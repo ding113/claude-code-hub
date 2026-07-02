@@ -6,9 +6,7 @@ export const dynamic = "force-dynamic";
 
 export default async function Page({ params }: { params: Promise<{ locale: string }> }) {
   // Await params to ensure locale is available in the async context
-  const { locale } = await params;
-
-  const session = await getSession();
+  const [{ locale }, session] = await Promise.all([params, getSession()]);
 
   if (!session || session.user.role !== "admin") {
     return redirect({ href: "/login", locale });

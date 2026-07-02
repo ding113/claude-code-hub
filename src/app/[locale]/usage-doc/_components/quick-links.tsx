@@ -31,6 +31,7 @@ export function QuickLinks({ isLoggedIn, onBackToTop }: QuickLinksProps) {
         </Link>
       )}
       <button
+        type="button"
         onClick={handleBackToTop}
         className="block w-full text-left text-sm text-muted-foreground hover:text-primary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 rounded px-2 py-1 cursor-pointer"
       >

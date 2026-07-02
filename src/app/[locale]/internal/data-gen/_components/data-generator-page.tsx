@@ -63,10 +63,10 @@ export function DataGeneratorPage() {
         payload.totalRecords = parseInt(totalRecords, 10);
       }
       if (models) {
-        payload.models = models
-          .split(",")
-          .map((m) => m.trim())
-          .filter(Boolean);
+        payload.models = models.split(",").flatMap((model) => {
+          const trimmed = model.trim();
+          return trimmed ? [trimmed] : [];
+        });
       }
       if (userIds) {
         payload.userIds = userIds
@@ -567,8 +567,8 @@ export function DataGeneratorPage() {
                   </TableHeader>
                   <TableBody>
                     {collapseByUser
-                      ? collapsedUserData?.map((item, idx) => (
-                          <TableRow key={idx}>
+                      ? collapsedUserData?.map((item) => (
+                          <TableRow key={`${item.userName}:${item.serviceModel}`}>
                             <TableCell>{item.userName}</TableCell>
                             <TableCell className="font-mono text-xs">{item.serviceModel}</TableCell>
                             <TableCell className="text-right">
@@ -579,8 +579,10 @@ export function DataGeneratorPage() {
                             </TableCell>
                           </TableRow>
                         ))
-                      : userBreakdownResult.items.map((item, idx) => (
-                          <TableRow key={idx}>
+                      : userBreakdownResult.items.map((item) => (
+                          <TableRow
+                            key={`${item.userName}:${item.keyName}:${item.serviceName}:${item.model}`}
+                          >
                             <TableCell>{item.userName}</TableCell>
                             <TableCell className="font-mono text-xs">{item.keyName}</TableCell>
                             <TableCell className="font-mono text-xs">

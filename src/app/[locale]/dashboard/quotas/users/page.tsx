@@ -122,8 +122,7 @@ async function getUsersWithQuotas(): Promise<UserQuotaWithUsage[]> {
 }
 
 export default async function UsersQuotaPage({ params }: { params: Promise<{ locale: string }> }) {
-  const { locale } = await params;
-  const session = await getSession();
+  const [{ locale }, session] = await Promise.all([params, getSession()]);
 
   if (!session || session.user.role !== "admin") {
     return redirect({ href: session ? "/dashboard/my-quota" : "/login", locale });
@@ -169,8 +168,11 @@ export default async function UsersQuotaPage({ params }: { params: Promise<{ loc
 }
 
 async function UsersQuotaContent({ locale }: { locale: string }) {
-  const [users, systemSettings] = await Promise.all([getUsersWithQuotas(), getSystemSettings()]);
-  const t = await getTranslations({ locale, namespace: "quota.users" });
+  const [users, systemSettings, t] = await Promise.all([
+    getUsersWithQuotas(),
+    getSystemSettings(),
+    getTranslations({ locale, namespace: "quota.users" }),
+  ]);
 
   return (
     <div className="space-y-3">

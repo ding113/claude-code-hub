@@ -10,7 +10,7 @@ import {
 } from "@/lib/notification/tasks/cache-hit-rate-alert";
 import { generateCostAlerts } from "@/lib/notification/tasks/cost-alert";
 import { generateDailyLeaderboard } from "@/lib/notification/tasks/daily-leaderboard";
-import { resolveSystemTimezone } from "@/lib/utils/timezone";
+import { resolveSystemTimezone } from "@/lib/utils/timezone-resolver";
 import {
   buildCacheHitRateAlertMessage,
   buildCircuitBreakerMessage,
@@ -387,20 +387,22 @@ function setupQueueProcessor(queue: Queue.Queue<NotificationJobData>): void {
 
         const fanoutRunId = String(job.id ?? job.timestamp ?? Date.now());
 
-        for (const binding of bindings) {
-          // 使用稳定的 jobId 避免 fan-out 主作业重试时重复 enqueue，造成重复发送
-          const childJobId = `cache-hit-rate-alert:${fanoutRunId}:${binding.id}`;
+        await Promise.all(
+          bindings.map((binding) => {
+            // 使用稳定的 jobId 避免 fan-out 主作业重试时重复 enqueue，造成重复发送
+            const childJobId = `cache-hit-rate-alert:${fanoutRunId}:${binding.id}`;
 
-          await queue.add(
-            {
-              type: "cache-hit-rate-alert",
-              targetId: binding.targetId,
-              bindingId: binding.id,
-              data: payload,
-            },
-            { jobId: childJobId }
-          );
-        }
+            return queue.add(
+              {
+                type: "cache-hit-rate-alert",
+                targetId: binding.targetId,
+                bindingId: binding.id,
+                data: payload,
+              },
+              { jobId: childJobId }
+            );
+          })
+        );
 
         logger.info({
           action: "cache_hit_rate_alert_fanout_enqueued",
@@ -748,18 +750,20 @@ async function removeAllRepeatableJobs(queue: Queue.Queue<NotificationJobData>):
   }
 
   let allRemoved = true;
-  for (const job of repeatableJobs) {
-    try {
-      await queue.removeRepeatableByKey(job.key);
-    } catch (error) {
-      allRemoved = false;
-      logger.warn({
-        action: "notification_repeatable_remove_failed",
-        key: job.key,
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
-  }
+  await Promise.all(
+    repeatableJobs.map(async (job) => {
+      try {
+        await queue.removeRepeatableByKey(job.key);
+      } catch (error) {
+        allRemoved = false;
+        logger.warn({
+          action: "notification_repeatable_remove_failed",
+          key: job.key,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    })
+  );
   return allRemoved;
 }
 
@@ -904,22 +908,24 @@ export async function scheduleNotifications() {
         const [hour, minute] = (settings.dailyLeaderboardTime ?? "09:00").split(":").map(Number);
         const defaultCron = `${minute} ${hour} * * *`;
 
-        for (const binding of bindings) {
-          const cron = binding.scheduleCron ?? defaultCron;
-          const tz = binding.scheduleTimezone ?? systemTimezone;
+        await Promise.all(
+          bindings.map((binding) => {
+            const cron = binding.scheduleCron ?? defaultCron;
+            const tz = binding.scheduleTimezone ?? systemTimezone;
 
-          await queue.add(
-            {
-              type: "daily-leaderboard",
-              targetId: binding.targetId,
-              bindingId: binding.id,
-            },
-            {
-              repeat: { cron, tz },
-              jobId: `daily-leaderboard:${binding.id}`,
-            }
-          );
-        }
+            return queue.add(
+              {
+                type: "daily-leaderboard",
+                targetId: binding.targetId,
+                bindingId: binding.id,
+              },
+              {
+                repeat: { cron, tz },
+                jobId: `daily-leaderboard:${binding.id}`,
+              }
+            );
+          })
+        );
 
         logger.info({
           action: "daily_leaderboard_scheduled",
@@ -933,25 +939,27 @@ export async function scheduleNotifications() {
         const bindings = await getEnabledBindingsByType("cost_alert");
         const interval = clampIntervalMinutes(settings.costAlertCheckInterval ?? 60);
 
-        for (const binding of bindings) {
-          const tz = binding.scheduleTimezone ?? systemTimezone;
-          // 优先级：绑定自定义 cron（支持 tz）> 默认间隔（按 N 是否整除 60 选择 cron 或固定 every）。
-          const repeat = binding.scheduleCron
-            ? { cron: binding.scheduleCron, tz }
-            : intervalToRepeat(interval, tz);
+        await Promise.all(
+          bindings.map((binding) => {
+            const tz = binding.scheduleTimezone ?? systemTimezone;
+            // 优先级：绑定自定义 cron（支持 tz）> 默认间隔（按 N 是否整除 60 选择 cron 或固定 every）。
+            const repeat = binding.scheduleCron
+              ? { cron: binding.scheduleCron, tz }
+              : intervalToRepeat(interval, tz);
 
-          await queue.add(
-            {
-              type: "cost-alert",
-              targetId: binding.targetId,
-              bindingId: binding.id,
-            },
-            {
-              repeat,
-              jobId: `cost-alert:${binding.id}`,
-            }
-          );
-        }
+            return queue.add(
+              {
+                type: "cost-alert",
+                targetId: binding.targetId,
+                bindingId: binding.id,
+              },
+              {
+                repeat,
+                jobId: `cost-alert:${binding.id}`,
+              }
+            );
+          })
+        );
 
         logger.info({
           action: "cost_alert_scheduled",

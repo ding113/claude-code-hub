@@ -1,6 +1,6 @@
 "use client";
 
-import { motion } from "framer-motion";
+import { m } from "framer-motion";
 import {
   AlertTriangle,
   Bell,
@@ -99,7 +99,7 @@ export function SettingsSection({
   const Icon = icon ? SETTINGS_SECTION_ICON_MAP[icon] : null;
 
   return (
-    <motion.section
+    <m.section
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ type: "spring", stiffness: 300, damping: 30 }}
@@ -138,7 +138,7 @@ export function SettingsSection({
         </div>
         {children}
       </div>
-    </motion.section>
+    </m.section>
   );
 }
 
@@ -201,6 +201,7 @@ export function SettingsToggleRow({
         </div>
       </div>
       <label className="relative inline-flex items-center cursor-pointer shrink-0">
+        <span className="sr-only">{title}</span>
         <input
           type="checkbox"
           className="sr-only peer"
@@ -271,6 +272,7 @@ export function SettingsInput({
           value={value}
           onChange={(e) => onChange(e.target.value)}
           placeholder={placeholder}
+          aria-label={label ?? placeholder}
           disabled={disabled}
           className={cn(
             "w-full bg-muted/50 border border-border rounded-lg py-2 px-3 text-sm text-foreground",
@@ -402,6 +404,7 @@ export function SettingsSlider({
           step={step}
           value={value}
           onChange={(e) => onChange(Number(e.target.value))}
+          aria-label={label}
           disabled={disabled}
           className="w-full h-1.5 bg-transparent appearance-none cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed relative z-10"
           style={{

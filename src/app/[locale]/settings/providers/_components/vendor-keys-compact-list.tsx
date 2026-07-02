@@ -334,10 +334,12 @@ function VendorKeyRow(props: {
               });
               if (undoResult.ok) {
                 toast.success(tBatchEdit("undo.singleDeleteUndone"));
-                await queryClient.invalidateQueries({ queryKey: ["providers"] });
-                await queryClient.invalidateQueries({ queryKey: ["providers-health"] });
-                await queryClient.invalidateQueries({ queryKey: ["providers-statistics"] });
-                await queryClient.invalidateQueries({ queryKey: ["provider-vendors"] });
+                await Promise.all([
+                  queryClient.invalidateQueries({ queryKey: ["providers"] }),
+                  queryClient.invalidateQueries({ queryKey: ["providers-health"] }),
+                  queryClient.invalidateQueries({ queryKey: ["providers-statistics"] }),
+                  queryClient.invalidateQueries({ queryKey: ["provider-vendors"] }),
+                ]);
               } else if (undoResult.errorCode === PROVIDER_BATCH_PATCH_ERROR_CODES.UNDO_EXPIRED) {
                 toast.error(tBatchEdit("undo.expired"));
               } else {

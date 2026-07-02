@@ -51,7 +51,7 @@ vi.mock("@/lib/audit/emit", () => ({
   emitActionAudit: vi.fn(),
 }));
 
-vi.mock("@/lib/utils/timezone", () => ({
+vi.mock("@/lib/utils/timezone-resolver", () => ({
   resolveSystemTimezone: vi.fn(async () => "UTC"),
 }));
 

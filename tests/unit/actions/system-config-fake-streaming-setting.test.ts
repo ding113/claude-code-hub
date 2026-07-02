@@ -55,7 +55,7 @@ vi.mock("@/lib/public-status/rebuild-hints", () => ({
   })),
 }));
 
-vi.mock("@/lib/utils/timezone", () => ({
+vi.mock("@/lib/utils/timezone-resolver", () => ({
   resolveSystemTimezone: vi.fn(async () => "UTC"),
   isValidIANATimezone: vi.fn(() => true),
 }));

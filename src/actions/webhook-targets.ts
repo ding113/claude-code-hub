@@ -5,7 +5,7 @@ import { getSession } from "@/lib/auth";
 import type { NotificationJobType } from "@/lib/constants/notification.constants";
 import { logger } from "@/lib/logger";
 import { isValidProxyUrl } from "@/lib/proxy-agent";
-import { resolveSystemTimezone } from "@/lib/utils/timezone";
+import { resolveSystemTimezone } from "@/lib/utils/timezone-resolver";
 import { WebhookNotifier } from "@/lib/webhook";
 import { buildTestMessage } from "@/lib/webhook/templates/test-messages";
 import { getNotificationSettings, updateNotificationSettings } from "@/repository/notifications";
@@ -447,15 +447,21 @@ export async function testWebhookTargetAction(
     });
 
     const latencyMs = Date.now() - start;
+
+    if (!result.success) {
+      await updateTestResult(id, {
+        success: false,
+        error: result.error,
+        latencyMs,
+      });
+      return { ok: false, error: result.error || "测试失败" };
+    }
+
     await updateTestResult(id, {
-      success: result.success,
+      success: true,
       error: result.error,
       latencyMs,
     });
-
-    if (!result.success) {
-      return { ok: false, error: result.error || "测试失败" };
-    }
 
     return { ok: true, data: { latencyMs } };
   } catch (error) {

@@ -145,7 +145,7 @@ describe("UsageLogsViewVirtualized fullscreen overlay", () => {
     await click(findButtonByLabel(container, "logs.actions.fullscreen") ?? null);
 
     expect(fullscreenMocks.request).toHaveBeenCalledWith(document.documentElement);
-    expect(container.querySelector('[role="dialog"][aria-modal="true"]')).not.toBeNull();
+    expect(container.querySelector('dialog[aria-modal="true"]')).not.toBeNull();
 
     const switchEl = container.querySelector(
       '[role="switch"][aria-label="logs.table.hideProviderColumn"]'
@@ -159,7 +159,7 @@ describe("UsageLogsViewVirtualized fullscreen overlay", () => {
 
     await click(findButtonByText(container, "logs.actions.exitFullscreen") ?? null);
     expect(fullscreenMocks.exit).toHaveBeenCalled();
-    expect(container.querySelector('[role="dialog"][aria-modal="true"]')).toBeNull();
+    expect(container.querySelector('dialog[aria-modal="true"]')).toBeNull();
 
     await act(async () => root.unmount());
     container.remove();
@@ -188,7 +188,7 @@ describe("UsageLogsViewVirtualized fullscreen overlay", () => {
 
     await click(findButtonByLabel(container, "logs.actions.fullscreen") ?? null);
 
-    expect(container.querySelector('[role="dialog"][aria-modal="true"]')).toBeNull();
+    expect(container.querySelector('dialog[aria-modal="true"]')).toBeNull();
     expect(toastMocks.error).toHaveBeenCalledTimes(1);
 
     await act(async () => root.unmount());

@@ -22,7 +22,7 @@ vi.mock("@/lib/utils/provider-schedule", () => ({
   isProviderActiveNow: vi.fn().mockReturnValue(true),
 }));
 
-vi.mock("@/lib/utils/timezone", () => ({
+vi.mock("@/lib/utils/timezone-resolver", () => ({
   resolveSystemTimezone: vi.fn().mockResolvedValue("UTC"),
 }));
 

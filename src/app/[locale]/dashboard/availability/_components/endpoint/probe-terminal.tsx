@@ -5,6 +5,7 @@ import { AlertCircle, CheckCircle2, Download, XCircle } from "lucide-react";
 import { useTimeZone, useTranslations } from "next-intl";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { useClientDate } from "@/hooks/use-client-date";
 import { cn } from "@/lib/utils";
 import type { ProviderEndpointProbeLog } from "@/types/provider";
 
@@ -74,23 +75,24 @@ export function ProbeTerminal({
   const t = useTranslations("dashboard.availability.terminal");
   const timeZone = useTimeZone() ?? "UTC";
   const containerRef = useRef<HTMLDivElement>(null);
-  const [userScrolled, setUserScrolled] = useState(false);
+  const userScrolledRef = useRef(false);
   const [filter, setFilter] = useState("");
+  const clientNow = useClientDate();
 
   // Auto-scroll to bottom when new logs arrive
   // biome-ignore lint/correctness/useExhaustiveDependencies: logs.length intentionally triggers re-scroll
   useEffect(() => {
-    if (autoScroll && !userScrolled && containerRef.current) {
+    if (autoScroll && !userScrolledRef.current && containerRef.current) {
       containerRef.current.scrollTop = containerRef.current.scrollHeight;
     }
-  }, [logs.length, autoScroll, userScrolled]);
+  }, [logs.length, autoScroll]);
 
   // Detect user scroll
   const handleScroll = () => {
     if (!containerRef.current) return;
     const { scrollTop, scrollHeight, clientHeight } = containerRef.current;
     const isAtBottom = scrollHeight - scrollTop - clientHeight < 50;
-    setUserScrolled(!isAtBottom);
+    userScrolledRef.current = !isAtBottom;
   };
 
   // Filter logs
@@ -192,6 +194,7 @@ export function ProbeTerminal({
 
             return (
               <button
+                type="button"
                 key={log.id}
                 onClick={() => onLogClick?.(log)}
                 className={cn(
@@ -262,7 +265,9 @@ export function ProbeTerminal({
         {/* Loading indicator */}
         {logs.length > 0 && (
           <div className="flex items-center gap-2 px-2 py-1 text-muted-foreground animate-pulse">
-            <span className="opacity-50">[{formatTime(new Date(), timeZone)}]</span>
+            <span className="opacity-50">
+              [{clientNow ? formatTime(clientNow, timeZone) : "--:--:--"}]
+            </span>
             <span>...</span>
           </div>
         )}
@@ -277,6 +282,7 @@ export function ProbeTerminal({
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
             placeholder={t("filterPlaceholder")}
+            aria-label={t("filterPlaceholder")}
             className={cn(
               "flex-1 bg-transparent border-none text-sm font-mono",
               "text-foreground placeholder:text-muted-foreground/50",

@@ -15,7 +15,7 @@ import { logger } from "@/lib/logger";
 import { getEndpointFilterStats } from "@/lib/provider-endpoints/endpoint-selector";
 import { getProviderModelRedirectTarget } from "@/lib/provider-model-redirects";
 import { RateLimitService } from "@/lib/rate-limit";
-import { resolveSystemTimezone } from "@/lib/utils/timezone";
+import { resolveSystemTimezone } from "@/lib/utils/timezone-resolver";
 import { isVendorTypeCircuitOpen } from "@/lib/vendor-type-circuit-breaker";
 import { findAllProvidersFresh } from "@/repository/provider";
 import type {
@@ -104,6 +104,20 @@ function buildStep(
   };
 }
 
+function buildFilteredProviderSnapshots(
+  inputProviders: Provider[],
+  outputProviders: Provider[],
+  userGroup: string | null,
+  getOverrides: (provider: Provider) => Partial<DispatchSimulatorProviderSnapshot>
+): DispatchSimulatorProviderSnapshot[] {
+  const outputProviderIds = new Set(outputProviders.map((provider) => provider.id));
+  return inputProviders.flatMap((provider) =>
+    outputProviderIds.has(provider.id)
+      ? []
+      : [buildProviderSnapshot(provider, userGroup, getOverrides(provider))]
+  );
+}
+
 async function buildPriorityTiers(
   providers: Provider[],
   userGroup: string | null,
@@ -123,13 +137,13 @@ async function buildPriorityTiers(
     }))
   );
 
-  const priorities = [
-    ...new Set(
+  const priorities = Array.from(
+    new Set(
       enriched.map(({ provider }) =>
         ProxyProviderResolver.resolveEffectivePriority(provider, userGroup)
       )
-    ),
-  ].sort((a, b) => a - b);
+    )
+  ).toSorted((a, b) => a - b);
   const selectedPriority = priorities[0] ?? null;
 
   return priorities.map((priority) => {
@@ -182,11 +196,9 @@ export async function simulateDispatchDecisionTree(
       currentProviders,
       groupFiltered,
       groupFilter
-        ? currentProviders
-            .filter((provider) => !groupFiltered.some((survivor) => survivor.id === provider.id))
-            .map((provider) =>
-              buildProviderSnapshot(provider, groupFilter, { details: "provider_group_mismatch" })
-            )
+        ? buildFilteredProviderSnapshots(currentProviders, groupFiltered, groupFilter, () => ({
+            details: "provider_group_mismatch",
+          }))
         : [],
       groupFilter,
       groupFilter ? undefined : "no_group_filter"
@@ -203,13 +215,14 @@ export async function simulateDispatchDecisionTree(
       2,
       currentProviders,
       formatCompatible,
-      currentProviders
-        .filter((provider) => !formatCompatible.some((survivor) => survivor.id === provider.id))
-        .map((provider) =>
-          buildProviderSnapshot(provider, groupFilter, {
-            details: `format ${input.clientFormat} incompatible with ${provider.providerType}`,
-          })
-        ),
+      buildFilteredProviderSnapshots(
+        currentProviders,
+        formatCompatible,
+        groupFilter,
+        (provider) => ({
+          details: `format ${input.clientFormat} incompatible with ${provider.providerType}`,
+        })
+      ),
       groupFilter
     )
   );
@@ -222,11 +235,9 @@ export async function simulateDispatchDecisionTree(
       3,
       currentProviders,
       enabledProviders,
-      currentProviders
-        .filter((provider) => !enabledProviders.some((survivor) => survivor.id === provider.id))
-        .map((provider) =>
-          buildProviderSnapshot(provider, groupFilter, { details: "provider_disabled" })
-        ),
+      buildFilteredProviderSnapshots(currentProviders, enabledProviders, groupFilter, () => ({
+        details: "provider_disabled",
+      })),
       groupFilter
     )
   );
@@ -241,13 +252,14 @@ export async function simulateDispatchDecisionTree(
       4,
       currentProviders,
       activeProviders,
-      currentProviders
-        .filter((provider) => !activeProviders.some((survivor) => survivor.id === provider.id))
-        .map((provider) =>
-          buildProviderSnapshot(provider, groupFilter, {
-            details: `outside active window ${provider.activeTimeStart ?? "-"}-${provider.activeTimeEnd ?? "-"}`,
-          })
-        ),
+      buildFilteredProviderSnapshots(
+        currentProviders,
+        activeProviders,
+        groupFilter,
+        (provider) => ({
+          details: `outside active window ${provider.activeTimeStart ?? "-"}-${provider.activeTimeEnd ?? "-"}`,
+        })
+      ),
       groupFilter
     )
   );
@@ -265,15 +277,9 @@ export async function simulateDispatchDecisionTree(
       allowlistEligible,
       normalizedModelName === ""
         ? []
-        : currentProviders
-            .filter(
-              (provider) => !allowlistEligible.some((survivor) => survivor.id === provider.id)
-            )
-            .map((provider) =>
-              buildProviderSnapshot(provider, groupFilter, {
-                details: `model ${normalizedModelName} did not match allowlist`,
-              })
-            ),
+        : buildFilteredProviderSnapshots(currentProviders, allowlistEligible, groupFilter, () => ({
+            details: `model ${normalizedModelName} did not match allowlist`,
+          })),
       groupFilter,
       normalizedModelName === "" ? "model_filter_skipped_for_resource_request" : undefined
     )
@@ -286,6 +292,7 @@ export async function simulateDispatchDecisionTree(
     if (
       provider.providerVendorId &&
       provider.providerVendorId > 0 &&
+      // react-doctor-disable-next-line react-doctor/async-await-in-loop -- simulator preserves provider order while collecting filtered snapshots
       (await isVendorTypeCircuitOpen(provider.providerVendorId, provider.providerType))
     ) {
       healthFiltered.push(
@@ -364,22 +371,26 @@ export async function simulateDispatchDecisionTree(
     stepIndex: 7,
     inputCount: currentProviders.length,
     outputCount: selectedPriorityProviders.length,
-    filteredOut: currentProviders
-      .filter((provider) => !selectedPriorityProviderIds.has(provider.id))
-      .map((provider) =>
-        buildProviderSnapshot(provider, groupFilter, {
-          details: `effective_priority=${ProxyProviderResolver.resolveEffectivePriority(provider, groupFilter)}`,
-        })
-      ),
-    surviving: currentProviders
-      .filter((provider) => selectedPriorityProviderIds.has(provider.id))
-      .map((provider) =>
-        buildProviderSnapshot(provider, groupFilter, {
-          redirectedModel: normalizedModelName
-            ? getProviderModelRedirectTarget(normalizedModelName, provider.modelRedirects)
-            : null,
-        })
-      ),
+    filteredOut: currentProviders.flatMap((provider) =>
+      selectedPriorityProviderIds.has(provider.id)
+        ? []
+        : [
+            buildProviderSnapshot(provider, groupFilter, {
+              details: `effective_priority=${ProxyProviderResolver.resolveEffectivePriority(provider, groupFilter)}`,
+            }),
+          ]
+    ),
+    surviving: currentProviders.flatMap((provider) =>
+      selectedPriorityProviderIds.has(provider.id)
+        ? [
+            buildProviderSnapshot(provider, groupFilter, {
+              redirectedModel: normalizedModelName
+                ? getProviderModelRedirectTarget(normalizedModelName, provider.modelRedirects)
+                : null,
+            }),
+          ]
+        : []
+    ),
   });
 
   currentProviders = currentProviders.filter((provider) =>

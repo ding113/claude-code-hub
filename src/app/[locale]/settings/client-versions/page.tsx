@@ -21,8 +21,10 @@ export default async function ClientVersionsPage({
   // Await params to ensure locale is available in the async context
   const { locale } = await params;
 
-  const t = await getTranslations({ locale, namespace: "settings" });
-  const session = await getSession();
+  const [t, session] = await Promise.all([
+    getTranslations({ locale, namespace: "settings" }),
+    getSession(),
+  ]);
 
   if (!session || session.user.role !== "admin") {
     return redirect({ href: "/login", locale });
@@ -72,8 +74,10 @@ async function ClientVersionsSettingsContent() {
 }
 
 async function ClientVersionsStatsContent({ locale }: { locale: string }) {
-  const t = await getTranslations({ locale, namespace: "settings" });
-  const statsResult = await fetchClientVersionStats();
+  const [t, statsResult] = await Promise.all([
+    getTranslations({ locale, namespace: "settings" }),
+    fetchClientVersionStats(),
+  ]);
   const stats = statsResult.ok ? statsResult.data : [];
 
   if (!stats || stats.length === 0) {

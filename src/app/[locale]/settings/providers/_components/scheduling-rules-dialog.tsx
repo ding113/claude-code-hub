@@ -176,7 +176,10 @@ function ScenarioCard({ title, icon: Icon, description, steps }: ScenarioCardPro
   return (
     <Collapsible open={isOpen} onOpenChange={setIsOpen} className="border rounded-lg">
       <CollapsibleTrigger asChild>
-        <button className="flex items-center justify-between w-full p-4 hover:bg-muted/50 transition-colors cursor-pointer">
+        <button
+          type="button"
+          className="flex items-center justify-between w-full p-4 hover:bg-muted/50 transition-colors cursor-pointer"
+        >
           <div className="flex items-center gap-3">
             <Icon className="h-6 w-6 shrink-0 text-muted-foreground" />
             <div className="text-left">
@@ -194,7 +197,7 @@ function ScenarioCard({ title, icon: Icon, description, steps }: ScenarioCardPro
       <CollapsibleContent>
         <div className="px-4 pb-4 space-y-3">
           {steps.map((step, index) => (
-            <div key={index} className="border-l-2 border-primary/30 pl-4 space-y-2">
+            <div key={step.step} className="border-l-2 border-primary/30 pl-4 space-y-2">
               <div className="flex items-baseline gap-2">
                 <Badge variant="outline" className="shrink-0">
                   {t("step")} {index + 1}
@@ -262,8 +265,8 @@ export function SchedulingRulesDialog() {
             <h3 className="font-semibold text-sm text-muted-foreground">
               {tGuide("scenariosTitle")}
             </h3>
-            {scenarios.map((scenario, index) => (
-              <ScenarioCard key={index} {...scenario} />
+            {scenarios.map((scenario) => (
+              <ScenarioCard key={scenario.title} {...scenario} />
             ))}
           </div>
 

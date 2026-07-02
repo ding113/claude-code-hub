@@ -8,6 +8,7 @@ import type { DateRange } from "react-day-picker";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { useClientDate } from "@/hooks/use-client-date";
 import { cn } from "@/lib/utils";
 import { getQuickDateRange, type QuickPeriod } from "../_utils/time-range";
 
@@ -85,6 +86,7 @@ export function LogsDateRangePicker({
   const t = useTranslations("dashboard");
   const tCommon = useTranslations("common");
   const [calendarOpen, setCalendarOpen] = useState(false);
+  const clientToday = useClientDate();
 
   const hasDateRange = Boolean(startDate && endDate);
 
@@ -212,7 +214,7 @@ export function LogsDateRangePicker({
               selected={selectedRange}
               onSelect={handleDateRangeSelect}
               numberOfMonths={2}
-              disabled={{ after: new Date() }}
+              disabled={clientToday ? { after: clientToday } : undefined}
             />
             {hasDateRange && (
               <div className="border-t p-2">
@@ -228,7 +230,10 @@ export function LogsDateRangePicker({
           variant="outline"
           size="icon-sm"
           onClick={() => handleNavigate("next")}
-          disabled={!hasDateRange || (endDate !== undefined && endDate >= formatDate(new Date()))}
+          disabled={
+            !hasDateRange ||
+            (clientToday !== null && endDate !== undefined && endDate >= formatDate(clientToday))
+          }
           title={t("leaderboard.dateRange.nextPeriod")}
         >
           <ChevronRight className="h-4 w-4" />

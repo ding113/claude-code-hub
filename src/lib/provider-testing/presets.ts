@@ -188,7 +188,10 @@ export const PRESET_MAPPING: Record<ProviderType, string[]> = {
 
 export function getPresetsForProvider(providerType: ProviderType): PresetConfig[] {
   const presetIds = PRESET_MAPPING[providerType] || [];
-  return presetIds.map((id) => PRESETS[id]).filter(Boolean);
+  return presetIds.flatMap((id) => {
+    const preset = PRESETS[id];
+    return preset ? [preset] : [];
+  });
 }
 
 export function getPreset(presetId: string): PresetConfig | undefined {

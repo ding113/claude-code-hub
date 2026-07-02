@@ -2,7 +2,7 @@
 
 import { AlertCircle, CheckCircle2, XCircle } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useEffect, useState } from "react";
+import { useLayoutEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
@@ -20,7 +20,7 @@ export function RegexTester({ pattern }: RegexTesterProps) {
     matchedText?: string;
   } | null>(null);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!pattern || !testMessage) {
       setMatchResult(null);
       return;

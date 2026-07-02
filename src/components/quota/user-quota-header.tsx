@@ -11,6 +11,8 @@ import type { CurrencyCode } from "@/lib/utils/currency";
 import { getQuotaColorClass, getUsageRate } from "@/lib/utils/quota-helpers";
 import { QuotaProgress } from "./quota-progress";
 
+const QUOTA_RESET_PLACEHOLDER_DATE = new Date(0);
+
 interface UserQuotaHeaderProps {
   userId: number;
   userName: string;
@@ -142,7 +144,7 @@ export function UserQuotaHeader({
                   dailyCost: {
                     current: dailyCostCurrent,
                     limit: dailyCostLimit,
-                    resetAt: new Date(),
+                    resetAt: QUOTA_RESET_PLACEHOLDER_DATE,
                   },
                 }}
                 currencyCode={currencyCode}

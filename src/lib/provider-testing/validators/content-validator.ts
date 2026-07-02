@@ -6,6 +6,10 @@
 
 import type { TestStatus, TestSubStatus } from "../types";
 
+function collectTextParts(content?: Array<{ text?: string }>): string[] {
+  return content?.flatMap((part) => (part.text ? [part.text] : [])) ?? [];
+}
+
 export interface ContentValidationResult {
   status: TestStatus;
   subStatus: TestSubStatus;
@@ -93,8 +97,7 @@ export function extractTextContent(responseBody: string): string {
     // Anthropic format
     if (obj.content && Array.isArray(obj.content)) {
       return obj.content
-        .filter((c: { type: string }) => c.type === "text")
-        .map((c: { text: string }) => c.text)
+        .flatMap((c: { type: string; text: string }) => (c.type === "text" ? [c.text] : []))
         .join("");
     }
 
@@ -111,19 +114,15 @@ export function extractTextContent(responseBody: string): string {
     // Codex Response API format
     if (obj.output && Array.isArray(obj.output)) {
       return obj.output
-        .flatMap(
-          (o: { content?: Array<{ text?: string }> }) =>
-            o.content?.map((c) => c.text || "").filter(Boolean) || []
-        )
+        .flatMap((o: { content?: Array<{ text?: string }> }) => collectTextParts(o.content))
         .join("");
     }
 
     // Gemini format
     if (obj.candidates && Array.isArray(obj.candidates)) {
       return obj.candidates
-        .flatMap(
-          (c: { content?: { parts?: Array<{ text?: string }> } }) =>
-            c.content?.parts?.map((p) => p.text || "").filter(Boolean) || []
+        .flatMap((c: { content?: { parts?: Array<{ text?: string }> } }) =>
+          collectTextParts(c.content?.parts)
         )
         .join("");
     }

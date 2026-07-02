@@ -59,7 +59,7 @@ export function parseAnthropicResponse(body: string, contentType?: string): Pars
     }
 
     // Extract text content
-    const textParts = data.content?.filter((c) => c.type === "text").map((c) => c.text || "") || [];
+    const textParts = data.content?.flatMap((c) => (c.type === "text" ? [c.text || ""] : [])) || [];
 
     const content = textParts.join("");
 

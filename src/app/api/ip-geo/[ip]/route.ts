@@ -18,15 +18,13 @@ export const runtime = "nodejs";
  * - 结果由 Redis 缓存，默认 TTL 3600s
  */
 export async function GET(request: Request, { params }: { params: Promise<{ ip: string }> }) {
-  const session = await getSession();
+  const [session, { ip }] = await Promise.all([getSession(), params]);
   if (!session) {
     return Response.json({ error: "unauthenticated" }, { status: 401 });
   }
   if (session.user.role !== "admin") {
     return Response.json({ error: "forbidden" }, { status: 403 });
   }
-
-  const { ip } = await params;
 
   const settings = await getCachedSystemSettings();
   if (!settings.ipGeoLookupEnabled) {

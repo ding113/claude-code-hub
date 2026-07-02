@@ -82,29 +82,34 @@ export function useBatchProviderTest(): UseBatchProviderTestResult {
 
           setRow(providerId, { status: "testing" });
           try {
+            // react-doctor-disable-next-line react-doctor/async-await-in-loop -- worker loop intentionally bounds provider test concurrency
             const result = await testProviderById(
               providerId,
               trimmedModel ? { model: trimmedModel } : undefined
             );
-            if (runIdRef.current !== runId) return;
-            if (result.ok) {
-              const data = result.data as UnifiedTestData;
-              setRow(providerId, {
-                status: data.status,
-                latencyMs: data.latencyMs,
-                message: data.errorMessage ?? data.message,
-                responseModel: data.model,
-                httpStatusCode: data.httpStatusCode,
-              });
+            if (runIdRef.current === runId) {
+              if (result.ok) {
+                const data = result.data as UnifiedTestData;
+                setRow(providerId, {
+                  status: data.status,
+                  latencyMs: data.latencyMs,
+                  message: data.errorMessage ?? data.message,
+                  responseModel: data.model,
+                  httpStatusCode: data.httpStatusCode,
+                });
+              } else {
+                setRow(providerId, { status: "error", message: result.error });
+              }
             } else {
-              setRow(providerId, { status: "error", message: result.error });
+              break;
             }
           } catch (error) {
-            if (runIdRef.current !== runId) return;
-            setRow(providerId, {
-              status: "error",
-              message: error instanceof Error ? error.message : String(error),
-            });
+            if (runIdRef.current === runId) {
+              setRow(providerId, {
+                status: "error",
+                message: error instanceof Error ? error.message : String(error),
+              });
+            }
           }
         }
       };
@@ -112,9 +117,7 @@ export function useBatchProviderTest(): UseBatchProviderTestResult {
       const workerCount = Math.min(BATCH_TEST_CONCURRENCY, targets.length);
       await Promise.all(Array.from({ length: workerCount }, () => worker()));
 
-      if (runIdRef.current !== runId) return;
-
-      if (cancelRef.current) {
+      if (runIdRef.current === runId && cancelRef.current) {
         setResults((prev) => {
           const next = { ...prev };
           for (const id of targets) {

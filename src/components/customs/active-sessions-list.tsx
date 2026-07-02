@@ -75,6 +75,7 @@ export function ActiveSessionsList({
             </span>
           </div>
           <button
+            type="button"
             onClick={() => router.push("/dashboard/sessions")}
             className="text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
           >

@@ -11,8 +11,10 @@ export default async function StatusPageSettingsPage({
   params: Promise<{ locale: string }>;
 }) {
   const { locale } = await params;
-  const t = await getTranslations({ locale, namespace: "settings" });
-  const settings = await loadStatusPageSettings();
+  const [t, settings] = await Promise.all([
+    getTranslations({ locale, namespace: "settings" }),
+    loadStatusPageSettings(),
+  ]);
 
   return (
     <div className="space-y-6">

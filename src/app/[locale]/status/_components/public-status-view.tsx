@@ -15,8 +15,9 @@ import {
   sortableKeyboardCoordinates,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
+import { useQuery } from "@tanstack/react-query";
 import { Activity } from "lucide-react";
-import { startTransition, useEffect, useMemo, useState } from "react";
+import { startTransition, useEffect, useLayoutEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import type { PublicStatusPayload } from "@/lib/public-status/payload";
 import {
@@ -52,6 +53,42 @@ import { StatusToolbar } from "./status-toolbar";
 type ViewModelSnapshot = PublicStatusPayload["groups"][number]["models"][number] & {
   timelineReusedFromPrevious?: boolean;
 };
+
+interface PublicStatusRefreshParams {
+  filterSlug?: string;
+  followServerDefaults: boolean;
+  intervalMinutes: number;
+  rangeHours: number;
+}
+
+function buildPublicStatusRequestUrl({
+  filterSlug,
+  followServerDefaults,
+  intervalMinutes,
+  rangeHours,
+}: PublicStatusRefreshParams) {
+  const params = new URLSearchParams();
+  if (!followServerDefaults) {
+    params.set("interval", String(intervalMinutes));
+    params.set("rangeHours", String(rangeHours));
+  }
+  if (filterSlug) {
+    params.set("groupSlug", filterSlug);
+  }
+  params.set("include", "meta,defaults,groups");
+  return params.size > 0 ? `/api/public-status?${params.toString()}` : "/api/public-status";
+}
+
+async function fetchPublicStatusRefresh(
+  params: PublicStatusRefreshParams
+): Promise<PublicStatusRouteResponse | null> {
+  const response = await fetch(buildPublicStatusRequestUrl(params), { cache: "no-store" });
+  if (response.status !== 200 && response.status !== 503) {
+    return null;
+  }
+
+  return response.json() as Promise<PublicStatusRouteResponse>;
+}
 
 interface PublicStatusViewProps {
   initialPayload: PublicStatusPayload;
@@ -187,71 +224,65 @@ export function PublicStatusView({
   const [orderHydrated, setOrderHydrated] = useState(false);
   const [groupOrder, setGroupOrder] = useState<string[]>([]);
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+  const { data: refreshedResponse } = useQuery({
+    queryKey: [
+      "public-status-refresh",
+      followServerDefaults,
+      intervalMinutes,
+      rangeHours,
+      filterSlug ?? null,
+    ],
+    queryFn: () =>
+      fetchPublicStatusRefresh({
+        filterSlug,
+        followServerDefaults,
+        intervalMinutes,
+        rangeHours,
+      }),
+    refetchInterval: 30_000,
+  });
 
-  useEffect(() => {
-    const refresh = async () => {
-      try {
-        const params = new URLSearchParams();
-        if (!followServerDefaults) {
-          params.set("interval", String(intervalMinutes));
-          params.set("rangeHours", String(rangeHours));
-        }
-        if (filterSlug) {
-          params.set("groupSlug", filterSlug);
-        }
-        params.set("include", "meta,defaults,groups");
-        const requestUrl =
-          params.size > 0 ? `/api/public-status?${params.toString()}` : "/api/public-status";
-        const response = await fetch(requestUrl, { cache: "no-store" });
-        if (response.status !== 200 && response.status !== 503) return;
-        const nextResponse = (await response.json()) as PublicStatusRouteResponse;
-        const next = toPublicStatusPayload(nextResponse);
-        // 单分组页面(/status/[slug]):每次轮询后仍只保留目标分组,避免刷新后展开成全站视图
-        const scoped = filterSlug
-          ? { ...next, groups: next.groups.filter((g) => g.publicGroupSlug === filterSlug) }
-          : next;
-        startTransition(() => {
-          setPayload((previous) => ({
-            ...scoped,
-            groups: scoped.groups.map((group) => {
-              const previousGroup = previous.groups.find(
-                (candidate) => candidate.publicGroupSlug === group.publicGroupSlug
+  useLayoutEffect(() => {
+    if (!refreshedResponse) return;
+
+    const next = toPublicStatusPayload(refreshedResponse);
+    // 单分组页面(/status/[slug]):每次轮询后仍只保留目标分组,避免刷新后展开成全站视图
+    const scoped = filterSlug
+      ? { ...next, groups: next.groups.filter((g) => g.publicGroupSlug === filterSlug) }
+      : next;
+    startTransition(() => {
+      setPayload((previous) => ({
+        ...scoped,
+        groups: scoped.groups.map((group) => {
+          const previousGroup = previous.groups.find(
+            (candidate) => candidate.publicGroupSlug === group.publicGroupSlug
+          );
+          if (!previousGroup) {
+            return group;
+          }
+
+          return {
+            ...group,
+            models: group.models.map((model) => {
+              const previousModel = previousGroup.models.find(
+                (candidate) => candidate.publicModelKey === model.publicModelKey
               );
-              if (!previousGroup) {
-                return group;
+              if (model.timeline.length > 0) {
+                return model;
               }
 
               return {
-                ...group,
-                models: group.models.map((model) => {
-                  const previousModel = previousGroup.models.find(
-                    (candidate) => candidate.publicModelKey === model.publicModelKey
-                  );
-                  if (model.timeline.length > 0) {
-                    return model;
-                  }
-
-                  return {
-                    ...model,
-                    timeline: previousModel?.timeline ?? [],
-                    timelineReusedFromPrevious: Boolean(previousModel?.timeline.length),
-                  };
-                }),
+                ...model,
+                timeline: previousModel?.timeline ?? [],
+                timelineReusedFromPrevious: Boolean(previousModel?.timeline.length),
               };
             }),
-          }));
-          setRouteStatus(nextResponse.status);
-        });
-      } catch {
-        // keep last payload until next tick
-      }
-    };
-    if (followServerDefaults || initialPayload.rebuildState === "rebuilding") {
-      void refresh();
-    }
-    const pollId = window.setInterval(() => void refresh(), 30_000);
-    return () => window.clearInterval(pollId);
-  }, [followServerDefaults, initialPayload.rebuildState, intervalMinutes, rangeHours, filterSlug]);
+          };
+        }),
+      }));
+      setRouteStatus(refreshedResponse.status);
+    });
+  }, [filterSlug, refreshedResponse]);
 
   useEffect(() => {
     setGroupOrder(loadGroupOrder());

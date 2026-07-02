@@ -177,12 +177,10 @@ class VendorTypeEndpointStatsBatcher {
           const deferredMap = this.deferredByProviderTypeVendorId.get(providerType);
           if (!deferredMap) continue;
 
-          const deferredEntries = chunk
-            .map((vendorId) => ({
-              vendorId,
-              deferred: deferredMap.get(vendorId) ?? [],
-            }))
-            .filter(({ deferred }) => deferred.length > 0);
+          const deferredEntries = chunk.flatMap((vendorId) => {
+            const deferred = deferredMap.get(vendorId) ?? [];
+            return deferred.length > 0 ? [{ vendorId, deferred }] : [];
+          });
 
           const vendorIdsToFetch = deferredEntries.map(({ vendorId }) => vendorId);
           vendorIdsToFetch.forEach((vendorId) => deferredMap.delete(vendorId));
@@ -193,6 +191,7 @@ class VendorTypeEndpointStatsBatcher {
           if (vendorIdsToFetch.length === 0) continue;
 
           try {
+            // react-doctor-disable-next-line react-doctor/async-await-in-loop -- stats batches are serialized to avoid bursty UI-triggered requests
             const res = await batchGetVendorTypeEndpointStats({
               vendorIds: vendorIdsToFetch,
               providerType,
@@ -254,6 +253,7 @@ class VendorTypeEndpointStatsBatcher {
                   const { vendorId, deferred } = deferredEntries[currentIndex];
 
                   try {
+                    // react-doctor-disable-next-line react-doctor/async-await-in-loop -- worker loop intentionally bounds request concurrency
                     const endpoints = await getProviderEndpointsByVendor({ vendorId });
                     const filtered = endpoints.filter(
                       (ep) =>
@@ -408,16 +408,15 @@ export function ProviderEndpointHover({ vendorId, providerType }: ProviderEndpoi
     <TooltipProvider>
       <Tooltip open={isOpen} onOpenChange={setIsOpen} delayDuration={200}>
         <TooltipTrigger asChild>
-          <div
-            className="flex items-center gap-1.5 cursor-help opacity-80 hover:opacity-100 transition-opacity focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 rounded px-1"
-            tabIndex={0}
-            role="button"
+          <button
+            type="button"
+            className="flex items-center gap-1.5 cursor-help opacity-80 hover:opacity-100 transition-opacity focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 rounded px-1 bg-transparent border-0"
             aria-label={t("endpointStatus.viewDetails", { count })}
             data-testid="endpoint-hover-trigger"
           >
             <Server className="h-3.5 w-3.5 text-muted-foreground" />
             <span className="text-xs font-medium text-muted-foreground tabular-nums">{count}</span>
-          </div>
+          </button>
         </TooltipTrigger>
         <TooltipContent
           side="right"

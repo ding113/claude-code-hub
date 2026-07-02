@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Link } from "@/i18n/routing";
 import { getSystemSettings } from "@/repository/system-config";
 import { DEFAULT_TIME_RANGE } from "@/types/statistics";
-import { StatisticsWrapper } from "./statistics";
+import { StatisticsWrapper } from "./statistics/wrapper";
 import { TodayLeaderboard } from "./today-leaderboard";
 
 const getCachedSystemSettings = cache(getSystemSettings);

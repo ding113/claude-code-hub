@@ -1,5 +1,3 @@
-"use server";
-
 import { and, desc, eq, inArray, isNull, notInArray, sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import { keys as keysTable, messageRequest, providers, users } from "@/drizzle/schema";
@@ -103,28 +101,32 @@ export async function findRecentActivityStream(limit = 20): Promise<ActivityStre
         .limit(limit * 2); // 获取足够的数据，后面会过滤
 
       // 过滤出每个 session 的最新一条（rowNum = 1）
-      const latestPerSession = activeSessionRequests
-        .filter((row) => row.rowNum === 1)
-        .map((row) => ({
-          id: row.id,
-          sessionId: row.sessionId,
-          userName: row.userName || "Unknown",
-          userId: row.userId,
-          keyId: row.keyId ?? 0,
-          keyName: row.keyName || "Unknown",
-          providerId: row.providerId,
-          providerName: row.providerName,
-          model: row.model,
-          originalModel: row.originalModel,
-          statusCode: row.statusCode,
-          durationMs: row.durationMs,
-          costUsd: row.costUsd,
-          startTime: row.createdAt ? new Date(row.createdAt).getTime() : Date.now(),
-          inputTokens: row.inputTokens,
-          outputTokens: row.outputTokens,
-          cacheCreationInputTokens: row.cacheCreationInputTokens,
-          cacheReadInputTokens: row.cacheReadInputTokens,
-        }));
+      const latestPerSession = activeSessionRequests.flatMap((row) =>
+        row.rowNum === 1
+          ? [
+              {
+                id: row.id,
+                sessionId: row.sessionId,
+                userName: row.userName || "Unknown",
+                userId: row.userId,
+                keyId: row.keyId ?? 0,
+                keyName: row.keyName || "Unknown",
+                providerId: row.providerId,
+                providerName: row.providerName,
+                model: row.model,
+                originalModel: row.originalModel,
+                statusCode: row.statusCode,
+                durationMs: row.durationMs,
+                costUsd: row.costUsd,
+                startTime: row.createdAt ? new Date(row.createdAt).getTime() : Date.now(),
+                inputTokens: row.inputTokens,
+                outputTokens: row.outputTokens,
+                cacheCreationInputTokens: row.cacheCreationInputTokens,
+                cacheReadInputTokens: row.cacheReadInputTokens,
+              },
+            ]
+          : []
+      );
 
       activityItems = latestPerSession;
 
@@ -137,9 +139,9 @@ export async function findRecentActivityStream(limit = 20): Promise<ActivityStre
     // 3. 如果不足 limit 条，补充数据库最新请求（排除已包含的 session）
     if (activityItems.length < limit) {
       const remaining = limit - activityItems.length;
-      const excludedSessionIds = activityItems
-        .map((item) => item.sessionId)
-        .filter((sid): sid is string => sid !== null);
+      const excludedSessionIds = activityItems.flatMap((item) =>
+        item.sessionId !== null ? [item.sessionId] : []
+      );
 
       const conditions = [isNull(messageRequest.deletedAt)];
       if (excludedSessionIds.length > 0) {

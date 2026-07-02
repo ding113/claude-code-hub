@@ -183,6 +183,7 @@ describe("provider-group tag inputs", () => {
     const input = container.querySelector("input") as HTMLInputElement;
     await act(async () => {
       // 点击容器会聚焦输入框，进而触发 onFocus -> handleFocus 展开下拉
+      input.focus();
       input.dispatchEvent(new MouseEvent("click", { bubbles: true }));
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
@@ -252,6 +253,7 @@ describe("provider-group tag inputs", () => {
 
     const input = container.querySelector("input") as HTMLInputElement;
     await act(async () => {
+      input.focus();
       input.dispatchEvent(new MouseEvent("click", { bubbles: true }));
       await new Promise((resolve) => setTimeout(resolve, 0));
     });

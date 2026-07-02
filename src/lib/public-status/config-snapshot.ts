@@ -192,8 +192,8 @@ export function buildPublicStatusConfigSnapshot(
     timeZone: input.timeZone ?? null,
     defaultIntervalMinutes: input.defaultIntervalMinutes,
     defaultRangeHours: input.defaultRangeHours,
-    groups: [...input.groups]
-      .sort(
+    groups: input.groups
+      .toSorted(
         (left, right) => left.sortOrder - right.sortOrder || left.slug.localeCompare(right.slug)
       )
       .map((group) => ({
@@ -262,7 +262,7 @@ export function buildInternalPublicStatusConfigSnapshot(
   return {
     ...input,
     generatedAt: new Date().toISOString(),
-    groups: [...input.groups].sort(
+    groups: Array.from(input.groups).toSorted(
       (left, right) => left.sortOrder - right.sortOrder || left.slug.localeCompare(right.slug)
     ),
   };
@@ -349,6 +349,7 @@ export async function readCurrentPublicStatusConfigSnapshot(input?: {
       : [undefined, LEGACY_PUBLIC_STATUS_REDIS_PREFIX];
   for (const prefix of prefixes) {
     const currentVersion = extractCurrentConfigVersion(
+      // react-doctor-disable-next-line react-doctor/async-await-in-loop -- current prefix must be tried before legacy fallback
       await safeGet(redis, buildPublicStatusConfigVersionPointerKey({ prefix }))
     );
     if (currentVersion) {
@@ -393,6 +394,7 @@ export async function readCurrentInternalPublicStatusConfigSnapshot(
       : [undefined, LEGACY_PUBLIC_STATUS_REDIS_PREFIX];
   for (const prefix of prefixes) {
     const currentVersion = extractCurrentConfigVersion(
+      // react-doctor-disable-next-line react-doctor/async-await-in-loop -- current prefix must be tried before legacy fallback
       await safeGet(redis, buildPublicStatusConfigVersionPointerKey({ prefix }))
     );
     if (currentVersion) {

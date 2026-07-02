@@ -64,7 +64,10 @@ export function createCsrfOriginGuard(config: CsrfGuardConfig) {
   const enforceInDevelopment = config.enforceInDevelopment ?? false;
   const trustForwardedHost = config.trustForwardedHost ?? false;
   const allowedOrigins = new Set(
-    (config.allowedOrigins ?? []).map(normalizeOrigin).filter((origin) => origin.length > 0)
+    (config.allowedOrigins ?? []).flatMap((origin) => {
+      const normalized = normalizeOrigin(origin);
+      return normalized.length > 0 ? [normalized] : [];
+    })
   );
 
   return {

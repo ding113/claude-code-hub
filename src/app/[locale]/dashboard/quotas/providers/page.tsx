@@ -47,8 +47,7 @@ export default async function ProvidersQuotaPage({
 }: {
   params: Promise<{ locale: string }>;
 }) {
-  const { locale } = await params;
-  const session = await getSession();
+  const [{ locale }, session] = await Promise.all([params, getSession()]);
 
   // 权限检查：仅 admin 用户可访问
   if (!session || session.user.role !== "admin") {
@@ -73,11 +72,11 @@ export default async function ProvidersQuotaPage({
 }
 
 async function ProvidersQuotaContent({ locale }: { locale: string }) {
-  const [providers, systemSettings] = await Promise.all([
+  const [providers, systemSettings, t] = await Promise.all([
     getProvidersWithQuotas(),
     getSystemSettings(),
+    getTranslations({ locale, namespace: "quota.providers" }),
   ]);
-  const t = await getTranslations({ locale, namespace: "quota.providers" });
 
   return (
     <div className="space-y-3">

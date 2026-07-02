@@ -195,7 +195,7 @@ describe("ProviderRichListItem Endpoint Display", () => {
       <ProviderRichListItem
         provider={provider}
         currentUser={ADMIN_USER}
-        enableMultiProviderTypes={true}
+        features={{ enableMultiProviderTypes: true }}
       />
     );
 
@@ -227,7 +227,7 @@ describe("ProviderRichListItem Endpoint Display", () => {
           updatedAt: new Date("2026-02-01T00:00:00Z"),
         }}
         currentUser={ADMIN_USER}
-        enableMultiProviderTypes={true}
+        features={{ enableMultiProviderTypes: true }}
       />
     );
 
@@ -257,7 +257,7 @@ describe("ProviderRichListItem Endpoint Display", () => {
       <ProviderRichListItem
         provider={provider}
         currentUser={ADMIN_USER}
-        enableMultiProviderTypes={true}
+        features={{ enableMultiProviderTypes: true }}
       />
     );
 

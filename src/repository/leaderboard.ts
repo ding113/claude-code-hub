@@ -1,9 +1,7 @@
-"use server";
-
 import { and, asc, desc, eq, isNull, sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import { providers, usageLedger, users } from "@/drizzle/schema";
-import { resolveSystemTimezone } from "@/lib/utils/timezone";
+import { resolveSystemTimezone } from "@/lib/utils/timezone-resolver";
 import type { ProviderType } from "@/types/provider";
 import type { BillingModelSource } from "@/types/system-config";
 import {
@@ -303,14 +301,20 @@ function buildDateCondition(
  * 通用排行榜查询函数（使用 SQL AT TIME ZONE 确保时区正确）
  */
 function buildUserFilterCondition(userFilters?: UserLeaderboardFilters) {
-  const normalizedTags = (userFilters?.userTags ?? []).map((t) => t.trim()).filter(Boolean);
+  const normalizedTags = (userFilters?.userTags ?? []).flatMap((tag) => {
+    const trimmed = tag.trim();
+    return trimmed ? [trimmed] : [];
+  });
   let tagFilterCondition: ReturnType<typeof sql> | undefined;
   if (normalizedTags.length > 0) {
     const tagConditions = normalizedTags.map((tag) => sql`${users.tags} ? ${tag}`);
     tagFilterCondition = sql`(${sql.join(tagConditions, sql` OR `)})`;
   }
 
-  const normalizedGroups = (userFilters?.userGroups ?? []).map((g) => g.trim()).filter(Boolean);
+  const normalizedGroups = (userFilters?.userGroups ?? []).flatMap((group) => {
+    const trimmed = group.trim();
+    return trimmed ? [trimmed] : [];
+  });
   let groupFilterCondition: ReturnType<typeof sql> | undefined;
   if (normalizedGroups.length > 0) {
     const groupConditions = normalizedGroups.map(
@@ -824,30 +828,34 @@ async function findProviderCacheHitRateLeaderboardWithTimezone(
     providerType ? eq(providers.providerType, providerType) : undefined,
   ];
 
-  const rankings = await db
-    .select({
-      providerId: usageLedger.finalProviderId,
-      providerName: providers.name,
-      totalRequests: sql<number>`count(*)::double precision`,
-      totalCost: sql<string>`COALESCE(sum(${usageLedger.costUsd}), 0)`,
-      cacheReadTokens: sumCacheReadTokens,
-      cacheCreationCost: sumCacheCreationCost,
-      totalInputTokens: sumTotalInputTokens,
-      cacheHitRate: cacheHitRateExpr,
-    })
-    .from(usageLedger)
-    .innerJoin(
-      providers,
-      and(sql`${usageLedger.finalProviderId} = ${providers.id}`, isNull(providers.deletedAt))
-    )
-    .where(
-      and(...whereConditions.filter((c): c is NonNullable<(typeof whereConditions)[number]> => !!c))
-    )
-    .groupBy(usageLedger.finalProviderId, providers.name)
-    .orderBy(desc(cacheHitRateExpr), desc(sql`count(*)`));
+  const [rankings, systemSettings] = await Promise.all([
+    db
+      .select({
+        providerId: usageLedger.finalProviderId,
+        providerName: providers.name,
+        totalRequests: sql<number>`count(*)::double precision`,
+        totalCost: sql<string>`COALESCE(sum(${usageLedger.costUsd}), 0)`,
+        cacheReadTokens: sumCacheReadTokens,
+        cacheCreationCost: sumCacheCreationCost,
+        totalInputTokens: sumTotalInputTokens,
+        cacheHitRate: cacheHitRateExpr,
+      })
+      .from(usageLedger)
+      .innerJoin(
+        providers,
+        and(sql`${usageLedger.finalProviderId} = ${providers.id}`, isNull(providers.deletedAt))
+      )
+      .where(
+        and(
+          ...whereConditions.filter((c): c is NonNullable<(typeof whereConditions)[number]> => !!c)
+        )
+      )
+      .groupBy(usageLedger.finalProviderId, providers.name)
+      .orderBy(desc(cacheHitRateExpr), desc(sql`count(*)`)),
+    getSystemSettings(),
+  ]);
 
   // Model-level cache hit breakdown per provider
-  const systemSettings = await getSystemSettings();
   const billingModelSource = systemSettings.billingModelSource;
   const rawModelField =
     billingModelSource === "original"
@@ -1155,22 +1163,26 @@ async function findModelLeaderboardWithTimezone(
     .groupBy(modelField)
     .orderBy(desc(sql`COALESCE(sum(${usageLedger.costUsd}), 0)`), desc(sql`count(*)`));
 
-  return rankings
-    .filter((entry) => entry.model !== null && entry.model !== "")
-    .map((entry) => ({
-      model: entry.model as string, // 已过滤 null/空字符串，可安全断言
-      totalRequests: entry.totalRequests,
-      totalCost: parseFloat(entry.totalCost),
-      totalTokens: entry.totalTokens,
-      successRate:
-        billingModelSource === "original" ? clampRatio01Nullable(entry.successRate) : null,
-      rowIdentityBasis: billingModelSource,
-      successRateBasis: billingModelSource === "original" ? "original" : "unavailable",
-      costTokensBasis: billingModelSource,
-      basisDisclosureRequired: billingModelSource !== "original",
-      successRateUnavailableReason:
-        billingModelSource !== "original" ? "redirected_billing_model" : undefined,
-    }));
+  return rankings.flatMap((entry) =>
+    entry.model !== null && entry.model !== ""
+      ? [
+          {
+            model: entry.model as string,
+            totalRequests: entry.totalRequests,
+            totalCost: parseFloat(entry.totalCost),
+            totalTokens: entry.totalTokens,
+            successRate:
+              billingModelSource === "original" ? clampRatio01Nullable(entry.successRate) : null,
+            rowIdentityBasis: billingModelSource,
+            successRateBasis: billingModelSource === "original" ? "original" : "unavailable",
+            costTokensBasis: billingModelSource,
+            basisDisclosureRequired: billingModelSource !== "original",
+            successRateUnavailableReason:
+              billingModelSource !== "original" ? "redirected_billing_model" : undefined,
+          },
+        ]
+      : []
+  );
 }
 
 /**

@@ -18,7 +18,7 @@ vi.mock("@/lib/proxy-agent", () => ({
   createProxyAgentForProvider: vi.fn(),
 }));
 
-vi.mock("@/lib/utils/timezone", () => ({
+vi.mock("@/lib/utils/timezone-resolver", () => ({
   resolveSystemTimezone: vi.fn().mockResolvedValue("UTC"),
 }));
 

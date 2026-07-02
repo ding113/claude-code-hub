@@ -9,6 +9,7 @@ import {
   useCallback,
   useEffect,
   useEffectEvent,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -134,8 +135,7 @@ export function VirtualizedLogsTable({
 }: VirtualizedLogsTableProps) {
   const t = useTranslations("dashboard");
   const tChain = useTranslations("provider-chain");
-  const [isHistoryBrowsing, setIsHistoryBrowsing] = useState(false);
-  const shouldPoll = autoRefreshEnabled && !isHistoryBrowsing;
+  const isHistoryBrowsingRef = useRef(false);
 
   const hideProviderColumn = hiddenColumns?.includes("provider") ?? false;
   const hideUserColumn = hiddenColumns?.includes("user") ?? false;
@@ -191,7 +191,7 @@ export function VirtualizedLogsTable({
       staleTime: 30000, // 30 seconds
       refetchOnWindowFocus: false,
       refetchInterval: (query) => {
-        if (!shouldPoll) return false;
+        if (!autoRefreshEnabled || isHistoryBrowsingRef.current) return false;
         if (query.state.fetchStatus !== "idle") return false;
         return autoRefreshIntervalMs;
       },
@@ -227,7 +227,7 @@ export function VirtualizedLogsTable({
   });
 
   useEffect(() => {
-    setIsHistoryBrowsing(showScrollToTop);
+    isHistoryBrowsingRef.current = showScrollToTop;
   }, [showScrollToTop]);
 
   const handleFiltersReset = useEffectEvent((nextResetKey: string) => {
@@ -236,7 +236,7 @@ export function VirtualizedLogsTable({
     resetScrollPosition();
   });
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     handleFiltersReset(filtersResetKey);
   }, [filtersResetKey]);
 
@@ -456,21 +456,23 @@ export function VirtualizedLogsTable({
             label: t("logs.billingDetails.hedgeWinner"),
             primary: formatCurrency(hedgeTable.winnerCost, currencyCode, 6),
           })}
-          {hedgeTable.attempts
-            .filter((attempt) => attempt.kind === "loser")
-            .map((loser) => (
-              <div
-                key={`${loser.providerId}-${loser.attemptNumber}`}
-                className="flex items-start justify-between gap-3"
-              >
-                <span className="text-[11px] text-rose-300/80 truncate">
-                  {loser.providerName ?? t("logs.billingDetails.hedgeLoserShort")}
-                </span>
-                <span className={cn(amountClassName, "text-rose-300/80")}>
-                  {formatCurrency(loser.costUsd, currencyCode, 6)}
-                </span>
-              </div>
-            ))}
+          {hedgeTable.attempts.flatMap((loser) =>
+            loser.kind === "loser"
+              ? [
+                  <div
+                    key={`${loser.providerId}-${loser.attemptNumber}`}
+                    className="flex items-start justify-between gap-3"
+                  >
+                    <span className="text-[11px] text-rose-300/80 truncate">
+                      {loser.providerName ?? t("logs.billingDetails.hedgeLoserShort")}
+                    </span>
+                    <span className={cn(amountClassName, "text-rose-300/80")}>
+                      {formatCurrency(loser.costUsd, currencyCode, 6)}
+                    </span>
+                  </div>,
+                ]
+              : []
+          )}
         </div>
         <div className="flex items-center justify-between gap-3 border-t border-background/20 pt-2 text-[11px] text-background/70">
           <span>{t("logs.billingDetails.hedgeTokenTotal")}</span>

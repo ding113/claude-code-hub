@@ -47,7 +47,7 @@ export function ProviderTab({
   const sortedProviders = useMemo(() => {
     if (!data?.providers) return [];
 
-    return [...data.providers].sort((a, b) => {
+    return Array.from(data.providers).toSorted((a, b) => {
       switch (sortBy) {
         case "availability":
           if (a.currentStatus === "unknown" && b.currentStatus !== "unknown") return 1;

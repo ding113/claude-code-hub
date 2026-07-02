@@ -28,7 +28,7 @@ export async function resolveDefaultSiteMetadataSource(): Promise<{
 
 export async function resolveDefaultLayoutTimeZone(): Promise<string> {
   try {
-    const { resolveSystemTimezone } = await import("@/lib/utils/timezone");
+    const { resolveSystemTimezone } = await import("@/lib/utils/timezone-resolver");
     return await resolveSystemTimezone();
   } catch (error) {
     logger.warn("resolveDefaultLayoutTimeZone failed", {

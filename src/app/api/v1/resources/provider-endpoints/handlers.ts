@@ -418,6 +418,7 @@ async function ensureVisibleEndpointIds(
   endpointIds: number[]
 ): Promise<Response | null> {
   for (const endpointId of endpointIds) {
+    // react-doctor-disable-next-line react-doctor/async-await-in-loop -- visibility checks return the first hidden endpoint in request order
     const hidden = await ensureVisibleEndpoint(c, endpointId);
     if (hidden) return hidden;
   }
@@ -462,11 +463,12 @@ function notFound(c: Context, errorCode: string, detail: string): Response {
 
 function filterVisibleProviderTypes<T>(value: T): T {
   if (Array.isArray(value)) {
-    return value
-      .map((item) => filterVisibleProviderTypes(item))
-      .filter(
-        (item) => !isHiddenProviderType((item as { providerType?: string }).providerType)
-      ) as T;
+    return value.flatMap((item) => {
+      const filtered = filterVisibleProviderTypes(item);
+      return !isHiddenProviderType((filtered as { providerType?: string }).providerType)
+        ? [filtered]
+        : [];
+    }) as T;
   }
   if (value instanceof Date) return value;
   if (!value || typeof value !== "object") return value;

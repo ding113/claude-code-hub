@@ -56,8 +56,10 @@ async function SettingsPricesContent({
   locale: string;
   searchParams: Promise<SettingsPricesSearchParams>;
 }) {
-  const t = await getTranslations({ locale, namespace: "settings" });
-  const params = await searchParams;
+  const [t, params] = await Promise.all([
+    getTranslations({ locale, namespace: "settings" }),
+    searchParams,
+  ]);
 
   // 解析分页参数
   const page = parseInt(params.page || "1", 10);

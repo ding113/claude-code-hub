@@ -136,8 +136,8 @@ export function buildHedgeBillingTable(
     cacheReadInputTokens: toCount(winner?.cacheReadInputTokens),
   };
 
-  const loserRows: HedgeAttemptRow[] = [...summary.losers]
-    .sort((a, b) => a.attemptNumber - b.attemptNumber)
+  const loserRows: HedgeAttemptRow[] = summary.losers
+    .toSorted((a, b) => a.attemptNumber - b.attemptNumber)
     .map((loser) => ({
       kind: "loser" as const,
       providerId: loser.providerId,

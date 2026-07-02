@@ -3,7 +3,7 @@
 import { format } from "date-fns";
 import { BarChart3, ChevronLeft, ChevronRight, RefreshCw } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useEffectEvent, useRef, useState } from "react";
 import { ModelBreakdownColumn } from "@/components/analytics/model-breakdown-column";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -44,6 +44,7 @@ export function StatisticsSummaryCard({
       setStats(result.data);
     }
   }, [dateRange.startDate, dateRange.endDate]);
+  const loadLatestStats = useEffectEvent(loadStats);
 
   // Initial load on date range change
   useEffect(() => {
@@ -60,7 +61,7 @@ export function StatisticsSummaryCard({
         clearInterval(intervalRef.current);
       }
       intervalRef.current = setInterval(() => {
-        loadStats();
+        loadLatestStats();
       }, POLL_INTERVAL);
     };
 
@@ -75,7 +76,7 @@ export function StatisticsSummaryCard({
       if (document.hidden) {
         stopPolling();
       } else {
-        loadStats();
+        loadLatestStats();
         startPolling();
       }
     };
@@ -87,7 +88,7 @@ export function StatisticsSummaryCard({
       stopPolling();
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [loadStats, autoRefreshSeconds]);
+  }, [autoRefreshSeconds]);
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);

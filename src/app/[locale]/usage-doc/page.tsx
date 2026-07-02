@@ -483,8 +483,8 @@ npm --version`}
             </p>
             <ul className="list-disc space-y-1 pl-4">
               {(t.raw("claudeCode.configuration.settingsJson.paths") as string[]).map(
-                (path: string, i: number) => (
-                  <li key={i}>{path}</li>
+                (path: string) => (
+                  <li key={path}>{path}</li>
                 )
               )}
             </ul>
@@ -510,8 +510,8 @@ npm --version`}
             </p>
             <ul className="list-disc space-y-1 pl-4">
               {(t.raw("claudeCode.configuration.settingsJson.importantPoints") as string[]).map(
-                (point: string, i: number) => (
-                  <li key={i}>{point}</li>
+                (point: string) => (
+                  <li key={point}>{point}</li>
                 )
               )}
             </ul>
@@ -643,11 +643,9 @@ sk_xxxxxxxxxxxxxxxxxx`}
         <h4 className={headingClasses.h4}>{t("codex.configuration.configFile.title")}</h4>
         <div className="space-y-3">
           <ol className="list-decimal space-y-2 pl-6">
-            {(t.raw("codex.configuration.configFile.steps") as string[]).map(
-              (step: string, i: number) => (
-                <li key={i}>{step.replace("${configPath}", configPath)}</li>
-              )
-            )}
+            {(t.raw("codex.configuration.configFile.steps") as string[]).map((step: string) => (
+              <li key={step}>{step.replace("${configPath}", configPath)}</li>
+            ))}
           </ol>
 
           <Tabs defaultValue="auth-json" className="w-full">
@@ -764,8 +762,8 @@ source ${shellConfigFile}`}
             </p>
             <ul className="list-disc space-y-2 pl-4">
               {(t.raw("codex.configuration.configFile.importantPoints") as string[]).map(
-                (point: string, i: number) => (
-                  <li key={i}>{point}</li>
+                (point: string) => (
+                  <li key={point}>{point}</li>
                 )
               )}
             </ul>
@@ -865,8 +863,8 @@ GEMINI_MODEL=gemini-3-pro-preview`}
             </p>
             <ul className="list-disc space-y-1 pl-4">
               {(t.raw("gemini.configuration.configFile.parameters") as string[]).map(
-                (param: string, i: number) => (
-                  <li key={i}>{param}</li>
+                (param: string) => (
+                  <li key={param}>{param}</li>
                 )
               )}
             </ul>
@@ -879,8 +877,8 @@ GEMINI_MODEL=gemini-3-pro-preview`}
             </p>
             <ul className="list-disc space-y-1 pl-4">
               {(t.raw("gemini.configuration.configFile.importantPoints") as string[]).map(
-                (point: string, i: number) => (
-                  <li key={i}>{point}</li>
+                (point: string) => (
+                  <li key={point}>{point}</li>
                 )
               )}
             </ul>
@@ -953,11 +951,9 @@ gemini`}
           />
           <p>{t("gemini.startup.agentMode.features")}</p>
           <ul className="list-disc space-y-1 pl-6">
-            {(t.raw("gemini.startup.agentMode.featureList") as string[]).map(
-              (feature: string, i: number) => (
-                <li key={i}>{feature}</li>
-              )
-            )}
+            {(t.raw("gemini.startup.agentMode.featureList") as string[]).map((feature: string) => (
+              <li key={feature}>{feature}</li>
+            ))}
           </ul>
         </div>
       </div>
@@ -1166,8 +1162,8 @@ gemini`}
             </p>
             <ul className="list-disc space-y-2 pl-4">
               {(t.raw("opencode.configuration.configFile.importantPoints") as string[]).map(
-                (point: string, i: number) => (
-                  <li key={i}>{point.replace("${resolvedOrigin}", resolvedOrigin)}</li>
+                (point: string) => (
+                  <li key={point}>{point.replace("${resolvedOrigin}", resolvedOrigin)}</li>
                 )
               )}
             </ul>
@@ -1226,11 +1222,9 @@ gemini`}
         <blockquote className="space-y-2 rounded-lg border-l-2 border-amber-500/50 bg-amber-50/50 dark:bg-amber-950/20 px-4 py-3">
           <p className="font-semibold text-foreground">{t("droid.configuration.prerequisite")}</p>
           <ol className="list-decimal space-y-2 pl-4">
-            {(t.raw("droid.configuration.prerequisiteSteps") as string[]).map(
-              (step: string, i: number) => (
-                <li key={i}>{step}</li>
-              )
-            )}
+            {(t.raw("droid.configuration.prerequisiteSteps") as string[]).map((step: string) => (
+              <li key={step}>{step}</li>
+            ))}
           </ol>
         </blockquote>
 
@@ -1266,8 +1260,8 @@ gemini`}
             </p>
             <ul className="list-disc space-y-2 pl-4">
               {(t.raw("droid.configuration.customModels.importantPoints") as string[]).map(
-                (point: string, i: number) => (
-                  <li key={i}>{point.replace("${resolvedOrigin}", resolvedOrigin)}</li>
+                (point: string) => (
+                  <li key={point}>{point.replace("${resolvedOrigin}", resolvedOrigin)}</li>
                 )
               )}
             </ul>
@@ -1277,11 +1271,9 @@ gemini`}
         <h4 className={headingClasses.h4}>{t("droid.configuration.switching.title")}</h4>
         <div className="space-y-3">
           <ol className="list-decimal space-y-2 pl-6">
-            {(t.raw("droid.configuration.switching.steps") as string[]).map(
-              (step: string, i: number) => (
-                <li key={i}>{step}</li>
-              )
-            )}
+            {(t.raw("droid.configuration.switching.steps") as string[]).map((step: string) => (
+              <li key={step}>{step}</li>
+            ))}
           </ol>
         </div>
       </div>
@@ -1304,11 +1296,9 @@ gemini`}
             {t("claudeCode.vsCodeExtension.configPath", { path: resolvedConfigPath })}
           </p>
           <ol className="list-decimal space-y-2 pl-6">
-            {(t.raw("claudeCode.vsCodeExtension.steps") as string[]).map(
-              (step: string, i: number) => (
-                <li key={i}>{step}</li>
-              )
-            )}
+            {(t.raw("claudeCode.vsCodeExtension.steps") as string[]).map((step: string) => (
+              <li key={step}>{step}</li>
+            ))}
           </ol>
           <CodeBlock
             language="jsonc"
@@ -1320,11 +1310,9 @@ gemini`}
           <blockquote className="space-y-1 rounded-lg border-l-2 border-primary/50 bg-muted/40 px-4 py-3">
             <p className="font-semibold text-foreground">{t("claudeCode.vsCodeExtension.note")}</p>
             <ul className="list-disc space-y-1 pl-4">
-              {(t.raw("claudeCode.vsCodeExtension.notePoints") as string[]).map(
-                (point: string, i: number) => (
-                  <li key={i}>{point}</li>
-                )
-              )}
+              {(t.raw("claudeCode.vsCodeExtension.notePoints") as string[]).map((point: string) => (
+                <li key={point}>{point}</li>
+              ))}
             </ul>
           </blockquote>
         </div>
@@ -1335,8 +1323,8 @@ gemini`}
         <div className="space-y-3">
           <h4 className={headingClasses.h4}>{t("codex.vsCodeExtension.title")}</h4>
           <ol className="list-decimal space-y-2 pl-6">
-            {(t.raw("codex.vsCodeExtension.steps") as string[]).map((step: string, i: number) => (
-              <li key={i}>{step}</li>
+            {(t.raw("codex.vsCodeExtension.steps") as string[]).map((step: string) => (
+              <li key={step}>{step}</li>
             ))}
           </ol>
           <blockquote className="space-y-1 rounded-lg border-l-2 border-primary/50 bg-muted/40 px-4 py-3">
@@ -1472,8 +1460,8 @@ ${cli.cliName}`}
           <p className="font-semibold text-foreground">{t(cmdNotFoundKey)}</p>
           {os === "windows" ? (
             <ul className="list-disc space-y-2 pl-6">
-              {(t.raw(cmdNotFoundWinKey) as string[]).map((item: string, i: number) => (
-                <li key={i}>{item}</li>
+              {(t.raw(cmdNotFoundWinKey) as string[]).map((item: string) => (
+                <li key={item}>{item}</li>
               ))}
             </ul>
           ) : (
@@ -1495,11 +1483,9 @@ source ~/.${os === "macos" ? "zshrc" : "bashrc"}`}
             {cli.id === "gemini" ? (
               // Gemini 特殊处理，显示 connectionSteps
               <ul className="list-disc space-y-2 pl-6">
-                {(t.raw("gemini.commonIssues.connectionSteps") as string[]).map(
-                  (step: string, i: number) => (
-                    <li key={i}>{step}</li>
-                  )
-                )}
+                {(t.raw("gemini.commonIssues.connectionSteps") as string[]).map((step: string) => (
+                  <li key={step}>{step}</li>
+                ))}
               </ul>
             ) : os === "windows" ? (
               <CodeBlock
@@ -1699,8 +1685,8 @@ curl -i ${apiOrigin}/v1/messages`}
         <ul className="list-disc space-y-2 pl-6">
           {(
             t.raw("commonCommands.commands") as Array<{ command: string; description: string }>
-          ).map((cmd: { command: string; description: string }, i: number) => (
-            <li key={i}>
+          ).map((cmd: { command: string; description: string }) => (
+            <li key={cmd.command}>
               <code className="rounded bg-muted px-1 py-0.5 text-xs text-foreground">
                 {cmd.command}
               </code>{" "}
@@ -1732,11 +1718,9 @@ curl -i ${apiOrigin}/v1/messages`}
             {t("troubleshooting.installationFailed.title")}
           </p>
           <ul className="list-disc space-y-2 pl-6">
-            {(t.raw("troubleshooting.installationFailed.steps") as string[]).map(
-              (step: string, i: number) => (
-                <li key={i}>{step}</li>
-              )
-            )}
+            {(t.raw("troubleshooting.installationFailed.steps") as string[]).map((step: string) => (
+              <li key={step}>{step}</li>
+            ))}
           </ul>
         </div>
 
@@ -1745,11 +1729,9 @@ curl -i ${apiOrigin}/v1/messages`}
             {t("troubleshooting.invalidApiKey.title")}
           </p>
           <ul className="list-disc space-y-2 pl-6">
-            {(t.raw("troubleshooting.invalidApiKey.steps") as string[]).map(
-              (step: string, i: number) => (
-                <li key={i}>{step}</li>
-              )
-            )}
+            {(t.raw("troubleshooting.invalidApiKey.steps") as string[]).map((step: string) => (
+              <li key={step}>{step}</li>
+            ))}
           </ul>
         </div>
 
@@ -1759,8 +1741,8 @@ curl -i ${apiOrigin}/v1/messages`}
           </p>
           <ul className="list-disc space-y-2 pl-6">
             {(t.raw("troubleshooting.endpointConfigError.points") as string[]).map(
-              (point: string, i: number) => (
-                <li key={i}>{point.replace("${resolvedOrigin}", resolvedOrigin)}</li>
+              (point: string) => (
+                <li key={point}>{point.replace("${resolvedOrigin}", resolvedOrigin)}</li>
               )
             )}
           </ul>
@@ -1825,7 +1807,7 @@ export default function UsageDocPage() {
       }
     };
 
-    window.addEventListener("scroll", handleScroll);
+    window.addEventListener("scroll", handleScroll, { passive: true });
     handleScroll(); // 初始化
 
     return () => window.removeEventListener("scroll", handleScroll);

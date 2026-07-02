@@ -4,6 +4,8 @@ import { apiClient } from "@/lib/api-client/v1/client";
 import { ApiError, getApiErrorMessageKey } from "@/lib/api-client/v1/errors";
 import type { ActionResult } from "./types";
 
+const SEARCH_PARAM_PRIMITIVE_TYPES = new Set(["string", "number", "boolean"]);
+
 // NOTE(#1259): errorCode is pre-mapped to an errors-namespace key so forms can
 // pass it straight to getErrorMessage(); raw REST codes like "auth.forbidden"
 // have no translation and would render as the literal key path.
@@ -41,7 +43,7 @@ export function searchParams(params: Record<string, unknown>): string {
       search.set(key, value.toISOString());
     } else if (Array.isArray(value)) {
       if (value.length > 0) search.set(key, value.map(String).join(","));
-    } else if (["string", "number", "boolean"].includes(typeof value)) {
+    } else if (SEARCH_PARAM_PRIMITIVE_TYPES.has(typeof value)) {
       search.set(key, String(value));
     }
   }

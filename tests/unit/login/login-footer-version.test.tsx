@@ -1,3 +1,4 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -32,16 +33,38 @@ vi.mock("next-themes", () => ({
   useTheme: vi.fn(() => ({ theme: "system", setTheme: vi.fn() })),
 }));
 
+vi.mock("framer-motion", () => {
+  const renderMotion =
+    (tag: "aside" | "div") =>
+    ({ children, animate, custom, initial, transition, variants, ...rest }: any) => {
+      const Component = tag;
+      return <Component {...rest}>{children}</Component>;
+    };
+
+  return {
+    m: {
+      aside: renderMotion("aside"),
+      div: renderMotion("div"),
+    },
+  };
+});
+
 const globalFetch = global.fetch;
 
 describe("LoginPage Footer Version", () => {
   let container: HTMLDivElement;
   let root: ReturnType<typeof createRoot>;
+  let queryClient: QueryClient;
 
   beforeEach(() => {
     container = document.createElement("div");
     document.body.appendChild(container);
     root = createRoot(container);
+    queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+      },
+    });
     vi.clearAllMocks();
     global.fetch = vi.fn();
   });
@@ -51,17 +74,28 @@ describe("LoginPage Footer Version", () => {
       root.unmount();
     });
     document.body.removeChild(container);
+    queryClient.clear();
     global.fetch = globalFetch;
   });
 
+  const flushTicks = async (times = 5) => {
+    for (let i = 0; i < times; i++) {
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+    }
+  };
+
   const render = async () => {
     await act(async () => {
-      root.render(<LoginPage />);
+      root.render(
+        <QueryClientProvider client={queryClient}>
+          <LoginPage />
+        </QueryClientProvider>
+      );
     });
 
-    await act(async () => {
-      await Promise.resolve();
-    });
+    await flushTicks();
   };
 
   it("shows version and update hint when hasUpdate=true", async () => {

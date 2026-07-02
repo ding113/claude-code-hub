@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useLayoutEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { TagInputField } from "@/components/form/form-field";
 import type { TagInputSuggestion } from "@/components/ui/tag-input";
@@ -44,22 +44,22 @@ export function ProviderGroupSelect({
   translations,
 }: ProviderGroupSelectProps) {
   const [groups, setGroups] = useState<Array<{ group: string; providerCount: number }>>([]);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isFetching, setIsFetching] = useState(false);
   const loadFailedText = useMemo(
     () => getTranslation(translations, "errors.loadFailed", "Load failed"),
     [translations]
   );
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     let alive = true;
     if (disabled) {
       setGroups([]);
-      setIsLoading(false);
+      setIsFetching(false);
       return () => {
         alive = false;
       };
     }
-    setIsLoading(true);
+    setIsFetching(true);
     getProviderGroupsWithCount()
       .then((res) => {
         if (!alive) return;
@@ -79,7 +79,7 @@ export function ProviderGroupSelect({
       })
       .finally(() => {
         if (!alive) return;
-        setIsLoading(false);
+        setIsFetching(false);
       });
 
     return () => {
@@ -99,11 +99,11 @@ export function ProviderGroupSelect({
 
   const description = useMemo(() => {
     const base = getTranslation(translations, "description", "");
-    if (isLoading && !base) {
+    if (isFetching && !base) {
       return getTranslation(translations, "loadingText", "Loading...");
     }
     return base;
-  }, [translations, isLoading]);
+  }, [translations, isFetching]);
 
   // 选择新分组后自动移除 "default"
   const handleChange = useCallback(

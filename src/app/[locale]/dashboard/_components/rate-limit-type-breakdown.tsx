@@ -30,12 +30,9 @@ export function RateLimitTypeBreakdown({ data }: RateLimitTypeBreakdownProps) {
   // 转换数据为图表格式
   const chartData = React.useMemo(() => {
     return Object.entries(data)
-      .filter(([, count]) => count > 0)
-      .map(([type, count]) => ({
-        type: type as RateLimitType,
-        count,
-        name: t(`types.${type}`),
-      }))
+      .flatMap(([type, count]) =>
+        count > 0 ? [{ type: type as RateLimitType, count, name: t(`types.${type}`) }] : []
+      )
       .sort((a, b) => b.count - a.count);
   }, [data, t]);
 
@@ -115,9 +112,9 @@ export function RateLimitTypeBreakdown({ data }: RateLimitTypeBreakdownProps) {
                 height={36}
                 content={({ payload }) => (
                   <div className="flex flex-wrap justify-center gap-2 pt-4">
-                    {payload?.map((entry, index) => (
+                    {payload?.map((entry) => (
                       <div
-                        key={`legend-${index}`}
+                        key={`legend-${entry.value}`}
                         className="flex items-center gap-2 rounded-md bg-muted/50 px-3 py-1"
                       >
                         <div

@@ -112,12 +112,12 @@ export function RuleListTable({ rules }: RuleListTableProps) {
                   <div className="flex items-center gap-2 flex-wrap">
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <code
-                          className="text-sm font-medium text-foreground font-mono truncate max-w-[300px] cursor-help"
-                          tabIndex={0}
+                        <button
+                          type="button"
+                          className="max-w-[300px] cursor-help truncate border-0 bg-transparent p-0 text-left font-mono text-sm font-medium text-foreground"
                         >
                           {rule.pattern}
-                        </code>
+                        </button>
                       </TooltipTrigger>
                       <TooltipContent
                         side="bottom"

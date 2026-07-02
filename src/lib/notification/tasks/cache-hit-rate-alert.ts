@@ -7,7 +7,7 @@ import {
 } from "@/lib/cache-hit-rate-alert/decision";
 import { logger } from "@/lib/logger";
 import { getRedisClient } from "@/lib/redis/client";
-import { resolveSystemTimezone } from "@/lib/utils/timezone";
+import { resolveSystemTimezone } from "@/lib/utils/timezone-resolver";
 import type {
   CacheHitRateAlertData,
   CacheHitRateAlertSettingsSnapshot,
@@ -351,7 +351,7 @@ export async function generateCacheHitRateAlertPayload(
 
   const suppressedCount = suppressedKeys.size;
   const remaining = redis
-    ? anomalyPairs.filter((p) => !suppressedKeys.has(p.key)).map((p) => p.anomaly)
+    ? anomalyPairs.flatMap((p) => (!suppressedKeys.has(p.key) ? [p.anomaly] : []))
     : anomalies;
 
   if (remaining.length === 0) {

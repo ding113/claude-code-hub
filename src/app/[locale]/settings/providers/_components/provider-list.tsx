@@ -104,17 +104,19 @@ export function ProviderList({
             statistics={statistics[provider.id]}
             statisticsLoading={statisticsLoading}
             currencyCode={currencyCode}
-            enableMultiProviderTypes={enableMultiProviderTypes}
+            features={{ enableMultiProviderTypes }}
             activeGroupFilter={activeGroupFilter}
-            isMultiSelectMode={isMultiSelectMode}
-            isSelected={selectedProviderIds.has(provider.id)}
-            onSelectChange={
-              onSelectProvider ? (checked) => onSelectProvider(provider.id, checked) : undefined
-            }
+            selection={{
+              isMultiSelectMode,
+              isSelected: selectedProviderIds.has(provider.id),
+              onSelectChange: onSelectProvider
+                ? (checked) => onSelectProvider(provider.id, checked)
+                : undefined,
+            }}
             onEdit={onEditProvider ? () => onEditProvider(provider) : undefined}
             allGroups={allGroups}
             userGroups={userGroups}
-            isAdmin={isAdmin}
+            permissions={{ isAdmin }}
           />
         ))}
       </div>

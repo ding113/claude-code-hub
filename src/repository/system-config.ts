@@ -1,5 +1,3 @@
-"use server";
-
 import { asc, eq } from "drizzle-orm";
 import type { AnyPgColumn } from "drizzle-orm/pg-core";
 import { db } from "@/drizzle/db";
@@ -416,6 +414,7 @@ function buildSelectAttempts(): SelectAttempt[] {
 async function selectSettingsRow() {
   for (const attempt of buildSelectAttempts()) {
     try {
+      // react-doctor-disable-next-line react-doctor/async-await-in-loop -- schema fallback attempts must run in order
       const [row] = await db
         .select(attempt.selection)
         .from(systemSettings)

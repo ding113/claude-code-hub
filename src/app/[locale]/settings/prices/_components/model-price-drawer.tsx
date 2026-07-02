@@ -1,8 +1,9 @@
 "use client";
 
+import { useQuery } from "@tanstack/react-query";
 import { Loader2, Pencil, Plus, Search } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useLayoutEffect, useState } from "react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -48,9 +49,21 @@ interface ModelPriceDrawerProps {
 
 type ModelMode = "chat" | "image_generation" | "completion";
 
-type PrefillStatus = "idle" | "loading" | "loaded" | "error";
-
 const EXTRA_FIELDS_JSON_PLACEHOLDER = JSON.stringify({ input_cost_per_second: 0.5 }, null, 2);
+
+async function fetchModelPricePrefillResults(query: string): Promise<ModelPrice[]> {
+  const params = new URLSearchParams();
+  params.set("page", "1");
+  params.set("pageSize", "10");
+  params.set("search", query);
+  const response = await fetch(`/api/prices?${params.toString()}`, { cache: "no-store" });
+  const payload = await response.json();
+  if (!payload?.ok) {
+    throw new Error(payload?.error || "unknown error");
+  }
+
+  return payload.data?.data ?? [];
+}
 
 function parsePricePerMillionToPerToken(value: string): number | undefined {
   const trimmed = value.trim();
@@ -107,9 +120,25 @@ export function ModelPriceDrawer({
 
   // 预填充搜索（仅 create 模式显示）
   const [prefillQuery, setPrefillQuery] = useState("");
-  const [prefillStatus, setPrefillStatus] = useState<PrefillStatus>("idle");
-  const [prefillResults, setPrefillResults] = useState<ModelPrice[]>([]);
   const debouncedPrefillQuery = useDebounce(prefillQuery, 300);
+  const prefillSearchQuery = debouncedPrefillQuery.trim();
+  const isPrefillEnabled = open && mode === "create" && prefillSearchQuery.length > 0;
+  const {
+    data: prefillResults = [],
+    isFetching: isPrefillLoading,
+    isError: isPrefillError,
+  } = useQuery({
+    queryKey: ["model-price-prefill", prefillSearchQuery],
+    queryFn: () => fetchModelPricePrefillResults(prefillSearchQuery),
+    enabled: isPrefillEnabled,
+  });
+  const prefillStatus = !isPrefillEnabled
+    ? "idle"
+    : isPrefillLoading
+      ? "loading"
+      : isPrefillError
+        ? "error"
+        : "loaded";
 
   const resetForm = useCallback(() => {
     setModelName("");
@@ -125,8 +154,6 @@ export function ModelPriceDrawer({
     setCacheCreation1hPrice("");
     setExtraFieldsJson("");
     setPrefillQuery("");
-    setPrefillStatus("idle");
-    setPrefillResults([]);
   }, []);
 
   const applyPrefill = useCallback((selected: ModelPrice) => {
@@ -169,7 +196,7 @@ export function ModelPriceDrawer({
   }, []);
 
   // 当抽屉打开或初始数据变化时，重置表单
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!open) {
       return;
     }
@@ -181,63 +208,6 @@ export function ModelPriceDrawer({
 
     resetForm();
   }, [open, mode, initialData, applyPrefill, resetForm]);
-
-  useEffect(() => {
-    if (!open || mode !== "create") {
-      return;
-    }
-
-    if (!prefillQuery.trim()) {
-      setPrefillResults([]);
-      setPrefillStatus("idle");
-    }
-  }, [mode, open, prefillQuery]);
-
-  useEffect(() => {
-    if (!open || mode !== "create") {
-      return;
-    }
-
-    const query = debouncedPrefillQuery.trim();
-    if (!query) {
-      return;
-    }
-
-    let cancelled = false;
-    const fetchPrefillResults = async () => {
-      setPrefillStatus("loading");
-      setPrefillResults([]);
-      try {
-        const params = new URLSearchParams();
-        params.set("page", "1");
-        params.set("pageSize", "10");
-        params.set("search", query);
-        const response = await fetch(`/api/prices?${params.toString()}`, { cache: "no-store" });
-        const payload = await response.json();
-        if (!payload?.ok) {
-          throw new Error(payload?.error || "unknown error");
-        }
-
-        const data: ModelPrice[] = payload.data?.data ?? [];
-        if (!cancelled) {
-          setPrefillResults(data);
-          setPrefillStatus("loaded");
-        }
-      } catch (error) {
-        console.error("搜索模型失败:", error);
-        if (!cancelled) {
-          setPrefillResults([]);
-          setPrefillStatus("error");
-        }
-      }
-    };
-
-    fetchPrefillResults();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [mode, open, debouncedPrefillQuery]);
 
   const handleSubmit = async () => {
     if (!modelName.trim()) {

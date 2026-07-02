@@ -98,7 +98,7 @@
     "hono": "^4",
     "html2canvas": "^1",
     "ioredis": "^5",
-    "jspdf": "^4",
+    "jspdf": "^4.2.1",
     "lucide-react": "^1.8.0",
     "maplibre-gl": "^5.23.0",
     "next": "^16",
@@ -140,10 +140,10 @@
     "@vitest/ui": "^4",
     "bun-types": "^1",
     "drizzle-kit": "^0.31",
-    "happy-dom": "^20",
+    "happy-dom": "^20.10.1",
     "openapi-typescript": "^7.13.0",
     "tailwindcss": "^4",
     "typescript": "^6",
-    "vitest": "^4"
+    "vitest": "^4.1.8"
   }
 }

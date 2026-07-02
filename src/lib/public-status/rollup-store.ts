@@ -217,27 +217,29 @@ export function getConfiguredPublicStatusGroupsFromSnapshot(
   snapshot: InternalPublicStatusConfigSnapshot
 ): PublicStatusConfiguredGroup[] {
   return snapshot.groups
-    .filter(
-      (group) =>
-        typeof group.sourceGroupName === "string" &&
-        group.sourceGroupName.trim().length > 0 &&
-        Array.isArray(group.models) &&
-        group.models.length > 0
+    .flatMap((group) =>
+      typeof group.sourceGroupName === "string" &&
+      group.sourceGroupName.trim().length > 0 &&
+      Array.isArray(group.models) &&
+      group.models.length > 0
+        ? [
+            {
+              sourceGroupId: group.sourceGroupId ?? null,
+              sourceGroupName: group.sourceGroupName.trim(),
+              publicGroupSlug: group.slug,
+              displayName: group.displayName,
+              explanatoryCopy: group.description,
+              sortOrder: group.sortOrder,
+              models: group.models.map((model) => ({
+                publicModelKey: model.publicModelKey,
+                label: model.label,
+                vendorIconKey: model.vendorIconKey,
+                requestTypeBadge: model.requestTypeBadge,
+              })),
+            },
+          ]
+        : []
     )
-    .map((group) => ({
-      sourceGroupId: group.sourceGroupId ?? null,
-      sourceGroupName: group.sourceGroupName.trim(),
-      publicGroupSlug: group.slug,
-      displayName: group.displayName,
-      explanatoryCopy: group.description,
-      sortOrder: group.sortOrder,
-      models: group.models.map((model) => ({
-        publicModelKey: model.publicModelKey,
-        label: model.label,
-        vendorIconKey: model.vendorIconKey,
-        requestTypeBadge: model.requestTypeBadge,
-      })),
-    }))
     .sort(
       (left, right) =>
         left.sortOrder - right.sortOrder || left.displayName.localeCompare(right.displayName)
@@ -452,10 +454,15 @@ export async function writePublicStatusRollupEvent(input: {
       );
     }
   } else {
-    for (const increment of increments) {
-      const field = buildPublicStatusRollupField(increment);
-      await redis.hincrbyfloat(key, field, increment.value);
+    if (typeof redis.hincrbyfloat !== "function") {
+      throw new Error("Public status rollup Redis client does not support hincrbyfloat");
     }
+    const hincrbyfloat = redis.hincrbyfloat.bind(redis);
+    await Promise.all(
+      increments.map((increment) =>
+        hincrbyfloat(key, buildPublicStatusRollupField(increment), increment.value)
+      )
+    );
     if (typeof redis.set === "function") {
       await redis.set(coverageStartKey, bucketStartIso, "NX");
     }
@@ -526,6 +533,7 @@ export async function readPublicStatusRollupBuckets(input: {
   const concurrency = 32;
   for (let index = 0; index < input.bucketStarts.length; index += concurrency) {
     const batchStarts = input.bucketStarts.slice(index, index + concurrency);
+    // react-doctor-disable-next-line react-doctor/async-await-in-loop -- rollup reads are intentionally batched to bound Redis concurrency
     const batchBuckets = await Promise.all(
       batchStarts.map(async (bucketStart) =>
         parseBucket(

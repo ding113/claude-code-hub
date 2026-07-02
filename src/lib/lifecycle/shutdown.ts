@@ -67,6 +67,7 @@ export async function runApplicationCleanup(
 
   const work = (async () => {
     // 1. 停止本地周期任务（不需要做 IO，几乎是同步）
+    // react-doctor-disable-next-line react-doctor/async-parallel -- shutdown steps are intentionally ordered so producers stop before buffers flush
     await withTimeout(
       (async () => {
         const { stopCacheCleanup } = await import("@/lib/cache/session-cache");

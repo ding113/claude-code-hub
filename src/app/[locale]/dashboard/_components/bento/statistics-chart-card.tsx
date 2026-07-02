@@ -61,14 +61,12 @@ export function StatisticsChartCard({
   const dateFnsLocale = getDateFnsLocale(locale);
   const [activeChart, setActiveChart] = React.useState<"cost" | "calls">("cost");
   const [chartMode, setChartMode] = React.useState<"stacked" | "overlay">("overlay");
-
-  const [selectedUserIds, setSelectedUserIds] = React.useState<Set<number>>(
-    () => new Set(data.users.map((u) => u.id))
+  const [deselectedUserIds, setDeselectedUserIds] = React.useState<Set<number>>(() => new Set());
+  const userIds = React.useMemo(() => data.users.map((user) => user.id), [data.users]);
+  const selectedUserIds = React.useMemo(
+    () => new Set(userIds.filter((userId) => !deselectedUserIds.has(userId))),
+    [userIds, deselectedUserIds]
   );
-
-  React.useEffect(() => {
-    setSelectedUserIds(new Set(data.users.map((u) => u.id)));
-  }, [data.users]);
 
   const isAdminMode = data.mode === "users";
   const enableUserFilter = isAdminMode && data.users.length > 1;
@@ -169,46 +167,44 @@ export function StatisticsChartCard({
     };
   }, [enableUserFilter]);
 
-  React.useEffect(() => {
-    const chartWrapper = chartWrapperRef.current;
-    if (!chartWrapper) return;
+  const handleChartWheel = React.useCallback((event: React.WheelEvent<HTMLDivElement>) => {
+    const scrollContainer = tooltipScrollRef.current;
+    if (!scrollContainer) return;
 
-    const handleWheel = (event: WheelEvent) => {
-      const scrollContainer = tooltipScrollRef.current;
-      if (!scrollContainer) return;
+    const maxScrollTop = scrollContainer.scrollHeight - scrollContainer.clientHeight;
+    if (maxScrollTop <= 0) return;
 
-      const maxScrollTop = scrollContainer.scrollHeight - scrollContainer.clientHeight;
-      if (maxScrollTop <= 0) return;
+    const deltaY =
+      event.deltaMode === 1
+        ? event.deltaY * 16
+        : event.deltaMode === 2
+          ? event.deltaY * 240
+          : event.deltaY;
+    if (!Number.isFinite(deltaY) || deltaY === 0) return;
 
-      const deltaY =
-        event.deltaMode === 1
-          ? event.deltaY * 16
-          : event.deltaMode === 2
-            ? event.deltaY * 240
-            : event.deltaY;
-      if (!Number.isFinite(deltaY) || deltaY === 0) return;
+    const current = scrollContainer.scrollTop;
+    const next = Math.min(maxScrollTop, Math.max(0, current + deltaY));
+    if (next === current) return;
 
-      const current = scrollContainer.scrollTop;
-      const next = Math.min(maxScrollTop, Math.max(0, current + deltaY));
-      if (next === current) return;
-
-      scrollContainer.scrollTop = next;
-      event.preventDefault();
-    };
-
-    chartWrapper.addEventListener("wheel", handleWheel, { passive: false });
-    return () => chartWrapper.removeEventListener("wheel", handleWheel);
+    scrollContainer.scrollTop = next;
+    event.preventDefault();
   }, []);
 
   const toggleUserSelection = (userId: number) => {
-    setSelectedUserIds((prev) => {
+    setDeselectedUserIds((prev) => {
       const next = new Set(prev);
-      if (next.has(userId)) {
-        if (next.size > 1) {
-          next.delete(userId);
+      const isSelected = !next.has(userId);
+      const selectedCount = userIds.reduce(
+        (count, currentUserId) => (next.has(currentUserId) ? count : count + 1),
+        0
+      );
+
+      if (isSelected) {
+        if (selectedCount > 1) {
+          next.add(userId);
         }
       } else {
-        next.add(userId);
+        next.delete(userId);
       }
       return next;
     });
@@ -309,6 +305,11 @@ export function StatisticsChartCard({
     return formatInTimeZone(date, timeZone, "yyyy MMMM d", { locale: dateFnsLocale });
   };
 
+  const visibleLegendUsers = data.users.flatMap((user, originalIndex) => {
+    const total = userTotals[user.dataKey];
+    return total && (total.cost.greaterThan(0) || total.calls > 0) ? [{ user, originalIndex }] : [];
+  });
+
   // 图表卡片整体 max-h 为 min(60vh, 720px)，用于保持首页更紧凑且避免大屏过高。
   // 同时设置 min-h 300px（优先级最高），保证最小可读性。
   // 关键目标：不让卡片本身滚动，在小视口下通过收缩图表高度，确保底部 Legend/按钮不被裁切。
@@ -333,6 +334,7 @@ export function StatisticsChartCard({
           {visibleUsers.length > 1 && (
             <div className="inline-flex rounded-md border bg-muted/30 p-0.5">
               <button
+                type="button"
                 data-active={chartMode === "overlay"}
                 onClick={() => setChartMode("overlay")}
                 className="data-[active=true]:bg-background data-[active=true]:shadow-sm text-[10px] text-muted-foreground px-2 py-0.5 rounded transition-colors hover:text-foreground cursor-pointer"
@@ -340,6 +342,7 @@ export function StatisticsChartCard({
                 {t("chartMode.overlay")}
               </button>
               <button
+                type="button"
                 data-active={chartMode === "stacked"}
                 onClick={() => setChartMode("stacked")}
                 className="data-[active=true]:bg-background data-[active=true]:shadow-sm text-[10px] text-muted-foreground px-2 py-0.5 rounded transition-colors hover:text-foreground cursor-pointer"
@@ -355,6 +358,7 @@ export function StatisticsChartCard({
           <div className="flex items-center border-l border-border/50 dark:border-white/[0.06]">
             {TIME_RANGE_OPTIONS.map((option) => (
               <button
+                type="button"
                 key={option.key}
                 data-active={data.timeRange === option.key}
                 onClick={() => onTimeRangeChange(option.key)}
@@ -375,6 +379,7 @@ export function StatisticsChartCard({
       {/* Metric Tabs */}
       <div ref={metricTabsRef} className="flex border-b border-border/50 dark:border-white/[0.06]">
         <button
+          type="button"
           data-active={activeChart === "cost"}
           onClick={() => setActiveChart("cost")}
           className={cn(
@@ -392,6 +397,7 @@ export function StatisticsChartCard({
           </span>
         </button>
         <button
+          type="button"
           data-active={activeChart === "calls"}
           onClick={() => setActiveChart("calls")}
           className={cn(
@@ -410,7 +416,7 @@ export function StatisticsChartCard({
       </div>
 
       {/* Chart */}
-      <div ref={chartWrapperRef} className="px-4 py-2">
+      <div ref={chartWrapperRef} className="px-4 py-2" onWheel={handleChartWheel}>
         <ChartContainer
           config={chartConfig}
           className="aspect-auto w-full"
@@ -484,8 +490,10 @@ export function StatisticsChartCard({
                     </div>
                     <div className="p-3">
                       <div className="space-y-1.5">
-                        {[...filteredPayload]
-                          .sort((a, b) => (Number(b.value ?? 0) || 0) - (Number(a.value ?? 0) || 0))
+                        {filteredPayload
+                          .toSorted(
+                            (a, b) => (Number(b.value ?? 0) || 0) - (Number(a.value ?? 0) || 0)
+                          )
                           .map((entry, index) => {
                             const baseKey =
                               entry.dataKey?.toString().replace(`_${activeChart}`, "") || "";
@@ -525,7 +533,7 @@ export function StatisticsChartCard({
               }}
             />
             {(chartMode === "overlay"
-              ? [...visibleUsers].sort((a, b) => {
+              ? Array.from(visibleUsers).toSorted((a, b) => {
                   const totalA = userTotals[a.dataKey];
                   const totalB = userTotals[b.dataKey];
                   if (!totalA || !totalB) return 0;
@@ -559,7 +567,8 @@ export function StatisticsChartCard({
           {/* Control buttons (floating, does not take extra vertical space) */}
           <div className="absolute right-4 rtl:right-auto rtl:left-4 top-0.5 z-10 w-auto flex flex-nowrap justify-end gap-x-2 gap-y-0.5">
             <button
-              onClick={() => setSelectedUserIds(new Set(data.users.map((u) => u.id)))}
+              type="button"
+              onClick={() => setDeselectedUserIds(new Set())}
               disabled={selectedUserIds.size === data.users.length}
               className={cn(
                 "text-[10px] px-2 py-0.5 rounded transition-colors cursor-pointer whitespace-nowrap",
@@ -571,6 +580,7 @@ export function StatisticsChartCard({
               {t("legend.selectAll")}
             </button>
             <button
+              type="button"
               onClick={() => {
                 const firstUserWithUsageId =
                   data.users.find((u) => {
@@ -579,7 +589,9 @@ export function StatisticsChartCard({
                   })?.id ?? data.users[0]?.id;
 
                 if (firstUserWithUsageId != null) {
-                  setSelectedUserIds(new Set([firstUserWithUsageId]));
+                  setDeselectedUserIds(
+                    new Set(userIds.filter((userId) => userId !== firstUserWithUsageId))
+                  );
                 }
               }}
               disabled={selectedUserIds.size === 1}
@@ -596,45 +608,40 @@ export function StatisticsChartCard({
           {/* User list with max 3 rows (3 * 24px = 72px) and scroll - only show users with non-zero usage */}
           <div className="max-h-[72px] overflow-y-auto pr-36 rtl:pr-0 rtl:pl-36">
             <div className="flex flex-wrap gap-1.5 justify-center">
-              {data.users
-                .map((user, originalIndex) => ({ user, originalIndex }))
-                .filter(({ user }) => {
-                  const total = userTotals[user.dataKey];
-                  return total && (total.cost.greaterThan(0) || total.calls > 0);
-                })
-                .map(({ user, originalIndex }) => {
-                  const color = getUserColor(originalIndex);
-                  const isSelected = selectedUserIds.has(user.id);
-                  const userTotal = userTotals[user.dataKey];
-                  return (
-                    <button
-                      key={user.dataKey}
-                      onClick={() => toggleUserSelection(user.id)}
-                      className={cn(
-                        "flex items-center gap-1.5 px-2 py-1 rounded-md text-xs transition-all cursor-pointer",
-                        isSelected
-                          ? "bg-muted/50 ring-1 ring-border"
-                          : "bg-muted/10 opacity-50 hover:opacity-75"
-                      )}
+              {visibleLegendUsers.map(({ user, originalIndex }) => {
+                const color = getUserColor(originalIndex);
+                const isSelected = selectedUserIds.has(user.id);
+                const userTotal = userTotals[user.dataKey];
+                return (
+                  <button
+                    type="button"
+                    key={user.dataKey}
+                    onClick={() => toggleUserSelection(user.id)}
+                    className={cn(
+                      "flex items-center gap-1.5 px-2 py-1 rounded-md text-xs transition-all cursor-pointer",
+                      isSelected
+                        ? "bg-muted/50 ring-1 ring-border"
+                        : "bg-muted/10 opacity-50 hover:opacity-75"
+                    )}
+                  >
+                    <div
+                      className="h-2 w-2 rounded-full flex-shrink-0"
+                      style={{ backgroundColor: color }}
+                    />
+                    <span
+                      className="font-medium truncate max-w-[80px]"
+                      title={user.name === "__others__" ? t("othersAggregate") : user.name}
                     >
-                      <div
-                        className="h-2 w-2 rounded-full flex-shrink-0"
-                        style={{ backgroundColor: color }}
-                      />
-                      <span
-                        className="font-medium truncate max-w-[80px]"
-                        title={user.name === "__others__" ? t("othersAggregate") : user.name}
-                      >
-                        {user.name === "__others__" ? t("othersAggregate") : user.name}
-                      </span>
-                      <span className="text-muted-foreground">
-                        {activeChart === "cost"
-                          ? formatCurrency(userTotal?.cost ?? 0, currencyCode)
-                          : (userTotal?.calls ?? 0).toLocaleString()}
-                      </span>
-                    </button>
-                  );
-                })}
+                      {user.name === "__others__" ? t("othersAggregate") : user.name}
+                    </span>
+                    <span className="text-muted-foreground">
+                      {activeChart === "cost"
+                        ? formatCurrency(userTotal?.cost ?? 0, currencyCode)
+                        : (userTotal?.calls ?? 0).toLocaleString()}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
           </div>
         </div>

@@ -5,6 +5,7 @@ import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LeaderboardView } from "@/app/[locale]/dashboard/leaderboard/_components/leaderboard-view";
+import { createTestQueryClient, withTestQueryClient } from "../../helpers/react-query";
 
 const fetchMock = vi.fn<typeof fetch>();
 const { getAllUserTagsMock, getAllUserKeyGroupsMock } = vi.hoisted(() => ({
@@ -25,6 +26,11 @@ vi.mock("next-intl", () => ({
 }));
 
 vi.mock("@/actions/users", () => ({
+  getAllUserTags: getAllUserTagsMock,
+  getAllUserKeyGroups: getAllUserKeyGroupsMock,
+}));
+
+vi.mock("@/lib/api-client/v1/actions/users", () => ({
   getAllUserTags: getAllUserTagsMock,
   getAllUserKeyGroups: getAllUserKeyGroupsMock,
 }));
@@ -84,6 +90,7 @@ async function flushUi() {
 describe("LeaderboardView filter gating", () => {
   let container: HTMLDivElement | null = null;
   let root: ReturnType<typeof createRoot> | null = null;
+  let queryClient: ReturnType<typeof createTestQueryClient>;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -92,6 +99,7 @@ describe("LeaderboardView filter gating", () => {
     container = document.createElement("div");
     document.body.appendChild(container);
     root = createRoot(container);
+    queryClient = createTestQueryClient();
 
     fetchMock.mockImplementation(
       async () =>
@@ -109,6 +117,7 @@ describe("LeaderboardView filter gating", () => {
       act(() => root!.unmount());
       root = null;
     }
+    queryClient.clear();
     if (container) {
       container.remove();
       container = null;
@@ -120,7 +129,7 @@ describe("LeaderboardView filter gating", () => {
     searchParamsState.value = new URLSearchParams("scope=provider");
 
     await act(async () => {
-      root!.render(<LeaderboardView isAdmin />);
+      root!.render(withTestQueryClient(<LeaderboardView isAdmin />, queryClient));
     });
     await waitForFetchCalls(1);
     await flushUi();
@@ -131,7 +140,7 @@ describe("LeaderboardView filter gating", () => {
 
     searchParamsState.value = new URLSearchParams("scope=providerCacheHitRate");
     await act(async () => {
-      root!.render(<LeaderboardView isAdmin />);
+      root!.render(withTestQueryClient(<LeaderboardView isAdmin />, queryClient));
     });
     await waitForFetchCalls(2);
     await flushUi();
@@ -145,7 +154,7 @@ describe("LeaderboardView filter gating", () => {
     searchParamsState.value = new URLSearchParams("scope=model");
 
     await act(async () => {
-      root!.render(<LeaderboardView isAdmin />);
+      root!.render(withTestQueryClient(<LeaderboardView isAdmin />, queryClient));
     });
     await waitForFetchCalls(1);
     await flushUi();

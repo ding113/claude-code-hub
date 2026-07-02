@@ -2,7 +2,7 @@
 
 import { ChevronDown, ExternalLink } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { SETTINGS_NAV_ITEMS } from "@/app/[locale]/settings/_lib/nav-items";
 import {
   DropdownMenu,
@@ -35,17 +35,27 @@ export function DashboardNav({ items }: DashboardNavProps) {
   const closeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const openTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
+  const clearOpenTimeout = useCallback(() => {
+    if (openTimeoutRef.current) {
+      clearTimeout(openTimeoutRef.current);
+      openTimeoutRef.current = null;
+    }
+  }, []);
+
+  const clearCloseTimeout = useCallback(() => {
+    if (closeTimeoutRef.current) {
+      clearTimeout(closeTimeoutRef.current);
+      closeTimeoutRef.current = null;
+    }
+  }, []);
+
   // Cleanup timeouts on unmount to prevent memory leaks
   useEffect(() => {
     return () => {
-      if (openTimeoutRef.current) {
-        clearTimeout(openTimeoutRef.current);
-      }
-      if (closeTimeoutRef.current) {
-        clearTimeout(closeTimeoutRef.current);
-      }
+      clearOpenTimeout();
+      clearCloseTimeout();
     };
-  }, []);
+  }, [clearOpenTimeout, clearCloseTimeout]);
 
   if (items.length === 0) {
     return null;
@@ -61,13 +71,8 @@ export function DashboardNav({ items }: DashboardNavProps) {
 
   const handleMouseEnter = () => {
     // Clear any existing timeouts
-    if (closeTimeoutRef.current) {
-      clearTimeout(closeTimeoutRef.current);
-      closeTimeoutRef.current = null;
-    }
-    if (openTimeoutRef.current) {
-      clearTimeout(openTimeoutRef.current);
-    }
+    clearCloseTimeout();
+    clearOpenTimeout();
     // Delay opening to prevent accidental triggers when moving mouse quickly
     openTimeoutRef.current = setTimeout(() => {
       setSettingsOpen(true);
@@ -76,10 +81,7 @@ export function DashboardNav({ items }: DashboardNavProps) {
 
   const handleMouseLeave = () => {
     // Clear open timeout
-    if (openTimeoutRef.current) {
-      clearTimeout(openTimeoutRef.current);
-      openTimeoutRef.current = null;
-    }
+    clearOpenTimeout();
     // Delay closing to give user time to move to the menu
     if (closeTimeoutRef.current) {
       clearTimeout(closeTimeoutRef.current);

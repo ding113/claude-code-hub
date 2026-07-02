@@ -36,7 +36,7 @@ export const EnvSchema = z.object({
     if (!val || typeof val !== "string") return undefined;
     if (val.includes("user:password@host:port")) return undefined; // 占位符模板
     return val;
-  }, z.string().url("数据库URL格式无效")),
+  }, z.url("数据库URL格式无效")),
   // PostgreSQL 连接池配置（postgres.js）
   // - 多副本部署（k8s）需要结合数据库 max_connections 分摊配置
   // - 这些值为“每个应用进程”的连接池上限

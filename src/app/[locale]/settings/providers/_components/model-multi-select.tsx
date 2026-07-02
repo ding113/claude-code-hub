@@ -10,7 +10,15 @@ import {
   RotateCcw,
 } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffectEvent,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -114,6 +122,7 @@ export function ModelMultiSelect({
 }: ModelMultiSelectProps) {
   const t = useTranslations("settings.providers.form.modelSelect");
   const tPrices = useTranslations("settings.prices");
+  const modelComboboxContentId = useId();
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [modelSource, setModelSource] = useState<ModelSource>("loading");
@@ -142,9 +151,9 @@ export function ModelMultiSelect({
 
     const unknownProviders = Array.from(
       new Set(
-        availableModels
-          .map((model) => model.litellmProvider)
-          .filter((provider): provider is string => !!provider && !seen.has(provider))
+        availableModels.flatMap((model) =>
+          model.litellmProvider && !seen.has(model.litellmProvider) ? [model.litellmProvider] : []
+        )
       )
     ).sort((left, right) => left.localeCompare(right));
 
@@ -265,12 +274,11 @@ export function ModelMultiSelect({
       }
 
       const localCatalog = await getAvailableModelCatalog({ scope: catalogScope });
-      if (requestId !== requestIdRef.current) {
-        return;
+      if (requestId === requestIdRef.current) {
+        setAvailableModels(localCatalog.map(buildLocalOption));
+        setModelSource("fallback");
+        setProviderFilter("__all__");
       }
-      setAvailableModels(localCatalog.map(buildLocalOption));
-      setModelSource("fallback");
-      setProviderFilter("__all__");
     } finally {
       if (requestId === requestIdRef.current) {
         setLoading(false);
@@ -291,7 +299,7 @@ export function ModelMultiSelect({
     void loadModels();
   });
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!open) {
       return;
     }
@@ -332,9 +340,9 @@ export function ModelMultiSelect({
   const handleInvertSelection = () => {
     const filteredKeys = new Set(filteredModels.map((model) => model.key));
     const preserved = selectedModels.filter((model) => !filteredKeys.has(getModelKey(model)));
-    const additions = filteredModels
-      .filter((model) => !selectedKeySet.has(model.key))
-      .map((model) => model.modelName);
+    const additions = filteredModels.flatMap((model) =>
+      !selectedKeySet.has(model.key) ? [model.modelName] : []
+    );
 
     onChange([...preserved, ...additions]);
   };
@@ -352,6 +360,7 @@ export function ModelMultiSelect({
             variant="outline"
             role="combobox"
             aria-expanded={open}
+            aria-controls={modelComboboxContentId}
             disabled={disabled}
             data-allowed-model-picker-trigger
             className="w-full justify-between border-dashed bg-background/70"
@@ -377,6 +386,7 @@ export function ModelMultiSelect({
         </PopoverTrigger>
 
         <PopoverContent
+          id={modelComboboxContentId}
           className="w-[720px] max-w-[calc(100vw-2rem)] p-0"
           align="start"
           onWheel={(event) => event.stopPropagation()}

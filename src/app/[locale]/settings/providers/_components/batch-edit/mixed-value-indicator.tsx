@@ -29,9 +29,10 @@ export function MixedValueIndicator({ values }: MixedValueIndicatorProps) {
             <div className="space-y-1">
               <p className="font-medium">{t("mixedValues.tooltip")}</p>
               <ul className="list-disc list-inside text-xs">
-                {values.slice(0, 5).map((v, i) => (
-                  <li key={i}>{formatValueForDisplay(v)}</li>
-                ))}
+                {values.slice(0, 5).map((v) => {
+                  const displayValue = formatValueForDisplay(v);
+                  return <li key={displayValue}>{displayValue}</li>;
+                })}
                 {values.length > 5 && (
                   <li>{t("mixedValues.andMore", { count: values.length - 5 })}</li>
                 )}

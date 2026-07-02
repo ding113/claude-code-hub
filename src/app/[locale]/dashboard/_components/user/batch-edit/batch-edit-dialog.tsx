@@ -375,9 +375,11 @@ function BatchEditDialogInner({
       }
 
       if (anySuccess) {
-        await queryClient.invalidateQueries({ queryKey: ["users"] });
-        await queryClient.invalidateQueries({ queryKey: ["userKeyGroups"] });
-        await queryClient.invalidateQueries({ queryKey: ["userTags"] });
+        await Promise.all([
+          queryClient.invalidateQueries({ queryKey: ["users"] }),
+          queryClient.invalidateQueries({ queryKey: ["userKeyGroups"] }),
+          queryClient.invalidateQueries({ queryKey: ["userTags"] }),
+        ]);
       }
 
       // Only close dialog and clear selection when fully successful

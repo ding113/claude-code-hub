@@ -1,5 +1,3 @@
-"use server";
-
 import { desc, isNull } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import { messageRequest, providers, users } from "@/drizzle/schema";
@@ -132,34 +130,28 @@ export async function analyzeLogDistribution(): Promise<LogDistribution> {
       }
     }
 
-    const usersData = await db
-      .select({ id: users.id, name: users.name })
-      .from(users)
-      .where(isNull(users.deletedAt));
+    const [usersData, providersData, modelPrices] = await Promise.all([
+      db.select({ id: users.id, name: users.name }).from(users).where(isNull(users.deletedAt)),
+      db
+        .select({ id: providers.id, name: providers.name })
+        .from(providers)
+        .where(isNull(providers.deletedAt)),
+      findAllLatestPrices(),
+    ]);
 
-    const providersData = await db
-      .select({ id: providers.id, name: providers.name })
-      .from(providers)
-      .where(isNull(providers.deletedAt));
+    const userWeights: WeightedItem<UserInfo>[] = usersData.flatMap((user) => {
+      const weight = userCounts[user.id] || 1;
+      return weight > 0 ? [{ item: { id: user.id, name: user.name }, weight }] : [];
+    });
 
-    const modelPrices = await findAllLatestPrices();
+    const providerWeights: WeightedItem<ProviderInfo>[] = providersData.flatMap((provider) => {
+      const weight = providerCounts[provider.id] || 1;
+      return weight > 0 ? [{ item: { id: provider.id, name: provider.name }, weight }] : [];
+    });
 
-    const userWeights: WeightedItem<UserInfo>[] = usersData
-      .map((user) => ({
-        item: { id: user.id, name: user.name },
-        weight: userCounts[user.id] || 1,
-      }))
-      .filter((item) => item.weight > 0);
-
-    const providerWeights: WeightedItem<ProviderInfo>[] = providersData
-      .map((provider) => ({
-        item: { id: provider.id, name: provider.name },
-        weight: providerCounts[provider.id] || 1,
-      }))
-      .filter((item) => item.weight > 0);
-
-    const modelWeights: WeightedItem<ModelInfo>[] = Object.entries(modelCounts)
-      .map(([modelName, count]) => {
+    const modelWeights: WeightedItem<ModelInfo>[] = Object.entries(modelCounts).flatMap(
+      ([modelName, count]) => {
+        if (count <= 0) return [];
         const priceInfo = modelPrices.find((p) => p.modelName === modelName);
         const priceData = priceInfo?.priceData;
 
@@ -185,18 +177,20 @@ export async function analyzeLogDistribution(): Promise<LogDistribution> {
           }
         }
 
-        return {
-          item: {
-            name: modelName,
-            inputPricePerM,
-            outputPricePerM,
-            cacheWritePricePerM,
-            cacheReadPricePerM,
+        return [
+          {
+            item: {
+              name: modelName,
+              inputPricePerM,
+              outputPricePerM,
+              cacheWritePricePerM,
+              cacheReadPricePerM,
+            },
+            weight: count,
           },
-          weight: count,
-        };
-      })
-      .filter((item) => item.weight > 0);
+        ];
+      }
+    );
 
     const tokenStats: TokenStats = calculateMeanAndStddev(tokenValues);
     const durationStats: DurationStats = calculateMeanAndStddev(durationValues);

@@ -33,84 +33,35 @@ export default function GlobalError({
   return (
     <html lang="en">
       <body>
-        <div
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            justifyContent: "center",
-            minHeight: "var(--cch-viewport-height, 100vh)",
-            fontFamily: "system-ui, sans-serif",
-            backgroundColor: "#f8f9fa",
-            padding: "20px",
-            textAlign: "center",
-          }}
-        >
-          <h2
-            style={{
-              fontSize: "24px",
-              marginBottom: "16px",
-              color: isNetwork ? "#f59e0b" : "#dc3545",
-            }}
-          >
+        <div className="global-error-shell">
+          <h2 className={isNetwork ? "global-error-title network" : "global-error-title"}>
             {isNetwork ? "Network Connection Error" : "Something went wrong!"}
           </h2>
 
           {isNetwork ? (
-            <div style={{ color: "#6c757d", marginBottom: "24px", maxWidth: "400px" }}>
-              <p style={{ marginBottom: "12px" }}>Unable to connect to the server. Please check:</p>
-              <ul
-                style={{
-                  textAlign: "left",
-                  margin: "0 auto",
-                  paddingLeft: "20px",
-                  listStyleType: "disc",
-                }}
-              >
+            <div className="global-error-copy">
+              <p className="global-error-check-title">
+                Unable to connect to the server. Please check:
+              </p>
+              <ul className="global-error-check-list">
                 <li>Your network connection is working</li>
                 <li>The server is running and accessible</li>
                 <li>Proxy settings are configured correctly</li>
               </ul>
             </div>
           ) : (
-            <p style={{ color: "#6c757d", marginBottom: "24px", maxWidth: "400px" }}>
+            <p className="global-error-copy">
               An unexpected error occurred. Please try again later.
             </p>
           )}
 
-          {error.digest && (
-            <p style={{ fontSize: "12px", color: "#adb5bd", marginBottom: "16px" }}>
-              Error ID: {error.digest}
-            </p>
-          )}
+          {error.digest && <p className="global-error-digest">Error ID: {error.digest}</p>}
 
-          <div style={{ display: "flex", gap: "12px" }}>
-            <button
-              onClick={() => reset()}
-              style={{
-                padding: "12px 24px",
-                fontSize: "16px",
-                backgroundColor: "#0d6efd",
-                color: "white",
-                border: "none",
-                borderRadius: "8px",
-                cursor: "pointer",
-              }}
-            >
+          <div className="global-error-actions">
+            <button type="button" onClick={() => reset()} className="global-error-button primary">
               Try again
             </button>
-            <button
-              onClick={handleGoHome}
-              style={{
-                padding: "12px 24px",
-                fontSize: "16px",
-                backgroundColor: "#6c757d",
-                color: "white",
-                border: "none",
-                borderRadius: "8px",
-                cursor: "pointer",
-              }}
-            >
+            <button type="button" onClick={handleGoHome} className="global-error-button">
               Go to Home
             </button>
           </div>

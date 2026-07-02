@@ -57,8 +57,8 @@ export function UserUnlimitedItem({ user, currencyCode = "USD" }: UserUnlimitedI
     }
     return { label: tStatus("active"), variant: "default" as const };
   })();
-  const topKeys = [...user.keys]
-    .sort((a, b) => b.todayUsage - a.todayUsage || b.totalUsage - a.totalUsage)
+  const topKeys = user.keys
+    .toSorted((a, b) => b.todayUsage - a.todayUsage || b.totalUsage - a.totalUsage)
     .slice(0, MAX_INLINE_KEYS);
 
   return (

@@ -1,5 +1,6 @@
 import { AlertCircle } from "lucide-react";
 import { getTranslations } from "next-intl/server";
+import { Suspense } from "react";
 import { Section } from "@/components/section";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -12,10 +13,12 @@ export const dynamic = "force-dynamic";
 
 export default async function LeaderboardPage({ params }: { params: Promise<{ locale: string }> }) {
   const { locale } = await params;
-  const t = await getTranslations({ locale, namespace: "dashboard" });
   // 获取用户 session 和系统设置
-  const session = await getSession();
-  const systemSettings = await getSystemSettings();
+  const [t, session, systemSettings] = await Promise.all([
+    getTranslations({ locale, namespace: "dashboard" }),
+    getSession(),
+    getSystemSettings(),
+  ]);
 
   // 检查权限
   const isAdmin = session?.user.role === "admin";
@@ -70,7 +73,9 @@ export default async function LeaderboardPage({ params }: { params: Promise<{ lo
         <p className="mt-2 text-muted-foreground">{t("title.costRankingDescription")}</p>
       </div>
       <Section>
-        <LeaderboardView isAdmin={isAdmin} />
+        <Suspense fallback={<div className="h-64" />}>
+          <LeaderboardView isAdmin={isAdmin} />
+        </Suspense>
       </Section>
     </div>
   );

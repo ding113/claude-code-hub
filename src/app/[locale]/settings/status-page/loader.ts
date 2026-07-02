@@ -12,8 +12,10 @@ export async function loadStatusPageSettings(): Promise<{
   initialAggregationIntervalMinutes: number;
   initialGroups: PublicStatusSettingsFormGroup[];
 }> {
-  const settings = await getSystemSettings();
-  const { groups } = await bootstrapProviderGroupsFromProviders();
+  const [settings, { groups }] = await Promise.all([
+    getSystemSettings(),
+    bootstrapProviderGroupsFromProviders(),
+  ]);
   const parsedGroups = groups.map((group) => ({
     group,
     parsed: parsePublicStatusDescription(group.description),

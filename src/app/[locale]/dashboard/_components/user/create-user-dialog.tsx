@@ -408,9 +408,8 @@ function CreateUserDialogInner({ onOpenChange, onSuccess }: CreateUserDialogProp
               limitTotalUsd: currentKeyDraft.limitTotalUsd ?? null,
               limitConcurrentSessions: currentKeyDraft.limitConcurrentSessions ?? 0,
             }}
-            isAdmin={true}
-            showLimitRules={false}
-            showExpireTime={false}
+            permissions={{ isAdmin: true }}
+            visibility={{ limitRules: false, expireTime: false }}
             onChange={handleKeyChange}
             translations={keyEditTranslations}
           />

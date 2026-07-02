@@ -1,6 +1,6 @@
 "use client";
 
-import { motion } from "framer-motion";
+import { m } from "framer-motion";
 import {
   Activity,
   AlertTriangle,
@@ -103,7 +103,7 @@ export function Section({
   const Icon = icon ? SECTION_ICON_MAP[icon] : null;
 
   return (
-    <motion.section
+    <m.section
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ type: "spring", stiffness: 300, damping: 30 }}
@@ -151,7 +151,7 @@ export function Section({
         )}
         {children}
       </div>
-    </motion.section>
+    </m.section>
   );
 }
 

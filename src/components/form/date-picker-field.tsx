@@ -137,7 +137,7 @@ export function DatePickerField({
             mode="single"
             selected={selectedDate}
             onSelect={handleSelect}
-            defaultMonth={selectedDate || new Date()}
+            defaultMonth={selectedDate || minDate || maxDate}
             disabled={disabledMatcher}
           />
           {value && (

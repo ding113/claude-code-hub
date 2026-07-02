@@ -3,9 +3,8 @@ import { getSession } from "@/lib/auth";
 
 export default async function QuotasPage({ params }: { params: Promise<{ locale: string }> }) {
   // Await params to ensure locale is available in the async context
-  const { locale } = await params;
+  const [{ locale }, session] = await Promise.all([params, getSession()]);
 
-  const session = await getSession();
   if (!session) {
     return redirect({ href: "/login", locale });
   }

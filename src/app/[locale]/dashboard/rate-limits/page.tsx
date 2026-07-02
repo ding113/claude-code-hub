@@ -9,8 +9,7 @@ import { RateLimitsContentSkeleton } from "./_components/rate-limits-skeleton";
 export const dynamic = "force-dynamic";
 
 export default async function RateLimitsPage({ params }: { params: Promise<{ locale: string }> }) {
-  const { locale } = await params;
-  const session = await getSession();
+  const [{ locale }, session] = await Promise.all([params, getSession()]);
 
   // 仅管理员可访问
   if (!session || session.user.role !== "admin") {

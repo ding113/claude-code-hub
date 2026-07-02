@@ -6,6 +6,7 @@ import { NextIntlClientProvider } from "next-intl";
 import { type ReactNode, act } from "react";
 import { createRoot } from "react-dom/client";
 import { beforeEach, describe, expect, test, vi } from "vitest";
+import { createTestQueryClient, withTestQueryClient } from "../../../helpers/react-query";
 import type { ProviderDisplay } from "@/types/provider";
 import enMessages from "../../../../messages/en";
 
@@ -24,8 +25,24 @@ vi.mock("@/app/[locale]/settings/providers/_components/batch-edit", () => ({
   ProviderBatchToolbar: () => null,
 }));
 
+vi.mock("@/app/[locale]/settings/providers/_components/batch-edit/provider-batch-actions", () => ({
+  ProviderBatchActions: () => null,
+}));
+
+vi.mock("@/app/[locale]/settings/providers/_components/batch-edit/provider-batch-dialog", () => ({
+  ProviderBatchDialog: () => null,
+}));
+
+vi.mock("@/app/[locale]/settings/providers/_components/batch-edit/provider-batch-toolbar", () => ({
+  ProviderBatchToolbar: () => null,
+}));
+
 // Batch-test dialog (requires QueryClientProvider, irrelevant to this test scope)
 vi.mock("@/app/[locale]/settings/providers/_components/batch-test", () => ({
+  BatchTestDialog: () => null,
+}));
+
+vi.mock("@/app/[locale]/settings/providers/_components/batch-test/batch-test-dialog", () => ({
   BatchTestDialog: () => null,
 }));
 
@@ -73,7 +90,10 @@ vi.mock("@/components/ui/dialog", () => ({
   Dialog: ({ open, children }: { open: boolean; children: ReactNode }) =>
     open ? <div data-testid="dialog-root">{children}</div> : null,
   DialogContent: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  DialogDescription: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  DialogHeader: ({ children }: { children: ReactNode }) => <div>{children}</div>,
   DialogTitle: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  DialogTrigger: ({ children }: { children: ReactNode }) => <>{children}</>,
 }));
 
 vi.mock("@radix-ui/react-visually-hidden", () => ({
@@ -151,18 +171,23 @@ function renderWithProviders(node: ReactNode) {
   const container = document.createElement("div");
   document.body.appendChild(container);
   const root = createRoot(container);
+  const queryClient = createTestQueryClient();
 
   act(() => {
     root.render(
-      <NextIntlClientProvider locale="en" messages={enMessages} timeZone="UTC">
-        {node}
-      </NextIntlClientProvider>
+      withTestQueryClient(
+        <NextIntlClientProvider locale="en" messages={enMessages} timeZone="UTC">
+          {node}
+        </NextIntlClientProvider>,
+        queryClient
+      )
     );
   });
 
   return {
     unmount: () => {
       act(() => root.unmount());
+      queryClient.clear();
       container.remove();
     },
     container,

@@ -127,6 +127,7 @@ async function tryFetchBatchProbeLogsByEndpointIds(
 
   for (const chunk of chunks) {
     try {
+      // react-doctor-disable-next-line react-doctor/async-await-in-loop -- chunk requests are intentionally serialized to avoid UI-triggered request fanout
       const res = await fetch("/api/v1/provider-endpoints/probe-logs:batch", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -228,6 +229,7 @@ async function fetchProbeLogsByEndpointIdsIndividually(
       const endpointId = endpointIds[currentIndex];
 
       try {
+        // react-doctor-disable-next-line react-doctor/async-await-in-loop -- worker loop intentionally bounds request concurrency
         const res = await getProviderEndpointProbeLogs({
           endpointId,
           limit,

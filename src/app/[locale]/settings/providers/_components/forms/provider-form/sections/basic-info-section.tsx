@@ -1,6 +1,6 @@
 "use client";
 
-import { motion } from "framer-motion";
+import { m } from "framer-motion";
 import { ExternalLink, Eye, EyeOff, Globe, Key, Link2, User } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -61,7 +61,7 @@ export function BasicInfoSection({ autoUrlPending, endpointPool }: BasicInfoSect
     const remaining = providers.length - displayed.length;
 
     return (
-      <motion.div
+      <m.div
         initial={{ opacity: 0, x: 20 }}
         animate={{ opacity: 1, x: 0 }}
         exit={{ opacity: 0, x: -20 }}
@@ -120,12 +120,12 @@ export function BasicInfoSection({ autoUrlPending, endpointPool }: BasicInfoSect
             )}
           </div>
         </SectionCard>
-      </motion.div>
+      </m.div>
     );
   }
 
   return (
-    <motion.div
+    <m.div
       initial={{ opacity: 0, x: 20 }}
       animate={{ opacity: 1, x: 0 }}
       exit={{ opacity: 0, x: -20 }}
@@ -232,13 +232,13 @@ export function BasicInfoSection({ autoUrlPending, endpointPool }: BasicInfoSect
 
             {/* URL Preview */}
             {state.basic.url.trim() && (
-              <motion.div
+              <m.div
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: "auto" }}
                 exit={{ opacity: 0, height: 0 }}
               >
                 <UrlPreview baseUrl={state.basic.url} providerType={state.routing.providerType} />
-              </motion.div>
+              </m.div>
             )}
           </div>
         </SectionCard>
@@ -306,6 +306,6 @@ export function BasicInfoSection({ autoUrlPending, endpointPool }: BasicInfoSect
           </SmartInputWrapper>
         </div>
       </SectionCard>
-    </motion.div>
+    </m.div>
   );
 }

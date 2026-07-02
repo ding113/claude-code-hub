@@ -67,9 +67,10 @@ export async function orchestrateFakeStreamingAttempts(
   // streaming we always buffer upstream as non-stream and rely on the
   // protocol-family validation rules. Allow callers to override.
   const validateAsStream = input.isStream === true;
+  const { abortSignal, maxAttempts, performAttempt } = input;
 
-  for (let attemptIndex = 0; attemptIndex < input.maxAttempts; attemptIndex += 1) {
-    if (input.abortSignal.aborted) {
+  for (let attemptIndex = 0; attemptIndex < maxAttempts; attemptIndex += 1) {
+    if (abortSignal.aborted) {
       return {
         ok: false,
         attempts,
@@ -80,13 +81,13 @@ export async function orchestrateFakeStreamingAttempts(
 
     const attemptAbort = new AbortController();
     const onParentAbort = () => attemptAbort.abort();
-    input.abortSignal.addEventListener("abort", onParentAbort, { once: true });
+    abortSignal.addEventListener("abort", onParentAbort, { once: true });
     // AbortSignal.addEventListener does NOT retroactively fire for a signal
     // that is already aborted, so we must re-check after wiring the listener
     // to close the race window between the loop-top check and this binding.
-    if (input.abortSignal.aborted) {
+    if (abortSignal.aborted) {
       attemptAbort.abort();
-      input.abortSignal.removeEventListener("abort", onParentAbort);
+      abortSignal.removeEventListener("abort", onParentAbort);
       return {
         ok: false,
         attempts,
@@ -97,10 +98,11 @@ export async function orchestrateFakeStreamingAttempts(
 
     let outcome: FakeStreamingAttemptOutcome | null;
     try {
-      outcome = await input.performAttempt(attemptIndex, attemptAbort.signal);
+      // react-doctor-disable-next-line react-doctor/async-await-in-loop -- retry attempts are sequential and depend on previous outcome
+      outcome = await performAttempt(attemptIndex, attemptAbort.signal);
     } catch (error) {
-      input.abortSignal.removeEventListener("abort", onParentAbort);
-      if (input.abortSignal.aborted || isAbortError(error)) {
+      abortSignal.removeEventListener("abort", onParentAbort);
+      if (abortSignal.aborted || isAbortError(error)) {
         return {
           ok: false,
           attempts,
@@ -111,7 +113,7 @@ export async function orchestrateFakeStreamingAttempts(
       // Re-throw non-abort errors so the caller can decide what to do.
       throw error;
     } finally {
-      input.abortSignal.removeEventListener("abort", onParentAbort);
+      abortSignal.removeEventListener("abort", onParentAbort);
     }
 
     if (outcome === null) {

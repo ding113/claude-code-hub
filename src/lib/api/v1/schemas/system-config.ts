@@ -17,19 +17,27 @@ const CodexPriorityBillingSourceSchema = z
   .enum(["requested", "actual"])
   .describe("Billing source used when Codex priority service tier is requested.");
 
+const validTimeZoneCache = new Map<string, boolean>();
+
+function isValidTimeZone(value: string): boolean {
+  const cached = validTimeZoneCache.get(value);
+  if (cached !== undefined) {
+    return cached;
+  }
+
+  try {
+    Intl.DateTimeFormat("en-US", { timeZone: value });
+    validTimeZoneCache.set(value, true);
+    return true;
+  } catch {
+    validTimeZoneCache.set(value, false);
+    return false;
+  }
+}
+
 const TimeZoneSchema = z
   .string()
-  .refine(
-    (value) => {
-      try {
-        new Intl.DateTimeFormat("en-US", { timeZone: value });
-        return true;
-      } catch {
-        return false;
-      }
-    },
-    { message: "Invalid IANA timezone identifier." }
-  )
+  .refine(isValidTimeZone, { message: "Invalid IANA timezone identifier." })
   .describe("IANA timezone identifier.");
 
 const XffPickSchema = z

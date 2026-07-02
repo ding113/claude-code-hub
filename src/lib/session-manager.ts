@@ -374,14 +374,11 @@ export class SessionManager {
           });
         } else if (Array.isArray(content)) {
           // 支持多模态 content（数组格式）
-          const textParts = content
-            .filter(
-              (item) =>
-                item &&
-                typeof item === "object" &&
-                (item as Record<string, unknown>).type === "text"
-            )
-            .map((item) => (item as Record<string, unknown>).text);
+          const textParts = content.flatMap((item) =>
+            item && typeof item === "object" && (item as Record<string, unknown>).type === "text"
+              ? [(item as Record<string, unknown>).text]
+              : []
+          );
           const joined = textParts.join("");
           contents.push(joined);
           logger.trace("SessionManager: Message content (array)", {
@@ -2598,6 +2595,7 @@ export class SessionManager {
 
       for (let i = 0; i < sessionIds.length; i += CHUNK_SIZE) {
         const chunk = sessionIds.slice(i, i + CHUNK_SIZE);
+        // react-doctor-disable-next-line react-doctor/async-await-in-loop -- termination is intentionally chunked to bound Redis/database concurrency
         const results = await Promise.all(
           chunk.map(async (sessionId) => {
             const success = await SessionManager.terminateSession(sessionId);

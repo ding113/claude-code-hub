@@ -1,5 +1,3 @@
-"use server";
-
 import { desc, eq } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import { webhookTargets } from "@/drizzle/schema";

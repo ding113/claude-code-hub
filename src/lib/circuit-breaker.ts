@@ -110,9 +110,15 @@ function parseConfigInvalidationProviderIds(message: string): number[] | null {
     }
 
     if (Array.isArray(obj.providerIds)) {
-      const ids = obj.providerIds
-        .map((v) => (typeof v === "number" ? v : Number.NaN))
-        .filter((v) => Number.isFinite(v) && Number.isInteger(v) && v > 0 && v <= 1_000_000_000);
+      const ids = obj.providerIds.flatMap((v) =>
+        typeof v === "number" &&
+        Number.isFinite(v) &&
+        Number.isInteger(v) &&
+        v > 0 &&
+        v <= 1_000_000_000
+          ? [v]
+          : []
+      );
       return ids.length > 0 ? ids : null;
     }
 
@@ -392,6 +398,7 @@ async function getProviderConfigForHealth(
     const versionAtStart = getConfigCacheVersion(providerId);
 
     try {
+      // react-doctor-disable-next-line react-doctor/async-await-in-loop -- retry depends on cache version observed during the previous load attempt
       const config = await loadProviderConfigDeduped(providerId);
 
       if (getConfigCacheVersion(providerId) !== versionAtStart) {
@@ -568,10 +575,12 @@ async function triggerCircuitBreakerAlert(
 ): Promise<void> {
   try {
     // 动态导入以避免循环依赖
-    const { db } = await import("@/drizzle/db");
-    const { providers } = await import("@/drizzle/schema");
-    const { eq } = await import("drizzle-orm");
-    const { sendCircuitBreakerAlert } = await import("@/lib/notification/notifier");
+    const [{ db }, { providers }, { eq }, { sendCircuitBreakerAlert }] = await Promise.all([
+      import("@/drizzle/db"),
+      import("@/drizzle/schema"),
+      import("drizzle-orm"),
+      import("@/lib/notification/notifier"),
+    ]);
 
     // 查询供应商名称
     const provider = await db
@@ -800,6 +809,7 @@ export async function getAllHealthStatusAsync(
   const forcedConfigMap = new Map<number, CircuitBreakerConfig>();
   for (let i = 0; i < nonClosedIds.length; i += CONFIG_FORCE_RELOAD_BATCH_SIZE) {
     const batch = nonClosedIds.slice(i, i + CONFIG_FORCE_RELOAD_BATCH_SIZE);
+    // react-doctor-disable-next-line react-doctor/async-await-in-loop -- force reload is intentionally batched to bound Redis/database concurrency
     await Promise.all(
       batch.map(async (providerId) => {
         const health = healthMap.get(providerId);
@@ -981,10 +991,14 @@ export async function clearProviderState(providerId: number): Promise<void> {
   configCacheVersion.delete(providerId);
 
   // 清除 Redis 状态
-  const { deleteCircuitState } = await import("@/lib/redis/circuit-breaker-state");
-  const { clearSingleProviderCostCache } = await import("@/lib/redis/cost-cache-cleanup");
-  await deleteCircuitState(providerId);
-  await clearSingleProviderCostCache({ providerId }).catch(() => null);
+  const [{ deleteCircuitState }, { clearSingleProviderCostCache }] = await Promise.all([
+    import("@/lib/redis/circuit-breaker-state"),
+    import("@/lib/redis/cost-cache-cleanup"),
+  ]);
+  await Promise.all([
+    deleteCircuitState(providerId),
+    clearSingleProviderCostCache({ providerId }).catch(() => null),
+  ]);
 
   logger.info(`[CircuitBreaker] Cleared all state for provider ${providerId}`, {
     providerId,

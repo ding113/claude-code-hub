@@ -2,7 +2,7 @@
 
 import { Loader2, Pencil, Plus } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useEffect, useState } from "react";
+import { useLayoutEffect, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -53,7 +53,7 @@ export function ModelPriceDialog({ mode, initialData, trigger, onSuccess }: Mode
   const [outputPrice, setOutputPrice] = useState("");
 
   // 当对话框打开或初始数据变化时，重置表单
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (open) {
       if (mode === "edit" && initialData) {
         setModelName(initialData.modelName);

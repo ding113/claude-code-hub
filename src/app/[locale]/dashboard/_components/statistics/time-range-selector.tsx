@@ -27,6 +27,7 @@ export function TimeRangeSelector({
     <div className={cn("flex flex-wrap ", className)}>
       {TIME_RANGE_OPTIONS.map((option) => (
         <button
+          type="button"
           key={option.key}
           data-active={value === option.key}
           disabled={disabled}

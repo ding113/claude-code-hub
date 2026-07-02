@@ -1,6 +1,7 @@
 "use client";
 
-import { motion } from "framer-motion";
+import { useQuery } from "@tanstack/react-query";
+import { m } from "framer-motion";
 import { AlertTriangle, Book, ExternalLink, Eye, EyeOff, Key, Loader2 } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
@@ -30,6 +31,33 @@ type LoginType = "admin" | "dashboard_user" | "readonly_user";
 interface LoginVersionInfo {
   current: string;
   hasUpdate: boolean;
+}
+
+async function fetchLoginVersionInfo(): Promise<LoginVersionInfo | null> {
+  const response = await fetch("/api/version");
+  const data = (await response.json()) as { current?: unknown; hasUpdate?: unknown };
+  if (typeof data.current !== "string") {
+    return null;
+  }
+
+  return {
+    current: data.current,
+    hasUpdate: Boolean(data.hasUpdate),
+  };
+}
+
+async function fetchPublicSiteTitle(): Promise<string> {
+  const response = await fetch("/api/public-site-meta");
+  if (!response.ok) {
+    return DEFAULT_SITE_TITLE;
+  }
+
+  const data = (await response.json()) as { siteTitle?: unknown };
+  if (typeof data.siteTitle !== "string") {
+    return DEFAULT_SITE_TITLE;
+  }
+
+  return data.siteTitle.trim() || DEFAULT_SITE_TITLE;
 }
 
 function parseLoginType(value: unknown): LoginType | null {
@@ -99,8 +127,16 @@ function LoginPageContent() {
   const [error, setError] = useState("");
   const [showHttpWarning, setShowHttpWarning] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [versionInfo, setVersionInfo] = useState<LoginVersionInfo | null>(null);
-  const [siteTitle, setSiteTitle] = useState(DEFAULT_SITE_TITLE);
+  const { data: versionInfo = null } = useQuery({
+    queryKey: ["login-version-info"],
+    queryFn: fetchLoginVersionInfo,
+    retry: false,
+  });
+  const { data: siteTitle = DEFAULT_SITE_TITLE } = useQuery({
+    queryKey: ["public-site-title"],
+    queryFn: fetchPublicSiteTitle,
+    retry: false,
+  });
 
   useEffect(() => {
     if (status === "error" && apiKeyInputRef.current) {
@@ -115,56 +151,6 @@ function LoginPageContent() {
         window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
       setShowHttpWarning(isHttp && !isLocalhost);
     }
-  }, []);
-
-  useEffect(() => {
-    let active = true;
-
-    void fetch("/api/version")
-      .then((response) => response.json() as Promise<{ current?: unknown; hasUpdate?: unknown }>)
-      .then((data) => {
-        if (!active || typeof data.current !== "string") {
-          return;
-        }
-
-        setVersionInfo({
-          current: data.current,
-          hasUpdate: Boolean(data.hasUpdate),
-        });
-      })
-      .catch(() => {});
-
-    return () => {
-      active = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    let active = true;
-
-    void fetch("/api/public-site-meta")
-      .then((response) => {
-        if (!response.ok) {
-          return null;
-        }
-
-        return response.json() as Promise<{ siteTitle?: unknown }>;
-      })
-      .then((data) => {
-        if (!active || !data || typeof data.siteTitle !== "string") {
-          return;
-        }
-
-        const nextSiteTitle = data.siteTitle.trim();
-        if (nextSiteTitle) {
-          setSiteTitle(nextSiteTitle);
-        }
-      })
-      .catch(() => {});
-
-    return () => {
-      active = false;
-    };
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -205,12 +191,12 @@ function LoginPageContent() {
     <div className="relative min-h-[var(--cch-viewport-height,100vh)] overflow-hidden bg-gradient-to-br from-background via-background to-orange-500/5 dark:to-orange-500/10">
       {/* Fullscreen Loading Overlay */}
       {isLoading && (
-        <div
+        <dialog
+          open
           data-testid="loading-overlay"
-          role="dialog"
           aria-modal="true"
           aria-label={t("login.loggingIn")}
-          className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-background/80 backdrop-blur-sm transition-all duration-200"
+          className="fixed inset-0 z-50 m-0 flex max-h-none max-w-none flex-col items-center justify-center border-0 bg-background/80 p-0 backdrop-blur-sm transition-all duration-200"
         >
           <Loader2 className="h-12 w-12 animate-spin motion-reduce:animate-none text-primary" />
           <p
@@ -220,7 +206,7 @@ function LoginPageContent() {
           >
             {t("login.loggingIn")}
           </p>
-        </div>
+        </dialog>
       )}
 
       {/* Top Right Controls */}
@@ -241,11 +227,11 @@ function LoginPageContent() {
 
       {/* Background Orbs */}
       <div className="pointer-events-none absolute inset-0 -z-10 overflow-hidden">
-        <motion.div
+        <m.div
           animate={floatAnimation}
           className="absolute right-[5%] top-[-5rem] h-96 w-96 rounded-full bg-orange-500/10 blur-[100px] dark:bg-orange-500/5"
         />
-        <motion.div
+        <m.div
           animate={floatAnimationSlow}
           className="absolute bottom-[-5rem] left-[10%] h-96 w-96 rounded-full bg-orange-400/10 blur-[100px] dark:bg-orange-400/5"
         />
@@ -254,7 +240,7 @@ function LoginPageContent() {
       {/* Main Layout */}
       <div className="flex min-h-[var(--cch-viewport-height,100vh)]">
         {/* Brand Panel - Desktop Only */}
-        <motion.aside
+        <m.aside
           data-testid="login-brand-panel"
           variants={brandPanelVariants}
           initial="hidden"
@@ -265,7 +251,7 @@ function LoginPageContent() {
           <div className="absolute inset-0 bg-gradient-to-br from-orange-500/10 via-orange-400/5 to-transparent dark:from-orange-500/15 dark:via-orange-400/10" />
 
           {/* Brand Panel Animated Orb */}
-          <motion.div
+          <m.div
             animate={floatAnimationSlow}
             className="absolute top-1/4 left-1/3 h-64 w-64 rounded-full bg-orange-500/8 blur-[80px] dark:bg-orange-500/5"
           />
@@ -278,7 +264,7 @@ function LoginPageContent() {
             <p className="max-w-xs text-base text-muted-foreground">{t("brand.tagline")}</p>
             <div className="mt-4 h-16 w-px bg-gradient-to-b from-transparent via-border to-transparent" />
           </div>
-        </motion.aside>
+        </m.aside>
 
         {/* Form Panel */}
         <div className="flex w-full flex-col items-center justify-center px-4 py-16 lg:w-[55%]">
@@ -294,7 +280,7 @@ function LoginPageContent() {
           </div>
 
           <div className="w-full max-w-lg space-y-4">
-            <motion.div custom={0.1} variants={stagger} initial="hidden" animate="visible">
+            <m.div custom={0.1} variants={stagger} initial="hidden" animate="visible">
               <Card className="w-full border-border/50 bg-card/95 shadow-2xl backdrop-blur-xl dark:border-border/30">
                 <CardHeader className="space-y-6 flex flex-col items-center text-center pt-8 pb-8">
                   <div className="flex h-16 w-16 items-center justify-center rounded-full bg-orange-500/10 text-orange-600 ring-8 ring-orange-500/5 dark:text-orange-400 lg:hidden">
@@ -325,7 +311,7 @@ function LoginPageContent() {
                     </Alert>
                   ) : null}
                   <form onSubmit={handleSubmit} className="space-y-6">
-                    <motion.div
+                    <m.div
                       custom={0.15}
                       variants={stagger}
                       initial="hidden"
@@ -370,9 +356,9 @@ function LoginPageContent() {
                           <AlertDescription>{error}</AlertDescription>
                         </Alert>
                       ) : null}
-                    </motion.div>
+                    </m.div>
 
-                    <motion.div
+                    <m.div
                       custom={0.2}
                       variants={stagger}
                       initial="hidden"
@@ -396,11 +382,11 @@ function LoginPageContent() {
                       <p className="text-center text-xs text-muted-foreground">
                         {t("security.privacyNote")}
                       </p>
-                    </motion.div>
+                    </m.div>
                   </form>
                 </CardContent>
               </Card>
-            </motion.div>
+            </m.div>
           </div>
         </div>
       </div>

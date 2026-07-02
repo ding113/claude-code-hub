@@ -70,9 +70,11 @@ export async function sendCircuitBreakerAlert(data: CircuitBreakerAlertData): Pr
           return;
         }
 
-        for (const binding of bindings) {
-          await addNotificationJobForTarget("circuit-breaker", binding.targetId, binding.id, data);
-        }
+        await Promise.all(
+          bindings.map((binding) =>
+            addNotificationJobForTarget("circuit-breaker", binding.targetId, binding.id, data)
+          )
+        );
       }
 
       // 设置缓存，5 分钟过期
@@ -107,9 +109,11 @@ export async function sendCircuitBreakerAlert(data: CircuitBreakerAlertData): Pr
           return;
         }
 
-        for (const binding of bindings) {
-          await addNotificationJobForTarget("circuit-breaker", binding.targetId, binding.id, data);
-        }
+        await Promise.all(
+          bindings.map((binding) =>
+            addNotificationJobForTarget("circuit-breaker", binding.targetId, binding.id, data)
+          )
+        );
       }
     }
 
@@ -169,9 +173,11 @@ export async function sendDailyLeaderboard(): Promise<void> {
         return;
       }
 
-      for (const binding of bindings) {
-        await addNotificationJobForTarget("daily-leaderboard", binding.targetId, binding.id, data);
-      }
+      await Promise.all(
+        bindings.map((binding) =>
+          addNotificationJobForTarget("daily-leaderboard", binding.targetId, binding.id, data)
+        )
+      );
     }
 
     logger.info({
@@ -217,9 +223,10 @@ export async function sendCostAlerts(): Promise<void> {
         logger.info({ action: "cost_alert_disabled", reason: "legacy_webhook_missing" });
         return;
       }
-      for (const alert of alerts) {
-        await addNotificationJob("cost-alert", settings.costAlertWebhook, alert);
-      }
+      const costAlertWebhook = settings.costAlertWebhook;
+      await Promise.all(
+        alerts.map((alert) => addNotificationJob("cost-alert", costAlertWebhook, alert))
+      );
     } else {
       const { getEnabledBindingsByType } = await import("@/repository/notification-bindings");
       const bindings = await getEnabledBindingsByType("cost_alert");
@@ -229,11 +236,13 @@ export async function sendCostAlerts(): Promise<void> {
         return;
       }
 
-      for (const alert of alerts) {
-        for (const binding of bindings) {
-          await addNotificationJobForTarget("cost-alert", binding.targetId, binding.id, alert);
-        }
-      }
+      await Promise.all(
+        alerts.flatMap((alert) =>
+          bindings.map((binding) =>
+            addNotificationJobForTarget("cost-alert", binding.targetId, binding.id, alert)
+          )
+        )
+      );
     }
 
     logger.info({

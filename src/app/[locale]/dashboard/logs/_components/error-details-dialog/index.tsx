@@ -2,7 +2,7 @@
 
 import { FileText, Gauge, GitBranch } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
@@ -13,7 +13,9 @@ import type { HedgeLoserBilling, StoredCostBreakdown } from "@/types/cost-breakd
 import type { ProviderChainItem } from "@/types/message";
 import type { SpecialSetting } from "@/types/special-settings";
 import type { BillingModelSource } from "@/types/system-config";
-import { LogicTraceTab, PerformanceTab, SummaryTab } from "./components";
+import { LogicTraceTab } from "./components/LogicTraceTab";
+import { PerformanceTab } from "./components/PerformanceTab";
+import { SummaryTab } from "./components/SummaryTab";
 
 interface ErrorDetailsDialogProps {
   statusCode: number | null;
@@ -122,7 +124,7 @@ export function ErrorDetailsDialog({
   const isInProgress = statusCode === null;
 
   // Check if session has messages data
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (open && sessionId) {
       const requestId = ++messageCheckRequestIdRef.current;
       setCheckingMessages(true);
@@ -149,7 +151,7 @@ export function ErrorDetailsDialog({
   }, [open, sessionId, requestSequence]);
 
   // Handle scrollToRedirect - switch to metadata tab when redirect info needs focus
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (open && scrollToRedirect) {
       // Switch to summary tab where model redirect info is displayed
       setActiveTab("summary");
@@ -163,14 +165,14 @@ export function ErrorDetailsDialog({
   }, [open, scrollToRedirect]);
 
   // Handle initialTab - switch to specified tab when opening
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (open && initialTab && !scrollToRedirect) {
       setActiveTab(initialTab);
     }
   }, [open, initialTab, scrollToRedirect]);
 
   // Reset tab when dialog closes
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!open) {
       setActiveTab("summary");
     }

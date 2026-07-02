@@ -155,18 +155,14 @@ export async function scheduleAutoCleanup() {
 
       // 移除所有已存在的定时任务
       const repeatableJobs = await queue.getRepeatableJobs();
-      for (const job of repeatableJobs) {
-        await queue.removeRepeatableByKey(job.key);
-      }
+      await Promise.all(repeatableJobs.map((job) => queue.removeRepeatableByKey(job.key)));
 
       return;
     }
 
     // 移除旧的定时任务
     const repeatableJobs = await queue.getRepeatableJobs();
-    for (const job of repeatableJobs) {
-      await queue.removeRepeatableByKey(job.key);
-    }
+    await Promise.all(repeatableJobs.map((job) => queue.removeRepeatableByKey(job.key)));
 
     // 存储 retentionDays 而非计算好的 beforeDate。
     // beforeDate 在 job 处理器执行时动态计算，保证每次 cron 触发时日期随时间滚动。

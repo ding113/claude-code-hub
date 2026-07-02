@@ -229,7 +229,12 @@ function formatProviderReferenceSummary(
   maxDisplayCount: number = 3
 ): string {
   const uniqueNames = Array.from(
-    new Set(references.map((reference) => reference.name.trim()).filter(Boolean))
+    new Set(
+      references.flatMap((reference) => {
+        const name = reference.name.trim();
+        return name ? [name] : [];
+      })
+    )
   );
   if (uniqueNames.length === 0) {
     return "";
@@ -285,14 +290,12 @@ export async function getDashboardProviderVendors(): Promise<DashboardProviderVe
 
     const vendors = await findProviderVendorsByIds(vendorIds);
 
-    return vendors
-      .map((vendor) => {
-        const types = Array.from(typesByVendorId.get(vendor.id) ?? []).sort(
-          (left, right) => (typeOrder.get(left) ?? 999) - (typeOrder.get(right) ?? 999)
-        );
-        return { ...vendor, providerTypes: types };
-      })
-      .filter((vendor) => vendor.providerTypes.length > 0);
+    return vendors.flatMap((vendor) => {
+      const types = Array.from(typesByVendorId.get(vendor.id) ?? []).sort(
+        (left, right) => (typeOrder.get(left) ?? 999) - (typeOrder.get(right) ?? 999)
+      );
+      return types.length > 0 ? [{ ...vendor, providerTypes: types }] : [];
+    });
   } catch (error) {
     logger.error("getDashboardProviderVendors:error", error);
     return [];

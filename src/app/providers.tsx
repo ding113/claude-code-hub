@@ -2,6 +2,7 @@
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Agentation } from "agentation";
+import { domMax, LazyMotion } from "framer-motion";
 import { ThemeProvider } from "next-themes";
 import { type ReactNode, useState } from "react";
 
@@ -36,8 +37,10 @@ export function AppProviders({ children }: AppProvidersProps) {
         enableColorScheme
         disableTransitionOnChange
       >
-        {children}
-        {process.env.NODE_ENV === "development" && <Agentation />}
+        <LazyMotion features={domMax}>
+          {children}
+          {process.env.NODE_ENV === "development" && <Agentation />}
+        </LazyMotion>
       </ThemeProvider>
     </QueryClientProvider>
   );

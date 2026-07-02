@@ -83,11 +83,14 @@ export function UsageLogsFilters({
   const t = useTranslations("dashboard");
   const tErrors = useTranslations("errors");
 
-  const [localFilters, setLocalFilters] = useState<UsageLogFilters>(filters);
+  const [localFilters, setLocalFilters] = useState<UsageLogFilters>(() => filters);
   const [isExporting, setIsExporting] = useState(false);
   const [exportStatus, setExportStatus] = useState<UsageLogsExportStatus | null>(null);
   const [activePreset, setActivePreset] = useState<FilterPreset | null>(null);
   const exportRunIdRef = useRef(0);
+  const cancelExportRun = useCallback(() => {
+    exportRunIdRef.current += 1;
+  }, []);
 
   // Track users and keys for display name resolution
   const [availableUsers, setAvailableUsers] = useState<Array<{ id: number; name: string }>>([]);
@@ -153,28 +156,24 @@ export function UsageLogsFilters({
   }, [localFilters.statusCode, localFilters.excludeStatusCode200, localFilters.minRetryCount]);
 
   useEffect(() => {
-    setLocalFilters(filters);
-  }, [filters]);
-
-  useEffect(() => {
     return () => {
-      exportRunIdRef.current += 1;
+      cancelExportRun();
     };
-  }, []);
+  }, [cancelExportRun]);
 
   const handleApply = useCallback(() => {
     onChange(sanitizeFilters(localFilters));
   }, [localFilters, onChange]);
 
   const handleReset = useCallback(() => {
-    exportRunIdRef.current += 1;
+    cancelExportRun();
     setLocalFilters({});
     setKeys([]);
     setActivePreset(null);
     setIsExporting(false);
     setExportStatus(null);
     onReset();
-  }, [onReset]);
+  }, [cancelExportRun, onReset]);
 
   const downloadBlob = useCallback((blob: Blob, extension: string) => {
     const url = window.URL.createObjectURL(blob);
@@ -189,6 +188,7 @@ export function UsageLogsFilters({
 
   const handleExport = async (exportFormat: "csv" | "xlsx") => {
     const runId = exportRunIdRef.current + 1;
+    const isCurrentExport = () => exportRunIdRef.current === runId;
     exportRunIdRef.current = runId;
     setIsExporting(true);
     setExportStatus({
@@ -203,74 +203,74 @@ export function UsageLogsFilters({
     try {
       const exportFilters = sanitizeFilters(localFilters);
       const startResult = await startUsageLogsExport({ ...exportFilters, format: exportFormat });
-      if (exportRunIdRef.current !== runId) {
-        return;
-      }
 
-      if (!startResult.ok) {
-        setExportStatus(null);
-        console.error("Failed to start usage logs export", startResult.error);
-        toast.error(t("logs.filters.exportError"));
-        return;
-      }
-
-      const jobId = startResult.data.jobId;
-      const EXPORT_TIMEOUT_MS = 10 * 60 * 1000;
-      const deadline = Date.now() + EXPORT_TIMEOUT_MS;
-
-      while (true) {
-        if (exportRunIdRef.current !== runId) {
-          return;
-        }
-
-        if (Date.now() > deadline) {
+      if (isCurrentExport()) {
+        if (!startResult.ok) {
           setExportStatus(null);
+          console.error("Failed to start usage logs export", startResult.error);
           toast.error(t("logs.filters.exportError"));
           return;
         }
 
-        const statusResult = await getUsageLogsExportStatus(jobId);
-        if (exportRunIdRef.current !== runId) {
+        const jobId = startResult.data.jobId;
+        const EXPORT_TIMEOUT_MS = 10 * 60 * 1000;
+        const deadline = Date.now() + EXPORT_TIMEOUT_MS;
+        let completed = false;
+
+        while (isCurrentExport()) {
+          if (Date.now() > deadline) {
+            setExportStatus(null);
+            toast.error(t("logs.filters.exportError"));
+            return;
+          }
+
+          // react-doctor-disable-next-line react-doctor/async-await-in-loop -- export status polling must wait between server status reads
+          const statusResult = await getUsageLogsExportStatus(jobId);
+
+          if (isCurrentExport()) {
+            if (!statusResult.ok) {
+              setExportStatus(null);
+              toast.error(t("logs.filters.exportError"));
+              return;
+            }
+
+            setExportStatus(statusResult.data);
+
+            if (statusResult.data.status === "failed") {
+              toast.error(statusResult.data.error || t("logs.filters.exportError"));
+              return;
+            }
+
+            if (statusResult.data.status === "completed") {
+              completed = true;
+              break;
+            }
+
+            await new Promise((resolve) => window.setTimeout(resolve, 800));
+          }
+        }
+
+        if (!completed || !isCurrentExport()) {
           return;
         }
 
-        if (!statusResult.ok) {
-          setExportStatus(null);
-          toast.error(t("logs.filters.exportError"));
-          return;
+        const downloadResult = await downloadUsageLogsExport(jobId);
+
+        if (isCurrentExport()) {
+          if (!downloadResult.ok) {
+            toast.error(
+              downloadResult.errorCode
+                ? getErrorMessage(tErrors, downloadResult.errorCode, downloadResult.errorParams)
+                : t("logs.filters.exportError")
+            );
+            return;
+          }
+
+          downloadBlob(downloadResult.data.blob, exportFormat === "xlsx" ? "xlsx" : "csv");
+
+          toast.success(t("logs.filters.exportSuccess"));
         }
-
-        setExportStatus(statusResult.data);
-
-        if (statusResult.data.status === "failed") {
-          toast.error(statusResult.data.error || t("logs.filters.exportError"));
-          return;
-        }
-
-        if (statusResult.data.status === "completed") {
-          break;
-        }
-
-        await new Promise((resolve) => window.setTimeout(resolve, 800));
       }
-
-      const downloadResult = await downloadUsageLogsExport(jobId);
-      if (exportRunIdRef.current !== runId) {
-        return;
-      }
-
-      if (!downloadResult.ok) {
-        toast.error(
-          downloadResult.errorCode
-            ? getErrorMessage(tErrors, downloadResult.errorCode, downloadResult.errorParams)
-            : t("logs.filters.exportError")
-        );
-        return;
-      }
-
-      downloadBlob(downloadResult.data.blob, exportFormat === "xlsx" ? "xlsx" : "csv");
-
-      toast.success(t("logs.filters.exportSuccess"));
     } catch (error) {
       console.error("Export failed:", error);
       toast.error(t("logs.filters.exportError"));

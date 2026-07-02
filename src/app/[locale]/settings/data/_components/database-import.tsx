@@ -91,6 +91,7 @@ export function DatabaseImport() {
       let hasReceivedCompletion = false;
 
       while (true) {
+        // react-doctor-disable-next-line react-doctor/async-await-in-loop -- stream chunks must be consumed in order
         const { done, value } = await reader.read();
 
         if (done) {
@@ -181,6 +182,7 @@ export function DatabaseImport() {
             type="file"
             accept=".dump"
             onChange={handleFileChange}
+            aria-label={t("selectFileLabel")}
             disabled={isImporting}
             className="flex h-10 w-full rounded-xl border border-border bg-white/[0.02] px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E25706]/50 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
           />
@@ -232,8 +234,8 @@ export function DatabaseImport() {
             ref={progressContainerRef}
             className="max-h-60 overflow-y-auto rounded-lg bg-muted/50 p-2 font-mono text-xs space-y-1"
           >
-            {progressMessages.map((message, index) => (
-              <div key={index} className="text-muted-foreground">
+            {progressMessages.map((message) => (
+              <div key={message} className="text-muted-foreground">
                 {message}
               </div>
             ))}

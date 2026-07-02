@@ -54,6 +54,21 @@ export function isProviderActiveNow(
 }
 
 const HHMM_RE = /^([01]\d|2[0-3]):([0-5]\d)$/;
+const timezoneMinuteFormatters = new Map<string, Intl.DateTimeFormat>();
+
+function getTimezoneMinuteFormatter(timezone: string): Intl.DateTimeFormat {
+  let formatter = timezoneMinuteFormatters.get(timezone);
+  if (!formatter) {
+    formatter = Intl.DateTimeFormat("en-US", {
+      timeZone: timezone,
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    });
+    timezoneMinuteFormatters.set(timezone, formatter);
+  }
+  return formatter;
+}
 
 function parseHHMM(time: string): number {
   const match = HHMM_RE.exec(time);
@@ -64,12 +79,7 @@ function parseHHMM(time: string): number {
 }
 
 function getCurrentMinutesInTimezone(now: Date, timezone: string): number {
-  const formatter = new Intl.DateTimeFormat("en-US", {
-    timeZone: timezone,
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  });
+  const formatter = getTimezoneMinuteFormatter(timezone);
 
   const parts = formatter.formatToParts(now);
   const hour = parseInt(parts.find((p) => p.type === "hour")?.value ?? "0", 10);

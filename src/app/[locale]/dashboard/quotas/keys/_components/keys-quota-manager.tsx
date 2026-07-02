@@ -64,42 +64,38 @@ export function KeysQuotaManager({ users, currencyCode = "USD" }: KeysQuotaManag
   const filteredUsers = useMemo(() => {
     const lowerQuery = searchQuery.toLowerCase();
 
-    return users
-      .map((user) => {
-        // 搜索：用户名或密钥名匹配
-        let filteredKeys = user.keys;
-        if (searchQuery) {
-          const userNameMatches = user.name.toLowerCase().includes(lowerQuery);
-          if (!userNameMatches) {
-            filteredKeys = filteredKeys.filter((key) =>
-              key.name.toLowerCase().includes(lowerQuery)
-            );
-          }
+    return users.flatMap((user) => {
+      // 搜索：用户名或密钥名匹配
+      let filteredKeys = user.keys;
+      if (searchQuery) {
+        const userNameMatches = user.name.toLowerCase().includes(lowerQuery);
+        if (!userNameMatches) {
+          filteredKeys = filteredKeys.filter((key) => key.name.toLowerCase().includes(lowerQuery));
         }
+      }
 
-        // 筛选：根据限额类型或状态
-        switch (filter) {
-          case "key-quota":
-            // 仅显示设置了密钥限额的
-            filteredKeys = filteredKeys.filter((key) => hasKeyQuotaSet(key.quota));
-            break;
-          case "user-quota-only":
-            // 仅显示继承用户限额的（未设置密钥限额）
-            filteredKeys = filteredKeys.filter((key) => !hasKeyQuotaSet(key.quota));
-            break;
-          case "warning":
-            // 预警：密钥或用户使用率 ≥60%
-            filteredKeys = filteredKeys.filter((key) => isWarning(key.quota, user.userQuota));
-            break;
-          case "exceeded":
-            // 超限：密钥或用户使用率 ≥100%
-            filteredKeys = filteredKeys.filter((key) => isExceeded(key.quota, user.userQuota));
-            break;
-        }
+      // 筛选：根据限额类型或状态
+      switch (filter) {
+        case "key-quota":
+          // 仅显示设置了密钥限额的
+          filteredKeys = filteredKeys.filter((key) => hasKeyQuotaSet(key.quota));
+          break;
+        case "user-quota-only":
+          // 仅显示继承用户限额的（未设置密钥限额）
+          filteredKeys = filteredKeys.filter((key) => !hasKeyQuotaSet(key.quota));
+          break;
+        case "warning":
+          // 预警：密钥或用户使用率 ≥60%
+          filteredKeys = filteredKeys.filter((key) => isWarning(key.quota, user.userQuota));
+          break;
+        case "exceeded":
+          // 超限：密钥或用户使用率 ≥100%
+          filteredKeys = filteredKeys.filter((key) => isExceeded(key.quota, user.userQuota));
+          break;
+      }
 
-        return { ...user, keys: filteredKeys };
-      })
-      .filter((user) => user.keys.length > 0); // 过滤掉没有密钥的用户
+      return filteredKeys.length > 0 ? [{ ...user, keys: filteredKeys }] : [];
+    });
   }, [users, searchQuery, filter]);
 
   // 统计信息

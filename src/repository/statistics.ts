@@ -5,7 +5,7 @@ import { and, eq, gte, inArray, isNull, lt, sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import { keys, messageRequest, usageLedger } from "@/drizzle/schema";
 import { TTLMap } from "@/lib/cache/ttl-map";
-import { resolveSystemTimezone } from "@/lib/utils/timezone";
+import { resolveSystemTimezone } from "@/lib/utils/timezone-resolver";
 import type {
   DatabaseKey,
   DatabaseKeyStatRow,
@@ -179,7 +179,7 @@ function zeroFillUserStats(
     });
   }
 
-  const sortedUsers = [...allUsers].sort((a, b) => a.name.localeCompare(b.name));
+  const sortedUsers = Array.from(allUsers).toSorted((a, b) => a.name.localeCompare(b.name));
   const filledRows: RuntimeDatabaseStatRow[] = [];
 
   for (const bucket of buckets) {
@@ -215,7 +215,7 @@ function zeroFillKeyStats(
     });
   }
 
-  const sortedKeys = [...allKeys].sort((a, b) => a.name.localeCompare(b.name));
+  const sortedKeys = Array.from(allKeys).toSorted((a, b) => a.name.localeCompare(b.name));
   const filledRows: RuntimeDatabaseKeyStatRow[] = [];
 
   for (const bucket of buckets) {

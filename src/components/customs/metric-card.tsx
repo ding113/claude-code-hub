@@ -2,7 +2,7 @@
 
 import type { LucideIcon } from "lucide-react";
 import * as React from "react";
-import { useEffect, useState } from "react";
+import { useLayoutEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
@@ -27,11 +27,11 @@ export function MetricCard({
   formatter,
   className,
 }: MetricCardProps) {
-  const [displayValue, setDisplayValue] = useState(value);
+  const [displayValue, setDisplayValue] = useState(() => value);
   const [isAnimating, setIsAnimating] = useState(false);
   const prevValueRef = React.useRef(value);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (typeof value === "number" && typeof prevValueRef.current === "number") {
       if (value !== prevValueRef.current) {
         setIsAnimating(true);

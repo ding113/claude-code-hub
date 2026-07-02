@@ -160,9 +160,11 @@ export function UserKeyTableRow({
   const [_isPending, startTransition] = useTransition();
   const [isTogglingEnabled, setIsTogglingEnabled] = useState(false);
   // 乐观更新：本地状态跟踪启用状态
-  const [localIsEnabled, setLocalIsEnabled] = useState(user.isEnabled);
+  const [localIsEnabled, setLocalIsEnabled] = useState(() => user.isEnabled);
   // 乐观更新：本地状态跟踪过期时间
-  const [localExpiresAt, setLocalExpiresAt] = useState<Date | null | undefined>(user.expiresAt);
+  const [localExpiresAt, setLocalExpiresAt] = useState<Date | null | undefined>(
+    () => user.expiresAt
+  );
   // Key 编辑 Dialog 状态
   const [editingKeyId, setEditingKeyId] = useState<number | null>(null);
   const isExpanded = isMultiSelectMode ? true : expanded;
@@ -185,6 +187,18 @@ export function UserKeyTableRow({
   };
 
   const expiresText = formatExpiry(localExpiresAt ?? null, locale);
+  const rowToggleProps = !isMultiSelectMode
+    ? {
+        onClick: () => onToggle(),
+        role: "button" as const,
+        tabIndex: 0,
+        onKeyDown: (e: React.KeyboardEvent<HTMLDivElement>) => {
+          if (e.key !== "Enter" && e.key !== " ") return;
+          e.preventDefault();
+          onToggle();
+        },
+      }
+    : {};
 
   // 计算用户过期状态
   const expiryStatus = getExpiryStatus(localIsEnabled, localExpiresAt ?? null);
@@ -303,19 +317,8 @@ export function UserKeyTableRow({
           resolvedGridColumnsClass,
           !isMultiSelectMode && "cursor-pointer hover:bg-muted/50"
         )}
-        onClick={() => {
-          if (isMultiSelectMode) return;
-          onToggle();
-        }}
-        role="button"
-        tabIndex={0}
-        aria-expanded={isExpanded}
-        onKeyDown={(e) => {
-          if (e.key !== "Enter" && e.key !== " ") return;
-          if (isMultiSelectMode) return;
-          e.preventDefault();
-          onToggle();
-        }}
+        {...rowToggleProps}
+        aria-expanded={!isMultiSelectMode ? isExpanded : undefined}
       >
         {/* 用户名 / 备注 */}
         <div className="px-2 min-w-0">
@@ -418,9 +421,10 @@ export function UserKeyTableRow({
         </div>
 
         {/* 到期时间 - clickable for quick renew */}
-        <div
+        <button
+          type="button"
           className={cn(
-            "px-2 text-sm text-muted-foreground",
+            "px-2 text-left text-sm text-muted-foreground bg-transparent border-0",
             onQuickRenew && "cursor-pointer hover:text-primary hover:underline"
           )}
           onClick={(e) => {
@@ -432,7 +436,7 @@ export function UserKeyTableRow({
           title={onQuickRenew ? translations.columns.expiresAtHint : undefined}
         >
           {expiresText}
-        </div>
+        </button>
 
         {/* RPM 限额 */}
         <div className="px-2 flex items-center justify-center">

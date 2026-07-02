@@ -3,7 +3,7 @@
 import { formatInTimeZone } from "date-fns-tz";
 import { ArrowUp, Loader2 } from "lucide-react";
 import { useTimeZone, useTranslations } from "next-intl";
-import { useCallback, useEffect, useEffectEvent, useMemo, useRef } from "react";
+import { useCallback, useEffect, useEffectEvent, useLayoutEffect, useMemo, useRef } from "react";
 import { toast } from "sonner";
 import { ModelVendorIcon } from "@/components/customs/model-vendor-icon";
 import { Badge } from "@/components/ui/badge";
@@ -87,9 +87,13 @@ export function UsageLogsTable({
     getItemKey,
   });
 
-  useEffect(() => {
-    onHistoryBrowsingChange?.(showScrollToTop);
-  }, [showScrollToTop, onHistoryBrowsingChange]);
+  const notifyHistoryBrowsingChange = useEffectEvent((isBrowsingHistory: boolean) => {
+    onHistoryBrowsingChange?.(isBrowsingHistory);
+  });
+
+  useLayoutEffect(() => {
+    notifyHistoryBrowsingChange(showScrollToTop);
+  }, [showScrollToTop]);
 
   const handleResetKeyChange = useEffectEvent((nextResetKey: string) => {
     if (previousResetKeyRef.current === nextResetKey) return;
@@ -97,7 +101,7 @@ export function UsageLogsTable({
     resetScrollPosition();
   });
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     handleResetKeyChange(resolvedResetKey);
   }, [resolvedResetKey]);
 

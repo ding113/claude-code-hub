@@ -108,16 +108,20 @@ export class SessionTracker {
 
       // 检查执行结果，捕获类型冲突错误
       if (results) {
+        let hasWrongType = false;
         for (const [err] of results) {
           if (err) {
             logger.error("SessionTracker: Pipeline command failed", { error: err });
             // 如果是类型冲突（WRONGTYPE），自动修复
             if (err.message?.includes("WRONGTYPE")) {
-              logger.warn("SessionTracker: Type conflict detected, auto-fixing");
-              await SessionTracker.initialize(); // 重新初始化，清理旧数据
-              return; // 本次追踪失败，下次请求会成功
+              hasWrongType = true;
             }
           }
+        }
+        if (hasWrongType) {
+          logger.warn("SessionTracker: Type conflict detected, auto-fixing");
+          await SessionTracker.initialize(); // 重新初始化，清理旧数据
+          return; // 本次追踪失败，下次请求会成功
         }
       }
 
@@ -158,15 +162,19 @@ export class SessionTracker {
 
       // 检查执行结果，捕获类型冲突错误
       if (results) {
+        let hasWrongType = false;
         for (const [err] of results) {
           if (err) {
             logger.error("SessionTracker: Pipeline command failed", { error: err });
             if (err.message?.includes("WRONGTYPE")) {
-              logger.warn("SessionTracker: Type conflict detected, auto-fixing");
-              await SessionTracker.initialize();
-              return;
+              hasWrongType = true;
             }
           }
+        }
+        if (hasWrongType) {
+          logger.warn("SessionTracker: Type conflict detected, auto-fixing");
+          await SessionTracker.initialize();
+          return;
         }
       }
 
@@ -242,15 +250,19 @@ export class SessionTracker {
 
       // 检查执行结果，捕获类型冲突错误
       if (results) {
+        let hasWrongType = false;
         for (const [err] of results) {
           if (err) {
             logger.error("SessionTracker: Pipeline command failed", { error: err });
             if (err.message?.includes("WRONGTYPE")) {
-              logger.warn("SessionTracker: Type conflict detected, auto-fixing");
-              await SessionTracker.initialize();
-              return;
+              hasWrongType = true;
             }
           }
+        }
+        if (hasWrongType) {
+          logger.warn("SessionTracker: Type conflict detected, auto-fixing");
+          await SessionTracker.initialize();
+          return;
         }
       }
 

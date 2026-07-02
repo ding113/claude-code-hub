@@ -10,8 +10,7 @@ export default async function UserInsightsPage({
 }: {
   params: Promise<{ locale: string; userId: string }>;
 }) {
-  const { locale, userId: userIdStr } = await params;
-  const session = await getSession();
+  const [{ locale, userId: userIdStr }, session] = await Promise.all([params, getSession()]);
 
   if (!session || session.user.role !== "admin") {
     return redirect({ href: "/dashboard/leaderboard", locale });

@@ -94,6 +94,7 @@ export async function schedulePublicStatusRebuild(input: {
   });
 
   for (const manifestKey of [versionedManifestKey, currentManifestKey]) {
+    // react-doctor-disable-next-line react-doctor/async-await-in-loop -- versioned manifest is preferred before current fallback
     const manifestRaw = await redis.get(manifestKey);
     if (!manifestRaw) {
       continue;

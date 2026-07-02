@@ -114,6 +114,7 @@ export async function cleanupLogs(
     const activeConditions = [...whereConditions, isNull(messageRequest.deletedAt)];
 
     while (true) {
+      // react-doctor-disable-next-line react-doctor/async-await-in-loop -- cleanup deletes batches until no rows remain
       const deleted = await deleteBatch(activeConditions, batchSize);
 
       if (deleted === 0) break;

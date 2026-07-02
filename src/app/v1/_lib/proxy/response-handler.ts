@@ -1962,6 +1962,7 @@ export class ProxyResponseHandler {
             while (true) {
               if (session.clientAbortSignal?.aborted) break;
 
+              // react-doctor-disable-next-line react-doctor/async-await-in-loop -- stream chunks must be consumed in order
               const { done, value } = await reader.read();
               if (done) {
                 const wasResponseControllerAborted =
@@ -2765,6 +2766,7 @@ export class ProxyResponseHandler {
             break; // 提前终止
           }
 
+          // react-doctor-disable-next-line react-doctor/async-await-in-loop -- stream chunks must be consumed in order
           const { value, done } = await reader.read();
           if (done) {
             streamEndedNormally = true;

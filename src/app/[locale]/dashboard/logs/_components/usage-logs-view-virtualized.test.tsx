@@ -69,7 +69,7 @@ vi.mock("@/components/ui/collapsible", () => ({
 }));
 
 vi.mock("@/components/ui/switch", () => ({
-  Switch: () => <button type="button" role="switch" />,
+  Switch: () => <button type="button" role="switch" aria-checked={false} />,
 }));
 
 vi.mock("./column-visibility-dropdown", () => ({

@@ -1,4 +1,4 @@
-import * as React from "react";
+import type * as React from "react";
 import { cn } from "@/lib/utils";
 
 export interface SeparatorProps extends React.HTMLAttributes<HTMLDivElement> {
@@ -6,8 +6,16 @@ export interface SeparatorProps extends React.HTMLAttributes<HTMLDivElement> {
   decorative?: boolean;
 }
 
-const Separator = React.forwardRef<HTMLDivElement, SeparatorProps>(
-  ({ className, orientation = "horizontal", decorative = true, ...props }, ref) => (
+function Separator({
+  className,
+  orientation = "horizontal",
+  decorative = true,
+  ref,
+  ...props
+}: SeparatorProps & {
+  ref?: React.Ref<HTMLDivElement>;
+}) {
+  return (
     <div
       ref={ref}
       role={decorative ? "none" : "separator"}
@@ -19,8 +27,8 @@ const Separator = React.forwardRef<HTMLDivElement, SeparatorProps>(
       )}
       {...props}
     />
-  )
-);
+  );
+}
 Separator.displayName = "Separator";
 
 export { Separator };

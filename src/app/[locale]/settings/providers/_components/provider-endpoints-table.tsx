@@ -3,7 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Edit2, Loader2, MoreHorizontal, Play, Plus, RotateCcw, Trash2 } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useEffect, useMemo, useState } from "react";
+import { useLayoutEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -124,7 +124,7 @@ export function ProviderEndpointsTable({
     const typeOrder = getAllProviderTypes();
     const typeIndexMap = new Map(typeOrder.map((t, i) => [t, i]));
 
-    return [...rawEndpoints].sort((a, b) => {
+    return Array.from(rawEndpoints).toSorted((a, b) => {
       const aTypeIndex = typeIndexMap.get(a.providerType) ?? 999;
       const bTypeIndex = typeIndexMap.get(b.providerType) ?? 999;
       if (aTypeIndex !== bTypeIndex) {
@@ -515,7 +515,7 @@ export function AddEndpointButton({
 
   const selectableTypes: ProviderType[] = getUserFacingProviderTypes();
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!open) {
       setUrl("");
       setLabel("");
@@ -687,9 +687,9 @@ function EditEndpointDialog({ endpoint }: { endpoint: ProviderEndpoint }) {
   const [open, setOpen] = useState(false);
   const queryClient = useQueryClient();
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isEnabled, setIsEnabled] = useState(endpoint.isEnabled);
+  const [isEnabled, setIsEnabled] = useState(() => endpoint.isEnabled);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (open) {
       setIsEnabled(endpoint.isEnabled);
     }

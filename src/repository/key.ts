@@ -1,5 +1,3 @@
-"use server";
-
 import { and, count, desc, eq, gt, gte, inArray, isNull, lt, or, sql, sum } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import { keys, providers, usageLedger, users } from "@/drizzle/schema";
@@ -811,79 +809,76 @@ export async function findKeysWithStatistics(userId: number): Promise<KeyStatist
   const tomorrow = new Date(today);
   tomorrow.setDate(tomorrow.getDate() + 1);
 
-  const stats: KeyStatistics[] = [];
+  const stats = await Promise.all(
+    userKeys.map(async (key) => {
+      const [[todayCount], [lastUsage], modelStatsRows] = await Promise.all([
+        db
+          .select({ count: count() })
+          .from(usageLedger)
+          .where(
+            and(
+              eq(usageLedger.key, key.key),
+              LEDGER_BILLING_CONDITION,
+              gte(usageLedger.createdAt, today),
+              lt(usageLedger.createdAt, tomorrow)
+            )
+          ),
+        db
+          .select({
+            createdAt: usageLedger.createdAt,
+            providerName: providers.name,
+          })
+          .from(usageLedger)
+          .innerJoin(providers, eq(usageLedger.finalProviderId, providers.id))
+          .where(and(eq(usageLedger.key, key.key), LEDGER_BILLING_CONDITION))
+          .orderBy(desc(usageLedger.createdAt))
+          .limit(1),
+        db
+          .select({
+            model: usageLedger.model,
+            callCount: sql<number>`count(*)::int`,
+            totalCost: sum(usageLedger.costUsd),
+            inputTokens: sql<number>`COALESCE(sum(${usageLedger.inputTokens}), 0)::double precision`,
+            outputTokens: sql<number>`COALESCE(sum(${usageLedger.outputTokens}), 0)::double precision`,
+            cacheCreationTokens: sql<number>`COALESCE(sum(${usageLedger.cacheCreationInputTokens}), 0)::double precision`,
+            cacheReadTokens: sql<number>`COALESCE(sum(${usageLedger.cacheReadInputTokens}), 0)::double precision`,
+          })
+          .from(usageLedger)
+          .where(
+            and(
+              eq(usageLedger.key, key.key),
+              LEDGER_BILLING_CONDITION,
+              gte(usageLedger.createdAt, today),
+              lt(usageLedger.createdAt, tomorrow),
+              sql`${usageLedger.model} IS NOT NULL`
+            )
+          )
+          .groupBy(usageLedger.model)
+          .orderBy(desc(sql`count(*)`)),
+      ]);
 
-  for (const key of userKeys) {
-    // 查询今日调用次数
-    const [todayCount] = await db
-      .select({ count: count() })
-      .from(usageLedger)
-      .where(
-        and(
-          eq(usageLedger.key, key.key),
-          LEDGER_BILLING_CONDITION,
-          gte(usageLedger.createdAt, today),
-          lt(usageLedger.createdAt, tomorrow)
-        )
-      );
+      const modelStats = modelStatsRows.map((row) => ({
+        model: row.model || "unknown",
+        callCount: row.callCount,
+        totalCost: (() => {
+          const costDecimal = toCostDecimal(row.totalCost) ?? new Decimal(0);
+          return costDecimal.toDecimalPlaces(6).toNumber();
+        })(),
+        inputTokens: row.inputTokens,
+        outputTokens: row.outputTokens,
+        cacheCreationTokens: row.cacheCreationTokens,
+        cacheReadTokens: row.cacheReadTokens,
+      }));
 
-    // 查询最后使用时间和供应商
-    const [lastUsage] = await db
-      .select({
-        createdAt: usageLedger.createdAt,
-        providerName: providers.name,
-      })
-      .from(usageLedger)
-      .innerJoin(providers, eq(usageLedger.finalProviderId, providers.id))
-      .where(and(eq(usageLedger.key, key.key), LEDGER_BILLING_CONDITION))
-      .orderBy(desc(usageLedger.createdAt))
-      .limit(1);
-
-    // 查询分模型统计（仅统计当天）
-    const modelStatsRows = await db
-      .select({
-        model: usageLedger.model,
-        callCount: sql<number>`count(*)::int`,
-        totalCost: sum(usageLedger.costUsd),
-        inputTokens: sql<number>`COALESCE(sum(${usageLedger.inputTokens}), 0)::double precision`,
-        outputTokens: sql<number>`COALESCE(sum(${usageLedger.outputTokens}), 0)::double precision`,
-        cacheCreationTokens: sql<number>`COALESCE(sum(${usageLedger.cacheCreationInputTokens}), 0)::double precision`,
-        cacheReadTokens: sql<number>`COALESCE(sum(${usageLedger.cacheReadInputTokens}), 0)::double precision`,
-      })
-      .from(usageLedger)
-      .where(
-        and(
-          eq(usageLedger.key, key.key),
-          LEDGER_BILLING_CONDITION,
-          gte(usageLedger.createdAt, today),
-          lt(usageLedger.createdAt, tomorrow),
-          sql`${usageLedger.model} IS NOT NULL`
-        )
-      )
-      .groupBy(usageLedger.model)
-      .orderBy(desc(sql`count(*)`));
-
-    const modelStats = modelStatsRows.map((row) => ({
-      model: row.model || "unknown",
-      callCount: row.callCount,
-      totalCost: (() => {
-        const costDecimal = toCostDecimal(row.totalCost) ?? new Decimal(0);
-        return costDecimal.toDecimalPlaces(6).toNumber();
-      })(),
-      inputTokens: row.inputTokens,
-      outputTokens: row.outputTokens,
-      cacheCreationTokens: row.cacheCreationTokens,
-      cacheReadTokens: row.cacheReadTokens,
-    }));
-
-    stats.push({
-      keyId: key.id,
-      todayCallCount: Number(todayCount?.count || 0),
-      lastUsedAt: lastUsage?.createdAt || null,
-      lastProviderName: lastUsage?.providerName || null,
-      modelStats,
-    });
-  }
+      return {
+        keyId: key.id,
+        todayCallCount: Number(todayCount?.count || 0),
+        lastUsedAt: lastUsage?.createdAt || null,
+        lastProviderName: lastUsage?.providerName || null,
+        modelStats,
+      };
+    })
+  );
 
   return stats;
 }

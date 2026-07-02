@@ -28,6 +28,8 @@ const SETTINGS_PATH = "/settings/request-filters";
 
 const VALIDATION_UNSAFE_KEYS = /(?:^|[.[])(?:__proto__|constructor|prototype)(?:[.[\]]|$)/;
 const MAX_OPERATIONS = 50;
+const VALID_OPERATION_TYPES = new Set(["set", "remove", "merge", "insert"]);
+const VALID_OPERATION_SCOPES = new Set(["header", "body"]);
 
 function isAdmin(session: Awaited<ReturnType<typeof getSession>>): boolean {
   return !!session && session.user.role === "admin";
@@ -63,11 +65,11 @@ function validateOperations(operations: unknown): string | null {
       return `${prefix}: must be an object`;
     }
 
-    if (!raw.op || !["set", "remove", "merge", "insert"].includes(raw.op as string)) {
+    if (!raw.op || !VALID_OPERATION_TYPES.has(raw.op as string)) {
       return `${prefix}: invalid op type "${String(raw.op)}"`;
     }
 
-    if (!raw.scope || !["header", "body"].includes(raw.scope as string)) {
+    if (!raw.scope || !VALID_OPERATION_SCOPES.has(raw.scope as string)) {
       return `${prefix}: invalid scope "${String(raw.scope)}"`;
     }
 
@@ -479,9 +481,11 @@ export async function getDistinctProviderGroupsAction(): Promise<ActionResult<st
   if (!isAdmin(session)) return { ok: false, error: "权限不足" };
 
   try {
-    const { db } = await import("@/drizzle/db");
-    const { providers } = await import("@/drizzle/schema");
-    const { isNull } = await import("drizzle-orm");
+    const [{ db }, { providers }, { isNull }] = await Promise.all([
+      import("@/drizzle/db"),
+      import("@/drizzle/schema"),
+      import("drizzle-orm"),
+    ]);
 
     const result = await db
       .selectDistinct({ groupTag: providers.groupTag })

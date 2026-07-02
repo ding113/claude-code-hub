@@ -6,7 +6,7 @@ import { RateLimitService } from "@/lib/rate-limit";
 import { SessionManager } from "@/lib/session-manager";
 import { parseProviderGroups, resolveProviderGroupsWithDefault } from "@/lib/utils/provider-group";
 import { isProviderActiveNow } from "@/lib/utils/provider-schedule";
-import { resolveSystemTimezone } from "@/lib/utils/timezone";
+import { resolveSystemTimezone } from "@/lib/utils/timezone-resolver";
 import { isVendorTypeCircuitOpen } from "@/lib/vendor-type-circuit-breaker";
 import { findAllProviders, findProviderById } from "@/repository/provider";
 import { getGroupCostMultiplier } from "@/repository/provider-groups";
@@ -53,14 +53,15 @@ function getEffectiveProviderGroup(session?: ProxySession): string | null {
  */
 function checkProviderGroupMatch(providerGroupTag: string | null, userGroups: string): boolean {
   const groups = parseProviderGroups(userGroups);
+  const groupSet = new Set(groups);
 
-  if (groups.includes(PROVIDER_GROUP.ALL)) {
+  if (groupSet.has(PROVIDER_GROUP.ALL)) {
     return true;
   }
 
   const providerTags = resolveProviderGroupsWithDefault(providerGroupTag);
 
-  return providerTags.some((tag) => groups.includes(tag));
+  return providerTags.some((tag) => groupSet.has(tag));
 }
 
 /**
@@ -214,14 +215,16 @@ export class ProxyProviderResolver {
       if (!session.provider) {
         break; // 无可用供应商，退出循环
       }
+      const selectedProvider = session.provider;
 
       // 选定供应商后，进行原子性并发检查并追踪
       if (session.sessionId) {
-        const limit = session.provider.limitConcurrentSessions || 0;
+        const limit = selectedProvider.limitConcurrentSessions || 0;
 
         // 使用原子性检查并追踪（解决竞态条件）
+        // react-doctor-disable-next-line react-doctor/async-await-in-loop -- fallback selection is sequential because each failure mutates session.provider
         const checkResult = await RateLimitService.checkAndTrackProviderSession(
-          session.provider.id,
+          selectedProvider.id,
           session.sessionId,
           limit
         );
@@ -231,8 +234,8 @@ export class ProxyProviderResolver {
           logger.warn(
             "ProviderSelector: Provider concurrent session limit exceeded, trying fallback",
             {
-              providerName: session.provider.name,
-              providerId: session.provider.id,
+              providerName: selectedProvider.name,
+              providerId: selectedProvider.id,
               current: checkResult.count,
               limit,
               attempt: attemptCount,
@@ -240,12 +243,12 @@ export class ProxyProviderResolver {
           );
 
           const failedContext = session.getLastSelectionContext();
-          session.addProviderToChain(session.provider, {
+          session.addProviderToChain(selectedProvider, {
             reason: "concurrent_limit_failed",
             selectionMethod: failedContext?.groupFilterApplied
               ? "group_filtered"
               : "weighted_random",
-            circuitState: getCircuitState(session.provider.id),
+            circuitState: getCircuitState(selectedProvider.id),
             attemptNumber: attemptCount,
             errorMessage: checkResult.reason || "并发限制已达到",
             decisionContext: failedContext
@@ -257,7 +260,7 @@ export class ProxyProviderResolver {
               : {
                   totalProviders: 0,
                   enabledProviders: 0,
-                  targetType: session.provider.providerType as NonNullable<
+                  targetType: selectedProvider.providerType as NonNullable<
                     ProviderChainItem["decisionContext"]
                   >["targetType"],
                   requestedModel: session.getOriginalModel() || "",
@@ -273,7 +276,7 @@ export class ProxyProviderResolver {
           });
 
           // 加入排除列表
-          excludedProviders.push(session.provider.id);
+          excludedProviders.push(selectedProvider.id);
 
           // === 重试选择 ===
           const { provider: fallbackProvider, context: retryContext } =
@@ -296,12 +299,12 @@ export class ProxyProviderResolver {
 
         // === 成功 ===
         if (checkResult.referenced) {
-          session.recordProviderSessionRef(session.provider.id);
+          session.recordProviderSessionRef(selectedProvider.id);
         }
 
         logger.debug("ProviderSelector: Session tracked atomically", {
           sessionId: session.sessionId,
-          providerName: session.provider.name,
+          providerName: selectedProvider.name,
           count: checkResult.count,
           attempt: attemptCount,
         });
@@ -838,11 +841,12 @@ export class ProxyProviderResolver {
 
     // Resolve system timezone once for active time checks
     const systemTimezone = await resolveSystemTimezone();
+    const excludeIdSet = new Set(excludeIds);
 
     // Step 2: 基础过滤 + 格式/模型匹配（使用 visibleProviders）
     const enabledProviders = visibleProviders.filter((provider) => {
       // 2a. 基础过滤
-      if (!provider.isEnabled || excludeIds.includes(provider.id)) {
+      if (!provider.isEnabled || excludeIdSet.has(provider.id)) {
         return false;
       }
 
@@ -874,10 +878,11 @@ export class ProxyProviderResolver {
     });
 
     context.enabledProviders = enabledProviders.length;
+    const enabledProviderSet = new Set(enabledProviders);
 
     // 记录被过滤的供应商（遍历 visibleProviders）
     for (const p of visibleProviders) {
-      if (!enabledProviders.includes(p)) {
+      if (!enabledProviderSet.has(p)) {
         let reason:
           | "circuit_open"
           | "rate_limited"
@@ -892,7 +897,7 @@ export class ProxyProviderResolver {
         if (!p.isEnabled) {
           reason = "disabled";
           details = "供应商已禁用";
-        } else if (excludeIds.includes(p.id)) {
+        } else if (excludeIdSet.has(p.id)) {
           reason = "excluded";
           details = "已在前序尝试中失败";
         } else if (!isProviderActiveNow(p.activeTimeStart, p.activeTimeEnd, systemTimezone)) {
@@ -942,38 +947,40 @@ export class ProxyProviderResolver {
       (p) => !healthyProviders.find((hp) => hp.id === p.id)
     );
 
-    for (const p of filteredOut) {
-      if (
-        p.providerVendorId &&
-        p.providerVendorId > 0 &&
-        (await isVendorTypeCircuitOpen(p.providerVendorId, p.providerType))
-      ) {
-        context.filteredProviders?.push({
-          id: p.id,
-          name: p.name,
-          reason: "circuit_open",
-          details: "vendor_type_circuit_open",
-        });
-        continue;
-      }
+    const filteredProviderReasons = await Promise.all(
+      filteredOut.map(async (p) => {
+        if (
+          p.providerVendorId &&
+          p.providerVendorId > 0 &&
+          (await isVendorTypeCircuitOpen(p.providerVendorId, p.providerType))
+        ) {
+          return {
+            id: p.id,
+            name: p.name,
+            reason: "circuit_open",
+            details: "vendor_type_circuit_open",
+          } as const;
+        }
 
-      if (await isCircuitOpen(p.id)) {
-        const state = getCircuitState(p.id);
-        context.filteredProviders?.push({
-          id: p.id,
-          name: p.name,
-          reason: "circuit_open",
-          details: state === "open" ? "circuit_open" : "circuit_half_open",
-        });
-      } else {
-        context.filteredProviders?.push({
+        if (await isCircuitOpen(p.id)) {
+          const state = getCircuitState(p.id);
+          return {
+            id: p.id,
+            name: p.name,
+            reason: "circuit_open",
+            details: state === "open" ? "circuit_open" : "circuit_half_open",
+          } as const;
+        }
+
+        return {
           id: p.id,
           name: p.name,
           reason: "rate_limited",
           details: "rate_limited",
-        });
-      }
-    }
+        } as const;
+      })
+    );
+    context.filteredProviders?.push(...filteredProviderReasons);
 
     if (healthyProviders.length === 0) {
       logger.warn("ProviderSelector: All providers rate limited or unavailable");
@@ -986,13 +993,13 @@ export class ProxyProviderResolver {
       healthyProviders,
       effectiveGroupPick
     );
-    const priorities = [
-      ...new Set(
+    const priorities = Array.from(
+      new Set(
         healthyProviders.map((p) =>
           ProxyProviderResolver.resolveEffectivePriority(p, effectiveGroupPick ?? null)
         )
-      ),
-    ].sort((a, b) => a - b);
+      )
+    ).toSorted((a, b) => a - b);
     context.priorityLevels = priorities;
     context.selectedPriority = Math.min(
       ...healthyProviders.map((p) =>
@@ -1162,7 +1169,7 @@ export class ProxyProviderResolver {
     }
 
     // 按成本倍率排序（倍率低的在前）
-    const sorted = [...providers].sort((a, b) => {
+    const sorted = Array.from(providers).toSorted((a, b) => {
       const costA = a.costMultiplier;
       const costB = b.costMultiplier;
       return costA - costB;
@@ -1319,13 +1326,13 @@ export class ProxyProviderResolver {
         beforeHealthCheck: typeFiltered.length,
         afterHealthCheck: healthyProviders.length,
         filteredProviders: [],
-        priorityLevels: [
-          ...new Set(
+        priorityLevels: Array.from(
+          new Set(
             healthyProviders.map((p) =>
               ProxyProviderResolver.resolveEffectivePriority(p, effectiveGroupPick ?? null)
             )
-          ),
-        ].sort((a, b) => a - b),
+          )
+        ).toSorted((a, b) => a - b),
         selectedPriority: ProxyProviderResolver.resolveEffectivePriority(
           selected,
           effectiveGroupPick ?? null

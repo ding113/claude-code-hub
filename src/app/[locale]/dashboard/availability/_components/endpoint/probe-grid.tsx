@@ -111,6 +111,7 @@ export function ProbeGrid({
             <Tooltip key={endpoint.id}>
               <TooltipTrigger asChild>
                 <button
+                  type="button"
                   onClick={() => onEndpointSelect?.(endpoint)}
                   className={cn(
                     "relative p-3 rounded-xl text-left transition-all duration-200",

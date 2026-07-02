@@ -2,7 +2,7 @@
 
 import type { LucideIcon } from "lucide-react";
 import { ChevronDown, ChevronRight } from "lucide-react";
-import { useState } from "react";
+import { type KeyboardEvent, useState } from "react";
 import { cn } from "@/lib/utils";
 
 export type StepStatus =
@@ -91,6 +91,20 @@ export function StepCard({
     timestamp !== undefined && baseTimestamp !== undefined ? timestamp - baseTimestamp : null;
 
   const hasDetails = !!details;
+  const detailToggleProps = hasDetails
+    ? {
+        onClick: () => setIsExpanded(!isExpanded),
+        onKeyDown: (e: KeyboardEvent<HTMLDivElement>) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            setIsExpanded(!isExpanded);
+          }
+        },
+        role: "button" as const,
+        tabIndex: 0,
+        "aria-expanded": isExpanded,
+      }
+    : {};
 
   return (
     <div className={cn("relative flex gap-3", className)}>
@@ -127,20 +141,7 @@ export function StepCard({
             config.bg,
             hasDetails && "cursor-pointer hover:shadow-sm"
           )}
-          onClick={hasDetails ? () => setIsExpanded(!isExpanded) : undefined}
-          onKeyDown={
-            hasDetails
-              ? (e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    setIsExpanded(!isExpanded);
-                  }
-                }
-              : undefined
-          }
-          tabIndex={hasDetails ? 0 : undefined}
-          role={hasDetails ? "button" : undefined}
-          aria-expanded={hasDetails ? isExpanded : undefined}
+          {...detailToggleProps}
         >
           {/* Header */}
           <div className="flex items-start gap-2">

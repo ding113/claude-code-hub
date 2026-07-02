@@ -2,7 +2,7 @@
 
 import { Loader2, RefreshCw } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useLayoutEffect, useState } from "react";
 import { toast } from "sonner";
 import { QuotaProgress } from "@/components/quota/quota-progress";
 import { QuotaQuickEditPopover } from "@/components/quota/quota-quick-edit-popover";
@@ -81,7 +81,7 @@ export function KeyQuotaUsageDialog({
     }
   }, [keyId, t]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!open) {
       setData(null);
       setError(false);

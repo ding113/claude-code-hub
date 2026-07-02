@@ -19,10 +19,9 @@ export default async function DashboardProvidersPage({
   params: Promise<{ locale: string }>;
 }) {
   // Await params to ensure locale is available in the async context
-  const { locale } = await params;
+  const [{ locale }, session] = await Promise.all([params, getSession()]);
 
   // 权限检查：仅 admin 用户可访问
-  const session = await getSession();
   if (!session || session.user.role !== "admin") {
     redirect({ href: session ? "/dashboard" : "/login", locale });
   }
@@ -30,8 +29,10 @@ export default async function DashboardProvidersPage({
   // TypeScript: session is guaranteed to be non-null after the redirect check
   const currentUser = session!.user;
 
-  const t = await getTranslations({ locale, namespace: "settings" });
-  const providers = await getProviders();
+  const [t, providers] = await Promise.all([
+    getTranslations({ locale, namespace: "settings" }),
+    getProviders(),
+  ]);
 
   return (
     <div className="space-y-6">

@@ -5,6 +5,7 @@
 import type { ReactNode } from "react";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { NextIntlClientProvider } from "next-intl";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { UploadPriceDialog } from "@/app/[locale]/settings/prices/_components/upload-price-dialog";
@@ -15,6 +16,7 @@ const modelPricesActionMocks = vi.hoisted(() => ({
   uploadPriceTable: vi.fn(async () => ({ ok: true, data: null as PriceUpdateResult | null })),
 }));
 vi.mock("@/actions/model-prices", () => modelPricesActionMocks);
+vi.mock("@/lib/api-client/v1/actions/model-prices", () => modelPricesActionMocks);
 
 const sonnerMocks = vi.hoisted(() => ({
   toast: {
@@ -39,14 +41,20 @@ function render(node: ReactNode) {
   const container = document.createElement("div");
   document.body.appendChild(container);
   const root = createRoot(container);
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false },
+    },
+  });
 
   act(() => {
-    root.render(node);
+    root.render(<QueryClientProvider client={queryClient}>{node}</QueryClientProvider>);
   });
 
   return {
     unmount: () => {
       act(() => root.unmount());
+      queryClient.clear();
       container.remove();
     },
   };

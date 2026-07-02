@@ -457,7 +457,7 @@ const PROVIDER_CUSTOM_HEADERS_SCHEMA = z
 export const CreateProviderSchema = z
   .object({
     name: z.string().min(1, "服务商名称不能为空").max(64, "服务商名称不能超过64个字符"),
-    url: z.string().url("请输入有效的URL地址").max(255, "URL长度不能超过255个字符"),
+    url: z.url("请输入有效的URL地址").max(255, "URL长度不能超过255个字符"),
     key: z.string().min(1, "API密钥不能为空").max(PROVIDER_KEY_MAX_LENGTH, "API密钥长度超出限制"),
     // 数据库字段命名：下划线
     is_enabled: z.boolean().optional().default(PROVIDER_DEFAULTS.IS_ENABLED),
@@ -652,7 +652,6 @@ export const CreateProviderSchema = z
       .optional(),
     // 供应商官网地址
     website_url: z
-      .string()
       .url("请输入有效的URL地址")
       .max(512, "URL长度不能超过512个字符")
       .nullable()
@@ -703,7 +702,7 @@ export const CreateProviderSchema = z
 export const UpdateProviderSchema = z
   .object({
     name: z.string().min(1).max(64).optional(),
-    url: z.string().url().max(255).optional(),
+    url: z.url().max(255).optional(),
     key: z
       .string()
       .min(1, "API密钥不能为空")
@@ -890,7 +889,6 @@ export const UpdateProviderSchema = z
       .optional(),
     // 供应商官网地址
     website_url: z
-      .string()
       .url("请输入有效的URL地址")
       .max(512, "URL长度不能超过512个字符")
       .nullable()

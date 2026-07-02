@@ -2,6 +2,7 @@ import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { createRoot } from "react-dom/client";
 import { act } from "react";
 import LoginPage from "@/app/[locale]/login/page";
+import { createTestQueryClient, withTestQueryClient } from "../../helpers/react-query";
 
 const mockPush = vi.hoisted(() => vi.fn());
 const mockRefresh = vi.hoisted(() => vi.fn());
@@ -37,11 +38,13 @@ const globalFetch = global.fetch;
 describe("LoginPage Accessibility", () => {
   let container: HTMLDivElement;
   let root: ReturnType<typeof createRoot>;
+  let queryClient: ReturnType<typeof createTestQueryClient>;
 
   beforeEach(() => {
     container = document.createElement("div");
     document.body.appendChild(container);
     root = createRoot(container);
+    queryClient = createTestQueryClient();
     vi.clearAllMocks();
     global.fetch = vi.fn();
   });
@@ -50,13 +53,14 @@ describe("LoginPage Accessibility", () => {
     act(() => {
       root.unmount();
     });
+    queryClient.clear();
     document.body.removeChild(container);
     global.fetch = globalFetch;
   });
 
   const render = async () => {
     await act(async () => {
-      root.render(<LoginPage />);
+      root.render(withTestQueryClient(<LoginPage />, queryClient));
     });
   };
 
@@ -100,7 +104,7 @@ describe("LoginPage Accessibility", () => {
     const overlay = getOverlay();
     expect(overlay).not.toBeNull();
 
-    expect(overlay?.getAttribute("role")).toBe("dialog");
+    expect(overlay?.tagName).toBe("DIALOG");
     expect(overlay?.getAttribute("aria-modal")).toBe("true");
     expect(overlay?.getAttribute("aria-label")).toBe("t:login.loggingIn");
 

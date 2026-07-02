@@ -1,7 +1,7 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import type { ReactNode } from "react";
+import type { KeyboardEvent, ReactNode } from "react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
@@ -66,6 +66,21 @@ export function ListItem({
   const handleDoubleClick = () => {
     onDoubleClick?.();
   };
+  const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (!onClick || (event.key !== "Enter" && event.key !== " ")) {
+      return;
+    }
+    event.preventDefault();
+    onClick();
+  };
+  const interactiveProps = onClick
+    ? {
+        onClick: handleClick,
+        onKeyDown: handleKeyDown,
+        role: "button" as const,
+        tabIndex: 0,
+      }
+    : {};
 
   return (
     <div
@@ -77,10 +92,8 @@ export function ListItem({
         data.status && statusColors[data.status],
         compact && "p-2"
       )}
-      onClick={handleClick}
+      {...interactiveProps}
       onDoubleClick={handleDoubleClick}
-      role={onClick ? "button" : undefined}
-      tabIndex={onClick ? 0 : undefined}
     >
       <div className="flex items-start justify-between gap-3">
         <div className="flex-1 min-w-0">
@@ -147,9 +160,9 @@ export function ListItem({
           {/* 元数据 */}
           {data.metadata && data.metadata.length > 0 && (
             <div className={cn("flex flex-wrap gap-2 mt-2", compact && "mt-1")}>
-              {data.metadata.map((meta, index) => (
+              {data.metadata.map((meta) => (
                 <span
-                  key={index}
+                  key={`${meta.label}:${meta.value}`}
                   className={cn(
                     "inline-flex items-center text-xs text-muted-foreground",
                     compact && "text-[11px]"

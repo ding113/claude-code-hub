@@ -15,9 +15,7 @@ export default async function SettingsLayout({
   params: Promise<{ locale: string }>;
 }) {
   // Await params to ensure locale is available in the async context
-  const { locale } = await params;
-
-  const session = await getSession();
+  const [{ locale }, session] = await Promise.all([params, getSession()]);
 
   if (!session) {
     return redirect({ href: "/login", locale });

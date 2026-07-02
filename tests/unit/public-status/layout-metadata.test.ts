@@ -13,7 +13,7 @@ vi.mock("@/repository/system-config", () => ({
   getSystemSettings: mockGetSystemSettings,
 }));
 
-vi.mock("@/lib/utils/timezone", () => ({
+vi.mock("@/lib/utils/timezone-resolver", () => ({
   resolveSystemTimezone: mockResolveSystemTimezone,
 }));
 

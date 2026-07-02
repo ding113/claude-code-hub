@@ -47,7 +47,7 @@ vi.mock("@/lib/provider-endpoints/endpoint-selector", () => endpointSelectorMock
 vi.mock("@/lib/rate-limit", () => ({
   RateLimitService: rateLimitMocks,
 }));
-vi.mock("@/lib/utils/timezone", () => timezoneMocks);
+vi.mock("@/lib/utils/timezone-resolver", () => timezoneMocks);
 vi.mock("@/repository/provider", () => repositoryMocks);
 
 function createProvider(id: number, overrides: Partial<Provider> = {}): Provider {

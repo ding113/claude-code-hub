@@ -24,8 +24,7 @@ export async function generateMetadata({
 }: {
   params: Promise<{ locale: string }>;
 }): Promise<Metadata> {
-  const { locale } = await params;
-  const headersStore = await headers();
+  const [{ locale }, headersStore] = await Promise.all([params, headers()]);
   const isPublicStatusRequest = headersStore.get("x-cch-public-status") === "1";
 
   try {
@@ -73,8 +72,7 @@ export default async function RootLayout({
   children: React.ReactNode;
   params: Promise<{ locale: string }>;
 }>) {
-  const { locale } = await params;
-  const headersStore = await headers();
+  const [{ locale }, headersStore] = await Promise.all([params, headers()]);
   const isPublicStatusRequest = headersStore.get("x-cch-public-status") === "1";
 
   // Validate locale
@@ -85,11 +83,10 @@ export default async function RootLayout({
   // 将路由段 locale 固定到 next-intl 请求上下文，避免后续导航回落到默认语言。
   setRequestLocale(locale);
 
-  // Load translation messages
-  const messages = await getMessages({ locale });
-  const timeZone = isPublicStatusRequest
-    ? await resolveLayoutTimeZone()
-    : await resolveDefaultLayoutTimeZone();
+  const [messages, timeZone] = await Promise.all([
+    getMessages({ locale }),
+    isPublicStatusRequest ? resolveLayoutTimeZone() : resolveDefaultLayoutTimeZone(),
+  ]);
   // Create a stable `now` timestamp to avoid SSR/CSR hydration mismatch for relative time
   const now = new Date();
 

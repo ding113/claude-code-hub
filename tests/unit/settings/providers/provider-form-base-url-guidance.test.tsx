@@ -29,10 +29,25 @@ const providerFormContextMock = vi.hoisted(() => ({
 }));
 
 vi.mock("framer-motion", () => ({
+  m: {
+    div: ({
+      animate,
+      children,
+      initial,
+      transition,
+      variants,
+      ...props
+    }: { children?: ReactNode } & Record<string, unknown>) => <div {...props}>{children}</div>,
+  },
   motion: {
-    div: ({ children, ...props }: { children?: ReactNode } & Record<string, unknown>) => (
-      <div {...props}>{children}</div>
-    ),
+    div: ({
+      animate,
+      children,
+      initial,
+      transition,
+      variants,
+      ...props
+    }: { children?: ReactNode } & Record<string, unknown>) => <div {...props}>{children}</div>,
   },
 }));
 

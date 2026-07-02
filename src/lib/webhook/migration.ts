@@ -86,7 +86,7 @@ export function collectLegacyWebhooks(settings: NotificationSettings): LegacyWeb
     const existing = webhookMap.get(trimmedUrl);
 
     if (existing) {
-      if (!existing.notificationTypes.includes(type)) {
+      if (!new Set(existing.notificationTypes).has(type)) {
         existing.notificationTypes.push(type);
       }
     } else {
@@ -235,7 +235,8 @@ export async function migrateToNewWebhookSystem(
 
       for (const notificationType of webhook.notificationTypes) {
         const existing = bindingsByType.get(notificationType) || [];
-        if (!existing.includes(targetId)) {
+        const existingSet = new Set(existing);
+        if (!existingSet.has(targetId)) {
           existing.push(targetId);
           bindingsByType.set(notificationType, existing);
         }
@@ -249,6 +250,7 @@ export async function migrateToNewWebhookSystem(
         isEnabled: true,
       }));
 
+      // react-doctor-disable-next-line react-doctor/async-await-in-loop -- migration applies notification types deterministically
       const bindResult = await updateBindingsAction(notificationType, bindings);
 
       if (!bindResult.ok) {

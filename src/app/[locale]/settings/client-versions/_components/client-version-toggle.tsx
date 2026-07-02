@@ -14,7 +14,7 @@ interface ClientVersionToggleProps {
 
 export function ClientVersionToggle({ enabled }: ClientVersionToggleProps) {
   const t = useTranslations("settings.clientVersions");
-  const [isEnabled, setIsEnabled] = useState(enabled);
+  const [isEnabled, setIsEnabled] = useState(() => enabled);
   const [isPending, startTransition] = useTransition();
 
   async function handleToggle(checked: boolean) {

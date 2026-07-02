@@ -43,6 +43,7 @@ export function TocNav({ tocItems, activeId, tocReady, onItemClick }: TocNavProp
         tocItems.length > 0 &&
         tocItems.map((item) => (
           <button
+            type="button"
             key={item.id}
             onClick={() => onItemClick(item.id)}
             className={cn(

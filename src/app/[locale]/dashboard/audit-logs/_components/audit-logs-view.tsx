@@ -231,7 +231,8 @@ export function AuditLogsView() {
                 const operator = log.operatorUserName ?? t("adminTokenOperator");
 
                 return (
-                  <div
+                  <button
+                    type="button"
                     key={log.id}
                     style={{
                       position: "absolute",
@@ -242,7 +243,7 @@ export function AuditLogsView() {
                       transform: `translateY(${virtualRow.start}px)`,
                     }}
                     className={cn(
-                      "flex items-center text-sm border-b border-border/40 transition-colors hover:bg-accent/50 cursor-pointer"
+                      "flex items-center text-left text-sm border-0 border-b border-border/40 bg-transparent transition-colors hover:bg-accent/50 cursor-pointer"
                     )}
                     onClick={() => openDetail(log)}
                   >
@@ -301,7 +302,7 @@ export function AuditLogsView() {
                         </Badge>
                       )}
                     </div>
-                  </div>
+                  </button>
                 );
               })}
             </div>

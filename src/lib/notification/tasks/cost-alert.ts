@@ -82,77 +82,84 @@ async function checkUserQuotas(threshold: number): Promise<CostAlertData[]> {
       getTimeRangeForPeriod("monthly"),
     ]);
 
-    for (const keyData of keysWithLimits) {
-      // 检查 5 小时额度
-      if (keyData.limit5h) {
-        const limit5h = parseFloat(keyData.limit5h);
-        if (limit5h > 0) {
-          // 使用 keyId 和标准统计函数（包含 warmup/deleted 过滤）
-          const cost5h = await sumKeyCostInTimeRange(
-            keyData.id,
-            range5h.startTime,
-            range5h.endTime
-          );
-          if (cost5h >= limit5h * threshold) {
-            alerts.push({
-              targetType: "user",
-              targetName: keyData.userName,
-              targetId: keyData.id,
-              currentCost: cost5h,
-              quotaLimit: limit5h,
-              threshold,
-              period: "5小时",
-            });
-          }
-        }
-      }
+    const keyAlertsByKey = await Promise.all(
+      keysWithLimits.map(async (keyData) => {
+        const keyAlerts: CostAlertData[] = [];
 
-      // 检查本周额度（自然周：从周一开始）
-      if (keyData.limitWeek) {
-        const limitWeek = parseFloat(keyData.limitWeek);
-        if (limitWeek > 0) {
-          const costWeek = await sumKeyCostInTimeRange(
-            keyData.id,
-            rangeWeekly.startTime,
-            rangeWeekly.endTime
-          );
-          if (costWeek >= limitWeek * threshold) {
-            alerts.push({
-              targetType: "user",
-              targetName: keyData.userName,
-              targetId: keyData.id,
-              currentCost: costWeek,
-              quotaLimit: limitWeek,
-              threshold,
-              period: "本周",
-            });
+        // 检查 5 小时额度
+        if (keyData.limit5h) {
+          const limit5h = parseFloat(keyData.limit5h);
+          if (limit5h > 0) {
+            // 使用 keyId 和标准统计函数（包含 warmup/deleted 过滤）
+            const cost5h = await sumKeyCostInTimeRange(
+              keyData.id,
+              range5h.startTime,
+              range5h.endTime
+            );
+            if (cost5h >= limit5h * threshold) {
+              keyAlerts.push({
+                targetType: "user",
+                targetName: keyData.userName,
+                targetId: keyData.id,
+                currentCost: cost5h,
+                quotaLimit: limit5h,
+                threshold,
+                period: "5小时",
+              });
+            }
           }
         }
-      }
 
-      // 检查本月额度（自然月：从 1 号开始）
-      if (keyData.limitMonth) {
-        const limitMonth = parseFloat(keyData.limitMonth);
-        if (limitMonth > 0) {
-          const costMonth = await sumKeyCostInTimeRange(
-            keyData.id,
-            rangeMonthly.startTime,
-            rangeMonthly.endTime
-          );
-          if (costMonth >= limitMonth * threshold) {
-            alerts.push({
-              targetType: "user",
-              targetName: keyData.userName,
-              targetId: keyData.id,
-              currentCost: costMonth,
-              quotaLimit: limitMonth,
-              threshold,
-              period: "本月",
-            });
+        // 检查本周额度（自然周：从周一开始）
+        if (keyData.limitWeek) {
+          const limitWeek = parseFloat(keyData.limitWeek);
+          if (limitWeek > 0) {
+            const costWeek = await sumKeyCostInTimeRange(
+              keyData.id,
+              rangeWeekly.startTime,
+              rangeWeekly.endTime
+            );
+            if (costWeek >= limitWeek * threshold) {
+              keyAlerts.push({
+                targetType: "user",
+                targetName: keyData.userName,
+                targetId: keyData.id,
+                currentCost: costWeek,
+                quotaLimit: limitWeek,
+                threshold,
+                period: "本周",
+              });
+            }
           }
         }
-      }
-    }
+
+        // 检查本月额度（自然月：从 1 号开始）
+        if (keyData.limitMonth) {
+          const limitMonth = parseFloat(keyData.limitMonth);
+          if (limitMonth > 0) {
+            const costMonth = await sumKeyCostInTimeRange(
+              keyData.id,
+              rangeMonthly.startTime,
+              rangeMonthly.endTime
+            );
+            if (costMonth >= limitMonth * threshold) {
+              keyAlerts.push({
+                targetType: "user",
+                targetName: keyData.userName,
+                targetId: keyData.id,
+                currentCost: costMonth,
+                quotaLimit: limitMonth,
+                threshold,
+                period: "本月",
+              });
+            }
+          }
+        }
+
+        return keyAlerts;
+      })
+    );
+    alerts.push(...keyAlertsByKey.flat());
   } catch (error) {
     logger.error({
       action: "check_user_quotas_error",
@@ -196,53 +203,60 @@ async function checkProviderQuotas(threshold: number): Promise<CostAlertData[]> 
       getTimeRangeForPeriod("monthly"),
     ]);
 
-    for (const provider of providersWithLimits) {
-      // 检查本周额度（自然周：从周一开始）
-      if (provider.limitWeek) {
-        const limitWeek = parseFloat(provider.limitWeek);
-        if (limitWeek > 0) {
-          const costWeek = await sumProviderCostInTimeRange(
-            provider.id,
-            rangeWeekly.startTime,
-            rangeWeekly.endTime
-          );
-          if (costWeek >= limitWeek * threshold) {
-            alerts.push({
-              targetType: "provider",
-              targetName: provider.name,
-              targetId: provider.id,
-              currentCost: costWeek,
-              quotaLimit: limitWeek,
-              threshold,
-              period: "本周",
-            });
-          }
-        }
-      }
+    const providerAlertsByProvider = await Promise.all(
+      providersWithLimits.map(async (provider) => {
+        const providerAlerts: CostAlertData[] = [];
 
-      // 检查本月额度（自然月：从 1 号开始）
-      if (provider.limitMonth) {
-        const limitMonth = parseFloat(provider.limitMonth);
-        if (limitMonth > 0) {
-          const costMonth = await sumProviderCostInTimeRange(
-            provider.id,
-            rangeMonthly.startTime,
-            rangeMonthly.endTime
-          );
-          if (costMonth >= limitMonth * threshold) {
-            alerts.push({
-              targetType: "provider",
-              targetName: provider.name,
-              targetId: provider.id,
-              currentCost: costMonth,
-              quotaLimit: limitMonth,
-              threshold,
-              period: "本月",
-            });
+        // 检查本周额度（自然周：从周一开始）
+        if (provider.limitWeek) {
+          const limitWeek = parseFloat(provider.limitWeek);
+          if (limitWeek > 0) {
+            const costWeek = await sumProviderCostInTimeRange(
+              provider.id,
+              rangeWeekly.startTime,
+              rangeWeekly.endTime
+            );
+            if (costWeek >= limitWeek * threshold) {
+              providerAlerts.push({
+                targetType: "provider",
+                targetName: provider.name,
+                targetId: provider.id,
+                currentCost: costWeek,
+                quotaLimit: limitWeek,
+                threshold,
+                period: "本周",
+              });
+            }
           }
         }
-      }
-    }
+
+        // 检查本月额度（自然月：从 1 号开始）
+        if (provider.limitMonth) {
+          const limitMonth = parseFloat(provider.limitMonth);
+          if (limitMonth > 0) {
+            const costMonth = await sumProviderCostInTimeRange(
+              provider.id,
+              rangeMonthly.startTime,
+              rangeMonthly.endTime
+            );
+            if (costMonth >= limitMonth * threshold) {
+              providerAlerts.push({
+                targetType: "provider",
+                targetName: provider.name,
+                targetId: provider.id,
+                currentCost: costMonth,
+                quotaLimit: limitMonth,
+                threshold,
+                period: "本月",
+              });
+            }
+          }
+        }
+
+        return providerAlerts;
+      })
+    );
+    alerts.push(...providerAlertsByProvider.flat());
   } catch (error) {
     logger.error({
       action: "check_provider_quotas_error",

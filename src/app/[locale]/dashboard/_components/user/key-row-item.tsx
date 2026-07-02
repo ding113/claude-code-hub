@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useLocale, useTranslations } from "next-intl";
-import { useEffect, useState } from "react";
+import { useLayoutEffect, useState } from "react";
 import { toast } from "sonner";
 import {
   AlertDialog,
@@ -171,10 +171,10 @@ export function KeyRowItem({
   const [quickRenewOpen, setQuickRenewOpen] = useState(false);
   const [isTogglingEnabled, setIsTogglingEnabled] = useState(false);
   // 乐观更新：本地状态跟踪启用状态
-  const [localStatus, setLocalStatus] = useState<"enabled" | "disabled">(keyData.status);
+  const [localStatus, setLocalStatus] = useState<"enabled" | "disabled">(() => keyData.status);
   // 乐观更新：本地状态跟踪过期时间
   const [localExpiresAt, setLocalExpiresAt] = useState<string | null | undefined>(
-    keyData.expiresAt
+    () => keyData.expiresAt
   );
   const tCommon = useTranslations("common");
   const tBatchEdit = useTranslations("dashboard.userManagement.batchEdit");
@@ -182,12 +182,12 @@ export function KeyRowItem({
   const tKeyStatus = useTranslations("dashboard.userManagement.keyStatus");
 
   // 当props更新时同步本地状态
-  useEffect(() => {
+  useLayoutEffect(() => {
     setLocalStatus(keyData.status);
   }, [keyData.status]);
 
   // 当props更新时同步过期时间
-  useEffect(() => {
+  useLayoutEffect(() => {
     setLocalExpiresAt(keyData.expiresAt);
   }, [keyData.expiresAt]);
 
@@ -214,7 +214,7 @@ export function KeyRowItem({
   // (e.g. parent reuses the same KeyRowItem instance for a different key).
   // Without this, the dialog/copy could expose the previous row's key.
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional reset when row identity changes
-  useEffect(() => {
+  useLayoutEffect(() => {
     setRevealedKey(null);
     setFullKeyDialogOpen(false);
   }, [keyData.id, keyData.maskedKey]);
@@ -530,8 +530,9 @@ export function KeyRowItem({
       </div>
 
       {/* 过期时间 - clickable for quick renew */}
-      <div
-        className="min-w-0 text-sm text-muted-foreground cursor-pointer hover:text-primary hover:underline"
+      <button
+        type="button"
+        className="min-w-0 bg-transparent p-0 text-left text-sm text-muted-foreground cursor-pointer hover:text-primary hover:underline"
         title={tKeyStatus("clickToQuickRenew")}
         onClick={(e) => {
           e.stopPropagation();
@@ -539,7 +540,7 @@ export function KeyRowItem({
         }}
       >
         {formatExpiry(localExpiresAt, locale)}
-      </div>
+      </button>
 
       {/* 操作 */}
       <div className="flex items-center justify-end gap-1" title={translations.fields.actions}>

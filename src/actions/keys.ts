@@ -16,7 +16,7 @@ import { invalidateCachedKey } from "@/lib/security/api-key-auth-cache";
 import { parseDateInputAsTimezone } from "@/lib/utils/date-input";
 import { ERROR_CODES } from "@/lib/utils/error-messages";
 import { normalizeProviderGroup, parseProviderGroups } from "@/lib/utils/provider-group";
-import { resolveSystemTimezone } from "@/lib/utils/timezone";
+import { resolveSystemTimezone } from "@/lib/utils/timezone-resolver";
 import { KeyFormSchema } from "@/lib/validation/schemas";
 import { toKey } from "@/repository/_shared/transformers";
 import type { KeyStatistics } from "@/repository/key";
@@ -682,11 +682,13 @@ export async function editKey(
       validatedData.limit5hResetMode !== key.limit5hResetMode
     ) {
       const { clearSingleKeyCostCache } = await import("@/lib/redis/cost-cache-cleanup");
-      await invalidateCachedKey(key.key).catch(() => null);
-      await clearSingleKeyCostCache({
-        keyId,
-        keyHash: key.key,
-      }).catch(() => null);
+      await Promise.all([
+        invalidateCachedKey(key.key).catch(() => null),
+        clearSingleKeyCostCache({
+          keyId,
+          keyHash: key.key,
+        }).catch(() => null),
+      ]);
     }
 
     revalidatePath("/dashboard");
@@ -1023,15 +1025,17 @@ export async function getKeyLimitUsage(keyId: number): Promise<
     }
 
     // 动态导入避免循环依赖
-    const { SessionTracker } = await import("@/lib/session-tracker");
-    const {
-      getResetInfo,
-      getResetInfoWithMode,
-      getTimeRangeForPeriod,
-      getTimeRangeForPeriodWithMode,
-    } = await import("@/lib/rate-limit/time-utils");
-    const { RateLimitService } = await import("@/lib/rate-limit/service");
-    const { sumKeyTotalCost, sumKeyCostInTimeRange } = await import("@/repository/statistics");
+    const [
+      { SessionTracker },
+      { getResetInfo, getResetInfoWithMode, getTimeRangeForPeriod, getTimeRangeForPeriodWithMode },
+      { RateLimitService },
+      { sumKeyTotalCost, sumKeyCostInTimeRange },
+    ] = await Promise.all([
+      import("@/lib/session-tracker"),
+      import("@/lib/rate-limit/time-utils"),
+      import("@/lib/rate-limit/service"),
+      import("@/repository/statistics"),
+    ]);
     const effectiveConcurrentLimit = resolveKeyConcurrentSessionLimit(
       key.limitConcurrentSessions,
       result.userLimitConcurrentSessions ?? null
@@ -1043,17 +1047,27 @@ export async function getKeyLimitUsage(keyId: number): Promise<
     const limit5hResetMode = key.limit5hResetMode ?? "rolling";
 
     // Calculate time ranges using Key's dailyResetTime/dailyResetMode configuration
-    const keyDailyTimeRange = await getTimeRangeForPeriodWithMode(
-      "daily",
-      key.dailyResetTime,
-      key.dailyResetMode ?? "fixed"
-    );
-
-    const range5h = await getTimeRangeForPeriod("5h");
-
-    // 5h fixed 走运行时状态，rolling/weekly/monthly 继续沿用 DB 时间范围
-    const rangeWeekly = await getTimeRangeForPeriod("weekly");
-    const rangeMonthly = await getTimeRangeForPeriod("monthly");
+    const [
+      keyDailyTimeRange,
+      range5h,
+      rangeWeekly,
+      rangeMonthly,
+      resetAt5h,
+      resetInfoDaily,
+      resetInfoWeekly,
+      resetInfoMonthly,
+    ] = await Promise.all([
+      getTimeRangeForPeriodWithMode("daily", key.dailyResetTime, key.dailyResetMode ?? "fixed"),
+      getTimeRangeForPeriod("5h"),
+      getTimeRangeForPeriod("weekly"),
+      getTimeRangeForPeriod("monthly"),
+      limit5hResetMode === "fixed"
+        ? RateLimitService.get5hWindowResetAt(keyId, "key", limit5hResetMode)
+        : Promise.resolve(null),
+      getResetInfoWithMode("daily", key.dailyResetTime, key.dailyResetMode ?? "fixed"),
+      getResetInfo("weekly"),
+      getResetInfo("monthly"),
+    ]);
 
     // 获取金额消费（使用 DB direct，与 my-usage.ts 保持一致）
     const [cost5h, costDaily, costWeekly, costMonthly, totalCost, concurrentSessions] =
@@ -1071,19 +1085,6 @@ export async function getKeyLimitUsage(keyId: number): Promise<
         sumKeyTotalCost(key.key, Infinity, costResetAt),
         SessionTracker.getKeySessionCount(keyId),
       ]);
-
-    // 获取重置时间
-    const resetAt5h =
-      limit5hResetMode === "fixed"
-        ? await RateLimitService.get5hWindowResetAt(keyId, "key", limit5hResetMode)
-        : null;
-    const resetInfoDaily = await getResetInfoWithMode(
-      "daily",
-      key.dailyResetTime,
-      key.dailyResetMode ?? "fixed"
-    );
-    const resetInfoWeekly = await getResetInfo("weekly");
-    const resetInfoMonthly = await getResetInfo("monthly");
 
     return {
       ok: true,
@@ -1443,6 +1444,7 @@ export async function batchUpdateKeys(
       // If another concurrent transaction disabled keys, this check will fail and rollback
       if (updates.isEnabled === false) {
         for (const userId of affectedUserIds) {
+          // react-doctor-disable-next-line react-doctor/async-await-in-loop -- transaction validation uses one tx and should stay ordered
           const [remainingEnabled] = await tx
             .select({ count: count() })
             .from(keysTable)

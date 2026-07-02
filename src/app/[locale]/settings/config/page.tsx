@@ -32,8 +32,10 @@ export default async function SettingsConfigPage({
 }
 
 async function SettingsConfigContent({ locale }: { locale: string }) {
-  const t = await getTranslations({ locale, namespace: "settings" });
-  const settings = await getSystemSettings();
+  const [t, settings] = await Promise.all([
+    getTranslations({ locale, namespace: "settings" }),
+    getSystemSettings(),
+  ]);
 
   return (
     <>

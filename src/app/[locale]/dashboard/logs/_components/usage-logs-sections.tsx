@@ -2,7 +2,7 @@ import { cache } from "react";
 import { ActiveSessionsList } from "@/components/customs/active-sessions-list";
 import { getEnvConfig } from "@/lib/config/env.schema";
 import type { CurrencyCode } from "@/lib/utils";
-import { resolveSystemTimezone } from "@/lib/utils/timezone";
+import { resolveSystemTimezone } from "@/lib/utils/timezone-resolver";
 import { getSystemSettings } from "@/repository/system-config";
 import type { SystemSettings } from "@/types/system-config";
 import { UsageLogsViewVirtualized } from "./usage-logs-view-virtualized";
@@ -28,9 +28,11 @@ export async function UsageLogsDataSection({
   searchParams,
   systemSettings: systemSettingsProp,
 }: UsageLogsDataSectionProps) {
-  const resolvedSearchParams = await searchParams;
-  const serverTimeZone = await resolveSystemTimezone();
-  const systemSettings = systemSettingsProp ?? (await getCachedSystemSettings());
+  const [resolvedSearchParams, serverTimeZone, systemSettings] = await Promise.all([
+    searchParams,
+    resolveSystemTimezone(),
+    systemSettingsProp ? Promise.resolve(systemSettingsProp) : getCachedSystemSettings(),
+  ]);
 
   return (
     <UsageLogsViewVirtualized

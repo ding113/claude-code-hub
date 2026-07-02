@@ -326,12 +326,15 @@ export class ClientVersionChecker {
         // 去重：每个用户只保留最新版本
         const userMap = new Map<number, (typeof users)[0]>();
         for (const user of users) {
-          const existing = userMap.get(user.userId);
+          const { clientInfo, userId } = user;
+          const userVersion = clientInfo.version;
+          const existing = userMap.get(userId);
           if (!existing) {
-            userMap.set(user.userId, user);
+            userMap.set(userId, user);
           } else {
-            if (isVersionGreater(user.clientInfo.version, existing.clientInfo.version)) {
-              userMap.set(user.userId, user);
+            const existingVersion = existing.clientInfo.version;
+            if (isVersionGreater(userVersion, existingVersion)) {
+              userMap.set(userId, user);
             }
           }
         }
@@ -339,20 +342,24 @@ export class ClientVersionChecker {
         const uniqueUsers = Array.from(userMap.values());
 
         // 使用内存计算 GA 版本，避免重复查询数据库
-        const usersWithVersion = uniqueUsers.map((u) => ({
-          userId: u.userId,
-          version: u.clientInfo.version,
+        const usersWithVersion = uniqueUsers.map(({ clientInfo, userId }) => ({
+          userId,
+          version: clientInfo.version,
         }));
         const gaVersion = ClientVersionChecker.computeGAVersionFromUsers(usersWithVersion);
 
-        const userStats = uniqueUsers.map((user) => ({
-          userId: user.userId,
-          username: user.username,
-          version: user.clientInfo.version,
-          lastSeen: user.lastSeen,
-          isLatest: gaVersion ? user.clientInfo.version === gaVersion : false,
-          needsUpgrade: gaVersion ? isVersionLess(user.clientInfo.version, gaVersion) : false,
-        }));
+        const userStats = uniqueUsers.map((user) => {
+          const { clientInfo, lastSeen, userId, username } = user;
+          const { version } = clientInfo;
+          return {
+            userId,
+            username,
+            version,
+            lastSeen,
+            isLatest: gaVersion ? version === gaVersion : false,
+            needsUpgrade: gaVersion ? isVersionLess(version, gaVersion) : false,
+          };
+        });
 
         stats.push({
           clientType,

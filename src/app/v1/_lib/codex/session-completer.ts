@@ -44,10 +44,10 @@ function getSessionTtlSeconds(): number {
 function extractClientIp(headers: Headers): string | null {
   const forwardedFor = headers.get("x-forwarded-for");
   if (forwardedFor) {
-    const first = forwardedFor
-      .split(",")
-      .map((ip) => ip.trim())
-      .filter(Boolean)[0];
+    const first = forwardedFor.split(",").flatMap((ip) => {
+      const trimmed = ip.trim();
+      return trimmed ? [trimmed] : [];
+    })[0];
     if (first) return first;
   }
 

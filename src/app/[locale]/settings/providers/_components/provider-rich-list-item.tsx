@@ -15,6 +15,7 @@ import {
   Trash,
   XCircle,
 } from "lucide-react";
+import Image from "next/image";
 import { useTranslations } from "next-intl";
 import { memo, useCallback, useEffect, useState, useTransition } from "react";
 import { toast } from "sonner";
@@ -100,17 +101,23 @@ interface ProviderRichListItemProps {
   statistics?: ProviderStatistics;
   statisticsLoading?: boolean;
   currencyCode?: CurrencyCode;
-  enableMultiProviderTypes: boolean;
-  isMultiSelectMode?: boolean;
-  isSelected?: boolean;
+  features: {
+    enableMultiProviderTypes: boolean;
+  };
+  selection?: {
+    isMultiSelectMode?: boolean;
+    isSelected?: boolean;
+    onSelectChange?: (checked: boolean) => void;
+  };
   activeGroupFilter?: string | null;
-  onSelectChange?: (checked: boolean) => void;
   onEdit?: () => void;
   onClone?: () => void;
   onDelete?: () => void;
   allGroups?: string[];
   userGroups?: string[];
-  isAdmin?: boolean;
+  permissions?: {
+    isAdmin?: boolean;
+  };
 }
 
 function ProviderRichListItemInner({
@@ -122,19 +129,22 @@ function ProviderRichListItemInner({
   statistics,
   statisticsLoading = false,
   currencyCode = "USD",
-  enableMultiProviderTypes,
-  isMultiSelectMode = false,
-  isSelected = false,
+  features,
+  selection,
   activeGroupFilter = null,
-  onSelectChange,
   onEdit: onEditProp,
   onClone: onCloneProp,
   onDelete: onDeleteProp,
   allGroups = [],
   userGroups = [],
-  isAdmin = false,
+  permissions,
 }: ProviderRichListItemProps) {
   const queryClient = useQueryClient();
+  const enableMultiProviderTypes = features.enableMultiProviderTypes;
+  const isMultiSelectMode = selection?.isMultiSelectMode ?? false;
+  const isSelected = selection?.isSelected ?? false;
+  const onSelectChange = selection?.onSelectChange;
+  const isAdmin = permissions?.isAdmin ?? false;
 
   const doInvalidate = useCallback(() => invalidateProviderQueries(queryClient), [queryClient]);
 
@@ -746,9 +756,12 @@ function ProviderRichListItemInner({
         <div className="hidden md:block flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             {provider.faviconUrl && (
-              <img
+              <Image
                 src={provider.faviconUrl}
                 alt=""
+                width={16}
+                height={16}
+                unoptimized
                 className="h-4 w-4 flex-shrink-0"
                 onError={(e) => {
                   (e.target as HTMLImageElement).style.display = "none";
@@ -847,6 +860,7 @@ function ProviderRichListItemInner({
             )}
             {canEdit && (
               <button
+                type="button"
                 onClick={(e) => {
                   e.stopPropagation();
                   handleShowKey();
@@ -1157,13 +1171,13 @@ export const ProviderRichListItem = memo(ProviderRichListItemInner, (prev, next)
     prev.statistics === next.statistics &&
     prev.statisticsLoading === next.statisticsLoading &&
     prev.currencyCode === next.currencyCode &&
-    prev.enableMultiProviderTypes === next.enableMultiProviderTypes &&
-    prev.isMultiSelectMode === next.isMultiSelectMode &&
-    prev.isSelected === next.isSelected &&
+    prev.features.enableMultiProviderTypes === next.features.enableMultiProviderTypes &&
+    prev.selection?.isMultiSelectMode === next.selection?.isMultiSelectMode &&
+    prev.selection?.isSelected === next.selection?.isSelected &&
     prev.activeGroupFilter === next.activeGroupFilter &&
     prev.allGroups === next.allGroups &&
     prev.userGroups === next.userGroups &&
-    prev.isAdmin === next.isAdmin
+    prev.permissions?.isAdmin === next.permissions?.isAdmin
   );
 });
 

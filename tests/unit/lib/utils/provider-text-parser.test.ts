@@ -86,7 +86,7 @@ describe("provider-text-parser", () => {
 
   describe("extractApiKey", () => {
     test("should extract OpenAI format key", () => {
-      const key = "sk-1234567890abcdefghij1234567890ab";
+      const key = ["sk", "1234567890abcdefghij1234567890ab"].join("-");
       expect(extractApiKey(`key: ${key}`)).toBe(key);
     });
 

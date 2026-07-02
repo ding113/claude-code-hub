@@ -18,7 +18,7 @@ import type { DailyResetMode } from "@/lib/rate-limit/time-utils";
 import { SessionTracker } from "@/lib/session-tracker";
 import type { CurrencyCode } from "@/lib/utils";
 import { ERROR_CODES } from "@/lib/utils/error-messages";
-import { resolveSystemTimezone } from "@/lib/utils/timezone";
+import { resolveSystemTimezone } from "@/lib/utils/timezone-resolver";
 import { LEDGER_BILLING_CONDITION } from "@/repository/_shared/ledger-conditions";
 import { EXCLUDE_WARMUP_CONDITION } from "@/repository/_shared/message-request-conditions";
 import { getSystemSettings } from "@/repository/system-config";
@@ -329,31 +329,34 @@ export async function getMyQuota(): Promise<ActionResult<MyUsageQuota>> {
     const user = session.user;
 
     // 导入时间工具函数和统计函数
-    const { getTimeRangeForPeriodWithMode, getTimeRangeForPeriod } = await import(
-      "@/lib/rate-limit/time-utils"
-    );
-    const { sumKeyQuotaCostsById, sumUserQuotaCosts } = await import("@/repository/statistics");
-    const { RateLimitService } = await import("@/lib/rate-limit/service");
+    const [
+      { getTimeRangeForPeriodWithMode, getTimeRangeForPeriod },
+      { sumKeyQuotaCostsById, sumUserQuotaCosts },
+      { RateLimitService },
+    ] = await Promise.all([
+      import("@/lib/rate-limit/time-utils"),
+      import("@/repository/statistics"),
+      import("@/lib/rate-limit/service"),
+    ]);
 
     // 计算各周期的时间范围
     // Key 使用 Key 的 dailyResetTime/dailyResetMode 配置
-    const keyDailyTimeRange = await getTimeRangeForPeriodWithMode(
-      "daily",
-      key.dailyResetTime ?? "00:00",
-      (key.dailyResetMode as DailyResetMode | undefined) ?? "fixed"
-    );
-
-    // User 使用 User 的 dailyResetTime/dailyResetMode 配置
-    const userDailyTimeRange = await getTimeRangeForPeriodWithMode(
-      "daily",
-      user.dailyResetTime ?? "00:00",
-      (user.dailyResetMode as DailyResetMode | undefined) ?? "fixed"
-    );
-
-    // 5h/weekly/monthly 使用统一时间范围
-    const range5h = await getTimeRangeForPeriod("5h");
-    const rangeWeekly = await getTimeRangeForPeriod("weekly");
-    const rangeMonthly = await getTimeRangeForPeriod("monthly");
+    const [keyDailyTimeRange, userDailyTimeRange, range5h, rangeWeekly, rangeMonthly] =
+      await Promise.all([
+        getTimeRangeForPeriodWithMode(
+          "daily",
+          key.dailyResetTime ?? "00:00",
+          (key.dailyResetMode as DailyResetMode | undefined) ?? "fixed"
+        ),
+        getTimeRangeForPeriodWithMode(
+          "daily",
+          user.dailyResetTime ?? "00:00",
+          (user.dailyResetMode as DailyResetMode | undefined) ?? "fixed"
+        ),
+        getTimeRangeForPeriod("5h"),
+        getTimeRangeForPeriod("weekly"),
+        getTimeRangeForPeriod("monthly"),
+      ]);
 
     // full reset 继续影响所有窗口；5H-only reset 只额外推进用户聚合 5H 的起点。
     const userCostResetAt = user.costResetAt ?? null;

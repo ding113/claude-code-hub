@@ -125,9 +125,9 @@ export function LaneChart({
         <div className="flex items-center gap-4 mb-4">
           <div className="w-32 md:w-40 shrink-0" />
           <div className="flex-1 relative h-6">
-            {timeLabels.map((label, i) => (
+            {timeLabels.map((label) => (
               <span
-                key={i}
+                key={`${label.label}:${label.position}`}
                 className="absolute text-xs font-mono text-muted-foreground transform -translate-x-1/2"
                 style={{ left: `${label.position}%` }}
               >
@@ -143,10 +143,11 @@ export function LaneChart({
           const isHighVolume = provider.totalRequests >= HIGH_VOLUME_THRESHOLD;
 
           return (
-            <div
+            <button
+              type="button"
               key={provider.providerId}
               className={cn(
-                "flex items-center gap-4 py-2 px-2 rounded-lg",
+                "flex w-full items-center gap-4 py-2 px-2 rounded-lg border-0 bg-transparent text-left",
                 "hover:bg-muted/30 transition-colors",
                 onProviderClick && "cursor-pointer"
               )}
@@ -285,7 +286,7 @@ export function LaneChart({
                     : t("noRequests")}
                 </div>
               </div>
-            </div>
+            </button>
           );
         })}
       </div>

@@ -9,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PublicStatusView } from "@/app/[locale]/status/_components/public-status-view";
 import type { PublicStatusPayload } from "@/lib/public-status/payload";
 import type { PublicStatusRouteResponse } from "@/lib/public-status/public-api-contract";
+import { createTestQueryClient, withTestQueryClient } from "../../helpers/react-query";
 
 vi.mock("@/app/[locale]/status/status-page.css", () => ({}));
 
@@ -75,18 +76,48 @@ function render(node: ReactNode) {
   const container = document.createElement("div");
   document.body.appendChild(container);
   const root = createRoot(container);
+  const queryClient = createTestQueryClient();
 
   act(() => {
-    root.render(node);
+    root.render(withTestQueryClient(node, queryClient));
   });
 
   return {
     container,
     unmount: () => {
       act(() => root.unmount());
+      queryClient.clear();
       container.remove();
     },
   };
+}
+
+async function advanceStatusPolling() {
+  await flushStatusUpdates();
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(30_000);
+  });
+  await flushStatusUpdates();
+}
+
+async function flushStatusUpdates() {
+  await act(async () => {
+    for (let i = 0; i < 5; i += 1) {
+      await Promise.resolve();
+    }
+  });
+}
+
+async function waitForStatusText(container: HTMLElement, expected: string) {
+  for (let i = 0; i < 20; i += 1) {
+    if ((container.textContent || "").includes(expected)) {
+      return;
+    }
+    await flushStatusUpdates();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
+    });
+  }
 }
 
 function buildPayload(overrides: Partial<PublicStatusPayload> = {}): PublicStatusPayload {
@@ -316,10 +347,7 @@ describe("public-status view", () => {
         { cache: "no-store" }
       );
 
-      await act(async () => {
-        vi.advanceTimersByTime(30_000);
-        await Promise.resolve();
-      });
+      await advanceStatusPolling();
 
       expect(container.textContent).toContain("Refresh delayed");
       expect(container.textContent).toContain("Preparing first snapshot");
@@ -507,10 +535,7 @@ describe("public-status view", () => {
         { cache: "no-store" }
       );
 
-      await act(async () => {
-        vi.advanceTimersByTime(30_000);
-        await Promise.resolve();
-      });
+      await advanceStatusPolling();
 
       const text = container.textContent || "";
       expect(text).toContain("Platform Model");
@@ -603,10 +628,8 @@ describe("public-status view", () => {
     );
 
     try {
-      await act(async () => {
-        vi.advanceTimersByTime(30_000);
-        await Promise.resolve();
-      });
+      await advanceStatusPolling();
+      await waitForStatusText(container, "Failed");
 
       expect(container.textContent).toContain("Failed");
       expect(container.textContent).toContain("0.00%");
@@ -675,10 +698,8 @@ describe("public-status view", () => {
     );
 
     try {
-      await act(async () => {
-        vi.advanceTimersByTime(30_000);
-        await Promise.resolve();
-      });
+      await advanceStatusPolling();
+      await waitForStatusText(container, "GPT-4.2");
 
       const text = container.textContent || "";
       expect(text).toContain("GPT-4.2");

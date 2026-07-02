@@ -11,7 +11,7 @@ import {
   Trophy,
 } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useLayoutEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -88,7 +88,7 @@ export function LeaderboardTable<TParent, TSub = TParent>({
 
   // 当调用方未提供稳定 rowKey 时（回退到 index），排序会导致展开态错位；此时在排序/数据变化时清空展开态，至少避免错位展开。
   // biome-ignore lint/correctness/useExhaustiveDependencies: 依赖用于在排序/数据变化时触发清空，避免 index key 造成错位展开
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!getRowKey) {
       setExpandedRows(new Set());
     }
@@ -125,7 +125,7 @@ export function LeaderboardTable<TParent, TSub = TParent>({
     const column = columns.find((col) => col.sortKey === sortKey);
     if (!column?.getValue) return data;
 
-    return [...data].sort((a, b) => {
+    return Array.from(data).toSorted((a, b) => {
       const valueA = column.getValue!(a);
       const valueB = column.getValue!(b);
 
@@ -233,11 +233,11 @@ export function LeaderboardTable<TParent, TSub = TParent>({
             <TableHeader>
               <TableRow>
                 <TableHead className="w-24">{t("columns.rank")}</TableHead>
-                {columns.map((col, idx) => {
+                {columns.map((col) => {
                   const shouldBold = getShouldBold(col);
                   return (
                     <TableHead
-                      key={idx}
+                      key={col.sortKey ?? col.header}
                       className={`${col.className || ""} ${col.sortKey ? "cursor-pointer select-none hover:bg-muted/50 transition-colors" : ""}`}
                       onClick={col.sortKey ? () => handleSort(col.sortKey) : undefined}
                     >
@@ -288,11 +288,11 @@ export function LeaderboardTable<TParent, TSub = TParent>({
                           {getRankBadge(rank)}
                         </div>
                       </TableCell>
-                      {columns.map((col, idx) => {
+                      {columns.map((col) => {
                         const shouldBold = getShouldBold(col);
                         return (
                           <TableCell
-                            key={idx}
+                            key={col.sortKey ?? col.header}
                             className={`${col.className || ""} ${shouldBold ? "font-bold" : ""}`}
                           >
                             {col.cell(row, index, false)}
@@ -313,11 +313,11 @@ export function LeaderboardTable<TParent, TSub = TParent>({
                                 <div className="h-4 w-4" />
                               </div>
                             </TableCell>
-                            {columns.map((col, idx) => {
+                            {columns.map((col) => {
                               const shouldBold = getShouldBold(col);
                               return (
                                 <TableCell
-                                  key={idx}
+                                  key={col.sortKey ?? col.header}
                                   className={`${col.className || ""} ${shouldBold ? "font-bold" : ""}`}
                                 >
                                   {col.cell(subRow, subIndex, true)}

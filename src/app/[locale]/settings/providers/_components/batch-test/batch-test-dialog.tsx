@@ -3,7 +3,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2, Play, Square } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useLayoutEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -62,6 +62,7 @@ const STATUS_BADGE_CLASSES: Record<BatchTestRowStatus, string> = {
 };
 
 const FAILED_STATUSES: BatchTestRowStatus[] = ["red", "error"];
+const FAILED_STATUS_SET = new Set<BatchTestRowStatus>(FAILED_STATUSES);
 
 export function BatchTestDialog({ open, onOpenChange, providers }: BatchTestDialogProps) {
   const t = useTranslations("settings.providers.batchTest");
@@ -79,7 +80,7 @@ export function BatchTestDialog({ open, onOpenChange, providers }: BatchTestDial
 
   // Reset transient state whenever the dialog is reopened; stop launching
   // new tests once it is closed so quota is not consumed in the background
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (open) {
       reset();
       setResultFilter("all");
@@ -90,17 +91,18 @@ export function BatchTestDialog({ open, onOpenChange, providers }: BatchTestDial
     }
   }, [open, reset, cancel]);
 
-  const suggestionsQuery = useQuery({
+  const { data: suggestionsResult } = useQuery({
     queryKey: ["provider-model-suggestions", "batch-test"],
     queryFn: () => getModelSuggestionsByProviderGroup(null),
     enabled: open,
     staleTime: 60_000,
   });
   const modelSuggestions = useMemo(() => {
-    const result = suggestionsQuery.data;
-    if (result?.ok && Array.isArray(result.data)) return result.data;
+    if (suggestionsResult?.ok && Array.isArray(suggestionsResult.data)) {
+      return suggestionsResult.data;
+    }
     return [];
-  }, [suggestionsQuery.data]);
+  }, [suggestionsResult]);
 
   const summary = useMemo(() => {
     const counts = { done: 0, green: 0, yellow: 0, failed: 0 };
@@ -113,7 +115,7 @@ export function BatchTestDialog({ open, onOpenChange, providers }: BatchTestDial
       } else if (row.status === "yellow") {
         counts.done += 1;
         counts.yellow += 1;
-      } else if (FAILED_STATUSES.includes(row.status)) {
+      } else if (FAILED_STATUS_SET.has(row.status)) {
         counts.done += 1;
         counts.failed += 1;
       } else if (row.status === "canceled") {
@@ -131,7 +133,7 @@ export function BatchTestDialog({ open, onOpenChange, providers }: BatchTestDial
     return targets.filter((provider) => {
       const status = results[provider.id]?.status;
       if (!status) return false;
-      if (resultFilter === "failed") return FAILED_STATUSES.includes(status);
+      if (resultFilter === "failed") return FAILED_STATUS_SET.has(status);
       return status === resultFilter;
     });
   }, [targets, results, resultFilter]);
@@ -244,17 +246,17 @@ export function BatchTestDialog({ open, onOpenChange, providers }: BatchTestDial
 
   const failedProviderIds = useMemo(
     () =>
-      targets
-        .filter((provider) => FAILED_STATUSES.includes(results[provider.id]?.status ?? "pending"))
-        .map((provider) => provider.id),
+      targets.flatMap((provider) =>
+        FAILED_STATUS_SET.has(results[provider.id]?.status ?? "pending") ? [provider.id] : []
+      ),
     [targets, results]
   );
 
   const greenProviderIds = useMemo(
     () =>
-      targets
-        .filter((provider) => results[provider.id]?.status === "green")
-        .map((provider) => provider.id),
+      targets.flatMap((provider) =>
+        results[provider.id]?.status === "green" ? [provider.id] : []
+      ),
     [targets, results]
   );
 
@@ -281,11 +283,14 @@ export function BatchTestDialog({ open, onOpenChange, providers }: BatchTestDial
               value={model}
               onChange={(e) => setModel(e.target.value)}
               placeholder={t("model.placeholder")}
+              aria-label={t("model.label")}
               disabled={isRunning}
             />
             <datalist id="batch-test-model-suggestions">
               {modelSuggestions.map((suggestion) => (
-                <option key={suggestion} value={suggestion} />
+                <option key={suggestion} value={suggestion}>
+                  {suggestion}
+                </option>
               ))}
             </datalist>
             <p className="text-xs text-muted-foreground">{t("model.hint")}</p>

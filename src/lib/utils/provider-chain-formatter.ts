@@ -382,11 +382,10 @@ export function formatProviderSummary(
 
   // 其他情况：显示请求链路（过滤掉 null 状态）
   const path = requests
-    .map((item) => {
+    .flatMap((item) => {
       const status = getProviderStatus(item);
-      return status ? `${item.name}(${status})` : null;
+      return status ? [`${item.name}(${status})`] : [];
     })
-    .filter((item): item is string => item !== null)
     .join(" → ");
 
   return path;
@@ -509,6 +508,7 @@ export function formatProviderTimeline(
   for (let i = 0; i < chain.length; i++) {
     const item = chain[i];
     const ctx = item.decisionContext;
+    const errorDetails = item.errorDetails;
     const elapsed = item.timestamp ? item.timestamp - startTime : 0;
     const actualAttemptNumber = requestIndexMap.get(i); // 使用映射的序号
 
@@ -629,8 +629,8 @@ export function formatProviderTimeline(
       const attempt = actualAttemptNumber ?? item.attemptNumber ?? 0;
       timeline += `${t("timeline.resourceNotFoundFailed", { attempt })}\n\n`;
 
-      if (item.errorDetails?.provider) {
-        const p = item.errorDetails.provider;
+      if (errorDetails?.provider) {
+        const p = errorDetails.provider;
         timeline += `${t("timeline.provider", { provider: p.name })}\n`;
         timeline += `${formatTimelineStatusCode(item, p.statusCode, t)}\n`;
         timeline += `${t("timeline.error", { error: p.statusText })}\n`;
@@ -657,8 +657,8 @@ export function formatProviderTimeline(
       }
 
       // 请求详情（用于问题排查）
-      if (item.errorDetails?.request) {
-        timeline += formatRequestDetails(item.errorDetails.request, t);
+      if (errorDetails?.request) {
+        timeline += formatRequestDetails(errorDetails.request, t);
       }
 
       timeline += `\n${t("timeline.resourceNotFoundNote")}`;
@@ -670,8 +670,8 @@ export function formatProviderTimeline(
       timeline += `${t("timeline.requestFailed", { attempt: actualAttemptNumber ?? 0 })}\n\n`;
 
       // ⭐ 使用结构化错误数据
-      if (item.errorDetails?.provider) {
-        const p = item.errorDetails.provider;
+      if (errorDetails?.provider) {
+        const p = errorDetails.provider;
         timeline += `${t("timeline.provider", { provider: p.name })}\n`;
         timeline += `${formatTimelineStatusCode(item, p.statusCode, t)}\n`;
         timeline += `${t("timeline.error", { error: p.statusText })}\n`;
@@ -713,8 +713,8 @@ export function formatProviderTimeline(
         }
 
         // 请求详情（用于问题排查）
-        if (item.errorDetails?.request) {
-          timeline += formatRequestDetails(item.errorDetails.request, t);
+        if (errorDetails?.request) {
+          timeline += formatRequestDetails(errorDetails.request, t);
         }
       } else {
         // 降级：使用 errorMessage
@@ -725,8 +725,8 @@ export function formatProviderTimeline(
         timeline += t("timeline.error", { error: item.errorMessage || t("timeline.unknown") });
 
         // 请求详情（降级路径）
-        if (item.errorDetails?.request) {
-          timeline += formatRequestDetails(item.errorDetails.request, t);
+        if (errorDetails?.request) {
+          timeline += formatRequestDetails(errorDetails.request, t);
         }
       }
 
@@ -738,8 +738,8 @@ export function formatProviderTimeline(
       timeline += `${t("timeline.systemErrorFailed", { attempt: actualAttemptNumber ?? 0 })}\n\n`;
 
       // ⭐ 使用结构化错误数据
-      if (item.errorDetails?.system) {
-        const s = item.errorDetails.system;
+      if (errorDetails?.system) {
+        const s = errorDetails.system;
         timeline += `${t("timeline.provider", { provider: item.name })}\n`;
 
         // 根据错误码显示更清晰的错误类型
@@ -779,8 +779,8 @@ export function formatProviderTimeline(
         }
 
         // 请求详情（用于问题排查）
-        if (item.errorDetails?.request) {
-          timeline += formatRequestDetails(item.errorDetails.request, t);
+        if (errorDetails?.request) {
+          timeline += formatRequestDetails(errorDetails.request, t);
         }
 
         timeline += `\n${t("timeline.systemErrorNote")}`;
@@ -790,8 +790,8 @@ export function formatProviderTimeline(
         timeline += `${t("timeline.error", { error: item.errorMessage || t("timeline.unknown") })}\n`;
 
         // 请求详情（降级路径）
-        if (item.errorDetails?.request) {
-          timeline += formatRequestDetails(item.errorDetails.request, t);
+        if (errorDetails?.request) {
+          timeline += formatRequestDetails(errorDetails.request, t);
         }
 
         timeline += `\n${t("timeline.systemErrorNote")}`;
@@ -805,8 +805,8 @@ export function formatProviderTimeline(
       const attempt = item.attemptNumber ?? actualAttemptNumber ?? 0;
       timeline += `${t("timeline.clientErrorNonRetryable", { attempt })}\n\n`;
 
-      if (item.errorDetails?.provider) {
-        const p = item.errorDetails.provider;
+      if (errorDetails?.provider) {
+        const p = errorDetails.provider;
         timeline += `${t("timeline.provider", { provider: p.name })}\n`;
         timeline += `${formatTimelineStatusCode(item, p.statusCode, t)}\n`;
         timeline += `${t("timeline.error", { error: p.statusText })}\n`;
@@ -818,8 +818,8 @@ export function formatProviderTimeline(
         timeline += `${t("timeline.error", { error: item.errorMessage || t("timeline.unknown") })}\n`;
       }
 
-      if (item.errorDetails?.matchedRule) {
-        const rule = item.errorDetails.matchedRule;
+      if (errorDetails?.matchedRule) {
+        const rule = errorDetails.matchedRule;
         timeline += `\n${t("timeline.matchedRule")}:\n`;
         timeline += `${t("timeline.ruleId", { id: rule.ruleId })}\n`;
         timeline += `${t("timeline.ruleCategory", { category: rule.category })}\n`;
@@ -834,8 +834,8 @@ export function formatProviderTimeline(
         })}\n`;
       }
 
-      if (item.errorDetails?.request) {
-        timeline += formatRequestDetails(item.errorDetails.request, t);
+      if (errorDetails?.request) {
+        timeline += formatRequestDetails(errorDetails.request, t);
       }
 
       timeline += `\n${t("timeline.clientErrorNote")}`;
@@ -849,8 +849,8 @@ export function formatProviderTimeline(
       timeline += `${t("timeline.provider", { provider: item.name })}\n`;
 
       // 使用结构化错误数据
-      if (item.errorDetails?.system) {
-        const s = item.errorDetails.system;
+      if (errorDetails?.system) {
+        const s = errorDetails.system;
         // 优先使用完整错误消息，提供更多排错信息
         timeline += `${t("timeline.http2ErrorType", { type: s.errorMessage || s.errorName || t("timeline.unknown") })}\n`;
 
@@ -862,8 +862,8 @@ export function formatProviderTimeline(
       }
 
       // 请求详情（用于问题排查）
-      if (item.errorDetails?.request) {
-        timeline += formatRequestDetails(item.errorDetails.request, t);
+      if (errorDetails?.request) {
+        timeline += formatRequestDetails(errorDetails.request, t);
       }
 
       timeline += `\n${t("timeline.http2FallbackNote")}`;
@@ -882,10 +882,11 @@ export function formatProviderTimeline(
         timeline += `\n\n[${(prevElapsed + 10).toString().padStart(4, "0")}ms] `;
         timeline += `${t("timeline.reselect")}\n\n`;
 
+        const excludedProviderIdSet = new Set(ctx.excludedProviderIds ?? []);
         const excludedNames =
-          ctx.filteredProviders
-            ?.filter((f) => ctx.excludedProviderIds?.includes(f.id))
-            .map((f) => f.name) || [];
+          ctx.filteredProviders?.flatMap((f) =>
+            excludedProviderIdSet.has(f.id) ? [f.name] : []
+          ) || [];
 
         if (excludedNames.length > 0) {
           timeline += `${t("timeline.excluded", { providers: excludedNames.join(", ") })}\n`;
@@ -993,8 +994,8 @@ export function formatProviderTimeline(
           timeline += `\n${t("timeline.errorDetails")}:\n${p.upstreamBody}`;
         }
 
-        if (item.errorDetails?.request) {
-          timeline += formatRequestDetails(item.errorDetails.request, t);
+        if (errorDetails?.request) {
+          timeline += formatRequestDetails(errorDetails.request, t);
         }
       } else {
         timeline += `${t("timeline.provider", { provider: item.name })}\n`;

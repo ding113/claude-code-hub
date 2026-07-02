@@ -358,6 +358,7 @@ export class RequestFilterEngine {
         this.isLoading = true;
 
         try {
+          // react-doctor-disable-next-line react-doctor/async-await-in-loop -- reload loop reruns only when another request arrived during loading
           const { getActiveRequestFilters } = await import("@/repository/request-filters");
           const filters = await getActiveRequestFilters();
           this.loadFilters(filters);
@@ -479,22 +480,23 @@ export class RequestFilterEngine {
     if (this.isInitialized && this.globalGuardFilters.length === 0) return;
 
     await this.ensureInitialized();
-    if (this.globalGuardFilters.length === 0) return;
 
-    for (const filter of this.globalGuardFilters) {
-      try {
-        if (filter.scope === "header") {
-          this.applyHeaderFilter(session, filter);
-        } else if (filter.scope === "body") {
-          this.applyBodyFilter(session, filter);
+    if (this.globalGuardFilters.length > 0) {
+      for (const filter of this.globalGuardFilters) {
+        try {
+          if (filter.scope === "header") {
+            this.applyHeaderFilter(session, filter);
+          } else if (filter.scope === "body") {
+            this.applyBodyFilter(session, filter);
+          }
+        } catch (error) {
+          logger.error("[RequestFilterEngine] Failed to apply global filter", {
+            filterId: filter.id,
+            scope: filter.scope,
+            action: filter.action,
+            error,
+          });
         }
-      } catch (error) {
-        logger.error("[RequestFilterEngine] Failed to apply global filter", {
-          filterId: filter.id,
-          scope: filter.scope,
-          action: filter.action,
-          error,
-        });
       }
     }
   }
@@ -503,43 +505,43 @@ export class RequestFilterEngine {
     if (this.isInitialized && this.providerGuardFilters.length === 0) return;
 
     await this.ensureInitialized();
-    if (this.providerGuardFilters.length === 0 || !session.provider) return;
+    if (this.providerGuardFilters.length > 0 && session.provider) {
+      const providerId = session.provider.id;
 
-    const providerId = session.provider.id;
-
-    let providerTagsSet: Set<string> | null = null;
-    if (this.hasGroupBasedFilters) {
-      const providerGroupTag = session.provider.groupTag;
-      providerTagsSet = new Set(resolveProviderGroupsWithDefault(providerGroupTag));
-    }
-
-    for (const filter of this.providerGuardFilters) {
-      let matches = false;
-
-      if (filter.bindingType === "providers") {
-        matches = filter.providerIdsSet?.has(providerId) ?? false;
-      } else if (filter.bindingType === "groups" && providerTagsSet) {
-        matches = filter.groupTagsSet
-          ? Array.from(providerTagsSet).some((tag) => filter.groupTagsSet!.has(tag))
-          : false;
+      let providerTagsSet: Set<string> | null = null;
+      if (this.hasGroupBasedFilters) {
+        const providerGroupTag = session.provider.groupTag;
+        providerTagsSet = new Set(resolveProviderGroupsWithDefault(providerGroupTag));
       }
 
-      if (!matches) continue;
+      for (const filter of this.providerGuardFilters) {
+        let matches = false;
 
-      try {
-        if (filter.scope === "header") {
-          this.applyHeaderFilter(session, filter);
-        } else if (filter.scope === "body") {
-          this.applyBodyFilter(session, filter);
+        if (filter.bindingType === "providers") {
+          matches = filter.providerIdsSet?.has(providerId) ?? false;
+        } else if (filter.bindingType === "groups" && providerTagsSet) {
+          matches = filter.groupTagsSet
+            ? Array.from(providerTagsSet).some((tag) => filter.groupTagsSet!.has(tag))
+            : false;
         }
-      } catch (error) {
-        logger.error("[RequestFilterEngine] Failed to apply provider filter", {
-          filterId: filter.id,
-          providerId,
-          scope: filter.scope,
-          action: filter.action,
-          error,
-        });
+
+        if (!matches) continue;
+
+        try {
+          if (filter.scope === "header") {
+            this.applyHeaderFilter(session, filter);
+          } else if (filter.scope === "body") {
+            this.applyBodyFilter(session, filter);
+          }
+        } catch (error) {
+          logger.error("[RequestFilterEngine] Failed to apply provider filter", {
+            filterId: filter.id,
+            providerId,
+            scope: filter.scope,
+            action: filter.action,
+            error,
+          });
+        }
       }
     }
   }

@@ -7,10 +7,10 @@ function splitProviderGroupValue(value: unknown): string[] {
     return [];
   }
 
-  return value
-    .split(PROVIDER_GROUP_SEPARATOR)
-    .map((group) => group.trim())
-    .filter(Boolean);
+  return value.split(PROVIDER_GROUP_SEPARATOR).flatMap((group) => {
+    const trimmed = group.trim();
+    return trimmed ? [trimmed] : [];
+  });
 }
 
 /**

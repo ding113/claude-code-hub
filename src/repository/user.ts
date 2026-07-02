@@ -1,5 +1,3 @@
-"use server";
-
 import { and, asc, eq, isNull, type SQL, sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import { keys as keysTable, users } from "@/drizzle/schema";
@@ -238,7 +236,10 @@ export async function findUserListBatch(
   }
 
   // Multi-tag filter with OR logic: users with ANY selected tag
-  const normalizedTags = (tagFilters ?? []).map((tag) => tag.trim()).filter(Boolean);
+  const normalizedTags = (tagFilters ?? []).flatMap((tag) => {
+    const trimmed = tag.trim();
+    return trimmed ? [trimmed] : [];
+  });
   let tagFilterCondition: SQL | undefined;
   if (normalizedTags.length > 0) {
     const tagConditions = normalizedTags.map(
@@ -247,7 +248,10 @@ export async function findUserListBatch(
     tagFilterCondition = sql`(${sql.join(tagConditions, sql` OR `)})`;
   }
 
-  const trimmedGroups = (keyGroupFilters ?? []).map((group) => group.trim()).filter(Boolean);
+  const trimmedGroups = (keyGroupFilters ?? []).flatMap((group) => {
+    const trimmed = group.trim();
+    return trimmed ? [trimmed] : [];
+  });
   let keyGroupFilterCondition: SQL | undefined;
   if (trimmedGroups.length > 0) {
     const groupConditions = trimmedGroups.map(

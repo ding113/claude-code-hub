@@ -44,6 +44,7 @@ async function executeWithRetry(
 ): Promise<void> {
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
+      // react-doctor-disable-next-line react-doctor/async-await-in-loop -- retry attempts must wait for the previous failure
       await fn();
       return;
     } catch (error) {

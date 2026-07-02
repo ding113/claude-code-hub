@@ -1,5 +1,3 @@
-"use server";
-
 import { and, avg, count, desc, eq, gte, lt, sql, sum } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import { providers, usageLedger } from "@/drizzle/schema";

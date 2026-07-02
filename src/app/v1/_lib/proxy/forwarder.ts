@@ -316,6 +316,7 @@ async function readResponseTextUpTo(
 
   try {
     while (true) {
+      // react-doctor-disable-next-line react-doctor/async-await-in-loop -- stream chunks must be consumed in order
       const { done, value } = await reader.read();
       if (done) break;
       if (!value || value.byteLength === 0) continue;
@@ -438,10 +439,10 @@ export function applyCacheTtlOverrideToMessage(
 
 export function mergeAnthropicCacheTtlBetaFlag(existing: string | null | undefined): string {
   const betaFlags = new Set(
-    (existing ?? "")
-      .split(",")
-      .map((s) => s.trim())
-      .filter(Boolean)
+    (existing ?? "").split(",").flatMap((s) => {
+      const trimmed = s.trim();
+      return trimmed ? [trimmed] : [];
+    })
   );
   betaFlags.add("extended-cache-ttl-2025-04-11");
   // extended-cache-ttl 依赖 prompt-caching；无条件补齐避免客户端只带其它 beta 时漏掉依赖
@@ -943,6 +944,7 @@ async function tryApplyReactiveAnthropicRectifier(params: {
     return { matched: false };
   }
 
+  const settings = await getCachedSystemSettings();
   for (const descriptor of REACTIVE_ANTHROPIC_RECTIFIERS) {
     const trigger = descriptor.detect(errorMessage);
     if (!trigger) {
@@ -950,7 +952,6 @@ async function tryApplyReactiveAnthropicRectifier(params: {
     }
 
     // 命中触发词后即终结（后续分支不再检测），与历史的 if/else 级联保持一致
-    const settings = await getCachedSystemSettings();
     if (!descriptor.isEnabled(settings)) {
       return { matched: false };
     }
@@ -978,26 +979,28 @@ async function tryApplyReactiveAnthropicRectifier(params: {
         retryAttemptNumber,
       })
     );
+    // react-doctor-disable-next-line react-doctor/async-await-in-loop -- rectifier persistence applies to the first matching descriptor only
     await persistSpecialSettings(persistSession);
 
-    if (!rectified.applied) {
-      return {
-        matched: true,
-        applied: false,
-        reason: "not_applicable",
-        rectifierType: descriptor.type,
-        trigger,
-      };
+    if (rectified.applied) {
+      descriptor.markRetried(params.retryState);
     }
 
-    descriptor.markRetried(params.retryState);
-    return {
-      matched: true,
-      applied: true,
-      rectifierType: descriptor.type,
-      trigger,
-      requestDetailsBeforeRectify,
-    };
+    return rectified.applied
+      ? {
+          matched: true,
+          applied: true,
+          rectifierType: descriptor.type,
+          trigger,
+          requestDetailsBeforeRectify,
+        }
+      : {
+          matched: true,
+          applied: false,
+          reason: "not_applicable",
+          rectifierType: descriptor.type,
+          trigger,
+        };
   }
 
   return { matched: false };
@@ -1395,13 +1398,9 @@ export class ProxyForwarder {
           // ========== 空响应检测（仅非流式）==========
           const contentType = response.headers.get("content-type") || "";
           const normalizedContentType = contentType.toLowerCase();
-          const isSSE = normalizedContentType.includes("text/event-stream");
-          const isHtml =
-            normalizedContentType.includes("text/html") ||
-            normalizedContentType.includes("application/xhtml+xml");
-          const isJson =
-            normalizedContentType.includes("application/json") ||
-            normalizedContentType.includes("+json");
+          const isSSE = /text\/event-stream/.test(normalizedContentType);
+          const isHtml = /(?:text\/html|application\/xhtml\+xml)/.test(normalizedContentType);
+          const isJson = /(?:application\/json|\+json)/.test(normalizedContentType);
 
           // ========== 流式响应：延迟成功判定（避免“假 200”）==========
           // 背景：上游可能返回 HTTP 200，但 SSE 内容为错误 JSON（如 {"error": "..."}）。
@@ -1962,13 +1961,14 @@ export class ProxyForwarder {
           // ⭐ 5. 上游 404 错误处理（不计入熔断器，先重试当前供应商，重试耗尽后切换）
           if (errorCategory === ErrorCategory.RESOURCE_NOT_FOUND) {
             const proxyError = lastError as ProxyError;
+            const upstreamError = proxyError.upstreamError;
             const willRetry = attemptCount < maxAttemptsPerProvider;
 
             logger.warn("ProxyForwarder: Upstream 404 error", {
               providerId: currentProvider.id,
               providerName: currentProvider.name,
               statusCode: 404,
-              statusCodeInferred: proxyError.upstreamError?.statusCodeInferred ?? false,
+              statusCodeInferred: upstreamError?.statusCodeInferred ?? false,
               error: errorMessage,
               attemptNumber: attemptCount,
               totalProvidersAttempted,
@@ -1984,7 +1984,7 @@ export class ProxyForwarder {
               rawCrossProviderFallbackEnabled: rawCrossProviderFallbackEnabled || undefined,
               errorMessage: errorMessage,
               statusCode: 404,
-              statusCodeInferred: proxyError.upstreamError?.statusCodeInferred ?? false,
+              statusCodeInferred: upstreamError?.statusCodeInferred ?? false,
               errorDetails: {
                 provider: rawCrossProviderFallbackEnabled
                   ? {
@@ -1998,8 +1998,8 @@ export class ProxyForwarder {
                       name: currentProvider.name,
                       statusCode: 404,
                       statusText: proxyError.message,
-                      upstreamBody: proxyError.upstreamError?.body,
-                      upstreamParsed: proxyError.upstreamError?.parsed,
+                      upstreamBody: upstreamError?.body,
+                      upstreamParsed: upstreamError?.parsed,
                     },
                 request: buildRequestDetails(session),
               },
@@ -2390,7 +2390,7 @@ export class ProxyForwarder {
         const geminiSearchParams = session.requestUrl.searchParams;
         const originalBody = session.request.message as Record<string, unknown>;
         isStreaming =
-          geminiPathname.includes("streamGenerateContent") ||
+          /streamGenerateContent/.test(geminiPathname) ||
           geminiSearchParams.get("alt") === "sse" ||
           originalBody?.stream === true;
 
@@ -2435,8 +2435,7 @@ export class ProxyForwarder {
         const geminiPathname = session.requestUrl.pathname || "";
         const geminiSearchParams = session.requestUrl.searchParams;
         isStreaming =
-          geminiPathname.includes("streamGenerateContent") ||
-          geminiSearchParams.get("alt") === "sse";
+          /streamGenerateContent/.test(geminiPathname) || geminiSearchParams.get("alt") === "sse";
 
         const accessToken = await GeminiAuth.getAccessToken(provider.key);
         isApiKey = GeminiAuth.isApiKey(provider.key);
@@ -3233,7 +3232,7 @@ export class ProxyForwarder {
       }
 
       // ⭐ 检测流式静默期超时（streaming_idle）
-      if (err.message?.includes("streaming_idle") && !session.clientAbortSignal?.aborted) {
+      if (/streaming_idle/.test(err.message ?? "") && !session.clientAbortSignal?.aborted) {
         // 流式静默期超时：首字节之后的连续静默窗口超时
         // 修复：静默期超时也是供应商问题，应计入熔断器
         logger.error(
@@ -3434,11 +3433,7 @@ export class ProxyForwarder {
           throw http1Error;
         }
       } else if (proxyConfig) {
-        const isProxyError =
-          err.message.includes("proxy") ||
-          err.message.includes("ECONNREFUSED") ||
-          err.message.includes("ENOTFOUND") ||
-          err.message.includes("ETIMEDOUT");
+        const isProxyError = /proxy|ECONNREFUSED|ENOTFOUND|ETIMEDOUT/.test(err.message);
 
         if (isProxyError) {
           logger.error("ProxyForwarder: Proxy connection failed", {
@@ -3538,9 +3533,9 @@ export class ProxyForwarder {
             targetUrl: proxyUrl, // 完整目标 URL（用于调试）
             headerKeys: Array.from(processedHeaders.keys()),
             headerCount: Array.from(processedHeaders.keys()).length,
-            invalidHeaders: Array.from(processedHeaders.entries())
-              .filter(([_, v]) => v === undefined || v === null || v === "")
-              .map(([k]) => k),
+            invalidHeaders: Array.from(processedHeaders.entries()).flatMap(([k, v]) =>
+              v === undefined || v === null || v === "" ? [k] : []
+            ),
 
             // 请求上下文
             method: session.method,
@@ -3577,9 +3572,9 @@ export class ProxyForwarder {
           targetUrl: proxyUrl, // 完整目标 URL（用于调试）
           headerKeys: Array.from(processedHeaders.keys()),
           headerCount: Array.from(processedHeaders.keys()).length,
-          invalidHeaders: Array.from(processedHeaders.entries())
-            .filter(([_, v]) => v === undefined || v === null || v === "")
-            .map(([k]) => k),
+          invalidHeaders: Array.from(processedHeaders.entries()).flatMap(([k, v]) =>
+            v === undefined || v === null || v === "" ? [k] : []
+          ),
 
           // 请求上下文
           method: session.method,
@@ -3683,7 +3678,8 @@ export class ProxyForwarder {
     }
 
     // 确保不是已失败的供应商之一
-    if (excludeProviderIds.includes(alternativeProvider.id)) {
+    const excludedProviderIds = new Set(excludeProviderIds);
+    if (excludedProviderIds.has(alternativeProvider.id)) {
       logger.error("ProxyForwarder: Selector returned excluded provider", {
         providerId: alternativeProvider.id,
         message: "This should not happen",
@@ -3836,6 +3832,7 @@ export class ProxyForwarder {
         }
         try {
           while (true) {
+            // react-doctor-disable-next-line react-doctor/async-await-in-loop -- stream chunks must be drained in order for usage reconstruction
             const { value, done } = await reader.read();
             if (done) {
               drainComplete = true;
@@ -4001,6 +3998,7 @@ export class ProxyForwarder {
 
       launchingAlternative = (async () => {
         while (!settled && !winnerCommitted && !noMoreProviders) {
+          // react-doctor-disable-next-line react-doctor/async-await-in-loop -- alternatives are selected one at a time based on launchedProviderIds
           const alternativeProvider = await ProxyForwarder.selectAlternative(
             session,
             Array.from(launchedProviderIds)
@@ -4855,7 +4853,8 @@ export class ProxyForwarder {
     failedProviderIds: number[],
     providerId: number
   ): void {
-    if (failedProviderIds.includes(providerId)) {
+    const failedProviderIdSet = new Set(failedProviderIds);
+    if (failedProviderIdSet.has(providerId)) {
       return;
     }
 
@@ -4917,6 +4916,7 @@ export class ProxyForwarder {
     reader: ReadableStreamDefaultReader<Uint8Array>
   ): Promise<ReadableStreamReadResult<Uint8Array>> {
     while (true) {
+      // react-doctor-disable-next-line react-doctor/async-await-in-loop -- stream reads are inherently sequential and skip empty chunks
       const result = await reader.read();
       if (result.done) {
         return result;
@@ -5104,10 +5104,10 @@ export class ProxyForwarder {
   } {
     const xffRaw = headers.get("x-forwarded-for");
     const xffParts =
-      xffRaw
-        ?.split(",")
-        .map((ip) => ip.trim())
-        .filter(Boolean) ?? [];
+      xffRaw?.split(",").flatMap((ip) => {
+        const trimmed = ip.trim();
+        return trimmed ? [trimmed] : [];
+      }) ?? [];
 
     const candidateIps = [
       ...xffParts,
@@ -5254,9 +5254,10 @@ export class ProxyForwarder {
 
     // 检测响应是否为 gzip 压缩
     const encoding = responseHeaders.get("content-encoding")?.toLowerCase() || "";
+    const hasGzipEncoding = /(^|,|\s)gzip($|,|\s)/.test(encoding);
     let bodyStream: ReadableStream<Uint8Array>;
 
-    if (encoding.includes("gzip")) {
+    if (hasGzipEncoding) {
       logger.debug("ProxyForwarder: Response is gzip encoded, decompressing manually", {
         providerId,
         providerName,
@@ -5329,7 +5330,7 @@ export class ProxyForwarder {
       providerId,
       providerName,
       statusCode: undiciRes.statusCode,
-      hasGzip: encoding.includes("gzip"),
+      hasGzip: hasGzipEncoding,
     });
 
     return new Response(bodyStream, {

@@ -9,12 +9,14 @@ import { NextIntlClientProvider } from "next-intl";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { ModelPriceDrawer } from "@/app/[locale]/settings/prices/_components/model-price-drawer";
 import type { ModelPrice } from "@/types/model-price";
+import { createTestQueryClient, withTestQueryClient } from "../../../helpers/react-query";
 import { loadMessages } from "./test-messages";
 
 const modelPricesActionMocks = vi.hoisted(() => ({
   upsertSingleModelPrice: vi.fn(async () => ({ ok: true, data: null })),
 }));
 vi.mock("@/actions/model-prices", () => modelPricesActionMocks);
+vi.mock("@/lib/api-client/v1/actions/model-prices", () => modelPricesActionMocks);
 
 const sonnerMocks = vi.hoisted(() => ({
   toast: {
@@ -28,14 +30,16 @@ function render(node: ReactNode) {
   const container = document.createElement("div");
   document.body.appendChild(container);
   const root = createRoot(container);
+  const queryClient = createTestQueryClient();
 
   act(() => {
-    root.render(node);
+    root.render(withTestQueryClient(node, queryClient));
   });
 
   return {
     unmount: () => {
       act(() => root.unmount());
+      queryClient.clear();
       container.remove();
     },
   };
@@ -48,6 +52,28 @@ async function flushPromises() {
 async function flushMicrotasks() {
   await Promise.resolve();
   await Promise.resolve();
+}
+
+async function flushQueryUpdates() {
+  for (let i = 0; i < 5; i += 1) {
+    await Promise.resolve();
+  }
+  await vi.advanceTimersByTimeAsync(0);
+  for (let i = 0; i < 5; i += 1) {
+    await Promise.resolve();
+  }
+}
+
+async function waitForBodyText(text: string) {
+  for (let i = 0; i < 20; i += 1) {
+    if ((document.body.textContent || "").includes(text)) {
+      return;
+    }
+    await act(async () => {
+      await flushQueryUpdates();
+      await vi.advanceTimersByTimeAsync(1);
+    });
+  }
 }
 
 function setReactInputValue(input: HTMLInputElement | HTMLTextAreaElement, value: string) {
@@ -117,14 +143,12 @@ describe("ModelPriceDrawer: 预填充与提交", () => {
     });
 
     await act(async () => {
-      vi.advanceTimersByTime(350);
-    });
-
-    await act(async () => {
-      await flushMicrotasks();
+      await vi.advanceTimersByTimeAsync(350);
+      await flushQueryUpdates();
     });
 
     expect(fetchMock).toHaveBeenCalled();
+    await waitForBodyText("openai/gpt-test");
     expect(document.body.textContent).toContain("openai/gpt-test");
 
     const resultItem = Array.from(document.querySelectorAll('[data-slot="command-item"]')).find(
@@ -179,10 +203,7 @@ describe("ModelPriceDrawer: 预填充与提交", () => {
     });
 
     await act(async () => {
-      vi.advanceTimersByTime(350);
-    });
-
-    await act(async () => {
+      await vi.advanceTimersByTimeAsync(350);
       await flushMicrotasks();
     });
 

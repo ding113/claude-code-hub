@@ -99,6 +99,17 @@
   }
 }
 
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
 .dark {
   --background: oklch(0.141 0.005 285.823);
   --foreground: oklch(0.985 0 0);
@@ -153,6 +164,70 @@
 
   .maplibregl-popup-tip {
     @apply hidden!;
+  }
+
+  .global-error-shell {
+    display: flex;
+    min-height: var(--cch-viewport-height, 100vh);
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background-color: #f8f9fa;
+    padding: 20px;
+    font-family: system-ui, sans-serif;
+    text-align: center;
+  }
+
+  .global-error-title {
+    margin-bottom: 16px;
+    color: #dc3545;
+    font-size: 24px;
+  }
+
+  .global-error-title.network {
+    color: #f59e0b;
+  }
+
+  .global-error-copy {
+    max-width: 400px;
+    margin-bottom: 24px;
+    color: #6c757d;
+  }
+
+  .global-error-check-title {
+    margin-bottom: 12px;
+  }
+
+  .global-error-check-list {
+    margin: 0 auto;
+    padding-left: 20px;
+    list-style-type: disc;
+    text-align: left;
+  }
+
+  .global-error-digest {
+    margin-bottom: 16px;
+    color: #adb5bd;
+    font-size: 12px;
+  }
+
+  .global-error-actions {
+    display: flex;
+    gap: 12px;
+  }
+
+  .global-error-button {
+    cursor: pointer;
+    border: none;
+    border-radius: 8px;
+    background-color: #6c757d;
+    padding: 12px 24px;
+    color: white;
+    font-size: 16px;
+  }
+
+  .global-error-button.primary {
+    background-color: #0d6efd;
   }
 }
 

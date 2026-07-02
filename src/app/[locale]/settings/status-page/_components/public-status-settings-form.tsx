@@ -143,7 +143,10 @@ export function PublicStatusSettingsForm({
     null
   );
   const [isPending, startTransition] = useTransition();
-  const slugInputRefs = useRef(new Map<string, HTMLInputElement>());
+  const slugInputRefs = useRef<Map<string, HTMLInputElement>>(null!);
+  if (!slugInputRefs.current) {
+    slugInputRefs.current = new Map<string, HTMLInputElement>();
+  }
 
   const enabledGroupCount = useMemo(() => getPublishableGroupCount(groups), [groups]);
   const previewHref = "/status";
@@ -193,16 +196,20 @@ export function PublicStatusSettingsForm({
     const payload: SavePublicStatusSettingsInput = {
       publicStatusWindowHours: Number(windowHours),
       publicStatusAggregationIntervalMinutes: Number(aggregationIntervalMinutes),
-      groups: groups
-        .filter((group) => group.enabled)
-        .map((group) => ({
-          groupName: group.groupName,
-          displayName: group.displayName.trim() || undefined,
-          publicGroupSlug: group.publicGroupSlug.trim() || undefined,
-          explanatoryCopy: group.explanatoryCopy.trim() || null,
-          sortOrder: group.sortOrder,
-          publicModels: normalizePublicStatusModels(group.publicModels),
-        })),
+      groups: groups.flatMap((group) =>
+        group.enabled
+          ? [
+              {
+                groupName: group.groupName,
+                displayName: group.displayName.trim() || undefined,
+                publicGroupSlug: group.publicGroupSlug.trim() || undefined,
+                explanatoryCopy: group.explanatoryCopy.trim() || null,
+                sortOrder: group.sortOrder,
+                publicModels: normalizePublicStatusModels(group.publicModels),
+              },
+            ]
+          : []
+      ),
     };
 
     startTransition(async () => {

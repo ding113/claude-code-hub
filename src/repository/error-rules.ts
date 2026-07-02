@@ -1,5 +1,3 @@
-"use server";
-
 import { desc, eq, inArray } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import { errorRules } from "@/drizzle/schema";
@@ -914,6 +912,7 @@ export async function syncDefaultErrorRules(): Promise<{
     // 删除不再存在于 DEFAULT_ERROR_RULES 中的默认规则
     for (const rule of allDefaultRulesInDb) {
       if (!defaultPatternSet.has(rule.pattern)) {
+        // react-doctor-disable-next-line react-doctor/async-await-in-loop -- default-rule sync uses one tx and updates counters deterministically
         await tx.delete(errorRules).where(eq(errorRules.id, rule.id));
         counters.deleted += 1;
       }
@@ -933,6 +932,7 @@ export async function syncDefaultErrorRules(): Promise<{
 
       if (existingIsDefault === undefined) {
         // pattern 不存在，直接插入
+        // react-doctor-disable-next-line react-doctor/async-await-in-loop -- default-rule sync uses one tx and updates counters deterministically
         const inserted = await tx
           .insert(errorRules)
           .values(rule)
@@ -948,6 +948,7 @@ export async function syncDefaultErrorRules(): Promise<{
 
       if (existingIsDefault === true) {
         // pattern 存在且是默认规则，更新它
+        // react-doctor-disable-next-line react-doctor/async-await-in-loop -- default-rule sync uses one tx and updates counters deterministically
         await tx
           .update(errorRules)
           .set({
@@ -993,6 +994,7 @@ export async function initializeDefaultErrorRules(): Promise<void> {
   // 使用事务批量插入，ON CONFLICT DO NOTHING 保证幂等性
   await db.transaction(async (tx) => {
     for (const rule of DEFAULT_ERROR_RULES) {
+      // react-doctor-disable-next-line react-doctor/async-await-in-loop -- initialization runs in one tx for deterministic insert order
       await tx.insert(errorRules).values(rule).onConflictDoNothing({ target: errorRules.pattern });
     }
   });

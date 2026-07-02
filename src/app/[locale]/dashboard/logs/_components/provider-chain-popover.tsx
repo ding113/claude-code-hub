@@ -13,6 +13,7 @@ import {
   Zap,
 } from "lucide-react";
 import { useTranslations } from "next-intl";
+import type { KeyboardEvent } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -483,6 +484,24 @@ export function ProviderChainPopover({
             const status = getItemStatus(item);
             const Icon = status.icon;
             const isLast = index === actualRequests.length - 1;
+            const chainItemProps = onChainItemClick
+              ? {
+                  onClick: () => {
+                    // Map actualRequests index back to original chain index
+                    const originalIndex = chain.indexOf(item);
+                    onChainItemClick(originalIndex);
+                  },
+                  onKeyDown: (e: KeyboardEvent<HTMLDivElement>) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      const originalIndex = chain.indexOf(item);
+                      onChainItemClick(originalIndex);
+                    }
+                  },
+                  role: "button" as const,
+                  tabIndex: 0,
+                }
+              : {};
 
             return (
               <div
@@ -492,28 +511,7 @@ export function ProviderChainPopover({
                   onChainItemClick &&
                     "cursor-pointer hover:bg-muted/50 rounded-md p-1 -m-1 transition-colors"
                 )}
-                onClick={
-                  onChainItemClick
-                    ? () => {
-                        // Map actualRequests index back to original chain index
-                        const originalIndex = chain.indexOf(item);
-                        onChainItemClick(originalIndex);
-                      }
-                    : undefined
-                }
-                onKeyDown={
-                  onChainItemClick
-                    ? (e) => {
-                        if (e.key === "Enter" || e.key === " ") {
-                          e.preventDefault();
-                          const originalIndex = chain.indexOf(item);
-                          onChainItemClick(originalIndex);
-                        }
-                      }
-                    : undefined
-                }
-                role={onChainItemClick ? "button" : undefined}
-                tabIndex={onChainItemClick ? 0 : undefined}
+                {...chainItemProps}
               >
                 {/* Timeline connector */}
                 <div className="flex flex-col items-center">

@@ -996,6 +996,7 @@ export async function removeProvider(
       return { ok: false, error: "无权限执行此操作" };
     }
 
+    // react-doctor-disable-next-line react-doctor/async-parallel -- the provider must be read before delete so vendor cleanup has the pre-delete snapshot
     const provider = await findProviderById(providerId);
     await deleteProvider(providerId);
 
@@ -1314,37 +1315,29 @@ const ProviderBatchPatchProviderIdsSchema = z
   .min(1)
   .max(BATCH_OPERATION_MAX_SIZE);
 
-const PreviewProviderBatchPatchSchema = z
-  .object({
-    providerIds: ProviderBatchPatchProviderIdsSchema,
-    patch: z.unknown().optional().default({}),
-  })
-  .strict();
+const PreviewProviderBatchPatchSchema = z.strictObject({
+  providerIds: ProviderBatchPatchProviderIdsSchema,
+  patch: z.unknown().optional().default({}),
+});
 
-const ApplyProviderBatchPatchSchema = z
-  .object({
-    previewToken: z.string().trim().min(1),
-    previewRevision: z.string().trim().min(1),
-    providerIds: ProviderBatchPatchProviderIdsSchema,
-    patch: z.unknown().optional().default({}),
-    idempotencyKey: z.string().trim().min(1).max(128).optional(),
-    excludeProviderIds: z.array(z.number().int().positive()).optional().default([]),
-  })
-  .strict();
+const ApplyProviderBatchPatchSchema = z.strictObject({
+  previewToken: z.string().trim().min(1),
+  previewRevision: z.string().trim().min(1),
+  providerIds: ProviderBatchPatchProviderIdsSchema,
+  patch: z.unknown().optional().default({}),
+  idempotencyKey: z.string().trim().min(1).max(128).optional(),
+  excludeProviderIds: z.array(z.number().int().positive()).optional().default([]),
+});
 
-const UndoProviderPatchSchema = z
-  .object({
-    undoToken: z.string().trim().min(1),
-    operationId: z.string().trim().min(1),
-  })
-  .strict();
+const UndoProviderPatchSchema = z.strictObject({
+  undoToken: z.string().trim().min(1),
+  operationId: z.string().trim().min(1),
+});
 
-const UndoProviderDeleteSchema = z
-  .object({
-    undoToken: z.string().trim().min(1),
-    operationId: z.string().trim().min(1),
-  })
-  .strict();
+const UndoProviderDeleteSchema = z.strictObject({
+  undoToken: z.string().trim().min(1),
+  operationId: z.string().trim().min(1),
+});
 
 export interface ProviderBatchPreviewRow {
   providerId: number;
@@ -1535,7 +1528,7 @@ function hasProviderFieldChangedForUndo(before: unknown, after: unknown): boolea
 }
 
 function dedupeProviderIds(providerIds: number[]): number[] {
-  return [...new Set(providerIds)].sort((a, b) => a - b);
+  return Array.from(new Set(providerIds)).toSorted((a, b) => a - b);
 }
 
 function getChangedPatchFields(patch: ProviderBatchPatch): ProviderBatchPatchField[] {
@@ -2138,13 +2131,15 @@ export async function applyProviderBatchPatch(
         providersByType.get(type)!.push(provider.id);
       }
 
-      dbUpdatedCount = 0;
-      for (const [type, ids] of providersByType) {
-        const filtered = filterRepositoryUpdatesByProviderType(repositoryUpdates, type);
-        if (Object.keys(filtered).length > 0) {
-          dbUpdatedCount += await updateProvidersBatch(ids, filtered);
-        }
-      }
+      const updateCounts = await Promise.all(
+        Array.from(providersByType, ([type, ids]) => {
+          const filtered = filterRepositoryUpdatesByProviderType(repositoryUpdates, type);
+          return Object.keys(filtered).length > 0
+            ? updateProvidersBatch(ids, filtered)
+            : Promise.resolve(0);
+        })
+      );
+      dbUpdatedCount = updateCounts.reduce((sum, count) => sum + count, 0);
     }
 
     if (repositoryUpdates.limit5hResetMode !== undefined) {
@@ -2171,16 +2166,18 @@ export async function applyProviderBatchPatch(
         f === "circuit_breaker_half_open_success_threshold"
     );
     if (hasCbFieldChange) {
-      for (const id of effectiveProviderIds) {
-        try {
-          await deleteProviderCircuitConfig(id);
-        } catch (error) {
-          logger.warn("applyProviderBatchPatch:cb_cache_invalidation_failed", {
-            providerId: id,
-            error: error instanceof Error ? error.message : String(error),
-          });
-        }
-      }
+      await Promise.all(
+        effectiveProviderIds.map(async (id) => {
+          try {
+            await deleteProviderCircuitConfig(id);
+          } catch (error) {
+            logger.warn("applyProviderBatchPatch:cb_cache_invalidation_failed", {
+              providerId: id,
+              error: error instanceof Error ? error.message : String(error),
+            });
+          }
+        })
+      );
 
       // 清除配置缓存并广播（跨实例立即生效）
       await publishCircuitBreakerConfigInvalidation(effectiveProviderIds);
@@ -2191,6 +2188,7 @@ export async function applyProviderBatchPatch(
         const batchSize = 20;
         for (let i = 0; i < effectiveProviderIds.length; i += batchSize) {
           const batch = effectiveProviderIds.slice(i, i + batchSize);
+          // react-doctor-disable-next-line react-doctor/async-await-in-loop -- intentionally batches Redis state changes to bound concurrency
           await Promise.all(
             batch.map((providerId) =>
               forceCloseCircuitState(providerId, { reason: "circuit_breaker_disabled" })
@@ -2299,10 +2297,10 @@ export async function undoProviderPatch(
     }
 
     let revertedCount = 0;
-    for (const { ids, updates } of preimageGroups.values()) {
-      const count = await updateProvidersBatch(ids, updates);
-      revertedCount += count;
-    }
+    const revertCounts = await Promise.all(
+      Array.from(preimageGroups.values(), ({ ids, updates }) => updateProvidersBatch(ids, updates))
+    );
+    revertedCount = revertCounts.reduce((sum, count) => sum + count, 0);
 
     if (preimageGroups.size > 0) {
       await publishProviderCacheInvalidation();
@@ -2312,16 +2310,18 @@ export async function undoProviderPatch(
       Object.keys(fields).some((k) => CB_PROVIDER_KEYS.has(k))
     );
     if (hasCbRevert) {
-      for (const providerId of snapshot.providerIds) {
-        try {
-          await deleteProviderCircuitConfig(providerId);
-        } catch (error) {
-          logger.warn("undoProviderPatch:cb_cache_invalidation_failed", {
-            providerId,
-            error: error instanceof Error ? error.message : String(error),
-          });
-        }
-      }
+      await Promise.all(
+        snapshot.providerIds.map(async (providerId) => {
+          try {
+            await deleteProviderCircuitConfig(providerId);
+          } catch (error) {
+            logger.warn("undoProviderPatch:cb_cache_invalidation_failed", {
+              providerId,
+              error: error instanceof Error ? error.message : String(error),
+            });
+          }
+        })
+      );
 
       // 清除配置缓存并广播（跨实例立即生效）
       await publishCircuitBreakerConfigInvalidation(snapshot.providerIds);
@@ -2338,6 +2338,7 @@ export async function undoProviderPatch(
         const batchSize = 20;
         for (let i = 0; i < disabledProviderIds.length; i += batchSize) {
           const batch = disabledProviderIds.slice(i, i + batchSize);
+          // react-doctor-disable-next-line react-doctor/async-await-in-loop -- intentionally batches Redis state changes to bound concurrency
           await Promise.all(
             batch.map((providerId) =>
               forceCloseCircuitState(providerId, { reason: "circuit_breaker_disabled" })
@@ -2744,21 +2745,30 @@ export async function getProviderLimitUsage(providerId: number): Promise<
     }
 
     // 动态导入避免循环依赖
-    const { SessionTracker } = await import("@/lib/session-tracker");
-    const {
-      getResetInfo,
-      getResetInfoWithMode,
-      getTimeRangeForPeriod,
-      getTimeRangeForPeriodWithMode,
-    } = await import("@/lib/rate-limit/time-utils");
-    const { RateLimitService } = await import("@/lib/rate-limit");
-    const { sumProviderCostInTimeRange, sumProviderTotalCost } = await import(
-      "@/repository/statistics"
-    );
+    const [
+      { SessionTracker },
+      { getResetInfo, getResetInfoWithMode, getTimeRangeForPeriod, getTimeRangeForPeriodWithMode },
+      { RateLimitService },
+      { sumProviderCostInTimeRange, sumProviderTotalCost },
+    ] = await Promise.all([
+      import("@/lib/session-tracker"),
+      import("@/lib/rate-limit/time-utils"),
+      import("@/lib/rate-limit"),
+      import("@/repository/statistics"),
+    ]);
     const limit5hResetMode = provider.limit5hResetMode ?? "rolling";
 
     // 计算各周期的时间范围
-    const [range5h, resetAt5h, rangeDaily, rangeWeekly, rangeMonthly] = await Promise.all([
+    const [
+      range5h,
+      resetAt5h,
+      rangeDaily,
+      rangeWeekly,
+      rangeMonthly,
+      resetDaily,
+      resetWeekly,
+      resetMonthly,
+    ] = await Promise.all([
       getTimeRangeForPeriod("5h"),
       limit5hResetMode === "fixed"
         ? RateLimitService.get5hWindowResetAt(providerId, "provider", limit5hResetMode)
@@ -2770,6 +2780,9 @@ export async function getProviderLimitUsage(providerId: number): Promise<
       ),
       getTimeRangeForPeriod("weekly"),
       getTimeRangeForPeriod("monthly"),
+      getResetInfoWithMode("daily", provider.dailyResetTime, provider.dailyResetMode ?? "fixed"),
+      getResetInfo("weekly"),
+      getResetInfo("monthly"),
     ]);
 
     // 获取金额消费（直接查询数据库，确保配额显示与 DB 一致）
@@ -2790,15 +2803,6 @@ export async function getProviderLimitUsage(providerId: number): Promise<
         sumProviderTotalCost(providerId, provider.totalCostResetAt),
         SessionTracker.getProviderSessionCount(providerId),
       ]);
-
-    // 获取重置时间信息
-    const resetDaily = await getResetInfoWithMode(
-      "daily",
-      provider.dailyResetTime,
-      provider.dailyResetMode ?? "fixed"
-    );
-    const resetWeekly = await getResetInfo("weekly");
-    const resetMonthly = await getResetInfo("monthly");
 
     return {
       ok: true,
@@ -2894,17 +2898,17 @@ export async function getProviderLimitUsageBatch(
     }
 
     // 动态导入避免循环依赖
-    const { SessionTracker } = await import("@/lib/session-tracker");
-    const {
-      getResetInfo,
-      getResetInfoWithMode,
-      getTimeRangeForPeriod,
-      getTimeRangeForPeriodWithMode,
-    } = await import("@/lib/rate-limit/time-utils");
-    const { RateLimitService } = await import("@/lib/rate-limit");
-    const { sumProviderCostInTimeRange, sumProviderTotalCost } = await import(
-      "@/repository/statistics"
-    );
+    const [
+      { SessionTracker },
+      { getResetInfo, getResetInfoWithMode, getTimeRangeForPeriod, getTimeRangeForPeriodWithMode },
+      { RateLimitService },
+      { sumProviderCostInTimeRange, sumProviderTotalCost },
+    ] = await Promise.all([
+      import("@/lib/session-tracker"),
+      import("@/lib/rate-limit/time-utils"),
+      import("@/lib/rate-limit"),
+      import("@/repository/statistics"),
+    ]);
 
     const providerIds = providers.map((p) => p.id);
 
@@ -2918,84 +2922,91 @@ export async function getProviderLimitUsageBatch(
       getTimeRangeForPeriod("monthly"),
     ]);
 
-    // 组装结果
-    for (const provider of providers) {
-      // 获取该供应商的 daily 时间范围（根据其 dailyResetMode 配置）
-      const dailyResetMode = (provider.dailyResetMode ?? "fixed") as "fixed" | "rolling";
-      const limit5hResetMode = (provider.limit5hResetMode ?? "rolling") as "fixed" | "rolling";
-      const rangeDaily = await getTimeRangeForPeriodWithMode(
-        "daily",
-        provider.dailyResetTime ?? undefined,
-        dailyResetMode
-      );
+    const usageEntries = await Promise.all(
+      providers.map(async (provider) => {
+        // 获取该供应商的 daily 时间范围（根据其 dailyResetMode 配置）
+        const dailyResetMode = (provider.dailyResetMode ?? "fixed") as "fixed" | "rolling";
+        const limit5hResetMode = (provider.limit5hResetMode ?? "rolling") as "fixed" | "rolling";
+        const rangeDaily = await getTimeRangeForPeriodWithMode(
+          "daily",
+          provider.dailyResetTime ?? undefined,
+          dailyResetMode
+        );
 
-      // 并行查询该供应商的各周期消费（直接查询数据库）
-      const [cost5h, resetAt5h, costDaily, costWeekly, costMonthly, totalCost] = await Promise.all([
-        limit5hResetMode === "fixed"
-          ? RateLimitService.getCurrentCost(
-              provider.id,
-              "provider",
-              "5h",
-              undefined,
-              limit5hResetMode
-            )
-          : sumProviderCostInTimeRange(provider.id, range5h.startTime, range5h.endTime),
-        limit5hResetMode === "fixed"
-          ? RateLimitService.get5hWindowResetAt(provider.id, "provider", limit5hResetMode)
-          : Promise.resolve(null),
-        sumProviderCostInTimeRange(provider.id, rangeDaily.startTime, rangeDaily.endTime),
-        sumProviderCostInTimeRange(provider.id, rangeWeekly.startTime, rangeWeekly.endTime),
-        sumProviderCostInTimeRange(provider.id, rangeMonthly.startTime, rangeMonthly.endTime),
-        sumProviderTotalCost(provider.id, provider.totalCostResetAt ?? null),
-      ]);
+        // 并行查询该供应商的各周期消费（直接查询数据库）
+        const [cost5h, resetAt5h, costDaily, costWeekly, costMonthly, totalCost] =
+          await Promise.all([
+            limit5hResetMode === "fixed"
+              ? RateLimitService.getCurrentCost(
+                  provider.id,
+                  "provider",
+                  "5h",
+                  undefined,
+                  limit5hResetMode
+                )
+              : sumProviderCostInTimeRange(provider.id, range5h.startTime, range5h.endTime),
+            limit5hResetMode === "fixed"
+              ? RateLimitService.get5hWindowResetAt(provider.id, "provider", limit5hResetMode)
+              : Promise.resolve(null),
+            sumProviderCostInTimeRange(provider.id, rangeDaily.startTime, rangeDaily.endTime),
+            sumProviderCostInTimeRange(provider.id, rangeWeekly.startTime, rangeWeekly.endTime),
+            sumProviderCostInTimeRange(provider.id, rangeMonthly.startTime, rangeMonthly.endTime),
+            sumProviderTotalCost(provider.id, provider.totalCostResetAt ?? null),
+          ]);
 
-      const sessionCount = sessionCountMap.get(provider.id) || 0;
+        const sessionCount = sessionCountMap.get(provider.id) || 0;
 
-      // 获取重置时间信息
-      const resetDaily = await getResetInfoWithMode(
-        "daily",
-        provider.dailyResetTime ?? undefined,
-        dailyResetMode
-      );
-      const resetWeekly = await getResetInfo("weekly");
-      const resetMonthly = await getResetInfo("monthly");
+        // 获取重置时间信息
+        const [resetDaily, resetWeekly, resetMonthly] = await Promise.all([
+          getResetInfoWithMode("daily", provider.dailyResetTime ?? undefined, dailyResetMode),
+          getResetInfo("weekly"),
+          getResetInfo("monthly"),
+        ]);
 
-      result.set(provider.id, {
-        cost5h: {
-          current: cost5h,
-          limit: provider.limit5hUsd ?? null,
-          resetInfo:
-            limit5hResetMode === "rolling"
-              ? "滚动窗口（5 小时）"
-              : resetAt5h
-                ? `固定窗口（重置于 ${resetAt5h.toISOString()}）`
-                : "固定窗口（等待首次成功记账）",
-        },
-        costDaily: {
-          current: costDaily,
-          limit: provider.limitDailyUsd ?? null,
-          resetAt: resetDaily.type === "rolling" ? undefined : resetDaily.resetAt!,
-        },
-        costWeekly: {
-          current: costWeekly,
-          limit: provider.limitWeeklyUsd ?? null,
-          resetAt: resetWeekly.resetAt!,
-        },
-        costMonthly: {
-          current: costMonthly,
-          limit: provider.limitMonthlyUsd ?? null,
-          resetAt: resetMonthly.resetAt!,
-        },
-        limitTotalUsd: {
-          current: totalCost,
-          limit: provider.limitTotalUsd ?? null,
-          resetAt: provider.totalCostResetAt ?? undefined,
-        },
-        concurrentSessions: {
-          current: sessionCount,
-          limit: provider.limitConcurrentSessions || 0,
-        },
-      });
+        return [
+          provider.id,
+          {
+            cost5h: {
+              current: cost5h,
+              limit: provider.limit5hUsd ?? null,
+              resetInfo:
+                limit5hResetMode === "rolling"
+                  ? "滚动窗口（5 小时）"
+                  : resetAt5h
+                    ? `固定窗口（重置于 ${resetAt5h.toISOString()}）`
+                    : "固定窗口（等待首次成功记账）",
+            },
+            costDaily: {
+              current: costDaily,
+              limit: provider.limitDailyUsd ?? null,
+              resetAt: resetDaily.type === "rolling" ? undefined : resetDaily.resetAt!,
+            },
+            costWeekly: {
+              current: costWeekly,
+              limit: provider.limitWeeklyUsd ?? null,
+              resetAt: resetWeekly.resetAt!,
+            },
+            costMonthly: {
+              current: costMonthly,
+              limit: provider.limitMonthlyUsd ?? null,
+              resetAt: resetMonthly.resetAt!,
+            },
+            limitTotalUsd: {
+              current: totalCost,
+              limit: provider.limitTotalUsd ?? null,
+              resetAt: provider.totalCostResetAt ?? undefined,
+            },
+            concurrentSessions: {
+              current: sessionCount,
+              limit: provider.limitConcurrentSessions || 0,
+            },
+          },
+        ] as const;
+      })
+    );
+
+    for (const [providerId, usage] of usageEntries) {
+      result.set(providerId, usage);
     }
 
     logger.debug(`getProviderLimitUsageBatch: 批量获取 ${providers.length} 个供应商限额数据完成`);
@@ -3617,6 +3628,7 @@ async function parseStreamResponse(response: Response): Promise<StreamParseResul
 
   try {
     while (true) {
+      // react-doctor-disable-next-line react-doctor/async-await-in-loop -- ReadableStream chunks must be consumed in order
       const { done, value } = await reader.read();
       if (done) break;
 
@@ -5191,12 +5203,12 @@ async function fetchGeminiModels(
     // Gemini 模型名称格式: "models/gemini-pro" -> "gemini-pro"
     // 注意：部分代理返回 supportedGenerationMethods 为 null，此时不过滤
     const models = result.models
-      .filter(
-        (m) =>
-          !m.supportedGenerationMethods || m.supportedGenerationMethods.includes("generateContent")
+      .flatMap((m) =>
+        !m.supportedGenerationMethods || m.supportedGenerationMethods.includes("generateContent")
+          ? [m.name.replace(/^models\//, "")]
+          : []
       )
-      .map((m) => m.name.replace(/^models\//, ""))
-      .sort();
+      .toSorted();
 
     return buildSuccessResult(models, "fetchGeminiModels");
   } catch (error) {
@@ -5395,12 +5407,17 @@ export async function reclusterProviderVendors(args: {
     const providerMap = new Map(allProviders.map((p) => [p.id, p]));
 
     // Calculate new vendor key for each provider
-    for (const provider of allProviders) {
-      const newVendorKey = await computeVendorKey({
-        providerUrl: provider.url,
-        websiteUrl: provider.websiteUrl,
-      });
+    const providerVendorKeyEntries = await Promise.all(
+      allProviders.map(async (provider) => ({
+        provider,
+        newVendorKey: await computeVendorKey({
+          providerUrl: provider.url,
+          websiteUrl: provider.websiteUrl,
+        }),
+      }))
+    );
 
+    for (const { provider, newVendorKey } of providerVendorKeyEntries) {
       if (!newVendorKey) {
         skippedInvalidUrl++;
         continue;
@@ -5456,6 +5473,7 @@ export async function reclusterProviderVendors(args: {
           if (!provider) continue;
 
           // Get or create new vendor
+          // react-doctor-disable-next-line react-doctor/async-await-in-loop -- transaction steps share one tx and must preserve deterministic write order
           const newVendorId = await getOrCreateProviderVendorIdFromUrls(
             {
               providerUrl: provider.url,
@@ -5465,6 +5483,7 @@ export async function reclusterProviderVendors(args: {
           );
 
           // Update provider's vendorId
+          // react-doctor-disable-next-line react-doctor/async-await-in-loop -- transaction steps share one tx and must preserve deterministic write order
           await tx
             .update(providersTable)
             .set({ providerVendorId: newVendorId, updatedAt: new Date() })
@@ -5476,16 +5495,18 @@ export async function reclusterProviderVendors(args: {
       await backfillProviderEndpointsFromProviders();
 
       // Cleanup empty vendors
-      for (const oldVendorId of oldVendorIds) {
-        try {
-          await tryDeleteProviderVendorIfEmpty(oldVendorId);
-        } catch (error) {
-          logger.warn("reclusterProviderVendors:vendor_cleanup_failed", {
-            vendorId: oldVendorId,
-            error: error instanceof Error ? error.message : String(error),
-          });
-        }
-      }
+      await Promise.all(
+        Array.from(oldVendorIds, async (oldVendorId) => {
+          try {
+            await tryDeleteProviderVendorIfEmpty(oldVendorId);
+          } catch (error) {
+            logger.warn("reclusterProviderVendors:vendor_cleanup_failed", {
+              vendorId: oldVendorId,
+              error: error instanceof Error ? error.message : String(error),
+            });
+          }
+        })
+      );
 
       // Publish cache invalidation
       try {

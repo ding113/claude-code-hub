@@ -14,7 +14,12 @@ export function deepEquals(a: unknown, b: unknown): boolean {
   // 4. 数组比较
   if (Array.isArray(a) && Array.isArray(b)) {
     if (a.length !== b.length) return false;
-    return a.every((item, i) => deepEquals(item, b[i]));
+    for (let i = 0; i < a.length; i++) {
+      if (!deepEquals(a[i], b[i])) {
+        return false;
+      }
+    }
+    return true;
   }
 
   // 5. 数组和对象的类型区分
@@ -26,11 +31,18 @@ export function deepEquals(a: unknown, b: unknown): boolean {
     const keysB = Object.keys(b).sort();
 
     if (keysA.length !== keysB.length) return false;
-    if (!keysA.every((k, i) => k === keysB[i])) return false;
+    for (let i = 0; i < keysA.length; i++) {
+      if (keysA[i] !== keysB[i]) {
+        return false;
+      }
+    }
 
-    return keysA.every((key) =>
-      deepEquals((a as Record<string, unknown>)[key], (b as Record<string, unknown>)[key])
-    );
+    for (const key of keysA) {
+      if (!deepEquals((a as Record<string, unknown>)[key], (b as Record<string, unknown>)[key])) {
+        return false;
+      }
+    }
+    return true;
   }
 
   return false;

@@ -1,7 +1,7 @@
 "use client";
 
 import { AlertTriangle } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffectEvent, useLayoutEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -125,30 +125,24 @@ export function LimitRulePicker({
   const [resetMode, setResetMode] = useState<LimitResetMode>("rolling");
   const [resetTime, setResetTime] = useState("00:00");
   const [error, setError] = useState<string | null>(null);
+  const selectType = useCallback((nextType: LimitType | "") => {
+    setType(nextType);
+    const nextResetConfig = nextType ? getResetConfig(nextType) : null;
+    setResetMode(nextResetConfig?.defaultMode ?? "rolling");
+    setResetTime("00:00");
+  }, []);
+  const initializeOpenState = useEffectEvent(() => {
+    const first = availableTypes[0]?.type ?? "";
+    selectType(type || first);
+    setRawValue("");
+    setError(null);
+  });
 
   // Reset state when dialog opens
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!open) return;
-    const first = availableTypes[0]?.type ?? "";
-    setType((prev) => (prev ? prev : first));
-    setRawValue("");
-    setResetMode("rolling");
-    setResetTime("00:00");
-    setError(null);
+    initializeOpenState();
   }, [open]);
-
-  useEffect(() => {
-    if (!type) return;
-    const resetConfig = getResetConfig(type);
-    if (!resetConfig) {
-      setResetMode("rolling");
-      setResetTime("00:00");
-      return;
-    }
-
-    setResetMode(resetConfig.defaultMode);
-    setResetTime("00:00");
-  }, [type]);
 
   const numericValue = useMemo(() => {
     const trimmed = rawValue.trim();
@@ -203,18 +197,11 @@ export function LimitRulePicker({
           </DialogDescription>
         </DialogHeader>
 
-        <form
-          className="grid gap-4"
-          onSubmit={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            handleSubmit();
-          }}
-        >
+        <form className="grid gap-4" action={handleSubmit}>
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label>{t("fields.type.label", "Limit type")}</Label>
-              <Select value={type} onValueChange={(val) => setType(val as LimitType)}>
+              <Select value={type} onValueChange={(val) => selectType(val as LimitType)}>
                 <SelectTrigger>
                   <SelectValue placeholder={t("fields.type.placeholder", "Select")} />
                 </SelectTrigger>

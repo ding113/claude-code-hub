@@ -76,11 +76,12 @@ export function LanguageSwitcher({ className, size = "sm" }: LanguageSwitcherPro
   const router = useRouter();
   const pathname = usePathname();
   const [isTransitioning, setIsTransitioning] = React.useState(false);
-  const [pendingLocale, setPendingLocale] = React.useState<Locale | null>(null);
+  const pendingLocaleRef = React.useRef<Locale | null>(null);
 
   React.useEffect(() => {
     const storedRefreshTarget = getPendingLocaleRefreshTarget();
-    const refreshTarget = pendingLocale ?? activePendingLocaleRefreshTarget ?? storedRefreshTarget;
+    const refreshTarget =
+      pendingLocaleRef.current ?? activePendingLocaleRefreshTarget ?? storedRefreshTarget;
 
     if (refreshTarget !== currentLocale) {
       return;
@@ -89,9 +90,9 @@ export function LanguageSwitcher({ className, size = "sm" }: LanguageSwitcherPro
     // Locale route 已切换后刷新当前 RSC 树，避免布局与服务端标题继续显示旧语言。
     router.refresh();
     clearPendingLocaleRefreshTarget();
-    setPendingLocale(null);
+    pendingLocaleRef.current = null;
     setIsTransitioning(false);
-  }, [currentLocale, pendingLocale, router]);
+  }, [currentLocale, router]);
 
   const handleLocaleChange = React.useCallback(
     (newLocale: Locale) => {
@@ -100,7 +101,7 @@ export function LanguageSwitcher({ className, size = "sm" }: LanguageSwitcherPro
       }
 
       setIsTransitioning(true);
-      setPendingLocale(newLocale);
+      pendingLocaleRef.current = newLocale;
       setPendingLocaleRefreshTarget(newLocale);
 
       try {
@@ -108,7 +109,7 @@ export function LanguageSwitcher({ className, size = "sm" }: LanguageSwitcherPro
       } catch (error) {
         console.error("Failed to switch locale:", error);
         clearPendingLocaleRefreshTarget();
-        setPendingLocale(null);
+        pendingLocaleRef.current = null;
         setIsTransitioning(false);
       }
     },

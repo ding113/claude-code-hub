@@ -83,7 +83,7 @@ vi.mock("@/drizzle/schema", () => ({
   users: {},
 }));
 
-vi.mock("@/lib/utils/timezone", () => ({
+vi.mock("@/lib/utils/timezone-resolver", () => ({
   resolveSystemTimezone: mocks.resolveSystemTimezone,
 }));
 

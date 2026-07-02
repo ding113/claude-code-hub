@@ -45,15 +45,17 @@ export function RateLimitFilters({
   const t = useTranslations("dashboard.rateLimits.filters");
   const tRateLimits = useTranslations("dashboard.rateLimits");
 
-  const [userId, setUserId] = React.useState<number | undefined>(initialFilters.user_id);
+  const [userId, setUserId] = React.useState<number | undefined>(() => initialFilters.user_id);
   const [providerId, setProviderId] = React.useState<number | undefined>(
-    initialFilters.provider_id
+    () => initialFilters.provider_id
   );
   const [limitType, setLimitType] = React.useState<RateLimitType | undefined>(
-    initialFilters.limit_type
+    () => initialFilters.limit_type
   );
-  const [startTime, setStartTime] = React.useState<Date | undefined>(initialFilters.start_time);
-  const [endTime, setEndTime] = React.useState<Date | undefined>(initialFilters.end_time);
+  const [startTime, setStartTime] = React.useState<Date | undefined>(
+    () => initialFilters.start_time
+  );
+  const [endTime, setEndTime] = React.useState<Date | undefined>(() => initialFilters.end_time);
 
   const [users, setUsers] = React.useState<Array<{ id: number; name: string }>>([]);
   const [providers, setProviders] = React.useState<Array<{ id: number; name: string }>>([]);

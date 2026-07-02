@@ -169,7 +169,7 @@ export function AvailabilityView() {
   const sortedProviders = useMemo(() => {
     if (!data?.providers) return [];
 
-    return [...data.providers].sort((a, b) => {
+    return Array.from(data.providers).toSorted((a, b) => {
       switch (sortBy) {
         case "availability":
           // Unknown status (no data) goes to the end

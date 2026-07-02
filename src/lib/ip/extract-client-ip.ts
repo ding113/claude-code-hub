@@ -65,10 +65,10 @@ function applyRule(source: HeadersLike, rule: IpHeaderRule): string | null {
   const raw = readHeader(source, rule.name);
   if (!raw) return null;
 
-  const entries = raw
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean);
+  const entries = raw.split(",").flatMap((s) => {
+    const trimmed = s.trim();
+    return trimmed ? [trimmed] : [];
+  });
   if (entries.length === 0) return null;
 
   const picked = pickFromChain(entries, rule.pick);

@@ -60,12 +60,12 @@ function createLazyFilterHook<T>(
         setError(null);
         try {
           const result = await fetcher();
-          if (!mountedRef.current) return;
-
-          if (result.ok) {
-            setData(result.data);
-          } else {
-            setError(result.error || "Failed to load data");
+          if (mountedRef.current) {
+            if (result.ok) {
+              setData(result.data);
+            } else {
+              setError(result.error || "Failed to load data");
+            }
           }
         } catch (err) {
           if (!mountedRef.current) return;

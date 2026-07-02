@@ -355,6 +355,7 @@ export async function executeProviderTest(config: ProviderTestConfig): Promise<P
   let fallbackResult: ProviderTestResult | null = null;
   for (const plan of plans) {
     const remainingTimeoutMs = Math.max(1000, deadline - Date.now());
+    // react-doctor-disable-next-line react-doctor/async-await-in-loop -- fallback plans are sequential and depend on previous attempt result
     const result = await runSingleAttempt(
       config,
       plan,

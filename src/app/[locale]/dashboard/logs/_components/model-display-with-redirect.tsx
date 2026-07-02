@@ -78,12 +78,13 @@ export function ModelDisplayWithRedirect({
       <div className="flex flex-col min-w-0 gap-0.5">
         <div className="flex items-center gap-1.5 min-w-0">
           {billingModel ? <ModelVendorIcon modelId={billingModel} /> : null}
-          <span
-            className="truncate max-w-full cursor-pointer hover:underline"
+          <button
+            type="button"
+            className="truncate max-w-full cursor-pointer hover:underline bg-transparent border-0 p-0 text-left"
             onClick={handleCopyModel}
           >
             {billingModel || "-"}
-          </span>
+          </button>
         </div>
         {secondaryLine}
       </div>
@@ -95,9 +96,13 @@ export function ModelDisplayWithRedirect({
     <div className="flex flex-col min-w-0 gap-0.5">
       <div className="flex items-center gap-1.5 min-w-0">
         {billingModel ? <ModelVendorIcon modelId={billingModel} /> : null}
-        <span className="truncate cursor-pointer hover:underline" onClick={handleCopyModel}>
+        <button
+          type="button"
+          className="truncate cursor-pointer hover:underline bg-transparent border-0 p-0 text-left"
+          onClick={handleCopyModel}
+        >
           {billingModel}
-        </span>
+        </button>
         <Badge
           variant="outline"
           className="cursor-pointer text-xs border-blue-300 text-blue-700 dark:border-blue-700 dark:text-blue-300 px-1 shrink-0"

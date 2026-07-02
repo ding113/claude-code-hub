@@ -1,6 +1,6 @@
 "use client";
 
-import { forwardRef, type KeyboardEvent, type ReactNode } from "react";
+import type { KeyboardEvent, ReactNode, Ref } from "react";
 import { cn } from "@/lib/utils";
 
 interface BentoGridProps {
@@ -34,6 +34,7 @@ interface BentoCardProps {
   rowSpan?: 1 | 2 | 3;
   interactive?: boolean;
   onClick?: () => void;
+  ref?: Ref<HTMLDivElement>;
 }
 
 const colSpanClasses = {
@@ -53,54 +54,66 @@ const rowSpanClasses = {
  * Bento Card Component
  * Individual card within the Bento Grid with glassmorphism styling
  */
-export const BentoCard = forwardRef<HTMLDivElement, BentoCardProps>(
-  ({ children, className, colSpan = 1, rowSpan = 1, interactive = false, onClick }, ref) => {
-    const handleKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
-      if (interactive && onClick && (e.key === "Enter" || e.key === " ")) {
-        e.preventDefault();
-        onClick();
+export function BentoCard({
+  children,
+  className,
+  colSpan = 1,
+  rowSpan = 1,
+  interactive = false,
+  onClick,
+  ref,
+}: BentoCardProps) {
+  const isInteractive = interactive && !!onClick;
+  const handleKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+    if (isInteractive && (e.key === "Enter" || e.key === " ")) {
+      e.preventDefault();
+      onClick();
+    }
+  };
+  const interactiveProps = isInteractive
+    ? {
+        onClick,
+        onKeyDown: handleKeyDown,
+        role: "button" as const,
+        tabIndex: 0,
       }
-    };
+    : {};
 
-    return (
-      <div
-        ref={ref}
-        onClick={onClick}
-        onKeyDown={interactive ? handleKeyDown : undefined}
-        role={interactive ? "button" : undefined}
-        tabIndex={interactive ? 0 : undefined}
-        className={cn(
-          // Base styles - Glass morphism (subtle)
-          "relative overflow-hidden rounded-2xl",
-          "bg-card/60 dark:bg-[rgba(20,20,23,0.5)]",
-          "backdrop-blur-lg",
-          "border border-border/50 dark:border-white/[0.08]",
-          "shadow-sm",
-          "p-4 md:p-5",
-          // Inner light gradient
-          "before:absolute before:inset-0 before:bg-gradient-to-b before:from-white/[0.02] before:to-transparent before:pointer-events-none before:z-[1]",
-          // Transitions
-          "transition-all duration-300 ease-out",
-          // Hover effects for interactive cards
-          interactive && [
-            "cursor-pointer",
-            "hover:border-primary/20 hover:shadow-md",
-            "hover:-translate-y-0.5",
-            "active:scale-[0.99]",
-          ],
-          // Group for child hover effects
-          "group",
-          // Span classes
-          colSpanClasses[colSpan],
-          rowSpanClasses[rowSpan],
-          className
-        )}
-      >
-        {/* Content wrapper to ensure z-index above pseudo-element */}
-        <div className="relative z-10 h-full">{children}</div>
-      </div>
-    );
-  }
-);
+  return (
+    <div
+      ref={ref}
+      {...interactiveProps}
+      className={cn(
+        // Base styles - Glass morphism (subtle)
+        "relative overflow-hidden rounded-2xl",
+        "bg-card/60 dark:bg-[rgba(20,20,23,0.5)]",
+        "backdrop-blur-lg",
+        "border border-border/50 dark:border-white/[0.08]",
+        "shadow-sm",
+        "p-4 md:p-5",
+        // Inner light gradient
+        "before:absolute before:inset-0 before:bg-gradient-to-b before:from-white/[0.02] before:to-transparent before:pointer-events-none before:z-[1]",
+        // Transitions
+        "transition-all duration-300 ease-out",
+        // Hover effects for interactive cards
+        interactive && [
+          "cursor-pointer",
+          "hover:border-primary/20 hover:shadow-md",
+          "hover:-translate-y-0.5",
+          "active:scale-[0.99]",
+        ],
+        // Group for child hover effects
+        "group",
+        // Span classes
+        colSpanClasses[colSpan],
+        rowSpanClasses[rowSpan],
+        className
+      )}
+    >
+      {/* Content wrapper to ensure z-index above pseudo-element */}
+      <div className="relative z-10 h-full">{children}</div>
+    </div>
+  );
+}
 
 BentoCard.displayName = "BentoCard";

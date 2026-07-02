@@ -5,6 +5,7 @@ import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LeaderboardView } from "@/app/[locale]/dashboard/leaderboard/_components/leaderboard-view";
+import { createTestQueryClient, withTestQueryClient } from "../../helpers/react-query";
 
 const fetchMock = vi.fn<typeof fetch>();
 const { getAllUserTagsMock, getAllUserKeyGroupsMock } = vi.hoisted(() => ({
@@ -25,6 +26,11 @@ vi.mock("next-intl", () => ({
 }));
 
 vi.mock("@/actions/users", () => ({
+  getAllUserTags: getAllUserTagsMock,
+  getAllUserKeyGroups: getAllUserKeyGroupsMock,
+}));
+
+vi.mock("@/lib/api-client/v1/actions/users", () => ({
   getAllUserTags: getAllUserTagsMock,
   getAllUserKeyGroups: getAllUserKeyGroupsMock,
 }));
@@ -91,6 +97,7 @@ function getRequestedScopes() {
 describe("LeaderboardView grouped tabs", () => {
   let container: HTMLDivElement | null = null;
   let root: ReturnType<typeof createRoot> | null = null;
+  let queryClient: ReturnType<typeof createTestQueryClient>;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -99,6 +106,7 @@ describe("LeaderboardView grouped tabs", () => {
     container = document.createElement("div");
     document.body.appendChild(container);
     root = createRoot(container);
+    queryClient = createTestQueryClient();
 
     fetchMock.mockImplementation(
       async () =>
@@ -116,6 +124,7 @@ describe("LeaderboardView grouped tabs", () => {
       act(() => root!.unmount());
       root = null;
     }
+    queryClient.clear();
     if (container) {
       container.remove();
       container = null;
@@ -127,7 +136,7 @@ describe("LeaderboardView grouped tabs", () => {
     searchParamsState.value = new URLSearchParams("scope=user");
 
     await act(async () => {
-      root!.render(<LeaderboardView isAdmin />);
+      root!.render(withTestQueryClient(<LeaderboardView isAdmin />, queryClient));
     });
     await waitForFetchCalls(1);
     await flushUi();
@@ -147,7 +156,7 @@ describe("LeaderboardView grouped tabs", () => {
     searchParamsState.value = new URLSearchParams("scope=userCacheHitRate");
 
     await act(async () => {
-      root!.render(<LeaderboardView isAdmin />);
+      root!.render(withTestQueryClient(<LeaderboardView isAdmin />, queryClient));
     });
     await waitForFetchCalls(1);
     await flushUi();
@@ -169,7 +178,7 @@ describe("LeaderboardView grouped tabs", () => {
     searchParamsState.value = new URLSearchParams("scope=userCacheHitRate");
 
     await act(async () => {
-      root!.render(<LeaderboardView isAdmin />);
+      root!.render(withTestQueryClient(<LeaderboardView isAdmin />, queryClient));
     });
     await waitForFetchCalls(1);
     await flushUi();
@@ -180,8 +189,7 @@ describe("LeaderboardView grouped tabs", () => {
     expect(providerTab).not.toBeNull();
 
     await act(async () => {
-      providerTab!.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
-      providerTab!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      providerTab!.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "Enter" }));
     });
     await waitForFetchCalls(2);
     await flushUi();
@@ -200,7 +208,7 @@ describe("LeaderboardView grouped tabs", () => {
     searchParamsState.value = new URLSearchParams("scope=model");
 
     await act(async () => {
-      root!.render(<LeaderboardView isAdmin />);
+      root!.render(withTestQueryClient(<LeaderboardView isAdmin />, queryClient));
     });
     await waitForFetchCalls(1);
     await flushUi();
@@ -216,7 +224,7 @@ describe("LeaderboardView grouped tabs", () => {
     searchParamsState.value = new URLSearchParams("scope=providerCacheHitRate");
 
     await act(async () => {
-      root!.render(<LeaderboardView isAdmin={false} />);
+      root!.render(withTestQueryClient(<LeaderboardView isAdmin={false} />, queryClient));
     });
     await waitForFetchCalls(1);
     await flushUi();

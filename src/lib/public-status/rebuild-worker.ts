@@ -179,36 +179,38 @@ async function publishPublicStatusProjection(input: {
     rollupSampleCount: input.rollupSampleCount,
   };
 
-  await setWithTtl(
-    input.redis,
-    snapshotTempKey,
-    JSON.stringify(snapshotRecord),
-    TEMP_PROJECTION_TTL_SECONDS
-  );
-  await setWithTtl(
-    input.redis,
-    seriesTempKey,
-    JSON.stringify(seriesRecord),
-    TEMP_PROJECTION_TTL_SECONDS
-  );
-  await setWithTtl(
-    input.redis,
-    snapshotKey,
-    JSON.stringify(snapshotRecord),
-    GENERATION_PROJECTION_TTL_SECONDS
-  );
-  await setWithTtl(
-    input.redis,
-    seriesKey,
-    JSON.stringify(seriesRecord),
-    GENERATION_PROJECTION_TTL_SECONDS
-  );
-  await setWithTtl(
-    input.redis,
-    versionedManifestKey,
-    JSON.stringify(manifestRecord),
-    GENERATION_PROJECTION_TTL_SECONDS
-  );
+  await Promise.all([
+    setWithTtl(
+      input.redis,
+      snapshotTempKey,
+      JSON.stringify(snapshotRecord),
+      TEMP_PROJECTION_TTL_SECONDS
+    ),
+    setWithTtl(
+      input.redis,
+      seriesTempKey,
+      JSON.stringify(seriesRecord),
+      TEMP_PROJECTION_TTL_SECONDS
+    ),
+    setWithTtl(
+      input.redis,
+      snapshotKey,
+      JSON.stringify(snapshotRecord),
+      GENERATION_PROJECTION_TTL_SECONDS
+    ),
+    setWithTtl(
+      input.redis,
+      seriesKey,
+      JSON.stringify(seriesRecord),
+      GENERATION_PROJECTION_TTL_SECONDS
+    ),
+    setWithTtl(
+      input.redis,
+      versionedManifestKey,
+      JSON.stringify(manifestRecord),
+      GENERATION_PROJECTION_TTL_SECONDS
+    ),
+  ]);
   if (typeof input.redis.get === "function") {
     let existingCurrentManifest: { configVersion?: string; coveredTo?: string } | null = null;
     try {

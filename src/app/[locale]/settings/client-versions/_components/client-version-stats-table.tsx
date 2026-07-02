@@ -20,6 +20,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { useClientDate } from "@/hooks/use-client-date";
 import type { ClientVersionStats } from "@/lib/client-version-checker";
 import { getClientTypeDisplayName } from "@/lib/ua-parser";
 import { formatDateDistance } from "@/lib/utils/date-format";
@@ -45,6 +46,7 @@ export function ClientVersionStatsTable({ data }: ClientVersionStatsTableProps) 
   const locale = useLocale();
   const t = useTranslations("settings.clientVersions.table");
   const tCommon = useTranslations("settings.common");
+  const clientNow = useClientDate();
 
   // Calculate totals
   const totalClients = data.length;
@@ -162,7 +164,9 @@ export function ClientVersionStatsTable({ data }: ClientVersionStatsTableProps) 
                           </code>
                         </TableCell>
                         <TableCell className="text-xs text-muted-foreground">
-                          {formatDateDistance(new Date(user.lastSeen), new Date(), locale)}
+                          {clientNow
+                            ? formatDateDistance(new Date(user.lastSeen), clientNow, locale)
+                            : String(user.lastSeen)}
                         </TableCell>
                         <TableCell>
                           {user.isLatest ? (

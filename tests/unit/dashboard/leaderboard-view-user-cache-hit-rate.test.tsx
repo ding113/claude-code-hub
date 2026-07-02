@@ -5,6 +5,7 @@ import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LeaderboardView } from "@/app/[locale]/dashboard/leaderboard/_components/leaderboard-view";
+import { createTestQueryClient, withTestQueryClient } from "../../helpers/react-query";
 
 const fetchMock = vi.fn<typeof fetch>();
 const { getAllUserTagsMock, getAllUserKeyGroupsMock } = vi.hoisted(() => ({
@@ -29,6 +30,11 @@ vi.mock("@/actions/users", () => ({
   getAllUserKeyGroups: getAllUserKeyGroupsMock,
 }));
 
+vi.mock("@/lib/api-client/v1/actions/users", () => ({
+  getAllUserTags: getAllUserTagsMock,
+  getAllUserKeyGroups: getAllUserKeyGroupsMock,
+}));
+
 vi.mock("@/app/[locale]/settings/providers/_components/provider-type-filter", () => ({
   ProviderTypeFilter: ({ value }: { value: string }) => (
     <div data-testid="provider-filter">{value}</div>
@@ -48,6 +54,7 @@ const globalFetch = global.fetch;
 describe("LeaderboardView user cache hit rate scope", () => {
   let container: HTMLDivElement | null = null;
   let root: ReturnType<typeof createRoot> | null = null;
+  let queryClient: ReturnType<typeof createTestQueryClient>;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -57,6 +64,7 @@ describe("LeaderboardView user cache hit rate scope", () => {
     container = document.createElement("div");
     document.body.appendChild(container);
     root = createRoot(container);
+    queryClient = createTestQueryClient();
 
     fetchMock.mockImplementation(async (input) => {
       const url = String(input);
@@ -103,6 +111,7 @@ describe("LeaderboardView user cache hit rate scope", () => {
       act(() => root!.unmount());
       root = null;
     }
+    queryClient.clear();
     if (container) {
       container.remove();
       container = null;
@@ -112,7 +121,7 @@ describe("LeaderboardView user cache hit rate scope", () => {
 
   it("fetches and renders user cache hit rate leaderboard for admin", async () => {
     await act(async () => {
-      root!.render(<LeaderboardView isAdmin />);
+      root!.render(withTestQueryClient(<LeaderboardView isAdmin />, queryClient));
     });
 
     expect(fetchMock).toHaveBeenCalled();
@@ -171,7 +180,7 @@ describe("LeaderboardView user cache hit rate scope", () => {
     });
 
     await act(async () => {
-      root!.render(<LeaderboardView isAdmin />);
+      root!.render(withTestQueryClient(<LeaderboardView isAdmin />, queryClient));
     });
 
     const expandButton = container!.querySelector(

@@ -22,7 +22,7 @@ vi.mock("@/lib/logger", () => ({
 }));
 
 import { logger } from "@/lib/logger";
-import { registerCrashDiagnostics } from "@/instrumentation";
+import { registerCrashDiagnostics } from "@/instrumentation-node";
 
 type CrashHandler = (arg: unknown) => void;
 

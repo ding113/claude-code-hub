@@ -2,7 +2,7 @@
 
 import { Check, ChevronsUpDown } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -48,6 +48,7 @@ export function IdentityFilters({
   onUsersChange,
 }: IdentityFiltersProps) {
   const t = useTranslations("dashboard");
+  const userComboboxContentId = useId();
 
   const [isUsersLoading, setIsUsersLoading] = useState(false);
   const [userSearchTerm, setUserSearchTerm] = useState("");
@@ -59,13 +60,20 @@ export function IdentityFilters({
 
   const [keys, setKeys] = useState<Key[]>(initialKeys);
   const [userPopoverOpen, setUserPopoverOpen] = useState(false);
+  const initialLoadRef = useRef({
+    initialKeysLength: initialKeys.length,
+    isAdmin,
+    userId: filters.userId,
+  });
+  const onKeysChangeRef = useRef(onKeysChange);
+  onKeysChangeRef.current = onKeysChange;
 
   const userMap = useMemo(
     () => new Map(availableUsers.map((user) => [user.id, user.name])),
     [availableUsers]
   );
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     isMountedRef.current = true;
     return () => {
       isMountedRef.current = false;
@@ -80,14 +88,15 @@ export function IdentityFilters({
 
       try {
         const result = await searchUsersForFilter(term);
-        if (!isMountedRef.current || requestId !== userSearchRequestIdRef.current) return;
 
-        if (result.ok) {
-          setAvailableUsers(result.data);
-          onUsersChange?.(result.data);
-        } else {
-          console.error("Failed to load users for filter:", result.error);
-          setAvailableUsers([]);
+        if (isMountedRef.current && requestId === userSearchRequestIdRef.current) {
+          if (result.ok) {
+            setAvailableUsers(result.data);
+            onUsersChange?.(result.data);
+          } else {
+            console.error("Failed to load users for filter:", result.error);
+            setAvailableUsers([]);
+          }
         }
       } catch (error) {
         if (!isMountedRef.current || requestId !== userSearchRequestIdRef.current) return;
@@ -103,12 +112,12 @@ export function IdentityFilters({
     [onUsersChange]
   );
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!isAdmin) return;
     void loadUsersForFilter(undefined);
   }, [isAdmin, loadUsersForFilter]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!isAdmin || !userPopoverOpen) return;
 
     const term = debouncedUserSearchTerm.trim() || undefined;
@@ -117,29 +126,29 @@ export function IdentityFilters({
     void loadUsersForFilter(term);
   }, [isAdmin, userPopoverOpen, debouncedUserSearchTerm, loadUsersForFilter]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!isAdmin) return;
     if (!userPopoverOpen) {
       setUserSearchTerm("");
     }
   }, [isAdmin, userPopoverOpen]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (initialKeys.length > 0) {
       setKeys(initialKeys);
     }
   }, [initialKeys]);
 
   // Load initial keys if userId is set
-  // biome-ignore lint/correctness/useExhaustiveDependencies: intentionally run only on mount
-  useEffect(() => {
+  useLayoutEffect(() => {
     const loadInitialKeys = async () => {
-      if (isAdmin && filters.userId && initialKeys.length === 0) {
+      const initialLoad = initialLoadRef.current;
+      if (initialLoad.isAdmin && initialLoad.userId && initialLoad.initialKeysLength === 0) {
         try {
-          const keysResult = await getKeys(filters.userId);
+          const keysResult = await getKeys(initialLoad.userId);
           if (keysResult.ok && keysResult.data) {
             setKeys(keysResult.data);
-            onKeysChange?.(keysResult.data);
+            onKeysChangeRef.current?.(keysResult.data);
           }
         } catch (error) {
           console.error("Failed to load initial keys:", error);
@@ -190,6 +199,7 @@ export function IdentityFilters({
                 variant="outline"
                 role="combobox"
                 aria-expanded={userPopoverOpen}
+                aria-controls={userComboboxContentId}
                 type="button"
                 className="w-full justify-between"
               >
@@ -204,6 +214,7 @@ export function IdentityFilters({
               </Button>
             </PopoverTrigger>
             <PopoverContent
+              id={userComboboxContentId}
               className="w-[320px] p-0"
               align="start"
               onWheel={(e) => e.stopPropagation()}

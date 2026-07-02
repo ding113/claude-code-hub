@@ -1,5 +1,3 @@
-"use server";
-
 import { and, desc, eq, gte, lt, lte, or, sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import { auditLog } from "@/drizzle/schema";

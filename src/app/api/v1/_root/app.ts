@@ -112,8 +112,10 @@ const csrfRoute = createRoute({
 });
 
 app.openapi(csrfRoute, async (c) => {
-  const { resolveAuth } = await import("@/lib/api/v1/_shared/auth-middleware");
-  const { createCsrfToken } = await import("@/lib/api/v1/_shared/csrf");
+  const [{ resolveAuth }, { createCsrfToken }] = await Promise.all([
+    import("@/lib/api/v1/_shared/auth-middleware"),
+    import("@/lib/api/v1/_shared/csrf"),
+  ]);
   const auth = await resolveAuth(c, "read");
   if (auth instanceof Response) {
     withNoStoreHeaders(auth.headers);

@@ -112,7 +112,7 @@ beforeEach(() => {
     sendWebhookMessage: mockSendWebhookMessage,
   }));
 
-  vi.doMock("@/lib/utils/timezone", () => ({
+  vi.doMock("@/lib/utils/timezone-resolver", () => ({
     resolveSystemTimezone: vi.fn(async () => "UTC"),
   }));
 

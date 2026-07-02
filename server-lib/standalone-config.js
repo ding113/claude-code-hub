@@ -16,6 +16,7 @@
 "use strict";
 
 const path = require("node:path");
+const fs = require("node:fs");
 
 function applyStandaloneNextConfig({ rootDir, env, log } = {}) {
   if (!env || typeof env !== "object") {
@@ -33,11 +34,9 @@ function applyStandaloneNextConfig({ rootDir, env, log } = {}) {
 
   let manifest;
   try {
-    // Use a fresh require each call so unit tests can swap fixtures via
+    // Read the manifest fresh each call so unit tests can swap fixtures via
     // tmp directories without fighting Node's module cache.
-    delete require.cache[require.resolve(manifestPath)];
-    // eslint-disable-next-line global-require
-    manifest = require(manifestPath);
+    manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
   } catch (err) {
     if (typeof log === "function") {
       log("warn", "standalone_config_load_failed", {

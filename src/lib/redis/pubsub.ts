@@ -48,19 +48,22 @@ async function resubscribeAll(sub: Redis): Promise<void> {
 
     if (channelsToSubscribe.length === 0) return;
 
-    let successCount = 0;
-    for (const channel of channelsToSubscribe) {
-      try {
-        await sub.subscribe(channel);
-        subscribedChannels.add(channel);
-        successCount++;
-      } catch (error) {
-        logger.warn("[RedisPubSub] Failed to resubscribe channel after reconnect", {
-          channel,
-          error,
-        });
-      }
-    }
+    const subscribeResults = await Promise.all(
+      channelsToSubscribe.map(async (channel) => {
+        try {
+          await sub.subscribe(channel);
+          subscribedChannels.add(channel);
+          return true;
+        } catch (error) {
+          logger.warn("[RedisPubSub] Failed to resubscribe channel after reconnect", {
+            channel,
+            error,
+          });
+          return false;
+        }
+      })
+    );
+    const successCount = subscribeResults.filter(Boolean).length;
 
     if (successCount > 0) {
       logger.info("[RedisPubSub] Resubscribed to channels after reconnect", {

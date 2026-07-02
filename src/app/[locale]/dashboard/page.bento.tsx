@@ -8,14 +8,15 @@ import { DashboardOverviewSkeleton } from "./_components/dashboard-skeletons";
 export const dynamic = "force-dynamic";
 
 export default async function DashboardPage({ params }: { params: Promise<{ locale: string }> }) {
-  const { locale } = await params;
-
-  const hasPrices = await hasPriceTable();
+  const [{ locale }, hasPrices, session] = await Promise.all([
+    params,
+    hasPriceTable(),
+    getSession(),
+  ]);
   if (!hasPrices) {
     return redirect({ href: "/settings/prices?required=true", locale });
   }
 
-  const session = await getSession();
   const isAdmin = session?.user?.role === "admin";
 
   return (

@@ -510,22 +510,24 @@ export function UsageLogsTable({
                                         {formatCurrency(hedgeTable.winnerCost, currencyCode, 6)}
                                       </span>
                                     </div>
-                                    {hedgeTable.attempts
-                                      .filter((attempt) => attempt.kind === "loser")
-                                      .map((loser) => (
-                                        <div
-                                          key={`${loser.providerId}-${loser.attemptNumber}`}
-                                          className="flex justify-between gap-3 text-rose-600 dark:text-rose-400"
-                                        >
-                                          <span className="truncate">
-                                            {loser.providerName ??
-                                              t("logs.billingDetails.hedgeLoserShort")}
-                                          </span>
-                                          <span className="font-mono">
-                                            {formatCurrency(loser.costUsd, currencyCode, 6)}
-                                          </span>
-                                        </div>
-                                      ))}
+                                    {hedgeTable.attempts.flatMap((loser) =>
+                                      loser.kind === "loser"
+                                        ? [
+                                            <div
+                                              key={`${loser.providerId}-${loser.attemptNumber}`}
+                                              className="flex justify-between gap-3 text-rose-600 dark:text-rose-400"
+                                            >
+                                              <span className="truncate">
+                                                {loser.providerName ??
+                                                  t("logs.billingDetails.hedgeLoserShort")}
+                                              </span>
+                                              <span className="font-mono">
+                                                {formatCurrency(loser.costUsd, currencyCode, 6)}
+                                              </span>
+                                            </div>,
+                                          ]
+                                        : []
+                                    )}
                                     <div className="flex justify-between gap-3 border-t pt-1 text-muted-foreground">
                                       <span>{t("logs.billingDetails.hedgeTokenTotal")}</span>
                                       <span className="font-mono">

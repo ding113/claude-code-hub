@@ -16,8 +16,10 @@ export default async function AvailabilityPage({
   params: Promise<{ locale: string }>;
 }) {
   const { locale } = await params;
-  const t = await getTranslations({ locale, namespace: "dashboard" });
-  const session = await getSession();
+  const [t, session] = await Promise.all([
+    getTranslations({ locale, namespace: "dashboard" }),
+    getSession(),
+  ]);
 
   // Only admin can access availability monitoring
   const isAdmin = session?.user.role === "admin";

@@ -5,7 +5,16 @@ const mockUseProviderForm = vi.fn();
 
 vi.mock("next-intl", () => ({ useTranslations: () => (key: string) => key }));
 vi.mock("framer-motion", () => ({
-  motion: { div: ({ children, ...rest }: any) => <div {...rest}>{children}</div> },
+  m: {
+    div: ({ animate, children, initial, transition, variants, ...rest }: any) => (
+      <div {...rest}>{children}</div>
+    ),
+  },
+  motion: {
+    div: ({ animate, children, initial, transition, variants, ...rest }: any) => (
+      <div {...rest}>{children}</div>
+    ),
+  },
 }));
 vi.mock("lucide-react", () => {
   const stub = ({ className }: any) => <span data-testid="icon" className={className} />;

@@ -2,6 +2,7 @@ import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { createRoot } from "react-dom/client";
 import { act } from "react";
 import LoginPage from "@/app/[locale]/login/page";
+import { createTestQueryClient, withTestQueryClient } from "../../helpers/react-query";
 
 // Mocks
 const mockPush = vi.hoisted(() => vi.fn());
@@ -36,11 +37,13 @@ vi.mock("next-themes", () => ({
 describe("LoginPage Visual Regression", () => {
   let container: HTMLDivElement;
   let root: ReturnType<typeof createRoot>;
+  let queryClient: ReturnType<typeof createTestQueryClient>;
 
   beforeEach(() => {
     container = document.createElement("div");
     document.body.appendChild(container);
     root = createRoot(container);
+    queryClient = createTestQueryClient();
     vi.clearAllMocks();
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
@@ -52,12 +55,13 @@ describe("LoginPage Visual Regression", () => {
     act(() => {
       root.unmount();
     });
+    queryClient.clear();
     document.body.removeChild(container);
   });
 
   const render = async () => {
     await act(async () => {
-      root.render(<LoginPage />);
+      root.render(withTestQueryClient(<LoginPage />, queryClient));
     });
   };
 

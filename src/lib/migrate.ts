@@ -128,6 +128,7 @@ async function repairDrizzleMigrationsCreatedAt(input: {
   }
 
   for (const fix of pendingFixes) {
+    // react-doctor-disable-next-line react-doctor/async-await-in-loop -- migration metadata repair uses one migration client and runs deterministically
     await client`
       UPDATE "drizzle"."__drizzle_migrations"
       SET created_at = ${fix.to}
@@ -163,6 +164,7 @@ export async function runMigrations() {
     // 获取迁移文件路径
     const migrationsFolder = path.join(process.cwd(), "drizzle");
 
+    // react-doctor-disable-next-line react-doctor/async-parallel -- migration repair must complete before migrate reads the migration table
     await ensureDrizzleMigrationsTableExists(migrationClient);
     await repairDrizzleMigrationsCreatedAt({ client: migrationClient, migrationsFolder });
 
@@ -197,6 +199,7 @@ export async function checkDatabaseConnection(retries = 30, delay = 2000): Promi
   for (let i = 0; i < retries; i++) {
     try {
       const client = postgres(process.env.DSN, { max: 1 });
+      // react-doctor-disable-next-line react-doctor/async-await-in-loop -- retry loop must wait between connection attempts
       await client`SELECT 1`;
       await client.end();
       logger.info("Database connection established");

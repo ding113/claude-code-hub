@@ -133,7 +133,7 @@ export async function sumLedgerQuotaCosts(
 
   const caseParts = ranges.map(
     ({ start, end }, i) =>
-      sql`COALESCE(SUM(CASE WHEN ${usageLedger.createdAt} >= ${start} AND ${usageLedger.createdAt} < ${end} THEN ${usageLedger.costUsd} ELSE 0 END), '0') AS ${sql.raw(`r${i}`)}`
+      sql`COALESCE(SUM(CASE WHEN ${usageLedger.createdAt} >= ${start} AND ${usageLedger.createdAt} < ${end} THEN ${usageLedger.costUsd} ELSE 0 END), '0') AS ${sql.identifier(`r${i}`)}`
   );
 
   const selectExpr = sql.join(caseParts, sql`, `);

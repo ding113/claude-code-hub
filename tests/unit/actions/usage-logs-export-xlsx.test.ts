@@ -10,7 +10,7 @@ const exportResultStore = new Map<string, string>();
 
 vi.mock("@/lib/auth", () => ({ getSession: getSessionMock }));
 
-vi.mock("@/lib/utils/timezone", () => ({
+vi.mock("@/lib/utils/timezone-resolver", () => ({
   resolveSystemTimezone: vi.fn(async () => "Asia/Shanghai"),
 }));
 

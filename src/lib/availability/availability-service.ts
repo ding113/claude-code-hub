@@ -43,7 +43,7 @@ const DEFAULT_MAX_BUCKETS = 100;
 const AVAILABILITY_SUCCESS_STATUS_CODE_MIN = 200;
 const AVAILABILITY_SUCCESS_STATUS_CODE_MAX_EXCLUSIVE = 400;
 const FINALIZED_REQUEST_OUTCOME_ALIAS = "successRateOutcome" as const;
-const FINALIZED_REQUEST_OUTCOME_SQL = sql.raw(`"${FINALIZED_REQUEST_OUTCOME_ALIAS}"`);
+const FINALIZED_REQUEST_OUTCOME_SQL = sql.identifier(FINALIZED_REQUEST_OUTCOME_ALIAS);
 const COUNTABLE_REQUEST_OUTCOME_SQL = sql`${FINALIZED_REQUEST_OUTCOME_SQL} IN ('success', 'failure')`;
 
 // Keep the hard cap independent from the UI/API default so future default tuning does not silently relax/tighten the guardrail.
@@ -114,7 +114,7 @@ function buildTimestampUpperBound(
 }
 
 function buildRelativeNowLowerBound(column: typeof messageRequest.createdAt, minutes: number) {
-  return sql`${column} >= NOW() - (${sql.raw(String(minutes))} * INTERVAL '1 minute')`;
+  return sql`${column} >= NOW() - (${minutes} * INTERVAL '1 minute')`;
 }
 
 function buildNowUpperBound(column: typeof messageRequest.createdAt) {

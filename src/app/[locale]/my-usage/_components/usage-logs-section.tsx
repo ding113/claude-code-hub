@@ -160,6 +160,7 @@ export function UsageLogsSection({
       <div className="rounded-lg border bg-card">
         <CollapsibleTrigger asChild>
           <button
+            type="button"
             className={cn(
               "flex w-full items-center justify-between gap-4 p-4",
               "hover:bg-muted/50 transition-colors",

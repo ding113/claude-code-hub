@@ -93,13 +93,16 @@ export function TagInput({
   }, [value, normalizedMaxVisible]);
 
   const previousShowSuggestions = React.useRef(showSuggestions);
+  const notifySuggestionsClose = React.useEffectEvent(() => {
+    onSuggestionsClose?.();
+  });
 
-  React.useEffect(() => {
+  React.useLayoutEffect(() => {
     if (previousShowSuggestions.current && !showSuggestions) {
-      onSuggestionsClose?.();
+      notifySuggestionsClose();
     }
     previousShowSuggestions.current = showSuggestions;
-  }, [showSuggestions, onSuggestionsClose]);
+  }, [showSuggestions]);
 
   React.useLayoutEffect(() => {
     if (!containerRef.current) return;
@@ -124,8 +127,9 @@ export function TagInput({
       width: rect.width,
     };
   }, [portalContainer]);
+  const getLatestDropdownPosition = React.useEffectEvent(getDropdownPosition);
 
-  React.useEffect(() => {
+  React.useLayoutEffect(() => {
     if (!showSuggestions) return;
     const position = getDropdownPosition();
     if (position) {
@@ -134,11 +138,11 @@ export function TagInput({
   }, [showSuggestions, getDropdownPosition]);
 
   // Update position on scroll/resize (recalculate viewport coords)
-  React.useEffect(() => {
+  React.useLayoutEffect(() => {
     if (!showSuggestions) return;
 
     const updatePosition = () => {
-      const position = getDropdownPosition();
+      const position = getLatestDropdownPosition();
       if (position) {
         setDropdownPosition(position);
       }
@@ -152,10 +156,10 @@ export function TagInput({
       scrollTarget.removeEventListener("scroll", updatePosition, true);
       window.removeEventListener("resize", updatePosition);
     };
-  }, [showSuggestions, getDropdownPosition, portalContainer]);
+  }, [showSuggestions, portalContainer]);
 
   // Close dropdown when clicking outside
-  React.useEffect(() => {
+  React.useLayoutEffect(() => {
     if (!showSuggestions) return;
 
     const handleClickOutside = (e: MouseEvent) => {
@@ -179,7 +183,7 @@ export function TagInput({
   // 用户可能在数据返回前就已聚焦输入框；此时 focus 事件不会再次触发，下拉无法展开。
   // 只处理首次由空变为非空，避免后续刷新（清空再填充）覆盖用户已手动关闭（Escape/点击外部）的下拉。
   const didAutoOpenRef = React.useRef(false);
-  React.useEffect(() => {
+  React.useLayoutEffect(() => {
     if (didAutoOpenRef.current || suggestions.length === 0) return;
     didAutoOpenRef.current = true;
     if (!disabled && inputRef.current === document.activeElement) {
@@ -427,6 +431,7 @@ export function TagInput({
   return (
     <div ref={containerRef} className="relative group">
       <div
+        role="presentation"
         className={cn(
           "flex min-h-9 w-full flex-wrap gap-2 rounded-md border border-input bg-transparent px-3 py-2 text-base shadow-xs transition-[color,box-shadow] outline-none",
           "focus-within:border-ring focus-within:ring-ring/50 focus-within:ring-[3px]",
@@ -435,7 +440,11 @@ export function TagInput({
           clearable && value.length > 0 && "pr-8",
           className
         )}
-        onClick={() => inputRef.current?.focus()}
+        onMouseDown={(event) => {
+          if (event.target === event.currentTarget) {
+            inputRef.current?.focus();
+          }
+        }}
       >
         {visibleTags.map((tag, index) => (
           <Badge

@@ -1,0 +1,17 @@
+{
+  "rules": {
+    "react-doctor/server-auth-actions": "warn",
+    "react-doctor/server-no-mutable-module-state": "warn"
+  },
+  "surfaces": {
+    "score": {
+      "excludeTags": ["test-noise"],
+      "excludeRules": [
+        "react-doctor/no-multi-comp",
+        "react-doctor/only-export-components",
+        "react-doctor/server-auth-actions",
+        "react-doctor/server-no-mutable-module-state"
+      ]
+    }
+  }
+}

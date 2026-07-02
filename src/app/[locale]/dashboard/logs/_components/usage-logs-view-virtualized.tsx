@@ -4,7 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, Expand, Filter, Minimize2, RefreshCw } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { useLocale, useTranslations } from "next-intl";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useEffectEvent, useId, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -75,9 +75,16 @@ function UsageLogsViewContent({
   // 手动刷新计数器：统计汇总面板（非 react-query）依赖它来与列表的手动刷新联动重拉。
   const [statsRefreshKey, setStatsRefreshKey] = useState(0);
   const refreshTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const clearRefreshTimeout = useCallback(() => {
+    if (refreshTimeoutRef.current) {
+      clearTimeout(refreshTimeoutRef.current);
+      refreshTimeoutRef.current = null;
+    }
+  }, []);
 
   const fullscreen = useFullscreen();
   const [isFullscreenOpen, setIsFullscreenOpen] = useState(false);
+  const fullscreenDialogTitleId = useId();
   const [hideProviderColumn, setHideProviderColumn] = useState(false);
   const wasInFullscreenRef = useRef(false);
   const [hiddenColumns, setHiddenColumns] = useState<LogsTableColumn[]>([]);
@@ -174,6 +181,7 @@ function UsageLogsViewContent({
 
     return parsed;
   }, [_params]);
+  const filtersKey = useMemo(() => buildLogsUrlQuery(filters).toString(), [filters]);
 
   const { data: overviewData } = useQuery<OverviewData>({
     queryKey: ["overview-data"],
@@ -188,11 +196,9 @@ function UsageLogsViewContent({
     // 同时刷新底部调用历史（react-query）与顶部统计汇总（refreshKey 触发）。
     setStatsRefreshKey((k) => k + 1);
     await queryClientInstance.invalidateQueries({ queryKey: ["usage-logs-batch"] });
-    if (refreshTimeoutRef.current) {
-      clearTimeout(refreshTimeoutRef.current);
-    }
+    clearRefreshTimeout();
     refreshTimeoutRef.current = setTimeout(() => setIsManualRefreshing(false), 500);
-  }, [queryClientInstance]);
+  }, [clearRefreshTimeout, queryClientInstance]);
 
   const handleEnterFullscreen = useCallback(async () => {
     if (!fullscreen.supported) return;
@@ -212,6 +218,7 @@ function UsageLogsViewContent({
     resetFullscreenState();
     await fullscreen.exit();
   }, [fullscreen, resetFullscreenState]);
+  const exitFullscreenFromEvent = useEffectEvent(handleExitFullscreen);
 
   useEffect(() => {
     if (!isFullscreenOpen) return;
@@ -232,13 +239,13 @@ function UsageLogsViewContent({
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented) return;
       if (event.key === "Escape") {
-        void handleExitFullscreen();
+        void exitFullscreenFromEvent();
       }
     };
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [handleExitFullscreen, isFullscreenOpen]);
+  }, [isFullscreenOpen]);
 
   const handleFilterChange = (newFilters: Omit<typeof filters, "page">) => {
     const query = buildLogsUrlQuery(newFilters);
@@ -247,11 +254,9 @@ function UsageLogsViewContent({
 
   useEffect(() => {
     return () => {
-      if (refreshTimeoutRef.current) {
-        clearTimeout(refreshTimeoutRef.current);
-      }
+      clearRefreshTimeout();
     };
-  }, []);
+  }, [clearRefreshTimeout]);
 
   const statsFilters = filters;
 
@@ -366,6 +371,7 @@ function UsageLogsViewContent({
           <CollapsibleContent forceMount className={cn(!isFilterOpen && "hidden")}>
             <div className="mt-3 rounded-lg border border-border/60 bg-card p-4">
               <UsageLogsFilters
+                key={filtersKey}
                 isAdmin={isAdmin}
                 providers={resolvedProviders}
                 initialKeys={resolvedKeys}
@@ -394,14 +400,18 @@ function UsageLogsViewContent({
       </div>
 
       {isFullscreenOpen ? (
-        <div
-          className="fixed inset-0 z-[70] bg-background flex flex-col"
-          role="dialog"
+        <dialog
+          open
+          className="fixed inset-0 z-[70] m-0 flex max-h-none max-w-none flex-col border-0 bg-background p-0"
           aria-modal="true"
+          aria-labelledby={fullscreenDialogTitleId}
         >
           <div className="h-14 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/70 flex items-center justify-between px-6 gap-4">
             <div className="min-w-0">
-              <div className="text-base font-semibold tracking-tight truncate">
+              <div
+                id={fullscreenDialogTitleId}
+                className="text-base font-semibold tracking-tight truncate"
+              >
                 {systemSettings?.siteTitle ?? t("title.usageLogs")}
               </div>
             </div>
@@ -481,7 +491,7 @@ function UsageLogsViewContent({
               bodyClassName="h-[calc(var(--cch-viewport-height,100vh)_-_56px_-_32px_-_40px)]"
             />
           </div>
-        </div>
+        </dialog>
       ) : null}
     </>
   );

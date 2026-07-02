@@ -57,8 +57,9 @@ export function parseGeminiResponse(body: string, _contentType?: string): Parsed
     const texts: string[] = [];
     if (data.candidates && Array.isArray(data.candidates)) {
       for (const candidate of data.candidates) {
-        if (candidate.content?.parts && Array.isArray(candidate.content.parts)) {
-          for (const part of candidate.content.parts) {
+        const parts = candidate.content?.parts;
+        if (parts && Array.isArray(parts)) {
+          for (const part of parts) {
             if (part.text) {
               texts.push(part.text);
             }

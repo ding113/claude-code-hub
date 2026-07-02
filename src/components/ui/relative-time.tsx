@@ -2,7 +2,7 @@
 
 import { formatInTimeZone } from "date-fns-tz";
 import { useLocale, useTimeZone, useTranslations } from "next-intl";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffectEvent, useLayoutEffect, useMemo, useState } from "react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { subscribeToTick } from "@/lib/shared-timer";
 import { formatDateDistance } from "@/lib/utils/date-format";
@@ -33,7 +33,7 @@ export function RelativeTime({
   updateInterval = 10000, // 默认每 10 秒更新
   format = "full",
 }: RelativeTimeProps) {
-  const [timeAgo, setTimeAgo] = useState<string>(fallback);
+  const [timeAgo, setTimeAgo] = useState<string>(() => fallback);
   const [mounted, setMounted] = useState(false);
   const locale = useLocale();
   const timeZone = useTimeZone() ?? "UTC";
@@ -66,6 +66,7 @@ export function RelativeTime({
     },
     [tShort, fallback]
   );
+  const formatLatestShortDistance = useEffectEvent(formatShortDistance);
 
   // Precompute an absolute timestamp string for tooltip content. Include timezone display.
   const absolute = useMemo(() => {
@@ -77,7 +78,7 @@ export function RelativeTime({
     return formatInTimeZone(dateObj, timeZone, "yyyy-MM-dd HH:mm:ss OOOO");
   }, [date, fallback, timeZone]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     // 如果 date 为 null，直接显示 fallback
     if (!date) {
       setMounted(true);
@@ -91,7 +92,7 @@ export function RelativeTime({
       const dateObj = typeof date === "string" ? new Date(date) : date;
       const now = new Date();
       if (format === "short") {
-        setTimeAgo(formatShortDistance(dateObj, now));
+        setTimeAgo(formatLatestShortDistance(dateObj, now));
       } else {
         setTimeAgo(formatDateDistance(dateObj, now, locale));
       }
@@ -109,7 +110,7 @@ export function RelativeTime({
     const interval = setInterval(updateTime, updateInterval);
 
     return () => clearInterval(interval);
-  }, [date, autoUpdate, updateInterval, locale, format, formatShortDistance]);
+  }, [date, autoUpdate, updateInterval, locale, format]);
 
   // 服务端渲染和客户端首次渲染显示占位符
   if (!mounted) {

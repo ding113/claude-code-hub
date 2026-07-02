@@ -70,6 +70,7 @@ export function ErrorRuleTester() {
           value={message}
           onChange={(e) => setMessage(e.target.value)}
           placeholder={t("errorRules.tester.inputPlaceholder")}
+          aria-label={t("errorRules.tester.inputLabel")}
           rows={3}
           className={cn(
             "w-full bg-muted/50 border border-border rounded-lg py-2.5 px-3 text-sm text-foreground",
@@ -173,9 +174,9 @@ export function ErrorRuleTester() {
                   {t("errorRules.tester.warnings")}
                 </p>
                 <div className="space-y-2">
-                  {result.warnings.map((warning, index) => (
+                  {result.warnings.map((warning) => (
                     <div
-                      key={index}
+                      key={warning}
                       className="flex items-start gap-2 rounded-lg bg-yellow-500/5 border border-yellow-500/20 px-3 py-2.5"
                     >
                       <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-yellow-400" />

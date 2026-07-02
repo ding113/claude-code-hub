@@ -10,7 +10,7 @@ import {
   Search,
 } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
+import { type ReactNode, useCallback, useLayoutEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent } from "@/components/ui/collapsible";
 import { Dialog, DialogTitle } from "@/components/ui/dialog";
@@ -35,13 +35,10 @@ import type {
   ProviderType,
 } from "@/types/provider";
 import type { User } from "@/types/user";
-import {
-  type BatchActionMode,
-  ProviderBatchActions,
-  ProviderBatchDialog,
-  ProviderBatchToolbar,
-} from "./batch-edit";
-import { BatchTestDialog } from "./batch-test";
+import { type BatchActionMode, ProviderBatchActions } from "./batch-edit/provider-batch-actions";
+import { ProviderBatchDialog } from "./batch-edit/provider-batch-dialog";
+import { ProviderBatchToolbar } from "./batch-edit/provider-batch-toolbar";
+import { BatchTestDialog } from "./batch-test/batch-test-dialog";
 import { ProviderForm } from "./forms/provider-form";
 import { ProviderFormDialogContent } from "./provider-form-dialog-content";
 import { ProviderGroupTab } from "./provider-group-tab";
@@ -146,7 +143,7 @@ export function ProviderManager({
   }, [typeFilter, statusFilter, groupFilter, circuitBrokenFilter, sortBy]);
 
   // Auto-reset circuit broken filter when no providers are broken
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (circuitBrokenCount === 0 && circuitBrokenFilter) {
       setCircuitBrokenFilter(false);
     }
@@ -211,9 +208,10 @@ export function ProviderManager({
 
     // Filter by groups
     if (groupFilter.length > 0) {
+      const groupFilterSet = new Set(groupFilter);
       result = result.filter((p) => {
         const providerGroups = resolveProviderGroupsWithDefault(p.groupTag);
-        return groupFilter.some((g) => providerGroups.includes(g));
+        return providerGroups.some((group) => groupFilterSet.has(group));
       });
     }
 
@@ -223,7 +221,7 @@ export function ProviderManager({
     }
 
     // 排序
-    return [...result].sort((a, b) => {
+    return Array.from(result).toSorted((a, b) => {
       switch (sortBy) {
         case "name":
           return a.name.localeCompare(b.name);
@@ -346,8 +344,8 @@ export function ProviderManager({
       setSelectedProviderIds((prev) => {
         const next = new Set(prev);
         for (const p of filteredProviders) {
-          const tags = resolveProviderGroupsWithDefault(p.groupTag);
-          if (tags.includes(group)) {
+          const tags = new Set(resolveProviderGroupsWithDefault(p.groupTag));
+          if (tags.has(group)) {
             next.add(p.id);
           }
         }

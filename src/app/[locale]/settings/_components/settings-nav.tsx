@@ -1,6 +1,6 @@
 "use client";
 
-import { motion } from "framer-motion";
+import { m } from "framer-motion";
 import {
   Activity,
   AlertTriangle,
@@ -79,7 +79,7 @@ export function SettingsNav({ items }: SettingsNavProps) {
             const isActive = getIsActive(item.href);
 
             return (
-              <motion.div
+              <m.div
                 key={item.href}
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
@@ -95,7 +95,7 @@ export function SettingsNav({ items }: SettingsNavProps) {
                       : "text-muted-foreground hover:text-foreground"
                   )}
                 >
-                  <motion.span
+                  <m.span
                     className={cn(
                       "flex items-center justify-center w-8 h-8 rounded-lg",
                       isActive ? "bg-primary/20" : "bg-muted/50"
@@ -110,17 +110,17 @@ export function SettingsNav({ items }: SettingsNavProps) {
                     <Icon
                       className={cn("h-4 w-4", isActive ? "text-primary" : "text-muted-foreground")}
                     />
-                  </motion.span>
+                  </m.span>
                   <span className="flex-1 text-left">{item.label}</span>
                   {isActive && (
-                    <motion.div
+                    <m.div
                       layoutId="settingsActiveTabIndicator"
                       className="absolute right-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-primary rounded-l-full"
                       transition={{ type: "spring", stiffness: 500, damping: 30 }}
                     />
                   )}
                 </Link>
-              </motion.div>
+              </m.div>
             );
           })}
         </div>
@@ -131,7 +131,7 @@ export function SettingsNav({ items }: SettingsNavProps) {
             {externalItems.map((item) => {
               const Icon = getIcon(item.iconName);
               return (
-                <motion.a
+                <m.a
                   key={item.href}
                   href={item.href}
                   target="_blank"
@@ -149,7 +149,7 @@ export function SettingsNav({ items }: SettingsNavProps) {
                   </span>
                   <span className="flex-1 text-left">{item.label}</span>
                   <ExternalLink className="h-3 w-3 opacity-50" />
-                </motion.a>
+                </m.a>
               );
             })}
           </div>
@@ -179,7 +179,7 @@ export function SettingsNav({ items }: SettingsNavProps) {
             const isActive = getIsActive(item.href);
 
             return (
-              <motion.div
+              <m.div
                 key={item.href}
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
@@ -193,7 +193,7 @@ export function SettingsNav({ items }: SettingsNavProps) {
                     isActive ? "text-primary" : "text-muted-foreground"
                   )}
                 >
-                  <motion.span
+                  <m.span
                     className={cn(
                       "flex items-center justify-center w-7 h-7 rounded-md",
                       isActive ? "bg-primary/10" : "hover:bg-muted/50"
@@ -204,17 +204,17 @@ export function SettingsNav({ items }: SettingsNavProps) {
                     transition={{ duration: 0.2 }}
                   >
                     <Icon className="h-4 w-4" />
-                  </motion.span>
+                  </m.span>
                   <span>{item.label}</span>
                   {isActive && (
-                    <motion.div
+                    <m.div
                       layoutId="settingsActiveTabIndicatorTablet"
                       className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary"
                       transition={{ type: "spring", stiffness: 500, damping: 30 }}
                     />
                   )}
                 </Link>
-              </motion.div>
+              </m.div>
             );
           })}
         </div>
@@ -228,7 +228,7 @@ export function SettingsNav({ items }: SettingsNavProps) {
             const isActive = getIsActive(item.href);
 
             return (
-              <motion.div
+              <m.div
                 key={item.href}
                 whileTap={{ scale: 0.9 }}
                 transition={{ type: "spring", stiffness: 400, damping: 25 }}
@@ -241,30 +241,30 @@ export function SettingsNav({ items }: SettingsNavProps) {
                     isActive ? "text-primary" : "text-muted-foreground"
                   )}
                 >
-                  <motion.div
+                  <m.div
                     animate={{ scale: isActive ? 1.1 : 1 }}
                     transition={{ type: "spring", stiffness: 400, damping: 25 }}
                   >
                     <Icon className={cn("h-5 w-5", isActive && "text-primary")} />
-                  </motion.div>
+                  </m.div>
                   <span className="text-[10px] font-medium truncate max-w-[48px]">
                     {item.label}
                   </span>
                   {isActive && (
-                    <motion.div
+                    <m.div
                       layoutId="settingsActiveTabIndicatorMobile"
                       className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-4 h-1 bg-primary rounded-full"
                       transition={{ type: "spring", stiffness: 500, damping: 30 }}
                     />
                   )}
                 </Link>
-              </motion.div>
+              </m.div>
             );
           })}
         </div>
         {/* Progress indicator */}
         <div className="absolute top-0 left-0 right-0 h-0.5 bg-muted">
-          <motion.div
+          <m.div
             className="h-full bg-primary"
             initial={{ width: "10%" }}
             animate={{

@@ -16,6 +16,36 @@ import type { IpGeoCoordinates, IpGeoPrivacy, IpGeoThreat } from "@/types/ip-geo
 export type RiskLevel = "none" | "low" | "medium" | "high" | "critical" | "unknown";
 
 const KNOWN_RISK_LEVELS = new Set<RiskLevel>(["none", "low", "medium", "high", "critical"]);
+const bigNumberFormatters = new Map<string, Intl.NumberFormat>();
+const localTimeFormatters = new Map<string, Intl.DateTimeFormat>();
+
+function getBigNumberFormatter(locale: string): Intl.NumberFormat {
+  let formatter = bigNumberFormatters.get(locale);
+  if (!formatter) {
+    formatter = Intl.NumberFormat(locale);
+    bigNumberFormatters.set(locale, formatter);
+  }
+  return formatter;
+}
+
+function getLocalTimeFormatter(locale: string, timeZone: string): Intl.DateTimeFormat {
+  const cacheKey = `${locale}\0${timeZone}`;
+  let formatter = localTimeFormatters.get(cacheKey);
+  if (!formatter) {
+    formatter = Intl.DateTimeFormat(locale, {
+      year: "numeric",
+      month: "short",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      timeZone,
+      timeZoneName: "short",
+    });
+    localTimeFormatters.set(cacheKey, formatter);
+  }
+  return formatter;
+}
 
 /**
  * Coerce an API `risk_level` string to our internal `RiskLevel` enum.
@@ -382,7 +412,7 @@ export function ExternalLink({
 
 export function formatBigNumber(value: number, locale: string): string {
   try {
-    return new Intl.NumberFormat(locale).format(value);
+    return getBigNumberFormatter(locale).format(value);
   } catch {
     return String(value);
   }
@@ -395,16 +425,7 @@ export function formatLocalTime(iso: string, tzId: string, locale: string): stri
     // "Invalid Date" rather than throwing, so the try/catch alone wouldn't
     // catch malformed input. Check explicitly.
     if (Number.isNaN(d.getTime())) return iso;
-    return new Intl.DateTimeFormat(locale, {
-      year: "numeric",
-      month: "short",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-      timeZone: tzId,
-      timeZoneName: "short",
-    }).format(d);
+    return getLocalTimeFormatter(locale, tzId).format(d);
   } catch {
     return iso;
   }

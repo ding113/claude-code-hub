@@ -1,6 +1,6 @@
 "use client";
 
-import { motion } from "framer-motion";
+import { m } from "framer-motion";
 import { Info, type LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -34,7 +34,7 @@ export function SectionCard({
   };
 
   return (
-    <motion.div
+    <m.div
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.2 }}
@@ -85,7 +85,7 @@ export function SectionCard({
         )}
         <div className={cn("px-5 pb-5", !title && !description && "pt-5")}>{children}</div>
       </div>
-    </motion.div>
+    </m.div>
   );
 }
 

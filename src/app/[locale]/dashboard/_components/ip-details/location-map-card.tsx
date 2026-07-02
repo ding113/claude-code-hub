@@ -57,9 +57,7 @@ export function LocationMapCard({
           </MapPopup>
           <MapControls
             position="bottom-right"
-            showZoom
-            showCompass={false}
-            showLocate={false}
+            visibility={{ zoom: true, compass: false, locate: false }}
             labels={{
               zoomIn: t("map.zoomIn"),
               zoomOut: t("map.zoomOut"),

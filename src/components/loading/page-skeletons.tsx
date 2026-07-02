@@ -9,14 +9,13 @@ interface LoadingStateProps {
 
 export function LoadingState({ label = "Loading", className }: LoadingStateProps) {
   return (
-    <div
-      role="status"
+    <output
       aria-live="polite"
       aria-busy="true"
       className={cn("text-xs text-muted-foreground", className)}
     >
       {label}
-    </div>
+    </output>
   );
 }
 

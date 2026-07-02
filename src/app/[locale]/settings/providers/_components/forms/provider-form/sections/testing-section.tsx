@@ -1,6 +1,6 @@
 "use client";
 
-import { motion } from "framer-motion";
+import { m } from "framer-motion";
 import { FlaskConical, Globe, Link2, Plug, Zap } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useMemo } from "react";
@@ -34,7 +34,7 @@ export function TestingSection() {
   }, [state.routing.customHeadersText]);
 
   return (
-    <motion.div
+    <m.div
       initial={{ opacity: 0, x: 20 }}
       animate={{ opacity: 1, x: 0 }}
       exit={{ opacity: 0, x: -20 }}
@@ -156,7 +156,7 @@ export function TestingSection() {
 
           {/* MCP Passthrough URL - shown when not "none" */}
           {state.mcp.mcpPassthroughType !== "none" && (
-            <motion.div
+            <m.div
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: "auto" }}
               exit={{ opacity: 0, height: 0 }}
@@ -187,7 +187,7 @@ export function TestingSection() {
                   </p>
                 )}
               </SmartInputWrapper>
-            </motion.div>
+            </m.div>
           )}
 
           {/* MCP Status Summary */}
@@ -204,6 +204,6 @@ export function TestingSection() {
           </div>
         </div>
       </SectionCard>
-    </motion.div>
+    </m.div>
   );
 }

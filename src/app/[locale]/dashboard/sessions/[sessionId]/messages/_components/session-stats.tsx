@@ -143,9 +143,9 @@ export function SessionStats({ stats, currencyCode = "USD", className }: Session
 
           {stats.models.length > 0 && (
             <div className="flex flex-wrap gap-1.5">
-              {stats.models.map((m, i) => (
+              {stats.models.map((m) => (
                 <Badge
-                  key={i}
+                  key={m}
                   variant="secondary"
                   className="text-[10px] px-1.5 py-0 h-5 font-mono text-muted-foreground"
                 >

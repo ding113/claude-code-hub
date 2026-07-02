@@ -2,7 +2,7 @@
 
 import type { LucideIcon } from "lucide-react";
 import { ArrowDown, ArrowRight, ArrowUp } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 
 interface ComparisonData {
@@ -122,12 +122,12 @@ export function BentoMetricCard({
   className,
   accentColor = "primary",
 }: MetricCardProps) {
-  const [displayValue, setDisplayValue] = useState(value);
+  const [displayValue, setDisplayValue] = useState(() => value);
   const [isAnimating, setIsAnimating] = useState(false);
   const prevValueRef = useRef(value);
   const colors = accentColors[accentColor];
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     let cancelled = false;
     if (typeof value === "number" && typeof prevValueRef.current === "number") {
       if (value !== prevValueRef.current) {
@@ -273,8 +273,8 @@ export function BentoMetricCard({
       {/* Comparison Section */}
       {comparisons && comparisons.length > 0 && (
         <div className="mt-auto pt-3 relative z-10 flex flex-wrap gap-x-4 gap-y-1">
-          {comparisons.map((comparison, index) => (
-            <ComparisonBadge key={index} {...comparison} />
+          {comparisons.map((comparison) => (
+            <ComparisonBadge key={comparison.label} {...comparison} />
           ))}
         </div>
       )}

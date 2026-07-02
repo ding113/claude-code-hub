@@ -61,7 +61,7 @@ export function DispatchSimulatorDialog({ providers }: DispatchSimulatorDialogPr
         groups.add(group);
       }
     }
-    return [...groups].sort((a, b) => a.localeCompare(b));
+    return Array.from(groups).toSorted((a, b) => a.localeCompare(b));
   }, [providers]);
 
   const stepSummary = result?.steps ?? [];

@@ -3,10 +3,20 @@
  * Configures how translations are loaded for each request
  */
 
-import { getRequestConfig } from "next-intl/server";
-import { resolveSystemTimezone } from "@/lib/utils/timezone";
+import { getRequestConfig, type RequestConfig } from "next-intl/server";
+import { resolveSystemTimezone } from "@/lib/utils/timezone-resolver";
 import type { Locale } from "./config";
 import { routing } from "./routing";
+
+type Messages = NonNullable<RequestConfig["messages"]>;
+
+const messageLoaders: Record<Locale, () => Promise<Messages>> = {
+  "zh-CN": () => import("../../messages/zh-CN").then((module) => module.default),
+  "zh-TW": () => import("../../messages/zh-TW").then((module) => module.default),
+  en: () => import("../../messages/en").then((module) => module.default),
+  ru: () => import("../../messages/ru").then((module) => module.default),
+  ja: () => import("../../messages/ja").then((module) => module.default),
+};
 
 export default getRequestConfig(async ({ requestLocale }) => {
   // This typically corresponds to the `[locale]` segment in the app directory
@@ -17,12 +27,11 @@ export default getRequestConfig(async ({ requestLocale }) => {
     locale = routing.defaultLocale;
   }
 
-  // Dynamically import all translation files for the current locale
-  // NOTE: This import expects each `messages/<locale>/index.ts` to default-export the full messages object.
-  // The `settings` namespace is composed by `messages/<locale>/settings/index.ts` so key paths stay stable.
-  const messages = await import(`../../messages/${locale}`).then((module) => module.default);
-
-  const timeZone = await resolveSystemTimezone();
+  // Each `messages/<locale>/index.ts` default-exports the full messages object.
+  const [messages, timeZone] = await Promise.all([
+    messageLoaders[locale as Locale](),
+    resolveSystemTimezone(),
+  ]);
 
   return {
     locale,

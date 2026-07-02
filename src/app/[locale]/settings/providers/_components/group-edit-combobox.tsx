@@ -3,7 +3,7 @@
 import { Loader2, Plus } from "lucide-react";
 import { useTranslations } from "next-intl";
 import type * as React from "react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -49,7 +49,7 @@ export function GroupEditCombobox({
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Sync selectedGroups with currentGroups when opening
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (open) {
       setSelectedGroups([...currentGroups]);
       setSearchValue("");
@@ -57,7 +57,7 @@ export function GroupEditCombobox({
   }, [open, currentGroups]);
 
   // Auto-focus search input when opening
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!open) return;
     const raf = requestAnimationFrame(() => {
       inputRef.current?.focus();

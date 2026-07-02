@@ -18,15 +18,16 @@ export default async function UsageLogsPage({
   params: Promise<{ locale: string }>;
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
-  const { locale } = await params;
-
-  const session = await getSession();
+  const [{ locale }, session, systemSettings] = await Promise.all([
+    params,
+    getSession(),
+    getSystemSettings(),
+  ]);
   if (!session) {
     return redirect({ href: "/login", locale });
   }
 
   const isAdmin = session.user.role === "admin";
-  const systemSettings = await getSystemSettings();
 
   return (
     <div className="space-y-4">

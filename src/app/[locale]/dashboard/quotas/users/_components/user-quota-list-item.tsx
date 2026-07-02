@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Progress } from "@/components/ui/progress";
+import { useClientDate } from "@/hooks/use-client-date";
 import { getContrastTextColor, getGroupColor } from "@/lib/utils/color";
 import { type CurrencyCode, formatCurrency } from "@/lib/utils/currency";
 import { formatDate, formatDateDistance } from "@/lib/utils/date-format";
@@ -48,15 +49,18 @@ export function UserQuotaListItem({ user, currencyCode = "USD" }: UserQuotaListI
   const tStatus = useTranslations("dashboard.userList.status");
   const locale = useLocale();
   const [keysOpen, setKeysOpen] = useState(false);
+  const clientNow = useClientDate();
   const expiresAtDate = user.expiresAt ? new Date(user.expiresAt) : null;
 
   const expiryText = (() => {
     if (!expiresAtDate) return tUsersCommon("neverExpires");
-    return `${formatDateDistance(expiresAtDate, new Date(), locale, { addSuffix: true })} · ${formatDate(expiresAtDate, "yyyy-MM-dd", locale)}`;
+    const absolute = formatDate(expiresAtDate, "yyyy-MM-dd", locale);
+    if (!clientNow) return absolute;
+    return `${formatDateDistance(expiresAtDate, clientNow, locale, { addSuffix: true })} · ${absolute}`;
   })();
 
   const expiryStatus = (() => {
-    const now = Date.now();
+    const now = clientNow?.getTime() ?? 0;
     const expTs = expiresAtDate?.getTime() ?? null;
 
     if (!user.isEnabled) {
@@ -72,7 +76,7 @@ export function UserQuotaListItem({ user, currencyCode = "USD" }: UserQuotaListI
   })();
 
   const sortedKeys = useMemo(() => {
-    return [...user.keys].sort((a, b) => {
+    return Array.from(user.keys).toSorted((a, b) => {
       if (b.todayUsage === a.todayUsage) {
         return b.totalUsage - a.totalUsage;
       }
@@ -191,7 +195,9 @@ export function UserQuotaListItem({ user, currencyCode = "USD" }: UserQuotaListI
             {user.quota?.dailyCost?.resetAt && (
               <p className="text-xs text-muted-foreground">
                 {t("dailyCost.resetAt")}{" "}
-                {formatDateDistance(new Date(user.quota.dailyCost.resetAt), new Date(), locale)}
+                {clientNow
+                  ? formatDateDistance(new Date(user.quota.dailyCost.resetAt), clientNow, locale)
+                  : formatDate(new Date(user.quota.dailyCost.resetAt), "yyyy-MM-dd", locale)}
               </p>
             )}
           </div>

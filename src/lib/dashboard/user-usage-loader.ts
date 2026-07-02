@@ -52,6 +52,7 @@ export async function loadUserUsagePagesSequentially({
       continue;
     }
 
+    // react-doctor-disable-next-line react-doctor/async-await-in-loop -- pages are fetched sequentially so aborts stop later work promptly
     const usageByKeyId = await fetchUsagePage(userIds);
     if (signal.aborted) {
       return;

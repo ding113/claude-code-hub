@@ -1,9 +1,7 @@
-"use server";
-
 import { and, desc, eq, notInArray } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import { notificationTargetBindings, webhookTargets } from "@/drizzle/schema";
-import { resolveSystemTimezone } from "@/lib/utils/timezone";
+import { resolveSystemTimezone } from "@/lib/utils/timezone-resolver";
 import type { WebhookProviderType, WebhookTarget, WebhookTestResult } from "./webhook-targets";
 
 export type NotificationType =
@@ -165,15 +163,18 @@ export async function upsertBindings(
   // Resolve system timezone for default value
   const defaultTimezone = await resolveSystemTimezone();
 
-  const normalized = bindings
-    .map((b) => ({
+  const normalized = bindings.flatMap((b) => {
+    const normalizedBinding = {
       targetId: b.targetId,
       isEnabled: b.isEnabled ?? true,
       scheduleCron: b.scheduleCron ?? null,
       scheduleTimezone: b.scheduleTimezone ?? defaultTimezone,
       templateOverride: b.templateOverride ?? null,
-    }))
-    .filter((b) => Number.isFinite(b.targetId) && b.targetId > 0);
+    };
+    return Number.isFinite(normalizedBinding.targetId) && normalizedBinding.targetId > 0
+      ? [normalizedBinding]
+      : [];
+  });
 
   const targetIds = Array.from(new Set(normalized.map((b) => b.targetId)));
 
@@ -196,6 +197,7 @@ export async function upsertBindings(
 
     // Upsert 目标绑定
     for (const binding of normalized) {
+      // react-doctor-disable-next-line react-doctor/async-await-in-loop -- binding upserts share one transaction and preserve deterministic order
       await tx
         .insert(notificationTargetBindings)
         .values({

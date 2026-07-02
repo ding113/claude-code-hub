@@ -2,7 +2,7 @@
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
-import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useCallback, useLayoutEffect, useMemo, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
 import {
   AlertDialog,
@@ -138,7 +138,7 @@ function ProviderFormContent({
 
   // Keep state.basic.url usable across other sections when legacy URL input is hidden.
   // Update URL when resolved URL changes
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (resolvedUrl && !state.basic.url && !isEdit) {
       dispatch({ type: "SET_URL", payload: resolvedUrl });
     }
@@ -156,25 +156,28 @@ function ProviderFormContent({
   const rafRef = useRef<number | null>(null);
   const scrollLockTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scrollEndListenerRef = useRef<(() => void) | null>(null);
+  const clearScrollHandles = useCallback(() => {
+    if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
+    if (scrollLockTimerRef.current) clearTimeout(scrollLockTimerRef.current);
+    if (scrollEndListenerRef.current) {
+      contentRef.current?.removeEventListener("scrollend", scrollEndListenerRef.current);
+    }
+  }, []);
 
   // Refs for scroll handler to avoid re-creating the callback on every tab change
   const activeTabRef = useRef(state.ui.activeTab);
   const activeSubTabRef = useRef(state.ui.activeSubTab);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     activeTabRef.current = state.ui.activeTab;
     activeSubTabRef.current = state.ui.activeSubTab;
   }, [state.ui.activeTab, state.ui.activeSubTab]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     return () => {
-      if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
-      if (scrollLockTimerRef.current) clearTimeout(scrollLockTimerRef.current);
-      if (scrollEndListenerRef.current) {
-        contentRef.current?.removeEventListener("scrollend", scrollEndListenerRef.current);
-      }
+      clearScrollHandles();
     };
-  }, []);
+  }, [clearScrollHandles]);
 
   // Scroll to section when tab is clicked
   const scrollToSection = useCallback((tab: NavTargetId) => {
@@ -250,7 +253,7 @@ function ProviderFormContent({
   };
 
   // Sync isPending to context
-  useEffect(() => {
+  useLayoutEffect(() => {
     dispatch({ type: "SET_IS_PENDING", payload: isPending });
   }, [isPending, dispatch]);
 
@@ -813,7 +816,7 @@ export function ProviderForm({
   const [resolvedUrl, setResolvedUrl] = useState<string | null>(null);
 
   // Fetch group suggestions
-  useEffect(() => {
+  useLayoutEffect(() => {
     const fetchGroups = async () => {
       try {
         const res = await getDistinctProviderGroupsAction();
@@ -828,7 +831,7 @@ export function ProviderForm({
   }, []);
 
   // Handle URL resolver for preset provider types
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (urlResolver && preset?.providerType && !preset?.url) {
       setAutoUrlPending(true);
       urlResolver(preset.providerType)

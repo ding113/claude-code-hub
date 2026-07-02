@@ -37,7 +37,13 @@ vi.mock("@/components/ui/dropdown-menu", () => ({
     <div data-testid="dropdown-menu-content">{children}</div>
   ),
   DropdownMenuItem: ({ children, onClick, ...props }: any) => (
-    <div data-testid="dropdown-menu-item" role="menuitem" onClick={onClick} {...props}>
+    <div
+      data-testid="dropdown-menu-item"
+      role="menuitem"
+      tabIndex={-1}
+      onClick={onClick}
+      {...props}
+    >
       {children}
     </div>
   ),

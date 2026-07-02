@@ -81,8 +81,10 @@ export async function createProviderGroup(input: {
   costMultiplier?: number;
   description?: string;
 }): Promise<ActionResult<ProviderGroup>> {
-  const t = await getTranslations("settings.providers.providerGroups");
-  const tError = await getTranslations("errors");
+  const [t, tError] = await Promise.all([
+    getTranslations("settings.providers.providerGroups"),
+    getTranslations("errors"),
+  ]);
   try {
     const session = await getSession();
     if (!session || session.user.role !== "admin") {
@@ -166,8 +168,10 @@ export async function updateProviderGroup(
   id: number,
   input: { costMultiplier?: number; description?: string | null; descriptionNote?: string | null }
 ): Promise<ActionResult<ProviderGroup>> {
-  const t = await getTranslations("settings.providers.providerGroups");
-  const tError = await getTranslations("errors");
+  const [t, tError] = await Promise.all([
+    getTranslations("settings.providers.providerGroups"),
+    getTranslations("errors"),
+  ]);
   try {
     const session = await getSession();
     if (!session || session.user.role !== "admin") {
@@ -245,8 +249,10 @@ export async function updateProviderGroup(
  * Admin-only. Cannot delete the "default" group.
  */
 export async function deleteProviderGroup(id: number): Promise<ActionResult<void>> {
-  const t = await getTranslations("settings.providers.providerGroups");
-  const tError = await getTranslations("errors");
+  const [t, tError] = await Promise.all([
+    getTranslations("settings.providers.providerGroups"),
+    getTranslations("errors"),
+  ]);
   try {
     const session = await getSession();
     if (!session || session.user.role !== "admin") {

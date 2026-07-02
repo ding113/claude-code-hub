@@ -1,8 +1,9 @@
 "use client";
 
+import { useQuery } from "@tanstack/react-query";
 import { useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useLayoutEffect, useState } from "react";
 import { LeaderboardPrimaryTabs } from "@/app/[locale]/dashboard/leaderboard/_components/leaderboard-primary-tabs";
 import { LeaderboardSecondaryTabs } from "@/app/[locale]/dashboard/leaderboard/_components/leaderboard-secondary-tabs";
 import {
@@ -96,6 +97,58 @@ function renderSuccessRateCell(
 }
 
 const VALID_PERIODS: LeaderboardPeriod[] = ["daily", "weekly", "monthly", "allTime", "custom"];
+const LEADERBOARD_FETCH_FAILED = "leaderboard_fetch_failed";
+
+interface LeaderboardQueryParams {
+  dateRange?: DateRangeParams;
+  isAdmin: boolean;
+  period: LeaderboardPeriod;
+  providerTypeFilter: ProviderType | "all";
+  scope: LeaderboardScope;
+  userGroupFilters: string[];
+  userTagFilters: string[];
+}
+
+function buildLeaderboardUrl({
+  dateRange,
+  isAdmin,
+  period,
+  providerTypeFilter,
+  scope,
+  userGroupFilters,
+  userTagFilters,
+}: LeaderboardQueryParams) {
+  let url = `/api/leaderboard?period=${period}&scope=${scope}`;
+  if (period === "custom" && dateRange) {
+    url += `&startDate=${dateRange.startDate}&endDate=${dateRange.endDate}`;
+  }
+  if (isProviderFamilyScope(scope) && providerTypeFilter !== "all") {
+    url += `&providerType=${encodeURIComponent(providerTypeFilter)}`;
+  }
+  if (scope === "provider") {
+    url += "&includeModelStats=1";
+  }
+  if (isUserFamilyScope(scope) && isAdmin) {
+    url += "&includeUserModelStats=1";
+  }
+  if (isUserFamilyScope(scope)) {
+    if (userTagFilters.length > 0) {
+      url += `&userTags=${encodeURIComponent(userTagFilters.join(","))}`;
+    }
+    if (userGroupFilters.length > 0) {
+      url += `&userGroups=${encodeURIComponent(userGroupFilters.join(","))}`;
+    }
+  }
+  return url;
+}
+
+async function fetchLeaderboardData(params: LeaderboardQueryParams): Promise<AnyEntry[]> {
+  const res = await fetch(buildLeaderboardUrl(params));
+  if (!res.ok) {
+    throw new Error(LEADERBOARD_FETCH_FAILED);
+  }
+  return res.json();
+}
 
 export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
   const t = useTranslations("dashboard.leaderboard");
@@ -116,10 +169,36 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
   const [tagSuggestions, setTagSuggestions] = useState<string[]>([]);
   const [groupSuggestions, setGroupSuggestions] = useState<string[]>([]);
   const [data, setData] = useState<AnyEntry[]>([]);
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const {
+    data: leaderboardData,
+    error: leaderboardError,
+    isLoading: loading,
+  } = useQuery({
+    queryKey: [
+      "leaderboard",
+      period,
+      scope,
+      dateRange?.startDate ?? null,
+      dateRange?.endDate ?? null,
+      providerTypeFilter,
+      userTagFilters.join(","),
+      userGroupFilters.join(","),
+      isAdmin,
+    ],
+    queryFn: () =>
+      fetchLeaderboardData({
+        dateRange,
+        isAdmin,
+        period,
+        providerTypeFilter,
+        scope,
+        userGroupFilters,
+        userTagFilters,
+      }),
+  });
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!isAdmin) return;
 
     const fetchSuggestions = async () => {
@@ -135,75 +214,33 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
   }, [isAdmin]);
 
   // 与 URL 查询参数保持同步，支持外部携带 scope/period 直达特定榜单
-  // biome-ignore lint/correctness/useExhaustiveDependencies: period 和 scope 仅用于比较，不应触发 effect 重新执行
-  useEffect(() => {
-    const normalizedScope = normalizeScopeFromUrl(searchParams.get("scope"), isAdmin);
+  useLayoutEffect(() => {
+    const normalizedScope = normalizeScopeFromUrl(urlScope, isAdmin);
+    setScope((current) => (current === normalizedScope ? current : normalizedScope));
 
-    if (normalizedScope !== scope) {
-      setScope(normalizedScope);
-    }
-
-    const urlP = searchParams.get("period") as LeaderboardPeriod | null;
     const normalizedPeriod: LeaderboardPeriod =
-      urlP && VALID_PERIODS.includes(urlP) ? urlP : "daily";
+      urlPeriod && VALID_PERIODS.includes(urlPeriod) ? urlPeriod : "daily";
+    setPeriod((current) => (current === normalizedPeriod ? current : normalizedPeriod));
+  }, [isAdmin, urlScope, urlPeriod]);
 
-    if (normalizedPeriod !== period) {
-      setPeriod(normalizedPeriod);
+  useLayoutEffect(() => {
+    if (leaderboardError) {
+      console.error(t("states.fetchFailed"), leaderboardError);
+      setError(
+        leaderboardError instanceof Error && leaderboardError.message !== LEADERBOARD_FETCH_FAILED
+          ? leaderboardError.message
+          : t("states.fetchFailed")
+      );
+      return;
     }
-  }, [isAdmin, searchParams]);
 
-  // Fetch data when period, scope, or dateRange changes
-  useEffect(() => {
-    let cancelled = false;
-    const fetchData = async () => {
-      try {
-        setLoading(true);
-        let url = `/api/leaderboard?period=${period}&scope=${scope}`;
-        if (period === "custom" && dateRange) {
-          url += `&startDate=${dateRange.startDate}&endDate=${dateRange.endDate}`;
-        }
-        if (isProviderFamilyScope(scope) && providerTypeFilter !== "all") {
-          url += `&providerType=${encodeURIComponent(providerTypeFilter)}`;
-        }
-        if (scope === "provider") {
-          url += "&includeModelStats=1";
-        }
-        if (isUserFamilyScope(scope) && isAdmin) {
-          url += "&includeUserModelStats=1";
-        }
-        if (isUserFamilyScope(scope)) {
-          if (userTagFilters.length > 0) {
-            url += `&userTags=${encodeURIComponent(userTagFilters.join(","))}`;
-          }
-          if (userGroupFilters.length > 0) {
-            url += `&userGroups=${encodeURIComponent(userGroupFilters.join(","))}`;
-          }
-        }
-        const res = await fetch(url);
+    if (!leaderboardData) {
+      return;
+    }
 
-        if (!res.ok) {
-          throw new Error(t("states.fetchFailed"));
-        }
-
-        const result = await res.json();
-
-        if (!cancelled) {
-          setData(result);
-          setError(null);
-        }
-      } catch (err) {
-        console.error(t("states.fetchFailed"), err);
-        if (!cancelled) setError(err instanceof Error ? err.message : t("states.fetchFailed"));
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    };
-
-    fetchData();
-    return () => {
-      cancelled = true;
-    };
-  }, [scope, period, dateRange, providerTypeFilter, userTagFilters, userGroupFilters, isAdmin, t]);
+    setData(leaderboardData);
+    setError(null);
+  }, [leaderboardData, leaderboardError, t]);
 
   const handlePeriodChange = useCallback(
     (newPeriod: LeaderboardPeriod, newDateRange?: DateRangeParams) => {

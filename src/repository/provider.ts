@@ -10,7 +10,7 @@ import { resetEndpointCircuit } from "@/lib/endpoint-circuit-breaker";
 import { logger } from "@/lib/logger";
 import { normalizeProviderModelRedirectRules } from "@/lib/provider-model-redirects";
 import { parseProviderGroups } from "@/lib/utils/provider-group";
-import { resolveSystemTimezone } from "@/lib/utils/timezone";
+import { resolveSystemTimezone } from "@/lib/utils/timezone-resolver";
 import type {
   AllowedModelRuleInput,
   AnthropicAdaptiveThinkingConfig,
@@ -1435,6 +1435,7 @@ export async function deleteProvidersBatch(ids: number[]): Promise<number> {
         sql`, `
       );
 
+      // react-doctor-disable-next-line react-doctor/async-await-in-loop -- chunked endpoint tombstones intentionally bound SQL statement size
       await tx
         .update(providerEndpoints)
         .set({
@@ -1487,6 +1488,7 @@ export async function restoreProvidersBatch(ids: number[]): Promise<number> {
     let restored = 0;
 
     for (const id of uniqueIds) {
+      // react-doctor-disable-next-line react-doctor/async-await-in-loop -- restore runs in one transaction and accumulates deterministic count
       if (await restoreProviderInTransaction(tx, id, now)) {
         restored += 1;
       }
@@ -1542,12 +1544,11 @@ export async function getDistinctProviderGroups(): Promise<string[]> {
     .orderBy(providers.groupTag);
 
   // 拆分逗号分隔的标签并去重
-  const allTags = result
-    .map((r) => r.groupTag)
-    .filter((tag): tag is string => tag !== null)
-    .flatMap((tag) => parseProviderGroups(tag));
+  const allTags = result.flatMap((row) =>
+    row.groupTag !== null ? parseProviderGroups(row.groupTag) : []
+  );
 
-  return [...new Set(allTags)].sort();
+  return Array.from(new Set(allTags)).toSorted();
 }
 
 /**

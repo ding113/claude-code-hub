@@ -235,9 +235,10 @@ export async function listCircuitStateKeys(): Promise<number[]> {
 
   try {
     const keys = await redis.keys("circuit_breaker:state:*");
-    return keys
-      .map((key) => parseInt(key.replace("circuit_breaker:state:", ""), 10))
-      .filter(Boolean);
+    return keys.flatMap((key) => {
+      const providerId = parseInt(key.replace("circuit_breaker:state:", ""), 10);
+      return providerId ? [providerId] : [];
+    });
   } catch (error) {
     logger.warn("[CircuitBreakerState] Failed to list keys", {
       error: error instanceof Error ? error.message : String(error),

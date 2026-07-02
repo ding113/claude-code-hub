@@ -45,6 +45,18 @@ interface RegexPattern {
   overrideStatusCode?: number;
 }
 
+function compileCaseInsensitivePattern(pattern: string): RegExp {
+  return new RegExp(pattern, "i");
+}
+
+function escapeRegExpLiteral(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function compileContainsMatcher(value: string): RegExp {
+  return new RegExp(escapeRegExpLiteral(value));
+}
+
 /**
  * 缓存的包含规则
  */
@@ -52,6 +64,7 @@ interface ContainsPattern {
   ruleId: number;
   pattern: string;
   text: string;
+  matcher: RegExp;
   category: string;
   description?: string;
   overrideResponse?: ErrorOverrideResponse;
@@ -193,13 +206,14 @@ class ErrorRuleDetector {
 
           let rules;
           try {
+            // react-doctor-disable-next-line react-doctor/async-await-in-loop -- reload retry loop waits for each database attempt
             rules = await getActiveErrorRules();
             this.dbLoadedSuccessfully = true;
           } catch (dbError) {
             const errorMessage = (dbError as Error).message || "";
 
             // 记录数据库错误（区分表不存在和其他错误）
-            if (errorMessage.includes("relation") && errorMessage.includes("does not exist")) {
+            if (/relation/.test(errorMessage) && /does not exist/.test(errorMessage)) {
               logger.warn(
                 "[ErrorRuleDetector] error_rules table does not exist yet (migration pending)"
               );
@@ -248,6 +262,7 @@ class ErrorRuleDetector {
                   ruleId: rule.id,
                   pattern: rule.pattern,
                   text: lowerText,
+                  matcher: compileContainsMatcher(lowerText),
                   category: rule.category,
                   description: rule.description ?? undefined,
                   overrideResponse: validatedOverrideResponse,
@@ -281,7 +296,7 @@ class ErrorRuleDetector {
                     break;
                   }
 
-                  const pattern = new RegExp(rule.pattern, "i");
+                  const pattern = compileCaseInsensitivePattern(rule.pattern);
                   newRegexPatterns.push({
                     ruleId: rule.id,
                     rawPattern: rule.pattern,
@@ -393,7 +408,7 @@ class ErrorRuleDetector {
 
     // 1. 包含匹配（最快）
     for (const pattern of this.containsPatterns) {
-      if (lowerMessage.includes(pattern.text)) {
+      if (pattern.matcher.test(lowerMessage)) {
         return {
           matched: true,
           ruleId: pattern.ruleId,

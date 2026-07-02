@@ -112,7 +112,7 @@ export function WebhookTargetsSection({
   );
 
   const sortedTargets = useMemo(() => {
-    return [...targets].sort((a, b) => b.id - a.id);
+    return Array.from(targets).toSorted((a, b) => b.id - a.id);
   }, [targets]);
 
   return (

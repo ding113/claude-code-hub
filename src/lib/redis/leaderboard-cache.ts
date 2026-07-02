@@ -1,6 +1,6 @@
 import { formatInTimeZone } from "date-fns-tz";
 import { logger } from "@/lib/logger";
-import { resolveSystemTimezone } from "@/lib/utils/timezone";
+import { resolveSystemTimezone } from "@/lib/utils/timezone-resolver";
 import {
   type DateRangeParams,
   findAllTimeLeaderboard,
@@ -85,10 +85,10 @@ function buildCacheKey(
   let userFilterSuffix = "";
   if (scope === "user" || scope === "userCacheHitRate") {
     const tagsPart = filters?.userTags?.length
-      ? `:tags:${[...filters.userTags].sort().join(",")}`
+      ? `:tags:${Array.from(filters.userTags).toSorted().join(",")}`
       : "";
     const groupsPart = filters?.userGroups?.length
-      ? `:groups:${[...filters.userGroups].sort().join(",")}`
+      ? `:groups:${Array.from(filters.userGroups).toSorted().join(",")}`
       : "";
     userFilterSuffix = tagsPart + groupsPart;
   }
@@ -308,6 +308,7 @@ export async function getLeaderboardWithCache(
       // 获得锁，查询数据库
       logger.debug("[LeaderboardCache] Acquired lock, computing", { period, scope, lockKey });
 
+      // react-doctor-disable-next-line react-doctor/async-parallel -- data must be computed before cache write and lock release
       const data = await queryDatabase(period, scope, dateRange, filters);
 
       // 写入缓存（60 秒 TTL）
@@ -332,6 +333,7 @@ export async function getLeaderboardWithCache(
       logger.debug("[LeaderboardCache] Lock held by another request, retrying", { period, scope });
 
       for (let i = 0; i < 50; i++) {
+        // react-doctor-disable-next-line react-doctor/async-await-in-loop -- retry polling intentionally waits between cache checks
         await sleep(100);
 
         const retried = await redis.get(cacheKey);

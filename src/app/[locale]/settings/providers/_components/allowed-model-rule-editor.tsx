@@ -210,13 +210,17 @@ export function AllowedModelRuleEditor({
     }
   };
 
-  const exactModels = value
-    .filter((rule) => rule.matchType === "exact")
-    .map((rule) => normalizeRule(rule).pattern)
-    .filter(Boolean);
+  const exactModels = value.flatMap((rule) => {
+    if (rule.matchType !== "exact") return [];
+    const pattern = normalizeRule(rule).pattern;
+    return pattern ? [pattern] : [];
+  });
 
   const handleExactModelsChange = (selectedModels: string[]) => {
-    const normalizedSelections = selectedModels.map((model) => model.trim()).filter(Boolean);
+    const normalizedSelections = selectedModels.flatMap((model) => {
+      const trimmed = model.trim();
+      return trimmed ? [trimmed] : [];
+    });
     const selectedKeys = new Set(
       normalizedSelections.map((model) =>
         getRuleIdentity({
@@ -234,7 +238,7 @@ export function AllowedModelRuleEditor({
     });
 
     const existingExactKeys = new Set(
-      nextRules.filter((rule) => rule.matchType === "exact").map((rule) => getRuleIdentity(rule))
+      nextRules.flatMap((rule) => (rule.matchType === "exact" ? [getRuleIdentity(rule)] : []))
     );
     let hitLimit = false;
 

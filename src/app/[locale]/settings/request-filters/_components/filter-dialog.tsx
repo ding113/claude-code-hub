@@ -56,6 +56,7 @@ function DarkInput({
   value,
   onChange,
   placeholder,
+  ariaLabel,
   required,
   type = "text",
   className,
@@ -64,6 +65,7 @@ function DarkInput({
   value: string | number;
   onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   placeholder?: string;
+  ariaLabel?: string;
   required?: boolean;
   type?: string;
   className?: string;
@@ -75,6 +77,7 @@ function DarkInput({
       value={value}
       onChange={onChange}
       placeholder={placeholder}
+      aria-label={ariaLabel ?? placeholder ?? id}
       required={required}
       className={cn(
         "w-full bg-muted/50 border border-border rounded-lg py-2 px-3 text-sm text-foreground",
@@ -92,6 +95,7 @@ function DarkTextarea({
   value,
   onChange,
   placeholder,
+  ariaLabel,
   rows = 3,
   className,
 }: {
@@ -99,6 +103,7 @@ function DarkTextarea({
   value: string;
   onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void;
   placeholder?: string;
+  ariaLabel?: string;
   rows?: number;
   className?: string;
 }) {
@@ -108,6 +113,7 @@ function DarkTextarea({
       value={value}
       onChange={onChange}
       placeholder={placeholder}
+      aria-label={ariaLabel ?? placeholder ?? id}
       rows={rows}
       className={cn(
         "w-full bg-muted/50 border border-border rounded-lg py-2 px-3 text-sm text-foreground resize-none",

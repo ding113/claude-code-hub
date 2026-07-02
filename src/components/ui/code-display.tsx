@@ -10,7 +10,7 @@ import {
   Search,
 } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { oneDark, oneLight } from "react-syntax-highlighter/dist/esm/styles/prism";
 import { Badge } from "@/components/ui/badge";
@@ -111,7 +111,7 @@ export function CodeDisplay({
   const [sseScrollTop, setSseScrollTop] = useState(0);
   const [copied, setCopied] = useState(false);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const getTheme = () => (document.documentElement.classList.contains("dark") ? "dark" : "light");
 
     setResolvedTheme(getTheme());
@@ -122,7 +122,7 @@ export function CodeDisplay({
     return () => observer.disconnect();
   }, []);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (mode !== "pretty") return;
     if (language === "text") return;
     if (content.length <= PRETTY_MODE_DEFAULT_MAX_CHARS) return;
@@ -165,12 +165,12 @@ export function CodeDisplay({
     });
   }, [searchQuery, sseEvents]);
 
-  useEffect(() => {
-    if (language !== "sse" || mode !== "pretty") return;
+  useLayoutEffect(() => {
+    if (language !== "sse") return;
     setExpandedSseRows(new Set());
-  }, [language, mode]);
+  }, [content, language]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (language !== "sse" || mode !== "pretty") return;
     const el = sseScrollRef.current;
     if (!el) return;
@@ -397,7 +397,14 @@ export function CodeDisplay({
       </div>
 
       <div className="border-t p-3 flex flex-col min-h-0">
-        <Tabs value={mode} onValueChange={(v) => setMode(v as "raw" | "pretty")} className="w-full">
+        <Tabs
+          value={mode}
+          onValueChange={(v) => {
+            setMode(v as "raw" | "pretty");
+            setExpandedSseRows(new Set());
+          }}
+          className="w-full"
+        >
           <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="raw" data-testid="code-display-mode-raw">
               {t("codeDisplay.raw")}

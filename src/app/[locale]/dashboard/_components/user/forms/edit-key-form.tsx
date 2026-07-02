@@ -3,7 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Loader2, RotateCcw } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useLocale, useTranslations } from "next-intl";
-import { useCallback, useEffect, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { DatePickerField } from "@/components/form/date-picker-field";
 import { NumberField, TagInputField, TextField } from "@/components/form/form-field";
@@ -78,6 +78,14 @@ export function EditKeyForm({ keyData, user, isAdmin = false, onSuccess }: EditK
   const tUI = useTranslations("ui.tagInput");
   const tCommon = useTranslations("common");
   const tErrors = useTranslations("errors");
+  const dateTimeFormatter = useMemo(
+    () =>
+      new Intl.DateTimeFormat(locale, {
+        dateStyle: "medium",
+        timeStyle: "short",
+      }),
+    [locale]
+  );
 
   // Load provider group suggestions
   useEffect(() => {
@@ -463,10 +471,7 @@ export function EditKeyForm({ keyData, user, isAdmin = false, onSuccess }: EditK
                 {keyData?.costResetAt && (
                   <p className="text-xs text-amber-600/80 dark:text-amber-400/80">
                     {t("resetLimits.lastResetAt", {
-                      date: new Intl.DateTimeFormat(locale as string, {
-                        dateStyle: "medium",
-                        timeStyle: "short",
-                      }).format(new Date(keyData.costResetAt)),
+                      date: dateTimeFormatter.format(new Date(keyData.costResetAt)),
                     })}
                   </p>
                 )}

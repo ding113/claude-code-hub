@@ -1,5 +1,3 @@
-"use server";
-
 import { desc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import { modelPrices } from "@/drizzle/schema";
@@ -101,7 +99,14 @@ export async function findLatestPriceByModelAndSource(
 export async function findLatestPricesByModels(
   modelNames: string[]
 ): Promise<Map<string, ModelPrice>> {
-  const uniqueNames = Array.from(new Set(modelNames.map((name) => name.trim()).filter(Boolean)));
+  const uniqueNames = Array.from(
+    new Set(
+      modelNames.flatMap((name) => {
+        const trimmed = name.trim();
+        return trimmed ? [trimmed] : [];
+      })
+    )
+  );
   if (uniqueNames.length === 0) {
     return new Map();
   }

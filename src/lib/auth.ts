@@ -5,6 +5,7 @@ import {
   isSignedAdminSessionTokenFormat,
   verifySignedAdminSessionToken,
 } from "@/lib/auth-admin-session-token";
+import { AUTH_COOKIE_NAME } from "@/lib/auth-constants";
 import { DEFAULT_AUTH_SESSION_TTL_SECONDS } from "@/lib/auth-session-store";
 import { config } from "@/lib/config/config";
 import { getEnvConfig } from "@/lib/config/env.schema";
@@ -44,7 +45,8 @@ declare global {
   var __cchAuthSessionStorage: AuthSessionStorage | undefined;
 }
 
-export const AUTH_COOKIE_NAME = "auth-token";
+export { AUTH_COOKIE_NAME };
+
 const MIN_AUTH_SESSION_TTL_SECONDS = 1;
 
 export interface AuthSession {
@@ -447,9 +449,14 @@ async function convertToAuthSession(
 
   const keyList = await findKeyList(sessionData.userId);
 
-  for (const key of keyList) {
-    const keyFingerprint = await toKeyFingerprint(key.key);
-    if (constantTimeEqual(keyFingerprint, expectedFingerprint)) {
+  const keyFingerprints = await Promise.all(
+    keyList.map(async (key) => ({
+      key,
+      fingerprint: await toKeyFingerprint(key.key),
+    }))
+  );
+  for (const { key, fingerprint } of keyFingerprints) {
+    if (constantTimeEqual(fingerprint, expectedFingerprint)) {
       return validateKey(key.key, options);
     }
   }

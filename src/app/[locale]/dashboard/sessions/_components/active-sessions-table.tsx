@@ -2,7 +2,7 @@
 
 import { Circle, Eye, XCircle } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
   AlertDialog,
@@ -94,7 +94,7 @@ function SessionStatusCell({
                         ? "bg-amber-500"
                         : ""
                   )}
-                  style={{ animationDuration: "1.5s" }}
+                  style={{ animationDuration: "800ms" }}
                 />
               )}
               <StatusIcon
@@ -134,7 +134,10 @@ export function ActiveSessionsTable({
   const [isBatchTerminating, setIsBatchTerminating] = useState(false);
   const [selectedSessionIds, setSelectedSessionIds] = useState<string[]>([]);
   const [isMultiSelectMode, setIsMultiSelectMode] = useState(false);
-  const [terminatingSessionIds, setTerminatingSessionIds] = useState<Set<string>>(new Set());
+  const terminatingSessionIdsRef = useRef<Set<string> | null>(null);
+  if (terminatingSessionIdsRef.current === null) {
+    terminatingSessionIdsRef.current = new Set();
+  }
   const showSelection = !inactive && isMultiSelectMode;
 
   // 使用 Set 优化成员检查性能
@@ -142,19 +145,20 @@ export function ActiveSessionsTable({
 
   // 按开始时间降序排序（最新的在前）
   const sortedSessions = useMemo(
-    () => [...sessions].sort((a, b) => b.startTime - a.startTime),
+    () => Array.from(sessions).toSorted((a, b) => b.startTime - a.startTime),
     [sessions]
   );
 
   // 确保选中项始终存在于当前列表（排除正在终止的会话）
   useEffect(() => {
+    const terminatingSessionIds = terminatingSessionIdsRef.current ?? new Set<string>();
     setSelectedSessionIds((prev) =>
       prev.filter(
         (id) =>
           terminatingSessionIds.has(id) || sessions.some((session) => session.sessionId === id)
       )
     );
-  }, [sessions, terminatingSessionIds]);
+  }, [sessions]);
 
   const toggleSelection = (sessionId: string, checked: boolean) => {
     setSelectedSessionIds((prev) => {
@@ -198,7 +202,7 @@ export function ActiveSessionsTable({
     }
 
     // 标记正在终止的会话
-    setTerminatingSessionIds(new Set(selectedSessionIds));
+    terminatingSessionIdsRef.current = new Set(selectedSessionIds);
     setIsBatchTerminating(true);
     try {
       const result = await terminateActiveSessionsBatch(selectedSessionIds);
@@ -240,7 +244,7 @@ export function ActiveSessionsTable({
       toast.error(t("actions.terminateFailed"));
     } finally {
       setIsBatchTerminating(false);
-      setTerminatingSessionIds(new Set());
+      terminatingSessionIdsRef.current = new Set();
     }
   };
 

@@ -63,8 +63,10 @@ export async function publishCurrentPublicStatusConfigProjection(input: {
   written: boolean;
   groupCount: number;
 }> {
-  const settings = await getSystemSettings();
-  const providerGroups = await findAllProviderGroups();
+  const [settings, providerGroups] = await Promise.all([
+    getSystemSettings(),
+    findAllProviderGroups(),
+  ]);
   const enabledGroups = collectEnabledPublicStatusGroups(
     providerGroups.map((group) => ({
       groupName: group.name,
@@ -147,17 +149,19 @@ export async function publishCurrentPublicStatusConfigProjection(input: {
   });
 
   const redis = getRedisClient({ allowWhenRateLimitDisabled: true });
-  const internalResult = await publishInternalPublicStatusConfigSnapshot({
-    snapshot: internalSnapshot,
-    redis,
-    setCurrentPointer: false,
-  });
-  const result = await publishPublicStatusConfigSnapshot({
-    reason: input.reason,
-    snapshot,
-    redis,
-    setCurrentPointer: false,
-  });
+  const [internalResult, result] = await Promise.all([
+    publishInternalPublicStatusConfigSnapshot({
+      snapshot: internalSnapshot,
+      redis,
+      setCurrentPointer: false,
+    }),
+    publishPublicStatusConfigSnapshot({
+      reason: input.reason,
+      snapshot,
+      redis,
+      setCurrentPointer: false,
+    }),
+  ]);
   const pointersWritten =
     internalResult.written && result.written
       ? await publishCurrentPublicStatusConfigPointers({

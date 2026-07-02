@@ -30,7 +30,10 @@ function formatHeaders(
   headers: Record<string, string> | null,
   preambleLines?: string[]
 ): string | null {
-  const normalizedPreamble = (preambleLines ?? []).map((line) => line.trim()).filter(Boolean);
+  const normalizedPreamble = (preambleLines ?? []).flatMap((line) => {
+    const trimmed = line.trim();
+    return trimmed ? [trimmed] : [];
+  });
   const preamble = normalizedPreamble.length > 0 ? normalizedPreamble.join("\n") : null;
 
   const headerLines =
@@ -51,6 +54,15 @@ interface SessionMessagesDetailsTabsProps {
   specialSettings: unknown | null;
   onCopyResponse?: () => void;
   isResponseCopied?: boolean;
+}
+
+function EmptyState({ message }: { message: string }) {
+  return (
+    <div className="flex flex-col items-center justify-center py-16 text-muted-foreground bg-muted/20 rounded-lg border border-dashed text-center px-4">
+      <Inbox className="h-10 w-10 mb-3 opacity-20" />
+      <p className="text-sm max-w-lg">{message}</p>
+    </div>
+  );
 }
 
 export function SessionMessagesDetailsTabs({
@@ -161,14 +173,6 @@ export function SessionMessagesDetailsTabs({
         })
       : t("details.storageTip");
 
-  // Reusable Empty State Component
-  const EmptyState = ({ message }: { message: string }) => (
-    <div className="flex flex-col items-center justify-center py-16 text-muted-foreground bg-muted/20 rounded-lg border border-dashed text-center px-4">
-      <Inbox className="h-10 w-10 mb-3 opacity-20" />
-      <p className="text-sm max-w-lg">{message}</p>
-    </div>
-  );
-
   return (
     <Tabs
       defaultValue="requestBody"
@@ -235,11 +239,8 @@ export function SessionMessagesDetailsTabs({
           </TabsTrigger>
         </TabsList>
 
-        <div
-          className="inline-flex items-center rounded-lg border bg-background p-1 shrink-0"
-          role="group"
-          aria-label={t("details.viewMode")}
-        >
+        <fieldset className="inline-flex items-center rounded-lg border bg-background p-1 shrink-0">
+          <legend className="sr-only">{t("details.viewMode")}</legend>
           <Button
             type="button"
             variant={viewMode === "before" ? "secondary" : "ghost"}
@@ -262,7 +263,7 @@ export function SessionMessagesDetailsTabs({
           >
             {t("details.after")}
           </Button>
-        </div>
+        </fieldset>
 
         <TooltipProvider>
           <Tooltip>

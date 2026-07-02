@@ -8,7 +8,7 @@ vi.mock("@/drizzle/db", () => ({
   },
 }));
 
-vi.mock("@/lib/utils/timezone", () => ({
+vi.mock("@/lib/utils/timezone-resolver", () => ({
   resolveSystemTimezone: vi.fn(async () => "Asia/Shanghai"),
 }));
 

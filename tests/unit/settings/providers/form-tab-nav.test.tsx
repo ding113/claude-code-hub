@@ -13,8 +13,15 @@ vi.mock("next-intl", () => ({
 
 // Mock framer-motion -- render motion.div as a plain div
 vi.mock("framer-motion", () => ({
+  m: {
+    div: ({ animate, children, initial, layoutId, transition, variants, ...rest }: any) => (
+      <div data-layout-id={layoutId} {...rest}>
+        {children}
+      </div>
+    ),
+  },
   motion: {
-    div: ({ children, layoutId, ...rest }: any) => (
+    div: ({ animate, children, initial, layoutId, transition, variants, ...rest }: any) => (
       <div data-layout-id={layoutId} {...rest}>
         {children}
       </div>

@@ -171,6 +171,7 @@ async function runCycle(): Promise<void> {
       if (leadershipLost) {
         break;
       }
+      // react-doctor-disable-next-line react-doctor/async-await-in-loop -- rebuild targets run sequentially so leadership loss can stop remaining work
       const result = await rebuildPublicStatusProjection({
         intervalMinutes: target.intervalMinutes,
         rangeHours: target.rangeHours,

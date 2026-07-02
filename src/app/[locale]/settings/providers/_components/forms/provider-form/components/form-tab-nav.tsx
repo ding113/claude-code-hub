@@ -1,6 +1,6 @@
 "use client";
 
-import { motion } from "framer-motion";
+import { m } from "framer-motion";
 import {
   Clock,
   FileText,
@@ -159,7 +159,7 @@ export function FormTabNav({
                   />
                 )}
                 {isActive && (
-                  <motion.div
+                  <m.div
                     layoutId="activeTabIndicatorHorizontal"
                     className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary"
                     transition={{ type: "spring", stiffness: 500, damping: 30 }}
@@ -220,7 +220,7 @@ export function FormTabNav({
                     />
                   )}
                   {isActive && (
-                    <motion.div
+                    <m.div
                       layoutId="activeTabIndicator"
                       className="absolute right-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-primary rounded-l-full"
                       transition={{ type: "spring", stiffness: 500, damping: 30 }}
@@ -303,7 +303,7 @@ export function FormTabNav({
                   />
                 )}
                 {isActive && (
-                  <motion.div
+                  <m.div
                     layoutId="activeTabIndicatorTablet"
                     className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary"
                     transition={{ type: "spring", stiffness: 500, damping: 30 }}
@@ -421,7 +421,7 @@ export function FormTabNav({
                 {/* Progress indicator */}
                 <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 flex gap-0.5">
                   {isActive && (
-                    <motion.div
+                    <m.div
                       layoutId="activeTabIndicatorMobile"
                       className="w-4 h-1 bg-primary rounded-full"
                       transition={{ type: "spring", stiffness: 500, damping: 30 }}
@@ -433,15 +433,14 @@ export function FormTabNav({
           })}
         </div>
         {/* Step indicator */}
-        <div
-          className="absolute top-0 left-0 right-0 h-0.5 bg-muted"
-          role="progressbar"
-          aria-valuenow={stepNumber}
-          aria-valuemin={0}
-          aria-valuemax={filteredTabs.length}
-          aria-label={t("tabs.stepProgress")}
-        >
-          <motion.div
+        <div className="absolute top-0 left-0 right-0 h-0.5 bg-muted">
+          <progress
+            className="sr-only"
+            value={stepNumber}
+            max={filteredTabs.length}
+            aria-label={t("tabs.stepProgress")}
+          />
+          <m.div
             className="h-full bg-primary"
             initial={false}
             animate={{ width: stepProgressWidth }}

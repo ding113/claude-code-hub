@@ -23,6 +23,10 @@ interface RegexPattern {
   word: string;
 }
 
+function compileCaseInsensitivePattern(pattern: string): RegExp {
+  return new RegExp(pattern, "i");
+}
+
 class SensitiveWordCache {
   private contains: string[] = [];
   private exact: Set<string> = new Set();
@@ -117,7 +121,7 @@ class SensitiveWordCache {
 
           case "regex":
             try {
-              const pattern = new RegExp(word.word, "i");
+              const pattern = compileCaseInsensitivePattern(word.word);
               this.regex.push({ pattern, word: word.word });
             } catch (error) {
               logger.error(`[SensitiveWordCache] Invalid regex pattern: ${word.word}`, error);

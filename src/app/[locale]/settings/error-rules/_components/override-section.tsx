@@ -171,6 +171,7 @@ export function OverrideSection({
               value={overrideResponse}
               onChange={(e) => onOverrideResponseChange(e.target.value)}
               placeholder={DEFAULT_OVERRIDE_RESPONSE}
+              aria-label={t("errorRules.dialog.overrideResponseLabel")}
               rows={6}
               className={cn(
                 "w-full bg-muted/50 border rounded-lg py-2.5 px-3 text-sm text-foreground font-mono",
@@ -202,6 +203,7 @@ export function OverrideSection({
               value={overrideStatusCode}
               onChange={(e) => onOverrideStatusCodeChange(e.target.value)}
               placeholder={t("errorRules.dialog.overrideStatusCodePlaceholder")}
+              aria-label={t("errorRules.dialog.overrideStatusCodeLabel")}
               className={cn(
                 "w-full bg-muted/50 border border-border rounded-lg py-2 px-3 text-sm text-foreground",
                 "placeholder:text-muted-foreground/50",

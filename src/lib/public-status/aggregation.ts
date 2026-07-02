@@ -65,27 +65,29 @@ export function getConfiguredPublicStatusGroups(
   snapshot: InternalPublicStatusConfigSnapshot
 ): PublicStatusConfiguredGroup[] {
   return snapshot.groups
-    .filter(
-      (group) =>
-        typeof group.sourceGroupName === "string" &&
-        group.sourceGroupName.trim().length > 0 &&
-        Array.isArray(group.models) &&
-        group.models.length > 0
+    .flatMap((group) =>
+      typeof group.sourceGroupName === "string" &&
+      group.sourceGroupName.trim().length > 0 &&
+      Array.isArray(group.models) &&
+      group.models.length > 0
+        ? [
+            {
+              sourceGroupId: group.sourceGroupId ?? null,
+              sourceGroupName: group.sourceGroupName.trim(),
+              publicGroupSlug: group.slug,
+              displayName: group.displayName,
+              explanatoryCopy: group.description,
+              sortOrder: group.sortOrder,
+              models: group.models.map((model) => ({
+                publicModelKey: model.publicModelKey,
+                label: model.label,
+                vendorIconKey: model.vendorIconKey,
+                requestTypeBadge: model.requestTypeBadge,
+              })),
+            },
+          ]
+        : []
     )
-    .map((group) => ({
-      sourceGroupId: group.sourceGroupId ?? null,
-      sourceGroupName: group.sourceGroupName!.trim(),
-      publicGroupSlug: group.slug,
-      displayName: group.displayName,
-      explanatoryCopy: group.description,
-      sortOrder: group.sortOrder,
-      models: group.models.map((model) => ({
-        publicModelKey: model.publicModelKey,
-        label: model.label,
-        vendorIconKey: model.vendorIconKey,
-        requestTypeBadge: model.requestTypeBadge,
-      })),
-    }))
     .sort(
       (left, right) =>
         left.sortOrder - right.sortOrder || left.displayName.localeCompare(right.displayName)
@@ -115,7 +117,7 @@ function median(values: number[]): number | null {
     return null;
   }
 
-  const sorted = [...values].sort((left, right) => left - right);
+  const sorted = Array.from(values).toSorted((left, right) => left - right);
   const middle = Math.floor(sorted.length / 2);
   if (sorted.length % 2 === 0) {
     return Number(((sorted[middle - 1] + sorted[middle]) / 2).toFixed(4));

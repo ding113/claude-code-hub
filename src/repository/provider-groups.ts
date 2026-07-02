@@ -169,8 +169,8 @@ export async function countProvidersUsingGroup(name: string): Promise<number> {
 
   let count = 0;
   for (const row of rows) {
-    const groups = parseProviderGroups(row.groupTag);
-    if (groups.includes(name)) {
+    const groups = new Set(parseProviderGroups(row.groupTag));
+    if (groups.has(name)) {
       count++;
     }
   }
@@ -187,7 +187,14 @@ export async function countProvidersUsingGroup(name: string): Promise<number> {
  * 不触发 audit——这是系统级同步，非用户显式操作。
  */
 export async function ensureProviderGroupsExist(names: string[]): Promise<void> {
-  const unique = Array.from(new Set(names.map((n) => n.trim()).filter((n) => n.length > 0)));
+  const unique = Array.from(
+    new Set(
+      names.flatMap((name) => {
+        const trimmed = name.trim();
+        return trimmed ? [trimmed] : [];
+      })
+    )
+  );
   if (unique.length === 0) return;
 
   await db

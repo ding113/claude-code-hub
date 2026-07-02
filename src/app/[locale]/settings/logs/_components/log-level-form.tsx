@@ -1,7 +1,8 @@
 "use client";
 
+import { useQuery } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useLayoutEffect, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -9,13 +10,26 @@ import { cn } from "@/lib/utils";
 
 type LogLevel = "fatal" | "error" | "warn" | "info" | "debug" | "trace";
 
+async function fetchLogLevel(): Promise<LogLevel> {
+  const response = await fetch("/api/admin/log-level");
+  const data = (await response.json()) as { level: LogLevel };
+  return data.level;
+}
+
 export function LogLevelForm() {
   const t = useTranslations("settings.logs");
   const tCommon = useTranslations("settings.common");
   const [currentLevel, setCurrentLevel] = useState<LogLevel>("info");
   const [selectedLevel, setSelectedLevel] = useState<LogLevel>("info");
-  const [isLoading, setIsLoading] = useState(true);
   const [isPending, startTransition] = useTransition();
+  const {
+    data: loadedLevel,
+    isLoading,
+    isError,
+  } = useQuery({
+    queryKey: ["admin-log-level"],
+    queryFn: fetchLogLevel,
+  });
 
   const LOG_LEVELS: { value: LogLevel; label: string; description: string }[] = [
     { value: "fatal", label: t("levels.fatal.label"), description: t("levels.fatal.description") },
@@ -26,21 +40,17 @@ export function LogLevelForm() {
     { value: "trace", label: t("levels.trace.label"), description: t("levels.trace.description") },
   ];
 
+  useLayoutEffect(() => {
+    if (!loadedLevel) return;
+    setCurrentLevel(loadedLevel);
+    setSelectedLevel(loadedLevel);
+  }, [loadedLevel]);
+
   useEffect(() => {
-    setIsLoading(true);
-    fetch("/api/admin/log-level")
-      .then((res) => res.json())
-      .then((data) => {
-        setCurrentLevel(data.level);
-        setSelectedLevel(data.level);
-      })
-      .catch(() => {
-        toast.error(t("form.fetchFailed"));
-      })
-      .finally(() => {
-        setIsLoading(false);
-      });
-  }, [t]);
+    if (isError) {
+      toast.error(t("form.fetchFailed"));
+    }
+  }, [isError, t]);
 
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();

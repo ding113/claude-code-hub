@@ -33,7 +33,7 @@ vi.mock("@/repository/usage-logs", async (importOriginal) => {
   };
 });
 
-vi.mock("@/lib/utils/timezone", () => ({
+vi.mock("@/lib/utils/timezone-resolver", () => ({
   resolveSystemTimezone: mocks.resolveSystemTimezone,
 }));
 

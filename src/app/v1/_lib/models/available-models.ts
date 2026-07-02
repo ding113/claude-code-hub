@@ -5,7 +5,7 @@ import { logger } from "@/lib/logger";
 import { createProxyAgentForProvider } from "@/lib/proxy-agent";
 import { ERROR_CODES, getErrorMessageServer } from "@/lib/utils/error-messages";
 import { isProviderActiveNow } from "@/lib/utils/provider-schedule";
-import { resolveSystemTimezone } from "@/lib/utils/timezone";
+import { resolveSystemTimezone } from "@/lib/utils/timezone-resolver";
 import { resolveApiKeyAuthOutcome } from "@/repository/key";
 import { findAllProviders } from "@/repository/provider";
 import type {
@@ -285,9 +285,9 @@ async function fetchModelsFromProvider(provider: Provider): Promise<FetchedModel
     logger.debug(`[AvailableModels] Using configured allowedModels for ${provider.name}`, {
       modelCount: provider.allowedModels.length,
     });
-    return (normalizeAllowedModelRules(provider.allowedModels) ?? [])
-      .filter((rule) => rule.matchType === "exact")
-      .map((rule) => ({ id: rule.pattern }));
+    return (normalizeAllowedModelRules(provider.allowedModels) ?? []).flatMap((rule) =>
+      rule.matchType === "exact" ? [{ id: rule.pattern }] : []
+    );
   }
 
   const configMap: Record<Provider["providerType"], UpstreamFetchConfig> = {

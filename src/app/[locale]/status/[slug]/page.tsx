@@ -34,17 +34,22 @@ export default async function PublicStatusGroupPage({
   params: Promise<{ locale: string; slug: string }>;
 }) {
   const { locale, slug } = await params;
-  const t = await getTranslations({ locale, namespace: "settings" });
-  const {
-    followServerDefaults,
-    initialPayload,
-    intervalMinutes,
-    rangeHours,
-    siteTitle,
-    status,
-    timeZone,
-    targetGroup,
-  } = await loadGroupContext(slug);
+  const [
+    t,
+    {
+      followServerDefaults,
+      initialPayload,
+      intervalMinutes,
+      rangeHours,
+      siteTitle,
+      status,
+      timeZone,
+      targetGroup,
+    },
+  ] = await Promise.all([
+    getTranslations({ locale, namespace: "settings" }),
+    loadGroupContext(slug),
+  ]);
   if (!targetGroup) {
     return notFound();
   }

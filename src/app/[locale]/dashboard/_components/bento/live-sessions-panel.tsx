@@ -59,6 +59,7 @@ function SessionItem({ session }: { session: ActiveSessionInfo }) {
 
   return (
     <button
+      type="button"
       onClick={() => router.push(`/dashboard/sessions/${session.sessionId}/messages`)}
       className={cn(
         "flex items-center gap-3 w-full p-2 rounded-md",
@@ -75,7 +76,7 @@ function SessionItem({ session }: { session: ActiveSessionInfo }) {
               "absolute inset-0 rounded-full animate-ping opacity-75",
               getPingColor(statusInfo)
             )}
-            style={{ animationDuration: "1.5s" }}
+            style={{ animationDuration: "800ms" }}
           />
         )}
         {statusInfo.label === "FAIL" ? (
@@ -223,6 +224,7 @@ export function LiveSessionsPanel({
       {/* Footer */}
       {(hasMore || sessions.length > 0) && (
         <button
+          type="button"
           onClick={() => router.push("/dashboard/sessions")}
           className={cn(
             "flex items-center justify-center gap-1 p-2",

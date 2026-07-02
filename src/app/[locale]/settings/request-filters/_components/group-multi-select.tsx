@@ -2,7 +2,7 @@
 
 import { Check, ChevronsUpDown, Loader2 } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -29,6 +29,7 @@ export function GroupMultiSelect({
   disabled = false,
 }: GroupMultiSelectProps) {
   const t = useTranslations("settings.requestFilters.dialog");
+  const groupComboboxContentId = useId();
   const [open, setOpen] = useState(false);
   const [groupTags, setGroupTags] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
@@ -63,6 +64,7 @@ export function GroupMultiSelect({
           variant="outline"
           role="combobox"
           aria-expanded={open}
+          aria-controls={groupComboboxContentId}
           disabled={disabled}
           className="w-full justify-between bg-muted/50 border-border hover:bg-white/10 hover:border-white/20"
         >
@@ -86,6 +88,7 @@ export function GroupMultiSelect({
         </Button>
       </PopoverTrigger>
       <PopoverContent
+        id={groupComboboxContentId}
         className="w-[400px] p-0 bg-card border-border"
         align="start"
         onWheel={(e) => e.stopPropagation()}

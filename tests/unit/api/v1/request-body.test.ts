@@ -14,7 +14,7 @@ describe("v1 request body parser", () => {
   test("parses valid JSON through strict schemas", async () => {
     const result = await parseJsonBody(
       jsonRequest(JSON.stringify({ name: "test" })),
-      z.object({ name: z.string() }).strict()
+      z.strictObject({ name: z.string() })
     );
 
     expect(result).toEqual({ ok: true, data: { name: "test" } });
@@ -34,7 +34,7 @@ describe("v1 request body parser", () => {
     const malformed = await parseJsonBody(jsonRequest("{"), z.object({}));
     const unknownField = await parseJsonBody(
       jsonRequest(JSON.stringify({ name: "test", extra: true })),
-      z.object({ name: z.string() }).strict()
+      z.strictObject({ name: z.string() })
     );
 
     expect(malformed.ok).toBe(false);

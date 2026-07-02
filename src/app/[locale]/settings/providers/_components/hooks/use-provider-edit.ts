@@ -15,7 +15,7 @@ export function useProviderEdit(item: ProviderDisplay, canEdit: boolean) {
 
   // 权重编辑
   const [showWeight, setShowWeight] = useState(false);
-  const [weight, setWeight] = useState<number>(clampWeight(item.weight));
+  const [weight, setWeight] = useState<number>(() => clampWeight(item.weight));
   const initialWeightRef = useRef<number>(item.weight);
 
   // 5小时消费上限

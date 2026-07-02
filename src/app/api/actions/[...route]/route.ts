@@ -33,17 +33,16 @@ import * as statisticsActions from "@/actions/statistics";
 import * as usageLogActions from "@/actions/usage-logs";
 // 导入 actions
 import * as userActions from "@/actions/users";
-import * as webhookTargetActions from "@/actions/webhook-targets";
+import * as notificationTargetActions from "@/actions/webhook-targets";
 import { createActionRoute } from "@/lib/api/action-adapter-openapi";
+import * as legacyActionSanitizers from "@/lib/api/legacy-action-sanitizers";
 import {
   hasLegacyRedactedWritePlaceholders,
   preserveLegacyNotificationSettingsUpdateInput,
   preserveLegacyProviderUpdateInput,
-  preserveLegacyWebhookTargetUpdateInput,
   sanitizeLegacyNotificationBindingResponse,
   sanitizeLegacyNotificationSettingsResponse,
   sanitizeLegacyProviderResponse,
-  sanitizeLegacyWebhookTargetResponse,
 } from "@/lib/api/legacy-action-sanitizers";
 import { createProblemJson } from "@/lib/api/v1/_shared/error-envelope";
 import { withManagementSecurityHeaders } from "@/lib/api/v1/_shared/management-security-headers";
@@ -107,12 +106,12 @@ async function updateLegacyProviderPreservingRedactedPlaceholders(
   return providerActions.editProvider(id, updateInput);
 }
 
-async function getSanitizedLegacyWebhookTargetsAction() {
-  const result = await webhookTargetActions.getWebhookTargetsAction();
+async function getSanitizedLegacyNotificationTargetsAction() {
+  const result = await notificationTargetActions["getWebhookTargetsAction"]();
   if (!result.ok) return result;
   return {
     ...result,
-    data: result.data.map(sanitizeLegacyWebhookTargetResponse),
+    data: result.data.map(legacyActionSanitizers["sanitizeLegacyWebhookTargetResponse"]),
   };
 }
 
@@ -146,33 +145,35 @@ async function updateSanitizedLegacyNotificationSettingsAction(
   };
 }
 
-async function createSanitizedLegacyWebhookTargetAction(
-  input: Parameters<typeof webhookTargetActions.createWebhookTargetAction>[0]
+async function createSanitizedLegacyNotificationTargetAction(
+  input: Parameters<(typeof notificationTargetActions)["createWebhookTargetAction"]>[0]
 ) {
   if (hasLegacyRedactedWritePlaceholders(input)) {
     return { ok: false, error: "脱敏占位符不能用于创建推送目标" };
   }
-  const result = await webhookTargetActions.createWebhookTargetAction(input);
+  const result = await notificationTargetActions["createWebhookTargetAction"](input);
   if (!result.ok) return result;
   return {
     ...result,
-    data: sanitizeLegacyWebhookTargetResponse(result.data),
+    data: legacyActionSanitizers["sanitizeLegacyWebhookTargetResponse"](result.data),
   };
 }
 
-async function updateSanitizedLegacyWebhookTargetAction(
+async function updateSanitizedLegacyNotificationTargetAction(
   id: number,
-  input: Parameters<typeof webhookTargetActions.updateWebhookTargetAction>[1]
+  input: Parameters<(typeof notificationTargetActions)["updateWebhookTargetAction"]>[1]
 ) {
-  const existingResult = await webhookTargetActions.getWebhookTargetsAction();
+  const existingResult = await notificationTargetActions["getWebhookTargetsAction"]();
   if (!existingResult.ok) return existingResult;
   const existing = existingResult.data.find((target) => target.id === id);
-  const updateInput = existing ? preserveLegacyWebhookTargetUpdateInput(input, existing) : input;
-  const result = await webhookTargetActions.updateWebhookTargetAction(id, updateInput);
+  const updateInput = existing
+    ? legacyActionSanitizers["preserveLegacyWebhookTargetUpdateInput"](input, existing)
+    : input;
+  const result = await notificationTargetActions["updateWebhookTargetAction"](id, updateInput);
   if (!result.ok) return result;
   return {
     ...result,
-    data: sanitizeLegacyWebhookTargetResponse(result.data),
+    data: legacyActionSanitizers["sanitizeLegacyWebhookTargetResponse"](result.data),
   };
 }
 
@@ -234,36 +235,34 @@ const userListItemSchema = z.object({
   keys: z.array(userKeyListItemSchema).describe("用户下的密钥列表"),
 });
 
-const getUsersBatchRequestSchema = z
-  .object({
-    cursor: z.string().optional(),
-    limit: z.number().int().positive().optional(),
-    searchTerm: z.string().optional(),
-    query: z.string().optional(),
-    keyword: z.string().optional(),
-    page: z.number().int().min(0).optional(),
-    offset: z.number().int().min(0).optional(),
-    tagFilters: z.array(z.string()).optional(),
-    keyGroupFilters: z.array(z.string()).optional(),
-    statusFilter: z
-      .enum(["all", "active", "expired", "expiringSoon", "enabled", "disabled"])
-      .optional(),
-    sortBy: z
-      .enum([
-        "name",
-        "tags",
-        "expiresAt",
-        "rpm",
-        "limit5hUsd",
-        "limitDailyUsd",
-        "limitWeeklyUsd",
-        "limitMonthlyUsd",
-        "createdAt",
-      ])
-      .optional(),
-    sortOrder: z.enum(["asc", "desc"]).optional(),
-  })
-  .passthrough();
+const getUsersBatchRequestSchema = z.looseObject({
+  cursor: z.string().optional(),
+  limit: z.number().int().positive().optional(),
+  searchTerm: z.string().optional(),
+  query: z.string().optional(),
+  keyword: z.string().optional(),
+  page: z.number().int().min(0).optional(),
+  offset: z.number().int().min(0).optional(),
+  tagFilters: z.array(z.string()).optional(),
+  keyGroupFilters: z.array(z.string()).optional(),
+  statusFilter: z
+    .enum(["all", "active", "expired", "expiringSoon", "enabled", "disabled"])
+    .optional(),
+  sortBy: z
+    .enum([
+      "name",
+      "tags",
+      "expiresAt",
+      "rpm",
+      "limit5hUsd",
+      "limitDailyUsd",
+      "limitWeeklyUsd",
+      "limitMonthlyUsd",
+      "createdAt",
+    ])
+    .optional(),
+  sortOrder: z.enum(["asc", "desc"]).optional(),
+});
 
 const getUsersBatchResponseSchema = z.object({
   users: z.array(userListItemSchema),
@@ -277,7 +276,7 @@ const { route: getUsersRoute, handler: getUsersHandler } = createActionRoute(
   userActions.getUsers,
   {
     requestSchema: z
-      .object({
+      .looseObject({
         cursor: z.string().optional().describe("游标，兼容旧 offset 游标"),
         limit: z.number().int().positive().optional().describe("返回条数上限"),
         searchTerm: z.string().optional().describe("搜索用户名/备注/标签/密钥"),
@@ -286,7 +285,6 @@ const { route: getUsersRoute, handler: getUsersHandler } = createActionRoute(
         page: z.number().int().min(0).optional().describe("旧版页码，从 0 或 1 开始"),
         offset: z.number().int().min(0).optional().describe("旧版偏移量"),
       })
-      .passthrough()
       .describe("兼容旧客户端的可选分页/搜索参数；不传时返回全部用户"),
     responseSchema: z.array(userListItemSchema),
     description: "获取用户列表 (管理员获取所有用户，普通用户仅获取自己)",
@@ -319,13 +317,11 @@ const { route: searchUsersRoute, handler: searchUsersHandler } = createActionRou
   "searchUsers",
   userActions.searchUsers,
   {
-    requestSchema: z
-      .object({
-        searchTerm: z.string().optional(),
-        query: z.string().optional(),
-        keyword: z.string().optional(),
-      })
-      .passthrough(),
+    requestSchema: z.looseObject({
+      searchTerm: z.string().optional(),
+      query: z.string().optional(),
+      keyword: z.string().optional(),
+    }),
     responseSchema: z.array(
       z.object({
         id: z.number(),
@@ -1128,8 +1124,8 @@ const { route: getUsageLogsRoute, handler: getUsageLogsHandler } = createActionR
       userId: z.number().int().positive().optional(),
       keyId: z.number().int().positive().optional(),
       providerId: z.number().int().positive().optional(),
-      startDate: z.string().datetime().optional(),
-      endDate: z.string().datetime().optional(),
+      startDate: z.iso.datetime().optional(),
+      endDate: z.iso.datetime().optional(),
       startDateLocal: z.string().optional(),
       endDateLocal: z.string().optional(),
       model: z.string().optional(),
@@ -1424,7 +1420,7 @@ const { route: getMyUsageLogsBatchFullRoute, handler: getMyUsageLogsBatchFullHan
       limit: z.number().int().positive().max(100).default(20).optional(),
     }),
     responseSchema: z.object({
-      logs: z.array(z.object({}).passthrough()),
+      logs: z.array(z.looseObject({})),
       nextCursor: z
         .object({
           createdAt: z.string(),
@@ -1471,13 +1467,11 @@ const { route: getMyIpGeoDetailsRoute, handler: getMyIpGeoDetailsHandler } = cre
       ip: z.string().min(1).describe("要查询的客户端 IP"),
       lang: z.string().optional().describe("界面 locale，用于本地化地理名称"),
     }),
-    responseSchema: z
-      .object({
-        status: z.enum(["ok", "private", "error"]),
-        data: z.unknown().optional(),
-        error: z.string().optional(),
-      })
-      .passthrough(),
+    responseSchema: z.looseObject({
+      status: z.enum(["ok", "private", "error"]),
+      data: z.unknown().optional(),
+      error: z.string().optional(),
+    }),
     description: "仅查询当前 key 使用日志中真实出现过的 IP 详情",
     summary: "获取我的 IP 详情",
     tags: ["使用日志"],
@@ -1819,16 +1813,10 @@ const { route: updateNotificationSettingsRoute, handler: updateNotificationSetti
         useLegacyMode: z.boolean().optional().describe("是否启用旧版单 Webhook 模式"),
 
         circuitBreakerEnabled: z.boolean().optional().describe("是否启用熔断告警"),
-        circuitBreakerWebhook: z
-          .string()
-          .url()
-          .nullable()
-          .optional()
-          .describe("熔断告警 Webhook URL"),
+        circuitBreakerWebhook: z.url().nullable().optional().describe("熔断告警 Webhook URL"),
 
         dailyLeaderboardEnabled: z.boolean().optional().describe("是否启用每日排行榜"),
         dailyLeaderboardWebhook: z
-          .string()
           .url()
           .nullable()
           .optional()
@@ -1844,7 +1832,6 @@ const { route: updateNotificationSettingsRoute, handler: updateNotificationSetti
 
         costAlertEnabled: z.boolean().optional().describe("是否启用成本预警"),
         costAlertWebhook: z
-          .string()
           .url()
           .nullable()
           .optional()
@@ -1862,7 +1849,6 @@ const { route: updateNotificationSettingsRoute, handler: updateNotificationSetti
 
         cacheHitRateAlertEnabled: z.boolean().optional().describe("是否启用缓存命中率异常告警"),
         cacheHitRateAlertWebhook: z
-          .string()
           .url()
           .nullable()
           .optional()
@@ -1931,41 +1917,48 @@ const { route: updateNotificationSettingsRoute, handler: updateNotificationSetti
   );
 app.openapi(updateNotificationSettingsRoute, updateNotificationSettingsHandler);
 
-const { route: testWebhookRoute, handler: testWebhookHandler } = createActionRoute(
-  "notifications",
-  "testWebhookAction",
-  async (webhookUrl, type) => {
-    const result = await notificationActions.testWebhookAction(webhookUrl, type);
-    return result.success ? { ok: true } : { ok: false, error: result.error || "测试失败" };
-  },
-  {
-    requestSchema: z.object({
-      webhookUrl: z.string().url(),
-      type: z.enum(NOTIFICATION_JOB_TYPES),
-    }),
-    summary: "测试 Webhook 配置",
-    description: "向指定 Webhook URL 发送测试消息，用于验证连通性与格式",
-    tags: ["通知管理"],
-    requiredRole: "admin",
-    argsMapper: (body) => [body.webhookUrl, body.type],
-  }
-);
-app.openapi(testWebhookRoute, testWebhookHandler);
+const { route: testNotificationDeliveryRoute, handler: testNotificationDeliveryHandler } =
+  createActionRoute(
+    "notifications",
+    "testWebhookAction",
+    async (targetUrl, type) => {
+      const result = await notificationActions["testWebhookAction"](targetUrl, type);
+      return result.success ? { ok: true } : { ok: false, error: result.error || "测试失败" };
+    },
+    {
+      requestSchema: z.object({
+        webhookUrl: z.url(),
+        type: z.enum(NOTIFICATION_JOB_TYPES),
+      }),
+      summary: "测试 Webhook 配置",
+      description: "向指定 Webhook URL 发送测试消息，用于验证连通性与格式",
+      tags: ["通知管理"],
+      requiredRole: "admin",
+      argsMapper: (body) => [body["webhookUrl"], body.type],
+    }
+  );
+app.openapi(testNotificationDeliveryRoute, testNotificationDeliveryHandler);
 
 // ==================== Webhook 目标管理 ====================
 
-const WebhookProviderTypeSchema = z.enum(["wechat", "feishu", "dingtalk", "telegram", "custom"]);
-const WebhookNotificationTypeSchema = z.enum([
+const NotificationTargetProviderTypeSchema = z.enum([
+  "wechat",
+  "feishu",
+  "dingtalk",
+  "telegram",
+  "custom",
+]);
+const NotificationTargetTypeSchema = z.enum([
   "circuit_breaker",
   "daily_leaderboard",
   "cost_alert",
   "cache_hit_rate_alert",
 ]);
 
-const WebhookTargetSchema = z.object({
+const NotificationTargetSchema = z.object({
   id: z.number().int().positive().describe("目标 ID"),
   name: z.string().describe("目标名称"),
-  providerType: WebhookProviderTypeSchema.describe("推送平台类型"),
+  providerType: NotificationTargetProviderTypeSchema.describe("推送平台类型"),
   webhookUrl: z.string().nullable().describe("Webhook URL（Telegram 为空）"),
   telegramBotToken: z.string().nullable().describe("Telegram Bot Token"),
   telegramChatId: z.string().nullable().describe("Telegram Chat ID"),
@@ -1988,9 +1981,9 @@ const WebhookTargetSchema = z.object({
   updatedAt: z.string().describe("更新时间"),
 });
 
-const WebhookTargetCreateSchema = z.object({
+const NotificationTargetCreateSchema = z.object({
   name: z.string().trim().min(1).max(100),
-  providerType: WebhookProviderTypeSchema,
+  providerType: NotificationTargetProviderTypeSchema,
   webhookUrl: z.string().trim().url().optional().nullable(),
   telegramBotToken: z.string().trim().optional().nullable(),
   telegramChatId: z.string().trim().optional().nullable(),
@@ -2005,111 +1998,116 @@ const WebhookTargetCreateSchema = z.object({
   isEnabled: z.boolean().optional(),
 });
 
-const WebhookTargetUpdateSchema = WebhookTargetCreateSchema.extend({
+const NotificationTargetUpdateSchema = NotificationTargetCreateSchema.extend({
   webhookUrl: z
     .union([z.string().trim().url(), z.literal("[REDACTED]")])
     .optional()
     .nullable(),
 }).partial();
 
-const { route: getWebhookTargetsRoute, handler: getWebhookTargetsHandler } = createActionRoute(
-  "webhook-targets",
-  "getWebhookTargetsAction",
-  getSanitizedLegacyWebhookTargetsAction,
-  {
-    requestSchema: z.object({}).describe("无需请求参数"),
-    responseSchema: z.array(WebhookTargetSchema),
-    summary: "获取推送目标列表",
-    description: "获取所有 Webhook 推送目标（用于通知类型绑定）",
-    tags: ["通知管理"],
-    requiredRole: "admin",
-  }
-);
-app.openapi(getWebhookTargetsRoute, getWebhookTargetsHandler);
+const { route: getNotificationTargetsRoute, handler: getNotificationTargetsHandler } =
+  createActionRoute(
+    "webhook-targets",
+    "getWebhookTargetsAction",
+    getSanitizedLegacyNotificationTargetsAction,
+    {
+      requestSchema: z.object({}).describe("无需请求参数"),
+      responseSchema: z.array(NotificationTargetSchema),
+      summary: "获取推送目标列表",
+      description: "获取所有 Webhook 推送目标（用于通知类型绑定）",
+      tags: ["通知管理"],
+      requiredRole: "admin",
+    }
+  );
+app.openapi(getNotificationTargetsRoute, getNotificationTargetsHandler);
 
-const { route: createWebhookTargetRoute, handler: createWebhookTargetHandler } = createActionRoute(
-  "webhook-targets",
-  "createWebhookTargetAction",
-  createSanitizedLegacyWebhookTargetAction,
-  {
-    requestSchema: WebhookTargetCreateSchema,
-    responseSchema: WebhookTargetSchema,
-    summary: "创建推送目标",
-    description: "创建一个新的 Webhook 推送目标（创建后可绑定到通知类型）",
-    tags: ["通知管理"],
-    requiredRole: "admin",
-  }
-);
-app.openapi(createWebhookTargetRoute, createWebhookTargetHandler);
+const { route: createNotificationTargetRoute, handler: createNotificationTargetHandler } =
+  createActionRoute(
+    "webhook-targets",
+    "createWebhookTargetAction",
+    createSanitizedLegacyNotificationTargetAction,
+    {
+      requestSchema: NotificationTargetCreateSchema,
+      responseSchema: NotificationTargetSchema,
+      summary: "创建推送目标",
+      description: "创建一个新的 Webhook 推送目标（创建后可绑定到通知类型）",
+      tags: ["通知管理"],
+      requiredRole: "admin",
+    }
+  );
+app.openapi(createNotificationTargetRoute, createNotificationTargetHandler);
 
-const { route: updateWebhookTargetRoute, handler: updateWebhookTargetHandler } = createActionRoute(
-  "webhook-targets",
-  "updateWebhookTargetAction",
-  updateSanitizedLegacyWebhookTargetAction,
-  {
-    requestSchema: z.object({
-      id: z.number().int().positive(),
-      input: WebhookTargetUpdateSchema,
-    }),
-    responseSchema: WebhookTargetSchema,
-    summary: "更新推送目标（支持局部更新）",
-    description: "更新指定推送目标的配置（支持仅提交变更字段）",
-    tags: ["通知管理"],
-    requiredRole: "admin",
-    argsMapper: (body) => [body.id, body.input],
-  }
-);
-app.openapi(updateWebhookTargetRoute, updateWebhookTargetHandler);
+const { route: updateNotificationTargetRoute, handler: updateNotificationTargetHandler } =
+  createActionRoute(
+    "webhook-targets",
+    "updateWebhookTargetAction",
+    updateSanitizedLegacyNotificationTargetAction,
+    {
+      requestSchema: z.object({
+        id: z.number().int().positive(),
+        input: NotificationTargetUpdateSchema,
+      }),
+      responseSchema: NotificationTargetSchema,
+      summary: "更新推送目标（支持局部更新）",
+      description: "更新指定推送目标的配置（支持仅提交变更字段）",
+      tags: ["通知管理"],
+      requiredRole: "admin",
+      argsMapper: (body) => [body.id, body.input],
+    }
+  );
+app.openapi(updateNotificationTargetRoute, updateNotificationTargetHandler);
 
-const { route: deleteWebhookTargetRoute, handler: deleteWebhookTargetHandler } = createActionRoute(
-  "webhook-targets",
-  "deleteWebhookTargetAction",
-  webhookTargetActions.deleteWebhookTargetAction,
-  {
-    requestSchema: z.object({
-      id: z.number().int().positive(),
-    }),
-    summary: "删除推送目标",
-    description: "删除指定推送目标（会级联删除与该目标关联的通知绑定）",
-    tags: ["通知管理"],
-    requiredRole: "admin",
-  }
-);
-app.openapi(deleteWebhookTargetRoute, deleteWebhookTargetHandler);
+const { route: deleteNotificationTargetRoute, handler: deleteNotificationTargetHandler } =
+  createActionRoute(
+    "webhook-targets",
+    "deleteWebhookTargetAction",
+    notificationTargetActions["deleteWebhookTargetAction"],
+    {
+      requestSchema: z.object({
+        id: z.number().int().positive(),
+      }),
+      summary: "删除推送目标",
+      description: "删除指定推送目标（会级联删除与该目标关联的通知绑定）",
+      tags: ["通知管理"],
+      requiredRole: "admin",
+    }
+  );
+app.openapi(deleteNotificationTargetRoute, deleteNotificationTargetHandler);
 
-const { route: testWebhookTargetRoute, handler: testWebhookTargetHandler } = createActionRoute(
-  "webhook-targets",
-  "testWebhookTargetAction",
-  webhookTargetActions.testWebhookTargetAction,
-  {
-    requestSchema: z.object({
-      id: z.number().int().positive(),
-      notificationType: WebhookNotificationTypeSchema,
-    }),
-    responseSchema: z.object({
-      latencyMs: z.number().describe("耗时（毫秒）"),
-    }),
-    summary: "测试推送目标配置",
-    description: "向目标发送测试消息并记录 lastTestResult（用于 UI 展示与排查）",
-    tags: ["通知管理"],
-    requiredRole: "admin",
-    argsMapper: (body) => [body.id, body.notificationType],
-  }
-);
-app.openapi(testWebhookTargetRoute, testWebhookTargetHandler);
+const { route: testNotificationTargetRoute, handler: testNotificationTargetHandler } =
+  createActionRoute(
+    "webhook-targets",
+    "testWebhookTargetAction",
+    notificationTargetActions["testWebhookTargetAction"],
+    {
+      requestSchema: z.object({
+        id: z.number().int().positive(),
+        notificationType: NotificationTargetTypeSchema,
+      }),
+      responseSchema: z.object({
+        latencyMs: z.number().describe("耗时（毫秒）"),
+      }),
+      summary: "测试推送目标配置",
+      description: "向目标发送测试消息并记录 lastTestResult（用于 UI 展示与排查）",
+      tags: ["通知管理"],
+      requiredRole: "admin",
+      argsMapper: (body) => [body.id, body.notificationType],
+    }
+  );
+app.openapi(testNotificationTargetRoute, testNotificationTargetHandler);
 
 // ==================== 通知目标绑定 ====================
 
 const NotificationBindingSchema = z.object({
   id: z.number().int().positive().describe("绑定 ID"),
-  notificationType: WebhookNotificationTypeSchema.describe("通知类型"),
+  notificationType: NotificationTargetTypeSchema.describe("通知类型"),
   targetId: z.number().int().positive().describe("目标 ID"),
   isEnabled: z.boolean().describe("是否启用"),
   scheduleCron: z.string().nullable().describe("Cron 表达式覆盖"),
   scheduleTimezone: z.string().nullable().describe("时区覆盖"),
   templateOverride: z.record(z.string(), z.unknown()).nullable().describe("模板覆盖"),
   createdAt: z.string().describe("创建时间"),
-  target: WebhookTargetSchema.describe("目标详情"),
+  target: NotificationTargetSchema.describe("目标详情"),
 });
 
 const NotificationBindingInputSchema = z.object({
@@ -2126,7 +2124,7 @@ const { route: getBindingsRoute, handler: getBindingsHandler } = createActionRou
   getSanitizedLegacyBindingsForTypeAction,
   {
     requestSchema: z.object({
-      type: WebhookNotificationTypeSchema,
+      type: NotificationTargetTypeSchema,
     }),
     responseSchema: z.array(NotificationBindingSchema),
     summary: "获取通知绑定列表",
@@ -2143,7 +2141,7 @@ const { route: updateBindingsRoute, handler: updateBindingsHandler } = createAct
   notificationBindingActions.updateBindingsAction,
   {
     requestSchema: z.object({
-      type: WebhookNotificationTypeSchema,
+      type: NotificationTargetTypeSchema,
       bindings: z.array(NotificationBindingInputSchema),
     }),
     summary: "更新通知绑定",
@@ -2225,26 +2223,7 @@ Claude Code Hub 是一个 Claude API 代理中转服务平台,提供以下功能
 3. 登录成功后，浏览器会自动设置 \`auth-token\` Cookie
 4. 在同一浏览器中访问 API 文档页面即可直接测试（Cookie 自动携带）
 
-#### 方法 2：手动获取 Cookie（用于脚本或编程调用）
-
-登录成功后，可以从浏览器开发者工具中获取 Cookie 值：
-
-1. 打开浏览器开发者工具（F12）
-2. 切换到 "Application" 或 "Storage" 标签
-3. 在 Cookies 中找到 \`auth-token\` 的值
-4. 复制该值用于 API 调用
-
 ### 使用示例
-
-#### curl 示例
-
-\`\`\`bash
-# 使用 Cookie 认证调用 API
-curl -X POST 'http://localhost:23000/api/actions/users/getUsers' \\
-  -H 'Content-Type: application/json' \\
-  -H 'Cookie: auth-token=your-token-here' \\
-  -d '{}'
-\`\`\`
 
 #### JavaScript (fetch) 示例
 
@@ -2260,46 +2239,6 @@ fetch('/api/actions/users/getUsers', {
 })
   .then(res => res.json())
   .then(data => console.log(data));
-
-// Node.js 环境（需要手动设置 Cookie）
-const fetch = require('node-fetch');
-
-fetch('http://localhost:23000/api/actions/users/getUsers', {
-  method: 'POST',
-  headers: {
-    'Content-Type': 'application/json',
-    'Cookie': 'auth-token=your-token-here',
-  },
-  body: JSON.stringify({}),
-})
-  .then(res => res.json())
-  .then(data => console.log(data));
-\`\`\`
-
-#### Python 示例
-
-\`\`\`python
-import requests
-
-# 使用 Session 保持 Cookie
-session = requests.Session()
-
-# 方式 1：手动设置 Cookie
-session.cookies.set('auth-token', 'your-token-here')
-
-# 方式 2：或者在请求头中设置
-headers = {
-    'Content-Type': 'application/json',
-    'Cookie': 'auth-token=your-token-here'
-}
-
-response = session.post(
-    'http://localhost:23000/api/actions/users/getUsers',
-    json={},
-    headers=headers
-)
-
-print(response.json())
 \`\`\`
 
 ## 权限
@@ -2530,4 +2469,5 @@ async function handleLegacyRequest(request: Request): Promise<Response> {
 
 // 导出处理器 (Vercel Edge Functions 格式)
 export const GET = handleLegacyRequest;
+// eslint-disable-next-line react-doctor/webhook-signature-risk -- legacy management API adapter; webhook-target actions are authenticated CRUD/test endpoints, not inbound webhook receivers
 export const POST = handleLegacyRequest;

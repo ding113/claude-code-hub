@@ -225,8 +225,11 @@ export async function getDashboardRealtimeData(): Promise<ActionResult<Dashboard
 
     // 处理供应商插槽数据（合并流量数据 + 过滤未设置限额 + 按占用率排序 + 限制最多3个）
     const providerSlotsWithVolume: ProviderSlotInfo[] = providerSlots
-      .filter((slot) => slot.totalSlots > 0) // 过滤未设置并发限额的供应商
-      .map((slot) => {
+      .flatMap((slot) => {
+        if (slot.totalSlots <= 0) {
+          return [];
+        }
+
         const rankingData = providerRankings.find((p) => p.providerId === slot.providerId);
 
         if (!rankingData) {
@@ -236,12 +239,14 @@ export async function getDashboardRealtimeData(): Promise<ActionResult<Dashboard
           });
         }
 
-        return {
-          ...slot,
-          totalVolume: rankingData?.totalTokens ?? 0,
-        };
+        return [
+          {
+            ...slot,
+            totalVolume: rankingData?.totalTokens ?? 0,
+          },
+        ];
       })
-      .sort((a, b) => {
+      .toSorted((a, b) => {
         // 按占用率降序排序（占用率 = usedSlots / totalSlots）
         const usageA = a.totalSlots > 0 ? a.usedSlots / a.totalSlots : 0;
         const usageB = b.totalSlots > 0 ? b.usedSlots / b.totalSlots : 0;
@@ -272,8 +277,8 @@ export async function getDashboardRealtimeData(): Promise<ActionResult<Dashboard
     });
 
     // 供应商排行按金额降序排序
-    const sortedProviderRankings = [...providerRankings]
-      .sort((a, b) => b.totalCost - a.totalCost)
+    const sortedProviderRankings = providerRankings
+      .toSorted((a, b) => b.totalCost - a.totalCost)
       .slice(0, 5);
 
     return {

@@ -25,12 +25,15 @@ import {
 import { Label } from "@/components/ui/label";
 import { ListContainer, ListItem, type ListItemData } from "@/components/ui/list";
 import { Switch } from "@/components/ui/switch";
+import { useClientDate } from "@/hooks/use-client-date";
 import { renewUser, toggleUserEnabled } from "@/lib/api-client/v1/actions/users";
 import { formatDate, formatDateDistance } from "@/lib/utils/date-format";
 import type { User, UserDisplay } from "@/types/user";
 import { AddUserDialog } from "./add-user-dialog";
 import { DeleteUserConfirm } from "./forms/delete-user-confirm";
 import { UserForm } from "./forms/user-form";
+
+const EXPIRING_SOON_MS = 72 * 60 * 60 * 1000;
 
 interface UserListProps {
   users: UserDisplay[];
@@ -57,8 +60,9 @@ export function UserList({ users, activeUserId, onUserSelect, currentUser }: Use
   const [enableOnRenew, setEnableOnRenew] = useState(false);
   const [editUser, setEditUser] = useState<UserDisplay | null>(null);
   const [deleteUser, setDeleteUser] = useState<UserDisplay | null>(null);
+  const clientToday = useClientDate();
 
-  const EXPIRING_SOON_MS = 72 * 60 * 60 * 1000; // 72 hours
+  const getRenewalDate = useCallback((days: number) => addDays(new Date(), days), []);
 
   // Calculate user status based on isEnabled and expiresAt
   const getStatusInfo = useCallback((user: UserDisplay, now: number) => {
@@ -91,13 +95,14 @@ export function UserList({ users, activeUserId, onUserSelect, currentUser }: Use
   const formatExpiry = useCallback(
     (expiresAt: Date | null | undefined) => {
       if (!expiresAt) return tUsers("neverExpires");
-      const relative = formatDateDistance(expiresAt, new Date(), locale, {
+      const absolute = formatDate(expiresAt, "yyyy-MM-dd", locale);
+      if (!clientToday) return absolute;
+      const relative = formatDateDistance(expiresAt, clientToday, locale, {
         addSuffix: true,
       });
-      const absolute = formatDate(expiresAt, "yyyy-MM-dd", locale);
       return `${relative} · ${absolute}`;
     },
-    [tUsers, locale]
+    [tUsers, locale, clientToday]
   );
 
   // Handle renew user
@@ -168,7 +173,7 @@ export function UserList({ users, activeUserId, onUserSelect, currentUser }: Use
   // Transform user data to list items
   const listItems: Array<{ user: UserDisplay; item: ListItemData }> = useMemo(
     () => {
-      const now = Date.now();
+      const now = clientToday?.getTime() ?? 0;
       return users.map((user) => {
         const statusInfo = getStatusInfo(user, now);
         const activeKeys = user.keys.filter((k) => k.status === "enabled").length;
@@ -202,7 +207,7 @@ export function UserList({ users, activeUserId, onUserSelect, currentUser }: Use
       });
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [users, t, formatExpiry, getStatusInfo]
+    [users, t, formatExpiry, getStatusInfo, clientToday]
   );
 
   // 特别设计的空状态 - 仅管理员可见
@@ -270,7 +275,7 @@ export function UserList({ users, activeUserId, onUserSelect, currentUser }: Use
                             onSelect={() =>
                               handleRenew(
                                 user.id,
-                                addDays(new Date(), 30),
+                                getRenewalDate(30),
                                 user.isEnabled ? undefined : true
                               )
                             }
@@ -281,7 +286,7 @@ export function UserList({ users, activeUserId, onUserSelect, currentUser }: Use
                             onSelect={() =>
                               handleRenew(
                                 user.id,
-                                addDays(new Date(), 90),
+                                getRenewalDate(90),
                                 user.isEnabled ? undefined : true
                               )
                             }
@@ -292,7 +297,7 @@ export function UserList({ users, activeUserId, onUserSelect, currentUser }: Use
                             onSelect={() =>
                               handleRenew(
                                 user.id,
-                                addDays(new Date(), 365),
+                                getRenewalDate(365),
                                 user.isEnabled ? undefined : true
                               )
                             }
@@ -352,7 +357,7 @@ export function UserList({ users, activeUserId, onUserSelect, currentUser }: Use
               label={t("actions.expirationDate")}
               value={customDate}
               onChange={setCustomDate}
-              minDate={new Date()}
+              minDate={clientToday ?? undefined}
             />
             {customRenewDialog.user && !customRenewDialog.user.isEnabled && (
               <div className="flex items-center space-x-2">

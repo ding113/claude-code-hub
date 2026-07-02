@@ -1,6 +1,6 @@
 "use client";
 
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, m } from "framer-motion";
 import {
   Activity,
   AlertTriangle,
@@ -38,7 +38,7 @@ import {
 import useSWR from "swr";
 import { type Locale, localeLabels, locales } from "@/i18n/config";
 import { normalizePathnameForLocaleNavigation } from "@/i18n/pathname";
-import { usePathname, useRouter } from "@/i18n/routing";
+import { useRouter } from "@/i18n/routing";
 import { getDashboardRealtimeData } from "@/lib/api-client/v1/actions/dashboard-realtime";
 import { getSystemSettings } from "@/lib/api-client/v1/actions/system-config";
 import { CURRENCY_CONFIG } from "@/lib/utils/currency";
@@ -51,6 +51,11 @@ import { CURRENCY_CONFIG } from "@/lib/utils/currency";
 const COLORS = {
   models: ["#ff6b35", "#00d4ff", "#ffd60a", "#00ff88", "#a855f7"],
 };
+
+const UTILIZATION_GRID_LINE_KEYS = Array.from(
+  { length: 20 },
+  (_, index) => `utilization-grid-line-${index}`
+);
 
 const THEMES = {
   dark: {
@@ -172,7 +177,7 @@ const CountUp = ({
   decimals?: number;
   className?: string;
 }) => {
-  const [displayValue, setDisplayValue] = useState(value);
+  const [displayValue, setDisplayValue] = useState(() => value);
   const prevValueRef = useRef(value);
   useEffect(() => {
     const start = prevValueRef.current;
@@ -225,7 +230,7 @@ const MetricCard = ({
   const isPositive = type === "positive";
   const isNegative = type === "negative";
   return (
-    <motion.div
+    <m.div
       initial={{ opacity: 0, scale: 0.95 }}
       animate={{ opacity: 1, scale: 1 }}
       className={`relative overflow-hidden rounded-lg p-4 flex flex-col justify-between h-full ${theme.card} hover:border-orange-500/30 transition-colors group`}
@@ -260,7 +265,7 @@ const MetricCard = ({
           </span>
         )}
       </div>
-    </motion.div>
+    </m.div>
   );
 };
 
@@ -303,7 +308,7 @@ const ActivityStream = ({
         <div className="space-y-0.5 relative h-full overflow-y-auto no-scrollbar p-1">
           <AnimatePresence initial={false}>
             {activities.map((item) => (
-              <motion.div
+              <m.div
                 key={item.id}
                 initial={{ opacity: 0, x: 20, backgroundColor: "rgba(255, 107, 53, 0.2)" }}
                 animate={{ opacity: 1, x: 0, backgroundColor: "rgba(255,255,255,0.02)" }}
@@ -332,12 +337,12 @@ const ActivityStream = ({
                     {item.status === 0 ? "..." : item.status}
                   </span>
                 </div>
-              </motion.div>
+              </m.div>
             ))}
           </AnimatePresence>
         </div>
       </div>
-      <style jsx>{`
+      <style>{`
         .no-scrollbar::-webkit-scrollbar {
           display: none;
         }
@@ -373,13 +378,13 @@ const ProviderQuotas = ({
         {t("sections.providerQuotas")}
       </div>
       <div className="flex-1 flex flex-col justify-around gap-2">
-        {providers.map((p, idx) => {
+        {providers.map((p) => {
           const percent = p.totalSlots > 0 ? (p.usedSlots / p.totalSlots) * 100 : 0;
           const isCritical = percent > 90;
           const isWarning = percent > 70;
 
           return (
-            <div key={idx} className="flex flex-col gap-1">
+            <div key={p.name} className="flex flex-col gap-1">
               <div className="flex justify-between items-end text-[10px]">
                 <span className={`font-mono font-bold ${theme.text}`}>{p.name}</span>
                 <span className={`font-mono ${isCritical ? "text-red-400" : "text-gray-400"}`}>
@@ -398,8 +403,8 @@ const ProviderQuotas = ({
                   style={{ width: `${percent}%` }}
                 />
                 <div className="absolute inset-0 w-full h-full flex">
-                  {Array.from({ length: 20 }).map((_, i) => (
-                    <div key={i} className="flex-1 border-r border-black/20 h-full" />
+                  {UTILIZATION_GRID_LINE_KEYS.map((lineKey) => (
+                    <div key={lineKey} className="flex-1 border-r border-black/20 h-full" />
                   ))}
                 </div>
               </div>
@@ -443,7 +448,7 @@ const UserRankings = ({
 
       <div className="flex-1 space-y-2 overflow-hidden">
         {users.slice(0, 5).map((user, index) => (
-          <motion.div
+          <m.div
             key={user.userId}
             layout
             transition={{ type: "spring", stiffness: 300, damping: 30 }}
@@ -480,7 +485,7 @@ const UserRankings = ({
               </div>
               <div className="flex justify-between items-center mt-1">
                 <div className="w-16 h-1 bg-gray-700 rounded-full overflow-hidden">
-                  <motion.div
+                  <m.div
                     className="h-full bg-purple-500"
                     initial={{ width: 0 }}
                     animate={{ width: `${(user.totalCost / (users[0]?.totalCost || 1)) * 100}%` }}
@@ -489,7 +494,7 @@ const UserRankings = ({
                 <span className="text-[9px] text-gray-500">{user.totalRequests} reqs</span>
               </div>
             </div>
-          </motion.div>
+          </m.div>
         ))}
       </div>
     </div>
@@ -564,13 +569,11 @@ const TrafficTrend = ({
 }) => {
   // 只显示到当前小时的数据（截断未来时间）
   const currentHour = currentTime.getUTCHours();
-  const filteredData = data
-    .filter((item) => item.hour <= currentHour)
-    .map((item) => ({
-      hour: item.hour,
-      value: item.value,
-      hourLabel: `${item.hour}:00`,
-    }));
+  const filteredData = data.flatMap((item) =>
+    item.hour <= currentHour
+      ? [{ hour: item.hour, value: item.value, hourLabel: `${item.hour}:00` }]
+      : []
+  );
 
   return (
     <div className="h-full flex flex-col">
@@ -685,8 +688,8 @@ const ModelDistribution = ({
               dataKey="value"
               stroke="none"
             >
-              {chartData.map((_, index) => (
-                <Cell key={`cell-${index}`} fill={COLORS.models[index % COLORS.models.length]} />
+              {chartData.map((entry, index) => (
+                <Cell key={entry.name} fill={COLORS.models[index % COLORS.models.length]} />
               ))}
             </Pie>
             <Tooltip
@@ -720,7 +723,6 @@ export default function BigScreenPage() {
   // 语言切换
   const currentLocale = useLocale() as Locale;
   const router = useRouter();
-  const pathname = usePathname();
 
   const handleLocaleSwitch = () => {
     // 循环切换语言：zh-CN → en → ja → ru → zh-TW → zh-CN
@@ -728,7 +730,9 @@ export default function BigScreenPage() {
     const nextIndex = (currentIndex + 1) % locales.length;
     const nextLocale = locales[nextIndex];
 
-    router.push(normalizePathnameForLocaleNavigation(pathname), { locale: nextLocale });
+    router.push(normalizePathnameForLocaleNavigation(window.location.pathname), {
+      locale: nextLocale,
+    });
   };
 
   const theme = THEMES[themeMode as keyof typeof THEMES];
@@ -815,6 +819,7 @@ export default function BigScreenPage() {
             <div className="h-6 w-[1px] bg-white/10" />
             <div className="flex gap-2">
               <button
+                type="button"
                 onClick={handleLocaleSwitch}
                 className={`p-1.5 rounded hover:bg-white/5 ${theme.text} flex items-center gap-1.5 transition-colors`}
                 title={t("chart.switchLocale", { locale: localeLabels[currentLocale] })}
@@ -825,12 +830,14 @@ export default function BigScreenPage() {
                 </span>
               </button>
               <button
+                type="button"
                 onClick={() => setThemeMode(themeMode === "dark" ? "light" : "dark")}
                 className={`p-1.5 rounded hover:bg-white/5 ${theme.text} transition-colors`}
               >
                 {themeMode === "dark" ? <Moon size={18} /> : <Sun size={18} />}
               </button>
               <button
+                type="button"
                 onClick={() => mutate()}
                 className={`p-1.5 rounded hover:bg-white/5 ${theme.text} transition-colors`}
               >
@@ -935,7 +942,7 @@ export default function BigScreenPage() {
         </footer>
       </div>
 
-      <style jsx global>{`
+      <style>{`
         @import url("https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Space+Grotesk:wght@400;600;700&display=swap");
         .font-mono {
           font-family: "JetBrains Mono", monospace;

@@ -1,6 +1,7 @@
 "use client";
 
 import { Activity } from "lucide-react";
+import { useMemo } from "react";
 import { ThemeSwitcher } from "@/components/ui/theme-switcher";
 import { cn } from "@/lib/utils";
 import type { DisplayState } from "../_lib/derive-display-state";
@@ -54,12 +55,17 @@ export function StatusHero({
   statusLabel,
 }: StatusHeroProps) {
   const colors = pillColor(overallState);
-  const formattedGeneratedAt = generatedAt
-    ? new Intl.DateTimeFormat(locale, {
+  const generatedAtFormatter = useMemo(
+    () =>
+      new Intl.DateTimeFormat(locale, {
         dateStyle: "medium",
         timeStyle: "medium",
         timeZone,
-      }).format(new Date(generatedAt))
+      }),
+    [locale, timeZone]
+  );
+  const formattedGeneratedAt = generatedAt
+    ? generatedAtFormatter.format(new Date(generatedAt))
     : "—";
 
   return (

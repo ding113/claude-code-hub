@@ -71,9 +71,9 @@ export function EditKeyQuotaDialog({
   const [limitDaily, setLimitDaily] = useState<string>(
     currentQuota?.costDaily.limit?.toString() ?? ""
   );
-  const [resetMode5h, setResetMode5h] = useState<"fixed" | "rolling">(limit5hResetMode);
-  const [resetMode, setResetMode] = useState<"fixed" | "rolling">(dailyResetMode);
-  const [resetTime, setResetTime] = useState<string>(dailyResetTime);
+  const [resetMode5h, setResetMode5h] = useState<"fixed" | "rolling">(() => limit5hResetMode);
+  const [resetMode, setResetMode] = useState<"fixed" | "rolling">(() => dailyResetMode);
+  const [resetTime, setResetTime] = useState<string>(() => dailyResetTime);
   const [limitWeekly, setLimitWeekly] = useState<string>(
     currentQuota?.costWeekly.limit?.toString() ?? ""
   );

@@ -798,6 +798,7 @@ export async function tryResponsesWebsocketUpstream(options: {
       }
 
       while (!socketClosed) {
+        // react-doctor-disable-next-line react-doctor/async-await-in-loop -- websocket messages must be consumed in arrival order
         const next = await new Promise<string | null>((resolve) => {
           if (messageQueue.length > 0) {
             resolve(popMessage() ?? null);

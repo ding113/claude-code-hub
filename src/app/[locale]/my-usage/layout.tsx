@@ -9,8 +9,10 @@ export default async function MyUsageLayout({
   children: ReactNode;
   params: Promise<{ locale: string }>;
 }) {
-  const { locale } = await params;
-  const session = await getSession({ allowReadOnlyAccess: true });
+  const [{ locale }, session] = await Promise.all([
+    params,
+    getSession({ allowReadOnlyAccess: true }),
+  ]);
 
   if (!session) {
     return redirect({ href: "/login?from=/my-usage", locale });

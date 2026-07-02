@@ -22,7 +22,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { useLocale, useTimeZone, useTranslations } from "next-intl";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useEffectEvent, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -178,6 +178,7 @@ export function PriceList({
     },
     []
   );
+  const fetchLatestPrices = useEffectEvent(fetchPrices);
 
   // 监听价格数据变化事件（由其他组件触发）
   useEffect(() => {
@@ -185,16 +186,22 @@ export function PriceList({
       const forcedPage = pendingRefreshPage.current;
       if (typeof forcedPage === "number") {
         pendingRefreshPage.current = null;
-        fetchPrices(forcedPage, pageSize, debouncedSearchTerm, sourceFilter, litellmProviderFilter);
+        fetchLatestPrices(
+          forcedPage,
+          pageSize,
+          debouncedSearchTerm,
+          sourceFilter,
+          litellmProviderFilter
+        );
         return;
       }
 
-      fetchPrices(page, pageSize, debouncedSearchTerm, sourceFilter, litellmProviderFilter);
+      fetchLatestPrices(page, pageSize, debouncedSearchTerm, sourceFilter, litellmProviderFilter);
     };
 
     window.addEventListener("price-data-updated", handlePriceUpdate);
     return () => window.removeEventListener("price-data-updated", handlePriceUpdate);
-  }, [page, pageSize, debouncedSearchTerm, fetchPrices, sourceFilter, litellmProviderFilter]);
+  }, [page, pageSize, debouncedSearchTerm, sourceFilter, litellmProviderFilter]);
 
   // 当防抖后的搜索词变化时，触发搜索（重置到第一页）
   useEffect(() => {

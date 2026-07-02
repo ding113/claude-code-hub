@@ -186,12 +186,9 @@ function QuotaRow({
       {!unlimited ? (
         <Progress value={percent ?? 0} className={progressClass} aria-label={ariaLabel} />
       ) : (
-        <div
-          className="h-1.5 flex-1 rounded-full bg-muted/50"
-          role="progressbar"
-          aria-label={`${label}: ${t("unlimited")}`}
-          aria-valuetext={t("unlimited")}
-        />
+        <div className="h-1.5 flex-1 rounded-full bg-muted/50">
+          <progress className="sr-only" aria-label={`${label}: ${t("unlimited")}`} />
+        </div>
       )}
       <span className="shrink-0 text-right font-mono text-xs text-foreground">
         {formatValue(current)}

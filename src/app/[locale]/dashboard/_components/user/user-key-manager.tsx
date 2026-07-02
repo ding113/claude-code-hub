@@ -6,6 +6,8 @@ import { KeyList } from "./key-list";
 import { KeyListHeader } from "./key-list-header";
 import { UserList } from "./user-list";
 
+const KEY_OWNER_PLACEHOLDER_DATE = new Date(0);
+
 interface UserKeyManagerProps {
   users: UserDisplay[];
   currentUser?: User;
@@ -50,8 +52,8 @@ export function UserKeyManager({ users, currentUser, currencyCode = "USD" }: Use
                     rpm: activeUser.rpm,
                     dailyQuota: activeUser.dailyQuota,
                     providerGroup: activeUser.providerGroup || "default",
-                    createdAt: new Date(),
-                    updatedAt: new Date(),
+                    createdAt: KEY_OWNER_PLACEHOLDER_DATE,
+                    updatedAt: KEY_OWNER_PLACEHOLDER_DATE,
                     limit5hUsd: activeUser.limit5hUsd ?? undefined,
                     limit5hResetMode: activeUser.limit5hResetMode ?? "rolling",
                     limitWeeklyUsd: activeUser.limitWeeklyUsd ?? undefined,
@@ -105,8 +107,8 @@ export function UserKeyManager({ users, currentUser, currencyCode = "USD" }: Use
                     rpm: activeUser.rpm,
                     dailyQuota: activeUser.dailyQuota,
                     providerGroup: activeUser.providerGroup || "default",
-                    createdAt: new Date(),
-                    updatedAt: new Date(),
+                    createdAt: KEY_OWNER_PLACEHOLDER_DATE,
+                    updatedAt: KEY_OWNER_PLACEHOLDER_DATE,
                     limit5hUsd: activeUser.limit5hUsd ?? undefined,
                     limit5hResetMode: activeUser.limit5hResetMode ?? "rolling",
                     limitWeeklyUsd: activeUser.limitWeeklyUsd ?? undefined,

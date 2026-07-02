@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useLayoutEffect, useState } from "react";
 import { QuotaQuickEditPopover } from "@/components/quota/quota-quick-edit-popover";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -70,10 +70,10 @@ export function UserLimitBadge({
   editUnit = "currency",
 }: UserLimitBadgeProps) {
   const [usageData, setUsageData] = useState<LimitUsageData | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isFetching, setIsFetching] = useState(false);
   const [error, setError] = useState(false);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     let isCancelled = false;
 
     // If no limit is set, don't fetch usage data
@@ -86,12 +86,12 @@ export function UserLimitBadge({
     if (cached) {
       // Reset error/loading state when using cached data
       setError(false);
-      setIsLoading(false);
+      setIsFetching(false);
       setUsageData((prev) => (prev === cached ? prev : cached));
       return;
     }
 
-    setIsLoading(true);
+    setIsFetching(true);
     setError(false);
 
     getSharedUserLimitUsage(userId)
@@ -113,7 +113,7 @@ export function UserLimitBadge({
       })
       .finally(() => {
         if (!isCancelled) {
-          setIsLoading(false);
+          setIsFetching(false);
         }
       });
 
@@ -158,7 +158,7 @@ export function UserLimitBadge({
   }
 
   // Loading state
-  if (isLoading) {
+  if (isFetching) {
     return <Skeleton className="h-5 w-12" />;
   }
 

@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { useClientDate } from "@/hooks/use-client-date";
 import { formatDate, formatDateDistance } from "@/lib/utils/date-format";
 
 export interface QuickRenewUser {
@@ -65,6 +66,7 @@ export function QuickRenewDialog({
   const [customDate, setCustomDate] = useState("");
   const [enableOnRenew, setEnableOnRenew] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const clientToday = useClientDate();
 
   // Format current expiry for display
   const currentExpiryText = useMemo(() => {
@@ -72,14 +74,14 @@ export function QuickRenewDialog({
       return translations.neverExpires;
     }
     const expiresAt = user.expiresAt instanceof Date ? user.expiresAt : new Date(user.expiresAt);
-    const now = new Date();
-    if (expiresAt <= now) {
+    const absolute = formatDate(expiresAt, "yyyy-MM-dd", locale);
+    if (!clientToday) return absolute;
+    if (expiresAt <= clientToday) {
       return translations.expired;
     }
-    const relative = formatDateDistance(expiresAt, now, locale, { addSuffix: true });
-    const absolute = formatDate(expiresAt, "yyyy-MM-dd", locale);
+    const relative = formatDateDistance(expiresAt, clientToday, locale, { addSuffix: true });
     return `${relative} (${absolute})`;
-  }, [user?.expiresAt, locale, translations]);
+  }, [user?.expiresAt, locale, translations, clientToday]);
 
   // Handle quick selection
   const handleQuickSelect = useCallback(
@@ -235,7 +237,7 @@ export function QuickRenewDialog({
               label=""
               value={customDate}
               onChange={setCustomDate}
-              minDate={new Date()}
+              minDate={clientToday ?? undefined}
             />
           </div>
 

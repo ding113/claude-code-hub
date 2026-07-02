@@ -57,6 +57,7 @@ vi.mock("@/components/ui/switch", () => ({
   }) => (
     <button
       data-testid="switch"
+      role="switch"
       onClick={() => onCheckedChange(!checked)}
       disabled={disabled}
       aria-checked={checked}

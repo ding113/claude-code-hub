@@ -1,6 +1,6 @@
 "use client";
 
-import { motion } from "framer-motion";
+import { m } from "framer-motion";
 import { Clock, Info, Settings, Timer } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { Badge } from "@/components/ui/badge";
@@ -45,7 +45,7 @@ export function OptionsSection({ subSectionRefs }: OptionsSectionProps) {
 
   return (
     <TooltipProvider>
-      <motion.div
+      <m.div
         initial={{ opacity: 0, x: 20 }}
         animate={{ opacity: 1, x: 0 }}
         exit={{ opacity: 0, x: -20 }}
@@ -584,7 +584,7 @@ export function OptionsSection({ subSectionRefs }: OptionsSectionProps) {
             </SectionCard>
           </div>
         </div>
-      </motion.div>
+      </m.div>
     </TooltipProvider>
   );
 }

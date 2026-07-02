@@ -303,10 +303,10 @@ function parseUserParams(c: Context): { id: number } | Response {
 }
 
 function splitCsv(value?: string): string[] | undefined {
-  const items = value
-    ?.split(",")
-    .map((item) => item.trim())
-    .filter(Boolean);
+  const items = value?.split(",").flatMap((item) => {
+    const trimmed = item.trim();
+    return trimmed ? [trimmed] : [];
+  });
   return items && items.length > 0 ? items : undefined;
 }
 
@@ -361,8 +361,8 @@ function redactUserKeys(value: unknown): unknown {
     return value;
   }
 
-  const entries = Object.entries(value as Record<string, unknown>)
-    .filter(([key]) => key !== "fullKey")
-    .map(([key, child]) => [key, redactUserKeys(child)] as const);
+  const entries = Object.entries(value as Record<string, unknown>).flatMap(([key, child]) =>
+    key !== "fullKey" ? ([[key, redactUserKeys(child)]] as const) : []
+  );
   return Object.fromEntries(entries);
 }

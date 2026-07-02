@@ -3,7 +3,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Loader2, Plus, Save } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useEffect, useMemo, useState } from "react";
+import { useLayoutEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -161,7 +161,7 @@ export function WebhookTargetDialog({
     defaultValues,
   });
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (open) {
       reset(defaultValues);
     }

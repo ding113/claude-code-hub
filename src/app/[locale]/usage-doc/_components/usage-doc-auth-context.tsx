@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, type ReactNode, useContext } from "react";
+import { createContext, type ReactNode, use, useMemo } from "react";
 
 interface UsageDocAuthContextValue {
   isLoggedIn: boolean;
@@ -18,11 +18,11 @@ export function UsageDocAuthProvider({
   isLoggedIn: boolean;
   children: ReactNode;
 }) {
-  return (
-    <UsageDocAuthContext.Provider value={{ isLoggedIn }}>{children}</UsageDocAuthContext.Provider>
-  );
+  const value = useMemo(() => ({ isLoggedIn }), [isLoggedIn]);
+
+  return <UsageDocAuthContext.Provider value={value}>{children}</UsageDocAuthContext.Provider>;
 }
 
 export function useUsageDocAuth(): UsageDocAuthContextValue {
-  return useContext(UsageDocAuthContext);
+  return use(UsageDocAuthContext);
 }

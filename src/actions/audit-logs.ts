@@ -57,8 +57,10 @@ export interface GetAuditLogsBatchResult {
 export async function getAuditLogsBatch(
   input: GetAuditLogsBatchInput = {}
 ): Promise<ActionResult<GetAuditLogsBatchResult>> {
-  const tAudit = await getTranslations("auditLogs");
-  const tErrors = await getTranslations("errors");
+  const [tAudit, tErrors] = await Promise.all([
+    getTranslations("auditLogs"),
+    getTranslations("errors"),
+  ]);
   try {
     const session = await getSession();
     if (!session || session.user.role !== "admin") {
@@ -112,8 +114,10 @@ export async function getAuditLogsBatch(
  * 获取审计日志详情（管理员）
  */
 export async function getAuditLogDetail(id: number): Promise<ActionResult<AuditLogRow | null>> {
-  const tAudit = await getTranslations("auditLogs");
-  const tErrors = await getTranslations("errors");
+  const [tAudit, tErrors] = await Promise.all([
+    getTranslations("auditLogs"),
+    getTranslations("errors"),
+  ]);
   try {
     const session = await getSession();
     if (!session || session.user.role !== "admin") {

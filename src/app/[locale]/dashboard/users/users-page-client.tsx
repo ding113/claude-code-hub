@@ -3,7 +3,7 @@
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Layers, Loader2, Plus, Search, ShieldCheck } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -84,11 +84,11 @@ function UsersPageContent({ currentUser }: UsersPageClientProps) {
   // Debounce search term to avoid frequent API requests
   const debouncedSearchTerm = useDebounce(searchTerm, 300);
   const pendingTagFiltersKey = useMemo(
-    () => pendingTagFilters.slice().sort().join("|"),
+    () => pendingTagFilters.toSorted().join("|"),
     [pendingTagFilters]
   );
   const pendingKeyGroupFiltersKey = useMemo(
-    () => pendingKeyGroupFilters.slice().sort().join("|"),
+    () => pendingKeyGroupFilters.toSorted().join("|"),
     [pendingKeyGroupFilters]
   );
   const debouncedPendingTagsKey = useDebounce(pendingTagFiltersKey, 300);
@@ -197,12 +197,12 @@ function UsersPageContent({ currentUser }: UsersPageClientProps) {
   const usageDatasetKey = useMemo(() => JSON.stringify(queryKey), [queryKey]);
   const latestUsageDatasetKeyRef = useRef(usageDatasetKey);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     latestUsageDatasetKeyRef.current = usageDatasetKey;
     setUsageByKeyId({});
   }, [usageDatasetKey]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!isAdmin || isLoading || isFetching || pageUserIds.length === 0) {
       return;
     }
@@ -273,23 +273,15 @@ function UsersPageContent({ currentUser }: UsersPageClientProps) {
   const isInitialLoading = isLoading && allUsers.length === 0;
   const isRefreshing = isFetching && !isInitialLoading && !isFetchingNextPage;
 
-  useEffect(() => {
-    setPendingTagFilters(tagFilters);
-  }, [tagFilters]);
-
-  useEffect(() => {
-    setPendingKeyGroupFilters(keyGroupFilters);
-  }, [keyGroupFilters]);
-
-  useEffect(() => {
-    const appliedKey = tagFilters.slice().sort().join("|");
+  useLayoutEffect(() => {
+    const appliedKey = tagFilters.toSorted().join("|");
     if (debouncedPendingTagsKey !== appliedKey) {
       setTagFilters(pendingTagFilters);
     }
   }, [debouncedPendingTagsKey, pendingTagFilters, tagFilters]);
 
-  useEffect(() => {
-    const appliedKey = keyGroupFilters.slice().sort().join("|");
+  useLayoutEffect(() => {
+    const appliedKey = keyGroupFilters.toSorted().join("|");
     if (debouncedPendingKeyGroupsKey !== appliedKey) {
       setKeyGroupFilters(pendingKeyGroupFilters);
     }
@@ -337,7 +329,7 @@ function UsersPageContent({ currentUser }: UsersPageClientProps) {
   }, [queryClient]);
 
   const hasPendingFilterChanges = useMemo(() => {
-    const normalize = (values: string[]) => [...values].sort().join("|");
+    const normalize = (values: string[]) => Array.from(values).toSorted().join("|");
     return (
       normalize(pendingTagFilters) !== normalize(tagFilters) ||
       normalize(pendingKeyGroupFilters) !== normalize(keyGroupFilters)
@@ -369,6 +361,7 @@ function UsersPageContent({ currentUser }: UsersPageClientProps) {
     const matchingIds = new Set<number>();
     const normalizedTerm = searchTerm.trim().toLowerCase();
     const hasSearch = normalizedTerm.length > 0;
+    const keyGroupFilterSet = new Set(keyGroupFilters);
 
     for (const user of visibleUsers) {
       if (user.keys.length === 0) continue;
@@ -382,7 +375,7 @@ function UsersPageContent({ currentUser }: UsersPageClientProps) {
 
         const matchesKeyGroup =
           keyGroupFilters.length > 0 &&
-          keyGroupFilters.some((filter) => splitTags(key.providerGroup).includes(filter));
+          splitTags(key.providerGroup).some((tag) => keyGroupFilterSet.has(tag));
 
         if (matchesSearch || matchesKeyGroup) {
           matchingIds.add(key.id);
@@ -404,7 +397,7 @@ function UsersPageContent({ currentUser }: UsersPageClientProps) {
   );
 
   // Keep selection consistent with current filtered list while in multi-select mode.
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!isMultiSelectMode) return;
     const validUserIds = new Set(allVisibleUserIds);
     const validKeyIds = new Set(allVisibleKeyIds);
@@ -551,18 +544,7 @@ function UsersPageContent({ currentUser }: UsersPageClientProps) {
     [tUserMgmt, tKeyList, tCommon]
   );
 
-  const scrollResetKey = useMemo(
-    () =>
-      `${resolvedSearchTerm ?? ""}|${resolvedTagFilters?.join(",") ?? "all"}|${resolvedKeyGroupFilters?.join(",") ?? "all"}|${resolvedStatusFilter ?? "all"}|${sortBy}|${sortOrder}`,
-    [
-      resolvedSearchTerm,
-      resolvedTagFilters,
-      resolvedKeyGroupFilters,
-      resolvedStatusFilter,
-      sortBy,
-      sortOrder,
-    ]
-  );
+  const scrollResetKey = `${resolvedSearchTerm ?? ""}|${resolvedTagFilters?.join(",") ?? "all"}|${resolvedKeyGroupFilters?.join(",") ?? "all"}|${resolvedStatusFilter ?? "all"}|${sortBy}|${sortOrder}`;
 
   return (
     <div className="space-y-4">
@@ -758,33 +740,41 @@ function UsersPageContent({ currentUser }: UsersPageClientProps) {
         <div className="space-y-3">
           <UserManagementTable
             users={visibleUsers}
-            hasNextPage={hasNextPage}
-            isFetchingNextPage={isFetchingNextPage}
-            onLoadMore={fetchNextPage}
+            pagination={{
+              hasNextPage,
+              isFetchingNextPage,
+              onLoadMore: fetchNextPage,
+            }}
             scrollResetKey={scrollResetKey}
             currentUser={currentUser}
             currencyCode={systemSettings?.currencyDisplay ?? "USD"}
             onCreateUser={isAdmin ? handleCreateUser : handleCreateKey}
             onAddKey={handleAddKey}
-            highlightKeyIds={shouldHighlightKeys ? matchingKeyIds : undefined}
-            autoExpandOnFilter={shouldHighlightKeys}
-            isMultiSelectMode={isAdmin && isMultiSelectMode}
-            selectedUserIds={selectedUserIds}
-            selectedKeyIds={selectedKeyIds}
-            onEnterMultiSelectMode={enterMultiSelectMode}
-            onExitMultiSelectMode={exitMultiSelectMode}
-            onSelectAll={handleSelectAll}
-            onSelectUser={handleSelectUser}
-            onSelectKey={handleSelectKey}
-            onOpenBatchEdit={handleOpenBatchEdit}
-            translations={tableTranslations}
-            onRefresh={() => {
-              setUsageByKeyId({});
-              clearUsageCache();
-              queryClient.invalidateQueries({ queryKey: ["users-usage"] });
-              refetch();
+            highlight={{
+              keyIds: shouldHighlightKeys ? matchingKeyIds : undefined,
+              autoExpandOnFilter: shouldHighlightKeys,
             }}
-            isRefreshing={isRefreshing}
+            selection={{
+              isMultiSelectMode: isAdmin && isMultiSelectMode,
+              selectedUserIds,
+              selectedKeyIds,
+              onEnterMultiSelectMode: enterMultiSelectMode,
+              onExitMultiSelectMode: exitMultiSelectMode,
+              onSelectAll: handleSelectAll,
+              onSelectUser: handleSelectUser,
+              onSelectKey: handleSelectKey,
+              onOpenBatchEdit: handleOpenBatchEdit,
+            }}
+            translations={tableTranslations}
+            refresh={{
+              onRefresh: () => {
+                setUsageByKeyId({});
+                clearUsageCache();
+                queryClient.invalidateQueries({ queryKey: ["users-usage"] });
+                refetch();
+              },
+              isRefreshing,
+            }}
           />
         </div>
       )}

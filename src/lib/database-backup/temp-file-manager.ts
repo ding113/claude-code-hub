@@ -138,6 +138,7 @@ export async function cleanupStaleTempFiles(maxAge: number = 6 * 60 * 60 * 1000)
         purpose: fileInfo.purpose,
       });
 
+      // react-doctor-disable-next-line react-doctor/async-await-in-loop -- cleanup count is accumulated deterministically
       await cleanupTempFile(filePath, "timeout");
       cleanedCount++;
     }

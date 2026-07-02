@@ -1,5 +1,6 @@
 "use client";
 
+import { useQuery } from "@tanstack/react-query";
 import { AlertCircle, CheckCircle, FileJson, Loader2, Upload, XCircle } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
@@ -25,6 +26,16 @@ interface PageLoadingOverlayProps {
 interface UploadPriceDialogProps {
   defaultOpen?: boolean;
   isRequired?: boolean;
+}
+
+async function fetchCloudModelCount(): Promise<number> {
+  const response = await fetch("/api/prices/cloud-model-count", { cache: "no-store" });
+  const payload = await response.json();
+  if (!payload?.ok) {
+    throw new Error(payload?.error || "unknown error");
+  }
+
+  return Number(payload.data?.count) || 0;
 }
 
 function PageLoadingOverlay({ active }: PageLoadingOverlayProps) {
@@ -63,10 +74,22 @@ export function UploadPriceDialog({
   const [open, setOpen] = useState(defaultOpen);
   const [uploading, setUploading] = useState(false);
   const [result, setResult] = useState<PriceUpdateResult | null>(null);
-  const [cloudModelCount, setCloudModelCount] = useState<number | null>(null);
-  const [cloudModelCountStatus, setCloudModelCountStatus] = useState<
-    "idle" | "loading" | "loaded" | "error"
-  >("idle");
+  const {
+    data: cloudModelCount = null,
+    isFetching: isCloudModelCountLoading,
+    isError: isCloudModelCountError,
+  } = useQuery({
+    queryKey: ["prices-cloud-model-count"],
+    queryFn: fetchCloudModelCount,
+    enabled: open,
+  });
+  const cloudModelCountStatus = !open
+    ? "idle"
+    : isCloudModelCountLoading
+      ? "loading"
+      : isCloudModelCountError
+        ? "error"
+        : "loaded";
 
   const handleOpenChange = (nextOpen: boolean) => {
     if (!nextOpen && uploading) {
@@ -79,41 +102,6 @@ export function UploadPriceDialog({
 
     setOpen(nextOpen);
   };
-
-  useEffect(() => {
-    if (!open) {
-      return;
-    }
-
-    let cancelled = false;
-    const fetchCloudModelCount = async () => {
-      setCloudModelCountStatus("loading");
-      try {
-        const response = await fetch("/api/prices/cloud-model-count", { cache: "no-store" });
-        const payload = await response.json();
-        if (!payload?.ok) {
-          throw new Error(payload?.error || "unknown error");
-        }
-
-        if (!cancelled) {
-          setCloudModelCount(Number(payload.data?.count) || 0);
-          setCloudModelCountStatus("loaded");
-        }
-      } catch (error) {
-        console.error("获取云端模型数量失败:", error);
-        if (!cancelled) {
-          setCloudModelCount(null);
-          setCloudModelCountStatus("error");
-        }
-      }
-    };
-
-    fetchCloudModelCount();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [open]);
 
   /**
    * 处理文件选择

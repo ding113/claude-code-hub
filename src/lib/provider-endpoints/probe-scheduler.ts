@@ -229,90 +229,90 @@ async function runProbeCycle(): Promise<void> {
       },
     }).stop;
 
+    const shouldStopCycle = () =>
+      leadershipLost || schedulerState.__CCH_ENDPOINT_PROBE_SCHEDULER_STOP_REQUESTED__;
     const jitter = CYCLE_JITTER_MS > 0 ? Math.floor(Math.random() * CYCLE_JITTER_MS) : 0;
     await sleep(jitter);
 
-    if (leadershipLost || schedulerState.__CCH_ENDPOINT_PROBE_SCHEDULER_STOP_REQUESTED__) {
-      return;
-    }
-
-    const allEndpoints = await findEnabledProviderEndpointsForProbing();
-    if (allEndpoints.length === 0) {
-      updateNextWorkHints({ nextDueAtMs: Number.POSITIVE_INFINITY, nowMs: Date.now() });
-      return;
-    }
-
-    // Calculate vendor endpoint counts for interval decisions
-    const vendorEndpointCounts = countEndpointsByVendorType(allEndpoints);
-
-    // Filter to only endpoints that are due for probing
-    const now = new Date();
-    const endpoints = filterDueEndpoints(allEndpoints, vendorEndpointCounts, now);
-    if (endpoints.length === 0) {
-      const nowMs = now.getTime();
-      updateNextWorkHints({
-        nextDueAtMs: computeNextDueAtMs(allEndpoints, vendorEndpointCounts, nowMs),
-        nowMs,
-      });
-      return;
-    }
-
-    const concurrency = Math.max(1, Math.min(CONCURRENCY, endpoints.length));
-    const minBatches = Math.ceil(endpoints.length / concurrency);
-    const expectedFloorMs = minBatches * Math.max(0, TIMEOUT_MS);
-    if (expectedFloorMs > TICK_INTERVAL_MS) {
-      logger.warn("[EndpointProbeScheduler] Probe capacity may be insufficient", {
-        dueEndpointsCount: endpoints.length,
-        totalEndpointsCount: allEndpoints.length,
-        tickIntervalMs: TICK_INTERVAL_MS,
-        timeoutMs: TIMEOUT_MS,
-        concurrency,
-        expectedFloorMs,
-      });
-    }
-
-    shuffleInPlace(endpoints);
-
-    let index = 0;
-    const worker = async () => {
-      while (!leadershipLost && !schedulerState.__CCH_ENDPOINT_PROBE_SCHEDULER_STOP_REQUESTED__) {
-        const endpoint = endpoints[index];
-        index += 1;
-        if (!endpoint) {
-          return;
-        }
-
-        try {
-          const result = await probeProviderEndpointAndRecordByEndpoint({
-            endpoint,
-            source: "scheduled",
-            timeoutMs: TIMEOUT_MS,
-          });
-
-          endpoint.lastProbedAt = new Date();
-          endpoint.lastProbeOk = result.ok;
-          endpoint.lastProbeErrorType = result.ok ? null : result.errorType;
-        } catch (error) {
-          logger.warn("[EndpointProbeScheduler] Probe failed", {
-            endpointId: endpoint.id,
-            error: error instanceof Error ? error.message : String(error),
-          });
-        }
+    if (!shouldStopCycle()) {
+      const allEndpoints = await findEnabledProviderEndpointsForProbing();
+      if (allEndpoints.length === 0) {
+        updateNextWorkHints({ nextDueAtMs: Number.POSITIVE_INFINITY, nowMs: Date.now() });
+        return;
       }
-    };
 
-    await Promise.all(Array.from({ length: concurrency }, () => worker()));
+      // Calculate vendor endpoint counts for interval decisions
+      const vendorEndpointCounts = countEndpointsByVendorType(allEndpoints);
 
-    if (leadershipLost || schedulerState.__CCH_ENDPOINT_PROBE_SCHEDULER_STOP_REQUESTED__) {
-      clearNextWorkHints();
-      return;
+      // Filter to only endpoints that are due for probing
+      const now = new Date();
+      const endpoints = filterDueEndpoints(allEndpoints, vendorEndpointCounts, now);
+      if (endpoints.length === 0) {
+        const nowMs = now.getTime();
+        updateNextWorkHints({
+          nextDueAtMs: computeNextDueAtMs(allEndpoints, vendorEndpointCounts, nowMs),
+          nowMs,
+        });
+        return;
+      }
+
+      const concurrency = Math.max(1, Math.min(CONCURRENCY, endpoints.length));
+      const minBatches = Math.ceil(endpoints.length / concurrency);
+      const expectedFloorMs = minBatches * Math.max(0, TIMEOUT_MS);
+      if (expectedFloorMs > TICK_INTERVAL_MS) {
+        logger.warn("[EndpointProbeScheduler] Probe capacity may be insufficient", {
+          dueEndpointsCount: endpoints.length,
+          totalEndpointsCount: allEndpoints.length,
+          tickIntervalMs: TICK_INTERVAL_MS,
+          timeoutMs: TIMEOUT_MS,
+          concurrency,
+          expectedFloorMs,
+        });
+      }
+
+      shuffleInPlace(endpoints);
+
+      let index = 0;
+      const worker = async () => {
+        while (!leadershipLost && !schedulerState.__CCH_ENDPOINT_PROBE_SCHEDULER_STOP_REQUESTED__) {
+          const endpoint = endpoints[index];
+          index += 1;
+          if (!endpoint) {
+            return;
+          }
+
+          try {
+            // react-doctor-disable-next-line react-doctor/async-await-in-loop -- worker loop intentionally bounds probe concurrency
+            const result = await probeProviderEndpointAndRecordByEndpoint({
+              endpoint,
+              source: "scheduled",
+              timeoutMs: TIMEOUT_MS,
+            });
+
+            endpoint.lastProbedAt = new Date();
+            endpoint.lastProbeOk = result.ok;
+            endpoint.lastProbeErrorType = result.ok ? null : result.errorType;
+          } catch (error) {
+            logger.warn("[EndpointProbeScheduler] Probe failed", {
+              endpointId: endpoint.id,
+              error: error instanceof Error ? error.message : String(error),
+            });
+          }
+        }
+      };
+
+      await Promise.all(Array.from({ length: concurrency }, () => worker()));
+
+      if (shouldStopCycle()) {
+        clearNextWorkHints();
+      } else {
+        const cycleNowMs = Date.now();
+        updateNextWorkHints({
+          nextDueAtMs: computeNextDueAtMs(allEndpoints, vendorEndpointCounts, cycleNowMs),
+          nowMs: cycleNowMs,
+        });
+      }
     }
-
-    const cycleNowMs = Date.now();
-    updateNextWorkHints({
-      nextDueAtMs: computeNextDueAtMs(allEndpoints, vendorEndpointCounts, cycleNowMs),
-      nowMs: cycleNowMs,
-    });
   } catch (error) {
     clearNextWorkHints();
     logger.warn("[EndpointProbeScheduler] Probe cycle error", {

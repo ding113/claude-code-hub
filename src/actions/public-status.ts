@@ -67,9 +67,11 @@ export async function savePublicStatusSettings(input: SavePublicStatusSettingsIn
   }>
 > {
   try {
-    const t = await getTranslations("settings");
-    const tError = await getTranslations("errors");
-    const session = await getSession();
+    const [t, tError, session] = await Promise.all([
+      getTranslations("settings"),
+      getTranslations("errors"),
+      getSession(),
+    ]);
     if (!session || session.user.role !== "admin") {
       return { ok: false, error: tError("UNAUTHORIZED") };
     }
@@ -138,6 +140,7 @@ export async function savePublicStatusSettings(input: SavePublicStatusSettingsIn
       );
 
       for (const groupUpdate of groupUpdates) {
+        // react-doctor-disable-next-line react-doctor/async-await-in-loop -- group updates share one transaction and preserve existing notes deterministically
         const currentGroup = await findProviderGroupById(groupUpdate.id, tx);
         const currentNote = parsePublicStatusDescription(currentGroup?.description).note;
         await updateProviderGroup(

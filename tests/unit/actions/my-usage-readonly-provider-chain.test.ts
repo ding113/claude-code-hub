@@ -25,7 +25,7 @@ vi.mock("next-intl/server", () => ({
   getTranslations: mocks.getTranslations,
 }));
 
-vi.mock("@/lib/utils/timezone", () => ({
+vi.mock("@/lib/utils/timezone-resolver", () => ({
   resolveSystemTimezone: mocks.resolveSystemTimezone,
 }));
 

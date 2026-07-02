@@ -746,10 +746,11 @@ describe("availability-service", () => {
     // 让短窗口查询也能直接命中部分索引并避免误判"请求中"。
     expectStatusCodeOnlyFinalizedBoundary(queryText);
     expect(queryText).toContain("fn_compute_message_request_success_rate_outcome");
-    expect(queryText).toContain(">= now() - (15 * interval '1 minute')");
+    expect(queryText).toMatch(/>= now\(\) - \(\$\d+ \* interval '1 minute'\)/);
     expect(queryText).toContain("<= now()");
     expect(queryText).toContain("count(*) filter");
     expect(queryText).toContain("max(");
+    expect(sqlToQuery(executeMock.mock.calls[0]?.[0]).params).toContain(15);
   });
 
   it("getCurrentProviderStatus 在提供商无聚合数据时返回 unknown", async () => {

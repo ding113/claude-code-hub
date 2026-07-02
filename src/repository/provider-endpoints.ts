@@ -506,10 +506,10 @@ export async function getOrCreateProviderVendorIdFromUrls(
  * 例如: anthropic.com -> Anthropic, api.openai.com -> OpenAI
  */
 export async function deriveDisplayNameFromDomain(domain: string): Promise<string> {
-  const parts = domain
-    .split(".")
-    .map((part) => part.trim())
-    .filter(Boolean);
+  const parts = domain.split(".").flatMap((part) => {
+    const trimmed = part.trim();
+    return trimmed ? [trimmed] : [];
+  });
   if (parts.length === 0) return "";
   if (parts.length === 1) {
     const name = parts[0];
@@ -576,6 +576,7 @@ export async function backfillProviderVendorsFromProviders(): Promise<{
       stats.processed++;
 
       // Use new computeVendorKey for consistent vendor key calculation
+      // react-doctor-disable-next-line react-doctor/async-await-in-loop -- backfill mutates vendor/provider rows in cursor order to avoid get-or-create races
       const vendorKey = await computeVendorKey({
         providerUrl: row.url,
         websiteUrl: row.websiteUrl,
@@ -701,14 +702,17 @@ export async function findEnabledProviderVendorTypePairs(): Promise<
     )
     .orderBy(asc(providers.providerVendorId), asc(providers.providerType));
 
-  return rows
-    .map((row) => ({
+  return rows.flatMap((row) => {
+    const vendorType = {
       vendorId: row.vendorId as number,
       providerType: row.providerType as ProviderType,
-    }))
-    .filter(
-      (row) => Number.isFinite(row.vendorId) && row.vendorId > 0 && Boolean(row.providerType)
-    );
+    };
+    return Number.isFinite(vendorType.vendorId) &&
+      vendorType.vendorId > 0 &&
+      vendorType.providerType
+      ? [vendorType]
+      : [];
+  });
 }
 
 /**
@@ -926,6 +930,7 @@ export async function updateProviderVendor(
 export async function deleteProviderVendor(vendorId: number): Promise<boolean> {
   const deleted = await db.transaction(async (tx) => {
     // 1. Delete endpoints (cascade would handle this, but manual is safe)
+    // react-doctor-disable-next-line react-doctor/async-parallel -- transaction deletes use one tx and must preserve referential order
     await tx.delete(providerEndpoints).where(eq(providerEndpoints.vendorId, vendorId));
     // 2. Delete providers (keys) - explicit delete required due to 'restrict'
     await tx.delete(providers).where(eq(providers.providerVendorId, vendorId));
@@ -1458,17 +1463,18 @@ export async function syncProviderEndpointOnProviderEdit(
       return { action: ensureResult === "noop" ? "noop" : ensureResult };
     }
 
-    const previousEndpoint = await loadEndpoint({
-      vendorId: previousVendorId,
-      providerType: previousProviderType,
-      url: previousUrl,
-    });
-
-    const nextEndpoint = await loadEndpoint({
-      vendorId: input.vendorId,
-      providerType: input.providerType,
-      url: nextUrl,
-    });
+    const [previousEndpoint, nextEndpoint] = await Promise.all([
+      loadEndpoint({
+        vendorId: previousVendorId,
+        providerType: previousProviderType,
+        url: previousUrl,
+      }),
+      loadEndpoint({
+        vendorId: input.vendorId,
+        providerType: input.providerType,
+        url: nextUrl,
+      }),
+    ]);
 
     if (previousEndpoint && !nextEndpoint) {
       const previousIsReferenced =
@@ -1700,7 +1706,7 @@ function sanitizeBackfillVendorScope(vendorIds: number[] | undefined): number[] 
     }
   }
 
-  return [...unique].sort((left, right) => left - right);
+  return Array.from(unique).toSorted((left, right) => left - right);
 }
 
 function pushBackfillSample(
@@ -1760,6 +1766,7 @@ export async function backfillProviderEndpointsFromProviders(
       whereClauses.push(inArray(providers.providerVendorId, scopedVendorIds));
     }
 
+    // react-doctor-disable-next-line react-doctor/async-await-in-loop -- paginated scan advances by lastProviderId from the previous page
     const rows = await db
       .select({
         id: providers.id,
@@ -1872,6 +1879,7 @@ export async function backfillProviderEndpointsFromProviders(
         whereClauses.push(inArray(providerEndpoints.vendorId, scopedVendorIds));
       }
 
+      // react-doctor-disable-next-line react-doctor/async-await-in-loop -- paginated scan advances by lastEndpointId from the previous page
       const rows = await db
         .select({
           id: providerEndpoints.id,
@@ -1924,6 +1932,7 @@ export async function backfillProviderEndpointsFromProviders(
         whereClauses.push(inArray(providerEndpoints.vendorId, scopedVendorIds));
       }
 
+      // react-doctor-disable-next-line react-doctor/async-await-in-loop -- paginated scan advances by lastEndpointId from the previous page
       const rows = await db
         .select({
           id: providerEndpoints.id,
@@ -2032,6 +2041,7 @@ export async function backfillProviderEndpointsFromProviders(
       });
 
       if (pending.length >= insertBatchSize) {
+        // react-doctor-disable-next-line react-doctor/async-await-in-loop -- flush keeps insert batches bounded
         await flush();
       }
     }

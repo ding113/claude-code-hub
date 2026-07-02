@@ -69,60 +69,61 @@ export function EndpointTab() {
       const currentType = latestSelectionRef.current.providerType;
       const nextVendors = await getDashboardProviderVendors();
 
-      if (requestId !== vendorsRequestIdRef.current) {
-        return null;
-      }
+      if (requestId === vendorsRequestIdRef.current) {
+        setVendors(nextVendors);
 
-      setVendors(nextVendors);
+        if (nextVendors.length === 0) {
+          setSelectedVendorId(null);
+          setSelectedType(null);
+          setSelectedEndpoint(null);
+          return {
+            selectionChanged: currentVendorId != null || currentType != null,
+            vendorId: null,
+            providerType: null,
+          };
+        }
 
-      if (nextVendors.length === 0) {
-        setSelectedVendorId(null);
-        setSelectedType(null);
-        setSelectedEndpoint(null);
+        const vendor =
+          (currentVendorId ? nextVendors.find((v) => v.id === currentVendorId) : null) ??
+          nextVendors[0] ??
+          null;
+
+        if (!vendor) {
+          setSelectedVendorId(null);
+          setSelectedType(null);
+          setSelectedEndpoint(null);
+          return {
+            selectionChanged: currentVendorId != null || currentType != null,
+            vendorId: null,
+            providerType: null,
+          };
+        }
+
+        const nextVendorId = vendor.id;
+        const nextProviderType =
+          currentType && vendor.providerTypes.includes(currentType)
+            ? currentType
+            : (vendor.providerTypes[0] ?? null);
+
+        const selectionChanged =
+          nextVendorId !== currentVendorId || nextProviderType !== currentType;
+
+        if (selectionChanged) {
+          // 避免 selection 自动切换期间仍能对旧 endpoint 发起探测请求（#781）。
+          setSelectedEndpoint(null);
+        }
+
+        setSelectedVendorId(nextVendorId);
+        setSelectedType(nextProviderType);
+
         return {
-          selectionChanged: currentVendorId != null || currentType != null,
-          vendorId: null,
-          providerType: null,
+          selectionChanged,
+          vendorId: nextVendorId,
+          providerType: nextProviderType,
         };
       }
 
-      const vendor =
-        (currentVendorId ? nextVendors.find((v) => v.id === currentVendorId) : null) ??
-        nextVendors[0] ??
-        null;
-
-      if (!vendor) {
-        setSelectedVendorId(null);
-        setSelectedType(null);
-        setSelectedEndpoint(null);
-        return {
-          selectionChanged: currentVendorId != null || currentType != null,
-          vendorId: null,
-          providerType: null,
-        };
-      }
-
-      const nextVendorId = vendor.id;
-      const nextProviderType =
-        currentType && vendor.providerTypes.includes(currentType)
-          ? currentType
-          : (vendor.providerTypes[0] ?? null);
-
-      const selectionChanged = nextVendorId !== currentVendorId || nextProviderType !== currentType;
-
-      if (selectionChanged) {
-        // 避免 selection 自动切换期间仍能对旧 endpoint 发起探测请求（#781）。
-        setSelectedEndpoint(null);
-      }
-
-      setSelectedVendorId(nextVendorId);
-      setSelectedType(nextProviderType);
-
-      return {
-        selectionChanged,
-        vendorId: nextVendorId,
-        providerType: nextProviderType,
-      };
+      return null;
     } catch (error) {
       if (requestId !== vendorsRequestIdRef.current) {
         return null;
@@ -151,20 +152,17 @@ export function EndpointTab() {
           providerType: params.providerType,
         });
 
-        if (requestId !== endpointsRequestIdRef.current) {
-          return;
+        if (requestId === endpointsRequestIdRef.current) {
+          setEndpoints(nextEndpoints);
+
+          const keepId = params.keepSelectedEndpointId ?? null;
+          if (keepId) {
+            const kept = nextEndpoints.find((e) => e.id === keepId) ?? null;
+            setSelectedEndpoint(kept ?? nextEndpoints[0] ?? null);
+          } else {
+            setSelectedEndpoint(nextEndpoints[0] ?? null);
+          }
         }
-
-        setEndpoints(nextEndpoints);
-
-        const keepId = params.keepSelectedEndpointId ?? null;
-        if (keepId) {
-          const kept = nextEndpoints.find((e) => e.id === keepId) ?? null;
-          setSelectedEndpoint(kept ?? nextEndpoints[0] ?? null);
-          return;
-        }
-
-        setSelectedEndpoint(nextEndpoints[0] ?? null);
       } catch (error) {
         if (requestId !== endpointsRequestIdRef.current) {
           return;
@@ -191,15 +189,12 @@ export function EndpointTab() {
         limit: 100,
       });
 
-      if (requestId !== probeLogsRequestIdRef.current) {
-        return;
-      }
-
-      if (latestSelectionRef.current.endpointId !== endpointId) {
-        return;
-      }
-
-      if (result.ok && result.data) {
+      if (
+        requestId === probeLogsRequestIdRef.current &&
+        latestSelectionRef.current.endpointId === endpointId &&
+        result.ok &&
+        result.data
+      ) {
         setProbeLogs(result.data.logs);
       }
     } catch (error) {

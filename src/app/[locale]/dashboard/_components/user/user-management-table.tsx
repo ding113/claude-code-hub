@@ -4,7 +4,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Loader2, RefreshCw, Users } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffectEvent, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { useVirtualizer } from "@/hooks/use-virtualizer";
@@ -18,26 +18,32 @@ import { UserKeyTableRow } from "./user-key-table-row";
 
 export interface UserManagementTableProps {
   users: UserDisplay[];
-  hasNextPage?: boolean;
-  isFetchingNextPage?: boolean;
-  onLoadMore?: () => void;
+  pagination?: {
+    hasNextPage?: boolean;
+    isFetchingNextPage?: boolean;
+    onLoadMore?: () => void;
+  };
   /** Used to reset virtual scroll position when filters change. */
   scrollResetKey?: string;
   currentUser?: User;
   currencyCode?: string;
   onCreateUser?: () => void;
   onAddKey?: (user: UserDisplay) => void;
-  highlightKeyIds?: Set<number>;
-  autoExpandOnFilter?: boolean;
-  isMultiSelectMode?: boolean;
-  selectedUserIds?: Set<number>;
-  selectedKeyIds?: Set<number>;
-  onEnterMultiSelectMode?: () => void;
-  onExitMultiSelectMode?: () => void;
-  onSelectAll?: (checked: boolean) => void;
-  onSelectUser?: (user: UserDisplay, checked: boolean) => void;
-  onSelectKey?: (keyId: number, checked: boolean) => void;
-  onOpenBatchEdit?: () => void;
+  highlight?: {
+    keyIds?: Set<number>;
+    autoExpandOnFilter?: boolean;
+  };
+  selection?: {
+    isMultiSelectMode?: boolean;
+    selectedUserIds?: Set<number>;
+    selectedKeyIds?: Set<number>;
+    onEnterMultiSelectMode?: () => void;
+    onExitMultiSelectMode?: () => void;
+    onSelectAll?: (checked: boolean) => void;
+    onSelectUser?: (user: UserDisplay, checked: boolean) => void;
+    onSelectKey?: (keyId: number, checked: boolean) => void;
+    onOpenBatchEdit?: () => void;
+  };
   translations: {
     table: {
       columns: {
@@ -92,8 +98,10 @@ export interface UserManagementTableProps {
       failed: string;
     };
   };
-  onRefresh?: () => void;
-  isRefreshing?: boolean;
+  refresh?: {
+    onRefresh?: () => void;
+    isRefreshing?: boolean;
+  };
 }
 
 const USER_ROW_HEIGHT = 52;
@@ -107,34 +115,38 @@ const GRID_COLUMNS_CLASS = "grid-cols-[minmax(260px,1fr)_120px_repeat(7,90px)_80
 
 export function UserManagementTable({
   users,
-  hasNextPage,
-  isFetchingNextPage,
-  onLoadMore,
+  pagination,
   scrollResetKey,
   currentUser,
   currencyCode,
   onCreateUser,
   onAddKey,
-  highlightKeyIds,
-  autoExpandOnFilter,
-  isMultiSelectMode,
-  selectedUserIds,
-  selectedKeyIds,
-  onEnterMultiSelectMode,
-  onExitMultiSelectMode,
-  onSelectAll,
-  onSelectUser,
-  onSelectKey,
-  onOpenBatchEdit,
+  highlight,
+  selection,
   translations,
-  onRefresh,
-  isRefreshing,
+  refresh,
 }: UserManagementTableProps) {
   const router = useRouter();
   const queryClient = useQueryClient();
   const tUserList = useTranslations("dashboard.userList");
   const tUserMgmt = useTranslations("dashboard.userManagement");
   const isAdmin = currentUser?.role === "admin";
+  const hasNextPage = pagination?.hasNextPage;
+  const isFetchingNextPage = pagination?.isFetchingNextPage;
+  const onLoadMore = pagination?.onLoadMore;
+  const highlightKeyIds = highlight?.keyIds;
+  const autoExpandOnFilter = highlight?.autoExpandOnFilter;
+  const isMultiSelectMode = selection?.isMultiSelectMode;
+  const selectedUserIds = selection?.selectedUserIds;
+  const selectedKeyIds = selection?.selectedKeyIds;
+  const onEnterMultiSelectMode = selection?.onEnterMultiSelectMode;
+  const onExitMultiSelectMode = selection?.onExitMultiSelectMode;
+  const onSelectAll = selection?.onSelectAll;
+  const onSelectUser = selection?.onSelectUser;
+  const onSelectKey = selection?.onSelectKey;
+  const onOpenBatchEdit = selection?.onOpenBatchEdit;
+  const onRefresh = refresh?.onRefresh;
+  const isRefreshing = refresh?.isRefreshing;
   const showMultiSelect = Boolean(isAdmin && isMultiSelectMode);
   // Use useMemo to create stable empty Set references for fallback
   const emptySet = useMemo(() => new Set<number>(), []);
@@ -156,7 +168,7 @@ export function UserManagementTable({
     () => new Map()
   );
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     setExpandedUsers((prev) => {
       const next = new Map<number, boolean>();
       for (const user of users) {
@@ -171,7 +183,7 @@ export function UserManagementTable({
     });
   }, [users]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (autoExpandOnFilter && !prevAutoExpandRef.current) {
       setExpandedUsers(new Map(users.map((user) => [user.id, true])));
     }
@@ -258,17 +270,21 @@ export function UserManagementTable({
 
   const virtualItems = rowVirtualizer.getVirtualItems();
   const lastItemIndex = virtualItems[virtualItems.length - 1]?.index ?? -1;
+  const canLoadMore = Boolean(onLoadMore);
+  const loadMore = useEffectEvent(() => {
+    onLoadMore?.();
+  });
 
-  useEffect(() => {
-    if (!onLoadMore) return;
+  useLayoutEffect(() => {
+    if (!canLoadMore) return;
     if (!hasNextPage) return;
     if (isFetchingNextPage) return;
     if (lastItemIndex >= users.length - 5) {
-      onLoadMore();
+      loadMore();
     }
-  }, [lastItemIndex, users.length, hasNextPage, isFetchingNextPage, onLoadMore]);
+  }, [lastItemIndex, users.length, hasNextPage, isFetchingNextPage, canLoadMore]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!scrollResetKey) return;
     rowVirtualizer.scrollToOffset(0);
   }, [scrollResetKey, rowVirtualizer]);
@@ -305,7 +321,7 @@ export function UserManagementTable({
     return users.find((u) => u.id === editingUserId) ?? null;
   }, [users, editingUserId]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!editDialogOpen) return;
     if (!editingUser) {
       setEditDialogOpen(false);
@@ -373,7 +389,7 @@ export function UserManagementTable({
         return { ok: false };
       }
       toast.success(tUserMgmt("quickRenew.success"));
-      // 刷新服务端数据（成功后乐观更新状态会在useEffect中被props覆盖）
+      // 刷新服务端数据（成功后乐观更新状态会在useLayoutEffect中被props覆盖）
       // 使 React Query 缓存失效，确保数据刷新
       queryClient.invalidateQueries({ queryKey: ["users"] });
       router.refresh();

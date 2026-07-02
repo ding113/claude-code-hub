@@ -31,6 +31,8 @@ const providersActionMocks = vi.hoisted(() => ({
 }));
 vi.mock("@/actions/providers", () => providersActionMocks);
 
+const FIXED_USER_TIMESTAMP = new Date(0);
+
 function loadMessages() {
   const base = path.join(process.cwd(), "messages/en");
   const read = (name: string) => JSON.parse(fs.readFileSync(path.join(base, name), "utf8"));
@@ -102,8 +104,8 @@ describe("EditKeyForm: 清除 expiresAt 后应携带 expiresAt 字段提交（�
               dailyResetTime: "00:00",
               isEnabled: true,
               expiresAt: null,
-              createdAt: new Date(),
-              updatedAt: new Date(),
+              createdAt: FIXED_USER_TIMESTAMP,
+              updatedAt: FIXED_USER_TIMESTAMP,
             }}
             isAdmin
           />

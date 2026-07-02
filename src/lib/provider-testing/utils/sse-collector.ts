@@ -11,6 +11,10 @@
 
 import type { ParsedResponse, TokenUsage } from "../types";
 
+function collectTextParts(content?: Array<{ text?: string }>): string[] {
+  return content?.flatMap((contentItem) => (contentItem.text ? [contentItem.text] : [])) ?? [];
+}
+
 /**
  * Extract text content from an SSE stream body
  * Handles both Anthropic and OpenAI streaming formats
@@ -80,10 +84,7 @@ export function extractTextFromSSE(body: string): string {
           }
         | undefined;
       if (eventType === "response.output_item.done" && item?.content) {
-        assignFallback(
-          3,
-          item.content.map((contentItem) => contentItem.text || "").filter(Boolean)
-        );
+        assignFallback(3, collectTextParts(item.content));
         continue;
       }
 
@@ -97,9 +98,7 @@ export function extractTextFromSSE(body: string): string {
       if (eventType === "response.completed" && response?.output) {
         assignFallback(
           4,
-          response.output.flatMap(
-            (outputItem) => outputItem.content?.map((contentItem) => contentItem.text || "") || []
-          )
+          response.output.flatMap((outputItem) => collectTextParts(outputItem.content))
         );
         continue;
       }
@@ -235,10 +234,7 @@ export function parseSSEStream(body: string): ParsedResponse {
           }
         | undefined;
       if (eventType === "response.output_item.done" && item?.content) {
-        assignFallback(
-          3,
-          item.content.map((contentItem) => contentItem.text || "").filter(Boolean)
-        );
+        assignFallback(3, collectTextParts(item.content));
       }
 
       const responseOutput = response?.output as
@@ -249,9 +245,7 @@ export function parseSSEStream(body: string): ParsedResponse {
       if (eventType === "response.completed" && responseOutput) {
         assignFallback(
           4,
-          responseOutput.flatMap(
-            (outputItem) => outputItem.content?.map((contentItem) => contentItem.text || "") || []
-          )
+          responseOutput.flatMap((outputItem) => collectTextParts(outputItem.content))
         );
       }
 
@@ -390,9 +384,9 @@ export function aggregateResponseText(body: string, _contentType?: string): stri
 
     // Anthropic format: {"content":[{"type":"text","text":"..."}]}
     if (obj.content && Array.isArray(obj.content)) {
-      const texts = (obj.content as Array<{ type?: string; text?: string }>)
-        .filter((c) => c.type === "text" && c.text)
-        .map((c) => c.text || "");
+      const texts = (obj.content as Array<{ type?: string; text?: string }>).flatMap((c) =>
+        c.type === "text" && c.text ? [c.text] : []
+      );
       if (texts.length > 0) {
         return texts.join("");
       }
@@ -400,9 +394,12 @@ export function aggregateResponseText(body: string, _contentType?: string): stri
 
     // OpenAI format: {"choices":[{"message":{"content":"..."}}]}
     if (obj.choices && Array.isArray(obj.choices)) {
-      const texts = (obj.choices as Array<{ message?: { content?: string }; text?: string }>)
-        .map((c) => c.message?.content || c.text || "")
-        .filter(Boolean);
+      const texts = (
+        obj.choices as Array<{ message?: { content?: string }; text?: string }>
+      ).flatMap((c) => {
+        const text = c.message?.content || c.text || "";
+        return text ? [text] : [];
+      });
       if (texts.length > 0) {
         return texts.join("");
       }
@@ -410,8 +407,8 @@ export function aggregateResponseText(body: string, _contentType?: string): stri
 
     // Codex Response API format: {"output":[{"content":[{"text":"..."}]}]}
     if (obj.output && Array.isArray(obj.output)) {
-      const texts = (obj.output as Array<{ content?: Array<{ text?: string }> }>).flatMap(
-        (o) => o.content?.map((c) => c.text || "").filter(Boolean) || []
+      const texts = (obj.output as Array<{ content?: Array<{ text?: string }> }>).flatMap((o) =>
+        collectTextParts(o.content)
       );
       if (texts.length > 0) {
         return texts.join("");
@@ -422,7 +419,7 @@ export function aggregateResponseText(body: string, _contentType?: string): stri
     if (obj.candidates && Array.isArray(obj.candidates)) {
       const texts = (
         obj.candidates as Array<{ content?: { parts?: Array<{ text?: string }> } }>
-      ).flatMap((c) => c.content?.parts?.map((p) => p.text || "").filter(Boolean) || []);
+      ).flatMap((c) => collectTextParts(c.content?.parts));
       if (texts.length > 0) {
         return texts.join("");
       }

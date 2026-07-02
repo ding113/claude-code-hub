@@ -1,7 +1,7 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { AvailabilityQueryResult } from "@/lib/availability";
 import { cn } from "@/lib/utils";
@@ -41,6 +41,9 @@ export function AvailabilityDashboard() {
   const inFlightRef = useRef(false);
   const abortControllerRef = useRef<AbortController | null>(null);
   const lastFocusRefreshAtRef = useRef(0);
+  const abortInFlightRequest = useCallback(() => {
+    abortControllerRef.current?.abort();
+  }, []);
 
   const fetchData = useCallback(
     async (options?: { force?: boolean }) => {
@@ -82,11 +85,10 @@ export function AvailabilityDashboard() {
         }
 
         const result: AvailabilityQueryResult = await res.json();
-        if (requestId !== requestIdRef.current) {
-          return;
+        if (requestId === requestIdRef.current) {
+          setData(result);
+          setError(null);
         }
-        setData(result);
-        setError(null);
       } catch (err) {
         if (controller.signal.aborted) {
           return;
@@ -111,15 +113,17 @@ export function AvailabilityDashboard() {
     void fetchData({ force: true });
   }, [fetchData]);
 
+  const fetchLatestData = useEffectEvent(fetchData);
+
   // Auto-refresh: 30s for provider tab, 10s for endpoint tab
   useEffect(() => {
     const interval = activeTab === "provider" ? 30000 : 10000;
     const timer = setInterval(() => {
       if (document.visibilityState === "hidden") return;
-      void fetchData();
+      void fetchLatestData();
     }, interval);
     return () => clearInterval(timer);
-  }, [activeTab, fetchData]);
+  }, [activeTab]);
 
   // 当页面从后台回到前台时，做一次节流刷新，避免看到陈旧数据；同时配合 visibility 判断减少后台请求。
   useEffect(() => {
@@ -127,7 +131,7 @@ export function AvailabilityDashboard() {
       const now = Date.now();
       if (now - lastFocusRefreshAtRef.current < 2000) return;
       lastFocusRefreshAtRef.current = now;
-      void fetchData({ force: true });
+      void fetchLatestData({ force: true });
     };
 
     const onFocus = () => refresh();
@@ -144,13 +148,13 @@ export function AvailabilityDashboard() {
       window.removeEventListener("focus", onFocus);
       document.removeEventListener("visibilitychange", onVisibilityChange);
     };
-  }, [fetchData]);
+  }, []);
 
   useEffect(() => {
     return () => {
-      abortControllerRef.current?.abort();
+      abortInFlightRequest();
     };
-  }, []);
+  }, [abortInFlightRequest]);
 
   const overviewMetrics = useMemo(() => {
     const providers = data?.providers ?? [];
@@ -170,9 +174,9 @@ export function AvailabilityDashboard() {
     const avgLatency =
       providersWithLatency.length > 0
         ? providersWithLatency.reduce((sum, p) => {
-            const latencies = p.timeBuckets
-              .filter((b) => b.avgLatencyMs > 0)
-              .map((b) => b.avgLatencyMs);
+            const latencies = p.timeBuckets.flatMap((b) =>
+              b.avgLatencyMs > 0 ? [b.avgLatencyMs] : []
+            );
             if (latencies.length === 0) return sum;
             return sum + latencies.reduce((a, b) => a + b, 0) / latencies.length;
           }, 0) / providersWithLatency.length

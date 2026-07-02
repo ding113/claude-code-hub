@@ -470,7 +470,10 @@ describe("Map UI", () => {
     const { container, unmount } = render(
       <div className="h-60 w-60">
         <Map viewport={{ center: [120, 30], zoom: 5 }}>
-          <MapControls showZoom showCompass showLocate showFullscreen labels={labels} />
+          <MapControls
+            visibility={{ zoom: true, compass: true, locate: true, fullscreen: true }}
+            labels={labels}
+          />
         </Map>
       </div>
     );

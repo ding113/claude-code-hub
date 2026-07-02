@@ -28,7 +28,10 @@ export function isFakeStreamingEligible(
   const entry = whitelist.find((candidate) => candidate.model.trim() === model);
   if (!entry) return false;
 
-  const trimmedGroups = entry.groupTags.map((tag) => tag.trim()).filter((tag) => tag.length > 0);
+  const trimmedGroups = entry.groupTags.flatMap((tag) => {
+    const trimmed = tag.trim();
+    return trimmed.length > 0 ? [trimmed] : [];
+  });
 
   if (trimmedGroups.length === 0) return true;
 

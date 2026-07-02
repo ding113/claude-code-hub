@@ -1,6 +1,6 @@
 "use client";
 
-import { motion } from "framer-motion";
+import { m } from "framer-motion";
 import {
   AlertTriangle,
   Clock,
@@ -117,7 +117,7 @@ function LimitCard({
         </div>
       </div>
       {value !== null && (
-        <motion.div
+        <m.div
           initial={{ scaleX: 0 }}
           animate={{ scaleX: 1 }}
           className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary/50 origin-left"
@@ -144,7 +144,7 @@ export function LimitsSection({ subSectionRefs }: LimitsSectionProps) {
   const limit5hResetMode = rateLimit.limit5hResetMode ?? "rolling";
 
   return (
-    <motion.div
+    <m.div
       initial={{ opacity: 0, x: 20 }}
       animate={{ opacity: 1, x: 0 }}
       exit={{ opacity: 0, x: -20 }}
@@ -535,6 +535,6 @@ export function LimitsSection({ subSectionRefs }: LimitsSectionProps) {
           </div>
         </SectionCard>
       </div>
-    </motion.div>
+    </m.div>
   );
 }

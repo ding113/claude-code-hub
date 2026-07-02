@@ -4,8 +4,8 @@ import {
   createContext,
   type Dispatch,
   type ReactNode,
+  use,
   useCallback,
-  useContext,
   useMemo,
   useReducer,
   useRef,
@@ -811,7 +811,10 @@ export function ProviderFormProvider({
     createInitialState(mode, provider, cloneProvider, preset, batchProviders)
   );
 
-  const dirtyFieldsRef = useRef(new Set<string>());
+  const dirtyFieldsRef = useRef<Set<string>>(null!);
+  if (!dirtyFieldsRef.current) {
+    dirtyFieldsRef.current = new Set<string>();
+  }
   const isBatch = mode === "batch";
 
   // Compute batch analysis once if in batch mode
@@ -871,7 +874,7 @@ export function ProviderFormProvider({
 
 // Hook
 export function useProviderForm(): ProviderFormContextValue {
-  const context = useContext(ProviderFormContext);
+  const context = use(ProviderFormContext);
   if (!context) {
     throw new Error("useProviderForm must be used within a ProviderFormProvider");
   }

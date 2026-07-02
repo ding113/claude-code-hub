@@ -6,8 +6,7 @@ import { AuditLogsView } from "./_components/audit-logs-view";
 export const dynamic = "force-dynamic";
 
 export default async function AuditLogsPage({ params }: { params: Promise<{ locale: string }> }) {
-  const { locale } = await params;
-  const session = await getSession();
+  const [{ locale }, session] = await Promise.all([params, getSession()]);
 
   if (!session) {
     return redirect({ href: "/login?from=/dashboard/audit-logs", locale });

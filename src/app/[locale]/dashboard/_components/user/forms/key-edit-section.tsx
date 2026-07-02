@@ -45,15 +45,19 @@ export interface KeyEditSectionProps {
     limitTotalUsd?: number | null;
     limitConcurrentSessions?: number;
   };
-  /** Admin 可自由编辑 providerGroup */
-  isAdmin?: boolean;
-  /** 是否是最后一个启用的 key (用于禁用 Switch 防止全部禁用) */
-  isLastEnabledKey?: boolean;
+  permissions?: {
+    /** Admin 可自由编辑 providerGroup */
+    isAdmin?: boolean;
+    /** 是否是最后一个启用的 key (用于禁用 Switch 防止全部禁用) */
+    isLastEnabledKey?: boolean;
+  };
   userProviderGroup?: string;
-  /** 是否显示限额规则区域，默认为 true */
-  showLimitRules?: boolean;
-  /** 是否显示到期时间区域，默认为 true */
-  showExpireTime?: boolean;
+  visibility?: {
+    /** 是否显示限额规则区域，默认为 true */
+    limitRules?: boolean;
+    /** 是否显示到期时间区域，默认为 true */
+    expireTime?: boolean;
+  };
   onChange: {
     (field: string, value: any): void;
     (batch: Record<string, any>): void;
@@ -126,16 +130,18 @@ const TTL_ORDER = ["inherit", "5m", "1h"] as const;
 
 export function KeyEditSection({
   keyData,
-  isAdmin = false,
-  isLastEnabledKey = false,
+  permissions,
   userProviderGroup,
-  showLimitRules = true,
-  showExpireTime = true,
+  visibility,
   onChange,
   scrollRef,
   translations,
 }: KeyEditSectionProps) {
   const [limitPickerOpen, setLimitPickerOpen] = useState(false);
+  const isAdmin = permissions?.isAdmin ?? false;
+  const isLastEnabledKey = permissions?.isLastEnabledKey ?? false;
+  const showLimitRules = visibility?.limitRules ?? true;
+  const showExpireTime = visibility?.expireTime ?? true;
 
   useEffect(() => {
     if (!scrollRef?.current) return;
@@ -541,18 +547,24 @@ export function KeyEditSection({
               <SelectValue placeholder={cacheTtlPreference} />
             </SelectTrigger>
             <SelectContent>
-              {TTL_ORDER.filter((k) => k in cacheTtlOptions).map((k) => (
-                <SelectItem key={k} value={k}>
-                  {cacheTtlOptions[k]}
-                </SelectItem>
-              ))}
-              {Object.entries(cacheTtlOptions)
-                .filter(([k]) => !TTL_ORDER.includes(k as (typeof TTL_ORDER)[number]))
-                .map(([k, label]) => (
-                  <SelectItem key={k} value={k}>
-                    {label}
-                  </SelectItem>
-                ))}
+              {TTL_ORDER.flatMap((k) =>
+                k in cacheTtlOptions
+                  ? [
+                      <SelectItem key={k} value={k}>
+                        {cacheTtlOptions[k]}
+                      </SelectItem>,
+                    ]
+                  : []
+              )}
+              {Object.entries(cacheTtlOptions).flatMap(([k, label]) =>
+                !TTL_ORDER.includes(k as (typeof TTL_ORDER)[number])
+                  ? [
+                      <SelectItem key={k} value={k}>
+                        {label}
+                      </SelectItem>,
+                    ]
+                  : []
+              )}
             </SelectContent>
           </Select>
         </div>

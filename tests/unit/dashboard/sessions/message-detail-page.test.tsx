@@ -53,7 +53,12 @@ describe("SessionMessagesPage", () => {
       throw new Error("SessionMessagesPage should return a React element");
     }
 
-    expect(element.type).toBe(MockSessionMessagesClient);
+    const child = element.props.children;
+    expect(isValidElement(child)).toBe(true);
+    if (!isValidElement(child)) {
+      throw new Error("SessionMessagesPage should render a child element");
+    }
+    expect(child.type).toBe(MockSessionMessagesClient);
   });
 
   test("redirects non-admin or unauthenticated users", async () => {

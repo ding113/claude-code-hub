@@ -96,24 +96,27 @@ export async function getKeyQuotaUsage(keyId: number): Promise<ActionResult<KeyQ
     };
 
     // Import time utils and statistics functions (same as my-usage.ts for consistency)
-    const { getTimeRangeForPeriodWithMode, getTimeRangeForPeriod } = await import(
-      "@/lib/rate-limit/time-utils"
-    );
-    const { RateLimitService } = await import("@/lib/rate-limit");
-    const { sumKeyCostInTimeRange, sumKeyTotalCost } = await import("@/repository/statistics");
+    const [
+      { getTimeRangeForPeriodWithMode, getTimeRangeForPeriod },
+      { RateLimitService },
+      { sumKeyCostInTimeRange, sumKeyTotalCost },
+    ] = await Promise.all([
+      import("@/lib/rate-limit/time-utils"),
+      import("@/lib/rate-limit"),
+      import("@/repository/statistics"),
+    ]);
 
     // Calculate time ranges using Key's dailyResetTime/dailyResetMode configuration
-    const keyDailyTimeRange = await getTimeRangeForPeriodWithMode(
-      "daily",
-      keyRow.dailyResetTime ?? "00:00",
-      (keyRow.dailyResetMode as DailyResetMode | undefined) ?? "fixed"
-    );
-
-    const range5h = await getTimeRangeForPeriod("5h");
-
-    // 5h 使用运行时服务读取，weekly/monthly 继续沿用 DB 时间范围
-    const rangeWeekly = await getTimeRangeForPeriod("weekly");
-    const rangeMonthly = await getTimeRangeForPeriod("monthly");
+    const [keyDailyTimeRange, range5h, rangeWeekly, rangeMonthly] = await Promise.all([
+      getTimeRangeForPeriodWithMode(
+        "daily",
+        keyRow.dailyResetTime ?? "00:00",
+        (keyRow.dailyResetMode as DailyResetMode | undefined) ?? "fixed"
+      ),
+      getTimeRangeForPeriod("5h"),
+      getTimeRangeForPeriod("weekly"),
+      getTimeRangeForPeriod("monthly"),
+    ]);
 
     const costResetAt = resolveKeyCostResetAt(keyRow.costResetAt ?? null, result.userCostResetAt);
     const clipStart = (start: Date): Date =>

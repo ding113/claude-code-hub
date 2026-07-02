@@ -3,7 +3,7 @@
 import { emitActionAudit } from "@/lib/audit/emit";
 import { getSession } from "@/lib/auth";
 import type { NotificationJobType } from "@/lib/constants/notification.constants";
-import { resolveSystemTimezone } from "@/lib/utils/timezone";
+import { resolveSystemTimezone } from "@/lib/utils/timezone-resolver";
 import { WebhookNotifier } from "@/lib/webhook";
 import { buildTestMessage } from "@/lib/webhook/templates/test-messages";
 import {
@@ -37,12 +37,14 @@ export async function updateNotificationSettingsAction(
       return { ok: false, error: "无权限执行此操作" };
     }
 
+    const scheduleNotificationsModulePromise = import("@/lib/notification/notification-queue");
+    // react-doctor-disable-next-line react-doctor/async-parallel -- audit needs the pre-update snapshot before applying the mutation
     const before = await getNotificationSettings();
     const updated = await updateNotificationSettings(payload);
 
     // 重新调度通知任务，使总开关、子开关、时间/间隔等变更立即生效（添加/移除 repeatable 作业）。
     // 动态导入避免静态加载 Bull；scheduleNotifications 内部已 fail-open，缺少 REDIS_URL 时不会影响设置保存。
-    const { scheduleNotifications } = await import("@/lib/notification/notification-queue");
+    const { scheduleNotifications } = await scheduleNotificationsModulePromise;
     await scheduleNotifications();
 
     emitActionAudit({

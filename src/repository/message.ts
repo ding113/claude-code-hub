@@ -1,5 +1,3 @@
-"use server";
-
 import { and, asc, desc, eq, gt, inArray, isNull, lt, sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import { keys as keysTable, messageRequest, providers, usageLedger, users } from "@/drizzle/schema";
@@ -374,6 +372,7 @@ export async function updateMessageRequestWinnerCost(
   let lastError: unknown;
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
     try {
+      // react-doctor-disable-next-line react-doctor/async-await-in-loop -- retry loop must wait for each optimistic update attempt
       await db
         .update(messageRequest)
         .set({
@@ -433,6 +432,7 @@ export async function addMessageRequestHedgeLoserCost(
   let lastError: unknown;
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
     try {
+      // react-doctor-disable-next-line react-doctor/async-await-in-loop -- retry loop must wait for each optimistic update attempt
       await db
         .update(messageRequest)
         .set({
@@ -955,71 +955,70 @@ export async function aggregateSessionStats(sessionId: string): Promise<{
     return null;
   }
 
-  // 2. 查询供应商列表（去重）
-  const providerList = await db
-    .selectDistinct({
-      providerId: usageLedger.finalProviderId,
-      providerName: providers.name,
-    })
-    .from(usageLedger)
-    .leftJoin(providers, eq(usageLedger.finalProviderId, providers.id))
-    .where(
-      and(
-        eq(usageLedger.sessionId, sessionId),
-        LEDGER_BILLING_CONDITION,
-        sql`${usageLedger.finalProviderId} IS NOT NULL`
-      )
-    );
-
-  // 3. 查询模型列表（去重）
-  const modelList = await db
-    .selectDistinct({ model: usageLedger.model })
-    .from(usageLedger)
-    .where(
-      and(
-        eq(usageLedger.sessionId, sessionId),
-        LEDGER_BILLING_CONDITION,
-        sql`${usageLedger.model} IS NOT NULL`
-      )
-    );
-
-  // 3.1 查询 Cache TTL 列表（去重）
-  const cacheTtlList = await db
-    .selectDistinct({ cacheTtl: usageLedger.cacheTtlApplied })
-    .from(usageLedger)
-    .where(
-      and(
-        eq(usageLedger.sessionId, sessionId),
-        LEDGER_BILLING_CONDITION,
-        sql`${usageLedger.cacheTtlApplied} IS NOT NULL`
-      )
-    );
+  const [providerList, modelList, cacheTtlList, [userInfo]] = await Promise.all([
+    // 2. 查询供应商列表（去重）
+    db
+      .selectDistinct({
+        providerId: usageLedger.finalProviderId,
+        providerName: providers.name,
+      })
+      .from(usageLedger)
+      .leftJoin(providers, eq(usageLedger.finalProviderId, providers.id))
+      .where(
+        and(
+          eq(usageLedger.sessionId, sessionId),
+          LEDGER_BILLING_CONDITION,
+          sql`${usageLedger.finalProviderId} IS NOT NULL`
+        )
+      ),
+    // 3. 查询模型列表（去重）
+    db
+      .selectDistinct({ model: usageLedger.model })
+      .from(usageLedger)
+      .where(
+        and(
+          eq(usageLedger.sessionId, sessionId),
+          LEDGER_BILLING_CONDITION,
+          sql`${usageLedger.model} IS NOT NULL`
+        )
+      ),
+    // 3.1 查询 Cache TTL 列表（去重）
+    db
+      .selectDistinct({ cacheTtl: usageLedger.cacheTtlApplied })
+      .from(usageLedger)
+      .where(
+        and(
+          eq(usageLedger.sessionId, sessionId),
+          LEDGER_BILLING_CONDITION,
+          sql`${usageLedger.cacheTtlApplied} IS NOT NULL`
+        )
+      ),
+    // 4. 获取用户信息（第一条请求）
+    db
+      .select({
+        userName: users.name,
+        userId: users.id,
+        keyName: keysTable.name,
+        keyId: keysTable.id,
+        userAgent: messageRequest.userAgent,
+        apiType: messageRequest.apiType,
+      })
+      .from(messageRequest)
+      .innerJoin(users, eq(messageRequest.userId, users.id))
+      .innerJoin(keysTable, eq(messageRequest.key, keysTable.key))
+      .where(and(eq(messageRequest.sessionId, sessionId), isNull(messageRequest.deletedAt)))
+      .orderBy(messageRequest.createdAt)
+      .limit(1),
+  ]);
 
   // 聚合 Cache TTL：单一值直接返回，多值返回 "mixed"
-  const uniqueCacheTtls = cacheTtlList.map((c) => c.cacheTtl).filter(Boolean) as string[];
+  const uniqueCacheTtls = cacheTtlList.flatMap((c) => (c.cacheTtl ? [c.cacheTtl] : []));
   const cacheTtlApplied =
     uniqueCacheTtls.length === 0
       ? null
       : uniqueCacheTtls.length === 1
         ? uniqueCacheTtls[0]
         : "mixed";
-
-  // 4. 获取用户信息（第一条请求）
-  const [userInfo] = await db
-    .select({
-      userName: users.name,
-      userId: users.id,
-      keyName: keysTable.name,
-      keyId: keysTable.id,
-      userAgent: messageRequest.userAgent,
-      apiType: messageRequest.apiType,
-    })
-    .from(messageRequest)
-    .innerJoin(users, eq(messageRequest.userId, users.id))
-    .innerJoin(keysTable, eq(messageRequest.key, keysTable.key))
-    .where(and(eq(messageRequest.sessionId, sessionId), isNull(messageRequest.deletedAt)))
-    .orderBy(messageRequest.createdAt)
-    .limit(1);
 
   if (!userInfo) {
     return null;
@@ -1531,31 +1530,32 @@ export async function findAdjacentRequestSequences(
   sessionId: string,
   sequence: number
 ): Promise<{ prevSequence: number | null; nextSequence: number | null }> {
-  const [prev] = await db
-    .select({
-      sequence: sql<number | null>`max(${messageRequest.requestSequence})`,
-    })
-    .from(messageRequest)
-    .where(
-      and(
-        eq(messageRequest.sessionId, sessionId),
-        isNull(messageRequest.deletedAt),
-        lt(messageRequest.requestSequence, sequence)
-      )
-    );
-
-  const [next] = await db
-    .select({
-      sequence: sql<number | null>`min(${messageRequest.requestSequence})`,
-    })
-    .from(messageRequest)
-    .where(
-      and(
-        eq(messageRequest.sessionId, sessionId),
-        isNull(messageRequest.deletedAt),
-        gt(messageRequest.requestSequence, sequence)
-      )
-    );
+  const [[prev], [next]] = await Promise.all([
+    db
+      .select({
+        sequence: sql<number | null>`max(${messageRequest.requestSequence})`,
+      })
+      .from(messageRequest)
+      .where(
+        and(
+          eq(messageRequest.sessionId, sessionId),
+          isNull(messageRequest.deletedAt),
+          lt(messageRequest.requestSequence, sequence)
+        )
+      ),
+    db
+      .select({
+        sequence: sql<number | null>`min(${messageRequest.requestSequence})`,
+      })
+      .from(messageRequest)
+      .where(
+        and(
+          eq(messageRequest.sessionId, sessionId),
+          isNull(messageRequest.deletedAt),
+          gt(messageRequest.requestSequence, sequence)
+        )
+      ),
+  ]);
 
   return {
     prevSequence: prev?.sequence ?? null,

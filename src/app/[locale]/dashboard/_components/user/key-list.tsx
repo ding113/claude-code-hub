@@ -167,6 +167,7 @@ export function KeyList({
               <Collapsible open={expandedKeys.has(record.id)}>
                 <CollapsibleTrigger asChild>
                   <button
+                    type="button"
                     onClick={() => toggleExpanded(record.id)}
                     className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
                   >

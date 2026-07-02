@@ -3,7 +3,7 @@
 import { AlertTriangle, Database, DollarSign, Settings2, TrendingUp } from "lucide-react";
 import { useTranslations } from "next-intl";
 import type { ComponentProps, ReactNode } from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
@@ -143,10 +143,6 @@ function NumberInput({
   constraints?: NumberInputConstraints;
 }) {
   const [localValue, setLocalValue] = useState(String(value));
-
-  useEffect(() => {
-    setLocalValue(String(value));
-  }, [value]);
 
   return (
     <input
@@ -328,6 +324,7 @@ export function NotificationTypeCard({
                   {t("notifications.dailyLeaderboard.topN")}
                 </label>
                 <NumberInput
+                  key={`dailyLeaderboardTopN-${settings.dailyLeaderboardTopN}`}
                   id="dailyLeaderboardTopN"
                   min={1}
                   max={20}
@@ -363,6 +360,7 @@ export function NotificationTypeCard({
                   step={0.05}
                   value={settings.costAlertThreshold}
                   disabled={!settings.enabled}
+                  aria-label={t("notifications.costAlert.threshold")}
                   onChange={safeNumberOnChange(
                     (nextValue) => onUpdateSettings({ costAlertThreshold: nextValue }),
                     { min: 0.5, max: 1.0 }
@@ -378,6 +376,7 @@ export function NotificationTypeCard({
                   {t("notifications.costAlert.interval")}
                 </label>
                 <NumberInput
+                  key={`costAlertCheckInterval-${settings.costAlertCheckInterval}`}
                   id="costAlertCheckInterval"
                   min={10}
                   max={1440}
@@ -428,6 +427,7 @@ export function NotificationTypeCard({
                   label={t("notifications.cacheHitRateAlert.checkInterval")}
                 >
                   <NumberInput
+                    key={`cacheHitRateAlertCheckInterval-${settings.cacheHitRateAlertCheckInterval}`}
                     id="cacheHitRateAlertCheckInterval"
                     min={1}
                     max={1440}
@@ -444,6 +444,7 @@ export function NotificationTypeCard({
                   label={t("notifications.cacheHitRateAlert.historicalLookbackDays")}
                 >
                   <NumberInput
+                    key={`cacheHitRateAlertHistoricalLookbackDays-${settings.cacheHitRateAlertHistoricalLookbackDays}`}
                     id="cacheHitRateAlertHistoricalLookbackDays"
                     min={1}
                     max={90}
@@ -464,6 +465,7 @@ export function NotificationTypeCard({
                   label={t("notifications.cacheHitRateAlert.cooldownMinutes")}
                 >
                   <NumberInput
+                    key={`cacheHitRateAlertCooldownMinutes-${settings.cacheHitRateAlertCooldownMinutes}`}
                     id="cacheHitRateAlertCooldownMinutes"
                     min={0}
                     max={1440}
@@ -482,6 +484,7 @@ export function NotificationTypeCard({
                   label={t("notifications.cacheHitRateAlert.absMin")}
                 >
                   <NumberInput
+                    key={`cacheHitRateAlertAbsMin-${settings.cacheHitRateAlertAbsMin}`}
                     id="cacheHitRateAlertAbsMin"
                     min={0}
                     max={1}
@@ -499,6 +502,7 @@ export function NotificationTypeCard({
                   label={t("notifications.cacheHitRateAlert.dropAbs")}
                 >
                   <NumberInput
+                    key={`cacheHitRateAlertDropAbs-${settings.cacheHitRateAlertDropAbs}`}
                     id="cacheHitRateAlertDropAbs"
                     min={0}
                     max={1}
@@ -516,6 +520,7 @@ export function NotificationTypeCard({
                   label={t("notifications.cacheHitRateAlert.dropRel")}
                 >
                   <NumberInput
+                    key={`cacheHitRateAlertDropRel-${settings.cacheHitRateAlertDropRel}`}
                     id="cacheHitRateAlertDropRel"
                     min={0}
                     max={1}
@@ -535,6 +540,7 @@ export function NotificationTypeCard({
                   label={t("notifications.cacheHitRateAlert.minEligibleRequests")}
                 >
                   <NumberInput
+                    key={`cacheHitRateAlertMinEligibleRequests-${settings.cacheHitRateAlertMinEligibleRequests}`}
                     id="cacheHitRateAlertMinEligibleRequests"
                     min={1}
                     max={100000}
@@ -555,6 +561,7 @@ export function NotificationTypeCard({
                   label={t("notifications.cacheHitRateAlert.minEligibleTokens")}
                 >
                   <NumberInput
+                    key={`cacheHitRateAlertMinEligibleTokens-${settings.cacheHitRateAlertMinEligibleTokens}`}
                     id="cacheHitRateAlertMinEligibleTokens"
                     min={0}
                     max={2147483647}
@@ -575,6 +582,7 @@ export function NotificationTypeCard({
                   label={t("notifications.cacheHitRateAlert.topN")}
                 >
                   <NumberInput
+                    key={`cacheHitRateAlertTopN-${settings.cacheHitRateAlertTopN}`}
                     id="cacheHitRateAlertTopN"
                     min={1}
                     max={100}

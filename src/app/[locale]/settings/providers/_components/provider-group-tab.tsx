@@ -54,7 +54,9 @@ import { exceedsProviderGroupDescriptionLimit } from "@/lib/public-status/descri
 import { cn } from "@/lib/utils";
 import { resolveProviderGroupsWithDefault } from "@/lib/utils/provider-group";
 import type { ProviderDisplay } from "@/types/provider";
-import { ProviderBatchActions, ProviderBatchDialog, ProviderBatchToolbar } from "./batch-edit";
+import { ProviderBatchActions } from "./batch-edit/provider-batch-actions";
+import { ProviderBatchDialog } from "./batch-edit/provider-batch-dialog";
+import { ProviderBatchToolbar } from "./batch-edit/provider-batch-toolbar";
 import { InlineEditPopover } from "./inline-edit-popover";
 import { invalidateProviderQueries } from "./invalidate-provider-queries";
 
@@ -564,7 +566,7 @@ function GroupMembersPanel({
 
   const handleInvertSelection = useCallback(() => {
     const next = new Set(
-      members.map((member) => member.id).filter((id) => !selectedProviderIds.has(id))
+      members.flatMap((member) => (!selectedProviderIds.has(member.id) ? [member.id] : []))
     );
     setSelectedProviderIds(next);
   }, [members, selectedProviderIds]);
@@ -861,7 +863,7 @@ function InlineTextEditPopover({
   const t = useTranslations("settings.providers.providerGroups");
   const isDesktop = useMediaQuery("(min-width: 768px)");
   const [open, setOpen] = useState(false);
-  const [draft, setDraft] = useState(value);
+  const [draft, setDraft] = useState(() => value);
   const [saving, setSaving] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 

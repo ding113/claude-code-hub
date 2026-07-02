@@ -66,41 +66,45 @@ export function UserStatisticsChart({
   const [chartMode, setChartMode] = React.useState<"stacked" | "overlay">("overlay");
 
   // 用户选择状态(仅 Admin 用 users 模式时启用)
-  const [selectedUserIds, setSelectedUserIds] = React.useState<Set<number>>(
-    () => new Set(data.users.map((u) => u.id))
+  const [deselectedUserIds, setDeselectedUserIds] = React.useState<Set<number>>(() => new Set());
+  const userIds = React.useMemo(() => data.users.map((user) => user.id), [data.users]);
+  const selectedUserIds = React.useMemo(
+    () => new Set(userIds.filter((userId) => !deselectedUserIds.has(userId))),
+    [userIds, deselectedUserIds]
   );
-
-  // 重置选择状态(当 data.users 变化时)
-  React.useEffect(() => {
-    setSelectedUserIds(new Set(data.users.map((u) => u.id)));
-  }, [data.users]);
 
   const isAdminMode = data.mode === "users";
   const enableUserFilter = isAdminMode && data.users.length > 1;
 
   const toggleUserSelection = (userId: number) => {
-    setSelectedUserIds((prev) => {
+    setDeselectedUserIds((prev) => {
       const next = new Set(prev);
-      if (next.has(userId)) {
+      const isSelected = !next.has(userId);
+      const selectedCount = userIds.reduce(
+        (count, currentUserId) => (next.has(currentUserId) ? count : count + 1),
+        0
+      );
+
+      if (isSelected) {
         // 至少保留一个用户
-        if (next.size > 1) {
-          next.delete(userId);
+        if (selectedCount > 1) {
+          next.add(userId);
         }
       } else {
-        next.add(userId);
+        next.delete(userId);
       }
       return next;
     });
   };
 
   const selectAllUsers = () => {
-    setSelectedUserIds(new Set(data.users.map((u) => u.id)));
+    setDeselectedUserIds(new Set());
   };
 
   const deselectAllUsers = () => {
     // 保留第一个用户
     if (data.users.length > 0) {
-      setSelectedUserIds(new Set([data.users[0].id]));
+      setDeselectedUserIds(new Set(userIds.filter((userId) => userId !== data.users[0].id)));
     }
   };
 
@@ -302,6 +306,7 @@ export function UserStatisticsChart({
         {!onTimeRangeChange && (
           <div className="flex">
             <button
+              type="button"
               data-active={activeChart === "cost"}
               className="data-[active=true]:bg-muted/50 relative z-30 flex flex-1 flex-col justify-center gap-1 border-t px-6 py-4 text-left even:border-l lg:border-t-0 lg:border-l lg:px-8 lg:py-6 cursor-pointer"
               onClick={() => setActiveChart("cost")}
@@ -312,6 +317,7 @@ export function UserStatisticsChart({
               </span>
             </button>
             <button
+              type="button"
               data-active={activeChart === "calls"}
               className="data-[active=true]:bg-muted/50 relative z-30 flex flex-1 flex-col justify-center gap-1 border-t px-6 py-4 text-left even:border-l lg:border-t-0 lg:border-l lg:px-8 lg:py-6 cursor-pointer"
               onClick={() => setActiveChart("calls")}
@@ -328,6 +334,7 @@ export function UserStatisticsChart({
       {onTimeRangeChange && (
         <div className="flex border-b">
           <button
+            type="button"
             data-active={activeChart === "cost"}
             className="data-[active=true]:bg-muted/50 relative z-30 flex flex-1 flex-col justify-center gap-1 px-6 py-3 text-left even:border-l transition-colors hover:bg-muted/30 cursor-pointer"
             onClick={() => setActiveChart("cost")}
@@ -338,6 +345,7 @@ export function UserStatisticsChart({
             </span>
           </button>
           <button
+            type="button"
             data-active={activeChart === "calls"}
             className="data-[active=true]:bg-muted/50 relative z-30 flex flex-1 flex-col justify-center gap-1 px-6 py-3 text-left even:border-l transition-colors hover:bg-muted/30 cursor-pointer"
             onClick={() => setActiveChart("calls")}
@@ -355,6 +363,7 @@ export function UserStatisticsChart({
           <div className="absolute top-0 right-0 sm:right-2 z-10">
             <div className="inline-flex rounded-md border bg-background/80 backdrop-blur-sm p-0.5">
               <button
+                type="button"
                 data-active={chartMode === "overlay"}
                 onClick={() => setChartMode("overlay")}
                 className="data-[active=true]:bg-muted data-[active=true]:text-foreground text-[10px] text-muted-foreground px-1.5 py-0.5 rounded transition-colors hover:bg-muted/70 cursor-pointer"
@@ -362,6 +371,7 @@ export function UserStatisticsChart({
                 {t("chartMode.overlay")}
               </button>
               <button
+                type="button"
                 data-active={chartMode === "stacked"}
                 onClick={() => setChartMode("stacked")}
                 className="data-[active=true]:bg-muted data-[active=true]:text-foreground text-[10px] text-muted-foreground px-1.5 py-0.5 rounded transition-colors hover:bg-muted/70 cursor-pointer"
@@ -443,8 +453,10 @@ export function UserStatisticsChart({
                         {formatTooltipDate(String(label ?? ""))}
                       </div>
                       <div className="grid gap-1.5">
-                        {[...filteredPayload]
-                          .sort((a, b) => (Number(b.value ?? 0) || 0) - (Number(a.value ?? 0) || 0))
+                        {filteredPayload
+                          .toSorted(
+                            (a, b) => (Number(b.value ?? 0) || 0) - (Number(a.value ?? 0) || 0)
+                          )
                           .map((entry, index) => {
                             const baseKey =
                               entry.dataKey?.toString().replace(`_${activeChart}`, "") || "";
@@ -488,7 +500,7 @@ export function UserStatisticsChart({
             />
             {/* Overlay 模式下按数值降序渲染，大的在底层，小的在顶层避免遮挡 */}
             {(chartMode === "overlay"
-              ? [...visibleUsers].sort((a, b) => {
+              ? Array.from(visibleUsers).toSorted((a, b) => {
                   const totalA = userTotals[a.dataKey];
                   const totalB = userTotals[b.dataKey];
                   if (!totalA || !totalB) return 0;
@@ -520,6 +532,7 @@ export function UserStatisticsChart({
                   {enableUserFilter && (
                     <div className="flex items-center justify-center gap-2 mb-2">
                       <button
+                        type="button"
                         onClick={selectAllUsers}
                         className="text-xs text-muted-foreground hover:text-foreground px-2 py-1 rounded hover:bg-muted/50 transition-colors"
                       >
@@ -527,6 +540,7 @@ export function UserStatisticsChart({
                       </button>
                       <span className="text-muted-foreground">·</span>
                       <button
+                        type="button"
                         onClick={deselectAllUsers}
                         className="text-xs text-muted-foreground hover:text-foreground px-2 py-1 rounded hover:bg-muted/50 transition-colors"
                       >

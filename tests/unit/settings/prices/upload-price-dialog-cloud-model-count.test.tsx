@@ -8,6 +8,7 @@ import { createRoot } from "react-dom/client";
 import { NextIntlClientProvider } from "next-intl";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { UploadPriceDialog } from "@/app/[locale]/settings/prices/_components/upload-price-dialog";
+import { createTestQueryClient, withTestQueryClient } from "../../../helpers/react-query";
 import { loadMessages } from "./test-messages";
 
 // 测试环境不加载 `@/i18n/routing` 的真实实现（避免 next-intl / Next.js 运行时依赖）
@@ -27,14 +28,16 @@ function render(node: ReactNode) {
   const container = document.createElement("div");
   document.body.appendChild(container);
   const root = createRoot(container);
+  const queryClient = createTestQueryClient();
 
   act(() => {
-    root.render(node);
+    root.render(withTestQueryClient(node, queryClient));
   });
 
   return {
     unmount: () => {
       act(() => root.unmount());
+      queryClient.clear();
       container.remove();
     },
   };

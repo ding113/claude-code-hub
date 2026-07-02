@@ -19,10 +19,11 @@ export default async function SettingsProvidersPage({
 }: {
   params: Promise<{ locale: string }>;
 }) {
-  const { locale } = await params;
-  const t = await getTranslations({ locale, namespace: "settings" });
-  const session = await getSession();
-  const providers = await getProviders();
+  const [{ locale }, session] = await Promise.all([params, getSession()]);
+  const [t, providers] = await Promise.all([
+    getTranslations({ locale, namespace: "settings" }),
+    getProviders(),
+  ]);
 
   return (
     <>

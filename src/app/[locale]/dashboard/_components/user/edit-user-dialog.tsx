@@ -100,6 +100,14 @@ function EditUserDialogInner({ onOpenChange, user, onSuccess }: EditUserDialogPr
   const [reset5hDialogOpen, setReset5hDialogOpen] = useState(false);
   const [isResettingLimits, setIsResettingLimits] = useState(false);
   const [resetLimitsDialogOpen, setResetLimitsDialogOpen] = useState(false);
+  const dateTimeFormatter = useMemo(
+    () =>
+      new Intl.DateTimeFormat(locale, {
+        dateStyle: "medium",
+        timeStyle: "short",
+      }),
+    [locale]
+  );
 
   // Always show providerGroup field in edit mode
   const userEditTranslations = useUserTranslations({ showProviderGroup: true });
@@ -373,10 +381,7 @@ function EditUserDialogInner({ onOpenChange, user, onSuccess }: EditUserDialogPr
                   {user.costResetAt && (
                     <p className="text-xs text-amber-600/80 dark:text-amber-400/80">
                       {t("editDialog.resetLimits.lastResetAt", {
-                        date: new Intl.DateTimeFormat(locale, {
-                          dateStyle: "medium",
-                          timeStyle: "short",
-                        }).format(new Date(user.costResetAt)),
+                        date: dateTimeFormatter.format(new Date(user.costResetAt)),
                       })}
                     </p>
                   )}

@@ -8,6 +8,7 @@ import type { DateRange } from "react-day-picker";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { useClientDate } from "@/hooks/use-client-date";
 import { cn } from "@/lib/utils";
 import type { LeaderboardPeriod } from "@/repository/leaderboard";
 
@@ -23,6 +24,7 @@ interface DateRangePickerProps {
 type QuickPeriod = "daily" | "weekly" | "monthly" | "allTime";
 
 const QUICK_PERIODS: QuickPeriod[] = ["daily", "weekly", "monthly", "allTime"];
+const HYDRATION_FALLBACK_DATE = new Date(0);
 
 function formatDate(date: Date): string {
   return format(date, "yyyy-MM-dd");
@@ -37,7 +39,7 @@ function parseDate(dateStr: string): Date {
 
 function getDateRangeForPeriod(
   period: QuickPeriod,
-  baseDate: Date = new Date()
+  baseDate: Date
 ): { startDate: string; endDate: string } {
   switch (period) {
     case "daily":
@@ -53,7 +55,7 @@ function getDateRangeForPeriod(
       return { startDate: formatDate(start), endDate: formatDate(end) };
     }
     default:
-      return { startDate: "2020-01-01", endDate: formatDate(new Date()) };
+      return { startDate: "2020-01-01", endDate: formatDate(baseDate) };
   }
 }
 
@@ -75,16 +77,18 @@ function shiftDateRange(
 export function DateRangePicker({ period, dateRange, onPeriodChange }: DateRangePickerProps) {
   const t = useTranslations("dashboard.leaderboard");
   const [calendarOpen, setCalendarOpen] = useState(false);
+  const clientToday = useClientDate();
 
   const currentRange = useMemo(() => {
+    const baseDate = clientToday ?? HYDRATION_FALLBACK_DATE;
     if (period === "custom" && dateRange) {
       return dateRange;
     }
     if (period !== "custom" && QUICK_PERIODS.includes(period as QuickPeriod)) {
-      return getDateRangeForPeriod(period as QuickPeriod);
+      return getDateRangeForPeriod(period as QuickPeriod, baseDate);
     }
-    return getDateRangeForPeriod("daily");
-  }, [period, dateRange]);
+    return getDateRangeForPeriod("daily", baseDate);
+  }, [period, dateRange, clientToday]);
 
   const selectedRange: DateRange = useMemo(() => {
     return {
@@ -198,7 +202,7 @@ export function DateRangePicker({ period, dateRange, onPeriodChange }: DateRange
               selected={selectedRange}
               onSelect={handleDateRangeSelect}
               numberOfMonths={2}
-              disabled={{ after: new Date() }}
+              disabled={clientToday ? { after: clientToday } : undefined}
             />
           </PopoverContent>
         </Popover>
@@ -207,7 +211,10 @@ export function DateRangePicker({ period, dateRange, onPeriodChange }: DateRange
           variant="outline"
           size="icon-sm"
           onClick={() => handleNavigate("next")}
-          disabled={period === "allTime" || currentRange.endDate >= formatDate(new Date())}
+          disabled={
+            period === "allTime" ||
+            (clientToday !== null && currentRange.endDate >= formatDate(clientToday))
+          }
           title={t("dateRange.nextPeriod")}
         >
           <ChevronRight className="h-4 w-4" />

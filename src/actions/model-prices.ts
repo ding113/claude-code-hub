@@ -196,6 +196,7 @@ export async function processPriceTableInternal(
 
         if (!existingPrice) {
           // 模型不存在，新增记录
+          // react-doctor-disable-next-line react-doctor/async-await-in-loop -- import result lists preserve source model order
           await createModelPrice(modelName, priceData, source);
           result.added.push(modelName);
         } else if (
@@ -640,12 +641,13 @@ function sanitizeExtraPriceData(value: unknown, path = ""): unknown {
   }
 
   return Object.fromEntries(
-    Object.entries(value)
-      .filter(([key]) => key !== "__proto__" && key !== "constructor" && key !== "prototype")
-      .map(([key, nestedValue]) => [
-        key,
-        sanitizeExtraPriceData(nestedValue, path ? `${path}.${key}` : key),
-      ])
+    Object.entries(value).flatMap(([key, nestedValue]) => {
+      if (key === "__proto__" || key === "constructor" || key === "prototype") {
+        return [];
+      }
+
+      return [[key, sanitizeExtraPriceData(nestedValue, path ? `${path}.${key}` : key)]];
+    })
   );
 }
 

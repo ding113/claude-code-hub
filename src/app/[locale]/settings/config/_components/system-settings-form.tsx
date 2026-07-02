@@ -20,7 +20,7 @@ import {
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -113,76 +113,75 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
   const tSettings = useTranslations("settings");
   const tCommon = useTranslations("settings.common");
   const tIpLogging = useTranslations("settings.config.ipLogging");
-  const [siteTitle, setSiteTitle] = useState(initialSettings.siteTitle);
+  const [siteTitle, setSiteTitle] = useState(() => initialSettings.siteTitle);
   const [allowGlobalUsageView, setAllowGlobalUsageView] = useState(
-    initialSettings.allowGlobalUsageView
+    () => initialSettings.allowGlobalUsageView
   );
   const [currencyDisplay, setCurrencyDisplay] = useState<CurrencyCode>(
-    initialSettings.currencyDisplay
+    () => initialSettings.currencyDisplay
   );
   const [billingModelSource, setBillingModelSource] = useState<BillingModelSource>(
-    initialSettings.billingModelSource
+    () => initialSettings.billingModelSource
   );
   const [codexPriorityBillingSource, setCodexPriorityBillingSource] =
-    useState<CodexPriorityBillingSource>(initialSettings.codexPriorityBillingSource);
+    useState<CodexPriorityBillingSource>(() => initialSettings.codexPriorityBillingSource);
   const [billNonSuccessfulRequests, setBillNonSuccessfulRequests] = useState(
-    initialSettings.billNonSuccessfulRequests
+    () => initialSettings.billNonSuccessfulRequests
   );
-  const [billHedgeLosers, setBillHedgeLosers] = useState(initialSettings.billHedgeLosers);
-  const [timezone, setTimezone] = useState<string | null>(initialSettings.timezone);
+  const [billHedgeLosers, setBillHedgeLosers] = useState(() => initialSettings.billHedgeLosers);
+  const [timezone, setTimezone] = useState<string | null>(() => initialSettings.timezone);
   const [verboseProviderError, setVerboseProviderError] = useState(
-    initialSettings.verboseProviderError
+    () => initialSettings.verboseProviderError
   );
   const [passThroughUpstreamErrorMessage, setPassThroughUpstreamErrorMessage] = useState(
-    initialSettings.passThroughUpstreamErrorMessage
+    () => initialSettings.passThroughUpstreamErrorMessage
   );
-  const [enableHttp2, setEnableHttp2] = useState(initialSettings.enableHttp2);
-  const [enableOpenaiResponsesWebsocket, setEnableOpenaiResponsesWebsocket] = useState(
-    initialSettings.enableOpenaiResponsesWebsocket
-  );
+  const [enableHttp2, setEnableHttp2] = useState(() => initialSettings.enableHttp2);
+  const enableOpenaiResponsesWebsocketRef = useRef(initialSettings.enableOpenaiResponsesWebsocket);
   const [enableHighConcurrencyMode, setEnableHighConcurrencyMode] = useState(
-    initialSettings.enableHighConcurrencyMode
+    () => initialSettings.enableHighConcurrencyMode
   );
   const [interceptAnthropicWarmupRequests, setInterceptAnthropicWarmupRequests] = useState(
-    initialSettings.interceptAnthropicWarmupRequests
+    () => initialSettings.interceptAnthropicWarmupRequests
   );
   const [enableThinkingSignatureRectifier, setEnableThinkingSignatureRectifier] = useState(
-    initialSettings.enableThinkingSignatureRectifier
+    () => initialSettings.enableThinkingSignatureRectifier
   );
   const [enableBillingHeaderRectifier, setEnableBillingHeaderRectifier] = useState(
-    initialSettings.enableBillingHeaderRectifier
+    () => initialSettings.enableBillingHeaderRectifier
   );
   const [enableResponseInputRectifier, setEnableResponseInputRectifier] = useState(
-    initialSettings.enableResponseInputRectifier
+    () => initialSettings.enableResponseInputRectifier
   );
   const [
     allowNonConversationEndpointProviderFallback,
     setAllowNonConversationEndpointProviderFallback,
-  ] = useState(initialSettings.allowNonConversationEndpointProviderFallback);
-  const [fakeStreamingWhitelist, setFakeStreamingWhitelist] = useState<
-    FakeStreamingWhitelistEntry[]
-  >(() =>
-    (initialSettings.fakeStreamingWhitelist ?? []).map((entry) => ({
-      model: entry.model,
-      groupTags: [...entry.groupTags],
-    }))
-  );
+  ] = useState(() => initialSettings.allowNonConversationEndpointProviderFallback);
+  const fakeStreamingWhitelistRef = useRef<FakeStreamingWhitelistEntry[] | null>(null);
+  if (fakeStreamingWhitelistRef.current === null) {
+    fakeStreamingWhitelistRef.current = (initialSettings.fakeStreamingWhitelist ?? []).map(
+      (entry) => ({
+        model: entry.model,
+        groupTags: [...entry.groupTags],
+      })
+    );
+  }
   const [enableThinkingBudgetRectifier, setEnableThinkingBudgetRectifier] = useState(
-    initialSettings.enableThinkingBudgetRectifier
+    () => initialSettings.enableThinkingBudgetRectifier
   );
   const [enableThinkingEffortConflictRectifier, setEnableThinkingEffortConflictRectifier] =
-    useState(initialSettings.enableThinkingEffortConflictRectifier);
+    useState(() => initialSettings.enableThinkingEffortConflictRectifier);
   const [enableCodexSessionIdCompletion, setEnableCodexSessionIdCompletion] = useState(
-    initialSettings.enableCodexSessionIdCompletion
+    () => initialSettings.enableCodexSessionIdCompletion
   );
   const [enableClaudeMetadataUserIdInjection, setEnableClaudeMetadataUserIdInjection] = useState(
-    initialSettings.enableClaudeMetadataUserIdInjection
+    () => initialSettings.enableClaudeMetadataUserIdInjection
   );
   const [enableResponseFixer, setEnableResponseFixer] = useState(
-    initialSettings.enableResponseFixer
+    () => initialSettings.enableResponseFixer
   );
   const [responseFixerConfig, setResponseFixerConfig] = useState(
-    initialSettings.responseFixerConfig
+    () => initialSettings.responseFixerConfig
   );
   const [quotaDbRefreshIntervalSecondsStr, setQuotaDbRefreshIntervalSecondsStr] = useState(
     String(initialSettings.quotaDbRefreshIntervalSeconds ?? 10)
@@ -211,7 +210,7 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
   const [ipGeoLookupEnabled, setIpGeoLookupEnabled] = useState(
     initialSettings.ipGeoLookupEnabled ?? true
   );
-  const [ipExtractionConfigText, setIpExtractionConfigText] = useState<string>(
+  const [ipExtractionConfigText, setIpExtractionConfigText] = useState<string>(() =>
     formatIpExtractionConfig(initialSettings.ipExtractionConfig ?? DEFAULT_IP_EXTRACTION_CONFIG)
   );
   const [isPending, startTransition] = useTransition();
@@ -271,7 +270,7 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
       const merged = new Map<string, Set<string>>();
       const allGroupsModels = new Set<string>();
       const order: string[] = [];
-      for (const entry of fakeStreamingWhitelist) {
+      for (const entry of fakeStreamingWhitelistRef.current ?? []) {
         const model = entry.model.trim();
         if (!model) continue;
         if (!merged.has(model)) {
@@ -311,7 +310,7 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
         verboseProviderError,
         passThroughUpstreamErrorMessage,
         enableHttp2,
-        enableOpenaiResponsesWebsocket,
+        enableOpenaiResponsesWebsocket: enableOpenaiResponsesWebsocketRef.current,
         enableHighConcurrencyMode,
         interceptAnthropicWarmupRequests,
         enableThinkingSignatureRectifier,
@@ -352,7 +351,7 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
         setVerboseProviderError(result.data.verboseProviderError);
         setPassThroughUpstreamErrorMessage(result.data.passThroughUpstreamErrorMessage);
         setEnableHttp2(result.data.enableHttp2);
-        setEnableOpenaiResponsesWebsocket(result.data.enableOpenaiResponsesWebsocket);
+        enableOpenaiResponsesWebsocketRef.current = result.data.enableOpenaiResponsesWebsocket;
         setEnableHighConcurrencyMode(result.data.enableHighConcurrencyMode);
         setInterceptAnthropicWarmupRequests(result.data.interceptAnthropicWarmupRequests);
         setEnableThinkingSignatureRectifier(result.data.enableThinkingSignatureRectifier);
@@ -361,11 +360,11 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
         setAllowNonConversationEndpointProviderFallback(
           result.data.allowNonConversationEndpointProviderFallback
         );
-        setFakeStreamingWhitelist(
-          (result.data.fakeStreamingWhitelist ?? []).map((entry) => ({
+        fakeStreamingWhitelistRef.current = (result.data.fakeStreamingWhitelist ?? []).map(
+          (entry) => ({
             model: entry.model,
             groupTags: [...entry.groupTags],
-          }))
+          })
         );
         setEnableThinkingBudgetRectifier(result.data.enableThinkingBudgetRectifier);
         setEnableThinkingEffortConflictRectifier(result.data.enableThinkingEffortConflictRectifier);

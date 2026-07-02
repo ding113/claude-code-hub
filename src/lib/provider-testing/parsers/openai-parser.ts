@@ -60,8 +60,10 @@ export function parseOpenAIResponse(body: string, contentType?: string): ParsedR
     // Extract text content from choices
     const content =
       data.choices
-        ?.map((c) => c.message?.content || "")
-        .filter(Boolean)
+        ?.flatMap((c) => {
+          const content = c.message?.content || "";
+          return content ? [content] : [];
+        })
         .join("") || "";
 
     // Extract usage

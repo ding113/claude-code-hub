@@ -10,16 +10,21 @@ export default async function PublicStatusPage({
   params: Promise<{ locale: string }>;
 }) {
   const { locale } = await params;
-  const t = await getTranslations({ locale, namespace: "settings.statusPage.public" });
-  const {
-    followServerDefaults,
-    initialPayload,
-    intervalMinutes,
-    rangeHours,
-    siteTitle,
-    status,
-    timeZone,
-  } = await loadPublicStatusPageData();
+  const [
+    t,
+    {
+      followServerDefaults,
+      initialPayload,
+      intervalMinutes,
+      rangeHours,
+      siteTitle,
+      status,
+      timeZone,
+    },
+  ] = await Promise.all([
+    getTranslations({ locale, namespace: "settings.statusPage.public" }),
+    loadPublicStatusPageData(),
+  ]);
 
   return (
     <PublicStatusView

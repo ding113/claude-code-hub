@@ -1,6 +1,6 @@
 "use client";
 
-import { motion } from "framer-motion";
+import { m } from "framer-motion";
 import { Info, Layers, Route, Scale } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
@@ -98,7 +98,7 @@ export function RoutingSection({ subSectionRefs }: RoutingSectionProps) {
   };
 
   return (
-    <motion.div
+    <m.div
       initial={{ opacity: 0, x: 20 }}
       animate={{ opacity: 1, x: 0 }}
       exit={{ opacity: 0, x: -20 }}
@@ -470,6 +470,6 @@ export function RoutingSection({ subSectionRefs }: RoutingSectionProps) {
           )}
         </SectionCard>
       </div>
-    </motion.div>
+    </m.div>
   );
 }

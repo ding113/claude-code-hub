@@ -2,7 +2,7 @@
 
 import { Check, ChevronsUpDown } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Command,
@@ -46,6 +46,7 @@ export function RequestFilters({
   isProvidersLoading = false,
 }: RequestFiltersProps) {
   const t = useTranslations("dashboard");
+  const providerComboboxContentId = useId();
 
   const [providerPopoverOpen, setProviderPopoverOpen] = useState(false);
   const [sessionIdPopoverOpen, setSessionIdPopoverOpen] = useState(false);
@@ -73,7 +74,7 @@ export function RequestFilters({
     [providers]
   );
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     isMountedRef.current = true;
     return () => {
       isMountedRef.current = false;
@@ -101,13 +102,13 @@ export function RequestFilters({
           providerId: filters.providerId,
         });
 
-        if (!isMountedRef.current || requestId !== sessionIdSearchRequestIdRef.current) return;
-
-        if (result.ok) {
-          setAvailableSessionIds(result.data);
-        } else {
-          console.error("Failed to load sessionId suggestions:", result.error);
-          setAvailableSessionIds([]);
+        if (isMountedRef.current && requestId === sessionIdSearchRequestIdRef.current) {
+          if (result.ok) {
+            setAvailableSessionIds(result.data);
+          } else {
+            console.error("Failed to load sessionId suggestions:", result.error);
+            setAvailableSessionIds([]);
+          }
         }
       } catch (error) {
         if (!isMountedRef.current || requestId !== sessionIdSearchRequestIdRef.current) return;
@@ -122,7 +123,7 @@ export function RequestFilters({
     [isAdmin, filters.keyId, filters.providerId, filters.userId]
   );
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!sessionIdPopoverOpen) return;
 
     const term = debouncedSessionIdSearchTerm.trim();
@@ -151,7 +152,7 @@ export function RequestFilters({
     loadSessionIdsForFilter,
   ]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!sessionIdPopoverOpen) {
       setAvailableSessionIds([]);
       lastLoadedSessionIdSuggestionsKeyRef.current = undefined;
@@ -170,6 +171,7 @@ export function RequestFilters({
                 variant="outline"
                 role="combobox"
                 aria-expanded={providerPopoverOpen}
+                aria-controls={providerComboboxContentId}
                 disabled={isProvidersLoading}
                 type="button"
                 className="w-full justify-between"
@@ -185,6 +187,7 @@ export function RequestFilters({
               </Button>
             </PopoverTrigger>
             <PopoverContent
+              id={providerComboboxContentId}
               className="w-[320px] p-0"
               align="start"
               onWheel={(e) => e.stopPropagation()}

@@ -2,7 +2,7 @@
 
 import { Activity, AlertTriangle, CheckCircle2, Loader2, XCircle } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -118,7 +118,7 @@ export function ApiTestButton({
 
   const resolvedProviderType = resolveProviderType(providerType);
   const [isTesting, setIsTesting] = useState(false);
-  const [isModelManuallyEdited, setIsModelManuallyEdited] = useState(false);
+  const isModelManuallyEditedRef = useRef(false);
   const [testModel, setTestModel] = useState(() =>
     getDefaultModelForProvider(providerType, normalizedAllowedModels[0])
   );
@@ -128,30 +128,30 @@ export function ApiTestButton({
   );
   const previousProviderId = useRef(providerId);
   const [customHeadersText, setCustomHeadersText] = useState(initialCustomHeadersText);
-  const [isCustomHeadersManuallyEdited, setIsCustomHeadersManuallyEdited] = useState(false);
+  const isCustomHeadersManuallyEditedRef = useRef(false);
   const [testResult, setTestResult] = useState<UnifiedTestResultData | null>(null);
 
-  useEffect(() => {
-    if (isModelManuallyEdited) {
+  useLayoutEffect(() => {
+    if (isModelManuallyEditedRef.current) {
       return;
     }
 
     setTestModel(getDefaultModelForProvider(providerType, normalizedAllowedModels[0]));
-  }, [isModelManuallyEdited, normalizedAllowedModels, providerType]);
+  }, [normalizedAllowedModels, providerType]);
 
   // 仅在用户未手动编辑时随 prop 变更同步；切换 provider 身份时重置编辑标志
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (previousProviderId.current === providerId) {
       return;
     }
     previousProviderId.current = providerId;
-    setIsCustomHeadersManuallyEdited(false);
+    isCustomHeadersManuallyEditedRef.current = false;
   }, [providerId]);
 
-  useEffect(() => {
-    if (isCustomHeadersManuallyEdited) return;
+  useLayoutEffect(() => {
+    if (isCustomHeadersManuallyEditedRef.current) return;
     setCustomHeadersText(initialCustomHeadersText);
-  }, [initialCustomHeadersText, isCustomHeadersManuallyEdited]);
+  }, [initialCustomHeadersText]);
 
   const CUSTOM_HEADER_ERROR_KEYS: Record<CustomHeadersValidationErrorCode, string> = {
     invalid_json: "customHeaders.errors.invalidJson",
@@ -436,7 +436,7 @@ export function ApiTestButton({
           id="test-model"
           value={testModel}
           onChange={(event) => {
-            setIsModelManuallyEdited(true);
+            isModelManuallyEditedRef.current = true;
             setTestModel(event.target.value);
           }}
           placeholder={DEFAULT_MODELS[resolvedProviderType]}
@@ -451,7 +451,7 @@ export function ApiTestButton({
           id="test-custom-headers"
           value={customHeadersText}
           onChange={(event) => {
-            setIsCustomHeadersManuallyEdited(true);
+            isCustomHeadersManuallyEditedRef.current = true;
             setCustomHeadersText(event.target.value);
           }}
           placeholder={CUSTOM_HEADERS_PLACEHOLDER}

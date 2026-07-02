@@ -17,7 +17,7 @@ import { invalidateCachedUser } from "@/lib/security/api-key-auth-cache";
 import { parseDateInputAsTimezone } from "@/lib/utils/date-input";
 import { ERROR_CODES } from "@/lib/utils/error-messages";
 import { normalizeProviderGroup, parseProviderGroups } from "@/lib/utils/provider-group";
-import { resolveSystemTimezone } from "@/lib/utils/timezone";
+import { resolveSystemTimezone } from "@/lib/utils/timezone-resolver";
 import { maskKey } from "@/lib/utils/validation";
 import { formatZodError } from "@/lib/utils/zod-i18n";
 import { CreateUserSchema, UpdateUserSchema } from "@/lib/validation/schemas";
@@ -194,8 +194,7 @@ async function buildUserDisplays(
     return [];
   }
 
-  const locale = await getLocale();
-  const t = await getTranslations("users");
+  const [locale, t] = await Promise.all([getLocale(), getTranslations("users")]);
   const userIds = users.map((u) => u.id);
   const [keysMap, usageMap] = await Promise.all([
     findKeyListBatch(userIds),
@@ -1205,8 +1204,10 @@ export async function batchUpdateUsers(
 
     if (updates.limit5hResetMode !== undefined && updatedIds.length > 0) {
       try {
-        const { clearUserCostCache } = await import("@/lib/redis/cost-cache-cleanup");
-        const keysMap = await findKeyListBatch(updatedIds);
+        const [{ clearUserCostCache }, keysMap] = await Promise.all([
+          import("@/lib/redis/cost-cache-cleanup"),
+          findKeyListBatch(updatedIds),
+        ]);
         await Promise.all(
           updatedIds.map(async (userId) => {
             const keys = keysMap.get(userId) ?? [];
@@ -1820,9 +1821,10 @@ export async function editUser(
       beforeUser &&
       validatedData.limit5hResetMode !== beforeUser.limit5hResetMode
     ) {
-      const { findKeyList } = await import("@/repository/key");
-      const { clearUserCostCache } = await import("@/lib/redis/cost-cache-cleanup");
-      const keys = await findKeyList(userId);
+      const [{ clearUserCostCache }, keys] = await Promise.all([
+        import("@/lib/redis/cost-cache-cleanup"),
+        import("@/repository/key").then(({ findKeyList }) => findKeyList(userId)),
+      ]);
       await clearUserCostCache({
         userId,
         keyIds: keys.map((item) => item.id),
@@ -2167,11 +2169,15 @@ export async function getUserAllLimitUsage(userId: number): Promise<
     }
 
     // 动态导入
-    const { getTimeRangeForPeriod, getTimeRangeForPeriodWithMode } = await import(
-      "@/lib/rate-limit/time-utils"
-    );
-    const { RateLimitService } = await import("@/lib/rate-limit/service");
-    const { sumUserCostInTimeRange, sumUserTotalCost } = await import("@/repository/statistics");
+    const [
+      { getTimeRangeForPeriod, getTimeRangeForPeriodWithMode },
+      { RateLimitService },
+      { sumUserCostInTimeRange, sumUserTotalCost },
+    ] = await Promise.all([
+      import("@/lib/rate-limit/time-utils"),
+      import("@/lib/rate-limit/service"),
+      import("@/repository/statistics"),
+    ]);
     const limit5hResetMode = user.limit5hResetMode ?? "rolling";
     const user5hCostResetAt = resolveUser5hCostResetAt(
       user.costResetAt ?? null,
@@ -2179,14 +2185,16 @@ export async function getUserAllLimitUsage(userId: number): Promise<
     );
 
     // 获取各时间范围
-    const range5h = await getTimeRangeForPeriod("5h");
-    const rangeDaily = await getTimeRangeForPeriodWithMode(
-      "daily",
-      user.dailyResetTime || "00:00",
-      (user.dailyResetMode || "fixed") as "fixed" | "rolling"
-    );
-    const rangeWeekly = await getTimeRangeForPeriod("weekly");
-    const rangeMonthly = await getTimeRangeForPeriod("monthly");
+    const [range5h, rangeDaily, rangeWeekly, rangeMonthly] = await Promise.all([
+      getTimeRangeForPeriod("5h"),
+      getTimeRangeForPeriodWithMode(
+        "daily",
+        user.dailyResetTime || "00:00",
+        (user.dailyResetMode || "fixed") as "fixed" | "rolling"
+      ),
+      getTimeRangeForPeriod("weekly"),
+      getTimeRangeForPeriod("monthly"),
+    ]);
 
     // Clip time range start by costResetAt (for limits-only reset)
     const clipStart = (start: Date): Date => clipStartByResetAt(start, user.costResetAt ?? null);
@@ -2385,6 +2393,7 @@ export async function resetUserAllStatistics(userId: number): Promise<ActionResu
     // 1. Delete all messageRequest logs for this user
     // Atomic: delete logs + ledger + clear costResetAt in a single transaction
     await db.transaction(async (tx) => {
+      // react-doctor-disable-next-line react-doctor/async-parallel -- transaction statements share one tx and must run in deterministic order
       await tx.delete(messageRequest).where(eq(messageRequest.userId, userId));
       await tx.delete(usageLedger).where(eq(usageLedger.userId, userId));
       await tx

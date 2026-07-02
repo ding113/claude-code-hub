@@ -151,7 +151,7 @@ vi.mock("@/components/ui/command", () => ({
     value?: string;
     onSelect?: () => void;
   }) => (
-    <div cmdk-item="" onClick={onSelect}>
+    <div data-cmdk-item="" onClick={onSelect}>
       {children}
     </div>
   ),
@@ -361,7 +361,7 @@ describe("UsageLogsFilters sessionId suggestions", () => {
     await actClick(providerBtn ?? null);
     await flushMicrotasks();
 
-    const providerItem = Array.from(document.querySelectorAll("[cmdk-item]")).find((el) =>
+    const providerItem = Array.from(document.querySelectorAll("[data-cmdk-item]")).find((el) =>
       (el.textContent || "").includes("p1")
     );
     await actClick(providerItem ?? null);

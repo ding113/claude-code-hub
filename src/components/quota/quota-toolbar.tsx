@@ -22,10 +22,12 @@ interface QuotaToolbarProps {
   onFilter?: (filter: string) => void;
   sortOptions?: { value: string; label: string }[];
   filterOptions?: { value: string; label: string }[];
-  showSearch?: boolean;
-  showSort?: boolean;
-  showFilter?: boolean;
-  showAutoRefresh?: boolean;
+  visibility?: {
+    search?: boolean;
+    sort?: boolean;
+    filter?: boolean;
+    autoRefresh?: boolean;
+  };
 }
 
 export function QuotaToolbar({
@@ -34,10 +36,7 @@ export function QuotaToolbar({
   onFilter,
   sortOptions,
   filterOptions,
-  showSearch = true,
-  showSort = true,
-  showFilter = true,
-  showAutoRefresh = true,
+  visibility,
 }: QuotaToolbarProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -45,6 +44,10 @@ export function QuotaToolbar({
   const [autoRefresh, setAutoRefresh] = useState(false);
   const [refreshInterval, setRefreshInterval] = useState(30);
   const t = useTranslations("quota");
+  const showSearch = visibility?.search ?? true;
+  const showSort = visibility?.sort ?? true;
+  const showFilter = visibility?.filter ?? true;
+  const showAutoRefresh = visibility?.autoRefresh ?? true;
 
   // Provide translated defaults when options are not passed in
   const _sortOptions = sortOptions ?? [

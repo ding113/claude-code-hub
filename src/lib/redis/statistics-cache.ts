@@ -110,6 +110,7 @@ export async function getStatisticsWithCache(
     logger.debug("[StatisticsCache] Lock held by another request, retrying", { timeRange, mode });
 
     for (let i = 0; i < 50; i++) {
+      // react-doctor-disable-next-line react-doctor/async-await-in-loop -- retry polling intentionally waits between cache checks
       await sleep(100);
 
       const retried = await redis.get(cacheKey);

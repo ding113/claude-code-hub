@@ -13,7 +13,7 @@ import { buildCsvHeaderLine, buildCsvRows, CSV_BOM } from "@/lib/usage-logs/expo
 import { createSummaryAccumulator } from "@/lib/usage-logs/export/summary";
 import { assembleUsageLogsXlsx, buildDetailRowXml } from "@/lib/usage-logs/export/xlsx";
 import { isProviderFinalized } from "@/lib/utils/provider-display";
-import { resolveSystemTimezone } from "@/lib/utils/timezone";
+import { resolveSystemTimezone } from "@/lib/utils/timezone-resolver";
 import {
   findUsageLogSessionIdSuggestions,
   findUsageLogsBatch,
@@ -194,12 +194,13 @@ async function buildUsageLogsExport(
 
     const progress = buildUsageLogsExportProgress(processedRows, estimatedTotalRows, batch.hasMore);
     estimatedTotalRows = progress.totalRows;
-    await onProgress?.(progress);
 
     if (!batch.hasMore || !batch.nextCursor) {
+      await onProgress?.(progress);
       break;
     }
 
+    await onProgress?.(progress);
     cursor = batch.nextCursor;
   }
 

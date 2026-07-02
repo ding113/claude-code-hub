@@ -73,6 +73,7 @@ async function runCleanupOnce(): Promise<void> {
         return;
       }
 
+      // react-doctor-disable-next-line react-doctor/async-await-in-loop -- cleanup deletes batches until no rows remain or leadership is lost
       const deleted = await deleteProviderEndpointProbeLogsBeforeDateBatch({
         beforeDate,
         batchSize: CLEANUP_BATCH_SIZE,

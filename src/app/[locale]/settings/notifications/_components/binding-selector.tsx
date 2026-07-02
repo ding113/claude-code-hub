@@ -3,7 +3,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { ChevronDown, ChevronRight, ExternalLink, Save, Settings2 } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useEffect, useMemo, useState } from "react";
+import { useLayoutEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
@@ -113,7 +113,7 @@ export function BindingSelector({ type, targets, bindings, onSave }: BindingSele
     defaultValues: { rows: formValues },
   });
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     reset({ rows: formValues });
   }, [formValues, reset]);
 
@@ -139,15 +139,19 @@ export function BindingSelector({ type, targets, bindings, onSave }: BindingSele
 
   const save = async (values: BindingsFormValues) => {
     try {
-      const payload = values.rows
-        .filter((r) => r.isBound)
-        .map((r) => ({
-          targetId: r.targetId,
-          isEnabled: r.isEnabled,
-          scheduleCron: r.scheduleCron?.trim() ? r.scheduleCron.trim() : null,
-          scheduleTimezone: r.scheduleTimezone?.trim() ? r.scheduleTimezone.trim() : null,
-          templateOverride: parseJsonObjectOrNull(r.templateOverrideJson),
-        }));
+      const payload = values.rows.flatMap((r) =>
+        r.isBound
+          ? [
+              {
+                targetId: r.targetId,
+                isEnabled: r.isEnabled,
+                scheduleCron: r.scheduleCron?.trim() ? r.scheduleCron.trim() : null,
+                scheduleTimezone: r.scheduleTimezone?.trim() ? r.scheduleTimezone.trim() : null,
+                templateOverride: parseJsonObjectOrNull(r.templateOverrideJson),
+              },
+            ]
+          : []
+      );
 
       const result = await onSave(type, payload);
       if (!result.ok) {
@@ -259,6 +263,7 @@ export function BindingSelector({ type, targets, bindings, onSave }: BindingSele
                                   })
                                 }
                                 placeholder={t("notifications.bindings.scheduleCronPlaceholder")}
+                                aria-label={t("notifications.bindings.scheduleCron")}
                                 className={cn(
                                   "w-full bg-muted/50 border border-border rounded-lg py-2 px-3 text-sm text-foreground font-mono",
                                   "placeholder:text-muted-foreground/50",
@@ -282,6 +287,7 @@ export function BindingSelector({ type, targets, bindings, onSave }: BindingSele
                                   })
                                 }
                                 placeholder="Asia/Shanghai"
+                                aria-label={t("notifications.bindings.scheduleTimezone")}
                                 className={cn(
                                   "w-full bg-muted/50 border border-border rounded-lg py-2 px-3 text-sm text-foreground",
                                   "placeholder:text-muted-foreground/50",

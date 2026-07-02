@@ -279,6 +279,7 @@ export class RateLimitService {
 
           // 5h 根据 fixed/rolling 模式走不同的 Redis 表示
           if (limit.period === "5h" && limit.resetMode === "fixed") {
+            // react-doctor-disable-next-line react-doctor/async-await-in-loop -- cost limit checks are fail-fast by window
             const fixedWindowState = await RateLimitService.getFixed5hWindowState(type, id);
             current = fixedWindowState.current;
           } else if (limit.period === "5h") {
@@ -1756,6 +1757,7 @@ export class RateLimitService {
         if (!check.limit || check.limit <= 0) continue;
 
         // Get or refresh lease from cache/DB
+        // react-doctor-disable-next-line react-doctor/async-await-in-loop -- lease checks are fail-fast by window
         const lease = await LeaseService.getCostLease({
           entityType,
           entityId,

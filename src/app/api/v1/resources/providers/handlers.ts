@@ -734,9 +734,9 @@ function hasUnresolvedRedactedHeaderEcho(
   if (!incoming) return false;
   const redactedExisting = existing ? (redactHeaderRecord(existing) ?? {}) : {};
   const redactedExistingNames = new Set(
-    Object.entries(redactedExisting)
-      .filter(([, value]) => value === "[REDACTED]")
-      .map(([name]) => name.toLowerCase())
+    Object.entries(redactedExisting).flatMap(([name, value]) =>
+      value === "[REDACTED]" ? [name.toLowerCase()] : []
+    )
   );
 
   return Object.entries(incoming).some(

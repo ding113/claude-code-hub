@@ -44,25 +44,19 @@ function cellColor(cell: FilledTimelineCell): string {
   return inferred ? "bg-rose-500/60" : "bg-rose-500";
 }
 
-function formatRange(start: string, end: string, locale: string, timeZone: string): string {
+function formatRange(
+  start: string,
+  end: string,
+  timeFormatter: Intl.DateTimeFormat,
+  dateFormatter: Intl.DateTimeFormat
+): string {
   try {
     const startDate = new Date(start);
     const endDate = new Date(end);
     if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) {
       return `${start} – ${end}`;
     }
-    const fmt = new Intl.DateTimeFormat(locale, {
-      hour: "2-digit",
-      minute: "2-digit",
-      timeZone,
-      hour12: false,
-    });
-    const dateFmt = new Intl.DateTimeFormat(locale, {
-      month: "short",
-      day: "2-digit",
-      timeZone,
-    });
-    return `${dateFmt.format(startDate)} ${fmt.format(startDate)} – ${fmt.format(endDate)}`;
+    return `${dateFormatter.format(startDate)} ${timeFormatter.format(startDate)} – ${timeFormatter.format(endDate)}`;
   } catch {
     return `${start} – ${end}`;
   }
@@ -78,6 +72,25 @@ export function PublicStatusTimeline({
   const activeCell = activeIndex === null ? null : (cells[activeIndex] ?? null);
   const activeBucket = activeCell?.bucket ?? null;
   const activeIsPlaceholder = activeBucket?.bucketStart.startsWith("empty-") ?? false;
+  const rangeTimeFormatter = useMemo(
+    () =>
+      new Intl.DateTimeFormat(locale, {
+        hour: "2-digit",
+        minute: "2-digit",
+        timeZone,
+        hour12: false,
+      }),
+    [locale, timeZone]
+  );
+  const rangeDateFormatter = useMemo(
+    () =>
+      new Intl.DateTimeFormat(locale, {
+        month: "short",
+        day: "2-digit",
+        timeZone,
+      }),
+    [locale, timeZone]
+  );
   const activeSummary = useMemo(() => {
     if (!activeBucket) {
       return null;
@@ -86,13 +99,18 @@ export function PublicStatusTimeline({
     return {
       range: activeIsPlaceholder
         ? null
-        : formatRange(activeBucket.bucketStart, activeBucket.bucketEnd, locale, timeZone),
+        : formatRange(
+            activeBucket.bucketStart,
+            activeBucket.bucketEnd,
+            rangeTimeFormatter,
+            rangeDateFormatter
+          ),
       availability:
         activeBucket.availabilityPct === null ? "—" : `${activeBucket.availabilityPct.toFixed(2)}%`,
       ttfb: formatTtfb(activeBucket.ttfbMs),
       tps: activeBucket.tps === null ? "—" : activeBucket.tps.toFixed(1),
     };
-  }, [activeBucket, activeIsPlaceholder, locale, timeZone]);
+  }, [activeBucket, activeIsPlaceholder, rangeDateFormatter, rangeTimeFormatter]);
 
   return (
     <div
@@ -104,29 +122,28 @@ export function PublicStatusTimeline({
         }
       }}
     >
-      <div
-        className="flex w-full items-center gap-[2px]"
-        role="list"
+      <ul
+        className="m-0 flex w-full list-none items-center gap-[2px] p-0"
         aria-label={labels.historyAriaLabel}
       >
         {cells.map((cell, index) => {
           const { bucket } = cell;
           return (
-            <button
-              key={`${bucket.bucketStart}-${index}`}
-              type="button"
-              role="listitem"
-              aria-label={`${labels.availability}: ${bucket.availabilityPct ?? "—"}`}
-              className={cn(
-                "h-6 flex-1 rounded-[2px] outline-none transition-opacity hover:opacity-80 focus-visible:ring-2 focus-visible:ring-ring",
-                cellColor(cell)
-              )}
-              onFocus={() => setActiveIndex(index)}
-              onMouseEnter={() => setActiveIndex(index)}
-            />
+            <li key={bucket.bucketStart} className="flex-1">
+              <button
+                type="button"
+                aria-label={`${labels.availability}: ${bucket.availabilityPct ?? "—"}`}
+                className={cn(
+                  "h-6 w-full rounded-[2px] outline-none transition-opacity hover:opacity-80 focus-visible:ring-2 focus-visible:ring-ring",
+                  cellColor(cell)
+                )}
+                onFocus={() => setActiveIndex(index)}
+                onMouseEnter={() => setActiveIndex(index)}
+              />
+            </li>
           );
         })}
-      </div>
+      </ul>
       {activeSummary ? (
         <div className="rounded-md border border-border/50 bg-popover px-3 py-2 text-xs text-popover-foreground shadow-sm">
           {activeSummary.range ? (

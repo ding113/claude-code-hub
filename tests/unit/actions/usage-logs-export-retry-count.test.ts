@@ -13,7 +13,7 @@ vi.mock("@/lib/auth", () => {
   };
 });
 
-vi.mock("@/lib/utils/timezone", () => ({
+vi.mock("@/lib/utils/timezone-resolver", () => ({
   resolveSystemTimezone: vi.fn(async () => "UTC"),
 }));
 

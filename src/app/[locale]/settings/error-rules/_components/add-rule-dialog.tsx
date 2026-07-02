@@ -154,6 +154,7 @@ export function AddRuleDialog() {
                 value={pattern}
                 onChange={(e) => setPattern(e.target.value)}
                 placeholder={t("errorRules.dialog.patternPlaceholder")}
+                aria-label={t("errorRules.dialog.patternLabel")}
                 required
                 className={cn(
                   "w-full bg-muted/50 border border-border rounded-lg py-2 px-3 text-sm text-foreground font-mono",
@@ -212,6 +213,7 @@ export function AddRuleDialog() {
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 placeholder={t("errorRules.dialog.descriptionPlaceholder")}
+                aria-label={t("errorRules.dialog.descriptionLabel")}
                 rows={3}
                 className={cn(
                   "w-full bg-muted/50 border border-border rounded-lg py-2.5 px-3 text-sm text-foreground",

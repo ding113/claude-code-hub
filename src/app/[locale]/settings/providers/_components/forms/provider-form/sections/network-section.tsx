@@ -1,6 +1,6 @@
 "use client";
 
-import { motion } from "framer-motion";
+import { m } from "framer-motion";
 import { Clock, Globe, Network, Shield, Timer, Wifi } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { Input } from "@/components/ui/input";
@@ -99,7 +99,7 @@ function TimeoutInput({
         </div>
       </div>
       {isCustom && (
-        <motion.div
+        <m.div
           initial={{ scaleX: 0 }}
           animate={{ scaleX: 1 }}
           className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary/50 origin-left"
@@ -122,7 +122,7 @@ export function NetworkSection({ subSectionRefs }: NetworkSectionProps) {
   const isBatch = mode === "batch";
 
   return (
-    <motion.div
+    <m.div
       initial={{ opacity: 0, x: 20 }}
       animate={{ opacity: 1, x: 0 }}
       exit={{ opacity: 0, x: -20 }}
@@ -156,7 +156,7 @@ export function NetworkSection({ subSectionRefs }: NetworkSectionProps) {
           </SmartInputWrapper>
 
           {state.network.proxyUrl && (
-            <motion.div
+            <m.div
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: "auto" }}
               exit={{ opacity: 0, height: 0 }}
@@ -198,7 +198,7 @@ export function NetworkSection({ subSectionRefs }: NetworkSectionProps) {
                   />
                 </div>
               )}
-            </motion.div>
+            </m.div>
           )}
         </div>
       </SectionCard>
@@ -288,6 +288,6 @@ export function NetworkSection({ subSectionRefs }: NetworkSectionProps) {
           </div>
         </SectionCard>
       </div>
-    </motion.div>
+    </m.div>
   );
 }

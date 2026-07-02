@@ -49,9 +49,11 @@ async function loadProviderConfigs(): Promise<void> {
 
   try {
     // Dynamic import to avoid circular dependencies
-    const { db } = await import("@/drizzle/db");
-    const { providers } = await import("@/drizzle/schema");
-    const { eq, isNull, and } = await import("drizzle-orm");
+    const [{ db }, { providers }, { eq, isNull, and }] = await Promise.all([
+      import("@/drizzle/db"),
+      import("@/drizzle/schema"),
+      import("drizzle-orm"),
+    ]);
 
     const providerList = await db
       .select({

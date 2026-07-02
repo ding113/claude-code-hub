@@ -40,7 +40,7 @@ vi.mock("@/components/ui/dropdown-menu", () => ({
   DropdownMenuTrigger: ({ children }: any) => <div>{children}</div>,
   DropdownMenuContent: ({ children }: any) => <div>{children}</div>,
   DropdownMenuItem: ({ children, onClick }: any) => (
-    <div role="menuitem" onClick={onClick}>
+    <div role="menuitem" tabIndex={-1} onClick={onClick}>
       {children}
     </div>
   ),
