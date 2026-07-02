@@ -4428,6 +4428,8 @@ export interface operations {
                             codexTextVerbosityPreference: string | null;
                             /** @description Codex parallel tool calls preference. */
                             codexParallelToolCallsPreference: string | null;
+                            /** @description Codex image generation tool preference. */
+                            codexImageGenerationPreference: string | null;
                             /** @description Codex service tier preference. */
                             codexServiceTierPreference: string | null;
                             /** @description Anthropic max tokens preference. */
@@ -4750,6 +4752,8 @@ export interface operations {
                     codex_text_verbosity_preference?: string;
                     /** @description Codex parallel tool calls preference. */
                     codex_parallel_tool_calls_preference?: string;
+                    /** @description Codex image generation tool preference. */
+                    codex_image_generation_preference?: string;
                     /** @description Codex service tier preference. */
                     codex_service_tier_preference?: string;
                     /** @description Anthropic max tokens preference. */
@@ -4883,6 +4887,8 @@ export interface operations {
                         codexTextVerbosityPreference: string | null;
                         /** @description Codex parallel tool calls preference. */
                         codexParallelToolCallsPreference: string | null;
+                        /** @description Codex image generation tool preference. */
+                        codexImageGenerationPreference: string | null;
                         /** @description Codex service tier preference. */
                         codexServiceTierPreference: string | null;
                         /** @description Anthropic max tokens preference. */
@@ -5200,6 +5206,8 @@ export interface operations {
                         codexTextVerbosityPreference: string | null;
                         /** @description Codex parallel tool calls preference. */
                         codexParallelToolCallsPreference: string | null;
+                        /** @description Codex image generation tool preference. */
+                        codexImageGenerationPreference: string | null;
                         /** @description Codex service tier preference. */
                         codexServiceTierPreference: string | null;
                         /** @description Anthropic max tokens preference. */
@@ -5697,6 +5705,8 @@ export interface operations {
                     codex_text_verbosity_preference?: string;
                     /** @description Codex parallel tool calls preference. */
                     codex_parallel_tool_calls_preference?: string;
+                    /** @description Codex image generation tool preference. */
+                    codex_image_generation_preference?: string;
                     /** @description Codex service tier preference. */
                     codex_service_tier_preference?: string;
                     /** @description Anthropic max tokens preference. */
@@ -5836,6 +5846,8 @@ export interface operations {
                         codexTextVerbosityPreference: string | null;
                         /** @description Codex parallel tool calls preference. */
                         codexParallelToolCallsPreference: string | null;
+                        /** @description Codex image generation tool preference. */
+                        codexImageGenerationPreference: string | null;
                         /** @description Codex service tier preference. */
                         codexServiceTierPreference: string | null;
                         /** @description Anthropic max tokens preference. */
@@ -7661,6 +7673,8 @@ export interface operations {
                         daily_reset_mode?: "fixed" | "rolling";
                         /** @description Daily reset time. */
                         daily_reset_time?: string;
+                        /** @description Codex image generation tool preference. */
+                        codex_image_generation_preference?: string | null;
                         /** @description Codex service tier preference. */
                         codex_service_tier_preference?: string | null;
                         /** @description Anthropic thinking budget preference. */

@@ -1,4 +1,5 @@
 import type {
+  CodexImageGenerationPreference,
   CodexParallelToolCallsPreference,
   CodexReasoningEffortPreference,
   CodexReasoningSummaryPreference,
@@ -15,6 +16,7 @@ type CodexProviderOverrideConfig = {
   codexReasoningSummaryPreference?: CodexReasoningSummaryPreference | null;
   codexTextVerbosityPreference?: CodexTextVerbosityPreference | null;
   codexParallelToolCallsPreference?: CodexParallelToolCallsPreference | null;
+  codexImageGenerationPreference?: CodexImageGenerationPreference | null;
   codexServiceTierPreference?: CodexServiceTierPreference | null;
 };
 
@@ -42,6 +44,150 @@ function normalizeParallelToolCallsPreference(
   return value === "true";
 }
 
+function normalizeImageGenerationPreference(
+  value: CodexImageGenerationPreference | null | undefined
+): boolean | null {
+  if (!value || value === "inherit") return null;
+  return value === "true";
+}
+
+function isImageGenerationTool(value: unknown): value is Record<string, unknown> {
+  return isPlainObject(value) && value.type === "image_generation";
+}
+
+function hasImageGenerationTool(value: unknown): boolean {
+  return Array.isArray(value) && value.some((tool) => isImageGenerationTool(tool));
+}
+
+function applyImageGenerationToolPreference(
+  request: Record<string, unknown>,
+  ensureCloned: () => Record<string, unknown>,
+  enabled: boolean | null
+): void {
+  if (enabled === null) {
+    return;
+  }
+
+  const existingTools = Array.isArray(request.tools) ? request.tools : null;
+  if (enabled) {
+    if (existingTools?.some((tool) => isImageGenerationTool(tool))) {
+      return;
+    }
+    const target = ensureCloned();
+    const nextTools = existingTools ? [...existingTools] : [];
+    nextTools.push({ type: "image_generation" });
+    target.tools = nextTools;
+    return;
+  }
+
+  if (!existingTools) {
+    return;
+  }
+
+  const nextTools = existingTools.filter((tool) => !isImageGenerationTool(tool));
+  if (nextTools.length === existingTools.length) {
+    return;
+  }
+
+  const target = ensureCloned();
+  if (nextTools.length > 0) {
+    target.tools = nextTools;
+  } else {
+    delete target.tools;
+  }
+}
+
+function summarizeImageGenerationToolChoice(value: unknown): string | null {
+  if (typeof value === "string") {
+    return value;
+  }
+  if (!isPlainObject(value) || typeof value.type !== "string") {
+    return null;
+  }
+  if (value.type === "image_generation") {
+    return "image_generation";
+  }
+  if (value.type !== "allowed_tools") {
+    return value.type;
+  }
+
+  const allowedTools = Array.isArray(value.tools) ? value.tools : [];
+  const imageToolCount = allowedTools.filter((tool) => isImageGenerationTool(tool)).length;
+  if (imageToolCount === 0) {
+    return "allowed_tools";
+  }
+  if (imageToolCount === allowedTools.length) {
+    return "allowed_tools:image_generation_only";
+  }
+  return "allowed_tools:includes_image_generation";
+}
+
+function applyImageGenerationToolChoicePreference(
+  request: Record<string, unknown>,
+  ensureCloned: () => Record<string, unknown>,
+  enabled: boolean | null,
+  context: {
+    hadImageGenerationTool: boolean;
+    hasAvailableTools: boolean;
+  }
+): void {
+  const toolChoice = request.tool_choice;
+
+  if (enabled === true) {
+    if (
+      !isPlainObject(toolChoice) ||
+      toolChoice.type !== "allowed_tools" ||
+      !Array.isArray(toolChoice.tools) ||
+      toolChoice.tools.some((tool) => isImageGenerationTool(tool))
+    ) {
+      return;
+    }
+
+    const target = ensureCloned();
+    target.tool_choice = {
+      ...toolChoice,
+      tools: [...toolChoice.tools, { type: "image_generation" }],
+    };
+    return;
+  }
+
+  if (enabled !== false) {
+    return;
+  }
+
+  if (toolChoice === "required" && context.hadImageGenerationTool && !context.hasAvailableTools) {
+    const target = ensureCloned();
+    target.tool_choice = "none";
+    return;
+  }
+
+  if (!isPlainObject(toolChoice)) {
+    return;
+  }
+
+  if (toolChoice.type === "image_generation") {
+    const target = ensureCloned();
+    target.tool_choice = "none";
+    return;
+  }
+
+  if (toolChoice.type !== "allowed_tools" || !Array.isArray(toolChoice.tools)) {
+    return;
+  }
+
+  const nextAllowedTools = toolChoice.tools.filter((tool) => !isImageGenerationTool(tool));
+  if (nextAllowedTools.length === toolChoice.tools.length) {
+    return;
+  }
+
+  const target = ensureCloned();
+  if (nextAllowedTools.length > 0) {
+    target.tool_choice = { ...toolChoice, tools: nextAllowedTools };
+  } else {
+    target.tool_choice = "none";
+  }
+}
+
 /**
  * 根据供应商配置对 Codex（Responses API）请求体进行覆写。
  *
@@ -50,6 +196,7 @@ function normalizeParallelToolCallsPreference(
  * - 偏好值为 null/undefined/"inherit" 表示“遵循客户端”
  * - 覆写仅影响以下字段：
  *   - parallel_tool_calls
+ *   - tools / tool_choice 中与 image_generation 相关的能力声明
  *   - reasoning.effort / reasoning.summary
  *   - service_tier
  *   - text.verbosity
@@ -67,20 +214,30 @@ export function applyCodexProviderOverrides(
     if (output === request) {
       output = { ...request };
     }
+    return output;
   };
 
   const parallelToolCalls = normalizeParallelToolCallsPreference(
     provider.codexParallelToolCallsPreference
   );
   if (parallelToolCalls !== null) {
-    ensureCloned();
-    output.parallel_tool_calls = parallelToolCalls;
+    ensureCloned().parallel_tool_calls = parallelToolCalls;
   }
+
+  const imageGeneration = normalizeImageGenerationPreference(
+    provider.codexImageGenerationPreference
+  );
+  const hadImageGenerationTool = hasImageGenerationTool(output.tools);
+  applyImageGenerationToolPreference(output, ensureCloned, imageGeneration);
+  applyImageGenerationToolChoicePreference(output, ensureCloned, imageGeneration, {
+    hadImageGenerationTool,
+    hasAvailableTools: Array.isArray(output.tools) && output.tools.length > 0,
+  });
 
   const reasoningEffort = normalizeStringPreference(provider.codexReasoningEffortPreference);
   const reasoningSummary = normalizeStringPreference(provider.codexReasoningSummaryPreference);
   if (reasoningEffort !== null || reasoningSummary !== null) {
-    ensureCloned();
+    const target = ensureCloned();
     const existingReasoning = isPlainObject(output.reasoning) ? output.reasoning : {};
     const nextReasoning: Record<string, unknown> = { ...existingReasoning };
     if (reasoningEffort !== null) {
@@ -89,21 +246,20 @@ export function applyCodexProviderOverrides(
     if (reasoningSummary !== null) {
       nextReasoning.summary = reasoningSummary;
     }
-    output.reasoning = nextReasoning;
+    target.reasoning = nextReasoning;
   }
 
   const textVerbosity = normalizeStringPreference(provider.codexTextVerbosityPreference);
   if (textVerbosity !== null) {
-    ensureCloned();
+    const target = ensureCloned();
     const existingText = isPlainObject(output.text) ? output.text : {};
     const nextText: Record<string, unknown> = { ...existingText, verbosity: textVerbosity };
-    output.text = nextText;
+    target.text = nextText;
   }
 
   const serviceTier = normalizeStringPreference(provider.codexServiceTierPreference);
   if (serviceTier !== null) {
-    ensureCloned();
-    output.service_tier = serviceTier;
+    ensureCloned().service_tier = serviceTier;
   }
 
   return output;
@@ -123,12 +279,17 @@ export function applyCodexProviderOverridesWithAudit(
   const reasoningEffort = normalizeStringPreference(provider.codexReasoningEffortPreference);
   const reasoningSummary = normalizeStringPreference(provider.codexReasoningSummaryPreference);
   const textVerbosity = normalizeStringPreference(provider.codexTextVerbosityPreference);
+  const imageGeneration = normalizeImageGenerationPreference(
+    provider.codexImageGenerationPreference
+  );
   const serviceTier = normalizeStringPreference(provider.codexServiceTierPreference);
 
   const beforeServiceTier = toAuditValue(request.service_tier);
+  const beforeImageGeneration = hasImageGenerationTool(request.tools);
 
   const hit =
     parallelToolCalls !== null ||
+    imageGeneration !== null ||
     reasoningEffort !== null ||
     reasoningSummary !== null ||
     textVerbosity !== null ||
@@ -145,17 +306,20 @@ export function applyCodexProviderOverridesWithAudit(
   const beforeReasoningSummary = toAuditValue(beforeReasoning?.summary);
   const beforeText = isPlainObject(request.text) ? request.text : null;
   const beforeTextVerbosity = toAuditValue(beforeText?.verbosity);
+  const beforeToolChoice = summarizeImageGenerationToolChoice(request.tool_choice);
 
   const nextRequest = applyCodexProviderOverrides(provider, request);
 
   const afterServiceTier = toAuditValue(nextRequest.service_tier);
 
   const afterParallelToolCalls = toAuditValue(nextRequest.parallel_tool_calls);
+  const afterImageGeneration = hasImageGenerationTool(nextRequest.tools);
   const afterReasoning = isPlainObject(nextRequest.reasoning) ? nextRequest.reasoning : null;
   const afterReasoningEffort = toAuditValue(afterReasoning?.effort);
   const afterReasoningSummary = toAuditValue(afterReasoning?.summary);
   const afterText = isPlainObject(nextRequest.text) ? nextRequest.text : null;
   const afterTextVerbosity = toAuditValue(afterText?.verbosity);
+  const afterToolChoice = summarizeImageGenerationToolChoice(nextRequest.tool_choice);
 
   const changes: ProviderParameterOverrideSpecialSetting["changes"] = [
     {
@@ -163,6 +327,12 @@ export function applyCodexProviderOverridesWithAudit(
       before: beforeParallelToolCalls,
       after: afterParallelToolCalls,
       changed: !Object.is(beforeParallelToolCalls, afterParallelToolCalls),
+    },
+    {
+      path: "tools.image_generation",
+      before: beforeImageGeneration,
+      after: afterImageGeneration,
+      changed: !Object.is(beforeImageGeneration, afterImageGeneration),
     },
     {
       path: "reasoning.effort",
@@ -187,6 +357,12 @@ export function applyCodexProviderOverridesWithAudit(
       before: beforeTextVerbosity,
       after: afterTextVerbosity,
       changed: !Object.is(beforeTextVerbosity, afterTextVerbosity),
+    },
+    {
+      path: "tool_choice",
+      before: beforeToolChoice,
+      after: afterToolChoice,
+      changed: !Object.is(beforeToolChoice, afterToolChoice),
     },
   ];
 

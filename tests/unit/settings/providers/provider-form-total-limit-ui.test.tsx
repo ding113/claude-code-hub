@@ -193,6 +193,7 @@ describe("ProviderForm: 编辑时应支持提交总消费上限(limit_total_usd)
       codexReasoningSummaryPreference: null,
       codexTextVerbosityPreference: null,
       codexParallelToolCallsPreference: null,
+    codexImageGenerationPreference: null,
       codexServiceTierPreference: null,
       anthropicMaxTokensPreference: null,
       anthropicThinkingBudgetPreference: null,

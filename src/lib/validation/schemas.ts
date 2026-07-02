@@ -32,6 +32,7 @@ const CODEX_REASONING_EFFORT_PREFERENCE = z.enum([
 const CODEX_REASONING_SUMMARY_PREFERENCE = z.enum(["inherit", "auto", "detailed"]);
 const CODEX_TEXT_VERBOSITY_PREFERENCE = z.enum(["inherit", "low", "medium", "high"]);
 const CODEX_PARALLEL_TOOL_CALLS_PREFERENCE = z.enum(["inherit", "true", "false"]);
+const CODEX_IMAGE_GENERATION_PREFERENCE = z.enum(["inherit", "true", "false"]);
 const CODEX_SERVICE_TIER_PREFERENCE = z.enum(["inherit", "auto", "default", "flex", "priority"]);
 
 // Anthropic preference schemas for max_tokens and thinking.budget_tokens
@@ -567,6 +568,8 @@ export const CreateProviderSchema = z
     codex_text_verbosity_preference: CODEX_TEXT_VERBOSITY_PREFERENCE.optional().default("inherit"),
     codex_parallel_tool_calls_preference:
       CODEX_PARALLEL_TOOL_CALLS_PREFERENCE.optional().default("inherit"),
+    codex_image_generation_preference:
+      CODEX_IMAGE_GENERATION_PREFERENCE.optional().default("inherit"),
     codex_service_tier_preference: CODEX_SERVICE_TIER_PREFERENCE.optional().default("inherit"),
     anthropic_max_tokens_preference: ANTHROPIC_MAX_TOKENS_PREFERENCE.optional().default("inherit"),
     anthropic_thinking_budget_preference:
@@ -806,6 +809,7 @@ export const UpdateProviderSchema = z
     codex_reasoning_summary_preference: CODEX_REASONING_SUMMARY_PREFERENCE.optional(),
     codex_text_verbosity_preference: CODEX_TEXT_VERBOSITY_PREFERENCE.optional(),
     codex_parallel_tool_calls_preference: CODEX_PARALLEL_TOOL_CALLS_PREFERENCE.optional(),
+    codex_image_generation_preference: CODEX_IMAGE_GENERATION_PREFERENCE.optional(),
     codex_service_tier_preference: CODEX_SERVICE_TIER_PREFERENCE.optional(),
     anthropic_max_tokens_preference: ANTHROPIC_MAX_TOKENS_PREFERENCE.optional(),
     anthropic_thinking_budget_preference: ANTHROPIC_THINKING_BUDGET_PREFERENCE.optional(),

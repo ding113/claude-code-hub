@@ -204,6 +204,15 @@
           "false": "强制关闭"
         }
       },
+      "imageGeneration": {
+        "label": "图像生成工具覆写",
+        "help": "OpenAI 官方将 image_generation 定义为 Responses 内建工具，而不是顶层布尔参数。强制开启会注入 type=image_generation 工具；强制关闭会移除该工具，并同步清理与它冲突的 tool_choice。",
+        "options": {
+          "inherit": "不覆写（跟随客户端）",
+          "true": "强制开启",
+          "false": "强制关闭"
+        }
+      },
       "serviceTier": {
         "label": "Service Tier 覆写",
         "help": "控制 Codex（Responses API）请求的 OpenAI service_tier。priority 对应 fast 模式；选择“跟随客户端”表示不改写 service_tier，其他值则强制覆写。若上游不支持所选档位，可能返回错误。",
