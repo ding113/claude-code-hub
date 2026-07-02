@@ -654,7 +654,7 @@ export async function addProvider(data: {
       codex_text_verbosity_preference: validated.codex_text_verbosity_preference ?? "inherit",
       codex_parallel_tool_calls_preference:
         validated.codex_parallel_tool_calls_preference ?? "inherit",
-      codex_image_generation_preference: validated.codex_image_generation_preference ?? "inherit",
+      codex_image_generation_preference: validated.codex_image_generation_preference,
       codex_service_tier_preference: validated.codex_service_tier_preference ?? "inherit",
       website_url: validated.website_url ?? null,
       favicon_url: faviconUrl,

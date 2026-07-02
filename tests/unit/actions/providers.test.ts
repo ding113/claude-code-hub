@@ -536,6 +536,28 @@ describe("Provider Actions - Async Optimization", () => {
       expect(elapsed).toBeLessThan(500);
       expect(revalidatePathMock).not.toHaveBeenCalled();
     });
+
+    it("preserves explicit null for codex_image_generation_preference", async () => {
+      const { addProvider } = await import("@/actions/providers");
+
+      const result = await addProvider({
+        name: "p2",
+        url: "https://api.example.com",
+        key: "sk-test-2",
+        codex_image_generation_preference: null,
+        tpm: null,
+        rpm: null,
+        rpd: null,
+        cc: null,
+      });
+
+      expect(result.ok).toBe(true);
+      expect(createProviderMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          codex_image_generation_preference: null,
+        })
+      );
+    });
   });
 
   // 说明：当前代码实现的函数名为 editProvider/removeProvider。
@@ -610,6 +632,22 @@ describe("Provider Actions - Async Optimization", () => {
         })
       );
       expect(terminateProviderSessionsBatchMock).toHaveBeenCalledWith([1], "editProvider");
+    });
+
+    it("editProvider endpoint sync: should forward explicit null codex image generation preference", async () => {
+      const { editProvider } = await import("@/actions/providers");
+
+      const result = await editProvider(1, {
+        codex_image_generation_preference: null,
+      });
+
+      expect(result.ok).toBe(true);
+      expect(updateProviderMock).toHaveBeenCalledWith(
+        1,
+        expect.objectContaining({
+          codex_image_generation_preference: null,
+        })
+      );
     });
 
     it("editProvider: group or allowlist changes should also terminate sticky sessions", async () => {

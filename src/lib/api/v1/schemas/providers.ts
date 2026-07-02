@@ -1,12 +1,15 @@
 import { z } from "@hono/zod-openapi";
 import { HIDDEN_PROVIDER_TYPES as HIDDEN_PROVIDER_TYPE_VALUES } from "@/lib/api/v1/_shared/constants";
-import { PROVIDER_KEY_MAX_LENGTH } from "@/lib/constants/provider.constants";
+import {
+  CODEX_IMAGE_GENERATION_PREFERENCE_VALUES,
+  PROVIDER_KEY_MAX_LENGTH,
+} from "@/lib/constants/provider.constants";
 import { ProviderTypeSchema } from "./_common";
 
 export const HIDDEN_PROVIDER_TYPES = new Set(HIDDEN_PROVIDER_TYPE_VALUES);
 
 const NullableStringSchema = z.string().nullable();
-const CodexImageGenerationPreferenceSchema = z.enum(["inherit", "true", "false"]);
+const CodexImageGenerationPreferenceSchema = z.enum(CODEX_IMAGE_GENERATION_PREFERENCE_VALUES);
 
 export const ProviderListQuerySchema = z.object({
   q: z.string().trim().optional().describe("Case-insensitive provider search text."),
