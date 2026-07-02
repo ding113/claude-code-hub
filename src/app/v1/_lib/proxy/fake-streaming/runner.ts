@@ -89,16 +89,18 @@ function buildStreamResponse(input: FakeStreamingRunInput): Response {
 
       const cleanupHeartbeat = () => clearInterval(heartbeatTimer);
 
-      const onAbort = () => {
-        cleanupHeartbeat();
-        safeClose();
-      };
-      input.abortSignal.addEventListener("abort", onAbort, { once: true });
-
+      // The completion hook must fire EXACTLY once per run: either from the
+      // orchestrator's terminal state, or — if orchestrator never settles
+      // (upstream fetch hung with no provider-level timeout) — from the abort
+      // listener as soon as the client disconnects. `completionFired` guards
+      // the once-only contract across both paths.
+      let completionFired = false;
       const invokeCompletion = async (
         result: OrchestrateResult,
         errorFromRunner?: unknown
       ): Promise<void> => {
+        if (completionFired) return;
+        completionFired = true;
         if (!input.onCompletion) return;
         try {
           await input.onCompletion({ result, errorFromRunner });
@@ -106,6 +108,24 @@ function buildStreamResponse(input: FakeStreamingRunInput): Response {
           // Lifecycle persistence errors must not leak into the SSE stream.
         }
       };
+
+      const onAbort = () => {
+        cleanupHeartbeat();
+        safeClose();
+        // Do NOT block on the persistence write — the response stream must
+        // close immediately for abort semantics. `invokeCompletion` returns
+        // void here, and its own body is fully try/catched so it cannot
+        // reject synchronously or via an unhandled rejection.
+        if (!completionFired) {
+          void invokeCompletion({
+            ok: false,
+            attempts: [],
+            errorCode: "client_abort",
+            errorMessage: "client disconnected before upstream settled",
+          });
+        }
+      };
+      input.abortSignal.addEventListener("abort", onAbort, { once: true });
 
       void orchestrateFakeStreamingAttempts({
         family: input.family,

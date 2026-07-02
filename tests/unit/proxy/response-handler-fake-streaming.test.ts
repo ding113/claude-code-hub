@@ -461,4 +461,79 @@ describe("onCompletion lifecycle hook", () => {
     const body = await response.text();
     expect(body).toBe(validBody);
   });
+
+  test("stream: hook fires with client_abort even when upstream fetch NEVER settles", async () => {
+    // Repro for the real-world bug where sw-sub2api-style upstreams accept
+    // stream:false but never send a response body, provider has
+    // request_timeout_non_streaming_ms=0, so the orchestrator promise stays
+    // pending forever. Without an abort-triggered fallback, the completion
+    // hook never fires and the message_request row stays with status_code
+    // = NULL / provider_chain = NULL forever.
+    const abortController = new AbortController();
+    // Never-resolving performAttempt, and it also does NOT reject on abort
+    // (simulating the case where undici's fetch abort is ineffective / the
+    // upstream socket is stuck in a half-open state).
+    const performAttempt: AttemptPerformer = () => new Promise<never>(() => {});
+    const onCompletion = vi.fn(async () => undefined);
+
+    const response = buildFakeStreamingResponse({
+      family: "anthropic",
+      isStream: true,
+      performAttempt,
+      abortSignal: abortController.signal,
+      maxAttempts: 1,
+      heartbeatIntervalMs: 5000,
+      onCompletion,
+    });
+
+    // Wait for the first heartbeat so we know the stream started.
+    await readUntilFirstChunk(response.body);
+
+    // Client disconnects while orchestrator is still hung.
+    abortController.abort();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(onCompletion).toHaveBeenCalledTimes(1);
+    const arg = onCompletion.mock.calls[0][0];
+    expect(arg.result.ok).toBe(false);
+    expect(arg.result.errorCode).toBe("client_abort");
+  });
+
+  test("stream: hook fires exactly once even if orchestrator resolves after abort", async () => {
+    // Belt-and-braces: if a slow orchestrator eventually resolves after the
+    // abort listener has already fired the hook, the .then() branch must not
+    // fire it a second time. Verifies the completionFired guard.
+    const abortController = new AbortController();
+    let releaseAttempt: (() => void) | null = null;
+    const performAttempt: AttemptPerformer = () =>
+      new Promise((resolve) => {
+        releaseAttempt = () => resolve({ status: 200, body: validBody, providerId: "p1" });
+      });
+    const onCompletion = vi.fn(async () => undefined);
+
+    const response = buildFakeStreamingResponse({
+      family: "anthropic",
+      isStream: true,
+      performAttempt,
+      abortSignal: abortController.signal,
+      maxAttempts: 1,
+      heartbeatIntervalMs: 5000,
+      onCompletion,
+    });
+
+    await readUntilFirstChunk(response.body);
+    // Abort fires the hook via the abort listener.
+    abortController.abort();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(onCompletion).toHaveBeenCalledTimes(1);
+
+    // Orchestrator wakes up *after* the abort — must NOT fire hook again.
+    releaseAttempt?.();
+    await vi.runAllTimersAsync();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(onCompletion).toHaveBeenCalledTimes(1);
+  });
 });
