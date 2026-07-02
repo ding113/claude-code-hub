@@ -204,6 +204,28 @@ describe("Codex 供应商级参数覆写", () => {
     expect(output.tool_choice).toBeUndefined();
   });
 
+  it("当强制 image_generation=false 且仍有其他工具可用时，应将 image_generation 专属 tool_choice 收口为 none", () => {
+    const provider = {
+      providerType: "codex",
+      codexImageGenerationPreference: "false",
+    };
+
+    const input: Record<string, unknown> = {
+      model: "gpt-5.5",
+      input: [],
+      tools: [
+        { type: "image_generation" },
+        { type: "function", name: "lookup_weather" },
+      ],
+      tool_choice: { type: "image_generation" },
+    };
+
+    const output = applyCodexProviderOverrides(provider as any, input);
+
+    expect(output.tools).toEqual([{ type: "function", name: "lookup_weather" }]);
+    expect(output.tool_choice).toBe("none");
+  });
+
   it("当强制 image_generation=false 且 required 在移除最后一个工具后失效时，应移除 tool_choice", () => {
     const provider = {
       providerType: "codex",
@@ -251,6 +273,32 @@ describe("Codex 供应商级参数覆写", () => {
       mode: "auto",
       tools: [{ type: "function", name: "lookup_weather" }],
     });
+  });
+
+  it("当强制 image_generation=false 且 allowed_tools 仅白名单图像工具时，应收口为 none", () => {
+    const provider = {
+      providerType: "codex",
+      codexImageGenerationPreference: "false",
+    };
+
+    const input: Record<string, unknown> = {
+      model: "gpt-5.5",
+      input: [],
+      tools: [
+        { type: "image_generation" },
+        { type: "function", name: "lookup_weather" },
+      ],
+      tool_choice: {
+        type: "allowed_tools",
+        mode: "auto",
+        tools: [{ type: "image_generation" }],
+      },
+    };
+
+    const output = applyCodexProviderOverrides(provider as any, input);
+
+    expect(output.tools).toEqual([{ type: "function", name: "lookup_weather" }]);
+    expect(output.tool_choice).toBe("none");
   });
 
   it("当强制 reasoning.effort/summary 时，应覆写并保留 reasoning 的其他字段", () => {

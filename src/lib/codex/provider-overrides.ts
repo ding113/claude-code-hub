@@ -155,9 +155,11 @@ function applyImageGenerationToolChoicePreference(
     return;
   }
 
-  if (toolChoice === "required" && context.hadImageGenerationTool && !context.hasAvailableTools) {
-    const target = ensureCloned();
-    delete target.tool_choice;
+  if (!context.hasAvailableTools) {
+    if (toolChoice !== undefined) {
+      const target = ensureCloned();
+      delete target.tool_choice;
+    }
     return;
   }
 
@@ -167,7 +169,8 @@ function applyImageGenerationToolChoicePreference(
 
   if (toolChoice.type === "image_generation") {
     const target = ensureCloned();
-    delete target.tool_choice;
+    // 只剩非图像工具时改成 none，避免回退到 auto 后放宽客户端原本的工具限制。
+    target.tool_choice = "none";
     return;
   }
 
@@ -184,7 +187,8 @@ function applyImageGenerationToolChoicePreference(
   if (nextAllowedTools.length > 0) {
     target.tool_choice = { ...toolChoice, tools: nextAllowedTools };
   } else {
-    delete target.tool_choice;
+    // 白名单被清空后不能回退到 auto，否则剩余工具会重新暴露给模型。
+    target.tool_choice = "none";
   }
 }
 
