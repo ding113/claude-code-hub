@@ -157,7 +157,7 @@ function applyImageGenerationToolChoicePreference(
 
   if (toolChoice === "required" && context.hadImageGenerationTool && !context.hasAvailableTools) {
     const target = ensureCloned();
-    target.tool_choice = "none";
+    delete target.tool_choice;
     return;
   }
 
@@ -167,7 +167,7 @@ function applyImageGenerationToolChoicePreference(
 
   if (toolChoice.type === "image_generation") {
     const target = ensureCloned();
-    target.tool_choice = "none";
+    delete target.tool_choice;
     return;
   }
 
@@ -184,7 +184,7 @@ function applyImageGenerationToolChoicePreference(
   if (nextAllowedTools.length > 0) {
     target.tool_choice = { ...toolChoice, tools: nextAllowedTools };
   } else {
-    target.tool_choice = "none";
+    delete target.tool_choice;
   }
 }
 

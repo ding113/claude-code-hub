@@ -111,7 +111,7 @@ function createMockState(
       codexReasoningSummaryPreference: "inherit",
       codexTextVerbosityPreference: "inherit",
       codexParallelToolCallsPreference: "inherit",
-    codexImageGenerationPreference: "inherit",
+      codexImageGenerationPreference: "inherit",
       codexServiceTierPreference: "inherit",
       anthropicMaxTokensPreference: "inherit",
       anthropicThinkingBudgetPreference: "inherit",

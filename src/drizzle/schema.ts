@@ -331,7 +331,7 @@ export const providers = pgTable('providers', {
   codexTextVerbosityPreference: varchar('codex_text_verbosity_preference', { length: 10 }),
   codexParallelToolCallsPreference: varchar('codex_parallel_tool_calls_preference', { length: 10 }),
   // image_generation 在 OpenAI Responses 中属于内建工具类型；
-  // 此处的 false 表示强制移除 type="image_generation" 的工具能力
+  // true 强制注入 type="image_generation"，false 强制移除该工具能力
   codexImageGenerationPreference: varchar('codex_image_generation_preference', { length: 10 }),
   codexServiceTierPreference: varchar('codex_service_tier_preference', { length: 20 }),
 

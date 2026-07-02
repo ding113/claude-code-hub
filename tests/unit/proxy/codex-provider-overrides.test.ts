@@ -114,6 +114,23 @@ describe("Codex 供应商级参数覆写", () => {
     expect(input.tools).toEqual([{ type: "function", name: "lookup_weather" }]);
   });
 
+  it("当强制 image_generation=true 且请求缺少 tools 时，应自动创建图像生成工具数组", () => {
+    const provider = {
+      providerType: "codex",
+      codexImageGenerationPreference: "true",
+    };
+
+    const input: Record<string, unknown> = {
+      model: "gpt-5.5",
+      input: [],
+    };
+
+    const output = applyCodexProviderOverrides(provider as any, input);
+
+    expect(output.tools).toEqual([{ type: "image_generation" }]);
+    expect(input.tools).toBeUndefined();
+  });
+
   it("当强制 image_generation=true 且 tool_choice=allowed_tools 时，应补齐白名单中的图像工具", () => {
     const provider = {
       providerType: "codex",
@@ -168,7 +185,7 @@ describe("Codex 供应商级参数覆写", () => {
     ]);
   });
 
-  it("当强制 image_generation=false 且 tool_choice 直接指向 image_generation 时，应改为 none", () => {
+  it("当强制 image_generation=false 且 tool_choice 直接指向 image_generation 时，应移除该选择", () => {
     const provider = {
       providerType: "codex",
       codexImageGenerationPreference: "false",
@@ -184,10 +201,10 @@ describe("Codex 供应商级参数覆写", () => {
     const output = applyCodexProviderOverrides(provider as any, input);
 
     expect(output.tools).toBeUndefined();
-    expect(output.tool_choice).toBe("none");
+    expect(output.tool_choice).toBeUndefined();
   });
 
-  it("当强制 image_generation=false 且 required 在移除最后一个工具后失效时，应改为 none", () => {
+  it("当强制 image_generation=false 且 required 在移除最后一个工具后失效时，应移除 tool_choice", () => {
     const provider = {
       providerType: "codex",
       codexImageGenerationPreference: "false",
@@ -203,7 +220,7 @@ describe("Codex 供应商级参数覆写", () => {
     const output = applyCodexProviderOverrides(provider as any, input);
 
     expect(output.tools).toBeUndefined();
-    expect(output.tool_choice).toBe("none");
+    expect(output.tool_choice).toBeUndefined();
   });
 
   it("当强制 image_generation=false 且 allowed_tools 包含 image_generation 时，应剔除该项", () => {

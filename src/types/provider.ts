@@ -627,7 +627,7 @@ export interface CreateProviderData {
   codex_reasoning_summary_preference?: CodexReasoningSummaryPreference | null;
   codex_text_verbosity_preference?: CodexTextVerbosityPreference | null;
   codex_parallel_tool_calls_preference?: CodexParallelToolCallsPreference | null;
-  codex_image_generation_preference?: CodexImageGenerationPreference | null;
+  codex_image_generation_preference?: CodexImageGenerationPreference;
   codex_service_tier_preference?: CodexServiceTierPreference | null;
   anthropic_max_tokens_preference?: AnthropicMaxTokensPreference | null;
   anthropic_thinking_budget_preference?: AnthropicThinkingBudgetPreference | null;
@@ -712,7 +712,7 @@ export interface UpdateProviderData {
   codex_reasoning_summary_preference?: CodexReasoningSummaryPreference | null;
   codex_text_verbosity_preference?: CodexTextVerbosityPreference | null;
   codex_parallel_tool_calls_preference?: CodexParallelToolCallsPreference | null;
-  codex_image_generation_preference?: CodexImageGenerationPreference | null;
+  codex_image_generation_preference?: CodexImageGenerationPreference;
   codex_service_tier_preference?: CodexServiceTierPreference | null;
   anthropic_max_tokens_preference?: AnthropicMaxTokensPreference | null;
   anthropic_thinking_budget_preference?: AnthropicThinkingBudgetPreference | null;
