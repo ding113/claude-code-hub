@@ -1338,7 +1338,7 @@ export function VirtualizedLogsTable({
               ) : null}
               {hideUserColumn && hideKeyColumn ? null : (
                 <div
-                  className="flex-[0.8] min-w-[90px] px-1.5 truncate"
+                  className="flex-[0.6] min-w-[80px] px-1.5 truncate"
                   title={`${t("logs.columns.user")} / ${t("logs.columns.key")}`}
                 >
                   {t("logs.columns.user")} / {t("logs.columns.key")}
@@ -1497,7 +1497,7 @@ export function VirtualizedLogsTable({
                     ) : null}
 
                     {hideUserColumn && hideKeyColumn ? null : (
-                      <div className="flex-[0.8] min-w-[90px] px-1.5">
+                      <div className="flex-[0.6] min-w-[80px] px-1.5">
                         {renderIdentityCell(log)}
                       </div>
                     )}
