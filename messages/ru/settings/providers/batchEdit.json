@@ -55,7 +55,8 @@
     "modelRedirects": "Перенаправление моделей",
     "allowedModels": "Разрешенные модели",
     "thinkingBudget": "Бюджет размышлений",
-    "adaptiveThinking": "Адаптивное мышление"
+    "adaptiveThinking": "Адаптивное мышление",
+    "deepseekReasoningEffort": "Уровень рассуждений DeepSeek"
   },
   "toast": {
     "previewFailed": "Ошибка предпросмотра: {error}",
@@ -91,7 +92,8 @@
   "batchNotes": {
     "codexOnly": "Только Codex",
     "claudeOnly": "Только Claude",
-    "geminiOnly": "Только Gemini"
+    "geminiOnly": "Только Gemini",
+    "deepseekOnly": "Только DeepSeek"
   },
   "mixedValues": {
     "label": "(смешанные значения)",

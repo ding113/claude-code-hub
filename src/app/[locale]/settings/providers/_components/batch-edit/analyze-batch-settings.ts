@@ -11,6 +11,7 @@ import type {
   CodexReasoningSummaryPreference,
   CodexServiceTierPreference,
   CodexTextVerbosityPreference,
+  DeepSeekReasoningEffortPreference,
   GeminiGoogleSearchPreference,
   McpPassthroughType,
   ProviderDisplay,
@@ -49,6 +50,7 @@ export interface BatchSettingsAnalysis {
     anthropicThinkingBudgetPreference: FieldAnalysisResult<AnthropicThinkingBudgetPreference>;
     anthropicAdaptiveThinking: FieldAnalysisResult<AnthropicAdaptiveThinkingConfig | null>;
     geminiGoogleSearchPreference: FieldAnalysisResult<GeminiGoogleSearchPreference>;
+    deepseekReasoningEffortPreference: FieldAnalysisResult<DeepSeekReasoningEffortPreference>;
     activeTimeStart: FieldAnalysisResult<string | null>;
     activeTimeEnd: FieldAnalysisResult<string | null>;
   };
@@ -170,6 +172,10 @@ export function analyzeBatchProviderSettings(providers: ProviderDisplay[]): Batc
       geminiGoogleSearchPreference: analyzeField(
         providers,
         (p) => p.geminiGoogleSearchPreference ?? "inherit"
+      ),
+      deepseekReasoningEffortPreference: analyzeField(
+        providers,
+        (p) => p.deepseekReasoningEffortPreference ?? "inherit"
       ),
       activeTimeStart: analyzeField(providers, (p) => p.activeTimeStart ?? null),
       activeTimeEnd: analyzeField(providers, (p) => p.activeTimeEnd ?? null),

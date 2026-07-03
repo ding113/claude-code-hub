@@ -22,6 +22,7 @@ import type {
   CodexReasoningSummaryPreference,
   CodexServiceTierPreference,
   CodexTextVerbosityPreference,
+  DeepSeekReasoningEffortPreference,
   GeminiGoogleSearchPreference,
 } from "@/types/provider";
 import { AdaptiveThinkingEditor } from "../../../adaptive-thinking-editor";
@@ -505,6 +506,50 @@ export function OptionsSection({ subSectionRefs }: OptionsSectionProps) {
                     {(["inherit", "enabled", "disabled"] as const).map((val) => (
                       <SelectItem key={val} value={val}>
                         {t(`sections.routing.geminiOverrides.googleSearch.options.${val}`)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </SmartInputWrapper>
+            </SectionCard>
+          )}
+
+          {/* DeepSeek Overrides - DeepSeek type only (or batch mode) */}
+          {(providerType === "deepseek" || isBatch) && (
+            <SectionCard
+              title={t("sections.routing.deepseekOverrides.title")}
+              description={t("sections.routing.deepseekOverrides.desc")}
+              icon={Settings}
+              badge={
+                isBatch ? (
+                  <Badge variant="outline">{tBatch("batchNotes.deepseekOnly")}</Badge>
+                ) : undefined
+              }
+            >
+              <SmartInputWrapper
+                label={t("sections.routing.deepseekOverrides.reasoningEffort.label")}
+              >
+                <Select
+                  value={state.routing.deepseekReasoningEffortPreference}
+                  onValueChange={(val) =>
+                    dispatch({
+                      type: "SET_DEEPSEEK_REASONING_EFFORT",
+                      payload: val as DeepSeekReasoningEffortPreference,
+                    })
+                  }
+                  disabled={state.ui.isPending}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue
+                      placeholder={t(
+                        "sections.routing.deepseekOverrides.reasoningEffort.options.inherit"
+                      )}
+                    />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {["inherit", "high", "max"].map((val) => (
+                      <SelectItem key={val} value={val}>
+                        {t(`sections.routing.deepseekOverrides.reasoningEffort.options.${val}`)}
                       </SelectItem>
                     ))}
                   </SelectContent>

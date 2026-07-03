@@ -116,7 +116,7 @@ Community-driven open-source success - more users, more contributors, stronger e
 
 **Current:**
 
-- Multi-provider management (claude, claude-auth, codex, gemini, openai-compatible)
+- Multi-provider management (claude, claude-auth, codex, deepseek, gemini, openai-compatible)
 - Auto-switching and circuit breaker
 - Session stickiness (5-min context caching)
 - Multi-tenant support

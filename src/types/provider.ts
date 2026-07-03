@@ -6,9 +6,16 @@ export type ProviderType =
   | "claude"
   | "claude-auth"
   | "codex"
+  | "deepseek"
   | "gemini"
   | "gemini-cli"
   | "openai-compatible";
+
+// DeepSeek reasoning effort 覆写偏好
+// - "inherit": 遵循客户端请求（默认）
+// - "high": 启用思考，力度 high（默认级别）
+// - "max": 启用思考，力度 max（最深入推理，仅第一轮生效）
+export type DeepSeekReasoningEffortPreference = "inherit" | "high" | "max";
 
 // Codex（Responses API）请求参数覆写偏好
 // - "inherit": 遵循客户端请求（默认）
@@ -100,6 +107,8 @@ export type ProviderBatchPatchField =
   | "codex_parallel_tool_calls_preference"
   | "codex_service_tier_preference"
   | "anthropic_max_tokens_preference"
+  // DeepSeek
+  | "deepseek_reasoning_effort_preference"
   | "gemini_google_search_preference"
   // Rate Limit
   | "limit_5h_usd"
@@ -153,6 +162,7 @@ export interface ProviderBatchPatchDraft {
   codex_text_verbosity_preference?: ProviderPatchDraftInput<CodexTextVerbosityPreference>;
   codex_parallel_tool_calls_preference?: ProviderPatchDraftInput<CodexParallelToolCallsPreference>;
   codex_service_tier_preference?: ProviderPatchDraftInput<CodexServiceTierPreference>;
+  deepseek_reasoning_effort_preference?: ProviderPatchDraftInput<DeepSeekReasoningEffortPreference>;
   anthropic_max_tokens_preference?: ProviderPatchDraftInput<AnthropicMaxTokensPreference>;
   gemini_google_search_preference?: ProviderPatchDraftInput<GeminiGoogleSearchPreference>;
   // Rate Limit
@@ -208,6 +218,7 @@ export interface ProviderBatchPatch {
   codex_text_verbosity_preference: ProviderPatchOperation<CodexTextVerbosityPreference>;
   codex_parallel_tool_calls_preference: ProviderPatchOperation<CodexParallelToolCallsPreference>;
   codex_service_tier_preference: ProviderPatchOperation<CodexServiceTierPreference>;
+  deepseek_reasoning_effort_preference: ProviderPatchOperation<DeepSeekReasoningEffortPreference>;
   anthropic_max_tokens_preference: ProviderPatchOperation<AnthropicMaxTokensPreference>;
   gemini_google_search_preference: ProviderPatchOperation<GeminiGoogleSearchPreference>;
   // Rate Limit
@@ -263,6 +274,7 @@ export interface ProviderBatchApplyUpdates {
   codex_text_verbosity_preference?: CodexTextVerbosityPreference | null;
   codex_parallel_tool_calls_preference?: CodexParallelToolCallsPreference | null;
   codex_service_tier_preference?: CodexServiceTierPreference | null;
+  deepseek_reasoning_effort_preference?: DeepSeekReasoningEffortPreference | null;
   anthropic_max_tokens_preference?: AnthropicMaxTokensPreference | null;
   gemini_google_search_preference?: GeminiGoogleSearchPreference | null;
   // Rate Limit
@@ -405,6 +417,9 @@ export interface Provider {
   codexParallelToolCallsPreference: CodexParallelToolCallsPreference | null;
   codexServiceTierPreference: CodexServiceTierPreference | null;
 
+  // DeepSeek reasoning effort override (only for deepseek providers)
+  deepseekReasoningEffortPreference: DeepSeekReasoningEffortPreference | null;
+
   // Anthropic (Messages API) parameter overrides (only for claude/claude-auth providers)
   anthropicMaxTokensPreference: AnthropicMaxTokensPreference | null;
   anthropicThinkingBudgetPreference: AnthropicThinkingBudgetPreference | null;
@@ -497,6 +512,8 @@ export interface ProviderDisplay {
   codexTextVerbosityPreference: CodexTextVerbosityPreference | null;
   codexParallelToolCallsPreference: CodexParallelToolCallsPreference | null;
   codexServiceTierPreference: CodexServiceTierPreference | null;
+  // DeepSeek reasoning effort override (only for deepseek providers)
+  deepseekReasoningEffortPreference: DeepSeekReasoningEffortPreference | null;
   anthropicMaxTokensPreference: AnthropicMaxTokensPreference | null;
   anthropicThinkingBudgetPreference: AnthropicThinkingBudgetPreference | null;
   anthropicAdaptiveThinking: AnthropicAdaptiveThinkingConfig | null;
@@ -620,6 +637,7 @@ export interface CreateProviderData {
   anthropic_thinking_budget_preference?: AnthropicThinkingBudgetPreference | null;
   anthropic_adaptive_thinking?: AnthropicAdaptiveThinkingConfig | null;
   gemini_google_search_preference?: GeminiGoogleSearchPreference | null;
+  deepseek_reasoning_effort_preference?: DeepSeekReasoningEffortPreference | null;
 
   // 废弃字段（保留向后兼容）
   // TPM (Tokens Per Minute): 每分钟可处理的文本总量
@@ -704,6 +722,7 @@ export interface UpdateProviderData {
   anthropic_thinking_budget_preference?: AnthropicThinkingBudgetPreference | null;
   anthropic_adaptive_thinking?: AnthropicAdaptiveThinkingConfig | null;
   gemini_google_search_preference?: GeminiGoogleSearchPreference | null;
+  deepseek_reasoning_effort_preference?: DeepSeekReasoningEffortPreference | null;
 
   // 废弃字段（保留向后兼容）
   // TPM (Tokens Per Minute): 每分钟可处理的文本总量

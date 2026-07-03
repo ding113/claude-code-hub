@@ -152,6 +152,17 @@ export function buildPatchDraftFromFormState(
     }
   }
 
+  // DeepSeek preferences
+  if (dirtyFields.has("routing.deepseekReasoningEffortPreference")) {
+    if (state.routing.deepseekReasoningEffortPreference === "inherit") {
+      draft.deepseek_reasoning_effort_preference = { clear: true };
+    } else {
+      draft.deepseek_reasoning_effort_preference = {
+        set: state.routing.deepseekReasoningEffortPreference,
+      };
+    }
+  }
+
   // Anthropic preferences
   if (dirtyFields.has("routing.anthropicMaxTokensPreference")) {
     if (state.routing.anthropicMaxTokensPreference === "inherit") {

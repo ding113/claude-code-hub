@@ -4297,7 +4297,7 @@ export interface operations {
                 /** @description Case-insensitive provider search text. */
                 q?: string;
                 /** @description Provider type. */
-                providerType?: "claude" | "codex" | "gemini" | "openai-compatible";
+                providerType?: "claude" | "codex" | "deepseek" | "gemini" | "openai-compatible";
                 /** @description Optional response expansion. Supported value: statistics. */
                 include?: "statistics";
             };
@@ -4345,7 +4345,7 @@ export interface operations {
                              * @description Supported provider type. Hidden legacy provider types are intentionally excluded.
                              * @enum {string}
                              */
-                            providerType: "claude" | "codex" | "gemini" | "openai-compatible";
+                            providerType: "claude" | "codex" | "deepseek" | "gemini" | "openai-compatible";
                             /** @description Provider vendor id. */
                             providerVendorId: number | null;
                             /** @description Whether client IP is preserved upstream. */
@@ -4428,6 +4428,11 @@ export interface operations {
                             codexTextVerbosityPreference: string | null;
                             /** @description Codex parallel tool calls preference. */
                             codexParallelToolCallsPreference: string | null;
+                            /**
+                             * @description DeepSeek reasoning effort.
+                             * @enum {string|null}
+                             */
+                            deepseekReasoningEffortPreference: "inherit" | "high" | "max" | null;
                             /** @description Codex service tier preference. */
                             codexServiceTierPreference: string | null;
                             /** @description Anthropic max tokens preference. */
@@ -4656,7 +4661,7 @@ export interface operations {
                      * @default claude
                      * @enum {string}
                      */
-                    provider_type?: "claude" | "codex" | "gemini" | "openai-compatible";
+                    provider_type?: "claude" | "codex" | "deepseek" | "gemini" | "openai-compatible";
                     /** @description Whether client IP is preserved upstream. */
                     preserve_client_ip?: boolean;
                     /** @description Whether sticky session reuse is disabled. */
@@ -4752,6 +4757,11 @@ export interface operations {
                     codex_parallel_tool_calls_preference?: string;
                     /** @description Codex service tier preference. */
                     codex_service_tier_preference?: string;
+                    /**
+                     * @description DeepSeek reasoning effort.
+                     * @enum {string}
+                     */
+                    deepseek_reasoning_effort_preference?: "inherit" | "high" | "max";
                     /** @description Anthropic max tokens preference. */
                     anthropic_max_tokens_preference?: string;
                     /** @description Anthropic thinking budget preference. */
@@ -4800,7 +4810,7 @@ export interface operations {
                          * @description Supported provider type. Hidden legacy provider types are intentionally excluded.
                          * @enum {string}
                          */
-                        providerType: "claude" | "codex" | "gemini" | "openai-compatible";
+                        providerType: "claude" | "codex" | "deepseek" | "gemini" | "openai-compatible";
                         /** @description Provider vendor id. */
                         providerVendorId: number | null;
                         /** @description Whether client IP is preserved upstream. */
@@ -4883,6 +4893,11 @@ export interface operations {
                         codexTextVerbosityPreference: string | null;
                         /** @description Codex parallel tool calls preference. */
                         codexParallelToolCallsPreference: string | null;
+                        /**
+                         * @description DeepSeek reasoning effort.
+                         * @enum {string|null}
+                         */
+                        deepseekReasoningEffortPreference: "inherit" | "high" | "max" | null;
                         /** @description Codex service tier preference. */
                         codexServiceTierPreference: string | null;
                         /** @description Anthropic max tokens preference. */
@@ -5117,7 +5132,7 @@ export interface operations {
                          * @description Supported provider type. Hidden legacy provider types are intentionally excluded.
                          * @enum {string}
                          */
-                        providerType: "claude" | "codex" | "gemini" | "openai-compatible";
+                        providerType: "claude" | "codex" | "deepseek" | "gemini" | "openai-compatible";
                         /** @description Provider vendor id. */
                         providerVendorId: number | null;
                         /** @description Whether client IP is preserved upstream. */
@@ -5200,6 +5215,11 @@ export interface operations {
                         codexTextVerbosityPreference: string | null;
                         /** @description Codex parallel tool calls preference. */
                         codexParallelToolCallsPreference: string | null;
+                        /**
+                         * @description DeepSeek reasoning effort.
+                         * @enum {string|null}
+                         */
+                        deepseekReasoningEffortPreference: "inherit" | "high" | "max" | null;
                         /** @description Codex service tier preference. */
                         codexServiceTierPreference: string | null;
                         /** @description Anthropic max tokens preference. */
@@ -5603,7 +5623,7 @@ export interface operations {
                      * @description Supported provider type. Hidden legacy provider types are intentionally excluded.
                      * @enum {string}
                      */
-                    provider_type?: "claude" | "codex" | "gemini" | "openai-compatible";
+                    provider_type?: "claude" | "codex" | "deepseek" | "gemini" | "openai-compatible";
                     /** @description Whether client IP is preserved upstream. */
                     preserve_client_ip?: boolean;
                     /** @description Whether sticky session reuse is disabled. */
@@ -5699,6 +5719,11 @@ export interface operations {
                     codex_parallel_tool_calls_preference?: string;
                     /** @description Codex service tier preference. */
                     codex_service_tier_preference?: string;
+                    /**
+                     * @description DeepSeek reasoning effort.
+                     * @enum {string}
+                     */
+                    deepseek_reasoning_effort_preference?: "inherit" | "high" | "max";
                     /** @description Anthropic max tokens preference. */
                     anthropic_max_tokens_preference?: string;
                     /** @description Anthropic thinking budget preference. */
@@ -5753,7 +5778,7 @@ export interface operations {
                          * @description Supported provider type. Hidden legacy provider types are intentionally excluded.
                          * @enum {string}
                          */
-                        providerType: "claude" | "codex" | "gemini" | "openai-compatible";
+                        providerType: "claude" | "codex" | "deepseek" | "gemini" | "openai-compatible";
                         /** @description Provider vendor id. */
                         providerVendorId: number | null;
                         /** @description Whether client IP is preserved upstream. */
@@ -5836,6 +5861,11 @@ export interface operations {
                         codexTextVerbosityPreference: string | null;
                         /** @description Codex parallel tool calls preference. */
                         codexParallelToolCallsPreference: string | null;
+                        /**
+                         * @description DeepSeek reasoning effort.
+                         * @enum {string|null}
+                         */
+                        deepseekReasoningEffortPreference: "inherit" | "high" | "max" | null;
                         /** @description Codex service tier preference. */
                         codexServiceTierPreference: string | null;
                         /** @description Anthropic max tokens preference. */
@@ -8978,7 +9008,7 @@ export interface operations {
                      * @description Provider type.
                      * @enum {string}
                      */
-                    providerType: "claude" | "codex" | "gemini" | "openai-compatible";
+                    providerType: "claude" | "codex" | "deepseek" | "gemini" | "openai-compatible";
                     /** @description Latency threshold in milliseconds. */
                     latencyThresholdMs?: number;
                     /** @description Expected response content. */
@@ -10115,7 +10145,7 @@ export interface operations {
         parameters: {
             query: {
                 /** @description Provider type. */
-                providerType: "claude" | "codex" | "gemini" | "openai-compatible";
+                providerType: "claude" | "codex" | "deepseek" | "gemini" | "openai-compatible";
             };
             header?: never;
             path?: never;
@@ -10317,7 +10347,7 @@ export interface operations {
                      * @description Provider type.
                      * @enum {string}
                      */
-                    providerType: "claude" | "codex" | "gemini" | "openai-compatible";
+                    providerType: "claude" | "codex" | "deepseek" | "gemini" | "openai-compatible";
                 };
             };
         };
@@ -24828,7 +24858,7 @@ export interface operations {
         parameters: {
             query?: {
                 /** @description Provider type. */
-                providerType?: "claude" | "codex" | "gemini" | "openai-compatible";
+                providerType?: "claude" | "codex" | "deepseek" | "gemini" | "openai-compatible";
                 /** @description Return dashboard-oriented endpoints. */
                 dashboard?: boolean | null;
             };
@@ -25060,7 +25090,7 @@ export interface operations {
                      * @description Provider type.
                      * @enum {string}
                      */
-                    providerType: "claude" | "codex" | "gemini" | "openai-compatible";
+                    providerType: "claude" | "codex" | "deepseek" | "gemini" | "openai-compatible";
                     /**
                      * Format: uri
                      * @description Endpoint URL.
@@ -26386,7 +26416,7 @@ export interface operations {
                      * @description Provider type.
                      * @enum {string}
                      */
-                    providerType: "claude" | "codex" | "gemini" | "openai-compatible";
+                    providerType: "claude" | "codex" | "deepseek" | "gemini" | "openai-compatible";
                 };
             };
         };
@@ -27231,7 +27261,7 @@ export interface operations {
         parameters: {
             query: {
                 /** @description Provider type. */
-                providerType: "claude" | "codex" | "gemini" | "openai-compatible";
+                providerType: "claude" | "codex" | "deepseek" | "gemini" | "openai-compatible";
             };
             header?: never;
             path: {
@@ -27460,7 +27490,7 @@ export interface operations {
                      * @description Provider type.
                      * @enum {string}
                      */
-                    providerType: "claude" | "codex" | "gemini" | "openai-compatible";
+                    providerType: "claude" | "codex" | "deepseek" | "gemini" | "openai-compatible";
                     /** @description Whether the vendor type circuit is manually open. */
                     manualOpen: boolean;
                 };
@@ -27681,7 +27711,7 @@ export interface operations {
                      * @description Provider type.
                      * @enum {string}
                      */
-                    providerType: "claude" | "codex" | "gemini" | "openai-compatible";
+                    providerType: "claude" | "codex" | "deepseek" | "gemini" | "openai-compatible";
                 };
             };
         };

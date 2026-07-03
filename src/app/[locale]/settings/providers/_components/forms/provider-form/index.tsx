@@ -361,6 +361,7 @@ function ProviderFormContent({
           anthropic_thinking_budget_preference: state.routing.anthropicThinkingBudgetPreference,
           anthropic_adaptive_thinking: state.routing.anthropicAdaptiveThinking,
           gemini_google_search_preference: state.routing.geminiGoogleSearchPreference,
+          deepseek_reasoning_effort_preference: state.routing.deepseekReasoningEffortPreference,
           active_time_start: state.routing.activeTimeStart || null,
           active_time_end: state.routing.activeTimeEnd || null,
           limit_5h_usd: state.rateLimit.limit5hUsd,
@@ -545,6 +546,8 @@ function ProviderFormContent({
       state.routing.anthropicAdaptiveThinking !== null ||
       // Gemini overrides
       state.routing.geminiGoogleSearchPreference !== "inherit" ||
+      // DeepSeek overrides
+      state.routing.deepseekReasoningEffortPreference !== "inherit" ||
       // Active time
       state.routing.activeTimeStart !== null ||
       state.routing.activeTimeEnd !== null ||

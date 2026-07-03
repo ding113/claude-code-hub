@@ -11,6 +11,7 @@ import type {
   CodexReasoningSummaryPreference,
   CodexServiceTierPreference,
   CodexTextVerbosityPreference,
+  DeepSeekReasoningEffortPreference,
   GeminiGoogleSearchPreference,
   McpPassthroughType,
   ProviderDisplay,
@@ -73,6 +74,8 @@ export interface RoutingState {
   anthropicAdaptiveThinking: AnthropicAdaptiveThinkingConfig | null;
   // Gemini-specific
   geminiGoogleSearchPreference: GeminiGoogleSearchPreference;
+  // DeepSeek-specific
+  deepseekReasoningEffortPreference: DeepSeekReasoningEffortPreference;
   // Scheduled active time window (HH:mm format, null = always active)
   activeTimeStart: string | null;
   activeTimeEnd: string | null;
@@ -161,6 +164,7 @@ export type ProviderFormAction =
   | { type: "SET_CODEX_TEXT_VERBOSITY"; payload: CodexTextVerbosityPreference }
   | { type: "SET_CODEX_PARALLEL_TOOL_CALLS"; payload: CodexParallelToolCallsPreference }
   | { type: "SET_CODEX_SERVICE_TIER"; payload: CodexServiceTierPreference }
+  | { type: "SET_DEEPSEEK_REASONING_EFFORT"; payload: DeepSeekReasoningEffortPreference }
   | { type: "SET_ANTHROPIC_MAX_TOKENS"; payload: AnthropicMaxTokensPreference }
   | { type: "SET_ANTHROPIC_THINKING_BUDGET"; payload: AnthropicThinkingBudgetPreference }
   | { type: "SET_ADAPTIVE_THINKING_EFFORT"; payload: AnthropicAdaptiveThinkingEffort }

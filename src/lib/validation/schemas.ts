@@ -82,6 +82,18 @@ const ANTHROPIC_ADAPTIVE_THINKING_CONFIG = z
 // - 'enabled': force inject googleSearch tool
 // - 'disabled': force remove googleSearch tool from request
 const GEMINI_GOOGLE_SEARCH_PREFERENCE = z.enum(["inherit", "enabled", "disabled"]);
+
+const DEEPSEEK_REASONING_EFFORT_PREFERENCE = z.enum(["inherit", "high", "max"]);
+
+const PROVIDER_TYPE_VALUES = [
+  "claude",
+  "claude-auth",
+  "codex",
+  "deepseek",
+  "gemini",
+  "gemini-cli",
+  "openai-compatible",
+] as const;
 const XFF_PICK_SCHEMA = z.union([
   z.literal("leftmost"),
   z.literal("rightmost"),
@@ -483,10 +495,7 @@ export const CreateProviderSchema = z
     cost_multiplier: z.coerce.number().min(0, "成本倍率不能为负数").optional().default(1.0),
     group_tag: z.string().max(255, "分组标签不能超过255个字符").nullable().optional(),
     // Codex 支持:供应商类型和模型重定向
-    provider_type: z
-      .enum(["claude", "claude-auth", "codex", "gemini", "gemini-cli", "openai-compatible"])
-      .optional()
-      .default("claude"),
+    provider_type: z.enum(PROVIDER_TYPE_VALUES).optional().default("claude"),
     preserve_client_ip: z.boolean().optional().default(false),
     disable_session_reuse: z.boolean().optional().default(false),
     model_redirects: PROVIDER_MODEL_REDIRECT_RULES_SCHEMA,
@@ -573,6 +582,8 @@ export const CreateProviderSchema = z
       ANTHROPIC_THINKING_BUDGET_PREFERENCE.optional().default("inherit"),
     anthropic_adaptive_thinking: ANTHROPIC_ADAPTIVE_THINKING_CONFIG,
     gemini_google_search_preference: GEMINI_GOOGLE_SEARCH_PREFERENCE.optional().default("inherit"),
+    deepseek_reasoning_effort_preference:
+      DEEPSEEK_REASONING_EFFORT_PREFERENCE.optional().default("inherit"),
     max_retry_attempts: z.coerce
       .number()
       .int("重试次数必须是整数")
@@ -729,9 +740,7 @@ export const UpdateProviderSchema = z
     cost_multiplier: z.coerce.number().min(0, "成本倍率不能为负数").optional(),
     group_tag: z.string().max(255, "分组标签不能超过255个字符").nullable().optional(),
     // Codex 支持:供应商类型和模型重定向
-    provider_type: z
-      .enum(["claude", "claude-auth", "codex", "gemini", "gemini-cli", "openai-compatible"])
-      .optional(),
+    provider_type: z.enum(PROVIDER_TYPE_VALUES).optional(),
     preserve_client_ip: z.boolean().optional(),
     disable_session_reuse: z.boolean().optional(),
     model_redirects: PROVIDER_MODEL_REDIRECT_RULES_SCHEMA,
@@ -811,6 +820,7 @@ export const UpdateProviderSchema = z
     anthropic_thinking_budget_preference: ANTHROPIC_THINKING_BUDGET_PREFERENCE.optional(),
     anthropic_adaptive_thinking: ANTHROPIC_ADAPTIVE_THINKING_CONFIG,
     gemini_google_search_preference: GEMINI_GOOGLE_SEARCH_PREFERENCE.optional(),
+    deepseek_reasoning_effort_preference: DEEPSEEK_REASONING_EFFORT_PREFERENCE.optional(),
     max_retry_attempts: z.coerce
       .number()
       .int("重试次数必须是整数")

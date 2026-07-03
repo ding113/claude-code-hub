@@ -55,7 +55,8 @@
     "modelRedirects": "Model Redirects",
     "allowedModels": "Allowed Models",
     "thinkingBudget": "Thinking Budget",
-    "adaptiveThinking": "Adaptive Thinking"
+    "adaptiveThinking": "Adaptive Thinking",
+    "deepseekReasoningEffort": "DeepSeek Reasoning Effort"
   },
   "toast": {
     "previewFailed": "Preview failed: {error}",
@@ -91,7 +92,8 @@
   "batchNotes": {
     "codexOnly": "Codex only",
     "claudeOnly": "Claude only",
-    "geminiOnly": "Gemini only"
+    "geminiOnly": "Gemini only",
+    "deepseekOnly": "DeepSeek only"
   },
   "mixedValues": {
     "label": "(mixed values)",

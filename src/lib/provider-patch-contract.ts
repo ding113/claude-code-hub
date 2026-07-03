@@ -54,6 +54,7 @@ const PATCH_FIELDS: ProviderBatchPatchField[] = [
   "codex_service_tier_preference",
   "anthropic_max_tokens_preference",
   "gemini_google_search_preference",
+  "deepseek_reasoning_effort_preference",
   // Rate Limit
   "limit_5h_usd",
   "limit_5h_reset_mode",
@@ -109,7 +110,7 @@ const CLEARABLE_FIELDS: Record<ProviderBatchPatchField, boolean> = {
   codex_service_tier_preference: true,
   anthropic_max_tokens_preference: true,
   gemini_google_search_preference: true,
-  // Rate Limit
+  deepseek_reasoning_effort_preference: true,
   limit_5h_usd: true,
   limit_5h_reset_mode: false,
   limit_daily_usd: true,
@@ -279,6 +280,8 @@ function isValidSetValue(field: ProviderBatchPatchField, value: unknown): boolea
       return isMaxTokensPreference(value);
     case "gemini_google_search_preference":
       return value === "inherit" || value === "enabled" || value === "disabled";
+    case "deepseek_reasoning_effort_preference":
+      return value === "inherit" || value === "high" || value === "max";
     case "mcp_passthrough_type":
       return value === "none" || value === "minimax" || value === "glm" || value === "custom";
     case "model_redirects":
@@ -492,6 +495,12 @@ export function normalizeProviderBatchPatchDraft(
   );
   if (!codexReasoningEffort.ok) return codexReasoningEffort;
 
+  const deepseekReasoningEffort = normalizePatchField(
+    "deepseek_reasoning_effort_preference",
+    typedDraft.deepseek_reasoning_effort_preference
+  );
+  if (!deepseekReasoningEffort.ok) return deepseekReasoningEffort;
+
   const codexReasoningSummary = normalizePatchField(
     "codex_reasoning_summary_preference",
     typedDraft.codex_reasoning_summary_preference
@@ -655,6 +664,7 @@ export function normalizeProviderBatchPatchDraft(
       codex_service_tier_preference: codexServiceTier.data,
       anthropic_max_tokens_preference: anthropicMaxTokens.data,
       gemini_google_search_preference: geminiGoogleSearch.data,
+      deepseek_reasoning_effort_preference: deepseekReasoningEffort.data,
       // Rate Limit
       limit_5h_usd: limit5hUsd.data,
       limit_5h_reset_mode: limit5hResetMode.data,
@@ -765,6 +775,10 @@ function applyPatchField<T>(
       case "codex_reasoning_effort_preference":
         updates.codex_reasoning_effort_preference =
           patch.value as ProviderBatchApplyUpdates["codex_reasoning_effort_preference"];
+        return { ok: true, data: undefined };
+      case "deepseek_reasoning_effort_preference":
+        updates.deepseek_reasoning_effort_preference =
+          patch.value as ProviderBatchApplyUpdates["deepseek_reasoning_effort_preference"];
         return { ok: true, data: undefined };
       case "codex_reasoning_summary_preference":
         updates.codex_reasoning_summary_preference =
@@ -910,6 +924,9 @@ function applyPatchField<T>(
     case "codex_reasoning_effort_preference":
       updates.codex_reasoning_effort_preference = "inherit";
       return { ok: true, data: undefined };
+    case "deepseek_reasoning_effort_preference":
+      updates.deepseek_reasoning_effort_preference = "inherit";
+      return { ok: true, data: undefined };
     case "codex_reasoning_summary_preference":
       updates.codex_reasoning_summary_preference = "inherit";
       return { ok: true, data: undefined };
@@ -996,6 +1013,7 @@ export function buildProviderBatchApplyUpdates(
     ["codex_text_verbosity_preference", patch.codex_text_verbosity_preference],
     ["codex_parallel_tool_calls_preference", patch.codex_parallel_tool_calls_preference],
     ["codex_service_tier_preference", patch.codex_service_tier_preference],
+    ["deepseek_reasoning_effort_preference", patch.deepseek_reasoning_effort_preference],
     ["anthropic_max_tokens_preference", patch.anthropic_max_tokens_preference],
     ["gemini_google_search_preference", patch.gemini_google_search_preference],
     // Rate Limit
@@ -1066,6 +1084,7 @@ export function hasProviderBatchPatchChanges(patch: ProviderBatchPatch): boolean
     patch.codex_service_tier_preference.mode !== "no_change" ||
     patch.anthropic_max_tokens_preference.mode !== "no_change" ||
     patch.gemini_google_search_preference.mode !== "no_change" ||
+    patch.deepseek_reasoning_effort_preference.mode !== "no_change" ||
     // Rate Limit
     patch.limit_5h_usd.mode !== "no_change" ||
     patch.limit_5h_reset_mode.mode !== "no_change" ||

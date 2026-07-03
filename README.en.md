@@ -101,7 +101,7 @@ Register now via <a href="https://pateway.ai/?ch=1ycdoum&aff=T8FV5H42">this link
 ## ✨ Core Highlights
 
 - 🤖 **Intelligent load balancing**: Weight + priority + grouping scheduler with built-in circuit breaker and up to three failover retries to keep requests stable.
-- 🧩 **Multi-provider management**: Connect Claude, Codex, Gemini CLI, and OpenAI-compatible vendors simultaneously with per-provider model redirection and HTTP/HTTPS/SOCKS proxy rules.
+- 🧩 **Multi-provider management**: Connect Claude, Codex, DeepSeek, Gemini CLI, and OpenAI-compatible vendors simultaneously with per-provider model redirection and HTTP/HTTPS/SOCKS proxy rules.
 - 🛡️ **Rate limiting & concurrency control**: Enforce RPM, monetary quotas (5-hour / weekly / monthly), and session concurrency via Redis Lua scripts with atomic counters and fail-open degradation.
 - 📘 **Automated OpenAPI docs**: 39 REST endpoints exported from Server Actions into OpenAPI 3.1.0, instantly browsable in Swagger and Scalar UI.
 - 📊 **Real-time monitoring & analytics**: Dashboards, active sessions, consumption leaderboards, decision-chain tracing, and proxy health tracking provide second-level visibility.

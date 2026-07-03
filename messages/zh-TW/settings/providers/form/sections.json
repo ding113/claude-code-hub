@@ -322,6 +322,19 @@
         }
       }
     },
+    "deepseekOverrides": {
+      "title": "DeepSeek 思考力度",
+      "desc": "在供應商層面覆寫 DeepSeek V4 模型的 reasoning_effort",
+      "reasoningEffort": {
+        "label": "思考力度",
+        "help": "控制模型使用的推理深度。'high' 是常規請求的默認級別；'max' 會注入深度推理指令，複雜 agent 請求自動使用。",
+        "options": {
+          "inherit": "不覆寫（遵循客戶端）",
+          "high": "high",
+          "max": "max"
+        }
+      }
+    },
     "modelRedirects": {
       "label": "模型重定向設定",
       "optional": "（選填）"

@@ -1,6 +1,6 @@
 import type { SpecialSetting } from "@/types/special-settings";
 
-export type ReasoningEffortPath = "output_config.effort" | "reasoning.effort";
+export type ReasoningEffortPath = "output_config.effort" | "reasoning.effort" | "reasoning_effort";
 
 function normalizeReasoningEffort(value: unknown): string | null {
   if (typeof value !== "string") {
@@ -47,6 +47,12 @@ export function extractReasoningEffortSettingFromRequestBody(requestBody: unknow
     if (effort) {
       return { path: "reasoning.effort", effort };
     }
+  }
+
+  // DeepSeek 风格：顶层 reasoning_effort 字段
+  const topLevelEffort = normalizeReasoningEffort(record.reasoning_effort);
+  if (topLevelEffort) {
+    return { path: "reasoning_effort", effort: topLevelEffort };
   }
 
   return null;
@@ -120,10 +126,12 @@ function findOverrideChange(
     ? [
         preferredPath,
         ...(preferredPath === "output_config.effort"
-          ? (["reasoning.effort"] as const)
-          : (["output_config.effort"] as const)),
+          ? (["reasoning.effort", "reasoning_effort"] as const)
+          : preferredPath === "reasoning_effort"
+            ? (["output_config.effort", "reasoning.effort"] as const)
+            : (["output_config.effort", "reasoning_effort"] as const)),
       ]
-    : ["output_config.effort", "reasoning.effort"];
+    : ["output_config.effort", "reasoning.effort", "reasoning_effort"];
 
   for (const candidatePath of candidatePaths) {
     for (const setting of specialSettings) {

@@ -112,11 +112,13 @@ function checkFormatProviderTypeCompatibility(
 ): boolean {
   switch (format) {
     case "claude":
-      return providerType === "claude" || providerType === "claude-auth";
+      return (
+        providerType === "claude" || providerType === "claude-auth" || providerType === "deepseek"
+      );
     case "response":
       return providerType === "codex";
     case "openai":
-      return providerType === "openai-compatible";
+      return providerType === "openai-compatible" || providerType === "deepseek";
     case "gemini":
       return providerType === "gemini";
     case "gemini-cli":
@@ -732,7 +734,13 @@ export class ProxyProviderResolver {
     let visibleProviders = allProviders;
 
     // 原始请求格式映射到目标供应商类型；缺省为 claude 以兼容历史请求
-    const targetType: "claude" | "codex" | "openai-compatible" | "gemini" | "gemini-cli" = (() => {
+    const targetType:
+      | "claude"
+      | "codex"
+      | "deepseek"
+      | "openai-compatible"
+      | "gemini"
+      | "gemini-cli" = (() => {
       switch (session?.originalFormat) {
         case "claude":
           return "claude";
@@ -1235,8 +1243,18 @@ export class ProxyProviderResolver {
     );
 
     // 将 providerType 映射为 decisionContext 允许的 targetType
-    const targetType: "claude" | "codex" | "openai-compatible" | "gemini" | "gemini-cli" =
-      providerType === "claude-auth" ? "claude" : providerType;
+    const targetType:
+      | "claude"
+      | "codex"
+      | "deepseek"
+      | "openai-compatible"
+      | "gemini"
+      | "gemini-cli" =
+      providerType === "claude-auth"
+        ? "claude"
+        : providerType === "deepseek"
+          ? "deepseek"
+          : (providerType as Exclude<typeof providerType, "claude-auth" | "deepseek">);
 
     if (typeFiltered.length === 0) {
       return {

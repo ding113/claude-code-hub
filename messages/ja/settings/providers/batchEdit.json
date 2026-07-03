@@ -55,7 +55,8 @@
     "modelRedirects": "モデルリダイレクト",
     "allowedModels": "許可モデル",
     "thinkingBudget": "思考バジェット",
-    "adaptiveThinking": "アダプティブ思考"
+    "adaptiveThinking": "アダプティブ思考",
+    "deepseekReasoningEffort": "DeepSeek 推論強度"
   },
   "toast": {
     "previewFailed": "プレビュー失敗: {error}",
@@ -91,7 +92,8 @@
   "batchNotes": {
     "codexOnly": "Codex のみ",
     "claudeOnly": "Claude のみ",
-    "geminiOnly": "Gemini のみ"
+    "geminiOnly": "Gemini のみ",
+    "deepseekOnly": "DeepSeek のみ"
   },
   "mixedValues": {
     "label": "(混合値)",

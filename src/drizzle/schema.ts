@@ -332,6 +332,11 @@ export const providers = pgTable('providers', {
   codexParallelToolCallsPreference: varchar('codex_parallel_tool_calls_preference', { length: 10 }),
   codexServiceTierPreference: varchar('codex_service_tier_preference', { length: 20 }),
 
+  // DeepSeek reasoning effort override (only for deepseek providers)
+  // - 'inherit': follow client request (default)
+  // - 'high'/'max': force override reasoning_effort
+  deepseekReasoningEffortPreference: varchar('deepseek_reasoning_effort_preference', { length: 20 }),
+
   // Anthropic (Messages API) parameter overrides (only for claude/claude-auth providers)
   // - 'inherit' or null: follow client request
   // - numeric string: force override to that value

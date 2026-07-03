@@ -101,7 +101,7 @@ AIGoCode 为 CCH 的用户提供了特别福利，通过此链接注册的用户
 ## ✨ 核心功能 Highlights
 
 - 🤖 **智能负载均衡**：权重 + 优先级 + 分组调度，内置熔断保护与最多 3 次故障转移，保障请求稳定。
-- 🧩 **多供应商管理**：同时接入 Claude、Codex、Gemini CLI、OpenAI Compatible，自定义模型重定向与 HTTP/HTTPS/SOCKS 代理。
+- 🧩 **多供应商管理**：同时接入 Claude、Codex、DeepSeek、Gemini CLI、OpenAI Compatible，自定义模型重定向与 HTTP/HTTPS/SOCKS 代理。
 - 🛡️ **限流与并发控制**：RPM、金额（5 小时/周/月）、并发 Session 多维限制，Redis Lua 脚本确保原子性与 Fail-Open 降级。
 - 📘 **自动化 OpenAPI 文档**：39 个 REST 端点由 Server Actions 自动生成 OpenAPI 3.1.0，Swagger + Scalar UI 双界面即刻试用。
 - 📊 **实时监控与统计**：仪表盘、活跃 Session、消耗排行榜、决策链记录、代理状态追踪，秒级掌控运行态势。

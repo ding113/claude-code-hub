@@ -662,6 +662,7 @@ function sanitizeProvider(
     anthropicThinkingBudgetPreference: provider.anthropicThinkingBudgetPreference,
     anthropicAdaptiveThinking: provider.anthropicAdaptiveThinking,
     geminiGoogleSearchPreference: provider.geminiGoogleSearchPreference,
+    deepseekReasoningEffortPreference: provider.deepseekReasoningEffortPreference ?? "inherit",
     todayTotalCostUsd: statistics?.todayCost ?? provider.todayTotalCostUsd,
     todayCallCount: statistics?.todayCalls ?? provider.todayCallCount,
     lastCallTime: statistics?.lastCallTime ?? provider.lastCallTime,

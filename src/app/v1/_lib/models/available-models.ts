@@ -297,6 +297,7 @@ async function fetchModelsFromProvider(provider: Provider): Promise<FetchedModel
     codex: UPSTREAM_CONFIGS.openai,
     gemini: UPSTREAM_CONFIGS.gemini,
     "gemini-cli": UPSTREAM_CONFIGS.gemini,
+    deepseek: UPSTREAM_CONFIGS.openai,
   };
 
   const config = configMap[provider.providerType];

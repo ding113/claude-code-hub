@@ -277,6 +277,19 @@
           "disabled": "强制关闭"
         }
       }
+    },
+    "deepseekOverrides": {
+      "title": "DeepSeek 思考力度",
+      "desc": "在供应商层面覆写 DeepSeek V4 模型的 reasoning_effort",
+      "reasoningEffort": {
+        "label": "思考力度",
+        "help": "控制模型使用的推理深度。'high' 是常规请求的默认级别；'max' 会注入深度推理指令，复杂 agent 请求自动使用。",
+        "options": {
+          "inherit": "不覆写（遵循客户端）",
+          "high": "high",
+          "max": "max"
+        }
+      }
     }
   },
   "rateLimit": {

@@ -8,6 +8,7 @@ export const DASHBOARD_COMPAT_HEADER = "X-CCH-Dashboard-Compat";
 export const PUBLIC_PROVIDER_TYPE_VALUES = [
   "claude",
   "codex",
+  "deepseek",
   "gemini",
   "openai-compatible",
 ] as const;
