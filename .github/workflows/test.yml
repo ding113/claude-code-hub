@@ -290,26 +290,17 @@ jobs:
             echo "✅ 所有测试通过"
           fi
 
-      - name: Create summary
-        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
-        uses: actions/github-script@v9
-        with:
-          script: |
-            const summary = `## 🧪 测试结果
-
-            | 测试类型 | 状态 |
-            |---------|------|
-            | 代码质量 | ${{ needs.quality.result == 'success' && '✅' || '❌' }} |
-            | 单元测试 | ${{ needs.unit-tests.result == 'success' && '✅' || '❌' }} |
-            | 集成测试 | ${{ needs.integration-tests.result == 'success' && '✅' || '❌' }} |
-            | API 测试 | ${{ needs.api-tests.result == 'success' && '✅' || '❌' }} |
-
-            **总体结果**: ${{ (needs.quality.result == 'success' && needs.unit-tests.result == 'success' && needs.integration-tests.result == 'success' && needs.api-tests.result == 'success') && '✅ 所有测试通过' || '❌ 部分测试失败' }}
-            `;
-
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: summary
-            });
+      - name: Create job summary
+        run: |
+          {
+            echo "## 🧪 测试结果"
+            echo
+            echo "| 测试类型 | 状态 |"
+            echo "|---------|------|"
+            echo "| 代码质量 | ${{ needs.quality.result == 'success' && '✅' || '❌' }} |"
+            echo "| 单元测试 | ${{ needs.unit-tests.result == 'success' && '✅' || '❌' }} |"
+            echo "| 集成测试 | ${{ needs.integration-tests.result == 'success' && '✅' || '❌' }} |"
+            echo "| API 测试 | ${{ needs.api-tests.result == 'success' && '✅' || '❌' }} |"
+            echo
+            echo "**总体结果**: ${{ (needs.quality.result == 'success' && needs.unit-tests.result == 'success' && needs.integration-tests.result == 'success' && needs.api-tests.result == 'success') && '✅ 所有测试通过' || '❌ 部分测试失败' }}"
+          } >> "$GITHUB_STEP_SUMMARY"
