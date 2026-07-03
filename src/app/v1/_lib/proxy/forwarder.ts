@@ -20,6 +20,7 @@ import { getCachedSystemSettings, isHttp2Enabled } from "@/lib/config";
 import { getEnvConfig } from "@/lib/config/env.schema";
 import { PROVIDER_DEFAULTS, PROVIDER_LIMITS } from "@/lib/constants/provider.constants";
 import { PROTECTED_AUTH_HEADER_NAMES } from "@/lib/custom-headers";
+import { applyDeepSeekProviderOverridesWithAudit } from "@/lib/deepseek/provider-overrides";
 import { recordEndpointFailure, recordEndpointSuccess } from "@/lib/endpoint-circuit-breaker";
 import { applyGeminiGoogleSearchOverrideWithAudit } from "@/lib/gemini/provider-overrides";
 import { logger } from "@/lib/logger";
@@ -2545,6 +2546,44 @@ export class ProxyForwarder {
 
             if (session.messageContext?.id) {
               // 同上：确保 special_settings 的"旧值"不会在并发下覆盖"新值"
+              await updateMessageRequestDetails(session.messageContext.id, {
+                specialSettings,
+              }).catch((err) => {
+                logger.error("[ProxyForwarder] Failed to persist special settings", {
+                  error: err,
+                  messageRequestId: session.messageContext?.id,
+                });
+              });
+            }
+          }
+        }
+
+        if (provider.providerType === "deepseek") {
+          const { request: overridden, audit: deepseekAudit } =
+            applyDeepSeekProviderOverridesWithAudit(
+              provider,
+              session.request.message as Record<string, unknown>
+            );
+          session.request.message = overridden;
+
+          if (deepseekAudit) {
+            session.addSpecialSetting(deepseekAudit);
+            const specialSettings = session.getSpecialSettings();
+
+            if (session.sessionId && session.shouldPersistSessionDebugArtifacts()) {
+              await SessionManager.storeSessionSpecialSettings(
+                session.sessionId,
+                specialSettings,
+                session.requestSequence
+              ).catch((err) => {
+                logger.error("[ProxyForwarder] Failed to store special settings", {
+                  error: err,
+                  sessionId: session.sessionId,
+                });
+              });
+            }
+
+            if (session.messageContext?.id) {
               await updateMessageRequestDetails(session.messageContext.id, {
                 specialSettings,
               }).catch((err) => {

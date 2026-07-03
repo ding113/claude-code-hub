@@ -37,6 +37,7 @@ const DEFAULT_MODELS: Record<ProviderType, string> = {
   "openai-compatible": "gpt-4.1-mini",
   gemini: "gemini-2.5-flash",
   "gemini-cli": "gemini-2.5-flash",
+  deepseek: "deepseek-v4-flash",
 };
 
 function resolveProviderType(providerType?: ProviderType | null): ProviderType {

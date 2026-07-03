@@ -97,6 +97,7 @@ const ACTION_TO_FIELD_PATH: Partial<Record<ProviderFormActionWith5hResetMode["ty
   SET_ADAPTIVE_THINKING_MODEL_MATCH_MODE: "routing.anthropicAdaptiveThinking",
   SET_ADAPTIVE_THINKING_MODELS: "routing.anthropicAdaptiveThinking",
   SET_GEMINI_GOOGLE_SEARCH: "routing.geminiGoogleSearchPreference",
+  SET_DEEPSEEK_REASONING_EFFORT: "routing.deepseekReasoningEffortPreference",
   SET_ACTIVE_TIME_START: "routing.activeTimeStart",
   SET_ACTIVE_TIME_END: "routing.activeTimeEnd",
   SET_CUSTOM_HEADERS_TEXT: "routing.customHeadersText",
@@ -229,6 +230,10 @@ export function createInitialState(
         geminiGoogleSearchPreference:
           analysis.routing.geminiGoogleSearchPreference.status === "uniform"
             ? analysis.routing.geminiGoogleSearchPreference.value
+            : "inherit",
+        deepseekReasoningEffortPreference:
+          analysis.routing.deepseekReasoningEffortPreference.status === "uniform"
+            ? analysis.routing.deepseekReasoningEffortPreference.value
             : "inherit",
         activeTimeStart:
           analysis.routing.activeTimeStart.status === "uniform"
@@ -365,6 +370,7 @@ export function createInitialState(
         anthropicThinkingBudgetPreference: "inherit",
         anthropicAdaptiveThinking: null,
         geminiGoogleSearchPreference: "inherit",
+        deepseekReasoningEffortPreference: "inherit",
         activeTimeStart: null,
         activeTimeEnd: null,
         customHeadersText: "",
@@ -444,6 +450,8 @@ export function createInitialState(
         sourceProvider?.anthropicThinkingBudgetPreference ?? "inherit",
       anthropicAdaptiveThinking: sourceProvider?.anthropicAdaptiveThinking ?? null,
       geminiGoogleSearchPreference: sourceProvider?.geminiGoogleSearchPreference ?? "inherit",
+      deepseekReasoningEffortPreference:
+        sourceProvider?.deepseekReasoningEffortPreference ?? "inherit",
       activeTimeStart: sourceProvider?.activeTimeStart ?? null,
       activeTimeEnd: sourceProvider?.activeTimeEnd ?? null,
       customHeadersText: stringifyCustomHeadersForTextarea(
@@ -642,6 +650,11 @@ export function providerFormReducer(
       return {
         ...state,
         routing: { ...state.routing, geminiGoogleSearchPreference: action.payload },
+      };
+    case "SET_DEEPSEEK_REASONING_EFFORT":
+      return {
+        ...state,
+        routing: { ...state.routing, deepseekReasoningEffortPreference: action.payload },
       };
     case "SET_ACTIVE_TIME_START":
       return {

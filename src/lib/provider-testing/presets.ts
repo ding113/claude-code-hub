@@ -184,6 +184,7 @@ export const PRESET_MAPPING: Record<ProviderType, string[]> = {
   "openai-compatible": ["oa_chat_basic", "oa_chat_stream"],
   gemini: ["gm_flash_basic", "gm_pro_basic"],
   "gemini-cli": ["gm_flash_basic", "gm_pro_basic"],
+  deepseek: ["oa_chat_basic", "oa_chat_stream"],
 };
 
 export function getPresetsForProvider(providerType: ProviderType): PresetConfig[] {

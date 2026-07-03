@@ -101,6 +101,7 @@ System shall support multiple provider types with appropriate protocol handling:
 - `claude` - Standard Anthropic API
 - `claude-auth` - Claude relay services (Bearer auth only)
 - `codex` - OpenAI Codex/Response API
+- `deepseek` - DeepSeek V4 API (OpenAI + Anthropic dual-format compatible)
 - `gemini` - Google Gemini API
 - `gemini-cli` - Gemini CLI format
 - `openai-compatible` - OpenAI-compatible APIs

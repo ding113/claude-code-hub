@@ -82,6 +82,8 @@ const ANTHROPIC_ADAPTIVE_THINKING_CONFIG = z
 // - 'enabled': force inject googleSearch tool
 // - 'disabled': force remove googleSearch tool from request
 const GEMINI_GOOGLE_SEARCH_PREFERENCE = z.enum(["inherit", "enabled", "disabled"]);
+
+const DEEPSEEK_REASONING_EFFORT_PREFERENCE = z.enum(["inherit", "high", "max"]);
 const XFF_PICK_SCHEMA = z.union([
   z.literal("leftmost"),
   z.literal("rightmost"),
@@ -573,6 +575,8 @@ export const CreateProviderSchema = z
       ANTHROPIC_THINKING_BUDGET_PREFERENCE.optional().default("inherit"),
     anthropic_adaptive_thinking: ANTHROPIC_ADAPTIVE_THINKING_CONFIG,
     gemini_google_search_preference: GEMINI_GOOGLE_SEARCH_PREFERENCE.optional().default("inherit"),
+    deepseek_reasoning_effort_preference:
+      DEEPSEEK_REASONING_EFFORT_PREFERENCE.optional().default("inherit"),
     max_retry_attempts: z.coerce
       .number()
       .int("重试次数必须是整数")
@@ -811,6 +815,7 @@ export const UpdateProviderSchema = z
     anthropic_thinking_budget_preference: ANTHROPIC_THINKING_BUDGET_PREFERENCE.optional(),
     anthropic_adaptive_thinking: ANTHROPIC_ADAPTIVE_THINKING_CONFIG,
     gemini_google_search_preference: GEMINI_GOOGLE_SEARCH_PREFERENCE.optional(),
+    deepseek_reasoning_effort_preference: DEEPSEEK_REASONING_EFFORT_PREFERENCE.optional(),
     max_retry_attempts: z.coerce
       .number()
       .int("重试次数必须是整数")

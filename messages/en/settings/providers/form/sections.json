@@ -322,6 +322,19 @@
         }
       }
     },
+    "deepseekOverrides": {
+      "title": "DeepSeek Reasoning Effort",
+      "desc": "Override reasoning_effort for DeepSeek V4 models",
+      "reasoningEffort": {
+        "label": "Reasoning Effort",
+        "help": "Controls how much reasoning effort the model uses. 'high' is the default level for regular requests; 'max' injects a deep reasoning directive and is automatically applied for complex agent requests.",
+        "options": {
+          "inherit": "No override (follow client)",
+          "high": "high",
+          "max": "max"
+        }
+      }
+    },
     "modelRedirects": {
       "label": "Model Redirects",
       "optional": "(optional)"

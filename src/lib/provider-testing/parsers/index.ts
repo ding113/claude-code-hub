@@ -30,6 +30,7 @@ const parserRegistry: Record<ProviderType, ResponseParser> = {
   "openai-compatible": parseOpenAIResponse,
   gemini: parseGeminiResponse,
   "gemini-cli": parseGeminiResponse,
+  deepseek: parseOpenAIResponse,
 };
 
 /**

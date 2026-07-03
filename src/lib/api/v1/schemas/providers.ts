@@ -107,6 +107,10 @@ export const ProviderSummarySchema = z
       .string()
       .nullable()
       .describe("Codex parallel tool calls preference."),
+    deepseekReasoningEffortPreference: z
+      .enum(["inherit", "high", "max"])
+      .nullable()
+      .describe("DeepSeek reasoning effort."),
     codexServiceTierPreference: z.string().nullable().describe("Codex service tier preference."),
     anthropicMaxTokensPreference: z
       .string()
@@ -475,6 +479,10 @@ export const ProviderCreateSchema = z
       .optional()
       .describe("Codex parallel tool calls preference."),
     codex_service_tier_preference: z.string().optional().describe("Codex service tier preference."),
+    deepseek_reasoning_effort_preference: z
+      .enum(["inherit", "high", "max"])
+      .optional()
+      .describe("DeepSeek reasoning effort."),
     anthropic_max_tokens_preference: z
       .string()
       .optional()

@@ -95,6 +95,7 @@ import type {
   CodexReasoningSummaryPreference,
   CodexServiceTierPreference,
   CodexTextVerbosityPreference,
+  DeepSeekReasoningEffortPreference,
   Provider,
   ProviderBatchApplyUpdates,
   ProviderBatchPatch,
@@ -375,6 +376,7 @@ export async function getProviders(): Promise<ProviderDisplay[]> {
         anthropicThinkingBudgetPreference: provider.anthropicThinkingBudgetPreference,
         anthropicAdaptiveThinking: provider.anthropicAdaptiveThinking,
         geminiGoogleSearchPreference: provider.geminiGoogleSearchPreference,
+        deepseekReasoningEffortPreference: provider.deepseekReasoningEffortPreference ?? "inherit",
         tpm: provider.tpm,
         rpm: provider.rpm,
         rpd: provider.rpd,
@@ -555,6 +557,7 @@ export async function addProvider(data: {
   codex_text_verbosity_preference?: CodexTextVerbosityPreference | null;
   codex_parallel_tool_calls_preference?: CodexParallelToolCallsPreference | null;
   codex_service_tier_preference?: CodexServiceTierPreference | null;
+  deepseek_reasoning_effort_preference?: DeepSeekReasoningEffortPreference | null;
   anthropic_max_tokens_preference?: AnthropicMaxTokensPreference | null;
   anthropic_thinking_budget_preference?: AnthropicThinkingBudgetPreference | null;
   anthropic_adaptive_thinking?: AnthropicAdaptiveThinkingConfig | null;
@@ -652,6 +655,8 @@ export async function addProvider(data: {
       codex_parallel_tool_calls_preference:
         validated.codex_parallel_tool_calls_preference ?? "inherit",
       codex_service_tier_preference: validated.codex_service_tier_preference ?? "inherit",
+      deepseek_reasoning_effort_preference:
+        validated.deepseek_reasoning_effort_preference ?? "inherit",
       website_url: validated.website_url ?? null,
       favicon_url: faviconUrl,
       tpm: validated.tpm ?? null,
@@ -1481,6 +1486,7 @@ const SINGLE_EDIT_PREIMAGE_FIELD_TO_PROVIDER_KEY: Record<string, keyof Provider>
   codex_text_verbosity_preference: "codexTextVerbosityPreference",
   codex_parallel_tool_calls_preference: "codexParallelToolCallsPreference",
   codex_service_tier_preference: "codexServiceTierPreference",
+  deepseek_reasoning_effort_preference: "deepseekReasoningEffortPreference",
   anthropic_max_tokens_preference: "anthropicMaxTokensPreference",
   anthropic_thinking_budget_preference: "anthropicThinkingBudgetPreference",
   anthropic_adaptive_thinking: "anthropicAdaptiveThinking",
@@ -1662,6 +1668,9 @@ function mapApplyUpdatesToRepositoryFormat(
   if (applyUpdates.codex_service_tier_preference !== undefined) {
     result.codexServiceTierPreference = applyUpdates.codex_service_tier_preference;
   }
+  if (applyUpdates.deepseek_reasoning_effort_preference !== undefined) {
+    result.deepseekReasoningEffortPreference = applyUpdates.deepseek_reasoning_effort_preference;
+  }
   if (applyUpdates.anthropic_max_tokens_preference !== undefined) {
     result.anthropicMaxTokensPreference = applyUpdates.anthropic_max_tokens_preference;
   }
@@ -1762,6 +1771,7 @@ const PATCH_FIELD_TO_PROVIDER_KEY: Record<ProviderBatchPatchField, keyof Provide
   codex_text_verbosity_preference: "codexTextVerbosityPreference",
   codex_parallel_tool_calls_preference: "codexParallelToolCallsPreference",
   codex_service_tier_preference: "codexServiceTierPreference",
+  deepseek_reasoning_effort_preference: "deepseekReasoningEffortPreference",
   anthropic_max_tokens_preference: "anthropicMaxTokensPreference",
   gemini_google_search_preference: "geminiGoogleSearchPreference",
   limit_5h_usd: "limit5hUsd",
@@ -1797,6 +1807,7 @@ const PATCH_FIELD_CLEAR_VALUE: Partial<Record<ProviderBatchPatchField, unknown>>
   codex_text_verbosity_preference: "inherit",
   codex_parallel_tool_calls_preference: "inherit",
   codex_service_tier_preference: "inherit",
+  deepseek_reasoning_effort_preference: "inherit",
   anthropic_max_tokens_preference: "inherit",
   gemini_google_search_preference: "inherit",
   mcp_passthrough_type: "none",
@@ -1819,6 +1830,10 @@ const CODEX_ONLY_FIELDS: ReadonlySet<ProviderBatchPatchField> = new Set([
 
 const GEMINI_ONLY_FIELDS: ReadonlySet<ProviderBatchPatchField> = new Set([
   "gemini_google_search_preference",
+]);
+
+const DEEPSEEK_ONLY_FIELDS: ReadonlySet<ProviderBatchPatchField> = new Set([
+  "deepseek_reasoning_effort_preference",
 ]);
 
 const CB_PROVIDER_KEYS: ReadonlySet<string> = new Set([
@@ -1912,6 +1927,7 @@ function generatePreviewRows(
       const isClaudeOnly = CLAUDE_ONLY_FIELDS.has(field);
       const isCodexOnly = CODEX_ONLY_FIELDS.has(field);
       const isGeminiOnly = GEMINI_ONLY_FIELDS.has(field);
+      const isDeepseekOnly = DEEPSEEK_ONLY_FIELDS.has(field);
 
       let isCompatible = true;
       let skipReason = "";
@@ -1924,6 +1940,9 @@ function generatePreviewRows(
       } else if (isGeminiOnly && !isGeminiProviderType(provider.providerType)) {
         isCompatible = false;
         skipReason = `Field "${field}" is only applicable to gemini/gemini-cli providers`;
+      } else if (isDeepseekOnly && provider.providerType !== "deepseek") {
+        isCompatible = false;
+        skipReason = `Field "${field}" is only applicable to deepseek providers`;
       }
 
       if (isCompatible) {
@@ -2124,7 +2143,11 @@ export async function applyProviderBatchPatch(
     const repositoryUpdates = mapApplyUpdatesToRepositoryFormat(updatesResult.data);
 
     const hasTypeSpecificFields = changedFields.some(
-      (f) => CLAUDE_ONLY_FIELDS.has(f) || CODEX_ONLY_FIELDS.has(f) || GEMINI_ONLY_FIELDS.has(f)
+      (f) =>
+        CLAUDE_ONLY_FIELDS.has(f) ||
+        CODEX_ONLY_FIELDS.has(f) ||
+        GEMINI_ONLY_FIELDS.has(f) ||
+        DEEPSEEK_ONLY_FIELDS.has(f)
     );
 
     let dbUpdatedCount: number;

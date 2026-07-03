@@ -85,6 +85,7 @@ function normalizeTtlFallbackSeconds(config: CacheHitRateAlertQueryConfig): {
     codex: 600,
     gemini: defaultSeconds,
     "gemini-cli": defaultSeconds,
+    deepseek: 600,
     "openai-compatible": 600,
   };
   const overrides = config.ttlFallbackSecondsByProviderType ?? {};

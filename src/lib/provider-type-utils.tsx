@@ -45,9 +45,14 @@ export const PROVIDER_TYPE_CONFIG: Record<
     bgColor: "bg-emerald-500/15",
   },
   "openai-compatible": {
-    icon: OpenAI, // OpenAI 无文字版本（默认 Mono）
+    icon: OpenAI,
     iconColor: "text-cyan-600",
     bgColor: "bg-cyan-500/15",
+  },
+  deepseek: {
+    icon: OpenAI,
+    iconColor: "text-purple-600",
+    bgColor: "bg-purple-500/15",
   },
 };
 

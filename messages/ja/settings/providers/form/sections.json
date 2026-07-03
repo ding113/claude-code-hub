@@ -322,6 +322,19 @@
         }
       }
     },
+    "deepseekOverrides": {
+      "title": "DeepSeek 推論力度",
+      "desc": "プロバイダーレベルで DeepSeek V4 モデルの reasoning_effort を上書きします",
+      "reasoningEffort": {
+        "label": "推論力度",
+        "help": "モデルが使用する推論の深さを制御します。'high' は通常リクエストのデフォルトレベルです。'max' は深い推論ディレクティブを注入し、複雑なエージェントリクエストに自動適用されます。",
+        "options": {
+          "inherit": "上書きなし（クライアントに従う）",
+          "high": "high",
+          "max": "max"
+        }
+      }
+    },
     "modelRedirects": {
       "label": "モデルリダイレクト設定",
       "optional": "（任意）"

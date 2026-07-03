@@ -257,6 +257,7 @@ export async function createProvider(providerData: CreateProviderData): Promise<
     anthropicThinkingBudgetPreference: providerData.anthropic_thinking_budget_preference ?? null,
     anthropicAdaptiveThinking: providerData.anthropic_adaptive_thinking ?? null,
     geminiGoogleSearchPreference: providerData.gemini_google_search_preference ?? null,
+    deepseekReasoningEffortPreference: providerData.deepseek_reasoning_effort_preference ?? null,
     tpm: providerData.tpm,
     rpm: providerData.rpm,
     rpd: providerData.rpd,
@@ -336,6 +337,7 @@ export async function createProvider(providerData: CreateProviderData): Promise<
         anthropicThinkingBudgetPreference: providers.anthropicThinkingBudgetPreference,
         anthropicAdaptiveThinking: providers.anthropicAdaptiveThinking,
         geminiGoogleSearchPreference: providers.geminiGoogleSearchPreference,
+        deepseekReasoningEffortPreference: providers.deepseekReasoningEffortPreference,
         tpm: providers.tpm,
         rpm: providers.rpm,
         rpd: providers.rpd,
@@ -424,6 +426,7 @@ export async function findProviderList(
       anthropicThinkingBudgetPreference: providers.anthropicThinkingBudgetPreference,
       anthropicAdaptiveThinking: providers.anthropicAdaptiveThinking,
       geminiGoogleSearchPreference: providers.geminiGoogleSearchPreference,
+      deepseekReasoningEffortPreference: providers.deepseekReasoningEffortPreference,
       tpm: providers.tpm,
       rpm: providers.rpm,
       rpd: providers.rpd,
@@ -512,6 +515,7 @@ export async function findAllProvidersFresh(): Promise<Provider[]> {
       anthropicThinkingBudgetPreference: providers.anthropicThinkingBudgetPreference,
       anthropicAdaptiveThinking: providers.anthropicAdaptiveThinking,
       geminiGoogleSearchPreference: providers.geminiGoogleSearchPreference,
+      deepseekReasoningEffortPreference: providers.deepseekReasoningEffortPreference,
       tpm: providers.tpm,
       rpm: providers.rpm,
       rpd: providers.rpd,
@@ -604,6 +608,7 @@ export async function findProviderById(id: number): Promise<Provider | null> {
       anthropicThinkingBudgetPreference: providers.anthropicThinkingBudgetPreference,
       anthropicAdaptiveThinking: providers.anthropicAdaptiveThinking,
       geminiGoogleSearchPreference: providers.geminiGoogleSearchPreference,
+      deepseekReasoningEffortPreference: providers.deepseekReasoningEffortPreference,
       tpm: providers.tpm,
       rpm: providers.rpm,
       rpd: providers.rpd,
@@ -736,6 +741,9 @@ export async function updateProvider(
     dbData.anthropicAdaptiveThinking = providerData.anthropic_adaptive_thinking ?? null;
   if (providerData.gemini_google_search_preference !== undefined)
     dbData.geminiGoogleSearchPreference = providerData.gemini_google_search_preference ?? null;
+  if (providerData.deepseek_reasoning_effort_preference !== undefined)
+    dbData.deepseekReasoningEffortPreference =
+      providerData.deepseek_reasoning_effort_preference ?? null;
   if (providerData.tpm !== undefined) dbData.tpm = providerData.tpm;
   if (providerData.rpm !== undefined) dbData.rpm = providerData.rpm;
   if (providerData.rpd !== undefined) dbData.rpd = providerData.rpd;
@@ -852,6 +860,7 @@ export async function updateProvider(
         anthropicThinkingBudgetPreference: providers.anthropicThinkingBudgetPreference,
         anthropicAdaptiveThinking: providers.anthropicAdaptiveThinking,
         geminiGoogleSearchPreference: providers.geminiGoogleSearchPreference,
+        deepseekReasoningEffortPreference: providers.deepseekReasoningEffortPreference,
         tpm: providers.tpm,
         rpm: providers.rpm,
         rpd: providers.rpd,
@@ -1088,6 +1097,7 @@ export interface BatchProviderUpdates {
   codexServiceTierPreference?: string | null;
   anthropicMaxTokensPreference?: string | null;
   geminiGoogleSearchPreference?: string | null;
+  deepseekReasoningEffortPreference?: string | null;
   // Rate Limit
   limit5hUsd?: string | null;
   limit5hResetMode?: string;
@@ -1204,6 +1214,9 @@ export async function updateProvidersBatch(
   }
   if (updates.geminiGoogleSearchPreference !== undefined) {
     setClauses.geminiGoogleSearchPreference = updates.geminiGoogleSearchPreference;
+  }
+  if (updates.deepseekReasoningEffortPreference !== undefined) {
+    setClauses.deepseekReasoningEffortPreference = updates.deepseekReasoningEffortPreference;
   }
   // Rate Limit
   if (updates.limit5hUsd !== undefined) {

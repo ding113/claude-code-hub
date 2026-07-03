@@ -86,7 +86,7 @@ export type ReasoningEffortSpecialSetting = {
   type: "reasoning_effort";
   scope: "request";
   hit: boolean;
-  path: "output_config.effort" | "reasoning.effort";
+  path: "output_config.effort" | "reasoning.effort" | "reasoning_effort";
   effort: string;
 };
 

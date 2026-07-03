@@ -16,6 +16,7 @@ export const USER_AGENTS: Record<ProviderType, string> = {
   "openai-compatible": "OpenAI-Compatible/2026.04",
   gemini: "GeminiCLI/v24.11.0 (linux; x64)",
   "gemini-cli": "GeminiCLI/v24.11.0 (linux; x64)",
+  deepseek: "DeepSeek/2026.04 (openai-compatible)",
 };
 
 export const BASE_HEADERS = {
@@ -115,6 +116,7 @@ export const DEFAULT_MODELS: Record<ProviderType, string> = {
   "openai-compatible": "gpt-4.1-mini",
   gemini: "gemini-2.5-flash",
   "gemini-cli": "gemini-2.5-flash",
+  deepseek: "deepseek-v4-flash",
 };
 
 export const DEFAULT_SUCCESS_CONTAINS: Record<ProviderType, string> = {
@@ -124,6 +126,7 @@ export const DEFAULT_SUCCESS_CONTAINS: Record<ProviderType, string> = {
   "openai-compatible": "pong",
   gemini: "pong",
   "gemini-cli": "pong",
+  deepseek: "pong",
 };
 
 export const API_ENDPOINTS: Record<ProviderType, string> = {
@@ -133,6 +136,7 @@ export const API_ENDPOINTS: Record<ProviderType, string> = {
   "openai-compatible": "/v1/chat/completions",
   gemini: "/v1beta/models/{model}:generateContent",
   "gemini-cli": "/v1beta/models/{model}:generateContent",
+  deepseek: "/v1/chat/completions",
 };
 
 const OPENAI_VERSIONED_FALLBACK_PATHS = [
@@ -155,6 +159,8 @@ export function getTestBody(providerType: ProviderType, model?: string): Record<
     case "gemini":
     case "gemini-cli":
       return { ...GEMINI_TEST_BODY };
+    case "deepseek":
+      return { ...OPENAI_TEST_BODY };
     default:
       throw new Error(`Unsupported provider type: ${providerType}`);
   }
@@ -192,6 +198,7 @@ export function getTestHeaders(
       });
       break;
     case "openai-compatible":
+    case "deepseek":
       Object.assign(headers, {
         ...OPENAI_TEST_HEADERS,
         Authorization: `Bearer ${apiKey}`,
