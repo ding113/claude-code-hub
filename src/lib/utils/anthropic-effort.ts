@@ -129,7 +129,7 @@ function findOverrideChange(
           ? (["reasoning.effort", "reasoning_effort"] as const)
           : preferredPath === "reasoning_effort"
             ? (["output_config.effort", "reasoning.effort"] as const)
-            : (["output_config.effort"] as const)),
+            : (["output_config.effort", "reasoning_effort"] as const)),
       ]
     : ["output_config.effort", "reasoning.effort", "reasoning_effort"];
 

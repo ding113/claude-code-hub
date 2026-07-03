@@ -122,6 +122,15 @@ describe("Provider schemas - priority/weight/costMultiplier 规则对齐", () =>
       expect(parsed.allowed_clients).toEqual([]);
       expect(parsed.blocked_clients).toEqual([]);
     });
+
+    test("provider_type 接受 deepseek", () => {
+      expect(
+        CreateProviderSchema.safeParse({
+          ...base,
+          provider_type: "deepseek",
+        }).success
+      ).toBe(true);
+    });
   });
 
   describe("client restrictions null normalization", () => {
@@ -133,6 +142,10 @@ describe("Provider schemas - priority/weight/costMultiplier 规则对齐", () =>
 
       expect(parsed.allowed_clients).toEqual([]);
       expect(parsed.blocked_clients).toEqual([]);
+    });
+
+    test("UpdateProviderSchema 的 provider_type 接受 deepseek", () => {
+      expect(UpdateProviderSchema.safeParse({ provider_type: "deepseek" }).success).toBe(true);
     });
 
     test("CreateUserSchema 将 null 归一化为空数组", () => {

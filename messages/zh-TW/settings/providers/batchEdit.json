@@ -55,7 +55,8 @@
     "modelRedirects": "模型重新導向",
     "allowedModels": "允許的模型",
     "thinkingBudget": "思考預算",
-    "adaptiveThinking": "自適應思考"
+    "adaptiveThinking": "自適應思考",
+    "deepseekReasoningEffort": "DeepSeek 推理強度"
   },
   "toast": {
     "previewFailed": "預覽失敗: {error}",
@@ -91,7 +92,8 @@
   "batchNotes": {
     "codexOnly": "僅限 Codex",
     "claudeOnly": "僅限 Claude",
-    "geminiOnly": "僅限 Gemini"
+    "geminiOnly": "僅限 Gemini",
+    "deepseekOnly": "僅限 DeepSeek"
   },
   "mixedValues": {
     "label": "(混合值)",

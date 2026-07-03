@@ -1,3 +1,4 @@
+import type { ClientFormat } from "@/app/v1/_lib/proxy/format-mapper";
 import type { DeepSeekReasoningEffortPreference } from "@/types/provider";
 import type { ProviderParameterOverrideSpecialSetting } from "@/types/special-settings";
 
@@ -6,6 +7,10 @@ type DeepSeekProviderOverrideConfig = {
   name?: string;
   providerType?: string;
   deepseekReasoningEffortPreference?: DeepSeekReasoningEffortPreference | null;
+};
+
+type DeepSeekProviderOverrideOptions = {
+  requestFormat?: ClientFormat | null;
 };
 
 function normalizeStringPreference(value: string | null | undefined): string | null {
@@ -25,7 +30,18 @@ function toAuditValue(value: unknown): string | number | boolean | null {
  * 判断请求体是否为 Anthropic Claude 格式
  * Anthropic 格式请求包含 output_config 字段，用于控制 thinking budget / effort
  */
-function isAnthropicFormatRequest(request: Record<string, unknown>): boolean {
+function isAnthropicFormatRequest(
+  request: Record<string, unknown>,
+  requestFormat?: ClientFormat | null
+): boolean {
+  if (requestFormat === "claude") {
+    return true;
+  }
+
+  if (requestFormat === "openai") {
+    return false;
+  }
+
   return "output_config" in request || "thinking" in request;
 }
 
@@ -46,7 +62,8 @@ function isAnthropicFormatRequest(request: Record<string, unknown>): boolean {
  */
 export function applyDeepSeekProviderOverrides(
   provider: DeepSeekProviderOverrideConfig,
-  request: Record<string, unknown>
+  request: Record<string, unknown>,
+  options: DeepSeekProviderOverrideOptions = {}
 ): Record<string, unknown> {
   if (provider.providerType !== "deepseek") {
     return request;
@@ -57,7 +74,7 @@ export function applyDeepSeekProviderOverrides(
     return request;
   }
 
-  const isAnthropic = isAnthropicFormatRequest(request);
+  const isAnthropic = isAnthropicFormatRequest(request, options.requestFormat);
 
   if (isAnthropic) {
     // Anthropic Messages API 格式: 设置 output_config.effort
@@ -85,7 +102,8 @@ export function applyDeepSeekProviderOverrides(
 
 export function applyDeepSeekProviderOverridesWithAudit(
   provider: DeepSeekProviderOverrideConfig,
-  request: Record<string, unknown>
+  request: Record<string, unknown>,
+  options: DeepSeekProviderOverrideOptions = {}
 ): { request: Record<string, unknown>; audit: ProviderParameterOverrideSpecialSetting | null } {
   if (provider.providerType !== "deepseek") {
     return { request, audit: null };
@@ -97,7 +115,7 @@ export function applyDeepSeekProviderOverridesWithAudit(
     return { request, audit: null };
   }
 
-  const isAnthropic = isAnthropicFormatRequest(request);
+  const isAnthropic = isAnthropicFormatRequest(request, options.requestFormat);
   const effortPath = isAnthropic ? "output_config.effort" : "reasoning_effort";
 
   // 读取 before 值
@@ -111,7 +129,7 @@ export function applyDeepSeekProviderOverridesWithAudit(
     beforeEffort = toAuditValue(request.reasoning_effort);
   }
 
-  const nextRequest = applyDeepSeekProviderOverrides(provider, request);
+  const nextRequest = applyDeepSeekProviderOverrides(provider, request, options);
 
   // 读取 after 值
   let afterEffort: string | number | boolean | null = null;

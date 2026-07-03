@@ -160,7 +160,7 @@ export function getTestBody(providerType: ProviderType, model?: string): Record<
     case "gemini-cli":
       return { ...GEMINI_TEST_BODY };
     case "deepseek":
-      return { ...OPENAI_TEST_BODY };
+      return { ...OPENAI_TEST_BODY, model: targetModel };
     default:
       throw new Error(`Unsupported provider type: ${providerType}`);
   }

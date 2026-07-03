@@ -2562,7 +2562,8 @@ export class ProxyForwarder {
           const { request: overridden, audit: deepseekAudit } =
             applyDeepSeekProviderOverridesWithAudit(
               provider,
-              session.request.message as Record<string, unknown>
+              session.request.message as Record<string, unknown>,
+              { requestFormat: session.originalFormat }
             );
           session.request.message = overridden;
 

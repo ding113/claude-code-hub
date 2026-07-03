@@ -316,4 +316,34 @@ describe("extractReasoningEffortInfo", () => {
       hasRequestEffort: true,
     });
   });
+
+  test("matches DeepSeek reasoning_effort override when original path is reasoning.effort", () => {
+    expect(
+      extractReasoningEffortInfo([
+        {
+          type: "reasoning_effort",
+          scope: "request",
+          hit: true,
+          path: "reasoning.effort",
+          effort: "medium",
+        },
+        {
+          type: "provider_parameter_override",
+          scope: "provider",
+          providerId: 3,
+          providerName: "deepseek provider",
+          providerType: "deepseek",
+          hit: true,
+          changed: true,
+          changes: [{ path: "reasoning_effort", before: "medium", after: "max", changed: true }],
+        },
+      ])
+    ).toEqual({
+      originalEffort: "medium",
+      overriddenEffort: "max",
+      isOverridden: true,
+      path: "reasoning.effort",
+      hasRequestEffort: true,
+    });
+  });
 });

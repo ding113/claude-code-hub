@@ -546,6 +546,8 @@ function ProviderFormContent({
       state.routing.anthropicAdaptiveThinking !== null ||
       // Gemini overrides
       state.routing.geminiGoogleSearchPreference !== "inherit" ||
+      // DeepSeek overrides
+      state.routing.deepseekReasoningEffortPreference !== "inherit" ||
       // Active time
       state.routing.activeTimeStart !== null ||
       state.routing.activeTimeEnd !== null ||

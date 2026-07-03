@@ -1873,6 +1873,10 @@ const GEMINI_ONLY_REPO_KEYS: ReadonlySet<keyof BatchProviderUpdates> = new Set([
   "geminiGoogleSearchPreference",
 ]);
 
+const DEEPSEEK_ONLY_REPO_KEYS: ReadonlySet<keyof BatchProviderUpdates> = new Set([
+  "deepseekReasoningEffortPreference",
+]);
+
 function filterRepositoryUpdatesByProviderType(
   updates: BatchProviderUpdates,
   providerType: string
@@ -1886,6 +1890,9 @@ function filterRepositoryUpdatesByProviderType(
   }
   if (!isGeminiProviderType(providerType as ProviderType)) {
     for (const key of GEMINI_ONLY_REPO_KEYS) delete filtered[key];
+  }
+  if (providerType !== "deepseek") {
+    for (const key of DEEPSEEK_ONLY_REPO_KEYS) delete filtered[key];
   }
   return filtered;
 }

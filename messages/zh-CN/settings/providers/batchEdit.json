@@ -55,7 +55,8 @@
     "modelRedirects": "模型重定向",
     "allowedModels": "允许的模型",
     "thinkingBudget": "思考预算",
-    "adaptiveThinking": "自适应思考"
+    "adaptiveThinking": "自适应思考",
+    "deepseekReasoningEffort": "DeepSeek 推理强度"
   },
   "toast": {
     "previewFailed": "预览失败: {error}",
@@ -91,7 +92,8 @@
   "batchNotes": {
     "codexOnly": "仅限 Codex",
     "claudeOnly": "仅限 Claude",
-    "geminiOnly": "仅限 Gemini"
+    "geminiOnly": "仅限 Gemini",
+    "deepseekOnly": "仅限 DeepSeek"
   },
   "mixedValues": {
     "label": "(混合值)",

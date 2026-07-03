@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getTestHeaders } from "@/lib/provider-testing/utils/test-prompts";
+import { getTestBody, getTestHeaders } from "@/lib/provider-testing/utils/test-prompts";
 
 describe("provider-testing getTestHeaders — Anthropic auth header selection", () => {
   it("sends both x-api-key and Authorization for direct api.anthropic.com", () => {
@@ -54,5 +54,12 @@ describe("provider-testing getTestHeaders — Gemini auth header selection", () 
     });
     expect(headers.Authorization).toBe("Bearer ya29.token");
     expect(headers["x-goog-api-key"]).toBeUndefined();
+  });
+});
+
+describe("provider-testing getTestBody", () => {
+  it("applies the requested model for deepseek", () => {
+    const body = getTestBody("deepseek", "deepseek-v4-pro");
+    expect(body.model).toBe("deepseek-v4-pro");
   });
 });

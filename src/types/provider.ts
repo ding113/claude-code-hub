@@ -102,7 +102,6 @@ export type ProviderBatchPatchField =
   | "swap_cache_ttl_billing"
   | "context_1m_preference"
   | "codex_reasoning_effort_preference"
-  | "deepseek_reasoning_effort_preference"
   | "codex_reasoning_summary_preference"
   | "codex_text_verbosity_preference"
   | "codex_parallel_tool_calls_preference"
