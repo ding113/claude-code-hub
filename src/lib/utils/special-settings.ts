@@ -120,6 +120,17 @@ function buildSettingKey(setting: SpecialSetting): string {
       ]);
     case "billing_header_rectifier":
       return JSON.stringify([setting.type, setting.hit, setting.removedCount]);
+    case "gemini_function_id_rectifier":
+      return JSON.stringify([
+        setting.type,
+        setting.hit,
+        setting.providerId ?? null,
+        setting.trigger,
+        setting.attemptNumber,
+        setting.retryAttemptNumber,
+        setting.strippedFunctionCallIds,
+        setting.strippedFunctionResponseIds,
+      ]);
     case "gemini_google_search_override":
       return JSON.stringify([
         setting.type,

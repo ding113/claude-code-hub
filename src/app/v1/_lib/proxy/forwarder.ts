@@ -79,6 +79,12 @@ import {
   ProxyError,
   sanitizeUrl,
 } from "./errors";
+import {
+  detectGeminiFunctionIdRectifierTrigger,
+  rectifyGeminiFunctionIds,
+  type GeminiFunctionIdRectifierResult,
+  type GeminiFunctionIdRectifierTrigger,
+} from "./gemini-function-id-rectifier";
 import { ModelRedirector } from "./model-redirector";
 import { nodeStreamToWebStreamSafe } from "./node-stream-to-web";
 import { ensureOpenAIChatStreamUsageOption } from "./openai-chat-usage-options";
@@ -238,12 +244,14 @@ type ReactiveRectifierRetryState = {
   thinkingSignatureRetried: boolean;
   thinkingBudgetRetried: boolean;
   thinkingEffortConflictRetried: boolean;
+  geminiFunctionIdRetried: boolean;
 };
 
 type ReactiveRectifierType =
   | "thinking_signature_rectifier"
   | "thinking_budget_rectifier"
-  | "thinking_effort_conflict_rectifier";
+  | "thinking_effort_conflict_rectifier"
+  | "gemini_function_id_rectifier";
 
 type ReactiveRectifierResult =
   | { matched: false }
@@ -902,6 +910,34 @@ const thinkingBudgetRectifierDescriptor: ReactiveRectifierDescriptor<
   }),
 };
 
+const geminiFunctionIdRectifierDescriptor: ReactiveRectifierDescriptor<
+  GeminiFunctionIdRectifierTrigger,
+  GeminiFunctionIdRectifierResult
+> = {
+  type: "gemini_function_id_rectifier",
+  displayName: "Gemini function id rectifier",
+  detect: detectGeminiFunctionIdRectifierTrigger,
+  // 暂无系统开关：触发词只会来自拒绝 id 字段的严格上游（Vertex），剥离后无功能损失
+  isEnabled: () => true,
+  hasRetried: (state) => state.geminiFunctionIdRetried,
+  markRetried: (state) => {
+    state.geminiFunctionIdRetried = true;
+  },
+  rectify: rectifyGeminiFunctionIds,
+  buildAuditSetting: (rectified, context) => ({
+    type: "gemini_function_id_rectifier",
+    scope: "request",
+    hit: rectified.applied,
+    providerId: context.provider.id,
+    providerName: context.provider.name,
+    trigger: context.trigger,
+    attemptNumber: context.attemptNumber,
+    retryAttemptNumber: context.retryAttemptNumber,
+    strippedFunctionCallIds: rectified.strippedFunctionCallIds,
+    strippedFunctionResponseIds: rectified.strippedFunctionResponseIds,
+  }),
+};
+
 // 注册表顺序即检测优先级：effort 冲突的错误文案更具体（reasoning_effort/output_config），
 // 必须先于签名整流器检测，避免被签名整流器的通用 invalid request 兜底吞掉。
 const REACTIVE_ANTHROPIC_RECTIFIERS: readonly ReactiveRectifierDescriptor[] = [
@@ -910,8 +946,12 @@ const REACTIVE_ANTHROPIC_RECTIFIERS: readonly ReactiveRectifierDescriptor[] = [
   thinkingBudgetRectifierDescriptor,
 ];
 
+const REACTIVE_GEMINI_RECTIFIERS: readonly ReactiveRectifierDescriptor[] = [
+  geminiFunctionIdRectifierDescriptor,
+];
+
 function getReactiveRectifierDisplayName(rectifierType: ReactiveRectifierType): string {
-  for (const descriptor of REACTIVE_ANTHROPIC_RECTIFIERS) {
+  for (const descriptor of [...REACTIVE_ANTHROPIC_RECTIFIERS, ...REACTIVE_GEMINI_RECTIFIERS]) {
     if (descriptor.type === rectifierType) {
       return descriptor.displayName;
     }
@@ -919,7 +959,7 @@ function getReactiveRectifierDisplayName(rectifierType: ReactiveRectifierType): 
   return rectifierType;
 }
 
-async function tryApplyReactiveAnthropicRectifier(params: {
+async function tryApplyReactiveRectifier(params: {
   provider: Provider;
   requestSession: ProxySession;
   persistSession: ProxySession;
@@ -938,12 +978,20 @@ async function tryApplyReactiveAnthropicRectifier(params: {
   } = params;
   const isAnthropicProvider =
     provider.providerType === "claude" || provider.providerType === "claude-auth";
+  const isGeminiProvider =
+    provider.providerType === "gemini" || provider.providerType === "gemini-cli";
 
-  if (!isAnthropicProvider) {
+  const registry = isAnthropicProvider
+    ? REACTIVE_ANTHROPIC_RECTIFIERS
+    : isGeminiProvider
+      ? REACTIVE_GEMINI_RECTIFIERS
+      : null;
+
+  if (!registry) {
     return { matched: false };
   }
 
-  for (const descriptor of REACTIVE_ANTHROPIC_RECTIFIERS) {
+  for (const descriptor of registry) {
     const trigger = descriptor.detect(errorMessage);
     if (!trigger) {
       continue;
@@ -1184,6 +1232,7 @@ export class ProxyForwarder {
         thinkingSignatureRetried: false,
         thinkingBudgetRetried: false,
         thinkingEffortConflictRetried: false,
+        geminiFunctionIdRetried: false,
       };
 
       const requestPath = session.requestUrl.pathname;
@@ -1736,7 +1785,7 @@ export class ProxyForwarder {
           }
 
           // 2.5 Reactive rectifier：命中后对同供应商“整流 + 重试一次”
-          const reactiveRectifierResult = await tryApplyReactiveAnthropicRectifier({
+          const reactiveRectifierResult = await tryApplyReactiveRectifier({
             provider: currentProvider,
             requestSession: session,
             persistSession: session,
@@ -4215,7 +4264,7 @@ export class ProxyForwarder {
         return;
       }
 
-      const reactiveRectifierResult = await tryApplyReactiveAnthropicRectifier({
+      const reactiveRectifierResult = await tryApplyReactiveRectifier({
         provider: attempt.provider,
         requestSession: attempt.session,
         persistSession: session,
@@ -4548,6 +4597,7 @@ export class ProxyForwarder {
           thinkingSignatureRetried: false,
           thinkingBudgetRetried: false,
           thinkingEffortConflictRetried: false,
+          geminiFunctionIdRetried: false,
         },
         settled: false,
         thresholdTriggered: false,
