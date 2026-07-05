@@ -64,7 +64,7 @@
       "outputPrice": "Output Price",
       "imagePrice": "Image Price",
       "provider": "Provider",
-      "mode": "Type",
+      "mode": "Mode",
       "cloud": "Cloud"
     },
     "pagination": {

@@ -64,7 +64,7 @@
       "outputPrice": "Цена вывода",
       "imagePrice": "Цена изображения",
       "provider": "Поставщик",
-      "mode": "Тип",
+      "mode": "Режим",
       "cloud": "Облако"
     },
     "pagination": {

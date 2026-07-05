@@ -64,7 +64,7 @@
       "outputPrice": "輸出價格",
       "imagePrice": "圖片價格",
       "provider": "供應商",
-      "mode": "類型",
+      "mode": "模式",
       "cloud": "雲端"
     },
     "pagination": {

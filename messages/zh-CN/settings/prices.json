@@ -64,7 +64,7 @@
       "outputPrice": "输出价格",
       "imagePrice": "图片价格",
       "provider": "供应商",
-      "mode": "类型",
+      "mode": "模式",
       "cloud": "云端"
     },
     "pagination": {

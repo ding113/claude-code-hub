@@ -64,7 +64,7 @@
       "outputPrice": "出力価格",
       "imagePrice": "画像価格",
       "provider": "プロバイダー",
-      "mode": "タイプ",
+      "mode": "モード",
       "cloud": "クラウド"
     },
     "pagination": {
