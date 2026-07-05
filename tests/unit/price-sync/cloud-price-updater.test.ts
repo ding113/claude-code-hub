@@ -208,6 +208,8 @@ describe("syncCloudPriceTableToDatabase", () => {
         total: 1,
       },
     } as any);
+    const { countCloudModelPrices } = await import("@/repository/model-price");
+    vi.mocked(countCloudModelPrices).mockResolvedValue(1);
 
     const { syncCloudPriceTableToDatabase } = await import("@/lib/price-sync/cloud-price-updater");
     const result = await syncCloudPriceTableToDatabase();
@@ -226,6 +228,88 @@ describe("syncCloudPriceTableToDatabase", () => {
     const { upsertCloudPricingCatalog } = await import("@/repository/cloud-pricing-catalog");
     expect(vi.mocked(upsertCloudPricingCatalog)).toHaveBeenCalledWith(
       expect.objectContaining({ version: "test-version", modelCount: 1 })
+    );
+  });
+
+  it("fails without deleting rows when all models convert to empty", async () => {
+    // 唯一模型只有 CNY 报价 -> convertCptVariant 返回 null -> converted.models 为空
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify({
+            schema: "cchp.pricing-table/v1",
+            version: "cny-only",
+            currency: "USD",
+            refreshed_at: "2026-07-01T00:00:00.000Z",
+            providers: { alibaba: { name: "Alibaba" } },
+            models: [
+              {
+                slug: "alibaba/qwen-max-cn",
+                model_name: "qwen-max-cn",
+                vendor: "alibaba",
+                display_name: "Qwen Max CN",
+                model_type: "chat",
+                endpoints: { inbound: ["openai-chat"], outbound: ["openai-chat"] },
+                pricing: [
+                  {
+                    provider: "alibaba-cn",
+                    official: true,
+                    source: "test",
+                    charges: { prompt: { unit: "per_M_tokens", price: "10", currency: "CNY" } },
+                  },
+                ],
+              },
+            ],
+          }),
+      }))
+    );
+
+    const { syncCloudPriceTableToDatabase } = await import("@/lib/price-sync/cloud-price-updater");
+    const result = await syncCloudPriceTableToDatabase();
+
+    expect(result.ok).toBe(false);
+    const { processPriceTableInternal } = await import("@/actions/model-prices");
+    expect(processPriceTableInternal).not.toHaveBeenCalled();
+    const { deleteCloudPricesNotIn } = await import("@/repository/model-price");
+    expect(vi.mocked(deleteCloudPricesNotIn)).not.toHaveBeenCalled();
+  });
+
+  it("records actual non-manual row count in catalog when manual conflicts are skipped", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        text: async () => buildCptJson(),
+      }))
+    );
+
+    const { processPriceTableInternal } = await import("@/actions/model-prices");
+    vi.mocked(processPriceTableInternal).mockResolvedValue({
+      ok: true,
+      data: {
+        added: [],
+        updated: [],
+        unchanged: [],
+        failed: [],
+        total: 1,
+        skippedConflicts: ["m1"],
+      },
+    } as any);
+    // m1 与本地 manual 冲突被跳过,库内非 manual 行数为 0(而非云端全量 1)
+    const { countCloudModelPrices } = await import("@/repository/model-price");
+    vi.mocked(countCloudModelPrices).mockResolvedValue(0);
+
+    const { syncCloudPriceTableToDatabase } = await import("@/lib/price-sync/cloud-price-updater");
+    const result = await syncCloudPriceTableToDatabase();
+
+    expect(result.ok).toBe(true);
+    const { upsertCloudPricingCatalog } = await import("@/repository/cloud-pricing-catalog");
+    expect(vi.mocked(upsertCloudPricingCatalog)).toHaveBeenCalledWith(
+      expect.objectContaining({ modelCount: 0 })
     );
   });
 

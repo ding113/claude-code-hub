@@ -1,6 +1,6 @@
 "use server";
 
-import { sql } from "drizzle-orm";
+import { desc, sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import { cloudPricingCatalog } from "@/drizzle/schema";
 import { logger } from "@/lib/logger";
@@ -44,7 +44,12 @@ export async function upsertCloudPricingCatalog(input: CloudPricingCatalogInput)
 
 export async function getCloudPricingCatalog(): Promise<CloudPricingCatalogRecord | null> {
   try {
-    const [row] = await db.select().from(cloudPricingCatalog).limit(1);
+    // 并发同步竞态下可能残留多行,固定取最新一条保证读取确定性
+    const [row] = await db
+      .select()
+      .from(cloudPricingCatalog)
+      .orderBy(desc(cloudPricingCatalog.id))
+      .limit(1);
     if (!row) return null;
     return {
       version: row.version,

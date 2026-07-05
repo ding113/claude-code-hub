@@ -30,6 +30,11 @@ export async function applyConvertedCloudPriceTable(
   converted: ConvertedCptTable,
   overwriteManual?: string[]
 ): Promise<CloudPriceTableResult<PriceUpdateResult>> {
+  // 转换结果为空时判为失败:落到 deleteCloudPricesNotIn([]) 会清空全部非 manual 行
+  if (Object.keys(converted.models).length === 0) {
+    return { ok: false, error: "云端价格表转换结果为空模型集,跳过同步以避免误删现有价格" };
+  }
+
   try {
     const { processPriceTableInternal } = await import("@/actions/model-prices");
     const jsonContent = JSON.stringify(converted.models);
@@ -56,14 +61,20 @@ export async function applyConvertedCloudPriceTable(
     }
 
     try {
-      const { upsertCloudPricingCatalog } = await import("@/repository/cloud-pricing-catalog");
+      const [{ upsertCloudPricingCatalog }, { countCloudModelPrices }] = await Promise.all([
+        import("@/repository/cloud-pricing-catalog"),
+        import("@/repository/model-price"),
+      ]);
+      // 记录同步后的实际非 manual 行数:manual 冲突跳过/写入失败的模型不落库,
+      // 若直接记云端全量数,版本短路的行数比对会永久失配
+      const cloudRowCount = await countCloudModelPrices();
       await upsertCloudPricingCatalog({
         version: converted.version,
         currency: converted.currency,
         refreshedAt: converted.refreshedAt || null,
         providers: converted.providers,
         vendors: converted.vendors,
-        modelCount: Object.keys(converted.models).length,
+        modelCount: cloudRowCount,
       });
     } catch (error) {
       logger.warn("[PriceSync] Failed to persist cloud pricing catalog", {
