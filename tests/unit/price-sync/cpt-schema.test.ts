@@ -96,7 +96,10 @@ describe("parseCptTable", () => {
 
   it("drops dangerous provider keys", () => {
     const table = validTable();
-    (table.providers as Record<string, unknown>).__proto__ = { name: "evil" };
+    // JSON.parse 才会产生自有 "__proto__" 属性;对象字面量赋值只改原型链,测不到过滤逻辑
+    (table as Record<string, unknown>).providers = JSON.parse(
+      '{"anthropic":{"name":"Anthropic"},"__proto__":{"name":"evil"},"constructor":{"name":"evil"},"prototype":{"name":"evil"}}'
+    );
     const result = parseCptTableValue(table);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
