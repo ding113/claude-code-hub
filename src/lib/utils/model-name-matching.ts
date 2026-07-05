@@ -27,17 +27,14 @@ export function buildModelNameFallbackCandidates(modelName: string): string[] {
   seeds.add(noSuffix);
 
   for (const seed of Array.from(seeds)) {
-    // "org/model":org 为托管商时跳过 org;否则同时保留完整段与最后一段
+    // "org/model":org 为托管商时跳过 org;否则只保留完整段与最后一段
     if (seed.includes("/")) {
       const firstSlash = seed.indexOf("/");
       const org = seed.slice(0, firstSlash);
-      const rest = seed.slice(firstSlash + 1);
       if (isHostPrefix(org)) {
-        seeds.add(rest);
+        seeds.add(seed.slice(firstSlash + 1));
       }
-      const lastSegment = seed.slice(seed.lastIndexOf("/") + 1);
-      seeds.add(lastSegment);
-      seeds.add(rest);
+      seeds.add(seed.slice(seed.lastIndexOf("/") + 1));
     }
   }
 

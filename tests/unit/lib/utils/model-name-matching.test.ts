@@ -43,6 +43,13 @@ describe("buildModelNameFallbackCandidates", () => {
     expect(candidates).toContain("DeepSeek-V3.2");
   });
 
+  it("does not strip non-host org prefixes", () => {
+    // "Pro" 不是托管商,去 org 的中间形态不应成为候选
+    const candidates = buildModelNameFallbackCandidates("Pro/deepseek-ai/DeepSeek-V3.2");
+    expect(candidates).not.toContain("deepseek-ai/DeepSeek-V3.2");
+    expect(candidates).not.toContain("deepseek-ai/deepseek-v3.2");
+  });
+
   it("deduplicates candidates", () => {
     const candidates = buildModelNameFallbackCandidates("openai/gpt-5.5");
     expect(new Set(candidates).size).toBe(candidates.length);
