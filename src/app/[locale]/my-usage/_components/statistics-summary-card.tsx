@@ -1,8 +1,8 @@
 "use client";
 
-import { format } from "date-fns";
+import { formatInTimeZone } from "date-fns-tz";
 import { BarChart3, ChevronLeft, ChevronRight, RefreshCw } from "lucide-react";
-import { useTranslations } from "next-intl";
+import { useTimeZone, useTranslations } from "next-intl";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ModelBreakdownColumn } from "@/components/analytics/model-breakdown-column";
 import { Button } from "@/components/ui/button";
@@ -20,20 +20,28 @@ interface StatisticsSummaryCardProps {
   serverTimeZone?: string;
 }
 
+function getDefaultDateRange(timeZone: string): { startDate: string; endDate: string } {
+  const today = formatInTimeZone(new Date(), timeZone, "yyyy-MM-dd");
+  return { startDate: today, endDate: today };
+}
+
 export function StatisticsSummaryCard({
   className,
   autoRefreshSeconds = 30,
   serverTimeZone,
 }: StatisticsSummaryCardProps) {
   const t = useTranslations("myUsage.stats");
+  const providerTimeZone = useTimeZone() ?? "UTC";
+  const effectiveTimeZone = serverTimeZone ?? providerTimeZone;
   const [stats, setStats] = useState<MyStatsSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [dateRange, setDateRange] = useState<{ startDate?: string; endDate?: string }>(() => {
-    const today = format(new Date(), "yyyy-MM-dd");
-    return { startDate: today, endDate: today };
-  });
+  const [dateRange, setDateRange] = useState<{ startDate?: string; endDate?: string }>(() =>
+    getDefaultDateRange(effectiveTimeZone)
+  );
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const autoDateRangeRef = useRef(true);
+  const previousTimeZoneRef = useRef(effectiveTimeZone);
 
   const loadStats = useCallback(async () => {
     const result = await getMyStatsSummary({
@@ -50,6 +58,13 @@ export function StatisticsSummaryCard({
     setLoading(true);
     loadStats().finally(() => setLoading(false));
   }, [loadStats]);
+
+  useEffect(() => {
+    if (previousTimeZoneRef.current === effectiveTimeZone) return;
+    previousTimeZoneRef.current = effectiveTimeZone;
+    if (!autoDateRangeRef.current) return;
+    setDateRange(getDefaultDateRange(effectiveTimeZone));
+  }, [effectiveTimeZone]);
 
   // Auto-refresh with visibility change handling
   useEffect(() => {
@@ -96,6 +111,7 @@ export function StatisticsSummaryCard({
   }, [loadStats]);
 
   const handleDateRangeChange = useCallback((range: { startDate?: string; endDate?: string }) => {
+    autoDateRangeRef.current = false;
     setDateRange(range);
   }, []);
 

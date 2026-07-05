@@ -38,6 +38,7 @@ import {
 } from "@/repository/leaderboard";
 import type { ProviderType } from "@/types/provider";
 import { getRedisClient } from "./client";
+import { scanPattern } from "./scan-helper";
 
 export type { DateRangeParams, LeaderboardPeriod };
 export type LeaderboardScope =
@@ -95,22 +96,22 @@ function buildCacheKey(
 
   if (period === "custom" && dateRange) {
     // leaderboard:{scope}:custom:2025-01-01_2025-01-15:USD
-    return `leaderboard:${scope}:custom:${dateRange.startDate}_${dateRange.endDate}:${currencyDisplay}${providerTypeSuffix}${includeModelStatsSuffix}${userFilterSuffix}`;
+    return `leaderboard:${scope}:custom:${dateRange.startDate}_${dateRange.endDate}:tz:${timezone}:${currencyDisplay}${providerTypeSuffix}${includeModelStatsSuffix}${userFilterSuffix}`;
   } else if (period === "daily") {
     // leaderboard:{scope}:daily:2025-01-15:USD
     const dateStr = formatInTimeZone(now, timezone, "yyyy-MM-dd");
-    return `leaderboard:${scope}:daily:${dateStr}:${currencyDisplay}${providerTypeSuffix}${includeModelStatsSuffix}${userFilterSuffix}`;
+    return `leaderboard:${scope}:daily:${dateStr}:tz:${timezone}:${currencyDisplay}${providerTypeSuffix}${includeModelStatsSuffix}${userFilterSuffix}`;
   } else if (period === "weekly") {
     // leaderboard:{scope}:weekly:2025-W03:USD (ISO week)
     const weekStr = formatInTimeZone(now, timezone, "yyyy-'W'ww");
-    return `leaderboard:${scope}:weekly:${weekStr}:${currencyDisplay}${providerTypeSuffix}${includeModelStatsSuffix}${userFilterSuffix}`;
+    return `leaderboard:${scope}:weekly:${weekStr}:tz:${timezone}:${currencyDisplay}${providerTypeSuffix}${includeModelStatsSuffix}${userFilterSuffix}`;
   } else if (period === "monthly") {
     // leaderboard:{scope}:monthly:2025-01:USD
     const monthStr = formatInTimeZone(now, timezone, "yyyy-MM");
-    return `leaderboard:${scope}:monthly:${monthStr}:${currencyDisplay}${providerTypeSuffix}${includeModelStatsSuffix}${userFilterSuffix}`;
+    return `leaderboard:${scope}:monthly:${monthStr}:tz:${timezone}:${currencyDisplay}${providerTypeSuffix}${includeModelStatsSuffix}${userFilterSuffix}`;
   } else {
     // allTime: leaderboard:{scope}:allTime:USD (no date component)
-    return `leaderboard:${scope}:allTime:${currencyDisplay}${providerTypeSuffix}${includeModelStatsSuffix}${userFilterSuffix}`;
+    return `leaderboard:${scope}:allTime:tz:${timezone}:${currencyDisplay}${providerTypeSuffix}${includeModelStatsSuffix}${userFilterSuffix}`;
   }
 }
 
@@ -389,5 +390,22 @@ export async function invalidateLeaderboardCache(
     logger.info("[LeaderboardCache] Cache invalidated", { period, scope, cacheKey });
   } catch (error) {
     logger.error("[LeaderboardCache] Failed to invalidate cache", { period, scope, error });
+  }
+}
+
+export async function invalidateAllLeaderboardCaches(): Promise<void> {
+  const redis = getRedisClient();
+  if (!redis) {
+    return;
+  }
+
+  try {
+    const keys = await scanPattern(redis, "leaderboard:*");
+    if (keys.length > 0) {
+      await redis.del(...keys);
+    }
+    logger.info("[LeaderboardCache] All caches invalidated", { deletedCount: keys.length });
+  } catch (error) {
+    logger.error("[LeaderboardCache] Failed to invalidate all caches", { error });
   }
 }

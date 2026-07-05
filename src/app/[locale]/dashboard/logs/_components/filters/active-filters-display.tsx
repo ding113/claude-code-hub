@@ -1,6 +1,7 @@
 "use client";
 
 import { format } from "date-fns";
+import { formatInTimeZone } from "date-fns-tz";
 import { X } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useMemo } from "react";
@@ -15,6 +16,7 @@ interface ActiveFiltersDisplayProps {
   onClearAll: () => void;
   displayNames: FilterDisplayNames;
   isAdmin: boolean;
+  serverTimeZone?: string;
   className?: string;
 }
 
@@ -30,6 +32,7 @@ export function ActiveFiltersDisplay({
   onClearAll,
   displayNames,
   isAdmin,
+  serverTimeZone,
   className,
 }: ActiveFiltersDisplayProps) {
   const t = useTranslations("dashboard.logs.filters");
@@ -81,8 +84,12 @@ export function ActiveFiltersDisplay({
 
     // Date range filter
     if (filters.startTime && filters.endTime) {
-      const startDate = format(new Date(filters.startTime), "MM/dd");
-      const endDate = format(new Date(filters.endTime - 1000), "MM/dd");
+      const startDate = serverTimeZone
+        ? formatInTimeZone(new Date(filters.startTime), serverTimeZone, "MM/dd")
+        : format(new Date(filters.startTime), "MM/dd");
+      const endDate = serverTimeZone
+        ? formatInTimeZone(new Date(filters.endTime - 1000), serverTimeZone, "MM/dd")
+        : format(new Date(filters.endTime - 1000), "MM/dd");
       result.push({
         key: "startTime",
         label: t("dateRange"),
@@ -141,7 +148,7 @@ export function ActiveFiltersDisplay({
     }
 
     return result;
-  }, [filters, displayNames, isAdmin, t]);
+  }, [filters, displayNames, isAdmin, serverTimeZone, t]);
 
   if (activeFilters.length === 0) {
     return null;

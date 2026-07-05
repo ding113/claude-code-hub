@@ -4,6 +4,7 @@ import { and, avg, count, desc, eq, gte, lt, sql, sum } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import { providers, usageLedger } from "@/drizzle/schema";
 import { Decimal, toCostDecimal } from "@/lib/utils/currency";
+import { resolveSystemTimezone } from "@/lib/utils/timezone";
 import { LEDGER_BILLING_CONDITION } from "./_shared/ledger-conditions";
 import { getSystemSettings } from "./system-config";
 
@@ -39,6 +40,26 @@ export interface AdminUserProviderBreakdownItem {
   cacheReadTokens: number;
 }
 
+async function buildSystemTimezoneDateConditions(startDate?: string, endDate?: string) {
+  const timezone = await resolveSystemTimezone();
+  const conditions = [];
+
+  if (startDate) {
+    conditions.push(gte(usageLedger.createdAt, sql`(${startDate}::date AT TIME ZONE ${timezone})`));
+  }
+
+  if (endDate) {
+    conditions.push(
+      lt(
+        usageLedger.createdAt,
+        sql`((${endDate}::date + INTERVAL '1 day') AT TIME ZONE ${timezone})`
+      )
+    );
+  }
+
+  return conditions;
+}
+
 /**
  * Get overview metrics for a specific user within a date range.
  */
@@ -47,15 +68,11 @@ export async function getUserOverviewMetrics(
   startDate?: string,
   endDate?: string
 ): Promise<UserInsightsOverviewMetrics> {
-  const conditions = [LEDGER_BILLING_CONDITION, eq(usageLedger.userId, userId)];
-
-  if (startDate) {
-    conditions.push(gte(usageLedger.createdAt, sql`${startDate}::date`));
-  }
-
-  if (endDate) {
-    conditions.push(lt(usageLedger.createdAt, sql`(${endDate}::date + INTERVAL '1 day')`));
-  }
+  const conditions = [
+    LEDGER_BILLING_CONDITION,
+    eq(usageLedger.userId, userId),
+    ...(await buildSystemTimezoneDateConditions(startDate, endDate)),
+  ];
 
   const [result] = await db
     .select({
@@ -102,15 +119,11 @@ export async function getUserModelBreakdown(
       : sql<string>`COALESCE(${usageLedger.model}, ${usageLedger.originalModel})`;
   const modelField = sql<string>`NULLIF(TRIM(${rawModelField}), '')`;
 
-  const conditions = [LEDGER_BILLING_CONDITION, eq(usageLedger.userId, userId)];
-
-  if (startDate) {
-    conditions.push(gte(usageLedger.createdAt, sql`${startDate}::date`));
-  }
-
-  if (endDate) {
-    conditions.push(lt(usageLedger.createdAt, sql`(${endDate}::date + INTERVAL '1 day')`));
-  }
+  const conditions = [
+    LEDGER_BILLING_CONDITION,
+    eq(usageLedger.userId, userId),
+    ...(await buildSystemTimezoneDateConditions(startDate, endDate)),
+  ];
 
   if (filters?.keyId) {
     conditions.push(
@@ -150,15 +163,11 @@ export async function getUserProviderBreakdown(
   endDate?: string,
   filters?: { keyId?: number; model?: string }
 ): Promise<AdminUserProviderBreakdownItem[]> {
-  const conditions = [LEDGER_BILLING_CONDITION, eq(usageLedger.userId, userId)];
-
-  if (startDate) {
-    conditions.push(gte(usageLedger.createdAt, sql`${startDate}::date`));
-  }
-
-  if (endDate) {
-    conditions.push(lt(usageLedger.createdAt, sql`(${endDate}::date + INTERVAL '1 day')`));
-  }
+  const conditions = [
+    LEDGER_BILLING_CONDITION,
+    eq(usageLedger.userId, userId),
+    ...(await buildSystemTimezoneDateConditions(startDate, endDate)),
+  ];
 
   if (filters?.keyId) {
     conditions.push(
