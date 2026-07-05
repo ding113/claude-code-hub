@@ -340,25 +340,24 @@ export function PriceList({
     [debouncedSearchTerm, fetchPrices, pageSize, updateURL]
   );
 
-  // 云端 vendor 汇总(筛选按钮数据源)
-  useEffect(() => {
-    let cancelled = false;
-    const loadVendors = async () => {
-      try {
-        const response = await fetch("/api/prices/vendors", { cache: "no-store" });
-        const payload = await response.json();
-        if (!cancelled && payload?.ok && Array.isArray(payload.data?.vendors)) {
-          setVendors(payload.data.vendors as CloudVendorSummary[]);
-        }
-      } catch (error) {
-        console.error("获取云端 vendor 列表失败:", error);
+  // 云端 vendor 汇总(筛选按钮数据源);同步/上传后随 price-data-updated 事件刷新
+  const loadVendors = useCallback(async () => {
+    try {
+      const response = await fetch("/api/prices/vendors", { cache: "no-store" });
+      const payload = await response.json();
+      if (payload?.ok && Array.isArray(payload.data?.vendors)) {
+        setVendors(payload.data.vendors as CloudVendorSummary[]);
       }
-    };
-    loadVendors();
-    return () => {
-      cancelled = true;
-    };
+    } catch (error) {
+      console.error("获取云端 vendor 列表失败:", error);
+    }
   }, []);
+
+  useEffect(() => {
+    loadVendors();
+    window.addEventListener("price-data-updated", loadVendors);
+    return () => window.removeEventListener("price-data-updated", loadVendors);
+  }, [loadVendors]);
 
   const quickVendors = vendors.slice(0, QUICK_VENDOR_BUTTON_COUNT);
   const moreVendors = vendors.slice(QUICK_VENDOR_BUTTON_COUNT);
