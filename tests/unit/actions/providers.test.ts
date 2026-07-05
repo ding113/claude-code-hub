@@ -148,7 +148,7 @@ describe("Provider Actions - Async Optimization", () => {
         codexReasoningSummaryPreference: "inherit",
         codexTextVerbosityPreference: "inherit",
         codexParallelToolCallsPreference: "inherit",
-    codexImageGenerationPreference: "inherit",
+        codexImageGenerationPreference: "inherit",
         tpm: null,
         rpm: null,
         rpd: null,

@@ -170,10 +170,7 @@ describe("Codex 供应商级参数覆写", () => {
     const input: Record<string, unknown> = {
       model: "gpt-5.5",
       input: [],
-      tools: [
-        { type: "image_generation" },
-        { type: "function", name: "lookup_weather" },
-      ],
+      tools: [{ type: "image_generation" }, { type: "function", name: "lookup_weather" }],
     };
 
     const output = applyCodexProviderOverrides(provider as any, input);
@@ -213,10 +210,7 @@ describe("Codex 供应商级参数覆写", () => {
     const input: Record<string, unknown> = {
       model: "gpt-5.5",
       input: [],
-      tools: [
-        { type: "image_generation" },
-        { type: "function", name: "lookup_weather" },
-      ],
+      tools: [{ type: "image_generation" }, { type: "function", name: "lookup_weather" }],
       tool_choice: { type: "image_generation" },
     };
 
@@ -254,10 +248,7 @@ describe("Codex 供应商级参数覆写", () => {
     const input: Record<string, unknown> = {
       model: "gpt-5.5",
       input: [],
-      tools: [
-        { type: "image_generation" },
-        { type: "function", name: "lookup_weather" },
-      ],
+      tools: [{ type: "image_generation" }, { type: "function", name: "lookup_weather" }],
       tool_choice: {
         type: "allowed_tools",
         mode: "auto",
@@ -284,10 +275,7 @@ describe("Codex 供应商级参数覆写", () => {
     const input: Record<string, unknown> = {
       model: "gpt-5.5",
       input: [],
-      tools: [
-        { type: "image_generation" },
-        { type: "function", name: "lookup_weather" },
-      ],
+      tools: [{ type: "image_generation" }, { type: "function", name: "lookup_weather" }],
       tool_choice: {
         type: "allowed_tools",
         mode: "auto",

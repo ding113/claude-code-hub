@@ -331,7 +331,9 @@ export function OptionsSection({ subSectionRefs }: OptionsSectionProps) {
                           <SelectContent>
                             {["inherit", "true", "false"].map((val) => (
                               <SelectItem key={val} value={val}>
-                                {t(`sections.routing.codexOverrides.imageGeneration.options.${val}`)}
+                                {t(
+                                  `sections.routing.codexOverrides.imageGeneration.options.${val}`
+                                )}
                               </SelectItem>
                             ))}
                           </SelectContent>

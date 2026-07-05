@@ -111,9 +111,9 @@ export const ProviderSummarySchema = z
       .string()
       .nullable()
       .describe("Codex parallel tool calls preference."),
-    codexImageGenerationPreference: CodexImageGenerationPreferenceSchema
-      .nullable()
-      .describe("Codex image generation tool preference."),
+    codexImageGenerationPreference: CodexImageGenerationPreferenceSchema.nullable().describe(
+      "Codex image generation tool preference."
+    ),
     codexServiceTierPreference: z.string().nullable().describe("Codex service tier preference."),
     anthropicMaxTokensPreference: z
       .string()
@@ -213,8 +213,7 @@ const ProviderBatchUpdateFieldsSchema = z
     limit_daily_usd: z.number().min(0).nullable().optional().describe("Daily USD limit."),
     daily_reset_mode: z.enum(["fixed", "rolling"]).optional().describe("Daily reset mode."),
     daily_reset_time: z.string().optional().describe("Daily reset time."),
-    codex_image_generation_preference: CodexImageGenerationPreferenceSchema
-      .nullable()
+    codex_image_generation_preference: CodexImageGenerationPreferenceSchema.nullable()
       .optional()
       .describe("Codex image generation tool preference."),
     codex_service_tier_preference: z
@@ -485,9 +484,9 @@ export const ProviderCreateSchema = z
       .string()
       .optional()
       .describe("Codex parallel tool calls preference."),
-    codex_image_generation_preference: CodexImageGenerationPreferenceSchema
-      .optional()
-      .describe("Codex image generation tool preference."),
+    codex_image_generation_preference: CodexImageGenerationPreferenceSchema.optional().describe(
+      "Codex image generation tool preference."
+    ),
     codex_service_tier_preference: z.string().optional().describe("Codex service tier preference."),
     anthropic_max_tokens_preference: z
       .string()

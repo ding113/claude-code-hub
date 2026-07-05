@@ -119,7 +119,7 @@ describe("createInitialState - batch mode", () => {
       codexReasoningSummaryPreference: null,
       codexTextVerbosityPreference: null,
       codexParallelToolCallsPreference: null,
-    codexImageGenerationPreference: null,
+      codexImageGenerationPreference: null,
       anthropicMaxTokensPreference: null,
       anthropicThinkingBudgetPreference: null,
       anthropicAdaptiveThinking: null,

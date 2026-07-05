@@ -347,7 +347,7 @@ describe("endpoint family -> provider routing matrix", () => {
       codexReasoningSummaryPreference: null,
       codexTextVerbosityPreference: null,
       codexParallelToolCallsPreference: null,
-    codexImageGenerationPreference: null,
+      codexImageGenerationPreference: null,
       codexServiceTierPreference: null,
       anthropicMaxTokensPreference: null,
       anthropicThinkingBudgetPreference: null,
