@@ -57,12 +57,13 @@ spec:
               value: "20"
             - name: DB_POOL_CONNECT_TIMEOUT
               value: "10"
+            # Fetch 超时单位为毫秒,需与 .env.example 和 env.schema.ts 保持一致。
             - name: FETCH_CONNECT_TIMEOUT
-              value: "30"
-            #- name: FETCH_HEADERS_TIMEOUT
-            #  value: "600"
-            #- name: FETCH_BODY_TIMEOUT
-            #  value: "600"
+              value: "30000"
+            - name: FETCH_HEADERS_TIMEOUT
+              value: "600000"
+            - name: FETCH_BODY_TIMEOUT
+              value: "600000"
             - name: ENABLE_RATE_LIMIT
               value: "true"
             - name: ENABLE_API_KEY_REDIS_CACHE
