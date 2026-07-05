@@ -10,8 +10,9 @@ import type { PaginationParams } from "@/repository/model-price";
  * - page: 页码 (默认: 1)
  * - pageSize: 每页大小 (默认: 50)
  * - search: 搜索关键词 (可选)
- * - source: 价格来源过滤 (可选: manual|litellm)
- * - litellmProvider: 云端提供商过滤 (可选，如 anthropic/openai/vertex_ai-language-models)
+ * - source: 价格来源过滤 (可选: manual|cloud|litellm)
+ * - vendor: 云端 vendor 过滤 (可选，如 anthropic/openai/google)
+ * - litellmProvider: 旧版云端提供商过滤 (可选，仅遗留数据可命中)
  */
 export async function GET(request: NextRequest) {
   try {
@@ -31,6 +32,7 @@ export async function GET(request: NextRequest) {
     );
     const search = searchParams.get("search") || "";
     const source = searchParams.get("source") || "";
+    const vendor = searchParams.get("vendor") || "";
     const litellmProvider = searchParams.get("litellmProvider") || "";
 
     // 参数验证
@@ -42,7 +44,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ ok: false, error: "每页大小必须在1-200之间" }, { status: 400 });
     }
 
-    if (source && source !== "manual" && source !== "litellm") {
+    if (source && source !== "manual" && source !== "cloud" && source !== "litellm") {
       return NextResponse.json({ ok: false, error: "source 参数无效" }, { status: 400 });
     }
 
@@ -52,6 +54,7 @@ export async function GET(request: NextRequest) {
       pageSize,
       search: search || undefined, // 传递搜索关键词给后端
       source: source ? (source as PaginationParams["source"]) : undefined,
+      vendor: vendor || undefined,
       litellmProvider: litellmProvider || undefined,
     };
 

@@ -72,7 +72,7 @@
     },
     "model_price": {
       "bulk_upload": "モデル価格の一括アップロード",
-      "sync_litellm": "LiteLLM モデル価格の同期",
+      "sync_litellm": "クラウド価格表の同期",
       "upsert": "モデル価格更新",
       "delete": "モデル価格削除"
     }

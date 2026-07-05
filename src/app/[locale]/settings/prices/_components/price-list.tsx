@@ -24,6 +24,7 @@ import {
 import { useLocale, useTimeZone, useTranslations } from "next-intl";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import { ModelVendorIcon } from "@/components/customs/model-vendor-icon";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -42,7 +43,7 @@ import {
 } from "@/components/ui/select";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useDebounce } from "@/lib/hooks/use-debounce";
-import { PRICE_FILTER_VENDORS } from "@/lib/model-vendor-icons";
+import type { CloudVendorSummary } from "@/lib/price-sync/cpt-convert";
 import { copyToClipboard } from "@/lib/utils/clipboard";
 import { resolvePricingForModelRecords } from "@/lib/utils/pricing-resolution";
 import type { ModelPrice, ModelPriceSource } from "@/types/model-price";
@@ -58,8 +59,11 @@ interface PriceListProps {
   initialPageSize: number;
   initialSearchTerm: string;
   initialSourceFilter: ModelPriceSource | "";
-  initialLitellmProviderFilter: string;
+  initialVendorFilter: string;
 }
+
+// 快捷筛选按钮最多展示的 vendor 数,其余进入下拉
+const QUICK_VENDOR_BUTTON_COUNT = 12;
 
 /**
  * 价格列表组件（支持分页）
@@ -71,7 +75,7 @@ export function PriceList({
   initialPageSize,
   initialSearchTerm,
   initialSourceFilter,
-  initialLitellmProviderFilter,
+  initialVendorFilter,
 }: PriceListProps) {
   const t = useTranslations("settings.prices");
   const tCommon = useTranslations("common");
@@ -79,7 +83,8 @@ export function PriceList({
   const timeZone = useTimeZone() ?? "UTC";
   const [searchTerm, setSearchTerm] = useState(initialSearchTerm);
   const [sourceFilter, setSourceFilter] = useState<ModelPriceSource | "">(initialSourceFilter);
-  const [litellmProviderFilter, setLitellmProviderFilter] = useState(initialLitellmProviderFilter);
+  const [vendorFilter, setVendorFilter] = useState(initialVendorFilter);
+  const [vendors, setVendors] = useState<CloudVendorSummary[]>([]);
   const [prices, setPrices] = useState<ModelPrice[]>(initialPrices);
   const [total, setTotal] = useState(initialTotal);
   const [page, setPage] = useState(initialPage);
@@ -101,7 +106,7 @@ export function PriceList({
       newPage: number,
       newPageSize: number,
       newSourceFilter: ModelPriceSource | "",
-      newLitellmProviderFilter: string
+      newVendorFilter: string
     ) => {
       const url = new URL(window.location.href);
       if (newSearchTerm) {
@@ -128,11 +133,12 @@ export function PriceList({
         url.searchParams.delete("source");
       }
 
-      if (newLitellmProviderFilter) {
-        url.searchParams.set("litellmProvider", newLitellmProviderFilter);
+      if (newVendorFilter) {
+        url.searchParams.set("vendor", newVendorFilter);
       } else {
-        url.searchParams.delete("litellmProvider");
+        url.searchParams.delete("vendor");
       }
+      url.searchParams.delete("litellmProvider");
       window.history.replaceState({}, "", url.toString());
     },
     []
@@ -145,7 +151,7 @@ export function PriceList({
       newPageSize: number,
       newSearchTerm: string,
       newSourceFilter: ModelPriceSource | "",
-      newLitellmProviderFilter: string
+      newVendorFilter: string
     ) => {
       setIsLoading(true);
       try {
@@ -157,8 +163,8 @@ export function PriceList({
         if (newSourceFilter) {
           url.searchParams.set("source", newSourceFilter);
         }
-        if (newLitellmProviderFilter) {
-          url.searchParams.set("litellmProvider", newLitellmProviderFilter);
+        if (newVendorFilter) {
+          url.searchParams.set("vendor", newVendorFilter);
         }
 
         const response = await fetch(url.toString());
@@ -185,16 +191,16 @@ export function PriceList({
       const forcedPage = pendingRefreshPage.current;
       if (typeof forcedPage === "number") {
         pendingRefreshPage.current = null;
-        fetchPrices(forcedPage, pageSize, debouncedSearchTerm, sourceFilter, litellmProviderFilter);
+        fetchPrices(forcedPage, pageSize, debouncedSearchTerm, sourceFilter, vendorFilter);
         return;
       }
 
-      fetchPrices(page, pageSize, debouncedSearchTerm, sourceFilter, litellmProviderFilter);
+      fetchPrices(page, pageSize, debouncedSearchTerm, sourceFilter, vendorFilter);
     };
 
     window.addEventListener("price-data-updated", handlePriceUpdate);
     return () => window.removeEventListener("price-data-updated", handlePriceUpdate);
-  }, [page, pageSize, debouncedSearchTerm, fetchPrices, sourceFilter, litellmProviderFilter]);
+  }, [page, pageSize, debouncedSearchTerm, fetchPrices, sourceFilter, vendorFilter]);
 
   // 当防抖后的搜索词变化时，触发搜索（重置到第一页）
   useEffect(() => {
@@ -205,9 +211,9 @@ export function PriceList({
 
     const newPage = 1; // 搜索时重置到第一页
     setPage(newPage);
-    updateURL(debouncedSearchTerm, newPage, pageSize, sourceFilter, litellmProviderFilter);
-    fetchPrices(newPage, pageSize, debouncedSearchTerm, sourceFilter, litellmProviderFilter);
-  }, [debouncedSearchTerm, fetchPrices, litellmProviderFilter, pageSize, sourceFilter, updateURL]);
+    updateURL(debouncedSearchTerm, newPage, pageSize, sourceFilter, vendorFilter);
+    fetchPrices(newPage, pageSize, debouncedSearchTerm, sourceFilter, vendorFilter);
+  }, [debouncedSearchTerm, fetchPrices, vendorFilter, pageSize, sourceFilter, updateURL]);
 
   // 搜索输入处理（只更新状态，不触发请求）
   const handleSearchChange = (value: string) => {
@@ -219,16 +225,16 @@ export function PriceList({
     const newPage = Math.max(1, Math.min(page, Math.ceil(total / newPageSize)));
     setPageSize(newPageSize);
     setPage(newPage);
-    updateURL(debouncedSearchTerm, newPage, newPageSize, sourceFilter, litellmProviderFilter);
-    fetchPrices(newPage, newPageSize, debouncedSearchTerm, sourceFilter, litellmProviderFilter);
+    updateURL(debouncedSearchTerm, newPage, newPageSize, sourceFilter, vendorFilter);
+    fetchPrices(newPage, newPageSize, debouncedSearchTerm, sourceFilter, vendorFilter);
   };
 
   // 页面跳转处理
   const handlePageChange = (newPage: number) => {
     if (newPage < 1 || newPage > totalPages) return;
     setPage(newPage);
-    updateURL(debouncedSearchTerm, newPage, pageSize, sourceFilter, litellmProviderFilter);
-    fetchPrices(newPage, pageSize, debouncedSearchTerm, sourceFilter, litellmProviderFilter);
+    updateURL(debouncedSearchTerm, newPage, pageSize, sourceFilter, vendorFilter);
+    fetchPrices(newPage, pageSize, debouncedSearchTerm, sourceFilter, vendorFilter);
   };
 
   // 移除客户端过滤逻辑（现在由后端处理）
@@ -322,17 +328,41 @@ export function PriceList({
   ];
 
   const applyFilters = useCallback(
-    (next: { source: ModelPriceSource | ""; litellmProvider: string }) => {
+    (next: { source: ModelPriceSource | ""; vendor: string }) => {
       setSourceFilter(next.source);
-      setLitellmProviderFilter(next.litellmProvider);
+      setVendorFilter(next.vendor);
 
       const newPage = 1;
       setPage(newPage);
-      updateURL(debouncedSearchTerm, newPage, pageSize, next.source, next.litellmProvider);
-      fetchPrices(newPage, pageSize, debouncedSearchTerm, next.source, next.litellmProvider);
+      updateURL(debouncedSearchTerm, newPage, pageSize, next.source, next.vendor);
+      fetchPrices(newPage, pageSize, debouncedSearchTerm, next.source, next.vendor);
     },
     [debouncedSearchTerm, fetchPrices, pageSize, updateURL]
   );
+
+  // 云端 vendor 汇总(筛选按钮数据源)
+  useEffect(() => {
+    let cancelled = false;
+    const loadVendors = async () => {
+      try {
+        const response = await fetch("/api/prices/vendors", { cache: "no-store" });
+        const payload = await response.json();
+        if (!cancelled && payload?.ok && Array.isArray(payload.data?.vendors)) {
+          setVendors(payload.data.vendors as CloudVendorSummary[]);
+        }
+      } catch (error) {
+        console.error("获取云端 vendor 列表失败:", error);
+      }
+    };
+    loadVendors();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const quickVendors = vendors.slice(0, QUICK_VENDOR_BUTTON_COUNT);
+  const moreVendors = vendors.slice(QUICK_VENDOR_BUTTON_COUNT);
+  const activeVendorInMore = moreVendors.some((item) => item.vendor === vendorFilter);
 
   return (
     <div className="space-y-4">
@@ -340,9 +370,9 @@ export function PriceList({
       <div className="flex flex-wrap items-center gap-2">
         <Button
           type="button"
-          variant={!sourceFilter && !litellmProviderFilter ? "default" : "outline"}
+          variant={!sourceFilter && !vendorFilter ? "default" : "outline"}
           size="sm"
-          onClick={() => applyFilters({ source: "", litellmProvider: "" })}
+          onClick={() => applyFilters({ source: "", vendor: "" })}
         >
           {t("filters.all")}
         </Button>
@@ -354,7 +384,7 @@ export function PriceList({
           onClick={() =>
             applyFilters({
               source: sourceFilter === "manual" ? "" : "manual",
-              litellmProvider: "",
+              vendor: "",
             })
           }
         >
@@ -362,23 +392,65 @@ export function PriceList({
           {t("filters.local")}
         </Button>
 
-        {PRICE_FILTER_VENDORS.map(({ i18nKey, litellmProvider, icon: Icon }) => (
+        {quickVendors.map((item) => (
           <Button
-            key={litellmProvider}
+            key={item.vendor}
             type="button"
-            variant={litellmProviderFilter === litellmProvider ? "default" : "outline"}
+            variant={vendorFilter === item.vendor ? "default" : "outline"}
             size="sm"
             onClick={() =>
               applyFilters({
                 source: "",
-                litellmProvider: litellmProviderFilter === litellmProvider ? "" : litellmProvider,
+                vendor: vendorFilter === item.vendor ? "" : item.vendor,
               })
             }
           >
-            <Icon className="h-4 w-4 mr-2" />
-            {t(`filters.${i18nKey}`)}
+            <ModelVendorIcon
+              modelId={item.vendor}
+              vendor={item.vendor}
+              iconFile={item.icon}
+              iconMono={item.iconMono}
+              className="h-4 w-4 mr-2 shrink-0"
+            />
+            {item.name}
           </Button>
         ))}
+
+        {moreVendors.length > 0 ? (
+          <Select
+            value={activeVendorInMore ? vendorFilter : ""}
+            onValueChange={(value) =>
+              applyFilters({ source: "", vendor: value === "__none__" ? "" : value })
+            }
+          >
+            <SelectTrigger
+              size="sm"
+              className={`w-auto min-w-32 ${activeVendorInMore ? "border-primary" : ""}`}
+            >
+              <SelectValue placeholder={t("filters.moreVendors")} />
+            </SelectTrigger>
+            <SelectContent>
+              {activeVendorInMore ? (
+                <SelectItem value="__none__">{t("filters.all")}</SelectItem>
+              ) : null}
+              {moreVendors.map((item) => (
+                <SelectItem key={item.vendor} value={item.vendor}>
+                  <span className="flex items-center gap-2">
+                    <ModelVendorIcon
+                      modelId={item.vendor}
+                      vendor={item.vendor}
+                      iconFile={item.icon}
+                      iconMono={item.iconMono}
+                      className="h-4 w-4 shrink-0"
+                    />
+                    {item.name}
+                    <span className="text-xs text-muted-foreground">{item.modelCount}</span>
+                  </span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        ) : null}
       </div>
 
       {/* 搜索和页面大小控制 */}
@@ -465,6 +537,21 @@ export function PriceList({
                     ? displayPriceData.selected_pricing_provider
                     : null);
 
+                const vendorSlug =
+                  typeof price.priceData.vendor === "string" ? price.priceData.vendor : null;
+                const isOfficialPricing =
+                  displayPricing?.source === "cloud_official" ||
+                  displayPricing?.pricingNode?.official === true;
+                const pricingProviderCount = price.priceData.pricing
+                  ? Object.keys(price.priceData.pricing).length
+                  : 0;
+                // 带斜杠的模型 ID 分段展示:弱化前缀,突出最后一段
+                const lastSlashIndex = price.modelName.lastIndexOf("/");
+                const modelIdPrefix =
+                  lastSlashIndex >= 0 ? price.modelName.slice(0, lastSlashIndex + 1) : "";
+                const modelIdBase =
+                  lastSlashIndex >= 0 ? price.modelName.slice(lastSlashIndex + 1) : price.modelName;
+
                 return (
                   <tr
                     key={price.id}
@@ -472,23 +559,45 @@ export function PriceList({
                   >
                     <td className="py-3 px-4 text-sm text-foreground whitespace-normal break-words">
                       <div className="flex flex-wrap items-center gap-2">
+                        <ModelVendorIcon
+                          modelId={price.modelName}
+                          vendor={vendorSlug}
+                          iconFile={
+                            typeof price.priceData.vendor_icon === "string"
+                              ? price.priceData.vendor_icon
+                              : null
+                          }
+                          iconMono={price.priceData.vendor_icon_mono === true}
+                          className="h-4 w-4 shrink-0"
+                        />
                         <span className="font-medium">
                           {price.priceData.display_name?.trim() || price.modelName}
                         </span>
-                        {price.priceData.litellm_provider ? (
+                        {vendorSlug ? (
+                          <Badge variant="secondary" className="font-mono text-xs">
+                            {vendorSlug}
+                          </Badge>
+                        ) : price.priceData.litellm_provider ? (
                           <Badge variant="secondary" className="font-mono text-xs">
                             {price.priceData.litellm_provider}
                           </Badge>
                         ) : null}
                         {displayPricingProviderKey &&
+                        displayPricingProviderKey !== vendorSlug &&
                         displayPricingProviderKey !== price.priceData.litellm_provider ? (
                           <Badge variant="outline" className="font-mono text-xs">
                             {displayPricingProviderKey}
                           </Badge>
                         ) : null}
-                        {price.priceData.pricing &&
-                        Object.keys(price.priceData.pricing).length > 1 ? (
-                          <Badge variant="outline">{t("badges.multi")}</Badge>
+                        {isOfficialPricing ? (
+                          <Badge className="border-transparent bg-[#E25706]/15 text-[#E25706]">
+                            {t("badges.official")}
+                          </Badge>
+                        ) : null}
+                        {pricingProviderCount > 1 ? (
+                          <Badge variant="outline">
+                            {t("badges.multiWithCount", { count: pricingProviderCount })}
+                          </Badge>
                         ) : null}
                         {price.source === "manual" && (
                           <Badge variant="outline">{t("badges.local")}</Badge>
@@ -500,10 +609,13 @@ export function PriceList({
                             <button
                               type="button"
                               aria-label={t("table.copyModelId")}
-                              className="font-mono text-xs text-muted-foreground hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                              className="max-w-full break-all text-left font-mono text-xs text-muted-foreground hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                               onClick={() => handleCopyModelId(price.modelName)}
                             >
-                              {price.modelName}
+                              {modelIdPrefix ? (
+                                <span className="text-muted-foreground/60">{modelIdPrefix}</span>
+                              ) : null}
+                              {modelIdBase}
                             </button>
                           </TooltipTrigger>
                           <TooltipContent sideOffset={4}>{t("table.copyModelId")}</TooltipContent>
@@ -679,7 +791,7 @@ export function PriceList({
                                   targetPage,
                                   pageSize,
                                   sourceFilter,
-                                  litellmProviderFilter
+                                  vendorFilter
                                 );
                               }
                             }}

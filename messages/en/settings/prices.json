@@ -9,30 +9,13 @@
   "filters": {
     "all": "All",
     "local": "Local",
-    "anthropic": "Anthropic",
-    "openai": "OpenAI",
-    "vertex": "Vertex",
-    "deepseek": "DeepSeek",
-    "mistral": "Mistral",
-    "meta": "Meta",
-    "cohere": "Cohere",
-    "xai": "xAI",
-    "groq": "Groq",
-    "bedrock": "Bedrock",
-    "azure": "Azure",
-    "together": "Together",
-    "nvidia": "NVIDIA",
-    "zhipuai": "Zhipu",
-    "volcengine": "Volcengine",
-    "minimax": "MiniMax",
-    "qwen": "Qwen",
-    "fireworks": "Fireworks",
-    "ollama": "Ollama",
-    "openrouter": "OpenRouter"
+    "moreVendors": "More vendors"
   },
   "badges": {
     "local": "Local",
-    "multi": "Multi"
+    "multi": "Multi",
+    "official": "Official",
+    "multiWithCount": "{count} sources"
   },
   "capabilities": {
     "assistantPrefill": "Assistant prefill",
@@ -64,25 +47,25 @@
   },
   "conflict": {
     "title": "Select Items to Overwrite",
-    "description": "The following models have manual prices. Check the ones to overwrite with LiteLLM prices, unchecked ones will be kept unchanged",
+    "description": "The following models have manual prices. Check the ones to overwrite with cloud prices, unchecked ones will be kept unchanged",
     "searchPlaceholder": "Search models...",
     "table": {
       "modelName": "Model",
       "manualPrice": "Manual Price",
-      "litellmPrice": "LiteLLM Price",
-      "action": "Action"
+      "action": "Action",
+      "cloudPrice": "Cloud Price"
     },
     "viewDiff": "View Diff",
     "diffTitle": "Price Difference",
     "diff": {
       "field": "Field",
       "manual": "Manual",
-      "litellm": "LiteLLM",
       "inputPrice": "Input Price",
       "outputPrice": "Output Price",
       "imagePrice": "Image Price",
       "provider": "Provider",
-      "mode": "Type"
+      "mode": "Type",
+      "cloud": "Cloud"
     },
     "pagination": {
       "showing": "Showing {from}-{to} of {total}"
@@ -148,7 +131,7 @@
     "updateFailed": "Update failed",
     "systemHasBuiltIn": "System has built-in price table",
     "manualDownload": "You can also manually download",
-    "latestPriceTable": "cloud price table",
+    "latestPriceTable": "cloud price table (models.json)",
     "andUploadViaButton": ", and upload via button above",
     "cloudModelCountLoading": "Loading cloud model count...",
     "cloudModelCountFailed": "Failed to load cloud model count",
@@ -218,7 +201,7 @@
     "fields": {
       "mode": "Mode",
       "displayName": "Display name",
-      "litellmProvider": "LiteLLM provider",
+      "litellmProvider": "LiteLLM provider (legacy)",
       "selectedPricingProvider": "Selected pricing provider",
       "selectedPricingSourceModel": "Selected source model",
       "selectedPricingResolution": "Selected resolution",
@@ -231,7 +214,12 @@
       "inputCostPerRequest": "Input Cost Per Request",
       "outputCostPerImage": "Output Cost Per Image",
       "inputCostPerSecond": "Input Cost Per Second",
-      "fileSearchCostPer1kCalls": "File Search Cost Per 1k Calls"
+      "fileSearchCostPer1kCalls": "File Search Cost Per 1k Calls",
+      "vendor": "Vendor",
+      "slug": "Model slug",
+      "officialPricingProvider": "Official pricing provider",
+      "modelFamily": "Model family",
+      "knowledgeCutoff": "Knowledge cutoff"
     }
   },
   "toast": {
@@ -251,6 +239,7 @@
     "pinSuccess": "Pinned {provider} pricing as local model price",
     "pinFailed": "Failed to pin provider pricing",
     "pinned": "Pinned",
-    "priority": "Fast mode pricing"
+    "priority": "Fast mode pricing",
+    "official": "Official"
   }
 }

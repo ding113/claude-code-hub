@@ -9,30 +9,13 @@
   "filters": {
     "all": "Все",
     "local": "Локальные",
-    "anthropic": "Anthropic",
-    "openai": "OpenAI",
-    "vertex": "Vertex",
-    "deepseek": "DeepSeek",
-    "mistral": "Mistral",
-    "meta": "Meta",
-    "cohere": "Cohere",
-    "xai": "xAI",
-    "groq": "Groq",
-    "bedrock": "Bedrock",
-    "azure": "Azure",
-    "together": "Together",
-    "nvidia": "NVIDIA",
-    "zhipuai": "Zhipu",
-    "volcengine": "Volcengine",
-    "minimax": "MiniMax",
-    "qwen": "Qwen",
-    "fireworks": "Fireworks",
-    "ollama": "Ollama",
-    "openrouter": "OpenRouter"
+    "moreVendors": "Больше вендоров"
   },
   "badges": {
     "local": "Локальная",
-    "multi": "Мульти"
+    "multi": "Мульти",
+    "official": "Официальная цена",
+    "multiWithCount": "{count} источников"
   },
   "capabilities": {
     "assistantPrefill": "Предзаполнение ассистента",
@@ -64,25 +47,25 @@
   },
   "conflict": {
     "title": "Выберите элементы для перезаписи",
-    "description": "Следующие модели имеют ручные цены. Отмеченные будут перезаписаны ценами LiteLLM, неотмеченные останутся без изменений",
+    "description": "Для следующих моделей заданы ручные цены. Отметьте те, которые нужно перезаписать облачными ценами; неотмеченные останутся без изменений",
     "searchPlaceholder": "Поиск моделей...",
     "table": {
       "modelName": "Модель",
       "manualPrice": "Ручная цена",
-      "litellmPrice": "Цена LiteLLM",
-      "action": "Действие"
+      "action": "Действие",
+      "cloudPrice": "Облачная цена"
     },
     "viewDiff": "Показать различия",
     "diffTitle": "Различия цен",
     "diff": {
       "field": "Поле",
       "manual": "Ручное",
-      "litellm": "LiteLLM",
       "inputPrice": "Цена ввода",
       "outputPrice": "Цена вывода",
       "imagePrice": "Цена изображения",
       "provider": "Поставщик",
-      "mode": "Тип"
+      "mode": "Тип",
+      "cloud": "Облако"
     },
     "pagination": {
       "showing": "Показано {from}-{to} из {total}"
@@ -148,7 +131,7 @@
     "updateFailed": "Ошибка обновления",
     "systemHasBuiltIn": "Система имеет встроенный прайс-лист",
     "manualDownload": "Вы также можете скачать вручную",
-    "latestPriceTable": "облачный прайс-лист",
+    "latestPriceTable": "облачную таблицу цен (models.json)",
     "andUploadViaButton": ", и загрузить через кнопку выше",
     "cloudModelCountLoading": "Загрузка количества моделей из облака...",
     "cloudModelCountFailed": "Не удалось загрузить количество моделей из облака",
@@ -218,7 +201,7 @@
     "fields": {
       "mode": "Режим",
       "displayName": "Отображаемое имя",
-      "litellmProvider": "Провайдер LiteLLM",
+      "litellmProvider": "Провайдер LiteLLM (устар.)",
       "selectedPricingProvider": "Выбранный провайдер цены",
       "selectedPricingSourceModel": "Выбранная исходная модель",
       "selectedPricingResolution": "Способ разрешения",
@@ -231,7 +214,12 @@
       "inputCostPerRequest": "Цена за запрос",
       "outputCostPerImage": "Цена за изображение",
       "inputCostPerSecond": "Цена за секунду ввода",
-      "fileSearchCostPer1kCalls": "Цена файлового поиска за 1k вызовов"
+      "fileSearchCostPer1kCalls": "Цена файлового поиска за 1k вызовов",
+      "vendor": "Вендор",
+      "slug": "Идентификатор модели",
+      "officialPricingProvider": "Официальный поставщик цен",
+      "modelFamily": "Семейство моделей",
+      "knowledgeCutoff": "Дата знаний"
     }
   },
   "toast": {
@@ -251,6 +239,7 @@
     "pinSuccess": "Цена {provider} закреплена как локальная цена модели",
     "pinFailed": "Не удалось закрепить цену провайдера",
     "pinned": "Закреплено",
-    "priority": "Цена быстрого режима"
+    "priority": "Цена быстрого режима",
+    "official": "Официальный"
   }
 }

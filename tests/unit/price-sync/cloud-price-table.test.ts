@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
-  fetchCloudPriceTableToml,
+  fetchCloudPriceTableJson,
   parseCloudPriceTableToml,
 } from "@/lib/price-sync/cloud-price-table";
 
@@ -130,7 +130,7 @@ describe("parseCloudPriceTableToml", () => {
   });
 });
 
-describe("fetchCloudPriceTableToml", () => {
+describe("fetchCloudPriceTableJson", () => {
   afterEach(() => {
     vi.useRealTimers();
     vi.unstubAllGlobals();
@@ -142,11 +142,11 @@ describe("fetchCloudPriceTableToml", () => {
       vi.fn(async () => ({
         ok: true,
         status: 200,
-        text: async () => "toml content",
+        text: async () => '{"schema":"x"}',
       }))
     );
 
-    const result = await fetchCloudPriceTableToml("https://example.test/prices.toml");
+    const result = await fetchCloudPriceTableJson("https://example.test/models.json");
     expect(result.ok).toBe(true);
   });
 
@@ -160,7 +160,7 @@ describe("fetchCloudPriceTableToml", () => {
       }))
     );
 
-    const result = await fetchCloudPriceTableToml("https://example.test/prices.toml");
+    const result = await fetchCloudPriceTableJson("https://example.test/models.json");
     expect(result.ok).toBe(false);
   });
 
@@ -170,12 +170,12 @@ describe("fetchCloudPriceTableToml", () => {
       vi.fn(async () => ({
         ok: true,
         status: 200,
-        url: "https://evil.test/prices.toml",
-        text: async () => "toml content",
+        url: "https://evil.test/models.json",
+        text: async () => '{"schema":"x"}',
       }))
     );
 
-    const result = await fetchCloudPriceTableToml("https://example.test/prices.toml");
+    const result = await fetchCloudPriceTableJson("https://example.test/models.json");
     expect(result.ok).toBe(false);
   });
 
@@ -185,12 +185,12 @@ describe("fetchCloudPriceTableToml", () => {
       vi.fn(async () => ({
         ok: true,
         status: 200,
-        url: "https://example.test/evil.toml",
-        text: async () => "toml content",
+        url: "https://example.test/evil.json",
+        text: async () => '{"schema":"x"}',
       }))
     );
 
-    const result = await fetchCloudPriceTableToml("https://example.test/prices.toml");
+    const result = await fetchCloudPriceTableJson("https://example.test/models.json");
     expect(result.ok).toBe(false);
   });
 
@@ -202,7 +202,7 @@ describe("fetchCloudPriceTableToml", () => {
       })
     );
 
-    const result = await fetchCloudPriceTableToml("not-a-url");
+    const result = await fetchCloudPriceTableJson("not-a-url");
     expect(result.ok).toBe(false);
   });
 
@@ -216,7 +216,7 @@ describe("fetchCloudPriceTableToml", () => {
       }))
     );
 
-    const result = await fetchCloudPriceTableToml("https://example.test/prices.toml");
+    const result = await fetchCloudPriceTableJson("https://example.test/models.json");
     expect(result.ok).toBe(false);
   });
 
@@ -235,8 +235,8 @@ describe("fetchCloudPriceTableToml", () => {
       )
     );
 
-    const promise = fetchCloudPriceTableToml("https://example.test/prices.toml");
-    await vi.advanceTimersByTimeAsync(10000);
+    const promise = fetchCloudPriceTableJson("https://example.test/models.json");
+    await vi.advanceTimersByTimeAsync(30000);
 
     const result = await promise;
     expect(result.ok).toBe(false);
@@ -250,7 +250,7 @@ describe("fetchCloudPriceTableToml", () => {
       })
     );
 
-    const result = await fetchCloudPriceTableToml("https://example.test/prices.toml");
+    const result = await fetchCloudPriceTableJson("https://example.test/models.json");
     expect(result.ok).toBe(false);
   });
 });

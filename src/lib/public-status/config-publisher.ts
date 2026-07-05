@@ -102,9 +102,11 @@ export async function publishCurrentPublicStatusConfigProjection(input: {
           vendorIconKey: resolvePublicStatusVendorIconKey({
             modelName,
             vendorIconKey:
-              typeof price?.priceData.litellm_provider === "string"
-                ? price.priceData.litellm_provider
-                : undefined,
+              typeof price?.priceData.vendor === "string"
+                ? price.priceData.vendor
+                : typeof price?.priceData.litellm_provider === "string"
+                  ? price.priceData.litellm_provider
+                  : undefined,
             providerTypeOverride: model.providerTypeOverride,
           }),
           requestTypeBadge: resolveRequestTypeBadge(modelName, model.providerTypeOverride),
@@ -135,9 +137,11 @@ export async function publishCurrentPublicStatusConfigProjection(input: {
           vendorIconKey: resolvePublicStatusVendorIconKey({
             modelName,
             vendorIconKey:
-              typeof price?.priceData.litellm_provider === "string"
-                ? price.priceData.litellm_provider
-                : undefined,
+              typeof price?.priceData.vendor === "string"
+                ? price.priceData.vendor
+                : typeof price?.priceData.litellm_provider === "string"
+                  ? price.priceData.litellm_provider
+                  : undefined,
             providerTypeOverride: model.providerTypeOverride,
           }),
           requestTypeBadge: resolveRequestTypeBadge(modelName, model.providerTypeOverride),

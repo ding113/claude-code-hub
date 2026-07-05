@@ -249,7 +249,7 @@ export function UploadPriceDialog({
                   • {t("dialog.manualDownload")}{" "}
                   <a
                     className="text-blue-500 underline"
-                    href="https://claude-code-hub.app/config/prices-base.toml"
+                    href="https://cch-plus.com/pricing/v1/models.json"
                     target="_blank"
                     rel="noopener noreferrer"
                   >

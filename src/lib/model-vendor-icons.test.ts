@@ -1,171 +1,82 @@
-import { describe, expect, it, vi } from "vitest";
-import { getModelVendor, PRICE_FILTER_VENDORS } from "./model-vendor-icons";
+import { describe, expect, it } from "vitest";
+import { getModelVendor, getVendorEntry, getVendorIconComponent } from "./model-vendor-icons";
 
 describe("getModelVendor", () => {
-  const cases: Array<{ modelId: string; expectedKey: string | null }> = [
-    // Anthropic
-    { modelId: "claude-sonnet-4-5-20250929", expectedKey: "anthropic" },
-    { modelId: "claude-3-opus-20240229", expectedKey: "anthropic" },
-    // OpenAI - gpt prefix
-    { modelId: "gpt-4o-mini", expectedKey: "openai" },
-    { modelId: "gpt-5.5", expectedKey: "openai" },
-    // OpenAI - chatgpt prefix
-    { modelId: "chatgpt-4o-latest", expectedKey: "openai" },
-    // OpenAI - o1/o3/o4 prefix
-    { modelId: "o1-preview", expectedKey: "openai" },
-    { modelId: "o3-mini", expectedKey: "openai" },
-    { modelId: "o4-mini", expectedKey: "openai" },
-    // Gemini
-    { modelId: "gemini-2.5-pro", expectedKey: "vertex" },
-    // DeepSeek
-    { modelId: "deepseek-chat", expectedKey: "deepseek" },
-    { modelId: "deepseek-reasoner", expectedKey: "deepseek" },
-    // Mistral family
-    { modelId: "mistral-large-latest", expectedKey: "mistral" },
-    { modelId: "mixtral-8x7b-instruct", expectedKey: "mistral" },
-    { modelId: "codestral-latest", expectedKey: "mistral" },
-    { modelId: "pixtral-large", expectedKey: "mistral" },
-    // Meta
-    { modelId: "llama-3.1-70b", expectedKey: "meta" },
-    // Qwen
-    { modelId: "qwen-turbo-latest", expectedKey: "qwen" },
-    // Cohere
-    { modelId: "command-r-plus", expectedKey: "cohere" },
-    // Grok (xAI)
-    { modelId: "grok-2", expectedKey: "xai" },
-    // Perplexity
-    { modelId: "pplx-70b-online", expectedKey: "perplexity" },
-    { modelId: "sonar-pro", expectedKey: "perplexity" },
-    // Doubao / Volcengine
-    { modelId: "doubao-pro-32k", expectedKey: "volcengine" },
-    { modelId: "seed-1.6-thinking", expectedKey: "volcengine" },
-    // Zhipu
-    { modelId: "chatglm-4", expectedKey: "zhipuai" },
-    { modelId: "glm-4-plus", expectedKey: "zhipuai" },
-    // Minimax
-    { modelId: "minimax-pro", expectedKey: "minimax" },
-    { modelId: "abab-6.5", expectedKey: "minimax" },
-    // Kimi
-    { modelId: "kimi-k1.5", expectedKey: "kimi" },
-    // Moonshot
-    { modelId: "moonshot-v1-8k", expectedKey: "moonshot" },
-    // Yi
-    { modelId: "yi-lightning", expectedKey: "yi" },
-    // Stepfun
-    { modelId: "step-2-16k", expectedKey: "stepfun" },
-    // Baichuan
-    { modelId: "baichuan-4", expectedKey: "baichuan" },
-    // SenseNova
-    { modelId: "sensenova-5.5", expectedKey: "sensenova" },
-    // Spark
-    { modelId: "spark-4.0-ultra", expectedKey: "spark" },
-    // Hunyuan
-    { modelId: "hunyuan-pro", expectedKey: "hunyuan" },
-    // Wenxin / Ernie
-    { modelId: "wenxin-4", expectedKey: "wenxin" },
-    { modelId: "ernie-4.0-8k", expectedKey: "wenxin" },
-    // Gemma
-    { modelId: "gemma-2-27b", expectedKey: "gemma" },
-    // Nvidia
-    { modelId: "nvidia-nemotron-4-340b", expectedKey: "nvidia" },
-    // InternLM
-    { modelId: "internlm2-20b", expectedKey: "internlm" },
+  const cases: Array<{ modelId: string; expectedVendor: string | null }> = [
+    { modelId: "claude-sonnet-4-5-20250929", expectedVendor: "anthropic" },
+    { modelId: "gpt-4o-mini", expectedVendor: "openai" },
+    { modelId: "chatgpt-4o-latest", expectedVendor: "openai" },
+    { modelId: "o1-preview", expectedVendor: "openai" },
+    { modelId: "gemini-2.5-pro", expectedVendor: "google" },
+    { modelId: "deepseek-chat", expectedVendor: "deepseek" },
+    { modelId: "mistral-large-latest", expectedVendor: "mistral" },
+    { modelId: "mixtral-8x7b-instruct", expectedVendor: "mistral" },
+    { modelId: "llama-3.1-70b", expectedVendor: "meta" },
+    { modelId: "qwen-turbo-latest", expectedVendor: "alibaba" },
+    { modelId: "command-r-plus", expectedVendor: "cohere" },
+    { modelId: "grok-2", expectedVendor: "xai" },
+    { modelId: "sonar-pro", expectedVendor: "perplexity" },
+    { modelId: "doubao-pro-32k", expectedVendor: "bytedance" },
+    { modelId: "glm-4-plus", expectedVendor: "zhipuai" },
+    { modelId: "kimi-k2", expectedVendor: "moonshotai" },
+    { modelId: "yi-lightning", expectedVendor: "01-ai" },
+    { modelId: "hunyuan-pro", expectedVendor: "tencent" },
+    { modelId: "ernie-4.0-8k", expectedVendor: "baidu" },
+    { modelId: "spark-max-32k", expectedVendor: "iflytek" },
+    { modelId: "anthropic/claude-sonnet-4-5", expectedVendor: "anthropic" },
+    { modelId: "openrouter/deepseek/deepseek-chat", expectedVendor: "deepseek" },
+    { modelId: "unknown-model-xyz", expectedVendor: null },
+    { modelId: "", expectedVendor: null },
   ];
 
-  it.each(cases)("matches '$modelId' -> $expectedKey", ({ modelId, expectedKey }) => {
+  it.each(cases)("matches '$modelId' -> $expectedVendor", ({ modelId, expectedVendor }) => {
     const result = getModelVendor(modelId);
-    if (expectedKey === null) {
+    if (expectedVendor === null) {
       expect(result).toBeNull();
     } else {
       expect(result).not.toBeNull();
-      expect(result!.i18nKey).toBe(expectedKey);
+      expect(result?.vendor).toBe(expectedVendor);
+      expect(result?.displayName.length).toBeGreaterThan(0);
     }
   });
 
-  it("is case-insensitive", () => {
-    expect(getModelVendor("Claude-Sonnet-4-5")?.i18nKey).toBe("anthropic");
-    expect(getModelVendor("GPT-4o")?.i18nKey).toBe("openai");
-    expect(getModelVendor("DEEPSEEK-CHAT")?.i18nKey).toBe("deepseek");
-  });
-
-  it("returns null for unknown models", () => {
-    expect(getModelVendor("unknown-model")).toBeNull();
-    expect(getModelVendor("custom-model-v2")).toBeNull();
-    expect(getModelVendor("some-random-thing")).toBeNull();
-  });
-
-  it("returns null for empty string", () => {
-    expect(getModelVendor("")).toBeNull();
-  });
-
-  it("resolves chatglm before glm (longest prefix wins)", () => {
-    const chatglm = getModelVendor("chatglm-4");
-    const glm = getModelVendor("glm-4-plus");
-    expect(chatglm?.prefix).toBe("chatglm");
-    expect(glm?.prefix).toBe("glm");
-    // Both map to zhipuai
-    expect(chatglm?.i18nKey).toBe("zhipuai");
-    expect(glm?.i18nKey).toBe("zhipuai");
-  });
-
-  it("resolves grok vs gpt correctly", () => {
-    expect(getModelVendor("grok-2")?.i18nKey).toBe("xai");
-    expect(getModelVendor("gpt-4o")?.i18nKey).toBe("openai");
-  });
-
-  it("exact prefix match works", () => {
-    // Model ID equals exactly the prefix
-    expect(getModelVendor("gpt")?.i18nKey).toBe("openai");
-    expect(getModelVendor("o1")?.i18nKey).toBe("openai");
-    expect(getModelVendor("yi")?.i18nKey).toBe("yi");
-  });
-
-  it("warns in development when a vendor rule has no registered icon", async () => {
-    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
-
-    vi.resetModules();
-    vi.doMock("@/lib/model-vendor-rules", () => ({
-      getModelVendor: () => ({
-        prefix: "missing",
-        hasColor: false,
-        i18nKey: "missing-vendor",
-      }),
-    }));
-    vi.stubEnv("NODE_ENV", "development");
-
-    try {
-      const { getModelVendor: getMockedModelVendor } = await import("./model-vendor-icons");
-      const result = getMockedModelVendor("missing-model");
-
-      expect(result?.i18nKey).toBe("missing-vendor");
-      expect(warnSpy).toHaveBeenCalledWith(
-        '[model-vendor-icons] No icon registered for i18nKey "missing-vendor"'
-      );
-    } finally {
-      vi.unstubAllEnvs();
-      warnSpy.mockRestore();
-      vi.doUnmock("@/lib/model-vendor-rules");
-      vi.resetModules();
+  it("provides a bundled icon component for major vendors", () => {
+    for (const modelId of ["claude-3", "gpt-4o", "gemini-2.5-pro", "deepseek-chat"]) {
+      expect(getModelVendor(modelId)?.icon).toBeTruthy();
     }
+  });
+
+  it("provides icon files aligned with the cloud icon map", () => {
+    expect(getModelVendor("claude-3")?.iconFile?.file).toBe("anthropic.svg");
+    expect(getModelVendor("claude-3")?.iconFile?.mono).toBe(true);
+    expect(getModelVendor("deepseek-chat")?.iconFile?.file).toBe("deepseek-color.svg");
   });
 });
 
-describe("PRICE_FILTER_VENDORS", () => {
-  it("has unique litellmProvider values", () => {
-    const providers = PRICE_FILTER_VENDORS.map((v) => v.litellmProvider);
-    expect(new Set(providers).size).toBe(providers.length);
+describe("getVendorIconComponent", () => {
+  it("resolves exact vendor slugs", () => {
+    expect(getVendorIconComponent("anthropic")).toBeTruthy();
+    expect(getVendorIconComponent("openai")).toBeTruthy();
+    expect(getVendorIconComponent("amazon-bedrock")).toBeTruthy();
   });
 
-  it("has unique i18nKey values", () => {
-    const keys = PRICE_FILTER_VENDORS.map((v) => v.i18nKey);
-    expect(new Set(keys).size).toBe(keys.length);
+  it("falls back by longest dash-prefix family", () => {
+    // alibaba-coding-plan-cn -> alibaba
+    expect(getVendorIconComponent("alibaba-coding-plan-cn")).toBe(
+      getVendorIconComponent("alibaba")
+    );
   });
 
-  it("includes core vendors", () => {
-    const keys = PRICE_FILTER_VENDORS.map((v) => v.i18nKey);
-    expect(keys).toContain("anthropic");
-    expect(keys).toContain("openai");
-    expect(keys).toContain("vertex");
-    expect(keys).toContain("deepseek");
+  it("returns null for unknown slugs", () => {
+    expect(getVendorIconComponent("definitely-unknown-vendor")).toBeNull();
+    expect(getVendorIconComponent("")).toBeNull();
+  });
+});
+
+describe("getVendorEntry", () => {
+  it("keeps vendor slug and display name for unregistered vendors", () => {
+    const entry = getVendorEntry("reka");
+    expect(entry.vendor).toBe("reka");
+    expect(entry.displayName).toBe("Reka");
   });
 });
