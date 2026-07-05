@@ -631,8 +631,8 @@ export const modelPrices = pgTable('model_prices', {
   id: serial('id').primaryKey(),
   modelName: varchar('model_name').notNull(),
   priceData: jsonb('price_data').notNull(),
-  // 价格来源: 'litellm' = 从 LiteLLM 同步, 'manual' = 手动添加
-  source: varchar('source', { length: 20 }).notNull().default('litellm').$type<'litellm' | 'manual'>(),
+  // 价格来源: 'cloud' = 云端价格表同步, 'manual' = 手动添加, 'litellm' = 旧版云端同步遗留值
+  source: varchar('source', { length: 20 }).notNull().default('cloud').$type<'cloud' | 'litellm' | 'manual'>(),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
 }, (table) => ({
@@ -643,7 +643,34 @@ export const modelPrices = pgTable('model_prices', {
   modelPricesCreatedAtIdx: index('idx_model_prices_created_at').on(table.createdAt.desc()),
   // 按来源过滤的索引
   modelPricesSourceIdx: index('idx_model_prices_source').on(table.source),
+  // 云端价格表 vendor 筛选（price_data->>'vendor'）
+  modelPricesVendorIdx: index('idx_model_prices_vendor').using(
+    'btree',
+    sql`((${table.priceData} ->> 'vendor'))`
+  ),
+  // 别名回退查询（price_data->'aliases' ? name）
+  modelPricesAliasesIdx: index('idx_model_prices_aliases').using(
+    'gin',
+    sql`((${table.priceData} -> 'aliases'))`
+  ),
 }));
+
+// 云端价格表目录元数据（providers 字典 / vendor 汇总 / 版本指纹），单行 upsert
+export const cloudPricingCatalog = pgTable('cloud_pricing_catalog', {
+  id: serial('id').primaryKey(),
+  // 内容指纹（版本变化才有实质更新）
+  version: varchar('version', { length: 64 }).notNull(),
+  currency: varchar('currency', { length: 16 }).notNull().default('USD'),
+  // 云端快照刷新时间（表内 refreshed_at）
+  refreshedAt: timestamp('refreshed_at', { withTimezone: true }),
+  // provider slug -> { name, doc, icon, icon_mono }
+  providers: jsonb('providers').notNull(),
+  // vendor 汇总: [{ vendor, name, icon, iconMono, modelCount }]
+  vendors: jsonb('vendors').notNull(),
+  // 本次同步写入的云端模型数（用于一致性校验）
+  modelCount: integer('model_count').notNull().default(0),
+  syncedAt: timestamp('synced_at', { withTimezone: true }).defaultNow(),
+});
 
 // Error Rules table
 export const errorRules = pgTable('error_rules', {

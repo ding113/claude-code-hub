@@ -18,7 +18,7 @@ type SettingsPricesSearchParams = {
   size?: string;
   search?: string;
   source?: string;
-  litellmProvider?: string;
+  vendor?: string;
 };
 
 interface SettingsPricesPageProps {
@@ -64,8 +64,10 @@ async function SettingsPricesContent({
   const pageSize = parseInt(params.pageSize || params.size || "50", 10);
   const search = params.search?.trim() || undefined;
   const source =
-    params.source === "manual" || params.source === "litellm" ? params.source : undefined;
-  const litellmProvider = params.litellmProvider?.trim() || undefined;
+    params.source === "manual" || params.source === "cloud" || params.source === "litellm"
+      ? params.source
+      : undefined;
+  const vendor = params.vendor?.trim() || undefined;
 
   // 获取分页数据（搜索与过滤在 SQL 层面执行）
   const pricesResult = await getModelPricesPaginated({
@@ -73,7 +75,7 @@ async function SettingsPricesContent({
     pageSize,
     search,
     source,
-    litellmProvider,
+    vendor,
   });
   const isRequired = params.required === "true";
 
@@ -121,7 +123,7 @@ async function SettingsPricesContent({
         initialPageSize={initialPageSize}
         initialSearchTerm={search ?? ""}
         initialSourceFilter={source ?? ""}
-        initialLitellmProviderFilter={litellmProvider ?? ""}
+        initialVendorFilter={vendor ?? ""}
       />
     </Section>
   );

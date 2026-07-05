@@ -9,30 +9,13 @@
   "filters": {
     "all": "所有",
     "local": "本機",
-    "anthropic": "Anthropic",
-    "openai": "OpenAI",
-    "vertex": "Vertex",
-    "deepseek": "DeepSeek",
-    "mistral": "Mistral",
-    "meta": "Meta",
-    "cohere": "Cohere",
-    "xai": "xAI",
-    "groq": "Groq",
-    "bedrock": "Bedrock",
-    "azure": "Azure",
-    "together": "Together",
-    "nvidia": "NVIDIA",
-    "zhipuai": "智譜",
-    "volcengine": "火山引擎",
-    "minimax": "MiniMax",
-    "qwen": "Qwen",
-    "fireworks": "Fireworks",
-    "ollama": "Ollama",
-    "openrouter": "OpenRouter"
+    "moreVendors": "更多廠商"
   },
   "badges": {
     "local": "本機",
-    "multi": "多供應商"
+    "multi": "多供應商",
+    "official": "官方價",
+    "multiWithCount": "{count} 個來源"
   },
   "capabilities": {
     "assistantPrefill": "助手預填充",
@@ -64,25 +47,25 @@
   },
   "conflict": {
     "title": "選擇要覆蓋的衝突項",
-    "description": "以下模型存在手動維護的價格，勾選後將用 LiteLLM 價格覆蓋，未勾選的保持本地不變",
+    "description": "以下模型存在手動維護的價格。勾選需要用雲端價格覆蓋的模型，未勾選的將保持不變",
     "searchPlaceholder": "搜尋模型...",
     "table": {
       "modelName": "模型名稱",
       "manualPrice": "手動價格",
-      "litellmPrice": "LiteLLM 價格",
-      "action": "動作"
+      "action": "動作",
+      "cloudPrice": "雲端價格"
     },
     "viewDiff": "查看差異",
     "diffTitle": "價格差異對比",
     "diff": {
       "field": "欄位",
       "manual": "手動",
-      "litellm": "LiteLLM",
       "inputPrice": "輸入價格",
       "outputPrice": "輸出價格",
       "imagePrice": "圖片價格",
       "provider": "供應商",
-      "mode": "類型"
+      "mode": "模式",
+      "cloud": "雲端"
     },
     "pagination": {
       "showing": "顯示 {from}-{to} 條，共 {total} 條"
@@ -148,7 +131,7 @@
     "updateFailed": "更新失敗",
     "systemHasBuiltIn": "系統已內置價格表",
     "manualDownload": "你也可以手動下載",
-    "latestPriceTable": "雲端價格表",
+    "latestPriceTable": "雲端價格表（models.json）",
     "andUploadViaButton": "，並透過上方按鈕上傳",
     "cloudModelCountLoading": "雲端模型數量載入中...",
     "cloudModelCountFailed": "雲端模型數量載入失敗",
@@ -218,7 +201,7 @@
     "fields": {
       "mode": "模式",
       "displayName": "顯示名稱",
-      "litellmProvider": "LiteLLM 供應商",
+      "litellmProvider": "LiteLLM 供應商（舊版）",
       "selectedPricingProvider": "選定價格提供方",
       "selectedPricingSourceModel": "選定來源模型",
       "selectedPricingResolution": "選定解析方式",
@@ -231,7 +214,12 @@
       "inputCostPerRequest": "按次輸入價格",
       "outputCostPerImage": "按圖輸出價格",
       "inputCostPerSecond": "按秒輸入價格",
-      "fileSearchCostPer1kCalls": "每千次檔案檢索價格"
+      "fileSearchCostPer1kCalls": "每千次檔案檢索價格",
+      "vendor": "廠商",
+      "slug": "模型標識",
+      "officialPricingProvider": "官方價格提供方",
+      "modelFamily": "模型系列",
+      "knowledgeCutoff": "知識截止"
     }
   },
   "toast": {
@@ -251,6 +239,7 @@
     "pinSuccess": "已將 {provider} 價格固化為本地模型價格",
     "pinFailed": "固化供應商價格失敗",
     "pinned": "已固化",
-    "priority": "快速模式價格"
+    "priority": "快速模式價格",
+    "official": "官方"
   }
 }

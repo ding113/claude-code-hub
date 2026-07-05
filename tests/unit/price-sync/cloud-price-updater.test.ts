@@ -41,6 +41,52 @@ vi.mock("@/actions/model-prices", () => ({
   })),
 }));
 
+vi.mock("@/repository/model-price", () => ({
+  deleteCloudPricesNotIn: vi.fn(async () => 0),
+  countCloudModelPrices: vi.fn(async () => 0),
+}));
+
+vi.mock("@/repository/cloud-pricing-catalog", () => ({
+  upsertCloudPricingCatalog: vi.fn(async () => {}),
+  getCloudPricingCatalog: vi.fn(async () => null),
+}));
+
+/** 构造最小可用的 CPT v1 价格表 JSON 文本 */
+function buildCptJson(options?: { version?: string; modelName?: string }): string {
+  const modelName = options?.modelName ?? "m1";
+  return JSON.stringify({
+    schema: "cchp.pricing-table/v1",
+    version: options?.version ?? "test-version",
+    currency: "USD",
+    refreshed_at: "2026-07-01T00:00:00.000Z",
+    providers: {
+      anthropic: { name: "Anthropic", icon: "anthropic.svg", icon_mono: true },
+    },
+    models: [
+      {
+        slug: `anthropic/${modelName}`,
+        model_name: modelName,
+        vendor: "anthropic",
+        display_name: "Model One",
+        model_type: "chat",
+        endpoints: { inbound: ["anthropic-messages"], outbound: ["anthropic-messages"] },
+        pricing: [
+          {
+            provider: "anthropic",
+            official: true,
+            source: "test",
+            charges: {
+              prompt: { unit: "per_M_tokens", price: "3" },
+              completion: { unit: "per_M_tokens", price: "15" },
+            },
+            tracks: [{ label: "standard", factor: "1", triggers: [] }],
+          },
+        ],
+      },
+    ],
+  });
+}
+
 async function flushAsync(): Promise<void> {
   await new Promise<void>((resolve) => setTimeout(() => resolve(), 0));
 }
@@ -84,13 +130,13 @@ describe("syncCloudPriceTableToDatabase", () => {
     expect(result.ok).toBe(false);
   });
 
-  it("returns ok=false when TOML is missing models table", async () => {
+  it("returns ok=false when payload has wrong schema id", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => ({
         ok: true,
         status: 200,
-        text: async () => ["[metadata]", 'version = "test"'].join("\n"),
+        text: async () => JSON.stringify({ schema: "other/v9", models: [], providers: {} }),
       }))
     );
 
@@ -105,7 +151,7 @@ describe("syncCloudPriceTableToDatabase", () => {
       vi.fn(async () => ({
         ok: true,
         status: 200,
-        text: async () => ['[models."m1"]', "input_cost_per_token = 0.000001"].join("\n"),
+        text: async () => buildCptJson(),
       }))
     );
 
@@ -126,7 +172,7 @@ describe("syncCloudPriceTableToDatabase", () => {
       vi.fn(async () => ({
         ok: true,
         status: 200,
-        text: async () => ['[models."m1"]', "input_cost_per_token = 0.000001"].join("\n"),
+        text: async () => buildCptJson(),
       }))
     );
 
@@ -141,16 +187,13 @@ describe("syncCloudPriceTableToDatabase", () => {
     expect(result.ok).toBe(false);
   });
 
-  it("returns ok=true when TOML parses and write succeeds", async () => {
+  it("returns ok=true and passes source='cloud' when table parses and write succeeds", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => ({
         ok: true,
         status: 200,
-        text: async () =>
-          ['[models."m1"]', 'display_name = "Model One"', "input_cost_per_token = 0.000001"].join(
-            "\n"
-          ),
+        text: async () => buildCptJson(),
       }))
     );
 
@@ -165,11 +208,179 @@ describe("syncCloudPriceTableToDatabase", () => {
         total: 1,
       },
     } as any);
+    const { countCloudModelPrices } = await import("@/repository/model-price");
+    vi.mocked(countCloudModelPrices).mockResolvedValue(1);
 
     const { syncCloudPriceTableToDatabase } = await import("@/lib/price-sync/cloud-price-updater");
     const result = await syncCloudPriceTableToDatabase();
     expect(result.ok).toBe(true);
     expect(processPriceTableInternal).toHaveBeenCalledTimes(1);
+    const [jsonContent, overwrite, source] = vi.mocked(processPriceTableInternal).mock.calls[0];
+    expect(source).toBe("cloud");
+    expect(overwrite).toBeUndefined();
+    const models = JSON.parse(jsonContent as string);
+    expect(models.m1.vendor).toBe("anthropic");
+    expect(models.m1.input_cost_per_token).toBeCloseTo(0.000003, 12);
+
+    // 整表切换:清理云端不存在的旧行 + 目录元数据落库
+    const { deleteCloudPricesNotIn } = await import("@/repository/model-price");
+    expect(vi.mocked(deleteCloudPricesNotIn)).toHaveBeenCalledWith(["m1"]);
+    const { upsertCloudPricingCatalog } = await import("@/repository/cloud-pricing-catalog");
+    expect(vi.mocked(upsertCloudPricingCatalog)).toHaveBeenCalledWith(
+      expect.objectContaining({ version: "test-version", modelCount: 1 })
+    );
+  });
+
+  it("fails without deleting rows when all models convert to empty", async () => {
+    // 唯一模型只有 CNY 报价 -> convertCptVariant 返回 null -> converted.models 为空
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify({
+            schema: "cchp.pricing-table/v1",
+            version: "cny-only",
+            currency: "USD",
+            refreshed_at: "2026-07-01T00:00:00.000Z",
+            providers: { alibaba: { name: "Alibaba" } },
+            models: [
+              {
+                slug: "alibaba/qwen-max-cn",
+                model_name: "qwen-max-cn",
+                vendor: "alibaba",
+                display_name: "Qwen Max CN",
+                model_type: "chat",
+                endpoints: { inbound: ["openai-chat"], outbound: ["openai-chat"] },
+                pricing: [
+                  {
+                    provider: "alibaba-cn",
+                    official: true,
+                    source: "test",
+                    charges: { prompt: { unit: "per_M_tokens", price: "10", currency: "CNY" } },
+                  },
+                ],
+              },
+            ],
+          }),
+      }))
+    );
+
+    const { syncCloudPriceTableToDatabase } = await import("@/lib/price-sync/cloud-price-updater");
+    const result = await syncCloudPriceTableToDatabase();
+
+    expect(result.ok).toBe(false);
+    const { processPriceTableInternal } = await import("@/actions/model-prices");
+    expect(processPriceTableInternal).not.toHaveBeenCalled();
+    const { deleteCloudPricesNotIn } = await import("@/repository/model-price");
+    expect(vi.mocked(deleteCloudPricesNotIn)).not.toHaveBeenCalled();
+  });
+
+  it("records actual non-manual row count in catalog when manual conflicts are skipped", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        text: async () => buildCptJson(),
+      }))
+    );
+
+    const { processPriceTableInternal } = await import("@/actions/model-prices");
+    vi.mocked(processPriceTableInternal).mockResolvedValue({
+      ok: true,
+      data: {
+        added: [],
+        updated: [],
+        unchanged: [],
+        failed: [],
+        total: 1,
+        skippedConflicts: ["m1"],
+      },
+    } as any);
+    // m1 与本地 manual 冲突被跳过,库内非 manual 行数为 0(而非云端全量 1)
+    const { countCloudModelPrices } = await import("@/repository/model-price");
+    vi.mocked(countCloudModelPrices).mockResolvedValue(0);
+
+    const { syncCloudPriceTableToDatabase } = await import("@/lib/price-sync/cloud-price-updater");
+    const result = await syncCloudPriceTableToDatabase();
+
+    expect(result.ok).toBe(true);
+    const { upsertCloudPricingCatalog } = await import("@/repository/cloud-pricing-catalog");
+    expect(vi.mocked(upsertCloudPricingCatalog)).toHaveBeenCalledWith(
+      expect.objectContaining({ modelCount: 0 })
+    );
+  });
+
+  it("skips write when version fingerprint and row count are unchanged", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        text: async () => buildCptJson({ version: "same-version" }),
+      }))
+    );
+
+    const { getCloudPricingCatalog } = await import("@/repository/cloud-pricing-catalog");
+    vi.mocked(getCloudPricingCatalog).mockResolvedValue({
+      version: "same-version",
+      currency: "USD",
+      refreshedAt: null,
+      providers: {},
+      vendors: [],
+      modelCount: 1,
+      syncedAt: null,
+    });
+    const { countCloudModelPrices } = await import("@/repository/model-price");
+    vi.mocked(countCloudModelPrices).mockResolvedValue(1);
+
+    const { processPriceTableInternal } = await import("@/actions/model-prices");
+    const { syncCloudPriceTableToDatabase } = await import("@/lib/price-sync/cloud-price-updater");
+    const result = await syncCloudPriceTableToDatabase();
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.data.unchanged).toEqual(["m1"]);
+      expect(result.data.added).toEqual([]);
+    }
+    expect(processPriceTableInternal).not.toHaveBeenCalled();
+  });
+
+  it("does not skip when overwriteManual is provided even if version matches", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        text: async () => buildCptJson({ version: "same-version" }),
+      }))
+    );
+
+    const { getCloudPricingCatalog } = await import("@/repository/cloud-pricing-catalog");
+    vi.mocked(getCloudPricingCatalog).mockResolvedValue({
+      version: "same-version",
+      currency: "USD",
+      refreshedAt: null,
+      providers: {},
+      vendors: [],
+      modelCount: 1,
+      syncedAt: null,
+    });
+
+    const { processPriceTableInternal } = await import("@/actions/model-prices");
+    vi.mocked(processPriceTableInternal).mockResolvedValue({
+      ok: true,
+      data: { added: [], updated: ["m1"], unchanged: [], failed: [], total: 1 },
+    } as any);
+
+    const { syncCloudPriceTableToDatabase } = await import("@/lib/price-sync/cloud-price-updater");
+    const result = await syncCloudPriceTableToDatabase(["m1"]);
+
+    expect(result.ok).toBe(true);
+    expect(processPriceTableInternal).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(processPriceTableInternal).mock.calls[0][1]).toEqual(["m1"]);
   });
 
   it("falls back to default error message when write returns ok=false without error", async () => {
@@ -178,7 +389,7 @@ describe("syncCloudPriceTableToDatabase", () => {
       vi.fn(async () => ({
         ok: true,
         status: 200,
-        text: async () => ['[models."m1"]', "input_cost_per_token = 0.000001"].join("\n"),
+        text: async () => buildCptJson(),
       }))
     );
 
@@ -201,7 +412,7 @@ describe("syncCloudPriceTableToDatabase", () => {
       vi.fn(async () => ({
         ok: true,
         status: 200,
-        text: async () => ['[models."m1"]', "input_cost_per_token = 0.000001"].join("\n"),
+        text: async () => buildCptJson(),
       }))
     );
 
@@ -223,7 +434,7 @@ describe("syncCloudPriceTableToDatabase", () => {
       vi.fn(async () => ({
         ok: true,
         status: 200,
-        text: async () => ['[models."m1"]', "input_cost_per_token = 0.000001"].join("\n"),
+        text: async () => buildCptJson(),
       }))
     );
 
@@ -399,7 +610,7 @@ describe("requestCloudPriceTableSync", () => {
     resolveFetch!({
       ok: true,
       status: 200,
-      text: async () => ['[models."m1"]', "input_cost_per_token = 0.000001"].join("\n"),
+      text: async () => buildCptJson(),
     });
 
     await Promise.all(asyncTasks.splice(0, asyncTasks.length));

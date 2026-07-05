@@ -1,35 +1,44 @@
 import { logger } from "@/lib/logger";
 import type { PriceUpdateResult } from "@/types/model-price";
-import {
-  type CloudPriceTableResult,
-  fetchCloudPriceTableToml,
-  parseCloudPriceTableToml,
-} from "./cloud-price-table";
+import { type CloudPriceTableResult, fetchAndParseCloudPriceTable } from "./cloud-price-table";
+import { type ConvertedCptTable, convertCptTable } from "./cpt-convert";
+
+/** 拉取并转换云端 CPT v1 价格表 */
+export async function loadConvertedCloudPriceTable(): Promise<
+  CloudPriceTableResult<ConvertedCptTable>
+> {
+  const parsed = await fetchAndParseCloudPriceTable();
+  if (!parsed.ok) {
+    return parsed;
+  }
+  try {
+    return { ok: true, data: convertCptTable(parsed.data) };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return { ok: false, error: `云端价格表转换失败：${message}` };
+  }
+}
 
 /**
- * 拉取云端 TOML 价格表并写入数据库（不覆盖 manual，本地优先）。
- *
- * 说明：
- * - 这里复用现有的批处理入库逻辑（processPriceTableInternal），以保持行为一致
- * - 任何失败都以 ok=false 返回，不抛出异常，避免影响调用方主流程
+ * 将转换后的云端价格表写入数据库(source='cloud',本地 manual 优先),
+ * 并完成整表切换语义:
+ * - 未列入覆盖列表的 manual 模型跳过(记入 skippedConflicts)
+ * - 云端已下线的模型(不在本次表内的非 manual 行,含旧版 litellm 行)删除
+ * - providers 字典 / vendor 汇总 / 版本指纹落入 cloud_pricing_catalog
  */
-export async function syncCloudPriceTableToDatabase(
+export async function applyConvertedCloudPriceTable(
+  converted: ConvertedCptTable,
   overwriteManual?: string[]
 ): Promise<CloudPriceTableResult<PriceUpdateResult>> {
-  const tomlResult = await fetchCloudPriceTableToml();
-  if (!tomlResult.ok) {
-    return tomlResult;
-  }
-
-  const parseResult = parseCloudPriceTableToml(tomlResult.data);
-  if (!parseResult.ok) {
-    return { ok: false, error: parseResult.error };
+  // 转换结果为空时判为失败:落到 deleteCloudPricesNotIn([]) 会清空全部非 manual 行
+  if (Object.keys(converted.models).length === 0) {
+    return { ok: false, error: "云端价格表转换结果为空模型集,跳过同步以避免误删现有价格" };
   }
 
   try {
     const { processPriceTableInternal } = await import("@/actions/model-prices");
-    const jsonContent = JSON.stringify(parseResult.data.models);
-    const result = await processPriceTableInternal(jsonContent, overwriteManual);
+    const jsonContent = JSON.stringify(converted.models);
+    const result = await processPriceTableInternal(jsonContent, overwriteManual, "cloud");
 
     if (!result.ok) {
       return { ok: false, error: result.error ?? "云端价格表写入失败" };
@@ -38,11 +47,101 @@ export async function syncCloudPriceTableToDatabase(
       return { ok: false, error: "云端价格表写入失败：返回结果为空" };
     }
 
+    // 整表切换:清理云端已不存在的非 manual 模型(含旧版价格表遗留行)
+    try {
+      const { deleteCloudPricesNotIn } = await import("@/repository/model-price");
+      const removed = await deleteCloudPricesNotIn(Object.keys(converted.models));
+      if (removed > 0) {
+        logger.info("[PriceSync] Removed stale cloud price rows", { removed });
+      }
+    } catch (error) {
+      logger.warn("[PriceSync] Failed to clean up stale cloud prices", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+
+    try {
+      const [{ upsertCloudPricingCatalog }, { countCloudModelPrices }] = await Promise.all([
+        import("@/repository/cloud-pricing-catalog"),
+        import("@/repository/model-price"),
+      ]);
+      // 记录同步后的实际非 manual 行数:manual 冲突跳过/写入失败的模型不落库,
+      // 若直接记云端全量数,版本短路的行数比对会永久失配
+      const cloudRowCount = await countCloudModelPrices();
+      await upsertCloudPricingCatalog({
+        version: converted.version,
+        currency: converted.currency,
+        refreshedAt: converted.refreshedAt || null,
+        providers: converted.providers,
+        vendors: converted.vendors,
+        modelCount: cloudRowCount,
+      });
+    } catch (error) {
+      logger.warn("[PriceSync] Failed to persist cloud pricing catalog", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+
     return { ok: true, data: result.data };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     return { ok: false, error: `云端价格表写入失败：${message}` };
   }
+}
+
+/**
+ * 拉取云端价格表并写入数据库(不覆盖 manual,本地优先)。
+ *
+ * 说明:
+ * - 版本指纹未变化且行数一致时跳过写库(表约 10MB/4000+ 模型,30 分钟一轮询)
+ * - 任何失败都以 ok=false 返回,不抛出异常,避免影响调用方主流程
+ */
+export async function syncCloudPriceTableToDatabase(
+  overwriteManual?: string[]
+): Promise<CloudPriceTableResult<PriceUpdateResult>> {
+  const loaded = await loadConvertedCloudPriceTable();
+  if (!loaded.ok) {
+    return loaded;
+  }
+  const converted = loaded.data;
+
+  // 版本短路:指纹一致且数据库云端行数与上次写入一致时无需重放整表
+  if (!overwriteManual?.length && converted.version) {
+    try {
+      const [{ getCloudPricingCatalog }, { countCloudModelPrices }] = await Promise.all([
+        import("@/repository/cloud-pricing-catalog"),
+        import("@/repository/model-price"),
+      ]);
+      const catalog = await getCloudPricingCatalog();
+      if (catalog && catalog.version === converted.version) {
+        const cloudCount = await countCloudModelPrices();
+        if (cloudCount === catalog.modelCount) {
+          const total = Object.keys(converted.models).length;
+          logger.debug("[PriceSync] Cloud price table unchanged, skipping write", {
+            version: converted.version,
+            total,
+          });
+          return {
+            ok: true,
+            data: {
+              added: [],
+              updated: [],
+              unchanged: Object.keys(converted.models),
+              failed: [],
+              total,
+              skippedConflicts: [],
+            },
+          };
+        }
+      }
+    } catch (error) {
+      logger.debug("[PriceSync] Version short-circuit check failed, falling through", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  return applyConvertedCloudPriceTable(converted, overwriteManual);
 }
 
 const DEFAULT_THROTTLE_MS = 5 * 60 * 1000;
