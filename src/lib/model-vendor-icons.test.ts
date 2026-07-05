@@ -74,9 +74,15 @@ describe("getVendorIconComponent", () => {
 });
 
 describe("getVendorEntry", () => {
-  it("keeps vendor slug and display name for unregistered vendors", () => {
+  it("resolves display name for registered vendors", () => {
     const entry = getVendorEntry("reka");
     expect(entry.vendor).toBe("reka");
     expect(entry.displayName).toBe("Reka");
+  });
+
+  it("keeps the slug as display name for unregistered vendors", () => {
+    const entry = getVendorEntry("definitely-unknown-vendor");
+    expect(entry.vendor).toBe("definitely-unknown-vendor");
+    expect(entry.displayName).toBe("definitely-unknown-vendor");
   });
 });

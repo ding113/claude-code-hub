@@ -80,6 +80,7 @@ import {
   Yi,
   Zhipu,
 } from "@lobehub/icons";
+import { resolveByDashPrefix } from "@/lib/model-vendor/dash-prefix-lookup";
 import { iconFileForVendor, type VendorIconFileEntry } from "@/lib/model-vendor/vendor-icon-files";
 import {
   inferVendorFromModelName,
@@ -186,15 +187,7 @@ const VENDOR_ICON_COMPONENTS: Record<string, VendorIconComponent> = {
 
 /** slug 精确命中 -> 最长 dash 前缀家族回退(与云端 icon 解析规则一致) */
 export function getVendorIconComponent(slug: string): VendorIconComponent | null {
-  const key = slug.trim().toLowerCase();
-  if (!key) return null;
-  if (VENDOR_ICON_COMPONENTS[key]) return VENDOR_ICON_COMPONENTS[key];
-  let probe = key;
-  while (probe.includes("-")) {
-    probe = probe.slice(0, probe.lastIndexOf("-"));
-    if (VENDOR_ICON_COMPONENTS[probe]) return VENDOR_ICON_COMPONENTS[probe];
-  }
-  return null;
+  return resolveByDashPrefix(slug, VENDOR_ICON_COMPONENTS);
 }
 
 export interface ModelVendorEntry {
