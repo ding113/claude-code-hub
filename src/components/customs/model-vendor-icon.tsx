@@ -41,8 +41,9 @@ function RemoteVendorIcon({
   fallbackSeed: string;
   className: string;
 }) {
-  const [failed, setFailed] = useState(false);
-  if (failed) {
+  // 记录失败的具体文件而非布尔值:file 变化后自动重试新图标
+  const [failedFile, setFailedFile] = useState<string | null>(null);
+  if (failedFile === file) {
     return <MonogramIcon seed={fallbackSeed} className={className} />;
   }
   return (
@@ -52,7 +53,7 @@ function RemoteVendorIcon({
       alt=""
       aria-hidden="true"
       loading="lazy"
-      onError={() => setFailed(true)}
+      onError={() => setFailedFile(file)}
       className={`select-none ${mono ? "dark:invert" : ""} ${className}`}
     />
   );
