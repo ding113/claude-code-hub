@@ -330,6 +330,9 @@ export const providers = pgTable('providers', {
   codexReasoningSummaryPreference: varchar('codex_reasoning_summary_preference', { length: 20 }),
   codexTextVerbosityPreference: varchar('codex_text_verbosity_preference', { length: 10 }),
   codexParallelToolCallsPreference: varchar('codex_parallel_tool_calls_preference', { length: 10 }),
+  // image_generation 在 OpenAI Responses 中属于内建工具类型；
+  // true 强制注入 type="image_generation"，false 强制移除该工具能力
+  codexImageGenerationPreference: varchar('codex_image_generation_preference', { length: 10 }),
   codexServiceTierPreference: varchar('codex_service_tier_preference', { length: 20 }),
 
   // Anthropic (Messages API) parameter overrides (only for claude/claude-auth providers)

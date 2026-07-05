@@ -356,6 +356,7 @@ function ProviderFormContent({
           codex_reasoning_summary_preference: state.routing.codexReasoningSummaryPreference,
           codex_text_verbosity_preference: state.routing.codexTextVerbosityPreference,
           codex_parallel_tool_calls_preference: state.routing.codexParallelToolCallsPreference,
+          codex_image_generation_preference: state.routing.codexImageGenerationPreference,
           codex_service_tier_preference: state.routing.codexServiceTierPreference,
           anthropic_max_tokens_preference: state.routing.anthropicMaxTokensPreference,
           anthropic_thinking_budget_preference: state.routing.anthropicThinkingBudgetPreference,
@@ -538,6 +539,7 @@ function ProviderFormContent({
       state.routing.codexReasoningSummaryPreference !== "inherit" ||
       state.routing.codexTextVerbosityPreference !== "inherit" ||
       state.routing.codexParallelToolCallsPreference !== "inherit" ||
+      state.routing.codexImageGenerationPreference !== "inherit" ||
       state.routing.codexServiceTierPreference !== "inherit" ||
       // Anthropic overrides
       state.routing.anthropicMaxTokensPreference !== "inherit" ||

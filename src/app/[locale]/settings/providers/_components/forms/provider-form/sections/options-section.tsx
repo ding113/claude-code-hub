@@ -17,6 +17,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { CUSTOM_HEADERS_PLACEHOLDER } from "@/lib/custom-headers";
 import type {
+  CodexImageGenerationPreference,
   CodexParallelToolCallsPreference,
   CodexReasoningEffortPreference,
   CodexReasoningSummaryPreference,
@@ -302,6 +303,51 @@ export function OptionsSection({ subSectionRefs }: OptionsSectionProps) {
                       ))}
                     </SelectContent>
                   </Select>
+                </SmartInputWrapper>
+
+                <SmartInputWrapper
+                  label={t("sections.routing.codexOverrides.imageGeneration.label")}
+                >
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <div className="relative">
+                        <Select
+                          value={state.routing.codexImageGenerationPreference}
+                          onValueChange={(val) =>
+                            dispatch({
+                              type: "SET_CODEX_IMAGE_GENERATION",
+                              payload: val as CodexImageGenerationPreference,
+                            })
+                          }
+                          disabled={state.ui.isPending}
+                        >
+                          <SelectTrigger className="w-full">
+                            <SelectValue
+                              placeholder={t(
+                                "sections.routing.codexOverrides.imageGeneration.options.inherit"
+                              )}
+                            />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {["inherit", "true", "false"].map((val) => (
+                              <SelectItem key={val} value={val}>
+                                {t(`sections.routing.codexOverrides.imageGeneration.options.${val}`)}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Info
+                          aria-hidden="true"
+                          className="pointer-events-none absolute right-10 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground"
+                        />
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" className="max-w-xs">
+                      <p className="text-sm">
+                        {t("sections.routing.codexOverrides.imageGeneration.help")}
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
                 </SmartInputWrapper>
 
                 <SmartInputWrapper label={t("sections.routing.codexOverrides.serviceTier.label")}>

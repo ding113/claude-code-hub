@@ -150,6 +150,7 @@ export function toProvider(dbProvider: any): Provider {
     codexReasoningSummaryPreference: dbProvider?.codexReasoningSummaryPreference ?? null,
     codexTextVerbosityPreference: dbProvider?.codexTextVerbosityPreference ?? null,
     codexParallelToolCallsPreference: dbProvider?.codexParallelToolCallsPreference ?? null,
+    codexImageGenerationPreference: dbProvider?.codexImageGenerationPreference ?? null,
     codexServiceTierPreference: dbProvider?.codexServiceTierPreference ?? null,
     anthropicMaxTokensPreference: dbProvider?.anthropicMaxTokensPreference ?? null,
     anthropicThinkingBudgetPreference: dbProvider?.anthropicThinkingBudgetPreference ?? null,

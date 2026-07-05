@@ -31,6 +31,7 @@ describe("Codex 供应商级参数覆写", () => {
       codexReasoningSummaryPreference: null,
       codexTextVerbosityPreference: null,
       codexParallelToolCallsPreference: null,
+      codexImageGenerationPreference: null,
     };
 
     const input: Record<string, unknown> = {
@@ -55,6 +56,7 @@ describe("Codex 供应商级参数覆写", () => {
       codexReasoningSummaryPreference: "inherit",
       codexTextVerbosityPreference: "inherit",
       codexParallelToolCallsPreference: "inherit",
+      codexImageGenerationPreference: "inherit",
     };
 
     const input: Record<string, unknown> = {
@@ -87,6 +89,216 @@ describe("Codex 供应商级参数覆写", () => {
     const output = applyCodexProviderOverrides(provider as any, input);
     expect(output.parallel_tool_calls).toBe(false);
     expect(input.parallel_tool_calls).toBe(true);
+  });
+
+  it("当强制 image_generation=true 时，应自动注入图像生成工具且不重复追加", () => {
+    const provider = {
+      providerType: "codex",
+      codexImageGenerationPreference: "true",
+    };
+
+    const input: Record<string, unknown> = {
+      model: "gpt-5.5",
+      input: [],
+      tools: [{ type: "function", name: "lookup_weather" }],
+      tool_choice: "none",
+    };
+
+    const output = applyCodexProviderOverrides(provider as any, input);
+
+    expect(output.tools).toEqual([
+      { type: "function", name: "lookup_weather" },
+      { type: "image_generation" },
+    ]);
+    expect(output.tool_choice).toBe("none");
+    expect(input.tools).toEqual([{ type: "function", name: "lookup_weather" }]);
+  });
+
+  it("当强制 image_generation=true 且请求缺少 tools 时，应自动创建图像生成工具数组", () => {
+    const provider = {
+      providerType: "codex",
+      codexImageGenerationPreference: "true",
+    };
+
+    const input: Record<string, unknown> = {
+      model: "gpt-5.5",
+      input: [],
+    };
+
+    const output = applyCodexProviderOverrides(provider as any, input);
+
+    expect(output.tools).toEqual([{ type: "image_generation" }]);
+    expect(input.tools).toBeUndefined();
+  });
+
+  it("当强制 image_generation=true 且 tool_choice=allowed_tools 时，应补齐白名单中的图像工具", () => {
+    const provider = {
+      providerType: "codex",
+      codexImageGenerationPreference: "true",
+    };
+
+    const input: Record<string, unknown> = {
+      model: "gpt-5.5",
+      input: [],
+      tools: [{ type: "function", name: "lookup_weather" }],
+      tool_choice: {
+        type: "allowed_tools",
+        mode: "auto",
+        tools: [{ type: "function", name: "lookup_weather" }],
+      },
+    };
+
+    const output = applyCodexProviderOverrides(provider as any, input);
+
+    expect(output.tools).toEqual([
+      { type: "function", name: "lookup_weather" },
+      { type: "image_generation" },
+    ]);
+    expect(output.tool_choice).toEqual({
+      type: "allowed_tools",
+      mode: "auto",
+      tools: [{ type: "function", name: "lookup_weather" }, { type: "image_generation" }],
+    });
+  });
+
+  it("当强制 image_generation=false 时，应从 tools 中移除对应工具", () => {
+    const provider = {
+      providerType: "codex",
+      codexImageGenerationPreference: "false",
+    };
+
+    const input: Record<string, unknown> = {
+      model: "gpt-5.5",
+      input: [],
+      tools: [
+        { type: "image_generation" },
+        { type: "function", name: "lookup_weather" },
+      ],
+    };
+
+    const output = applyCodexProviderOverrides(provider as any, input);
+
+    expect(output.tools).toEqual([{ type: "function", name: "lookup_weather" }]);
+    expect(input.tools).toEqual([
+      { type: "image_generation" },
+      { type: "function", name: "lookup_weather" },
+    ]);
+  });
+
+  it("当强制 image_generation=false 且 tool_choice 直接指向 image_generation 时，应移除该选择", () => {
+    const provider = {
+      providerType: "codex",
+      codexImageGenerationPreference: "false",
+    };
+
+    const input: Record<string, unknown> = {
+      model: "gpt-5.5",
+      input: [],
+      tools: [{ type: "image_generation" }],
+      tool_choice: { type: "image_generation" },
+    };
+
+    const output = applyCodexProviderOverrides(provider as any, input);
+
+    expect(output.tools).toBeUndefined();
+    expect(output.tool_choice).toBeUndefined();
+  });
+
+  it("当强制 image_generation=false 且仍有其他工具可用时，应将 image_generation 专属 tool_choice 收口为 none", () => {
+    const provider = {
+      providerType: "codex",
+      codexImageGenerationPreference: "false",
+    };
+
+    const input: Record<string, unknown> = {
+      model: "gpt-5.5",
+      input: [],
+      tools: [
+        { type: "image_generation" },
+        { type: "function", name: "lookup_weather" },
+      ],
+      tool_choice: { type: "image_generation" },
+    };
+
+    const output = applyCodexProviderOverrides(provider as any, input);
+
+    expect(output.tools).toEqual([{ type: "function", name: "lookup_weather" }]);
+    expect(output.tool_choice).toBe("none");
+  });
+
+  it("当强制 image_generation=false 且 required 在移除最后一个工具后失效时，应移除 tool_choice", () => {
+    const provider = {
+      providerType: "codex",
+      codexImageGenerationPreference: "false",
+    };
+
+    const input: Record<string, unknown> = {
+      model: "gpt-5.5",
+      input: [],
+      tools: [{ type: "image_generation" }],
+      tool_choice: "required",
+    };
+
+    const output = applyCodexProviderOverrides(provider as any, input);
+
+    expect(output.tools).toBeUndefined();
+    expect(output.tool_choice).toBeUndefined();
+  });
+
+  it("当强制 image_generation=false 且 allowed_tools 包含 image_generation 时，应剔除该项", () => {
+    const provider = {
+      providerType: "codex",
+      codexImageGenerationPreference: "false",
+    };
+
+    const input: Record<string, unknown> = {
+      model: "gpt-5.5",
+      input: [],
+      tools: [
+        { type: "image_generation" },
+        { type: "function", name: "lookup_weather" },
+      ],
+      tool_choice: {
+        type: "allowed_tools",
+        mode: "auto",
+        tools: [{ type: "image_generation" }, { type: "function", name: "lookup_weather" }],
+      },
+    };
+
+    const output = applyCodexProviderOverrides(provider as any, input);
+
+    expect(output.tools).toEqual([{ type: "function", name: "lookup_weather" }]);
+    expect(output.tool_choice).toEqual({
+      type: "allowed_tools",
+      mode: "auto",
+      tools: [{ type: "function", name: "lookup_weather" }],
+    });
+  });
+
+  it("当强制 image_generation=false 且 allowed_tools 仅白名单图像工具时，应收口为 none", () => {
+    const provider = {
+      providerType: "codex",
+      codexImageGenerationPreference: "false",
+    };
+
+    const input: Record<string, unknown> = {
+      model: "gpt-5.5",
+      input: [],
+      tools: [
+        { type: "image_generation" },
+        { type: "function", name: "lookup_weather" },
+      ],
+      tool_choice: {
+        type: "allowed_tools",
+        mode: "auto",
+        tools: [{ type: "image_generation" }],
+      },
+    };
+
+    const output = applyCodexProviderOverrides(provider as any, input);
+
+    expect(output.tools).toEqual([{ type: "function", name: "lookup_weather" }]);
+    expect(output.tool_choice).toBe("none");
   });
 
   it("当强制 reasoning.effort/summary 时，应覆写并保留 reasoning 的其他字段", () => {
@@ -169,6 +381,7 @@ describe("Codex 供应商级参数覆写", () => {
       codexReasoningSummaryPreference: null,
       codexTextVerbosityPreference: "inherit",
       codexParallelToolCallsPreference: null,
+      codexImageGenerationPreference: null,
     };
 
     const input: Record<string, unknown> = {
@@ -223,12 +436,15 @@ describe("Codex 供应商级参数覆写", () => {
       codexReasoningSummaryPreference: "detailed",
       codexTextVerbosityPreference: "high",
       codexParallelToolCallsPreference: "true",
+      codexImageGenerationPreference: "false",
     };
 
     const input: Record<string, unknown> = {
       model: "gpt-5.5",
       input: [],
       parallel_tool_calls: false,
+      tools: [{ type: "image_generation" }],
+      tool_choice: { type: "image_generation" },
       reasoning: { effort: "low", summary: "auto" },
       text: { verbosity: "low" },
     };
@@ -241,9 +457,11 @@ describe("Codex 供应商级参数覆写", () => {
     const changedPaths = (result.audit?.changes ?? []).filter((c) => c.changed).map((c) => c.path);
     expect(changedPaths).toEqual([
       "parallel_tool_calls",
+      "tools.image_generation",
       "reasoning.effort",
       "reasoning.summary",
       "text.verbosity",
+      "tool_choice",
     ]);
   });
 
@@ -256,6 +474,7 @@ describe("Codex 供应商级参数覆写", () => {
       codexReasoningSummaryPreference: null,
       codexTextVerbosityPreference: null,
       codexParallelToolCallsPreference: null,
+      codexImageGenerationPreference: null,
       codexServiceTierPreference: null,
     };
 
