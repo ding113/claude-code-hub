@@ -17,6 +17,10 @@ export type GeminiFunctionIdRectifierResult = {
  *
  * 注意：与其他整流器一致，这里不依赖错误规则开关，仅做字符串判断。
  */
+// 逐条提取 `unknown name "id" at <path>` 违规中的 path（引号可选，兼容网关改写文案），
+// 在 `:`（Vertex 的 `: Cannot find field.` 尾缀）或换行处截断，避免吞掉下一条违规。
+const ID_VIOLATION_PATTERN = /unknown name "id" at '?([^':\n]*)/g;
+
 export function detectGeminiFunctionIdRectifierTrigger(
   errorMessage: string | null | undefined
 ): GeminiFunctionIdRectifierTrigger | null {
@@ -24,16 +28,22 @@ export function detectGeminiFunctionIdRectifierTrigger(
 
   const lower = errorMessage.toLowerCase();
 
-  if (!lower.includes('unknown name "id"')) return null;
+  // id 违规必须与其自身路径中的函数字段绑定判断，而非全文独立子串匹配——
+  // 防止多违规消息中「id 在无关路径 + 函数字段见于另一条违规」造成串扰误触发。
+  // 兼容 snake_case（Vertex 错误文案）与 camelCase（部分兼容网关）两种路径写法。
+  for (const match of lower.matchAll(ID_VIOLATION_PATTERN)) {
+    const path = match[1] ?? "";
+    if (
+      path.includes("function_call") ||
+      path.includes("function_response") ||
+      path.includes("functioncall") ||
+      path.includes("functionresponse")
+    ) {
+      return "unknown_function_id_field";
+    }
+  }
 
-  // 兼容 snake_case（Vertex 错误文案）与 camelCase（部分兼容网关）两种路径写法
-  const mentionsFunctionField =
-    lower.includes("function_call") ||
-    lower.includes("function_response") ||
-    lower.includes("functioncall") ||
-    lower.includes("functionresponse");
-
-  return mentionsFunctionField ? "unknown_function_id_field" : null;
+  return null;
 }
 
 function stripIdsFromContents(contents: unknown): {
@@ -56,16 +66,21 @@ function stripIdsFromContents(contents: unknown): {
       if (!part || typeof part !== "object") continue;
       const partObj = part as Record<string, unknown>;
 
-      const functionCall = partObj.functionCall;
-      if (functionCall && typeof functionCall === "object" && "id" in functionCall) {
-        delete (functionCall as Record<string, unknown>).id;
-        strippedFunctionCallIds += 1;
+      // 请求体字段名兼容 camelCase 与 snake_case（proto JSON 两种写法均合法）
+      for (const key of ["functionCall", "function_call"]) {
+        const functionCall = partObj[key];
+        if (functionCall && typeof functionCall === "object" && "id" in functionCall) {
+          delete (functionCall as Record<string, unknown>).id;
+          strippedFunctionCallIds += 1;
+        }
       }
 
-      const functionResponse = partObj.functionResponse;
-      if (functionResponse && typeof functionResponse === "object" && "id" in functionResponse) {
-        delete (functionResponse as Record<string, unknown>).id;
-        strippedFunctionResponseIds += 1;
+      for (const key of ["functionResponse", "function_response"]) {
+        const functionResponse = partObj[key];
+        if (functionResponse && typeof functionResponse === "object" && "id" in functionResponse) {
+          delete (functionResponse as Record<string, unknown>).id;
+          strippedFunctionResponseIds += 1;
+        }
       }
     }
   }

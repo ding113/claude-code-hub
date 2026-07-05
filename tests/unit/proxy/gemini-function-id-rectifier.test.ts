@@ -35,6 +35,21 @@ Invalid JSON payload received. Unknown name "id" at 'contents[2].parts[0].functi
       expect(trigger).toBe("unknown_function_id_field");
     });
 
+    it("should detect unquoted path variants from rewritten gateway errors", () => {
+      const trigger = detectGeminiFunctionIdRectifierTrigger(
+        `Invalid JSON: Unknown name "id" at contents[1].parts[0].function_call`
+      );
+      expect(trigger).toBe("unknown_function_id_field");
+    });
+
+    it("should not cross-match id violation on one path with function field on another", () => {
+      const trigger = detectGeminiFunctionIdRectifierTrigger(
+        `Invalid JSON payload received. Unknown name "id" at 'generation_config': Cannot find field.
+Invalid JSON payload received. Unknown name "foo" at 'contents[0].parts[0].function_call': Cannot find field.`
+      );
+      expect(trigger).toBeNull();
+    });
+
     it("should return null when unknown field is not id", () => {
       const trigger = detectGeminiFunctionIdRectifierTrigger(
         `Invalid JSON payload received. Unknown name "foo" at 'contents[0].parts[0].function_call': Cannot find field.`
@@ -147,6 +162,24 @@ Invalid JSON payload received. Unknown name "id" at 'contents[2].parts[0].functi
         contents: Array<{ parts: Array<Record<string, unknown>> }>;
       };
       expect(wrapped.contents[0].parts[0].functionCall).toEqual({ name: "f", args: {} });
+    });
+
+    it("should strip ids from snake_case function fields", () => {
+      const message: Record<string, unknown> = {
+        contents: [
+          { role: "model", parts: [{ function_call: { id: "c1", name: "f", args: {} } }] },
+          { role: "user", parts: [{ function_response: { id: "c1", name: "f", response: {} } }] },
+        ],
+      };
+
+      const result = rectifyGeminiFunctionIds(message);
+      expect(result.applied).toBe(true);
+      expect(result.strippedFunctionCallIds).toBe(1);
+      expect(result.strippedFunctionResponseIds).toBe(1);
+
+      const contents = message.contents as Array<{ parts: Array<Record<string, unknown>> }>;
+      expect(contents[0].parts[0].function_call).toEqual({ name: "f", args: {} });
+      expect(contents[1].parts[0].function_response).toEqual({ name: "f", response: {} });
     });
 
     it("should not apply when function fields carry no id", () => {
