@@ -31,6 +31,7 @@ vi.mock("@/lib/logger", () => ({
 vi.mock("@/lib/async-task-manager", () => ({
   AsyncTaskManager: {
     register: () => new AbortController(),
+    touch: vi.fn(() => true),
     cleanup: vi.fn(),
     cancel: vi.fn(),
   },

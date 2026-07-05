@@ -21,6 +21,7 @@ vi.mock("@/lib/async-task-manager", () => ({
       asyncTasks.push(promise);
       return new AbortController();
     },
+    touch: vi.fn(() => true),
     cleanup: () => {},
     cancel: () => {},
   },
@@ -59,6 +60,7 @@ vi.mock("@/lib/session-manager", () => ({
   SessionManager: {
     updateSessionUsage: vi.fn(async () => undefined),
     storeSessionResponse: vi.fn(),
+    storeSessionResponsePhaseSnapshot: vi.fn(async () => undefined),
     extractCodexPromptCacheKey: vi.fn(),
     updateSessionWithCodexCacheKey: vi.fn(),
   },
@@ -88,6 +90,7 @@ vi.mock("@/lib/proxy-status-tracker", () => ({
 
 import { ProxyResponseHandler } from "@/app/v1/_lib/proxy/response-handler";
 import { ProxySession } from "@/app/v1/_lib/proxy/session";
+import { AsyncTaskManager } from "@/lib/async-task-manager";
 import { SessionManager } from "@/lib/session-manager";
 import { RateLimitService } from "@/lib/rate-limit";
 import { SessionTracker } from "@/lib/session-tracker";
@@ -265,6 +268,38 @@ function createNonStreamResponse(usage: { input_tokens: number; output_tokens: n
   );
 }
 
+function createChunkedNonStreamResponse(usage: {
+  input_tokens: number;
+  output_tokens: number;
+}): Response {
+  const body = JSON.stringify({
+    type: "message",
+    usage,
+  });
+  const encoder = new TextEncoder();
+  const chunks = [
+    encoder.encode(body.slice(0, 8)),
+    encoder.encode(body.slice(8, 24)),
+    encoder.encode(body.slice(24)),
+  ];
+  let index = 0;
+
+  const stream = new ReadableStream<Uint8Array>({
+    pull(controller) {
+      if (index < chunks.length) {
+        controller.enqueue(chunks[index++]);
+        return;
+      }
+      controller.close();
+    },
+  });
+
+  return new Response(stream, {
+    status: 200,
+    headers: { "content-type": "application/json" },
+  });
+}
+
 function createStreamResponse(usage: { input_tokens: number; output_tokens: number }): Response {
   const sseText = `event: message_delta\ndata: ${JSON.stringify({ usage })}\n\n`;
   const encoder = new TextEncoder();
@@ -303,6 +338,7 @@ describe("Lease Budget Decrement after trackCostToRedis", () => {
     vi.mocked(updateMessageRequestDetails).mockResolvedValue(undefined);
     vi.mocked(updateMessageRequestDuration).mockResolvedValue(undefined);
     vi.mocked(SessionManager.storeSessionResponse).mockResolvedValue(undefined);
+    vi.mocked(SessionManager.storeSessionResponsePhaseSnapshot).mockResolvedValue(undefined);
     vi.mocked(RateLimitService.trackCost).mockResolvedValue(undefined);
     vi.mocked(RateLimitService.trackUserDailyCost).mockResolvedValue(undefined);
     vi.mocked(RateLimitService.decrementLeaseBudget).mockResolvedValue({
@@ -354,6 +390,46 @@ describe("Lease Budget Decrement after trackCostToRedis", () => {
         expect(matchingCall![3]).toBeCloseTo(expectedCost, 4);
       }
     }
+  });
+
+  it("should refresh task activity while reading chunked non-stream response bodies", async () => {
+    const messageId = 5010;
+    const session = createSession({
+      originalModel,
+      redirectedModel: originalModel,
+      sessionId: "sess-non-stream-chunked-touch",
+      messageId,
+    });
+
+    const response = createChunkedNonStreamResponse(usage);
+    const cloneSpy = vi.spyOn(response, "clone");
+
+    await ProxyResponseHandler.dispatch(session, response);
+    await drainAsyncTasks();
+
+    const taskId = `non-stream-${messageId}`;
+    const touchCalls = vi
+      .mocked(AsyncTaskManager.touch)
+      .mock.calls.filter(([calledTaskId]) => calledTaskId === taskId);
+    expect(touchCalls.length).toBeGreaterThanOrEqual(2);
+    expect(cloneSpy).toHaveBeenCalledTimes(1);
+    expect(SessionManager.storeSessionResponsePhaseSnapshot).toHaveBeenCalledWith(
+      session.sessionId,
+      "after",
+      expect.objectContaining({
+        body: expect.stringContaining('"type":"message"'),
+        meta: expect.objectContaining({ statusCode: 200 }),
+      }),
+      session.requestSequence
+    );
+    expect(updateMessageRequestDetails).toHaveBeenCalledWith(
+      messageId,
+      expect.objectContaining({
+        statusCode: 200,
+        inputTokens: usage.input_tokens,
+        outputTokens: usage.output_tokens,
+      })
+    );
   });
 
   it("should call decrementLeaseBudget for all windows and entity types (stream)", async () => {

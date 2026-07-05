@@ -57,6 +57,240 @@ import {
 } from "./stream-finalization";
 
 const CLIENT_ABORT_DRAIN_MAX_MS = 60_000;
+const STREAM_STATS_MAX_BUFFER_BYTES = 10 * 1024 * 1024;
+const STREAM_STATS_HEAD_BYTES = 1024 * 1024;
+const STREAM_STATS_TAIL_BYTES = STREAM_STATS_MAX_BUFFER_BYTES - STREAM_STATS_HEAD_BYTES;
+const STREAM_STATS_TAIL_CHUNKS = 8192;
+const STREAM_STATS_TRUNCATED_MARKER = "\n\n: [cch_truncated]\n\n";
+
+type BoundedStreamTextSnapshot = {
+  text: string;
+  truncated: boolean;
+  totalBytes: number;
+  bufferedBytes: number;
+  chunkCount: number;
+};
+
+function copyUint8Range(value: Uint8Array, start = 0, end = value.byteLength): Uint8Array {
+  return new Uint8Array(value.subarray(start, end));
+}
+
+function resolveNonStreamTaskStaleTimeoutMs(provider: Provider): number {
+  return provider.requestTimeoutNonStreamingMs > 0
+    ? provider.requestTimeoutNonStreamingMs
+    : Number.POSITIVE_INFINITY;
+}
+
+function resolveStreamTaskStaleTimeoutMs(provider: Provider): number {
+  if (provider.streamingIdleTimeoutMs <= 0) {
+    return Number.POSITIVE_INFINITY;
+  }
+
+  if (provider.firstByteTimeoutStreamingMs > 0) {
+    return Math.max(provider.firstByteTimeoutStreamingMs, provider.streamingIdleTimeoutMs);
+  }
+
+  return Number.POSITIVE_INFINITY;
+}
+
+// 流式统计只需要头部元信息和尾部 usage/final event。按字节保存窗口，避免
+// string[] 无界增长，也避免 subarray 持有超大原始 ArrayBuffer。
+export class BoundedStreamTextAccumulator {
+  private readonly headChunks: Uint8Array[] = [];
+  private readonly tailChunks: Uint8Array[] = [];
+  private readonly tailChunkBytes: number[] = [];
+  private headBufferedBytes = 0;
+  private tailBufferedBytes = 0;
+  private tailHead = 0;
+  private tailMode = false;
+  private truncated = false;
+  private totalBytes = 0;
+  private chunksSeen = 0;
+  private finishedSnapshot: BoundedStreamTextSnapshot | null = null;
+
+  get chunkCount(): number {
+    return this.chunksSeen;
+  }
+
+  get totalByteCount(): number {
+    return this.totalBytes;
+  }
+
+  get bufferedByteCount(): number {
+    return this.headBufferedBytes + this.tailBufferedBytes;
+  }
+
+  get isTruncated(): boolean {
+    return this.truncated;
+  }
+
+  pushBytes(value: Uint8Array): void {
+    if (!value || value.byteLength === 0) {
+      return;
+    }
+
+    this.finishedSnapshot = null;
+    this.chunksSeen += 1;
+    this.totalBytes += value.byteLength;
+
+    if (!this.tailMode && this.headBufferedBytes < STREAM_STATS_HEAD_BYTES) {
+      const remainingHeadBytes = STREAM_STATS_HEAD_BYTES - this.headBufferedBytes;
+      if (value.byteLength <= remainingHeadBytes) {
+        this.headChunks.push(copyUint8Range(value));
+        this.headBufferedBytes += value.byteLength;
+        return;
+      }
+
+      this.headChunks.push(copyUint8Range(value, 0, remainingHeadBytes));
+      this.headBufferedBytes += remainingHeadBytes;
+      this.tailMode = true;
+      this.pushTailBytes(value.subarray(remainingHeadBytes));
+      return;
+    }
+
+    this.tailMode = true;
+    this.pushTailBytes(value);
+  }
+
+  finish(): BoundedStreamTextSnapshot {
+    if (this.finishedSnapshot) {
+      return this.finishedSnapshot;
+    }
+
+    const text = this.createSnapshotText();
+
+    this.finishedSnapshot = {
+      text,
+      truncated: this.truncated,
+      totalBytes: this.totalBytes,
+      bufferedBytes: this.headBufferedBytes + this.tailBufferedBytes,
+      chunkCount: this.chunksSeen,
+    };
+
+    return this.finishedSnapshot;
+  }
+
+  private createSnapshotText(): string {
+    if (!this.tailMode) {
+      return this.decodeChunks(this.headChunks, 0, this.headBufferedBytes);
+    }
+
+    if (!this.truncated) {
+      return this.decodeContiguousBufferedBytes();
+    }
+
+    const headText = this.decodeChunks(this.headChunks, 0, this.headBufferedBytes);
+    const tailText = this.decodeChunks(this.tailChunks, this.tailHead, this.tailBufferedBytes);
+    return `${headText}${STREAM_STATS_TRUNCATED_MARKER}${tailText}`;
+  }
+
+  private pushTailBytes(value: Uint8Array): void {
+    if (!value || value.byteLength === 0) {
+      return;
+    }
+
+    if (value.byteLength > STREAM_STATS_TAIL_BYTES) {
+      this.tailChunks.length = 0;
+      this.tailChunkBytes.length = 0;
+      this.tailHead = 0;
+      const tail = copyUint8Range(value, value.byteLength - STREAM_STATS_TAIL_BYTES);
+      this.tailChunks.push(tail);
+      this.tailChunkBytes.push(tail.byteLength);
+      this.tailBufferedBytes = tail.byteLength;
+      this.truncated = true;
+      return;
+    }
+
+    const copy = copyUint8Range(value);
+    this.tailChunks.push(copy);
+    this.tailChunkBytes.push(copy.byteLength);
+    this.tailBufferedBytes += copy.byteLength;
+
+    while (
+      this.tailBufferedBytes > STREAM_STATS_TAIL_BYTES &&
+      this.tailHead < this.tailChunkBytes.length
+    ) {
+      const overflowBytes = this.tailBufferedBytes - STREAM_STATS_TAIL_BYTES;
+      const oldestChunkBytes = this.tailChunkBytes[this.tailHead] ?? 0;
+
+      if (oldestChunkBytes <= 0) {
+        this.tailHead += 1;
+        continue;
+      }
+
+      if (overflowBytes >= oldestChunkBytes) {
+        this.tailBufferedBytes -= oldestChunkBytes;
+        this.tailChunks[this.tailHead] = new Uint8Array();
+        this.tailChunkBytes[this.tailHead] = 0;
+        this.tailHead += 1;
+        this.truncated = true;
+        continue;
+      }
+
+      const oldestChunk = this.tailChunks[this.tailHead]!;
+      this.tailChunks[this.tailHead] = copyUint8Range(oldestChunk, overflowBytes);
+      this.tailChunkBytes[this.tailHead] = oldestChunkBytes - overflowBytes;
+      this.tailBufferedBytes -= overflowBytes;
+      this.truncated = true;
+    }
+
+    if (this.tailHead > 4096) {
+      this.tailChunks.splice(0, this.tailHead);
+      this.tailChunkBytes.splice(0, this.tailHead);
+      this.tailHead = 0;
+    }
+
+    const keptCount = this.tailChunks.length - this.tailHead;
+    if (keptCount > STREAM_STATS_TAIL_CHUNKS) {
+      const joined = this.concatChunks(this.tailChunks, this.tailHead, this.tailBufferedBytes);
+      this.tailChunks.length = 0;
+      this.tailChunkBytes.length = 0;
+      this.tailHead = 0;
+      this.tailChunks.push(joined);
+      this.tailChunkBytes.push(joined.byteLength);
+      this.tailBufferedBytes = joined.byteLength;
+    }
+  }
+
+  private decodeChunks(chunks: Uint8Array[], startIndex: number, totalBytes: number): string {
+    if (totalBytes <= 0) {
+      return "";
+    }
+    return new TextDecoder().decode(this.concatChunks(chunks, startIndex, totalBytes));
+  }
+
+  private decodeContiguousBufferedBytes(): string {
+    const totalBytes = this.headBufferedBytes + this.tailBufferedBytes;
+    if (totalBytes <= 0) {
+      return "";
+    }
+
+    const headBytes = this.concatChunks(this.headChunks, 0, this.headBufferedBytes);
+    const tailBytes = this.concatChunks(this.tailChunks, this.tailHead, this.tailBufferedBytes);
+    const out = new Uint8Array(headBytes.byteLength + tailBytes.byteLength);
+    out.set(headBytes, 0);
+    out.set(tailBytes, headBytes.byteLength);
+    return new TextDecoder().decode(out);
+  }
+
+  private concatChunks(chunks: Uint8Array[], startIndex: number, totalBytes: number): Uint8Array {
+    if (totalBytes <= 0) {
+      return new Uint8Array();
+    }
+
+    const out = new Uint8Array(totalBytes);
+    let offset = 0;
+    for (let i = startIndex; i < chunks.length; i++) {
+      const chunk = chunks[i];
+      if (!chunk || chunk.byteLength === 0) {
+        continue;
+      }
+      out.set(chunk, offset);
+      offset += chunk.byteLength;
+    }
+    return offset === totalBytes ? out : out.slice(0, offset);
+  }
+}
 
 /**
  * Idempotent helper to release the agent pool reference count attached to a session.
@@ -71,6 +305,82 @@ function releaseSessionAgent(session: ProxySession): void {
       // ignore - agent may already be evicted
     }
     s.releaseAgent = undefined;
+  }
+}
+
+function bindTaskAbortToUpstreamResponse(
+  session: ProxySession,
+  abortController: AbortController,
+  taskId: string
+): () => void {
+  const abortUpstream = () => {
+    const sessionWithController = session as typeof session & {
+      responseController?: AbortController;
+    };
+    const upstreamController = sessionWithController.responseController;
+    if (!upstreamController || upstreamController.signal.aborted) {
+      return;
+    }
+
+    const reason =
+      abortController.signal.reason instanceof Error
+        ? abortController.signal.reason
+        : new Error("async_task_aborted");
+    try {
+      upstreamController.abort(reason);
+    } catch (error) {
+      logger.warn("[ResponseHandler] Failed to abort upstream response for async task", {
+        taskId,
+        error,
+      });
+    }
+  };
+
+  abortController.signal.addEventListener("abort", abortUpstream, { once: true });
+  if (abortController.signal.aborted) {
+    abortUpstream();
+  }
+
+  return () => {
+    abortController.signal.removeEventListener("abort", abortUpstream);
+  };
+}
+
+async function readResponseTextWithTaskActivity(
+  response: Response,
+  taskId: string
+): Promise<string> {
+  if (!response.body) {
+    AsyncTaskManager.touch(taskId);
+    return response.text();
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  const chunks: string[] = [];
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) {
+        break;
+      }
+      if (!value || value.byteLength === 0) {
+        continue;
+      }
+
+      AsyncTaskManager.touch(taskId);
+      chunks.push(decoder.decode(value, { stream: true }));
+    }
+
+    const finalText = decoder.decode();
+    if (finalText) {
+      chunks.push(finalText);
+    }
+    AsyncTaskManager.touch(taskId);
+    return chunks.join("");
+  } finally {
+    reader.releaseLock();
   }
 }
 
@@ -1049,17 +1359,17 @@ export class ProxyResponseHandler {
     const statusCode = response.status;
 
     let finalResponse = response;
-    const persistNonStreamAfterSnapshot = async (targetResponse: Response) => {
+    let finalResponseBodyForSnapshot: string | null = null;
+    const persistNonStreamAfterSnapshot = (targetResponse: Response, body: string) => {
       if (!session.sessionId || !session.shouldPersistSessionDebugArtifacts()) {
         return;
       }
 
-      const finalBody = await targetResponse.clone().text();
       const responseAfterSnapshotTask = SessionManager.storeSessionResponsePhaseSnapshot?.(
         session.sessionId,
         "after",
         {
-          body: finalBody,
+          body,
           headers: targetResponse.headers,
           meta: {
             upstreamUrl: null,
@@ -1096,9 +1406,15 @@ export class ProxyResponseHandler {
         const statusCode = response.status;
 
         const taskId = `non-stream-passthrough-${messageContext?.id || `unknown-${Date.now()}`}`;
+        const statsAbortController = new AbortController();
+        const cleanupTaskAbortBinding = bindTaskAbortToUpstreamResponse(
+          session,
+          statsAbortController,
+          taskId
+        );
         const statsPromise = (async () => {
           try {
-            const responseText = await responseForStats.text();
+            const responseText = await readResponseTextWithTaskActivity(responseForStats, taskId);
 
             const sessionWithCleanup = session as typeof session & {
               clearResponseTimeout?: () => void;
@@ -1203,12 +1519,16 @@ export class ProxyResponseHandler {
               );
             }
           } finally {
+            cleanupTaskAbortBinding();
             releaseSessionAgent(session);
-            AsyncTaskManager.cleanup(taskId);
           }
         })();
 
-        AsyncTaskManager.register(taskId, statsPromise, "non-stream-passthrough-stats");
+        AsyncTaskManager.register(taskId, statsPromise, {
+          taskType: "non-stream-passthrough-stats",
+          abortController: statsAbortController,
+          staleTimeoutMs: resolveNonStreamTaskStaleTimeoutMs(provider),
+        });
         statsPromise.catch((error) => {
           if (session.sessionId && session.shouldPersistSessionDebugArtifacts()) {
             void discardBeforeResponseBodySnapshot(session);
@@ -1246,6 +1566,7 @@ export class ProxyResponseHandler {
           const responseData = JSON.parse(responseText) as GeminiResponse;
 
           const transformed = GeminiAdapter.transformResponse(responseData, false);
+          const transformedBody = JSON.stringify(transformed);
 
           logger.debug(
             "[ResponseHandler] Transformed Gemini non-stream response to client format",
@@ -1257,7 +1578,8 @@ export class ProxyResponseHandler {
           );
 
           // ⭐ 清理传输 headers（body 已从流转为 JSON 字符串）
-          finalResponse = new Response(JSON.stringify(transformed), {
+          finalResponseBodyForSnapshot = transformedBody;
+          finalResponse = new Response(transformedBody, {
             status: response.status,
             statusText: response.statusText,
             headers: cleanResponseHeaders(response.headers),
@@ -1265,6 +1587,7 @@ export class ProxyResponseHandler {
         } catch (error) {
           logger.error("[ResponseHandler] Failed to transform Gemini non-stream response:", error);
           finalResponse = response;
+          finalResponseBodyForSnapshot = null;
         }
       }
     }
@@ -1272,6 +1595,11 @@ export class ProxyResponseHandler {
     // 使用 AsyncTaskManager 管理后台处理任务
     const taskId = `non-stream-${messageContext?.id || `unknown-${Date.now()}`}`;
     const abortController = new AbortController();
+    const cleanupTaskAbortBinding = bindTaskAbortToUpstreamResponse(
+      session,
+      abortController,
+      taskId
+    );
     const cleanupClientAbortListener = bindClientAbortListener(session.clientAbortSignal, () => {
       AsyncTaskManager.cancel(taskId);
       abortController.abort();
@@ -1334,7 +1662,7 @@ export class ProxyResponseHandler {
         }
 
         // ⭐ 非流式：读取完整响应体（会等待所有数据下载完成）
-        const responseText = await responseForLog.text();
+        const responseText = await readResponseTextWithTaskActivity(responseForLog, taskId);
 
         // ⭐ 响应体读取完成：清除响应超时定时器
         const sessionWithCleanup = session as typeof session & {
@@ -1420,6 +1748,13 @@ export class ProxyResponseHandler {
           responseBeforeSnapshotTask?.catch((err) => {
             logger.error("[ResponseHandler] Failed to store response before snapshot:", err);
           });
+
+          // after 快照复用本任务已经读取到的响应文本，避免再启动一个未受
+          // AsyncTaskManager 管理的 clone().text() 读取分支。
+          persistNonStreamAfterSnapshot(
+            finalResponse,
+            finalResponseBodyForSnapshot ?? responseText
+          );
         }
 
         if (billableUsageMetrics && messageContext) {
@@ -1706,14 +2041,18 @@ export class ProxyResponseHandler {
           });
         }
       } finally {
+        cleanupTaskAbortBinding();
         cleanupClientAbortListener();
         releaseSessionAgent(session);
-        AsyncTaskManager.cleanup(taskId);
       }
     })();
 
     // 注册任务并添加全局错误捕获
-    AsyncTaskManager.register(taskId, processingPromise, "non-stream-processing");
+    AsyncTaskManager.register(taskId, processingPromise, {
+      taskType: "non-stream-processing",
+      abortController,
+      staleTimeoutMs: resolveNonStreamTaskStaleTimeoutMs(provider),
+    });
     processingPromise.catch(async (error) => {
       logger.error("ResponseHandler: Uncaught error in non-stream processing", {
         taskId,
@@ -1731,9 +2070,6 @@ export class ProxyResponseHandler {
       });
     });
 
-    void persistNonStreamAfterSnapshot(finalResponse).catch((error) => {
-      logger.error("[ResponseHandler] Failed to persist non-stream after snapshot", { error });
-    });
     return finalResponse;
   }
 
@@ -1778,6 +2114,13 @@ export class ProxyResponseHandler {
         const statusCode = response.status;
 
         const taskId = `stream-passthrough-${messageContext.id}`;
+        const streamTaskStaleTimeoutMs = resolveStreamTaskStaleTimeoutMs(provider);
+        const statsAbortController = new AbortController();
+        const cleanupTaskAbortBinding = bindTaskAbortToUpstreamResponse(
+          session,
+          statsAbortController,
+          taskId
+        );
         const statsPromise = (async () => {
           const sessionWithCleanup = session as typeof session & {
             clearResponseTimeout?: () => void;
@@ -1787,106 +2130,10 @@ export class ProxyResponseHandler {
           };
 
           let reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
-          // 保护：避免透传 stats 任务把超大响应体无界缓存在内存中（DoS/OOM 风险）
-          // 说明：用于统计/结算的内容采用“头部 + 尾部窗口”：
-          // - 头部保留前 MAX_STATS_HEAD_BYTES（便于解析可能前置的 metadata）
-          // - 尾部保留最近 MAX_STATS_TAIL_BYTES（便于解析结尾 usage/假 200 等）
-          // - 中间部分会被丢弃（wasTruncated=true），统计将退化为 best-effort
-          const MAX_STATS_BUFFER_BYTES = 10 * 1024 * 1024; // 10MB
-          const MAX_STATS_HEAD_BYTES = 1024 * 1024; // 1MB
-          const MAX_STATS_TAIL_BYTES = MAX_STATS_BUFFER_BYTES - MAX_STATS_HEAD_BYTES;
-          const MAX_STATS_TAIL_CHUNKS = 8192;
-
-          const headChunks: string[] = [];
-          let headBufferedBytes = 0;
-
-          const tailChunks: string[] = [];
-          const tailChunkBytes: number[] = [];
-          let tailHead = 0;
-          let tailBufferedBytes = 0;
-          let wasTruncated = false;
-          let inTailMode = false;
-
-          const joinTailChunks = (): string => {
-            if (tailHead <= 0) return tailChunks.join("");
-            return tailChunks.slice(tailHead).join("");
-          };
-
-          const joinChunks = (): string => {
-            const headText = headChunks.join("");
-            if (!inTailMode) {
-              return headText;
-            }
-
-            const tailText = joinTailChunks();
-
-            // 用 SSE comment 标记被截断的中间段；parseSSEData 会忽略 ":" 开头的行
-            if (wasTruncated) {
-              // 插入空行强制 flush event，避免“头+尾”拼接后跨 event 误拼接数据行
-              return `${headText}\n\n: [cch_truncated]\n\n${tailText}`;
-            }
-
-            return `${headText}${tailText}`;
-          };
-
-          const pushChunk = (text: string, bytes: number) => {
-            if (!text) return;
-
-            const pushToTail = (tailText: string, tailBytes: number) => {
-              if (!tailText) return;
-
-              tailChunks.push(tailText);
-              tailChunkBytes.push(tailBytes);
-              tailBufferedBytes += tailBytes;
-
-              // 仅保留尾部窗口，避免内存无界增长
-              while (tailBufferedBytes > MAX_STATS_TAIL_BYTES && tailHead < tailChunkBytes.length) {
-                tailBufferedBytes -= tailChunkBytes[tailHead] ?? 0;
-                tailChunks[tailHead] = "";
-                tailChunkBytes[tailHead] = 0;
-                tailHead += 1;
-                wasTruncated = true;
-              }
-
-              // 定期压缩数组，避免 head 指针过大导致 slice/join 性能退化
-              if (tailHead > 4096) {
-                tailChunks.splice(0, tailHead);
-                tailChunkBytes.splice(0, tailHead);
-                tailHead = 0;
-              }
-
-              // 防御：限制 chunk 数量，避免大量超小 chunk 导致对象/数组膨胀（即使总字节数已受限）
-              const keptCount = tailChunks.length - tailHead;
-              if (keptCount > MAX_STATS_TAIL_CHUNKS) {
-                const joined = joinTailChunks();
-                tailChunks.length = 0;
-                tailChunkBytes.length = 0;
-                tailHead = 0;
-                tailChunks.push(joined);
-                tailChunkBytes.push(tailBufferedBytes);
-              }
-            };
-
-            // 优先填充 head；超过 head 上限后切到 tail（但不代表一定发生截断，只有 tail 溢出才算截断）
-            if (!inTailMode && headBufferedBytes < MAX_STATS_HEAD_BYTES) {
-              const remainingHeadBytes = MAX_STATS_HEAD_BYTES - headBufferedBytes;
-              if (remainingHeadBytes > 0 && bytes > remainingHeadBytes) {
-                const headPart = text.substring(0, remainingHeadBytes);
-                const tailPart = text.substring(remainingHeadBytes);
-
-                pushChunk(headPart, remainingHeadBytes);
-
-                inTailMode = true;
-                pushToTail(tailPart, bytes - remainingHeadBytes);
-              } else {
-                headChunks.push(text);
-                headBufferedBytes += bytes;
-              }
-            } else {
-              pushToTail(text, bytes);
-            }
-          };
-          const decoder = new TextDecoder();
+          const streamTextAccumulator = new BoundedStreamTextAccumulator();
+          let lastStreamTextSnapshot: BoundedStreamTextSnapshot | null = null;
+          const getCollectedChunkCount = () =>
+            lastStreamTextSnapshot?.chunkCount ?? streamTextAccumulator.chunkCount;
           let isFirstChunk = true;
           let streamEndedNormally = false;
           let responseTimeoutCleared = false;
@@ -1894,7 +2141,9 @@ export class ProxyResponseHandler {
 
           // 静默期 Watchdog：透传也需要支持中途卡住（无新数据推送）
           const idleTimeoutMs =
-            provider.streamingIdleTimeoutMs > 0 ? provider.streamingIdleTimeoutMs : Infinity;
+            provider.streamingIdleTimeoutMs > 0
+              ? provider.streamingIdleTimeoutMs
+              : Number.POSITIVE_INFINITY;
           let idleTimeoutId: NodeJS.Timeout | null = null;
           const clearIdleTimer = () => {
             if (idleTimeoutId) {
@@ -1912,11 +2161,10 @@ export class ProxyResponseHandler {
                 providerId: provider.id,
                 providerName: provider.name,
                 idleTimeoutMs,
-                chunksCollected: headChunks.length + Math.max(0, tailChunks.length - tailHead),
-                headBufferedBytes,
-                tailBufferedBytes,
-                bufferedBytes: headBufferedBytes + tailBufferedBytes,
-                wasTruncated,
+                chunksCollected: getCollectedChunkCount(),
+                totalBytes: streamTextAccumulator.totalByteCount,
+                bufferedBytes: streamTextAccumulator.bufferedByteCount,
+                wasTruncated: streamTextAccumulator.isTruncated,
               });
               // 终止上游连接：让透传到客户端的连接也尽快结束，避免永久悬挂占用资源
               try {
@@ -1945,10 +2193,14 @@ export class ProxyResponseHandler {
             }
           };
 
+          const flushAndSnapshot = (): BoundedStreamTextSnapshot => {
+            const snapshot = streamTextAccumulator.finish();
+            lastStreamTextSnapshot = snapshot;
+            return snapshot;
+          };
+
           const flushAndJoin = (): string => {
-            const flushed = decoder.decode();
-            if (flushed) pushChunk(flushed, 0);
-            return joinChunks();
+            return flushAndSnapshot().text;
           };
 
           try {
@@ -1989,25 +2241,8 @@ export class ProxyResponseHandler {
                   clearResponseTimeoutOnce(chunkSize);
                 }
 
-                // 尽量填满 head：边界 chunk 可能跨过 head 上限，按 byte 切分以避免 head 少于 1MB
-                if (!inTailMode && headBufferedBytes < MAX_STATS_HEAD_BYTES) {
-                  const remainingHeadBytes = MAX_STATS_HEAD_BYTES - headBufferedBytes;
-                  if (remainingHeadBytes > 0 && chunkSize > remainingHeadBytes) {
-                    const headPart = value.subarray(0, remainingHeadBytes);
-                    const tailPart = value.subarray(remainingHeadBytes);
-
-                    const headText = decoder.decode(headPart, { stream: true });
-                    pushChunk(headText, remainingHeadBytes);
-
-                    inTailMode = true;
-                    const tailText = decoder.decode(tailPart, { stream: true });
-                    pushChunk(tailText, chunkSize - remainingHeadBytes);
-                  } else {
-                    pushChunk(decoder.decode(value, { stream: true }), chunkSize);
-                  }
-                } else {
-                  pushChunk(decoder.decode(value, { stream: true }), chunkSize);
-                }
+                streamTextAccumulator.pushBytes(value);
+                AsyncTaskManager.touch(taskId);
               }
 
               // 首块数据到达后才启动 idle timer（避免与首字节超时职责重叠）
@@ -2017,13 +2252,14 @@ export class ProxyResponseHandler {
             }
 
             clearIdleTimer();
-            const allContent = flushAndJoin();
+            const streamSnapshot = flushAndSnapshot();
+            const allContent = streamSnapshot.text;
             const clientAborted = session.clientAbortSignal?.aborted ?? false;
 
             // 存储响应体到 Redis（5分钟过期）
             if (
               session.sessionId &&
-              !wasTruncated &&
+              !streamSnapshot?.truncated &&
               session.shouldPersistSessionDebugArtifacts()
             ) {
               void SessionManager.storeSessionResponse(
@@ -2053,12 +2289,14 @@ export class ProxyResponseHandler {
               responseAfterSnapshotTask?.catch((err) => {
                 logger.error("[ResponseHandler] Failed to store response after snapshot:", err);
               });
-            } else if (session.sessionId && wasTruncated) {
+            } else if (session.sessionId && streamSnapshot?.truncated) {
               logger.warn("[ResponseHandler] Skip storing passthrough response: body too large", {
                 taskId,
                 providerId: provider.id,
                 providerName: provider.name,
-                maxBytes: MAX_STATS_BUFFER_BYTES,
+                maxBytes: STREAM_STATS_MAX_BUFFER_BYTES,
+                totalBytes: streamSnapshot.totalBytes,
+                bufferedBytes: streamSnapshot.bufferedBytes,
               });
             }
 
@@ -2157,6 +2395,7 @@ export class ProxyResponseHandler {
               });
             }
           } finally {
+            cleanupTaskAbortBinding();
             clearIdleTimer();
             // 兜底：在流结束/中断后清理首字节超时，避免定时器泄漏
             // 注意：不应在流仍可能继续时清理（否则会让首字节超时失效）
@@ -2219,11 +2458,14 @@ export class ProxyResponseHandler {
               });
             }
             releaseSessionAgent(session);
-            AsyncTaskManager.cleanup(taskId);
           }
         })();
 
-        AsyncTaskManager.register(taskId, statsPromise, "stream-passthrough-stats");
+        AsyncTaskManager.register(taskId, statsPromise, {
+          taskType: "stream-passthrough-stats",
+          abortController: statsAbortController,
+          staleTimeoutMs: streamTaskStaleTimeoutMs,
+        });
         statsPromise.catch((error) => {
           if (session.sessionId && session.shouldPersistSessionDebugArtifacts()) {
             void discardBeforeResponseBodySnapshot(session);
@@ -2322,14 +2564,25 @@ export class ProxyResponseHandler {
     // 使用 AsyncTaskManager 管理后台处理任务
     const taskId = `stream-${messageContext?.id || `unknown-${Date.now()}`}`;
     const abortController = new AbortController();
+    const cleanupTaskAbortBinding = bindTaskAbortToUpstreamResponse(
+      session,
+      abortController,
+      taskId
+    );
     const idleTimeoutMs =
-      provider.streamingIdleTimeoutMs > 0 ? provider.streamingIdleTimeoutMs : Infinity;
+      provider.streamingIdleTimeoutMs > 0
+        ? provider.streamingIdleTimeoutMs
+        : Number.POSITIVE_INFINITY;
+    const streamTaskStaleTimeoutMs = resolveStreamTaskStaleTimeoutMs(provider);
     const clientAbortDrainTimeoutMs = CLIENT_ABORT_DRAIN_MAX_MS;
 
     // 提升 idleTimeoutId 到外部作用域，以便客户端断开时能清除
     let idleTimeoutId: NodeJS.Timeout | null = null;
     let clientAbortDrainTimeoutId: NodeJS.Timeout | null = null;
-    const chunks: string[] = [];
+    const streamTextAccumulator = new BoundedStreamTextAccumulator();
+    let lastStreamTextSnapshot: BoundedStreamTextSnapshot | null = null;
+    const getCollectedChunkCount = () =>
+      lastStreamTextSnapshot?.chunkCount ?? streamTextAccumulator.chunkCount;
     const clearClientAbortDrainTimer = () => {
       if (clientAbortDrainTimeoutId) {
         clearTimeout(clientAbortDrainTimeoutId);
@@ -2350,7 +2603,7 @@ export class ProxyResponseHandler {
           taskId,
           providerId: provider.id,
           idleTimeoutMs,
-          chunksCollected: chunks.length,
+          chunksCollected: getCollectedChunkCount(),
         });
 
         // 1. 关闭客户端流（让客户端收到连接关闭通知，避免悬挂）
@@ -2435,10 +2688,7 @@ export class ProxyResponseHandler {
 
     const processingPromise = (async () => {
       const reader = internalStream.getReader();
-      const decoder = new TextDecoder();
-      // 注意：即使 STORE_SESSION_RESPONSE_BODY=false（不写入 Redis），这里也会在内存中累积完整流内容：
-      // - 用于解析 usage/cost 与内部结算（例如“假 200”检测）
-      // 因此该开关仅影响“是否持久化”，不用于控制流式内存占用。
+      // 统计/结算只保留有界的“头 + 尾”文本快照，避免长流式响应把进程堆撑满。
       let usageForCost: UsageMetrics | null = null;
       let isFirstChunk = true; // 标记是否为第一块数据
 
@@ -2448,11 +2698,9 @@ export class ProxyResponseHandler {
       // 静默一直等到 60s drain 总上限。
 
       const flushAndJoin = (): string => {
-        const flushed = decoder.decode();
-        if (flushed) {
-          chunks.push(flushed);
-        }
-        return chunks.join("");
+        const snapshot = streamTextAccumulator.finish();
+        lastStreamTextSnapshot = snapshot;
+        return snapshot.text;
       };
 
       const finalizeStream = async (
@@ -2473,8 +2721,14 @@ export class ProxyResponseHandler {
         const streamErrorMessage = finalized.errorMessage;
         const providerIdForPersistence = finalized.providerIdForPersistence;
 
-        // 存储响应体到 Redis（5分钟过期）
-        if (session.sessionId && session.shouldPersistSessionDebugArtifacts()) {
+        const streamSnapshot = lastStreamTextSnapshot;
+
+        // 存储响应体到 Redis（5分钟过期）。截断后的统计快照不是完整正文，不能伪装成完整调试正文落盘。
+        if (
+          session.sessionId &&
+          session.shouldPersistSessionDebugArtifacts() &&
+          !streamSnapshot?.truncated
+        ) {
           const beforeBody = (await consumeBeforeResponseBodySnapshot(session)) ?? allContent;
           void SessionManager.storeSessionResponse(
             session.sessionId,
@@ -2502,6 +2756,16 @@ export class ProxyResponseHandler {
           );
           responseBeforeSnapshotTask?.catch((err) => {
             logger.error("[ResponseHandler] Failed to store response before snapshot:", err);
+          });
+        } else if (session.sessionId && streamSnapshot?.truncated) {
+          discardBeforeResponseBodySnapshot(session);
+          logger.warn("[ResponseHandler] Skip storing stream response: body too large", {
+            taskId,
+            providerId: provider.id,
+            providerName: provider.name,
+            maxBytes: STREAM_STATS_MAX_BUFFER_BYTES,
+            totalBytes: streamSnapshot.totalBytes,
+            bufferedBytes: streamSnapshot.bufferedBytes,
           });
         }
 
@@ -2746,7 +3010,7 @@ export class ProxyResponseHandler {
           statusCode: effectiveStatusCode,
           durationMs: duration,
           isStreaming: true,
-          sseEventCount: chunks.length,
+          sseEventCount: getCollectedChunkCount(),
           errorMessage: streamErrorMessage ?? undefined,
         });
       };
@@ -2760,7 +3024,7 @@ export class ProxyResponseHandler {
               taskId,
               providerId: provider.id,
               providerName: provider.name,
-              chunksCollected: chunks.length,
+              chunksCollected: getCollectedChunkCount(),
             });
             break; // 提前终止
           }
@@ -2772,14 +3036,15 @@ export class ProxyResponseHandler {
           }
           if (value) {
             const chunkSize = value.length;
-            chunks.push(decoder.decode(value, { stream: true }));
+            streamTextAccumulator.pushBytes(value);
+            AsyncTaskManager.touch(taskId);
 
             // 每次收到数据后重置静默期计时器（首次收到数据时启动）
             startIdleTimer();
             logger.trace("ResponseHandler: Idle timer reset (data received)", {
               taskId,
               providerId: provider.id,
-              chunksCollected: chunks.length,
+              chunksCollected: getCollectedChunkCount(),
               lastChunkSize: chunkSize,
               idleTimeoutMs: idleTimeoutMs === Infinity ? "disabled" : idleTimeoutMs,
             });
@@ -2852,7 +3117,7 @@ export class ProxyResponseHandler {
               providerId: provider.id,
               providerName: provider.name,
               messageId: messageContext.id,
-              chunksCollected: chunks.length,
+              chunksCollected: getCollectedChunkCount(),
               errorName: err.name,
             });
 
@@ -2887,7 +3152,7 @@ export class ProxyResponseHandler {
               providerId: provider.id,
               providerName: provider.name,
               messageId: messageContext.id,
-              chunksCollected: chunks.length,
+              chunksCollected: getCollectedChunkCount(),
             });
 
             // 注意：无法重试，因为客户端已收到 HTTP 200
@@ -2926,7 +3191,7 @@ export class ProxyResponseHandler {
               providerId: provider.id,
               providerName: provider.name,
               messageId: messageContext.id,
-              chunksCollected: chunks.length,
+              chunksCollected: getCollectedChunkCount(),
               errorName: err.name,
               errorMessage: err.message || "(empty message)",
             });
@@ -2959,7 +3224,7 @@ export class ProxyResponseHandler {
               providerId: provider.id,
               providerName: provider.name,
               messageId: messageContext.id,
-              chunksCollected: chunks.length,
+              chunksCollected: getCollectedChunkCount(),
               errorName: err.name,
               reason:
                 err.name === "ResponseAborted"
@@ -2985,7 +3250,7 @@ export class ProxyResponseHandler {
             providerId: provider.id,
             providerName: provider.name,
             messageId: messageContext.id,
-            chunksCollected: chunks.length,
+            chunksCollected: getCollectedChunkCount(),
             errorName: err.name,
             errorMessage: err.message || "(empty message)",
             errorCode: (err as NodeJS.ErrnoException).code,
@@ -3037,6 +3302,7 @@ export class ProxyResponseHandler {
         }
       } finally {
         // 确保资源释放
+        cleanupTaskAbortBinding();
         cleanupClientAbortListener();
         clearClientAbortDrainTimer();
         clearIdleTimer(); // 清除静默期计时器（防止泄漏）
@@ -3049,12 +3315,15 @@ export class ProxyResponseHandler {
           });
         }
         releaseSessionAgent(session);
-        AsyncTaskManager.cleanup(taskId);
       }
     })();
 
     // 注册任务并添加全局错误捕获
-    AsyncTaskManager.register(taskId, processingPromise, "stream-processing");
+    AsyncTaskManager.register(taskId, processingPromise, {
+      taskType: "stream-processing",
+      abortController,
+      staleTimeoutMs: streamTaskStaleTimeoutMs,
+    });
     processingPromise.catch(async (error) => {
       logger.error("ResponseHandler: Uncaught error in stream processing", {
         taskId,
