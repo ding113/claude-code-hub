@@ -113,6 +113,34 @@ describe("convertCptVariant", () => {
     expect(node?.output_cost_per_token_above_272k_tokens).toBeCloseTo(0.00002, 12);
   });
 
+  it("does not derive tier fields from non-USD or negative base charges", () => {
+    const node = convertCptVariant({
+      provider: "alibaba-cn",
+      official: true,
+      source: "test",
+      charges: {
+        prompt: { unit: "per_M_tokens", price: "10", currency: "CNY" },
+        cache_read: { unit: "per_M_tokens", price: "-1" },
+        completion: { unit: "per_M_tokens", price: "40" },
+      },
+      tracks: [
+        {
+          label: ">200K context",
+          factor: "1",
+          charge_factors: { prompt: "2", completion: "1.5", cache_read: "2" },
+          triggers: [{ kind: "input_tokens_above", threshold: 200000 }],
+        },
+        { label: "standard", factor: "1", triggers: [] },
+      ],
+    });
+
+    // 基础价与分层价同口径:CNY / 负数维度均不产生计费字段
+    expect(node?.input_cost_per_token).toBeUndefined();
+    expect(node?.input_cost_per_token_above_200k_tokens).toBeUndefined();
+    expect(node?.cache_read_input_token_cost_above_200k_tokens).toBeUndefined();
+    expect(node?.output_cost_per_token_above_200k_tokens).toBeCloseTo(0.00006, 12);
+  });
+
   it("maps priority service tier tracks to priority fields", () => {
     const node = convertCptVariant({
       provider: "openai",

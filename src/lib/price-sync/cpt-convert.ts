@@ -226,7 +226,12 @@ export function convertCptVariant(variant: CptPricingVariant): Record<string, un
   const basePriceOf = (chargeKey: string): number | null => {
     const charge = charges[chargeKey];
     if (!charge) return null;
-    return parseDecimal(charge.price);
+    // 与基础价循环同口径:非 USD 报价与内部计费不可比,负数价格拒绝
+    if (typeof charge.currency === "string" && charge.currency && charge.currency !== "USD") {
+      return null;
+    }
+    const price = parseDecimal(charge.price);
+    return price !== null && price >= 0 ? price : null;
   };
 
   // 基础价:base price x 默认轨道 factor(无默认轨道时 factor=1)
