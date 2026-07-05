@@ -133,9 +133,9 @@ describe("resolvePricingForModelRecords - cloud official", () => {
     expect(resolved?.source).toBe("official_fallback");
   });
 
-  it("official-aware detail fallback prefers official nodes at equal detail", () => {
+  it("claims official=true nodes via cloud official even without vendor declarations", () => {
     const record = makeCloudRecord({
-      // 无 vendor/官方声明,exact/official 键都不命中 -> 走 detail fallback
+      // 无 vendor/官方声明,exact/official 键都不命中,official=true 由 resolveCloudOfficial 兜住
       pricing: {
         aaa: { input_cost_per_token: 0.000001, output_cost_per_token: 0.000002 },
         zzz: {
@@ -146,8 +146,6 @@ describe("resolvePricingForModelRecords - cloud official", () => {
       },
       official_pricing_provider: undefined,
     });
-    // 干掉 cloud_official 的 official 标志识别路径?不能——official=true 会先被 resolveCloudOfficial 命中。
-    // 这里直接断言 cloud_official 生效即可。
     const resolved = resolvePricingForModelRecords({
       provider: null,
       primaryModelName: "mystery-model",
@@ -157,5 +155,28 @@ describe("resolvePricingForModelRecords - cloud official", () => {
     });
 
     expect(resolved?.resolvedPricingProviderKey).toBe("zzz");
+    expect(resolved?.source).toBe("cloud_official");
+  });
+
+  it("detail fallback skips official nodes without valid price data", () => {
+    const record = makeCloudRecord({
+      // official 节点无任何有效价格字段:cloud_official 不命中,
+      // detail fallback 的官方优先排序也必须继续尝试后续有效节点
+      pricing: {
+        aaa: { input_cost_per_token: 0.000001, output_cost_per_token: 0.000002 },
+        zzz: { official: true, provider_model_id: "zzz-model" },
+      },
+      official_pricing_provider: undefined,
+    });
+    const resolved = resolvePricingForModelRecords({
+      provider: null,
+      primaryModelName: "mystery-model",
+      fallbackModelName: null,
+      primaryRecord: record,
+      fallbackRecord: null,
+    });
+
+    expect(resolved?.resolvedPricingProviderKey).toBe("aaa");
+    expect(resolved?.source).toBe("priority_fallback");
   });
 });

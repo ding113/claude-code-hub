@@ -399,7 +399,9 @@ function resolveCloudOfficial(candidate: ModelRecordCandidate): ResolvedPricing 
 
   for (const key of officialKeys) {
     const pricingNode = pricingMap[key];
-    if (!pricingNode) continue;
+    // 校验节点自身价格:merge 后的整表校验会被 pricing 映射里其他节点"带过",
+    // 选中无价格节点会让顶层计费字段为空
+    if (!pricingNode || !hasValidPriceData(pricingNode as ModelPriceData)) continue;
     const mergedPriceData = mergePriceData(candidate.record.priceData, pricingNode, key);
     if (!hasValidPriceData(mergedPriceData)) continue;
 
@@ -421,31 +423,35 @@ function resolveDetailedFallback(candidate: ModelRecordCandidate): ResolvedPrici
     return null;
   }
 
-  // 官方节点优先,再按明细字段数排序
+  // 官方节点优先,再按明细字段数排序;首选节点数据无效时继续尝试后续节点
   const keys = Object.keys(pricingMap).sort((a, b) => {
     const officialA = pricingMap[a]?.official === true ? 0 : 1;
     const officialB = pricingMap[b]?.official === true ? 0 : 1;
     if (officialA !== officialB) return officialA - officialB;
     return compareDetailKeys(a, b, pricingMap);
   });
-  const selectedKey = keys[0];
-  if (!selectedKey) {
-    return null;
+
+  for (const selectedKey of keys) {
+    const pricingNode = pricingMap[selectedKey];
+    // 同 resolveCloudOfficial:节点自身必须携带有效价格,否则继续尝试后续节点
+    if (!pricingNode || !hasValidPriceData(pricingNode as ModelPriceData)) {
+      continue;
+    }
+    const mergedPriceData = mergePriceData(candidate.record.priceData, pricingNode, selectedKey);
+    if (!hasValidPriceData(mergedPriceData)) {
+      continue;
+    }
+
+    return {
+      resolvedModelName: candidate.modelName ?? candidate.record.modelName,
+      resolvedPricingProviderKey: selectedKey,
+      source: "priority_fallback",
+      priceData: mergedPriceData,
+      pricingNode,
+    };
   }
 
-  const pricingNode = pricingMap[selectedKey];
-  const mergedPriceData = mergePriceData(candidate.record.priceData, pricingNode, selectedKey);
-  if (!hasValidPriceData(mergedPriceData)) {
-    return null;
-  }
-
-  return {
-    resolvedModelName: candidate.modelName ?? candidate.record.modelName,
-    resolvedPricingProviderKey: selectedKey,
-    source: "priority_fallback",
-    priceData: mergedPriceData,
-    pricingNode,
-  };
+  return null;
 }
 
 function resolveTopLevel(candidate: ModelRecordCandidate): ResolvedPricing | null {
