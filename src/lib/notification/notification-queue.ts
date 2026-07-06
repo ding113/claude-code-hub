@@ -2,7 +2,6 @@ import type { Job } from "bull";
 import Queue from "bull";
 import type { NotificationJobType } from "@/lib/constants/notification.constants";
 import { logger } from "@/lib/logger";
-import { buildRedisQueueOptions } from "@/lib/redis/bull-queue-options";
 import {
   applyCacheHitRateAlertCooldownToPayload,
   buildCacheHitRateAlertCooldownKey,
@@ -11,6 +10,7 @@ import {
 } from "@/lib/notification/tasks/cache-hit-rate-alert";
 import { generateCostAlerts } from "@/lib/notification/tasks/cost-alert";
 import { generateDailyLeaderboard } from "@/lib/notification/tasks/daily-leaderboard";
+import { buildRedisQueueOptions } from "@/lib/redis/bull-queue-options";
 import { resolveSystemTimezone } from "@/lib/utils/timezone";
 import {
   buildCacheHitRateAlertMessage,
