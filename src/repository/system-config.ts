@@ -269,8 +269,7 @@ const RECENT_COLUMN_LADDER: ReadonlyArray<{
     column: systemSettings.enableGeminiFunctionIdRectifier,
     selectWarn:
       "system_settings 表除 enableGeminiFunctionIdRectifier 外仍有列缺失，继续回退到上一代字段集。",
-    updateWarn:
-      "system_settings 表除 enableGeminiFunctionIdRectifier 外仍有列缺失，继续降级更新。",
+    updateWarn: "system_settings 表除 enableGeminiFunctionIdRectifier 外仍有列缺失，继续降级更新。",
   },
   {
     key: "enableThinkingEffortConflictRectifier",
