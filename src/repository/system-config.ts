@@ -165,6 +165,7 @@ function createFallbackSettings(): SystemSettings {
     enableThinkingSignatureRectifier: true,
     enableThinkingBudgetRectifier: true,
     enableThinkingEffortConflictRectifier: true,
+    enableGeminiFunctionIdRectifier: true,
     enableBillingHeaderRectifier: true,
     enableResponseInputRectifier: true,
     allowNonConversationEndpointProviderFallback: true,
@@ -263,6 +264,13 @@ const RECENT_COLUMN_LADDER: ReadonlyArray<{
   // 本层更新失败（仍有列缺失）时记录的告警
   updateWarn: string;
 }> = [
+  {
+    key: "enableGeminiFunctionIdRectifier",
+    column: systemSettings.enableGeminiFunctionIdRectifier,
+    selectWarn:
+      "system_settings 表除 enableGeminiFunctionIdRectifier 外仍有列缺失，继续回退到上一代字段集。",
+    updateWarn: "system_settings 表除 enableGeminiFunctionIdRectifier 外仍有列缺失，继续降级更新。",
+  },
   {
     key: "enableThinkingEffortConflictRectifier",
     column: systemSettings.enableThinkingEffortConflictRectifier,
@@ -679,6 +687,11 @@ export async function updateSystemSettings(
     // thinking effort 冲突整流器开关（如果提供）
     if (payload.enableThinkingEffortConflictRectifier !== undefined) {
       updates.enableThinkingEffortConflictRectifier = payload.enableThinkingEffortConflictRectifier;
+    }
+
+    // Gemini function id 整流器开关（如果提供）
+    if (payload.enableGeminiFunctionIdRectifier !== undefined) {
+      updates.enableGeminiFunctionIdRectifier = payload.enableGeminiFunctionIdRectifier;
     }
 
     // billing header 整流器开关（如果提供）

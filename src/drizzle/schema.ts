@@ -841,6 +841,13 @@ export const systemSettings = pgTable('system_settings', {
     .notNull()
     .default(true),
 
+  // Gemini function id 整流器（默认开启）
+  // 开启后：当 Gemini 类型供应商（Vertex 等严格上游）因 functionCall/functionResponse 携带 id
+  // 返回 400 错误时，自动剥离 id 字段并对同供应商重试一次
+  enableGeminiFunctionIdRectifier: boolean('enable_gemini_function_id_rectifier')
+    .notNull()
+    .default(true),
+
   // billing header 整流器（默认开启）
   // 开启后：主动移除 Claude Code 客户端注入到 system 提示中的 x-anthropic-billing-header 文本块
   enableBillingHeaderRectifier: boolean('enable_billing_header_rectifier')

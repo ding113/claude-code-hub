@@ -96,6 +96,11 @@ export interface SystemSettings {
   // 同时存在返回 400 错误时，自动剥离 effort 字段并对同供应商重试一次
   enableThinkingEffortConflictRectifier: boolean;
 
+  // Gemini function id 整流器（默认开启）
+  // 目标：当 Gemini 类型供应商（Vertex 等严格上游）因 functionCall/functionResponse 携带 id
+  // 返回 400 错误时，自动剥离 id 字段并对同供应商重试一次
+  enableGeminiFunctionIdRectifier: boolean;
+
   // billing header 整流器（默认开启）
   // 目标：主动移除 Claude Code 客户端注入到 system 提示中的 x-anthropic-billing-header 文本块，
   // 防止 Amazon Bedrock 等非原生 Anthropic 上游返回 400 错误
@@ -203,6 +208,9 @@ export interface UpdateSystemSettingsInput {
 
   // thinking effort 冲突整流器（可选）
   enableThinkingEffortConflictRectifier?: boolean;
+
+  // Gemini function id 整流器（可选）
+  enableGeminiFunctionIdRectifier?: boolean;
 
   // billing header 整流器（可选）
   enableBillingHeaderRectifier?: boolean;

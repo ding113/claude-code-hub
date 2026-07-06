@@ -62,6 +62,7 @@ async function SettingsConfigContent({ locale }: { locale: string }) {
             enableThinkingSignatureRectifier: settings.enableThinkingSignatureRectifier,
             enableThinkingBudgetRectifier: settings.enableThinkingBudgetRectifier,
             enableThinkingEffortConflictRectifier: settings.enableThinkingEffortConflictRectifier,
+            enableGeminiFunctionIdRectifier: settings.enableGeminiFunctionIdRectifier,
             enableBillingHeaderRectifier: settings.enableBillingHeaderRectifier,
             enableResponseInputRectifier: settings.enableResponseInputRectifier,
             allowNonConversationEndpointProviderFallback:

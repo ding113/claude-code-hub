@@ -68,6 +68,8 @@
     "enableThinkingBudgetRectifierDesc": "當 Anthropic 類型供應商返回 budget_tokens < 1024 錯誤時，自動將 thinking 預算設為最大值（32000），並在需要時將 max_tokens 設為 64000，然後重試一次（預設開啟）。",
     "enableThinkingEffortConflictRectifier": "啟用 thinking effort 衝突整流器",
     "enableThinkingEffortConflictRectifierDesc": "當 Anthropic 相容供應商（如 DeepSeek、MiMo 等）因 thinking 關閉與 reasoning_effort 同時存在返回 400 錯誤時，自動剝離 effort 欄位（output_config/reasoning_effort）並對同一供應商重試一次（預設開啟）。",
+    "enableGeminiFunctionIdRectifier": "啟用 Gemini function id 整流器",
+    "enableGeminiFunctionIdRectifierDesc": "當 Gemini 類型供應商（如 Vertex AI 等嚴格上游）因 functionCall/functionResponse 攜帶 id 欄位返回 400 錯誤時，自動剝離 id 欄位並對同一供應商重試一次（預設開啟）。",
     "enableBillingHeaderRectifier": "啟用計費標頭整流器",
     "enableBillingHeaderRectifierDesc": "主動移除 Claude Code 客戶端注入到 system 提示中的 x-anthropic-billing-header 文字區塊，防止 Amazon Bedrock 等非原生 Anthropic 上游回傳 400 錯誤（預設開啟）。",
     "enableResponseInputRectifier": "啟用 Response Input 整流器",
