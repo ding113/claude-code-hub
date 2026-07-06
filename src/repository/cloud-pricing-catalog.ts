@@ -28,14 +28,18 @@ export interface CloudPricingCatalogInput {
 
 /** 单行 upsert:目录元数据只保留最新一份 */
 export async function upsertCloudPricingCatalog(input: CloudPricingCatalogInput): Promise<void> {
-  const refreshedAt = input.refreshedAt ? new Date(input.refreshedAt) : null;
+  const parsed = input.refreshedAt ? new Date(input.refreshedAt) : null;
+  // refreshedAt 以 ISO 字符串 + 显式 ::timestamptz 绑定,不让 JS Date 进驱动参数路径
+  const refreshedAtIso = parsed && !Number.isNaN(parsed.getTime()) ? parsed.toISOString() : null;
+  // providers 字典上游用 Object.create(null) 构建(防原型污染),
+  // 但 drizzle 的 is() 会对参数取 Object.getPrototypeOf(value).constructor,null 原型直接抛错
   const providers = { ...input.providers };
   await db.transaction(async (tx) => {
     await tx.execute(sql`DELETE FROM cloud_pricing_catalog`);
     await tx.insert(cloudPricingCatalog).values({
       version: input.version,
       currency: input.currency,
-      refreshedAt: refreshedAt && !Number.isNaN(refreshedAt.getTime()) ? refreshedAt : null,
+      refreshedAt: refreshedAtIso ? sql`${refreshedAtIso}::timestamptz` : null,
       providers,
       vendors: input.vendors,
       modelCount: input.modelCount,
