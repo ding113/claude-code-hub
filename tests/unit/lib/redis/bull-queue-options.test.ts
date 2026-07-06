@@ -71,8 +71,6 @@ describe("buildRedisQueueOptions", () => {
   it("throws on an unparseable URL", async () => {
     const { buildRedisQueueOptions } = await import("@/lib/redis/bull-queue-options");
 
-    expect(() => buildRedisQueueOptions("not a url", "[Test]")).toThrow(
-      "Invalid REDIS_URL format"
-    );
+    expect(() => buildRedisQueueOptions("not a url", "[Test]")).toThrow("Invalid REDIS_URL format");
   });
 });
