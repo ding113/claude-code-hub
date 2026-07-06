@@ -3,7 +3,7 @@ import { CasingCache } from "drizzle-orm/casing";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const dbMock = vi.hoisted(() => ({
-  execute: vi.fn(async () => ({ count: 0 })),
+  delete: vi.fn(),
 }));
 
 vi.mock("@/drizzle/db", () => ({
@@ -25,15 +25,28 @@ describe("deleteCloudPricesNotIn", () => {
     vi.clearAllMocks();
   });
 
-  it("renders keep model names as a PostgreSQL array instead of a tuple", async () => {
+  it("renders keep model names without tuple ANY syntax", async () => {
+    const whereMock = vi.fn(function (this: unknown, condition: unknown) {
+      (whereMock as unknown as { condition: unknown }).condition = condition;
+      return this;
+    });
+    const returningMock = vi.fn(async () => [{ id: 1 }, { id: 2 }]);
+    dbMock.delete.mockReturnValue({
+      where: whereMock,
+      returning: returningMock,
+    });
     const { deleteCloudPricesNotIn } = await import("@/repository/model-price");
 
-    await deleteCloudPricesNotIn(["model-a", "model-b"]);
+    const removed = await deleteCloudPricesNotIn(["model-a", "model-b"]);
 
-    expect(dbMock.execute).toHaveBeenCalledTimes(1);
-    const query = dbMock.execute.mock.calls[0]?.[0];
-    const text = sqlToString(query).replace(/\s+/g, " ").toLowerCase();
-    expect(text).toContain("any(array[");
+    expect(removed).toBe(2);
+    expect(dbMock.delete).toHaveBeenCalledTimes(1);
+    expect(whereMock).toHaveBeenCalledTimes(1);
+    expect(returningMock).toHaveBeenCalledWith({ id: expect.anything() });
+    const text = sqlToString((whereMock as unknown as { condition: unknown }).condition)
+      .replace(/\s+/g, " ")
+      .toLowerCase();
+    expect(text).toContain("not in ($2, $3)");
     expect(text).not.toContain("any((");
   });
 });
