@@ -1,8 +1,19 @@
 "use client";
 
-import { addDays, endOfMonth, endOfWeek, format, startOfMonth, startOfWeek } from "date-fns";
+import {
+  addDays,
+  addMonths,
+  differenceInCalendarDays,
+  endOfMonth,
+  endOfWeek,
+  format,
+  isSameDay,
+  startOfMonth,
+  startOfWeek,
+} from "date-fns";
+import { formatInTimeZone, toZonedTime } from "date-fns-tz";
 import { CalendarIcon, ChevronLeft, ChevronRight } from "lucide-react";
-import { useTranslations } from "next-intl";
+import { useTimeZone, useTranslations } from "next-intl";
 import { useCallback, useMemo, useState } from "react";
 import type { DateRange } from "react-day-picker";
 import { Button } from "@/components/ui/button";
@@ -28,6 +39,10 @@ function formatDate(date: Date): string {
   return format(date, "yyyy-MM-dd");
 }
 
+function formatDateInSystemTimeZone(date: Date, timeZone: string): string {
+  return formatInTimeZone(date, timeZone, "yyyy-MM-dd");
+}
+
 function parseDate(dateStr: string): Date {
   // Parse as local date to avoid timezone issues
   // new Date("YYYY-MM-DD") parses as UTC, which causes off-by-one errors in different timezones
@@ -37,8 +52,10 @@ function parseDate(dateStr: string): Date {
 
 function getDateRangeForPeriod(
   period: QuickPeriod,
-  baseDate: Date = new Date()
+  timeZone: string,
+  now: Date = new Date()
 ): { startDate: string; endDate: string } {
+  const baseDate = toZonedTime(now, timeZone);
   switch (period) {
     case "daily":
       return { startDate: formatDate(baseDate), endDate: formatDate(baseDate) };
@@ -53,7 +70,7 @@ function getDateRangeForPeriod(
       return { startDate: formatDate(start), endDate: formatDate(end) };
     }
     default:
-      return { startDate: "2020-01-01", endDate: formatDate(new Date()) };
+      return { startDate: "2020-01-01", endDate: formatDateInSystemTimeZone(now, timeZone) };
   }
 }
 
@@ -63,7 +80,16 @@ function shiftDateRange(
 ): { startDate: string; endDate: string } {
   const start = parseDate(range.startDate);
   const end = parseDate(range.endDate);
-  const days = Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+
+  if (isSameDay(start, startOfMonth(start)) && isSameDay(end, endOfMonth(start))) {
+    const month = addMonths(start, direction === "prev" ? -1 : 1);
+    return {
+      startDate: formatDate(startOfMonth(month)),
+      endDate: formatDate(endOfMonth(month)),
+    };
+  }
+
+  const days = differenceInCalendarDays(end, start) + 1;
   const shift = direction === "prev" ? -days : days;
 
   return {
@@ -74,17 +100,19 @@ function shiftDateRange(
 
 export function DateRangePicker({ period, dateRange, onPeriodChange }: DateRangePickerProps) {
   const t = useTranslations("dashboard.leaderboard");
+  const timeZone = useTimeZone() ?? "UTC";
   const [calendarOpen, setCalendarOpen] = useState(false);
+  const today = useMemo(() => formatDateInSystemTimeZone(new Date(), timeZone), [timeZone]);
 
   const currentRange = useMemo(() => {
     if (period === "custom" && dateRange) {
       return dateRange;
     }
     if (period !== "custom" && QUICK_PERIODS.includes(period as QuickPeriod)) {
-      return getDateRangeForPeriod(period as QuickPeriod);
+      return getDateRangeForPeriod(period as QuickPeriod, timeZone);
     }
-    return getDateRangeForPeriod("daily");
-  }, [period, dateRange]);
+    return getDateRangeForPeriod("daily", timeZone);
+  }, [period, dateRange, timeZone]);
 
   const selectedRange: DateRange = useMemo(() => {
     return {
@@ -198,7 +226,7 @@ export function DateRangePicker({ period, dateRange, onPeriodChange }: DateRange
               selected={selectedRange}
               onSelect={handleDateRangeSelect}
               numberOfMonths={2}
-              disabled={{ after: new Date() }}
+              disabled={{ after: parseDate(today) }}
             />
           </PopoverContent>
         </Popover>
@@ -207,7 +235,7 @@ export function DateRangePicker({ period, dateRange, onPeriodChange }: DateRange
           variant="outline"
           size="icon-sm"
           onClick={() => handleNavigate("next")}
-          disabled={period === "allTime" || currentRange.endDate >= formatDate(new Date())}
+          disabled={period === "allTime" || currentRange.endDate >= today}
           title={t("dateRange.nextPeriod")}
         >
           <ChevronRight className="h-4 w-4" />

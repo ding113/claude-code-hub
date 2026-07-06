@@ -20,8 +20,18 @@ interface TaskInfo {
   promise: Promise<void>;
   abortController: AbortController;
   createdAt: number;
+  lastActivityAt: number;
   taskType: string;
+  staleTimeoutMs: number;
 }
+
+interface RegisterTaskOptions {
+  taskType?: string;
+  abortController?: AbortController;
+  staleTimeoutMs?: number;
+}
+
+const DEFAULT_STALE_TASK_TIMEOUT_MS = 10 * 60 * 1000;
 
 class AsyncTaskManagerClass {
   private tasks: Map<string, TaskInfo> = new Map();
@@ -60,7 +70,7 @@ class AsyncTaskManagerClass {
       this.cleanupAll();
     });
 
-    // 每分钟检查并清理超时任务（>10 分钟未完成，防止内存泄漏）
+    // 每分钟检查并清理空闲超时任务，防止挂死后台任务长期强引用上下文。
     this.cleanupInterval = setInterval(() => {
       this.cleanupCompletedTasks();
     }, 60000);
@@ -74,25 +84,42 @@ class AsyncTaskManagerClass {
    * @param taskType 任务类型（用于日志）
    * @returns AbortController（可用于取消任务）
    */
-  register(taskId: string, promise: Promise<void>, taskType = "unknown"): AbortController {
+  register(
+    taskId: string,
+    promise: Promise<void>,
+    taskTypeOrOptions: string | RegisterTaskOptions = "unknown"
+  ): AbortController {
     this.initializeIfNeeded();
 
+    const options =
+      typeof taskTypeOrOptions === "string" ? { taskType: taskTypeOrOptions } : taskTypeOrOptions;
+    const taskType = options.taskType ?? "unknown";
+
     // 如果任务已存在，先取消旧任务
-    if (this.tasks.has(taskId)) {
+    const oldTaskInfo = this.tasks.get(taskId);
+    if (oldTaskInfo) {
       logger.warn("[AsyncTaskManager] Task already exists, cancelling old task", {
         taskId,
         taskType,
       });
       this.cancel(taskId);
+      this.cleanup(taskId, oldTaskInfo);
     }
 
-    const abortController = new AbortController();
+    const abortController = options.abortController ?? new AbortController();
+    const staleTimeoutMs =
+      options.staleTimeoutMs === undefined || options.staleTimeoutMs <= 0
+        ? DEFAULT_STALE_TASK_TIMEOUT_MS
+        : options.staleTimeoutMs;
+    const now = Date.now();
 
     const taskInfo: TaskInfo = {
       promise,
       abortController,
-      createdAt: Date.now(),
+      createdAt: now,
+      lastActivityAt: now,
       taskType,
+      staleTimeoutMs,
     };
 
     this.tasks.set(taskId, taskInfo);
@@ -126,7 +153,7 @@ class AsyncTaskManagerClass {
         }
       })
       .finally(() => {
-        this.cleanup(taskId);
+        this.cleanup(taskId, taskInfo);
       });
 
     logger.debug("[AsyncTaskManager] Task registered", {
@@ -136,6 +163,20 @@ class AsyncTaskManagerClass {
     });
 
     return abortController;
+  }
+
+  /**
+   * 标记任务仍在推进。流式任务每次读到 chunk 都应 touch，避免长时间活跃流被
+   * wall-clock stale cleanup 误判为挂死任务。
+   */
+  touch(taskId: string): boolean {
+    const taskInfo = this.tasks.get(taskId);
+    if (!taskInfo) {
+      return false;
+    }
+
+    taskInfo.lastActivityAt = Date.now();
+    return true;
   }
 
   /**
@@ -150,7 +191,9 @@ class AsyncTaskManagerClass {
       return;
     }
 
-    taskInfo.abortController.abort();
+    if (!taskInfo.abortController.signal.aborted) {
+      taskInfo.abortController.abort();
+    }
 
     logger.info("[AsyncTaskManager] Task cancelled", {
       taskId,
@@ -160,11 +203,15 @@ class AsyncTaskManagerClass {
   }
 
   /**
-   * 清理单个任务
+   * 清理单个任务。必须带上注册时的任务实例，避免旧任务 finally 误删同 taskId 的新任务。
    *
    * @param taskId 任务唯一标识
    */
-  cleanup(taskId: string): void {
+  private cleanup(taskId: string, expectedTask: TaskInfo): boolean {
+    if (this.tasks.get(taskId) !== expectedTask) {
+      return false;
+    }
+
     const deleted = this.tasks.delete(taskId);
     if (deleted) {
       logger.debug("[AsyncTaskManager] Task cleaned up", {
@@ -172,33 +219,40 @@ class AsyncTaskManagerClass {
         remainingTasks: this.tasks.size,
       });
     }
+    return deleted;
   }
 
   /**
    * 检查并清理超时任务
    *
-   * 遍历所有活跃任务，对于超过 10 分钟还未完成的任务：
+   * 遍历所有活跃任务，对于空闲时间超过任务级 staleTimeoutMs 的任务：
    * 1. 记录警告日志
    * 2. 触发 AbortController 取消任务
    * 3. 从任务 Map 中移除
    *
-   * ⚠️ 注意：这不是清理"已完成"的任务，而是清理"超时未完成"的任务
+   * 注意：这是清理"空闲超时"的任务。活跃流应在收到上游 chunk 时
+   * 调用 touch() 更新 lastActivityAt，避免被误判为挂死任务。
    */
   private cleanupCompletedTasks(): void {
     const now = Date.now();
-    const staleThreshold = 10 * 60 * 1000; // 10 分钟
 
     for (const [taskId, taskInfo] of this.tasks.entries()) {
       const age = now - taskInfo.createdAt;
+      const idleAge = now - taskInfo.lastActivityAt;
 
-      // 如果任务超过 10 分钟还没完成，记录警告并取消
-      if (age > staleThreshold) {
-        logger.warn("[AsyncTaskManager] Task timeout, cancelling", {
+      const staleTimeoutMs = taskInfo.staleTimeoutMs || DEFAULT_STALE_TASK_TIMEOUT_MS;
+
+      // 如果任务超过阈值没有任何进展，记录警告、取消并从 Map 断开强引用。
+      if (idleAge > staleTimeoutMs) {
+        logger.warn("[AsyncTaskManager] Task timeout, cancelling and detaching", {
           taskId,
           taskType: taskInfo.taskType,
           age,
+          idleAge,
+          staleTimeoutMs,
         });
         this.cancel(taskId);
+        this.cleanup(taskId, taskInfo);
       }
     }
   }
@@ -211,8 +265,9 @@ class AsyncTaskManagerClass {
       count: this.tasks.size,
     });
 
-    for (const taskId of this.tasks.keys()) {
+    for (const [taskId, taskInfo] of Array.from(this.tasks.entries())) {
       this.cancel(taskId);
+      this.cleanup(taskId, taskInfo);
     }
 
     if (this.cleanupInterval) {

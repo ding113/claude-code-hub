@@ -389,6 +389,7 @@ function UsageLogsViewContent({
             autoRefreshEnabled={!isFullscreenOpen && isAutoRefresh}
             autoRefreshIntervalMs={logsRefreshIntervalMs ?? 5000}
             hiddenColumns={hiddenColumns}
+            serverTimeZone={serverTimeZone}
           />
         </div>
       </div>
@@ -479,6 +480,7 @@ function UsageLogsViewContent({
               hideScrollToTop={true}
               hiddenColumns={hideProviderColumn ? ["provider"] : undefined}
               bodyClassName="h-[calc(var(--cch-viewport-height,100vh)_-_56px_-_32px_-_40px)]"
+              serverTimeZone={serverTimeZone}
             />
           </div>
         </div>

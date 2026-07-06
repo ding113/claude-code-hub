@@ -1,11 +1,15 @@
 import { z } from "@hono/zod-openapi";
 import { HIDDEN_PROVIDER_TYPES as HIDDEN_PROVIDER_TYPE_VALUES } from "@/lib/api/v1/_shared/constants";
-import { PROVIDER_KEY_MAX_LENGTH } from "@/lib/constants/provider.constants";
+import {
+  CODEX_IMAGE_GENERATION_PREFERENCE_VALUES,
+  PROVIDER_KEY_MAX_LENGTH,
+} from "@/lib/constants/provider.constants";
 import { ProviderTypeSchema } from "./_common";
 
 export const HIDDEN_PROVIDER_TYPES = new Set(HIDDEN_PROVIDER_TYPE_VALUES);
 
 const NullableStringSchema = z.string().nullable();
+const CodexImageGenerationPreferenceSchema = z.enum(CODEX_IMAGE_GENERATION_PREFERENCE_VALUES);
 
 export const ProviderListQuerySchema = z.object({
   q: z.string().trim().optional().describe("Case-insensitive provider search text."),
@@ -107,6 +111,9 @@ export const ProviderSummarySchema = z
       .string()
       .nullable()
       .describe("Codex parallel tool calls preference."),
+    codexImageGenerationPreference: CodexImageGenerationPreferenceSchema.nullable().describe(
+      "Codex image generation tool preference."
+    ),
     codexServiceTierPreference: z.string().nullable().describe("Codex service tier preference."),
     anthropicMaxTokensPreference: z
       .string()
@@ -206,6 +213,9 @@ const ProviderBatchUpdateFieldsSchema = z
     limit_daily_usd: z.number().min(0).nullable().optional().describe("Daily USD limit."),
     daily_reset_mode: z.enum(["fixed", "rolling"]).optional().describe("Daily reset mode."),
     daily_reset_time: z.string().optional().describe("Daily reset time."),
+    codex_image_generation_preference: CodexImageGenerationPreferenceSchema.nullable()
+      .optional()
+      .describe("Codex image generation tool preference."),
     codex_service_tier_preference: z
       .string()
       .nullable()
@@ -474,6 +484,9 @@ export const ProviderCreateSchema = z
       .string()
       .optional()
       .describe("Codex parallel tool calls preference."),
+    codex_image_generation_preference: CodexImageGenerationPreferenceSchema.optional().describe(
+      "Codex image generation tool preference."
+    ),
     codex_service_tier_preference: z.string().optional().describe("Codex service tier preference."),
     anthropic_max_tokens_preference: z
       .string()

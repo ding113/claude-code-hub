@@ -747,8 +747,22 @@
     {
       "idx": 106,
       "version": "7",
-      "when": 1783307818850,
-      "tag": "0106_same_puff_adder",
+      "when": 1783018751299,
+      "tag": "0106_calm_firebird",
+      "breakpoints": true
+    },
+    {
+      "idx": 107,
+      "version": "7",
+      "when": 1783270005639,
+      "tag": "0107_handy_sunset_bain",
+      "breakpoints": true
+    },
+    {
+      "idx": 108,
+      "version": "7",
+      "when": 1783320834802,
+      "tag": "0108_rich_onslaught",
       "breakpoints": true
     }
   ]

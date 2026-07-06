@@ -215,6 +215,37 @@ describe.sequential("AsyncTaskManager edge runtime", () => {
     await Promise.all([firstPromise, secondPromise]);
   });
 
+  it("does not let an old task finalizer remove a newer task with the same taskId", async () => {
+    process.env.CI = "true";
+    process.env.NEXT_RUNTIME = "nodejs";
+
+    const { AsyncTaskManager } = await import("@/lib/async-task-manager");
+
+    let resolveFirst: () => void;
+    const firstPromise = new Promise<void>((resolve) => {
+      resolveFirst = resolve;
+    });
+    AsyncTaskManager.register("t1", firstPromise);
+
+    let resolveSecond: () => void;
+    const secondPromise = new Promise<void>((resolve) => {
+      resolveSecond = resolve;
+    });
+    AsyncTaskManager.register("t1", secondPromise);
+
+    resolveFirst!();
+    await firstPromise;
+    await new Promise<void>((resolve) => queueMicrotask(() => resolve()));
+
+    expect(AsyncTaskManager.getActiveTaskCount()).toBe(1);
+
+    resolveSecond!();
+    await secondPromise;
+    await new Promise<void>((resolve) => queueMicrotask(() => resolve()));
+
+    expect(AsyncTaskManager.getActiveTaskCount()).toBe(0);
+  });
+
   it("logs task cancelled when isClientAbortError returns true", async () => {
     process.env.CI = "true";
     process.env.NEXT_RUNTIME = "nodejs";
@@ -266,12 +297,14 @@ describe.sequential("AsyncTaskManager edge runtime", () => {
     const controller = AsyncTaskManager.register("stale-task", taskPromise, "custom_type");
 
     const managerAny = AsyncTaskManager as unknown as {
-      tasks: Map<string, { createdAt: number }>;
+      tasks: Map<string, { createdAt: number; lastActivityAt: number }>;
       cleanupCompletedTasks: () => void;
     };
     const info = managerAny.tasks.get("stale-task");
     expect(info).toBeDefined();
-    info!.createdAt = Date.now() - 11 * 60 * 1000;
+    const oldTimestamp = Date.now() - 11 * 60 * 1000;
+    info!.createdAt = oldTimestamp;
+    info!.lastActivityAt = oldTimestamp;
 
     let resolveFresh: () => void;
     const freshPromise = new Promise<void>((resolve) => {
@@ -283,11 +316,83 @@ describe.sequential("AsyncTaskManager edge runtime", () => {
 
     expect(controller.signal.aborted).toBe(true);
     expect(freshController.signal.aborted).toBe(false);
+    expect(AsyncTaskManager.getActiveTaskCount()).toBe(1);
     expect(vi.mocked(logger.warn)).toHaveBeenCalled();
 
     resolveTask!();
     resolveFresh!();
     await Promise.all([taskPromise, freshPromise]);
+  });
+
+  it("does not cancel a long-running task that was recently touched", async () => {
+    process.env.CI = "true";
+    process.env.NEXT_RUNTIME = "nodejs";
+
+    const { AsyncTaskManager } = await import("@/lib/async-task-manager");
+
+    let resolveTask: () => void;
+    const taskPromise = new Promise<void>((resolve) => {
+      resolveTask = resolve;
+    });
+
+    const controller = AsyncTaskManager.register("active-stream", taskPromise, "stream-processing");
+
+    const managerAny = AsyncTaskManager as unknown as {
+      tasks: Map<string, { createdAt: number; lastActivityAt: number }>;
+      cleanupCompletedTasks: () => void;
+    };
+    const info = managerAny.tasks.get("active-stream");
+    expect(info).toBeDefined();
+    const oldTimestamp = Date.now() - 11 * 60 * 1000;
+    info!.createdAt = oldTimestamp;
+    info!.lastActivityAt = oldTimestamp;
+
+    expect(AsyncTaskManager.touch("active-stream")).toBe(true);
+    managerAny.cleanupCompletedTasks();
+
+    expect(controller.signal.aborted).toBe(false);
+    expect(AsyncTaskManager.getActiveTaskCount()).toBe(1);
+    expect(AsyncTaskManager.touch("missing-task")).toBe(false);
+
+    resolveTask!();
+    await taskPromise;
+  });
+
+  it("cleanupCompletedTasks aborts a provided controller and detaches stale tasks", async () => {
+    process.env.CI = "true";
+    process.env.NEXT_RUNTIME = "nodejs";
+
+    const { AsyncTaskManager } = await import("@/lib/async-task-manager");
+
+    let resolveTask: () => void;
+    const taskPromise = new Promise<void>((resolve) => {
+      resolveTask = resolve;
+    });
+    const controller = new AbortController();
+
+    const returnedController = AsyncTaskManager.register("stale-task", taskPromise, {
+      taskType: "stream-processing",
+      abortController: controller,
+    });
+    expect(returnedController).toBe(controller);
+
+    const managerAny = AsyncTaskManager as unknown as {
+      tasks: Map<string, { createdAt: number; lastActivityAt: number }>;
+      cleanupCompletedTasks: () => void;
+    };
+    const info = managerAny.tasks.get("stale-task");
+    expect(info).toBeDefined();
+    const oldTimestamp = Date.now() - 11 * 60 * 1000;
+    info!.createdAt = oldTimestamp;
+    info!.lastActivityAt = oldTimestamp;
+
+    managerAny.cleanupCompletedTasks();
+
+    expect(controller.signal.aborted).toBe(true);
+    expect(AsyncTaskManager.getActiveTaskCount()).toBe(0);
+
+    resolveTask!();
+    await taskPromise;
   });
 
   it("cleanupAll cancels tasks and clears interval", async () => {
@@ -313,6 +418,7 @@ describe.sequential("AsyncTaskManager edge runtime", () => {
     managerAny.cleanupAll();
 
     expect(controller.signal.aborted).toBe(true);
+    expect(AsyncTaskManager.getActiveTaskCount()).toBe(0);
     expect(clearIntervalSpy).toHaveBeenCalledWith(intervalId);
     expect(managerAny.cleanupInterval).toBeNull();
 

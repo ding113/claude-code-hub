@@ -54,6 +54,40 @@ function setReactInputValue(input: HTMLInputElement, value: string) {
   input.dispatchEvent(new Event("change", { bubbles: true }));
 }
 
+/** 按 URL 路由的 fetch mock:/api/prices/vendors 返回 vendor 汇总,其余返回价格数据 */
+function makeRoutedFetchMock(pricePayload: unknown) {
+  const vendorsPayload = {
+    ok: true,
+    data: {
+      vendors: [
+        { vendor: "openai", name: "OpenAI", icon: "openai.svg", iconMono: true, modelCount: 10 },
+        {
+          vendor: "anthropic",
+          name: "Anthropic",
+          icon: "anthropic.svg",
+          iconMono: true,
+          modelCount: 8,
+        },
+      ],
+      version: "test",
+    },
+  };
+  return vi.fn(async (input: unknown) => {
+    const url = String(input);
+    if (url.includes("/api/prices/vendors")) {
+      return { json: async () => vendorsPayload };
+    }
+    return { json: async () => pricePayload };
+  });
+}
+
+/** 过滤出 /api/prices 数据请求(排除 vendors 请求) */
+function priceCalls(fetchMock: ReturnType<typeof vi.fn>): string[] {
+  return fetchMock.mock.calls
+    .map((call) => String(call[0]))
+    .filter((url) => url.includes("/api/prices") && !url.includes("/api/prices/vendors"));
+}
+
 describe("PriceList: 交互与数据刷新", () => {
   const messages = loadMessages();
   const now = new Date("2026-01-01T00:00:00.000Z");
@@ -89,11 +123,9 @@ describe("PriceList: 交互与数据刷新", () => {
   });
 
   test("点击筛选按钮应触发拉取，并携带对应 query 参数", async () => {
-    const fetchMock = vi.fn().mockResolvedValue({
-      json: async () => ({
-        ok: true,
-        data: { data: [baseModel], total: 1, page: 1, pageSize: 50 },
-      }),
+    const fetchMock = makeRoutedFetchMock({
+      ok: true,
+      data: { data: [baseModel], total: 1, page: 1, pageSize: 50 },
     });
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     globalThis.fetch = fetchMock as any;
@@ -107,10 +139,16 @@ describe("PriceList: 交互与数据刷新", () => {
           initialPageSize={20}
           initialSearchTerm=""
           initialSourceFilter=""
-          initialLitellmProviderFilter=""
+          initialVendorFilter=""
         />
       </NextIntlClientProvider>
     );
+
+    // 等待 vendors 列表加载后按钮渲染
+    await act(async () => {
+      await flushPromises();
+      await flushPromises();
+    });
 
     const openaiFilter = Array.from(document.querySelectorAll("button")).find((el) =>
       (el.textContent || "").includes("OpenAI")
@@ -123,9 +161,9 @@ describe("PriceList: 交互与数据刷新", () => {
       await flushPromises();
     });
 
-    expect(fetchMock).toHaveBeenCalled();
-    const firstUrl = fetchMock.mock.calls[0][0] as string;
-    expect(firstUrl).toContain("litellmProvider=openai");
+    expect(priceCalls(fetchMock).length).toBe(1);
+    const firstUrl = priceCalls(fetchMock)[0];
+    expect(firstUrl).toContain("vendor=openai");
 
     await act(async () => {
       openaiFilter?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
@@ -133,19 +171,17 @@ describe("PriceList: 交互与数据刷新", () => {
       await flushPromises();
     });
 
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-    const secondUrl = fetchMock.mock.calls[1][0] as string;
-    expect(secondUrl).not.toContain("litellmProvider=openai");
+    expect(priceCalls(fetchMock).length).toBe(2);
+    const secondUrl = priceCalls(fetchMock)[1];
+    expect(secondUrl).not.toContain("vendor=openai");
 
     unmount();
   });
 
   test("点击 All 应清空筛选并触发拉取", async () => {
-    const fetchMock = vi.fn().mockResolvedValue({
-      json: async () => ({
-        ok: true,
-        data: { data: [baseModel], total: 1, page: 1, pageSize: 20 },
-      }),
+    const fetchMock = makeRoutedFetchMock({
+      ok: true,
+      data: { data: [baseModel], total: 1, page: 1, pageSize: 20 },
     });
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     globalThis.fetch = fetchMock as any;
@@ -159,7 +195,7 @@ describe("PriceList: 交互与数据刷新", () => {
           initialPageSize={20}
           initialSearchTerm=""
           initialSourceFilter=""
-          initialLitellmProviderFilter="openai"
+          initialVendorFilter="openai"
         />
       </NextIntlClientProvider>
     );
@@ -175,9 +211,9 @@ describe("PriceList: 交互与数据刷新", () => {
       await flushPromises();
     });
 
-    expect(fetchMock).toHaveBeenCalled();
-    const url = fetchMock.mock.calls[0][0] as string;
-    expect(url).not.toContain("litellmProvider=openai");
+    expect(priceCalls(fetchMock).length).toBeGreaterThan(0);
+    const url = priceCalls(fetchMock)[0];
+    expect(url).not.toContain("vendor=openai");
 
     unmount();
   });
@@ -189,7 +225,7 @@ describe("PriceList: 交互与数据刷新", () => {
       data: { data: [page2Model], total: 60, page: 2, pageSize: 50 },
     };
 
-    const fetchMock = vi.fn().mockResolvedValue({ json: async () => page2 });
+    const fetchMock = makeRoutedFetchMock(page2);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     globalThis.fetch = fetchMock as any;
 
@@ -202,7 +238,7 @@ describe("PriceList: 交互与数据刷新", () => {
           initialPageSize={50}
           initialSearchTerm=""
           initialSourceFilter=""
-          initialLitellmProviderFilter=""
+          initialVendorFilter=""
         />
       </NextIntlClientProvider>
     );
@@ -219,8 +255,8 @@ describe("PriceList: 交互与数据刷新", () => {
       await flushPromises();
     });
 
-    expect(fetchMock).toHaveBeenCalled();
-    const url = fetchMock.mock.calls[0][0] as string;
+    expect(priceCalls(fetchMock).length).toBeGreaterThan(0);
+    const url = priceCalls(fetchMock)[0];
     expect(url).toContain("page=2");
 
     expect(document.body.textContent).toContain("page-2-model");
@@ -229,11 +265,9 @@ describe("PriceList: 交互与数据刷新", () => {
   });
 
   test("页面大小：切换 pageSize 应重新计算页码并重新请求", async () => {
-    const fetchMock = vi.fn().mockResolvedValue({
-      json: async () => ({
-        ok: true,
-        data: { data: [baseModel], total: 60, page: 2, pageSize: 50 },
-      }),
+    const fetchMock = makeRoutedFetchMock({
+      ok: true,
+      data: { data: [baseModel], total: 60, page: 2, pageSize: 50 },
     });
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     globalThis.fetch = fetchMock as any;
@@ -247,7 +281,7 @@ describe("PriceList: 交互与数据刷新", () => {
           initialPageSize={20}
           initialSearchTerm=""
           initialSourceFilter=""
-          initialLitellmProviderFilter=""
+          initialVendorFilter=""
         />
       </NextIntlClientProvider>
     );
@@ -274,8 +308,8 @@ describe("PriceList: 交互与数据刷新", () => {
       await flushPromises();
     });
 
-    expect(fetchMock).toHaveBeenCalled();
-    const url = fetchMock.mock.calls[0][0] as string;
+    expect(priceCalls(fetchMock).length).toBeGreaterThan(0);
+    const url = priceCalls(fetchMock)[0];
     expect(url).toContain("pageSize=50");
     expect(url).toContain("page=2");
 
@@ -303,7 +337,7 @@ describe("PriceList: 交互与数据刷新", () => {
           initialPageSize={50}
           initialSearchTerm=""
           initialSourceFilter=""
-          initialLitellmProviderFilter=""
+          initialVendorFilter=""
         />
       </NextIntlClientProvider>
     );
@@ -326,8 +360,8 @@ describe("PriceList: 交互与数据刷新", () => {
       await Promise.resolve();
     });
 
-    expect(fetchMock).toHaveBeenCalled();
-    const url = fetchMock.mock.calls[0][0] as string;
+    expect(priceCalls(fetchMock).length).toBeGreaterThan(0);
+    const url = priceCalls(fetchMock)[0];
     expect(url).toContain("search=gpt");
     expect(url).toContain("page=1");
 
@@ -353,7 +387,7 @@ describe("PriceList: 交互与数据刷新", () => {
           initialPageSize={50}
           initialSearchTerm=""
           initialSourceFilter=""
-          initialLitellmProviderFilter=""
+          initialVendorFilter=""
         />
       </NextIntlClientProvider>
     );

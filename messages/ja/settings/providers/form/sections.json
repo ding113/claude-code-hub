@@ -216,6 +216,15 @@
           "true": "強制有効"
         }
       },
+      "imageGeneration": {
+        "help": "OpenAI 公式では image_generation は Responses の組み込みツールであり、トップレベルの boolean フィールドではありません。強制有効は type=image_generation ツールを注入し、強制無効はそのツールと競合する tool_choice を取り除きます。",
+        "label": "画像生成ツールオーバーライド",
+        "options": {
+          "false": "強制無効",
+          "inherit": "オーバーライドしない（クライアントに従う）",
+          "true": "強制有効"
+        }
+      },
       "serviceTier": {
         "help": "Codex（Responses API）リクエストの OpenAI service_tier を制御します。priority は fast モードに相当します。「クライアントに従う」は service_tier を上書きせず、その他の値は強制上書きします。上流が未対応の tier ではエラーになる場合があります。",
         "label": "Service Tier オーバーライド",

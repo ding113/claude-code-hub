@@ -1,7 +1,7 @@
 "use client";
 
 import { ArrowLeft } from "lucide-react";
-import { useTranslations } from "next-intl";
+import { useTimeZone, useTranslations } from "next-intl";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useRouter } from "@/i18n/routing";
@@ -19,10 +19,11 @@ interface UserInsightsViewProps {
 
 export function UserInsightsView({ userId, userName }: UserInsightsViewProps) {
   const t = useTranslations("dashboard.leaderboard.userInsights");
+  const timeZone = useTimeZone() ?? "UTC";
   const router = useRouter();
   const [filters, setFilters] = useState<UserInsightsFilters>(DEFAULT_FILTERS);
 
-  const { startDate, endDate } = resolveTimePresetDates(filters.timeRange);
+  const { startDate, endDate } = resolveTimePresetDates(filters.timeRange, timeZone);
 
   return (
     <div className="space-y-6" data-testid="user-insights-page">

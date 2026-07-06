@@ -28,6 +28,7 @@ function createBatchState(): ProviderFormState {
       codexReasoningSummaryPreference: "inherit",
       codexTextVerbosityPreference: "inherit",
       codexParallelToolCallsPreference: "inherit",
+      codexImageGenerationPreference: "inherit",
       codexServiceTierPreference: "inherit",
       anthropicMaxTokensPreference: "inherit",
       anthropicThinkingBudgetPreference: "inherit",
@@ -310,6 +311,25 @@ describe("buildPatchDraftFromFormState", () => {
     const draft = buildPatchDraftFromFormState(state, dirty);
 
     expect(draft.codex_service_tier_preference).toEqual({ set: "priority" });
+  });
+
+  it("clears codexImageGenerationPreference when dirty and inherit", () => {
+    const state = createBatchState();
+    const dirty = new Set(["routing.codexImageGenerationPreference"]);
+
+    const draft = buildPatchDraftFromFormState(state, dirty);
+
+    expect(draft.codex_image_generation_preference).toEqual({ clear: true });
+  });
+
+  it("sets codexImageGenerationPreference when dirty and not inherit", () => {
+    const state = createBatchState();
+    state.routing.codexImageGenerationPreference = "false";
+    const dirty = new Set(["routing.codexImageGenerationPreference"]);
+
+    const draft = buildPatchDraftFromFormState(state, dirty);
+
+    expect(draft.codex_image_generation_preference).toEqual({ set: "false" });
   });
 
   it("clears anthropicThinkingBudgetPreference when dirty and inherit", () => {

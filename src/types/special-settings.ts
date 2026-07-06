@@ -285,6 +285,7 @@ export type PricingResolutionSpecialSetting = {
     | "local_manual"
     | "cloud_exact"
     | "cloud_model_fallback"
+    | "cloud_official"
     | "priority_fallback"
     | "single_provider_top_level"
     | "official_fallback";

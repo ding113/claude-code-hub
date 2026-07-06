@@ -80,6 +80,7 @@ function buildTestProvider(overrides: Partial<Provider> = {}): Provider {
     codexReasoningSummaryPreference: null,
     codexTextVerbosityPreference: null,
     codexParallelToolCallsPreference: null,
+    codexImageGenerationPreference: null,
     anthropicMaxTokensPreference: null,
     anthropicThinkingBudgetPreference: null,
     anthropicAdaptiveThinking: null,

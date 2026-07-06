@@ -4,10 +4,13 @@ import { revalidatePath } from "next/cache";
 import { emitActionAudit } from "@/lib/audit/emit";
 import { getSession } from "@/lib/auth";
 import { logger } from "@/lib/logger";
+import { parseCloudPriceTableToml } from "@/lib/price-sync/cloud-price-table";
 import {
-  fetchCloudPriceTableToml,
-  parseCloudPriceTableToml,
-} from "@/lib/price-sync/cloud-price-table";
+  applyConvertedCloudPriceTable,
+  loadConvertedCloudPriceTable,
+} from "@/lib/price-sync/cloud-price-updater";
+import { convertCptTable } from "@/lib/price-sync/cpt-convert";
+import { isCptTableLike, parseCptTableValue } from "@/lib/price-sync/cpt-schema";
 import { isPriceLikeFieldPath } from "@/lib/utils/model-price-fields";
 import {
   createModelPrice,
@@ -102,14 +105,14 @@ function buildManualPriceDataFromProviderPricing(
  * 用于系统初始化、云端自动同步和 Web UI 上传
  * @param jsonContent - 价格表 JSON 内容
  * @param overwriteManual - 可选，要覆盖的手动添加模型名称列表
- * @param source - 写入记录的来源。云端/自动同步为 'litellm'（默认）；
+ * @param source - 写入记录的来源。云端/自动同步为 'cloud'（默认）；
  *   用户在本地显式上传的价格表为 'manual'，使其遵循“本地优先”原则、
  *   不被后续云端自动同步覆盖。
  */
 export async function processPriceTableInternal(
   jsonContent: string,
   overwriteManual?: string[],
-  source: ModelPriceSource = "litellm"
+  source: ModelPriceSource = "cloud"
 ): Promise<ActionResult<PriceUpdateResult>> {
   try {
     // 解析JSON内容
@@ -180,11 +183,11 @@ export async function processPriceTableInternal(
           continue;
         }
 
-        // 本地优先：仅当本次写入来自云端/自动同步（source='litellm'）时，
+        // 本地优先：仅当本次写入来自云端/自动同步（source 非 'manual'）时，
         // 才跳过用户手动维护的模型，除非显式列入覆盖列表。
         // 用户显式上传（source='manual'）属于权威导入，不受此保护跳过，可正常覆盖。
         const isManualPrice = manualPrices.has(modelName);
-        if (source === "litellm" && isManualPrice && !overwriteSet.has(modelName)) {
+        if (source !== "manual" && isManualPrice && !overwriteSet.has(modelName)) {
           // 跳过手动添加的模型，记录到 skippedConflicts
           result.skippedConflicts?.push(modelName);
           result.unchanged.push(modelName);
@@ -238,8 +241,9 @@ export async function processPriceTableInternal(
  * 上传并更新模型价格表（Web UI 入口，包含权限检查）
  *
  * 支持格式：
- * - JSON：PriceTableJson（内部入库格式）
- * - TOML：云端价格表格式（会提取 models 表后再入库）
+ * - JSON（CPT v1）：云端价格表 models.json（schema=cchp.pricing-table/v1），转换后入库
+ * - JSON（Legacy）：PriceTableJson（内部入库格式）
+ * - TOML：旧版云端价格表格式（会提取 models 表后再入库）
  * @param overwriteManual - 可选，要覆盖的手动添加模型名称列表
  */
 export async function uploadPriceTable(
@@ -252,10 +256,24 @@ export async function uploadPriceTable(
     return { ok: false, error: "无权限执行此操作" };
   }
 
-  // 先尝试 JSON；失败则按 TOML 解析（用于云端价格表文件直接上传）
+  // 先尝试 JSON（CPT v1 云端表或内部格式）；失败则按 TOML 解析（旧版价格表文件直接上传）
   let jsonContent = content;
   try {
-    JSON.parse(content);
+    const parsedJson = JSON.parse(content) as unknown;
+    if (isCptTableLike(parsedJson)) {
+      const cptResult = parseCptTableValue(parsedJson);
+      if (!cptResult.ok) {
+        emitActionAudit({
+          category: "model_price",
+          action: "model_price.bulk_upload",
+          targetType: "model_price",
+          success: false,
+          errorMessage: cptResult.error,
+        });
+        return { ok: false, error: cptResult.error };
+      }
+      jsonContent = JSON.stringify(convertCptTable(cptResult.data).models);
+    }
   } catch {
     const parseResult = parseCloudPriceTableToml(content);
     if (!parseResult.ok) {
@@ -324,6 +342,8 @@ export async function getModelPrices(): Promise<ModelPrice[]> {
 
 export interface AvailableModelCatalogItem {
   modelName: string;
+  /** 云端 vendor slug（新价格表）；旧数据回退 litellm_provider */
+  vendor: string | null;
   litellmProvider: string | null;
   updatedAt: string;
 }
@@ -357,6 +377,7 @@ export async function getAvailableModelCatalog(options?: {
       })
       .map((price) => ({
         modelName: price.modelName,
+        vendor: typeof price.priceData.vendor === "string" ? price.priceData.vendor : null,
         litellmProvider:
           typeof price.priceData.litellm_provider === "string"
             ? price.priceData.litellm_provider
@@ -437,7 +458,7 @@ export async function getAvailableModelsByProviderType(): Promise<string[]> {
  */
 
 /**
- * 检查 LiteLLM 同步是否会产生冲突
+ * 检查云端价格表同步是否会产生冲突
  * @returns 冲突检查结果，包含是否有冲突以及冲突列表
  */
 export async function checkLiteLLMSyncConflicts(): Promise<ActionResult<SyncConflictCheckResult>> {
@@ -448,35 +469,27 @@ export async function checkLiteLLMSyncConflicts(): Promise<ActionResult<SyncConf
       return { ok: false, error: "无权限执行此操作" };
     }
 
-    // 拉取并解析云端 TOML 价格表
-    const tomlResult = await fetchCloudPriceTableToml();
-    if (!tomlResult.ok) {
-      return {
-        ok: false,
-        error: tomlResult.error,
-      };
+    // 拉取并转换云端 CPT v1 价格表
+    const loaded = await loadConvertedCloudPriceTable();
+    if (!loaded.ok) {
+      return { ok: false, error: loaded.error };
     }
 
-    const parseResult = parseCloudPriceTableToml(tomlResult.data);
-    if (!parseResult.ok) {
-      return { ok: false, error: parseResult.error };
-    }
-
-    const priceTable: PriceTableJson = parseResult.data.models;
+    const priceTable: PriceTableJson = loaded.data.models;
 
     // 获取数据库中所有 manual 价格
     const manualPrices = await findAllManualPrices();
     logger.info(`[Conflict Check] Found ${manualPrices.size} manual prices in database`);
 
-    // 构建冲突列表：检查哪些 manual 模型会被 LiteLLM 同步覆盖
+    // 构建冲突列表：检查哪些 manual 模型会被云端同步覆盖（按 canonical 模型名精确匹配）
     const conflicts: SyncConflict[] = [];
     for (const [modelName, manualPrice] of manualPrices) {
-      const litellmPrice = priceTable[modelName];
-      if (litellmPrice && typeof litellmPrice === "object" && "mode" in litellmPrice) {
+      const cloudPrice = priceTable[modelName];
+      if (cloudPrice && typeof cloudPrice === "object" && "mode" in cloudPrice) {
         conflicts.push({
           modelName,
           manualPrice: manualPrice.priceData,
-          litellmPrice: litellmPrice as ModelPriceData,
+          cloudPrice: cloudPrice as ModelPriceData,
         });
       }
     }
@@ -498,7 +511,7 @@ export async function checkLiteLLMSyncConflicts(): Promise<ActionResult<SyncConf
 }
 
 /**
- * 从 LiteLLM CDN 同步价格表到数据库
+ * 从云端价格表（cch-plus.com CPT v1）同步到数据库
  * @param overwriteManual - 可选，要覆盖的手动添加模型名称列表
  * @returns 同步结果
  */
@@ -514,35 +527,24 @@ export async function syncLiteLLMPrices(
 
     logger.info("[PriceSync] Starting cloud price sync...");
 
-    // 拉取并解析云端 TOML 价格表
-    const tomlResult = await fetchCloudPriceTableToml();
-    if (!tomlResult.ok) {
-      logger.error("[PriceSync] Failed to fetch cloud price table", { error: tomlResult.error });
+    // 拉取并转换云端 CPT v1 价格表
+    const loaded = await loadConvertedCloudPriceTable();
+    if (!loaded.ok) {
+      logger.error("[PriceSync] Failed to fetch cloud price table", { error: loaded.error });
       emitActionAudit({
         category: "model_price",
         action: "model_price.sync_litellm",
         targetType: "model_price",
         success: false,
-        errorMessage: tomlResult.error,
+        errorMessage: loaded.error,
       });
-      return { ok: false, error: tomlResult.error };
+      return { ok: false, error: loaded.error };
     }
 
-    const parseResult = parseCloudPriceTableToml(tomlResult.data);
-    if (!parseResult.ok) {
-      logger.error("[PriceSync] Failed to parse cloud price table", { error: parseResult.error });
-      emitActionAudit({
-        category: "model_price",
-        action: "model_price.sync_litellm",
-        targetType: "model_price",
-        success: false,
-        errorMessage: parseResult.error,
-      });
-      return { ok: false, error: parseResult.error };
-    }
-
-    const jsonContent = JSON.stringify(parseResult.data.models);
-    const result = await processPriceTableInternal(jsonContent, overwriteManual);
+    const applied = await applyConvertedCloudPriceTable(loaded.data, overwriteManual);
+    const result: ActionResult<PriceUpdateResult> = applied.ok
+      ? { ok: true, data: applied.data }
+      : { ok: false, error: applied.error };
 
     if (result.ok) {
       logger.info("[PriceSync] Cloud price sync completed", {
@@ -887,7 +889,9 @@ export async function pinModelPricingProviderAsManual(input: {
       return { ok: false, error: "价格提供商不能为空" };
     }
 
-    const latestCloudPrice = await findLatestPriceByModelAndSource(modelName, "litellm");
+    const latestCloudPrice =
+      (await findLatestPriceByModelAndSource(modelName, "cloud")) ??
+      (await findLatestPriceByModelAndSource(modelName, "litellm"));
     if (!latestCloudPrice) {
       return { ok: false, error: "未找到云端模型价格" };
     }

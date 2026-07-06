@@ -57,10 +57,10 @@ function formatPrice(value?: number): string {
  */
 function PriceDiffPopover({
   manualPrice,
-  litellmPrice,
+  cloudPrice,
 }: {
   manualPrice: ModelPriceData;
-  litellmPrice: ModelPriceData;
+  cloudPrice: ModelPriceData;
 }) {
   const t = useTranslations("settings.prices.conflict");
 
@@ -68,68 +68,68 @@ function PriceDiffPopover({
     const items: Array<{
       field: string;
       manual: string;
-      litellm: string;
+      cloud: string;
       changed: boolean;
     }> = [];
 
     // 输入价格
     const manualInput = formatPrice(manualPrice.input_cost_per_token);
-    const litellmInput = formatPrice(litellmPrice.input_cost_per_token);
+    const cloudInput = formatPrice(cloudPrice.input_cost_per_token);
     items.push({
       field: t("diff.inputPrice"),
       manual: manualInput,
-      litellm: litellmInput,
-      changed: manualInput !== litellmInput,
+      cloud: cloudInput,
+      changed: manualInput !== cloudInput,
     });
 
     // 输出价格
     const manualOutput = formatPrice(manualPrice.output_cost_per_token);
-    const litellmOutput = formatPrice(litellmPrice.output_cost_per_token);
+    const cloudOutput = formatPrice(cloudPrice.output_cost_per_token);
     items.push({
       field: t("diff.outputPrice"),
       manual: manualOutput,
-      litellm: litellmOutput,
-      changed: manualOutput !== litellmOutput,
+      cloud: cloudOutput,
+      changed: manualOutput !== cloudOutput,
     });
 
     // 图片价格（如果有）
-    if (manualPrice.output_cost_per_image || litellmPrice.output_cost_per_image) {
+    if (manualPrice.output_cost_per_image || cloudPrice.output_cost_per_image) {
       const manualImg = manualPrice.output_cost_per_image
         ? `$${manualPrice.output_cost_per_image}/img`
         : "-";
-      const litellmImg = litellmPrice.output_cost_per_image
-        ? `$${litellmPrice.output_cost_per_image}/img`
+      const cloudImg = cloudPrice.output_cost_per_image
+        ? `$${cloudPrice.output_cost_per_image}/img`
         : "-";
       items.push({
         field: t("diff.imagePrice"),
         manual: manualImg,
-        litellm: litellmImg,
-        changed: manualImg !== litellmImg,
+        cloud: cloudImg,
+        changed: manualImg !== cloudImg,
       });
     }
 
     // 供应商
-    const manualProvider = manualPrice.litellm_provider || "-";
-    const litellmProvider = litellmPrice.litellm_provider || "-";
+    const manualProvider = manualPrice.vendor || manualPrice.litellm_provider || "-";
+    const cloudVendor = cloudPrice.vendor || cloudPrice.litellm_provider || "-";
     items.push({
       field: t("diff.provider"),
       manual: manualProvider,
-      litellm: litellmProvider,
-      changed: manualProvider !== litellmProvider,
+      cloud: cloudVendor,
+      changed: manualProvider !== cloudVendor,
     });
 
     // 类型
     const manualMode = manualPrice.mode || "-";
-    const litellmMode = litellmPrice.mode || "-";
+    const cloudMode = cloudPrice.mode || "-";
     items.push({
       field: t("diff.mode"),
       manual: manualMode,
-      litellm: litellmMode,
-      changed: manualMode !== litellmMode,
+      cloud: cloudMode,
+      changed: manualMode !== cloudMode,
     });
 
     return items;
-  }, [manualPrice, litellmPrice, t]);
+  }, [manualPrice, cloudPrice, t]);
 
   return (
     <Popover>
@@ -147,7 +147,7 @@ function PriceDiffPopover({
               <TableRow>
                 <TableHead className="w-24 text-xs">{t("diff.field")}</TableHead>
                 <TableHead className="text-xs">{t("diff.manual")}</TableHead>
-                <TableHead className="text-xs">{t("diff.litellm")}</TableHead>
+                <TableHead className="text-xs">{t("diff.cloud")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -163,9 +163,9 @@ function PriceDiffPopover({
                   </TableCell>
                   <TableCell className="text-xs font-mono">
                     {diff.changed ? (
-                      <span className="text-green-600 dark:text-green-400">{diff.litellm}</span>
+                      <span className="text-green-600 dark:text-green-400">{diff.cloud}</span>
                     ) : (
-                      diff.litellm
+                      diff.cloud
                     )}
                   </TableCell>
                 </TableRow>
@@ -291,7 +291,7 @@ export function SyncConflictDialog({
                   </TableHead>
                   <TableHead>{t("table.modelName")}</TableHead>
                   <TableHead className="w-32">{t("table.manualPrice")}</TableHead>
-                  <TableHead className="w-32">{t("table.litellmPrice")}</TableHead>
+                  <TableHead className="w-32">{t("table.cloudPrice")}</TableHead>
                   <TableHead className="w-24">{t("table.action")}</TableHead>
                 </TableRow>
               </TableHeader>
@@ -315,13 +315,13 @@ export function SyncConflictDialog({
                       </TableCell>
                       <TableCell className="text-sm">
                         <Badge variant="secondary" className="font-mono">
-                          {formatPrice(conflict.litellmPrice.input_cost_per_token)}
+                          {formatPrice(conflict.cloudPrice.input_cost_per_token)}
                         </Badge>
                       </TableCell>
                       <TableCell>
                         <PriceDiffPopover
                           manualPrice={conflict.manualPrice}
-                          litellmPrice={conflict.litellmPrice}
+                          cloudPrice={conflict.cloudPrice}
                         />
                       </TableCell>
                     </TableRow>

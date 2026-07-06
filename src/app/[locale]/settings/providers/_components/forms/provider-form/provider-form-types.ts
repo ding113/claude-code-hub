@@ -6,6 +6,7 @@ import type {
   AnthropicAdaptiveThinkingModelMatchMode,
   AnthropicMaxTokensPreference,
   AnthropicThinkingBudgetPreference,
+  CodexImageGenerationPreference,
   CodexParallelToolCallsPreference,
   CodexReasoningEffortPreference,
   CodexReasoningSummaryPreference,
@@ -66,6 +67,7 @@ export interface RoutingState {
   codexReasoningSummaryPreference: CodexReasoningSummaryPreference;
   codexTextVerbosityPreference: CodexTextVerbosityPreference;
   codexParallelToolCallsPreference: CodexParallelToolCallsPreference;
+  codexImageGenerationPreference: CodexImageGenerationPreference;
   codexServiceTierPreference: CodexServiceTierPreference;
   // Anthropic-specific
   anthropicMaxTokensPreference: AnthropicMaxTokensPreference;
@@ -160,6 +162,7 @@ export type ProviderFormAction =
   | { type: "SET_CODEX_REASONING_SUMMARY"; payload: CodexReasoningSummaryPreference }
   | { type: "SET_CODEX_TEXT_VERBOSITY"; payload: CodexTextVerbosityPreference }
   | { type: "SET_CODEX_PARALLEL_TOOL_CALLS"; payload: CodexParallelToolCallsPreference }
+  | { type: "SET_CODEX_IMAGE_GENERATION"; payload: CodexImageGenerationPreference }
   | { type: "SET_CODEX_SERVICE_TIER"; payload: CodexServiceTierPreference }
   | { type: "SET_ANTHROPIC_MAX_TOKENS"; payload: AnthropicMaxTokensPreference }
   | { type: "SET_ANTHROPIC_THINKING_BUDGET"; payload: AnthropicThinkingBudgetPreference }

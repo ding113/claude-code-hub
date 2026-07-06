@@ -81,10 +81,20 @@ export interface ModelPriceData {
   selected_pricing_provider?: string;
   selected_pricing_source_model?: string;
   selected_pricing_resolution?: "manual_pin";
+  // 云端价格表(cchp.pricing-table/v1)元数据
+  vendor?: string;
+  slug?: string;
+  aliases?: string[];
+  vendor_icon?: string;
+  vendor_icon_mono?: boolean;
+  official_pricing_provider?: string | null;
+  model_family?: string;
+  deprecated?: boolean;
+  knowledge_cutoff?: string;
   max_input_tokens?: number;
   max_output_tokens?: number;
   max_tokens?: number;
-  mode?: "chat" | "image_generation" | "completion" | "responses";
+  mode?: "chat" | "image_generation" | "completion" | "responses" | (string & {});
 
   // 支持的功能
   supports_assistant_prefill?: boolean;
@@ -104,8 +114,14 @@ export interface ModelPriceData {
 
 /**
  * 价格来源类型
+ * - "cloud": 云端价格表(cchp.pricing-table/v1)同步写入
+ * - "manual": 用户手动添加/上传(本地优先,不被云端覆盖)
+ * - "litellm": 旧版云端同步的遗留值,首次新版同步后被整体替换
  */
-export type ModelPriceSource = "litellm" | "manual";
+export type ModelPriceSource = "cloud" | "litellm" | "manual";
+
+/** 非本地(云端)来源集合,查询过滤用 */
+export const CLOUD_PRICE_SOURCES = ["cloud", "litellm"] as const;
 
 /**
  * 模型价格记录
@@ -144,7 +160,7 @@ export interface PriceUpdateResult {
 export interface SyncConflict {
   modelName: string;
   manualPrice: ModelPriceData; // 当前手动添加的价格
-  litellmPrice: ModelPriceData; // LiteLLM 中的价格
+  cloudPrice: ModelPriceData; // 云端价格表中的价格
 }
 
 /**

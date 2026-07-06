@@ -24,6 +24,7 @@ export async function listModelPrices(c: Context): Promise<Response> {
     pageSize: c.req.query("pageSize"),
     search: c.req.query("search"),
     source: c.req.query("source"),
+    vendor: c.req.query("vendor"),
     litellmProvider: c.req.query("litellmProvider"),
   });
   if (!query.success) return fromZodError(query.error, new URL(c.req.url).pathname);

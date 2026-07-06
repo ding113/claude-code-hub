@@ -1,8 +1,11 @@
 import TOML from "@iarna/toml";
 import type { ModelPriceData } from "@/types/model-price";
+import { type CptParseResult, parseCptTable } from "./cpt-schema";
 
-export const CLOUD_PRICE_TABLE_URL = "https://claude-code-hub.app/config/prices-base.toml";
-const FETCH_TIMEOUT_MS = 10000;
+/** 云端价格表(CPT v1)地址;schema 见 https://cch-plus.com/pricing/v1/models.schema.json */
+export const CLOUD_PRICE_TABLE_URL = "https://cch-plus.com/pricing/v1/models.json";
+// 全量价格表约 10MB+,超时给足余量
+const FETCH_TIMEOUT_MS = 30000;
 
 export type CloudPriceTable = {
   metadata?: Record<string, unknown>;
@@ -15,6 +18,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+/**
+ * 解析旧版 TOML 价格表(仅保留给用户本地上传旧文件的兼容路径,
+ * 云端同步已切换到 CPT v1 JSON)。
+ */
 export function parseCloudPriceTableToml(tomlText: string): CloudPriceTableResult<CloudPriceTable> {
   try {
     const parsed = TOML.parse(tomlText) as unknown;
@@ -50,7 +57,8 @@ export function parseCloudPriceTableToml(tomlText: string): CloudPriceTableResul
   }
 }
 
-export async function fetchCloudPriceTableToml(
+/** 拉取云端 CPT v1 价格表原文(JSON 文本) */
+export async function fetchCloudPriceTableJson(
   url: string = CLOUD_PRICE_TABLE_URL
 ): Promise<CloudPriceTableResult<string>> {
   const expectedUrl = (() => {
@@ -68,7 +76,7 @@ export async function fetchCloudPriceTableToml(
     const response = await fetch(url, {
       signal: controller.signal,
       headers: {
-        Accept: "text/plain",
+        Accept: "application/json",
       },
       cache: "no-store",
     });
@@ -92,16 +100,27 @@ export async function fetchCloudPriceTableToml(
       return { ok: false, error: `云端价格表拉取失败：HTTP ${response.status}` };
     }
 
-    const tomlText = await response.text();
-    if (!tomlText.trim()) {
+    const jsonText = await response.text();
+    if (!jsonText.trim()) {
       return { ok: false, error: "云端价格表拉取失败：内容为空" };
     }
 
-    return { ok: true, data: tomlText };
+    return { ok: true, data: jsonText };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     return { ok: false, error: `云端价格表拉取失败：${message}` };
   } finally {
     clearTimeout(timeoutId);
   }
+}
+
+/** 拉取并解析云端 CPT v1 价格表 */
+export async function fetchAndParseCloudPriceTable(
+  url: string = CLOUD_PRICE_TABLE_URL
+): Promise<CptParseResult> {
+  const fetched = await fetchCloudPriceTableJson(url);
+  if (!fetched.ok) {
+    return fetched;
+  }
+  return parseCptTable(fetched.data);
 }

@@ -1,5 +1,5 @@
 {
-  "id": "3bda11e7-30b9-4be5-87b3-d05c63e2328c",
+  "id": "30511ee7-83b4-4f2f-8e28-e9ba594ec671",
   "prevId": "e61c4e85-4edf-4d73-b2e3-5326af94eba0",
   "version": "7",
   "dialect": "postgresql",
@@ -2731,6 +2731,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "codex_image_generation_preference": {
+          "name": "codex_image_generation_preference",
+          "type": "varchar(10)",
+          "primaryKey": false,
+          "notNull": false
+        },
         "codex_service_tier_preference": {
           "name": "codex_service_tier_preference",
           "type": "varchar(20)",
@@ -3456,13 +3462,6 @@
         },
         "enable_thinking_effort_conflict_rectifier": {
           "name": "enable_thinking_effort_conflict_rectifier",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": true
-        },
-        "enable_gemini_function_id_rectifier": {
-          "name": "enable_gemini_function_id_rectifier",
           "type": "boolean",
           "primaryKey": false,
           "notNull": true,

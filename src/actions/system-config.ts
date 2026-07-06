@@ -8,6 +8,11 @@ import { invalidateSystemSettingsCache } from "@/lib/config";
 import { logger } from "@/lib/logger";
 import { publishCurrentPublicStatusConfigProjection } from "@/lib/public-status/config-publisher";
 import { schedulePublicStatusRebuild } from "@/lib/public-status/rebuild-hints";
+import {
+  invalidateAllLeaderboardCaches,
+  invalidateAllOverviewCaches,
+  invalidateAllStatisticsCaches,
+} from "@/lib/redis";
 import { resolveSystemTimezone } from "@/lib/utils/timezone";
 import { UpdateSystemSettingsSchema } from "@/lib/validation/schemas";
 import { getSystemSettings, updateSystemSettings } from "@/repository/system-config";
@@ -156,6 +161,18 @@ export async function saveSystemSettings(formData: {
       "@/app/v1/_lib/proxy/provider-selector-settings-cache"
     );
     invalidateProviderSelectorSystemSettingsCache();
+
+    if (validated.timezone !== undefined) {
+      await Promise.all([
+        invalidateAllOverviewCaches(),
+        invalidateAllStatisticsCaches(),
+        invalidateAllLeaderboardCaches(),
+      ]).catch((error) => {
+        logger.warn("[SystemSettings] Failed to invalidate timezone-sensitive dashboard caches", {
+          error,
+        });
+      });
+    }
 
     const shouldRepublishPublicStatusProjection =
       validated.siteTitle !== undefined ||

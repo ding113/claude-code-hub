@@ -9,30 +9,13 @@
   "filters": {
     "all": "すべて",
     "local": "ローカル",
-    "anthropic": "Anthropic",
-    "openai": "OpenAI",
-    "vertex": "Vertex",
-    "deepseek": "DeepSeek",
-    "mistral": "Mistral",
-    "meta": "Meta",
-    "cohere": "Cohere",
-    "xai": "xAI",
-    "groq": "Groq",
-    "bedrock": "Bedrock",
-    "azure": "Azure",
-    "together": "Together",
-    "nvidia": "NVIDIA",
-    "zhipuai": "Zhipu",
-    "volcengine": "Volcengine",
-    "minimax": "MiniMax",
-    "qwen": "Qwen",
-    "fireworks": "Fireworks",
-    "ollama": "Ollama",
-    "openrouter": "OpenRouter"
+    "moreVendors": "その他のベンダー"
   },
   "badges": {
     "local": "ローカル",
-    "multi": "マルチ"
+    "multi": "マルチ",
+    "official": "公式価格",
+    "multiWithCount": "{count} ソース"
   },
   "capabilities": {
     "assistantPrefill": "アシスタント事前入力",
@@ -64,25 +47,25 @@
   },
   "conflict": {
     "title": "上書きする項目を選択",
-    "description": "以下のモデルには手動で設定された価格があります。チェックした項目はLiteLLM価格で上書きされ、チェックしない項目は現在のままです",
+    "description": "以下のモデルには手動価格があります。クラウド価格で上書きするものにチェックを入れてください。チェックしないものは変更されません",
     "searchPlaceholder": "モデルを検索...",
     "table": {
       "modelName": "モデル",
       "manualPrice": "手動価格",
-      "litellmPrice": "LiteLLM価格",
-      "action": "操作内容"
+      "action": "操作内容",
+      "cloudPrice": "クラウド価格"
     },
     "viewDiff": "差異を表示",
     "diffTitle": "価格差異",
     "diff": {
       "field": "フィールド",
       "manual": "手動",
-      "litellm": "LiteLLM",
       "inputPrice": "入力価格",
       "outputPrice": "出力価格",
       "imagePrice": "画像価格",
       "provider": "プロバイダー",
-      "mode": "タイプ"
+      "mode": "モード",
+      "cloud": "クラウド"
     },
     "pagination": {
       "showing": "{from}〜{to}件を表示 (全{total}件)"
@@ -148,7 +131,7 @@
     "updateFailed": "更新に失敗しました",
     "systemHasBuiltIn": "システムは組み込み価格表を持っています",
     "manualDownload": "手動でダウンロードすることもできます",
-    "latestPriceTable": "クラウド価格表",
+    "latestPriceTable": "クラウド価格表 (models.json)",
     "andUploadViaButton": "、上のボタンでアップロードしてください",
     "cloudModelCountLoading": "クラウドモデル数を読み込み中...",
     "cloudModelCountFailed": "クラウドモデル数の読み込みに失敗しました",
@@ -218,7 +201,7 @@
     "fields": {
       "mode": "モード",
       "displayName": "表示名",
-      "litellmProvider": "LiteLLM プロバイダー",
+      "litellmProvider": "LiteLLM プロバイダー (旧版)",
       "selectedPricingProvider": "選択中の価格プロバイダー",
       "selectedPricingSourceModel": "選択元モデル",
       "selectedPricingResolution": "選択解決方式",
@@ -231,7 +214,12 @@
       "inputCostPerRequest": "リクエスト単価",
       "outputCostPerImage": "画像出力単価",
       "inputCostPerSecond": "秒単位入力価格",
-      "fileSearchCostPer1kCalls": "ファイル検索 1k 回あたりの価格"
+      "fileSearchCostPer1kCalls": "ファイル検索 1k 回あたりの価格",
+      "vendor": "ベンダー",
+      "slug": "モデル識別子",
+      "officialPricingProvider": "公式価格プロバイダー",
+      "modelFamily": "モデルファミリー",
+      "knowledgeCutoff": "知識カットオフ"
     }
   },
   "toast": {
@@ -251,6 +239,7 @@
     "pinSuccess": "{provider} の価格をローカルモデル価格として固定しました",
     "pinFailed": "プロバイダー価格の固定に失敗しました",
     "pinned": "固定済み",
-    "priority": "高速モード価格"
+    "priority": "高速モード価格",
+    "official": "公式"
   }
 }

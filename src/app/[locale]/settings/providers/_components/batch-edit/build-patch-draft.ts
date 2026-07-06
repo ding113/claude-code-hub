@@ -144,6 +144,15 @@ export function buildPatchDraftFromFormState(
       };
     }
   }
+  if (dirtyFields.has("routing.codexImageGenerationPreference")) {
+    if (state.routing.codexImageGenerationPreference === "inherit") {
+      draft.codex_image_generation_preference = { clear: true };
+    } else {
+      draft.codex_image_generation_preference = {
+        set: state.routing.codexImageGenerationPreference,
+      };
+    }
+  }
   if (dirtyFields.has("routing.codexServiceTierPreference")) {
     if (state.routing.codexServiceTierPreference === "inherit") {
       draft.codex_service_tier_preference = { clear: true };

@@ -31,6 +31,7 @@ vi.mock("@/lib/logger", () => ({
 vi.mock("@/lib/async-task-manager", () => ({
   AsyncTaskManager: {
     register: () => new AbortController(),
+    touch: vi.fn(() => true),
     cleanup: vi.fn(),
     cancel: vi.fn(),
   },
@@ -105,6 +106,7 @@ function createCodexProvider(overrides: Partial<Provider> = {}): Provider {
     codexReasoningSummaryPreference: null,
     codexTextVerbosityPreference: null,
     codexParallelToolCallsPreference: null,
+    codexImageGenerationPreference: null,
     codexServiceTierPreference: null,
     anthropicMaxTokensPreference: null,
     anthropicThinkingBudgetPreference: null,

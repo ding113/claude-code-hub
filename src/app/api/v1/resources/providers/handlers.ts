@@ -657,6 +657,7 @@ function sanitizeProvider(
     codexReasoningSummaryPreference: provider.codexReasoningSummaryPreference,
     codexTextVerbosityPreference: provider.codexTextVerbosityPreference,
     codexParallelToolCallsPreference: provider.codexParallelToolCallsPreference,
+    codexImageGenerationPreference: provider.codexImageGenerationPreference,
     codexServiceTierPreference: provider.codexServiceTierPreference,
     anthropicMaxTokensPreference: provider.anthropicMaxTokensPreference,
     anthropicThinkingBudgetPreference: provider.anthropicThinkingBudgetPreference,

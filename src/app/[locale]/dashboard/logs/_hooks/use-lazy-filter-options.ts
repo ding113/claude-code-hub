@@ -98,8 +98,13 @@ function createLazyFilterHook<T>(
  * 惰性加载 Models 列表
  * 用于 Model 筛选器下拉，展开时才加载数据
  */
-export const useLazyModels: () => UseLazyFilterOptionsReturn<string> =
-  createLazyFilterHook<string>(getModelList);
+export const useLazyModels: () => UseLazyFilterOptionsReturn<string> = createLazyFilterHook<string>(
+  async () => {
+    const result = await getModelList();
+    if (!result.ok) return result;
+    return { ...result, data: result.data.filter(isNonBlankString) };
+  }
+);
 
 /**
  * 惰性加载 StatusCodes 列表
@@ -114,3 +119,7 @@ export const useLazyStatusCodes: () => UseLazyFilterOptionsReturn<number> =
  */
 export const useLazyEndpoints: () => UseLazyFilterOptionsReturn<string> =
   createLazyFilterHook<string>(getEndpointList);
+
+function isNonBlankString(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0;
+}

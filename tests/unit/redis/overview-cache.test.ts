@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { getRedisClient } from "@/lib/redis/client";
 import { getOverviewWithCache, invalidateOverviewCache } from "@/lib/redis/overview-cache";
+import { resolveSystemTimezone } from "@/lib/utils/timezone";
 import {
   getOverviewMetricsWithComparison,
   type OverviewMetricsWithComparison,
@@ -19,6 +20,10 @@ vi.mock("@/lib/redis/client", () => ({
   getRedisClient: vi.fn(),
 }));
 
+vi.mock("@/lib/utils/timezone", () => ({
+  resolveSystemTimezone: vi.fn().mockResolvedValue("UTC"),
+}));
+
 vi.mock("@/repository/overview", () => ({
   getOverviewMetricsWithComparison: vi.fn(),
 }));
@@ -28,6 +33,7 @@ type RedisMock = {
   set: ReturnType<typeof vi.fn>;
   setex: ReturnType<typeof vi.fn>;
   del: ReturnType<typeof vi.fn>;
+  scan: ReturnType<typeof vi.fn>;
 };
 
 function createRedisMock(): RedisMock {
@@ -36,6 +42,7 @@ function createRedisMock(): RedisMock {
     set: vi.fn(),
     setex: vi.fn(),
     del: vi.fn(),
+    scan: vi.fn(),
   };
 }
 
@@ -55,6 +62,7 @@ function createOverviewData(): OverviewMetricsWithComparison {
 describe("getOverviewWithCache", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(resolveSystemTimezone).mockResolvedValue("UTC");
   });
 
   it("returns cached data on cache hit (no DB call)", async () => {
@@ -69,7 +77,7 @@ describe("getOverviewWithCache", () => {
     const result = await getOverviewWithCache();
 
     expect(result).toEqual(data);
-    expect(redis.get).toHaveBeenCalledWith("overview:global");
+    expect(redis.get).toHaveBeenCalledWith("overview:global:tz:UTC");
     expect(getOverviewMetricsWithComparison).not.toHaveBeenCalled();
   });
 
@@ -90,9 +98,9 @@ describe("getOverviewWithCache", () => {
 
     expect(result).toEqual(data);
     expect(getOverviewMetricsWithComparison).toHaveBeenCalledWith(42);
-    expect(redis.set).toHaveBeenCalledWith("overview:user:42:lock", "1", "EX", 5, "NX");
-    expect(redis.setex).toHaveBeenCalledWith("overview:user:42", 10, JSON.stringify(data));
-    expect(redis.del).toHaveBeenCalledWith("overview:user:42:lock");
+    expect(redis.set).toHaveBeenCalledWith("overview:user:42:tz:UTC:lock", "1", "EX", 5, "NX");
+    expect(redis.setex).toHaveBeenCalledWith("overview:user:42:tz:UTC", 10, JSON.stringify(data));
+    expect(redis.del).toHaveBeenCalledWith("overview:user:42:tz:UTC:lock");
   });
 
   it("falls back to direct DB query when Redis is unavailable (null client)", async () => {
@@ -140,9 +148,9 @@ describe("getOverviewWithCache", () => {
       const result = await pending;
 
       expect(result).toEqual(data);
-      expect(redis.set).toHaveBeenCalledWith("overview:user:99:lock", "1", "EX", 5, "NX");
-      expect(redis.get).toHaveBeenNthCalledWith(1, "overview:user:99");
-      expect(redis.get).toHaveBeenNthCalledWith(2, "overview:user:99");
+      expect(redis.set).toHaveBeenCalledWith("overview:user:99:tz:UTC:lock", "1", "EX", 5, "NX");
+      expect(redis.get).toHaveBeenNthCalledWith(1, "overview:user:99:tz:UTC");
+      expect(redis.get).toHaveBeenNthCalledWith(2, "overview:user:99:tz:UTC");
       expect(getOverviewMetricsWithComparison).toHaveBeenCalledWith(99);
     } finally {
       vi.useRealTimers();
@@ -166,20 +174,32 @@ describe("getOverviewWithCache", () => {
     await getOverviewWithCache();
     await getOverviewWithCache(42);
 
-    expect(redis.get).toHaveBeenNthCalledWith(1, "overview:global");
-    expect(redis.get).toHaveBeenNthCalledWith(2, "overview:user:42");
-    expect(redis.setex).toHaveBeenNthCalledWith(1, "overview:global", 10, JSON.stringify(data));
-    expect(redis.setex).toHaveBeenNthCalledWith(2, "overview:user:42", 10, JSON.stringify(data));
+    expect(redis.get).toHaveBeenNthCalledWith(1, "overview:global:tz:UTC");
+    expect(redis.get).toHaveBeenNthCalledWith(2, "overview:user:42:tz:UTC");
+    expect(redis.setex).toHaveBeenNthCalledWith(
+      1,
+      "overview:global:tz:UTC",
+      10,
+      JSON.stringify(data)
+    );
+    expect(redis.setex).toHaveBeenNthCalledWith(
+      2,
+      "overview:user:42:tz:UTC",
+      10,
+      JSON.stringify(data)
+    );
   });
 });
 
 describe("invalidateOverviewCache", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(resolveSystemTimezone).mockResolvedValue("UTC");
   });
 
-  it("deletes the correct cache key", async () => {
+  it("deletes timezone-scoped and legacy cache keys", async () => {
     const redis = createRedisMock();
+    redis.scan.mockResolvedValueOnce(["0", ["overview:user:42:tz:UTC"]]);
     redis.del.mockResolvedValueOnce(1);
 
     vi.mocked(getRedisClient).mockReturnValue(
@@ -188,7 +208,8 @@ describe("invalidateOverviewCache", () => {
 
     await invalidateOverviewCache(42);
 
-    expect(redis.del).toHaveBeenCalledWith("overview:user:42");
+    expect(redis.scan).toHaveBeenCalledWith("0", "MATCH", "overview:user:42:tz:*", "COUNT", 100);
+    expect(redis.del).toHaveBeenCalledWith("overview:user:42:tz:UTC", "overview:user:42");
   });
 
   it("does nothing when Redis is unavailable", async () => {
@@ -199,7 +220,7 @@ describe("invalidateOverviewCache", () => {
 
   it("swallows Redis errors during invalidation", async () => {
     const redis = createRedisMock();
-    redis.del.mockRejectedValueOnce(new Error("delete failed"));
+    redis.scan.mockRejectedValueOnce(new Error("scan failed"));
 
     vi.mocked(getRedisClient).mockReturnValue(
       redis as unknown as NonNullable<ReturnType<typeof getRedisClient>>

@@ -15,7 +15,8 @@ const deleteModelPriceByNameMock = vi.fn();
 const findAllManualPricesMock = vi.fn();
 
 // Price sync mock
-const fetchCloudPriceTableTomlMock = vi.fn();
+const loadConvertedCloudPriceTableMock = vi.fn();
+const applyConvertedCloudPriceTableMock = vi.fn();
 
 vi.mock("@/lib/auth", () => ({
   getSession: () => getSessionMock(),
@@ -54,19 +55,36 @@ vi.mock("@/repository/model-price", () => ({
   hasAnyPriceRecords: vi.fn(async () => false),
 }));
 
-vi.mock("@/lib/price-sync/cloud-price-table", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/lib/price-sync/cloud-price-table")>();
+vi.mock("@/lib/price-sync/cloud-price-updater", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/price-sync/cloud-price-updater")>();
   return {
     ...actual,
-    fetchCloudPriceTableToml: (...args: unknown[]) => fetchCloudPriceTableTomlMock(...args),
+    loadConvertedCloudPriceTable: (...args: unknown[]) => loadConvertedCloudPriceTableMock(...args),
+    applyConvertedCloudPriceTable: (...args: unknown[]) =>
+      applyConvertedCloudPriceTableMock(...args),
   };
 });
+
+/** 构造 loadConvertedCloudPriceTable 的成功返回 */
+function makeConvertedTable(models: Record<string, unknown>) {
+  return {
+    ok: true,
+    data: {
+      models,
+      vendors: [],
+      providers: {},
+      version: "test-version",
+      currency: "USD",
+      refreshedAt: "2026-07-01T00:00:00.000Z",
+    },
+  };
+}
 
 // Helper to create mock ModelPrice
 function makeMockPrice(
   modelName: string,
   priceData: Partial<ModelPriceData>,
-  source: "litellm" | "manual" = "manual"
+  source: "cloud" | "litellm" | "manual" = "manual"
 ): ModelPrice {
   const now = new Date();
   return {
@@ -349,12 +367,11 @@ describe("Model Price Actions", () => {
   describe("checkLiteLLMSyncConflicts", () => {
     it("should return no conflicts when no manual prices exist", async () => {
       findAllManualPricesMock.mockResolvedValue(new Map());
-      fetchCloudPriceTableTomlMock.mockResolvedValue({
-        ok: true,
-        data: ['[models."claude-3-opus"]', 'mode = "chat"', "input_cost_per_token = 0.000015"].join(
-          "\n"
-        ),
-      });
+      loadConvertedCloudPriceTableMock.mockResolvedValue(
+        makeConvertedTable({
+          "claude-3-opus": { mode: "chat", input_cost_per_token: 0.000015 },
+        })
+      );
 
       const { checkLiteLLMSyncConflicts } = await import("@/actions/model-prices");
       const result = await checkLiteLLMSyncConflicts();
@@ -373,15 +390,15 @@ describe("Model Price Actions", () => {
 
       findAllManualPricesMock.mockResolvedValue(new Map([["claude-3-opus", manualPrice]]));
 
-      fetchCloudPriceTableTomlMock.mockResolvedValue({
-        ok: true,
-        data: [
-          '[models."claude-3-opus"]',
-          'mode = "chat"',
-          "input_cost_per_token = 0.000015",
-          "output_cost_per_token = 0.00006",
-        ].join("\n"),
-      });
+      loadConvertedCloudPriceTableMock.mockResolvedValue(
+        makeConvertedTable({
+          "claude-3-opus": {
+            mode: "chat",
+            input_cost_per_token: 0.000015,
+            output_cost_per_token: 0.00006,
+          },
+        })
+      );
 
       const { checkLiteLLMSyncConflicts } = await import("@/actions/model-prices");
       const result = await checkLiteLLMSyncConflicts();
@@ -390,6 +407,7 @@ describe("Model Price Actions", () => {
       expect(result.data?.hasConflicts).toBe(true);
       expect(result.data?.conflicts).toHaveLength(1);
       expect(result.data?.conflicts[0]?.modelName).toBe("claude-3-opus");
+      expect(result.data?.conflicts[0]?.cloudPrice.input_cost_per_token).toBe(0.000015);
     });
 
     it("should not report conflicts for manual prices not in LiteLLM", async () => {
@@ -400,12 +418,11 @@ describe("Model Price Actions", () => {
 
       findAllManualPricesMock.mockResolvedValue(new Map([["custom-model", manualPrice]]));
 
-      fetchCloudPriceTableTomlMock.mockResolvedValue({
-        ok: true,
-        data: ['[models."claude-3-opus"]', 'mode = "chat"', "input_cost_per_token = 0.000015"].join(
-          "\n"
-        ),
-      });
+      loadConvertedCloudPriceTableMock.mockResolvedValue(
+        makeConvertedTable({
+          "claude-3-opus": { mode: "chat", input_cost_per_token: 0.000015 },
+        })
+      );
 
       const { checkLiteLLMSyncConflicts } = await import("@/actions/model-prices");
       const result = await checkLiteLLMSyncConflicts();
@@ -427,7 +444,7 @@ describe("Model Price Actions", () => {
 
     it("should handle network errors gracefully", async () => {
       findAllManualPricesMock.mockResolvedValue(new Map());
-      fetchCloudPriceTableTomlMock.mockResolvedValue({
+      loadConvertedCloudPriceTableMock.mockResolvedValue({
         ok: false,
         error: "云端价格表拉取失败：mock",
       });
@@ -439,18 +456,18 @@ describe("Model Price Actions", () => {
       expect(result.error).toContain("云端");
     });
 
-    it("should handle invalid TOML gracefully", async () => {
+    it("should handle invalid schema gracefully", async () => {
       findAllManualPricesMock.mockResolvedValue(new Map());
-      fetchCloudPriceTableTomlMock.mockResolvedValue({
-        ok: true,
-        data: "[models\ninvalid = true",
+      loadConvertedCloudPriceTableMock.mockResolvedValue({
+        ok: false,
+        error: "价格表格式无效：schema 不是 cchp.pricing-table/v1（实际为 other/v9）",
       });
 
       const { checkLiteLLMSyncConflicts } = await import("@/actions/model-prices");
       const result = await checkLiteLLMSyncConflicts();
 
       expect(result.ok).toBe(false);
-      expect(result.error).toContain("TOML");
+      expect(result.error).toContain("schema");
     });
   });
 
@@ -516,11 +533,11 @@ describe("Model Price Actions", () => {
       expect(upsertModelPriceMock).toHaveBeenCalledWith(
         "custom-model",
         expect.any(Object),
-        "litellm"
+        "cloud"
       );
     });
 
-    it("should add new models with litellm source", async () => {
+    it("should add new models with cloud source", async () => {
       findAllManualPricesMock.mockResolvedValue(new Map());
       findAllLatestPricesMock.mockResolvedValue([]);
       createModelPriceMock.mockResolvedValue(
@@ -545,7 +562,7 @@ describe("Model Price Actions", () => {
 
       expect(result.ok).toBe(true);
       expect(result.data?.added).toContain("new-model");
-      expect(createModelPriceMock).toHaveBeenCalledWith("new-model", expect.any(Object), "litellm");
+      expect(createModelPriceMock).toHaveBeenCalledWith("new-model", expect.any(Object), "cloud");
     });
 
     it("should skip metadata fields like sample_spec", async () => {
@@ -589,7 +606,7 @@ describe("Model Price Actions", () => {
           input_cost_per_token: 0.000001,
           output_cost_per_token: 0.000002,
         },
-        "litellm"
+        "cloud"
       );
 
       findAllManualPricesMock.mockResolvedValue(new Map());
@@ -672,11 +689,7 @@ describe("Model Price Actions", () => {
       expect(result.ok).toBe(true);
       expect(result.data?.updated).toContain("cloud-model");
       // Transactional replace, not a separate delete + insert.
-      expect(upsertModelPriceMock).toHaveBeenCalledWith(
-        "cloud-model",
-        expect.any(Object),
-        "litellm"
-      );
+      expect(upsertModelPriceMock).toHaveBeenCalledWith("cloud-model", expect.any(Object), "cloud");
       expect(createModelPriceMock).not.toHaveBeenCalled();
     });
 
@@ -821,7 +834,7 @@ describe("Model Price Actions", () => {
       });
 
       expect(result.ok).toBe(true);
-      expect(findLatestPriceByModelAndSourceMock).toHaveBeenCalledWith("gpt-5.5", "litellm");
+      expect(findLatestPriceByModelAndSourceMock).toHaveBeenCalledWith("gpt-5.5", "cloud");
       expect(upsertModelPriceMock).toHaveBeenCalledWith(
         "gpt-5.5",
         expect.objectContaining({
