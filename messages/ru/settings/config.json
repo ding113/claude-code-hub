@@ -68,6 +68,8 @@
     "enableThinkingBudgetRectifierDesc": "Если Anthropic-провайдер возвращает ошибку budget_tokens < 1024, автоматически устанавливает thinking budget на максимум (32000) и при необходимости max_tokens на 64000, затем повторяет запрос один раз (включено по умолчанию).",
     "enableThinkingEffortConflictRectifier": "Включить исправление конфликта thinking-effort",
     "enableThinkingEffortConflictRectifierDesc": "Если Anthropic-совместимый провайдер (например, DeepSeek или MiMo) возвращает ошибку 400 из-за сочетания отключённого thinking и reasoning_effort, автоматически удаляет поля effort (output_config/reasoning_effort) и повторяет запрос к тому же провайдеру один раз (включено по умолчанию).",
+    "enableGeminiFunctionIdRectifier": "Включить исправление id функций Gemini",
+    "enableGeminiFunctionIdRectifierDesc": "Если Gemini-провайдер (строгий upstream, например Vertex AI) возвращает ошибку 400 из-за поля id в functionCall/functionResponse, автоматически удаляет поля id и повторяет запрос к тому же провайдеру один раз (включено по умолчанию).",
     "enableBillingHeaderRectifier": "Включить исправление billing-заголовка",
     "enableBillingHeaderRectifierDesc": "Проактивно удаляет текстовые блоки x-anthropic-billing-header, добавленные клиентом Claude Code в системный промпт, предотвращая ошибки 400 от Amazon Bedrock и других не-Anthropic провайдеров (включено по умолчанию).",
     "enableResponseInputRectifier": "Включить исправление Response Input",

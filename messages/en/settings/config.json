@@ -68,6 +68,8 @@
     "enableThinkingBudgetRectifierDesc": "When Anthropic providers return budget_tokens < 1024 errors, automatically sets thinking budget to maximum (32000) and max_tokens to 64000 if needed, then retries once (enabled by default).",
     "enableThinkingEffortConflictRectifier": "Enable Thinking Effort Conflict Rectifier",
     "enableThinkingEffortConflictRectifierDesc": "When Anthropic-compatible providers (such as DeepSeek or MiMo) return 400 errors because disabled thinking conflicts with reasoning_effort, automatically strips the effort fields (output_config/reasoning_effort) and retries once against the same provider (enabled by default).",
+    "enableGeminiFunctionIdRectifier": "Enable Gemini Function Id Rectifier",
+    "enableGeminiFunctionIdRectifierDesc": "When Gemini providers (strict upstreams such as Vertex AI) return 400 errors because functionCall/functionResponse carry an id field, automatically strips the id fields and retries once against the same provider (enabled by default).",
     "enableBillingHeaderRectifier": "Enable Billing Header Rectifier",
     "enableBillingHeaderRectifierDesc": "Proactively removes x-anthropic-billing-header text blocks injected by Claude Code client into the system prompt, preventing Amazon Bedrock and other non-native Anthropic upstreams from returning 400 errors (enabled by default).",
     "enableResponseInputRectifier": "Enable Response Input Rectifier",

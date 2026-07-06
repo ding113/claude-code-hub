@@ -81,6 +81,7 @@ export async function POST(req: Request) {
       interceptAnthropicWarmupRequests: validated.interceptAnthropicWarmupRequests,
       enableThinkingSignatureRectifier: validated.enableThinkingSignatureRectifier,
       enableThinkingBudgetRectifier: validated.enableThinkingBudgetRectifier,
+      enableGeminiFunctionIdRectifier: validated.enableGeminiFunctionIdRectifier,
       enableBillingHeaderRectifier: validated.enableBillingHeaderRectifier,
       enableResponseInputRectifier: validated.enableResponseInputRectifier,
       enableCodexSessionIdCompletion: validated.enableCodexSessionIdCompletion,

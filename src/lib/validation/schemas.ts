@@ -1013,6 +1013,8 @@ export const UpdateSystemSettingsSchema = z.object({
   enableThinkingBudgetRectifier: z.boolean().optional(),
   // thinking effort 冲突整流器（可选）
   enableThinkingEffortConflictRectifier: z.boolean().optional(),
+  // Gemini function id 整流器（可选）
+  enableGeminiFunctionIdRectifier: z.boolean().optional(),
   // billing header 整流器（可选）
   enableBillingHeaderRectifier: z.boolean().optional(),
   // Response API input 整流器（可选）

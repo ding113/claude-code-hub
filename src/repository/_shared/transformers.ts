@@ -269,6 +269,7 @@ export function toSystemSettings(dbSettings: any): SystemSettings {
     enableThinkingBudgetRectifier: dbSettings?.enableThinkingBudgetRectifier ?? true,
     enableThinkingEffortConflictRectifier:
       dbSettings?.enableThinkingEffortConflictRectifier ?? true,
+    enableGeminiFunctionIdRectifier: dbSettings?.enableGeminiFunctionIdRectifier ?? true,
     enableBillingHeaderRectifier: dbSettings?.enableBillingHeaderRectifier ?? true,
     enableResponseInputRectifier: dbSettings?.enableResponseInputRectifier ?? true,
     allowNonConversationEndpointProviderFallback:
