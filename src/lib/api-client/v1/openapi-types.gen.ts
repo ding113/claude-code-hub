@@ -4428,6 +4428,11 @@ export interface operations {
                             codexTextVerbosityPreference: string | null;
                             /** @description Codex parallel tool calls preference. */
                             codexParallelToolCallsPreference: string | null;
+                            /**
+                             * @description Codex image generation tool preference.
+                             * @enum {string|null}
+                             */
+                            codexImageGenerationPreference: "inherit" | "true" | "false" | null;
                             /** @description Codex service tier preference. */
                             codexServiceTierPreference: string | null;
                             /** @description Anthropic max tokens preference. */
@@ -4750,6 +4755,11 @@ export interface operations {
                     codex_text_verbosity_preference?: string;
                     /** @description Codex parallel tool calls preference. */
                     codex_parallel_tool_calls_preference?: string;
+                    /**
+                     * @description Codex image generation tool preference.
+                     * @enum {string}
+                     */
+                    codex_image_generation_preference?: "inherit" | "true" | "false";
                     /** @description Codex service tier preference. */
                     codex_service_tier_preference?: string;
                     /** @description Anthropic max tokens preference. */
@@ -4883,6 +4893,11 @@ export interface operations {
                         codexTextVerbosityPreference: string | null;
                         /** @description Codex parallel tool calls preference. */
                         codexParallelToolCallsPreference: string | null;
+                        /**
+                         * @description Codex image generation tool preference.
+                         * @enum {string|null}
+                         */
+                        codexImageGenerationPreference: "inherit" | "true" | "false" | null;
                         /** @description Codex service tier preference. */
                         codexServiceTierPreference: string | null;
                         /** @description Anthropic max tokens preference. */
@@ -5200,6 +5215,11 @@ export interface operations {
                         codexTextVerbosityPreference: string | null;
                         /** @description Codex parallel tool calls preference. */
                         codexParallelToolCallsPreference: string | null;
+                        /**
+                         * @description Codex image generation tool preference.
+                         * @enum {string|null}
+                         */
+                        codexImageGenerationPreference: "inherit" | "true" | "false" | null;
                         /** @description Codex service tier preference. */
                         codexServiceTierPreference: string | null;
                         /** @description Anthropic max tokens preference. */
@@ -5697,6 +5717,11 @@ export interface operations {
                     codex_text_verbosity_preference?: string;
                     /** @description Codex parallel tool calls preference. */
                     codex_parallel_tool_calls_preference?: string;
+                    /**
+                     * @description Codex image generation tool preference.
+                     * @enum {string}
+                     */
+                    codex_image_generation_preference?: "inherit" | "true" | "false";
                     /** @description Codex service tier preference. */
                     codex_service_tier_preference?: string;
                     /** @description Anthropic max tokens preference. */
@@ -5836,6 +5861,11 @@ export interface operations {
                         codexTextVerbosityPreference: string | null;
                         /** @description Codex parallel tool calls preference. */
                         codexParallelToolCallsPreference: string | null;
+                        /**
+                         * @description Codex image generation tool preference.
+                         * @enum {string|null}
+                         */
+                        codexImageGenerationPreference: "inherit" | "true" | "false" | null;
                         /** @description Codex service tier preference. */
                         codexServiceTierPreference: string | null;
                         /** @description Anthropic max tokens preference. */
@@ -7661,6 +7691,11 @@ export interface operations {
                         daily_reset_mode?: "fixed" | "rolling";
                         /** @description Daily reset time. */
                         daily_reset_time?: string;
+                        /**
+                         * @description Codex image generation tool preference.
+                         * @enum {string|null}
+                         */
+                        codex_image_generation_preference?: "inherit" | "true" | "false" | null;
                         /** @description Codex service tier preference. */
                         codex_service_tier_preference?: string | null;
                         /** @description Anthropic thinking budget preference. */
@@ -19350,8 +19385,10 @@ export interface operations {
                 /** @description Optional model search text. */
                 search?: string;
                 /** @description Optional source filter. */
-                source?: "litellm" | "manual";
-                /** @description Optional LiteLLM provider filter. */
+                source?: "cloud" | "litellm" | "manual";
+                /** @description Optional cloud vendor filter. */
+                vendor?: string;
+                /** @description Legacy LiteLLM provider filter (matches pre-migration rows only). */
                 litellmProvider?: string;
             };
             header?: never;
@@ -19381,7 +19418,7 @@ export interface operations {
                              * @description Price source.
                              * @enum {string}
                              */
-                            source: "litellm" | "manual";
+                            source: "cloud" | "litellm" | "manual";
                             /**
                              * Format: date-time
                              * @description Creation time.
@@ -19577,7 +19614,9 @@ export interface operations {
                         items: {
                             /** @description Model name. */
                             modelName: string;
-                            /** @description LiteLLM provider. */
+                            /** @description Cloud pricing table vendor slug. */
+                            vendor: string | null;
+                            /** @description Legacy LiteLLM provider. */
                             litellmProvider: string | null;
                             /**
                              * Format: date-time
@@ -20131,8 +20170,8 @@ export interface operations {
                             manualPrice: {
                                 [key: string]: unknown;
                             };
-                            /** @description LiteLLM price payload. */
-                            litellmPrice: {
+                            /** @description Cloud price payload. */
+                            cloudPrice: {
                                 [key: string]: unknown;
                             };
                         }[];
@@ -20548,7 +20587,7 @@ export interface operations {
                          * @description Price source.
                          * @enum {string}
                          */
-                        source: "litellm" | "manual";
+                        source: "cloud" | "litellm" | "manual";
                         /**
                          * Format: date-time
                          * @description Creation time.
@@ -20925,7 +20964,7 @@ export interface operations {
                          * @description Price source.
                          * @enum {string}
                          */
-                        source: "litellm" | "manual";
+                        source: "cloud" | "litellm" | "manual";
                         /**
                          * Format: date-time
                          * @description Creation time.

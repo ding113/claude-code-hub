@@ -1,7 +1,9 @@
 import { z } from "@hono/zod-openapi";
 import { IsoDateTimeStringSchema } from "./_common";
 
-export const ModelPriceSourceSchema = z.enum(["litellm", "manual"]).describe("Model price source.");
+export const ModelPriceSourceSchema = z
+  .enum(["cloud", "litellm", "manual"])
+  .describe("Model price source ('litellm' is a legacy value from the old cloud table).");
 
 export const ModelPriceModeSchema = z
   .enum(["chat", "image_generation", "completion", "responses"])
@@ -20,7 +22,12 @@ export const ModelPriceListQuerySchema = z.object({
   pageSize: z.coerce.number().int().min(1).max(100).default(20).describe("Page size."),
   search: z.string().trim().optional().describe("Optional model search text."),
   source: ModelPriceSourceSchema.optional().describe("Optional source filter."),
-  litellmProvider: z.string().trim().optional().describe("Optional LiteLLM provider filter."),
+  vendor: z.string().trim().optional().describe("Optional cloud vendor filter."),
+  litellmProvider: z
+    .string()
+    .trim()
+    .optional()
+    .describe("Legacy LiteLLM provider filter (matches pre-migration rows only)."),
 });
 
 export const ModelPriceCatalogQuerySchema = z.object({
@@ -50,7 +57,8 @@ export const ModelPriceListResponseSchema = z.object({
 
 export const ModelPriceCatalogItemSchema = z.object({
   modelName: z.string().describe("Model name."),
-  litellmProvider: z.string().nullable().describe("LiteLLM provider."),
+  vendor: z.string().nullable().describe("Cloud pricing table vendor slug."),
+  litellmProvider: z.string().nullable().describe("Legacy LiteLLM provider."),
   updatedAt: IsoDateTimeStringSchema.describe("Last update time."),
 });
 
@@ -87,7 +95,7 @@ export const ModelPriceUpdateResultSchema = z.object({
 export const ModelPriceSyncConflictSchema = z.object({
   modelName: z.string().describe("Conflicting model name."),
   manualPrice: ModelPriceDataSchema.describe("Manual price payload."),
-  litellmPrice: ModelPriceDataSchema.describe("LiteLLM price payload."),
+  cloudPrice: ModelPriceDataSchema.describe("Cloud price payload."),
 });
 
 export const ModelPriceSyncConflictCheckResponseSchema = z.object({

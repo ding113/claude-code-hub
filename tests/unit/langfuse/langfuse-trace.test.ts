@@ -350,6 +350,48 @@ describe("traceProxyRequest", () => {
     );
   });
 
+  test("should preserve request summary fields from lightweight Langfuse previews", async () => {
+    const { traceProxyRequest } = await import("@/lib/langfuse/trace-proxy-request");
+
+    await traceProxyRequest({
+      session: createMockSession({
+        request: {
+          message: {
+            truncatedForLangfuse: true,
+            model: "claude-sonnet-4-20250514",
+            stream: true,
+            max_tokens: 1024,
+            temperature: 0.7,
+            messageCount: 3,
+            toolsCount: 2,
+            hasSystemPrompt: true,
+          },
+          model: "claude-sonnet-4-20250514",
+        },
+        getMessagesLength: () => 3,
+      }),
+      responseHeaders: new Headers(),
+      durationMs: 500,
+      statusCode: 200,
+      isStreaming: true,
+    });
+
+    const llmCall = mockRootSpan.startObservation.mock.calls.find(
+      (c: unknown[]) => c[0] === "llm-call"
+    );
+    expect(llmCall[1].metadata.requestSummary).toEqual(
+      expect.objectContaining({
+        model: "claude-sonnet-4-20250514",
+        messageCount: 3,
+        hasSystemPrompt: true,
+        toolsCount: 2,
+        stream: true,
+        maxTokens: 1024,
+        temperature: 0.7,
+      })
+    );
+  });
+
   test("should handle model redirect metadata", async () => {
     const { traceProxyRequest } = await import("@/lib/langfuse/trace-proxy-request");
 

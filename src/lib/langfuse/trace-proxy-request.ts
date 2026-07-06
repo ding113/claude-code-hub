@@ -4,13 +4,27 @@ import { isLangfuseEnabled } from "@/lib/langfuse/index";
 import { logger } from "@/lib/logger";
 import type { CostBreakdown } from "@/lib/utils/cost-calculation";
 
+const LANGFUSE_JSON_PARSE_MAX_CHARS = 1024 * 1024;
+const LANGFUSE_TEXT_PREVIEW_EDGE_CHARS = 128 * 1024;
+
 function buildRequestBodySummary(session: ProxySession): Record<string, unknown> {
   const msg = session.request.message as Record<string, unknown>;
+  const hasSystemPrompt =
+    typeof msg.hasSystemPrompt === "boolean"
+      ? msg.hasSystemPrompt
+      : Array.isArray(msg.system) && msg.system.length > 0;
+  const toolsCount =
+    typeof msg.toolsCount === "number"
+      ? msg.toolsCount
+      : Array.isArray(msg.tools)
+        ? msg.tools.length
+        : 0;
+
   return {
     model: session.request.model,
     messageCount: session.getMessagesLength(),
-    hasSystemPrompt: Array.isArray(msg.system) && msg.system.length > 0,
-    toolsCount: Array.isArray(msg.tools) ? msg.tools.length : 0,
+    hasSystemPrompt,
+    toolsCount,
     stream: msg.stream === true,
     maxTokens: typeof msg.max_tokens === "number" ? msg.max_tokens : undefined,
     temperature: typeof msg.temperature === "number" ? msg.temperature : undefined,
@@ -124,6 +138,15 @@ function buildResponseOutput(ctx: TraceContext): unknown {
   }
 
   return output;
+}
+
+function buildLargeTextPreview(text: string): Record<string, unknown> {
+  return {
+    truncated: true,
+    totalChars: text.length,
+    head: text.slice(0, LANGFUSE_TEXT_PREVIEW_EDGE_CHARS),
+    tail: text.slice(-LANGFUSE_TEXT_PREVIEW_EDGE_CHARS),
+  };
 }
 
 /**
@@ -422,6 +445,10 @@ export async function traceProxyRequest(ctx: TraceContext): Promise<void> {
 }
 
 function tryParseJsonSafe(text: string): unknown {
+  if (text.length > LANGFUSE_JSON_PARSE_MAX_CHARS) {
+    return buildLargeTextPreview(text);
+  }
+
   try {
     return JSON.parse(text);
   } catch {

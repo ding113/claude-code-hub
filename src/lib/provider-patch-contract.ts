@@ -51,6 +51,7 @@ const PATCH_FIELDS: ProviderBatchPatchField[] = [
   "codex_reasoning_summary_preference",
   "codex_text_verbosity_preference",
   "codex_parallel_tool_calls_preference",
+  "codex_image_generation_preference",
   "codex_service_tier_preference",
   "anthropic_max_tokens_preference",
   "gemini_google_search_preference",
@@ -106,6 +107,7 @@ const CLEARABLE_FIELDS: Record<ProviderBatchPatchField, boolean> = {
   codex_reasoning_summary_preference: true,
   codex_text_verbosity_preference: true,
   codex_parallel_tool_calls_preference: true,
+  codex_image_generation_preference: true,
   codex_service_tier_preference: true,
   anthropic_max_tokens_preference: true,
   gemini_google_search_preference: true,
@@ -264,6 +266,8 @@ function isValidSetValue(field: ProviderBatchPatchField, value: unknown): boolea
     case "codex_text_verbosity_preference":
       return value === "inherit" || value === "low" || value === "medium" || value === "high";
     case "codex_parallel_tool_calls_preference":
+      return value === "inherit" || value === "true" || value === "false";
+    case "codex_image_generation_preference":
       return value === "inherit" || value === "true" || value === "false";
     case "codex_service_tier_preference":
       return (
@@ -510,6 +514,12 @@ export function normalizeProviderBatchPatchDraft(
   );
   if (!codexParallelToolCalls.ok) return codexParallelToolCalls;
 
+  const codexImageGeneration = normalizePatchField(
+    "codex_image_generation_preference",
+    typedDraft.codex_image_generation_preference
+  );
+  if (!codexImageGeneration.ok) return codexImageGeneration;
+
   const codexServiceTier = normalizePatchField(
     "codex_service_tier_preference",
     typedDraft.codex_service_tier_preference
@@ -652,6 +662,7 @@ export function normalizeProviderBatchPatchDraft(
       codex_reasoning_summary_preference: codexReasoningSummary.data,
       codex_text_verbosity_preference: codexTextVerbosity.data,
       codex_parallel_tool_calls_preference: codexParallelToolCalls.data,
+      codex_image_generation_preference: codexImageGeneration.data,
       codex_service_tier_preference: codexServiceTier.data,
       anthropic_max_tokens_preference: anthropicMaxTokens.data,
       gemini_google_search_preference: geminiGoogleSearch.data,
@@ -777,6 +788,10 @@ function applyPatchField<T>(
       case "codex_parallel_tool_calls_preference":
         updates.codex_parallel_tool_calls_preference =
           patch.value as ProviderBatchApplyUpdates["codex_parallel_tool_calls_preference"];
+        return { ok: true, data: undefined };
+      case "codex_image_generation_preference":
+        updates.codex_image_generation_preference =
+          patch.value as ProviderBatchApplyUpdates["codex_image_generation_preference"];
         return { ok: true, data: undefined };
       case "codex_service_tier_preference":
         updates.codex_service_tier_preference =
@@ -919,6 +934,9 @@ function applyPatchField<T>(
     case "codex_parallel_tool_calls_preference":
       updates.codex_parallel_tool_calls_preference = "inherit";
       return { ok: true, data: undefined };
+    case "codex_image_generation_preference":
+      updates.codex_image_generation_preference = "inherit";
+      return { ok: true, data: undefined };
     case "codex_service_tier_preference":
       updates.codex_service_tier_preference = "inherit";
       return { ok: true, data: undefined };
@@ -995,6 +1013,7 @@ export function buildProviderBatchApplyUpdates(
     ["codex_reasoning_summary_preference", patch.codex_reasoning_summary_preference],
     ["codex_text_verbosity_preference", patch.codex_text_verbosity_preference],
     ["codex_parallel_tool_calls_preference", patch.codex_parallel_tool_calls_preference],
+    ["codex_image_generation_preference", patch.codex_image_generation_preference],
     ["codex_service_tier_preference", patch.codex_service_tier_preference],
     ["anthropic_max_tokens_preference", patch.anthropic_max_tokens_preference],
     ["gemini_google_search_preference", patch.gemini_google_search_preference],
@@ -1063,6 +1082,7 @@ export function hasProviderBatchPatchChanges(patch: ProviderBatchPatch): boolean
     patch.codex_reasoning_summary_preference.mode !== "no_change" ||
     patch.codex_text_verbosity_preference.mode !== "no_change" ||
     patch.codex_parallel_tool_calls_preference.mode !== "no_change" ||
+    patch.codex_image_generation_preference.mode !== "no_change" ||
     patch.codex_service_tier_preference.mode !== "no_change" ||
     patch.anthropic_max_tokens_preference.mode !== "no_change" ||
     patch.gemini_google_search_preference.mode !== "no_change" ||

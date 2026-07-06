@@ -1,5 +1,5 @@
 import { format, subDays } from "date-fns";
-import { formatInTimeZone, fromZonedTime, toZonedTime } from "date-fns-tz";
+import { fromZonedTime, toZonedTime } from "date-fns-tz";
 
 export interface ClockParts {
   hours: number;
@@ -57,46 +57,41 @@ export function inclusiveEndTimestampFromExclusive(endExclusiveTimestamp: number
 
 export type QuickPeriod = "today" | "yesterday" | "last7days" | "last30days";
 
-function formatDateInTimeZone(date: Date, timeZone?: string): string {
-  if (timeZone) {
-    return formatInTimeZone(date, timeZone, "yyyy-MM-dd");
-  }
-  return format(date, "yyyy-MM-dd");
-}
-
 export function getQuickDateRange(
   period: QuickPeriod,
   timeZone?: string,
   now: Date = new Date()
 ): { startDate: string; endDate: string } {
   const baseDate = timeZone ? toZonedTime(now, timeZone) : now;
+  const formatDate = (date: Date) => format(date, "yyyy-MM-dd");
+
   switch (period) {
     case "today":
       return {
-        startDate: formatDateInTimeZone(baseDate, timeZone),
-        endDate: formatDateInTimeZone(baseDate, timeZone),
+        startDate: formatDate(baseDate),
+        endDate: formatDate(baseDate),
       };
     case "yesterday": {
       const yesterday = subDays(baseDate, 1);
       return {
-        startDate: formatDateInTimeZone(yesterday, timeZone),
-        endDate: formatDateInTimeZone(yesterday, timeZone),
+        startDate: formatDate(yesterday),
+        endDate: formatDate(yesterday),
       };
     }
     case "last7days":
       return {
-        startDate: formatDateInTimeZone(subDays(baseDate, 6), timeZone),
-        endDate: formatDateInTimeZone(baseDate, timeZone),
+        startDate: formatDate(subDays(baseDate, 6)),
+        endDate: formatDate(baseDate),
       };
     case "last30days":
       return {
-        startDate: formatDateInTimeZone(subDays(baseDate, 29), timeZone),
-        endDate: formatDateInTimeZone(baseDate, timeZone),
+        startDate: formatDate(subDays(baseDate, 29)),
+        endDate: formatDate(baseDate),
       };
     default:
       return {
-        startDate: formatDateInTimeZone(baseDate, timeZone),
-        endDate: formatDateInTimeZone(baseDate, timeZone),
+        startDate: formatDate(baseDate),
+        endDate: formatDate(baseDate),
       };
   }
 }

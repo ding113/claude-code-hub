@@ -31,6 +31,8 @@ export const PROVIDER_DEFAULTS = {
   MAX_RETRY_ATTEMPTS: 2,
 } as const;
 
+export const CODEX_IMAGE_GENERATION_PREFERENCE_VALUES = ["inherit", "true", "false"] as const;
+
 export const PROVIDER_GROUP = {
   /** 默认分组标识符 - 用于表示未设置分组的 key/供应商 */
   DEFAULT: "default",

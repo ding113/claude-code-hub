@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { getRedisClient } from "@/lib/redis/client";
 import { getStatisticsWithCache, invalidateStatisticsCache } from "@/lib/redis/statistics-cache";
+import { resolveSystemTimezone } from "@/lib/utils/timezone";
 import {
   getKeyStatisticsFromDB,
   getMixedStatisticsFromDB,
@@ -19,6 +20,10 @@ vi.mock("@/lib/logger", () => ({
 
 vi.mock("@/lib/redis/client", () => ({
   getRedisClient: vi.fn(),
+}));
+
+vi.mock("@/lib/utils/timezone", () => ({
+  resolveSystemTimezone: vi.fn().mockResolvedValue("UTC"),
 }));
 
 vi.mock("@/repository/statistics", () => ({
@@ -72,6 +77,7 @@ function createKeyStats(): DatabaseKeyStatRow[] {
 describe("getStatisticsWithCache", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(resolveSystemTimezone).mockResolvedValue("UTC");
   });
 
   it("returns cached data on cache hit", async () => {
@@ -86,7 +92,7 @@ describe("getStatisticsWithCache", () => {
     const result = await getStatisticsWithCache("today", "users");
 
     expect(result).toEqual(cached);
-    expect(redis.get).toHaveBeenCalledWith("statistics:today:users:global");
+    expect(redis.get).toHaveBeenCalledWith("statistics:today:users:global:tz:UTC");
     expect(getUserStatisticsFromDB).not.toHaveBeenCalled();
     expect(getKeyStatisticsFromDB).not.toHaveBeenCalled();
     expect(getMixedStatisticsFromDB).not.toHaveBeenCalled();
@@ -108,7 +114,7 @@ describe("getStatisticsWithCache", () => {
     const result = await getStatisticsWithCache("today", "users");
 
     expect(result).toEqual(rows);
-    expect(getUserStatisticsFromDB).toHaveBeenCalledWith("today");
+    expect(getUserStatisticsFromDB).toHaveBeenCalledWith("today", "UTC");
     expect(getKeyStatisticsFromDB).not.toHaveBeenCalled();
     expect(getMixedStatisticsFromDB).not.toHaveBeenCalled();
   });
@@ -129,7 +135,7 @@ describe("getStatisticsWithCache", () => {
     const result = await getStatisticsWithCache("7days", "keys", 42);
 
     expect(result).toEqual(rows);
-    expect(getKeyStatisticsFromDB).toHaveBeenCalledWith(42, "7days");
+    expect(getKeyStatisticsFromDB).toHaveBeenCalledWith(42, "7days", "UTC");
     expect(getUserStatisticsFromDB).not.toHaveBeenCalled();
     expect(getMixedStatisticsFromDB).not.toHaveBeenCalled();
   });
@@ -153,7 +159,7 @@ describe("getStatisticsWithCache", () => {
     const result = await getStatisticsWithCache("30days", "mixed", 42);
 
     expect(result).toEqual(mixedResult);
-    expect(getMixedStatisticsFromDB).toHaveBeenCalledWith(42, "30days");
+    expect(getMixedStatisticsFromDB).toHaveBeenCalledWith(42, "30days", "UTC");
     expect(getUserStatisticsFromDB).not.toHaveBeenCalled();
     expect(getKeyStatisticsFromDB).not.toHaveBeenCalled();
   });
@@ -174,7 +180,7 @@ describe("getStatisticsWithCache", () => {
     await getStatisticsWithCache("today", "users");
 
     expect(redis.setex).toHaveBeenCalledWith(
-      "statistics:today:users:global",
+      "statistics:today:users:global:tz:UTC",
       30,
       JSON.stringify(rows)
     );
@@ -188,7 +194,7 @@ describe("getStatisticsWithCache", () => {
     const result = await getStatisticsWithCache("today", "users");
 
     expect(result).toEqual(rows);
-    expect(getUserStatisticsFromDB).toHaveBeenCalledWith("today");
+    expect(getUserStatisticsFromDB).toHaveBeenCalledWith("today", "UTC");
   });
 
   it("uses retry path and returns cached data when lock is held", async () => {
@@ -209,7 +215,7 @@ describe("getStatisticsWithCache", () => {
 
       expect(result).toEqual(rows);
       expect(redis.set).toHaveBeenCalledWith(
-        "statistics:today:users:global:lock",
+        "statistics:today:users:global:tz:UTC:lock",
         "1",
         "EX",
         5,
@@ -239,7 +245,7 @@ describe("getStatisticsWithCache", () => {
       const result = await pending;
 
       expect(result).toEqual(rows);
-      expect(getUserStatisticsFromDB).toHaveBeenCalledWith("today");
+      expect(getUserStatisticsFromDB).toHaveBeenCalledWith("today", "UTC");
     } finally {
       vi.useRealTimers();
     }
@@ -258,7 +264,7 @@ describe("getStatisticsWithCache", () => {
     const result = await getStatisticsWithCache("today", "users");
 
     expect(result).toEqual(rows);
-    expect(getUserStatisticsFromDB).toHaveBeenCalledWith("today");
+    expect(getUserStatisticsFromDB).toHaveBeenCalledWith("today", "UTC");
   });
 
   it("uses different cache keys for different timeRanges", async () => {
@@ -273,8 +279,8 @@ describe("getStatisticsWithCache", () => {
     await getStatisticsWithCache("today", "users");
     await getStatisticsWithCache("7days", "users");
 
-    expect(redis.get).toHaveBeenNthCalledWith(1, "statistics:today:users:global");
-    expect(redis.get).toHaveBeenNthCalledWith(2, "statistics:7days:users:global");
+    expect(redis.get).toHaveBeenNthCalledWith(1, "statistics:today:users:global:tz:UTC");
+    expect(redis.get).toHaveBeenNthCalledWith(2, "statistics:7days:users:global:tz:UTC");
   });
 
   it("uses different cache keys for global vs user scope", async () => {
@@ -289,18 +295,25 @@ describe("getStatisticsWithCache", () => {
     await getStatisticsWithCache("today", "users");
     await getStatisticsWithCache("today", "users", 42);
 
-    expect(redis.get).toHaveBeenNthCalledWith(1, "statistics:today:users:global");
-    expect(redis.get).toHaveBeenNthCalledWith(2, "statistics:today:users:42");
+    expect(redis.get).toHaveBeenNthCalledWith(1, "statistics:today:users:global:tz:UTC");
+    expect(redis.get).toHaveBeenNthCalledWith(2, "statistics:today:users:42:tz:UTC");
   });
 });
 
 describe("invalidateStatisticsCache", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(resolveSystemTimezone).mockResolvedValue("UTC");
   });
 
-  it("deletes all mode keys for a given timeRange", async () => {
+  it("deletes timezone-scoped and legacy keys for a given timeRange", async () => {
     const redis = createRedisMock();
+    const matchedKeys = [
+      "statistics:today:users:42:tz:UTC",
+      "statistics:today:keys:42:tz:UTC",
+      "statistics:today:mixed:42:tz:UTC",
+    ];
+    redis.scan.mockResolvedValueOnce(["0", matchedKeys]);
     redis.del.mockResolvedValueOnce(3);
 
     vi.mocked(getRedisClient).mockReturnValue(
@@ -309,7 +322,15 @@ describe("invalidateStatisticsCache", () => {
 
     await invalidateStatisticsCache("today", 42);
 
+    expect(redis.scan).toHaveBeenCalledWith(
+      "0",
+      "MATCH",
+      "statistics:today:*:42:tz:*",
+      "COUNT",
+      100
+    );
     expect(redis.del).toHaveBeenCalledWith(
+      ...matchedKeys,
       "statistics:today:users:42",
       "statistics:today:keys:42",
       "statistics:today:mixed:42"
@@ -319,12 +340,15 @@ describe("invalidateStatisticsCache", () => {
   it("deletes all keys for scope when timeRange is undefined", async () => {
     const redis = createRedisMock();
     const matchedKeys = [
-      "statistics:today:users:global",
-      "statistics:7days:keys:global",
-      "statistics:30days:mixed:global",
+      "statistics:today:users:global:tz:UTC",
+      "statistics:7days:keys:global:tz:UTC",
+      "statistics:30days:mixed:global:tz:UTC",
     ];
-    redis.scan.mockResolvedValueOnce(["0", matchedKeys]);
-    redis.del.mockResolvedValueOnce(matchedKeys.length);
+    const legacyMatchedKeys = ["statistics:today:users:global", "statistics:7days:keys:global"];
+    redis.scan
+      .mockResolvedValueOnce(["0", matchedKeys])
+      .mockResolvedValueOnce(["0", legacyMatchedKeys]);
+    redis.del.mockResolvedValueOnce(matchedKeys.length + legacyMatchedKeys.length);
 
     vi.mocked(getRedisClient).mockReturnValue(
       redis as unknown as NonNullable<ReturnType<typeof getRedisClient>>
@@ -332,8 +356,23 @@ describe("invalidateStatisticsCache", () => {
 
     await invalidateStatisticsCache(undefined, undefined);
 
-    expect(redis.scan).toHaveBeenCalledWith("0", "MATCH", "statistics:*:*:global", "COUNT", 100);
-    expect(redis.del).toHaveBeenCalledWith(...matchedKeys);
+    expect(redis.scan).toHaveBeenNthCalledWith(
+      1,
+      "0",
+      "MATCH",
+      "statistics:*:*:global:tz:*",
+      "COUNT",
+      100
+    );
+    expect(redis.scan).toHaveBeenNthCalledWith(
+      2,
+      "0",
+      "MATCH",
+      "statistics:*:*:global",
+      "COUNT",
+      100
+    );
+    expect(redis.del).toHaveBeenCalledWith(...matchedKeys, ...legacyMatchedKeys);
   });
 
   it("does nothing when Redis is unavailable", async () => {
@@ -344,7 +383,7 @@ describe("invalidateStatisticsCache", () => {
 
   it("does not call del when wildcard query returns no key", async () => {
     const redis = createRedisMock();
-    redis.scan.mockResolvedValueOnce(["0", []]);
+    redis.scan.mockResolvedValueOnce(["0", []]).mockResolvedValueOnce(["0", []]);
 
     vi.mocked(getRedisClient).mockReturnValue(
       redis as unknown as NonNullable<ReturnType<typeof getRedisClient>>
@@ -352,7 +391,15 @@ describe("invalidateStatisticsCache", () => {
 
     await invalidateStatisticsCache(undefined, 42);
 
-    expect(redis.scan).toHaveBeenCalledWith("0", "MATCH", "statistics:*:*:42", "COUNT", 100);
+    expect(redis.scan).toHaveBeenNthCalledWith(
+      1,
+      "0",
+      "MATCH",
+      "statistics:*:*:42:tz:*",
+      "COUNT",
+      100
+    );
+    expect(redis.scan).toHaveBeenNthCalledWith(2, "0", "MATCH", "statistics:*:*:42", "COUNT", 100);
     expect(redis.del).not.toHaveBeenCalled();
   });
 

@@ -5,7 +5,9 @@ import { ProxyForwarder } from "@/app/v1/_lib/proxy/forwarder";
 import { resolveEndpointPolicy } from "@/app/v1/_lib/proxy/endpoint-policy";
 import { ProxyResponseHandler } from "@/app/v1/_lib/proxy/response-handler";
 import { ProxySession } from "@/app/v1/_lib/proxy/session";
+import { AsyncTaskManager } from "@/lib/async-task-manager";
 import { SessionManager } from "@/lib/session-manager";
+import { updateMessageRequestDetails } from "@/repository/message";
 import type { Provider } from "@/types/provider";
 
 const asyncTasks: Promise<void>[] = [];
@@ -37,10 +39,11 @@ vi.mock("@/app/v1/_lib/proxy/response-fixer", () => ({
 
 vi.mock("@/lib/async-task-manager", () => ({
   AsyncTaskManager: {
-    register: (_taskId: string, promise: Promise<void>) => {
+    register: vi.fn((_taskId: string, promise: Promise<void>) => {
       asyncTasks.push(promise);
       return new AbortController();
-    },
+    }),
+    touch: () => true,
     cleanup: () => {},
     cancel: () => {},
   },
@@ -75,7 +78,7 @@ vi.mock("@/repository/model-price", () => ({
 vi.mock("@/lib/session-manager", () => ({
   SessionManager: {
     storeSessionResponse: vi.fn(),
-    updateSessionUsage: vi.fn(),
+    updateSessionUsage: vi.fn(async () => undefined),
     clearSessionProvider: vi.fn(),
     storeSessionRequestPhaseSnapshot: vi.fn(async () => undefined),
     storeSessionResponsePhaseSnapshot: vi.fn(async () => undefined),
@@ -140,6 +143,7 @@ function createProvider(overrides: Partial<Provider> = {}): Provider {
     codexReasoningSummaryPreference: null,
     codexTextVerbosityPreference: null,
     codexParallelToolCallsPreference: null,
+    codexImageGenerationPreference: null,
     anthropicMaxTokensPreference: null,
     anthropicThinkingBudgetPreference: null,
     geminiGoogleSearchPreference: null,
@@ -392,6 +396,48 @@ describe("ProxyResponseHandler - Gemini stream passthrough timeouts", () => {
     ).toBeNull();
 
     await Promise.allSettled(asyncTasks);
+  });
+
+  test("Gemini 流式透传禁用 idle timeout 时不应回落到默认 stale cleanup", async () => {
+    asyncTasks.length = 0;
+    vi.mocked(AsyncTaskManager.register).mockClear();
+
+    const provider = createProvider({
+      firstByteTimeoutStreamingMs: 1000,
+      streamingIdleTimeoutMs: 0,
+    });
+    const session = createSession({
+      clientAbortSignal: new AbortController().signal,
+      messageId: 12,
+      userId: 22,
+    });
+    session.setProvider(provider);
+
+    const upstreamResponse = new Response('data: {"usageMetadata":{"promptTokenCount":1}}\n\n', {
+      status: 200,
+      headers: { "content-type": "text/event-stream" },
+    });
+
+    const returned = await (
+      ProxyResponseHandler as unknown as {
+        handleStream: (session: ProxySession, response: Response) => Promise<Response>;
+      }
+    ).handleStream(session, upstreamResponse);
+
+    await returned.text();
+    await Promise.allSettled(asyncTasks);
+
+    const statsRegisterCall = vi.mocked(AsyncTaskManager.register).mock.calls.find((call) => {
+      const options = call[2] as { taskType?: string } | undefined;
+      return options?.taskType === "stream-passthrough-stats";
+    });
+
+    expect(statsRegisterCall).toBeDefined();
+    expect(statsRegisterCall?.[2]).toEqual(
+      expect.objectContaining({
+        staleTimeoutMs: Number.POSITIVE_INFINITY,
+      })
+    );
   });
 
   test("不应在仅收到 headers 时清除首字节超时：无首块数据时应在窗口内中断避免悬挂", async () => {
@@ -661,5 +707,65 @@ describe("ProxyResponseHandler - Gemini stream passthrough timeouts", () => {
       await close();
       await Promise.allSettled(asyncTasks);
     }
+  });
+
+  test("Gemini 流式透传超大单 chunk 应保留尾部 usage 且不把截断快照作为完整正文存储", async () => {
+    asyncTasks.length = 0;
+    vi.mocked(SessionManager.storeSessionResponse).mockClear();
+    vi.mocked(updateMessageRequestDetails).mockClear();
+
+    const clientAbortController = new AbortController();
+    const provider = createProvider({
+      firstByteTimeoutStreamingMs: 1000,
+      streamingIdleTimeoutMs: 0,
+    });
+    const session = createSession({
+      clientAbortSignal: clientAbortController.signal,
+      messageId: 77,
+      userId: 1,
+    });
+    session.setProvider(provider);
+    session.setSessionId("gemini-large-single-chunk");
+    (
+      session as ProxySession & {
+        shouldPersistSessionDebugArtifacts?: () => boolean;
+      }
+    ).shouldPersistSessionDebugArtifacts = () => true;
+
+    const hugeText = "x".repeat(11 * 1024 * 1024);
+    const bodyText = `data: {"text":"${hugeText}"}\n\ndata: {"usageMetadata":{"promptTokenCount":463,"candidatesTokenCount":11}}\n\n`;
+    const bodyBytes = new TextEncoder().encode(bodyText);
+
+    const upstreamResponse = new Response(
+      new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(bodyBytes);
+          controller.close();
+        },
+      }),
+      {
+        status: 200,
+        headers: { "content-type": "text/event-stream" },
+      }
+    );
+
+    const returned = await (
+      ProxyResponseHandler as unknown as {
+        handleStream: (session: ProxySession, response: Response) => Promise<Response>;
+      }
+    ).handleStream(session, upstreamResponse);
+
+    await returned.text();
+    await Promise.allSettled(asyncTasks);
+
+    expect(updateMessageRequestDetails).toHaveBeenCalledWith(
+      77,
+      expect.objectContaining({
+        statusCode: 200,
+        inputTokens: 463,
+        outputTokens: 11,
+      })
+    );
+    expect(SessionManager.storeSessionResponse).not.toHaveBeenCalled();
   });
 });

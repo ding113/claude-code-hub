@@ -216,6 +216,15 @@
           "true": "Force enable"
         }
       },
+      "imageGeneration": {
+        "help": "OpenAI documents image_generation as a built-in Responses tool rather than a top-level boolean field. Force enable injects a type=image_generation tool; force disable removes it and clears conflicting tool_choice settings.",
+        "label": "Image Generation Tool Override",
+        "options": {
+          "false": "Force disable",
+          "inherit": "No override (follow client)",
+          "true": "Force enable"
+        }
+      },
       "serviceTier": {
         "help": "Controls the OpenAI service_tier for Codex (Responses API) requests. \"priority\" corresponds to fast mode. \"inherit\" follows the client request; other values force override service_tier. Unsupported tiers may cause upstream errors.",
         "label": "Service Tier Override",

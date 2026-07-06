@@ -6,6 +6,7 @@ export type ResolvedPricingSource =
   | "local_manual"
   | "cloud_exact"
   | "cloud_model_fallback"
+  | "cloud_official"
   | "priority_fallback"
   | "single_provider_top_level"
   | "official_fallback";
@@ -102,10 +103,30 @@ function extractHost(urlValue: string | null | undefined): string {
   }
 }
 
+/**
+ * vendor -> 视为"官方价"的 provider key 集合。
+ * 与云端价格表生成侧的 OFFICIAL_PROVIDER_EXTRA 对齐:与 vendor 同名的 provider 即官方,
+ * 此表登记额外的官方渠道(如 Google 的 gemini API 与 Vertex 都是第一方价)。
+ */
+const OFFICIAL_PROVIDER_EXTRA: Record<string, string[]> = {
+  google: ["google-vertex"],
+  amazon: ["amazon-bedrock"],
+  alibaba: ["qwen"],
+  zhipuai: ["z-ai"],
+  bytedance: ["volcengine"],
+  meta: ["llama"],
+};
+
 function getOfficialProviderKeys(
   modelName: string | null | undefined,
   priceData?: ModelPriceData
 ): string[] {
+  // 云端价格表带 vendor 字段时,官方 provider 由数据侧决定
+  const vendor = normalizeText(typeof priceData?.vendor === "string" ? priceData.vendor : "");
+  if (vendor) {
+    return [vendor, ...(OFFICIAL_PROVIDER_EXTRA[vendor] ?? [])];
+  }
+
   const family = normalizeText(
     typeof priceData?.model_family === "string" ? priceData.model_family : ""
   );
@@ -125,7 +146,7 @@ function getOfficialProviderKeys(
   }
 
   if (family.includes("gemini") || normalizedModelName.startsWith("gemini")) {
-    return ["vertex_ai", "vertex", "google"];
+    return ["google", "google-vertex", "vertex_ai", "vertex"];
   }
 
   return [];
@@ -167,9 +188,43 @@ export function resolvePricingKeyCandidates(
     pushUnique(candidates, "anthropic", "exact");
   }
   if (name.includes("vertex") || host.includes("googleapis.com") || name.includes("google")) {
+    pushUnique(candidates, "google", "exact");
+    pushUnique(candidates, "google-vertex", "exact");
     pushUnique(candidates, "vertex_ai", "exact");
     pushUnique(candidates, "vertex", "exact");
-    pushUnique(candidates, "google", "exact");
+  }
+  if (name.includes("bedrock") || host.includes("amazonaws.com")) {
+    pushUnique(candidates, "amazon-bedrock", "exact");
+    pushUnique(candidates, "bedrock", "exact");
+  }
+  if (name.includes("deepseek") || host.includes("deepseek.com")) {
+    pushUnique(candidates, "deepseek", "exact");
+  }
+  if (name.includes("moonshot") || name.includes("kimi") || host.includes("moonshot")) {
+    pushUnique(candidates, "moonshotai", "exact");
+  }
+  if (name.includes("siliconflow") || host.includes("siliconflow")) {
+    pushUnique(candidates, "siliconflow", "exact");
+  }
+  if (name.includes("volcengine") || name.includes("doubao") || host.includes("volces.com")) {
+    pushUnique(candidates, "volcengine", "exact");
+  }
+  if (name.includes("dashscope") || host.includes("dashscope") || host.includes("aliyun")) {
+    pushUnique(candidates, "alibaba", "exact");
+    pushUnique(candidates, "alibaba-cn", "exact");
+  }
+  if (name.includes("groq") || host.includes("groq.com")) {
+    pushUnique(candidates, "groq", "exact");
+  }
+  if (name.includes("xai") || name.includes("grok") || host.includes("x.ai")) {
+    pushUnique(candidates, "xai", "exact");
+  }
+  if (name.includes("mistral") || host.includes("mistral.ai")) {
+    pushUnique(candidates, "mistral", "exact");
+  }
+  if (name.includes("zhipu") || name.includes("bigmodel") || host.includes("bigmodel.cn")) {
+    pushUnique(candidates, "zhipuai", "exact");
+    pushUnique(candidates, "z-ai", "exact");
   }
 
   for (const officialKey of getOfficialProviderKeys(modelName, priceData)) {
@@ -321,31 +376,82 @@ function resolveFromPricingMap(
   return null;
 }
 
+/**
+ * 云端价格表数据驱动的官方价选择:
+ * 优先 official_pricing_provider 指名的节点,其次任意 official=true 的节点。
+ */
+function resolveCloudOfficial(candidate: ModelRecordCandidate): ResolvedPricing | null {
+  const pricingMap = getPricingMap(candidate.record);
+  if (!candidate.record || !pricingMap) {
+    return null;
+  }
+
+  const declaredKey = candidate.record.priceData.official_pricing_provider;
+  const officialKeys: string[] = [];
+  if (typeof declaredKey === "string" && declaredKey && pricingMap[declaredKey]) {
+    officialKeys.push(declaredKey);
+  }
+  for (const [key, node] of Object.entries(pricingMap)) {
+    if (node?.official === true && !officialKeys.includes(key)) {
+      officialKeys.push(key);
+    }
+  }
+
+  for (const key of officialKeys) {
+    const pricingNode = pricingMap[key];
+    // 校验节点自身价格:merge 后的整表校验会被 pricing 映射里其他节点"带过",
+    // 选中无价格节点会让顶层计费字段为空
+    if (!pricingNode || !hasValidPriceData(pricingNode as ModelPriceData)) continue;
+    const mergedPriceData = mergePriceData(candidate.record.priceData, pricingNode, key);
+    if (!hasValidPriceData(mergedPriceData)) continue;
+
+    return {
+      resolvedModelName: candidate.modelName ?? candidate.record.modelName,
+      resolvedPricingProviderKey: key,
+      source: "cloud_official",
+      priceData: mergedPriceData,
+      pricingNode,
+    };
+  }
+
+  return null;
+}
+
 function resolveDetailedFallback(candidate: ModelRecordCandidate): ResolvedPricing | null {
   const pricingMap = getPricingMap(candidate.record);
   if (!candidate.record || !pricingMap) {
     return null;
   }
 
-  const keys = Object.keys(pricingMap).sort((a, b) => compareDetailKeys(a, b, pricingMap));
-  const selectedKey = keys[0];
-  if (!selectedKey) {
-    return null;
+  // 官方节点优先,再按明细字段数排序;首选节点数据无效时继续尝试后续节点
+  const keys = Object.keys(pricingMap).sort((a, b) => {
+    const officialA = pricingMap[a]?.official === true ? 0 : 1;
+    const officialB = pricingMap[b]?.official === true ? 0 : 1;
+    if (officialA !== officialB) return officialA - officialB;
+    return compareDetailKeys(a, b, pricingMap);
+  });
+
+  for (const selectedKey of keys) {
+    const pricingNode = pricingMap[selectedKey];
+    // 同 resolveCloudOfficial:节点自身必须携带有效价格,否则继续尝试后续节点
+    if (!pricingNode || !hasValidPriceData(pricingNode as ModelPriceData)) {
+      continue;
+    }
+    const mergedPriceData = mergePriceData(candidate.record.priceData, pricingNode, selectedKey);
+    if (!hasValidPriceData(mergedPriceData)) {
+      continue;
+    }
+
+    return {
+      resolvedModelName: candidate.modelName ?? candidate.record.modelName,
+      resolvedPricingProviderKey: selectedKey,
+      source: "priority_fallback",
+      priceData: mergedPriceData,
+      pricingNode,
+    };
   }
 
-  const pricingNode = pricingMap[selectedKey];
-  const mergedPriceData = mergePriceData(candidate.record.priceData, pricingNode, selectedKey);
-  if (!hasValidPriceData(mergedPriceData)) {
-    return null;
-  }
-
-  return {
-    resolvedModelName: candidate.modelName ?? candidate.record.modelName,
-    resolvedPricingProviderKey: selectedKey,
-    source: "priority_fallback",
-    priceData: mergedPriceData,
-    pricingNode,
-  };
+  return null;
 }
 
 function resolveTopLevel(candidate: ModelRecordCandidate): ResolvedPricing | null {
@@ -359,6 +465,8 @@ function resolveTopLevel(candidate: ModelRecordCandidate): ResolvedPricing | nul
       candidate.record.priceData.selected_pricing_provider.trim()) ||
     (typeof candidate.record.priceData.litellm_provider === "string" &&
       candidate.record.priceData.litellm_provider.trim()) ||
+    (typeof candidate.record.priceData.official_pricing_provider === "string" &&
+      candidate.record.priceData.official_pricing_provider.trim()) ||
     officialKeys[0] ||
     candidate.record.modelName;
 
@@ -410,6 +518,12 @@ export function resolvePricingForModelRecords(
 
   for (const candidate of candidates) {
     const resolved = resolveFromPricingMap(candidate, keyCandidates, "exact");
+    if (resolved) return resolved;
+  }
+
+  // 云端价格表标注的官方报价(数据驱动)优先于按模型名推断的官方回退
+  for (const candidate of candidates) {
+    const resolved = resolveCloudOfficial(candidate);
     if (resolved) return resolved;
   }
 

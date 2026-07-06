@@ -72,7 +72,7 @@
     },
     "model_price": {
       "bulk_upload": "批次上傳模型價格",
-      "sync_litellm": "同步 LiteLLM 模型價格",
+      "sync_litellm": "同步雲端價格表",
       "upsert": "更新模型價格",
       "delete": "刪除模型價格"
     }

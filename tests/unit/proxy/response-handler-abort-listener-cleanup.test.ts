@@ -22,6 +22,7 @@ vi.mock("@/lib/async-task-manager", () => ({
       testState.asyncTasks.push(promise);
       return new AbortController();
     },
+    touch: () => true,
     cleanup: testState.cleanupTask,
     cancel: testState.cancelTask,
   },

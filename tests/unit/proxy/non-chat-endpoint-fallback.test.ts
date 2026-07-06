@@ -147,6 +147,7 @@ function createProvider(id: number, overrides: Partial<Provider> = {}): Provider
     codexReasoningSummaryPreference: null,
     codexTextVerbosityPreference: null,
     codexParallelToolCallsPreference: null,
+    codexImageGenerationPreference: null,
     tpm: 0,
     rpm: 0,
     rpd: 0,

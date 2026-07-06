@@ -14,6 +14,7 @@ interface RelativeTimeProps {
   autoUpdate?: boolean;
   updateInterval?: number;
   format?: "full" | "short";
+  timeZone?: string;
 }
 
 /**
@@ -32,11 +33,13 @@ export function RelativeTime({
   autoUpdate = true,
   updateInterval = 10000, // 默认每 10 秒更新
   format = "full",
+  timeZone: timeZoneOverride,
 }: RelativeTimeProps) {
   const [timeAgo, setTimeAgo] = useState<string>(fallback);
   const [mounted, setMounted] = useState(false);
   const locale = useLocale();
-  const timeZone = useTimeZone() ?? "UTC";
+  const providerTimeZone = useTimeZone();
+  const timeZone = timeZoneOverride ?? providerTimeZone ?? "UTC";
   const tShort = useTranslations("common.relativeTimeShort");
 
   // Format short distance with i18n

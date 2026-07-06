@@ -443,6 +443,21 @@ describe("provider patch contract", () => {
     });
 
     it.each([
+      ["codex_image_generation_preference", "inherit"],
+      ["codex_image_generation_preference", "true"],
+      ["codex_image_generation_preference", "false"],
+    ] as const)("accepts valid %s value: %s", (field, value) => {
+      const result = prepareProviderBatchApplyUpdates({
+        [field]: { set: value },
+      });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.data[field]).toBe(value);
+    });
+
+    it.each([
       ["gemini_google_search_preference", "inherit"],
       ["gemini_google_search_preference", "enabled"],
       ["gemini_google_search_preference", "disabled"],
@@ -902,6 +917,7 @@ describe("provider patch contract", () => {
       "codex_reasoning_summary_preference",
       "codex_text_verbosity_preference",
       "codex_parallel_tool_calls_preference",
+      "codex_image_generation_preference",
       "anthropic_max_tokens_preference",
       "gemini_google_search_preference",
     ] as const)("clears %s to inherit", (field) => {

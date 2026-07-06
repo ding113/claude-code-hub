@@ -4,6 +4,7 @@ import { desc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import { modelPrices } from "@/drizzle/schema";
 import { logger } from "@/lib/logger";
+import { buildModelNameFallbackCandidates } from "@/lib/utils/model-name-matching";
 import type { ModelPrice, ModelPriceData, ModelPriceSource } from "@/types/model-price";
 import { toModelPrice } from "./_shared/transformers";
 
@@ -15,7 +16,8 @@ export interface PaginationParams {
   pageSize: number;
   search?: string; // 可选的搜索关键词
   source?: ModelPriceSource; // 可选的来源过滤
-  litellmProvider?: string; // 可选的云端提供商过滤（price_data.litellm_provider）
+  vendor?: string; // 可选的云端 vendor 过滤（price_data.vendor）
+  litellmProvider?: string; // 旧版云端提供商过滤（price_data.litellm_provider），仅遗留数据可命中
 }
 
 /**
@@ -30,7 +32,12 @@ export interface PaginatedResult<T> {
 }
 
 /**
- * 获取指定模型的最新价格
+ * 获取指定模型的最新价格。
+ *
+ * 精确名未命中时按以下顺序回退(用于带斜杠/区域前缀/日期后缀等调用名变体):
+ * 1. 归一化候选名(去托管商前缀、取最后一段、剥区域前缀等)的精确匹配
+ * 2. 云端价格表 aliases 数组命中原名
+ * 3. aliases 命中候选名
  */
 export async function findLatestPriceByModel(modelName: string): Promise<ModelPrice | null> {
   try {
@@ -54,8 +61,8 @@ export async function findLatestPriceByModel(modelName: string): Promise<ModelPr
       )
       .limit(1);
 
-    if (!price) return null;
-    return toModelPrice(price);
+    if (price) return toModelPrice(price);
+    return await findLatestPriceByModelFallback(modelName);
   } catch (error) {
     logger.error("[ModelPrice] Failed to query latest price by model", {
       modelName,
@@ -63,6 +70,47 @@ export async function findLatestPriceByModel(modelName: string): Promise<ModelPr
     });
     return null;
   }
+}
+
+/** 精确名未命中后的候选名/别名回退查询 */
+async function findLatestPriceByModelFallback(modelName: string): Promise<ModelPrice | null> {
+  const original = modelName.trim();
+  if (!original) return null;
+
+  const candidates = buildModelNameFallbackCandidates(original);
+  const candidateArray = candidates.length > 0 ? candidates : [original];
+
+  // 匹配优先级:候选名精确命中 > 别名命中原名 > 别名命中候选名;
+  // 同级内 manual 优先、时间倒序。别名查询命中 idx_model_prices_aliases(GIN)。
+  const query = sql`
+    SELECT
+      id,
+      model_name as "modelName",
+      price_data as "priceData",
+      source,
+      created_at as "createdAt",
+      updated_at as "updatedAt"
+    FROM model_prices
+    WHERE model_name = ANY(${candidateArray})
+       OR price_data -> 'aliases' ? ${original}
+       OR price_data -> 'aliases' ?| ${candidateArray}
+    ORDER BY
+      CASE
+        WHEN model_name = ANY(${candidateArray}) THEN 0
+        WHEN price_data -> 'aliases' ? ${original} THEN 1
+        ELSE 2
+      END,
+      COALESCE(array_position(${candidateArray}::text[], model_name), 2147483647),
+      (source = 'manual') DESC,
+      created_at DESC NULLS LAST,
+      id DESC
+    LIMIT 1
+  `;
+
+  const result = await db.execute(query);
+  const rows = Array.from(result);
+  if (rows.length === 0) return null;
+  return toModelPrice(rows[0]);
 }
 
 export async function findLatestPriceByModelAndSource(
@@ -160,17 +208,24 @@ export async function findAllLatestPrices(): Promise<ModelPrice[]> {
 export async function findAllLatestPricesPaginated(
   params: PaginationParams
 ): Promise<PaginatedResult<ModelPrice>> {
-  const { page, pageSize, search, source, litellmProvider } = params;
+  const { page, pageSize, search, source, vendor, litellmProvider } = params;
   const offset = (page - 1) * pageSize;
 
   // 构建 WHERE 条件
   const buildWhereCondition = () => {
     const conditions: ReturnType<typeof sql>[] = [];
     if (search?.trim()) {
-      conditions.push(sql`model_name ILIKE ${`%${search.trim()}%`}`);
+      const term = `%${search.trim()}%`;
+      conditions.push(sql`(model_name ILIKE ${term} OR price_data->>'display_name' ILIKE ${term})`);
     }
-    if (source) {
+    if (source === "cloud") {
+      // 云端来源包含旧版 litellm 遗留行,避免切换期查询漏数据
+      conditions.push(sql`source <> 'manual'`);
+    } else if (source) {
       conditions.push(sql`source = ${source}`);
+    }
+    if (vendor?.trim()) {
+      conditions.push(sql`price_data->>'vendor' = ${vendor.trim()}`);
     }
     if (litellmProvider?.trim()) {
       conditions.push(sql`price_data->>'litellm_provider' = ${litellmProvider.trim()}`);
@@ -327,6 +382,33 @@ export async function findAllManualPrices(): Promise<Map<string, ModelPrice>> {
     priceMap.set(price.modelName, price);
   }
   return priceMap;
+}
+
+/**
+ * 删除不在保留列表中的所有云端来源价格记录(source <> 'manual')。
+ * 云端价格表整表切换/换代时清理陈旧模型;manual 记录不受影响。
+ * @returns 删除的行数
+ */
+export async function deleteCloudPricesNotIn(keepModelNames: string[]): Promise<number> {
+  // 空保留列表视为无效输入直接跳过:否则等同于清空全部非 manual 行
+  if (keepModelNames.length === 0) return 0;
+  const result = await db.execute(sql`
+    DELETE FROM model_prices
+    WHERE source <> 'manual'
+      AND NOT (model_name = ANY(${keepModelNames}))
+  `);
+  const count = (result as unknown as { count?: number }).count;
+  return typeof count === "number" ? count : 0;
+}
+
+/** 统计云端来源(source <> 'manual')的去重模型数量,用于同步一致性校验 */
+export async function countCloudModelPrices(): Promise<number> {
+  const [row] = await db.execute(sql`
+    SELECT COUNT(DISTINCT model_name) AS total
+    FROM model_prices
+    WHERE source <> 'manual'
+  `);
+  return Number((row as { total?: unknown })?.total ?? 0);
 }
 
 /**

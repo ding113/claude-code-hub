@@ -22,6 +22,7 @@ vi.mock("next/navigation", () => ({
 
 vi.mock("next-intl", () => ({
   useTranslations: () => tMock,
+  useTimeZone: () => "Asia/Shanghai",
 }));
 
 vi.mock("@/actions/users", () => ({

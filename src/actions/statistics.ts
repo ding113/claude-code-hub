@@ -24,6 +24,11 @@ import type { ActionResult } from "./types";
  */
 const createDataKey = (prefix: string, id: number): string => `${prefix}-${id}`;
 
+function serializeChartBucketDate(value: string | Date): string {
+  const date = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(date.getTime()) ? String(value) : date.toISOString();
+}
+
 /**
  * 获取用户统计数据，用于图表展示
  */
@@ -99,16 +104,7 @@ export async function getUserStatistics(
     const dataByDate = new Map<string, ChartDataItem>();
 
     statsData.forEach((row) => {
-      // 根据分辨率格式化日期
-      let dateStr: string;
-      if (rangeConfig.resolution === "hour") {
-        // 小时分辨率：显示为 "HH:mm" 格式
-        const hour = new Date(row.date);
-        dateStr = hour.toISOString();
-      } else {
-        // 天分辨率：显示为 "YYYY-MM-DD" 格式
-        dateStr = new Date(row.date).toISOString().split("T")[0];
-      }
+      const dateStr = serializeChartBucketDate(row.date);
 
       if (!dataByDate.has(dateStr)) {
         dataByDate.set(dateStr, {
