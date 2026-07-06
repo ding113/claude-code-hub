@@ -81,9 +81,9 @@ import {
 } from "./errors";
 import {
   detectGeminiFunctionIdRectifierTrigger,
-  rectifyGeminiFunctionIds,
   type GeminiFunctionIdRectifierResult,
   type GeminiFunctionIdRectifierTrigger,
+  rectifyGeminiFunctionIds,
 } from "./gemini-function-id-rectifier";
 import { ModelRedirector } from "./model-redirector";
 import { nodeStreamToWebStreamSafe } from "./node-stream-to-web";
@@ -917,8 +917,7 @@ const geminiFunctionIdRectifierDescriptor: ReactiveRectifierDescriptor<
   type: "gemini_function_id_rectifier",
   displayName: "Gemini function id rectifier",
   detect: detectGeminiFunctionIdRectifierTrigger,
-  // 暂无系统开关：触发词只会来自拒绝 id 字段的严格上游（Vertex），剥离后无功能损失
-  isEnabled: () => true,
+  isEnabled: (settings) => settings.enableGeminiFunctionIdRectifier ?? true,
   hasRetried: (state) => state.geminiFunctionIdRetried,
   markRetried: (state) => {
     state.geminiFunctionIdRetried = true;

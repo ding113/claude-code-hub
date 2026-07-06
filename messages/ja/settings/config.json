@@ -68,6 +68,8 @@
     "enableThinkingBudgetRectifierDesc": "Anthropic プロバイダーで budget_tokens < 1024 エラーが発生した場合、thinking 予算を最大値（32000）に設定し、必要に応じて max_tokens を 64000 に設定して1回だけ再試行します（既定で有効）。",
     "enableThinkingEffortConflictRectifier": "thinking effort 競合整流を有効化",
     "enableThinkingEffortConflictRectifierDesc": "Anthropic 互換プロバイダー（DeepSeek や MiMo など）が thinking 無効と reasoning_effort の併存により 400 エラーを返した場合、effort フィールド（output_config/reasoning_effort）を自動的に取り除き、同じプロバイダーに対して1回だけ再試行します（既定で有効）。",
+    "enableGeminiFunctionIdRectifier": "Gemini function id 整流を有効化",
+    "enableGeminiFunctionIdRectifierDesc": "Gemini プロバイダー（Vertex AI などの厳格な上流）が functionCall/functionResponse に含まれる id フィールドにより 400 エラーを返した場合、id フィールドを自動的に取り除き、同じプロバイダーに対して1回だけ再試行します（既定で有効）。",
     "enableBillingHeaderRectifier": "課金ヘッダー整流を有効化",
     "enableBillingHeaderRectifierDesc": "Claude Code クライアントが system プロンプトに注入する x-anthropic-billing-header テキストブロックを事前に削除し、Amazon Bedrock などの非ネイティブ Anthropic 上流による 400 エラーを防止します（既定で有効）。",
     "enableResponseInputRectifier": "Response Input 整流器を有効化",

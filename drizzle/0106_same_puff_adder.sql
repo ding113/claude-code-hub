@@ -1,0 +1,1 @@
+ALTER TABLE "system_settings" ADD COLUMN "enable_gemini_function_id_rectifier" boolean DEFAULT true NOT NULL;

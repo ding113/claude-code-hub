@@ -743,6 +743,13 @@
       "when": 1781156586163,
       "tag": "0105_chief_rocket_racer",
       "breakpoints": true
+    },
+    {
+      "idx": 106,
+      "version": "7",
+      "when": 1783307818850,
+      "tag": "0106_same_puff_adder",
+      "breakpoints": true
     }
   ]
 }

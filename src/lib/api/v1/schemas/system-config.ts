@@ -129,6 +129,9 @@ export const SystemSettingsSchema = z
     enableThinkingEffortConflictRectifier: z
       .boolean()
       .describe("Whether thinking effort conflict rectifier retries are enabled."),
+    enableGeminiFunctionIdRectifier: z
+      .boolean()
+      .describe("Whether Gemini function id rectifier retries are enabled."),
     enableBillingHeaderRectifier: z
       .boolean()
       .describe("Whether billing-header rectifier is enabled."),

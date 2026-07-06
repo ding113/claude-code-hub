@@ -74,6 +74,7 @@ export async function saveSystemSettings(formData: {
   enableThinkingSignatureRectifier?: boolean;
   enableThinkingBudgetRectifier?: boolean;
   enableThinkingEffortConflictRectifier?: boolean;
+  enableGeminiFunctionIdRectifier?: boolean;
   enableBillingHeaderRectifier?: boolean;
   enableResponseInputRectifier?: boolean;
   allowNonConversationEndpointProviderFallback?: boolean;
@@ -127,6 +128,7 @@ export async function saveSystemSettings(formData: {
       enableThinkingSignatureRectifier: validated.enableThinkingSignatureRectifier,
       enableThinkingBudgetRectifier: validated.enableThinkingBudgetRectifier,
       enableThinkingEffortConflictRectifier: validated.enableThinkingEffortConflictRectifier,
+      enableGeminiFunctionIdRectifier: validated.enableGeminiFunctionIdRectifier,
       enableBillingHeaderRectifier: validated.enableBillingHeaderRectifier,
       enableResponseInputRectifier: validated.enableResponseInputRectifier,
       allowNonConversationEndpointProviderFallback:

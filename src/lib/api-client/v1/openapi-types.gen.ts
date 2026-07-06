@@ -11880,6 +11880,8 @@ export interface operations {
                         enableThinkingBudgetRectifier: boolean;
                         /** @description Whether thinking effort conflict rectifier retries are enabled. */
                         enableThinkingEffortConflictRectifier: boolean;
+                        /** @description Whether Gemini function id rectifier retries are enabled. */
+                        enableGeminiFunctionIdRectifier: boolean;
                         /** @description Whether billing-header rectifier is enabled. */
                         enableBillingHeaderRectifier: boolean;
                         /** @description Whether Responses API input rectifier is enabled. */
@@ -12140,6 +12142,8 @@ export interface operations {
                     enableThinkingBudgetRectifier?: boolean;
                     /** @description Whether thinking effort conflict rectifier retries are enabled. */
                     enableThinkingEffortConflictRectifier?: boolean;
+                    /** @description Whether Gemini function id rectifier retries are enabled. */
+                    enableGeminiFunctionIdRectifier?: boolean;
                     /** @description Whether billing-header rectifier is enabled. */
                     enableBillingHeaderRectifier?: boolean;
                     /** @description Whether Responses API input rectifier is enabled. */
@@ -12273,6 +12277,8 @@ export interface operations {
                         enableThinkingBudgetRectifier: boolean;
                         /** @description Whether thinking effort conflict rectifier retries are enabled. */
                         enableThinkingEffortConflictRectifier: boolean;
+                        /** @description Whether Gemini function id rectifier retries are enabled. */
+                        enableGeminiFunctionIdRectifier: boolean;
                         /** @description Whether billing-header rectifier is enabled. */
                         enableBillingHeaderRectifier: boolean;
                         /** @description Whether Responses API input rectifier is enabled. */
