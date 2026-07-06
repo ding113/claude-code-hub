@@ -487,7 +487,8 @@ function preferEntry(a: CptModelEntry, b: CptModelEntry): CptModelEntry {
 
 /**
  * 转换整张 CPT 价格表。
- * models 以 canonical bare model_name 为键(与内部 model_prices.model_name 对齐)。
+ * models 以 canonical bare model_name 为键(与内部 model_prices.model_name 对齐),
+ * 并将每个模型的 aliases 展开为同价的独立模型键。
  */
 export function convertCptTable(table: CptTable): ConvertedCptTable {
   const entryByName = new Map<string, CptModelEntry>();
@@ -507,6 +508,19 @@ export function convertCptTable(table: CptTable): ConvertedCptTable {
     if (!converted) continue;
     models[name] = converted;
     vendorCounts.set(entry.vendor, (vendorCounts.get(entry.vendor) ?? 0) + 1);
+  }
+
+  // 别名展开为独立模型行:仅以别名出现的调用名也能精确命中计费。
+  // canonical 名先全部落位,别名不覆盖已有键(canonical 优先,别名冲突先到先得);
+  // vendors 统计保持按 canonical 模型计数。
+  for (const name of Object.keys(models)) {
+    const aliases = models[name].aliases;
+    if (!aliases?.length) continue;
+    for (const alias of aliases) {
+      if (alias === "__proto__" || alias === "constructor" || alias === "prototype") continue;
+      if (models[alias]) continue;
+      models[alias] = { ...models[name] };
+    }
   }
 
   const vendors: CloudVendorSummary[] = Array.from(vendorCounts.entries())

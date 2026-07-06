@@ -227,7 +227,7 @@ describe("syncCloudPriceTableToDatabase", () => {
     expect(vi.mocked(deleteCloudPricesNotIn)).toHaveBeenCalledWith(["m1"]);
     const { upsertCloudPricingCatalog } = await import("@/repository/cloud-pricing-catalog");
     expect(vi.mocked(upsertCloudPricingCatalog)).toHaveBeenCalledWith(
-      expect.objectContaining({ version: "test-version", modelCount: 1 })
+      expect.objectContaining({ version: "test-version+cvt1", modelCount: 1 })
     );
   });
 
@@ -325,7 +325,7 @@ describe("syncCloudPriceTableToDatabase", () => {
 
     const { getCloudPricingCatalog } = await import("@/repository/cloud-pricing-catalog");
     vi.mocked(getCloudPricingCatalog).mockResolvedValue({
-      version: "same-version",
+      version: "same-version+cvt1",
       currency: "USD",
       refreshedAt: null,
       providers: {},
@@ -360,7 +360,7 @@ describe("syncCloudPriceTableToDatabase", () => {
 
     const { getCloudPricingCatalog } = await import("@/repository/cloud-pricing-catalog");
     vi.mocked(getCloudPricingCatalog).mockResolvedValue({
-      version: "same-version",
+      version: "same-version+cvt1",
       currency: "USD",
       refreshedAt: null,
       providers: {},

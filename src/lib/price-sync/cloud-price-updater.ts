@@ -3,6 +3,16 @@ import type { PriceUpdateResult } from "@/types/model-price";
 import { type CloudPriceTableResult, fetchAndParseCloudPriceTable } from "./cloud-price-table";
 import { type ConvertedCptTable, convertCptTable } from "./cpt-convert";
 
+/**
+ * 转换器修订号:转换逻辑变更(如 alias 展开为独立模型行)时递增,
+ * 使版本指纹失配、绕过短路,强制重写整表。
+ */
+const CPT_CONVERTER_REV = 1;
+
+function versionFingerprint(version: string): string {
+  return `${version}+cvt${CPT_CONVERTER_REV}`;
+}
+
 /** 拉取并转换云端 CPT v1 价格表 */
 export async function loadConvertedCloudPriceTable(): Promise<
   CloudPriceTableResult<ConvertedCptTable>
@@ -69,7 +79,7 @@ export async function applyConvertedCloudPriceTable(
       // 若直接记云端全量数,版本短路的行数比对会永久失配
       const cloudRowCount = await countCloudModelPrices();
       await upsertCloudPricingCatalog({
-        version: converted.version,
+        version: converted.version ? versionFingerprint(converted.version) : converted.version,
         currency: converted.currency,
         refreshedAt: converted.refreshedAt || null,
         providers: converted.providers,
@@ -113,7 +123,7 @@ export async function syncCloudPriceTableToDatabase(
         import("@/repository/model-price"),
       ]);
       const catalog = await getCloudPricingCatalog();
-      if (catalog && catalog.version === converted.version) {
+      if (catalog && catalog.version === versionFingerprint(converted.version)) {
         const cloudCount = await countCloudModelPrices();
         if (cloudCount === catalog.modelCount) {
           const total = Object.keys(converted.models).length;

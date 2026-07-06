@@ -420,7 +420,12 @@ describe("convertCptTable", () => {
       ])
     );
 
-    expect(Object.keys(converted.models).sort()).toEqual(["claude-sonnet-4-5", "gpt-5.5"]);
+    expect(Object.keys(converted.models).sort()).toEqual([
+      "anthropic/claude-sonnet-4-5",
+      "claude-sonnet-4-5",
+      "claude-sonnet-4-5-20250929",
+      "gpt-5.5",
+    ]);
     expect(converted.version).toBe("v1");
     expect(converted.vendors.map((v) => v.vendor).sort()).toEqual(["anthropic", "openai"]);
     const anthropicVendor = converted.vendors.find((v) => v.vendor === "anthropic");
@@ -435,6 +440,7 @@ describe("convertCptTable", () => {
       model_name: "mistral-7b-instruct",
       vendor: "mistral",
       display_name: "Mistral 7B",
+      aliases: [],
       pricing: [
         {
           provider: "mistral",
@@ -450,6 +456,7 @@ describe("convertCptTable", () => {
       model_name: "mistral-7b-instruct",
       vendor: "other",
       display_name: "Mistral 7B (community)",
+      aliases: [],
       pricing: [
         {
           provider: "openrouter",
@@ -464,6 +471,42 @@ describe("convertCptTable", () => {
     const converted = convertCptTable(table([otherEntry, officialEntry]));
     expect(Object.keys(converted.models)).toEqual(["mistral-7b-instruct"]);
     expect(converted.models["mistral-7b-instruct"].vendor).toBe("mistral");
+  });
+
+  it("expands aliases into standalone model entries sharing the canonical price data", () => {
+    const converted = convertCptTable(table([claudeEntry()]));
+
+    const canonical = converted.models["claude-sonnet-4-5"];
+    const aliasRow = converted.models["claude-sonnet-4-5-20250929"];
+    expect(aliasRow).toBeDefined();
+    expect(aliasRow.input_cost_per_token).toBe(canonical.input_cost_per_token);
+    expect(aliasRow.display_name).toBe(canonical.display_name);
+    expect(converted.models["anthropic/claude-sonnet-4-5"]).toBeDefined();
+
+    // vendors 统计仍按 canonical 模型计数
+    expect(converted.vendors.find((v) => v.vendor === "anthropic")?.modelCount).toBe(1);
+  });
+
+  it("does not let an alias override another canonical model", () => {
+    const dated = claudeEntry({
+      slug: "anthropic/claude-sonnet-4-5-20250929",
+      model_name: "claude-sonnet-4-5-20250929",
+      display_name: "Claude Sonnet 4.5 (2025-09-29)",
+      aliases: [],
+      pricing: [claudeVariant({ charges: { prompt: { unit: "per_M_tokens", price: "99" } } })],
+    });
+    const converted = convertCptTable(table([claudeEntry(), dated]));
+
+    // claude-sonnet-4-5 的 alias 与 dated 的 canonical 名相同,canonical 数据保留
+    expect(converted.models["claude-sonnet-4-5-20250929"].input_cost_per_token).toBeCloseTo(
+      0.000099,
+      12
+    );
+  });
+
+  it("skips dangerous alias names", () => {
+    const converted = convertCptTable(table([claudeEntry({ aliases: ["__proto__", "ok-alias"] })]));
+    expect(Object.keys(converted.models).sort()).toEqual(["claude-sonnet-4-5", "ok-alias"]);
   });
 
   it("skips dangerous model names", () => {
