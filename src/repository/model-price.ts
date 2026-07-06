@@ -401,8 +401,9 @@ export async function deleteCloudPricesNotIn(keepModelNames: string[]): Promise<
     WHERE source <> 'manual'
       AND NOT (model_name = ANY(${sql.param(keepModelNames)}))
   `);
-  const count = (result as unknown as { count?: number }).count;
-  return typeof count === "number" ? count : 0;
+  // 驱动可能以 number/string/bigint 报告受影响行数,统一归一化,避免静默回落 0
+  const count = Number((result as unknown as { count?: number | bigint | string }).count ?? 0);
+  return Number.isFinite(count) ? count : 0;
 }
 
 /** 统计云端来源(source <> 'manual')的去重模型数量,用于同步一致性校验 */

@@ -77,11 +77,18 @@ describe("deleteCloudPricesNotIn", () => {
     expect(query.params).toEqual([keep]);
   });
 
-  it("returns the deleted row count reported by the driver", async () => {
-    executeResult = Object.assign([], { count: 42 });
+  // drivers may report the affected-row count as number, string or bigint
+  it.each([
+    ["number", 42, 42],
+    ["string", "42", 42],
+    ["bigint", 42n, 42],
+    ["undefined", undefined, 0],
+    ["garbage", "not-a-count", 0],
+  ])("normalizes a %s driver count", async (_kind, raw, expected) => {
+    executeResult = Object.assign([], { count: raw });
     const { deleteCloudPricesNotIn } = await import("@/repository/model-price");
 
-    await expect(deleteCloudPricesNotIn(["model-a"])).resolves.toBe(42);
+    await expect(deleteCloudPricesNotIn(["model-a"])).resolves.toBe(expected);
   });
 
   it("skips execution entirely for an empty keep list", async () => {
