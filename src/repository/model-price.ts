@@ -82,6 +82,9 @@ async function findLatestPriceByModelFallback(modelName: string): Promise<ModelP
 
   // 匹配优先级:候选名精确命中 > 别名命中原名 > 别名命中候选名;
   // 同级内 manual 优先、时间倒序。别名查询命中 idx_model_prices_aliases(GIN)。
+  // sql.param 将候选列表绑定为单个数组参数:直接内插会展开成 ($1,$2,...) 元组,
+  // ANY()/?|/::text[] 都会被 PG 拒绝,导致回退查询必败
+  const candidatesParam = sql.param(candidateArray);
   const query = sql`
     SELECT
       id,
@@ -91,16 +94,16 @@ async function findLatestPriceByModelFallback(modelName: string): Promise<ModelP
       created_at as "createdAt",
       updated_at as "updatedAt"
     FROM model_prices
-    WHERE model_name = ANY(${candidateArray})
+    WHERE model_name = ANY(${candidatesParam})
        OR price_data -> 'aliases' ? ${original}
-       OR price_data -> 'aliases' ?| ${candidateArray}
+       OR price_data -> 'aliases' ?| ${candidatesParam}
     ORDER BY
       CASE
-        WHEN model_name = ANY(${candidateArray}) THEN 0
+        WHEN model_name = ANY(${candidatesParam}) THEN 0
         WHEN price_data -> 'aliases' ? ${original} THEN 1
         ELSE 2
       END,
-      COALESCE(array_position(${candidateArray}::text[], model_name), 2147483647),
+      COALESCE(array_position(${candidatesParam}::text[], model_name), 2147483647),
       (source = 'manual') DESC,
       created_at DESC NULLS LAST,
       id DESC
