@@ -4,6 +4,7 @@ import { ExpressAdapter } from "@bull-board/express";
 import type { Job } from "bull";
 import Queue from "bull";
 import { logger } from "@/lib/logger";
+import { buildRedisQueueOptions } from "@/lib/redis/bull-queue-options";
 import { getSystemSettings } from "@/repository/system-config";
 import { cleanupLogs } from "./service";
 
@@ -36,40 +37,7 @@ function getCleanupQueue(): Queue.Queue {
     redisUrl: redisUrl.replace(/:[^:]*@/, ":***@"), // 隐藏密码
   });
 
-  // --- START SNI/TLS FIX ---
-  const useTls = redisUrl.startsWith("rediss://");
-  // Bull 需要一个 RedisOptions 对象
-  const redisQueueOptions: Queue.QueueOptions["redis"] = {};
-
-  try {
-    // 使用 Node.js 内置的 URL 解析器
-    const url = new URL(redisUrl);
-    redisQueueOptions.host = url.hostname;
-    redisQueueOptions.port = parseInt(url.port || (useTls ? "6379" : "6379"), 10);
-    // WHATWG URL 不会自动解码 userinfo 中的百分号编码，需显式 decode
-    redisQueueOptions.password = decodeURIComponent(url.password);
-    redisQueueOptions.username = decodeURIComponent(url.username); // 传递用户名
-    // 支持 redis://host:port/15 形式的 DB 选择
-    const dbFromPath = parseInt(url.pathname.slice(1), 10);
-    if (!Number.isNaN(dbFromPath)) {
-      redisQueueOptions.db = dbFromPath;
-    }
-
-    if (useTls) {
-      const rejectUnauthorized = process.env.REDIS_TLS_REJECT_UNAUTHORIZED !== "false";
-      logger.info("[CleanupQueue] Using TLS connection (rediss://)", { rejectUnauthorized });
-      redisQueueOptions.tls = {
-        host: url.hostname,
-        servername: url.hostname, // SNI support for cloud Redis providers
-        rejectUnauthorized,
-      };
-    }
-  } catch (e) {
-    logger.error("[CleanupQueue] Failed to parse REDIS_URL, connection will fail:", e);
-    // 如果 URL 格式错误，则抛出异常停止启动
-    throw new Error("Invalid REDIS_URL format");
-  }
-  // --- END SNI/TLS FIX ---
+  const redisQueueOptions = buildRedisQueueOptions(redisUrl, "[CleanupQueue]");
 
   // 创建队列实例
   _cleanupQueue = new Queue("log-cleanup", {
