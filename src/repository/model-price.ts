@@ -392,10 +392,14 @@ export async function findAllManualPrices(): Promise<Map<string, ModelPrice>> {
 export async function deleteCloudPricesNotIn(keepModelNames: string[]): Promise<number> {
   // 空保留列表视为无效输入直接跳过:否则等同于清空全部非 manual 行
   if (keepModelNames.length === 0) return 0;
+  const keepModelNameParams = sql.join(
+    keepModelNames.map((modelName) => sql`${modelName}`),
+    sql`, `
+  );
   const result = await db.execute(sql`
     DELETE FROM model_prices
     WHERE source <> 'manual'
-      AND NOT (model_name = ANY(${keepModelNames}))
+      AND NOT (model_name = ANY(ARRAY[${keepModelNameParams}]::text[]))
   `);
   const count = (result as unknown as { count?: number }).count;
   return typeof count === "number" ? count : 0;

@@ -26,17 +26,23 @@ export interface CloudPricingCatalogInput {
   modelCount: number;
 }
 
+function toPlainJson<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T;
+}
+
 /** 单行 upsert:目录元数据只保留最新一份 */
 export async function upsertCloudPricingCatalog(input: CloudPricingCatalogInput): Promise<void> {
   const refreshedAt = input.refreshedAt ? new Date(input.refreshedAt) : null;
+  const providers = toPlainJson(input.providers);
+  const vendors = toPlainJson(input.vendors);
   await db.transaction(async (tx) => {
     await tx.execute(sql`DELETE FROM cloud_pricing_catalog`);
     await tx.insert(cloudPricingCatalog).values({
       version: input.version,
       currency: input.currency,
       refreshedAt: refreshedAt && !Number.isNaN(refreshedAt.getTime()) ? refreshedAt : null,
-      providers: input.providers,
-      vendors: input.vendors,
+      providers,
+      vendors,
       modelCount: input.modelCount,
     });
   });
