@@ -1,6 +1,6 @@
 "use server";
 
-import { and, desc, eq, inArray, ne, notInArray, sql } from "drizzle-orm";
+import { desc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import { modelPrices } from "@/drizzle/schema";
 import { logger } from "@/lib/logger";
@@ -392,11 +392,14 @@ export async function findAllManualPrices(): Promise<Map<string, ModelPrice>> {
 export async function deleteCloudPricesNotIn(keepModelNames: string[]): Promise<number> {
   // 空保留列表视为无效输入直接跳过:否则等同于清空全部非 manual 行
   if (keepModelNames.length === 0) return 0;
-  const deletedRows = await db
-    .delete(modelPrices)
-    .where(and(ne(modelPrices.source, "manual"), notInArray(modelPrices.modelName, keepModelNames)))
-    .returning({ id: modelPrices.id });
-  return deletedRows.length;
+  // sql.param 将整个列表绑定为单个数组参数:直接内插会被展开成 ANY(($1,$2,...)) 元组,PG 拒绝
+  const result = await db.execute(sql`
+    DELETE FROM model_prices
+    WHERE source <> 'manual'
+      AND NOT (model_name = ANY(${sql.param(keepModelNames)}))
+  `);
+  const count = (result as unknown as { count?: number }).count;
+  return typeof count === "number" ? count : 0;
 }
 
 /** 统计云端来源(source <> 'manual')的去重模型数量,用于同步一致性校验 */
