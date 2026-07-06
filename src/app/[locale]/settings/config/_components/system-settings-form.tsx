@@ -833,7 +833,7 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
         {/* Enable Gemini Function Id Rectifier */}
         <div className="p-4 rounded-xl bg-white/[0.02] border border-white/5 flex items-center justify-between hover:bg-white/[0.04] transition-colors">
           <div className="flex items-start gap-3">
-            <div className="w-8 h-8 flex items-center justify-center rounded-lg bg-sky-500/10 text-sky-400 shrink-0">
+            <div className="w-8 h-8 flex items-center justify-center rounded-lg bg-lime-500/10 text-lime-400 shrink-0">
               <Pencil className="h-4 w-4" />
             </div>
             <div>
