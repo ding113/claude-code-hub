@@ -4,6 +4,7 @@ import { ArrowRightLeft, Loader2, Pin } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
+import { ModelVendorIcon } from "@/components/customs/model-vendor-icon";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -50,11 +51,17 @@ export function ProviderPricingDialog({ price, trigger, onSuccess }: ProviderPri
       return [] as Array<[string, Record<string, unknown>]>;
     }
 
+    // 官方报价排在最前,其余按 slug 字典序
     return Object.entries(pricing)
       .filter((entry): entry is [string, Record<string, unknown>] => {
         return !!entry[1] && typeof entry[1] === "object" && !Array.isArray(entry[1]);
       })
-      .sort((a, b) => a[0].localeCompare(b[0]));
+      .sort((a, b) => {
+        const officialA = a[1].official === true ? 0 : 1;
+        const officialB = b[1].official === true ? 0 : 1;
+        if (officialA !== officialB) return officialA - officialB;
+        return a[0].localeCompare(b[0]);
+      });
   }, [price.priceData.pricing]);
 
   const handlePin = async (pricingProviderKey: string) => {
@@ -111,9 +118,25 @@ export function ProviderPricingDialog({ price, trigger, onSuccess }: ProviderPri
               >
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex items-center gap-2">
+                    <ModelVendorIcon
+                      modelId={providerKey}
+                      vendor={providerKey}
+                      className="h-4 w-4 shrink-0"
+                    />
                     <Badge variant="secondary" className="font-mono text-xs">
                       {providerKey}
                     </Badge>
+                    {providerPricing.official === true ? (
+                      <Badge className="border-transparent bg-[#E25706]/15 text-[#E25706]">
+                        {t("providerPricing.official")}
+                      </Badge>
+                    ) : null}
+                    {typeof providerPricing.provider_model_id === "string" &&
+                    providerPricing.provider_model_id !== price.modelName ? (
+                      <span className="font-mono text-xs text-muted-foreground truncate max-w-48">
+                        {providerPricing.provider_model_id}
+                      </span>
+                    ) : null}
                     {price.priceData.selected_pricing_provider === providerKey ? (
                       <Badge variant="outline">{t("providerPricing.pinned")}</Badge>
                     ) : null}

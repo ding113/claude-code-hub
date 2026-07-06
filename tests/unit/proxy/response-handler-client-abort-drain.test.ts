@@ -1,13 +1,19 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { resolveEndpointPolicy } from "@/app/v1/_lib/proxy/endpoint-policy";
-import { ProxyResponseHandler } from "@/app/v1/_lib/proxy/response-handler";
+import {
+  BoundedStreamTextAccumulator,
+  ProxyResponseHandler,
+} from "@/app/v1/_lib/proxy/response-handler";
 import { ProxySession } from "@/app/v1/_lib/proxy/session";
 import { setDeferredStreamingFinalization } from "@/app/v1/_lib/proxy/stream-finalization";
 import { AsyncTaskManager } from "@/lib/async-task-manager";
+import { emitProxyLangfuseTrace } from "@/lib/langfuse/emit-proxy-trace";
+import { SessionManager } from "@/lib/session-manager";
 import { updateMessageRequestDetails, updateMessageRequestDuration } from "@/repository/message";
 import type { Provider } from "@/types/provider";
 
 const asyncTasks: Promise<void>[] = [];
+const STREAM_STATS_HEAD_BYTES_FOR_TEST = 1024 * 1024;
 
 vi.mock("@/app/v1/_lib/proxy/response-fixer", () => ({
   ResponseFixer: {
@@ -21,6 +27,7 @@ vi.mock("@/lib/async-task-manager", () => ({
       asyncTasks.push(promise);
       return new AbortController();
     }),
+    touch: vi.fn(() => true),
     cleanup: vi.fn(),
     cancel: vi.fn(),
   },
@@ -72,7 +79,7 @@ vi.mock("@/lib/session-manager", () => ({
   SessionManager: {
     clearSessionProvider: vi.fn(),
     extractCodexPromptCacheKey: vi.fn(),
-    storeSessionResponse: vi.fn(),
+    storeSessionResponse: vi.fn(async () => undefined),
     storeSessionRequestPhaseSnapshot: vi.fn(),
     storeSessionResponsePhaseSnapshot: vi.fn(),
     storeSessionRequestHeaders: vi.fn(),
@@ -82,6 +89,7 @@ vi.mock("@/lib/session-manager", () => ({
     storeSessionUpstreamResponseMeta: vi.fn(),
     updateSessionProvider: vi.fn(),
     updateSessionUsage: vi.fn(),
+    updateSessionBindingSmart: vi.fn(async () => ({ updated: false, reason: "test" })),
     updateSessionWithCodexCacheKey: vi.fn(),
   },
 }));
@@ -154,6 +162,7 @@ function createProvider(): Provider {
     codexReasoningSummaryPreference: null,
     codexTextVerbosityPreference: null,
     codexParallelToolCallsPreference: null,
+    codexImageGenerationPreference: null,
     anthropicMaxTokensPreference: null,
     anthropicThinkingBudgetPreference: null,
     geminiGoogleSearchPreference: null,
@@ -268,6 +277,131 @@ function createResponsesSse(): Response {
   ].join("\n\n");
 
   return new Response(body, {
+    status: 200,
+    headers: { "content-type": "text/event-stream" },
+  });
+}
+
+function createResponsesJson(): Response {
+  return new Response(
+    JSON.stringify({
+      id: "resp_non_stream",
+      model: "gpt-5.4-mini-2026-03-17",
+      usage: {
+        input_tokens: 463,
+        output_tokens: 11,
+      },
+    }),
+    {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    }
+  );
+}
+
+function createOversizedResponsesSse(): Response {
+  const oversizedDelta = "x".repeat(11 * 1024 * 1024);
+  const body = [
+    `event: response.output_text.delta\ndata: ${JSON.stringify({
+      type: "response.output_text.delta",
+      delta: oversizedDelta,
+    })}`,
+    `event: response.completed\ndata: ${JSON.stringify({
+      type: "response.completed",
+      response: {
+        id: "resp_large",
+        model: "gpt-5.4-mini-2026-03-17",
+        usage: {
+          input_tokens: 463,
+          output_tokens: 11,
+        },
+      },
+    })}`,
+    "",
+  ].join("\n\n");
+
+  return new Response(body, {
+    status: 200,
+    headers: { "content-type": "text/event-stream" },
+  });
+}
+
+function createUtf8SplitHeadTailResponsesSse(): Response {
+  const encoder = new TextEncoder();
+  const eventPrefix = `event: response.output_text.delta\ndata: {"type":"response.output_text.delta","delta":"`;
+  const splitChar = "界";
+  const prefixBytes = encoder.encode(eventPrefix).byteLength;
+  const fillBytes = STREAM_STATS_HEAD_BYTES_FOR_TEST - prefixBytes - 1;
+  if (fillBytes < 0) {
+    throw new Error("test event prefix is too large for the head window");
+  }
+
+  const completedEvent = `event: response.completed\ndata: ${JSON.stringify({
+    type: "response.completed",
+    response: {
+      id: "resp_utf8_boundary",
+      model: "gpt-5.4-mini-2026-03-17",
+      usage: {
+        input_tokens: 463,
+        output_tokens: 11,
+      },
+    },
+  })}\n\n`;
+  const body = `${eventPrefix}${"a".repeat(fillBytes)}${splitChar}"}\n\n${completedEvent}`;
+  const chunk = encoder.encode(body);
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(chunk);
+      controller.close();
+    },
+  });
+
+  return new Response(stream, {
+    status: 200,
+    headers: { "content-type": "text/event-stream" },
+  });
+}
+
+function createSplitTailBoundaryResponsesSse(): Response {
+  const encoder = new TextEncoder();
+  const completedEvent = `event: response.completed\ndata: ${JSON.stringify({
+    type: "response.completed",
+    response: {
+      id: "resp_split_tail",
+      model: "gpt-5.4-mini-2026-03-17",
+      usage: {
+        input_tokens: 463,
+        output_tokens: 11,
+      },
+    },
+  })}\n\n`;
+  const splitAt = Math.floor(completedEvent.length / 2);
+  const firstChunk = encoder.encode(
+    `event: response.output_text.delta\ndata: ${JSON.stringify({
+      type: "response.output_text.delta",
+      delta: "x".repeat(9 * 1024 * 1024),
+    })}\n\n${completedEvent.slice(0, splitAt)}`
+  );
+  const secondChunk = encoder.encode(
+    `${completedEvent.slice(splitAt)}event: response.output_text.delta\ndata: ${JSON.stringify({
+      type: "response.output_text.delta",
+      delta: "y".repeat(2 * 1024 * 1024),
+    })}\n\n`
+  );
+  const chunks = [firstChunk, secondChunk];
+  let index = 0;
+
+  const stream = new ReadableStream<Uint8Array>({
+    pull(controller) {
+      if (index < chunks.length) {
+        controller.enqueue(chunks[index++]);
+        return;
+      }
+      controller.close();
+    },
+  });
+
+  return new Response(stream, {
     status: 200,
     headers: { "content-type": "text/event-stream" },
   });
@@ -527,6 +661,80 @@ describe("ProxyResponseHandler stream client abort finalization", () => {
     vi.clearAllMocks();
   });
 
+  it("copies Buffer-backed stream windows before retaining stats snapshots", () => {
+    const accumulator = new BoundedStreamTextAccumulator();
+    const headMarker = "head-copy-marker";
+    const tailMarker = "tail-copy-marker";
+    const originalChunk = Buffer.from(`${headMarker}${"x".repeat(11 * 1024 * 1024)}${tailMarker}`);
+    const originalLength = originalChunk.byteLength;
+
+    accumulator.pushBytes(originalChunk);
+    originalChunk.fill("z");
+
+    const snapshot = accumulator.finish();
+
+    expect(snapshot.truncated).toBe(true);
+    expect(snapshot.totalBytes).toBe(originalLength);
+    expect(snapshot.bufferedBytes).toBe(10 * 1024 * 1024);
+    expect(snapshot.text).toContain(headMarker);
+    expect(snapshot.text).toContain(tailMarker);
+    expect(snapshot.text).not.toContain("zzzzzzzzzzzzzzzz");
+  });
+
+  it("does not apply the default stale cleanup when stream idle timeout is disabled", async () => {
+    const controller = new AbortController();
+    const session = createSession(controller.signal);
+    session.provider.streamingIdleTimeoutMs = 0;
+    setDeferredStreamingFinalization(session, {
+      providerId: 1,
+      providerName: "avemujica-responses",
+      providerPriority: 1,
+      attemptNumber: 1,
+      totalProvidersAttempted: 1,
+      isFirstAttempt: true,
+      isFailoverSuccess: false,
+      endpointId: 42,
+      endpointUrl: "https://api.test.invalid/v1",
+      upstreamStatusCode: 200,
+    });
+
+    await ProxyResponseHandler.dispatch(session, createResponsesSse());
+    await drainAsyncTasks();
+
+    const streamRegisterCall = vi.mocked(AsyncTaskManager.register).mock.calls.find((call) => {
+      const options = call[2] as { taskType?: string } | undefined;
+      return options?.taskType === "stream-processing";
+    });
+
+    expect(streamRegisterCall).toBeDefined();
+    expect(streamRegisterCall?.[2]).toEqual(
+      expect.objectContaining({
+        staleTimeoutMs: Number.POSITIVE_INFINITY,
+      })
+    );
+  });
+
+  it("does not apply the default stale cleanup when non-stream request timeout is disabled", async () => {
+    const controller = new AbortController();
+    const session = createSession(controller.signal);
+    session.provider.requestTimeoutNonStreamingMs = 0;
+
+    await ProxyResponseHandler.dispatch(session, createResponsesJson());
+    await drainAsyncTasks();
+
+    const nonStreamRegisterCall = vi.mocked(AsyncTaskManager.register).mock.calls.find((call) => {
+      const options = call[2] as { taskType?: string } | undefined;
+      return options?.taskType === "non-stream-processing";
+    });
+
+    expect(nonStreamRegisterCall).toBeDefined();
+    expect(nonStreamRegisterCall?.[2]).toEqual(
+      expect.objectContaining({
+        staleTimeoutMs: Number.POSITIVE_INFINITY,
+      })
+    );
+  });
+
   it("finalizes a complete upstream responses stream as success when the downstream client already closed", async () => {
     const controller = new AbortController();
     controller.abort();
@@ -557,6 +765,121 @@ describe("ProxyResponseHandler stream client abort finalization", () => {
         outputTokens: 11,
       })
     );
+  });
+
+  it("keeps stream accounting bounded for oversized successful streams", async () => {
+    const controller = new AbortController();
+    const session = createSession(controller.signal);
+    session.sessionId = "session_large";
+    Object.assign(session, {
+      shouldPersistSessionDebugArtifacts: () => true,
+    });
+    setDeferredStreamingFinalization(session, {
+      providerId: 1,
+      providerName: "avemujica-responses",
+      providerPriority: 1,
+      attemptNumber: 1,
+      totalProvidersAttempted: 1,
+      isFirstAttempt: true,
+      isFailoverSuccess: false,
+      endpointId: 42,
+      endpointUrl: "https://api.test.invalid/v1",
+      upstreamStatusCode: 200,
+    });
+
+    await ProxyResponseHandler.dispatch(session, createOversizedResponsesSse());
+    await drainAsyncTasks();
+
+    expect(updateMessageRequestDetails).toHaveBeenCalledWith(
+      123,
+      expect.objectContaining({
+        statusCode: 200,
+        inputTokens: 463,
+        outputTokens: 11,
+      })
+    );
+    expect(SessionManager.storeSessionResponse).not.toHaveBeenCalled();
+
+    const traceCall = vi.mocked(emitProxyLangfuseTrace).mock.calls.at(-1);
+    expect(traceCall).toBeDefined();
+    const traceData = traceCall?.[1];
+    const responseText = traceData?.responseText ?? "";
+    expect(responseText).toContain("[cch_truncated]");
+    expect(responseText.length).toBeLessThan(10 * 1024 * 1024 + 1024);
+  });
+
+  it("decodes an untruncated stream as contiguous UTF-8 across the head/tail split", async () => {
+    const controller = new AbortController();
+    const session = createSession(controller.signal);
+    session.sessionId = "session_utf8_boundary";
+    Object.assign(session, {
+      shouldPersistSessionDebugArtifacts: () => true,
+    });
+    setDeferredStreamingFinalization(session, {
+      providerId: 1,
+      providerName: "avemujica-responses",
+      providerPriority: 1,
+      attemptNumber: 1,
+      totalProvidersAttempted: 1,
+      isFirstAttempt: true,
+      isFailoverSuccess: false,
+      endpointId: 42,
+      endpointUrl: "https://api.test.invalid/v1",
+      upstreamStatusCode: 200,
+    });
+
+    await ProxyResponseHandler.dispatch(session, createUtf8SplitHeadTailResponsesSse());
+    await drainAsyncTasks();
+
+    expect(updateMessageRequestDetails).toHaveBeenCalledWith(
+      123,
+      expect.objectContaining({
+        statusCode: 200,
+        inputTokens: 463,
+        outputTokens: 11,
+      })
+    );
+
+    const traceCall = vi.mocked(emitProxyLangfuseTrace).mock.calls.at(-1);
+    expect(traceCall).toBeDefined();
+    const responseText = traceCall?.[1].responseText ?? "";
+    expect(responseText).toContain("界");
+    expect(responseText).not.toContain("\uFFFD");
+    expect(responseText).not.toContain("[cch_truncated]");
+  });
+
+  it("keeps usage when a terminal responses event is split across tail chunk eviction", async () => {
+    const controller = new AbortController();
+    const session = createSession(controller.signal);
+    session.sessionId = "session_split_tail";
+    Object.assign(session, {
+      shouldPersistSessionDebugArtifacts: () => true,
+    });
+    setDeferredStreamingFinalization(session, {
+      providerId: 1,
+      providerName: "avemujica-responses",
+      providerPriority: 1,
+      attemptNumber: 1,
+      totalProvidersAttempted: 1,
+      isFirstAttempt: true,
+      isFailoverSuccess: false,
+      endpointId: 42,
+      endpointUrl: "https://api.test.invalid/v1",
+      upstreamStatusCode: 200,
+    });
+
+    await ProxyResponseHandler.dispatch(session, createSplitTailBoundaryResponsesSse());
+    await drainAsyncTasks();
+
+    expect(updateMessageRequestDetails).toHaveBeenCalledWith(
+      123,
+      expect.objectContaining({
+        statusCode: 200,
+        inputTokens: 463,
+        outputTokens: 11,
+      })
+    );
+    expect(SessionManager.storeSessionResponse).not.toHaveBeenCalled();
   });
 
   it("reclassifies a client-aborted stream as success when final usage was already received", async () => {

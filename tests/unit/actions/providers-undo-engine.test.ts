@@ -88,6 +88,7 @@ function makeProvider(id: number, overrides: Record<string, unknown> = {}) {
     codexReasoningSummaryPreference: null,
     codexTextVerbosityPreference: null,
     codexParallelToolCallsPreference: null,
+    codexImageGenerationPreference: null,
     anthropicMaxTokensPreference: null,
     anthropicThinkingBudgetPreference: null,
     anthropicAdaptiveThinking: null,

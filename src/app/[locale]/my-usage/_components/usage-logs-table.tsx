@@ -28,6 +28,7 @@ interface UsageLogsTableProps {
   onLoadMore?: () => void;
   resetScrollKey?: unknown;
   onHistoryBrowsingChange?: (isBrowsingHistory: boolean) => void;
+  serverTimeZone?: string;
 }
 
 export function UsageLogsTable({
@@ -41,11 +42,13 @@ export function UsageLogsTable({
   onLoadMore,
   resetScrollKey,
   onHistoryBrowsingChange,
+  serverTimeZone,
 }: UsageLogsTableProps) {
   const t = useTranslations("myUsage.logs");
   const tCommon = useTranslations("common");
   const tDashboard = useTranslations("dashboard");
-  const timeZone = useTimeZone() ?? "UTC";
+  const providerTimeZone = useTimeZone() ?? "UTC";
+  const timeZone = serverTimeZone ?? providerTimeZone;
   const resolvedResetKey = useMemo(() => JSON.stringify(resetScrollKey ?? null), [resetScrollKey]);
   const previousResetKeyRef = useRef(resolvedResetKey);
 

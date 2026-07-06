@@ -29,7 +29,7 @@ function render(node: ReactNode) {
 }
 
 describe("PriceList multi-provider pricing", () => {
-  test("renders a Multi badge when a model contains multiple provider pricing nodes", () => {
+  test("renders a multi-source badge and official pricing info for cloud rows", () => {
     const messages = loadMessages();
     const now = new Date("2026-03-06T00:00:00.000Z");
 
@@ -41,9 +41,12 @@ describe("PriceList multi-provider pricing", () => {
           mode: "responses",
           display_name: "GPT-5.5",
           model_family: "gpt",
-          litellm_provider: "chatgpt",
+          vendor: "openai",
+          slug: "openai/gpt-5.5",
+          official_pricing_provider: "openai",
           pricing: {
             openai: {
+              official: true,
               input_cost_per_token: 0.0000025,
               output_cost_per_token: 0.000015,
             },
@@ -53,7 +56,7 @@ describe("PriceList multi-provider pricing", () => {
             },
           },
         },
-        source: "litellm",
+        source: "cloud",
         createdAt: now,
         updatedAt: now,
       },
@@ -68,12 +71,16 @@ describe("PriceList multi-provider pricing", () => {
           initialPageSize={50}
           initialSearchTerm=""
           initialSourceFilter=""
-          initialLitellmProviderFilter=""
+          initialVendorFilter=""
         />
       </NextIntlClientProvider>
     );
 
-    expect(document.body.textContent).toContain("Multi");
+    // 多来源徽标(badges.multiWithCount)与 vendor 徽标
+    expect(document.body.textContent).toContain("2 sources");
+    expect(document.body.textContent).toContain("openai");
+    // 官方价徽标(badges.official)
+    expect(document.body.textContent).toContain("Official");
     expect(document.body.textContent).toContain("$2.50/M");
     expect(document.body.textContent).toContain("$15.00/M");
     unmount();

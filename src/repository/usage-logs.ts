@@ -1494,10 +1494,20 @@ export async function getUsedModels(): Promise<string[]> {
   const results = await db
     .selectDistinct({ model: messageRequest.model })
     .from(messageRequest)
-    .where(and(isNull(messageRequest.deletedAt), sql`${messageRequest.model} IS NOT NULL`))
+    .where(
+      and(
+        isNull(messageRequest.deletedAt),
+        sql`${messageRequest.model} IS NOT NULL`,
+        sql`btrim(${messageRequest.model}) <> ''`
+      )
+    )
     .orderBy(messageRequest.model);
 
-  return results.map((r) => r.model).filter((m): m is string => m !== null);
+  return results.map((r) => r.model).filter(isNonBlankString);
+}
+
+function isNonBlankString(value: string | null): value is string {
+  return typeof value === "string" && value.trim().length > 0;
 }
 
 /**

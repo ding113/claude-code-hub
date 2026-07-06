@@ -126,6 +126,7 @@ function makeProviderDisplay(overrides: Partial<ProviderDisplay> = {}): Provider
     codexReasoningSummaryPreference: null,
     codexTextVerbosityPreference: null,
     codexParallelToolCallsPreference: null,
+    codexImageGenerationPreference: null,
     anthropicMaxTokensPreference: null,
     anthropicThinkingBudgetPreference: null,
     tpm: null,

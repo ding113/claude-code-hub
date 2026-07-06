@@ -163,6 +163,7 @@ function makeCloneProvider(overrides: Partial<ProviderDisplay> = {}): ProviderDi
     codexReasoningSummaryPreference: null,
     codexTextVerbosityPreference: null,
     codexParallelToolCallsPreference: null,
+    codexImageGenerationPreference: null,
     codexServiceTierPreference: null,
     anthropicMaxTokensPreference: null,
     anthropicThinkingBudgetPreference: null,

@@ -1,3 +1,6 @@
+import { format, subDays } from "date-fns";
+import { toZonedTime } from "date-fns-tz";
+
 export type TimeRangePreset = "today" | "7days" | "30days" | "thisMonth";
 
 export interface UserInsightsFilters {
@@ -17,33 +20,38 @@ export const DEFAULT_FILTERS: UserInsightsFilters = {
 export function resolveTimePresetDates(preset: TimeRangePreset): {
   startDate?: string;
   endDate?: string;
+};
+export function resolveTimePresetDates(
+  preset: TimeRangePreset,
+  timeZone: string | undefined,
+  now?: Date
+): {
+  startDate?: string;
+  endDate?: string;
+};
+export function resolveTimePresetDates(
+  preset: TimeRangePreset,
+  timeZone?: string,
+  now: Date = new Date()
+): {
+  startDate?: string;
+  endDate?: string;
 } {
-  const now = new Date();
-  const yyyy = now.getFullYear();
-  const mm = String(now.getMonth() + 1).padStart(2, "0");
-  const dd = String(now.getDate()).padStart(2, "0");
-  const today = `${yyyy}-${mm}-${dd}`;
+  const baseDate = timeZone ? toZonedTime(now, timeZone) : now;
+  const today = format(baseDate, "yyyy-MM-dd");
 
   switch (preset) {
     case "today":
       return { startDate: today, endDate: today };
     case "7days": {
-      const start = new Date(now);
-      start.setDate(start.getDate() - 6);
-      const sy = start.getFullYear();
-      const sm = String(start.getMonth() + 1).padStart(2, "0");
-      const sd = String(start.getDate()).padStart(2, "0");
-      return { startDate: `${sy}-${sm}-${sd}`, endDate: today };
+      const start = subDays(baseDate, 6);
+      return { startDate: format(start, "yyyy-MM-dd"), endDate: today };
     }
     case "30days": {
-      const start = new Date(now);
-      start.setDate(start.getDate() - 29);
-      const sy = start.getFullYear();
-      const sm = String(start.getMonth() + 1).padStart(2, "0");
-      const sd = String(start.getDate()).padStart(2, "0");
-      return { startDate: `${sy}-${sm}-${sd}`, endDate: today };
+      const start = subDays(baseDate, 29);
+      return { startDate: format(start, "yyyy-MM-dd"), endDate: today };
     }
     case "thisMonth":
-      return { startDate: `${yyyy}-${mm}-01`, endDate: today };
+      return { startDate: format(baseDate, "yyyy-MM-01"), endDate: today };
   }
 }

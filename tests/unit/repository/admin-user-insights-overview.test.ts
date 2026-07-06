@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { resolveSystemTimezone } from "@/lib/utils/timezone";
 
 function sqlToString(sqlObj: unknown): string {
   const visited = new Set<unknown>();
@@ -67,6 +68,10 @@ vi.mock("@/drizzle/db", () => ({
 }));
 
 vi.mock("@/drizzle/schema", () => ({
+  messageRequest: {
+    blockedBy: "blockedBy",
+    endpoint: "endpoint",
+  },
   usageLedger: {
     userId: "userId",
     costUsd: "costUsd",
@@ -93,9 +98,14 @@ vi.mock("@/repository/system-config", () => ({
   getSystemSettings: vi.fn(),
 }));
 
+vi.mock("@/lib/utils/timezone", () => ({
+  resolveSystemTimezone: vi.fn().mockResolvedValue("Asia/Shanghai"),
+}));
+
 describe("getUserOverviewMetrics", () => {
   beforeEach(() => {
     vi.resetModules();
+    vi.mocked(resolveSystemTimezone).mockResolvedValue("Asia/Shanghai");
     selectResults.length = 0;
     allWhereArgs.length = 0;
     capturedSelections.length = 0;
@@ -125,6 +135,8 @@ describe("getUserOverviewMetrics", () => {
     const whereSql = sqlToString(allWhereArgs[0][0]);
     expect(whereSql).toContain("2026-03-01");
     expect(whereSql).toContain("2026-03-09");
+    expect(whereSql).toContain("AT TIME ZONE");
+    expect(resolveSystemTimezone).toHaveBeenCalled();
     expect(whereSql).toContain("INTERVAL '1 day'");
 
     const errorCountSql = sqlToString(capturedSelections[0].errorCount).toLowerCase();

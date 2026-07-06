@@ -9,30 +9,13 @@
   "filters": {
     "all": "全部",
     "local": "本地",
-    "anthropic": "Anthropic",
-    "openai": "OpenAI",
-    "vertex": "Vertex",
-    "deepseek": "DeepSeek",
-    "mistral": "Mistral",
-    "meta": "Meta",
-    "cohere": "Cohere",
-    "xai": "xAI",
-    "groq": "Groq",
-    "bedrock": "Bedrock",
-    "azure": "Azure",
-    "together": "Together",
-    "nvidia": "NVIDIA",
-    "zhipuai": "智谱",
-    "volcengine": "火山引擎",
-    "minimax": "MiniMax",
-    "qwen": "Qwen",
-    "fireworks": "Fireworks",
-    "ollama": "Ollama",
-    "openrouter": "OpenRouter"
+    "moreVendors": "更多厂商"
   },
   "badges": {
     "local": "本地",
-    "multi": "多供应商"
+    "multi": "多供应商",
+    "official": "官方价",
+    "multiWithCount": "{count} 个来源"
   },
   "capabilities": {
     "assistantPrefill": "助手预填充",
@@ -64,25 +47,25 @@
   },
   "conflict": {
     "title": "选择要覆盖的冲突项",
-    "description": "以下模型存在手动维护的价格，勾选后将用 LiteLLM 价格覆盖，未勾选的保持本地不变",
+    "description": "以下模型存在手动维护的价格。勾选需要用云端价格覆盖的模型，未勾选的将保持不变",
     "searchPlaceholder": "搜索模型...",
     "table": {
       "modelName": "模型",
       "manualPrice": "手动价格",
-      "litellmPrice": "LiteLLM 价格",
-      "action": "操作"
+      "action": "操作",
+      "cloudPrice": "云端价格"
     },
     "viewDiff": "查看差异",
     "diffTitle": "价格差异对比",
     "diff": {
       "field": "字段",
       "manual": "手动",
-      "litellm": "LiteLLM",
       "inputPrice": "输入价格",
       "outputPrice": "输出价格",
       "imagePrice": "图片价格",
       "provider": "供应商",
-      "mode": "类型"
+      "mode": "模式",
+      "cloud": "云端"
     },
     "pagination": {
       "showing": "显示 {from}-{to} 条，共 {total} 条"
@@ -148,7 +131,7 @@
     "updateFailed": "更新失败",
     "systemHasBuiltIn": "系统已内置价格表",
     "manualDownload": "你也可以手动下载",
-    "latestPriceTable": "云端价格表",
+    "latestPriceTable": "云端价格表（models.json）",
     "andUploadViaButton": "，并通过上方按钮上传",
     "cloudModelCountLoading": "云端模型数量加载中...",
     "cloudModelCountFailed": "云端模型数量加载失败",
@@ -218,7 +201,7 @@
     "fields": {
       "mode": "模式",
       "displayName": "展示名称",
-      "litellmProvider": "LiteLLM 供应商",
+      "litellmProvider": "LiteLLM 供应商（旧版）",
       "selectedPricingProvider": "选中价格提供方",
       "selectedPricingSourceModel": "选中源模型",
       "selectedPricingResolution": "选中解析方式",
@@ -231,7 +214,12 @@
       "inputCostPerRequest": "按次输入价格",
       "outputCostPerImage": "按图输出价格",
       "inputCostPerSecond": "按秒输入价格",
-      "fileSearchCostPer1kCalls": "每千次文件检索价格"
+      "fileSearchCostPer1kCalls": "每千次文件检索价格",
+      "vendor": "厂商",
+      "slug": "模型标识",
+      "officialPricingProvider": "官方价格提供方",
+      "modelFamily": "模型系列",
+      "knowledgeCutoff": "知识截止"
     }
   },
   "toast": {
@@ -251,6 +239,7 @@
     "pinSuccess": "已将 {provider} 价格固化为本地模型价格",
     "pinFailed": "固化供应商价格失败",
     "pinned": "已固化",
-    "priority": "快速模式价格"
+    "priority": "快速模式价格",
+    "official": "官方"
   }
 }

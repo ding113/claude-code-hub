@@ -33,4 +33,19 @@ describe("provider-patch-contract - codex service tier", () => {
 
     expect(updates.data.codex_service_tier_preference).toBe("priority");
   });
+
+  it("builds apply updates for codex_image_generation_preference", () => {
+    const normalized = normalizeProviderBatchPatchDraft({
+      codex_image_generation_preference: { set: "false" },
+    });
+
+    expect(normalized.ok).toBe(true);
+    if (!normalized.ok) return;
+
+    const updates = buildProviderBatchApplyUpdates(normalized.data);
+    expect(updates.ok).toBe(true);
+    if (!updates.ok) return;
+
+    expect(updates.data.codex_image_generation_preference).toBe("false");
+  });
 });

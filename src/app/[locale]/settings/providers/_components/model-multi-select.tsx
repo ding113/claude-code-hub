@@ -38,7 +38,7 @@ import {
   getAvailableModelCatalog,
 } from "@/lib/api-client/v1/actions/model-prices";
 import { fetchUpstreamModels, getUnmaskedProviderKey } from "@/lib/api-client/v1/actions/providers";
-import { PRICE_FILTER_VENDORS } from "@/lib/model-vendor-icons";
+import { vendorDisplayName } from "@/lib/model-vendor/vendor-inference";
 import { cn } from "@/lib/utils";
 import type { ProviderType } from "@/types/provider";
 
@@ -93,10 +93,16 @@ function buildLocalOption(item: AvailableModelCatalogItem): ModelOption {
 function buildVirtualOption(modelName: string): ModelOption {
   return {
     modelName,
+    vendor: null,
     litellmProvider: null,
     updatedAt: "",
     key: getModelKey(modelName),
   };
+}
+
+/** 分组口径:云端 vendor 优先,旧数据回退 litellm_provider */
+function getModelGroupKey(model: AvailableModelCatalogItem): string | null {
+  return model.vendor ?? model.litellmProvider ?? null;
 }
 
 export function ModelMultiSelect({
@@ -124,42 +130,21 @@ export function ModelMultiSelect({
   const requestIdRef = useRef(0);
 
   const providerOptions = useMemo(() => {
-    const knownProviders = new Map(
-      PRICE_FILTER_VENDORS.map((entry) => [entry.litellmProvider, entry.i18nKey])
-    );
-    const seen = new Set<string>();
-    const options: Array<{ value: string; label: string }> = [];
-
-    for (const entry of PRICE_FILTER_VENDORS) {
-      if (availableModels.some((model) => model.litellmProvider === entry.litellmProvider)) {
-        seen.add(entry.litellmProvider);
-        options.push({
-          value: entry.litellmProvider,
-          label: tPrices(`filters.${entry.i18nKey}`),
-        });
-      }
+    // 按 vendor 聚合,数量多的在前;显示名走 vendorDisplayName 兜底
+    const counts = new Map<string, number>();
+    for (const model of availableModels) {
+      const group = getModelGroupKey(model);
+      if (!group) continue;
+      counts.set(group, (counts.get(group) ?? 0) + 1);
     }
 
-    const unknownProviders = Array.from(
-      new Set(
-        availableModels
-          .map((model) => model.litellmProvider)
-          .filter((provider): provider is string => !!provider && !seen.has(provider))
-      )
-    ).sort((left, right) => left.localeCompare(right));
-
-    for (const provider of unknownProviders) {
-      seen.add(provider);
-      options.push({
-        value: provider,
-        label: knownProviders.has(provider)
-          ? tPrices(`filters.${knownProviders.get(provider)}`)
-          : provider,
-      });
-    }
-
-    return options;
-  }, [availableModels, tPrices]);
+    return Array.from(counts.entries())
+      .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
+      .map(([vendor]) => ({
+        value: vendor,
+        label: vendorDisplayName(vendor),
+      }));
+  }, [availableModels]);
 
   const selectedKeySet = useMemo(
     () => new Set(selectedModels.map((model) => getModelKey(model))),
@@ -199,7 +184,7 @@ export function ModelMultiSelect({
       if (keyword && !model.modelName.toLowerCase().includes(keyword)) {
         return false;
       }
-      if (useProviderFilter && model.litellmProvider !== providerFilter) {
+      if (useProviderFilter && getModelGroupKey(model) !== providerFilter) {
         return false;
       }
       return true;
@@ -249,6 +234,7 @@ export function ModelMultiSelect({
           const upstreamModels = upstreamResult.data.models.map((modelName) =>
             buildLocalOption({
               modelName,
+              vendor: null,
               litellmProvider: null,
               updatedAt: "",
             })
@@ -526,12 +512,12 @@ export function ModelMultiSelect({
                         <Checkbox checked={false} className="mr-2 shrink-0" />
                         <div className="min-w-0 flex-1">
                           <div className="truncate font-mono text-sm">{model.modelName}</div>
-                          {modelSource === "fallback" && model.litellmProvider ? (
+                          {modelSource === "fallback" && getModelGroupKey(model) ? (
                             <div className="mt-1 flex items-center gap-2 text-[11px] text-muted-foreground">
                               <span>
                                 {providerOptions.find(
-                                  (option) => option.value === model.litellmProvider
-                                )?.label ?? model.litellmProvider}
+                                  (option) => option.value === getModelGroupKey(model)
+                                )?.label ?? getModelGroupKey(model)}
                               </span>
                             </div>
                           ) : null}

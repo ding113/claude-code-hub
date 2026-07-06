@@ -230,6 +230,7 @@ function makeProviderDisplay(overrides: Partial<ProviderDisplay> = {}): Provider
     codexReasoningSummaryPreference: null,
     codexTextVerbosityPreference: null,
     codexParallelToolCallsPreference: null,
+    codexImageGenerationPreference: null,
     tpm: null,
     rpm: null,
     rpd: null,

@@ -1,4 +1,4 @@
-import { getModelVendor } from "@/lib/model-vendor-rules";
+import { inferVendorFromModelName, UNKNOWN_VENDOR } from "@/lib/model-vendor/vendor-inference";
 import type { ProviderType } from "@/types/provider";
 
 export const PUBLIC_STATUS_VENDOR_ICON_KEYS = [
@@ -70,39 +70,51 @@ const RAW_PROVIDER_TO_PUBLIC_STATUS_ICON_KEY: Record<string, PublicStatusVendorI
   volcengine: "volcengine",
   xai: "xai",
   zhipuai: "zhipuai",
+  // 云端价格表 vendor slug
+  google: "gemini",
+  "google-vertex": "gemini",
+  alibaba: "qwen",
+  bytedance: "volcengine",
+  moonshotai: "moonshot",
+  tencent: "hunyuan",
+  baidu: "wenxin",
+  iflytek: "spark",
+  "01-ai": "yi",
+  amazon: "bedrock",
+  "amazon-bedrock": "bedrock",
 };
 
+// 云端价格表口径的 vendor slug -> 公开状态页 icon key
 const MODEL_VENDOR_TO_PUBLIC_STATUS_ICON_KEY: Record<string, PublicStatusVendorIconKey> = {
   anthropic: "anthropic",
   azure: "azure",
   baichuan: "baichuan",
   bedrock: "bedrock",
+  amazon: "bedrock",
   cohere: "cohere",
   deepseek: "deepseek",
-  gemma: "gemma",
+  google: "gemini",
   groq: "groq",
-  hunyuan: "hunyuan",
+  tencent: "hunyuan",
   internlm: "internlm",
-  kimi: "kimi",
   meta: "meta",
   minimax: "minimax",
   mistral: "mistral",
-  moonshot: "moonshot",
+  moonshotai: "moonshot",
   nvidia: "nvidia",
   ollama: "ollama",
   openai: "openai",
   openrouter: "openrouter",
   perplexity: "perplexity",
-  qwen: "qwen",
+  alibaba: "qwen",
   sensenova: "sensenova",
-  spark: "spark",
+  iflytek: "spark",
   stepfun: "stepfun",
   together: "together",
-  vertex: "gemini",
-  volcengine: "volcengine",
-  wenxin: "wenxin",
+  bytedance: "volcengine",
+  baidu: "wenxin",
   xai: "xai",
-  yi: "yi",
+  "01-ai": "yi",
   zhipuai: "zhipuai",
 };
 
@@ -144,9 +156,9 @@ export function resolvePublicStatusVendorIconKey(input: {
     return explicitKey;
   }
 
-  const matchedVendor = getModelVendor(input.modelName);
-  if (matchedVendor) {
-    const normalizedKey = MODEL_VENDOR_TO_PUBLIC_STATUS_ICON_KEY[matchedVendor.i18nKey];
+  const inferredVendor = inferVendorFromModelName(input.modelName);
+  if (inferredVendor !== UNKNOWN_VENDOR) {
+    const normalizedKey = MODEL_VENDOR_TO_PUBLIC_STATUS_ICON_KEY[inferredVendor];
     if (normalizedKey) {
       return normalizedKey;
     }

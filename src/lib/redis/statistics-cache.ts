@@ -1,4 +1,5 @@
 import { logger } from "@/lib/logger";
+import { resolveSystemTimezone } from "@/lib/utils/timezone";
 import {
   getKeyStatisticsFromDB,
   getMixedStatisticsFromDB,
@@ -26,6 +27,7 @@ function sleep(ms: number): Promise<void> {
 async function queryDatabase(
   timeRange: TimeRange,
   mode: "users" | "keys" | "mixed",
+  timezone: string,
   userId?: number
 ): Promise<StatisticsCacheData> {
   if ((mode === "keys" || mode === "mixed") && userId === undefined) {
@@ -33,11 +35,11 @@ async function queryDatabase(
   }
   switch (mode) {
     case "users":
-      return await getUserStatisticsFromDB(timeRange);
+      return await getUserStatisticsFromDB(timeRange, timezone);
     case "keys":
-      return await getKeyStatisticsFromDB(userId!, timeRange);
+      return await getKeyStatisticsFromDB(userId!, timeRange, timezone);
     case "mixed":
-      return await getMixedStatisticsFromDB(userId!, timeRange);
+      return await getMixedStatisticsFromDB(userId!, timeRange, timezone);
   }
 }
 
@@ -56,6 +58,7 @@ export async function getStatisticsWithCache(
   userId?: number
 ): Promise<StatisticsCacheData> {
   const redis = getRedisClient();
+  const timezone = await resolveSystemTimezone();
 
   if (!redis) {
     logger.warn("[StatisticsCache] Redis not available, fallback to direct query", {
@@ -63,10 +66,10 @@ export async function getStatisticsWithCache(
       mode,
       userId,
     });
-    return await queryDatabase(timeRange, mode, userId);
+    return await queryDatabase(timeRange, mode, timezone, userId);
   }
 
-  const cacheKey = buildStatisticsCacheKey(timeRange, mode, userId);
+  const cacheKey = buildStatisticsCacheKey(timeRange, mode, userId, timezone);
   const lockKey = `${cacheKey}:lock`;
 
   let locked = false;
@@ -87,7 +90,7 @@ export async function getStatisticsWithCache(
     if (locked) {
       logger.debug("[StatisticsCache] Acquired lock, computing", { timeRange, mode, lockKey });
 
-      data = await queryDatabase(timeRange, mode, userId);
+      data = await queryDatabase(timeRange, mode, timezone, userId);
 
       try {
         await redis.setex(cacheKey, CACHE_TTL, JSON.stringify(data));
@@ -125,14 +128,14 @@ export async function getStatisticsWithCache(
 
     // Retry timeout - fallback to direct DB
     logger.warn("[StatisticsCache] Retry timeout, fallback to direct query", { timeRange, mode });
-    return await queryDatabase(timeRange, mode, userId);
+    return await queryDatabase(timeRange, mode, timezone, userId);
   } catch (error) {
     logger.error("[StatisticsCache] Redis error, fallback to direct query", {
       timeRange,
       mode,
       error,
     });
-    return data ?? (await queryDatabase(timeRange, mode, userId));
+    return data ?? (await queryDatabase(timeRange, mode, timezone, userId));
   } finally {
     if (locked) {
       await redis
@@ -164,22 +167,47 @@ export async function invalidateStatisticsCache(
   try {
     if (timeRange) {
       const modes = ["users", "keys", "mixed"] as const;
-      const keysToDelete = modes.map((m) => buildStatisticsCacheKey(timeRange, m, userId));
-      await redis.del(...keysToDelete);
+      const pattern = `statistics:${timeRange}:*:${scope}:tz:*`;
+      const legacyKeysToDelete = modes.map((m) => `statistics:${timeRange}:${m}:${scope}`);
+      const matchedKeys = await scanPattern(redis, pattern);
+      const keysToDelete = [...matchedKeys, ...legacyKeysToDelete];
+      if (keysToDelete.length > 0) {
+        await redis.del(...keysToDelete);
+      }
       logger.info("[StatisticsCache] Cache invalidated", { timeRange, scope, keysToDelete });
     } else {
-      const pattern = `statistics:*:*:${scope}`;
+      const pattern = `statistics:*:*:${scope}:tz:*`;
+      const legacyPattern = `statistics:*:*:${scope}`;
       const matchedKeys = await scanPattern(redis, pattern);
-      if (matchedKeys.length > 0) {
-        await redis.del(...matchedKeys);
+      const legacyMatchedKeys = await scanPattern(redis, legacyPattern);
+      const keysToDelete = [...new Set([...matchedKeys, ...legacyMatchedKeys])];
+      if (keysToDelete.length > 0) {
+        await redis.del(...keysToDelete);
       }
       logger.info("[StatisticsCache] Cache invalidated (all timeRanges)", {
         scope,
         pattern,
-        deletedCount: matchedKeys.length,
+        deletedCount: keysToDelete.length,
       });
     }
   } catch (error) {
     logger.error("[StatisticsCache] Failed to invalidate cache", { timeRange, scope, error });
+  }
+}
+
+export async function invalidateAllStatisticsCaches(): Promise<void> {
+  const redis = getRedisClient();
+  if (!redis) {
+    return;
+  }
+
+  try {
+    const keys = await scanPattern(redis, "statistics:*");
+    if (keys.length > 0) {
+      await redis.del(...keys);
+    }
+    logger.info("[StatisticsCache] All caches invalidated", { deletedCount: keys.length });
+  } catch (error) {
+    logger.error("[StatisticsCache] Failed to invalidate all caches", { error });
   }
 }

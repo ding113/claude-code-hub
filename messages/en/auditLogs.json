@@ -72,7 +72,7 @@
     },
     "model_price": {
       "bulk_upload": "Bulk upload model prices",
-      "sync_litellm": "Sync LiteLLM model prices",
+      "sync_litellm": "Sync cloud price table",
       "upsert": "Upsert model price",
       "delete": "Delete model price"
     }

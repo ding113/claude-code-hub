@@ -5,7 +5,7 @@
 import type { ReactNode } from "react";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
-import { describe, expect, test, vi } from "vitest";
+import { beforeEach, describe, expect, test, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
 
@@ -37,6 +37,12 @@ const usersActionMocks = vi.hoisted(() => ({
     ok: true,
     data: [] as Array<{ id: number; name: string }>,
   })),
+}));
+
+const lazyFilterOptionMocks = vi.hoisted(() => ({
+  models: [] as string[],
+  endpoints: [] as string[],
+  statusCodes: [] as number[],
 }));
 
 vi.mock("@/actions/usage-logs", () => ({
@@ -132,7 +138,11 @@ vi.mock("@/components/ui/select", () => ({
   Select: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
   SelectTrigger: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
   SelectContent: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
-  SelectItem: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
+  SelectItem: ({ children, value }: { children?: ReactNode; value: string }) => (
+    <div data-select-item="" data-select-value={value}>
+      {children}
+    </div>
+  ),
   SelectValue: () => <span />,
 }));
 
@@ -160,17 +170,17 @@ vi.mock("@/components/ui/command", () => ({
 // Mock lazy filter hooks
 vi.mock("@/app/[locale]/dashboard/logs/_hooks/use-lazy-filter-options", () => ({
   useLazyModels: () => ({
-    data: [],
+    data: lazyFilterOptionMocks.models,
     isLoading: false,
     onOpenChange: vi.fn(),
   }),
   useLazyEndpoints: () => ({
-    data: [],
+    data: lazyFilterOptionMocks.endpoints,
     isLoading: false,
     onOpenChange: vi.fn(),
   }),
   useLazyStatusCodes: () => ({
-    data: [],
+    data: lazyFilterOptionMocks.statusCodes,
     isLoading: false,
     onOpenChange: vi.fn(),
   }),
@@ -197,7 +207,49 @@ function setReactInputValue(input: HTMLInputElement, value: string) {
   input.dispatchEvent(new Event("change", { bubbles: true }));
 }
 
+beforeEach(() => {
+  lazyFilterOptionMocks.models = [];
+  lazyFilterOptionMocks.endpoints = [];
+  lazyFilterOptionMocks.statusCodes = [];
+});
+
 describe("UsageLogsFilters sessionId suggestions", () => {
+  test("should ignore empty model options before rendering Select items", async () => {
+    vi.clearAllMocks();
+    document.body.innerHTML = "";
+    lazyFilterOptionMocks.models = ["", "   ", "claude-sonnet-4-5", "gpt-4o"];
+
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(
+        <UsageLogsFilters
+          isAdmin={false}
+          providers={[]}
+          initialKeys={[]}
+          filters={{}}
+          onChange={() => {}}
+          onReset={() => {}}
+        />
+      );
+    });
+
+    const values = Array.from(container.querySelectorAll("[data-select-value]")).map((el) =>
+      el.getAttribute("data-select-value")
+    );
+    expect(values).toContain("claude-sonnet-4-5");
+    expect(values).toContain("gpt-4o");
+    expect(values).not.toContain("");
+    expect(values).not.toContain("   ");
+
+    await act(async () => {
+      root.unmount();
+    });
+    container.remove();
+  });
+
   test("should debounce and require min length (>=2)", async () => {
     vi.useFakeTimers();
     vi.clearAllMocks();
