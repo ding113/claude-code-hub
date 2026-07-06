@@ -112,6 +112,7 @@ function parseMeUsageLogsQuery(c: Context): MeUsageLogsActionQueryInput | Respon
     statusCode: c.req.query("statusCode"),
     excludeStatusCode200: c.req.query("excludeStatusCode200"),
     endpoint: c.req.query("endpoint"),
+    includeNonBillingEndpoints: c.req.query("includeNonBillingEndpoints"),
     minRetryCount: c.req.query("minRetryCount"),
   });
   if (!query.success) return fromZodError(query.error, new URL(c.req.url).pathname);

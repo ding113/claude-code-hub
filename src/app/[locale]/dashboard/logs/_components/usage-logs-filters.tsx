@@ -43,6 +43,7 @@ const VALID_FILTER_KEYS: (keyof UsageLogFilters)[] = [
   "excludeStatusCode200",
   "model",
   "endpoint",
+  "includeNonBillingEndpoints",
   "minRetryCount",
 ];
 
@@ -132,6 +133,7 @@ export function UsageLogsFilters({
     if (isAdmin && localFilters.providerId !== undefined) count++;
     if (localFilters.model) count++;
     if (localFilters.endpoint) count++;
+    if (localFilters.includeNonBillingEndpoints) count++;
     if (localFilters.sessionId) count++;
     return count;
   }, [
@@ -139,6 +141,7 @@ export function UsageLogsFilters({
     localFilters.providerId,
     localFilters.model,
     localFilters.endpoint,
+    localFilters.includeNonBillingEndpoints,
     localFilters.sessionId,
   ]);
 

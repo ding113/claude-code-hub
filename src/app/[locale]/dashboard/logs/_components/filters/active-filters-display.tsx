@@ -108,6 +108,14 @@ export function ActiveFiltersDisplay({
       });
     }
 
+    if (filters.includeNonBillingEndpoints) {
+      result.push({
+        key: "includeNonBillingEndpoints",
+        label: t("includeNonBillingEndpoints"),
+        value: t("included"),
+      });
+    }
+
     // Status code filter
     if (filters.excludeStatusCode200) {
       result.push({

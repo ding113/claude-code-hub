@@ -106,6 +106,7 @@ vi.mock("./usage-logs-filters", () => ({
             statusCode: 500,
             model: "claude-sonnet",
             endpoint: "/v1/messages",
+            includeNonBillingEndpoints: true,
             minRetryCount: 1,
           })
         }
@@ -121,6 +122,16 @@ vi.mock("./usage-logs-filters", () => ({
         }
       >
         apply exclude 200
+      </button>
+      <button
+        type="button"
+        onClick={() =>
+          onChange({
+            includeNonBillingEndpoints: true,
+          })
+        }
+      >
+        apply include internal
       </button>
       <button type="button" onClick={onReset}>
         reset filters
@@ -185,8 +196,18 @@ describe("UsageLogsViewVirtualized filter navigation", () => {
     clickButton(container, "apply all filters");
 
     expect(routerMocks.pushedHref).toBe(
-      "/zh-CN/dashboard/logs?userId=2&keyId=3&providerId=4&sessionId=session-abc&startTime=1000&endTime=2000&statusCode=500&model=claude-sonnet&endpoint=%2Fv1%2Fmessages&minRetry=1"
+      "/zh-CN/dashboard/logs?userId=2&keyId=3&providerId=4&sessionId=session-abc&startTime=1000&endTime=2000&statusCode=500&model=claude-sonnet&endpoint=%2Fv1%2Fmessages&includeNonBillingEndpoints=true&minRetry=1"
     );
+
+    unmount();
+  });
+
+  it("applies include-internal filter through the locale-aware dashboard route", () => {
+    const { container, unmount } = renderUsageLogsView();
+
+    clickButton(container, "apply include internal");
+
+    expect(routerMocks.pushedHref).toBe("/zh-CN/dashboard/logs?includeNonBillingEndpoints=true");
 
     unmount();
   });

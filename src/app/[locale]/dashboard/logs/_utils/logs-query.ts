@@ -9,6 +9,7 @@ export interface LogsUrlFilters {
   excludeStatusCode200?: boolean;
   model?: string;
   endpoint?: string;
+  includeNonBillingEndpoints?: boolean;
   minRetryCount?: number;
   page?: number;
 }
@@ -54,6 +55,7 @@ export function parseLogsUrlFilters(searchParams: {
     excludeStatusCode200: statusCodeParam === "!200",
     model: parseStringParam(searchParams.model),
     endpoint: parseStringParam(searchParams.endpoint),
+    includeNonBillingEndpoints: firstString(searchParams.includeNonBillingEndpoints) === "true",
     minRetryCount: parseIntParam(searchParams.minRetry),
     page,
   };
@@ -80,6 +82,9 @@ export function buildLogsUrlQuery(filters: LogsUrlFilters): URLSearchParams {
 
   if (filters.model) query.set("model", filters.model);
   if (filters.endpoint) query.set("endpoint", filters.endpoint);
+  if (filters.includeNonBillingEndpoints) {
+    query.set("includeNonBillingEndpoints", "true");
+  }
 
   if (filters.minRetryCount !== undefined) {
     query.set("minRetry", filters.minRetryCount.toString());

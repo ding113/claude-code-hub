@@ -74,6 +74,7 @@ export interface VirtualizedLogsTableFilters {
   excludeStatusCode200?: boolean;
   model?: string;
   endpoint?: string;
+  includeNonBillingEndpoints?: boolean;
   minRetryCount?: number;
 }
 
@@ -973,6 +974,19 @@ export function VirtualizedLogsTable({
           data-slot="logs-provider-subline"
         >
           {renderProviderCell(log)}
+        </div>
+      ) : null}
+      {isNonBillingEndpoint(log.endpoint) ? (
+        <div className="flex min-w-0 items-center gap-1.5 text-[10px] text-muted-foreground">
+          <Badge
+            variant="outline"
+            className="shrink-0 border-amber-200 bg-amber-50 px-1 py-0 text-[10px] text-amber-700 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-300"
+          >
+            {t("logs.table.nonBilling")}
+          </Badge>
+          <span className="truncate font-mono" title={log.endpoint ?? undefined}>
+            {log.endpoint}
+          </span>
         </div>
       ) : null}
     </div>

@@ -21,6 +21,9 @@ export const MeUsageLogsQuerySchema = z.object({
   statusCode: z.coerce.number().int().optional().describe("HTTP status code filter."),
   excludeStatusCode200: BooleanQuerySchema.describe("Exclude successful responses."),
   endpoint: z.string().optional().describe("Endpoint filter."),
+  includeNonBillingEndpoints: BooleanQuerySchema.describe(
+    "Include internal non-billing endpoints such as compact and count_tokens."
+  ),
   minRetryCount: z.coerce.number().int().min(0).optional().describe("Minimum retry count."),
 });
 

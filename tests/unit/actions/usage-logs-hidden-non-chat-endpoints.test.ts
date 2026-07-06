@@ -42,6 +42,7 @@ describe("usage logs hidden non-chat endpoints", () => {
     ]);
     expect(shouldHideUsageLogEndpointsByDefault(undefined)).toBe(true);
     expect(shouldHideUsageLogEndpointsByDefault("")).toBe(true);
+    expect(shouldHideUsageLogEndpointsByDefault(undefined, true)).toBe(false);
   });
 
   it("explicit endpoint filter reveals target raw endpoints and keeps filter options intact", () => {
@@ -97,6 +98,15 @@ describe("usage logs hidden non-chat endpoints", () => {
     expect(explicitSql).toContain("message_request");
     expect(explicitQueries.flatMap((query) => query.params)).toEqual(["/v1/responses/compact"]);
     expect(explicitSql).not.toContain("not in");
+  });
+
+  it("include-non-billing filter disables the default hidden predicate without requiring an exact endpoint", () => {
+    expect(
+      buildDefaultHiddenUsageLogEndpointCondition(usageLedger.endpoint, undefined, true)
+    ).toBeNull();
+
+    const conditions = buildUsageLogConditions({ includeNonBillingEndpoints: true });
+    expect(conditions).toHaveLength(0);
   });
 
   it("key scoped usage log queries still call the shared default hidden predicate", () => {

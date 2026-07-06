@@ -16,6 +16,7 @@ import { escapeLike } from "./_shared/like";
 import { EXCLUDE_WARMUP_CONDITION } from "./_shared/message-request-conditions";
 import {
   buildDefaultHiddenUsageLogEndpointCondition,
+  buildNonBillingUsageLogEndpointCondition,
   buildUsageLogConditions,
   buildUsageLogEndpointMatchCondition,
   RETRY_COUNT_EXPR,
@@ -36,6 +37,7 @@ export interface UsageLogFilters {
   excludeStatusCode200?: boolean;
   model?: string;
   endpoint?: string;
+  includeNonBillingEndpoints?: boolean;
   /** 最低重试次数（按 provider_chain 中“实际请求”数量 - 1 计算；<= 0 视为不筛选） */
   minRetryCount?: number;
   page?: number;
@@ -329,7 +331,8 @@ export async function findUsageLogsBatch(
 
   const hiddenLedgerEndpointCondition = buildDefaultHiddenUsageLogEndpointCondition(
     usageLedger.endpoint,
-    filters.endpoint
+    filters.endpoint,
+    filters.includeNonBillingEndpoints
   );
   if (hiddenLedgerEndpointCondition) {
     ledgerConditions.push(hiddenLedgerEndpointCondition);
@@ -466,6 +469,7 @@ interface UsageLogSlimFilters {
   excludeStatusCode200?: boolean;
   model?: string;
   endpoint?: string;
+  includeNonBillingEndpoints?: boolean;
   /** 最低重试次数（按 provider_chain 中“实际请求”数量 - 1 计算；<= 0 视为不筛选） */
   minRetryCount?: number;
 }
@@ -740,7 +744,8 @@ function buildKeyLedgerConditions(
 
   const hiddenKeyLedgerEndpointCondition = buildDefaultHiddenUsageLogEndpointCondition(
     usageLedger.endpoint,
-    filters.endpoint
+    filters.endpoint,
+    filters.includeNonBillingEndpoints
   );
   if (hiddenKeyLedgerEndpointCondition) {
     conditions.push(hiddenKeyLedgerEndpointCondition);
@@ -1590,8 +1595,6 @@ export async function findUsageLogSessionIdSuggestions(
 export async function findUsageLogsStats(
   filters: Omit<UsageLogFilters, "page" | "pageSize">
 ): Promise<UsageLogSummary> {
-  const { userId, keyId, providerId } = filters;
-
   // 在 ledger-only 模式下，message_request 为空 —— 依赖它的筛选条件必须短路处理。
   const ledgerOnly = await isLedgerOnlyMode();
   const minRetryCount = filters.minRetryCount ?? 0;
@@ -1600,67 +1603,80 @@ export async function findUsageLogsStats(
   }
 
   if (!ledgerOnly && isNonBillingEndpoint(filters.endpoint)) {
-    const conditions = [isNull(messageRequest.deletedAt), EXCLUDE_WARMUP_CONDITION];
-
-    if (userId !== undefined) {
-      conditions.push(eq(messageRequest.userId, userId));
-    }
-
-    if (keyId !== undefined) {
-      conditions.push(eq(keysTable.id, keyId));
-    }
-
-    if (providerId !== undefined) {
-      conditions.push(eq(messageRequest.providerId, providerId));
-    }
-
-    conditions.push(...buildUsageLogConditions(filters));
-
-    const baseQuery = db
-      .select({
-        totalRequests: sql<number>`count(*)::double precision`,
-        totalCost: sql<string>`0`,
-        totalInputTokens: sql<number>`COALESCE(sum(${messageRequest.inputTokens})::double precision, 0::double precision)`,
-        totalOutputTokens: sql<number>`COALESCE(sum(${messageRequest.outputTokens})::double precision, 0::double precision)`,
-        totalReasoningOutputTokens: sql<number>`COALESCE(sum(${messageRequest.reasoningOutputTokens})::double precision, 0::double precision)`,
-        totalCacheCreationTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreationInputTokens})::double precision, 0::double precision)`,
-        totalCacheReadTokens: sql<number>`COALESCE(sum(${messageRequest.cacheReadInputTokens})::double precision, 0::double precision)`,
-        totalCacheCreation5mTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreation5mInputTokens})::double precision, 0::double precision)`,
-        totalCacheCreation1hTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreation1hInputTokens})::double precision, 0::double precision)`,
-      })
-      .from(messageRequest);
-
-    const query =
-      keyId !== undefined
-        ? baseQuery.innerJoin(keysTable, eq(messageRequest.key, keysTable.key))
-        : baseQuery;
-
-    const [summaryResult] = await query.where(and(...conditions));
-
-    const totalRequests = summaryResult?.totalRequests ?? 0;
-    const totalCost = parseFloat(summaryResult?.totalCost ?? "0");
-    // totalCacheCreation5m/1hTokens 是 totalCacheCreationTokens 的细分项，
-    // 不得重复累加，否则 count_tokens / compact 端点的 totalTokens
-    // 会比其他端点多出一份缓存创建 token，造成前端口径错位。
-    const totalTokens =
-      (summaryResult?.totalInputTokens ?? 0) +
-      (summaryResult?.totalOutputTokens ?? 0) +
-      (summaryResult?.totalCacheCreationTokens ?? 0) +
-      (summaryResult?.totalCacheReadTokens ?? 0);
-
-    return {
-      totalRequests,
-      totalCost,
-      totalTokens,
-      totalInputTokens: summaryResult?.totalInputTokens ?? 0,
-      totalOutputTokens: summaryResult?.totalOutputTokens ?? 0,
-      totalReasoningOutputTokens: summaryResult?.totalReasoningOutputTokens ?? 0,
-      totalCacheCreationTokens: summaryResult?.totalCacheCreationTokens ?? 0,
-      totalCacheReadTokens: summaryResult?.totalCacheReadTokens ?? 0,
-      totalCacheCreation5mTokens: summaryResult?.totalCacheCreation5mTokens ?? 0,
-      totalCacheCreation1hTokens: summaryResult?.totalCacheCreation1hTokens ?? 0,
-    };
+    return findMessageRequestUsageLogStats(filters);
   }
+
+  const includeMixedStats =
+    !ledgerOnly && filters.includeNonBillingEndpoints === true && !filters.endpoint?.trim();
+
+  const billableSummary = await findBillableUsageLogStats(filters, ledgerOnly);
+
+  if (!includeMixedStats) {
+    return billableSummary;
+  }
+
+  const nonBillingSummary = await findMessageRequestUsageLogStats(filters, {
+    nonBillingOnly: true,
+  });
+
+  return mergeUsageLogSummaries(billableSummary, nonBillingSummary);
+}
+
+async function findMessageRequestUsageLogStats(
+  filters: Omit<UsageLogFilters, "page" | "pageSize">,
+  options: { nonBillingOnly?: boolean } = {}
+): Promise<UsageLogSummary> {
+  const { userId, keyId, providerId } = filters;
+  const conditions = [isNull(messageRequest.deletedAt), EXCLUDE_WARMUP_CONDITION];
+
+  if (userId !== undefined) {
+    conditions.push(eq(messageRequest.userId, userId));
+  }
+
+  if (keyId !== undefined) {
+    conditions.push(eq(keysTable.id, keyId));
+  }
+
+  if (providerId !== undefined) {
+    conditions.push(eq(messageRequest.providerId, providerId));
+  }
+
+  conditions.push(...buildUsageLogConditions(filters));
+
+  if (options.nonBillingOnly) {
+    conditions.push(buildNonBillingUsageLogEndpointCondition(messageRequest.endpoint));
+  }
+
+  const baseQuery = db
+    .select({
+      totalRequests: sql<number>`count(*)::double precision`,
+      totalCost: sql<string>`0`,
+      totalInputTokens: sql<number>`COALESCE(sum(${messageRequest.inputTokens})::double precision, 0::double precision)`,
+      totalOutputTokens: sql<number>`COALESCE(sum(${messageRequest.outputTokens})::double precision, 0::double precision)`,
+      totalReasoningOutputTokens: sql<number>`COALESCE(sum(${messageRequest.reasoningOutputTokens})::double precision, 0::double precision)`,
+      totalCacheCreationTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreationInputTokens})::double precision, 0::double precision)`,
+      totalCacheReadTokens: sql<number>`COALESCE(sum(${messageRequest.cacheReadInputTokens})::double precision, 0::double precision)`,
+      totalCacheCreation5mTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreation5mInputTokens})::double precision, 0::double precision)`,
+      totalCacheCreation1hTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreation1hInputTokens})::double precision, 0::double precision)`,
+    })
+    .from(messageRequest);
+
+  const query =
+    keyId !== undefined
+      ? baseQuery.innerJoin(keysTable, eq(messageRequest.key, keysTable.key))
+      : baseQuery;
+
+  const [summaryResult] = await query.where(and(...conditions));
+
+  return buildUsageLogSummaryFromAggregates(summaryResult);
+}
+
+async function findBillableUsageLogStats(
+  filters: Omit<UsageLogFilters, "page" | "pageSize">,
+  ledgerOnly: boolean
+): Promise<UsageLogSummary> {
+  const { userId, keyId, providerId } = filters;
+  const minRetryCount = filters.minRetryCount ?? 0;
 
   const conditions = [LEDGER_BILLING_CONDITION];
 
@@ -1701,7 +1717,8 @@ export async function findUsageLogsStats(
 
   const hiddenStatsLedgerEndpointCondition = buildDefaultHiddenUsageLogEndpointCondition(
     usageLedger.endpoint,
-    filters.endpoint
+    filters.endpoint,
+    filters.includeNonBillingEndpoints
   );
   if (hiddenStatsLedgerEndpointCondition) {
     conditions.push(hiddenStatsLedgerEndpointCondition);
@@ -1747,6 +1764,24 @@ export async function findUsageLogsStats(
 
   const [summaryResult] = await query.where(and(...conditions));
 
+  return buildUsageLogSummaryFromAggregates(summaryResult);
+}
+
+function buildUsageLogSummaryFromAggregates(
+  summaryResult:
+    | {
+        totalRequests: number;
+        totalCost: string;
+        totalInputTokens: number;
+        totalOutputTokens: number;
+        totalReasoningOutputTokens: number;
+        totalCacheCreationTokens: number;
+        totalCacheReadTokens: number;
+        totalCacheCreation5mTokens: number;
+        totalCacheCreation1hTokens: number;
+      }
+    | undefined
+): UsageLogSummary {
   const totalRequests = summaryResult?.totalRequests ?? 0;
   const totalCost = parseFloat(summaryResult?.totalCost ?? "0");
   const totalTokens =
@@ -1766,5 +1801,26 @@ export async function findUsageLogsStats(
     totalCacheReadTokens: summaryResult?.totalCacheReadTokens ?? 0,
     totalCacheCreation5mTokens: summaryResult?.totalCacheCreation5mTokens ?? 0,
     totalCacheCreation1hTokens: summaryResult?.totalCacheCreation1hTokens ?? 0,
+  };
+}
+
+function mergeUsageLogSummaries(
+  primary: UsageLogSummary,
+  secondary: UsageLogSummary
+): UsageLogSummary {
+  return {
+    totalRequests: primary.totalRequests + secondary.totalRequests,
+    totalCost: primary.totalCost + secondary.totalCost,
+    totalTokens: primary.totalTokens + secondary.totalTokens,
+    totalInputTokens: primary.totalInputTokens + secondary.totalInputTokens,
+    totalOutputTokens: primary.totalOutputTokens + secondary.totalOutputTokens,
+    totalReasoningOutputTokens:
+      (primary.totalReasoningOutputTokens ?? 0) + (secondary.totalReasoningOutputTokens ?? 0),
+    totalCacheCreationTokens: primary.totalCacheCreationTokens + secondary.totalCacheCreationTokens,
+    totalCacheReadTokens: primary.totalCacheReadTokens + secondary.totalCacheReadTokens,
+    totalCacheCreation5mTokens:
+      primary.totalCacheCreation5mTokens + secondary.totalCacheCreation5mTokens,
+    totalCacheCreation1hTokens:
+      primary.totalCacheCreation1hTokens + secondary.totalCacheCreation1hTokens,
   };
 }

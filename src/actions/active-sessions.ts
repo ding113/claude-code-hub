@@ -932,6 +932,7 @@ export async function getSessionRequests(
       id: number;
       sequence: number;
       model: string | null;
+      endpoint: string | null;
       statusCode: number | null;
       costUsd: string | null;
       createdAt: Date | null;

@@ -17,11 +17,13 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getSessionRequests } from "@/lib/api-client/v1/actions/active-sessions";
 import { cn } from "@/lib/utils";
+import { isNonBillingEndpoint } from "@/lib/utils/performance-formatter";
 
 interface RequestItem {
   id: number;
   sequence: number;
   model: string | null;
+  endpoint: string | null;
   statusCode: number | null;
   costUsd: string | null;
   createdAt: Date | null;
@@ -46,6 +48,7 @@ export function RequestListSidebar({
   className,
 }: RequestListSidebarProps) {
   const t = useTranslations("dashboard.sessions");
+  const tDashboard = useTranslations("dashboard");
   const timeZone = useTimeZone() ?? "UTC";
   const [requests, setRequests] = useState<RequestItem[]>([]);
   const [total, setTotal] = useState(0);
@@ -249,6 +252,23 @@ export function RequestListSidebar({
                     {formatTime(request.createdAt)}
                   </span>
                 </div>
+
+                {isNonBillingEndpoint(request.endpoint) ? (
+                  <div className="mb-1 flex min-w-0 items-center gap-1.5">
+                    <Badge
+                      variant="outline"
+                      className="h-4 shrink-0 border-amber-200 bg-amber-50 px-1 py-0 text-[10px] text-amber-700 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-300"
+                    >
+                      {tDashboard("logs.table.nonBilling")}
+                    </Badge>
+                    <span
+                      className="truncate font-mono text-[10px] text-muted-foreground"
+                      title={request.endpoint ?? undefined}
+                    >
+                      {request.endpoint}
+                    </span>
+                  </div>
+                ) : null}
 
                 <div className="flex justify-between items-center mt-2">
                   <div className="flex items-center gap-1.5">

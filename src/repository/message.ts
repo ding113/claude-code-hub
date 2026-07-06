@@ -1477,6 +1477,7 @@ export async function findRequestsBySessionId(
     id: number;
     sequence: number;
     model: string | null;
+    endpoint: string | null;
     statusCode: number | null;
     costUsd: string | null;
     createdAt: Date | null;
@@ -1502,6 +1503,7 @@ export async function findRequestsBySessionId(
       id: messageRequest.id,
       sequence: messageRequest.requestSequence,
       model: messageRequest.model,
+      endpoint: messageRequest.endpoint,
       statusCode: messageRequest.statusCode,
       costUsd: messageRequest.costUsd,
       createdAt: messageRequest.createdAt,
@@ -1522,6 +1524,7 @@ export async function findRequestsBySessionId(
       id: r.id,
       sequence: r.sequence ?? 1,
       model: r.model,
+      endpoint: r.endpoint,
       statusCode: r.statusCode,
       costUsd: r.costUsd,
       createdAt: r.createdAt,

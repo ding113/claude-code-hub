@@ -17,6 +17,7 @@ export interface UsageLogFilters {
   excludeStatusCode200?: boolean;
   model?: string;
   endpoint?: string;
+  includeNonBillingEndpoints?: boolean;
   minRetryCount?: number;
 }
 

@@ -272,6 +272,7 @@ export interface MyUsageLogsFilters {
   statusCode?: number;
   excludeStatusCode200?: boolean;
   endpoint?: string;
+  includeNonBillingEndpoints?: boolean;
   minRetryCount?: number;
   page?: number;
   pageSize?: number;
@@ -619,6 +620,7 @@ export interface MyUsageLogsBatchFilters {
   statusCode?: number;
   excludeStatusCode200?: boolean;
   endpoint?: string;
+  includeNonBillingEndpoints?: boolean;
   minRetryCount?: number;
   cursor?: { createdAt: string; id: number };
   limit?: number;
@@ -688,6 +690,7 @@ export async function getMyUsageLogs(
       statusCode: filters.statusCode,
       excludeStatusCode200: filters.excludeStatusCode200,
       endpoint: filters.endpoint,
+      includeNonBillingEndpoints: filters.includeNonBillingEndpoints,
       minRetryCount: filters.minRetryCount,
       page,
       pageSize,
@@ -733,6 +736,7 @@ export async function getMyUsageLogsBatch(
       statusCode: filters.statusCode,
       excludeStatusCode200: filters.excludeStatusCode200,
       endpoint: filters.endpoint,
+      includeNonBillingEndpoints: filters.includeNonBillingEndpoints,
       minRetryCount: filters.minRetryCount,
       cursor: filters.cursor,
       limit,
@@ -781,6 +785,7 @@ export async function getMyUsageLogsBatchFull(
       statusCode: params.statusCode,
       excludeStatusCode200: params.excludeStatusCode200,
       endpoint: params.endpoint,
+      includeNonBillingEndpoints: params.includeNonBillingEndpoints,
       minRetryCount: params.minRetryCount,
       cursor: params.cursor,
       startTime: dateRange.startTime,

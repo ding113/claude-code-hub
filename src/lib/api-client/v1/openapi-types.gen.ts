@@ -35341,6 +35341,8 @@ export interface operations {
                 excludeStatusCode200?: "true" | "false" | boolean;
                 /** @description Endpoint filter. */
                 endpoint?: string;
+                /** @description Include internal non-billing endpoints such as compact and count_tokens. */
+                includeNonBillingEndpoints?: "true" | "false" | boolean;
                 /** @description Minimum retry count. */
                 minRetryCount?: number | null;
                 /** @description Start timestamp in milliseconds. */
@@ -35544,6 +35546,8 @@ export interface operations {
                 excludeStatusCode200?: "true" | "false" | boolean;
                 /** @description Endpoint filter. */
                 endpoint?: string;
+                /** @description Include internal non-billing endpoints such as compact and count_tokens. */
+                includeNonBillingEndpoints?: "true" | "false" | boolean;
                 /** @description Minimum retry count. */
                 minRetryCount?: number | null;
                 /** @description Start timestamp in milliseconds. */
@@ -36612,6 +36616,8 @@ export interface operations {
                     excludeStatusCode200?: "true" | "false" | boolean;
                     /** @description Endpoint filter. */
                     endpoint?: string;
+                    /** @description Include internal non-billing endpoints such as compact and count_tokens. */
+                    includeNonBillingEndpoints?: "true" | "false" | boolean;
                     /** @description Minimum retry count. */
                     minRetryCount?: number | null;
                     /** @description Start timestamp in milliseconds. */
@@ -37688,6 +37694,8 @@ export interface operations {
                 excludeStatusCode200?: "true" | "false" | boolean;
                 /** @description Endpoint filter. */
                 endpoint?: string;
+                /** @description Include internal non-billing endpoints such as compact and count_tokens. */
+                includeNonBillingEndpoints?: "true" | "false" | boolean;
                 /** @description Minimum retry count. */
                 minRetryCount?: number | null;
             };
@@ -37889,6 +37897,8 @@ export interface operations {
                 excludeStatusCode200?: "true" | "false" | boolean;
                 /** @description Endpoint filter. */
                 endpoint?: string;
+                /** @description Include internal non-billing endpoints such as compact and count_tokens. */
+                includeNonBillingEndpoints?: "true" | "false" | boolean;
                 /** @description Minimum retry count. */
                 minRetryCount?: number | null;
             };

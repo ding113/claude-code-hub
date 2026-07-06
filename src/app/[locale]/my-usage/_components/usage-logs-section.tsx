@@ -21,6 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import {
   getMyAvailableEndpoints,
   getMyAvailableModels,
@@ -49,6 +50,7 @@ interface Filters {
   statusCode?: number;
   excludeStatusCode200?: boolean;
   endpoint?: string;
+  includeNonBillingEndpoints?: boolean;
   minRetryCount?: number;
 }
 
@@ -114,6 +116,7 @@ export function UsageLogsSection({
       statusCode: appliedFilters.statusCode,
       excludeStatusCode200: appliedFilters.excludeStatusCode200,
       endpoint: appliedFilters.endpoint,
+      includeNonBillingEndpoints: appliedFilters.includeNonBillingEndpoints,
       minRetryCount: appliedFilters.minRetryCount,
     };
   }, [appliedFilters, serverTimeZone]);
@@ -123,6 +126,7 @@ export function UsageLogsSection({
     if (appliedFilters.startDate || appliedFilters.endDate) count++;
     if (appliedFilters.model) count++;
     if (appliedFilters.endpoint) count++;
+    if (appliedFilters.includeNonBillingEndpoints) count++;
     if (appliedFilters.statusCode || appliedFilters.excludeStatusCode200) count++;
     if (appliedFilters.minRetryCount) count++;
     return count;
@@ -268,6 +272,27 @@ export function UsageLogsSection({
                     ))}
                   </SelectContent>
                 </Select>
+              </div>
+              <div className="space-y-1.5 lg:col-span-4">
+                <Label>{tDashboard("logs.filters.includeNonBillingEndpoints")}</Label>
+                <div className="flex items-center justify-between gap-3 rounded-lg border bg-card px-3 py-2.5">
+                  <div className="min-w-0 space-y-0.5">
+                    <p className="text-sm font-medium leading-none">
+                      {tDashboard("logs.filters.includeNonBillingEndpoints")}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {tDashboard("logs.filters.includeNonBillingEndpointsHint")}
+                    </p>
+                  </div>
+                  <Switch
+                    checked={draftFilters.includeNonBillingEndpoints ?? false}
+                    onCheckedChange={(checked) =>
+                      handleFilterChange({
+                        includeNonBillingEndpoints: checked ? true : undefined,
+                      })
+                    }
+                  />
+                </div>
               </div>
               <div className="space-y-1.5 lg:col-span-4">
                 <Label>{t("filters.status")}</Label>

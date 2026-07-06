@@ -13,12 +13,13 @@ describe("logs-query", () => {
       statusCode: 500,
       model: "claude-sonnet",
       endpoint: "/v1/messages",
+      includeNonBillingEndpoints: true,
       minRetryCount: 1,
       page: 3,
     });
 
     expect(query.toString()).toBe(
-      "userId=2&keyId=3&providerId=4&sessionId=session-abc&startTime=1000&endTime=2000&statusCode=500&model=claude-sonnet&endpoint=%2Fv1%2Fmessages&minRetry=1&page=3"
+      "userId=2&keyId=3&providerId=4&sessionId=session-abc&startTime=1000&endTime=2000&statusCode=500&model=claude-sonnet&endpoint=%2Fv1%2Fmessages&includeNonBillingEndpoints=true&minRetry=1&page=3"
     );
   });
 
@@ -43,6 +44,7 @@ describe("logs-query", () => {
         statusCode: "!200",
         model: "claude-sonnet",
         endpoint: "/v1/messages",
+        includeNonBillingEndpoints: "true",
         minRetry: "1",
         page: "3",
       })
@@ -57,6 +59,7 @@ describe("logs-query", () => {
       excludeStatusCode200: true,
       model: "claude-sonnet",
       endpoint: "/v1/messages",
+      includeNonBillingEndpoints: true,
       minRetryCount: 1,
       page: 3,
     });

@@ -29,6 +29,7 @@ vi.mock("@/app/[locale]/dashboard/logs/_components/logs-date-range-picker", () =
 
 vi.mock("@/app/[locale]/dashboard/logs/_components/virtualized-logs-table", () => ({
   VirtualizedLogsTable: (props: {
+    filters?: Record<string, unknown>;
     hiddenColumns?: string[];
     disableDetailDialog?: boolean;
     fetchFn?: unknown;
@@ -37,6 +38,7 @@ vi.mock("@/app/[locale]/dashboard/logs/_components/virtualized-logs-table", () =
   }) => (
     <div
       data-testid="virtualized-logs-table"
+      data-filters={JSON.stringify(props.filters ?? {})}
       data-hidden-columns={JSON.stringify(props.hiddenColumns)}
       data-disable-detail-dialog={String(props.disableDetailDialog)}
       data-query-key-prefix={props.queryKeyPrefix}
@@ -76,11 +78,42 @@ vi.mock("@/components/ui/input", () => ({
   Input: (props: React.ComponentProps<"input">) => <input {...props} />,
 }));
 
+vi.mock("@/components/ui/switch", () => ({
+  Switch: ({
+    checked,
+    onCheckedChange,
+  }: {
+    checked?: boolean;
+    onCheckedChange?: (value: boolean) => void;
+  }) => (
+    <button
+      type="button"
+      data-checked={String(checked)}
+      onClick={() => onCheckedChange?.(!checked)}
+    >
+      toggle
+    </button>
+  ),
+}));
+
 vi.mock("@/components/ui/label", () => ({
   Label: ({ children }: { children?: ReactNode }) => <label>{children}</label>,
 }));
 
 import { UsageLogsSection } from "./usage-logs-section";
+
+function clickButton(container: HTMLElement, text: string) {
+  const button = Array.from(container.querySelectorAll("button")).find(
+    (item) => item.textContent?.trim() === text
+  );
+  if (!button) {
+    throw new Error(`Button not found: ${text}`);
+  }
+
+  act(() => {
+    button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  });
+}
 
 describe("my-usage usage logs section", () => {
   test("renders VirtualizedLogsTable with correct restrictions", async () => {
@@ -115,6 +148,35 @@ describe("my-usage usage logs section", () => {
     expect(table!.getAttribute("data-has-fetch-fn")).toBe("true");
     expect(table!.getAttribute("data-query-key-prefix")).toBe("my-usage-logs-batch");
     expect(table!.getAttribute("data-ip-lookup-mode")).toBe("my-usage");
+
+    await act(async () => {
+      root.unmount();
+    });
+    container.remove();
+  });
+
+  test("applies include-non-billing filter to my-usage logs table", async () => {
+    mocks.getMyAvailableModels.mockResolvedValue({ ok: true, data: [] });
+    mocks.getMyAvailableEndpoints.mockResolvedValue({ ok: true, data: [] });
+    mocks.getMyUsageMetadata.mockResolvedValue({
+      ok: true,
+      data: { currencyCode: "USD", billingModelSource: "original" },
+    });
+
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(<UsageLogsSection defaultOpen />);
+    });
+
+    clickButton(container, "toggle");
+    clickButton(container, "filters.apply");
+
+    const table = container.querySelector('[data-testid="virtualized-logs-table"]');
+    const filters = JSON.parse(table?.getAttribute("data-filters") ?? "{}");
+    expect(filters.includeNonBillingEndpoints).toBe(true);
 
     await act(async () => {
       root.unmount();

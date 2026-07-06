@@ -11,6 +11,7 @@ export interface UsageLogFilterParams {
   excludeStatusCode200?: boolean;
   model?: string;
   endpoint?: string;
+  includeNonBillingEndpoints?: boolean;
   minRetryCount?: number;
 }
 
@@ -29,8 +30,11 @@ function buildNormalizedEndpointSql(column: SQLWrapper): SQL {
   return sql`LOWER(REGEXP_REPLACE(${column}, '/+$', ''))`;
 }
 
-export function shouldHideUsageLogEndpointsByDefault(endpoint: string | null | undefined): boolean {
-  return !endpoint?.trim();
+export function shouldHideUsageLogEndpointsByDefault(
+  endpoint: string | null | undefined,
+  includeNonBillingEndpoints: boolean = false
+): boolean {
+  return !includeNonBillingEndpoints && !endpoint?.trim();
 }
 
 export function buildUsageLogEndpointMatchCondition(
@@ -46,9 +50,10 @@ export function buildUsageLogEndpointMatchCondition(
 
 export function buildDefaultHiddenUsageLogEndpointCondition(
   column: SQLWrapper,
-  explicitEndpoint: string | null | undefined
+  explicitEndpoint: string | null | undefined,
+  includeNonBillingEndpoints: boolean = false
 ): SQL | null {
-  if (!shouldHideUsageLogEndpointsByDefault(explicitEndpoint)) {
+  if (!shouldHideUsageLogEndpointsByDefault(explicitEndpoint, includeNonBillingEndpoints)) {
     return null;
   }
 
@@ -60,6 +65,15 @@ export function buildDefaultHiddenUsageLogEndpointCondition(
         sql`, `
       )}
     )
+  )`;
+}
+
+export function buildNonBillingUsageLogEndpointCondition(column: SQLWrapper): SQL {
+  return sql`${buildNormalizedEndpointSql(column)} IN (
+    ${sql.join(
+      DEFAULT_HIDDEN_USAGE_LOG_ENDPOINTS.map((endpoint) => sql`${endpoint}`),
+      sql`, `
+    )}
   )`;
 }
 
@@ -147,7 +161,8 @@ export function buildUsageLogConditions(filters: UsageLogFilterParams): SQL[] {
 
   const hiddenEndpointCondition = buildDefaultHiddenUsageLogEndpointCondition(
     messageRequest.endpoint,
-    filters.endpoint
+    filters.endpoint,
+    filters.includeNonBillingEndpoints
   );
   if (hiddenEndpointCondition) {
     conditions.push(hiddenEndpointCondition);

@@ -166,6 +166,7 @@ function parseUsageLogsQuery(c: Context): UsageLogsActionQueryInput | Response {
     statusCode: c.req.query("statusCode"),
     excludeStatusCode200: c.req.query("excludeStatusCode200"),
     endpoint: c.req.query("endpoint"),
+    includeNonBillingEndpoints: c.req.query("includeNonBillingEndpoints"),
     minRetryCount: c.req.query("minRetryCount"),
     startTime: c.req.query("startTime"),
     endTime: c.req.query("endTime"),

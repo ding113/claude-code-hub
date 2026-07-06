@@ -45,8 +45,6 @@ export function MetadataTab({
   costMultiplier,
   context1mApplied,
   providerChain,
-  hasMessages,
-  checkingMessages,
 }: MetadataTabProps) {
   const t = useTranslations("dashboard.logs.details");
   const tChain = useTranslations("provider-chain");
@@ -104,20 +102,18 @@ export function MetadataTab({
                   )}
                 </div>
               </div>
-              {hasMessages && !checkingMessages && (
-                <Link
-                  href={
-                    requestSequence
-                      ? `/dashboard/sessions/${sessionId}/messages?seq=${requestSequence}`
-                      : `/dashboard/sessions/${sessionId}/messages`
-                  }
-                >
-                  <Button variant="outline" size="sm">
-                    <ExternalLink className="h-4 w-4 mr-2" />
-                    {t("viewDetails")}
-                  </Button>
-                </Link>
-              )}
+              <Link
+                href={
+                  requestSequence
+                    ? `/dashboard/sessions/${sessionId}/messages?seq=${requestSequence}`
+                    : `/dashboard/sessions/${sessionId}/messages`
+                }
+              >
+                <Button variant="outline" size="sm">
+                  <ExternalLink className="h-4 w-4 mr-2" />
+                  {t("viewDetails")}
+                </Button>
+              </Link>
             </div>
           </div>
         </div>

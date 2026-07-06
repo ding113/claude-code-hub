@@ -22,6 +22,7 @@ interface UsageLogsStatsPanelProps {
     excludeStatusCode200?: boolean;
     model?: string;
     endpoint?: string;
+    includeNonBillingEndpoints?: boolean;
     minRetryCount?: number;
   };
   currencyCode?: CurrencyCode;

@@ -76,8 +76,6 @@ export function SummaryTab({
   clientIp,
   endpoint,
   specialSettings,
-  hasMessages,
-  checkingMessages,
   onViewLogicTrace,
 }: SummaryTabProps) {
   const t = useTranslations("dashboard.logs.details");
@@ -304,20 +302,18 @@ export function SummaryTab({
                     )}
                   </div>
                 </div>
-                {hasMessages && !checkingMessages && (
-                  <Link
-                    href={
-                      requestSequence
-                        ? `/dashboard/sessions/${sessionId}/messages?seq=${requestSequence}`
-                        : `/dashboard/sessions/${sessionId}/messages`
-                    }
-                  >
-                    <Button variant="outline" size="sm">
-                      <ExternalLink className="h-4 w-4 mr-2" />
-                      {t("viewDetails")}
-                    </Button>
-                  </Link>
-                )}
+                <Link
+                  href={
+                    requestSequence
+                      ? `/dashboard/sessions/${sessionId}/messages?seq=${requestSequence}`
+                      : `/dashboard/sessions/${sessionId}/messages`
+                  }
+                >
+                  <Button variant="outline" size="sm">
+                    <ExternalLink className="h-4 w-4 mr-2" />
+                    {t("viewDetails")}
+                  </Button>
+                </Link>
               </div>
             </div>
           </div>
