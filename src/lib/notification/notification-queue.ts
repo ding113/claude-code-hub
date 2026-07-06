@@ -189,8 +189,14 @@ function getNotificationQueue(): Queue.Queue<NotificationJobData> {
     const url = new URL(redisUrl);
     redisQueueOptions.host = url.hostname;
     redisQueueOptions.port = parseInt(url.port || (useTls ? "6379" : "6379"), 10);
-    redisQueueOptions.password = url.password;
-    redisQueueOptions.username = url.username; // 传递用户名
+    // WHATWG URL 不会自动解码 userinfo 中的百分号编码，需显式 decode
+    redisQueueOptions.password = decodeURIComponent(url.password);
+    redisQueueOptions.username = decodeURIComponent(url.username); // 传递用户名
+    // 支持 redis://host:port/15 形式的 DB 选择
+    const dbFromPath = parseInt(url.pathname.slice(1), 10);
+    if (!Number.isNaN(dbFromPath)) {
+      redisQueueOptions.db = dbFromPath;
+    }
 
     if (useTls) {
       const rejectUnauthorized = process.env.REDIS_TLS_REJECT_UNAUTHORIZED !== "false";
