@@ -23,6 +23,7 @@ function sqlToString(sqlObject: unknown): string {
 describe("deleteCloudPricesNotIn", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.resetModules();
   });
 
   it("renders keep model names without tuple ANY syntax", async () => {

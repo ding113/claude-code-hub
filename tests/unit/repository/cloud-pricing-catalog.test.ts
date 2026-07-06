@@ -22,6 +22,7 @@ vi.mock("@/drizzle/db", () => ({
 describe("upsertCloudPricingCatalog", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.resetModules();
   });
 
   it("stores null-prototype provider maps as plain JSON objects", async () => {
