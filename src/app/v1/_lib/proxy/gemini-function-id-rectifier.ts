@@ -17,9 +17,10 @@ export type GeminiFunctionIdRectifierResult = {
  *
  * 注意：与其他整流器一致，这里不依赖错误规则开关，仅做字符串判断。
  */
-// 逐条提取 `unknown name "id" at <path>` 违规中的 path（引号可选，兼容网关改写文案），
-// 在 `:`（Vertex 的 `: Cannot find field.` 尾缀）或换行处截断，避免吞掉下一条违规。
-const ID_VIOLATION_PATTERN = /unknown name "id" at '?([^':\n]*)/g;
+// 逐条提取 `unknown name "id" at <path>` 违规中的 path，引号路径与无引号路径分开捕获
+// （兼容网关改写文案）：引号路径在闭合引号截断，无引号路径在空白/冒号/换行截断，
+// 防止多条违规被合并到一行时跨违规误捕获。
+const ID_VIOLATION_PATTERN = /unknown name "id" at\s+(?:'([^':\n]+)'|([^\s':\n]+))/g;
 
 export function detectGeminiFunctionIdRectifierTrigger(
   errorMessage: string | null | undefined
@@ -32,7 +33,7 @@ export function detectGeminiFunctionIdRectifierTrigger(
   // 防止多违规消息中「id 在无关路径 + 函数字段见于另一条违规」造成串扰误触发。
   // 兼容 snake_case（Vertex 错误文案）与 camelCase（部分兼容网关）两种路径写法。
   for (const match of lower.matchAll(ID_VIOLATION_PATTERN)) {
-    const path = match[1] ?? "";
+    const path = match[1] ?? match[2] ?? "";
     if (
       path.includes("function_call") ||
       path.includes("function_response") ||

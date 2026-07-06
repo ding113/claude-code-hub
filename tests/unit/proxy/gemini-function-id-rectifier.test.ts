@@ -50,6 +50,20 @@ Invalid JSON payload received. Unknown name "foo" at 'contents[0].parts[0].funct
       expect(trigger).toBeNull();
     });
 
+    it("should not cross-match unquoted violations joined on a single line", () => {
+      const trigger = detectGeminiFunctionIdRectifierTrigger(
+        `Unknown name "id" at generation_config Unknown name "foo" at contents[0].parts[0].function_call`
+      );
+      expect(trigger).toBeNull();
+    });
+
+    it("should still detect unquoted function path among joined single-line violations", () => {
+      const trigger = detectGeminiFunctionIdRectifierTrigger(
+        `Unknown name "foo" at generation_config Unknown name "id" at contents[0].parts[0].function_call`
+      );
+      expect(trigger).toBe("unknown_function_id_field");
+    });
+
     it("should return null when unknown field is not id", () => {
       const trigger = detectGeminiFunctionIdRectifierTrigger(
         `Invalid JSON payload received. Unknown name "foo" at 'contents[0].parts[0].function_call': Cannot find field.`
