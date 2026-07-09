@@ -1004,7 +1004,7 @@ export function VirtualizedLogsTable({
                     </div>
 
                     {/* Codex Reasoning Effort */}
-                    <div className="flex-[0.9] min-w-[100px] px-1.5 font-mono text-xs">
+                    <div className="flex-[0.9] min-w-[100px] overflow-hidden px-1.5 font-mono text-xs">
                       <CodexReasoningEffortDisplay specialSettings={log.specialSettings} />
                     </div>
 

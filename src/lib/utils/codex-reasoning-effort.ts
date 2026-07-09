@@ -67,42 +67,38 @@ export function extractCodexReasoningEffortInfo(
   }
 
   const requestedEffort = extractCodexReasoningEffortFromSpecialSettings(specialSettings);
-  let overrideBefore: string | null = null;
-  let overrideAfter: string | null = null;
-  let overrideChanged = false;
+  let hasEffortOverrideAudit = false;
+  let initialOverrideBefore: string | null = null;
+  let finalOverrideAfter: string | null = null;
 
   for (const setting of specialSettings) {
     if (setting.type !== "provider_parameter_override" || setting.providerType !== "codex") {
       continue;
     }
 
-    const effortChange = setting.changes.find((change) => change.path === "reasoning.effort");
+    const effortChange = setting.changes?.find((change) => change.path === "reasoning.effort");
     if (!effortChange) {
       continue;
     }
 
-    overrideBefore = normalizeCodexReasoningEffort(effortChange.before);
-    overrideAfter = normalizeCodexReasoningEffort(effortChange.after);
-    overrideChanged = effortChange.changed;
-    break;
+    // 首次覆写前的值用于兼容没有请求审计的历史记录；最后一次覆写后的值才是
+    // 重试或切换供应商后最终发送给上游的思考强度。
+    if (!hasEffortOverrideAudit) {
+      initialOverrideBefore = normalizeCodexReasoningEffort(effortChange.before);
+    }
+    finalOverrideAfter = normalizeCodexReasoningEffort(effortChange.after);
+    hasEffortOverrideAudit = true;
   }
 
-  if (overrideChanged && overrideAfter) {
-    return {
-      requestedEffort: requestedEffort ?? overrideBefore,
-      effectiveEffort: overrideAfter,
-      isOverridden: true,
-    };
-  }
-
-  const effectiveEffort = requestedEffort ?? overrideAfter ?? overrideBefore;
+  const originalEffort = requestedEffort ?? initialOverrideBefore;
+  const effectiveEffort = finalOverrideAfter ?? originalEffort;
   if (!effectiveEffort) {
     return null;
   }
 
   return {
-    requestedEffort: effectiveEffort,
+    requestedEffort: originalEffort,
     effectiveEffort,
-    isOverridden: false,
+    isOverridden: hasEffortOverrideAudit && originalEffort !== effectiveEffort,
   };
 }

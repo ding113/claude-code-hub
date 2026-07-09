@@ -70,6 +70,93 @@ describe("extractCodexReasoningEffortInfo", () => {
     });
   });
 
+  test("供应商切换后使用最终成功尝试的实际转发值", () => {
+    expect(
+      extractCodexReasoningEffortInfo([
+        { type: "codex_reasoning_effort", scope: "request", hit: true, effort: "low" },
+        {
+          type: "provider_parameter_override",
+          scope: "provider",
+          providerId: 1,
+          providerName: "Failed Codex",
+          providerType: "codex",
+          hit: true,
+          changed: true,
+          changes: [{ path: "reasoning.effort", before: "low", after: "high", changed: true }],
+        },
+        {
+          type: "provider_parameter_override",
+          scope: "provider",
+          providerId: 2,
+          providerName: "Successful Codex",
+          providerType: "codex",
+          hit: true,
+          changed: true,
+          changes: [{ path: "reasoning.effort", before: "high", after: "max", changed: true }],
+        },
+      ])
+    ).toEqual({
+      requestedEffort: "low",
+      effectiveEffort: "max",
+      isOverridden: true,
+    });
+  });
+
+  test("同一供应商重试时保留最初请求值和最终转发值", () => {
+    expect(
+      extractCodexReasoningEffortInfo([
+        { type: "codex_reasoning_effort", scope: "request", hit: true, effort: "low" },
+        {
+          type: "provider_parameter_override",
+          scope: "provider",
+          providerId: 1,
+          providerName: "Codex",
+          providerType: "codex",
+          hit: true,
+          changed: true,
+          changes: [{ path: "reasoning.effort", before: "low", after: "high", changed: true }],
+        },
+        {
+          type: "provider_parameter_override",
+          scope: "provider",
+          providerId: 1,
+          providerName: "Codex",
+          providerType: "codex",
+          hit: true,
+          changed: false,
+          changes: [{ path: "reasoning.effort", before: "high", after: "high", changed: false }],
+        },
+      ])
+    ).toEqual({
+      requestedEffort: "low",
+      effectiveEffort: "high",
+      isOverridden: true,
+    });
+  });
+
+  test("忽略缺少 changes 的异常历史审计", () => {
+    const malformedSetting = {
+      type: "provider_parameter_override",
+      scope: "provider",
+      providerId: 1,
+      providerName: "Codex",
+      providerType: "codex",
+      hit: true,
+      changed: false,
+    } as unknown as SpecialSetting;
+
+    expect(
+      extractCodexReasoningEffortInfo([
+        { type: "codex_reasoning_effort", scope: "request", hit: true, effort: "medium" },
+        malformedSetting,
+      ])
+    ).toEqual({
+      requestedEffort: "medium",
+      effectiveEffort: "medium",
+      isOverridden: false,
+    });
+  });
+
   test("供应商强制设置思考强度时显示实际转发值", () => {
     expect(
       extractCodexReasoningEffortInfo([

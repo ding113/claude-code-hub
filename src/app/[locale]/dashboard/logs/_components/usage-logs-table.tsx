@@ -299,7 +299,7 @@ export function UsageLogsTable({
                         </Tooltip>
                       </TooltipProvider>
                     </TableCell>
-                    <TableCell className="font-mono text-xs w-[120px] max-w-[120px]">
+                    <TableCell className="font-mono text-xs w-[120px] max-w-[120px] overflow-hidden">
                       <CodexReasoningEffortDisplay specialSettings={log.specialSettings} />
                     </TableCell>
                     <TableCell className="text-right font-mono text-xs">

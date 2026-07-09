@@ -500,6 +500,12 @@ describe("error-details-dialog layout", () => {
     expect(html).toContain("Overridden by provider");
     expect(html).toContain("low");
     expect(html).toContain("high");
+
+    const container = document.createElement("div");
+    container.innerHTML = html;
+    expect(container.querySelector("svg.lucide-arrow-right")?.getAttribute("aria-hidden")).toBe(
+      "true"
+    );
   });
 
   test("renders key metrics when cost and duration are present", () => {

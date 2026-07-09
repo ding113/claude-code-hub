@@ -193,7 +193,17 @@ describe("virtualized-logs-table Codex reasoning effort", () => {
           type: "codex_reasoning_effort",
           scope: "request",
           hit: true,
-          effort: "max",
+          effort: "low",
+        },
+        {
+          type: "provider_parameter_override",
+          scope: "provider",
+          providerId: 1,
+          providerName: "Codex",
+          providerType: "codex",
+          hit: true,
+          changed: true,
+          changes: [{ path: "reasoning.effort", before: "low", after: "max", changed: true }],
         },
       ],
     });
@@ -208,9 +218,10 @@ describe("virtualized-logs-table Codex reasoning effort", () => {
     expect(effortIndex).toBeGreaterThan(modelIndex);
     expect(tokensIndex).toBeGreaterThan(effortIndex);
 
-    expect(container.querySelector('[data-slot="codex-reasoning-effort"]')?.textContent).toContain(
-      "max"
-    );
+    const effortDisplay = container.querySelector('[data-slot="codex-reasoning-effort"]');
+    expect(effortDisplay?.textContent).toContain("low");
+    expect(effortDisplay?.textContent).toContain("max");
+    expect(effortDisplay?.closest(".overflow-hidden")).not.toBeNull();
   });
 });
 

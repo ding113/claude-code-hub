@@ -359,7 +359,7 @@ export function SummaryTab({
                   {effortDisplay.isOverridden && effortDisplay.effectiveEffort && (
                     <>
                       {effortDisplay.requestedEffort && (
-                        <ArrowRight className="h-3 w-3 text-muted-foreground" />
+                        <ArrowRight className="h-3 w-3 text-muted-foreground" aria-hidden="true" />
                       )}
                       <ThinkingEffortBadge
                         effort={effortDisplay.effectiveEffort}

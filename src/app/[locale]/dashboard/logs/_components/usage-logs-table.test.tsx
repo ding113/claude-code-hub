@@ -105,7 +105,17 @@ describe("usage-logs-table Codex reasoning effort", () => {
                 type: "codex_reasoning_effort",
                 scope: "request",
                 hit: true,
-                effort: "high",
+                effort: "low",
+              },
+              {
+                type: "provider_parameter_override",
+                scope: "provider",
+                providerId: 1,
+                providerName: "Codex",
+                providerType: "codex",
+                hit: true,
+                changed: true,
+                changes: [{ path: "reasoning.effort", before: "low", after: "max", changed: true }],
               },
             ],
           }),
@@ -129,7 +139,9 @@ describe("usage-logs-table Codex reasoning effort", () => {
 
     const cells = [...container.querySelectorAll("tbody tr:first-child td")];
     expect(cells[6]?.textContent).toContain("gpt-5.4");
-    expect(cells[7]?.textContent).toContain("high");
+    expect(cells[7]?.textContent).toContain("low");
+    expect(cells[7]?.textContent).toContain("max");
+    expect(cells[7]?.className).toContain("overflow-hidden");
   });
 });
 
