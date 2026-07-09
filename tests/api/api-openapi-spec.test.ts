@@ -234,9 +234,9 @@ describe("OpenAPI 规范验证", () => {
     expect(publicStatusOperation?.responses?.["503"]).toBeDefined();
     expect(publicStatusOperation?.parameters).toBeDefined();
 
-    const parameterNames = (publicStatusOperation?.parameters as Array<{ name?: string }>).map(
-      (parameter) => parameter.name
-    );
+    const parameterNames = (
+      (publicStatusOperation?.parameters ?? []) as Array<{ name?: string }>
+    ).map((parameter) => parameter.name);
     expect(parameterNames).toEqual(
       expect.arrayContaining([
         "interval",
