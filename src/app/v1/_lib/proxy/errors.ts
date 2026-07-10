@@ -900,27 +900,31 @@ export function isEmptyResponseError(error: unknown): error is EmptyResponseErro
  * 判断错误类型（异步版本）
  *
  * 分类规则（优先级从高到低）：
- * 1. 客户端主动中断（AbortError 或 error.code === 'ECONNRESET' 且 statusCode === 499）
+ * 1. 上游服务端错误（ProxyError 500-599）
+ *    → 说明请求已到达供应商，但供应商未能正常处理
+ *    → 即使正文命中客户端错误或传输错误特征，也应计入熔断器并触发故障切换
+ *
+ * 2. 客户端主动中断（AbortError 或 CCH 本地合成的 499）
  *    → 客户端关闭连接或主动取消请求
  *    → 不应计入熔断器（不是供应商问题）
  *    → 不应重试（客户端已经不想要结果了）
  *    → 应立即返回错误
  *
- * 2. 不可重试的客户端输入错误（Prompt 超限、内容过滤、PDF 限制、Thinking 参数格式错误、参数缺失、非法请求）
+ * 3. 系统/网络问题（fetch 网络异常）
+ *    → 包括：DNS 解析失败、连接被拒绝、连接超时、网络中断等
+ *    → 不应计入供应商熔断器（不是供应商服务不可用）
+ *    → 应先重试1次当前供应商（可能是临时网络抖动）
+ *
+ * 4. 不可重试的客户端输入错误（Prompt 超限、内容过滤、PDF 限制、Thinking 参数格式错误、参数缺失、非法请求）
  *    → 客户端输入违反了 API 的硬性限制或安全策略
  *    → 不应计入熔断器（不是供应商故障）
  *    → 不应重试（重试也会失败）
  *    → 应立即返回错误，提示用户修正输入
  *
- * 3. 供应商问题（ProxyError - 所有 4xx/5xx HTTP 错误）
+ * 5. 其余供应商问题（ProxyError - 未命中客户端错误规则的 HTTP 错误）
  *    → 说明请求到达供应商并得到响应，但供应商无法正常处理
  *    → 应计入熔断器，连续失败时触发熔断保护
  *    → 应直接切换到其他供应商
- *
- * 4. 系统/网络问题（fetch 网络异常）
- *    → 包括：DNS 解析失败、连接被拒绝、连接超时、网络中断等
- *    → 不应计入供应商熔断器（不是供应商服务不可用）
- *    → 应先重试1次当前供应商（可能是临时网络抖动）
  *
  * 此函数会确保错误规则已加载后再进行检测
  *
@@ -928,38 +932,44 @@ export function isEmptyResponseError(error: unknown): error is EmptyResponseErro
  * @returns 错误分类（CLIENT_ABORT、NON_RETRYABLE_CLIENT_ERROR、PROVIDER_ERROR 或 SYSTEM_ERROR）
  */
 export async function categorizeErrorAsync(error: Error): Promise<ErrorCategory> {
-  // 优先级 1: 客户端中断检测（优先级最高）- 使用统一的精确检测函数
+  // 优先级 1: 上游 5xx 始终表示供应商故障
+  // 必须先于基于 message/cause 的中断与传输错误启发式，避免上游正文误导分类。
+  if (error instanceof ProxyError && error.statusCode >= 500 && error.statusCode < 600) {
+    return ErrorCategory.PROVIDER_ERROR;
+  }
+
+  // 优先级 2: 客户端中断检测 - 使用统一的精确检测函数
   if (isClientAbortError(error)) {
     return ErrorCategory.CLIENT_ABORT; // 客户端主动中断
   }
 
-  // 优先级 1.5: Native transport errors — must not be matched by error rules
+  // 优先级 3: Native transport errors — must not be matched by error rules
   // These are always SYSTEM_ERROR regardless of message content
   if (isTransportError(error)) {
     return ErrorCategory.SYSTEM_ERROR;
   }
 
-  // 优先级 2: 不可重试的客户端输入错误检测（白名单模式）
+  // 优先级 4: 不可重试的客户端输入错误检测（白名单模式）
   // 使用异步版本确保错误规则已加载
   if (await isNonRetryableClientErrorAsync(error)) {
     return ErrorCategory.NON_RETRYABLE_CLIENT_ERROR; // 客户端输入错误
   }
 
-  // 优先级 3: ProxyError = HTTP 错误（4xx 或 5xx）
+  // 优先级 5: 其余 ProxyError = HTTP 客户端错误
   if (error instanceof ProxyError) {
-    // 优先级 3.1: 404 错误特殊处理 - 不计入熔断器，仅触发故障切换
+    // 优先级 5.1: 404 错误特殊处理 - 不计入熔断器，仅触发故障切换
     if (error.statusCode === 404) {
       return ErrorCategory.RESOURCE_NOT_FOUND; // 上游资源不存在
     }
     return ErrorCategory.PROVIDER_ERROR; // 其他 HTTP 错误都是供应商问题
   }
 
-  // 优先级 3.2: 空响应错误 - 计入熔断器 + 触发故障切换
+  // 优先级 5.2: 空响应错误 - 计入熔断器 + 触发故障切换
   if (error instanceof EmptyResponseError) {
     return ErrorCategory.PROVIDER_ERROR; // 空响应视为供应商问题
   }
 
-  // 优先级 4: 其他所有错误都是系统错误
+  // 优先级 6: 其他所有错误都是系统错误
   // 包括：
   // - TypeError: fetch failed (网络层错误)
   // - ENOTFOUND: DNS 解析失败
