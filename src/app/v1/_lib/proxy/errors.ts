@@ -900,9 +900,10 @@ export function isEmptyResponseError(error: unknown): error is EmptyResponseErro
  * 判断错误类型（异步版本）
  *
  * 分类规则（优先级从高到低）：
- * 1. 上游服务端错误（ProxyError 500-599）
+ * 1. 上游服务端错误（真实 HTTP ProxyError 500-599）
  *    → 说明请求已到达供应商，但供应商未能正常处理
  *    → 即使正文命中客户端错误或传输错误特征，也应计入熔断器并触发故障切换
+ *    → 假 200 检测合成的 5xx 不属于真实 HTTP 状态，仍需经过语义错误规则
  *
  * 2. 客户端主动中断（AbortError 或 CCH 本地合成的 499）
  *    → 客户端关闭连接或主动取消请求
@@ -932,9 +933,15 @@ export function isEmptyResponseError(error: unknown): error is EmptyResponseErro
  * @returns 错误分类（CLIENT_ABORT、NON_RETRYABLE_CLIENT_ERROR、PROVIDER_ERROR 或 SYSTEM_ERROR）
  */
 export async function categorizeErrorAsync(error: Error): Promise<ErrorCategory> {
-  // 优先级 1: 上游 5xx 始终表示供应商故障
+  // 优先级 1: 真实上游 HTTP 5xx 始终表示供应商故障
   // 必须先于基于 message/cause 的中断与传输错误启发式，避免上游正文误导分类。
-  if (error instanceof ProxyError && error.statusCode >= 500 && error.statusCode < 600) {
+  // FAKE_200_* 的 5xx 是 CCH 根据 HTTP 200 响应体合成的，不能作为权威传输状态。
+  if (
+    error instanceof ProxyError &&
+    !error.message.startsWith("FAKE_200_") &&
+    error.statusCode >= 500 &&
+    error.statusCode < 600
+  ) {
     return ErrorCategory.PROVIDER_ERROR;
   }
 

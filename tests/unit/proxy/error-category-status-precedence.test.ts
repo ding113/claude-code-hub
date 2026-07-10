@@ -3,6 +3,20 @@ import { describe, expect, it, vi } from "vitest";
 vi.mock("@/repository/error-rules", () => ({
   getActiveErrorRules: vi.fn(async () => [
     {
+      id: 17,
+      pattern: "ValidationException",
+      matchType: "contains",
+      category: "validation_error",
+      description: "AWS/Bedrock validation error (non-retryable)",
+      overrideResponse: null,
+      overrideStatusCode: null,
+      isEnabled: true,
+      isDefault: true,
+      priority: 93,
+      createdAt: new Date(0),
+      updatedAt: new Date(0),
+    },
+    {
       id: 18,
       pattern: "unknown model|model.*not.*found|model.*does.*not.*exist",
       matchType: "regex",
@@ -59,6 +73,20 @@ describe("categorizeErrorAsync - upstream HTTP status precedence", () => {
 
   it("should keep native transport errors as SYSTEM_ERROR", async () => {
     expect(await categorizeErrorAsync(new Error("fetch failed"))).toBe(ErrorCategory.SYSTEM_ERROR);
+  });
+
+  it("should keep fake-200 fallback 502 validation errors non-retryable", async () => {
+    const error = new ProxyError("FAKE_200_JSON_ERROR_MESSAGE_NON_EMPTY", 502, {
+      body: "ValidationException: invalid request payload",
+      providerId: 1,
+      providerName: "test-provider",
+      rawBody: JSON.stringify({
+        error: { message: "ValidationException: invalid request payload" },
+      }),
+      statusCodeInferred: false,
+    });
+
+    expect(await categorizeErrorAsync(error)).toBe(ErrorCategory.NON_RETRYABLE_CLIENT_ERROR);
   });
 
   it("should keep upstream 404 model errors as NON_RETRYABLE_CLIENT_ERROR", async () => {
