@@ -48,6 +48,9 @@ export class ProxyError extends Error {
       rawBody?: string;
       rawBodyTruncated?: boolean;
 
+      /** 该错误是否由 HTTP 200 响应体检测合成，而非真实上游 HTTP 错误。 */
+      isSyntheticFake200?: boolean;
+
       /**
        * 标记该 ProxyError 的 statusCode 是否由“响应体内容”推断得出（而非上游真实 HTTP 状态码）。
        *
@@ -938,7 +941,7 @@ export async function categorizeErrorAsync(error: Error): Promise<ErrorCategory>
   // FAKE_200_* 的 5xx 是 CCH 根据 HTTP 200 响应体合成的，不能作为权威传输状态。
   if (
     error instanceof ProxyError &&
-    !error.message.startsWith("FAKE_200_") &&
+    error.upstreamError?.isSyntheticFake200 !== true &&
     error.statusCode >= 500 &&
     error.statusCode < 600
   ) {

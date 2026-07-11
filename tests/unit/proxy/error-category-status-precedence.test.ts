@@ -36,6 +36,28 @@ vi.mock("@/repository/error-rules", () => ({
 import { ErrorCategory, ProxyError, categorizeErrorAsync } from "@/app/v1/_lib/proxy/errors";
 
 describe("categorizeErrorAsync - upstream HTTP status precedence", () => {
+  it("should treat real upstream 503 messages with fake-200-like prefixes as PROVIDER_ERROR", async () => {
+    const response = new Response(
+      JSON.stringify({
+        error: {
+          code: "model_not_found",
+          message: "FAKE_200_JSON_ERROR_NON_EMPTY: model not found",
+        },
+      }),
+      {
+        status: 503,
+        statusText: "Service Unavailable",
+        headers: { "content-type": "application/json" },
+      }
+    );
+    const error = await ProxyError.fromUpstreamResponse(response, {
+      id: 1,
+      name: "test-provider",
+    });
+
+    expect(await categorizeErrorAsync(error)).toBe(ErrorCategory.PROVIDER_ERROR);
+  });
+
   it("should categorize upstream 503 model errors as PROVIDER_ERROR", async () => {
     const error = new ProxyError("Provider returned 503: model not found", 503, {
       body: JSON.stringify({
@@ -84,6 +106,7 @@ describe("categorizeErrorAsync - upstream HTTP status precedence", () => {
         error: { message: "ValidationException: invalid request payload" },
       }),
       statusCodeInferred: false,
+      isSyntheticFake200: true,
     });
 
     expect(await categorizeErrorAsync(error)).toBe(ErrorCategory.NON_RETRYABLE_CLIENT_ERROR);

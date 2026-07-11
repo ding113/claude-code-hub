@@ -1564,6 +1564,7 @@ export class ProxyForwarder {
                 // 不参与规则匹配/持久化，避免污染数据库或误触发覆写规则。
                 rawBody: inspectedText,
                 rawBodyTruncated: inspectedTruncated,
+                isSyntheticFake200: true,
                 statusCodeInferred: inferredStatusCode !== undefined,
                 statusCodeInferenceMatcherId: inferredStatus?.matcherId,
               });
