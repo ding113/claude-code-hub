@@ -74,6 +74,38 @@ describe("Codex 供应商级参数覆写", () => {
     expect(input).toEqual(snapshot);
   });
 
+  it("当 image_generation 偏好为 inherit 时，不应扫描工具声明", () => {
+    const provider = {
+      providerType: "codex",
+      codexImageGenerationPreference: "inherit",
+    };
+    let toolsReadCount = 0;
+    let inputReadCount = 0;
+    const input: Record<string, unknown> = { model: "gpt-5.5" };
+    Object.defineProperties(input, {
+      tools: {
+        enumerable: true,
+        get: () => {
+          toolsReadCount += 1;
+          return [{ type: "namespace", name: "image_gen" }];
+        },
+      },
+      input: {
+        enumerable: true,
+        get: () => {
+          inputReadCount += 1;
+          return [];
+        },
+      },
+    });
+
+    const output = applyCodexProviderOverrides(provider as any, input);
+
+    expect(output).toBe(input);
+    expect(toolsReadCount).toBe(0);
+    expect(inputReadCount).toBe(0);
+  });
+
   it("当强制 parallel_tool_calls 时，应覆写为对应布尔值", () => {
     const provider = {
       providerType: "codex",

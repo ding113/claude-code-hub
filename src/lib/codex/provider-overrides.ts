@@ -375,12 +375,14 @@ export function applyCodexProviderOverrides(
   const imageGeneration = normalizeImageGenerationPreference(
     provider.codexImageGenerationPreference
   );
-  applyImageGenerationToolPreference(output, ensureCloned, imageGeneration);
-  applyInputImageGenerationToolPreference(output, ensureCloned, imageGeneration);
-  applyImageGenerationToolChoicePreference(output, ensureCloned, imageGeneration, {
-    imageGenerationToolReference: findImageGenerationToolReference(output),
-    hasAvailableTools: hasAvailableTool(output),
-  });
+  if (imageGeneration !== null) {
+    applyImageGenerationToolPreference(output, ensureCloned, imageGeneration);
+    applyInputImageGenerationToolPreference(output, ensureCloned, imageGeneration);
+    applyImageGenerationToolChoicePreference(output, ensureCloned, imageGeneration, {
+      imageGenerationToolReference: findImageGenerationToolReference(output),
+      hasAvailableTools: hasAvailableTool(output),
+    });
+  }
 
   const reasoningEffort = normalizeStringPreference(provider.codexReasoningEffortPreference);
   const reasoningSummary = normalizeStringPreference(provider.codexReasoningSummaryPreference);
