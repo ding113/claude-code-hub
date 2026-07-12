@@ -99,9 +99,10 @@ describe("Codex 供应商级参数覆写", () => {
       },
     });
 
-    const output = applyCodexProviderOverrides(provider as any, input);
+    const result = applyCodexProviderOverridesWithAudit(provider as any, input);
 
-    expect(output).toBe(input);
+    expect(result.request).toBe(input);
+    expect(result.audit).toBeNull();
     expect(toolsReadCount).toBe(0);
     expect(inputReadCount).toBe(0);
   });

@@ -435,9 +435,6 @@ export function applyCodexProviderOverridesWithAudit(
   const serviceTier = normalizeStringPreference(provider.codexServiceTierPreference);
 
   const beforeServiceTier = toAuditValue(request.service_tier);
-  const beforeImageGeneration = hasImageGenerationTool(request.tools);
-  const beforeInputImageGeneration = hasInputImageGenerationTool(request.input);
-
   const hit =
     parallelToolCalls !== null ||
     imageGeneration !== null ||
@@ -451,6 +448,8 @@ export function applyCodexProviderOverridesWithAudit(
     return { request, audit: null };
   }
 
+  const beforeImageGeneration = hasImageGenerationTool(request.tools);
+  const beforeInputImageGeneration = hasInputImageGenerationTool(request.input);
   const beforeParallelToolCalls = toAuditValue(request.parallel_tool_calls);
   const beforeReasoning = isPlainObject(request.reasoning) ? request.reasoning : null;
   const beforeReasoningEffort = toAuditValue(beforeReasoning?.effort);
