@@ -3378,6 +3378,20 @@ function asNonNegativeFiniteNumber(value: unknown): number | undefined {
   return value;
 }
 
+function getNestedOpenAICacheWriteTokens(usage: Record<string, unknown>): number | undefined {
+  if (typeof usage.cache_creation_input_tokens === "number") {
+    return undefined;
+  }
+
+  const inputTokensDetails = usage.input_tokens_details as Record<string, unknown> | undefined;
+  const promptTokensDetails = usage.prompt_tokens_details as Record<string, unknown> | undefined;
+
+  return (
+    asNonNegativeFiniteNumber(inputTokensDetails?.cache_write_tokens) ??
+    asNonNegativeFiniteNumber(promptTokensDetails?.cache_write_tokens)
+  );
+}
+
 export function extractUsageMetrics(value: unknown): UsageMetrics | null {
   if (!value || typeof value !== "object") {
     return null;
@@ -3513,9 +3527,7 @@ export function extractUsageMetrics(value: unknown): UsageMetrics | null {
   }
 
   if (result.cache_creation_input_tokens === undefined) {
-    const cacheWriteTokens =
-      asNonNegativeFiniteNumber(inputTokensDetails?.cache_write_tokens) ??
-      asNonNegativeFiniteNumber(promptTokensDetails?.cache_write_tokens);
+    const cacheWriteTokens = getNestedOpenAICacheWriteTokens(usage);
 
     if (cacheWriteTokens !== undefined) {
       result.cache_creation_input_tokens = cacheWriteTokens;
@@ -3649,7 +3661,7 @@ export function parseUsageFromResponseText(
     }
 
     usageRecord = value as Record<string, unknown>;
-    usageMetrics = adjustUsageForProviderType(extracted, providerType);
+    usageMetrics = adjustUsageForProviderType(extracted, providerType, usageRecord);
 
     logger.debug("[ResponseHandler] Parsed usage from response", {
       source,
@@ -3838,8 +3850,8 @@ export function parseUsageFromResponseText(
     })();
 
     if (mergedClaudeUsage) {
-      usageMetrics = adjustUsageForProviderType(mergedClaudeUsage, providerType);
       usageRecord = mergedClaudeUsage as unknown as Record<string, unknown>;
+      usageMetrics = adjustUsageForProviderType(mergedClaudeUsage, providerType, usageRecord);
       logger.debug("[ResponseHandler] Final merged usage from Claude SSE", {
         providerType,
         usage: usageMetrics,
@@ -3849,8 +3861,8 @@ export function parseUsageFromResponseText(
     // Gemini SSE 处理：使用最后一个有效的 usageMetadata
     // 仅当 Claude SSE 没有提供 usage 且 applyUsageValue 也没有找到时才使用
     if (!usageMetrics && lastGeminiUsage) {
-      usageMetrics = adjustUsageForProviderType(lastGeminiUsage, providerType);
       usageRecord = lastGeminiUsageRecord;
+      usageMetrics = adjustUsageForProviderType(lastGeminiUsage, providerType, usageRecord);
       logger.debug("[ResponseHandler] Final usage from Gemini SSE (last event)", {
         providerType,
         usage: usageMetrics,
@@ -3869,22 +3881,20 @@ const PROVIDERS_WITH_CACHE_SUBSET_USAGE = new Set<string>(["codex", "openai-comp
 
 function adjustUsageForProviderType(
   usage: UsageMetrics,
-  providerType: string | null | undefined
+  providerType: string | null | undefined,
+  rawUsage: Record<string, unknown> | null
 ): UsageMetrics {
   if (!providerType || !PROVIDERS_WITH_CACHE_SUBSET_USAGE.has(providerType)) {
     return usage;
   }
 
   const inputTokens = usage.input_tokens;
-  const hasCachedTokens = typeof usage.cache_read_input_tokens === "number";
-  const hasCacheWriteTokens = typeof usage.cache_creation_input_tokens === "number";
-
-  if (typeof inputTokens !== "number" || (!hasCachedTokens && !hasCacheWriteTokens)) {
+  if (typeof inputTokens !== "number") {
     return usage;
   }
 
-  const cachedTokens = hasCachedTokens ? (usage.cache_read_input_tokens ?? 0) : 0;
-  const cacheWriteTokens = hasCacheWriteTokens ? (usage.cache_creation_input_tokens ?? 0) : 0;
+  const cachedTokens = asNonNegativeFiniteNumber(usage.cache_read_input_tokens) ?? 0;
+  const cacheWriteTokens = rawUsage ? (getNestedOpenAICacheWriteTokens(rawUsage) ?? 0) : 0;
   const adjustedInput = Math.max(inputTokens - cachedTokens - cacheWriteTokens, 0);
   if (adjustedInput === inputTokens) {
     return usage;

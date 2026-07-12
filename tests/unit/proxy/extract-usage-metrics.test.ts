@@ -824,6 +824,88 @@ describe("extractUsageMetrics", () => {
   });
 
   describe("openai-compatible cached_tokens subset normalization", () => {
+    it("should keep top-level cache creation disjoint while subtracting cached input", () => {
+      const response = JSON.stringify({
+        usage: {
+          input_tokens: 1000,
+          cache_creation_input_tokens: 200,
+          input_tokens_details: {
+            cached_tokens: 300,
+            cache_write_tokens: 50,
+          },
+        },
+      });
+
+      const result = parseUsageFromResponseText(response, "openai-compatible");
+
+      expect(result.usageMetrics?.input_tokens).toBe(700);
+      expect(result.usageMetrics?.cache_creation_input_tokens).toBe(200);
+      expect(result.usageMetrics?.cache_read_input_tokens).toBe(300);
+    });
+
+    it("should keep TTL-derived cache creation disjoint", () => {
+      const response = JSON.stringify({
+        usage: {
+          input_tokens: 1000,
+          cache_creation: {
+            ephemeral_5m_input_tokens: 200,
+          },
+          input_tokens_details: {
+            cached_tokens: 300,
+          },
+        },
+      });
+
+      const result = parseUsageFromResponseText(response, "openai-compatible");
+
+      expect(result.usageMetrics?.input_tokens).toBe(700);
+      expect(result.usageMetrics?.cache_creation_input_tokens).toBe(200);
+      expect(result.usageMetrics?.cache_creation_5m_input_tokens).toBe(200);
+      expect(result.usageMetrics?.cache_read_input_tokens).toBe(300);
+    });
+
+    it("should subtract nested cache_write_tokens without cached_tokens", () => {
+      const response = JSON.stringify({
+        usage: {
+          input_tokens: 1000,
+          input_tokens_details: {
+            cache_write_tokens: 200,
+          },
+        },
+      });
+
+      const result = parseUsageFromResponseText(response, "openai-compatible");
+
+      expect(result.usageMetrics?.input_tokens).toBe(800);
+      expect(result.usageMetrics?.cache_creation_input_tokens).toBe(200);
+      expect(result.usageMetrics?.cache_read_input_tokens).toBeUndefined();
+    });
+
+    it("should keep nested cache_write_tokens disjoint for providers outside the allow-list", () => {
+      const response = JSON.stringify({
+        usage: {
+          input_tokens: 1000,
+          input_tokens_details: {
+            cache_write_tokens: 200,
+          },
+        },
+      });
+
+      const result = parseUsageFromResponseText(response, "openai");
+
+      expect(result.usageMetrics?.input_tokens).toBe(1000);
+      expect(result.usageMetrics?.cache_creation_input_tokens).toBe(200);
+    });
+
+    it("should ignore exponent-overflow cache buckets during input normalization", () => {
+      const response =
+        '{"usage":{"input_tokens":1000,"cache_read_input_tokens":1e400,"input_tokens_details":{"cache_write_tokens":1e400}}}';
+
+      const result = parseUsageFromResponseText(response, "openai-compatible");
+
+      expect(result.usageMetrics?.input_tokens).toBe(1000);
+    });
+
     it("should subtract Chat Completions cached_tokens from input_tokens (non-stream)", () => {
       const response = JSON.stringify({
         usage: {
