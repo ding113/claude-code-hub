@@ -3371,12 +3371,35 @@ export class ProxyResponseHandler {
   }
 }
 
+function asNonNegativeFiniteNumber(value: unknown): number | undefined {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+    return undefined;
+  }
+  return value;
+}
+
+function getNestedOpenAICacheWriteTokens(usage: Record<string, unknown>): number | undefined {
+  if (typeof usage.cache_creation_input_tokens === "number") {
+    return undefined;
+  }
+
+  const inputTokensDetails = usage.input_tokens_details as Record<string, unknown> | undefined;
+  const promptTokensDetails = usage.prompt_tokens_details as Record<string, unknown> | undefined;
+
+  return (
+    asNonNegativeFiniteNumber(inputTokensDetails?.cache_write_tokens) ??
+    asNonNegativeFiniteNumber(promptTokensDetails?.cache_write_tokens)
+  );
+}
+
 export function extractUsageMetrics(value: unknown): UsageMetrics | null {
   if (!value || typeof value !== "object") {
     return null;
   }
 
   const usage = value as Record<string, unknown>;
+  const inputTokensDetails = usage.input_tokens_details as Record<string, unknown> | undefined;
+  const promptTokensDetails = usage.prompt_tokens_details as Record<string, unknown> | undefined;
   const result: UsageMetrics = {};
   let hasAny = false;
 
@@ -3503,6 +3526,18 @@ export function extractUsageMetrics(value: unknown): UsageMetrics | null {
     hasAny = true;
   }
 
+  if (result.cache_creation_input_tokens === undefined) {
+    const cacheWriteTokens = getNestedOpenAICacheWriteTokens(usage);
+
+    if (cacheWriteTokens !== undefined) {
+      result.cache_creation_input_tokens = cacheWriteTokens;
+      hasAny = true;
+      logger.debug("[ResponseHandler] Parsed cache write tokens from OpenAI usage details", {
+        cacheWriteTokens,
+      });
+    }
+  }
+
   const cacheCreationDetails = usage.cache_creation as Record<string, unknown> | undefined;
   let cacheCreationDetailedTotal = 0;
 
@@ -3579,7 +3614,6 @@ export function extractUsageMetrics(value: unknown): UsageMetrics | null {
   }
 
   if (result.cache_read_input_tokens === undefined) {
-    const inputTokensDetails = usage.input_tokens_details as Record<string, unknown> | undefined;
     if (inputTokensDetails && typeof inputTokensDetails.cached_tokens === "number") {
       result.cache_read_input_tokens = inputTokensDetails.cached_tokens;
       hasAny = true;
@@ -3590,7 +3624,6 @@ export function extractUsageMetrics(value: unknown): UsageMetrics | null {
   }
 
   if (result.cache_read_input_tokens === undefined) {
-    const promptTokensDetails = usage.prompt_tokens_details as Record<string, unknown> | undefined;
     if (promptTokensDetails && typeof promptTokensDetails.cached_tokens === "number") {
       result.cache_read_input_tokens = promptTokensDetails.cached_tokens;
       hasAny = true;
@@ -3628,7 +3661,7 @@ export function parseUsageFromResponseText(
     }
 
     usageRecord = value as Record<string, unknown>;
-    usageMetrics = adjustUsageForProviderType(extracted, providerType);
+    usageMetrics = adjustUsageForProviderType(extracted, providerType, usageRecord);
 
     logger.debug("[ResponseHandler] Parsed usage from response", {
       source,
@@ -3817,8 +3850,8 @@ export function parseUsageFromResponseText(
     })();
 
     if (mergedClaudeUsage) {
-      usageMetrics = adjustUsageForProviderType(mergedClaudeUsage, providerType);
       usageRecord = mergedClaudeUsage as unknown as Record<string, unknown>;
+      usageMetrics = adjustUsageForProviderType(mergedClaudeUsage, providerType, usageRecord);
       logger.debug("[ResponseHandler] Final merged usage from Claude SSE", {
         providerType,
         usage: usageMetrics,
@@ -3828,8 +3861,8 @@ export function parseUsageFromResponseText(
     // Gemini SSE 处理：使用最后一个有效的 usageMetadata
     // 仅当 Claude SSE 没有提供 usage 且 applyUsageValue 也没有找到时才使用
     if (!usageMetrics && lastGeminiUsage) {
-      usageMetrics = adjustUsageForProviderType(lastGeminiUsage, providerType);
       usageRecord = lastGeminiUsageRecord;
+      usageMetrics = adjustUsageForProviderType(lastGeminiUsage, providerType, usageRecord);
       logger.debug("[ResponseHandler] Final usage from Gemini SSE (last event)", {
         providerType,
         usage: usageMetrics,
@@ -3840,36 +3873,38 @@ export function parseUsageFromResponseText(
   return { usageRecord, usageMetrics };
 }
 
-// Provider types whose upstream APIs report cached tokens as a subset of
-// input_tokens (OpenAI semantics) rather than as a disjoint bucket (Anthropic
-// semantics). For these, subtract cache_read_input_tokens from input_tokens
-// before persistence so internal cost buckets are not double-counted.
+// Provider types whose upstream APIs report cache tokens as subsets of
+// input_tokens (OpenAI semantics) rather than as disjoint buckets (Anthropic
+// semantics). For these, subtract both cache buckets from input_tokens before
+// persistence so internal cost buckets are not double-counted.
 const PROVIDERS_WITH_CACHE_SUBSET_USAGE = new Set<string>(["codex", "openai-compatible"]);
 
 function adjustUsageForProviderType(
   usage: UsageMetrics,
-  providerType: string | null | undefined
+  providerType: string | null | undefined,
+  rawUsage: Record<string, unknown> | null
 ): UsageMetrics {
   if (!providerType || !PROVIDERS_WITH_CACHE_SUBSET_USAGE.has(providerType)) {
     return usage;
   }
 
-  const cachedTokens = usage.cache_read_input_tokens;
   const inputTokens = usage.input_tokens;
-
-  if (typeof cachedTokens !== "number" || typeof inputTokens !== "number") {
+  if (typeof inputTokens !== "number") {
     return usage;
   }
 
-  const adjustedInput = Math.max(inputTokens - cachedTokens, 0);
+  const cachedTokens = asNonNegativeFiniteNumber(usage.cache_read_input_tokens) ?? 0;
+  const cacheWriteTokens = rawUsage ? (getNestedOpenAICacheWriteTokens(rawUsage) ?? 0) : 0;
+  const adjustedInput = Math.max(inputTokens - cachedTokens - cacheWriteTokens, 0);
   if (adjustedInput === inputTokens) {
     return usage;
   }
 
-  logger.debug("[UsageMetrics] Adjusted input tokens to exclude cached tokens", {
+  logger.debug("[UsageMetrics] Adjusted input tokens to exclude cache buckets", {
     providerType,
     originalInputTokens: inputTokens,
     cachedTokens,
+    cacheWriteTokens,
     adjustedInputTokens: adjustedInput,
   });
 
