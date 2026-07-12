@@ -3371,12 +3371,21 @@ export class ProxyResponseHandler {
   }
 }
 
+function asNonNegativeFiniteNumber(value: unknown): number | undefined {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+    return undefined;
+  }
+  return value;
+}
+
 export function extractUsageMetrics(value: unknown): UsageMetrics | null {
   if (!value || typeof value !== "object") {
     return null;
   }
 
   const usage = value as Record<string, unknown>;
+  const inputTokensDetails = usage.input_tokens_details as Record<string, unknown> | undefined;
+  const promptTokensDetails = usage.prompt_tokens_details as Record<string, unknown> | undefined;
   const result: UsageMetrics = {};
   let hasAny = false;
 
@@ -3503,6 +3512,20 @@ export function extractUsageMetrics(value: unknown): UsageMetrics | null {
     hasAny = true;
   }
 
+  if (result.cache_creation_input_tokens === undefined) {
+    const cacheWriteTokens =
+      asNonNegativeFiniteNumber(inputTokensDetails?.cache_write_tokens) ??
+      asNonNegativeFiniteNumber(promptTokensDetails?.cache_write_tokens);
+
+    if (cacheWriteTokens !== undefined) {
+      result.cache_creation_input_tokens = cacheWriteTokens;
+      hasAny = true;
+      logger.debug("[ResponseHandler] Parsed cache write tokens from OpenAI usage details", {
+        cacheWriteTokens,
+      });
+    }
+  }
+
   const cacheCreationDetails = usage.cache_creation as Record<string, unknown> | undefined;
   let cacheCreationDetailedTotal = 0;
 
@@ -3579,7 +3602,6 @@ export function extractUsageMetrics(value: unknown): UsageMetrics | null {
   }
 
   if (result.cache_read_input_tokens === undefined) {
-    const inputTokensDetails = usage.input_tokens_details as Record<string, unknown> | undefined;
     if (inputTokensDetails && typeof inputTokensDetails.cached_tokens === "number") {
       result.cache_read_input_tokens = inputTokensDetails.cached_tokens;
       hasAny = true;
@@ -3590,7 +3612,6 @@ export function extractUsageMetrics(value: unknown): UsageMetrics | null {
   }
 
   if (result.cache_read_input_tokens === undefined) {
-    const promptTokensDetails = usage.prompt_tokens_details as Record<string, unknown> | undefined;
     if (promptTokensDetails && typeof promptTokensDetails.cached_tokens === "number") {
       result.cache_read_input_tokens = promptTokensDetails.cached_tokens;
       hasAny = true;
@@ -3840,10 +3861,10 @@ export function parseUsageFromResponseText(
   return { usageRecord, usageMetrics };
 }
 
-// Provider types whose upstream APIs report cached tokens as a subset of
-// input_tokens (OpenAI semantics) rather than as a disjoint bucket (Anthropic
-// semantics). For these, subtract cache_read_input_tokens from input_tokens
-// before persistence so internal cost buckets are not double-counted.
+// Provider types whose upstream APIs report cache tokens as subsets of
+// input_tokens (OpenAI semantics) rather than as disjoint buckets (Anthropic
+// semantics). For these, subtract both cache buckets from input_tokens before
+// persistence so internal cost buckets are not double-counted.
 const PROVIDERS_WITH_CACHE_SUBSET_USAGE = new Set<string>(["codex", "openai-compatible"]);
 
 function adjustUsageForProviderType(
@@ -3854,22 +3875,26 @@ function adjustUsageForProviderType(
     return usage;
   }
 
-  const cachedTokens = usage.cache_read_input_tokens;
   const inputTokens = usage.input_tokens;
+  const hasCachedTokens = typeof usage.cache_read_input_tokens === "number";
+  const hasCacheWriteTokens = typeof usage.cache_creation_input_tokens === "number";
 
-  if (typeof cachedTokens !== "number" || typeof inputTokens !== "number") {
+  if (typeof inputTokens !== "number" || (!hasCachedTokens && !hasCacheWriteTokens)) {
     return usage;
   }
 
-  const adjustedInput = Math.max(inputTokens - cachedTokens, 0);
+  const cachedTokens = hasCachedTokens ? (usage.cache_read_input_tokens ?? 0) : 0;
+  const cacheWriteTokens = hasCacheWriteTokens ? (usage.cache_creation_input_tokens ?? 0) : 0;
+  const adjustedInput = Math.max(inputTokens - cachedTokens - cacheWriteTokens, 0);
   if (adjustedInput === inputTokens) {
     return usage;
   }
 
-  logger.debug("[UsageMetrics] Adjusted input tokens to exclude cached tokens", {
+  logger.debug("[UsageMetrics] Adjusted input tokens to exclude cache buckets", {
     providerType,
     originalInputTokens: inputTokens,
     cachedTokens,
+    cacheWriteTokens,
     adjustedInputTokens: adjustedInput,
   });
 
