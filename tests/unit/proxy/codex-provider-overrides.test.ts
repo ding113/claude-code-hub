@@ -161,6 +161,101 @@ describe("Codex 供应商级参数覆写", () => {
     });
   });
 
+  it("当强制 image_generation=true 且请求已声明 image_gen namespace 时，不应重复注入图像工具", () => {
+    const provider = {
+      providerType: "codex",
+      codexImageGenerationPreference: "true",
+    };
+
+    const input: Record<string, unknown> = {
+      model: "gpt-5.5",
+      input: [],
+      tools: [
+        {
+          type: "namespace",
+          name: "image_gen",
+          tools: [{ type: "function", name: "imagegen" }],
+        },
+      ],
+    };
+
+    const output = applyCodexProviderOverrides(provider as any, input);
+
+    expect(output).toBe(input);
+    expect(output.tools).toEqual(input.tools);
+  });
+
+  it("当强制 image_generation=true 且 Responses Lite 已声明 image_gen namespace 时，不应重复注入顶层工具", () => {
+    const provider = {
+      providerType: "codex",
+      codexImageGenerationPreference: "true",
+    };
+
+    const input: Record<string, unknown> = {
+      model: "gpt-5.5",
+      input: [
+        {
+          type: "additional_tools",
+          tools: [{ type: "namespace", name: "image_gen" }],
+        },
+      ],
+    };
+
+    const output = applyCodexProviderOverrides(provider as any, input);
+
+    expect(output).toBe(input);
+    expect(output.tools).toBeUndefined();
+  });
+
+  it.each([
+    [
+      "顶层 tools",
+      {
+        tools: [{ type: "namespace", name: "image_gen" }],
+        input: [],
+      },
+    ],
+    [
+      "Responses Lite",
+      {
+        input: [
+          {
+            type: "additional_tools",
+            tools: [{ type: "namespace", name: "image_gen" }],
+          },
+        ],
+      },
+    ],
+  ])("当强制 image_generation=true 且%s已声明 namespace 时，allowed_tools 应使用同形引用", (_, request) => {
+    const provider = {
+      providerType: "codex",
+      codexImageGenerationPreference: "true",
+    };
+    const input: Record<string, unknown> = {
+      model: "gpt-5.5",
+      ...request,
+      tool_choice: {
+        type: "allowed_tools",
+        mode: "auto",
+        tools: [{ type: "function", name: "lookup_weather" }],
+      },
+    };
+
+    const output = applyCodexProviderOverrides(provider as any, input);
+
+    expect(output.tool_choice).toEqual({
+      type: "allowed_tools",
+      mode: "auto",
+      tools: [
+        { type: "function", name: "lookup_weather" },
+        { type: "namespace", name: "image_gen" },
+      ],
+    });
+    expect(output.tools).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ type: "image_generation" })])
+    );
+  });
+
   it("当强制 image_generation=false 时，应从 tools 中移除对应工具", () => {
     const provider = {
       providerType: "codex",
@@ -180,6 +275,166 @@ describe("Codex 供应商级参数覆写", () => {
       { type: "image_generation" },
       { type: "function", name: "lookup_weather" },
     ]);
+  });
+
+  it("当强制 image_generation=false 时，应完整移除 namespace 和 Responses Lite 图片工具声明", () => {
+    const provider = {
+      id: 90,
+      name: "codex-provider",
+      providerType: "codex",
+      codexImageGenerationPreference: "false",
+    };
+
+    const imageNamespace = {
+      type: "namespace",
+      name: "image_gen",
+      tools: [{ type: "function", name: "imagegen" }],
+    };
+    const codeNamespace = {
+      type: "namespace",
+      name: "code_tools",
+      tools: [{ type: "function", name: "run" }],
+    };
+    const input: Record<string, unknown> = {
+      model: "gpt-5.5",
+      tools: [{ type: "function", name: "shell" }, imageNamespace, codeNamespace],
+      input: [
+        { type: "message", role: "user", content: [{ type: "input_text", text: "hello" }] },
+        { type: "additional_tools", tools: [imageNamespace] },
+        { type: "additional_tools", tools: [imageNamespace, codeNamespace] },
+      ],
+      tool_choice: { type: "namespace", name: "image_gen" },
+    };
+    const snapshot = structuredClone(input);
+
+    const result = applyCodexProviderOverridesWithAudit(provider as any, input);
+
+    expect(result.request.tools).toEqual([{ type: "function", name: "shell" }, codeNamespace]);
+    expect(result.request.input).toEqual([
+      { type: "message", role: "user", content: [{ type: "input_text", text: "hello" }] },
+      { type: "additional_tools", tools: [codeNamespace] },
+    ]);
+    expect(result.request.tool_choice).toBe("none");
+    expect(input).toEqual(snapshot);
+
+    expect(
+      result.audit?.changes.find((change) => change.path === "tools.image_generation")
+    ).toEqual({
+      path: "tools.image_generation",
+      before: true,
+      after: false,
+      changed: true,
+    });
+    expect(
+      result.audit?.changes.find(
+        (change) => change.path === "input.additional_tools.image_generation"
+      )
+    ).toEqual({
+      path: "input.additional_tools.image_generation",
+      before: true,
+      after: false,
+      changed: true,
+    });
+  });
+
+  it("当强制 image_generation=false 且只有 Responses Lite 图片工具时，应独立清理并正确审计", () => {
+    const provider = {
+      id: 90,
+      name: "codex-provider",
+      providerType: "codex",
+      codexImageGenerationPreference: "false",
+    };
+    const input: Record<string, unknown> = {
+      model: "gpt-5.5",
+      input: [
+        { type: "message", role: "user", content: [{ type: "input_text", text: "hello" }] },
+        { type: "image_generation_call", id: "ig_123", result: "preserve" },
+        {
+          type: "additional_tools",
+          tools: [{ type: "namespace", name: "image_gen" }],
+        },
+      ],
+      include: ["image_generation_call.results"],
+      tool_choice: "auto",
+    };
+    const snapshot = structuredClone(input);
+
+    const result = applyCodexProviderOverridesWithAudit(provider as any, input);
+
+    expect(result.request.input).toEqual([
+      { type: "message", role: "user", content: [{ type: "input_text", text: "hello" }] },
+      { type: "image_generation_call", id: "ig_123", result: "preserve" },
+    ]);
+    expect(result.request.include).toEqual(["image_generation_call.results"]);
+    expect(result.request.tool_choice).toBeUndefined();
+    expect(input).toEqual(snapshot);
+    expect(
+      result.audit?.changes.find((change) => change.path === "tools.image_generation")
+    ).toEqual({
+      path: "tools.image_generation",
+      before: false,
+      after: false,
+      changed: false,
+    });
+    expect(
+      result.audit?.changes.find(
+        (change) => change.path === "input.additional_tools.image_generation"
+      )
+    ).toEqual({
+      path: "input.additional_tools.image_generation",
+      before: true,
+      after: false,
+      changed: true,
+    });
+  });
+
+  it.each([
+    ["字符串", "image_generation", "image_generation"],
+    ["namespace 字段", { type: "namespace", namespace: "image_gen" }, "namespace:image_gen"],
+    ["嵌套 tool", { tool: { type: "namespace", name: "image_gen" } }, "tool:image_generation"],
+    ["function.name", { function: { name: "image_generation" } }, "function:image_generation"],
+  ])("当强制 image_generation=false 时，应移除%s形式的 tool_choice 并记录审计", (_, toolChoice, auditValue) => {
+    const provider = {
+      providerType: "codex",
+      codexImageGenerationPreference: "false",
+    };
+    const input: Record<string, unknown> = {
+      model: "gpt-5.5",
+      input: [],
+      tool_choice: toolChoice,
+    };
+
+    const result = applyCodexProviderOverridesWithAudit(provider as any, input);
+
+    expect(result.request.tool_choice).toBeUndefined();
+    expect(result.audit?.changes.find((change) => change.path === "tool_choice")).toEqual({
+      path: "tool_choice",
+      before: auditValue,
+      after: null,
+      changed: true,
+    });
+  });
+
+  it("不应把其他 namespace 中名为 imagegen 的普通函数误判为图片工具", () => {
+    const provider = {
+      providerType: "codex",
+      codexImageGenerationPreference: "false",
+    };
+    const input: Record<string, unknown> = {
+      model: "gpt-5.5",
+      input: [],
+      tools: [
+        {
+          type: "namespace",
+          name: "media_tools",
+          tools: [{ type: "function", name: "imagegen" }],
+        },
+      ],
+    };
+
+    const output = applyCodexProviderOverrides(provider as any, input);
+
+    expect(output).toBe(input);
   });
 
   it("当强制 image_generation=false 且 tool_choice 直接指向 image_generation 时，应移除该选择", () => {
@@ -259,6 +514,35 @@ describe("Codex 供应商级参数覆写", () => {
     const output = applyCodexProviderOverrides(provider as any, input);
 
     expect(output.tools).toEqual([{ type: "function", name: "lookup_weather" }]);
+    expect(output.tool_choice).toEqual({
+      type: "allowed_tools",
+      mode: "auto",
+      tools: [{ type: "function", name: "lookup_weather" }],
+    });
+  });
+
+  it("当强制 image_generation=false 且 allowed_tools 包含 image_gen namespace 时，应剔除该项", () => {
+    const provider = {
+      providerType: "codex",
+      codexImageGenerationPreference: "false",
+    };
+
+    const input: Record<string, unknown> = {
+      model: "gpt-5.5",
+      input: [],
+      tools: [{ type: "function", name: "lookup_weather" }],
+      tool_choice: {
+        type: "allowed_tools",
+        mode: "auto",
+        tools: [
+          { type: "namespace", name: "image_gen" },
+          { type: "function", name: "lookup_weather" },
+        ],
+      },
+    };
+
+    const output = applyCodexProviderOverrides(provider as any, input);
+
     expect(output.tool_choice).toEqual({
       type: "allowed_tools",
       mode: "auto",
