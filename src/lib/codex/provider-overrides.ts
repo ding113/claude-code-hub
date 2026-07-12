@@ -51,12 +51,87 @@ function normalizeImageGenerationPreference(
   return value === "true";
 }
 
-function isImageGenerationTool(value: unknown): value is Record<string, unknown> {
-  return isPlainObject(value) && value.type === "image_generation";
+function toImageGenerationToolReference(value: unknown): Record<string, unknown> | null {
+  if (!isPlainObject(value)) {
+    return null;
+  }
+  if (value.type === "image_generation") {
+    return { type: "image_generation" };
+  }
+  if (value.type === "namespace") {
+    if (value.name === "image_gen") {
+      return { type: "namespace", name: "image_gen" };
+    }
+    if (value.namespace === "image_gen") {
+      return { type: "namespace", namespace: "image_gen" };
+    }
+  }
+  return null;
+}
+
+function isImageGenerationTool(value: unknown): boolean {
+  return toImageGenerationToolReference(value) !== null;
 }
 
 function hasImageGenerationTool(value: unknown): boolean {
   return Array.isArray(value) && value.some((tool) => isImageGenerationTool(tool));
+}
+
+function hasInputImageGenerationTool(value: unknown): boolean {
+  return (
+    Array.isArray(value) &&
+    value.some(
+      (item) =>
+        isPlainObject(item) &&
+        item.type === "additional_tools" &&
+        hasImageGenerationTool(item.tools)
+    )
+  );
+}
+
+function findImageGenerationToolReference(
+  request: Record<string, unknown>
+): Record<string, unknown> | null {
+  if (Array.isArray(request.tools)) {
+    for (const tool of request.tools) {
+      const reference = toImageGenerationToolReference(tool);
+      if (reference) {
+        return reference;
+      }
+    }
+  }
+
+  if (!Array.isArray(request.input)) {
+    return null;
+  }
+  for (const item of request.input) {
+    if (!isPlainObject(item) || item.type !== "additional_tools" || !Array.isArray(item.tools)) {
+      continue;
+    }
+    for (const tool of item.tools) {
+      const reference = toImageGenerationToolReference(tool);
+      if (reference) {
+        return reference;
+      }
+    }
+  }
+  return null;
+}
+
+function hasAvailableTool(request: Record<string, unknown>): boolean {
+  if (Array.isArray(request.tools) && request.tools.length > 0) {
+    return true;
+  }
+  return (
+    Array.isArray(request.input) &&
+    request.input.some(
+      (item) =>
+        isPlainObject(item) &&
+        item.type === "additional_tools" &&
+        Array.isArray(item.tools) &&
+        item.tools.length > 0
+    )
+  );
 }
 
 function applyImageGenerationToolPreference(
@@ -70,7 +145,10 @@ function applyImageGenerationToolPreference(
 
   const existingTools = Array.isArray(request.tools) ? request.tools : null;
   if (enabled) {
-    if (existingTools?.some((tool) => isImageGenerationTool(tool))) {
+    if (
+      existingTools?.some((tool) => isImageGenerationTool(tool)) ||
+      hasInputImageGenerationTool(request.input)
+    ) {
       return;
     }
     const target = ensureCloned();
@@ -97,15 +175,74 @@ function applyImageGenerationToolPreference(
   }
 }
 
+function applyInputImageGenerationToolPreference(
+  request: Record<string, unknown>,
+  ensureCloned: () => Record<string, unknown>,
+  enabled: boolean | null
+): void {
+  if (enabled !== false || !Array.isArray(request.input)) {
+    return;
+  }
+
+  const nextInput: unknown[] = [];
+  let changed = false;
+  for (const item of request.input) {
+    if (!isPlainObject(item) || item.type !== "additional_tools" || !Array.isArray(item.tools)) {
+      nextInput.push(item);
+      continue;
+    }
+
+    const nextTools = item.tools.filter((tool) => !isImageGenerationTool(tool));
+    if (nextTools.length === item.tools.length) {
+      nextInput.push(item);
+      continue;
+    }
+
+    changed = true;
+    if (nextTools.length > 0) {
+      nextInput.push({ ...item, tools: nextTools });
+    }
+  }
+
+  if (changed) {
+    ensureCloned().input = nextInput;
+  }
+}
+
+function isImageGenerationToolChoice(value: unknown): boolean {
+  if (typeof value === "string") {
+    return value === "image_generation";
+  }
+  if (!isPlainObject(value)) {
+    return false;
+  }
+  if (isImageGenerationTool(value)) {
+    return true;
+  }
+  return isImageGenerationTool(value.tool);
+}
+
 function summarizeImageGenerationToolChoice(value: unknown): string | null {
   if (typeof value === "string") {
     return value;
   }
-  if (!isPlainObject(value) || typeof value.type !== "string") {
+  if (!isPlainObject(value)) {
+    return null;
+  }
+  if (isImageGenerationTool(value.tool)) {
+    return "tool:image_generation";
+  }
+  if (typeof value.type !== "string") {
     return null;
   }
   if (value.type === "image_generation") {
     return "image_generation";
+  }
+  if (
+    value.type === "namespace" &&
+    (value.name === "image_gen" || value.namespace === "image_gen")
+  ) {
+    return "namespace:image_gen";
   }
   if (value.type !== "allowed_tools") {
     return value.type;
@@ -127,7 +264,7 @@ function applyImageGenerationToolChoicePreference(
   ensureCloned: () => Record<string, unknown>,
   enabled: boolean | null,
   context: {
-    hadImageGenerationTool: boolean;
+    imageGenerationToolReference: Record<string, unknown> | null;
     hasAvailableTools: boolean;
   }
 ): void {
@@ -146,7 +283,10 @@ function applyImageGenerationToolChoicePreference(
     const target = ensureCloned();
     target.tool_choice = {
       ...toolChoice,
-      tools: [...toolChoice.tools, { type: "image_generation" }],
+      tools: [
+        ...toolChoice.tools,
+        context.imageGenerationToolReference ?? { type: "image_generation" },
+      ],
     };
     return;
   }
@@ -163,18 +303,18 @@ function applyImageGenerationToolChoicePreference(
     return;
   }
 
-  if (!isPlainObject(toolChoice)) {
-    return;
-  }
-
-  if (toolChoice.type === "image_generation") {
+  if (isImageGenerationToolChoice(toolChoice)) {
     const target = ensureCloned();
     // 只剩非图像工具时改成 none，避免回退到 auto 后放宽客户端原本的工具限制。
     target.tool_choice = "none";
     return;
   }
 
-  if (toolChoice.type !== "allowed_tools" || !Array.isArray(toolChoice.tools)) {
+  if (
+    !isPlainObject(toolChoice) ||
+    toolChoice.type !== "allowed_tools" ||
+    !Array.isArray(toolChoice.tools)
+  ) {
     return;
   }
 
@@ -200,7 +340,7 @@ function applyImageGenerationToolChoicePreference(
  * - 偏好值为 null/undefined/"inherit" 表示“遵循客户端”
  * - 覆写仅影响以下字段：
  *   - parallel_tool_calls
- *   - tools / tool_choice 中与 image_generation 相关的能力声明
+ *   - tools / input.additional_tools / tool_choice 中与 image_generation 相关的能力声明
  *   - reasoning.effort / reasoning.summary
  *   - service_tier
  *   - text.verbosity
@@ -231,12 +371,14 @@ export function applyCodexProviderOverrides(
   const imageGeneration = normalizeImageGenerationPreference(
     provider.codexImageGenerationPreference
   );
-  const hadImageGenerationTool = hasImageGenerationTool(output.tools);
-  applyImageGenerationToolPreference(output, ensureCloned, imageGeneration);
-  applyImageGenerationToolChoicePreference(output, ensureCloned, imageGeneration, {
-    hadImageGenerationTool,
-    hasAvailableTools: Array.isArray(output.tools) && output.tools.length > 0,
-  });
+  if (imageGeneration !== null) {
+    applyImageGenerationToolPreference(output, ensureCloned, imageGeneration);
+    applyInputImageGenerationToolPreference(output, ensureCloned, imageGeneration);
+    applyImageGenerationToolChoicePreference(output, ensureCloned, imageGeneration, {
+      imageGenerationToolReference: findImageGenerationToolReference(output),
+      hasAvailableTools: hasAvailableTool(output),
+    });
+  }
 
   const reasoningEffort = normalizeStringPreference(provider.codexReasoningEffortPreference);
   const reasoningSummary = normalizeStringPreference(provider.codexReasoningSummaryPreference);
@@ -289,8 +431,6 @@ export function applyCodexProviderOverridesWithAudit(
   const serviceTier = normalizeStringPreference(provider.codexServiceTierPreference);
 
   const beforeServiceTier = toAuditValue(request.service_tier);
-  const beforeImageGeneration = hasImageGenerationTool(request.tools);
-
   const hit =
     parallelToolCalls !== null ||
     imageGeneration !== null ||
@@ -304,6 +444,8 @@ export function applyCodexProviderOverridesWithAudit(
     return { request, audit: null };
   }
 
+  const beforeImageGeneration = hasImageGenerationTool(request.tools);
+  const beforeInputImageGeneration = hasInputImageGenerationTool(request.input);
   const beforeParallelToolCalls = toAuditValue(request.parallel_tool_calls);
   const beforeReasoning = isPlainObject(request.reasoning) ? request.reasoning : null;
   const beforeReasoningEffort = toAuditValue(beforeReasoning?.effort);
@@ -318,6 +460,7 @@ export function applyCodexProviderOverridesWithAudit(
 
   const afterParallelToolCalls = toAuditValue(nextRequest.parallel_tool_calls);
   const afterImageGeneration = hasImageGenerationTool(nextRequest.tools);
+  const afterInputImageGeneration = hasInputImageGenerationTool(nextRequest.input);
   const afterReasoning = isPlainObject(nextRequest.reasoning) ? nextRequest.reasoning : null;
   const afterReasoningEffort = toAuditValue(afterReasoning?.effort);
   const afterReasoningSummary = toAuditValue(afterReasoning?.summary);
@@ -337,6 +480,12 @@ export function applyCodexProviderOverridesWithAudit(
       before: beforeImageGeneration,
       after: afterImageGeneration,
       changed: !Object.is(beforeImageGeneration, afterImageGeneration),
+    },
+    {
+      path: "input.additional_tools.image_generation",
+      before: beforeInputImageGeneration,
+      after: afterInputImageGeneration,
+      changed: !Object.is(beforeInputImageGeneration, afterInputImageGeneration),
     },
     {
       path: "reasoning.effort",
