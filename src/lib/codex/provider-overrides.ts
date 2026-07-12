@@ -58,8 +58,13 @@ function toImageGenerationToolReference(value: unknown): Record<string, unknown>
   if (value.type === "image_generation") {
     return { type: "image_generation" };
   }
-  if (value.type === "namespace" && value.name === "image_gen") {
-    return { type: "namespace", name: "image_gen" };
+  if (value.type === "namespace") {
+    if (value.name === "image_gen") {
+      return { type: "namespace", name: "image_gen" };
+    }
+    if (value.namespace === "image_gen") {
+      return { type: "namespace", namespace: "image_gen" };
+    }
   }
   return null;
 }
@@ -214,13 +219,7 @@ function isImageGenerationToolChoice(value: unknown): boolean {
   if (isImageGenerationTool(value)) {
     return true;
   }
-  if (value.type === "namespace" && value.namespace === "image_gen") {
-    return true;
-  }
-  if (isImageGenerationToolChoice(value.tool)) {
-    return true;
-  }
-  return isPlainObject(value.function) && value.function.name === "image_generation";
+  return isImageGenerationTool(value.tool);
 }
 
 function summarizeImageGenerationToolChoice(value: unknown): string | null {
@@ -230,11 +229,8 @@ function summarizeImageGenerationToolChoice(value: unknown): string | null {
   if (!isPlainObject(value)) {
     return null;
   }
-  if (isImageGenerationToolChoice(value.tool)) {
+  if (isImageGenerationTool(value.tool)) {
     return "tool:image_generation";
-  }
-  if (isPlainObject(value.function) && value.function.name === "image_generation") {
-    return "function:image_generation";
   }
   if (typeof value.type !== "string") {
     return null;

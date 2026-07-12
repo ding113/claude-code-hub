@@ -425,7 +425,6 @@ describe("Codex 供应商级参数覆写", () => {
     ["字符串", "image_generation", "image_generation"],
     ["namespace 字段", { type: "namespace", namespace: "image_gen" }, "namespace:image_gen"],
     ["嵌套 tool", { tool: { type: "namespace", name: "image_gen" } }, "tool:image_generation"],
-    ["function.name", { function: { name: "image_generation" } }, "function:image_generation"],
   ])("当强制 image_generation=false 时，应移除%s形式的 tool_choice 并记录审计", (_, toolChoice, auditValue) => {
     const provider = {
       providerType: "codex",
@@ -446,6 +445,60 @@ describe("Codex 供应商级参数覆写", () => {
       after: null,
       changed: true,
     });
+  });
+
+  it("不应把名为 image_generation 的普通函数选择误判为内置图片工具", () => {
+    const provider = {
+      providerType: "codex",
+      codexImageGenerationPreference: "false",
+    };
+    const input: Record<string, unknown> = {
+      model: "gpt-5.5",
+      input: [],
+      tools: [
+        {
+          type: "function",
+          name: "image_generation",
+          parameters: { type: "object", properties: {} },
+        },
+      ],
+      tool_choice: {
+        type: "function",
+        function: { name: "image_generation" },
+      },
+    };
+
+    const result = applyCodexProviderOverridesWithAudit(provider as any, input);
+
+    expect(result.request).toBe(input);
+    expect(result.request.tool_choice).toEqual(input.tool_choice);
+    expect(result.audit?.changes.find((change) => change.path === "tool_choice")).toEqual({
+      path: "tool_choice",
+      before: "function",
+      after: "function",
+      changed: false,
+    });
+  });
+
+  it("不应递归解析多层嵌套的 tool_choice.tool", () => {
+    const provider = {
+      providerType: "codex",
+      codexImageGenerationPreference: "false",
+    };
+    const nestedToolChoice: Record<string, unknown> = {
+      tool: { tool: { type: "image_generation" } },
+    };
+    const input: Record<string, unknown> = {
+      model: "gpt-5.5",
+      input: [],
+      tools: [{ type: "function", name: "lookup_weather" }],
+      tool_choice: nestedToolChoice,
+    };
+
+    const output = applyCodexProviderOverrides(provider as any, input);
+
+    expect(output).toBe(input);
+    expect(output.tool_choice).toBe(nestedToolChoice);
   });
 
   it("不应把其他 namespace 中名为 imagegen 的普通函数误判为图片工具", () => {
@@ -569,6 +622,35 @@ describe("Codex 供应商级参数覆写", () => {
         mode: "auto",
         tools: [
           { type: "namespace", name: "image_gen" },
+          { type: "function", name: "lookup_weather" },
+        ],
+      },
+    };
+
+    const output = applyCodexProviderOverrides(provider as any, input);
+
+    expect(output.tool_choice).toEqual({
+      type: "allowed_tools",
+      mode: "auto",
+      tools: [{ type: "function", name: "lookup_weather" }],
+    });
+  });
+
+  it("当 allowed_tools 使用 namespace 字段声明 image_gen 时，也应剔除该项", () => {
+    const provider = {
+      providerType: "codex",
+      codexImageGenerationPreference: "false",
+    };
+
+    const input: Record<string, unknown> = {
+      model: "gpt-5.5",
+      input: [],
+      tools: [{ type: "function", name: "lookup_weather" }],
+      tool_choice: {
+        type: "allowed_tools",
+        mode: "auto",
+        tools: [
+          { type: "namespace", namespace: "image_gen" },
           { type: "function", name: "lookup_weather" },
         ],
       },
