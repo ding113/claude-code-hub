@@ -39,7 +39,7 @@ export const EnvSchema = z.object({
   }, z.string().url("数据库URL格式无效")),
   // PostgreSQL 连接池配置（postgres.js）
   // - 多副本部署（k8s）需要结合数据库 max_connections 分摊配置
-  // - 这些值为“每个应用进程”的连接池上限
+  // - DB_POOL_MAX 是每个应用进程内 data/control/writer 三类 pool 的连接总预算
   DB_POOL_MAX: optionalNumber(
     z.number().int().min(1, "DB_POOL_MAX 不能小于 1").max(200, "DB_POOL_MAX 不能大于 200")
   ),
@@ -57,6 +57,22 @@ export const EnvSchema = z.object({
       .min(1, "DB_POOL_CONNECT_TIMEOUT 不能小于 1")
       .max(120, "DB_POOL_CONNECT_TIMEOUT 不能大于 120")
   ),
+  // 活动语句超时（毫秒），必须早于流式结算的 120 秒应用层 deadline
+  DB_STATEMENT_TIMEOUT_MS: optionalNumber(
+    z
+      .number()
+      .int()
+      .min(1000, "DB_STATEMENT_TIMEOUT_MS 不能小于 1000")
+      .max(119000, "DB_STATEMENT_TIMEOUT_MS 不能大于 119000")
+  ).default(90_000),
+  // 等待数据库锁的最长时间（毫秒）
+  DB_LOCK_TIMEOUT_MS: optionalNumber(
+    z
+      .number()
+      .int()
+      .min(100, "DB_LOCK_TIMEOUT_MS 不能小于 100")
+      .max(60000, "DB_LOCK_TIMEOUT_MS 不能大于 60000")
+  ).default(5_000),
   // message_request 写入模式
   // - sync：同步写入（兼容旧行为，但高并发下会增加请求尾部阻塞）
   // - async：异步批量写入（默认，降低 DB 写放大与连接占用）
@@ -108,6 +124,13 @@ export const EnvSchema = z.object({
   PORT: z.coerce.number().default(23000),
   REDIS_URL: z.string().optional(),
   REDIS_TLS_REJECT_UNAUTHORIZED: z.string().default("true").transform(booleanTransform),
+  REDIS_COMMAND_TIMEOUT_MS: optionalNumber(
+    z
+      .number()
+      .int()
+      .min(100, "REDIS_COMMAND_TIMEOUT_MS 不能小于 100")
+      .max(120000, "REDIS_COMMAND_TIMEOUT_MS 不能大于 120000")
+  ).default(10_000),
   ENABLE_RATE_LIMIT: z.string().default("true").transform(booleanTransform),
   ENABLE_SECURE_COOKIES: z.string().default("true").transform(booleanTransform),
   ENABLE_LEGACY_ACTIONS_API: z.string().default("true").transform(booleanTransform),

@@ -308,6 +308,52 @@ describe("ProxyForwarder - retry limit enforcement", () => {
     vi.clearAllMocks();
   });
 
+  test("local DB admission overload should not retry or penalize Provider and endpoint circuits", async () => {
+    const session = createSession();
+    const provider = createProvider({
+      providerType: "claude",
+      providerVendorId: 123,
+      maxRetryAttempts: 3,
+    });
+    session.setProvider(provider);
+    mocks.getPreferredProviderEndpoints.mockResolvedValue([
+      makeEndpoint({
+        id: 1,
+        vendorId: 123,
+        providerType: "claude",
+        url: "https://ep1.example.com",
+      }),
+    ]);
+
+    vi.mocked(categorizeErrorAsync).mockResolvedValue(5 as ErrorCategory);
+    const admissionCause = Object.assign(new Error("Database pool data is full"), {
+      name: "DbPoolAdmissionError",
+      code: "DB_POOL_ADMISSION_EXCEEDED",
+      pool: "data",
+      maxOutstanding: 32,
+    });
+    const wrappedError = new Error("Failed query", { cause: admissionCause });
+    const doForward = vi.spyOn(
+      ProxyForwarder as unknown as { doForward: (...args: unknown[]) => unknown },
+      "doForward"
+    );
+    doForward.mockRejectedValue(wrappedError);
+
+    await expect(ProxyForwarder.send(session)).rejects.toBeDefined();
+
+    expect(doForward).toHaveBeenCalledTimes(1);
+    expect(mocks.recordEndpointFailure).not.toHaveBeenCalled();
+    expect(mocks.recordFailure).not.toHaveBeenCalled();
+    expect(session.getProviderChain()).toEqual([
+      expect.objectContaining({
+        id: provider.id,
+        endpointId: 1,
+        reason: "system_error",
+        attemptNumber: 1,
+      }),
+    ]);
+  });
+
   test("endpoints > maxRetry: should only use top N lowest-latency endpoints", async () => {
     vi.useFakeTimers();
 

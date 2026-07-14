@@ -8,6 +8,7 @@ import {
   handleOpenAICompatibleModels,
 } from "@/app/v1/_lib/models/available-models";
 import { handleProxyRequest } from "@/app/v1/_lib/proxy-handler";
+import { withDataDbScope } from "@/drizzle/db";
 import { logger } from "@/lib/logger";
 import { sensitiveWordDetector } from "@/lib/sensitive-word-detector";
 import { SessionTracker } from "@/lib/session-tracker";
@@ -58,10 +59,14 @@ app.all("*", handleProxyRequest);
 
 export { app as v1App };
 
-export const GET = handle(app);
-export const POST = handle(app);
-export const PUT = handle(app);
-export const DELETE = handle(app);
-export const PATCH = handle(app);
-export const OPTIONS = handle(app);
-export const HEAD = handle(app);
+const routeHandler = withDataDbScope(handle(app));
+
+export {
+  routeHandler as GET,
+  routeHandler as POST,
+  routeHandler as PUT,
+  routeHandler as DELETE,
+  routeHandler as PATCH,
+  routeHandler as OPTIONS,
+  routeHandler as HEAD,
+};
