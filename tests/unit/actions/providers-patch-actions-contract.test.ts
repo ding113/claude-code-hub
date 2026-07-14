@@ -5,7 +5,19 @@ import { buildRedisMock, createRedisStore } from "./redis-mock-utils";
 const getSessionMock = vi.fn();
 const findAllProvidersFreshMock = vi.fn();
 const updateProvidersBatchMock = vi.fn();
+const findProviderBatchApplyOperationMock = vi.fn();
+const applyProviderBatchOperationIfUnchangedMock = vi.fn();
+const consumeProviderBatchUndoMock = vi.fn();
 const { store: redisStore, mocks: redisMocks } = createRedisStore();
+const applyLedger = new Map<
+  string,
+  {
+    previewToken: string;
+    payloadFingerprint: string;
+    result: Record<string, unknown>;
+    undoAvailable: boolean;
+  }
+>();
 
 vi.mock("@/lib/auth", () => ({
   getSession: getSessionMock,
@@ -14,6 +26,9 @@ vi.mock("@/lib/auth", () => ({
 vi.mock("@/repository/provider", () => ({
   findAllProvidersFresh: findAllProvidersFreshMock,
   updateProvidersBatch: updateProvidersBatchMock,
+  findProviderBatchApplyOperation: findProviderBatchApplyOperationMock,
+  applyProviderBatchOperationIfUnchanged: applyProviderBatchOperationIfUnchangedMock,
+  consumeProviderBatchUndo: consumeProviderBatchUndoMock,
   deleteProvidersBatch: vi.fn(),
 }));
 
@@ -101,14 +116,78 @@ function makeProvider(id: number, overrides: Record<string, unknown> = {}) {
   };
 }
 
+function installApplyLedgerMocks() {
+  findProviderBatchApplyOperationMock.mockImplementation(
+    async ({ claimKey, previewToken, payloadFingerprint }) => {
+      const existing = applyLedger.get(claimKey);
+      if (existing) {
+        return existing.payloadFingerprint === payloadFingerprint
+          ? { status: "replay", result: existing.result, undoAvailable: existing.undoAvailable }
+          : { status: "idempotency_conflict" };
+      }
+      if ([...applyLedger.values()].some((entry) => entry.previewToken === previewToken)) {
+        return { status: "preview_consumed" };
+      }
+      return { status: "not_found" };
+    }
+  );
+  applyProviderBatchOperationIfUnchangedMock.mockImplementation(async (input) => {
+    const lookup = await findProviderBatchApplyOperationMock(input);
+    if (lookup.status !== "not_found") return lookup;
+    const expectedById = new Map(input.expectedPreimages.map((entry) => [entry.providerId, entry]));
+    const updatedCount = new Set(input.groups.flatMap((group) => group.ids)).size;
+    const appliedAt = new Date();
+    const result = {
+      applyResult: {
+        operationId: input.operationId,
+        appliedAt: appliedAt.toISOString(),
+        updatedCount,
+        undoToken: input.undoToken,
+        undoExpiresAt: new Date(appliedAt.getTime() + input.undoTtlSeconds * 1000).toISOString(),
+      },
+      previewProviderIds: input.expectedPreimages.map((entry) => entry.providerId),
+      effectiveProviderIds: input.effectiveProviderIds,
+      preimages: input.effectiveProviderIds.map((providerId) => {
+        const expected = expectedById.get(providerId);
+        return {
+          providerId,
+          providerType: expected.providerType,
+          isEnabled: expected.values.isEnabled,
+          values: input.undoPreimage[providerId],
+        };
+      }),
+      undoRestorable: input.undoRestorable,
+      postCommitEffects: input.postCommitEffects,
+    };
+    applyLedger.set(input.claimKey, {
+      previewToken: input.previewToken,
+      payloadFingerprint: input.payloadFingerprint,
+      result,
+      undoAvailable: true,
+    });
+    return { status: "applied", result, undoAvailable: true };
+  });
+}
+
 describe("Provider Batch Patch Action Contracts", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.resetModules();
     redisStore.clear();
+    applyLedger.clear();
     getSessionMock.mockResolvedValue({ user: { id: 1, role: "admin" } });
     findAllProvidersFreshMock.mockResolvedValue([]);
     updateProvidersBatchMock.mockResolvedValue(0);
+    installApplyLedgerMocks();
+    consumeProviderBatchUndoMock.mockImplementation(async ({ undoToken, operationId }) => {
+      const entry = [...applyLedger.values()].find(
+        (candidate) => candidate.result.applyResult.undoToken === undoToken
+      );
+      if (!entry || !entry.undoAvailable) return { status: "expired" };
+      if (entry.result.applyResult.operationId !== operationId) return { status: "conflict" };
+      entry.undoAvailable = false;
+      return { status: "consumed" };
+    });
   });
 
   it("previewProviderBatchPatch should require admin role", async () => {
@@ -200,6 +279,7 @@ describe("Provider Batch Patch Action Contracts", () => {
   });
 
   it("applyProviderBatchPatch should return idempotent result for same idempotency key", async () => {
+    findAllProvidersFreshMock.mockResolvedValue([makeProvider(1), makeProvider(2)]);
     const { previewProviderBatchPatch, applyProviderBatchPatch } = await import(
       "@/actions/providers"
     );
@@ -233,6 +313,7 @@ describe("Provider Batch Patch Action Contracts", () => {
   });
 
   it("undoProviderPatch should reject mismatched operation id", async () => {
+    findAllProvidersFreshMock.mockResolvedValue([makeProvider(10)]);
     const { previewProviderBatchPatch, applyProviderBatchPatch, undoProviderPatch } = await import(
       "@/actions/providers"
     );
@@ -293,6 +374,14 @@ describe("Provider Batch Patch Action Contracts", () => {
       undoToken: apply.data.undoToken,
       operationId: apply.data.operationId,
     });
+    redisMocks.setex.mockClear();
+    const replay = await applyProviderBatchPatch({
+      previewToken: preview.data.previewToken,
+      previewRevision: preview.data.previewRevision,
+      providerIds: [12, 13],
+      patch: { group_tag: { set: "rollback" } },
+      idempotencyKey: "undo-consume",
+    });
     const secondUndo = await undoProviderPatch({
       undoToken: apply.data.undoToken,
       operationId: apply.data.operationId,
@@ -302,6 +391,9 @@ describe("Provider Batch Patch Action Contracts", () => {
     if (firstUndo.ok) {
       expect(firstUndo.data.revertedCount).toBe(2);
     }
+    expect(replay.ok).toBe(true);
+    expect(redisMocks.setex).not.toHaveBeenCalled();
+    expect(redisStore.has(`cch:prov:undo-patch:${apply.data.undoToken}`)).toBe(false);
 
     expect(secondUndo.ok).toBe(false);
     if (secondUndo.ok) return;

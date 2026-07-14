@@ -1,0 +1,15 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "incremental": false,
+    "types": ["node", "vitest/globals"]
+  },
+  "include": [
+    "../next-env.d.ts",
+    "../src/**/*.d.ts",
+    "../src/**/*.ts",
+    "integration/provider-batch-ledger-postgres.test.ts",
+    "configs/provider-batch-ledger-postgres.config.ts"
+  ],
+  "exclude": ["../node_modules", "../.next", "../dist", "../build"]
+}
