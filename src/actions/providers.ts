@@ -81,6 +81,7 @@ import {
   updateProvider,
   updateProviderPrioritiesBatch,
   updateProvidersBatch,
+  releaseProviderBatchUndo,
 } from "@/repository/provider";
 import {
   backfillProviderEndpointsFromProviders,
@@ -2537,9 +2538,18 @@ export async function undoProviderPatch(
     }
 
     let revertedCount = 0;
-    for (const { ids, updates } of preimageGroups.values()) {
-      const count = await updateProvidersBatch(ids, updates);
-      revertedCount += count;
+    try {
+      for (const { ids, updates } of preimageGroups.values()) {
+        const count = await updateProvidersBatch(ids, updates);
+        revertedCount += count;
+      }
+    } catch (error) {
+      await releaseProviderBatchUndo({
+        undoToken: parsed.data.undoToken,
+        operationId: parsed.data.operationId,
+        releasedAt: new Date(),
+      });
+      throw error;
     }
 
     if (preimageGroups.size > 0) {

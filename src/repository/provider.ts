@@ -1506,6 +1506,7 @@ function resolveProviderBatchApplyOperation(
         status: "replay",
         result: claimOperation.result,
         undoAvailable:
+          claimOperation.result.undoRestorable &&
           claimOperation.undoConsumedAt === null &&
           claimOperation.undoExpiresAt !== null &&
           claimOperation.undoExpiresAt > now,
@@ -1843,6 +1844,26 @@ export async function consumeProviderBatchUndo(input: {
     return { status: "conflict" };
   }
   return { status: "expired" };
+}
+
+export async function releaseProviderBatchUndo(input: {
+  undoToken: string;
+  operationId: string;
+  releasedAt: Date;
+}): Promise<boolean> {
+  const released = await db
+    .update(providerBatchApplyOperations)
+    .set({ undoConsumedAt: null, updatedAt: input.releasedAt })
+    .where(
+      and(
+        eq(providerBatchApplyOperations.undoToken, input.undoToken),
+        eq(providerBatchApplyOperations.operationId, input.operationId),
+        eq(providerBatchApplyOperations.status, "applied"),
+        gt(providerBatchApplyOperations.undoExpiresAt, input.releasedAt)
+      )
+    )
+    .returning({ claimKey: providerBatchApplyOperations.claimKey });
+  return released.length === 1;
 }
 
 export async function updateProviderBatchGroupsIfUnchanged(
