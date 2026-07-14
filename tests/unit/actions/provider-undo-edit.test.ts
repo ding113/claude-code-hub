@@ -6,6 +6,7 @@ const getSessionMock = vi.fn();
 const findProviderByIdMock = vi.fn();
 const updateProviderMock = vi.fn();
 const updateProvidersBatchMock = vi.fn();
+const undoProviderBatchOperationMock = vi.fn();
 const publishCacheInvalidationMock = vi.fn();
 const clearProviderStateMock = vi.fn();
 const clearConfigCacheMock = vi.fn();
@@ -22,6 +23,7 @@ vi.mock("@/repository/provider", () => ({
   findAllProvidersFresh: vi.fn(),
   updateProvider: updateProviderMock,
   updateProvidersBatch: updateProvidersBatchMock,
+  undoProviderBatchOperation: undoProviderBatchOperationMock,
   deleteProvidersBatch: vi.fn(),
 }));
 

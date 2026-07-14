@@ -1443,7 +1443,26 @@ function isProviderBatchPreimageValueEqual(current: unknown, expected: unknown):
     typeof current === "object" &&
     typeof expected === "object"
   ) {
-    return JSON.stringify(current) === JSON.stringify(expected);
+    if (Array.isArray(current) || Array.isArray(expected)) {
+      return (
+        Array.isArray(current) &&
+        Array.isArray(expected) &&
+        current.length === expected.length &&
+        current.every((value, index) => isProviderBatchPreimageValueEqual(value, expected[index]))
+      );
+    }
+    const currentRecord = current as Record<string, unknown>;
+    const expectedRecord = expected as Record<string, unknown>;
+    const currentKeys = Object.keys(currentRecord);
+    const expectedKeys = Object.keys(expectedRecord);
+    return (
+      currentKeys.length === expectedKeys.length &&
+      currentKeys.every(
+        (key) =>
+          Object.prototype.hasOwnProperty.call(expectedRecord, key) &&
+          isProviderBatchPreimageValueEqual(currentRecord[key], expectedRecord[key])
+      )
+    );
   }
   return false;
 }
@@ -1568,9 +1587,6 @@ export async function findProviderBatchApplyOperation(
   input: FindProviderBatchApplyOperationInput
 ): Promise<ProviderBatchApplyOperationLookupResult> {
   const now = new Date();
-  await db
-    .delete(providerBatchApplyOperations)
-    .where(lt(providerBatchApplyOperations.expiresAt, now));
   const rows = await db
     .select()
     .from(providerBatchApplyOperations)

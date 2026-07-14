@@ -80,7 +80,7 @@ import {
   undoProviderBatchOperation,
   updateProvider,
   updateProviderPrioritiesBatch,
-  type updateProvidersBatch,
+  updateProvidersBatch,
 } from "@/repository/provider";
 import {
   backfillProviderEndpointsFromProviders,
@@ -962,6 +962,7 @@ export async function editProvider(
       preimage: {
         [providerId]: preimageFields,
       },
+      durable: false,
     });
 
     emitActionAudit({
@@ -1433,6 +1434,7 @@ interface ProviderPatchUndoSnapshot {
   operationId: string;
   providerIds: number[];
   preimage: Record<number, Record<string, unknown>>;
+  durable?: boolean;
 }
 
 interface ProviderDeleteUndoSnapshot {
@@ -2066,6 +2068,7 @@ async function restoreProviderPatchUndoSnapshot(
       operationId: operation.applyResult.operationId,
       providerIds,
       preimage,
+      durable: true,
     },
     remainingTtlSeconds
   );
@@ -2512,12 +2515,23 @@ export async function undoProviderPatch(
       }
     }
 
-    const undoResult = await undoProviderBatchOperation({
-      undoToken: parsed.data.undoToken,
-      operationId: parsed.data.operationId,
-      groups: [...preimageGroups.values()],
-      revertedAt: new Date(nowMs),
-    });
+    const undoResult = snapshot.durable
+      ? await undoProviderBatchOperation({
+          undoToken: parsed.data.undoToken,
+          operationId: parsed.data.operationId,
+          groups: [...preimageGroups.values()],
+          revertedAt: new Date(nowMs),
+        })
+      : {
+          status: "reverted" as const,
+          revertedCount: await (async () => {
+            let count = 0;
+            for (const { ids, updates } of preimageGroups.values()) {
+              count += await updateProvidersBatch(ids, updates);
+            }
+            return count;
+          })(),
+        };
     if (undoResult.status === "conflict") {
       return {
         ok: false,
