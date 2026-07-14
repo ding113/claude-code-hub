@@ -1,4 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type {
+  DurableMessageRequestUpdateOptions,
+  MessageRequestUpdatePatch,
+} from "@/repository/message-write-buffer";
 
 const mockDbInsertValues = vi.hoisted(() => vi.fn());
 const mockDbInsertReturning = vi.hoisted(() => vi.fn());
@@ -289,9 +293,9 @@ describe("repository/message public status rollup hook", () => {
 
   it("publishes the public-status rollup when a timed-out durable waiter commits later", async () => {
     mockGetEnvConfig.mockReturnValue({ MESSAGE_REQUEST_WRITE_MODE: "async" });
-    let onCommitted: (() => void) | undefined;
+    let onCommitted: DurableMessageRequestUpdateOptions["onCommitted"];
     mockEnqueueMessageRequestUpdateDurably.mockImplementationOnce(
-      (_id, _details, options: { onCommitted?: () => void } | undefined) => {
+      (_id, _details, options: DurableMessageRequestUpdateOptions | undefined) => {
         onCommitted = options?.onCommitted;
         return Promise.reject(new Error("durable acknowledgement timed out"));
       }
@@ -336,21 +340,22 @@ describe("repository/message public status rollup hook", () => {
       original_model: "gpt-4.1",
     });
 
-    await expect(
-      updateMessageRequestDetailsDurably(810, {
-        durationMs: 1_500,
-        statusCode: 200,
-        outputTokens: 10,
-        providerChain: [{ id: 1, name: "provider-a", groupTag: "openai" }],
-        model: "gpt-4.1",
-      })
-    ).rejects.toThrow("durable acknowledgement timed out");
+    const terminalPatch = {
+      durationMs: 1_500,
+      statusCode: 200,
+      outputTokens: 10,
+      providerChain: [{ id: 1, name: "provider-a", groupTag: "openai" }],
+      model: "gpt-4.1",
+    } satisfies Readonly<MessageRequestUpdatePatch>;
+    await expect(updateMessageRequestDetailsDurably(810, terminalPatch)).rejects.toThrow(
+      "durable acknowledgement timed out"
+    );
     await flushMicrotasks();
 
     expect(onCommitted).toBeTypeOf("function");
     expect(mockQueuePublicStatusRollupWrite).not.toHaveBeenCalled();
 
-    onCommitted?.();
+    await onCommitted?.(terminalPatch);
     await flushMicrotasks();
 
     expect(mockQueuePublicStatusRollupWrite).toHaveBeenCalledTimes(1);

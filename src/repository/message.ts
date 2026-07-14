@@ -19,9 +19,9 @@ import { EXCLUDE_WARMUP_CONDITION } from "./_shared/message-request-conditions";
 import { toMessageRequest } from "./_shared/transformers";
 import {
   type DurableMessageRequestUpdateOptions,
-  type MessageRequestUpdatePatch,
   enqueueMessageRequestUpdate,
   enqueueMessageRequestUpdateDurably,
+  type MessageRequestUpdatePatch,
 } from "./message-write-buffer";
 
 type PublicStatusRequestSeed = {
