@@ -1,7 +1,7 @@
 "use server";
 
 import { and, asc, desc, eq, gt, inArray, isNull, lt, sql } from "drizzle-orm";
-import { db } from "@/drizzle/db";
+import { db, getMessageWriterDb } from "@/drizzle/db";
 import { keys as keysTable, messageRequest, providers, usageLedger, users } from "@/drizzle/schema";
 import { getEnvConfig } from "@/lib/config/env.schema";
 import { isLedgerOnlyMode } from "@/lib/ledger-fallback";
@@ -17,7 +17,12 @@ import type { SpecialSetting } from "@/types/special-settings";
 import { LEDGER_BILLING_CONDITION } from "./_shared/ledger-conditions";
 import { EXCLUDE_WARMUP_CONDITION } from "./_shared/message-request-conditions";
 import { toMessageRequest } from "./_shared/transformers";
-import { enqueueMessageRequestUpdate } from "./message-write-buffer";
+import {
+  type DurableMessageRequestUpdateOptions,
+  type MessageRequestUpdatePatch,
+  enqueueMessageRequestUpdate,
+  enqueueMessageRequestUpdateDurably,
+} from "./message-write-buffer";
 
 type PublicStatusRequestSeed = {
   createdAt: Date;
@@ -27,6 +32,7 @@ type PublicStatusRequestSeed = {
 };
 
 type PublicStatusFinalDetails = {
+  durationMs?: number;
   statusCode?: number;
   outputTokens?: number;
   ttfbMs?: number | null;
@@ -199,6 +205,18 @@ function queuePublicStatusRollupForFinalDetails(
       clearPublicStatusRequestInFlight(id);
     }
   })();
+}
+
+function publishCommittedMessageRequestDetails(
+  id: number,
+  details: PublicStatusFinalDetails
+): void {
+  if (details.durationMs !== undefined) {
+    updatePublicStatusRequestSeed(id, { durationMs: details.durationMs });
+  }
+  if (details.providerChain !== undefined && details.statusCode !== undefined) {
+    queuePublicStatusRollupForFinalDetails(id, details);
+  }
 }
 
 /**
@@ -458,41 +476,40 @@ export async function addMessageRequestHedgeLoserCost(
   throw lastError;
 }
 
+export type MessageRequestDetailsUpdate = {
+  durationMs?: number;
+  statusCode?: number;
+  inputTokens?: number;
+  outputTokens?: number;
+  ttfbMs?: number | null;
+  cacheCreationInputTokens?: number;
+  cacheReadInputTokens?: number;
+  cacheCreation5mInputTokens?: number;
+  cacheCreation1hInputTokens?: number;
+  cacheTtlApplied?: string | null;
+  providerChain?: CreateMessageRequestData["provider_chain"];
+  errorMessage?: string;
+  errorStack?: string; // 完整堆栈信息
+  errorCause?: string; // 嵌套错误原因（JSON 格式）
+  model?: string; // ⭐ 新增：支持更新重定向后的模型名称
+  actualResponseModel?: string | null; // 上游响应实际返回的模型名(audit 用途，不影响计费)
+  providerId?: number; // ⭐ 新增：支持更新最终供应商ID（重试切换后）
+  context1mApplied?: boolean; // 是否应用了1M上下文窗口
+  swapCacheTtlApplied?: boolean; // Swap Cache TTL Billing active at request time
+  specialSettings?: CreateMessageRequestData["special_settings"]; // 特殊设置（审计/展示）
+};
+
 /**
  * 更新消息请求的扩展信息（status code, tokens, provider chain, error）
  */
 export async function updateMessageRequestDetails(
   id: number,
-  details: {
-    statusCode?: number;
-    inputTokens?: number;
-    outputTokens?: number;
-    ttfbMs?: number | null;
-    cacheCreationInputTokens?: number;
-    cacheReadInputTokens?: number;
-    cacheCreation5mInputTokens?: number;
-    cacheCreation1hInputTokens?: number;
-    cacheTtlApplied?: string | null;
-    providerChain?: CreateMessageRequestData["provider_chain"];
-    errorMessage?: string;
-    errorStack?: string; // 完整堆栈信息
-    errorCause?: string; // 嵌套错误原因（JSON 格式）
-    model?: string; // ⭐ 新增：支持更新重定向后的模型名称
-    actualResponseModel?: string | null; // 上游响应实际返回的模型名(audit 用途，不影响计费)
-    providerId?: number; // ⭐ 新增：支持更新最终供应商ID（重试切换后）
-    context1mApplied?: boolean; // 是否应用了1M上下文窗口
-    swapCacheTtlApplied?: boolean; // Swap Cache TTL Billing active at request time
-    specialSettings?: CreateMessageRequestData["special_settings"]; // 特殊设置（审计/展示）
-  }
+  details: MessageRequestDetailsUpdate,
+  options: { onlyIfUnfinalized?: boolean } = {}
 ): Promise<void> {
-  const shouldQueuePublicStatusRollup =
-    details.providerChain !== undefined && details.statusCode !== undefined;
-
-  if (getEnvConfig().MESSAGE_REQUEST_WRITE_MODE === "async") {
+  if (getEnvConfig().MESSAGE_REQUEST_WRITE_MODE === "async" && !options.onlyIfUnfinalized) {
     enqueueMessageRequestUpdate(id, details);
-    if (shouldQueuePublicStatusRollup) {
-      queuePublicStatusRollupForFinalDetails(id, details);
-    }
+    publishCommittedMessageRequestDetails(id, details);
     return;
   }
 
@@ -500,6 +517,9 @@ export async function updateMessageRequestDetails(
     updatedAt: new Date(),
   };
 
+  if (details.durationMs !== undefined) {
+    updateData.durationMs = details.durationMs;
+  }
   if (details.statusCode !== undefined) {
     updateData.statusCode = details.statusCode;
   }
@@ -558,10 +578,55 @@ export async function updateMessageRequestDetails(
     updateData.specialSettings = details.specialSettings;
   }
 
-  await db.update(messageRequest).set(updateData).where(eq(messageRequest.id, id));
-  if (shouldQueuePublicStatusRollup) {
-    queuePublicStatusRollupForFinalDetails(id, details);
+  if (options.onlyIfUnfinalized) {
+    const updated = await getMessageWriterDb()
+      .update(messageRequest)
+      .set(updateData)
+      .where(and(eq(messageRequest.id, id), isNull(messageRequest.statusCode)))
+      .returning({ id: messageRequest.id });
+    if (updated.length === 0) {
+      return;
+    }
+  } else {
+    await db.update(messageRequest).set(updateData).where(eq(messageRequest.id, id));
   }
+  publishCommittedMessageRequestDetails(id, details);
+}
+
+export async function updateMessageRequestDetailsIfUnfinalized(
+  id: number,
+  details: MessageRequestDetailsUpdate
+): Promise<void> {
+  await updateMessageRequestDetails(id, details, { onlyIfUnfinalized: true });
+}
+
+/**
+ * Persist terminal request details with an acknowledgement that the backing SQL batch committed.
+ * Ordinary async metadata updates continue to use updateMessageRequestDetails().
+ */
+export async function updateMessageRequestDetailsDurably(
+  id: number,
+  details: MessageRequestDetailsUpdate,
+  options?: DurableMessageRequestUpdateOptions
+): Promise<void> {
+  if (getEnvConfig().MESSAGE_REQUEST_WRITE_MODE !== "async") {
+    await updateMessageRequestDetails(id, details);
+    return;
+  }
+
+  let commitPublished = false;
+  const publishCommit = (committedPatch: Readonly<MessageRequestUpdatePatch>) => {
+    if (commitPublished) return;
+    commitPublished = true;
+    publishCommittedMessageRequestDetails(id, committedPatch);
+    return options?.onCommitted?.(committedPatch);
+  };
+
+  await enqueueMessageRequestUpdateDurably(id, details, {
+    ...options,
+    onCommitted: publishCommit,
+  });
+  publishCommit(details);
 }
 
 /**
