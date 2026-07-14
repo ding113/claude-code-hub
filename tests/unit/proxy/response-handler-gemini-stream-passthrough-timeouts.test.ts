@@ -5,12 +5,26 @@ import { ProxyForwarder } from "@/app/v1/_lib/proxy/forwarder";
 import { resolveEndpointPolicy } from "@/app/v1/_lib/proxy/endpoint-policy";
 import { ProxyResponseHandler } from "@/app/v1/_lib/proxy/response-handler";
 import { ProxySession } from "@/app/v1/_lib/proxy/session";
+import { setDeferredStreamingFinalization } from "@/app/v1/_lib/proxy/stream-finalization";
 import { AsyncTaskManager } from "@/lib/async-task-manager";
 import { SessionManager } from "@/lib/session-manager";
-import { updateMessageRequestDetails } from "@/repository/message";
+import {
+  updateMessageRequestDetails,
+  updateMessageRequestDetailsDurably,
+} from "@/repository/message";
 import type { Provider } from "@/types/provider";
 
 const asyncTasks: Promise<void>[] = [];
+
+async function expectAllFulfilled(tasks: readonly Promise<unknown>[]): Promise<void> {
+  const settlements = await Promise.allSettled(tasks);
+  const rejections = settlements
+    .filter((settlement): settlement is PromiseRejectedResult => settlement.status === "rejected")
+    .map((settlement) => settlement.reason);
+  if (rejections.length > 0) {
+    throw new AggregateError(rejections, "Unexpected async task rejection");
+  }
+}
 
 const mocks = vi.hoisted(() => {
   return {
@@ -39,10 +53,26 @@ vi.mock("@/app/v1/_lib/proxy/response-fixer", () => ({
 
 vi.mock("@/lib/async-task-manager", () => ({
   AsyncTaskManager: {
-    register: vi.fn((_taskId: string, promise: Promise<void>) => {
-      asyncTasks.push(promise);
-      return new AbortController();
-    }),
+    register: vi.fn(
+      (
+        _taskId: string,
+        factory: (signal: AbortSignal) => Promise<void>,
+        options?: string | { abortController?: AbortController }
+      ) => {
+        const controller =
+          typeof options === "object" && options.abortController
+            ? options.abortController
+            : new AbortController();
+        let promise: Promise<void>;
+        try {
+          promise = Promise.resolve(factory(controller.signal));
+        } catch (error) {
+          promise = Promise.reject(error);
+        }
+        asyncTasks.push(promise);
+        return controller;
+      }
+    ),
     touch: () => true,
     cleanup: () => {},
     cancel: () => {},
@@ -59,9 +89,20 @@ vi.mock("@/lib/logger", () => ({
   },
 }));
 
+vi.mock("@/lib/circuit-breaker", () => ({
+  recordFailure: vi.fn(async () => undefined),
+  recordSuccess: vi.fn(async () => undefined),
+}));
+
+vi.mock("@/lib/endpoint-circuit-breaker", () => ({
+  recordEndpointFailure: vi.fn(async () => undefined),
+  recordEndpointSuccess: vi.fn(async () => undefined),
+}));
+
 vi.mock("@/repository/message", () => ({
   updateMessageRequestCost: vi.fn(),
   updateMessageRequestDetails: vi.fn(),
+  updateMessageRequestDetailsDurably: vi.fn(),
   updateMessageRequestDuration: vi.fn(),
 }));
 
@@ -80,6 +121,8 @@ vi.mock("@/lib/session-manager", () => ({
     storeSessionResponse: vi.fn(),
     updateSessionUsage: vi.fn(async () => undefined),
     clearSessionProvider: vi.fn(),
+    updateSessionBindingSmart: vi.fn(async () => ({ updated: false, reason: "test" })),
+    updateSessionProvider: vi.fn(async () => undefined),
     storeSessionRequestPhaseSnapshot: vi.fn(async () => undefined),
     storeSessionResponsePhaseSnapshot: vi.fn(async () => undefined),
     storeSessionUpstreamRequestMeta: vi.fn(async () => undefined),
@@ -395,7 +438,7 @@ describe("ProxyResponseHandler - Gemini stream passthrough timeouts", () => {
         .detailSnapshotResponseBeforeSource
     ).toBeNull();
 
-    await Promise.allSettled(asyncTasks);
+    await expectAllFulfilled(asyncTasks);
   });
 
   test("Gemini 流式透传禁用 idle timeout 时不应回落到默认 stale cleanup", async () => {
@@ -425,7 +468,7 @@ describe("ProxyResponseHandler - Gemini stream passthrough timeouts", () => {
     ).handleStream(session, upstreamResponse);
 
     await returned.text();
-    await Promise.allSettled(asyncTasks);
+    await expectAllFulfilled(asyncTasks);
 
     const statsRegisterCall = vi.mocked(AsyncTaskManager.register).mock.calls.find((call) => {
       const options = call[2] as { taskType?: string } | undefined;
@@ -504,7 +547,7 @@ describe("ProxyResponseHandler - Gemini stream passthrough timeouts", () => {
     } finally {
       clientAbortController.abort(new Error("test_cleanup"));
       await close();
-      await Promise.allSettled(asyncTasks);
+      await expectAllFulfilled(asyncTasks);
     }
   });
 
@@ -570,7 +613,7 @@ describe("ProxyResponseHandler - Gemini stream passthrough timeouts", () => {
     } finally {
       clientAbortController.abort(new Error("test_cleanup"));
       await close();
-      await Promise.allSettled(asyncTasks);
+      await expectAllFulfilled(asyncTasks);
     }
   });
 
@@ -635,7 +678,7 @@ describe("ProxyResponseHandler - Gemini stream passthrough timeouts", () => {
     } finally {
       clientAbortController.abort(new Error("test_cleanup"));
       await close();
-      await Promise.allSettled(asyncTasks);
+      await expectAllFulfilled(asyncTasks);
     }
   });
 
@@ -697,7 +740,7 @@ describe("ProxyResponseHandler - Gemini stream passthrough timeouts", () => {
       expect(first.done).toBe(false);
 
       clientAbortController.abort(new Error("client_cancelled"));
-      await Promise.allSettled(asyncTasks);
+      await expectAllFulfilled(asyncTasks);
 
       expect(vi.mocked(SessionManager.clearSessionProvider)).toHaveBeenCalledWith(
         "gemini-abort-session"
@@ -705,14 +748,14 @@ describe("ProxyResponseHandler - Gemini stream passthrough timeouts", () => {
     } finally {
       clientAbortController.abort(new Error("test_cleanup"));
       await close();
-      await Promise.allSettled(asyncTasks);
+      await expectAllFulfilled(asyncTasks);
     }
   });
 
   test("Gemini 流式透传超大单 chunk 应保留尾部 usage 且不把截断快照作为完整正文存储", async () => {
     asyncTasks.length = 0;
     vi.mocked(SessionManager.storeSessionResponse).mockClear();
-    vi.mocked(updateMessageRequestDetails).mockClear();
+    vi.mocked(updateMessageRequestDetailsDurably).mockClear();
 
     const clientAbortController = new AbortController();
     const provider = createProvider({
@@ -756,9 +799,9 @@ describe("ProxyResponseHandler - Gemini stream passthrough timeouts", () => {
     ).handleStream(session, upstreamResponse);
 
     await returned.text();
-    await Promise.allSettled(asyncTasks);
+    await expectAllFulfilled(asyncTasks);
 
-    expect(updateMessageRequestDetails).toHaveBeenCalledWith(
+    expect(updateMessageRequestDetailsDurably).toHaveBeenCalledWith(
       77,
       expect.objectContaining({
         statusCode: 200,
@@ -767,5 +810,75 @@ describe("ProxyResponseHandler - Gemini stream passthrough timeouts", () => {
       })
     );
     expect(SessionManager.storeSessionResponse).not.toHaveBeenCalled();
+  });
+
+  test("Gemini 终态副作用挂起时应先释放传输资源并在共享 deadline 后收敛", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+    asyncTasks.length = 0;
+    vi.mocked(updateMessageRequestDetailsDurably).mockClear();
+    vi.mocked(SessionManager.clearSessionProvider).mockClear();
+    const releaseAgent = vi.fn();
+    vi.mocked(SessionManager.clearSessionProvider).mockImplementationOnce(() => {
+      return new Promise(() => {});
+    });
+
+    try {
+      const session = createSession({
+        clientAbortSignal: new AbortController().signal,
+        messageId: 88,
+        userId: 1,
+      });
+      const provider = createProvider({
+        firstByteTimeoutStreamingMs: 1000,
+        streamingIdleTimeoutMs: 0,
+      });
+      session.setProvider(provider);
+      session.setSessionId("gemini-post-terminal-deadline");
+      Object.assign(session, { releaseAgent });
+      setDeferredStreamingFinalization(session, {
+        providerId: provider.id,
+        providerName: provider.name,
+        providerPriority: provider.priority,
+        attemptNumber: 1,
+        totalProvidersAttempted: 1,
+        isFirstAttempt: true,
+        isFailoverSuccess: false,
+        endpointId: 42,
+        endpointUrl: "https://api.test.invalid/v1",
+        upstreamStatusCode: 500,
+      });
+
+      const bodyText =
+        'data: {"usageMetadata":{"promptTokenCount":463,"candidatesTokenCount":11}}\n\n';
+      const response = new Response(bodyText, {
+        status: 500,
+        headers: { "content-type": "text/event-stream" },
+      });
+      const returned = await (
+        ProxyResponseHandler as unknown as {
+          handleStream: (session: ProxySession, response: Response) => Promise<Response>;
+        }
+      ).handleStream(session, response);
+
+      await returned.text();
+      for (
+        let attempt = 0;
+        attempt < 20 && vi.mocked(SessionManager.clearSessionProvider).mock.calls.length === 0;
+        attempt++
+      ) {
+        await vi.advanceTimersByTimeAsync(1);
+      }
+      expect(updateMessageRequestDetailsDurably).toHaveBeenCalledTimes(1);
+      expect(SessionManager.clearSessionProvider).toHaveBeenCalledTimes(1);
+      expect(releaseAgent).toHaveBeenCalledTimes(1);
+
+      await vi.advanceTimersByTimeAsync(120_000);
+      await expectAllFulfilled(asyncTasks.splice(0, asyncTasks.length));
+
+      expect(releaseAgent).toHaveBeenCalledTimes(1);
+      expect(updateMessageRequestDetailsDurably).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
