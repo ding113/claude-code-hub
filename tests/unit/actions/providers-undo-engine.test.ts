@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { PROVIDER_BATCH_PATCH_ERROR_CODES } from "@/lib/provider-batch-patch-error-codes";
+import type { ProviderBatchApplyLedgerResult } from "@/drizzle/schema";
 import { buildRedisMock, createRedisStore } from "./redis-mock-utils";
 
 const getSessionMock = vi.fn();
@@ -9,6 +10,7 @@ const updateProvidersBatchMock = vi.fn();
 const findProviderBatchApplyOperationMock = vi.fn();
 const applyProviderBatchOperationIfUnchangedMock = vi.fn();
 const undoProviderBatchOperationMock = vi.fn();
+const findProviderBatchUndoOperationMock = vi.fn();
 const publishCacheInvalidationMock = vi.fn();
 const { store: redisStore, mocks: redisMocks } = createRedisStore();
 const applyLedger = new Map<
@@ -16,7 +18,7 @@ const applyLedger = new Map<
   {
     previewToken: string;
     payloadFingerprint: string;
-    result: Record<string, unknown>;
+    result: ProviderBatchApplyLedgerResult;
     undoAvailable: boolean;
   }
 >();
@@ -31,6 +33,7 @@ vi.mock("@/repository/provider", () => ({
   findProviderBatchApplyOperation: findProviderBatchApplyOperationMock,
   applyProviderBatchOperationIfUnchanged: applyProviderBatchOperationIfUnchangedMock,
   undoProviderBatchOperation: undoProviderBatchOperationMock,
+  findProviderBatchUndoOperation: findProviderBatchUndoOperationMock,
   deleteProvidersBatch: vi.fn(),
 }));
 
@@ -181,6 +184,7 @@ describe("Undo Provider Batch Patch Engine", () => {
     getSessionMock.mockResolvedValue({ user: { id: 1, role: "admin" } });
     findAllProvidersFreshMock.mockResolvedValue([]);
     updateProvidersBatchMock.mockResolvedValue(0);
+    findProviderBatchUndoOperationMock.mockResolvedValue({ status: "expired" });
     installApplyLedgerMocks();
     undoProviderBatchOperationMock.mockImplementation(
       async ({ undoToken, operationId, groups }) => {
@@ -344,6 +348,44 @@ describe("Undo Provider Batch Patch Engine", () => {
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.errorCode).toBe(PROVIDER_BATCH_PATCH_ERROR_CODES.UNDO_EXPIRED);
+  });
+
+  it("should restore a durable batch undo when the Redis snapshot is missing", async () => {
+    const providers = [makeProvider(1, { groupTag: "old" })];
+    const { undoToken, operationId, undoProviderPatch } = await setupPreviewApplyAndGetUndo(
+      providers,
+      [1],
+      { group_tag: { set: "new" } }
+    );
+    const entry = [...applyLedger.values()][0]!;
+    redisStore.clear();
+    findProviderBatchUndoOperationMock.mockResolvedValueOnce({
+      status: "available",
+      result: entry.result,
+    });
+    updateProvidersBatchMock.mockResolvedValue(1);
+
+    const result = await undoProviderPatch({ undoToken, operationId });
+
+    expect(result.ok).toBe(true);
+    expect(undoProviderBatchOperationMock).toHaveBeenCalledWith(
+      expect.objectContaining({ undoToken, operationId })
+    );
+  });
+
+  it("should keep a committed undo successful when cache invalidation fails", async () => {
+    const providers = [makeProvider(1, { groupTag: "old" })];
+    const { undoToken, operationId, undoProviderPatch } = await setupPreviewApplyAndGetUndo(
+      providers,
+      [1],
+      { group_tag: { set: "new" } }
+    );
+    updateProvidersBatchMock.mockResolvedValue(1);
+    publishCacheInvalidationMock.mockRejectedValueOnce(new Error("cache unavailable"));
+
+    const result = await undoProviderPatch({ undoToken, operationId });
+
+    expect(result.ok).toBe(true);
   });
 
   it("should return UNDO_CONFLICT for mismatched operationId", async () => {

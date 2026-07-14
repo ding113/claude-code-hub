@@ -832,6 +832,7 @@ function statusFromActionError(result: Extract<ActionResult<unknown>, { ok: fals
     case "CONFLICT":
     case "IDEMPOTENCY_CONFLICT":
     case "UNDO_CONFLICT":
+    case "UNDO_STALE":
     case "PREVIEW_STALE":
     case "resource.conflict":
       return 409;

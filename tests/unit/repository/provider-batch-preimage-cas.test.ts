@@ -29,6 +29,7 @@ function makeLockedProvider(id: number, groupTag: string | null) {
     key: "sk-test",
     providerVendorId: 1,
     providerType: "codex",
+    isEnabled: true,
     groupTag,
     priority: 1,
     weight: 100,

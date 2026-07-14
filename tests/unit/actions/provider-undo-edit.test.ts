@@ -7,6 +7,7 @@ const findProviderByIdMock = vi.fn();
 const updateProviderMock = vi.fn();
 const updateProvidersBatchMock = vi.fn();
 const undoProviderBatchOperationMock = vi.fn();
+const findProviderBatchUndoOperationMock = vi.fn();
 const publishCacheInvalidationMock = vi.fn();
 const clearProviderStateMock = vi.fn();
 const clearConfigCacheMock = vi.fn();
@@ -24,6 +25,7 @@ vi.mock("@/repository/provider", () => ({
   updateProvider: updateProviderMock,
   updateProvidersBatch: updateProvidersBatchMock,
   undoProviderBatchOperation: undoProviderBatchOperationMock,
+  findProviderBatchUndoOperation: findProviderBatchUndoOperationMock,
   deleteProvidersBatch: vi.fn(),
 }));
 
@@ -130,6 +132,7 @@ describe("Provider Single Edit Undo Actions", () => {
     findProviderByIdMock.mockResolvedValue(makeProvider(1, { name: "Before Name", key: "sk-old" }));
     updateProviderMock.mockResolvedValue(makeProvider(1, { name: "After Name", key: "sk-new" }));
     updateProvidersBatchMock.mockResolvedValue(1);
+    findProviderBatchUndoOperationMock.mockResolvedValue({ status: "expired" });
     publishCacheInvalidationMock.mockResolvedValue(undefined);
     clearProviderStateMock.mockReturnValue(undefined);
     clearConfigCacheMock.mockReturnValue(undefined);

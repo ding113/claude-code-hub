@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { PROVIDER_BATCH_PATCH_ERROR_CODES } from "@/lib/provider-batch-patch-error-codes";
+import type { ProviderBatchApplyLedgerResult } from "@/drizzle/schema";
 import { buildRedisMock, createRedisStore } from "./redis-mock-utils";
 
 const getSessionMock = vi.fn();
@@ -8,13 +9,14 @@ const updateProvidersBatchMock = vi.fn();
 const findProviderBatchApplyOperationMock = vi.fn();
 const applyProviderBatchOperationIfUnchangedMock = vi.fn();
 const undoProviderBatchOperationMock = vi.fn();
+const findProviderBatchUndoOperationMock = vi.fn();
 const { store: redisStore, mocks: redisMocks } = createRedisStore();
 const applyLedger = new Map<
   string,
   {
     previewToken: string;
     payloadFingerprint: string;
-    result: Record<string, unknown>;
+    result: ProviderBatchApplyLedgerResult;
     undoAvailable: boolean;
   }
 >();
@@ -29,6 +31,7 @@ vi.mock("@/repository/provider", () => ({
   findProviderBatchApplyOperation: findProviderBatchApplyOperationMock,
   applyProviderBatchOperationIfUnchanged: applyProviderBatchOperationIfUnchangedMock,
   undoProviderBatchOperation: undoProviderBatchOperationMock,
+  findProviderBatchUndoOperation: findProviderBatchUndoOperationMock,
   deleteProvidersBatch: vi.fn(),
 }));
 
@@ -178,6 +181,7 @@ describe("Provider Batch Patch Action Contracts", () => {
     getSessionMock.mockResolvedValue({ user: { id: 1, role: "admin" } });
     findAllProvidersFreshMock.mockResolvedValue([]);
     updateProvidersBatchMock.mockResolvedValue(0);
+    findProviderBatchUndoOperationMock.mockResolvedValue({ status: "expired" });
     installApplyLedgerMocks();
     undoProviderBatchOperationMock.mockImplementation(
       async ({ undoToken, operationId, groups }) => {

@@ -14,6 +14,7 @@ import { getCachedProviders } from "@/lib/cache/provider-cache";
 import { PROVIDER_TIMEOUT_DEFAULTS } from "@/lib/constants/provider.constants";
 import { resetEndpointCircuit } from "@/lib/endpoint-circuit-breaker";
 import { logger } from "@/lib/logger";
+import { SENSITIVE_PROVIDER_BATCH_UNDO_KEYS } from "@/lib/provider-batch-patch-error-codes";
 import { normalizeProviderModelRedirectRules } from "@/lib/provider-model-redirects";
 import { parseProviderGroups } from "@/lib/utils/provider-group";
 import { resolveSystemTimezone } from "@/lib/utils/timezone";
@@ -1459,7 +1460,7 @@ function isProviderBatchPreimageValueEqual(current: unknown, expected: unknown):
       currentKeys.length === expectedKeys.length &&
       currentKeys.every(
         (key) =>
-          Object.prototype.hasOwnProperty.call(expectedRecord, key) &&
+          Object.hasOwn(expectedRecord, key) &&
           isProviderBatchPreimageValueEqual(currentRecord[key], expectedRecord[key])
       )
     );
@@ -1469,7 +1470,6 @@ function isProviderBatchPreimageValueEqual(current: unknown, expected: unknown):
 
 type ProviderBatchApplyLedgerRow = typeof providerBatchApplyOperations.$inferSelect;
 const PROVIDER_BATCH_APPLY_LEDGER_TTL_MS = 24 * 60 * 60 * 1000;
-const SENSITIVE_PROVIDER_BATCH_UNDO_KEYS = new Set(["proxyUrl", "mcpPassthroughUrl"]);
 
 export type ProviderBatchApplyOperationLookupResult =
   | { status: "replay"; result: ProviderBatchApplyLedgerResult; undoAvailable: boolean }
@@ -1591,9 +1591,12 @@ export async function findProviderBatchApplyOperation(
     .select()
     .from(providerBatchApplyOperations)
     .where(
-      or(
-        eq(providerBatchApplyOperations.claimKey, input.claimKey),
-        eq(providerBatchApplyOperations.previewToken, input.previewToken)
+      and(
+        gt(providerBatchApplyOperations.expiresAt, now),
+        or(
+          eq(providerBatchApplyOperations.claimKey, input.claimKey),
+          eq(providerBatchApplyOperations.previewToken, input.previewToken)
+        )
       )
     );
 
@@ -1668,11 +1671,14 @@ export async function applyProviderBatchOperationIfUnchanged(
   const claimStartedAt = new Date();
   const ledgerExpiresAt = new Date(claimStartedAt.getTime() + PROVIDER_BATCH_APPLY_LEDGER_TTL_MS);
 
+  // Keep retention cleanup outside the provider-locking transaction so a large
+  // expired backlog cannot extend the critical write section.
+  await db
+    .delete(providerBatchApplyOperations)
+    .where(lt(providerBatchApplyOperations.expiresAt, claimStartedAt));
+
   try {
     const transactionResult = await db.transaction(async (tx) => {
-      await tx
-        .delete(providerBatchApplyOperations)
-        .where(lt(providerBatchApplyOperations.expiresAt, claimStartedAt));
       const inserted = await tx
         .insert(providerBatchApplyOperations)
         .values({
@@ -1823,6 +1829,45 @@ export type ConsumeProviderBatchUndoResult =
   | { status: "conflict" }
   | { status: "expired" };
 
+export type FindProviderBatchUndoOperationResult =
+  | { status: "available"; result: ProviderBatchApplyLedgerResult }
+  | { status: "conflict" }
+  | { status: "expired" };
+
+export async function findProviderBatchUndoOperation(input: {
+  undoToken: string;
+  operationId: string;
+  now: Date;
+}): Promise<FindProviderBatchUndoOperationResult> {
+  const [operation] = await db
+    .select({
+      operationId: providerBatchApplyOperations.operationId,
+      undoExpiresAt: providerBatchApplyOperations.undoExpiresAt,
+      undoConsumedAt: providerBatchApplyOperations.undoConsumedAt,
+      status: providerBatchApplyOperations.status,
+      result: providerBatchApplyOperations.result,
+    })
+    .from(providerBatchApplyOperations)
+    .where(eq(providerBatchApplyOperations.undoToken, input.undoToken))
+    .limit(1);
+
+  if (operation && operation.operationId !== input.operationId) {
+    return { status: "conflict" };
+  }
+  if (
+    !operation ||
+    operation.status !== "applied" ||
+    operation.undoConsumedAt !== null ||
+    operation.undoExpiresAt === null ||
+    operation.undoExpiresAt <= input.now ||
+    !operation.result ||
+    !operation.result.undoRestorable
+  ) {
+    return { status: "expired" };
+  }
+  return { status: "available", result: operation.result };
+}
+
 export async function consumeProviderBatchUndo(input: {
   undoToken: string;
   operationId: string;
@@ -1865,6 +1910,7 @@ export async function consumeProviderBatchUndo(input: {
 export type UndoProviderBatchOperationResult =
   | { status: "reverted"; revertedCount: number }
   | { status: "conflict" }
+  | { status: "mismatch" }
   | { status: "expired" };
 
 export async function undoProviderBatchOperation(input: {
@@ -1873,54 +1919,61 @@ export async function undoProviderBatchOperation(input: {
   groups: ProviderBatchUpdateGroup[];
   revertedAt: Date;
 }): Promise<UndoProviderBatchOperationResult> {
-  return db.transaction(async (tx) => {
-    const [operation] = await tx
-      .select({
-        operationId: providerBatchApplyOperations.operationId,
-        undoExpiresAt: providerBatchApplyOperations.undoExpiresAt,
-        undoConsumedAt: providerBatchApplyOperations.undoConsumedAt,
-        status: providerBatchApplyOperations.status,
-      })
-      .from(providerBatchApplyOperations)
-      .where(eq(providerBatchApplyOperations.undoToken, input.undoToken))
-      .for("update")
-      .limit(1);
+  try {
+    return await db.transaction(async (tx) => {
+      const [operation] = await tx
+        .select({
+          operationId: providerBatchApplyOperations.operationId,
+          undoExpiresAt: providerBatchApplyOperations.undoExpiresAt,
+          undoConsumedAt: providerBatchApplyOperations.undoConsumedAt,
+          status: providerBatchApplyOperations.status,
+        })
+        .from(providerBatchApplyOperations)
+        .where(eq(providerBatchApplyOperations.undoToken, input.undoToken))
+        .for("update")
+        .limit(1);
 
-    if (operation && operation.operationId !== input.operationId) {
-      return { status: "conflict" };
-    }
-    if (
-      !operation ||
-      operation.status !== "applied" ||
-      operation.undoConsumedAt !== null ||
-      operation.undoExpiresAt === null ||
-      operation.undoExpiresAt <= input.revertedAt
-    ) {
-      return { status: "expired" };
-    }
-
-    let revertedCount = 0;
-    for (const group of input.groups) {
-      const ids = [...new Set(group.ids)].sort((a, b) => a - b);
-      if (ids.length === 0) continue;
-      const updated = await tx
-        .update(providers)
-        .set(buildProviderBatchSetClauses(group.updates, input.revertedAt))
-        .where(and(inArray(providers.id, ids), isNull(providers.deletedAt)))
-        .returning({ id: providers.id });
-      if (updated.length !== ids.length) {
-        throw new ProviderBatchPreimageMismatchError();
+      if (operation && operation.operationId !== input.operationId) {
+        return { status: "conflict" };
       }
-      revertedCount += updated.length;
+      if (
+        !operation ||
+        operation.status !== "applied" ||
+        operation.undoConsumedAt !== null ||
+        operation.undoExpiresAt === null ||
+        operation.undoExpiresAt <= input.revertedAt
+      ) {
+        return { status: "expired" };
+      }
+
+      let revertedCount = 0;
+      for (const group of input.groups) {
+        const ids = [...new Set(group.ids)].sort((a, b) => a - b);
+        if (ids.length === 0) continue;
+        const updated = await tx
+          .update(providers)
+          .set(buildProviderBatchSetClauses(group.updates, input.revertedAt))
+          .where(and(inArray(providers.id, ids), isNull(providers.deletedAt)))
+          .returning({ id: providers.id });
+        if (updated.length !== ids.length) {
+          throw new ProviderBatchPreimageMismatchError();
+        }
+        revertedCount += updated.length;
+      }
+
+      await tx
+        .update(providerBatchApplyOperations)
+        .set({ undoConsumedAt: input.revertedAt, updatedAt: input.revertedAt })
+        .where(eq(providerBatchApplyOperations.undoToken, input.undoToken));
+
+      return { status: "reverted", revertedCount };
+    });
+  } catch (error) {
+    if (error instanceof ProviderBatchPreimageMismatchError) {
+      return { status: "mismatch" };
     }
-
-    await tx
-      .update(providerBatchApplyOperations)
-      .set({ undoConsumedAt: input.revertedAt, updatedAt: input.revertedAt })
-      .where(eq(providerBatchApplyOperations.undoToken, input.undoToken));
-
-    return { status: "reverted", revertedCount };
-  });
+    throw error;
+  }
 }
 
 export async function updateProviderBatchGroupsIfUnchanged(

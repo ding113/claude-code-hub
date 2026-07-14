@@ -45,6 +45,15 @@
     "disableFailed": "失敗をすべて無効化 ({count})",
     "enableGreen": "利用可能をすべて有効化 ({count})"
   },
+  "errors": {
+    "nothingToApply": "適用する変更がありません。",
+    "previewExpired": "プレビューの有効期限が切れました。再度プレビューしてください。",
+    "previewStale": "プレビュー後にプロバイダー設定が変更されました。再度プレビューしてください。",
+    "idempotencyConflict": "この冪等性キーは別の操作ですでに使用されています。",
+    "undoExpired": "取り消し期限が切れているか、すでに使用されています。",
+    "undoConflict": "取り消しトークンがこの操作と一致しません。",
+    "undoStale": "プロバイダーを自動的に復元できません。更新して現在の状態を確認してください。"
+  },
   "toast": {
     "toggleFailed": "ステータスの切り替えに失敗しました: {error}",
     "bulkFailed": "一括操作に失敗しました: {error}",

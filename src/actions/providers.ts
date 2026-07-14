@@ -26,7 +26,10 @@ import { PROVIDER_GROUP, PROVIDER_TIMEOUT_DEFAULTS } from "@/lib/constants/provi
 import { normalizeCustomHeadersRecord } from "@/lib/custom-headers";
 import { logger } from "@/lib/logger";
 import { PROVIDER_ALLOWED_MODEL_RULE_INPUT_LIST_SCHEMA } from "@/lib/provider-allowed-model-schema";
-import { PROVIDER_BATCH_PATCH_ERROR_CODES } from "@/lib/provider-batch-patch-error-codes";
+import {
+  PROVIDER_BATCH_PATCH_ERROR_CODES,
+  SENSITIVE_PROVIDER_BATCH_UNDO_KEYS,
+} from "@/lib/provider-batch-patch-error-codes";
 import { PROVIDER_MODEL_REDIRECT_RULE_LIST_SCHEMA } from "@/lib/provider-model-redirect-schema";
 import { normalizeProviderModelRedirectRules } from "@/lib/provider-model-redirects";
 import {
@@ -72,6 +75,7 @@ import {
   findAllProviders,
   findAllProvidersFresh,
   findProviderBatchApplyOperation,
+  findProviderBatchUndoOperation,
   findProviderById,
   getProviderStatistics,
   type ProviderBatchExpectedPreimage,
@@ -1585,7 +1589,7 @@ function buildActionValidationError(error: z.ZodError): ProviderPatchActionError
 function buildNoChangesError(): ProviderPatchActionError {
   return {
     ok: false,
-    error: "没有可应用的变更",
+    error: PROVIDER_BATCH_PATCH_ERROR_CODES.NOTHING_TO_APPLY,
     errorCode: PROVIDER_BATCH_PATCH_ERROR_CODES.NOTHING_TO_APPLY,
   };
 }
@@ -2027,13 +2031,13 @@ function buildProviderBatchConflictError(
   if (status === "idempotency_conflict" && hasIdempotencyKey) {
     return {
       ok: false,
-      error: "幂等键已被不同的批量操作使用",
+      error: PROVIDER_BATCH_PATCH_ERROR_CODES.IDEMPOTENCY_CONFLICT,
       errorCode: PROVIDER_BATCH_PATCH_ERROR_CODES.IDEMPOTENCY_CONFLICT,
     };
   }
   return {
     ok: false,
-    error: "预览内容已失效，请重新预览",
+    error: PROVIDER_BATCH_PATCH_ERROR_CODES.PREVIEW_STALE,
     errorCode: PROVIDER_BATCH_PATCH_ERROR_CODES.PREVIEW_STALE,
   };
 }
@@ -2139,16 +2143,18 @@ async function runProviderBatchPostCommitEffects(
   for (let index = 0; index < operation.effectiveProviderIds.length; index += batchSize) {
     const batch = operation.effectiveProviderIds.slice(index, index + batchSize);
     await Promise.all(
-      batch.map((providerId) =>
-        forceCloseCircuitState(providerId, { reason: "circuit_breaker_disabled" }).catch(
-          (error) => {
-            logger.warn("applyProviderBatchPatch:force_close_circuit_failed", {
-              providerId,
-              error: error instanceof Error ? error.message : String(error),
-            });
-          }
-        )
-      )
+      batch.map(async (providerId) => {
+        try {
+          const current = await findProviderById(providerId);
+          if (!current || current.circuitBreakerFailureThreshold > 0) return;
+          await forceCloseCircuitState(providerId, { reason: "circuit_breaker_disabled" });
+        } catch (error) {
+          logger.warn("applyProviderBatchPatch:force_close_circuit_failed", {
+            providerId,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      })
     );
   }
 }
@@ -2306,7 +2312,7 @@ export async function applyProviderBatchPatch(
     if (!snapshot) {
       return {
         ok: false,
-        error: "预览已过期，请重新预览",
+        error: PROVIDER_BATCH_PATCH_ERROR_CODES.PREVIEW_EXPIRED,
         errorCode: PROVIDER_BATCH_PATCH_ERROR_CODES.PREVIEW_EXPIRED,
       };
     }
@@ -2320,7 +2326,7 @@ export async function applyProviderBatchPatch(
     if (isStale) {
       return {
         ok: false,
-        error: "预览内容已失效，请重新预览",
+        error: PROVIDER_BATCH_PATCH_ERROR_CODES.PREVIEW_STALE,
         errorCode: PROVIDER_BATCH_PATCH_ERROR_CODES.PREVIEW_STALE,
       };
     }
@@ -2330,7 +2336,7 @@ export async function applyProviderBatchPatch(
     if (effectiveProviderIds.length === 0) {
       return {
         ok: false,
-        error: "排除后无可应用的供应商",
+        error: PROVIDER_BATCH_PATCH_ERROR_CODES.NOTHING_TO_APPLY,
         errorCode: PROVIDER_BATCH_PATCH_ERROR_CODES.NOTHING_TO_APPLY,
       };
     }
@@ -2349,7 +2355,7 @@ export async function applyProviderBatchPatch(
     if (!preimages) {
       return {
         ok: false,
-        error: "预览内容已失效，请重新预览",
+        error: PROVIDER_BATCH_PATCH_ERROR_CODES.PREVIEW_STALE,
         errorCode: PROVIDER_BATCH_PATCH_ERROR_CODES.PREVIEW_STALE,
       };
     }
@@ -2386,14 +2392,13 @@ export async function applyProviderBatchPatch(
     const undoPreimage = Object.fromEntries(
       effectiveProviderIds.map((providerId) => [providerId, preimages.undo[providerId]])
     );
-    const sensitiveUndoKeys = new Set(["proxyUrl", "mcpPassthroughUrl"]);
     let undoRestorable = true;
     const durableUndoPreimage = Object.fromEntries(
       Object.entries(undoPreimage).map(([providerId, values]) => [
         providerId,
         Object.fromEntries(
           Object.entries(values).filter(([key]) => {
-            if (!sensitiveUndoKeys.has(key)) {
+            if (!SENSITIVE_PROVIDER_BATCH_UNDO_KEYS.has(key)) {
               return true;
             }
             undoRestorable = false;
@@ -2433,7 +2438,7 @@ export async function applyProviderBatchPatch(
     if (operation.status === "stale") {
       return {
         ok: false,
-        error: "供应商状态在预览后发生变化，请重新预览",
+        error: PROVIDER_BATCH_PATCH_ERROR_CODES.PREVIEW_STALE,
         errorCode: PROVIDER_BATCH_PATCH_ERROR_CODES.PREVIEW_STALE,
       };
     }
@@ -2470,19 +2475,42 @@ export async function undoProviderPatch(
 
     const nowMs = Date.now();
 
-    const snapshot = await providerPatchUndoStore.get(parsed.data.undoToken);
+    let snapshot = await providerPatchUndoStore.get(parsed.data.undoToken);
     if (!snapshot) {
-      return {
-        ok: false,
-        error: "撤销窗口已过期",
-        errorCode: PROVIDER_BATCH_PATCH_ERROR_CODES.UNDO_EXPIRED,
+      const durableUndo = await findProviderBatchUndoOperation({
+        undoToken: parsed.data.undoToken,
+        operationId: parsed.data.operationId,
+        now: new Date(nowMs),
+      });
+      if (durableUndo.status === "conflict") {
+        return {
+          ok: false,
+          error: PROVIDER_BATCH_PATCH_ERROR_CODES.UNDO_CONFLICT,
+          errorCode: PROVIDER_BATCH_PATCH_ERROR_CODES.UNDO_CONFLICT,
+        };
+      }
+      if (durableUndo.status === "expired") {
+        return {
+          ok: false,
+          error: PROVIDER_BATCH_PATCH_ERROR_CODES.UNDO_EXPIRED,
+          errorCode: PROVIDER_BATCH_PATCH_ERROR_CODES.UNDO_EXPIRED,
+        };
+      }
+      snapshot = {
+        undoToken: parsed.data.undoToken,
+        operationId: parsed.data.operationId,
+        providerIds: durableUndo.result.effectiveProviderIds,
+        preimage: Object.fromEntries(
+          durableUndo.result.preimages.map((entry) => [entry.providerId, entry.values])
+        ),
+        durable: true,
       };
     }
 
     if (snapshot.operationId !== parsed.data.operationId) {
       return {
         ok: false,
-        error: "撤销参数与操作不匹配",
+        error: PROVIDER_BATCH_PATCH_ERROR_CODES.UNDO_CONFLICT,
         errorCode: PROVIDER_BATCH_PATCH_ERROR_CODES.UNDO_CONFLICT,
       };
     }
@@ -2535,24 +2563,45 @@ export async function undoProviderPatch(
     if (undoResult.status === "conflict") {
       return {
         ok: false,
-        error: "撤销参数与操作不匹配",
+        error: PROVIDER_BATCH_PATCH_ERROR_CODES.UNDO_CONFLICT,
         errorCode: PROVIDER_BATCH_PATCH_ERROR_CODES.UNDO_CONFLICT,
+      };
+    }
+    if (undoResult.status === "mismatch") {
+      return {
+        ok: false,
+        error: PROVIDER_BATCH_PATCH_ERROR_CODES.UNDO_STALE,
+        errorCode: PROVIDER_BATCH_PATCH_ERROR_CODES.UNDO_STALE,
       };
     }
     if (undoResult.status === "expired") {
       await providerPatchUndoStore.delete(parsed.data.undoToken);
       return {
         ok: false,
-        error: "撤销窗口已过期或已被消费",
+        error: PROVIDER_BATCH_PATCH_ERROR_CODES.UNDO_EXPIRED,
         errorCode: PROVIDER_BATCH_PATCH_ERROR_CODES.UNDO_EXPIRED,
       };
     }
     const revertedCount = undoResult.revertedCount;
 
-    await providerPatchUndoStore.delete(parsed.data.undoToken);
+    try {
+      await providerPatchUndoStore.delete(parsed.data.undoToken);
+    } catch (error) {
+      logger.warn("undoProviderPatch:undo_snapshot_cleanup_failed", {
+        operationId: snapshot.operationId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
 
     if (preimageGroups.size > 0) {
-      await publishProviderCacheInvalidation();
+      try {
+        await publishProviderCacheInvalidation();
+      } catch (error) {
+        logger.warn("undoProviderPatch:provider_cache_invalidation_failed", {
+          operationId: snapshot.operationId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
     }
 
     const hasCbRevert = Object.values(snapshot.preimage).some((fields) =>
@@ -2571,7 +2620,14 @@ export async function undoProviderPatch(
       }
 
       // 清除配置缓存并广播（跨实例立即生效）
-      await publishCircuitBreakerConfigInvalidation(snapshot.providerIds);
+      try {
+        await publishCircuitBreakerConfigInvalidation(snapshot.providerIds);
+      } catch (error) {
+        logger.warn("undoProviderPatch:cb_broadcast_failed", {
+          operationId: snapshot.operationId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
 
       // 若撤销后变为禁用（threshold<=0），则应立即解除 OPEN/HALF-OPEN 拦截（跨实例）
       const disabledProviderIds = snapshot.providerIds.filter((providerId) => {
@@ -2587,7 +2643,14 @@ export async function undoProviderPatch(
           const batch = disabledProviderIds.slice(i, i + batchSize);
           await Promise.all(
             batch.map((providerId) =>
-              forceCloseCircuitState(providerId, { reason: "circuit_breaker_disabled" })
+              forceCloseCircuitState(providerId, { reason: "circuit_breaker_disabled" }).catch(
+                (error) => {
+                  logger.warn("undoProviderPatch:force_close_circuit_failed", {
+                    providerId,
+                    error: error instanceof Error ? error.message : String(error),
+                  });
+                }
+              )
             )
           );
         }
