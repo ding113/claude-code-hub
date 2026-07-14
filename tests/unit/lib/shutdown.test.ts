@@ -14,6 +14,7 @@ describe.sequential("lifecycle/shutdown", () => {
     vi.resetModules();
     vi.useRealTimers();
     delete (globalThis as unknown as { __CCH_LIFECYCLE__?: unknown }).__CCH_LIFECYCLE__;
+    delete (globalThis as unknown as { __ASYNC_TASK_MANAGER__?: unknown }).__ASYNC_TASK_MANAGER__;
     delete (globalThis as unknown as { __CCH_CLOUD_PRICE_SYNC_INTERVAL_ID__?: unknown })
       .__CCH_CLOUD_PRICE_SYNC_INTERVAL_ID__;
     delete (globalThis as unknown as { __CCH_API_KEY_VF_SYNC_CLEANUP__?: unknown })
@@ -23,6 +24,7 @@ describe.sequential("lifecycle/shutdown", () => {
   afterEach(() => {
     vi.useRealTimers();
     vi.unstubAllEnvs();
+    delete (globalThis as unknown as { __ASYNC_TASK_MANAGER__?: unknown }).__ASYNC_TASK_MANAGER__;
   });
 
   it("markShuttingDown flips isShuttingDown idempotently", async () => {
@@ -50,14 +52,14 @@ describe.sequential("lifecycle/shutdown", () => {
     expect(second).toBe(first);
   });
 
-  it("runApplicationCleanup invokes the staged modules and survives one step throwing", async () => {
+  it("runApplicationCleanup invokes staged modules and survives one non-critical step throwing", async () => {
     const stopCache = vi.fn();
-    const stopProbe = vi.fn();
+    const stopProbe = vi.fn(() => {
+      throw new Error("simulated probe scheduler shutdown failure");
+    });
     const stopPublicStatus = vi.fn(async () => {});
     const stopProbeLog = vi.fn();
-    const shutdownTasks = vi.fn(() => {
-      throw new Error("simulated tasks shutdown failure");
-    });
+    const shutdownTasks = vi.fn(async () => {});
     const stopWriteBuffer = vi.fn(async () => {});
     const shutdownLf = vi.fn(async () => {});
     const closeRedis = vi.fn(async () => {});
@@ -139,5 +141,77 @@ describe.sequential("lifecycle/shutdown", () => {
 
     expect(elapsed).toBeLessThan(2_000);
     releaseHang();
+  });
+
+  it("runApplicationCleanup abort 后等待所有 async task settled 再启动 writer", async () => {
+    vi.stubEnv("CI", "true");
+    vi.stubEnv("NEXT_RUNTIME", "nodejs");
+    vi.doUnmock("@/lib/async-task-manager");
+
+    vi.doMock("@/lib/cache/session-cache", () => ({ stopCacheCleanup: () => {} }));
+    vi.doMock("@/lib/provider-endpoints/probe-scheduler", () => ({
+      stopEndpointProbeScheduler: () => {},
+    }));
+    vi.doMock("@/lib/public-status/scheduler", () => ({
+      stopPublicStatusRebuildScheduler: async () => {},
+    }));
+    vi.doMock("@/lib/provider-endpoints/probe-log-cleanup", () => ({
+      stopEndpointProbeLogCleanup: () => {},
+    }));
+
+    const writerStarted = vi.fn();
+    vi.doMock("@/repository/message-write-buffer", () => ({
+      stopMessageRequestWriteBuffer: async () => {
+        writerStarted();
+      },
+    }));
+    vi.doMock("@/drizzle/db", () => ({ closeDbPools: async () => {} }));
+    vi.doMock("@/lib/langfuse", () => ({ shutdownLangfuse: async () => {} }));
+    vi.doMock("@/lib/redis", () => ({ closeRedis: async () => {} }));
+
+    const { AsyncTaskManager } = await import("@/lib/async-task-manager");
+    let resolveFirst!: () => void;
+    let resolveSecond!: () => void;
+    const first = new Promise<void>((resolve) => {
+      resolveFirst = resolve;
+    });
+    const second = new Promise<void>((resolve) => {
+      resolveSecond = resolve;
+    });
+    const firstController = new AbortController();
+    const secondController = new AbortController();
+    const firstAborted = new Promise<void>((resolve) => {
+      firstController.signal.addEventListener("abort", () => resolve(), { once: true });
+    });
+    const secondAborted = new Promise<void>((resolve) => {
+      secondController.signal.addEventListener("abort", () => resolve(), { once: true });
+    });
+    AsyncTaskManager.register("shutdown-first", () => first, {
+      abortController: firstController,
+    });
+    AsyncTaskManager.register("shutdown-second", () => second, {
+      abortController: secondController,
+    });
+
+    const { runApplicationCleanup } = await import("@/lib/lifecycle/shutdown");
+    const cleanup = runApplicationCleanup("SIGTERM", {
+      totalTimeoutMs: 5_000,
+      perStepTimeoutMs: 20,
+    });
+    await Promise.all([firstAborted, secondAborted]);
+
+    expect(firstController.signal.aborted).toBe(true);
+    expect(secondController.signal.aborted).toBe(true);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(writerStarted).not.toHaveBeenCalled();
+
+    resolveFirst();
+    await new Promise<void>((resolve) => queueMicrotask(resolve));
+    expect(writerStarted).not.toHaveBeenCalled();
+
+    resolveSecond();
+    await cleanup;
+
+    expect(writerStarted).toHaveBeenCalledTimes(1);
   });
 });

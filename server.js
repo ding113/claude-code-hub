@@ -742,10 +742,10 @@ async function main() {
 //   2. server.close()        -> stop accepting; in-flight HTTP finishes
 //   3. wss.close()           -> reject new WS upgrades
 //   4. Wait for drain        -> bounded by SHUTDOWN_DRAIN_MS
-//   5. runApplicationCleanup -> Redis / Langfuse / msg buffer / schedulers; bounded
-//      by SHUTDOWN_CLEANUP_MS. Inside cleanup, asyncTaskManager.cleanupAll() runs
-//      LAST so streaming responses had a chance to finish during step 4.
-//   6. process.exit(0)
+//   5. runApplicationCleanup -> abort + join tasks, flush writer, close DB pools,
+//      then release non-critical resources. SHUTDOWN_CLEANUP_MS is a soft warning;
+//      the referenced hard watchdog is the final bound for critical barriers.
+//   6. Success logs shutdown_complete and exits 0; cleanup failure exits 1.
 function registerOrchestratedShutdown(server, wss) {
   let shuttingDown = false;
 
@@ -770,13 +770,12 @@ function registerOrchestratedShutdown(server, wss) {
     shuttingDown = true;
     log("info", "shutdown_received", { signal, drainMs, cleanupMs, hardExitMs });
 
-    // Final safety: even if every step below hangs, this terminates the process.
-    // .unref() so the timer itself doesn't keep the event loop alive.
+    // Final safety: even if every step below hangs, this referenced timer keeps
+    // the process alive until it can terminate with a truthful non-zero status.
     const hardExit = setTimeout(() => {
       log("error", "shutdown_hard_exit_watchdog", { hardExitMs });
       process.exit(1);
     }, hardExitMs);
-    if (typeof hardExit.unref === "function") hardExit.unref();
 
     // 1. Flip readiness BEFORE closing the listener so probes already in flight
     //    see 503 and the Service starts removing this pod from endpoints.
@@ -805,29 +804,42 @@ function registerOrchestratedShutdown(server, wss) {
         resolve();
       }
     });
-    if (wss && typeof wss.close === "function") {
+
+    const closeWss = new Promise((resolve) => {
+      if (!wss || typeof wss.close !== "function") {
+        resolve();
+        return;
+      }
+
       try {
-        wss.close();
+        if (wss.close.length === 0) {
+          wss.close();
+          resolve();
+          return;
+        }
+        wss.close(() => resolve());
       } catch (err) {
         log("warn", "shutdown_wss_close_error", {
           error: String(err && err.message ? err.message : err),
         });
+        resolve();
       }
-    }
+    });
+    const closeTransports = Promise.all([closeServer, closeWss]);
 
-    // 4. Bounded drain — server.close() resolves only after every in-flight
-    //    connection completes; we cap it so a stuck client can't hold us forever.
+    // 4. Bounded drain — HTTP and WebSocket close only settle after every in-flight
+    //    connection completes; we cap them so a stuck client can't hold us forever.
     //    Clearing the timer on natural close avoids a misleading
     //    "shutdown_drain_timeout" warning during the subsequent cleanup phase.
     await Promise.race([
-      closeServer,
+      closeTransports,
       new Promise((resolve) => {
         const t = setTimeout(() => {
           log("warn", "shutdown_drain_timeout", { drainMs });
           resolve();
         }, drainMs);
         if (typeof t.unref === "function") t.unref();
-        closeServer.finally(() => clearTimeout(t));
+        closeTransports.finally(() => clearTimeout(t));
       }),
     ]);
 
@@ -839,11 +851,15 @@ function registerOrchestratedShutdown(server, wss) {
         log("warn", "shutdown_cleanup_unavailable", {
           reason: "lifecycle_globals_not_bound",
         });
+        process.exit(1);
+        return;
       }
     } catch (err) {
-      log("warn", "shutdown_cleanup_error", {
+      log("error", "shutdown_cleanup_error", {
         error: String(err && err.message ? err.message : err),
       });
+      process.exit(1);
+      return;
     }
 
     log("info", "shutdown_complete", { signal });

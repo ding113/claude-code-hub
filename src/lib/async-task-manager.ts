@@ -17,6 +17,7 @@ import { logger } from "./logger";
  */
 
 interface TaskInfo {
+  taskId: string;
   promise: Promise<void>;
   abortController: AbortController;
   createdAt: number;
@@ -31,11 +32,19 @@ interface RegisterTaskOptions {
   staleTimeoutMs?: number;
 }
 
+type AsyncTaskFactory = (signal: AbortSignal) => Promise<void>;
+
+type AsyncTaskLifecycleState = "open" | "draining" | "closed";
+
 const DEFAULT_STALE_TASK_TIMEOUT_MS = 10 * 60 * 1000;
 
 class AsyncTaskManagerClass {
+  // tasks 仅指向每个 taskId 的最新 generation；pendingTasks 跟踪所有尚未 settled 的 generation。
   private tasks: Map<string, TaskInfo> = new Map();
+  private pendingTasks: Set<TaskInfo> = new Set();
   private cleanupInterval: NodeJS.Timeout | null = null;
+  private shutdownPromise: Promise<void> | null = null;
+  private lifecycleState: AsyncTaskLifecycleState = "open";
   // Lazily initialize Node-only hooks on first use to avoid side effects at import time.
   private initialized = false;
 
@@ -65,7 +74,7 @@ class AsyncTaskManagerClass {
     // 耗尽路径（例如脚本类调用方未触发 SIGTERM）。
     process.once("beforeExit", () => {
       logger.info("[AsyncTaskManager] beforeExit reached, cancelling remaining tasks", {
-        activeTaskCount: this.tasks.size,
+        activeTaskCount: this.pendingTasks.size,
       });
       this.cleanupAll();
     });
@@ -80,40 +89,47 @@ class AsyncTaskManagerClass {
    * 注册一个异步任务
    *
    * @param taskId 任务唯一标识
-   * @param promise 异步任务 Promise
+   * @param factory 通过 admission 后才启动的异步任务 factory
    * @param taskType 任务类型（用于日志）
    * @returns AbortController（可用于取消任务）
    */
   register(
     taskId: string,
-    promise: Promise<void>,
+    factory: AsyncTaskFactory,
     taskTypeOrOptions: string | RegisterTaskOptions = "unknown"
   ): AbortController {
-    this.initializeIfNeeded();
-
     const options =
       typeof taskTypeOrOptions === "string" ? { taskType: taskTypeOrOptions } : taskTypeOrOptions;
     const taskType = options.taskType ?? "unknown";
+    const abortController = options.abortController ?? new AbortController();
 
-    // 如果任务已存在，先取消旧任务
-    const oldTaskInfo = this.tasks.get(taskId);
-    if (oldTaskInfo) {
-      logger.warn("[AsyncTaskManager] Task already exists, cancelling old task", {
-        taskId,
-        taskType,
-      });
-      this.cancel(taskId);
-      this.cleanup(taskId, oldTaskInfo);
+    if (
+      this.lifecycleState === "closed" ||
+      (this.lifecycleState === "draining" && this.pendingTasks.size === 0)
+    ) {
+      abortController.abort();
+      return abortController;
     }
 
-    const abortController = options.abortController ?? new AbortController();
+    this.initializeIfNeeded();
+
+    const previousLatest = this.tasks.get(taskId);
+
     const staleTimeoutMs =
       options.staleTimeoutMs === undefined || options.staleTimeoutMs <= 0
         ? DEFAULT_STALE_TASK_TIMEOUT_MS
         : options.staleTimeoutMs;
     const now = Date.now();
 
+    let resolveTask!: () => void;
+    let rejectTask!: (reason?: unknown) => void;
+    const promise = new Promise<void>((resolve, reject) => {
+      resolveTask = resolve;
+      rejectTask = reject;
+    });
+
     const taskInfo: TaskInfo = {
+      taskId,
       promise,
       abortController,
       createdAt: now,
@@ -123,6 +139,22 @@ class AsyncTaskManagerClass {
     };
 
     this.tasks.set(taskId, taskInfo);
+    this.pendingTasks.add(taskInfo);
+
+    if (previousLatest) {
+      logger.warn("[AsyncTaskManager] Task already exists, cancelling old task", {
+        taskId,
+        taskType,
+      });
+      if (!previousLatest.abortController.signal.aborted) {
+        previousLatest.abortController.abort();
+      }
+      logger.info("[AsyncTaskManager] Task cancelled", {
+        taskId,
+        taskType: previousLatest.taskType,
+        age: Date.now() - previousLatest.createdAt,
+      });
+    }
 
     // 任务完成后自动清理
     promise
@@ -159,8 +191,18 @@ class AsyncTaskManagerClass {
     logger.debug("[AsyncTaskManager] Task registered", {
       taskId,
       taskType,
-      activeTasks: this.tasks.size,
+      activeTasks: this.pendingTasks.size,
     });
+
+    if (abortController.signal.aborted) {
+      resolveTask();
+    } else {
+      try {
+        Promise.resolve(factory(abortController.signal)).then(resolveTask, rejectTask);
+      } catch (error) {
+        rejectTask(error);
+      }
+    }
 
     return abortController;
   }
@@ -208,18 +250,19 @@ class AsyncTaskManagerClass {
    * @param taskId 任务唯一标识
    */
   private cleanup(taskId: string, expectedTask: TaskInfo): boolean {
-    if (this.tasks.get(taskId) !== expectedTask) {
+    if (!this.pendingTasks.delete(expectedTask)) {
       return false;
     }
 
-    const deleted = this.tasks.delete(taskId);
-    if (deleted) {
-      logger.debug("[AsyncTaskManager] Task cleaned up", {
-        taskId,
-        remainingTasks: this.tasks.size,
-      });
+    if (this.tasks.get(taskId) === expectedTask) {
+      this.tasks.delete(taskId);
     }
-    return deleted;
+
+    logger.debug("[AsyncTaskManager] Task cleaned up", {
+      taskId,
+      remainingTasks: this.pendingTasks.size,
+    });
+    return true;
   }
 
   /**
@@ -228,7 +271,7 @@ class AsyncTaskManagerClass {
    * 遍历所有活跃任务，对于空闲时间超过任务级 staleTimeoutMs 的任务：
    * 1. 记录警告日志
    * 2. 触发 AbortController 取消任务
-   * 3. 从任务 Map 中移除
+   * 3. 保持 pending 跟踪，直到真实 Promise settled
    *
    * 注意：这是清理"空闲超时"的任务。活跃流应在收到上游 chunk 时
    * 调用 touch() 更新 lastActivityAt，避免被误判为挂死任务。
@@ -236,23 +279,23 @@ class AsyncTaskManagerClass {
   private cleanupCompletedTasks(): void {
     const now = Date.now();
 
-    for (const [taskId, taskInfo] of this.tasks.entries()) {
+    for (const taskInfo of this.pendingTasks) {
+      const { taskId } = taskInfo;
       const age = now - taskInfo.createdAt;
       const idleAge = now - taskInfo.lastActivityAt;
 
       const staleTimeoutMs = taskInfo.staleTimeoutMs || DEFAULT_STALE_TASK_TIMEOUT_MS;
 
-      // 如果任务超过阈值没有任何进展，记录警告、取消并从 Map 断开强引用。
-      if (idleAge > staleTimeoutMs) {
-        logger.warn("[AsyncTaskManager] Task timeout, cancelling and detaching", {
+      // stale cleanup 只负责发出一次取消；settlement 才拥有移除 pending 跟踪的权限。
+      if (idleAge > staleTimeoutMs && !taskInfo.abortController.signal.aborted) {
+        logger.warn("[AsyncTaskManager] Task timeout, cancelling", {
           taskId,
           taskType: taskInfo.taskType,
           age,
           idleAge,
           staleTimeoutMs,
         });
-        this.cancel(taskId);
-        this.cleanup(taskId, taskInfo);
+        taskInfo.abortController.abort();
       }
     }
   }
@@ -261,13 +304,15 @@ class AsyncTaskManagerClass {
    * 清理所有任务（进程退出时调用）
    */
   cleanupAll(): void {
+    this.lifecycleState = "closed";
     logger.info("[AsyncTaskManager] Cleaning up all tasks", {
-      count: this.tasks.size,
+      count: this.pendingTasks.size,
     });
 
-    for (const [taskId, taskInfo] of Array.from(this.tasks.entries())) {
-      this.cancel(taskId);
-      this.cleanup(taskId, taskInfo);
+    for (const taskInfo of Array.from(this.pendingTasks)) {
+      if (!taskInfo.abortController.signal.aborted) {
+        taskInfo.abortController.abort();
+      }
     }
 
     if (this.cleanupInterval) {
@@ -277,10 +322,69 @@ class AsyncTaskManagerClass {
   }
 
   /**
+   * 取消并等待 shutdown 时仍在飞的全部任务 settled。
+   *
+   * task 的 finally 可能在等待期间注册尾部任务，因此循环到 pending 集合为空；并发 shutdown
+   * 调用共享同一个 Promise，避免重复取消或提前返回。
+   */
+  shutdownAll(): Promise<void> {
+    if (this.shutdownPromise) {
+      return this.shutdownPromise;
+    }
+
+    let resolveShutdown!: () => void;
+    let rejectShutdown!: (reason?: unknown) => void;
+    const shutdownPromise = new Promise<void>((resolve, reject) => {
+      resolveShutdown = resolve;
+      rejectShutdown = reject;
+    });
+    this.shutdownPromise = shutdownPromise;
+    this.lifecycleState = "draining";
+
+    // 先发布共享 Promise，再同步开始 abort；这样既保留既有同步取消语义，
+    // 同步 abort listener 重入时也会复用同一次 shutdown。
+    void (async () => {
+      if (this.cleanupInterval) {
+        clearInterval(this.cleanupInterval);
+        this.cleanupInterval = null;
+      }
+
+      while (true) {
+        if (this.pendingTasks.size === 0) {
+          this.lifecycleState = "closed";
+          return;
+        }
+
+        const activeTasks = Array.from(this.pendingTasks);
+        logger.info("[AsyncTaskManager] Cancelling and joining active tasks", {
+          count: activeTasks.length,
+        });
+
+        for (const taskInfo of activeTasks) {
+          if (!taskInfo.abortController.signal.aborted) {
+            taskInfo.abortController.abort();
+          }
+        }
+
+        await Promise.allSettled(activeTasks.map((taskInfo) => taskInfo.promise));
+
+        for (const taskInfo of activeTasks) {
+          this.cleanup(taskInfo.taskId, taskInfo);
+        }
+      }
+    })().then(resolveShutdown, (error) => {
+      this.lifecycleState = "closed";
+      rejectShutdown(error);
+    });
+
+    return shutdownPromise;
+  }
+
+  /**
    * 获取当前活跃任务数
    */
   getActiveTaskCount(): number {
-    return this.tasks.size;
+    return this.pendingTasks.size;
   }
 
   /**
@@ -288,8 +392,8 @@ class AsyncTaskManagerClass {
    */
   getActiveTasks(): Array<{ taskId: string; taskType: string; age: number }> {
     const now = Date.now();
-    return Array.from(this.tasks.entries()).map(([taskId, taskInfo]) => ({
-      taskId,
+    return Array.from(this.pendingTasks).map((taskInfo) => ({
+      taskId: taskInfo.taskId,
       taskType: taskInfo.taskType,
       age: now - taskInfo.createdAt,
     }));
@@ -303,6 +407,6 @@ export const AsyncTaskManager =
 
 // 供 shutdown 编排器调用：在 cleanup 阶段（server.close 完成后）才取消残留任务，
 // 避免 drain 期间打断流式响应。
-export function shutdownAllAsyncTasks(): void {
-  AsyncTaskManager.cleanupAll();
+export function shutdownAllAsyncTasks(): Promise<void> {
+  return AsyncTaskManager.shutdownAll();
 }

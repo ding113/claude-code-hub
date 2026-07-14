@@ -202,7 +202,7 @@ export function requestCloudPriceTableSync(options: {
 
       AsyncTaskManager.register(
         taskId,
-        (async () => {
+        async () => {
           try {
             const result = await syncCloudPriceTableToDatabase();
             if (!result.ok) {
@@ -223,7 +223,7 @@ export function requestCloudPriceTableSync(options: {
           } finally {
             g.__CCH_CLOUD_PRICE_SYNC_LAST_AT__ = Date.now();
           }
-        })(),
+        },
         "cloud_price_table_sync"
       );
     } catch (error) {
