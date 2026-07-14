@@ -7,6 +7,11 @@ const mocks = vi.hoisted(() => ({
   trackCost: vi.fn(async () => {}),
   trackUserDailyCost: vi.fn(async () => {}),
   decrementLeaseBudget: vi.fn(async () => {}),
+  settleLeaseBudgets: vi.fn(async () => ({
+    requestId: "test",
+    status: "settled" as const,
+    settlements: [],
+  })),
 }));
 
 vi.mock("@/repository/message", () => ({
@@ -30,7 +35,18 @@ vi.mock("@/lib/logger", () => ({
 
 vi.mock("@/lib/async-task-manager", () => ({
   AsyncTaskManager: {
-    register: () => new AbortController(),
+    register: (
+      _taskId: string,
+      factory: (signal: AbortSignal) => Promise<void>,
+      options?: string | { abortController?: AbortController }
+    ) => {
+      const controller =
+        typeof options === "object" && options.abortController
+          ? options.abortController
+          : new AbortController();
+      void Promise.resolve(factory(controller.signal)).catch(() => {});
+      return controller;
+    },
     touch: vi.fn(() => true),
     cleanup: vi.fn(),
     cancel: vi.fn(),
@@ -47,6 +63,7 @@ vi.mock("@/lib/rate-limit", () => ({
     trackCost: mocks.trackCost,
     trackUserDailyCost: mocks.trackUserDailyCost,
     decrementLeaseBudget: mocks.decrementLeaseBudget,
+    settleLeaseBudgets: mocks.settleLeaseBudgets,
   },
 }));
 
@@ -188,6 +205,7 @@ describe("finalizeHedgeLoserBilling Codex priority snapshot", () => {
     mocks.trackCost.mockClear();
     mocks.trackUserDailyCost.mockClear();
     mocks.decrementLeaseBudget.mockClear();
+    mocks.settleLeaseBudgets.mockClear();
   });
 
   it("uses the initial loser's captured requested service tier after winner session sync", async () => {
@@ -202,6 +220,7 @@ describe("finalizeHedgeLoserBilling Codex priority snapshot", () => {
 
     const billed = await finalizeHedgeLoserBilling({
       messageRequestId: 123,
+      messageRequestCreatedAtMs: new Date("2026-06-08T00:00:00.000Z").getTime(),
       loserSession: loserSession as any,
       provider,
       attemptNumber: 1,
@@ -246,6 +265,7 @@ describe("finalizeHedgeLoserBilling Codex priority snapshot", () => {
 
     const billed = await finalizeHedgeLoserBilling({
       messageRequestId: 123,
+      messageRequestCreatedAtMs: new Date("2026-06-08T00:00:00.000Z").getTime(),
       loserSession: loserSession as any,
       provider: loserProvider,
       attemptNumber: 1,
@@ -270,17 +290,52 @@ describe("finalizeHedgeLoserBilling Codex priority snapshot", () => {
       2400,
       expect.objectContaining({
         userId: 20,
-        requestId: 123,
+        userResetTime: "00:00",
+        userResetMode: "fixed",
+        requestId: "123:hedge-loser:11:1",
       })
     );
-    expect(mocks.trackUserDailyCost).toHaveBeenCalledWith(
-      20,
-      2400,
-      "00:00",
-      "fixed",
+    expect(mocks.trackUserDailyCost).not.toHaveBeenCalled();
+    expect(mocks.settleLeaseBudgets).toHaveBeenCalledWith(
       expect.objectContaining({
-        requestId: 123,
+        requestId: "123:hedge-loser:11:1",
+        cost: 2400,
       })
+    );
+  });
+
+  it("tracks an alternative loser even when its shadow session has no request context", async () => {
+    const loserProvider = createCodexProvider({ id: 12, name: "shadow-loser" });
+    const loserSession = createLoserSession(loserProvider, { sessionId: null }) as ReturnType<
+      typeof createLoserSession
+    > & { messageContext: null; sessionId: null };
+    loserSession.sessionId = null;
+    loserSession.messageContext = null;
+
+    const billed = await finalizeHedgeLoserBilling({
+      messageRequestId: 124,
+      messageRequestCreatedAtMs: new Date("2026-06-08T00:00:01.000Z").getTime(),
+      loserSession: loserSession as any,
+      provider: loserProvider,
+      attemptNumber: 2,
+      upstreamStatusCode: 200,
+      allContent: JSON.stringify({ usage: { input_tokens: 100, output_tokens: 10 } }),
+      drainComplete: true,
+    });
+
+    expect(billed).toBe("200");
+    expect(mocks.trackCost).toHaveBeenCalledWith(
+      10,
+      loserProvider.id,
+      "",
+      200,
+      expect.objectContaining({
+        requestId: "124:hedge-loser:12:2",
+        createdAtMs: new Date("2026-06-08T00:00:01.000Z").getTime(),
+      })
+    );
+    expect(mocks.settleLeaseBudgets).toHaveBeenCalledWith(
+      expect.objectContaining({ requestId: "124:hedge-loser:12:2", cost: 200 })
     );
   });
 });
