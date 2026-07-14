@@ -13,7 +13,7 @@ const PREFIX = `it-provider-batch-ledger-${Date.now()}-${Math.random().toString(
 let db: PostgresJsDatabase<typeof Schema>;
 let schema: typeof Schema;
 let applyProviderBatchOperationIfUnchanged: ProviderRepository["applyProviderBatchOperationIfUnchanged"];
-let consumeProviderBatchUndo: ProviderRepository["consumeProviderBatchUndo"];
+let undoProviderBatchOperation: ProviderRepository["undoProviderBatchOperation"];
 let findProviderBatchApplyOperation: ProviderRepository["findProviderBatchApplyOperation"];
 let vendorId: number | null = null;
 const providerIds: number[] = [];
@@ -136,7 +136,7 @@ run("provider batch durable ledger (PostgreSQL)", () => {
     ({ db } = await import("@/drizzle/db"));
     ({
       applyProviderBatchOperationIfUnchanged,
-      consumeProviderBatchUndo,
+      undoProviderBatchOperation,
       findProviderBatchApplyOperation,
     } = await import("@/repository/provider"));
 
@@ -300,7 +300,7 @@ run("provider batch durable ledger (PostgreSQL)", () => {
     expect(replay).toEqual({ status: "replay", result: applied.result, undoAvailable: true });
   });
 
-  test("consuming undo prevents durable replay from reviving the token", async () => {
+  test("atomic undo restores providers and prevents durable replay from reviving the token", async () => {
     const [providerId] = await insertProviders(1);
     const input = makeInput({
       claim: "undo-consumed",
@@ -316,12 +316,13 @@ run("provider batch durable ledger (PostgreSQL)", () => {
     if (!("result" in applied)) return;
 
     await expect(
-      consumeProviderBatchUndo({
+      undoProviderBatchOperation({
         undoToken: applied.result.applyResult.undoToken,
         operationId: applied.result.applyResult.operationId,
-        consumedAt: new Date(),
+        groups: [{ ids: [providerId], updates: { priority: 1 } }],
+        revertedAt: new Date(),
       })
-    ).resolves.toEqual({ status: "consumed" });
+    ).resolves.toEqual({ status: "reverted", revertedCount: 1 });
 
     const replay = await findProviderBatchApplyOperation({
       claimKey: input.claimKey,
@@ -333,5 +334,41 @@ run("provider batch durable ledger (PostgreSQL)", () => {
       result: applied.result,
       undoAvailable: false,
     });
+  });
+
+  test("failed undo rolls back provider writes and leaves the token available", async () => {
+    const [providerId] = await insertProviders(1);
+    const input = makeInput({
+      claim: "undo-rollback",
+      preview: "undo-rollback-preview",
+      fingerprint: fingerprint("2"),
+      previewProviderIds: [providerId],
+      effectiveProviderIds: [providerId],
+      priority: 61,
+    });
+
+    const applied = await applyProviderBatchOperationIfUnchanged(input);
+    expect(applied.status).toBe("applied");
+    if (!("result" in applied)) return;
+
+    await expect(
+      undoProviderBatchOperation({
+        undoToken: applied.result.applyResult.undoToken,
+        operationId: applied.result.applyResult.operationId,
+        groups: [
+          { ids: [providerId], updates: { priority: 1 } },
+          { ids: [providerId + 999_999], updates: { priority: 1 } },
+        ],
+        revertedAt: new Date(),
+      })
+    ).rejects.toThrow();
+
+    const replay = await findProviderBatchApplyOperation({
+      claimKey: input.claimKey,
+      previewToken: input.previewToken,
+      payloadFingerprint: input.payloadFingerprint,
+    });
+    expect(replay.status).toBe("replay");
+    if (replay.status === "replay") expect(replay.undoAvailable).toBe(true);
   });
 });

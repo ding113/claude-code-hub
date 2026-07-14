@@ -8,7 +8,7 @@ const findAllProvidersFreshMock = vi.fn();
 const updateProvidersBatchMock = vi.fn();
 const findProviderBatchApplyOperationMock = vi.fn();
 const applyProviderBatchOperationIfUnchangedMock = vi.fn();
-const consumeProviderBatchUndoMock = vi.fn();
+const undoProviderBatchOperationMock = vi.fn();
 const publishCacheInvalidationMock = vi.fn();
 const { store: redisStore, mocks: redisMocks } = createRedisStore();
 const applyLedger = new Map<
@@ -30,7 +30,7 @@ vi.mock("@/repository/provider", () => ({
   updateProvidersBatch: updateProvidersBatchMock,
   findProviderBatchApplyOperation: findProviderBatchApplyOperationMock,
   applyProviderBatchOperationIfUnchanged: applyProviderBatchOperationIfUnchangedMock,
-  consumeProviderBatchUndo: consumeProviderBatchUndoMock,
+  undoProviderBatchOperation: undoProviderBatchOperationMock,
   deleteProvidersBatch: vi.fn(),
 }));
 
@@ -182,15 +182,21 @@ describe("Undo Provider Batch Patch Engine", () => {
     findAllProvidersFreshMock.mockResolvedValue([]);
     updateProvidersBatchMock.mockResolvedValue(0);
     installApplyLedgerMocks();
-    consumeProviderBatchUndoMock.mockImplementation(async ({ undoToken, operationId }) => {
-      const entry = [...applyLedger.values()].find(
-        (candidate) => candidate.result.applyResult.undoToken === undoToken
-      );
-      if (!entry || !entry.undoAvailable) return { status: "expired" };
-      if (entry.result.applyResult.operationId !== operationId) return { status: "conflict" };
-      entry.undoAvailable = false;
-      return { status: "consumed" };
-    });
+    undoProviderBatchOperationMock.mockImplementation(
+      async ({ undoToken, operationId, groups }) => {
+        const entry = [...applyLedger.values()].find(
+          (candidate) => candidate.result.applyResult.undoToken === undoToken
+        );
+        if (!entry || !entry.undoAvailable) return { status: "expired" };
+        if (entry.result.applyResult.operationId !== operationId) return { status: "conflict" };
+        let revertedCount = 0;
+        for (const group of groups) {
+          revertedCount += await updateProvidersBatchMock(group.ids, group.updates);
+        }
+        entry.undoAvailable = false;
+        return { status: "reverted", revertedCount };
+      }
+    );
     publishCacheInvalidationMock.mockResolvedValue(undefined);
   });
 

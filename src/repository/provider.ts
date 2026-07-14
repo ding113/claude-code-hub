@@ -1846,24 +1846,65 @@ export async function consumeProviderBatchUndo(input: {
   return { status: "expired" };
 }
 
-export async function releaseProviderBatchUndo(input: {
+export type UndoProviderBatchOperationResult =
+  | { status: "reverted"; revertedCount: number }
+  | { status: "conflict" }
+  | { status: "expired" };
+
+export async function undoProviderBatchOperation(input: {
   undoToken: string;
   operationId: string;
-  releasedAt: Date;
-}): Promise<boolean> {
-  const released = await db
-    .update(providerBatchApplyOperations)
-    .set({ undoConsumedAt: null, updatedAt: input.releasedAt })
-    .where(
-      and(
-        eq(providerBatchApplyOperations.undoToken, input.undoToken),
-        eq(providerBatchApplyOperations.operationId, input.operationId),
-        eq(providerBatchApplyOperations.status, "applied"),
-        gt(providerBatchApplyOperations.undoExpiresAt, input.releasedAt)
-      )
-    )
-    .returning({ claimKey: providerBatchApplyOperations.claimKey });
-  return released.length === 1;
+  groups: ProviderBatchUpdateGroup[];
+  revertedAt: Date;
+}): Promise<UndoProviderBatchOperationResult> {
+  return db.transaction(async (tx) => {
+    const [operation] = await tx
+      .select({
+        operationId: providerBatchApplyOperations.operationId,
+        undoExpiresAt: providerBatchApplyOperations.undoExpiresAt,
+        undoConsumedAt: providerBatchApplyOperations.undoConsumedAt,
+        status: providerBatchApplyOperations.status,
+      })
+      .from(providerBatchApplyOperations)
+      .where(eq(providerBatchApplyOperations.undoToken, input.undoToken))
+      .for("update")
+      .limit(1);
+
+    if (operation && operation.operationId !== input.operationId) {
+      return { status: "conflict" };
+    }
+    if (
+      !operation ||
+      operation.status !== "applied" ||
+      operation.undoConsumedAt !== null ||
+      operation.undoExpiresAt === null ||
+      operation.undoExpiresAt <= input.revertedAt
+    ) {
+      return { status: "expired" };
+    }
+
+    let revertedCount = 0;
+    for (const group of input.groups) {
+      const ids = [...new Set(group.ids)].sort((a, b) => a - b);
+      if (ids.length === 0) continue;
+      const updated = await tx
+        .update(providers)
+        .set(buildProviderBatchSetClauses(group.updates, input.revertedAt))
+        .where(and(inArray(providers.id, ids), isNull(providers.deletedAt)))
+        .returning({ id: providers.id });
+      if (updated.length !== ids.length) {
+        throw new ProviderBatchPreimageMismatchError();
+      }
+      revertedCount += updated.length;
+    }
+
+    await tx
+      .update(providerBatchApplyOperations)
+      .set({ undoConsumedAt: input.revertedAt, updatedAt: input.revertedAt })
+      .where(eq(providerBatchApplyOperations.undoToken, input.undoToken));
+
+    return { status: "reverted", revertedCount };
+  });
 }
 
 export async function updateProviderBatchGroupsIfUnchanged(

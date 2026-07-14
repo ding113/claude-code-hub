@@ -67,7 +67,6 @@ import { restoreProvidersBatch } from "@/repository";
 import {
   applyProviderBatchOperationIfUnchanged,
   type BatchProviderUpdates,
-  consumeProviderBatchUndo,
   createProvider,
   deleteProvider,
   findAllProviders,
@@ -78,10 +77,10 @@ import {
   type ProviderBatchExpectedPreimage,
   type ProviderBatchUpdateGroup,
   resetProviderTotalCostResetAt,
+  undoProviderBatchOperation,
   updateProvider,
   updateProviderPrioritiesBatch,
-  updateProvidersBatch,
-  releaseProviderBatchUndo,
+  type updateProvidersBatch,
 } from "@/repository/provider";
 import {
   backfillProviderEndpointsFromProviders,
@@ -2485,30 +2484,6 @@ export async function undoProviderPatch(
       };
     }
 
-    const durableConsume = await consumeProviderBatchUndo({
-      undoToken: parsed.data.undoToken,
-      operationId: parsed.data.operationId,
-      consumedAt: new Date(nowMs),
-    });
-    if (durableConsume.status === "conflict") {
-      return {
-        ok: false,
-        error: "撤销参数与操作不匹配",
-        errorCode: PROVIDER_BATCH_PATCH_ERROR_CODES.UNDO_CONFLICT,
-      };
-    }
-    if (durableConsume.status === "expired") {
-      await providerPatchUndoStore.delete(parsed.data.undoToken);
-      return {
-        ok: false,
-        error: "撤销窗口已过期或已被消费",
-        errorCode: PROVIDER_BATCH_PATCH_ERROR_CODES.UNDO_EXPIRED,
-      };
-    }
-
-    // Delete after validation passes so operationId mismatch doesn't destroy the token
-    await providerPatchUndoStore.delete(parsed.data.undoToken);
-
     // Group providers by identical preimage values to minimise DB round-trips
     const preimageGroups = new Map<string, { ids: number[]; updates: BatchProviderUpdates }>();
 
@@ -2537,20 +2512,30 @@ export async function undoProviderPatch(
       }
     }
 
-    let revertedCount = 0;
-    try {
-      for (const { ids, updates } of preimageGroups.values()) {
-        const count = await updateProvidersBatch(ids, updates);
-        revertedCount += count;
-      }
-    } catch (error) {
-      await releaseProviderBatchUndo({
-        undoToken: parsed.data.undoToken,
-        operationId: parsed.data.operationId,
-        releasedAt: new Date(),
-      });
-      throw error;
+    const undoResult = await undoProviderBatchOperation({
+      undoToken: parsed.data.undoToken,
+      operationId: parsed.data.operationId,
+      groups: [...preimageGroups.values()],
+      revertedAt: new Date(nowMs),
+    });
+    if (undoResult.status === "conflict") {
+      return {
+        ok: false,
+        error: "撤销参数与操作不匹配",
+        errorCode: PROVIDER_BATCH_PATCH_ERROR_CODES.UNDO_CONFLICT,
+      };
     }
+    if (undoResult.status === "expired") {
+      await providerPatchUndoStore.delete(parsed.data.undoToken);
+      return {
+        ok: false,
+        error: "撤销窗口已过期或已被消费",
+        errorCode: PROVIDER_BATCH_PATCH_ERROR_CODES.UNDO_EXPIRED,
+      };
+    }
+    const revertedCount = undoResult.revertedCount;
+
+    await providerPatchUndoStore.delete(parsed.data.undoToken);
 
     if (preimageGroups.size > 0) {
       await publishProviderCacheInvalidation();
