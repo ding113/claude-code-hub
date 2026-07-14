@@ -4,6 +4,7 @@ import { handle } from "hono/vercel";
 import { registerCors } from "@/app/v1/_lib/cors";
 import { handleAvailableModels } from "@/app/v1/_lib/models/available-models";
 import { handleProxyRequest } from "@/app/v1/_lib/proxy-handler";
+import { withDataDbScope } from "@/drizzle/db";
 
 export const runtime = "nodejs";
 
@@ -19,10 +20,14 @@ app.get("/models", handleAvailableModels);
 // 格式检测会自动识别 Gemini 请求体中的 contents 字段
 app.all("*", handleProxyRequest);
 
-export const GET = handle(app);
-export const POST = handle(app);
-export const PUT = handle(app);
-export const DELETE = handle(app);
-export const PATCH = handle(app);
-export const OPTIONS = handle(app);
-export const HEAD = handle(app);
+const routeHandler = withDataDbScope(handle(app));
+
+export {
+  routeHandler as GET,
+  routeHandler as POST,
+  routeHandler as PUT,
+  routeHandler as DELETE,
+  routeHandler as PATCH,
+  routeHandler as OPTIONS,
+  routeHandler as HEAD,
+};

@@ -4,6 +4,7 @@ import { pipeline as streamPipeline } from "node:stream";
 import { createGunzip, constants as zlibConstants } from "node:zlib";
 import type { Dispatcher } from "undici";
 import { request as undiciRequest } from "undici";
+import { findDbPoolAdmissionError } from "@/drizzle/admitted-client";
 import { applyAnthropicProviderOverridesWithAudit } from "@/lib/anthropic/provider-overrides";
 import {
   getCircuitState,
@@ -1775,6 +1776,37 @@ export class ProxyForwarder {
                   errorType: "ClientAbort",
                   errorName: "ClientAbort",
                   errorMessage: "Client aborted request",
+                },
+                request: buildRequestDetails(session),
+              },
+            });
+
+            throw lastError;
+          }
+
+          if (errorCategory === ErrorCategory.LOCAL_OVERLOAD) {
+            const admission = findDbPoolAdmissionError(lastError);
+            logger.warn("ProxyForwarder: Local database admission rejected", {
+              providerId: currentProvider.id,
+              providerName: currentProvider.name,
+              endpointId: activeEndpoint.endpointId,
+              pool: admission?.pool,
+              maxOutstanding: admission?.maxOutstanding,
+              attemptNumber: attemptCount,
+            });
+
+            session.addProviderToChain(currentProvider, {
+              ...endpointAudit,
+              reason: "system_error",
+              circuitState: getCircuitState(currentProvider.id),
+              attemptNumber: attemptCount,
+              errorMessage,
+              errorDetails: {
+                system: {
+                  errorType: "DbPoolAdmissionError",
+                  errorName: "DbPoolAdmissionError",
+                  errorMessage: admission?.message ?? errorMessage,
+                  errorCode: admission?.code,
                 },
                 request: buildRequestDetails(session),
               },
@@ -3852,6 +3884,7 @@ export class ProxyForwarder {
       const reader = attempt.reader;
       const response = attempt.response;
       const messageRequestId = session.messageContext?.id;
+      const messageRequestCreatedAtMs = session.messageContext?.createdAt.getTime();
       if (!reader || !response || messageRequestId == null) {
         // 无可读响应或无请求行可归属 -> 无法计费，直接释放资源。
         const cancel = reader?.cancel("hedge_loser_no_billing");
@@ -3923,6 +3956,7 @@ export class ProxyForwarder {
 
         await finalizeHedgeLoserBilling({
           messageRequestId,
+          messageRequestCreatedAtMs: messageRequestCreatedAtMs ?? Date.now(),
           loserSession: attempt.session,
           provider: attempt.provider,
           attemptNumber: attempt.sequence,
@@ -4260,6 +4294,40 @@ export class ProxyForwarder {
             ? error
             : new ProxyError("Request aborted by client", 499, undefined, true)
         );
+        return;
+      }
+
+      if (errorCategory === ErrorCategory.LOCAL_OVERLOAD) {
+        const admission = findDbPoolAdmissionError(error);
+        logger.warn("ProxyForwarder: Local database admission rejected during hedge", {
+          providerId: attempt.provider.id,
+          providerName: attempt.provider.name,
+          endpointId: attempt.endpointAudit.endpointId,
+          pool: admission?.pool,
+          maxOutstanding: admission?.maxOutstanding,
+          participantSequence: attempt.sequence,
+          attemptNumber: attempt.requestAttemptCount,
+        });
+
+        session.addProviderToChain(attempt.provider, {
+          ...attempt.endpointAudit,
+          reason: "system_error",
+          attemptNumber: attempt.sequence,
+          errorMessage,
+          circuitState: getCircuitState(attempt.provider.id),
+          errorDetails: {
+            system: {
+              errorType: "DbPoolAdmissionError",
+              errorName: "DbPoolAdmissionError",
+              errorMessage: admission?.message ?? errorMessage,
+              errorCode: admission?.code,
+            },
+            request: buildRequestDetails(session),
+          },
+          modelRedirect: getAttemptModelRedirect(attempt),
+        });
+        abortAllAttempts(undefined, "database_pool_overload");
+        await settleFailure(error);
         return;
       }
 

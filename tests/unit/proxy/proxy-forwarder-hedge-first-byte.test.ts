@@ -1722,6 +1722,49 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
     );
   });
 
+  test("local DB admission overload should stop hedge without circuit mutation or failover", async () => {
+    const provider = createProvider({ id: 1, name: "p1", firstByteTimeoutStreamingMs: 100 });
+    const session = createSession();
+    session.setProvider(provider);
+
+    const admissionCause = Object.assign(new Error("Database pool data is full"), {
+      name: "DbPoolAdmissionError",
+      code: "DB_POOL_ADMISSION_EXCEEDED",
+      pool: "data",
+      maxOutstanding: 32,
+    });
+    const wrappedError = new Error("Failed query", { cause: admissionCause });
+    mocks.categorizeErrorAsync.mockResolvedValueOnce(ProxyErrorCategory.LOCAL_OVERLOAD);
+
+    const doForward = vi.spyOn(
+      ProxyForwarder as unknown as {
+        doForward: (...args: unknown[]) => Promise<Response>;
+      },
+      "doForward"
+    );
+    doForward.mockRejectedValueOnce(wrappedError);
+
+    const error = await ProxyForwarder.send(session).catch((rejection) => rejection as Error);
+
+    expect(error).toBe(wrappedError);
+    expect(doForward).toHaveBeenCalledTimes(1);
+    expect(mocks.pickRandomProviderWithExclusion).not.toHaveBeenCalled();
+    expect(mocks.recordEndpointFailure).not.toHaveBeenCalled();
+    expect(mocks.recordFailure).not.toHaveBeenCalled();
+    expect(mocks.clearSessionProvider).toHaveBeenCalledWith("sess-hedge");
+    expect(session.getProviderChain()).toEqual([
+      expect.objectContaining({
+        id: provider.id,
+        reason: "system_error",
+        errorDetails: expect.objectContaining({
+          system: expect.objectContaining({
+            errorCode: "DB_POOL_ADMISSION_EXCEEDED",
+          }),
+        }),
+      }),
+    ]);
+  });
+
   test("hedge 备选供应商命中 thinking signature 错误时，应整流后在同供应商重试并保留审计", async () => {
     vi.useFakeTimers();
 

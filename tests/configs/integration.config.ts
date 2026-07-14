@@ -8,6 +8,10 @@ export default createTestRunnerConfig({
   testFiles: [
     "tests/integration/usage-ledger.test.ts",
     "tests/integration/my-usage-imported-ledger.test.ts",
+    "tests/integration/rolling-cost-redis.test.ts",
+    "tests/integration/lease-settlement-redis.test.ts",
+    "tests/integration/db-pool-isolation-postgres.test.ts",
+    "tests/integration/db-pool-slow-close-postgres.test.ts",
   ],
   api: {
     host: process.env.VITEST_API_HOST || "127.0.0.1",
