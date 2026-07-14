@@ -1,5 +1,6 @@
 import type { UsageMetrics } from "@/app/v1/_lib/proxy/response-handler";
 import type { ProxySession } from "@/app/v1/_lib/proxy/session";
+import { redactHeaders } from "@/lib/api/v1/_shared/redaction";
 import { isLangfuseEnabled } from "@/lib/langfuse/index";
 import { logger } from "@/lib/logger";
 import type { CostBreakdown } from "@/lib/utils/cost-calculation";
@@ -36,25 +37,6 @@ function getStatusCategory(statusCode: number): string {
   if (statusCode >= 400 && statusCode < 500) return "4xx";
   if (statusCode >= 500) return "5xx";
   return `${Math.floor(statusCode / 100)}xx`;
-}
-
-/**
- * Convert Headers to a plain record.
- *
- * Security note: session.headers are the CLIENT's original request headers
- * (user -> CCH), which may include the user's own CCH auth key. These are
- * safe to log -- the user already knows their own credentials.
- *
- * The upstream PROVIDER API key (outboundKey) is injected by ProxyForwarder
- * into a separate Headers object and is NEVER present in session.headers or
- * ctx.responseHeaders, so no redaction is needed here.
- */
-function headersToRecord(headers: Headers): Record<string, string> {
-  const result: Record<string, string> = {};
-  headers.forEach((value, key) => {
-    result[key] = value;
-  });
-  return result;
 }
 
 const SUCCESS_REASONS = new Set([
@@ -242,7 +224,9 @@ export async function traceProxyRequest(ctx: TraceContext): Promise<void> {
       requestSequence: String(session.getRequestSequence()),
     };
 
-    // Build generation metadata - all request detail fields, raw headers (no redaction)
+    const requestHeaders = redactHeaders(session.headers);
+    const responseHeaders = redactHeaders(ctx.responseHeaders);
+
     const generationMetadata: Record<string, unknown> = {
       // Provider
       providerId: provider?.id,
@@ -277,9 +261,8 @@ export async function traceProxyRequest(ctx: TraceContext): Promise<void> {
       requestSummary: buildRequestBodySummary(session),
       // SSE
       sseEventCount: ctx.sseEventCount,
-      // Headers (raw, no redaction)
-      requestHeaders: headersToRecord(session.headers),
-      responseHeaders: headersToRecord(ctx.responseHeaders),
+      requestHeaders,
+      responseHeaders,
     };
 
     // Build usage details for Langfuse generation
