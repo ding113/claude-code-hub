@@ -241,6 +241,71 @@ describe("Provider Single Edit Undo Actions", () => {
     expect(publishCacheInvalidationMock).toHaveBeenCalledTimes(1);
   });
 
+  it("undoProviderPatch should atomically consume a volatile token before reverting", async () => {
+    const { editProvider, undoProviderPatch } = await import("../../../src/actions/providers");
+
+    const edited = await editProvider(1, { name: "After Name" });
+    if (!edited.ok) throw new Error(`Edit should succeed: ${edited.error}`);
+
+    updateProvidersBatchMock.mockClear();
+    redisMocks.eval.mockClear();
+    redisMocks.del.mockClear();
+
+    const undone = await undoProviderPatch({
+      undoToken: edited.data.undoToken,
+      operationId: edited.data.operationId,
+    });
+
+    expect(undone.ok).toBe(true);
+    expect(redisMocks.eval).toHaveBeenCalledOnce();
+    expect(updateProvidersBatchMock).toHaveBeenCalledOnce();
+    expect(redisMocks.eval.mock.invocationCallOrder[0]).toBeLessThan(
+      updateProvidersBatchMock.mock.invocationCallOrder[0]
+    );
+    expect(redisMocks.del).not.toHaveBeenCalled();
+  });
+
+  it("undoProviderPatch should allow only one concurrent volatile undo", async () => {
+    const { editProvider, undoProviderPatch } = await import("../../../src/actions/providers");
+
+    const edited = await editProvider(1, { name: "After Name" });
+    if (!edited.ok) throw new Error(`Edit should succeed: ${edited.error}`);
+
+    updateProvidersBatchMock.mockClear();
+
+    const undoInput = {
+      undoToken: edited.data.undoToken,
+      operationId: edited.data.operationId,
+    };
+    const results = await Promise.all([undoProviderPatch(undoInput), undoProviderPatch(undoInput)]);
+
+    expect(results.filter((result) => result.ok)).toHaveLength(1);
+    const failed = results.find((result) => !result.ok);
+    expect(failed?.errorCode).toBe(PROVIDER_BATCH_PATCH_ERROR_CODES.UNDO_EXPIRED);
+    expect(updateProvidersBatchMock).toHaveBeenCalledOnce();
+  });
+
+  it("undoProviderPatch should not revert when volatile token consumption fails", async () => {
+    const { editProvider, undoProviderPatch } = await import("../../../src/actions/providers");
+
+    const edited = await editProvider(1, { name: "After Name" });
+    if (!edited.ok) throw new Error(`Edit should succeed: ${edited.error}`);
+
+    updateProvidersBatchMock.mockClear();
+    redisMocks.eval.mockRejectedValueOnce(new Error("redis unavailable"));
+
+    const undone = await undoProviderPatch({
+      undoToken: edited.data.undoToken,
+      operationId: edited.data.operationId,
+    });
+
+    expect(undone.ok).toBe(false);
+    if (undone.ok) return;
+    expect(undone.errorCode).toBe(PROVIDER_BATCH_PATCH_ERROR_CODES.UNDO_EXPIRED);
+    expect(updateProvidersBatchMock).not.toHaveBeenCalled();
+    expect(redisStore.has(`cch:prov:undo-patch:${edited.data.undoToken}`)).toBe(true);
+  });
+
   it("undoProviderPatch should not include key field in preimage", async () => {
     findProviderByIdMock.mockResolvedValueOnce(makeProvider(1, { key: "sk-before" }));
     updateProviderMock.mockResolvedValueOnce(makeProvider(1, { key: "sk-after" }));

@@ -2515,6 +2515,26 @@ export async function undoProviderPatch(
       };
     }
 
+    // Volatile undo has no durable ledger, so consume its token before any provider write.
+    if (!snapshot.durable) {
+      const consumedSnapshot = await providerPatchUndoStore.getAndDelete(parsed.data.undoToken);
+      if (!consumedSnapshot) {
+        return {
+          ok: false,
+          error: PROVIDER_BATCH_PATCH_ERROR_CODES.UNDO_EXPIRED,
+          errorCode: PROVIDER_BATCH_PATCH_ERROR_CODES.UNDO_EXPIRED,
+        };
+      }
+      if (consumedSnapshot.operationId !== parsed.data.operationId) {
+        return {
+          ok: false,
+          error: PROVIDER_BATCH_PATCH_ERROR_CODES.UNDO_CONFLICT,
+          errorCode: PROVIDER_BATCH_PATCH_ERROR_CODES.UNDO_CONFLICT,
+        };
+      }
+      snapshot = consumedSnapshot;
+    }
+
     // Group providers by identical preimage values to minimise DB round-trips
     const preimageGroups = new Map<string, { ids: number[]; updates: BatchProviderUpdates }>();
 
@@ -2584,13 +2604,15 @@ export async function undoProviderPatch(
     }
     const revertedCount = undoResult.revertedCount;
 
-    try {
-      await providerPatchUndoStore.delete(parsed.data.undoToken);
-    } catch (error) {
-      logger.warn("undoProviderPatch:undo_snapshot_cleanup_failed", {
-        operationId: snapshot.operationId,
-        error: error instanceof Error ? error.message : String(error),
-      });
+    if (snapshot.durable) {
+      try {
+        await providerPatchUndoStore.delete(parsed.data.undoToken);
+      } catch (error) {
+        logger.warn("undoProviderPatch:undo_snapshot_cleanup_failed", {
+          operationId: snapshot.operationId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
     }
 
     if (preimageGroups.size > 0) {
