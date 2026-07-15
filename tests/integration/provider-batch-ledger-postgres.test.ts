@@ -1,4 +1,4 @@
-import { and, eq, inArray, like } from "drizzle-orm";
+import { and, eq, inArray, isNull, like } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import type * as Schema from "@/drizzle/schema";
@@ -334,6 +334,72 @@ run("provider batch durable ledger (PostgreSQL)", () => {
       result: applied.result,
       undoAvailable: false,
     });
+  });
+
+  test("durable undo reconciles endpoints when it re-enables a provider", async () => {
+    const [providerId] = await insertProviders(1);
+    await db
+      .update(schema.providers)
+      .set({ isEnabled: true })
+      .where(eq(schema.providers.id, providerId));
+
+    const input = makeInput({
+      claim: "undo-enable-endpoint",
+      preview: "undo-enable-endpoint-preview",
+      fingerprint: fingerprint("3"),
+      previewProviderIds: [providerId],
+      effectiveProviderIds: [providerId],
+      priority: 1,
+    });
+    input.groups = [{ ids: [providerId], updates: { isEnabled: false } }];
+    input.expectedPreimages = expectedPreimages([providerId]).map((entry) => ({
+      ...entry,
+      values: { ...entry.values, isEnabled: true },
+    }));
+    input.undoPreimage = { [providerId]: { isEnabled: true } };
+
+    const applied = await applyProviderBatchOperationIfUnchanged(input);
+    expect(applied.status).toBe("applied");
+    if (!("result" in applied)) return;
+
+    const [provider] = await db
+      .select({
+        isEnabled: schema.providers.isEnabled,
+        providerType: schema.providers.providerType,
+        url: schema.providers.url,
+      })
+      .from(schema.providers)
+      .where(eq(schema.providers.id, providerId));
+    expect(provider?.isEnabled).toBe(false);
+
+    await expect(
+      undoProviderBatchOperation({
+        undoToken: applied.result.applyResult.undoToken,
+        operationId: applied.result.applyResult.operationId,
+        groups: [{ ids: [providerId], updates: { isEnabled: true } }],
+        revertedAt: new Date(),
+      })
+    ).resolves.toEqual({ status: "reverted", revertedCount: 1 });
+
+    const [revertedProvider] = await db
+      .select({ isEnabled: schema.providers.isEnabled })
+      .from(schema.providers)
+      .where(eq(schema.providers.id, providerId));
+    expect(revertedProvider?.isEnabled).toBe(true);
+
+    const endpoints = await db
+      .select({ id: schema.providerEndpoints.id })
+      .from(schema.providerEndpoints)
+      .where(
+        and(
+          eq(schema.providerEndpoints.vendorId, vendorId!),
+          eq(schema.providerEndpoints.providerType, provider!.providerType),
+          eq(schema.providerEndpoints.url, provider!.url),
+          eq(schema.providerEndpoints.isEnabled, true),
+          isNull(schema.providerEndpoints.deletedAt)
+        )
+      );
+    expect(endpoints).toHaveLength(1);
   });
 
   test("failed undo rolls back provider writes and leaves the token available", async () => {

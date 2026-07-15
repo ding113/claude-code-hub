@@ -1920,7 +1920,7 @@ export async function undoProviderBatchOperation(input: {
   revertedAt: Date;
 }): Promise<UndoProviderBatchOperationResult> {
   try {
-    return await db.transaction(async (tx) => {
+    const result = await db.transaction(async (tx): Promise<UndoProviderBatchOperationResult> => {
       const [operation] = await tx
         .select({
           operationId: providerBatchApplyOperations.operationId,
@@ -1968,6 +1968,14 @@ export async function undoProviderBatchOperation(input: {
 
       return { status: "reverted", revertedCount };
     });
+
+    if (result.status === "reverted") {
+      await ensureEnabledProviderEndpointsForIds(
+        input.groups.flatMap((group) => (group.updates.isEnabled === true ? group.ids : []))
+      );
+    }
+
+    return result;
   } catch (error) {
     if (error instanceof ProviderBatchPreimageMismatchError) {
       return { status: "mismatch" };
