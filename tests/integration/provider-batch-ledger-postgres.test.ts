@@ -361,7 +361,7 @@ run("provider batch durable ledger (PostgreSQL)", () => {
         ],
         revertedAt: new Date(),
       })
-    ).rejects.toThrow();
+    ).resolves.toEqual({ status: "mismatch" });
 
     const replay = await findProviderBatchApplyOperation({
       claimKey: input.claimKey,

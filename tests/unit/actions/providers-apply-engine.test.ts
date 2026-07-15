@@ -527,7 +527,7 @@ describe("Apply Provider Batch Patch Engine", () => {
     redisStore.delete(`cch:prov:preview:${preview.data.previewToken}`);
     redisStore.delete(`cch:prov:undo-patch:${first.data.undoToken}`);
     redisSetexMock.mockClear();
-    vi.setSystemTime(new Date("2026-07-14T12:00:03.000Z"));
+    vi.setSystemTime(new Date("2026-07-14T12:00:03.001Z"));
 
     const replay = await applyProviderBatchPatch({
       previewToken: preview.data.previewToken,
@@ -543,7 +543,9 @@ describe("Apply Provider Batch Patch Engine", () => {
     expect(applyProviderBatchOperationIfUnchangedMock).toHaveBeenCalledOnce();
     const undoEntry = redisStore.get(`cch:prov:undo-patch:${first.data.undoToken}`);
     expect(undoEntry).toBeDefined();
-    expect(undoEntry?.expiresAt).toBe(new Date(first.data.undoExpiresAt).getTime());
+    const advertisedExpiry = new Date(first.data.undoExpiresAt).getTime();
+    expect(undoEntry?.expiresAt).toBeGreaterThanOrEqual(advertisedExpiry);
+    expect(undoEntry?.expiresAt).toBeLessThan(advertisedExpiry + 1000);
     expect(redisSetexMock).toHaveBeenCalledWith(
       `cch:prov:undo-patch:${first.data.undoToken}`,
       7,

@@ -2050,7 +2050,7 @@ async function restoreProviderPatchUndoSnapshot(
   if (!undoAvailable) {
     return;
   }
-  const remainingTtlSeconds = Math.floor(
+  const remainingTtlSeconds = Math.ceil(
     (new Date(operation.applyResult.undoExpiresAt).getTime() - Date.now()) / 1000
   );
   if (remainingTtlSeconds <= 0) {

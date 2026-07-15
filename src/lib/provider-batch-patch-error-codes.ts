@@ -9,7 +9,10 @@ export const PROVIDER_BATCH_PATCH_ERROR_CODES = {
   UNDO_STALE: "UNDO_STALE",
 } as const;
 
-export const SENSITIVE_PROVIDER_BATCH_UNDO_KEYS = new Set(["proxyUrl", "mcpPassthroughUrl"]);
+export const SENSITIVE_PROVIDER_BATCH_UNDO_KEYS: ReadonlySet<string> = new Set([
+  "proxyUrl",
+  "mcpPassthroughUrl",
+]);
 
 export type ProviderBatchPatchErrorCode =
   (typeof PROVIDER_BATCH_PATCH_ERROR_CODES)[keyof typeof PROVIDER_BATCH_PATCH_ERROR_CODES];
