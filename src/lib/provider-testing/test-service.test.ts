@@ -169,33 +169,33 @@ describe("executeProviderTest", () => {
     expectRequestUrl("https://relay.example.com/openai/v1/responses");
   });
 
-  test.each([
-    "https://api.gptclubapi.xyz/openai",
-    "https://api.gptclubapi.xyz/openai/",
-  ])("codex bare /openai base preserves absolute versioned request url: %s", async (providerUrl) => {
-    mockJsonResponse({
-      id: "resp_test",
-      model: "gpt-5.5",
-      output: [
-        {
-          type: "message",
-          role: "assistant",
-          content: [{ type: "output_text", text: "pong" }],
-        },
-      ],
-    });
+  test.each(["https://api.gptclubapi.xyz/openai", "https://api.gptclubapi.xyz/openai/"])(
+    "codex bare /openai base preserves absolute versioned request url: %s",
+    async (providerUrl) => {
+      mockJsonResponse({
+        id: "resp_test",
+        model: "gpt-5.5",
+        output: [
+          {
+            type: "message",
+            role: "assistant",
+            content: [{ type: "output_text", text: "pong" }],
+          },
+        ],
+      });
 
-    const result = await executeProviderTest({
-      providerUrl,
-      apiKey: "sk-test-codex",
-      providerType: "codex",
-      model: "gpt-5.5",
-    });
+      const result = await executeProviderTest({
+        providerUrl,
+        apiKey: "sk-test-codex",
+        providerType: "codex",
+        model: "gpt-5.5",
+      });
 
-    expect(result.success).toBe(true);
-    expect(result.requestUrl).toBe("https://api.gptclubapi.xyz/openai/v1/responses");
-    expect(fetchMock.mock.calls[0]?.[0]).toBe("https://api.gptclubapi.xyz/openai/v1/responses");
-  });
+      expect(result.success).toBe(true);
+      expect(result.requestUrl).toBe("https://api.gptclubapi.xyz/openai/v1/responses");
+      expect(fetchMock.mock.calls[0]?.[0]).toBe("https://api.gptclubapi.xyz/openai/v1/responses");
+    }
+  );
 
   test("openai-compatible 版本根路径应只追加 endpoint，不重复拼接 /v1", async () => {
     mockJsonResponse({
