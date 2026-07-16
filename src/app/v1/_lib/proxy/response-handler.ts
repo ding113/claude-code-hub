@@ -549,9 +549,9 @@ async function consumeBeforeResponseBodySnapshot(session: ProxySession): Promise
   }
 }
 
-function discardBeforeResponseBodySnapshot(session: ProxySession): void {
+function discardBeforeResponseBodySnapshot(session: ProxySession): boolean {
   const source = takeBeforeResponseBodySnapshotSource(session);
-  if (!source?.body) return;
+  if (!source?.body) return false;
 
   void source.body.cancel().catch((error) => {
     logger.warn("[ResponseHandler] Failed to discard before-response snapshot body", {
@@ -560,6 +560,7 @@ function discardBeforeResponseBodySnapshot(session: ProxySession): void {
       error,
     });
   });
+  return true;
 }
 
 export type UsageMetrics = {
@@ -1445,7 +1446,8 @@ export class ProxyResponseHandler {
     const snapshotSession = session as ProxySession & {
       detailSnapshotResponseBeforeSource?: Response | null;
     };
-    if (session.sessionId && session.shouldPersistSessionDebugArtifacts()) {
+    const isStreamingResponse = response.headers.get("content-type")?.includes("text/event-stream");
+    if (!isStreamingResponse && session.sessionId && session.shouldPersistSessionDebugArtifacts()) {
       snapshotSession.detailSnapshotResponseBeforeSource = response.clone();
     }
 
@@ -2418,24 +2420,40 @@ export class ProxyResponseHandler {
         (provider.providerType === "gemini" || provider.providerType === "gemini-cli");
 
       if (isGeminiPassthrough) {
-        // 完全透传：clone 用于后台统计，返回原始 response
-        logger.debug(
-          "[ResponseHandler] Gemini stream passthrough (clone for stats, return original)",
-          {
-            originalFormat: session.originalFormat,
-            providerType: provider.providerType,
-            model: session.request.model,
-            statusCode: response.status,
-            reason: "Client receives untouched response, stats read from clone",
-          }
-        );
+        logger.debug("[ResponseHandler] Gemini stream passthrough (demand-driven stats)", {
+          originalFormat: session.originalFormat,
+          providerType: provider.providerType,
+          model: session.request.model,
+          statusCode: response.status,
+          reason: "Client receives untouched chunks observed by the authoritative pump",
+        });
+        discardBeforeResponseBodySnapshot(session);
 
         // 注意：不要在“仅收到响应头”时清除首字节超时。
         // 背景：部分上游可能会快速返回 200 + SSE headers，但随后长时间不发送任何 body 数据。
         // 若在 headers 阶段就 clearResponseTimeout，会导致首字节超时失效，客户端与服务端都会表现为一直“请求中”。
         // 透传场景下，我们在后台 stats 读取到第一块数据时再清除超时（与非透传路径口径一致）。
 
-        const responseForStats = response.clone();
+        let observePassthroughChunk = (_value: Uint8Array) => {};
+        let observePassthroughReadStart = () => {};
+        let passthroughPump: DemandDrivenResponsePump;
+        passthroughPump = createDemandDrivenResponsePump({
+          source: response.body,
+          onReadStart: () => observePassthroughReadStart(),
+          onChunk: (value) => observePassthroughChunk(value),
+          onClientCancel: (reason) => {
+            passthroughPump.startDrain(reason);
+            passthroughPump.cancelSource(reason);
+          },
+        });
+        const cleanupPassthroughClientAbortListener = bindClientAbortListener(
+          session.clientAbortSignal,
+          () => {
+            const reason = session.clientAbortSignal?.reason;
+            passthroughPump.startDrain(reason);
+            passthroughPump.cancelSource(reason);
+          }
+        );
         const statusCode = response.status;
 
         const taskId = `stream-passthrough-${messageContext.id}`;
@@ -2454,14 +2472,15 @@ export class ProxyResponseHandler {
             responseController?: AbortController;
           };
 
-          let reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
           const streamTextAccumulator = new BoundedStreamTextAccumulator();
           let lastStreamTextSnapshot: BoundedStreamTextSnapshot | null = null;
           const getCollectedChunkCount = () =>
             lastStreamTextSnapshot?.chunkCount ?? streamTextAccumulator.chunkCount;
           let isFirstChunk = true;
           let streamEndedNormally = false;
+          let terminalFinalizationStarted = false;
           let responseTimeoutCleared = false;
+          let pumpClientAborted = false;
           let abortReason: string | undefined;
           let transportReleased = false;
 
@@ -2501,6 +2520,10 @@ export class ProxyResponseHandler {
             }, idleTimeoutMs);
           };
 
+          observePassthroughReadStart = () => {
+            if (!isFirstChunk) startIdleTimer();
+          };
+
           const clearResponseTimeoutOnce = (firstChunkSize?: number) => {
             if (responseTimeoutCleared) return;
             if (!sessionWithCleanup.clearResponseTimeout) return;
@@ -2529,9 +2552,20 @@ export class ProxyResponseHandler {
             return flushAndSnapshot().text;
           };
 
+          observePassthroughChunk = (value) => {
+            if (isFirstChunk) {
+              isFirstChunk = false;
+              session.recordTtfb();
+              clearResponseTimeoutOnce(value.byteLength);
+            }
+            streamTextAccumulator.pushBytes(value);
+            AsyncTaskManager.touch(taskId);
+          };
+
           const releaseTransportResources = () => {
             if (transportReleased) return;
             transportReleased = true;
+            cleanupPassthroughClientAbortListener();
             cleanupTaskAbortBinding();
             clearIdleTimer();
             try {
@@ -2557,90 +2591,20 @@ export class ProxyResponseHandler {
                 }
               );
             }
-            try {
-              const cancelPromise = reader?.cancel();
-              cancelPromise?.catch((error) => {
-                logger.warn("[ResponseHandler] Gemini passthrough: Failed to cancel stats reader", {
-                  taskId,
-                  providerId: provider.id,
-                  providerName: provider.name,
-                  error: error instanceof Error ? error.message : String(error),
-                });
-              });
-            } catch (error) {
-              logger.warn("[ResponseHandler] Gemini passthrough: Failed to cancel stats reader", {
-                taskId,
-                providerId: provider.id,
-                providerName: provider.name,
-                error: error instanceof Error ? error.message : String(error),
-              });
-            }
-            try {
-              reader?.releaseLock();
-            } catch (error) {
-              logger.warn("[ResponseHandler] Gemini passthrough: Failed to release reader lock", {
-                taskId,
-                providerId: provider.id,
-                providerName: provider.name,
-                error: error instanceof Error ? error.message : String(error),
-              });
-            }
-            reader = null;
             releaseSessionAgent(session);
           };
 
           try {
-            const body = responseForStats.body;
-            if (!body) return;
-            reader = body.getReader();
-
-            // 注意：即使 STORE_SESSION_RESPONSE_BODY=false（不写入 Redis），这里也会在内存中累积完整流内容：
-            // - 用于解析 usage/cost 与内部结算（例如“假 200”检测）
-            // 因此该开关仅影响“是否持久化”，不用于控制流式内存占用。
-            while (true) {
-              if (session.clientAbortSignal?.aborted) break;
-
-              const { done, value } = await reader.read();
-              if (done) {
-                const wasResponseControllerAborted =
-                  sessionWithController.responseController?.signal.aborted ?? false;
-                const clientAborted = session.clientAbortSignal?.aborted ?? false;
-
-                // abort -> nodeStreamToWebStreamSafe 可能会把错误吞掉并 close()，导致 done=true；
-                // 这里必须结合 abort signal 判断是否为“自然结束”。
-                if (wasResponseControllerAborted || clientAborted) {
-                  streamEndedNormally = false;
-                  if (!abortReason) {
-                    abortReason = clientAborted ? "CLIENT_ABORTED" : "STREAM_RESPONSE_TIMEOUT";
-                  }
-                } else {
-                  streamEndedNormally = true;
-                }
-                break;
-              }
-
-              const chunkSize = value?.byteLength ?? 0;
-              if (value && chunkSize > 0) {
-                if (isFirstChunk) {
-                  isFirstChunk = false;
-                  session.recordTtfb();
-                  clearResponseTimeoutOnce(chunkSize);
-                }
-
-                streamTextAccumulator.pushBytes(value);
-                AsyncTaskManager.touch(taskId);
-              }
-
-              // 首块数据到达后才启动 idle timer（避免与首字节超时职责重叠）
-              if (!isFirstChunk) {
-                startIdleTimer();
-              }
-            }
+            const pumpCompletion = await passthroughPump.completion;
+            streamEndedNormally = pumpCompletion.streamEndedNormally;
+            pumpClientAborted = pumpCompletion.clientAborted;
+            if (pumpCompletion.error) throw pumpCompletion.error;
 
             clearIdleTimer();
             const streamSnapshot = flushAndSnapshot();
             const allContent = streamSnapshot.text;
-            const clientAborted = session.clientAbortSignal?.aborted ?? false;
+            const clientAborted =
+              pumpClientAborted || (session.clientAbortSignal?.aborted ?? false);
             releaseTransportResources();
 
             // 存储响应体到 Redis（5分钟过期）
@@ -2689,6 +2653,7 @@ export class ProxyResponseHandler {
 
             // 使用共享的统计处理方法
             const duration = Date.now() - session.startTime;
+            terminalFinalizationStarted = true;
             const finalized = await finalizeDeferredStreamingFinalizationIfNeeded(
               session,
               allContent,
@@ -2726,7 +2691,8 @@ export class ProxyResponseHandler {
             }
           } catch (error) {
             const err = error instanceof Error ? error : new Error(String(error));
-            const clientAborted = session.clientAbortSignal?.aborted ?? false;
+            const clientAborted =
+              passthroughPump.wasClientAborted() || (session.clientAbortSignal?.aborted ?? false);
             const isResponseControllerAborted =
               sessionWithController.responseController?.signal.aborted ?? false;
             const isIdleTimeout = !!err.message?.includes("streaming_idle");
@@ -2756,6 +2722,10 @@ export class ProxyResponseHandler {
             });
 
             try {
+              if (terminalFinalizationStarted) {
+                throw err;
+              }
+              terminalFinalizationStarted = true;
               clearIdleTimer();
               const allContent = flushAndJoin();
               const duration = Date.now() - session.startTime;
@@ -2787,13 +2757,29 @@ export class ProxyResponseHandler {
                 });
               }
             } catch (finalizeError) {
+              const persistenceDeadlineAtMs = Date.now() + STREAM_FAILURE_PERSISTENCE_MAX_MS;
+              const fallbackStatusCode =
+                statusCode >= 400
+                  ? statusCode
+                  : streamEndedNormally
+                    ? 500
+                    : clientAborted
+                      ? 499
+                      : 502;
               await persistRequestFailure({
                 session,
                 messageContext,
-                statusCode: statusCode && statusCode >= 400 ? statusCode : 502,
+                statusCode: fallbackStatusCode,
                 error: finalizeError,
                 taskId,
                 phase: "stream",
+                detailsWriter: updateMessageRequestDetailsIfUnfinalized,
+                awaitPersistence: <T>(promise: Promise<T>) =>
+                  raceWithDeadline(
+                    promise,
+                    persistenceDeadlineAtMs,
+                    "stream_failure_persistence_timeout"
+                  ),
               });
             }
           } finally {
@@ -2841,8 +2827,11 @@ export class ProxyResponseHandler {
           });
         }
 
-        discardBeforeResponseBodySnapshot(session);
-        return response;
+        return new Response(passthroughPump.stream, {
+          status: response.status,
+          statusText: response.statusText,
+          headers: cleanResponseHeaders(response.headers),
+        });
       } else {
         // ❌ 需要转换：客户端不是 Gemini 格式（如 OpenAI/Claude）
         logger.debug("[ResponseHandler] Transforming Gemini stream to client format", {
@@ -3136,8 +3125,7 @@ export class ProxyResponseHandler {
           session.shouldPersistSessionDebugArtifacts() &&
           !streamSnapshot?.truncated
         ) {
-          const beforeBody =
-            (await awaitFinalization(consumeBeforeResponseBodySnapshot(session))) ?? allContent;
+          const beforeBody = allContent;
           void SessionManager.storeSessionResponse(
             session.sessionId,
             allContent,
