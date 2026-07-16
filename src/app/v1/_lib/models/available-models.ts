@@ -32,6 +32,16 @@ const DEFAULT_MODELS_TIMEOUT_MS = 10000;
 /** Codex CLI 使用空远端清单时会回退到内置模型目录。 */
 const CODEX_MODELS_MANIFEST_ETAG = 'W/"cch-codex-bundled-v1"';
 
+function matchesIfNoneMatch(value: string | undefined, etag: string): boolean {
+  if (!value) return false;
+
+  const opaqueTag = etag.replace(/^W\//, "");
+  return value.split(",").some((candidate) => {
+    const normalized = candidate.trim();
+    return normalized === "*" || normalized.replace(/^W\//, "") === opaqueTag;
+  });
+}
+
 /**
  * 获取 provider 的请求超时配置
  */
@@ -549,7 +559,8 @@ export async function handleAvailableModels(c: Context): Promise<Response> {
 
     if (c.req.path === "/v1/models" && c.req.query("client_version")?.trim()) {
       c.header("ETag", CODEX_MODELS_MANIFEST_ETAG);
-      if (c.req.header("if-none-match") === CODEX_MODELS_MANIFEST_ETAG) {
+      c.header("Cache-Control", "no-cache");
+      if (matchesIfNoneMatch(c.req.header("if-none-match"), CODEX_MODELS_MANIFEST_ETAG)) {
         return c.body(null, 304);
       }
       return c.json({ models: [] });

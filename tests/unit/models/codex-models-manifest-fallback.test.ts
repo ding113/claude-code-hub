@@ -77,16 +77,22 @@ describe("Codex models manifest fallback", () => {
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ models: [] });
     expect(response.headers.get("etag")).toBe(CODEX_MODELS_ETAG);
+    expect(response.headers.get("cache-control")).toBe("no-cache");
     expect(findAllProviders).not.toHaveBeenCalled();
   });
 
-  it("returns 304 when If-None-Match matches the fallback manifest", async () => {
+  it.each([
+    CODEX_MODELS_ETAG,
+    `"other", ${CODEX_MODELS_ETAG}`,
+    "*",
+  ])("returns 304 when If-None-Match is %s", async (ifNoneMatch) => {
     const response = await authenticatedRequest("/v1/models?client_version=0.144.1", {
-      "if-none-match": CODEX_MODELS_ETAG,
+      "if-none-match": ifNoneMatch,
     });
 
     expect(response.status).toBe(304);
     expect(response.headers.get("etag")).toBe(CODEX_MODELS_ETAG);
+    expect(response.headers.get("cache-control")).toBe("no-cache");
     expect(await response.text()).toBe("");
     expect(findAllProviders).not.toHaveBeenCalled();
   });
