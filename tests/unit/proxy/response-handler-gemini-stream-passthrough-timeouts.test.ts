@@ -393,7 +393,7 @@ describe("ProxyResponseHandler - Gemini stream passthrough timeouts", () => {
     ).toBeNull();
   });
 
-  test("Gemini 流式透传返回原始响应前应丢弃未消费的 before-snapshot 响应分支", async () => {
+  test("Gemini 流式透传应在泵读取前丢弃 before-snapshot 并保留返回正文", async () => {
     asyncTasks.length = 0;
     const cancel = vi.fn(async () => undefined);
     const session = createSession({
@@ -412,10 +412,11 @@ describe("ProxyResponseHandler - Gemini stream passthrough timeouts", () => {
       body: { cancel },
     };
 
+    const expectedBody = 'data: {"provider":"gemini"}\n\n';
     const upstreamResponse = new Response(
       new ReadableStream<Uint8Array>({
         start(controller) {
-          controller.enqueue(new TextEncoder().encode('data: {"provider":"gemini"}\n\n'));
+          controller.enqueue(new TextEncoder().encode(expectedBody));
           controller.close();
         },
       }),
@@ -431,7 +432,7 @@ describe("ProxyResponseHandler - Gemini stream passthrough timeouts", () => {
       }
     ).handleStream(session, upstreamResponse);
 
-    expect(returned).toBe(upstreamResponse);
+    await expect(returned.text()).resolves.toBe(expectedBody);
     expect(cancel).toHaveBeenCalledOnce();
     expect(
       (session as ProxySession & { detailSnapshotResponseBeforeSource?: unknown })

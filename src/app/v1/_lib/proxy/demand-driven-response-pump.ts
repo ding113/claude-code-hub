@@ -23,6 +23,8 @@ export interface DemandDrivenResponsePump {
   wasClientAborted: () => boolean;
 }
 
+const PENDING_CHUNK_DEADLINE_MS = 60_000;
+
 function toError(error: unknown): Error {
   return error instanceof Error ? error : new Error(String(error));
 }
@@ -39,6 +41,7 @@ export function createDemandDrivenResponsePump(
   let drainPromise: Promise<void> | null = null;
   let settled = false;
   let readerReleased = false;
+  let pendingChunkDeadlineId: ReturnType<typeof setTimeout> | null = null;
   let resolveCompletion: (completion: DemandDrivenResponsePumpCompletion) => void = () => {};
   const completion = new Promise<DemandDrivenResponsePumpCompletion>((resolve) => {
     resolveCompletion = resolve;
@@ -54,15 +57,41 @@ export function createDemandDrivenResponsePump(
     }
   };
 
-  const settle = (streamEndedNormally: boolean, error: Error | null) => {
+  const clearPendingChunkDeadline = () => {
+    if (!pendingChunkDeadlineId) return;
+    clearTimeout(pendingChunkDeadlineId);
+    pendingChunkDeadlineId = null;
+  };
+
+  const settle = (
+    streamEndedNormally: boolean,
+    error: Error | null,
+    sourceCancelReason?: Error
+  ) => {
     if (settled) return;
     settled = true;
     state = "finalizing";
     pendingChunk = null;
+    clearPendingChunkDeadline();
+    let cancelPromise: Promise<void> | null = null;
+    const recordSourceCancelFailure = (cancelError: unknown) => {
+      const normalizedCancelError = toError(cancelError);
+      if (error && error.cause === undefined) error.cause = normalizedCancelError;
+    };
+    if (sourceCancelReason) {
+      try {
+        cancelPromise = reader.cancel(sourceCancelReason);
+      } catch (cancelError) {
+        recordSourceCancelFailure(
+          cancelError instanceof Error ? cancelError : new Error(String(cancelError))
+        );
+      }
+    }
     releaseReader();
     clientController = null;
     state = "closed";
     resolveCompletion({ streamEndedNormally, clientAborted, error });
+    void cancelPromise?.then(undefined, recordSourceCancelFailure);
   };
 
   const finishWithError = (error: unknown) => {
@@ -92,6 +121,43 @@ export function createDemandDrivenResponsePump(
 
   let scheduleDrain = () => {};
 
+  const startDrain = (_reason?: unknown) => {
+    if (settled || state === "finalizing" || state === "closed") return;
+    if (state === "draining") {
+      scheduleDrain();
+      return;
+    }
+    clientAborted = true;
+    state = "draining";
+    try {
+      clientController?.error(
+        _reason == null ? new Error("Client disconnected") : toError(_reason)
+      );
+    } catch (controllerError) {
+      if (!(controllerError instanceof TypeError)) throw controllerError;
+      // The ReadableStream cancel algorithm may have already detached the controller.
+    }
+    scheduleDrain();
+  };
+
+  const cancelSource = (reason?: unknown) => {
+    if (settled) return;
+    const normalized = reason == null ? new Error("Source cancelled") : toError(reason);
+    settle(false, normalized, normalized);
+  };
+
+  const armPendingChunkDeadline = () => {
+    clearPendingChunkDeadline();
+    pendingChunkDeadlineId = setTimeout(() => {
+      const error = new DOMException(
+        `Client response body was not consumed within ${PENDING_CHUNK_DEADLINE_MS}ms`,
+        "AbortError"
+      );
+      startDrain(error);
+      cancelSource(error);
+    }, PENDING_CHUNK_DEADLINE_MS);
+  };
+
   const ensureRead = (): Promise<void> => {
     if (settled || pendingChunk || readInFlight) {
       return readInFlight ?? Promise.resolve();
@@ -116,7 +182,9 @@ export function createDemandDrivenResponsePump(
           }
 
           options.onChunk(result.value);
+          if (settled) return;
           pendingChunk = result.value;
+          armPendingChunkDeadline();
         },
         (error) => finishWithError(error)
       )
@@ -143,6 +211,7 @@ export function createDemandDrivenResponsePump(
           continue;
         }
         if (pendingChunk) {
+          clearPendingChunkDeadline();
           pendingChunk = null;
           continue;
         }
@@ -154,24 +223,6 @@ export function createDemandDrivenResponsePump(
         scheduleDrain();
       }
     });
-  };
-
-  const startDrain = (_reason?: unknown) => {
-    if (settled || state === "finalizing" || state === "closed") return;
-    if (state === "draining") {
-      scheduleDrain();
-      return;
-    }
-    clientAborted = true;
-    state = "draining";
-    try {
-      clientController?.error(
-        _reason == null ? new Error("Client disconnected") : toError(_reason)
-      );
-    } catch {
-      // The ReadableStream cancel algorithm may have already detached the controller.
-    }
-    scheduleDrain();
   };
 
   const stream = new ReadableStream<Uint8Array>(
@@ -186,6 +237,7 @@ export function createDemandDrivenResponsePump(
         if (settled || state !== "client-active" || !pendingChunk) return;
 
         const chunk = pendingChunk;
+        clearPendingChunkDeadline();
         pendingChunk = null;
         try {
           clientController?.enqueue(chunk);
@@ -197,8 +249,11 @@ export function createDemandDrivenResponsePump(
         void ensureRead();
       },
       cancel(reason) {
-        options.onClientCancel?.(reason);
-        startDrain(reason);
+        try {
+          options.onClientCancel?.(reason);
+        } finally {
+          startDrain(reason);
+        }
       },
     },
     { highWaterMark: 0 }
@@ -210,15 +265,7 @@ export function createDemandDrivenResponsePump(
     stream,
     completion,
     startDrain,
-    cancelSource(reason) {
-      if (settled) return;
-      const normalized = reason == null ? new Error("Source cancelled") : toError(reason);
-      const cancelPromise = reader.cancel(normalized);
-      settle(false, normalized);
-      void cancelPromise.catch(() => {
-        // The pump has already recorded the hard-cancel cause.
-      });
-    },
+    cancelSource,
     errorClient(error) {
       if (settled || state !== "client-active") return;
       state = "draining";

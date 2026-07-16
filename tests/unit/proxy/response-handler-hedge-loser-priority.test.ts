@@ -1,3 +1,4 @@
+import { Context } from "hono";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
@@ -76,6 +77,7 @@ vi.mock(import("@/lib/utils/performance-formatter"), async (importOriginal) => {
 });
 
 import { finalizeHedgeLoserBilling } from "@/app/v1/_lib/proxy/response-handler";
+import { ProxySession } from "@/app/v1/_lib/proxy/session";
 import type { Provider } from "@/types/provider";
 
 function createCodexProvider(overrides: Partial<Provider> = {}): Provider {
@@ -140,7 +142,7 @@ function createCodexProvider(overrides: Partial<Provider> = {}): Provider {
   };
 }
 
-function createLoserSession(
+async function createLoserSession(
   provider: Provider,
   overrides: {
     sessionId?: string | null;
@@ -148,53 +150,46 @@ function createLoserSession(
     groupCostMultiplier?: number;
   } = {}
 ) {
-  return {
-    provider,
-    request: {
-      model: "winner-default-model",
-      message: {
-        model: "winner-default-model",
-        service_tier: "default",
-      },
-    },
-    sessionId: overrides.sessionId ?? "session-1",
-    messageContext: { id: 123, createdAt: new Date("2026-06-08T00:00:00.000Z") },
-    authState: {
-      key: {
-        id: 10,
-        limit5hResetMode: "rolling",
-        dailyResetTime: "00:00",
-        dailyResetMode: "fixed",
-      },
-      user: {
-        id: 20,
-        limit5hResetMode: "rolling",
-        dailyResetTime: "00:00",
-        dailyResetMode: "fixed",
-      },
-    },
-    getEndpoint: () => "/v1/responses",
-    getOriginalModel: () => "winner-default-model",
-    getCurrentModel: () => "winner-default-model",
-    getContext1mApplied: () => overrides.context1mApplied ?? false,
-    setContext1mApplied: vi.fn(),
-    getGroupCostMultiplier: () => overrides.groupCostMultiplier ?? 1,
-    getSpecialSettings: () => [],
-    addSpecialSetting: vi.fn(),
-    shouldTrackSessionObservability: () => false,
-    getCodexPriorityBillingSource: vi.fn(async () => "requested"),
-    getResolvedPricingByBillingSource: vi.fn(async () => ({
-      resolvedModelName: "gpt-5.5",
-      resolvedPricingProviderKey: "openai",
-      source: "official_fallback",
-      priceData: {
-        input_cost_per_token: 1,
-        output_cost_per_token: 10,
-        input_cost_per_token_priority: 2,
-        output_cost_per_token_priority: 20,
-      },
-    })),
+  const context = new Context(
+    new Request("http://localhost/v1/responses", {
+      method: "POST",
+      body: JSON.stringify({ model: "winner-default-model", service_tier: "default" }),
+      headers: { "content-type": "application/json" },
+    })
+  );
+  const session = await ProxySession.fromContext(context);
+  session.provider = provider;
+  session.sessionId = overrides.sessionId ?? "session-1";
+  session.messageContext = {
+    id: 123,
+    createdAt: new Date("2026-06-08T00:00:00.000Z"),
+    user: { id: 20, limit5hResetMode: "rolling", dailyResetTime: "00:00", dailyResetMode: "fixed" },
+    key: { id: 10, limit5hResetMode: "rolling", dailyResetTime: "00:00", dailyResetMode: "fixed" },
+    apiKey: "test-api-key",
   };
+  session.authState = {
+    success: true,
+    apiKey: "test-api-key",
+    key: session.messageContext.key,
+    user: session.messageContext.user,
+  };
+  session.getCodexPriorityBillingSource = vi.fn(async () => "requested");
+  session.getResolvedPricingByBillingSource = vi.fn(async () => ({
+    resolvedModelName: "gpt-5.5",
+    resolvedPricingProviderKey: "openai",
+    source: "official_fallback",
+    priceData: {
+      input_cost_per_token: 1,
+      output_cost_per_token: 10,
+      input_cost_per_token_priority: 2,
+      output_cost_per_token_priority: 20,
+    },
+  }));
+  if (overrides.context1mApplied) session.setContext1mApplied(true);
+  if (overrides.groupCostMultiplier !== undefined) {
+    session.setGroupCostMultiplier(overrides.groupCostMultiplier);
+  }
+  return session;
 }
 
 describe("finalizeHedgeLoserBilling Codex priority snapshot", () => {
@@ -210,7 +205,7 @@ describe("finalizeHedgeLoserBilling Codex priority snapshot", () => {
 
   it("uses the initial loser's captured requested service tier after winner session sync", async () => {
     const provider = createCodexProvider();
-    const loserSession = createLoserSession(provider);
+    const loserSession = await createLoserSession(provider);
     const responseBody = JSON.stringify({
       usage: {
         input_tokens: 100,
@@ -221,7 +216,7 @@ describe("finalizeHedgeLoserBilling Codex priority snapshot", () => {
     const billed = await finalizeHedgeLoserBilling({
       messageRequestId: 123,
       messageRequestCreatedAtMs: new Date("2026-06-08T00:00:00.000Z").getTime(),
-      loserSession: loserSession as any,
+      loserSession,
       provider,
       attemptNumber: 1,
       upstreamStatusCode: 200,
@@ -252,7 +247,7 @@ describe("finalizeHedgeLoserBilling Codex priority snapshot", () => {
       name: "winner-polluted-provider",
       costMultiplier: 10,
     });
-    const loserSession = createLoserSession(winnerProvider, {
+    const loserSession = await createLoserSession(winnerProvider, {
       context1mApplied: true,
       groupCostMultiplier: 99,
     });
@@ -266,7 +261,7 @@ describe("finalizeHedgeLoserBilling Codex priority snapshot", () => {
     const billed = await finalizeHedgeLoserBilling({
       messageRequestId: 123,
       messageRequestCreatedAtMs: new Date("2026-06-08T00:00:00.000Z").getTime(),
-      loserSession: loserSession as any,
+      loserSession,
       provider: loserProvider,
       attemptNumber: 1,
       upstreamStatusCode: 200,
@@ -306,16 +301,14 @@ describe("finalizeHedgeLoserBilling Codex priority snapshot", () => {
 
   it("tracks an alternative loser even when its shadow session has no request context", async () => {
     const loserProvider = createCodexProvider({ id: 12, name: "shadow-loser" });
-    const loserSession = createLoserSession(loserProvider, { sessionId: null }) as ReturnType<
-      typeof createLoserSession
-    > & { messageContext: null; sessionId: null };
+    const loserSession = await createLoserSession(loserProvider, { sessionId: null });
     loserSession.sessionId = null;
     loserSession.messageContext = null;
 
     const billed = await finalizeHedgeLoserBilling({
       messageRequestId: 124,
       messageRequestCreatedAtMs: new Date("2026-06-08T00:00:01.000Z").getTime(),
-      loserSession: loserSession as any,
+      loserSession,
       provider: loserProvider,
       attemptNumber: 2,
       upstreamStatusCode: 200,
