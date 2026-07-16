@@ -9,7 +9,7 @@ import { emitProxyLangfuseTrace } from "@/lib/langfuse/emit-proxy-trace";
 import { logger } from "@/lib/logger";
 import { ProxyStatusTracker } from "@/lib/proxy-status-tracker";
 import { sanitizeErrorTextForDetail } from "@/lib/utils/upstream-error-detection";
-import { updateMessageRequestDetails, updateMessageRequestDuration } from "@/repository/message";
+import { updateMessageRequestDetailsDurably } from "@/repository/message";
 import type { SystemSettings } from "@/types/system-config";
 import { deriveClientSafeUpstreamErrorMessage } from "./client-error-message";
 import { attachSessionIdToErrorResponse } from "./error-session-id";
@@ -623,7 +623,6 @@ export class ProxyErrorHandler {
     }
 
     const duration = Date.now() - session.startTime;
-    await updateMessageRequestDuration(session.messageContext.id, duration);
 
     // 如果是限流错误，将元数据附加到错误消息中
     let finalErrorMessage = errorMessage;
@@ -632,7 +631,8 @@ export class ProxyErrorHandler {
     }
 
     // 保存错误信息和决策链
-    await updateMessageRequestDetails(session.messageContext.id, {
+    await updateMessageRequestDetailsDurably(session.messageContext.id, {
+      durationMs: duration,
       errorMessage: finalErrorMessage,
       providerChain: session.getProviderChain(),
       statusCode: statusCode,
