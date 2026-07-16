@@ -63,7 +63,6 @@ import { buildProxyUrl } from "../url";
 import { rectifyBillingHeader } from "./billing-header-rectifier";
 import { bindClientAbortListener } from "./client-abort-listener";
 import { deriveClientSafeUpstreamErrorMessage } from "./client-error-message";
-import { combineAbortSignals } from "./combine-abort-signals";
 import { isStandardProxyEndpointPath } from "./endpoint-family-catalog";
 import { resolveEndpointPolicy, shouldEnforceStrictEndpointPoolPolicy } from "./endpoint-policy";
 import {
@@ -3007,23 +3006,31 @@ export class ProxyForwarder {
     }
 
     // 2. 组合双路信号：response + client
-    const signals = [responseController.signal];
-    if (session.clientAbortSignal) {
-      signals.push(session.clientAbortSignal);
-    }
-
-    // 优先 Node 20.3+ 原生 AbortSignal.any（V8 内部管理 listener，无需手动 cleanup）；
-    // Next.js standalone 覆盖全局时 fallback 到 polyfill，由调用方在请求结束时调用
-    // cleanupCombinedSignal 解绑源信号上的 listener，避免持有 session/请求体闭包。
-    const { signal: combinedSignal, cleanup: cleanupCombinedSignal } = combineAbortSignals(signals);
+    const transportController = new AbortController();
+    const abortTransportFrom = (source: AbortSignal) => {
+      if (!transportController.signal.aborted) {
+        transportController.abort(source.reason);
+      }
+    };
+    const cleanupResponseTransportSignal = bindClientAbortListener(responseController.signal, () =>
+      abortTransportFrom(responseController.signal)
+    );
+    const cleanupClientTransportSignal = bindClientAbortListener(session.clientAbortSignal, () => {
+      const clientSignal = session.clientAbortSignal;
+      if (clientSignal) abortTransportFrom(clientSignal);
+    });
+    const cleanupCombinedSignal = () => {
+      cleanupResponseTransportSignal();
+      cleanupClientTransportSignal();
+    };
     logger.debug("ProxyForwarder: Combined abort signals", {
-      signalCount: signals.length,
+      signalCount: session.clientAbortSignal ? 2 : 1,
     });
 
     const init: UndiciFetchOptions = {
       method: session.method,
       headers: processedHeaders,
-      signal: combinedSignal, // 使用组合信号
+      signal: transportController.signal, // 使用组合信号
       ...(requestBody ? { body: requestBody } : {}),
     };
 
@@ -3109,7 +3116,7 @@ export class ProxyForwarder {
               body: requestBodyJson,
               sessionId: getResponsesWsSessionId(session.headers),
               endpointId: responsesWsEndpointId,
-              abortSignal: combinedSignal,
+              abortSignal: transportController.signal,
             });
 
             if ("response" in wsResult) {
@@ -3672,6 +3679,8 @@ export class ProxyForwarder {
       }
     }
 
+    cleanupClientTransportSignal();
+
     // 检查 HTTP 错误状态（4xx/5xx 均视为失败，触发重试）
     // 注意：用户要求所有 4xx 都重试，包括 401、403、429 等
     if (!response.ok) {
@@ -3725,7 +3734,7 @@ export class ProxyForwarder {
 
     // Attach agent release callback for in-flight reference counting.
     // response-handler must call this in its finally block after the stream is fully consumed.
-    // 同时复用此回调作为 combineAbortSignals polyfill 的 cleanup 入口：response-handler 已经
+    // 同时复用此回调作为 transport signal 的 cleanup 入口：response-handler 已经
     // 保证在请求结束时（成功/异常）幂等地调用 releaseAgent，把 cleanup 合并到这里就不必再
     // 改造 response-handler 的所有 finally 调用点。两个动作互不影响，cleanup 内部自带 cleaned
     // 标志，重复调用安全。
