@@ -29,6 +29,9 @@ export interface FetchedModel {
 /** 模型列表请求的默认超时（毫秒） */
 const DEFAULT_MODELS_TIMEOUT_MS = 10000;
 
+/** Codex CLI 使用空远端清单时会回退到内置模型目录。 */
+const CODEX_MODELS_MANIFEST_ETAG = 'W/"cch-codex-bundled-v1"';
+
 /**
  * 获取 provider 的请求超时配置
  */
@@ -543,6 +546,14 @@ export const handleOpenAICompatibleModels = createFixedProviderTypesModelsHandle
 export async function handleAvailableModels(c: Context): Promise<Response> {
   try {
     const { user, key } = await authenticateRequest(c);
+
+    if (c.req.query("client_version")?.trim()) {
+      c.header("ETag", CODEX_MODELS_MANIFEST_ETAG);
+      if (c.req.header("if-none-match") === CODEX_MODELS_MANIFEST_ETAG) {
+        return c.body(null, 304);
+      }
+      return c.json({ models: [] });
+    }
 
     const responseFormat = detectResponseFormat(c);
     const clientFormatOverride = detectClientFormatOverride(c);
