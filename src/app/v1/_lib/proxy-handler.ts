@@ -18,6 +18,7 @@ import { ProxySession } from "./proxy/session";
 export async function handleProxyRequest(c: Context): Promise<Response> {
   let session: ProxySession | null = null;
   let cachedSystemSettings: Awaited<ReturnType<typeof getCachedSystemSettings>> | null = null;
+  let acquiredConcurrencySessionId: string | null = null;
   try {
     session = await ProxySession.fromContext(c);
     try {
@@ -88,6 +89,7 @@ export async function handleProxyRequest(c: Context): Promise<Response> {
     // 9. 增加并发计数（在所有检查通过后，请求开始前）- 跳过 count_tokens
     if (session.sessionId && session.getEndpointPolicy().trackConcurrentRequests) {
       await SessionTracker.incrementConcurrentCount(session.sessionId);
+      acquiredConcurrencySessionId = session.sessionId;
     }
 
     // 10. 记录请求开始
@@ -146,8 +148,8 @@ export async function handleProxyRequest(c: Context): Promise<Response> {
     return ProxyResponses.buildError(500, "代理请求发生未知错误");
   } finally {
     // 11. 减少并发计数（确保无论成功失败都执行）- 跳过 count_tokens
-    if (session?.sessionId && session.getEndpointPolicy().trackConcurrentRequests) {
-      await SessionTracker.decrementConcurrentCount(session.sessionId);
+    if (acquiredConcurrencySessionId) {
+      await SessionTracker.decrementConcurrentCount(acquiredConcurrencySessionId);
     }
   }
 }
