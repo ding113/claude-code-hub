@@ -547,7 +547,7 @@ export async function handleAvailableModels(c: Context): Promise<Response> {
   try {
     const { user, key } = await authenticateRequest(c);
 
-    if (c.req.query("client_version")?.trim()) {
+    if (c.req.path === "/v1/models" && c.req.query("client_version")?.trim()) {
       c.header("ETag", CODEX_MODELS_MANIFEST_ETAG);
       if (c.req.header("if-none-match") === CODEX_MODELS_MANIFEST_ETAG) {
         return c.body(null, 304);

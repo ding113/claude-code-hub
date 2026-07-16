@@ -48,6 +48,7 @@ const CODEX_MODELS_ETAG = 'W/"cch-codex-bundled-v1"';
 function createApp() {
   const app = new Hono();
   app.get("/v1/models", handleAvailableModels);
+  app.get("/v1beta/models", handleAvailableModels);
   return app;
 }
 
@@ -104,6 +105,15 @@ describe("Codex models manifest fallback", () => {
 
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ object: "list", data: [] });
+    expect(findAllProviders).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps Gemini model discovery for /v1beta/models with client_version", async () => {
+    const response = await authenticatedRequest("/v1beta/models?client_version=0.144.1");
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ models: [] });
+    expect(response.headers.get("etag")).toBeNull();
     expect(findAllProviders).toHaveBeenCalledTimes(1);
   });
 
