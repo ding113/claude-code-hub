@@ -52,246 +52,246 @@ describe("message terminal public-status public seam", () => {
     vi.doUnmock("@/lib/redis");
   });
 
-  it.each<OwnerOrder>([
-    "primary-first",
-    "fallback-first",
-  ])("%s publishes exactly one rollup from the terminal SQL owner", async (ownerOrder) => {
-    vi.resetModules();
-    vi.useFakeTimers();
+  it.each<OwnerOrder>(["primary-first", "fallback-first"])(
+    "%s publishes exactly one rollup from the terminal SQL owner",
+    async (ownerOrder) => {
+      vi.resetModules();
+      vi.useFakeTimers();
 
-    const id = ownerOrder === "primary-first" ? 91_001 : 91_002;
-    const row: TerminalRow = {
-      id,
-      createdAt: new Date("2026-07-13T12:00:00.000Z"),
-      model: "gpt-4.1",
-      originalModel: "gpt-4.1",
-      durationMs: null,
-      statusCode: null,
-    };
-    const releasePrimary = createDeferred<void>();
-    const primaryReceipts: number[][] = [];
-    const fallbackReceipts: number[][] = [];
-    const primarySql: Array<{ sql: string; params: unknown[] }> = [];
-    const rollupPipelines: Array<Array<{ command: string; args: unknown[] }>> = [];
+      const id = ownerOrder === "primary-first" ? 91_001 : 91_002;
+      const row: TerminalRow = {
+        id,
+        createdAt: new Date("2026-07-13T12:00:00.000Z"),
+        model: "gpt-4.1",
+        originalModel: "gpt-4.1",
+        durationMs: null,
+        statusCode: null,
+      };
+      const releasePrimary = createDeferred<void>();
+      const primaryReceipts: number[][] = [];
+      const fallbackReceipts: number[][] = [];
+      const primarySql: Array<{ sql: string; params: unknown[] }> = [];
+      const rollupPipelines: Array<Array<{ command: string; args: unknown[] }>> = [];
 
-    const primaryDetails = {
-      durationMs: 1_200,
-      statusCode: 200,
-      outputTokens: 60,
-      providerChain: [
-        {
-          id: 1,
-          name: "primary-provider",
-          groupTag: "openai",
-          reason: "request_success" as const,
-          statusCode: 200,
-        },
-      ],
-      model: "gpt-4.1",
-    };
-    const fallbackDetails = {
-      durationMs: 2_400,
-      statusCode: 504,
-      outputTokens: 0,
-      errorMessage: "Error: stream_finalization_timeout",
-      providerChain: [
-        {
-          id: 2,
-          name: "fallback-provider",
-          groupTag: "openai",
-          reason: "retry_failed" as const,
-          statusCode: 504,
-        },
-      ],
-      model: "gpt-4.1",
-    };
+      const primaryDetails = {
+        durationMs: 1_200,
+        statusCode: 200,
+        outputTokens: 60,
+        providerChain: [
+          {
+            id: 1,
+            name: "primary-provider",
+            groupTag: "openai",
+            reason: "request_success" as const,
+            statusCode: 200,
+          },
+        ],
+        model: "gpt-4.1",
+      };
+      const fallbackDetails = {
+        durationMs: 2_400,
+        statusCode: 504,
+        outputTokens: 0,
+        errorMessage: "Error: stream_finalization_timeout",
+        providerChain: [
+          {
+            id: 2,
+            name: "fallback-provider",
+            groupTag: "openai",
+            reason: "retry_failed" as const,
+            statusCode: 504,
+          },
+        ],
+        model: "gpt-4.1",
+      };
 
-    const execute = vi.fn(async (query: Parameters<typeof toSqlText>[0]) => {
-      const built = toSqlText(query);
-      primarySql.push(built);
-      await releasePrimary.promise;
-      if (row.statusCode !== null) {
-        primaryReceipts.push([]);
-        return [];
-      }
-      row.durationMs = primaryDetails.durationMs;
-      row.statusCode = primaryDetails.statusCode;
-      primaryReceipts.push([id]);
-      return [{ id }];
-    });
+      const execute = vi.fn(async (query: Parameters<typeof toSqlText>[0]) => {
+        const built = toSqlText(query);
+        primarySql.push(built);
+        await releasePrimary.promise;
+        if (row.statusCode !== null) {
+          primaryReceipts.push([]);
+          return [];
+        }
+        row.durationMs = primaryDetails.durationMs;
+        row.statusCode = primaryDetails.statusCode;
+        primaryReceipts.push([id]);
+        return [{ id }];
+      });
 
-    const writerUpdate = vi.fn(() => ({
-      set: vi.fn((patch: Record<string, unknown>) => ({
-        where: vi.fn(() => ({
-          returning: vi.fn(async () => {
-            if (row.statusCode !== null) {
-              fallbackReceipts.push([]);
-              return [];
-            }
-            row.durationMs = patch.durationMs as number;
-            row.statusCode = patch.statusCode as number;
-            fallbackReceipts.push([id]);
-            return [{ id }];
-          }),
-        })),
-      })),
-    }));
-    const writerDb = { execute, update: writerUpdate };
-
-    vi.doMock("@/drizzle/db", () => ({
-      db: {
-        select: vi.fn(() => ({
-          from: vi.fn(() => ({
-            where: vi.fn(() => ({
-              limit: vi.fn(async () => [
-                {
-                  createdAt: row.createdAt,
-                  model: row.model,
-                  originalModel: row.originalModel,
-                  durationMs: row.durationMs,
-                },
-              ]),
-            })),
+      const writerUpdate = vi.fn(() => ({
+        set: vi.fn((patch: Record<string, unknown>) => ({
+          where: vi.fn(() => ({
+            returning: vi.fn(async () => {
+              if (row.statusCode !== null) {
+                fallbackReceipts.push([]);
+                return [];
+              }
+              row.durationMs = patch.durationMs as number;
+              row.statusCode = patch.statusCode as number;
+              fallbackReceipts.push([id]);
+              return [{ id }];
+            }),
           })),
         })),
-        update: vi.fn(),
-      },
-      getMessageWriterDb: vi.fn(() => writerDb),
-    }));
-    vi.doMock("@/lib/config/env.schema", () => ({
-      getEnvConfig: () => ({
-        MESSAGE_REQUEST_WRITE_MODE: "async",
-        MESSAGE_REQUEST_ASYNC_FLUSH_INTERVAL_MS: 60_000,
-        MESSAGE_REQUEST_ASYNC_BATCH_SIZE: 1_000,
-        MESSAGE_REQUEST_ASYNC_MAX_PENDING: 1_000,
-      }),
-    }));
-    vi.doMock("@/lib/logger", () => ({
-      logger: {
-        trace: vi.fn(),
-        debug: vi.fn(),
-        info: vi.fn(),
-        warn: vi.fn(),
-        error: vi.fn(),
-      },
-    }));
+      }));
+      const writerDb = { execute, update: writerUpdate };
 
-    const configSnapshot = JSON.stringify({
-      configVersion: "cfg-r2-seam",
-      generatedAt: "2026-07-13T11:59:00.000Z",
-      siteTitle: "Status",
-      siteDescription: "Status",
-      timeZone: "UTC",
-      defaultIntervalMinutes: 5,
-      defaultRangeHours: 24,
-      groups: [
-        {
-          sourceGroupId: 42,
-          sourceGroupName: "openai",
-          slug: "openai",
-          displayName: "OpenAI",
-          sortOrder: 1,
-          description: null,
-          models: [
-            {
-              publicModelKey: "gpt-4.1",
-              label: "GPT-4.1",
-              vendorIconKey: "openai",
-              requestTypeBadge: "openaiCompatible",
-            },
-          ],
+      vi.doMock("@/drizzle/db", () => ({
+        db: {
+          select: vi.fn(() => ({
+            from: vi.fn(() => ({
+              where: vi.fn(() => ({
+                limit: vi.fn(async () => [
+                  {
+                    createdAt: row.createdAt,
+                    model: row.model,
+                    originalModel: row.originalModel,
+                    durationMs: row.durationMs,
+                  },
+                ]),
+              })),
+            })),
+          })),
+          update: vi.fn(),
         },
-      ],
-    });
-    const redis = {
-      status: "ready",
-      hincrbyfloat: vi.fn(),
-      get: vi.fn(async (key: string) => {
-        if (key === "public-status:v2:config-version:current") {
-          return "cfg-r2-seam";
-        }
-        if (key === "public-status:v2:config-internal:cfg-r2-seam") {
-          return configSnapshot;
-        }
-        return null;
-      }),
-      pipeline: vi.fn(() => {
-        const operations: Array<{ command: string; args: unknown[] }> = [];
-        return {
-          hincrbyfloat: (...args: unknown[]) => {
-            operations.push({ command: "hincrbyfloat", args });
-          },
-          set: (...args: unknown[]) => {
-            operations.push({ command: "set", args });
-          },
-          expire: (...args: unknown[]) => {
-            operations.push({ command: "expire", args });
-          },
-          exec: async () => {
-            rollupPipelines.push(operations);
-            return operations.map(() => [null, 1] as [null, number]);
-          },
-        };
-      }),
-    };
-    vi.doMock("@/lib/redis", () => ({
-      getRedisClient: vi.fn(() => redis),
-    }));
+        getMessageWriterDb: vi.fn(() => writerDb),
+      }));
+      vi.doMock("@/lib/config/env.schema", () => ({
+        getEnvConfig: () => ({
+          MESSAGE_REQUEST_WRITE_MODE: "async",
+          MESSAGE_REQUEST_ASYNC_FLUSH_INTERVAL_MS: 60_000,
+          MESSAGE_REQUEST_ASYNC_BATCH_SIZE: 1_000,
+          MESSAGE_REQUEST_ASYNC_MAX_PENDING: 1_000,
+        }),
+      }));
+      vi.doMock("@/lib/logger", () => ({
+        logger: {
+          trace: vi.fn(),
+          debug: vi.fn(),
+          info: vi.fn(),
+          warn: vi.fn(),
+          error: vi.fn(),
+        },
+      }));
 
-    const { updateMessageRequestDetailsDurably, updateMessageRequestDetailsIfUnfinalized } =
-      await import("@/repository/message");
-    const { flushMessageRequestWriteBuffer, stopMessageRequestWriteBuffer } = await import(
-      "@/repository/message-write-buffer"
-    );
+      const configSnapshot = JSON.stringify({
+        configVersion: "cfg-r2-seam",
+        generatedAt: "2026-07-13T11:59:00.000Z",
+        siteTitle: "Status",
+        siteDescription: "Status",
+        timeZone: "UTC",
+        defaultIntervalMinutes: 5,
+        defaultRangeHours: 24,
+        groups: [
+          {
+            sourceGroupId: 42,
+            sourceGroupName: "openai",
+            slug: "openai",
+            displayName: "OpenAI",
+            sortOrder: 1,
+            description: null,
+            models: [
+              {
+                publicModelKey: "gpt-4.1",
+                label: "GPT-4.1",
+                vendorIconKey: "openai",
+                requestTypeBadge: "openaiCompatible",
+              },
+            ],
+          },
+        ],
+      });
+      const redis = {
+        status: "ready",
+        hincrbyfloat: vi.fn(),
+        get: vi.fn(async (key: string) => {
+          if (key === "public-status:v2:config-version:current") {
+            return "cfg-r2-seam";
+          }
+          if (key === "public-status:v2:config-internal:cfg-r2-seam") {
+            return configSnapshot;
+          }
+          return null;
+        }),
+        pipeline: vi.fn(() => {
+          const operations: Array<{ command: string; args: unknown[] }> = [];
+          return {
+            hincrbyfloat: (...args: unknown[]) => {
+              operations.push({ command: "hincrbyfloat", args });
+            },
+            set: (...args: unknown[]) => {
+              operations.push({ command: "set", args });
+            },
+            expire: (...args: unknown[]) => {
+              operations.push({ command: "expire", args });
+            },
+            exec: async () => {
+              rollupPipelines.push(operations);
+              return operations.map(() => [null, 1] as [null, number]);
+            },
+          };
+        }),
+      };
+      vi.doMock("@/lib/redis", () => ({
+        getRedisClient: vi.fn(() => redis),
+      }));
 
-    const primary = updateMessageRequestDetailsDurably(id, primaryDetails, { timeoutMs: 10 });
-    const primaryResult = primary.catch((error: unknown) => error);
-    const flush = flushMessageRequestWriteBuffer();
+      const { updateMessageRequestDetailsDurably, updateMessageRequestDetailsIfUnfinalized } =
+        await import("@/repository/message");
+      const { flushMessageRequestWriteBuffer, stopMessageRequestWriteBuffer } = await import(
+        "@/repository/message-write-buffer"
+      );
 
-    await vi.advanceTimersByTimeAsync(10);
-    await expect(primaryResult).resolves.toEqual(
-      expect.objectContaining({
-        message: "durable message_request acknowledgement timed out",
-      })
-    );
+      const primary = updateMessageRequestDetailsDurably(id, primaryDetails, { timeoutMs: 10 });
+      const primaryResult = primary.catch((error: unknown) => error);
+      const flush = flushMessageRequestWriteBuffer();
 
-    if (ownerOrder === "fallback-first") {
-      await updateMessageRequestDetailsIfUnfinalized(id, fallbackDetails);
-      releasePrimary.resolve();
-      await flush;
-    } else {
-      releasePrimary.resolve();
-      await flush;
-      await updateMessageRequestDetailsIfUnfinalized(id, fallbackDetails);
+      await vi.advanceTimersByTimeAsync(10);
+      await expect(primaryResult).resolves.toEqual(
+        expect.objectContaining({
+          message: "durable message_request acknowledgement timed out",
+        })
+      );
+
+      if (ownerOrder === "fallback-first") {
+        await updateMessageRequestDetailsIfUnfinalized(id, fallbackDetails);
+        releasePrimary.resolve();
+        await flush;
+      } else {
+        releasePrimary.resolve();
+        await flush;
+        await updateMessageRequestDetailsIfUnfinalized(id, fallbackDetails);
+      }
+      await flushMicrotasks();
+
+      expect(primarySql).toHaveLength(1);
+      expect(primarySql[0]?.sql).toMatch(/"?status_code"? IS NULL/);
+      expect(primarySql[0]?.sql).toContain("RETURNING id");
+      expect(primaryReceipts).toEqual(ownerOrder === "primary-first" ? [[id]] : [[]]);
+      expect(fallbackReceipts).toEqual(ownerOrder === "fallback-first" ? [[id]] : [[]]);
+      expect(row).toMatchObject(
+        ownerOrder === "primary-first"
+          ? { durationMs: primaryDetails.durationMs, statusCode: primaryDetails.statusCode }
+          : { durationMs: fallbackDetails.durationMs, statusCode: fallbackDetails.statusCode }
+      );
+      expect(redis.get.mock.calls).toEqual([
+        ["public-status:v2:config-version:current"],
+        ["public-status:v2:config-internal:cfg-r2-seam"],
+      ]);
+      expect(rollupPipelines).toHaveLength(1);
+
+      const rollupFields = rollupPipelines[0]!
+        .filter((operation) => operation.command === "hincrbyfloat")
+        .map((operation) => String(operation.args[1]));
+      const expectedMetric = ownerOrder === "primary-first" ? "success" : "failure";
+      const losingMetric = ownerOrder === "primary-first" ? "failure" : "success";
+      expect(rollupFields).toContain(`42|gpt-4.1|${expectedMetric}`);
+      expect(rollupFields).not.toContain(`42|gpt-4.1|${losingMetric}`);
+
+      await stopMessageRequestWriteBuffer();
     }
-    await flushMicrotasks();
-
-    expect(primarySql).toHaveLength(1);
-    expect(primarySql[0]?.sql).toMatch(/"?status_code"? IS NULL/);
-    expect(primarySql[0]?.sql).toContain("RETURNING id");
-    expect(primaryReceipts).toEqual(ownerOrder === "primary-first" ? [[id]] : [[]]);
-    expect(fallbackReceipts).toEqual(ownerOrder === "fallback-first" ? [[id]] : [[]]);
-    expect(row).toMatchObject(
-      ownerOrder === "primary-first"
-        ? { durationMs: primaryDetails.durationMs, statusCode: primaryDetails.statusCode }
-        : { durationMs: fallbackDetails.durationMs, statusCode: fallbackDetails.statusCode }
-    );
-    expect(redis.get.mock.calls).toEqual([
-      ["public-status:v2:config-version:current"],
-      ["public-status:v2:config-internal:cfg-r2-seam"],
-    ]);
-    expect(rollupPipelines).toHaveLength(1);
-
-    const rollupFields = rollupPipelines[0]!
-      .filter((operation) => operation.command === "hincrbyfloat")
-      .map((operation) => String(operation.args[1]));
-    const expectedMetric = ownerOrder === "primary-first" ? "success" : "failure";
-    const losingMetric = ownerOrder === "primary-first" ? "failure" : "success";
-    expect(rollupFields).toContain(`42|gpt-4.1|${expectedMetric}`);
-    expect(rollupFields).not.toContain(`42|gpt-4.1|${losingMetric}`);
-
-    await stopMessageRequestWriteBuffer();
-  });
+  );
 
   it("same-ID pending durable merge publishes one rollup from the committed latest payload", async () => {
     vi.resetModules();

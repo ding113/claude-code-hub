@@ -352,11 +352,12 @@ describe("endpoint family catalog", () => {
     expect(resolveEndpointFamilyByPath(path)?.modelRequired).toBe(true);
   });
 
-  test.each(FAMILY_SAMPLES.filter((entry) => !entry.modelRequired))("%s 不应要求模型", ({
-    path,
-  }) => {
-    expect(resolveEndpointFamilyByPath(path)?.modelRequired).toBe(false);
-  });
+  test.each(FAMILY_SAMPLES.filter((entry) => !entry.modelRequired))(
+    "%s 不应要求模型",
+    ({ path }) => {
+      expect(resolveEndpointFamilyByPath(path)?.modelRequired).toBe(false);
+    }
+  );
 
   test("Gemini batch body fallback 应识别为 gemini", () => {
     expect(
