@@ -31,5 +31,7 @@ RUN mkdir -p /app/reports
 
 # --report-on-fatalerror / --report-uncaught-exception：在 native 段错误或
 # 未捕获异常时写出 JSON 诊断报告（包含原生堆栈、libuv 句柄、JS 堆等）
+# --report-exclude-env：诊断报告不得持久化 ADMIN_TOKEN、DSN、Redis、Langfuse
+# 与 Provider credentials 等运行时环境变量
 # --report-directory：指向 /app/reports 以便挂卷持久化
-CMD ["node", "--report-on-fatalerror", "--report-uncaught-exception", "--report-directory=/app/reports", "server.js"]
+CMD ["node", "--report-on-fatalerror", "--report-uncaught-exception", "--report-exclude-env", "--report-directory=/app/reports", "server.js"]

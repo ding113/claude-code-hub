@@ -1,4 +1,5 @@
 import type { Context } from "hono";
+import { findSafeDatabaseError } from "@/drizzle/admitted-client";
 import { getCachedSystemSettings } from "@/lib/config";
 import { logger } from "@/lib/logger";
 import { ProxyStatusTracker } from "@/lib/proxy-status-tracker";
@@ -30,10 +31,14 @@ export async function handleProxyRequest(c: Context): Promise<Response> {
         cachedSystemSettings.allowNonConversationEndpointProviderFallback ?? true
       );
     } catch (settingsError) {
+      const databaseError = findSafeDatabaseError(settingsError);
       logger.warn(
         "[ProxyHandler] Failed to load proxy system settings, fallback highConcurrency=false and rawCrossProviderFallback=false",
         {
-          error: settingsError,
+          error:
+            databaseError?.message ??
+            (settingsError instanceof Error ? settingsError.message : String(settingsError)),
+          databaseCode: databaseError?.code,
         }
       );
       session.setHighConcurrencyModeEnabled(false);
@@ -136,7 +141,12 @@ export async function handleProxyRequest(c: Context): Promise<Response> {
 
     return finalResponse;
   } catch (error) {
-    logger.error("Proxy handler error:", error);
+    const databaseError = findSafeDatabaseError(error);
+    logger.error("Proxy handler error:", {
+      error: databaseError?.message ?? (error instanceof Error ? error.message : String(error)),
+      databaseCode: databaseError?.code,
+      databasePool: databaseError?.pool,
+    });
     if (session) {
       return await ProxyErrorHandler.handle(session, error);
     }

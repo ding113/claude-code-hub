@@ -248,6 +248,8 @@ describe("traceProxyRequest", () => {
           cookie: cookieSecret,
           "content-type": "application/json",
           "x-api-key": apiKeySecret,
+          "x-cch-future-marker": "future-internal-canary",
+          "x-cch-responses-ws-session": "ws-session-canary",
           "x-request-id": "request-123",
         }),
       }),
@@ -292,6 +294,9 @@ describe("traceProxyRequest", () => {
     for (const secret of [authorizationSecret, apiKeySecret, cookieSecret, setCookieSecret]) {
       expect(serializedSdkArguments).not.toContain(secret);
     }
+    expect(serializedSdkArguments).not.toContain("x-cch-");
+    expect(serializedSdkArguments).not.toContain("future-internal-canary");
+    expect(serializedSdkArguments).not.toContain("ws-session-canary");
   });
 
   test("should include provider name and model in tags", async () => {

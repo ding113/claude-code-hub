@@ -7,6 +7,14 @@ export interface DbPoolAdmissionErrorDetails {
   message: string;
 }
 
+export interface SafeDatabaseErrorDetails {
+  kind: "admission" | "query";
+  code?: string;
+  pool?: string;
+  maxOutstanding?: number;
+  message: string;
+}
+
 export class DbPoolAdmissionError extends Error {
   readonly code = DB_POOL_ADMISSION_ERROR_CODE;
 
@@ -55,6 +63,68 @@ export function findDbPoolAdmissionError(error: unknown): DbPoolAdmissionErrorDe
 
 export function isDbPoolAdmissionError(error: unknown): boolean {
   return findDbPoolAdmissionError(error) !== null;
+}
+
+export function findSafeDatabaseError(error: unknown): SafeDatabaseErrorDetails | null {
+  const admission = findDbPoolAdmissionError(error);
+  if (admission) {
+    return {
+      kind: "admission",
+      code: admission.code,
+      pool: admission.pool,
+      maxOutstanding: admission.maxOutstanding,
+      message: `Database pool admission exceeded (pool=${admission.pool}, maxOutstanding=${admission.maxOutstanding})`,
+    };
+  }
+
+  const visited = new Set<unknown>();
+  let current: unknown = error;
+  let databaseCode: string | undefined;
+
+  for (let depth = 0; depth < 8; depth += 1) {
+    if ((typeof current !== "object" && typeof current !== "function") || current === null) {
+      break;
+    }
+    if (visited.has(current)) break;
+    visited.add(current);
+
+    const candidate = current as {
+      name?: unknown;
+      code?: unknown;
+      query?: unknown;
+      params?: unknown;
+      cause?: unknown;
+    };
+    if (databaseCode === undefined && typeof candidate.code === "string") {
+      databaseCode = candidate.code;
+    }
+    if (
+      candidate.name === "DrizzleQueryError" ||
+      (typeof candidate.query === "string" && Array.isArray(candidate.params))
+    ) {
+      let cause = candidate.cause;
+      const causeVisited = new Set<unknown>();
+      for (let causeDepth = 0; causeDepth < 8; causeDepth += 1) {
+        if ((typeof cause !== "object" && typeof cause !== "function") || cause === null) break;
+        if (causeVisited.has(cause)) break;
+        causeVisited.add(cause);
+        const causeCandidate = cause as { code?: unknown; cause?: unknown };
+        if (databaseCode === undefined && typeof causeCandidate.code === "string") {
+          databaseCode = causeCandidate.code;
+          break;
+        }
+        cause = causeCandidate.cause;
+      }
+      return {
+        kind: "query",
+        code: databaseCode,
+        message: "Database query failed",
+      };
+    }
+    current = candidate.cause;
+  }
+
+  return null;
 }
 
 interface AdmittedClientOptions {
@@ -165,8 +235,22 @@ function wrapPendingQuery(pending: unknown, release: () => void): unknown {
           throw error;
         }
 
+        if (property === "cancel") {
+          // postgres.js Query is lazy: observing an unexecuted query through
+          // then/catch would start it again after cancel(). A queued query is
+          // rejected synchronously by cancel(), so its token can be released
+          // immediately. An already-executed query can be observed safely.
+          const executed = (target as { executed?: unknown }).executed === true;
+          if (executed) {
+            void track().catch(() => undefined);
+          } else {
+            release();
+          }
+          return result === target ? proxy : result;
+        }
+
         if (result === target) {
-          if (property === "execute" || property === "forEach" || property === "cancel") {
+          if (property === "execute" || property === "forEach") {
             void track().catch(() => undefined);
           }
           return proxy;
@@ -251,6 +335,22 @@ export function createAdmittedSqlClient<TClient extends object>(
   };
 
   return new Proxy(client, {
+    apply(target, thisArg, argArray) {
+      const release = acquire();
+      try {
+        return wrapPendingQuery(
+          Reflect.apply(
+            target as unknown as (...args: unknown[]) => unknown,
+            thisArg,
+            argArray
+          ),
+          release
+        );
+      } catch (error) {
+        release();
+        throw error;
+      }
+    },
     get(target, property, receiver) {
       if (property === "unsafe") return admittedUnsafe;
       if (property === "begin") return admittedBegin;
