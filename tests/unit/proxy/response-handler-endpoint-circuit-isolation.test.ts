@@ -68,6 +68,7 @@ vi.mock("@/repository/message", () => ({
   updateMessageRequestCostWithBreakdown: vi.fn(),
   updateMessageRequestDetails: vi.fn(),
   updateMessageRequestDetailsDurably: vi.fn(),
+  updateMessageRequestDetailsIfUnfinalized: vi.fn(),
   updateMessageRequestDuration: vi.fn(),
 }));
 
@@ -356,7 +357,7 @@ function setupCommonMocks() {
     updatedAt: new Date(),
   });
   vi.mocked(updateMessageRequestDetails).mockResolvedValue(undefined);
-  vi.mocked(updateMessageRequestDetailsDurably).mockResolvedValue(undefined);
+  vi.mocked(updateMessageRequestDetailsDurably).mockResolvedValue(true);
   vi.mocked(updateMessageRequestDuration).mockResolvedValue(undefined);
   vi.mocked(SessionManager.storeSessionResponse).mockResolvedValue(undefined);
   vi.mocked(SessionManager.clearSessionProvider).mockResolvedValue(undefined);
@@ -408,7 +409,7 @@ describe("Endpoint circuit breaker isolation", () => {
       expect.objectContaining({ message: expect.stringContaining("FAKE_200") })
     );
     expect(mockRecordEndpointFailure).not.toHaveBeenCalled();
-    expect(SessionManager.clearSessionProvider).toHaveBeenCalledWith("fake-session");
+    expect(SessionManager.clearSessionProvider).toHaveBeenCalledWith("fake-session", 1);
 
     const chain = session.getProviderChain();
     expect(
@@ -437,7 +438,7 @@ describe("Endpoint circuit breaker isolation", () => {
       expect.objectContaining({ message: expect.stringContaining("FAKE_200") })
     );
     expect(mockRecordEndpointFailure).not.toHaveBeenCalled();
-    expect(SessionManager.clearSessionProvider).toHaveBeenCalledWith("fake-session");
+    expect(SessionManager.clearSessionProvider).toHaveBeenCalledWith("fake-session", 1);
     expect(SessionManager.updateSessionUsage).not.toHaveBeenCalled();
     expect(SessionTracker.refreshSession).not.toHaveBeenCalled();
   });
@@ -453,7 +454,7 @@ describe("Endpoint circuit breaker isolation", () => {
 
     expect(mockRecordFailure).not.toHaveBeenCalled();
     expect(mockRecordEndpointFailure).not.toHaveBeenCalled();
-    expect(SessionManager.clearSessionProvider).toHaveBeenCalledWith("fake-session");
+    expect(SessionManager.clearSessionProvider).toHaveBeenCalledWith("fake-session", 1);
 
     const chain = session.getProviderChain();
     expect(
@@ -514,7 +515,8 @@ describe("Endpoint circuit breaker isolation", () => {
     );
     expect(updateMessageRequestDetailsDurably).toHaveBeenCalledWith(
       1,
-      expect.objectContaining({ statusCode: 200, providerId: 1 })
+      expect.objectContaining({ statusCode: 200, providerId: 1 }),
+      expect.objectContaining({ onCommitted: expect.any(Function) })
     );
   });
 

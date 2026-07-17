@@ -73,6 +73,7 @@ vi.mock("@/repository/message", () => ({
   updateMessageRequestCostWithBreakdown: vi.fn(),
   updateMessageRequestDetails: vi.fn(),
   updateMessageRequestDetailsDurably: vi.fn(),
+  updateMessageRequestDetailsIfUnfinalized: vi.fn(),
   updateMessageRequestDuration: vi.fn(),
 }));
 
@@ -548,7 +549,7 @@ describe("Lease Budget Decrement after trackCostToRedis", () => {
     vi.mocked(findLatestPriceByModel).mockResolvedValue(
       makePriceRecord(originalModel, testPriceData)
     );
-    vi.mocked(updateMessageRequestDetailsDurably).mockResolvedValue(undefined);
+    vi.mocked(updateMessageRequestDetailsDurably).mockResolvedValue(true);
     vi.mocked(updateMessageRequestDuration).mockResolvedValue(undefined);
     vi.mocked(SessionManager.storeSessionResponse).mockResolvedValue(undefined);
     vi.mocked(SessionManager.storeSessionResponsePhaseSnapshot).mockResolvedValue(undefined);
@@ -630,7 +631,8 @@ describe("Lease Budget Decrement after trackCostToRedis", () => {
         statusCode: 200,
         inputTokens: usage.input_tokens,
         outputTokens: usage.output_tokens,
-      })
+      }),
+      expect.objectContaining({ onCommitted: expect.any(Function) })
     );
   });
 
@@ -719,7 +721,8 @@ describe("Lease Budget Decrement after trackCostToRedis", () => {
         statusCode: 200,
         inputTokens: usage.input_tokens,
         outputTokens: usage.output_tokens,
-      })
+      }),
+      expect.objectContaining({ onCommitted: expect.any(Function) })
     );
   });
 

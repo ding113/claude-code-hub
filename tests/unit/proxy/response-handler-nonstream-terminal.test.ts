@@ -7,10 +7,13 @@ import type { Provider } from "@/types/provider";
 import type { User } from "@/types/user";
 
 type TaskOptions = { readonly abortController?: AbortController; readonly taskType?: string };
+type TerminalWriterOptions = { readonly onCommitted?: () => void | Promise<void> };
 
 const mocks = vi.hoisted(() => ({
-  conditional: vi.fn<(id: number, details: object) => Promise<void>>(),
-  durable: vi.fn<(id: number, details: object) => Promise<void>>(),
+  conditional:
+    vi.fn<(id: number, details: object, options?: TerminalWriterOptions) => Promise<boolean>>(),
+  durable:
+    vi.fn<(id: number, details: object, options?: TerminalWriterOptions) => Promise<boolean>>(),
   recordFailure: vi.fn<(providerId: number, error: Error) => Promise<void>>(),
   tasks: Array.from<Promise<void>>([]),
   trackerEnd: vi.fn(),
@@ -206,8 +209,24 @@ describe("ProxyResponseHandler.dispatch nonstream terminal behavior", () => {
   beforeEach(() => {
     mocks.tasks.length = 0;
     vi.clearAllMocks();
-    mocks.conditional.mockResolvedValue(undefined);
-    mocks.durable.mockResolvedValue(undefined);
+    mocks.conditional.mockImplementation(async (_id, _details, options) => {
+      try {
+        const result = options?.onCommitted?.();
+        if (result) void Promise.resolve(result).catch(() => undefined);
+      } catch {
+        // Test mock mirrors the repository's commit-observer boundary.
+      }
+      return true;
+    });
+    mocks.durable.mockImplementation(async (_id, _details, options) => {
+      try {
+        const result = options?.onCommitted?.();
+        if (result) void Promise.resolve(result).catch(() => undefined);
+      } catch {
+        // Test mock mirrors the repository's commit-observer boundary.
+      }
+      return true;
+    });
     mocks.recordFailure.mockResolvedValue(undefined);
   });
 
@@ -229,7 +248,8 @@ describe("ProxyResponseHandler.dispatch nonstream terminal behavior", () => {
     expect(settlements.every(({ status }) => status === "fulfilled")).toBe(true);
     expect(mocks.conditional).toHaveBeenCalledWith(
       41,
-      expect.objectContaining({ statusCode: 503 })
+      expect.objectContaining({ durationMs: expect.any(Number), statusCode: 503 }),
+      expect.objectContaining({ onCommitted: expect.any(Function) })
     );
     expect(mocks.recordFailure).toHaveBeenCalledWith(7, expect.any(Error));
     expect(mocks.conditional.mock.invocationCallOrder[0]).toBeLessThan(

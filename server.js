@@ -256,11 +256,14 @@ async function handleWebSocketConnection(ws, req) {
   const pending = [];
   let pendingBytes = 0;
   let closed = false;
+  let closing = false;
+  let turnSequence = 0;
   // Track the in-flight internal HTTP ClientRequest so we can abort it when
   // the client WebSocket disconnects mid-stream — otherwise the SSE consumer
   // (and provider concurrency / breaker counters) keep running for minutes.
   let currentInternalReq = null;
   let currentInternalRes = null;
+  let currentTurnSettle = null;
 
   const abortCurrentInternalReq = () => {
     const reqToDestroy = currentInternalReq;
@@ -307,6 +310,8 @@ async function handleWebSocketConnection(ws, req) {
   const finalize = () => {
     if (closed) return;
     closed = true;
+    currentTurnSettle?.();
+    currentTurnSettle = null;
     abortCurrentInternalReq();
     dropPendingFrames();
     invalidateOutboundSends(ws);
@@ -331,6 +336,8 @@ async function handleWebSocketConnection(ws, req) {
       return;
     }
     closed = true;
+    currentTurnSettle?.();
+    currentTurnSettle = null;
     abortCurrentInternalReq();
     dropPendingFrames();
     invalidateOutboundSends(ws);
@@ -343,6 +350,10 @@ async function handleWebSocketConnection(ws, req) {
     }
   };
   const sendErrorAndClose = (error, close) => {
+    if (closed || closing) return;
+    closing = true;
+    abortCurrentInternalReq();
+    dropPendingFrames();
     const finish = () => requestClose(close.code, close.reason);
     safeSend(ws, { type: "error", error }, { onSuccess: finish, onFailure: finish });
   };
@@ -356,7 +367,35 @@ async function handleWebSocketConnection(ws, req) {
   });
 
   const processFrame = async (raw) => {
-    if (closed) return;
+    if (closed || closing) return;
+    const turnId = ++turnSequence;
+    let turnActive = true;
+    let turnReq = null;
+    let turnRes = null;
+    let turnSettle = null;
+    const destroyLateResource = (resource) => {
+      try {
+        if (resource && !resource.destroyed) resource.destroy();
+      } catch {
+        // ignore late transport cleanup errors
+      }
+    };
+    const registerTurnResource = (clientReq, clientRes, settleTurn) => {
+      if (closed || closing || !turnActive) {
+        destroyLateResource(clientReq);
+        destroyLateResource(clientRes);
+        return false;
+      }
+      turnReq = clientReq;
+      turnRes = clientRes || turnRes;
+      currentInternalReq = clientReq;
+      if (clientRes) currentInternalRes = clientRes;
+      if (typeof settleTurn === "function") {
+        turnSettle = settleTurn;
+        currentTurnSettle = settleTurn;
+      }
+      return true;
+    };
 
     if (typeof raw !== "string") {
       sendErrorAndClose(
@@ -406,20 +445,21 @@ async function handleWebSocketConnection(ws, req) {
       hasPreviousResponseId: typeof body.previous_response_id === "string",
     });
 
-    await forwardToInternalHttp(
-      ws,
-      req,
-      body,
-      responsesWsSessionId,
-      (clientReq, clientRes) => {
-        currentInternalReq = clientReq;
-        if (clientRes) currentInternalRes = clientRes;
-      },
-      requestClose
-    );
-    if (!closed) {
-      currentInternalReq = null;
-      currentInternalRes = null;
+    try {
+      await forwardToInternalHttp(
+        ws,
+        req,
+        body,
+        responsesWsSessionId,
+        registerTurnResource,
+        requestClose
+      );
+    } finally {
+      turnActive = false;
+      if (currentInternalReq === turnReq) currentInternalReq = null;
+      if (currentInternalRes === turnRes) currentInternalRes = null;
+      if (currentTurnSettle === turnSettle) currentTurnSettle = null;
+      log("debug", "ws_turn_resources_released", { turnId });
     }
   };
 
@@ -434,7 +474,7 @@ async function handleWebSocketConnection(ws, req) {
       await processFrame(next);
     } finally {
       inFlight = false;
-      if (pending.length > 0 && !closed) {
+      if (pending.length > 0 && !closed && !closing) {
         void drain().catch((err) => {
           log("error", "ws_drain_failed", {
             error: String(err && err.message ? err.message : err),
@@ -449,7 +489,7 @@ async function handleWebSocketConnection(ws, req) {
   };
 
   ws.on("message", (data, isBinary) => {
-    if (closed) return;
+    if (closed || closing) return;
     if (isBinary) {
       sendErrorAndClose(
         { code: "invalid_frame_type", message: "Only text WebSocket frames are supported" },
@@ -564,6 +604,15 @@ async function forwardToInternalHttp(
   internalHeaders["content-length"] = String(payload.length);
 
   await new Promise((resolve) => {
+    let cleanupRequestBody = () => {};
+    let turnFinished = false;
+    const forceSettleTurn = () => {
+      if (turnFinished) return false;
+      turnFinished = true;
+      cleanupRequestBody();
+      resolve();
+      return true;
+    };
     const req = http.request(
       {
         method: "POST",
@@ -573,21 +622,39 @@ async function forwardToInternalHttp(
         headers: internalHeaders,
       },
       (res) => {
-        if (typeof registerInternalReq === "function") {
-          registerInternalReq(req, res);
-        }
         const contentType = (res.headers["content-type"] || "").toLowerCase();
         const isSse = contentType.includes("text/event-stream");
         let responseSettled = false;
+        let responseBodyEnded = false;
+        let terminalSendAcknowledged = false;
         const settleResponse = () => {
           if (responseSettled) return false;
+          if (!responseBodyEnded || !terminalSendAcknowledged) return false;
           responseSettled = true;
+          turnFinished = true;
+          cleanupRequestBody();
           resolve();
           return true;
         };
+        const acknowledgeTerminalSend = () => {
+          terminalSendAcknowledged = true;
+          settleResponse();
+        };
+        const forceSettleResponse = () => {
+          if (responseSettled) return false;
+          responseSettled = true;
+          return forceSettleTurn();
+        };
+        if (typeof registerInternalReq === "function") {
+          const accepted = registerInternalReq(req, res, forceSettleResponse);
+          if (accepted === false) {
+            forceSettleResponse();
+            return;
+          }
+        }
         const settleAndClose = (reason) => {
           initiateClose(1011, reason);
-          settleResponse();
+          forceSettleResponse();
         };
         const sendFatalError = (code, message, closeReason) => {
           const sent = safeSend(
@@ -609,6 +676,7 @@ async function forwardToInternalHttp(
           res.on("data", (c) => chunks.push(c));
           res.on("end", () => {
             if (responseSettled) return;
+            responseBodyEnded = true;
             const text = Buffer.concat(chunks).toString("utf8");
             let parsed;
             try {
@@ -628,7 +696,7 @@ async function forwardToInternalHttp(
                       ? parsed.error
                       : { code: `http_${res.statusCode}`, message: text.slice(0, 512) },
                 },
-                { response: res, onSuccess: settleResponse, onFailure: settleAndClose }
+                { response: res, onSuccess: acknowledgeTerminalSend, onFailure: settleAndClose }
               );
               log("info", "ws_terminal_event_sent", {
                 type: "error",
@@ -639,7 +707,7 @@ async function forwardToInternalHttp(
               safeSend(
                 ws,
                 { type: "response.completed", response: parsed },
-                { response: res, onSuccess: settleResponse, onFailure: settleAndClose }
+                { response: res, onSuccess: acknowledgeTerminalSend, onFailure: settleAndClose }
               );
               log("info", "ws_terminal_event_sent", { type: "response.completed", source: "json" });
             }
@@ -654,6 +722,11 @@ async function forwardToInternalHttp(
           });
           res.on("close", () => {
             if (responseSettled) return;
+            if (responseBodyEnded || res.complete) {
+              responseBodyEnded = true;
+              settleResponse();
+              return;
+            }
             sendFatalError(
               "internal_response_closed",
               "Internal response closed before a complete JSON body was received",
@@ -672,11 +745,16 @@ async function forwardToInternalHttp(
         const EVENT_DELIMITER = /\r?\n\r?\n/;
         const failIfUnsettled = (code, message, closeReason) => {
           if (responseSettled) return;
-          if (!sawTerminal) {
-            sendFatalError(code, message, closeReason);
+          if (sawTerminal) {
+            // A terminal protocol event is authoritative. Once the internal
+            // transport closes, wait only for its WS send acknowledgement;
+            // otherwise this persistent connection would retain inFlight
+            // ownership forever when close/error arrives before `end`.
+            responseBodyEnded = true;
+            settleResponse();
             return;
           }
-          settleResponse();
+          sendFatalError(code, message, closeReason);
         };
 
         const flushEvents = () => {
@@ -702,7 +780,7 @@ async function forwardToInternalHttp(
                 // clean terminal event.
                 safeSend(ws, { type: "response.completed", response: null }, {
                   response: res,
-                  onSuccess: settleResponse,
+                  onSuccess: acknowledgeTerminalSend,
                   onFailure: settleAndClose,
                 });
                 sawTerminal = true;
@@ -724,7 +802,7 @@ async function forwardToInternalHttp(
               event && typeof event.type === "string" && TERMINAL_EVENT_TYPES.has(event.type);
             safeSend(ws, event, {
               response: res,
-              onSuccess: isTerminalEvent ? settleResponse : undefined,
+              onSuccess: isTerminalEvent ? acknowledgeTerminalSend : undefined,
               onFailure: settleAndClose,
             });
             if (isTerminalEvent) {
@@ -743,6 +821,7 @@ async function forwardToInternalHttp(
         });
         res.on("end", () => {
           if (responseSettled) return;
+          responseBodyEnded = true;
           // Flush any remaining buffered event
           if (buffer.trim().length > 0) {
             buffer += "\n\n";
@@ -760,6 +839,7 @@ async function forwardToInternalHttp(
             // response.create. Do not close here; only fatal transport/protocol
             // errors initiate a close handshake.
             log("info", "ws_turn_completed", { terminalEventType });
+            settleResponse();
           }
           if (!sawTerminal) return;
         });
@@ -771,6 +851,11 @@ async function forwardToInternalHttp(
           );
         });
         res.on("close", () => {
+          if (responseBodyEnded || res.complete) {
+            responseBodyEnded = true;
+            settleResponse();
+            return;
+          }
           failIfUnsettled(
             "internal_response_closed",
             "Internal response closed before emitting a terminal response event",
@@ -780,25 +865,42 @@ async function forwardToInternalHttp(
       }
     );
 
-    req.on("error", (err) => {
-      // ECONNRESET when we destroy() the request on client disconnect is
-      // expected; downgrade to debug to avoid noisy logs in normal traffic.
-      const errCode = err && (err.code || err.name);
-      const isAbort = errCode === "ECONNRESET" || errCode === "ERR_STREAM_PREMATURE_CLOSE";
-      if (!isAbort) {
-        emitErrorEvent(
-          ws,
-          "internal_request_error",
-          String(err && err.message ? err.message : err)
-        );
-        initiateClose(1011, "internal_request_error");
-      }
-      resolve();
-    });
-
     if (typeof registerInternalReq === "function") {
-      registerInternalReq(req);
+      const accepted = registerInternalReq(req, null, forceSettleTurn);
+      if (accepted === false) {
+        if (!req.destroyed) req.destroy();
+        forceSettleTurn();
+        return;
+      }
     }
+
+    const handleRequestError = (err) => {
+      if (turnFinished) {
+        return;
+      }
+      turnFinished = true;
+      cleanupRequestBody();
+      let finished = false;
+      const finish = () => {
+        if (finished) return;
+        finished = true;
+        initiateClose(1011, "internal_request_error");
+        resolve();
+      };
+      const sent = safeSend(
+        ws,
+        {
+          type: "error",
+          error: {
+            code: "internal_request_error",
+            message: String(err && err.message ? err.message : err),
+          },
+        },
+        { onSuccess: finish, onFailure: finish }
+      );
+      if (!sent) finish();
+    };
+    req.on("error", handleRequestError);
     let requestEnded = false;
     let requestBodyFinished = false;
     let requestBodyDeadlineId = null;
@@ -827,15 +929,56 @@ async function forwardToInternalHttp(
       if (requestBodyFinished) return;
       requestBodyFinished = true;
       clearRequestBodyListeners();
+      if (!turnFinished) {
+        turnFinished = true;
+        const finish = () => {
+          initiateClose(1011, "internal_request_body_closed");
+          resolve();
+        };
+        const sent = safeSend(
+          ws,
+          {
+            type: "error",
+            error: {
+              code: "internal_request_body_closed",
+              message: "Internal request body closed before it was fully written",
+            },
+          },
+          { onSuccess: finish, onFailure: finish }
+        );
+        if (!sent) finish();
+        return;
+      }
       resolve();
     };
     const expireRequestBody = () => {
       if (requestBodyFinished) return;
       requestBodyFinished = true;
       clearRequestBodyListeners();
+      turnFinished = true;
       if (!req.destroyed) req.destroy();
-      initiateClose(1011, "internal_request_drain_timeout");
-      resolve();
+      const finish = () => {
+        initiateClose(1011, "internal_request_drain_timeout");
+        resolve();
+      };
+      const sent = safeSend(
+        ws,
+        {
+          type: "error",
+          error: {
+            code: "internal_request_drain_timeout",
+            message: "Internal request body remained backpressured past its deadline",
+          },
+        },
+        { onSuccess: finish, onFailure: finish }
+      );
+      if (!sent) finish();
+    };
+    cleanupRequestBody = () => {
+      if (requestBodyFinished) return;
+      requestBodyFinished = true;
+      clearRequestBodyListeners();
+      if (!requestEnded && !req.destroyed) req.destroy();
     };
     if (req.write(payload)) {
       finishRequestBody();

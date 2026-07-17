@@ -178,7 +178,7 @@ describe("repository/message public status rollup hook", () => {
   });
 
   it("writes timeout fallback details only while the request is unfinalized", async () => {
-    mockWriterDbUpdateReturning.mockResolvedValueOnce([{ id: 606 }]);
+    mockDbUpdateReturning.mockResolvedValueOnce([{ id: 606 }]);
     const { updateMessageRequestDetailsIfUnfinalized } = await import("@/repository/message");
 
     await updateMessageRequestDetailsIfUnfinalized(606, {
@@ -186,11 +186,10 @@ describe("repository/message public status rollup hook", () => {
       errorMessage: "Error: stream_finalization_timeout",
     });
 
-    expect(mockGetMessageWriterDb).toHaveBeenCalledTimes(1);
-    expect(mockWriterDbUpdateWhere).toHaveBeenCalledTimes(1);
-    expect(mockWriterDbUpdateReturning).toHaveBeenCalledWith({ id: "id" });
-    expect(mockDbUpdateSet).not.toHaveBeenCalled();
-    const whereSql = sqlToString(mockWriterDbUpdateWhere.mock.calls[0]?.[0]).toLowerCase();
+    expect(mockGetMessageWriterDb).not.toHaveBeenCalled();
+    expect(mockDbUpdateWhere).toHaveBeenCalledTimes(1);
+    expect(mockDbUpdateReturning).toHaveBeenCalledWith({ id: "id" });
+    const whereSql = sqlToString(mockDbUpdateWhere.mock.calls[0]?.[0]).toLowerCase();
     expect(whereSql).toContain("statuscode");
     expect(whereSql).toContain("is null");
   });
@@ -217,7 +216,7 @@ describe("repository/message public status rollup hook", () => {
   });
 
   it("does not queue terminal rollup when the timeout fallback loses the terminal CAS", async () => {
-    mockWriterDbUpdateReturning.mockResolvedValueOnce([]);
+    mockDbUpdateReturning.mockResolvedValueOnce([]);
     const { updateMessageRequestDetailsIfUnfinalized } = await import("@/repository/message");
 
     await updateMessageRequestDetailsIfUnfinalized(607, {
@@ -227,14 +226,20 @@ describe("repository/message public status rollup hook", () => {
     });
     await flushMicrotasks();
 
-    expect(mockGetMessageWriterDb).toHaveBeenCalledTimes(1);
+    expect(mockGetMessageWriterDb).not.toHaveBeenCalled();
     expect(mockQueuePublicStatusRollupWrite).not.toHaveBeenCalled();
   });
 
   it("async durable details queue public-status rollup only after the batch commit ack", async () => {
     mockGetEnvConfig.mockReturnValue({ MESSAGE_REQUEST_WRITE_MODE: "async" });
     const durableAck = createDeferred<void>();
-    mockEnqueueMessageRequestUpdateDurably.mockReturnValueOnce(durableAck.promise);
+    mockEnqueueMessageRequestUpdateDurably.mockImplementationOnce(
+      async (_id, details, options: DurableMessageRequestUpdateOptions | undefined) => {
+        await durableAck.promise;
+        await options?.onCommitted?.(details);
+        return true;
+      }
+    );
     mockDbInsertReturning.mockResolvedValueOnce([
       {
         id: 808,
@@ -368,6 +373,7 @@ describe("repository/message public status rollup hook", () => {
 
   it("sync durable details remain direct and queue rollup after the DB write", async () => {
     mockGetEnvConfig.mockReturnValue({ MESSAGE_REQUEST_WRITE_MODE: "sync" });
+    mockDbUpdateReturning.mockResolvedValueOnce([{ id: 809 }]);
     mockDbSelectLimit.mockResolvedValueOnce([
       {
         createdAt: new Date("2026-04-21T10:04:00.000Z"),

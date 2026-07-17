@@ -293,7 +293,7 @@ describe("message terminal public-status public seam", () => {
     }
   );
 
-  it("same-ID pending durable merge publishes one rollup from the committed latest payload", async () => {
+  it("same-ID pending durable contention publishes one rollup from the first owner", async () => {
     vi.resetModules();
     vi.useFakeTimers();
 
@@ -507,40 +507,41 @@ describe("message terminal public-status public seam", () => {
     expect(row.statusCode).toBeNull();
 
     releaseCommit.resolve();
-    await Promise.all([oldFailure, latestSuccess, flush]);
+    const [oldFailureResult, latestSuccessResult] = await Promise.all([
+      oldFailure,
+      latestSuccess,
+      flush,
+    ]);
     await flushMicrotasks();
+
+    expect(oldFailureResult).toBe(true);
+    expect(latestSuccessResult).toBe(false);
 
     expect(committedSql).toHaveLength(1);
     expect(committedSql[0]?.sql).toMatch(/"?status_code"? IS NULL/);
     expect(committedSql[0]?.sql).toContain("RETURNING id");
     expect(row).toMatchObject({
-      durationMs: latestSuccessDetails.durationMs,
-      statusCode: latestSuccessDetails.statusCode,
+      durationMs: oldFailureDetails.durationMs,
+      statusCode: oldFailureDetails.statusCode,
       inputTokens: oldFailureDetails.inputTokens,
-      outputTokens: latestSuccessDetails.outputTokens,
-      ttfbMs: latestSuccessDetails.ttfbMs,
-      providerChain: latestSuccessDetails.providerChain,
-      providerId: latestSuccessDetails.providerId,
+      outputTokens: oldFailureDetails.outputTokens,
+      ttfbMs: oldFailureDetails.ttfbMs,
+      providerChain: oldFailureDetails.providerChain,
+      providerId: oldFailureDetails.providerId,
     });
     expect(rollupPipelines).toHaveLength(1);
 
     const rollupIncrementOperations = rollupPipelines[0]!.filter(
       (operation) => operation.command === "hincrbyfloat"
     );
-    expect(rollupIncrementOperations).toHaveLength(5);
+    expect(rollupIncrementOperations).toHaveLength(1);
     const rollupIncrements = Object.fromEntries(
       rollupIncrementOperations.map((operation) => [
         String(operation.args[1]),
         Number(operation.args[2]),
       ])
     );
-    expect(rollupIncrements).toEqual({
-      "42|gpt-4.1|success": 1,
-      "42|gpt-4.1|ttfb_sum": latestSuccessDetails.ttfbMs,
-      "42|gpt-4.1|ttfb_count": 1,
-      "42|gpt-4.1|tps_sum": 80,
-      "42|gpt-4.1|tps_count": 1,
-    });
+    expect(rollupIncrements).toEqual({ "42|gpt-4.1|failure": 1 });
 
     await stopMessageRequestWriteBuffer();
   });

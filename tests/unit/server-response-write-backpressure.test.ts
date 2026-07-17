@@ -22,7 +22,11 @@ type ServerModule = {
     request: { headers: Record<string, string>; url: string },
     body: Record<string, unknown>,
     sessionId: string,
-    registerRequest?: (request: http.ClientRequest) => void,
+    registerRequest?: (
+      request: http.ClientRequest,
+      response?: http.IncomingMessage | null,
+      settleTurn?: () => boolean
+    ) => boolean | void,
     close?: (code: number, reason: string) => void
   ) => Promise<void>;
 };
@@ -61,7 +65,11 @@ function createIncomingResponse(): http.IncomingMessage {
 
 function requestInput() {
   return {
-    ws: { readyState: 1, send: vi.fn(), close: vi.fn() },
+    ws: {
+      readyState: 1,
+      send: vi.fn((_payload: string, callback?: (error?: Error) => void) => callback?.()),
+      close: vi.fn(),
+    },
     request: { headers: { authorization: "Bearer test" }, url: "/v1/responses" },
     body: { model: "gpt-5.5", input: "hello" },
   };
@@ -111,7 +119,10 @@ async function startSseBridge(send: WebSocketLike["send"]) {
   return { events, request, response, ws };
 }
 
-afterEach(vi.restoreAllMocks);
+afterEach(() => {
+  vi.useRealTimers();
+  vi.restoreAllMocks();
+});
 
 describe("server response write backpressure", () => {
   it("waits for request drain before ending a backpressured payload", async () => {
@@ -124,6 +135,76 @@ describe("server response write backpressure", () => {
     expect(events).toEqual(["write", "end"]);
     request.emit("error", Object.assign(new Error("closed"), { code: "ECONNRESET" }));
     await forwarding;
+  });
+
+  it.each(["ECONNREFUSED", "ECONNRESET"])(
+    "sends one fatal frame and waits for its acknowledgement on active request error %s",
+    async (code) => {
+      const events: string[] = [];
+      const request = createClientRequest(false, events);
+      vi.spyOn(http, "request").mockImplementation(() => request);
+      const input = requestInput();
+      const sent: string[] = [];
+      let sendCallback: ((error?: Error) => void) | undefined;
+      input.ws.send = (payload, callback) => {
+        sent.push(payload);
+        sendCallback = callback;
+      };
+      const close = vi.fn();
+
+      const forwarding = serverModule.forwardToInternalHttp(
+        input.ws,
+        input.request,
+        input.body,
+        "request-error-session",
+        undefined,
+        close
+      );
+      let settled = false;
+      void forwarding.then(() => {
+        settled = true;
+      });
+
+      request.emit("error", Object.assign(new Error(code), { code }));
+      await new Promise<void>((resolve) => setImmediate(resolve));
+
+      expect(sent).toHaveLength(1);
+      expect(JSON.parse(sent[0]).error.code).toBe("internal_request_error");
+      expect(settled).toBe(false);
+      expect(close).not.toHaveBeenCalled();
+
+      sendCallback?.();
+      await forwarding;
+      expect(close).toHaveBeenCalledWith(1011, "internal_request_error");
+
+      expect(() => request.emit("error", new Error("late request error"))).not.toThrow();
+      expect(sent).toHaveLength(1);
+    }
+  );
+
+  it("force-settles an active turn without relying on request destroy events", async () => {
+    const events: string[] = [];
+    const request = createClientRequest(false, events);
+    vi.spyOn(http, "request").mockImplementation(() => request);
+    const input = requestInput();
+    let settleTurn: (() => boolean) | undefined;
+
+    const forwarding = serverModule.forwardToInternalHttp(
+      input.ws,
+      input.request,
+      input.body,
+      "force-settle-session",
+      (_request, _response, settle) => {
+        settleTurn = settle;
+        return true;
+      }
+    );
+
+    expect(settleTurn?.()).toBe(true);
+    await forwarding;
+    expect(events).toContain("destroy");
+    expect(input.ws.send).not.toHaveBeenCalled();
+    expect(() => request.emit("error", new Error("late request error"))).not.toThrow();
   });
 
   it("lets close win before drain without ending twice or stranding completion", async () => {
@@ -281,6 +362,130 @@ describe("server response write backpressure", () => {
     expect(JSON.parse(payload)).toMatchObject({ error: { code: "invalid_frame_type" } });
     expect(ws.close).not.toHaveBeenCalled();
     callback?.();
+    expect(ws.close).toHaveBeenCalledWith(1003, "binary_not_supported");
+  });
+
+  it("aborts an active internal turn before a fatal protocol frame is acknowledged", async () => {
+    const callbacks: Array<(error?: Error) => void> = [];
+    const ws = createWebSocket((_payload, callback) => {
+      if (callback) callbacks.push(callback);
+    });
+    const events: string[] = [];
+    const request = createClientRequest(true, events);
+    vi.spyOn(http, "request").mockImplementation(() => request);
+    await serverModule.handleWebSocketConnection(ws, { headers: {}, url: "/v1/responses" });
+
+    ws.emit(
+      "message",
+      Buffer.from('{"type":"response.create","model":"gpt-5.5","input":"hello"}'),
+      false
+    );
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    ws.emit("message", Buffer.from("binary"), true);
+
+    expect(request.destroyed).toBe(true);
+    expect(ws.close).not.toHaveBeenCalled();
+    callbacks.at(-1)?.();
+    expect(ws.close).toHaveBeenCalledWith(1003, "binary_not_supported");
+  });
+
+  it("settles an SSE turn when terminal acknowledgement precedes a premature close", async () => {
+    const events: string[] = [];
+    const request = createClientRequest(true, events);
+    const response = createIncomingResponse();
+    response.complete = false;
+    let respond: ((response: http.IncomingMessage) => void) | undefined;
+    vi.spyOn(http, "request").mockImplementation((_options, callback) => {
+      if (callback) respond = callback;
+      return request;
+    });
+    const close = vi.fn();
+    const input = requestInput();
+    const forwarding = serverModule.forwardToInternalHttp(
+      input.ws,
+      input.request,
+      input.body,
+      "terminal-close-session",
+      undefined,
+      close
+    );
+    respond?.(response);
+    response.emit(
+      "data",
+      `data: ${JSON.stringify({ type: "response.completed", response: { id: "r1" } })}\n\n`
+    );
+    response.emit("close");
+
+    await forwarding;
+    expect(close).not.toHaveBeenCalled();
+  });
+
+  it("waits for the JSON terminal send acknowledgement across end and close", async () => {
+    const events: string[] = [];
+    const request = createClientRequest(true, events);
+    const response = new http.IncomingMessage(new Socket());
+    response.headers = { "content-type": "application/json" };
+    let respond: ((response: http.IncomingMessage) => void) | undefined;
+    vi.spyOn(http, "request").mockImplementation((_options, callback) => {
+      if (callback) respond = callback;
+      return request;
+    });
+    let sendCallback: ((error?: Error) => void) | undefined;
+    const sent: string[] = [];
+    const close = vi.fn();
+    const input = requestInput();
+    input.ws.send = (payload, callback) => {
+      sent.push(payload);
+      sendCallback = callback;
+    };
+
+    const forwarding = serverModule.forwardToInternalHttp(
+      input.ws,
+      input.request,
+      input.body,
+      "json-session",
+      undefined,
+      close
+    );
+    respond?.(response);
+    response.emit("data", Buffer.from('{"id":"response-1"}'));
+    response.emit("end");
+    response.emit("close");
+
+    let settled = false;
+    void forwarding.then(() => {
+      settled = true;
+    });
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(settled).toBe(false);
+    expect(sent.map((payload) => JSON.parse(payload).type)).toEqual(["response.completed"]);
+    expect(close).not.toHaveBeenCalled();
+
+    sendCallback?.();
+    await forwarding;
+    expect(close).not.toHaveBeenCalled();
+  });
+
+  it("does not start a request while a fatal protocol frame awaits acknowledgement", async () => {
+    const callbacks: Array<(error?: Error) => void> = [];
+    const ws = createWebSocket((_payload, callback) => {
+      if (callback) callbacks.push(callback);
+    });
+    const requestSpy = vi
+      .spyOn(http, "request")
+      .mockImplementation(() => createClientRequest(true, []));
+    await serverModule.handleWebSocketConnection(ws, { headers: {}, url: "/v1/responses" });
+
+    ws.emit("message", Buffer.from("binary"), true);
+    ws.emit(
+      "message",
+      Buffer.from('{"type":"response.create","model":"gpt-5.5","input":"hello"}'),
+      false
+    );
+    await new Promise<void>((resolve) => setImmediate(resolve));
+
+    expect(requestSpy).not.toHaveBeenCalled();
+    callbacks.shift()?.();
     expect(ws.close).toHaveBeenCalledWith(1003, "binary_not_supported");
   });
 });

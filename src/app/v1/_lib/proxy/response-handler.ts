@@ -3,6 +3,7 @@ import {
   resolveAnthropicStreamActualResponseModel,
 } from "@/app/v1/_lib/proxy/anthropic-actual-response-model";
 import { ResponseFixer } from "@/app/v1/_lib/proxy/response-fixer";
+import { findSafeDatabaseError } from "@/drizzle/admitted-client";
 import { AsyncTaskManager } from "@/lib/async-task-manager";
 import { getEnvConfig } from "@/lib/config/env.schema";
 import { getCachedSystemSettings } from "@/lib/config/system-settings-cache";
@@ -37,10 +38,8 @@ import {
 import {
   addMessageRequestHedgeLoserCost,
   updateMessageRequestCostWithBreakdown,
-  updateMessageRequestDetails,
   updateMessageRequestDetailsDurably,
   updateMessageRequestDetailsIfUnfinalized,
-  updateMessageRequestDuration,
   updateMessageRequestWinnerCost,
 } from "@/repository/message";
 import type { HedgeLoserBilling, StoredCostBreakdown } from "@/types/cost-breakdown";
@@ -132,34 +131,55 @@ async function persistNonStreamTerminalDetails(options: {
   messageRequestId: number;
   durationMs: number;
   details: MessageRequestTerminalDetails;
-}): Promise<void> {
+  onCommitted?: () => void | Promise<void>;
+}): Promise<boolean> {
   const completeTerminalDetails = {
     ...options.details,
     durationMs: options.durationMs,
   };
   try {
-    await updateMessageRequestDetailsDurably(options.messageRequestId, completeTerminalDetails);
-    return;
+    const committed = await updateMessageRequestDetailsDurably(
+      options.messageRequestId,
+      completeTerminalDetails,
+      options.onCommitted ? { onCommitted: options.onCommitted } : undefined
+    );
+    if (committed) return true;
   } catch (primaryError) {
+    const databaseError = findSafeDatabaseError(primaryError);
     logger.error("ResponseHandler: Durable non-stream terminal persistence failed", {
       taskId: options.taskId,
       messageId: options.messageRequestId,
       statusCode: options.details.statusCode,
-      error: primaryError,
+      error:
+        databaseError?.message ??
+        (primaryError instanceof Error ? primaryError.message : String(primaryError)),
+      errorCode: databaseError?.code,
+      errorPool: databaseError?.pool,
     });
   }
 
   try {
-    await updateMessageRequestDetailsIfUnfinalized(
-      options.messageRequestId,
-      completeTerminalDetails
-    );
+    return await awaitTerminalPersistenceWithOwnership({
+      promise: updateMessageRequestDetailsIfUnfinalized(
+        options.messageRequestId,
+        completeTerminalDetails,
+        options.onCommitted ? { onCommitted: options.onCommitted } : undefined
+      ),
+      taskId: options.taskId,
+      operation: "nonstream-terminal-fallback",
+      timeoutMs: STREAM_FAILURE_PERSISTENCE_MAX_MS,
+    });
   } catch (fallbackError) {
+    const databaseError = findSafeDatabaseError(fallbackError);
     logger.error("ResponseHandler: Conditional non-stream terminal fallback failed", {
       taskId: options.taskId,
       messageId: options.messageRequestId,
       statusCode: options.details.statusCode,
-      fallbackError,
+      error:
+        databaseError?.message ??
+        (fallbackError instanceof Error ? fallbackError.message : String(fallbackError)),
+      errorCode: databaseError?.code,
+      errorPool: databaseError?.pool,
     });
     throw markNonStreamTerminalPersistenceError(fallbackError);
   }
@@ -196,40 +216,128 @@ function raceWithDeadline<T>(
   return raceWithTimeout(operation, remainingMs, message);
 }
 
+let terminalPersistenceTailSequence = 0;
+
+function awaitTerminalPersistenceWithOwnership<T>(options: {
+  promise: Promise<T>;
+  taskId: string;
+  operation: string;
+  timeoutMs: number;
+}): Promise<T> {
+  const persistence = Promise.resolve(options.promise);
+  let started = false;
+  const controller = AsyncTaskManager.register(
+    `${options.taskId}-${options.operation}-${++terminalPersistenceTailSequence}`,
+    async () => {
+      started = true;
+      try {
+        await persistence;
+      } catch {
+        // The request owner observes and projects the original rejection. This
+        // tail task only keeps late persistence joinable during shutdown.
+      }
+    },
+    {
+      taskType: "terminal-persistence-tail",
+      staleTimeoutMs: Number.POSITIVE_INFINITY,
+    }
+  );
+
+  if (controller.signal.aborted && !started) {
+    return persistence;
+  }
+
+  return raceWithTimeout(
+    persistence,
+    options.timeoutMs,
+    `${options.operation}_persistence_timeout`
+  );
+}
+
 function schedulePostTerminalSideEffects(options: {
   taskId: string;
   providerId: number;
   sessionId: string | null;
-  commit: () => Promise<void>;
-}): void {
+  commit: (signal: AbortSignal) => Promise<void>;
+}): Promise<void> {
   const effectTaskId = `${options.taskId}-post-terminal-effects`;
-  AsyncTaskManager.register(
-    effectTaskId,
-    async () => {
+  const completion = Promise.withResolvers<void>();
+  let started = false;
+  const run = async (signal: AbortSignal) => {
+    started = true;
+    try {
+      if (signal.aborted) {
+        logger.info("[ResponseHandler] Post-terminal side effects cancelled before start", {
+          taskId: options.taskId,
+          providerId: options.providerId,
+          sessionId: options.sessionId,
+        });
+        return;
+      }
+
       let commitPromise: Promise<void>;
       try {
-        commitPromise = Promise.resolve(options.commit());
+        commitPromise = Promise.resolve(options.commit(signal));
       } catch (error) {
         commitPromise = Promise.reject(error);
       }
 
-      await raceWithTimeout(
-        commitPromise,
-        STREAM_FINALIZATION_MAX_MS,
-        "post_terminal_side_effect_timeout"
-      ).catch((error) => {
-        logger.warn("[ResponseHandler] Post-terminal side effects did not complete", {
+      let warningTimer: ReturnType<typeof setTimeout> | null = setTimeout(() => {
+        logger.warn("[ResponseHandler] Post-terminal side effects are still pending", {
+          taskId: options.taskId,
+          providerId: options.providerId,
+          sessionId: options.sessionId,
+          maxWaitMs: STREAM_FINALIZATION_MAX_MS,
+        });
+      }, STREAM_FINALIZATION_MAX_MS);
+      warningTimer.unref?.();
+      try {
+        await commitPromise;
+      } catch (error) {
+        logger.warn("[ResponseHandler] Post-terminal side effects failed", {
           taskId: options.taskId,
           providerId: options.providerId,
           sessionId: options.sessionId,
           error: error instanceof Error ? error.message : String(error),
         });
-      });
-    },
-    {
-      taskType: "post-terminal-side-effects",
-      staleTimeoutMs: STREAM_FINALIZATION_MAX_MS,
+      } finally {
+        if (warningTimer) {
+          clearTimeout(warningTimer);
+          warningTimer = null;
+        }
+      }
+    } finally {
+      completion.resolve();
     }
+  };
+  const controller = AsyncTaskManager.register(effectTaskId, run, {
+    taskType: "post-terminal-side-effects",
+    staleTimeoutMs: STREAM_FINALIZATION_MAX_MS,
+  });
+
+  if (controller.signal.aborted && !started) {
+    // shutdownAll may have closed the registry before a late SQL commit is
+    // observed. Execute inline so the writer callback remains the owner and
+    // shutdown can join it before Redis/DB dependencies are closed.
+    void run(new AbortController().signal);
+  }
+
+  return completion.promise;
+}
+
+async function runPostTerminalSideEffects(
+  effects: ReadonlyArray<() => Promise<void>>,
+  signal: AbortSignal
+): Promise<void> {
+  if (signal.aborted) return;
+  await Promise.allSettled(
+    effects.map((effect) => {
+      try {
+        return effect();
+      } catch (error) {
+        return Promise.reject(error);
+      }
+    })
   );
 }
 
@@ -1038,12 +1146,12 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
 ): FinalizeDeferredStreamingResult {
   const meta = consumeDeferredStreamingFinalization(session);
   const provider = session.provider;
+  const providerIdForPersistence = meta?.providerId ?? provider?.id ?? null;
   const clearSessionBinding = async () => {
     if (!session.sessionId) return;
-    await SessionManager.clearSessionProvider(session.sessionId);
+    await SessionManager.clearSessionProvider(session.sessionId, providerIdForPersistence);
   };
 
-  const providerIdForPersistence = meta?.providerId ?? provider?.id ?? null;
   const isHedgeWinner = meta?.isHedgeWinner === true;
   const billHedgeLosers = meta?.billHedgeLosers === true;
 
@@ -1058,12 +1166,7 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
     : ({ isError: false } as const);
   let clientAbortGateUsage: FinalizeDeferredStreamingResult["clientAbortGateUsage"];
   const clientAbortCompleteSuccess = (() => {
-    if (
-      streamEndedNormally ||
-      !clientAborted ||
-      upstreamStatusCode < 200 ||
-      upstreamStatusCode >= 300
-    ) {
+    if (!clientAborted || upstreamStatusCode < 200 || upstreamStatusCode >= 300) {
       return false;
     }
 
@@ -1108,9 +1211,16 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
   } else if (clientAbortCompleteSuccess) {
     effectiveStatusCode = upstreamStatusCode;
     errorMessage = null;
+  } else if (streamEndedNormally && upstreamStatusCode >= 400) {
+    effectiveStatusCode = upstreamStatusCode;
+    const upstreamError = detectUpstreamErrorFromSseOrJsonText(allContent);
+    errorMessage = upstreamError.isError ? upstreamError.code : `HTTP ${upstreamStatusCode}`;
+  } else if (clientAborted) {
+    effectiveStatusCode = 499;
+    errorMessage = "CLIENT_ABORTED";
   } else if (!streamEndedNormally) {
-    effectiveStatusCode = clientAborted ? 499 : 502;
-    errorMessage = clientAborted ? "CLIENT_ABORTED" : (abortReason ?? "STREAM_ABORTED");
+    effectiveStatusCode = 502;
+    errorMessage = abortReason ?? "STREAM_ABORTED";
   } else {
     // streamEndedNormally=true
     effectiveStatusCode = upstreamStatusCode;
@@ -1126,7 +1236,7 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
   }
 
   const shouldClearSessionBindingOnFailure =
-    (!streamEndedNormally && !clientAbortCompleteSuccess) ||
+    ((clientAborted || !streamEndedNormally) && !clientAbortCompleteSuccess) ||
     detected.isError ||
     (upstreamStatusCode >= 400 && errorMessage !== null);
 
@@ -1174,7 +1284,7 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
   // 同时，为了让故障转移/熔断能正确工作：
   // - 客户端主动中断：不计入熔断器（这通常不是供应商问题）
   // - 非客户端中断：计入 provider/endpoint 熔断失败（与 timeout 路径保持一致）
-  if (!streamEndedNormally && !clientAbortCompleteSuccess) {
+  if ((clientAborted || !streamEndedNormally) && !clientAbortCompleteSuccess) {
     session.addProviderToChain(providerForChain, {
       endpointId: meta.endpointId,
       endpointUrl: meta.endpointUrl,
@@ -1631,9 +1741,20 @@ export class ProxyResponseHandler {
 
             // 使用共享的统计处理方法
             const duration = Date.now() - session.startTime;
-            if (messageContext) {
-              await updateMessageRequestDuration(messageContext.id, duration);
-            }
+            let providerFailureScheduled = false;
+            const scheduleProviderFailure = () => {
+              if (!commitProviderFailure || providerFailureScheduled) return;
+              providerFailureScheduled = true;
+              return schedulePostTerminalSideEffects({
+                taskId,
+                providerId: provider.id,
+                sessionId: session.sessionId,
+                commit: async (signal) => {
+                  if (signal.aborted) return;
+                  await commitProviderFailure();
+                },
+              });
+            };
             const finalizedUsage = await finalizeRequestStats(
               session,
               responseText,
@@ -1641,18 +1762,9 @@ export class ProxyResponseHandler {
               duration,
               errorMessageForFinalize,
               undefined,
-              false // Gemini 非流式透传
+              false, // Gemini 非流式透传
+              scheduleProviderFailure
             );
-
-            if (commitProviderFailure) {
-              schedulePostTerminalSideEffects({
-                taskId,
-                providerId: provider.id,
-                sessionId: session.sessionId,
-                commit: commitProviderFailure,
-              });
-            }
-
             emitProxyLangfuseTrace(session, {
               responseHeaders: response.headers,
               responseText,
@@ -1690,29 +1802,11 @@ export class ProxyResponseHandler {
               });
             }
 
-            if (messageContext) {
-              const duration = Date.now() - session.startTime;
-              await updateMessageRequestDuration(messageContext.id, duration);
-              await updateMessageRequestDetailsDurably(messageContext.id, {
-                statusCode: finalizedStatusCode,
-                ...errorDetails,
-                ttfbMs: session.ttfbMs ?? duration,
-                providerChain: session.getProviderChain(),
-                model: session.getCurrentModel() ?? undefined,
-                providerId: session.provider?.id,
-                context1mApplied: session.getContext1mApplied(),
-                swapCacheTtlApplied: session.provider?.swapCacheTtlBilling ?? false,
-                specialSettings: session.getSpecialSettings() ?? undefined,
-              });
-              const tracker = ProxyStatusTracker.getInstance();
-              tracker.endRequest(messageContext.user.id, messageContext.id);
-            }
-
             const postTerminalSideEffects: Array<() => Promise<void>> = [];
             if (session.sessionId) {
               const sessionId = session.sessionId;
               postTerminalSideEffects.push(async () => {
-                await SessionManager.clearSessionProvider(sessionId);
+                await SessionManager.clearSessionProvider(sessionId, provider.id);
               });
             }
             if (
@@ -1735,15 +1829,42 @@ export class ProxyResponseHandler {
                 }
               });
             }
-            if (postTerminalSideEffects.length > 0) {
-              schedulePostTerminalSideEffects({
+            let postTerminalSideEffectsScheduled = false;
+            const scheduleCommittedSideEffects = () => {
+              if (postTerminalSideEffects.length === 0 || postTerminalSideEffectsScheduled) return;
+              postTerminalSideEffectsScheduled = true;
+              return schedulePostTerminalSideEffects({
                 taskId,
                 providerId: provider.id,
                 sessionId: session.sessionId,
-                commit: async () => {
-                  await Promise.all(postTerminalSideEffects.map((effect) => effect()));
-                },
+                commit: (signal) => runPostTerminalSideEffects(postTerminalSideEffects, signal),
               });
+            };
+
+            if (messageContext) {
+              const duration = Date.now() - session.startTime;
+              const tracker = ProxyStatusTracker.getInstance();
+              try {
+                await persistNonStreamTerminalDetails({
+                  taskId,
+                  messageRequestId: messageContext.id,
+                  durationMs: duration,
+                  details: {
+                    statusCode: finalizedStatusCode,
+                    ...errorDetails,
+                    ttfbMs: session.ttfbMs ?? duration,
+                    providerChain: session.getProviderChain(),
+                    model: session.getCurrentModel() ?? undefined,
+                    providerId: session.provider?.id,
+                    context1mApplied: session.getContext1mApplied(),
+                    swapCacheTtlApplied: session.provider?.swapCacheTtlBilling ?? false,
+                    specialSettings: session.getSpecialSettings() ?? undefined,
+                  },
+                  onCommitted: scheduleCommittedSideEffects,
+                });
+              } finally {
+                tracker.endRequest(messageContext.user.id, messageContext.id);
+              }
             }
           } finally {
             cleanupTaskAbortBinding();
@@ -1851,36 +1972,11 @@ export class ProxyResponseHandler {
           options.statusCode ?? (session.clientAbortSignal?.aborted ? 499 : statusCode);
         const errorDetails =
           options.error === undefined ? undefined : buildProcessingErrorDetails(options.error);
-        if (messageContext) {
-          const duration = Date.now() - session.startTime;
-          const terminalDetails: MessageRequestTerminalDetails = {
-            statusCode: finalizedStatusCode,
-            ...errorDetails,
-            ttfbMs: session.ttfbMs ?? duration,
-            providerChain: session.getProviderChain(),
-            model: session.getCurrentModel() ?? undefined, // 更新重定向后的模型
-            providerId: session.provider?.id, // 更新最终供应商ID（重试切换后）
-            context1mApplied: session.getContext1mApplied(),
-            swapCacheTtlApplied: session.provider?.swapCacheTtlBilling ?? false,
-          };
-          const tracker = ProxyStatusTracker.getInstance();
-          try {
-            await persistNonStreamTerminalDetails({
-              taskId,
-              messageRequestId: messageContext.id,
-              durationMs: duration,
-              details: terminalDetails,
-            });
-          } finally {
-            tracker.endRequest(messageContext.user.id, messageContext.id);
-          }
-        }
-
         const postTerminalSideEffects = [...(options.postTerminalSideEffects ?? [])];
         if (session.sessionId) {
           const sessionId = session.sessionId;
           postTerminalSideEffects.push(async () => {
-            await SessionManager.clearSessionProvider(sessionId);
+            await SessionManager.clearSessionProvider(sessionId, provider.id);
 
             const sessionUsagePayload: SessionUsageUpdate = {
               status:
@@ -1900,16 +1996,41 @@ export class ProxyResponseHandler {
             }
           });
         }
-
-        if (postTerminalSideEffects.length > 0) {
-          schedulePostTerminalSideEffects({
+        let postTerminalSideEffectsScheduled = false;
+        const scheduleCommittedSideEffects = () => {
+          if (postTerminalSideEffects.length === 0 || postTerminalSideEffectsScheduled) return;
+          postTerminalSideEffectsScheduled = true;
+          return schedulePostTerminalSideEffects({
             taskId,
             providerId: provider.id,
             sessionId: session.sessionId,
-            commit: async () => {
-              await Promise.all(postTerminalSideEffects.map((effect) => effect()));
-            },
+            commit: (signal) => runPostTerminalSideEffects(postTerminalSideEffects, signal),
           });
+        };
+        if (messageContext) {
+          const duration = Date.now() - session.startTime;
+          const terminalDetails: MessageRequestTerminalDetails = {
+            statusCode: finalizedStatusCode,
+            ...errorDetails,
+            ttfbMs: session.ttfbMs ?? duration,
+            providerChain: session.getProviderChain(),
+            model: session.getCurrentModel() ?? undefined, // 更新重定向后的模型
+            providerId: session.provider?.id, // 更新最终供应商ID（重试切换后）
+            context1mApplied: session.getContext1mApplied(),
+            swapCacheTtlApplied: session.provider?.swapCacheTtlBilling ?? false,
+          };
+          const tracker = ProxyStatusTracker.getInstance();
+          try {
+            await persistNonStreamTerminalDetails({
+              taskId,
+              messageRequestId: messageContext.id,
+              durationMs: duration,
+              details: terminalDetails,
+              onCommitted: scheduleCommittedSideEffects,
+            });
+          } finally {
+            tracker.endRequest(messageContext.user.id, messageContext.id);
+          }
         }
       };
 
@@ -2181,6 +2302,18 @@ export class ProxyResponseHandler {
           });
         }
 
+        let postTerminalSideEffectsScheduled = false;
+        const scheduleCommittedSideEffects = () => {
+          if (postTerminalSideEffects.length === 0 || postTerminalSideEffectsScheduled) return;
+          postTerminalSideEffectsScheduled = true;
+          return schedulePostTerminalSideEffects({
+            taskId,
+            providerId: provider.id,
+            sessionId: session.sessionId,
+            commit: (signal) => runPostTerminalSideEffects(postTerminalSideEffects, signal),
+          });
+        };
+
         if (messageContext) {
           const duration = Date.now() - session.startTime;
           const terminalDetails: MessageRequestTerminalDetails = {
@@ -2213,21 +2346,11 @@ export class ProxyResponseHandler {
               messageRequestId: messageContext.id,
               durationMs: duration,
               details: terminalDetails,
+              onCommitted: scheduleCommittedSideEffects,
             });
           } finally {
             tracker.endRequest(messageContext.user.id, messageContext.id);
           }
-        }
-
-        if (postTerminalSideEffects.length > 0) {
-          schedulePostTerminalSideEffects({
-            taskId,
-            providerId: provider.id,
-            sessionId: session.sessionId,
-            commit: async () => {
-              await Promise.all(postTerminalSideEffects.map((effect) => effect()));
-            },
-          });
         }
 
         logger.debug("ResponseHandler: Non-stream response processed", {
@@ -2436,22 +2559,41 @@ export class ProxyResponseHandler {
 
         let observePassthroughChunk = (_value: Uint8Array) => {};
         let observePassthroughReadStart = () => {};
+        let observePassthroughDrainStart = () => {};
+        let abortPassthroughTransport = (_reason: Error) => {};
         let passthroughPump: DemandDrivenResponsePump;
+        let passthroughDrainTimeoutId: ReturnType<typeof setTimeout> | null = null;
+        const clearPassthroughDrainTimeout = () => {
+          if (passthroughDrainTimeoutId) {
+            clearTimeout(passthroughDrainTimeoutId);
+            passthroughDrainTimeoutId = null;
+          }
+        };
+        const startPassthroughDrain = (reason?: unknown) => {
+          passthroughPump.startDrain(reason);
+          observePassthroughDrainStart();
+          if (passthroughDrainTimeoutId) return;
+          passthroughDrainTimeoutId = setTimeout(() => {
+            passthroughDrainTimeoutId = null;
+            const drainTimeoutError = new Error("client_abort_drain_timeout");
+            abortPassthroughTransport(drainTimeoutError);
+            passthroughPump.cancelSource(drainTimeoutError);
+          }, CLIENT_ABORT_DRAIN_MAX_MS);
+          passthroughDrainTimeoutId.unref?.();
+        };
         passthroughPump = createDemandDrivenResponsePump({
           source: response.body,
           onReadStart: () => observePassthroughReadStart(),
           onChunk: (value) => observePassthroughChunk(value),
           onClientCancel: (reason) => {
-            passthroughPump.startDrain(reason);
-            passthroughPump.cancelSource(reason);
+            startPassthroughDrain(reason);
           },
         });
         const cleanupPassthroughClientAbortListener = bindClientAbortListener(
           session.clientAbortSignal,
           () => {
             const reason = session.clientAbortSignal?.reason;
-            passthroughPump.startDrain(reason);
-            passthroughPump.cancelSource(reason);
+            startPassthroughDrain(reason);
           }
         );
         const statusCode = response.status;
@@ -2483,6 +2625,21 @@ export class ProxyResponseHandler {
           let pumpClientAborted = false;
           let abortReason: string | undefined;
           let transportReleased = false;
+          let commitSideEffectsScheduled = false;
+          let latestCommitSideEffects: (() => Promise<void>) | undefined;
+          const scheduleCommitSideEffects = (effect: (() => Promise<void>) | undefined) => {
+            if (!effect || commitSideEffectsScheduled) return;
+            commitSideEffectsScheduled = true;
+            return schedulePostTerminalSideEffects({
+              taskId,
+              providerId: provider.id,
+              sessionId: session.sessionId,
+              commit: async (signal) => {
+                if (signal.aborted) return;
+                await effect();
+              },
+            });
+          };
 
           // 静默期 Watchdog：透传也需要支持中途卡住（无新数据推送）
           const idleTimeoutMs =
@@ -2523,6 +2680,19 @@ export class ProxyResponseHandler {
           observePassthroughReadStart = () => {
             if (!isFirstChunk) startIdleTimer();
           };
+          observePassthroughDrainStart = startIdleTimer;
+          abortPassthroughTransport = (reason) => {
+            try {
+              sessionWithController.responseController?.abort(reason);
+            } catch {
+              // ignore
+            }
+            try {
+              statsAbortController.abort(reason);
+            } catch {
+              // ignore
+            }
+          };
 
           const clearResponseTimeoutOnce = (firstChunkSize?: number) => {
             if (responseTimeoutCleared) return;
@@ -2553,6 +2723,7 @@ export class ProxyResponseHandler {
           };
 
           observePassthroughChunk = (value) => {
+            clearIdleTimer();
             if (isFirstChunk) {
               isFirstChunk = false;
               session.recordTtfb();
@@ -2565,6 +2736,7 @@ export class ProxyResponseHandler {
           const releaseTransportResources = () => {
             if (transportReleased) return;
             transportReleased = true;
+            clearPassthroughDrainTimeout();
             cleanupPassthroughClientAbortListener();
             cleanupTaskAbortBinding();
             clearIdleTimer();
@@ -2662,6 +2834,7 @@ export class ProxyResponseHandler {
               clientAborted,
               abortReason
             );
+            latestCommitSideEffects = finalized.commitSideEffects;
             const finalizedUsage = await finalizeRequestStats(
               session,
               allContent,
@@ -2669,7 +2842,8 @@ export class ProxyResponseHandler {
               duration,
               finalized.errorMessage ?? undefined,
               finalized.providerIdForPersistence ?? undefined,
-              true // Gemini 流式透传(NDJSON 无 data:/event: 前缀,必须显式告知)
+              true, // Gemini 流式透传(NDJSON 无 data:/event: 前缀,必须显式告知)
+              () => scheduleCommitSideEffects(latestCommitSideEffects)
             );
             emitProxyLangfuseTrace(session, {
               responseHeaders: response.headers,
@@ -2681,14 +2855,6 @@ export class ProxyResponseHandler {
               isStreaming: true,
               errorMessage: finalized.errorMessage ?? undefined,
             });
-            if (finalized.commitSideEffects) {
-              schedulePostTerminalSideEffects({
-                taskId,
-                providerId: provider.id,
-                sessionId: session.sessionId,
-                commit: finalized.commitSideEffects,
-              });
-            }
           } catch (error) {
             const err = error instanceof Error ? error : new Error(String(error));
             const clientAborted =
@@ -2738,26 +2904,19 @@ export class ProxyResponseHandler {
                 clientAborted,
                 abortReason
               );
+              latestCommitSideEffects = finalized.commitSideEffects;
 
               await finalizeRequestStats(
                 session,
                 allContent,
                 finalized.effectiveStatusCode,
                 duration,
-                finalized.errorMessage ?? abortReason,
+                finalized.errorMessage ?? undefined,
                 finalized.providerIdForPersistence ?? undefined,
-                true // 流式透传错误兜底也是流式上下文
+                true, // 流式透传错误兜底也是流式上下文
+                () => scheduleCommitSideEffects(latestCommitSideEffects)
               );
-              if (finalized.commitSideEffects) {
-                schedulePostTerminalSideEffects({
-                  taskId,
-                  providerId: provider.id,
-                  sessionId: session.sessionId,
-                  commit: finalized.commitSideEffects,
-                });
-              }
             } catch (finalizeError) {
-              const persistenceDeadlineAtMs = Date.now() + STREAM_FAILURE_PERSISTENCE_MAX_MS;
               const fallbackStatusCode =
                 statusCode >= 400
                   ? statusCode
@@ -2774,12 +2933,14 @@ export class ProxyResponseHandler {
                 taskId,
                 phase: "stream",
                 detailsWriter: updateMessageRequestDetailsIfUnfinalized,
+                onCommitted: () => scheduleCommitSideEffects(latestCommitSideEffects),
                 awaitPersistence: <T>(promise: Promise<T>) =>
-                  raceWithDeadline(
+                  awaitTerminalPersistenceWithOwnership({
                     promise,
-                    persistenceDeadlineAtMs,
-                    "stream_failure_persistence_timeout"
-                  ),
+                    taskId,
+                    operation: "gemini-stream-fallback",
+                    timeoutMs: STREAM_FAILURE_PERSISTENCE_MAX_MS,
+                  }),
               });
             }
           } finally {
@@ -3066,31 +3227,47 @@ export class ProxyResponseHandler {
     };
 
     let terminalDetailsPersisted = false;
+    let streamCommitSideEffectsScheduled = false;
+    let latestStreamCommitSideEffects: Array<() => Promise<void>> = [];
+    const scheduleStreamCommitSideEffects = () => {
+      if (latestStreamCommitSideEffects.length === 0 || streamCommitSideEffectsScheduled) return;
+      streamCommitSideEffectsScheduled = true;
+      const committedEffects = [...latestStreamCommitSideEffects];
+      return schedulePostTerminalSideEffects({
+        taskId,
+        providerId: provider.id,
+        sessionId: session.sessionId,
+        commit: (signal) => runPostTerminalSideEffects(committedEffects, signal),
+      });
+    };
     let streamFailurePersistencePromise: Promise<void> | null = null;
     const persistStreamFailureOnce = (
       options: Parameters<typeof persistRequestFailure>[0]
     ): Promise<void> => {
       if (terminalDetailsPersisted) return Promise.resolve();
       if (!streamFailurePersistencePromise) {
-        const persistenceDeadlineAtMs = Date.now() + STREAM_FAILURE_PERSISTENCE_MAX_MS;
         streamFailurePersistencePromise = persistRequestFailure({
           ...options,
           detailsWriter: updateMessageRequestDetailsIfUnfinalized,
+          onCommitted: options.onCommitted ?? scheduleStreamCommitSideEffects,
           awaitPersistence: <T>(promise: Promise<T>) =>
-            raceWithDeadline(
+            awaitTerminalPersistenceWithOwnership({
               promise,
-              persistenceDeadlineAtMs,
-              "stream_failure_persistence_timeout"
-            ),
-        }).catch((error) => {
-          logger.error("ResponseHandler: Stream failure fallback threw", {
-            taskId,
-            messageId: messageContext.id,
-            error,
+              taskId,
+              operation: "stream-failure-fallback",
+              timeoutMs: STREAM_FAILURE_PERSISTENCE_MAX_MS,
+            }),
+        })
+          .then(() => undefined)
+          .catch((error) => {
+            logger.error("ResponseHandler: Stream failure fallback threw", {
+              taskId,
+              messageId: messageContext.id,
+              error,
+            });
           });
-        });
       }
-      return streamFailurePersistencePromise;
+      return streamFailurePersistencePromise ?? Promise.resolve();
     };
 
     let streamFinalizationPromise: Promise<void> | null = null;
@@ -3113,6 +3290,9 @@ export class ProxyResponseHandler {
           clientAborted,
           abortReason
         );
+        latestStreamCommitSideEffects = finalized.commitSideEffects
+          ? [finalized.commitSideEffects]
+          : [];
         const effectiveStatusCode = finalized.effectiveStatusCode;
         const streamErrorMessage = finalized.errorMessage;
         const providerIdForPersistence = finalized.providerIdForPersistence;
@@ -3166,7 +3346,6 @@ export class ProxyResponseHandler {
         }
 
         const duration = Date.now() - session.startTime;
-        await awaitFinalization(updateMessageRequestDuration(messageContext.id, duration));
 
         const tracker = ProxyStatusTracker.getInstance();
         tracker.endRequest(messageContext.user.id, messageContext.id);
@@ -3394,35 +3573,7 @@ export class ProxyResponseHandler {
           ? anthropicModelDetection.actualResponseModel
           : extractActualResponseModelForProvider(provider.providerType, true, allContent);
 
-        // 保存扩展信息（status code, tokens, provider chain）
-        await awaitFinalization(
-          updateMessageRequestDetailsDurably(messageContext.id, {
-            statusCode: effectiveStatusCode,
-            inputTokens: usageForCost?.input_tokens,
-            outputTokens: usageForCost?.output_tokens,
-            ttfbMs: session.ttfbMs,
-            cacheCreationInputTokens: usageForCost?.cache_creation_input_tokens,
-            cacheReadInputTokens: usageForCost?.cache_read_input_tokens,
-            cacheCreation5mInputTokens: usageForCost?.cache_creation_5m_input_tokens,
-            cacheCreation1hInputTokens: usageForCost?.cache_creation_1h_input_tokens,
-            cacheTtlApplied: usageForCost?.cache_ttl ?? null,
-            providerChain: session.getProviderChain(),
-            ...(streamErrorMessage ? { errorMessage: streamErrorMessage } : {}),
-            model: currentRequestedModel ?? undefined, // 更新重定向后的模型
-            actualResponseModel: finalActualResponseModel,
-            providerId: providerIdForPersistence ?? session.provider?.id, // 更新最终供应商ID（重试切换后）
-            context1mApplied: session.getContext1mApplied(),
-            swapCacheTtlApplied: provider.swapCacheTtlBilling ?? false,
-            specialSettings: session.getSpecialSettings() ?? undefined,
-          })
-        );
-        terminalDetailsPersisted = true;
-
-        const postTerminalSideEffects: Array<() => Promise<void>> = [];
-        const commitDeferredSideEffects = finalized.commitSideEffects;
-        if (commitDeferredSideEffects) {
-          postTerminalSideEffects.push(commitDeferredSideEffects);
-        }
+        const postTerminalSideEffects = [...latestStreamCommitSideEffects];
         if (codexCacheBinding) {
           const { sessionId, promptCacheKey, providerId, keyId } = codexCacheBinding;
           postTerminalSideEffects.push(async () => {
@@ -3438,16 +3589,37 @@ export class ProxyResponseHandler {
             }
           });
         }
-        if (postTerminalSideEffects.length > 0) {
-          schedulePostTerminalSideEffects({
-            taskId,
-            providerId: providerIdForPersistence ?? provider.id,
-            sessionId: session.sessionId,
-            commit: async () => {
-              await Promise.all(postTerminalSideEffects.map((effect) => effect()));
+        latestStreamCommitSideEffects = postTerminalSideEffects;
+
+        // 保存扩展信息（status code, tokens, provider chain）
+        terminalDetailsPersisted = await awaitFinalization(
+          updateMessageRequestDetailsDurably(
+            messageContext.id,
+            {
+              statusCode: effectiveStatusCode,
+              durationMs: duration,
+              inputTokens: usageForCost?.input_tokens,
+              outputTokens: usageForCost?.output_tokens,
+              ttfbMs: session.ttfbMs,
+              cacheCreationInputTokens: usageForCost?.cache_creation_input_tokens,
+              cacheReadInputTokens: usageForCost?.cache_read_input_tokens,
+              cacheCreation5mInputTokens: usageForCost?.cache_creation_5m_input_tokens,
+              cacheCreation1hInputTokens: usageForCost?.cache_creation_1h_input_tokens,
+              cacheTtlApplied: usageForCost?.cache_ttl ?? null,
+              providerChain: session.getProviderChain(),
+              ...(streamErrorMessage ? { errorMessage: streamErrorMessage } : {}),
+              model: currentRequestedModel ?? undefined, // 更新重定向后的模型
+              actualResponseModel: finalActualResponseModel,
+              providerId: providerIdForPersistence ?? session.provider?.id, // 更新最终供应商ID（重试切换后）
+              context1mApplied: session.getContext1mApplied(),
+              swapCacheTtlApplied: provider.swapCacheTtlBilling ?? false,
+              specialSettings: session.getSpecialSettings() ?? undefined,
             },
-          });
-        }
+            {
+              onCommitted: scheduleStreamCommitSideEffects,
+            }
+          )
+        );
 
         emitProxyLangfuseTrace(session, {
           responseHeaders: response.headers,
@@ -4881,7 +5053,8 @@ export async function finalizeRequestStats(
    *   导致 extractActualResponseModelForProvider 走 non-stream JSON.parse 失败
    * - 如果不传则回退为 isSSEText 嗅探(仅兼容保留)
    */
-  isStreaming?: boolean
+  isStreaming?: boolean,
+  onCommitted?: () => void | Promise<void>
 ): Promise<UsageMetrics | null> {
   const { messageContext, provider } = session;
   if (!provider || !messageContext) {
@@ -4953,8 +5126,9 @@ export async function finalizeRequestStats(
       });
     }
 
-    await updateMessageRequestDetailsDurably(messageContext.id, {
+    const terminalDetails = {
       statusCode: statusCode,
+      durationMs: duration,
       ...(errorMessage ? { errorMessage } : {}),
       ttfbMs: session.ttfbMs ?? duration,
       providerChain: session.getProviderChain(),
@@ -4968,7 +5142,14 @@ export async function finalizeRequestStats(
       context1mApplied: session.getContext1mApplied(),
       swapCacheTtlApplied: session.provider?.swapCacheTtlBilling ?? false,
       specialSettings: session.getSpecialSettings() ?? undefined,
-    });
+    };
+    if (onCommitted) {
+      await updateMessageRequestDetailsDurably(messageContext.id, terminalDetails, {
+        onCommitted,
+      });
+    } else {
+      await updateMessageRequestDetailsDurably(messageContext.id, terminalDetails);
+    }
     return null;
   }
 
@@ -5056,8 +5237,9 @@ export async function finalizeRequestStats(
   }
 
   // 7. 更新请求详情
-  await updateMessageRequestDetailsDurably(messageContext.id, {
+  const terminalDetails = {
     statusCode: statusCode,
+    durationMs: duration,
     inputTokens: normalizedUsage.input_tokens,
     outputTokens: normalizedUsage.output_tokens,
     ttfbMs: session.ttfbMs ?? duration,
@@ -5078,7 +5260,12 @@ export async function finalizeRequestStats(
     context1mApplied: session.getContext1mApplied(),
     swapCacheTtlApplied: provider.swapCacheTtlBilling ?? false,
     specialSettings: session.getSpecialSettings() ?? undefined,
-  });
+  };
+  if (onCommitted) {
+    await updateMessageRequestDetailsDurably(messageContext.id, terminalDetails, { onCommitted });
+  } else {
+    await updateMessageRequestDetailsDurably(messageContext.id, terminalDetails);
+  }
 
   if (session.sessionId && session.requestSequence != null) {
     if (session.shouldTrackSessionObservability()) {
@@ -5234,6 +5421,11 @@ function buildProcessingErrorDetails(error: unknown): {
   errorStack?: string;
   errorCause?: string;
 } {
+  const databaseError = findSafeDatabaseError(error);
+  if (databaseError) {
+    return { errorMessage: databaseError.message };
+  }
+
   const maxErrorStackLength = 8192;
   const maxErrorCauseLength = 4096;
   const errorMessage = formatProcessingError(error);
@@ -5272,44 +5464,47 @@ async function persistRequestFailure(options: {
   taskId: string;
   phase: "stream" | "non-stream";
   awaitPersistence?: <T>(promise: Promise<T>) => Promise<T>;
-  detailsWriter?: typeof updateMessageRequestDetails;
-}): Promise<void> {
+  detailsWriter?: typeof updateMessageRequestDetailsIfUnfinalized;
+  onCommitted?: () => void | Promise<void>;
+}): Promise<boolean> {
   const { session, messageContext, statusCode, error, taskId, phase } = options;
   const awaitPersistence = options.awaitPersistence ?? (<T>(promise: Promise<T>) => promise);
-  const detailsWriter = options.detailsWriter ?? updateMessageRequestDetails;
+  const detailsWriter = options.detailsWriter ?? updateMessageRequestDetailsIfUnfinalized;
 
   if (!messageContext) {
     logger.warn("ResponseHandler: Cannot persist failure without messageContext", {
       taskId,
       phase,
     });
-    return;
+    return false;
   }
 
   const tracker = ProxyStatusTracker.getInstance();
   const { errorMessage, errorStack, errorCause } = buildProcessingErrorDetails(error);
   const duration = Date.now() - session.startTime;
+  let committed = false;
 
   try {
-    // 更新请求持续时间
-    await awaitPersistence(updateMessageRequestDuration(messageContext.id, duration));
-
-    // 更新错误详情和 provider chain
-    await awaitPersistence(
-      detailsWriter(messageContext.id, {
-        statusCode,
-        errorMessage,
-        errorStack,
-        errorCause,
-        ttfbMs: phase === "non-stream" ? (session.ttfbMs ?? duration) : session.ttfbMs,
-        providerChain: session.getProviderChain(),
-        model: session.getCurrentModel() ?? undefined,
-        providerId: session.provider?.id, // 更新最终供应商ID（重试切换后）
-        context1mApplied: session.getContext1mApplied(),
-        swapCacheTtlApplied: session.provider?.swapCacheTtlBilling ?? false,
-        specialSettings: session.getSpecialSettings() ?? undefined,
-      })
-    );
+    // duration 与 terminal status 必须属于同一个 CAS patch，避免 ordinary
+    // metadata 在 overflow 或进程退出时丢失而留下永久 active 记录。
+    const terminalDetails = {
+      statusCode,
+      durationMs: duration,
+      errorMessage,
+      errorStack,
+      errorCause,
+      ttfbMs: phase === "non-stream" ? (session.ttfbMs ?? duration) : session.ttfbMs,
+      providerChain: session.getProviderChain(),
+      model: session.getCurrentModel() ?? undefined,
+      providerId: session.provider?.id, // 更新最终供应商ID（重试切换后）
+      context1mApplied: session.getContext1mApplied(),
+      swapCacheTtlApplied: session.provider?.swapCacheTtlBilling ?? false,
+      specialSettings: session.getSpecialSettings() ?? undefined,
+    };
+    const persistence = options.onCommitted
+      ? detailsWriter(messageContext.id, terminalDetails, { onCommitted: options.onCommitted })
+      : detailsWriter(messageContext.id, terminalDetails);
+    committed = Boolean(await awaitPersistence(persistence));
 
     if (session.sessionId && session.requestSequence != null) {
       if (session.shouldTrackSessionObservability()) {
@@ -5332,12 +5527,16 @@ async function persistRequestFailure(options: {
       }
     );
   } catch (dbError) {
+    const databaseError = findSafeDatabaseError(dbError);
     logger.error("ResponseHandler: Failed to persist request failure", {
       taskId,
       phase,
       messageId: messageContext.id,
       error: errorMessage,
-      dbError,
+      databaseError:
+        databaseError?.message ?? (dbError instanceof Error ? dbError.message : String(dbError)),
+      databaseErrorCode: databaseError?.code,
+      databaseErrorPool: databaseError?.pool,
     });
   } finally {
     // 确保无论数据库操作成功与否，都清理追踪状态
@@ -5364,6 +5563,7 @@ async function persistRequestFailure(options: {
     sseEventCount: phase === "stream" ? 0 : undefined,
     errorMessage,
   });
+  return committed;
 }
 
 /**

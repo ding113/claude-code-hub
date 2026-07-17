@@ -6,10 +6,13 @@ import type { Provider } from "@/types/provider";
 import type { User } from "@/types/user";
 
 type TaskOptions = { readonly abortController?: AbortController };
+type TerminalWriterOptions = { readonly onCommitted?: () => void | Promise<void> };
 const mocks = vi.hoisted(() => ({
-  conditional: vi.fn<(id: number, details: object) => Promise<void>>(),
+  conditional:
+    vi.fn<(id: number, details: object, options?: TerminalWriterOptions) => Promise<boolean>>(),
   details: vi.fn<(id: number, details: object) => Promise<void>>(),
-  durable: vi.fn<(id: number, details: object) => Promise<void>>(),
+  durable:
+    vi.fn<(id: number, details: object, options?: TerminalWriterOptions) => Promise<boolean>>(),
   tasks: Array.from<Promise<void>>([]),
 }));
 
@@ -118,7 +121,13 @@ const geminiResponse = (body: BodyInit) =>
 
 async function settleTasks(): Promise<void> {
   while (mocks.tasks.length > 0) {
-    await Promise.allSettled(mocks.tasks.splice(0, mocks.tasks.length));
+    const results = await Promise.allSettled(mocks.tasks.splice(0, mocks.tasks.length));
+    const errors = results.flatMap((result) =>
+      result.status === "rejected" ? [result.reason] : []
+    );
+    if (errors.length > 0) {
+      throw new AggregateError(errors, "Gemini terminal background tasks failed");
+    }
   }
 }
 
@@ -129,29 +138,40 @@ describe("ProxyResponseHandler.dispatch Gemini terminal behavior", () => {
     vi.useRealTimers();
     mocks.tasks.length = 0;
     vi.clearAllMocks();
-    mocks.conditional.mockResolvedValue(undefined);
+    mocks.conditional.mockResolvedValue(true);
     mocks.details.mockResolvedValue(undefined);
-    mocks.durable.mockResolvedValue(undefined);
+    mocks.durable.mockResolvedValue(true);
   });
 
-  it("cancels the Gemini source when the returned body is cancelled", async () => {
+  it("drains the Gemini source after the returned body is cancelled", async () => {
     const cancelSource = vi.fn();
-    let failSource = () => {};
+    let sourceController: ReadableStreamDefaultController<Uint8Array> | null = null;
+    const encoder = new TextEncoder();
     const source = new ReadableStream<Uint8Array>({
       cancel: cancelSource,
       start(controller) {
-        failSource = () => controller.error(new DOMException("closed", "AbortError"));
+        sourceController = controller;
+        controller.enqueue(encoder.encode('{"chunk":1}\n'));
       },
     });
     const session = await createSession({});
     const returned = await ProxyResponseHandler.dispatch(session, geminiResponse(source));
 
     await returned.body?.cancel(new Error("client cancelled body"));
-    const cancellationCount = cancelSource.mock.calls.length;
-    failSource();
+    sourceController?.enqueue(encoder.encode('{"usageMetadata":{"promptTokenCount":1}}\n'));
+    sourceController?.close();
     await settleTasks();
 
-    expect(cancellationCount).toBe(1);
+    expect(cancelSource).not.toHaveBeenCalled();
+    expect(mocks.durable).toHaveBeenCalledWith(
+      MESSAGE.id,
+      expect.objectContaining({
+        durationMs: expect.any(Number),
+        inputTokens: 1,
+        statusCode: 499,
+      }),
+      expect.objectContaining({ onCommitted: expect.any(Function) })
+    );
   });
 
   it("resets the Gemini idle window after every received chunk", async () => {
@@ -192,7 +212,8 @@ describe("ProxyResponseHandler.dispatch Gemini terminal behavior", () => {
 
     expect(mocks.conditional).toHaveBeenCalledWith(
       MESSAGE.id,
-      expect.objectContaining({ statusCode: 500 })
+      expect.objectContaining({ durationMs: expect.any(Number), statusCode: 500 }),
+      expect.objectContaining({ onCommitted: expect.any(Function) })
     );
   });
 

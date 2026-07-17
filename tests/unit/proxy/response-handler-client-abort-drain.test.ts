@@ -969,6 +969,18 @@ async function expectTaskToResolveWithoutWaiting(promise: Promise<void>): Promis
   expect(outcome).toBe("resolved");
 }
 
+function publishCommitObserver(
+  details: Parameters<typeof updateMessageRequestDetailsDurably>[1],
+  options: Parameters<typeof updateMessageRequestDetailsDurably>[2]
+): void {
+  try {
+    const result = options?.onCommitted?.(details);
+    if (result) void Promise.resolve(result).catch(() => undefined);
+  } catch {
+    // Test mock mirrors the repository's commit-observer boundary.
+  }
+}
+
 function createAbortableNonStreamResponse(signal: AbortSignal): Response {
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
@@ -995,6 +1007,28 @@ describe("ProxyResponseHandler stream client abort finalization", () => {
     asyncTasks.splice(0, asyncTasks.length);
     registeredTasks.splice(0, registeredTasks.length);
     vi.clearAllMocks();
+    vi.mocked(updateMessageRequestDetailsDurably).mockImplementation(
+      async (_id, details, options) => {
+        try {
+          const result = options?.onCommitted?.(details);
+          if (result) void Promise.resolve(result).catch(() => undefined);
+        } catch {
+          // Test mock mirrors the repository's commit-observer boundary.
+        }
+        return true;
+      }
+    );
+    vi.mocked(updateMessageRequestDetailsIfUnfinalized).mockImplementation(
+      async (_id, details, options) => {
+        try {
+          const result = options?.onCommitted?.(details);
+          if (result) void Promise.resolve(result).catch(() => undefined);
+        } catch {
+          // Test mock mirrors the repository's commit-observer boundary.
+        }
+        return true;
+      }
+    );
   });
 
   it("propagates unexpected registered task rejections during drain", async () => {
@@ -1017,9 +1051,10 @@ describe("ProxyResponseHandler stream client abort finalization", () => {
   it("keeps shutdown pending until generic non-stream recovery persistence settles", async () => {
     const recoveryStarted = createDeferred<void>();
     const releaseRecovery = createDeferred<void>();
-    vi.mocked(updateMessageRequestDuration).mockImplementationOnce(async () => {
+    vi.mocked(updateMessageRequestDetailsIfUnfinalized).mockImplementationOnce(async () => {
       recoveryStarted.resolve();
       await releaseRecovery.promise;
+      return true;
     });
     let shutdownPromise: Promise<void> | undefined;
 
@@ -1038,14 +1073,16 @@ describe("ProxyResponseHandler stream client abort finalization", () => {
 
       await expectPromiseToRemainPending(shutdownPromise);
       expect(updateMessageRequestDetails).not.toHaveBeenCalled();
+      expect(updateMessageRequestDetailsIfUnfinalized).toHaveBeenCalledTimes(1);
 
       releaseRecovery.resolve();
       await shutdownPromise;
       await expect(processingTask).rejects.toThrow("error classification failed");
 
-      expect(updateMessageRequestDetails).toHaveBeenCalledWith(
+      expect(updateMessageRequestDetailsIfUnfinalized).toHaveBeenCalledWith(
         123,
         expect.objectContaining({
+          durationMs: expect.any(Number),
           statusCode: 500,
           errorMessage: "Error: error classification failed",
         })
@@ -1060,9 +1097,10 @@ describe("ProxyResponseHandler stream client abort finalization", () => {
   it("keeps shutdown pending until generic stream recovery persistence settles", async () => {
     const recoveryStarted = createDeferred<void>();
     const releaseRecovery = createDeferred<void>();
-    vi.mocked(updateMessageRequestDuration).mockImplementationOnce(async () => {
+    vi.mocked(updateMessageRequestDetailsIfUnfinalized).mockImplementationOnce(async () => {
       recoveryStarted.resolve();
       await releaseRecovery.promise;
+      return true;
     });
     let downstreamRead: Promise<string> | undefined;
     let shutdownPromise: Promise<void> | undefined;
@@ -1082,7 +1120,7 @@ describe("ProxyResponseHandler stream client abort finalization", () => {
       shutdownPromise = shutdownAllAsyncTasks();
 
       await expectPromiseToRemainPending(shutdownPromise);
-      expect(updateMessageRequestDetailsIfUnfinalized).not.toHaveBeenCalled();
+      expect(updateMessageRequestDetailsIfUnfinalized).toHaveBeenCalledTimes(1);
 
       releaseRecovery.resolve();
       await shutdownPromise;
@@ -1092,9 +1130,11 @@ describe("ProxyResponseHandler stream client abort finalization", () => {
       expect(updateMessageRequestDetailsIfUnfinalized).toHaveBeenCalledWith(
         123,
         expect.objectContaining({
+          durationMs: expect.any(Number),
           statusCode: 500,
           errorMessage: "Error: error classification failed",
-        })
+        }),
+        expect.objectContaining({ onCommitted: expect.any(Function) })
       );
     } finally {
       releaseRecovery.resolve();
@@ -1182,7 +1222,12 @@ describe("ProxyResponseHandler stream client abort finalization", () => {
 
     await reader?.cancel("test cleanup");
     await drainAsyncTasks();
-    expect(updateMessageRequestDuration).toHaveBeenCalledWith(123, expect.any(Number));
+    expect(updateMessageRequestDuration).not.toHaveBeenCalled();
+    expect(updateMessageRequestDetailsDurably).toHaveBeenCalledWith(
+      123,
+      expect.objectContaining({ durationMs: expect.any(Number) }),
+      expect.objectContaining({ onCommitted: expect.any(Function) })
+    );
   });
 
   it("does not count a pending chunk for an active slow consumer as Provider idle", async () => {
@@ -1245,7 +1290,8 @@ describe("ProxyResponseHandler stream client abort finalization", () => {
           statusCode: 200,
           inputTokens: 463,
           outputTokens: 11,
-        })
+        }),
+        expect.objectContaining({ onCommitted: expect.any(Function) })
       );
       expect(recordFailure).not.toHaveBeenCalled();
     } finally {
@@ -1371,7 +1417,7 @@ describe("ProxyResponseHandler stream client abort finalization", () => {
     await drainAsyncTasks();
 
     expect(updateMessageRequestDetailsDurably).toHaveBeenCalledTimes(1);
-    expect(updateMessageRequestDuration).toHaveBeenCalledTimes(1);
+    expect(updateMessageRequestDuration).not.toHaveBeenCalled();
     expect(emitProxyLangfuseTrace).toHaveBeenCalledTimes(1);
   });
 
@@ -1420,7 +1466,8 @@ describe("ProxyResponseHandler stream client abort finalization", () => {
         expect.objectContaining({
           statusCode: 200,
           providerId: 1,
-        })
+        }),
+        expect.objectContaining({ onCommitted: expect.any(Function) })
       );
       expect(emitProxyLangfuseTrace).toHaveBeenCalledTimes(1);
       expect(
@@ -1483,7 +1530,8 @@ describe("ProxyResponseHandler stream client abort finalization", () => {
           statusCode: 502,
           errorMessage: "STREAM_UPSTREAM_ABORTED",
           providerId: 1,
-        })
+        }),
+        expect.objectContaining({ onCommitted: expect.any(Function) })
       );
       expect(
         vi.mocked(AsyncTaskManager.register).mock.calls.some((call) => {
@@ -1504,8 +1552,8 @@ describe("ProxyResponseHandler stream client abort finalization", () => {
     const removeSpy = vi.spyOn(clientController.signal, "removeEventListener");
     const responseController = new AbortController();
     let resolvePersistence!: () => void;
-    const blockedPersistence = new Promise<void>((resolve) => {
-      resolvePersistence = resolve;
+    const blockedPersistence = new Promise<boolean>((resolve) => {
+      resolvePersistence = () => resolve(true);
     });
     let markPersistenceStarted!: () => void;
     const persistenceStarted = new Promise<void>((resolve) => {
@@ -1533,7 +1581,7 @@ describe("ProxyResponseHandler stream client abort finalization", () => {
         endpointUrl: "https://api.test.invalid/v1",
         upstreamStatusCode: 200,
       });
-      vi.mocked(updateMessageRequestDuration).mockImplementationOnce(() => {
+      vi.mocked(updateMessageRequestDetailsDurably).mockImplementationOnce(() => {
         markPersistenceStarted();
         return blockedPersistence;
       });
@@ -1545,7 +1593,7 @@ describe("ProxyResponseHandler stream client abort finalization", () => {
       await downstream.text();
       await persistenceStarted;
 
-      expect(updateMessageRequestDuration).toHaveBeenCalledTimes(1);
+      expect(updateMessageRequestDetailsDurably).toHaveBeenCalledTimes(1);
       expect(updateMessageRequestDetailsIfUnfinalized).not.toHaveBeenCalled();
       expect(session.clearResponseTimeout).toHaveBeenCalledTimes(1);
       expect(releaseAgent).toHaveBeenCalledTimes(1);
@@ -1568,7 +1616,11 @@ describe("ProxyResponseHandler stream client abort finalization", () => {
       timersRestored = true;
       const tasks = asyncTasks.splice(0, asyncTasks.length);
       await expectAllFulfilled(tasks);
-      expect(updateMessageRequestDetailsDurably).toHaveBeenCalledTimes(1);
+      expect(updateMessageRequestDetailsDurably).toHaveBeenCalledWith(
+        123,
+        expect.objectContaining({ durationMs: expect.any(Number), statusCode: 200 }),
+        expect.objectContaining({ onCommitted: expect.any(Function) })
+      );
     } finally {
       resolvePersistence();
       if (!timersRestored) {
@@ -1597,8 +1649,8 @@ describe("ProxyResponseHandler stream client abort finalization", () => {
         endpointUrl: "https://api.test.invalid/v1",
         upstreamStatusCode: 200,
       });
-      vi.mocked(updateMessageRequestDuration).mockImplementationOnce(
-        () => new Promise<void>(() => {})
+      vi.mocked(updateMessageRequestDetailsDurably).mockImplementationOnce(
+        () => new Promise<boolean>(() => {})
       );
 
       const downstream = await ProxyResponseHandler.dispatch(session, createResponsesSse());
@@ -1611,9 +1663,11 @@ describe("ProxyResponseHandler stream client abort finalization", () => {
       expect(updateMessageRequestDetailsIfUnfinalized).toHaveBeenCalledWith(
         123,
         expect.objectContaining({
+          durationMs: expect.any(Number),
           statusCode: 500,
           errorMessage: "Error: stream_finalization_timeout",
-        })
+        }),
+        expect.objectContaining({ onCommitted: expect.any(Function) })
       );
     } finally {
       vi.clearAllTimers();
@@ -1621,13 +1675,14 @@ describe("ProxyResponseHandler stream client abort finalization", () => {
     }
   });
 
-  it("does not continue a timed-out failure fallback in the background", async () => {
+  it("keeps a late fallback commit observable after the failure deadline", async () => {
     vi.useFakeTimers();
     const flushMicrotasks = (remaining = 32): Promise<void> =>
       remaining === 0
         ? Promise.resolve()
         : Promise.resolve().then(() => flushMicrotasks(remaining - 1));
-    let resolveFallbackDuration!: () => void;
+    let resolveFallback!: () => void;
+    let committedCallback: (() => void | Promise<void>) | undefined;
     try {
       const clientController = new AbortController();
       const session = createSession(clientController.signal);
@@ -1643,36 +1698,41 @@ describe("ProxyResponseHandler stream client abort finalization", () => {
         endpointUrl: "https://api.test.invalid/v1",
         upstreamStatusCode: 200,
       });
-      vi.mocked(updateMessageRequestDuration)
-        .mockImplementationOnce(() => new Promise<void>(() => {}))
-        .mockImplementationOnce(
-          () =>
-            new Promise<void>((resolve) => {
-              resolveFallbackDuration = resolve;
-            })
-        );
+      vi.mocked(updateMessageRequestDetailsDurably).mockImplementationOnce(
+        () => new Promise<boolean>(() => {})
+      );
+      vi.mocked(updateMessageRequestDetailsIfUnfinalized).mockImplementationOnce(
+        async (_id, details, options) => {
+          committedCallback = options?.onCommitted;
+          await new Promise<void>((resolve) => {
+            resolveFallback = resolve;
+          });
+          await options?.onCommitted?.(details);
+          return true;
+        }
+      );
 
       const downstream = await ProxyResponseHandler.dispatch(session, createResponsesSse());
       await downstream.text();
       await vi.advanceTimersByTimeAsync(120_000);
       await flushMicrotasks();
 
-      expect(updateMessageRequestDuration).toHaveBeenCalledTimes(2);
+      expect(updateMessageRequestDetailsDurably).toHaveBeenCalledTimes(1);
+      expect(updateMessageRequestDetailsIfUnfinalized).toHaveBeenCalledTimes(1);
 
       await vi.advanceTimersByTimeAsync(5_000);
       await flushMicrotasks();
+      expect(asyncTasks.length).toBeGreaterThanOrEqual(2);
+
+      resolveFallback();
+      await flushMicrotasks();
+      expect(committedCallback).toBeTypeOf("function");
       const tasks = asyncTasks.splice(0, asyncTasks.length);
       await expectAllFulfilled(tasks);
-      expect(updateMessageRequestDetailsDurably).not.toHaveBeenCalled();
-      expect(updateMessageRequestDetailsIfUnfinalized).not.toHaveBeenCalled();
 
-      resolveFallbackDuration();
-      await flushMicrotasks();
-
-      expect(updateMessageRequestDetailsDurably).not.toHaveBeenCalled();
-      expect(updateMessageRequestDetailsIfUnfinalized).not.toHaveBeenCalled();
+      expect(updateMessageRequestDetailsIfUnfinalized).toHaveBeenCalledTimes(1);
     } finally {
-      resolveFallbackDuration?.();
+      resolveFallback?.();
       await flushMicrotasks();
       vi.clearAllTimers();
       vi.useRealTimers();
@@ -1681,86 +1741,32 @@ describe("ProxyResponseHandler stream client abort finalization", () => {
     }
   });
 
-  it("shares one deadline across sequential stream finalization steps", async () => {
-    vi.useFakeTimers();
-    const flushMicrotasks = (remaining = 32): Promise<void> =>
-      remaining === 0
-        ? Promise.resolve()
-        : Promise.resolve().then(() => flushMicrotasks(remaining - 1));
-    let resolveDuration!: () => void;
-    let resolveTerminalDetails!: () => void;
-    let markDurationStarted!: () => void;
-    const durationStarted = new Promise<void>((resolve) => {
-      markDurationStarted = resolve;
+  it("persists stream duration in the same durable terminal patch", async () => {
+    const clientController = new AbortController();
+    const session = createSession(clientController.signal);
+    setDeferredStreamingFinalization(session, {
+      providerId: 1,
+      providerName: "avemujica-responses",
+      providerPriority: 1,
+      attemptNumber: 1,
+      totalProvidersAttempted: 1,
+      isFirstAttempt: true,
+      isFailoverSuccess: false,
+      endpointId: 42,
+      endpointUrl: "https://api.test.invalid/v1",
+      upstreamStatusCode: 200,
     });
-    let markTerminalDetailsStarted!: () => void;
-    const terminalDetailsStarted = new Promise<void>((resolve) => {
-      markTerminalDetailsStarted = resolve;
-    });
-    try {
-      const clientController = new AbortController();
-      const session = createSession(clientController.signal);
-      setDeferredStreamingFinalization(session, {
-        providerId: 1,
-        providerName: "avemujica-responses",
-        providerPriority: 1,
-        attemptNumber: 1,
-        totalProvidersAttempted: 1,
-        isFirstAttempt: true,
-        isFailoverSuccess: false,
-        endpointId: 42,
-        endpointUrl: "https://api.test.invalid/v1",
-        upstreamStatusCode: 200,
-      });
-      vi.mocked(updateMessageRequestDuration).mockImplementationOnce(() => {
-        markDurationStarted();
-        return new Promise<void>((resolve) => {
-          resolveDuration = resolve;
-        });
-      });
-      vi.mocked(updateMessageRequestDetailsDurably).mockImplementationOnce(() => {
-        markTerminalDetailsStarted();
-        return new Promise<void>((resolve) => {
-          resolveTerminalDetails = resolve;
-        });
-      });
 
-      const downstream = await ProxyResponseHandler.dispatch(session, createResponsesSse());
-      await downstream.text();
-      await durationStarted;
-      await vi.advanceTimersByTimeAsync(119_000);
-      resolveDuration();
-      await terminalDetailsStarted;
-      await flushMicrotasks();
+    const downstream = await ProxyResponseHandler.dispatch(session, createResponsesSse());
+    await downstream.text();
+    await drainAsyncTasks();
 
-      expect(updateMessageRequestDuration).toHaveBeenCalledTimes(1);
-      expect(updateMessageRequestDetailsDurably).toHaveBeenCalledTimes(1);
-      expect(updateMessageRequestDetailsIfUnfinalized).not.toHaveBeenCalled();
-
-      await vi.advanceTimersByTimeAsync(1_000);
-      await flushMicrotasks();
-
-      expect(updateMessageRequestDuration).toHaveBeenCalledTimes(2);
-      expect(updateMessageRequestDetailsIfUnfinalized).toHaveBeenCalledTimes(1);
-      expect(vi.mocked(updateMessageRequestDetailsIfUnfinalized).mock.calls[0]).toEqual([
-        123,
-        expect.objectContaining({
-          statusCode: 500,
-          errorMessage: "Error: stream_finalization_timeout",
-        }),
-      ]);
-    } finally {
-      resolveDuration?.();
-      resolveTerminalDetails?.();
-      await flushMicrotasks();
-      vi.clearAllTimers();
-      vi.useRealTimers();
-      const tasks = asyncTasks.splice(0, asyncTasks.length);
-      await Promise.race([
-        expectAllFulfilled(tasks),
-        new Promise<void>((resolve) => setTimeout(resolve, 100)),
-      ]);
-    }
+    expect(updateMessageRequestDuration).not.toHaveBeenCalled();
+    expect(updateMessageRequestDetailsDurably).toHaveBeenCalledWith(
+      123,
+      expect.objectContaining({ durationMs: expect.any(Number), statusCode: 200 }),
+      expect.objectContaining({ onCommitted: expect.any(Function) })
+    );
   });
 
   it("does not let a timeout fallback overwrite a late primary terminal write", async () => {
@@ -1775,10 +1781,10 @@ describe("ProxyResponseHandler stream client abort finalization", () => {
     const primaryDetailsStarted = new Promise<void>((resolve) => {
       markPrimaryDetailsStarted = resolve;
     });
-    let resolveFallbackDuration!: () => void;
-    let markFallbackDurationStarted!: () => void;
-    const fallbackDurationStarted = new Promise<void>((resolve) => {
-      markFallbackDurationStarted = resolve;
+    let resolveFallback!: () => void;
+    let markFallbackStarted!: () => void;
+    const fallbackStarted = new Promise<void>((resolve) => {
+      markFallbackStarted = resolve;
     });
     try {
       const clientController = new AbortController();
@@ -1795,32 +1801,29 @@ describe("ProxyResponseHandler stream client abort finalization", () => {
         endpointUrl: "https://api.test.invalid/v1",
         upstreamStatusCode: 200,
       });
-      vi.mocked(updateMessageRequestDuration)
-        .mockImplementationOnce(async () => undefined)
-        .mockImplementationOnce(() => {
-          markFallbackDurationStarted();
-          return new Promise<void>((resolve) => {
-            resolveFallbackDuration = resolve;
-          });
-        });
       vi.mocked(updateMessageRequestDetailsDurably)
         .mockImplementationOnce((_id, details) => {
           markPrimaryDetailsStarted();
-          return new Promise<void>((resolve) => {
+          return new Promise<boolean>((resolve) => {
             resolvePrimaryDetails = () => {
               terminalStatusCode = details.statusCode ?? null;
-              resolve();
+              resolve(true);
             };
           });
         })
         .mockImplementation(async (_id, details) => {
           terminalStatusCode = details.statusCode ?? null;
+          return true;
         });
       vi.mocked(updateMessageRequestDetailsIfUnfinalized).mockImplementation(
         async (_id, details) => {
+          markFallbackStarted();
           if (terminalStatusCode === null) {
             terminalStatusCode = details.statusCode ?? null;
           }
+          return new Promise<boolean>((resolve) => {
+            resolveFallback = () => resolve(false);
+          });
         }
       );
 
@@ -1828,13 +1831,13 @@ describe("ProxyResponseHandler stream client abort finalization", () => {
       await downstream.text();
       await primaryDetailsStarted;
       await vi.advanceTimersByTimeAsync(120_000);
-      await fallbackDurationStarted;
+      await fallbackStarted;
 
       resolvePrimaryDetails();
       await flushMicrotasks();
       expect(terminalStatusCode).toBe(200);
 
-      resolveFallbackDuration();
+      resolveFallback();
       await flushMicrotasks();
       const tasks = asyncTasks.splice(0, asyncTasks.length);
       await expectAllFulfilled(tasks);
@@ -1843,7 +1846,7 @@ describe("ProxyResponseHandler stream client abort finalization", () => {
       expect(terminalStatusCode).toBe(200);
     } finally {
       resolvePrimaryDetails?.();
-      resolveFallbackDuration?.();
+      resolveFallback?.();
       await flushMicrotasks();
       vi.clearAllTimers();
       vi.useRealTimers();
@@ -1894,14 +1897,15 @@ describe("ProxyResponseHandler stream client abort finalization", () => {
     await drainAsyncTasks();
 
     expect(AsyncTaskManager.cancel).not.toHaveBeenCalled();
-    expect(updateMessageRequestDuration).toHaveBeenCalledWith(123, expect.any(Number));
+    expect(updateMessageRequestDuration).not.toHaveBeenCalled();
     expect(updateMessageRequestDetailsDurably).toHaveBeenCalledWith(
       123,
       expect.objectContaining({
         statusCode: 200,
         inputTokens: 463,
         outputTokens: 11,
-      })
+      }),
+      expect.objectContaining({ onCommitted: expect.any(Function) })
     );
   });
 
@@ -1935,7 +1939,8 @@ describe("ProxyResponseHandler stream client abort finalization", () => {
         statusCode: 200,
         inputTokens: 463,
         outputTokens: 11,
-      })
+      }),
+      expect.objectContaining({ onCommitted: expect.any(Function) })
     );
     expect(SessionManager.storeSessionResponse).not.toHaveBeenCalled();
 
@@ -1980,7 +1985,8 @@ describe("ProxyResponseHandler stream client abort finalization", () => {
         statusCode: 200,
         inputTokens: 463,
         outputTokens: 11,
-      })
+      }),
+      expect.objectContaining({ onCommitted: expect.any(Function) })
     );
 
     const traceCall = vi.mocked(emitProxyLangfuseTrace).mock.calls.at(-1);
@@ -2024,7 +2030,8 @@ describe("ProxyResponseHandler stream client abort finalization", () => {
         statusCode: 200,
         inputTokens: 463,
         outputTokens: 11,
-      })
+      }),
+      expect.objectContaining({ onCommitted: expect.any(Function) })
     );
     expect(SessionManager.storeSessionResponse).not.toHaveBeenCalled();
   });
@@ -2062,7 +2069,8 @@ describe("ProxyResponseHandler stream client abort finalization", () => {
             statusCode: 200,
           }),
         ],
-      })
+      }),
+      expect.objectContaining({ onCommitted: expect.any(Function) })
     );
   });
 
@@ -2092,7 +2100,8 @@ describe("ProxyResponseHandler stream client abort finalization", () => {
       expect.objectContaining({
         statusCode: 499,
         errorMessage: "CLIENT_ABORTED",
-      })
+      }),
+      expect.objectContaining({ onCommitted: expect.any(Function) })
     );
   });
 
@@ -2126,7 +2135,8 @@ describe("ProxyResponseHandler stream client abort finalization", () => {
       expect.objectContaining({
         statusCode: 499,
         errorMessage: "CLIENT_ABORTED",
-      })
+      }),
+      expect.objectContaining({ onCommitted: expect.any(Function) })
     );
     // Must NOT have been recorded as a billed 200 success.
     const calls = (
@@ -2193,7 +2203,8 @@ describe("ProxyResponseHandler stream client abort finalization", () => {
       expect.objectContaining({
         statusCode: 200,
         inputTokens: 463,
-      })
+      }),
+      expect.objectContaining({ onCommitted: expect.any(Function) })
     );
 
     const expectedCost = 0.001554;
@@ -2277,7 +2288,8 @@ describe("ProxyResponseHandler stream client abort finalization", () => {
         expect.objectContaining({
           statusCode: 499,
           errorMessage: "CLIENT_ABORTED",
-        })
+        }),
+        expect.objectContaining({ onCommitted: expect.any(Function) })
       );
     } finally {
       vi.useRealTimers();
@@ -2325,7 +2337,8 @@ describe("ProxyResponseHandler stream client abort finalization", () => {
         expect.objectContaining({
           statusCode: 499,
           errorMessage: "CLIENT_ABORTED",
-        })
+        }),
+        expect.objectContaining({ onCommitted: expect.any(Function) })
       );
     } finally {
       vi.useRealTimers();
@@ -2376,7 +2389,8 @@ describe("ProxyResponseHandler stream client abort finalization", () => {
         expect.objectContaining({
           statusCode: 499,
           errorMessage: "CLIENT_ABORTED",
-        })
+        }),
+        expect.objectContaining({ onCommitted: expect.any(Function) })
       );
     } finally {
       vi.useRealTimers();
@@ -2425,7 +2439,8 @@ describe("ProxyResponseHandler stream client abort finalization", () => {
         expect.objectContaining({
           statusCode: 502,
           errorMessage: "STREAM_IDLE_TIMEOUT",
-        })
+        }),
+        expect.objectContaining({ onCommitted: expect.any(Function) })
       );
       expect(recordFailure).toHaveBeenCalledTimes(1);
     } finally {
@@ -2471,7 +2486,8 @@ describe("ProxyResponseHandler stream client abort finalization", () => {
         expect.objectContaining({
           statusCode: 499,
           errorMessage: "CLIENT_ABORTED",
-        })
+        }),
+        expect.objectContaining({ onCommitted: expect.any(Function) })
       );
     } finally {
       vi.useRealTimers();
@@ -2516,7 +2532,8 @@ describe("ProxyResponseHandler stream client abort finalization", () => {
         expect.objectContaining({
           statusCode: 499,
           errorMessage: "CLIENT_ABORTED",
-        })
+        }),
+        expect.objectContaining({ onCommitted: expect.any(Function) })
       );
     } finally {
       if (!upstreamController.signal.aborted) {
@@ -2556,7 +2573,8 @@ describe("ProxyResponseHandler stream client abort finalization", () => {
       expect.objectContaining({
         statusCode: 499,
         errorMessage: "CLIENT_ABORTED",
-      })
+      }),
+      expect.objectContaining({ onCommitted: expect.any(Function) })
     );
   });
 
@@ -2587,7 +2605,8 @@ describe("ProxyResponseHandler stream client abort finalization", () => {
       expect.objectContaining({
         statusCode: 502,
         errorMessage: "STREAM_UPSTREAM_ABORTED",
-      })
+      }),
+      expect.objectContaining({ onCommitted: expect.any(Function) })
     );
   });
 
@@ -2619,14 +2638,11 @@ describe("ProxyResponseHandler stream client abort finalization", () => {
     expect(updateMessageRequestDetailsDurably).toHaveBeenCalledTimes(1);
     expect(updateMessageRequestDetails).not.toHaveBeenCalled();
     expect(updateMessageRequestDetailsIfUnfinalized).toHaveBeenCalledTimes(1);
-    expect(updateMessageRequestDuration).toHaveBeenCalledTimes(2);
-    expect(vi.mocked(updateMessageRequestDuration).mock.calls[1]).toEqual([
-      123,
-      expect.any(Number),
-    ]);
+    expect(updateMessageRequestDuration).not.toHaveBeenCalled();
     expect(vi.mocked(updateMessageRequestDetailsIfUnfinalized).mock.calls[0]).toEqual([
       123,
       expect.objectContaining({
+        durationMs: expect.any(Number),
         statusCode: 499,
         errorMessage: "CLIENT_ABORTED",
         providerId: 1,
@@ -2639,6 +2655,7 @@ describe("ProxyResponseHandler stream client abort finalization", () => {
           }),
         ],
       }),
+      expect.objectContaining({ onCommitted: expect.any(Function) }),
     ]);
   });
 
@@ -2723,7 +2740,8 @@ describe("ProxyResponseHandler stream client abort finalization", () => {
         expect.objectContaining({
           statusCode: 502,
           errorMessage: "STREAM_IDLE_TIMEOUT",
-        })
+        }),
+        expect.objectContaining({ onCommitted: expect.any(Function) })
       );
     } finally {
       vi.useRealTimers();
@@ -2762,7 +2780,8 @@ describe("ProxyResponseHandler stream client abort finalization", () => {
       expect.objectContaining({
         statusCode: 502,
         errorMessage: "STREAM_RESPONSE_TIMEOUT",
-      })
+      }),
+      expect.objectContaining({ onCommitted: expect.any(Function) })
     );
     upstream.close();
   });
@@ -2801,7 +2820,8 @@ describe("ProxyResponseHandler stream client abort finalization", () => {
       expect.objectContaining({
         statusCode: 502,
         errorMessage: "STREAM_RESPONSE_TIMEOUT",
-      })
+      }),
+      expect.objectContaining({ onCommitted: expect.any(Function) })
     );
     expect(recordFailure).toHaveBeenCalledTimes(1);
     expect(recordFailure).toHaveBeenCalledWith(
@@ -2814,7 +2834,16 @@ describe("ProxyResponseHandler stream client abort finalization", () => {
   it("waits for durable non-stream failure details before mutating the Provider circuit", async () => {
     const durableAck = createDeferred<void>();
     vi.mocked(updateMessageRequestDetailsDurably).mockImplementationOnce(
-      async () => await durableAck.promise
+      async (_id, details, options) => {
+        await durableAck.promise;
+        try {
+          const result = options?.onCommitted?.(details);
+          if (result) void Promise.resolve(result).catch(() => undefined);
+        } catch {
+          // Test mock mirrors the repository's commit-observer boundary.
+        }
+        return true;
+      }
     );
     const session = createSession(new AbortController().signal);
     const response = new Response('{"error":{"message":"provider failed"}}', {
@@ -2874,7 +2903,8 @@ describe("ProxyResponseHandler stream client abort finalization", () => {
         durationMs: expect.any(Number),
         statusCode: 500,
         errorMessage: "FAKE_200_JSON_ERROR_MESSAGE_NON_EMPTY",
-      })
+      }),
+      expect.objectContaining({ onCommitted: expect.any(Function) })
     );
     expect(updateMessageRequestDetailsIfUnfinalized).toHaveBeenCalledTimes(1);
     expect(updateMessageRequestDetailsIfUnfinalized).toHaveBeenCalledWith(
@@ -2892,7 +2922,8 @@ describe("ProxyResponseHandler stream client abort finalization", () => {
             errorMessage: "FAKE_200_JSON_ERROR_MESSAGE_NON_EMPTY",
           }),
         ],
-      })
+      }),
+      expect.objectContaining({ onCommitted: expect.any(Function) })
     );
   });
 
@@ -2943,7 +2974,8 @@ describe("ProxyResponseHandler stream client abort finalization", () => {
                   }),
                 ]
               : [],
-        })
+        }),
+        expect.objectContaining({ onCommitted: expect.any(Function) })
       );
     }
   );
@@ -2972,7 +3004,11 @@ describe("ProxyResponseHandler stream client abort finalization", () => {
   it("waits for durable Gemini non-stream failure details before mutating the Provider circuit", async () => {
     const durableAck = createDeferred<void>();
     vi.mocked(updateMessageRequestDetailsDurably).mockImplementationOnce(
-      async () => await durableAck.promise
+      async (_id, details, options) => {
+        await durableAck.promise;
+        publishCommitObserver(details, options);
+        return true;
+      }
     );
     const session = createSession(new AbortController().signal, {
       providerType: "gemini",
@@ -3045,7 +3081,7 @@ describe("ProxyResponseHandler stream client abort finalization", () => {
     }
   );
 
-  it("persists Gemini non-stream duration before completing terminal stats", async () => {
+  it("persists Gemini non-stream duration atomically with terminal stats", async () => {
     const session = createSession(new AbortController().signal, {
       providerType: "gemini",
       originalFormat: "gemini",
@@ -3060,18 +3096,22 @@ describe("ProxyResponseHandler stream client abort finalization", () => {
     await ProxyResponseHandler.dispatch(session, response);
     await drainAsyncTasks();
 
-    expect(updateMessageRequestDuration).toHaveBeenCalledTimes(1);
-    expect(updateMessageRequestDuration).toHaveBeenCalledWith(123, expect.any(Number));
+    expect(updateMessageRequestDuration).not.toHaveBeenCalled();
     expect(updateMessageRequestDetailsDurably).toHaveBeenCalledWith(
       123,
-      expect.objectContaining({ statusCode: 200 })
+      expect.objectContaining({ durationMs: expect.any(Number), statusCode: 200 }),
+      expect.objectContaining({ onCommitted: expect.any(Function) })
     );
   });
 
   it("persists one durable 502 before Provider circuit mutation on non-stream response timeout", async () => {
     const durableAck = createDeferred<void>();
     vi.mocked(updateMessageRequestDetailsDurably).mockImplementationOnce(
-      async () => await durableAck.promise
+      async (_id, details, options) => {
+        await durableAck.promise;
+        publishCommitObserver(details, options);
+        return true;
+      }
     );
     const responseController = new AbortController();
     const session = createSession(new AbortController().signal);
@@ -3109,7 +3149,11 @@ describe("ProxyResponseHandler stream client abort finalization", () => {
   it("waits for durable non-stream details before updating the Codex cache binding", async () => {
     const durableAck = createDeferred<void>();
     vi.mocked(updateMessageRequestDetailsDurably).mockImplementationOnce(
-      async () => await durableAck.promise
+      async (_id, details, options) => {
+        await durableAck.promise;
+        publishCommitObserver(details, options);
+        return true;
+      }
     );
     vi.mocked(SessionManager.extractCodexPromptCacheKey).mockReturnValueOnce("cache-key-1");
     vi.mocked(SessionManager.updateSessionWithCodexCacheKey).mockResolvedValueOnce(undefined);
@@ -3145,7 +3189,11 @@ describe("ProxyResponseHandler stream client abort finalization", () => {
     const cacheBinding = createDeferred<void>();
     const cacheBindingStarted = createDeferred<void>();
     vi.mocked(updateMessageRequestDetailsDurably).mockImplementationOnce(
-      async () => await durableAck.promise
+      async (_id, details, options) => {
+        await durableAck.promise;
+        publishCommitObserver(details, options);
+        return true;
+      }
     );
     vi.mocked(SessionManager.extractCodexPromptCacheKey).mockReturnValueOnce("stream-cache-key-1");
     vi.mocked(SessionManager.updateSessionWithCodexCacheKey).mockImplementationOnce(async () => {
@@ -3222,7 +3270,8 @@ describe("ProxyResponseHandler stream client abort finalization", () => {
 
     expect(updateMessageRequestDetailsDurably).toHaveBeenCalledWith(
       123,
-      expect.objectContaining({ statusCode: 500 })
+      expect.objectContaining({ statusCode: 500 }),
+      expect.objectContaining({ onCommitted: expect.any(Function) })
     );
     expect(SessionManager.updateSessionWithCodexCacheKey).not.toHaveBeenCalled();
   });
@@ -3249,13 +3298,15 @@ describe("ProxyResponseHandler stream client abort finalization", () => {
     await ProxyResponseHandler.dispatch(session, response);
     await drainAsyncTasks();
 
-    expect(updateMessageRequestDuration).toHaveBeenCalledWith(123, expect.any(Number));
+    expect(updateMessageRequestDuration).not.toHaveBeenCalled();
     expect(updateMessageRequestDetailsDurably).toHaveBeenCalledWith(
       123,
       expect.objectContaining({
+        durationMs: expect.any(Number),
         statusCode: 502,
         errorMessage: expect.stringContaining("Gemini non-stream body read failed"),
-      })
+      }),
+      expect.objectContaining({ onCommitted: expect.any(Function) })
     );
     expect(recordFailure).toHaveBeenCalledTimes(1);
   });
