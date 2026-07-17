@@ -37,107 +37,182 @@ export function nodeStreamToWebStreamSafe(
     onError = null;
   };
 
-  return new ReadableStream<Uint8Array>({
-    start(controller) {
-      logger.debug("ProxyForwarder: Starting Node-to-Web stream conversion", {
-        providerId,
-        providerName,
-      });
-
-      onData = (chunk: Buffer | Uint8Array) => {
-        if (settled) return;
-        chunkCount++;
-        totalBytes += chunk.length;
-        try {
-          const buf = chunk instanceof Uint8Array ? chunk : new Uint8Array(chunk);
-          controller.enqueue(buf);
-        } catch {
-          // controller 已关闭/出错时忽略
-        }
-      };
-      nodeStream.on("data", onData);
-
-      onEnd = () => {
-        if (settled) return;
-        settled = true;
-        logger.debug("ProxyForwarder: Node stream ended normally", {
-          providerId,
-          providerName,
-          chunkCount,
-          totalBytes,
-        });
-        detach(nodeStream);
-        try {
-          controller.close();
-        } catch {
-          // ignore
-        }
-      };
-      nodeStream.on("end", onEnd);
-
-      onClose = () => {
-        if (settled) return;
-        settled = true;
-        logger.debug("ProxyForwarder: Node stream closed", {
-          providerId,
-          providerName,
-          chunkCount,
-          totalBytes,
-        });
-        detach(nodeStream);
-        try {
-          controller.close();
-        } catch {
-          // ignore
-        }
-      };
-      nodeStream.on("close", onClose);
-
-      onError = (err: Error) => {
-        if (settled) return;
-        settled = true;
-        logger.warn("ProxyForwarder: Upstream stream error (signaling downstream)", {
-          providerId,
-          providerName,
-          error: err.message,
-          errorName: err.name,
-        });
-        detach(nodeStream);
-        try {
-          controller.error(err);
-        } catch {
-          // ignore
-        }
-      };
-      nodeStream.on("error", onError);
-    },
-
-    cancel(reason) {
-      // 重复 cancel 应是 no-op：避免重复 detach、重复注册 swallow 监听
-      if (settled) return;
-      settled = true;
-      detach(nodeStream);
-      if (nodeStream.destroyed) return;
-
-      // destroy(reason) 在 reason 为 Error 时会 re-emit "error"，而我们已经
-      // detach 了错误监听。注册一次 swallow 监听吞掉它，避免触发 uncaughtException。
-      // 但 destroy() 不带 reason / 带非 Error reason 时 不会 emit error，此时
-      // once("error") 会成为常驻泄露 —— 用 once("close") 兜底清理。
-      const swallow = () => {
-        // ignore: web 流已 cancel，下游没有 reader 关心了
-      };
-      nodeStream.once("error", swallow);
-      nodeStream.once("close", () => {
-        nodeStream.removeListener("error", swallow);
-      });
-
-      try {
-        nodeStream.destroy(
-          reason instanceof Error ? reason : reason ? new Error(String(reason)) : undefined
-        );
-      } catch {
-        // ignore
+  const installPendingDestroyErrorGuard = (stream: Readable) => {
+    let cleanupTimeout: NodeJS.Timeout | null = null;
+    const cleanup = () => {
+      stream.removeListener("error", swallow);
+      stream.removeListener("close", cleanup);
+      if (cleanupTimeout) {
+        clearTimeout(cleanupTimeout);
+        cleanupTimeout = null;
       }
+    };
+    const swallow = () => {
+      // ignore: the Web stream has already settled with the same terminal state
+      cleanup();
+    };
+
+    stream.once("error", swallow);
+    stream.once("close", cleanup);
+    cleanupTimeout = setTimeout(cleanup, 60_000);
+    cleanupTimeout.unref?.();
+  };
+
+  return new ReadableStream<Uint8Array>(
+    {
+      start(controller) {
+        logger.debug("ProxyForwarder: Starting Node-to-Web stream conversion", {
+          providerId,
+          providerName,
+        });
+
+        // Web ReadableStream 通过 pull() 表达下游需求。先保持 Node 流暂停，
+        // 并在注册会启用 flowing mode 的 data 监听器前安装所有终态监听器。
+        nodeStream.pause();
+
+        onEnd = () => {
+          if (settled) return;
+          settled = true;
+          logger.debug("ProxyForwarder: Node stream ended normally", {
+            providerId,
+            providerName,
+            chunkCount,
+            totalBytes,
+          });
+          detach(nodeStream);
+          try {
+            controller.close();
+          } catch {
+            // ignore
+          }
+        };
+        nodeStream.on("end", onEnd);
+
+        onClose = () => {
+          if (settled) return;
+          if (!nodeStream.readableEnded) {
+            onError?.(new Error("Upstream stream closed before end"));
+            return;
+          }
+          settled = true;
+          logger.debug("ProxyForwarder: Node stream closed", {
+            providerId,
+            providerName,
+            chunkCount,
+            totalBytes,
+          });
+          detach(nodeStream);
+          try {
+            controller.close();
+          } catch {
+            // ignore
+          }
+        };
+        nodeStream.on("close", onClose);
+
+        onError = (err: Error) => {
+          if (settled) return;
+          settled = true;
+          logger.warn("ProxyForwarder: Upstream stream error (signaling downstream)", {
+            providerId,
+            providerName,
+            error: err.message,
+            errorName: err.name,
+          });
+          detach(nodeStream);
+          try {
+            controller.error(err);
+          } catch {
+            // ignore
+          }
+        };
+        nodeStream.on("error", onError);
+
+        onData = (chunk: Buffer | Uint8Array) => {
+          if (settled) return;
+          chunkCount++;
+          totalBytes += chunk.length;
+          try {
+            const buf = chunk instanceof Uint8Array ? chunk : new Uint8Array(chunk);
+            controller.enqueue(buf);
+            if (controller.desiredSize !== null && controller.desiredSize <= 0) {
+              nodeStream.pause();
+            }
+          } catch {
+            // controller 已关闭/出错时忽略
+          }
+        };
+        nodeStream.on("data", onData);
+
+        const preexistingError = nodeStream.errored;
+        if (preexistingError) {
+          // Before close, destroy(error) may have recorded the error while its
+          // event is still queued. Once close has fired, no delayed destroy event
+          // remains and retaining the bounded guard would only hold the stream.
+          if (!nodeStream.closed) {
+            installPendingDestroyErrorGuard(nodeStream);
+          }
+          onError(preexistingError);
+          return;
+        }
+
+        if (nodeStream.readableAborted || (nodeStream.closed && !nodeStream.readableEnded)) {
+          if (!nodeStream.closed) {
+            // destroy() marks the stream aborted before an asynchronous _destroy
+            // callback can emit its error. Keep a bounded listener until that
+            // callback reaches error/close so the settled Web stream cannot turn
+            // a request-local failure into an uncaught process error.
+            installPendingDestroyErrorGuard(nodeStream);
+          }
+          onError(new Error("Upstream stream closed before end"));
+          return;
+        }
+
+        // end/close 可能在包装前已经发出；监听器安装完成后复查终态，
+        // 避免 Web reader 永久等待一个不会再次触发的事件。
+        if (nodeStream.readableEnded) {
+          onEnd();
+        }
+      },
+
+      pull() {
+        if (!settled && !nodeStream.destroyed) {
+          nodeStream.resume();
+        }
+      },
+
+      cancel(reason) {
+        // 重复 cancel 应是 no-op：避免重复 detach、重复注册 swallow 监听
+        if (settled) return;
+        settled = true;
+        detach(nodeStream);
+
+        if (nodeStream.destroyed) {
+          // destroy(error) may queue an error even after closed becomes true.
+          // External destroy() can also set destroyed before an asynchronous
+          // _destroy callback supplies its error, so guard while close is pending.
+          if (nodeStream.errored || !nodeStream.closed) {
+            installPendingDestroyErrorGuard(nodeStream);
+          }
+          return;
+        }
+
+        installPendingDestroyErrorGuard(nodeStream);
+
+        try {
+          nodeStream.destroy(
+            reason instanceof Error ? reason : reason ? new Error(String(reason)) : undefined
+          );
+        } catch {
+          // ignore
+        }
+      },
     },
-  });
+    {
+      highWaterMark: Math.max(1, nodeStream.readableHighWaterMark * 2),
+      size(chunk) {
+        return chunk.byteLength;
+      },
+    }
+  );
 }

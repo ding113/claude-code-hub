@@ -3,6 +3,7 @@ import "server-only";
 import crypto from "node:crypto";
 import { extractCodexSessionId } from "@/app/v1/_lib/codex/session-extractor";
 import { sanitizeHeaders, sanitizeUrl } from "@/app/v1/_lib/proxy/errors";
+import { RESERVED_INTERNAL_HEADERS } from "@/app/v1/_lib/responses-ws/internal-secret";
 import { parseClaudeMetadataUserId } from "@/lib/claude-code/metadata-user-id";
 import { getEnvConfig } from "@/lib/config/env.schema";
 import { logger } from "@/lib/logger";
@@ -31,6 +32,15 @@ import {
   getUserActiveSessionsKey,
 } from "./redis/active-session-keys";
 import { SessionTracker } from "./session-tracker";
+
+const RESERVED_INTERNAL_HEADER_SET = new Set(
+  RESERVED_INTERNAL_HEADERS.map((header) => header.toLowerCase())
+);
+
+function isReservedInternalHeader(name: string): boolean {
+  const lowerName = name.toLowerCase();
+  return lowerName.startsWith("x-cch-") || RESERVED_INTERNAL_HEADER_SET.has(lowerName);
+}
 
 /**
  * 将已脱敏的 header 文本解析为可序列化对象（用于写入 Session 元信息）。
@@ -73,7 +83,7 @@ function parseHeaderRecord(value: string): Record<string, string> | null {
 
     const record: Record<string, string> = {};
     for (const [key, raw] of Object.entries(parsed as Record<string, unknown>)) {
-      if (typeof raw === "string") {
+      if (typeof raw === "string" && !isReservedInternalHeader(key)) {
         record[key] = raw;
       }
     }
@@ -128,7 +138,9 @@ function normalizeSnapshotHeaders(
   }
 
   const normalized = Object.fromEntries(
-    Object.entries(headers).filter(([, value]) => typeof value === "string")
+    Object.entries(headers).filter(
+      ([key, value]) => typeof value === "string" && !isReservedInternalHeader(key)
+    )
   );
   return Object.keys(normalized).length > 0 ? normalized : null;
 }
@@ -685,15 +697,40 @@ export class SessionManager {
   /**
    * 清除 session 绑定的 provider（用于跨模型 session 绑定过时时）
    */
-  static async clearSessionProvider(sessionId: string): Promise<void> {
+  static async clearSessionProvider(
+    sessionId: string,
+    expectedProviderId?: number | null
+  ): Promise<boolean> {
     const redis = getRedisClient();
-    if (!redis || redis.status !== "ready") return;
+    if (!redis || redis.status !== "ready") return false;
 
     try {
-      await redis.del(`session:${sessionId}:provider`);
-      logger.trace("SessionManager: Cleared session provider binding", { sessionId });
+      const key = `session:${sessionId}:provider`;
+      const deleted =
+        expectedProviderId == null
+          ? await redis.del(key)
+          : Number(
+              await redis.eval(
+                `
+                  if redis.call("GET", KEYS[1]) == ARGV[1] then
+                    return redis.call("DEL", KEYS[1])
+                  end
+                  return 0
+                `,
+                1,
+                key,
+                expectedProviderId.toString()
+              )
+            );
+      logger.trace("SessionManager: Cleared session provider binding", {
+        sessionId,
+        expectedProviderId: expectedProviderId ?? null,
+        deleted: deleted > 0,
+      });
+      return deleted > 0;
     } catch (error) {
       logger.error("SessionManager: Failed to clear session provider", { error, sessionId });
+      return false;
     }
   }
 

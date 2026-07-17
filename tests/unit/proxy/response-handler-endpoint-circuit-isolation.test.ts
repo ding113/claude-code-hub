@@ -17,9 +17,23 @@ const asyncTasks: Promise<void>[] = [];
 
 vi.mock("@/lib/async-task-manager", () => ({
   AsyncTaskManager: {
-    register: (_taskId: string, promise: Promise<void>) => {
+    register: (
+      _taskId: string,
+      factory: (signal: AbortSignal) => Promise<void>,
+      options?: string | { abortController?: AbortController }
+    ) => {
+      const controller =
+        typeof options === "object" && options.abortController
+          ? options.abortController
+          : new AbortController();
+      let promise: Promise<void>;
+      try {
+        promise = Promise.resolve(factory(controller.signal));
+      } catch (error) {
+        promise = Promise.reject(error);
+      }
       asyncTasks.push(promise);
-      return new AbortController();
+      return controller;
     },
     touch: () => true,
     cleanup: () => {},
@@ -53,6 +67,8 @@ vi.mock("@/repository/message", () => ({
   updateMessageRequestCost: vi.fn(),
   updateMessageRequestCostWithBreakdown: vi.fn(),
   updateMessageRequestDetails: vi.fn(),
+  updateMessageRequestDetailsDurably: vi.fn(),
+  updateMessageRequestDetailsIfUnfinalized: vi.fn(),
   updateMessageRequestDuration: vi.fn(),
 }));
 
@@ -62,6 +78,8 @@ vi.mock("@/lib/session-manager", () => ({
     storeSessionResponse: vi.fn(),
     clearSessionProvider: vi.fn(),
     extractCodexPromptCacheKey: vi.fn(),
+    updateSessionBindingSmart: vi.fn(),
+    updateSessionProvider: vi.fn(),
     updateSessionWithCodexCacheKey: vi.fn(),
   },
 }));
@@ -71,6 +89,7 @@ vi.mock("@/lib/rate-limit", () => ({
     trackCost: vi.fn(),
     trackUserDailyCost: vi.fn(),
     decrementLeaseBudget: vi.fn(),
+    settleLeaseBudgets: vi.fn(),
   },
 }));
 
@@ -89,16 +108,21 @@ vi.mock("@/lib/proxy-status-tracker", () => ({
 }));
 
 // Mock circuit breakers with tracked spies (vi.hoisted to avoid TDZ with vi.mock hoisting)
-const { mockRecordFailure, mockRecordEndpointFailure, mockRecordEndpointSuccess } = vi.hoisted(
-  () => ({
-    mockRecordFailure: vi.fn(),
-    mockRecordEndpointFailure: vi.fn(),
-    mockRecordEndpointSuccess: vi.fn(),
-  })
-);
+const {
+  mockRecordFailure,
+  mockRecordSuccess,
+  mockRecordEndpointFailure,
+  mockRecordEndpointSuccess,
+} = vi.hoisted(() => ({
+  mockRecordFailure: vi.fn(),
+  mockRecordSuccess: vi.fn(),
+  mockRecordEndpointFailure: vi.fn(),
+  mockRecordEndpointSuccess: vi.fn(),
+}));
 
 vi.mock("@/lib/circuit-breaker", () => ({
   recordFailure: mockRecordFailure,
+  recordSuccess: mockRecordSuccess,
 }));
 
 vi.mock("@/lib/endpoint-circuit-breaker", () => ({
@@ -112,7 +136,11 @@ import { ProxySession } from "@/app/v1/_lib/proxy/session";
 import { setDeferredStreamingFinalization } from "@/app/v1/_lib/proxy/stream-finalization";
 import { getSystemSettings } from "@/repository/system-config";
 import { findLatestPriceByModel } from "@/repository/model-price";
-import { updateMessageRequestDetails, updateMessageRequestDuration } from "@/repository/message";
+import {
+  updateMessageRequestDetails,
+  updateMessageRequestDetailsDurably,
+  updateMessageRequestDuration,
+} from "@/repository/message";
 import { SessionManager } from "@/lib/session-manager";
 import { RateLimitService } from "@/lib/rate-limit";
 import { SessionTracker } from "@/lib/session-tracker";
@@ -308,8 +336,10 @@ function createSuccessStreamResponse(): Response {
 }
 
 async function drainAsyncTasks(): Promise<void> {
-  const tasks = asyncTasks.splice(0, asyncTasks.length);
-  await Promise.all(tasks);
+  while (asyncTasks.length > 0) {
+    const tasks = asyncTasks.splice(0, asyncTasks.length);
+    await Promise.all(tasks);
+  }
 }
 
 function setupCommonMocks() {
@@ -327,17 +357,30 @@ function setupCommonMocks() {
     updatedAt: new Date(),
   });
   vi.mocked(updateMessageRequestDetails).mockResolvedValue(undefined);
+  vi.mocked(updateMessageRequestDetailsDurably).mockResolvedValue(true);
   vi.mocked(updateMessageRequestDuration).mockResolvedValue(undefined);
   vi.mocked(SessionManager.storeSessionResponse).mockResolvedValue(undefined);
   vi.mocked(SessionManager.clearSessionProvider).mockResolvedValue(undefined);
+  vi.mocked(SessionManager.updateSessionUsage).mockResolvedValue(undefined);
+  vi.mocked(SessionManager.updateSessionBindingSmart).mockResolvedValue({
+    updated: true,
+    reason: "test",
+  });
+  vi.mocked(SessionManager.updateSessionProvider).mockResolvedValue(undefined);
   vi.mocked(RateLimitService.trackCost).mockResolvedValue(undefined);
   vi.mocked(RateLimitService.trackUserDailyCost).mockResolvedValue(undefined);
   vi.mocked(RateLimitService.decrementLeaseBudget).mockResolvedValue({
     success: true,
     newRemaining: 10,
   });
+  vi.mocked(RateLimitService.settleLeaseBudgets).mockResolvedValue({
+    requestId: "test",
+    status: "settled",
+    settlements: [],
+  });
   vi.mocked(SessionTracker.refreshSession).mockResolvedValue(undefined);
   mockRecordFailure.mockResolvedValue(undefined);
+  mockRecordSuccess.mockResolvedValue(undefined);
   mockRecordEndpointFailure.mockResolvedValue(undefined);
   mockRecordEndpointSuccess.mockResolvedValue(undefined);
 }
@@ -357,7 +400,8 @@ describe("Endpoint circuit breaker isolation", () => {
     setDeferredMeta(session, 42);
 
     const response = createFake200StreamResponse();
-    await ProxyResponseHandler.dispatch(session, response);
+    const clientResponse = await ProxyResponseHandler.dispatch(session, response);
+    await clientResponse.text();
     await drainAsyncTasks();
 
     expect(mockRecordFailure).toHaveBeenCalledWith(
@@ -365,7 +409,7 @@ describe("Endpoint circuit breaker isolation", () => {
       expect.objectContaining({ message: expect.stringContaining("FAKE_200") })
     );
     expect(mockRecordEndpointFailure).not.toHaveBeenCalled();
-    expect(SessionManager.clearSessionProvider).toHaveBeenCalledWith("fake-session");
+    expect(SessionManager.clearSessionProvider).toHaveBeenCalledWith("fake-session", 1);
 
     const chain = session.getProviderChain();
     expect(
@@ -385,7 +429,8 @@ describe("Endpoint circuit breaker isolation", () => {
     setDeferredMeta(session, 42);
 
     const response = createFake200StreamResponse();
-    await ProxyResponseHandler.dispatch(session, response);
+    const clientResponse = await ProxyResponseHandler.dispatch(session, response);
+    await clientResponse.text();
     await drainAsyncTasks();
 
     expect(mockRecordFailure).toHaveBeenCalledWith(
@@ -393,7 +438,7 @@ describe("Endpoint circuit breaker isolation", () => {
       expect.objectContaining({ message: expect.stringContaining("FAKE_200") })
     );
     expect(mockRecordEndpointFailure).not.toHaveBeenCalled();
-    expect(SessionManager.clearSessionProvider).toHaveBeenCalledWith("fake-session");
+    expect(SessionManager.clearSessionProvider).toHaveBeenCalledWith("fake-session", 1);
     expect(SessionManager.updateSessionUsage).not.toHaveBeenCalled();
     expect(SessionTracker.refreshSession).not.toHaveBeenCalled();
   });
@@ -403,12 +448,13 @@ describe("Endpoint circuit breaker isolation", () => {
     setDeferredMeta(session, 42);
 
     const response = createFake200StreamResponse("model not found");
-    await ProxyResponseHandler.dispatch(session, response);
+    const clientResponse = await ProxyResponseHandler.dispatch(session, response);
+    await clientResponse.text();
     await drainAsyncTasks();
 
     expect(mockRecordFailure).not.toHaveBeenCalled();
     expect(mockRecordEndpointFailure).not.toHaveBeenCalled();
-    expect(SessionManager.clearSessionProvider).toHaveBeenCalledWith("fake-session");
+    expect(SessionManager.clearSessionProvider).toHaveBeenCalledWith("fake-session", 1);
 
     const chain = session.getProviderChain();
     expect(
@@ -439,7 +485,8 @@ describe("Endpoint circuit breaker isolation", () => {
     });
 
     const response = createNon200StreamResponse(429);
-    await ProxyResponseHandler.dispatch(session, response);
+    const clientResponse = await ProxyResponseHandler.dispatch(session, response);
+    await clientResponse.text();
     await drainAsyncTasks();
 
     expect(mockRecordFailure).toHaveBeenCalledWith(1, expect.any(Error));
@@ -451,11 +498,26 @@ describe("Endpoint circuit breaker isolation", () => {
     setDeferredMeta(session, 42);
 
     const response = createSuccessStreamResponse();
-    await ProxyResponseHandler.dispatch(session, response);
+    const clientResponse = await ProxyResponseHandler.dispatch(session, response);
+    await clientResponse.text();
     await drainAsyncTasks();
 
     expect(mockRecordEndpointSuccess).toHaveBeenCalledWith(42);
+    expect(mockRecordSuccess).toHaveBeenCalledWith(1);
     expect(mockRecordEndpointFailure).not.toHaveBeenCalled();
+    expect(SessionManager.updateSessionBindingSmart).toHaveBeenCalledWith(
+      "fake-session",
+      1,
+      10,
+      true,
+      false,
+      456
+    );
+    expect(updateMessageRequestDetailsDurably).toHaveBeenCalledWith(
+      1,
+      expect.objectContaining({ statusCode: 200, providerId: 1 }),
+      expect.objectContaining({ onCommitted: expect.any(Function) })
+    );
   });
 
   it("streaming success without endpointId should NOT call any endpoint circuit breaker function", async () => {
@@ -463,7 +525,8 @@ describe("Endpoint circuit breaker isolation", () => {
     setDeferredMeta(session, null);
 
     const response = createSuccessStreamResponse();
-    await ProxyResponseHandler.dispatch(session, response);
+    const clientResponse = await ProxyResponseHandler.dispatch(session, response);
+    await clientResponse.text();
     await drainAsyncTasks();
 
     expect(mockRecordEndpointSuccess).not.toHaveBeenCalled();

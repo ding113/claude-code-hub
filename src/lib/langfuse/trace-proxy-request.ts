@@ -1,5 +1,7 @@
+import { sanitizeHeaders } from "@/app/v1/_lib/proxy/errors";
 import type { UsageMetrics } from "@/app/v1/_lib/proxy/response-handler";
 import type { ProxySession } from "@/app/v1/_lib/proxy/session";
+import { redactHeaders } from "@/lib/api/v1/_shared/redaction";
 import { isLangfuseEnabled } from "@/lib/langfuse/index";
 import { logger } from "@/lib/logger";
 import type { CostBreakdown } from "@/lib/utils/cost-calculation";
@@ -38,23 +40,32 @@ function getStatusCategory(statusCode: number): string {
   return `${Math.floor(statusCode / 100)}xx`;
 }
 
-/**
- * Convert Headers to a plain record.
- *
- * Security note: session.headers are the CLIENT's original request headers
- * (user -> CCH), which may include the user's own CCH auth key. These are
- * safe to log -- the user already knows their own credentials.
- *
- * The upstream PROVIDER API key (outboundKey) is injected by ProxyForwarder
- * into a separate Headers object and is NEVER present in session.headers or
- * ctx.responseHeaders, so no redaction is needed here.
- */
-function headersToRecord(headers: Headers): Record<string, string> {
-  const result: Record<string, string> = {};
+function sanitizeProviderChainValue(value: unknown, key?: string): unknown {
+  if (key === "headers" && typeof value === "string") {
+    return sanitizeHeaders(value);
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => sanitizeProviderChainValue(item));
+  }
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value).map(([entryKey, entryValue]) => [
+        entryKey,
+        sanitizeProviderChainValue(entryValue, entryKey),
+      ])
+    );
+  }
+  return value;
+}
+
+function redactLangfuseHeaders(headers: Headers): Record<string, string> {
+  const externalHeaders = new Headers();
   headers.forEach((value, key) => {
-    result[key] = value;
+    if (!key.toLowerCase().startsWith("x-cch-")) {
+      externalHeaders.append(key, value);
+    }
   });
-  return result;
+  return redactHeaders(externalHeaders);
 }
 
 const SUCCESS_REASONS = new Set([
@@ -242,13 +253,15 @@ export async function traceProxyRequest(ctx: TraceContext): Promise<void> {
       requestSequence: String(session.getRequestSequence()),
     };
 
-    // Build generation metadata - all request detail fields, raw headers (no redaction)
+    const requestHeaders = redactLangfuseHeaders(session.headers);
+    const responseHeaders = redactLangfuseHeaders(ctx.responseHeaders);
+
     const generationMetadata: Record<string, unknown> = {
       // Provider
       providerId: provider?.id,
       providerName: provider?.name,
       providerType: provider?.providerType,
-      providerChain: session.getProviderChain(),
+      providerChain: sanitizeProviderChainValue(session.getProviderChain()),
       // Model
       model: session.getCurrentModel(),
       originalModel: session.getOriginalModel(),
@@ -277,9 +290,8 @@ export async function traceProxyRequest(ctx: TraceContext): Promise<void> {
       requestSummary: buildRequestBodySummary(session),
       // SSE
       sseEventCount: ctx.sseEventCount,
-      // Headers (raw, no redaction)
-      requestHeaders: headersToRecord(session.headers),
-      responseHeaders: headersToRecord(ctx.responseHeaders),
+      requestHeaders,
+      responseHeaders,
     };
 
     // Build usage details for Langfuse generation
@@ -344,7 +356,8 @@ export async function traceProxyRequest(ctx: TraceContext): Promise<void> {
         }
 
         // 2. Provider attempt events (one per failed/hedge chain item)
-        for (const item of session.getProviderChain()) {
+        for (const rawItem of session.getProviderChain()) {
+          const item = sanitizeProviderChainValue(rawItem) as typeof rawItem;
           // Hedge trigger: informational event (not a success or failure)
           if (item.reason === "hedge_triggered") {
             const hedgeObs = rootSpan.startObservation(

@@ -37,6 +37,7 @@ vi.mock("@/repository/system-config", () => ({
 vi.mock("@/repository/message", () => ({
   updateMessageRequestCost: vi.fn(),
   updateMessageRequestDetails: vi.fn(),
+  updateMessageRequestDetailsDurably: vi.fn(),
   updateMessageRequestDuration: vi.fn(),
 }));
 
@@ -67,7 +68,11 @@ vi.mock("@/lib/proxy-status-tracker", () => ({
 import { finalizeRequestStats } from "@/app/v1/_lib/proxy/response-handler";
 import { ProxySession } from "@/app/v1/_lib/proxy/session";
 import { RateLimitService } from "@/lib/rate-limit";
-import { updateMessageRequestCost, updateMessageRequestDetails } from "@/repository/message";
+import {
+  updateMessageRequestCost,
+  updateMessageRequestDetails,
+  updateMessageRequestDetailsDurably,
+} from "@/repository/message";
 import { findLatestPriceByModel } from "@/repository/model-price";
 import { getSystemSettings } from "@/repository/system-config";
 
@@ -212,7 +217,7 @@ describe("价格表缺失/查询失败：请求不计费且不报错", () => {
       "bad upstream"
     );
 
-    expect(updateMessageRequestDetails).toHaveBeenCalledWith(
+    expect(updateMessageRequestDetailsDurably).toHaveBeenCalledWith(
       2000,
       expect.objectContaining({
         statusCode: 502,

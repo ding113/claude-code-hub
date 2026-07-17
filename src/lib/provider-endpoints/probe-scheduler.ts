@@ -51,6 +51,7 @@ const schedulerState = globalThis as unknown as {
   __CCH_ENDPOINT_PROBE_SCHEDULER_STOP_REQUESTED__?: boolean;
   __CCH_ENDPOINT_PROBE_SCHEDULER_NEXT_DUE_AT_MS__?: number;
   __CCH_ENDPOINT_PROBE_SCHEDULER_NEXT_DB_POLL_AT_MS__?: number;
+  __CCH_ENDPOINT_PROBE_SCHEDULER_CURRENT_PROMISE__?: Promise<void>;
 };
 
 function sleep(ms: number): Promise<void> {
@@ -324,6 +325,16 @@ async function runProbeCycle(): Promise<void> {
   }
 }
 
+function launchProbeCycle(): void {
+  if (schedulerState.__CCH_ENDPOINT_PROBE_SCHEDULER_CURRENT_PROMISE__) return;
+  const current = runProbeCycle().finally(() => {
+    if (schedulerState.__CCH_ENDPOINT_PROBE_SCHEDULER_CURRENT_PROMISE__ === current) {
+      schedulerState.__CCH_ENDPOINT_PROBE_SCHEDULER_CURRENT_PROMISE__ = undefined;
+    }
+  });
+  schedulerState.__CCH_ENDPOINT_PROBE_SCHEDULER_CURRENT_PROMISE__ = current;
+}
+
 export function startEndpointProbeScheduler(): void {
   if (schedulerState.__CCH_ENDPOINT_PROBE_SCHEDULER_STARTED__) {
     return;
@@ -333,10 +344,10 @@ export function startEndpointProbeScheduler(): void {
   schedulerState.__CCH_ENDPOINT_PROBE_SCHEDULER_STARTED__ = true;
   clearNextWorkHints();
 
-  void runProbeCycle();
+  launchProbeCycle();
 
   schedulerState.__CCH_ENDPOINT_PROBE_SCHEDULER_INTERVAL_ID__ = setInterval(() => {
-    void runProbeCycle();
+    launchProbeCycle();
   }, TICK_INTERVAL_MS);
 
   logger.info("[EndpointProbeScheduler] Started", {
@@ -352,7 +363,7 @@ export function startEndpointProbeScheduler(): void {
   });
 }
 
-export function stopEndpointProbeScheduler(): void {
+export async function stopEndpointProbeScheduler(): Promise<void> {
   schedulerState.__CCH_ENDPOINT_PROBE_SCHEDULER_STOP_REQUESTED__ = true;
   clearNextWorkHints();
 
@@ -364,10 +375,12 @@ export function stopEndpointProbeScheduler(): void {
   schedulerState.__CCH_ENDPOINT_PROBE_SCHEDULER_INTERVAL_ID__ = undefined;
   schedulerState.__CCH_ENDPOINT_PROBE_SCHEDULER_STARTED__ = false;
 
+  await schedulerState.__CCH_ENDPOINT_PROBE_SCHEDULER_CURRENT_PROMISE__;
+
   const lock = schedulerState.__CCH_ENDPOINT_PROBE_SCHEDULER_LOCK__;
   schedulerState.__CCH_ENDPOINT_PROBE_SCHEDULER_LOCK__ = undefined;
   if (lock) {
-    void releaseLeaderLock(lock);
+    await releaseLeaderLock(lock);
   }
 }
 

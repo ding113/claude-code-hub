@@ -60,6 +60,17 @@ describe("SessionManager 辅助函数", () => {
     expect(getParseHeaderRecordWarnCalls()).toHaveLength(0);
   });
 
+  test("parseHeaderRecord：移除历史快照中的内部 x-cch header", async () => {
+    vi.clearAllMocks();
+    const { parseHeaderRecord } = await loadHelpers();
+
+    expect(
+      parseHeaderRecord(
+        '{"x-cch-internal-secret":"secret-canary","x-cch-future-marker":"1","x-safe":"ok"}'
+      )
+    ).toEqual({ "x-safe": "ok" });
+  });
+
   test("parseHeaderRecord：无效 JSON 应返回 null 并记录 warn", async () => {
     vi.clearAllMocks();
     const { parseHeaderRecord } = await loadHelpers();

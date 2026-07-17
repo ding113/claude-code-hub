@@ -34,22 +34,47 @@ vi.mock("server-only", () => ({}));
 import { buildRedisOptionsForUrl, closeRedis, getRedisClient } from "@/lib/redis/client";
 
 describe("buildRedisOptionsForUrl", () => {
+  afterEach(() => {
+    delete process.env.REDIS_COMMAND_TIMEOUT_MS;
+  });
+
   it("detects TLS from rediss:// protocol", () => {
     const result = buildRedisOptionsForUrl("rediss://localhost:6380");
     expect(result.isTLS).toBe(true);
     expect(result.options.tls).toBeDefined();
+    expect(result.options.commandTimeout).toBe(10_000);
+    expect(result.options.socketTimeout).toBe(15_000);
+    expect(result.options.autoResendUnfulfilledCommands).toBe(false);
   });
 
   it("does not enable TLS for redis:// protocol", () => {
     const result = buildRedisOptionsForUrl("redis://localhost:6379");
     expect(result.isTLS).toBe(false);
     expect(result.options.tls).toBeUndefined();
+    expect(result.options.commandTimeout).toBe(10_000);
+    expect(result.options.socketTimeout).toBe(15_000);
+    expect(result.options.autoResendUnfulfilledCommands).toBe(false);
   });
 
   it("falls back to string-prefix detection for malformed URLs", () => {
     const result = buildRedisOptionsForUrl("rediss://not a valid url");
     expect(result.isTLS).toBe(true);
   });
+
+  it.each(["redis://localhost:6379", "rediss://localhost:6380"])(
+    "supports REDIS_COMMAND_TIMEOUT_MS override for %s",
+    async (redisUrl) => {
+      process.env.REDIS_COMMAND_TIMEOUT_MS = "2500";
+      vi.resetModules();
+      const { buildRedisOptionsForUrl: buildFreshOptions } = await import("@/lib/redis/client");
+
+      const result = buildFreshOptions(redisUrl);
+
+      expect(result.options.commandTimeout).toBe(2_500);
+      expect(result.options.socketTimeout).toBe(7_500);
+      expect(result.options.autoResendUnfulfilledCommands).toBe(false);
+    }
+  );
 });
 
 describe("getRedisClient", () => {

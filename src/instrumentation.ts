@@ -3,6 +3,7 @@
  * 在服务器启动时自动执行数据库迁移
  */
 
+import { findSafeDatabaseError } from "@/drizzle/admitted-client";
 import { startCacheCleanup } from "@/lib/cache/session-cache";
 import { getBenignBrokenPipeCode } from "@/lib/lifecycle/benign-errors";
 import { logger } from "@/lib/logger";
@@ -33,7 +34,8 @@ const instrumentationState = globalThis as unknown as {
  * 处理器，并在崩溃时尝试写入 Node 诊断报告（report.*.json）。
  *
  * 必要的 node 启动参数（在 Dockerfile 中配置）：
- *   --report-on-fatalerror --report-uncaught-exception --report-directory=/app/reports
+ *   --report-on-fatalerror --report-uncaught-exception --report-exclude-env
+ *   --report-directory=/app/reports
  *
  * 这两个 process.on(...) 不会与现有的 SIGTERM / SIGINT 处理器冲突。
  */
@@ -43,15 +45,27 @@ export function registerCrashDiagnostics(): void {
   }
   instrumentationState.__CCH_CRASH_HANDLERS_REGISTERED__ = true;
 
+  const toSafeCrashError = (error: unknown): Error => {
+    const databaseError = findSafeDatabaseError(error);
+    if (databaseError) return new Error(databaseError.message);
+    return error instanceof Error ? error : new Error(String(error));
+  };
+
   const writeReport = (trigger: string, err: unknown): string | undefined => {
     try {
       const report = (
         process as NodeJS.Process & {
-          report?: { writeReport: (filename?: string, err?: unknown) => string };
+          report?: {
+            excludeEnv?: boolean;
+            writeReport: (filename?: string, err?: unknown) => string;
+          };
         }
       ).report;
       if (report?.writeReport) {
-        return report.writeReport(`report.${trigger}.${Date.now()}.json`, err as Error);
+        // Diagnostic reports are durable artifacts. Exclude the entire
+        // environment rather than maintaining an incomplete secret allowlist.
+        report.excludeEnv = true;
+        return report.writeReport(`report.${trigger}.${Date.now()}.json`, toSafeCrashError(err));
       }
     } catch {
       // 写入诊断报告失败不应再抛出
@@ -95,12 +109,13 @@ export function registerCrashDiagnostics(): void {
       return;
     }
 
-    const reportPath = writeReport("uncaughtException", err);
-    writeFatalStderr("uncaughtException", err, reportPath);
+    const safeError = toSafeCrashError(err);
+    const reportPath = writeReport("uncaughtException", safeError);
+    writeFatalStderr("uncaughtException", safeError, reportPath);
     logger.fatal("[Lifecycle] uncaughtException", {
-      error: err.message,
-      errorName: err.name,
-      stack: err.stack,
+      error: safeError.message,
+      errorName: safeError.name,
+      stack: safeError.stack,
       reportPath,
     });
     // 与 Node 默认行为一致：捕获后退出，避免后续运行在不一致状态
@@ -126,7 +141,7 @@ export function registerCrashDiagnostics(): void {
       return;
     }
 
-    const err = reason instanceof Error ? reason : new Error(String(reason));
+    const err = toSafeCrashError(reason);
     const reportPath = writeReport("unhandledRejection", err);
     writeFatalStderr("unhandledRejection", err, reportPath);
     logger.fatal("[Lifecycle] unhandledRejection", {
@@ -344,12 +359,17 @@ export async function register() {
       }
 
       // Ledger backfill: fire-and-forget after migration (non-blocking, idempotent)
-      import("@/lib/ledger-backfill")
-        .then(({ backfillUsageLedger }) =>
-          backfillUsageLedger().then((result) => {
-            logger.info("[Instrumentation] Ledger backfill complete", result);
-          })
-        )
+      Promise.all([import("@/lib/async-task-manager"), import("@/lib/ledger-backfill")])
+        .then(([{ AsyncTaskManager }, { backfillUsageLedger }]) => {
+          AsyncTaskManager.register(
+            "startup-ledger-backfill",
+            async (signal) => {
+              const result = await backfillUsageLedger(signal);
+              logger.info("[Instrumentation] Ledger backfill complete", result);
+            },
+            { taskType: "startup-ledger-backfill", staleTimeoutMs: Number.POSITIVE_INFINITY }
+          );
+        })
         .catch((err) => {
           logger.warn("[Instrumentation] Ledger backfill failed (non-fatal)", {
             error: err instanceof Error ? err.message : String(err),
@@ -429,6 +449,23 @@ export async function register() {
       // 初始化通知任务队列（如果启用）
       const { scheduleNotifications } = await import("@/lib/notification/notification-queue");
       await scheduleNotifications();
+      (
+        globalThis as typeof globalThis & {
+          __CCH_STOP_BACKGROUND_QUEUES__?: () => Promise<void>;
+        }
+      ).__CCH_STOP_BACKGROUND_QUEUES__ = async () => {
+        const [{ stopCleanupQueue }, { stopNotificationQueue }] = await Promise.all([
+          import("@/lib/log-cleanup/cleanup-queue"),
+          import("@/lib/notification/notification-queue"),
+        ]);
+        const results = await Promise.allSettled([stopCleanupQueue(), stopNotificationQueue()]);
+        const failures = results.flatMap((result) =>
+          result.status === "rejected" ? [result.reason] : []
+        );
+        if (failures.length > 0) {
+          throw new AggregateError(failures, "Failed to stop background queues");
+        }
+      };
 
       // 初始化智能探测调度器（如果启用）
       const { startProbeScheduler, isSmartProbingEnabled } = await import(
@@ -493,12 +530,17 @@ export async function register() {
         await runMigrations();
 
         // Ledger backfill: fire-and-forget after migration (non-blocking, idempotent)
-        import("@/lib/ledger-backfill")
-          .then(({ backfillUsageLedger }) =>
-            backfillUsageLedger().then((result) => {
-              logger.info("[Instrumentation] Ledger backfill complete", result);
-            })
-          )
+        Promise.all([import("@/lib/async-task-manager"), import("@/lib/ledger-backfill")])
+          .then(([{ AsyncTaskManager }, { backfillUsageLedger }]) => {
+            AsyncTaskManager.register(
+              "startup-ledger-backfill",
+              async (signal) => {
+                const result = await backfillUsageLedger(signal);
+                logger.info("[Instrumentation] Ledger backfill complete", result);
+              },
+              { taskType: "startup-ledger-backfill", staleTimeoutMs: Number.POSITIVE_INFINITY }
+            );
+          })
           .catch((err) => {
             logger.warn("[Instrumentation] Ledger backfill failed (non-fatal)", {
               error: err instanceof Error ? err.message : String(err),

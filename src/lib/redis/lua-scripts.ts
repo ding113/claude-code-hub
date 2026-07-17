@@ -265,30 +265,33 @@ return results
 `;
 
 /**
- * 追踪 5小时滚动窗口消费（使用 ZSET）
+ * 追踪滚动窗口消费（写路径专用，使用 ZSET）
  *
- * 功能：
- * 1. 清理 5 小时前的消费记录
- * 2. 添加当前消费记录（带时间戳）
- * 3. 计算当前窗口内的总消费
- * 4. 设置兜底 TTL（6 小时）
+ * 写路径只负责清理、追加和恢复 TTL。精确总额由 GET 脚本在真正需要
+ * 限额判断时计算，避免每次成功请求都扫描整个窗口。
  *
- * KEYS[1]: key:${id}:cost_5h_rolling 或 provider:${id}:cost_5h_rolling
+ * KEYS[1]: {entity}:${id}:cost_{window}_rolling
  * ARGV[1]: cost（本次消费金额）
  * ARGV[2]: now（当前时间戳，毫秒）
- * ARGV[3]: window（窗口时长，毫秒，默认 18000000 = 5小时）
- * ARGV[4]: request_id（可选，用于 member 去重）
+ * ARGV[3]: window（窗口时长，毫秒）
+ * ARGV[4]: request_id（可选，用于相同时间轴上的 member 去重）
+ * ARGV[5]: ttl_seconds（兜底 TTL，秒）
  *
- * 返回值：string - 当前窗口内的总消费
+ * 返回值：integer - 1 表示写入完成
  */
-export const TRACK_COST_5H_ROLLING_WINDOW = `
+export const TRACK_COST_ROLLING_WINDOW = `
 local key = KEYS[1]
 local cost = tonumber(ARGV[1])
 local now_ms = tonumber(ARGV[2])
-local window_ms = tonumber(ARGV[3])  -- 5 hours = 18000000 ms
+local window_ms = tonumber(ARGV[3])
 local request_id = ARGV[4]
+local ttl_seconds = tonumber(ARGV[5])
 
--- 1. 清理过期记录（5 小时前的数据）
+if not cost or not now_ms or not window_ms or not ttl_seconds then
+  return redis.error_reply('invalid rolling cost arguments')
+end
+
+-- 1. 清理窗口外的消费记录
 redis.call('ZREMRANGEBYSCORE', key, '-inf', now_ms - window_ms)
 
 -- 2. 添加当前消费记录（member = timestamp:cost 或 timestamp:requestId:cost，便于调试和追踪）
@@ -300,21 +303,10 @@ else
 end
 redis.call('ZADD', key, now_ms, member)
 
--- 3. 计算窗口内总消费
-local records = redis.call('ZRANGE', key, 0, -1)
-local total = 0
-for _, record in ipairs(records) do
-  -- 解析 member 格式："timestamp:cost" 或 "timestamp:id:cost"
-  local cost_str = string.match(record, '.*:(.+)')
-  if cost_str then
-    total = total + tonumber(cost_str)
-  end
-end
+-- 3. 恢复兜底 TTL，允许写路径修复缺失 TTL 的合法或脏 ZSET
+redis.call('EXPIRE', key, ttl_seconds)
 
--- 4. 设置兜底 TTL（6 小时，防止数据永久堆积）
-redis.call('EXPIRE', key, 21600)
-
-return tostring(total)
+return 1
 `;
 
 /**
@@ -347,59 +339,6 @@ for _, record in ipairs(records) do
     total = total + tonumber(cost_str)
   end
 end
-
-return tostring(total)
-`;
-
-/**
- * 追踪 24小时滚动窗口消费（使用 ZSET）
- *
- * 功能：
- * 1. 清理 24 小时前的消费记录
- * 2. 添加当前消费记录（带时间戳）
- * 3. 计算当前窗口内的总消费
- * 4. 设置兜底 TTL（25 小时）
- *
- * KEYS[1]: key:${id}:cost_daily_rolling 或 provider:${id}:cost_daily_rolling
- * ARGV[1]: cost（本次消费金额）
- * ARGV[2]: now（当前时间戳，毫秒）
- * ARGV[3]: window（窗口时长，毫秒，默认 86400000 = 24小时）
- * ARGV[4]: request_id（可选，用于 member 去重）
- *
- * 返回值：string - 当前窗口内的总消费
- */
-export const TRACK_COST_DAILY_ROLLING_WINDOW = `
-local key = KEYS[1]
-local cost = tonumber(ARGV[1])
-local now_ms = tonumber(ARGV[2])
-local window_ms = tonumber(ARGV[3])  -- 24 hours = 86400000 ms
-local request_id = ARGV[4]
-
--- 1. 清理过期记录（24 小时前的数据）
-redis.call('ZREMRANGEBYSCORE', key, '-inf', now_ms - window_ms)
-
--- 2. 添加当前消费记录（member = timestamp:cost 或 timestamp:requestId:cost，便于调试和追踪）
-local member
-if request_id and request_id ~= '' then
-  member = now_ms .. ':' .. request_id .. ':' .. cost
-else
-  member = now_ms .. ':' .. cost
-end
-redis.call('ZADD', key, now_ms, member)
-
--- 3. 计算窗口内总消费
-local records = redis.call('ZRANGE', key, 0, -1)
-local total = 0
-for _, record in ipairs(records) do
-  -- 解析 member 格式："timestamp:cost" 或 "timestamp:id:cost"
-  local cost_str = string.match(record, '.*:(.+)')
-  if cost_str then
-    total = total + tonumber(cost_str)
-  end
-end
-
--- 4. 设置兜底 TTL（25 小时，防止数据永久堆积）
-redis.call('EXPIRE', key, 90000)
 
 return tostring(total)
 `;
