@@ -1,3 +1,4 @@
+import { sanitizeHeaders } from "@/app/v1/_lib/proxy/errors";
 import type { UsageMetrics } from "@/app/v1/_lib/proxy/response-handler";
 import type { ProxySession } from "@/app/v1/_lib/proxy/session";
 import { redactHeaders } from "@/lib/api/v1/_shared/redaction";
@@ -37,6 +38,34 @@ function getStatusCategory(statusCode: number): string {
   if (statusCode >= 400 && statusCode < 500) return "4xx";
   if (statusCode >= 500) return "5xx";
   return `${Math.floor(statusCode / 100)}xx`;
+}
+
+function sanitizeProviderChainValue(value: unknown, key?: string): unknown {
+  if (key === "headers" && typeof value === "string") {
+    return sanitizeHeaders(value);
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => sanitizeProviderChainValue(item));
+  }
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value).map(([entryKey, entryValue]) => [
+        entryKey,
+        sanitizeProviderChainValue(entryValue, entryKey),
+      ])
+    );
+  }
+  return value;
+}
+
+function redactLangfuseHeaders(headers: Headers): Record<string, string> {
+  const externalHeaders = new Headers();
+  headers.forEach((value, key) => {
+    if (!key.toLowerCase().startsWith("x-cch-")) {
+      externalHeaders.append(key, value);
+    }
+  });
+  return redactHeaders(externalHeaders);
 }
 
 const SUCCESS_REASONS = new Set([
@@ -224,15 +253,15 @@ export async function traceProxyRequest(ctx: TraceContext): Promise<void> {
       requestSequence: String(session.getRequestSequence()),
     };
 
-    const requestHeaders = redactHeaders(session.headers);
-    const responseHeaders = redactHeaders(ctx.responseHeaders);
+    const requestHeaders = redactLangfuseHeaders(session.headers);
+    const responseHeaders = redactLangfuseHeaders(ctx.responseHeaders);
 
     const generationMetadata: Record<string, unknown> = {
       // Provider
       providerId: provider?.id,
       providerName: provider?.name,
       providerType: provider?.providerType,
-      providerChain: session.getProviderChain(),
+      providerChain: sanitizeProviderChainValue(session.getProviderChain()),
       // Model
       model: session.getCurrentModel(),
       originalModel: session.getOriginalModel(),
@@ -327,7 +356,8 @@ export async function traceProxyRequest(ctx: TraceContext): Promise<void> {
         }
 
         // 2. Provider attempt events (one per failed/hedge chain item)
-        for (const item of session.getProviderChain()) {
+        for (const rawItem of session.getProviderChain()) {
+          const item = sanitizeProviderChainValue(rawItem) as typeof rawItem;
           // Hedge trigger: informational event (not a success or failure)
           if (item.reason === "hedge_triggered") {
             const hedgeObs = rootSpan.startObservation(

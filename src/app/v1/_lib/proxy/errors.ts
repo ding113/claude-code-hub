@@ -13,6 +13,7 @@ import { redactJsonString } from "@/lib/utils/message-redaction";
 import { sanitizeErrorTextForDetail } from "@/lib/utils/upstream-error-detection";
 import type { ErrorOverrideResponse } from "@/repository/error-rules";
 import type { ProviderChainItem } from "@/types/message";
+import { RESERVED_INTERNAL_HEADERS } from "../responses-ws/internal-secret";
 import type { ProxySession } from "./session";
 
 /** Marker message for the synthetic terminal error emitted when every provider fails. */
@@ -1126,6 +1127,13 @@ const SENSITIVE_HEADERS = new Set([
   "cookie",
   "set-cookie",
 ]);
+const RESERVED_INTERNAL_HEADER_SET = new Set(
+  RESERVED_INTERNAL_HEADERS.map((header) => header.toLowerCase())
+);
+function isReservedInternalHeader(name: string): boolean {
+  const lowerName = name.toLowerCase();
+  return lowerName.startsWith("x-cch-") || RESERVED_INTERNAL_HEADER_SET.has(lowerName);
+}
 
 const SENSITIVE_URL_PARAMS = new Set([
   "key",
@@ -1207,6 +1215,7 @@ export function sanitizeHeaders(headers: Headers | string): string {
     const collected: string[] = [];
     headers.forEach((value, key) => {
       const lowerKey = key.toLowerCase();
+      if (isReservedInternalHeader(lowerKey)) return;
       if (SENSITIVE_HEADERS.has(lowerKey)) {
         const maskedValue =
           lowerKey === "authorization" ? maskAuthorizationValue(value) : maskSensitiveValue(value);
@@ -1234,6 +1243,7 @@ export function sanitizeHeaders(headers: Headers | string): string {
     if (!name) return line;
 
     const lowerName = name.toLowerCase();
+    if (isReservedInternalHeader(lowerName)) return null;
     if (!SENSITIVE_HEADERS.has(lowerName)) return line;
 
     const maskedValue =
@@ -1241,7 +1251,7 @@ export function sanitizeHeaders(headers: Headers | string): string {
     return `${name}: ${maskedValue}`;
   });
 
-  return sanitizedLines.join("\n");
+  return sanitizedLines.filter((line): line is string => line !== null).join("\n");
 }
 
 /**

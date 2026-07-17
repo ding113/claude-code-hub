@@ -1454,7 +1454,7 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
       await rejection;
       expect(controller1.signal.aborted).toBe(true);
       expect(controller2.signal.aborted).toBe(true);
-      expect(mocks.clearSessionProvider).toHaveBeenCalledWith("sess-hedge");
+      expect(mocks.clearSessionProvider).toHaveBeenCalledWith("sess-hedge", 1);
       expect(mocks.recordFailure).not.toHaveBeenCalled();
       expect(mocks.recordSuccess).not.toHaveBeenCalled();
 
@@ -1646,7 +1646,7 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
         expect(error.message).toBe("所有供应商暂时不可用，请稍后重试");
         expect(error.message).not.toContain("invalid key");
         expect(error.message).not.toContain("model not found");
-        expect(mocks.clearSessionProvider).toHaveBeenCalledWith("sess-hedge");
+        expect(mocks.clearSessionProvider).toHaveBeenCalledWith("sess-hedge", 1);
       } finally {
         vi.useRealTimers();
       }
@@ -1694,7 +1694,7 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
     expect(error.message).toBe("prompt too long");
     expect(doForward).toHaveBeenCalledTimes(1);
     expect(mocks.pickRandomProviderWithExclusion).not.toHaveBeenCalled();
-    expect(mocks.clearSessionProvider).toHaveBeenCalledWith("sess-hedge");
+    expect(mocks.clearSessionProvider).toHaveBeenCalledWith("sess-hedge", 1);
     expect(session.getProviderChain()).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -1751,7 +1751,7 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
     expect(mocks.pickRandomProviderWithExclusion).not.toHaveBeenCalled();
     expect(mocks.recordEndpointFailure).not.toHaveBeenCalled();
     expect(mocks.recordFailure).not.toHaveBeenCalled();
-    expect(mocks.clearSessionProvider).toHaveBeenCalledWith("sess-hedge");
+    expect(mocks.clearSessionProvider).toHaveBeenCalledWith("sess-hedge", 1);
     expect(session.getProviderChain()).toEqual([
       expect.objectContaining({
         id: provider.id,

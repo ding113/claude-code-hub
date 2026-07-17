@@ -1,4 +1,5 @@
 import { Context } from "hono";
+import { DrizzleQueryError } from "drizzle-orm";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import {
   ProxyErrorHandler,
@@ -6,6 +7,7 @@ import {
 } from "@/app/v1/_lib/proxy/error-handler";
 import { ProxyError } from "@/app/v1/_lib/proxy/errors";
 import { ProxySession } from "@/app/v1/_lib/proxy/session";
+import { DbPoolAdmissionError } from "@/drizzle/admitted-client";
 import type { ErrorDetectionResult } from "@/lib/error-rule-detector";
 
 const mocks = vi.hoisted(() => ({
@@ -184,5 +186,52 @@ describe("ProxyErrorHandler.handle client message", () => {
     expect(responseText).not.toContain("https://");
     expect(responseText).not.toContain("req_abc123");
     expect(responseText).not.toContain("provider-a");
+  });
+
+  test("returns a fixed 503 without exposing an admission query or parameters", async () => {
+    const session = await createSession();
+    const canary = "sk-admission-secret-canary";
+    const error = new DrizzleQueryError(
+      "select * from keys where key = $1",
+      [canary],
+      new DbPoolAdmissionError("control", 32)
+    );
+
+    const response = await ProxyErrorHandler.handle(session, error);
+    const responseText = await response.text();
+
+    expect(response.status).toBe(503);
+    expect(responseText).not.toContain(canary);
+    expect(responseText).not.toContain("select * from keys");
+    expect(responseText).not.toContain("params:");
+    expect(mocks.getCachedSystemSettings).not.toHaveBeenCalled();
+    expect(mocks.emitProxyLangfuseTrace).toHaveBeenCalledWith(
+      session,
+      expect.objectContaining({
+        errorMessage: expect.not.stringContaining(canary),
+        statusCode: 503,
+      })
+    );
+  });
+
+  test("sanitizes ordinary Drizzle query failures before HTTP and Langfuse", async () => {
+    const session = await createSession();
+    const canary = "sk-query-secret-canary";
+    const cause = Object.assign(new Error("canceling statement due to lock timeout"), {
+      code: "55P03",
+    });
+    const error = new DrizzleQueryError("update keys set key = $1", [canary], cause);
+
+    const response = await ProxyErrorHandler.handle(session, error);
+    const responseText = await response.text();
+    const traceArguments = JSON.stringify(mocks.emitProxyLangfuseTrace.mock.calls);
+
+    expect(response.status).toBe(500);
+    expect(responseText).not.toContain(canary);
+    expect(responseText).not.toContain("update keys");
+    expect(responseText).not.toContain("params:");
+    expect(traceArguments).not.toContain(canary);
+    expect(traceArguments).not.toContain("update keys");
+    expect(mocks.getCachedSystemSettings).not.toHaveBeenCalled();
   });
 });

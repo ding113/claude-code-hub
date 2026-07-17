@@ -35,6 +35,8 @@ describe("SessionManager.terminateSession", () => {
       status: "ready",
       get: vi.fn(async () => null),
       hget: vi.fn(async () => null),
+      del: vi.fn(async () => 1),
+      eval: vi.fn(async () => 1),
       pipeline: vi.fn(() => pipelineRef),
     };
   });
@@ -82,5 +84,27 @@ describe("SessionManager.terminateSession", () => {
     expect(ok).toBe(true);
 
     expect(pipelineRef.zrem).not.toHaveBeenCalledWith(getUserActiveSessionsKey(123), sessionId);
+  });
+
+  it("迟到 cleanup 仅删除仍绑定到预期 provider 的 session", async () => {
+    const { SessionManager } = await import("@/lib/session-manager");
+
+    await expect(SessionManager.clearSessionProvider("sess_compare", 42)).resolves.toBe(true);
+
+    expect(redisClientRef.eval).toHaveBeenCalledWith(
+      expect.stringContaining('redis.call("GET", KEYS[1]) == ARGV[1]'),
+      1,
+      "session:sess_compare:provider",
+      "42"
+    );
+    expect(redisClientRef.del).not.toHaveBeenCalled();
+  });
+
+  it("迟到 cleanup 不删除已切换到新 provider 的 session", async () => {
+    redisClientRef.eval.mockResolvedValueOnce(0);
+    const { SessionManager } = await import("@/lib/session-manager");
+
+    await expect(SessionManager.clearSessionProvider("sess_compare", 42)).resolves.toBe(false);
+    expect(redisClientRef.del).not.toHaveBeenCalled();
   });
 });

@@ -1,8 +1,10 @@
 import { Context } from "hono";
+import { DrizzleQueryError } from "drizzle-orm";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { ProxyErrorHandler } from "@/app/v1/_lib/proxy/error-handler";
 import { ProxyError } from "@/app/v1/_lib/proxy/errors";
 import { ProxySession } from "@/app/v1/_lib/proxy/session";
+import { DbPoolAdmissionError } from "@/drizzle/admitted-client";
 import type { ErrorDetectionResult } from "@/lib/error-rule-detector";
 import type { emitProxyLangfuseTrace } from "@/lib/langfuse/emit-proxy-trace";
 import type { updateMessageRequestDetailsDurably } from "@/repository/message";
@@ -211,5 +213,21 @@ describe("ProxyErrorHandler.handle durable persistence", () => {
     expect(mocks.emitProxyLangfuseTrace).toHaveBeenCalledOnce();
     expect(mocks.updateMessageRequestDetailsDurably).not.toHaveBeenCalled();
     expect(mocks.endRequest).not.toHaveBeenCalled();
+  });
+
+  test("returns admission 503 without recursively waiting on durable persistence", async () => {
+    const session = await createSession();
+    attachMessageContext(session);
+    const error = new DrizzleQueryError(
+      "select * from keys where key = $1",
+      ["sk-admission-canary"],
+      new DbPoolAdmissionError("control", 32)
+    );
+
+    const response = await ProxyErrorHandler.handle(session, error);
+
+    expect(response.status).toBe(503);
+    expect(mocks.updateMessageRequestDetailsDurably).not.toHaveBeenCalled();
+    expect(mocks.endRequest).toHaveBeenCalledWith(USER.id, 901);
   });
 });

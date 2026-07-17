@@ -5,16 +5,10 @@ import { afterAll, beforeAll, describe, expect, test, vi } from "vitest";
 const HAS_DB = Boolean(process.env.DSN || process.env.DATABASE_URL);
 const run = describe.skipIf(!HAS_DB);
 
-if (!process.env.DSN && process.env.DATABASE_URL) {
-  process.env.DSN = process.env.DATABASE_URL;
-}
-
-const previousPoolMax = process.env.DB_POOL_MAX;
-process.env.DB_POOL_MAX = "6";
-vi.resetModules();
-
 run("PostgreSQL pool isolation integration", () => {
   let dbModule: typeof import("@/drizzle/db");
+  let previousDsn: string | undefined;
+  let previousPoolMax: string | undefined;
 
   async function rows<T>(query: ReturnType<typeof sql>): Promise<T[]> {
     return Array.from(await dbModule.getDb().execute(query)) as T[];
@@ -43,15 +37,30 @@ run("PostgreSQL pool isolation integration", () => {
   }
 
   beforeAll(async () => {
+    previousDsn = process.env.DSN;
+    previousPoolMax = process.env.DB_POOL_MAX;
+    if (!process.env.DSN && process.env.DATABASE_URL) {
+      process.env.DSN = process.env.DATABASE_URL;
+    }
+    process.env.DB_POOL_MAX = "6";
+    vi.resetModules();
     dbModule = await import("@/drizzle/db");
   });
 
   afterAll(async () => {
-    await dbModule.closeDbPools();
-    if (previousPoolMax === undefined) {
-      delete process.env.DB_POOL_MAX;
-    } else {
-      process.env.DB_POOL_MAX = previousPoolMax;
+    try {
+      await dbModule.closeDbPools();
+    } finally {
+      if (previousPoolMax === undefined) {
+        delete process.env.DB_POOL_MAX;
+      } else {
+        process.env.DB_POOL_MAX = previousPoolMax;
+      }
+      if (previousDsn === undefined) {
+        delete process.env.DSN;
+      } else {
+        process.env.DSN = previousDsn;
+      }
     }
   });
 

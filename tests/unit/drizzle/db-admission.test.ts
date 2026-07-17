@@ -161,4 +161,65 @@ describe("drizzle/db outstanding admission", () => {
     queryDeferreds.at(-1)?.resolve([]);
     await acceptedObserved;
   });
+
+  it("cancel 未执行的 lazy query 时不应通过 then 重新启动查询", async () => {
+    const { createAdmittedSqlClient } = await import("@/drizzle/admitted-client");
+    const makeLazyQuery = () => ({
+      executed: false,
+      then: vi.fn(),
+      cancel: vi.fn(() => null),
+    });
+    const first = makeLazyQuery();
+    const second = makeLazyQuery();
+    const client = {
+      unsafe: vi.fn().mockReturnValueOnce(first).mockReturnValueOnce(second),
+      begin: vi.fn(),
+    };
+    const admitted = createAdmittedSqlClient(client, { pool: "data", maxOutstanding: 1 });
+
+    const firstQuery = admitted.unsafe() as typeof first;
+    firstQuery.cancel();
+
+    expect(first.then).not.toHaveBeenCalled();
+    expect(first.cancel).toHaveBeenCalledOnce();
+    expect(() => admitted.unsafe()).not.toThrow();
+  });
+
+  it("tagged-template query 也受同一 admission 上限保护", async () => {
+    const { createAdmittedSqlClient } = await import("@/drizzle/admitted-client");
+    const first = deferred<unknown[]>();
+    const second = deferred<unknown[]>();
+    const raw = Object.assign(
+      vi.fn().mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise),
+      { unsafe: vi.fn(), begin: vi.fn() }
+    );
+    const admitted = createAdmittedSqlClient(raw, { pool: "data", maxOutstanding: 1 });
+
+    const firstQuery = admitted`select 1`;
+    expect(() => admitted`select 2`).toThrowError(
+      expect.objectContaining({ code: "DB_POOL_ADMISSION_EXCEEDED" })
+    );
+    expect(raw).toHaveBeenCalledTimes(1);
+
+    first.resolve([]);
+    await firstQuery;
+
+    const secondQuery = admitted`select 2`;
+    second.resolve([]);
+    await secondQuery;
+    expect(raw).toHaveBeenCalledTimes(2);
+  });
+
+  it("Drizzle query wrapper 从 cause 提取 SQLSTATE 但不暴露原始内容", async () => {
+    const { findSafeDatabaseError } = await import("@/drizzle/admitted-client");
+    const details = findSafeDatabaseError({
+      name: "DrizzleQueryError",
+      query: "select * from secrets where token = $1",
+      params: ["admission-canary"],
+      cause: { code: "55P03" },
+    });
+
+    expect(details).toEqual({ kind: "query", code: "55P03", message: "Database query failed" });
+    expect(JSON.stringify(details)).not.toContain("admission-canary");
+  });
 });
