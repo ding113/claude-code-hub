@@ -46,6 +46,31 @@ async function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise
   }
 }
 
+async function awaitWithWarning<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
+  const timer = setTimeout(() => {
+    logger.warn(`[Shutdown] ${label} still pending`, { ms });
+  }, ms);
+  try {
+    return await p;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function awaitQuiescenceBestEffort(
+  promise: Promise<unknown>,
+  warningMs: number,
+  label: string
+): Promise<void> {
+  try {
+    await awaitWithWarning(promise, warningMs, label);
+  } catch (error) {
+    logger.warn(`[Shutdown] ${label} failed`, {
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
 const DEFAULT_STEP_TIMEOUT_MS = 3000;
 const DEFAULT_TOTAL_TIMEOUT_MS = 10000;
 
@@ -67,10 +92,11 @@ export async function runApplicationCleanup(
   const startedAt = Date.now();
   logger.info("[Shutdown] application cleanup starting", { signal, totalMs, stepMs });
   let writerQuiescencePending = false;
+  const deferredErrors: Error[] = [];
 
   const work = (async () => {
     // 1. 停止本地周期任务（不需要做 IO，几乎是同步）
-    await withTimeout(
+    await awaitQuiescenceBestEffort(
       (async () => {
         const { stopCacheCleanup } = await import("@/lib/cache/session-cache");
         stopCacheCleanup();
@@ -80,19 +106,19 @@ export async function runApplicationCleanup(
     );
 
     // 2. 端点探测调度器
-    await withTimeout(
+    await awaitQuiescenceBestEffort(
       (async () => {
         const { stopEndpointProbeScheduler } = await import(
           "@/lib/provider-endpoints/probe-scheduler"
         );
-        stopEndpointProbeScheduler();
+        await stopEndpointProbeScheduler();
       })(),
       stepMs,
       "stopEndpointProbeScheduler"
     );
 
     // 3. 公共状态重建调度器
-    await withTimeout(
+    await awaitQuiescenceBestEffort(
       (async () => {
         const { stopPublicStatusRebuildScheduler } = await import("@/lib/public-status/scheduler");
         await stopPublicStatusRebuildScheduler();
@@ -102,18 +128,41 @@ export async function runApplicationCleanup(
     );
 
     // 4. 端点探测日志清理
-    await withTimeout(
+    await awaitQuiescenceBestEffort(
       (async () => {
         const { stopEndpointProbeLogCleanup } = await import(
           "@/lib/provider-endpoints/probe-log-cleanup"
         );
-        stopEndpointProbeLogCleanup();
+        await stopEndpointProbeLogCleanup();
       })(),
       stepMs,
       "stopEndpointProbeLogCleanup"
     );
 
-    // 5. 取消仍在飞的后台异步任务。
+    // 5. Bull queues own Redis connections and may still ACK jobs or emit DB work.
+    //    Join them before closing either backing resource.
+    try {
+      await awaitWithWarning(
+        (async () => {
+          const stopQueues = (
+            globalThis as typeof globalThis & {
+              __CCH_STOP_BACKGROUND_QUEUES__?: () => Promise<void>;
+            }
+          ).__CCH_STOP_BACKGROUND_QUEUES__;
+          if (stopQueues) await stopQueues();
+        })(),
+        stepMs,
+        "stopBackgroundQueues"
+      );
+    } catch (error) {
+      const queueError = error instanceof Error ? error : new Error(String(error));
+      deferredErrors.push(queueError);
+      logger.error("[Shutdown] background queues failed to stop; continuing critical cleanup", {
+        error: queueError.message,
+      });
+    }
+
+    // 6. 取消仍在飞的后台异步任务。
     //    必须排在 message-buffer flush 之前——任务被 abort 时仍会写出尾部日志/用量记录，
     //    flush 才能把这些尾部更新真正落库。
     const asyncTasksWarningTimer = setTimeout(() => {
@@ -131,7 +180,7 @@ export async function runApplicationCleanup(
       clearTimeout(asyncTasksWarningTimer);
     }
 
-    // 6. 刷写 message_request 异步写缓冲。这里不能用可脱离的单步 timeout：
+    // 7. 刷写 message_request 异步写缓冲。这里不能用可脱离的单步 timeout：
     //    closeDbPools 必须等 writer 真正 settled，否则会关闭仍在执行终态 SQL 的连接。
     writerQuiescencePending = true;
     const writerWarningTimer = setTimeout(() => {
@@ -150,7 +199,7 @@ export async function runApplicationCleanup(
       writerQuiescencePending = false;
     }
 
-    // 7. writer flush 完成后再关闭数据库 pool。pool close 也是 critical barrier，
+    // 8. writer flush 完成后再关闭数据库 pool。pool close 也是 critical barrier，
     //    单步 deadline 只能告警，不能让底层 client.end() 脱离 shutdown 生命周期。
     const dbWarningTimer = setTimeout(() => {
       logger.warn("[Shutdown] closeDbPools still pending", { ms: stepMs });
@@ -167,7 +216,7 @@ export async function runApplicationCleanup(
       clearTimeout(dbWarningTimer);
     }
 
-    // 8. Langfuse 自带超时（LANGFUSE_SHUTDOWN_TIMEOUT_MS），这里再加一层兜底
+    // 9. Langfuse 自带超时（LANGFUSE_SHUTDOWN_TIMEOUT_MS），这里再加一层兜底
     await withTimeout(
       (async () => {
         const { shutdownLangfuse } = await import("@/lib/langfuse");
@@ -177,7 +226,7 @@ export async function runApplicationCleanup(
       "shutdownLangfuse"
     );
 
-    // 9. Redis 连接最后关：上面的步骤可能仍在写日志/缓存
+    // 10. Redis 连接最后关：上面的步骤可能仍在写日志/缓存
     await withTimeout(
       (async () => {
         const { closeRedis } = await import("@/lib/redis");
@@ -187,7 +236,7 @@ export async function runApplicationCleanup(
       "closeRedis"
     );
 
-    // 10. API Key Vacuum Filter 订阅清理 —— 同步函数，不需要 timeout
+    // 11. API Key Vacuum Filter 订阅清理 —— 同步函数，不需要 timeout
     try {
       const g = globalThis as unknown as {
         __CCH_API_KEY_VF_SYNC_CLEANUP__?: (() => void) | null;
@@ -199,7 +248,7 @@ export async function runApplicationCleanup(
       });
     }
 
-    // 11. 云价格定时同步
+    // 12. 云价格定时同步
     try {
       const g = globalThis as unknown as {
         __CCH_CLOUD_PRICE_SYNC_INTERVAL_ID__?: ReturnType<typeof setInterval>;
@@ -212,6 +261,10 @@ export async function runApplicationCleanup(
       logger.warn("[Shutdown] cloud price sync scheduler cleanup failed", {
         error: error instanceof Error ? error.message : String(error),
       });
+    }
+
+    if (deferredErrors.length > 0) {
+      throw new AggregateError(deferredErrors, "Application cleanup completed with errors");
     }
   })();
 

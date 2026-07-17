@@ -367,10 +367,6 @@ class AsyncTaskManagerClass {
         }
 
         await Promise.allSettled(activeTasks.map((taskInfo) => taskInfo.promise));
-
-        for (const taskInfo of activeTasks) {
-          this.cleanup(taskInfo.taskId, taskInfo);
-        }
       }
     })().then(resolveShutdown, (error) => {
       this.lifecycleState = "closed";

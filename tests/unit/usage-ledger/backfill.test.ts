@@ -1,12 +1,15 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 process.env.DSN = "";
+
+const mockTransaction = vi.hoisted(() => vi.fn());
 
 vi.mock("@/drizzle/db", () => ({
   db: {
     execute: vi.fn(),
+    transaction: mockTransaction,
   },
 }));
 
@@ -23,6 +26,10 @@ const serviceSource = readFileSync(
 );
 
 describe("backfillUsageLedger", () => {
+  beforeEach(() => {
+    mockTransaction.mockReset();
+  });
+
   it("exports backfillUsageLedger function", () => {
     expect(typeof backfillUsageLedger).toBe("function");
   });
@@ -38,5 +45,37 @@ describe("backfillUsageLedger", () => {
   it("computes success_rate_outcome during backfill", () => {
     expect(serviceSource).toContain("success_rate_outcome");
     expect(serviceSource).toContain("fn_compute_message_request_success_rate_outcome");
+  });
+
+  it("rejects before opening a transaction when already aborted", async () => {
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(backfillUsageLedger(controller.signal)).rejects.toMatchObject({
+      name: "AbortError",
+    });
+    expect(mockTransaction).not.toHaveBeenCalled();
+  });
+
+  it("observes abort after a batch and does not start another batch", async () => {
+    const controller = new AbortController();
+    let resolveBatch!: (value: unknown[]) => void;
+    const batch = new Promise<unknown[]>((resolve) => {
+      resolveBatch = resolve;
+    });
+    const execute = vi
+      .fn()
+      .mockResolvedValueOnce([{ acquired: true }])
+      .mockReturnValueOnce(batch)
+      .mockResolvedValueOnce([{ processed: 0, inserted: 0, updated: 0, max_id: 0 }]);
+    mockTransaction.mockImplementation(async (callback) => callback({ execute }));
+
+    const backfill = backfillUsageLedger(controller.signal);
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    controller.abort();
+    resolveBatch([{ processed: 1, inserted: 1, updated: 0, max_id: 1 }]);
+
+    await expect(backfill).rejects.toMatchObject({ name: "AbortError" });
+    expect(execute).toHaveBeenCalledTimes(2);
   });
 });

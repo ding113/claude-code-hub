@@ -11,13 +11,17 @@ export interface BackfillUsageLedgerSummary {
   alreadyExisted: number;
 }
 
-export async function backfillUsageLedger(): Promise<BackfillUsageLedgerSummary> {
+export async function backfillUsageLedger(
+  signal?: AbortSignal
+): Promise<BackfillUsageLedgerSummary> {
   const startTime = Date.now();
   const LOCK_KEY = 20260101;
+  signal?.throwIfAborted();
 
   // Use pg_try_advisory_xact_lock (transaction-scoped) so lock/unlock always happen
   // on the same connection — safe with connection pools.
   return await db.transaction(async (tx) => {
+    signal?.throwIfAborted();
     const lockResult = await tx.execute(sql`
       SELECT pg_try_advisory_xact_lock(${LOCK_KEY}) AS acquired
     `);
@@ -39,6 +43,7 @@ export async function backfillUsageLedger(): Promise<BackfillUsageLedgerSummary>
       let lastId = 0;
 
       while (true) {
+        signal?.throwIfAborted();
         const batchResult = await tx.execute(sql`
         WITH batch AS (
           SELECT
@@ -189,6 +194,7 @@ export async function backfillUsageLedger(): Promise<BackfillUsageLedgerSummary>
         const inserted = Number(batchRow?.inserted ?? 0);
         const updated = Number(batchRow?.updated ?? 0);
         const maxId = Number(batchRow?.max_id ?? 0);
+        signal?.throwIfAborted();
 
         if (processed === 0) {
           break;

@@ -19,12 +19,16 @@ describe.sequential("lifecycle/shutdown", () => {
       .__CCH_CLOUD_PRICE_SYNC_INTERVAL_ID__;
     delete (globalThis as unknown as { __CCH_API_KEY_VF_SYNC_CLEANUP__?: unknown })
       .__CCH_API_KEY_VF_SYNC_CLEANUP__;
+    delete (globalThis as unknown as { __CCH_STOP_BACKGROUND_QUEUES__?: unknown })
+      .__CCH_STOP_BACKGROUND_QUEUES__;
   });
 
   afterEach(() => {
     vi.useRealTimers();
     vi.unstubAllEnvs();
     delete (globalThis as unknown as { __ASYNC_TASK_MANAGER__?: unknown }).__ASYNC_TASK_MANAGER__;
+    delete (globalThis as unknown as { __CCH_STOP_BACKGROUND_QUEUES__?: unknown })
+      .__CCH_STOP_BACKGROUND_QUEUES__;
   });
 
   it("markShuttingDown flips isShuttingDown idempotently", async () => {
@@ -108,6 +112,49 @@ describe.sequential("lifecycle/shutdown", () => {
     expect(closeRedis).toHaveBeenCalled();
     expect(cleanupSpy).toHaveBeenCalled();
     expect(clearIntervalSpy).toHaveBeenCalledWith(intervalId);
+  });
+
+  it("waits for scheduler quiescence after the warning threshold before closing resources", async () => {
+    let releaseScheduler!: () => void;
+    const schedulerStopped = new Promise<void>((resolve) => {
+      releaseScheduler = resolve;
+    });
+    const closeDbPools = vi.fn(async () => {});
+    const closeRedis = vi.fn(async () => {});
+
+    vi.doMock("@/lib/cache/session-cache", () => ({ stopCacheCleanup: () => {} }));
+    vi.doMock("@/lib/provider-endpoints/probe-scheduler", () => ({
+      stopEndpointProbeScheduler: () => schedulerStopped,
+    }));
+    vi.doMock("@/lib/public-status/scheduler", () => ({
+      stopPublicStatusRebuildScheduler: async () => {},
+    }));
+    vi.doMock("@/lib/provider-endpoints/probe-log-cleanup", () => ({
+      stopEndpointProbeLogCleanup: async () => {},
+    }));
+    vi.doMock("@/lib/async-task-manager", () => ({ shutdownAllAsyncTasks: async () => {} }));
+    vi.doMock("@/repository/message-write-buffer", () => ({
+      stopMessageRequestWriteBuffer: async () => {},
+    }));
+    vi.doMock("@/drizzle/db", () => ({ closeDbPools }));
+    vi.doMock("@/lib/langfuse", () => ({ shutdownLangfuse: async () => {} }));
+    vi.doMock("@/lib/redis", () => ({ closeRedis }));
+
+    const { runApplicationCleanup } = await import("@/lib/lifecycle/shutdown");
+    const cleanup = runApplicationCleanup("SIGTERM", {
+      totalTimeoutMs: 5_000,
+      perStepTimeoutMs: 20,
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(closeDbPools).not.toHaveBeenCalled();
+    expect(closeRedis).not.toHaveBeenCalled();
+
+    releaseScheduler();
+    await cleanup;
+
+    expect(closeDbPools).toHaveBeenCalledTimes(1);
+    expect(closeRedis).toHaveBeenCalledTimes(1);
   });
 
   it("runApplicationCleanup returns within totalTimeoutMs even if one step hangs", async () => {
@@ -213,5 +260,51 @@ describe.sequential("lifecycle/shutdown", () => {
     await cleanup;
 
     expect(writerStarted).toHaveBeenCalledTimes(1);
+  });
+
+  it("continues critical cleanup after background queue shutdown fails", async () => {
+    const queueError = new Error("queue stop failed");
+    const shutdownTasks = vi.fn(async () => {});
+    const stopWriteBuffer = vi.fn(async () => {});
+    const closeDbPools = vi.fn(async () => {});
+    const shutdownLangfuse = vi.fn(async () => {});
+    const closeRedis = vi.fn(async () => {});
+
+    vi.doMock("@/lib/cache/session-cache", () => ({ stopCacheCleanup: () => {} }));
+    vi.doMock("@/lib/provider-endpoints/probe-scheduler", () => ({
+      stopEndpointProbeScheduler: () => {},
+    }));
+    vi.doMock("@/lib/public-status/scheduler", () => ({
+      stopPublicStatusRebuildScheduler: async () => {},
+    }));
+    vi.doMock("@/lib/provider-endpoints/probe-log-cleanup", () => ({
+      stopEndpointProbeLogCleanup: () => {},
+    }));
+    vi.doMock("@/lib/async-task-manager", () => ({ shutdownAllAsyncTasks: shutdownTasks }));
+    vi.doMock("@/repository/message-write-buffer", () => ({
+      stopMessageRequestWriteBuffer: stopWriteBuffer,
+    }));
+    vi.doMock("@/drizzle/db", () => ({ closeDbPools }));
+    vi.doMock("@/lib/langfuse", () => ({ shutdownLangfuse }));
+    vi.doMock("@/lib/redis", () => ({ closeRedis }));
+    (
+      globalThis as unknown as { __CCH_STOP_BACKGROUND_QUEUES__?: () => Promise<void> }
+    ).__CCH_STOP_BACKGROUND_QUEUES__ = vi.fn().mockRejectedValue(queueError);
+
+    const { runApplicationCleanup } = await import("@/lib/lifecycle/shutdown");
+    let thrown: unknown;
+    try {
+      await runApplicationCleanup("SIGTERM", { totalTimeoutMs: 5_000, perStepTimeoutMs: 100 });
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown).toBeInstanceOf(AggregateError);
+    expect((thrown as AggregateError).errors).toContain(queueError);
+    expect(shutdownTasks).toHaveBeenCalledOnce();
+    expect(stopWriteBuffer).toHaveBeenCalledOnce();
+    expect(closeDbPools).toHaveBeenCalledOnce();
+    expect(shutdownLangfuse).toHaveBeenCalledOnce();
+    expect(closeRedis).toHaveBeenCalledOnce();
   });
 });
