@@ -556,8 +556,13 @@ export const handleOpenAICompatibleModels = createFixedProviderTypesModelsHandle
 export async function handleAvailableModels(c: Context): Promise<Response> {
   try {
     const { user, key } = await authenticateRequest(c);
+    const responseFormat = detectResponseFormat(c);
 
-    if (c.req.path === "/v1/models" && c.req.query("client_version")?.trim()) {
+    if (
+      c.req.path === "/v1/models" &&
+      responseFormat === "openai" &&
+      c.req.query("client_version")?.trim()
+    ) {
       c.header("ETag", CODEX_MODELS_MANIFEST_ETAG);
       c.header("Cache-Control", "no-cache");
       if (matchesIfNoneMatch(c.req.header("if-none-match"), CODEX_MODELS_MANIFEST_ETAG)) {
@@ -566,7 +571,6 @@ export async function handleAvailableModels(c: Context): Promise<Response> {
       return c.json({ models: [] });
     }
 
-    const responseFormat = detectResponseFormat(c);
     const clientFormatOverride = detectClientFormatOverride(c);
     const clientFormat = clientFormatOverride || mapResponseFormatToClientFormat(responseFormat);
 

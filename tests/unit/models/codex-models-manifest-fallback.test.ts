@@ -123,6 +123,17 @@ describe("Codex models manifest fallback", () => {
     expect(findAllProviders).toHaveBeenCalledTimes(1);
   });
 
+  it("keeps Gemini model discovery for x-goog-api-key requests with client_version", async () => {
+    const response = await authenticatedRequest("/v1/models?client_version=0.144.1", {
+      "x-goog-api-key": "gemini-key",
+    });
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ models: [] });
+    expect(response.headers.get("etag")).toBeNull();
+    expect(findAllProviders).toHaveBeenCalledTimes(1);
+  });
+
   it("still requires authentication before returning the fallback manifest", async () => {
     const response = await createApp().request("http://localhost/v1/models?client_version=0.144.1");
 
