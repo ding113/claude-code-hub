@@ -232,7 +232,7 @@ run("lease settlement Lua integration", () => {
     });
     await expect(redis.ttl(noTtl.key)).resolves.toBe(-1);
     expect(JSON.parse((await redis.get(insufficient.key))!) as BudgetLease).toMatchObject({
-      remainingBudget: 0.5,
+      remainingBudget: 0,
     });
     await expect(redis.type(wrongType.key)).resolves.toBe("list");
 

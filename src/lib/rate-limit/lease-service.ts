@@ -472,7 +472,17 @@ export class LeaseService {
         if not remaining or ttl <= 0 then
           settlements[#settlements + 1] = {0, -1}
         elseif remaining < cost then
-          settlements[#settlements + 1] = {-1, remaining}
+          -- Consume the cached slice when the request is larger than the
+          -- remaining lease. Keeping a positive balance here lets every
+          -- request in the refresh window repeat the same overshoot.
+          lease.remainingBudget = 0
+          local encodedLeaseOk, encodedLease = pcall(cjson.encode, lease)
+          if not encodedLeaseOk then
+            settlements[#settlements + 1] = {0, -1}
+          else
+            pendingWrites[#pendingWrites + 1] = {leaseKey, ttl, encodedLease}
+            settlements[#settlements + 1] = {-1, 0}
+          end
         else
           local newRemaining = remaining - cost
           lease.remainingBudget = newRemaining
