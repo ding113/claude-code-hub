@@ -259,35 +259,38 @@ describe("Codex 供应商级参数覆写", () => {
         ],
       },
     ],
-  ])("当强制 image_generation=true 且%s已声明 namespace 时，allowed_tools 应使用同形引用", (_, request) => {
-    const provider = {
-      providerType: "codex",
-      codexImageGenerationPreference: "true",
-    };
-    const input: Record<string, unknown> = {
-      model: "gpt-5.5",
-      ...request,
-      tool_choice: {
+  ])(
+    "当强制 image_generation=true 且%s已声明 namespace 时，allowed_tools 应使用同形引用",
+    (_, request) => {
+      const provider = {
+        providerType: "codex",
+        codexImageGenerationPreference: "true",
+      };
+      const input: Record<string, unknown> = {
+        model: "gpt-5.5",
+        ...request,
+        tool_choice: {
+          type: "allowed_tools",
+          mode: "auto",
+          tools: [{ type: "function", name: "lookup_weather" }],
+        },
+      };
+
+      const output = applyCodexProviderOverrides(provider as any, input);
+
+      expect(output.tool_choice).toEqual({
         type: "allowed_tools",
         mode: "auto",
-        tools: [{ type: "function", name: "lookup_weather" }],
-      },
-    };
-
-    const output = applyCodexProviderOverrides(provider as any, input);
-
-    expect(output.tool_choice).toEqual({
-      type: "allowed_tools",
-      mode: "auto",
-      tools: [
-        { type: "function", name: "lookup_weather" },
-        { type: "namespace", name: "image_gen" },
-      ],
-    });
-    expect(output.tools).not.toEqual(
-      expect.arrayContaining([expect.objectContaining({ type: "image_generation" })])
-    );
-  });
+        tools: [
+          { type: "function", name: "lookup_weather" },
+          { type: "namespace", name: "image_gen" },
+        ],
+      });
+      expect(output.tools).not.toEqual(
+        expect.arrayContaining([expect.objectContaining({ type: "image_generation" })])
+      );
+    }
+  );
 
   it("当强制 image_generation=false 时，应从 tools 中移除对应工具", () => {
     const provider = {
@@ -425,27 +428,30 @@ describe("Codex 供应商级参数覆写", () => {
     ["字符串", "image_generation", "image_generation"],
     ["namespace 字段", { type: "namespace", namespace: "image_gen" }, "namespace:image_gen"],
     ["嵌套 tool", { tool: { type: "namespace", name: "image_gen" } }, "tool:image_generation"],
-  ])("当强制 image_generation=false 时，应移除%s形式的 tool_choice 并记录审计", (_, toolChoice, auditValue) => {
-    const provider = {
-      providerType: "codex",
-      codexImageGenerationPreference: "false",
-    };
-    const input: Record<string, unknown> = {
-      model: "gpt-5.5",
-      input: [],
-      tool_choice: toolChoice,
-    };
+  ])(
+    "当强制 image_generation=false 时，应移除%s形式的 tool_choice 并记录审计",
+    (_, toolChoice, auditValue) => {
+      const provider = {
+        providerType: "codex",
+        codexImageGenerationPreference: "false",
+      };
+      const input: Record<string, unknown> = {
+        model: "gpt-5.5",
+        input: [],
+        tool_choice: toolChoice,
+      };
 
-    const result = applyCodexProviderOverridesWithAudit(provider as any, input);
+      const result = applyCodexProviderOverridesWithAudit(provider as any, input);
 
-    expect(result.request.tool_choice).toBeUndefined();
-    expect(result.audit?.changes.find((change) => change.path === "tool_choice")).toEqual({
-      path: "tool_choice",
-      before: auditValue,
-      after: null,
-      changed: true,
-    });
-  });
+      expect(result.request.tool_choice).toBeUndefined();
+      expect(result.audit?.changes.find((change) => change.path === "tool_choice")).toEqual({
+        path: "tool_choice",
+        before: auditValue,
+        after: null,
+        changed: true,
+      });
+    }
+  );
 
   it("不应把名为 image_generation 的普通函数选择误判为内置图片工具", () => {
     const provider = {
