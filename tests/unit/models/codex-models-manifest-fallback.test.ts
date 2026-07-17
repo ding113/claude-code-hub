@@ -81,20 +81,18 @@ describe("Codex models manifest fallback", () => {
     expect(findAllProviders).not.toHaveBeenCalled();
   });
 
-  it.each([
-    CODEX_MODELS_ETAG,
-    `"other", ${CODEX_MODELS_ETAG}`,
-    "*",
-  ])("returns 304 when If-None-Match is %s", async (ifNoneMatch) => {
-    const response = await authenticatedRequest("/v1/models?client_version=0.144.1", {
-      "if-none-match": ifNoneMatch,
-    });
+  it("returns 304 for matching If-None-Match validators", async () => {
+    for (const ifNoneMatch of [CODEX_MODELS_ETAG, `"other", ${CODEX_MODELS_ETAG}`, "*"]) {
+      const response = await authenticatedRequest("/v1/models?client_version=0.144.1", {
+        "if-none-match": ifNoneMatch,
+      });
 
-    expect(response.status).toBe(304);
-    expect(response.headers.get("etag")).toBe(CODEX_MODELS_ETAG);
-    expect(response.headers.get("cache-control")).toBe("no-cache");
-    expect(await response.text()).toBe("");
-    expect(findAllProviders).not.toHaveBeenCalled();
+      expect(response.status).toBe(304);
+      expect(response.headers.get("etag")).toBe(CODEX_MODELS_ETAG);
+      expect(response.headers.get("cache-control")).toBe("no-cache");
+      expect(await response.text()).toBe("");
+      expect(findAllProviders).not.toHaveBeenCalled();
+    }
   });
 
   it("keeps the OpenAI models response for requests without client_version", async () => {
