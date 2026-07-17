@@ -131,7 +131,7 @@ describe("registerCrashDiagnostics", () => {
       // fatal 路径必须写出同步 stderr 兜底诊断，防止回归静默吞掉致命错误
       expect(stderrSpy).toHaveBeenCalled();
       expect(process.report?.excludeEnv).toBe(true);
-      const reportCalls = (process.report?.writeReport as unknown as ReturnType<typeof vi.fn>).mock
+      const reportCalls = (process.report!.writeReport as unknown as ReturnType<typeof vi.fn>).mock
         .calls;
       expect(reportCalls[0]?.[1]).toBe(error);
     });
@@ -146,7 +146,7 @@ describe("registerCrashDiagnostics", () => {
 
       uncaughtException(error);
 
-      const reportCalls = (process.report?.writeReport as unknown as ReturnType<typeof vi.fn>).mock
+      const reportCalls = (process.report!.writeReport as unknown as ReturnType<typeof vi.fn>).mock
         .calls;
       const reportError = reportCalls[0]?.[1] as Error;
       expect(reportError).not.toBe(error);
