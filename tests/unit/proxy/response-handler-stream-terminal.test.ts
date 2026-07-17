@@ -9,7 +9,10 @@ import type { User } from "@/types/user";
 type TaskOptions = { readonly abortController?: AbortController };
 
 const mocks = vi.hoisted(() => ({
-  durable: vi.fn<(id: number, details: object) => Promise<void>>(),
+  durable:
+    vi.fn<
+      (id: number, details: object, options?: { onCommitted?: () => void }) => Promise<boolean>
+    >(),
   tasks: Array.from<Promise<void>>([]),
   trackerEnd: vi.fn(),
 }));
@@ -206,7 +209,7 @@ describe("ProxyResponseHandler.dispatch stream terminal behavior", () => {
   beforeEach(() => {
     mocks.tasks.length = 0;
     vi.clearAllMocks();
-    mocks.durable.mockResolvedValue(undefined);
+    mocks.durable.mockResolvedValue(true);
   });
 
   it("persists a naturally completed stream and releases its transport", async () => {
@@ -219,7 +222,11 @@ describe("ProxyResponseHandler.dispatch stream terminal behavior", () => {
     await returned.text();
     await settleTasks();
 
-    expect(mocks.durable).toHaveBeenCalledWith(51, expect.objectContaining({ statusCode: 200 }));
+    expect(mocks.durable).toHaveBeenCalledWith(
+      51,
+      expect.objectContaining({ statusCode: 200 }),
+      expect.objectContaining({ onCommitted: expect.any(Function) })
+    );
     expect(mocks.trackerEnd).toHaveBeenCalledWith(USER.id, MESSAGE.id);
     expect(releaseAgent).toHaveBeenCalledOnce();
   });
@@ -242,7 +249,11 @@ describe("ProxyResponseHandler.dispatch stream terminal behavior", () => {
     abortSource();
     await settleTasks();
 
-    expect(mocks.durable).toHaveBeenCalledWith(51, expect.objectContaining({ statusCode: 499 }));
+    expect(mocks.durable).toHaveBeenCalledWith(
+      51,
+      expect.objectContaining({ statusCode: 499 }),
+      expect.objectContaining({ onCommitted: expect.any(Function) })
+    );
     expect(releaseAgent).toHaveBeenCalledOnce();
   });
 
@@ -258,7 +269,11 @@ describe("ProxyResponseHandler.dispatch stream terminal behavior", () => {
     await expect(bodyRead).rejects.toThrow("response deadline exceeded");
     await settleTasks();
 
-    expect(mocks.durable).toHaveBeenCalledWith(51, expect.objectContaining({ statusCode: 502 }));
+    expect(mocks.durable).toHaveBeenCalledWith(
+      51,
+      expect.objectContaining({ statusCode: 502 }),
+      expect.objectContaining({ onCommitted: expect.any(Function) })
+    );
     expect(cancelSource).toHaveBeenCalledOnce();
     expect(releaseAgent).toHaveBeenCalledOnce();
   });

@@ -130,8 +130,11 @@ function installAsyncDurableBoundaries(execute: (query: SqlQuery) => Promise<unk
   return { pipelineExec, redisGet };
 }
 
-function installSyncDurableBoundaries() {
-  const where = vi.fn(async (_condition: unknown) => []);
+function installSyncDurableBoundaries(
+  returnedRows: readonly { readonly id: number }[] = [{ id: 804 }]
+) {
+  const returning = vi.fn(async (_selection: unknown) => returnedRows);
+  const where = vi.fn((_condition: unknown) => ({ returning }));
   const set = vi.fn((_patch: Record<string, unknown>) => ({ where }));
   const update = vi.fn((_table: unknown) => ({ set }));
   const writerExecute = vi.fn();
@@ -182,7 +185,7 @@ describe("message terminal CAS and durable acknowledgement", () => {
       providerChain: [{ id: 4, name: "fallback", groupTag: "openai" }],
     });
 
-    expect(result).toBeUndefined();
+    expect(result).toBe(false);
     expect(boundary.writerReturning).toHaveBeenCalledTimes(1);
     expect(boundary.getRedisClient).not.toHaveBeenCalled();
     expect(boundary.defaultUpdate).not.toHaveBeenCalled();
@@ -205,9 +208,17 @@ describe("message terminal CAS and durable acknowledgement", () => {
       model: "gpt-4.1",
     });
 
-    await expect(
-      Promise.race([completion.then(() => "committed"), Promise.resolve("pending")])
-    ).resolves.toBe("pending");
+    let settled = false;
+    void completion.then(
+      () => {
+        settled = true;
+      },
+      () => {
+        settled = true;
+      }
+    );
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(settled).toBe(false);
     expect(execute).toHaveBeenCalledTimes(1);
     expect(redisGet).not.toHaveBeenCalled();
 
@@ -223,12 +234,49 @@ describe("message terminal CAS and durable acknowledgement", () => {
     vi.resetModules();
     const { set, writerExecute } = installSyncDurableBoundaries();
     const { updateMessageRequestDetailsDurably } = await import("@/repository/message");
+    const onCommitted = vi.fn();
 
-    await updateMessageRequestDetailsDurably(804, { durationMs: 900, statusCode: 201 });
+    await updateMessageRequestDetailsDurably(
+      804,
+      { durationMs: 900, statusCode: 201 },
+      { onCommitted }
+    );
 
     expect(set).toHaveBeenCalledWith(
       expect.objectContaining({ durationMs: 900, statusCode: 201, updatedAt: expect.any(Date) })
     );
     expect(writerExecute).not.toHaveBeenCalled();
+    expect(onCommitted).toHaveBeenCalledWith({ durationMs: 900, statusCode: 201 });
+  });
+
+  it("does not wait for synchronous commit observers after SQL commits", async () => {
+    vi.resetModules();
+    installSyncDurableBoundaries();
+    const { updateMessageRequestDetailsDurably } = await import("@/repository/message");
+    const observer = createDeferred<void>();
+    const onCommitted = vi.fn(() => observer.promise);
+
+    await expect(
+      updateMessageRequestDetailsDurably(806, { durationMs: 900, statusCode: 201 }, { onCommitted })
+    ).resolves.toBe(true);
+    expect(onCommitted).toHaveBeenCalledOnce();
+    observer.resolve();
+  });
+
+  it("does not publish a synchronous durable callback when the terminal CAS loses", async () => {
+    vi.resetModules();
+    const { writerExecute } = installSyncDurableBoundaries([]);
+    const { updateMessageRequestDetailsDurably } = await import("@/repository/message");
+    const onCommitted = vi.fn();
+
+    const committed = await updateMessageRequestDetailsDurably(
+      805,
+      { durationMs: 1_100, statusCode: 502 },
+      { onCommitted }
+    );
+
+    expect(committed).toBe(false);
+    expect(writerExecute).not.toHaveBeenCalled();
+    expect(onCommitted).not.toHaveBeenCalled();
   });
 });

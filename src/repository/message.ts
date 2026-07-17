@@ -143,7 +143,7 @@ async function readPublicStatusRequestSeedFallback(
 function queuePublicStatusRollupForFinalDetails(
   id: number,
   details: PublicStatusFinalDetails
-): void {
+): Promise<void> | undefined {
   if (!isPublicStatusFinalDetails(details) || !markPublicStatusRequestInFlight(id)) {
     return;
   }
@@ -152,7 +152,7 @@ function queuePublicStatusRollupForFinalDetails(
     return;
   }
 
-  void (async () => {
+  return (async () => {
     try {
       const seed =
         peekPublicStatusRequestSeed(id) ?? (await readPublicStatusRequestSeedFallback(id));
@@ -210,12 +210,12 @@ function queuePublicStatusRollupForFinalDetails(
 function publishCommittedMessageRequestDetails(
   id: number,
   details: PublicStatusFinalDetails
-): void {
+): Promise<void> | undefined {
   if (details.durationMs !== undefined) {
     updatePublicStatusRequestSeed(id, { durationMs: details.durationMs });
   }
   if (details.providerChain !== undefined && details.statusCode !== undefined) {
-    queuePublicStatusRollupForFinalDetails(id, details);
+    return queuePublicStatusRollupForFinalDetails(id, details);
   }
 }
 
@@ -505,12 +505,17 @@ export type MessageRequestDetailsUpdate = {
 export async function updateMessageRequestDetails(
   id: number,
   details: MessageRequestDetailsUpdate,
-  options: { onlyIfUnfinalized?: boolean } = {}
-): Promise<void> {
+  options: { onlyIfUnfinalized?: boolean; awaitCommitObservers?: boolean } = {}
+): Promise<boolean> {
   if (getEnvConfig().MESSAGE_REQUEST_WRITE_MODE === "async" && !options.onlyIfUnfinalized) {
+    // 终态 patch 必须观察 SQL commit 后再发布 public-status rollup。
+    // 非终态 metadata 仍保持轻量 enqueue，但不能伪称已提交。
+    if (details.statusCode !== undefined) {
+      await updateMessageRequestDetailsDurably(id, details);
+      return true;
+    }
     enqueueMessageRequestUpdate(id, details);
-    publishCommittedMessageRequestDetails(id, details);
-    return;
+    return true;
   }
 
   const updateData: Record<string, unknown> = {
@@ -579,25 +584,56 @@ export async function updateMessageRequestDetails(
   }
 
   if (options.onlyIfUnfinalized) {
-    const updated = await getMessageWriterDb()
+    const terminalDb =
+      getEnvConfig().MESSAGE_REQUEST_WRITE_MODE === "async" ? getMessageWriterDb() : db;
+    const updated = await terminalDb
       .update(messageRequest)
       .set(updateData)
       .where(and(eq(messageRequest.id, id), isNull(messageRequest.statusCode)))
       .returning({ id: messageRequest.id });
     if (updated.length === 0) {
-      return;
+      return false;
     }
   } else {
     await db.update(messageRequest).set(updateData).where(eq(messageRequest.id, id));
   }
-  publishCommittedMessageRequestDetails(id, details);
+  const rollupPromise = publishCommittedMessageRequestDetails(id, details);
+  if (options.awaitCommitObservers === false) {
+    void rollupPromise;
+  } else {
+    await rollupPromise;
+  }
+  return true;
 }
 
 export async function updateMessageRequestDetailsIfUnfinalized(
   id: number,
-  details: MessageRequestDetailsUpdate
-): Promise<void> {
-  await updateMessageRequestDetails(id, details, { onlyIfUnfinalized: true });
+  details: MessageRequestDetailsUpdate,
+  options?: Pick<DurableMessageRequestUpdateOptions, "onCommitted">
+): Promise<boolean> {
+  const committed = await updateMessageRequestDetails(id, details, {
+    onlyIfUnfinalized: true,
+    awaitCommitObservers: false,
+  });
+  if (committed && options?.onCommitted) {
+    try {
+      const callbackResult = options.onCommitted(details);
+      if (callbackResult && typeof callbackResult.then === "function") {
+        void Promise.resolve(callbackResult).catch((error) => {
+          logger.warn("[MessageRequest] Conditional commit callback failed", {
+            messageRequestId: id,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        });
+      }
+    } catch (error) {
+      logger.warn("[MessageRequest] Conditional commit callback failed", {
+        messageRequestId: id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+  return committed;
 }
 
 /**
@@ -608,25 +644,50 @@ export async function updateMessageRequestDetailsDurably(
   id: number,
   details: MessageRequestDetailsUpdate,
   options?: DurableMessageRequestUpdateOptions
-): Promise<void> {
+): Promise<boolean> {
   if (getEnvConfig().MESSAGE_REQUEST_WRITE_MODE !== "async") {
-    await updateMessageRequestDetails(id, details);
-    return;
+    const committed = await updateMessageRequestDetails(id, details, {
+      onlyIfUnfinalized: true,
+      awaitCommitObservers: false,
+    });
+    if (committed) {
+      try {
+        const callbackResult = options?.onCommitted?.(details);
+        if (callbackResult && typeof callbackResult.then === "function") {
+          void Promise.resolve(callbackResult).catch((error) => {
+            logger.warn("[MessageRequest] onCommitted callback failed", {
+              messageRequestId: id,
+              error: error instanceof Error ? error.message : String(error),
+            });
+          });
+        }
+      } catch (error) {
+        logger.warn("[MessageRequest] onCommitted callback failed", {
+          messageRequestId: id,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+    return committed;
   }
 
   let commitPublished = false;
   const publishCommit = (committedPatch: Readonly<MessageRequestUpdatePatch>) => {
     if (commitPublished) return;
     commitPublished = true;
-    publishCommittedMessageRequestDetails(id, committedPatch);
-    return options?.onCommitted?.(committedPatch);
+    const rollupPromise = publishCommittedMessageRequestDetails(id, committedPatch);
+    const callbackResult = options?.onCommitted?.(committedPatch);
+    if (rollupPromise && callbackResult) {
+      return Promise.all([rollupPromise, callbackResult]).then(() => undefined);
+    }
+    return callbackResult ?? rollupPromise;
   };
 
-  await enqueueMessageRequestUpdateDurably(id, details, {
+  const committed = await enqueueMessageRequestUpdateDurably(id, details, {
     ...options,
     onCommitted: publishCommit,
   });
-  publishCommit(details);
+  return committed;
 }
 
 /**

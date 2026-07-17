@@ -227,9 +227,17 @@ describe("terminal outcome contract", () => {
     const flushPromise = flushMessageRequestWriteBuffer();
     await flushMicrotasks();
 
-    await expect(
-      Promise.race([handlePromise.then(() => "resolved"), Promise.resolve("pending")])
-    ).resolves.toBe("pending");
+    let settled = false;
+    void handlePromise.then(
+      () => {
+        settled = true;
+      },
+      () => {
+        settled = true;
+      }
+    );
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(settled).toBe(false);
     expect(execute).toHaveBeenCalledTimes(1);
     expect(rollupPipelines).toEqual([]);
     expect(executedSql[0]?.sql).toContain("duration_ms");

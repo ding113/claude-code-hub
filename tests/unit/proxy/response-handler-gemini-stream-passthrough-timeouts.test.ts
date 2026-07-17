@@ -35,6 +35,17 @@ const mocks = vi.hoisted(() => {
 beforeEach(() => {
   mocks.isHttp2Enabled.mockReset();
   mocks.isHttp2Enabled.mockResolvedValue(false);
+  vi.mocked(updateMessageRequestDetailsDurably).mockImplementation(
+    async (_id, details, options) => {
+      try {
+        const result = options?.onCommitted?.(details);
+        if (result) void Promise.resolve(result).catch(() => undefined);
+      } catch {
+        // Test mock mirrors the repository's commit-observer boundary.
+      }
+      return true;
+    }
+  );
 });
 
 vi.mock("@/lib/config", async (importOriginal) => {
@@ -683,7 +694,7 @@ describe("ProxyResponseHandler - Gemini stream passthrough timeouts", () => {
     }
   });
 
-  test("客户端中断流式透传后应清理 session provider 绑定，避免下次继续复用旧供应商", async () => {
+  test("客户端中断流式透传后应继续 drain 并提交尾部 usage", async () => {
     asyncTasks.length = 0;
     const { baseUrl, close } = await startSseServer((_req, res) => {
       res.writeHead(200, {
@@ -695,11 +706,13 @@ describe("ProxyResponseHandler - Gemini stream passthrough timeouts", () => {
       res.write('data: {"x":1}\n\n');
       setTimeout(() => {
         try {
-          res.write('data: {"x":2}\n\n');
+          res.end(
+            'data: {"usageMetadata":{"promptTokenCount":3,"candidatesTokenCount":2},"finishReason":"STOP"}\n\n'
+          );
         } catch {
           // ignore
         }
-      }, 1000);
+      }, 20);
     });
 
     const clientAbortController = new AbortController();
@@ -743,9 +756,16 @@ describe("ProxyResponseHandler - Gemini stream passthrough timeouts", () => {
       clientAbortController.abort(new Error("client_cancelled"));
       await expectAllFulfilled(asyncTasks);
 
-      expect(vi.mocked(SessionManager.clearSessionProvider)).toHaveBeenCalledWith(
-        "gemini-abort-session"
+      expect(updateMessageRequestDetailsDurably).toHaveBeenCalledWith(
+        4,
+        expect.objectContaining({
+          statusCode: 200,
+          inputTokens: 3,
+          outputTokens: 2,
+        }),
+        expect.objectContaining({ onCommitted: expect.any(Function) })
       );
+      expect(vi.mocked(SessionManager.clearSessionProvider)).not.toHaveBeenCalled();
     } finally {
       clientAbortController.abort(new Error("test_cleanup"));
       await close();
@@ -808,19 +828,23 @@ describe("ProxyResponseHandler - Gemini stream passthrough timeouts", () => {
         statusCode: 200,
         inputTokens: 463,
         outputTokens: 11,
-      })
+      }),
+      expect.objectContaining({ onCommitted: expect.any(Function) })
     );
     expect(SessionManager.storeSessionResponse).not.toHaveBeenCalled();
   });
 
-  test("Gemini 终态副作用挂起时应先释放传输资源并在共享 deadline 后收敛", async () => {
+  test("Gemini 终态副作用挂起时应保持 shutdown ownership 直到真实 I/O 完成", async () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
     asyncTasks.length = 0;
     vi.mocked(updateMessageRequestDetailsDurably).mockClear();
     vi.mocked(SessionManager.clearSessionProvider).mockClear();
     const releaseAgent = vi.fn();
+    let releaseSideEffect: () => void = () => {};
     vi.mocked(SessionManager.clearSessionProvider).mockImplementationOnce(() => {
-      return new Promise(() => {});
+      return new Promise<void>((resolve) => {
+        releaseSideEffect = resolve;
+      });
     });
 
     try {
@@ -873,8 +897,15 @@ describe("ProxyResponseHandler - Gemini stream passthrough timeouts", () => {
       expect(SessionManager.clearSessionProvider).toHaveBeenCalledTimes(1);
       expect(releaseAgent).toHaveBeenCalledTimes(1);
 
+      let tasksSettled = false;
+      const pendingTasks = expectAllFulfilled(asyncTasks.splice(0, asyncTasks.length)).then(() => {
+        tasksSettled = true;
+      });
       await vi.advanceTimersByTimeAsync(120_000);
-      await expectAllFulfilled(asyncTasks.splice(0, asyncTasks.length));
+      expect(tasksSettled).toBe(false);
+
+      releaseSideEffect();
+      await pendingTasks;
 
       expect(releaseAgent).toHaveBeenCalledTimes(1);
       expect(updateMessageRequestDetailsDurably).toHaveBeenCalledTimes(1);

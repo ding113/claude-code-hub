@@ -191,9 +191,17 @@ describe("message_request 异步批量写入", () => {
     expect(executeMock).toHaveBeenCalledTimes(1);
     const built = toSqlText(executeMock.mock.calls[0]?.[0]);
     expect(built.sql).toContain("RETURNING id");
-    await expect(
-      Promise.race([durablePromise.then(() => "resolved"), Promise.resolve("pending")])
-    ).resolves.toBe("pending");
+    let settled = false;
+    void durablePromise.then(
+      () => {
+        settled = true;
+      },
+      () => {
+        settled = true;
+      }
+    );
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(settled).toBe(false);
 
     deferred.resolve([{ id: 2 }]);
     await flushPromise;
@@ -228,7 +236,7 @@ describe("message_request 异步批量写入", () => {
 
     deferred.resolve([{ id: 51001 }, { id: 52002 }]);
     await flushPromise;
-    await expect(durablePromise).resolves.toBeUndefined();
+    await expect(durablePromise).resolves.toBe(true);
     await stopMessageRequestWriteBuffer();
   });
 
@@ -255,7 +263,47 @@ describe("message_request 异步批量写入", () => {
 
     deferred.resolve([{ id: 11 }, { id: 12 }]);
     await flushPromise;
-    await expect(Promise.all([first, second])).resolves.toEqual([undefined, undefined]);
+    await expect(Promise.all([first, second])).resolves.toEqual([true, true]);
+    await stopMessageRequestWriteBuffer();
+  });
+
+  it("同一 id 的后续 durable contender 不得覆盖首个 terminal owner", async () => {
+    process.env.MESSAGE_REQUEST_WRITE_MODE = "async";
+
+    const deferred = createDeferred<unknown[]>();
+    executeMock.mockImplementationOnce(async () => deferred.promise);
+
+    const {
+      enqueueMessageRequestUpdateDurably,
+      flushMessageRequestWriteBuffer,
+      stopMessageRequestWriteBuffer,
+    } = await import("@/repository/message-write-buffer");
+    const ownerCallback = vi.fn();
+    const contenderCallback = vi.fn();
+
+    const owner = enqueueMessageRequestUpdateDurably(
+      13,
+      { statusCode: 200, errorMessage: "owner" },
+      { onCommitted: ownerCallback }
+    );
+    const contender = enqueueMessageRequestUpdateDurably(
+      13,
+      { statusCode: 499, errorMessage: "contender" },
+      { onCommitted: contenderCallback }
+    );
+    const flushPromise = flushMessageRequestWriteBuffer();
+
+    deferred.resolve([{ id: 13 }]);
+    await flushPromise;
+    await expect(owner).resolves.toBe(true);
+    await expect(contender).resolves.toBe(false);
+
+    const built = toSqlText(executeMock.mock.calls[0]?.[0]);
+    expect(built.params).toContain("owner");
+    expect(built.params).not.toContain("contender");
+    expect(ownerCallback).toHaveBeenCalledOnce();
+    expect(contenderCallback).not.toHaveBeenCalled();
+    expect(executeMock).toHaveBeenCalledTimes(1);
     await stopMessageRequestWriteBuffer();
   });
 
@@ -273,12 +321,20 @@ describe("message_request 异步批量写入", () => {
 
     const durablePromise = enqueueMessageRequestUpdateDurably(21, { statusCode: 200 });
     await flushMessageRequestWriteBuffer();
-    await expect(
-      Promise.race([durablePromise.then(() => "resolved"), Promise.resolve("pending")])
-    ).resolves.toBe("pending");
+    let settled = false;
+    void durablePromise.then(
+      () => {
+        settled = true;
+      },
+      () => {
+        settled = true;
+      }
+    );
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(settled).toBe(false);
 
     await flushMessageRequestWriteBuffer();
-    await expect(durablePromise).resolves.toBeUndefined();
+    await expect(durablePromise).resolves.toBe(true);
     expect(executeMock).toHaveBeenCalledTimes(2);
     await stopMessageRequestWriteBuffer();
   });
@@ -325,7 +381,7 @@ describe("message_request 异步批量写入", () => {
 
     const retry = enqueueMessageRequestUpdateDurably(31, { statusCode: 200 });
     await flushMessageRequestWriteBuffer();
-    await expect(retry).resolves.toBeUndefined();
+    await expect(retry).resolves.toBe(true);
     await stopMessageRequestWriteBuffer();
   });
 
@@ -354,7 +410,7 @@ describe("message_request 异步批量写入", () => {
 
     const retry = enqueueMessageRequestUpdateDurably(311, { statusCode: 502 });
     await flushMessageRequestWriteBuffer();
-    await expect(retry).resolves.toBeUndefined();
+    await expect(retry).resolves.toBe(true);
 
     const built = toSqlText(executeMock.mock.calls[0]?.[0]);
     expect(built.params).not.toContain("stale-primary-generation");
@@ -382,7 +438,7 @@ describe("message_request 异步批量写入", () => {
     firstExecute.resolve([]);
 
     await flushPromise;
-    await expect(retry).resolves.toBeUndefined();
+    await expect(retry).resolves.toBe(true);
     expect(executeMock).toHaveBeenCalledTimes(2);
     await stopMessageRequestWriteBuffer();
   });
@@ -482,7 +538,7 @@ describe("message_request 异步批量写入", () => {
     );
 
     await expect(flushMessageRequestWriteBuffer()).resolves.toBeUndefined();
-    await expect(durable).resolves.toBeUndefined();
+    await expect(durable).resolves.toBe(true);
     expect(loggerErrorMock).toHaveBeenCalledWith(
       "[MessageRequestWriteBuffer] Durable commit callback failed",
       expect.objectContaining({
@@ -491,6 +547,35 @@ describe("message_request 异步批量写入", () => {
       })
     );
     await stopMessageRequestWriteBuffer();
+  });
+
+  it("stop 应等待已提交终态的异步 commit callback 完成", async () => {
+    process.env.MESSAGE_REQUEST_WRITE_MODE = "async";
+    const callback = createDeferred<void>();
+    const {
+      enqueueMessageRequestUpdateDurably,
+      flushMessageRequestWriteBuffer,
+      stopMessageRequestWriteBuffer,
+    } = await import("@/repository/message-write-buffer");
+
+    const durable = enqueueMessageRequestUpdateDurably(
+      325,
+      { statusCode: 200 },
+      { onCommitted: () => callback.promise }
+    );
+    await flushMessageRequestWriteBuffer();
+    await durable;
+
+    let stopped = false;
+    const stop = stopMessageRequestWriteBuffer().then(() => {
+      stopped = true;
+    });
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(stopped).toBe(false);
+
+    callback.resolve();
+    await stop;
+    expect(stopped).toBe(true);
   });
 
   it("fallback CAS 先写入后，late durable primary 不得覆盖既有终态", async () => {
@@ -592,22 +677,26 @@ describe("message_request 异步批量写入", () => {
         throw new Error("executor did not synchronously re-enter stop");
       }
       const samePromise = outerStopPromise === reentrantPromise;
-      const settlementsBeforeRelease = await Promise.all([
-        Promise.race([
-          outerStopPromise.then(
-            () => "fulfilled",
-            () => "rejected"
-          ),
-          Promise.resolve("pending"),
-        ]),
-        Promise.race([
-          reentrantPromise.then(
-            () => "fulfilled",
-            () => "rejected"
-          ),
-          Promise.resolve("pending"),
-        ]),
-      ]);
+      let outerSettled = false;
+      let reentrantSettled = false;
+      void outerStopPromise.then(
+        () => {
+          outerSettled = true;
+        },
+        () => {
+          outerSettled = true;
+        }
+      );
+      void reentrantPromise.then(
+        () => {
+          reentrantSettled = true;
+        },
+        () => {
+          reentrantSettled = true;
+        }
+      );
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      const settlementsBeforeRelease = [outerSettled, reentrantSettled];
 
       if (shouldReject) {
         databaseBarrier.reject(databaseError);
@@ -616,7 +705,7 @@ describe("message_request 异步批量写入", () => {
       }
       const stopResults = await Promise.allSettled([outerStopPromise, reentrantPromise]);
 
-      expect(settlementsBeforeRelease).toEqual(["pending", "pending"]);
+      expect(settlementsBeforeRelease).toEqual([false, false]);
       if (shouldReject) {
         const shutdownError = "message_request writer shutdown persistence failed";
         expect(stopResults).toEqual([
@@ -699,11 +788,17 @@ describe("message_request 异步批量写入", () => {
 
     expect(executeMock).toHaveBeenCalledTimes(1);
 
-    const raced = await Promise.race([
-      stopPromise.then(() => "stopped"),
-      Promise.resolve("pending"),
-    ]);
-    expect(raced).toBe("pending");
+    let settled = false;
+    void stopPromise.then(
+      () => {
+        settled = true;
+      },
+      () => {
+        settled = true;
+      }
+    );
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(settled).toBe(false);
 
     deferred.resolve([]);
     await stopPromise;

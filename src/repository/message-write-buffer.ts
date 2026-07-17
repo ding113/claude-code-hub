@@ -2,6 +2,7 @@ import "server-only";
 
 import type { SQL } from "drizzle-orm";
 import { sql } from "drizzle-orm";
+import { findSafeDatabaseError } from "@/drizzle/admitted-client";
 import { getMessageWriterDb } from "@/drizzle/db";
 import { getEnvConfig } from "@/lib/config/env.schema";
 import { logger } from "@/lib/logger";
@@ -404,6 +405,7 @@ class MessageRequestWriteBuffer {
   private overflowLastDroppedId: number | undefined;
   private flushAgainAfterCurrent = false;
   private flushInFlight: Promise<void> | null = null;
+  private readonly commitCallbacksInFlight = new Set<Promise<void>>();
   private stopping = false;
 
   constructor(config: WriterConfig) {
@@ -423,28 +425,17 @@ class MessageRequestWriteBuffer {
     id: number,
     patch: MessageRequestUpdatePatch,
     options: DurableMessageRequestUpdateOptions = {}
-  ): Promise<void> {
+  ): Promise<boolean> {
     if (this.stopping) {
       return Promise.reject(new Error("message_request writer is stopping"));
     }
 
     const activeAcknowledgement = this.durableAcknowledgements.get(id);
     if (activeAcknowledgement && !activeAcknowledgement.settled) {
-      if (activeAcknowledgement.state === "pending") {
-        const existing = this.pending.get(id);
-        if (existing?.durableAcknowledgement === activeAcknowledgement) {
-          if (options.onCommitted) {
-            activeAcknowledgement.onCommittedCallbacks.add(options.onCommitted);
-          }
-          this.setPending(id, mergePatch(existing.patch, patch), existing.durableAcknowledgement);
-          this.scheduleFlushIfNeeded();
-          return activeAcknowledgement.promise;
-        }
-      }
-
-      return Promise.reject(
-        new Error(`durable message_request update already in flight for id ${id}`)
-      );
+      // The first durable claimant owns both the terminal patch and its commit
+      // callback. Later contenders may observe its SQL acknowledgement, but
+      // must not merge a contradictory terminal outcome or publish side effects.
+      return activeAcknowledgement.promise.then(() => false);
     }
 
     if (this.durableAcknowledgements.size >= this.config.maxPending) {
@@ -461,11 +452,11 @@ class MessageRequestWriteBuffer {
         acknowledgement,
         new Error("durable message_request queue is full")
       );
-      return acknowledgement.promise;
+      return acknowledgement.promise.then(() => true);
     }
 
     this.scheduleFlushIfNeeded();
-    return acknowledgement.promise;
+    return acknowledgement.promise.then(() => true);
   }
 
   private createDurableAcknowledgement(
@@ -520,12 +511,18 @@ class MessageRequestWriteBuffer {
       try {
         const result = callback(patch);
         if (result && typeof result.then === "function") {
-          void result.catch((error: unknown) => {
-            logger.error("[MessageRequestWriteBuffer] Durable commit callback failed", {
-              error: error instanceof Error ? error.message : String(error),
-              messageRequestId: acknowledgement.id,
+          let callbackPromise: Promise<void>;
+          callbackPromise = Promise.resolve(result)
+            .catch((error: unknown) => {
+              logger.error("[MessageRequestWriteBuffer] Durable commit callback failed", {
+                error: error instanceof Error ? error.message : String(error),
+                messageRequestId: acknowledgement.id,
+              });
+            })
+            .finally(() => {
+              this.commitCallbacksInFlight.delete(callbackPromise);
             });
-          });
+          this.commitCallbacksInFlight.add(callbackPromise);
         }
       } catch (error) {
         logger.error("[MessageRequestWriteBuffer] Durable commit callback failed", {
@@ -789,8 +786,13 @@ class MessageRequestWriteBuffer {
             }
             this.enforcePendingLimit();
 
+            const databaseError = findSafeDatabaseError(error);
             logger.error("[MessageRequestWriteBuffer] Flush failed, will retry later", {
-              error: error instanceof Error ? error.message : String(error),
+              error:
+                databaseError?.message ?? (error instanceof Error ? error.message : String(error)),
+              databaseCode: databaseError?.code,
+              admissionPool: databaseError?.pool,
+              admissionMaxOutstanding: databaseError?.maxOutstanding,
               pending: this.pending.size,
               batchSize: batch.length,
             });
@@ -833,6 +835,9 @@ class MessageRequestWriteBuffer {
         new Error("message_request writer stopped before durable commit")
       );
     }
+    while (this.commitCallbacksInFlight.size > 0) {
+      await Promise.allSettled([...this.commitCallbacksInFlight]);
+    }
     this.clearOverflowLogTimer();
     this.flushOverflowLog();
     this.pending.clear();
@@ -870,7 +875,7 @@ export function enqueueMessageRequestUpdateDurably(
   id: number,
   patch: MessageRequestUpdatePatch,
   options?: DurableMessageRequestUpdateOptions
-): Promise<void> {
+): Promise<boolean> {
   if (getEnvConfig().MESSAGE_REQUEST_WRITE_MODE !== "async") {
     return Promise.reject(
       new Error("durable message_request buffer API requires async write mode")

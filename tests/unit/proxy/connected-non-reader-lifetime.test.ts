@@ -122,7 +122,7 @@ describe("connected non-reader response lifetime", () => {
 
     expect(cancel).toHaveBeenCalledOnce();
     expect(cancel).toHaveBeenCalledWith(deadlineError);
-    expect(completion).toMatchObject({ streamEndedNormally: false, clientAborted: true });
+    expect(completion).toMatchObject({ streamEndedNormally: false, clientAborted: false });
     expect(completion.error).toEqual(deadlineError);
     expect(completions).toEqual([completion]);
     expect(pump.getState()).toBe("closed");

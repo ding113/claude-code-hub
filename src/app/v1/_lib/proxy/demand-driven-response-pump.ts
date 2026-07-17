@@ -121,13 +121,13 @@ export function createDemandDrivenResponsePump(
 
   let scheduleDrain = () => {};
 
-  const startDrain = (_reason?: unknown) => {
+  const startDrain = (_reason?: unknown, markClientAborted = true) => {
     if (settled || state === "finalizing" || state === "closed") return;
     if (state === "draining") {
       scheduleDrain();
       return;
     }
-    clientAborted = true;
+    if (markClientAborted) clientAborted = true;
     state = "draining";
     try {
       clientController?.error(
@@ -153,7 +153,7 @@ export function createDemandDrivenResponsePump(
         `Client response body was not consumed within ${PENDING_CHUNK_DEADLINE_MS}ms`,
         "AbortError"
       );
-      startDrain(error);
+      startDrain(error, false);
       cancelSource(error);
     }, PENDING_CHUNK_DEADLINE_MS);
   };

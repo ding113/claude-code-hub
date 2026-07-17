@@ -129,9 +129,17 @@ run.sequential("message write buffer PostgreSQL recovery", () => {
       });
       const flush = writeBuffer.flushMessageRequestWriteBuffer();
 
-      await expect(
-        Promise.race([durable.then(() => "settled"), Promise.resolve("pending")])
-      ).resolves.toBe("pending");
+      let settled = false;
+      void durable.then(
+        () => {
+          settled = true;
+        },
+        () => {
+          settled = true;
+        }
+      );
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(settled).toBe(false);
       await expectRequest(ordinaryId, { durationMs: null });
       return { durable, flush };
     });
