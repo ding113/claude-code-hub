@@ -134,6 +134,19 @@ describe("Codex models manifest fallback", () => {
     expect(findAllProviders).toHaveBeenCalledTimes(1);
   });
 
+  it.each([
+    ["/v1/models?client_version=0.144.1&format=gemini", undefined],
+    ["/v1/models?client_version=0.144.1&api_type=gemini", undefined],
+    ["/v1/models?client_version=0.144.1", { "x-cch-api-type": "gemini" }],
+  ])("keeps explicit model format override for %s", async (path, headers) => {
+    const response = await authenticatedRequest(path, headers);
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ object: "list", data: [] });
+    expect(response.headers.get("etag")).toBeNull();
+    expect(findAllProviders).toHaveBeenCalledTimes(1);
+  });
+
   it("still requires authentication before returning the fallback manifest", async () => {
     const response = await createApp().request("http://localhost/v1/models?client_version=0.144.1");
 

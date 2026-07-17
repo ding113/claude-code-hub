@@ -557,10 +557,12 @@ export async function handleAvailableModels(c: Context): Promise<Response> {
   try {
     const { user, key } = await authenticateRequest(c);
     const responseFormat = detectResponseFormat(c);
+    const clientFormatOverride = detectClientFormatOverride(c);
 
     if (
       c.req.path === "/v1/models" &&
       responseFormat === "openai" &&
+      clientFormatOverride === null &&
       c.req.query("client_version")?.trim()
     ) {
       c.header("ETag", CODEX_MODELS_MANIFEST_ETAG);
@@ -571,7 +573,6 @@ export async function handleAvailableModels(c: Context): Promise<Response> {
       return c.json({ models: [] });
     }
 
-    const clientFormatOverride = detectClientFormatOverride(c);
     const clientFormat = clientFormatOverride || mapResponseFormatToClientFormat(responseFormat);
 
     logger.debug("[AvailableModels] Request received", {
