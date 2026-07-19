@@ -354,6 +354,69 @@ describe("ProxyForwarder - retry limit enforcement", () => {
     ]);
   });
 
+  test("upstream storage-capacity 400 should retry, record failure, and switch provider", async () => {
+    vi.useFakeTimers();
+
+    try {
+      const session = createSession();
+      const provider1 = createProvider({
+        id: 1,
+        name: "storage-limited-provider",
+        providerVendorId: null,
+        maxRetryAttempts: 2,
+      });
+      const provider2 = createProvider({
+        id: 2,
+        name: "fallback-provider",
+        providerVendorId: null,
+        maxRetryAttempts: 2,
+      });
+      session.setProvider(provider1);
+
+      const storageError = new ProxyError("invalid request: upstream storage failure", 400, {
+        body: '{"error":{"message":"disk storage creation failed: failed to write to temp file; disk free-space floor reached"}}',
+        providerId: provider1.id,
+        providerName: provider1.name,
+      });
+
+      const selectAlternative = vi.spyOn(
+        ProxyForwarder as unknown as {
+          selectAlternative: (...args: unknown[]) => unknown;
+        },
+        "selectAlternative"
+      );
+      selectAlternative.mockResolvedValueOnce(provider2).mockResolvedValueOnce(null);
+
+      const doForward = vi.spyOn(
+        ProxyForwarder as unknown as { doForward: (...args: unknown[]) => unknown },
+        "doForward"
+      );
+      doForward.mockRejectedValueOnce(storageError).mockRejectedValueOnce(storageError);
+      doForward.mockResolvedValueOnce(
+        new Response("{}", {
+          status: 200,
+          headers: { "content-type": "application/json", "content-length": "2" },
+        })
+      );
+
+      const sendPromise = ProxyForwarder.send(session);
+      await vi.runAllTimersAsync();
+      const response = await sendPromise;
+
+      expect(response.status).toBe(200);
+      expect(doForward).toHaveBeenCalledTimes(3);
+      expect(selectAlternative).toHaveBeenCalledWith(session, [provider1.id]);
+      expect(mocks.recordFailure).toHaveBeenCalledTimes(1);
+      expect(mocks.recordFailure).toHaveBeenCalledWith(provider1.id, storageError);
+      expect(session.provider?.id).toBe(provider2.id);
+      expect(
+        session.getProviderChain().some((entry) => entry.reason === "client_error_non_retryable")
+      ).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   test("endpoints > maxRetry: should only use top N lowest-latency endpoints", async () => {
     vi.useFakeTimers();
 

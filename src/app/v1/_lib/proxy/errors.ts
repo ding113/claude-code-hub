@@ -581,6 +581,35 @@ function extractErrorContentForDetection(error: Error): string {
  */
 const errorDetectionCache = new WeakMap<Error, ErrorDetectionResult>();
 
+const RETRYABLE_UPSTREAM_STORAGE_ERROR_MARKERS = [
+  "disk storage creation failed",
+  "disk free-space floor reached",
+] as const;
+
+/**
+ * Detect an upstream storage-capacity failure that was incorrectly returned as HTTP 400.
+ *
+ * This must remain narrow: ordinary invalid-request responses are client errors and should
+ * continue to bypass retries and provider circuit accounting.
+ */
+export function isRetryableUpstreamStorageCapacityError(error: Error): boolean {
+  if (!(error instanceof ProxyError) || error.statusCode !== 400) {
+    return false;
+  }
+
+  // Synthetic fake-200 errors are inferred from a response body and must keep their own
+  // classification even when the body contains the same text as a real upstream response.
+  if (error.message.startsWith("FAKE_200_") || error.upstreamError?.statusCodeInferred === true) {
+    return false;
+  }
+
+  const body = error.upstreamError?.body?.toLowerCase();
+  return (
+    body != null &&
+    RETRYABLE_UPSTREAM_STORAGE_ERROR_MARKERS.every((marker) => body.includes(marker))
+  );
+}
+
 /**
  * 检测错误规则（异步版本，带缓存）
  *
@@ -946,6 +975,13 @@ export async function categorizeErrorAsync(error: Error): Promise<ErrorCategory>
   // These are always SYSTEM_ERROR regardless of message content
   if (isTransportError(error)) {
     return ErrorCategory.SYSTEM_ERROR;
+  }
+
+  // Some upstream relays report their own storage-capacity protection as HTTP 400.
+  // Classify this known provider failure before broad client-error rules can match text
+  // such as "invalid request" in the same response body.
+  if (isRetryableUpstreamStorageCapacityError(error)) {
+    return ErrorCategory.PROVIDER_ERROR;
   }
 
   // 优先级 2: 不可重试的客户端输入错误检测（白名单模式）
