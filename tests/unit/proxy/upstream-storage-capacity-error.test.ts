@@ -66,13 +66,25 @@ describe("upstream storage-capacity 400 classification", () => {
     expect(await categorizeErrorAsync(error)).toBe(ErrorCategory.NON_RETRYABLE_CLIENT_ERROR);
   });
 
-  it("does not reinterpret a synthetic fake-200 error as a real provider 400", async () => {
+  it("excludes a fake-200 message prefix without relying on inferred status", async () => {
+    const error = createStorageError(
+      STORAGE_ERROR_BODY.replace("disk storage", "invalid request: disk storage"),
+      {
+        statusCodeInferred: false,
+      },
+      "FAKE_200_JSON_ERROR_NON_EMPTY"
+    );
+
+    expect(isRetryableUpstreamStorageCapacityError(error)).toBe(false);
+    expect(await categorizeErrorAsync(error)).toBe(ErrorCategory.NON_RETRYABLE_CLIENT_ERROR);
+  });
+
+  it("excludes an inferred status without relying on a fake-200 message prefix", async () => {
     const error = createStorageError(
       STORAGE_ERROR_BODY.replace("disk storage", "invalid request: disk storage"),
       {
         statusCodeInferred: true,
-      },
-      "FAKE_200_JSON_ERROR_NON_EMPTY"
+      }
     );
 
     expect(isRetryableUpstreamStorageCapacityError(error)).toBe(false);
