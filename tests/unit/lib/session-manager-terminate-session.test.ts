@@ -209,4 +209,39 @@ describe("SessionManager.terminateSession", () => {
     expect(pipelineRef.exec).not.toHaveBeenCalled();
     expect(pipelineRef.del).not.toHaveBeenCalled();
   });
+
+  it("preserves shared Session state after scoped legacy termination linearizes on the old Provider", async () => {
+    const sessionId = "sess_scoped_legacy_failover";
+    redisClientRef.get.mockImplementation(async (key: string) => {
+      if (key === `session:${sessionId}:provider`) return "42";
+      if (key === `session:${sessionId}:key`) return "7";
+      return null;
+    });
+    redisClientRef.hget.mockResolvedValue("123");
+    bindingMocks.mutateLegacySessionBindingSafely.mockResolvedValueOnce({
+      status: "ok",
+      changed: true,
+      providerId: null,
+      terminatedProviderId: 42,
+    });
+    const { getGlobalActiveSessionsKey, getKeyActiveSessionsKey, getUserActiveSessionsKey } =
+      await import("@/lib/redis/active-session-keys");
+    const { SessionManager } = await import("@/lib/session-manager");
+
+    await expect(SessionManager.terminateSession(sessionId, [42])).resolves.toBe(true);
+
+    expect(bindingMocks.mutateLegacySessionBindingSafely).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionId,
+        keyId: 7,
+        mutation: { type: "terminate", expectedProviderIds: [42] },
+      })
+    );
+    expect(pipelineRef.zrem).toHaveBeenCalledWith("provider:42:active_sessions", sessionId);
+    expect(pipelineRef.hdel).toHaveBeenCalledWith("provider:42:active_session_refs", sessionId);
+    expect(pipelineRef.del).not.toHaveBeenCalled();
+    expect(pipelineRef.zrem).not.toHaveBeenCalledWith(getGlobalActiveSessionsKey(), sessionId);
+    expect(pipelineRef.zrem).not.toHaveBeenCalledWith(getKeyActiveSessionsKey(7), sessionId);
+    expect(pipelineRef.zrem).not.toHaveBeenCalledWith(getUserActiveSessionsKey(123), sessionId);
+  });
 });

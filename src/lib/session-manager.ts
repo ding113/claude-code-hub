@@ -2874,6 +2874,45 @@ export class SessionManager {
             });
             return false;
           }
+
+          if (expectedProviderIds) {
+            const terminatedProviderId = legacy.terminatedProviderId;
+            if (terminatedProviderId == null) {
+              logger.warn("SessionManager: Scoped legacy termination lost Provider identity", {
+                sessionId,
+                keyId,
+              });
+              return false;
+            }
+
+            // The helper's value-checked delete is the linearization point. A
+            // failover may bind this Session to Q immediately afterwards, so
+            // provider-scoped invalidation must not delete shared Session
+            // metadata or global/key/user indexes after removing P.
+            try {
+              const providerCleanup = redis.pipeline();
+              providerCleanup.zrem(`provider:${terminatedProviderId}:active_sessions`, sessionId);
+              providerCleanup.hdel(
+                `provider:${terminatedProviderId}:active_session_refs`,
+                sessionId
+              );
+              await providerCleanup.exec();
+            } catch (cleanupError) {
+              logger.warn("SessionManager: Scoped legacy Provider index cleanup failed", {
+                sessionId,
+                providerId: terminatedProviderId,
+                error: cleanupError,
+              });
+            }
+
+            logger.info("SessionManager: Cleared scoped legacy Provider binding", {
+              sessionId,
+              providerId: terminatedProviderId,
+              keyId,
+            });
+            return true;
+          }
+
           bindingTerminated = true;
         } else {
           logger.warn("SessionManager: Session binding termination blocked", {
