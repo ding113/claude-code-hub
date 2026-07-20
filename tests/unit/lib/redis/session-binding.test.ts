@@ -28,6 +28,7 @@ import {
   CLEAR_SESSION_BINDING,
   DELETE_LEGACY_PROVIDER_IF_VALUE,
   READ_OR_RECONCILE_SESSION_BINDING,
+  RESTORE_LEGACY_PROVIDER_IF_ABSENT,
   TERMINATE_SESSION_BINDING,
 } from "@/lib/redis/lua-scripts";
 
@@ -838,6 +839,57 @@ describe("versioned session binding operations", () => {
       1,
       "session:sid:provider",
       "10"
+    );
+  });
+
+  it("restores a cleared provider mirror if canonical state appears before the post-check", async () => {
+    let provider: string | null = "8";
+    const mock = createMockRedis({
+      operationResponses: {
+        [RESTORE_LEGACY_PROVIDER_IF_ABSENT]: [
+          () => {
+            provider = "8";
+            return 1;
+          },
+        ],
+      },
+    });
+    let existsCalls = 0;
+    mock.existsMock.mockImplementation(async () => {
+      existsCalls += 1;
+      // Initial guard and pre-mutation guard pass; the post-clear guard sees
+      // a versioned worker creating canonical state concurrently.
+      return existsCalls === 3 ? 1 : 0;
+    });
+    mock.getMock.mockImplementation(async (key: string) => {
+      if (key === "session:sid:key") return "4";
+      if (key === "session:sid:provider") return provider;
+      return null;
+    });
+    mock.delMock.mockImplementation(async (key: string) => {
+      if (key === "session:sid:provider") provider = null;
+      return 1;
+    });
+
+    const result = await mutateLegacySessionBindingSafely({
+      sessionId: "sid",
+      keyId: 4,
+      redis: mock.redis,
+      mutation: { type: "clear", expectedProviderId: 8 },
+    });
+
+    expect(result).toEqual({
+      status: "conflict",
+      reason: "canonical_exists",
+      legacyFallbackAllowed: false,
+    });
+    expect(provider).toBe("8");
+    expect(mock.evalMock).toHaveBeenCalledWith(
+      RESTORE_LEGACY_PROVIDER_IF_ABSENT,
+      1,
+      "session:sid:provider",
+      "8",
+      "300"
     );
   });
 

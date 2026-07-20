@@ -8,6 +8,7 @@ import {
   CLEAR_SESSION_BINDING,
   DELETE_LEGACY_PROVIDER_IF_VALUE,
   READ_OR_RECONCILE_SESSION_BINDING,
+  RESTORE_LEGACY_PROVIDER_IF_ABSENT,
   TERMINATE_SESSION_BINDING,
 } from "./lua-scripts";
 
@@ -846,7 +847,8 @@ function parseLegacyProviderId(raw: string | null): number | null | undefined {
 async function rejectLegacyMutationAfterCanonicalAppeared(
   redis: SessionBindingRedisClient,
   keys: SessionBindingKeys,
-  rollbackProviderValue?: string
+  rollbackProviderValue?: string,
+  restoreProviderValue?: { value: string; ttlSeconds: number }
 ): Promise<SessionBindingConflictResult | null> {
   if ((await redis.exists(keys.canonical)) === 0) return null;
 
@@ -860,6 +862,22 @@ async function rejectLegacyMutationAfterCanonicalAppeared(
       );
     } catch (error) {
       logger.warn("Legacy binding rollback could not execute atomically", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  if (restoreProviderValue !== undefined) {
+    try {
+      await redis.eval(
+        RESTORE_LEGACY_PROVIDER_IF_ABSENT,
+        1,
+        keys.legacyProvider,
+        restoreProviderValue.value,
+        restoreProviderValue.ttlSeconds.toString()
+      );
+    } catch (error) {
+      logger.warn("Legacy binding mirror restoration could not execute atomically", {
         error: error instanceof Error ? error.message : String(error),
       });
     }
@@ -994,7 +1012,12 @@ export async function mutateLegacySessionBindingSafely(
         await redis.del(keys.legacyProvider);
         await redis.expire(keys.legacyOwner, ttlSeconds);
         {
-          const conflictAfterClear = await rejectLegacyMutationAfterCanonicalAppeared(redis, keys);
+          const conflictAfterClear = await rejectLegacyMutationAfterCanonicalAppeared(
+            redis,
+            keys,
+            undefined,
+            { value: legacyProvider.toString(), ttlSeconds }
+          );
           if (conflictAfterClear) return conflictAfterClear;
         }
         return { status: "ok", changed: true, providerId: null };

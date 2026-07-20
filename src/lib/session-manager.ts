@@ -2795,17 +2795,10 @@ export class SessionManager {
             redis,
           });
           if (terminated.status !== "ok") {
-            const latest = await readOrReconcileSessionBinding({
-              sessionId,
-              keyId,
-              ttlSeconds: SessionManager.SESSION_TTL,
-              redis,
-            });
             logger.warn("SessionManager: Versioned session termination blocked", {
               sessionId,
               keyId,
               reason: terminated.reason,
-              latestStatus: latest.status,
             });
             return false;
           }
