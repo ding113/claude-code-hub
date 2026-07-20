@@ -118,6 +118,8 @@ export type LegacySessionBindingMutationResult =
       status: "ok";
       changed: boolean;
       providerId: number | null;
+      /** Provider removed at the scoped terminate linearization point. */
+      terminatedProviderId?: number;
     }
   | SessionBindingConflictResult
   | SessionBindingUnavailableResult;
@@ -1372,7 +1374,12 @@ export async function mutateLegacySessionBindingSafely(
             { value: providerToTerminate.toString(), ttlSeconds }
           );
           if (conflictAfterTerminate) return conflictAfterTerminate;
-          return { status: "ok", changed: true, providerId: null };
+          return {
+            status: "ok",
+            changed: true,
+            providerId: null,
+            terminatedProviderId: providerToTerminate,
+          };
         }
 
         if (legacyProvider !== null) await redis.del(keys.legacyProvider);
