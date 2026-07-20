@@ -86,4 +86,17 @@ describe("discovery validity", () => {
       error: false,
     });
   });
+
+  it("accepts Anthropic tool-use partial JSON as deliverable content", () => {
+    const parser = new DiscoveryValidityParser("anthropic");
+
+    expect(
+      parser.push('data: {"type":"content_block_delta","delta":{"partial_json":"{\\"x\\":1}"}}\n\n')
+    ).toMatchObject({ ready: true, error: false });
+    expect(parser.push('data: {"type":"message_stop"}\n\n')).toMatchObject({
+      ready: true,
+      terminal: true,
+      error: false,
+    });
+  });
 });

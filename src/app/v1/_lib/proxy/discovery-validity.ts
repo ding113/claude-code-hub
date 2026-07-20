@@ -27,6 +27,9 @@ function hasContent(value: unknown): boolean {
     "functionCall",
     "function_call",
     "arguments",
+    "partial_json",
+    "id",
+    "name",
     "input",
     "parts",
   ].some((key) => hasContent(object[key]));
