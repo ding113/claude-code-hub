@@ -2843,6 +2843,18 @@ export class SessionManager {
         return false;
       }
 
+      // A binding-aware termination must succeed before any session metadata or
+      // active-session indexes are removed. This guard keeps a future mutation
+      // path from turning a CAS/mirror conflict into a misleading success based
+      // only on unrelated metadata deletions.
+      if (keyId !== null && !bindingTerminated) {
+        logger.warn("SessionManager: Session binding was not terminated", {
+          sessionId,
+          keyId,
+        });
+        return false;
+      }
+
       // 2. 删除所有 Session 相关的 key
       const pipeline = redis.pipeline();
 

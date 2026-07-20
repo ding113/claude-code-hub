@@ -587,6 +587,30 @@ describe("versioned session binding operations", () => {
     expect(mock.evalMock).toHaveBeenCalledTimes(callsAfterFailure);
   });
 
+  it("allows legacy fallback on the first runtime capability error", async () => {
+    const mock = createMockRedis({
+      operationResponses: {
+        [CAS_SESSION_BINDING]: [new Error("ERR script execution disabled")],
+      },
+    });
+
+    const result = await compareAndSetSessionBinding({
+      sessionId: "sid",
+      keyId: 4,
+      expectedGeneration: "generation-a",
+      providerId: 8,
+      redis: mock.redis,
+    });
+
+    expect(result).toMatchObject({
+      status: "unavailable",
+      reason: "capability_unavailable",
+      capabilityState: "unavailable",
+      legacyFallbackAllowed: true,
+    });
+    expect(getVersionedBindingCapabilityState()).toBe("unavailable");
+  });
+
   it("fails closed on malformed binding data without disabling the capability", async () => {
     const mock = createMockRedis({
       operationResponses: {
