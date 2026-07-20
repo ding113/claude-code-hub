@@ -5119,7 +5119,7 @@ export class ProxyForwarder {
       coordinator.addAttempt({
         id,
         providerId: provider.id,
-        priority: provider.priority || 0,
+        priority: ProxyProviderResolver.resolveEffectivePriorityForSession(provider, session),
         kind,
         ready: false,
         pending: true,

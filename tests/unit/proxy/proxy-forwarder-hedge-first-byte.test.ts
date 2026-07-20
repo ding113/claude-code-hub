@@ -4,6 +4,9 @@ import { resolveEndpointPolicy } from "@/app/v1/_lib/proxy/endpoint-policy";
 const mocks = vi.hoisted(() => ({
   pickRandomProviderWithExclusion: vi.fn(),
   pickDiscoveryProviders: vi.fn(),
+  resolveEffectivePriorityForSession: vi.fn(
+    (provider: { priority?: number | null }) => provider.priority ?? 0
+  ),
   recordSuccess: vi.fn(),
   recordFailure: vi.fn(async () => {}),
   getCircuitState: vi.fn(() => "closed"),
@@ -107,6 +110,7 @@ vi.mock("@/app/v1/_lib/proxy/provider-selector", () => ({
   ProxyProviderResolver: {
     pickRandomProviderWithExclusion: mocks.pickRandomProviderWithExclusion,
     pickDiscoveryProviders: mocks.pickDiscoveryProviders,
+    resolveEffectivePriorityForSession: mocks.resolveEffectivePriorityForSession,
   },
 }));
 
