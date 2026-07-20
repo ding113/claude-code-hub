@@ -86,6 +86,16 @@ export class DiscoveryCoordinator {
     this.attempts.delete(id);
   }
 
+  /** Mark an already-running attempt as the sole fallback for this request. */
+  promoteToFallback(id: string): boolean {
+    if (this.isTerminal) return false;
+    const attempt = this.attempts.get(id);
+    if (!attempt?.pending) return false;
+    attempt.kind = "fallback";
+    this.state = "FALLBACK_READY_HELD";
+    return true;
+  }
+
   get isTerminal(): boolean {
     return (
       this.state === "WINNER_COMMITTED" ||

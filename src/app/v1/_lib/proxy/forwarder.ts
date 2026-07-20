@@ -5389,6 +5389,7 @@ export class ProxyForwarder {
             );
             if (sticky) {
               sticky.kind = "fallback";
+              coordinator.promoteToFallback(sticky.id);
               if (bindingSnapshot && bindingSnapshot.providerId === initialProvider.id) {
                 void SessionManager.clearVersionedSessionProvider(
                   bindingSnapshot,

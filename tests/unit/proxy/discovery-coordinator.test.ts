@@ -99,6 +99,14 @@ describe("DiscoveryCoordinator", () => {
     expect(coordinator.markFailed("fallback")).toEqual({ type: "none" });
   });
 
+  it("keeps coordinator kind in sync when a running Sticky becomes fallback", () => {
+    const coordinator = new DiscoveryCoordinator({ concurrency: 2, maxRounds: 2 });
+    coordinator.addAttempt(attempt("sticky", 1));
+
+    expect(coordinator.promoteToFallback("sticky")).toBe(true);
+    expect(coordinator.snapshot.find((item) => item.id === "sticky")?.kind).toBe("fallback");
+  });
+
   it("opens a full new round when all normal attempts fail", () => {
     const coordinator = new DiscoveryCoordinator({ concurrency: 3, maxRounds: 2 });
     coordinator.addAttempt(attempt("a", 1));
