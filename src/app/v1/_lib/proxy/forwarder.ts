@@ -3848,7 +3848,7 @@ export class ProxyForwarder {
       settings.discoveryEnabled === true &&
       endpointPolicy.allowRetry &&
       endpointPolicy.allowProviderSwitch &&
-      message.stream === true &&
+      message?.stream === true &&
       !endpointPolicy.bypassForwarderPreprocessing &&
       protocol !== "unknown" &&
       routing.routingMode !== "lease_conflict_single" &&
