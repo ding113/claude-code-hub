@@ -5,6 +5,7 @@ import { locales } from "@/i18n/config";
 import { emitActionAudit } from "@/lib/audit/emit";
 import { getSession } from "@/lib/auth";
 import { invalidateSystemSettingsCache } from "@/lib/config";
+import { DEFAULT_SETTINGS } from "@/lib/config/system-settings-cache";
 import { logger } from "@/lib/logger";
 import { publishCurrentPublicStatusConfigProjection } from "@/lib/public-status/config-publisher";
 import { schedulePublicStatusRebuild } from "@/lib/public-status/rebuild-hints";
@@ -25,12 +26,7 @@ import type {
 } from "@/types/system-config";
 import type { ActionResult } from "./types";
 
-const DEFAULT_DISCOVERY_WINDOW = {
-  discoverySlaMs: 10_000,
-  stickySlaMs: 20_000,
-  maxDiscoveryRounds: 2,
-  racingTotalTimeoutMs: 60_000,
-} as const;
+const DISCOVERY_WINDOW_INVALID = "DISCOVERY_WINDOW_INVALID";
 
 export async function fetchSystemSettings(): Promise<ActionResult<SystemSettings>> {
   try {
@@ -126,19 +122,16 @@ export async function saveSystemSettings(formData: {
     const validated = UpdateSystemSettingsSchema.parse(formData);
     const effectiveDiscoveryWindow = {
       discoverySlaMs:
-        validated.discoverySlaMs ??
-        before?.discoverySlaMs ??
-        DEFAULT_DISCOVERY_WINDOW.discoverySlaMs,
-      stickySlaMs:
-        validated.stickySlaMs ?? before?.stickySlaMs ?? DEFAULT_DISCOVERY_WINDOW.stickySlaMs,
+        validated.discoverySlaMs ?? before?.discoverySlaMs ?? DEFAULT_SETTINGS.discoverySlaMs,
+      stickySlaMs: validated.stickySlaMs ?? before?.stickySlaMs ?? DEFAULT_SETTINGS.stickySlaMs,
       maxDiscoveryRounds:
         validated.maxDiscoveryRounds ??
         before?.maxDiscoveryRounds ??
-        DEFAULT_DISCOVERY_WINDOW.maxDiscoveryRounds,
+        DEFAULT_SETTINGS.maxDiscoveryRounds,
       racingTotalTimeoutMs:
         validated.racingTotalTimeoutMs ??
         before?.racingTotalTimeoutMs ??
-        DEFAULT_DISCOVERY_WINDOW.racingTotalTimeoutMs,
+        DEFAULT_SETTINGS.racingTotalTimeoutMs,
     };
     if (
       effectiveDiscoveryWindow.racingTotalTimeoutMs <
@@ -147,7 +140,8 @@ export async function saveSystemSettings(formData: {
     ) {
       return {
         ok: false,
-        error: "竞速总超时必须不小于 Sticky SLA + Discovery 轮数 × Discovery SLA",
+        error: "Discovery window validation failed.",
+        errorCode: DISCOVERY_WINDOW_INVALID,
       };
     }
     const updated = await updateSystemSettings({

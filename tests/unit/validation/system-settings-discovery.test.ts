@@ -26,6 +26,16 @@ describe("UpdateSystemSettingsSchema Discovery settings", () => {
     ).toThrow("竞速总超时");
   });
 
+  it("preserves an intentionally shorter Sticky SLA", () => {
+    const result = UpdateSystemSettingsSchema.parse({
+      discoverySlaMs: 10_000,
+      stickySlaMs: 5_000,
+      maxDiscoveryRounds: 2,
+      racingTotalTimeoutMs: 25_000,
+    });
+    expect(result.stickySlaMs).toBe(5_000);
+  });
+
   it("allows partial updates so the server can merge them with stored settings", () => {
     expect(UpdateSystemSettingsSchema.parse({ discoveryEnabled: true })).toEqual({
       discoveryEnabled: true,

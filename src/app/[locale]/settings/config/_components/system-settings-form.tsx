@@ -393,7 +393,11 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
       });
 
       if (!result.ok) {
-        toast.error(result.error || t("saveFailed"));
+        const errorMessage =
+          result.errorCode === "DISCOVERY_WINDOW_INVALID"
+            ? t("discoveryWindowInvalid")
+            : result.error || t("saveFailed");
+        toast.error(errorMessage);
         return;
       }
 

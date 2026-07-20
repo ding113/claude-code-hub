@@ -4847,7 +4847,10 @@ export class ProxyForwarder {
     const concurrency = Math.max(1, Math.floor(settings.discoveryConcurrency ?? 2));
     const maxRounds = Math.max(1, Math.floor(settings.maxDiscoveryRounds ?? 2));
     const discoverySlaMs = Math.max(1, settings.discoverySlaMs ?? 10_000);
-    const stickySlaMs = Math.max(discoverySlaMs, settings.stickySlaMs ?? 20_000);
+    // Respect the configured Sticky budget. The settings validator already
+    // checks the total pre-winner window; a shorter Sticky SLA is a valid
+    // deliberate choice and must not be silently expanded at runtime.
+    const stickySlaMs = Math.max(1, settings.stickySlaMs ?? 20_000);
     const totalTimeoutMs = Math.max(stickySlaMs, settings.racingTotalTimeoutMs ?? 60_000);
     const protocol = ProxyForwarder.discoveryProtocol(session);
     const coordinator = new DiscoveryCoordinator({ concurrency, maxRounds });
@@ -5186,17 +5189,9 @@ export class ProxyForwarder {
               throw new ProxyError("Invalid upstream discovery response", 502);
             }
             if (!validity.ready) continue;
-            const normalPendingHigher = Array.from(attempts.values()).some(
-              (other) =>
-                other.pending &&
-                other.kind === "normal" &&
-                (other.provider.priority || 0) < (provider.priority || 0)
-            );
-            // Once a valid prefix is buffered behind a higher-priority normal
-            // attempt, stop reading. This leaves the reader idle so a later
-            // fallback promotion can transfer it without racing an in-flight
-            // read and losing bytes from the buffered response.
-            if (normalPendingHigher) return;
+            // Record readiness even when the priority gate holds this attempt.
+            // The coordinator can then promote the buffered stream if the
+            // higher-priority attempt fails or the round closes.
             const action = coordinator.markReady(id);
             if (action.type === "commit_normal" || action.type === "promote_fallback")
               await commit(attempt);

@@ -32,7 +32,7 @@ export function getCachedSystemSettingsOnlyCache(): SystemSettings | null {
 }
 
 /** Default settings used when cache fetch fails */
-const DEFAULT_SETTINGS: Pick<
+export const DEFAULT_SETTINGS: Pick<
   SystemSettings,
   | "enableHttp2"
   | "enableOpenaiResponsesWebsocket"
