@@ -3828,7 +3828,13 @@ export class ProxyForwarder {
 
   private static async shouldUseStreamingDiscovery(session: ProxySession): Promise<boolean> {
     const settings = await getCachedSystemSettings();
-    if (SessionManager.getVersionedBindingCapabilityState() !== "available") {
+    if (settings.discoveryEnabled !== true) {
+      return false;
+    }
+    if (
+      typeof SessionManager.getVersionedBindingCapabilityState !== "function" ||
+      SessionManager.getVersionedBindingCapabilityState() !== "available"
+    ) {
       return false;
     }
     const endpointPolicy = ProxyForwarder.getEndpointPolicy(session);
