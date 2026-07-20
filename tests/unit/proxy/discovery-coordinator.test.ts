@@ -44,6 +44,7 @@ describe("DiscoveryCoordinator", () => {
     expect(coordinator.markReady("a", epoch.requestEpoch, epoch.roundEpoch)).toEqual({
       type: "none",
     });
+    expect(coordinator.markFailed("a")).toEqual({ type: "none" });
   });
 
   it("promotes a ready fallback at the round boundary when no normal is ready", () => {

@@ -147,7 +147,7 @@ export class DiscoveryCoordinator {
   ): DiscoveryAction {
     if (!this.acceptsEpoch(requestEpoch, roundEpoch) || this.isTerminal) return { type: "none" };
     const attempt = this.attempts.get(id);
-    if (!attempt) return { type: "none" };
+    if (!attempt?.pending) return { type: "none" };
     attempt.pending = false;
     attempt.ready = false;
     const readyAction = this.chooseReadyNormal();

@@ -5034,6 +5034,15 @@ export class ProxyForwarder {
       return candidates[0];
     };
 
+    const scheduleRoundBoundary = (delayMs: number) => {
+      const epoch = coordinator.epochs;
+      roundTimer = setTimeout(() => {
+        void executeCoordinatorAction(
+          coordinator.onRoundBoundary(epoch.requestEpoch, epoch.roundEpoch)
+        ).catch((error) => logger.warn("[Discovery] Round boundary failed", { error }));
+      }, delayMs);
+    };
+
     const launch = async (provider: Provider, kind: "normal" | "fallback"): Promise<void> => {
       if (settled || committed || launched.has(provider.id)) return;
       launched.add(provider.id);
@@ -5290,11 +5299,7 @@ export class ProxyForwarder {
       }
       if (candidates.length === 0) return;
       if (!committed && !settled) {
-        roundTimer = setTimeout(() => {
-          void onBoundary().catch((error) =>
-            logger.warn("[Discovery] Round boundary failed", { error })
-          );
-        }, discoverySlaMs);
+        scheduleRoundBoundary(discoverySlaMs);
       }
     };
 
@@ -5380,11 +5385,7 @@ export class ProxyForwarder {
       const initial = hasSticky ? concurrency - 1 : Math.max(0, concurrency - 1);
       if (hasSticky) {
         if (stickyProbeFailed) {
-          roundTimer = setTimeout(() => {
-            void onBoundary().catch((error) =>
-              logger.warn("[Discovery] Sticky failure boundary failed", { error })
-            );
-          }, discoverySlaMs);
+          scheduleRoundBoundary(discoverySlaMs);
         } else {
           stickyTimer = setTimeout(() => {
             const sticky = Array.from(attempts.values()).find(
@@ -5429,11 +5430,7 @@ export class ProxyForwarder {
           }
         }
         if (Array.from(attempts.values()).some((attempt) => attempt.pending)) {
-          roundTimer = setTimeout(() => {
-            void onBoundary().catch((error) =>
-              logger.warn("[Discovery] Round boundary failed", { error })
-            );
-          }, discoverySlaMs);
+          scheduleRoundBoundary(discoverySlaMs);
         } else if (!settled && !committed) {
           await settleFailure(ProxyForwarder.buildAllProvidersUnavailableError(lastError));
         }
