@@ -98,6 +98,25 @@ export const SystemSettingsSchema = z
       .describe(
         "Whether streaming-hedge (provider racing) losers are kept alive, drained, and billed (their cost accumulates into the request total)."
       ),
+    discoveryEnabled: z.boolean().describe("Whether bounded streaming Discovery is enabled."),
+    discoveryConcurrency: z
+      .number()
+      .int()
+      .positive()
+      .describe("Maximum number of normal Discovery attempts in the initial batch."),
+    maxDiscoveryRounds: z.number().int().positive().describe("Maximum number of Discovery rounds."),
+    discoverySlaMs: z.number().int().positive().describe("首字 Discovery SLA in milliseconds."),
+    stickySlaMs: z.number().int().positive().describe("Sticky probe SLA in milliseconds."),
+    racingTotalTimeoutMs: z
+      .number()
+      .int()
+      .positive()
+      .describe("Total pre-winner Discovery deadline in milliseconds."),
+    stickyTimeoutCooldownMs: z
+      .number()
+      .int()
+      .positive()
+      .describe("Sticky timeout cooldown in milliseconds."),
     timezone: TimeZoneSchema.nullable().describe(
       "Configured system timezone, or null for default."
     ),

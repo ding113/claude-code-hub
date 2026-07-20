@@ -11885,6 +11885,20 @@ export interface operations {
                         billNonSuccessfulRequests: boolean;
                         /** @description Whether streaming-hedge (provider racing) losers are kept alive, drained, and billed (their cost accumulates into the request total). */
                         billHedgeLosers: boolean;
+                        /** @description Whether bounded streaming Discovery is enabled. */
+                        discoveryEnabled: boolean;
+                        /** @description Maximum number of normal Discovery attempts in the initial batch. */
+                        discoveryConcurrency: number;
+                        /** @description Maximum number of Discovery rounds. */
+                        maxDiscoveryRounds: number;
+                        /** @description 首字 Discovery SLA in milliseconds. */
+                        discoverySlaMs: number;
+                        /** @description Sticky probe SLA in milliseconds. */
+                        stickySlaMs: number;
+                        /** @description Total pre-winner Discovery deadline in milliseconds. */
+                        racingTotalTimeoutMs: number;
+                        /** @description Sticky timeout cooldown in milliseconds. */
+                        stickyTimeoutCooldownMs: number;
                         /** @description Configured system timezone, or null for default. */
                         timezone: string | null;
                         /** @description Whether usage-log cleanup is enabled. */
@@ -12147,6 +12161,20 @@ export interface operations {
                     billNonSuccessfulRequests?: boolean;
                     /** @description Whether streaming-hedge (provider racing) losers are kept alive, drained, and billed (their cost accumulates into the request total). */
                     billHedgeLosers?: boolean;
+                    /** @description Whether bounded streaming Discovery is enabled. */
+                    discoveryEnabled?: boolean;
+                    /** @description Maximum number of normal Discovery attempts in the initial batch. */
+                    discoveryConcurrency?: number;
+                    /** @description Maximum number of Discovery rounds. */
+                    maxDiscoveryRounds?: number;
+                    /** @description 首字 Discovery SLA in milliseconds. */
+                    discoverySlaMs?: number;
+                    /** @description Sticky probe SLA in milliseconds. */
+                    stickySlaMs?: number;
+                    /** @description Total pre-winner Discovery deadline in milliseconds. */
+                    racingTotalTimeoutMs?: number;
+                    /** @description Sticky timeout cooldown in milliseconds. */
+                    stickyTimeoutCooldownMs?: number;
                     /** @description System timezone, or null to use default. */
                     timezone?: string | null;
                     /** @description Whether usage-log cleanup is enabled. */
@@ -12282,6 +12310,20 @@ export interface operations {
                         billNonSuccessfulRequests: boolean;
                         /** @description Whether streaming-hedge (provider racing) losers are kept alive, drained, and billed (their cost accumulates into the request total). */
                         billHedgeLosers: boolean;
+                        /** @description Whether bounded streaming Discovery is enabled. */
+                        discoveryEnabled: boolean;
+                        /** @description Maximum number of normal Discovery attempts in the initial batch. */
+                        discoveryConcurrency: number;
+                        /** @description Maximum number of Discovery rounds. */
+                        maxDiscoveryRounds: number;
+                        /** @description 首字 Discovery SLA in milliseconds. */
+                        discoverySlaMs: number;
+                        /** @description Sticky probe SLA in milliseconds. */
+                        stickySlaMs: number;
+                        /** @description Total pre-winner Discovery deadline in milliseconds. */
+                        racingTotalTimeoutMs: number;
+                        /** @description Sticky timeout cooldown in milliseconds. */
+                        stickyTimeoutCooldownMs: number;
                         /** @description Configured system timezone, or null for default. */
                         timezone: string | null;
                         /** @description Whether usage-log cleanup is enabled. */

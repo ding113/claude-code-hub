@@ -54,6 +54,13 @@ const DEFAULT_SETTINGS: Pick<
   | "passThroughUpstreamErrorMessage"
   | "publicStatusWindowHours"
   | "publicStatusAggregationIntervalMinutes"
+  | "discoveryEnabled"
+  | "discoveryConcurrency"
+  | "maxDiscoveryRounds"
+  | "discoverySlaMs"
+  | "stickySlaMs"
+  | "racingTotalTimeoutMs"
+  | "stickyTimeoutCooldownMs"
 > = {
   enableHttp2: false,
   enableOpenaiResponsesWebsocket: true,
@@ -84,6 +91,13 @@ const DEFAULT_SETTINGS: Pick<
   },
   publicStatusWindowHours: 24,
   publicStatusAggregationIntervalMinutes: 5,
+  discoveryEnabled: false,
+  discoveryConcurrency: 2,
+  maxDiscoveryRounds: 2,
+  discoverySlaMs: 10_000,
+  stickySlaMs: 20_000,
+  racingTotalTimeoutMs: 60_000,
+  stickyTimeoutCooldownMs: 300_000,
 };
 
 /**
@@ -166,13 +180,13 @@ export async function getCachedSystemSettings(): Promise<SystemSettings> {
       publicStatusWindowHours: DEFAULT_SETTINGS.publicStatusWindowHours,
       publicStatusAggregationIntervalMinutes:
         DEFAULT_SETTINGS.publicStatusAggregationIntervalMinutes,
-      discoveryEnabled: false,
-      discoveryConcurrency: 2,
-      maxDiscoveryRounds: 2,
-      discoverySlaMs: 10_000,
-      stickySlaMs: 20_000,
-      racingTotalTimeoutMs: 60_000,
-      stickyTimeoutCooldownMs: 300_000,
+      discoveryEnabled: DEFAULT_SETTINGS.discoveryEnabled,
+      discoveryConcurrency: DEFAULT_SETTINGS.discoveryConcurrency,
+      maxDiscoveryRounds: DEFAULT_SETTINGS.maxDiscoveryRounds,
+      discoverySlaMs: DEFAULT_SETTINGS.discoverySlaMs,
+      stickySlaMs: DEFAULT_SETTINGS.stickySlaMs,
+      racingTotalTimeoutMs: DEFAULT_SETTINGS.racingTotalTimeoutMs,
+      stickyTimeoutCooldownMs: DEFAULT_SETTINGS.stickyTimeoutCooldownMs,
       quotaDbRefreshIntervalSeconds: 10,
       quotaLeasePercent5h: 0.05,
       quotaLeasePercentDaily: 0.05,

@@ -780,6 +780,15 @@ export const systemSettings = pgTable('system_settings', {
   // 关闭：竞速输家直接取消连接，不计费（旧行为）
   billHedgeLosers: boolean('bill_hedge_losers').notNull().default(true),
 
+  // Bounded streaming Discovery (disabled by default until explicitly enabled).
+  discoveryEnabled: boolean('discovery_enabled').notNull().default(false),
+  discoveryConcurrency: integer('discovery_concurrency').notNull().default(2),
+  maxDiscoveryRounds: integer('max_discovery_rounds').notNull().default(2),
+  discoverySlaMs: integer('discovery_sla_ms').notNull().default(10000),
+  stickySlaMs: integer('sticky_sla_ms').notNull().default(20000),
+  racingTotalTimeoutMs: integer('racing_total_timeout_ms').notNull().default(60000),
+  stickyTimeoutCooldownMs: integer('sticky_timeout_cooldown_ms').notNull().default(300000),
+
   // 系统时区配置 (IANA timezone identifier)
   // 用于统一后端时间边界计算和前端日期/时间显示
   // null 表示使用环境变量 TZ 或默认 UTC

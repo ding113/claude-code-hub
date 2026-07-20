@@ -56,9 +56,20 @@ export async function POST(req: Request) {
 
   try {
     const body = await req.json();
+    const current = await getSystemSettings();
 
     // 验证请求数据
     const validated = UpdateSystemSettingsSchema.parse(body);
+    const discoverySlaMs = validated.discoverySlaMs ?? current.discoverySlaMs;
+    const stickySlaMs = validated.stickySlaMs ?? current.stickySlaMs;
+    const maxDiscoveryRounds = validated.maxDiscoveryRounds ?? current.maxDiscoveryRounds;
+    const racingTotalTimeoutMs = validated.racingTotalTimeoutMs ?? current.racingTotalTimeoutMs;
+    if (racingTotalTimeoutMs < stickySlaMs + maxDiscoveryRounds * discoverySlaMs) {
+      return Response.json(
+        { error: "竞速总超时必须不小于 Sticky SLA + Discovery 轮数 × Discovery SLA" },
+        { status: 400 }
+      );
+    }
 
     // 更新系统设置
     const updated = await updateSystemSettings({
@@ -67,6 +78,13 @@ export async function POST(req: Request) {
       currencyDisplay: validated.currencyDisplay,
       billingModelSource: validated.billingModelSource,
       codexPriorityBillingSource: validated.codexPriorityBillingSource,
+      discoveryEnabled: validated.discoveryEnabled,
+      discoveryConcurrency: validated.discoveryConcurrency,
+      maxDiscoveryRounds: validated.maxDiscoveryRounds,
+      discoverySlaMs: validated.discoverySlaMs,
+      stickySlaMs: validated.stickySlaMs,
+      racingTotalTimeoutMs: validated.racingTotalTimeoutMs,
+      stickyTimeoutCooldownMs: validated.stickyTimeoutCooldownMs,
       timezone: validated.timezone,
       enableAutoCleanup: validated.enableAutoCleanup,
       cleanupRetentionDays: validated.cleanupRetentionDays,

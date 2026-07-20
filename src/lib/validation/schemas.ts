@@ -946,205 +946,270 @@ export const UpdateProviderSchema = z
  * 系统设置更新数据验证schema
  * 注意：所有字段均为可选，支持部分更新
  */
-export const UpdateSystemSettingsSchema = z.object({
-  siteTitle: z.string().min(1, "站点标题不能为空").max(128, "站点标题不能超过128个字符").optional(),
-  allowGlobalUsageView: z.boolean().optional(),
-  currencyDisplay: z
-    .enum(
-      Object.keys(CURRENCY_CONFIG) as [
-        keyof typeof CURRENCY_CONFIG,
-        ...Array<keyof typeof CURRENCY_CONFIG>,
-      ],
-      { message: "不支持的货币类型" }
-    )
-    .optional(),
-  // 计费模型来源配置（可选）
-  billingModelSource: z
-    .enum(["original", "redirected"], { message: "不支持的计费模型来源" })
-    .optional(),
-  codexPriorityBillingSource: z
-    .enum(["requested", "actual"], { message: "不支持的 Codex Priority 计费来源" })
-    .optional(),
-  // 系统时区配置（可选）
-  // 必须是有效的 IANA 时区标识符（如 "Asia/Shanghai", "America/New_York"）
-  timezone: z
-    .string()
-    .refine((val) => isValidIANATimezone(val), {
-      message: "无效的时区标识符，请使用 IANA 时区格式（如 Asia/Shanghai）",
-    })
-    .nullable()
-    .optional(),
-  // 日志清理配置（可选）
-  enableAutoCleanup: z.boolean().optional(),
-  cleanupRetentionDays: z.coerce
-    .number()
-    .int("保留天数必须是整数")
-    .min(1, "保留天数不能少于1天")
-    .max(365, "保留天数不能超过365天")
-    .optional(),
-  cleanupSchedule: z.string().min(1, "执行时间不能为空").optional(),
-  cleanupBatchSize: z.coerce
-    .number()
-    .int("批量大小必须是整数")
-    .min(1000, "批量大小不能少于1000")
-    .max(100000, "批量大小不能超过100000")
-    .optional(),
-  // 客户端版本检查配置（可选）
-  enableClientVersionCheck: z.boolean().optional(),
-  // 供应商不可用时是否返回详细错误信息（可选）
-  verboseProviderError: z.boolean().optional(),
-  // 标准代理错误响应是否透传安全脱敏后的上游错误 message（可选）
-  passThroughUpstreamErrorMessage: z.boolean().optional(),
-  // 启用 HTTP/2 连接供应商（可选）
-  enableHttp2: z.boolean().optional(),
-  // 非成功请求按 token 用量计费（可选；默认关闭）
-  billNonSuccessfulRequests: z.boolean().optional(),
-  // 供应商竞速输家计费（可选；默认开启）
-  billHedgeLosers: z.boolean().optional(),
-  // 启用 OpenAI Responses WebSocket 支持（可选，仅 Codex 类型供应商生效）
-  enableOpenaiResponsesWebsocket: z.boolean().optional(),
-  // 高并发模式（可选）
-  enableHighConcurrencyMode: z.boolean().optional(),
-  // 可选拦截 Anthropic Warmup 请求（可选）
-  interceptAnthropicWarmupRequests: z.boolean().optional(),
-  // thinking signature 整流器（可选）
-  enableThinkingSignatureRectifier: z.boolean().optional(),
-  // thinking budget 整流器（可选）
-  enableThinkingBudgetRectifier: z.boolean().optional(),
-  // thinking effort 冲突整流器（可选）
-  enableThinkingEffortConflictRectifier: z.boolean().optional(),
-  // Gemini function id 整流器（可选）
-  enableGeminiFunctionIdRectifier: z.boolean().optional(),
-  // billing header 整流器（可选）
-  enableBillingHeaderRectifier: z.boolean().optional(),
-  // Response API input 整流器（可选）
-  enableResponseInputRectifier: z.boolean().optional(),
-  // 非对话端点跨供应商 fallback（可选）
-  allowNonConversationEndpointProviderFallback: z.boolean().optional(),
-  // Fake 流式输出白名单（可选）。空数组表示显式禁用；缺省 → 使用默认四个图像生成模型。
-  fakeStreamingWhitelist: z
-    .array(
-      z.object({
-        model: z
-          .string()
-          .min(1, "model 不能为空")
-          .max(200, "model 不能超过 200 个字符")
-          .transform((value) => value.trim())
-          .refine((value) => value.length > 0, { message: "model 不能为空" }),
-        groupTags: z
-          .array(
-            z
-              .string()
-              .min(1)
-              .transform((value) => value.trim())
-              .refine((value) => value.length > 0, { message: "groupTag 不能为空" })
-          )
-          .default([])
-          .transform((tags) => Array.from(new Set(tags))),
+export const UpdateSystemSettingsSchema = z
+  .object({
+    siteTitle: z
+      .string()
+      .min(1, "站点标题不能为空")
+      .max(128, "站点标题不能超过128个字符")
+      .optional(),
+    allowGlobalUsageView: z.boolean().optional(),
+    currencyDisplay: z
+      .enum(
+        Object.keys(CURRENCY_CONFIG) as [
+          keyof typeof CURRENCY_CONFIG,
+          ...Array<keyof typeof CURRENCY_CONFIG>,
+        ],
+        { message: "不支持的货币类型" }
+      )
+      .optional(),
+    // 计费模型来源配置（可选）
+    billingModelSource: z
+      .enum(["original", "redirected"], { message: "不支持的计费模型来源" })
+      .optional(),
+    codexPriorityBillingSource: z
+      .enum(["requested", "actual"], { message: "不支持的 Codex Priority 计费来源" })
+      .optional(),
+    // 系统时区配置（可选）
+    // 必须是有效的 IANA 时区标识符（如 "Asia/Shanghai", "America/New_York"）
+    timezone: z
+      .string()
+      .refine((val) => isValidIANATimezone(val), {
+        message: "无效的时区标识符，请使用 IANA 时区格式（如 Asia/Shanghai）",
       })
-    )
-    .superRefine((entries, ctx) => {
-      const seen = new Set<string>();
-      for (let index = 0; index < entries.length; index += 1) {
-        const model = entries[index].model;
-        if (seen.has(model)) {
-          ctx.addIssue({
-            code: z.ZodIssueCode.custom,
-            message: `fakeStreamingWhitelist 模型重复: ${model}`,
-            path: [index, "model"],
-          });
+      .nullable()
+      .optional(),
+    // 日志清理配置（可选）
+    enableAutoCleanup: z.boolean().optional(),
+    cleanupRetentionDays: z.coerce
+      .number()
+      .int("保留天数必须是整数")
+      .min(1, "保留天数不能少于1天")
+      .max(365, "保留天数不能超过365天")
+      .optional(),
+    cleanupSchedule: z.string().min(1, "执行时间不能为空").optional(),
+    cleanupBatchSize: z.coerce
+      .number()
+      .int("批量大小必须是整数")
+      .min(1000, "批量大小不能少于1000")
+      .max(100000, "批量大小不能超过100000")
+      .optional(),
+    // 客户端版本检查配置（可选）
+    enableClientVersionCheck: z.boolean().optional(),
+    // 供应商不可用时是否返回详细错误信息（可选）
+    verboseProviderError: z.boolean().optional(),
+    // 标准代理错误响应是否透传安全脱敏后的上游错误 message（可选）
+    passThroughUpstreamErrorMessage: z.boolean().optional(),
+    // 启用 HTTP/2 连接供应商（可选）
+    enableHttp2: z.boolean().optional(),
+    // 非成功请求按 token 用量计费（可选；默认关闭）
+    billNonSuccessfulRequests: z.boolean().optional(),
+    // 供应商竞速输家计费（可选；默认开启）
+    billHedgeLosers: z.boolean().optional(),
+    // Bounded streaming Discovery（默认关闭；启用前需满足总窗口约束）
+    discoveryEnabled: z.boolean().optional(),
+    discoveryConcurrency: z.coerce
+      .number()
+      .int("Discovery 并发数必须是整数")
+      .min(1, "Discovery 并发数必须大于 0")
+      .max(32, "Discovery 并发数不能超过 32")
+      .optional(),
+    maxDiscoveryRounds: z.coerce
+      .number()
+      .int("Discovery 轮数必须是整数")
+      .min(1, "Discovery 轮数必须大于 0")
+      .max(32, "Discovery 轮数不能超过 32")
+      .optional(),
+    discoverySlaMs: z.coerce
+      .number()
+      .int("Discovery SLA 必须是整数毫秒")
+      .min(1, "Discovery SLA 必须大于 0")
+      .max(300_000, "Discovery SLA 不能超过 300000 毫秒")
+      .optional(),
+    stickySlaMs: z.coerce
+      .number()
+      .int("Sticky SLA 必须是整数毫秒")
+      .min(1, "Sticky SLA 必须大于 0")
+      .max(600_000, "Sticky SLA 不能超过 600000 毫秒")
+      .optional(),
+    racingTotalTimeoutMs: z.coerce
+      .number()
+      .int("竞速总超时必须是整数毫秒")
+      .min(1, "竞速总超时必须大于 0")
+      .max(3_600_000, "竞速总超时不能超过 3600000 毫秒")
+      .optional(),
+    stickyTimeoutCooldownMs: z.coerce
+      .number()
+      .int("Sticky 冷却时间必须是整数毫秒")
+      .min(1, "Sticky 冷却时间必须大于 0")
+      .max(86_400_000, "Sticky 冷却时间不能超过 86400000 毫秒")
+      .optional(),
+    // 启用 OpenAI Responses WebSocket 支持（可选，仅 Codex 类型供应商生效）
+    enableOpenaiResponsesWebsocket: z.boolean().optional(),
+    // 高并发模式（可选）
+    enableHighConcurrencyMode: z.boolean().optional(),
+    // 可选拦截 Anthropic Warmup 请求（可选）
+    interceptAnthropicWarmupRequests: z.boolean().optional(),
+    // thinking signature 整流器（可选）
+    enableThinkingSignatureRectifier: z.boolean().optional(),
+    // thinking budget 整流器（可选）
+    enableThinkingBudgetRectifier: z.boolean().optional(),
+    // thinking effort 冲突整流器（可选）
+    enableThinkingEffortConflictRectifier: z.boolean().optional(),
+    // Gemini function id 整流器（可选）
+    enableGeminiFunctionIdRectifier: z.boolean().optional(),
+    // billing header 整流器（可选）
+    enableBillingHeaderRectifier: z.boolean().optional(),
+    // Response API input 整流器（可选）
+    enableResponseInputRectifier: z.boolean().optional(),
+    // 非对话端点跨供应商 fallback（可选）
+    allowNonConversationEndpointProviderFallback: z.boolean().optional(),
+    // Fake 流式输出白名单（可选）。空数组表示显式禁用；缺省 → 使用默认四个图像生成模型。
+    fakeStreamingWhitelist: z
+      .array(
+        z.object({
+          model: z
+            .string()
+            .min(1, "model 不能为空")
+            .max(200, "model 不能超过 200 个字符")
+            .transform((value) => value.trim())
+            .refine((value) => value.length > 0, { message: "model 不能为空" }),
+          groupTags: z
+            .array(
+              z
+                .string()
+                .min(1)
+                .transform((value) => value.trim())
+                .refine((value) => value.length > 0, { message: "groupTag 不能为空" })
+            )
+            .default([])
+            .transform((tags) => Array.from(new Set(tags))),
+        })
+      )
+      .superRefine((entries, ctx) => {
+        const seen = new Set<string>();
+        for (let index = 0; index < entries.length; index += 1) {
+          const model = entries[index].model;
+          if (seen.has(model)) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              message: `fakeStreamingWhitelist 模型重复: ${model}`,
+              path: [index, "model"],
+            });
+          }
+          seen.add(model);
         }
-        seen.add(model);
-      }
-    })
-    .optional(),
-  // Codex Session ID 补全（可选）
-  enableCodexSessionIdCompletion: z.boolean().optional(),
-  // Claude metadata.user_id 注入（可选）
-  enableClaudeMetadataUserIdInjection: z.boolean().optional(),
-  // 响应整流（可选）
-  enableResponseFixer: z.boolean().optional(),
-  responseFixerConfig: z
-    .object({
-      fixTruncatedJson: z.boolean().optional(),
-      fixSseFormat: z.boolean().optional(),
-      fixEncoding: z.boolean().optional(),
-      maxJsonDepth: z.coerce.number().int("maxJsonDepth 必须是整数").min(1).max(2000).optional(),
-      maxFixSize: z.coerce
-        .number()
-        .int("maxFixSize 必须是整数")
-        .min(1024)
-        .max(10 * 1024 * 1024)
-        .optional(),
-    })
-    .partial()
-    .optional(),
+      })
+      .optional(),
+    // Codex Session ID 补全（可选）
+    enableCodexSessionIdCompletion: z.boolean().optional(),
+    // Claude metadata.user_id 注入（可选）
+    enableClaudeMetadataUserIdInjection: z.boolean().optional(),
+    // 响应整流（可选）
+    enableResponseFixer: z.boolean().optional(),
+    responseFixerConfig: z
+      .object({
+        fixTruncatedJson: z.boolean().optional(),
+        fixSseFormat: z.boolean().optional(),
+        fixEncoding: z.boolean().optional(),
+        maxJsonDepth: z.coerce.number().int("maxJsonDepth 必须是整数").min(1).max(2000).optional(),
+        maxFixSize: z.coerce
+          .number()
+          .int("maxFixSize 必须是整数")
+          .min(1024)
+          .max(10 * 1024 * 1024)
+          .optional(),
+      })
+      .partial()
+      .optional(),
 
-  // Quota lease settings
-  quotaDbRefreshIntervalSeconds: z.coerce
-    .number()
-    .int("DB refresh interval must be an integer")
-    .min(1, "DB refresh interval cannot be less than 1 second")
-    .max(300, "DB refresh interval cannot exceed 300 seconds")
-    .optional(),
-  quotaLeasePercent5h: z.coerce
-    .number()
-    .min(0, "Lease percent cannot be negative")
-    .max(1, "Lease percent cannot exceed 1")
-    .optional(),
-  quotaLeasePercentDaily: z.coerce
-    .number()
-    .min(0, "Lease percent cannot be negative")
-    .max(1, "Lease percent cannot exceed 1")
-    .optional(),
-  quotaLeasePercentWeekly: z.coerce
-    .number()
-    .min(0, "Lease percent cannot be negative")
-    .max(1, "Lease percent cannot exceed 1")
-    .optional(),
-  quotaLeasePercentMonthly: z.coerce
-    .number()
-    .min(0, "Lease percent cannot be negative")
-    .max(1, "Lease percent cannot exceed 1")
-    .optional(),
-  quotaLeaseCapUsd: z.coerce.number().min(0, "Lease cap cannot be negative").nullable().optional(),
-  publicStatusWindowHours: z.coerce
-    .number()
-    .int("PUBLIC_STATUS_WINDOW_INVALID_INT")
-    .min(1, "PUBLIC_STATUS_WINDOW_TOO_SMALL")
-    .max(MAX_PUBLIC_STATUS_RANGE_HOURS, "PUBLIC_STATUS_WINDOW_TOO_LARGE")
-    .optional(),
-  publicStatusAggregationIntervalMinutes: z.coerce
-    .number()
-    .int("PUBLIC_STATUS_INTERVAL_INVALID_INT")
-    .refine(
-      (value) =>
-        PUBLIC_STATUS_INTERVAL_OPTIONS.includes(
-          value as (typeof PUBLIC_STATUS_INTERVAL_OPTIONS)[number]
-        ),
-      {
-        message: "PUBLIC_STATUS_INTERVAL_INVALID",
-      }
-    )
-    .optional(),
+    // Quota lease settings
+    quotaDbRefreshIntervalSeconds: z.coerce
+      .number()
+      .int("DB refresh interval must be an integer")
+      .min(1, "DB refresh interval cannot be less than 1 second")
+      .max(300, "DB refresh interval cannot exceed 300 seconds")
+      .optional(),
+    quotaLeasePercent5h: z.coerce
+      .number()
+      .min(0, "Lease percent cannot be negative")
+      .max(1, "Lease percent cannot exceed 1")
+      .optional(),
+    quotaLeasePercentDaily: z.coerce
+      .number()
+      .min(0, "Lease percent cannot be negative")
+      .max(1, "Lease percent cannot exceed 1")
+      .optional(),
+    quotaLeasePercentWeekly: z.coerce
+      .number()
+      .min(0, "Lease percent cannot be negative")
+      .max(1, "Lease percent cannot exceed 1")
+      .optional(),
+    quotaLeasePercentMonthly: z.coerce
+      .number()
+      .min(0, "Lease percent cannot be negative")
+      .max(1, "Lease percent cannot exceed 1")
+      .optional(),
+    quotaLeaseCapUsd: z.coerce
+      .number()
+      .min(0, "Lease cap cannot be negative")
+      .nullable()
+      .optional(),
+    publicStatusWindowHours: z.coerce
+      .number()
+      .int("PUBLIC_STATUS_WINDOW_INVALID_INT")
+      .min(1, "PUBLIC_STATUS_WINDOW_TOO_SMALL")
+      .max(MAX_PUBLIC_STATUS_RANGE_HOURS, "PUBLIC_STATUS_WINDOW_TOO_LARGE")
+      .optional(),
+    publicStatusAggregationIntervalMinutes: z.coerce
+      .number()
+      .int("PUBLIC_STATUS_INTERVAL_INVALID_INT")
+      .refine(
+        (value) =>
+          PUBLIC_STATUS_INTERVAL_OPTIONS.includes(
+            value as (typeof PUBLIC_STATUS_INTERVAL_OPTIONS)[number]
+          ),
+        {
+          message: "PUBLIC_STATUS_INTERVAL_INVALID",
+        }
+      )
+      .optional(),
 
-  // 客户端 IP 提取链（可选；null 表示使用内置默认）
-  ipExtractionConfig: z
-    .union([
-      z.null(),
-      z.object({
-        headers: z.array(
-          z.object({
-            name: z.string(),
-            pick: XFF_PICK_SCHEMA.optional(),
-          })
-        ),
-      }),
-    ])
-    .optional(),
-  // 是否启用 IP 归属地查询（可选）
-  ipGeoLookupEnabled: z.boolean().optional(),
-});
+    // 客户端 IP 提取链（可选；null 表示使用内置默认）
+    ipExtractionConfig: z
+      .union([
+        z.null(),
+        z.object({
+          headers: z.array(
+            z.object({
+              name: z.string(),
+              pick: XFF_PICK_SCHEMA.optional(),
+            })
+          ),
+        }),
+      ])
+      .optional(),
+    // 是否启用 IP 归属地查询（可选）
+    ipGeoLookupEnabled: z.boolean().optional(),
+  })
+  .superRefine((data, ctx) => {
+    const values = [
+      data.racingTotalTimeoutMs,
+      data.stickySlaMs,
+      data.maxDiscoveryRounds,
+      data.discoverySlaMs,
+    ];
+    if (values.every((value) => value !== undefined)) {
+      const requiredWindow = data.stickySlaMs! + data.maxDiscoveryRounds! * data.discoverySlaMs!;
+      if (data.racingTotalTimeoutMs! < requiredWindow) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["racingTotalTimeoutMs"],
+          message: "竞速总超时必须不小于 Sticky SLA + Discovery 轮数 × Discovery SLA",
+        });
+      }
+    }
+  });
 
 // 导出类型推断
 

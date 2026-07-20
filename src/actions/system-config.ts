@@ -64,6 +64,13 @@ export async function saveSystemSettings(formData: {
   codexPriorityBillingSource?: CodexPriorityBillingSource;
   billNonSuccessfulRequests?: boolean;
   billHedgeLosers?: boolean;
+  discoveryEnabled?: boolean;
+  discoveryConcurrency?: number;
+  maxDiscoveryRounds?: number;
+  discoverySlaMs?: number;
+  stickySlaMs?: number;
+  racingTotalTimeoutMs?: number;
+  stickyTimeoutCooldownMs?: number;
   timezone?: string | null;
   enableAutoCleanup?: boolean;
   cleanupRetentionDays?: number;
@@ -110,6 +117,22 @@ export async function saveSystemSettings(formData: {
 
     before = await getSystemSettings();
     const validated = UpdateSystemSettingsSchema.parse(formData);
+    const effectiveDiscoveryWindow = {
+      discoverySlaMs: validated.discoverySlaMs ?? before.discoverySlaMs,
+      stickySlaMs: validated.stickySlaMs ?? before.stickySlaMs,
+      maxDiscoveryRounds: validated.maxDiscoveryRounds ?? before.maxDiscoveryRounds,
+      racingTotalTimeoutMs: validated.racingTotalTimeoutMs ?? before.racingTotalTimeoutMs,
+    };
+    if (
+      effectiveDiscoveryWindow.racingTotalTimeoutMs <
+      effectiveDiscoveryWindow.stickySlaMs +
+        effectiveDiscoveryWindow.maxDiscoveryRounds * effectiveDiscoveryWindow.discoverySlaMs
+    ) {
+      return {
+        ok: false,
+        error: "竞速总超时必须不小于 Sticky SLA + Discovery 轮数 × Discovery SLA",
+      };
+    }
     const updated = await updateSystemSettings({
       siteTitle: validated.siteTitle?.trim(),
       allowGlobalUsageView: validated.allowGlobalUsageView,
@@ -118,6 +141,13 @@ export async function saveSystemSettings(formData: {
       codexPriorityBillingSource: validated.codexPriorityBillingSource,
       billNonSuccessfulRequests: validated.billNonSuccessfulRequests,
       billHedgeLosers: validated.billHedgeLosers,
+      discoveryEnabled: validated.discoveryEnabled,
+      discoveryConcurrency: validated.discoveryConcurrency,
+      maxDiscoveryRounds: validated.maxDiscoveryRounds,
+      discoverySlaMs: validated.discoverySlaMs,
+      stickySlaMs: validated.stickySlaMs,
+      racingTotalTimeoutMs: validated.racingTotalTimeoutMs,
+      stickyTimeoutCooldownMs: validated.stickyTimeoutCooldownMs,
       timezone: validated.timezone,
       enableAutoCleanup: validated.enableAutoCleanup,
       cleanupRetentionDays: validated.cleanupRetentionDays,
