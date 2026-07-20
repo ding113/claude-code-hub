@@ -57,6 +57,7 @@ export interface SessionBindingRedisClient {
   eval(script: string, numberOfKeys: number, ...args: Array<string | number>): Promise<unknown>;
   evalsha?(sha1: string, numberOfKeys: number, ...args: Array<string | number>): Promise<unknown>;
   get(key: string): Promise<string | null>;
+  hget?(key: string, field: string): Promise<string | null>;
   del(...keys: string[]): Promise<number>;
   exists(key: string): Promise<number>;
   expire(key: string, ttlSeconds: number): Promise<number>;
@@ -869,13 +870,20 @@ async function rejectLegacyMutationAfterCanonicalAppeared(
 
   if (restoreProviderValue !== undefined) {
     try {
-      await redis.eval(
-        RESTORE_LEGACY_PROVIDER_IF_ABSENT,
-        1,
-        keys.legacyProvider,
-        restoreProviderValue.value,
-        restoreProviderValue.ttlSeconds.toString()
-      );
+      // The canonical hash and legacy mirror intentionally use different
+      // cluster slots. Read the canonical provider first, then use a
+      // single-key conditional write so we only restore a mirror that still
+      // belongs to the canonical binding observed by this fallback path.
+      const canonicalProvider = await redis.hget?.(keys.canonical, "provider_id");
+      if (canonicalProvider === restoreProviderValue.value) {
+        await redis.eval(
+          RESTORE_LEGACY_PROVIDER_IF_ABSENT,
+          1,
+          keys.legacyProvider,
+          restoreProviderValue.value,
+          restoreProviderValue.ttlSeconds.toString()
+        );
+      }
     } catch (error) {
       logger.warn("Legacy binding mirror restoration could not execute atomically", {
         error: error instanceof Error ? error.message : String(error),

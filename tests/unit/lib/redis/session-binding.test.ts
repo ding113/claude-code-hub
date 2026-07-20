@@ -85,6 +85,7 @@ function createMockRedis(options: MockRedisOptions = {}) {
     if (probeCooldowns.has(key)) return probeCooldowns.get(key) ?? null;
     return options.cooldownValue ?? null;
   });
+  const hgetMock = vi.fn(async (_key: string, _field: string) => null as string | null);
   const delMock = vi.fn(async (..._keys: string[]) => {
     if (cleanupFails) throw new Error("cleanup failed");
     return 4;
@@ -118,6 +119,7 @@ function createMockRedis(options: MockRedisOptions = {}) {
     eval: evalMock,
     ...(options.evalSha ? { evalsha: evalShaMock } : {}),
     get: getMock,
+    hget: hgetMock,
     del: delMock,
     exists: existsMock,
     expire: expireMock,
@@ -132,6 +134,7 @@ function createMockRedis(options: MockRedisOptions = {}) {
     evalMock,
     evalShaMock,
     getMock,
+    hgetMock,
     delMock,
     existsMock,
     expireMock,
@@ -866,6 +869,7 @@ describe("versioned session binding operations", () => {
       if (key === "session:sid:provider") return provider;
       return null;
     });
+    mock.hgetMock.mockResolvedValue("8");
     mock.delMock.mockImplementation(async (key: string) => {
       if (key === "session:sid:provider") provider = null;
       return 1;
@@ -890,6 +894,44 @@ describe("versioned session binding operations", () => {
       "session:sid:provider",
       "8",
       "300"
+    );
+  });
+
+  it("does not restore a mirror when the concurrent canonical binding is a null tombstone", async () => {
+    let provider: string | null = "8";
+    const mock = createMockRedis();
+    let existsCalls = 0;
+    mock.existsMock.mockImplementation(async () => {
+      existsCalls += 1;
+      return existsCalls === 3 ? 1 : 0;
+    });
+    mock.getMock.mockImplementation(async (key: string) => {
+      if (key === "session:sid:key") return "4";
+      if (key === "session:sid:provider") return provider;
+      return null;
+    });
+    mock.hgetMock.mockResolvedValue(null);
+    mock.delMock.mockImplementation(async (key: string) => {
+      if (key === "session:sid:provider") provider = null;
+      return 1;
+    });
+
+    const result = await mutateLegacySessionBindingSafely({
+      sessionId: "sid",
+      keyId: 4,
+      redis: mock.redis,
+      mutation: { type: "clear", expectedProviderId: 8 },
+    });
+
+    expect(result).toMatchObject({ status: "conflict", reason: "canonical_exists" });
+    expect(provider).toBeNull();
+    expect(mock.evalMock).not.toHaveBeenCalledWith(
+      RESTORE_LEGACY_PROVIDER_IF_ABSENT,
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+      expect.anything()
     );
   });
 
