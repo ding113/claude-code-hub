@@ -3831,10 +3831,13 @@ export class ProxyForwarder {
     if (settings.discoveryEnabled !== true) {
       return false;
     }
-    if (
-      typeof SessionManager.getVersionedBindingCapabilityState !== "function" ||
-      SessionManager.getVersionedBindingCapabilityState() !== "available"
-    ) {
+    const capabilityState =
+      typeof SessionManager.ensureVersionedBindingCapability === "function"
+        ? await SessionManager.ensureVersionedBindingCapability()
+        : typeof SessionManager.getVersionedBindingCapabilityState === "function"
+          ? SessionManager.getVersionedBindingCapabilityState()
+          : "unknown";
+    if (capabilityState !== "available") {
       return false;
     }
     const endpointPolicy = ProxyForwarder.getEndpointPolicy(session);

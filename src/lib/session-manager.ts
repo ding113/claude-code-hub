@@ -34,6 +34,7 @@ import {
 import {
   clearSessionBinding as clearVersionedSessionBinding,
   compareAndSetSessionBinding,
+  ensureVersionedBindingCapability,
   mutateLegacySessionBindingSafely,
   readOrReconcileSessionBinding,
   isSessionProviderCoolingDown as readSessionProviderCooldown,
@@ -666,6 +667,10 @@ export class SessionManager {
 
   static getVersionedBindingCapabilityState(): VersionedBindingCapabilityState {
     return readVersionedBindingCapabilityState();
+  }
+
+  static async ensureVersionedBindingCapability(): Promise<VersionedBindingCapabilityState> {
+    return ensureVersionedBindingCapability();
   }
 
   static async getSessionBindingSnapshot(
