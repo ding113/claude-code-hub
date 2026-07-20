@@ -5,6 +5,10 @@ import {
   getUserActiveSessionsKey,
 } from "@/lib/redis/active-session-keys";
 import { getRedisClient } from "./redis";
+import {
+  getVersionedBindingCapabilityState,
+  mutateLegacySessionBindingSafely,
+} from "./redis/session-binding";
 
 const PROVIDER_ACTIVE_SESSIONS_PATTERN = /^provider:(\d+):active_sessions$/;
 
@@ -197,8 +201,24 @@ export class SessionTracker {
 
     try {
       const now = Date.now();
-      const pipeline = redis.pipeline();
       const ttlSeconds = SessionTracker.SESSION_TTL_SECONDS;
+      if (getVersionedBindingCapabilityState() === "unavailable") {
+        const legacyRefresh = await mutateLegacySessionBindingSafely({
+          sessionId,
+          keyId,
+          ttlSeconds,
+          redis,
+          mutation: { type: "refresh" },
+        });
+        if (legacyRefresh.status !== "ok") {
+          logger.warn("SessionTracker: Legacy binding TTL refresh blocked", {
+            sessionId,
+            keyId,
+            reason: legacyRefresh.reason,
+          });
+        }
+      }
+      const pipeline = redis.pipeline();
       const providerZSetKey = `provider:${providerId}:active_sessions`;
       const providerRefKey = `provider:${providerId}:active_session_refs`;
       const globalKey = getGlobalActiveSessionsKey();
@@ -222,10 +242,6 @@ export class SessionTracker {
         commandIndex++;
       }
 
-      pipeline.expire(`session:${sessionId}:provider`, ttlSeconds);
-      commandIndex++;
-      pipeline.expire(`session:${sessionId}:key`, ttlSeconds);
-      commandIndex++;
       pipeline.setex(`session:${sessionId}:last_seen`, ttlSeconds, now.toString());
       commandIndex++;
 

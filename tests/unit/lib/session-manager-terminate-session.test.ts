@@ -2,6 +2,15 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 let redisClientRef: any;
 let pipelineRef: any;
+const bindingMocks = vi.hoisted(() => ({
+  clearSessionBinding: vi.fn(),
+  compareAndSetSessionBinding: vi.fn(),
+  isSessionProviderCoolingDown: vi.fn(),
+  mutateLegacySessionBindingSafely: vi.fn(),
+  readOrReconcileSessionBinding: vi.fn(),
+  refreshSessionBinding: vi.fn(),
+  terminateSessionBinding: vi.fn(),
+}));
 
 vi.mock("server-only", () => ({}));
 
@@ -17,6 +26,11 @@ vi.mock("@/lib/logger", () => ({
 
 vi.mock("@/lib/redis", () => ({
   getRedisClient: () => redisClientRef,
+}));
+
+vi.mock("@/lib/redis/session-binding", () => ({
+  ...bindingMocks,
+  getVersionedBindingCapabilityState: () => "unavailable",
 }));
 
 describe("SessionManager.terminateSession", () => {
@@ -39,6 +53,17 @@ describe("SessionManager.terminateSession", () => {
       eval: vi.fn(async () => 1),
       pipeline: vi.fn(() => pipelineRef),
     };
+    bindingMocks.readOrReconcileSessionBinding.mockResolvedValue({
+      status: "unavailable",
+      reason: "capability_unavailable",
+      capabilityState: "unavailable",
+      legacyFallbackAllowed: true,
+    });
+    bindingMocks.mutateLegacySessionBindingSafely.mockResolvedValue({
+      status: "ok",
+      changed: true,
+      providerId: null,
+    });
   });
 
   it("应同时从 global/key/user 的 active_sessions ZSET 中移除 sessionId（若可解析到 userId）", async () => {
@@ -89,22 +114,69 @@ describe("SessionManager.terminateSession", () => {
   it("迟到 cleanup 仅删除仍绑定到预期 provider 的 session", async () => {
     const { SessionManager } = await import("@/lib/session-manager");
 
-    await expect(SessionManager.clearSessionProvider("sess_compare", 42)).resolves.toBe(true);
+    await expect(SessionManager.clearSessionProvider("sess_compare", 42, 7)).resolves.toBe(true);
 
-    expect(redisClientRef.eval).toHaveBeenCalledWith(
-      expect.stringContaining('redis.call("GET", KEYS[1]) == ARGV[1]'),
-      1,
-      "session:sess_compare:provider",
-      "42"
+    expect(bindingMocks.mutateLegacySessionBindingSafely).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionId: "sess_compare",
+        keyId: 7,
+        mutation: { type: "clear", expectedProviderId: 42 },
+      })
     );
-    expect(redisClientRef.del).not.toHaveBeenCalled();
   });
 
   it("迟到 cleanup 不删除已切换到新 provider 的 session", async () => {
-    redisClientRef.eval.mockResolvedValueOnce(0);
+    bindingMocks.mutateLegacySessionBindingSafely.mockResolvedValueOnce({
+      status: "conflict",
+      reason: "provider_mismatch",
+      legacyFallbackAllowed: false,
+    });
     const { SessionManager } = await import("@/lib/session-manager");
 
-    await expect(SessionManager.clearSessionProvider("sess_compare", 42)).resolves.toBe(false);
+    await expect(SessionManager.clearSessionProvider("sess_compare", 42, 7)).resolves.toBe(false);
     expect(redisClientRef.del).not.toHaveBeenCalled();
+  });
+
+  it("versioned termination leaves an owned tombstone instead of deleting mirrors", async () => {
+    const sessionId = "sess_versioned";
+    redisClientRef.get.mockImplementation(async (key: string) => {
+      if (key === `session:${sessionId}:provider`) return "42";
+      if (key === `session:${sessionId}:key`) return "7";
+      return null;
+    });
+    bindingMocks.readOrReconcileSessionBinding.mockResolvedValue({
+      status: "ok",
+      source: "existing",
+      snapshot: {
+        sessionId,
+        keyId: 7,
+        providerId: 42,
+        generation: "generation-a",
+      },
+      legacyFallbackAllowed: false,
+    });
+    bindingMocks.terminateSessionBinding.mockResolvedValue({
+      status: "ok",
+      source: "terminated",
+      snapshot: {
+        sessionId,
+        keyId: 7,
+        providerId: null,
+        generation: "generation-b",
+      },
+      legacyFallbackAllowed: false,
+    });
+    const { SessionManager } = await import("@/lib/session-manager");
+
+    await expect(SessionManager.terminateSession(sessionId)).resolves.toBe(true);
+
+    expect(bindingMocks.terminateSessionBinding).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionId,
+        keyId: 7,
+      })
+    );
+    expect(pipelineRef.del).not.toHaveBeenCalledWith(`session:${sessionId}:provider`);
+    expect(pipelineRef.del).not.toHaveBeenCalledWith(`session:${sessionId}:key`);
   });
 });

@@ -10,6 +10,7 @@ export default createTestRunnerConfig({
     "tests/integration/my-usage-imported-ledger.test.ts",
     "tests/integration/rolling-cost-redis.test.ts",
     "tests/integration/lease-settlement-redis.test.ts",
+    "tests/integration/session-binding-versioning-redis.test.ts",
     "tests/integration/db-pool-isolation-postgres.test.ts",
     "tests/integration/db-pool-slow-close-postgres.test.ts",
     "tests/integration/message-write-buffer-recovery-postgres.test.ts",

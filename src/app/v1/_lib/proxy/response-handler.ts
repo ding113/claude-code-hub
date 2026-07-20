@@ -1149,7 +1149,8 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
   const providerIdForPersistence = meta?.providerId ?? provider?.id ?? null;
   const clearSessionBinding = async () => {
     if (!session.sessionId) return;
-    await SessionManager.clearSessionProvider(session.sessionId, providerIdForPersistence);
+    const keyId = session.authState?.key?.id ?? session.messageContext?.key?.id ?? null;
+    await SessionManager.clearSessionProvider(session.sessionId, providerIdForPersistence, keyId);
   };
 
   const isHedgeWinner = meta?.isHedgeWinner === true;
@@ -1806,7 +1807,8 @@ export class ProxyResponseHandler {
             if (session.sessionId) {
               const sessionId = session.sessionId;
               postTerminalSideEffects.push(async () => {
-                await SessionManager.clearSessionProvider(sessionId, provider.id);
+                const keyId = session.authState?.key?.id ?? session.messageContext?.key?.id ?? null;
+                await SessionManager.clearSessionProvider(sessionId, provider.id, keyId);
               });
             }
             if (
@@ -1976,7 +1978,8 @@ export class ProxyResponseHandler {
         if (session.sessionId) {
           const sessionId = session.sessionId;
           postTerminalSideEffects.push(async () => {
-            await SessionManager.clearSessionProvider(sessionId, provider.id);
+            const keyId = session.authState?.key?.id ?? session.messageContext?.key?.id ?? null;
+            await SessionManager.clearSessionProvider(sessionId, provider.id, keyId);
 
             const sessionUsagePayload: SessionUsageUpdate = {
               status:

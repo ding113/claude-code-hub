@@ -357,7 +357,12 @@ function setupCommonMocks() {
     updatedAt: new Date(),
   });
   vi.mocked(updateMessageRequestDetails).mockResolvedValue(undefined);
-  vi.mocked(updateMessageRequestDetailsDurably).mockResolvedValue(true);
+  vi.mocked(updateMessageRequestDetailsDurably).mockImplementation(
+    async (_messageId, _details, options) => {
+      await options?.onCommitted?.();
+      return true;
+    }
+  );
   vi.mocked(updateMessageRequestDuration).mockResolvedValue(undefined);
   vi.mocked(SessionManager.storeSessionResponse).mockResolvedValue(undefined);
   vi.mocked(SessionManager.clearSessionProvider).mockResolvedValue(undefined);
@@ -409,7 +414,7 @@ describe("Endpoint circuit breaker isolation", () => {
       expect.objectContaining({ message: expect.stringContaining("FAKE_200") })
     );
     expect(mockRecordEndpointFailure).not.toHaveBeenCalled();
-    expect(SessionManager.clearSessionProvider).toHaveBeenCalledWith("fake-session", 1);
+    expect(SessionManager.clearSessionProvider).toHaveBeenCalledWith("fake-session", 1, 456);
 
     const chain = session.getProviderChain();
     expect(
@@ -438,7 +443,7 @@ describe("Endpoint circuit breaker isolation", () => {
       expect.objectContaining({ message: expect.stringContaining("FAKE_200") })
     );
     expect(mockRecordEndpointFailure).not.toHaveBeenCalled();
-    expect(SessionManager.clearSessionProvider).toHaveBeenCalledWith("fake-session", 1);
+    expect(SessionManager.clearSessionProvider).toHaveBeenCalledWith("fake-session", 1, 456);
     expect(SessionManager.updateSessionUsage).not.toHaveBeenCalled();
     expect(SessionTracker.refreshSession).not.toHaveBeenCalled();
   });
@@ -454,7 +459,7 @@ describe("Endpoint circuit breaker isolation", () => {
 
     expect(mockRecordFailure).not.toHaveBeenCalled();
     expect(mockRecordEndpointFailure).not.toHaveBeenCalled();
-    expect(SessionManager.clearSessionProvider).toHaveBeenCalledWith("fake-session", 1);
+    expect(SessionManager.clearSessionProvider).toHaveBeenCalledWith("fake-session", 1, 456);
 
     const chain = session.getProviderChain();
     expect(

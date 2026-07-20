@@ -116,6 +116,16 @@ describe("getRedisClient", () => {
     expect(mocks.MockRedis).toHaveBeenCalledTimes(1);
   });
 
+  it("replaces the singleton when REDIS_URL changes", () => {
+    getRedisClient({ allowWhenRateLimitDisabled: true });
+    process.env.REDIS_URL = "redis://localhost:6380";
+
+    getRedisClient({ allowWhenRateLimitDisabled: true });
+
+    expect(mocks.mockDisconnect).toHaveBeenCalledTimes(1);
+    expect(mocks.MockRedis).toHaveBeenCalledTimes(2);
+  });
+
   it("creates new client when existing singleton has status=end", () => {
     getRedisClient({ allowWhenRateLimitDisabled: true });
     mocks.state.status = "end";

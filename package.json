@@ -30,6 +30,7 @@
     "test:coverage:proxy-guard-pipeline": "vitest run --config tests/configs/proxy-guard-pipeline.config.ts --coverage",
     "test:coverage:include-session-id-in-errors": "vitest run --config tests/configs/include-session-id-in-errors.config.ts --coverage",
     "test:coverage:usage-logs-sessionid-search": "vitest run --config tests/configs/usage-logs-sessionid-search.config.ts --coverage",
+    "test:coverage:session-binding": "vitest run --config tests/configs/session-binding.config.ts --coverage",
     "test:ci": "vitest run --reporter=default --reporter=junit --outputFile.junit=reports/vitest-junit.xml",
     "test:v1": "vitest run --config tests/configs/v1.config.ts --coverage --reporter=verbose && bun scripts/check-v1-critical-coverage.ts",
     "openapi:generate": "bun scripts/generate-v1-types.ts",

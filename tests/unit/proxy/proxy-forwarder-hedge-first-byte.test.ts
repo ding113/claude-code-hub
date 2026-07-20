@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   updateSessionBindingSmart: vi.fn(async () => ({ updated: true, reason: "test" })),
   updateSessionProvider: vi.fn(async () => {}),
   clearSessionProvider: vi.fn(async () => {}),
+  clearSessionProviders: vi.fn(async () => false),
   isHttp2Enabled: vi.fn(async () => false),
   getPreferredProviderEndpoints: vi.fn(async () => []),
   getEndpointFilterStats: vi.fn(async () => null),
@@ -92,6 +93,7 @@ vi.mock("@/lib/session-manager", () => ({
     updateSessionBindingSmart: mocks.updateSessionBindingSmart,
     updateSessionProvider: mocks.updateSessionProvider,
     clearSessionProvider: mocks.clearSessionProvider,
+    clearSessionProviders: mocks.clearSessionProviders,
     storeSessionSpecialSettings: mocks.storeSessionSpecialSettings,
     storeSessionRequestPhaseSnapshot: mocks.storeSessionRequestPhaseSnapshot,
     storeSessionResponsePhaseSnapshot: mocks.storeSessionResponsePhaseSnapshot,
@@ -1454,7 +1456,7 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
       await rejection;
       expect(controller1.signal.aborted).toBe(true);
       expect(controller2.signal.aborted).toBe(true);
-      expect(mocks.clearSessionProvider).toHaveBeenCalledWith("sess-hedge", 1);
+      expect(mocks.clearSessionProviders).toHaveBeenCalledWith("sess-hedge", new Set([1, 2]), null);
       expect(mocks.recordFailure).not.toHaveBeenCalled();
       expect(mocks.recordSuccess).not.toHaveBeenCalled();
 
@@ -1646,7 +1648,11 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
         expect(error.message).toBe("所有供应商暂时不可用，请稍后重试");
         expect(error.message).not.toContain("invalid key");
         expect(error.message).not.toContain("model not found");
-        expect(mocks.clearSessionProvider).toHaveBeenCalledWith("sess-hedge", 1);
+        expect(mocks.clearSessionProviders).toHaveBeenCalledWith(
+          "sess-hedge",
+          new Set([1, 2]),
+          null
+        );
       } finally {
         vi.useRealTimers();
       }
@@ -1694,7 +1700,7 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
     expect(error.message).toBe("prompt too long");
     expect(doForward).toHaveBeenCalledTimes(1);
     expect(mocks.pickRandomProviderWithExclusion).not.toHaveBeenCalled();
-    expect(mocks.clearSessionProvider).toHaveBeenCalledWith("sess-hedge", 1);
+    expect(mocks.clearSessionProviders).toHaveBeenCalledWith("sess-hedge", new Set([1]), null);
     expect(session.getProviderChain()).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -1751,7 +1757,7 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
     expect(mocks.pickRandomProviderWithExclusion).not.toHaveBeenCalled();
     expect(mocks.recordEndpointFailure).not.toHaveBeenCalled();
     expect(mocks.recordFailure).not.toHaveBeenCalled();
-    expect(mocks.clearSessionProvider).toHaveBeenCalledWith("sess-hedge", 1);
+    expect(mocks.clearSessionProviders).toHaveBeenCalledWith("sess-hedge", new Set([1]), null);
     expect(session.getProviderChain()).toEqual([
       expect.objectContaining({
         id: provider.id,

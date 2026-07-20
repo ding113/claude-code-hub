@@ -3,6 +3,7 @@ import { getEnvConfig } from "@/lib/config/env.schema";
 import { logger } from "@/lib/logger";
 
 let redisClient: Redis | null = null;
+let redisClientUrl: string | null = null;
 
 function maskRedisUrl(redisUrl: string) {
   try {
@@ -105,9 +106,20 @@ export function getRedisClient(input?: { allowWhenRateLimitDisabled?: boolean })
 
   const safeRedisUrl = maskRedisUrl(redisUrl);
 
+  if (redisClient && redisClientUrl !== redisUrl) {
+    const staleClient = redisClient;
+    redisClient = null;
+    redisClientUrl = null;
+    staleClient.disconnect();
+    logger.warn("[Redis] Connection configuration changed, replacing client", {
+      redisUrl: safeRedisUrl,
+    });
+  }
+
   if (redisClient) {
     if (redisClient.status === "end") {
       redisClient = null;
+      redisClientUrl = null;
     } else {
       return redisClient;
     }
@@ -123,6 +135,7 @@ export function getRedisClient(input?: { allowWhenRateLimitDisabled?: boolean })
     // 3. 使用组合后的配置创建客户端
     const client = new Redis(redisUrl, redisOptions);
     redisClient = client;
+    redisClientUrl = redisUrl;
 
     // 4. 保持原始的事件监听器
     client.on("connect", () => {
@@ -153,6 +166,7 @@ export function getRedisClient(input?: { allowWhenRateLimitDisabled?: boolean })
       if (redisClient !== client) return;
       logger.warn("[Redis] Connection ended, resetting client", { redisUrl: safeRedisUrl });
       redisClient = null;
+      redisClientUrl = null;
     });
 
     // 5. 返回客户端实例
@@ -179,6 +193,7 @@ export async function closeRedis(): Promise<void> {
   } finally {
     if (redisClient === client) {
       redisClient = null;
+      redisClientUrl = null;
     }
   }
 }

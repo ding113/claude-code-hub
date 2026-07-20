@@ -31,6 +31,20 @@ import {
   getKeyActiveSessionsKey,
   getUserActiveSessionsKey,
 } from "./redis/active-session-keys";
+import {
+  clearSessionBinding as clearVersionedSessionBinding,
+  compareAndSetSessionBinding,
+  mutateLegacySessionBindingSafely,
+  readOrReconcileSessionBinding,
+  isSessionProviderCoolingDown as readSessionProviderCooldown,
+  getVersionedBindingCapabilityState as readVersionedBindingCapabilityState,
+  type SessionBindingResult,
+  type SessionBindingSnapshot,
+  type SessionBindingUnavailableResult,
+  type SessionProviderCooldownResult,
+  terminateSessionBinding as terminateVersionedSessionBinding,
+  type VersionedBindingCapabilityState,
+} from "./redis/session-binding";
 import { SessionTracker } from "./session-tracker";
 
 const RESERVED_INTERNAL_HEADER_SET = new Set(
@@ -40,6 +54,15 @@ const RESERVED_INTERNAL_HEADER_SET = new Set(
 function isReservedInternalHeader(name: string): boolean {
   const lowerName = name.toLowerCase();
   return lowerName.startsWith("x-cch-") || RESERVED_INTERNAL_HEADER_SET.has(lowerName);
+}
+
+function redisUnavailableBindingResult(): SessionBindingUnavailableResult {
+  return {
+    status: "unavailable",
+    reason: "redis_not_ready",
+    capabilityState: readVersionedBindingCapabilityState(),
+    legacyFallbackAllowed: true,
+  };
 }
 
 /**
@@ -562,14 +585,31 @@ export class SessionManager {
     if (!redis || redis.status !== "ready") return;
 
     try {
+      const binding = await readOrReconcileSessionBinding({
+        sessionId,
+        keyId,
+        ttlSeconds: SessionManager.SESSION_TTL,
+        redis,
+      });
+      if (binding.status !== "ok") {
+        if (!binding.legacyFallbackAllowed) return;
+        const legacy = await mutateLegacySessionBindingSafely({
+          sessionId,
+          keyId,
+          ttlSeconds: SessionManager.SESSION_TTL,
+          redis,
+          mutation: { type: "inspect" },
+        });
+        if (legacy.status !== "ok") return;
+      }
+
       const pipeline = redis.pipeline();
       const hashKey = `hash:${contentHash}:session`;
 
       // 存储映射关系
       pipeline.setex(hashKey, SessionManager.SESSION_TTL, sessionId);
 
-      // 初始化 session 元数据
-      pipeline.setex(`session:${sessionId}:key`, SessionManager.SESSION_TTL, keyId.toString());
+      // Initialize non-binding session metadata after tenant ownership is proven.
       pipeline.setex(
         `session:${sessionId}:last_seen`,
         SessionManager.SESSION_TTL,
@@ -587,16 +627,31 @@ export class SessionManager {
   /**
    * 刷新 session TTL（滑动窗口）
    */
-  private static async refreshSessionTTL(sessionId: string, _keyId?: number | null): Promise<void> {
+  private static async refreshSessionTTL(sessionId: string, keyId?: number | null): Promise<void> {
     const redis = getRedisClient();
     if (!redis || redis.status !== "ready") return;
 
     try {
       const pipeline = redis.pipeline();
-
-      // TTL 刷新不能改写 session 归属；这里只延长已有 key/provider 绑定的存活时间。
-      pipeline.expire(`session:${sessionId}:key`, SessionManager.SESSION_TTL);
-      pipeline.expire(`session:${sessionId}:provider`, SessionManager.SESSION_TTL);
+      // Provider selection performs the authoritative binding reconcile. Keep
+      // this path limited to session activity metadata so a request does not
+      // pay for a second full binding Lua round trip before selection.
+      if (keyId != null && readVersionedBindingCapabilityState() === "unavailable") {
+        const legacyRefresh = await mutateLegacySessionBindingSafely({
+          sessionId,
+          keyId,
+          ttlSeconds: SessionManager.SESSION_TTL,
+          redis,
+          mutation: { type: "refresh" },
+        });
+        if (legacyRefresh.status !== "ok") {
+          logger.warn("SessionManager: Legacy binding TTL refresh blocked", {
+            sessionId,
+            keyId,
+            reason: legacyRefresh.reason,
+          });
+        }
+      }
       pipeline.setex(
         `session:${sessionId}:last_seen`,
         SessionManager.SESSION_TTL,
@@ -607,6 +662,73 @@ export class SessionManager {
     } catch (error) {
       logger.error("SessionManager: Failed to refresh TTL", { error });
     }
+  }
+
+  static getVersionedBindingCapabilityState(): VersionedBindingCapabilityState {
+    return readVersionedBindingCapabilityState();
+  }
+
+  static async getSessionBindingSnapshot(
+    sessionId: string,
+    keyId: number
+  ): Promise<SessionBindingResult> {
+    const redis = getRedisClient();
+    if (!redis || redis.status !== "ready") return redisUnavailableBindingResult();
+    return readOrReconcileSessionBinding({
+      sessionId,
+      keyId,
+      ttlSeconds: SessionManager.SESSION_TTL,
+      redis,
+    });
+  }
+
+  static async compareAndSetSessionProvider(
+    snapshot: SessionBindingSnapshot,
+    providerId: number
+  ): Promise<SessionBindingResult> {
+    const redis = getRedisClient();
+    if (!redis || redis.status !== "ready") return redisUnavailableBindingResult();
+    return compareAndSetSessionBinding({
+      sessionId: snapshot.sessionId,
+      keyId: snapshot.keyId,
+      expectedGeneration: snapshot.generation,
+      providerId,
+      ttlSeconds: SessionManager.SESSION_TTL,
+      redis,
+    });
+  }
+
+  static async clearVersionedSessionProvider(
+    snapshot: SessionBindingSnapshot,
+    expectedProviderId: number | null,
+    cooldownTtlSeconds: number = 0
+  ): Promise<SessionBindingResult> {
+    const redis = getRedisClient();
+    if (!redis || redis.status !== "ready") return redisUnavailableBindingResult();
+    return clearVersionedSessionBinding({
+      sessionId: snapshot.sessionId,
+      keyId: snapshot.keyId,
+      expectedGeneration: snapshot.generation,
+      expectedProviderId,
+      cooldownTtlSeconds,
+      ttlSeconds: SessionManager.SESSION_TTL,
+      redis,
+    });
+  }
+
+  static async isSessionProviderCoolingDown(
+    sessionId: string,
+    keyId: number,
+    providerId: number
+  ): Promise<SessionProviderCooldownResult> {
+    const redis = getRedisClient();
+    if (!redis || redis.status !== "ready") return redisUnavailableBindingResult();
+    return readSessionProviderCooldown({
+      sessionId,
+      keyId,
+      providerId,
+      redis,
+    });
   }
 
   /**
@@ -621,35 +743,72 @@ export class SessionManager {
     if (!redis || redis.status !== "ready") return;
 
     try {
-      const key = `session:${sessionId}:provider`;
-      // 使用 SET ... NX 保证只有第一次绑定成功（原子操作）
-      const result = await redis.set(
-        key,
-        providerId.toString(),
-        "EX",
-        SessionManager.SESSION_TTL,
-        "NX" // Only set if not exists
-      );
+      if (keyId != null) {
+        const binding = await readOrReconcileSessionBinding({
+          sessionId,
+          keyId,
+          ttlSeconds: SessionManager.SESSION_TTL,
+          redis,
+        });
+        if (binding.status === "ok") {
+          if (binding.snapshot.providerId !== null) {
+            logger.debug("SessionManager: Session already bound, skipping", {
+              sessionId,
+              attemptedProviderId: providerId,
+            });
+            return;
+          }
 
-      if (result === "OK") {
-        if (keyId != null) {
-          await redis.setex(
-            `session:${sessionId}:key`,
-            SessionManager.SESSION_TTL,
-            keyId.toString()
-          );
+          const updated = await compareAndSetSessionBinding({
+            sessionId,
+            keyId,
+            expectedGeneration: binding.snapshot.generation,
+            providerId,
+            ttlSeconds: SessionManager.SESSION_TTL,
+            redis,
+          });
+          if (updated.status === "ok") {
+            logger.trace("SessionManager: Bound versioned session to provider", {
+              sessionId,
+              providerId,
+            });
+          }
+          return;
         }
-        logger.trace("SessionManager: Bound session to provider", {
+        if (!binding.legacyFallbackAllowed) {
+          logger.warn("SessionManager: Versioned session binding is not writable", {
+            sessionId,
+            keyId,
+            reason: binding.reason,
+          });
+          return;
+        }
+        const legacy = await mutateLegacySessionBindingSafely({
           sessionId,
-          providerId,
+          keyId,
+          ttlSeconds: SessionManager.SESSION_TTL,
+          redis,
+          mutation: { type: "bind_if_absent", providerId },
         });
-      } else {
-        // 已绑定过，不覆盖（避免并发请求选择不同供应商）
-        logger.debug("SessionManager: Session already bound, skipping", {
-          sessionId,
-          attemptedProviderId: providerId,
-        });
+        if (legacy.status === "ok" && legacy.changed) {
+          logger.trace("SessionManager: Bound legacy session to provider", {
+            sessionId,
+            providerId,
+          });
+        } else if (legacy.status !== "ok") {
+          logger.warn("SessionManager: Legacy session binding blocked", {
+            sessionId,
+            keyId,
+            reason: legacy.reason,
+          });
+        }
+        return;
       }
+
+      logger.warn("SessionManager: Cannot bind session without an API key owner", {
+        sessionId,
+        providerId,
+      });
     } catch (error) {
       logger.error("SessionManager: Failed to bind provider", { error });
     }
@@ -667,6 +826,24 @@ export class SessionManager {
 
     try {
       if (keyId != null) {
+        const binding = await readOrReconcileSessionBinding({
+          sessionId,
+          keyId,
+          ttlSeconds: SessionManager.SESSION_TTL,
+          redis,
+        });
+        if (binding.status === "ok") {
+          return binding.snapshot.providerId;
+        }
+        if (!binding.legacyFallbackAllowed) {
+          logger.warn("SessionManager: Versioned session binding is unavailable for reuse", {
+            sessionId,
+            keyId,
+            reason: binding.reason,
+          });
+          return null;
+        }
+
         const boundKeyId = await redis.get(`session:${sessionId}:key`);
         // Fail-closed：boundKeyId 缺失（TTL 漂移、旧绑定或写入路径未原子写 key）也视为校验失败，
         // 避免无法证明归属当前 key 的旧 provider binding 继续被复用。
@@ -699,39 +876,121 @@ export class SessionManager {
    */
   static async clearSessionProvider(
     sessionId: string,
-    expectedProviderId?: number | null
+    expectedProviderId?: number | null,
+    keyId?: number | null
   ): Promise<boolean> {
     const redis = getRedisClient();
     if (!redis || redis.status !== "ready") return false;
 
     try {
-      const key = `session:${sessionId}:provider`;
-      const deleted =
-        expectedProviderId == null
-          ? await redis.del(key)
-          : Number(
-              await redis.eval(
-                `
-                  if redis.call("GET", KEYS[1]) == ARGV[1] then
-                    return redis.call("DEL", KEYS[1])
-                  end
-                  return 0
-                `,
-                1,
-                key,
-                expectedProviderId.toString()
-              )
-            );
-      logger.trace("SessionManager: Cleared session provider binding", {
+      if (keyId != null) {
+        const binding = await readOrReconcileSessionBinding({
+          sessionId,
+          keyId,
+          ttlSeconds: SessionManager.SESSION_TTL,
+          redis,
+        });
+        if (binding.status === "ok") {
+          const currentProviderId = binding.snapshot.providerId;
+          if (
+            currentProviderId === null ||
+            (expectedProviderId != null && currentProviderId !== expectedProviderId)
+          ) {
+            return false;
+          }
+
+          const cleared = await clearVersionedSessionBinding({
+            sessionId,
+            keyId,
+            expectedGeneration: binding.snapshot.generation,
+            expectedProviderId: currentProviderId,
+            ttlSeconds: SessionManager.SESSION_TTL,
+            redis,
+          });
+          const didClear = cleared.status === "ok";
+          logger.trace("SessionManager: Cleared versioned session provider binding", {
+            sessionId,
+            keyId,
+            expectedProviderId: expectedProviderId ?? null,
+            deleted: didClear,
+          });
+          return didClear;
+        }
+        if (!binding.legacyFallbackAllowed) {
+          logger.warn("SessionManager: Versioned session binding clear blocked", {
+            sessionId,
+            keyId,
+            reason: binding.reason,
+          });
+          return false;
+        }
+        const legacy = await mutateLegacySessionBindingSafely({
+          sessionId,
+          keyId,
+          ttlSeconds: SessionManager.SESSION_TTL,
+          redis,
+          mutation: { type: "clear", expectedProviderId },
+        });
+        return legacy.status === "ok" && legacy.changed;
+      }
+
+      logger.warn("SessionManager: Cannot clear session binding without an API key owner", {
         sessionId,
         expectedProviderId: expectedProviderId ?? null,
-        deleted: deleted > 0,
       });
-      return deleted > 0;
+      return false;
     } catch (error) {
       logger.error("SessionManager: Failed to clear session provider", { error, sessionId });
       return false;
     }
+  }
+
+  static async clearSessionProviders(
+    sessionId: string,
+    expectedProviderIds: Iterable<number>,
+    keyId?: number | null
+  ): Promise<boolean> {
+    const providerIds = Array.from(
+      new Set(
+        Array.from(expectedProviderIds).filter(
+          (providerId) => Number.isSafeInteger(providerId) && providerId > 0
+        )
+      )
+    );
+    if (providerIds.length === 0 || keyId == null) return false;
+
+    const redis = getRedisClient();
+    if (!redis || redis.status !== "ready") return false;
+
+    const binding = await readOrReconcileSessionBinding({
+      sessionId,
+      keyId,
+      ttlSeconds: SessionManager.SESSION_TTL,
+      redis,
+    });
+    if (binding.status === "ok") {
+      const providerId = binding.snapshot.providerId;
+      if (providerId === null || !providerIds.includes(providerId)) return false;
+      const cleared = await clearVersionedSessionBinding({
+        sessionId,
+        keyId,
+        expectedGeneration: binding.snapshot.generation,
+        expectedProviderId: providerId,
+        ttlSeconds: SessionManager.SESSION_TTL,
+        redis,
+      });
+      return cleared.status === "ok";
+    }
+    if (!binding.legacyFallbackAllowed) return false;
+
+    const legacy = await mutateLegacySessionBindingSafely({
+      sessionId,
+      keyId,
+      ttlSeconds: SessionManager.SESSION_TTL,
+      redis,
+      mutation: { type: "clear", expectedProviderIds: providerIds },
+    });
+    return legacy.status === "ok" && legacy.changed;
   }
 
   /**
@@ -743,19 +1002,16 @@ export class SessionManager {
    * @param sessionId - Session ID
    * @returns 优先级数字（数字越小优先级越高），如果未绑定或无法查询则返回 null
    */
-  static async getSessionProviderPriority(sessionId: string): Promise<number | null> {
+  static async getSessionProviderPriority(
+    sessionId: string,
+    keyId?: number | null
+  ): Promise<number | null> {
     const redis = getRedisClient();
     if (!redis || redis.status !== "ready") return null;
 
     try {
-      // 修复：从真实绑定关系读取（session:provider）
-      const providerIdStr = await redis.get(`session:${sessionId}:provider`);
-      if (!providerIdStr) {
-        return null;
-      }
-
-      const providerId = parseInt(providerIdStr, 10);
-      if (Number.isNaN(providerId)) {
+      const providerId = await SessionManager.getSessionProvider(sessionId, keyId);
+      if (providerId === null) {
         return null;
       }
 
@@ -797,26 +1053,91 @@ export class SessionManager {
     }
 
     try {
-      // ========== 情况 1：首次尝试成功 ==========
-      if (isFirstAttempt) {
-        const key = `session:${sessionId}:provider`;
-        // 使用 SET NX 绑定（避免覆盖并发请求）
-        const result = await redis.set(
-          key,
-          newProviderId.toString(),
-          "EX",
-          SessionManager.SESSION_TTL,
-          "NX"
-        );
+      let versionedSnapshot: SessionBindingSnapshot | null = null;
+      let useLegacyBinding = false;
+      let legacyProviderId: number | null = null;
 
-        if (result === "OK") {
-          if (keyId != null) {
-            await redis.setex(
-              `session:${sessionId}:key`,
-              SessionManager.SESSION_TTL,
-              keyId.toString()
-            );
+      if (keyId != null) {
+        const binding = await readOrReconcileSessionBinding({
+          sessionId,
+          keyId,
+          ttlSeconds: SessionManager.SESSION_TTL,
+          redis,
+        });
+        if (binding.status === "ok") {
+          versionedSnapshot = binding.snapshot;
+        } else if (binding.legacyFallbackAllowed) {
+          const legacy = await mutateLegacySessionBindingSafely({
+            sessionId,
+            keyId,
+            ttlSeconds: SessionManager.SESSION_TTL,
+            redis,
+            mutation: { type: "inspect" },
+          });
+          if (legacy.status !== "ok") {
+            return {
+              updated: false,
+              reason: "legacy_binding_conflict",
+              details: legacy.reason,
+            };
           }
+          useLegacyBinding = true;
+          legacyProviderId = legacy.providerId;
+        } else {
+          return {
+            updated: false,
+            reason: "versioned_binding_conflict",
+            details: binding.reason,
+          };
+        }
+      } else {
+        return {
+          updated: false,
+          reason: "binding_owner_unavailable",
+          details: "Cannot mutate a Session binding without an API key owner",
+        };
+      }
+
+      const persistBinding = async (onlyIfUnbound: boolean): Promise<boolean> => {
+        if (versionedSnapshot) {
+          if (onlyIfUnbound && versionedSnapshot.providerId !== null) {
+            return false;
+          }
+          const result = await compareAndSetSessionBinding({
+            sessionId,
+            keyId: versionedSnapshot.keyId,
+            expectedGeneration: versionedSnapshot.generation,
+            providerId: newProviderId,
+            ttlSeconds: SessionManager.SESSION_TTL,
+            redis,
+          });
+          if (result.status !== "ok") {
+            logger.warn("SessionManager: Versioned session binding CAS did not update", {
+              sessionId,
+              keyId: versionedSnapshot.keyId,
+              providerId: newProviderId,
+              reason: result.reason,
+            });
+            return false;
+          }
+          return true;
+        }
+
+        if (!useLegacyBinding) return false;
+        const result = await mutateLegacySessionBindingSafely({
+          sessionId,
+          keyId: keyId!,
+          ttlSeconds: SessionManager.SESSION_TTL,
+          redis,
+          mutation: onlyIfUnbound
+            ? { type: "bind_if_absent", providerId: newProviderId }
+            : { type: "set", providerId: newProviderId },
+        });
+        return result.status === "ok" && result.changed;
+      };
+
+      if (isFirstAttempt) {
+        if (await persistBinding(true)) {
           logger.info("SessionManager: Bound session to provider (first success)", {
             sessionId,
             providerId: newProviderId,
@@ -827,31 +1148,23 @@ export class SessionManager {
             reason: "first_success",
             details: `首次成功，绑定到供应商 ${newProviderId} (priority=${newProviderPriority})`,
           };
-        } else {
-          // 并发请求已经绑定了，放弃更新
-          return {
-            updated: false,
-            reason: "concurrent_binding_exists",
-            details: "并发请求已绑定，跳过",
-          };
         }
+        return {
+          updated: false,
+          reason: "concurrent_binding_exists",
+          details: "并发请求已绑定，跳过",
+        };
       }
 
-      // ========== 情况 2：重试成功（需要智能决策）==========
-
-      // 2.0 故障转移成功 或 竞速赢家强制改绑：无条件更新绑定
-      // forceUpdate 在读取当前绑定/优先级/熔断状态之前短路，确保竞速赢家一定成为复用绑定。
       if (isFailoverSuccess || forceUpdate) {
-        const pipeline = redis.pipeline();
-        pipeline.setex(
-          `session:${sessionId}:provider`,
-          SessionManager.SESSION_TTL,
-          newProviderId.toString()
-        );
-        if (keyId != null) {
-          pipeline.setex(`session:${sessionId}:key`, SessionManager.SESSION_TTL, keyId.toString());
+        const updated = await persistBinding(false);
+        if (!updated) {
+          return {
+            updated: false,
+            reason: "concurrent_binding_changed",
+            details: "Session binding changed before the update committed",
+          };
         }
-        await pipeline.exec();
 
         const reason = isFailoverSuccess ? "failover_success" : "race_winner_forced";
         logger.info(
@@ -874,27 +1187,10 @@ export class SessionManager {
         };
       }
 
-      // 2.1 获取当前绑定的供应商 ID
-      const currentProviderIdStr = await redis.get(`session:${sessionId}:provider`);
-      if (!currentProviderIdStr) {
-        // 没有绑定，使用 SET NX 绑定
-        const key = `session:${sessionId}:provider`;
-        const result = await redis.set(
-          key,
-          newProviderId.toString(),
-          "EX",
-          SessionManager.SESSION_TTL,
-          "NX"
-        );
+      const currentProviderId: number | null = versionedSnapshot?.providerId ?? legacyProviderId;
 
-        if (result === "OK") {
-          if (keyId != null) {
-            await redis.setex(
-              `session:${sessionId}:key`,
-              SessionManager.SESSION_TTL,
-              keyId.toString()
-            );
-          }
+      if (currentProviderId === null) {
+        if (await persistBinding(true)) {
           logger.info("SessionManager: Bound session (no previous binding)", {
             sessionId,
             providerId: newProviderId,
@@ -905,39 +1201,21 @@ export class SessionManager {
             reason: "no_previous_binding",
             details: `无绑定，绑定到供应商 ${newProviderId} (priority=${newProviderPriority})`,
           };
-        } else {
-          return {
-            updated: false,
-            reason: "concurrent_binding_exists",
-            details: "并发请求已绑定",
-          };
         }
+        return {
+          updated: false,
+          reason: "concurrent_binding_exists",
+          details: "并发请求已绑定",
+        };
       }
 
-      const currentProviderId = parseInt(currentProviderIdStr, 10);
-      if (Number.isNaN(currentProviderId)) {
-        logger.warn("SessionManager: Invalid provider ID in Redis", {
-          currentProviderIdStr,
-        });
-        return { updated: false, reason: "invalid_provider_id" };
-      }
-
-      // 2.2 查询当前供应商的详情（优先级 + 健康状态）
       const { findProviderById } = await import("@/repository/provider");
       const currentProvider = await findProviderById(currentProviderId);
 
       if (!currentProvider) {
-        // 当前供应商不存在（可能被删除），直接更新
-        const pipeline = redis.pipeline();
-        pipeline.setex(
-          `session:${sessionId}:provider`,
-          SessionManager.SESSION_TTL,
-          newProviderId.toString()
-        );
-        if (keyId != null) {
-          pipeline.setex(`session:${sessionId}:key`, SessionManager.SESSION_TTL, keyId.toString());
+        if (!(await persistBinding(false))) {
+          return { updated: false, reason: "concurrent_binding_changed" };
         }
-        await pipeline.exec();
 
         logger.info("SessionManager: Updated binding (current provider not found)", {
           sessionId,
@@ -955,20 +1233,10 @@ export class SessionManager {
 
       const currentPriority = currentProvider.priority || 0;
 
-      // 2.3 智能决策：优先级比较 + 健康检查
-
-      // ========== 规则 A：新供应商优先级更高（数字更小）→ 直接迁移 ==========
       if (newProviderPriority < currentPriority) {
-        const pipeline = redis.pipeline();
-        pipeline.setex(
-          `session:${sessionId}:provider`,
-          SessionManager.SESSION_TTL,
-          newProviderId.toString()
-        );
-        if (keyId != null) {
-          pipeline.setex(`session:${sessionId}:key`, SessionManager.SESSION_TTL, keyId.toString());
+        if (!(await persistBinding(false))) {
+          return { updated: false, reason: "concurrent_binding_changed" };
         }
-        await pipeline.exec();
 
         logger.info("SessionManager: Migrated to higher priority provider", {
           sessionId,
@@ -986,22 +1254,13 @@ export class SessionManager {
         };
       }
 
-      // ========== 规则 B：新供应商优先级相同或更低 → 检查原供应商健康状态 ==========
       const { isCircuitOpen } = await import("@/lib/circuit-breaker");
       const isCurrentCircuitOpen = await isCircuitOpen(currentProviderId);
 
       if (isCurrentCircuitOpen) {
-        // 原供应商已熔断 → 更新到新供应商（备用供应商接管）
-        const pipeline = redis.pipeline();
-        pipeline.setex(
-          `session:${sessionId}:provider`,
-          SessionManager.SESSION_TTL,
-          newProviderId.toString()
-        );
-        if (keyId != null) {
-          pipeline.setex(`session:${sessionId}:key`, SessionManager.SESSION_TTL, keyId.toString());
+        if (!(await persistBinding(false))) {
+          return { updated: false, reason: "concurrent_binding_changed" };
         }
-        await pipeline.exec();
 
         logger.info("SessionManager: Migrated to backup provider (circuit open)", {
           sessionId,
@@ -1019,7 +1278,6 @@ export class SessionManager {
         };
       }
 
-      // 原供应商健康 + 优先级更高/相同 → 保持原绑定（尽量使用主供应商）
       logger.debug("SessionManager: Keeping current provider (healthy and higher/equal priority)", {
         sessionId,
         currentProviderId,
@@ -2362,52 +2620,91 @@ export class SessionManager {
       // 使用 prompt_cache_key 作为新的 Session ID（添加前缀以区分）
       const codexSessionId = `codex_${promptCacheKey}`;
 
-      // 检查是否已经存在绑定
-      const existingProvider = await redis.get(`session:${codexSessionId}:provider`);
-
-      if (existingProvider) {
-        // 已存在绑定，刷新 TTL
-        const pipeline = redis.pipeline();
-        pipeline.expire(`session:${codexSessionId}:provider`, SessionManager.SESSION_TTL);
-        if (keyId != null) {
-          pipeline.setex(
-            `session:${codexSessionId}:key`,
-            SessionManager.SESSION_TTL,
-            keyId.toString()
-          );
-        }
-        await pipeline.exec();
-        logger.debug("SessionManager: Refreshed Codex session TTL", {
-          sessionId: codexSessionId,
-          providerId: parseInt(existingProvider, 10),
-        });
-        return { sessionId: codexSessionId, updated: false };
-      }
-
-      // 新建绑定
-      const pipeline = redis.pipeline();
-      pipeline.setex(
-        `session:${codexSessionId}:provider`,
-        SessionManager.SESSION_TTL,
-        providerId.toString()
-      );
       if (keyId != null) {
-        pipeline.setex(
-          `session:${codexSessionId}:key`,
-          SessionManager.SESSION_TTL,
-          keyId.toString()
-        );
+        const binding = await readOrReconcileSessionBinding({
+          sessionId: codexSessionId,
+          keyId,
+          ttlSeconds: SessionManager.SESSION_TTL,
+          redis,
+        });
+        if (binding.status === "ok") {
+          if (binding.snapshot.providerId !== null) {
+            logger.debug("SessionManager: Refreshed versioned Codex session TTL", {
+              sessionId: codexSessionId,
+              providerId: binding.snapshot.providerId,
+            });
+            return { sessionId: codexSessionId, updated: false };
+          }
+
+          const updated = await compareAndSetSessionBinding({
+            sessionId: codexSessionId,
+            keyId,
+            expectedGeneration: binding.snapshot.generation,
+            providerId,
+            ttlSeconds: SessionManager.SESSION_TTL,
+            redis,
+          });
+          if (updated.status === "ok") {
+            logger.info("SessionManager: Created versioned Codex session", {
+              sessionId: codexSessionId,
+              providerId,
+            });
+            return { sessionId: codexSessionId, updated: true };
+          }
+          return { sessionId: currentSessionId, updated: false };
+        }
+        if (!binding.legacyFallbackAllowed) {
+          logger.warn("SessionManager: Codex session binding owner could not be verified", {
+            sessionId: codexSessionId,
+            keyId,
+            reason: binding.reason,
+          });
+          return { sessionId: currentSessionId, updated: false };
+        }
+        const legacy = await mutateLegacySessionBindingSafely({
+          sessionId: codexSessionId,
+          keyId,
+          ttlSeconds: SessionManager.SESSION_TTL,
+          redis,
+          mutation: { type: "inspect" },
+        });
+        if (legacy.status !== "ok") {
+          logger.warn("SessionManager: Legacy Codex binding owner could not be verified", {
+            sessionId: codexSessionId,
+            keyId,
+            reason: legacy.reason,
+          });
+          return { sessionId: currentSessionId, updated: false };
+        }
+
+        if (legacy.providerId !== null) {
+          await mutateLegacySessionBindingSafely({
+            sessionId: codexSessionId,
+            keyId,
+            ttlSeconds: SessionManager.SESSION_TTL,
+            redis,
+            mutation: { type: "refresh" },
+          });
+          return { sessionId: codexSessionId, updated: false };
+        }
+
+        const bound = await mutateLegacySessionBindingSafely({
+          sessionId: codexSessionId,
+          keyId,
+          ttlSeconds: SessionManager.SESSION_TTL,
+          redis,
+          mutation: { type: "bind_if_absent", providerId },
+        });
+        if (bound.status === "ok") {
+          return { sessionId: codexSessionId, updated: bound.changed };
+        }
+        return { sessionId: currentSessionId, updated: false };
       }
-      await pipeline.exec();
 
-      logger.info("SessionManager: Created Codex session from prompt_cache_key", {
+      logger.warn("SessionManager: Cannot bind Codex session without an API key owner", {
         sessionId: codexSessionId,
-        promptCacheKey,
-        providerId,
-        ttl: SessionManager.SESSION_TTL,
       });
-
-      return { sessionId: codexSessionId, updated: true };
+      return { sessionId: currentSessionId, updated: false };
     } catch (error) {
       logger.error("SessionManager: Failed to update Codex session", { error });
       return { sessionId: currentSessionId, updated: false };
@@ -2423,7 +2720,10 @@ export class SessionManager {
    * @param sessionId - Session ID
    * @returns 是否成功删除
    */
-  static async terminateSession(sessionId: string): Promise<boolean> {
+  static async terminateSession(
+    sessionId: string,
+    expectedProviderIds?: readonly number[]
+  ): Promise<boolean> {
     const redis = getRedisClient();
     if (!redis || redis.status !== "ready") {
       logger.warn("SessionManager: Redis not ready, cannot terminate session");
@@ -2435,6 +2735,7 @@ export class SessionManager {
       let providerId: number | null = null;
       let keyId: number | null = null;
       let userId: number | null = null;
+      let bindingTerminated = false;
 
       try {
         const [providerIdStr, keyIdStr, userIdStr] = await Promise.all([
@@ -2443,11 +2744,17 @@ export class SessionManager {
           redis.hget(`session:${sessionId}:info`, "userId"),
         ]);
 
-        providerId = providerIdStr ? parseInt(providerIdStr, 10) : null;
-        keyId = keyIdStr ? parseInt(keyIdStr, 10) : null;
-        userId = userIdStr ? parseInt(userIdStr, 10) : null;
+        providerId = providerIdStr ? Number(providerIdStr) : null;
+        keyId = keyIdStr ? Number(keyIdStr) : null;
+        userId = userIdStr ? Number(userIdStr) : null;
 
-        if (!Number.isFinite(userId)) {
+        if (providerId !== null && (!Number.isSafeInteger(providerId) || providerId <= 0)) {
+          providerId = null;
+        }
+        if (keyId !== null && (!Number.isSafeInteger(keyId) || keyId <= 0)) {
+          keyId = null;
+        }
+        if (userId !== null && (!Number.isSafeInteger(userId) || userId <= 0)) {
           userId = null;
         }
       } catch (lookupError) {
@@ -2461,12 +2768,85 @@ export class SessionManager {
         );
       }
 
+      if (keyId !== null) {
+        const binding = await readOrReconcileSessionBinding({
+          sessionId,
+          keyId,
+          ttlSeconds: SessionManager.SESSION_TTL,
+          redis,
+        });
+        if (binding.status === "ok") {
+          providerId = binding.snapshot.providerId ?? providerId;
+          if (
+            expectedProviderIds &&
+            (binding.snapshot.providerId === null ||
+              !expectedProviderIds.includes(binding.snapshot.providerId))
+          ) {
+            return false;
+          }
+
+          const terminated = await terminateVersionedSessionBinding({
+            sessionId,
+            keyId,
+            expectedProviderId: expectedProviderIds
+              ? (binding.snapshot.providerId ?? undefined)
+              : undefined,
+            ttlSeconds: SessionManager.SESSION_TTL,
+            redis,
+          });
+          if (terminated.status !== "ok") {
+            const latest = await readOrReconcileSessionBinding({
+              sessionId,
+              keyId,
+              ttlSeconds: SessionManager.SESSION_TTL,
+              redis,
+            });
+            logger.warn("SessionManager: Versioned session termination blocked", {
+              sessionId,
+              keyId,
+              reason: terminated.reason,
+              latestStatus: latest.status,
+            });
+            return false;
+          }
+          bindingTerminated = true;
+        } else if (binding.status === "unavailable" && binding.legacyFallbackAllowed) {
+          const legacy = await mutateLegacySessionBindingSafely({
+            sessionId,
+            keyId,
+            ttlSeconds: SessionManager.SESSION_TTL,
+            redis,
+            mutation: { type: "terminate", expectedProviderIds },
+          });
+          if (legacy.status !== "ok") {
+            logger.warn("SessionManager: Legacy session termination blocked", {
+              sessionId,
+              keyId,
+              reason: legacy.reason,
+            });
+            return false;
+          }
+          bindingTerminated = true;
+        } else {
+          logger.warn("SessionManager: Session binding termination blocked", {
+            sessionId,
+            keyId,
+            reason: binding.reason,
+          });
+          return false;
+        }
+      } else if (providerId !== null || expectedProviderIds) {
+        logger.warn("SessionManager: Session binding owner unavailable during termination", {
+          sessionId,
+          providerId,
+        });
+        return false;
+      }
+
       // 2. 删除所有 Session 相关的 key
       const pipeline = redis.pipeline();
 
-      // 基础绑定信息
-      pipeline.del(`session:${sessionId}:provider`);
-      pipeline.del(`session:${sessionId}:key`);
+      // Binding mirrors are mutated only by the tenant-authorized helpers above.
       pipeline.del(`session:${sessionId}:info`);
       pipeline.del(`session:${sessionId}:last_seen`);
       pipeline.del(`session:${sessionId}:concurrent_count`);
@@ -2514,7 +2894,7 @@ export class SessionManager {
         deletedKeys,
       });
 
-      return deletedKeys > 0;
+      return bindingTerminated || deletedKeys > 0;
     } catch (error) {
       logger.error("SessionManager: Failed to terminate session", {
         error,
@@ -2572,7 +2952,10 @@ export class SessionManager {
         return 0;
       }
 
-      const terminatedCount = await SessionManager.terminateSessionsBatch([...sessionIds]);
+      const terminatedCount = await SessionManager.terminateSessionsBatch(
+        [...sessionIds],
+        uniqueProviderIds
+      );
       logger.info("SessionManager: Terminated provider sessions batch", {
         providerIds: uniqueProviderIds,
         sessionCount: sessionIds.size,
@@ -2617,7 +3000,10 @@ export class SessionManager {
    * @param sessionIds - Session ID 列表
    * @returns 成功终止的数量
    */
-  static async terminateSessionsBatch(sessionIds: string[]): Promise<number> {
+  static async terminateSessionsBatch(
+    sessionIds: string[],
+    expectedProviderIds?: readonly number[]
+  ): Promise<number> {
     if (sessionIds.length === 0) {
       return 0;
     }
@@ -2637,7 +3023,7 @@ export class SessionManager {
         const chunk = sessionIds.slice(i, i + CHUNK_SIZE);
         const results = await Promise.all(
           chunk.map(async (sessionId) => {
-            const success = await SessionManager.terminateSession(sessionId);
+            const success = await SessionManager.terminateSession(sessionId, expectedProviderIds);
             return success ? 1 : 0;
           })
         );

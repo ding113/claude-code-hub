@@ -4554,7 +4554,10 @@ export class ProxyForwarder {
 
       abortAllAttempts(attempt, "hedge_loser");
 
-      if (session.sessionId) {
+      // A non-hedged request is finalized through response-handler. Updating
+      // here as well would perform a duplicate binding read/CAS before the
+      // stream has passed its final validation.
+      if (session.sessionId && isActualHedgeWin) {
         void (async () => {
           const bindingResult = await SessionManager.updateSessionBindingSmart(
             session.sessionId!,
@@ -4994,16 +4997,17 @@ export class ProxyForwarder {
     expectedProviderId: number | null
   ): Promise<void> {
     if (!session.sessionId) return;
-    await SessionManager.clearSessionProvider(session.sessionId, expectedProviderId);
+    const keyId = session.authState?.key?.id ?? session.messageContext?.key?.id ?? null;
+    await SessionManager.clearSessionProvider(session.sessionId, expectedProviderId, keyId);
   }
 
   private static async clearSessionProviderBindings(
     session: ProxySession,
     expectedProviderIds: Iterable<number>
   ): Promise<void> {
-    for (const providerId of new Set(expectedProviderIds)) {
-      await ProxyForwarder.clearSessionProviderBinding(session, providerId);
-    }
+    if (!session.sessionId) return;
+    const keyId = session.authState?.key?.id ?? session.messageContext?.key?.id ?? null;
+    await SessionManager.clearSessionProviders(session.sessionId, expectedProviderIds, keyId);
   }
 
   private static markProviderFailed(
