@@ -1407,7 +1407,12 @@ describe("versioned session binding operations", () => {
         redis: mock.redis,
         mutation: { type: "terminate", expectedProviderIds: [10] },
       })
-    ).resolves.toMatchObject({ status: "ok", changed: true, providerId: null });
+    ).resolves.toMatchObject({
+      status: "ok",
+      changed: true,
+      providerId: null,
+      terminatedProviderId: 10,
+    });
     expect(owner).toBe("4");
   });
 
