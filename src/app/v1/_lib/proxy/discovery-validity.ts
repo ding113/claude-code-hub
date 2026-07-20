@@ -9,7 +9,11 @@ export type DiscoveryValidity = {
   ready: boolean;
   terminal: boolean;
   error: boolean;
+  limitExceeded?: boolean;
 };
+
+export const DISCOVERY_PREFIX_MAX_BYTES = 1024 * 1024;
+export const DISCOVERY_EVENT_MAX_COUNT = 1024;
 
 function hasContent(value: unknown): boolean {
   if (typeof value === "string") return value.trim().length > 0;
@@ -26,9 +30,12 @@ function hasContent(value: unknown): boolean {
     "tool_calls",
     "functionCall",
     "function_call",
+    "function",
     "arguments",
-    "input",
     "partial_json",
+    "id",
+    "name",
+    "input",
     "parts",
   ].some((key) => hasContent(object[key]));
 }
@@ -141,10 +148,21 @@ export class DiscoveryValidityParser {
   private _ready = false;
   private _terminal = false;
   private _error = false;
+  private _limitExceeded = false;
+  private bytesSeen = 0;
+  private eventsSeen = 0;
 
   constructor(readonly protocol: DiscoveryProtocol) {}
 
   push(chunk: Uint8Array | string): DiscoveryValidity {
+    this.bytesSeen +=
+      typeof chunk === "string" ? new TextEncoder().encode(chunk).byteLength : chunk.byteLength;
+    if (!this._ready && this.bytesSeen > DISCOVERY_PREFIX_MAX_BYTES) {
+      this._error = true;
+      this._limitExceeded = true;
+      this.buffered = "";
+      return this.result;
+    }
     this.buffered +=
       typeof chunk === "string" ? chunk : this.decoder.decode(chunk, { stream: true });
 
@@ -177,7 +195,7 @@ export class DiscoveryValidityParser {
       }
     }
 
-    return { ready: this._ready && !this._error, terminal: this._terminal, error: this._error };
+    return this.result;
   }
 
   private consumeLine(line: string): void {
@@ -195,6 +213,12 @@ export class DiscoveryValidityParser {
   }
 
   private consumeValue(value: unknown): void {
+    this.eventsSeen += 1;
+    if (!this._ready && this.eventsSeen > DISCOVERY_EVENT_MAX_COUNT) {
+      this._error = true;
+      this._limitExceeded = true;
+      return;
+    }
     const result = classifyJson(value, this.protocol);
     this._ready ||= result.ready;
     this._terminal ||= result.terminal;
@@ -209,5 +233,18 @@ export class DiscoveryValidityParser {
   }
   get error(): boolean {
     return this._error;
+  }
+
+  get limitExceeded(): boolean {
+    return this._limitExceeded;
+  }
+
+  private get result(): DiscoveryValidity {
+    return {
+      ready: this._ready && !this._error,
+      terminal: this._terminal,
+      error: this._error,
+      ...(this._limitExceeded ? { limitExceeded: true } : {}),
+    };
   }
 }

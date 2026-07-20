@@ -13,6 +13,20 @@ const attempt = (id: string, priority: number, kind: "normal" | "fallback" = "no
 });
 
 describe("DiscoveryCoordinator", () => {
+  it("keeps Sticky probing outside the Discovery round counter", () => {
+    const coordinator = new DiscoveryCoordinator({ concurrency: 2, maxRounds: 1 });
+    coordinator.startStickyProbe();
+    expect(coordinator.state).toBe("STICKY_PROBING");
+    expect(coordinator.round).toBe(1);
+
+    coordinator.addAttempt(attempt("sticky", 1));
+    expect(coordinator.demoteToFallback("sticky")).toBe(true);
+    coordinator.startDiscoveryAfterSticky();
+
+    expect(coordinator.state).toBe("DISCOVERY_RACING");
+    expect(coordinator.round).toBe(1);
+  });
+
   it("commits the highest priority ready normal attempt", () => {
     const coordinator = new DiscoveryCoordinator({ concurrency: 2, maxRounds: 2 });
     coordinator.addAttempt(attempt("a", 10));
@@ -44,6 +58,7 @@ describe("DiscoveryCoordinator", () => {
     expect(coordinator.markReady("a", epoch.requestEpoch, epoch.roundEpoch)).toEqual({
       type: "none",
     });
+    expect(coordinator.markFailed("a")).toEqual({ type: "none" });
   });
 
   it("promotes a ready fallback at the round boundary when no normal is ready", () => {
@@ -100,6 +115,49 @@ describe("DiscoveryCoordinator", () => {
       ready: true,
       pending: true,
     });
-    expect(coordinator.markFailed("high")).toEqual({ type: "commit_normal", attemptId: "low" });
+    expect(coordinator.markFailed("high")).toEqual({
+      type: "commit_normal",
+      attemptId: "low",
+    });
+  });
+
+  it("treats fallback promotion as terminal", () => {
+    const coordinator = new DiscoveryCoordinator({ concurrency: 2, maxRounds: 2 });
+    coordinator.addAttempt(attempt("fallback", 1, "fallback"));
+
+    expect(coordinator.markReady("fallback")).toEqual({
+      type: "promote_fallback",
+      attemptId: "fallback",
+    });
+    expect(coordinator.state).toBe("FALLBACK_ACTIVE");
+    expect(coordinator.isTerminal).toBe(true);
+    expect(coordinator.markFailed("fallback")).toEqual({ type: "none" });
+  });
+
+  it("keeps coordinator kind in sync when a running Sticky becomes fallback", () => {
+    const coordinator = new DiscoveryCoordinator({ concurrency: 2, maxRounds: 2 });
+    coordinator.addAttempt(attempt("sticky", 1));
+
+    expect(coordinator.promoteToFallback("sticky")).toBe(true);
+    expect(coordinator.snapshot.find((item) => item.id === "sticky")?.kind).toBe("fallback");
+  });
+
+  it("opens a full new round when all normal attempts fail", () => {
+    const coordinator = new DiscoveryCoordinator({ concurrency: 3, maxRounds: 2 });
+    coordinator.addAttempt(attempt("a", 1));
+    coordinator.addAttempt(attempt("b", 2));
+
+    expect(coordinator.markFailed("a")).toEqual({ type: "none" });
+    expect(coordinator.markFailed("b")).toEqual({ type: "launch", slots: 3 });
+    expect(coordinator.round).toBe(2);
+  });
+
+  it("commits a ready normal candidate at the total deadline", () => {
+    const coordinator = new DiscoveryCoordinator({ concurrency: 2, maxRounds: 2 });
+    coordinator.addAttempt(attempt("high", 1));
+    coordinator.addAttempt(attempt("normal", 2));
+    coordinator.markReady("normal");
+
+    expect(coordinator.onDeadline()).toEqual({ type: "commit_normal", attemptId: "normal" });
   });
 });

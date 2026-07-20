@@ -9,10 +9,12 @@ import { getEnvConfig } from "@/lib/config/env.schema";
 import { getCachedSystemSettings } from "@/lib/config/system-settings-cache";
 import { emitProxyLangfuseTrace } from "@/lib/langfuse/emit-proxy-trace";
 import { logger } from "@/lib/logger";
+import { recordDiscoveryControlEvent } from "@/lib/observability/discovery-metrics";
 import { requestCloudPriceTableSync } from "@/lib/price-sync/cloud-price-updater";
 import { ProxyStatusTracker } from "@/lib/proxy-status-tracker";
 import { RateLimitService } from "@/lib/rate-limit";
 import { deleteLiveChain } from "@/lib/redis/live-chain-store";
+import type { SessionBindingSnapshot } from "@/lib/redis/session-binding";
 import { SessionManager } from "@/lib/session-manager";
 import { SessionTracker } from "@/lib/session-tracker";
 import { CODEX_1M_CONTEXT_TOKEN_THRESHOLD } from "@/lib/special-attributes";
@@ -58,6 +60,7 @@ import { isClientAbortError, isTransportError } from "./errors";
 import type { ProxySession } from "./session";
 import {
   consumeDeferredStreamingFinalization,
+  type DeferredStreamingFinalization,
   peekDeferredStreamingFinalization,
 } from "./stream-finalization";
 
@@ -95,7 +98,156 @@ function resolveStreamTaskStaleTimeoutMs(): number {
 
 const STREAM_FINALIZATION_MAX_MS = 120_000;
 const STREAM_FAILURE_PERSISTENCE_MAX_MS = 5_000;
+const DISCOVERY_LEASE_RELEASE_MAX_MS = 5_000;
 const NON_STREAM_TERMINAL_PERSISTENCE_ERROR = Symbol("non_stream_terminal_persistence_error");
+
+type DiscoveryLeaseLifecycle = {
+  active: boolean;
+  ensureOwned: () => Promise<boolean>;
+  release: () => Promise<void>;
+};
+
+function isSessionBindingMutationAllowed(session: ProxySession): boolean {
+  const checker = (session as ProxySession & { isSessionBindingAllowed?: () => boolean })
+    .isSessionBindingAllowed;
+  return checker?.call(session) !== false;
+}
+
+function startDiscoveryLeaseLifecycle(session: ProxySession): DiscoveryLeaseLifecycle {
+  const lease = peekDeferredStreamingFinalization(session)?.discoveryLease;
+  if (!lease) {
+    return {
+      active: false,
+      ensureOwned: async () => true,
+      release: async () => undefined,
+    };
+  }
+
+  let renewalTimer: ReturnType<typeof setInterval> | null = null;
+  let renewalInFlight: Promise<boolean> | null = null;
+  let releasePromise: Promise<void> | null = null;
+  let ownershipState: "unknown" | "owned" | "lost" = "unknown";
+
+  const stopRenewal = () => {
+    if (renewalTimer) {
+      clearInterval(renewalTimer);
+      renewalTimer = null;
+    }
+  };
+
+  const renew = (): Promise<boolean> => {
+    if (releasePromise || ownershipState === "lost") return Promise.resolve(false);
+    if (renewalInFlight) return renewalInFlight;
+
+    const operation = (async () => {
+      const result = await SessionManager.renewSessionDiscoveryLease(
+        lease.sessionId,
+        lease.keyId,
+        lease.ownerToken,
+        lease.ttlSeconds
+      );
+      if (result.status !== "renewed") {
+        ownershipState = "lost";
+        stopRenewal();
+        logger.warn("[ResponseHandler] Discovery lease renewal stopped", {
+          sessionId: lease.sessionId,
+          keyId: lease.keyId,
+          status: result.status,
+          reason: "reason" in result ? result.reason : undefined,
+        });
+        return false;
+      }
+      ownershipState = "owned";
+      return true;
+    })()
+      .catch((error) => {
+        ownershipState = "lost";
+        stopRenewal();
+        logger.warn("[ResponseHandler] Discovery lease renewal failed", {
+          sessionId: lease.sessionId,
+          keyId: lease.keyId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        return false;
+      })
+      .finally(() => {
+        if (renewalInFlight === operation) renewalInFlight = null;
+      });
+    renewalInFlight = operation;
+    return operation;
+  };
+
+  // Ownership transfers from the Forwarder to the finalizer without delaying
+  // the downstream response. Renew immediately so an expired/lost token is
+  // observed before any terminal Session binding mutation is attempted.
+  const handoffRenewal = renew();
+  const renewalIntervalMs = Math.max(250, Math.floor((lease.ttlSeconds * 1000) / 3));
+  renewalTimer = setInterval(() => {
+    void renew();
+  }, renewalIntervalMs);
+  renewalTimer.unref?.();
+
+  return {
+    active: true,
+    ensureOwned: async () => {
+      if (!(await handoffRenewal) || releasePromise || ownershipState !== "owned") return false;
+      // Revalidate with the owner token at the mutation boundary. This runs in
+      // post-terminal side effects, so it cannot add latency to downstream TTFB.
+      return renew();
+    },
+    release: () => {
+      if (releasePromise) return releasePromise;
+      stopRenewal();
+      releasePromise = (async () => {
+        try {
+          const result = await raceWithTimeout(
+            SessionManager.releaseSessionDiscoveryLease(
+              lease.sessionId,
+              lease.keyId,
+              lease.ownerToken
+            ),
+            DISCOVERY_LEASE_RELEASE_MAX_MS,
+            "discovery_lease_release_timeout"
+          );
+          if (result.status !== "released") {
+            logger.debug("[ResponseHandler] Discovery lease release skipped", {
+              sessionId: lease.sessionId,
+              keyId: lease.keyId,
+              status: result.status,
+              reason: "reason" in result ? result.reason : undefined,
+            });
+          }
+        } catch (error) {
+          logger.warn("[ResponseHandler] Discovery lease release failed", {
+            sessionId: lease.sessionId,
+            keyId: lease.keyId,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      })();
+      return releasePromise;
+    },
+  };
+}
+
+async function releaseOwnedProviderSessionRef(
+  session: ProxySession,
+  meta: DeferredStreamingFinalization | null,
+  retainAsBaseline: boolean
+): Promise<void> {
+  if (retainAsBaseline || meta?.providerSessionRefOwned !== true || !session.sessionId) return;
+  if (!session.consumeProviderSessionRef(meta.providerId)) return;
+
+  try {
+    await RateLimitService.releaseProviderSession(meta.providerId, session.sessionId);
+  } catch (error) {
+    logger.warn("[ResponseHandler] Failed to release Discovery Provider session reference", {
+      sessionId: session.sessionId,
+      providerId: meta.providerId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
 
 type MessageRequestTerminalDetails = Parameters<typeof updateMessageRequestDetailsDurably>[1];
 type NonStreamTerminalPersistenceError = Error & {
@@ -974,8 +1126,31 @@ function hasPositiveBillableTokens(usage: UsageMetrics | null): boolean {
   return tokens > 0;
 }
 
-const FINISH_REASON_MARKER = /"finish_reason"\s*:\s*"[a-z_]+"/;
-const GEMINI_FINISH_REASON_MARKER = /"finishReason"\s*:\s*"[A-Z_]+"/;
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function hasOpenAIChatCompletionMarker(data: unknown): boolean {
+  if (!isRecord(data) || !Array.isArray(data.choices)) return false;
+  return data.choices.some(
+    (choice) =>
+      isRecord(choice) &&
+      typeof choice.finish_reason === "string" &&
+      choice.finish_reason.trim().length > 0
+  );
+}
+
+function hasGeminiCompletionMarker(data: unknown, format: ProxySession["originalFormat"]): boolean {
+  if (!isRecord(data)) return false;
+  const payload = format === "gemini-cli" && isRecord(data.response) ? data.response : data;
+  if (!Array.isArray(payload.candidates)) return false;
+  return payload.candidates.some(
+    (candidate) =>
+      isRecord(candidate) &&
+      typeof candidate.finishReason === "string" &&
+      candidate.finishReason.trim().length > 0
+  );
+}
 
 /**
  * 判断流式响应文本中是否存在“与格式匹配的终止完成标记”，用以区分
@@ -984,16 +1159,38 @@ const GEMINI_FINISH_REASON_MARKER = /"finishReason"\s*:\s*"[A-Z_]+"/;
  * 仅 usage>0 不足以证明完成：Anthropic 在首个 `message_start` 即带 usage、
  * Gemini 在中间事件即带 usageMetadata，截断流同样会出现正向 token。
  */
-function hasStreamCompletionMarker(text: string): boolean {
-  if (
-    text.includes("response.completed") || // OpenAI Responses / Codex
-    text.includes("message_stop") || // Anthropic Messages
-    text.includes("[DONE]") // OpenAI Chat Completions
-  ) {
-    return true;
+function hasStreamCompletionMarker(text: string, format: ProxySession["originalFormat"]): boolean {
+  const events = parseSSEData(text);
+
+  switch (format) {
+    case "response":
+      return events.some(
+        (event) =>
+          event.event === "response.completed" &&
+          isRecord(event.data) &&
+          event.data.type === "response.completed" &&
+          isRecord(event.data.response)
+      );
+    case "claude":
+      return events.some(
+        (event) =>
+          event.event === "message_stop" &&
+          isRecord(event.data) &&
+          event.data.type === "message_stop"
+      );
+    case "openai":
+      return events.some(
+        (event) =>
+          event.event === "message" &&
+          ((typeof event.data === "string" && event.data.trim() === "[DONE]") ||
+            hasOpenAIChatCompletionMarker(event.data))
+      );
+    case "gemini":
+    case "gemini-cli":
+      return events.some(
+        (event) => event.event === "message" && hasGeminiCompletionMarker(event.data, format)
+      );
   }
-  // OpenAI chat / Gemini：非空 finish reason 标记最终块。
-  return FINISH_REASON_MARKER.test(text) || GEMINI_FINISH_REASON_MARKER.test(text);
 }
 
 export async function resolveBillableUsageMetricsForCost(
@@ -1117,6 +1314,12 @@ type FinalizeDeferredStreamingResult = {
   };
   /** Circuit and Session side effects, committed after durable terminal details. */
   commitSideEffects?: () => Promise<void>;
+  /** Attempt-scoped ref cleanup; idempotent via ProxySession ownership consumption. */
+  finalizeAttemptResources?: () => Promise<void>;
+  /** Whether terminal helpers may create auxiliary Sticky bindings (for example Codex cache keys). */
+  allowAuxiliarySessionBinding: boolean;
+  /** Discovery auxiliary bindings must wait for, and depend on, the primary generation CAS. */
+  confirmAuxiliarySessionBinding: () => Promise<boolean>;
 };
 
 /**
@@ -1142,28 +1345,131 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
   upstreamStatusCode: number,
   streamEndedNormally: boolean,
   clientAborted: boolean,
+  discoveryLeaseLifecycle: DiscoveryLeaseLifecycle,
   abortReason?: string
 ): FinalizeDeferredStreamingResult {
   const meta = consumeDeferredStreamingFinalization(session);
   const provider = session.provider;
   const providerIdForPersistence = meta?.providerId ?? provider?.id ?? null;
   const clearSessionBinding = async () => {
-    if (!session.sessionId) return;
+    if (!session.sessionId || !isSessionBindingMutationAllowed(session)) return;
     const keyId = session.authState?.key?.id ?? session.messageContext?.key?.id ?? null;
-    if (meta?.bindingIntent === "none") return;
-    if (meta?.bindingSnapshot && keyId != null) {
-      await SessionManager.clearVersionedSessionProvider(
+    if (meta?.bindingIntent === "none" || meta?.bindingIntent === "create") return;
+    if (meta?.bindingIntent === "renew") {
+      // A client disconnect is not evidence that the Sticky Provider failed.
+      // Discovery renewals may only clear the exact binding snapshot that was
+      // observed before the request.
+      if (clientAborted) return;
+      if (
+        !meta.bindingSnapshot ||
+        keyId == null ||
+        meta.bindingSnapshot.keyId !== keyId ||
+        meta.bindingSnapshot.sessionId !== session.sessionId ||
+        meta.bindingSnapshot.providerId !== meta.providerId
+      ) {
+        logger.debug("[ResponseHandler] Discovery binding clear skipped", {
+          sessionId: session.sessionId,
+          keyId,
+          expectedProviderId: meta.providerId,
+          reason: "missing_or_mismatched_snapshot",
+        });
+        return;
+      }
+      if (!(await discoveryLeaseLifecycle.ensureOwned())) {
+        logger.warn(
+          "[ResponseHandler] Discovery binding clear skipped after lease ownership loss",
+          {
+            sessionId: meta.bindingSnapshot.sessionId,
+            keyId: meta.bindingSnapshot.keyId,
+            expectedProviderId: meta.bindingSnapshot.providerId,
+          }
+        );
+        return;
+      }
+      const cleared = await SessionManager.clearVersionedSessionProvider(
         meta.bindingSnapshot,
-        meta.bindingSnapshot.providerId,
+        meta.providerId,
         0
       );
+      if (cleared.status !== "ok") {
+        logger.debug("[ResponseHandler] Discovery binding clear skipped", {
+          sessionId: meta.bindingSnapshot.sessionId,
+          keyId: meta.bindingSnapshot.keyId,
+          expectedProviderId: meta.bindingSnapshot.providerId,
+          reason: cleared.reason,
+        });
+      }
       return;
     }
+
+    // Legacy deferred finalization has no explicit binding intent and keeps its
+    // pre-Discovery behavior.
     await SessionManager.clearSessionProvider(session.sessionId, providerIdForPersistence, keyId);
+  };
+
+  let retainProviderSessionRef = false;
+  const finalizeProviderSessionRef = () =>
+    releaseOwnedProviderSessionRef(session, meta, retainProviderSessionRef);
+
+  const compareAndSetDiscoveryBinding = async (
+    snapshot: SessionBindingSnapshot,
+    providerId: number,
+    keyId: number
+  ) => {
+    if (
+      !snapshot ||
+      snapshot.keyId !== keyId ||
+      (session.sessionId !== null && snapshot.sessionId !== session.sessionId)
+    )
+      return { updated: false, reason: "missing_snapshot", details: "missing_snapshot" };
+
+    if (!(await discoveryLeaseLifecycle.ensureOwned())) {
+      return {
+        updated: false,
+        reason: "discovery_lease_not_owned",
+        details: "lease_lost_or_unavailable",
+      };
+    }
+
+    const cas = await SessionManager.compareAndSetSessionProvider(snapshot, providerId);
+    if (cas.status === "conflict") {
+      recordDiscoveryControlEvent("binding_cas_conflict", {
+        requestId: session.messageContext?.id ?? null,
+        sessionId: snapshot.sessionId,
+        keyId,
+        providerId,
+        reason: cas.reason,
+      });
+    }
+
+    return {
+      updated: cas.status === "ok",
+      reason: cas.status === "ok" ? "discovery_generation_cas" : cas.reason,
+      details: cas.status,
+    };
   };
 
   const isHedgeWinner = meta?.isHedgeWinner === true;
   const billHedgeLosers = meta?.billHedgeLosers === true;
+  const allowAuxiliarySessionBinding =
+    isSessionBindingMutationAllowed(session) &&
+    (meta?.bindingIntent === undefined || (meta.bindingIntent !== "none" && !clientAborted));
+  const hasDiscoveryBindingIntent =
+    meta?.bindingIntent === "create" || meta?.bindingIntent === "renew";
+  let resolvePrimaryDiscoveryBinding: ((updated: boolean) => void) | null = null;
+  const primaryDiscoveryBinding = hasDiscoveryBindingIntent
+    ? new Promise<boolean>((resolve) => {
+        resolvePrimaryDiscoveryBinding = resolve;
+      })
+    : Promise.resolve(allowAuxiliarySessionBinding);
+  let primaryDiscoveryBindingSettled = false;
+  const settlePrimaryDiscoveryBinding = (updated: boolean) => {
+    if (primaryDiscoveryBindingSettled) return;
+    primaryDiscoveryBindingSettled = true;
+    resolvePrimaryDiscoveryBinding?.(updated);
+  };
+  const confirmAuxiliarySessionBinding = async () =>
+    allowAuxiliarySessionBinding && (await primaryDiscoveryBinding);
 
   // 仅在“上游 HTTP=200 且流自然结束”时做“假 200”检测：
   // - 非 200：HTTP 已经表明失败（无需额外启发式）
@@ -1177,7 +1483,7 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
   const completionMarkerMissing =
     meta?.requiresCompletionMarker === true &&
     streamEndedNormally &&
-    !hasStreamCompletionMarker(allContent);
+    !hasStreamCompletionMarker(allContent, session.originalFormat);
   let clientAbortGateUsage: FinalizeDeferredStreamingResult["clientAbortGateUsage"];
   const clientAbortCompleteSuccess = (() => {
     if (!clientAborted || upstreamStatusCode < 200 || upstreamStatusCode >= 300) {
@@ -1196,7 +1502,7 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
     // completion marker is present, proving the upstream finished before the
     // client stopped reading. Otherwise keep the pre-PR safe default (499,
     // unbilled).
-    if (!hasStreamCompletionMarker(allContent)) {
+    if (!hasStreamCompletionMarker(allContent, session.originalFormat)) {
       return false;
     }
 
@@ -1262,6 +1568,16 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
   // - 只返回“内部状态码 + 错误原因”，由调用方写入统计；
   // - 不在这里更新熔断/绑定（meta 缺失意味着 Forwarder 没有启用延迟结算；provider 缺失意味着无法归因）。
   if (!meta || !provider) {
+    const commitSideEffects =
+      shouldClearSessionBindingOnFailure || meta?.providerSessionRefOwned === true
+        ? async () => {
+            try {
+              if (shouldClearSessionBindingOnFailure) await clearSessionBinding();
+            } finally {
+              await finalizeProviderSessionRef();
+            }
+          }
+        : undefined;
     return {
       effectiveStatusCode,
       errorMessage,
@@ -1269,7 +1585,10 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
       isHedgeWinner,
       billHedgeLosers,
       clientAbortGateUsage,
-      commitSideEffects: shouldClearSessionBindingOnFailure ? clearSessionBinding : undefined,
+      commitSideEffects,
+      finalizeAttemptResources: finalizeProviderSessionRef,
+      allowAuxiliarySessionBinding,
+      confirmAuxiliarySessionBinding,
     };
   }
 
@@ -1313,22 +1632,26 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
     });
 
     const commitSideEffects = async () => {
-      await clearSessionBinding();
+      try {
+        await clearSessionBinding();
 
-      if (!clientAborted && session.getEndpointPolicy().allowCircuitBreakerAccounting) {
-        try {
-          const { recordFailure } = await import("@/lib/circuit-breaker");
-          await recordFailure(meta.providerId, new Error(errorMessage ?? "STREAM_ABORTED"));
-        } catch (cbError) {
-          logger.warn("[ResponseHandler] Failed to record streaming failure in circuit breaker", {
-            providerId: meta.providerId,
-            sessionId: session.sessionId ?? null,
-            error: cbError,
-          });
+        if (!clientAborted && session.getEndpointPolicy().allowCircuitBreakerAccounting) {
+          try {
+            const { recordFailure } = await import("@/lib/circuit-breaker");
+            await recordFailure(meta.providerId, new Error(errorMessage ?? "STREAM_ABORTED"));
+          } catch (cbError) {
+            logger.warn("[ResponseHandler] Failed to record streaming failure in circuit breaker", {
+              providerId: meta.providerId,
+              sessionId: session.sessionId ?? null,
+              error: cbError,
+            });
+          }
+
+          // Stream aborts are key-level errors. The endpoint delivered HTTP 200,
+          // so only the Provider circuit is updated here.
         }
-
-        // Stream aborts are key-level errors. The endpoint delivered HTTP 200,
-        // so only the Provider circuit is updated here.
+      } finally {
+        await finalizeProviderSessionRef();
       }
     };
 
@@ -1340,6 +1663,9 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
       billHedgeLosers,
       clientAbortGateUsage,
       commitSideEffects,
+      finalizeAttemptResources: finalizeProviderSessionRef,
+      allowAuxiliarySessionBinding,
+      confirmAuxiliarySessionBinding,
     };
   }
 
@@ -1354,18 +1680,22 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
     });
 
     const commitSideEffects = async () => {
-      await clearSessionBinding();
-      if (session.getEndpointPolicy().allowCircuitBreakerAccounting) {
-        try {
-          const { recordFailure } = await import("@/lib/circuit-breaker");
-          await recordFailure(meta.providerId, new Error(errorMessage ?? "STREAM_ABORTED"));
-        } catch (cbError) {
-          logger.warn("[ResponseHandler] Failed to record missing stream completion marker", {
-            providerId: meta.providerId,
-            sessionId: session.sessionId ?? null,
-            error: cbError,
-          });
+      try {
+        await clearSessionBinding();
+        if (session.getEndpointPolicy().allowCircuitBreakerAccounting) {
+          try {
+            const { recordFailure } = await import("@/lib/circuit-breaker");
+            await recordFailure(meta.providerId, new Error(errorMessage ?? "STREAM_ABORTED"));
+          } catch (cbError) {
+            logger.warn("[ResponseHandler] Failed to record missing stream completion marker", {
+              providerId: meta.providerId,
+              sessionId: session.sessionId ?? null,
+              error: cbError,
+            });
+          }
         }
+      } finally {
+        await finalizeProviderSessionRef();
       }
     };
 
@@ -1377,6 +1707,9 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
       billHedgeLosers,
       clientAbortGateUsage,
       commitSideEffects,
+      finalizeAttemptResources: finalizeProviderSessionRef,
+      allowAuxiliarySessionBinding,
+      confirmAuxiliarySessionBinding,
     };
   }
 
@@ -1413,23 +1746,27 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
     });
 
     const commitSideEffects = async () => {
-      await clearSessionBinding();
+      try {
+        await clearSessionBinding();
 
-      // 404 is RESOURCE_NOT_FOUND and must not penalize the Provider circuit.
-      if (
-        effectiveStatusCode !== 404 &&
-        session.getEndpointPolicy().allowCircuitBreakerAccounting
-      ) {
-        try {
-          const { recordFailure } = await import("@/lib/circuit-breaker");
-          await recordFailure(meta.providerId, new Error(detected.code));
-        } catch (cbError) {
-          logger.warn("[ResponseHandler] Failed to record fake-200 error in circuit breaker", {
-            providerId: meta.providerId,
-            sessionId: session.sessionId ?? null,
-            error: cbError,
-          });
+        // 404 is RESOURCE_NOT_FOUND and must not penalize the Provider circuit.
+        if (
+          effectiveStatusCode !== 404 &&
+          session.getEndpointPolicy().allowCircuitBreakerAccounting
+        ) {
+          try {
+            const { recordFailure } = await import("@/lib/circuit-breaker");
+            await recordFailure(meta.providerId, new Error(detected.code));
+          } catch (cbError) {
+            logger.warn("[ResponseHandler] Failed to record fake-200 error in circuit breaker", {
+              providerId: meta.providerId,
+              sessionId: session.sessionId ?? null,
+              error: cbError,
+            });
+          }
         }
+      } finally {
+        await finalizeProviderSessionRef();
       }
     };
 
@@ -1441,6 +1778,9 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
       billHedgeLosers,
       clientAbortGateUsage,
       commitSideEffects,
+      finalizeAttemptResources: finalizeProviderSessionRef,
+      allowAuxiliarySessionBinding,
+      confirmAuxiliarySessionBinding,
     };
   }
 
@@ -1471,22 +1811,26 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
     });
 
     const commitSideEffects = async () => {
-      await clearSessionBinding();
+      try {
+        await clearSessionBinding();
 
-      if (
-        effectiveStatusCode !== 404 &&
-        session.getEndpointPolicy().allowCircuitBreakerAccounting
-      ) {
-        try {
-          const { recordFailure } = await import("@/lib/circuit-breaker");
-          await recordFailure(meta.providerId, new Error(errorMessage));
-        } catch (cbError) {
-          logger.warn("[ResponseHandler] Failed to record non-200 error in circuit breaker", {
-            providerId: meta.providerId,
-            sessionId: session.sessionId ?? null,
-            error: cbError,
-          });
+        if (
+          effectiveStatusCode !== 404 &&
+          session.getEndpointPolicy().allowCircuitBreakerAccounting
+        ) {
+          try {
+            const { recordFailure } = await import("@/lib/circuit-breaker");
+            await recordFailure(meta.providerId, new Error(errorMessage));
+          } catch (cbError) {
+            logger.warn("[ResponseHandler] Failed to record non-200 error in circuit breaker", {
+              providerId: meta.providerId,
+              sessionId: session.sessionId ?? null,
+              error: cbError,
+            });
+          }
         }
+      } finally {
+        await finalizeProviderSessionRef();
       }
     };
 
@@ -1498,6 +1842,9 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
       billHedgeLosers,
       clientAbortGateUsage,
       commitSideEffects,
+      finalizeAttemptResources: finalizeProviderSessionRef,
+      allowAuxiliarySessionBinding,
+      confirmAuxiliarySessionBinding,
     };
   }
 
@@ -1517,42 +1864,47 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
   }
 
   const commitSideEffects = async () => {
-    if (meta.endpointId != null) {
+    let primaryDiscoveryBindingUpdated = false;
+    try {
+      if (meta.endpointId != null) {
+        try {
+          const { recordEndpointSuccess } = await import("@/lib/endpoint-circuit-breaker");
+          await recordEndpointSuccess(meta.endpointId);
+        } catch (endpointError) {
+          logger.warn("[ResponseHandler] Failed to record endpoint success (stream finalized)", {
+            endpointId: meta.endpointId,
+            providerId: meta.providerId,
+            error: endpointError,
+          });
+        }
+      }
+
       try {
-        const { recordEndpointSuccess } = await import("@/lib/endpoint-circuit-breaker");
-        await recordEndpointSuccess(meta.endpointId);
-      } catch (endpointError) {
-        logger.warn("[ResponseHandler] Failed to record endpoint success (stream finalized)", {
-          endpointId: meta.endpointId,
+        const { recordSuccess } = await import("@/lib/circuit-breaker");
+        await recordSuccess(meta.providerId);
+      } catch (cbError) {
+        logger.warn("[ResponseHandler] Failed to record streaming success in circuit breaker", {
           providerId: meta.providerId,
-          error: endpointError,
+          error: cbError,
         });
       }
-    }
 
-    try {
-      const { recordSuccess } = await import("@/lib/circuit-breaker");
-      await recordSuccess(meta.providerId);
-    } catch (cbError) {
-      logger.warn("[ResponseHandler] Failed to record streaming success in circuit breaker", {
-        providerId: meta.providerId,
-        error: cbError,
-      });
-    }
-
-    // Hedge winner: commitWinner() already performed session binding and chain logging.
-    if (meta.bindingIntent !== "none" && !meta.isHedgeWinner && session.sessionId) {
-      const keyId = session.authState?.key?.id ?? session.messageContext?.key?.id ?? null;
-      const result =
-        meta.bindingSnapshot && keyId != null
-          ? await SessionManager.compareAndSetSessionProvider(
-              meta.bindingSnapshot,
-              meta.providerId
-            ).then((cas) => ({
-              updated: cas.status === "ok",
-              reason: cas.status === "ok" ? "discovery_generation_cas" : cas.reason,
-              details: cas.status,
-            }))
+      // A client abort may still be billable when a completion marker was
+      // already buffered, but it must never create or renew Sticky state.
+      if (
+        meta.bindingIntent !== "none" &&
+        !meta.isHedgeWinner &&
+        !clientAborted &&
+        session.sessionId &&
+        isSessionBindingMutationAllowed(session)
+      ) {
+        const keyId = session.authState?.key?.id ?? session.messageContext?.key?.id ?? null;
+        const isDiscoveryBinding =
+          meta.bindingIntent === "create" || meta.bindingIntent === "renew";
+        const result = isDiscoveryBinding
+          ? meta.bindingSnapshot && keyId != null
+            ? await compareAndSetDiscoveryBinding(meta.bindingSnapshot, meta.providerId, keyId)
+            : { updated: false, reason: "missing_snapshot", details: "missing_snapshot" }
           : await SessionManager.updateSessionBindingSmart(
               session.sessionId,
               meta.providerId,
@@ -1562,48 +1914,56 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
               keyId
             );
 
-      if (result.updated) {
-        logger.info("[ResponseHandler] Session binding updated (stream finalized)", {
-          sessionId: session.sessionId,
-          providerId: meta.providerId,
-          providerName: meta.providerName,
-          priority: meta.providerPriority,
-          reason: result.reason,
-          details: result.details,
-          attemptNumber: meta.attemptNumber,
-          totalProvidersAttempted: meta.totalProvidersAttempted,
-        });
-      } else {
-        logger.debug("[ResponseHandler] Session binding not updated (stream finalized)", {
-          sessionId: session.sessionId,
-          providerId: meta.providerId,
-          providerName: meta.providerName,
-          priority: meta.providerPriority,
-          reason: result.reason,
-          details: result.details,
-        });
+        primaryDiscoveryBindingUpdated = isDiscoveryBinding && result.updated;
+        retainProviderSessionRef =
+          primaryDiscoveryBindingUpdated && meta.providerSessionRefRetainOnSuccess === true;
+
+        if (result.updated) {
+          logger.info("[ResponseHandler] Session binding updated (stream finalized)", {
+            sessionId: session.sessionId,
+            providerId: meta.providerId,
+            providerName: meta.providerName,
+            priority: meta.providerPriority,
+            reason: result.reason,
+            details: result.details,
+            attemptNumber: meta.attemptNumber,
+            totalProvidersAttempted: meta.totalProvidersAttempted,
+          });
+        } else {
+          logger.debug("[ResponseHandler] Session binding not updated (stream finalized)", {
+            sessionId: session.sessionId,
+            providerId: meta.providerId,
+            providerName: meta.providerName,
+            priority: meta.providerPriority,
+            reason: result.reason,
+            details: result.details,
+          });
+        }
+
+        if (session.shouldTrackSessionObservability()) {
+          void SessionManager.updateSessionProvider(session.sessionId, {
+            providerId: meta.providerId,
+            providerName: meta.providerName,
+          }).catch((err) => {
+            logger.error(
+              "[ResponseHandler] Failed to update session provider info (stream finalized)",
+              { error: err }
+            );
+          });
+        }
       }
 
-      if (session.shouldTrackSessionObservability()) {
-        void SessionManager.updateSessionProvider(session.sessionId, {
-          providerId: meta.providerId,
-          providerName: meta.providerName,
-        }).catch((err) => {
-          logger.error(
-            "[ResponseHandler] Failed to update session provider info (stream finalized)",
-            { error: err }
-          );
-        });
-      }
+      logger.info("[ResponseHandler] Streaming request finalized as success", {
+        providerId: meta.providerId,
+        providerName: meta.providerName,
+        attemptNumber: meta.attemptNumber,
+        totalProvidersAttempted: meta.totalProvidersAttempted,
+        statusCode: meta.upstreamStatusCode,
+      });
+    } finally {
+      settlePrimaryDiscoveryBinding(primaryDiscoveryBindingUpdated);
+      await finalizeProviderSessionRef();
     }
-
-    logger.info("[ResponseHandler] Streaming request finalized as success", {
-      providerId: meta.providerId,
-      providerName: meta.providerName,
-      attemptNumber: meta.attemptNumber,
-      totalProvidersAttempted: meta.totalProvidersAttempted,
-      statusCode: meta.upstreamStatusCode,
-    });
   };
 
   return {
@@ -1614,6 +1974,9 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
     billHedgeLosers,
     clientAbortGateUsage,
     commitSideEffects,
+    finalizeAttemptResources: finalizeProviderSessionRef,
+    allowAuxiliarySessionBinding,
+    confirmAuxiliarySessionBinding,
   };
 }
 
@@ -1869,7 +2232,7 @@ export class ProxyResponseHandler {
             }
 
             const postTerminalSideEffects: Array<() => Promise<void>> = [];
-            if (session.sessionId) {
+            if (session.sessionId && isSessionBindingMutationAllowed(session)) {
               const sessionId = session.sessionId;
               postTerminalSideEffects.push(async () => {
                 const keyId = session.authState?.key?.id ?? session.messageContext?.key?.id ?? null;
@@ -2044,7 +2407,9 @@ export class ProxyResponseHandler {
           const sessionId = session.sessionId;
           postTerminalSideEffects.push(async () => {
             const keyId = session.authState?.key?.id ?? session.messageContext?.key?.id ?? null;
-            await SessionManager.clearSessionProvider(sessionId, provider.id, keyId);
+            if (isSessionBindingMutationAllowed(session)) {
+              await SessionManager.clearSessionProvider(sessionId, provider.id, keyId);
+            }
 
             const sessionUsagePayload: SessionUsageUpdate = {
               status:
@@ -2178,7 +2543,8 @@ export class ProxyResponseHandler {
           statusCode >= 200 &&
           statusCode < 300 &&
           session.sessionId &&
-          provider.id
+          provider.id &&
+          isSessionBindingMutationAllowed(session)
         ) {
           try {
             const responseData = JSON.parse(responseText) as Record<string, unknown>;
@@ -2594,10 +2960,16 @@ export class ProxyResponseHandler {
   private static async handleStream(session: ProxySession, response: Response): Promise<Response> {
     const messageContext = session.messageContext;
     const provider = session.provider;
+    const discoveryLeaseLifecycle = startDiscoveryLeaseLifecycle(session);
 
     if (!messageContext || !provider || !response.body) {
       discardBeforeResponseBodySnapshot(session);
       releaseSessionAgent(session);
+      const deferredMeta = peekDeferredStreamingFinalization(session);
+      void (async () => {
+        await releaseOwnedProviderSessionRef(session, deferredMeta, false);
+        await discoveryLeaseLifecycle.release();
+      })();
       return response;
     }
 
@@ -2695,16 +3067,26 @@ export class ProxyResponseHandler {
           let transportReleased = false;
           let commitSideEffectsScheduled = false;
           let latestCommitSideEffects: (() => Promise<void>) | undefined;
+          let latestFinalizeAttemptResources: (() => Promise<void>) | undefined;
           const scheduleCommitSideEffects = (effect: (() => Promise<void>) | undefined) => {
-            if (!effect || commitSideEffectsScheduled) return;
+            if (
+              (!effect && !latestFinalizeAttemptResources && !discoveryLeaseLifecycle.active) ||
+              commitSideEffectsScheduled
+            )
+              return;
             commitSideEffectsScheduled = true;
+            const finalizeAttemptResources = latestFinalizeAttemptResources;
             return schedulePostTerminalSideEffects({
               taskId,
               providerId: provider.id,
               sessionId: session.sessionId,
               commit: async (signal) => {
-                if (signal.aborted) return;
-                await effect();
+                try {
+                  if (!signal.aborted) await effect?.();
+                } finally {
+                  await finalizeAttemptResources?.();
+                  await discoveryLeaseLifecycle.release();
+                }
               },
             });
           };
@@ -2900,9 +3282,11 @@ export class ProxyResponseHandler {
               statusCode,
               streamEndedNormally,
               clientAborted,
+              discoveryLeaseLifecycle,
               abortReason
             );
             latestCommitSideEffects = finalized.commitSideEffects;
+            latestFinalizeAttemptResources = finalized.finalizeAttemptResources;
             const finalizedUsage = await finalizeRequestStats(
               session,
               allContent,
@@ -2970,9 +3354,11 @@ export class ProxyResponseHandler {
                 statusCode,
                 false,
                 clientAborted,
+                discoveryLeaseLifecycle,
                 abortReason
               );
               latestCommitSideEffects = finalized.commitSideEffects;
+              latestFinalizeAttemptResources = finalized.finalizeAttemptResources;
 
               await finalizeRequestStats(
                 session,
@@ -3013,6 +3399,12 @@ export class ProxyResponseHandler {
             }
           } finally {
             releaseTransportResources();
+            if (!commitSideEffectsScheduled) {
+              void (async () => {
+                await latestFinalizeAttemptResources?.();
+                await discoveryLeaseLifecycle.release();
+              })();
+            }
           }
         };
 
@@ -3297,15 +3689,30 @@ export class ProxyResponseHandler {
     let terminalDetailsPersisted = false;
     let streamCommitSideEffectsScheduled = false;
     let latestStreamCommitSideEffects: Array<() => Promise<void>> = [];
+    let latestStreamFinalizeAttemptResources: (() => Promise<void>) | undefined;
     const scheduleStreamCommitSideEffects = () => {
-      if (latestStreamCommitSideEffects.length === 0 || streamCommitSideEffectsScheduled) return;
+      if (
+        (latestStreamCommitSideEffects.length === 0 &&
+          !latestStreamFinalizeAttemptResources &&
+          !discoveryLeaseLifecycle.active) ||
+        streamCommitSideEffectsScheduled
+      )
+        return;
       streamCommitSideEffectsScheduled = true;
       const committedEffects = [...latestStreamCommitSideEffects];
+      const finalizeAttemptResources = latestStreamFinalizeAttemptResources;
       return schedulePostTerminalSideEffects({
         taskId,
         providerId: provider.id,
         sessionId: session.sessionId,
-        commit: (signal) => runPostTerminalSideEffects(committedEffects, signal),
+        commit: async (signal) => {
+          try {
+            await runPostTerminalSideEffects(committedEffects, signal);
+          } finally {
+            await finalizeAttemptResources?.();
+            await discoveryLeaseLifecycle.release();
+          }
+        },
       });
     };
     let streamFailurePersistencePromise: Promise<void> | null = null;
@@ -3356,11 +3763,13 @@ export class ProxyResponseHandler {
           statusCode,
           streamEndedNormally,
           clientAborted,
+          discoveryLeaseLifecycle,
           abortReason
         );
         latestStreamCommitSideEffects = finalized.commitSideEffects
           ? [finalized.commitSideEffects]
           : [];
+        latestStreamFinalizeAttemptResources = finalized.finalizeAttemptResources;
         const effectiveStatusCode = finalized.effectiveStatusCode;
         const streamErrorMessage = finalized.errorMessage;
         const providerIdForPersistence = finalized.providerIdForPersistence;
@@ -3457,7 +3866,8 @@ export class ProxyResponseHandler {
           effectiveStatusCode >= 200 &&
           effectiveStatusCode < 300 &&
           session.sessionId &&
-          provider.id
+          provider.id &&
+          finalized.allowAuxiliarySessionBinding
         ) {
           try {
             const sseEvents = parseSSEData(allContent);
@@ -3645,6 +4055,7 @@ export class ProxyResponseHandler {
         if (codexCacheBinding) {
           const { sessionId, promptCacheKey, providerId, keyId } = codexCacheBinding;
           postTerminalSideEffects.push(async () => {
+            if (!(await finalized.confirmAuxiliarySessionBinding())) return;
             try {
               await SessionManager.updateSessionWithCodexCacheKey(
                 sessionId,
@@ -4067,6 +4478,12 @@ export class ProxyResponseHandler {
         clearClientAbortDrainTimer();
         clearIdleTimer(); // 清除静默期计时器（防止泄漏）
         releaseSessionAgent(session);
+        if (!streamCommitSideEffectsScheduled) {
+          void (async () => {
+            await latestStreamFinalizeAttemptResources?.();
+            await discoveryLeaseLifecycle.release();
+          })();
+        }
       }
     };
 

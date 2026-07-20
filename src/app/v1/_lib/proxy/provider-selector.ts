@@ -296,7 +296,9 @@ export class ProxyProviderResolver {
 
         // === 成功 ===
         if (checkResult.referenced) {
-          session.recordProviderSessionRef(session.provider.id);
+          session.recordProviderSessionRef(session.provider.id, {
+            retainOnSuccess: checkResult.tracked,
+          });
         }
 
         logger.debug("ProviderSelector: Session tracked atomically", {

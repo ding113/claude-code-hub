@@ -1,6 +1,13 @@
 import type { SessionBindingSnapshot } from "@/lib/redis/session-binding";
 import type { ProxySession } from "./session";
 
+export type DeferredStreamingDiscoveryLease = {
+  sessionId: string;
+  keyId: number;
+  ownerToken: string;
+  ttlSeconds: number;
+};
+
 /**
  * 流式响应（SSE）在“收到响应头”时无法确定成功与否：
  * - 上游可能返回 HTTP 200，但 body 是错误 JSON（假 200）
@@ -41,6 +48,12 @@ export type DeferredStreamingFinalization = {
   bindingSnapshot?: SessionBindingSnapshot | null;
   /** Discovery winners must satisfy the protocol completion marker before binding. */
   requiresCompletionMarker?: boolean;
+  /** Lease already acquired by Forwarder and owned until terminal side effects finish. */
+  discoveryLease?: DeferredStreamingDiscoveryLease;
+  /** Whether this attempt owns a Provider concurrent-session reference. */
+  providerSessionRefOwned?: boolean;
+  /** CAS success converts this attempt ref into the binding baseline when true. */
+  providerSessionRefRetainOnSuccess?: boolean;
 };
 
 const deferredMeta = new WeakMap<ProxySession, DeferredStreamingFinalization>();

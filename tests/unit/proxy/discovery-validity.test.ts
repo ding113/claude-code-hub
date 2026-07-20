@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  DISCOVERY_EVENT_MAX_COUNT,
+  DISCOVERY_PREFIX_MAX_BYTES,
   DiscoveryValidityParser,
   classifyDiscoveryChunk,
 } from "@/app/v1/_lib/proxy/discovery-validity";
@@ -87,6 +89,27 @@ describe("discovery validity", () => {
     });
   });
 
+  it("accepts Anthropic tool-use partial JSON as deliverable content", () => {
+    const parser = new DiscoveryValidityParser("anthropic");
+
+    expect(
+      parser.push('data: {"type":"content_block_delta","delta":{"partial_json":"{\\"x\\":1}"}}\n\n')
+    ).toMatchObject({ ready: true, error: false });
+    expect(parser.push('data: {"type":"message_stop"}\n\n')).toMatchObject({
+      ready: true,
+      terminal: true,
+      error: false,
+    });
+  });
+
+  it("accepts nested OpenAI Chat tool-call arguments", () => {
+    expect(
+      parserForOpenAIChatToolCall().push(
+        'data: {"choices":[{"delta":{"tool_calls":[{"function":{"arguments":"{\\"x\\":1}"}}]}}]}\n\n'
+      )
+    ).toMatchObject({ ready: true, error: false });
+  });
+
   it("accepts Anthropic tool-use starts and partial JSON deltas", () => {
     expect(
       classifyDiscoveryChunk(
@@ -101,4 +124,23 @@ describe("discovery validity", () => {
       ).ready
     ).toBe(true);
   });
+
+  it("fails a metadata-only prefix after the byte limit", () => {
+    const parser = new DiscoveryValidityParser("openai-chat");
+    const result = parser.push(`:${"x".repeat(DISCOVERY_PREFIX_MAX_BYTES + 1)}`);
+    expect(result).toMatchObject({ ready: false, error: true, limitExceeded: true });
+  });
+
+  it("fails metadata-only protocol events after the event limit", () => {
+    const parser = new DiscoveryValidityParser("anthropic");
+    let result = parser.push("");
+    for (let index = 0; index <= DISCOVERY_EVENT_MAX_COUNT; index += 1) {
+      result = parser.push('data: {"type":"ping"}\n');
+    }
+    expect(result).toMatchObject({ ready: false, error: true, limitExceeded: true });
+  });
 });
+
+function parserForOpenAIChatToolCall(): DiscoveryValidityParser {
+  return new DiscoveryValidityParser("openai-chat");
+}
