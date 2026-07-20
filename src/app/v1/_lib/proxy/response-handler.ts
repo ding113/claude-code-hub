@@ -1154,7 +1154,7 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
     if (meta?.bindingSnapshot && keyId != null) {
       await SessionManager.clearVersionedSessionProvider(
         meta.bindingSnapshot,
-        providerIdForPersistence,
+        meta.bindingSnapshot.providerId,
         0
       );
       return;
