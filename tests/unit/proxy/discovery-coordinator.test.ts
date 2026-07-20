@@ -74,4 +74,17 @@ describe("DiscoveryCoordinator", () => {
       cancelAttemptIds: ["normal"],
     });
   });
+
+  it("retains a lower-priority ready candidate until the higher tier fails", () => {
+    const coordinator = new DiscoveryCoordinator({ concurrency: 2, maxRounds: 2 });
+    coordinator.addAttempt(attempt("high", 1));
+    coordinator.addAttempt(attempt("low", 10));
+
+    expect(coordinator.markReady("low")).toEqual({ type: "none" });
+    expect(coordinator.snapshot.find((item) => item.id === "low")).toMatchObject({
+      ready: true,
+      pending: true,
+    });
+    expect(coordinator.markFailed("high")).toEqual({ type: "commit_normal", attemptId: "low" });
+  });
 });

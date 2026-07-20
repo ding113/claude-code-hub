@@ -5137,24 +5137,32 @@ export class ProxyForwarder {
           attempt.reader = response.body.getReader();
           while (!committed && !settled && attempt.pending) {
             const item = await attempt.reader.read();
-            if (item.done) throw new EmptyResponseError(provider.id, provider.name, "empty_body");
+            if (item.done) {
+              // A ready candidate may have reached EOF while waiting for a
+              // higher-priority attempt. Its buffered prefix remains a valid
+              // response and must stay promotable.
+              if (attempt.ready) return;
+              throw new EmptyResponseError(provider.id, provider.name, "empty_body");
+            }
             if (!item.value || item.value.byteLength === 0) continue;
             attempt.chunks.push(item.value);
             const validity = attempt.parser.push(item.value);
-            if (validity.error || validity.terminal)
+            // A single read can contain both deliverable content and the
+            // protocol terminator. Terminal is only invalid when no content
+            // was observed; otherwise the buffered candidate is complete.
+            if (validity.error || (validity.terminal && !validity.ready))
               throw new ProxyError("Invalid upstream discovery response", 502);
             if (!validity.ready) continue;
             attempt.ready = true;
-            const normalPendingHigher = Array.from(attempts.values()).some(
-              (other) =>
-                other.pending &&
-                other.kind === "normal" &&
-                (other.provider.priority || 0) < (provider.priority || 0)
-            );
-            if (normalPendingHigher) continue;
             const action = coordinator.markReady(id);
             if (action.type === "commit_normal" || action.type === "promote_fallback")
               await commit(attempt);
+            // Do not issue another reader request after a complete candidate;
+            // the buffered stream is already sufficient for later promotion.
+            if (validity.terminal) return;
+            // The coordinator owns priority gating. A ready lower-priority
+            // candidate stays held while a higher tier is still pending.
+            if (action.type === "none") continue;
             return;
           }
         })
