@@ -5161,8 +5161,9 @@ export class ProxyForwarder {
             // the buffered stream is already sufficient for later promotion.
             if (validity.terminal) return;
             // The coordinator owns priority gating. A ready lower-priority
-            // candidate stays held while a higher tier is still pending.
-            if (action.type === "none") continue;
+            // candidate stays held while a higher tier is still pending. Stop
+            // reading so later chunks are not consumed before promotion.
+            if (action.type === "none") return;
             return;
           }
         })
