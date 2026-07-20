@@ -46,6 +46,14 @@ the versioned Redis binding capability is available. If Redis capability is
 unknown/unavailable, the existing provider selection and Hedge behavior remain
 active.
 
+The versioned binding scripts require the canonical binding, legacy provider,
+legacy owner, lease, and cooldown keys to be evaluated atomically. On Redis
+Cluster layouts where those keys do not share a slot and Redis returns
+`CROSSSLOT` (or when Lua capability probing fails), the capability state is
+`unavailable`; the service records that state and uses the tenant-checked
+legacy wrapper. Discovery stays disabled until a later connection-lifecycle
+probe succeeds.
+
 ## Rollout
 
 1. Apply the system-settings migration.
