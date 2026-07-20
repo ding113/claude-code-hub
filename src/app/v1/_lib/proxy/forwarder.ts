@@ -3845,7 +3845,6 @@ export class ProxyForwarder {
       disableStreamingHedge?: boolean;
     };
     return (
-      settings.discoveryEnabled === true &&
       endpointPolicy.allowRetry &&
       endpointPolicy.allowProviderSwitch &&
       message?.stream === true &&
@@ -5035,6 +5034,14 @@ export class ProxyForwarder {
     const launch = async (provider: Provider, kind: "normal" | "fallback"): Promise<void> => {
       if (settled || committed || launched.has(provider.id)) return;
       launched.add(provider.id);
+      let providerSessionRefTracked = false;
+      const rollbackLaunch = () => {
+        launched.delete(provider.id);
+        if (providerSessionRefTracked) {
+          releaseProviderRef(provider.id);
+          providerSessionRefTracked = false;
+        }
+      };
       if (provider.id !== initialProvider.id && session.sessionId) {
         const limit = provider.limitConcurrentSessions || 0;
         const check = await RateLimitService.checkAndTrackProviderSession(
@@ -5046,14 +5053,29 @@ export class ProxyForwarder {
           launched.delete(provider.id);
           throw new ProxyError(check.reason || "Provider concurrent limit reached", 503);
         }
-        if (check.referenced) session.recordProviderSessionRef(provider.id);
+        if (check.referenced) {
+          session.recordProviderSessionRef(provider.id);
+          providerSessionRefTracked = true;
+        }
       }
-      const endpoint = await ProxyForwarder.resolveStreamingHedgeEndpoint(session, provider);
-      const attemptSession =
-        provider.id === initialProvider.id
-          ? session
-          : ProxyForwarder.createStreamingShadowSession(session, provider);
-      attemptSession.setProvider(provider);
+      let endpoint: Awaited<ReturnType<typeof ProxyForwarder.resolveStreamingHedgeEndpoint>>;
+      try {
+        endpoint = await ProxyForwarder.resolveStreamingHedgeEndpoint(session, provider);
+      } catch (error) {
+        rollbackLaunch();
+        throw error;
+      }
+      let attemptSession: ProxySession;
+      try {
+        attemptSession =
+          provider.id === initialProvider.id
+            ? session
+            : ProxyForwarder.createStreamingShadowSession(session, provider);
+        attemptSession.setProvider(provider);
+      } catch (error) {
+        rollbackLaunch();
+        throw error;
+      }
       const controller = new AbortController();
       const id = `${provider.id}:${sequence + 1}`;
       const attempt = {
@@ -5137,25 +5159,42 @@ export class ProxyForwarder {
           attempt.reader = response.body.getReader();
           while (!committed && !settled && attempt.pending) {
             const item = await attempt.reader.read();
-            if (item.done) throw new EmptyResponseError(provider.id, provider.name, "empty_body");
+            if (attempt.readerTransferred || committed || settled || !attempt.pending) break;
+            if (item.done) {
+              if (attempt.ready) break;
+              throw new EmptyResponseError(provider.id, provider.name, "empty_body");
+            }
             if (!item.value || item.value.byteLength === 0) continue;
             attempt.chunks.push(item.value);
             const validity = attempt.parser.push(item.value);
-            if (validity.error || validity.terminal)
+            if (validity.error) throw new ProxyError("Invalid upstream discovery response", 502);
+            if (validity.ready) attempt.ready = true;
+            if (validity.terminal) {
+              if (attempt.ready) break;
               throw new ProxyError("Invalid upstream discovery response", 502);
+            }
             if (!validity.ready) continue;
-            attempt.ready = true;
             const normalPendingHigher = Array.from(attempts.values()).some(
               (other) =>
                 other.pending &&
                 other.kind === "normal" &&
                 (other.provider.priority || 0) < (provider.priority || 0)
             );
-            if (normalPendingHigher) continue;
+            // Once a valid prefix is buffered behind a higher-priority normal
+            // attempt, stop reading. This leaves the reader idle so a later
+            // fallback promotion can transfer it without racing an in-flight
+            // read and losing bytes from the buffered response.
+            if (normalPendingHigher) return;
             const action = coordinator.markReady(id);
             if (action.type === "commit_normal" || action.type === "promote_fallback")
               await commit(attempt);
             return;
+          }
+          if (attempt.ready && !committed && !settled && attempt.pending) {
+            const action = coordinator.markReady(id);
+            if (action.type === "commit_normal" || action.type === "promote_fallback") {
+              await commit(attempt);
+            }
           }
         })
         .catch(async (error) => {
@@ -5180,6 +5219,7 @@ export class ProxyForwarder {
           attempt.releaseAgent?.();
           releaseProviderRef(provider.id);
           const actionOwnsNextStep =
+            failureAction.type === "commit_normal" ||
             failureAction.type === "promote_fallback" ||
             failureAction.type === "launch" ||
             failureAction.type === "terminal_failure";
@@ -5188,7 +5228,15 @@ export class ProxyForwarder {
           }
           if (!actionOwnsNextStep && !committed && !settled) {
             const replacement = await chooseCandidate();
-            if (replacement) await launch(replacement, "normal");
+            if (replacement) {
+              try {
+                await launch(replacement, "normal");
+              } catch (launchError) {
+                lastError =
+                  launchError instanceof Error ? launchError : new Error(String(launchError));
+                noMoreCandidates = true;
+              }
+            }
           }
           if (
             Array.from(attempts.values()).every((candidate) => !candidate.pending) &&
@@ -5207,20 +5255,37 @@ export class ProxyForwarder {
         });
     };
 
-    const launchNextRound = async () => {
+    const launchNextRound = async (slots: number, coordinatorAlreadyAdvanced = false) => {
       if (settled || committed) return;
-      currentRound += 1;
-      if (currentRound > maxRounds) return;
-      coordinator.beginRound();
-      const candidate = await chooseCandidate();
-      if (candidate) {
+      if (coordinatorAlreadyAdvanced) {
+        currentRound = coordinator.round;
+      } else {
+        const nextRound = coordinator.beginRound();
+        currentRound = nextRound.round;
+      }
+      if (currentRound > maxRounds || slots <= 0) return;
+      const candidates = await ProxyProviderResolver.pickDiscoveryProviders(
+        session,
+        slots,
+        Array.from(launched)
+      );
+      if (candidates.length === 0) {
+        noMoreCandidates = true;
+      }
+      for (const candidate of candidates) {
         try {
           await launch(candidate, "normal");
         } catch (error) {
           lastError = error instanceof Error ? error : new Error(String(error));
-          noMoreCandidates = true;
+          noMoreCandidates = false;
         }
       }
+      const hasPendingAttempt = Array.from(attempts.values()).some((attempt) => attempt.pending);
+      if (!hasPendingAttempt) {
+        await settleFailure(ProxyForwarder.buildAllProvidersUnavailableError(lastError));
+        return;
+      }
+      if (candidates.length === 0) return;
       if (!committed && !settled) {
         roundTimer = setTimeout(() => {
           void onBoundary().catch((error) =>
@@ -5246,8 +5311,9 @@ export class ProxyForwarder {
         if (action.promoteAttemptId) {
           const fallback = attempts.get(action.promoteAttemptId);
           if (fallback) fallback.kind = "fallback";
-          if (action.type === "cancel" && currentRound < maxRounds) {
-            await launchNextRound();
+          if (action.type === "cancel") {
+            if (fallback) await commit(fallback);
+            return;
           }
         }
       }
@@ -5257,20 +5323,12 @@ export class ProxyForwarder {
         return;
       }
       if (action.type === "launch") {
-        await launchNextRound();
+        await launchNextRound(action.slots, true);
         return;
       }
       if (action.type === "terminal_failure") {
         await settleFailure(ProxyForwarder.buildAllProvidersUnavailableError(lastError));
         return;
-      }
-      if (action.type === "none") {
-        const fallbackPending = Array.from(attempts.values()).some(
-          (attempt) => attempt.pending && attempt.kind === "fallback"
-        );
-        if (fallbackPending && currentRound < maxRounds) {
-          await launchNextRound();
-        }
       }
     };
 
@@ -5279,6 +5337,7 @@ export class ProxyForwarder {
       await executeCoordinatorAction(coordinator.onRoundBoundary());
     };
 
+    let stickyProbeFailed = false;
     const cleanupAbort = bindClientAbortListener(session.clientAbortSignal, () => {
       if (settled || committed) return;
       void settleFailure(new ProxyError("Request aborted by client", 499, undefined, true)).catch(
@@ -5298,6 +5357,7 @@ export class ProxyForwarder {
       try {
         await launch(initialProvider, "normal");
       } catch (error) {
+        stickyProbeFailed = hasSticky;
         lastError = error instanceof Error ? error : new Error(String(error));
         const replacement = await chooseCandidate();
         if (replacement) {
@@ -5316,32 +5376,40 @@ export class ProxyForwarder {
       }
       const initial = hasSticky ? concurrency - 1 : Math.max(0, concurrency - 1);
       if (hasSticky) {
-        stickyTimer = setTimeout(() => {
-          const sticky = Array.from(attempts.values()).find(
-            (attempt) => attempt.pending && attempt.provider.id === initialProvider.id
-          );
-          if (sticky) {
-            sticky.kind = "fallback";
-            if (bindingSnapshot && bindingSnapshot.providerId === initialProvider.id) {
-              void SessionManager.clearVersionedSessionProvider(
-                bindingSnapshot,
-                initialProvider.id,
-                Math.ceil((settings.stickyTimeoutCooldownMs ?? 300_000) / 1000)
-              ).catch((error) =>
-                logger.debug("[Discovery] Failed to clear timed-out Sticky", { error })
-              );
+        if (stickyProbeFailed) {
+          roundTimer = setTimeout(() => {
+            void onBoundary().catch((error) =>
+              logger.warn("[Discovery] Sticky failure boundary failed", { error })
+            );
+          }, discoverySlaMs);
+        } else {
+          stickyTimer = setTimeout(() => {
+            const sticky = Array.from(attempts.values()).find(
+              (attempt) => attempt.pending && attempt.provider.id === initialProvider.id
+            );
+            if (sticky) {
+              sticky.kind = "fallback";
+              if (bindingSnapshot && bindingSnapshot.providerId === initialProvider.id) {
+                void SessionManager.clearVersionedSessionProvider(
+                  bindingSnapshot,
+                  initialProvider.id,
+                  Math.ceil((settings.stickyTimeoutCooldownMs ?? 300_000) / 1000)
+                ).catch((error) =>
+                  logger.debug("[Discovery] Failed to clear timed-out Sticky", { error })
+                );
+              }
+              if (currentRound < maxRounds) {
+                void launchNextRound(Math.max(0, concurrency - 1)).catch((error) =>
+                  logger.warn("[Discovery] Sticky round launch failed", { error })
+                );
+              } else {
+                void onBoundary().catch((error) =>
+                  logger.warn("[Discovery] Sticky boundary failed", { error })
+                );
+              }
             }
-            if (currentRound < maxRounds) {
-              void launchNextRound().catch((error) =>
-                logger.warn("[Discovery] Sticky round launch failed", { error })
-              );
-            } else {
-              void onBoundary().catch((error) =>
-                logger.warn("[Discovery] Sticky boundary failed", { error })
-              );
-            }
-          }
-        }, stickySlaMs);
+          }, stickySlaMs);
+        }
       } else {
         const candidates = await ProxyProviderResolver.pickDiscoveryProviders(
           session,
@@ -5353,14 +5421,18 @@ export class ProxyForwarder {
             await launch(provider, "normal");
           } catch (error) {
             lastError = error instanceof Error ? error : new Error(String(error));
-            noMoreCandidates = true;
+            noMoreCandidates = false;
           }
         }
-        roundTimer = setTimeout(() => {
-          void onBoundary().catch((error) =>
-            logger.warn("[Discovery] Round boundary failed", { error })
-          );
-        }, discoverySlaMs);
+        if (Array.from(attempts.values()).some((attempt) => attempt.pending)) {
+          roundTimer = setTimeout(() => {
+            void onBoundary().catch((error) =>
+              logger.warn("[Discovery] Round boundary failed", { error })
+            );
+          }, discoverySlaMs);
+        } else if (!settled && !committed) {
+          await settleFailure(ProxyForwarder.buildAllProvidersUnavailableError(lastError));
+        }
       }
       const result = await resultPromise;
       if (result.error) throw result.error;

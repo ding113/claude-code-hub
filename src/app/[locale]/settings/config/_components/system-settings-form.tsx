@@ -114,6 +114,7 @@ function formatIpExtractionConfig(config: IpExtractionConfig): string {
 }
 
 const DEFAULT_IP_EXTRACTION_CONFIG_TEXT = formatIpExtractionConfig(DEFAULT_IP_EXTRACTION_CONFIG);
+type DiscoveryNumberValue = number | "";
 
 export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps) {
   const router = useRouter();
@@ -138,16 +139,20 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
   );
   const [billHedgeLosers, setBillHedgeLosers] = useState(initialSettings.billHedgeLosers);
   const [discoveryEnabled, setDiscoveryEnabled] = useState(initialSettings.discoveryEnabled);
-  const [discoveryConcurrency, setDiscoveryConcurrency] = useState(
+  const [discoveryConcurrency, setDiscoveryConcurrency] = useState<DiscoveryNumberValue>(
     initialSettings.discoveryConcurrency
   );
-  const [maxDiscoveryRounds, setMaxDiscoveryRounds] = useState(initialSettings.maxDiscoveryRounds);
-  const [discoverySlaMs, setDiscoverySlaMs] = useState(initialSettings.discoverySlaMs);
-  const [stickySlaMs, setStickySlaMs] = useState(initialSettings.stickySlaMs);
-  const [racingTotalTimeoutMs, setRacingTotalTimeoutMs] = useState(
+  const [maxDiscoveryRounds, setMaxDiscoveryRounds] = useState<DiscoveryNumberValue>(
+    initialSettings.maxDiscoveryRounds
+  );
+  const [discoverySlaMs, setDiscoverySlaMs] = useState<DiscoveryNumberValue>(
+    initialSettings.discoverySlaMs
+  );
+  const [stickySlaMs, setStickySlaMs] = useState<DiscoveryNumberValue>(initialSettings.stickySlaMs);
+  const [racingTotalTimeoutMs, setRacingTotalTimeoutMs] = useState<DiscoveryNumberValue>(
     initialSettings.racingTotalTimeoutMs
   );
-  const [stickyTimeoutCooldownMs, setStickyTimeoutCooldownMs] = useState(
+  const [stickyTimeoutCooldownMs, setStickyTimeoutCooldownMs] = useState<DiscoveryNumberValue>(
     initialSettings.stickyTimeoutCooldownMs
   );
   const [timezone, setTimezone] = useState<string | null>(initialSettings.timezone);
@@ -250,7 +255,27 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
       return;
     }
 
-    if (racingTotalTimeoutMs < stickySlaMs + maxDiscoveryRounds * discoverySlaMs) {
+    const discoveryConfig = {
+      discoveryConcurrency: Number(discoveryConcurrency),
+      maxDiscoveryRounds: Number(maxDiscoveryRounds),
+      discoverySlaMs: Number(discoverySlaMs),
+      stickySlaMs: Number(stickySlaMs),
+      racingTotalTimeoutMs: Number(racingTotalTimeoutMs),
+      stickyTimeoutCooldownMs: Number(stickyTimeoutCooldownMs),
+    };
+    if (
+      discoveryEnabled &&
+      Object.values(discoveryConfig).some((value) => !Number.isSafeInteger(value) || value < 1)
+    ) {
+      toast.error(t("discoveryWindowInvalid"));
+      return;
+    }
+    if (
+      discoveryEnabled &&
+      discoveryConfig.racingTotalTimeoutMs <
+        discoveryConfig.stickySlaMs +
+          discoveryConfig.maxDiscoveryRounds * discoveryConfig.discoverySlaMs
+    ) {
       toast.error(t("discoveryWindowInvalid"));
       return;
     }
@@ -337,12 +362,7 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
         billNonSuccessfulRequests,
         billHedgeLosers,
         discoveryEnabled,
-        discoveryConcurrency,
-        maxDiscoveryRounds,
-        discoverySlaMs,
-        stickySlaMs,
-        racingTotalTimeoutMs,
-        stickyTimeoutCooldownMs,
+        ...(discoveryEnabled ? discoveryConfig : {}),
         timezone,
         verboseProviderError,
         passThroughUpstreamErrorMessage,
@@ -714,8 +734,11 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
                   id={`discovery-${key}`}
                   type="number"
                   min={min}
-                  value={value}
-                  onChange={(event) => setter(Number(event.target.value))}
+                  required={discoveryEnabled}
+                  value={value === 0 ? "" : value}
+                  onChange={(event) =>
+                    setter(event.target.value === "" ? "" : Number(event.target.value))
+                  }
                   disabled={isPending || !discoveryEnabled}
                   className={inputClassName}
                 />

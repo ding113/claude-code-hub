@@ -11891,7 +11891,7 @@ export interface operations {
                         discoveryConcurrency: number;
                         /** @description Maximum number of Discovery rounds. */
                         maxDiscoveryRounds: number;
-                        /** @description 首字 Discovery SLA in milliseconds. */
+                        /** @description 首字节 Discovery SLA in milliseconds. */
                         discoverySlaMs: number;
                         /** @description Sticky probe SLA in milliseconds. */
                         stickySlaMs: number;
@@ -12167,7 +12167,7 @@ export interface operations {
                     discoveryConcurrency?: number;
                     /** @description Maximum number of Discovery rounds. */
                     maxDiscoveryRounds?: number;
-                    /** @description 首字 Discovery SLA in milliseconds. */
+                    /** @description 首字节 Discovery SLA in milliseconds. */
                     discoverySlaMs?: number;
                     /** @description Sticky probe SLA in milliseconds. */
                     stickySlaMs?: number;
@@ -12316,7 +12316,7 @@ export interface operations {
                         discoveryConcurrency: number;
                         /** @description Maximum number of Discovery rounds. */
                         maxDiscoveryRounds: number;
-                        /** @description 首字 Discovery SLA in milliseconds. */
+                        /** @description 首字节 Discovery SLA in milliseconds. */
                         discoverySlaMs: number;
                         /** @description Sticky probe SLA in milliseconds. */
                         stickySlaMs: number;

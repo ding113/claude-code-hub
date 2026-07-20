@@ -67,6 +67,10 @@ export class DiscoveryCoordinator {
   }
 
   beginRound(): { requestEpoch: number; roundEpoch: number; round: number } {
+    if (this.isTerminal || this.round >= this.maxRounds) {
+      return { ...this.epochs, round: this.round };
+    }
+    this.round += 1;
     this.roundEpoch += 1;
     if (!this.isTerminal) this.state = "DISCOVERY_RACING";
     return { ...this.epochs, round: this.round };
@@ -83,7 +87,11 @@ export class DiscoveryCoordinator {
   }
 
   get isTerminal(): boolean {
-    return this.state === "WINNER_COMMITTED" || this.state === "TERMINAL_FAILED";
+    return (
+      this.state === "WINNER_COMMITTED" ||
+      this.state === "FALLBACK_ACTIVE" ||
+      this.state === "TERMINAL_FAILED"
+    );
   }
 
   get activeAttempts(): DiscoveryAttempt[] {
@@ -132,6 +140,8 @@ export class DiscoveryCoordinator {
     if (!attempt) return { type: "none" };
     attempt.pending = false;
     attempt.ready = false;
+    const readyAction = this.chooseReadyNormal();
+    if (readyAction.type !== "none") return readyAction;
     return this.afterAttemptState();
   }
 
@@ -152,8 +162,7 @@ export class DiscoveryCoordinator {
       );
       if (higherTierPending) return { type: "none" };
     }
-    const sameTier = readyNormal.filter((attempt) => attempt.priority === bestPriority);
-    const winner = sameTier[0];
+    const winner = readyNormal[0];
     this.state = "WINNER_COMMITTED";
     winner.pending = false;
     return {
@@ -188,12 +197,11 @@ export class DiscoveryCoordinator {
       const cancelAttemptIds = pendingNormal.map((attempt) => attempt.id);
       for (const attempt of pendingNormal) attempt.pending = false;
       if (this.round < this.maxRounds) {
-        this.round += 1;
-        this.roundEpoch += 1;
+        this.beginRound();
         this.state = "DISCOVERY_RACING";
         return {
           type: "launch",
-          slots: Math.max(1, this.concurrency - 1),
+          slots: Math.max(0, this.concurrency - 1),
           cancelAttemptIds,
         };
       }
@@ -214,12 +222,11 @@ export class DiscoveryCoordinator {
     for (const id of losers) this.attempts.get(id)!.pending = false;
 
     if (this.round < this.maxRounds) {
-      this.round += 1;
-      this.roundEpoch += 1;
+      this.beginRound();
       this.state = "DISCOVERY_RACING";
       return {
         type: "launch",
-        slots: Math.max(1, this.concurrency - 1),
+        slots: Math.max(0, this.concurrency - 1),
         cancelAttemptIds: losers,
         promoteAttemptId: fallback.id,
       };
@@ -229,6 +236,8 @@ export class DiscoveryCoordinator {
 
   onDeadline(): DiscoveryAction {
     if (this.isTerminal) return { type: "none" };
+    const readyNormal = this.chooseReadyNormal(true);
+    if (readyNormal.type === "commit_normal") return readyNormal;
     const fallback = Array.from(this.attempts.values()).find(
       (attempt) => attempt.pending && attempt.kind === "fallback" && attempt.ready
     );
@@ -245,7 +254,7 @@ export class DiscoveryCoordinator {
     const attempt = this.attempts.get(id);
     if (!attempt || this.isTerminal) return { type: "none" };
     attempt.pending = false;
-    this.state = "WINNER_COMMITTED";
+    this.state = attempt.kind === "fallback" ? "FALLBACK_ACTIVE" : "WINNER_COMMITTED";
     return {
       type: attempt.kind === "fallback" ? "promote_fallback" : "commit_normal",
       attemptId: id,
@@ -276,9 +285,8 @@ export class DiscoveryCoordinator {
       this.state = "TERMINAL_FAILED";
       return { type: "terminal_failure" };
     }
-    this.round += 1;
-    this.roundEpoch += 1;
+    this.beginRound();
     this.state = "DISCOVERY_RACING";
-    return { type: "launch", slots: Math.max(1, this.concurrency - 1) };
+    return { type: "launch", slots: this.concurrency };
   }
 }

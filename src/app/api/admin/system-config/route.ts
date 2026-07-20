@@ -66,7 +66,7 @@ export async function POST(req: Request) {
     const racingTotalTimeoutMs = validated.racingTotalTimeoutMs ?? current.racingTotalTimeoutMs;
     if (racingTotalTimeoutMs < stickySlaMs + maxDiscoveryRounds * discoverySlaMs) {
       return Response.json(
-        { error: "竞速总超时必须不小于 Sticky SLA + Discovery 轮数 × Discovery SLA" },
+        { error: "discoveryWindowInvalid", errorCode: "discoveryWindowInvalid" },
         { status: 400 }
       );
     }

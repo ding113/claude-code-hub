@@ -25,6 +25,13 @@ import type {
 } from "@/types/system-config";
 import type { ActionResult } from "./types";
 
+const DEFAULT_DISCOVERY_WINDOW = {
+  discoverySlaMs: 10_000,
+  stickySlaMs: 20_000,
+  maxDiscoveryRounds: 2,
+  racingTotalTimeoutMs: 60_000,
+} as const;
+
 export async function fetchSystemSettings(): Promise<ActionResult<SystemSettings>> {
   try {
     const session = await getSession();
@@ -118,10 +125,20 @@ export async function saveSystemSettings(formData: {
     before = await getSystemSettings();
     const validated = UpdateSystemSettingsSchema.parse(formData);
     const effectiveDiscoveryWindow = {
-      discoverySlaMs: validated.discoverySlaMs ?? before.discoverySlaMs,
-      stickySlaMs: validated.stickySlaMs ?? before.stickySlaMs,
-      maxDiscoveryRounds: validated.maxDiscoveryRounds ?? before.maxDiscoveryRounds,
-      racingTotalTimeoutMs: validated.racingTotalTimeoutMs ?? before.racingTotalTimeoutMs,
+      discoverySlaMs:
+        validated.discoverySlaMs ??
+        before?.discoverySlaMs ??
+        DEFAULT_DISCOVERY_WINDOW.discoverySlaMs,
+      stickySlaMs:
+        validated.stickySlaMs ?? before?.stickySlaMs ?? DEFAULT_DISCOVERY_WINDOW.stickySlaMs,
+      maxDiscoveryRounds:
+        validated.maxDiscoveryRounds ??
+        before?.maxDiscoveryRounds ??
+        DEFAULT_DISCOVERY_WINDOW.maxDiscoveryRounds,
+      racingTotalTimeoutMs:
+        validated.racingTotalTimeoutMs ??
+        before?.racingTotalTimeoutMs ??
+        DEFAULT_DISCOVERY_WINDOW.racingTotalTimeoutMs,
     };
     if (
       effectiveDiscoveryWindow.racingTotalTimeoutMs <

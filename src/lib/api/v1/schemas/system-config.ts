@@ -105,7 +105,7 @@ export const SystemSettingsSchema = z
       .positive()
       .describe("Maximum number of normal Discovery attempts in the initial batch."),
     maxDiscoveryRounds: z.number().int().positive().describe("Maximum number of Discovery rounds."),
-    discoverySlaMs: z.number().int().positive().describe("首字 Discovery SLA in milliseconds."),
+    discoverySlaMs: z.number().int().positive().describe("首字节 Discovery SLA in milliseconds."),
     stickySlaMs: z.number().int().positive().describe("Sticky probe SLA in milliseconds."),
     racingTotalTimeoutMs: z
       .number()
