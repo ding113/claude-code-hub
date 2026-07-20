@@ -897,6 +897,55 @@ describe("versioned session binding operations", () => {
     );
   });
 
+  it("keeps a provider mirror when canonical imported the same value before rollback", async () => {
+    let provider: string | null = null;
+    const mock = createMockRedis({
+      operationResponses: {
+        [DELETE_LEGACY_PROVIDER_IF_VALUE]: [
+          () => {
+            provider = null;
+            return 1;
+          },
+        ],
+      },
+    });
+    let existsCalls = 0;
+    mock.existsMock.mockImplementation(async () => {
+      existsCalls += 1;
+      return existsCalls === 3 ? 1 : 0;
+    });
+    mock.getMock.mockImplementation(async (key: string) => {
+      if (key === "session:sid:key") return "4";
+      if (key === "session:sid:provider") return provider;
+      return null;
+    });
+    mock.setexMock.mockImplementation(async (key: string, _ttl: number, value: string) => {
+      if (key === "session:sid:provider") provider = value;
+      return "OK";
+    });
+    mock.hgetMock.mockResolvedValue("10");
+
+    const result = await mutateLegacySessionBindingSafely({
+      sessionId: "sid",
+      keyId: 4,
+      redis: mock.redis,
+      mutation: { type: "set", providerId: 10 },
+    });
+
+    expect(result).toEqual({
+      status: "conflict",
+      reason: "canonical_exists",
+      legacyFallbackAllowed: false,
+    });
+    expect(provider).toBe("10");
+    expect(mock.evalMock).not.toHaveBeenCalledWith(
+      DELETE_LEGACY_PROVIDER_IF_VALUE,
+      1,
+      "session:sid:provider",
+      "10"
+    );
+  });
+
   it("does not restore a mirror when the concurrent canonical binding is a null tombstone", async () => {
     let provider: string | null = "8";
     const mock = createMockRedis();

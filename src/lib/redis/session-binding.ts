@@ -855,12 +855,19 @@ async function rejectLegacyMutationAfterCanonicalAppeared(
 
   if (rollbackProviderValue !== undefined) {
     try {
-      await redis.eval(
-        DELETE_LEGACY_PROVIDER_IF_VALUE,
-        1,
-        keys.legacyProvider,
-        rollbackProviderValue
-      );
+      // A recovered versioned worker may have imported this exact provider
+      // into canonical before the post-write check. In that case the legacy
+      // mirror is already part of valid dual-write state and must survive the
+      // rollback; deleting it would manufacture mirror_missing.
+      const canonicalProvider = await redis.hget?.(keys.canonical, "provider_id");
+      if (canonicalProvider !== rollbackProviderValue && canonicalProvider !== undefined) {
+        await redis.eval(
+          DELETE_LEGACY_PROVIDER_IF_VALUE,
+          1,
+          keys.legacyProvider,
+          rollbackProviderValue
+        );
+      }
     } catch (error) {
       logger.warn("Legacy binding rollback could not execute atomically", {
         error: error instanceof Error ? error.message : String(error),
