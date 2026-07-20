@@ -837,6 +837,20 @@ function parseLegacyProviderId(raw: string | null): number | null | undefined {
   return isPositiveInteger(providerId) ? providerId : undefined;
 }
 
+async function ensureLegacyOwner(
+  redis: SessionBindingRedisClient,
+  keys: SessionBindingKeys,
+  keyId: number,
+  ttlSeconds: number
+): Promise<SessionBindingConflictResult | null> {
+  if ((await redis.expire(keys.legacyOwner, ttlSeconds)) > 0) return null;
+
+  await redis.set(keys.legacyOwner, keyId.toString(), "EX", ttlSeconds, "NX");
+  const owner = await redis.get(keys.legacyOwner);
+  if (owner === keyId.toString()) return null;
+  return conflict(owner === null ? "orphan_legacy_provider" : "foreign_legacy_owner");
+}
+
 /**
  * A legacy fallback mutation can race a different worker which has already
  * recovered versioned binding capability. Re-check the canonical key after a
@@ -960,6 +974,9 @@ export async function mutateLegacySessionBindingSafely(
     if (legacyProvider === undefined) return conflict("invalid_legacy_provider");
     if ((await redis.exists(keys.canonical)) > 0) return conflict("canonical_exists");
 
+    const ownerRefreshConflict = await ensureLegacyOwner(redis, keys, input.keyId, ttlSeconds);
+    if (ownerRefreshConflict) return ownerRefreshConflict;
+
     switch (input.mutation.type) {
       case "inspect":
         return { status: "ok", changed: false, providerId: legacyProvider };
@@ -985,8 +1002,17 @@ export async function mutateLegacySessionBindingSafely(
           ttlSeconds,
           "NX"
         );
-        await redis.expire(keys.legacyOwner, ttlSeconds);
         if (result === "OK") {
+          const ownerConflict = await ensureLegacyOwner(redis, keys, input.keyId, ttlSeconds);
+          if (ownerConflict) {
+            await redis.eval(
+              DELETE_LEGACY_PROVIDER_IF_VALUE,
+              1,
+              keys.legacyProvider,
+              input.mutation.providerId.toString()
+            );
+            return ownerConflict;
+          }
           const conflictAfterBind = await rejectLegacyMutationAfterCanonicalAppeared(
             redis,
             keys,
@@ -1001,8 +1027,17 @@ export async function mutateLegacySessionBindingSafely(
       }
       case "set":
         await redis.setex(keys.legacyProvider, ttlSeconds, input.mutation.providerId.toString());
-        await redis.expire(keys.legacyOwner, ttlSeconds);
         {
+          const ownerConflict = await ensureLegacyOwner(redis, keys, input.keyId, ttlSeconds);
+          if (ownerConflict) {
+            await redis.eval(
+              DELETE_LEGACY_PROVIDER_IF_VALUE,
+              1,
+              keys.legacyProvider,
+              input.mutation.providerId.toString()
+            );
+            return ownerConflict;
+          }
           const conflictAfterSet = await rejectLegacyMutationAfterCanonicalAppeared(
             redis,
             keys,

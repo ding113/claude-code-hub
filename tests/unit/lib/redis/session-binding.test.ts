@@ -946,6 +946,61 @@ describe("versioned session binding operations", () => {
     );
   });
 
+  it("rolls back a legacy provider bind when the owner cannot be refreshed", async () => {
+    let owner: string | null = "4";
+    let provider: string | null = null;
+    const mock = createMockRedis({
+      operationResponses: {
+        [DELETE_LEGACY_PROVIDER_IF_VALUE]: [
+          () => {
+            provider = null;
+            return 1;
+          },
+        ],
+      },
+    });
+    let expireCalls = 0;
+    mock.expireMock.mockImplementation(async () => {
+      expireCalls += 1;
+      if (expireCalls === 1) return 1;
+      owner = null;
+      return 0;
+    });
+    mock.getMock.mockImplementation(async (key: string) => {
+      if (key === "session:sid:key") return owner;
+      if (key === "session:sid:provider") return provider;
+      return null;
+    });
+    mock.setMock.mockImplementation(async () => {
+      owner = "5";
+      return null;
+    });
+    mock.setexMock.mockImplementation(async (key: string, _ttl: number, value: string) => {
+      if (key === "session:sid:provider") provider = value;
+      return "OK";
+    });
+
+    const result = await mutateLegacySessionBindingSafely({
+      sessionId: "sid",
+      keyId: 4,
+      redis: mock.redis,
+      mutation: { type: "set", providerId: 10 },
+    });
+
+    expect(result).toEqual({
+      status: "conflict",
+      reason: "foreign_legacy_owner",
+      legacyFallbackAllowed: false,
+    });
+    expect(provider).toBeNull();
+    expect(mock.evalMock).toHaveBeenCalledWith(
+      DELETE_LEGACY_PROVIDER_IF_VALUE,
+      1,
+      "session:sid:provider",
+      "10"
+    );
+  });
+
   it("does not restore a mirror when the concurrent canonical binding is a null tombstone", async () => {
     let provider: string | null = "8";
     const mock = createMockRedis();
