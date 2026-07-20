@@ -180,6 +180,57 @@ describe("SessionManager.terminateSession", () => {
     expect(pipelineRef.del).not.toHaveBeenCalledWith(`session:${sessionId}:key`);
   });
 
+  it("preserves shared Session state after scoped versioned termination linearizes on the old Provider", async () => {
+    const sessionId = "sess_scoped_versioned_failover";
+    redisClientRef.get.mockImplementation(async (key: string) => {
+      if (key === `session:${sessionId}:provider`) return "42";
+      if (key === `session:${sessionId}:key`) return "7";
+      return null;
+    });
+    redisClientRef.hget.mockResolvedValue("123");
+    bindingMocks.readOrReconcileSessionBinding.mockResolvedValue({
+      status: "ok",
+      source: "existing",
+      snapshot: {
+        sessionId,
+        keyId: 7,
+        providerId: 42,
+        generation: "generation-before-provider-invalidation",
+      },
+      legacyFallbackAllowed: false,
+    });
+    bindingMocks.terminateSessionBinding.mockResolvedValue({
+      status: "ok",
+      source: "terminated",
+      snapshot: {
+        sessionId,
+        keyId: 7,
+        providerId: null,
+        generation: "generation-after-provider-invalidation",
+      },
+      legacyFallbackAllowed: false,
+    });
+    const { getGlobalActiveSessionsKey, getKeyActiveSessionsKey, getUserActiveSessionsKey } =
+      await import("@/lib/redis/active-session-keys");
+    const { SessionManager } = await import("@/lib/session-manager");
+
+    await expect(SessionManager.terminateSession(sessionId, [42])).resolves.toBe(true);
+
+    expect(bindingMocks.terminateSessionBinding).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionId,
+        keyId: 7,
+        expectedProviderId: 42,
+      })
+    );
+    expect(pipelineRef.zrem).toHaveBeenCalledWith("provider:42:active_sessions", sessionId);
+    expect(pipelineRef.hdel).toHaveBeenCalledWith("provider:42:active_session_refs", sessionId);
+    expect(pipelineRef.del).not.toHaveBeenCalled();
+    expect(pipelineRef.zrem).not.toHaveBeenCalledWith(getGlobalActiveSessionsKey(), sessionId);
+    expect(pipelineRef.zrem).not.toHaveBeenCalledWith(getKeyActiveSessionsKey(7), sessionId);
+    expect(pipelineRef.zrem).not.toHaveBeenCalledWith(getUserActiveSessionsKey(123), sessionId);
+  });
+
   it("does not delete session metadata when versioned termination hits a mirror conflict", async () => {
     const sessionId = "sess_mirror_conflict";
     redisClientRef.get.mockImplementation(async (key: string) => {

@@ -2857,6 +2857,44 @@ export class SessionManager {
             });
             return false;
           }
+
+          if (expectedProviderIds) {
+            const terminatedProviderId = binding.snapshot.providerId;
+            if (terminatedProviderId === null) {
+              logger.warn("SessionManager: Scoped versioned termination lost Provider identity", {
+                sessionId,
+                keyId,
+              });
+              return false;
+            }
+
+            // The versioned CAS above is the linearization point. A failover
+            // may bind this Session to Q immediately afterwards, so scoped
+            // invalidation must only remove P's Provider-owned indexes.
+            try {
+              const providerCleanup = redis.pipeline();
+              providerCleanup.zrem(`provider:${terminatedProviderId}:active_sessions`, sessionId);
+              providerCleanup.hdel(
+                `provider:${terminatedProviderId}:active_session_refs`,
+                sessionId
+              );
+              await providerCleanup.exec();
+            } catch (cleanupError) {
+              logger.warn("SessionManager: Scoped versioned Provider index cleanup failed", {
+                sessionId,
+                providerId: terminatedProviderId,
+                error: cleanupError,
+              });
+            }
+
+            logger.info("SessionManager: Cleared scoped versioned Provider binding", {
+              sessionId,
+              providerId: terminatedProviderId,
+              keyId,
+            });
+            return true;
+          }
+
           bindingTerminated = true;
         } else if (binding.status === "unavailable" && binding.legacyFallbackAllowed) {
           const legacy = await mutateLegacySessionBindingSafely({
