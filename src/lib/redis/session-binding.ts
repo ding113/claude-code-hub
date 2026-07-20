@@ -576,6 +576,10 @@ async function withCapabilityProbeDeadline<T>(
   operation: Promise<T>,
   deadlineAt: number
 ): Promise<T> {
+  // The timeout races the Redis command but cannot cancel it. Observe a late
+  // rejection so an operation that settles after the deadline never becomes
+  // an unhandled promise rejection.
+  operation.catch(() => {});
   const remainingMs = deadlineAt - Date.now();
   if (remainingMs <= 0) throw new Error("Session binding capability probe deadline exceeded");
 
