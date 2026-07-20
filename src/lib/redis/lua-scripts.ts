@@ -694,6 +694,50 @@ return {'ok', 'cleared', next_generation, ''}
 `;
 
 /**
+ * Renew a request-scoped Discovery lease only while the caller still owns it.
+ *
+ * KEYS[1]: tenant-scoped Discovery lease key
+ * ARGV[1]: owner token
+ * ARGV[2]: lease TTL in seconds
+ *
+ * Return: 1 when renewed, otherwise 0.
+ */
+export const RENEW_SESSION_DISCOVERY_LEASE = `
+local lease_key = KEYS[1]
+local owner_token = ARGV[1]
+local ttl = tonumber(ARGV[2])
+
+if owner_token == '' or not ttl or ttl <= 0 then
+  return 0
+end
+if redis.call('GET', lease_key) ~= owner_token then
+  return 0
+end
+
+return redis.call('EXPIRE', lease_key, ttl)
+`;
+
+/**
+ * Release a request-scoped Discovery lease without deleting a newer owner's
+ * lease after the original owner's TTL elapsed.
+ *
+ * KEYS[1]: tenant-scoped Discovery lease key
+ * ARGV[1]: owner token
+ *
+ * Return: 1 when released, otherwise 0.
+ */
+export const RELEASE_SESSION_DISCOVERY_LEASE = `
+local lease_key = KEYS[1]
+local owner_token = ARGV[1]
+
+if owner_token == '' or redis.call('GET', lease_key) ~= owner_token then
+  return 0
+end
+
+return redis.call('DEL', lease_key)
+`;
+
+/**
  * Tenant-authorized administrative termination. Unlike request-level clear,
  * this operation intentionally does not compare an old generation. It still
  * validates canonical ownership and both legacy mirrors before rotating the

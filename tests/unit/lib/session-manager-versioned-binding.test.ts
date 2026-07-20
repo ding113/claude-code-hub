@@ -1,11 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const bindingMocks = vi.hoisted(() => ({
+  acquireSessionDiscoveryLease: vi.fn(),
   clearSessionBinding: vi.fn(),
   compareAndSetSessionBinding: vi.fn(),
   isSessionProviderCoolingDown: vi.fn(),
   readOrReconcileSessionBinding: vi.fn(),
   refreshSessionBinding: vi.fn(),
+  releaseSessionDiscoveryLease: vi.fn(),
+  renewSessionDiscoveryLease: vi.fn(),
 }));
 
 let redisClientRef: {
@@ -75,9 +78,61 @@ beforeEach(() => {
     setex: vi.fn(async () => "OK"),
   };
   bindingMocks.readOrReconcileSessionBinding.mockResolvedValue(snapshot());
+  bindingMocks.acquireSessionDiscoveryLease.mockResolvedValue({
+    status: "acquired",
+    ownerToken: "owner-a",
+    legacyFallbackAllowed: false,
+  });
+  bindingMocks.renewSessionDiscoveryLease.mockResolvedValue({
+    status: "renewed",
+    legacyFallbackAllowed: false,
+  });
+  bindingMocks.releaseSessionDiscoveryLease.mockResolvedValue({
+    status: "released",
+    legacyFallbackAllowed: false,
+  });
 });
 
 describe("SessionManager versioned binding adapter", () => {
+  it("delegates the complete tenant-scoped Discovery lease lifecycle", async () => {
+    await expect(
+      SessionManager.acquireSessionDiscoveryLease(SESSION_ID, KEY_ID, 61, "owner-a")
+    ).resolves.toMatchObject({ status: "acquired", ownerToken: "owner-a" });
+    await expect(
+      SessionManager.renewSessionDiscoveryLease(SESSION_ID, KEY_ID, "owner-a", 61)
+    ).resolves.toMatchObject({ status: "renewed" });
+    await expect(
+      SessionManager.releaseSessionDiscoveryLease(SESSION_ID, KEY_ID, "owner-a")
+    ).resolves.toMatchObject({ status: "released" });
+
+    expect(bindingMocks.acquireSessionDiscoveryLease).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionId: SESSION_ID,
+        keyId: KEY_ID,
+        ttlSeconds: 61,
+        ownerToken: "owner-a",
+        redis: redisClientRef,
+      })
+    );
+    expect(bindingMocks.renewSessionDiscoveryLease).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionId: SESSION_ID,
+        keyId: KEY_ID,
+        ttlSeconds: 61,
+        ownerToken: "owner-a",
+        redis: redisClientRef,
+      })
+    );
+    expect(bindingMocks.releaseSessionDiscoveryLease).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionId: SESSION_ID,
+        keyId: KEY_ID,
+        ownerToken: "owner-a",
+        redis: redisClientRef,
+      })
+    );
+  });
+
   it("returns the tenant-scoped provider without reading the legacy mirror", async () => {
     await expect(SessionManager.getSessionProvider(SESSION_ID, KEY_ID)).resolves.toBe(PROVIDER_ID);
 

@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  DISCOVERY_EVENT_MAX_COUNT,
+  DISCOVERY_PREFIX_MAX_BYTES,
   DiscoveryValidityParser,
   classifyDiscoveryChunk,
 } from "@/app/v1/_lib/proxy/discovery-validity";
@@ -121,6 +123,21 @@ describe("discovery validity", () => {
         "anthropic"
       ).ready
     ).toBe(true);
+  });
+
+  it("fails a metadata-only prefix after the byte limit", () => {
+    const parser = new DiscoveryValidityParser("openai-chat");
+    const result = parser.push(`:${"x".repeat(DISCOVERY_PREFIX_MAX_BYTES + 1)}`);
+    expect(result).toMatchObject({ ready: false, error: true, limitExceeded: true });
+  });
+
+  it("fails metadata-only protocol events after the event limit", () => {
+    const parser = new DiscoveryValidityParser("anthropic");
+    let result = parser.push("");
+    for (let index = 0; index <= DISCOVERY_EVENT_MAX_COUNT; index += 1) {
+      result = parser.push('data: {"type":"ping"}\n');
+    }
+    expect(result).toMatchObject({ ready: false, error: true, limitExceeded: true });
   });
 });
 

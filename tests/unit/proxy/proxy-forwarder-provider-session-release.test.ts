@@ -22,6 +22,20 @@ describe("ProxyForwarder provider failure session release", () => {
     mocks.releaseProviderSession.mockClear();
   });
 
+  it("tracks baseline ownership independently for consecutive refs to one Provider", async () => {
+    const { ProxySession } = await import("@/app/v1/_lib/proxy/session");
+    const session = Object.create(ProxySession.prototype) as ProxySession;
+
+    session.recordProviderSessionRef(42, { retainOnSuccess: true });
+    session.recordProviderSessionRef(42, { retainOnSuccess: false });
+
+    expect(session.shouldRetainProviderSessionRefOnSuccess(42)).toBe(true);
+    expect(session.consumeProviderSessionRef(42)).toBe(true);
+    expect(session.shouldRetainProviderSessionRefOnSuccess(42)).toBe(false);
+    expect(session.consumeProviderSessionRef(42)).toBe(true);
+    expect(session.hasProviderSessionRef(42)).toBe(false);
+  });
+
   it("标记供应商失败时仅释放本请求已获取的 provider session ref", async () => {
     const { ProxyForwarder } = await import("@/app/v1/_lib/proxy/forwarder");
     const forwarderInternals = ProxyForwarder as unknown as {

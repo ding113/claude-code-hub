@@ -8,6 +8,8 @@ import {
   CLEAR_SESSION_BINDING,
   DELETE_LEGACY_PROVIDER_IF_VALUE,
   READ_OR_RECONCILE_SESSION_BINDING,
+  RELEASE_SESSION_DISCOVERY_LEASE,
+  RENEW_SESSION_DISCOVERY_LEASE,
   RESTORE_LEGACY_PROVIDER_IF_ABSENT,
   TERMINATE_SESSION_BINDING,
 } from "./lua-scripts";
@@ -127,6 +129,50 @@ export interface SessionProviderCooldownInput {
   redis?: SessionBindingRedisClient;
 }
 
+export interface SessionDiscoveryLeaseInput {
+  sessionId: string;
+  keyId: number;
+  ownerToken: string;
+  redis?: SessionBindingRedisClient;
+}
+
+export interface AcquireSessionDiscoveryLeaseInput {
+  sessionId: string;
+  keyId: number;
+  ttlSeconds: number;
+  ownerToken?: string;
+  redis?: SessionBindingRedisClient;
+}
+
+export interface RenewSessionDiscoveryLeaseInput extends SessionDiscoveryLeaseInput {
+  ttlSeconds: number;
+}
+
+export type SessionDiscoveryLeaseAcquireResult =
+  | {
+      status: "acquired";
+      ownerToken: string;
+      legacyFallbackAllowed: false;
+    }
+  | {
+      status: "conflict";
+      reason: "invalid_input" | "lease_held";
+      legacyFallbackAllowed: false;
+    }
+  | SessionBindingUnavailableResult;
+
+export type SessionDiscoveryLeaseMutationResult =
+  | {
+      status: "renewed" | "released";
+      legacyFallbackAllowed: false;
+    }
+  | {
+      status: "lost";
+      reason: "invalid_input" | "not_owner_or_missing";
+      legacyFallbackAllowed: false;
+    }
+  | SessionBindingUnavailableResult;
+
 export interface SessionBindingOkResult {
   status: "ok";
   snapshot: SessionBindingSnapshot;
@@ -238,6 +284,17 @@ export function buildSessionProviderCooldownKey(
   );
 }
 
+export function buildSessionDiscoveryLeaseKey(
+  sessionId: string,
+  keyId: number,
+  namespace?: string
+): string {
+  return namespacedKey(
+    namespace,
+    `session-binding:v1:{${bindingHashTag(sessionId, keyId)}}:discovery-lease`
+  );
+}
+
 export function buildSessionBindingKeys(
   sessionId: string,
   keyId: number,
@@ -287,6 +344,13 @@ function normalizeEvalResult(raw: unknown): string[] {
     }
     throw new Error("Invalid value in session binding Lua result");
   });
+}
+
+function parseLeaseMutationFlag(raw: unknown): boolean {
+  const value = Buffer.isBuffer(raw) ? raw.toString("utf8") : raw;
+  if (value === 1 || value === "1") return true;
+  if (value === 0 || value === "0" || value === null) return false;
+  throw new Error("Invalid session Discovery lease Lua result");
 }
 
 function parseProviderId(raw: string): number | null {
@@ -456,6 +520,21 @@ function handleOperationError(ready: ReadyClient, error: unknown): SessionBindin
   return unavailable("operation_failed");
 }
 
+function handleLeaseOperationError(
+  ready: ReadyClient,
+  error: unknown
+): SessionBindingUnavailableResult {
+  if (isCapabilityError(error)) {
+    markCapabilityUnavailable(ready.redis, ready.epoch, error);
+    return unavailable("capability_unavailable");
+  }
+
+  logger.warn("Session Discovery lease operation failed", {
+    error: error instanceof Error ? error.message : String(error),
+  });
+  return unavailable("operation_failed");
+}
+
 async function runCapabilityProbe(
   client: SessionBindingRedisClient,
   epoch: number
@@ -468,10 +547,18 @@ async function runCapabilityProbe(
   const ttlSeconds = 60;
   const keys = buildSessionBindingKeys(sessionId, keyId, namespace);
   const cooldownKey = buildSessionProviderCooldownKey(sessionId, keyId, providerId, namespace);
-  const cleanupKeys = [keys.canonical, keys.legacyProvider, keys.legacyOwner, cooldownKey];
+  const leaseKey = buildSessionDiscoveryLeaseKey(sessionId, keyId, namespace);
+  const cleanupKeys = [
+    keys.canonical,
+    keys.legacyProvider,
+    keys.legacyOwner,
+    cooldownKey,
+    leaseKey,
+  ];
   const initialGeneration = randomUUID();
   const boundGeneration = randomUUID();
   const clearedGeneration = randomUUID();
+  const leaseOwnerToken = randomUUID();
   let operationsSucceeded = false;
   let cleanupSucceeded = false;
 
@@ -552,6 +639,40 @@ async function runCapabilityProbe(
     );
     if (cooldownGeneration !== cleared.snapshot.generation) {
       throw new Error("Session binding capability probe cooldown failed");
+    }
+
+    const acquiredLease = await withCapabilityProbeDeadline(
+      client.set(leaseKey, leaseOwnerToken, "EX", ttlSeconds, "NX"),
+      deadlineAt
+    );
+    if (acquiredLease !== "OK") {
+      throw new Error("Session binding capability probe lease acquire failed");
+    }
+
+    const renewedLease = parseLeaseMutationFlag(
+      await withCapabilityProbeDeadline(
+        client.eval(
+          RENEW_SESSION_DISCOVERY_LEASE,
+          1,
+          leaseKey,
+          leaseOwnerToken,
+          ttlSeconds.toString()
+        ),
+        deadlineAt
+      )
+    );
+    if (!renewedLease) {
+      throw new Error("Session binding capability probe lease renew failed");
+    }
+
+    const releasedLease = parseLeaseMutationFlag(
+      await withCapabilityProbeDeadline(
+        client.eval(RELEASE_SESSION_DISCOVERY_LEASE, 1, leaseKey, leaseOwnerToken),
+        deadlineAt
+      )
+    );
+    if (!releasedLease) {
+      throw new Error("Session binding capability probe lease release failed");
     }
     operationsSucceeded = capabilityClient === client && capabilityEpoch === epoch;
   } catch (error) {
@@ -654,6 +775,116 @@ async function readyVersionedClient(
 
 function connectionIsCurrent(ready: ReadyClient): boolean {
   return capabilityClient === ready.redis && capabilityEpoch === ready.epoch;
+}
+
+export async function acquireSessionDiscoveryLease(
+  input: AcquireSessionDiscoveryLeaseInput
+): Promise<SessionDiscoveryLeaseAcquireResult> {
+  const ownerToken = input.ownerToken ?? randomUUID();
+  if (!isValidIdentity(input.sessionId, input.keyId, input.ttlSeconds) || ownerToken.length === 0) {
+    return {
+      status: "conflict",
+      reason: "invalid_input",
+      legacyFallbackAllowed: false,
+    };
+  }
+
+  const ready = await readyVersionedClient(input.redis);
+  if ("status" in ready) return ready;
+
+  try {
+    const result = await ready.redis.set(
+      buildSessionDiscoveryLeaseKey(input.sessionId, input.keyId),
+      ownerToken,
+      "EX",
+      input.ttlSeconds,
+      "NX"
+    );
+    if (!connectionIsCurrent(ready)) return unavailable("connection_changed");
+    if (result === "OK" || (Buffer.isBuffer(result) && result.toString("utf8") === "OK")) {
+      return { status: "acquired", ownerToken, legacyFallbackAllowed: false };
+    }
+    if (result === null) {
+      return { status: "conflict", reason: "lease_held", legacyFallbackAllowed: false };
+    }
+    return handleLeaseOperationError(ready, new Error("Unexpected Discovery lease SET result"));
+  } catch (error) {
+    return handleLeaseOperationError(ready, error);
+  }
+}
+
+export async function renewSessionDiscoveryLease(
+  input: RenewSessionDiscoveryLeaseInput
+): Promise<SessionDiscoveryLeaseMutationResult> {
+  if (
+    !isValidIdentity(input.sessionId, input.keyId, input.ttlSeconds) ||
+    input.ownerToken.length === 0
+  ) {
+    return { status: "lost", reason: "invalid_input", legacyFallbackAllowed: false };
+  }
+
+  const ready = await readyVersionedClient(input.redis);
+  if ("status" in ready) return ready;
+
+  try {
+    const renewed = parseLeaseMutationFlag(
+      await evalBindingScript(
+        ready.redis,
+        RENEW_SESSION_DISCOVERY_LEASE,
+        1,
+        buildSessionDiscoveryLeaseKey(input.sessionId, input.keyId),
+        input.ownerToken,
+        input.ttlSeconds.toString()
+      )
+    );
+    if (!connectionIsCurrent(ready)) return unavailable("connection_changed");
+    return renewed
+      ? { status: "renewed", legacyFallbackAllowed: false }
+      : {
+          status: "lost",
+          reason: "not_owner_or_missing",
+          legacyFallbackAllowed: false,
+        };
+  } catch (error) {
+    return handleLeaseOperationError(ready, error);
+  }
+}
+
+export async function releaseSessionDiscoveryLease(
+  input: SessionDiscoveryLeaseInput
+): Promise<SessionDiscoveryLeaseMutationResult> {
+  if (
+    input.sessionId.length === 0 ||
+    !isPositiveInteger(input.keyId) ||
+    input.ownerToken.length === 0
+  ) {
+    return { status: "lost", reason: "invalid_input", legacyFallbackAllowed: false };
+  }
+
+  const ready = await readyVersionedClient(input.redis);
+  if ("status" in ready) return ready;
+
+  try {
+    const released = parseLeaseMutationFlag(
+      await evalBindingScript(
+        ready.redis,
+        RELEASE_SESSION_DISCOVERY_LEASE,
+        1,
+        buildSessionDiscoveryLeaseKey(input.sessionId, input.keyId),
+        input.ownerToken
+      )
+    );
+    if (!connectionIsCurrent(ready)) return unavailable("connection_changed");
+    return released
+      ? { status: "released", legacyFallbackAllowed: false }
+      : {
+          status: "lost",
+          reason: "not_owner_or_missing",
+          legacyFallbackAllowed: false,
+        };
+  } catch (error) {
+    return handleLeaseOperationError(ready, error);
+  }
 }
 
 export async function readOrReconcileSessionBinding(
@@ -835,6 +1066,23 @@ function parseLegacyProviderId(raw: string | null): number | null | undefined {
   if (raw === null) return null;
   const providerId = Number(raw);
   return isPositiveInteger(providerId) ? providerId : undefined;
+}
+
+async function deleteLegacyProviderIfValue(
+  redis: SessionBindingRedisClient,
+  providerKey: string,
+  providerId: number
+): Promise<boolean> {
+  const result = await redis.eval(
+    DELETE_LEGACY_PROVIDER_IF_VALUE,
+    1,
+    providerKey,
+    providerId.toString()
+  );
+  const normalized = Buffer.isBuffer(result) ? result.toString("utf8") : result;
+  if (normalized === 1 || normalized === "1") return true;
+  if (normalized === 0 || normalized === "0" || normalized === null) return false;
+  throw new Error("Invalid conditional legacy provider delete result");
 }
 
 async function ensureLegacyOwner(
@@ -1059,7 +1307,26 @@ export async function mutateLegacySessionBindingSafely(
         if (legacyProvider === null) {
           return { status: "ok", changed: false, providerId: null };
         }
-        await redis.del(keys.legacyProvider);
+        {
+          const deleted = await deleteLegacyProviderIfValue(
+            redis,
+            keys.legacyProvider,
+            legacyProvider
+          );
+          if (!deleted) {
+            const conflictAfterConcurrentMutation =
+              await rejectLegacyMutationAfterCanonicalAppeared(redis, keys);
+            if (conflictAfterConcurrentMutation) return conflictAfterConcurrentMutation;
+
+            const concurrentProvider = parseLegacyProviderId(await redis.get(keys.legacyProvider));
+            if (concurrentProvider === undefined) return conflict("invalid_legacy_provider");
+            if (concurrentProvider === null) {
+              await redis.expire(keys.legacyOwner, ttlSeconds);
+              return { status: "ok", changed: false, providerId: null };
+            }
+            return conflict("provider_mismatch");
+          }
+        }
         await redis.expire(keys.legacyOwner, ttlSeconds);
         {
           const conflictAfterClear = await rejectLegacyMutationAfterCanonicalAppeared(
@@ -1078,6 +1345,36 @@ export async function mutateLegacySessionBindingSafely(
         ) {
           return conflict("provider_mismatch");
         }
+        if (input.mutation.expectedProviderIds) {
+          const providerToTerminate = legacyProvider as number;
+          const deleted = await deleteLegacyProviderIfValue(
+            redis,
+            keys.legacyProvider,
+            providerToTerminate
+          );
+          if (!deleted) {
+            const conflictAfterConcurrentMutation =
+              await rejectLegacyMutationAfterCanonicalAppeared(redis, keys);
+            if (conflictAfterConcurrentMutation) return conflictAfterConcurrentMutation;
+            return conflict("provider_mismatch");
+          }
+
+          // Provider-scoped invalidation must preserve tenant ownership. A
+          // concurrent failover may install a new Provider immediately after
+          // the conditional delete; removing the owner here would orphan it.
+          const ownerConflict = await ensureLegacyOwner(redis, keys, input.keyId, ttlSeconds);
+          if (ownerConflict) return ownerConflict;
+
+          const conflictAfterTerminate = await rejectLegacyMutationAfterCanonicalAppeared(
+            redis,
+            keys,
+            undefined,
+            { value: providerToTerminate.toString(), ttlSeconds }
+          );
+          if (conflictAfterTerminate) return conflictAfterTerminate;
+          return { status: "ok", changed: true, providerId: null };
+        }
+
         if (legacyProvider !== null) await redis.del(keys.legacyProvider);
         await redis.del(keys.legacyOwner);
         {

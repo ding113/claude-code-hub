@@ -66,6 +66,16 @@ export class DiscoveryCoordinator {
     return { requestEpoch: this.requestEpoch, roundEpoch: this.roundEpoch };
   }
 
+  startStickyProbe(): void {
+    if (!this.isTerminal) this.state = "STICKY_PROBING";
+  }
+
+  startDiscoveryAfterSticky(): void {
+    if (this.state === "STICKY_PROBING" || this.state === "FALLBACK_READY_HELD") {
+      this.state = "DISCOVERY_RACING";
+    }
+  }
+
   beginRound(): { requestEpoch: number; roundEpoch: number; round: number } {
     if (this.isTerminal || this.round >= this.maxRounds) {
       return { ...this.epochs, round: this.round };

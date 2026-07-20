@@ -13,6 +13,20 @@ const attempt = (id: string, priority: number, kind: "normal" | "fallback" = "no
 });
 
 describe("DiscoveryCoordinator", () => {
+  it("keeps Sticky probing outside the Discovery round counter", () => {
+    const coordinator = new DiscoveryCoordinator({ concurrency: 2, maxRounds: 1 });
+    coordinator.startStickyProbe();
+    expect(coordinator.state).toBe("STICKY_PROBING");
+    expect(coordinator.round).toBe(1);
+
+    coordinator.addAttempt(attempt("sticky", 1));
+    expect(coordinator.demoteToFallback("sticky")).toBe(true);
+    coordinator.startDiscoveryAfterSticky();
+
+    expect(coordinator.state).toBe("DISCOVERY_RACING");
+    expect(coordinator.round).toBe(1);
+  });
+
   it("commits the highest priority ready normal attempt", () => {
     const coordinator = new DiscoveryCoordinator({ concurrency: 2, maxRounds: 2 });
     coordinator.addAttempt(attempt("a", 10));
