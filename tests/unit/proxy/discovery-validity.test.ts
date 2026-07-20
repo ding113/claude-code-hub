@@ -107,6 +107,21 @@ describe("discovery validity", () => {
       )
     ).toMatchObject({ ready: true, error: false });
   });
+
+  it("accepts Anthropic tool-use starts and partial JSON deltas", () => {
+    expect(
+      classifyDiscoveryChunk(
+        'data: {"type":"content_block_start","content_block":{"type":"tool_use","id":"tu_1","name":"search","input":{}}}\n',
+        "anthropic"
+      ).ready
+    ).toBe(true);
+    expect(
+      classifyDiscoveryChunk(
+        'data: {"type":"content_block_delta","delta":{"type":"input_json_delta","partial_json":"{\\"q\\":1}"}}\n',
+        "anthropic"
+      ).ready
+    ).toBe(true);
+  });
 });
 
 function parserForOpenAIChatToolCall(): DiscoveryValidityParser {

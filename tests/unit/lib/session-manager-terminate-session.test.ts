@@ -179,4 +179,34 @@ describe("SessionManager.terminateSession", () => {
     expect(pipelineRef.del).not.toHaveBeenCalledWith(`session:${sessionId}:provider`);
     expect(pipelineRef.del).not.toHaveBeenCalledWith(`session:${sessionId}:key`);
   });
+
+  it("does not delete session metadata when versioned termination hits a mirror conflict", async () => {
+    const sessionId = "sess_mirror_conflict";
+    redisClientRef.get.mockImplementation(async (key: string) => {
+      if (key === `session:${sessionId}:provider`) return "42";
+      if (key === `session:${sessionId}:key`) return "7";
+      return null;
+    });
+    bindingMocks.readOrReconcileSessionBinding.mockResolvedValue({
+      status: "ok",
+      source: "existing",
+      snapshot: {
+        sessionId,
+        keyId: 7,
+        providerId: 42,
+        generation: "generation-a",
+      },
+      legacyFallbackAllowed: false,
+    });
+    bindingMocks.terminateSessionBinding.mockResolvedValue({
+      status: "conflict",
+      reason: "mirror_conflict",
+      legacyFallbackAllowed: false,
+    });
+    const { SessionManager } = await import("@/lib/session-manager");
+
+    await expect(SessionManager.terminateSession(sessionId)).resolves.toBe(false);
+    expect(pipelineRef.exec).not.toHaveBeenCalled();
+    expect(pipelineRef.del).not.toHaveBeenCalled();
+  });
 });

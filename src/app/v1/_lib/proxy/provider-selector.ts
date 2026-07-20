@@ -1179,6 +1179,13 @@ export class ProxyProviderResolver {
     return provider.priority ?? 0;
   }
 
+  static resolveEffectivePriorityForSession(provider: Provider, session: ProxySession): number {
+    return ProxyProviderResolver.resolveEffectivePriority(
+      provider,
+      getEffectiveProviderGroup(session)
+    );
+  }
+
   /**
    * 优先级分层：只选择最高优先级的供应商（支持分组优先级覆盖）
    */

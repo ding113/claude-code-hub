@@ -140,6 +140,20 @@ export class DiscoveryCoordinator {
     return this.chooseReadyNormal();
   }
 
+  /** Convert a timed-out Sticky attempt into the request's fallback lane. */
+  demoteToFallback(
+    id: string,
+    requestEpoch = this.requestEpoch,
+    roundEpoch = this.roundEpoch
+  ): boolean {
+    if (!this.acceptsEpoch(requestEpoch, roundEpoch) || this.isTerminal) return false;
+    const attempt = this.attempts.get(id);
+    if (!attempt?.pending) return false;
+    attempt.kind = "fallback";
+    this.state = "FALLBACK_READY_HELD";
+    return true;
+  }
+
   markFailed(
     id: string,
     requestEpoch = this.requestEpoch,
@@ -283,6 +297,13 @@ export class DiscoveryCoordinator {
   private afterAttemptState(): DiscoveryAction {
     const pending = this.activeAttempts;
     if (pending.length === 0) return this.finishOrLaunch();
+
+    // A higher-priority attempt may have been the only gate preventing a
+    // ready lower-priority candidate from winning. Once that attempt fails,
+    // re-run the normal winner selection before waiting for another boundary.
+    const readyNormal = this.chooseReadyNormal();
+    if (readyNormal.type === "commit_normal") return readyNormal;
+
     const fallback = pending.find((attempt) => attempt.kind === "fallback");
     if (fallback?.ready && pending.every((attempt) => attempt.kind === "fallback")) {
       return this.commitWinner(fallback.id);

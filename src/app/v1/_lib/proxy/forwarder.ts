@@ -4896,6 +4896,12 @@ export class ProxyForwarder {
     let totalTimer: NodeJS.Timeout | null = null;
     let roundTimer: NodeJS.Timeout | null = null;
     let stickyTimer: NodeJS.Timeout | null = null;
+    const clearRoundTimer = () => {
+      if (roundTimer) {
+        clearTimeout(roundTimer);
+        roundTimer = null;
+      }
+    };
     let executeCoordinatorAction: (action: DiscoveryAction) => Promise<void> = async () => {};
     let resolveResult: ((result: { response?: Response; error?: Error }) => void) | null = null;
     const resultPromise = new Promise<{ response?: Response; error?: Error }>((resolve) => {
@@ -4903,12 +4909,7 @@ export class ProxyForwarder {
     });
 
     const releaseProviderRef = (providerId: number) => {
-      if (!session.sessionId) return;
-      const consumer = (session as { consumeProviderSessionRef?: (id: number) => boolean })
-        .consumeProviderSessionRef;
-      if (consumer?.call(session, providerId)) {
-        void RateLimitService.releaseProviderSession(providerId, session.sessionId);
-      }
+      ProxyForwarder.releaseProviderSessionRef(session, providerId);
     };
 
     const getAttemptModelRedirect = (attempt: (typeof winner & { id: string }) | null) => {
@@ -5047,6 +5048,7 @@ export class ProxyForwarder {
     };
 
     const scheduleRoundBoundary = (delayMs: number) => {
+      clearRoundTimer();
       const epoch = coordinator.epochs;
       roundTimer = setTimeout(() => {
         void executeCoordinatorAction(
@@ -5163,7 +5165,7 @@ export class ProxyForwarder {
       coordinator.addAttempt({
         id,
         providerId: provider.id,
-        priority: provider.priority || 0,
+        priority: ProxyProviderResolver.resolveEffectivePriorityForSession(provider, session),
         kind,
         ready: false,
         pending: true,
@@ -5192,34 +5194,38 @@ export class ProxyForwarder {
           attempt.reader = response.body.getReader();
           while (!committed && !settled && attempt.pending) {
             const item = await attempt.reader.read();
-            if (attempt.readerTransferred || committed || settled || !attempt.pending) break;
+            if (attempt.readerTransferred || committed || settled || !attempt.pending) return;
             if (item.done) {
-              if (attempt.ready) break;
+              // A ready candidate may have reached EOF while waiting for a
+              // higher-priority attempt. Its buffered prefix remains a valid
+              // response and must stay promotable.
+              if (attempt.ready) return;
               throw new EmptyResponseError(provider.id, provider.name, "empty_body");
             }
             if (!item.value || item.value.byteLength === 0) continue;
             attempt.chunks.push(item.value);
             const validity = attempt.parser.push(item.value);
-            if (validity.error) throw new ProxyError("Invalid upstream discovery response", 502);
-            if (validity.ready) attempt.ready = true;
-            if (validity.terminal) {
-              if (attempt.ready) break;
+            // A single read can contain both deliverable content and the
+            // protocol terminator. Terminal is only invalid when no content
+            // was observed; otherwise the buffered candidate is complete.
+            if (validity.error || (validity.terminal && !validity.ready))
               throw new ProxyError("Invalid upstream discovery response", 502);
-            }
             if (!validity.ready) continue;
+            attempt.ready = true;
             // Record readiness even when the priority gate holds this attempt.
             // The coordinator can then promote the buffered stream if the
             // higher-priority attempt fails or the round closes.
             const action = coordinator.markReady(id);
             if (action.type === "commit_normal" || action.type === "promote_fallback")
               await commit(attempt);
+            // Do not issue another reader request after a complete candidate;
+            // the buffered stream is already sufficient for later promotion.
+            if (validity.terminal) return;
+            // The coordinator owns priority gating. A ready lower-priority
+            // candidate stays held while a higher tier is still pending. Stop
+            // reading so later chunks are not consumed before promotion.
+            if (action.type === "none") return;
             return;
-          }
-          if (attempt.ready && !committed && !settled && attempt.pending) {
-            const action = coordinator.markReady(id);
-            if (action.type === "commit_normal" || action.type === "promote_fallback") {
-              await commit(attempt);
-            }
           }
         })
         .catch(async (error) => {
@@ -5325,7 +5331,10 @@ export class ProxyForwarder {
               } catch (launchError) {
                 lastError =
                   launchError instanceof Error ? launchError : new Error(String(launchError));
-                noMoreCandidates = true;
+                // A single launch failure does not prove that the remaining
+                // candidate pool is exhausted. The current round boundary can
+                // still advance or retry selection from the remaining pool.
+                noMoreCandidates = false;
               }
             }
           }
@@ -5348,6 +5357,7 @@ export class ProxyForwarder {
 
     const launchNextRound = async (slots: number, coordinatorAlreadyAdvanced = false) => {
       if (settled || committed) return;
+      clearRoundTimer();
       if (coordinatorAlreadyAdvanced) {
         currentRound = coordinator.round;
       } else {
@@ -5368,6 +5378,7 @@ export class ProxyForwarder {
           await launch(candidate, "normal");
         } catch (error) {
           lastError = error instanceof Error ? error : new Error(String(error));
+          // Launch setup failures do not establish pool exhaustion.
           noMoreCandidates = false;
         }
       }
@@ -5398,11 +5409,10 @@ export class ProxyForwarder {
         if (action.promoteAttemptId) {
           const fallback = attempts.get(action.promoteAttemptId);
           if (fallback) fallback.kind = "fallback";
-          if (action.type === "cancel") {
-            if (fallback) await commit(fallback);
-            return;
-          }
         }
+        // A final-round fallback may still be waiting for a protocol-valid
+        // prefix. Keep it alive; markReady will commit it when it becomes safe.
+        if (action.type === "cancel") return;
       }
       if (action.type === "commit_normal" || action.type === "promote_fallback") {
         const attempt = attempts.get(action.attemptId);
@@ -5474,8 +5484,8 @@ export class ProxyForwarder {
               (attempt) => attempt.pending && attempt.provider.id === initialProvider.id
             );
             if (sticky) {
+              if (!coordinator.demoteToFallback(sticky.id)) return;
               sticky.kind = "fallback";
-              coordinator.promoteToFallback(sticky.id);
               if (bindingSnapshot && bindingSnapshot.providerId === initialProvider.id) {
                 void (async () => {
                   const cleared = await SessionManager.clearVersionedSessionProvider(
@@ -5526,6 +5536,7 @@ export class ProxyForwarder {
           initial,
           Array.from(launched)
         );
+        if (candidates.length === 0) noMoreCandidates = true;
         for (const provider of candidates) {
           try {
             await launch(provider, "normal");
@@ -5546,7 +5557,7 @@ export class ProxyForwarder {
     } finally {
       cleanupAbort();
       if (totalTimer) clearTimeout(totalTimer);
-      if (roundTimer) clearTimeout(roundTimer);
+      clearRoundTimer();
       if (stickyTimer) clearTimeout(stickyTimer);
     }
   }
@@ -5810,15 +5821,17 @@ export class ProxyForwarder {
       return;
     }
 
+    ProxyForwarder.releaseProviderSessionRef(session, providerId);
+  }
+
+  private static releaseProviderSessionRef(session: ProxySession, providerId: number): boolean {
+    if (!session.sessionId) return false;
     const providerSessionRefConsumer = (
-      session as { consumeProviderSessionRef?: (providerId: number) => boolean }
+      session as { consumeProviderSessionRef?: (id: number) => boolean }
     ).consumeProviderSessionRef;
-
-    if (!providerSessionRefConsumer?.call(session, providerId)) {
-      return;
-    }
-
+    if (!providerSessionRefConsumer?.call(session, providerId)) return false;
     void RateLimitService.releaseProviderSession(providerId, session.sessionId);
+    return true;
   }
 
   private static buildAllProvidersUnavailableError(finalError?: Error | null): ProxyError {

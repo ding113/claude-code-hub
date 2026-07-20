@@ -54,6 +54,21 @@ describe("DiscoveryCoordinator", () => {
     expect(coordinator.snapshot.find((item) => item.id === "a")?.kind).toBe("fallback");
   });
 
+  it("keeps Sticky demotion synchronized with the coordinator", () => {
+    const coordinator = new DiscoveryCoordinator({ concurrency: 2, maxRounds: 2 });
+    coordinator.addAttempt(attempt("sticky", 1));
+
+    expect(coordinator.demoteToFallback("sticky")).toBe(true);
+    expect(coordinator.snapshot.find((item) => item.id === "sticky")).toMatchObject({
+      kind: "fallback",
+      pending: true,
+    });
+    expect(coordinator.markReady("sticky")).toEqual({
+      type: "promote_fallback",
+      attemptId: "sticky",
+    });
+  });
+
   it("chooses the best ready normal at a boundary", () => {
     const coordinator = new DiscoveryCoordinator({ concurrency: 3, maxRounds: 1 });
     coordinator.addAttempt(attempt("a", 10));
@@ -76,11 +91,16 @@ describe("DiscoveryCoordinator", () => {
     });
   });
 
-  it("commits a ready lower-priority candidate when the higher tier fails", () => {
+  it("retains a lower-priority ready candidate until the higher tier fails", () => {
     const coordinator = new DiscoveryCoordinator({ concurrency: 2, maxRounds: 2 });
     coordinator.addAttempt(attempt("high", 1));
     coordinator.addAttempt(attempt("low", 10));
+
     expect(coordinator.markReady("low")).toEqual({ type: "none" });
+    expect(coordinator.snapshot.find((item) => item.id === "low")).toMatchObject({
+      ready: true,
+      pending: true,
+    });
     expect(coordinator.markFailed("high")).toEqual({
       type: "commit_normal",
       attemptId: "low",
