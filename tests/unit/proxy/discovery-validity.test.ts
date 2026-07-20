@@ -60,4 +60,18 @@ describe("discovery validity", () => {
       ).ready
     ).toBe(true);
   });
+
+  it("consumes split SSE lines incrementally without waiting for the full stream", () => {
+    const parser = new DiscoveryValidityParser("openai-chat");
+    expect(parser.push('data: {"choices":[{"delta":{"content":"hel')).toEqual({
+      ready: false,
+      terminal: false,
+      error: false,
+    });
+    expect(parser.push('lo"}}]}\n\n')).toEqual({
+      ready: true,
+      terminal: false,
+      error: false,
+    });
+  });
 });

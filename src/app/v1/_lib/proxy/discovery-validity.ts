@@ -137,11 +137,58 @@ export class DiscoveryValidityParser {
   push(chunk: Uint8Array | string): DiscoveryValidity {
     this.buffered +=
       typeof chunk === "string" ? chunk : this.decoder.decode(chunk, { stream: true });
-    const result = classifyDiscoveryChunk(this.buffered, this.protocol);
+
+    // SSE streams are line framed. Consume each completed line once instead
+    // of reparsing the complete prefix on every chunk (which is quadratic on
+    // long streams). Keep only the unfinished line for the next push.
+    if (this.buffered.includes("\n")) {
+      const lines = this.buffered.split(/\r?\n/);
+      this.buffered = lines.pop() ?? "";
+      for (const line of lines) this.consumeLine(line);
+    }
+
+    // Some providers return one raw JSON object without an SSE newline. Parse
+    // it only when the complete object is available; incomplete JSON remains
+    // buffered and is not repeatedly scanned as a protocol event.
+    const tail = this.buffered.trim();
+    if (tail) {
+      const candidate = tail.startsWith("data:") ? tail.slice(5).trim() : tail;
+      if (candidate === "[DONE]") {
+        this._terminal = true;
+        this.buffered = "";
+      } else if (candidate.startsWith("{") || candidate.startsWith("[")) {
+        try {
+          const value = JSON.parse(candidate) as unknown;
+          this.consumeValue(value);
+          this.buffered = "";
+        } catch {
+          // Keep incomplete raw JSON until the next chunk completes it.
+        }
+      }
+    }
+
+    return { ready: this._ready && !this._error, terminal: this._terminal, error: this._error };
+  }
+
+  private consumeLine(line: string): void {
+    const candidate = line.startsWith("data:") ? line.slice(5).trim() : line.trim();
+    if (!candidate || candidate.startsWith(":")) return;
+    if (candidate === "[DONE]") {
+      this._terminal = true;
+      return;
+    }
+    try {
+      this.consumeValue(JSON.parse(candidate) as unknown);
+    } catch {
+      // Ignore comments and incomplete/non-JSON protocol lines.
+    }
+  }
+
+  private consumeValue(value: unknown): void {
+    const result = classifyJson(value, this.protocol);
     this._ready ||= result.ready;
     this._terminal ||= result.terminal;
     this._error ||= result.error;
-    return { ready: this._ready && !this._error, terminal: this._terminal, error: this._error };
   }
 
   get ready(): boolean {

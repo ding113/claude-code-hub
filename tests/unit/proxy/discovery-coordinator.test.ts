@@ -27,7 +27,11 @@ describe("DiscoveryCoordinator", () => {
     coordinator.addAttempt(attempt("a", 1));
     coordinator.addAttempt(attempt("b", 2));
     const action = coordinator.onRoundBoundary();
-    expect(action.type).toBe("cancel");
+    expect(action).toMatchObject({
+      type: "launch",
+      promoteAttemptId: "a",
+      cancelAttemptIds: ["b"],
+    });
     expect(coordinator.snapshot.find((item) => item.id === "a")?.kind).toBe("fallback");
     expect(coordinator.snapshot.filter((item) => item.pending)).toHaveLength(1);
   });
@@ -45,9 +49,7 @@ describe("DiscoveryCoordinator", () => {
   it("promotes a ready fallback at the round boundary when no normal is ready", () => {
     const coordinator = new DiscoveryCoordinator({ concurrency: 2, maxRounds: 2 });
     coordinator.addAttempt(attempt("a", 1, "fallback"));
-    coordinator.addAttempt(attempt("b", 1, "normal"));
-    expect(coordinator.markReady("a")).toEqual({ type: "none" });
-    expect(coordinator.onRoundBoundary()).toEqual({ type: "promote_fallback", attemptId: "a" });
+    expect(coordinator.markReady("a")).toEqual({ type: "promote_fallback", attemptId: "a" });
     expect(coordinator.snapshot.find((item) => item.id === "a")?.kind).toBe("fallback");
   });
 
@@ -59,5 +61,17 @@ describe("DiscoveryCoordinator", () => {
     coordinator.markReady("a");
     coordinator.markReady("c");
     expect(coordinator.onRoundBoundary()).toEqual({ type: "commit_normal", attemptId: "c" });
+  });
+
+  it("reports normal attempts cancelled when retaining an existing fallback", () => {
+    const coordinator = new DiscoveryCoordinator({ concurrency: 2, maxRounds: 3 });
+    coordinator.addAttempt(attempt("fallback", 1, "fallback"));
+    coordinator.addAttempt(attempt("normal", 2));
+    const action = coordinator.onRoundBoundary();
+    expect(action).toEqual({
+      type: "launch",
+      slots: 1,
+      cancelAttemptIds: ["normal"],
+    });
   });
 });
