@@ -26,6 +26,7 @@ function hasContent(value: unknown): boolean {
     "tool_calls",
     "functionCall",
     "function_call",
+    "function",
     "arguments",
     "partial_json",
     "id",

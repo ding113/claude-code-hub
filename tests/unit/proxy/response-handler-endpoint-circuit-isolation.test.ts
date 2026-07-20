@@ -77,6 +77,9 @@ vi.mock("@/lib/session-manager", () => ({
     updateSessionUsage: vi.fn(),
     storeSessionResponse: vi.fn(),
     clearSessionProvider: vi.fn(),
+    clearVersionedSessionProvider: vi.fn(),
+    compareAndSetSessionProvider: vi.fn(),
+    getSessionBindingSnapshot: vi.fn(),
     extractCodexPromptCacheKey: vi.fn(),
     updateSessionBindingSmart: vi.fn(),
     updateSessionProvider: vi.fn(),
@@ -335,6 +338,23 @@ function createSuccessStreamResponse(): Response {
   });
 }
 
+function createSuccessStreamResponseWithCompletion(): Response {
+  const sseText =
+    `data: ${JSON.stringify({ type: "content_block_delta", delta: { text: "ok" } })}\n\n` +
+    `data: ${JSON.stringify({ type: "message_stop" })}\n\n`;
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(encoder.encode(sseText));
+      controller.close();
+    },
+  });
+  return new Response(stream, {
+    status: 200,
+    headers: { "content-type": "text/event-stream" },
+  });
+}
+
 async function drainAsyncTasks(): Promise<void> {
   while (asyncTasks.length > 0) {
     const tasks = asyncTasks.splice(0, asyncTasks.length);
@@ -366,6 +386,39 @@ function setupCommonMocks() {
   vi.mocked(updateMessageRequestDuration).mockResolvedValue(undefined);
   vi.mocked(SessionManager.storeSessionResponse).mockResolvedValue(undefined);
   vi.mocked(SessionManager.clearSessionProvider).mockResolvedValue(undefined);
+  vi.mocked(SessionManager.clearVersionedSessionProvider).mockResolvedValue({
+    status: "ok",
+    source: "cleared",
+    snapshot: {
+      sessionId: "fake-session",
+      keyId: 456,
+      providerId: null,
+      generation: "cleared",
+    },
+    legacyFallbackAllowed: false,
+  });
+  vi.mocked(SessionManager.compareAndSetSessionProvider).mockResolvedValue({
+    status: "ok",
+    source: "updated",
+    snapshot: {
+      sessionId: "fake-session",
+      keyId: 456,
+      providerId: 1,
+      generation: "updated",
+    },
+    legacyFallbackAllowed: false,
+  });
+  vi.mocked(SessionManager.getSessionBindingSnapshot).mockResolvedValue({
+    status: "ok",
+    source: "existing",
+    snapshot: {
+      sessionId: "fake-session",
+      keyId: 456,
+      providerId: null,
+      generation: "fresh",
+    },
+    legacyFallbackAllowed: false,
+  });
   vi.mocked(SessionManager.updateSessionUsage).mockResolvedValue(undefined);
   vi.mocked(SessionManager.updateSessionBindingSmart).mockResolvedValue({
     updated: true,
@@ -536,5 +589,61 @@ describe("Endpoint circuit breaker isolation", () => {
 
     expect(mockRecordEndpointSuccess).not.toHaveBeenCalled();
     expect(mockRecordEndpointFailure).not.toHaveBeenCalled();
+  });
+
+  it("reconciles an expired Discovery binding snapshot before retrying CAS", async () => {
+    const session = createSession();
+    const snapshot = {
+      sessionId: "fake-session",
+      keyId: 456,
+      providerId: null,
+      generation: "expired-generation",
+    } as const;
+    setDeferredStreamingFinalization(session, {
+      providerId: 1,
+      providerName: "test-provider",
+      providerPriority: 10,
+      attemptNumber: 1,
+      totalProvidersAttempted: 2,
+      isFirstAttempt: false,
+      isFailoverSuccess: true,
+      endpointId: 42,
+      endpointUrl: "https://api.test.com",
+      upstreamStatusCode: 200,
+      bindingIntent: "create",
+      bindingSnapshot: snapshot,
+      requiresCompletionMarker: true,
+    });
+    vi.mocked(SessionManager.compareAndSetSessionProvider)
+      .mockResolvedValueOnce({
+        status: "conflict",
+        reason: "canonical_missing",
+        legacyFallbackAllowed: false,
+      })
+      .mockResolvedValueOnce({
+        status: "ok",
+        source: "updated",
+        snapshot: {
+          ...snapshot,
+          providerId: 1,
+          generation: "renewed-generation",
+        },
+        legacyFallbackAllowed: false,
+      });
+
+    const clientResponse = await ProxyResponseHandler.dispatch(
+      session,
+      createSuccessStreamResponseWithCompletion()
+    );
+    await clientResponse.text();
+    await drainAsyncTasks();
+
+    expect(SessionManager.getSessionBindingSnapshot).toHaveBeenCalledWith("fake-session", 456);
+    expect(SessionManager.compareAndSetSessionProvider).toHaveBeenNthCalledWith(1, snapshot, 1);
+    expect(SessionManager.compareAndSetSessionProvider).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ generation: "fresh", providerId: null }),
+      1
+    );
   });
 });

@@ -5225,6 +5225,15 @@ export class ProxyForwarder {
           }
           attempt.releaseAgent?.();
           releaseProviderRef(provider.id);
+          if (lastErrorCategory === ErrorCategory.NON_RETRYABLE_CLIENT_ERROR) {
+            // Client/input errors are independent of the selected provider.
+            // Stop Discovery immediately so the same invalid request is not
+            // fanned out or masked by a later generic fallback error.
+            await settleFailure(
+              ProxyForwarder.resolveHedgeTerminalError(lastError, lastErrorCategory)
+            );
+            return;
+          }
           const actionOwnsNextStep =
             failureAction.type === "commit_normal" ||
             failureAction.type === "promote_fallback" ||

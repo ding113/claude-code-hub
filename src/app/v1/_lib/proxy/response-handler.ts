@@ -15,6 +15,7 @@ import { RateLimitService } from "@/lib/rate-limit";
 import { deleteLiveChain } from "@/lib/redis/live-chain-store";
 import { SessionManager } from "@/lib/session-manager";
 import { SessionTracker } from "@/lib/session-tracker";
+import type { SessionBindingSnapshot } from "@/lib/redis/session-binding";
 import { CODEX_1M_CONTEXT_TOKEN_THRESHOLD } from "@/lib/special-attributes";
 import type {
   CostBreakdown,
@@ -1152,14 +1153,53 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
     const keyId = session.authState?.key?.id ?? session.messageContext?.key?.id ?? null;
     if (meta?.bindingIntent === "none") return;
     if (meta?.bindingSnapshot && keyId != null) {
-      await SessionManager.clearVersionedSessionProvider(
+      const cleared = await SessionManager.clearVersionedSessionProvider(
         meta.bindingSnapshot,
-        providerIdForPersistence,
+        meta.bindingSnapshot.providerId,
         0
       );
+      if (cleared.status !== "ok") {
+        logger.debug("[ResponseHandler] Discovery binding clear skipped", {
+          sessionId: meta.bindingSnapshot.sessionId,
+          keyId: meta.bindingSnapshot.keyId,
+          expectedProviderId: meta.bindingSnapshot.providerId,
+          reason: cleared.reason,
+        });
+      }
       return;
     }
     await SessionManager.clearSessionProvider(session.sessionId, providerIdForPersistence, keyId);
+  };
+
+  const compareAndSetDiscoveryBinding = async (
+    snapshot: SessionBindingSnapshot,
+    providerId: number,
+    keyId: number
+  ) => {
+    if (!snapshot)
+      return { updated: false, reason: "missing_snapshot", details: "missing_snapshot" };
+
+    let cas = await SessionManager.compareAndSetSessionProvider(snapshot, providerId);
+    if (cas.status === "conflict" && cas.reason === "canonical_missing") {
+      // A long stream can outlive SESSION_TTL. Reconcile once before giving up,
+      // but only retry when the binding still represents the same owner/provider
+      // observed before the stream. This preserves CAS protection against a
+      // concurrent request that established a different Sticky in the meantime.
+      const refreshed = await SessionManager.getSessionBindingSnapshot(
+        session.sessionId ?? snapshot.sessionId,
+        keyId
+      );
+      if (refreshed.status === "ok" && refreshed.snapshot.providerId === snapshot.providerId) {
+        session.setSessionBindingSnapshot(refreshed.snapshot);
+        cas = await SessionManager.compareAndSetSessionProvider(refreshed.snapshot, providerId);
+      }
+    }
+
+    return {
+      updated: cas.status === "ok",
+      reason: cas.status === "ok" ? "discovery_generation_cas" : cas.reason,
+      details: cas.status,
+    };
   };
 
   const isHedgeWinner = meta?.isHedgeWinner === true;
@@ -1545,14 +1585,7 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
       const keyId = session.authState?.key?.id ?? session.messageContext?.key?.id ?? null;
       const result =
         meta.bindingSnapshot && keyId != null
-          ? await SessionManager.compareAndSetSessionProvider(
-              meta.bindingSnapshot,
-              meta.providerId
-            ).then((cas) => ({
-              updated: cas.status === "ok",
-              reason: cas.status === "ok" ? "discovery_generation_cas" : cas.reason,
-              details: cas.status,
-            }))
+          ? await compareAndSetDiscoveryBinding(meta.bindingSnapshot, meta.providerId, keyId)
           : await SessionManager.updateSessionBindingSmart(
               session.sessionId,
               meta.providerId,

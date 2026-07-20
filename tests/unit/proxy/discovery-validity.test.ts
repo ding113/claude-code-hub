@@ -99,4 +99,16 @@ describe("discovery validity", () => {
       error: false,
     });
   });
+
+  it("accepts nested OpenAI Chat tool-call arguments", () => {
+    expect(
+      parserForOpenAIChatToolCall().push(
+        'data: {"choices":[{"delta":{"tool_calls":[{"function":{"arguments":"{\\"x\\":1}"}}]}}]}\n\n'
+      )
+    ).toMatchObject({ ready: true, error: false });
+  });
 });
+
+function parserForOpenAIChatToolCall(): DiscoveryValidityParser {
+  return new DiscoveryValidityParser("openai-chat");
+}
