@@ -26,6 +26,7 @@ import {
 import {
   CAS_SESSION_BINDING,
   CLEAR_SESSION_BINDING,
+  DELETE_LEGACY_PROVIDER_IF_VALUE,
   READ_OR_RECONCILE_SESSION_BINDING,
   TERMINATE_SESSION_BINDING,
 } from "@/lib/redis/lua-scripts";
@@ -784,6 +785,60 @@ describe("versioned session binding operations", () => {
       legacyFallbackAllowed: false,
     });
     expect(mock.getMock).not.toHaveBeenCalled();
+  });
+
+  it("fails closed and rolls back its provider write if canonical state appears mid-mutation", async () => {
+    let provider: string | null = "8";
+    const mock = createMockRedis({
+      operationResponses: {
+        [DELETE_LEGACY_PROVIDER_IF_VALUE]: [
+          () => {
+            provider = null;
+            return 1;
+          },
+        ],
+      },
+    });
+    let existsCalls = 0;
+    mock.existsMock.mockImplementation(async () => {
+      existsCalls += 1;
+      // Initial guard and pre-mutation guard pass; the post-write guard sees
+      // a versioned worker creating the canonical binding concurrently.
+      return existsCalls === 3 ? 1 : 0;
+    });
+    mock.getMock.mockImplementation(async (key: string) => {
+      if (key === "session:sid:key") return "4";
+      if (key === "session:sid:provider") return provider;
+      return null;
+    });
+    mock.setexMock.mockImplementation(async (key: string, _ttl: number, value: string) => {
+      if (key === "session:sid:provider") provider = value;
+      return "OK";
+    });
+    mock.delMock.mockImplementation(async (key: string) => {
+      if (key === "session:sid:provider") provider = null;
+      return 1;
+    });
+
+    const result = await mutateLegacySessionBindingSafely({
+      sessionId: "sid",
+      keyId: 4,
+      redis: mock.redis,
+      mutation: { type: "set", providerId: 10 },
+    });
+
+    expect(result).toEqual({
+      status: "conflict",
+      reason: "canonical_exists",
+      legacyFallbackAllowed: false,
+    });
+    expect(provider).toBeNull();
+    expect(mock.evalMock).toHaveBeenCalledWith(
+      DELETE_LEGACY_PROVIDER_IF_VALUE,
+      1,
+      "session:sid:provider",
+      "10"
+    );
   });
 
   it("uses the tenant-authorized termination primitive and leaves a tombstone", async () => {

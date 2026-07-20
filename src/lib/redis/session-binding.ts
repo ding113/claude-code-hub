@@ -6,6 +6,7 @@ import { getRedisClient } from "./client";
 import {
   CAS_SESSION_BINDING,
   CLEAR_SESSION_BINDING,
+  DELETE_LEGACY_PROVIDER_IF_VALUE,
   READ_OR_RECONCILE_SESSION_BINDING,
   TERMINATE_SESSION_BINDING,
 } from "./lua-scripts";
@@ -834,6 +835,39 @@ function parseLegacyProviderId(raw: string | null): number | null | undefined {
   return isPositiveInteger(providerId) ? providerId : undefined;
 }
 
+/**
+ * A legacy fallback mutation can race a different worker which has already
+ * recovered versioned binding capability. Re-check the canonical key after a
+ * legacy write and fail closed if the versioned owner appeared in between.
+ * Rollback uses a single-key conditional Lua script, so a concurrent versioned
+ * writer cannot have its newer provider value deleted. If scripts are disabled
+ * entirely, the mutation still fails closed and leaves the mirror untouched.
+ */
+async function rejectLegacyMutationAfterCanonicalAppeared(
+  redis: SessionBindingRedisClient,
+  keys: SessionBindingKeys,
+  rollbackProviderValue?: string
+): Promise<SessionBindingConflictResult | null> {
+  if ((await redis.exists(keys.canonical)) === 0) return null;
+
+  if (rollbackProviderValue !== undefined) {
+    try {
+      await redis.eval(
+        DELETE_LEGACY_PROVIDER_IF_VALUE,
+        1,
+        keys.legacyProvider,
+        rollbackProviderValue
+      );
+    } catch (error) {
+      logger.warn("Legacy binding rollback could not execute atomically", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  return conflict("canonical_exists");
+}
+
 export async function mutateLegacySessionBindingSafely(
   input: LegacySessionBindingMutationInput
 ): Promise<LegacySessionBindingMutationResult> {
@@ -899,6 +933,13 @@ export async function mutateLegacySessionBindingSafely(
       case "refresh":
         await redis.expire(keys.legacyOwner, ttlSeconds);
         if (legacyProvider !== null) await redis.expire(keys.legacyProvider, ttlSeconds);
+        {
+          const conflictAfterRefresh = await rejectLegacyMutationAfterCanonicalAppeared(
+            redis,
+            keys
+          );
+          if (conflictAfterRefresh) return conflictAfterRefresh;
+        }
         return { status: "ok", changed: false, providerId: legacyProvider };
       case "bind_if_absent": {
         if (legacyProvider !== null) {
@@ -913,6 +954,12 @@ export async function mutateLegacySessionBindingSafely(
         );
         await redis.expire(keys.legacyOwner, ttlSeconds);
         if (result === "OK") {
+          const conflictAfterBind = await rejectLegacyMutationAfterCanonicalAppeared(
+            redis,
+            keys,
+            input.mutation.providerId.toString()
+          );
+          if (conflictAfterBind) return conflictAfterBind;
           return { status: "ok", changed: true, providerId: input.mutation.providerId };
         }
         const concurrentProvider = parseLegacyProviderId(await redis.get(keys.legacyProvider));
@@ -922,6 +969,14 @@ export async function mutateLegacySessionBindingSafely(
       case "set":
         await redis.setex(keys.legacyProvider, ttlSeconds, input.mutation.providerId.toString());
         await redis.expire(keys.legacyOwner, ttlSeconds);
+        {
+          const conflictAfterSet = await rejectLegacyMutationAfterCanonicalAppeared(
+            redis,
+            keys,
+            input.mutation.providerId.toString()
+          );
+          if (conflictAfterSet) return conflictAfterSet;
+        }
         return { status: "ok", changed: true, providerId: input.mutation.providerId };
       case "clear":
         if (
@@ -938,6 +993,10 @@ export async function mutateLegacySessionBindingSafely(
         }
         await redis.del(keys.legacyProvider);
         await redis.expire(keys.legacyOwner, ttlSeconds);
+        {
+          const conflictAfterClear = await rejectLegacyMutationAfterCanonicalAppeared(redis, keys);
+          if (conflictAfterClear) return conflictAfterClear;
+        }
         return { status: "ok", changed: true, providerId: null };
       case "terminate":
         if (
@@ -948,6 +1007,13 @@ export async function mutateLegacySessionBindingSafely(
         }
         if (legacyProvider !== null) await redis.del(keys.legacyProvider);
         await redis.del(keys.legacyOwner);
+        {
+          const conflictAfterTerminate = await rejectLegacyMutationAfterCanonicalAppeared(
+            redis,
+            keys
+          );
+          if (conflictAfterTerminate) return conflictAfterTerminate;
+        }
         return { status: "ok", changed: legacyProvider !== null, providerId: null };
     }
   } catch (error) {
