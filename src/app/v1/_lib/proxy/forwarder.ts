@@ -5300,8 +5300,19 @@ export class ProxyForwarder {
       } catch (error) {
         lastError = error instanceof Error ? error : new Error(String(error));
         const replacement = await chooseCandidate();
-        if (replacement) await launch(replacement, "normal");
-        else await settleFailure(ProxyForwarder.resolveHedgeTerminalError(lastError, null));
+        if (replacement) {
+          try {
+            await launch(replacement, "normal");
+          } catch (replacementError) {
+            lastError =
+              replacementError instanceof Error
+                ? replacementError
+                : new Error(String(replacementError));
+            await settleFailure(ProxyForwarder.resolveHedgeTerminalError(lastError, null));
+          }
+        } else {
+          await settleFailure(ProxyForwarder.resolveHedgeTerminalError(lastError, null));
+        }
       }
       const initial = hasSticky ? concurrency - 1 : Math.max(0, concurrency - 1);
       if (hasSticky) {
