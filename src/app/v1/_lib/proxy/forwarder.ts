@@ -4853,6 +4853,7 @@ export class ProxyForwarder {
     const stickySlaMs = Math.max(1, settings.stickySlaMs ?? 20_000);
     const totalTimeoutMs = Math.max(stickySlaMs, settings.racingTotalTimeoutMs ?? 60_000);
     const protocol = ProxyForwarder.discoveryProtocol(session);
+    const rawCrossProviderFallbackEnabled = session.isRawCrossProviderFallbackEnabled();
     const coordinator = new DiscoveryCoordinator({ concurrency, maxRounds });
     const bindingKeyId = session.authState?.key?.id ?? session.messageContext?.key?.id ?? null;
     // Provider selection normally populates this snapshot for a reused Sticky.
@@ -4908,6 +4909,14 @@ export class ProxyForwarder {
       if (consumer?.call(session, providerId)) {
         void RateLimitService.releaseProviderSession(providerId, session.sessionId);
       }
+    };
+
+    const getAttemptModelRedirect = (attempt: (typeof winner & { id: string }) | null) => {
+      if (!attempt) return undefined;
+      if (attempt.modelRedirect !== undefined) return attempt.modelRedirect;
+      const redirect = attempt.session.getCurrentModelRedirect(attempt.provider.id);
+      if (redirect) attempt.modelRedirect = structuredClone(redirect);
+      return attempt.modelRedirect;
     };
 
     const cancelAttempt = (attempt: (typeof winner & { id: string }) | null, reason: string) => {
@@ -5046,7 +5055,15 @@ export class ProxyForwarder {
       }, delayMs);
     };
 
-    const launch = async (provider: Provider, kind: "normal" | "fallback"): Promise<void> => {
+    const launch = async (
+      provider: Provider,
+      kind: "normal" | "fallback",
+      options?: {
+        attemptSession?: ProxySession;
+        requestAttemptCount?: number;
+        retryState?: ReactiveRectifierRetryState;
+      }
+    ): Promise<void> => {
       if (settled || committed || launched.has(provider.id)) return;
       launched.add(provider.id);
       let providerSessionRefTracked = false;
@@ -5083,9 +5100,10 @@ export class ProxyForwarder {
       let attemptSession: ProxySession;
       try {
         attemptSession =
-          provider.id === initialProvider.id
+          options?.attemptSession ??
+          (provider.id === initialProvider.id
             ? session
-            : ProxyForwarder.createStreamingShadowSession(session, provider);
+            : ProxyForwarder.createStreamingShadowSession(session, provider));
         attemptSession.setProvider(provider);
       } catch (error) {
         rollbackLaunch();
@@ -5112,8 +5130,8 @@ export class ProxyForwarder {
         clearResponseTimeout: null,
         firstByteTimeoutMs: 0,
         sequence: ++sequence,
-        requestAttemptCount: 1,
-        reactiveRectifierRetryState: {
+        requestAttemptCount: options?.requestAttemptCount ?? 1,
+        reactiveRectifierRetryState: options?.retryState ?? {
           thinkingSignatureRetried: false,
           thinkingBudgetRetried: false,
           thinkingEffortConflictRetried: false,
@@ -5206,16 +5224,73 @@ export class ProxyForwarder {
         })
         .catch(async (error) => {
           if (committed || settled || !attempt.pending) return;
-          attempt.pending = false;
-          const failureAction = coordinator.markFailed(id);
           lastError = error instanceof Error ? error : new Error(String(error));
           lastErrorCategory = await categorizeErrorAsync(lastError);
+          const errorMessage =
+            lastError instanceof ProxyError
+              ? lastError.getDetailedErrorMessage()
+              : lastError.message;
+
+          // Preserve the existing provider-local rectifier contract before
+          // classifying a 400 as terminal. The rectifier mutates the shadow
+          // request session, so retry the same attempt session rather than
+          // creating a fresh unrectified shadow from the parent session.
+          const rectifier = await tryApplyReactiveRectifier({
+            provider,
+            requestSession: attempt.session,
+            persistSession: session,
+            errorMessage,
+            attemptNumber: attempt.requestAttemptCount,
+            retryAttemptNumber: attempt.requestAttemptCount + 1,
+            retryState: attempt.reactiveRectifierRetryState,
+          });
+          if (rectifier.matched && rectifier.applied) {
+            attempt.pending = false;
+            coordinator.removeAttempt(id);
+            const readerCancel = attempt.reader?.cancel("discovery_rectifier_retry");
+            readerCancel?.catch(() => undefined);
+            attempt.releaseAgent?.();
+            releaseProviderRef(provider.id);
+            session.addProviderToChain(provider, {
+              ...buildRetryFailedChainEntry(
+                provider,
+                attempt.endpointAudit,
+                attempt.requestAttemptCount,
+                lastError,
+                errorMessage,
+                rectifier.requestDetailsBeforeRectify,
+                rawCrossProviderFallbackEnabled
+              ),
+              modelRedirect: getAttemptModelRedirect(attempt),
+            });
+            launched.delete(provider.id);
+            try {
+              await launch(provider, attempt.kind, {
+                attemptSession: attempt.session,
+                requestAttemptCount: attempt.requestAttemptCount + 1,
+                retryState: attempt.reactiveRectifierRetryState,
+              });
+            } catch (retryLaunchError) {
+              lastError =
+                retryLaunchError instanceof Error
+                  ? retryLaunchError
+                  : new Error(String(retryLaunchError));
+              lastErrorCategory = await categorizeErrorAsync(lastError);
+              await settleFailure(
+                ProxyForwarder.resolveHedgeTerminalError(lastError, lastErrorCategory)
+              );
+            }
+            return;
+          }
+
+          attempt.pending = false;
+          const failureAction = coordinator.markFailed(id);
           session.addProviderToChain(provider, {
             ...attempt.endpointAudit,
             reason: "retry_failed",
             attemptNumber: attempt.sequence,
             statusCode: lastError instanceof ProxyError ? lastError.statusCode : undefined,
-            errorMessage: lastError.message,
+            errorMessage,
           });
           if (
             lastErrorCategory === ErrorCategory.PROVIDER_ERROR &&
@@ -5365,7 +5440,10 @@ export class ProxyForwarder {
     }, totalTimeoutMs);
 
     try {
-      const hasSticky = session.shouldReuseProvider() && !!session.sessionId;
+      const hasSticky =
+        session.shouldReuseProvider() &&
+        !!session.sessionId &&
+        bindingSnapshot?.providerId === initialProvider.id;
       try {
         await launch(initialProvider, "normal");
       } catch (error) {
@@ -5399,13 +5477,36 @@ export class ProxyForwarder {
               sticky.kind = "fallback";
               coordinator.promoteToFallback(sticky.id);
               if (bindingSnapshot && bindingSnapshot.providerId === initialProvider.id) {
-                void SessionManager.clearVersionedSessionProvider(
-                  bindingSnapshot,
-                  initialProvider.id,
-                  Math.ceil((settings.stickyTimeoutCooldownMs ?? 300_000) / 1000)
-                ).catch((error) =>
-                  logger.debug("[Discovery] Failed to clear timed-out Sticky", { error })
-                );
+                void (async () => {
+                  const cleared = await SessionManager.clearVersionedSessionProvider(
+                    bindingSnapshot,
+                    initialProvider.id,
+                    Math.ceil((settings.stickyTimeoutCooldownMs ?? 300_000) / 1000)
+                  );
+                  if (cleared.status === "ok") {
+                    bindingSnapshot = cleared.snapshot;
+                    session.setSessionBindingSnapshot(cleared.snapshot);
+                  } else {
+                    logger.debug("[Discovery] Failed to clear timed-out Sticky", {
+                      reason: cleared.reason,
+                    });
+                  }
+                })()
+                  .catch((error) =>
+                    logger.debug("[Discovery] Failed to clear timed-out Sticky", { error })
+                  )
+                  .finally(() => {
+                    if (currentRound < maxRounds) {
+                      void launchNextRound(Math.max(0, concurrency - 1)).catch((error) =>
+                        logger.warn("[Discovery] Sticky round launch failed", { error })
+                      );
+                    } else {
+                      void onBoundary().catch((error) =>
+                        logger.warn("[Discovery] Sticky boundary failed", { error })
+                      );
+                    }
+                  });
+                return;
               }
               if (currentRound < maxRounds) {
                 void launchNextRound(Math.max(0, concurrency - 1)).catch((error) =>
