@@ -1011,7 +1011,7 @@ export const UpdateSystemSettingsSchema = z
     discoveryConcurrency: z.coerce
       .number()
       .int("Discovery 并发数必须是整数")
-      .min(1, "Discovery 并发数必须大于 0")
+      .min(2, "Discovery 并发数不能小于 2")
       .max(32, "Discovery 并发数不能超过 32")
       .optional(),
     maxDiscoveryRounds: z.coerce

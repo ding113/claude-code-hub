@@ -15,6 +15,11 @@ describe("UpdateSystemSettingsSchema Discovery settings", () => {
     expect(result.discoveryConcurrency).toBe(2);
   });
 
+  it("requires at least one fallback slot in addition to the normal lane", () => {
+    const result = UpdateSystemSettingsSchema.safeParse({ discoveryConcurrency: 1 });
+    expect(result.success).toBe(false);
+  });
+
   it("rejects a total deadline shorter than the configured discovery window", () => {
     expect(() =>
       UpdateSystemSettingsSchema.parse({

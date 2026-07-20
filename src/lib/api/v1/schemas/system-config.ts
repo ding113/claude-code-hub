@@ -102,7 +102,7 @@ export const SystemSettingsSchema = z
     discoveryConcurrency: z
       .number()
       .int()
-      .positive()
+      .min(2)
       .describe("Maximum number of normal Discovery attempts in the initial batch."),
     maxDiscoveryRounds: z.number().int().positive().describe("Maximum number of Discovery rounds."),
     discoverySlaMs: z

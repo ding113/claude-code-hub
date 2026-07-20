@@ -719,37 +719,46 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
               disabled={isPending}
             />
           </div>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {(
-              [
-                ["discoveryConcurrency", discoveryConcurrency, setDiscoveryConcurrency, 1],
-                ["maxDiscoveryRounds", maxDiscoveryRounds, setMaxDiscoveryRounds, 1],
-                ["discoverySlaMs", discoverySlaMs, setDiscoverySlaMs, 1],
-                ["stickySlaMs", stickySlaMs, setStickySlaMs, 1],
-                ["racingTotalTimeoutMs", racingTotalTimeoutMs, setRacingTotalTimeoutMs, 1],
-                ["stickyTimeoutCooldownMs", stickyTimeoutCooldownMs, setStickyTimeoutCooldownMs, 1],
-              ] as const
-            ).map(([key, value, setter, min]) => (
-              <div key={key} className="space-y-1.5">
-                <Label htmlFor={`discovery-${key}`} className="text-xs">
-                  {t(key)}
-                </Label>
-                <Input
-                  id={`discovery-${key}`}
-                  type="number"
-                  min={min}
-                  required={discoveryEnabled}
-                  value={value === 0 ? "" : value}
-                  onChange={(event) =>
-                    setter(event.target.value === "" ? "" : Number(event.target.value))
-                  }
-                  disabled={isPending || !discoveryEnabled}
-                  className={inputClassName}
-                />
+          {discoveryEnabled ? (
+            <>
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {(
+                  [
+                    ["discoveryConcurrency", discoveryConcurrency, setDiscoveryConcurrency, 2],
+                    ["maxDiscoveryRounds", maxDiscoveryRounds, setMaxDiscoveryRounds, 1],
+                    ["discoverySlaMs", discoverySlaMs, setDiscoverySlaMs, 1],
+                    ["stickySlaMs", stickySlaMs, setStickySlaMs, 1],
+                    ["racingTotalTimeoutMs", racingTotalTimeoutMs, setRacingTotalTimeoutMs, 1],
+                    [
+                      "stickyTimeoutCooldownMs",
+                      stickyTimeoutCooldownMs,
+                      setStickyTimeoutCooldownMs,
+                      1,
+                    ],
+                  ] as const
+                ).map(([key, value, setter, min]) => (
+                  <div key={key} className="space-y-1.5">
+                    <Label htmlFor={`discovery-${key}`} className="text-xs">
+                      {t(key)}
+                    </Label>
+                    <Input
+                      id={`discovery-${key}`}
+                      type="number"
+                      min={min}
+                      required
+                      value={value === 0 ? "" : value}
+                      onChange={(event) =>
+                        setter(event.target.value === "" ? "" : Number(event.target.value))
+                      }
+                      disabled={isPending}
+                      className={inputClassName}
+                    />
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
-          <p className="text-xs text-muted-foreground">{t("discoveryWindowDesc")}</p>
+              <p className="text-xs text-muted-foreground">{t("discoveryWindowDesc")}</p>
+            </>
+          ) : null}
         </div>
 
         {/* Verbose Provider Error */}
