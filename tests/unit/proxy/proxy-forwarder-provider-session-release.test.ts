@@ -68,6 +68,22 @@ describe("ProxyForwarder provider failure session release", () => {
     expect(mocks.releaseProviderSession).not.toHaveBeenCalled();
   });
 
+  it("endpoint resolution rollback releases only a recorded provider ref", async () => {
+    const { ProxyForwarder } = await import("@/app/v1/_lib/proxy/forwarder");
+    const forwarderInternals = ProxyForwarder as unknown as {
+      releaseProviderSessionRef: (session: ProxySession, providerId: number) => boolean;
+    };
+    const consumeProviderSessionRef = vi.fn(() => true);
+    const session = {
+      sessionId: "sess_endpoint_failure",
+      consumeProviderSessionRef,
+    } as unknown as ProxySession;
+
+    expect(forwarderInternals.releaseProviderSessionRef(session, 42)).toBe(true);
+    expect(consumeProviderSessionRef).toHaveBeenCalledWith(42);
+    expect(mocks.releaseProviderSession).toHaveBeenCalledWith(42, "sess_endpoint_failure");
+  });
+
   it("重复标记同一供应商时只释放一次，避免 hedge 路径重复 ZREM", async () => {
     const { ProxyForwarder } = await import("@/app/v1/_lib/proxy/forwarder");
     const forwarderInternals = ProxyForwarder as unknown as {

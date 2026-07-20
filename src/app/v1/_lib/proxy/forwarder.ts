@@ -4897,12 +4897,7 @@ export class ProxyForwarder {
     });
 
     const releaseProviderRef = (providerId: number) => {
-      if (!session.sessionId) return;
-      const consumer = (session as { consumeProviderSessionRef?: (id: number) => boolean })
-        .consumeProviderSessionRef;
-      if (consumer?.call(session, providerId)) {
-        void RateLimitService.releaseProviderSession(providerId, session.sessionId);
-      }
+      ProxyForwarder.releaseProviderSessionRef(session, providerId);
     };
 
     const cancelAttempt = (attempt: (typeof winner & { id: string }) | null, reason: string) => {
@@ -5035,6 +5030,7 @@ export class ProxyForwarder {
     const launch = async (provider: Provider, kind: "normal" | "fallback"): Promise<void> => {
       if (settled || committed || launched.has(provider.id)) return;
       launched.add(provider.id);
+      let providerSessionRefRecorded = false;
       if (provider.id !== initialProvider.id && session.sessionId) {
         const limit = provider.limitConcurrentSessions || 0;
         const check = await RateLimitService.checkAndTrackProviderSession(
@@ -5046,9 +5042,19 @@ export class ProxyForwarder {
           launched.delete(provider.id);
           throw new ProxyError(check.reason || "Provider concurrent limit reached", 503);
         }
-        if (check.referenced) session.recordProviderSessionRef(provider.id);
+        if (check.referenced) {
+          session.recordProviderSessionRef(provider.id);
+          providerSessionRefRecorded = true;
+        }
       }
-      const endpoint = await ProxyForwarder.resolveStreamingHedgeEndpoint(session, provider);
+      let endpoint: Awaited<ReturnType<typeof ProxyForwarder.resolveStreamingHedgeEndpoint>>;
+      try {
+        endpoint = await ProxyForwarder.resolveStreamingHedgeEndpoint(session, provider);
+      } catch (error) {
+        launched.delete(provider.id);
+        if (providerSessionRefRecorded) releaseProviderRef(provider.id);
+        throw error;
+      }
       const attemptSession =
         provider.id === initialProvider.id
           ? session
@@ -5330,6 +5336,7 @@ export class ProxyForwarder {
             (attempt) => attempt.pending && attempt.provider.id === initialProvider.id
           );
           if (sticky) {
+            if (!coordinator.demoteToFallback(sticky.id)) return;
             sticky.kind = "fallback";
             if (bindingSnapshot && bindingSnapshot.providerId === initialProvider.id) {
               void SessionManager.clearVersionedSessionProvider(
@@ -5641,15 +5648,17 @@ export class ProxyForwarder {
       return;
     }
 
+    ProxyForwarder.releaseProviderSessionRef(session, providerId);
+  }
+
+  private static releaseProviderSessionRef(session: ProxySession, providerId: number): boolean {
+    if (!session.sessionId) return false;
     const providerSessionRefConsumer = (
-      session as { consumeProviderSessionRef?: (providerId: number) => boolean }
+      session as { consumeProviderSessionRef?: (id: number) => boolean }
     ).consumeProviderSessionRef;
-
-    if (!providerSessionRefConsumer?.call(session, providerId)) {
-      return;
-    }
-
+    if (!providerSessionRefConsumer?.call(session, providerId)) return false;
     void RateLimitService.releaseProviderSession(providerId, session.sessionId);
+    return true;
   }
 
   private static buildAllProvidersUnavailableError(finalError?: Error | null): ProxyError {

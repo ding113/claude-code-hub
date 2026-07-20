@@ -122,6 +122,20 @@ export class DiscoveryCoordinator {
     return this.chooseReadyNormal();
   }
 
+  /** Convert a timed-out Sticky attempt into the request's fallback lane. */
+  demoteToFallback(
+    id: string,
+    requestEpoch = this.requestEpoch,
+    roundEpoch = this.roundEpoch
+  ): boolean {
+    if (!this.acceptsEpoch(requestEpoch, roundEpoch) || this.isTerminal) return false;
+    const attempt = this.attempts.get(id);
+    if (!attempt?.pending) return false;
+    attempt.kind = "fallback";
+    this.state = "FALLBACK_READY_HELD";
+    return true;
+  }
+
   markFailed(
     id: string,
     requestEpoch = this.requestEpoch,

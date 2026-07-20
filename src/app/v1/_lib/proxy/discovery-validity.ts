@@ -28,8 +28,18 @@ function hasContent(value: unknown): boolean {
     "function_call",
     "arguments",
     "input",
+    "partial_json",
     "parts",
   ].some((key) => hasContent(object[key]));
+}
+
+function hasAnthropicContentBlock(value: unknown): boolean {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const block = value as Record<string, unknown>;
+  if (typeof block.type !== "string" || block.type.length === 0) return false;
+  // Text blocks need non-empty text; tool_use/thinking/image blocks are
+  // deliverable as soon as their typed block starts, even with empty input.
+  return block.type === "text" ? hasContent(block.text) : true;
 }
 
 function classifyJson(value: unknown, protocol: DiscoveryProtocol): DiscoveryValidity {
@@ -89,7 +99,7 @@ function classifyJson(value: unknown, protocol: DiscoveryProtocol): DiscoveryVal
   return {
     ready:
       (object.type === "content_block_delta" && hasContent(object.delta)) ||
-      (object.type === "content_block_start" && hasContent(object.content_block)) ||
+      (object.type === "content_block_start" && hasAnthropicContentBlock(object.content_block)) ||
       hasContent(object.content),
     terminal: false,
     error: false,
