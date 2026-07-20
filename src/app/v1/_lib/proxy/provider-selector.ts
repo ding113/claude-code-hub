@@ -458,6 +458,43 @@ export class ProxyProviderResolver {
   }
 
   /**
+   * Select a bounded Discovery batch using the exact same filters, priority
+   * and weighted selection as the normal selector. The method is intentionally
+   * additive: legacy initial selection/fallback keeps its existing behavior.
+   */
+  static async pickDiscoveryProviders(
+    session: ProxySession,
+    count: number,
+    excludeIds: number[] = []
+  ): Promise<Provider[]> {
+    const selected: Provider[] = [];
+    const excluded = new Set(excludeIds);
+    const limit = Math.max(0, Math.floor(count));
+    const keyId = session.authState?.key?.id ?? session.messageContext?.key?.id ?? null;
+    while (selected.length < limit) {
+      const provider = await ProxyProviderResolver.pickRandomProviderWithExclusion(
+        session,
+        Array.from(excluded)
+      );
+      if (!provider || excluded.has(provider.id)) break;
+      if (session.sessionId && keyId != null) {
+        const cooldown = await SessionManager.isSessionProviderCoolingDown(
+          session.sessionId,
+          keyId,
+          provider.id
+        );
+        if (cooldown.status === "ok" && cooldown.coolingDown) {
+          excluded.add(provider.id);
+          continue;
+        }
+      }
+      selected.push(provider);
+      excluded.add(provider.id);
+    }
+    return selected;
+  }
+
+  /**
    * 查找可复用的供应商（基于 session）
    */
   private static async findReusable(session: ProxySession): Promise<Provider | null> {
@@ -465,9 +502,22 @@ export class ProxyProviderResolver {
       return null;
     }
 
-    // 从 Redis 读取该 session 绑定的 provider
+    // Read the binding once and retain its generation for Discovery timeout
+    // cleanup/finalization. Re-reading here would allow an older request to
+    // clear a newer binding (ABA).
     const keyId = session.authState?.key?.id ?? session.messageContext?.key?.id ?? null;
-    const providerId = await SessionManager.getSessionProvider(session.sessionId, keyId);
+    let providerId: number | null = null;
+    if (keyId != null) {
+      const binding = await SessionManager.getSessionBindingSnapshot(session.sessionId, keyId);
+      if (binding.status === "ok") {
+        session.setSessionBindingSnapshot(binding.snapshot);
+        providerId = binding.snapshot.providerId;
+      } else if (binding.legacyFallbackAllowed) {
+        providerId = await SessionManager.getSessionProvider(session.sessionId, keyId);
+      }
+    } else {
+      providerId = await SessionManager.getSessionProvider(session.sessionId, keyId);
+    }
     if (!providerId) {
       logger.debug("ProviderSelector: Session has no bound provider", {
         sessionId: session.sessionId,

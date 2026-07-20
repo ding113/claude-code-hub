@@ -1,6 +1,7 @@
 import type { Context } from "hono";
 import { logger } from "@/lib/logger";
 import { writeLiveChain } from "@/lib/redis/live-chain-store";
+import type { SessionBindingSnapshot } from "@/lib/redis/session-binding";
 import { clientRequestsContext1m as clientRequestsContext1mHelper } from "@/lib/special-attributes";
 import {
   type ResolvedPricing,
@@ -206,6 +207,11 @@ export class ProxySession {
   // 失败切换 provider 时只能释放这里记录过的引用，避免 hedge/fallback 释放未 acquire 的 Redis 计数。
   private providerSessionRefs = new Set<number>();
 
+  // Snapshot captured during provider selection. Discovery reuses this exact
+  // generation for timeout cleanup/finalization instead of performing a
+  // second read that could race with another request's binding update.
+  private sessionBindingSnapshot: SessionBindingSnapshot | null = null;
+
   private constructor(init: {
     startTime: number;
     method: string;
@@ -347,6 +353,14 @@ export class ProxySession {
     if (provider) {
       this.providerType = provider.providerType as ProviderType;
     }
+  }
+
+  setSessionBindingSnapshot(snapshot: SessionBindingSnapshot | null): void {
+    this.sessionBindingSnapshot = snapshot;
+  }
+
+  getSessionBindingSnapshot(): SessionBindingSnapshot | null {
+    return this.sessionBindingSnapshot;
   }
 
   recordProviderSessionRef(providerId: number): void {

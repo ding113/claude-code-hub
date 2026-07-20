@@ -1,3 +1,4 @@
+import type { SessionBindingSnapshot } from "@/lib/redis/session-binding";
 import type { ProxySession } from "./session";
 
 /**
@@ -35,6 +36,11 @@ export type DeferredStreamingFinalization = {
    * coexists with asynchronously accumulated loser costs without clobbering.
    */
   billHedgeLosers?: boolean;
+  /** Discovery delays binding until the stream has a valid completion marker. */
+  bindingIntent?: "create" | "renew" | "none";
+  bindingSnapshot?: SessionBindingSnapshot | null;
+  /** Discovery winners must satisfy the protocol completion marker before binding. */
+  requiresCompletionMarker?: boolean;
 };
 
 const deferredMeta = new WeakMap<ProxySession, DeferredStreamingFinalization>();

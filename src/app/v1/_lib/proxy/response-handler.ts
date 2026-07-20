@@ -1150,6 +1150,15 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
   const clearSessionBinding = async () => {
     if (!session.sessionId) return;
     const keyId = session.authState?.key?.id ?? session.messageContext?.key?.id ?? null;
+    if (meta?.bindingIntent === "none") return;
+    if (meta?.bindingSnapshot && keyId != null) {
+      await SessionManager.clearVersionedSessionProvider(
+        meta.bindingSnapshot,
+        providerIdForPersistence,
+        0
+      );
+      return;
+    }
     await SessionManager.clearSessionProvider(session.sessionId, providerIdForPersistence, keyId);
   };
 
@@ -1165,6 +1174,10 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
   const detected = shouldDetectFake200
     ? detectUpstreamErrorFromSseOrJsonText(allContent)
     : ({ isError: false } as const);
+  const completionMarkerMissing =
+    meta?.requiresCompletionMarker === true &&
+    streamEndedNormally &&
+    !hasStreamCompletionMarker(allContent);
   let clientAbortGateUsage: FinalizeDeferredStreamingResult["clientAbortGateUsage"];
   const clientAbortCompleteSuccess = (() => {
     if (!clientAborted || upstreamStatusCode < 200 || upstreamStatusCode >= 300) {
@@ -1209,6 +1222,9 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
       effectiveStatusCode = 502;
     }
     errorMessage = detected.detail ? `${detected.code}: ${detected.detail}` : detected.code;
+  } else if (completionMarkerMissing) {
+    effectiveStatusCode = 502;
+    errorMessage = "STREAM_COMPLETION_MARKER_MISSING";
   } else if (clientAbortCompleteSuccess) {
     effectiveStatusCode = upstreamStatusCode;
     errorMessage = null;
@@ -1239,6 +1255,7 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
   const shouldClearSessionBindingOnFailure =
     ((clientAborted || !streamEndedNormally) && !clientAbortCompleteSuccess) ||
     detected.isError ||
+    completionMarkerMissing ||
     (upstreamStatusCode >= 400 && errorMessage !== null);
 
   // 未启用延迟结算 / provider 缺失：
@@ -1312,6 +1329,43 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
 
         // Stream aborts are key-level errors. The endpoint delivered HTTP 200,
         // so only the Provider circuit is updated here.
+      }
+    };
+
+    return {
+      effectiveStatusCode,
+      errorMessage,
+      providerIdForPersistence,
+      isHedgeWinner,
+      billHedgeLosers,
+      clientAbortGateUsage,
+      commitSideEffects,
+    };
+  }
+
+  if (completionMarkerMissing) {
+    session.addProviderToChain(providerForChain, {
+      endpointId: meta.endpointId,
+      endpointUrl: meta.endpointUrl,
+      reason: "retry_failed",
+      attemptNumber: meta.attemptNumber,
+      statusCode: effectiveStatusCode,
+      errorMessage: errorMessage ?? undefined,
+    });
+
+    const commitSideEffects = async () => {
+      await clearSessionBinding();
+      if (session.getEndpointPolicy().allowCircuitBreakerAccounting) {
+        try {
+          const { recordFailure } = await import("@/lib/circuit-breaker");
+          await recordFailure(meta.providerId, new Error(errorMessage ?? "STREAM_ABORTED"));
+        } catch (cbError) {
+          logger.warn("[ResponseHandler] Failed to record missing stream completion marker", {
+            providerId: meta.providerId,
+            sessionId: session.sessionId ?? null,
+            error: cbError,
+          });
+        }
       }
     };
 
@@ -1487,15 +1541,26 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
     }
 
     // Hedge winner: commitWinner() already performed session binding and chain logging.
-    if (!meta.isHedgeWinner && session.sessionId) {
-      const result = await SessionManager.updateSessionBindingSmart(
-        session.sessionId,
-        meta.providerId,
-        meta.providerPriority,
-        meta.isFirstAttempt,
-        meta.isFailoverSuccess,
-        session.authState?.key?.id ?? session.messageContext?.key?.id ?? null
-      );
+    if (meta.bindingIntent !== "none" && !meta.isHedgeWinner && session.sessionId) {
+      const keyId = session.authState?.key?.id ?? session.messageContext?.key?.id ?? null;
+      const result =
+        meta.bindingSnapshot && keyId != null
+          ? await SessionManager.compareAndSetSessionProvider(
+              meta.bindingSnapshot,
+              meta.providerId
+            ).then((cas) => ({
+              updated: cas.status === "ok",
+              reason: cas.status === "ok" ? "discovery_generation_cas" : cas.reason,
+              details: cas.status,
+            }))
+          : await SessionManager.updateSessionBindingSmart(
+              session.sessionId,
+              meta.providerId,
+              meta.providerPriority,
+              meta.isFirstAttempt,
+              meta.isFailoverSuccess,
+              keyId
+            );
 
       if (result.updated) {
         logger.info("[ResponseHandler] Session binding updated (stream finalized)", {
