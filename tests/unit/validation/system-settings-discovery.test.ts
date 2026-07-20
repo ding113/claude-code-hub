@@ -26,6 +26,17 @@ describe("UpdateSystemSettingsSchema Discovery settings", () => {
     ).toThrow("竞速总超时");
   });
 
+  it("accepts a total deadline exactly equal to the configured discovery window", () => {
+    expect(() =>
+      UpdateSystemSettingsSchema.parse({
+        discoverySlaMs: 10_000,
+        stickySlaMs: 20_000,
+        maxDiscoveryRounds: 2,
+        racingTotalTimeoutMs: 40_000,
+      })
+    ).not.toThrow();
+  });
+
   it("preserves an intentionally shorter Sticky SLA", () => {
     const result = UpdateSystemSettingsSchema.parse({
       discoverySlaMs: 10_000,
