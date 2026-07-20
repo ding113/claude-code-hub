@@ -134,6 +134,39 @@ describe("DiscoveryCoordinator", () => {
     expect(coordinator.markFailed("fallback")).toEqual({ type: "none" });
   });
 
+  it("records a ready-held fallback without promoting it before the deadline", () => {
+    const coordinator = new DiscoveryCoordinator({ concurrency: 2, maxRounds: 2 });
+    coordinator.addAttempt(attempt("fallback", 1, "fallback"));
+    coordinator.addAttempt(attempt("normal", 1));
+
+    expect(coordinator.recordReadyHeld("fallback")).toBe(true);
+    expect(coordinator.snapshot.find((item) => item.id === "fallback")).toMatchObject({
+      kind: "fallback",
+      ready: true,
+      pending: true,
+    });
+    expect(coordinator.state).toBe("FALLBACK_READY_HELD");
+    expect(coordinator.onDeadline()).toEqual({
+      type: "promote_fallback",
+      attemptId: "fallback",
+    });
+  });
+
+  it("rejects ready-held writes for stale, non-fallback, or inactive attempts", () => {
+    const coordinator = new DiscoveryCoordinator({ concurrency: 2, maxRounds: 2 });
+    coordinator.addAttempt(attempt("normal", 1));
+    coordinator.addAttempt(attempt("fallback", 1, "fallback"));
+    const staleEpoch = coordinator.epochs;
+
+    expect(coordinator.recordReadyHeld("normal")).toBe(false);
+    coordinator.beginRound();
+    expect(
+      coordinator.recordReadyHeld("fallback", staleEpoch.requestEpoch, staleEpoch.roundEpoch)
+    ).toBe(false);
+    coordinator.markFailed("fallback");
+    expect(coordinator.recordReadyHeld("fallback")).toBe(false);
+  });
+
   it("keeps coordinator kind in sync when a running Sticky becomes fallback", () => {
     const coordinator = new DiscoveryCoordinator({ concurrency: 2, maxRounds: 2 });
     coordinator.addAttempt(attempt("sticky", 1));

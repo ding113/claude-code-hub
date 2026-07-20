@@ -5574,8 +5574,10 @@ export class ProxyForwarder {
               (fallbackPromotionBlocked || roundLaunchesInProgress > 0)
             ) {
               // The next wave has been reserved but its normal attempts may
-              // still be awaiting selection/endpoint setup. Keep the fallback
-              // ready-held until those slots are registered or exhausted.
+              // still be awaiting selection/endpoint setup. Persist readiness
+              // without promoting so the total deadline can still recover the
+              // buffered fallback if that setup stalls.
+              coordinator.recordReadyHeld(id);
               return;
             }
             // Record readiness even when the priority gate holds this attempt.

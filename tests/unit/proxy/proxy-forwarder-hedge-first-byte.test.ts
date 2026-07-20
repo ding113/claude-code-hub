@@ -2509,6 +2509,86 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
     }
   });
 
+  test("a ready-held Sticky fallback survives a stalled next-wave selector until the total deadline", async () => {
+    vi.useFakeTimers();
+    try {
+      const sticky = createProvider({ id: 1, name: "sticky", priority: 1 });
+      const session = createSession();
+      session.authState = {
+        success: true,
+        user: null,
+        key: { id: 27 },
+        apiKey: null,
+      } as typeof session.authState;
+      session.request.message.messages = [
+        { role: "user", content: "first" },
+        { role: "user", content: "second" },
+      ];
+      session.setProvider(sticky);
+      session.setSessionBindingSnapshot({
+        sessionId: session.sessionId!,
+        keyId: 27,
+        providerId: sticky.id,
+        generation: "g-sticky-deadline",
+      });
+      mocks.getCachedSystemSettings.mockResolvedValue({
+        discoveryEnabled: true,
+        discoveryConcurrency: 2,
+        maxDiscoveryRounds: 1,
+        discoverySlaMs: 20,
+        stickySlaMs: 10,
+        racingTotalTimeoutMs: 50,
+        stickyTimeoutCooldownMs: 300_000,
+      });
+
+      const stalledSelector = Promise.withResolvers<Provider[]>();
+      mocks.pickDiscoveryProviders.mockReturnValueOnce(stalledSelector.promise);
+      vi.spyOn(
+        ProxyForwarder as unknown as {
+          doForward: (...args: unknown[]) => Promise<Response>;
+        },
+        "doForward"
+      ).mockResolvedValueOnce(
+        new Response(
+          new ReadableStream<Uint8Array>({
+            start(controller) {
+              setTimeout(() => {
+                controller.enqueue(
+                  new TextEncoder().encode(
+                    'data: {"type":"content_block_delta","delta":{"text":"sticky-fallback"}}\n\n'
+                  )
+                );
+                controller.close();
+              }, 15);
+            },
+          }),
+          { headers: { "content-type": "text/event-stream" } }
+        )
+      );
+
+      let settledEarly = false;
+      const responsePromise = ProxyForwarder.send(session).then((response) => {
+        settledEarly = true;
+        return response;
+      });
+
+      await vi.advanceTimersByTimeAsync(10);
+      expect(mocks.pickDiscoveryProviders).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(5);
+      expect(settledEarly).toBe(false);
+
+      await vi.advanceTimersByTimeAsync(35);
+      const response = await responsePromise;
+      expect(await response.text()).toContain('"sticky-fallback"');
+      expect(session.provider?.id).toBe(sticky.id);
+
+      stalledSelector.resolve([]);
+      await vi.advanceTimersByTimeAsync(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   test("Sticky probing does not consume a configured Discovery round", async () => {
     vi.useFakeTimers();
     try {

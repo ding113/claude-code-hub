@@ -150,6 +150,20 @@ export class DiscoveryCoordinator {
     return this.chooseReadyNormal();
   }
 
+  /** Record a ready fallback without allowing it to preempt a reserved normal wave. */
+  recordReadyHeld(
+    id: string,
+    requestEpoch = this.requestEpoch,
+    roundEpoch = this.roundEpoch
+  ): boolean {
+    if (!this.acceptsEpoch(requestEpoch, roundEpoch) || this.isTerminal) return false;
+    const attempt = this.attempts.get(id);
+    if (!attempt?.pending || attempt.kind !== "fallback") return false;
+    attempt.ready = true;
+    this.state = "FALLBACK_READY_HELD";
+    return true;
+  }
+
   /** Convert a timed-out Sticky attempt into the request's fallback lane. */
   demoteToFallback(
     id: string,
