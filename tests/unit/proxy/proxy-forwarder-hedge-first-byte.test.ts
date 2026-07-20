@@ -3,6 +3,7 @@ import { resolveEndpointPolicy } from "@/app/v1/_lib/proxy/endpoint-policy";
 
 const mocks = vi.hoisted(() => ({
   pickRandomProviderWithExclusion: vi.fn(),
+  pickDiscoveryProviders: vi.fn(),
   recordSuccess: vi.fn(),
   recordFailure: vi.fn(async () => {}),
   getCircuitState: vi.fn(() => "closed"),
@@ -37,6 +38,7 @@ const mocks = vi.hoisted(() => ({
   storeSessionSpecialSettings: vi.fn(async () => {}),
   storeSessionRequestPhaseSnapshot: vi.fn(async () => {}),
   storeSessionResponsePhaseSnapshot: vi.fn(async () => {}),
+  getVersionedBindingCapabilityState: vi.fn(() => "available"),
 }));
 
 vi.mock("@/lib/logger", () => ({
@@ -90,6 +92,7 @@ vi.mock("@/lib/rate-limit/service", () => ({
 
 vi.mock("@/lib/session-manager", () => ({
   SessionManager: {
+    getVersionedBindingCapabilityState: mocks.getVersionedBindingCapabilityState,
     updateSessionBindingSmart: mocks.updateSessionBindingSmart,
     updateSessionProvider: mocks.updateSessionProvider,
     clearSessionProvider: mocks.clearSessionProvider,
@@ -103,6 +106,7 @@ vi.mock("@/lib/session-manager", () => ({
 vi.mock("@/app/v1/_lib/proxy/provider-selector", () => ({
   ProxyProviderResolver: {
     pickRandomProviderWithExclusion: mocks.pickRandomProviderWithExclusion,
+    pickDiscoveryProviders: mocks.pickDiscoveryProviders,
   },
 }));
 
@@ -333,6 +337,10 @@ function withThinkingBlocks(session: ProxySession): void {
 describe("ProxyForwarder - first-byte hedge scheduling", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.getCachedSystemSettings.mockResolvedValue({
+      enableThinkingSignatureRectifier: true,
+      enableThinkingBudgetRectifier: true,
+    });
     mocks.checkAndTrackProviderSession.mockResolvedValue({
       allowed: true,
       count: 1,
@@ -2056,6 +2064,89 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
       expect(winnerEntry).toBeDefined();
       expect(winnerEntry!.reason).toBe("request_success");
       expect(mocks.releaseProviderSession).toHaveBeenCalledWith(1, "sess-hedge");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("Discovery commits a lower-priority ready stream when the higher tier fails", async () => {
+    vi.useFakeTimers();
+
+    try {
+      const high = createProvider({ id: 1, name: "high", priority: 1 });
+      const low = createProvider({ id: 2, name: "low", priority: 10 });
+      const session = createSession();
+      session.setProvider(high);
+      mocks.getCachedSystemSettings.mockResolvedValue({
+        discoveryEnabled: true,
+        discoveryConcurrency: 2,
+        maxDiscoveryRounds: 1,
+        discoverySlaMs: 100,
+        stickySlaMs: 100,
+        racingTotalTimeoutMs: 500,
+        stickyTimeoutCooldownMs: 300_000,
+      });
+      mocks.pickDiscoveryProviders.mockResolvedValueOnce([low]);
+
+      const doForward = vi.spyOn(
+        ProxyForwarder as unknown as {
+          doForward: (...args: unknown[]) => Promise<Response>;
+        },
+        "doForward"
+      );
+
+      doForward.mockImplementationOnce(
+        async (_attemptSession, _provider, _baseUrl, _audit, _count, _stream, signal) => {
+          await new Promise<never>((_resolve, reject) => {
+            const timer = setTimeout(() => reject(new Error("high tier failed")), 30);
+            signal?.addEventListener(
+              "abort",
+              () => {
+                clearTimeout(timer);
+                reject(new Error("high tier aborted"));
+              },
+              { once: true }
+            );
+          });
+        }
+      );
+      doForward.mockImplementationOnce(
+        async (_attemptSession, _provider, _baseUrl, _audit, _count, _stream, signal) => {
+          const stream = new ReadableStream<Uint8Array>({
+            start(controller) {
+              const timer = setTimeout(() => {
+                controller.enqueue(
+                  new TextEncoder().encode(
+                    'data: {"type":"content_block_delta","delta":{"text":"low"}}\n\n'
+                  )
+                );
+                controller.close();
+              }, 5);
+              signal?.addEventListener(
+                "abort",
+                () => {
+                  clearTimeout(timer);
+                  controller.close();
+                },
+                { once: true }
+              );
+            },
+          });
+          return new Response(stream, {
+            status: 200,
+            headers: { "content-type": "text/event-stream" },
+          });
+        }
+      );
+
+      const responsePromise = ProxyForwarder.send(session);
+      await vi.advanceTimersByTimeAsync(10);
+      await vi.advanceTimersByTimeAsync(30);
+      const response = await responsePromise;
+
+      expect(await response.text()).toContain('"low"');
+      expect(session.provider?.id).toBe(low.id);
+      expect(doForward).toHaveBeenCalledTimes(2);
     } finally {
       vi.useRealTimers();
     }

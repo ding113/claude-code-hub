@@ -5195,6 +5195,7 @@ export class ProxyForwarder {
           attempt.releaseAgent?.();
           releaseProviderRef(provider.id);
           const actionOwnsNextStep =
+            failureAction.type === "commit_normal" ||
             failureAction.type === "promote_fallback" ||
             failureAction.type === "launch" ||
             failureAction.type === "terminal_failure";
