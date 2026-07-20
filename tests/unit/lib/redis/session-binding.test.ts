@@ -6,10 +6,12 @@ vi.mock("@/lib/logger", () => ({
 }));
 
 import {
+  acquireSessionDiscoveryLease,
   buildCanonicalSessionBindingKey,
   buildLegacySessionOwnerKey,
   buildLegacySessionProviderKey,
   buildSessionBindingKeys,
+  buildSessionDiscoveryLeaseKey,
   buildSessionProviderCooldownKey,
   clearSessionBinding,
   compareAndSetSessionBinding,
@@ -19,6 +21,8 @@ import {
   mutateLegacySessionBindingSafely,
   readOrReconcileSessionBinding,
   refreshSessionBinding,
+  releaseSessionDiscoveryLease,
+  renewSessionDiscoveryLease,
   resetVersionedBindingCapabilityForTests,
   terminateSessionBinding,
   type SessionBindingRedisClient,
@@ -28,6 +32,8 @@ import {
   CLEAR_SESSION_BINDING,
   DELETE_LEGACY_PROVIDER_IF_VALUE,
   READ_OR_RECONCILE_SESSION_BINDING,
+  RELEASE_SESSION_DISCOVERY_LEASE,
+  RENEW_SESSION_DISCOVERY_LEASE,
   RESTORE_LEGACY_PROVIDER_IF_ABSENT,
   TERMINATE_SESSION_BINDING,
 } from "@/lib/redis/lua-scripts";
@@ -43,6 +49,7 @@ interface MockRedisOptions {
   probeGate?: Promise<void>;
   status?: string;
   cooldownValue?: string | null;
+  leaseSetResult?: unknown;
 }
 
 function createMockRedis(options: MockRedisOptions = {}) {
@@ -70,6 +77,8 @@ function createMockRedis(options: MockRedisOptions = {}) {
         probeCooldowns.set(String(args[5]), String(args[8]));
         return ["ok", "cleared", String(args[8]), ""];
       }
+      if (script === RENEW_SESSION_DISCOVERY_LEASE) return 1;
+      if (script === RELEASE_SESSION_DISCOVERY_LEASE) return 1;
       throw new Error("Unexpected probe script");
     }
 
@@ -78,6 +87,13 @@ function createMockRedis(options: MockRedisOptions = {}) {
     if (response instanceof Error) throw response;
     if (typeof response === "function") return response(args);
     if (response !== undefined) return response;
+    if (script === DELETE_LEGACY_PROVIDER_IF_VALUE) {
+      const providerKey = String(args[2]);
+      const expectedProvider = String(args[3]);
+      if ((await getMock(providerKey)) !== expectedProvider) return 0;
+      await delMock(providerKey);
+      return 1;
+    }
     throw new Error(`Missing operation response for ${numberOfKeys} key script`);
   });
 
@@ -92,7 +108,10 @@ function createMockRedis(options: MockRedisOptions = {}) {
   });
   const existsMock = vi.fn(async () => 0);
   const expireMock = vi.fn(async () => 1);
-  const setMock = vi.fn(async () => "OK");
+  const setMock = vi.fn(async (key: string) => {
+    if (key.startsWith("session-binding-capability-probe:")) return "OK";
+    return options.leaseSetResult === undefined ? "OK" : options.leaseSetResult;
+  });
   const setexMock = vi.fn(async () => "OK");
   const evalShaMock = vi.fn(async (..._args: unknown[]) => {
     if (options.evalShaNoScriptOnce) {
@@ -161,12 +180,18 @@ describe("session binding key builders", () => {
   it("scopes canonical and cooldown keys by API key while preserving legacy mirrors", () => {
     const canonical = buildCanonicalSessionBindingKey("session:{a}", 17);
     const cooldown = buildSessionProviderCooldownKey("session:{a}", 17, 4);
+    const lease = buildSessionDiscoveryLeaseKey("session:{a}", 17);
 
     expect(canonical).toMatch(/^session-binding:v1:\{[a-f0-9]{64}\}:binding$/);
     expect(cooldown).toMatch(/^session-binding:v1:\{[a-f0-9]{64}\}:provider:4:cooldown$/);
+    expect(lease).toMatch(/^session-binding:v1:\{[a-f0-9]{64}\}:discovery-lease$/);
     expect(canonical.match(/\{([^}]+)\}/)?.[1]).toBe(cooldown.match(/\{([^}]+)\}/)?.[1]);
+    expect(canonical.match(/\{([^}]+)\}/)?.[1]).toBe(lease.match(/\{([^}]+)\}/)?.[1]);
     expect(buildCanonicalSessionBindingKey("session:a", 18)).not.toBe(
       buildCanonicalSessionBindingKey("session:a", 17)
+    );
+    expect(buildSessionDiscoveryLeaseKey("session:a", 18)).not.toBe(
+      buildSessionDiscoveryLeaseKey("session:a", 17)
     );
     expect(buildLegacySessionProviderKey("session:{a}")).toBe("session:session:{a}:provider");
     expect(buildLegacySessionOwnerKey("session:{a}")).toBe("session:session:{a}:key");
@@ -192,9 +217,10 @@ describe("versioned binding capability", () => {
     await expect(ensureVersionedBindingCapability(mock.redis)).resolves.toBe("available");
 
     expect(getVersionedBindingCapabilityState()).toBe("available");
-    expect(mock.evalMock).toHaveBeenCalledTimes(3);
+    expect(mock.evalMock).toHaveBeenCalledTimes(5);
     expect(mock.getMock).toHaveBeenCalledTimes(1);
-    expect(mock.delMock).toHaveBeenCalledTimes(4);
+    expect(mock.setMock).toHaveBeenCalledTimes(1);
+    expect(mock.delMock).toHaveBeenCalledTimes(5);
     expect(mock.delMock.mock.calls.every((call) => call.length === 1)).toBe(true);
     expect(mock.onMock.mock.calls.map(([event]) => event)).toEqual([
       "close",
@@ -218,7 +244,7 @@ describe("versioned binding capability", () => {
     releaseProbe?.();
 
     await expect(Promise.all([first, second])).resolves.toEqual(["available", "available"]);
-    expect(mock.evalMock).toHaveBeenCalledTimes(3);
+    expect(mock.evalMock).toHaveBeenCalledTimes(5);
   });
 
   it("stays unavailable on the same connection after a capability failure", async () => {
@@ -241,7 +267,7 @@ describe("versioned binding capability", () => {
     expect(getVersionedBindingCapabilityState()).toBe("unknown");
     await expect(ensureVersionedBindingCapability(mock.redis)).resolves.toBe("available");
 
-    expect(mock.evalMock).toHaveBeenCalledTimes(4);
+    expect(mock.evalMock).toHaveBeenCalledTimes(6);
   });
 
   it("automatically probes when a reconnected client becomes ready", async () => {
@@ -254,15 +280,15 @@ describe("versioned binding capability", () => {
     mock.emit("ready");
 
     await vi.waitFor(() => expect(getVersionedBindingCapabilityState()).toBe("available"));
-    expect(mock.evalMock).toHaveBeenCalledTimes(4);
+    expect(mock.evalMock).toHaveBeenCalledTimes(6);
   });
 
   it("does not become available when isolated probe cleanup fails", async () => {
     const mock = createMockRedis({ cleanupFails: true });
 
     await expect(ensureVersionedBindingCapability(mock.redis)).resolves.toBe("unavailable");
-    expect(mock.evalMock).toHaveBeenCalledTimes(3);
-    expect(mock.delMock).toHaveBeenCalledTimes(4);
+    expect(mock.evalMock).toHaveBeenCalledTimes(5);
+    expect(mock.delMock).toHaveBeenCalledTimes(5);
   });
 
   it("detaches lifecycle listeners when tests reset state", async () => {
@@ -284,6 +310,164 @@ describe("versioned binding capability", () => {
   it("reports unknown without creating a probe when Redis is not configured", async () => {
     await expect(ensureVersionedBindingCapability()).resolves.toBe("unknown");
     expect(getVersionedBindingCapabilityState()).toBe("unknown");
+  });
+});
+
+describe("session Discovery lease operations", () => {
+  beforeEach(() => {
+    resetVersionedBindingCapabilityForTests();
+  });
+
+  it("acquires a tenant-scoped lease with an explicit owner token and TTL", async () => {
+    const mock = createMockRedis();
+
+    const result = await acquireSessionDiscoveryLease({
+      sessionId: "sid",
+      keyId: 4,
+      ttlSeconds: 61,
+      ownerToken: "owner-a",
+      redis: mock.redis,
+    });
+
+    expect(result).toEqual({
+      status: "acquired",
+      ownerToken: "owner-a",
+      legacyFallbackAllowed: false,
+    });
+    expect(mock.setMock.mock.calls.at(-1)).toEqual([
+      buildSessionDiscoveryLeaseKey("sid", 4),
+      "owner-a",
+      "EX",
+      61,
+      "NX",
+    ]);
+  });
+
+  it("returns a lease conflict without revealing the current owner", async () => {
+    const mock = createMockRedis({ leaseSetResult: null });
+
+    const result = await acquireSessionDiscoveryLease({
+      sessionId: "sid",
+      keyId: 4,
+      ttlSeconds: 30,
+      redis: mock.redis,
+    });
+
+    expect(result).toEqual({
+      status: "conflict",
+      reason: "lease_held",
+      legacyFallbackAllowed: false,
+    });
+  });
+
+  it("renews and releases only through owner-token Lua primitives", async () => {
+    const mock = createMockRedis({
+      operationResponses: {
+        [RENEW_SESSION_DISCOVERY_LEASE]: [1],
+        [RELEASE_SESSION_DISCOVERY_LEASE]: [1],
+      },
+    });
+
+    await expect(
+      renewSessionDiscoveryLease({
+        sessionId: "sid",
+        keyId: 4,
+        ownerToken: "owner-a",
+        ttlSeconds: 45,
+        redis: mock.redis,
+      })
+    ).resolves.toEqual({ status: "renewed", legacyFallbackAllowed: false });
+    await expect(
+      releaseSessionDiscoveryLease({
+        sessionId: "sid",
+        keyId: 4,
+        ownerToken: "owner-a",
+        redis: mock.redis,
+      })
+    ).resolves.toEqual({ status: "released", legacyFallbackAllowed: false });
+
+    expect(mock.evalMock).toHaveBeenCalledWith(
+      RENEW_SESSION_DISCOVERY_LEASE,
+      1,
+      buildSessionDiscoveryLeaseKey("sid", 4),
+      "owner-a",
+      "45"
+    );
+    expect(mock.evalMock).toHaveBeenCalledWith(
+      RELEASE_SESSION_DISCOVERY_LEASE,
+      1,
+      buildSessionDiscoveryLeaseKey("sid", 4),
+      "owner-a"
+    );
+  });
+
+  it("reports a lost lease when renew or release no longer owns the key", async () => {
+    const mock = createMockRedis({
+      operationResponses: {
+        [RENEW_SESSION_DISCOVERY_LEASE]: [0],
+        [RELEASE_SESSION_DISCOVERY_LEASE]: [0],
+      },
+    });
+
+    await expect(
+      renewSessionDiscoveryLease({
+        sessionId: "sid",
+        keyId: 4,
+        ownerToken: "stale-owner",
+        ttlSeconds: 45,
+        redis: mock.redis,
+      })
+    ).resolves.toEqual({
+      status: "lost",
+      reason: "not_owner_or_missing",
+      legacyFallbackAllowed: false,
+    });
+    await expect(
+      releaseSessionDiscoveryLease({
+        sessionId: "sid",
+        keyId: 4,
+        ownerToken: "stale-owner",
+        redis: mock.redis,
+      })
+    ).resolves.toEqual({
+      status: "lost",
+      reason: "not_owner_or_missing",
+      legacyFallbackAllowed: false,
+    });
+  });
+
+  it("rejects invalid identities before touching Redis", async () => {
+    const mock = createMockRedis();
+
+    await expect(
+      acquireSessionDiscoveryLease({
+        sessionId: "",
+        keyId: 0,
+        ttlSeconds: 0,
+        ownerToken: "",
+        redis: mock.redis,
+      })
+    ).resolves.toEqual({
+      status: "conflict",
+      reason: "invalid_input",
+      legacyFallbackAllowed: false,
+    });
+    await expect(
+      renewSessionDiscoveryLease({
+        sessionId: "sid",
+        keyId: 4,
+        ttlSeconds: 30,
+        ownerToken: "",
+        redis: mock.redis,
+      })
+    ).resolves.toEqual({
+      status: "lost",
+      reason: "invalid_input",
+      legacyFallbackAllowed: false,
+    });
+
+    expect(mock.evalMock).not.toHaveBeenCalled();
+    expect(mock.setMock).not.toHaveBeenCalled();
   });
 });
 
@@ -662,7 +846,7 @@ describe("versioned session binding operations", () => {
       keyId: 4,
       redis: mock.redis,
     });
-    await vi.waitFor(() => expect(mock.evalMock).toHaveBeenCalledTimes(4));
+    await vi.waitFor(() => expect(mock.evalMock).toHaveBeenCalledTimes(6));
     mock.emit("reconnecting");
     resolveOperation?.(["ok", "existing", "generation", "8"]);
 
@@ -1039,6 +1223,73 @@ describe("versioned session binding operations", () => {
     );
   });
 
+  it("does not clear a newer legacy Provider that replaced the expected value", async () => {
+    let provider: string | null = "8";
+    const mock = createMockRedis({
+      operationResponses: {
+        [DELETE_LEGACY_PROVIDER_IF_VALUE]: [
+          () => {
+            provider = "9";
+            return 0;
+          },
+        ],
+      },
+    });
+    mock.getMock.mockImplementation(async (key: string) => {
+      if (key === "session:sid:key") return "4";
+      if (key === "session:sid:provider") return provider;
+      return null;
+    });
+
+    const result = await mutateLegacySessionBindingSafely({
+      sessionId: "sid",
+      keyId: 4,
+      redis: mock.redis,
+      mutation: { type: "clear", expectedProviderId: 8 },
+    });
+
+    expect(result).toMatchObject({ status: "conflict", reason: "provider_mismatch" });
+    expect(provider).toBe("9");
+    expect(mock.delMock).not.toHaveBeenCalledWith("session:sid:provider");
+  });
+
+  it("does not terminate a newer legacy Provider or its tenant owner", async () => {
+    let owner: string | null = "4";
+    let provider: string | null = "8";
+    const mock = createMockRedis({
+      operationResponses: {
+        [DELETE_LEGACY_PROVIDER_IF_VALUE]: [
+          () => {
+            provider = "9";
+            return 0;
+          },
+        ],
+      },
+    });
+    mock.getMock.mockImplementation(async (key: string) => {
+      if (key === "session:sid:key") return owner;
+      if (key === "session:sid:provider") return provider;
+      return null;
+    });
+    mock.delMock.mockImplementation(async (key: string) => {
+      if (key === "session:sid:provider") provider = null;
+      if (key === "session:sid:key") owner = null;
+      return 1;
+    });
+
+    const result = await mutateLegacySessionBindingSafely({
+      sessionId: "sid",
+      keyId: 4,
+      redis: mock.redis,
+      mutation: { type: "terminate", expectedProviderIds: [8] },
+    });
+
+    expect(result).toMatchObject({ status: "conflict", reason: "provider_mismatch" });
+    expect(provider).toBe("9");
+    expect(owner).toBe("4");
+    expect(mock.delMock).not.toHaveBeenCalled();
+  });
+
   it("uses the tenant-authorized termination primitive and leaves a tombstone", async () => {
     const mock = createMockRedis({
       operationResponses: {
@@ -1157,7 +1408,7 @@ describe("versioned session binding operations", () => {
         mutation: { type: "terminate", expectedProviderIds: [10] },
       })
     ).resolves.toMatchObject({ status: "ok", changed: true, providerId: null });
-    expect(owner).toBeNull();
+    expect(owner).toBe("4");
   });
 
   it("rejects malformed legacy mutation arguments before touching Redis", async () => {

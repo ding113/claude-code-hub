@@ -3,9 +3,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 /**
  * Tests for SessionManager.updateSessionBindingSmart forceUpdate semantics.
  *
- * Hedge race winners must unconditionally rebind the session-reuse binding to
- * the winner. forceUpdate short-circuits the smart-decision path (priority /
- * circuit health) that would otherwise keep a healthy higher-priority binding.
+ * Hedge race winners bypass the smart-decision path (priority / circuit
+ * health), while versioned bindings still use generation CAS so a stale winner
+ * cannot overwrite a newer concurrent binding.
  */
 
 let redisClientRef: {
@@ -180,7 +180,7 @@ describe("SessionManager.updateSessionBindingSmart forceUpdate", () => {
 
     expect(findProviderById).not.toHaveBeenCalled();
     expect(isCircuitOpen).not.toHaveBeenCalled();
-    // forceUpdate goes straight to the unconditional pipeline path.
+    // forceUpdate goes straight to the persistence path.
     expect(findProviderById).not.toHaveBeenCalled();
   });
 
@@ -281,6 +281,49 @@ describe("SessionManager.updateSessionBindingSmart forceUpdate", () => {
     expect(redisClientRef!.pipeline).not.toHaveBeenCalled();
     expect(redisClientRef!.setex).not.toHaveBeenCalled();
   });
+
+  it.each([
+    { isFailoverSuccess: false, forceUpdate: true },
+    { isFailoverSuccess: true, forceUpdate: false },
+  ])(
+    "does not let a stale versioned winner overwrite a newer binding (%o)",
+    async ({ isFailoverSuccess, forceUpdate }) => {
+      bindingMocks.readOrReconcileSessionBinding.mockResolvedValue({
+        status: "ok",
+        source: "existing",
+        snapshot: {
+          sessionId: SID,
+          keyId: KEY_ID,
+          providerId: 1,
+          generation: "generation-before-concurrent-update",
+        },
+        legacyFallbackAllowed: false,
+      });
+      bindingMocks.compareAndSetSessionBinding.mockResolvedValue({
+        status: "conflict",
+        reason: "generation_mismatch",
+        legacyFallbackAllowed: false,
+      });
+
+      const result = await SessionManager.updateSessionBindingSmart(
+        SID,
+        2,
+        10,
+        false,
+        isFailoverSuccess,
+        KEY_ID,
+        forceUpdate
+      );
+
+      expect(result).toEqual({
+        updated: false,
+        reason: "concurrent_binding_changed",
+        details: "Session binding changed before the update committed",
+      });
+      expect(bindingMocks.compareAndSetSessionBinding).toHaveBeenCalledTimes(1);
+      expect(bindingMocks.mutateLegacySessionBindingSafely).not.toHaveBeenCalled();
+    }
+  );
 
   it("does not fall back to legacy writes for a foreign owner conflict", async () => {
     bindingMocks.readOrReconcileSessionBinding.mockResolvedValue({

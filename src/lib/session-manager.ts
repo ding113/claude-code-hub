@@ -32,15 +32,21 @@ import {
   getUserActiveSessionsKey,
 } from "./redis/active-session-keys";
 import {
+  acquireSessionDiscoveryLease as acquireVersionedSessionDiscoveryLease,
   clearSessionBinding as clearVersionedSessionBinding,
   compareAndSetSessionBinding,
+  ensureVersionedBindingCapability,
   mutateLegacySessionBindingSafely,
   readOrReconcileSessionBinding,
   isSessionProviderCoolingDown as readSessionProviderCooldown,
   getVersionedBindingCapabilityState as readVersionedBindingCapabilityState,
+  releaseSessionDiscoveryLease as releaseVersionedSessionDiscoveryLease,
+  renewSessionDiscoveryLease as renewVersionedSessionDiscoveryLease,
   type SessionBindingResult,
   type SessionBindingSnapshot,
   type SessionBindingUnavailableResult,
+  type SessionDiscoveryLeaseAcquireResult,
+  type SessionDiscoveryLeaseMutationResult,
   type SessionProviderCooldownResult,
   terminateSessionBinding as terminateVersionedSessionBinding,
   type VersionedBindingCapabilityState,
@@ -668,6 +674,54 @@ export class SessionManager {
     return readVersionedBindingCapabilityState();
   }
 
+  static async ensureVersionedBindingCapability(): Promise<VersionedBindingCapabilityState> {
+    return ensureVersionedBindingCapability();
+  }
+
+  static async acquireSessionDiscoveryLease(
+    sessionId: string,
+    keyId: number,
+    ttlSeconds: number,
+    ownerToken?: string
+  ): Promise<SessionDiscoveryLeaseAcquireResult> {
+    const redis = getRedisClient();
+    if (!redis || redis.status !== "ready") return redisUnavailableBindingResult();
+    return acquireVersionedSessionDiscoveryLease({
+      sessionId,
+      keyId,
+      ttlSeconds,
+      ownerToken,
+      redis,
+    });
+  }
+
+  static async renewSessionDiscoveryLease(
+    sessionId: string,
+    keyId: number,
+    ownerToken: string,
+    ttlSeconds: number
+  ): Promise<SessionDiscoveryLeaseMutationResult> {
+    const redis = getRedisClient();
+    if (!redis || redis.status !== "ready") return redisUnavailableBindingResult();
+    return renewVersionedSessionDiscoveryLease({
+      sessionId,
+      keyId,
+      ownerToken,
+      ttlSeconds,
+      redis,
+    });
+  }
+
+  static async releaseSessionDiscoveryLease(
+    sessionId: string,
+    keyId: number,
+    ownerToken: string
+  ): Promise<SessionDiscoveryLeaseMutationResult> {
+    const redis = getRedisClient();
+    if (!redis || redis.status !== "ready") return redisUnavailableBindingResult();
+    return releaseVersionedSessionDiscoveryLease({ sessionId, keyId, ownerToken, redis });
+  }
+
   static async getSessionBindingSnapshot(
     sessionId: string,
     keyId: number
@@ -1036,7 +1090,8 @@ export class SessionManager {
   /**
    * 智能更新 Session 绑定
    *
-   * 策略：首次绑定用 SET NX；故障转移成功或竞速赢家强制改绑时无条件更新；其他情况按优先级和熔断状态决策
+   * 策略：首次绑定用条件创建；故障转移成功或竞速赢家跳过优先级/熔断决策，
+   * 但版本化路径仍以读取到的 generation 做 CAS，避免迟到请求覆盖更新的绑定。
    */
   static async updateSessionBindingSmart(
     sessionId: string,
