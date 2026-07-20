@@ -5,6 +5,31 @@
  */
 
 /**
+ * Delete a legacy provider mirror only when it still contains the value that
+ * the guarded fallback mutation wrote. This is intentionally single-key so it
+ * remains usable on Redis Cluster when the multi-key binding scripts are not.
+ */
+export const DELETE_LEGACY_PROVIDER_IF_VALUE = `
+if redis.call('GET', KEYS[1]) == ARGV[1] then
+  return redis.call('DEL', KEYS[1])
+end
+return 0
+`;
+
+/**
+ * Restore a legacy provider mirror only when the guarded fallback clear left
+ * it absent. The conditional write keeps a concurrent versioned writer's
+ * newer mirror value intact.
+ */
+export const RESTORE_LEGACY_PROVIDER_IF_ABSENT = `
+if redis.call('EXISTS', KEYS[1]) == 0 then
+  redis.call('SETEX', KEYS[1], ARGV[2], ARGV[1])
+  return 1
+end
+return 0
+`;
+
+/**
  * Atomic concurrency check + session tracking (TC-041 fixed version)
  *
  * Features:

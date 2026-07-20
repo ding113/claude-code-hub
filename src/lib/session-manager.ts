@@ -2795,17 +2795,10 @@ export class SessionManager {
             redis,
           });
           if (terminated.status !== "ok") {
-            const latest = await readOrReconcileSessionBinding({
-              sessionId,
-              keyId,
-              ttlSeconds: SessionManager.SESSION_TTL,
-              redis,
-            });
             logger.warn("SessionManager: Versioned session termination blocked", {
               sessionId,
               keyId,
               reason: terminated.reason,
-              latestStatus: latest.status,
             });
             return false;
           }
@@ -2839,6 +2832,18 @@ export class SessionManager {
         logger.warn("SessionManager: Session binding owner unavailable during termination", {
           sessionId,
           providerId,
+        });
+        return false;
+      }
+
+      // A binding-aware termination must succeed before any session metadata or
+      // active-session indexes are removed. This guard keeps a future mutation
+      // path from turning a CAS/mirror conflict into a misleading success based
+      // only on unrelated metadata deletions.
+      if (keyId !== null && !bindingTerminated) {
+        logger.warn("SessionManager: Session binding was not terminated", {
+          sessionId,
+          keyId,
         });
         return false;
       }

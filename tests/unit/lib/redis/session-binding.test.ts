@@ -26,7 +26,9 @@ import {
 import {
   CAS_SESSION_BINDING,
   CLEAR_SESSION_BINDING,
+  DELETE_LEGACY_PROVIDER_IF_VALUE,
   READ_OR_RECONCILE_SESSION_BINDING,
+  RESTORE_LEGACY_PROVIDER_IF_ABSENT,
   TERMINATE_SESSION_BINDING,
 } from "@/lib/redis/lua-scripts";
 
@@ -83,6 +85,7 @@ function createMockRedis(options: MockRedisOptions = {}) {
     if (probeCooldowns.has(key)) return probeCooldowns.get(key) ?? null;
     return options.cooldownValue ?? null;
   });
+  const hgetMock = vi.fn(async (_key: string, _field: string) => null as string | null);
   const delMock = vi.fn(async (..._keys: string[]) => {
     if (cleanupFails) throw new Error("cleanup failed");
     return 4;
@@ -116,6 +119,7 @@ function createMockRedis(options: MockRedisOptions = {}) {
     eval: evalMock,
     ...(options.evalSha ? { evalsha: evalShaMock } : {}),
     get: getMock,
+    hget: hgetMock,
     del: delMock,
     exists: existsMock,
     expire: expireMock,
@@ -130,6 +134,7 @@ function createMockRedis(options: MockRedisOptions = {}) {
     evalMock,
     evalShaMock,
     getMock,
+    hgetMock,
     delMock,
     existsMock,
     expireMock,
@@ -587,6 +592,30 @@ describe("versioned session binding operations", () => {
     expect(mock.evalMock).toHaveBeenCalledTimes(callsAfterFailure);
   });
 
+  it("allows legacy fallback on the first runtime capability error", async () => {
+    const mock = createMockRedis({
+      operationResponses: {
+        [CAS_SESSION_BINDING]: [new Error("ERR script execution disabled")],
+      },
+    });
+
+    const result = await compareAndSetSessionBinding({
+      sessionId: "sid",
+      keyId: 4,
+      expectedGeneration: "generation-a",
+      providerId: 8,
+      redis: mock.redis,
+    });
+
+    expect(result).toMatchObject({
+      status: "unavailable",
+      reason: "capability_unavailable",
+      capabilityState: "unavailable",
+      legacyFallbackAllowed: true,
+    });
+    expect(getVersionedBindingCapabilityState()).toBe("unavailable");
+  });
+
   it("fails closed on malformed binding data without disabling the capability", async () => {
     const mock = createMockRedis({
       operationResponses: {
@@ -760,6 +789,254 @@ describe("versioned session binding operations", () => {
       legacyFallbackAllowed: false,
     });
     expect(mock.getMock).not.toHaveBeenCalled();
+  });
+
+  it("fails closed and rolls back its provider write if canonical state appears mid-mutation", async () => {
+    let provider: string | null = "8";
+    const mock = createMockRedis({
+      operationResponses: {
+        [DELETE_LEGACY_PROVIDER_IF_VALUE]: [
+          () => {
+            provider = null;
+            return 1;
+          },
+        ],
+      },
+    });
+    let existsCalls = 0;
+    mock.existsMock.mockImplementation(async () => {
+      existsCalls += 1;
+      // Initial guard and pre-mutation guard pass; the post-write guard sees
+      // a versioned worker creating the canonical binding concurrently.
+      return existsCalls === 3 ? 1 : 0;
+    });
+    mock.getMock.mockImplementation(async (key: string) => {
+      if (key === "session:sid:key") return "4";
+      if (key === "session:sid:provider") return provider;
+      return null;
+    });
+    mock.setexMock.mockImplementation(async (key: string, _ttl: number, value: string) => {
+      if (key === "session:sid:provider") provider = value;
+      return "OK";
+    });
+    mock.delMock.mockImplementation(async (key: string) => {
+      if (key === "session:sid:provider") provider = null;
+      return 1;
+    });
+
+    const result = await mutateLegacySessionBindingSafely({
+      sessionId: "sid",
+      keyId: 4,
+      redis: mock.redis,
+      mutation: { type: "set", providerId: 10 },
+    });
+
+    expect(result).toEqual({
+      status: "conflict",
+      reason: "canonical_exists",
+      legacyFallbackAllowed: false,
+    });
+    expect(provider).toBeNull();
+    expect(mock.evalMock).toHaveBeenCalledWith(
+      DELETE_LEGACY_PROVIDER_IF_VALUE,
+      1,
+      "session:sid:provider",
+      "10"
+    );
+  });
+
+  it("restores a cleared provider mirror if canonical state appears before the post-check", async () => {
+    let provider: string | null = "8";
+    const mock = createMockRedis({
+      operationResponses: {
+        [RESTORE_LEGACY_PROVIDER_IF_ABSENT]: [
+          () => {
+            provider = "8";
+            return 1;
+          },
+        ],
+      },
+    });
+    let existsCalls = 0;
+    mock.existsMock.mockImplementation(async () => {
+      existsCalls += 1;
+      // Initial guard and pre-mutation guard pass; the post-clear guard sees
+      // a versioned worker creating canonical state concurrently.
+      return existsCalls === 3 ? 1 : 0;
+    });
+    mock.getMock.mockImplementation(async (key: string) => {
+      if (key === "session:sid:key") return "4";
+      if (key === "session:sid:provider") return provider;
+      return null;
+    });
+    mock.hgetMock.mockResolvedValue("8");
+    mock.delMock.mockImplementation(async (key: string) => {
+      if (key === "session:sid:provider") provider = null;
+      return 1;
+    });
+
+    const result = await mutateLegacySessionBindingSafely({
+      sessionId: "sid",
+      keyId: 4,
+      redis: mock.redis,
+      mutation: { type: "clear", expectedProviderId: 8 },
+    });
+
+    expect(result).toEqual({
+      status: "conflict",
+      reason: "canonical_exists",
+      legacyFallbackAllowed: false,
+    });
+    expect(provider).toBe("8");
+    expect(mock.evalMock).toHaveBeenCalledWith(
+      RESTORE_LEGACY_PROVIDER_IF_ABSENT,
+      1,
+      "session:sid:provider",
+      "8",
+      "300"
+    );
+  });
+
+  it("keeps a provider mirror when canonical imported the same value before rollback", async () => {
+    let provider: string | null = null;
+    const mock = createMockRedis({
+      operationResponses: {
+        [DELETE_LEGACY_PROVIDER_IF_VALUE]: [
+          () => {
+            provider = null;
+            return 1;
+          },
+        ],
+      },
+    });
+    let existsCalls = 0;
+    mock.existsMock.mockImplementation(async () => {
+      existsCalls += 1;
+      return existsCalls === 3 ? 1 : 0;
+    });
+    mock.getMock.mockImplementation(async (key: string) => {
+      if (key === "session:sid:key") return "4";
+      if (key === "session:sid:provider") return provider;
+      return null;
+    });
+    mock.setexMock.mockImplementation(async (key: string, _ttl: number, value: string) => {
+      if (key === "session:sid:provider") provider = value;
+      return "OK";
+    });
+    mock.hgetMock.mockResolvedValue("10");
+
+    const result = await mutateLegacySessionBindingSafely({
+      sessionId: "sid",
+      keyId: 4,
+      redis: mock.redis,
+      mutation: { type: "set", providerId: 10 },
+    });
+
+    expect(result).toEqual({
+      status: "conflict",
+      reason: "canonical_exists",
+      legacyFallbackAllowed: false,
+    });
+    expect(provider).toBe("10");
+    expect(mock.evalMock).not.toHaveBeenCalledWith(
+      DELETE_LEGACY_PROVIDER_IF_VALUE,
+      1,
+      "session:sid:provider",
+      "10"
+    );
+  });
+
+  it("rolls back a legacy provider bind when the owner cannot be refreshed", async () => {
+    let owner: string | null = "4";
+    let provider: string | null = null;
+    const mock = createMockRedis({
+      operationResponses: {
+        [DELETE_LEGACY_PROVIDER_IF_VALUE]: [
+          () => {
+            provider = null;
+            return 1;
+          },
+        ],
+      },
+    });
+    let expireCalls = 0;
+    mock.expireMock.mockImplementation(async () => {
+      expireCalls += 1;
+      if (expireCalls === 1) return 1;
+      owner = null;
+      return 0;
+    });
+    mock.getMock.mockImplementation(async (key: string) => {
+      if (key === "session:sid:key") return owner;
+      if (key === "session:sid:provider") return provider;
+      return null;
+    });
+    mock.setMock.mockImplementation(async () => {
+      owner = "5";
+      return null;
+    });
+    mock.setexMock.mockImplementation(async (key: string, _ttl: number, value: string) => {
+      if (key === "session:sid:provider") provider = value;
+      return "OK";
+    });
+
+    const result = await mutateLegacySessionBindingSafely({
+      sessionId: "sid",
+      keyId: 4,
+      redis: mock.redis,
+      mutation: { type: "set", providerId: 10 },
+    });
+
+    expect(result).toEqual({
+      status: "conflict",
+      reason: "foreign_legacy_owner",
+      legacyFallbackAllowed: false,
+    });
+    expect(provider).toBeNull();
+    expect(mock.evalMock).toHaveBeenCalledWith(
+      DELETE_LEGACY_PROVIDER_IF_VALUE,
+      1,
+      "session:sid:provider",
+      "10"
+    );
+  });
+
+  it("does not restore a mirror when the concurrent canonical binding is a null tombstone", async () => {
+    let provider: string | null = "8";
+    const mock = createMockRedis();
+    let existsCalls = 0;
+    mock.existsMock.mockImplementation(async () => {
+      existsCalls += 1;
+      return existsCalls === 3 ? 1 : 0;
+    });
+    mock.getMock.mockImplementation(async (key: string) => {
+      if (key === "session:sid:key") return "4";
+      if (key === "session:sid:provider") return provider;
+      return null;
+    });
+    mock.hgetMock.mockResolvedValue(null);
+    mock.delMock.mockImplementation(async (key: string) => {
+      if (key === "session:sid:provider") provider = null;
+      return 1;
+    });
+
+    const result = await mutateLegacySessionBindingSafely({
+      sessionId: "sid",
+      keyId: 4,
+      redis: mock.redis,
+      mutation: { type: "clear", expectedProviderId: 8 },
+    });
+
+    expect(result).toMatchObject({ status: "conflict", reason: "canonical_exists" });
+    expect(provider).toBeNull();
+    expect(mock.evalMock).not.toHaveBeenCalledWith(
+      RESTORE_LEGACY_PROVIDER_IF_ABSENT,
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+      expect.anything()
+    );
   });
 
   it("uses the tenant-authorized termination primitive and leaves a tombstone", async () => {
