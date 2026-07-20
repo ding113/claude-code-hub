@@ -74,4 +74,16 @@ describe("discovery validity", () => {
       error: false,
     });
   });
+
+  it("keeps ready when content and the terminal marker arrive in one read", () => {
+    const parser = new DiscoveryValidityParser("openai-chat");
+
+    expect(
+      parser.push('data: {"choices":[{"delta":{"content":"done"}}]}\n\ndata: [DONE]\n\n')
+    ).toEqual({
+      ready: true,
+      terminal: true,
+      error: false,
+    });
+  });
 });
