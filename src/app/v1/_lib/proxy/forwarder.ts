@@ -3845,7 +3845,6 @@ export class ProxyForwarder {
       disableStreamingHedge?: boolean;
     };
     return (
-      settings.discoveryEnabled === true &&
       endpointPolicy.allowRetry &&
       endpointPolicy.allowProviderSwitch &&
       message?.stream === true &&
@@ -4890,6 +4889,12 @@ export class ProxyForwarder {
     let totalTimer: NodeJS.Timeout | null = null;
     let roundTimer: NodeJS.Timeout | null = null;
     let stickyTimer: NodeJS.Timeout | null = null;
+    const clearRoundTimer = () => {
+      if (roundTimer) {
+        clearTimeout(roundTimer);
+        roundTimer = null;
+      }
+    };
     let executeCoordinatorAction: (action: DiscoveryAction) => Promise<void> = async () => {};
     let resolveResult: ((result: { response?: Response; error?: Error }) => void) | null = null;
     const resultPromise = new Promise<{ response?: Response; error?: Error }>((resolve) => {
@@ -5225,6 +5230,7 @@ export class ProxyForwarder {
 
     const launchNextRound = async () => {
       if (settled || committed) return;
+      clearRoundTimer();
       currentRound += 1;
       if (currentRound > maxRounds) return;
       coordinator.beginRound();
@@ -5234,10 +5240,10 @@ export class ProxyForwarder {
           await launch(candidate, "normal");
         } catch (error) {
           lastError = error instanceof Error ? error : new Error(String(error));
-          noMoreCandidates = true;
         }
       }
       if (!committed && !settled) {
+        clearRoundTimer();
         roundTimer = setTimeout(() => {
           void onBoundary().catch((error) =>
             logger.warn("[Discovery] Round boundary failed", { error })
@@ -5365,14 +5371,15 @@ export class ProxyForwarder {
           initial,
           Array.from(launched)
         );
+        if (candidates.length === 0) noMoreCandidates = true;
         for (const provider of candidates) {
           try {
             await launch(provider, "normal");
           } catch (error) {
             lastError = error instanceof Error ? error : new Error(String(error));
-            noMoreCandidates = true;
           }
         }
+        clearRoundTimer();
         roundTimer = setTimeout(() => {
           void onBoundary().catch((error) =>
             logger.warn("[Discovery] Round boundary failed", { error })
@@ -5385,7 +5392,7 @@ export class ProxyForwarder {
     } finally {
       cleanupAbort();
       if (totalTimer) clearTimeout(totalTimer);
-      if (roundTimer) clearTimeout(roundTimer);
+      clearRoundTimer();
       if (stickyTimer) clearTimeout(stickyTimer);
     }
   }
