@@ -29,8 +29,13 @@ export type DiscoveryAttempt = {
 export type DiscoveryAction =
   | { type: "commit_normal"; attemptId: string }
   | { type: "promote_fallback"; attemptId: string }
-  | { type: "cancel"; attemptIds: string[] }
-  | { type: "launch"; slots: number }
+  | { type: "cancel"; attemptIds: string[]; promoteAttemptId?: string }
+  | {
+      type: "launch";
+      slots: number;
+      cancelAttemptIds?: string[];
+      promoteAttemptId?: string;
+    }
   | { type: "none" }
   | { type: "terminal_failure" };
 
@@ -63,6 +68,7 @@ export class DiscoveryCoordinator {
 
   beginRound(): { requestEpoch: number; roundEpoch: number; round: number } {
     this.roundEpoch += 1;
+    if (!this.isTerminal) this.state = "DISCOVERY_RACING";
     return { ...this.epochs, round: this.round };
   }
 
@@ -102,6 +108,17 @@ export class DiscoveryCoordinator {
     const attempt = this.attempts.get(id);
     if (!attempt?.pending) return { type: "none" };
     attempt.ready = true;
+    if (attempt.kind === "fallback") {
+      const pendingNormal = Array.from(this.attempts.values()).some(
+        (candidate) => candidate.pending && candidate.kind === "normal"
+      );
+      if (!pendingNormal) {
+        attempt.pending = false;
+        this.state = "FALLBACK_ACTIVE";
+        return { type: "promote_fallback", attemptId: attempt.id };
+      }
+      return { type: "none" };
+    }
     return this.chooseReadyNormal();
   }
 
@@ -168,14 +185,19 @@ export class DiscoveryCoordinator {
       .filter((attempt) => attempt.pending && attempt.kind === "normal")
       .sort(compareAttempts);
     if (currentFallback && pendingNormal.length > 0) {
+      const cancelAttemptIds = pendingNormal.map((attempt) => attempt.id);
       for (const attempt of pendingNormal) attempt.pending = false;
       if (this.round < this.maxRounds) {
         this.round += 1;
         this.roundEpoch += 1;
         this.state = "DISCOVERY_RACING";
-        return { type: "launch", slots: Math.max(1, this.concurrency - 1) };
+        return {
+          type: "launch",
+          slots: Math.max(1, this.concurrency - 1),
+          cancelAttemptIds,
+        };
       }
-      return { type: "none" };
+      return { type: "cancel", attemptIds: cancelAttemptIds };
     }
     if (pendingNormal.length === 0) {
       if (currentFallback) {
@@ -191,11 +213,18 @@ export class DiscoveryCoordinator {
     const losers = pendingNormal.slice(1).map((attempt) => attempt.id);
     for (const id of losers) this.attempts.get(id)!.pending = false;
 
-    if (currentFallback) {
-      currentFallback.pending = true;
-      return { type: "cancel", attemptIds: losers };
+    if (this.round < this.maxRounds) {
+      this.round += 1;
+      this.roundEpoch += 1;
+      this.state = "DISCOVERY_RACING";
+      return {
+        type: "launch",
+        slots: Math.max(1, this.concurrency - 1),
+        cancelAttemptIds: losers,
+        promoteAttemptId: fallback.id,
+      };
     }
-    return { type: "cancel", attemptIds: losers };
+    return { type: "cancel", attemptIds: losers, promoteAttemptId: fallback.id };
   }
 
   onDeadline(): DiscoveryAction {

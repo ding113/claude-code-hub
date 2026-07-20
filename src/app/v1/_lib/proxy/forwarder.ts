@@ -63,7 +63,7 @@ import { buildProxyUrl } from "../url";
 import { rectifyBillingHeader } from "./billing-header-rectifier";
 import { bindClientAbortListener } from "./client-abort-listener";
 import { deriveClientSafeUpstreamErrorMessage } from "./client-error-message";
-import { DiscoveryCoordinator } from "./discovery-coordinator";
+import { type DiscoveryAction, DiscoveryCoordinator } from "./discovery-coordinator";
 import { type DiscoveryProtocol, DiscoveryValidityParser } from "./discovery-validity";
 import { isStandardProxyEndpointPath } from "./endpoint-family-catalog";
 import { resolveEndpointPolicy, shouldEnforceStrictEndpointPoolPolicy } from "./endpoint-policy";
@@ -4875,6 +4875,7 @@ export class ProxyForwarder {
         pending: boolean;
         ready: boolean;
         round: number;
+        readerTransferred: boolean;
       }
     >();
     const launched = new Set<number>();
@@ -4889,6 +4890,7 @@ export class ProxyForwarder {
     let totalTimer: NodeJS.Timeout | null = null;
     let roundTimer: NodeJS.Timeout | null = null;
     let stickyTimer: NodeJS.Timeout | null = null;
+    let executeCoordinatorAction: (action: DiscoveryAction) => Promise<void> = async () => {};
     let resolveResult: ((result: { response?: Response; error?: Error }) => void) | null = null;
     const resultPromise = new Promise<{ response?: Response; error?: Error }>((resolve) => {
       resolveResult = resolve;
@@ -4904,6 +4906,7 @@ export class ProxyForwarder {
     };
 
     const cancelAttempt = (attempt: (typeof winner & { id: string }) | null, reason: string) => {
+      if (attempt?.readerTransferred) return;
       if (!attempt?.pending) return;
       attempt.pending = false;
       try {
@@ -4911,7 +4914,12 @@ export class ProxyForwarder {
       } catch {
         /* abort is best effort */
       }
-      void attempt.reader?.cancel(reason).catch(() => undefined);
+      try {
+        const cancelPromise = attempt.reader?.cancel(reason);
+        cancelPromise?.catch(() => undefined);
+      } catch (error) {
+        logger.debug("[Discovery] Reader cancel failed", { reason, error });
+      }
       try {
         attempt.releaseAgent?.();
       } catch {
@@ -4933,8 +4941,18 @@ export class ProxyForwarder {
       if (roundTimer) clearTimeout(roundTimer);
       if (stickyTimer) clearTimeout(stickyTimer);
       cancelLosers();
-      const attempted = new Set(launched);
-      await ProxyForwarder.clearSessionProviderBindings(session, attempted);
+      if (bindingSnapshot) {
+        if (bindingSnapshot.providerId != null) {
+          await SessionManager.clearVersionedSessionProvider(
+            bindingSnapshot,
+            bindingSnapshot.providerId,
+            0
+          );
+        }
+      } else {
+        const attempted = new Set(launched);
+        await ProxyForwarder.clearSessionProviderBindings(session, attempted);
+      }
       resolveResult?.({ error });
     };
 
@@ -4943,6 +4961,9 @@ export class ProxyForwarder {
       committed = true;
       winner = attempt;
       attempt.pending = false;
+      // From this point ResponseHandler owns the reader and agent release.
+      // No coordinator/timer path may cancel or release this attempt again.
+      attempt.readerTransferred = true;
       if (totalTimer) clearTimeout(totalTimer);
       if (roundTimer) clearTimeout(roundTimer);
       if (stickyTimer) clearTimeout(stickyTimer);
@@ -5044,6 +5065,7 @@ export class ProxyForwarder {
         pending: true,
         ready: false,
         round: currentRound,
+        readerTransferred: false,
         provider,
         session: attemptSession,
         baseUrl: endpoint.baseUrl,
@@ -5080,6 +5102,7 @@ export class ProxyForwarder {
         pending: boolean;
         ready: boolean;
         round: number;
+        readerTransferred: boolean;
       };
       attempts.set(id, attempt);
       coordinator.addAttempt({
@@ -5138,7 +5161,7 @@ export class ProxyForwarder {
         .catch(async (error) => {
           if (committed || settled || !attempt.pending) return;
           attempt.pending = false;
-          coordinator.markFailed(id);
+          const failureAction = coordinator.markFailed(id);
           lastError = error instanceof Error ? error : new Error(String(error));
           lastErrorCategory = await categorizeErrorAsync(lastError);
           session.addProviderToChain(provider, {
@@ -5156,8 +5179,17 @@ export class ProxyForwarder {
           }
           attempt.releaseAgent?.();
           releaseProviderRef(provider.id);
-          const replacement = await chooseCandidate();
-          if (replacement && !committed && !settled) await launch(replacement, "normal");
+          const actionOwnsNextStep =
+            failureAction.type === "promote_fallback" ||
+            failureAction.type === "launch" ||
+            failureAction.type === "terminal_failure";
+          if (actionOwnsNextStep) {
+            await executeCoordinatorAction(failureAction);
+          }
+          if (!actionOwnsNextStep && !committed && !settled) {
+            const replacement = await chooseCandidate();
+            if (replacement) await launch(replacement, "normal");
+          }
           if (
             Array.from(attempts.values()).every((candidate) => !candidate.pending) &&
             noMoreCandidates
@@ -5166,6 +5198,12 @@ export class ProxyForwarder {
               ProxyForwarder.resolveHedgeTerminalError(lastError, lastErrorCategory)
             );
           }
+        })
+        .catch((error) => {
+          logger.warn("[Discovery] Attempt completion handler failed", {
+            providerId: provider.id,
+            error,
+          });
         });
     };
 
@@ -5184,60 +5222,75 @@ export class ProxyForwarder {
         }
       }
       if (!committed && !settled) {
-        roundTimer = setTimeout(() => void onBoundary(), discoverySlaMs);
+        roundTimer = setTimeout(() => {
+          void onBoundary().catch((error) =>
+            logger.warn("[Discovery] Round boundary failed", { error })
+          );
+        }, discoverySlaMs);
+      }
+    };
+
+    executeCoordinatorAction = async (action) => {
+      if (settled || committed) return;
+      if (action.type === "cancel" || action.type === "launch") {
+        const cancelIds =
+          action.type === "cancel" ? action.attemptIds : (action.cancelAttemptIds ?? []);
+        for (const id of cancelIds) {
+          const attempt = attempts.get(id);
+          // Coordinator marks cancelled attempts non-pending before returning
+          // the action. Restore the transport-facing state long enough for the
+          // exactly-once cancellation/release path to run.
+          if (attempt && !attempt.readerTransferred) attempt.pending = true;
+          if (attempt) cancelAttempt(attempt, "discovery_round_boundary");
+        }
+        if (action.promoteAttemptId) {
+          const fallback = attempts.get(action.promoteAttemptId);
+          if (fallback) fallback.kind = "fallback";
+          if (action.type === "cancel" && currentRound < maxRounds) {
+            await launchNextRound();
+          }
+        }
+      }
+      if (action.type === "commit_normal" || action.type === "promote_fallback") {
+        const attempt = attempts.get(action.attemptId);
+        if (attempt) await commit(attempt);
+        return;
+      }
+      if (action.type === "launch") {
+        await launchNextRound();
+        return;
+      }
+      if (action.type === "terminal_failure") {
+        await settleFailure(ProxyForwarder.buildAllProvidersUnavailableError(lastError));
+        return;
+      }
+      if (action.type === "none") {
+        const fallbackPending = Array.from(attempts.values()).some(
+          (attempt) => attempt.pending && attempt.kind === "fallback"
+        );
+        if (fallbackPending && currentRound < maxRounds) {
+          await launchNextRound();
+        }
       }
     };
 
     const onBoundary = async () => {
       if (settled || committed) return;
-      const fallback = Array.from(attempts.values()).find(
-        (attempt) => attempt.pending && attempt.kind === "fallback"
-      );
-      const pendingNormals = Array.from(attempts.values())
-        .filter((attempt) => attempt.pending && attempt.kind === "normal")
-        .sort(
-          (a, b) =>
-            (a.provider.priority || 0) - (b.provider.priority || 0) || a.sequence - b.sequence
-        );
-      const readyNormal = pendingNormals.find((attempt) => attempt.ready);
-      if (readyNormal) {
-        await commit(readyNormal);
-        return;
-      }
-      // The fallback is held during the SLA window, but at the round
-      // boundary it may take over when no normal result is ready.
-      if (fallback?.ready) {
-        await commit(fallback);
-        return;
-      }
-      if (pendingNormals[0]) {
-        if (fallback) {
-          for (const loser of pendingNormals) cancelAttempt(loser, "discovery_round_boundary");
-          if (currentRound < maxRounds) await launchNextRound();
-          return;
-        }
-        pendingNormals[0].kind = "fallback";
-        for (const loser of pendingNormals.slice(1))
-          cancelAttempt(loser, "discovery_round_boundary");
-        if (currentRound < maxRounds) await launchNextRound();
-        return;
-      }
-      if (currentRound < maxRounds) await launchNextRound();
-      else await settleFailure(ProxyForwarder.buildAllProvidersUnavailableError(lastError));
+      await executeCoordinatorAction(coordinator.onRoundBoundary());
     };
 
     const cleanupAbort = bindClientAbortListener(session.clientAbortSignal, () => {
       if (settled || committed) return;
-      void settleFailure(new ProxyError("Request aborted by client", 499, undefined, true));
+      void settleFailure(new ProxyError("Request aborted by client", 499, undefined, true)).catch(
+        (error) => logger.warn("[Discovery] Client abort cleanup failed", { error })
+      );
     });
 
     totalTimer = setTimeout(() => {
       if (settled || committed) return;
-      const fallback = Array.from(attempts.values()).find(
-        (attempt) => attempt.pending && attempt.kind === "fallback" && attempt.ready
+      void executeCoordinatorAction(coordinator.onDeadline()).catch((error) =>
+        logger.warn("[Discovery] Deadline action failed", { error })
       );
-      if (fallback) void commit(fallback);
-      else void settleFailure(ProxyForwarder.buildAllProvidersUnavailableError(lastError));
     }, totalTimeoutMs);
 
     try {
@@ -5267,8 +5320,15 @@ export class ProxyForwarder {
                 logger.debug("[Discovery] Failed to clear timed-out Sticky", { error })
               );
             }
-            if (currentRound < maxRounds) void launchNextRound();
-            else void onBoundary();
+            if (currentRound < maxRounds) {
+              void launchNextRound().catch((error) =>
+                logger.warn("[Discovery] Sticky round launch failed", { error })
+              );
+            } else {
+              void onBoundary().catch((error) =>
+                logger.warn("[Discovery] Sticky boundary failed", { error })
+              );
+            }
           }
         }, stickySlaMs);
       } else {
@@ -5285,7 +5345,11 @@ export class ProxyForwarder {
             noMoreCandidates = true;
           }
         }
-        roundTimer = setTimeout(() => void onBoundary(), discoverySlaMs);
+        roundTimer = setTimeout(() => {
+          void onBoundary().catch((error) =>
+            logger.warn("[Discovery] Round boundary failed", { error })
+          );
+        }, discoverySlaMs);
       }
       const result = await resultPromise;
       if (result.error) throw result.error;
