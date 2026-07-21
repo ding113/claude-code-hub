@@ -426,6 +426,7 @@
           "normal": "候補",
           "fallback": "フォールバック"
         },
+        "roleTransition": "{from} → {to}",
         "outcomes": {
           "success": "正常終了",
           "pending": "待機中",
@@ -446,6 +447,7 @@
           "clear": "解除",
           "none": "変更なし"
         },
+        "bindingFallbackWinner": "書き込みなし · フォールバック勝者",
         "bindingOutcomes": {
           "updated": "更新済み",
           "cleared": "解除済み",

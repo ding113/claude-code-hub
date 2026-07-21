@@ -426,6 +426,7 @@
           "normal": "Кандидат",
           "fallback": "Резерв"
         },
+        "roleTransition": "{from} → {to}",
         "outcomes": {
           "success": "Успешно",
           "pending": "Ожидание",
@@ -446,6 +447,7 @@
           "clear": "Очистить",
           "none": "Без изменений"
         },
+        "bindingFallbackWinner": "Не записано · Победитель резерва",
         "bindingOutcomes": {
           "updated": "Обновлено",
           "cleared": "Очищено",

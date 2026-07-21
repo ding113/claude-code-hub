@@ -1297,12 +1297,179 @@ describe("error-details-dialog routing trace", () => {
     const roundOne = document.querySelector("[data-testid='discovery-round-1']");
     expect(roundOne?.textContent).toContain("candidate-a");
     expect(roundOne?.textContent).toContain("candidate-b");
+    expect(roundOne?.textContent).toContain("Candidate");
+    expect(roundOne?.textContent).not.toContain("Candidate → Fallback");
     expect(roundOne?.textContent).toContain("Ready, held");
     expect(roundOne?.textContent).toContain("Winner");
     expect(roundOne?.querySelector(".sm\\:grid-cols-2")).not.toBeNull();
     expect(html).toContain("60000ms");
     expect(html).toContain("300000ms");
     expect(html).toContain("300s");
+  });
+
+  test("shows fallback promotion and humanizes the fallback winner binding result", () => {
+    const fallbackTrace: RoutingTraceV1 = {
+      ...discoveryTrace,
+      events: [
+        {
+          type: "attempt_started",
+          at: 1_000,
+          elapsedMs: 0,
+          round: 1,
+          attemptId: "normal:1",
+          attemptKind: "normal",
+          provider: { id: 80, name: "slow-provider", priority: 1 },
+        },
+        {
+          type: "fallback_promoted",
+          at: 11_000,
+          elapsedMs: 10_000,
+          round: 1,
+          attemptId: "normal:1",
+          attemptKind: "fallback",
+          provider: { id: 80, name: "slow-provider", priority: 1 },
+          outcome: "timeout",
+        },
+        {
+          type: "winner_committed",
+          at: 20_000,
+          elapsedMs: 19_000,
+          round: 1,
+          attemptId: "normal:1",
+          attemptKind: "fallback",
+          provider: { id: 80, name: "slow-provider", priority: 1 },
+          statusCode: 200,
+        },
+        {
+          type: "request_finished",
+          at: 21_000,
+          elapsedMs: 20_000,
+          outcome: "success",
+          statusCode: 200,
+        },
+        {
+          type: "binding_finalized",
+          at: 21_100,
+          elapsedMs: 20_100,
+          provider: { id: 80, name: "slow-provider" },
+          bindingAction: "none",
+          outcome: "skipped",
+          reason: "fallback_winner",
+        },
+      ],
+      summary: {
+        ...discoveryTrace.summary!,
+        durationMs: 20_000,
+        ttfbMs: 19_000,
+        attemptsPerRequest: 1,
+        rounds: 1,
+        fallbackPromotions: 1,
+        winnerOrigin: "fallback",
+        winnerProviderId: 80,
+        winnerRound: 1,
+      },
+    };
+
+    const html = renderWithIntl(
+      <ErrorDetailsDialog
+        externalOpen
+        statusCode={200}
+        errorMessage={null}
+        providerChain={[
+          { id: 80, name: "slow-provider", reason: "request_success", statusCode: 200 },
+        ]}
+        routingTrace={fallbackTrace}
+        sessionId="fallback-session"
+      />
+    );
+    const document = parseHtml(html);
+    const fallbackCard = document.querySelector("[data-testid='discovery-attempt']");
+    const terminal = document.querySelector("[data-testid='discovery-terminal-status']");
+    const bindingSummary = document.querySelector("[data-testid='discovery-binding-summary']");
+
+    expect(fallbackCard?.textContent).toContain("Candidate → Fallback");
+    expect(fallbackCard?.textContent).toContain("Winner");
+    expect(terminal?.textContent).toContain("Not written · Fallback winner");
+    expect(terminal?.textContent).not.toContain("fallback_winner");
+    expect(bindingSummary?.getAttribute("title")).toBe("fallback_winner");
+    expect(terminal?.textContent).not.toContain("No change · Skipped");
+
+    const normalWinnerHtml = renderWithIntl(
+      <ErrorDetailsDialog
+        externalOpen
+        statusCode={200}
+        errorMessage={null}
+        providerChain={[]}
+        routingTrace={{
+          ...fallbackTrace,
+          summary: { ...fallbackTrace.summary!, winnerOrigin: "normal" },
+        }}
+        sessionId="normal-winner-session"
+      />
+    );
+    const normalWinnerTerminal = parseHtml(normalWinnerHtml).querySelector(
+      "[data-testid='discovery-terminal-status']"
+    );
+    expect(normalWinnerTerminal?.textContent).toContain("No change · Skipped");
+    expect(normalWinnerTerminal?.textContent).toContain("fallback_winner");
+    expect(normalWinnerTerminal?.textContent).not.toContain("Not written · Fallback winner");
+  });
+
+  test("shows Sticky promotion without inventing a source role for truncated traces", () => {
+    const { summary: _summary, ...traceWithoutSummary } = discoveryTrace;
+    const renderRole = (events: RoutingTraceV1["events"], truncated = false) => {
+      const html = renderWithIntl(
+        <ErrorDetailsDialog
+          externalOpen
+          statusCode={null}
+          errorMessage={null}
+          providerChain={[]}
+          routingTrace={{ ...traceWithoutSummary, events, truncated }}
+          sessionId="role-transition-session"
+        />
+      );
+      return parseHtml(html).querySelector("[data-testid='discovery-attempt']")?.textContent ?? "";
+    };
+
+    const stickyRole = renderRole([
+      {
+        type: "attempt_started",
+        at: 1_000,
+        elapsedMs: 0,
+        round: 0,
+        attemptId: "sticky:1",
+        attemptKind: "sticky",
+        provider: { id: 80, name: "sticky-provider", priority: 1 },
+      },
+      {
+        type: "fallback_promoted",
+        at: 21_000,
+        elapsedMs: 20_000,
+        round: 0,
+        attemptId: "sticky:1",
+        attemptKind: "fallback",
+        provider: { id: 80, name: "sticky-provider", priority: 1 },
+      },
+    ]);
+    const truncatedFallbackRole = renderRole(
+      [
+        {
+          type: "fallback_promoted",
+          at: 21_000,
+          elapsedMs: 20_000,
+          round: 1,
+          attemptId: "fallback:1",
+          attemptKind: "fallback",
+          provider: { id: 80, name: "fallback-provider", priority: 1 },
+        },
+      ],
+      true
+    );
+
+    expect(stickyRole).toContain("Sticky → Fallback");
+    expect(truncatedFallbackRole).toContain("Fallback");
+    expect(truncatedFallbackRole).not.toContain("Candidate → Fallback");
+    expect(truncatedFallbackRole).not.toContain("Sticky → Fallback");
   });
 
   test("expands exact Discovery attempts with sanitized provider details and cancellation reasons", () => {

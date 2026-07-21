@@ -426,6 +426,7 @@
           "normal": "候选",
           "fallback": "保底"
         },
+        "roleTransition": "{from} → {to}",
         "outcomes": {
           "success": "成功",
           "pending": "等待中",
@@ -446,6 +447,7 @@
           "clear": "清除",
           "none": "不变更"
         },
+        "bindingFallbackWinner": "未写入 · 保底赢家",
         "bindingOutcomes": {
           "updated": "已更新",
           "cleared": "已清除",

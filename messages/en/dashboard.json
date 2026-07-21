@@ -426,6 +426,7 @@
           "normal": "Candidate",
           "fallback": "Fallback"
         },
+        "roleTransition": "{from} → {to}",
         "outcomes": {
           "success": "Success",
           "pending": "Pending",
@@ -446,6 +447,7 @@
           "clear": "Clear",
           "none": "No change"
         },
+        "bindingFallbackWinner": "Not written · Fallback winner",
         "bindingOutcomes": {
           "updated": "Updated",
           "cleared": "Cleared",

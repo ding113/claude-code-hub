@@ -426,6 +426,7 @@
           "normal": "候選",
           "fallback": "備援"
         },
+        "roleTransition": "{from} → {to}",
         "outcomes": {
           "success": "成功完成",
           "pending": "處理中",
@@ -446,6 +447,7 @@
           "clear": "解除綁定",
           "none": "不變更"
         },
+        "bindingFallbackWinner": "未寫入 · 備援贏家",
         "bindingOutcomes": {
           "updated": "綁定已更新",
           "cleared": "綁定已解除",

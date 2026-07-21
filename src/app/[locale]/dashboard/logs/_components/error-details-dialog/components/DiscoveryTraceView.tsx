@@ -60,6 +60,7 @@ type AttemptView = {
   sequence: number | null;
   round: number;
   role: "sticky" | "normal" | "fallback";
+  promotedFrom: "sticky" | "normal" | null;
   priority: number | null;
   startedAt: number | null;
   elapsedMs: number | null;
@@ -230,7 +231,12 @@ function normalizeTerminalOutcome(
   }
 }
 
-function applyEventOutcome(attempt: AttemptView, type: string, event: TraceRecord): void {
+function applyEventOutcome(
+  attempt: AttemptView,
+  type: string,
+  event: TraceRecord,
+  roleBeforeEvent: AttemptView["role"] | null
+): void {
   const explicit = normalizeOutcome(event.outcome);
   if (explicit) attempt.outcome = explicit;
 
@@ -248,6 +254,9 @@ function applyEventOutcome(attempt: AttemptView, type: string, event: TraceRecor
       attempt.outcome = "cancelled";
       break;
     case "fallback_promoted":
+      if (roleBeforeEvent && roleBeforeEvent !== "fallback") {
+        attempt.promotedFrom = roleBeforeEvent;
+      }
       attempt.role = "fallback";
       attempt.fallbackPromoted = true;
       break;
@@ -286,13 +295,15 @@ function buildAttempts(trace: RoutingTraceV1, providerChain: ProviderChainItem[]
 
     const round = Math.max(0, asNumber(event.round) ?? 0);
     const existing = attempts.get(attemptId);
+    const initialRole = normalizeRole(event.attemptKind ?? event.role ?? event.kind, round);
     const attempt: AttemptView = existing ?? {
       id: attemptId,
       providerId: provider.id,
       providerName: provider.name,
       sequence: parseAttemptSequence(attemptId),
       round,
-      role: normalizeRole(event.attemptKind ?? event.role ?? event.kind, round),
+      role: initialRole,
+      promotedFrom: null,
       priority: provider.priority,
       startedAt: null,
       elapsedMs: null,
@@ -318,6 +329,7 @@ function buildAttempts(trace: RoutingTraceV1, providerChain: ProviderChainItem[]
     const elapsedMs = asNumber(event.elapsedMs);
     if (type === "attempt_started") attempt.startedAt = elapsedMs;
     if (elapsedMs != null) attempt.elapsedMs = elapsedMs;
+    const roleBeforeEvent = existing ? attempt.role : null;
     attempt.role =
       attempt.role === "fallback"
         ? "fallback"
@@ -325,7 +337,7 @@ function buildAttempts(trace: RoutingTraceV1, providerChain: ProviderChainItem[]
             event.attemptKind ?? event.role ?? event.kind ?? attempt.role,
             attempt.round
           );
-    applyEventOutcome(attempt, type, event);
+    applyEventOutcome(attempt, type, event, roleBeforeEvent);
     if (
       type === "attempt_started" ||
       type === "attempt_ready" ||
@@ -529,6 +541,16 @@ export function DiscoveryTraceView({
     bindingEvent?.outcome === "failed"
       ? bindingEvent.outcome
       : "unknown";
+  const isFallbackWinnerBinding =
+    bindingEvent?.bindingAction === "none" &&
+    bindingOutcome === "skipped" &&
+    bindingEvent.reason === "fallback_winner" &&
+    asString(summary.winnerOrigin) === "fallback";
+  const bindingSummary = isFallbackWinnerBinding
+    ? t("bindingFallbackWinner")
+    : bindingEvent
+      ? `${t(`bindingActions.${bindingEvent.bindingAction ?? "none"}`)} · ${t(`bindingOutcomes.${bindingOutcome}`)}`
+      : null;
 
   return (
     <div className="space-y-5" data-testid="discovery-trace-view">
@@ -566,11 +588,14 @@ export function DiscoveryTraceView({
             <div className="flex items-center justify-between gap-3 py-2.5">
               <span className="text-muted-foreground">{t("bindingResult")}</span>
               <div className="min-w-0 text-right">
-                <div className="font-medium">
-                  {t(`bindingActions.${bindingEvent.bindingAction ?? "none"}`)} ·{" "}
-                  {t(`bindingOutcomes.${bindingOutcome}`)}
+                <div
+                  className="font-medium"
+                  data-testid="discovery-binding-summary"
+                  title={isFallbackWinnerBinding ? bindingEvent.reason : undefined}
+                >
+                  {bindingSummary}
                 </div>
-                {bindingEvent.reason && (
+                {bindingEvent.reason && !isFallbackWinnerBinding && (
                   <div className="mt-0.5 font-mono text-[10px] text-muted-foreground break-all">
                     {bindingEvent.reason}
                   </div>
@@ -688,6 +713,12 @@ function AttemptCard({ attempt }: { attempt: AttemptView }) {
   const statusCode = chainItem?.statusCode ?? attempt.statusCode;
   const endpoint = sanitizeEndpoint(chainItem?.endpointUrl);
   const errorMessage = getChainErrorMessage(chainItem);
+  const roleLabel = attempt.promotedFrom
+    ? t("roleTransition", {
+        from: t(`roles.${attempt.promotedFrom}`),
+        to: t(`roles.${attempt.role}`),
+      })
+    : t(`roles.${attempt.role}`);
   const cancellationLabel = attempt.cancellationKind
     ? KNOWN_CANCELLATION_KINDS.has(attempt.cancellationKind)
       ? t(`cancellationKinds.${attempt.cancellationKind}`)
@@ -726,7 +757,7 @@ function AttemptCard({ attempt }: { attempt: AttemptView }) {
             </div>
             <div className="mt-2 flex items-center gap-1.5 flex-wrap">
               <Badge variant="outline" className="text-[10px] bg-background/60">
-                {t(`roles.${attempt.role}`)}
+                {roleLabel}
               </Badge>
               <Badge variant="outline" className="text-[10px] bg-background/60">
                 {t(`outcomes.${attempt.outcome}`)}
