@@ -181,35 +181,12 @@ export function classifyDiscoveryChunk(
   chunk: Uint8Array | string,
   protocol: DiscoveryProtocol
 ): DiscoveryValidity {
-  const text = typeof chunk === "string" ? chunk : new TextDecoder().decode(chunk);
-  if (!text.trim()) return { ready: false, terminal: false, error: false };
-
-  const lines = text.split(/\r?\n/);
-  let sawTerminal = false;
-  let sawError = false;
-  let sawReady = false;
-  for (const line of lines) {
-    const candidate = line.startsWith("data:") ? line.slice(5).trim() : line.trim();
-    if (!candidate || candidate.startsWith(":")) continue;
-    if (candidate === "[DONE]") {
-      sawTerminal = true;
-      continue;
-    }
-    try {
-      const result = classifyJson(JSON.parse(candidate), protocol);
-      sawTerminal ||= result.terminal;
-      sawError ||= result.error;
-      sawReady ||= result.ready;
-    } catch {
-      // A raw JSON response may arrive in a single chunk. Plain text is not
-      // a protocol-safe winner; keep waiting for a parseable event.
-    }
-  }
-  return { ready: sawReady && !sawError, terminal: sawTerminal, error: sawError };
+  return new DiscoveryValidityParser(protocol).push(chunk);
 }
 
 export class DiscoveryValidityParser {
   private buffered = "";
+  private dataLines: string[] = [];
   private readonly decoder = new TextDecoder();
   private _ready = false;
   private _terminal = false;
@@ -228,21 +205,24 @@ export class DiscoveryValidityParser {
       this._error = true;
       this._limitExceeded = true;
       this.buffered = "";
+      this.dataLines = [];
       return this.result;
     }
     this.buffered +=
       typeof chunk === "string" ? chunk : this.decoder.decode(chunk, { stream: true });
 
-    // SSE streams are line framed. Consume each completed line once instead
-    // of reparsing the complete prefix on every chunk (which is quadratic on
-    // long streams). Keep only the unfinished line for the next push.
+    // SSE streams are line framed and events end on a blank line. Consume
+    // completed lines once, while preserving all data: lines for the current
+    // event so multi-line payloads are joined according to the SSE spec.
     if (this.buffered.includes("\n")) {
-      const lines = this.buffered.split(/\r?\n/);
+      const lines = this.buffered.split("\n");
       this.buffered = lines.pop() ?? "";
-      for (const line of lines) {
+      for (const rawLine of lines) {
+        const line = rawLine.endsWith("\r") ? rawLine.slice(0, -1) : rawLine;
         this.consumeLine(line);
         if (this._error) {
           this.buffered = "";
+          this.dataLines = [];
           return this.result;
         }
       }
@@ -252,15 +232,11 @@ export class DiscoveryValidityParser {
     // it only when the complete object is available; incomplete JSON remains
     // buffered and is not repeatedly scanned as a protocol event.
     const tail = this.buffered.trim();
-    if (tail) {
-      const candidate = tail.startsWith("data:") ? tail.slice(5).trim() : tail;
-      if (candidate === "[DONE]") {
-        this._terminal = true;
-        this.buffered = "";
-      } else if (candidate.startsWith("{") || candidate.startsWith("[")) {
+    if (this.dataLines.length === 0 && tail && !this.isSseField(tail)) {
+      if (tail.startsWith("{") || tail.startsWith("[")) {
         try {
-          const value = JSON.parse(candidate) as unknown;
-          this.consumeValue(value);
+          const value = JSON.parse(tail) as unknown;
+          this.consumeEventValue(value);
           this.buffered = "";
         } catch {
           // Keep incomplete raw JSON until the next chunk completes it.
@@ -272,30 +248,84 @@ export class DiscoveryValidityParser {
   }
 
   private consumeLine(line: string): void {
-    const candidate = line.startsWith("data:") ? line.slice(5).trim() : line.trim();
-    if (!candidate || candidate.startsWith(":")) return;
-    if (candidate === "[DONE]") {
+    if (line === "") {
+      this.flushSseEvent();
+      return;
+    }
+
+    if (line.startsWith(":")) return;
+
+    const colonIndex = line.indexOf(":");
+    const field = colonIndex === -1 ? line : line.slice(0, colonIndex);
+    if (field === "data") {
+      let value = colonIndex === -1 ? "" : line.slice(colonIndex + 1);
+      if (value.startsWith(" ")) value = value.slice(1);
+      this.dataLines.push(value);
+      return;
+    }
+
+    // event/id/retry and unknown SSE fields carry framing metadata only. A
+    // bare JSON line is supported for providers returning non-SSE JSON, but
+    // never while an SSE data event is pending.
+    if (field === "event" || field === "id" || field === "retry" || this.dataLines.length > 0) {
+      return;
+    }
+    const candidate = line.trim();
+    if (candidate.startsWith("{") || candidate.startsWith("[")) {
+      try {
+        this.consumeEventValue(JSON.parse(candidate) as unknown);
+      } catch {
+        // Plain text and incomplete/non-JSON lines cannot establish validity.
+      }
+    }
+  }
+
+  private flushSseEvent(): void {
+    if (this.dataLines.length === 0) return;
+    const candidate = this.dataLines.join("\n");
+    this.dataLines = [];
+    if (!this.beginEvent()) return;
+    if (candidate.trim() === "[DONE]") {
       this._terminal = true;
       return;
     }
     try {
       this.consumeValue(JSON.parse(candidate) as unknown);
     } catch {
-      // Ignore comments and incomplete/non-JSON protocol lines.
+      // A complete but non-JSON SSE event cannot establish protocol validity.
     }
   }
 
-  private consumeValue(value: unknown): void {
+  private consumeEventValue(value: unknown): void {
+    if (!this.beginEvent()) return;
+    this.consumeValue(value);
+  }
+
+  private beginEvent(): boolean {
     this.eventsSeen += 1;
     if (!this._ready && this.eventsSeen > DISCOVERY_EVENT_MAX_COUNT) {
       this._error = true;
       this._limitExceeded = true;
-      return;
+      return false;
     }
+    return true;
+  }
+
+  private consumeValue(value: unknown): void {
     const result = classifyJson(value, this.protocol);
     this._ready ||= result.ready;
     this._terminal ||= result.terminal;
     this._error ||= result.error;
+  }
+
+  private isSseField(line: string): boolean {
+    return (
+      line.startsWith(":") ||
+      line.startsWith("data:") ||
+      line.startsWith("event:") ||
+      line.startsWith("id:") ||
+      line.startsWith("retry:")
+    );
   }
 
   get ready(): boolean {
