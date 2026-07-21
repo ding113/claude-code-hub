@@ -12,6 +12,7 @@ import {
   RENEW_SESSION_DISCOVERY_LEASE,
   RESTORE_LEGACY_PROVIDER_IF_ABSENT,
   TERMINATE_SESSION_BINDING,
+  TOUCH_SESSION_BINDING,
 } from "./lua-scripts";
 
 export const DEFAULT_SESSION_BINDING_TTL_SECONDS = 300;
@@ -91,6 +92,11 @@ export interface ClearSessionBindingInput extends ReadOrReconcileSessionBindingI
   expectedGeneration: string;
   expectedProviderId: number | null;
   cooldownTtlSeconds?: number;
+}
+
+export interface TouchSessionBindingInput extends ReadOrReconcileSessionBindingInput {
+  expectedGeneration: string;
+  expectedProviderId: number | null;
 }
 
 export interface TerminateSessionBindingInput extends ReadOrReconcileSessionBindingInput {
@@ -179,7 +185,14 @@ export interface SessionBindingOkResult {
   status: "ok";
   snapshot: SessionBindingSnapshot;
   legacyFallbackAllowed: false;
-  source: "created" | "existing" | "legacy_upgraded" | "updated" | "cleared" | "terminated";
+  source:
+    | "created"
+    | "existing"
+    | "legacy_upgraded"
+    | "updated"
+    | "touched"
+    | "cleared"
+    | "terminated";
 }
 
 export interface SessionBindingConflictResult {
@@ -225,6 +238,7 @@ interface ReadyClient {
 
 const READ_SOURCES = new Set(["created", "existing", "legacy_upgraded"]);
 const MUTATION_SOURCES = new Set(["updated", "cleared"]);
+const TOUCH_SOURCES = new Set(["touched"]);
 const CONFLICT_REASONS = new Set<SessionBindingConflictReason>([
   "canonical_corrupt",
   "canonical_exists",
@@ -609,6 +623,33 @@ async function runCapabilityProbe(
       throw new Error("Session binding capability probe update failed");
     }
 
+    const touched = parseBindingResult(
+      await withCapabilityProbeDeadline(
+        client.eval(
+          TOUCH_SESSION_BINDING,
+          3,
+          keys.canonical,
+          keys.legacyProvider,
+          keys.legacyOwner,
+          keyId.toString(),
+          updated.snapshot.generation,
+          providerId.toString(),
+          ttlSeconds.toString()
+        ),
+        deadlineAt
+      ),
+      { sessionId, keyId },
+      TOUCH_SOURCES
+    );
+    if (
+      touched.status !== "ok" ||
+      touched.source !== "touched" ||
+      touched.snapshot.generation !== updated.snapshot.generation ||
+      touched.snapshot.providerId !== providerId
+    ) {
+      throw new Error("Session binding capability probe touch failed");
+    }
+
     const cleared = parseBindingResult(
       await withCapabilityProbeDeadline(
         client.eval(
@@ -965,6 +1006,46 @@ export async function compareAndSetSessionBinding(
       raw,
       { sessionId: input.sessionId, keyId: input.keyId },
       MUTATION_SOURCES
+    );
+  } catch (error) {
+    return handleOperationError(ready, error);
+  }
+}
+
+export async function touchSessionBinding(
+  input: TouchSessionBindingInput
+): Promise<SessionBindingResult> {
+  const ttlSeconds = input.ttlSeconds ?? DEFAULT_SESSION_BINDING_TTL_SECONDS;
+  if (
+    !isValidIdentity(input.sessionId, input.keyId, ttlSeconds) ||
+    !input.expectedGeneration ||
+    (input.expectedProviderId !== null && !isPositiveInteger(input.expectedProviderId))
+  ) {
+    return conflict("invalid_input");
+  }
+
+  const ready = await readyVersionedClient(input.redis);
+  if ("status" in ready) return ready;
+
+  const keys = buildSessionBindingKeys(input.sessionId, input.keyId);
+  try {
+    const raw = await evalBindingScript(
+      ready.redis,
+      TOUCH_SESSION_BINDING,
+      3,
+      keys.canonical,
+      keys.legacyProvider,
+      keys.legacyOwner,
+      input.keyId.toString(),
+      input.expectedGeneration,
+      input.expectedProviderId?.toString() ?? "",
+      ttlSeconds.toString()
+    );
+    if (!connectionIsCurrent(ready)) return unavailable("connection_changed");
+    return parseBindingResult(
+      raw,
+      { sessionId: input.sessionId, keyId: input.keyId },
+      TOUCH_SOURCES
     );
   } catch (error) {
     return handleOperationError(ready, error);

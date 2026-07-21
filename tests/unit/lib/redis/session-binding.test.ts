@@ -25,6 +25,7 @@ import {
   renewSessionDiscoveryLease,
   resetVersionedBindingCapabilityForTests,
   terminateSessionBinding,
+  touchSessionBinding,
   type SessionBindingRedisClient,
 } from "@/lib/redis/session-binding";
 import {
@@ -36,6 +37,7 @@ import {
   RENEW_SESSION_DISCOVERY_LEASE,
   RESTORE_LEGACY_PROVIDER_IF_ABSENT,
   TERMINATE_SESSION_BINDING,
+  TOUCH_SESSION_BINDING,
 } from "@/lib/redis/lua-scripts";
 
 type EvalResponse = unknown | Error | ((args: unknown[]) => unknown | Promise<unknown>);
@@ -72,6 +74,9 @@ function createMockRedis(options: MockRedisOptions = {}) {
       }
       if (script === CAS_SESSION_BINDING) {
         return ["ok", "updated", String(args[7]), String(args[8])];
+      }
+      if (script === TOUCH_SESSION_BINDING) {
+        return ["ok", "touched", String(args[6]), String(args[7])];
       }
       if (script === CLEAR_SESSION_BINDING) {
         probeCooldowns.set(String(args[5]), String(args[8]));
@@ -210,14 +215,14 @@ describe("versioned binding capability", () => {
     resetVersionedBindingCapabilityForTests();
   });
 
-  it("probes reconcile, CAS, clear, cooldown, and cleanup exactly once per connection", async () => {
+  it("probes reconcile, CAS, touch, clear, cooldown, and cleanup exactly once per connection", async () => {
     const mock = createMockRedis();
 
     await expect(ensureVersionedBindingCapability(mock.redis)).resolves.toBe("available");
     await expect(ensureVersionedBindingCapability(mock.redis)).resolves.toBe("available");
 
     expect(getVersionedBindingCapabilityState()).toBe("available");
-    expect(mock.evalMock).toHaveBeenCalledTimes(5);
+    expect(mock.evalMock).toHaveBeenCalledTimes(6);
     expect(mock.getMock).toHaveBeenCalledTimes(1);
     expect(mock.setMock).toHaveBeenCalledTimes(1);
     expect(mock.delMock).toHaveBeenCalledTimes(5);
@@ -244,7 +249,7 @@ describe("versioned binding capability", () => {
     releaseProbe?.();
 
     await expect(Promise.all([first, second])).resolves.toEqual(["available", "available"]);
-    expect(mock.evalMock).toHaveBeenCalledTimes(5);
+    expect(mock.evalMock).toHaveBeenCalledTimes(6);
   });
 
   it("stays unavailable on the same connection after a capability failure", async () => {
@@ -267,7 +272,7 @@ describe("versioned binding capability", () => {
     expect(getVersionedBindingCapabilityState()).toBe("unknown");
     await expect(ensureVersionedBindingCapability(mock.redis)).resolves.toBe("available");
 
-    expect(mock.evalMock).toHaveBeenCalledTimes(6);
+    expect(mock.evalMock).toHaveBeenCalledTimes(7);
   });
 
   it("automatically probes when a reconnected client becomes ready", async () => {
@@ -280,14 +285,14 @@ describe("versioned binding capability", () => {
     mock.emit("ready");
 
     await vi.waitFor(() => expect(getVersionedBindingCapabilityState()).toBe("available"));
-    expect(mock.evalMock).toHaveBeenCalledTimes(6);
+    expect(mock.evalMock).toHaveBeenCalledTimes(7);
   });
 
   it("does not become available when isolated probe cleanup fails", async () => {
     const mock = createMockRedis({ cleanupFails: true });
 
     await expect(ensureVersionedBindingCapability(mock.redis)).resolves.toBe("unavailable");
-    expect(mock.evalMock).toHaveBeenCalledTimes(5);
+    expect(mock.evalMock).toHaveBeenCalledTimes(6);
     expect(mock.delMock).toHaveBeenCalledTimes(5);
   });
 
@@ -659,6 +664,81 @@ describe("versioned session binding operations", () => {
     expect(getVersionedBindingCapabilityState()).toBe("available");
   });
 
+  it.each([
+    { label: "null tombstone", providerId: null },
+    { label: "provider binding", providerId: 23 },
+  ])("touches an exact $label without rotating generation", async ({ providerId }) => {
+    const mock = createMockRedis({
+      operationResponses: {
+        [TOUCH_SESSION_BINDING]: [(args) => ["ok", "touched", String(args[6]), String(args[7])]],
+      },
+    });
+
+    const result = await touchSessionBinding({
+      sessionId: "sid",
+      keyId: 4,
+      expectedGeneration: "captured-generation",
+      expectedProviderId: providerId,
+      ttlSeconds: 90,
+      redis: mock.redis,
+    });
+
+    expect(result).toEqual({
+      status: "ok",
+      source: "touched",
+      snapshot: {
+        sessionId: "sid",
+        keyId: 4,
+        providerId,
+        generation: "captured-generation",
+      },
+      legacyFallbackAllowed: false,
+    });
+    const operation = mock.evalMock.mock.calls.at(-1);
+    expect(operation?.slice(0, 5)).toEqual([
+      TOUCH_SESSION_BINDING,
+      3,
+      buildCanonicalSessionBindingKey("sid", 4),
+      "session:sid:provider",
+      "session:sid:key",
+    ]);
+    expect(operation?.slice(5)).toEqual([
+      "4",
+      "captured-generation",
+      providerId?.toString() ?? "",
+      "90",
+    ]);
+  });
+
+  it.each([
+    ["an advanced generation", "generation_mismatch"],
+    ["a different provider", "provider_mismatch"],
+    ["a missing canonical binding", "canonical_missing"],
+    ["a missing legacy mirror", "mirror_missing"],
+    ["a contradictory legacy mirror", "mirror_conflict"],
+  ] as const)("fails closed when touching %s", async (_label, reason) => {
+    const mock = createMockRedis({
+      operationResponses: {
+        [TOUCH_SESSION_BINDING]: [["conflict", reason]],
+      },
+    });
+
+    const result = await touchSessionBinding({
+      sessionId: "sid",
+      keyId: 4,
+      expectedGeneration: "stale-or-conflicting-generation",
+      expectedProviderId: 23,
+      redis: mock.redis,
+    });
+
+    expect(result).toEqual({
+      status: "conflict",
+      reason,
+      legacyFallbackAllowed: false,
+    });
+    expect(getVersionedBindingCapabilityState()).toBe("available");
+  });
+
   it("clears a provider with a tenant-scoped cooldown in the same Lua call", async () => {
     const mock = createMockRedis({
       cooldownValue: "cooldown-generation",
@@ -846,7 +926,7 @@ describe("versioned session binding operations", () => {
       keyId: 4,
       redis: mock.redis,
     });
-    await vi.waitFor(() => expect(mock.evalMock).toHaveBeenCalledTimes(6));
+    await vi.waitFor(() => expect(mock.evalMock).toHaveBeenCalledTimes(7));
     mock.emit("reconnecting");
     resolveOperation?.(["ok", "existing", "generation", "8"]);
 
