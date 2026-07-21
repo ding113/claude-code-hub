@@ -5279,7 +5279,9 @@ export class ProxyForwarder {
               ? "create"
               : "renew",
         bindingSnapshot,
-        requiresCompletionMarker: attempt.kind !== "fallback",
+        // Fallbacks cannot create Sticky, but an incomplete fallback stream must
+        // still be classified as failed rather than as a successful truncated 200.
+        requiresCompletionMarker: true,
         discoveryLease: lease,
         providerSessionRefOwned: attempt.providerSessionRefOwned,
         providerSessionRefRetainOnSuccess: attempt.providerSessionRefRetainOnSuccess,

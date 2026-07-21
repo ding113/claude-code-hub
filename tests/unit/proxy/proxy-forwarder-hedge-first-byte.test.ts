@@ -2920,8 +2920,11 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
 
       await vi.advanceTimersByTimeAsync(35);
       const response = await responsePromise;
+      const deferred = peekDeferredStreamingFinalization(session);
       expect(await response.text()).toContain('"sticky-fallback"');
       expect(session.provider?.id).toBe(sticky.id);
+      expect(deferred?.bindingIntent).toBe("none");
+      expect(deferred?.requiresCompletionMarker).toBe(true);
 
       stalledSelector.resolve([]);
       await vi.advanceTimersByTimeAsync(0);
