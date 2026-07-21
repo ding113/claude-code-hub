@@ -155,6 +155,7 @@ export class DiscoveryValidityParser {
   constructor(readonly protocol: DiscoveryProtocol) {}
 
   push(chunk: Uint8Array | string): DiscoveryValidity {
+    if (this._error) return this.result;
     this.bytesSeen +=
       typeof chunk === "string" ? new TextEncoder().encode(chunk).byteLength : chunk.byteLength;
     if (!this._ready && this.bytesSeen > DISCOVERY_PREFIX_MAX_BYTES) {
@@ -172,7 +173,13 @@ export class DiscoveryValidityParser {
     if (this.buffered.includes("\n")) {
       const lines = this.buffered.split(/\r?\n/);
       this.buffered = lines.pop() ?? "";
-      for (const line of lines) this.consumeLine(line);
+      for (const line of lines) {
+        this.consumeLine(line);
+        if (this._error) {
+          this.buffered = "";
+          return this.result;
+        }
+      }
     }
 
     // Some providers return one raw JSON object without an SSE newline. Parse
