@@ -2943,6 +2943,88 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
     }
   });
 
+  test("Discovery keeps refilling the current round when an error replacement fails setup", async () => {
+    const initialFailure = createProvider({ id: 1, name: "initial-failure", priority: 1 });
+    const pending = createProvider({ id: 2, name: "pending", priority: 1 });
+    const setupFailure = createProvider({ id: 3, name: "setup-failure", priority: 1 });
+    const healthy = createProvider({ id: 4, name: "healthy", priority: 1 });
+    const session = createSession();
+    session.authState = {
+      success: true,
+      user: null,
+      key: { id: 31 },
+      apiKey: null,
+    } as typeof session.authState;
+    session.setProvider(initialFailure);
+    mocks.getCachedSystemSettings.mockResolvedValue({
+      discoveryEnabled: true,
+      discoveryConcurrency: 2,
+      maxDiscoveryRounds: 1,
+      discoverySlaMs: 50,
+      stickySlaMs: 50,
+      racingTotalTimeoutMs: 200,
+      stickyTimeoutCooldownMs: 300_000,
+    });
+    mocks.pickDiscoveryProviders
+      .mockResolvedValueOnce([pending])
+      .mockResolvedValueOnce([setupFailure])
+      .mockResolvedValueOnce([healthy]);
+
+    const endpointResolver = vi.spyOn(
+      ProxyForwarder as unknown as {
+        resolveStreamingHedgeEndpoint: (
+          session: ProxySession,
+          provider: Provider
+        ) => Promise<{ endpointId: number | null; baseUrl: string; endpointUrl: string }>;
+      },
+      "resolveStreamingHedgeEndpoint"
+    );
+    endpointResolver.mockImplementation(async (_attemptSession, provider) => {
+      if (provider.id === setupFailure.id) throw new Error("replacement setup failed");
+      return {
+        endpointId: null,
+        baseUrl: provider.url,
+        endpointUrl: provider.url,
+      };
+    });
+
+    const doForward = vi.spyOn(
+      ProxyForwarder as unknown as {
+        doForward: (...args: unknown[]) => Promise<Response>;
+      },
+      "doForward"
+    );
+    doForward.mockImplementation(async (attemptSession) => {
+      const providerId = (attemptSession as ProxySession).provider?.id;
+      if (providerId === initialFailure.id) throw new Error("initial Provider failed");
+      if (providerId === healthy.id) {
+        return new Response('data: {"type":"content_block_delta","delta":{"text":"healthy"}}\n\n', {
+          headers: { "content-type": "text/event-stream" },
+        });
+      }
+      return new Response(new ReadableStream<Uint8Array>(), {
+        headers: { "content-type": "text/event-stream" },
+      });
+    });
+
+    try {
+      const response = await ProxyForwarder.send(session);
+
+      expect(await response.text()).toContain('"healthy"');
+      expect(mocks.pickDiscoveryProviders).toHaveBeenCalledTimes(3);
+      expect(mocks.pickDiscoveryProviders).toHaveBeenNthCalledWith(
+        3,
+        expect.anything(),
+        1,
+        expect.arrayContaining([initialFailure.id, pending.id, setupFailure.id])
+      );
+      expect(doForward).toHaveBeenCalledTimes(3);
+      expect(session.provider?.id).toBe(healthy.id);
+    } finally {
+      endpointResolver.mockRestore();
+    }
+  });
+
   test("an explicit Sticky failure starts Discovery round one at full concurrency", async () => {
     const sticky = createProvider({ id: 1, name: "sticky", priority: 1 });
     const normal = createProvider({ id: 2, name: "normal", priority: 1 });
