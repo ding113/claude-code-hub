@@ -18,6 +18,7 @@ describe("DiscoveryCoordinator", () => {
     coordinator.startStickyProbe();
     expect(coordinator.state).toBe("STICKY_PROBING");
     expect(coordinator.round).toBe(1);
+    expect(coordinator.canRefillCurrentRound).toBe(false);
 
     coordinator.addAttempt(attempt("sticky", 1));
     expect(coordinator.demoteToFallback("sticky")).toBe(true);
@@ -25,6 +26,7 @@ describe("DiscoveryCoordinator", () => {
 
     expect(coordinator.state).toBe("DISCOVERY_RACING");
     expect(coordinator.round).toBe(1);
+    expect(coordinator.canRefillCurrentRound).toBe(true);
   });
 
   it("commits the highest priority ready normal attempt", () => {
@@ -48,6 +50,20 @@ describe("DiscoveryCoordinator", () => {
     });
     expect(coordinator.snapshot.find((item) => item.id === "a")?.kind).toBe("fallback");
     expect(coordinator.snapshot.filter((item) => item.pending)).toHaveLength(1);
+    expect(coordinator.canRefillCurrentRound).toBe(true);
+  });
+
+  it("closes refills after the final round boundary", () => {
+    const coordinator = new DiscoveryCoordinator({ concurrency: 2, maxRounds: 1 });
+    coordinator.addAttempt(attempt("a", 1));
+    coordinator.addAttempt(attempt("b", 2));
+
+    expect(coordinator.onRoundBoundary()).toEqual({
+      type: "cancel",
+      attemptIds: ["b"],
+      promoteAttemptId: "a",
+    });
+    expect(coordinator.canRefillCurrentRound).toBe(false);
   });
 
   it("ignores callbacks from an old request epoch", () => {

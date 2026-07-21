@@ -2542,6 +2542,114 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
     }
   });
 
+  test("a Sticky rectifier retry stalled in setup still demotes to fallback", async () => {
+    vi.useFakeTimers();
+    try {
+      const sticky = createProvider({ id: 1, name: "sticky", priority: 1 });
+      const normal = createProvider({ id: 2, name: "normal", priority: 1 });
+      const session = createSession();
+      session.authState = {
+        success: true,
+        user: null,
+        key: { id: 36 },
+        apiKey: null,
+      } as typeof session.authState;
+      session.request.message.messages = [
+        { role: "user", content: "first" },
+        { role: "assistant", content: [{ type: "thinking", thinking: "t", signature: "sig" }] },
+      ];
+      setProviderWithSessionRef(session, sticky);
+      session.setSessionBindingSnapshot({
+        sessionId: session.sessionId!,
+        keyId: 36,
+        providerId: sticky.id,
+        generation: "g-sticky-rectifier-setup",
+      });
+      mocks.getCachedSystemSettings.mockResolvedValue({
+        discoveryEnabled: true,
+        discoveryConcurrency: 2,
+        maxDiscoveryRounds: 1,
+        discoverySlaMs: 50,
+        stickySlaMs: 10,
+        racingTotalTimeoutMs: 100,
+        stickyTimeoutCooldownMs: 300_000,
+        enableThinkingSignatureRectifier: true,
+      });
+      mocks.pickDiscoveryProviders.mockResolvedValueOnce([normal]);
+
+      const retrySetup = Promise.withResolvers<{
+        endpointId: number | null;
+        baseUrl: string;
+        endpointUrl: string;
+      }>();
+      const retrySetupStarted = Promise.withResolvers<void>();
+      let stickyEndpointCalls = 0;
+      const endpointResolver = vi.spyOn(
+        ProxyForwarder as unknown as {
+          resolveStreamingHedgeEndpoint: (
+            session: ProxySession,
+            provider: Provider
+          ) => Promise<{ endpointId: number | null; baseUrl: string; endpointUrl: string }>;
+        },
+        "resolveStreamingHedgeEndpoint"
+      );
+      endpointResolver.mockImplementation(async (_attemptSession, provider) => {
+        if (provider.id === sticky.id) {
+          stickyEndpointCalls += 1;
+          if (stickyEndpointCalls > 1) {
+            retrySetupStarted.resolve();
+            return retrySetup.promise;
+          }
+        }
+        return { endpointId: null, baseUrl: provider.url, endpointUrl: provider.url };
+      });
+
+      const signatureError = new UpstreamProxyError(
+        "Invalid `signature` in `thinking` block",
+        400,
+        {
+          body: '{"error":"invalid_signature"}',
+          providerId: sticky.id,
+          providerName: sticky.name,
+        }
+      );
+      const doForward = vi.spyOn(
+        ProxyForwarder as unknown as {
+          doForward: (...args: unknown[]) => Promise<Response>;
+        },
+        "doForward"
+      );
+      doForward.mockImplementation(async (attemptSession) => {
+        if ((attemptSession as ProxySession).provider?.id === sticky.id) throw signatureError;
+        return new Response('data: {"type":"content_block_delta","delta":{"text":"normal"}}\n\n', {
+          headers: { "content-type": "text/event-stream" },
+        });
+      });
+
+      const responsePromise = ProxyForwarder.send(session);
+      await retrySetupStarted.promise;
+      await vi.advanceTimersByTimeAsync(10);
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(mocks.clearVersionedSessionProvider).toHaveBeenCalledWith(
+        expect.objectContaining({ generation: "g-sticky-rectifier-setup" }),
+        sticky.id,
+        300
+      );
+      expect(mocks.pickDiscoveryProviders).toHaveBeenCalledTimes(1);
+      expect(doForward).toHaveBeenCalledTimes(2);
+
+      retrySetup.resolve({ endpointId: null, baseUrl: sticky.url, endpointUrl: sticky.url });
+      await vi.advanceTimersByTimeAsync(0);
+      const response = await responsePromise;
+      expect(await response.text()).toContain('"normal"');
+      expect(doForward).toHaveBeenCalledTimes(2);
+      expect(mocks.releaseProviderSession).toHaveBeenCalledWith(sticky.id, session.sessionId);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   test("Sticky timeout and fallback failure consume a single replacement-wave reservation", async () => {
     vi.useFakeTimers();
     try {
@@ -3808,6 +3916,522 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
     } finally {
       endpointResolver.mockRestore();
     }
+  });
+
+  test("a rectifier retry setup reservation cannot overfill the next Discovery round", async () => {
+    vi.useFakeTimers();
+    try {
+      const retrying = createProvider({
+        id: 1,
+        name: "retrying",
+        priority: 10,
+        limitConcurrentSessions: 1,
+      });
+      const fallback = createProvider({ id: 2, name: "fallback", priority: 1 });
+      const nextRound = createProvider({ id: 3, name: "next-round", priority: 1 });
+      const unexpected = createProvider({ id: 4, name: "unexpected", priority: 1 });
+      const session = createSession();
+      session.authState = {
+        success: true,
+        user: null,
+        key: { id: 31 },
+        apiKey: null,
+      } as typeof session.authState;
+      setProviderWithSessionRef(session, retrying);
+      withThinkingBlocks(session);
+      mocks.getCachedSystemSettings.mockResolvedValue({
+        discoveryEnabled: true,
+        discoveryConcurrency: 2,
+        maxDiscoveryRounds: 2,
+        discoverySlaMs: 10,
+        stickySlaMs: 10,
+        racingTotalTimeoutMs: 100,
+        stickyTimeoutCooldownMs: 300_000,
+        enableThinkingSignatureRectifier: true,
+      });
+      mocks.pickDiscoveryProviders
+        .mockResolvedValueOnce([fallback])
+        .mockResolvedValueOnce([nextRound])
+        .mockResolvedValueOnce([unexpected]);
+
+      const retrySetup = Promise.withResolvers<{
+        endpointId: number | null;
+        baseUrl: string;
+        endpointUrl: string;
+      }>();
+      const retrySetupStarted = Promise.withResolvers<void>();
+      let retryingEndpointCalls = 0;
+      const endpointResolver = vi.spyOn(
+        ProxyForwarder as unknown as {
+          resolveStreamingHedgeEndpoint: (
+            session: ProxySession,
+            provider: Provider
+          ) => Promise<{ endpointId: number | null; baseUrl: string; endpointUrl: string }>;
+        },
+        "resolveStreamingHedgeEndpoint"
+      );
+      endpointResolver.mockImplementation(async (_attemptSession, provider) => {
+        if (provider.id === retrying.id) {
+          retryingEndpointCalls += 1;
+          if (retryingEndpointCalls > 1) {
+            retrySetupStarted.resolve();
+            return retrySetup.promise;
+          }
+        }
+        return {
+          endpointId: null,
+          baseUrl: provider.url,
+          endpointUrl: provider.url,
+        };
+      });
+
+      const signatureError = new UpstreamProxyError(
+        "Invalid `signature` in `thinking` block",
+        400,
+        {
+          body: '{"error":"invalid_signature"}',
+          providerId: retrying.id,
+          providerName: retrying.name,
+        }
+      );
+      const nextRoundResponse = Promise.withResolvers<Response>();
+      const activeProviders = new Set<number>();
+      let maxActive = 0;
+      const doForward = vi.spyOn(
+        ProxyForwarder as unknown as {
+          doForward: (...args: unknown[]) => Promise<Response>;
+        },
+        "doForward"
+      );
+      doForward.mockImplementation(async (attemptSession, ...args) => {
+        const providerId = (attemptSession as ProxySession).provider!.id;
+        const signal = args.at(-1) as AbortSignal;
+        activeProviders.add(providerId);
+        maxActive = Math.max(maxActive, activeProviders.size);
+        signal.addEventListener("abort", () => activeProviders.delete(providerId), { once: true });
+        if (providerId === retrying.id) {
+          activeProviders.delete(providerId);
+          throw signatureError;
+        }
+        if (providerId === nextRound.id) return nextRoundResponse.promise;
+        return new Response(new ReadableStream<Uint8Array>(), {
+          headers: { "content-type": "text/event-stream" },
+        });
+      });
+
+      const responsePromise = ProxyForwarder.send(session);
+      await retrySetupStarted.promise;
+      await vi.advanceTimersByTimeAsync(10);
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(mocks.pickDiscoveryProviders).toHaveBeenCalledTimes(2);
+      expect(maxActive).toBeLessThanOrEqual(2);
+
+      retrySetup.resolve({
+        endpointId: null,
+        baseUrl: retrying.url,
+        endpointUrl: retrying.url,
+      });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(mocks.pickDiscoveryProviders).toHaveBeenCalledTimes(2);
+      expect(doForward).toHaveBeenCalledTimes(3);
+
+      nextRoundResponse.resolve(
+        new Response('data: {"type":"content_block_delta","delta":{"text":"next"}}\n\n', {
+          headers: { "content-type": "text/event-stream" },
+        })
+      );
+      await vi.advanceTimersByTimeAsync(0);
+      const response = await responsePromise;
+      expect(await response.text()).toContain('"next"');
+      expect(maxActive).toBeLessThanOrEqual(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("the final Discovery boundary cancels a stalled rectifier retry without refilling", async () => {
+    vi.useFakeTimers();
+    try {
+      const retrying = createProvider({
+        id: 1,
+        name: "retrying",
+        priority: 10,
+        limitConcurrentSessions: 1,
+      });
+      const fallback = createProvider({ id: 2, name: "fallback", priority: 1 });
+      const unexpected = createProvider({ id: 3, name: "unexpected", priority: 1 });
+      const session = createSession();
+      session.authState = {
+        success: true,
+        user: null,
+        key: { id: 32 },
+        apiKey: null,
+      } as typeof session.authState;
+      setProviderWithSessionRef(session, retrying);
+      withThinkingBlocks(session);
+      mocks.getCachedSystemSettings.mockResolvedValue({
+        discoveryEnabled: true,
+        discoveryConcurrency: 2,
+        maxDiscoveryRounds: 1,
+        discoverySlaMs: 10,
+        stickySlaMs: 10,
+        racingTotalTimeoutMs: 100,
+        stickyTimeoutCooldownMs: 300_000,
+        enableThinkingSignatureRectifier: true,
+      });
+      mocks.pickDiscoveryProviders
+        .mockResolvedValueOnce([fallback])
+        .mockResolvedValueOnce([unexpected]);
+
+      const retrySetup = Promise.withResolvers<{
+        endpointId: number | null;
+        baseUrl: string;
+        endpointUrl: string;
+      }>();
+      const retrySetupStarted = Promise.withResolvers<void>();
+      let retryingEndpointCalls = 0;
+      const endpointResolver = vi.spyOn(
+        ProxyForwarder as unknown as {
+          resolveStreamingHedgeEndpoint: (
+            session: ProxySession,
+            provider: Provider
+          ) => Promise<{ endpointId: number | null; baseUrl: string; endpointUrl: string }>;
+        },
+        "resolveStreamingHedgeEndpoint"
+      );
+      endpointResolver.mockImplementation(async (_attemptSession, provider) => {
+        if (provider.id === retrying.id) {
+          retryingEndpointCalls += 1;
+          if (retryingEndpointCalls > 1) {
+            retrySetupStarted.resolve();
+            return retrySetup.promise;
+          }
+        }
+        return {
+          endpointId: null,
+          baseUrl: provider.url,
+          endpointUrl: provider.url,
+        };
+      });
+
+      const signatureError = new UpstreamProxyError(
+        "Invalid `signature` in `thinking` block",
+        400,
+        {
+          body: '{"error":"invalid_signature"}',
+          providerId: retrying.id,
+          providerName: retrying.name,
+        }
+      );
+      let fallbackController: ReadableStreamDefaultController<Uint8Array> | null = null;
+      const doForward = vi.spyOn(
+        ProxyForwarder as unknown as {
+          doForward: (...args: unknown[]) => Promise<Response>;
+        },
+        "doForward"
+      );
+      doForward.mockImplementation(async (attemptSession) => {
+        const providerId = (attemptSession as ProxySession).provider!.id;
+        if (providerId === retrying.id) throw signatureError;
+        return new Response(
+          new ReadableStream<Uint8Array>({
+            start(controller) {
+              fallbackController = controller;
+            },
+          }),
+          { headers: { "content-type": "text/event-stream" } }
+        );
+      });
+
+      const responsePromise = ProxyForwarder.send(session);
+      await retrySetupStarted.promise;
+      await vi.advanceTimersByTimeAsync(10);
+      retrySetup.resolve({
+        endpointId: null,
+        baseUrl: retrying.url,
+        endpointUrl: retrying.url,
+      });
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(mocks.pickDiscoveryProviders).toHaveBeenCalledTimes(1);
+      expect(doForward).toHaveBeenCalledTimes(2);
+
+      fallbackController!.enqueue(
+        new TextEncoder().encode(
+          'data: {"type":"content_block_delta","delta":{"text":"fallback"}}\n\n'
+        )
+      );
+      fallbackController!.close();
+      await vi.advanceTimersByTimeAsync(0);
+      const response = await responsePromise;
+      expect(await response.text()).toContain('"fallback"');
+      expect(mocks.pickDiscoveryProviders).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("the Discovery deadline releases a stalled rectifier retry reservation exactly once", async () => {
+    vi.useFakeTimers();
+    try {
+      const provider = createProvider({ id: 1, name: "retrying", limitConcurrentSessions: 1 });
+      const session = createSession();
+      session.authState = {
+        success: true,
+        user: null,
+        key: { id: 33 },
+        apiKey: null,
+      } as typeof session.authState;
+      setProviderWithSessionRef(session, provider);
+      withThinkingBlocks(session);
+      mocks.getCachedSystemSettings.mockResolvedValue({
+        discoveryEnabled: true,
+        discoveryConcurrency: 2,
+        maxDiscoveryRounds: 1,
+        discoverySlaMs: 100,
+        stickySlaMs: 100,
+        racingTotalTimeoutMs: 50,
+        stickyTimeoutCooldownMs: 300_000,
+        enableThinkingSignatureRectifier: true,
+      });
+      mocks.pickDiscoveryProviders.mockResolvedValueOnce([]);
+
+      const retrySetup = Promise.withResolvers<{
+        endpointId: number | null;
+        baseUrl: string;
+        endpointUrl: string;
+      }>();
+      const retrySetupStarted = Promise.withResolvers<void>();
+      let endpointCalls = 0;
+      const endpointResolver = vi.spyOn(
+        ProxyForwarder as unknown as {
+          resolveStreamingHedgeEndpoint: (
+            session: ProxySession,
+            provider: Provider
+          ) => Promise<{ endpointId: number | null; baseUrl: string; endpointUrl: string }>;
+        },
+        "resolveStreamingHedgeEndpoint"
+      );
+      endpointResolver.mockImplementation(async () => {
+        endpointCalls += 1;
+        if (endpointCalls > 1) {
+          retrySetupStarted.resolve();
+          return retrySetup.promise;
+        }
+        return { endpointId: null, baseUrl: provider.url, endpointUrl: provider.url };
+      });
+
+      const signatureError = new UpstreamProxyError(
+        "Invalid `signature` in `thinking` block",
+        400,
+        {
+          body: '{"error":"invalid_signature"}',
+          providerId: provider.id,
+          providerName: provider.name,
+        }
+      );
+      const doForward = vi.spyOn(
+        ProxyForwarder as unknown as {
+          doForward: (...args: unknown[]) => Promise<Response>;
+        },
+        "doForward"
+      );
+      doForward.mockRejectedValueOnce(signatureError);
+
+      const observedError = ProxyForwarder.send(session).catch((error) => error);
+      await retrySetupStarted.promise;
+      await vi.advanceTimersByTimeAsync(50);
+
+      expect(await observedError).toBeInstanceOf(UpstreamProxyError);
+      expect(mocks.releaseProviderSession).toHaveBeenCalledTimes(1);
+      expect(session.hasProviderSessionRef(provider.id)).toBe(false);
+
+      retrySetup.resolve({ endpointId: null, baseUrl: provider.url, endpointUrl: provider.url });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(doForward).toHaveBeenCalledTimes(1);
+      expect(mocks.releaseProviderSession).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("client abort cancels a stalled rectifier retry setup and releases its ref", async () => {
+    vi.useFakeTimers();
+    try {
+      const clientAbort = new AbortController();
+      const provider = createProvider({ id: 1, name: "retrying", limitConcurrentSessions: 1 });
+      const session = createSession(clientAbort.signal);
+      session.authState = {
+        success: true,
+        user: null,
+        key: { id: 35 },
+        apiKey: null,
+      } as typeof session.authState;
+      setProviderWithSessionRef(session, provider);
+      withThinkingBlocks(session);
+      mocks.getCachedSystemSettings.mockResolvedValue({
+        discoveryEnabled: true,
+        discoveryConcurrency: 2,
+        maxDiscoveryRounds: 1,
+        discoverySlaMs: 100,
+        stickySlaMs: 100,
+        racingTotalTimeoutMs: 500,
+        stickyTimeoutCooldownMs: 300_000,
+        enableThinkingSignatureRectifier: true,
+      });
+      mocks.pickDiscoveryProviders.mockResolvedValueOnce([]);
+
+      const retrySetup = Promise.withResolvers<{
+        endpointId: number | null;
+        baseUrl: string;
+        endpointUrl: string;
+      }>();
+      const retrySetupStarted = Promise.withResolvers<void>();
+      let endpointCalls = 0;
+      const endpointResolver = vi.spyOn(
+        ProxyForwarder as unknown as {
+          resolveStreamingHedgeEndpoint: (
+            session: ProxySession,
+            provider: Provider
+          ) => Promise<{ endpointId: number | null; baseUrl: string; endpointUrl: string }>;
+        },
+        "resolveStreamingHedgeEndpoint"
+      );
+      endpointResolver.mockImplementation(async () => {
+        endpointCalls += 1;
+        if (endpointCalls > 1) {
+          retrySetupStarted.resolve();
+          return retrySetup.promise;
+        }
+        return { endpointId: null, baseUrl: provider.url, endpointUrl: provider.url };
+      });
+
+      const signatureError = new UpstreamProxyError(
+        "Invalid `signature` in `thinking` block",
+        400,
+        {
+          body: '{"error":"invalid_signature"}',
+          providerId: provider.id,
+          providerName: provider.name,
+        }
+      );
+      const doForward = vi.spyOn(
+        ProxyForwarder as unknown as {
+          doForward: (...args: unknown[]) => Promise<Response>;
+        },
+        "doForward"
+      );
+      doForward.mockRejectedValueOnce(signatureError);
+
+      const observedError = ProxyForwarder.send(session).catch((error) => error);
+      await retrySetupStarted.promise;
+      clientAbort.abort();
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(await observedError).toBeInstanceOf(UpstreamProxyError);
+      expect(mocks.releaseProviderSession).toHaveBeenCalledTimes(1);
+      expect(session.hasProviderSessionRef(provider.id)).toBe(false);
+
+      retrySetup.resolve({ endpointId: null, baseUrl: provider.url, endpointUrl: provider.url });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(doForward).toHaveBeenCalledTimes(1);
+      expect(mocks.releaseProviderSession).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test.each([
+    {
+      label: "client abort",
+      category: ProxyErrorCategory.CLIENT_ABORT,
+      setupError: new Error("retry setup observed client abort"),
+      expectedStatus: 499,
+    },
+    {
+      label: "local overload",
+      category: ProxyErrorCategory.LOCAL_OVERLOAD,
+      setupError: new DbPoolAdmissionError("data", 32),
+      expectedStatus: null,
+    },
+  ])("rectifier retry setup preserves $label fail-fast semantics", async (scenario) => {
+    const retrying = createProvider({ id: 1, name: "retrying", limitConcurrentSessions: 1 });
+    const peer = createProvider({ id: 2, name: "peer" });
+    const unexpected = createProvider({ id: 3, name: "unexpected" });
+    const session = createSession();
+    session.authState = {
+      success: true,
+      user: null,
+      key: { id: 34 },
+      apiKey: null,
+    } as typeof session.authState;
+    setProviderWithSessionRef(session, retrying);
+    withThinkingBlocks(session);
+    mocks.getCachedSystemSettings.mockResolvedValue({
+      discoveryEnabled: true,
+      discoveryConcurrency: 2,
+      maxDiscoveryRounds: 2,
+      discoverySlaMs: 100,
+      stickySlaMs: 100,
+      racingTotalTimeoutMs: 500,
+      stickyTimeoutCooldownMs: 300_000,
+      enableThinkingSignatureRectifier: true,
+    });
+    mocks.pickDiscoveryProviders.mockResolvedValueOnce([peer]).mockResolvedValueOnce([unexpected]);
+    mocks.categorizeErrorAsync
+      .mockResolvedValueOnce(ProxyErrorCategory.PROVIDER_ERROR)
+      .mockResolvedValueOnce(scenario.category);
+
+    let retryingEndpointCalls = 0;
+    const endpointResolver = vi.spyOn(
+      ProxyForwarder as unknown as {
+        resolveStreamingHedgeEndpoint: (
+          session: ProxySession,
+          provider: Provider
+        ) => Promise<{ endpointId: number | null; baseUrl: string; endpointUrl: string }>;
+      },
+      "resolveStreamingHedgeEndpoint"
+    );
+    endpointResolver.mockImplementation(async (_attemptSession, provider) => {
+      if (provider.id === retrying.id) {
+        retryingEndpointCalls += 1;
+        if (retryingEndpointCalls > 1) throw scenario.setupError;
+      }
+      return { endpointId: null, baseUrl: provider.url, endpointUrl: provider.url };
+    });
+
+    const signatureError = new UpstreamProxyError("Invalid `signature` in `thinking` block", 400, {
+      body: '{"error":"invalid_signature"}',
+      providerId: retrying.id,
+      providerName: retrying.name,
+    });
+    const doForward = vi.spyOn(
+      ProxyForwarder as unknown as {
+        doForward: (...args: unknown[]) => Promise<Response>;
+      },
+      "doForward"
+    );
+    doForward.mockImplementation(async (attemptSession) => {
+      if ((attemptSession as ProxySession).provider?.id === retrying.id) throw signatureError;
+      return new Response(new ReadableStream<Uint8Array>(), {
+        headers: { "content-type": "text/event-stream" },
+      });
+    });
+
+    const observed = await ProxyForwarder.send(session).catch((error) => error);
+    if (scenario.expectedStatus == null) {
+      expect(observed).toBe(scenario.setupError);
+    } else {
+      expect(observed).toBeInstanceOf(UpstreamProxyError);
+      expect((observed as UpstreamProxyError).statusCode).toBe(scenario.expectedStatus);
+    }
+    expect(mocks.pickDiscoveryProviders).toHaveBeenCalledTimes(1);
+    expect(doForward).toHaveBeenCalledTimes(2);
+    expect(mocks.recordFailure).not.toHaveBeenCalled();
+    expect(
+      mocks.releaseProviderSession.mock.calls.filter(([providerId]) => providerId === retrying.id)
+    ).toHaveLength(1);
   });
 
   test("Discovery releases a transferred Provider session ref exactly once when rectifier retry setup fails", async () => {
