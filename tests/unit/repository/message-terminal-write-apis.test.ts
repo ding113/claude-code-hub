@@ -1,7 +1,5 @@
 import type { StoredCostBreakdown } from "@/types/cost-breakdown";
 import type { CreateMessageRequestData } from "@/types/message";
-import type { SQL } from "drizzle-orm";
-import { PgDialect } from "drizzle-orm/pg-core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 function installSyncBoundaries(insertedRows: readonly Record<string, unknown>[] = []) {
@@ -29,16 +27,9 @@ function installSyncBoundaries(insertedRows: readonly Record<string, unknown>[] 
 
 function installAsyncRoutingTraceBoundaries() {
   const controlUpdate = vi.fn();
-  const writerUpdateWhere = vi.fn(async (_condition: unknown) => []);
-  const writerUpdateSet = vi.fn((_values: Record<string, unknown>) => ({
-    where: writerUpdateWhere,
-  }));
-  const writerUpdate = vi.fn((_table: unknown) => ({ set: writerUpdateSet }));
-  const getMessageWriterDb = vi.fn(() => ({
-    update: writerUpdate,
-    execute: vi.fn(),
-  }));
+  const getMessageWriterDb = vi.fn();
   const enqueueMessageRequestUpdate = vi.fn();
+  const enqueueMessageRequestPostTerminalRoutingTraceDurably = vi.fn(async () => true);
   const loggerWarn = vi.fn();
 
   vi.doMock("@/drizzle/db", () => ({
@@ -57,6 +48,7 @@ function installAsyncRoutingTraceBoundaries() {
     isDevelopment: vi.fn(() => false),
   }));
   vi.doMock("@/repository/message-write-buffer", () => ({
+    enqueueMessageRequestPostTerminalRoutingTraceDurably,
     enqueueMessageRequestUpdate,
     enqueueMessageRequestUpdateDurably: vi.fn(),
   }));
@@ -71,12 +63,10 @@ function installAsyncRoutingTraceBoundaries() {
 
   return {
     controlUpdate,
+    enqueueMessageRequestPostTerminalRoutingTraceDurably,
     enqueueMessageRequestUpdate,
     getMessageWriterDb,
     loggerWarn,
-    writerUpdate,
-    writerUpdateSet,
-    writerUpdateWhere,
   };
 }
 
@@ -264,7 +254,7 @@ describe("message terminal write APIs", () => {
     expect(updateWhere).toHaveBeenCalledTimes(1);
   });
 
-  it("patches an async finalized routing trace directly through the writer lane", async () => {
+  it("patches an async finalized routing trace through acknowledged post-terminal metadata", async () => {
     vi.resetModules();
     const boundaries = installAsyncRoutingTraceBoundaries();
     const { updateMessageRequestRoutingTrace } = await import("@/repository/message");
@@ -290,54 +280,20 @@ describe("message terminal write APIs", () => {
 
     expect(boundaries.enqueueMessageRequestUpdate).not.toHaveBeenCalled();
     expect(boundaries.controlUpdate).not.toHaveBeenCalled();
-    expect(boundaries.getMessageWriterDb).toHaveBeenCalledOnce();
-    expect(boundaries.writerUpdate).toHaveBeenCalledOnce();
-    expect(boundaries.writerUpdateSet).toHaveBeenCalledWith({
-      routingTrace,
-      updatedAt: expect.any(Date),
-    });
-    expect(boundaries.writerUpdateSet.mock.calls[0]?.[0]).not.toHaveProperty("statusCode");
-    expect(boundaries.writerUpdateSet.mock.calls[0]?.[0]).not.toHaveProperty("costUsd");
-
-    const where = boundaries.writerUpdateWhere.mock.calls[0]?.[0] as SQL;
-    const query = new PgDialect().sqlToQuery(where);
-    expect(query.sql).toContain('"message_request"."id" = $1');
-    expect(query.sql).toContain('"message_request"."deleted_at" is null');
-    expect(query.sql).not.toContain("status_code");
-  });
-
-  it("retries a transient async routing trace write before succeeding", async () => {
-    vi.useFakeTimers();
-    vi.resetModules();
-    const boundaries = installAsyncRoutingTraceBoundaries();
-    boundaries.writerUpdateWhere
-      .mockRejectedValueOnce(new Error("writer temporarily unavailable"))
-      .mockRejectedValueOnce(new Error("writer still unavailable"))
-      .mockResolvedValueOnce([]);
-    const { updateMessageRequestRoutingTrace } = await import("@/repository/message");
-    const routingTrace = {
-      version: 1 as const,
-      mode: "legacy_serial" as const,
-      startedAt: 2_000,
-      updatedAt: 2_100,
-      discoveryEnabled: false,
-      eligible: false,
-      events: [],
-    };
-
-    const persistence = updateMessageRequestRoutingTrace(708, routingTrace);
-    await vi.runAllTimersAsync();
-    await expect(persistence).resolves.toBeUndefined();
-
-    expect(boundaries.writerUpdateWhere).toHaveBeenCalledTimes(3);
+    expect(boundaries.getMessageWriterDb).not.toHaveBeenCalled();
+    expect(boundaries.enqueueMessageRequestPostTerminalRoutingTraceDurably).toHaveBeenCalledWith(
+      707,
+      routingTrace
+    );
     expect(boundaries.loggerWarn).not.toHaveBeenCalled();
   });
 
-  it("keeps exhausted async routing trace persistence best-effort and logs once", async () => {
-    vi.useFakeTimers();
+  it("keeps rejected async routing trace persistence best-effort and logs once", async () => {
     vi.resetModules();
     const boundaries = installAsyncRoutingTraceBoundaries();
-    boundaries.writerUpdateWhere.mockRejectedValue(new Error("writer unavailable"));
+    boundaries.enqueueMessageRequestPostTerminalRoutingTraceDurably.mockRejectedValue(
+      new Error("durable writer unavailable")
+    );
     const { updateMessageRequestRoutingTrace } = await import("@/repository/message");
     const routingTrace = {
       version: 1 as const,
@@ -349,19 +305,33 @@ describe("message terminal write APIs", () => {
       events: [],
     };
 
-    const persistence = updateMessageRequestRoutingTrace(709, routingTrace);
-    await vi.runAllTimersAsync();
-    await expect(persistence).resolves.toBeUndefined();
+    await expect(updateMessageRequestRoutingTrace(709, routingTrace)).resolves.toBeUndefined();
 
-    expect(boundaries.writerUpdateWhere).toHaveBeenCalledTimes(3);
+    expect(boundaries.enqueueMessageRequestPostTerminalRoutingTraceDurably).toHaveBeenCalledOnce();
     expect(boundaries.loggerWarn).toHaveBeenCalledOnce();
     expect(boundaries.loggerWarn).toHaveBeenCalledWith(
       "[MessageRequest] Failed to patch finalized routing trace",
       {
         requestId: 709,
-        attempts: 3,
-        error: "writer unavailable",
+        error: "durable writer unavailable",
       }
+    );
+  });
+
+  it("logs and skips an invalid routing trace without persisting raw trace data", async () => {
+    vi.resetModules();
+    const boundaries = installAsyncRoutingTraceBoundaries();
+    const { updateMessageRequestRoutingTrace } = await import("@/repository/message");
+
+    await updateMessageRequestRoutingTrace(710, { version: 2 } as unknown as Parameters<
+      typeof updateMessageRequestRoutingTrace
+    >[1]);
+
+    expect(boundaries.enqueueMessageRequestPostTerminalRoutingTraceDurably).not.toHaveBeenCalled();
+    expect(boundaries.controlUpdate).not.toHaveBeenCalled();
+    expect(boundaries.loggerWarn).toHaveBeenCalledWith(
+      "[MessageRequest] Skipped patching invalid routing trace",
+      { requestId: 710 }
     );
   });
 });
