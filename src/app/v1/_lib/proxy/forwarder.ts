@@ -5750,9 +5750,49 @@ export class ProxyForwarder {
                 await launchNextRound(concurrency, true);
                 return;
               }
-              await settleFailure(
-                ProxyForwarder.resolveHedgeTerminalError(lastError, lastErrorCategory)
-              );
+              if (committed || settled) return;
+
+              // The rectified retry is provider-local. A setup failure must
+              // release only this attempt's slot and let other Discovery
+              // candidates continue, rather than cancelling a healthy peer.
+              // Re-register the failed attempt briefly so the coordinator can
+              // apply its normal failure/round transition rules.
+              launched.add(provider.id);
+              const retryFailureRegistered = coordinator.addAttempt({
+                id,
+                providerId: provider.id,
+                priority: ProxyProviderResolver.resolveEffectivePriorityForSession(
+                  provider,
+                  session
+                ),
+                kind: attempt.kind,
+                ready: false,
+                pending: true,
+                round: currentRound,
+                launchOrder: attempt.sequence,
+              });
+              const retryFailureAction = retryFailureRegistered
+                ? coordinator.markFailed(id)
+                : ({ type: "none" } as const);
+              const actionOwnsNextStep =
+                retryFailureAction.type === "commit_normal" ||
+                retryFailureAction.type === "promote_fallback" ||
+                retryFailureAction.type === "launch" ||
+                retryFailureAction.type === "terminal_failure";
+              if (actionOwnsNextStep) {
+                await executeCoordinatorAction(retryFailureAction);
+              }
+              if (!actionOwnsNextStep && !committed && !settled) {
+                await refillCurrentRoundSlots(1);
+              }
+              if (
+                Array.from(attempts.values()).every((candidate) => !candidate.pending) &&
+                noMoreCandidates
+              ) {
+                await settleFailure(
+                  ProxyForwarder.resolveHedgeTerminalError(lastError, lastErrorCategory)
+                );
+              }
             }
             return;
           }

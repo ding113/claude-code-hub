@@ -3726,6 +3726,90 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
     expect(session.hasProviderSessionRef(initial.id)).toBe(true);
   });
 
+  test("Discovery keeps a healthy peer when rectifier retry setup fails", async () => {
+    const initial = createProvider({ id: 1, name: "initial", limitConcurrentSessions: 1 });
+    const alternative = createProvider({ id: 2, name: "alternative" });
+    const session = createSession();
+    session.authState = {
+      success: true,
+      user: null,
+      key: { id: 24 },
+      apiKey: null,
+    } as typeof session.authState;
+    setProviderWithSessionRef(session, initial);
+    withThinkingBlocks(session);
+    mocks.getCachedSystemSettings.mockResolvedValue({
+      discoveryEnabled: true,
+      discoveryConcurrency: 2,
+      maxDiscoveryRounds: 1,
+      discoverySlaMs: 100,
+      stickySlaMs: 100,
+      racingTotalTimeoutMs: 500,
+      stickyTimeoutCooldownMs: 300_000,
+      enableThinkingSignatureRectifier: true,
+    });
+    mocks.pickDiscoveryProviders.mockResolvedValueOnce([alternative]);
+
+    let initialEndpointAttempts = 0;
+    let allowAlternativeResponse!: () => void;
+    const rectifierRetrySetupAttempted = new Promise<void>((resolve) => {
+      allowAlternativeResponse = resolve;
+    });
+    const endpointResolver = vi.spyOn(
+      ProxyForwarder as unknown as {
+        resolveStreamingHedgeEndpoint: (
+          session: ProxySession,
+          provider: Provider
+        ) => Promise<{ endpointId: number | null; baseUrl: string; endpointUrl: string }>;
+      },
+      "resolveStreamingHedgeEndpoint"
+    );
+    endpointResolver.mockImplementation(async (_attemptSession, provider) => {
+      if (provider.id === initial.id) {
+        initialEndpointAttempts += 1;
+        if (initialEndpointAttempts > 1) {
+          allowAlternativeResponse();
+          throw new Error("rectifier retry endpoint setup failed");
+        }
+      }
+      return {
+        endpointId: null,
+        baseUrl: provider.url,
+        endpointUrl: provider.url,
+      };
+    });
+
+    const signatureError = new UpstreamProxyError("Invalid `signature` in `thinking` block", 400, {
+      body: '{"error":"invalid_signature"}',
+      providerId: initial.id,
+      providerName: initial.name,
+    });
+    const doForward = vi.spyOn(
+      ProxyForwarder as unknown as {
+        doForward: (...args: unknown[]) => Promise<Response>;
+      },
+      "doForward"
+    );
+    doForward.mockImplementation(async (attemptSession) => {
+      const provider = (attemptSession as ProxySession).provider;
+      if (provider?.id === initial.id) throw signatureError;
+      await rectifierRetrySetupAttempted;
+      return new Response(
+        'data: {"type":"content_block_delta","delta":{"text":"alternative"}}\n\n',
+        { headers: { "content-type": "text/event-stream" } }
+      );
+    });
+
+    try {
+      const response = await ProxyForwarder.send(session);
+      expect(await response.text()).toContain('"alternative"');
+      expect(initialEndpointAttempts).toBe(2);
+      expect(session.provider?.id).toBe(alternative.id);
+    } finally {
+      endpointResolver.mockRestore();
+    }
+  });
+
   test("Discovery releases a transferred Provider session ref exactly once when rectifier retry setup fails", async () => {
     const provider = createProvider({ id: 1, name: "initial", limitConcurrentSessions: 1 });
     const session = createSession();
