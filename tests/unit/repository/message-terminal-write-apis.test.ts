@@ -12,6 +12,13 @@ function installSyncBoundaries(insertedRows: readonly Record<string, unknown>[] 
   const updateSet = vi.fn((_values: Record<string, unknown>) => ({ where: updateWhere }));
   const update = vi.fn((_table: unknown) => ({ set: updateSet }));
   const writerUpdate = vi.fn((_table: unknown) => ({ set: updateSet }));
+  const outboxReceipt = { field: "706", payload: "routing-trace-706" };
+  const stageRoutingTraceOutbox = vi.fn(async () => outboxReceipt);
+  const acknowledgeRoutingTraceOutbox = vi.fn(async () => true);
+  const persistRoutingTraceMonotonically = vi.fn(async (_id: number, routingTrace: unknown) => {
+    await updateSet({ routingTrace, updatedAt: new Date() }).where(updateWhere);
+    return true;
+  });
 
   vi.doMock("@/drizzle/db", () => ({
     db: { insert, update, select: vi.fn(), execute: vi.fn() },
@@ -21,8 +28,21 @@ function installSyncBoundaries(insertedRows: readonly Record<string, unknown>[] 
     getEnvConfig: vi.fn(() => ({ MESSAGE_REQUEST_WRITE_MODE: "sync" as const })),
     isDevelopment: vi.fn(() => false),
   }));
+  vi.doMock("@/repository/routing-trace-outbox", () => ({
+    acknowledgeRoutingTraceOutbox,
+    persistRoutingTraceMonotonically,
+    stageRoutingTraceOutbox,
+  }));
 
-  return { insertValues, update, updateSet, updateWhere };
+  return {
+    acknowledgeRoutingTraceOutbox,
+    insertValues,
+    persistRoutingTraceMonotonically,
+    stageRoutingTraceOutbox,
+    update,
+    updateSet,
+    updateWhere,
+  };
 }
 
 function installAsyncRoutingTraceBoundaries() {
@@ -31,6 +51,10 @@ function installAsyncRoutingTraceBoundaries() {
   const enqueueMessageRequestUpdate = vi.fn();
   const enqueueMessageRequestPostTerminalRoutingTraceDurably = vi.fn(async () => true);
   const loggerWarn = vi.fn();
+  const outboxReceipt = { field: "707", payload: "routing-trace-707" };
+  const stageRoutingTraceOutbox = vi.fn(async () => outboxReceipt);
+  const acknowledgeRoutingTraceOutbox = vi.fn(async () => true);
+  const persistRoutingTraceMonotonically = vi.fn(async () => true);
 
   vi.doMock("@/drizzle/db", () => ({
     db: {
@@ -60,13 +84,22 @@ function installAsyncRoutingTraceBoundaries() {
       warn: loggerWarn,
     },
   }));
+  vi.doMock("@/repository/routing-trace-outbox", () => ({
+    acknowledgeRoutingTraceOutbox,
+    persistRoutingTraceMonotonically,
+    stageRoutingTraceOutbox,
+  }));
 
   return {
+    acknowledgeRoutingTraceOutbox,
     controlUpdate,
     enqueueMessageRequestPostTerminalRoutingTraceDurably,
     enqueueMessageRequestUpdate,
     getMessageWriterDb,
     loggerWarn,
+    outboxReceipt,
+    persistRoutingTraceMonotonically,
+    stageRoutingTraceOutbox,
   };
 }
 
@@ -88,6 +121,7 @@ describe("message terminal write APIs", () => {
     vi.doUnmock("@/lib/config/env.schema");
     vi.doUnmock("@/lib/logger");
     vi.doUnmock("@/repository/message-write-buffer");
+    vi.doUnmock("@/repository/routing-trace-outbox");
   });
 
   it("creates a request through the repository and returns its public row", async () => {
@@ -164,14 +198,17 @@ describe("message terminal write APIs", () => {
 
   it("writes duration through the synchronous database boundary", async () => {
     vi.resetModules();
-    const { updateSet, updateWhere } = installSyncBoundaries();
+    const boundaries = installSyncBoundaries();
     const { updateMessageRequestDuration } = await import("@/repository/message");
 
     const result = await updateMessageRequestDuration(702, 345);
 
     expect(result).toBeUndefined();
-    expect(updateSet).toHaveBeenCalledWith({ durationMs: 345, updatedAt: expect.any(Date) });
-    expect(updateWhere).toHaveBeenCalledTimes(1);
+    expect(boundaries.updateSet).toHaveBeenCalledWith({
+      durationMs: 345,
+      updatedAt: expect.any(Date),
+    });
+    expect(boundaries.updateWhere).toHaveBeenCalledTimes(1);
   });
 
   it("formats and writes the request cost", async () => {
@@ -230,7 +267,7 @@ describe("message terminal write APIs", () => {
 
   it("patches a finalized routing trace without touching terminal or billing fields", async () => {
     vi.resetModules();
-    const { updateSet, updateWhere } = installSyncBoundaries();
+    const boundaries = installSyncBoundaries();
     const { updateMessageRequestRoutingTrace } = await import("@/repository/message");
     const routingTrace = {
       version: 1 as const,
@@ -245,13 +282,16 @@ describe("message terminal write APIs", () => {
 
     await updateMessageRequestRoutingTrace(706, routingTrace);
 
-    expect(updateSet).toHaveBeenCalledWith({
+    expect(boundaries.updateSet).toHaveBeenCalledWith({
       routingTrace,
       updatedAt: expect.any(Date),
     });
-    expect(updateSet.mock.calls[0]?.[0]).not.toHaveProperty("statusCode");
-    expect(updateSet.mock.calls[0]?.[0]).not.toHaveProperty("costUsd");
-    expect(updateWhere).toHaveBeenCalledTimes(1);
+    expect(boundaries.updateSet.mock.calls[0]?.[0]).not.toHaveProperty("statusCode");
+    expect(boundaries.updateSet.mock.calls[0]?.[0]).not.toHaveProperty("costUsd");
+    expect(boundaries.updateWhere).toHaveBeenCalledTimes(1);
+    expect(boundaries.stageRoutingTraceOutbox).toHaveBeenCalledWith(706, routingTrace);
+    expect(boundaries.persistRoutingTraceMonotonically).toHaveBeenCalledWith(706, routingTrace);
+    expect(boundaries.acknowledgeRoutingTraceOutbox).toHaveBeenCalledOnce();
   });
 
   it("patches an async finalized routing trace through acknowledged post-terminal metadata", async () => {
@@ -283,8 +323,14 @@ describe("message terminal write APIs", () => {
     expect(boundaries.getMessageWriterDb).not.toHaveBeenCalled();
     expect(boundaries.enqueueMessageRequestPostTerminalRoutingTraceDurably).toHaveBeenCalledWith(
       707,
-      routingTrace
+      routingTrace,
+      { timeoutMs: 3_000 }
     );
+    expect(boundaries.stageRoutingTraceOutbox).toHaveBeenCalledWith(707, routingTrace);
+    expect(boundaries.stageRoutingTraceOutbox.mock.invocationCallOrder[0]).toBeLessThan(
+      boundaries.enqueueMessageRequestPostTerminalRoutingTraceDurably.mock.invocationCallOrder[0]!
+    );
+    expect(boundaries.acknowledgeRoutingTraceOutbox).toHaveBeenCalledWith(boundaries.outboxReceipt);
     expect(boundaries.loggerWarn).not.toHaveBeenCalled();
   });
 
@@ -313,9 +359,104 @@ describe("message terminal write APIs", () => {
       "[MessageRequest] Failed to patch finalized routing trace",
       {
         requestId: 709,
+        recoverable: true,
         error: "durable writer unavailable",
       }
     );
+    expect(boundaries.acknowledgeRoutingTraceOutbox).not.toHaveBeenCalled();
+  });
+
+  it("reports an unrecoverable boundary when both outbox staging and the writer fail", async () => {
+    vi.resetModules();
+    const boundaries = installAsyncRoutingTraceBoundaries();
+    boundaries.stageRoutingTraceOutbox.mockResolvedValue(null);
+    boundaries.enqueueMessageRequestPostTerminalRoutingTraceDurably.mockRejectedValue(
+      new Error("writer unavailable")
+    );
+    boundaries.persistRoutingTraceMonotonically.mockRejectedValue(
+      new Error("direct writer unavailable")
+    );
+    const { updateMessageRequestRoutingTrace } = await import("@/repository/message");
+
+    await updateMessageRequestRoutingTrace(712, {
+      version: 1,
+      mode: "discovery",
+      startedAt: 1_000,
+      updatedAt: 1_100,
+      discoveryEnabled: true,
+      eligible: true,
+      events: [],
+    });
+
+    expect(boundaries.loggerWarn).toHaveBeenCalledWith(
+      "[MessageRequest] Failed to patch finalized routing trace",
+      {
+        requestId: 712,
+        recoverable: false,
+        error: "direct writer unavailable",
+      }
+    );
+    expect(boundaries.acknowledgeRoutingTraceOutbox).not.toHaveBeenCalled();
+  });
+
+  it("uses a monotonic direct fallback when coalescing occurs without an outbox receipt", async () => {
+    vi.resetModules();
+    const boundaries = installAsyncRoutingTraceBoundaries();
+    boundaries.stageRoutingTraceOutbox.mockResolvedValue(null);
+    boundaries.enqueueMessageRequestPostTerminalRoutingTraceDurably.mockResolvedValue(false);
+    const { updateMessageRequestRoutingTrace } = await import("@/repository/message");
+    const routingTrace = {
+      version: 1 as const,
+      mode: "discovery" as const,
+      startedAt: 1_000,
+      updatedAt: 1_102,
+      discoveryEnabled: true,
+      eligible: true,
+      events: [],
+    };
+
+    await updateMessageRequestRoutingTrace(713, routingTrace);
+
+    expect(boundaries.persistRoutingTraceMonotonically).toHaveBeenCalledWith(713, routingTrace);
+    expect(boundaries.loggerWarn).not.toHaveBeenCalled();
+    expect(boundaries.acknowledgeRoutingTraceOutbox).not.toHaveBeenCalled();
+  });
+
+  it("keeps a newer outbox receipt when the writer only committed an older coalesced trace", async () => {
+    vi.resetModules();
+    const boundaries = installAsyncRoutingTraceBoundaries();
+    const oldReceipt = { field: "711", payload: "old" };
+    const newReceipt = { field: "711", payload: "new" };
+    boundaries.stageRoutingTraceOutbox
+      .mockResolvedValueOnce(oldReceipt)
+      .mockResolvedValueOnce(newReceipt);
+    boundaries.enqueueMessageRequestPostTerminalRoutingTraceDurably
+      .mockResolvedValueOnce(true)
+      .mockResolvedValueOnce(false);
+    const { updateMessageRequestRoutingTrace } = await import("@/repository/message");
+
+    await updateMessageRequestRoutingTrace(711, {
+      version: 1,
+      mode: "discovery",
+      startedAt: 1_000,
+      updatedAt: 1_100,
+      discoveryEnabled: true,
+      eligible: true,
+      events: [],
+    });
+    await updateMessageRequestRoutingTrace(711, {
+      version: 1,
+      mode: "discovery",
+      startedAt: 1_000,
+      updatedAt: 1_101,
+      discoveryEnabled: true,
+      eligible: true,
+      events: [],
+    });
+
+    expect(boundaries.acknowledgeRoutingTraceOutbox).toHaveBeenCalledOnce();
+    expect(boundaries.acknowledgeRoutingTraceOutbox).toHaveBeenCalledWith(oldReceipt);
+    expect(boundaries.acknowledgeRoutingTraceOutbox).not.toHaveBeenCalledWith(newReceipt);
   });
 
   it("logs and skips an invalid routing trace without persisting raw trace data", async () => {
@@ -328,6 +469,7 @@ describe("message terminal write APIs", () => {
     >[1]);
 
     expect(boundaries.enqueueMessageRequestPostTerminalRoutingTraceDurably).not.toHaveBeenCalled();
+    expect(boundaries.stageRoutingTraceOutbox).not.toHaveBeenCalled();
     expect(boundaries.controlUpdate).not.toHaveBeenCalled();
     expect(boundaries.loggerWarn).toHaveBeenCalledWith(
       "[MessageRequest] Skipped patching invalid routing trace",

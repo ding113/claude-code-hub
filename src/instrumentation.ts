@@ -233,6 +233,21 @@ async function startCloudPriceSyncScheduler(): Promise<void> {
   }
 }
 
+async function startRoutingTraceOutboxRecovery(): Promise<void> {
+  if (!process.env.REDIS_URL) return;
+  try {
+    const { startRoutingTraceOutboxReplayScheduler } = await import(
+      "@/repository/routing-trace-outbox"
+    );
+    await startRoutingTraceOutboxReplayScheduler();
+    logger.info("[Instrumentation] Routing trace outbox recovery started");
+  } catch (error) {
+    logger.warn("[Instrumentation] Routing trace outbox recovery failed to start", {
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
 /**
  * 多实例：订阅 API Key 变更广播，触发本机 Vacuum Filter 失效并重建。
  *
@@ -357,6 +372,8 @@ export async function register() {
           value: process.env.AUTO_MIGRATE,
         });
       }
+
+      await startRoutingTraceOutboxRecovery();
 
       // Ledger backfill: fire-and-forget after migration (non-blocking, idempotent)
       Promise.all([import("@/lib/async-task-manager"), import("@/lib/ledger-backfill")])
@@ -528,6 +545,7 @@ export async function register() {
       const isConnected = await checkDatabaseConnection();
       if (isConnected) {
         await runMigrations();
+        await startRoutingTraceOutboxRecovery();
 
         // Ledger backfill: fire-and-forget after migration (non-blocking, idempotent)
         Promise.all([import("@/lib/async-task-manager"), import("@/lib/ledger-backfill")])

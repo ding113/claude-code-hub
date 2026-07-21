@@ -814,6 +814,11 @@ export class ProxySession {
     this.scheduleLiveObservabilityFlush();
   }
 
+  private advanceRoutingTraceRevision(observedAt: number): void {
+    if (!this.routingTrace) return;
+    this.routingTrace.updatedAt = Math.max(observedAt, this.routingTrace.updatedAt + 1);
+  }
+
   initializeRoutingTrace(options: {
     mode: RoutingTraceMode;
     discoveryEnabled: boolean;
@@ -882,7 +887,7 @@ export class ProxySession {
       }
     }
     if (!changed) return;
-    this.routingTrace.updatedAt = at;
+    this.advanceRoutingTraceRevision(at);
     this.persistLiveRoutingTrace();
   }
 
@@ -933,7 +938,7 @@ export class ProxySession {
       terminalEvent.elapsedMs = Math.max(0, now - this.routingTrace.startedAt);
       terminalEvent.outcome = resolvedOutcome;
       terminalEvent.statusCode = statusCode;
-      this.routingTrace.updatedAt = now;
+      this.advanceRoutingTraceRevision(now);
       this.persistLiveRoutingTrace();
     }
     return this.getRoutingTrace();

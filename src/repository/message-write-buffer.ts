@@ -9,6 +9,7 @@ import { logger } from "@/lib/logger";
 import type { StoredCostBreakdown } from "@/types/cost-breakdown";
 import type { CreateMessageRequestData } from "@/types/message";
 import { normalizeRoutingTrace, type RoutingTraceV1 } from "@/types/routing-trace";
+import { buildMonotonicRoutingTraceAssignments } from "./routing-trace-persistence";
 
 export type MessageRequestUpdatePatch = {
   durationMs?: number;
@@ -77,6 +78,12 @@ type PendingMessageRequestUpdate = {
 
 type MessageRequestUpdateBatchRecord = MessageRequestUpdateRecord & {
   durableAcknowledgement?: DurableAcknowledgement;
+};
+
+type PostTerminalMetadataTask = {
+  promise: Promise<boolean>;
+  routingTraceUpdatedAt: number;
+  routingTracePayload: string;
 };
 
 type WriterConfig = {
@@ -307,13 +314,18 @@ function takeBatch(
 
 export function buildBatchUpdateSql(
   updates: MessageRequestUpdateRecord[],
-  options: { returnUpdatedIds?: boolean; fencedDurableIds?: readonly number[] } = {}
+  options: {
+    returnUpdatedIds?: boolean;
+    fencedDurableIds?: readonly number[];
+    monotonicRoutingTraceIds?: readonly number[];
+  } = {}
 ): SQL | null {
   if (updates.length === 0) {
     return null;
   }
 
   const ids = updates.map((u) => u.id);
+  const monotonicRoutingTraceIds = new Set(options.monotonicRoutingTraceIds ?? []);
 
   const setClauses: SQL[] = [];
   for (const [key, columnName] of Object.entries(COLUMN_MAP) as Array<
@@ -336,8 +348,24 @@ export function buildBatchUpdateSql(
           cases.push(sql`WHEN ${update.id} THEN NULL`);
           continue;
         }
-        const json = JSON.stringify(key === "routingTrace" ? normalizeRoutingTrace(value) : value);
-        cases.push(sql`WHEN ${update.id} THEN ${json}::jsonb`);
+        if (key === "routingTrace") {
+          const normalizedTrace = normalizeRoutingTrace(value);
+          if (!normalizedTrace) {
+            cases.push(sql`WHEN ${update.id} THEN NULL`);
+            continue;
+          }
+          if (!monotonicRoutingTraceIds.has(update.id)) {
+            cases.push(sql`WHEN ${update.id} THEN ${JSON.stringify(normalizedTrace)}::jsonb`);
+            continue;
+          }
+          const assignments = buildMonotonicRoutingTraceAssignments(normalizedTrace, {
+            routingTrace: sql`${sql.identifier("routing_trace")}`,
+            updatedAt: sql`${sql.identifier("updated_at")}`,
+          });
+          cases.push(sql`WHEN ${update.id} THEN ${assignments.routingTrace}`);
+          continue;
+        }
+        cases.push(sql`WHEN ${update.id} THEN ${JSON.stringify(value)}::jsonb`);
         continue;
       }
 
@@ -363,8 +391,24 @@ export function buildBatchUpdateSql(
     return null;
   }
 
-  // 所有更新统一刷新 updated_at
-  setClauses.push(sql`${sql.identifier("updated_at")} = NOW()`);
+  if (monotonicRoutingTraceIds.size > 0) {
+    const cases: SQL[] = [];
+    for (const update of updates) {
+      if (!monotonicRoutingTraceIds.has(update.id) || !update.patch.routingTrace) continue;
+      const assignments = buildMonotonicRoutingTraceAssignments(update.patch.routingTrace, {
+        routingTrace: sql`${sql.identifier("routing_trace")}`,
+        updatedAt: sql`${sql.identifier("updated_at")}`,
+      });
+      cases.push(sql`WHEN ${update.id} THEN ${assignments.updatedAt}`);
+    }
+    setClauses.push(
+      cases.length > 0
+        ? sql`${sql.identifier("updated_at")} = CASE id ${sql.join(cases, sql` `)} ELSE NOW() END`
+        : sql`${sql.identifier("updated_at")} = NOW()`
+    );
+  } else {
+    setClauses.push(sql`${sql.identifier("updated_at")} = NOW()`);
+  }
 
   const idList = sql.join(
     ids.map((id) => sql`${id}`),
@@ -429,7 +473,7 @@ class MessageRequestWriteBuffer {
   private readonly config: WriterConfig;
   private readonly pending = new Map<number, PendingMessageRequestUpdate>();
   private readonly deferredOrdinary = new Map<number, MessageRequestUpdatePatch>();
-  private readonly postTerminalMetadataTasks = new Map<number, Promise<boolean>>();
+  private readonly postTerminalMetadataTasks = new Map<number, PostTerminalMetadataTask>();
   private readonly evictableIndex = new EvictablePendingIndex();
   private readonly durableAcknowledgements = new Map<number, DurableAcknowledgement>();
   private flushTimer: NodeJS.Timeout | null = null;
@@ -521,11 +565,22 @@ class MessageRequestWriteBuffer {
         new Error("post-terminal metadata updates may only contain routingTrace")
       );
     }
+    const normalizedTrace = normalizeRoutingTrace(patch.routingTrace);
+    if (!normalizedTrace) {
+      return Promise.reject(new Error("post-terminal routing trace is invalid"));
+    }
+    const routingTracePayload = JSON.stringify(normalizedTrace);
     const existingTask = this.postTerminalMetadataTasks.get(id);
     if (existingTask) {
-      // Binding finalization is once-guarded upstream. Coalesce accidental
-      // duplicate callers so they cannot allocate unbounded waiters/timers.
-      return existingTask;
+      // Exact duplicates may share the same ACK. A different revision remains
+      // in the Redis outbox and must not be acknowledged as if this SQL wrote it.
+      if (
+        existingTask.routingTraceUpdatedAt === normalizedTrace.updatedAt &&
+        existingTask.routingTracePayload === routingTracePayload
+      ) {
+        return existingTask.promise;
+      }
+      return existingTask.promise.then(() => false);
     }
     if (
       this.stopping &&
@@ -537,14 +592,18 @@ class MessageRequestWriteBuffer {
       return Promise.reject(new Error("durable message_request queue is full"));
     }
 
-    let task: Promise<boolean>;
-    task = this.persistPostTerminalMetadataDurably(id, patch, options).finally(() => {
+    const task: PostTerminalMetadataTask = {
+      promise: Promise.resolve(false),
+      routingTraceUpdatedAt: normalizedTrace.updatedAt,
+      routingTracePayload,
+    };
+    task.promise = this.persistPostTerminalMetadataDurably(id, patch, options).finally(() => {
       if (this.postTerminalMetadataTasks.get(id) === task) {
         this.postTerminalMetadataTasks.delete(id);
       }
     });
     this.postTerminalMetadataTasks.set(id, task);
-    return task;
+    return task.promise;
   }
 
   private async persistPostTerminalMetadataDurably(
@@ -916,9 +975,13 @@ class MessageRequestWriteBuffer {
           const fencedDurableIds = batch.flatMap((item) =>
             item.durableAcknowledgement?.writeScope === "terminal" ? [item.id] : []
           );
+          const monotonicRoutingTraceIds = batch.flatMap((item) =>
+            item.durableAcknowledgement?.writeScope === "post-terminal-metadata" ? [item.id] : []
+          );
           const query = buildBatchUpdateSql(batch, {
             returnUpdatedIds: requiresUpdatedIds,
             fencedDurableIds,
+            monotonicRoutingTraceIds,
           });
           if (!query) {
             for (const item of batch) {
@@ -1040,7 +1103,7 @@ class MessageRequestWriteBuffer {
     ) {
       await Promise.allSettled([
         ...this.commitCallbacksInFlight,
-        ...this.postTerminalMetadataTasks.values(),
+        ...Array.from(this.postTerminalMetadataTasks.values(), (task) => task.promise),
       ]);
     }
 
@@ -1061,7 +1124,7 @@ class MessageRequestWriteBuffer {
     while (this.commitCallbacksInFlight.size > 0 || this.postTerminalMetadataTasks.size > 0) {
       await Promise.allSettled([
         ...this.commitCallbacksInFlight,
-        ...this.postTerminalMetadataTasks.values(),
+        ...Array.from(this.postTerminalMetadataTasks.values(), (task) => task.promise),
       ]);
     }
     this.clearOverflowLogTimer();

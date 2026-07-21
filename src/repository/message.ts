@@ -25,6 +25,13 @@ import {
   enqueueMessageRequestUpdateDurably,
   type MessageRequestUpdatePatch,
 } from "./message-write-buffer";
+import {
+  acknowledgeRoutingTraceOutbox,
+  persistRoutingTraceMonotonically,
+  stageRoutingTraceOutbox,
+} from "./routing-trace-outbox";
+
+const POST_TERMINAL_ROUTING_TRACE_ACK_TIMEOUT_MS = 3_000;
 
 type PublicStatusRequestSeed = {
   createdAt: Date;
@@ -616,9 +623,10 @@ export async function updateMessageRequestDetails(
 }
 
 /**
- * Best-effort routing trace patch for work that completes after the request's
- * terminal row has been committed (for example, Sticky binding finalization).
- * This intentionally bypasses terminal ownership and public-status rollups.
+ * Routing trace patch for work that completes after the request's terminal row
+ * has committed. A Redis outbox is staged first so a shutdown-time database
+ * outage can be replayed after restart without touching terminal ownership,
+ * billing, or public-status rollups.
  */
 export async function updateMessageRequestRoutingTrace(
   id: number,
@@ -632,28 +640,58 @@ export async function updateMessageRequestRoutingTrace(
     return;
   }
 
+  const outboxReceipt = await stageRoutingTraceOutbox(id, normalized);
+  let persisted = false;
+
   if (getEnvConfig().MESSAGE_REQUEST_WRITE_MODE === "async") {
+    let persistenceError: unknown = null;
     try {
-      await enqueueMessageRequestPostTerminalRoutingTraceDurably(id, normalized);
+      persisted = await enqueueMessageRequestPostTerminalRoutingTraceDurably(id, normalized, {
+        timeoutMs: POST_TERMINAL_ROUTING_TRACE_ACK_TIMEOUT_MS,
+      });
     } catch (error) {
+      persistenceError = error;
+    }
+
+    // A different revision may be coalesced behind an older in-flight writer
+    // task. Normally its outbox receipt is the recovery path; if Redis staging
+    // was unavailable, make one monotonic direct attempt instead of dropping it.
+    if (!persisted && !outboxReceipt) {
+      try {
+        await persistRoutingTraceMonotonically(id, normalized);
+        persisted = true;
+        persistenceError = null;
+      } catch (error) {
+        persistenceError = error;
+      }
+    }
+
+    if (!persisted && persistenceError) {
       logger.warn("[MessageRequest] Failed to patch finalized routing trace", {
         requestId: id,
-        error: error instanceof Error ? error.message : String(error),
+        recoverable: outboxReceipt !== null,
+        error:
+          persistenceError instanceof Error ? persistenceError.message : String(persistenceError),
       });
+    }
+    if (persisted && outboxReceipt) {
+      await acknowledgeRoutingTraceOutbox(outboxReceipt);
     }
     return;
   }
 
   try {
-    await db
-      .update(messageRequest)
-      .set({ routingTrace: normalized, updatedAt: new Date() })
-      .where(and(eq(messageRequest.id, id), isNull(messageRequest.deletedAt)));
+    await persistRoutingTraceMonotonically(id, normalized);
+    persisted = true;
   } catch (error) {
     logger.warn("[MessageRequest] Failed to patch finalized routing trace", {
       requestId: id,
+      recoverable: outboxReceipt !== null,
       error: error instanceof Error ? error.message : String(error),
     });
+  }
+  if (persisted && outboxReceipt) {
+    await acknowledgeRoutingTraceOutbox(outboxReceipt);
   }
 }
 

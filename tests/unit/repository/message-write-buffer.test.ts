@@ -191,6 +191,27 @@ describe("message_request 异步批量写入", () => {
     expect(defaultExecuteMock).not.toHaveBeenCalled();
   });
 
+  it("非法 routing trace 应写入 SQL NULL 而不是 JSON null", async () => {
+    process.env.MESSAGE_REQUEST_WRITE_MODE = "async";
+
+    const {
+      enqueueMessageRequestUpdate,
+      flushMessageRequestWriteBuffer,
+      stopMessageRequestWriteBuffer,
+    } = await import("@/repository/message-write-buffer");
+
+    enqueueMessageRequestUpdate(44, {
+      routingTrace: { version: 999, events: [] } as never,
+    });
+    await flushMessageRequestWriteBuffer();
+    await stopMessageRequestWriteBuffer();
+
+    const built = toSqlText(executeMock.mock.calls[0]?.[0]);
+    expect(built.sql).toContain('"routing_trace" = CASE id');
+    expect(built.sql).toContain("THEN NULL");
+    expect(built.params).not.toContain("null");
+  });
+
   it("普通 enqueue 立即返回，但 durable enqueue 应等待批量 SQL 成功", async () => {
     process.env.MESSAGE_REQUEST_WRITE_MODE = "async";
 
@@ -278,6 +299,11 @@ describe("message_request 异步批量写入", () => {
     const built = toSqlText(executeMock.mock.calls[0]?.[0]);
     expect(built.sql).toContain("RETURNING id");
     expect(built.sql).toContain("routing_trace");
+    expect(built.sql).toContain("jsonb_typeof");
+    expect(built.sql).toContain("'updatedAt'");
+    expect(built.sql).toContain("'-Infinity'::numeric");
+    expect(built.sql).toContain('"updated_at" = CASE id');
+    expect(built.sql).toContain('ELSE "updated_at" END');
     expect(built.sql).not.toContain("status_code IS NULL");
     expect(built.sql).not.toContain("duration_ms");
     expect(
@@ -459,6 +485,37 @@ describe("message_request 异步批量写入", () => {
     await flushMessageRequestWriteBuffer();
     await expect(Promise.all(admitted)).resolves.toHaveLength(100);
     expect(executeMock).toHaveBeenCalledTimes(1);
+    await stopMessageRequestWriteBuffer();
+  });
+
+  it("does not acknowledge a newer revision through an older in-flight metadata task", async () => {
+    process.env.MESSAGE_REQUEST_WRITE_MODE = "async";
+    const releaseOld = createDeferred<unknown[]>();
+    executeMock.mockImplementationOnce(async () => releaseOld.promise);
+
+    const {
+      enqueueMessageRequestPostTerminalRoutingTraceDurably,
+      flushMessageRequestWriteBuffer,
+      stopMessageRequestWriteBuffer,
+    } = await import("@/repository/message-write-buffer");
+    const oldTrace = createRoutingTrace(7_100);
+    const newTrace = createRoutingTrace(7_101);
+    const oldWrite = enqueueMessageRequestPostTerminalRoutingTraceDurably(52_107, oldTrace);
+    const flush = flushMessageRequestWriteBuffer();
+    const newerWrite = enqueueMessageRequestPostTerminalRoutingTraceDurably(52_107, newTrace);
+
+    releaseOld.resolve([{ id: 52_107 }]);
+    await flush;
+    await expect(oldWrite).resolves.toBe(true);
+    await expect(newerWrite).resolves.toBe(false);
+    expect(executeMock).toHaveBeenCalledOnce();
+    const built = toSqlText(executeMock.mock.calls[0]?.[0]);
+    expect(
+      built.params.some((value) => typeof value === "string" && value.includes('"updatedAt":7100'))
+    ).toBe(true);
+    expect(
+      built.params.some((value) => typeof value === "string" && value.includes('"updatedAt":7101'))
+    ).toBe(false);
     await stopMessageRequestWriteBuffer();
   });
 

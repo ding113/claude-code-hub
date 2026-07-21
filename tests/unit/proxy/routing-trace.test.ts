@@ -161,6 +161,35 @@ describe("ProxySession routing trace recorder", () => {
     });
   });
 
+  it("advances the persistence revision when terminal events share one wall-clock millisecond", () => {
+    const nowSpy = vi.spyOn(Date, "now").mockReturnValue(1_000);
+    const session = makeTraceSession();
+    session.initializeRoutingTrace({
+      mode: "discovery",
+      discoveryEnabled: true,
+      eligible: true,
+      startedAt: 1_000,
+    });
+    const initializedRevision = session.getRoutingTrace()?.updatedAt ?? 0;
+
+    session.finalizeRoutingTrace(200, "success");
+    const terminalRevision = session.getRoutingTrace()?.updatedAt ?? 0;
+    session.appendRoutingTraceEvent({
+      type: "binding_finalized",
+      bindingAction: "create",
+      outcome: "updated",
+    });
+    const bindingRevision = session.getRoutingTrace()?.updatedAt ?? 0;
+
+    expect(terminalRevision).toBeGreaterThan(initializedRevision);
+    expect(bindingRevision).toBeGreaterThan(terminalRevision);
+    expect(session.getRoutingTrace()?.events.at(-1)).toMatchObject({
+      type: "binding_finalized",
+      at: 1_000,
+    });
+    nowSpy.mockRestore();
+  });
+
   it("caps the trace at 512 events and persists the truncated snapshot independently", async () => {
     const session = makeTraceSession();
     session.initializeRoutingTrace({
