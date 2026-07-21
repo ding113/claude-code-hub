@@ -280,7 +280,11 @@ function createSession(opts?: { sessionId?: string | null }): ProxySession {
   return session;
 }
 
-function setDeferredMeta(session: ProxySession, endpointId: number | null = 42) {
+function setDeferredMeta(
+  session: ProxySession,
+  endpointId: number | null = 42,
+  extra: Partial<Parameters<typeof setDeferredStreamingFinalization>[1]> = {}
+) {
   setDeferredStreamingFinalization(session, {
     providerId: 1,
     providerName: "test-provider",
@@ -292,6 +296,7 @@ function setDeferredMeta(session: ProxySession, endpointId: number | null = 42) 
     endpointId,
     endpointUrl: "https://api.test.com",
     upstreamStatusCode: 200,
+    ...extra,
   });
 }
 
@@ -375,7 +380,6 @@ function createMisleadingCompletionTextResponse(): Response {
     headers: { "content-type": "text/event-stream" },
   });
 }
-
 function createControllableSuccessStreamResponse(): {
   response: Response;
   complete: () => void;
@@ -1418,5 +1422,184 @@ describe("Endpoint circuit breaker isolation", () => {
     expect(SessionManager.compareAndSetSessionProvider).toHaveBeenCalledOnce();
     expect(SessionManager.compareAndSetSessionProvider).toHaveBeenCalledWith(snapshot, 1);
     expect(RateLimitService.releaseProviderSession).toHaveBeenCalledWith(1, "fake-session");
+  });
+
+  it("keeps the captured legacy Hedge winner binding alive throughout a long stream", async () => {
+    vi.useFakeTimers();
+    try {
+      const session = createSession();
+      const snapshot = {
+        sessionId: "fake-session",
+        keyId: 456,
+        providerId: 1,
+        generation: "hedge-long-stream-generation",
+      } as const;
+      setDeferredMeta(session, 42, {
+        isHedgeWinner: true,
+        hedgeBindingAuthorityPromise: Promise.resolve({
+          snapshot,
+          legacyClearAllowed: false,
+        }),
+      });
+      vi.mocked(SessionManager.getVersionedSessionBindingRefreshIntervalMs).mockReturnValue(1_000);
+      const controlled = createControllableSuccessStreamResponse();
+
+      const clientResponse = await ProxyResponseHandler.dispatch(session, controlled.response);
+      const bodyPromise = clientResponse.text();
+      await vi.advanceTimersByTimeAsync(3_000);
+
+      // Immediate ownership validation plus one heartbeat per interval.
+      expect(SessionManager.touchVersionedSessionBinding).toHaveBeenCalledTimes(4);
+      expect(SessionManager.touchVersionedSessionBinding).toHaveBeenLastCalledWith(snapshot);
+
+      controlled.complete();
+      await bodyPromise;
+      await drainAsyncTasks();
+
+      // A final touch gives the next turn a complete TTL from stream completion.
+      expect(SessionManager.touchVersionedSessionBinding).toHaveBeenCalledTimes(5);
+      expect(SessionManager.touchVersionedSessionBinding).toHaveBeenLastCalledWith(snapshot);
+      expect(SessionManager.updateSessionBindingSmart).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(3_000);
+      expect(SessionManager.touchVersionedSessionBinding).toHaveBeenCalledTimes(5);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("clears a failed Hedge stream only through its captured generation", async () => {
+    vi.useFakeTimers();
+    try {
+      const session = createSession();
+      const snapshot = {
+        sessionId: "fake-session",
+        keyId: 456,
+        providerId: 1,
+        generation: "failed-hedge-generation",
+      } as const;
+      setDeferredMeta(session, 42, {
+        isHedgeWinner: true,
+        hedgeBindingAuthorityPromise: Promise.resolve({
+          snapshot,
+          legacyClearAllowed: false,
+        }),
+      });
+      vi.mocked(SessionManager.getVersionedSessionBindingRefreshIntervalMs).mockReturnValue(1_000);
+      vi.mocked(SessionManager.clearVersionedSessionProvider).mockResolvedValueOnce({
+        status: "conflict",
+        reason: "generation_mismatch",
+        legacyFallbackAllowed: false,
+      });
+
+      const clientResponse = await ProxyResponseHandler.dispatch(
+        session,
+        createFake200StreamResponse()
+      );
+      await clientResponse.text();
+      await drainAsyncTasks();
+
+      expect(SessionManager.clearVersionedSessionProvider).toHaveBeenCalledWith(snapshot, 1);
+      expect(SessionManager.clearSessionProvider).not.toHaveBeenCalled();
+      const touchesAfterFailure = vi.mocked(SessionManager.touchVersionedSessionBinding).mock.calls
+        .length;
+      await vi.advanceTimersByTimeAsync(5_000);
+      expect(SessionManager.touchVersionedSessionBinding).toHaveBeenCalledTimes(
+        touchesAfterFailure
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not let a failed stale Hedge stream clear a newer same-Provider generation", async () => {
+    const session = createSession();
+    setDeferredMeta(session, 42, {
+      isHedgeWinner: true,
+      hedgeBindingAuthorityPromise: Promise.resolve({
+        snapshot: null,
+        legacyClearAllowed: false,
+      }),
+    });
+
+    const clientResponse = await ProxyResponseHandler.dispatch(
+      session,
+      createFake200StreamResponse()
+    );
+    await clientResponse.text();
+    await drainAsyncTasks();
+
+    expect(SessionManager.clearVersionedSessionProvider).not.toHaveBeenCalled();
+    expect(SessionManager.clearSessionProvider).not.toHaveBeenCalled();
+    expect(SessionManager.touchVersionedSessionBinding).not.toHaveBeenCalled();
+  });
+
+  it("uses generic cleanup only after the Hedge winner confirms a legacy binding write", async () => {
+    const session = createSession();
+    setDeferredMeta(session, 42, {
+      isHedgeWinner: true,
+      hedgeBindingAuthorityPromise: Promise.resolve({
+        snapshot: null,
+        legacyClearAllowed: true,
+      }),
+    });
+
+    const clientResponse = await ProxyResponseHandler.dispatch(
+      session,
+      createFake200StreamResponse()
+    );
+    await clientResponse.text();
+    await drainAsyncTasks();
+
+    expect(SessionManager.clearVersionedSessionProvider).not.toHaveBeenCalled();
+    expect(SessionManager.clearSessionProvider).toHaveBeenCalledWith("fake-session", 1, 456);
+    expect(SessionManager.touchVersionedSessionBinding).not.toHaveBeenCalled();
+  });
+
+  it("stops Hedge heartbeats after a generation conflict and never revives the binding", async () => {
+    vi.useFakeTimers();
+    try {
+      const session = createSession();
+      const snapshot = {
+        sessionId: "fake-session",
+        keyId: 456,
+        providerId: 1,
+        generation: "generation-before-termination",
+      } as const;
+      setDeferredMeta(session, 42, {
+        isHedgeWinner: true,
+        hedgeBindingAuthorityPromise: Promise.resolve({
+          snapshot,
+          legacyClearAllowed: false,
+        }),
+      });
+      vi.mocked(SessionManager.getVersionedSessionBindingRefreshIntervalMs).mockReturnValue(1_000);
+      vi.mocked(SessionManager.touchVersionedSessionBinding)
+        .mockResolvedValueOnce({
+          status: "ok",
+          source: "touched",
+          snapshot,
+          legacyFallbackAllowed: false,
+        })
+        .mockResolvedValueOnce({
+          status: "conflict",
+          reason: "generation_mismatch",
+          legacyFallbackAllowed: false,
+        });
+      const controlled = createControllableSuccessStreamResponse();
+
+      const clientResponse = await ProxyResponseHandler.dispatch(session, controlled.response);
+      const bodyPromise = clientResponse.text();
+      await vi.advanceTimersByTimeAsync(5_000);
+      expect(SessionManager.touchVersionedSessionBinding).toHaveBeenCalledTimes(2);
+
+      controlled.complete();
+      await bodyPromise;
+      await drainAsyncTasks();
+
+      expect(SessionManager.touchVersionedSessionBinding).toHaveBeenCalledTimes(2);
+      expect(SessionManager.updateSessionBindingSmart).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

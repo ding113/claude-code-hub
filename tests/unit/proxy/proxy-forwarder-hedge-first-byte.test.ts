@@ -168,6 +168,7 @@ import {
 import { ProxyForwarder } from "@/app/v1/_lib/proxy/forwarder";
 import { ModelRedirector } from "@/app/v1/_lib/proxy/model-redirector";
 import { ProxySession } from "@/app/v1/_lib/proxy/session";
+import { peekDeferredStreamingFinalization } from "@/app/v1/_lib/proxy/stream-finalization";
 import { DbPoolAdmissionError } from "@/drizzle/admitted-client";
 import { logger } from "@/lib/logger";
 import type { Provider } from "@/types/provider";
@@ -1091,7 +1092,22 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
       const provider1 = createProvider({ id: 1, name: "p1", firstByteTimeoutStreamingMs: 100 });
       const provider2 = createProvider({ id: 2, name: "p2", firstByteTimeoutStreamingMs: 100 });
       const session = createSession();
+      session.authState = {
+        ...session.authState!,
+        key: { id: 456 },
+      } as never;
       setProviderWithSessionRef(session, provider1);
+      const winnerBindingSnapshot = {
+        sessionId: "sess-hedge",
+        keyId: 456,
+        providerId: 2,
+        generation: "hedge-winner-generation",
+      };
+      mocks.updateSessionBindingSmart.mockResolvedValueOnce({
+        updated: true,
+        reason: "race_winner_forced",
+        bindingSnapshot: winnerBindingSnapshot,
+      } as never);
 
       mocks.pickRandomProviderWithExclusion.mockResolvedValueOnce(provider2);
 
@@ -1134,7 +1150,12 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
 
       await vi.advanceTimersByTimeAsync(50);
       const response = await responsePromise;
+      const deferred = peekDeferredStreamingFinalization(session);
       expect(await response.text()).toContain('"provider":"p2"');
+      await expect(deferred?.hedgeBindingAuthorityPromise).resolves.toEqual({
+        snapshot: winnerBindingSnapshot,
+        legacyClearAllowed: false,
+      });
       expect(controller1.signal.aborted).toBe(true);
       expect(controller2.signal.aborted).toBe(false);
       expect(mocks.recordFailure).not.toHaveBeenCalled();
@@ -1148,7 +1169,7 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
         0,
         false,
         true,
-        null,
+        456,
         true
       );
       expect(mocks.releaseProviderSession).toHaveBeenCalledWith(1, "sess-hedge");
