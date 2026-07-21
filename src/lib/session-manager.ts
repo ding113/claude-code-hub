@@ -222,6 +222,10 @@ function parseSessionDetailResponseMeta(value: string): SessionDetailResponseMet
   }
 }
 
+function buildTenantContentHashSessionKey(keyId: number, contentHash: string): string {
+  return `hash:${keyId}:${contentHash}:session`;
+}
+
 /**
  * Session 管理器
  *
@@ -311,6 +315,42 @@ export class SessionManager {
     const timestamp = Date.now().toString(36);
     const random = crypto.randomBytes(6).toString("hex");
     return `sess_${timestamp}_${random}`;
+  }
+
+  private static async proveContentHashSessionOwnership(
+    redis: NonNullable<ReturnType<typeof getRedisClient>>,
+    sessionId: string,
+    keyId: number
+  ): Promise<{ owned: boolean; ownerPresent: boolean }> {
+    const legacyOwner = await redis.get(`session:${sessionId}:key`);
+    if (legacyOwner !== keyId.toString()) {
+      return { owned: false, ownerPresent: legacyOwner !== null };
+    }
+
+    // Reconcile only after the legacy owner proves the tenant. This both
+    // validates canonical/mirror consistency and refreshes the complete binding
+    // TTL, preventing an owner-expiry race between hash lookup and Provider selection.
+    const binding = await readOrReconcileSessionBinding({
+      sessionId,
+      keyId,
+      ttlSeconds: SessionManager.SESSION_TTL,
+      redis,
+    });
+    if (binding.status === "ok") {
+      return { owned: true, ownerPresent: true };
+    }
+    if (!binding.legacyFallbackAllowed) {
+      return { owned: false, ownerPresent: true };
+    }
+
+    const legacyRefresh = await mutateLegacySessionBindingSafely({
+      sessionId,
+      keyId,
+      ttlSeconds: SessionManager.SESSION_TTL,
+      redis,
+      mutation: { type: "refresh" },
+    });
+    return { owned: legacyRefresh.status === "ok", ownerPresent: true };
   }
 
   /**
@@ -545,17 +585,32 @@ export class SessionManager {
     // 3. 尝试从 Redis 查找已有 session
     if (redis && redis.status === "ready") {
       try {
-        const hashKey = `hash:${contentHash}:session`;
+        const hashKey = buildTenantContentHashSessionKey(keyId, contentHash);
         const existingSessionId = await redis.get(hashKey);
 
         if (existingSessionId) {
-          // 找到已有 session，刷新 TTL
-          await SessionManager.refreshSessionTTL(existingSessionId, keyId);
-          logger.trace("SessionManager: Reusing session via hash", {
-            sessionId: existingSessionId,
+          const ownership = await SessionManager.proveContentHashSessionOwnership(
+            redis,
+            existingSessionId,
+            keyId
+          );
+          if (ownership.owned) {
+            // 找到当前 tenant 的已有 session，刷新 TTL
+            await SessionManager.refreshSessionTTL(existingSessionId, keyId);
+            logger.trace("SessionManager: Reusing tenant-scoped session via hash", {
+              sessionId: existingSessionId,
+              hash: contentHash,
+              keyId,
+            });
+            return existingSessionId;
+          }
+
+          logger.warn("SessionManager: Ignoring content-hash mapping without matching owner", {
             hash: contentHash,
+            keyId,
+            mappingScope: "tenant",
+            ownerPresent: ownership.ownerPresent,
           });
-          return existingSessionId;
         }
 
         // 未找到：创建新 session
@@ -611,7 +666,10 @@ export class SessionManager {
       }
 
       const pipeline = redis.pipeline();
-      const hashKey = `hash:${contentHash}:session`;
+      // Do not dual-write the historical unscoped key. Mixed-version workers
+      // may temporarily create separate Sessions; old mappings expire naturally
+      // without allowing the new path to import tenant-ambiguous state.
+      const hashKey = buildTenantContentHashSessionKey(keyId, contentHash);
 
       // 存储映射关系
       pipeline.setex(hashKey, SessionManager.SESSION_TTL, sessionId);
