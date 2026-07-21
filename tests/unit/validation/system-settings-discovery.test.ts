@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { isDiscoverySettingField } from "@/lib/validation/discovery-settings";
 import { UpdateSystemSettingsSchema } from "@/lib/validation/schemas";
 
 describe("UpdateSystemSettingsSchema Discovery settings", () => {
@@ -67,5 +68,12 @@ describe("UpdateSystemSettingsSchema Discovery settings", () => {
     expect(UpdateSystemSettingsSchema.parse({ discoveryEnabled: true })).toEqual({
       discoveryEnabled: true,
     });
+  });
+
+  it("rejects inherited Object prototype names as Discovery fields", () => {
+    expect(isDiscoverySettingField("toString")).toBe(false);
+    expect(isDiscoverySettingField("valueOf")).toBe(false);
+    expect(isDiscoverySettingField("__proto__")).toBe(false);
+    expect(isDiscoverySettingField("discoverySlaMs")).toBe(true);
   });
 });

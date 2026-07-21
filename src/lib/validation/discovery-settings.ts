@@ -13,7 +13,9 @@ export const DISCOVERY_FIELD_LIMITS = {
 export type DiscoverySettingField = keyof typeof DISCOVERY_FIELD_LIMITS;
 
 export function isDiscoverySettingField(value: unknown): value is DiscoverySettingField {
-  return typeof value === "string" && value in DISCOVERY_FIELD_LIMITS;
+  return (
+    typeof value === "string" && Object.prototype.hasOwnProperty.call(DISCOVERY_FIELD_LIMITS, value)
+  );
 }
 
 export function getDiscoveryValidationErrorCode(

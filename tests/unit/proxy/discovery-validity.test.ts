@@ -110,6 +110,15 @@ describe("discovery validity", () => {
     ).toBe(true);
   });
 
+  it("accepts an OpenAI Responses reasoning summary text delta as deliverable content", () => {
+    expect(
+      classifyDiscoveryChunk(
+        'data: {"type":"response.reasoning_summary_text.delta","delta":"thinking"}\n\n',
+        "openai-responses"
+      ).ready
+    ).toBe(true);
+  });
+
   it("holds Responses output-item metadata until a text delta is deliverable", () => {
     const parser = new DiscoveryValidityParser("openai-responses");
 

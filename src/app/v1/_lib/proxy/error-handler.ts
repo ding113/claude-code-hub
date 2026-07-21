@@ -674,7 +674,11 @@ export class ProxyErrorHandler {
 
     // 记录请求结束
     ProxyErrorHandler.endRequestTracking(session);
-    void session.closeLiveObservability();
+    void session.closeLiveObservability().catch((error) => {
+      logger.warn("ProxyErrorHandler: Failed to close live observability", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    });
   }
 
   private static endRequestTracking(session: ProxySession): void {

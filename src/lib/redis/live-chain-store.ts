@@ -32,7 +32,7 @@ function buildKey(sessionId: string, requestSequence: number): string {
 function inferDiscoveryPhase(trace: RoutingTraceV1): string {
   const terminalEvent = trace.events.findLast((event) => event.type === "request_finished");
   if (terminalEvent) {
-    switch (trace.summary?.outcome ?? terminalEvent.outcome) {
+    switch (terminalEvent.outcome ?? trace.summary?.outcome) {
       case "success":
         return "completed";
       case "client_abort":

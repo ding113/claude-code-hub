@@ -20,6 +20,7 @@ const mocks = vi.hoisted(() => ({
     passThroughUpstreamErrorMessage: false,
   })),
   updateMessageRequestDetailsDurably: vi.fn<typeof updateMessageRequestDetailsDurably>(),
+  loggerWarn: vi.fn(),
 }));
 
 vi.mock("@/lib/error-rule-detector", () => ({
@@ -51,7 +52,7 @@ vi.mock("@/lib/logger", () => ({
     fatal: vi.fn(),
     info: vi.fn(),
     trace: vi.fn(),
-    warn: vi.fn(),
+    warn: mocks.loggerWarn,
   },
 }));
 
@@ -127,6 +128,24 @@ describe("ProxyErrorHandler.handle durable persistence", () => {
       passThroughUpstreamErrorMessage: false,
     });
     mocks.updateMessageRequestDetailsDurably.mockResolvedValue(undefined);
+  });
+
+  test("logs a rejected live observability close without leaking an unhandled rejection", async () => {
+    const session = await createSession();
+    attachMessageContext(session);
+    vi.spyOn(session, "closeLiveObservability").mockRejectedValueOnce(
+      new Error("redis unavailable")
+    );
+
+    const response = await ProxyErrorHandler.handle(session, new Error("fetch failed"));
+
+    expect(response.status).toBe(500);
+    await vi.waitFor(() => {
+      expect(mocks.loggerWarn).toHaveBeenCalledWith(
+        "ProxyErrorHandler: Failed to close live observability",
+        { error: "redis unavailable" }
+      );
+    });
   });
 
   test("emits the trace, awaits persistence, then ends status tracking", async () => {

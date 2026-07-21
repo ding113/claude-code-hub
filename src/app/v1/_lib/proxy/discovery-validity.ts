@@ -137,6 +137,7 @@ function classifyJson(value: unknown, protocol: DiscoveryProtocol): DiscoveryVal
       ready:
         (object.type === "response.output_text.delta" && hasContent(object.delta)) ||
         (object.type === "response.function_call_arguments.delta" && hasContent(object.delta)) ||
+        (object.type === "response.reasoning_summary_text.delta" && hasContent(object.delta)) ||
         (object.type === "response.output_item.added" && hasOpenAIResponsesOutputItem(object.item)),
       terminal: false,
       error: false,
