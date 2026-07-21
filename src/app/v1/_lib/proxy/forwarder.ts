@@ -5096,6 +5096,7 @@ export class ProxyForwarder {
     let queuedRoundLaunchesPending = 0;
     let refillQueue: Promise<void> = Promise.resolve();
     const roundLaunchIdleWaiters = new Set<() => void>();
+    const queuedRoundLaunchStartWaiters = new Set<() => void>();
     let fallbackPromotionBlocked = false;
     type StickyTimeoutWaveReservation = { fallbackAttemptId: string; slots: number };
     let stickyTimeoutWaveReservation: StickyTimeoutWaveReservation | null = null;
@@ -5116,6 +5117,14 @@ export class ProxyForwarder {
       if (roundLaunchesInProgress !== 0) return;
       for (const resolve of roundLaunchIdleWaiters) resolve();
       roundLaunchIdleWaiters.clear();
+    };
+    const waitForRoundLaunchHandoff = async (): Promise<void> => {
+      while (roundLaunchesInProgress > 0 || queuedRoundLaunchesPending > 0) {
+        if (roundLaunchesInProgress > 0) await waitForRoundLaunches();
+        if (queuedRoundLaunchesPending > 0) {
+          await new Promise<void>((resolve) => queuedRoundLaunchStartWaiters.add(resolve));
+        }
+      }
     };
     const clearRoundTimer = () => {
       if (roundTimer) {
@@ -5863,7 +5872,9 @@ export class ProxyForwarder {
             attempt.ready = true;
             if (
               attempt.kind === "fallback" &&
-              (fallbackPromotionBlocked || roundLaunchesInProgress > 0)
+              (fallbackPromotionBlocked ||
+                roundLaunchesInProgress > 0 ||
+                queuedRoundLaunchesPending > 0)
             ) {
               // The next wave has been reserved but its normal attempts may
               // still be awaiting selection/endpoint setup. Persist readiness
@@ -5961,7 +5972,7 @@ export class ProxyForwarder {
           // that is meant to replace it. Wait until those reserved slots have
           // either registered or rolled back before the coordinator decides
           // whether another round is needed.
-          await waitForRoundLaunches();
+          await waitForRoundLaunchHandoff();
           if (committed || settled || !attempt.pending) return;
 
           // Preserve the existing provider-local rectifier contract before
@@ -6499,6 +6510,10 @@ export class ProxyForwarder {
         if (launchEntry.gateReleased) return;
         launchEntry.gateReleased = true;
         queuedRoundLaunchesPending = Math.max(0, queuedRoundLaunchesPending - 1);
+        if (queuedRoundLaunchesPending === 0) {
+          for (const resolve of queuedRoundLaunchStartWaiters) resolve();
+          queuedRoundLaunchStartWaiters.clear();
+        }
         await reevaluateReadyAttemptsAfterLaunch();
       };
       const runQueuedLaunch = async () => {
