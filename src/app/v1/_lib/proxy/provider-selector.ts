@@ -428,6 +428,56 @@ export class ProxyProviderResolver {
   }
 
   /**
+   * First-byte hedge alternate: next health-SLO qualified peer after excludes.
+   * Returns null when no remaining SLO-qualified candidate exists → do not race.
+   * Does not fall back to legacy priority+weight.
+   */
+  static async pickHealthSloAlternate(
+    session: ProxySession,
+    excludeIds: number[]
+  ): Promise<Provider | null> {
+    const { selectNextHealthDispatchAlternate } = await import(
+      "@/lib/provider-dispatch/health-aware-select"
+    );
+    const { isProviderActiveNow } = await import("@/lib/utils/provider-schedule");
+    const { resolveSystemTimezone } = await import("@/lib/utils/timezone");
+    // providerSupportsModel is module-local in this file.
+
+    const allProviders = await session.getProvidersSnapshot();
+    const excludeSet = new Set(excludeIds);
+    const effectiveGroupPick = getEffectiveProviderGroup(session);
+    const requestedModel = session.getOriginalModel() || "";
+    const systemTimezone = await resolveSystemTimezone();
+
+    let pool = allProviders.filter((provider) => {
+      if (!provider.isEnabled || excludeSet.has(provider.id)) return false;
+      if (!isProviderActiveNow(provider.activeTimeStart, provider.activeTimeEnd, systemTimezone)) {
+        return false;
+      }
+      if (effectiveGroupPick && !checkProviderGroupMatch(provider.groupTag, effectiveGroupPick)) {
+        return false;
+      }
+      if (session.originalFormat) {
+        if (
+          !checkFormatProviderTypeCompatibility(session.originalFormat, provider.providerType)
+        ) {
+          return false;
+        }
+      }
+      if (requestedModel && !providerSupportsModel(provider, requestedModel)) {
+        return false;
+      }
+      return true;
+    });
+
+    return selectNextHealthDispatchAlternate(
+      pool,
+      (p) => ProxyProviderResolver.resolveEffectivePriority(p, effectiveGroupPick),
+      excludeIds
+    );
+  }
+
+  /**
    * 查找可复用的供应商（基于 session）
    *
    * Disabled: health-aware dispatch re-evaluates the optimal provider every request.

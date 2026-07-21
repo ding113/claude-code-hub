@@ -3,6 +3,7 @@ import { resolveEndpointPolicy } from "@/app/v1/_lib/proxy/endpoint-policy";
 
 const mocks = vi.hoisted(() => ({
   pickRandomProviderWithExclusion: vi.fn(),
+  pickHealthSloAlternate: vi.fn(),
   recordSuccess: vi.fn(),
   recordFailure: vi.fn(async () => {}),
   getCircuitState: vi.fn(() => "closed"),
@@ -101,6 +102,7 @@ vi.mock("@/lib/session-manager", () => ({
 vi.mock("@/app/v1/_lib/proxy/provider-selector", () => ({
   ProxyProviderResolver: {
     pickRandomProviderWithExclusion: mocks.pickRandomProviderWithExclusion,
+    pickHealthSloAlternate: mocks.pickHealthSloAlternate,
   },
 }));
 
@@ -536,7 +538,7 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
       setProviderWithSessionRef(session, fireworks);
       session.addProviderToChain(fireworks, { reason: "initial_selection" });
 
-      mocks.pickRandomProviderWithExclusion.mockResolvedValueOnce(minimax);
+      mocks.pickHealthSloAlternate.mockResolvedValueOnce(minimax);
 
       const doForward = vi.spyOn(
         ProxyForwarder as unknown as {
@@ -624,7 +626,7 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
       setProviderWithSessionRef(session, slow);
       session.addProviderToChain(slow, { reason: "initial_selection" });
 
-      mocks.pickRandomProviderWithExclusion.mockResolvedValueOnce(fast);
+      mocks.pickHealthSloAlternate.mockResolvedValueOnce(fast);
 
       const doForward = vi.spyOn(
         ProxyForwarder as unknown as {
@@ -708,7 +710,7 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
       session.setProvider(fireworks);
       session.addProviderToChain(fireworks, { reason: "initial_selection" });
 
-      mocks.pickRandomProviderWithExclusion
+      mocks.pickHealthSloAlternate
         .mockResolvedValueOnce(minimax)
         .mockResolvedValueOnce(null);
       mocks.categorizeErrorAsync.mockResolvedValue(ProxyErrorCategory.PROVIDER_ERROR);
@@ -783,7 +785,7 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
       session.setProvider(fireworks);
       session.addProviderToChain(fireworks, { reason: "initial_selection" });
 
-      mocks.pickRandomProviderWithExclusion.mockResolvedValueOnce(minimax);
+      mocks.pickHealthSloAlternate.mockResolvedValueOnce(minimax);
 
       const doForward = vi.spyOn(
         ProxyForwarder as unknown as {
@@ -922,7 +924,7 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
       const session = createSession();
       setProviderWithSessionRef(session, provider1);
 
-      mocks.pickRandomProviderWithExclusion.mockResolvedValueOnce(provider2);
+      mocks.pickHealthSloAlternate.mockResolvedValueOnce(provider2);
 
       const doForward = vi.spyOn(
         ProxyForwarder as unknown as {
@@ -1001,7 +1003,7 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
       const session = createSession();
       setProviderWithSessionRef(session, provider1);
 
-      mocks.pickRandomProviderWithExclusion
+      mocks.pickHealthSloAlternate
         .mockResolvedValueOnce(provider2)
         .mockResolvedValueOnce(provider3);
       mocks.checkAndTrackProviderSession
@@ -1089,7 +1091,7 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
       session.setHighConcurrencyModeEnabled(true);
       setProviderWithSessionRef(session, provider1);
 
-      mocks.pickRandomProviderWithExclusion.mockResolvedValueOnce(provider2);
+      mocks.pickHealthSloAlternate.mockResolvedValueOnce(provider2);
 
       const doForward = vi.spyOn(
         ProxyForwarder as unknown as {
@@ -1155,7 +1157,7 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
       const session = createSession();
       setProviderWithSessionRef(session, provider1);
 
-      mocks.pickRandomProviderWithExclusion.mockResolvedValueOnce(provider2);
+      mocks.pickHealthSloAlternate.mockResolvedValueOnce(provider2);
 
       const doForward = vi.spyOn(
         ProxyForwarder as unknown as {
@@ -1194,7 +1196,7 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
       await vi.advanceTimersByTimeAsync(100);
 
       expect(doForward).toHaveBeenCalledTimes(2);
-      expect(mocks.pickRandomProviderWithExclusion).toHaveBeenCalledTimes(1);
+      expect(mocks.pickHealthSloAlternate).toHaveBeenCalledTimes(1);
 
       const chainBeforeWinner = session.getProviderChain();
       expect(chainBeforeWinner).toEqual(
@@ -1224,7 +1226,7 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
       const session = createSession();
       setProviderWithSessionRef(session, provider1);
 
-      mocks.pickRandomProviderWithExclusion.mockResolvedValueOnce(provider2);
+      mocks.pickHealthSloAlternate.mockResolvedValueOnce(provider2);
 
       const doForward = vi.spyOn(
         ProxyForwarder as unknown as {
@@ -1299,7 +1301,7 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
       const session = createSession();
       setProviderWithSessionRef(session, provider1);
 
-      mocks.pickRandomProviderWithExclusion
+      mocks.pickHealthSloAlternate
         .mockResolvedValueOnce(provider2)
         .mockResolvedValueOnce(provider3);
 
@@ -1400,7 +1402,7 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
       session.request.message.model = requestedModel;
       setProviderWithSessionRef(session, provider1);
 
-      mocks.pickRandomProviderWithExclusion.mockResolvedValueOnce(provider2);
+      mocks.pickHealthSloAlternate.mockResolvedValueOnce(provider2);
 
       const doForward = vi.spyOn(
         ProxyForwarder as unknown as {
@@ -1488,7 +1490,7 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
       const session = createSession();
       session.setProvider(provider1);
 
-      mocks.pickRandomProviderWithExclusion.mockRejectedValueOnce(new Error("selector down"));
+      mocks.pickHealthSloAlternate.mockRejectedValueOnce(new Error("selector down"));
 
       const doForward = vi.spyOn(
         ProxyForwarder as unknown as {
@@ -1541,7 +1543,7 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
       setProviderWithSessionRef(session, provider1);
 
       mocks.getPreferredProviderEndpoints.mockRejectedValueOnce(new Error("Redis connection lost"));
-      mocks.pickRandomProviderWithExclusion.mockResolvedValueOnce(null);
+      mocks.pickHealthSloAlternate.mockResolvedValueOnce(null);
 
       const responsePromise = ProxyForwarder.send(session);
       const errorPromise = responsePromise.catch((rejection) => rejection as UpstreamProxyError);
@@ -1549,7 +1551,7 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
       await vi.runAllTimersAsync();
       const error = await errorPromise;
 
-      expect(mocks.pickRandomProviderWithExclusion).toHaveBeenCalled();
+      expect(mocks.pickHealthSloAlternate).toHaveBeenCalled();
       expect(error).toBeInstanceOf(UpstreamProxyError);
       expect(error.statusCode).toBe(503);
       expect(error.message).toBe("所有供应商暂时不可用，请稍后重试");
@@ -1596,7 +1598,7 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
       const session = createSession();
       session.setProvider(provider1);
 
-      mocks.pickRandomProviderWithExclusion
+      mocks.pickHealthSloAlternate
         .mockResolvedValueOnce(provider2)
         .mockResolvedValueOnce(null);
       mocks.categorizeErrorAsync.mockResolvedValueOnce(category).mockResolvedValueOnce(category);
@@ -1665,7 +1667,7 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
       providerName: provider1.name,
     });
 
-    mocks.pickRandomProviderWithExclusion.mockResolvedValueOnce(provider2);
+    mocks.pickHealthSloAlternate.mockResolvedValueOnce(provider2);
     mocks.categorizeErrorAsync.mockResolvedValueOnce(ProxyErrorCategory.NON_RETRYABLE_CLIENT_ERROR);
     vi.mocked(getErrorDetectionResultAsync).mockResolvedValueOnce({
       matched: true,
@@ -1693,7 +1695,7 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
     expect(error).toBe(originalError);
     expect(error.message).toBe("prompt too long");
     expect(doForward).toHaveBeenCalledTimes(1);
-    expect(mocks.pickRandomProviderWithExclusion).not.toHaveBeenCalled();
+    expect(mocks.pickHealthSloAlternate).not.toHaveBeenCalled();
     expect(mocks.clearSessionProvider).toHaveBeenCalledWith("sess-hedge");
     expect(session.getProviderChain()).toEqual(
       expect.arrayContaining([
@@ -1732,7 +1734,7 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
       session.setProvider(provider1);
       withThinkingBlocks(session);
 
-      mocks.pickRandomProviderWithExclusion.mockResolvedValueOnce(provider2);
+      mocks.pickHealthSloAlternate.mockResolvedValueOnce(provider2);
       mocks.categorizeErrorAsync.mockResolvedValueOnce(
         ProxyErrorCategory.NON_RETRYABLE_CLIENT_ERROR
       );
@@ -1814,7 +1816,7 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
       expect(await response.text()).toContain('"provider":"p2-rectified"');
       expect(session.provider?.id).toBe(2);
       expect(controller1.signal.aborted).toBe(true);
-      expect(mocks.pickRandomProviderWithExclusion).toHaveBeenCalled();
+      expect(mocks.pickHealthSloAlternate).toHaveBeenCalled();
       expect(mocks.storeSessionSpecialSettings).toHaveBeenCalledWith(
         "sess-hedge",
         expect.arrayContaining([
@@ -1847,7 +1849,7 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
         messages: [{ role: "user", content: "hi" }],
       };
 
-      mocks.pickRandomProviderWithExclusion.mockResolvedValueOnce(provider2);
+      mocks.pickHealthSloAlternate.mockResolvedValueOnce(provider2);
       mocks.categorizeErrorAsync.mockResolvedValueOnce(
         ProxyErrorCategory.NON_RETRYABLE_CLIENT_ERROR
       );
@@ -1928,7 +1930,7 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
 
       expect(await response.text()).toContain('"provider":"p1-budget-rectified"');
       expect(session.provider?.id).toBe(1);
-      expect(mocks.pickRandomProviderWithExclusion).toHaveBeenCalledTimes(1);
+      expect(mocks.pickHealthSloAlternate).toHaveBeenCalledTimes(1);
       expect(session.getSpecialSettings()).toEqual(
         expect.arrayContaining([
           expect.objectContaining({
@@ -1969,7 +1971,7 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
       );
 
       // After provider 1 fails, pick provider 2 as alternative
-      mocks.pickRandomProviderWithExclusion.mockResolvedValueOnce(provider2);
+      mocks.pickHealthSloAlternate.mockResolvedValueOnce(provider2);
 
       const doForward = vi.spyOn(
         ProxyForwarder as unknown as {

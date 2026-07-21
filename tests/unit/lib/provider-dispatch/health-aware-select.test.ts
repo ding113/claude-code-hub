@@ -4,6 +4,7 @@ import {
   HEALTH_DISPATCH_MIN_ONLINE_RATE,
   meetsHealthDispatchSlo,
   selectBestHealthDispatchProvider,
+  selectNextHealthDispatchAlternate,
 } from "@/lib/provider-dispatch/health-aware-select";
 import type { Provider } from "@/types/provider";
 
@@ -230,5 +231,57 @@ describe("selectBestHealthDispatchProvider", () => {
       resolvePriority
     );
     expect(result?.provider.name).toBe("fast");
+  });
+});
+
+describe("selectNextHealthDispatchAlternate", () => {
+  const resolvePriority = (p: Provider) => p.priority ?? 0;
+
+  it("returns null when only one SLO peer exists", () => {
+    const alt = selectNextHealthDispatchAlternate(
+      [
+        makeProvider({
+          id: 1,
+          name: "only",
+          priority: 0,
+          healthTestOnlineRate: 1,
+          healthTestAvgFirstByteMs: 100,
+        }),
+      ],
+      resolvePriority,
+      [1]
+    );
+    expect(alt).toBeNull();
+  });
+
+  it("returns second-best SLO peer after excluding primary", () => {
+    const alt = selectNextHealthDispatchAlternate(
+      [
+        makeProvider({
+          id: 1,
+          name: "best",
+          priority: 0,
+          healthTestOnlineRate: 1,
+          healthTestAvgFirstByteMs: 100,
+        }),
+        makeProvider({
+          id: 2,
+          name: "second",
+          priority: 1,
+          healthTestOnlineRate: 0.9,
+          healthTestAvgFirstByteMs: 200,
+        }),
+        makeProvider({
+          id: 3,
+          name: "bad",
+          priority: 0,
+          healthTestOnlineRate: 0.5,
+          healthTestAvgFirstByteMs: 50,
+        }),
+      ],
+      resolvePriority,
+      [1]
+    );
+    expect(alt?.name).toBe("second");
   });
 });

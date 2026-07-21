@@ -78,6 +78,26 @@ export function selectBestHealthDispatchProvider(
   providers: Provider[],
   resolvePriority: (provider: Provider) => number
 ): { provider: Provider; mode: "health_slo"; candidates: HealthDispatchCandidate[] } | null {
+  const candidates = listHealthDispatchCandidates(providers, resolvePriority);
+  if (candidates.length === 0) {
+    return null;
+  }
+
+  return {
+    provider: candidates[0].provider,
+    mode: "health_slo",
+    candidates,
+  };
+}
+
+/**
+ * Rank all SLO-qualified providers (same order as selectBestHealthDispatchProvider).
+ * Used by first-byte hedge to pick the next alternate without re-introducing non-SLO peers.
+ */
+export function listHealthDispatchCandidates(
+  providers: Provider[],
+  resolvePriority: (provider: Provider) => number
+): HealthDispatchCandidate[] {
   const candidates: HealthDispatchCandidate[] = [];
 
   for (const provider of providers) {
@@ -91,19 +111,27 @@ export function selectBestHealthDispatchProvider(
     });
   }
 
-  if (candidates.length === 0) {
-    return null;
-  }
-
   candidates.sort((a, b) => {
     if (a.priority !== b.priority) return a.priority - b.priority;
     if (a.avgFirstByteMs !== b.avgFirstByteMs) return a.avgFirstByteMs - b.avgFirstByteMs;
     return a.provider.id - b.provider.id;
   });
 
-  return {
-    provider: candidates[0].provider,
-    mode: "health_slo",
-    candidates,
-  };
+  return candidates;
+}
+
+/**
+ * Next health-SLO alternate after excluding already-launched provider ids.
+ * Returns null when fewer than 1 remaining qualified peer exists (no race).
+ */
+export function selectNextHealthDispatchAlternate(
+  providers: Provider[],
+  resolvePriority: (provider: Provider) => number,
+  excludeProviderIds: Iterable<number>
+): Provider | null {
+  const excluded = new Set(excludeProviderIds);
+  const remaining = listHealthDispatchCandidates(providers, resolvePriority).filter(
+    (c) => !excluded.has(c.provider.id)
+  );
+  return remaining[0]?.provider ?? null;
 }

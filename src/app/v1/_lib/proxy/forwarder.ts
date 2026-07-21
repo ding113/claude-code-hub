@@ -3742,10 +3742,14 @@ export class ProxyForwarder {
     return alternativeProvider;
   }
 
-  private static shouldUseStreamingHedge(_session: ProxySession): boolean {
-    // Streaming hedge (timeout racing) disabled: health-aware single-provider dispatch
-    // already picks the best SLO-qualified key; racing would reintroduce multi-send cost.
-    return false;
+  private static shouldUseStreamingHedge(session: ProxySession): boolean {
+    // First-byte timeout hedge: keep primary alive on threshold, launch next
+    // health-SLO alternate; respond with whichever produces first-byte first.
+    // No alternate qualified → no race (shouldUse still true but launch returns null).
+    const provider = session.provider;
+    if (!provider) return false;
+    const fb = provider.firstByteTimeoutStreamingMs ?? 0;
+    return Number.isFinite(fb) && fb > 0;
   }
 
   private static getEndpointPolicy(session: ProxySession) {
@@ -4045,7 +4049,9 @@ export class ProxyForwarder {
 
       launchingAlternative = (async () => {
         while (!settled && !winnerCommitted && !noMoreProviders) {
-          const alternativeProvider = await ProxyForwarder.selectAlternative(
+          // Hedge alternate must be next health-SLO qualified peer only.
+          // No remaining SLO peer → no race (leave primary running alone).
+          const alternativeProvider = await ProxyProviderResolver.pickHealthSloAlternate(
             session,
             Array.from(launchedProviderIds)
           );
