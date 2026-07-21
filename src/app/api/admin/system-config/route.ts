@@ -7,6 +7,7 @@ import {
   invalidateAllOverviewCaches,
   invalidateAllStatisticsCaches,
 } from "@/lib/redis";
+import { DISCOVERY_WINDOW_INVALID_ERROR_CODE } from "@/lib/validation/discovery-settings";
 import { UpdateSystemSettingsSchema } from "@/lib/validation/schemas";
 import { getSystemSettings, updateSystemSettings } from "@/repository/system-config";
 
@@ -66,7 +67,7 @@ export async function POST(req: Request) {
     const racingTotalTimeoutMs = validated.racingTotalTimeoutMs ?? current.racingTotalTimeoutMs;
     if (racingTotalTimeoutMs < stickySlaMs + maxDiscoveryRounds * discoverySlaMs) {
       return Response.json(
-        { error: "discoveryWindowInvalid", errorCode: "discoveryWindowInvalid" },
+        { error: "discoveryWindowInvalid", errorCode: DISCOVERY_WINDOW_INVALID_ERROR_CODE },
         { status: 400 }
       );
     }
