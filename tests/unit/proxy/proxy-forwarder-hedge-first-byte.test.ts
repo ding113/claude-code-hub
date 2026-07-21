@@ -2650,6 +2650,135 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
     }
   });
 
+  test("a timed-out Sticky retry setup failure starts exactly one full Discovery wave", async () => {
+    vi.useFakeTimers();
+    try {
+      const sticky = createProvider({ id: 1, name: "sticky", priority: 1 });
+      const normalOne = createProvider({ id: 2, name: "normal-one", priority: 1 });
+      const normalTwo = createProvider({ id: 3, name: "normal-two", priority: 1 });
+      const session = createSession();
+      session.authState = {
+        success: true,
+        user: null,
+        key: { id: 38 },
+        apiKey: null,
+      } as typeof session.authState;
+      session.request.message.messages = [
+        { role: "user", content: "first" },
+        { role: "assistant", content: [{ type: "thinking", thinking: "t", signature: "sig" }] },
+      ];
+      setProviderWithSessionRef(session, sticky);
+      session.setSessionBindingSnapshot({
+        sessionId: session.sessionId!,
+        keyId: 38,
+        providerId: sticky.id,
+        generation: "g-sticky-retry-failure",
+      });
+      mocks.getCachedSystemSettings.mockResolvedValue({
+        discoveryEnabled: true,
+        discoveryConcurrency: 2,
+        maxDiscoveryRounds: 1,
+        discoverySlaMs: 50,
+        stickySlaMs: 10,
+        racingTotalTimeoutMs: 100,
+        stickyTimeoutCooldownMs: 300_000,
+        enableThinkingSignatureRectifier: true,
+      });
+      mocks.pickDiscoveryProviders.mockResolvedValueOnce([normalOne, normalTwo]);
+
+      const clearBinding = Promise.withResolvers<unknown>();
+      mocks.clearVersionedSessionProvider.mockReturnValueOnce(clearBinding.promise);
+      const retrySetup = Promise.withResolvers<{
+        endpointId: number | null;
+        baseUrl: string;
+        endpointUrl: string;
+      }>();
+      const retrySetupStarted = Promise.withResolvers<void>();
+      let stickyEndpointCalls = 0;
+      vi.spyOn(
+        ProxyForwarder as unknown as {
+          resolveStreamingHedgeEndpoint: (
+            session: ProxySession,
+            provider: Provider
+          ) => Promise<{ endpointId: number | null; baseUrl: string; endpointUrl: string }>;
+        },
+        "resolveStreamingHedgeEndpoint"
+      ).mockImplementation(async (_attemptSession, provider) => {
+        if (provider.id === sticky.id && ++stickyEndpointCalls > 1) {
+          retrySetupStarted.resolve();
+          return retrySetup.promise;
+        }
+        return { endpointId: null, baseUrl: provider.url, endpointUrl: provider.url };
+      });
+
+      const signatureError = new UpstreamProxyError(
+        "Invalid `signature` in `thinking` block",
+        400,
+        {
+          body: '{"error":"invalid_signature"}',
+          providerId: sticky.id,
+          providerName: sticky.name,
+        }
+      );
+      const normalTwoResponse = Promise.withResolvers<Response>();
+      const doForward = vi.spyOn(
+        ProxyForwarder as unknown as {
+          doForward: (...args: unknown[]) => Promise<Response>;
+        },
+        "doForward"
+      );
+      doForward.mockImplementation(async (attemptSession) => {
+        const providerId = (attemptSession as ProxySession).provider?.id;
+        if (providerId === sticky.id) throw signatureError;
+        if (providerId === normalTwo.id) return normalTwoResponse.promise;
+        return new Response(new ReadableStream<Uint8Array>(), {
+          headers: { "content-type": "text/event-stream" },
+        });
+      });
+
+      const responsePromise = ProxyForwarder.send(session);
+      await retrySetupStarted.promise;
+      await vi.advanceTimersByTimeAsync(10);
+      retrySetup.reject(new Error("sticky retry setup failed"));
+      await vi.advanceTimersByTimeAsync(0);
+      // The failed rectifier setup frees the fallback slot, but the reserved
+      // wave remains behind the Sticky binding-clear CAS.
+      expect(mocks.pickDiscoveryProviders).not.toHaveBeenCalled();
+
+      clearBinding.resolve({
+        status: "ok",
+        legacyFallbackAllowed: false,
+        source: "cleared",
+        snapshot: {
+          sessionId: session.sessionId!,
+          keyId: 38,
+          providerId: null,
+          generation: "g-sticky-retry-failure-cleared",
+        },
+      });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(mocks.pickDiscoveryProviders).toHaveBeenCalledTimes(1);
+      expect(mocks.pickDiscoveryProviders).toHaveBeenCalledWith(
+        expect.anything(),
+        2,
+        expect.arrayContaining([sticky.id])
+      );
+      normalTwoResponse.resolve(
+        new Response('data: {"type":"content_block_delta","delta":{"text":"winner"}}\n\n', {
+          headers: { "content-type": "text/event-stream" },
+        })
+      );
+      await vi.advanceTimersByTimeAsync(0);
+
+      const response = await responsePromise;
+      expect(await response.text()).toContain('"winner"');
+      expect(mocks.pickDiscoveryProviders).toHaveBeenCalledTimes(1);
+      expect(doForward).toHaveBeenCalledTimes(3);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   test("Sticky timeout and fallback failure consume a single replacement-wave reservation", async () => {
     vi.useFakeTimers();
     try {
@@ -2677,7 +2806,7 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
       mocks.getCachedSystemSettings.mockResolvedValue({
         discoveryEnabled: true,
         discoveryConcurrency: 2,
-        maxDiscoveryRounds: 2,
+        maxDiscoveryRounds: 1,
         discoverySlaMs: 50,
         stickySlaMs: 10,
         racingTotalTimeoutMs: 200,
@@ -2716,15 +2845,6 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
       expect(mocks.clearVersionedSessionProvider).toHaveBeenCalledTimes(1);
       expect(mocks.pickDiscoveryProviders).not.toHaveBeenCalled();
 
-      stickyAttempt.reject(new Error("Sticky fallback failed while binding clear was pending"));
-      await vi.advanceTimersByTimeAsync(0);
-      expect(mocks.pickDiscoveryProviders).toHaveBeenCalledTimes(1);
-      expect(mocks.pickDiscoveryProviders).toHaveBeenCalledWith(
-        expect.anything(),
-        2,
-        expect.arrayContaining([sticky.id])
-      );
-
       clearBinding.resolve({
         status: "ok",
         legacyFallbackAllowed: false,
@@ -2736,8 +2856,17 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
           generation: "g-cleared-single-wave",
         },
       });
+      // Resolve the cooldown and fail the fallback in the same turn. This
+      // exercises the claim-to-queue-start window: the claimed N-1 wave must
+      // remain expandable to full concurrency before placeholders register.
+      stickyAttempt.reject(new Error("Sticky fallback failed while the wave was being claimed"));
       await vi.advanceTimersByTimeAsync(0);
       expect(mocks.pickDiscoveryProviders).toHaveBeenCalledTimes(1);
+      expect(mocks.pickDiscoveryProviders).toHaveBeenCalledWith(
+        expect.anything(),
+        2,
+        expect.arrayContaining([sticky.id])
+      );
 
       replacementWave.resolve([normalOne, normalTwo]);
       await vi.advanceTimersByTimeAsync(0);
@@ -2874,6 +3003,66 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
     }
   });
 
+  test("a racing deadline bounds a stalled Sticky cooldown cleanup", async () => {
+    vi.useFakeTimers();
+    try {
+      const sticky = createProvider({ id: 1, name: "sticky", priority: 1 });
+      const session = createSession();
+      session.authState = {
+        success: true,
+        user: null,
+        key: { id: 39 },
+        apiKey: null,
+      } as typeof session.authState;
+      session.request.message.messages = [
+        { role: "user", content: "first" },
+        { role: "user", content: "second" },
+      ];
+      session.setProvider(sticky);
+      session.setSessionBindingSnapshot({
+        sessionId: session.sessionId!,
+        keyId: 39,
+        providerId: sticky.id,
+        generation: "g-sticky-cleanup-bound",
+      });
+      mocks.getCachedSystemSettings.mockResolvedValue({
+        discoveryEnabled: true,
+        discoveryConcurrency: 2,
+        maxDiscoveryRounds: 1,
+        discoverySlaMs: 20,
+        stickySlaMs: 10,
+        racingTotalTimeoutMs: 30,
+        stickyTimeoutCooldownMs: 300_000,
+      });
+      mocks.clearVersionedSessionProvider.mockReturnValueOnce(new Promise(() => {}));
+      vi.spyOn(
+        ProxyForwarder as unknown as {
+          doForward: (...args: unknown[]) => Promise<Response>;
+        },
+        "doForward"
+      ).mockResolvedValueOnce(
+        new Response(new ReadableStream<Uint8Array>(), {
+          headers: { "content-type": "text/event-stream" },
+        })
+      );
+
+      const observed = ProxyForwarder.send(session).catch((error) => error);
+      await vi.advanceTimersByTimeAsync(30);
+      let settled = false;
+      void observed.then(() => {
+        settled = true;
+      });
+      await vi.advanceTimersByTimeAsync(999);
+      expect(settled).toBe(false);
+
+      await vi.advanceTimersByTimeAsync(1);
+      expect(await observed).toBeInstanceOf(UpstreamProxyError);
+      expect(mocks.releaseSessionDiscoveryLease).toHaveBeenCalledOnce();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   test("client abort preserves an already-reserved Sticky timeout cooldown", async () => {
     vi.useFakeTimers();
     try {
@@ -2939,7 +3128,7 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
       clientAbort.abort(new Error("client disconnected"));
       await vi.advanceTimersByTimeAsync(0);
 
-      expect(requestSettled).toBe(false);
+      expect(requestSettled).toBe(true);
       expect(mocks.clearVersionedSessionProvider).toHaveBeenCalledOnce();
       expect(mocks.clearVersionedSessionProvider).toHaveBeenCalledWith(
         expect.objectContaining({ generation: "g-sticky-cooldown-abort" }),
@@ -3625,6 +3814,150 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
     }
   });
 
+  test("Discovery round SLA advances while the initial candidate selector is stalled", async () => {
+    vi.useFakeTimers();
+    try {
+      const initial = createProvider({ id: 1, name: "initial", priority: 1 });
+      const winner = createProvider({ id: 2, name: "next-round", priority: 1 });
+      const stale = createProvider({ id: 3, name: "stale", priority: 1 });
+      const session = createSession();
+      session.authState = {
+        success: true,
+        user: null,
+        key: { id: 39 },
+        apiKey: null,
+      } as typeof session.authState;
+      session.setProvider(initial);
+      mocks.getCachedSystemSettings.mockResolvedValue({
+        discoveryEnabled: true,
+        discoveryConcurrency: 2,
+        maxDiscoveryRounds: 2,
+        discoverySlaMs: 10,
+        stickySlaMs: 10,
+        racingTotalTimeoutMs: 100,
+        stickyTimeoutCooldownMs: 300_000,
+      });
+
+      const stalledSelector = Promise.withResolvers<Provider[]>();
+      const selectorStarted = Promise.withResolvers<void>();
+      mocks.pickDiscoveryProviders
+        .mockImplementationOnce(() => {
+          selectorStarted.resolve();
+          return stalledSelector.promise;
+        })
+        .mockResolvedValueOnce([winner]);
+
+      const launchedProviderIds: number[] = [];
+      const doForward = vi.spyOn(
+        ProxyForwarder as unknown as {
+          doForward: (...args: unknown[]) => Promise<Response>;
+        },
+        "doForward"
+      );
+      doForward.mockImplementation(async (attemptSession) => {
+        const providerId = (attemptSession as ProxySession).provider!.id;
+        launchedProviderIds.push(providerId);
+        if (providerId === winner.id) {
+          return new Response('data: {"type":"content_block_delta","delta":{"text":"next"}}\n\n', {
+            headers: { "content-type": "text/event-stream" },
+          });
+        }
+        return new Response(new ReadableStream<Uint8Array>(), {
+          headers: { "content-type": "text/event-stream" },
+        });
+      });
+
+      const responsePromise = ProxyForwarder.send(session);
+      await selectorStarted.promise;
+      await vi.advanceTimersByTimeAsync(10);
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(mocks.pickDiscoveryProviders).toHaveBeenCalledTimes(2);
+      const response = await responsePromise;
+      expect(await response.text()).toContain('"next"');
+
+      stalledSelector.resolve([stale]);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(launchedProviderIds).toEqual([initial.id, winner.id]);
+      expect(doForward).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("a stale candidate selector cannot launch after its Discovery round closes", async () => {
+    vi.useFakeTimers();
+    try {
+      const initial = createProvider({ id: 1, name: "initial", priority: 1 });
+      const peer = createProvider({ id: 2, name: "peer", priority: 1 });
+      const nextRound = createProvider({ id: 3, name: "next-round", priority: 1 });
+      const stale = createProvider({ id: 4, name: "stale", priority: 1 });
+      const session = createSession();
+      session.authState = {
+        success: true,
+        user: null,
+        key: { id: 37 },
+        apiKey: null,
+      } as typeof session.authState;
+      session.setProvider(initial);
+      mocks.getCachedSystemSettings.mockResolvedValue({
+        discoveryEnabled: true,
+        discoveryConcurrency: 2,
+        maxDiscoveryRounds: 2,
+        discoverySlaMs: 10,
+        stickySlaMs: 10,
+        racingTotalTimeoutMs: 100,
+        stickyTimeoutCooldownMs: 300_000,
+      });
+      const staleSelector = Promise.withResolvers<Provider[]>();
+      const refillStarted = Promise.withResolvers<void>();
+      mocks.pickDiscoveryProviders
+        .mockResolvedValueOnce([peer])
+        .mockImplementationOnce(() => {
+          refillStarted.resolve();
+          return staleSelector.promise;
+        })
+        .mockResolvedValueOnce([nextRound]);
+
+      const launchedProviderIds: number[] = [];
+      const doForward = vi.spyOn(
+        ProxyForwarder as unknown as {
+          doForward: (...args: unknown[]) => Promise<Response>;
+        },
+        "doForward"
+      );
+      doForward.mockImplementation(async (attemptSession) => {
+        const providerId = (attemptSession as ProxySession).provider!.id;
+        launchedProviderIds.push(providerId);
+        if (providerId === initial.id) throw new Error("initial failed");
+        if (providerId === nextRound.id) {
+          return new Response('data: {"type":"content_block_delta","delta":{"text":"next"}}\n\n', {
+            headers: { "content-type": "text/event-stream" },
+          });
+        }
+        return new Response(new ReadableStream<Uint8Array>(), {
+          headers: { "content-type": "text/event-stream" },
+        });
+      });
+
+      const responsePromise = ProxyForwarder.send(session);
+      await refillStarted.promise;
+      await vi.advanceTimersByTimeAsync(10);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(mocks.pickDiscoveryProviders).toHaveBeenCalledTimes(3);
+
+      staleSelector.resolve([stale]);
+      await vi.advanceTimersByTimeAsync(0);
+
+      const response = await responsePromise;
+      expect(await response.text()).toContain('"next"');
+      expect(launchedProviderIds).toEqual([initial.id, peer.id, nextRound.id]);
+      expect(doForward).toHaveBeenCalledTimes(3);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   test("a fallback failure waits for the reserved wave before advancing another round", async () => {
     vi.useFakeTimers();
     try {
@@ -4165,6 +4498,12 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
       fallbackController!.close();
       await vi.advanceTimersByTimeAsync(0);
       const response = await responsePromise;
+      expect(peekDeferredStreamingFinalization(session)).toEqual(
+        expect.objectContaining({
+          bindingIntent: "none",
+          requiresCompletionMarker: true,
+        })
+      );
       expect(await response.text()).toContain('"fallback"');
       expect(mocks.pickDiscoveryProviders).toHaveBeenCalledTimes(1);
     } finally {

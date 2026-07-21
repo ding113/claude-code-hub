@@ -66,6 +66,43 @@ describe("DiscoveryCoordinator", () => {
     expect(coordinator.canRefillCurrentRound).toBe(false);
   });
 
+  it("counts setup reservations as occupied slots without promoting them to fallback", () => {
+    const coordinator = new DiscoveryCoordinator({ concurrency: 2, maxRounds: 2 });
+    coordinator.addAttempt(attempt("transport", 1));
+    coordinator.addAttempt({
+      ...attempt("setup", 2),
+      providerId: 0,
+      priority: Number.POSITIVE_INFINITY,
+      setupOnly: true,
+    });
+
+    expect(coordinator.activeAttempts).toHaveLength(2);
+    expect(coordinator.onRoundBoundary()).toEqual({
+      type: "launch",
+      slots: 1,
+      cancelAttemptIds: ["setup"],
+      promoteAttemptId: "transport",
+    });
+    expect(coordinator.snapshot.find((item) => item.id === "transport")?.kind).toBe("fallback");
+    expect(coordinator.snapshot.find((item) => item.id === "setup")?.pending).toBe(false);
+  });
+
+  it("terminates the final round instead of promoting a setup-only reservation", () => {
+    const coordinator = new DiscoveryCoordinator({ concurrency: 1, maxRounds: 1 });
+    coordinator.addAttempt({
+      ...attempt("setup", 1),
+      providerId: 0,
+      priority: Number.POSITIVE_INFINITY,
+      setupOnly: true,
+    });
+
+    expect(coordinator.onRoundBoundary()).toEqual({
+      type: "terminal_failure",
+      cancelAttemptIds: ["setup"],
+    });
+    expect(coordinator.state).toBe("TERMINAL_FAILED");
+  });
+
   it("ignores callbacks from an old request epoch", () => {
     const coordinator = new DiscoveryCoordinator({ concurrency: 2, maxRounds: 2 });
     coordinator.addAttempt(attempt("a", 1));

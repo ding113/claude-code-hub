@@ -781,6 +781,44 @@ describe("Endpoint circuit breaker isolation", () => {
     expect(RateLimitService.releaseProviderSession).toHaveBeenCalledWith(1, "fake-session");
   });
 
+  it("records a Discovery fallback without a completion marker as failed", async () => {
+    const session = createSession();
+    setDeferredStreamingFinalization(session, {
+      providerId: 1,
+      providerName: "test-provider",
+      providerPriority: 10,
+      attemptNumber: 2,
+      totalProvidersAttempted: 2,
+      isFirstAttempt: false,
+      isFailoverSuccess: true,
+      endpointId: 42,
+      endpointUrl: "https://api.test.com",
+      upstreamStatusCode: 200,
+      bindingIntent: "none",
+      requiresCompletionMarker: true,
+    });
+
+    const clientResponse = await ProxyResponseHandler.dispatch(
+      session,
+      createSuccessStreamResponse()
+    );
+    await clientResponse.text();
+    await drainAsyncTasks();
+
+    expect(updateMessageRequestDetailsDurably).toHaveBeenCalledWith(
+      1,
+      expect.objectContaining({
+        statusCode: 502,
+        errorMessage: "STREAM_COMPLETION_MARKER_MISSING",
+      }),
+      expect.objectContaining({ onCommitted: expect.any(Function) })
+    );
+    expect(mockRecordFailure).toHaveBeenCalledOnce();
+    expect(mockRecordSuccess).not.toHaveBeenCalled();
+    expect(SessionManager.compareAndSetSessionProvider).not.toHaveBeenCalled();
+    expect(SessionManager.clearVersionedSessionProvider).not.toHaveBeenCalled();
+  });
+
   it("does not clear a create tombstone when the completion marker is missing", async () => {
     const session = createSession();
     setDeferredStreamingFinalization(session, {

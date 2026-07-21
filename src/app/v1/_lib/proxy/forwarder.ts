@@ -200,6 +200,7 @@ function applyProviderCustomHeaders(
 const RETRY_LIMITS = PROVIDER_LIMITS.MAX_RETRY_ATTEMPTS;
 const MAX_PROVIDER_SWITCHES = 20; // 保险栓：最多切换 20 次供应商（防止无限循环）
 const DISCOVERY_LEASE_HANDOFF_GRACE_SECONDS = 5;
+const DISCOVERY_TERMINAL_CLEANUP_MAX_MS = 1_000;
 
 function isDiscoveryRolloutEligible(keyId: number, sessionId: string, percent: number): boolean {
   const normalizedPercent = Math.max(0, Math.min(100, Math.floor(percent)));
@@ -239,17 +240,30 @@ class DiscoveryCancellationError extends Error {
   }
 }
 
-type DiscoveryRetrySetupReservation = {
+type DiscoverySetupReservationBase = {
   placeholderAttemptId: string;
-  providerId: number;
   requestEpoch: number;
   roundEpoch: number;
   controller: AbortController;
+  providerId: number | null;
   providerSessionRefOwned: boolean;
   providerSessionRefRetainOnSuccess: boolean;
   providerSessionRefReleased: boolean;
   cancellationKind: DiscoveryCancellationKind | null;
 };
+
+type DiscoveryRetrySetupReservation = DiscoverySetupReservationBase & {
+  purpose: "rectifier_retry";
+  providerId: number;
+};
+
+type DiscoveryCandidateSetupReservation = DiscoverySetupReservationBase & {
+  purpose: "candidate_launch";
+};
+
+type DiscoverySetupReservation =
+  | DiscoveryRetrySetupReservation
+  | DiscoveryCandidateSetupReservation;
 
 class DiscoveryValidityLimitError extends Error {
   constructor() {
@@ -5065,7 +5079,9 @@ export class ProxyForwarder {
     >();
     const launched = new Set<number>();
     const retrySetupReservations = new Map<string, DiscoveryRetrySetupReservation>();
+    const candidateSetupReservations = new Map<string, DiscoveryCandidateSetupReservation>();
     let sequence = 0;
+    let setupSequence = 0;
     let currentRound = 1;
     let winner: (typeof attempts extends Map<string, infer V> ? V : never) | null = null;
     let committed = false;
@@ -5080,7 +5096,10 @@ export class ProxyForwarder {
     let refillQueue: Promise<void> = Promise.resolve();
     const roundLaunchIdleWaiters = new Set<() => void>();
     let fallbackPromotionBlocked = false;
-    let stickyTimeoutWaveReservation: { fallbackAttemptId: string } | null = null;
+    type StickyTimeoutWaveReservation = { fallbackAttemptId: string; slots: number };
+    let stickyTimeoutWaveReservation: StickyTimeoutWaveReservation | null = null;
+    let stickyTimeoutWaveClaim: StickyTimeoutWaveReservation | null = null;
+    let stickyTimeoutWaveLaunchPromise: Promise<void> | null = null;
     let stickyTimeoutCooldownPromise: Promise<void> | null = null;
     const hasSticky =
       session.shouldReuseProvider() &&
@@ -5118,20 +5137,31 @@ export class ProxyForwarder {
       ProxyForwarder.releaseProviderSessionRef(session, attempt.provider.id);
     };
 
-    const releaseRetrySetupProviderRef = (reservation: DiscoveryRetrySetupReservation) => {
-      if (!reservation.providerSessionRefOwned || reservation.providerSessionRefReleased) return;
+    const releaseSetupProviderRef = (reservation: DiscoverySetupReservation) => {
+      if (
+        reservation.providerId == null ||
+        !reservation.providerSessionRefOwned ||
+        reservation.providerSessionRefReleased
+      ) {
+        return;
+      }
       reservation.providerSessionRefReleased = true;
       reservation.providerSessionRefOwned = false;
       ProxyForwarder.releaseProviderSessionRef(session, reservation.providerId);
     };
 
-    const cancelRetrySetupReservation = (
-      reservation: DiscoveryRetrySetupReservation,
+    const cancelSetupReservation = (
+      reservation: DiscoverySetupReservation,
       cancellationKind: DiscoveryCancellationKind
     ) => {
       if (reservation.cancellationKind) return;
       reservation.cancellationKind = cancellationKind;
-      retrySetupReservations.delete(reservation.placeholderAttemptId);
+      if (reservation.purpose === "rectifier_retry") {
+        retrySetupReservations.delete(reservation.placeholderAttemptId);
+      } else {
+        candidateSetupReservations.delete(reservation.placeholderAttemptId);
+      }
+      coordinator.removeAttempt(reservation.placeholderAttemptId);
       if (!reservation.controller.signal.aborted) {
         try {
           reservation.controller.abort(new DiscoveryCancellationError(cancellationKind));
@@ -5139,21 +5169,24 @@ export class ProxyForwarder {
           /* abort is best effort */
         }
       }
-      releaseRetrySetupProviderRef(reservation);
+      releaseSetupProviderRef(reservation);
     };
 
-    const cancelRetrySetupReservations = (
+    const cancelSetupReservations = (
       cancellationKind: DiscoveryCancellationKind,
-      predicate: (reservation: DiscoveryRetrySetupReservation) => boolean = () => true
+      predicate: (reservation: DiscoverySetupReservation) => boolean = () => true
     ) => {
       for (const reservation of retrySetupReservations.values()) {
-        if (predicate(reservation)) cancelRetrySetupReservation(reservation, cancellationKind);
+        if (predicate(reservation)) cancelSetupReservation(reservation, cancellationKind);
+      }
+      for (const reservation of candidateSetupReservations.values()) {
+        if (predicate(reservation)) cancelSetupReservation(reservation, cancellationKind);
       }
     };
 
-    const awaitRetrySetupStep = async <T>(
+    const awaitSetupStep = async <T>(
       promise: Promise<T>,
-      reservation?: DiscoveryRetrySetupReservation
+      reservation?: DiscoverySetupReservation
     ): Promise<T> => {
       if (!reservation) return promise;
       const { signal } = reservation.controller;
@@ -5254,6 +5287,43 @@ export class ProxyForwarder {
       }
     };
 
+    const waitForStickyTimeoutCooldownBounded = async (
+      cancellationKind?: DiscoveryCancellationKind
+    ): Promise<void> => {
+      const cooldown = stickyTimeoutCooldownPromise;
+      if (!cooldown) return;
+
+      const maxWaitMs =
+        cancellationKind === "client_abort"
+          ? 0
+          : cancellationKind === "request_deadline"
+            ? DISCOVERY_TERMINAL_CLEANUP_MAX_MS
+            : Math.min(
+                DISCOVERY_TERMINAL_CLEANUP_MAX_MS,
+                Math.max(0, racingDeadlineAt - Date.now())
+              );
+      if (maxWaitMs <= 0) return;
+
+      let timeout: NodeJS.Timeout | null = null;
+      let completed = false;
+      await Promise.race([
+        cooldown.then(() => {
+          completed = true;
+        }),
+        new Promise<void>((resolve) => {
+          timeout = setTimeout(resolve, maxWaitMs);
+          timeout.unref?.();
+        }),
+      ]);
+      if (timeout) clearTimeout(timeout);
+      if (!completed) {
+        logger.warn("[Discovery] Sticky cooldown cleanup exceeded terminal wait budget", {
+          maxWaitMs,
+          cancellationKind,
+        });
+      }
+    };
+
     const settleFailure = async (
       error: Error,
       options: {
@@ -5266,13 +5336,19 @@ export class ProxyForwarder {
       if (totalTimer) clearTimeout(totalTimer);
       if (roundTimer) clearTimeout(roundTimer);
       if (stickyTimer) clearTimeout(stickyTimer);
-      cancelRetrySetupReservations(options.cancellationKind ?? "discovery_loser");
+      cancelSetupReservations(options.cancellationKind ?? "discovery_loser");
       cancelLosers(null, options.cancellationKind ?? "discovery_loser");
       // Sticky timeout owns its cooldown mutation. A terminal deadline/error or
       // client abort may race that Redis CAS, but must not issue a second
-      // zero-cooldown clear against the same captured generation.
-      if (stickyTimeoutCooldownPromise) await stickyTimeoutCooldownPromise;
-      if (!options.preserveBinding && bindingWriteAllowed && session.isSessionBindingAllowed()) {
+      // zero-cooldown clear against the same captured generation. Terminal
+      // delivery must not wait without a bound for Redis cleanup.
+      await waitForStickyTimeoutCooldownBounded(options.cancellationKind);
+      if (
+        !stickyTimeoutCooldownPromise &&
+        !options.preserveBinding &&
+        bindingWriteAllowed &&
+        session.isSessionBindingAllowed()
+      ) {
         if (bindingSnapshot.providerId != null) {
           await SessionManager.clearVersionedSessionProvider(
             bindingSnapshot,
@@ -5321,7 +5397,7 @@ export class ProxyForwarder {
       if (totalTimer) clearTimeout(totalTimer);
       if (roundTimer) clearTimeout(roundTimer);
       if (stickyTimer) clearTimeout(stickyTimer);
-      cancelRetrySetupReservations("discovery_loser");
+      cancelSetupReservations("discovery_loser");
       cancelLosers(attempt);
       discoveryMetrics.attemptFinished(attempt.id, {
         providerId: attempt.provider.id,
@@ -5361,7 +5437,7 @@ export class ProxyForwarder {
               ? "create"
               : "renew",
         bindingSnapshot,
-        requiresCompletionMarker: attempt.kind !== "fallback",
+        requiresCompletionMarker: true,
         discoveryLease: lease,
         providerSessionRefOwned: attempt.providerSessionRefOwned,
         providerSessionRefRetainOnSuccess: attempt.providerSessionRefRetainOnSuccess,
@@ -5460,19 +5536,32 @@ export class ProxyForwarder {
         requestAttemptCount?: number;
         retryState?: ReactiveRectifierRetryState;
         retrySetupReservation?: DiscoveryRetrySetupReservation;
+        candidateSetupReservation?: DiscoveryCandidateSetupReservation;
       }
     ): Promise<boolean> => {
       const retrySetupReservation = options?.retrySetupReservation;
+      const candidateSetupReservation = options?.candidateSetupReservation;
+      const setupReservation = retrySetupReservation ?? candidateSetupReservation;
+      const isCandidateSetupActive = () =>
+        !candidateSetupReservation ||
+        (candidateSetupReservations.get(candidateSetupReservation.placeholderAttemptId) ===
+          candidateSetupReservation &&
+          !candidateSetupReservation.controller.signal.aborted &&
+          coordinator.isSetupPending(
+            candidateSetupReservation.placeholderAttemptId,
+            candidateSetupReservation.requestEpoch,
+            candidateSetupReservation.roundEpoch
+          ));
       let providerSessionRefOwnedByReservation =
-        retrySetupReservation?.providerSessionRefOwned === true &&
-        retrySetupReservation.providerSessionRefReleased === false;
+        setupReservation?.providerSessionRefOwned === true &&
+        setupReservation.providerSessionRefReleased === false;
       let providerSessionRefTracked = providerSessionRefOwnedByReservation;
       let providerSessionRefRetainOnSuccess =
-        retrySetupReservation?.providerSessionRefRetainOnSuccess === true;
+        setupReservation?.providerSessionRefRetainOnSuccess === true;
       const rollbackLaunch = () => {
         if (providerSessionRefTracked) {
-          if (providerSessionRefOwnedByReservation && retrySetupReservation) {
-            releaseRetrySetupProviderRef(retrySetupReservation);
+          if (providerSessionRefOwnedByReservation && setupReservation) {
+            releaseSetupProviderRef(setupReservation);
           } else {
             ProxyForwarder.releaseProviderSessionRef(session, provider.id);
           }
@@ -5483,29 +5572,62 @@ export class ProxyForwarder {
         if (retrySetupReservation) {
           retrySetupReservations.delete(retrySetupReservation.placeholderAttemptId);
         }
+        if (candidateSetupReservation && !candidateSetupReservation.cancellationKind) {
+          candidateSetupReservation.providerId = null;
+          candidateSetupReservation.providerSessionRefOwned = false;
+          candidateSetupReservation.providerSessionRefRetainOnSuccess = false;
+          candidateSetupReservation.providerSessionRefReleased = false;
+        }
       };
       if (
         settled ||
         committed ||
-        retrySetupReservation?.controller.signal.aborted ||
+        setupReservation?.controller.signal.aborted ||
+        !isCandidateSetupActive() ||
         (!retrySetupReservation && launched.has(provider.id))
       ) {
         rollbackLaunch();
         return false;
       }
       if (!retrySetupReservation) launched.add(provider.id);
-      if (!retrySetupReservation && provider.id === initialProvider.id) {
+      if (!setupReservation && provider.id === initialProvider.id) {
         providerSessionRefTracked = session.hasProviderSessionRef(provider.id);
         providerSessionRefRetainOnSuccess =
           providerSessionRefTracked && session.shouldRetainProviderSessionRefOnSuccess(provider.id);
       }
       if (!retrySetupReservation && !providerSessionRefTracked && session.sessionId) {
         const limit = provider.limitConcurrentSessions || 0;
-        const check = await awaitRetrySetupStep(
-          RateLimitService.checkAndTrackProviderSession(provider.id, session.sessionId, limit),
-          retrySetupReservation
+        const admissionPromise = RateLimitService.checkAndTrackProviderSession(
+          provider.id,
+          session.sessionId,
+          limit
         );
+        // The underlying admission call cannot be aborted. If cancellation
+        // wins its race and the late result nevertheless reserved a session
+        // ref, release that ref here; the normal path transfers ownership to
+        // the reservation and remains exactly-once.
+        if (setupReservation) {
+          void admissionPromise.then(
+            (lateCheck) => {
+              if (setupReservation.controller.signal.aborted && lateCheck.referenced) {
+                session.recordProviderSessionRef(provider.id, {
+                  retainOnSuccess: lateCheck.tracked,
+                });
+                ProxyForwarder.releaseProviderSessionRef(session, provider.id);
+              }
+            },
+            () => undefined
+          );
+        }
+        let check: Awaited<ReturnType<typeof RateLimitService.checkAndTrackProviderSession>>;
+        try {
+          check = await awaitSetupStep(admissionPromise, setupReservation);
+        } catch (error) {
+          rollbackLaunch();
+          throw error;
+        }
         if (!check.allowed) {
+          rollbackLaunch();
           throw new ProxyError(check.reason || "Provider concurrent limit reached", 503);
         }
         if (check.referenced) {
@@ -5514,23 +5636,35 @@ export class ProxyForwarder {
           });
           providerSessionRefTracked = true;
           providerSessionRefRetainOnSuccess = check.tracked;
+          if (candidateSetupReservation) {
+            candidateSetupReservation.providerId = provider.id;
+            candidateSetupReservation.providerSessionRefOwned = true;
+            candidateSetupReservation.providerSessionRefRetainOnSuccess = check.tracked;
+            candidateSetupReservation.providerSessionRefReleased = false;
+            providerSessionRefOwnedByReservation = true;
+          }
         }
       }
-      if (settled || committed) {
+      if (settled || committed || !isCandidateSetupActive()) {
         rollbackLaunch();
         return false;
       }
       let endpoint: Awaited<ReturnType<typeof ProxyForwarder.resolveStreamingHedgeEndpoint>>;
       try {
-        endpoint = await awaitRetrySetupStep(
+        endpoint = await awaitSetupStep(
           ProxyForwarder.resolveStreamingHedgeEndpoint(session, provider),
-          retrySetupReservation
+          setupReservation
         );
       } catch (error) {
         rollbackLaunch();
         throw error;
       }
-      if (settled || committed || retrySetupReservation?.controller.signal.aborted) {
+      if (
+        settled ||
+        committed ||
+        setupReservation?.controller.signal.aborted ||
+        !isCandidateSetupActive()
+      ) {
         rollbackLaunch();
         return false;
       }
@@ -5546,7 +5680,12 @@ export class ProxyForwarder {
         rollbackLaunch();
         throw error;
       }
-      if (settled || committed || retrySetupReservation?.controller.signal.aborted) {
+      if (
+        settled ||
+        committed ||
+        setupReservation?.controller.signal.aborted ||
+        !isCandidateSetupActive()
+      ) {
         rollbackLaunch();
         return false;
       }
@@ -5563,6 +5702,17 @@ export class ProxyForwarder {
         coordinator.removeAttempt(retrySetupReservation.placeholderAttemptId);
         if (providerSessionRefOwnedByReservation) {
           retrySetupReservation.providerSessionRefOwned = false;
+          providerSessionRefOwnedByReservation = false;
+        }
+      } else if (candidateSetupReservation) {
+        if (!isCandidateSetupActive()) {
+          rollbackLaunch();
+          return false;
+        }
+        coordinator.removeAttempt(candidateSetupReservation.placeholderAttemptId);
+        candidateSetupReservations.delete(candidateSetupReservation.placeholderAttemptId);
+        if (providerSessionRefOwnedByReservation) {
+          candidateSetupReservation.providerSessionRefOwned = false;
           providerSessionRefOwnedByReservation = false;
         }
       }
@@ -5637,6 +5787,9 @@ export class ProxyForwarder {
         launchOrder: attempt.sequence,
       });
       if (!registered || settled || committed) {
+        if (candidateSetupReservation) {
+          candidateSetupReservations.delete(candidateSetupReservation.placeholderAttemptId);
+        }
         rollbackLaunch();
         return false;
       }
@@ -5736,6 +5889,15 @@ export class ProxyForwarder {
         })
         .catch(async (error) => {
           if (committed || settled || !attempt.pending) return;
+          const stickyWaveForFallback =
+            attempt.kind === "fallback"
+              ? stickyTimeoutWaveReservation?.fallbackAttemptId === id
+                ? stickyTimeoutWaveReservation
+                : stickyTimeoutWaveClaim?.fallbackAttemptId === id
+                  ? stickyTimeoutWaveClaim
+                  : null
+              : null;
+          if (stickyWaveForFallback) stickyWaveForFallback.slots = concurrency;
           lastError = error instanceof Error ? error : new Error(String(error));
           lastErrorCategory = await categorizeErrorAsync(lastError);
           const errorMessage =
@@ -5817,6 +5979,7 @@ export class ProxyForwarder {
           if (rectifier.matched && rectifier.applied) {
             const reservationEpoch = coordinator.epochs;
             const retrySetupReservation: DiscoveryRetrySetupReservation = {
+              purpose: "rectifier_retry",
               placeholderAttemptId: id,
               providerId: provider.id,
               requestEpoch: reservationEpoch.requestEpoch,
@@ -5829,6 +5992,7 @@ export class ProxyForwarder {
               cancellationKind: null,
             };
             retrySetupReservations.set(id, retrySetupReservation);
+            coordinator.markSetupOnly(id);
             // Keep the coordinator placeholder alive while setup runs. It
             // reserves the same concurrency slot across round transitions,
             // while the reservation owns the transferred Provider ref.
@@ -5890,6 +6054,20 @@ export class ProxyForwarder {
                 return;
               }
 
+              if (stickyTimeoutWaveReservation?.fallbackAttemptId === id) {
+                // Sticky already timed out, but its replacement wave is still
+                // waiting on the binding cooldown. A retry setup failure frees
+                // the fallback slot, so enlarge the reserved wave to full
+                // concurrency; the cooldown completion callback still owns
+                // starting it.
+                stickyTimeoutWaveReservation.slots = concurrency;
+                coordinator.removeAttempt(id);
+                if (!stickyTimeoutCooldownPromise) {
+                  await launchReservedStickyTimeoutWave();
+                }
+                return;
+              }
+
               // The rectified retry is provider-local. A setup failure must
               // release only this attempt's slot and let other Discovery
               // candidates continue. The placeholder is still in the
@@ -5917,11 +6095,14 @@ export class ProxyForwarder {
 
           const failedStickyProbe =
             stickyProbeActive && attempt.kind === "normal" && provider.id === initialProvider.id;
+          const failedReservedStickyFallback =
+            !failedStickyProbe && stickyTimeoutWaveReservation?.fallbackAttemptId === id;
           attempt.pending = false;
-          const failureAction = failedStickyProbe
-            ? ({ type: "none" } as const)
-            : coordinator.markFailed(id);
-          if (failedStickyProbe) coordinator.removeAttempt(id);
+          const failureAction =
+            failedStickyProbe || failedReservedStickyFallback
+              ? ({ type: "none" } as const)
+              : coordinator.markFailed(id);
+          if (failedStickyProbe || failedReservedStickyFallback) coordinator.removeAttempt(id);
           session.addProviderToChain(provider, {
             ...attempt.endpointAudit,
             reason: "retry_failed",
@@ -5958,6 +6139,16 @@ export class ProxyForwarder {
             await launchNextRound(concurrency, true);
             return;
           }
+          if (failedReservedStickyFallback && stickyTimeoutWaveReservation) {
+            // This fallback represented the only occupied slot in the reserved
+            // Sticky replacement wave. Do not let markFailed terminalize a
+            // maxRounds=1 coordinator before that first wave has started.
+            stickyTimeoutWaveReservation.slots = concurrency;
+            if (!stickyTimeoutCooldownPromise) {
+              await launchReservedStickyTimeoutWave();
+            }
+            return;
+          }
           const actionOwnsNextStep =
             failureAction.type === "commit_normal" ||
             failureAction.type === "promote_fallback" ||
@@ -5968,7 +6159,15 @@ export class ProxyForwarder {
               failureAction.type === "launch" &&
               stickyTimeoutWaveReservation?.fallbackAttemptId === id
             ) {
-              await launchReservedStickyTimeoutWave(failureAction.slots);
+              stickyTimeoutWaveReservation.slots = Math.max(
+                stickyTimeoutWaveReservation.slots,
+                failureAction.slots
+              );
+              if (!stickyTimeoutCooldownPromise) {
+                await launchReservedStickyTimeoutWave();
+              }
+            } else if (failureAction.type === "launch" && stickyTimeoutWaveLaunchPromise) {
+              await stickyTimeoutWaveLaunchPromise;
             } else {
               await executeCoordinatorAction(failureAction);
             }
@@ -5976,10 +6175,7 @@ export class ProxyForwarder {
           if (!actionOwnsNextStep && !committed && !settled) {
             await refillCurrentRoundSlots(1);
           }
-          if (
-            Array.from(attempts.values()).every((candidate) => !candidate.pending) &&
-            noMoreCandidates
-          ) {
+          if (coordinator.activeAttempts.length === 0 && noMoreCandidates) {
             await settleFailure(
               ProxyForwarder.resolveHedgeTerminalError(lastError, lastErrorCategory)
             );
@@ -5994,42 +6190,134 @@ export class ProxyForwarder {
       return true;
     };
 
+    const reserveCandidateSetupSlots = (slots: number): DiscoveryCandidateSetupReservation[] => {
+      const epoch = coordinator.epochs;
+      const reservations: DiscoveryCandidateSetupReservation[] = [];
+      for (let index = 0; index < slots; index += 1) {
+        const placeholderAttemptId = `setup:${currentRound}:${++setupSequence}`;
+        const reservation: DiscoveryCandidateSetupReservation = {
+          purpose: "candidate_launch",
+          placeholderAttemptId,
+          requestEpoch: epoch.requestEpoch,
+          roundEpoch: epoch.roundEpoch,
+          controller: new AbortController(),
+          providerId: null,
+          providerSessionRefOwned: false,
+          providerSessionRefRetainOnSuccess: false,
+          providerSessionRefReleased: false,
+          cancellationKind: null,
+        };
+        const registered = coordinator.addAttempt({
+          id: placeholderAttemptId,
+          providerId: 0,
+          priority: Number.POSITIVE_INFINITY,
+          kind: "normal",
+          setupOnly: true,
+          ready: false,
+          pending: true,
+          round: currentRound,
+          launchOrder: Number.MAX_SAFE_INTEGER - slots + index,
+        });
+        if (!registered) break;
+        candidateSetupReservations.set(placeholderAttemptId, reservation);
+        reservations.push(reservation);
+      }
+      return reservations;
+    };
+
+    const isCandidateSetupReservationActive = (
+      reservation: DiscoveryCandidateSetupReservation
+    ): boolean =>
+      candidateSetupReservations.get(reservation.placeholderAttemptId) === reservation &&
+      !reservation.controller.signal.aborted &&
+      coordinator.isSetupPending(
+        reservation.placeholderAttemptId,
+        reservation.requestEpoch,
+        reservation.roundEpoch
+      );
+
     const fillDiscoverySlots = async (slots: number): Promise<void> => {
-      let remainingSlots = slots;
-      while (remainingSlots > 0 && !settled && !committed) {
-        const exclusionCountBeforeSelection = launched.size;
-        const candidates = await ProxyProviderResolver.pickDiscoveryProviders(
-          session,
-          remainingSlots,
-          Array.from(launched)
-        );
-        if (candidates.length === 0) {
-          noMoreCandidates = true;
-          break;
-        }
-
-        noMoreCandidates = false;
-        let registeredInBatch = 0;
-        for (const candidate of candidates) {
+      const reservations = reserveCandidateSetupSlots(slots);
+      try {
+        while (reservations.length > 0 && !settled && !committed) {
+          if (!isCandidateSetupReservationActive(reservations[0])) break;
+          const exclusionCountBeforeSelection = launched.size;
+          let candidates: Provider[];
           try {
-            if (await launch(candidate, "normal")) {
-              registeredInBatch += 1;
-              remainingSlots -= 1;
-            }
+            candidates = await awaitSetupStep(
+              ProxyProviderResolver.pickDiscoveryProviders(
+                session,
+                reservations.length,
+                Array.from(launched)
+              ),
+              reservations[0]
+            );
           } catch (error) {
-            lastError = error instanceof Error ? error : new Error(String(error));
-            // launch() excludes setup failures before throwing, so keep filling
-            // this round from the remaining candidate pool.
-            noMoreCandidates = false;
+            if (!isCandidateSetupReservationActive(reservations[0])) break;
+            throw error;
           }
-          if (remainingSlots <= 0 || settled || committed) break;
-        }
+          if (
+            settled ||
+            committed ||
+            reservations.length === 0 ||
+            !isCandidateSetupReservationActive(reservations[0])
+          ) {
+            break;
+          }
+          if (candidates.length === 0) {
+            noMoreCandidates = true;
+            break;
+          }
 
-        // A selector that ignores exclusions must not create an unbounded setup
-        // loop. Normal selectors advance `launched` even before transport setup.
-        if (registeredInBatch === 0 && launched.size === exclusionCountBeforeSelection) {
-          noMoreCandidates = true;
-          break;
+          noMoreCandidates = false;
+          let registeredInBatch = 0;
+          for (const candidate of candidates) {
+            const reservation = reservations[0];
+            if (!reservation || !isCandidateSetupReservationActive(reservation)) break;
+            reservation.providerId = candidate.id;
+            const bound = coordinator.bindSetupProvider(
+              reservation.placeholderAttemptId,
+              candidate.id,
+              ProxyProviderResolver.resolveEffectivePriorityForSession(candidate, session),
+              reservation.requestEpoch,
+              reservation.roundEpoch
+            );
+            if (!bound) break;
+            try {
+              if (
+                await launch(candidate, "normal", {
+                  candidateSetupReservation: reservation,
+                })
+              ) {
+                registeredInBatch += 1;
+                reservations.shift();
+              }
+            } catch (error) {
+              if (isCandidateSetupReservationActive(reservation)) {
+                lastError = error instanceof Error ? error : new Error(String(error));
+                // The setup placeholder remains in the current round so another
+                // candidate can consume the same reserved slot.
+                noMoreCandidates = false;
+              }
+            }
+            if (reservations.length === 0 || settled || committed) break;
+          }
+
+          if (reservations.length === 0 || !isCandidateSetupReservationActive(reservations[0])) {
+            break;
+          }
+          // A selector that ignores exclusions must not create an unbounded setup
+          // loop. Normal selectors advance `launched` even before transport setup.
+          if (registeredInBatch === 0 && launched.size === exclusionCountBeforeSelection) {
+            noMoreCandidates = true;
+            break;
+          }
+        }
+      } finally {
+        for (const reservation of reservations) {
+          if (candidateSetupReservations.get(reservation.placeholderAttemptId) === reservation) {
+            cancelSetupReservation(reservation, "discovery_loser");
+          }
         }
       }
     };
@@ -6040,6 +6328,16 @@ export class ProxyForwarder {
 
       notifyRoundLaunchIdle();
       fallbackPromotionBlocked = false;
+      const readyNormal = Array.from(attempts.values()).find(
+        (attempt) => attempt.pending && attempt.ready && attempt.kind === "normal"
+      );
+      if (readyNormal && !committed && !settled) {
+        const action = coordinator.markReady(readyNormal.id);
+        if (action.type === "commit_normal") {
+          await commit(attempts.get(action.attemptId) ?? null);
+          return;
+        }
+      }
       const readyFallback = Array.from(attempts.values()).find(
         (attempt) => attempt.pending && attempt.ready && attempt.kind === "fallback"
       );
@@ -6071,7 +6369,18 @@ export class ProxyForwarder {
       await queued;
     }
 
-    const launchNextRound = async (slots: number, coordinatorAlreadyAdvanced = false) => {
+    let launchNextRoundQueue: Promise<void> = Promise.resolve();
+    type QueuedRoundLaunch = {
+      resolvers: Set<() => number>;
+      onStartCallbacks: Set<() => void>;
+      started: boolean;
+      promise: Promise<void>;
+    };
+    const queuedAdvancedRoundLaunches = new Map<string, QueuedRoundLaunch>();
+    const runLaunchNextRound = async (
+      resolveSlots: () => number,
+      coordinatorAlreadyAdvanced = false
+    ) => {
       if (settled || committed) return;
       roundLaunchesInProgress += 1;
       clearRoundTimer();
@@ -6082,38 +6391,158 @@ export class ProxyForwarder {
           const nextRound = coordinator.beginRound();
           currentRound = nextRound.round;
         }
-        if (currentRound > maxRounds || slots <= 0) return;
-        await fillDiscoverySlots(slots);
-        const hasPendingAttempt = Array.from(attempts.values()).some((attempt) => attempt.pending);
-        if (!hasPendingAttempt) {
-          await settleFailure(ProxyForwarder.buildAllProvidersUnavailableError(lastError));
-          return;
-        }
+        const launchEpoch = coordinator.epochs;
+        if (currentRound > maxRounds || resolveSlots() <= 0) return;
+        // The round SLA starts when the round is opened, before selector,
+        // admission, or endpoint setup can consume the budget. The timer
+        // cancels setup reservations and advances the coordinator while the
+        // launch batch is still in flight.
         if (!committed && !settled) {
           scheduleRoundBoundary(discoverySlaMs);
+        }
+        let reservedSlots = 0;
+        while (
+          !committed &&
+          !settled &&
+          coordinator.acceptsEpoch(launchEpoch.requestEpoch, launchEpoch.roundEpoch)
+        ) {
+          const targetSlots = Math.max(0, resolveSlots());
+          const additionalSlots = targetSlots - reservedSlots;
+          if (additionalSlots <= 0) break;
+          reservedSlots = targetSlots;
+          await fillDiscoverySlots(additionalSlots);
+        }
+        const hasPendingAttempt = coordinator.activeAttempts.length > 0;
+        if (
+          !hasPendingAttempt &&
+          !committed &&
+          !settled &&
+          coordinator.acceptsEpoch(launchEpoch.requestEpoch, launchEpoch.roundEpoch)
+        ) {
+          await settleFailure(ProxyForwarder.buildAllProvidersUnavailableError(lastError));
+          return;
         }
       } finally {
         await finishRoundLaunchBatch();
       }
     };
 
-    const launchReservedStickyTimeoutWave = async (slots: number): Promise<void> => {
-      if (!stickyTimeoutWaveReservation) return;
-      stickyTimeoutWaveReservation = null;
+    const queueLaunchNextRound = async (
+      resolveSlots: () => number,
+      coordinatorAlreadyAdvanced = false,
+      onStart?: () => void
+    ) => {
+      const expectedEpoch = coordinatorAlreadyAdvanced ? coordinator.epochs : null;
+      const epochKey = expectedEpoch
+        ? `${expectedEpoch.requestEpoch}:${expectedEpoch.roundEpoch}`
+        : null;
+      const existing = epochKey ? queuedAdvancedRoundLaunches.get(epochKey) : null;
+      if (existing) {
+        existing.resolvers.add(resolveSlots);
+        if (onStart) {
+          if (existing.started) onStart();
+          else existing.onStartCallbacks.add(onStart);
+        }
+        return existing.promise;
+      }
+
+      const launchEntry: QueuedRoundLaunch = {
+        resolvers: new Set([resolveSlots]),
+        onStartCallbacks: new Set(onStart ? [onStart] : []),
+        started: false,
+        promise: Promise.resolve(),
+      };
+      const runQueuedLaunch = async () => {
+        // A boundary may cancel a selector/setup batch before enqueueing the
+        // next wave. Wait for that batch's finally/cleanup before opening the
+        // next round so two waves cannot overlap or double-count slots.
+        await waitForRoundLaunches();
+        if (
+          expectedEpoch &&
+          !coordinator.acceptsEpoch(expectedEpoch.requestEpoch, expectedEpoch.roundEpoch)
+        ) {
+          return;
+        }
+        launchEntry.started = true;
+        for (const callback of launchEntry.onStartCallbacks) callback();
+        launchEntry.onStartCallbacks.clear();
+        return runLaunchNextRound(
+          () => Math.max(0, ...Array.from(launchEntry.resolvers, (slotResolver) => slotResolver())),
+          coordinatorAlreadyAdvanced
+        );
+      };
+      const queued = launchNextRoundQueue.then(runQueuedLaunch, runQueuedLaunch);
+      launchEntry.promise = queued;
+      if (epochKey) queuedAdvancedRoundLaunches.set(epochKey, launchEntry);
+      launchNextRoundQueue = queued.catch(() => undefined);
+      void queued.then(
+        () => {
+          if (epochKey && queuedAdvancedRoundLaunches.get(epochKey) === launchEntry) {
+            queuedAdvancedRoundLaunches.delete(epochKey);
+          }
+        },
+        () => {
+          if (epochKey && queuedAdvancedRoundLaunches.get(epochKey) === launchEntry) {
+            queuedAdvancedRoundLaunches.delete(epochKey);
+          }
+        }
+      );
+      return queued;
+    };
+
+    const launchNextRound = async (slots: number, coordinatorAlreadyAdvanced = false) =>
+      queueLaunchNextRound(() => slots, coordinatorAlreadyAdvanced);
+
+    const launchReservedStickyTimeoutWave = async (slots?: number): Promise<void> => {
+      const reservation = stickyTimeoutWaveReservation;
+      if (reservation && slots != null) reservation.slots = Math.max(reservation.slots, slots);
+      if (stickyTimeoutWaveLaunchPromise) return stickyTimeoutWaveLaunchPromise;
+      if (!reservation) return;
       if (settled || committed) return;
-      await launchNextRound(slots, true);
+      stickyTimeoutWaveClaim = reservation;
+      const launchPromise = queueLaunchNextRound(
+        () => reservation.slots,
+        true,
+        () => {
+          if (stickyTimeoutWaveReservation === reservation) {
+            stickyTimeoutWaveReservation = null;
+          }
+        }
+      );
+      stickyTimeoutWaveLaunchPromise = launchPromise;
+      try {
+        await launchPromise;
+      } finally {
+        if (stickyTimeoutWaveReservation === reservation) {
+          stickyTimeoutWaveReservation = null;
+        }
+        if (stickyTimeoutWaveClaim === reservation) {
+          stickyTimeoutWaveClaim = null;
+        }
+        if (stickyTimeoutWaveLaunchPromise === launchPromise) {
+          stickyTimeoutWaveLaunchPromise = null;
+        }
+      }
     };
 
     executeCoordinatorAction = async (action, terminalCancellationKind) => {
       if (settled || committed) return;
-      if (action.type === "cancel" || action.type === "launch") {
+      if (
+        action.type === "cancel" ||
+        action.type === "launch" ||
+        (action.type === "terminal_failure" && action.cancelAttemptIds)
+      ) {
         const cancelIds =
           action.type === "cancel" ? action.attemptIds : (action.cancelAttemptIds ?? []);
         for (const id of cancelIds) {
           const attempt = attempts.get(id);
           const retrySetupReservation = retrySetupReservations.get(id);
+          const candidateSetupReservation = candidateSetupReservations.get(id);
           if (retrySetupReservation) {
-            cancelRetrySetupReservation(retrySetupReservation, "discovery_sla_timeout");
+            cancelSetupReservation(retrySetupReservation, "discovery_sla_timeout");
+          }
+          if (candidateSetupReservation) {
+            cancelSetupReservation(candidateSetupReservation, "discovery_sla_timeout");
           }
           // Coordinator marks cancelled attempts non-pending before returning
           // the action. Restore the transport-facing state long enough for the
@@ -6121,7 +6550,7 @@ export class ProxyForwarder {
           if (attempt && !attempt.readerTransferred) attempt.pending = true;
           if (attempt) cancelAttempt(attempt, "discovery_sla_timeout");
         }
-        if (action.promoteAttemptId) {
+        if ("promoteAttemptId" in action && action.promoteAttemptId) {
           const fallback = attempts.get(action.promoteAttemptId);
           const retrySetupReservation = retrySetupReservations.get(action.promoteAttemptId);
           if (fallback) {
@@ -6164,7 +6593,7 @@ export class ProxyForwarder {
       if (settled || committed) return;
       if (stickyTimer) clearTimeout(stickyTimer);
       coordinator.cancelRequest();
-      cancelRetrySetupReservations("client_abort");
+      cancelSetupReservations("client_abort");
       void settleFailure(new ProxyError("Request aborted by client", 499, undefined, true), {
         preserveBinding: true,
         cancellationKind: "client_abort",
@@ -6232,18 +6661,21 @@ export class ProxyForwarder {
                 }
                 discoveryMetrics.fallbackPromoted(stickyAttemptId, initialProvider.id, 0);
                 fallbackPromotionBlocked = true;
-                stickyTimeoutWaveReservation = { fallbackAttemptId: stickyAttemptId };
+                stickyTimeoutWaveReservation = {
+                  fallbackAttemptId: stickyAttemptId,
+                  slots: Math.max(0, concurrency - 1),
+                };
                 if (bindingSnapshot && bindingSnapshot.providerId === initialProvider.id) {
                   void ensureStickyTimeoutCooldown(
                     Math.ceil((settings.stickyTimeoutCooldownMs ?? 300_000) / 1000)
                   ).finally(() => {
-                    void launchReservedStickyTimeoutWave(Math.max(0, concurrency - 1)).catch(
-                      (error) => logger.warn("[Discovery] Sticky round launch failed", { error })
+                    void launchReservedStickyTimeoutWave().catch((error) =>
+                      logger.warn("[Discovery] Sticky round launch failed", { error })
                     );
                   });
                   return;
                 }
-                void launchReservedStickyTimeoutWave(Math.max(0, concurrency - 1)).catch((error) =>
+                void launchReservedStickyTimeoutWave().catch((error) =>
                   logger.warn("[Discovery] Sticky round launch failed", { error })
                 );
               }
