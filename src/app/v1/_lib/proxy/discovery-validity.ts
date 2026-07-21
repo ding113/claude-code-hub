@@ -49,15 +49,37 @@ function hasAnthropicContentBlock(value: unknown): boolean {
   return block.type === "text" ? hasContent(block.text) : true;
 }
 
-function classifyJson(value: unknown, protocol: DiscoveryProtocol): DiscoveryValidity {
-  if (!value || typeof value !== "object") return { ready: false, terminal: false, error: true };
+/**
+ * Protocol-level error signals that must remain terminal even if a provider
+ * emits a later completion marker. Keep this shared by the racing parser and
+ * stream finalizer so a failed winner cannot become Sticky during settlement.
+ */
+export function isDiscoveryProtocolErrorPayload(value: unknown): boolean {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const object = value as Record<string, unknown>;
   if (
     object.error ||
     object.failed ||
     object.type === "error" ||
+    object.type === "response.error" ||
     object.type === "response.failed"
   ) {
+    return true;
+  }
+
+  const response = object.response;
+  return (
+    !!response &&
+    typeof response === "object" &&
+    !Array.isArray(response) &&
+    !!(response as Record<string, unknown>).error
+  );
+}
+
+function classifyJson(value: unknown, protocol: DiscoveryProtocol): DiscoveryValidity {
+  if (!value || typeof value !== "object") return { ready: false, terminal: false, error: true };
+  const object = value as Record<string, unknown>;
+  if (isDiscoveryProtocolErrorPayload(value)) {
     return { ready: false, terminal: true, error: true };
   }
   if (protocol === "openai-chat") {

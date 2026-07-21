@@ -56,6 +56,7 @@ import {
   createDemandDrivenResponsePump,
   type DemandDrivenResponsePump,
 } from "./demand-driven-response-pump";
+import { isDiscoveryProtocolErrorPayload } from "./discovery-validity";
 import { isClientAbortError, isTransportError } from "./errors";
 import type { ProxySession } from "./session";
 import {
@@ -1197,6 +1198,7 @@ function hasStreamCompletionMarker(text: string, format: ProxySession["originalF
 
   switch (format) {
     case "response":
+      if (events.some((event) => isDiscoveryProtocolErrorPayload(event.data))) return false;
       return events.some((event) => {
         if (!isRecord(event.data)) return false;
         const markerType = event.data.type;

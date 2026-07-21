@@ -853,6 +853,59 @@ describe("Endpoint circuit breaker isolation", () => {
     );
   });
 
+  it("does not let response.done override an earlier nested Responses failure", async () => {
+    const session = createSession();
+    session.originalFormat = "response";
+    const snapshot = {
+      sessionId: "fake-session",
+      keyId: 456,
+      providerId: null,
+      generation: "failed-before-done-generation",
+    } as const;
+    setDeferredStreamingFinalization(session, {
+      providerId: 1,
+      providerName: "test-provider",
+      providerPriority: 10,
+      attemptNumber: 1,
+      totalProvidersAttempted: 2,
+      isFirstAttempt: false,
+      isFailoverSuccess: true,
+      endpointId: 42,
+      endpointUrl: "https://api.test.com",
+      upstreamStatusCode: 200,
+      bindingIntent: "create",
+      bindingSnapshot: snapshot,
+      requiresCompletionMarker: true,
+    });
+    const body =
+      `event: response.output_text.delta\ndata: ${JSON.stringify({
+        type: "response.output_text.delta",
+        delta: "partial output",
+      })}\n\n` +
+      `event: response.failed\ndata: ${JSON.stringify({
+        type: "response.failed",
+        response: { status: "failed", error: { message: "upstream failed" } },
+      })}\n\n` +
+      `event: response.done\ndata: ${JSON.stringify({ type: "response.done" })}\n\n`;
+
+    const clientResponse = await ProxyResponseHandler.dispatch(
+      session,
+      new Response(body, {
+        status: 200,
+        headers: { "content-type": "text/event-stream" },
+      })
+    );
+    await clientResponse.text();
+    await drainAsyncTasks();
+
+    expect(SessionManager.compareAndSetSessionProvider).not.toHaveBeenCalled();
+    expect(mockRecordSuccess).not.toHaveBeenCalled();
+    expect(mockRecordFailure).toHaveBeenCalledWith(
+      1,
+      expect.objectContaining({ message: "STREAM_COMPLETION_MARKER_MISSING" })
+    );
+  });
+
   it.each([
     {
       label: "Claude data-only stop",

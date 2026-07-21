@@ -33,6 +33,21 @@ describe("discovery validity", () => {
     expect(parser.push('{"type":"response.output_text.delta","delta":"late"}').ready).toBe(false);
   });
 
+  it.each([
+    '{"type":"response.error"}',
+    '{"failed":true}',
+    '{"type":"response.done","response":{"error":{"message":"no"}}}',
+  ])("rejects Responses protocol error payload %s", (payload) => {
+    const parser = new DiscoveryValidityParser("openai-responses");
+
+    expect(parser.push(payload)).toMatchObject({ ready: false, terminal: true, error: true });
+    expect(parser.push('{"type":"response.done"}')).toMatchObject({
+      ready: false,
+      terminal: true,
+      error: true,
+    });
+  });
+
   it("does not promote empty tool or content events", () => {
     expect(
       classifyDiscoveryChunk(
