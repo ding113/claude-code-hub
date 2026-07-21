@@ -49,6 +49,7 @@ import {
   type SessionDiscoveryLeaseMutationResult,
   type SessionProviderCooldownResult,
   terminateSessionBinding as terminateVersionedSessionBinding,
+  touchSessionBinding,
   type VersionedBindingCapabilityState,
 } from "./redis/session-binding";
 import { SessionTracker } from "./session-tracker";
@@ -731,6 +732,29 @@ export class SessionManager {
     return readOrReconcileSessionBinding({
       sessionId,
       keyId,
+      ttlSeconds: SessionManager.SESSION_TTL,
+      redis,
+    });
+  }
+
+  /**
+   * Heartbeats run at one third of the configured binding TTL, leaving time
+   * for a transient Redis failure without allowing a live binding to expire.
+   */
+  static getVersionedSessionBindingRefreshIntervalMs(): number {
+    return Math.max(1, Math.floor((SessionManager.SESSION_TTL * 1000) / 3));
+  }
+
+  static async touchVersionedSessionBinding(
+    snapshot: SessionBindingSnapshot
+  ): Promise<SessionBindingResult> {
+    const redis = getRedisClient();
+    if (!redis || redis.status !== "ready") return redisUnavailableBindingResult();
+    return touchSessionBinding({
+      sessionId: snapshot.sessionId,
+      keyId: snapshot.keyId,
+      expectedGeneration: snapshot.generation,
+      expectedProviderId: snapshot.providerId,
       ttlSeconds: SessionManager.SESSION_TTL,
       redis,
     });
