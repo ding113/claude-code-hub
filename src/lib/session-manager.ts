@@ -1125,7 +1125,12 @@ export class SessionManager {
     isFailoverSuccess: boolean = false,
     keyId?: number | null,
     forceUpdate: boolean = false
-  ): Promise<{ updated: boolean; reason: string; details?: string }> {
+  ): Promise<{
+    updated: boolean;
+    reason: string;
+    details?: string;
+    bindingSnapshot?: SessionBindingSnapshot;
+  }> {
     const redis = getRedisClient();
     if (!redis || redis.status !== "ready") {
       return { updated: false, reason: "redis_not_ready" };
@@ -1133,6 +1138,7 @@ export class SessionManager {
 
     try {
       let versionedSnapshot: SessionBindingSnapshot | null = null;
+      let committedVersionedSnapshot: SessionBindingSnapshot | null = null;
       let useLegacyBinding = false;
       let legacyProviderId: number | null = null;
 
@@ -1199,6 +1205,7 @@ export class SessionManager {
             });
             return false;
           }
+          committedVersionedSnapshot = result.snapshot;
           return true;
         }
 
@@ -1263,6 +1270,7 @@ export class SessionManager {
           details: isFailoverSuccess
             ? `故障转移成功，绑定到供应商 ${newProviderId}`
             : `竞速赢家强制改绑到供应商 ${newProviderId}`,
+          ...(committedVersionedSnapshot ? { bindingSnapshot: committedVersionedSnapshot } : {}),
         };
       }
 

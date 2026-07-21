@@ -1370,6 +1370,90 @@ describe("versioned session binding operations", () => {
     expect(mock.delMock).not.toHaveBeenCalled();
   });
 
+  it("keeps the tenant owner tombstone after an unscoped legacy termination", async () => {
+    let owner: string | null = "4";
+    let provider: string | null = "8";
+    const mock = createMockRedis();
+    mock.getMock.mockImplementation(async (key: string) => {
+      if (key === "session:sid:key") return owner;
+      if (key === "session:sid:provider") return provider;
+      return null;
+    });
+    mock.delMock.mockImplementation(async (key: string) => {
+      if (key === "session:sid:provider") provider = null;
+      if (key === "session:sid:key") owner = null;
+      return 1;
+    });
+
+    const result = await mutateLegacySessionBindingSafely({
+      sessionId: "sid",
+      keyId: 4,
+      redis: mock.redis,
+      mutation: { type: "terminate" },
+    });
+
+    expect(result).toMatchObject({ status: "ok", changed: true, providerId: null });
+    expect(provider).toBeNull();
+    expect(owner).toBe("4");
+    expect(mock.delMock).not.toHaveBeenCalledWith("session:sid:key");
+  });
+
+  it("restores mirrors when versioned recovery races an unscoped legacy termination", async () => {
+    let owner: string | null = "4";
+    let provider: string | null = "8";
+    const mock = createMockRedis({
+      operationResponses: {
+        [RESTORE_LEGACY_PROVIDER_IF_ABSENT]: [
+          () => {
+            if (provider === null) provider = "8";
+            return 1;
+          },
+        ],
+      },
+    });
+    let existsCalls = 0;
+    mock.existsMock.mockImplementation(async () => {
+      existsCalls += 1;
+      return existsCalls === 3 ? 1 : 0;
+    });
+    mock.getMock.mockImplementation(async (key: string) => {
+      if (key === "session:sid:key") return owner;
+      if (key === "session:sid:provider") return provider;
+      return null;
+    });
+    mock.hgetMock.mockResolvedValue("8");
+    mock.delMock.mockImplementation(async (key: string) => {
+      if (key === "session:sid:provider") provider = null;
+      if (key === "session:sid:key") owner = null;
+      return 1;
+    });
+
+    const result = await mutateLegacySessionBindingSafely({
+      sessionId: "sid",
+      keyId: 4,
+      redis: mock.redis,
+      mutation: { type: "terminate" },
+    });
+
+    expect(result).toMatchObject({ status: "conflict", reason: "canonical_exists" });
+    expect(owner).toBe("4");
+    expect(provider).toBe("8");
+    expect(mock.evalMock).toHaveBeenCalledWith(
+      DELETE_LEGACY_PROVIDER_IF_VALUE,
+      1,
+      "session:sid:provider",
+      "8"
+    );
+    expect(mock.evalMock).toHaveBeenCalledWith(
+      RESTORE_LEGACY_PROVIDER_IF_ABSENT,
+      1,
+      "session:sid:provider",
+      "8",
+      "300"
+    );
+    expect(mock.delMock).not.toHaveBeenCalledWith("session:sid:key");
+  });
+
   it("uses the tenant-authorized termination primitive and leaves a tombstone", async () => {
     const mock = createMockRedis({
       operationResponses: {

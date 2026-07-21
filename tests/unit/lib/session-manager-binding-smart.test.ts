@@ -278,6 +278,12 @@ describe("SessionManager.updateSessionBindingSmart forceUpdate", () => {
         providerId: 2,
       })
     );
+    expect(result.bindingSnapshot).toEqual({
+      sessionId: SID,
+      keyId: 42,
+      providerId: 2,
+      generation: "generation-b",
+    });
     expect(redisClientRef!.pipeline).not.toHaveBeenCalled();
     expect(redisClientRef!.setex).not.toHaveBeenCalled();
   });

@@ -1463,12 +1463,34 @@ export async function mutateLegacySessionBindingSafely(
           };
         }
 
-        if (legacyProvider !== null) await redis.del(keys.legacyProvider);
-        await redis.del(keys.legacyOwner);
+        if (legacyProvider !== null) {
+          const deleted = await deleteLegacyProviderIfValue(
+            redis,
+            keys.legacyProvider,
+            legacyProvider
+          );
+          if (!deleted) {
+            const conflictAfterConcurrentMutation =
+              await rejectLegacyMutationAfterCanonicalAppeared(redis, keys);
+            if (conflictAfterConcurrentMutation) return conflictAfterConcurrentMutation;
+            return conflict("provider_mismatch");
+          }
+        }
+
+        // Keep the tenant owner as a null-binding tombstone. Besides matching
+        // the versioned terminate semantics, this prevents a recovered
+        // versioned worker from losing its required owner mirror while this
+        // fallback operation is in flight.
+        {
+          const ownerConflict = await ensureLegacyOwner(redis, keys, input.keyId, ttlSeconds);
+          if (ownerConflict) return ownerConflict;
+        }
         {
           const conflictAfterTerminate = await rejectLegacyMutationAfterCanonicalAppeared(
             redis,
-            keys
+            keys,
+            undefined,
+            legacyProvider === null ? undefined : { value: legacyProvider.toString(), ttlSeconds }
           );
           if (conflictAfterTerminate) return conflictAfterTerminate;
         }

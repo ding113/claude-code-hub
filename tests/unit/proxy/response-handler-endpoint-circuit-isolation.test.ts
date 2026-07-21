@@ -74,10 +74,13 @@ vi.mock("@/repository/message", () => ({
 
 vi.mock("@/lib/session-manager", () => ({
   SessionManager: {
+    clearVersionedSessionProvider: vi.fn(),
     updateSessionUsage: vi.fn(),
     storeSessionResponse: vi.fn(),
     clearSessionProvider: vi.fn(),
     extractCodexPromptCacheKey: vi.fn(),
+    getVersionedSessionBindingRefreshIntervalMs: vi.fn(),
+    touchVersionedSessionBinding: vi.fn(),
     updateSessionBindingSmart: vi.fn(),
     updateSessionProvider: vi.fn(),
     updateSessionWithCodexCacheKey: vi.fn(),
@@ -272,7 +275,11 @@ function createSession(opts?: { sessionId?: string | null }): ProxySession {
   return session;
 }
 
-function setDeferredMeta(session: ProxySession, endpointId: number | null = 42) {
+function setDeferredMeta(
+  session: ProxySession,
+  endpointId: number | null = 42,
+  extra: Partial<Parameters<typeof setDeferredStreamingFinalization>[1]> = {}
+) {
   setDeferredStreamingFinalization(session, {
     providerId: 1,
     providerName: "test-provider",
@@ -284,6 +291,7 @@ function setDeferredMeta(session: ProxySession, endpointId: number | null = 42) 
     endpointId,
     endpointUrl: "https://api.test.com",
     upstreamStatusCode: 200,
+    ...extra,
   });
 }
 
@@ -335,6 +343,31 @@ function createSuccessStreamResponse(): Response {
   });
 }
 
+function createControllableSuccessStreamResponse(): {
+  response: Response;
+  complete: () => void;
+} {
+  const encoder = new TextEncoder();
+  let sourceController: ReadableStreamDefaultController<Uint8Array> | null = null;
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      sourceController = controller;
+      controller.enqueue(
+        encoder.encode(
+          `event: message_delta\ndata: ${JSON.stringify({ usage: { input_tokens: 100, output_tokens: 50 } })}\n\n`
+        )
+      );
+    },
+  });
+  return {
+    response: new Response(stream, {
+      status: 200,
+      headers: { "content-type": "text/event-stream" },
+    }),
+    complete: () => sourceController?.close(),
+  };
+}
+
 async function drainAsyncTasks(): Promise<void> {
   while (asyncTasks.length > 0) {
     const tasks = asyncTasks.splice(0, asyncTasks.length);
@@ -366,6 +399,24 @@ function setupCommonMocks() {
   vi.mocked(updateMessageRequestDuration).mockResolvedValue(undefined);
   vi.mocked(SessionManager.storeSessionResponse).mockResolvedValue(undefined);
   vi.mocked(SessionManager.clearSessionProvider).mockResolvedValue(undefined);
+  vi.mocked(SessionManager.clearVersionedSessionProvider).mockResolvedValue({
+    status: "ok",
+    source: "cleared",
+    snapshot: {
+      sessionId: "fake-session",
+      keyId: 456,
+      providerId: null,
+      generation: "cleared-generation",
+    },
+    legacyFallbackAllowed: false,
+  });
+  vi.mocked(SessionManager.getVersionedSessionBindingRefreshIntervalMs).mockReturnValue(100_000);
+  vi.mocked(SessionManager.touchVersionedSessionBinding).mockImplementation(async (snapshot) => ({
+    status: "ok",
+    source: "touched",
+    snapshot,
+    legacyFallbackAllowed: false,
+  }));
   vi.mocked(SessionManager.updateSessionUsage).mockResolvedValue(undefined);
   vi.mocked(SessionManager.updateSessionBindingSmart).mockResolvedValue({
     updated: true,
@@ -536,5 +587,133 @@ describe("Endpoint circuit breaker isolation", () => {
 
     expect(mockRecordEndpointSuccess).not.toHaveBeenCalled();
     expect(mockRecordEndpointFailure).not.toHaveBeenCalled();
+  });
+
+  it("keeps the captured legacy Hedge winner binding alive throughout a long stream", async () => {
+    vi.useFakeTimers();
+    try {
+      const session = createSession();
+      const snapshot = {
+        sessionId: "fake-session",
+        keyId: 456,
+        providerId: 1,
+        generation: "hedge-long-stream-generation",
+      } as const;
+      setDeferredMeta(session, 42, {
+        isHedgeWinner: true,
+        hedgeBindingSnapshotPromise: Promise.resolve(snapshot),
+      });
+      vi.mocked(SessionManager.getVersionedSessionBindingRefreshIntervalMs).mockReturnValue(1_000);
+      const controlled = createControllableSuccessStreamResponse();
+
+      const clientResponse = await ProxyResponseHandler.dispatch(session, controlled.response);
+      const bodyPromise = clientResponse.text();
+      await vi.advanceTimersByTimeAsync(3_000);
+
+      // Immediate ownership validation plus one heartbeat per interval.
+      expect(SessionManager.touchVersionedSessionBinding).toHaveBeenCalledTimes(4);
+      expect(SessionManager.touchVersionedSessionBinding).toHaveBeenLastCalledWith(snapshot);
+
+      controlled.complete();
+      await bodyPromise;
+      await drainAsyncTasks();
+
+      // A final touch gives the next turn a complete TTL from stream completion.
+      expect(SessionManager.touchVersionedSessionBinding).toHaveBeenCalledTimes(5);
+      expect(SessionManager.touchVersionedSessionBinding).toHaveBeenLastCalledWith(snapshot);
+      expect(SessionManager.updateSessionBindingSmart).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(3_000);
+      expect(SessionManager.touchVersionedSessionBinding).toHaveBeenCalledTimes(5);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("clears a failed Hedge stream only through its captured generation", async () => {
+    vi.useFakeTimers();
+    try {
+      const session = createSession();
+      const snapshot = {
+        sessionId: "fake-session",
+        keyId: 456,
+        providerId: 1,
+        generation: "failed-hedge-generation",
+      } as const;
+      setDeferredMeta(session, 42, {
+        isHedgeWinner: true,
+        hedgeBindingSnapshotPromise: Promise.resolve(snapshot),
+      });
+      vi.mocked(SessionManager.getVersionedSessionBindingRefreshIntervalMs).mockReturnValue(1_000);
+      vi.mocked(SessionManager.clearVersionedSessionProvider).mockResolvedValueOnce({
+        status: "conflict",
+        reason: "generation_mismatch",
+        legacyFallbackAllowed: false,
+      });
+
+      const clientResponse = await ProxyResponseHandler.dispatch(
+        session,
+        createFake200StreamResponse()
+      );
+      await clientResponse.text();
+      await drainAsyncTasks();
+
+      expect(SessionManager.clearVersionedSessionProvider).toHaveBeenCalledWith(snapshot, 1);
+      expect(SessionManager.clearSessionProvider).not.toHaveBeenCalled();
+      const touchesAfterFailure = vi.mocked(SessionManager.touchVersionedSessionBinding).mock.calls
+        .length;
+      await vi.advanceTimersByTimeAsync(5_000);
+      expect(SessionManager.touchVersionedSessionBinding).toHaveBeenCalledTimes(
+        touchesAfterFailure
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("stops Hedge heartbeats after a generation conflict and never revives the binding", async () => {
+    vi.useFakeTimers();
+    try {
+      const session = createSession();
+      const snapshot = {
+        sessionId: "fake-session",
+        keyId: 456,
+        providerId: 1,
+        generation: "generation-before-termination",
+      } as const;
+      setDeferredMeta(session, 42, {
+        isHedgeWinner: true,
+        hedgeBindingSnapshotPromise: Promise.resolve(snapshot),
+      });
+      vi.mocked(SessionManager.getVersionedSessionBindingRefreshIntervalMs).mockReturnValue(1_000);
+      vi.mocked(SessionManager.touchVersionedSessionBinding)
+        .mockResolvedValueOnce({
+          status: "ok",
+          source: "touched",
+          snapshot,
+          legacyFallbackAllowed: false,
+        })
+        .mockResolvedValueOnce({
+          status: "conflict",
+          reason: "generation_mismatch",
+          legacyFallbackAllowed: false,
+        });
+      const controlled = createControllableSuccessStreamResponse();
+
+      const clientResponse = await ProxyResponseHandler.dispatch(session, controlled.response);
+      const bodyPromise = clientResponse.text();
+      await vi.advanceTimersByTimeAsync(5_000);
+      expect(SessionManager.touchVersionedSessionBinding).toHaveBeenCalledTimes(2);
+
+      controlled.complete();
+      await bodyPromise;
+      await drainAsyncTasks();
+
+      // Completion must not retry after an administrator or concurrent request
+      // advances the generation.
+      expect(SessionManager.touchVersionedSessionBinding).toHaveBeenCalledTimes(2);
+      expect(SessionManager.updateSessionBindingSmart).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

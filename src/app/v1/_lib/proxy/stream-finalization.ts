@@ -1,4 +1,10 @@
+import type { SessionBindingSnapshot } from "@/lib/redis/session-binding";
 import type { ProxySession } from "./session";
+
+export type DeferredStreamingBindingHeartbeat = {
+  stop: () => void;
+  complete: () => Promise<void>;
+};
 
 /**
  * 流式响应（SSE）在“收到响应头”时无法确定成功与否：
@@ -35,6 +41,10 @@ export type DeferredStreamingFinalization = {
    * coexists with asynchronously accumulated loser costs without clobbering.
    */
   billHedgeLosers?: boolean;
+  /** Exact generation created by the legacy Hedge winner's first-byte CAS. */
+  hedgeBindingSnapshotPromise?: Promise<SessionBindingSnapshot | null>;
+  /** ResponseHandler-owned runtime lifecycle; attached when streaming starts. */
+  hedgeBindingHeartbeat?: DeferredStreamingBindingHeartbeat;
 };
 
 const deferredMeta = new WeakMap<ProxySession, DeferredStreamingFinalization>();
