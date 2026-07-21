@@ -182,9 +182,7 @@ export function classifyDiscoveryChunk(
   protocol: DiscoveryProtocol
 ): DiscoveryValidity {
   const text = typeof chunk === "string" ? chunk : new TextDecoder().decode(chunk);
-  if (!text.trim() || text.trim().startsWith(":"))
-    return { ready: false, terminal: false, error: false };
-  if (text.includes("[DONE]")) return { ready: false, terminal: true, error: false };
+  if (!text.trim()) return { ready: false, terminal: false, error: false };
 
   const lines = text.split(/\r?\n/);
   let sawTerminal = false;
@@ -193,6 +191,10 @@ export function classifyDiscoveryChunk(
   for (const line of lines) {
     const candidate = line.startsWith("data:") ? line.slice(5).trim() : line.trim();
     if (!candidate || candidate.startsWith(":")) continue;
+    if (candidate === "[DONE]") {
+      sawTerminal = true;
+      continue;
+    }
     try {
       const result = classifyJson(JSON.parse(candidate), protocol);
       sawTerminal ||= result.terminal;

@@ -42,6 +42,23 @@ describe("discovery validity", () => {
     ).toEqual({ ready: false, terminal: true, error: true });
   });
 
+  it("keeps stateless readiness when content and DONE share a chunk", () => {
+    expect(
+      classifyDiscoveryChunk(
+        'data: {"choices":[{"delta":{"content":"done"}}]}\n\ndata: [DONE]\n\n',
+        "openai-chat"
+      )
+    ).toEqual({ ready: true, terminal: true, error: false });
+  });
+
+  it("keeps stateless readiness when a comment precedes content in one chunk", () => {
+    expect(
+      classifyDiscoveryChunk(
+        ': keepalive\ndata: {"choices":[{"delta":{"content":"ready"}}]}\n\n',
+        "openai-chat"
+      )
+    ).toEqual({ ready: true, terminal: false, error: false });
+  });
   it("rejects errors even when a later chunk contains content", () => {
     const parser = new DiscoveryValidityParser("openai-responses");
     expect(parser.push('{"type":"response.failed","error":{"message":"no"}}').error).toBe(true);
