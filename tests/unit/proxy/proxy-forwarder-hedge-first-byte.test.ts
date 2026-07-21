@@ -3988,7 +3988,8 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
     try {
       const fallback = createProvider({ id: 1, name: "fallback", priority: 1 });
       const setup = createProvider({ id: 2, name: "cancelled-setup", priority: 1 });
-      const winner = createProvider({ id: 3, name: "next-round-winner", priority: 1 });
+      const stalled = createProvider({ id: 3, name: "stalled-next-wave", priority: 1 });
+      const winner = createProvider({ id: 4, name: "error-refill-winner", priority: 1 });
       const session = createSession();
       session.authState = {
         success: true,
@@ -4006,7 +4007,15 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
         racingTotalTimeoutMs: 100,
         stickyTimeoutCooldownMs: 300_000,
       });
-      mocks.pickDiscoveryProviders.mockResolvedValueOnce([setup]).mockResolvedValueOnce([winner]);
+      const stalledNextWave = Promise.withResolvers<Provider[]>();
+      const stalledNextWaveStarted = Promise.withResolvers<void>();
+      mocks.pickDiscoveryProviders
+        .mockResolvedValueOnce([setup])
+        .mockImplementationOnce(() => {
+          stalledNextWaveStarted.resolve();
+          return stalledNextWave.promise;
+        })
+        .mockResolvedValueOnce([winner]);
 
       endpointResolver = vi.spyOn(
         ProxyForwarder as unknown as {
@@ -4037,23 +4046,22 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
           headers: { "content-type": "text/event-stream" },
         });
       });
-      mocks.releaseProviderSession.mockImplementation(async (providerId) => {
-        if (providerId === setup.id) {
-          fallbackFailure.reject(new Error("fallback failed during queued-wave handoff"));
-        }
-      });
-
       const responsePromise = ProxyForwarder.send(session);
       await vi.advanceTimersByTimeAsync(10);
+      await stalledNextWaveStarted.promise;
+      fallbackFailure.reject(new Error("fallback failed after queued-wave handoff"));
       await vi.advanceTimersByTimeAsync(0);
 
       const response = await responsePromise;
       expect(await response.text()).toContain('"winner"');
       expect(launchedProviderIds).toEqual([fallback.id, winner.id]);
-      expect(mocks.pickDiscoveryProviders).toHaveBeenCalledTimes(2);
+      expect(mocks.pickDiscoveryProviders).toHaveBeenCalledTimes(3);
+
+      stalledNextWave.resolve([stalled]);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(launchedProviderIds).toEqual([fallback.id, winner.id]);
     } finally {
       endpointResolver?.mockRestore();
-      mocks.releaseProviderSession.mockImplementation(async () => {});
       vi.useRealTimers();
     }
   });
@@ -4131,12 +4139,17 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
     }
   });
 
-  test("a fallback failure waits for the reserved wave before advancing another round", async () => {
+  test("a fallback failure refills the reserved round without waiting for its stalled selector", async () => {
     vi.useFakeTimers();
     try {
       const fallback = createProvider({ id: 1, name: "fallback", priority: 1 });
       const firstRoundLoser = createProvider({ id: 2, name: "first-round-loser", priority: 1 });
       const nextRoundWinner = createProvider({ id: 3, name: "next-round-winner", priority: 1 });
+      const staleReservedCandidate = createProvider({
+        id: 4,
+        name: "stale-reserved-candidate",
+        priority: 1,
+      });
       const session = createSession();
       session.authState = {
         success: true,
@@ -4158,9 +4171,7 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
       mocks.pickDiscoveryProviders
         .mockResolvedValueOnce([firstRoundLoser])
         .mockReturnValueOnce(reservedWave.promise)
-        .mockResolvedValueOnce([
-          createProvider({ id: 4, name: "unexpected-extra-round", priority: 1 }),
-        ]);
+        .mockResolvedValueOnce([nextRoundWinner]);
 
       const fallbackFailure = Promise.withResolvers<Response>();
       const doForward = vi.spyOn(
@@ -4189,13 +4200,13 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
 
       fallbackFailure.reject(new Error("fallback failed during reserved wave"));
       await vi.advanceTimersByTimeAsync(0);
-      expect(mocks.pickDiscoveryProviders).toHaveBeenCalledTimes(2);
+      expect(mocks.pickDiscoveryProviders).toHaveBeenCalledTimes(3);
 
-      reservedWave.resolve([nextRoundWinner]);
-      await vi.advanceTimersByTimeAsync(0);
       const response = await responsePromise;
       expect(await response.text()).toContain('"winner"');
-      expect(mocks.pickDiscoveryProviders).toHaveBeenCalledTimes(2);
+
+      reservedWave.resolve([staleReservedCandidate]);
+      await vi.advanceTimersByTimeAsync(0);
       expect(doForward).toHaveBeenCalledTimes(3);
     } finally {
       vi.useRealTimers();

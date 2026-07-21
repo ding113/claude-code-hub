@@ -5119,11 +5119,12 @@ export class ProxyForwarder {
       roundLaunchIdleWaiters.clear();
     };
     const waitForRoundLaunchHandoff = async (): Promise<void> => {
-      while (roundLaunchesInProgress > 0 || queuedRoundLaunchesPending > 0) {
-        if (roundLaunchesInProgress > 0) await waitForRoundLaunches();
-        if (queuedRoundLaunchesPending > 0) {
-          await new Promise<void>((resolve) => queuedRoundLaunchStartWaiters.add(resolve));
-        }
+      // A queued wave only needs to register its setup placeholders before a
+      // failure can safely update the coordinator. Waiting for that wave's
+      // selector/admission/setup to finish would keep a dead fallback occupying
+      // a slot until the round SLA and prevent immediate error replacement.
+      while (queuedRoundLaunchesPending > 0) {
+        await new Promise<void>((resolve) => queuedRoundLaunchStartWaiters.add(resolve));
       }
     };
     const clearRoundTimer = () => {
