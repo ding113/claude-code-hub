@@ -507,7 +507,14 @@ export class ProxyProviderResolver {
     // Read the binding once and retain its generation for Discovery timeout
     // cleanup/finalization. Re-reading here would allow an older request to
     // clear a newer binding (ABA).
+    const sessionId = session.sessionId;
     const keyId = session.authState?.key?.id ?? session.messageContext?.key?.id ?? null;
+    const clearRejectedProviderBinding = async (providerId: number): Promise<void> => {
+      await SessionManager.clearSessionProvider(sessionId, providerId, keyId);
+      // A clear attempt can advance or race the canonical generation. Force
+      // Discovery to read authoritative state instead of this old snapshot.
+      if (keyId != null) session.setSessionBindingSnapshot(null);
+    };
     let providerId: number | null = null;
     if (keyId != null) {
       const binding = await SessionManager.getSessionBindingSnapshot(session.sessionId, keyId);
@@ -534,7 +541,7 @@ export class ProxyProviderResolver {
         sessionId: session.sessionId,
         providerId,
       });
-      await SessionManager.clearSessionProvider(session.sessionId, providerId, keyId);
+      await clearRejectedProviderBinding(providerId);
       return null;
     }
 
@@ -544,7 +551,7 @@ export class ProxyProviderResolver {
         providerId: provider.id,
         providerName: provider.name,
       });
-      await SessionManager.clearSessionProvider(session.sessionId, providerId, keyId);
+      await clearRejectedProviderBinding(providerId);
       return null;
     }
 
@@ -558,7 +565,7 @@ export class ProxyProviderResolver {
         activeTimeEnd: provider.activeTimeEnd,
         timezone: systemTimezone,
       });
-      await SessionManager.clearSessionProvider(session.sessionId, providerId, keyId);
+      await clearRejectedProviderBinding(providerId);
       return null;
     }
 
@@ -599,7 +606,7 @@ export class ProxyProviderResolver {
         providerType: provider.providerType,
         originalFormat: session.originalFormat,
       });
-      await SessionManager.clearSessionProvider(session.sessionId, providerId, keyId);
+      await clearRejectedProviderBinding(providerId);
       return null;
     }
 
@@ -618,7 +625,7 @@ export class ProxyProviderResolver {
       // 清除过时绑定，避免 SET NX 死锁
       // 当 session 内请求模型发生变化时，旧绑定已无意义，
       // 清除后新的成功请求可通过 SET NX 重新绑定匹配的 provider
-      await SessionManager.clearSessionProvider(session.sessionId, providerId, keyId);
+      await clearRejectedProviderBinding(providerId);
       logger.info("ProviderSelector: Cleared stale provider binding (model mismatch)", {
         sessionId: session.sessionId,
         staleProviderId: provider.id,
@@ -674,7 +681,7 @@ export class ProxyProviderResolver {
           ],
         },
       });
-      await SessionManager.clearSessionProvider(session.sessionId, providerId, keyId);
+      await clearRejectedProviderBinding(providerId);
       return null;
     }
 
