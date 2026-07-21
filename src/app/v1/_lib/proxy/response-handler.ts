@@ -114,7 +114,8 @@ function isSessionBindingMutationAllowed(session: ProxySession): boolean {
 }
 
 function startDiscoveryLeaseLifecycle(session: ProxySession): DiscoveryLeaseLifecycle {
-  const lease = peekDeferredStreamingFinalization(session)?.discoveryLease;
+  const deferred = peekDeferredStreamingFinalization(session);
+  const lease = deferred?.discoveryLease;
   if (!lease) {
     return {
       active: false,
@@ -127,6 +128,12 @@ function startDiscoveryLeaseLifecycle(session: ProxySession): DiscoveryLeaseLife
   let renewalInFlight: Promise<boolean> | null = null;
   let releasePromise: Promise<void> | null = null;
   let ownershipState: "unknown" | "owned" | "lost" = "unknown";
+  const bindingSnapshot =
+    (deferred?.bindingIntent === "create" || deferred?.bindingIntent === "renew") &&
+    deferred.bindingSnapshot?.sessionId === lease.sessionId &&
+    deferred.bindingSnapshot.keyId === lease.keyId
+      ? deferred.bindingSnapshot
+      : null;
 
   const stopRenewal = () => {
     if (renewalTimer) {
@@ -157,6 +164,25 @@ function startDiscoveryLeaseLifecycle(session: ProxySession): DiscoveryLeaseLife
         });
         return false;
       }
+
+      if (bindingSnapshot) {
+        const touched = await SessionManager.touchVersionedSessionBinding(bindingSnapshot);
+        if (
+          touched.status !== "ok" ||
+          touched.snapshot.generation !== bindingSnapshot.generation ||
+          touched.snapshot.providerId !== bindingSnapshot.providerId
+        ) {
+          ownershipState = "lost";
+          stopRenewal();
+          logger.warn("[ResponseHandler] Discovery binding heartbeat stopped", {
+            sessionId: lease.sessionId,
+            keyId: lease.keyId,
+            status: touched.status,
+            reason: "reason" in touched ? touched.reason : "snapshot_mismatch",
+          });
+          return false;
+        }
+      }
       ownershipState = "owned";
       return true;
     })()
@@ -181,7 +207,14 @@ function startDiscoveryLeaseLifecycle(session: ProxySession): DiscoveryLeaseLife
   // the downstream response. Renew immediately so an expired/lost token is
   // observed before any terminal Session binding mutation is attempted.
   const handoffRenewal = renew();
-  const renewalIntervalMs = Math.max(250, Math.floor((lease.ttlSeconds * 1000) / 3));
+  const leaseRenewalIntervalMs = Math.floor((lease.ttlSeconds * 1000) / 3);
+  const bindingRefreshIntervalMs = bindingSnapshot
+    ? SessionManager.getVersionedSessionBindingRefreshIntervalMs()
+    : Number.POSITIVE_INFINITY;
+  const renewalIntervalMs = Math.max(
+    250,
+    Math.min(leaseRenewalIntervalMs, bindingRefreshIntervalMs)
+  );
   renewalTimer = setInterval(() => {
     void renew();
   }, renewalIntervalMs);
@@ -1468,6 +1501,10 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
     primaryDiscoveryBindingSettled = true;
     resolvePrimaryDiscoveryBinding?.(updated);
   };
+  const finalizeFailedDiscoveryBinding = async () => {
+    settlePrimaryDiscoveryBinding(false);
+    await finalizeProviderSessionRef();
+  };
   const confirmAuxiliarySessionBinding = async () =>
     allowAuxiliarySessionBinding && (await primaryDiscoveryBinding);
 
@@ -1569,12 +1606,14 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
   // - 不在这里更新熔断/绑定（meta 缺失意味着 Forwarder 没有启用延迟结算；provider 缺失意味着无法归因）。
   if (!meta || !provider) {
     const commitSideEffects =
-      shouldClearSessionBindingOnFailure || meta?.providerSessionRefOwned === true
+      shouldClearSessionBindingOnFailure ||
+      meta?.providerSessionRefOwned === true ||
+      hasDiscoveryBindingIntent
         ? async () => {
             try {
               if (shouldClearSessionBindingOnFailure) await clearSessionBinding();
             } finally {
-              await finalizeProviderSessionRef();
+              await finalizeFailedDiscoveryBinding();
             }
           }
         : undefined;
@@ -1651,7 +1690,7 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
           // so only the Provider circuit is updated here.
         }
       } finally {
-        await finalizeProviderSessionRef();
+        await finalizeFailedDiscoveryBinding();
       }
     };
 
@@ -1695,7 +1734,7 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
           }
         }
       } finally {
-        await finalizeProviderSessionRef();
+        await finalizeFailedDiscoveryBinding();
       }
     };
 
@@ -1766,7 +1805,7 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
           }
         }
       } finally {
-        await finalizeProviderSessionRef();
+        await finalizeFailedDiscoveryBinding();
       }
     };
 
@@ -1830,7 +1869,7 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
           }
         }
       } finally {
-        await finalizeProviderSessionRef();
+        await finalizeFailedDiscoveryBinding();
       }
     };
 

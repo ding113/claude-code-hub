@@ -5167,7 +5167,7 @@ export class ProxyForwarder {
       cancelLosers(null, options.cancellationKind ?? "discovery_loser");
       if (!options.preserveBinding && bindingWriteAllowed && session.isSessionBindingAllowed()) {
         if (bindingSnapshot.providerId != null) {
-          void SessionManager.clearVersionedSessionProvider(
+          await SessionManager.clearVersionedSessionProvider(
             bindingSnapshot,
             bindingSnapshot.providerId,
             0
@@ -5362,7 +5362,7 @@ export class ProxyForwarder {
           retainOnSuccess: boolean;
         };
       }
-    ): Promise<void> => {
+    ): Promise<boolean> => {
       const transferredProviderSessionRef = options?.providerSessionRefTransfer?.owned === true;
       let providerSessionRefTracked = transferredProviderSessionRef;
       let providerSessionRefRetainOnSuccess =
@@ -5376,7 +5376,7 @@ export class ProxyForwarder {
       };
       if (settled || committed || launched.has(provider.id)) {
         rollbackLaunch();
-        return;
+        return false;
       }
       launched.add(provider.id);
       if (!transferredProviderSessionRef && provider.id === initialProvider.id) {
@@ -5404,7 +5404,7 @@ export class ProxyForwarder {
       }
       if (settled || committed) {
         rollbackLaunch();
-        return;
+        return false;
       }
       let endpoint: Awaited<ReturnType<typeof ProxyForwarder.resolveStreamingHedgeEndpoint>>;
       try {
@@ -5415,7 +5415,7 @@ export class ProxyForwarder {
       }
       if (settled || committed) {
         rollbackLaunch();
-        return;
+        return false;
       }
       let attemptSession: ProxySession;
       try {
@@ -5431,7 +5431,7 @@ export class ProxyForwarder {
       }
       if (settled || committed) {
         rollbackLaunch();
-        return;
+        return false;
       }
       const controller = new AbortController();
       const id = `${provider.id}:${sequence + 1}`;
@@ -5505,7 +5505,7 @@ export class ProxyForwarder {
       });
       if (!registered || settled || committed) {
         rollbackLaunch();
-        return;
+        return false;
       }
       attempts.set(id, attempt);
       discoveryMetrics.attemptStarted({
@@ -5821,6 +5821,7 @@ export class ProxyForwarder {
             error,
           });
         });
+      return true;
     };
 
     const launchNextRound = async (slots: number, coordinatorAlreadyAdvanced = false) => {
@@ -5835,21 +5836,42 @@ export class ProxyForwarder {
           currentRound = nextRound.round;
         }
         if (currentRound > maxRounds || slots <= 0) return;
-        const candidates = await ProxyProviderResolver.pickDiscoveryProviders(
-          session,
-          slots,
-          Array.from(launched)
-        );
-        if (candidates.length === 0) {
-          noMoreCandidates = true;
-        }
-        for (const candidate of candidates) {
-          try {
-            await launch(candidate, "normal");
-          } catch (error) {
-            lastError = error instanceof Error ? error : new Error(String(error));
-            // Launch setup failures do not establish pool exhaustion.
-            noMoreCandidates = false;
+        let remainingSlots = slots;
+        while (remainingSlots > 0 && !settled && !committed) {
+          const exclusionCountBeforeSelection = launched.size;
+          const candidates = await ProxyProviderResolver.pickDiscoveryProviders(
+            session,
+            remainingSlots,
+            Array.from(launched)
+          );
+          if (candidates.length === 0) {
+            noMoreCandidates = true;
+            break;
+          }
+
+          noMoreCandidates = false;
+          let registeredInBatch = 0;
+          for (const candidate of candidates) {
+            try {
+              if (await launch(candidate, "normal")) {
+                registeredInBatch += 1;
+                remainingSlots -= 1;
+              }
+            } catch (error) {
+              lastError = error instanceof Error ? error : new Error(String(error));
+              // This Provider is already excluded by launch(). Continue filling
+              // the same round from the remaining candidate pool.
+              noMoreCandidates = false;
+            }
+            if (remainingSlots <= 0 || settled || committed) break;
+          }
+
+          // A selector that ignores exclusions must not create an unbounded
+          // setup loop. Normal selectors always advance `launched`, including
+          // attempts that fail before transport registration.
+          if (registeredInBatch === 0 && launched.size === exclusionCountBeforeSelection) {
+            noMoreCandidates = true;
+            break;
           }
         }
         const hasPendingAttempt = Array.from(attempts.values()).some((attempt) => attempt.pending);
