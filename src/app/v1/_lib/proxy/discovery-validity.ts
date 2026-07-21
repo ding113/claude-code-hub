@@ -49,6 +49,43 @@ function hasAnthropicContentBlock(value: unknown): boolean {
   return block.type === "text" ? hasContent(block.text) : true;
 }
 
+function hasOpenAIResponsesOutputItem(value: unknown): boolean {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const item = value as Record<string, unknown>;
+  if (typeof item.type !== "string") return false;
+
+  switch (item.type) {
+    case "message":
+      return hasContent(item.content);
+    case "reasoning":
+      return hasContent(item.summary) || hasContent(item.content);
+    case "function_call":
+    case "mcp_call":
+      return hasContent(item.name) || hasContent(item.arguments);
+    case "custom_tool_call":
+      return hasContent(item.name) || hasContent(item.input);
+    case "computer_call":
+    case "web_search_call":
+    case "file_search_call":
+    case "code_interpreter_call":
+    case "local_shell_call":
+    case "shell_call":
+    case "apply_patch_call":
+      return [
+        item.action,
+        item.arguments,
+        item.input,
+        item.queries,
+        item.query,
+        item.code,
+        item.command,
+        item.operation,
+      ].some(hasContent);
+    default:
+      return false;
+  }
+}
+
 /**
  * Protocol-level error signals that must remain terminal even if a provider
  * emits a later completion marker. Keep this shared by the racing parser and
@@ -100,7 +137,7 @@ function classifyJson(value: unknown, protocol: DiscoveryProtocol): DiscoveryVal
       ready:
         (object.type === "response.output_text.delta" && hasContent(object.delta)) ||
         (object.type === "response.function_call_arguments.delta" && hasContent(object.delta)) ||
-        (object.type === "response.output_item.added" && hasContent(object.item)),
+        (object.type === "response.output_item.added" && hasOpenAIResponsesOutputItem(object.item)),
       terminal: false,
       error: false,
     };

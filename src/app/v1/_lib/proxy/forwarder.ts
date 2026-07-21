@@ -5067,6 +5067,7 @@ export class ProxyForwarder {
     const roundLaunchIdleWaiters = new Set<() => void>();
     let fallbackPromotionBlocked = false;
     let stickyTimeoutWaveReservation: { fallbackAttemptId: string } | null = null;
+    let stickyTimeoutCooldownPromise: Promise<void> | null = null;
     const hasSticky =
       session.shouldReuseProvider() &&
       !!session.sessionId &&
@@ -5190,6 +5191,10 @@ export class ProxyForwarder {
       if (roundTimer) clearTimeout(roundTimer);
       if (stickyTimer) clearTimeout(stickyTimer);
       cancelLosers(null, options.cancellationKind ?? "discovery_loser");
+      // Sticky timeout owns its cooldown mutation. A terminal deadline/error or
+      // client abort may race that Redis CAS, but must not issue a second
+      // zero-cooldown clear against the same captured generation.
+      if (stickyTimeoutCooldownPromise) await stickyTimeoutCooldownPromise;
       if (!options.preserveBinding && bindingWriteAllowed && session.isSessionBindingAllowed()) {
         if (bindingSnapshot.providerId != null) {
           await SessionManager.clearVersionedSessionProvider(
@@ -5340,6 +5345,13 @@ export class ProxyForwarder {
           error,
         });
       }
+    };
+
+    const ensureStickyTimeoutCooldown = (cooldownTtlSeconds: number): Promise<void> => {
+      if (!stickyTimeoutCooldownPromise) {
+        stickyTimeoutCooldownPromise = clearCapturedStickyBinding(cooldownTtlSeconds);
+      }
+      return stickyTimeoutCooldownPromise;
     };
 
     const scheduleRoundBoundary = (delayMs: number) => {
@@ -6023,7 +6035,7 @@ export class ProxyForwarder {
                 fallbackPromotionBlocked = true;
                 stickyTimeoutWaveReservation = { fallbackAttemptId: sticky.id };
                 if (bindingSnapshot && bindingSnapshot.providerId === initialProvider.id) {
-                  void clearCapturedStickyBinding(
+                  void ensureStickyTimeoutCooldown(
                     Math.ceil((settings.stickyTimeoutCooldownMs ?? 300_000) / 1000)
                   ).finally(() => {
                     void launchReservedStickyTimeoutWave(Math.max(0, concurrency - 1)).catch(

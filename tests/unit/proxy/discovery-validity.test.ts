@@ -78,6 +78,49 @@ describe("discovery validity", () => {
     ).toBe(true);
   });
 
+  it("holds Responses output-item metadata until a text delta is deliverable", () => {
+    const parser = new DiscoveryValidityParser("openai-responses");
+
+    expect(
+      parser.push(
+        'data: {"type":"response.output_item.added","item":{"id":"msg_1","type":"message","status":"in_progress","content":[]}}\n\n'
+      )
+    ).toEqual({ ready: false, terminal: false, error: false });
+    expect(parser.push('data: {"type":"response.output_text.delta","delta":"hello"}\n\n')).toEqual({
+      ready: true,
+      terminal: false,
+      error: false,
+    });
+  });
+
+  it("does not let Responses output-item metadata mask a later error", () => {
+    const parser = new DiscoveryValidityParser("openai-responses");
+
+    expect(
+      parser.push(
+        'data: {"type":"response.output_item.added","item":{"id":"msg_1","type":"message","status":"in_progress"}}\n\n'
+      )
+    ).toMatchObject({ ready: false, error: false });
+    expect(
+      parser.push('data: {"type":"response.failed","error":{"message":"upstream failed"}}\n\n')
+    ).toEqual({ ready: false, terminal: true, error: true });
+  });
+
+  it("accepts only an explicit non-empty Responses tool payload", () => {
+    expect(
+      classifyDiscoveryChunk(
+        'data: {"type":"response.output_item.added","item":{"id":"fc_1","type":"function_call","status":"in_progress"}}\n',
+        "openai-responses"
+      ).ready
+    ).toBe(false);
+    expect(
+      classifyDiscoveryChunk(
+        'data: {"type":"response.output_item.added","item":{"id":"fc_1","type":"function_call","name":"lookup","arguments":"{}"}}\n',
+        "openai-responses"
+      ).ready
+    ).toBe(true);
+  });
+
   it("consumes split SSE lines incrementally without waiting for the full stream", () => {
     const parser = new DiscoveryValidityParser("openai-chat");
     expect(parser.push('data: {"choices":[{"delta":{"content":"hel')).toEqual({
