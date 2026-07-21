@@ -40,24 +40,19 @@ export interface PresetSelectionContext {
 export const PRESETS: Record<string, PresetConfig> = {
   cc_haiku_basic: {
     id: "cc_haiku_basic",
-    description: "Claude CLI haiku stream",
+    description: "Minimal Claude stream probe",
     providerTypes: ["claude", "claude-auth"],
     payload: ccHaikuBasic,
-    defaultSuccessContains: "pong",
+    // Soft match: tiny probe may not always emit exact "pong"
+    defaultSuccessContains: "",
     defaultModel: "claude-haiku-4-5-20251001",
     path: "/v1/messages",
-    userAgent: "claude-cli/2.1.84 (external, cli)",
-    extraHeaders: {
-      "Anthropic-Beta": "oauth-2025-04-20,interleaved-thinking-2025-05-14",
-      "Anthropic-Dangerous-Direct-Browser-Access": "true",
-      "X-App": "cli",
-    },
+    userAgent: "cch-health-probe/1.0",
     score: 100,
-    modelHints: ["haiku"],
   },
   cc_beta_cli: {
     id: "cc_beta_cli",
-    description: "Claude CLI beta relay profile",
+    description: "Claude CLI beta relay profile (legacy, not used by health probes)",
     providerTypes: ["claude", "claude-auth"],
     payload: ccBetaCli,
     defaultSuccessContains: "pong",
@@ -75,7 +70,7 @@ export const PRESETS: Record<string, PresetConfig> = {
   },
   cc_public_thinking: {
     id: "cc_public_thinking",
-    description: "Public Claude with thinking enabled",
+    description: "Public Claude with thinking enabled (legacy, not used by health probes)",
     providerTypes: ["claude", "claude-auth"],
     payload: publicCcBase,
     defaultSuccessContains: "pong",
@@ -92,22 +87,18 @@ export const PRESETS: Record<string, PresetConfig> = {
   },
   cx_codex_basic: {
     id: "cx_codex_basic",
-    description: "Codex Responses stream",
+    description: "Minimal Codex Responses stream probe",
     providerTypes: ["codex"],
     payload: cxCodexBasic,
-    defaultSuccessContains: "pong",
+    defaultSuccessContains: "",
     defaultModel: "gpt-5.5",
     path: "/v1/responses",
-    userAgent: "Codex-CLI/1.0",
-    extraHeaders: {
-      "openai-beta": "responses=experimental",
-    },
+    userAgent: "cch-health-probe/1.0",
     score: 100,
-    modelHints: ["codex"],
   },
   cx_gpt_basic: {
     id: "cx_gpt_basic",
-    description: "Responses API GPT profile",
+    description: "Responses API GPT profile (legacy, not used by health probes)",
     providerTypes: ["codex"],
     payload: cxGptBasic,
     defaultSuccessContains: "pong",
@@ -122,7 +113,7 @@ export const PRESETS: Record<string, PresetConfig> = {
   },
   oa_chat_basic: {
     id: "oa_chat_basic",
-    description: "OpenAI compatible chat completion",
+    description: "OpenAI compatible chat completion (legacy non-stream)",
     providerTypes: ["openai-compatible"],
     payload: oaChatBasic,
     defaultSuccessContains: "pong",
@@ -133,17 +124,14 @@ export const PRESETS: Record<string, PresetConfig> = {
   },
   oa_chat_stream: {
     id: "oa_chat_stream",
-    description: "OpenAI compatible chat completion stream",
+    description: "Minimal OpenAI compatible stream probe",
     providerTypes: ["openai-compatible"],
     payload: oaChatStream,
-    defaultSuccessContains: "pong",
+    defaultSuccessContains: "",
     defaultModel: "gpt-4.1-mini",
     path: "/v1/chat/completions",
-    userAgent: "OpenAI-Compatible/2026.04",
-    extraHeaders: {
-      Accept: "application/json, text/event-stream",
-    },
-    score: 85,
+    userAgent: "cch-health-probe/1.0",
+    score: 100,
   },
   gm_flash_basic: {
     id: "gm_flash_basic",
@@ -178,12 +166,14 @@ export const PRESETS: Record<string, PresetConfig> = {
 };
 
 export const PRESET_MAPPING: Record<ProviderType, string[]> = {
-  claude: ["cc_haiku_basic", "cc_beta_cli", "cc_public_thinking"],
-  "claude-auth": ["cc_haiku_basic", "cc_beta_cli", "cc_public_thinking"],
-  codex: ["cx_codex_basic", "cx_gpt_basic"],
-  "openai-compatible": ["oa_chat_basic", "oa_chat_stream"],
-  gemini: ["gm_flash_basic", "gm_pro_basic"],
-  "gemini-cli": ["gm_flash_basic", "gm_pro_basic"],
+  // Health/manual probes: one lean stream template only (no thinking/cache_control bloat).
+  claude: ["cc_haiku_basic"],
+  "claude-auth": ["cc_haiku_basic"],
+  codex: ["cx_codex_basic"],
+  // Stream-only: non-stream oa_chat_basic caused a second billed upstream call on template fallback.
+  "openai-compatible": ["oa_chat_stream"],
+  gemini: ["gm_flash_basic"],
+  "gemini-cli": ["gm_flash_basic"],
 };
 
 export function getPresetsForProvider(providerType: ProviderType): PresetConfig[] {
@@ -265,7 +255,12 @@ function scorePreset(preset: PresetConfig, context: PresetSelectionContext): num
 }
 
 export function getExecutionPresetCandidates(context: PresetSelectionContext): PresetConfig[] {
-  return getPresetsForProvider(context.providerType).sort(
-    (left, right) => scorePreset(right, context) - scorePreset(left, context)
-  );
+  // Prefer stream templates for connectivity tests (manual + scheduled): one shot,
+  // closer to real client traffic, and no non-stream → stream double-billing.
+  const streamOnly = getPresetsForProvider(context.providerType).filter((preset) => {
+    const payload = preset.payload as Record<string, unknown>;
+    return payload.stream === true;
+  });
+  const candidates = streamOnly.length > 0 ? streamOnly : getPresetsForProvider(context.providerType);
+  return candidates.sort((left, right) => scorePreset(right, context) - scorePreset(left, context));
 }

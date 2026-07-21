@@ -1,26 +1,11 @@
 {
   "model": "claude-haiku-4-5-20251001",
-  "max_tokens": 20,
+  "max_tokens": 8,
   "stream": true,
-  "metadata": {
-    "user_id": "cch_probe_test"
-  },
-  "system": [
-    {
-      "text": "You are Claude Code, Anthropic's official CLI for Claude.",
-      "type": "text"
-    }
-  ],
   "messages": [
     {
       "role": "user",
-      "content": [
-        {
-          "text": "ping, please reply 'pong'",
-          "type": "text"
-        }
-      ]
+      "content": "ping"
     }
-  ],
-  "tools": []
+  ]
 }

@@ -451,6 +451,17 @@ export async function register() {
       }
 
       try {
+        const { startProviderHealthTestScheduler } = await import(
+          "@/lib/provider-health-test/scheduler"
+        );
+        startProviderHealthTestScheduler();
+      } catch (error) {
+        logger.warn("[Instrumentation] Failed to start provider health test scheduler", {
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+
+      try {
         const { startPublicStatusRebuildScheduler } = await import("@/lib/public-status/scheduler");
         startPublicStatusRebuildScheduler();
       } catch (error) {
@@ -585,6 +596,17 @@ export async function register() {
           startEndpointProbeScheduler();
         } catch (error) {
           logger.warn("[Instrumentation] Failed to start endpoint probe scheduler", {
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+
+        try {
+          const { startProviderHealthTestScheduler } = await import(
+            "@/lib/provider-health-test/scheduler"
+          );
+          startProviderHealthTestScheduler();
+        } catch (error) {
+          logger.warn("[Instrumentation] Failed to start provider health test scheduler", {
             error: error instanceof Error ? error.message : String(error),
           });
         }

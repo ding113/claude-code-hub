@@ -3742,14 +3742,10 @@ export class ProxyForwarder {
     return alternativeProvider;
   }
 
-  private static shouldUseStreamingHedge(session: ProxySession): boolean {
-    const endpointPolicy = ProxyForwarder.getEndpointPolicy(session);
-    return (
-      (endpointPolicy?.allowRetry ?? true) &&
-      (endpointPolicy?.allowProviderSwitch ?? true) &&
-      (session.request.message as Record<string, unknown>).stream === true &&
-      (session.provider?.firstByteTimeoutStreamingMs ?? 0) > 0
-    );
+  private static shouldUseStreamingHedge(_session: ProxySession): boolean {
+    // Streaming hedge (timeout racing) disabled: health-aware single-provider dispatch
+    // already picks the best SLO-qualified key; racing would reintroduce multi-send cost.
+    return false;
   }
 
   private static getEndpointPolicy(session: ProxySession) {

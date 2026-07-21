@@ -2,6 +2,7 @@ import { matchesAllowedModelRules } from "@/lib/allowed-model-rules";
 import { getCircuitState, isCircuitOpen } from "@/lib/circuit-breaker";
 import { PROVIDER_GROUP } from "@/lib/constants/provider.constants";
 import { logger } from "@/lib/logger";
+import { selectBestHealthDispatchProvider } from "@/lib/provider-dispatch/health-aware-select";
 import { RateLimitService } from "@/lib/rate-limit";
 import { SessionManager } from "@/lib/session-manager";
 import { parseProviderGroups, resolveProviderGroupsWithDefault } from "@/lib/utils/provider-group";
@@ -141,40 +142,9 @@ export class ProxyProviderResolver {
     // 动态尝试所有可用供应商（避免无限循环通过 excludedProviders 和 null 返回）
     const excludedProviders: number[] = [];
 
-    // === 会话复用 ===
-    const reusedProvider = await ProxyProviderResolver.findReusable(session);
-    if (reusedProvider) {
-      session.setProvider(reusedProvider);
-
-      // 记录会话复用上下文
-      session.addProviderToChain(reusedProvider, {
-        reason: "session_reuse",
-        selectionMethod: "session_reuse",
-        circuitState: getCircuitState(reusedProvider.id),
-        decisionContext: {
-          totalProviders: 0, // 复用不需要筛选
-          enabledProviders: 0,
-          targetType: reusedProvider.providerType as NonNullable<
-            ProviderChainItem["decisionContext"]
-          >["targetType"],
-          requestedModel: session.getOriginalModel() || "",
-          groupFilterApplied: false,
-          beforeHealthCheck: 0,
-          afterHealthCheck: 0,
-          priorityLevels: [reusedProvider.priority || 0],
-          selectedPriority: reusedProvider.priority || 0,
-          candidatesAtPriority: [
-            {
-              id: reusedProvider.id,
-              name: reusedProvider.name,
-              weight: reusedProvider.weight,
-              costMultiplier: reusedProvider.costMultiplier,
-            },
-          ],
-          sessionId: session.sessionId || undefined,
-        },
-      });
-    }
+    // === 会话复用（已关闭：健康调度要求每请求重选最优供应商）===
+    // Sticky session reuse would pin a stale provider after health ranking changes.
+    // Keep the call site as a no-op so decision-chain / tests that mention reuse stay stable.
 
     // === 首次选择或重试 ===
     if (!session.provider) {
@@ -459,259 +429,14 @@ export class ProxyProviderResolver {
 
   /**
    * 查找可复用的供应商（基于 session）
+   *
+   * Disabled: health-aware dispatch re-evaluates the optimal provider every request.
+   * Sticky session reuse would freeze a previous winner after ranking changes.
    */
-  private static async findReusable(session: ProxySession): Promise<Provider | null> {
-    if (!session.shouldReuseProvider() || !session.sessionId) {
-      return null;
-    }
-
-    // 从 Redis 读取该 session 绑定的 provider
-    const providerId = await SessionManager.getSessionProvider(
-      session.sessionId,
-      session.authState?.key?.id ?? null
-    );
-    if (!providerId) {
-      logger.debug("ProviderSelector: Session has no bound provider", {
-        sessionId: session.sessionId,
-      });
-      return null;
-    }
-
-    // 验证 provider 可用性
-    const provider = await findProviderById(providerId);
-    if (!provider?.isEnabled) {
-      logger.debug("ProviderSelector: Session provider unavailable", {
-        sessionId: session.sessionId,
-        providerId,
-      });
-      await SessionManager.clearSessionProvider(session.sessionId);
-      return null;
-    }
-
-    if (provider.disableSessionReuse) {
-      logger.debug("ProviderSelector: Session provider opted out of session reuse", {
-        sessionId: session.sessionId,
-        providerId: provider.id,
-        providerName: provider.name,
-      });
-      await SessionManager.clearSessionProvider(session.sessionId);
-      return null;
-    }
-
-    // 调度时间窗口检查：防止会话复用绕过时间调度
-    const systemTimezone = await resolveSystemTimezone();
-    if (!isProviderActiveNow(provider.activeTimeStart, provider.activeTimeEnd, systemTimezone)) {
-      logger.debug("ProviderSelector: Session provider outside active schedule", {
-        sessionId: session.sessionId,
-        providerId: provider.id,
-        activeTimeStart: provider.activeTimeStart,
-        activeTimeEnd: provider.activeTimeEnd,
-        timezone: systemTimezone,
-      });
-      await SessionManager.clearSessionProvider(session.sessionId);
-      return null;
-    }
-
-    // 临时熔断（vendor+type）：防止会话复用绕过故障隔离
-    if (
-      provider.providerVendorId &&
-      provider.providerVendorId > 0 &&
-      (await isVendorTypeCircuitOpen(provider.providerVendorId, provider.providerType))
-    ) {
-      logger.debug("ProviderSelector: Session provider vendor-type circuit is open", {
-        sessionId: session.sessionId,
-        providerId: provider.id,
-        vendorId: provider.providerVendorId,
-        providerType: provider.providerType,
-      });
-      return null;
-    }
-
-    // 检查熔断器状态（TC-055 修复）
-    if (await isCircuitOpen(provider.id)) {
-      logger.debug("ProviderSelector: Session provider circuit is open", {
-        sessionId: session.sessionId,
-        providerId: provider.id,
-        providerName: provider.name,
-        circuitState: getCircuitState(provider.id),
-      });
-      return null;
-    }
-
-    if (
-      session.originalFormat &&
-      !checkFormatProviderTypeCompatibility(session.originalFormat, provider.providerType)
-    ) {
-      logger.debug("ProviderSelector: Session provider incompatible with request format", {
-        sessionId: session.sessionId,
-        providerId: provider.id,
-        providerName: provider.name,
-        providerType: provider.providerType,
-        originalFormat: session.originalFormat,
-      });
-      await SessionManager.clearSessionProvider(session.sessionId);
-      return null;
-    }
-
-    // 检查模型支持
-    const requestedModel = session.getOriginalModel();
-    if (requestedModel && !providerSupportsModel(provider, requestedModel)) {
-      logger.debug("ProviderSelector: Session provider does not support requested model", {
-        sessionId: session.sessionId,
-        providerId: provider.id,
-        providerName: provider.name,
-        providerType: provider.providerType,
-        requestedModel,
-        allowedModels: provider.allowedModels,
-      });
-
-      // 清除过时绑定，避免 SET NX 死锁
-      // 当 session 内请求模型发生变化时，旧绑定已无意义，
-      // 清除后新的成功请求可通过 SET NX 重新绑定匹配的 provider
-      await SessionManager.clearSessionProvider(session.sessionId);
-      logger.info("ProviderSelector: Cleared stale provider binding (model mismatch)", {
-        sessionId: session.sessionId,
-        staleProviderId: provider.id,
-        staleProviderName: provider.name,
-        requestedModel,
-      });
-
-      return null;
-    }
-
-    // Check provider-level client restrictions on session reuse
-    const providerAllowed = provider.allowedClients ?? [];
-    const providerBlocked = provider.blockedClients ?? [];
-    const clientResult = isClientAllowedDetailed(session, providerAllowed, providerBlocked);
-    if (!clientResult.allowed) {
-      logger.debug("ProviderSelector: Session provider blocked by client restrictions", {
-        sessionId: session.sessionId,
-        providerId: provider.id,
-        matchType: clientResult.matchType,
-        matchedPattern: clientResult.matchedPattern,
-        detectedClient: clientResult.detectedClient,
-      });
-      session.addProviderToChain(provider, {
-        reason: "client_restriction_filtered",
-        decisionContext: {
-          totalProviders: 0,
-          enabledProviders: 0,
-          targetType: provider.providerType as NonNullable<
-            ProviderChainItem["decisionContext"]
-          >["targetType"],
-          requestedModel: session.getOriginalModel() || "",
-          groupFilterApplied: false,
-          beforeHealthCheck: 0,
-          afterHealthCheck: 0,
-          priorityLevels: [],
-          selectedPriority: 0,
-          candidatesAtPriority: [],
-          filteredProviders: [
-            {
-              id: provider.id,
-              name: provider.name,
-              reason: "client_restriction",
-              details:
-                clientResult.matchType === "blocklist_hit" ? "blocklist_hit" : "allowlist_miss",
-              clientRestrictionContext: {
-                matchType: clientResult.matchType as "blocklist_hit" | "allowlist_miss",
-                matchedPattern: clientResult.matchedPattern,
-                detectedClient: clientResult.detectedClient,
-                providerAllowlist: clientResult.checkedAllowlist,
-                providerBlocklist: clientResult.checkedBlocklist,
-              },
-            },
-          ],
-        },
-      });
-      await SessionManager.clearSessionProvider(session.sessionId);
-      return null;
-    }
-
-    // 修复：检查用户分组权限（严格分组隔离 + 支持多分组）
-    // Check if session provider matches user's group
-    // Priority: key.providerGroup > user.providerGroup
-    const effectiveGroup = getEffectiveProviderGroup(session);
-    const keyGroup = session?.authState?.key?.providerGroup;
-    if (effectiveGroup) {
-      // Use helper function for core group matching logic
-      // Fix #190: Support provider multi-tags (e.g. "cli,chat") matching user single-tag (e.g. "cli")
-      // Fix #281: Reject providers without groupTag when user/key has group restrictions
-      if (!checkProviderGroupMatch(provider.groupTag, effectiveGroup)) {
-        // Detailed logging based on specific failure reason
-        if (!provider.groupTag) {
-          logger.warn(
-            "ProviderSelector: Session provider has no group tag but user/key requires group",
-            {
-              sessionId: session.sessionId,
-              providerId: provider.id,
-              providerName: provider.name,
-              effectiveGroups: effectiveGroup,
-              keyGroupOverride: !!keyGroup,
-              message:
-                "Strict group isolation: rejecting untagged provider for group-scoped user/key",
-            }
-          );
-        } else {
-          logger.warn("ProviderSelector: Session provider not in user groups", {
-            sessionId: session.sessionId,
-            providerId: provider.id,
-            providerName: provider.name,
-            providerTags: provider.groupTag,
-            effectiveGroups: effectiveGroup,
-            keyGroupOverride: !!keyGroup,
-            message: "Strict group isolation: rejecting cross-group session reuse",
-          });
-        }
-        return null; // Reject reuse, re-select
-      }
-    }
-    // No auth group info (effectiveGroup is null) can reuse any provider
-
-    // 会话复用也必须遵守限额（否则会绕过"达到限额即禁用"的语义）
-    const costCheck = await RateLimitService.checkCostLimitsWithLease(provider.id, "provider", {
-      limit_5h_usd: provider.limit5hUsd,
-      limit_5h_reset_mode: provider.limit5hResetMode,
-      limit_daily_usd: provider.limitDailyUsd,
-      daily_reset_mode: provider.dailyResetMode,
-      daily_reset_time: provider.dailyResetTime,
-      limit_weekly_usd: provider.limitWeeklyUsd,
-      limit_monthly_usd: provider.limitMonthlyUsd,
-    });
-
-    if (!costCheck.allowed) {
-      logger.debug("ProviderSelector: Session provider cost limit exceeded, reject reuse", {
-        sessionId: session.sessionId,
-        providerId: provider.id,
-      });
-      return null;
-    }
-
-    const totalCheck = await RateLimitService.checkTotalCostLimit(
-      provider.id,
-      "provider",
-      provider.limitTotalUsd,
-      {
-        resetAt: provider.totalCostResetAt,
-      }
-    );
-
-    if (!totalCheck.allowed) {
-      logger.debug("ProviderSelector: Session provider total cost limit exceeded, reject reuse", {
-        sessionId: session.sessionId,
-        providerId: provider.id,
-        reason: totalCheck.reason,
-      });
-      return null;
-    }
-
-    logger.info("ProviderSelector: Reusing provider", {
-      providerName: provider.name,
-      providerId: provider.id,
-      sessionId: session.sessionId,
-    });
-    return provider;
+  private static async findReusable(_session: ProxySession): Promise<Provider | null> {
+    return null;
   }
+
 
   private static async pickRandomProvider(
     session?: ProxySession,
@@ -981,11 +706,7 @@ export class ProxyProviderResolver {
       return { provider: null, context };
     }
 
-    // Step 5: 优先级分层（只选择最高优先级的供应商）
-    const topPriorityProviders = ProxyProviderResolver.selectTopPriority(
-      healthyProviders,
-      effectiveGroupPick
-    );
+    // Step 5/6: health-aware dispatch when possible, else legacy priority + weight
     const priorities = [
       ...new Set(
         healthyProviders.map((p) =>
@@ -994,23 +715,49 @@ export class ProxyProviderResolver {
       ),
     ].sort((a, b) => a - b);
     context.priorityLevels = priorities;
-    context.selectedPriority = Math.min(
-      ...healthyProviders.map((p) =>
-        ProxyProviderResolver.resolveEffectivePriority(p, effectiveGroupPick ?? null)
-      )
+
+    const healthPick = selectBestHealthDispatchProvider(healthyProviders, (p) =>
+      ProxyProviderResolver.resolveEffectivePriority(p, effectiveGroupPick ?? null)
     );
 
-    // Step 6: 成本排序 + 加权选择 + 计算概率
-    const totalWeight = topPriorityProviders.reduce((sum, p) => sum + p.weight, 0);
-    context.candidatesAtPriority = topPriorityProviders.map((p) => ({
-      id: p.id,
-      name: p.name,
-      weight: p.weight,
-      costMultiplier: p.costMultiplier,
-      probability: totalWeight > 0 ? p.weight / totalWeight : 0,
-    }));
+    let selected: Provider;
+    let selectionMode: "health_slo" | "legacy_priority_weight";
 
-    const selected = ProxyProviderResolver.selectOptimal(topPriorityProviders);
+    if (healthPick) {
+      selected = healthPick.provider;
+      selectionMode = "health_slo";
+      context.selectedPriority = healthPick.candidates[0]?.priority ?? selected.priority ?? 0;
+      // Candidates = all SLO-qualified providers at the chosen priority (for chain logging)
+      const bestPriority = context.selectedPriority;
+      const samePriority = healthPick.candidates.filter((c) => c.priority === bestPriority);
+      context.candidatesAtPriority = samePriority.map((c) => ({
+        id: c.provider.id,
+        name: c.provider.name,
+        weight: c.provider.weight,
+        costMultiplier: c.provider.costMultiplier,
+        probability: samePriority.length > 0 ? 1 / samePriority.length : 0,
+      }));
+    } else {
+      const topPriorityProviders = ProxyProviderResolver.selectTopPriority(
+        healthyProviders,
+        effectiveGroupPick
+      );
+      context.selectedPriority = Math.min(
+        ...healthyProviders.map((p) =>
+          ProxyProviderResolver.resolveEffectivePriority(p, effectiveGroupPick ?? null)
+        )
+      );
+      const totalWeight = topPriorityProviders.reduce((sum, p) => sum + p.weight, 0);
+      context.candidatesAtPriority = topPriorityProviders.map((p) => ({
+        id: p.id,
+        name: p.name,
+        weight: p.weight,
+        costMultiplier: p.costMultiplier,
+        probability: totalWeight > 0 ? p.weight / totalWeight : 0,
+      }));
+      selected = ProxyProviderResolver.selectOptimal(topPriorityProviders);
+      selectionMode = "legacy_priority_weight";
+    }
 
     // 详细的选择日志
     logger.info("ProviderSelector: Selection decision", {
@@ -1022,6 +769,14 @@ export class ProxyProviderResolver {
       afterGroupFilter: candidateProviders.map((p) => p.name),
       afterHealthFilter: healthyProviders.length,
       filteredOut: filteredOut.map((p) => p.name),
+      selectionMode,
+      healthSloCandidates: healthPick?.candidates.map((c) => ({
+        id: c.provider.id,
+        name: c.provider.name,
+        priority: c.priority,
+        onlineRate: c.onlineRate,
+        avgFirstByteMs: c.avgFirstByteMs,
+      })),
       topPriorityLevel: context.selectedPriority,
       topPriorityCandidates: context.candidatesAtPriority,
       selected: {
@@ -1031,6 +786,8 @@ export class ProxyProviderResolver {
         priority: selected.priority,
         weight: selected.weight,
         cost: selected.costMultiplier,
+        onlineRate: selected.healthTestOnlineRate,
+        avgFirstByteMs: selected.healthTestAvgFirstByteMs,
         circuitState: getCircuitState(selected.id),
       },
     });
@@ -1288,24 +1045,46 @@ export class ProxyProviderResolver {
       };
     }
 
-    // 优先级分层
-    const topPriorityProviders = ProxyProviderResolver.selectTopPriority(
-      healthyProviders,
-      effectiveGroupPick
+    // Health-aware first, else legacy priority + weight
+    const healthPick = selectBestHealthDispatchProvider(healthyProviders, (p) =>
+      ProxyProviderResolver.resolveEffectivePriority(p, effectiveGroupPick ?? null)
     );
 
-    // 成本排序 + 加权随机选择
-    const selected = ProxyProviderResolver.selectOptimal(topPriorityProviders);
+    let selected: Provider;
+    let candidates: Array<{
+      id: number;
+      name: string;
+      weight: number;
+      costMultiplier: number;
+      probability: number;
+    }>;
 
-    // 计算候选者概率
-    const totalWeight = topPriorityProviders.reduce((sum, p) => sum + p.weight, 0);
-    const candidates = topPriorityProviders.map((p) => ({
-      id: p.id,
-      name: p.name,
-      weight: p.weight,
-      costMultiplier: p.costMultiplier,
-      probability: totalWeight > 0 ? p.weight / totalWeight : 1 / topPriorityProviders.length,
-    }));
+    if (healthPick) {
+      selected = healthPick.provider;
+      const bestPriority = healthPick.candidates[0]?.priority ?? selected.priority ?? 0;
+      const samePriority = healthPick.candidates.filter((c) => c.priority === bestPriority);
+      candidates = samePriority.map((c) => ({
+        id: c.provider.id,
+        name: c.provider.name,
+        weight: c.provider.weight,
+        costMultiplier: c.provider.costMultiplier,
+        probability: samePriority.length > 0 ? 1 / samePriority.length : 0,
+      }));
+    } else {
+      const topPriorityProviders = ProxyProviderResolver.selectTopPriority(
+        healthyProviders,
+        effectiveGroupPick
+      );
+      selected = ProxyProviderResolver.selectOptimal(topPriorityProviders);
+      const totalWeight = topPriorityProviders.reduce((sum, p) => sum + p.weight, 0);
+      candidates = topPriorityProviders.map((p) => ({
+        id: p.id,
+        name: p.name,
+        weight: p.weight,
+        costMultiplier: p.costMultiplier,
+        probability: totalWeight > 0 ? p.weight / totalWeight : 1 / topPriorityProviders.length,
+      }));
+    }
 
     return {
       provider: selected,

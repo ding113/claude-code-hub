@@ -1,6 +1,6 @@
 {
   "model": "gpt-5.5",
-  "instructions": "You are Codex, based on GPT-5. You are running as a coding agent in the Codex CLI on a user's computer.",
+  "instructions": "Reply with exactly pong.",
   "input": [
     {
       "type": "message",
@@ -14,12 +14,12 @@
     }
   ],
   "tools": [],
-  "tool_choice": "auto",
+  "tool_choice": "none",
   "parallel_tool_calls": false,
   "reasoning": {
-    "effort": "low",
-    "summary": "auto"
+    "effort": "none"
   },
   "store": false,
-  "stream": true
+  "stream": true,
+  "max_output_tokens": 16
 }

@@ -60,6 +60,8 @@ export async function saveSystemSettings(formData: {
   siteTitle?: string;
   allowGlobalUsageView?: boolean;
   currencyDisplay?: string;
+  healthTestDailyBudgetCny?: number;
+  healthTestGlobalBudgetSuspendedDay?: string | null;
   billingModelSource?: string;
   codexPriorityBillingSource?: CodexPriorityBillingSource;
   billNonSuccessfulRequests?: boolean;
@@ -114,6 +116,8 @@ export async function saveSystemSettings(formData: {
       siteTitle: validated.siteTitle?.trim(),
       allowGlobalUsageView: validated.allowGlobalUsageView,
       currencyDisplay: validated.currencyDisplay,
+      healthTestDailyBudgetCny: validated.healthTestDailyBudgetCny,
+      healthTestGlobalBudgetSuspendedDay: validated.healthTestGlobalBudgetSuspendedDay,
       billingModelSource: validated.billingModelSource,
       codexPriorityBillingSource: validated.codexPriorityBillingSource,
       billNonSuccessfulRequests: validated.billNonSuccessfulRequests,

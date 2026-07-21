@@ -26,6 +26,10 @@ function toProviderGroup(row: ProviderGroupRow): ProviderGroup {
     name: row.name,
     costMultiplier: Number(row.costMultiplier),
     description: row.description ?? null,
+    healthTestModel:
+      row.healthTestModel != null && String(row.healthTestModel).trim()
+        ? String(row.healthTestModel).trim()
+        : null,
     createdAt: row.createdAt!,
     updatedAt: row.updatedAt!,
   };
@@ -114,6 +118,10 @@ export async function createProviderGroup(input: CreateProviderGroupInput): Prom
       name: input.name,
       costMultiplier: input.costMultiplier?.toString() ?? "1.0",
       description: input.description ?? null,
+      healthTestModel:
+        input.healthTestModel != null && String(input.healthTestModel).trim()
+          ? String(input.healthTestModel).trim()
+          : null,
     })
     .returning();
 
@@ -139,6 +147,11 @@ export async function updateProviderGroup(
   }
   if (input.description !== undefined) {
     setData.description = input.description;
+  }
+  if (input.healthTestModel !== undefined) {
+    const raw = input.healthTestModel;
+    setData.healthTestModel =
+      raw != null && String(raw).trim() ? String(raw).trim() : null;
   }
 
   const [row] = await executor
@@ -291,4 +304,62 @@ export async function getGroupCostMultiplier(rawGroupString: string): Promise<nu
   }
 
   return 1.0;
+}
+
+
+/**
+ * Resolve scheduled health-test model for a provider based on its groupTag(s).
+ * First matching non-empty group.healthTestModel wins (group name order as in tag).
+ * Returns null when no configured group model → scheduled tests should skip.
+ */
+export async function resolveHealthTestModelForProviderGroups(
+  groupTag: string | null | undefined
+): Promise<string | null> {
+  const tags = parseProviderGroups(groupTag);
+  if (tags.length === 0) return null;
+
+  const rows = await db
+    .select({
+      name: providerGroups.name,
+      healthTestModel: providerGroups.healthTestModel,
+    })
+    .from(providerGroups)
+    .where(inArray(providerGroups.name, tags));
+
+  const byName = new Map(
+    rows.map((r) => [
+      r.name,
+      r.healthTestModel != null && String(r.healthTestModel).trim()
+        ? String(r.healthTestModel).trim()
+        : null,
+    ])
+  );
+
+  for (const tag of tags) {
+    const model = byName.get(tag);
+    if (model) return model;
+  }
+  return null;
+}
+
+/**
+ * Map group name → healthTestModel for bulk scheduler filtering.
+ */
+export async function getProviderGroupHealthTestModelMap(): Promise<Map<string, string | null>> {
+  const rows = await db
+    .select({
+      name: providerGroups.name,
+      healthTestModel: providerGroups.healthTestModel,
+    })
+    .from(providerGroups);
+  const map = new Map<string, string | null>();
+  for (const r of rows) {
+    map.set(
+      r.name,
+      r.healthTestModel != null && String(r.healthTestModel).trim()
+        ? String(r.healthTestModel).trim()
+        : null
+    );
+  }
+  return map;
 }

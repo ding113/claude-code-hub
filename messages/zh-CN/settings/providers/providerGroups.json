@@ -42,5 +42,10 @@
   "groupDescriptionLabel": "分组描述",
   "noDescription": "添加描述",
   "descriptionTooLong": "描述不能超过500字符",
-  "openProviderEditor": "编辑供应商"
+  "openProviderEditor": "编辑供应商",
+  "healthTestModel": "默认测试模型",
+  "healthTestModelPlaceholder": "留空 = 不对该组定时测试",
+  "healthTestModelHelp": "配置后，该分组供应商用此模型做定时连通性测试；留空则不定时测。",
+  "healthTestModelEmpty": "不定时测",
+  "groupHealthTestModelLabel": "默认测试模型"
 }

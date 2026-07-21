@@ -69,6 +69,16 @@ export {
   updateProviderEndpointProbeSnapshot,
   updateProviderVendor,
 } from "./provider-endpoints";
+export type { ProviderHealthTestLog, ProviderHealthTestTarget } from "./provider-health-test";
+export {
+  findProviderHealthTestLogs,
+  findProvidersForScheduledHealthTest,
+  getHealthTestGlobalBudgetStatus,
+  recordProviderHealthTestResult,
+  rebalanceScheduledHealthTestsBySlo,
+  suspendAllScheduledHealthTestsForGlobalBudget,
+  updateProviderScheduledHealthTestEnabled,
+} from "./provider-health-test";
 // Statistics related exports
 export {
   getActiveKeysForUserFromDB,

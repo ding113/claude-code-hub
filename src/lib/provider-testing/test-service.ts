@@ -22,6 +22,10 @@ import type {
 } from "./types";
 import { TEST_DEFAULTS } from "./types";
 import {
+  hasRealContentTokenInBody,
+  hasRealContentTokenInSse,
+} from "./utils/sse-collector";
+import {
   DEFAULT_SUCCESS_CONTAINS,
   getTestBody,
   getTestHeaders,
@@ -47,6 +51,196 @@ interface VersionlessFallbackState {
 
 const RETRYABLE_HTTP_STATUS_CODES = [400, 404, 405, 415, 422] as const;
 const INVALID_OPENAI_URL_MARKER = /Invalid URL \(POST \/v1\/.+\)/i;
+
+/**
+ * Read the full body while measuring time-to-first-REAL-content-token.
+ *
+ * Headers alone are NOT first-token. Empty SSE control frames
+ * (response.created / message_start / ping) also are NOT first-token.
+ * Aligned with Sub2API first_token_ms: first non-empty text delta.
+ *
+ * For SSE/Responses streams, keep reading until:
+ * - `response.completed` is observed (usage lives on this frame), or
+ * - the upstream stream ends, or
+ * - the total/abort timeout fires.
+ * Having text content alone must NOT stop the drain — otherwise concurrent
+ * probes can miss the completed/usage frame and leave token/cost null.
+ */
+async function readBodyWithFirstTokenMs(
+  response: Response,
+  attemptStartTime: number,
+  options?: {
+    firstByteTimeoutMs?: number;
+    abortController?: AbortController;
+  }
+): Promise<{ body: string; firstByteMs: number | undefined; firstByteTimedOut: boolean }> {
+  const firstByteTimeoutMs = options?.firstByteTimeoutMs;
+  const abortController = options?.abortController;
+  const contentType = response.headers.get("content-type") || undefined;
+  const looksLikeSse =
+    contentType?.includes("text/event-stream") || contentType?.includes("text/x-event-stream");
+
+  // Prefer streaming read so we can timestamp the first real content token.
+  const body = response.body;
+  if (body && typeof body.getReader === "function") {
+    const reader = body.getReader();
+    const decoder = new TextDecoder();
+    const chunks: string[] = [];
+    let buffer = "";
+    let firstByteMs: number | undefined;
+    let firstByteTimedOut = false;
+    let firstByteTimeoutId: ReturnType<typeof setTimeout> | undefined;
+    let sawResponseCompleted = false;
+
+    const armFirstTokenTimeout = () => {
+      if (!firstByteTimeoutMs || firstByteTimeoutMs <= 0 || !abortController) return;
+      firstByteTimeoutId = setTimeout(() => {
+        firstByteTimedOut = true;
+        try {
+          void reader.cancel("first_token_timeout");
+        } catch {
+          // ignore
+        }
+        try {
+          abortController.abort();
+        } catch {
+          // ignore
+        }
+      }, firstByteTimeoutMs);
+    };
+
+    const bufferHasResponseCompleted = (text: string): boolean => {
+      // Official Responses SSE: event line and/or data JSON type.
+      // Anthropic Messages SSE ends with message_stop (usage is on message_delta before it).
+      return (
+        text.includes("response.completed") ||
+        text.includes('"type":"response.completed"') ||
+        text.includes('"type": "response.completed"') ||
+        text.includes("message_stop") ||
+        text.includes('"type":"message_stop"') ||
+        text.includes('"type": "message_stop"')
+      );
+    };
+
+    try {
+      armFirstTokenTimeout();
+      while (true) {
+        if (abortController?.signal.aborted) {
+          break;
+        }
+        const { done, value } = await reader.read();
+        if (done) break;
+        if (value && value.byteLength > 0) {
+          const piece = decoder.decode(value, { stream: true });
+          chunks.push(piece);
+          buffer += piece;
+
+          if (firstByteMs === undefined) {
+            const hasToken =
+              looksLikeSse || buffer.includes("data:")
+                ? hasRealContentTokenInSse(buffer)
+                : // Non-stream progressive body: wait until we can detect content;
+                  // for plain progressive bytes, treat first non-whitespace as token.
+                  /[^\s]/.test(buffer);
+            if (hasToken) {
+              firstByteMs = Date.now() - attemptStartTime;
+              if (firstByteTimeoutId) {
+                clearTimeout(firstByteTimeoutId);
+                firstByteTimeoutId = undefined;
+              }
+              // Do NOT stop here for SSE. Usage is typically only present on
+              // response.completed, which arrives after text deltas.
+            }
+          }
+
+          // SSE: once completed is in the buffer we have usage; stop draining.
+          // Non-SSE: keep reading until stream end (JSON body is atomic enough).
+          if (
+            (looksLikeSse || buffer.includes("data:")) &&
+            !sawResponseCompleted &&
+            bufferHasResponseCompleted(buffer)
+          ) {
+            sawResponseCompleted = true;
+            // Soft stop: cancel reader after completed so we don't hang on idle keep-alive.
+            // Body already contains completed+usage for parsing.
+            try {
+              void reader.cancel("response_completed");
+            } catch {
+              // ignore
+            }
+            break;
+          }
+        }
+      }
+      try {
+        chunks.push(decoder.decode());
+      } catch {
+        // ignore flush errors after cancel
+      }
+
+      // If stream ended without a delta token but final body has content (done/completed),
+      // use full elapsed time as first-token.
+      if (firstByteMs === undefined) {
+        const full = chunks.join("");
+        if (hasRealContentTokenInBody(full, contentType) || /[^\s]/.test(full)) {
+          firstByteMs = Date.now() - attemptStartTime;
+        }
+      }
+
+      return {
+        body: chunks.join(""),
+        firstByteMs,
+        firstByteTimedOut,
+      };
+    } catch (error) {
+      if (firstByteTimedOut) {
+        return { body: chunks.join(""), firstByteMs: undefined, firstByteTimedOut: true };
+      }
+      // Cancel after completed can surface as abort/cancel; still return drained body.
+      if (sawResponseCompleted && chunks.length > 0) {
+        return {
+          body: chunks.join(""),
+          firstByteMs,
+          firstByteTimedOut: false,
+        };
+      }
+      throw error;
+    } finally {
+      if (firstByteTimeoutId) clearTimeout(firstByteTimeoutId);
+      try {
+        reader.releaseLock();
+      } catch {
+        // ignore
+      }
+    }
+  }
+
+  // Fallback when body stream is unavailable (e.g. some mocks / polyfills).
+  let firstByteTimeoutId: ReturnType<typeof setTimeout> | undefined;
+  let firstByteTimedOut = false;
+  if (firstByteTimeoutMs && firstByteTimeoutMs > 0 && abortController) {
+    firstByteTimeoutId = setTimeout(() => {
+      firstByteTimedOut = true;
+      abortController.abort();
+    }, firstByteTimeoutMs);
+  }
+  try {
+    const text = await response.text();
+    const hasToken = hasRealContentTokenInBody(text, contentType) || /[^\s]/.test(text);
+    return {
+      body: text,
+      firstByteMs: hasToken ? Date.now() - attemptStartTime : undefined,
+      firstByteTimedOut,
+    };
+  } catch (error) {
+    if (firstByteTimedOut) {
+      return { body: "", firstByteMs: undefined, firstByteTimedOut: true };
+    }
+    throw error;
+  } finally {
+    if (firstByteTimeoutId) clearTimeout(firstByteTimeoutId);
+  }
+}
 
 function buildAttemptPlans(config: ProviderTestConfig): AttemptPlan[] {
   const customPayload = config.customPayload?.trim();
@@ -223,6 +417,11 @@ async function runSingleAttempt(
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+    const firstByteTimeoutMs =
+      typeof config.firstByteTimeoutMs === "number" && config.firstByteTimeoutMs > 0
+        ? config.firstByteTimeoutMs
+        : undefined;
+    let firstByteTimedOut = false;
 
     try {
       const fetchOptions: RequestInit & { dispatcher?: unknown } = {
@@ -239,10 +438,79 @@ async function runSingleAttempt(
       while (true) {
         attemptStartTime = Date.now();
         firstByteMs = undefined;
-        const response = await fetch(requestUrl, fetchOptions);
-        firstByteMs = Date.now() - attemptStartTime;
+        firstByteTimedOut = false;
 
-        const responseBody = await response.text();
+        let response: Response;
+        try {
+          response = await fetch(requestUrl, fetchOptions);
+        } catch (error) {
+          // Header-stage abort is still a total failure; message kept generic.
+          throw error;
+        }
+
+        // First-token semantics (Sub2API-aligned): time to first non-empty body chunk,
+        // NOT HTTP headers. Streaming gateways often return 200 headers quickly.
+        let responseBody: string;
+        try {
+          const read = await readBodyWithFirstTokenMs(response, attemptStartTime, {
+            firstByteTimeoutMs,
+            abortController: controller,
+          });
+          responseBody = read.body;
+          firstByteMs = read.firstByteMs;
+          firstByteTimedOut = read.firstByteTimedOut;
+        } catch (error) {
+          if (firstByteTimedOut) {
+            clearTimeout(timeoutId);
+            const latencyMs = Date.now() - startTime;
+            return {
+              success: false,
+              status: "red",
+              subStatus: "network_error",
+              latencyMs,
+              firstByteMs: undefined,
+              errorMessage: "First token timed out",
+              errorType: "first_byte_timeout",
+              rawError: error,
+              requestUrl,
+              testedAt: new Date(),
+              validationDetails: buildValidationDetails(
+                undefined,
+                latencyMs,
+                slowThresholdMs,
+                false,
+                plan.successContains
+              ),
+              usedProxy,
+            };
+          }
+          throw error;
+        }
+
+        if (firstByteTimedOut) {
+          clearTimeout(timeoutId);
+          const latencyMs = Date.now() - startTime;
+          return {
+            success: false,
+            status: "red",
+            subStatus: "network_error",
+            latencyMs,
+            firstByteMs: undefined,
+            errorMessage: "First token timed out",
+            errorType: "first_byte_timeout",
+            requestUrl,
+            testedAt: new Date(),
+            validationDetails: buildValidationDetails(
+              undefined,
+              latencyMs,
+              slowThresholdMs,
+              false,
+              plan.successContains
+            ),
+            usedProxy,
+          };
+        }
+
         const fallbackUrl = resolveVersionlessOpenAiFallbackUrl(
           config,
           requestUrl,

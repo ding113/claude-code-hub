@@ -51,7 +51,8 @@ function getDefaultModelForProvider(
 }
 
 function getTimeoutMsForProvider(providerType: ProviderType): number {
-  return providerType === "gemini" || providerType === "gemini-cli" ? 60_000 : 15_000;
+  // Align with health-test total timeout: no 15s first-token kill on manual tests.
+  return 120_000;
 }
 
 function normalizeUsage(usage?: Record<string, unknown>) {

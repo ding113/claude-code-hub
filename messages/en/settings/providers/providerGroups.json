@@ -42,5 +42,10 @@
   "groupDescriptionLabel": "Group Description",
   "noDescription": "Add description",
   "descriptionTooLong": "Description must be 500 characters or fewer",
-  "openProviderEditor": "Edit Provider"
+  "openProviderEditor": "Edit Provider",
+  "healthTestModel": "Default test model",
+  "healthTestModelPlaceholder": "Empty = skip scheduled tests",
+  "healthTestModelHelp": "When set, providers in this group use this model for scheduled health tests; leave empty to skip.",
+  "healthTestModelEmpty": "No scheduled tests",
+  "groupHealthTestModelLabel": "Default test model"
 }

@@ -150,7 +150,7 @@ export const EnvSchema = z.object({
     .number()
     .min(1, "MAX_RETRY_ATTEMPTS_DEFAULT 不能小于 1")
     .max(10, "MAX_RETRY_ATTEMPTS_DEFAULT 不能大于 10")
-    .default(2),
+    .default(1),
   // Fetch 超时配置（毫秒）
   FETCH_BODY_TIMEOUT: z.coerce.number().default(600_000), // 请求/响应体传输超时（默认 600 秒）
   FETCH_HEADERS_TIMEOUT: z.coerce.number().default(600_000), // 响应头接收超时（默认 600 秒）

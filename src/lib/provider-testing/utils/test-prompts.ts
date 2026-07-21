@@ -27,27 +27,20 @@ export const BASE_HEADERS = {
 
 export const CLAUDE_TEST_BODY: ClaudeTestBody = {
   model: "claude-haiku-4-5-20251001",
-  max_tokens: 20,
+  max_tokens: 8,
   stream: true,
-  metadata: { user_id: "cch_probe_test" },
-  system: [
-    {
-      type: "text",
-      text: "You are Claude Code, Anthropic's official CLI for Claude.",
-    },
-  ],
   messages: [
     {
       role: "user",
-      content: [{ type: "text", text: "ping, please reply 'pong'" }],
+      content: [{ type: "text", text: "ping" }],
     },
   ],
 };
 
 export const CODEX_TEST_BODY: CodexTestBody = {
   model: "gpt-5.5",
-  instructions:
-    "You are Codex, based on GPT-5. You are running as a coding agent in the Codex CLI on a user's computer.",
+  // Keep a tiny instructions string: empty/missing makes some Codex relays inject a huge default system prompt.
+  instructions: "Reply with exactly pong.",
   input: [
     {
       type: "message",
@@ -56,21 +49,19 @@ export const CODEX_TEST_BODY: CodexTestBody = {
     },
   ],
   tools: [],
-  tool_choice: "auto",
+  tool_choice: "none",
   parallel_tool_calls: false,
-  reasoning: { effort: "low", summary: "auto" },
+  reasoning: { effort: "none", summary: "auto" },
   store: false,
   stream: true,
+  max_output_tokens: 16,
 };
 
 export const OPENAI_TEST_BODY: OpenAITestBody = {
   model: "gpt-4.1-mini",
-  messages: [
-    { role: "system", content: "You are an echo bot. Reply with exactly pong." },
-    { role: "user", content: "ping" },
-  ],
-  max_tokens: 20,
-  stream: false,
+  messages: [{ role: "user", content: "ping" }],
+  max_tokens: 8,
+  stream: true,
 };
 
 export const GEMINI_TEST_BODY: GeminiTestBody = {

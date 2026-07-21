@@ -48,6 +48,7 @@ import { ProviderGroupTab } from "./provider-group-tab";
 import { ProviderList } from "./provider-list";
 import { ProviderSortDropdown, type SortKey } from "./provider-sort-dropdown";
 import { ProviderTypeFilter } from "./provider-type-filter";
+import { HealthTestBudgetBar } from "./health-test-budget-bar";
 import { ProviderVendorView } from "./provider-vendor-view";
 
 /** Per-endpoint circuit breaker state, keyed by provider ID */
@@ -380,22 +381,25 @@ export function ProviderManager({
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <ProviderBatchToolbar
-          isMultiSelectMode={isMultiSelectMode}
-          allSelected={allSelected}
-          selectedCount={selectedProviderIds.size}
-          totalCount={filteredProviders.length}
-          onEnterMode={handleEnterMultiSelectMode}
-          onExitMode={handleExitMultiSelectMode}
-          onSelectAll={handleSelectAll}
-          onInvertSelection={handleInvertSelection}
-          onOpenBatchEdit={handleOpenBatchEdit}
-          providers={filteredProviders}
-          onSelectByType={handleSelectByType}
-          onSelectByGroup={handleSelectByGroup}
-        />
-        {addDialogSlot ? <div className="ml-auto">{addDialogSlot}</div> : null}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <HealthTestBudgetBar currencyCode={currencyCode} />
+        <div className="flex flex-wrap items-center gap-2 ml-auto">
+          <ProviderBatchToolbar
+            isMultiSelectMode={isMultiSelectMode}
+            allSelected={allSelected}
+            selectedCount={selectedProviderIds.size}
+            totalCount={filteredProviders.length}
+            onEnterMode={handleEnterMultiSelectMode}
+            onExitMode={handleExitMultiSelectMode}
+            onSelectAll={handleSelectAll}
+            onInvertSelection={handleInvertSelection}
+            onOpenBatchEdit={handleOpenBatchEdit}
+            providers={filteredProviders}
+            onSelectByType={handleSelectByType}
+            onSelectByGroup={handleSelectByGroup}
+          />
+          {addDialogSlot ? <div>{addDialogSlot}</div> : null}
+        </div>
       </div>
       {/* Filter section */}
       <div className="flex flex-col gap-3">

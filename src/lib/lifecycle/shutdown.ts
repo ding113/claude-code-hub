@@ -88,6 +88,18 @@ export async function runApplicationCleanup(
       "stopEndpointProbeScheduler"
     );
 
+    // 2b. 供应商 LLM 健康测试调度器
+    await withTimeout(
+      (async () => {
+        const { stopProviderHealthTestScheduler } = await import(
+          "@/lib/provider-health-test/scheduler"
+        );
+        stopProviderHealthTestScheduler();
+      })(),
+      stepMs,
+      "stopProviderHealthTestScheduler"
+    );
+
     // 3. 公共状态重建调度器
     await withTimeout(
       (async () => {

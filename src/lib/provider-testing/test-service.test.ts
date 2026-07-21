@@ -15,9 +15,29 @@ function createMockResponse(
     ok?: boolean;
     status?: number;
     statusText?: string;
+    /** Delay before the first body chunk (ms). Used to verify first-token timing. */
+    firstChunkDelayMs?: number;
   }
 ): Response {
   const ok = options?.ok ?? true;
+  const firstChunkDelayMs = options?.firstChunkDelayMs ?? 0;
+
+  const bodyStream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      const bytes = new TextEncoder().encode(responseBody);
+      const push = () => {
+        if (bytes.byteLength > 0) {
+          controller.enqueue(bytes);
+        }
+        controller.close();
+      };
+      if (firstChunkDelayMs > 0) {
+        setTimeout(push, firstChunkDelayMs);
+      } else {
+        push();
+      }
+    },
+  });
 
   return {
     ok,
@@ -26,7 +46,13 @@ function createMockResponse(
     headers: new Headers({
       "content-type": options?.contentType ?? "application/json",
     }),
-    text: async () => responseBody,
+    body: bodyStream,
+    text: async () => {
+      if (firstChunkDelayMs > 0) {
+        await new Promise((r) => setTimeout(r, firstChunkDelayMs));
+      }
+      return responseBody;
+    },
   } as Response;
 }
 
@@ -384,50 +410,35 @@ describe("executeProviderTest", () => {
     ).rejects.toThrow("Preset not found: cx_base");
   });
 
-  test("openai-compatible 在首个模板返回 400 时，应自动回退到下一个模板", async () => {
-    const errorBody = JSON.stringify({
-      error: {
-        message: "bad request",
-      },
-    });
-    const okBody = JSON.stringify({
-      model: "gpt-4.1-mini",
-      choices: [
-        {
-          message: {
-            role: "assistant",
-            content: "pong",
-          },
+  test("openai-compatible 只有流式模板时 400 不再二次请求", async () => {
+      const errorBody = JSON.stringify({
+        error: {
+          message: "bad request",
         },
-      ],
-    });
+      });
 
-    fetchMock
-      .mockResolvedValueOnce(
+      fetchMock.mockResolvedValue(
         createMockResponse(errorBody, {
           ok: false,
           status: 400,
           statusText: "Bad Request",
         })
-      )
-      .mockResolvedValueOnce(createMockResponse(okBody));
+      );
 
-    const result = await executeProviderTest({
-      providerUrl: "https://api.example.com",
-      apiKey: "sk-test-openai-compatible",
-      providerType: "openai-compatible",
-      model: "gpt-4.1-mini",
+      const result = await executeProviderTest({
+        providerUrl: "https://api.example.com",
+        apiKey: "sk-test",
+        providerType: "openai-compatible",
+        model: "gpt-4.1-mini",
+      });
+
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(result.success).toBe(false);
+      const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)) as {
+        stream?: boolean;
+      };
+      expect(body.stream).toBe(true);
     });
-
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(result.success).toBe(true);
-    expect(result.content).toBe("pong");
-
-    const secondBody = JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body)) as {
-      stream?: boolean;
-    };
-    expect(secondBody.stream).toBe(true);
-  });
 
   test("codex bare /openai base retries versionless responses path after invalid url", async () => {
     const errorBody = JSON.stringify({
@@ -517,63 +528,49 @@ describe("executeProviderTest", () => {
     expect(result.requestUrl).toBe("https://api.gptclubapi.xyz/openai/responses");
   });
 
-  test("codex provider test reuses versionless path across preset candidates", async () => {
-    const invalidUrlBody = JSON.stringify({
-      error: {
-        message: "Invalid URL (POST /v1/responses)",
-      },
-    });
-    const stillInvalidBody = JSON.stringify({
-      error: {
-        message: "Unsupported responses body",
-      },
-    });
-    const okBody = JSON.stringify({
-      id: "resp_test",
-      model: "gpt-5.5",
-      output: [
-        {
-          type: "message",
-          role: "assistant",
-          content: [{ type: "output_text", text: "pong" }],
+  test("codex provider test only has one stream preset so versionless failure does not multi-template retry", async () => {
+      const invalidUrlBody = JSON.stringify({
+        error: {
+          message: "Invalid URL (POST /v1/responses)",
         },
-      ],
+      });
+      const stillInvalidBody = JSON.stringify({
+        error: {
+          message: "Unsupported responses body",
+        },
+      });
+
+      fetchMock
+        .mockResolvedValueOnce(
+          createMockResponse(invalidUrlBody, {
+            ok: false,
+            status: 400,
+            statusText: "Bad Request",
+          })
+        )
+        .mockResolvedValueOnce(
+          createMockResponse(stillInvalidBody, {
+            ok: false,
+            status: 400,
+            statusText: "Bad Request",
+          })
+        );
+
+      const result = await executeProviderTest({
+        providerUrl: "https://api.gptclubapi.xyz/openai",
+        apiKey: "sk-test",
+        providerType: "codex",
+        model: "gpt-5.5",
+      });
+
+      // Single lean codex preset: versioned path → one versionless fallback, then stop.
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
+        "https://api.gptclubapi.xyz/openai/v1/responses",
+        "https://api.gptclubapi.xyz/openai/responses",
+      ]);
+      expect(result.success).toBe(false);
     });
-
-    fetchMock
-      .mockResolvedValueOnce(
-        createMockResponse(invalidUrlBody, {
-          ok: false,
-          status: 400,
-          statusText: "Bad Request",
-        })
-      )
-      .mockResolvedValueOnce(
-        createMockResponse(stillInvalidBody, {
-          ok: false,
-          status: 400,
-          statusText: "Bad Request",
-        })
-      )
-      .mockResolvedValueOnce(createMockResponse(okBody));
-
-    const result = await executeProviderTest({
-      providerUrl: "https://api.gptclubapi.xyz/openai",
-      apiKey: "sk-test-codex",
-      providerType: "codex",
-      model: "gpt-5.5",
-    });
-
-    expect(fetchMock).toHaveBeenCalledTimes(3);
-    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
-      "https://api.gptclubapi.xyz/openai/v1/responses",
-      "https://api.gptclubapi.xyz/openai/responses",
-      "https://api.gptclubapi.xyz/openai/responses",
-    ]);
-    expect(result.success).toBe(true);
-    expect(result.requestUrl).toBe("https://api.gptclubapi.xyz/openai/responses");
-    expect(result.content).toBe("pong");
-  });
 
   test("openai-compatible bare /openai base retries versionless chat path after invalid url", async () => {
     const errorBody = JSON.stringify({
@@ -833,7 +830,7 @@ data: {"type":"response.completed","response":{"model":"gpt-5.5","usage":{"input
 
     const result = await executeProviderTest({
       providerUrl: "https://api.example.com",
-      apiKey: "sk-test-openai-compatible",
+      apiKey: "test-key",
       providerType: "openai-compatible",
     });
 
@@ -841,5 +838,107 @@ data: {"type":"response.completed","response":{"model":"gpt-5.5","usage":{"input
     expect(result.subStatus).toBe("network_error");
     expect(result.validationDetails.httpPassed).toBe(false);
     expect(result.validationDetails.latencyPassed).toBe(false);
+  });
+
+  test("SSE first-token timing waits for real text delta, not control frames", async () => {
+    // Control frame first (immediate), real text delta after 150ms.
+    const control = `event: response.created
+data: {"type":"response.created","response":{"id":"resp_1"}}
+
+`;
+    const delta = `event: response.output_text.delta
+data: {"type":"response.output_text.delta","delta":"pong"}
+
+`;
+    const completed = `event: response.completed
+data: {"type":"response.completed","response":{"model":"gpt-5.6-terra","usage":{"input_tokens":39,"output_tokens":5,"total_tokens":44}}}
+
+`;
+
+    const encoder = new TextEncoder();
+    const bodyStream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(encoder.encode(control));
+        setTimeout(() => {
+          controller.enqueue(encoder.encode(delta));
+          setTimeout(() => {
+            controller.enqueue(encoder.encode(completed));
+            controller.close();
+          }, 30);
+        }, 150);
+      },
+    });
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      headers: new Headers({ "content-type": "text/event-stream" }),
+      body: bodyStream,
+      text: async () => control + delta + completed,
+    } as Response);
+
+    const result = await executeProviderTest({
+      providerUrl: "https://api.example.com",
+      apiKey: "sk-test",
+      providerType: "codex",
+      model: "gpt-5.6-terra",
+      timeoutMs: 5000,
+    });
+
+    expect(result.success).toBe(true);
+    // Must wait for real text delta (~150ms), not control frame (~0ms).
+    expect(result.firstByteMs).toBeGreaterThanOrEqual(100);
+  });
+
+  test("SSE 读流等到 response.completed 才结束，避免只有文本时丢 usage", async () => {
+    const control = `event: response.created
+data: {"type":"response.created","response":{"id":"resp_1","model":"gpt-5.6-terra","usage":null}}
+
+`;
+    const delta = `event: response.output_text.delta
+data: {"type":"response.output_text.delta","delta":"pong"}
+
+`;
+    const completed = `event: response.completed
+data: {"type":"response.completed","response":{"model":"gpt-5.6-terra","usage":{"input_tokens":312,"output_tokens":5,"total_tokens":317}}}
+
+`;
+
+    const encoder = new TextEncoder();
+    const bodyStream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        // First only control + text (as if provider flushes early).
+        controller.enqueue(encoder.encode(control + delta));
+        // usage arrives later on completed — reader must still be open.
+        setTimeout(() => {
+          controller.enqueue(encoder.encode(completed));
+          controller.close();
+        }, 80);
+      },
+    });
+
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      headers: new Headers({ "content-type": "text/event-stream" }),
+      body: bodyStream,
+      text: async () => control + delta + completed,
+    } as Response);
+
+    const result = await executeProviderTest({
+      providerUrl: "https://1pkapi.com/v1",
+      apiKey: "sk-test",
+      providerType: "codex",
+      model: "gpt-5.6-terra",
+      timeoutMs: 5000,
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.content).toBe("pong");
+    expect(result.usage).toEqual({
+      inputTokens: 312,
+      outputTokens: 5,
+    });
   });
 });

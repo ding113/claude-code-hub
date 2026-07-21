@@ -93,6 +93,16 @@ export interface ProviderTestConfig {
   successContains?: string;
   /** Request timeout in ms (default: 10000) */
   timeoutMs?: number;
+  /**
+   * Optional first-token deadline in ms. When set, abort if the first
+   * response body chunk is not received within this window.
+   * Health tests (manual + scheduled) leave this undefined so only the total
+   * timeout applies — first-token TTFB is still measured for metrics.
+   *
+   * Note: this is NOT header TTFB — streaming gateways often return 200
+   * headers quickly while the first content token arrives much later.
+   */
+  firstByteTimeoutMs?: number;
   /** Send the Gemini key as Authorization Bearer instead of x-goog-api-key (JSON credentials) */
   geminiBearerAuth?: boolean;
 
@@ -152,7 +162,11 @@ export interface ProviderTestResult {
   subStatus: TestSubStatus;
   /** Total request latency in ms */
   latencyMs: number;
-  /** Time to first byte in ms (if available) */
+  /**
+   * Time to first content token / first body chunk in ms.
+   * Measured from request start to the first non-empty body bytes
+   * (not HTTP response headers — avoids streaming "fake fast" headers).
+   */
   firstByteMs?: number;
   /** HTTP status code */
   httpStatusCode?: number;
@@ -240,18 +254,19 @@ export interface ClaudeTestBody {
  */
 export interface CodexTestBody {
   model: string;
-  instructions: string;
+  instructions?: string;
   input: Array<{
     type: "message";
     role: "user";
     content: Array<{ type: "input_text"; text: string }>;
   }>;
-  tools: unknown[];
-  tool_choice: string;
+  tools?: unknown[];
+  tool_choice?: string;
   parallel_tool_calls?: boolean;
   reasoning?: { effort: string; summary: string };
   store: boolean;
   stream: boolean;
+  max_output_tokens?: number;
   prompt_cache_key?: string;
 }
 

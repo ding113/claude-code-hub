@@ -2,7 +2,7 @@
 
 import { and, asc, desc, eq, isNull, sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
-import { providers, usageLedger, users } from "@/drizzle/schema";
+import { providerHealthTestLogs, providers, usageLedger, users } from "@/drizzle/schema";
 import { resolveSystemTimezone } from "@/lib/utils/timezone";
 import type { ProviderType } from "@/types/provider";
 import type { BillingModelSource } from "@/types/system-config";
@@ -297,6 +297,107 @@ function buildDateCondition(
     default:
       return sql`1=1`;
   }
+}
+
+/**
+ * Same calendar window as buildDateCondition, but for health-test logs
+ * (created_at column on provider_health_test_logs).
+ */
+function buildHealthTestDateCondition(
+  period: LeaderboardPeriod,
+  timezone: string,
+  dateRange?: DateRangeParams
+) {
+  const nowLocal = sql`CURRENT_TIMESTAMP AT TIME ZONE ${timezone}`;
+
+  if (period === "custom" && dateRange) {
+    const startLocal = sql`(${dateRange.startDate}::date)::timestamp`;
+    const endExclusiveLocal = sql`(${dateRange.endDate}::date + INTERVAL '1 day')`;
+    const start = sql`(${startLocal} AT TIME ZONE ${timezone})`;
+    const endExclusive = sql`(${endExclusiveLocal} AT TIME ZONE ${timezone})`;
+    return sql`${providerHealthTestLogs.createdAt} >= ${start} AND ${providerHealthTestLogs.createdAt} < ${endExclusive}`;
+  }
+
+  switch (period) {
+    case "allTime":
+      return sql`1=1`;
+    case "daily": {
+      const startLocal = sql`DATE_TRUNC('day', ${nowLocal})`;
+      const endExclusiveLocal = sql`(${startLocal} + INTERVAL '1 day')`;
+      const start = sql`(${startLocal} AT TIME ZONE ${timezone})`;
+      const endExclusive = sql`(${endExclusiveLocal} AT TIME ZONE ${timezone})`;
+      return sql`${providerHealthTestLogs.createdAt} >= ${start} AND ${providerHealthTestLogs.createdAt} < ${endExclusive}`;
+    }
+    case "last24h":
+      return sql`${providerHealthTestLogs.createdAt} >= (CURRENT_TIMESTAMP - INTERVAL '24 hours')`;
+    case "weekly": {
+      const startLocal = sql`DATE_TRUNC('week', ${nowLocal})`;
+      const endExclusiveLocal = sql`(${startLocal} + INTERVAL '1 week')`;
+      const start = sql`(${startLocal} AT TIME ZONE ${timezone})`;
+      const endExclusive = sql`(${endExclusiveLocal} AT TIME ZONE ${timezone})`;
+      return sql`${providerHealthTestLogs.createdAt} >= ${start} AND ${providerHealthTestLogs.createdAt} < ${endExclusive}`;
+    }
+    case "monthly": {
+      const startLocal = sql`DATE_TRUNC('month', ${nowLocal})`;
+      const endExclusiveLocal = sql`(${startLocal} + INTERVAL '1 month')`;
+      const start = sql`(${startLocal} AT TIME ZONE ${timezone})`;
+      const endExclusive = sql`(${endExclusiveLocal} AT TIME ZONE ${timezone})`;
+      return sql`${providerHealthTestLogs.createdAt} >= ${start} AND ${providerHealthTestLogs.createdAt} < ${endExclusive}`;
+    }
+    default:
+      return sql`1=1`;
+  }
+}
+
+/**
+ * Per-provider estimated health-test spend for the leaderboard window.
+ * Does not affect user billing — operational probe cost only.
+ */
+async function loadHealthTestCostByProvider(
+  period: LeaderboardPeriod,
+  timezone: string,
+  dateRange?: DateRangeParams,
+  providerType?: ProviderType
+): Promise<Map<number, { cost: number; requests: number; tokens: number; name: string }>> {
+  const rows = await db
+    .select({
+      providerId: providerHealthTestLogs.providerId,
+      providerName: providers.name,
+      totalCost: sql<string>`COALESCE(sum(${providerHealthTestLogs.costUsd}), 0)`,
+      totalRequests: sql<number>`count(*)::double precision`,
+      totalTokens: sql<number>`COALESCE(
+        sum(
+          COALESCE(${providerHealthTestLogs.inputTokens}, 0) +
+          COALESCE(${providerHealthTestLogs.outputTokens}, 0) +
+          COALESCE(${providerHealthTestLogs.cacheCreationInputTokens}, 0) +
+          COALESCE(${providerHealthTestLogs.cacheReadInputTokens}, 0)
+        )::double precision,
+        0::double precision
+      )`,
+    })
+    .from(providerHealthTestLogs)
+    .innerJoin(
+      providers,
+      and(eq(providerHealthTestLogs.providerId, providers.id), isNull(providers.deletedAt))
+    )
+    .where(
+      and(
+        buildHealthTestDateCondition(period, timezone, dateRange),
+        providerType ? eq(providers.providerType, providerType) : undefined
+      )
+    )
+    .groupBy(providerHealthTestLogs.providerId, providers.name);
+
+  const map = new Map<number, { cost: number; requests: number; tokens: number; name: string }>();
+  for (const row of rows) {
+    map.set(row.providerId, {
+      cost: Number.parseFloat(String(row.totalCost)) || 0,
+      requests: Number(row.totalRequests) || 0,
+      tokens: Number(row.totalTokens) || 0,
+      name: row.providerName,
+    });
+  }
+  return map;
 }
 
 /**
@@ -698,12 +799,21 @@ async function findProviderLeaderboardWithTimezone(
     .groupBy(usageLedger.finalProviderId, providers.name)
     .orderBy(desc(sql`COALESCE(sum(${usageLedger.costUsd}), 0)`));
 
-  const baseEntries: ProviderLeaderboardEntry[] = rankings.map((entry) => {
+  // Merge estimated health-test spend (not user billing) into provider cost rankings.
+  const healthByProvider = await loadHealthTestCostByProvider(
+    period,
+    timezone,
+    dateRange,
+    providerType
+  );
+
+  const byId = new Map<number, ProviderLeaderboardEntry>();
+  for (const entry of rankings) {
     const totalCost = parseFloat(entry.totalCost);
     const totalRequests = entry.totalRequests;
     const totalTokens = entry.totalTokens;
     const avgCosts = computeAvgCosts(totalCost, totalRequests, totalTokens);
-    return {
+    byId.set(entry.providerId, {
       providerId: entry.providerId,
       providerName: entry.providerName,
       totalRequests,
@@ -713,8 +823,42 @@ async function findProviderLeaderboardWithTimezone(
       avgTtfbMs: entry.avgTtfbMs ?? 0,
       avgTokensPerSecond: entry.avgTokensPerSecond ?? 0,
       ...avgCosts,
-    };
-  });
+    });
+  }
+
+  for (const [providerId, health] of healthByProvider) {
+    const existing = byId.get(providerId);
+    if (existing) {
+      existing.totalCost += health.cost;
+      existing.totalRequests += health.requests;
+      existing.totalTokens += health.tokens;
+      const avgCosts = computeAvgCosts(
+        existing.totalCost,
+        existing.totalRequests,
+        existing.totalTokens
+      );
+      existing.avgCostPerRequest = avgCosts.avgCostPerRequest;
+      existing.avgCostPerMillionTokens = avgCosts.avgCostPerMillionTokens;
+    } else if (health.cost > 0 || health.requests > 0) {
+      // Provider only appeared in health tests (no user traffic this period).
+      const avgCosts = computeAvgCosts(health.cost, health.requests, health.tokens);
+      byId.set(providerId, {
+        providerId,
+        providerName: health.name,
+        totalRequests: health.requests,
+        totalCost: health.cost,
+        totalTokens: health.tokens,
+        successRate: null,
+        avgTtfbMs: 0,
+        avgTokensPerSecond: 0,
+        ...avgCosts,
+      });
+    }
+  }
+
+  const baseEntries: ProviderLeaderboardEntry[] = Array.from(byId.values()).sort(
+    (a, b) => b.totalCost - a.totalCost
+  );
 
   if (!includeModelStats) return baseEntries;
 

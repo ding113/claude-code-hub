@@ -1,6 +1,7 @@
 // 供应商类型枚举
 
 import type { CacheTtlPreference } from "./cache";
+import type { ProviderHealthTestSample } from "@/lib/provider-health-test/stats";
 
 export type ProviderType =
   | "claude"
@@ -424,6 +425,27 @@ export interface Provider {
   // Gemini (generateContent API) parameter overrides (only for gemini/gemini-cli providers)
   geminiGoogleSearchPreference: GeminiGoogleSearchPreference | null;
 
+  // Provider scheduled LLM health test
+  scheduledHealthTestEnabled: boolean;
+  lastHealthTestAt: Date | null;
+  lastHealthTestOk: boolean | null;
+  lastHealthTestStatus: string | null;
+  lastHealthTestFirstByteMs: number | null;
+  lastHealthTestLatencyMs: number | null;
+  lastHealthTestModel: string | null;
+  lastHealthTestErrorType: string | null;
+  lastHealthTestErrorMessage: string | null;
+  healthTestOnlineRate: number | null;
+  healthTestAvgFirstByteMs: number | null;
+  healthTestRecentResults: ProviderHealthTestSample[] | null;
+  /** Estimated upstream health-test spend for current local day (not user billing). */
+  healthTestTodayCostUsd: number | null;
+  healthTestTodayCalls: number | null;
+  /** Local day (YYYY-MM-DD) when scheduled tests were auto-disabled for budget; null if not budget-suspended. */
+  healthTestBudgetSuspendedDay: string | null;
+  /** True when scheduled probes were auto-disabled by SLO rebalance (top-2 keep); rebalance may re-enable. */
+  healthTestSloAutoDisabled: boolean;
+
   // 废弃（保留向后兼容，但不再使用）
   // TPM (Tokens Per Minute): 每分钟可处理的文本总量
   tpm: number | null;
@@ -513,6 +535,23 @@ export interface ProviderDisplay {
   anthropicThinkingBudgetPreference: AnthropicThinkingBudgetPreference | null;
   anthropicAdaptiveThinking: AnthropicAdaptiveThinkingConfig | null;
   geminiGoogleSearchPreference: GeminiGoogleSearchPreference | null;
+  // Provider scheduled LLM health test
+  scheduledHealthTestEnabled: boolean;
+  lastHealthTestAt: string | null;
+  lastHealthTestOk: boolean | null;
+  lastHealthTestStatus: string | null;
+  lastHealthTestFirstByteMs: number | null;
+  lastHealthTestLatencyMs: number | null;
+  lastHealthTestModel: string | null;
+  lastHealthTestErrorType: string | null;
+  lastHealthTestErrorMessage: string | null;
+  healthTestOnlineRate: number | null;
+  healthTestAvgFirstByteMs: number | null;
+  healthTestRecentResults: ProviderHealthTestSample[] | null;
+  healthTestTodayCostUsd: number | null;
+  healthTestTodayCalls: number | null;
+  healthTestBudgetSuspendedDay: string | null;
+  healthTestSloAutoDisabled: boolean;
   // 废弃字段（保留向后兼容）
   tpm: number | null;
   rpm: number | null;

@@ -6,6 +6,8 @@
 export {
   aggregateResponseText,
   extractTextFromSSE,
+  hasRealContentTokenInBody,
+  hasRealContentTokenInSse,
   isSSEResponse,
   parseNDJSONStream,
   parseSSEStream,

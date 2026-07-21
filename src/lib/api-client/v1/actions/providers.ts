@@ -210,6 +210,16 @@ export function testProviderById(providerId: number, data?: { model?: string }) 
   );
 }
 
+export function setProviderScheduledHealthTestEnabled(providerId: number, enabled: boolean) {
+  return toActionResult(
+    apiPost(
+      `/api/v1/providers/${providerId}/scheduled-health-test:set-enabled`,
+      { enabled },
+      dashboardCompatOptions
+    )
+  );
+}
+
 export function getProviderTestPresets(providerType: string) {
   return toActionResult(
     apiGet(
@@ -245,3 +255,25 @@ export function reclusterProviderVendors(args: unknown) {
 }
 
 export { getAvailableModelCatalog } from "./model-prices";
+
+
+export function getHealthTestBudgetOverview() {
+  return toActionResult(
+    apiGet<{
+      todayCost: number;
+      budget: number;
+      isSuspendedToday: boolean;
+      localDay: string;
+    }>("/api/v1/providers/health-test-budget", dashboardCompatOptions)
+  );
+}
+
+export function setHealthTestGlobalDailyBudget(budget: number) {
+  return toActionResult(
+    apiPost<{ budget: number }>(
+      "/api/v1/providers/health-test-budget:set",
+      { budget },
+      dashboardCompatOptions
+    )
+  );
+}

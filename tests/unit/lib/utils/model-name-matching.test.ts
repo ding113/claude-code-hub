@@ -29,6 +29,13 @@ describe("buildModelNameFallbackCandidates", () => {
     expect(candidates).toContain("deepseek-v3.2");
   });
 
+  it("strips hyphen channel suffixes like -build-free for pricing fallback", () => {
+    const candidates = buildModelNameFallbackCandidates("grok-4.5-build-free");
+    expect(candidates).toContain("grok-4.5");
+    // intermediate peel is fine too
+    expect(candidates.some((c) => c === "grok-4.5" || c.startsWith("grok-4.5"))).toBe(true);
+  });
+
   it("strips bedrock region prefixes", () => {
     const candidates = buildModelNameFallbackCandidates(
       "us.anthropic.claude-sonnet-4-5-20250929-v1:0"

@@ -2,7 +2,7 @@
 
 import { and, avg, count, eq, gte, lt, sql, sum } from "drizzle-orm";
 import { db } from "@/drizzle/db";
-import { usageLedger } from "@/drizzle/schema";
+import { providerHealthTestLogs, usageLedger } from "@/drizzle/schema";
 import { Decimal, toCostDecimal } from "@/lib/utils/currency";
 import { resolveSystemTimezone } from "@/lib/utils/timezone";
 import { LEDGER_BILLING_CONDITION } from "./_shared/ledger-conditions";
@@ -13,7 +13,7 @@ import { LEDGER_BILLING_CONDITION } from "./_shared/ledger-conditions";
 export interface OverviewMetrics {
   /** 今日总请求数 */
   todayRequests: number;
-  /** 今日总消耗（美元） */
+  /** 今日总消耗（美元）— 用户业务账 + 健康测估算开销（不进用户账单） */
   todayCost: number;
   /** 平均响应时间（毫秒） */
   avgResponseTime: number;
@@ -35,10 +35,26 @@ export interface OverviewMetricsWithComparison extends OverviewMetrics {
   recentMinuteRequests: number;
 }
 
+/** Sum estimated health-test spend in [start, end). Not user-billable. */
+async function sumHealthTestCostUsd(start: ReturnType<typeof sql>, end: ReturnType<typeof sql>) {
+  const [row] = await db
+    .select({
+      totalCost: sum(providerHealthTestLogs.costUsd),
+    })
+    .from(providerHealthTestLogs)
+    .where(
+      and(gte(providerHealthTestLogs.createdAt, start), lt(providerHealthTestLogs.createdAt, end))
+    );
+  return toCostDecimal(row?.totalCost) ?? new Decimal(0);
+}
+
 /**
  * 获取今日概览统计数据
  * 包括：今日总请求数、今日总消耗、平均响应时间、今日错误率
  * 使用 SQL AT TIME ZONE 确保"今日"基于系统时区配置
+ *
+ * 今日总消耗 = usage_ledger 业务账 + provider_health_test_logs 探针估算
+ * （探针不进用户账单，但要进运营侧「今日消费」）
  */
 export async function getOverviewMetrics(): Promise<OverviewMetrics> {
   const timezone = await resolveSystemTimezone();
@@ -47,24 +63,28 @@ export async function getOverviewMetrics(): Promise<OverviewMetrics> {
   const todayStart = sql`(${todayStartLocal} AT TIME ZONE ${timezone})`;
   const tomorrowStart = sql`((${todayStartLocal} + INTERVAL '1 day') AT TIME ZONE ${timezone})`;
 
-  const [result] = await db
-    .select({
-      requestCount: count(),
-      totalCost: sum(usageLedger.costUsd),
-      avgDuration: avg(usageLedger.durationMs),
-      errorCount: sql<number>`count(*) FILTER (WHERE NOT ${usageLedger.isSuccess})`,
-    })
-    .from(usageLedger)
-    .where(
-      and(
-        LEDGER_BILLING_CONDITION,
-        gte(usageLedger.createdAt, todayStart),
-        lt(usageLedger.createdAt, tomorrowStart)
+  const [result, healthCost] = await Promise.all([
+    db
+      .select({
+        requestCount: count(),
+        totalCost: sum(usageLedger.costUsd),
+        avgDuration: avg(usageLedger.durationMs),
+        errorCount: sql<number>`count(*) FILTER (WHERE NOT ${usageLedger.isSuccess})`,
+      })
+      .from(usageLedger)
+      .where(
+        and(
+          LEDGER_BILLING_CONDITION,
+          gte(usageLedger.createdAt, todayStart),
+          lt(usageLedger.createdAt, tomorrowStart)
+        )
       )
-    );
+      .then((rows) => rows[0]),
+    sumHealthTestCostUsd(todayStart, tomorrowStart),
+  ]);
 
-  // 处理成本数据
-  const costDecimal = toCostDecimal(result.totalCost) ?? new Decimal(0);
+  // 处理成本数据：业务账 + 健康测估算
+  const costDecimal = (toCostDecimal(result.totalCost) ?? new Decimal(0)).plus(healthCost);
   const todayCost = costDecimal.toDecimalPlaces(6).toNumber();
 
   // 处理平均响应时间（转换为整数）
@@ -87,7 +107,7 @@ export async function getOverviewMetrics(): Promise<OverviewMetrics> {
 /**
  * 获取带昨日同时段对比的概览数据
  * 昨日同时段：昨天 00:00 到昨天的当前时刻
- * @param userId 可选用户ID，传入时只统计该用户的数据
+ * @param userId 可选用户ID，传入时只统计该用户的数据（不含健康测，健康测非用户消费）
  */
 export async function getOverviewMetricsWithComparison(
   userId?: number
@@ -104,9 +124,11 @@ export async function getOverviewMetricsWithComparison(
 
   // 用户过滤条件
   const userCondition = userId ? eq(usageLedger.userId, userId) : undefined;
+  // 健康测只并入全局运营视图，不并入单用户消费
+  const includeHealth = userId == null;
 
   // 并行查询今日数据、昨日同时段数据、最近1分钟数据
-  const [todayResult, yesterdayResult, rpmResult] = await Promise.all([
+  const [todayResult, yesterdayResult, rpmResult, healthToday, healthYesterday] = await Promise.all([
     // 今日数据（从今日 00:00 到现在）
     db
       .select({
@@ -155,14 +177,21 @@ export async function getOverviewMetricsWithComparison(
           gte(usageLedger.createdAt, sql`CURRENT_TIMESTAMP - INTERVAL '1 minute'`)
         )
       ),
+
+    includeHealth
+      ? sumHealthTestCostUsd(todayStart, tomorrowStart)
+      : Promise.resolve(new Decimal(0)),
+    includeHealth
+      ? sumHealthTestCostUsd(yesterdayStart, yesterdayEnd)
+      : Promise.resolve(new Decimal(0)),
   ]);
 
   const today = todayResult[0];
   const yesterday = yesterdayResult[0];
   const rpm = rpmResult[0];
 
-  // 处理今日数据
-  const todayCostDecimal = toCostDecimal(today.totalCost) ?? new Decimal(0);
+  // 处理今日数据（业务 + 可选健康测）
+  const todayCostDecimal = (toCostDecimal(today.totalCost) ?? new Decimal(0)).plus(healthToday);
   const todayCost = todayCostDecimal.toDecimalPlaces(6).toNumber();
   const todayAvgResponseTime = today.avgDuration ? Math.round(Number(today.avgDuration)) : 0;
   const todayRequestCount = Number(today.requestCount || 0);
@@ -173,7 +202,9 @@ export async function getOverviewMetricsWithComparison(
       : 0;
 
   // 处理昨日同时段数据
-  const yesterdayCostDecimal = toCostDecimal(yesterday.totalCost) ?? new Decimal(0);
+  const yesterdayCostDecimal = (toCostDecimal(yesterday.totalCost) ?? new Decimal(0)).plus(
+    healthYesterday
+  );
   const yesterdaySamePeriodCost = yesterdayCostDecimal.toDecimalPlaces(6).toNumber();
   const yesterdaySamePeriodAvgResponseTime = yesterday.avgDuration
     ? Math.round(Number(yesterday.avgDuration))

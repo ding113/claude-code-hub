@@ -51,6 +51,9 @@ import {
   resetProviderUsage,
   revealProviderKey,
   testProviderAnthropic,
+  getHealthTestBudgetOverview,
+  setHealthTestGlobalDailyBudget,
+  setProviderScheduledHealthTestEnabled,
   testProviderById,
   testProviderGemini,
   testProviderOpenAIChat,
@@ -665,7 +668,7 @@ providersRouter.openapi(
     path: "/providers/{id}/test",
     middleware: requireAuth("admin"),
     tags: ["Providers"],
-    summary: "Run provider test by id",
+    summary: "Run unified provider test by id",
     description:
       "Runs the unified relay-style provider API test against a stored provider using its saved credentials and proxy configuration.",
     "x-required-access": "admin",
@@ -686,6 +689,94 @@ providersRouter.openapi(
     },
   }),
   testProviderById as never
+);
+
+
+providersRouter.openapi(
+  createRoute({
+    method: "get",
+    path: "/providers/health-test-budget",
+    middleware: requireAuth("admin"),
+    tags: ["Providers"],
+    summary: "Get global health-test budget status",
+    description:
+      "Returns today's total estimated health-test spend vs the global daily budget, and whether scheduled tests are suspended for the day.",
+    "x-required-access": "admin",
+    security,
+    responses: {
+      200: {
+        description: "Budget overview.",
+        content: { "application/json": { schema: ProviderGenericResponseSchema } },
+      },
+      ...problemResponses,
+    },
+  }),
+  getHealthTestBudgetOverview as never
+);
+
+providersRouter.openapi(
+  createRoute({
+    method: "post",
+    path: "/providers/health-test-budget:set",
+    middleware: requireAuth("admin"),
+    tags: ["Providers"],
+    summary: "Set global health-test daily budget",
+    description:
+      "Updates the global daily health-test spend cap (display currency units). Clears today's global suspend and re-enables budget-suspended scheduled tests.",
+    "x-required-access": "admin",
+    security,
+    request: {
+      body: {
+        required: true,
+        content: {
+          "application/json": {
+            schema: z.object({ budget: z.number().min(0.01).max(100000) }).strict(),
+          },
+        },
+      },
+    },
+    responses: {
+      200: {
+        description: "Budget updated.",
+        content: { "application/json": { schema: ProviderGenericResponseSchema } },
+      },
+      ...problemResponses,
+    },
+  }),
+  setHealthTestGlobalDailyBudget as never
+);
+
+providersRouter.openapi(
+  createRoute({
+    method: "post",
+    path: "/providers/{id}/scheduled-health-test:set-enabled",
+    middleware: requireAuth("admin"),
+    tags: ["Providers"],
+    summary: "Enable or disable scheduled LLM health test",
+    description:
+      "Toggles the per-minute scheduled LLM first-byte health test for a provider. Default is enabled.",
+    "x-required-access": "admin",
+    security,
+    request: {
+      params: ProviderIdParamSchema,
+      body: {
+        required: true,
+        content: {
+          "application/json": {
+            schema: z.object({ enabled: z.boolean() }).strict(),
+          },
+        },
+      },
+    },
+    responses: {
+      200: {
+        description: "Toggle result.",
+        content: { "application/json": { schema: ProviderGenericResponseSchema } },
+      },
+      ...problemResponses,
+    },
+  }),
+  setProviderScheduledHealthTestEnabled as never
 );
 
 providersRouter.openapi(

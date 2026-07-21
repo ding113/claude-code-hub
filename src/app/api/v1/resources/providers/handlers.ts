@@ -451,6 +451,59 @@ export async function testProviderById(c: Context): Promise<Response> {
   );
 }
 
+export async function getHealthTestBudgetOverview(c: Context): Promise<Response> {
+  const providerActions = await import("@/actions/providers");
+  return actionJson(
+    c,
+    await callAction(c, providerActions.getHealthTestBudgetOverview, [] as never[], c.get("auth"))
+  );
+}
+
+export async function setHealthTestGlobalDailyBudget(c: Context): Promise<Response> {
+  const body = await parseJson(c, z.object({ budget: z.number().min(0.01).max(100000) }).strict());
+  if (body instanceof Response) return body;
+  const providerActions = await import("@/actions/providers");
+  return actionJson(
+    c,
+    await callAction(
+      c,
+      providerActions.setHealthTestGlobalDailyBudget,
+      [body.budget] as never[],
+      c.get("auth")
+    )
+  );
+}
+
+export async function setProviderScheduledHealthTestEnabled(c: Context): Promise<Response> {
+  const id = Number(c.req.param("id"));
+  if (!Number.isInteger(id) || id <= 0) {
+    return createProblemResponse({
+      status: 400,
+      instance: new URL(c.req.url).pathname,
+      errorCode: "request.validation_failed",
+      detail: "Provider id is invalid.",
+    });
+  }
+  const body = await parseJson(
+    c,
+    z.object({ enabled: z.boolean() }).strict()
+  );
+  if (body instanceof Response) return body;
+  const existing = await findVisibleProvider(c, id);
+  if (existing instanceof Response) return existing;
+  if (!existing) return providerNotFound(c);
+  const providerActions = await import("@/actions/providers");
+  return actionJson(
+    c,
+    await callAction(
+      c,
+      providerActions.setProviderScheduledHealthTestEnabled,
+      [id, body.enabled] as never[],
+      c.get("auth")
+    )
+  );
+}
+
 export async function testProviderAnthropic(c: Context): Promise<Response> {
   return callProviderTest(c, ProviderApiTestSchema, "testProviderAnthropicMessages");
 }
@@ -663,6 +716,22 @@ function sanitizeProvider(
     anthropicThinkingBudgetPreference: provider.anthropicThinkingBudgetPreference,
     anthropicAdaptiveThinking: provider.anthropicAdaptiveThinking,
     geminiGoogleSearchPreference: provider.geminiGoogleSearchPreference,
+    scheduledHealthTestEnabled: provider.scheduledHealthTestEnabled ?? true,
+    lastHealthTestAt: provider.lastHealthTestAt ?? null,
+    lastHealthTestOk: provider.lastHealthTestOk ?? null,
+    lastHealthTestStatus: provider.lastHealthTestStatus ?? null,
+    lastHealthTestFirstByteMs: provider.lastHealthTestFirstByteMs ?? null,
+    lastHealthTestLatencyMs: provider.lastHealthTestLatencyMs ?? null,
+    lastHealthTestModel: provider.lastHealthTestModel ?? null,
+    lastHealthTestErrorType: provider.lastHealthTestErrorType ?? null,
+    lastHealthTestErrorMessage: provider.lastHealthTestErrorMessage ?? null,
+    healthTestOnlineRate: provider.healthTestOnlineRate ?? null,
+    healthTestAvgFirstByteMs: provider.healthTestAvgFirstByteMs ?? null,
+    healthTestRecentResults: provider.healthTestRecentResults ?? null,
+    healthTestTodayCostUsd: provider.healthTestTodayCostUsd ?? null,
+    healthTestTodayCalls: provider.healthTestTodayCalls ?? null,
+    healthTestBudgetSuspendedDay: provider.healthTestBudgetSuspendedDay ?? null,
+    healthTestSloAutoDisabled: provider.healthTestSloAutoDisabled ?? false,
     todayTotalCostUsd: statistics?.todayCost ?? provider.todayTotalCostUsd,
     todayCallCount: statistics?.todayCalls ?? provider.todayCallCount,
     lastCallTime: statistics?.lastCallTime ?? provider.lastCallTime,

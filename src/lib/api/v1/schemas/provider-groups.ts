@@ -6,6 +6,11 @@ export const ProviderGroupSchema = z.object({
   name: z.string().describe("Provider group name."),
   costMultiplier: z.number().min(0).describe("Group cost multiplier."),
   description: z.string().nullable().describe("Optional group description."),
+  healthTestModel: z
+    .string()
+    .nullable()
+    .optional()
+    .describe("Default scheduled health-test model; null/empty = skip scheduled tests."),
   providerCount: z
     .number()
     .int()
@@ -25,6 +30,12 @@ export const ProviderGroupCreateSchema = z
     name: z.string().trim().min(1).max(100).describe("Provider group name."),
     costMultiplier: z.number().min(0).optional().describe("Group cost multiplier."),
     description: z.string().max(5000).optional().describe("Optional group description."),
+    healthTestModel: z
+      .string()
+      .max(200)
+      .nullable()
+      .optional()
+      .describe("Default scheduled health-test model; empty = skip scheduled tests."),
   })
   .strict();
 
@@ -38,6 +49,12 @@ export const ProviderGroupUpdateSchema = z
       .nullable()
       .optional()
       .describe("Optional plain description note."),
+    healthTestModel: z
+      .string()
+      .max(200)
+      .nullable()
+      .optional()
+      .describe("Default scheduled health-test model; empty = skip scheduled tests."),
   })
   .strict();
 

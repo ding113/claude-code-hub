@@ -338,6 +338,22 @@ export async function createProvider(providerData: CreateProviderData): Promise<
         anthropicThinkingBudgetPreference: providers.anthropicThinkingBudgetPreference,
         anthropicAdaptiveThinking: providers.anthropicAdaptiveThinking,
         geminiGoogleSearchPreference: providers.geminiGoogleSearchPreference,
+        scheduledHealthTestEnabled: providers.scheduledHealthTestEnabled,
+        lastHealthTestAt: providers.lastHealthTestAt,
+        lastHealthTestOk: providers.lastHealthTestOk,
+        lastHealthTestStatus: providers.lastHealthTestStatus,
+        lastHealthTestFirstByteMs: providers.lastHealthTestFirstByteMs,
+        lastHealthTestLatencyMs: providers.lastHealthTestLatencyMs,
+        lastHealthTestModel: providers.lastHealthTestModel,
+        lastHealthTestErrorType: providers.lastHealthTestErrorType,
+        lastHealthTestErrorMessage: providers.lastHealthTestErrorMessage,
+        healthTestOnlineRate: providers.healthTestOnlineRate,
+        healthTestAvgFirstByteMs: providers.healthTestAvgFirstByteMs,
+        healthTestRecentResults: providers.healthTestRecentResults,
+        healthTestTodayCostUsd: providers.healthTestTodayCostUsd,
+        healthTestTodayCalls: providers.healthTestTodayCalls,
+        healthTestBudgetSuspendedDay: providers.healthTestBudgetSuspendedDay,
+        healthTestSloAutoDisabled: providers.healthTestSloAutoDisabled,
         tpm: providers.tpm,
         rpm: providers.rpm,
         rpd: providers.rpd,
@@ -427,6 +443,22 @@ export async function findProviderList(
       anthropicThinkingBudgetPreference: providers.anthropicThinkingBudgetPreference,
       anthropicAdaptiveThinking: providers.anthropicAdaptiveThinking,
       geminiGoogleSearchPreference: providers.geminiGoogleSearchPreference,
+      scheduledHealthTestEnabled: providers.scheduledHealthTestEnabled,
+      lastHealthTestAt: providers.lastHealthTestAt,
+      lastHealthTestOk: providers.lastHealthTestOk,
+      lastHealthTestStatus: providers.lastHealthTestStatus,
+      lastHealthTestFirstByteMs: providers.lastHealthTestFirstByteMs,
+      lastHealthTestLatencyMs: providers.lastHealthTestLatencyMs,
+      lastHealthTestModel: providers.lastHealthTestModel,
+      lastHealthTestErrorType: providers.lastHealthTestErrorType,
+      lastHealthTestErrorMessage: providers.lastHealthTestErrorMessage,
+      healthTestOnlineRate: providers.healthTestOnlineRate,
+      healthTestAvgFirstByteMs: providers.healthTestAvgFirstByteMs,
+      healthTestRecentResults: providers.healthTestRecentResults,
+      healthTestTodayCostUsd: providers.healthTestTodayCostUsd,
+      healthTestTodayCalls: providers.healthTestTodayCalls,
+      healthTestBudgetSuspendedDay: providers.healthTestBudgetSuspendedDay,
+      healthTestSloAutoDisabled: providers.healthTestSloAutoDisabled,
       tpm: providers.tpm,
       rpm: providers.rpm,
       rpd: providers.rpd,
@@ -516,6 +548,22 @@ export async function findAllProvidersFresh(): Promise<Provider[]> {
       anthropicThinkingBudgetPreference: providers.anthropicThinkingBudgetPreference,
       anthropicAdaptiveThinking: providers.anthropicAdaptiveThinking,
       geminiGoogleSearchPreference: providers.geminiGoogleSearchPreference,
+      scheduledHealthTestEnabled: providers.scheduledHealthTestEnabled,
+      lastHealthTestAt: providers.lastHealthTestAt,
+      lastHealthTestOk: providers.lastHealthTestOk,
+      lastHealthTestStatus: providers.lastHealthTestStatus,
+      lastHealthTestFirstByteMs: providers.lastHealthTestFirstByteMs,
+      lastHealthTestLatencyMs: providers.lastHealthTestLatencyMs,
+      lastHealthTestModel: providers.lastHealthTestModel,
+      lastHealthTestErrorType: providers.lastHealthTestErrorType,
+      lastHealthTestErrorMessage: providers.lastHealthTestErrorMessage,
+      healthTestOnlineRate: providers.healthTestOnlineRate,
+      healthTestAvgFirstByteMs: providers.healthTestAvgFirstByteMs,
+      healthTestRecentResults: providers.healthTestRecentResults,
+      healthTestTodayCostUsd: providers.healthTestTodayCostUsd,
+      healthTestTodayCalls: providers.healthTestTodayCalls,
+      healthTestBudgetSuspendedDay: providers.healthTestBudgetSuspendedDay,
+      healthTestSloAutoDisabled: providers.healthTestSloAutoDisabled,
       tpm: providers.tpm,
       rpm: providers.rpm,
       rpd: providers.rpd,
@@ -609,6 +657,22 @@ export async function findProviderById(id: number): Promise<Provider | null> {
       anthropicThinkingBudgetPreference: providers.anthropicThinkingBudgetPreference,
       anthropicAdaptiveThinking: providers.anthropicAdaptiveThinking,
       geminiGoogleSearchPreference: providers.geminiGoogleSearchPreference,
+      scheduledHealthTestEnabled: providers.scheduledHealthTestEnabled,
+      lastHealthTestAt: providers.lastHealthTestAt,
+      lastHealthTestOk: providers.lastHealthTestOk,
+      lastHealthTestStatus: providers.lastHealthTestStatus,
+      lastHealthTestFirstByteMs: providers.lastHealthTestFirstByteMs,
+      lastHealthTestLatencyMs: providers.lastHealthTestLatencyMs,
+      lastHealthTestModel: providers.lastHealthTestModel,
+      lastHealthTestErrorType: providers.lastHealthTestErrorType,
+      lastHealthTestErrorMessage: providers.lastHealthTestErrorMessage,
+      healthTestOnlineRate: providers.healthTestOnlineRate,
+      healthTestAvgFirstByteMs: providers.healthTestAvgFirstByteMs,
+      healthTestRecentResults: providers.healthTestRecentResults,
+      healthTestTodayCostUsd: providers.healthTestTodayCostUsd,
+      healthTestTodayCalls: providers.healthTestTodayCalls,
+      healthTestBudgetSuspendedDay: providers.healthTestBudgetSuspendedDay,
+      healthTestSloAutoDisabled: providers.healthTestSloAutoDisabled,
       tpm: providers.tpm,
       rpm: providers.rpm,
       rpd: providers.rpd,
@@ -860,6 +924,22 @@ export async function updateProvider(
         anthropicThinkingBudgetPreference: providers.anthropicThinkingBudgetPreference,
         anthropicAdaptiveThinking: providers.anthropicAdaptiveThinking,
         geminiGoogleSearchPreference: providers.geminiGoogleSearchPreference,
+        scheduledHealthTestEnabled: providers.scheduledHealthTestEnabled,
+        lastHealthTestAt: providers.lastHealthTestAt,
+        lastHealthTestOk: providers.lastHealthTestOk,
+        lastHealthTestStatus: providers.lastHealthTestStatus,
+        lastHealthTestFirstByteMs: providers.lastHealthTestFirstByteMs,
+        lastHealthTestLatencyMs: providers.lastHealthTestLatencyMs,
+        lastHealthTestModel: providers.lastHealthTestModel,
+        lastHealthTestErrorType: providers.lastHealthTestErrorType,
+        lastHealthTestErrorMessage: providers.lastHealthTestErrorMessage,
+        healthTestOnlineRate: providers.healthTestOnlineRate,
+        healthTestAvgFirstByteMs: providers.healthTestAvgFirstByteMs,
+        healthTestRecentResults: providers.healthTestRecentResults,
+        healthTestTodayCostUsd: providers.healthTestTodayCostUsd,
+        healthTestTodayCalls: providers.healthTestTodayCalls,
+        healthTestBudgetSuspendedDay: providers.healthTestBudgetSuspendedDay,
+        healthTestSloAutoDisabled: providers.healthTestSloAutoDisabled,
         tpm: providers.tpm,
         rpm: providers.rpm,
         rpd: providers.rpd,
@@ -922,6 +1002,34 @@ export async function updateProvider(
 
   if (!updateResult) {
     return null;
+  }
+
+  // Provider turned off → wipe health-test window/logs (keep today's cost counters).
+  if (providerData.is_enabled === false && updateResult.provider.isEnabled === false) {
+    try {
+      const { clearProviderHealthTestHistory } = await import("@/repository/provider-health-test");
+      await clearProviderHealthTestHistory(id);
+      // refresh snapshot fields on returned object
+      updateResult.provider = {
+        ...updateResult.provider,
+        lastHealthTestAt: null,
+        lastHealthTestOk: null,
+        lastHealthTestStatus: null,
+        lastHealthTestFirstByteMs: null,
+        lastHealthTestLatencyMs: null,
+        lastHealthTestModel: null,
+        lastHealthTestErrorType: null,
+        lastHealthTestErrorMessage: null,
+        healthTestOnlineRate: null,
+        healthTestAvgFirstByteMs: null,
+        healthTestRecentResults: null,
+      } as typeof updateResult.provider;
+    } catch (error) {
+      logger.warn("updateProvider:clear_health_test_history_failed", {
+        providerId: id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 
   if (updateResult.endpointCircuitResetId != null) {
@@ -1297,6 +1405,27 @@ export async function updateProvidersBatch(
       providerType: providers.providerType,
       url: providers.url,
     });
+
+  // Batch disable → clear health-test history for each disabled provider.
+  if (updates.isEnabled === false && result.length > 0) {
+    try {
+      const { clearProviderHealthTestHistory } = await import("@/repository/provider-health-test");
+      for (const row of result) {
+        try {
+          await clearProviderHealthTestHistory(row.id);
+        } catch (error) {
+          logger.warn("updateProvidersBatch:clear_health_test_history_failed", {
+            providerId: row.id,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
+    } catch (error) {
+      logger.warn("updateProvidersBatch:clear_health_test_history_import_failed", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
 
   // #779/#781：批量启用供应商时，best-effort 确保 endpoint pool 中存在对应 URL（避免历史/竞态导致启用后严格端点被阻断）。
   if (updates.isEnabled === true && result.length > 0) {

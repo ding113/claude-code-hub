@@ -134,6 +134,8 @@ export async function getCachedSystemSettings(): Promise<SystemSettings> {
       siteTitle: "Claude Code Hub",
       allowGlobalUsageView: false,
       currencyDisplay: "USD",
+      healthTestDailyBudgetCny: 1,
+      healthTestGlobalBudgetSuspendedDay: null,
       billingModelSource: "original",
       codexPriorityBillingSource: DEFAULT_SETTINGS.codexPriorityBillingSource,
       billNonSuccessfulRequests: false,

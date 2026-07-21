@@ -131,6 +131,84 @@ export const ProviderSummarySchema = z
       .string()
       .nullable()
       .describe("Gemini Google Search preference."),
+    // Provider scheduled LLM health test (key-level, default ON)
+    scheduledHealthTestEnabled: z
+      .boolean()
+      .describe("Whether the per-minute LLM health test is enabled for this provider."),
+    lastHealthTestAt: NullableStringSchema.describe("Last LLM health test timestamp."),
+    lastHealthTestOk: z.boolean().nullable().describe("Whether the last LLM health test succeeded."),
+    lastHealthTestStatus: NullableStringSchema.describe("Last LLM health test status (green/yellow/red)."),
+    lastHealthTestFirstByteMs: z
+      .number()
+      .int()
+      .nullable()
+      .describe("Last successful first-byte latency in milliseconds."),
+    lastHealthTestLatencyMs: z
+      .number()
+      .int()
+      .nullable()
+      .describe("Last health test total latency in milliseconds."),
+    lastHealthTestModel: NullableStringSchema.describe("Model used in the last health test."),
+    lastHealthTestErrorType: NullableStringSchema.describe("Last health test error type."),
+    lastHealthTestErrorMessage: NullableStringSchema.describe("Last health test error message."),
+    healthTestOnlineRate: z
+      .number()
+      .nullable()
+      .describe("Online rate over the last up to 60 health tests (0-1)."),
+    healthTestAvgFirstByteMs: z
+      .number()
+      .int()
+      .nullable()
+      .describe("Average first-byte latency over successful health tests in the window."),
+    healthTestRecentResults: z
+      .array(
+        z.union([
+          z.boolean(),
+          z.object({
+            ok: z.boolean(),
+            firstByteMs: z.number().int().nullable().optional(),
+            latencyMs: z.number().int().nullable().optional(),
+            status: z.string().nullable().optional(),
+            model: z.string().nullable().optional(),
+            source: z.string().nullable().optional(),
+            errorType: z.string().nullable().optional(),
+            errorMessage: z.string().nullable().optional(),
+            httpStatusCode: z.number().int().nullable().optional(),
+            inputTokens: z.number().int().nullable().optional(),
+            outputTokens: z.number().int().nullable().optional(),
+            costUsd: z.number().nullable().optional(),
+            testedAt: z.string().optional(),
+          }),
+        ])
+      )
+      .nullable()
+      .describe(
+        "Recent health test samples oldest→newest for sparkline/tooltips (legacy boolean[] still accepted)."
+      ),
+    healthTestTodayCostUsd: z
+      .number()
+      .nullable()
+      .optional()
+      .describe("Estimated upstream health-test spend for the current local day (not user billing)."),
+    healthTestTodayCalls: z
+      .number()
+      .int()
+      .nullable()
+      .optional()
+      .describe("Number of health tests run today for this provider."),
+    healthTestBudgetSuspendedDay: z
+      .string()
+      .nullable()
+      .optional()
+      .describe(
+        "Local day (YYYY-MM-DD) when scheduled health tests were auto-disabled for daily budget; null if not budget-suspended."
+      ),
+    healthTestSloAutoDisabled: z
+      .boolean()
+      .optional()
+      .describe(
+        "True when scheduled probes were auto-disabled by SLO rebalance (keep top-2 per type pool)."
+      ),
     todayTotalCostUsd: z
       .string()
       .optional()

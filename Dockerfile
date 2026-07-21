@@ -1,4 +1,3 @@
-# syntax=docker/dockerfile:1
 FROM oven/bun:debian AS deps
 WORKDIR /app
 COPY package.json ./

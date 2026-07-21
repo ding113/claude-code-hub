@@ -146,6 +146,8 @@ function createFallbackSettings(): SystemSettings {
     siteTitle: DEFAULT_SITE_TITLE,
     allowGlobalUsageView: false,
     currencyDisplay: "USD",
+    healthTestDailyBudgetCny: 1,
+    healthTestGlobalBudgetSuspendedDay: null,
     billingModelSource: "original",
     codexPriorityBillingSource: "requested",
     billNonSuccessfulRequests: false,
@@ -264,6 +266,20 @@ const RECENT_COLUMN_LADDER: ReadonlyArray<{
   // 本层更新失败（仍有列缺失）时记录的告警
   updateWarn: string;
 }> = [
+  {
+    key: "healthTestGlobalBudgetSuspendedDay",
+    column: systemSettings.healthTestGlobalBudgetSuspendedDay,
+    selectWarn:
+      "system_settings 表除 healthTestGlobalBudgetSuspendedDay 外仍有列缺失，继续回退到上一代字段集。",
+    updateWarn: "system_settings 表除 healthTestGlobalBudgetSuspendedDay 外仍有列缺失，继续降级更新。",
+  },
+  {
+    key: "healthTestDailyBudgetCny",
+    column: systemSettings.healthTestDailyBudgetCny,
+    selectWarn:
+      "system_settings 表除 healthTestDailyBudgetCny 外仍有列缺失，继续回退到上一代字段集。",
+    updateWarn: "system_settings 表除 healthTestDailyBudgetCny 外仍有列缺失，继续降级更新。",
+  },
   {
     key: "enableGeminiFunctionIdRectifier",
     column: systemSettings.enableGeminiFunctionIdRectifier,
@@ -600,6 +616,14 @@ export async function updateSystemSettings(
     // 货币显示配置字段（如果提供）
     if (payload.currencyDisplay !== undefined) {
       updates.currencyDisplay = payload.currencyDisplay;
+    }
+
+    // Global health-test daily budget
+    if (payload.healthTestDailyBudgetCny !== undefined) {
+      updates.healthTestDailyBudgetCny = String(payload.healthTestDailyBudgetCny);
+    }
+    if (payload.healthTestGlobalBudgetSuspendedDay !== undefined) {
+      updates.healthTestGlobalBudgetSuspendedDay = payload.healthTestGlobalBudgetSuspendedDay;
     }
 
     // 计费模型来源配置字段（如果提供）

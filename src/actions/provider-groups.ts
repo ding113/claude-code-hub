@@ -80,6 +80,7 @@ export async function createProviderGroup(input: {
   name: string;
   costMultiplier?: number;
   description?: string;
+  healthTestModel?: string | null;
 }): Promise<ActionResult<ProviderGroup>> {
   const t = await getTranslations("settings.providers.providerGroups");
   const tError = await getTranslations("errors");
@@ -123,10 +124,16 @@ export async function createProviderGroup(input: {
       };
     }
 
+    const healthTestModel =
+      input.healthTestModel != null && String(input.healthTestModel).trim()
+        ? String(input.healthTestModel).trim()
+        : null;
+
     const group = await repoCreateProviderGroup({
       name,
       costMultiplier: input.costMultiplier,
       description: input.description ?? null,
+      healthTestModel,
     });
 
     emitActionAudit({
@@ -140,6 +147,7 @@ export async function createProviderGroup(input: {
         name: group.name,
         costMultiplier: group.costMultiplier,
         description: group.description,
+        healthTestModel: group.healthTestModel,
       },
       success: true,
     });
@@ -164,7 +172,12 @@ export async function createProviderGroup(input: {
  */
 export async function updateProviderGroup(
   id: number,
-  input: { costMultiplier?: number; description?: string | null; descriptionNote?: string | null }
+  input: {
+    costMultiplier?: number;
+    description?: string | null;
+    descriptionNote?: string | null;
+    healthTestModel?: string | null;
+  }
 ): Promise<ActionResult<ProviderGroup>> {
   const t = await getTranslations("settings.providers.providerGroups");
   const tError = await getTranslations("errors");
@@ -201,9 +214,17 @@ export async function updateProviderGroup(
       };
     }
 
+    const healthTestModelPatch =
+      input.healthTestModel === undefined
+        ? undefined
+        : input.healthTestModel != null && String(input.healthTestModel).trim()
+          ? String(input.healthTestModel).trim()
+          : null;
+
     const updated = await repoUpdateProviderGroup(id, {
       costMultiplier: input.costMultiplier,
       description: nextDescription,
+      ...(healthTestModelPatch !== undefined ? { healthTestModel: healthTestModelPatch } : {}),
     });
 
     if (!updated) {

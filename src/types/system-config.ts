@@ -32,6 +32,11 @@ export interface SystemSettings {
   // 货币显示配置
   currencyDisplay: CurrencyCode;
 
+  /** Global daily health-test spend cap (display units, default 1). */
+  healthTestDailyBudgetCny: number;
+  /** Local day when ALL scheduled health tests were auto-disabled for global budget. */
+  healthTestGlobalBudgetSuspendedDay: string | null;
+
   // 计费模型来源配置
   billingModelSource: BillingModelSource;
 
@@ -157,6 +162,10 @@ export interface UpdateSystemSettingsInput {
 
   // 货币显示配置（可选）
   currencyDisplay?: CurrencyCode;
+
+  /** Global daily health-test budget (display units). */
+  healthTestDailyBudgetCny?: number;
+  healthTestGlobalBudgetSuspendedDay?: string | null;
 
   // 计费模型来源配置（可选）
   billingModelSource?: BillingModelSource;

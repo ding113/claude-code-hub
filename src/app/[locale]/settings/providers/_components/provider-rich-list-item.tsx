@@ -84,6 +84,7 @@ import { invalidateProviderQueries } from "./invalidate-provider-queries";
 import { PriorityEditPopover } from "./priority-edit-popover";
 import { ProviderEndpointHover } from "./provider-endpoint-hover";
 import { ProviderFormDialogContent } from "./provider-form-dialog-content";
+import { ProviderHealthTestCard } from "./provider-health-test-card";
 
 interface ProviderRichListItemProps {
   provider: ProviderDisplay;
@@ -656,6 +657,16 @@ function ProviderRichListItemInner({
           </div>
         </div>
 
+        {/* Mobile: scheduled health test card */}
+        <div className="md:hidden">
+          <ProviderHealthTestCard
+            provider={provider}
+            canEdit={canEdit}
+            compact
+            currencyCode={currencyCode}
+          />
+        </div>
+
         {/* Mobile: actions */}
         <div className="flex items-center justify-end gap-2 md:hidden">
           {canEdit && (
@@ -961,6 +972,15 @@ function ProviderRichListItemInner({
               </div>
             </>
           )}
+        </div>
+
+        {/* Desktop: scheduled health test */}
+        <div className="hidden md:block flex-shrink-0 w-[260px] lg:w-[280px]">
+          <ProviderHealthTestCard
+            provider={provider}
+            canEdit={canEdit}
+            currencyCode={currencyCode}
+          />
         </div>
 
         {/* Desktop: action buttons */}

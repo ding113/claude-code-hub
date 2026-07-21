@@ -46,7 +46,10 @@ services:
       start_period: 5s
 
   app:
-    image: ghcr.io/ding113/claude-code-hub:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: claude-code-hub-local:provider-scheduled-health-test
     depends_on:
       postgres:
         condition: service_healthy
@@ -64,7 +67,7 @@ services:
       SESSION_TTL: ${SESSION_TTL:-300}
       DB_POOL_IDLE_TIMEOUT: ${DB_POOL_IDLE_TIMEOUT:-20}
       DB_POOL_CONNECT_TIMEOUT: ${DB_POOL_CONNECT_TIMEOUT:-10}
-      MAX_RETRY_ATTEMPTS_DEFAULT: ${MAX_RETRY_ATTEMPTS_DEFAULT:-2}
+      MAX_RETRY_ATTEMPTS_DEFAULT: ${MAX_RETRY_ATTEMPTS_DEFAULT:-1}
       LANGFUSE_SAMPLE_RATE: ${LANGFUSE_SAMPLE_RATE:-1.0}
       # 设置时区为上海
       TZ: Asia/Shanghai

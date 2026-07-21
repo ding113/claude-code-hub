@@ -12,6 +12,7 @@ import {
   index,
   uniqueIndex,
   pgEnum,
+  date,
 } from 'drizzle-orm/pg-core';
 import { relations, sql } from 'drizzle-orm';
 import type { SpecialSetting } from '@/types/special-settings';
@@ -174,6 +175,8 @@ export const providerGroups = pgTable('provider_groups', {
   name: varchar('name', { length: 200 }).notNull().unique(),
   costMultiplier: numeric('cost_multiplier', { precision: 10, scale: 4 }).notNull().default('1.0'),
   description: text('description'),
+  /** Scheduled health-test model for this group; null/empty = skip scheduled tests */
+  healthTestModel: varchar('health_test_model', { length: 200 }),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 });
@@ -276,7 +279,7 @@ export const providers = pgTable('providers', {
   limitConcurrentSessions: integer('limit_concurrent_sessions').default(0),
 
   // 熔断器配置（每个供应商独立配置）
-  // null = 使用全局默认值 (env.MAX_RETRY_ATTEMPTS_DEFAULT 或 2)
+  // null = 使用全局默认值 (env.MAX_RETRY_ATTEMPTS_DEFAULT 或 1)
   maxRetryAttempts: integer('max_retry_attempts'),
   circuitBreakerFailureThreshold: integer('circuit_breaker_failure_threshold').default(5),
   circuitBreakerOpenDuration: integer('circuit_breaker_open_duration').default(1800000), // 30分钟（毫秒）
@@ -359,12 +362,46 @@ export const providers = pgTable('providers', {
   rpd: integer('rpd').default(0),
   cc: integer('cc').default(0),
 
+  // Provider scheduled LLM health test (default ON)
+  // - scheduledHealthTestEnabled: per-provider toggle for the minute scheduler
+  // - lastHealth* / healthTest*: denormalized snapshot for dashboard cards
+  scheduledHealthTestEnabled: boolean('scheduled_health_test_enabled').notNull().default(true),
+  lastHealthTestAt: timestamp('last_health_test_at', { withTimezone: true }),
+  lastHealthTestOk: boolean('last_health_test_ok'),
+  lastHealthTestStatus: varchar('last_health_test_status', { length: 16 }),
+  lastHealthTestFirstByteMs: integer('last_health_test_first_byte_ms'),
+  lastHealthTestLatencyMs: integer('last_health_test_latency_ms'),
+  lastHealthTestModel: varchar('last_health_test_model', { length: 128 }),
+  lastHealthTestErrorType: varchar('last_health_test_error_type', { length: 64 }),
+  lastHealthTestErrorMessage: text('last_health_test_error_message'),
+  healthTestOnlineRate: numeric('health_test_online_rate', { precision: 6, scale: 4 }),
+  healthTestAvgFirstByteMs: integer('health_test_avg_first_byte_ms'),
+  // Last up to N probe samples (oldest→newest) for sparkline + hover details
+  healthTestRecentResults: jsonb('health_test_recent_results')
+    .$type<import("@/lib/provider-health-test/stats").ProviderHealthTestSample[] | boolean[] | null>()
+    .default(null),
+  // Estimated upstream health-test spend for current local day (not user billing)
+  healthTestTodayCostUsd: numeric('health_test_today_cost_usd', { precision: 21, scale: 15 }),
+  healthTestTodayCalls: integer('health_test_today_calls').default(0),
+  healthTestTodayDate: date('health_test_today_date'),
+  // Local day when scheduled health tests were auto-disabled for daily budget.
+  // Next local day the scheduler re-enables automatically.
+  healthTestBudgetSuspendedDay: date('health_test_budget_suspended_day'),
+  // True when scheduled probes were turned off by SLO rebalance (keep top-2 only).
+  // Rebalance may re-enable only rows with this flag; manual/budget offs stay sticky.
+  healthTestSloAutoDisabled: boolean('health_test_slo_auto_disabled').notNull().default(false),
+
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
 }, (table) => ({
   // 优化启用状态的服务商查询（按优先级和权重排序）
   providersEnabledPriorityIdx: index('idx_providers_enabled_priority').on(table.isEnabled, table.priority, table.weight).where(sql`${table.deletedAt} IS NULL`),
+  providersScheduledHealthIdx: index('idx_providers_scheduled_health').on(
+    table.scheduledHealthTestEnabled,
+    table.isEnabled,
+    table.lastHealthTestAt
+  ).where(sql`${table.deletedAt} IS NULL`),
   // 分组查询优化
   providersGroupIdx: index('idx_providers_group').on(table.groupTag).where(sql`${table.deletedAt} IS NULL`),
   // #779：加速“旧 URL 是否仍被引用”的判断（vendor/type/url 精确匹配）
@@ -457,6 +494,39 @@ export const providerEndpointProbeLogs = pgTable('provider_endpoint_probe_logs',
     table.createdAt.desc()
   ),
   providerEndpointProbeLogsCreatedAtIdx: index('idx_provider_endpoint_probe_logs_created_at').on(table.createdAt),
+}));
+
+// Provider Health Test Logs - LLM first-byte health history (provider key dimension)
+export const providerHealthTestLogs = pgTable('provider_health_test_logs', {
+  id: serial('id').primaryKey(),
+  providerId: integer('provider_id')
+    .notNull()
+    .references(() => providers.id, { onDelete: 'cascade' }),
+  source: varchar('source', { length: 20 })
+    .notNull()
+    .default('scheduled')
+    .$type<'scheduled' | 'manual'>(),
+  ok: boolean('ok').notNull(),
+  status: varchar('status', { length: 16 }),
+  model: varchar('model', { length: 128 }),
+  firstByteMs: integer('first_byte_ms'),
+  latencyMs: integer('latency_ms'),
+  httpStatusCode: integer('http_status_code'),
+  errorType: varchar('error_type', { length: 64 }),
+  errorMessage: text('error_message'),
+  // Estimated upstream test spend (not user billing)
+  inputTokens: bigint('input_tokens', { mode: 'number' }),
+  outputTokens: bigint('output_tokens', { mode: 'number' }),
+  cacheCreationInputTokens: bigint('cache_creation_input_tokens', { mode: 'number' }),
+  cacheReadInputTokens: bigint('cache_read_input_tokens', { mode: 'number' }),
+  costUsd: numeric('cost_usd', { precision: 21, scale: 15 }),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+}, (table) => ({
+  providerHealthTestLogsProviderCreatedAtIdx: index('idx_provider_health_test_logs_provider_created_at').on(
+    table.providerId,
+    table.createdAt.desc()
+  ),
+  providerHealthTestLogsCreatedAtIdx: index('idx_provider_health_test_logs_created_at').on(table.createdAt),
 }));
 
 // Message Request table
@@ -760,6 +830,11 @@ export const systemSettings = pgTable('system_settings', {
 
   // 货币显示配置
   currencyDisplay: varchar('currency_display', { length: 10 }).notNull().default('USD'),
+
+  // Global scheduled health-test daily budget (display currency units, default ¥1).
+  // Over budget → disable ALL scheduled health tests until next local day.
+  healthTestDailyBudgetCny: numeric('health_test_daily_budget_cny', { precision: 12, scale: 4 }).notNull().default('1'),
+  healthTestGlobalBudgetSuspendedDay: date('health_test_global_budget_suspended_day'),
 
   // 计费模型来源配置: 'original' (重定向前) | 'redirected' (重定向后)
   billingModelSource: varchar('billing_model_source', { length: 20 }).notNull().default('original'),
@@ -1174,6 +1249,7 @@ export const providersRelations = relations(providers, ({ many, one }) => ({
     references: [providerVendors.id],
   }),
   messageRequests: many(messageRequest),
+  healthTestLogs: many(providerHealthTestLogs),
 }));
 
 export const providerVendorsRelations = relations(providerVendors, ({ many }) => ({
@@ -1193,6 +1269,13 @@ export const providerEndpointProbeLogsRelations = relations(providerEndpointProb
   endpoint: one(providerEndpoints, {
     fields: [providerEndpointProbeLogs.endpointId],
     references: [providerEndpoints.id],
+  }),
+}));
+
+export const providerHealthTestLogsRelations = relations(providerHealthTestLogs, ({ one }) => ({
+  provider: one(providers, {
+    fields: [providerHealthTestLogs.providerId],
+    references: [providers.id],
   }),
 }));
 

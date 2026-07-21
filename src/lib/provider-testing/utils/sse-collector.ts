@@ -164,6 +164,103 @@ export function extractTextFromSSE(body: string): string {
 /**
  * Parse a complete SSE stream into a structured response
  */
+
+/**
+ * True when a partial/full SSE buffer contains a real content token (text delta).
+ * Ignores SSE control frames like response.created / message_start / pings,
+ * so first-token timing is not "fake-fast" on empty control events.
+ */
+export function hasRealContentTokenInSse(buffer: string): boolean {
+  if (!buffer) return false;
+
+  // Fast path: if extractTextFromSSE already finds non-empty text, we're done.
+  // (It also handles done/completed fallbacks; good enough for timing.)
+  try {
+    if (extractTextFromSSE(buffer).trim().length > 0) {
+      return true;
+    }
+  } catch {
+    // fall through to line scan
+  }
+
+  // Incremental scan of data: lines for delta content only.
+  const lines = buffer.split("\n");
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed.startsWith("data:")) continue;
+    const payload = trimmed.slice(5).trim();
+    if (!payload || payload === "[DONE]") continue;
+    try {
+      const obj = JSON.parse(payload) as Record<string, unknown>;
+      const eventType = obj.type;
+
+      // Anthropic text delta
+      const delta = obj.delta as Record<string, unknown> | undefined;
+      if (typeof delta?.text === "string" && delta.text.length > 0) return true;
+
+      // Codex / Responses text delta
+      if (eventType === "response.output_text.delta" && typeof obj.delta === "string" && obj.delta.length > 0) {
+        return true;
+      }
+
+      // OpenAI chat completions stream
+      const choices = obj.choices as Array<{ delta?: { content?: string } }> | undefined;
+      if (Array.isArray(choices)) {
+        for (const choice of choices) {
+          if (typeof choice.delta?.content === "string" && choice.delta.content.length > 0) {
+            return true;
+          }
+        }
+      }
+    } catch {
+      // non-json data line — ignore for token detection
+    }
+  }
+  return false;
+}
+
+/**
+ * True when a non-stream JSON/plain body already contains usable content text.
+ */
+export function hasRealContentTokenInBody(body: string, contentType?: string): boolean {
+  if (!body?.trim()) return false;
+  if (isSSEResponse(body, contentType) || body.includes("data:")) {
+    return hasRealContentTokenInSse(body);
+  }
+  try {
+    const obj = JSON.parse(body) as Record<string, unknown>;
+    // Anthropic non-stream
+    const content = obj.content as Array<{ type?: string; text?: string }> | undefined;
+    if (Array.isArray(content)) {
+      for (const c of content) {
+        if (typeof c.text === "string" && c.text.trim().length > 0) return true;
+      }
+    }
+    // OpenAI chat
+    const choices = obj.choices as Array<{ message?: { content?: string } }> | undefined;
+    if (Array.isArray(choices)) {
+      for (const c of choices) {
+        if (typeof c.message?.content === "string" && c.message.content.trim().length > 0) {
+          return true;
+        }
+      }
+    }
+    // Responses API
+    const output = obj.output as Array<{ content?: Array<{ text?: string }> }> | undefined;
+    if (Array.isArray(output)) {
+      for (const item of output) {
+        for (const c of item.content ?? []) {
+          if (typeof c.text === "string" && c.text.trim().length > 0) return true;
+        }
+      }
+    }
+  } catch {
+    // plain text body
+    return body.trim().length > 0;
+  }
+  return false;
+}
+
 export function parseSSEStream(body: string): ParsedResponse {
   const lines = body.split("\n");
   const texts: string[] = [];
@@ -285,33 +382,85 @@ export function parseSSEStream(body: string): ParsedResponse {
         }
       }
 
-      // Extract usage from final chunk (Anthropic message_delta)
-      if (obj.type === "message_delta") {
-        const msgUsage = obj.usage as
+      // Extract usage from final chunk (Anthropic message_start / message_delta).
+      // message_start carries input_tokens; message_delta carries final output_tokens.
+      // Must NOT be overwritten by the OpenAI prompt_tokens/completion_tokens branch below.
+      if (obj.type === "message_start") {
+        const message = obj.message as
           | {
-              output_tokens?: number;
+              usage?: {
+                input_tokens?: number;
+                output_tokens?: number;
+                cache_creation_input_tokens?: number;
+                cache_read_input_tokens?: number;
+              };
             }
           | undefined;
-        if (msgUsage?.output_tokens) {
+        const startUsage = message?.usage;
+        if (startUsage) {
           usage = {
-            inputTokens: 0,
-            outputTokens: msgUsage.output_tokens,
+            inputTokens: startUsage.input_tokens || 0,
+            outputTokens: startUsage.output_tokens || 0,
+            cacheCreationInputTokens: startUsage.cache_creation_input_tokens,
+            cacheReadInputTokens: startUsage.cache_read_input_tokens,
           };
         }
       }
 
-      // OpenAI usage in final chunk
+      if (obj.type === "message_delta") {
+        const msgUsage = obj.usage as
+          | {
+              input_tokens?: number;
+              output_tokens?: number;
+              cache_creation_input_tokens?: number;
+              cache_read_input_tokens?: number;
+            }
+          | undefined;
+        if (msgUsage) {
+          usage = {
+            // Prefer delta values; fall back to earlier message_start input tokens.
+            inputTokens:
+              typeof msgUsage.input_tokens === "number"
+                ? msgUsage.input_tokens
+                : (usage?.inputTokens ?? 0),
+            outputTokens:
+              typeof msgUsage.output_tokens === "number"
+                ? msgUsage.output_tokens
+                : (usage?.outputTokens ?? 0),
+            cacheCreationInputTokens:
+              msgUsage.cache_creation_input_tokens ?? usage?.cacheCreationInputTokens,
+            cacheReadInputTokens: msgUsage.cache_read_input_tokens ?? usage?.cacheReadInputTokens,
+          };
+        }
+      }
+
+      // OpenAI chat.completions stream usage (prompt_tokens / completion_tokens).
+      // Only apply when those fields exist — Anthropic uses input_tokens/output_tokens
+      // and must not be zeroed out by this branch.
       const objUsage = obj.usage as
         | {
             prompt_tokens?: number;
             completion_tokens?: number;
             total_tokens?: number;
+            input_tokens?: number;
+            output_tokens?: number;
           }
         | undefined;
-      if (objUsage) {
+      if (objUsage && (objUsage.prompt_tokens != null || objUsage.completion_tokens != null)) {
         usage = {
           inputTokens: objUsage.prompt_tokens || 0,
           outputTokens: objUsage.completion_tokens || 0,
+        };
+      } else if (
+        objUsage &&
+        obj.type !== "message_delta" &&
+        obj.type !== "message_start" &&
+        (objUsage.input_tokens != null || objUsage.output_tokens != null)
+      ) {
+        // Generic top-level usage with Anthropic/Responses field names (non-message events).
+        usage = {
+          inputTokens: objUsage.input_tokens || 0,
+          outputTokens: objUsage.output_tokens || 0,
         };
       }
 
@@ -321,7 +470,7 @@ export function parseSSEStream(body: string): ParsedResponse {
             output_tokens?: number;
           }
         | undefined;
-      if (responseUsage) {
+      if (responseUsage && (responseUsage.input_tokens != null || responseUsage.output_tokens != null)) {
         usage = {
           inputTokens: responseUsage.input_tokens || 0,
           outputTokens: responseUsage.output_tokens || 0,
@@ -482,17 +631,47 @@ export function parseNDJSONStream(body: string): ParsedResponse {
         }
       }
 
-      // Extract usage
+      // Extract usage (OpenAI chat fields and Responses/Codex fields)
       const objUsage = obj.usage as
         | {
             prompt_tokens?: number;
             completion_tokens?: number;
+            input_tokens?: number;
+            output_tokens?: number;
           }
         | undefined;
       if (objUsage) {
+        const input =
+          objUsage.prompt_tokens != null
+            ? objUsage.prompt_tokens
+            : objUsage.input_tokens != null
+              ? objUsage.input_tokens
+              : undefined;
+        const output =
+          objUsage.completion_tokens != null
+            ? objUsage.completion_tokens
+            : objUsage.output_tokens != null
+              ? objUsage.output_tokens
+              : undefined;
+        if (input != null || output != null) {
+          usage = {
+            inputTokens: input || 0,
+            outputTokens: output || 0,
+          };
+        }
+      }
+
+      // Nested response.usage (Responses API NDJSON)
+      const response = obj.response as
+        | { usage?: { input_tokens?: number; output_tokens?: number }; model?: string }
+        | undefined;
+      if (!model && response?.model && typeof response.model === "string") {
+        model = response.model;
+      }
+      if (response?.usage) {
         usage = {
-          inputTokens: objUsage.prompt_tokens || 0,
-          outputTokens: objUsage.completion_tokens || 0,
+          inputTokens: response.usage.input_tokens || 0,
+          outputTokens: response.usage.output_tokens || 0,
         };
       }
     } catch {

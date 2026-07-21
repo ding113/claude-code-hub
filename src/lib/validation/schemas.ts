@@ -958,6 +958,13 @@ export const UpdateSystemSettingsSchema = z.object({
       { message: "不支持的货币类型" }
     )
     .optional(),
+  // Global health-test daily budget (display currency units, default 1)
+  healthTestDailyBudgetCny: z.coerce
+    .number()
+    .min(0.01, "测试日预算不能小于 0.01")
+    .max(100000, "测试日预算过大")
+    .optional(),
+  healthTestGlobalBudgetSuspendedDay: z.string().nullable().optional(),
   // 计费模型来源配置（可选）
   billingModelSource: z
     .enum(["original", "redirected"], { message: "不支持的计费模型来源" })

@@ -130,7 +130,7 @@ type AutoSortResult = {
 };
 
 const API_TEST_TIMEOUT_LIMITS = {
-  DEFAULT: 15000,
+  DEFAULT: 120000,
   MIN: 5000,
   MAX: 120000,
 } as const;
@@ -166,8 +166,8 @@ function resolveApiTestTimeoutMs(): number {
 // API 测试配置常量
 const API_TEST_CONFIG = {
   TIMEOUT_MS: resolveApiTestTimeoutMs(),
-  GEMINI_TIMEOUT_MS: 60000, // Gemini 3 有 thinking 功能，需要更长超时
-  MAX_RESPONSE_PREVIEW_LENGTH: 500, // 响应内容预览最大长度（增加到 500 字符以显示更多内容）
+  GEMINI_TIMEOUT_MS: 120000, // Align with health-test ceiling; no shorter first-token kill
+  MAX_RESPONSE_PREVIEW_LENGTH: 500,
   TEST_MAX_TOKENS: 100, // 测试请求的最大 token 数
   TEST_PROMPT: "Hello", // 测试请求的默认提示词
   // 流式响应资源限制（防止 DoS 攻击）
@@ -377,6 +377,24 @@ export async function getProviders(): Promise<ProviderDisplay[]> {
         anthropicThinkingBudgetPreference: provider.anthropicThinkingBudgetPreference,
         anthropicAdaptiveThinking: provider.anthropicAdaptiveThinking,
         geminiGoogleSearchPreference: provider.geminiGoogleSearchPreference,
+        scheduledHealthTestEnabled: provider.scheduledHealthTestEnabled ?? true,
+        lastHealthTestAt: provider.lastHealthTestAt
+          ? provider.lastHealthTestAt.toISOString()
+          : null,
+        lastHealthTestOk: provider.lastHealthTestOk ?? null,
+        lastHealthTestStatus: provider.lastHealthTestStatus ?? null,
+        lastHealthTestFirstByteMs: provider.lastHealthTestFirstByteMs ?? null,
+        lastHealthTestLatencyMs: provider.lastHealthTestLatencyMs ?? null,
+        lastHealthTestModel: provider.lastHealthTestModel ?? null,
+        lastHealthTestErrorType: provider.lastHealthTestErrorType ?? null,
+        lastHealthTestErrorMessage: provider.lastHealthTestErrorMessage ?? null,
+        healthTestOnlineRate: provider.healthTestOnlineRate ?? null,
+        healthTestAvgFirstByteMs: provider.healthTestAvgFirstByteMs ?? null,
+        healthTestRecentResults: provider.healthTestRecentResults ?? null,
+        healthTestTodayCostUsd: provider.healthTestTodayCostUsd ?? null,
+        healthTestTodayCalls: provider.healthTestTodayCalls ?? null,
+        healthTestBudgetSuspendedDay: provider.healthTestBudgetSuspendedDay ?? null,
+        healthTestSloAutoDisabled: provider.healthTestSloAutoDisabled ?? false,
         tpm: provider.tpm,
         rpm: provider.rpm,
         rpd: provider.rpd,
@@ -4789,9 +4807,11 @@ export type TestProviderByIdArgs = {
   model?: string;
 };
 
-/** Timeout for by-id tests; Gemini needs longer because of thinking output */
-const BY_ID_TEST_TIMEOUT_MS = 15000;
-const BY_ID_TEST_GEMINI_TIMEOUT_MS = 60000;
+/** Timeout constants kept for any legacy callers; health tests use runProviderHealthTest defaults (120s). */
+const BY_ID_TEST_TIMEOUT_MS = 120_000;
+const BY_ID_TEST_GEMINI_TIMEOUT_MS = 120_000;
+void BY_ID_TEST_TIMEOUT_MS;
+void BY_ID_TEST_GEMINI_TIMEOUT_MS;
 
 /**
  * Run the unified provider test against a stored provider.
@@ -4830,36 +4850,23 @@ export async function testProviderById(
     };
   }
 
-  const isGeminiType = provider.providerType === "gemini" || provider.providerType === "gemini-cli";
-
-  // JSON credentials must be exchanged for an access token and sent as a
-  // Bearer header, mirroring the dedicated Gemini test/model-fetch flows
-  let apiKey = provider.key;
-  let geminiBearerAuth = false;
-  if (isGeminiType) {
-    try {
-      apiKey = await GeminiAuth.getAccessToken(provider.key);
-      geminiBearerAuth = GeminiAuth.isJson(provider.key);
-    } catch (error) {
-      logger.warn("testProviderById: gemini auth preprocess failed", { error, providerId });
-    }
-  }
-
   try {
-    const config: ProviderTestConfig = {
-      providerId: String(provider.id),
-      providerUrl: provider.url,
-      apiKey,
-      providerType: provider.providerType,
-      model: args?.model?.trim() || undefined,
-      proxyUrl: provider.proxyUrl ?? undefined,
-      proxyFallbackToDirect: provider.proxyFallbackToDirect,
-      customHeaders: provider.customHeaders ?? undefined,
-      timeoutMs: isGeminiType ? BY_ID_TEST_GEMINI_TIMEOUT_MS : BY_ID_TEST_TIMEOUT_MS,
-      geminiBearerAuth: geminiBearerAuth || undefined,
-    };
-
-    const result = await executeProviderTest(config);
+    const { runProviderHealthTest } = await import("@/lib/provider-health-test/run-test");
+    const { getDefaultHealthTestModel } = await import("@/lib/provider-health-test/defaults");
+    const result = await runProviderHealthTest({
+      provider: {
+        id: provider.id,
+        name: provider.name,
+        url: provider.url,
+        key: provider.key,
+        providerType: provider.providerType,
+        proxyUrl: provider.proxyUrl,
+        proxyFallbackToDirect: provider.proxyFallbackToDirect,
+        customHeaders: provider.customHeaders,
+      },
+      source: "manual",
+      model: args?.model?.trim() || getDefaultHealthTestModel(provider.providerType),
+    });
 
     return {
       ok: true,
@@ -4872,6 +4879,37 @@ export async function testProviderById(
       error: error instanceof Error ? error.message : "测试执行失败",
     };
   }
+}
+
+/**
+ * Toggle scheduled LLM health test for a provider (default ON).
+ */
+export async function setProviderScheduledHealthTestEnabled(
+  providerId: number,
+  enabled: boolean
+): Promise<ActionResult<{ providerId: number; enabled: boolean }>> {
+  const session = await getSession();
+  if (!session || session.user.role !== "admin") {
+    return { ok: false, error: "未授权" };
+  }
+
+  const { updateProviderScheduledHealthTestEnabled } = await import(
+    "@/repository/provider-health-test"
+  );
+  const ok = await updateProviderScheduledHealthTestEnabled(providerId, enabled);
+  if (!ok) {
+    return { ok: false, error: "供应商不存在", errorCode: "provider.not_found" };
+  }
+
+  // Invalidate provider cache so list reflects the toggle promptly.
+  try {
+    const { publishProviderCacheInvalidation } = await import("@/lib/cache/provider-cache");
+    await publishProviderCacheInvalidation();
+  } catch {
+    // best-effort
+  }
+
+  return { ok: true, data: { providerId, enabled } };
 }
 
 // ============================================================================
@@ -5527,5 +5565,86 @@ export async function reclusterProviderVendors(args: {
     logger.error("reclusterProviderVendors:error", error);
     const message = error instanceof Error ? error.message : "Recluster failed";
     return { ok: false, error: message };
+  }
+}
+
+
+/**
+ * Global health-test budget overview for provider manager UI.
+ */
+export async function getHealthTestBudgetOverview(): Promise<
+  ActionResult<{
+    todayCost: number;
+    budget: number;
+    isSuspendedToday: boolean;
+    localDay: string;
+  }>
+> {
+  const session = await getSession();
+  if (!session || session.user.role !== "admin") {
+    return { ok: false, error: "未授权" };
+  }
+  try {
+    const { getHealthTestGlobalBudgetStatus } = await import("@/repository/provider-health-test");
+    const status = await getHealthTestGlobalBudgetStatus();
+    return { ok: true, data: status };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : "获取测试预算失败",
+    };
+  }
+}
+
+/**
+ * Update global health-test daily budget (display currency units).
+ * Clears today's global suspend so new limit takes effect immediately.
+ */
+export async function setHealthTestGlobalDailyBudget(
+  budget: number
+): Promise<ActionResult<{ budget: number }>> {
+  const session = await getSession();
+  if (!session || session.user.role !== "admin") {
+    return { ok: false, error: "未授权" };
+  }
+  if (!Number.isFinite(budget) || budget < 0.01) {
+    return { ok: false, error: "预算无效" };
+  }
+  try {
+    const { updateSystemSettings } = await import("@/repository/system-config");
+    await updateSystemSettings({
+      healthTestDailyBudgetCny: budget,
+      healthTestGlobalBudgetSuspendedDay: null,
+    });
+    // Re-enable providers that were budget-suspended today so new cap applies.
+    const { db } = await import("@/drizzle/db");
+    const { providers } = await import("@/drizzle/schema");
+    const { and, eq, isNull, sql } = await import("drizzle-orm");
+    await db
+      .update(providers)
+      .set({
+        scheduledHealthTestEnabled: true,
+        healthTestBudgetSuspendedDay: null,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          isNull(providers.deletedAt),
+          eq(providers.scheduledHealthTestEnabled, false),
+          sql`${providers.healthTestBudgetSuspendedDay} IS NOT NULL`
+        )
+      );
+    try {
+      const { publishProviderCacheInvalidation } = await import("@/lib/cache/provider-cache");
+      await publishProviderCacheInvalidation();
+    } catch {
+      // best-effort
+    }
+    return { ok: true, data: { budget } };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : "保存预算失败",
+    };
   }
 }

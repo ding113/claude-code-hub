@@ -62,6 +62,7 @@ interface GroupFormState {
   name: string;
   costMultiplier: string;
   description: string;
+  healthTestModel: string;
 }
 
 interface ProviderGroupTabProps {
@@ -74,6 +75,7 @@ const INITIAL_FORM: GroupFormState = {
   name: "",
   costMultiplier: "1.0",
   description: "",
+  healthTestModel: "",
 };
 
 function getProviderGroupDescriptionNote(description: string | null | undefined): string {
@@ -135,6 +137,7 @@ export function ProviderGroupTab({
       name: group.name,
       costMultiplier: String(group.costMultiplier),
       description: getProviderGroupDescriptionNote(group.description),
+      healthTestModel: group.healthTestModel ?? "",
     });
     setDialogOpen(true);
   }, []);
@@ -170,6 +173,7 @@ export function ProviderGroupTab({
         costMultiplier?: number;
         description?: string | null;
         descriptionNote?: string | null;
+        healthTestModel?: string | null;
       }
     ): Promise<boolean> => {
       const result = await updateProviderGroup(groupId, patch);
@@ -207,6 +211,7 @@ export function ProviderGroupTab({
         const ok = await saveGroupPatch(editingGroup.id, {
           costMultiplier,
           descriptionNote: trimmedDescription || null,
+          healthTestModel: form.healthTestModel.trim() || null,
         });
         if (ok) {
           closeDialog();
@@ -217,6 +222,7 @@ export function ProviderGroupTab({
       const result = await createProviderGroup({
         name: trimmedName,
         costMultiplier,
+        healthTestModel: form.healthTestModel.trim() || null,
         description: trimmedDescription || undefined,
       });
       if (result.ok) {
@@ -313,6 +319,7 @@ export function ProviderGroupTab({
                 <TableHead>{t("groupName")}</TableHead>
                 <TableHead className="w-[180px]">{t("costMultiplier")}</TableHead>
                 <TableHead>{t("descriptionLabel")}</TableHead>
+                <TableHead className="w-[200px]">{t("healthTestModel")}</TableHead>
                 <TableHead className="w-[120px] text-center">{t("providerCount")}</TableHead>
                 <TableHead className="w-[96px]" />
               </TableRow>
@@ -383,6 +390,29 @@ export function ProviderGroupTab({
                           </span>
                         ) : (
                           <span className="text-muted-foreground">{t("noDescription")}</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="max-w-[220px]">
+                        {isAdmin ? (
+                          <InlineTextEditPopover
+                            value={group.healthTestModel ?? ""}
+                            emptyLabel={t("healthTestModelEmpty")}
+                            label={t("groupHealthTestModelLabel")}
+                            placeholder={t("healthTestModelPlaceholder")}
+                            validator={(raw) => {
+                              if (raw.length > 200) return t("descriptionTooLong");
+                              return null;
+                            }}
+                            onSave={(value) =>
+                              saveGroupPatch(group.id, {
+                                healthTestModel: value.trim() || null,
+                              })
+                            }
+                          />
+                        ) : group.healthTestModel ? (
+                          <span className="font-mono text-sm">{group.healthTestModel}</span>
+                        ) : (
+                          <span className="text-muted-foreground text-xs">{t("healthTestModelEmpty")}</span>
                         )}
                       </TableCell>
                       <TableCell className="text-center">
@@ -486,6 +516,17 @@ export function ProviderGroupTab({
               />
             </div>
           </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">{t("healthTestModel")}</label>
+                    <Input
+                      value={form.healthTestModel}
+                      onChange={(e) =>
+                        setForm((prev) => ({ ...prev, healthTestModel: e.target.value }))
+                      }
+                      placeholder={t("healthTestModelPlaceholder")}
+                    />
+                    <p className="text-xs text-muted-foreground">{t("healthTestModelHelp")}</p>
+                  </div>
 
           <DialogFooter>
             <Button variant="outline" onClick={closeDialog} disabled={isSaving}>

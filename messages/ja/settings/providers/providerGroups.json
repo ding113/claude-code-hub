@@ -42,5 +42,10 @@
   "groupDescriptionLabel": "グループ説明",
   "noDescription": "説明を追加",
   "descriptionTooLong": "説明は500文字以内で入力してください",
-  "openProviderEditor": "プロバイダーを編集"
+  "openProviderEditor": "プロバイダーを編集",
+  "healthTestModel": "デフォルトテストモデル",
+  "healthTestModelPlaceholder": "空 = 定時テストしない",
+  "healthTestModelHelp": "設定するとこのグループの定時ヘルスチェックに使用。空なら定時テストなし。",
+  "healthTestModelEmpty": "定時なし",
+  "groupHealthTestModelLabel": "デフォルトテストモデル"
 }

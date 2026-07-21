@@ -1,5 +1,6 @@
 import { PROVIDER_TIMEOUT_DEFAULTS } from "@/lib/constants/provider.constants";
 import { normalizeProviderModelRedirectRules } from "@/lib/provider-model-redirects";
+import { normalizeHealthTestRecentResults } from "@/lib/provider-health-test/stats";
 import { formatCostForStorage } from "@/lib/utils/currency";
 import type { Key } from "@/types/key";
 import type { MessageRequest } from "@/types/message";
@@ -156,6 +157,32 @@ export function toProvider(dbProvider: any): Provider {
     anthropicThinkingBudgetPreference: dbProvider?.anthropicThinkingBudgetPreference ?? null,
     anthropicAdaptiveThinking: dbProvider?.anthropicAdaptiveThinking ?? null,
     geminiGoogleSearchPreference: dbProvider?.geminiGoogleSearchPreference ?? null,
+    scheduledHealthTestEnabled: dbProvider?.scheduledHealthTestEnabled ?? true,
+    lastHealthTestAt: dbProvider?.lastHealthTestAt
+      ? new Date(dbProvider.lastHealthTestAt)
+      : null,
+    lastHealthTestOk: dbProvider?.lastHealthTestOk ?? null,
+    lastHealthTestStatus: dbProvider?.lastHealthTestStatus ?? null,
+    lastHealthTestFirstByteMs: dbProvider?.lastHealthTestFirstByteMs ?? null,
+    lastHealthTestLatencyMs: dbProvider?.lastHealthTestLatencyMs ?? null,
+    lastHealthTestModel: dbProvider?.lastHealthTestModel ?? null,
+    lastHealthTestErrorType: dbProvider?.lastHealthTestErrorType ?? null,
+    lastHealthTestErrorMessage: dbProvider?.lastHealthTestErrorMessage ?? null,
+    healthTestOnlineRate:
+      dbProvider?.healthTestOnlineRate !== null && dbProvider?.healthTestOnlineRate !== undefined
+        ? parseFloat(dbProvider.healthTestOnlineRate)
+        : null,
+    healthTestAvgFirstByteMs: dbProvider?.healthTestAvgFirstByteMs ?? null,
+    healthTestRecentResults: normalizeHealthTestRecentResults(dbProvider?.healthTestRecentResults),
+    healthTestTodayCostUsd:
+      dbProvider?.healthTestTodayCostUsd !== null && dbProvider?.healthTestTodayCostUsd !== undefined
+        ? parseFloat(String(dbProvider.healthTestTodayCostUsd))
+        : null,
+    healthTestTodayCalls: dbProvider?.healthTestTodayCalls ?? null,
+    healthTestBudgetSuspendedDay: dbProvider?.healthTestBudgetSuspendedDay
+      ? String(dbProvider.healthTestBudgetSuspendedDay)
+      : null,
+    healthTestSloAutoDisabled: dbProvider?.healthTestSloAutoDisabled ?? false,
     tpm: dbProvider?.tpm ?? null,
     rpm: dbProvider?.rpm ?? null,
     rpd: dbProvider?.rpd ?? null,
@@ -245,6 +272,13 @@ export function toSystemSettings(dbSettings: any): SystemSettings {
     siteTitle: dbSettings?.siteTitle ?? "Claude Code Hub",
     allowGlobalUsageView: dbSettings?.allowGlobalUsageView ?? true,
     currencyDisplay: dbSettings?.currencyDisplay ?? "USD",
+    healthTestDailyBudgetCny:
+      dbSettings?.healthTestDailyBudgetCny != null && dbSettings?.healthTestDailyBudgetCny !== undefined
+        ? parseFloat(String(dbSettings.healthTestDailyBudgetCny))
+        : 1,
+    healthTestGlobalBudgetSuspendedDay: dbSettings?.healthTestGlobalBudgetSuspendedDay
+      ? String(dbSettings.healthTestGlobalBudgetSuspendedDay)
+      : null,
     billingModelSource: dbSettings?.billingModelSource ?? "original",
     codexPriorityBillingSource:
       dbSettings?.codexPriorityBillingSource === "requested" ||

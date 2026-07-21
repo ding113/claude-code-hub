@@ -42,5 +42,10 @@
   "groupDescriptionLabel": "Описание группы",
   "noDescription": "Добавить описание",
   "descriptionTooLong": "Описание должно содержать не более 500 символов",
-  "openProviderEditor": "Редактировать поставщика"
+  "openProviderEditor": "Редактировать поставщика",
+  "healthTestModel": "Модель теста",
+  "healthTestModelPlaceholder": "Пусто = без плановых тестов",
+  "healthTestModelHelp": "Если задано — плановые health-тесты этой группы используют эту модель; пусто — не тестировать.",
+  "healthTestModelEmpty": "Без плановых",
+  "groupHealthTestModelLabel": "Модель теста"
 }

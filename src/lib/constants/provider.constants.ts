@@ -28,7 +28,8 @@ export const PROVIDER_KEY_MAX_LENGTH = 1024 * 1024;
 export const PROVIDER_DEFAULTS = {
   IS_ENABLED: true,
   WEIGHT: 1,
-  MAX_RETRY_ATTEMPTS: 2,
+  // Single attempt only: fail → switch provider immediately (no same-provider retry).
+  MAX_RETRY_ATTEMPTS: 1,
 } as const;
 
 export const CODEX_IMAGE_GENERATION_PREFERENCE_VALUES = ["inherit", "true", "false"] as const;

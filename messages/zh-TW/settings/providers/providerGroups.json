@@ -42,5 +42,10 @@
   "groupDescriptionLabel": "分組描述",
   "noDescription": "新增描述",
   "descriptionTooLong": "描述不能超過500個字元",
-  "openProviderEditor": "編輯供應商"
+  "openProviderEditor": "編輯供應商",
+  "healthTestModel": "預設測試模型",
+  "healthTestModelPlaceholder": "留空 = 不對該組定時測試",
+  "healthTestModelHelp": "設定後，該分組供應商用此模型做定時連通性測試；留空則不定時測。",
+  "healthTestModelEmpty": "不定時測",
+  "groupHealthTestModelLabel": "預設測試模型"
 }
