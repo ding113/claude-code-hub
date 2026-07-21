@@ -143,7 +143,12 @@ function classifyJson(value: unknown, protocol: DiscoveryProtocol): DiscoveryVal
     };
   }
   if (protocol === "gemini") {
-    const candidates = Array.isArray(object.candidates) ? object.candidates : [];
+    const response =
+      object.response && typeof object.response === "object" && !Array.isArray(object.response)
+        ? (object.response as Record<string, unknown>)
+        : null;
+    const candidatesValue = response?.candidates ?? object.candidates;
+    const candidates = Array.isArray(candidatesValue) ? candidatesValue : [];
     return {
       ready: candidates.some((candidate) => hasContent(candidate)),
       terminal: false,

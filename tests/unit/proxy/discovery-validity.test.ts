@@ -27,6 +27,21 @@ describe("discovery validity", () => {
     expect(classifyDiscoveryChunk("data: [DONE]\n", "openai-chat").terminal).toBe(true);
   });
 
+  it("accepts Gemini candidates in the supported response wrapper", () => {
+    expect(
+      classifyDiscoveryChunk(
+        '{"response":{"candidates":[{"content":{"parts":[{"text":"hello"}]}}]}}',
+        "gemini"
+      )
+    ).toEqual({ ready: true, terminal: false, error: false });
+  });
+
+  it("keeps wrapped Gemini errors terminal", () => {
+    expect(
+      classifyDiscoveryChunk('{"response":{"error":{"message":"upstream failed"}}}', "gemini")
+    ).toEqual({ ready: false, terminal: true, error: true });
+  });
+
   it("rejects errors even when a later chunk contains content", () => {
     const parser = new DiscoveryValidityParser("openai-responses");
     expect(parser.push('{"type":"response.failed","error":{"message":"no"}}').error).toBe(true);
