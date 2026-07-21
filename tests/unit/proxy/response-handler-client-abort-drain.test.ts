@@ -3481,6 +3481,63 @@ describe("ProxyResponseHandler stream client abort finalization", () => {
     expect(SessionManager.releaseSessionDiscoveryLease).toHaveBeenCalledOnce();
   });
 
+  it("settles a failed Discovery binding before rejecting its auxiliary Codex cache binding", async () => {
+    vi.mocked(SessionManager.extractCodexPromptCacheKey).mockReturnValueOnce(
+      "incomplete-discovery-cache-key"
+    );
+    const session = createSession(new AbortController().signal);
+    session.sessionId = "stream-discovery-cache-incomplete";
+    session.recordProviderSessionRef(1);
+    setDeferredStreamingFinalization(session, {
+      providerId: 1,
+      providerName: "avemujica-responses",
+      providerPriority: 1,
+      attemptNumber: 1,
+      totalProvidersAttempted: 2,
+      isFirstAttempt: false,
+      isFailoverSuccess: true,
+      endpointId: 42,
+      endpointUrl: "https://api.test.invalid/v1",
+      upstreamStatusCode: 200,
+      bindingIntent: "create",
+      bindingSnapshot: {
+        sessionId: "stream-discovery-cache-incomplete",
+        keyId: 2,
+        providerId: null,
+        generation: "incomplete-discovery-generation",
+      },
+      requiresCompletionMarker: true,
+      discoveryLease: {
+        sessionId: "stream-discovery-cache-incomplete",
+        keyId: 2,
+        ownerToken: "incomplete-discovery-owner",
+        ttlSeconds: 30,
+      },
+      providerSessionRefOwned: true,
+    });
+    const incomplete = new Response(
+      `event: response.output_text.done\ndata: ${JSON.stringify({
+        type: "response.output_text.done",
+        text: "partial",
+      })}\n\n`,
+      { status: 200, headers: { "content-type": "text/event-stream" } }
+    );
+
+    const downstream = await ProxyResponseHandler.dispatch(session, incomplete);
+    await downstream.text();
+    for (let index = 0; index < 10 && !getRegisteredTask("post-terminal-side-effects"); index++) {
+      await new Promise<void>((resolve) => setImmediate(resolve));
+    }
+    const sideEffects = getRegisteredTask("post-terminal-side-effects");
+    expect(sideEffects).toBeDefined();
+    await expectTaskToResolveWithoutWaiting(sideEffects as Promise<void>);
+    await drainAsyncTasks();
+
+    expect(SessionManager.compareAndSetSessionProvider).not.toHaveBeenCalled();
+    expect(SessionManager.updateSessionWithCodexCacheKey).not.toHaveBeenCalled();
+    expect(SessionManager.releaseSessionDiscoveryLease).toHaveBeenCalledOnce();
+  });
+
   it("does not publish a stream Codex cache binding for a final non-2xx outcome", async () => {
     vi.mocked(SessionManager.extractCodexPromptCacheKey).mockReturnValueOnce("stream-cache-key-2");
     const session = createSession(new AbortController().signal);

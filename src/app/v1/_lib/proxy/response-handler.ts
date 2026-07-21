@@ -61,6 +61,7 @@ import { isClientAbortError, isTransportError } from "./errors";
 import type { ProxySession } from "./session";
 import {
   consumeDeferredStreamingFinalization,
+  type DeferredStreamingBindingHeartbeat,
   type DeferredStreamingFinalization,
   peekDeferredStreamingFinalization,
 } from "./stream-finalization";
@@ -281,6 +282,96 @@ async function releaseOwnedProviderSessionRef(
       error: error instanceof Error ? error.message : String(error),
     });
   }
+}
+
+function startHedgeBindingHeartbeat(session: ProxySession): void {
+  const deferred = peekDeferredStreamingFinalization(session);
+  const authorityPromise = deferred?.hedgeBindingAuthorityPromise;
+  if (!deferred?.isHedgeWinner || !authorityPromise || deferred.hedgeBindingHeartbeat) return;
+
+  let periodicActive = true;
+  let authorityLost = false;
+  let timer: ReturnType<typeof setInterval> | null = null;
+  let touchInFlight: Promise<boolean> | null = null;
+  let completionPromise: Promise<void> | null = null;
+
+  const stopPeriodic = () => {
+    periodicActive = false;
+    if (timer) {
+      clearInterval(timer);
+      timer = null;
+    }
+  };
+
+  const loseAuthority = (status: string, reason?: string) => {
+    if (authorityLost) return;
+    authorityLost = true;
+    stopPeriodic();
+    logger.warn("[ResponseHandler] Hedge binding heartbeat stopped", {
+      sessionId: session.sessionId,
+      status,
+      reason,
+    });
+  };
+
+  const touch = (allowAfterStop = false): Promise<boolean> => {
+    if (authorityLost || (!periodicActive && !allowAfterStop)) return Promise.resolve(false);
+    if (touchInFlight) return touchInFlight;
+
+    const operation = (async () => {
+      const { snapshot } = await authorityPromise;
+      if (!snapshot) {
+        authorityLost = true;
+        stopPeriodic();
+        return false;
+      }
+      if (authorityLost || (!periodicActive && !allowAfterStop)) return false;
+
+      const touched = await SessionManager.touchVersionedSessionBinding(snapshot);
+      if (
+        touched.status !== "ok" ||
+        touched.snapshot.generation !== snapshot.generation ||
+        touched.snapshot.providerId !== snapshot.providerId
+      ) {
+        loseAuthority(touched.status, "reason" in touched ? touched.reason : "snapshot_mismatch");
+        return false;
+      }
+      return true;
+    })()
+      .catch((error) => {
+        loseAuthority("error", error instanceof Error ? error.message : String(error));
+        return false;
+      })
+      .finally(() => {
+        if (touchInFlight === operation) touchInFlight = null;
+      });
+    touchInFlight = operation;
+    return operation;
+  };
+
+  const lifecycle: DeferredStreamingBindingHeartbeat = {
+    stop: stopPeriodic,
+    complete: () => {
+      if (completionPromise) return completionPromise;
+      stopPeriodic();
+      completionPromise = (async () => {
+        if (touchInFlight) await touchInFlight;
+        if (authorityLost) return;
+        await touch(true);
+      })();
+      return completionPromise;
+    },
+  };
+  deferred.hedgeBindingHeartbeat = lifecycle;
+
+  // The first touch validates that ownership really transferred with the
+  // first-byte CAS. Subsequent touches keep streams longer than SESSION_TTL alive.
+  void touch();
+  const intervalMs = Math.max(250, SessionManager.getVersionedSessionBindingRefreshIntervalMs());
+  timer = setInterval(() => {
+    void touch();
+  }, intervalMs);
+  timer.unref?.();
 }
 
 type MessageRequestTerminalDetails = Parameters<typeof updateMessageRequestDetailsDurably>[1];
@@ -1388,6 +1479,27 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
   const providerIdForPersistence = meta?.providerId ?? provider?.id ?? null;
   const clearSessionBinding = async () => {
     if (!session.sessionId || !isSessionBindingMutationAllowed(session)) return;
+    const hedgeAuthority = meta?.isHedgeWinner
+      ? await meta.hedgeBindingAuthorityPromise
+      : undefined;
+    if (hedgeAuthority?.snapshot) {
+      const hedgeSnapshot = hedgeAuthority.snapshot;
+      const cleared = await SessionManager.clearVersionedSessionProvider(
+        hedgeSnapshot,
+        providerIdForPersistence
+      );
+      if (cleared.status !== "ok") {
+        logger.warn("[ResponseHandler] Hedge winner binding clear stopped", {
+          sessionId: hedgeSnapshot.sessionId,
+          providerId: providerIdForPersistence,
+          reason: cleared.reason,
+        });
+      }
+      return;
+    }
+    if (meta?.isHedgeWinner && !hedgeAuthority?.legacyClearAllowed) {
+      return;
+    }
     const keyId = session.authState?.key?.id ?? session.messageContext?.key?.id ?? null;
     if (meta?.bindingIntent === "none" || meta?.bindingIntent === "create") return;
     if (meta?.bindingIntent === "renew") {
@@ -1503,6 +1615,10 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
     primaryDiscoveryBindingSettled = true;
     resolvePrimaryDiscoveryBinding?.(updated);
   };
+  const finalizeFailedDiscoveryBinding = async () => {
+    settlePrimaryDiscoveryBinding(false);
+    await finalizeProviderSessionRef();
+  };
   const confirmAuxiliarySessionBinding = async () =>
     allowAuxiliarySessionBinding && (await primaryDiscoveryBinding);
 
@@ -1598,18 +1714,24 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
     detected.isError ||
     completionMarkerMissing ||
     (upstreamStatusCode >= 400 && errorMessage !== null);
+  if (shouldClearSessionBindingOnFailure) {
+    meta?.hedgeBindingHeartbeat?.stop();
+  }
 
   // 未启用延迟结算 / provider 缺失：
   // - 只返回“内部状态码 + 错误原因”，由调用方写入统计；
   // - 不在这里更新熔断/绑定（meta 缺失意味着 Forwarder 没有启用延迟结算；provider 缺失意味着无法归因）。
   if (!meta || !provider) {
+    meta?.hedgeBindingHeartbeat?.stop();
     const commitSideEffects =
-      shouldClearSessionBindingOnFailure || meta?.providerSessionRefOwned === true
+      shouldClearSessionBindingOnFailure ||
+      meta?.providerSessionRefOwned === true ||
+      hasDiscoveryBindingIntent
         ? async () => {
             try {
               if (shouldClearSessionBindingOnFailure) await clearSessionBinding();
             } finally {
-              await finalizeProviderSessionRef();
+              await finalizeFailedDiscoveryBinding();
             }
           }
         : undefined;
@@ -1686,7 +1808,7 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
           // so only the Provider circuit is updated here.
         }
       } finally {
-        await finalizeProviderSessionRef();
+        await finalizeFailedDiscoveryBinding();
       }
     };
 
@@ -1730,7 +1852,7 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
           }
         }
       } finally {
-        await finalizeProviderSessionRef();
+        await finalizeFailedDiscoveryBinding();
       }
     };
 
@@ -1801,7 +1923,7 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
           }
         }
       } finally {
-        await finalizeProviderSessionRef();
+        await finalizeFailedDiscoveryBinding();
       }
     };
 
@@ -1865,7 +1987,7 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
           }
         }
       } finally {
-        await finalizeProviderSessionRef();
+        await finalizeFailedDiscoveryBinding();
       }
     };
 
@@ -1898,8 +2020,13 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
     });
   }
 
+  // Stop periodic refresh at the stream boundary and issue one final
+  // generation-safe touch so the next turn receives a full binding TTL.
+  // complete() is idempotent and permanently stops after any authority conflict.
+  const hedgeBindingCompletion = meta.hedgeBindingHeartbeat?.complete();
   const commitSideEffects = async () => {
     let primaryDiscoveryBindingUpdated = false;
+    await hedgeBindingCompletion;
     try {
       if (meta.endpointId != null) {
         try {
@@ -3007,6 +3134,8 @@ export class ProxyResponseHandler {
       })();
       return response;
     }
+
+    startHedgeBindingHeartbeat(session);
 
     let processedStream: ReadableStream<Uint8Array> = response.body;
 

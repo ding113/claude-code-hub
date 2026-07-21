@@ -278,8 +278,36 @@ describe("SessionManager.updateSessionBindingSmart forceUpdate", () => {
         providerId: 2,
       })
     );
+    expect(result.bindingSnapshot).toEqual({
+      sessionId: SID,
+      keyId: 42,
+      providerId: 2,
+      generation: "generation-b",
+    });
+    expect(result.legacyBindingUpdated).toBeUndefined();
     expect(redisClientRef!.pipeline).not.toHaveBeenCalled();
     expect(redisClientRef!.setex).not.toHaveBeenCalled();
+  });
+
+  it("marks only a confirmed legacy force-update as eligible for legacy cleanup", async () => {
+    legacyProviderId = 1;
+
+    const result = await SessionManager.updateSessionBindingSmart(
+      SID,
+      2,
+      10,
+      false,
+      false,
+      KEY_ID,
+      true
+    );
+
+    expect(result).toMatchObject({
+      updated: true,
+      reason: "race_winner_forced",
+      legacyBindingUpdated: true,
+    });
+    expect(result.bindingSnapshot).toBeUndefined();
   });
 
   it.each([

@@ -1092,7 +1092,22 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
       const provider1 = createProvider({ id: 1, name: "p1", firstByteTimeoutStreamingMs: 100 });
       const provider2 = createProvider({ id: 2, name: "p2", firstByteTimeoutStreamingMs: 100 });
       const session = createSession();
+      session.authState = {
+        ...session.authState!,
+        key: { id: 456 },
+      } as never;
       setProviderWithSessionRef(session, provider1);
+      const winnerBindingSnapshot = {
+        sessionId: "sess-hedge",
+        keyId: 456,
+        providerId: 2,
+        generation: "hedge-winner-generation",
+      };
+      mocks.updateSessionBindingSmart.mockResolvedValueOnce({
+        updated: true,
+        reason: "race_winner_forced",
+        bindingSnapshot: winnerBindingSnapshot,
+      } as never);
 
       mocks.pickRandomProviderWithExclusion.mockResolvedValueOnce(provider2);
 
@@ -1135,7 +1150,12 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
 
       await vi.advanceTimersByTimeAsync(50);
       const response = await responsePromise;
+      const deferred = peekDeferredStreamingFinalization(session);
       expect(await response.text()).toContain('"provider":"p2"');
+      await expect(deferred?.hedgeBindingAuthorityPromise).resolves.toEqual({
+        snapshot: winnerBindingSnapshot,
+        legacyClearAllowed: false,
+      });
       expect(controller1.signal.aborted).toBe(true);
       expect(controller2.signal.aborted).toBe(false);
       expect(mocks.recordFailure).not.toHaveBeenCalled();
@@ -1149,7 +1169,7 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
         0,
         false,
         true,
-        null,
+        456,
         true
       );
       expect(mocks.releaseProviderSession).toHaveBeenCalledWith(1, "sess-hedge");
@@ -2861,6 +2881,183 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
     }
   });
 
+  test("Sticky Discovery refills a slot immediately after candidate setup fails", async () => {
+    vi.useFakeTimers();
+    let endpointResolver: ReturnType<typeof vi.spyOn> | null = null;
+    try {
+      const sticky = createProvider({ id: 1, name: "sticky", priority: 1 });
+      const setupFailure = createProvider({ id: 2, name: "setup-failure", priority: 1 });
+      const replacement = createProvider({ id: 3, name: "replacement", priority: 1 });
+      const session = createSession();
+      session.authState = {
+        success: true,
+        user: null,
+        key: { id: 30 },
+        apiKey: null,
+      } as typeof session.authState;
+      session.request.message.messages = [
+        { role: "user", content: "first" },
+        { role: "user", content: "second" },
+      ];
+      session.setProvider(sticky);
+      session.setSessionBindingSnapshot({
+        sessionId: session.sessionId!,
+        keyId: 30,
+        providerId: sticky.id,
+        generation: "setup-refill-generation",
+      });
+      mocks.getCachedSystemSettings.mockResolvedValue({
+        discoveryEnabled: true,
+        discoveryConcurrency: 2,
+        maxDiscoveryRounds: 1,
+        discoverySlaMs: 50,
+        stickySlaMs: 10,
+        racingTotalTimeoutMs: 200,
+        stickyTimeoutCooldownMs: 300_000,
+      });
+      mocks.pickDiscoveryProviders
+        .mockResolvedValueOnce([setupFailure])
+        .mockResolvedValueOnce([replacement]);
+
+      endpointResolver = vi.spyOn(
+        ProxyForwarder as unknown as {
+          resolveStreamingHedgeEndpoint: (
+            session: ProxySession,
+            provider: Provider
+          ) => Promise<{ endpointId: number | null; baseUrl: string; endpointUrl: string }>;
+        },
+        "resolveStreamingHedgeEndpoint"
+      );
+      endpointResolver.mockImplementation(async (_attemptSession, provider) => {
+        if (provider.id === setupFailure.id) throw new Error("candidate endpoint setup failed");
+        return {
+          endpointId: null,
+          baseUrl: provider.url,
+          endpointUrl: provider.url,
+        };
+      });
+
+      const doForward = vi.spyOn(
+        ProxyForwarder as unknown as {
+          doForward: (...args: unknown[]) => Promise<Response>;
+        },
+        "doForward"
+      );
+      doForward.mockImplementation(async (attemptSession) => {
+        if ((attemptSession as ProxySession).provider?.id === sticky.id) {
+          return new Response(new ReadableStream<Uint8Array>(), {
+            headers: { "content-type": "text/event-stream" },
+          });
+        }
+        return new Response(
+          'data: {"type":"content_block_delta","delta":{"text":"replacement"}}\n\n',
+          { headers: { "content-type": "text/event-stream" } }
+        );
+      });
+
+      const responsePromise = ProxyForwarder.send(session);
+      await vi.advanceTimersByTimeAsync(10);
+      await vi.advanceTimersByTimeAsync(0);
+      const response = await responsePromise;
+
+      expect(await response.text()).toContain('"replacement"');
+      expect(mocks.pickDiscoveryProviders).toHaveBeenCalledTimes(2);
+      expect(mocks.pickDiscoveryProviders).toHaveBeenNthCalledWith(
+        2,
+        expect.anything(),
+        1,
+        expect.arrayContaining([sticky.id, setupFailure.id])
+      );
+      expect(doForward).toHaveBeenCalledTimes(2);
+      expect(session.provider?.id).toBe(replacement.id);
+    } finally {
+      endpointResolver?.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
+  test("Discovery keeps refilling the current round when an error replacement fails setup", async () => {
+    const initialFailure = createProvider({ id: 1, name: "initial-failure", priority: 1 });
+    const pending = createProvider({ id: 2, name: "pending", priority: 1 });
+    const setupFailure = createProvider({ id: 3, name: "setup-failure", priority: 1 });
+    const healthy = createProvider({ id: 4, name: "healthy", priority: 1 });
+    const session = createSession();
+    session.authState = {
+      success: true,
+      user: null,
+      key: { id: 31 },
+      apiKey: null,
+    } as typeof session.authState;
+    session.setProvider(initialFailure);
+    mocks.getCachedSystemSettings.mockResolvedValue({
+      discoveryEnabled: true,
+      discoveryConcurrency: 2,
+      maxDiscoveryRounds: 1,
+      discoverySlaMs: 50,
+      stickySlaMs: 50,
+      racingTotalTimeoutMs: 200,
+      stickyTimeoutCooldownMs: 300_000,
+    });
+    mocks.pickDiscoveryProviders
+      .mockResolvedValueOnce([pending])
+      .mockResolvedValueOnce([setupFailure])
+      .mockResolvedValueOnce([healthy]);
+
+    const endpointResolver = vi.spyOn(
+      ProxyForwarder as unknown as {
+        resolveStreamingHedgeEndpoint: (
+          session: ProxySession,
+          provider: Provider
+        ) => Promise<{ endpointId: number | null; baseUrl: string; endpointUrl: string }>;
+      },
+      "resolveStreamingHedgeEndpoint"
+    );
+    endpointResolver.mockImplementation(async (_attemptSession, provider) => {
+      if (provider.id === setupFailure.id) throw new Error("replacement setup failed");
+      return {
+        endpointId: null,
+        baseUrl: provider.url,
+        endpointUrl: provider.url,
+      };
+    });
+
+    const doForward = vi.spyOn(
+      ProxyForwarder as unknown as {
+        doForward: (...args: unknown[]) => Promise<Response>;
+      },
+      "doForward"
+    );
+    doForward.mockImplementation(async (attemptSession) => {
+      const providerId = (attemptSession as ProxySession).provider?.id;
+      if (providerId === initialFailure.id) throw new Error("initial Provider failed");
+      if (providerId === healthy.id) {
+        return new Response('data: {"type":"content_block_delta","delta":{"text":"healthy"}}\n\n', {
+          headers: { "content-type": "text/event-stream" },
+        });
+      }
+      return new Response(new ReadableStream<Uint8Array>(), {
+        headers: { "content-type": "text/event-stream" },
+      });
+    });
+
+    try {
+      const response = await ProxyForwarder.send(session);
+
+      expect(await response.text()).toContain('"healthy"');
+      expect(mocks.pickDiscoveryProviders).toHaveBeenCalledTimes(3);
+      expect(mocks.pickDiscoveryProviders).toHaveBeenNthCalledWith(
+        3,
+        expect.anything(),
+        1,
+        expect.arrayContaining([initialFailure.id, pending.id, setupFailure.id])
+      );
+      expect(doForward).toHaveBeenCalledTimes(3);
+      expect(session.provider?.id).toBe(healthy.id);
+    } finally {
+      endpointResolver.mockRestore();
+    }
+  });
+
   test("an explicit Sticky failure starts Discovery round one at full concurrency", async () => {
     const sticky = createProvider({ id: 1, name: "sticky", priority: 1 });
     const normal = createProvider({ id: 2, name: "normal", priority: 1 });
@@ -2987,6 +3184,83 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
     expect(doForward).toHaveBeenCalledTimes(1);
     expect(mocks.recordFailure).not.toHaveBeenCalled();
     expect(mocks.releaseSessionDiscoveryLease).toHaveBeenCalledTimes(1);
+  });
+
+  test("Discovery clears terminal binding state before releasing its lease", async () => {
+    const provider = createProvider({ id: 1 });
+    const session = createSession();
+    session.authState = {
+      success: true,
+      user: null,
+      key: { id: 29 },
+      apiKey: null,
+    } as typeof session.authState;
+    session.setProvider(provider);
+    session.setSessionBindingSnapshot({
+      sessionId: session.sessionId!,
+      keyId: 29,
+      providerId: provider.id,
+      generation: "terminal-clear-generation",
+    });
+    mocks.getCachedSystemSettings.mockResolvedValue({
+      discoveryEnabled: true,
+      discoveryConcurrency: 2,
+      maxDiscoveryRounds: 1,
+      discoverySlaMs: 100,
+      stickySlaMs: 100,
+      racingTotalTimeoutMs: 500,
+    });
+    const order: string[] = [];
+    const clear = Promise.withResolvers<{
+      status: "ok";
+      legacyFallbackAllowed: false;
+      source: "cleared";
+      snapshot: {
+        sessionId: string;
+        keyId: number;
+        providerId: null;
+        generation: string;
+      };
+    }>();
+    mocks.clearVersionedSessionProvider.mockImplementationOnce(async () => {
+      order.push("clear-start");
+      const result = await clear.promise;
+      order.push("clear-end");
+      return result;
+    });
+    mocks.releaseSessionDiscoveryLease.mockImplementationOnce(async () => {
+      order.push("lease-release");
+      return { status: "released", legacyFallbackAllowed: false };
+    });
+    vi.spyOn(
+      ProxyForwarder as unknown as {
+        doForward: (...args: unknown[]) => Promise<Response>;
+      },
+      "doForward"
+    ).mockRejectedValueOnce(new Error("terminal upstream failure"));
+
+    const observed = ProxyForwarder.send(session).catch((error) => error);
+    for (let index = 0; index < 10 && order.length === 0; index++) {
+      await new Promise<void>((resolve) => setImmediate(resolve));
+    }
+    expect(order).toEqual(["clear-start"]);
+    expect(mocks.releaseSessionDiscoveryLease).not.toHaveBeenCalled();
+
+    clear.resolve({
+      status: "ok",
+      legacyFallbackAllowed: false,
+      source: "cleared",
+      snapshot: {
+        sessionId: session.sessionId!,
+        keyId: 29,
+        providerId: null,
+        generation: "terminal-cleared-generation",
+      },
+    });
+    expect(await observed).toBeInstanceOf(Error);
+    expect(mocks.clearVersionedSessionProvider).toHaveBeenCalledOnce();
+    expect(mocks.releaseSessionDiscoveryLease).toHaveBeenCalledOnce();
+    expect(order).toEqual(["clear-start", "clear-end", "lease-release"]);
   });
 
   test("Discovery total deadline is not blocked by a stalled candidate selector", async () => {

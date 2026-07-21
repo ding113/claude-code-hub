@@ -8,6 +8,18 @@ export type DeferredStreamingDiscoveryLease = {
   ttlSeconds: number;
 };
 
+export type DeferredStreamingBindingHeartbeat = {
+  stop: () => void;
+  complete: () => Promise<void>;
+};
+
+export type DeferredStreamingHedgeBindingAuthority = {
+  /** Exact versioned generation written by the first-byte winner, when available. */
+  snapshot: SessionBindingSnapshot | null;
+  /** Only a confirmed successful legacy write may use the non-versioned clear path. */
+  legacyClearAllowed: boolean;
+};
+
 /**
  * 流式响应（SSE）在“收到响应头”时无法确定成功与否：
  * - 上游可能返回 HTTP 200，但 body 是错误 JSON（假 200）
@@ -54,6 +66,10 @@ export type DeferredStreamingFinalization = {
   providerSessionRefOwned?: boolean;
   /** CAS success converts this attempt ref into the binding baseline when true. */
   providerSessionRefRetainOnSuccess?: boolean;
+  /** Binding authority established by the legacy Hedge winner's first-byte write. */
+  hedgeBindingAuthorityPromise?: Promise<DeferredStreamingHedgeBindingAuthority>;
+  /** ResponseHandler-owned runtime lifecycle; attached when streaming starts. */
+  hedgeBindingHeartbeat?: DeferredStreamingBindingHeartbeat;
 };
 
 const deferredMeta = new WeakMap<ProxySession, DeferredStreamingFinalization>();

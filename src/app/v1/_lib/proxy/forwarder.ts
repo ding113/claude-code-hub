@@ -106,7 +106,10 @@ import {
 import { ProxyProviderResolver } from "./provider-selector";
 import { finalizeHedgeLoserBilling } from "./response-handler";
 import type { ProxySession } from "./session";
-import { setDeferredStreamingFinalization } from "./stream-finalization";
+import {
+  type DeferredStreamingHedgeBindingAuthority,
+  setDeferredStreamingFinalization,
+} from "./stream-finalization";
 import {
   detectThinkingBudgetRectifierTrigger,
   rectifyThinkingBudget,
@@ -4764,8 +4767,9 @@ export class ProxyForwarder {
       // A non-hedged request is finalized through response-handler. Updating
       // here as well would perform a duplicate binding read/CAS before the
       // stream has passed its final validation.
+      let hedgeBindingAuthorityPromise: Promise<DeferredStreamingHedgeBindingAuthority> | undefined;
       if (session.sessionId && isActualHedgeWin && session.isSessionBindingAllowed()) {
-        void (async () => {
+        hedgeBindingAuthorityPromise = (async () => {
           const bindingResult = await SessionManager.updateSessionBindingSmart(
             session.sessionId!,
             attempt.provider.id,
@@ -4788,15 +4792,31 @@ export class ProxyForwarder {
           }
 
           if (session.shouldTrackSessionObservability()) {
-            await SessionManager.updateSessionProvider(session.sessionId!, {
+            void SessionManager.updateSessionProvider(session.sessionId!, {
               providerId: attempt.provider.id,
               providerName: attempt.provider.name,
+            }).catch((observabilityError) => {
+              logger.error(
+                "ProxyForwarder: Failed to update observable session provider for hedge winner",
+                { error: observabilityError }
+              );
             });
           }
+
+          return {
+            // Only the exact snapshot returned by the first-byte CAS may keep
+            // a versioned binding alive or clear it after a failed stream.
+            snapshot: bindingResult.bindingSnapshot ?? null,
+            // A generic clear is safe only when this request demonstrably
+            // committed the legacy binding. A versioned CAS conflict must not
+            // clear a newer generation that happens to use the same Provider.
+            legacyClearAllowed: bindingResult.legacyBindingUpdated === true,
+          };
         })().catch((bindingError) => {
           logger.error("ProxyForwarder: Failed to update session provider info for hedge winner", {
             error: bindingError,
           });
+          return { snapshot: null, legacyClearAllowed: false };
         });
       }
 
@@ -4814,6 +4834,7 @@ export class ProxyForwarder {
         isHedgeWinner: isActualHedgeWin,
         billHedgeLosers,
         bindingIntent: session.isSessionBindingAllowed() ? undefined : "none",
+        hedgeBindingAuthorityPromise,
       });
 
       const response = new Response(
@@ -5171,7 +5192,7 @@ export class ProxyForwarder {
       cancelLosers(null, options.cancellationKind ?? "discovery_loser");
       if (!options.preserveBinding && bindingWriteAllowed && session.isSessionBindingAllowed()) {
         if (bindingSnapshot.providerId != null) {
-          void SessionManager.clearVersionedSessionProvider(
+          await SessionManager.clearVersionedSessionProvider(
             bindingSnapshot,
             bindingSnapshot.providerId,
             0
@@ -5288,19 +5309,6 @@ export class ProxyForwarder {
       });
     };
 
-    const chooseCandidate = async (): Promise<Provider | null> => {
-      const candidates = await ProxyProviderResolver.pickDiscoveryProviders(
-        session,
-        1,
-        Array.from(launched)
-      );
-      if (!candidates[0]) {
-        noMoreCandidates = true;
-        return null;
-      }
-      return candidates[0];
-    };
-
     const clearCapturedStickyBinding = async (cooldownTtlSeconds: number): Promise<void> => {
       if (
         !bindingWriteAllowed ||
@@ -5366,7 +5374,7 @@ export class ProxyForwarder {
           retainOnSuccess: boolean;
         };
       }
-    ): Promise<void> => {
+    ): Promise<boolean> => {
       const transferredProviderSessionRef = options?.providerSessionRefTransfer?.owned === true;
       let providerSessionRefTracked = transferredProviderSessionRef;
       let providerSessionRefRetainOnSuccess =
@@ -5380,7 +5388,7 @@ export class ProxyForwarder {
       };
       if (settled || committed || launched.has(provider.id)) {
         rollbackLaunch();
-        return;
+        return false;
       }
       launched.add(provider.id);
       if (!transferredProviderSessionRef && provider.id === initialProvider.id) {
@@ -5408,7 +5416,7 @@ export class ProxyForwarder {
       }
       if (settled || committed) {
         rollbackLaunch();
-        return;
+        return false;
       }
       let endpoint: Awaited<ReturnType<typeof ProxyForwarder.resolveStreamingHedgeEndpoint>>;
       try {
@@ -5419,7 +5427,7 @@ export class ProxyForwarder {
       }
       if (settled || committed) {
         rollbackLaunch();
-        return;
+        return false;
       }
       let attemptSession: ProxySession;
       try {
@@ -5435,7 +5443,7 @@ export class ProxyForwarder {
       }
       if (settled || committed) {
         rollbackLaunch();
-        return;
+        return false;
       }
       const controller = new AbortController();
       const id = `${provider.id}:${sequence + 1}`;
@@ -5509,7 +5517,7 @@ export class ProxyForwarder {
       });
       if (!registered || settled || committed) {
         rollbackLaunch();
-        return;
+        return false;
       }
       attempts.set(id, attempt);
       discoveryMetrics.attemptStarted({
@@ -5796,19 +5804,7 @@ export class ProxyForwarder {
             }
           }
           if (!actionOwnsNextStep && !committed && !settled) {
-            const replacement = await chooseCandidate();
-            if (replacement) {
-              try {
-                await launch(replacement, "normal");
-              } catch (launchError) {
-                lastError =
-                  launchError instanceof Error ? launchError : new Error(String(launchError));
-                // A single launch failure does not prove that the remaining
-                // candidate pool is exhausted. The current round boundary can
-                // still advance or retry selection from the remaining pool.
-                noMoreCandidates = false;
-              }
-            }
+            await refillCurrentRoundSlots(1);
           }
           if (
             Array.from(attempts.values()).every((candidate) => !candidate.pending) &&
@@ -5825,7 +5821,75 @@ export class ProxyForwarder {
             error,
           });
         });
+      return true;
     };
+
+    const fillDiscoverySlots = async (slots: number): Promise<void> => {
+      let remainingSlots = slots;
+      while (remainingSlots > 0 && !settled && !committed) {
+        const exclusionCountBeforeSelection = launched.size;
+        const candidates = await ProxyProviderResolver.pickDiscoveryProviders(
+          session,
+          remainingSlots,
+          Array.from(launched)
+        );
+        if (candidates.length === 0) {
+          noMoreCandidates = true;
+          break;
+        }
+
+        noMoreCandidates = false;
+        let registeredInBatch = 0;
+        for (const candidate of candidates) {
+          try {
+            if (await launch(candidate, "normal")) {
+              registeredInBatch += 1;
+              remainingSlots -= 1;
+            }
+          } catch (error) {
+            lastError = error instanceof Error ? error : new Error(String(error));
+            // launch() excludes setup failures before throwing, so keep filling
+            // this round from the remaining candidate pool.
+            noMoreCandidates = false;
+          }
+          if (remainingSlots <= 0 || settled || committed) break;
+        }
+
+        // A selector that ignores exclusions must not create an unbounded setup
+        // loop. Normal selectors advance `launched` even before transport setup.
+        if (registeredInBatch === 0 && launched.size === exclusionCountBeforeSelection) {
+          noMoreCandidates = true;
+          break;
+        }
+      }
+    };
+
+    const finishRoundLaunchBatch = async (): Promise<void> => {
+      roundLaunchesInProgress = Math.max(0, roundLaunchesInProgress - 1);
+      if (roundLaunchesInProgress !== 0) return;
+
+      notifyRoundLaunchIdle();
+      fallbackPromotionBlocked = false;
+      const readyFallback = Array.from(attempts.values()).find(
+        (attempt) => attempt.pending && attempt.ready && attempt.kind === "fallback"
+      );
+      if (readyFallback && !committed && !settled) {
+        const action = coordinator.markReady(readyFallback.id);
+        if (action.type === "promote_fallback") await commit(readyFallback);
+      }
+    };
+
+    async function refillCurrentRoundSlots(slots: number): Promise<void> {
+      if (slots <= 0 || settled || committed) return;
+      roundLaunchesInProgress += 1;
+      try {
+        // Deliberately preserve the existing round timer. An explicit failure
+        // releases capacity but must not grant the replacement a fresh SLA.
+        await fillDiscoverySlots(slots);
+      } finally {
+        await finishRoundLaunchBatch();
+      }
+    }
 
     const launchNextRound = async (slots: number, coordinatorAlreadyAdvanced = false) => {
       if (settled || committed) return;
@@ -5839,23 +5903,7 @@ export class ProxyForwarder {
           currentRound = nextRound.round;
         }
         if (currentRound > maxRounds || slots <= 0) return;
-        const candidates = await ProxyProviderResolver.pickDiscoveryProviders(
-          session,
-          slots,
-          Array.from(launched)
-        );
-        if (candidates.length === 0) {
-          noMoreCandidates = true;
-        }
-        for (const candidate of candidates) {
-          try {
-            await launch(candidate, "normal");
-          } catch (error) {
-            lastError = error instanceof Error ? error : new Error(String(error));
-            // Launch setup failures do not establish pool exhaustion.
-            noMoreCandidates = false;
-          }
-        }
+        await fillDiscoverySlots(slots);
         const hasPendingAttempt = Array.from(attempts.values()).some((attempt) => attempt.pending);
         if (!hasPendingAttempt) {
           await settleFailure(ProxyForwarder.buildAllProvidersUnavailableError(lastError));
@@ -5865,18 +5913,7 @@ export class ProxyForwarder {
           scheduleRoundBoundary(discoverySlaMs);
         }
       } finally {
-        roundLaunchesInProgress = Math.max(0, roundLaunchesInProgress - 1);
-        if (roundLaunchesInProgress === 0) {
-          notifyRoundLaunchIdle();
-          fallbackPromotionBlocked = false;
-          const readyFallback = Array.from(attempts.values()).find(
-            (attempt) => attempt.pending && attempt.ready && attempt.kind === "fallback"
-          );
-          if (readyFallback && !committed && !settled) {
-            const action = coordinator.markReady(readyFallback.id);
-            if (action.type === "promote_fallback") await commit(readyFallback);
-          }
-        }
+        await finishRoundLaunchBatch();
       }
     };
 
