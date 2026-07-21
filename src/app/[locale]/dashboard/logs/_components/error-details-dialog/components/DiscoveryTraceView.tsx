@@ -41,6 +41,16 @@ const KNOWN_BYPASS_REASONS = new Set([
   "lease_unavailable",
 ]);
 
+const KNOWN_CANCELLATION_KINDS = new Set([
+  "discovery_loser",
+  "discovery_sla_timeout",
+  "round_timeout",
+  "sticky_timeout",
+  "request_deadline",
+  "client_abort",
+  "winner_committed",
+]);
+
 type TraceRecord = Record<string, unknown>;
 
 type AttemptView = {
@@ -678,17 +688,8 @@ function AttemptCard({ attempt }: { attempt: AttemptView }) {
   const statusCode = chainItem?.statusCode ?? attempt.statusCode;
   const endpoint = sanitizeEndpoint(chainItem?.endpointUrl);
   const errorMessage = getChainErrorMessage(chainItem);
-  const knownCancellationKinds = new Set([
-    "discovery_loser",
-    "discovery_sla_timeout",
-    "round_timeout",
-    "sticky_timeout",
-    "request_deadline",
-    "client_abort",
-    "winner_committed",
-  ]);
   const cancellationLabel = attempt.cancellationKind
-    ? knownCancellationKinds.has(attempt.cancellationKind)
+    ? KNOWN_CANCELLATION_KINDS.has(attempt.cancellationKind)
       ? t(`cancellationKinds.${attempt.cancellationKind}`)
       : attempt.cancellationKind
     : null;

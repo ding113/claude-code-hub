@@ -473,7 +473,7 @@
         "configStickySla": "Sticky SLA",
         "configTotalTimeout": "全体タイムアウト",
         "configStickyCooldown": "Sticky タイムアウトのクールダウン",
-        "configStickyBindingTtl": "Sticky バインドの有効期間（SESSION_TTL）",
+        "configStickyBindingTtl": "Sticky バインドの有効期間 (SESSION_TTL)",
         "attemptDetails": {
           "providerId": "Provider ID",
           "attempt": "試行回数",

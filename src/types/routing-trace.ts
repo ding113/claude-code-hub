@@ -190,6 +190,7 @@ function normalizeRoutingTraceConfig(value: unknown): RoutingTraceConfigV1 | und
   const stickySlaMs = finiteNumber(config.stickySlaMs);
   const racingTotalTimeoutMs = finiteNumber(config.racingTotalTimeoutMs);
   const stickyTimeoutCooldownMs = finiteNumber(config.stickyTimeoutCooldownMs);
+  const sessionTtlSeconds = finiteNumber(config.sessionTtlSeconds);
   if (
     discoveryConcurrency === undefined ||
     maxDiscoveryRounds === undefined ||
@@ -207,9 +208,7 @@ function normalizeRoutingTraceConfig(value: unknown): RoutingTraceConfigV1 | und
     stickySlaMs,
     racingTotalTimeoutMs,
     stickyTimeoutCooldownMs,
-    ...(finiteNumber(config.sessionTtlSeconds) !== undefined
-      ? { sessionTtlSeconds: finiteNumber(config.sessionTtlSeconds) }
-      : {}),
+    ...(sessionTtlSeconds !== undefined ? { sessionTtlSeconds } : {}),
   };
 }
 
