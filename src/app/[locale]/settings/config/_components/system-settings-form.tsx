@@ -265,7 +265,8 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
     };
     if (
       discoveryEnabled &&
-      Object.values(discoveryConfig).some((value) => !Number.isSafeInteger(value) || value < 1)
+      (discoveryConfig.discoveryConcurrency < 2 ||
+        Object.values(discoveryConfig).some((value) => !Number.isSafeInteger(value) || value < 1))
     ) {
       toast.error(t("discoveryWindowInvalid"));
       return;

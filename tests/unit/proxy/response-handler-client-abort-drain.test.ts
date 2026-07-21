@@ -10,6 +10,7 @@ import { AsyncTaskManager, shutdownAllAsyncTasks } from "@/lib/async-task-manage
 import { recordFailure } from "@/lib/circuit-breaker";
 import { emitProxyLangfuseTrace } from "@/lib/langfuse/emit-proxy-trace";
 import { RateLimitService } from "@/lib/rate-limit";
+import type { SessionBindingSnapshot } from "@/lib/redis/session-binding";
 import { SessionManager } from "@/lib/session-manager";
 import {
   updateMessageRequestCostWithBreakdown,
@@ -118,12 +119,19 @@ vi.mock("@/lib/session-manager", () => ({
     clearVersionedSessionProvider: vi.fn(),
     compareAndSetSessionProvider: vi.fn(),
     getSessionBindingSnapshot: vi.fn(),
+    getVersionedSessionBindingRefreshIntervalMs: vi.fn(() => 100_000),
     renewSessionDiscoveryLease: vi.fn(async () => ({
       status: "renewed",
       legacyFallbackAllowed: false,
     })),
     releaseSessionDiscoveryLease: vi.fn(async () => ({
       status: "released",
+      legacyFallbackAllowed: false,
+    })),
+    touchVersionedSessionBinding: vi.fn(async (snapshot: SessionBindingSnapshot) => ({
+      status: "ok",
+      source: "touched",
+      snapshot,
       legacyFallbackAllowed: false,
     })),
     extractCodexPromptCacheKey: vi.fn(),

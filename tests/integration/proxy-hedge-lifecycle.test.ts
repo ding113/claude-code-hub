@@ -8,6 +8,7 @@ import { ProxyResponseHandler } from "@/app/v1/_lib/proxy/response-handler";
 import { type MessageContext, ProxySession } from "@/app/v1/_lib/proxy/session";
 import { DbPoolAdmissionError } from "@/drizzle/admitted-client";
 import { getGlobalAgentPool, resetGlobalAgentPool } from "@/lib/proxy-agent";
+import type { SessionBindingSnapshot } from "@/lib/redis/session-binding";
 import type { Key } from "@/types/key";
 import type { Provider } from "@/types/provider";
 import type { User } from "@/types/user";
@@ -124,6 +125,17 @@ vi.mock("@/lib/session-manager", async (importOriginal) => {
     }
     static override async renewSessionDiscoveryLease() {
       return state.renewDiscoveryLease();
+    }
+    static override getVersionedSessionBindingRefreshIntervalMs() {
+      return 100_000;
+    }
+    static override async touchVersionedSessionBinding(snapshot: SessionBindingSnapshot) {
+      return {
+        status: "ok" as const,
+        source: "touched" as const,
+        snapshot,
+        legacyFallbackAllowed: false as const,
+      };
     }
     static override async releaseSessionDiscoveryLease() {
       return state.releaseDiscoveryLease();

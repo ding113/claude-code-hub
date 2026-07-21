@@ -80,8 +80,10 @@ vi.mock("@/lib/session-manager", () => ({
     clearVersionedSessionProvider: vi.fn(),
     compareAndSetSessionProvider: vi.fn(),
     getSessionBindingSnapshot: vi.fn(),
+    getVersionedSessionBindingRefreshIntervalMs: vi.fn(),
     renewSessionDiscoveryLease: vi.fn(),
     releaseSessionDiscoveryLease: vi.fn(),
+    touchVersionedSessionBinding: vi.fn(),
     extractCodexPromptCacheKey: vi.fn(),
     updateSessionBindingSmart: vi.fn(),
     updateSessionProvider: vi.fn(),
@@ -468,10 +470,17 @@ function setupCommonMocks() {
     },
     legacyFallbackAllowed: false,
   });
+  vi.mocked(SessionManager.getVersionedSessionBindingRefreshIntervalMs).mockReturnValue(100_000);
   vi.mocked(SessionManager.renewSessionDiscoveryLease).mockResolvedValue({
     status: "renewed",
     legacyFallbackAllowed: false,
   });
+  vi.mocked(SessionManager.touchVersionedSessionBinding).mockImplementation(async (binding) => ({
+    status: "ok",
+    source: "touched",
+    snapshot: binding,
+    legacyFallbackAllowed: false,
+  }));
   vi.mocked(SessionManager.releaseSessionDiscoveryLease).mockResolvedValue({
     status: "released",
     legacyFallbackAllowed: false,
@@ -846,6 +855,11 @@ describe("Endpoint circuit breaker isolation", () => {
 
   it.each([
     {
+      label: "Claude data-only stop",
+      format: "claude" as const,
+      body: `data: ${JSON.stringify({ type: "message_stop" })}\n\n`,
+    },
+    {
       label: "OpenAI Responses",
       format: "response" as const,
       body: `event: response.completed\ndata: ${JSON.stringify({
@@ -915,6 +929,7 @@ describe("Endpoint circuit breaker isolation", () => {
     await drainAsyncTasks();
 
     expect(SessionManager.compareAndSetSessionProvider).toHaveBeenCalledWith(snapshot, 1);
+    expect(mockRecordFailure).not.toHaveBeenCalled();
   });
 
   it("releases a create attempt ref when generation CAS loses", async () => {
@@ -1160,6 +1175,126 @@ describe("Endpoint circuit breaker isolation", () => {
       const renewCalls = vi.mocked(SessionManager.renewSessionDiscoveryLease).mock.calls.length;
       await vi.advanceTimersByTimeAsync(5_000);
       expect(SessionManager.renewSessionDiscoveryLease).toHaveBeenCalledTimes(renewCalls);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("touches the captured binding often enough for a long Discovery winner", async () => {
+    vi.useFakeTimers();
+    try {
+      const session = createSession();
+      const snapshot = {
+        sessionId: "fake-session",
+        keyId: 456,
+        providerId: null,
+        generation: "long-stream-generation",
+      } as const;
+      setDeferredStreamingFinalization(session, {
+        providerId: 1,
+        providerName: "test-provider",
+        providerPriority: 10,
+        attemptNumber: 1,
+        totalProvidersAttempted: 2,
+        isFirstAttempt: false,
+        isFailoverSuccess: true,
+        endpointId: 42,
+        endpointUrl: "https://api.test.com",
+        upstreamStatusCode: 200,
+        bindingIntent: "create",
+        bindingSnapshot: snapshot,
+        requiresCompletionMarker: true,
+        discoveryLease: {
+          sessionId: "fake-session",
+          keyId: 456,
+          ownerToken: "long-stream-owner",
+          ttlSeconds: 3_600,
+        },
+      });
+      vi.mocked(SessionManager.getVersionedSessionBindingRefreshIntervalMs).mockReturnValue(1_000);
+      const controlled = createControllableSuccessStreamResponse();
+
+      const clientResponse = await ProxyResponseHandler.dispatch(session, controlled.response);
+      await vi.advanceTimersByTimeAsync(3_000);
+      expect(SessionManager.touchVersionedSessionBinding).toHaveBeenCalledTimes(4);
+      expect(SessionManager.touchVersionedSessionBinding).toHaveBeenLastCalledWith(snapshot);
+
+      controlled.complete();
+      await clientResponse.text();
+      await drainAsyncTasks();
+
+      expect(SessionManager.compareAndSetSessionProvider).toHaveBeenCalledWith(snapshot, 1);
+      expect(SessionManager.getSessionBindingSnapshot).not.toHaveBeenCalled();
+      expect(SessionManager.releaseSessionDiscoveryLease).toHaveBeenCalledWith(
+        "fake-session",
+        456,
+        "long-stream-owner"
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not revive a binding after an authority advances its generation", async () => {
+    vi.useFakeTimers();
+    try {
+      const session = createSession();
+      const snapshot = {
+        sessionId: "fake-session",
+        keyId: 456,
+        providerId: 1,
+        generation: "generation-before-termination",
+      } as const;
+      setDeferredStreamingFinalization(session, {
+        providerId: 1,
+        providerName: "test-provider",
+        providerPriority: 10,
+        attemptNumber: 1,
+        totalProvidersAttempted: 1,
+        isFirstAttempt: true,
+        isFailoverSuccess: false,
+        endpointId: 42,
+        endpointUrl: "https://api.test.com",
+        upstreamStatusCode: 200,
+        bindingIntent: "renew",
+        bindingSnapshot: snapshot,
+        requiresCompletionMarker: true,
+        discoveryLease: {
+          sessionId: "fake-session",
+          keyId: 456,
+          ownerToken: "terminated-stream-owner",
+          ttlSeconds: 3_600,
+        },
+      });
+      vi.mocked(SessionManager.getVersionedSessionBindingRefreshIntervalMs).mockReturnValue(1_000);
+      vi.mocked(SessionManager.touchVersionedSessionBinding)
+        .mockResolvedValueOnce({
+          status: "ok",
+          source: "touched",
+          snapshot,
+          legacyFallbackAllowed: false,
+        })
+        .mockResolvedValueOnce({
+          status: "conflict",
+          reason: "generation_mismatch",
+          legacyFallbackAllowed: false,
+        });
+      const controlled = createControllableSuccessStreamResponse();
+
+      const clientResponse = await ProxyResponseHandler.dispatch(session, controlled.response);
+      await vi.advanceTimersByTimeAsync(1_000);
+      controlled.complete();
+      await clientResponse.text();
+      await drainAsyncTasks();
+
+      expect(SessionManager.touchVersionedSessionBinding).toHaveBeenCalledTimes(2);
+      expect(SessionManager.compareAndSetSessionProvider).not.toHaveBeenCalled();
+      expect(SessionManager.getSessionBindingSnapshot).not.toHaveBeenCalled();
+      expect(SessionManager.releaseSessionDiscoveryLease).toHaveBeenCalledWith(
+        "fake-session",
+        456,
+        "terminated-stream-owner"
+      );
     } finally {
       vi.useRealTimers();
     }

@@ -114,7 +114,8 @@ function isSessionBindingMutationAllowed(session: ProxySession): boolean {
 }
 
 function startDiscoveryLeaseLifecycle(session: ProxySession): DiscoveryLeaseLifecycle {
-  const lease = peekDeferredStreamingFinalization(session)?.discoveryLease;
+  const deferred = peekDeferredStreamingFinalization(session);
+  const lease = deferred?.discoveryLease;
   if (!lease) {
     return {
       active: false,
@@ -127,6 +128,12 @@ function startDiscoveryLeaseLifecycle(session: ProxySession): DiscoveryLeaseLife
   let renewalInFlight: Promise<boolean> | null = null;
   let releasePromise: Promise<void> | null = null;
   let ownershipState: "unknown" | "owned" | "lost" = "unknown";
+  const bindingSnapshot =
+    (deferred?.bindingIntent === "create" || deferred?.bindingIntent === "renew") &&
+    deferred.bindingSnapshot?.sessionId === lease.sessionId &&
+    deferred.bindingSnapshot.keyId === lease.keyId
+      ? deferred.bindingSnapshot
+      : null;
 
   const stopRenewal = () => {
     if (renewalTimer) {
@@ -157,6 +164,25 @@ function startDiscoveryLeaseLifecycle(session: ProxySession): DiscoveryLeaseLife
         });
         return false;
       }
+
+      if (bindingSnapshot) {
+        const touched = await SessionManager.touchVersionedSessionBinding(bindingSnapshot);
+        if (
+          touched.status !== "ok" ||
+          touched.snapshot.generation !== bindingSnapshot.generation ||
+          touched.snapshot.providerId !== bindingSnapshot.providerId
+        ) {
+          ownershipState = "lost";
+          stopRenewal();
+          logger.warn("[ResponseHandler] Discovery binding heartbeat stopped", {
+            sessionId: lease.sessionId,
+            keyId: lease.keyId,
+            status: touched.status,
+            reason: "reason" in touched ? touched.reason : "snapshot_mismatch",
+          });
+          return false;
+        }
+      }
       ownershipState = "owned";
       return true;
     })()
@@ -181,7 +207,14 @@ function startDiscoveryLeaseLifecycle(session: ProxySession): DiscoveryLeaseLife
   // the downstream response. Renew immediately so an expired/lost token is
   // observed before any terminal Session binding mutation is attempted.
   const handoffRenewal = renew();
-  const renewalIntervalMs = Math.max(250, Math.floor((lease.ttlSeconds * 1000) / 3));
+  const leaseRenewalIntervalMs = Math.floor((lease.ttlSeconds * 1000) / 3);
+  const bindingRefreshIntervalMs = bindingSnapshot
+    ? SessionManager.getVersionedSessionBindingRefreshIntervalMs()
+    : Number.POSITIVE_INFINITY;
+  const renewalIntervalMs = Math.max(
+    250,
+    Math.min(leaseRenewalIntervalMs, bindingRefreshIntervalMs)
+  );
   renewalTimer = setInterval(() => {
     void renew();
   }, renewalIntervalMs);
@@ -1174,7 +1207,7 @@ function hasStreamCompletionMarker(text: string, format: ProxySession["originalF
     case "claude":
       return events.some(
         (event) =>
-          event.event === "message_stop" &&
+          (event.event === "message_stop" || event.event === "message") &&
           isRecord(event.data) &&
           event.data.type === "message_stop"
       );
