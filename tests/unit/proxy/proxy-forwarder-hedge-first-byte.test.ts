@@ -2509,6 +2509,116 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
     }
   });
 
+  test("Sticky timeout and fallback failure consume a single replacement-wave reservation", async () => {
+    vi.useFakeTimers();
+    try {
+      const sticky = createProvider({ id: 1, name: "sticky", priority: 1 });
+      const normalOne = createProvider({ id: 2, name: "normal-one", priority: 1 });
+      const normalTwo = createProvider({ id: 3, name: "normal-two", priority: 1 });
+      const session = createSession();
+      session.authState = {
+        success: true,
+        user: null,
+        key: { id: 28 },
+        apiKey: null,
+      } as typeof session.authState;
+      session.request.message.messages = [
+        { role: "user", content: "first" },
+        { role: "user", content: "second" },
+      ];
+      session.setProvider(sticky);
+      session.setSessionBindingSnapshot({
+        sessionId: session.sessionId!,
+        keyId: 28,
+        providerId: sticky.id,
+        generation: "g-sticky-single-wave",
+      });
+      mocks.getCachedSystemSettings.mockResolvedValue({
+        discoveryEnabled: true,
+        discoveryConcurrency: 2,
+        maxDiscoveryRounds: 2,
+        discoverySlaMs: 50,
+        stickySlaMs: 10,
+        racingTotalTimeoutMs: 200,
+        stickyTimeoutCooldownMs: 300_000,
+      });
+
+      const clearBinding = Promise.withResolvers<unknown>();
+      mocks.clearVersionedSessionProvider.mockReturnValueOnce(clearBinding.promise);
+      const replacementWave = Promise.withResolvers<Provider[]>();
+      mocks.pickDiscoveryProviders.mockReturnValueOnce(replacementWave.promise);
+
+      const stickyAttempt = Promise.withResolvers<Response>();
+      const normalOneAttempt = Promise.withResolvers<Response>();
+      const normalTwoAttempt = Promise.withResolvers<Response>();
+      const doForward = vi.spyOn(
+        ProxyForwarder as unknown as {
+          doForward: (...args: unknown[]) => Promise<Response>;
+        },
+        "doForward"
+      );
+      doForward.mockImplementation(async (attemptSession) => {
+        switch ((attemptSession as ProxySession).provider?.id) {
+          case sticky.id:
+            return stickyAttempt.promise;
+          case normalOne.id:
+            return normalOneAttempt.promise;
+          case normalTwo.id:
+            return normalTwoAttempt.promise;
+          default:
+            throw new Error("unexpected Provider");
+        }
+      });
+
+      const responsePromise = ProxyForwarder.send(session);
+      await vi.advanceTimersByTimeAsync(10);
+      expect(mocks.clearVersionedSessionProvider).toHaveBeenCalledTimes(1);
+      expect(mocks.pickDiscoveryProviders).not.toHaveBeenCalled();
+
+      stickyAttempt.reject(new Error("Sticky fallback failed while binding clear was pending"));
+      await vi.advanceTimersByTimeAsync(0);
+      expect(mocks.pickDiscoveryProviders).toHaveBeenCalledTimes(1);
+      expect(mocks.pickDiscoveryProviders).toHaveBeenCalledWith(
+        expect.anything(),
+        2,
+        expect.arrayContaining([sticky.id])
+      );
+
+      clearBinding.resolve({
+        status: "ok",
+        legacyFallbackAllowed: false,
+        source: "cleared",
+        snapshot: {
+          sessionId: session.sessionId!,
+          keyId: 28,
+          providerId: null,
+          generation: "g-cleared-single-wave",
+        },
+      });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(mocks.pickDiscoveryProviders).toHaveBeenCalledTimes(1);
+
+      replacementWave.resolve([normalOne, normalTwo]);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(doForward).toHaveBeenCalledTimes(3);
+
+      normalOneAttempt.resolve(
+        new Response('data: {"type":"content_block_delta","delta":{"text":"normal-one"}}\n\n', {
+          headers: { "content-type": "text/event-stream" },
+        })
+      );
+      await vi.advanceTimersByTimeAsync(0);
+      const response = await responsePromise;
+      expect(await response.text()).toContain('"normal-one"');
+      expect(session.provider?.id).toBe(normalOne.id);
+
+      normalTwoAttempt.resolve(new Response(null));
+      await vi.advanceTimersByTimeAsync(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   test("a ready-held Sticky fallback survives a stalled next-wave selector until the total deadline", async () => {
     vi.useFakeTimers();
     try {
