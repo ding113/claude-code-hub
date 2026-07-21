@@ -3945,9 +3945,13 @@ export class ProxyForwarder {
       const binding = await SessionManager.getSessionBindingSnapshot(sessionId, keyId);
       if (binding.status !== "ok") {
         // A foreign or irreconcilable mirror must never be mutated by this
-        // request. Infrastructure unavailability still falls back to the
-        // established legacy wrapper.
-        if (binding.status === "conflict") session.setSessionBindingAllowed(false);
+        // request or fan out through legacy Hedge. Explicit upstream failures
+        // may still use the established one-at-a-time provider fallback below.
+        // Infrastructure unavailability continues to use the legacy wrapper.
+        if (binding.status === "conflict") {
+          session.disableStreamingHedge();
+          session.setSessionBindingAllowed(false);
+        }
         return null;
       }
       bindingSnapshot = binding.snapshot;

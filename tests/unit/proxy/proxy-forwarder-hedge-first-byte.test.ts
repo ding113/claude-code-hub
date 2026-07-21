@@ -168,6 +168,7 @@ import {
 import { ProxyForwarder } from "@/app/v1/_lib/proxy/forwarder";
 import { ModelRedirector } from "@/app/v1/_lib/proxy/model-redirector";
 import { ProxySession } from "@/app/v1/_lib/proxy/session";
+import { peekDeferredStreamingFinalization } from "@/app/v1/_lib/proxy/stream-finalization";
 import { DbPoolAdmissionError } from "@/drizzle/admitted-client";
 import { logger } from "@/lib/logger";
 import type { Provider } from "@/types/provider";
@@ -2362,8 +2363,9 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
     expect(mocks.getCachedSystemSettings).toHaveBeenCalledTimes(1);
   });
 
-  test("foreign binding state fails closed before Discovery acquires a lease", async () => {
-    const provider = createProvider({ id: 1, firstByteTimeoutStreamingMs: 0 });
+  test("foreign binding state uses single-upstream routing with serial fallback", async () => {
+    const provider = createProvider({ id: 1, firstByteTimeoutStreamingMs: 100 });
+    const alternative = createProvider({ id: 2, name: "serial-fallback" });
     const session = createSession();
     session.authState = {
       success: true,
@@ -2378,6 +2380,7 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
       reason: "legacy_owner_mismatch",
       legacyFallbackAllowed: false,
     });
+    mocks.pickRandomProviderWithExclusion.mockResolvedValueOnce(alternative);
 
     const doForward = vi.spyOn(
       ProxyForwarder as unknown as {
@@ -2385,16 +2388,26 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
       },
       "doForward"
     );
-    doForward.mockResolvedValueOnce(
-      new Response('data: {"type":"message_stop"}\n\n', {
-        status: 200,
-        headers: { "content-type": "text/event-stream" },
-      })
-    );
+    doForward
+      .mockRejectedValueOnce(new UpstreamProxyError("initial provider failed", 500))
+      .mockResolvedValueOnce(
+        new Response('data: {"type":"message_stop"}\n\n', {
+          status: 200,
+          headers: { "content-type": "text/event-stream" },
+        })
+      );
 
-    await ProxyForwarder.send(session);
-    expect(doForward).toHaveBeenCalledTimes(1);
+    const response = await ProxyForwarder.send(session);
+    expect(response.status).toBe(200);
+    expect(doForward).toHaveBeenCalledTimes(2);
+    expect(doForward.mock.calls.map((call) => (call[1] as Provider).id)).toEqual([
+      provider.id,
+      alternative.id,
+    ]);
+    expect(mocks.pickRandomProviderWithExclusion).toHaveBeenCalledTimes(1);
+    expect(session.isStreamingHedgeDisabled()).toBe(true);
     expect(session.isSessionBindingAllowed()).toBe(false);
+    expect(peekDeferredStreamingFinalization(session)?.bindingIntent).toBe("none");
     expect(mocks.acquireSessionDiscoveryLease).not.toHaveBeenCalled();
     expect(mocks.pickDiscoveryProviders).not.toHaveBeenCalled();
   });

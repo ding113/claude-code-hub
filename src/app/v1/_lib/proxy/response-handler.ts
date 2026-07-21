@@ -1197,13 +1197,13 @@ function hasStreamCompletionMarker(text: string, format: ProxySession["originalF
 
   switch (format) {
     case "response":
-      return events.some(
-        (event) =>
-          event.event === "response.completed" &&
-          isRecord(event.data) &&
-          event.data.type === "response.completed" &&
-          isRecord(event.data.response)
-      );
+      return events.some((event) => {
+        if (!isRecord(event.data)) return false;
+        const markerType = event.data.type;
+        if (markerType !== "response.completed" && markerType !== "response.done") return false;
+        if (event.event !== "message" && event.event !== markerType) return false;
+        return markerType === "response.done" || isRecord(event.data.response);
+      });
     case "claude":
       return events.some(
         (event) =>

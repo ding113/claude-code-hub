@@ -868,6 +868,19 @@ describe("Endpoint circuit breaker isolation", () => {
       })}\n\n`,
     },
     {
+      label: "OpenAI Responses data-only completed",
+      format: "response" as const,
+      body: `data: ${JSON.stringify({
+        type: "response.completed",
+        response: { id: "resp_data_only_completed" },
+      })}\n\n`,
+    },
+    {
+      label: "OpenAI Responses done",
+      format: "response" as const,
+      body: `event: response.done\ndata: ${JSON.stringify({ type: "response.done" })}\n\n`,
+    },
+    {
       label: "OpenAI Chat finish reason",
       format: "openai" as const,
       body: `data: ${JSON.stringify({
