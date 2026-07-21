@@ -1315,12 +1315,7 @@ function hasStreamCompletionMarker(text: string, format: ProxySession["originalF
           isRecord(event.data.response)
       );
     case "claude":
-      return events.some(
-        (event) =>
-          event.event === "message_stop" &&
-          isRecord(event.data) &&
-          event.data.type === "message_stop"
-      );
+      return events.some((event) => isRecord(event.data) && event.data.type === "message_stop");
     case "openai":
       return events.some(
         (event) =>

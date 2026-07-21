@@ -21,10 +21,10 @@ describe("discovery validity", () => {
 
   it("accepts OpenAI Chat delta and rejects DONE", () => {
     expect(
-      classifyDiscoveryChunk('data: {"choices":[{"delta":{"content":"hi"}}]}\n', "openai-chat")
+      classifyDiscoveryChunk('data: {"choices":[{"delta":{"content":"hi"}}]}\n\n', "openai-chat")
         .ready
     ).toBe(true);
-    expect(classifyDiscoveryChunk("data: [DONE]\n", "openai-chat").terminal).toBe(true);
+    expect(classifyDiscoveryChunk("data: [DONE]\n\n", "openai-chat").terminal).toBe(true);
   });
 
   it("keeps stateless readiness when content and DONE share a chunk", () => {
@@ -54,19 +54,19 @@ describe("discovery validity", () => {
   it("does not promote empty tool or content events", () => {
     expect(
       classifyDiscoveryChunk(
-        'data: {"type":"content_block_start","content_block":{"type":"text","text":""}}\n',
+        'data: {"type":"content_block_start","content_block":{"type":"text","text":""}}\n\n',
         "anthropic"
       ).ready
     ).toBe(false);
     expect(
       classifyDiscoveryChunk(
-        'data: {"choices":[{"delta":{"tool_calls":[{"function":{}}]}}]}\n',
+        'data: {"choices":[{"delta":{"tool_calls":[{"function":{}}]}}]}\n\n',
         "openai-chat"
       ).ready
     ).toBe(false);
     expect(
       classifyDiscoveryChunk(
-        'data: {"type":"response.output_text.delta","delta":"  "}\n',
+        'data: {"type":"response.output_text.delta","delta":"  "}\n\n',
         "openai-responses"
       ).ready
     ).toBe(false);
@@ -75,7 +75,7 @@ describe("discovery validity", () => {
   it("accepts a non-empty function call delta as deliverable content", () => {
     expect(
       classifyDiscoveryChunk(
-        'data: {"type":"response.function_call_arguments.delta","delta":"{\\"x\\":1}"}\n',
+        'data: {"type":"response.function_call_arguments.delta","delta":"{\\"x\\":1}"}\n\n',
         "openai-responses"
       ).ready
     ).toBe(true);
@@ -112,13 +112,13 @@ describe("discovery validity", () => {
   it("accepts only an explicit non-empty Responses tool payload", () => {
     expect(
       classifyDiscoveryChunk(
-        'data: {"type":"response.output_item.added","item":{"id":"fc_1","type":"function_call","status":"in_progress"}}\n',
+        'data: {"type":"response.output_item.added","item":{"id":"fc_1","type":"function_call","status":"in_progress"}}\n\n',
         "openai-responses"
       ).ready
     ).toBe(false);
     expect(
       classifyDiscoveryChunk(
-        'data: {"type":"response.output_item.added","item":{"id":"fc_1","type":"function_call","name":"lookup","arguments":"{}"}}\n',
+        'data: {"type":"response.output_item.added","item":{"id":"fc_1","type":"function_call","name":"lookup","arguments":"{}"}}\n\n',
         "openai-responses"
       ).ready
     ).toBe(true);
@@ -134,6 +134,53 @@ describe("discovery validity", () => {
     expect(parser.push('lo"}}]}\n\n')).toEqual({
       ready: true,
       terminal: false,
+      error: false,
+    });
+  });
+
+  it("joins all data lines in one SSE event before parsing", () => {
+    const parser = new DiscoveryValidityParser("openai-chat");
+
+    expect(parser.push('event: message\nid: 42\ndata: {"choices":[{"delta":\n')).toEqual({
+      ready: false,
+      terminal: false,
+      error: false,
+    });
+    expect(parser.push('data: {"content":"hello"}}]}\n\n')).toEqual({
+      ready: true,
+      terminal: false,
+      error: false,
+    });
+  });
+
+  it("ignores comments and SSE metadata instead of parsing them as payloads", () => {
+    const parser = new DiscoveryValidityParser("anthropic");
+
+    expect(parser.push(": keepalive\nevent: message\nid: 7\nretry: 1000\n\n")).toEqual({
+      ready: false,
+      terminal: false,
+      error: false,
+    });
+    expect(
+      parser.push('data: {"type":"content_block_delta",\ndata: "delta":{"text":"hi"}}\n\n')
+    ).toMatchObject({ ready: true, error: false });
+  });
+
+  it("does not parse raw JSON while an SSE data event is pending", () => {
+    const parser = new DiscoveryValidityParser("openai-chat");
+
+    expect(parser.push('data: {"choices":[{"delta":\n')).toEqual({
+      ready: false,
+      terminal: false,
+      error: false,
+    });
+    expect(parser.push('{"content":"wrongly standalone"}}]}')).toEqual({
+      ready: false,
+      terminal: false,
+      error: false,
+    });
+    expect(parser.push('\ndata: {"content":"ready"}}]}\n\n')).toMatchObject({
+      ready: true,
       error: false,
     });
   });
@@ -174,13 +221,13 @@ describe("discovery validity", () => {
   it("accepts Anthropic tool-use starts and partial JSON deltas", () => {
     expect(
       classifyDiscoveryChunk(
-        'data: {"type":"content_block_start","content_block":{"type":"tool_use","id":"tu_1","name":"search","input":{}}}\n',
+        'data: {"type":"content_block_start","content_block":{"type":"tool_use","id":"tu_1","name":"search","input":{}}}\n\n',
         "anthropic"
       ).ready
     ).toBe(true);
     expect(
       classifyDiscoveryChunk(
-        'data: {"type":"content_block_delta","delta":{"type":"input_json_delta","partial_json":"{\\"q\\":1}"}}\n',
+        'data: {"type":"content_block_delta","delta":{"type":"input_json_delta","partial_json":"{\\"q\\":1}"}}\n\n',
         "anthropic"
       ).ready
     ).toBe(true);
@@ -196,19 +243,38 @@ describe("discovery validity", () => {
     const parser = new DiscoveryValidityParser("anthropic");
     let result = parser.push("");
     for (let index = 0; index <= DISCOVERY_EVENT_MAX_COUNT; index += 1) {
-      result = parser.push('data: {"type":"ping"}\n');
+      result = parser.push('data: {"type":"ping"}\n\n');
     }
     expect(result).toMatchObject({ ready: false, error: true, limitExceeded: true });
+  });
+
+  it("counts a multi-line data payload as one complete SSE event", () => {
+    const parser = new DiscoveryValidityParser("anthropic");
+    const metadataEvents = Array.from(
+      { length: DISCOVERY_EVENT_MAX_COUNT - 1 },
+      () => 'data: {"type":"ping"}\n\n'
+    ).join("");
+
+    expect(parser.push(`${metadataEvents}data: {\ndata: "type":"ping"}\n\n`)).toEqual({
+      ready: false,
+      terminal: false,
+      error: false,
+    });
+    expect(parser.push('data: {"type":"ping"}\n\n')).toMatchObject({
+      ready: false,
+      error: true,
+      limitExceeded: true,
+    });
   });
 
   it("stops parsing current and future events after the event limit", () => {
     const parser = new DiscoveryValidityParser("anthropic");
     const metadataEvents = Array.from(
       { length: DISCOVERY_EVENT_MAX_COUNT + 1 },
-      () => 'data: {"type":"ping"}\n'
+      () => 'data: {"type":"ping"}\n\n'
     ).join("");
 
-    const limited = parser.push(`${metadataEvents}data: {"type":"message_stop"}\n`);
+    const limited = parser.push(`${metadataEvents}data: {"type":"message_stop"}\n\n`);
     expect(limited).toMatchObject({
       ready: false,
       terminal: false,
@@ -216,7 +282,7 @@ describe("discovery validity", () => {
       limitExceeded: true,
     });
 
-    expect(parser.push('data: {"type":"message_stop"}\n')).toEqual(limited);
+    expect(parser.push('data: {"type":"message_stop"}\n\n')).toEqual(limited);
   });
 });
 

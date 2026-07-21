@@ -867,6 +867,11 @@ describe("Endpoint circuit breaker isolation", () => {
       })}\n\n`,
     },
     {
+      label: "Anthropic data-only",
+      format: "claude" as const,
+      body: `data: ${JSON.stringify({ type: "message_stop" })}\n\n`,
+    },
+    {
       label: "OpenAI Chat finish reason",
       format: "openai" as const,
       body: `data: ${JSON.stringify({
