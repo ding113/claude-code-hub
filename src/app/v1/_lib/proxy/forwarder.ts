@@ -467,14 +467,18 @@ async function readResponseTextUpTo(
       // because the tee controller waits for internal queue drainage while the other
       // branch has not started consuming yet. This deadlocks the main request path.
       reader.cancel().catch((cancelErr) => {
-        logger.debug("readResponseTextUpTo: failed to cancel reader", { error: cancelErr });
+        logger.debug("readResponseTextUpTo: failed to cancel reader", {
+          error: cancelErr,
+        });
       });
     }
 
     try {
       reader.releaseLock();
     } catch (releaseErr) {
-      logger.debug("readResponseTextUpTo: failed to release reader lock", { error: releaseErr });
+      logger.debug("readResponseTextUpTo: failed to release reader lock", {
+        error: releaseErr,
+      });
     }
   }
 
@@ -1412,10 +1416,16 @@ export class ProxyForwarder {
         providerVendorId > 0;
       let endpointSelectionError: Error | null = null;
 
-      const endpointCandidates: Array<{ endpointId: number | null; baseUrl: string }> = [];
+      const endpointCandidates: Array<{
+        endpointId: number | null;
+        baseUrl: string;
+      }> = [];
 
       if (isMcpRequest) {
-        endpointCandidates.push({ endpointId: null, baseUrl: currentProvider.url });
+        endpointCandidates.push({
+          endpointId: null,
+          baseUrl: currentProvider.url,
+        });
       } else if (providerVendorId > 0) {
         try {
           const preferred = await getPreferredProviderEndpoints({
@@ -1459,7 +1469,9 @@ export class ProxyForwarder {
           );
 
           // Record endpoint pool exhaustion in provider chain for audit trail
-          const exhaustionContext: Record<string, unknown> = { strictBlockCause };
+          const exhaustionContext: Record<string, unknown> = {
+            strictBlockCause,
+          };
           if (endpointSelectionError) {
             exhaustionContext.selectorError = endpointSelectionError.message;
           }
@@ -1513,7 +1525,10 @@ export class ProxyForwarder {
           ProxyForwarder.markProviderFailed(session, failedProviderIds, currentProvider.id);
           attemptCount = maxAttemptsPerProvider;
         } else {
-          endpointCandidates.push({ endpointId: null, baseUrl: currentProvider.url });
+          endpointCandidates.push({
+            endpointId: null,
+            baseUrl: currentProvider.url,
+          });
         }
       }
 
@@ -3593,7 +3608,10 @@ export class ProxyForwarder {
 
         // 记录到决策链（标记为 HTTP/2 回退）
         session.addProviderToChain(provider, {
-          ...(endpointAudit ?? { endpointId: null, endpointUrl: sanitizeUrl(baseUrl) }),
+          ...(endpointAudit ?? {
+            endpointId: null,
+            endpointUrl: sanitizeUrl(baseUrl),
+          }),
           reason: "http2_fallback",
           circuitState: getCircuitState(provider.id),
           attemptNumber: attemptNumber ?? 1,
@@ -5171,7 +5189,10 @@ export class ProxyForwarder {
     const roundLaunchIdleWaiters = new Set<() => void>();
     const queuedRoundLaunchStartWaiters = new Set<() => void>();
     let fallbackPromotionBlocked = false;
-    type StickyTimeoutWaveReservation = { fallbackAttemptId: string; slots: number };
+    type StickyTimeoutWaveReservation = {
+      fallbackAttemptId: string;
+      slots: number;
+    };
     let stickyTimeoutWaveReservation: StickyTimeoutWaveReservation | null = null;
     let stickyTimeoutWaveClaim: StickyTimeoutWaveReservation | null = null;
     let stickyTimeoutWaveLaunchPromise: Promise<void> | null = null;
@@ -5393,7 +5414,10 @@ export class ProxyForwarder {
           );
         } catch (error) {
           discoveryMetrics.cancelFailed(attempt.id, attempt.provider.id, error);
-          logger.debug("[Discovery] Reader cancel failed", { cancellationKind, error });
+          logger.debug("[Discovery] Reader cancel failed", {
+            cancellationKind,
+            error,
+          });
         }
       }
       if (attempt.releaseAgent && !attempt.agentReleased) {
@@ -5617,6 +5641,12 @@ export class ProxyForwarder {
       if (attempt.session !== session)
         ProxyForwarder.syncWinningAttemptSession(session, attempt.session);
 
+      const bindingIntent =
+        attempt.kind === "fallback" || !bindingWriteAllowed || !session.isSessionBindingAllowed()
+          ? "none"
+          : bindingSnapshot?.providerId == null
+            ? "create"
+            : "renew";
       setDeferredStreamingFinalization(session, {
         providerId: attempt.provider.id,
         providerName: attempt.provider.name,
@@ -5630,14 +5660,9 @@ export class ProxyForwarder {
         upstreamStatusCode: attempt.response.status,
         isHedgeWinner: false,
         billHedgeLosers: false,
-        bindingIntent:
-          attempt.kind === "fallback" || !bindingWriteAllowed || !session.isSessionBindingAllowed()
-            ? "none"
-            : bindingSnapshot?.providerId == null
-              ? "create"
-              : "renew",
+        bindingIntent,
         bindingSnapshot,
-        requiresCompletionMarker: true,
+        requiresCompletionMarkerForBinding: bindingIntent === "create" || bindingIntent === "renew",
         discoveryLease: lease,
         providerSessionRefOwned: attempt.providerSessionRefOwned,
         providerSessionRefRetainOnSuccess: attempt.providerSessionRefRetainOnSuccess,
@@ -5945,7 +5970,10 @@ export class ProxyForwarder {
         provider,
         session: attemptSession,
         baseUrl: endpoint.baseUrl,
-        endpointAudit: { endpointId: endpoint.endpointId, endpointUrl: endpoint.endpointUrl },
+        endpointAudit: {
+          endpointId: endpoint.endpointId,
+          endpointUrl: endpoint.endpointUrl,
+        },
         modelRedirect: undefined,
         responseController: null,
         clearResponseTimeout: null,
@@ -6876,10 +6904,6 @@ export class ProxyForwarder {
           if (candidateSetupReservation) {
             cancelSetupReservation(candidateSetupReservation, "discovery_sla_timeout");
           }
-          // Coordinator marks cancelled attempts non-pending before returning
-          // the action. Restore the transport-facing state long enough for the
-          // exactly-once cancellation/release path to run.
-          if (attempt && !attempt.readerTransferred) attempt.pending = true;
           if (attempt) cancelAttempt(attempt, "discovery_sla_timeout");
         }
         if ("promoteAttemptId" in action && action.promoteAttemptId) {
@@ -7022,13 +7046,17 @@ export class ProxyForwarder {
                     Math.ceil((settings.stickyTimeoutCooldownMs ?? 300_000) / 1000)
                   ).finally(() => {
                     void launchReservedStickyTimeoutWave().catch((error) =>
-                      logger.warn("[Discovery] Sticky round launch failed", { error })
+                      logger.warn("[Discovery] Sticky round launch failed", {
+                        error,
+                      })
                     );
                   });
                   return;
                 }
                 void launchReservedStickyTimeoutWave().catch((error) =>
-                  logger.warn("[Discovery] Sticky round launch failed", { error })
+                  logger.warn("[Discovery] Sticky round launch failed", {
+                    error,
+                  })
                 );
               }
             },
@@ -7086,7 +7114,11 @@ export class ProxyForwarder {
   private static async resolveStreamingHedgeEndpoint(
     session: ProxySession,
     provider: Provider
-  ): Promise<{ endpointId: number | null; baseUrl: string; endpointUrl: string }> {
+  ): Promise<{
+    endpointId: number | null;
+    baseUrl: string;
+    endpointUrl: string;
+  }> {
     const requestPath = session.requestUrl.pathname;
     const providerVendorId = provider.providerVendorId ?? 0;
     const isMcpRequest =
@@ -7110,13 +7142,20 @@ export class ProxyForwarder {
       });
     }
 
-    const endpointCandidates: Array<{ endpointId: number | null; endpointUrl: string }> = [];
+    const endpointCandidates: Array<{
+      endpointId: number | null;
+      endpointUrl: string;
+    }> = [];
     let endpointSelectionError: Error | null = null;
 
     if (isMcpRequest) {
       const sanitizedUrl = sanitizeUrl(provider.url);
       endpointCandidates.push({ endpointId: null, endpointUrl: sanitizedUrl });
-      return { endpointId: null, baseUrl: provider.url, endpointUrl: sanitizedUrl };
+      return {
+        endpointId: null,
+        baseUrl: provider.url,
+        endpointUrl: sanitizedUrl,
+      };
     }
 
     if (providerVendorId > 0) {
@@ -7126,7 +7165,10 @@ export class ProxyForwarder {
           providerType: provider.providerType,
         });
         endpointCandidates.push(
-          ...preferred.map((endpoint) => ({ endpointId: endpoint.id, endpointUrl: endpoint.url }))
+          ...preferred.map((endpoint) => ({
+            endpointId: endpoint.id,
+            endpointUrl: endpoint.url,
+          }))
         );
       } catch (error) {
         endpointSelectionError = error instanceof Error ? error : new Error(String(error));
@@ -7159,7 +7201,11 @@ export class ProxyForwarder {
       }
 
       const sanitizedUrl = sanitizeUrl(provider.url);
-      return { endpointId: null, baseUrl: provider.url, endpointUrl: sanitizedUrl };
+      return {
+        endpointId: null,
+        baseUrl: provider.url,
+        endpointUrl: sanitizedUrl,
+      };
     }
 
     return {

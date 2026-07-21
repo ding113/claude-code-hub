@@ -626,22 +626,31 @@ export async function updateMessageRequestRoutingTrace(
   const normalized = normalizeRoutingTrace(routingTrace);
   if (!normalized) return;
 
-  if (getEnvConfig().MESSAGE_REQUEST_WRITE_MODE === "async") {
-    enqueueMessageRequestUpdate(id, { routingTrace: normalized });
-    return;
+  const useWriterLane = getEnvConfig().MESSAGE_REQUEST_WRITE_MODE === "async";
+  const maxAttempts = 3;
+  let lastError: unknown;
+
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    try {
+      const traceDb = useWriterLane ? getMessageWriterDb() : db;
+      await traceDb
+        .update(messageRequest)
+        .set({ routingTrace: normalized, updatedAt: new Date() })
+        .where(and(eq(messageRequest.id, id), isNull(messageRequest.deletedAt)));
+      return;
+    } catch (error) {
+      lastError = error;
+      if (attempt < maxAttempts - 1) {
+        await new Promise((resolve) => setTimeout(resolve, 50 * (attempt + 1)));
+      }
+    }
   }
 
-  try {
-    await db
-      .update(messageRequest)
-      .set({ routingTrace: normalized, updatedAt: new Date() })
-      .where(and(eq(messageRequest.id, id), isNull(messageRequest.deletedAt)));
-  } catch (error) {
-    logger.warn("[MessageRequest] Failed to patch finalized routing trace", {
-      requestId: id,
-      error: error instanceof Error ? error.message : String(error),
-    });
-  }
+  logger.warn("[MessageRequest] Failed to patch finalized routing trace", {
+    requestId: id,
+    attempts: maxAttempts,
+    error: lastError instanceof Error ? lastError.message : String(lastError),
+  });
 }
 
 export async function updateMessageRequestDetailsIfUnfinalized(

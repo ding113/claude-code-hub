@@ -14,7 +14,10 @@ const mocks = vi.hoisted(() => ({
     health: { failureCount: 0 },
     config: { failureThreshold: 3 },
   })),
-  updateSessionBindingSmart: vi.fn(async () => ({ updated: true, reason: "test" })),
+  updateSessionBindingSmart: vi.fn(async () => ({
+    updated: true,
+    reason: "test",
+  })),
   updateSessionProvider: vi.fn(async () => {}),
   clearSessionProvider: vi.fn(async () => {}),
   clearSessionProviders: vi.fn(async () => false),
@@ -98,7 +101,10 @@ vi.mock("@/lib/provider-endpoints/endpoint-selector", () => ({
 
 vi.mock("@/app/v1/_lib/responses-ws/eligibility", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/app/v1/_lib/responses-ws/eligibility")>();
-  return { ...actual, isWebsocketClientRequest: mocks.isWebsocketClientRequest };
+  return {
+    ...actual,
+    isWebsocketClientRequest: mocks.isWebsocketClientRequest,
+  };
 });
 
 vi.mock("@/lib/endpoint-circuit-breaker", () => ({
@@ -317,7 +323,9 @@ function createStreamingResponse(params: {
         return;
       }
 
-      params.controller.signal.addEventListener("abort", onAbort, { once: true });
+      params.controller.signal.addEventListener("abort", onAbort, {
+        once: true,
+      });
       timeoutId = setTimeout(() => {
         if (params.controller.signal.aborted) {
           controller.close();
@@ -355,7 +363,9 @@ function createDelayedFailure(params: {
       return;
     }
 
-    params.controller.signal.addEventListener("abort", rejectWithError, { once: true });
+    params.controller.signal.addEventListener("abort", rejectWithError, {
+      once: true,
+    });
     timeoutId = setTimeout(() => {
       params.controller.signal.removeEventListener("abort", rejectWithError);
       reject(params.error);
@@ -522,7 +532,13 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
     const fireworks = createProvider({
       id: 383,
       name: "fireworks",
-      modelRedirects: [{ matchType: "exact", source: requestedModel, target: fireworksRedirect }],
+      modelRedirects: [
+        {
+          matchType: "exact",
+          source: requestedModel,
+          target: fireworksRedirect,
+        },
+      ],
     });
     const minimax = createProvider({
       id: 206,
@@ -591,7 +607,13 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
     const fireworks = createProvider({
       id: 383,
       name: "fireworks",
-      modelRedirects: [{ matchType: "exact", source: requestedModel, target: fireworksRedirect }],
+      modelRedirects: [
+        {
+          matchType: "exact",
+          source: requestedModel,
+          target: fireworksRedirect,
+        },
+      ],
     });
     const fallback = createProvider({
       id: 206,
@@ -649,7 +671,13 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
     const fireworks = createProvider({
       id: 383,
       name: "fireworks",
-      modelRedirects: [{ matchType: "exact", source: requestedModel, target: fireworksRedirect }],
+      modelRedirects: [
+        {
+          matchType: "exact",
+          source: requestedModel,
+          target: fireworksRedirect,
+        },
+      ],
     });
     const plainProvider = createProvider({
       id: 520,
@@ -697,13 +725,25 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
         id: 383,
         name: "fireworks",
         firstByteTimeoutStreamingMs: 100,
-        modelRedirects: [{ matchType: "exact", source: requestedModel, target: fireworksRedirect }],
+        modelRedirects: [
+          {
+            matchType: "exact",
+            source: requestedModel,
+            target: fireworksRedirect,
+          },
+        ],
       });
       const minimax = createProvider({
         id: 206,
         name: "Minimax Max",
         firstByteTimeoutStreamingMs: 100,
-        modelRedirects: [{ matchType: "exact", source: requestedModel, target: minimaxRedirect }],
+        modelRedirects: [
+          {
+            matchType: "exact",
+            source: requestedModel,
+            target: minimaxRedirect,
+          },
+        ],
       });
       const session = createSession();
       session.request.model = requestedModel;
@@ -793,8 +833,16 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
     vi.useFakeTimers();
 
     try {
-      const slow = createProvider({ id: 383, name: "slow", firstByteTimeoutStreamingMs: 100 });
-      const fast = createProvider({ id: 206, name: "fast", firstByteTimeoutStreamingMs: 100 });
+      const slow = createProvider({
+        id: 383,
+        name: "slow",
+        firstByteTimeoutStreamingMs: 100,
+      });
+      const fast = createProvider({
+        id: 206,
+        name: "fast",
+        firstByteTimeoutStreamingMs: 100,
+      });
       const session = createSession();
       setProviderWithSessionRef(session, slow);
       session.addProviderToChain(slow, { reason: "initial_selection" });
@@ -869,13 +917,25 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
         id: 383,
         name: "fireworks",
         firstByteTimeoutStreamingMs: 100,
-        modelRedirects: [{ matchType: "exact", source: requestedModel, target: fireworksRedirect }],
+        modelRedirects: [
+          {
+            matchType: "exact",
+            source: requestedModel,
+            target: fireworksRedirect,
+          },
+        ],
       });
       const minimax = createProvider({
         id: 206,
         name: "Minimax Max",
         firstByteTimeoutStreamingMs: 100,
-        modelRedirects: [{ matchType: "exact", source: requestedModel, target: minimaxRedirect }],
+        modelRedirects: [
+          {
+            matchType: "exact",
+            source: requestedModel,
+            target: minimaxRedirect,
+          },
+        ],
       });
       const session = createSession();
       session.request.model = requestedModel;
@@ -1092,8 +1152,16 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
     vi.useFakeTimers();
 
     try {
-      const provider1 = createProvider({ id: 1, name: "p1", firstByteTimeoutStreamingMs: 100 });
-      const provider2 = createProvider({ id: 2, name: "p2", firstByteTimeoutStreamingMs: 100 });
+      const provider1 = createProvider({
+        id: 1,
+        name: "p1",
+        firstByteTimeoutStreamingMs: 100,
+      });
+      const provider2 = createProvider({
+        id: 2,
+        name: "p2",
+        firstByteTimeoutStreamingMs: 100,
+      });
       const session = createSession();
       session.authState = {
         ...session.authState!,
@@ -1185,14 +1253,22 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
     vi.useFakeTimers();
 
     try {
-      const provider1 = createProvider({ id: 1, name: "p1", firstByteTimeoutStreamingMs: 100 });
+      const provider1 = createProvider({
+        id: 1,
+        name: "p1",
+        firstByteTimeoutStreamingMs: 100,
+      });
       const provider2 = createProvider({
         id: 2,
         name: "p2",
         firstByteTimeoutStreamingMs: 100,
         limitConcurrentSessions: 1,
       });
-      const provider3 = createProvider({ id: 3, name: "p3", firstByteTimeoutStreamingMs: 100 });
+      const provider3 = createProvider({
+        id: 3,
+        name: "p3",
+        firstByteTimeoutStreamingMs: 100,
+      });
       const session = createSession();
       setProviderWithSessionRef(session, provider1);
 
@@ -1207,7 +1283,12 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
           referenced: false,
           reason: "供应商并发 Session 上限已达到（1/1）",
         })
-        .mockResolvedValueOnce({ allowed: true, count: 1, tracked: true, referenced: true });
+        .mockResolvedValueOnce({
+          allowed: true,
+          count: 1,
+          tracked: true,
+          referenced: true,
+        });
 
       const doForward = vi.spyOn(
         ProxyForwarder as unknown as {
@@ -1278,8 +1359,16 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
     vi.useFakeTimers();
 
     try {
-      const provider1 = createProvider({ id: 1, name: "p1", firstByteTimeoutStreamingMs: 100 });
-      const provider2 = createProvider({ id: 2, name: "p2", firstByteTimeoutStreamingMs: 100 });
+      const provider1 = createProvider({
+        id: 1,
+        name: "p1",
+        firstByteTimeoutStreamingMs: 100,
+      });
+      const provider2 = createProvider({
+        id: 2,
+        name: "p2",
+        firstByteTimeoutStreamingMs: 100,
+      });
       const session = createSession();
       session.setHighConcurrencyModeEnabled(true);
       setProviderWithSessionRef(session, provider1);
@@ -1414,8 +1503,16 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
     vi.useFakeTimers();
 
     try {
-      const provider1 = createProvider({ id: 1, name: "p1", firstByteTimeoutStreamingMs: 100 });
-      const provider2 = createProvider({ id: 2, name: "p2", firstByteTimeoutStreamingMs: 100 });
+      const provider1 = createProvider({
+        id: 1,
+        name: "p1",
+        firstByteTimeoutStreamingMs: 100,
+      });
+      const provider2 = createProvider({
+        id: 2,
+        name: "p2",
+        firstByteTimeoutStreamingMs: 100,
+      });
       const session = createSession();
       setProviderWithSessionRef(session, provider1);
 
@@ -1488,9 +1585,21 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
     vi.useFakeTimers();
 
     try {
-      const provider1 = createProvider({ id: 1, name: "p1", firstByteTimeoutStreamingMs: 100 });
-      const provider2 = createProvider({ id: 2, name: "p2", firstByteTimeoutStreamingMs: 100 });
-      const provider3 = createProvider({ id: 3, name: "p3", firstByteTimeoutStreamingMs: 100 });
+      const provider1 = createProvider({
+        id: 1,
+        name: "p1",
+        firstByteTimeoutStreamingMs: 100,
+      });
+      const provider2 = createProvider({
+        id: 2,
+        name: "p2",
+        firstByteTimeoutStreamingMs: 100,
+      });
+      const provider3 = createProvider({
+        id: 3,
+        name: "p3",
+        firstByteTimeoutStreamingMs: 100,
+      });
       const session = createSession();
       setProviderWithSessionRef(session, provider1);
 
@@ -1586,7 +1695,11 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
         name: "p2",
         firstByteTimeoutStreamingMs: 100,
         modelRedirects: [
-          { matchType: "exact", source: requestedModel, target: "MiniMax-M2.7-highspeed" },
+          {
+            matchType: "exact",
+            source: requestedModel,
+            target: "MiniMax-M2.7-highspeed",
+          },
         ],
       });
       const clientAbortController = new AbortController();
@@ -1679,7 +1792,11 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
     vi.useFakeTimers();
 
     try {
-      const provider1 = createProvider({ id: 1, name: "p1", firstByteTimeoutStreamingMs: 100 });
+      const provider1 = createProvider({
+        id: 1,
+        name: "p1",
+        firstByteTimeoutStreamingMs: 100,
+      });
       const session = createSession();
       session.setProvider(provider1);
 
@@ -1785,8 +1902,16 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
       vi.useFakeTimers();
 
       try {
-        const provider1 = createProvider({ id: 1, name: "p1", firstByteTimeoutStreamingMs: 100 });
-        const provider2 = createProvider({ id: 2, name: "p2", firstByteTimeoutStreamingMs: 100 });
+        const provider1 = createProvider({
+          id: 1,
+          name: "p1",
+          firstByteTimeoutStreamingMs: 100,
+        });
+        const provider2 = createProvider({
+          id: 2,
+          name: "p2",
+          firstByteTimeoutStreamingMs: 100,
+        });
         const session = createSession();
         session.setProvider(provider1);
 
@@ -1853,8 +1978,16 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
   );
 
   test("non-retryable client errors should stop hedge immediately and preserve original error", async () => {
-    const provider1 = createProvider({ id: 1, name: "p1", firstByteTimeoutStreamingMs: 100 });
-    const provider2 = createProvider({ id: 2, name: "p2", firstByteTimeoutStreamingMs: 100 });
+    const provider1 = createProvider({
+      id: 1,
+      name: "p1",
+      firstByteTimeoutStreamingMs: 100,
+    });
+    const provider2 = createProvider({
+      id: 2,
+      name: "p2",
+      firstByteTimeoutStreamingMs: 100,
+    });
     const session = createSession();
     session.setProvider(provider1);
 
@@ -1922,7 +2055,11 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
   });
 
   test("local DB admission overload should stop hedge without circuit mutation or failover", async () => {
-    const provider = createProvider({ id: 1, name: "p1", firstByteTimeoutStreamingMs: 100 });
+    const provider = createProvider({
+      id: 1,
+      name: "p1",
+      firstByteTimeoutStreamingMs: 100,
+    });
     const session = createSession();
     session.setProvider(provider);
 
@@ -1968,8 +2105,16 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
     vi.useFakeTimers();
 
     try {
-      const provider1 = createProvider({ id: 1, name: "p1", firstByteTimeoutStreamingMs: 100 });
-      const provider2 = createProvider({ id: 2, name: "p2", firstByteTimeoutStreamingMs: 100 });
+      const provider1 = createProvider({
+        id: 1,
+        name: "p1",
+        firstByteTimeoutStreamingMs: 100,
+      });
+      const provider2 = createProvider({
+        id: 2,
+        name: "p2",
+        firstByteTimeoutStreamingMs: 100,
+      });
       const session = createSession();
       session.setProvider(provider1);
       withThinkingBlocks(session);
@@ -2077,8 +2222,16 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
     vi.useFakeTimers();
 
     try {
-      const provider1 = createProvider({ id: 1, name: "p1", firstByteTimeoutStreamingMs: 100 });
-      const provider2 = createProvider({ id: 2, name: "p2", firstByteTimeoutStreamingMs: 100 });
+      const provider1 = createProvider({
+        id: 1,
+        name: "p1",
+        firstByteTimeoutStreamingMs: 100,
+      });
+      const provider2 = createProvider({
+        id: 2,
+        name: "p2",
+        firstByteTimeoutStreamingMs: 100,
+      });
       const session = createSession();
       session.setProvider(provider1);
       session.request.message = {
@@ -2344,7 +2497,10 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
   });
 
   test("Discovery lease conflict forces a single upstream and forbids binding writes", async () => {
-    const provider = createProvider({ id: 1, firstByteTimeoutStreamingMs: 100 });
+    const provider = createProvider({
+      id: 1,
+      firstByteTimeoutStreamingMs: 100,
+    });
     const session = createSession();
     session.authState = {
       success: true,
@@ -2387,7 +2543,10 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
   });
 
   test("foreign binding state uses single-upstream routing with serial fallback", async () => {
-    const provider = createProvider({ id: 1, firstByteTimeoutStreamingMs: 100 });
+    const provider = createProvider({
+      id: 1,
+      firstByteTimeoutStreamingMs: 100,
+    });
     const alternative = createProvider({ id: 2, name: "serial-fallback" });
     const session = createSession();
     session.authState = {
@@ -2559,7 +2718,10 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
       } as typeof session.authState;
       session.request.message.messages = [
         { role: "user", content: "first" },
-        { role: "assistant", content: [{ type: "thinking", thinking: "t", signature: "sig" }] },
+        {
+          role: "assistant",
+          content: [{ type: "thinking", thinking: "t", signature: "sig" }],
+        },
       ];
       setProviderWithSessionRef(session, sticky);
       session.setSessionBindingSnapshot({
@@ -2592,7 +2754,11 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
           resolveStreamingHedgeEndpoint: (
             session: ProxySession,
             provider: Provider
-          ) => Promise<{ endpointId: number | null; baseUrl: string; endpointUrl: string }>;
+          ) => Promise<{
+            endpointId: number | null;
+            baseUrl: string;
+            endpointUrl: string;
+          }>;
         },
         "resolveStreamingHedgeEndpoint"
       );
@@ -2604,7 +2770,11 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
             return retrySetup.promise;
           }
         }
-        return { endpointId: null, baseUrl: provider.url, endpointUrl: provider.url };
+        return {
+          endpointId: null,
+          baseUrl: provider.url,
+          endpointUrl: provider.url,
+        };
       });
 
       const signatureError = new UpstreamProxyError(
@@ -2642,7 +2812,11 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
       expect(mocks.pickDiscoveryProviders).toHaveBeenCalledTimes(1);
       expect(doForward).toHaveBeenCalledTimes(2);
 
-      retrySetup.resolve({ endpointId: null, baseUrl: sticky.url, endpointUrl: sticky.url });
+      retrySetup.resolve({
+        endpointId: null,
+        baseUrl: sticky.url,
+        endpointUrl: sticky.url,
+      });
       await vi.advanceTimersByTimeAsync(0);
       const response = await responsePromise;
       expect(await response.text()).toContain('"normal"');
@@ -2657,8 +2831,16 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
     vi.useFakeTimers();
     try {
       const sticky = createProvider({ id: 1, name: "sticky", priority: 1 });
-      const normalOne = createProvider({ id: 2, name: "normal-one", priority: 1 });
-      const normalTwo = createProvider({ id: 3, name: "normal-two", priority: 1 });
+      const normalOne = createProvider({
+        id: 2,
+        name: "normal-one",
+        priority: 1,
+      });
+      const normalTwo = createProvider({
+        id: 3,
+        name: "normal-two",
+        priority: 1,
+      });
       const session = createSession();
       session.authState = {
         success: true,
@@ -2668,7 +2850,10 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
       } as typeof session.authState;
       session.request.message.messages = [
         { role: "user", content: "first" },
-        { role: "assistant", content: [{ type: "thinking", thinking: "t", signature: "sig" }] },
+        {
+          role: "assistant",
+          content: [{ type: "thinking", thinking: "t", signature: "sig" }],
+        },
       ];
       setProviderWithSessionRef(session, sticky);
       session.setSessionBindingSnapshot({
@@ -2703,7 +2888,11 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
           resolveStreamingHedgeEndpoint: (
             session: ProxySession,
             provider: Provider
-          ) => Promise<{ endpointId: number | null; baseUrl: string; endpointUrl: string }>;
+          ) => Promise<{
+            endpointId: number | null;
+            baseUrl: string;
+            endpointUrl: string;
+          }>;
         },
         "resolveStreamingHedgeEndpoint"
       ).mockImplementation(async (_attemptSession, provider) => {
@@ -2711,7 +2900,11 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
           retrySetupStarted.resolve();
           return retrySetup.promise;
         }
-        return { endpointId: null, baseUrl: provider.url, endpointUrl: provider.url };
+        return {
+          endpointId: null,
+          baseUrl: provider.url,
+          endpointUrl: provider.url,
+        };
       });
 
       const signatureError = new UpstreamProxyError(
@@ -2786,8 +2979,16 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
     vi.useFakeTimers();
     try {
       const sticky = createProvider({ id: 1, name: "sticky", priority: 1 });
-      const normalOne = createProvider({ id: 2, name: "normal-one", priority: 1 });
-      const normalTwo = createProvider({ id: 3, name: "normal-two", priority: 1 });
+      const normalOne = createProvider({
+        id: 2,
+        name: "normal-one",
+        priority: 1,
+      });
+      const normalTwo = createProvider({
+        id: 3,
+        name: "normal-two",
+        priority: 1,
+      });
       const session = createSession();
       session.authState = {
         success: true,
@@ -3246,8 +3447,16 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
     vi.useFakeTimers();
     try {
       const sticky = createProvider({ id: 1, name: "sticky", priority: 1 });
-      const roundOne = createProvider({ id: 2, name: "round-one", priority: 1 });
-      const roundTwo = createProvider({ id: 3, name: "round-two", priority: 1 });
+      const roundOne = createProvider({
+        id: 2,
+        name: "round-one",
+        priority: 1,
+      });
+      const roundTwo = createProvider({
+        id: 3,
+        name: "round-two",
+        priority: 1,
+      });
       const session = createSession();
       session.authState = {
         success: true,
@@ -3396,8 +3605,16 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
     let endpointResolver: ReturnType<typeof vi.spyOn> | null = null;
     try {
       const sticky = createProvider({ id: 1, name: "sticky", priority: 1 });
-      const setupFailure = createProvider({ id: 2, name: "setup-failure", priority: 1 });
-      const replacement = createProvider({ id: 3, name: "replacement", priority: 1 });
+      const setupFailure = createProvider({
+        id: 2,
+        name: "setup-failure",
+        priority: 1,
+      });
+      const replacement = createProvider({
+        id: 3,
+        name: "replacement",
+        priority: 1,
+      });
       const session = createSession();
       session.authState = {
         success: true,
@@ -3434,7 +3651,11 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
           resolveStreamingHedgeEndpoint: (
             session: ProxySession,
             provider: Provider
-          ) => Promise<{ endpointId: number | null; baseUrl: string; endpointUrl: string }>;
+          ) => Promise<{
+            endpointId: number | null;
+            baseUrl: string;
+            endpointUrl: string;
+          }>;
         },
         "resolveStreamingHedgeEndpoint"
       );
@@ -3487,9 +3708,17 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
   });
 
   test("Discovery keeps refilling the current round when an error replacement fails setup", async () => {
-    const initialFailure = createProvider({ id: 1, name: "initial-failure", priority: 1 });
+    const initialFailure = createProvider({
+      id: 1,
+      name: "initial-failure",
+      priority: 1,
+    });
     const pending = createProvider({ id: 2, name: "pending", priority: 1 });
-    const setupFailure = createProvider({ id: 3, name: "setup-failure", priority: 1 });
+    const setupFailure = createProvider({
+      id: 3,
+      name: "setup-failure",
+      priority: 1,
+    });
     const healthy = createProvider({ id: 4, name: "healthy", priority: 1 });
     const session = createSession();
     session.authState = {
@@ -3518,7 +3747,11 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
         resolveStreamingHedgeEndpoint: (
           session: ProxySession,
           provider: Provider
-        ) => Promise<{ endpointId: number | null; baseUrl: string; endpointUrl: string }>;
+        ) => Promise<{
+          endpointId: number | null;
+          baseUrl: string;
+          endpointUrl: string;
+        }>;
       },
       "resolveStreamingHedgeEndpoint"
     );
@@ -3621,7 +3854,10 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
     );
     expect(doForward).toHaveBeenCalledTimes(2);
     expect(mocks.clearVersionedSessionProvider).toHaveBeenCalledWith(
-      expect.objectContaining({ providerId: sticky.id, generation: "g-sticky-failure" }),
+      expect.objectContaining({
+        providerId: sticky.id,
+        generation: "g-sticky-failure",
+      }),
       sticky.id,
       0
     );
@@ -3899,7 +4135,11 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
         priority: 1,
         limitConcurrentSessions: 1,
       });
-      const winner = createProvider({ id: 3, name: "next-round-winner", priority: 1 });
+      const winner = createProvider({
+        id: 3,
+        name: "next-round-winner",
+        priority: 1,
+      });
       const session = createSession();
       session.authState = {
         success: true,
@@ -3924,13 +4164,21 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
           resolveStreamingHedgeEndpoint: (
             session: ProxySession,
             provider: Provider
-          ) => Promise<{ endpointId: number | null; baseUrl: string; endpointUrl: string }>;
+          ) => Promise<{
+            endpointId: number | null;
+            baseUrl: string;
+            endpointUrl: string;
+          }>;
         },
         "resolveStreamingHedgeEndpoint"
       );
       endpointResolver.mockImplementation(async (_attemptSession, provider) => {
         if (provider.id === setup.id) return new Promise(() => {});
-        return { endpointId: null, baseUrl: provider.url, endpointUrl: provider.url };
+        return {
+          endpointId: null,
+          baseUrl: provider.url,
+          endpointUrl: provider.url,
+        };
       });
 
       let fallbackController: ReadableStreamDefaultController<Uint8Array> | null = null;
@@ -3990,9 +4238,21 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
     let endpointResolver: ReturnType<typeof vi.spyOn> | null = null;
     try {
       const fallback = createProvider({ id: 1, name: "fallback", priority: 1 });
-      const setup = createProvider({ id: 2, name: "cancelled-setup", priority: 1 });
-      const stalled = createProvider({ id: 3, name: "stalled-next-wave", priority: 1 });
-      const winner = createProvider({ id: 4, name: "error-refill-winner", priority: 1 });
+      const setup = createProvider({
+        id: 2,
+        name: "cancelled-setup",
+        priority: 1,
+      });
+      const stalled = createProvider({
+        id: 3,
+        name: "stalled-next-wave",
+        priority: 1,
+      });
+      const winner = createProvider({
+        id: 4,
+        name: "error-refill-winner",
+        priority: 1,
+      });
       const session = createSession();
       session.authState = {
         success: true,
@@ -4025,13 +4285,21 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
           resolveStreamingHedgeEndpoint: (
             session: ProxySession,
             provider: Provider
-          ) => Promise<{ endpointId: number | null; baseUrl: string; endpointUrl: string }>;
+          ) => Promise<{
+            endpointId: number | null;
+            baseUrl: string;
+            endpointUrl: string;
+          }>;
         },
         "resolveStreamingHedgeEndpoint"
       );
       endpointResolver.mockImplementation(async (_attemptSession, provider) => {
         if (provider.id === setup.id) return new Promise(() => {});
-        return { endpointId: null, baseUrl: provider.url, endpointUrl: provider.url };
+        return {
+          endpointId: null,
+          baseUrl: provider.url,
+          endpointUrl: provider.url,
+        };
       });
 
       const fallbackFailure = Promise.withResolvers<Response>();
@@ -4074,7 +4342,11 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
     try {
       const initial = createProvider({ id: 1, name: "initial", priority: 1 });
       const peer = createProvider({ id: 2, name: "peer", priority: 1 });
-      const nextRound = createProvider({ id: 3, name: "next-round", priority: 1 });
+      const nextRound = createProvider({
+        id: 3,
+        name: "next-round",
+        priority: 1,
+      });
       const stale = createProvider({ id: 4, name: "stale", priority: 1 });
       const session = createSession();
       session.authState = {
@@ -4142,12 +4414,135 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
     }
   });
 
+  test("a round-cancelled attempt cannot win when its upstream ignores abort and resolves late", async () => {
+    vi.useFakeTimers();
+    try {
+      const fallback = createProvider({ id: 1, name: "fallback", priority: 1 });
+      const cancelled = createProvider({
+        id: 2,
+        name: "cancelled",
+        priority: 10,
+      });
+      const winner = createProvider({
+        id: 3,
+        name: "next-round-winner",
+        priority: 1,
+      });
+      const session = createSession();
+      session.authState = {
+        success: true,
+        user: null,
+        key: { id: 42 },
+        apiKey: null,
+      } as typeof session.authState;
+      session.setProvider(fallback);
+      mocks.getCachedSystemSettings.mockResolvedValue({
+        discoveryEnabled: true,
+        discoveryConcurrency: 2,
+        maxDiscoveryRounds: 2,
+        discoverySlaMs: 10,
+        stickySlaMs: 10,
+        racingTotalTimeoutMs: 100,
+        stickyTimeoutCooldownMs: 300_000,
+      });
+      mocks.pickDiscoveryProviders
+        .mockResolvedValueOnce([cancelled])
+        .mockResolvedValueOnce([winner]);
+
+      const cancelledResponse = Promise.withResolvers<Response>();
+      const winnerResponse = Promise.withResolvers<Response>();
+      const cancelledReader = vi.fn();
+      const cancelledAgentRelease = vi.fn();
+      let cancelledSignal: AbortSignal | undefined;
+      const doForward = vi.spyOn(
+        ProxyForwarder as unknown as {
+          doForward: (...args: unknown[]) => Promise<Response>;
+        },
+        "doForward"
+      );
+      doForward.mockImplementation(async (attemptSession, ...args) => {
+        const runtime = attemptSession as ProxySession & AttemptRuntime;
+        const providerId = runtime.provider!.id;
+        if (providerId === cancelled.id) {
+          cancelledSignal = args.at(-1) as AbortSignal;
+          runtime.releaseAgent = cancelledAgentRelease;
+          return cancelledResponse.promise;
+        }
+        if (providerId === winner.id) return winnerResponse.promise;
+        return new Response(new ReadableStream<Uint8Array>(), {
+          headers: { "content-type": "text/event-stream" },
+        });
+      });
+
+      let responseSettled = false;
+      const responsePromise = ProxyForwarder.send(session).then((response) => {
+        responseSettled = true;
+        return response;
+      });
+      await vi.advanceTimersByTimeAsync(10);
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(cancelledSignal?.aborted).toBe(true);
+      expect(doForward).toHaveBeenCalledTimes(3);
+
+      cancelledResponse.resolve(
+        new Response(
+          new ReadableStream<Uint8Array>({
+            start(controller) {
+              controller.enqueue(
+                new TextEncoder().encode(
+                  'data: {"type":"content_block_delta","delta":{"text":"too-late"}}\n\n'
+                )
+              );
+            },
+            cancel: cancelledReader,
+          }),
+          { headers: { "content-type": "text/event-stream" } }
+        )
+      );
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(responseSettled).toBe(false);
+      expect(session.provider?.id).not.toBe(cancelled.id);
+      expect(cancelledReader).toHaveBeenCalledOnce();
+      expect(cancelledAgentRelease).toHaveBeenCalledOnce();
+      expect(
+        mocks.releaseProviderSession.mock.calls.filter(
+          ([providerId]) => providerId === cancelled.id
+        )
+      ).toHaveLength(1);
+
+      winnerResponse.resolve(
+        new Response('data: {"type":"content_block_delta","delta":{"text":"winner"}}\n\n', {
+          headers: { "content-type": "text/event-stream" },
+        })
+      );
+      await vi.advanceTimersByTimeAsync(0);
+
+      const response = await responsePromise;
+      expect(await response.text()).toContain('"winner"');
+      expect(session.provider?.id).toBe(winner.id);
+      expect(cancelledReader).toHaveBeenCalledOnce();
+      expect(cancelledAgentRelease).toHaveBeenCalledOnce();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   test("a fallback failure refills the reserved round without waiting for its stalled selector", async () => {
     vi.useFakeTimers();
     try {
       const fallback = createProvider({ id: 1, name: "fallback", priority: 1 });
-      const firstRoundLoser = createProvider({ id: 2, name: "first-round-loser", priority: 1 });
-      const nextRoundWinner = createProvider({ id: 3, name: "next-round-winner", priority: 1 });
+      const firstRoundLoser = createProvider({
+        id: 2,
+        name: "first-round-loser",
+        priority: 1,
+      });
+      const nextRoundWinner = createProvider({
+        id: 3,
+        name: "next-round-winner",
+        priority: 1,
+      });
       const staleReservedCandidate = createProvider({
         id: 4,
         name: "stale-reserved-candidate",
@@ -4248,7 +4643,11 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
         resolveStreamingHedgeEndpoint: (
           session: ProxySession,
           provider: Provider
-        ) => Promise<{ endpointId: number | null; baseUrl: string; endpointUrl: string }>;
+        ) => Promise<{
+          endpointId: number | null;
+          baseUrl: string;
+          endpointUrl: string;
+        }>;
       },
       "resolveStreamingHedgeEndpoint"
     );
@@ -4283,8 +4682,16 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
   });
 
   test("Discovery transfers the Provider session ref when a rectifier retries the same Provider", async () => {
-    const initial = createProvider({ id: 1, name: "initial", limitConcurrentSessions: 1 });
-    const alternative = createProvider({ id: 2, name: "alternative", limitConcurrentSessions: 1 });
+    const initial = createProvider({
+      id: 1,
+      name: "initial",
+      limitConcurrentSessions: 1,
+    });
+    const alternative = createProvider({
+      id: 2,
+      name: "alternative",
+      limitConcurrentSessions: 1,
+    });
     const session = createSession();
     session.authState = {
       success: true,
@@ -4355,7 +4762,11 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
   });
 
   test("Discovery keeps a healthy peer when rectifier retry setup fails", async () => {
-    const initial = createProvider({ id: 1, name: "initial", limitConcurrentSessions: 1 });
+    const initial = createProvider({
+      id: 1,
+      name: "initial",
+      limitConcurrentSessions: 1,
+    });
     const alternative = createProvider({ id: 2, name: "alternative" });
     const session = createSession();
     session.authState = {
@@ -4388,7 +4799,11 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
         resolveStreamingHedgeEndpoint: (
           session: ProxySession,
           provider: Provider
-        ) => Promise<{ endpointId: number | null; baseUrl: string; endpointUrl: string }>;
+        ) => Promise<{
+          endpointId: number | null;
+          baseUrl: string;
+          endpointUrl: string;
+        }>;
       },
       "resolveStreamingHedgeEndpoint"
     );
@@ -4448,8 +4863,16 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
         limitConcurrentSessions: 1,
       });
       const fallback = createProvider({ id: 2, name: "fallback", priority: 1 });
-      const nextRound = createProvider({ id: 3, name: "next-round", priority: 1 });
-      const unexpected = createProvider({ id: 4, name: "unexpected", priority: 1 });
+      const nextRound = createProvider({
+        id: 3,
+        name: "next-round",
+        priority: 1,
+      });
+      const unexpected = createProvider({
+        id: 4,
+        name: "unexpected",
+        priority: 1,
+      });
       const session = createSession();
       session.authState = {
         success: true,
@@ -4486,7 +4909,11 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
           resolveStreamingHedgeEndpoint: (
             session: ProxySession,
             provider: Provider
-          ) => Promise<{ endpointId: number | null; baseUrl: string; endpointUrl: string }>;
+          ) => Promise<{
+            endpointId: number | null;
+            baseUrl: string;
+            endpointUrl: string;
+          }>;
         },
         "resolveStreamingHedgeEndpoint"
       );
@@ -4580,7 +5007,11 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
         limitConcurrentSessions: 1,
       });
       const fallback = createProvider({ id: 2, name: "fallback", priority: 1 });
-      const unexpected = createProvider({ id: 3, name: "unexpected", priority: 1 });
+      const unexpected = createProvider({
+        id: 3,
+        name: "unexpected",
+        priority: 1,
+      });
       const session = createSession();
       session.authState = {
         success: true,
@@ -4616,7 +5047,11 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
           resolveStreamingHedgeEndpoint: (
             session: ProxySession,
             provider: Provider
-          ) => Promise<{ endpointId: number | null; baseUrl: string; endpointUrl: string }>;
+          ) => Promise<{
+            endpointId: number | null;
+            baseUrl: string;
+            endpointUrl: string;
+          }>;
         },
         "resolveStreamingHedgeEndpoint"
       );
@@ -4688,7 +5123,7 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
       expect(peekDeferredStreamingFinalization(session)).toEqual(
         expect.objectContaining({
           bindingIntent: "none",
-          requiresCompletionMarker: true,
+          requiresCompletionMarkerForBinding: false,
         })
       );
       expect(await response.text()).toContain('"fallback"');
@@ -4701,7 +5136,11 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
   test("the Discovery deadline releases a stalled rectifier retry reservation exactly once", async () => {
     vi.useFakeTimers();
     try {
-      const provider = createProvider({ id: 1, name: "retrying", limitConcurrentSessions: 1 });
+      const provider = createProvider({
+        id: 1,
+        name: "retrying",
+        limitConcurrentSessions: 1,
+      });
       const session = createSession();
       session.authState = {
         success: true,
@@ -4735,7 +5174,11 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
           resolveStreamingHedgeEndpoint: (
             session: ProxySession,
             provider: Provider
-          ) => Promise<{ endpointId: number | null; baseUrl: string; endpointUrl: string }>;
+          ) => Promise<{
+            endpointId: number | null;
+            baseUrl: string;
+            endpointUrl: string;
+          }>;
         },
         "resolveStreamingHedgeEndpoint"
       );
@@ -4745,7 +5188,11 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
           retrySetupStarted.resolve();
           return retrySetup.promise;
         }
-        return { endpointId: null, baseUrl: provider.url, endpointUrl: provider.url };
+        return {
+          endpointId: null,
+          baseUrl: provider.url,
+          endpointUrl: provider.url,
+        };
       });
 
       const signatureError = new UpstreamProxyError(
@@ -4773,7 +5220,11 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
       expect(mocks.releaseProviderSession).toHaveBeenCalledTimes(1);
       expect(session.hasProviderSessionRef(provider.id)).toBe(false);
 
-      retrySetup.resolve({ endpointId: null, baseUrl: provider.url, endpointUrl: provider.url });
+      retrySetup.resolve({
+        endpointId: null,
+        baseUrl: provider.url,
+        endpointUrl: provider.url,
+      });
       await vi.advanceTimersByTimeAsync(0);
       expect(doForward).toHaveBeenCalledTimes(1);
       expect(mocks.releaseProviderSession).toHaveBeenCalledTimes(1);
@@ -4786,7 +5237,11 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
     vi.useFakeTimers();
     try {
       const clientAbort = new AbortController();
-      const provider = createProvider({ id: 1, name: "retrying", limitConcurrentSessions: 1 });
+      const provider = createProvider({
+        id: 1,
+        name: "retrying",
+        limitConcurrentSessions: 1,
+      });
       const session = createSession(clientAbort.signal);
       session.authState = {
         success: true,
@@ -4820,7 +5275,11 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
           resolveStreamingHedgeEndpoint: (
             session: ProxySession,
             provider: Provider
-          ) => Promise<{ endpointId: number | null; baseUrl: string; endpointUrl: string }>;
+          ) => Promise<{
+            endpointId: number | null;
+            baseUrl: string;
+            endpointUrl: string;
+          }>;
         },
         "resolveStreamingHedgeEndpoint"
       );
@@ -4830,7 +5289,11 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
           retrySetupStarted.resolve();
           return retrySetup.promise;
         }
-        return { endpointId: null, baseUrl: provider.url, endpointUrl: provider.url };
+        return {
+          endpointId: null,
+          baseUrl: provider.url,
+          endpointUrl: provider.url,
+        };
       });
 
       const signatureError = new UpstreamProxyError(
@@ -4859,7 +5322,11 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
       expect(mocks.releaseProviderSession).toHaveBeenCalledTimes(1);
       expect(session.hasProviderSessionRef(provider.id)).toBe(false);
 
-      retrySetup.resolve({ endpointId: null, baseUrl: provider.url, endpointUrl: provider.url });
+      retrySetup.resolve({
+        endpointId: null,
+        baseUrl: provider.url,
+        endpointUrl: provider.url,
+      });
       await vi.advanceTimersByTimeAsync(0);
       expect(doForward).toHaveBeenCalledTimes(1);
       expect(mocks.releaseProviderSession).toHaveBeenCalledTimes(1);
@@ -4882,7 +5349,11 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
       expectedStatus: null,
     },
   ])("rectifier retry setup preserves $label fail-fast semantics", async (scenario) => {
-    const retrying = createProvider({ id: 1, name: "retrying", limitConcurrentSessions: 1 });
+    const retrying = createProvider({
+      id: 1,
+      name: "retrying",
+      limitConcurrentSessions: 1,
+    });
     const peer = createProvider({ id: 2, name: "peer" });
     const unexpected = createProvider({ id: 3, name: "unexpected" });
     const session = createSession();
@@ -4915,7 +5386,11 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
         resolveStreamingHedgeEndpoint: (
           session: ProxySession,
           provider: Provider
-        ) => Promise<{ endpointId: number | null; baseUrl: string; endpointUrl: string }>;
+        ) => Promise<{
+          endpointId: number | null;
+          baseUrl: string;
+          endpointUrl: string;
+        }>;
       },
       "resolveStreamingHedgeEndpoint"
     );
@@ -4924,7 +5399,11 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
         retryingEndpointCalls += 1;
         if (retryingEndpointCalls > 1) throw scenario.setupError;
       }
-      return { endpointId: null, baseUrl: provider.url, endpointUrl: provider.url };
+      return {
+        endpointId: null,
+        baseUrl: provider.url,
+        endpointUrl: provider.url,
+      };
     });
 
     const signatureError = new UpstreamProxyError("Invalid `signature` in `thinking` block", 400, {
@@ -4961,7 +5440,11 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
   });
 
   test("Discovery releases a transferred Provider session ref exactly once when rectifier retry setup fails", async () => {
-    const provider = createProvider({ id: 1, name: "initial", limitConcurrentSessions: 1 });
+    const provider = createProvider({
+      id: 1,
+      name: "initial",
+      limitConcurrentSessions: 1,
+    });
     const session = createSession();
     session.authState = {
       success: true,
@@ -4988,7 +5471,11 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
         resolveStreamingHedgeEndpoint: (
           session: ProxySession,
           provider: Provider
-        ) => Promise<{ endpointId: number | null; baseUrl: string; endpointUrl: string }>;
+        ) => Promise<{
+          endpointId: number | null;
+          baseUrl: string;
+          endpointUrl: string;
+        }>;
       },
       "resolveStreamingHedgeEndpoint"
     );
@@ -5032,7 +5519,11 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
     vi.useFakeTimers();
     try {
       const initial = createProvider({ id: 1, name: "initial" });
-      const delayed = createProvider({ id: 2, name: "delayed", limitConcurrentSessions: 1 });
+      const delayed = createProvider({
+        id: 2,
+        name: "delayed",
+        limitConcurrentSessions: 1,
+      });
       const session = createSession();
       session.authState = {
         success: true,
@@ -5084,7 +5575,12 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
 
       const responsePromise = ProxyForwarder.send(session);
       await vi.advanceTimersByTimeAsync(10);
-      resolveAdmission({ allowed: true, count: 1, tracked: true, referenced: true });
+      resolveAdmission({
+        allowed: true,
+        count: 1,
+        tracked: true,
+        referenced: true,
+      });
       await vi.advanceTimersByTimeAsync(1);
       const response = await responsePromise;
       expect(await response.text()).toContain('"winner"');
@@ -5125,7 +5621,9 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
     doForward.mockImplementationOnce(
       async (_attemptSession, _provider, _baseUrl, _audit, _count, _stream, signal) =>
         await new Promise<Response>((_resolve, reject) => {
-          signal?.addEventListener("abort", () => reject(signal.reason), { once: true });
+          signal?.addEventListener("abort", () => reject(signal.reason), {
+            once: true,
+          });
         })
     );
 
@@ -5179,7 +5677,11 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
     const clientAbortController = new AbortController();
     const addSpy = vi.spyOn(clientAbortController.signal, "addEventListener");
     const removeSpy = vi.spyOn(clientAbortController.signal, "removeEventListener");
-    const provider = createProvider({ id: 1, name: "p1", firstByteTimeoutStreamingMs: 100 });
+    const provider = createProvider({
+      id: 1,
+      name: "p1",
+      firstByteTimeoutStreamingMs: 100,
+    });
     const session = createSession(clientAbortController.signal);
     setProviderWithSessionRef(session, provider);
     session.forwardedRequestBody = "x".repeat(512 * 1024);
@@ -5214,7 +5716,11 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
     const clientAbortController = new AbortController();
     clientAbortController.abort(new Error("client_cancelled"));
     const addSpy = vi.spyOn(clientAbortController.signal, "addEventListener");
-    const provider = createProvider({ id: 1, name: "p1", firstByteTimeoutStreamingMs: 100 });
+    const provider = createProvider({
+      id: 1,
+      name: "p1",
+      firstByteTimeoutStreamingMs: 100,
+    });
     const session = createSession(clientAbortController.signal);
     setProviderWithSessionRef(session, provider);
 
@@ -5225,7 +5731,9 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
       "doForward"
     );
 
-    await expect(ProxyForwarder.send(session)).rejects.toMatchObject({ statusCode: 499 });
+    await expect(ProxyForwarder.send(session)).rejects.toMatchObject({
+      statusCode: 499,
+    });
     expect(doForward).not.toHaveBeenCalled();
     expect(addSpy.mock.calls.filter(([type]) => type === "abort")).toHaveLength(0);
   });

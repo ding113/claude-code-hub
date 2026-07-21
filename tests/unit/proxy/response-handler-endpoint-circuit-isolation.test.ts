@@ -88,6 +88,7 @@ vi.mock("@/lib/session-manager", () => ({
     updateSessionBindingSmart: vi.fn(),
     updateSessionProvider: vi.fn(),
     updateSessionWithCodexCacheKey: vi.fn(),
+    storeSessionSpecialSettings: vi.fn(),
   },
 }));
 
@@ -178,8 +179,18 @@ function createSession(opts?: { sessionId?: string | null }): ProxySession {
     dailyResetMode: "fixed",
   };
 
-  const user = { id: 123, name: "test-user", dailyResetTime: "00:00", dailyResetMode: "fixed" };
-  const key = { id: 456, name: "test-key", dailyResetTime: "00:00", dailyResetMode: "fixed" };
+  const user = {
+    id: 123,
+    name: "test-user",
+    dailyResetTime: "00:00",
+    dailyResetMode: "fixed",
+  };
+  const key = {
+    id: 456,
+    name: "test-key",
+    dailyResetTime: "00:00",
+    dailyResetMode: "fixed",
+  };
 
   Object.assign(session, {
     request: { message: {}, log: "(test)", model: "test-model" },
@@ -369,7 +380,9 @@ function createMisleadingCompletionTextResponse(): Response {
   const sseText =
     `event: content_block_delta\ndata: ${JSON.stringify({
       type: "content_block_delta",
-      delta: { text: "the words message_stop and response.completed are ordinary content" },
+      delta: {
+        text: "the words message_stop and response.completed are ordinary content",
+      },
     })}\n\n` +
     `event: message_delta\ndata: ${JSON.stringify({
       type: "message_delta",
@@ -495,6 +508,7 @@ function setupCommonMocks() {
     reason: "test",
   });
   vi.mocked(SessionManager.updateSessionProvider).mockResolvedValue(undefined);
+  vi.mocked(SessionManager.storeSessionSpecialSettings).mockResolvedValue(undefined);
   vi.mocked(RateLimitService.trackCost).mockResolvedValue(undefined);
   vi.mocked(RateLimitService.trackUserDailyCost).mockResolvedValue(undefined);
   vi.mocked(RateLimitService.decrementLeaseBudget).mockResolvedValue({
@@ -781,7 +795,7 @@ describe("Endpoint circuit breaker isolation", () => {
     expect(RateLimitService.releaseProviderSession).toHaveBeenCalledWith(1, "fake-session");
   });
 
-  it("records a Discovery fallback without a completion marker as failed", async () => {
+  it("keeps a naturally completed Discovery fallback successful without a completion marker", async () => {
     const session = createSession();
     setDeferredStreamingFinalization(session, {
       providerId: 1,
@@ -795,7 +809,7 @@ describe("Endpoint circuit breaker isolation", () => {
       endpointUrl: "https://api.test.com",
       upstreamStatusCode: 200,
       bindingIntent: "none",
-      requiresCompletionMarker: true,
+      requiresCompletionMarkerForBinding: false,
     });
 
     const clientResponse = await ProxyResponseHandler.dispatch(
@@ -805,22 +819,29 @@ describe("Endpoint circuit breaker isolation", () => {
     await clientResponse.text();
     await drainAsyncTasks();
 
-    expect(updateMessageRequestDetailsDurably).toHaveBeenCalledWith(
-      1,
+    const details = vi.mocked(updateMessageRequestDetailsDurably).mock.calls.at(-1)?.[1];
+    expect(details).toEqual(
       expect.objectContaining({
-        statusCode: 502,
-        errorMessage: "STREAM_COMPLETION_MARKER_MISSING",
-      }),
-      expect.objectContaining({ onCommitted: expect.any(Function) })
+        statusCode: 200,
+        inputTokens: 100,
+        outputTokens: 50,
+      })
     );
-    expect(mockRecordFailure).toHaveBeenCalledOnce();
-    expect(mockRecordSuccess).not.toHaveBeenCalled();
+    expect(details).not.toHaveProperty("errorMessage");
+    expect(mockRecordFailure).not.toHaveBeenCalled();
+    expect(mockRecordSuccess).toHaveBeenCalledWith(1);
     expect(SessionManager.compareAndSetSessionProvider).not.toHaveBeenCalled();
     expect(SessionManager.clearVersionedSessionProvider).not.toHaveBeenCalled();
   });
 
-  it("does not clear a create tombstone when the completion marker is missing", async () => {
+  it("keeps a create tombstone and skips Sticky when the completion marker is missing", async () => {
     const session = createSession();
+    const appendRoutingTraceEvent = vi.fn();
+    Object.assign(session, {
+      appendRoutingTraceEvent,
+      getRoutingTrace: () => null,
+    });
+    session.recordProviderSessionRef(1);
     setDeferredStreamingFinalization(session, {
       providerId: 1,
       providerName: "test-provider",
@@ -839,7 +860,15 @@ describe("Endpoint circuit breaker isolation", () => {
         providerId: null,
         generation: "incomplete-generation",
       },
-      requiresCompletionMarker: true,
+      requiresCompletionMarkerForBinding: true,
+      discoveryLease: {
+        sessionId: "fake-session",
+        keyId: 456,
+        ownerToken: "missing-marker-owner",
+        ttlSeconds: 30,
+      },
+      providerSessionRefOwned: true,
+      providerSessionRefRetainOnSuccess: true,
     });
 
     const clientResponse = await ProxyResponseHandler.dispatch(
@@ -852,7 +881,138 @@ describe("Endpoint circuit breaker isolation", () => {
     expect(SessionManager.clearVersionedSessionProvider).not.toHaveBeenCalled();
     expect(SessionManager.clearSessionProvider).not.toHaveBeenCalled();
     expect(SessionManager.compareAndSetSessionProvider).not.toHaveBeenCalled();
+    expect(mockRecordFailure).not.toHaveBeenCalled();
+    expect(mockRecordSuccess).toHaveBeenCalledWith(1);
+    expect(RateLimitService.releaseProviderSession).toHaveBeenCalledWith(1, "fake-session");
+    expect(appendRoutingTraceEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "binding_finalized",
+        bindingAction: "create",
+        outcome: "skipped",
+        reason: "completion_marker_missing",
+      })
+    );
+    const details = vi.mocked(updateMessageRequestDetailsDurably).mock.calls.at(-1)?.[1];
+    expect(details).toEqual(expect.objectContaining({ statusCode: 200 }));
+    expect(details).not.toHaveProperty("errorMessage");
   });
+
+  it("clears only the captured renew binding when a successful stream has no completion marker", async () => {
+    const session = createSession();
+    const snapshot = {
+      sessionId: "fake-session",
+      keyId: 456,
+      providerId: 1,
+      generation: "renew-missing-marker-generation",
+    } as const;
+    setDeferredStreamingFinalization(session, {
+      providerId: 1,
+      providerName: "test-provider",
+      providerPriority: 10,
+      attemptNumber: 1,
+      totalProvidersAttempted: 1,
+      isFirstAttempt: true,
+      isFailoverSuccess: false,
+      endpointId: 42,
+      endpointUrl: "https://api.test.com",
+      upstreamStatusCode: 200,
+      bindingIntent: "renew",
+      bindingSnapshot: snapshot,
+      requiresCompletionMarkerForBinding: true,
+    });
+
+    const clientResponse = await ProxyResponseHandler.dispatch(
+      session,
+      createMisleadingCompletionTextResponse()
+    );
+    await clientResponse.text();
+    await drainAsyncTasks();
+
+    expect(SessionManager.clearVersionedSessionProvider).toHaveBeenCalledWith(snapshot, 1, 0);
+    expect(SessionManager.clearSessionProvider).not.toHaveBeenCalled();
+    expect(SessionManager.compareAndSetSessionProvider).not.toHaveBeenCalled();
+    expect(mockRecordFailure).not.toHaveBeenCalled();
+    expect(mockRecordSuccess).toHaveBeenCalledWith(1);
+    const details = vi.mocked(updateMessageRequestDetailsDurably).mock.calls.at(-1)?.[1];
+    expect(details).toEqual(expect.objectContaining({ statusCode: 200 }));
+    expect(details).not.toHaveProperty("errorMessage");
+  });
+
+  it.each([
+    {
+      label: "Claude",
+      format: "claude" as const,
+      body: `data: ${JSON.stringify({
+        type: "content_block_delta",
+        delta: { type: "text_delta", text: "ok" },
+      })}\n\n`,
+    },
+    {
+      label: "OpenAI Chat",
+      format: "openai" as const,
+      body: `data: ${JSON.stringify({ choices: [{ delta: { content: "ok" } }] })}\n\n`,
+    },
+    {
+      label: "OpenAI Responses",
+      format: "response" as const,
+      body: `event: response.output_text.delta\ndata: ${JSON.stringify({
+        type: "response.output_text.delta",
+        delta: "ok",
+      })}\n\n`,
+    },
+    {
+      label: "Gemini NDJSON",
+      format: "gemini" as const,
+      body: `${JSON.stringify({ candidates: [{ content: { parts: [{ text: "ok" }] } }] })}\n`,
+    },
+  ])(
+    "keeps a naturally completed $label stream successful but unbound without a marker",
+    async ({ format, body }) => {
+      const session = createSession();
+      session.originalFormat = format;
+      if (format === "gemini" || format === "gemini-cli") {
+        session.provider = { ...session.provider!, providerType: format };
+      }
+      const snapshot = {
+        sessionId: "fake-session",
+        keyId: 456,
+        providerId: null,
+        generation: `${format}-natural-eof-generation`,
+      } as const;
+      setDeferredStreamingFinalization(session, {
+        providerId: 1,
+        providerName: "test-provider",
+        providerPriority: 10,
+        attemptNumber: 1,
+        totalProvidersAttempted: 2,
+        isFirstAttempt: false,
+        isFailoverSuccess: true,
+        endpointId: 42,
+        endpointUrl: "https://api.test.com",
+        upstreamStatusCode: 200,
+        bindingIntent: "create",
+        bindingSnapshot: snapshot,
+        requiresCompletionMarkerForBinding: true,
+      });
+
+      const clientResponse = await ProxyResponseHandler.dispatch(
+        session,
+        new Response(body, {
+          status: 200,
+          headers: { "content-type": "text/event-stream" },
+        })
+      );
+      await expect(clientResponse.text()).resolves.toContain("ok");
+      await drainAsyncTasks();
+
+      expect(SessionManager.compareAndSetSessionProvider).not.toHaveBeenCalled();
+      expect(mockRecordFailure).not.toHaveBeenCalled();
+      expect(mockRecordSuccess).toHaveBeenCalledWith(1);
+      const details = vi.mocked(updateMessageRequestDetailsDurably).mock.calls.at(-1)?.[1];
+      expect(details).toEqual(expect.objectContaining({ statusCode: 200 }));
+      expect(details).not.toHaveProperty("errorMessage");
+    }
+  );
 
   it("does not accept completion marker words embedded in ordinary SSE content", async () => {
     const session = createSession();
@@ -874,7 +1034,7 @@ describe("Endpoint circuit breaker isolation", () => {
         providerId: null,
         generation: "misleading-content-generation",
       },
-      requiresCompletionMarker: true,
+      requiresCompletionMarkerForBinding: true,
     });
 
     const clientResponse = await ProxyResponseHandler.dispatch(
@@ -885,14 +1045,11 @@ describe("Endpoint circuit breaker isolation", () => {
     await drainAsyncTasks();
 
     expect(SessionManager.compareAndSetSessionProvider).not.toHaveBeenCalled();
-    expect(updateMessageRequestDetailsDurably).toHaveBeenCalledWith(
-      1,
-      expect.objectContaining({
-        statusCode: 502,
-        errorMessage: "STREAM_COMPLETION_MARKER_MISSING",
-      }),
-      expect.objectContaining({ onCommitted: expect.any(Function) })
-    );
+    expect(mockRecordFailure).not.toHaveBeenCalled();
+    expect(mockRecordSuccess).toHaveBeenCalledWith(1);
+    const details = vi.mocked(updateMessageRequestDetailsDurably).mock.calls.at(-1)?.[1];
+    expect(details).toEqual(expect.objectContaining({ statusCode: 200 }));
+    expect(details).not.toHaveProperty("errorMessage");
   });
 
   it("does not let response.done override an earlier nested Responses failure", async () => {
@@ -917,7 +1074,7 @@ describe("Endpoint circuit breaker isolation", () => {
       upstreamStatusCode: 200,
       bindingIntent: "create",
       bindingSnapshot: snapshot,
-      requiresCompletionMarker: true,
+      requiresCompletionMarkerForBinding: true,
     });
     const body =
       `event: response.output_text.delta\ndata: ${JSON.stringify({
@@ -944,7 +1101,7 @@ describe("Endpoint circuit breaker isolation", () => {
     expect(mockRecordSuccess).not.toHaveBeenCalled();
     expect(mockRecordFailure).toHaveBeenCalledWith(
       1,
-      expect.objectContaining({ message: "STREAM_COMPLETION_MARKER_MISSING" })
+      expect.objectContaining({ message: "UPSTREAM_PROTOCOL_ERROR" })
     );
   });
 
@@ -1008,9 +1165,19 @@ describe("Endpoint circuit breaker isolation", () => {
         response: { candidates: [{ finishReason: "STOP" }] },
       })}\n\n`,
     },
+    {
+      label: "Gemini NDJSON",
+      format: "gemini" as const,
+      body: `${JSON.stringify({
+        candidates: [{ content: { parts: [{ text: "ok" }] }, finishReason: "STOP" }],
+      })}\n`,
+    },
   ])("accepts a structurally valid $label completion marker", async ({ format, body }) => {
     const session = createSession();
     session.originalFormat = format;
+    if (format === "gemini" || format === "gemini-cli") {
+      session.provider = { ...session.provider!, providerType: format };
+    }
     const snapshot = {
       sessionId: "fake-session",
       keyId: 456,
@@ -1030,7 +1197,7 @@ describe("Endpoint circuit breaker isolation", () => {
       upstreamStatusCode: 200,
       bindingIntent: "create",
       bindingSnapshot: snapshot,
-      requiresCompletionMarker: true,
+      requiresCompletionMarkerForBinding: true,
     });
 
     const clientResponse = await ProxyResponseHandler.dispatch(
@@ -1069,7 +1236,7 @@ describe("Endpoint circuit breaker isolation", () => {
       upstreamStatusCode: 200,
       bindingIntent: "create",
       bindingSnapshot: snapshot,
-      requiresCompletionMarker: true,
+      requiresCompletionMarkerForBinding: true,
       providerSessionRefOwned: true,
       providerSessionRefRetainOnSuccess: true,
     });
@@ -1112,7 +1279,7 @@ describe("Endpoint circuit breaker isolation", () => {
       upstreamStatusCode: 200,
       bindingIntent: "renew",
       bindingSnapshot: snapshot,
-      requiresCompletionMarker: true,
+      requiresCompletionMarkerForBinding: true,
       providerSessionRefOwned: true,
       providerSessionRefRetainOnSuccess: true,
     });
@@ -1150,7 +1317,7 @@ describe("Endpoint circuit breaker isolation", () => {
       upstreamStatusCode: 200,
       bindingIntent: "renew",
       bindingSnapshot: snapshot,
-      requiresCompletionMarker: true,
+      requiresCompletionMarkerForBinding: true,
       providerSessionRefOwned: true,
       providerSessionRefRetainOnSuccess: false,
     });
@@ -1210,7 +1377,7 @@ describe("Endpoint circuit breaker isolation", () => {
         providerId: null,
         generation: "lease-guarded-generation",
       },
-      requiresCompletionMarker: true,
+      requiresCompletionMarkerForBinding: true,
       discoveryLease: {
         sessionId: "fake-session",
         keyId: 456,
@@ -1264,7 +1431,7 @@ describe("Endpoint circuit breaker isolation", () => {
       endpointUrl: "https://api.test.com",
       upstreamStatusCode: 200,
       bindingIntent: "create",
-      requiresCompletionMarker: true,
+      requiresCompletionMarkerForBinding: true,
       discoveryLease: {
         sessionId: "fake-session",
         keyId: 456,
@@ -1311,7 +1478,7 @@ describe("Endpoint circuit breaker isolation", () => {
         endpointUrl: "https://api.test.com",
         upstreamStatusCode: 200,
         bindingIntent: "none",
-        requiresCompletionMarker: false,
+        requiresCompletionMarkerForBinding: false,
         discoveryLease: {
           sessionId: "fake-session",
           keyId: 456,
@@ -1383,7 +1550,7 @@ describe("Endpoint circuit breaker isolation", () => {
         upstreamStatusCode: 200,
         bindingIntent: "create",
         bindingSnapshot: snapshot,
-        requiresCompletionMarker: true,
+        requiresCompletionMarkerForBinding: true,
         discoveryLease: {
           sessionId: "fake-session",
           keyId: 456,
@@ -1438,7 +1605,7 @@ describe("Endpoint circuit breaker isolation", () => {
         upstreamStatusCode: 200,
         bindingIntent: "renew",
         bindingSnapshot: snapshot,
-        requiresCompletionMarker: true,
+        requiresCompletionMarkerForBinding: true,
         discoveryLease: {
           sessionId: "fake-session",
           keyId: 456,
@@ -1501,7 +1668,7 @@ describe("Endpoint circuit breaker isolation", () => {
       endpointUrl: "https://api.test.com",
       upstreamStatusCode: 200,
       bindingIntent: "none",
-      requiresCompletionMarker: false,
+      requiresCompletionMarkerForBinding: false,
       discoveryLease: {
         sessionId: "fake-session",
         keyId: 456,
@@ -1538,7 +1705,7 @@ describe("Endpoint circuit breaker isolation", () => {
         endpointUrl: "https://api.test.com",
         upstreamStatusCode: 200,
         bindingIntent: "none",
-        requiresCompletionMarker: false,
+        requiresCompletionMarkerForBinding: false,
         discoveryLease: {
           sessionId: "fake-session",
           keyId: 456,
@@ -1591,7 +1758,7 @@ describe("Endpoint circuit breaker isolation", () => {
       upstreamStatusCode: 200,
       bindingIntent: "create",
       bindingSnapshot: snapshot,
-      requiresCompletionMarker: true,
+      requiresCompletionMarkerForBinding: true,
       providerSessionRefOwned: true,
     });
     session.recordProviderSessionRef(1);

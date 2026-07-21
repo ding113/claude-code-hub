@@ -50,7 +50,7 @@ import type { SessionUsageUpdate } from "@/types/session";
 import type { LongContextPricingSpecialSetting } from "@/types/special-settings";
 import { GeminiAdapter } from "../gemini/adapter";
 import type { GeminiResponse } from "../gemini/types";
-import { extractActualResponseModelForProvider } from "./actual-response-model";
+import { extractActualResponseModelForProvider, extractJsonChunks } from "./actual-response-model";
 import { bindClientAbortListener } from "./client-abort-listener";
 import {
   createDemandDrivenResponsePump,
@@ -880,7 +880,9 @@ function bindTaskAbortToUpstreamResponse(
     }
   };
 
-  abortController.signal.addEventListener("abort", abortUpstream, { once: true });
+  abortController.signal.addEventListener("abort", abortUpstream, {
+    once: true,
+  });
   if (abortController.signal.aborted) {
     abortUpstream();
   }
@@ -1303,39 +1305,71 @@ function hasGeminiCompletionMarker(data: unknown): boolean {
  * 仅 usage>0 不足以证明完成：Anthropic 在首个 `message_start` 即带 usage、
  * Gemini 在中间事件即带 usageMetadata，截断流同样会出现正向 token。
  */
-function hasStreamCompletionMarker(text: string, format: ProxySession["originalFormat"]): boolean {
+function inspectStreamCompletion(
+  text: string,
+  format: ProxySession["originalFormat"]
+): { hasMarker: boolean; hasProtocolError: boolean } {
   const events = parseSSEData(text);
+  const payloads: unknown[] = events.map((event) => event.data);
+
+  // Native Gemini passthrough is NDJSON rather than SSE. Reuse the shared
+  // structured stream extractor so a valid finishReason can authorize Sticky.
+  if (format === "gemini" || format === "gemini-cli") {
+    for (const candidate of extractJsonChunks(text)) {
+      try {
+        payloads.push(JSON.parse(candidate) as unknown);
+      } catch {
+        // Malformed or incomplete JSON cannot establish completion.
+      }
+    }
+  }
+
+  const hasProtocolError = payloads.some(isDiscoveryProtocolErrorPayload);
+  if (hasProtocolError) return { hasMarker: false, hasProtocolError: true };
 
   switch (format) {
     case "response":
-      if (events.some((event) => isDiscoveryProtocolErrorPayload(event.data))) return false;
-      return events.some((event) => {
-        if (!isRecord(event.data)) return false;
-        const markerType = event.data.type;
-        if (markerType !== "response.completed" && markerType !== "response.done") return false;
-        if (event.event !== "message" && event.event !== markerType) return false;
-        return markerType === "response.done" || isRecord(event.data.response);
-      });
+      return {
+        hasMarker: events.some((event) => {
+          if (!isRecord(event.data)) return false;
+          const markerType = event.data.type;
+          if (markerType !== "response.completed" && markerType !== "response.done") return false;
+          if (event.event !== "message" && event.event !== markerType) return false;
+          return markerType === "response.done" || isRecord(event.data.response);
+        }),
+        hasProtocolError: false,
+      };
     case "claude":
-      return events.some(
-        (event) =>
-          (event.event === "message_stop" || event.event === "message") &&
-          isRecord(event.data) &&
-          event.data.type === "message_stop"
-      );
+      return {
+        hasMarker: events.some(
+          (event) =>
+            (event.event === "message_stop" || event.event === "message") &&
+            isRecord(event.data) &&
+            event.data.type === "message_stop"
+        ),
+        hasProtocolError: false,
+      };
     case "openai":
-      return events.some(
-        (event) =>
-          event.event === "message" &&
-          ((typeof event.data === "string" && event.data.trim() === "[DONE]") ||
-            hasOpenAIChatCompletionMarker(event.data))
-      );
+      return {
+        hasMarker: events.some(
+          (event) =>
+            event.event === "message" &&
+            ((typeof event.data === "string" && event.data.trim() === "[DONE]") ||
+              hasOpenAIChatCompletionMarker(event.data))
+        ),
+        hasProtocolError: false,
+      };
     case "gemini":
     case "gemini-cli":
-      return events.some(
-        (event) => event.event === "message" && hasGeminiCompletionMarker(event.data)
-      );
+      return {
+        hasMarker: payloads.some(hasGeminiCompletionMarker),
+        hasProtocolError: false,
+      };
   }
+}
+
+function hasStreamCompletionMarker(text: string, format: ProxySession["originalFormat"]): boolean {
+  return inspectStreamCompletion(text, format).hasMarker;
 }
 
 export async function resolveBillableUsageMetricsForCost(
@@ -1523,7 +1557,7 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
       await updateMessageRequestRoutingTrace(session.messageContext.id, routingTrace);
     }
   };
-  const clearSessionBinding = async () => {
+  const clearSessionBinding = async (bindingFailureReason?: string) => {
     if (!session.sessionId || !isSessionBindingMutationAllowed(session)) return;
     const hedgeAuthority = meta?.isHedgeWinner
       ? await meta.hedgeBindingAuthorityPromise
@@ -1551,7 +1585,10 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
       await recordBindingFinalized({
         bindingAction: "none",
         outcome: "skipped",
-        reason: meta.bindingIntent === "create" ? "stream_not_successful" : "binding_not_requested",
+        reason:
+          meta.bindingIntent === "create"
+            ? (bindingFailureReason ?? "stream_not_successful")
+            : "binding_not_requested",
       });
       return;
     }
@@ -1612,7 +1649,8 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
       await recordBindingFinalized({
         bindingAction: "clear",
         outcome: cleared.status === "ok" ? "cleared" : "skipped",
-        reason: cleared.status === "ok" ? "stream_failed" : cleared.reason,
+        reason:
+          cleared.status === "ok" ? (bindingFailureReason ?? "stream_failed") : cleared.reason,
       });
       return;
     }
@@ -1636,7 +1674,11 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
       snapshot.keyId !== keyId ||
       (session.sessionId !== null && snapshot.sessionId !== session.sessionId)
     )
-      return { updated: false, reason: "missing_snapshot", details: "missing_snapshot" };
+      return {
+        updated: false,
+        reason: "missing_snapshot",
+        details: "missing_snapshot",
+      };
 
     if (!(await discoveryLeaseLifecycle.ensureOwned())) {
       return {
@@ -1661,7 +1703,11 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
         outcome: "failed",
         reason: "binding_error",
       });
-      return { updated: false, reason: "binding_error", details: "binding_error" };
+      return {
+        updated: false,
+        reason: "binding_error",
+        details: "binding_error",
+      };
     }
     if (cas.status === "conflict") {
       recordDiscoveryControlEvent("binding_cas_conflict", {
@@ -1688,11 +1734,18 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
 
   const isHedgeWinner = meta?.isHedgeWinner === true;
   const billHedgeLosers = meta?.billHedgeLosers === true;
-  const allowAuxiliarySessionBinding =
-    isSessionBindingMutationAllowed(session) &&
-    (meta?.bindingIntent === undefined || (meta.bindingIntent !== "none" && !clientAborted));
   const hasDiscoveryBindingIntent =
     meta?.bindingIntent === "create" || meta?.bindingIntent === "renew";
+  const completionInspection = inspectStreamCompletion(allContent, session.originalFormat);
+  const completionMarkerMissingForBinding =
+    meta?.requiresCompletionMarkerForBinding === true &&
+    hasDiscoveryBindingIntent &&
+    streamEndedNormally &&
+    !completionInspection.hasMarker;
+  const allowAuxiliarySessionBinding =
+    isSessionBindingMutationAllowed(session) &&
+    !completionMarkerMissingForBinding &&
+    (meta?.bindingIntent === undefined || (meta.bindingIntent !== "none" && !clientAborted));
   let resolvePrimaryDiscoveryBinding: ((updated: boolean) => void) | null = null;
   const primaryDiscoveryBinding = hasDiscoveryBindingIntent
     ? new Promise<boolean>((resolve) => {
@@ -1723,13 +1776,17 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
   //
   // 此处返回 `{isError:false}` 仅表示“跳过检测”，最终仍会在下面按中断/超时视为失败结算。
   const shouldDetectFake200 = streamEndedNormally && upstreamStatusCode === 200;
-  const detected = shouldDetectFake200
+  const bodyDetected = shouldDetectFake200
     ? detectUpstreamErrorFromSseOrJsonText(allContent)
     : ({ isError: false } as const);
-  const completionMarkerMissing =
-    meta?.requiresCompletionMarker === true &&
-    streamEndedNormally &&
-    !hasStreamCompletionMarker(allContent, session.originalFormat);
+  const detected =
+    shouldDetectFake200 && !bodyDetected.isError && completionInspection.hasProtocolError
+      ? ({
+          isError: true,
+          code: "UPSTREAM_PROTOCOL_ERROR",
+          detail: "Upstream stream emitted a protocol error event",
+        } as const)
+      : bodyDetected;
   let clientAbortGateUsage: FinalizeDeferredStreamingResult["clientAbortGateUsage"];
   const clientAbortCompleteSuccess = (() => {
     if (!clientAborted || upstreamStatusCode < 200 || upstreamStatusCode >= 300) {
@@ -1753,7 +1810,10 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
     }
 
     const { usageMetrics } = parseUsageFromResponseText(allContent, provider?.providerType);
-    clientAbortGateUsage = { usageMetrics, providerType: provider?.providerType };
+    clientAbortGateUsage = {
+      usageMetrics,
+      providerType: provider?.providerType,
+    };
     return hasPositiveBillableTokens(usageMetrics);
   })();
 
@@ -1774,9 +1834,6 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
       effectiveStatusCode = 502;
     }
     errorMessage = detected.detail ? `${detected.code}: ${detected.detail}` : detected.code;
-  } else if (completionMarkerMissing) {
-    effectiveStatusCode = 502;
-    errorMessage = "STREAM_COMPLETION_MARKER_MISSING";
   } else if (clientAbortCompleteSuccess) {
     effectiveStatusCode = upstreamStatusCode;
     errorMessage = null;
@@ -1807,7 +1864,6 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
   const shouldClearSessionBindingOnFailure =
     ((clientAborted || !streamEndedNormally) && !clientAbortCompleteSuccess) ||
     detected.isError ||
-    completionMarkerMissing ||
     (upstreamStatusCode >= 400 && errorMessage !== null);
   if (shouldClearSessionBindingOnFailure) {
     meta?.hedgeBindingHeartbeat?.stop();
@@ -1901,50 +1957,6 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
 
           // Stream aborts are key-level errors. The endpoint delivered HTTP 200,
           // so only the Provider circuit is updated here.
-        }
-      } finally {
-        await finalizeFailedDiscoveryBinding();
-      }
-    };
-
-    return {
-      effectiveStatusCode,
-      errorMessage,
-      providerIdForPersistence,
-      isHedgeWinner,
-      billHedgeLosers,
-      clientAbortGateUsage,
-      commitSideEffects,
-      finalizeAttemptResources: finalizeProviderSessionRef,
-      allowAuxiliarySessionBinding,
-      confirmAuxiliarySessionBinding,
-    };
-  }
-
-  if (completionMarkerMissing) {
-    session.addProviderToChain(providerForChain, {
-      endpointId: meta.endpointId,
-      endpointUrl: meta.endpointUrl,
-      reason: "retry_failed",
-      attemptNumber: meta.attemptNumber,
-      statusCode: effectiveStatusCode,
-      errorMessage: errorMessage ?? undefined,
-    });
-
-    const commitSideEffects = async () => {
-      try {
-        await clearSessionBinding();
-        if (session.getEndpointPolicy().allowCircuitBreakerAccounting) {
-          try {
-            const { recordFailure } = await import("@/lib/circuit-breaker");
-            await recordFailure(meta.providerId, new Error(errorMessage ?? "STREAM_ABORTED"));
-          } catch (cbError) {
-            logger.warn("[ResponseHandler] Failed to record missing stream completion marker", {
-              providerId: meta.providerId,
-              sessionId: session.sessionId ?? null,
-              error: cbError,
-            });
-          }
         }
       } finally {
         await finalizeFailedDiscoveryBinding();
@@ -2146,9 +2158,19 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
         });
       }
 
-      // A client abort may still be billable when a completion marker was
-      // already buffered, but it must never create or renew Sticky state.
-      if (
+      // A natural 2xx EOF without a protocol marker remains a successful,
+      // billable request, but it cannot create or renew Sticky state.
+      if (completionMarkerMissingForBinding) {
+        if (meta.bindingIntent === "renew") {
+          await clearSessionBinding("completion_marker_missing");
+        } else if (meta.bindingIntent === "create") {
+          await recordBindingFinalized({
+            bindingAction: "create",
+            outcome: "skipped",
+            reason: "completion_marker_missing",
+          });
+        }
+      } else if (
         meta.bindingIntent !== "none" &&
         !meta.isHedgeWinner &&
         !clientAborted &&
@@ -2161,7 +2183,11 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
         const result = isDiscoveryBinding
           ? meta.bindingSnapshot && keyId != null
             ? await compareAndSetDiscoveryBinding(meta.bindingSnapshot, meta.providerId, keyId)
-            : { updated: false, reason: "missing_snapshot", details: "missing_snapshot" }
+            : {
+                updated: false,
+                reason: "missing_snapshot",
+                details: "missing_snapshot",
+              }
           : await SessionManager.updateSessionBindingSmart(
               session.sessionId,
               meta.providerId,
@@ -6170,11 +6196,17 @@ async function trackCostToRedis(
         },
         user: {
           id: user.id,
-          resetModes: { "5h": user.limit5hResetMode, daily: user.dailyResetMode },
+          resetModes: {
+            "5h": user.limit5hResetMode,
+            daily: user.dailyResetMode,
+          },
         },
         provider: {
           id: provider.id,
-          resetModes: { "5h": provider.limit5hResetMode, daily: provider.dailyResetMode },
+          resetModes: {
+            "5h": provider.limit5hResetMode,
+            daily: provider.dailyResetMode,
+          },
         },
       },
     });
@@ -6281,7 +6313,9 @@ async function persistRequestFailure(options: {
       specialSettings: session.getSpecialSettings() ?? undefined,
     };
     const persistence = options.onCommitted
-      ? detailsWriter(messageContext.id, terminalDetails, { onCommitted: options.onCommitted })
+      ? detailsWriter(messageContext.id, terminalDetails, {
+          onCommitted: options.onCommitted,
+        })
       : detailsWriter(messageContext.id, terminalDetails);
     committed = Boolean(await awaitPersistence(persistence));
 
