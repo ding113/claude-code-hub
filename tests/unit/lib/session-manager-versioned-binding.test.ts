@@ -2,6 +2,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const bindingMocks = vi.hoisted(() => ({
   acquireSessionDiscoveryLease: vi.fn(),
+  buildSessionBindingKeys: vi.fn((sessionId: string, _keyId: number) => ({
+    canonical: `session-binding:v1:{${"a".repeat(64)}}:binding`,
+    legacyProvider: `session:${sessionId}:provider`,
+    legacyOwner: `session:${sessionId}:key`,
+  })),
   clearSessionBinding: vi.fn(),
   compareAndSetSessionBinding: vi.fn(),
   isSessionProviderCoolingDown: vi.fn(),
@@ -16,6 +21,7 @@ let redisClientRef: {
   status: string;
   del: ReturnType<typeof vi.fn>;
   eval: ReturnType<typeof vi.fn>;
+  exists: ReturnType<typeof vi.fn>;
   get: ReturnType<typeof vi.fn>;
   pipeline: ReturnType<typeof vi.fn>;
   set: ReturnType<typeof vi.fn>;
@@ -73,6 +79,7 @@ beforeEach(() => {
     status: "ready",
     del: vi.fn(async () => 1),
     eval: vi.fn(async () => 1),
+    exists: vi.fn(async () => 0),
     get: vi.fn(async () => null),
     pipeline: vi.fn(() => pipeline),
     set: vi.fn(async () => "OK"),
@@ -179,6 +186,45 @@ describe("SessionManager versioned binding adapter", () => {
     await expect(SessionManager.getSessionProvider(SESSION_ID, KEY_ID)).resolves.toBeNull();
 
     expect(redisClientRef.get).not.toHaveBeenCalled();
+  });
+
+  it("does not reuse a legacy mirror when canonical state exists during capability fallback", async () => {
+    bindingMocks.readOrReconcileSessionBinding.mockResolvedValue({
+      status: "unavailable",
+      reason: "capability_unavailable",
+      capabilityState: "unavailable",
+      legacyFallbackAllowed: true,
+    });
+    redisClientRef.exists.mockResolvedValue(1);
+    redisClientRef.get.mockResolvedValue(String(PROVIDER_ID));
+
+    await expect(SessionManager.getSessionProvider(SESSION_ID, KEY_ID)).resolves.toBeNull();
+
+    expect(redisClientRef.exists).toHaveBeenCalledWith(
+      expect.stringMatching(/^session-binding:v1:\{[a-f0-9]+\}:binding$/)
+    );
+    expect(redisClientRef.get).not.toHaveBeenCalled();
+  });
+
+  it("still reuses a tenant-owned legacy-only mirror during capability fallback", async () => {
+    bindingMocks.readOrReconcileSessionBinding.mockResolvedValue({
+      status: "unavailable",
+      reason: "capability_unavailable",
+      capabilityState: "unavailable",
+      legacyFallbackAllowed: true,
+    });
+    redisClientRef.exists.mockResolvedValue(0);
+    redisClientRef.get.mockImplementation(async (key: string) =>
+      key.endsWith(":key") ? String(KEY_ID) : String(PROVIDER_ID)
+    );
+
+    await expect(SessionManager.getSessionProvider(SESSION_ID, KEY_ID)).resolves.toBe(PROVIDER_ID);
+
+    expect(redisClientRef.exists).toHaveBeenCalledWith(
+      expect.stringMatching(/^session-binding:v1:\{[a-f0-9]+\}:binding$/)
+    );
+    expect(redisClientRef.get).toHaveBeenCalledWith(`session:${SESSION_ID}:key`);
+    expect(redisClientRef.get).toHaveBeenCalledWith(`session:${SESSION_ID}:provider`);
   });
 
   it("clears through generation CAS and does not delete the legacy provider directly", async () => {
