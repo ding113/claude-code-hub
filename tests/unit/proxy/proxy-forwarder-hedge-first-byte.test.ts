@@ -3885,6 +3885,103 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
     }
   });
 
+  test("a ready fallback stays held until the queued next wave registers", async () => {
+    vi.useFakeTimers();
+    let endpointResolver: ReturnType<typeof vi.spyOn> | null = null;
+    try {
+      const fallback = createProvider({ id: 1, name: "fallback", priority: 1 });
+      const setup = createProvider({
+        id: 2,
+        name: "cancelled-setup",
+        priority: 1,
+        limitConcurrentSessions: 1,
+      });
+      const winner = createProvider({ id: 3, name: "next-round-winner", priority: 1 });
+      const session = createSession();
+      session.authState = {
+        success: true,
+        user: null,
+        key: { id: 40 },
+        apiKey: null,
+      } as typeof session.authState;
+      session.setProvider(fallback);
+      mocks.getCachedSystemSettings.mockResolvedValue({
+        discoveryEnabled: true,
+        discoveryConcurrency: 2,
+        maxDiscoveryRounds: 2,
+        discoverySlaMs: 10,
+        stickySlaMs: 10,
+        racingTotalTimeoutMs: 100,
+        stickyTimeoutCooldownMs: 300_000,
+      });
+      mocks.pickDiscoveryProviders.mockResolvedValueOnce([setup]).mockResolvedValueOnce([winner]);
+
+      endpointResolver = vi.spyOn(
+        ProxyForwarder as unknown as {
+          resolveStreamingHedgeEndpoint: (
+            session: ProxySession,
+            provider: Provider
+          ) => Promise<{ endpointId: number | null; baseUrl: string; endpointUrl: string }>;
+        },
+        "resolveStreamingHedgeEndpoint"
+      );
+      endpointResolver.mockImplementation(async (_attemptSession, provider) => {
+        if (provider.id === setup.id) return new Promise(() => {});
+        return { endpointId: null, baseUrl: provider.url, endpointUrl: provider.url };
+      });
+
+      let fallbackController: ReadableStreamDefaultController<Uint8Array> | null = null;
+      const launchedProviderIds: number[] = [];
+      const doForward = vi.spyOn(
+        ProxyForwarder as unknown as {
+          doForward: (...args: unknown[]) => Promise<Response>;
+        },
+        "doForward"
+      );
+      doForward.mockImplementation(async (attemptSession) => {
+        const providerId = (attemptSession as ProxySession).provider!.id;
+        launchedProviderIds.push(providerId);
+        if (providerId === winner.id) {
+          return new Response(
+            'data: {"type":"content_block_delta","delta":{"text":"winner"}}\n\n',
+            { headers: { "content-type": "text/event-stream" } }
+          );
+        }
+        return new Response(
+          new ReadableStream<Uint8Array>({
+            start(controller) {
+              fallbackController = controller;
+            },
+          }),
+          { headers: { "content-type": "text/event-stream" } }
+        );
+      });
+      mocks.releaseProviderSession.mockImplementation(async (providerId) => {
+        if (providerId !== setup.id || !fallbackController) return;
+        fallbackController.enqueue(
+          new TextEncoder().encode(
+            'data: {"type":"content_block_delta","delta":{"text":"fallback"}}\n\n'
+          )
+        );
+        fallbackController.close();
+      });
+
+      const responsePromise = ProxyForwarder.send(session);
+      await vi.advanceTimersByTimeAsync(10);
+      await vi.advanceTimersByTimeAsync(0);
+
+      const response = await responsePromise;
+      expect(await response.text()).toContain('"winner"');
+      expect(launchedProviderIds).toEqual([fallback.id, winner.id]);
+      expect(mocks.pickDiscoveryProviders).toHaveBeenCalledTimes(2);
+      expect(mocks.releaseProviderSession).toHaveBeenCalledWith(setup.id, session.sessionId);
+    } finally {
+      endpointResolver?.mockRestore();
+      mocks.releaseProviderSession.mockImplementation(async () => {});
+      vi.useRealTimers();
+    }
+  });
+
   test("a stale candidate selector cannot launch after its Discovery round closes", async () => {
     vi.useFakeTimers();
     try {

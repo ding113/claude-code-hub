@@ -5093,6 +5093,7 @@ export class ProxyForwarder {
     let roundTimer: NodeJS.Timeout | null = null;
     let stickyTimer: NodeJS.Timeout | null = null;
     let roundLaunchesInProgress = 0;
+    let queuedRoundLaunchesPending = 0;
     let refillQueue: Promise<void> = Promise.resolve();
     const roundLaunchIdleWaiters = new Set<() => void>();
     let fallbackPromotionBlocked = false;
@@ -6322,11 +6323,9 @@ export class ProxyForwarder {
       }
     };
 
-    const finishRoundLaunchBatch = async (): Promise<void> => {
-      roundLaunchesInProgress = Math.max(0, roundLaunchesInProgress - 1);
-      if (roundLaunchesInProgress !== 0) return;
-
-      notifyRoundLaunchIdle();
+    const reevaluateReadyAttemptsAfterLaunch = async (): Promise<void> => {
+      if (roundLaunchesInProgress !== 0 || queuedRoundLaunchesPending !== 0) return;
+      if (committed || settled) return;
       fallbackPromotionBlocked = false;
       const readyNormal = Array.from(attempts.values()).find(
         (attempt) => attempt.pending && attempt.ready && attempt.kind === "normal"
@@ -6345,6 +6344,14 @@ export class ProxyForwarder {
         const action = coordinator.markReady(readyFallback.id);
         if (action.type === "promote_fallback") await commit(readyFallback);
       }
+    };
+
+    const finishRoundLaunchBatch = async (): Promise<void> => {
+      roundLaunchesInProgress = Math.max(0, roundLaunchesInProgress - 1);
+      if (roundLaunchesInProgress !== 0) return;
+
+      notifyRoundLaunchIdle();
+      await reevaluateReadyAttemptsAfterLaunch();
     };
 
     async function refillCurrentRoundSlots(slots: number): Promise<void> {
@@ -6370,20 +6377,36 @@ export class ProxyForwarder {
     }
 
     let launchNextRoundQueue: Promise<void> = Promise.resolve();
-    type QueuedRoundLaunch = {
+    type RoundLaunchSlotState = {
       resolvers: Set<() => number>;
+      consumedSlots: number;
+      timerStarted: boolean;
+    };
+    type QueuedRoundLaunch = {
+      slotState: RoundLaunchSlotState;
       onStartCallbacks: Set<() => void>;
       started: boolean;
+      accepting: boolean;
+      gateReleased: boolean;
       promise: Promise<void>;
     };
     const queuedAdvancedRoundLaunches = new Map<string, QueuedRoundLaunch>();
     const runLaunchNextRound = async (
-      resolveSlots: () => number,
-      coordinatorAlreadyAdvanced = false
+      slotState: RoundLaunchSlotState,
+      coordinatorAlreadyAdvanced = false,
+      onSlotsClosed?: () => void
     ) => {
-      if (settled || committed) return;
+      let slotsClosed = false;
+      const closeSlots = () => {
+        if (slotsClosed) return;
+        slotsClosed = true;
+        onSlotsClosed?.();
+      };
+      if (settled || committed) {
+        closeSlots();
+        return;
+      }
       roundLaunchesInProgress += 1;
-      clearRoundTimer();
       try {
         if (coordinatorAlreadyAdvanced) {
           currentRound = coordinator.round;
@@ -6392,26 +6415,36 @@ export class ProxyForwarder {
           currentRound = nextRound.round;
         }
         const launchEpoch = coordinator.epochs;
-        if (currentRound > maxRounds || resolveSlots() <= 0) return;
+        const requestedSlots = () =>
+          Math.max(0, ...Array.from(slotState.resolvers, (slotResolver) => slotResolver()));
+        if (currentRound > maxRounds || requestedSlots() <= slotState.consumedSlots) {
+          closeSlots();
+          return;
+        }
         // The round SLA starts when the round is opened, before selector,
         // admission, or endpoint setup can consume the budget. The timer
         // cancels setup reservations and advances the coordinator while the
         // launch batch is still in flight.
-        if (!committed && !settled) {
+        if (!slotState.timerStarted && !committed && !settled) {
+          clearRoundTimer();
           scheduleRoundBoundary(discoverySlaMs);
+          slotState.timerStarted = true;
         }
-        let reservedSlots = 0;
         while (
           !committed &&
           !settled &&
           coordinator.acceptsEpoch(launchEpoch.requestEpoch, launchEpoch.roundEpoch)
         ) {
-          const targetSlots = Math.max(0, resolveSlots());
-          const additionalSlots = targetSlots - reservedSlots;
-          if (additionalSlots <= 0) break;
-          reservedSlots = targetSlots;
+          const targetSlots = requestedSlots();
+          const additionalSlots = targetSlots - slotState.consumedSlots;
+          if (additionalSlots <= 0) {
+            closeSlots();
+            break;
+          }
+          slotState.consumedSlots = targetSlots;
           await fillDiscoverySlots(additionalSlots);
         }
+        closeSlots();
         const hasPendingAttempt = coordinator.activeAttempts.length > 0;
         if (
           !hasPendingAttempt &&
@@ -6423,6 +6456,7 @@ export class ProxyForwarder {
           return;
         }
       } finally {
+        closeSlots();
         await finishRoundLaunchBatch();
       }
     };
@@ -6437,8 +6471,8 @@ export class ProxyForwarder {
         ? `${expectedEpoch.requestEpoch}:${expectedEpoch.roundEpoch}`
         : null;
       const existing = epochKey ? queuedAdvancedRoundLaunches.get(epochKey) : null;
-      if (existing) {
-        existing.resolvers.add(resolveSlots);
+      if (existing?.accepting) {
+        existing.slotState.resolvers.add(resolveSlots);
         if (onStart) {
           if (existing.started) onStart();
           else existing.onStartCallbacks.add(onStart);
@@ -6446,11 +6480,26 @@ export class ProxyForwarder {
         return existing.promise;
       }
 
+      const slotState: RoundLaunchSlotState = existing?.slotState ?? {
+        resolvers: new Set(),
+        consumedSlots: 0,
+        timerStarted: false,
+      };
+      slotState.resolvers.add(resolveSlots);
       const launchEntry: QueuedRoundLaunch = {
-        resolvers: new Set([resolveSlots]),
+        slotState,
         onStartCallbacks: new Set(onStart ? [onStart] : []),
         started: false,
+        accepting: true,
+        gateReleased: false,
         promise: Promise.resolve(),
+      };
+      queuedRoundLaunchesPending += 1;
+      const releaseQueuedWaveGate = async () => {
+        if (launchEntry.gateReleased) return;
+        launchEntry.gateReleased = true;
+        queuedRoundLaunchesPending = Math.max(0, queuedRoundLaunchesPending - 1);
+        await reevaluateReadyAttemptsAfterLaunch();
       };
       const runQueuedLaunch = async () => {
         // A boundary may cancel a selector/setup batch before enqueueing the
@@ -6461,15 +6510,24 @@ export class ProxyForwarder {
           expectedEpoch &&
           !coordinator.acceptsEpoch(expectedEpoch.requestEpoch, expectedEpoch.roundEpoch)
         ) {
+          await releaseQueuedWaveGate();
           return;
         }
         launchEntry.started = true;
         for (const callback of launchEntry.onStartCallbacks) callback();
         launchEntry.onStartCallbacks.clear();
-        return runLaunchNextRound(
-          () => Math.max(0, ...Array.from(launchEntry.resolvers, (slotResolver) => slotResolver())),
-          coordinatorAlreadyAdvanced
+        const running = runLaunchNextRound(
+          launchEntry.slotState,
+          coordinatorAlreadyAdvanced,
+          () => {
+            launchEntry.accepting = false;
+          }
         );
+        // runLaunchNextRound synchronously registers setup reservations before
+        // its first await, so the queued-wave gate can now hand off to the
+        // coordinator's active-attempt gate.
+        await releaseQueuedWaveGate();
+        return running;
       };
       const queued = launchNextRoundQueue.then(runQueuedLaunch, runQueuedLaunch);
       launchEntry.promise = queued;
