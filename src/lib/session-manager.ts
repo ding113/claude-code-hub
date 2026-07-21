@@ -33,6 +33,7 @@ import {
 } from "./redis/active-session-keys";
 import {
   acquireSessionDiscoveryLease as acquireVersionedSessionDiscoveryLease,
+  buildSessionBindingKeys,
   clearSessionBinding as clearVersionedSessionBinding,
   compareAndSetSessionBinding,
   ensureVersionedBindingCapability,
@@ -976,6 +977,18 @@ export class SessionManager {
             sessionId,
             keyId,
             reason: binding.reason,
+          });
+          return null;
+        }
+
+        // A capability failure may permit a legacy read only when this
+        // session has no canonical binding. If canonical state exists, the
+        // legacy mirror is not safely writable and must not be reused.
+        const bindingKeys = buildSessionBindingKeys(sessionId, keyId);
+        if ((await redis.exists(bindingKeys.canonical)) > 0) {
+          logger.warn("SessionManager: Refusing legacy provider reuse with canonical binding", {
+            sessionId,
+            keyId,
           });
           return null;
         }
