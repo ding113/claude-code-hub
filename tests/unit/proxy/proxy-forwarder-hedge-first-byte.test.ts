@@ -2640,6 +2640,216 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
     }
   });
 
+  test("Sticky timeout cooldown completes once before a racing total deadline settles", async () => {
+    vi.useFakeTimers();
+    try {
+      const sticky = createProvider({ id: 1, name: "sticky", priority: 1 });
+      const session = createSession();
+      session.authState = {
+        success: true,
+        user: null,
+        key: { id: 32 },
+        apiKey: null,
+      } as typeof session.authState;
+      session.request.message.messages = [
+        { role: "user", content: "first" },
+        { role: "user", content: "second" },
+      ];
+      session.setProvider(sticky);
+      session.setSessionBindingSnapshot({
+        sessionId: session.sessionId!,
+        keyId: 32,
+        providerId: sticky.id,
+        generation: "g-sticky-cooldown-deadline",
+      });
+      mocks.getCachedSystemSettings.mockResolvedValue({
+        discoveryEnabled: true,
+        discoveryConcurrency: 2,
+        maxDiscoveryRounds: 1,
+        discoverySlaMs: 20,
+        stickySlaMs: 10,
+        racingTotalTimeoutMs: 30,
+        stickyTimeoutCooldownMs: 300_000,
+      });
+
+      const cooldownClear = Promise.withResolvers<{
+        status: "ok";
+        legacyFallbackAllowed: false;
+        source: "cleared";
+        snapshot: {
+          sessionId: string;
+          keyId: number;
+          providerId: null;
+          generation: string;
+        };
+      }>();
+      const order: string[] = [];
+      mocks.clearVersionedSessionProvider.mockImplementationOnce(
+        async (_snapshot, _providerId, cooldownTtlSeconds) => {
+          order.push(`cooldown-start:${cooldownTtlSeconds}`);
+          const result = await cooldownClear.promise;
+          order.push("cooldown-end");
+          return result;
+        }
+      );
+      mocks.releaseSessionDiscoveryLease.mockImplementationOnce(async () => {
+        order.push("lease-release");
+        return { status: "released", legacyFallbackAllowed: false };
+      });
+      vi.spyOn(
+        ProxyForwarder as unknown as {
+          doForward: (...args: unknown[]) => Promise<Response>;
+        },
+        "doForward"
+      ).mockResolvedValueOnce(
+        new Response(new ReadableStream<Uint8Array>(), {
+          headers: { "content-type": "text/event-stream" },
+        })
+      );
+
+      let requestSettled = false;
+      const observed = ProxyForwarder.send(session).then(
+        (response) => {
+          requestSettled = true;
+          return response;
+        },
+        (error) => {
+          requestSettled = true;
+          return error;
+        }
+      );
+
+      await vi.advanceTimersByTimeAsync(10);
+      expect(mocks.clearVersionedSessionProvider).toHaveBeenCalledWith(
+        expect.objectContaining({ generation: "g-sticky-cooldown-deadline" }),
+        sticky.id,
+        300
+      );
+      expect(order).toEqual(["cooldown-start:300"]);
+
+      await vi.advanceTimersByTimeAsync(20);
+      expect(requestSettled).toBe(false);
+      expect(mocks.clearVersionedSessionProvider).toHaveBeenCalledOnce();
+      expect(mocks.releaseSessionDiscoveryLease).not.toHaveBeenCalled();
+
+      cooldownClear.resolve({
+        status: "ok",
+        legacyFallbackAllowed: false,
+        source: "cleared",
+        snapshot: {
+          sessionId: session.sessionId!,
+          keyId: 32,
+          providerId: null,
+          generation: "g-sticky-cooldown-applied",
+        },
+      });
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(await observed).toBeInstanceOf(UpstreamProxyError);
+      expect(mocks.clearVersionedSessionProvider).toHaveBeenCalledOnce();
+      expect(mocks.pickDiscoveryProviders).not.toHaveBeenCalled();
+      expect(order).toEqual(["cooldown-start:300", "cooldown-end", "lease-release"]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("client abort preserves an already-reserved Sticky timeout cooldown", async () => {
+    vi.useFakeTimers();
+    try {
+      const clientAbort = new AbortController();
+      const sticky = createProvider({ id: 1, name: "sticky", priority: 1 });
+      const session = createSession(clientAbort.signal);
+      session.authState = {
+        success: true,
+        user: null,
+        key: { id: 33 },
+        apiKey: null,
+      } as typeof session.authState;
+      session.request.message.messages = [
+        { role: "user", content: "first" },
+        { role: "user", content: "second" },
+      ];
+      session.setProvider(sticky);
+      session.setSessionBindingSnapshot({
+        sessionId: session.sessionId!,
+        keyId: 33,
+        providerId: sticky.id,
+        generation: "g-sticky-cooldown-abort",
+      });
+      mocks.getCachedSystemSettings.mockResolvedValue({
+        discoveryEnabled: true,
+        discoveryConcurrency: 2,
+        maxDiscoveryRounds: 1,
+        discoverySlaMs: 50,
+        stickySlaMs: 10,
+        racingTotalTimeoutMs: 100,
+        stickyTimeoutCooldownMs: 300_000,
+      });
+
+      const cooldownClear = Promise.withResolvers<{
+        status: "ok";
+        legacyFallbackAllowed: false;
+        source: "cleared";
+        snapshot: {
+          sessionId: string;
+          keyId: number;
+          providerId: null;
+          generation: string;
+        };
+      }>();
+      mocks.clearVersionedSessionProvider.mockReturnValueOnce(cooldownClear.promise);
+      vi.spyOn(
+        ProxyForwarder as unknown as {
+          doForward: (...args: unknown[]) => Promise<Response>;
+        },
+        "doForward"
+      ).mockResolvedValueOnce(
+        new Response(new ReadableStream<Uint8Array>(), {
+          headers: { "content-type": "text/event-stream" },
+        })
+      );
+
+      let requestSettled = false;
+      const observed = ProxyForwarder.send(session).catch((error) => {
+        requestSettled = true;
+        return error;
+      });
+      await vi.advanceTimersByTimeAsync(10);
+      clientAbort.abort(new Error("client disconnected"));
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(requestSettled).toBe(false);
+      expect(mocks.clearVersionedSessionProvider).toHaveBeenCalledOnce();
+      expect(mocks.clearVersionedSessionProvider).toHaveBeenCalledWith(
+        expect.objectContaining({ generation: "g-sticky-cooldown-abort" }),
+        sticky.id,
+        300
+      );
+
+      cooldownClear.resolve({
+        status: "ok",
+        legacyFallbackAllowed: false,
+        source: "cleared",
+        snapshot: {
+          sessionId: session.sessionId!,
+          keyId: 33,
+          providerId: null,
+          generation: "g-sticky-cooldown-abort-applied",
+        },
+      });
+      await vi.advanceTimersByTimeAsync(0);
+
+      const error = await observed;
+      expect(error).toBeInstanceOf(UpstreamProxyError);
+      expect((error as UpstreamProxyError).statusCode).toBe(499);
+      expect(mocks.clearVersionedSessionProvider).toHaveBeenCalledOnce();
+      expect(mocks.releaseSessionDiscoveryLease).toHaveBeenCalledOnce();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   test("a ready-held Sticky fallback survives a stalled next-wave selector until the total deadline", async () => {
     vi.useFakeTimers();
     try {
