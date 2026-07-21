@@ -601,7 +601,10 @@ describe("Endpoint circuit breaker isolation", () => {
       } as const;
       setDeferredMeta(session, 42, {
         isHedgeWinner: true,
-        hedgeBindingSnapshotPromise: Promise.resolve(snapshot),
+        hedgeBindingAuthorityPromise: Promise.resolve({
+          snapshot,
+          legacyClearAllowed: false,
+        }),
       });
       vi.mocked(SessionManager.getVersionedSessionBindingRefreshIntervalMs).mockReturnValue(1_000);
       const controlled = createControllableSuccessStreamResponse();
@@ -641,7 +644,10 @@ describe("Endpoint circuit breaker isolation", () => {
       } as const;
       setDeferredMeta(session, 42, {
         isHedgeWinner: true,
-        hedgeBindingSnapshotPromise: Promise.resolve(snapshot),
+        hedgeBindingAuthorityPromise: Promise.resolve({
+          snapshot,
+          legacyClearAllowed: false,
+        }),
       });
       vi.mocked(SessionManager.getVersionedSessionBindingRefreshIntervalMs).mockReturnValue(1_000);
       vi.mocked(SessionManager.clearVersionedSessionProvider).mockResolvedValueOnce({
@@ -670,6 +676,52 @@ describe("Endpoint circuit breaker isolation", () => {
     }
   });
 
+  it("does not let a failed stale Hedge stream clear a newer same-Provider generation", async () => {
+    const session = createSession();
+    setDeferredMeta(session, 42, {
+      isHedgeWinner: true,
+      // The first-byte write read G0, but a concurrent request established
+      // Provider 1 at G1 before its CAS. No authority over G1 was acquired.
+      hedgeBindingAuthorityPromise: Promise.resolve({
+        snapshot: null,
+        legacyClearAllowed: false,
+      }),
+    });
+
+    const clientResponse = await ProxyResponseHandler.dispatch(
+      session,
+      createFake200StreamResponse()
+    );
+    await clientResponse.text();
+    await drainAsyncTasks();
+
+    expect(SessionManager.clearVersionedSessionProvider).not.toHaveBeenCalled();
+    expect(SessionManager.clearSessionProvider).not.toHaveBeenCalled();
+    expect(SessionManager.touchVersionedSessionBinding).not.toHaveBeenCalled();
+  });
+
+  it("uses generic cleanup only after the Hedge winner confirms a legacy binding write", async () => {
+    const session = createSession();
+    setDeferredMeta(session, 42, {
+      isHedgeWinner: true,
+      hedgeBindingAuthorityPromise: Promise.resolve({
+        snapshot: null,
+        legacyClearAllowed: true,
+      }),
+    });
+
+    const clientResponse = await ProxyResponseHandler.dispatch(
+      session,
+      createFake200StreamResponse()
+    );
+    await clientResponse.text();
+    await drainAsyncTasks();
+
+    expect(SessionManager.clearVersionedSessionProvider).not.toHaveBeenCalled();
+    expect(SessionManager.clearSessionProvider).toHaveBeenCalledWith("fake-session", 1, 456);
+    expect(SessionManager.touchVersionedSessionBinding).not.toHaveBeenCalled();
+  });
+
   it("stops Hedge heartbeats after a generation conflict and never revives the binding", async () => {
     vi.useFakeTimers();
     try {
@@ -682,7 +734,10 @@ describe("Endpoint circuit breaker isolation", () => {
       } as const;
       setDeferredMeta(session, 42, {
         isHedgeWinner: true,
-        hedgeBindingSnapshotPromise: Promise.resolve(snapshot),
+        hedgeBindingAuthorityPromise: Promise.resolve({
+          snapshot,
+          legacyClearAllowed: false,
+        }),
       });
       vi.mocked(SessionManager.getVersionedSessionBindingRefreshIntervalMs).mockReturnValue(1_000);
       vi.mocked(SessionManager.touchVersionedSessionBinding)

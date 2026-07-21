@@ -30,7 +30,6 @@ import {
 } from "@/lib/provider-endpoints/endpoint-selector";
 import { getGlobalAgentPool, getProxyAgentForProvider } from "@/lib/proxy-agent";
 import { RateLimitService } from "@/lib/rate-limit/service";
-import type { SessionBindingSnapshot } from "@/lib/redis/session-binding";
 import { SessionManager } from "@/lib/session-manager";
 import {
   detectUpstreamErrorFromSseOrJsonText,
@@ -99,7 +98,10 @@ import {
 import { ProxyProviderResolver } from "./provider-selector";
 import { finalizeHedgeLoserBilling } from "./response-handler";
 import type { ProxySession } from "./session";
-import { setDeferredStreamingFinalization } from "./stream-finalization";
+import {
+  type DeferredStreamingHedgeBindingAuthority,
+  setDeferredStreamingFinalization,
+} from "./stream-finalization";
 import {
   detectThinkingBudgetRectifierTrigger,
   rectifyThinkingBudget,
@@ -4558,9 +4560,9 @@ export class ProxyForwarder {
       // A non-hedged request is finalized through response-handler. Updating
       // here as well would perform a duplicate binding read/CAS before the
       // stream has passed its final validation.
-      let hedgeBindingSnapshotPromise: Promise<SessionBindingSnapshot | null> | undefined;
+      let hedgeBindingAuthorityPromise: Promise<DeferredStreamingHedgeBindingAuthority> | undefined;
       if (session.sessionId && isActualHedgeWin) {
-        hedgeBindingSnapshotPromise = (async () => {
+        hedgeBindingAuthorityPromise = (async () => {
           const bindingResult = await SessionManager.updateSessionBindingSmart(
             session.sessionId!,
             attempt.provider.id,
@@ -4594,14 +4596,20 @@ export class ProxyForwarder {
             });
           }
 
-          // Only the exact snapshot returned by the first-byte CAS may keep
-          // this binding alive. Legacy fallback and failed CAS paths return null.
-          return bindingResult.bindingSnapshot ?? null;
+          return {
+            // Only the exact snapshot returned by the first-byte CAS may keep
+            // a versioned binding alive or clear it after a failed stream.
+            snapshot: bindingResult.bindingSnapshot ?? null,
+            // A generic clear is safe only when this request demonstrably
+            // committed the legacy binding. A versioned CAS conflict must not
+            // clear a newer generation that happens to use the same Provider.
+            legacyClearAllowed: bindingResult.legacyBindingUpdated === true,
+          };
         })().catch((bindingError) => {
           logger.error("ProxyForwarder: Failed to update session provider info for hedge winner", {
             error: bindingError,
           });
-          return null;
+          return { snapshot: null, legacyClearAllowed: false };
         });
       }
 
@@ -4618,7 +4626,7 @@ export class ProxyForwarder {
         upstreamStatusCode: attempt.response.status,
         isHedgeWinner: isActualHedgeWin,
         billHedgeLosers,
-        hedgeBindingSnapshotPromise,
+        hedgeBindingAuthorityPromise,
       });
 
       const response = new Response(

@@ -1130,6 +1130,7 @@ export class SessionManager {
     reason: string;
     details?: string;
     bindingSnapshot?: SessionBindingSnapshot;
+    legacyBindingUpdated?: boolean;
   }> {
     const redis = getRedisClient();
     if (!redis || redis.status !== "ready") {
@@ -1139,6 +1140,7 @@ export class SessionManager {
     try {
       let versionedSnapshot: SessionBindingSnapshot | null = null;
       let committedVersionedSnapshot: SessionBindingSnapshot | null = null;
+      let committedLegacyBinding = false;
       let useLegacyBinding = false;
       let legacyProviderId: number | null = null;
 
@@ -1219,7 +1221,9 @@ export class SessionManager {
             ? { type: "bind_if_absent", providerId: newProviderId }
             : { type: "set", providerId: newProviderId },
         });
-        return result.status === "ok" && result.changed;
+        const updated = result.status === "ok" && result.changed;
+        if (updated) committedLegacyBinding = true;
+        return updated;
       };
 
       if (isFirstAttempt) {
@@ -1271,6 +1275,7 @@ export class SessionManager {
             ? `故障转移成功，绑定到供应商 ${newProviderId}`
             : `竞速赢家强制改绑到供应商 ${newProviderId}`,
           ...(committedVersionedSnapshot ? { bindingSnapshot: committedVersionedSnapshot } : {}),
+          ...(committedLegacyBinding ? { legacyBindingUpdated: true } : {}),
         };
       }
 

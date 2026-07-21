@@ -100,8 +100,8 @@ const NON_STREAM_TERMINAL_PERSISTENCE_ERROR = Symbol("non_stream_terminal_persis
 
 function startHedgeBindingHeartbeat(session: ProxySession): void {
   const deferred = peekDeferredStreamingFinalization(session);
-  const snapshotPromise = deferred?.hedgeBindingSnapshotPromise;
-  if (!deferred?.isHedgeWinner || !snapshotPromise || deferred.hedgeBindingHeartbeat) return;
+  const authorityPromise = deferred?.hedgeBindingAuthorityPromise;
+  if (!deferred?.isHedgeWinner || !authorityPromise || deferred.hedgeBindingHeartbeat) return;
 
   let periodicActive = true;
   let authorityLost = false;
@@ -133,7 +133,7 @@ function startHedgeBindingHeartbeat(session: ProxySession): void {
     if (touchInFlight) return touchInFlight;
 
     const operation = (async () => {
-      const snapshot = await snapshotPromise;
+      const { snapshot } = await authorityPromise;
       if (!snapshot) {
         authorityLost = true;
         stopPeriodic();
@@ -1240,8 +1240,11 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
   const providerIdForPersistence = meta?.providerId ?? provider?.id ?? null;
   const clearSessionBinding = async () => {
     if (!session.sessionId) return;
-    const hedgeSnapshot = meta?.isHedgeWinner ? await meta.hedgeBindingSnapshotPromise : null;
-    if (hedgeSnapshot) {
+    const hedgeAuthority = meta?.isHedgeWinner
+      ? await meta.hedgeBindingAuthorityPromise
+      : undefined;
+    if (hedgeAuthority?.snapshot) {
+      const hedgeSnapshot = hedgeAuthority.snapshot;
       const cleared = await SessionManager.clearVersionedSessionProvider(
         hedgeSnapshot,
         providerIdForPersistence
@@ -1253,6 +1256,9 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
           reason: cleared.reason,
         });
       }
+      return;
+    }
+    if (meta?.isHedgeWinner && !hedgeAuthority?.legacyClearAllowed) {
       return;
     }
     const keyId = session.authState?.key?.id ?? session.messageContext?.key?.id ?? null;

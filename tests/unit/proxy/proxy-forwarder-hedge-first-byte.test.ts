@@ -983,7 +983,10 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
       const response = await responsePromise;
       const deferred = peekDeferredStreamingFinalization(session);
       expect(await response.text()).toContain('"provider":"p2"');
-      await expect(deferred?.hedgeBindingSnapshotPromise).resolves.toEqual(winnerBindingSnapshot);
+      await expect(deferred?.hedgeBindingAuthorityPromise).resolves.toEqual({
+        snapshot: winnerBindingSnapshot,
+        legacyClearAllowed: false,
+      });
       expect(controller1.signal.aborted).toBe(true);
       expect(controller2.signal.aborted).toBe(false);
       expect(mocks.recordFailure).not.toHaveBeenCalled();
