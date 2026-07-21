@@ -5,7 +5,10 @@ import {
   ProxyResponseHandler,
 } from "@/app/v1/_lib/proxy/response-handler";
 import { ProxySession } from "@/app/v1/_lib/proxy/session";
-import { setDeferredStreamingFinalization } from "@/app/v1/_lib/proxy/stream-finalization";
+import {
+  peekDeferredStreamingFinalization,
+  setDeferredStreamingFinalization,
+} from "@/app/v1/_lib/proxy/stream-finalization";
 import { AsyncTaskManager, shutdownAllAsyncTasks } from "@/lib/async-task-manager";
 import { recordFailure } from "@/lib/circuit-breaker";
 import { emitProxyLangfuseTrace } from "@/lib/langfuse/emit-proxy-trace";
@@ -3185,6 +3188,67 @@ describe("ProxyResponseHandler stream client abort finalization", () => {
       expect.objectContaining({ durationMs: expect.any(Number), statusCode: 200 }),
       expect.objectContaining({ onCommitted: expect.any(Function) })
     );
+  });
+
+  it("releases Discovery resources for a non-SSE Gemini winner", async () => {
+    const session = createSession(new AbortController().signal, {
+      providerType: "gemini",
+      originalFormat: "gemini",
+      endpoint: "/v1beta/models/gemini-2.0-flash:streamGenerateContent",
+      model: "gemini-2.0-flash",
+    });
+    session.sessionId = "non-sse-gemini-discovery";
+    session.recordProviderSessionRef(1);
+    setDeferredStreamingFinalization(session, {
+      providerId: 1,
+      providerName: "gemini-discovery",
+      providerPriority: 1,
+      attemptNumber: 1,
+      totalProvidersAttempted: 2,
+      isFirstAttempt: false,
+      isFailoverSuccess: true,
+      endpointId: 42,
+      endpointUrl: "https://api.test.invalid/v1",
+      upstreamStatusCode: 200,
+      bindingIntent: "create",
+      bindingSnapshot: {
+        sessionId: "non-sse-gemini-discovery",
+        keyId: 2,
+        providerId: null,
+        generation: "non-sse-generation",
+      },
+      requiresCompletionMarker: true,
+      discoveryLease: {
+        sessionId: "non-sse-gemini-discovery",
+        keyId: 2,
+        ownerToken: "non-sse-owner",
+        ttlSeconds: 30,
+      },
+      providerSessionRefOwned: true,
+      providerSessionRefRetainOnSuccess: true,
+    });
+    const response = new Response(
+      '{"response":{"candidates":[{"content":{"parts":[{"text":"hello"}]}}]}}',
+      { status: 200, headers: { "content-type": "application/json" } }
+    );
+
+    const returned = await ProxyResponseHandler.dispatch(session, response);
+    expect(returned).toBe(response);
+    await drainAsyncTasks();
+
+    expect(SessionManager.renewSessionDiscoveryLease).toHaveBeenCalled();
+    expect(SessionManager.releaseSessionDiscoveryLease).toHaveBeenCalledOnce();
+    expect(SessionManager.releaseSessionDiscoveryLease).toHaveBeenCalledWith(
+      "non-sse-gemini-discovery",
+      2,
+      "non-sse-owner"
+    );
+    expect(RateLimitService.releaseProviderSession).toHaveBeenCalledWith(
+      1,
+      "non-sse-gemini-discovery"
+    );
+    expect(SessionManager.compareAndSetSessionProvider).not.toHaveBeenCalled();
+    expect(peekDeferredStreamingFinalization(session)).toBeNull();
   });
 
   it("persists one durable 502 before Provider circuit mutation on non-stream response timeout", async () => {

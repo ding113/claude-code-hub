@@ -284,6 +284,25 @@ async function releaseOwnedProviderSessionRef(
   }
 }
 
+async function finalizeNonStreamDiscoveryResources(
+  session: ProxySession,
+  lifecycle: DiscoveryLeaseLifecycle
+): Promise<void> {
+  const deferred = peekDeferredStreamingFinalization(session);
+  if (!deferred?.discoveryLease) return;
+
+  // Non-SSE responses do not run the protocol completion finalizer, so they
+  // cannot safely create or renew Sticky. Consume the metadata and release
+  // both request-scoped resources after body processing instead of waiting
+  // for the Redis lease TTL.
+  const meta = consumeDeferredStreamingFinalization(session);
+  try {
+    await releaseOwnedProviderSessionRef(session, meta, false);
+  } finally {
+    await lifecycle.release();
+  }
+}
+
 function startHedgeBindingHeartbeat(session: ProxySession): void {
   const deferred = peekDeferredStreamingFinalization(session);
   const authorityPromise = deferred?.hedgeBindingAuthorityPromise;
@@ -2187,9 +2206,11 @@ export class ProxyResponseHandler {
   ): Promise<Response> {
     const messageContext = session.messageContext;
     const provider = session.provider;
+    const discoveryLeaseLifecycle = startDiscoveryLeaseLifecycle(session);
     if (!provider) {
       discardBeforeResponseBodySnapshot(session);
       releaseSessionAgent(session);
+      void finalizeNonStreamDiscoveryResources(session, discoveryLeaseLifecycle);
       return response;
     }
 
@@ -2460,6 +2481,7 @@ export class ProxyResponseHandler {
             }
           } finally {
             cleanupTaskAbortBinding();
+            await finalizeNonStreamDiscoveryResources(session, discoveryLeaseLifecycle);
             releaseSessionAgent(session);
           }
         };
@@ -3078,6 +3100,7 @@ export class ProxyResponseHandler {
       } finally {
         cleanupTaskAbortBinding();
         cleanupClientAbortListener();
+        await finalizeNonStreamDiscoveryResources(session, discoveryLeaseLifecycle);
         releaseSessionAgent(session);
       }
     };
