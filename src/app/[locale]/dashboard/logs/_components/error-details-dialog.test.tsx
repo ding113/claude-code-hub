@@ -286,6 +286,7 @@ const messages = {
         },
         logicTrace: {
           title: "Decision Chain",
+          singleRouteSelectionTitle: "Provider selection under single-route protection",
           noDecisionData: "No decision data",
           providersCount: "{count} providers",
           healthyCount: "{count} healthy",
@@ -1188,6 +1189,7 @@ describe("error-details-dialog routing trace", () => {
       stickySlaMs: 20_000,
       racingTotalTimeoutMs: 60_000,
       stickyTimeoutCooldownMs: 300_000,
+      sessionTtlSeconds: 300,
     },
     events: [
       {
@@ -1300,6 +1302,215 @@ describe("error-details-dialog routing trace", () => {
     expect(roundOne?.querySelector(".sm\\:grid-cols-2")).not.toBeNull();
     expect(html).toContain("60000ms");
     expect(html).toContain("300000ms");
+    expect(html).toContain("300s");
+  });
+
+  test("expands exact Discovery attempts with sanitized provider details and cancellation reasons", () => {
+    const longSecondError =
+      "<script>alert('x')</script> second-attempt-429 " + "x".repeat(8_200) + "TAIL_NOT_RENDERED";
+    const detailedTrace: RoutingTraceV1 = {
+      version: 1,
+      mode: "discovery",
+      startedAt: 1_000,
+      updatedAt: 5_000,
+      discoveryEnabled: true,
+      eligible: true,
+      events: [
+        {
+          type: "attempt_started",
+          at: 1_000,
+          elapsedMs: 0,
+          round: 1,
+          attemptId: "80:1",
+          attemptKind: "normal",
+          provider: { id: 80, name: "same-provider", priority: 1 },
+        },
+        {
+          type: "attempt_finished",
+          at: 1_500,
+          elapsedMs: 500,
+          round: 1,
+          attemptId: "80:1",
+          attemptKind: "normal",
+          provider: { id: 80, name: "same-provider", priority: 1 },
+          outcome: "failed",
+          statusCode: 403,
+        },
+        {
+          type: "attempt_started",
+          at: 1_600,
+          elapsedMs: 600,
+          round: 1,
+          attemptId: "80:2",
+          attemptKind: "normal",
+          provider: { id: 80, name: "same-provider", priority: 1 },
+        },
+        {
+          type: "attempt_finished",
+          at: 2_000,
+          elapsedMs: 1_000,
+          round: 1,
+          attemptId: "80:2",
+          attemptKind: "normal",
+          provider: { id: 80, name: "same-provider", priority: 1 },
+          outcome: "failed",
+          statusCode: 429,
+        },
+        {
+          type: "attempt_started",
+          at: 2_100,
+          elapsedMs: 1_100,
+          round: 1,
+          attemptId: "91:3",
+          attemptKind: "normal",
+          provider: { id: 91, name: "legacy-provider", priority: 2 },
+        },
+        {
+          type: "attempt_finished",
+          at: 2_500,
+          elapsedMs: 1_500,
+          round: 1,
+          attemptId: "91:3",
+          attemptKind: "normal",
+          provider: { id: 91, name: "legacy-provider", priority: 2 },
+          outcome: "failed",
+          statusCode: 503,
+        },
+        {
+          type: "attempt_started",
+          at: 2_600,
+          elapsedMs: 1_600,
+          round: 1,
+          attemptId: "56:4",
+          attemptKind: "normal",
+          provider: { id: 56, name: "cancelled-provider", priority: 3 },
+        },
+        {
+          type: "attempt_finished",
+          at: 5_000,
+          elapsedMs: 4_000,
+          round: 1,
+          attemptId: "56:4",
+          attemptKind: "normal",
+          provider: { id: 56, name: "cancelled-provider", priority: 3 },
+          outcome: "cancelled",
+          cancellationKind: "discovery_sla_timeout",
+        },
+      ],
+    };
+    const { container, unmount } = renderClientWithIntl(
+      <ErrorDetailsDialog
+        externalOpen
+        initialTab="logic-trace"
+        statusCode={503}
+        errorMessage={null}
+        providerChain={[
+          {
+            id: 80,
+            name: "same-provider",
+            reason: "retry_failed",
+            attemptNumber: 1,
+            statusCode: 403,
+            endpointUrl: "https://api.example.com/v1?key=secret-one",
+            errorMessage: "first-attempt-403",
+          },
+          {
+            id: 80,
+            name: "same-provider",
+            reason: "retry_failed",
+            attemptNumber: 2,
+            statusCode: 429,
+            endpointUrl: "https://api.example.com/v2?key=secret-two",
+            errorMessage: longSecondError,
+          },
+          {
+            id: 91,
+            name: "legacy-provider",
+            reason: "retry_failed",
+            statusCode: 503,
+            endpointUrl:
+              "https://endpoint-user:endpoint-pass@api.example.com/v3?key=endpoint-secret#fragment",
+            errorDetails: {
+              provider: {
+                id: 91,
+                name: "legacy-provider",
+                statusCode: 503,
+                statusText: "Service Unavailable",
+                upstreamBody: JSON.stringify({
+                  message: "third-attempt-503",
+                  api_key: "sk-abcdefghijklmnopqrstuvwxyz123456",
+                  authorization: "Bearer bearer-secret-value",
+                }),
+              },
+            },
+          },
+        ]}
+        routingTrace={detailedTrace}
+        sessionId="trace-details"
+      />
+    );
+
+    const attempts = Array.from(
+      container.querySelectorAll<HTMLElement>("[data-testid='discovery-attempt']")
+    );
+    const secondAttempt = attempts.find((card) => card.textContent?.includes("HTTP 429"));
+    const secondToggle =
+      secondAttempt?.querySelector("[data-testid='discovery-attempt-toggle']") ?? null;
+    expect(secondToggle?.getAttribute("aria-expanded")).toBe("false");
+    click(secondToggle);
+    expect(secondToggle?.getAttribute("aria-expanded")).toBe("true");
+    expect(secondAttempt?.textContent).toContain("second-attempt-429");
+    expect(secondAttempt?.textContent).not.toContain("first-attempt-403");
+    expect(secondAttempt?.textContent).toContain("https://api.example.com/v2");
+    expect(secondAttempt?.textContent).not.toContain("secret-two");
+    expect(secondAttempt?.textContent).not.toContain("TAIL_NOT_RENDERED");
+    expect(secondAttempt?.querySelector("script")).toBeNull();
+
+    const legacyAttempt = attempts.find((card) => card.textContent?.includes("HTTP 503"));
+    click(legacyAttempt?.querySelector("[data-testid='discovery-attempt-toggle']") ?? null);
+    expect(legacyAttempt?.textContent).toContain("third-attempt-503");
+    expect(legacyAttempt?.textContent).toContain("https://api.example.com/v3");
+    expect(legacyAttempt?.textContent).not.toContain("endpoint-user");
+    expect(legacyAttempt?.textContent).not.toContain("endpoint-secret");
+    expect(legacyAttempt?.textContent).not.toContain("abcdefghijklmnopqrstuvwxyz123456");
+    expect(legacyAttempt?.textContent).not.toContain("bearer-secret-value");
+
+    const cancelledAttempt = attempts.find((card) =>
+      card.textContent?.includes("cancelled-provider")
+    );
+    click(cancelledAttempt?.querySelector("[data-testid='discovery-attempt-toggle']") ?? null);
+    expect(cancelledAttempt?.textContent).toContain("Discovery SLA expired");
+    expect(cancelledAttempt?.textContent).not.toContain("Upstream error");
+    unmount();
+  });
+
+  test("labels a lease conflict as single-route protection while retaining provider selection", () => {
+    const protectedTrace: RoutingTraceV1 = {
+      version: 1,
+      mode: "single_upstream",
+      startedAt: 1_000,
+      updatedAt: 2_000,
+      discoveryEnabled: true,
+      eligible: false,
+      bypassReason: "lease_conflict",
+      events: [],
+    };
+    const html = renderWithIntl(
+      <ErrorDetailsDialog
+        externalOpen
+        statusCode={200}
+        errorMessage={null}
+        providerChain={[
+          { id: 80, name: "protected-provider", reason: "request_success", statusCode: 200 },
+        ]}
+        routingTrace={protectedTrace}
+        sessionId="protected-session"
+      />
+    );
+
+    expect(html).toContain("Single-route protection");
+    expect(html).toContain("Provider selection under single-route protection");
+    expect(html).toContain("protected-provider");
   });
 
   test("shows a legacy mode and bypass reason while retaining the old chain", () => {

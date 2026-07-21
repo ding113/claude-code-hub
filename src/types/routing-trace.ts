@@ -28,6 +28,8 @@ export interface RoutingTraceConfigV1 {
   stickySlaMs: number;
   racingTotalTimeoutMs: number;
   stickyTimeoutCooldownMs: number;
+  /** The binding/session TTL in seconds; optional for traces written before this field existed. */
+  sessionTtlSeconds?: number;
 }
 
 export interface RoutingTraceProviderV1 {
@@ -205,6 +207,9 @@ function normalizeRoutingTraceConfig(value: unknown): RoutingTraceConfigV1 | und
     stickySlaMs,
     racingTotalTimeoutMs,
     stickyTimeoutCooldownMs,
+    ...(finiteNumber(config.sessionTtlSeconds) !== undefined
+      ? { sessionTtlSeconds: finiteNumber(config.sessionTtlSeconds) }
+      : {}),
   };
 }
 

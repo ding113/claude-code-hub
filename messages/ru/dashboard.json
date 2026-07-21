@@ -385,7 +385,8 @@
           "discovery": "Ограниченный Discovery",
           "legacy_hedge": "Прежняя гонка Hedge",
           "legacy_serial": "Прежнее последовательное переключение",
-          "single_upstream": "Один upstream"
+          "single_upstream": "Один upstream",
+          "lease_conflict": "Защита одним маршрутом"
         },
         "bypassed": "Discovery не использован: {reason}",
         "bypassReasons": {
@@ -403,7 +404,7 @@
           "rollout_ineligible": "Запрос не входит в текущий rollout",
           "redis_capability_unavailable": "Возможность привязки Redis недоступна",
           "binding_conflict": "Конфликт привязки Session",
-          "lease_conflict": "Lease Discovery занят другим запросом",
+          "lease_conflict": "Lease Discovery занят другим запросом; этот запрос использует один upstream",
           "lease_unavailable": "Lease Discovery недоступен",
           "unknown": "Условия запуска Discovery не выполнены"
         },
@@ -471,10 +472,31 @@
         "configDiscoverySla": "SLA раунда",
         "configStickySla": "SLA Sticky",
         "configTotalTimeout": "Общий тайм-аут",
-        "configStickyCooldown": "Пауза после тайм-аута Sticky"
+        "configStickyCooldown": "Пауза после тайм-аута Sticky",
+        "configStickyBindingTtl": "Срок действия привязки Sticky (SESSION_TTL)",
+        "attemptDetails": {
+          "providerId": "ID провайдера",
+          "attempt": "Попытка",
+          "status": "Статус HTTP",
+          "inferred": "выведен",
+          "endpoint": "Upstream",
+          "error": "Ошибка upstream",
+          "cancellation": "Причина отмены",
+          "timeline": "Хронология попытки"
+        },
+        "cancellationKinds": {
+          "discovery_loser": "Победила другая попытка Discovery",
+          "discovery_sla_timeout": "SLA Discovery истёк",
+          "round_timeout": "SLA раунда истёк",
+          "sticky_timeout": "SLA Sticky истёк",
+          "request_deadline": "Общий срок Discovery истёк",
+          "client_abort": "Клиент отключился",
+          "winner_committed": "Другой провайдер был выбран победителем"
+        }
       },
       "logicTrace": {
         "title": "Цепочка решений",
+        "singleRouteSelectionTitle": "Выбор провайдера в режиме защиты одним маршрутом",
         "noDecisionData": "Нет данных о решениях",
         "providersCount": "{count} поставщиков",
         "healthyCount": "{count} исправных",

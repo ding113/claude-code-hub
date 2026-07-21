@@ -15,6 +15,7 @@ import {
   Link2,
   RefreshCw,
   Server,
+  ShieldCheck,
   XCircle,
   Zap,
 } from "lucide-react";
@@ -188,6 +189,9 @@ export function LogicTraceTab({
   const totalProviders = decisionContext?.totalProviders || 0;
   const afterHealthCheck = decisionContext?.afterHealthCheck || 0;
   const normalizedRoutingTrace = normalizeRoutingTrace(routingTrace);
+  const isLeaseConflictProtection =
+    normalizedRoutingTrace?.mode === "single_upstream" &&
+    normalizedRoutingTrace.bypassReason === "lease_conflict";
 
   // Calculate step offset for session reuse flow
   const sessionReuseStepOffset = isSessionReuseFlow ? 1 : 0;
@@ -196,7 +200,7 @@ export function LogicTraceTab({
     return (
       <div className="space-y-5">
         <RoutingModeBanner trace={normalizedRoutingTrace} />
-        <DiscoveryTraceView trace={normalizedRoutingTrace} />
+        <DiscoveryTraceView trace={normalizedRoutingTrace} providerChain={providerChain ?? []} />
       </div>
     );
   }
@@ -263,12 +267,16 @@ export function LogicTraceTab({
         <div className="space-y-2">
           <div className="flex items-center justify-between">
             <h4 className="text-sm font-semibold flex items-center gap-2">
-              {isSessionReuseFlow ? (
+              {isLeaseConflictProtection ? (
+                <ShieldCheck className="h-4 w-4 text-amber-600" />
+              ) : isSessionReuseFlow ? (
                 <Link2 className="h-4 w-4 text-violet-600" />
               ) : (
                 <GitBranch className="h-4 w-4 text-blue-600" />
               )}
-              {t("logicTrace.title")}
+              {isLeaseConflictProtection
+                ? t("logicTrace.singleRouteSelectionTitle")
+                : t("logicTrace.title")}
             </h4>
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
               {isSessionReuseFlow ? (

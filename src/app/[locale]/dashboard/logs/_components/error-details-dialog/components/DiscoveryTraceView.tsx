@@ -2,6 +2,7 @@
 
 import {
   CheckCircle,
+  ChevronDown,
   ChevronRight,
   CircleDot,
   Clock3,
@@ -13,8 +14,12 @@ import {
   Zap,
 } from "lucide-react";
 import { useTranslations } from "next-intl";
+import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import { redactJsonString } from "@/lib/utils/message-redaction";
+import { sanitizeErrorTextForDetail } from "@/lib/utils/upstream-error-detection";
+import type { ProviderChainItem } from "@/types/message";
 import type { RoutingTraceV1 } from "@/types/routing-trace";
 
 const KNOWN_BYPASS_REASONS = new Set([
@@ -42,6 +47,7 @@ type AttemptView = {
   id: string;
   providerId: number | null;
   providerName: string | null;
+  sequence: number | null;
   round: number;
   role: "sticky" | "normal" | "fallback";
   priority: number | null;
@@ -58,12 +64,17 @@ type AttemptView = {
     | "client_abort"
     | "deadline";
   statusCode: number | null;
+  cancellationKind: string | null;
+  reason: string | null;
   fallbackPromoted: boolean;
   winnerCommitted: boolean;
+  chainItem: ProviderChainItem | null;
   history: Array<{
     type: string;
     elapsedMs: number | null;
     outcome: AttemptView["outcome"] | null;
+    cancellationKind: string | null;
+    reason: string | null;
   }>;
 };
 
@@ -77,6 +88,80 @@ function asString(value: unknown): string | null {
 
 function asNumber(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function parseAttemptSequence(attemptId: string): number | null {
+  const match = /:(\d+)$/.exec(attemptId);
+  return match ? Number(match[1]) : null;
+}
+
+function truncateForDisplay(value: string, maxLength = 8_192): string {
+  return value.length > maxLength ? `${value.slice(0, maxLength)}\n...` : value;
+}
+
+function sanitizeEndpoint(value: string | undefined): string | null {
+  if (!value) return null;
+  try {
+    const url = new URL(value);
+    url.username = "";
+    url.password = "";
+    url.search = "";
+    url.hash = "";
+    return truncateForDisplay(url.toString(), 2_048);
+  } catch {
+    return truncateForDisplay(value.split(/[?#]/, 1)[0], 2_048);
+  }
+}
+
+function getChainErrorMessage(item: ProviderChainItem | null): string | null {
+  if (!item) return null;
+  const sanitize = (value: string) =>
+    truncateForDisplay(sanitizeErrorTextForDetail(redactJsonString(value)));
+  if (item.errorMessage) return sanitize(item.errorMessage);
+  if (item.errorDetails?.provider?.upstreamBody) {
+    return sanitize(item.errorDetails.provider.upstreamBody);
+  }
+  if (item.errorDetails?.system?.errorMessage) {
+    return sanitize(item.errorDetails.system.errorMessage);
+  }
+  if (item.errorDetails?.clientError) return sanitize(item.errorDetails.clientError);
+  return null;
+}
+
+function buildProviderChainLookup(providerChain: ProviderChainItem[]): {
+  byAttempt: Map<string, ProviderChainItem>;
+  uniqueByProvider: Map<number, ProviderChainItem>;
+} {
+  const byAttempt = new Map<string, ProviderChainItem>();
+  const byProvider = new Map<number, ProviderChainItem[]>();
+  for (const item of providerChain) {
+    const items = byProvider.get(item.id) ?? [];
+    items.push(item);
+    byProvider.set(item.id, items);
+    if (Number.isFinite(item.attemptNumber)) {
+      byAttempt.set(`${item.id}:${item.attemptNumber}`, item);
+    }
+  }
+
+  const uniqueByProvider = new Map<number, ProviderChainItem>();
+  for (const [providerId, items] of byProvider) {
+    if (items.length === 1) uniqueByProvider.set(providerId, items[0]);
+  }
+  return { byAttempt, uniqueByProvider };
+}
+
+function findChainItem(
+  attemptId: string,
+  providerId: number | null,
+  lookup: ReturnType<typeof buildProviderChainLookup>
+): ProviderChainItem | null {
+  if (providerId == null) return null;
+  const sequence = parseAttemptSequence(attemptId);
+  if (sequence != null) {
+    const exact = lookup.byAttempt.get(`${providerId}:${sequence}`);
+    if (exact) return exact;
+  }
+  return lookup.uniqueByProvider.get(providerId) ?? null;
 }
 
 function eventType(event: TraceRecord): string {
@@ -174,8 +259,9 @@ function applyEventOutcome(attempt: AttemptView, type: string, event: TraceRecor
   }
 }
 
-function buildAttempts(trace: RoutingTraceV1): AttemptView[] {
+function buildAttempts(trace: RoutingTraceV1, providerChain: ProviderChainItem[]): AttemptView[] {
   const attempts = new Map<string, AttemptView>();
+  const lookup = buildProviderChainLookup(providerChain);
 
   for (const rawEvent of trace.events) {
     const event = asRecord(rawEvent);
@@ -194,6 +280,7 @@ function buildAttempts(trace: RoutingTraceV1): AttemptView[] {
       id: attemptId,
       providerId: provider.id,
       providerName: provider.name,
+      sequence: parseAttemptSequence(attemptId),
       round,
       role: normalizeRole(event.attemptKind ?? event.role ?? event.kind, round),
       priority: provider.priority,
@@ -201,16 +288,23 @@ function buildAttempts(trace: RoutingTraceV1): AttemptView[] {
       elapsedMs: null,
       outcome: "pending",
       statusCode: null,
+      cancellationKind: null,
+      reason: null,
       fallbackPromoted: false,
       winnerCommitted: false,
+      chainItem: findChainItem(attemptId, provider.id, lookup),
       history: [],
     };
 
     attempt.providerId ??= provider.id;
     attempt.providerName ??= provider.name;
+    attempt.sequence ??= parseAttemptSequence(attempt.id);
+    attempt.chainItem ??= findChainItem(attempt.id, attempt.providerId, lookup);
     attempt.round = Math.max(attempt.round, round);
     attempt.priority ??= provider.priority;
     attempt.statusCode ??= asNumber(event.statusCode);
+    attempt.cancellationKind ??= asString(event.cancellationKind);
+    attempt.reason ??= asString(event.reason);
     const elapsedMs = asNumber(event.elapsedMs);
     if (type === "attempt_started") attempt.startedAt = elapsedMs;
     if (elapsedMs != null) attempt.elapsedMs = elapsedMs;
@@ -234,6 +328,8 @@ function buildAttempts(trace: RoutingTraceV1): AttemptView[] {
         type,
         elapsedMs,
         outcome: normalizeOutcome(event.outcome),
+        cancellationKind: asString(event.cancellationKind),
+        reason: asString(event.reason),
       });
     }
     attempts.set(attemptId, attempt);
@@ -355,8 +451,16 @@ function outcomeStyle(outcome: AttemptView["outcome"]): {
 
 export function RoutingModeBanner({ trace }: { trace: RoutingTraceV1 }) {
   const t = useTranslations("dashboard.logs.details.routingTrace");
+  const isLeaseConflict =
+    trace.mode === "single_upstream" && trace.bypassReason === "lease_conflict";
   const Icon =
-    trace.mode === "discovery" ? Zap : trace.mode === "single_upstream" ? Server : GitBranch;
+    trace.mode === "discovery"
+      ? Zap
+      : isLeaseConflict
+        ? ShieldCheck
+        : trace.mode === "single_upstream"
+          ? Server
+          : GitBranch;
   const rawReason = trace.bypassReason;
   const reason =
     rawReason && KNOWN_BYPASS_REASONS.has(rawReason) ? rawReason : rawReason ? "unknown" : null;
@@ -367,7 +471,7 @@ export function RoutingModeBanner({ trace }: { trace: RoutingTraceV1 }) {
         <Icon className="h-4 w-4 shrink-0 text-blue-600 dark:text-blue-400" />
         <span className="text-xs text-muted-foreground">{t("title")}</span>
         <Badge variant="outline" className="max-w-full whitespace-normal text-left">
-          {t(`modes.${trace.mode}`)}
+          {isLeaseConflict ? t("modes.lease_conflict") : t(`modes.${trace.mode}`)}
         </Badge>
       </div>
       {reason && (
@@ -379,9 +483,15 @@ export function RoutingModeBanner({ trace }: { trace: RoutingTraceV1 }) {
   );
 }
 
-export function DiscoveryTraceView({ trace }: { trace: RoutingTraceV1 }) {
+export function DiscoveryTraceView({
+  trace,
+  providerChain = [],
+}: {
+  trace: RoutingTraceV1;
+  providerChain?: ProviderChainItem[];
+}) {
   const t = useTranslations("dashboard.logs.details.routingTrace");
-  const attempts = buildAttempts(trace);
+  const attempts = buildAttempts(trace, providerChain);
   const grouped = new Map<number, AttemptView[]>();
   for (const attempt of attempts) {
     const group = grouped.get(attempt.round) ?? [];
@@ -501,6 +611,12 @@ export function DiscoveryTraceView({ trace }: { trace: RoutingTraceV1 }) {
                 value={`${numberFrom(config, "stickyTimeoutCooldownMs")}ms`}
               />
             )}
+            {numberFrom(config, "sessionTtlSeconds") != null && (
+              <TraceValue
+                label={t("configStickyBindingTtl")}
+                value={`${numberFrom(config, "sessionTtlSeconds")}s`}
+              />
+            )}
           </div>
         </div>
       )}
@@ -553,57 +669,137 @@ function TraceValue({ label, value }: { label: string; value: string | number | 
 
 function AttemptCard({ attempt }: { attempt: AttemptView }) {
   const t = useTranslations("dashboard.logs.details.routingTrace");
+  const [expanded, setExpanded] = useState(false);
   const style = outcomeStyle(attempt.outcome);
   const Icon = style.icon;
   const providerName =
     attempt.providerName ?? t("providerFallback", { id: attempt.providerId ?? "-" });
+  const chainItem = attempt.chainItem;
+  const statusCode = chainItem?.statusCode ?? attempt.statusCode;
+  const endpoint = sanitizeEndpoint(chainItem?.endpointUrl);
+  const errorMessage = getChainErrorMessage(chainItem);
+  const knownCancellationKinds = new Set([
+    "discovery_loser",
+    "discovery_sla_timeout",
+    "round_timeout",
+    "sticky_timeout",
+    "request_deadline",
+    "client_abort",
+    "winner_committed",
+  ]);
+  const cancellationLabel = attempt.cancellationKind
+    ? knownCancellationKinds.has(attempt.cancellationKind)
+      ? t(`cancellationKinds.${attempt.cancellationKind}`)
+      : attempt.cancellationKind
+    : null;
 
   return (
     <article
       className={cn("min-w-0 rounded-md border p-3", style.className)}
       data-testid="discovery-attempt"
     >
-      <div className="flex items-start gap-2 min-w-0">
-        <Icon className="h-4 w-4 mt-0.5 shrink-0" />
-        <div className="min-w-0 flex-1">
-          <div className="flex items-start justify-between gap-2 min-w-0">
-            <span className="text-sm font-medium truncate" title={providerName}>
-              {providerName}
-            </span>
-            {attempt.elapsedMs != null && (
-              <span className="text-[10px] font-mono shrink-0">
-                {t("elapsed", { elapsed: Math.max(0, Math.round(attempt.elapsedMs)) })}
+      <button
+        type="button"
+        className="w-full min-w-0 text-left"
+        aria-expanded={expanded}
+        data-testid="discovery-attempt-toggle"
+        onClick={() => setExpanded((current) => !current)}
+      >
+        <div className="flex items-start gap-2 min-w-0">
+          <Icon className="h-4 w-4 mt-0.5 shrink-0" />
+          <div className="min-w-0 flex-1">
+            <div className="flex items-start justify-between gap-2 min-w-0">
+              <span className="text-sm font-medium truncate" title={providerName}>
+                {providerName}
               </span>
+              <div className="flex items-center gap-1.5 shrink-0">
+                {statusCode != null && (
+                  <span className="text-[10px] font-mono">HTTP {statusCode}</span>
+                )}
+                {expanded ? (
+                  <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                ) : (
+                  <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                )}
+              </div>
+            </div>
+            <div className="mt-2 flex items-center gap-1.5 flex-wrap">
+              <Badge variant="outline" className="text-[10px] bg-background/60">
+                {t(`roles.${attempt.role}`)}
+              </Badge>
+              <Badge variant="outline" className="text-[10px] bg-background/60">
+                {t(`outcomes.${attempt.outcome}`)}
+              </Badge>
+              {attempt.priority != null && (
+                <span className="text-[10px] opacity-80">
+                  {t("priority", { priority: attempt.priority })}
+                </span>
+              )}
+              {attempt.elapsedMs != null && (
+                <span className="text-[10px] font-mono opacity-80">
+                  {t("elapsed", { elapsed: Math.max(0, Math.round(attempt.elapsedMs)) })}
+                </span>
+              )}
+            </div>
+            {(attempt.fallbackPromoted || attempt.winnerCommitted) && (
+              <div className="mt-2 flex items-center gap-1 text-[10px]">
+                <ChevronRight className="h-3 w-3 shrink-0" />
+                <span>
+                  {attempt.winnerCommitted ? t("winnerCommitted") : t("fallbackPromoted")}
+                </span>
+              </div>
             )}
           </div>
-          <div className="mt-2 flex items-center gap-1.5 flex-wrap">
-            <Badge variant="outline" className="text-[10px] bg-background/60">
-              {t(`roles.${attempt.role}`)}
-            </Badge>
-            <Badge variant="outline" className="text-[10px] bg-background/60">
-              {t(`outcomes.${attempt.outcome}`)}
-            </Badge>
-            {attempt.priority != null && (
-              <span className="text-[10px] opacity-80">
-                {t("priority", { priority: attempt.priority })}
-              </span>
+        </div>
+      </button>
+      {expanded && (
+        <div
+          className="mt-3 border-t border-current/10 pt-3 space-y-2 text-[10px]"
+          data-testid="discovery-attempt-details"
+        >
+          <div className="grid grid-cols-2 gap-x-3 gap-y-1 min-w-0">
+            {attempt.providerId != null && (
+              <TraceValue label={t("attemptDetails.providerId")} value={attempt.providerId} />
             )}
-            {attempt.statusCode != null && (
-              <span className="text-[10px] font-mono">HTTP {attempt.statusCode}</span>
+            {attempt.sequence != null && (
+              <TraceValue label={t("attemptDetails.attempt")} value={`#${attempt.sequence}`} />
+            )}
+            {statusCode != null && (
+              <TraceValue
+                label={t("attemptDetails.status")}
+                value={`${statusCode}${chainItem?.statusCodeInferred ? ` ${t("attemptDetails.inferred")}` : ""}`}
+              />
             )}
           </div>
-          {(attempt.fallbackPromoted || attempt.winnerCommitted) && (
-            <div className="mt-2 flex items-center gap-1 text-[10px]">
-              <ChevronRight className="h-3 w-3 shrink-0" />
-              <span>{attempt.winnerCommitted ? t("winnerCommitted") : t("fallbackPromoted")}</span>
+          {endpoint && (
+            <div className="border-t border-current/10 pt-2 min-w-0">
+              <div className="text-muted-foreground mb-1">{t("attemptDetails.endpoint")}</div>
+              <code className="block break-all">{endpoint}</code>
+            </div>
+          )}
+          {errorMessage && (
+            <div className="border-t border-current/10 pt-2 min-w-0">
+              <div className="text-rose-700 dark:text-rose-300 mb-1">
+                {t("attemptDetails.error")}
+              </div>
+              <pre className="max-h-48 overflow-auto whitespace-pre-wrap break-words rounded bg-rose-50 p-2 dark:bg-rose-950/20">
+                {errorMessage}
+              </pre>
+            </div>
+          )}
+          {cancellationLabel && (
+            <div className="border-t border-current/10 pt-2">
+              <span className="text-muted-foreground">{t("attemptDetails.cancellation")}:</span>{" "}
+              <span>{cancellationLabel}</span>
             </div>
           )}
           {attempt.history.length > 0 && (
-            <div className="mt-2 border-t border-current/10 pt-2 space-y-1">
+            <div className="border-t border-current/10 pt-2 space-y-1">
+              <div className="text-muted-foreground">{t("attemptDetails.timeline")}</div>
               {attempt.history.map((event, index) => (
                 <div
                   key={`${event.type}-${event.elapsedMs ?? "unknown"}-${index}`}
-                  className="flex items-center justify-between gap-2 text-[10px] min-w-0"
+                  className="flex items-center justify-between gap-2 min-w-0"
                 >
                   <span className="flex items-center gap-1 min-w-0">
                     <span className="h-1 w-1 rounded-full bg-current shrink-0 opacity-60" />
@@ -619,7 +815,7 @@ function AttemptCard({ attempt }: { attempt: AttemptView }) {
             </div>
           )}
         </div>
-      </div>
+      )}
     </article>
   );
 }

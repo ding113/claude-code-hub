@@ -385,7 +385,8 @@
           "discovery": "限定 Discovery",
           "legacy_hedge": "従来の Hedge 競争",
           "legacy_serial": "従来の直列フェイルオーバー",
-          "single_upstream": "単一アップストリーム"
+          "single_upstream": "単一アップストリーム",
+          "lease_conflict": "単一経路保護"
         },
         "bypassed": "このリクエストでは Discovery を使用していません：{reason}",
         "bypassReasons": {
@@ -403,7 +404,7 @@
           "rollout_ineligible": "現在のロールアウト対象外です",
           "redis_capability_unavailable": "Redis バインディング機能を利用できません",
           "binding_conflict": "Session バインディングが競合しています",
-          "lease_conflict": "別のリクエストが Discovery リースを保持しています",
+          "lease_conflict": "別のリクエストが Discovery リースを保持しているため、このリクエストは単一アップストリームを使用します",
           "lease_unavailable": "Discovery リースを利用できません",
           "unknown": "Discovery の適格条件を満たしていません"
         },
@@ -471,10 +472,31 @@
         "configDiscoverySla": "ラウンド SLA",
         "configStickySla": "Sticky SLA",
         "configTotalTimeout": "全体タイムアウト",
-        "configStickyCooldown": "Sticky タイムアウトのクールダウン"
+        "configStickyCooldown": "Sticky タイムアウトのクールダウン",
+        "configStickyBindingTtl": "Sticky バインドの有効期間（SESSION_TTL）",
+        "attemptDetails": {
+          "providerId": "Provider ID",
+          "attempt": "試行回数",
+          "status": "HTTP ステータス",
+          "inferred": "推定",
+          "endpoint": "エンドポイント",
+          "error": "上流エラー",
+          "cancellation": "キャンセル理由",
+          "timeline": "試行タイムライン"
+        },
+        "cancellationKinds": {
+          "discovery_loser": "別の Discovery 試行が勝利しました",
+          "discovery_sla_timeout": "Discovery SLA の期限に達しました",
+          "round_timeout": "ラウンド SLA の期限に達しました",
+          "sticky_timeout": "Sticky SLA の期限に達しました",
+          "request_deadline": "Discovery の合計期限に達しました",
+          "client_abort": "クライアントが切断しました",
+          "winner_committed": "別の Provider が勝者として確定しました"
+        }
       },
       "logicTrace": {
         "title": "決定チェーン",
+        "singleRouteSelectionTitle": "単一経路保護での Provider 選択",
         "noDecisionData": "決定データがありません",
         "providersCount": "{count} プロバイダー",
         "healthyCount": "{count} 健全",

@@ -128,6 +128,8 @@
     "stickySlaMs": "Sticky 等待 SLA（毫秒）",
     "racingTotalTimeoutMs": "Discovery 總逾時（毫秒）",
     "stickyTimeoutCooldownMs": "Sticky 逾時冷卻（毫秒）",
+    "stickyBindingTtl": "Sticky 綁定有效期",
+    "stickyBindingTtlDesc": "唯讀；此值跟隨環境變數 SESSION_TTL，並與其他 Session 快照共用。",
     "discoveryWindowDesc": "總逾時必須不小於 Sticky SLA + 最大輪數 × Discovery SLA。Discovery 輸家會取消，不走舊 Hedge 的 drain 或輸家計費。",
     "discoveryWindowInvalid": "Discovery 總逾時短於已設定的 Sticky 與 Discovery 視窗。",
     "discoverySettingsInvalid": "一個或多個 Discovery 設定值超出允許範圍。",

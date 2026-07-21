@@ -10,6 +10,7 @@ import {
   Link2,
   MinusCircle,
   RefreshCw,
+  ShieldCheck,
   XCircle,
   Zap,
 } from "lucide-react";
@@ -331,6 +332,9 @@ export function ProviderChainPopover({
 
   // Determine max width based on whether cost badge is present
   const maxWidthClass = hasCostBadge ? "max-w-[140px]" : "max-w-[180px]";
+  const isLeaseConflictProtection =
+    normalizedRoutingTrace?.mode === "single_upstream" &&
+    normalizedRoutingTrace.bypassReason === "lease_conflict";
 
   // Check if this is a session reuse
   const isSessionReuse =
@@ -354,22 +358,41 @@ export function ProviderChainPopover({
         <TooltipProvider>
           <Tooltip delayDuration={300}>
             <TooltipTrigger asChild>
-              <span className="truncate flex items-center gap-1 cursor-help" dir="auto">
+              <span className="flex items-center gap-1 min-w-0 cursor-help" dir="auto">
+                {isLeaseConflictProtection && (
+                  <ShieldCheck className="h-3 w-3 shrink-0 text-amber-600" aria-hidden="true" />
+                )}
                 {/* Session reuse indicator */}
-                {isSessionReuse && <Link2 className="h-3 w-3 shrink-0 text-violet-500" />}
+                {isSessionReuse && !isLeaseConflictProtection && (
+                  <Link2 className="h-3 w-3 shrink-0 text-violet-500" />
+                )}
                 {/* Initial selection: show compact priority badge before name */}
                 {!isSessionReuse && selectionContext && (
                   <span className="shrink-0 text-[10px] text-emerald-600 dark:text-emerald-400 font-mono font-medium">
                     P{selectionContext.selectedPriority}
                   </span>
                 )}
-                <span className="truncate">{displayName}</span>
+                <span className="truncate min-w-0">{displayName}</span>
+                {isLeaseConflictProtection && (
+                  <Badge
+                    variant="outline"
+                    className="shrink-0 border-amber-300 bg-amber-50 px-1.5 py-0 text-[10px] text-amber-700 dark:border-amber-800 dark:bg-amber-950/20 dark:text-amber-300"
+                  >
+                    {tRouting("modes.lease_conflict")}
+                  </Badge>
+                )}
               </span>
             </TooltipTrigger>
             <TooltipContent side="bottom" align="start" className="max-w-[320px]">
               <div className="space-y-2">
                 {/* Provider name */}
                 <div className="font-medium text-xs">{displayName}</div>
+                {isLeaseConflictProtection && (
+                  <div className="flex items-start gap-1.5 border-b pb-2 text-[10px] text-amber-700 dark:border-zinc-700 dark:text-amber-300">
+                    <ShieldCheck className="mt-0.5 h-3 w-3 shrink-0" aria-hidden="true" />
+                    <span>{tRouting("bypassReasons.lease_conflict")}</span>
+                  </div>
+                )}
                 {singleRequestItem?.statusCode && (
                   <div className="flex items-center gap-1">
                     <Badge
@@ -597,7 +620,9 @@ export function ProviderChainPopover({
         >
           <span className="flex w-full items-center gap-1 min-w-0">
             {/* Request count badge */}
-            {isHedge ? (
+            {isLeaseConflictProtection ? (
+              <ShieldCheck className="h-3 w-3 shrink-0 text-amber-600" aria-hidden="true" />
+            ) : isHedge ? (
               <GitBranch className="h-3 w-3 shrink-0 text-indigo-500" />
             ) : (
               <Badge variant="secondary" className="shrink-0">
@@ -609,6 +634,14 @@ export function ProviderChainPopover({
             <span className="truncate min-w-0" dir="auto">
               {displayName}
             </span>
+            {isLeaseConflictProtection && (
+              <Badge
+                variant="outline"
+                className="shrink-0 border-amber-300 bg-amber-50 px-1.5 py-0 text-[10px] text-amber-700 dark:border-amber-800 dark:bg-amber-950/20 dark:text-amber-300"
+              >
+                {tRouting("modes.lease_conflict")}
+              </Badge>
+            )}
             {/* Cost multiplier badge (if not 1) */}
             {hasFinalCostBadge && (
               <Badge
@@ -648,7 +681,14 @@ export function ProviderChainPopover({
       <PopoverContent className="w-[360px] max-w-[calc(100vw-2rem)] p-0" align="start">
         <div className="p-3 border-b">
           <div className="flex items-center justify-between">
-            <h4 className="font-semibold text-sm">{t("logs.providerChain.decisionChain")}</h4>
+            <h4 className="flex items-center gap-1.5 font-semibold text-sm">
+              {isLeaseConflictProtection && (
+                <ShieldCheck className="h-3.5 w-3.5 shrink-0 text-amber-600" aria-hidden="true" />
+              )}
+              {isLeaseConflictProtection
+                ? tRouting("modes.lease_conflict")
+                : t("logs.providerChain.decisionChain")}
+            </h4>
             <Badge variant="outline" className="text-[10px]">
               {isHedge ? tChain("timeline.hedgeRace") : `${requestCount} ${t("logs.table.times")}`}
             </Badge>

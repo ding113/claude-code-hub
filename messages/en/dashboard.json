@@ -385,7 +385,8 @@
           "discovery": "Bounded Discovery",
           "legacy_hedge": "Legacy Hedge",
           "legacy_serial": "Legacy serial fallback",
-          "single_upstream": "Single upstream"
+          "single_upstream": "Single upstream",
+          "lease_conflict": "Single-route protection"
         },
         "bypassed": "Discovery was not used: {reason}",
         "bypassReasons": {
@@ -403,7 +404,7 @@
           "rollout_ineligible": "Request is outside the current rollout",
           "redis_capability_unavailable": "Redis binding capability is unavailable",
           "binding_conflict": "Session binding conflict",
-          "lease_conflict": "Another request owns the Discovery lease",
+          "lease_conflict": "Another request owns the Discovery lease; this request uses one upstream",
           "lease_unavailable": "Discovery lease is unavailable",
           "unknown": "Eligibility requirement was not met"
         },
@@ -471,10 +472,31 @@
         "configDiscoverySla": "Round SLA",
         "configStickySla": "Sticky SLA",
         "configTotalTimeout": "Total timeout",
-        "configStickyCooldown": "Sticky timeout cooldown"
+        "configStickyCooldown": "Sticky timeout cooldown",
+        "configStickyBindingTtl": "Sticky binding validity (SESSION_TTL)",
+        "attemptDetails": {
+          "providerId": "Provider ID",
+          "attempt": "Attempt",
+          "status": "HTTP status",
+          "inferred": "inferred",
+          "endpoint": "Endpoint",
+          "error": "Upstream error",
+          "cancellation": "Cancellation reason",
+          "timeline": "Attempt timeline"
+        },
+        "cancellationKinds": {
+          "discovery_loser": "Another Discovery attempt won",
+          "discovery_sla_timeout": "Discovery SLA expired",
+          "round_timeout": "Round SLA expired",
+          "sticky_timeout": "Sticky SLA expired",
+          "request_deadline": "Total Discovery deadline reached",
+          "client_abort": "Client disconnected",
+          "winner_committed": "Another provider was committed"
+        }
       },
       "logicTrace": {
         "title": "Decision Chain",
+        "singleRouteSelectionTitle": "Provider selection under single-route protection",
         "noDecisionData": "No decision data available",
         "providersCount": "{count} providers",
         "healthyCount": "{count} healthy",

@@ -1312,6 +1312,10 @@ export class ProxyForwarder {
 
     const requestStartedAt = Date.now();
     const discoverySettings = await getCachedSystemSettings();
+    const configuredSessionTtlSeconds = getEnvConfig().SESSION_TTL;
+    const sessionTtlSeconds = Number.isFinite(configuredSessionTtlSeconds)
+      ? Math.max(1, Math.floor(configuredSessionTtlSeconds))
+      : 300;
     const discoveryPreparation = await ProxyForwarder.prepareStreamingDiscovery(
       session,
       discoverySettings,
@@ -1336,6 +1340,7 @@ export class ProxyForwarder {
             1,
             discoverySettings.stickyTimeoutCooldownMs ?? 300_000
           ),
+          sessionTtlSeconds,
         },
       });
       const discoveryPromise = ProxyForwarder.sendStreamingWithDiscovery(
@@ -6297,7 +6302,7 @@ export class ProxyForwarder {
               ...buildRetryFailedChainEntry(
                 provider,
                 attempt.endpointAudit,
-                attempt.requestAttemptCount,
+                attempt.sequence,
                 lastError,
                 errorMessage,
                 rectifier.requestDetailsBeforeRectify,

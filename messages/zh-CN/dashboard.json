@@ -385,7 +385,8 @@
           "discovery": "有界供应商 Discovery",
           "legacy_hedge": "旧版 Hedge 竞速",
           "legacy_serial": "旧版串行故障转移",
-          "single_upstream": "单上游模式"
+          "single_upstream": "单上游模式",
+          "lease_conflict": "单路保护"
         },
         "bypassed": "本请求未使用 Discovery：{reason}",
         "bypassReasons": {
@@ -403,7 +404,7 @@
           "rollout_ineligible": "本请求不在当前灰度范围内",
           "redis_capability_unavailable": "Redis 绑定能力不可用",
           "binding_conflict": "Session 绑定状态冲突",
-          "lease_conflict": "另一个请求持有 Discovery 租约",
+          "lease_conflict": "另一个请求持有 Discovery 租约，本请求只使用一个上游",
           "lease_unavailable": "Discovery 租约不可用",
           "unknown": "未满足 Discovery 准入条件"
         },
@@ -471,10 +472,31 @@
         "configDiscoverySla": "每轮 SLA",
         "configStickySla": "Sticky SLA",
         "configTotalTimeout": "总超时",
-        "configStickyCooldown": "Sticky 超时冷却"
+        "configStickyCooldown": "Sticky 超时冷却",
+        "configStickyBindingTtl": "Sticky 绑定有效期（SESSION_TTL）",
+        "attemptDetails": {
+          "providerId": "供应商 ID",
+          "attempt": "尝试次数",
+          "status": "HTTP 状态",
+          "inferred": "推断",
+          "endpoint": "端点",
+          "error": "上游错误",
+          "cancellation": "取消原因",
+          "timeline": "尝试时间线"
+        },
+        "cancellationKinds": {
+          "discovery_loser": "其他 Discovery 尝试已胜出",
+          "discovery_sla_timeout": "Discovery SLA 已到期",
+          "round_timeout": "本轮 SLA 已到期",
+          "sticky_timeout": "Sticky SLA 已到期",
+          "request_deadline": "Discovery 总时限已到期",
+          "client_abort": "客户端已断开",
+          "winner_committed": "其他供应商已提交为赢家"
+        }
       },
       "logicTrace": {
         "title": "决策链",
+        "singleRouteSelectionTitle": "单路保护下的供应商选择",
         "noDecisionData": "暂无决策数据",
         "providersCount": "{count} 个供应商",
         "healthyCount": "{count} 个健康",

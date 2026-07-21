@@ -658,4 +658,88 @@ describe("provider-chain-popover Discovery summary", () => {
     expect(html).toContain("Note: payload may have been forwarded");
     expect(html).toContain("Why CCH cannot retry this response on the server");
   });
+
+  test("marks lease-conflict single-upstream routing without hiding selector priority", () => {
+    const routingTrace: RoutingTraceV1 = {
+      version: 1,
+      mode: "single_upstream",
+      startedAt: 1_000,
+      updatedAt: 2_000,
+      discoveryEnabled: true,
+      eligible: false,
+      bypassReason: "lease_conflict",
+      events: [],
+    };
+    const html = renderWithIntl(
+      <ProviderChainPopover
+        chain={[
+          {
+            id: 80,
+            name: "Lyclaude",
+            reason: "initial_selection",
+            decisionContext: {
+              selectedPriority: 1,
+              totalProviders: 2,
+              enabledProviders: 2,
+              afterHealthCheck: 2,
+              beforeHealthCheck: 2,
+              priorityLevels: [1],
+              candidatesAtPriority: [],
+              groupFilterApplied: false,
+              targetType: "codex",
+            },
+          },
+          { id: 80, name: "Lyclaude", reason: "request_success", statusCode: 200 },
+        ]}
+        routingTrace={routingTrace}
+        finalProvider="Lyclaude"
+      />
+    );
+
+    expect(html).toContain("Single-route protection");
+    expect(html).toContain("Another request owns the Discovery lease");
+    expect(html).toContain("P1");
+    expect(html).toContain("lucide-shield-check");
+  });
+
+  test("keeps lease-conflict protection visible after serial provider fallback", () => {
+    const routingTrace: RoutingTraceV1 = {
+      version: 1,
+      mode: "single_upstream",
+      startedAt: 1_000,
+      updatedAt: 3_000,
+      discoveryEnabled: true,
+      eligible: false,
+      bypassReason: "lease_conflict",
+      events: [],
+    };
+    const html = renderWithIntl(
+      <ProviderChainPopover
+        chain={[
+          { id: 80, name: "primary", reason: "initial_selection" },
+          {
+            id: 80,
+            name: "primary",
+            reason: "retry_failed",
+            attemptNumber: 1,
+            statusCode: 503,
+          },
+          {
+            id: 81,
+            name: "backup",
+            reason: "retry_success",
+            attemptNumber: 2,
+            statusCode: 200,
+          },
+        ]}
+        routingTrace={routingTrace}
+        finalProvider="backup"
+      />
+    );
+
+    expect(html).toContain("Single-route protection");
+    expect(html).toContain("lucide-shield-check");
+    expect(html).toContain("primary");
+    expect(html).toContain("backup");
+  });
 });
