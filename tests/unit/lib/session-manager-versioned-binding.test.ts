@@ -9,6 +9,7 @@ const bindingMocks = vi.hoisted(() => ({
   refreshSessionBinding: vi.fn(),
   releaseSessionDiscoveryLease: vi.fn(),
   renewSessionDiscoveryLease: vi.fn(),
+  touchSessionBinding: vi.fn(),
 }));
 
 let redisClientRef: {
@@ -91,6 +92,10 @@ beforeEach(() => {
     status: "released",
     legacyFallbackAllowed: false,
   });
+  bindingMocks.touchSessionBinding.mockResolvedValue({
+    ...snapshot(),
+    source: "touched",
+  });
 });
 
 describe("SessionManager versioned binding adapter", () => {
@@ -140,6 +145,28 @@ describe("SessionManager versioned binding adapter", () => {
       expect.objectContaining({ sessionId: SESSION_ID, keyId: KEY_ID })
     );
     expect(redisClientRef.get).not.toHaveBeenCalled();
+  });
+
+  it("touches only the captured binding and exposes a TTL-derived heartbeat interval", async () => {
+    const binding = snapshot().snapshot;
+    const configuredTtl = Number.parseInt(process.env.SESSION_TTL || "300", 10);
+
+    await expect(SessionManager.touchVersionedSessionBinding(binding)).resolves.toMatchObject({
+      status: "ok",
+      source: "touched",
+    });
+
+    expect(bindingMocks.touchSessionBinding).toHaveBeenCalledWith({
+      sessionId: SESSION_ID,
+      keyId: KEY_ID,
+      expectedGeneration: "generation-a",
+      expectedProviderId: PROVIDER_ID,
+      ttlSeconds: configuredTtl,
+      redis: redisClientRef,
+    });
+    expect(SessionManager.getVersionedSessionBindingRefreshIntervalMs()).toBe(
+      Math.max(1, Math.floor((configuredTtl * 1000) / 3))
+    );
   });
 
   it("fails closed on a foreign legacy owner", async () => {

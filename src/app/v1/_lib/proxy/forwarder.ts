@@ -5041,6 +5041,7 @@ export class ProxyForwarder {
     let roundLaunchesInProgress = 0;
     const roundLaunchIdleWaiters = new Set<() => void>();
     let fallbackPromotionBlocked = false;
+    let stickyTimeoutWaveReservation: { fallbackAttemptId: string } | null = null;
     const hasSticky =
       session.shouldReuseProvider() &&
       !!session.sessionId &&
@@ -5781,7 +5782,14 @@ export class ProxyForwarder {
             failureAction.type === "launch" ||
             failureAction.type === "terminal_failure";
           if (actionOwnsNextStep) {
-            await executeCoordinatorAction(failureAction);
+            if (
+              failureAction.type === "launch" &&
+              stickyTimeoutWaveReservation?.fallbackAttemptId === id
+            ) {
+              await launchReservedStickyTimeoutWave(failureAction.slots);
+            } else {
+              await executeCoordinatorAction(failureAction);
+            }
           }
           if (!actionOwnsNextStep && !committed && !settled) {
             const replacement = await chooseCandidate();
@@ -5866,6 +5874,13 @@ export class ProxyForwarder {
           }
         }
       }
+    };
+
+    const launchReservedStickyTimeoutWave = async (slots: number): Promise<void> => {
+      if (!stickyTimeoutWaveReservation) return;
+      stickyTimeoutWaveReservation = null;
+      if (settled || committed) return;
+      await launchNextRound(slots, true);
     };
 
     executeCoordinatorAction = async (action, terminalCancellationKind) => {
@@ -5965,17 +5980,18 @@ export class ProxyForwarder {
                 sticky.kind = "fallback";
                 discoveryMetrics.fallbackPromoted(sticky.id, sticky.provider.id, 0);
                 fallbackPromotionBlocked = true;
+                stickyTimeoutWaveReservation = { fallbackAttemptId: sticky.id };
                 if (bindingSnapshot && bindingSnapshot.providerId === initialProvider.id) {
                   void clearCapturedStickyBinding(
                     Math.ceil((settings.stickyTimeoutCooldownMs ?? 300_000) / 1000)
                   ).finally(() => {
-                    void launchNextRound(Math.max(0, concurrency - 1), true).catch((error) =>
-                      logger.warn("[Discovery] Sticky round launch failed", { error })
+                    void launchReservedStickyTimeoutWave(Math.max(0, concurrency - 1)).catch(
+                      (error) => logger.warn("[Discovery] Sticky round launch failed", { error })
                     );
                   });
                   return;
                 }
-                void launchNextRound(Math.max(0, concurrency - 1), true).catch((error) =>
+                void launchReservedStickyTimeoutWave(Math.max(0, concurrency - 1)).catch((error) =>
                   logger.warn("[Discovery] Sticky round launch failed", { error })
                 );
               }

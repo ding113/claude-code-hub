@@ -49,6 +49,7 @@ import {
   type SessionDiscoveryLeaseMutationResult,
   type SessionProviderCooldownResult,
   terminateSessionBinding as terminateVersionedSessionBinding,
+  touchSessionBinding,
   type VersionedBindingCapabilityState,
 } from "./redis/session-binding";
 import { SessionTracker } from "./session-tracker";
@@ -731,6 +732,29 @@ export class SessionManager {
     return readOrReconcileSessionBinding({
       sessionId,
       keyId,
+      ttlSeconds: SessionManager.SESSION_TTL,
+      redis,
+    });
+  }
+
+  /**
+   * Heartbeats run at one third of the configured binding TTL, leaving time
+   * for a transient Redis failure without allowing a live binding to expire.
+   */
+  static getVersionedSessionBindingRefreshIntervalMs(): number {
+    return Math.max(1, Math.floor((SessionManager.SESSION_TTL * 1000) / 3));
+  }
+
+  static async touchVersionedSessionBinding(
+    snapshot: SessionBindingSnapshot
+  ): Promise<SessionBindingResult> {
+    const redis = getRedisClient();
+    if (!redis || redis.status !== "ready") return redisUnavailableBindingResult();
+    return touchSessionBinding({
+      sessionId: snapshot.sessionId,
+      keyId: snapshot.keyId,
+      expectedGeneration: snapshot.generation,
+      expectedProviderId: snapshot.providerId,
       ttlSeconds: SessionManager.SESSION_TTL,
       redis,
     });
@@ -2857,6 +2881,44 @@ export class SessionManager {
             });
             return false;
           }
+
+          if (expectedProviderIds) {
+            const terminatedProviderId = binding.snapshot.providerId;
+            if (terminatedProviderId === null) {
+              logger.warn("SessionManager: Scoped versioned termination lost Provider identity", {
+                sessionId,
+                keyId,
+              });
+              return false;
+            }
+
+            // The versioned CAS above is the linearization point. A failover
+            // may bind this Session to Q immediately afterwards, so scoped
+            // invalidation must only remove P's Provider-owned indexes.
+            try {
+              const providerCleanup = redis.pipeline();
+              providerCleanup.zrem(`provider:${terminatedProviderId}:active_sessions`, sessionId);
+              providerCleanup.hdel(
+                `provider:${terminatedProviderId}:active_session_refs`,
+                sessionId
+              );
+              await providerCleanup.exec();
+            } catch (cleanupError) {
+              logger.warn("SessionManager: Scoped versioned Provider index cleanup failed", {
+                sessionId,
+                providerId: terminatedProviderId,
+                error: cleanupError,
+              });
+            }
+
+            logger.info("SessionManager: Cleared scoped versioned Provider binding", {
+              sessionId,
+              providerId: terminatedProviderId,
+              keyId,
+            });
+            return true;
+          }
+
           bindingTerminated = true;
         } else if (binding.status === "unavailable" && binding.legacyFallbackAllowed) {
           const legacy = await mutateLegacySessionBindingSafely({

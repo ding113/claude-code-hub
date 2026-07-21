@@ -13,6 +13,8 @@ import {
   isSessionProviderCoolingDown,
   readOrReconcileSessionBinding,
   resetVersionedBindingCapabilityForTests,
+  terminateSessionBinding,
+  touchSessionBinding,
   type SessionBindingOkResult,
   type SessionBindingResult,
 } from "@/lib/redis/session-binding";
@@ -378,6 +380,94 @@ runWithVersionedBinding("versioned session binding reconcile", () => {
 });
 
 runWithVersionedBinding("versioned session binding mutation", () => {
+  test("touches exact null and provider snapshots without rotating generation", async () => {
+    const sessionId = nextSessionId("touch-exact");
+    const keyId = 1200;
+    const providerId = 2200;
+    const keys = buildSessionBindingKeys(sessionId, keyId);
+    rememberBindingKeys(sessionId, [keyId]);
+
+    const initial = requireOk(await readBinding(sessionId, keyId));
+    await redis.expire(keys.canonical, 5);
+    await redis.expire(keys.legacyOwner, 5);
+    const touchedNull = requireOk(
+      await touchSessionBinding({
+        ...initial.snapshot,
+        expectedGeneration: initial.snapshot.generation,
+        expectedProviderId: null,
+        ttlSeconds: BINDING_TTL_SECONDS,
+        redis,
+      })
+    );
+    expect(touchedNull.source).toBe("touched");
+    expect(touchedNull.snapshot).toEqual(initial.snapshot);
+    expect(await redis.ttl(keys.canonical)).toBeGreaterThan(BINDING_TTL_SECONDS - 5);
+    expect(await redis.ttl(keys.legacyOwner)).toBeGreaterThan(BINDING_TTL_SECONDS - 5);
+    expect(await redis.exists(keys.legacyProvider)).toBe(0);
+
+    const bound = requireOk(
+      await bindProvider(sessionId, keyId, touchedNull.snapshot.generation, providerId)
+    );
+    await redis.expire(keys.canonical, 5);
+    await redis.expire(keys.legacyOwner, 5);
+    await redis.expire(keys.legacyProvider, 5);
+    const touchedProvider = requireOk(
+      await touchSessionBinding({
+        sessionId,
+        keyId,
+        expectedGeneration: bound.snapshot.generation,
+        expectedProviderId: providerId,
+        ttlSeconds: BINDING_TTL_SECONDS,
+        redis,
+      })
+    );
+    expect(touchedProvider.source).toBe("touched");
+    expect(touchedProvider.snapshot).toEqual(bound.snapshot);
+    expect(await redis.ttl(keys.canonical)).toBeGreaterThan(BINDING_TTL_SECONDS - 5);
+    expect(await redis.ttl(keys.legacyOwner)).toBeGreaterThan(BINDING_TTL_SECONDS - 5);
+    expect(await redis.ttl(keys.legacyProvider)).toBeGreaterThan(BINDING_TTL_SECONDS - 5);
+  });
+
+  test("rejects a stale touch after administrative termination advances generation", async () => {
+    const sessionId = nextSessionId("touch-after-admin-termination");
+    const keyId = 1201;
+    const providerId = 2201;
+    const keys = buildSessionBindingKeys(sessionId, keyId);
+    rememberBindingKeys(sessionId, [keyId]);
+
+    const initial = requireOk(await readBinding(sessionId, keyId));
+    const bound = requireOk(
+      await bindProvider(sessionId, keyId, initial.snapshot.generation, providerId)
+    );
+    const terminated = requireOk(
+      await terminateSessionBinding({
+        sessionId,
+        keyId,
+        expectedProviderId: providerId,
+        ttlSeconds: BINDING_TTL_SECONDS,
+        redis,
+      })
+    );
+
+    const staleTouch = await touchSessionBinding({
+      sessionId,
+      keyId,
+      expectedGeneration: bound.snapshot.generation,
+      expectedProviderId: providerId,
+      ttlSeconds: BINDING_TTL_SECONDS,
+      redis,
+    });
+
+    expect(staleTouch).toEqual({
+      status: "conflict",
+      reason: "generation_mismatch",
+      legacyFallbackAllowed: false,
+    });
+    expect(await redis.hget(keys.canonical, "generation")).toBe(terminated.snapshot.generation);
+    expect(await redis.hget(keys.canonical, "provider_id")).toBeNull();
+    expect(await redis.exists(keys.legacyProvider)).toBe(0);
+  });
+
   test("rotates generation across CAS and rejects a stale ABA clear", async () => {
     const sessionId = nextSessionId("aba");
     const keyId = 1201;

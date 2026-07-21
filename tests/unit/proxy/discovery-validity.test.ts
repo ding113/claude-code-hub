@@ -139,6 +139,24 @@ describe("discovery validity", () => {
     }
     expect(result).toMatchObject({ ready: false, error: true, limitExceeded: true });
   });
+
+  it("stops parsing current and future events after the event limit", () => {
+    const parser = new DiscoveryValidityParser("anthropic");
+    const metadataEvents = Array.from(
+      { length: DISCOVERY_EVENT_MAX_COUNT + 1 },
+      () => 'data: {"type":"ping"}\n'
+    ).join("");
+
+    const limited = parser.push(`${metadataEvents}data: {"type":"message_stop"}\n`);
+    expect(limited).toMatchObject({
+      ready: false,
+      terminal: false,
+      error: true,
+      limitExceeded: true,
+    });
+
+    expect(parser.push('data: {"type":"message_stop"}\n')).toEqual(limited);
+  });
 });
 
 function parserForOpenAIChatToolCall(): DiscoveryValidityParser {
