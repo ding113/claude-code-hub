@@ -8,6 +8,7 @@ import { getEnvConfig } from "@/lib/config/env.schema";
 import { logger } from "@/lib/logger";
 import type { StoredCostBreakdown } from "@/types/cost-breakdown";
 import type { CreateMessageRequestData } from "@/types/message";
+import { normalizeRoutingTrace, type RoutingTraceV1 } from "@/types/routing-trace";
 
 export type MessageRequestUpdatePatch = {
   durationMs?: number;
@@ -22,6 +23,7 @@ export type MessageRequestUpdatePatch = {
   cacheCreation1hInputTokens?: number;
   cacheTtlApplied?: string | null;
   providerChain?: CreateMessageRequestData["provider_chain"];
+  routingTrace?: RoutingTraceV1 | null;
   errorMessage?: string;
   errorStack?: string;
   errorCause?: string;
@@ -231,6 +233,7 @@ const COLUMN_MAP: Record<keyof MessageRequestUpdatePatch, string> = {
   cacheCreation1hInputTokens: "cache_creation_1h_input_tokens",
   cacheTtlApplied: "cache_ttl_applied",
   providerChain: "provider_chain",
+  routingTrace: "routing_trace",
   errorMessage: "error_message",
   errorStack: "error_stack",
   errorCause: "error_cause",
@@ -297,12 +300,17 @@ export function buildBatchUpdateSql(
         continue;
       }
 
-      if (key === "providerChain" || key === "specialSettings" || key === "costBreakdown") {
+      if (
+        key === "providerChain" ||
+        key === "routingTrace" ||
+        key === "specialSettings" ||
+        key === "costBreakdown"
+      ) {
         if (value === null) {
           cases.push(sql`WHEN ${update.id} THEN NULL`);
           continue;
         }
-        const json = JSON.stringify(value);
+        const json = JSON.stringify(key === "routingTrace" ? normalizeRoutingTrace(value) : value);
         cases.push(sql`WHEN ${update.id} THEN ${json}::jsonb`);
         continue;
       }

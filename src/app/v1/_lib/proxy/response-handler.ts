@@ -13,7 +13,6 @@ import { recordDiscoveryControlEvent } from "@/lib/observability/discovery-metri
 import { requestCloudPriceTableSync } from "@/lib/price-sync/cloud-price-updater";
 import { ProxyStatusTracker } from "@/lib/proxy-status-tracker";
 import { RateLimitService } from "@/lib/rate-limit";
-import { deleteLiveChain } from "@/lib/redis/live-chain-store";
 import type { SessionBindingSnapshot } from "@/lib/redis/session-binding";
 import { SessionManager } from "@/lib/session-manager";
 import { SessionTracker } from "@/lib/session-tracker";
@@ -42,6 +41,7 @@ import {
   updateMessageRequestCostWithBreakdown,
   updateMessageRequestDetailsDurably,
   updateMessageRequestDetailsIfUnfinalized,
+  updateMessageRequestRoutingTrace,
   updateMessageRequestWinnerCost,
 } from "@/repository/message";
 import type { HedgeLoserBilling, StoredCostBreakdown } from "@/types/cost-breakdown";
@@ -1496,6 +1496,33 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
   const meta = consumeDeferredStreamingFinalization(session);
   const provider = session.provider;
   const providerIdForPersistence = meta?.providerId ?? provider?.id ?? null;
+  let bindingTraceRecorded = false;
+  const recordBindingFinalized = async (options: {
+    bindingAction: "create" | "renew" | "clear" | "none";
+    outcome: string;
+    reason?: string;
+  }): Promise<void> => {
+    if (bindingTraceRecorded || !meta?.discoveryLease) return;
+    bindingTraceRecorded = true;
+    session.appendRoutingTraceEvent({
+      type: "binding_finalized",
+      provider:
+        providerIdForPersistence == null
+          ? undefined
+          : {
+              id: providerIdForPersistence,
+              ...(meta.providerName ? { name: meta.providerName } : {}),
+              priority: meta.providerPriority,
+            },
+      bindingAction: options.bindingAction,
+      outcome: options.outcome,
+      ...(options.reason ? { reason: options.reason } : {}),
+    });
+    const routingTrace = session.getRoutingTrace();
+    if (routingTrace && session.messageContext) {
+      await updateMessageRequestRoutingTrace(session.messageContext.id, routingTrace);
+    }
+  };
   const clearSessionBinding = async () => {
     if (!session.sessionId || !isSessionBindingMutationAllowed(session)) return;
     const hedgeAuthority = meta?.isHedgeWinner
@@ -1520,7 +1547,14 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
       return;
     }
     const keyId = session.authState?.key?.id ?? session.messageContext?.key?.id ?? null;
-    if (meta?.bindingIntent === "none" || meta?.bindingIntent === "create") return;
+    if (meta?.bindingIntent === "none" || meta?.bindingIntent === "create") {
+      await recordBindingFinalized({
+        bindingAction: "none",
+        outcome: "skipped",
+        reason: meta.bindingIntent === "create" ? "stream_not_successful" : "binding_not_requested",
+      });
+      return;
+    }
     if (meta?.bindingIntent === "renew") {
       // A client disconnect is not evidence that the Sticky Provider failed.
       // Discovery renewals may only clear the exact binding snapshot that was
@@ -1539,6 +1573,11 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
           expectedProviderId: meta.providerId,
           reason: "missing_or_mismatched_snapshot",
         });
+        await recordBindingFinalized({
+          bindingAction: "clear",
+          outcome: "skipped",
+          reason: "missing_or_mismatched_snapshot",
+        });
         return;
       }
       if (!(await discoveryLeaseLifecycle.ensureOwned())) {
@@ -1550,6 +1589,11 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
             expectedProviderId: meta.bindingSnapshot.providerId,
           }
         );
+        await recordBindingFinalized({
+          bindingAction: "clear",
+          outcome: "skipped",
+          reason: "discovery_lease_not_owned",
+        });
         return;
       }
       const cleared = await SessionManager.clearVersionedSessionProvider(
@@ -1565,6 +1609,11 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
           reason: cleared.reason,
         });
       }
+      await recordBindingFinalized({
+        bindingAction: "clear",
+        outcome: cleared.status === "ok" ? "cleared" : "skipped",
+        reason: cleared.status === "ok" ? "stream_failed" : cleared.reason,
+      });
       return;
     }
 
@@ -1597,7 +1646,23 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
       };
     }
 
-    const cas = await SessionManager.compareAndSetSessionProvider(snapshot, providerId);
+    let cas: Awaited<ReturnType<typeof SessionManager.compareAndSetSessionProvider>>;
+    try {
+      cas = await SessionManager.compareAndSetSessionProvider(snapshot, providerId);
+    } catch (error) {
+      logger.warn("[ResponseHandler] Discovery binding CAS failed", {
+        sessionId: snapshot.sessionId,
+        keyId,
+        providerId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      await recordBindingFinalized({
+        bindingAction: meta?.bindingIntent === "create" ? "create" : "renew",
+        outcome: "failed",
+        reason: "binding_error",
+      });
+      return { updated: false, reason: "binding_error", details: "binding_error" };
+    }
     if (cas.status === "conflict") {
       recordDiscoveryControlEvent("binding_cas_conflict", {
         requestId: session.messageContext?.id ?? null,
@@ -1607,6 +1672,12 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
         reason: cas.reason,
       });
     }
+
+    await recordBindingFinalized({
+      bindingAction: meta?.bindingIntent === "create" ? "create" : "renew",
+      outcome: cas.status === "ok" ? "updated" : "skipped",
+      reason: cas.status === "ok" ? "generation_cas" : cas.reason,
+    });
 
     return {
       updated: cas.status === "ok",
@@ -1636,6 +1707,11 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
   };
   const finalizeFailedDiscoveryBinding = async () => {
     settlePrimaryDiscoveryBinding(false);
+    await recordBindingFinalized({
+      bindingAction: "none",
+      outcome: "skipped",
+      reason: "stream_not_successful",
+    });
     await finalizeProviderSessionRef();
   };
   const confirmAuxiliarySessionBinding = async () =>
@@ -2045,8 +2121,8 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
   const hedgeBindingCompletion = meta.hedgeBindingHeartbeat?.complete();
   const commitSideEffects = async () => {
     let primaryDiscoveryBindingUpdated = false;
-    await hedgeBindingCompletion;
     try {
+      await hedgeBindingCompletion;
       if (meta.endpointId != null) {
         try {
           const { recordEndpointSuccess } = await import("@/lib/endpoint-circuit-breaker");
@@ -2095,6 +2171,14 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
               keyId
             );
 
+        if (isDiscoveryBinding && !bindingTraceRecorded) {
+          await recordBindingFinalized({
+            bindingAction: meta.bindingIntent === "create" ? "create" : "renew",
+            outcome: "skipped",
+            reason: result.reason,
+          });
+        }
+
         primaryDiscoveryBindingUpdated = isDiscoveryBinding && result.updated;
         retainProviderSessionRef =
           primaryDiscoveryBindingUpdated && meta.providerSessionRefRetainOnSuccess === true;
@@ -2132,6 +2216,22 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
             );
           });
         }
+      }
+
+      if (meta.discoveryLease && !bindingTraceRecorded) {
+        await recordBindingFinalized({
+          bindingAction:
+            meta.bindingIntent === "create" || meta.bindingIntent === "renew"
+              ? meta.bindingIntent
+              : "none",
+          outcome: "skipped",
+          reason:
+            meta.bindingIntent === "none"
+              ? "fallback_winner"
+              : clientAborted
+                ? "client_aborted"
+                : "binding_not_permitted",
+        });
       }
 
       logger.info("[ResponseHandler] Streaming request finalized as success", {
@@ -2467,6 +2567,7 @@ export class ProxyResponseHandler {
                     ...errorDetails,
                     ttfbMs: session.ttfbMs ?? duration,
                     providerChain: session.getProviderChain(),
+                    routingTrace: session.finalizeRoutingTrace(finalizedStatusCode),
                     model: session.getCurrentModel() ?? undefined,
                     providerId: session.provider?.id,
                     context1mApplied: session.getContext1mApplied(),
@@ -2631,6 +2732,7 @@ export class ProxyResponseHandler {
             ...errorDetails,
             ttfbMs: session.ttfbMs ?? duration,
             providerChain: session.getProviderChain(),
+            routingTrace: session.finalizeRoutingTrace(finalizedStatusCode),
             model: session.getCurrentModel() ?? undefined, // 更新重定向后的模型
             providerId: session.provider?.id, // 更新最终供应商ID（重试切换后）
             context1mApplied: session.getContext1mApplied(),
@@ -2945,6 +3047,7 @@ export class ProxyResponseHandler {
             cacheCreation1hInputTokens: usageMetrics?.cache_creation_1h_input_tokens,
             cacheTtlApplied: usageMetrics?.cache_ttl ?? null,
             providerChain: session.getProviderChain(),
+            routingTrace: session.finalizeRoutingTrace(statusCode),
             ...(terminalErrorMessage ? { errorMessage: terminalErrorMessage } : {}),
             model: session.getCurrentModel() ?? undefined, // 更新重定向后的模型
             actualResponseModel: extractActualResponseModelForProvider(
@@ -4273,6 +4376,7 @@ export class ProxyResponseHandler {
               cacheCreation1hInputTokens: usageForCost?.cache_creation_1h_input_tokens,
               cacheTtlApplied: usageForCost?.cache_ttl ?? null,
               providerChain: session.getProviderChain(),
+              routingTrace: session.finalizeRoutingTrace(effectiveStatusCode),
               ...(streamErrorMessage ? { errorMessage: streamErrorMessage } : {}),
               model: currentRequestedModel ?? undefined, // 更新重定向后的模型
               actualResponseModel: finalActualResponseModel,
@@ -5804,6 +5908,7 @@ export async function finalizeRequestStats(
       ...(errorMessage ? { errorMessage } : {}),
       ttfbMs: session.ttfbMs ?? duration,
       providerChain: session.getProviderChain(),
+      routingTrace: session.finalizeRoutingTrace(statusCode),
       model: session.getCurrentModel() ?? undefined,
       actualResponseModel: extractActualResponseModelForProvider(
         provider.providerType,
@@ -5921,6 +6026,7 @@ export async function finalizeRequestStats(
     cacheCreation1hInputTokens: normalizedUsage.cache_creation_1h_input_tokens,
     cacheTtlApplied: normalizedUsage.cache_ttl ?? null,
     providerChain: session.getProviderChain(),
+    routingTrace: session.finalizeRoutingTrace(statusCode),
     ...(errorMessage ? { errorMessage } : {}),
     model: session.getCurrentModel() ?? undefined,
     actualResponseModel: extractActualResponseModelForProvider(
@@ -5941,7 +6047,7 @@ export async function finalizeRequestStats(
 
   if (session.sessionId && session.requestSequence != null) {
     if (session.shouldTrackSessionObservability()) {
-      void deleteLiveChain(session.sessionId, session.requestSequence);
+      void session.closeLiveObservability();
     }
   }
 
@@ -6167,6 +6273,7 @@ async function persistRequestFailure(options: {
       errorCause,
       ttfbMs: phase === "non-stream" ? (session.ttfbMs ?? duration) : session.ttfbMs,
       providerChain: session.getProviderChain(),
+      routingTrace: session.finalizeRoutingTrace(statusCode),
       model: session.getCurrentModel() ?? undefined,
       providerId: session.provider?.id, // 更新最终供应商ID（重试切换后）
       context1mApplied: session.getContext1mApplied(),
@@ -6180,7 +6287,7 @@ async function persistRequestFailure(options: {
 
     if (session.sessionId && session.requestSequence != null) {
       if (session.shouldTrackSessionObservability()) {
-        void deleteLiveChain(session.sessionId, session.requestSequence);
+        void session.closeLiveObservability();
       }
     }
 

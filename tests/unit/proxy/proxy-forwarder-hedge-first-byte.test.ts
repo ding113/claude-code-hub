@@ -461,7 +461,7 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
       Date.now()
     );
 
-    expect(prepared).not.toBeNull();
+    expect(prepared).toMatchObject({ status: "prepared" });
     expect(mocks.ensureVersionedBindingCapability).toHaveBeenCalledTimes(1);
     expect(mocks.getSessionBindingSnapshot).toHaveBeenCalledWith("sess-hedge", 20);
     expect(mocks.acquireSessionDiscoveryLease).toHaveBeenCalledTimes(1);
@@ -504,7 +504,10 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
         Date.now()
       );
 
-      expect(prepared).toBeNull();
+      expect(prepared).toEqual({
+        status: "skipped",
+        reason: "redis_capability_unavailable",
+      });
       expect(mocks.ensureVersionedBindingCapability).toHaveBeenCalledTimes(1);
       expect(mocks.getSessionBindingSnapshot).not.toHaveBeenCalled();
       expect(mocks.acquireSessionDiscoveryLease).not.toHaveBeenCalled();

@@ -179,4 +179,30 @@ describe("message terminal write APIs", () => {
     expect(updateSet).toHaveBeenCalledWith({ ...details, updatedAt: expect.any(Date) });
     expect(updateSet.mock.calls[0]?.[0]).not.toHaveProperty("statusCode");
   });
+
+  it("patches a finalized routing trace without touching terminal or billing fields", async () => {
+    vi.resetModules();
+    const { updateSet, updateWhere } = installSyncBoundaries();
+    const { updateMessageRequestRoutingTrace } = await import("@/repository/message");
+    const routingTrace = {
+      version: 1 as const,
+      mode: "legacy_serial" as const,
+      startedAt: 1_000,
+      updatedAt: 1_050,
+      discoveryEnabled: true,
+      eligible: false,
+      bypassReason: "non_streaming",
+      events: [],
+    };
+
+    await updateMessageRequestRoutingTrace(706, routingTrace);
+
+    expect(updateSet).toHaveBeenCalledWith({
+      routingTrace,
+      updatedAt: expect.any(Date),
+    });
+    expect(updateSet.mock.calls[0]?.[0]).not.toHaveProperty("statusCode");
+    expect(updateSet.mock.calls[0]?.[0]).not.toHaveProperty("costUsd");
+    expect(updateWhere).toHaveBeenCalledTimes(1);
+  });
 });

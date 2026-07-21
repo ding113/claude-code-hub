@@ -5,8 +5,10 @@ import { act } from "react";
 import { NextIntlClientProvider } from "next-intl";
 import { Window } from "happy-dom";
 import { beforeEach, describe, expect, test, vi } from "vitest";
+import dashboardMessages from "../../../../../../messages/en/dashboard.json";
 import ipDetailsMessages from "../../../../../../messages/en/ipDetails.json";
 import providerChainMessages from "../../../../../../messages/en/provider-chain.json";
+import type { RoutingTraceV1 } from "@/types/routing-trace";
 
 const hasSessionMessagesMock = vi.fn();
 
@@ -206,6 +208,8 @@ const messages = {
         endpoint: "Endpoint",
       },
       details: {
+        routingTrace: dashboardMessages.logs.details.routingTrace,
+        modelAudit: dashboardMessages.logs.details.modelAudit,
         title: "Request Details",
         inProgress: "In progress",
         statusTitle: "Status: {status}",
@@ -1166,6 +1170,251 @@ describe("error-details-dialog tabs", () => {
     expect(html).toContain("Session Info");
     expect(html).toContain("test-session-123");
     expect(html).toContain("#5");
+  });
+});
+
+describe("error-details-dialog routing trace", () => {
+  const discoveryTrace: RoutingTraceV1 = {
+    version: 1,
+    mode: "discovery",
+    startedAt: 1_000,
+    updatedAt: 13_000,
+    discoveryEnabled: true,
+    eligible: true,
+    config: {
+      discoveryConcurrency: 2,
+      maxDiscoveryRounds: 2,
+      discoverySlaMs: 10_000,
+      stickySlaMs: 20_000,
+      racingTotalTimeoutMs: 60_000,
+      stickyTimeoutCooldownMs: 300_000,
+    },
+    events: [
+      {
+        type: "attempt_started",
+        at: 1_000,
+        elapsedMs: 0,
+        round: 0,
+        attemptId: "sticky:1",
+        attemptKind: "sticky",
+        provider: { id: 10, name: "sticky-provider", priority: 1 },
+      },
+      {
+        type: "attempt_finished",
+        at: 3_000,
+        elapsedMs: 2_000,
+        round: 0,
+        attemptId: "sticky:1",
+        attemptKind: "sticky",
+        provider: { id: 10, name: "sticky-provider", priority: 1 },
+        outcome: "cancelled",
+        cancellationKind: "sticky_timeout",
+      },
+      {
+        type: "round_started",
+        at: 3_000,
+        elapsedMs: 2_000,
+        round: 1,
+      },
+      {
+        type: "attempt_started",
+        at: 3_010,
+        elapsedMs: 2_010,
+        round: 1,
+        attemptId: "normal:1",
+        attemptKind: "normal",
+        provider: { id: 11, name: "candidate-a", priority: 1 },
+      },
+      {
+        type: "attempt_held",
+        at: 3_100,
+        elapsedMs: 2_100,
+        round: 1,
+        attemptId: "normal:1",
+        attemptKind: "normal",
+        provider: { id: 11, name: "candidate-a", priority: 1 },
+      },
+      {
+        type: "attempt_started",
+        at: 3_020,
+        elapsedMs: 2_020,
+        round: 1,
+        attemptId: "normal:2",
+        attemptKind: "normal",
+        provider: { id: 12, name: "candidate-b", priority: 2 },
+      },
+      {
+        type: "winner_committed",
+        at: 4_000,
+        elapsedMs: 3_000,
+        round: 1,
+        attemptId: "normal:2",
+        attemptKind: "normal",
+        provider: { id: 12, name: "candidate-b", priority: 2 },
+        statusCode: 200,
+      },
+    ],
+    summary: {
+      outcome: "success",
+      statusCode: 200,
+      durationMs: 12_000,
+      ttfbMs: 3_000,
+      attemptsPerRequest: 3,
+      maxActiveAttempts: 2,
+      rounds: 1,
+      providerMs: 5_000,
+      fallbackPromotions: 0,
+      cancelFailures: 0,
+      winnerOrigin: "normal",
+      winnerProviderId: 12,
+      winnerRound: 1,
+    },
+  };
+
+  test("renders Sticky and same-round attempts in the Discovery branch", () => {
+    const html = renderWithIntl(
+      <ErrorDetailsDialog
+        externalOpen
+        statusCode={200}
+        errorMessage={null}
+        providerChain={[
+          { id: 12, name: "candidate-b", reason: "request_success", statusCode: 200 },
+        ]}
+        routingTrace={discoveryTrace}
+        sessionId="trace-session"
+      />
+    );
+    const document = parseHtml(html);
+
+    expect(document.querySelector("[data-testid='routing-mode-banner']")?.textContent).toContain(
+      "Bounded Discovery"
+    );
+    expect(document.querySelector("[data-testid='discovery-round-0']")?.textContent).toContain(
+      "sticky-provider"
+    );
+    const roundOne = document.querySelector("[data-testid='discovery-round-1']");
+    expect(roundOne?.textContent).toContain("candidate-a");
+    expect(roundOne?.textContent).toContain("candidate-b");
+    expect(roundOne?.textContent).toContain("Ready, held");
+    expect(roundOne?.textContent).toContain("Winner");
+    expect(roundOne?.querySelector(".sm\\:grid-cols-2")).not.toBeNull();
+    expect(html).toContain("60000ms");
+    expect(html).toContain("300000ms");
+  });
+
+  test("shows a legacy mode and bypass reason while retaining the old chain", () => {
+    const legacyTrace: RoutingTraceV1 = {
+      version: 1,
+      mode: "legacy_serial",
+      startedAt: 1_000,
+      updatedAt: 2_000,
+      discoveryEnabled: true,
+      eligible: false,
+      bypassReason: "non_streaming",
+      events: [],
+    };
+    const html = renderWithIntl(
+      <ErrorDetailsDialog
+        externalOpen
+        statusCode={200}
+        errorMessage={null}
+        providerChain={[
+          { id: 1, name: "legacy-provider", reason: "request_success", statusCode: 200 },
+        ]}
+        routingTrace={legacyTrace}
+        sessionId="legacy-session"
+      />
+    );
+
+    expect(html).toContain("Legacy serial fallback");
+    expect(html).toContain("Non-streaming request");
+    expect(html).toContain("legacy-provider");
+    expect(html).not.toContain("Discovery rounds");
+  });
+
+  test("shows late terminal failure and Sticky binding result after a first-byte winner", () => {
+    const failedTrace: RoutingTraceV1 = {
+      ...discoveryTrace,
+      events: [
+        ...discoveryTrace.events,
+        {
+          type: "request_finished",
+          at: 5_000,
+          elapsedMs: 4_000,
+          outcome: "failed",
+          statusCode: 502,
+        },
+        {
+          type: "binding_finalized",
+          at: 5_100,
+          elapsedMs: 4_100,
+          provider: { id: 12, name: "candidate-b" },
+          bindingAction: "renew",
+          outcome: "skipped",
+          reason: "generation_conflict",
+        },
+      ],
+      summary: { ...discoveryTrace.summary!, outcome: "failed", statusCode: 502 },
+    };
+    const html = renderWithIntl(
+      <ErrorDetailsDialog
+        externalOpen
+        statusCode={502}
+        errorMessage="STREAM_COMPLETION_MARKER_MISSING"
+        providerChain={[{ id: 12, name: "candidate-b", reason: "retry_failed", statusCode: 502 }]}
+        routingTrace={failedTrace}
+        sessionId="trace-session"
+      />
+    );
+    const document = parseHtml(html);
+    const terminal = document.querySelector("[data-testid='discovery-terminal-status']");
+
+    expect(terminal?.textContent).toContain("Request result");
+    expect(terminal?.textContent).toContain("Failed");
+    expect(terminal?.textContent).toContain("HTTP 502");
+    expect(terminal?.textContent).toContain("Sticky binding");
+    expect(terminal?.textContent).toContain("Renew");
+    expect(terminal?.textContent).toContain("generation_conflict");
+    expect(document.querySelector("[data-testid='discovery-round-1']")?.textContent).toContain(
+      "Failed"
+    );
+  });
+
+  test("derives live attempt concurrency while the terminal summary is not available", () => {
+    const { summary: _summary, ...liveTrace } = discoveryTrace;
+    const html = renderWithIntl(
+      <ErrorDetailsDialog
+        externalOpen
+        statusCode={null}
+        errorMessage={null}
+        providerChain={[]}
+        routingTrace={liveTrace}
+        sessionId="live-trace-session"
+      />
+    );
+    const document = parseHtml(html);
+    const discoveryView = document.querySelector("[data-testid='discovery-trace-view']");
+
+    expect(discoveryView?.textContent).toContain("1 rounds · 3 attempts · max 2 active");
+    expect(discoveryView?.textContent).not.toContain("0 attempts · max 0 active");
+  });
+
+  test("falls back to the old chain for an unsupported trace version", () => {
+    const html = renderWithIntl(
+      <ErrorDetailsDialog
+        externalOpen
+        statusCode={200}
+        errorMessage={null}
+        providerChain={[
+          { id: 1, name: "old-provider", reason: "request_success", statusCode: 200 },
+        ]}
+        routingTrace={{ ...discoveryTrace, version: 2 } as unknown as RoutingTraceV1}
+        sessionId="old-session"
+      />
+    );
+
+    expect(html).toContain("old-provider");
+    expect(html).not.toContain("Bounded Discovery");
   });
 });
 

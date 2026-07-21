@@ -4,6 +4,7 @@ import {
   AlertTriangle,
   CheckCircle,
   ChevronRight,
+  Clock3,
   GitBranch,
   InfoIcon,
   Link2,
@@ -26,11 +27,13 @@ import {
 } from "@/lib/utils/provider-chain-formatter";
 import { parseProviderGroups } from "@/lib/utils/provider-group";
 import type { ProviderChainItem } from "@/types/message";
+import { normalizeRoutingTrace, type RoutingTraceV1 } from "@/types/routing-trace";
 import { getFake200ReasonKey } from "./fake200-reason";
 import { Fake200RetryTooltip } from "./fake200-retry-tooltip";
 
 interface ProviderChainPopoverProps {
   chain: ProviderChainItem[];
+  routingTrace?: RoutingTraceV1 | null;
   finalProvider: string;
   /** Whether a cost badge is displayed, affects name max width */
   hasCostBadge?: boolean;
@@ -40,6 +43,51 @@ interface ProviderChainPopoverProps {
 
 function parseGroupTags(groupTag?: string | null): string[] {
   return Array.from(new Set(parseProviderGroups(groupTag)));
+}
+
+function deriveDiscoveryStats(trace: RoutingTraceV1): {
+  rounds: number;
+  attempts: number;
+} {
+  const startedAttempts = new Set<string>();
+  let anonymousAttempts = 0;
+  let maxRound = 0;
+
+  for (const event of trace.events) {
+    if (typeof event.round === "number" && Number.isFinite(event.round)) {
+      maxRound = Math.max(maxRound, event.round);
+    }
+    if (event.type !== "attempt_started") continue;
+    if (event.attemptId) startedAttempts.add(event.attemptId);
+    else anonymousAttempts += 1;
+  }
+
+  return {
+    rounds: trace.summary?.rounds ?? maxRound,
+    attempts: trace.summary?.attemptsPerRequest ?? startedAttempts.size + anonymousAttempts,
+  };
+}
+
+type DiscoveryTerminalOutcome = "success" | "failed" | "client_abort" | "deadline" | "pending";
+
+function getDiscoveryTerminal(trace: RoutingTraceV1): {
+  outcome: DiscoveryTerminalOutcome;
+  statusCode: number | null;
+} {
+  const terminalEvent = trace.events.findLast((event) => event.type === "request_finished");
+  const rawOutcome = terminalEvent?.outcome ?? trace.summary?.outcome;
+  const outcome: DiscoveryTerminalOutcome =
+    rawOutcome === "success" ||
+    rawOutcome === "failed" ||
+    rawOutcome === "client_abort" ||
+    rawOutcome === "deadline"
+      ? rawOutcome
+      : "pending";
+
+  return {
+    outcome,
+    statusCode: terminalEvent?.statusCode ?? trace.summary?.statusCode ?? null,
+  };
 }
 
 /**
@@ -126,12 +174,15 @@ function getItemStatus(item: ProviderChainItem): {
 
 export function ProviderChainPopover({
   chain,
+  routingTrace,
   finalProvider,
   hasCostBadge = false,
   onChainItemClick,
 }: ProviderChainPopoverProps) {
   const t = useTranslations("dashboard");
   const tChain = useTranslations("provider-chain");
+  const tRouting = useTranslations("dashboard.logs.details.routingTrace");
+  const normalizedRoutingTrace = normalizeRoutingTrace(routingTrace);
 
   // “假 200”识别发生在 SSE 流式结束后：此时响应内容可能已透传给客户端，但内部会按失败统计/熔断。
   const hasFake200PostStreamFailure = chain.some(
@@ -150,6 +201,133 @@ export function ProviderChainPopover({
 
   // Fallback for empty string
   const displayName = finalProvider || "-";
+
+  if (normalizedRoutingTrace?.mode === "discovery") {
+    const { rounds, attempts } = deriveDiscoveryStats(normalizedRoutingTrace);
+    const terminal = getDiscoveryTerminal(normalizedRoutingTrace);
+    const terminalPresentation =
+      terminal.outcome === "success"
+        ? { icon: CheckCircle, className: "text-emerald-600" }
+        : terminal.outcome === "failed"
+          ? { icon: XCircle, className: "text-rose-600" }
+          : terminal.outcome === "deadline"
+            ? { icon: Clock3, className: "text-amber-600" }
+            : terminal.outcome === "client_abort"
+              ? { icon: MinusCircle, className: "text-amber-600" }
+              : { icon: RefreshCw, className: "text-muted-foreground" };
+    const TerminalIcon = terminalPresentation.icon;
+    const rawWinnerOrigin = normalizedRoutingTrace.summary?.winnerOrigin;
+    const winnerOrigin =
+      rawWinnerOrigin === "sticky" || rawWinnerOrigin === "normal" || rawWinnerOrigin === "fallback"
+        ? rawWinnerOrigin
+        : "none";
+
+    return (
+      <Popover>
+        <PopoverTrigger asChild>
+          <Button
+            type="button"
+            variant="ghost"
+            className="h-auto p-0 font-normal hover:bg-transparent w-full min-w-0"
+            aria-label={`${displayName} - ${tRouting("discoveryCompact", { rounds, attempts })}`}
+          >
+            <span className="flex w-full items-center gap-1 min-w-0">
+              <Zap className="h-3 w-3 shrink-0 text-blue-500" />
+              <span className="truncate min-w-0" dir="auto">
+                {displayName}
+              </span>
+              <Badge variant="secondary" className="shrink-0 text-[10px] px-1.5 py-0">
+                {tRouting("discoveryCompact", { rounds, attempts })}
+              </Badge>
+            </span>
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-[360px] max-w-[calc(100vw-2rem)] p-0" align="start">
+          <div className="p-3 border-b flex items-center justify-between gap-3">
+            <h4 className="font-semibold text-sm flex items-center gap-2 min-w-0">
+              <Zap className="h-4 w-4 shrink-0 text-blue-500" />
+              <span className="truncate">{tRouting("discoveryTitle")}</span>
+            </h4>
+            <Badge variant="outline" className="shrink-0 text-[10px]">
+              {tRouting("modes.discovery")}
+            </Badge>
+          </div>
+          <div className="p-3 space-y-3">
+            <div className="grid grid-cols-2 gap-3 text-xs">
+              <div>
+                <div className="text-[10px] text-muted-foreground">{tRouting("roundsLabel")}</div>
+                <div className="font-mono">{rounds}</div>
+              </div>
+              <div>
+                <div className="text-[10px] text-muted-foreground">{tRouting("attemptsLabel")}</div>
+                <div className="font-mono">{attempts}</div>
+              </div>
+            </div>
+            <div
+              className="flex items-center gap-2 text-xs min-w-0"
+              data-testid="discovery-compact-terminal"
+            >
+              <TerminalIcon className={cn("h-4 w-4 shrink-0", terminalPresentation.className)} />
+              <span className="text-muted-foreground">{tRouting("terminalOutcome")}:</span>
+              <Badge variant="outline" className="text-[10px]">
+                {tRouting(`outcomes.${terminal.outcome}`)}
+              </Badge>
+              {terminal.statusCode != null && (
+                <span className="font-mono text-[10px]">HTTP {terminal.statusCode}</span>
+              )}
+            </div>
+            {winnerOrigin !== "none" && (
+              <div className="flex items-center gap-2 text-xs min-w-0">
+                <GitBranch className="h-4 w-4 shrink-0 text-muted-foreground" />
+                <span className="text-muted-foreground">{tRouting("winnerOrigin")}:</span>
+                <Badge variant="outline" className="text-[10px]">
+                  {tRouting(`roles.${winnerOrigin}`)}
+                </Badge>
+              </div>
+            )}
+          </div>
+          {(hasFake200PostStreamFailure || onChainItemClick) && (
+            <div className="border-t bg-muted/30">
+              {hasFake200PostStreamFailure && (
+                <div className="flex items-start justify-center gap-1.5 px-3 py-2 text-[10px] text-amber-700 dark:text-amber-300">
+                  <InfoIcon className="h-3 w-3 shrink-0 mt-0.5" aria-hidden="true" />
+                  <div className="flex flex-col items-center gap-1 text-center">
+                    {typeof fake200CodeForDisplay === "string" && (
+                      <span>
+                        {t("logs.details.fake200DetectedReason", {
+                          reason: t(
+                            getFake200ReasonKey(
+                              fake200CodeForDisplay,
+                              "logs.details.fake200Reasons"
+                            )
+                          ),
+                        })}
+                      </span>
+                    )}
+                    <span>{t("logs.details.fake200ForwardedNotice")}</span>
+                    <Fake200RetryTooltip
+                      className="justify-center text-amber-700 dark:text-amber-300"
+                      side="top"
+                      align="center"
+                    />
+                  </div>
+                </div>
+              )}
+              {onChainItemClick && (
+                <button
+                  type="button"
+                  className="w-full border-t p-2 text-[10px] text-muted-foreground hover:text-foreground first:border-t-0"
+                  onClick={() => onChainItemClick(0)}
+                >
+                  {tRouting("viewDetails")}
+                </button>
+              )}
+            </div>
+          )}
+        </PopoverContent>
+      </Popover>
+    );
+  }
 
   // Determine max width based on whether cost badge is present
   const maxWidthClass = hasCostBadge ? "max-w-[140px]" : "max-w-[180px]";

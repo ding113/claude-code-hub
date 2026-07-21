@@ -28,7 +28,9 @@ import { formatCurrency } from "@/lib/utils/currency";
 import { findHedgeLoserCost, summarizeHedgeBilling } from "@/lib/utils/hedge-billing";
 import { formatProbability, formatProviderTimeline } from "@/lib/utils/provider-chain-formatter";
 import type { ProviderChainItem } from "@/types/message";
+import { normalizeRoutingTrace } from "@/types/routing-trace";
 import { type LogicTraceTabProps, parseBlockedReason } from "../types";
+import { DiscoveryTraceView, RoutingModeBanner } from "./DiscoveryTraceView";
 import { StepCard, type StepStatus } from "./StepCard";
 
 function getRequestStatus(item: ProviderChainItem): StepStatus {
@@ -63,6 +65,7 @@ function getRequestStatus(item: ProviderChainItem): StepStatus {
 export function LogicTraceTab({
   statusCode: _statusCode,
   providerChain,
+  routingTrace,
   sessionId,
   blockedBy,
   blockedReason,
@@ -184,9 +187,19 @@ export function LogicTraceTab({
   // Count providers at each stage
   const totalProviders = decisionContext?.totalProviders || 0;
   const afterHealthCheck = decisionContext?.afterHealthCheck || 0;
+  const normalizedRoutingTrace = normalizeRoutingTrace(routingTrace);
 
   // Calculate step offset for session reuse flow
   const sessionReuseStepOffset = isSessionReuseFlow ? 1 : 0;
+
+  if (normalizedRoutingTrace?.mode === "discovery") {
+    return (
+      <div className="space-y-5">
+        <RoutingModeBanner trace={normalizedRoutingTrace} />
+        <DiscoveryTraceView trace={normalizedRoutingTrace} />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -242,6 +255,8 @@ export function LogicTraceTab({
           )}
         </div>
       )}
+
+      {normalizedRoutingTrace && <RoutingModeBanner trace={normalizedRoutingTrace} />}
 
       {/* Decision Chain Header */}
       {providerChain && providerChain.length > 0 && (

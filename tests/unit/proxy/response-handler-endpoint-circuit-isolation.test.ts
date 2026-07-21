@@ -1186,6 +1186,11 @@ describe("Endpoint circuit breaker isolation", () => {
     },
   ])("fails binding closed when the finalizer lease is $label", async ({ leaseResult }) => {
     const session = createSession();
+    const appendRoutingTraceEvent = vi.fn();
+    Object.assign(session, {
+      appendRoutingTraceEvent,
+      getRoutingTrace: () => null,
+    });
     session.recordProviderSessionRef(1);
     setDeferredStreamingFinalization(session, {
       providerId: 1,
@@ -1227,6 +1232,66 @@ describe("Endpoint circuit breaker isolation", () => {
     expect(SessionManager.compareAndSetSessionProvider).not.toHaveBeenCalled();
     expect(RateLimitService.releaseProviderSession).toHaveBeenCalledWith(1, "fake-session");
     expect(SessionManager.releaseSessionDiscoveryLease).toHaveBeenCalledOnce();
+    expect(appendRoutingTraceEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "binding_finalized",
+        bindingAction: "create",
+        outcome: "skipped",
+        reason: "discovery_lease_not_owned",
+      })
+    );
+    expect(appendRoutingTraceEvent).not.toHaveBeenCalledWith(
+      expect.objectContaining({ reason: "binding_not_permitted" })
+    );
+  });
+
+  it("records a missing Discovery binding snapshot instead of a generic denial", async () => {
+    const session = createSession();
+    const appendRoutingTraceEvent = vi.fn();
+    Object.assign(session, {
+      appendRoutingTraceEvent,
+      getRoutingTrace: () => null,
+    });
+    setDeferredStreamingFinalization(session, {
+      providerId: 1,
+      providerName: "test-provider",
+      providerPriority: 10,
+      attemptNumber: 1,
+      totalProvidersAttempted: 2,
+      isFirstAttempt: false,
+      isFailoverSuccess: true,
+      endpointId: 42,
+      endpointUrl: "https://api.test.com",
+      upstreamStatusCode: 200,
+      bindingIntent: "create",
+      requiresCompletionMarker: true,
+      discoveryLease: {
+        sessionId: "fake-session",
+        keyId: 456,
+        ownerToken: "missing-snapshot-owner",
+        ttlSeconds: 30,
+      },
+    });
+
+    const clientResponse = await ProxyResponseHandler.dispatch(
+      session,
+      createSuccessStreamResponseWithCompletion()
+    );
+    await clientResponse.text();
+    await drainAsyncTasks();
+
+    expect(SessionManager.compareAndSetSessionProvider).not.toHaveBeenCalled();
+    expect(appendRoutingTraceEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "binding_finalized",
+        bindingAction: "create",
+        outcome: "skipped",
+        reason: "missing_snapshot",
+      })
+    );
+    expect(appendRoutingTraceEvent).not.toHaveBeenCalledWith(
+      expect.objectContaining({ reason: "binding_not_permitted" })
+    );
   });
 
   it("renews a long-stream lease and releases it once after terminal side effects", async () => {

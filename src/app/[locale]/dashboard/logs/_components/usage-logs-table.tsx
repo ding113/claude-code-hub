@@ -217,6 +217,7 @@ export function UsageLogsTable({
                             <div className="w-full">
                               <ProviderChainPopover
                                 chain={log.providerChain ?? []}
+                                routingTrace={log.routingTrace}
                                 finalProvider={
                                   getFinalProviderName(log.providerChain ?? []) ||
                                   log.providerName ||
@@ -613,6 +614,7 @@ export function UsageLogsTable({
                         statusCode={log.statusCode}
                         errorMessage={log.errorMessage}
                         providerChain={log.providerChain}
+                        routingTrace={log.routingTrace}
                         sessionId={log.sessionId}
                         requestSequence={log.requestSequence}
                         blockedBy={log.blockedBy}

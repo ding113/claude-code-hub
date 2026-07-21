@@ -996,6 +996,46 @@ describe("message_request 异步批量写入", () => {
     expect(built.sql).toContain("::numeric");
     expect(built.sql).not.toContain("COALESCE");
   });
+
+  it("routingTrace 应作为 jsonb 写入且保留终态摘要", async () => {
+    process.env.MESSAGE_REQUEST_WRITE_MODE = "async";
+
+    const { enqueueMessageRequestUpdate, stopMessageRequestWriteBuffer } = await import(
+      "@/repository/message-write-buffer"
+    );
+    const routingTrace = {
+      version: 1 as const,
+      mode: "discovery" as const,
+      startedAt: 1_000,
+      updatedAt: 1_100,
+      discoveryEnabled: true,
+      eligible: true,
+      events: [{ type: "request_finished" as const, at: 1_100, elapsedMs: 100 }],
+      summary: {
+        outcome: "success" as const,
+        statusCode: 200,
+        durationMs: 100,
+        ttfbMs: 50,
+        attemptsPerRequest: 2,
+        maxActiveAttempts: 2,
+        rounds: 1,
+        providerMs: 180,
+        fallbackPromotions: 0,
+        cancelFailures: 0,
+        winnerOrigin: "normal" as const,
+        winnerProviderId: 7,
+        winnerRound: 1,
+      },
+    };
+
+    enqueueMessageRequestUpdate(12, { routingTrace });
+    await stopMessageRequestWriteBuffer();
+
+    const built = toSqlText(executeMock.mock.calls[0]?.[0]);
+    expect(built.sql).toContain('"routing_trace" = CASE id');
+    expect(built.sql).toContain("::jsonb");
+    expect(built.params).toContain(JSON.stringify(routingTrace));
+  });
 });
 
 describe("mergePatch（替换合并语义）", () => {

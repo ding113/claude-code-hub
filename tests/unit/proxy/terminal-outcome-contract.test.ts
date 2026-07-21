@@ -220,6 +220,8 @@ describe("terminal outcome contract", () => {
       getContext1mApplied: () => false,
       getGroupCostMultiplier: () => 1,
       getSpecialSettings: () => null,
+      finalizeRoutingTrace: () => null,
+      closeLiveObservability: vi.fn(async () => undefined),
     } as ProxySession;
 
     const handlePromise = ProxyErrorHandler.handle(session, new Error("top-level failure"));

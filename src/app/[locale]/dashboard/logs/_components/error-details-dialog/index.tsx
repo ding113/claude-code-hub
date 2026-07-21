@@ -11,6 +11,7 @@ import { hasSessionMessages } from "@/lib/api-client/v1/actions/active-sessions"
 import { cn } from "@/lib/utils";
 import type { HedgeLoserBilling, StoredCostBreakdown } from "@/types/cost-breakdown";
 import type { ProviderChainItem } from "@/types/message";
+import type { RoutingTraceV1 } from "@/types/routing-trace";
 import type { SpecialSetting } from "@/types/special-settings";
 import type { BillingModelSource } from "@/types/system-config";
 import { LogicTraceTab, PerformanceTab, SummaryTab } from "./components";
@@ -19,6 +20,7 @@ interface ErrorDetailsDialogProps {
   statusCode: number | null;
   errorMessage: string | null;
   providerChain: ProviderChainItem[] | null;
+  routingTrace?: RoutingTraceV1 | null;
   sessionId: string | null;
   requestSequence?: number | null;
   blockedBy?: string | null;
@@ -63,6 +65,7 @@ export function ErrorDetailsDialog({
   statusCode,
   errorMessage,
   providerChain,
+  routingTrace,
   sessionId,
   requestSequence,
   blockedBy,
@@ -212,6 +215,7 @@ export function ErrorDetailsDialog({
     statusCode,
     errorMessage,
     providerChain,
+    routingTrace,
     sessionId,
     requestSequence,
     blockedBy,

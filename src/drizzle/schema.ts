@@ -21,6 +21,7 @@ import type { AllowedModelRuleInput, ProviderModelRedirectRule, ProviderType } f
 import type { FilterOperation } from "@/lib/request-filter-types";
 import type { IpExtractionConfig } from "@/types/ip-extraction";
 import type { AuditCategory } from "@/types/audit-log";
+import type { RoutingTraceV1 } from "@/types/routing-trace";
 
 // Enums
 export const dailyResetModeEnum = pgEnum('daily_reset_mode', ['fixed', 'rolling']);
@@ -486,6 +487,9 @@ export const messageRequest = pgTable('message_request', {
 
   // 上游决策链（记录尝试的供应商列表）
   providerChain: jsonb('provider_chain').$type<Array<{ id: number; name: string }>>(),
+
+  // 请求路由轨迹（Discovery/legacy 模式、轮次、并发尝试与终态摘要）
+  routingTrace: jsonb('routing_trace').$type<RoutingTraceV1>(),
 
   // HTTP 状态码
   statusCode: integer('status_code'),
