@@ -130,6 +130,7 @@
     "stickyTimeoutCooldownMs": "Sticky 逾時冷卻（毫秒）",
     "discoveryWindowDesc": "總逾時必須不小於 Sticky SLA + 最大輪數 × Discovery SLA。Discovery 輸家會取消，不走舊 Hedge 的 drain 或輸家計費。",
     "discoveryWindowInvalid": "Discovery 總逾時短於已設定的 Sticky 與 Discovery 視窗。",
+    "discoverySettingsInvalid": "一個或多個 Discovery 設定值超出允許範圍。",
     "verboseProviderError": "詳細供應商錯誤資訊",
     "verboseProviderErrorDesc": "開啟後，CCH 會在某些上游失敗類型下於 `error.details` 返回較詳細的診斷資訊（例如供應商可用性診斷或脫敏後的上游片段）。",
     "verboseProviderErrorTooltip": "此選項可能暴露供應商名稱、內部路由線索、上游失敗原因等診斷資訊。僅建議在客戶端可以查看底層排障上下文時開啟。",

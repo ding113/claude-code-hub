@@ -7,6 +7,10 @@ type JsonBodySchema<T> = {
   safeParse: (value: unknown) => { success: true; data: T } | { success: false; error: z.ZodError };
 };
 
+type ParseJsonBodyOptions = {
+  validationErrorCode?: (error: z.ZodError) => string | undefined;
+};
+
 type HonoJsonRequest = {
   req: {
     raw: Request;
@@ -71,7 +75,8 @@ export async function parseJsonBody<T>(
 
 export async function parseHonoJsonBody<T>(
   c: HonoJsonRequest,
-  schema: JsonBodySchema<T>
+  schema: JsonBodySchema<T>,
+  options?: ParseJsonBodyOptions
 ): Promise<ParsedBodyResult<T>> {
   const contentType =
     c.req.header("content-type") ??
@@ -113,7 +118,7 @@ export async function parseHonoJsonBody<T>(
         instance: new URL(c.req.url).pathname,
         title: "Validation failed",
         detail: "One or more fields are invalid.",
-        errorCode: "request.validation_failed",
+        errorCode: options?.validationErrorCode?.(parsed.error) ?? "request.validation_failed",
         invalidParams: parsed.error.issues.map((issue) => ({
           path: normalizeZodPath(issue.path),
           code: issue.code,

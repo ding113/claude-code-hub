@@ -47,6 +47,7 @@ import {
   shouldWarnQuotaLeaseCapZero,
   shouldWarnQuotaLeasePercentZero,
 } from "@/lib/utils/validation/quota-lease-warnings";
+import { DISCOVERY_FIELD_LIMITS } from "@/lib/validation/discovery-settings";
 import { DEFAULT_IP_EXTRACTION_CONFIG, type IpExtractionConfig } from "@/types/ip-extraction";
 import type {
   BillingModelSource,
@@ -263,12 +264,12 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
       racingTotalTimeoutMs: Number(racingTotalTimeoutMs),
       stickyTimeoutCooldownMs: Number(stickyTimeoutCooldownMs),
     };
-    if (
-      discoveryEnabled &&
-      (discoveryConfig.discoveryConcurrency < 2 ||
-        Object.values(discoveryConfig).some((value) => !Number.isSafeInteger(value) || value < 1))
-    ) {
-      toast.error(t("discoveryWindowInvalid"));
+    const discoverySettingsInvalid = Object.entries(discoveryConfig).some(([field, value]) => {
+      const [min, max] = DISCOVERY_FIELD_LIMITS[field as keyof typeof DISCOVERY_FIELD_LIMITS];
+      return !Number.isSafeInteger(value) || value < min || value > max;
+    });
+    if (discoveryEnabled && discoverySettingsInvalid) {
+      toast.error(t("discoverySettingsInvalid"));
       return;
     }
     if (
@@ -397,7 +398,9 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
         const errorMessage =
           result.errorCode === "DISCOVERY_WINDOW_INVALID"
             ? t("discoveryWindowInvalid")
-            : result.error || t("saveFailed");
+            : result.errorCode === "DISCOVERY_SETTINGS_INVALID"
+              ? t("discoverySettingsInvalid")
+              : result.error || t("saveFailed");
         toast.error(errorMessage);
         return;
       }
@@ -725,19 +728,44 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 {(
                   [
-                    ["discoveryConcurrency", discoveryConcurrency, setDiscoveryConcurrency, 2],
-                    ["maxDiscoveryRounds", maxDiscoveryRounds, setMaxDiscoveryRounds, 1],
-                    ["discoverySlaMs", discoverySlaMs, setDiscoverySlaMs, 1],
-                    ["stickySlaMs", stickySlaMs, setStickySlaMs, 1],
-                    ["racingTotalTimeoutMs", racingTotalTimeoutMs, setRacingTotalTimeoutMs, 1],
+                    [
+                      "discoveryConcurrency",
+                      discoveryConcurrency,
+                      setDiscoveryConcurrency,
+                      ...DISCOVERY_FIELD_LIMITS.discoveryConcurrency,
+                    ],
+                    [
+                      "maxDiscoveryRounds",
+                      maxDiscoveryRounds,
+                      setMaxDiscoveryRounds,
+                      ...DISCOVERY_FIELD_LIMITS.maxDiscoveryRounds,
+                    ],
+                    [
+                      "discoverySlaMs",
+                      discoverySlaMs,
+                      setDiscoverySlaMs,
+                      ...DISCOVERY_FIELD_LIMITS.discoverySlaMs,
+                    ],
+                    [
+                      "stickySlaMs",
+                      stickySlaMs,
+                      setStickySlaMs,
+                      ...DISCOVERY_FIELD_LIMITS.stickySlaMs,
+                    ],
+                    [
+                      "racingTotalTimeoutMs",
+                      racingTotalTimeoutMs,
+                      setRacingTotalTimeoutMs,
+                      ...DISCOVERY_FIELD_LIMITS.racingTotalTimeoutMs,
+                    ],
                     [
                       "stickyTimeoutCooldownMs",
                       stickyTimeoutCooldownMs,
                       setStickyTimeoutCooldownMs,
-                      1,
+                      ...DISCOVERY_FIELD_LIMITS.stickyTimeoutCooldownMs,
                     ],
                   ] as const
-                ).map(([key, value, setter, min]) => (
+                ).map(([key, value, setter, min, max]) => (
                   <div key={key} className="space-y-1.5">
                     <Label htmlFor={`discovery-${key}`} className="text-xs">
                       {t(key)}
@@ -746,6 +774,7 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
                       id={`discovery-${key}`}
                       type="number"
                       min={min}
+                      max={max}
                       required
                       value={value === 0 ? "" : value}
                       onChange={(event) =>

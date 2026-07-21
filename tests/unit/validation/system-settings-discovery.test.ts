@@ -18,6 +18,17 @@ describe("UpdateSystemSettingsSchema Discovery settings", () => {
   it("requires at least one fallback slot in addition to the normal lane", () => {
     const result = UpdateSystemSettingsSchema.safeParse({ discoveryConcurrency: 1 });
     expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues[0]?.message).toBe("DISCOVERY_SETTINGS_INVALID");
+    }
+  });
+
+  it("uses a stable error code when a Discovery value exceeds its supported range", () => {
+    const result = UpdateSystemSettingsSchema.safeParse({ stickyTimeoutCooldownMs: 86_400_001 });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues[0]?.message).toBe("DISCOVERY_SETTINGS_INVALID");
+    }
   });
 
   it("rejects a total deadline shorter than the configured discovery window", () => {
@@ -28,7 +39,7 @@ describe("UpdateSystemSettingsSchema Discovery settings", () => {
         maxDiscoveryRounds: 2,
         racingTotalTimeoutMs: 30_000,
       })
-    ).toThrow("竞速总超时");
+    ).toThrow("DISCOVERY_WINDOW_INVALID");
   });
 
   it("accepts a total deadline exactly equal to the configured discovery window", () => {

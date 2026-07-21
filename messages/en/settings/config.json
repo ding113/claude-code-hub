@@ -128,6 +128,7 @@
     "stickyTimeoutCooldownMs": "Sticky timeout cooldown (milliseconds)",
     "discoveryWindowDesc": "The total timeout must be at least Sticky SLA + maximum rounds × Discovery SLA. Discovery losers are cancelled and are not drained or billed by the legacy Hedge path.",
     "discoveryWindowInvalid": "Discovery total timeout is shorter than the configured Sticky and Discovery windows.",
+    "discoverySettingsInvalid": "One or more Discovery values are outside the allowed range.",
     "verboseProviderError": "Verbose Provider Error",
     "verboseProviderErrorDesc": "When enabled, CCH may return detailed diagnostic information for some upstream failure types in `error.details` (for example provider availability diagnostics or sanitized upstream snippets).",
     "verboseProviderErrorTooltip": "May expose provider names, internal routing clues, upstream failure reasons, and other diagnostic details. Enable only if clients are allowed to see low-level troubleshooting context.",

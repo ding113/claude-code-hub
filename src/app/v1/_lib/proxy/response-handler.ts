@@ -1284,9 +1284,9 @@ function hasOpenAIChatCompletionMarker(data: unknown): boolean {
   );
 }
 
-function hasGeminiCompletionMarker(data: unknown, format: ProxySession["originalFormat"]): boolean {
+function hasGeminiCompletionMarker(data: unknown): boolean {
   if (!isRecord(data)) return false;
-  const payload = format === "gemini-cli" && isRecord(data.response) ? data.response : data;
+  const payload = isRecord(data.response) ? data.response : data;
   if (!Array.isArray(payload.candidates)) return false;
   return payload.candidates.some(
     (candidate) =>
@@ -1333,7 +1333,7 @@ function hasStreamCompletionMarker(text: string, format: ProxySession["originalF
     case "gemini":
     case "gemini-cli":
       return events.some(
-        (event) => event.event === "message" && hasGeminiCompletionMarker(event.data, format)
+        (event) => event.event === "message" && hasGeminiCompletionMarker(event.data)
       );
   }
 }

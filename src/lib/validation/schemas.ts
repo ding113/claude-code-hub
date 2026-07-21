@@ -16,6 +16,16 @@ import {
 } from "@/lib/public-status/constants";
 import { CURRENCY_CONFIG } from "@/lib/utils/currency";
 import { isValidIANATimezone } from "@/lib/utils/timezone";
+import {
+  DISCOVERY_FIELD_LIMITS,
+  DISCOVERY_SETTINGS_INVALID_ERROR_CODE,
+  DISCOVERY_WINDOW_INVALID_ERROR_CODE,
+} from "./discovery-settings";
+
+export {
+  DISCOVERY_SETTINGS_INVALID_ERROR_CODE,
+  DISCOVERY_WINDOW_INVALID_ERROR_CODE,
+} from "./discovery-settings";
 
 const CACHE_TTL_PREFERENCE = z.enum(["inherit", "5m", "1h"]);
 const CONTEXT_1M_PREFERENCE = z.enum(["inherit", "force_enable", "disabled"]);
@@ -1010,39 +1020,39 @@ export const UpdateSystemSettingsSchema = z
     discoveryEnabled: z.boolean().optional(),
     discoveryConcurrency: z.coerce
       .number()
-      .int("Discovery 并发数必须是整数")
-      .min(2, "Discovery 并发数不能小于 2")
-      .max(32, "Discovery 并发数不能超过 32")
+      .int(DISCOVERY_SETTINGS_INVALID_ERROR_CODE)
+      .min(DISCOVERY_FIELD_LIMITS.discoveryConcurrency[0], DISCOVERY_SETTINGS_INVALID_ERROR_CODE)
+      .max(DISCOVERY_FIELD_LIMITS.discoveryConcurrency[1], DISCOVERY_SETTINGS_INVALID_ERROR_CODE)
       .optional(),
     maxDiscoveryRounds: z.coerce
       .number()
-      .int("Discovery 轮数必须是整数")
-      .min(1, "Discovery 轮数必须大于 0")
-      .max(32, "Discovery 轮数不能超过 32")
+      .int(DISCOVERY_SETTINGS_INVALID_ERROR_CODE)
+      .min(DISCOVERY_FIELD_LIMITS.maxDiscoveryRounds[0], DISCOVERY_SETTINGS_INVALID_ERROR_CODE)
+      .max(DISCOVERY_FIELD_LIMITS.maxDiscoveryRounds[1], DISCOVERY_SETTINGS_INVALID_ERROR_CODE)
       .optional(),
     discoverySlaMs: z.coerce
       .number()
-      .int("Discovery SLA 必须是整数毫秒")
-      .min(1, "Discovery SLA 必须大于 0")
-      .max(300_000, "Discovery SLA 不能超过 300000 毫秒")
+      .int(DISCOVERY_SETTINGS_INVALID_ERROR_CODE)
+      .min(DISCOVERY_FIELD_LIMITS.discoverySlaMs[0], DISCOVERY_SETTINGS_INVALID_ERROR_CODE)
+      .max(DISCOVERY_FIELD_LIMITS.discoverySlaMs[1], DISCOVERY_SETTINGS_INVALID_ERROR_CODE)
       .optional(),
     stickySlaMs: z.coerce
       .number()
-      .int("Sticky SLA 必须是整数毫秒")
-      .min(1, "Sticky SLA 必须大于 0")
-      .max(600_000, "Sticky SLA 不能超过 600000 毫秒")
+      .int(DISCOVERY_SETTINGS_INVALID_ERROR_CODE)
+      .min(DISCOVERY_FIELD_LIMITS.stickySlaMs[0], DISCOVERY_SETTINGS_INVALID_ERROR_CODE)
+      .max(DISCOVERY_FIELD_LIMITS.stickySlaMs[1], DISCOVERY_SETTINGS_INVALID_ERROR_CODE)
       .optional(),
     racingTotalTimeoutMs: z.coerce
       .number()
-      .int("竞速总超时必须是整数毫秒")
-      .min(1, "竞速总超时必须大于 0")
-      .max(3_600_000, "竞速总超时不能超过 3600000 毫秒")
+      .int(DISCOVERY_SETTINGS_INVALID_ERROR_CODE)
+      .min(DISCOVERY_FIELD_LIMITS.racingTotalTimeoutMs[0], DISCOVERY_SETTINGS_INVALID_ERROR_CODE)
+      .max(DISCOVERY_FIELD_LIMITS.racingTotalTimeoutMs[1], DISCOVERY_SETTINGS_INVALID_ERROR_CODE)
       .optional(),
     stickyTimeoutCooldownMs: z.coerce
       .number()
-      .int("Sticky 冷却时间必须是整数毫秒")
-      .min(1, "Sticky 冷却时间必须大于 0")
-      .max(86_400_000, "Sticky 冷却时间不能超过 86400000 毫秒")
+      .int(DISCOVERY_SETTINGS_INVALID_ERROR_CODE)
+      .min(DISCOVERY_FIELD_LIMITS.stickyTimeoutCooldownMs[0], DISCOVERY_SETTINGS_INVALID_ERROR_CODE)
+      .max(DISCOVERY_FIELD_LIMITS.stickyTimeoutCooldownMs[1], DISCOVERY_SETTINGS_INVALID_ERROR_CODE)
       .optional(),
     // 启用 OpenAI Responses WebSocket 支持（可选，仅 Codex 类型供应商生效）
     enableOpenaiResponsesWebsocket: z.boolean().optional(),
@@ -1205,7 +1215,7 @@ export const UpdateSystemSettingsSchema = z
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ["racingTotalTimeoutMs"],
-          message: "竞速总超时必须不小于 Sticky SLA + Discovery 轮数 × Discovery SLA",
+          message: DISCOVERY_WINDOW_INVALID_ERROR_CODE,
         });
       }
     }

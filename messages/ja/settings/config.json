@@ -130,6 +130,7 @@
     "stickyTimeoutCooldownMs": "Sticky タイムアウト後のクールダウン（ミリ秒）",
     "discoveryWindowDesc": "合計タイムアウトは Sticky SLA + 最大ラウンド数 × Discovery SLA 以上にしてください。",
     "discoveryWindowInvalid": "Discovery 合計タイムアウトが設定された Sticky/Discovery ウィンドウより短くなっています。",
+    "discoverySettingsInvalid": "1 つ以上の Discovery 設定値が許容範囲外です。",
     "verboseProviderError": "詳細なプロバイダーエラー",
     "verboseProviderErrorDesc": "有効にすると、一部の上流障害タイプで `error.details` により詳細な診断情報（プロバイダー可用性の診断やサニタイズ済み上流断片など）を含める場合があります。",
     "verboseProviderErrorTooltip": "この設定を有効にすると、プロバイダー名、内部ルーティングの手掛かり、上流障害の理由などの診断情報が露出する可能性があります。クライアントに低レベルのトラブルシュート文脈を見せてもよい場合にのみ有効化してください。",

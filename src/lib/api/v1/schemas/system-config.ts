@@ -1,5 +1,9 @@
 import { z } from "@hono/zod-openapi";
 import { CURRENCY_CONFIG } from "@/lib/utils/currency";
+import {
+  DISCOVERY_FIELD_LIMITS,
+  DISCOVERY_SETTINGS_INVALID_ERROR_CODE,
+} from "@/lib/validation/discovery-settings";
 import { IsoDateTimeStringSchema } from "./_common";
 
 const currencyValues = Object.keys(CURRENCY_CONFIG) as [
@@ -101,25 +105,39 @@ export const SystemSettingsSchema = z
     discoveryEnabled: z.boolean().describe("Whether bounded streaming Discovery is enabled."),
     discoveryConcurrency: z
       .number()
-      .int()
-      .min(2)
+      .int(DISCOVERY_SETTINGS_INVALID_ERROR_CODE)
+      .min(DISCOVERY_FIELD_LIMITS.discoveryConcurrency[0], DISCOVERY_SETTINGS_INVALID_ERROR_CODE)
+      .max(DISCOVERY_FIELD_LIMITS.discoveryConcurrency[1], DISCOVERY_SETTINGS_INVALID_ERROR_CODE)
       .describe("Maximum number of normal Discovery attempts in the initial batch."),
-    maxDiscoveryRounds: z.number().int().positive().describe("Maximum number of Discovery rounds."),
+    maxDiscoveryRounds: z
+      .number()
+      .int(DISCOVERY_SETTINGS_INVALID_ERROR_CODE)
+      .min(DISCOVERY_FIELD_LIMITS.maxDiscoveryRounds[0], DISCOVERY_SETTINGS_INVALID_ERROR_CODE)
+      .max(DISCOVERY_FIELD_LIMITS.maxDiscoveryRounds[1], DISCOVERY_SETTINGS_INVALID_ERROR_CODE)
+      .describe("Maximum number of Discovery rounds."),
     discoverySlaMs: z
       .number()
-      .int()
-      .positive()
+      .int(DISCOVERY_SETTINGS_INVALID_ERROR_CODE)
+      .min(DISCOVERY_FIELD_LIMITS.discoverySlaMs[0], DISCOVERY_SETTINGS_INVALID_ERROR_CODE)
+      .max(DISCOVERY_FIELD_LIMITS.discoverySlaMs[1], DISCOVERY_SETTINGS_INVALID_ERROR_CODE)
       .describe("First-byte Discovery SLA in milliseconds."),
-    stickySlaMs: z.number().int().positive().describe("Sticky probe SLA in milliseconds."),
+    stickySlaMs: z
+      .number()
+      .int(DISCOVERY_SETTINGS_INVALID_ERROR_CODE)
+      .min(DISCOVERY_FIELD_LIMITS.stickySlaMs[0], DISCOVERY_SETTINGS_INVALID_ERROR_CODE)
+      .max(DISCOVERY_FIELD_LIMITS.stickySlaMs[1], DISCOVERY_SETTINGS_INVALID_ERROR_CODE)
+      .describe("Sticky probe SLA in milliseconds."),
     racingTotalTimeoutMs: z
       .number()
-      .int()
-      .positive()
+      .int(DISCOVERY_SETTINGS_INVALID_ERROR_CODE)
+      .min(DISCOVERY_FIELD_LIMITS.racingTotalTimeoutMs[0], DISCOVERY_SETTINGS_INVALID_ERROR_CODE)
+      .max(DISCOVERY_FIELD_LIMITS.racingTotalTimeoutMs[1], DISCOVERY_SETTINGS_INVALID_ERROR_CODE)
       .describe("Total pre-winner Discovery deadline in milliseconds."),
     stickyTimeoutCooldownMs: z
       .number()
-      .int()
-      .positive()
+      .int(DISCOVERY_SETTINGS_INVALID_ERROR_CODE)
+      .min(DISCOVERY_FIELD_LIMITS.stickyTimeoutCooldownMs[0], DISCOVERY_SETTINGS_INVALID_ERROR_CODE)
+      .max(DISCOVERY_FIELD_LIMITS.stickyTimeoutCooldownMs[1], DISCOVERY_SETTINGS_INVALID_ERROR_CODE)
       .describe("Sticky timeout cooldown in milliseconds."),
     timezone: TimeZoneSchema.nullable().describe(
       "Configured system timezone, or null for default."

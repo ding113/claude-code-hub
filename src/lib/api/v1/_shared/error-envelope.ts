@@ -69,13 +69,13 @@ export function problem(options: CreateProblemOptions): Response {
   return createProblemResponse(options);
 }
 
-export function fromZodError(error: ZodError, instance: string): Response {
+export function fromZodError(error: ZodError, instance: string, errorCode?: string): Response {
   return createProblemResponse({
     status: 400,
     instance,
     title: "Validation failed",
     detail: "One or more fields are invalid.",
-    errorCode: "request.validation_failed",
+    errorCode: errorCode ?? "request.validation_failed",
     invalidParams: error.issues.map((issue) => ({
       path: normalizeZodPath(issue.path),
       code: issue.code,

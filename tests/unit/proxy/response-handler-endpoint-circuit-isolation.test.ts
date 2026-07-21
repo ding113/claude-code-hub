@@ -957,6 +957,13 @@ describe("Endpoint circuit breaker isolation", () => {
       })}\n\n`,
     },
     {
+      label: "Gemini wrapped response",
+      format: "gemini" as const,
+      body: `data: ${JSON.stringify({
+        response: { candidates: [{ finishReason: "STOP" }] },
+      })}\n\n`,
+    },
+    {
       label: "Gemini CLI",
       format: "gemini-cli" as const,
       body: `data: ${JSON.stringify({

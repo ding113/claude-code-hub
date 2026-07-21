@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { ZodError } from "zod";
 import { locales } from "@/i18n/config";
 import { emitActionAudit } from "@/lib/audit/emit";
 import { getSession } from "@/lib/auth";
@@ -15,6 +16,10 @@ import {
   invalidateAllStatisticsCaches,
 } from "@/lib/redis";
 import { resolveSystemTimezone } from "@/lib/utils/timezone";
+import {
+  DISCOVERY_WINDOW_INVALID_ERROR_CODE,
+  getDiscoveryValidationErrorCode,
+} from "@/lib/validation/discovery-settings";
 import { UpdateSystemSettingsSchema } from "@/lib/validation/schemas";
 import { getSystemSettings, updateSystemSettings } from "@/repository/system-config";
 import type { IpExtractionConfig } from "@/types/ip-extraction";
@@ -26,7 +31,10 @@ import type {
 } from "@/types/system-config";
 import type { ActionResult } from "./types";
 
-const DISCOVERY_WINDOW_INVALID = "DISCOVERY_WINDOW_INVALID";
+function discoveryValidationErrorCode(error: unknown): string | null {
+  if (!(error instanceof ZodError)) return null;
+  return getDiscoveryValidationErrorCode(error.issues) ?? null;
+}
 
 export async function fetchSystemSettings(): Promise<ActionResult<SystemSettings>> {
   try {
@@ -141,7 +149,7 @@ export async function saveSystemSettings(formData: {
       return {
         ok: false,
         error: "Discovery window validation failed.",
-        errorCode: DISCOVERY_WINDOW_INVALID,
+        errorCode: DISCOVERY_WINDOW_INVALID_ERROR_CODE,
       };
     }
     const updated = await updateSystemSettings({
@@ -280,7 +288,12 @@ export async function saveSystemSettings(formData: {
     return { ok: true, data: { ...updated, publicStatusProjectionWarningCode } };
   } catch (error) {
     logger.error("更新系统设置失败:", error);
-    const message = error instanceof Error ? error.message : "更新系统设置失败";
+    const validationErrorCode = discoveryValidationErrorCode(error);
+    const message = validationErrorCode
+      ? "Discovery settings validation failed."
+      : error instanceof Error
+        ? error.message
+        : "更新系统设置失败";
     emitActionAudit({
       category: "system_settings",
       action: "system_settings.update",
@@ -290,6 +303,10 @@ export async function saveSystemSettings(formData: {
       success: false,
       errorMessage: "UPDATE_FAILED",
     });
-    return { ok: false, error: message };
+    return {
+      ok: false,
+      error: message,
+      ...(validationErrorCode ? { errorCode: validationErrorCode } : {}),
+    };
   }
 }
