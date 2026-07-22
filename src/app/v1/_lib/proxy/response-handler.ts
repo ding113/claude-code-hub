@@ -1368,7 +1368,10 @@ function inspectStreamCompletion(
   }
 }
 
-function hasStreamCompletionMarker(text: string, format: ProxySession["originalFormat"]): boolean {
+export function hasStreamCompletionMarker(
+  text: string,
+  format: ProxySession["originalFormat"]
+): boolean {
   return inspectStreamCompletion(text, format).hasMarker;
 }
 
@@ -5673,6 +5676,12 @@ export async function finalizeHedgeLoserBilling(params: {
    */
   drainComplete: boolean;
   /**
+   * Discovery only accounts responses that report usage explicitly. Legacy
+   * Hedge leaves this false so complete per-request-priced responses retain
+   * their established billing semantics.
+   */
+  requireUsage?: boolean;
+  /**
    * Billing context captured BEFORE the shared session could be polluted by
    * syncWinningAttemptSession (only set for the INITIAL provider's losing attempt, whose
    * session is overwritten with the winner's model). Shadow-session losers leave this
@@ -5695,6 +5704,7 @@ export async function finalizeHedgeLoserBilling(params: {
     upstreamStatusCode,
     allContent,
     drainComplete,
+    requireUsage = false,
     billingContext,
   } = params;
 
@@ -5711,6 +5721,10 @@ export async function finalizeHedgeLoserBilling(params: {
         loserSession,
         provider.swapCacheTtlBilling
       );
+    }
+
+    if (requireUsage && !usageForCost) {
+      return null;
     }
 
     // Truncated drain (timeout / cap / abort) with no parsed usage: do NOT fall through to

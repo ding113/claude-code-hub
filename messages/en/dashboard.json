@@ -299,6 +299,7 @@
         "title": "Billing Details",
         "input": "Input",
         "output": "Output",
+        "cacheWrite": "Cache Write",
         "cacheWrite5m": "Cache Write (5m)",
         "cacheWrite1h": "Cache Write (1h)",
         "cacheRead": "Cache Read",
@@ -496,7 +497,12 @@
           "endpoint": "Endpoint",
           "error": "Upstream error",
           "cancellation": "Cancellation reason",
-          "timeline": "Attempt timeline"
+          "timeline": "Attempt timeline",
+          "billing": "Cost and usage",
+          "billed": "Included in total cost",
+          "billedCost": "Billed cost",
+          "winnerCost": "Winner cost",
+          "notObtained": "Cancelled; usage unavailable"
         },
         "cancellationKinds": {
           "discovery_loser": "Another Discovery attempt won",

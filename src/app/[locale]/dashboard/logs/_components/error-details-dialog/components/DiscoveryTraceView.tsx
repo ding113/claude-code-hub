@@ -16,9 +16,12 @@ import {
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
-import { cn } from "@/lib/utils";
+import { cn, formatTokenAmount } from "@/lib/utils";
+import { formatCurrency } from "@/lib/utils/currency";
+import { summarizeHedgeBilling } from "@/lib/utils/hedge-billing";
 import { redactJsonString } from "@/lib/utils/message-redaction";
 import { sanitizeErrorTextForDetail } from "@/lib/utils/upstream-error-detection";
+import type { HedgeLoserBilling } from "@/types/cost-breakdown";
 import type { ProviderChainItem } from "@/types/message";
 import type { RoutingTraceV1 } from "@/types/routing-trace";
 
@@ -80,6 +83,9 @@ type AttemptView = {
   fallbackPromoted: boolean;
   winnerCommitted: boolean;
   chainItem: ProviderChainItem | null;
+  billingEntry: HedgeLoserBilling | null;
+  billingStatus: "none" | "billed" | "not_obtained";
+  winnerCostUsd: string | null;
   history: Array<{
     type: string;
     elapsedMs: number | null;
@@ -88,6 +94,38 @@ type AttemptView = {
     reason: string | null;
   }>;
 };
+
+function findDiscoveryBillingEntry(
+  hedgeLosers: HedgeLoserBilling[] | null | undefined,
+  attempt: Pick<AttemptView, "providerId" | "sequence" | "chainItem">
+): HedgeLoserBilling | null {
+  if (!hedgeLosers || hedgeLosers.length === 0 || attempt.providerId == null) return null;
+  const candidates = hedgeLosers.filter((entry) => entry.providerId === attempt.providerId);
+  if (candidates.length === 0) return null;
+
+  const attemptNumbers = [attempt.sequence ?? attempt.chainItem?.attemptNumber].filter(
+    (number): number is number => number != null && Number.isFinite(number)
+  );
+  for (const attemptNumber of attemptNumbers) {
+    const exact = candidates.find((entry) => entry.attemptNumber === attemptNumber);
+    if (exact) return exact;
+  }
+  return null;
+}
+
+function inferMissingBillingStatus(attempt: AttemptView): AttemptView["billingStatus"] {
+  if (attempt.winnerCommitted || attempt.outcome === "winner") return "none";
+  if (
+    attempt.outcome === "cancelled" ||
+    attempt.outcome === "timeout" ||
+    attempt.outcome === "client_abort" ||
+    attempt.outcome === "deadline" ||
+    attempt.outcome === "failed"
+  ) {
+    return "not_obtained";
+  }
+  return "none";
+}
 
 function asRecord(value: unknown): TraceRecord {
   return value && typeof value === "object" && !Array.isArray(value) ? (value as TraceRecord) : {};
@@ -99,6 +137,12 @@ function asString(value: unknown): string | null {
 
 function asNumber(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function isDisplayableCost(value: unknown): value is string {
+  if (typeof value !== "string" || value.trim() === "") return false;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0;
 }
 
 function parseAttemptSequence(attemptId: string): number | null {
@@ -278,7 +322,12 @@ function applyEventOutcome(
   }
 }
 
-function buildAttempts(trace: RoutingTraceV1, providerChain: ProviderChainItem[]): AttemptView[] {
+function buildAttempts(
+  trace: RoutingTraceV1,
+  providerChain: ProviderChainItem[],
+  hedgeLosers: HedgeLoserBilling[] | null | undefined,
+  costUsd: string | null | undefined
+): AttemptView[] {
   const attempts = new Map<string, AttemptView>();
   const lookup = buildProviderChainLookup(providerChain);
 
@@ -314,6 +363,9 @@ function buildAttempts(trace: RoutingTraceV1, providerChain: ProviderChainItem[]
       fallbackPromoted: false,
       winnerCommitted: false,
       chainItem: findChainItem(attemptId, provider.id, lookup),
+      billingEntry: null,
+      billingStatus: "none",
+      winnerCostUsd: null,
       history: [],
     };
 
@@ -370,10 +422,30 @@ function buildAttempts(trace: RoutingTraceV1, providerChain: ProviderChainItem[]
     }
   }
 
-  return [...attempts.values()].sort((a, b) => {
+  const sortedAttempts = [...attempts.values()].sort((a, b) => {
     if (a.round !== b.round) return a.round - b.round;
     return (a.startedAt ?? Number.MAX_SAFE_INTEGER) - (b.startedAt ?? Number.MAX_SAFE_INTEGER);
   });
+
+  const hedgeSummary = summarizeHedgeBilling(costUsd, hedgeLosers);
+  for (const attempt of sortedAttempts) {
+    const billingEntry = findDiscoveryBillingEntry(hedgeLosers, attempt);
+    if (billingEntry) {
+      attempt.billingEntry = billingEntry;
+      attempt.billingStatus = "billed";
+      continue;
+    }
+
+    attempt.billingStatus = inferMissingBillingStatus(attempt);
+    if (attempt.winnerCommitted || attempt.outcome === "winner") {
+      // When billed losers exist, subtract them from the persisted request total
+      // so the winner card agrees with the existing hedge billing table. With no
+      // loser entry, costUsd is the only safe winner amount available.
+      attempt.winnerCostUsd = hedgeSummary?.winnerCost ?? costUsd ?? null;
+    }
+  }
+
+  return sortedAttempts;
 }
 
 function numberFrom(record: TraceRecord, ...keys: string[]): number | null {
@@ -508,12 +580,23 @@ export function RoutingModeBanner({ trace }: { trace: RoutingTraceV1 }) {
 export function DiscoveryTraceView({
   trace,
   providerChain = [],
+  hedgeLosers,
+  costUsd,
+  winnerUsage,
 }: {
   trace: RoutingTraceV1;
   providerChain?: ProviderChainItem[];
+  hedgeLosers?: HedgeLoserBilling[] | null;
+  costUsd?: string | null;
+  winnerUsage?: {
+    inputTokens?: number | null;
+    outputTokens?: number | null;
+    cacheCreationInputTokens?: number | null;
+    cacheReadInputTokens?: number | null;
+  };
 }) {
   const t = useTranslations("dashboard.logs.details.routingTrace");
-  const attempts = buildAttempts(trace, providerChain);
+  const attempts = buildAttempts(trace, providerChain, hedgeLosers, costUsd);
   const grouped = new Map<number, AttemptView[]>();
   for (const attempt of attempts) {
     const group = grouped.get(attempt.round) ?? [];
@@ -682,7 +765,7 @@ export function DiscoveryTraceView({
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {roundAttempts.map((attempt) => (
-                  <AttemptCard key={attempt.id} attempt={attempt} />
+                  <AttemptCard key={attempt.id} attempt={attempt} winnerUsage={winnerUsage} />
                 ))}
               </div>
             </section>
@@ -702,8 +785,20 @@ function TraceValue({ label, value }: { label: string; value: string | number | 
   );
 }
 
-function AttemptCard({ attempt }: { attempt: AttemptView }) {
+function AttemptCard({
+  attempt,
+  winnerUsage,
+}: {
+  attempt: AttemptView;
+  winnerUsage?: {
+    inputTokens?: number | null;
+    outputTokens?: number | null;
+    cacheCreationInputTokens?: number | null;
+    cacheReadInputTokens?: number | null;
+  };
+}) {
   const t = useTranslations("dashboard.logs.details.routingTrace");
+  const tDetails = useTranslations("dashboard.logs.details");
   const [expanded, setExpanded] = useState(false);
   const style = outcomeStyle(attempt.outcome);
   const Icon = style.icon;
@@ -724,6 +819,72 @@ function AttemptCard({ attempt }: { attempt: AttemptView }) {
       ? t(`cancellationKinds.${attempt.cancellationKind}`)
       : attempt.cancellationKind
     : null;
+
+  const billingEntry = attempt.billingEntry;
+  const billedCost = attempt.winnerCostUsd ?? billingEntry?.costUsd;
+  const tokenRows = billingEntry
+    ? [
+        ["input", billingEntry.inputTokens],
+        ["output", billingEntry.outputTokens],
+        ["cacheWrite", billingEntry.cacheCreationInputTokens],
+        ["cacheRead", billingEntry.cacheReadInputTokens],
+      ].filter(([, value]) => typeof value === "number" && Number.isFinite(value))
+    : [];
+  const winnerTokenRows = attempt.winnerCommitted
+    ? [
+        ["input", winnerUsage?.inputTokens],
+        ["output", winnerUsage?.outputTokens],
+        ["cacheWrite", winnerUsage?.cacheCreationInputTokens],
+        ["cacheRead", winnerUsage?.cacheReadInputTokens],
+      ].filter(([, value]) => typeof value === "number" && Number.isFinite(value))
+    : [];
+  const renderBillingDetails = () => {
+    const isWinner = attempt.winnerCommitted || attempt.outcome === "winner";
+    const effectiveStatus =
+      isWinner && attempt.winnerCostUsd != null ? "billed" : attempt.billingStatus;
+    if (effectiveStatus === "none") return null;
+    const statusKey = effectiveStatus === "billed" ? "billed" : "notObtained";
+    const statusClass =
+      effectiveStatus === "billed"
+        ? "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/20 dark:text-emerald-300"
+        : "border-slate-200 bg-slate-50 text-slate-600 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-300";
+    const rows = isWinner ? winnerTokenRows : tokenRows;
+
+    return (
+      <div
+        className="border-t border-current/10 pt-2 space-y-2"
+        data-testid="discovery-attempt-billing"
+      >
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-muted-foreground">{t("attemptDetails.billing")}</span>
+          <Badge
+            variant="outline"
+            className={cn("text-[10px]", statusClass)}
+            data-testid="discovery-attempt-billing-status"
+          >
+            {t(`attemptDetails.${statusKey}`)}
+          </Badge>
+        </div>
+        {effectiveStatus === "billed" && isDisplayableCost(billedCost) && (
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-muted-foreground">
+              {isWinner ? t("attemptDetails.winnerCost") : t("attemptDetails.billedCost")}
+            </span>
+            <span className="font-mono font-medium">{formatCurrency(billedCost, "USD", 6)}</span>
+          </div>
+        )}
+        {effectiveStatus === "billed" && rows.length > 0 && (
+          <div className="flex flex-wrap gap-x-3 gap-y-1 font-mono text-muted-foreground">
+            {rows.map(([kind, value]) => (
+              <span key={kind}>
+                {tDetails(`billingDetails.${kind}`)} {formatTokenAmount(value as number)}
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  };
 
   return (
     <article
@@ -825,6 +986,7 @@ function AttemptCard({ attempt }: { attempt: AttemptView }) {
               <span>{cancellationLabel}</span>
             </div>
           )}
+          {renderBillingDetails()}
           {attempt.history.length > 0 && (
             <div className="border-t border-current/10 pt-2 space-y-1">
               <div className="text-muted-foreground">{t("attemptDetails.timeline")}</div>

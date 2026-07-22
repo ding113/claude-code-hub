@@ -20,6 +20,11 @@ export type DiscoveryAttempt = {
   providerId: number;
   priority: number;
   kind: DiscoveryAttemptKind;
+  /**
+   * A final-round rescue is kept alive beside the primary fallback. It can
+   * rescue the request, but it must never establish or renew Sticky.
+   */
+  finalRescue?: boolean;
   /** Selector/endpoint setup occupies a slot but cannot become a winner or fallback. */
   setupOnly?: boolean;
   ready: boolean;
@@ -31,7 +36,12 @@ export type DiscoveryAttempt = {
 export type DiscoveryAction =
   | { type: "commit_normal"; attemptId: string }
   | { type: "promote_fallback"; attemptId: string }
-  | { type: "cancel"; attemptIds: string[]; promoteAttemptId?: string }
+  | {
+      type: "cancel";
+      attemptIds: string[];
+      promoteAttemptId?: string;
+      rescueAttemptId?: string;
+    }
   | {
       type: "launch";
       slots: number;
@@ -59,6 +69,7 @@ export class DiscoveryCoordinator {
   private requestEpoch = 0;
   private roundEpoch = 0;
   private roundOpen = true;
+  private finalRescueAttemptId: string | null = null;
 
   constructor(options: DiscoveryCoordinatorOptions) {
     this.concurrency = Math.max(1, Math.floor(options.concurrency));
@@ -89,6 +100,7 @@ export class DiscoveryCoordinator {
     }
     this.round += 1;
     this.roundEpoch += 1;
+    this.finalRescueAttemptId = null;
     if (!this.isTerminal) {
       this.state = "DISCOVERY_RACING";
       this.roundOpen = true;
@@ -171,7 +183,9 @@ export class DiscoveryCoordinator {
   }
 
   get snapshot(): DiscoveryAttempt[] {
-    return Array.from(this.attempts.values()).map((attempt) => ({ ...attempt }));
+    return Array.from(this.attempts.values()).map((attempt) => ({
+      ...attempt,
+    }));
   }
 
   /** Ignore events from a cancelled request or an old round. */
@@ -189,6 +203,15 @@ export class DiscoveryCoordinator {
     if (!attempt?.pending || attempt.setupOnly === true) return { type: "none" };
     attempt.ready = true;
     if (attempt.kind === "fallback") {
+      // Once the final rescue lane is open, the primary fallback and the
+      // standby are peers. Whichever produces a valid prefix first may rescue
+      // the request; do not keep a ready fallback waiting for a pending
+      // standby that may never respond.
+      if (this.finalRescueAttemptId) {
+        attempt.pending = false;
+        this.state = "FALLBACK_ACTIVE";
+        return { type: "promote_fallback", attemptId: attempt.id };
+      }
       const pendingNormal = Array.from(this.attempts.values()).some(
         (candidate) => candidate.pending && candidate.kind === "normal"
       );
@@ -281,8 +304,9 @@ export class DiscoveryCoordinator {
 
   /**
    * Close the current SLA window. At a boundary a ready normal always wins;
-   * otherwise the best still-pending normal becomes the sole fallback. A
-   * fallback that is merely ready is held until no normal can still win.
+   * otherwise the best still-pending normal becomes the primary fallback. A
+   * non-final fallback is held until no normal can still win; the final window
+   * may retain one additional pending normal as a bounded rescue lane.
    */
   onRoundBoundary(requestEpoch = this.requestEpoch, roundEpoch = this.roundEpoch): DiscoveryAction {
     if (!this.acceptsEpoch(requestEpoch, roundEpoch) || this.isTerminal) return { type: "none" };
@@ -311,6 +335,26 @@ export class DiscoveryCoordinator {
       )
       .sort(compareAttempts);
     if (currentFallback && (pendingNormal.length > 0 || setupAttemptIds.length > 0)) {
+      // In the final round preserve one best normal alongside the primary
+      // fallback. This is a bounded rescue lane: at most two upstreams stay
+      // alive regardless of the configured discovery concurrency.
+      if (this.round >= this.maxRounds && this.concurrency >= 2 && pendingNormal.length > 0) {
+        const rescue = pendingNormal[0];
+        rescue.finalRescue = true;
+        this.finalRescueAttemptId = rescue.id;
+        const cancelAttemptIds = [
+          ...pendingNormal.slice(1).map((attempt) => attempt.id),
+          ...setupAttemptIds,
+        ];
+        for (const id of cancelAttemptIds) this.attempts.get(id)!.pending = false;
+        this.state = "FALLBACK_READY_HELD";
+        return {
+          type: "cancel",
+          attemptIds: cancelAttemptIds,
+          rescueAttemptId: rescue.id,
+        };
+      }
+
       const cancelAttemptIds = [...pendingNormal.map((attempt) => attempt.id), ...setupAttemptIds];
       for (const attempt of pendingNormal) attempt.pending = false;
       if (this.round < this.maxRounds) {
@@ -332,7 +376,10 @@ export class DiscoveryCoordinator {
       if (setupAttemptIds.length > 0) {
         if (this.round >= this.maxRounds) {
           this.state = "TERMINAL_FAILED";
-          return { type: "terminal_failure", cancelAttemptIds: setupAttemptIds };
+          return {
+            type: "terminal_failure",
+            cancelAttemptIds: setupAttemptIds,
+          };
         }
         this.beginRound();
         return {
@@ -347,7 +394,19 @@ export class DiscoveryCoordinator {
     const fallback = pendingNormal[0];
     fallback.kind = "fallback";
     this.state = "FALLBACK_READY_HELD";
-    const losers = [...pendingNormal.slice(1).map((attempt) => attempt.id), ...setupAttemptIds];
+    // In the final round, retain one additional normal as a standby rescue.
+    // It remains a normal candidate for race purposes but is explicitly
+    // ineligible for Sticky binding.
+    const finalRescue =
+      this.round >= this.maxRounds && this.concurrency >= 2 ? pendingNormal[1] : undefined;
+    if (finalRescue) {
+      finalRescue.finalRescue = true;
+      this.finalRescueAttemptId = finalRescue.id;
+    }
+    const losers = [
+      ...pendingNormal.slice(finalRescue ? 2 : 1).map((attempt) => attempt.id),
+      ...setupAttemptIds,
+    ];
     for (const id of losers) this.attempts.get(id)!.pending = false;
 
     if (this.round < this.maxRounds) {
@@ -360,7 +419,12 @@ export class DiscoveryCoordinator {
         promoteAttemptId: fallback.id,
       };
     }
-    return { type: "cancel", attemptIds: losers, promoteAttemptId: fallback.id };
+    return {
+      type: "cancel",
+      attemptIds: losers,
+      promoteAttemptId: fallback.id,
+      ...(finalRescue ? { rescueAttemptId: finalRescue.id } : {}),
+    };
   }
 
   onDeadline(): DiscoveryAction {
@@ -414,7 +478,10 @@ export class DiscoveryCoordinator {
     if (readyNormal.type === "commit_normal") return readyNormal;
 
     const fallback = pending.find((attempt) => attempt.kind === "fallback");
-    if (fallback?.ready && pending.every((attempt) => attempt.kind === "fallback")) {
+    if (
+      fallback?.ready &&
+      (this.finalRescueAttemptId != null || pending.every((attempt) => attempt.kind === "fallback"))
+    ) {
       return this.commitWinner(fallback.id);
     }
     return { type: "none" };

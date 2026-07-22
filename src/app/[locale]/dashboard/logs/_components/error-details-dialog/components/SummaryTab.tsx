@@ -66,6 +66,7 @@ export function SummaryTab({
   costBreakdown,
   hedgeLosers,
   providerChain,
+  routingTrace,
   context1mApplied,
   durationMs,
   ttfbMs,
@@ -627,10 +628,23 @@ export function SummaryTab({
             {(() => {
               const hedgeWinnerStep =
                 providerChain?.find((item) => item.reason === "hedge_winner") ?? null;
+              const discoveryWinnerEvent =
+                routingTrace?.mode === "discovery"
+                  ? routingTrace.events.findLast(
+                      (event) =>
+                        event.type === "winner_committed" &&
+                        (routingTrace.summary?.winnerProviderId == null ||
+                          event.provider?.id === routingTrace.summary.winnerProviderId)
+                    )
+                  : null;
+              const discoveryWinner = discoveryWinnerEvent?.provider;
+              const discoveryWinnerAttempt = discoveryWinnerEvent?.attemptId?.match(/:(\d+)$/)?.[1];
               const hedgeTable = buildHedgeBillingTable(costUsd, hedgeLosers, {
-                providerId: hedgeWinnerStep?.id ?? null,
-                providerName: hedgeWinnerStep?.name ?? null,
-                attemptNumber: hedgeWinnerStep?.attemptNumber ?? null,
+                providerId: hedgeWinnerStep?.id ?? discoveryWinner?.id ?? null,
+                providerName: hedgeWinnerStep?.name ?? discoveryWinner?.name ?? null,
+                attemptNumber:
+                  hedgeWinnerStep?.attemptNumber ??
+                  (discoveryWinnerAttempt ? Number(discoveryWinnerAttempt) : null),
                 inputTokens,
                 outputTokens,
                 cacheCreationInputTokens,
@@ -649,7 +663,10 @@ export function SummaryTab({
                       {t("billingDetails.hedgeMergedCount", { count: hedgeTable.count })}
                     </Badge>
                   </div>
-                  <div className="overflow-x-auto rounded-md border">
+                  <div
+                    className="overflow-x-auto rounded-md border"
+                    data-testid="provider-racing-billing-table"
+                  >
                     <table className="w-full text-xs">
                       <thead>
                         <tr className="border-b bg-muted/40 text-muted-foreground">

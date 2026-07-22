@@ -299,6 +299,7 @@
         "title": "課金詳細",
         "input": "入力",
         "output": "出力",
+        "cacheWrite": "キャッシュ書き込み",
         "cacheWrite5m": "キャッシュ書き込み (5m)",
         "cacheWrite1h": "キャッシュ書き込み (1h)",
         "cacheRead": "キャッシュ読み取り",
@@ -496,7 +497,12 @@
           "endpoint": "エンドポイント",
           "error": "上流エラー",
           "cancellation": "キャンセル理由",
-          "timeline": "試行タイムライン"
+          "timeline": "試行タイムライン",
+          "billing": "費用と使用量",
+          "billed": "合計費用に計上済み",
+          "billedCost": "計上費用",
+          "winnerCost": "勝者の費用",
+          "notObtained": "キャンセル済み、使用量未取得"
         },
         "cancellationKinds": {
           "discovery_loser": "別の Discovery 試行が勝利しました",

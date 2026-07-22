@@ -200,7 +200,18 @@ export function LogicTraceTab({
     return (
       <div className="space-y-5">
         <RoutingModeBanner trace={normalizedRoutingTrace} />
-        <DiscoveryTraceView trace={normalizedRoutingTrace} providerChain={providerChain ?? []} />
+        <DiscoveryTraceView
+          trace={normalizedRoutingTrace}
+          providerChain={providerChain ?? []}
+          hedgeLosers={hedgeLosers}
+          costUsd={costUsd}
+          winnerUsage={{
+            inputTokens,
+            outputTokens,
+            cacheCreationInputTokens,
+            cacheReadInputTokens,
+          }}
+        />
       </div>
     );
   }
