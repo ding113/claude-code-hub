@@ -1550,7 +1550,8 @@ export class ProxyForwarder {
               detected.isError &&
               (detected.code === "FAKE_200_HTML_BODY" ||
                 detected.code === "FAKE_200_JSON_ERROR_NON_EMPTY" ||
-                detected.code === "FAKE_200_JSON_ERROR_MESSAGE_NON_EMPTY");
+                detected.code === "FAKE_200_JSON_ERROR_MESSAGE_NON_EMPTY" ||
+                detected.code === "FAKE_200_OPENAI_RESPONSE_FAILED");
 
             if (isStrongFake200) {
               const inferredStatus = inferUpstreamErrorStatusCodeFromText(inspectedText);
