@@ -10,6 +10,7 @@ import {
   Link2,
   MinusCircle,
   RefreshCw,
+  Server,
   ShieldCheck,
   XCircle,
   Zap,
@@ -28,7 +29,11 @@ import {
 } from "@/lib/utils/provider-chain-formatter";
 import { parseProviderGroups } from "@/lib/utils/provider-group";
 import type { ProviderChainItem } from "@/types/message";
-import { normalizeRoutingTrace, type RoutingTraceV1 } from "@/types/routing-trace";
+import {
+  normalizeRoutingTrace,
+  type RoutingTraceV1,
+  type RoutingTraceWinnerOrigin,
+} from "@/types/routing-trace";
 import { getFake200ReasonKey } from "./fake200-reason";
 import { Fake200RetryTooltip } from "./fake200-retry-tooltip";
 
@@ -89,6 +94,90 @@ function getDiscoveryTerminal(trace: RoutingTraceV1): {
     outcome,
     statusCode: terminalEvent?.statusCode ?? trace.summary?.statusCode ?? null,
   };
+}
+
+type DiscoveryRouteMode = "sticky" | "cold_start" | "rediscovery";
+
+function getStickyEvidenceIndex(trace: RoutingTraceV1): number {
+  return trace.events.findIndex(
+    (event) =>
+      event.type === "sticky_probe_started" ||
+      event.type === "sticky_timeout" ||
+      event.attemptKind === "sticky"
+  );
+}
+
+function deriveDiscoveryRouteMode(
+  trace: RoutingTraceV1,
+  chain: ProviderChainItem[]
+): DiscoveryRouteMode {
+  const stickyEvidenceIndex = getStickyEvidenceIndex(trace);
+  if (stickyEvidenceIndex < 0) {
+    if (trace.summary?.winnerOrigin === "sticky") return "sticky";
+
+    const truncatedStickyFallback =
+      trace.truncated === true &&
+      chain.some(
+        (item) => item.reason === "session_reuse" || item.selectionMethod === "session_reuse"
+      ) &&
+      ((trace.summary?.rounds ?? 0) >= 1 || (trace.summary?.winnerRound ?? 0) >= 1);
+    return truncatedStickyFallback ? "rediscovery" : "cold_start";
+  }
+
+  const transitionEvents = trace.events.slice(stickyEvidenceIndex);
+  const enteredRediscovery =
+    transitionEvents.some(
+      (event) =>
+        event.type === "sticky_timeout" ||
+        (typeof event.round === "number" &&
+          event.round >= 1 &&
+          (event.type === "round_started" ||
+            (event.attemptKind !== undefined && event.attemptKind !== "sticky")))
+    ) ||
+    (trace.summary?.rounds ?? 0) >= 1 ||
+    (trace.summary?.winnerRound ?? 0) >= 1;
+  return enteredRediscovery ? "rediscovery" : "sticky";
+}
+
+function getDiscoveryWinnerOrigin(trace: RoutingTraceV1): RoutingTraceWinnerOrigin {
+  const summaryOrigin = trace.summary?.winnerOrigin;
+  if (summaryOrigin === "sticky" || summaryOrigin === "normal" || summaryOrigin === "fallback") {
+    return summaryOrigin;
+  }
+
+  const winnerKind = trace.events.findLast(
+    (event) => event.type === "winner_committed"
+  )?.attemptKind;
+  return winnerKind === "sticky" || winnerKind === "normal" || winnerKind === "fallback"
+    ? winnerKind
+    : "none";
+}
+
+function getDiscoveryFinalProviderName(
+  trace: RoutingTraceV1,
+  chain: ProviderChainItem[],
+  fallbackName: string,
+  winnerOrigin: RoutingTraceWinnerOrigin
+): string | null {
+  const winnerProviderId = trace.summary?.winnerProviderId;
+  const winnerEvent = [...trace.events]
+    .reverse()
+    .find(
+      (event) =>
+        (event.type === "winner_committed" ||
+          (event.type === "attempt_finished" && event.outcome === "winner")) &&
+        (winnerProviderId == null || event.provider?.id === winnerProviderId) &&
+        event.provider?.name
+    );
+  if (winnerEvent?.provider?.name) return winnerEvent.provider.name;
+  const hasSuccessfulChainItem = chain.some(
+    (item) =>
+      (item.reason === "request_success" ||
+        item.reason === "retry_success" ||
+        item.reason === "hedge_winner") &&
+      item.statusCode != null
+  );
+  return winnerOrigin !== "none" || hasSuccessfulChainItem ? fallbackName || null : null;
 }
 
 /**
@@ -205,6 +294,15 @@ export function ProviderChainPopover({
 
   if (normalizedRoutingTrace?.mode === "discovery") {
     const { rounds, attempts } = deriveDiscoveryStats(normalizedRoutingTrace);
+    const routeMode = deriveDiscoveryRouteMode(normalizedRoutingTrace, chain);
+    const winnerOrigin = getDiscoveryWinnerOrigin(normalizedRoutingTrace);
+    const discoveryFinalProvider = getDiscoveryFinalProviderName(
+      normalizedRoutingTrace,
+      chain,
+      displayName,
+      winnerOrigin
+    );
+    const triggerProviderName = discoveryFinalProvider ?? displayName;
     const terminal = getDiscoveryTerminal(normalizedRoutingTrace);
     const terminalPresentation =
       terminal.outcome === "success"
@@ -217,12 +315,9 @@ export function ProviderChainPopover({
               ? { icon: MinusCircle, className: "text-amber-600" }
               : { icon: RefreshCw, className: "text-muted-foreground" };
     const TerminalIcon = terminalPresentation.icon;
-    const rawWinnerOrigin = normalizedRoutingTrace.summary?.winnerOrigin;
-    const winnerOrigin =
-      rawWinnerOrigin === "sticky" || rawWinnerOrigin === "normal" || rawWinnerOrigin === "fallback"
-        ? rawWinnerOrigin
-        : "none";
-
+    const routeLabel = tRouting(`routeModes.${routeMode}`);
+    const winnerSourceLabel =
+      winnerOrigin === "none" ? null : tRouting(`winnerSources.${winnerOrigin}`);
     return (
       <Popover>
         <PopoverTrigger asChild>
@@ -230,30 +325,58 @@ export function ProviderChainPopover({
             type="button"
             variant="ghost"
             className="h-auto p-0 font-normal hover:bg-transparent w-full min-w-0"
-            aria-label={`${displayName} - ${tRouting("discoveryCompact", { rounds, attempts })}`}
+            aria-label={`${triggerProviderName} - ${routeLabel} - ${tRouting("discoveryCompact", { rounds, attempts })}`}
           >
-            <span className="flex w-full items-center gap-1 min-w-0">
+            <span className="flex w-full min-w-0 items-center gap-1 overflow-hidden">
               <Zap className="h-3 w-3 shrink-0 text-blue-500" />
-              <span className="truncate min-w-0" dir="auto">
-                {displayName}
+              <span className="min-w-0 flex-1 truncate" dir="auto">
+                {triggerProviderName}
               </span>
-              <Badge variant="secondary" className="shrink-0 text-[10px] px-1.5 py-0">
-                {tRouting("discoveryCompact", { rounds, attempts })}
+              <Badge
+                variant="secondary"
+                className="min-w-0 max-w-[45%] shrink px-1.5 py-0 text-[10px]"
+                title={routeLabel}
+              >
+                <span className="truncate">{routeLabel}</span>
               </Badge>
             </span>
           </Button>
         </PopoverTrigger>
         <PopoverContent className="w-[360px] max-w-[calc(100vw-2rem)] p-0" align="start">
           <div className="p-3 border-b flex items-center justify-between gap-3">
-            <h4 className="font-semibold text-sm flex items-center gap-2 min-w-0">
+            <h4 className="flex min-w-0 flex-1 items-center gap-2 text-sm font-semibold">
               <Zap className="h-4 w-4 shrink-0 text-blue-500" />
               <span className="truncate">{tRouting("discoveryTitle")}</span>
             </h4>
-            <Badge variant="outline" className="shrink-0 text-[10px]">
-              {tRouting("modes.discovery")}
+            <Badge
+              variant="outline"
+              className="min-w-0 max-w-[45%] shrink text-[10px]"
+              title={tRouting("modes.discovery")}
+            >
+              <span className="truncate">{tRouting("modes.discovery")}</span>
             </Badge>
           </div>
           <div className="p-3 space-y-3">
+            <div className="flex items-start gap-2 text-xs min-w-0">
+              <Server className="h-4 w-4 shrink-0 text-muted-foreground" />
+              <span className="text-muted-foreground shrink-0">{tRouting("finalProvider")}:</span>
+              <span className="font-medium min-w-0 break-words" dir="auto">
+                {discoveryFinalProvider ?? "-"}
+              </span>
+            </div>
+            <div className="flex min-w-0 items-start gap-2 text-xs">
+              <GitBranch className="h-4 w-4 shrink-0 text-muted-foreground" />
+              <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1">
+                <span className="text-muted-foreground">{tRouting("routeMode")}:</span>
+                <Badge
+                  variant="outline"
+                  className="min-w-0 max-w-full whitespace-normal break-words text-[10px] leading-snug"
+                  title={routeLabel}
+                >
+                  {routeLabel}
+                </Badge>
+              </div>
+            </div>
             <div className="grid grid-cols-2 gap-3 text-xs">
               <div>
                 <div className="text-[10px] text-muted-foreground">{tRouting("roundsLabel")}</div>
@@ -265,25 +388,33 @@ export function ProviderChainPopover({
               </div>
             </div>
             <div
-              className="flex items-center gap-2 text-xs min-w-0"
+              className="flex min-w-0 items-start gap-2 text-xs"
               data-testid="discovery-compact-terminal"
             >
               <TerminalIcon className={cn("h-4 w-4 shrink-0", terminalPresentation.className)} />
-              <span className="text-muted-foreground">{tRouting("terminalOutcome")}:</span>
-              <Badge variant="outline" className="text-[10px]">
-                {tRouting(`outcomes.${terminal.outcome}`)}
-              </Badge>
-              {terminal.statusCode != null && (
-                <span className="font-mono text-[10px]">HTTP {terminal.statusCode}</span>
-              )}
+              <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1">
+                <span className="text-muted-foreground">{tRouting("terminalOutcome")}:</span>
+                <Badge variant="outline" className="text-[10px]">
+                  {tRouting(`outcomes.${terminal.outcome}`)}
+                </Badge>
+                {terminal.statusCode != null && (
+                  <span className="font-mono text-[10px]">HTTP {terminal.statusCode}</span>
+                )}
+              </div>
             </div>
             {winnerOrigin !== "none" && (
-              <div className="flex items-center gap-2 text-xs min-w-0">
+              <div className="flex min-w-0 items-start gap-2 text-xs">
                 <GitBranch className="h-4 w-4 shrink-0 text-muted-foreground" />
-                <span className="text-muted-foreground">{tRouting("winnerOrigin")}:</span>
-                <Badge variant="outline" className="text-[10px]">
-                  {tRouting(`roles.${winnerOrigin}`)}
-                </Badge>
+                <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1">
+                  <span className="text-muted-foreground">{tRouting("winnerOrigin")}:</span>
+                  <Badge
+                    variant="outline"
+                    className="min-w-0 max-w-full whitespace-normal break-words text-[10px] leading-snug"
+                    title={winnerSourceLabel ?? undefined}
+                  >
+                    {winnerSourceLabel}
+                  </Badge>
+                </div>
               </div>
             )}
           </div>

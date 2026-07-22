@@ -410,6 +410,13 @@
         },
         "discoveryTitle": "Discovery ラウンド",
         "discoveryCompact": "{rounds}R · {attempts} 回",
+        "routeMode": "ルーティング方式",
+        "routeModes": {
+          "sticky": "Sticky",
+          "cold_start": "コールドスタート",
+          "rediscovery": "再探索"
+        },
+        "finalProvider": "最終プロバイダー",
         "roundsLabel": "ラウンド",
         "attemptsLabel": "試行",
         "winnerOrigin": "勝者の経路",
@@ -425,6 +432,11 @@
           "sticky": "Sticky",
           "normal": "候補",
           "fallback": "フォールバック"
+        },
+        "winnerSources": {
+          "sticky": "Sticky",
+          "normal": "通常候補",
+          "fallback": "フォールバック引き継ぎ"
         },
         "roleTransition": "{from} → {to}",
         "outcomes": {

@@ -485,7 +485,7 @@ describe("provider-chain-popover hedge/abort reason handling", () => {
 });
 
 describe("provider-chain-popover Discovery summary", () => {
-  test("shows rounds, attempts and winner origin instead of the legacy serial chain", () => {
+  test("shows cold start, rounds, attempts and fallback winner source", () => {
     const routingTrace: RoutingTraceV1 = {
       version: 1,
       mode: "discovery",
@@ -520,11 +520,364 @@ describe("provider-chain-popover Discovery summary", () => {
       />
     );
 
+    expect(html).toContain("Cold start");
     expect(html).toContain("2R · 4 tries");
+    expect(html).toContain("Final provider");
+    expect(html).toContain("winner");
+    expect(html).toContain("Route mode");
     expect(html).toContain("Winner origin");
-    expect(html).toContain("Fallback");
+    expect(html).toContain("Fallback takeover");
     expect(html).toContain("View Discovery details");
     expect(html).not.toContain("1 times");
+
+    const document = parseHtml(html);
+    const coldStartBadges = Array.from(document.querySelectorAll("[data-slot='badge']")).filter(
+      (node) => node.textContent === "Cold start"
+    );
+    expect(coldStartBadges.some((node) => node.classList.contains("max-w-[45%]"))).toBe(true);
+    expect(coldStartBadges.some((node) => node.classList.contains("whitespace-normal"))).toBe(true);
+    const fallbackBadge = Array.from(document.querySelectorAll("[data-slot='badge']")).find(
+      (node) => node.textContent === "Fallback takeover"
+    );
+    expect(fallbackBadge?.classList.contains("whitespace-normal")).toBe(true);
+  });
+
+  test("labels a healthy Sticky request and shows the full winner name from the trace", () => {
+    const routingTrace: RoutingTraceV1 = {
+      version: 1,
+      mode: "discovery",
+      startedAt: 1_000,
+      updatedAt: 3_000,
+      discoveryEnabled: true,
+      eligible: true,
+      events: [
+        {
+          type: "sticky_probe_started",
+          at: 1_000,
+          elapsedMs: 0,
+          round: 0,
+          attemptKind: "sticky",
+          provider: { id: 9, name: "full-sticky-provider-name" },
+        },
+        {
+          type: "winner_committed",
+          at: 2_000,
+          elapsedMs: 1_000,
+          round: 0,
+          attemptId: "sticky:1",
+          attemptKind: "sticky",
+          provider: { id: 9, name: "full-sticky-provider-name" },
+          statusCode: 200,
+        },
+      ],
+      summary: {
+        outcome: "success",
+        statusCode: 200,
+        durationMs: 2_000,
+        ttfbMs: 1_000,
+        attemptsPerRequest: 1,
+        maxActiveAttempts: 1,
+        rounds: 0,
+        providerMs: 1_000,
+        fallbackPromotions: 0,
+        cancelFailures: 0,
+        winnerOrigin: "sticky",
+        winnerProviderId: 9,
+        winnerRound: 0,
+      },
+    };
+
+    const html = renderWithIntl(
+      <ProviderChainPopover
+        chain={[{ id: 9, name: "short", reason: "request_success", statusCode: 200 }]}
+        routingTrace={routingTrace}
+        finalProvider="short"
+      />
+    );
+
+    expect(html).toContain("full-sticky-provider-name");
+    expect(html).toContain("Route mode");
+    expect(html).toContain("Sticky");
+    expect(html).toContain("0R · 1 tries");
+  });
+
+  test("labels Discovery after a Sticky timeout as rediscovery", () => {
+    const routingTrace: RoutingTraceV1 = {
+      version: 1,
+      mode: "discovery",
+      startedAt: 1_000,
+      updatedAt: 4_000,
+      discoveryEnabled: true,
+      eligible: true,
+      events: [
+        {
+          type: "sticky_probe_started",
+          at: 1_000,
+          elapsedMs: 0,
+          round: 0,
+          attemptKind: "sticky",
+          provider: { id: 1, name: "old-sticky" },
+        },
+        {
+          type: "sticky_timeout",
+          at: 2_000,
+          elapsedMs: 1_000,
+          round: 0,
+          attemptKind: "sticky",
+          provider: { id: 1, name: "old-sticky" },
+          outcome: "timeout",
+        },
+        { type: "round_started", at: 2_001, elapsedMs: 1_001, round: 1 },
+        {
+          type: "winner_committed",
+          at: 3_000,
+          elapsedMs: 2_000,
+          round: 1,
+          attemptId: "fallback:2",
+          attemptKind: "fallback",
+          provider: { id: 2, name: "new-winner" },
+          statusCode: 200,
+        },
+      ],
+      summary: {
+        outcome: "success",
+        statusCode: 200,
+        durationMs: 3_000,
+        ttfbMs: 2_000,
+        attemptsPerRequest: 2,
+        maxActiveAttempts: 2,
+        rounds: 1,
+        providerMs: 3_000,
+        fallbackPromotions: 1,
+        cancelFailures: 0,
+        winnerOrigin: "fallback",
+        winnerProviderId: 2,
+        winnerRound: 1,
+      },
+    };
+
+    const html = renderWithIntl(
+      <ProviderChainPopover
+        chain={[{ id: 2, name: "new-winner", reason: "retry_success", statusCode: 200 }]}
+        routingTrace={routingTrace}
+        finalProvider="new-winner"
+      />
+    );
+
+    expect(html).toContain("Rediscovery");
+    expect(html).toContain("Fallback takeover");
+    expect(html).not.toContain("Cold start");
+  });
+
+  test("labels a Sticky attempt that fails before discovery as Sticky", () => {
+    const routingTrace: RoutingTraceV1 = {
+      version: 1,
+      mode: "discovery",
+      startedAt: 1_000,
+      updatedAt: 3_000,
+      discoveryEnabled: true,
+      eligible: true,
+      events: [
+        {
+          type: "sticky_probe_started",
+          at: 1_000,
+          elapsedMs: 0,
+          round: 0,
+          attemptKind: "sticky",
+          provider: { id: 1, name: "sticky-provider" },
+        },
+        {
+          type: "attempt_finished",
+          at: 2_000,
+          elapsedMs: 1_000,
+          round: 0,
+          attemptKind: "sticky",
+          outcome: "failed",
+          provider: { id: 1, name: "sticky-provider" },
+        },
+        {
+          type: "request_finished",
+          at: 3_000,
+          elapsedMs: 2_000,
+          outcome: "failed",
+          statusCode: 503,
+        },
+      ],
+      summary: {
+        outcome: "failed",
+        statusCode: 503,
+        durationMs: 2_000,
+        ttfbMs: null,
+        attemptsPerRequest: 1,
+        maxActiveAttempts: 1,
+        rounds: 0,
+        providerMs: 1_000,
+        fallbackPromotions: 0,
+        cancelFailures: 0,
+        winnerOrigin: "none",
+        winnerProviderId: null,
+        winnerRound: 0,
+      },
+    };
+
+    const html = renderWithIntl(
+      <ProviderChainPopover
+        chain={[{ id: 1, name: "sticky-provider", reason: "session_reuse", statusCode: 503 }]}
+        routingTrace={routingTrace}
+        finalProvider="sticky-provider"
+      />
+    );
+
+    expect(html).toContain("Sticky");
+    expect(html).not.toContain("Rediscovery");
+  });
+
+  test("does not infer Rediscovery from a stale session_reuse chain", () => {
+    const routingTrace: RoutingTraceV1 = {
+      version: 1,
+      mode: "discovery",
+      startedAt: 1_000,
+      updatedAt: 3_000,
+      discoveryEnabled: true,
+      eligible: true,
+      events: [
+        { type: "round_started", at: 1_000, elapsedMs: 0, round: 1 },
+        {
+          type: "attempt_started",
+          at: 1_010,
+          elapsedMs: 10,
+          round: 1,
+          attemptKind: "normal",
+          provider: { id: 2, name: "cold-start-provider" },
+        },
+      ],
+    };
+
+    const html = renderWithIntl(
+      <ProviderChainPopover
+        chain={[{ id: 1, name: "stale-session-provider", reason: "session_reuse" }]}
+        routingTrace={routingTrace}
+        finalProvider="cold-start-provider"
+      />
+    );
+
+    expect(html).toContain("Cold start");
+    expect(html).not.toContain("Rediscovery");
+  });
+
+  test("uses session reuse only as a fallback for a truncated trace", () => {
+    const routingTrace: RoutingTraceV1 = {
+      version: 1,
+      mode: "discovery",
+      startedAt: 1_000,
+      updatedAt: 3_000,
+      discoveryEnabled: true,
+      eligible: true,
+      truncated: true,
+      events: [{ type: "round_started", at: 2_000, elapsedMs: 1_000, round: 1 }],
+      summary: {
+        outcome: "success",
+        statusCode: 200,
+        durationMs: 2_000,
+        ttfbMs: 1_000,
+        attemptsPerRequest: 2,
+        maxActiveAttempts: 2,
+        rounds: 1,
+        providerMs: 2_000,
+        fallbackPromotions: 0,
+        cancelFailures: 0,
+        winnerOrigin: "normal",
+        winnerProviderId: 2,
+        winnerRound: 1,
+      },
+    };
+
+    const html = renderWithIntl(
+      <ProviderChainPopover
+        chain={[{ id: 1, name: "sticky-provider", reason: "session_reuse" }]}
+        routingTrace={routingTrace}
+        finalProvider="winner"
+      />
+    );
+
+    expect(html).toContain("Rediscovery");
+  });
+
+  test("recognizes Rediscovery from a retained non-Sticky winner event", () => {
+    const routingTrace: RoutingTraceV1 = {
+      version: 1,
+      mode: "discovery",
+      startedAt: 1_000,
+      updatedAt: 3_000,
+      discoveryEnabled: true,
+      eligible: true,
+      truncated: true,
+      events: [
+        {
+          type: "sticky_probe_started",
+          at: 1_000,
+          elapsedMs: 0,
+          round: 0,
+          attemptKind: "sticky",
+          provider: { id: 1, name: "old-sticky" },
+        },
+        {
+          type: "winner_committed",
+          at: 3_000,
+          elapsedMs: 2_000,
+          round: 1,
+          attemptKind: "normal",
+          provider: { id: 2, name: "new-winner" },
+          statusCode: 200,
+        },
+      ],
+    };
+
+    const html = renderWithIntl(
+      <ProviderChainPopover
+        chain={[{ id: 1, name: "old-sticky", reason: "session_reuse" }]}
+        routingTrace={routingTrace}
+        finalProvider="new-winner"
+      />
+    );
+
+    expect(html).toContain("Rediscovery");
+    expect(html).toContain("Normal candidate");
+  });
+
+  test("uses live winner events when the final summary has not been persisted yet", () => {
+    const routingTrace: RoutingTraceV1 = {
+      version: 1,
+      mode: "discovery",
+      startedAt: 1_000,
+      updatedAt: 2_000,
+      discoveryEnabled: true,
+      eligible: true,
+      events: [
+        {
+          type: "winner_committed",
+          at: 1_500,
+          elapsedMs: 500,
+          round: 1,
+          attemptId: "normal:1",
+          attemptKind: "normal",
+          provider: { id: 7, name: "live-winner-name" },
+          statusCode: 200,
+        },
+      ],
+    };
+
+    const html = renderWithIntl(
+      <ProviderChainPopover
+        chain={[]}
+        routingTrace={routingTrace}
+        finalProvider="stale-selection"
+      />
+    );
+
+    expect(html).toContain("live-winner-name");
+    expect(html).toContain("Normal candidate");
+    expect(html).toContain("Cold start");
   });
 
   test("derives live rounds and attempt count before a terminal summary exists", () => {
@@ -582,6 +935,7 @@ describe("provider-chain-popover Discovery summary", () => {
     );
 
     expect(html).toContain("2R · 3 tries");
+    expect(html).toContain("Cold start");
     expect(html).toContain("Request result");
     expect(html).toContain("Pending");
     expect(html).not.toContain("0R · 0 tries");
@@ -741,5 +1095,28 @@ describe("provider-chain-popover Discovery summary", () => {
     expect(html).toContain("lucide-shield-check");
     expect(html).toContain("primary");
     expect(html).toContain("backup");
+  });
+
+  test("does not label a binding conflict as single-route protection", () => {
+    const routingTrace: RoutingTraceV1 = {
+      version: 1,
+      mode: "single_upstream",
+      startedAt: 1_000,
+      updatedAt: 2_000,
+      discoveryEnabled: true,
+      eligible: false,
+      bypassReason: "binding_conflict",
+      events: [],
+    };
+    const html = renderWithIntl(
+      <ProviderChainPopover
+        chain={[{ id: 80, name: "Lyclaude", reason: "request_success", statusCode: 200 }]}
+        routingTrace={routingTrace}
+        finalProvider="Lyclaude"
+      />
+    );
+
+    expect(html).not.toContain("Single-route protection");
+    expect(html).not.toContain("lucide-shield-check");
   });
 });

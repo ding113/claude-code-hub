@@ -410,6 +410,13 @@
         },
         "discoveryTitle": "Discovery 輪次",
         "discoveryCompact": "{rounds} 輪 · {attempts} 次",
+        "routeMode": "路由類型",
+        "routeModes": {
+          "sticky": "Sticky",
+          "cold_start": "冷啟動",
+          "rediscovery": "重新發現"
+        },
+        "finalProvider": "最終供應商",
         "roundsLabel": "輪次",
         "attemptsLabel": "嘗試",
         "winnerOrigin": "贏家來源",
@@ -425,6 +432,11 @@
           "sticky": "Sticky",
           "normal": "候選",
           "fallback": "備援"
+        },
+        "winnerSources": {
+          "sticky": "Sticky",
+          "normal": "正常候選",
+          "fallback": "備援接管"
         },
         "roleTransition": "{from} → {to}",
         "outcomes": {

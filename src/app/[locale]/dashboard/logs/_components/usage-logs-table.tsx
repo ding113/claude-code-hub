@@ -261,7 +261,11 @@ export function UsageLogsTable({
                               )}
                           </div>
                           {/* 显示供应商倍率 Badge（不为 1.0 时） */}
-                          {shouldShowCostBadgeInCell(log.providerChain, multiplier) ? (
+                          {shouldShowCostBadgeInCell(
+                            log.providerChain,
+                            multiplier,
+                            log.routingTrace
+                          ) ? (
                             <Badge
                               variant="outline"
                               className={

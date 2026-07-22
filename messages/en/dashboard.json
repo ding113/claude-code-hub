@@ -410,6 +410,13 @@
         },
         "discoveryTitle": "Discovery rounds",
         "discoveryCompact": "{rounds}R · {attempts} tries",
+        "routeMode": "Route mode",
+        "routeModes": {
+          "sticky": "Sticky",
+          "cold_start": "Cold start",
+          "rediscovery": "Rediscovery"
+        },
+        "finalProvider": "Final provider",
         "roundsLabel": "Rounds",
         "attemptsLabel": "Attempts",
         "winnerOrigin": "Winner origin",
@@ -425,6 +432,11 @@
           "sticky": "Sticky",
           "normal": "Candidate",
           "fallback": "Fallback"
+        },
+        "winnerSources": {
+          "sticky": "Sticky",
+          "normal": "Normal candidate",
+          "fallback": "Fallback takeover"
         },
         "roleTransition": "{from} → {to}",
         "outcomes": {

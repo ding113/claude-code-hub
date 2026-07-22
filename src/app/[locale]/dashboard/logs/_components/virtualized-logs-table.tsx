@@ -923,7 +923,8 @@ export function VirtualizedLogsTable({
                                   multiplier !== 1;
                                 const showBadgeInTable = shouldShowCostBadgeInCell(
                                   log.providerChain,
-                                  multiplier
+                                  multiplier,
+                                  log.routingTrace
                                 );
 
                                 return (
