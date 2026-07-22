@@ -68,8 +68,13 @@ vi.mock("@/components/ui/button", () => ({
 }));
 
 vi.mock("@/components/ui/badge", () => ({
-  Badge: ({ children, className }: React.ComponentProps<"span"> & { variant?: string }) => (
-    <span data-slot="badge" className={className}>
+  Badge: ({
+    children,
+    className,
+    variant: _variant,
+    ...props
+  }: React.ComponentProps<"span"> & { variant?: string }) => (
+    <span data-slot="badge" className={className} {...props}>
       {children}
     </span>
   ),
@@ -132,6 +137,10 @@ function parseHtml(html: string) {
   const window = new Window();
   window.document.body.innerHTML = html;
   return window.document;
+}
+
+function getCompactDiscoveryRouteBadge(html: string) {
+  return parseHtml(html).querySelector("[data-testid='discovery-route-badge']");
 }
 
 describe("provider-chain-popover probability formatting", () => {
@@ -540,6 +549,15 @@ describe("provider-chain-popover Discovery summary", () => {
       (node) => node.textContent === "Fallback takeover"
     );
     expect(fallbackBadge?.classList.contains("whitespace-normal")).toBe(true);
+    const compactRouteBadge = getCompactDiscoveryRouteBadge(html);
+    expect(compactRouteBadge?.classList.contains("bg-amber-50")).toBe(true);
+    expect(compactRouteBadge?.classList.contains("text-amber-800")).toBe(true);
+    expect(compactRouteBadge?.getAttribute("data-route-mode")).toBe("cold_start");
+    expect(compactRouteBadge?.getAttribute("data-winner-origin")).toBe("fallback");
+    expect(compactRouteBadge?.getAttribute("title")).toBe("Cold start · Fallback takeover");
+    expect(document.querySelector("button")?.getAttribute("aria-label")).toContain(
+      "Cold start · Fallback takeover"
+    );
   });
 
   test("labels a healthy Sticky request and shows the full winner name from the trace", () => {
@@ -599,6 +617,10 @@ describe("provider-chain-popover Discovery summary", () => {
     expect(html).toContain("Route mode");
     expect(html).toContain("Sticky");
     expect(html).toContain("0R · 1 tries");
+    const compactRouteBadge = getCompactDiscoveryRouteBadge(html);
+    expect(compactRouteBadge?.classList.contains("bg-violet-50")).toBe(true);
+    expect(compactRouteBadge?.classList.contains("text-violet-700")).toBe(true);
+    expect(compactRouteBadge?.getAttribute("data-winner-origin")).toBe("sticky");
   });
 
   test("labels Discovery after a Sticky timeout as rediscovery", () => {
@@ -667,6 +689,11 @@ describe("provider-chain-popover Discovery summary", () => {
     expect(html).toContain("Rediscovery");
     expect(html).toContain("Fallback takeover");
     expect(html).not.toContain("Cold start");
+    const compactRouteBadge = getCompactDiscoveryRouteBadge(html);
+    expect(compactRouteBadge?.classList.contains("bg-slate-100")).toBe(true);
+    expect(compactRouteBadge?.classList.contains("text-slate-700")).toBe(true);
+    expect(compactRouteBadge?.getAttribute("data-route-mode")).toBe("rediscovery");
+    expect(compactRouteBadge?.getAttribute("data-winner-origin")).toBe("fallback");
   });
 
   test("labels a Sticky attempt that fails before discovery as Sticky", () => {
@@ -730,6 +757,13 @@ describe("provider-chain-popover Discovery summary", () => {
 
     expect(html).toContain("Sticky");
     expect(html).not.toContain("Rediscovery");
+    const compactRouteBadge = getCompactDiscoveryRouteBadge(html);
+    expect(compactRouteBadge?.getAttribute("data-winner-origin")).toBe("none");
+    expect(compactRouteBadge?.classList.contains("bg-violet-50")).toBe(false);
+    expect(compactRouteBadge?.classList.contains("bg-blue-50")).toBe(false);
+    expect(compactRouteBadge?.classList.contains("bg-amber-50")).toBe(false);
+    expect(compactRouteBadge?.classList.contains("bg-teal-50")).toBe(false);
+    expect(compactRouteBadge?.classList.contains("bg-slate-100")).toBe(false);
   });
 
   test("does not infer Rediscovery from a stale session_reuse chain", () => {
@@ -843,6 +877,10 @@ describe("provider-chain-popover Discovery summary", () => {
 
     expect(html).toContain("Rediscovery");
     expect(html).toContain("Normal candidate");
+    const compactRouteBadge = getCompactDiscoveryRouteBadge(html);
+    expect(compactRouteBadge?.classList.contains("bg-teal-50")).toBe(true);
+    expect(compactRouteBadge?.classList.contains("text-teal-700")).toBe(true);
+    expect(compactRouteBadge?.getAttribute("data-winner-origin")).toBe("normal");
   });
 
   test("uses live winner events when the final summary has not been persisted yet", () => {
@@ -878,6 +916,10 @@ describe("provider-chain-popover Discovery summary", () => {
     expect(html).toContain("live-winner-name");
     expect(html).toContain("Normal candidate");
     expect(html).toContain("Cold start");
+    const compactRouteBadge = getCompactDiscoveryRouteBadge(html);
+    expect(compactRouteBadge?.classList.contains("bg-blue-50")).toBe(true);
+    expect(compactRouteBadge?.classList.contains("text-blue-700")).toBe(true);
+    expect(compactRouteBadge?.getAttribute("data-winner-origin")).toBe("normal");
   });
 
   test("derives live rounds and attempt count before a terminal summary exists", () => {
@@ -1054,6 +1096,12 @@ describe("provider-chain-popover Discovery summary", () => {
     expect(html).toContain("Another request owns the Discovery lease");
     expect(html).toContain("P1");
     expect(html).toContain("lucide-shield-check");
+    const document = parseHtml(html);
+    const protectionBadge = Array.from(document.querySelectorAll("[data-slot='badge']")).find(
+      (node) => node.textContent === "Single-route protection"
+    );
+    expect(protectionBadge?.classList.contains("bg-amber-50")).toBe(true);
+    expect(protectionBadge?.classList.contains("text-amber-700")).toBe(true);
   });
 
   test("keeps lease-conflict protection visible after serial provider fallback", () => {

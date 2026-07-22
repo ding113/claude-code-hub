@@ -153,6 +153,37 @@ function getDiscoveryWinnerOrigin(trace: RoutingTraceV1): RoutingTraceWinnerOrig
     : "none";
 }
 
+function getCompactDiscoveryRouteBadgeClass(
+  routeMode: DiscoveryRouteMode,
+  winnerOrigin: RoutingTraceWinnerOrigin
+): string {
+  if (winnerOrigin === "none") {
+    return "";
+  }
+
+  if (routeMode === "sticky" && winnerOrigin === "sticky") {
+    return "border-violet-200 bg-violet-50 text-violet-700 dark:border-violet-800 dark:bg-violet-950/20 dark:text-violet-300";
+  }
+
+  if (routeMode === "cold_start" && winnerOrigin === "normal") {
+    return "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-950/20 dark:text-blue-300";
+  }
+
+  if (routeMode === "cold_start" && winnerOrigin === "fallback") {
+    return "border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-800 dark:bg-amber-950/20 dark:text-amber-300";
+  }
+
+  if (routeMode === "rediscovery" && winnerOrigin === "normal") {
+    return "border-teal-200 bg-teal-50 text-teal-700 dark:border-teal-800 dark:bg-teal-950/20 dark:text-teal-300";
+  }
+
+  if (routeMode === "rediscovery" && winnerOrigin === "fallback") {
+    return "border-slate-300 bg-slate-100 text-slate-700 dark:border-slate-600 dark:bg-slate-800/50 dark:text-slate-200";
+  }
+
+  return "";
+}
+
 function getDiscoveryFinalProviderName(
   trace: RoutingTraceV1,
   chain: ProviderChainItem[],
@@ -318,6 +349,10 @@ export function ProviderChainPopover({
     const routeLabel = tRouting(`routeModes.${routeMode}`);
     const winnerSourceLabel =
       winnerOrigin === "none" ? null : tRouting(`winnerSources.${winnerOrigin}`);
+    const compactRouteDescription =
+      winnerSourceLabel && winnerSourceLabel !== routeLabel
+        ? `${routeLabel} · ${winnerSourceLabel}`
+        : routeLabel;
     return (
       <Popover>
         <PopoverTrigger asChild>
@@ -325,7 +360,7 @@ export function ProviderChainPopover({
             type="button"
             variant="ghost"
             className="h-auto p-0 font-normal hover:bg-transparent w-full min-w-0"
-            aria-label={`${triggerProviderName} - ${routeLabel} - ${tRouting("discoveryCompact", { rounds, attempts })}`}
+            aria-label={`${triggerProviderName} - ${compactRouteDescription} - ${tRouting("discoveryCompact", { rounds, attempts })}`}
           >
             <span className="flex w-full min-w-0 items-center gap-1 overflow-hidden">
               <Zap className="h-3 w-3 shrink-0 text-blue-500" />
@@ -334,8 +369,14 @@ export function ProviderChainPopover({
               </span>
               <Badge
                 variant="secondary"
-                className="min-w-0 max-w-[45%] shrink px-1.5 py-0 text-[10px]"
-                title={routeLabel}
+                className={cn(
+                  "min-w-0 max-w-[45%] shrink px-1.5 py-0 text-[10px]",
+                  getCompactDiscoveryRouteBadgeClass(routeMode, winnerOrigin)
+                )}
+                data-testid="discovery-route-badge"
+                data-route-mode={routeMode}
+                data-winner-origin={winnerOrigin}
+                title={compactRouteDescription}
               >
                 <span className="truncate">{routeLabel}</span>
               </Badge>
