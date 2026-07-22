@@ -1,4 +1,5 @@
 import Redis, { type RedisOptions } from "ioredis";
+import { getEnvConfig } from "@/lib/config/env.schema";
 import { logger } from "@/lib/logger";
 
 let redisClient: Redis | null = null;
@@ -46,6 +47,7 @@ export function buildRedisOptionsForUrl(redisUrl: string): {
   isTLS: boolean;
   options: RedisOptions;
 } {
+  const env = getEnvConfig();
   const isTLS = (() => {
     try {
       const parsed = new URL(redisUrl);
@@ -59,6 +61,14 @@ export function buildRedisOptionsForUrl(redisUrl: string): {
   const baseOptions: RedisOptions = {
     enableOfflineQueue: false, // 快速失败
     maxRetriesPerRequest: 3,
+    commandTimeout: env.REDIS_COMMAND_TIMEOUT_MS,
+    // commandTimeout only rejects the caller Promise; it does not remove a sent
+    // command from ioredis' RESP-order queue. Destroy a no-progress socket shortly
+    // afterwards so the shared queue cannot grow without bound under a TCP blackhole.
+    socketTimeout: env.REDIS_COMMAND_TIMEOUT_MS + 5_000,
+    // Timed-out writes have already been treated as fail-open by the application.
+    // Replaying them after reconnect would mutate Redis after the request completed.
+    autoResendUnfulfilledCommands: false,
     retryStrategy(times: number) {
       if (times > 5) {
         logger.error("[Redis] Max retries reached, giving up");

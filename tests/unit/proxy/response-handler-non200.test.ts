@@ -19,9 +19,23 @@ const asyncTasks: Promise<void>[] = [];
 
 vi.mock("@/lib/async-task-manager", () => ({
   AsyncTaskManager: {
-    register: (_taskId: string, promise: Promise<void>) => {
+    register: (
+      _taskId: string,
+      factory: (signal: AbortSignal) => Promise<void>,
+      options?: string | { abortController?: AbortController }
+    ) => {
+      const controller =
+        typeof options === "object" && options.abortController
+          ? options.abortController
+          : new AbortController();
+      let promise: Promise<void>;
+      try {
+        promise = Promise.resolve(factory(controller.signal));
+      } catch (error) {
+        promise = Promise.reject(error);
+      }
       asyncTasks.push(promise);
-      return new AbortController();
+      return controller;
     },
     touch: () => true,
     cleanup: () => {},
@@ -257,6 +271,178 @@ describe("Non-200 Status Code Handling", () => {
       const result = detectUpstreamErrorFromSseOrJsonText("");
       expect(result.isError).toBe(true);
       expect(result.code).toBe("FAKE_200_EMPTY_BODY");
+    });
+
+    it("should detect OpenAI Responses response.failed SSE event", () => {
+      const sse = [
+        "event: response.failed",
+        'data: {"type":"response.failed","response":{"id":"resp_123","status":"failed","error":{"code":"rate_limit_exceeded","message":"Concurrency limit exceeded for user, please retry later"}}}',
+        "",
+      ].join("\n");
+
+      const result = detectUpstreamErrorFromSseOrJsonText(sse);
+
+      expect(result.isError).toBe(true);
+      if (result.isError) {
+        expect(result.code).toBe("FAKE_200_OPENAI_RESPONSE_FAILED");
+        expect(result.detail).toBe("Concurrency limit exceeded for user, please retry later");
+      }
+    });
+
+    it("should detect OpenAI Responses failure when only the SSE event name says response.failed", () => {
+      const sse = [
+        "event: response.failed",
+        'data: {"response":{"error":{"message":"Concurrency limit exceeded for user, please retry later"}}}',
+        "",
+      ].join("\n");
+
+      const result = detectUpstreamErrorFromSseOrJsonText(sse);
+
+      expect(result.isError).toBe(true);
+      if (result.isError) {
+        expect(result.code).toBe("FAKE_200_OPENAI_RESPONSE_FAILED");
+        expect(result.detail).toBe("Concurrency limit exceeded for user, please retry later");
+      }
+    });
+
+    it("should detect OpenAI Responses failure when SSE event name is response.failed but data type is generic", () => {
+      const sse = [
+        "event: response.failed",
+        'data: {"type":"response","response":{"error":{"message":"Concurrency limit exceeded for user, please retry later"}}}',
+        "",
+      ].join("\n");
+
+      const result = detectUpstreamErrorFromSseOrJsonText(sse);
+
+      expect(result.isError).toBe(true);
+      if (result.isError) {
+        expect(result.code).toBe("FAKE_200_OPENAI_RESPONSE_FAILED");
+        expect(result.detail).toBe("Concurrency limit exceeded for user, please retry later");
+      }
+    });
+
+    it("should detect wrapped OpenAI Responses failed JSON object", () => {
+      const body = JSON.stringify({
+        type: "response.failed",
+        response: {
+          id: "resp_456",
+          status: "failed",
+          error: {
+            code: "server_error",
+            message: "Upstream worker failed",
+          },
+        },
+      });
+
+      const result = detectUpstreamErrorFromSseOrJsonText(body);
+
+      expect(result.isError).toBe(true);
+      if (result.isError) {
+        expect(result.code).toBe("FAKE_200_OPENAI_RESPONSE_FAILED");
+        expect(result.detail).toBe("Upstream worker failed");
+      }
+    });
+
+    it("should detect flat OpenAI Responses failed JSON object", () => {
+      const body = JSON.stringify({
+        id: "resp_789",
+        object: "response",
+        status: "failed",
+        error: {
+          code: "rate_limit_exceeded",
+          message: "Too many concurrent requests",
+        },
+      });
+
+      const result = detectUpstreamErrorFromSseOrJsonText(body);
+
+      expect(result.isError).toBe(true);
+      if (result.isError) {
+        expect(result.code).toBe("FAKE_200_OPENAI_RESPONSE_FAILED");
+        expect(result.detail).toBe("Too many concurrent requests");
+      }
+    });
+
+    it("should detect OpenAI Responses failed event when error detail is not extractable", () => {
+      const body = JSON.stringify({
+        type: "response.failed",
+        response: {
+          id: "resp_numeric_code",
+          status: "failed",
+          error: {
+            code: 429,
+            type: "rate_limit_error",
+          },
+        },
+      });
+
+      const result = detectUpstreamErrorFromSseOrJsonText(body);
+
+      expect(result.isError).toBe(true);
+      if (result.isError) {
+        expect(result.code).toBe("FAKE_200_OPENAI_RESPONSE_FAILED");
+        expect(result.detail).toBeUndefined();
+      }
+    });
+
+    it("should detect OpenAI Responses failed event without error payload", () => {
+      const body = JSON.stringify({
+        type: "response.failed",
+        response: {
+          id: "resp_missing_error",
+          status: "failed",
+        },
+      });
+
+      const result = detectUpstreamErrorFromSseOrJsonText(body);
+
+      expect(result.isError).toBe(true);
+      if (result.isError) {
+        expect(result.code).toBe("FAKE_200_OPENAI_RESPONSE_FAILED");
+        expect(result.detail).toBeUndefined();
+      }
+    });
+
+    it("should detect OpenAI Responses failed SSE event without error payload", () => {
+      const sse = [
+        "event: response.failed",
+        'data: {"type":"response.failed","response":{"id":"resp_sse_missing_error","status":"failed"}}',
+        "",
+      ].join("\n");
+
+      const result = detectUpstreamErrorFromSseOrJsonText(sse);
+
+      expect(result.isError).toBe(true);
+      if (result.isError) {
+        expect(result.code).toBe("FAKE_200_OPENAI_RESPONSE_FAILED");
+        expect(result.detail).toBeUndefined();
+      }
+    });
+
+    it("should not treat successful OpenAI Responses completed event as fake 200", () => {
+      const sse = [
+        "event: response.completed",
+        'data: {"type":"response.completed","response":{"id":"resp_ok","status":"completed","usage":{"input_tokens":1,"output_tokens":1}}}',
+        "",
+      ].join("\n");
+
+      const result = detectUpstreamErrorFromSseOrJsonText(sse);
+
+      expect(result.isError).toBe(false);
+    });
+
+    it("should not classify normal OpenAI chat completion SSE chunks as Responses failures", () => {
+      const sse = [
+        'data: {"id":"chatcmpl_123","object":"chat.completion.chunk","choices":[{"index":0,"delta":{"content":"hello"}}]}',
+        "",
+        'data: {"id":"chatcmpl_123","object":"chat.completion.chunk","choices":[{"index":0,"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":3,"completion_tokens":1,"total_tokens":4}}',
+        "",
+        "data: [DONE]",
+      ].join("\n");
+
+      const result = detectUpstreamErrorFromSseOrJsonText(sse);
+
+      expect(result.isError).toBe(false);
     });
 
     it("should return isError=false for successful JSON without error field", () => {

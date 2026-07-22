@@ -2,7 +2,8 @@ import "server-only";
 
 import type { SQL } from "drizzle-orm";
 import { sql } from "drizzle-orm";
-import { db } from "@/drizzle/db";
+import { findSafeDatabaseError } from "@/drizzle/admitted-client";
+import { getMessageWriterDb } from "@/drizzle/db";
 import { getEnvConfig } from "@/lib/config/env.schema";
 import { logger } from "@/lib/logger";
 import type { StoredCostBreakdown } from "@/types/cost-breakdown";
@@ -43,11 +44,179 @@ export type MessageRequestUpdateRecord = {
   patch: MessageRequestUpdatePatch;
 };
 
+export type DurableMessageRequestUpdateOptions = {
+  timeoutMs?: number;
+  onCommitted?: (patch: Readonly<MessageRequestUpdatePatch>) => void | Promise<void>;
+};
+
+type DurableAcknowledgement = {
+  id: number;
+  promise: Promise<void>;
+  resolve: () => void;
+  reject: (error: Error) => void;
+  state: "pending" | "in-flight";
+  settled: boolean;
+  timeoutId: NodeJS.Timeout | null;
+  commitNotified: boolean;
+  onCommittedCallbacks: Set<NonNullable<DurableMessageRequestUpdateOptions["onCommitted"]>>;
+};
+
+type PendingMessageRequestUpdate = {
+  patch: MessageRequestUpdatePatch;
+  durableAcknowledgement?: DurableAcknowledgement;
+};
+
+type MessageRequestUpdateBatchRecord = MessageRequestUpdateRecord & {
+  durableAcknowledgement?: DurableAcknowledgement;
+};
+
 type WriterConfig = {
   flushIntervalMs: number;
   batchSize: number;
   maxPending: number;
 };
+
+const DEFAULT_DURABLE_ACK_TIMEOUT_MS = 120_000;
+const OVERFLOW_LOG_AGGREGATION_MS = 1_000;
+
+type EvictablePendingEntry = {
+  id: number;
+  priority: number;
+  order: number;
+};
+
+class EvictablePendingIndex {
+  private readonly heap: EvictablePendingEntry[] = [];
+  private readonly positions = new Map<number, number>();
+  private nextOrder = 0;
+
+  upsert(id: number, priority: number): void {
+    const position = this.positions.get(id);
+    if (position === undefined) {
+      const entry = { id, priority, order: this.nextOrder++ };
+      this.heap.push(entry);
+      this.positions.set(id, this.heap.length - 1);
+      this.bubbleUp(this.heap.length - 1);
+      return;
+    }
+
+    const entry = this.heap[position];
+    if (!entry || entry.priority === priority) {
+      return;
+    }
+
+    const previousPriority = entry.priority;
+    entry.priority = priority;
+    if (priority < previousPriority) {
+      this.bubbleUp(position);
+    } else {
+      this.bubbleDown(position);
+    }
+  }
+
+  remove(id: number): EvictablePendingEntry | undefined {
+    const position = this.positions.get(id);
+    if (position === undefined) {
+      return undefined;
+    }
+    return this.removeAt(position);
+  }
+
+  popLowestPriority(): EvictablePendingEntry | undefined {
+    if (this.heap.length === 0) {
+      return undefined;
+    }
+    return this.removeAt(0);
+  }
+
+  clear(): void {
+    this.heap.length = 0;
+    this.positions.clear();
+  }
+
+  private removeAt(position: number): EvictablePendingEntry | undefined {
+    const removed = this.heap[position];
+    if (!removed) {
+      return undefined;
+    }
+
+    const last = this.heap.pop();
+    this.positions.delete(removed.id);
+    if (last && position < this.heap.length) {
+      this.heap[position] = last;
+      this.positions.set(last.id, position);
+      const parentPosition = Math.floor((position - 1) / 2);
+      if (position > 0 && this.isLowerPriority(last, this.heap[parentPosition])) {
+        this.bubbleUp(position);
+      } else {
+        this.bubbleDown(position);
+      }
+    }
+    return removed;
+  }
+
+  private bubbleUp(startPosition: number): void {
+    let position = startPosition;
+    while (position > 0) {
+      const parentPosition = Math.floor((position - 1) / 2);
+      const entry = this.heap[position];
+      const parent = this.heap[parentPosition];
+      if (!entry || !parent || !this.isLowerPriority(entry, parent)) {
+        break;
+      }
+      this.swap(position, parentPosition);
+      position = parentPosition;
+    }
+  }
+
+  private bubbleDown(startPosition: number): void {
+    let position = startPosition;
+    while (true) {
+      const leftPosition = position * 2 + 1;
+      const rightPosition = leftPosition + 1;
+      let lowestPosition = position;
+
+      if (
+        this.heap[leftPosition] &&
+        this.heap[lowestPosition] &&
+        this.isLowerPriority(this.heap[leftPosition], this.heap[lowestPosition])
+      ) {
+        lowestPosition = leftPosition;
+      }
+      if (
+        this.heap[rightPosition] &&
+        this.heap[lowestPosition] &&
+        this.isLowerPriority(this.heap[rightPosition], this.heap[lowestPosition])
+      ) {
+        lowestPosition = rightPosition;
+      }
+      if (lowestPosition === position) {
+        return;
+      }
+      this.swap(position, lowestPosition);
+      position = lowestPosition;
+    }
+  }
+
+  private swap(firstPosition: number, secondPosition: number): void {
+    const first = this.heap[firstPosition];
+    const second = this.heap[secondPosition];
+    if (!first || !second) {
+      return;
+    }
+    this.heap[firstPosition] = second;
+    this.heap[secondPosition] = first;
+    this.positions.set(first.id, secondPosition);
+    this.positions.set(second.id, firstPosition);
+  }
+
+  private isLowerPriority(first: EvictablePendingEntry, second: EvictablePendingEntry): boolean {
+    return (
+      first.priority < second.priority ||
+      (first.priority === second.priority && first.order < second.order)
+    );
+  }
+}
 
 const COLUMN_MAP: Record<keyof MessageRequestUpdatePatch, string> = {
   durationMs: "duration_ms",
@@ -83,10 +252,22 @@ function loadWriterConfig(): WriterConfig {
   };
 }
 
-function takeBatch(map: Map<number, MessageRequestUpdatePatch>, batchSize: number) {
-  const items: MessageRequestUpdateRecord[] = [];
-  for (const [id, patch] of map) {
-    items.push({ id, patch });
+function takeBatch(
+  map: Map<number, PendingMessageRequestUpdate>,
+  evictableIndex: EvictablePendingIndex,
+  batchSize: number
+): MessageRequestUpdateBatchRecord[] {
+  const items: MessageRequestUpdateBatchRecord[] = [];
+  for (const [id, pending] of map) {
+    if (pending.durableAcknowledgement && !pending.durableAcknowledgement.settled) {
+      pending.durableAcknowledgement.state = "in-flight";
+    }
+    items.push({
+      id,
+      patch: pending.patch,
+      durableAcknowledgement: pending.durableAcknowledgement,
+    });
+    evictableIndex.remove(id);
     map.delete(id);
     if (items.length >= batchSize) {
       break;
@@ -95,7 +276,10 @@ function takeBatch(map: Map<number, MessageRequestUpdatePatch>, batchSize: numbe
   return items;
 }
 
-export function buildBatchUpdateSql(updates: MessageRequestUpdateRecord[]): SQL | null {
+export function buildBatchUpdateSql(
+  updates: MessageRequestUpdateRecord[],
+  options: { returnUpdatedIds?: boolean; durableIds?: readonly number[] } = {}
+): SQL | null {
   if (updates.length === 0) {
     return null;
   }
@@ -152,12 +336,26 @@ export function buildBatchUpdateSql(updates: MessageRequestUpdateRecord[]): SQL 
     ids.map((id) => sql`${id}`),
     sql`, `
   );
+  const updateIds = new Set(ids);
+  const durableIds = Array.from(new Set(options.durableIds ?? [])).filter((id) =>
+    updateIds.has(id)
+  );
+  const durableFence =
+    durableIds.length === 0
+      ? sql``
+      : durableIds.length === ids.length
+        ? sql` AND ${sql.identifier("status_code")} IS NULL`
+        : sql` AND (id NOT IN (${sql.join(
+            durableIds.map((id) => sql`${id}`),
+            sql`, `
+          )}) OR ${sql.identifier("status_code")} IS NULL)`;
 
-  return sql`
+  const query = sql`
     UPDATE message_request
     SET ${sql.join(setClauses, sql`, `)}
-    WHERE id IN (${idList}) AND deleted_at IS NULL
+    WHERE id IN (${idList}) AND deleted_at IS NULL${durableFence}
   `;
+  return options.returnUpdatedIds ? sql`${query} RETURNING id` : query;
 }
 
 /**
@@ -195,10 +393,19 @@ function getPatchRetentionPriority(patch: MessageRequestUpdatePatch): number {
 
 class MessageRequestWriteBuffer {
   private readonly config: WriterConfig;
-  private readonly pending = new Map<number, MessageRequestUpdatePatch>();
+  private readonly pending = new Map<number, PendingMessageRequestUpdate>();
+  private readonly evictableIndex = new EvictablePendingIndex();
+  private readonly durableAcknowledgements = new Map<number, DurableAcknowledgement>();
   private flushTimer: NodeJS.Timeout | null = null;
+  private overflowLogTimer: NodeJS.Timeout | null = null;
+  private overflowDroppedCount = 0;
+  private overflowDroppedWithDurationMs = 0;
+  private overflowDroppedWithStatusCode = 0;
+  private overflowLowestPriority = Number.POSITIVE_INFINITY;
+  private overflowLastDroppedId: number | undefined;
   private flushAgainAfterCurrent = false;
   private flushInFlight: Promise<void> | null = null;
+  private readonly commitCallbacksInFlight = new Set<Promise<void>>();
   private stopping = false;
 
   constructor(config: WriterConfig) {
@@ -206,51 +413,262 @@ class MessageRequestWriteBuffer {
   }
 
   enqueue(id: number, patch: MessageRequestUpdatePatch): void {
-    const existing = this.pending.get(id) ?? {};
+    const existing = this.pending.get(id);
     // existing is older, patch is newer -> for replacement fields newer wins.
-    this.pending.set(id, mergePatch(existing, patch));
+    this.setPending(id, mergePatch(existing?.patch ?? {}, patch), existing?.durableAcknowledgement);
 
-    // 队列上限保护：DB 异常时避免无限增长导致 OOM
-    if (this.pending.size > this.config.maxPending) {
-      // 优先保留更接近终态的 patch：
-      // statusCode > durationMs > metadata-only
-      // 这样 Gemini passthrough 等 statusCode-only 终态更新不会比 duration-only 更容易被丢弃。
-      let droppedId: number | undefined;
-      let droppedPatch: MessageRequestUpdatePatch | undefined;
-      let lowestPriority = Number.POSITIVE_INFINITY;
+    this.enforcePendingLimit();
+    this.scheduleFlushIfNeeded();
+  }
 
-      for (const [candidateId, candidatePatch] of this.pending) {
-        const priority = getPatchRetentionPriority(candidatePatch);
-        if (priority < lowestPriority) {
-          lowestPriority = priority;
-          droppedId = candidateId;
-          droppedPatch = candidatePatch;
-        }
+  enqueueDurably(
+    id: number,
+    patch: MessageRequestUpdatePatch,
+    options: DurableMessageRequestUpdateOptions = {}
+  ): Promise<boolean> {
+    if (this.stopping) {
+      return Promise.reject(new Error("message_request writer is stopping"));
+    }
+
+    const activeAcknowledgement = this.durableAcknowledgements.get(id);
+    if (activeAcknowledgement && !activeAcknowledgement.settled) {
+      // The first durable claimant owns both the terminal patch and its commit
+      // callback. Later contenders may observe its SQL acknowledgement, but
+      // must not merge a contradictory terminal outcome or publish side effects.
+      return activeAcknowledgement.promise.then(() => false);
+    }
+
+    if (this.durableAcknowledgements.size >= this.config.maxPending) {
+      return Promise.reject(new Error("durable message_request queue is full"));
+    }
+
+    const acknowledgement = this.createDurableAcknowledgement(id, options);
+    const existing = this.pending.get(id);
+    this.setPending(id, mergePatch(existing?.patch ?? {}, patch), acknowledgement);
+
+    if (!this.enforcePendingLimit()) {
+      this.deletePending(id);
+      this.rejectDurableAcknowledgement(
+        acknowledgement,
+        new Error("durable message_request queue is full")
+      );
+      return acknowledgement.promise.then(() => true);
+    }
+
+    this.scheduleFlushIfNeeded();
+    return acknowledgement.promise.then(() => true);
+  }
+
+  private createDurableAcknowledgement(
+    id: number,
+    options: DurableMessageRequestUpdateOptions
+  ): DurableAcknowledgement {
+    let resolvePromise!: () => void;
+    let rejectPromise!: (error: Error) => void;
+    const promise = new Promise<void>((resolve, reject) => {
+      resolvePromise = resolve;
+      rejectPromise = reject;
+    });
+    const acknowledgement: DurableAcknowledgement = {
+      id,
+      promise,
+      resolve: resolvePromise,
+      reject: rejectPromise,
+      state: "pending",
+      settled: false,
+      timeoutId: null,
+      commitNotified: false,
+      onCommittedCallbacks: new Set(options.onCommitted ? [options.onCommitted] : []),
+    };
+
+    const timeoutMs = options.timeoutMs ?? DEFAULT_DURABLE_ACK_TIMEOUT_MS;
+    const effectiveTimeoutMs =
+      Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : DEFAULT_DURABLE_ACK_TIMEOUT_MS;
+    acknowledgement.timeoutId = setTimeout(() => {
+      const pending = this.pending.get(id);
+      if (pending?.durableAcknowledgement === acknowledgement) {
+        this.deletePending(id);
       }
+      this.rejectDurableAcknowledgement(
+        acknowledgement,
+        new Error("durable message_request acknowledgement timed out")
+      );
+    }, effectiveTimeoutMs);
+    acknowledgement.timeoutId.unref?.();
 
-      if (droppedId === undefined) {
-        const first = this.pending.entries().next().value as
-          | [number, MessageRequestUpdatePatch]
-          | undefined;
-        if (first) {
-          droppedId = first[0];
-          droppedPatch = first[1];
+    this.durableAcknowledgements.set(id, acknowledgement);
+    return acknowledgement;
+  }
+
+  private notifyDurableCommit(
+    acknowledgement: DurableAcknowledgement | undefined,
+    patch: Readonly<MessageRequestUpdatePatch>
+  ): void {
+    if (!acknowledgement || acknowledgement.commitNotified) return;
+    acknowledgement.commitNotified = true;
+
+    for (const callback of acknowledgement.onCommittedCallbacks) {
+      try {
+        const result = callback(patch);
+        if (result && typeof result.then === "function") {
+          let callbackPromise: Promise<void>;
+          callbackPromise = Promise.resolve(result)
+            .catch((error: unknown) => {
+              logger.error("[MessageRequestWriteBuffer] Durable commit callback failed", {
+                error: error instanceof Error ? error.message : String(error),
+                messageRequestId: acknowledgement.id,
+              });
+            })
+            .finally(() => {
+              this.commitCallbacksInFlight.delete(callbackPromise);
+            });
+          this.commitCallbacksInFlight.add(callbackPromise);
         }
-      }
-
-      if (droppedId !== undefined) {
-        this.pending.delete(droppedId);
-        logger.warn("[MessageRequestWriteBuffer] Pending queue overflow, dropping update", {
-          maxPending: this.config.maxPending,
-          droppedId,
-          droppedPriority: lowestPriority,
-          droppedHasDurationMs: droppedPatch?.durationMs !== undefined,
-          droppedHasStatusCode: droppedPatch?.statusCode !== undefined,
-          currentPending: this.pending.size,
+      } catch (error) {
+        logger.error("[MessageRequestWriteBuffer] Durable commit callback failed", {
+          error: error instanceof Error ? error.message : String(error),
+          messageRequestId: acknowledgement.id,
         });
       }
     }
+    acknowledgement.onCommittedCallbacks.clear();
+  }
 
+  private resolveDurableAcknowledgement(acknowledgement?: DurableAcknowledgement): void {
+    if (!acknowledgement || acknowledgement.settled) return;
+    acknowledgement.settled = true;
+    if (acknowledgement.timeoutId) {
+      clearTimeout(acknowledgement.timeoutId);
+      acknowledgement.timeoutId = null;
+    }
+    if (this.durableAcknowledgements.get(acknowledgement.id) === acknowledgement) {
+      this.durableAcknowledgements.delete(acknowledgement.id);
+    }
+    acknowledgement.resolve();
+  }
+
+  private rejectDurableAcknowledgement(
+    acknowledgement: DurableAcknowledgement | undefined,
+    error: Error
+  ): void {
+    if (!acknowledgement || acknowledgement.settled) return;
+    acknowledgement.settled = true;
+    if (acknowledgement.timeoutId) {
+      clearTimeout(acknowledgement.timeoutId);
+      acknowledgement.timeoutId = null;
+    }
+    if (this.durableAcknowledgements.get(acknowledgement.id) === acknowledgement) {
+      this.durableAcknowledgements.delete(acknowledgement.id);
+    }
+    acknowledgement.reject(error);
+  }
+
+  private rejectAllDurableAcknowledgements(error: Error): void {
+    for (const acknowledgement of this.durableAcknowledgements.values()) {
+      this.rejectDurableAcknowledgement(acknowledgement, error);
+    }
+  }
+
+  private setPending(
+    id: number,
+    patch: MessageRequestUpdatePatch,
+    durableAcknowledgement?: DurableAcknowledgement
+  ): void {
+    const activeDurableAcknowledgement =
+      durableAcknowledgement && !durableAcknowledgement.settled
+        ? durableAcknowledgement
+        : undefined;
+    this.pending.set(id, {
+      patch,
+      durableAcknowledgement: activeDurableAcknowledgement,
+    });
+    if (activeDurableAcknowledgement) {
+      this.evictableIndex.remove(id);
+    } else {
+      this.evictableIndex.upsert(id, getPatchRetentionPriority(patch));
+    }
+  }
+
+  private deletePending(id: number): PendingMessageRequestUpdate | undefined {
+    const pending = this.pending.get(id);
+    if (!pending) {
+      return undefined;
+    }
+    this.pending.delete(id);
+    this.evictableIndex.remove(id);
+    return pending;
+  }
+
+  private enforcePendingLimit(): boolean {
+    while (this.pending.size > this.config.maxPending) {
+      const droppedEntry = this.evictableIndex.popLowestPriority();
+      if (!droppedEntry) {
+        return false;
+      }
+      const dropped = this.pending.get(droppedEntry.id);
+      if (!dropped || (dropped.durableAcknowledgement && !dropped.durableAcknowledgement.settled)) {
+        continue;
+      }
+
+      this.pending.delete(droppedEntry.id);
+      this.recordOverflowDrop(droppedEntry, dropped.patch);
+    }
+
+    return true;
+  }
+
+  private recordOverflowDrop(
+    droppedEntry: EvictablePendingEntry,
+    droppedPatch: MessageRequestUpdatePatch
+  ): void {
+    this.overflowDroppedCount++;
+    this.overflowLastDroppedId = droppedEntry.id;
+    this.overflowLowestPriority = Math.min(this.overflowLowestPriority, droppedEntry.priority);
+    if (droppedPatch.durationMs !== undefined) {
+      this.overflowDroppedWithDurationMs++;
+    }
+    if (droppedPatch.statusCode !== undefined) {
+      this.overflowDroppedWithStatusCode++;
+    }
+    if (this.overflowLogTimer) {
+      return;
+    }
+    this.overflowLogTimer = setTimeout(() => {
+      this.overflowLogTimer = null;
+      this.flushOverflowLog();
+    }, OVERFLOW_LOG_AGGREGATION_MS);
+    this.overflowLogTimer.unref?.();
+  }
+
+  private flushOverflowLog(): void {
+    if (this.overflowDroppedCount === 0) {
+      return;
+    }
+    logger.warn("[MessageRequestWriteBuffer] Pending queue overflow, dropping updates", {
+      maxPending: this.config.maxPending,
+      droppedCount: this.overflowDroppedCount,
+      lowestDroppedPriority: this.overflowLowestPriority,
+      droppedWithDurationMs: this.overflowDroppedWithDurationMs,
+      droppedWithStatusCode: this.overflowDroppedWithStatusCode,
+      lastDroppedId: this.overflowLastDroppedId,
+      currentPending: this.pending.size,
+    });
+    this.overflowDroppedCount = 0;
+    this.overflowDroppedWithDurationMs = 0;
+    this.overflowDroppedWithStatusCode = 0;
+    this.overflowLowestPriority = Number.POSITIVE_INFINITY;
+    this.overflowLastDroppedId = undefined;
+  }
+
+  private clearOverflowLogTimer(): void {
+    if (!this.overflowLogTimer) {
+      return;
+    }
+    clearTimeout(this.overflowLogTimer);
+    this.overflowLogTimer = null;
+  }
+
+  private scheduleFlushIfNeeded(): void {
     // flush 过程中有新任务：标记需要再跑一轮（避免刚好 flush 完成时遗漏）
     if (this.flushInFlight) {
       this.flushAgainAfterCurrent = true;
@@ -300,24 +718,81 @@ class MessageRequestWriteBuffer {
         this.flushAgainAfterCurrent = false;
 
         while (this.pending.size > 0) {
-          const batch = takeBatch(this.pending, this.config.batchSize);
-          const query = buildBatchUpdateSql(batch);
+          const batch = takeBatch(this.pending, this.evictableIndex, this.config.batchSize);
+          const requiresUpdatedIds = batch.some(
+            (item) => item.durableAcknowledgement && !item.durableAcknowledgement.settled
+          );
+          const durableIds = batch.flatMap((item) =>
+            item.durableAcknowledgement ? [item.id] : []
+          );
+          const query = buildBatchUpdateSql(batch, {
+            returnUpdatedIds: requiresUpdatedIds,
+            durableIds,
+          });
           if (!query) {
+            for (const item of batch) {
+              this.rejectDurableAcknowledgement(
+                item.durableAcknowledgement,
+                new Error("durable message_request update contains no writable fields")
+              );
+            }
             continue;
           }
 
           try {
-            await db.execute(query);
+            const result = await getMessageWriterDb().execute(query);
+            const updatedIds = new Set(
+              requiresUpdatedIds
+                ? Array.from(result, (row) => Number((row as { id?: unknown }).id))
+                : []
+            );
+            for (const item of batch) {
+              const acknowledgement = item.durableAcknowledgement;
+              if (!acknowledgement) {
+                continue;
+              }
+              if (updatedIds.has(item.id)) {
+                this.notifyDurableCommit(acknowledgement, item.patch);
+                if (!acknowledgement.settled) {
+                  this.resolveDurableAcknowledgement(acknowledgement);
+                }
+              } else if (!acknowledgement.settled) {
+                this.rejectDurableAcknowledgement(
+                  acknowledgement,
+                  new Error(`durable message_request update did not persist id ${item.id}`)
+                );
+              }
+            }
           } catch (error) {
             // 失败重试：将 batch 放回队列
             // 合并策略：保留“更新更晚”的字段（existing 优先），避免覆盖新数据。
             for (const item of batch) {
-              const existing = this.pending.get(item.id) ?? {};
-              this.pending.set(item.id, mergePatch(item.patch, existing));
+              if (item.durableAcknowledgement?.settled) {
+                continue;
+              }
+              const existing = this.pending.get(item.id);
+              const durableAcknowledgement =
+                item.durableAcknowledgement && !item.durableAcknowledgement.settled
+                  ? item.durableAcknowledgement
+                  : existing?.durableAcknowledgement;
+              if (durableAcknowledgement) {
+                durableAcknowledgement.state = "pending";
+              }
+              this.setPending(
+                item.id,
+                mergePatch(item.patch, existing?.patch ?? {}),
+                durableAcknowledgement
+              );
             }
+            this.enforcePendingLimit();
 
+            const databaseError = findSafeDatabaseError(error);
             logger.error("[MessageRequestWriteBuffer] Flush failed, will retry later", {
-              error: error instanceof Error ? error.message : String(error),
+              error:
+                databaseError?.message ?? (error instanceof Error ? error.message : String(error)),
+              databaseCode: databaseError?.code,
+              admissionPool: databaseError?.pool,
+              admissionMaxOutstanding: databaseError?.maxOutstanding,
               pending: this.pending.size,
               batchSize: batch.length,
             });
@@ -346,17 +821,39 @@ class MessageRequestWriteBuffer {
     if (this.pending.size > 0) {
       await this.flush();
     }
+    if (this.pending.size > 0) {
+      const error = new Error("message_request writer shutdown persistence failed");
+      this.rejectAllDurableAcknowledgements(error);
+      this.clearOverflowLogTimer();
+      this.flushOverflowLog();
+      this.pending.clear();
+      this.evictableIndex.clear();
+      throw error;
+    }
+    if (this.durableAcknowledgements.size > 0) {
+      this.rejectAllDurableAcknowledgements(
+        new Error("message_request writer stopped before durable commit")
+      );
+    }
+    while (this.commitCallbacksInFlight.size > 0) {
+      await Promise.allSettled([...this.commitCallbacksInFlight]);
+    }
+    this.clearOverflowLogTimer();
+    this.flushOverflowLog();
+    this.pending.clear();
+    this.evictableIndex.clear();
   }
 }
 
 let _buffer: MessageRequestWriteBuffer | null = null;
 let _bufferState: "running" | "stopping" | "stopped" = "running";
+let _stopPromise: Promise<void> | null = null;
 
 function getBuffer(): MessageRequestWriteBuffer | null {
+  if (_bufferState !== "running") {
+    return null;
+  }
   if (!_buffer) {
-    if (_bufferState !== "running") {
-      return null;
-    }
     _buffer = new MessageRequestWriteBuffer(loadWriterConfig());
   }
   return _buffer;
@@ -374,6 +871,23 @@ export function enqueueMessageRequestUpdate(id: number, patch: MessageRequestUpd
   buffer.enqueue(id, patch);
 }
 
+export function enqueueMessageRequestUpdateDurably(
+  id: number,
+  patch: MessageRequestUpdatePatch,
+  options?: DurableMessageRequestUpdateOptions
+): Promise<boolean> {
+  if (getEnvConfig().MESSAGE_REQUEST_WRITE_MODE !== "async") {
+    return Promise.reject(
+      new Error("durable message_request buffer API requires async write mode")
+    );
+  }
+  const buffer = getBuffer();
+  if (!buffer) {
+    return Promise.reject(new Error("message_request writer is not running"));
+  }
+  return buffer.enqueueDurably(id, patch, options);
+}
+
 export async function flushMessageRequestWriteBuffer(): Promise<void> {
   if (!_buffer) {
     return;
@@ -381,18 +895,30 @@ export async function flushMessageRequestWriteBuffer(): Promise<void> {
   await _buffer.flush();
 }
 
-export async function stopMessageRequestWriteBuffer(): Promise<void> {
-  if (_bufferState === "stopped") {
-    return;
+export function stopMessageRequestWriteBuffer(): Promise<void> {
+  if (_stopPromise) {
+    return _stopPromise;
   }
   _bufferState = "stopping";
+  const buffer = _buffer;
 
-  if (!_buffer) {
+  let resolveStop!: () => void;
+  let rejectStop!: (reason?: unknown) => void;
+  const stopPromise = new Promise<void>((resolve, reject) => {
+    resolveStop = resolve;
+    rejectStop = reject;
+  });
+  _stopPromise = stopPromise;
+
+  void (async () => {
+    if (buffer) {
+      await buffer.stop();
+      if (_buffer === buffer) {
+        _buffer = null;
+      }
+    }
     _bufferState = "stopped";
-    return;
-  }
+  })().then(resolveStop, rejectStop);
 
-  await _buffer.stop();
-  _buffer = null;
-  _bufferState = "stopped";
+  return stopPromise;
 }

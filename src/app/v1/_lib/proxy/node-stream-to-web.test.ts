@@ -23,6 +23,139 @@ async function readAll(reader: ReadableStreamDefaultReader<Uint8Array>): Promise
 }
 
 describe("nodeStreamToWebStreamSafe", () => {
+  it("does not drain an unread source past the stream high-water marks", async () => {
+    const totalChunks = 32;
+    let producedChunks = 0;
+
+    const node = new Readable({
+      highWaterMark: 1,
+      read() {
+        if (producedChunks >= totalChunks) {
+          this.push(null);
+          return;
+        }
+
+        producedChunks++;
+        this.push(Buffer.alloc(64 * 1024, producedChunks));
+      },
+    });
+
+    const web = nodeStreamToWebStreamSafe(node, 1, "test");
+
+    // Allow all currently scheduled Node stream work to run. A backpressured
+    // adapter should fill only the Node/Web high-water marks, not reach EOF.
+    await new Promise((resolve) => setImmediate(resolve));
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(producedChunks).toBeLessThanOrEqual(3);
+
+    await web.cancel();
+  });
+
+  it("uses a byte budget so small chunks do not pause after one enqueue", async () => {
+    const chunkSize = 256;
+    const highWaterMark = 64 * 1024;
+    const webHighWaterMark = highWaterMark * 2;
+    let producedChunks = 0;
+
+    const node = new Readable({
+      highWaterMark,
+      read() {
+        producedChunks++;
+        this.push(Buffer.alloc(chunkSize, producedChunks));
+      },
+    });
+
+    const web = nodeStreamToWebStreamSafe(node, 1, "test");
+    await new Promise((resolve) => setImmediate(resolve));
+    await new Promise((resolve) => setImmediate(resolve));
+
+    const producedBytes = producedChunks * chunkSize;
+    expect(producedBytes).toBeGreaterThan(webHighWaterMark + chunkSize * 8);
+    expect(producedBytes).toBeLessThanOrEqual(webHighWaterMark + highWaterMark + chunkSize * 2);
+
+    await web.cancel();
+  });
+
+  it("closes immediately when the source ended before conversion", async () => {
+    const node = new Readable({
+      read() {
+        this.push(null);
+      },
+    });
+    node.resume();
+    await new Promise<void>((resolve) => node.once("end", resolve));
+
+    const web = nodeStreamToWebStreamSafe(node, 1, "test");
+    const reader = web.getReader();
+    const result = await Promise.race([
+      reader.read(),
+      new Promise<"pending">((resolve) => setImmediate(() => resolve("pending"))),
+    ]);
+
+    expect(result).toEqual({ done: true, value: undefined });
+  });
+
+  it("rejects with the original error when the source errored before conversion", async () => {
+    const node = new Readable({
+      read() {
+        // no-op
+      },
+    });
+    const boom = new Error("preexisting-upstream-error");
+    node.once("error", () => {});
+    node.destroy(boom);
+    await new Promise<void>((resolve) => node.once("close", resolve));
+
+    const web = nodeStreamToWebStreamSafe(node, 1, "test");
+    const reader = web.getReader();
+
+    await expect(reader.read()).rejects.toBe(boom);
+    expect(node.listenerCount("error")).toBe(0);
+    expect(node.listenerCount("close")).toBe(0);
+  });
+
+  it("rejects when the source was destroyed before conversion without reaching EOF", async () => {
+    const node = new Readable({
+      read() {
+        // no-op
+      },
+    });
+    node.destroy();
+    await new Promise<void>((resolve) => node.once("close", resolve));
+
+    const web = nodeStreamToWebStreamSafe(node, 1, "test");
+    const reader = web.getReader();
+
+    await expect(reader.read()).rejects.toThrow("closed before end");
+  });
+
+  it("protects a delayed destroy error when destruction started before conversion", async () => {
+    const lateDestroyError = new Error("pre-aborted-late-destroy");
+    const node = new Readable({
+      read() {
+        // no-op
+      },
+      destroy(_error, callback) {
+        setTimeout(() => callback(lateDestroyError), 30);
+      },
+    });
+    const uncaughtSpy = vi.fn();
+    process.once("uncaughtException", uncaughtSpy);
+
+    node.destroy();
+    const web = nodeStreamToWebStreamSafe(node, 1, "test");
+    const reader = web.getReader();
+
+    await expect(reader.read()).rejects.toThrow("closed before end");
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    process.removeListener("uncaughtException", uncaughtSpy);
+    expect(uncaughtSpy).not.toHaveBeenCalled();
+    expect(node.listenerCount("error")).toBe(0);
+    expect(node.listenerCount("close")).toBe(0);
+  });
+
   it("forwards chunks then closes when the source ends normally", async () => {
     const node = Readable.from([Buffer.from("hello "), Buffer.from("world")]);
 
@@ -60,6 +193,20 @@ describe("nodeStreamToWebStreamSafe", () => {
     expect(node.listenerCount("end")).toBe(0);
     expect(node.listenerCount("close")).toBe(0);
     expect(node.listenerCount("error")).toBe(0);
+  });
+
+  it("rejects when the source closes after conversion without reaching EOF", async () => {
+    const node = new Readable({
+      read() {
+        // no-op, destroy after the adapter installs its listeners
+      },
+    });
+
+    const web = nodeStreamToWebStreamSafe(node, 1, "test");
+    const reader = web.getReader();
+    node.destroy();
+
+    await expect(reader.read()).rejects.toThrow("closed before end");
   });
 
   it("destroys the source and detaches listeners on cancel(), and ignores subsequent events", async () => {
@@ -140,13 +287,99 @@ describe("nodeStreamToWebStreamSafe", () => {
     });
     node.destroy();
     const destroySpy = vi.spyOn(node, "destroy");
+    node.once("error", () => {});
 
     const web = nodeStreamToWebStreamSafe(node, 1, "test");
     const reader = web.getReader();
-    await reader.cancel("client gone");
+    await reader.cancel("client gone").catch(() => {});
 
     // Wrapper must short-circuit when nodeStream.destroyed is true
     expect(destroySpy).not.toHaveBeenCalled();
+  });
+
+  it("guards a delayed error when external destroy races with downstream cancel", async () => {
+    const lateDestroyError = new Error("external-destroy-late-error");
+    const node = new Readable({
+      read() {
+        // no-op
+      },
+      destroy(_error, callback) {
+        setTimeout(() => callback(lateDestroyError), 30);
+      },
+    });
+    const web = nodeStreamToWebStreamSafe(node, 1, "test");
+    const reader = web.getReader();
+    const uncaughtSpy = vi.fn();
+    process.once("uncaughtException", uncaughtSpy);
+
+    node.destroy();
+    expect(node.destroyed).toBe(true);
+    expect(node.errored).toBeNull();
+    expect(node.closed).toBe(false);
+
+    await reader.cancel("client gone");
+    const adapterProtectedPendingDestroy = node.listenerCount("error") > 0;
+    if (!adapterProtectedPendingDestroy) {
+      // Keep the red test from leaking the expected late error into Vitest.
+      node.once("error", () => {});
+    }
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    process.removeListener("uncaughtException", uncaughtSpy);
+    expect(adapterProtectedPendingDestroy).toBe(true);
+    expect(uncaughtSpy).not.toHaveBeenCalled();
+    expect(node.listenerCount("error")).toBe(0);
+    expect(node.listenerCount("close")).toBe(0);
+  });
+
+  it("protects a queued destroy(error) event when cancel races in the same tick", async () => {
+    const node = new Readable({
+      read() {
+        // no-op
+      },
+    });
+    const web = nodeStreamToWebStreamSafe(node, 1, "test");
+    const reader = web.getReader();
+
+    node.destroy(new Error("upstream-race"));
+    const cancelPromise = reader.cancel("client gone");
+
+    const adapterProtectedQueuedError = node.listenerCount("error") > 0;
+    if (!adapterProtectedQueuedError) {
+      // Keep the current broken implementation from surfacing an uncaught
+      // exception after the assertion has captured the missing protection.
+      node.once("error", () => {});
+    }
+
+    await cancelPromise;
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(adapterProtectedQueuedError).toBe(true);
+    expect(node.listenerCount("error")).toBe(0);
+    expect(node.listenerCount("close")).toBe(0);
+  });
+
+  it("protects a delayed asynchronous destroy(error) event after cancel", async () => {
+    const lateDestroyError = new Error("late-destroy");
+    const node = new Readable({
+      read() {
+        // no-op
+      },
+      destroy(_error, callback) {
+        setTimeout(() => callback(lateDestroyError), 30);
+      },
+    });
+    const uncaughtSpy = vi.fn();
+    process.once("uncaughtException", uncaughtSpy);
+
+    const web = nodeStreamToWebStreamSafe(node, 1, "test");
+    await web.cancel(new Error("client gone"));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    process.removeListener("uncaughtException", uncaughtSpy);
+    expect(uncaughtSpy).not.toHaveBeenCalled();
+    expect(node.listenerCount("error")).toBe(0);
+    expect(node.listenerCount("close")).toBe(0);
   });
 
   it("treats back-to-back end + close as a single close on the web stream", async () => {

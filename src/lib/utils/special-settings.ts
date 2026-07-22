@@ -52,6 +52,8 @@ function buildSettingKey(setting: SpecialSetting): string {
       return JSON.stringify([setting.type, setting.guard, setting.action, setting.statusCode]);
     case "anthropic_effort":
       return JSON.stringify([setting.type, setting.hit, setting.effort]);
+    case "codex_reasoning_effort":
+      return JSON.stringify([setting.type, setting.hit, setting.effort]);
     case "anthropic_cache_ttl_header_override":
       return JSON.stringify([setting.type, setting.ttl]);
     case "anthropic_context_1m_header_override":

@@ -115,7 +115,8 @@ describe("findReusable - model mismatch clears stale binding", () => {
 
     expect(result).toBeNull();
     expect(sessionManagerMocks.SessionManager.clearSessionProvider).toHaveBeenCalledWith(
-      "sess_disable_reuse"
+      "sess_disable_reuse",
+      78
     );
   });
 
@@ -139,7 +140,8 @@ describe("findReusable - model mismatch clears stale binding", () => {
     expect(result).toBeNull();
     // Key assertion: clearSessionProvider should have been called
     expect(sessionManagerMocks.SessionManager.clearSessionProvider).toHaveBeenCalledWith(
-      "4c25cf92"
+      "4c25cf92",
+      78
     );
   });
 
@@ -162,7 +164,8 @@ describe("findReusable - model mismatch clears stale binding", () => {
 
     expect(result).toBeNull();
     expect(sessionManagerMocks.SessionManager.clearSessionProvider).toHaveBeenCalledWith(
-      "sess_response_format_mismatch"
+      "sess_response_format_mismatch",
+      94
     );
   });
 
@@ -236,7 +239,8 @@ describe("findReusable - model mismatch clears stale binding", () => {
 
     expect(result).toBeNull();
     expect(sessionManagerMocks.SessionManager.clearSessionProvider).toHaveBeenCalledWith(
-      "sess_variant"
+      "sess_variant",
+      78
     );
   });
 });

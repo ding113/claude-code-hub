@@ -6,12 +6,14 @@
  * 2. 智能截断：JSON 完整保存，文本限制 500 字符
  * 3. 可读性优先：纯文本格式化，便于排查问题
  */
+import { isDbPoolAdmissionError } from "@/drizzle/admitted-client";
 import { getEnvConfig } from "@/lib/config/env.schema";
 import { type ErrorDetectionResult, errorRuleDetector } from "@/lib/error-rule-detector";
 import { redactJsonString } from "@/lib/utils/message-redaction";
 import { sanitizeErrorTextForDetail } from "@/lib/utils/upstream-error-detection";
 import type { ErrorOverrideResponse } from "@/repository/error-rules";
 import type { ProviderChainItem } from "@/types/message";
+import { RESERVED_INTERNAL_HEADERS } from "../responses-ws/internal-secret";
 import type { ProxySession } from "./session";
 
 /** Marker message for the synthetic terminal error emitted when every provider fails. */
@@ -554,6 +556,7 @@ export enum ErrorCategory {
   CLIENT_ABORT, // 客户端主动中断 → 不计入熔断器 + 不重试 + 直接返回
   NON_RETRYABLE_CLIENT_ERROR, // 客户端输入错误（Prompt 超限、内容过滤、PDF 限制、Thinking 格式、参数缺失/额外参数、非法请求）→ 不计入熔断器 + 不重试 + 直接返回
   RESOURCE_NOT_FOUND, // 上游 404 错误 → 不计入熔断器 + 直接切换供应商
+  LOCAL_OVERLOAD, // 本地数据库等 admission 过载 → 不计入任何熔断器 + 不重试/切换供应商
 }
 
 /**
@@ -925,12 +928,18 @@ export function isEmptyResponseError(error: unknown): error is EmptyResponseErro
  * 此函数会确保错误规则已加载后再进行检测
  *
  * @param error - 捕获的错误对象
- * @returns 错误分类（CLIENT_ABORT、NON_RETRYABLE_CLIENT_ERROR、PROVIDER_ERROR 或 SYSTEM_ERROR）
+ * @returns 错误分类（CLIENT_ABORT、LOCAL_OVERLOAD、NON_RETRYABLE_CLIENT_ERROR、PROVIDER_ERROR 或 SYSTEM_ERROR）
  */
 export async function categorizeErrorAsync(error: Error): Promise<ErrorCategory> {
   // 优先级 1: 客户端中断检测（优先级最高）- 使用统一的精确检测函数
   if (isClientAbortError(error)) {
     return ErrorCategory.CLIENT_ABORT; // 客户端主动中断
+  }
+
+  // 优先级 1.25: 本地 DB admission 过载。Drizzle 会把底层错误包在 cause 中，
+  // 必须在网络/规则分类前识别，避免重试上游或惩罚 Provider/endpoint circuit。
+  if (isDbPoolAdmissionError(error)) {
+    return ErrorCategory.LOCAL_OVERLOAD;
   }
 
   // 优先级 1.5: Native transport errors — must not be matched by error rules
@@ -1118,6 +1127,13 @@ const SENSITIVE_HEADERS = new Set([
   "cookie",
   "set-cookie",
 ]);
+const RESERVED_INTERNAL_HEADER_SET = new Set(
+  RESERVED_INTERNAL_HEADERS.map((header) => header.toLowerCase())
+);
+function isReservedInternalHeader(name: string): boolean {
+  const lowerName = name.toLowerCase();
+  return lowerName.startsWith("x-cch-") || RESERVED_INTERNAL_HEADER_SET.has(lowerName);
+}
 
 const SENSITIVE_URL_PARAMS = new Set([
   "key",
@@ -1199,6 +1215,7 @@ export function sanitizeHeaders(headers: Headers | string): string {
     const collected: string[] = [];
     headers.forEach((value, key) => {
       const lowerKey = key.toLowerCase();
+      if (isReservedInternalHeader(lowerKey)) return;
       if (SENSITIVE_HEADERS.has(lowerKey)) {
         const maskedValue =
           lowerKey === "authorization" ? maskAuthorizationValue(value) : maskSensitiveValue(value);
@@ -1226,6 +1243,7 @@ export function sanitizeHeaders(headers: Headers | string): string {
     if (!name) return line;
 
     const lowerName = name.toLowerCase();
+    if (isReservedInternalHeader(lowerName)) return null;
     if (!SENSITIVE_HEADERS.has(lowerName)) return line;
 
     const maskedValue =
@@ -1233,7 +1251,7 @@ export function sanitizeHeaders(headers: Headers | string): string {
     return `${name}: ${maskedValue}`;
   });
 
-  return sanitizedLines.join("\n");
+  return sanitizedLines.filter((line): line is string => line !== null).join("\n");
 }
 
 /**

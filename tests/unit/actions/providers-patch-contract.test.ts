@@ -374,6 +374,7 @@ describe("provider patch contract", () => {
       ["codex_reasoning_effort_preference", "medium"],
       ["codex_reasoning_effort_preference", "high"],
       ["codex_reasoning_effort_preference", "xhigh"],
+      ["codex_reasoning_effort_preference", "max"],
     ] as const)("accepts valid %s value: %s", (field, value) => {
       const result = prepareProviderBatchApplyUpdates({
         [field]: { set: value },

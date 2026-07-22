@@ -16,7 +16,18 @@ vi.mock("@/lib/logger", () => ({
 
 vi.mock("@/lib/async-task-manager", () => ({
   AsyncTaskManager: {
-    register: () => new AbortController(),
+    register: (
+      _taskId: string,
+      factory: (signal: AbortSignal) => Promise<void>,
+      options?: string | { abortController?: AbortController }
+    ) => {
+      const controller =
+        typeof options === "object" && options.abortController
+          ? options.abortController
+          : new AbortController();
+      void Promise.resolve(factory(controller.signal)).catch(() => {});
+      return controller;
+    },
     touch: () => true,
     cleanup: () => {},
     cancel: () => {},

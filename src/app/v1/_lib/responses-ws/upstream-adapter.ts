@@ -206,19 +206,46 @@ function isWsClosingOrClosed(ws: WebSocketType): boolean {
   return ws.readyState >= 2;
 }
 
-function closeWs(ws: WebSocketType, code: number): void {
+function safelyCloseWebSocket(ws: WebSocketType, code: number): void {
+  if (ws.readyState === 3) return;
+
+  // Active closes can still surface an asynchronous error after request-level
+  // listeners are detached. This one-shot sink keeps the error owned by this
+  // socket instead of letting it escape to process-level crash handlers.
+  const consumeCloseError = () => {};
+  ws.once("error", consumeCloseError);
+  ws.once("close", () => {
+    ws.off("error", consumeCloseError);
+  });
+
+  // Another close path may already have started the handshake. Keep the
+  // temporary sink above, but do not issue a duplicate close or terminate.
+  if (ws.readyState === 2) return;
+
+  if (ws.readyState === 0) {
+    // ws emits this error asynchronously when a CONNECTING socket is closed
+    // or terminated, so abort the incomplete handshake instead of attempting
+    // a normal close handshake.
+    try {
+      ws.terminate();
+    } catch {
+      // ignore
+    }
+    return;
+  }
+
   try {
     ws.close(code);
   } catch {
-    // ignore
-  }
-}
-
-function terminateWs(ws: WebSocketType): void {
-  try {
-    ws.terminate?.();
-  } catch {
-    // ignore
+    // A readyState transition can race with close(). If the socket is still
+    // live, terminate it using the error consumer installed above.
+    if (!isWsClosingOrClosed(ws)) {
+      try {
+        ws.terminate();
+      } catch {
+        // ignore
+      }
+    }
   }
 }
 
@@ -235,7 +262,7 @@ function forgetPersistentSession(sessionId: string, ws?: WebSocketType): void {
 
 function closePersistentEntry(entry: PersistentWsEntry, code: number): void {
   forgetPersistentSession(entry.sessionId, entry.ws);
-  closeWs(entry.ws, code);
+  safelyCloseWebSocket(entry.ws, code);
 }
 
 function armPersistentIdleTimer(entry: PersistentWsEntry): void {
@@ -441,7 +468,7 @@ export async function tryResponsesWebsocketUpstream(options: {
 
   const closeAndForget = (code: number) => {
     if (sessionId) forgetPersistentSession(sessionId, ws);
-    closeWs(ws, code);
+    safelyCloseWebSocket(ws, code);
   };
 
   const messageQueue: string[] = [];
@@ -460,6 +487,7 @@ export async function tryResponsesWebsocketUpstream(options: {
   let terminalEventSeen = false;
   let terminalEventShouldClosePersistent = false;
   let firstEventTimer: ReturnType<typeof setTimeout> | null = null;
+  let requestFinished = false;
 
   const sendFrame = () => {
     if (!isWsOpen(ws)) {
@@ -643,7 +671,9 @@ export async function tryResponsesWebsocketUpstream(options: {
   };
 
   const finishRequest = (options?: { closeCode?: number; forgetSession?: boolean }) => {
-    cleanupRequestListeners();
+    if (requestFinished) return;
+    requestFinished = true;
+
     let closeDetachedEntry = false;
     if (persistentEntry) {
       persistentEntry.active = false;
@@ -663,8 +693,9 @@ export async function tryResponsesWebsocketUpstream(options: {
     if (options?.closeCode) {
       closeAndForget(options.closeCode);
     } else if (closeDetachedEntry) {
-      closeWs(ws, 1000);
+      safelyCloseWebSocket(ws, 1000);
     }
+    cleanupRequestListeners();
   };
 
   function onAbort() {
@@ -699,18 +730,20 @@ export async function tryResponsesWebsocketUpstream(options: {
   // Bound the wait for the first event so a silent upstream cannot pin a
   // request slot indefinitely. Cleared on first message or any other
   // resolution.
-  firstEventTimer = setTimeout(() => {
-    if (firstEventSeen) return;
-    finishOpen({
-      ok: false,
-      reason: "ws_error_pre_first_event",
-      message: "timeout_waiting_for_first_event",
-      // A silent upstream is most likely transient (load, latency); the
-      // next request should re-probe rather than skip the WS path.
-      cacheableAsUnsupported: false,
-    });
-    closeAndForget(1011);
-  }, FIRST_EVENT_TIMEOUT_MS);
+  if (!openResolved) {
+    firstEventTimer = setTimeout(() => {
+      if (firstEventSeen) return;
+      finishOpen({
+        ok: false,
+        reason: "ws_error_pre_first_event",
+        message: "timeout_waiting_for_first_event",
+        // A silent upstream is most likely transient (load, latency); the
+        // next request should re-probe rather than skip the WS path.
+        cacheableAsUnsupported: false,
+      });
+      finishRequest({ closeCode: 1011, forgetSession: true });
+    }, FIRST_EVENT_TIMEOUT_MS);
+  }
 
   if (reused) {
     sendFrame();
@@ -722,9 +755,7 @@ export async function tryResponsesWebsocketUpstream(options: {
     firstEventTimer = null;
   }
   if (!openResult.ok) {
-    cleanupRequestListeners();
-    if (sessionId) forgetPersistentSession(sessionId, ws);
-    terminateWs(ws);
+    finishRequest({ closeCode: 1011, forgetSession: true });
     return {
       failed: true,
       reason: openResult.reason,

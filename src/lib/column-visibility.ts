@@ -44,7 +44,7 @@ export const DEFAULT_HIDDEN_COLUMNS: LogsTableColumn[] = ["ip"];
 /**
  * Columns that cannot be hidden (always visible)
  */
-export const ALWAYS_VISIBLE_COLUMNS = ["time", "model", "status"] as const;
+export const ALWAYS_VISIBLE_COLUMNS = ["time", "model", "reasoningEffort", "status"] as const;
 
 /**
  * Get the storage key for a specific user and table

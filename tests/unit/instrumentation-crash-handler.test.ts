@@ -9,6 +9,7 @@
  * 防止未来重构（删掉早返回、反转判断、移动谓词调用）在谓词测试全绿的情况下重新引入崩溃。
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { DrizzleQueryError } from "drizzle-orm";
 
 vi.mock("@/lib/logger", () => ({
   logger: {
@@ -121,13 +122,45 @@ describe("registerCrashDiagnostics", () => {
   describe("genuine errors (must still fail-fast)", () => {
     it("uncaughtException: a generic Error exits with code 1 and writes diagnostics", () => {
       const { uncaughtException } = captureHandlers();
-      uncaughtException(new Error("real bug"));
+      const error = new Error("real bug");
+      uncaughtException(error);
 
       expect(exitSpy).toHaveBeenCalledWith(1);
       expect(logger.fatal).toHaveBeenCalledTimes(1);
       expect(logger.warn).not.toHaveBeenCalled();
       // fatal 路径必须写出同步 stderr 兜底诊断，防止回归静默吞掉致命错误
       expect(stderrSpy).toHaveBeenCalled();
+      expect(process.report?.excludeEnv).toBe(true);
+      const writeReport = process.report?.writeReport;
+      expect(writeReport).toBeDefined();
+      const reportCalls = (writeReport as unknown as ReturnType<typeof vi.fn>).mock.calls;
+      expect(reportCalls[0]?.[1]).toBe(error);
+    });
+
+    it("uncaughtException: database wrappers are redacted at every crash sink", () => {
+      const { uncaughtException } = captureHandlers();
+      const error = new DrizzleQueryError(
+        "select * from secrets where token = $1",
+        ["crash-report-canary"],
+        new Error("driver exposed crash-report-canary")
+      );
+
+      uncaughtException(error);
+
+      const writeReport = process.report?.writeReport;
+      expect(writeReport).toBeDefined();
+      const reportCalls = (writeReport as unknown as ReturnType<typeof vi.fn>).mock.calls;
+      const reportError = reportCalls[0]?.[1] as Error;
+      expect(reportError).not.toBe(error);
+      expect(reportError.message).toBe("Database query failed");
+      expect(
+        JSON.stringify({
+          reportCalls,
+          stderrCalls: stderrSpy.mock.calls,
+          fatalCalls: (logger.fatal as unknown as ReturnType<typeof vi.fn>).mock.calls,
+        })
+      ).not.toContain("crash-report-canary");
+      expect(exitSpy).toHaveBeenCalledWith(1);
     });
 
     it("uncaughtException: a non-benign transport code (ECONNREFUSED) exits with code 1", () => {

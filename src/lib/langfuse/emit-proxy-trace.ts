@@ -106,9 +106,19 @@ export function emitProxyLangfuseTrace(
 ): void {
   if (!process.env.LANGFUSE_PUBLIC_KEY || !process.env.LANGFUSE_SECRET_KEY) return;
 
-  // 必须在异步 import 之前截断，避免动态加载/SDK 发送期间闭包继续强引用完整大响应。
-  const responseText = truncateResponseTextForLangfuse(data.responseText);
-  const sessionSnapshot = buildLangfuseSessionSnapshot(session);
+  let responseText: string;
+  let sessionSnapshot: ProxySession;
+  try {
+    // 必须在异步 import 之前截断，避免动态加载/SDK 发送期间闭包继续强引用完整大响应。
+    responseText = truncateResponseTextForLangfuse(data.responseText);
+    sessionSnapshot = buildLangfuseSessionSnapshot(session);
+  } catch (err) {
+    logger.warn("[Langfuse] Proxy trace snapshot failed", {
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return;
+  }
+
   const {
     responseHeaders,
     durationMs,

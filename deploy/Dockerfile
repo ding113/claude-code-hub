@@ -58,7 +58,9 @@ COPY --from=build --chown=node:node /app/.next/standalone ./
 COPY --from=build --chown=node:node /app/.next/server ./.next/server
 COPY --from=build --chown=node:node /app/.next/static ./.next/static
 
+RUN mkdir -p /app/reports && chown node:node /app/reports
+
 USER node
 EXPOSE 3000
 
-CMD ["node", "server.js"]
+CMD ["node", "--report-on-fatalerror", "--report-uncaught-exception", "--report-exclude-env", "--report-directory=/app/reports", "server.js"]

@@ -23,6 +23,7 @@ const schedulerState = globalThis as unknown as {
   __CCH_PUBLIC_STATUS_REBUILD_SCHEDULER_RUNNING__?: boolean;
   __CCH_PUBLIC_STATUS_REBUILD_SCHEDULER_LOCK__?: LeaderLock;
   __CCH_PUBLIC_STATUS_REBUILD_SCHEDULER_STOP_REQUESTED__?: boolean;
+  __CCH_PUBLIC_STATUS_REBUILD_SCHEDULER_CURRENT_PROMISE__?: Promise<void>;
 };
 
 function parseRebuildHintKey(
@@ -168,7 +169,7 @@ async function runCycle(): Promise<void> {
 
     const targets = await collectTargets();
     for (const target of targets) {
-      if (leadershipLost) {
+      if (leadershipLost || schedulerState.__CCH_PUBLIC_STATUS_REBUILD_SCHEDULER_STOP_REQUESTED__) {
         break;
       }
       const result = await rebuildPublicStatusProjection({
@@ -176,6 +177,9 @@ async function runCycle(): Promise<void> {
         rangeHours: target.rangeHours,
         redis,
       });
+      if (schedulerState.__CCH_PUBLIC_STATUS_REBUILD_SCHEDULER_STOP_REQUESTED__) {
+        break;
+      }
       if (result.status === "updated" && target.hintKey) {
         await redis.del(target.hintKey);
       }
@@ -190,6 +194,16 @@ async function runCycle(): Promise<void> {
   }
 }
 
+function launchCycle(): void {
+  if (schedulerState.__CCH_PUBLIC_STATUS_REBUILD_SCHEDULER_CURRENT_PROMISE__) return;
+  const current = runCycle().finally(() => {
+    if (schedulerState.__CCH_PUBLIC_STATUS_REBUILD_SCHEDULER_CURRENT_PROMISE__ === current) {
+      schedulerState.__CCH_PUBLIC_STATUS_REBUILD_SCHEDULER_CURRENT_PROMISE__ = undefined;
+    }
+  });
+  schedulerState.__CCH_PUBLIC_STATUS_REBUILD_SCHEDULER_CURRENT_PROMISE__ = current;
+}
+
 export function startPublicStatusRebuildScheduler(): void {
   if (schedulerState.__CCH_PUBLIC_STATUS_REBUILD_SCHEDULER_STARTED__) {
     return;
@@ -198,7 +212,7 @@ export function startPublicStatusRebuildScheduler(): void {
   schedulerState.__CCH_PUBLIC_STATUS_REBUILD_SCHEDULER_STOP_REQUESTED__ = false;
   schedulerState.__CCH_PUBLIC_STATUS_REBUILD_SCHEDULER_STARTED__ = true;
   schedulerState.__CCH_PUBLIC_STATUS_REBUILD_SCHEDULER_INTERVAL_ID__ = setInterval(() => {
-    void runCycle();
+    launchCycle();
   }, TICK_INTERVAL_MS);
 
   const timer = schedulerState.__CCH_PUBLIC_STATUS_REBUILD_SCHEDULER_INTERVAL_ID__ as
@@ -206,7 +220,7 @@ export function startPublicStatusRebuildScheduler(): void {
     | undefined;
   timer?.unref?.();
 
-  void runCycle();
+  launchCycle();
 }
 
 export async function stopPublicStatusRebuildScheduler(): Promise<void> {
@@ -216,6 +230,8 @@ export async function stopPublicStatusRebuildScheduler(): Promise<void> {
   if (intervalId) {
     clearInterval(intervalId);
   }
+
+  await schedulerState.__CCH_PUBLIC_STATUS_REBUILD_SCHEDULER_CURRENT_PROMISE__;
 
   const currentLock = schedulerState.__CCH_PUBLIC_STATUS_REBUILD_SCHEDULER_LOCK__;
   if (currentLock) {

@@ -214,5 +214,20 @@ describe("buildRequestDetails - Redaction based on STORE_SESSION_MESSAGES", () =
       expect(result.headers).toBe("authorization: Bearer [REDACTED]");
       expect(result.headers).not.toContain("stale-token");
     });
+
+    it("should remove reserved internal transport headers", () => {
+      const headers = new Headers([
+        ["x-cch-internal-secret", "ws-secret-canary"],
+        ["x-cch-responses-ws-forward", "1"],
+        ["x-benign", "visible"],
+      ]);
+      const session = createMockSessionWithHeaders("{}", headers, "");
+
+      const result = buildRequestDetails(session);
+
+      expect(result.headers).toBe("x-benign: visible");
+      expect(result.headers).not.toContain("x-cch-");
+      expect(result.headers).not.toContain("ws-secret-canary");
+    });
   });
 });
