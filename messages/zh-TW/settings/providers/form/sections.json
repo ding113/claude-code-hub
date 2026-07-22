@@ -237,15 +237,16 @@
         }
       },
       "reasoningEffort": {
-        "help": "控制模型在輸出前用於推理的強度（推理 token 數量）。選擇「跟隨客戶端」表示不改寫請求；選擇其他值則強制覆寫 reasoning.effort。注意：none 僅 GPT-5.4 mini 系列支援，模型不支援會返回錯誤。",
+        "help": "控制模型在輸出前用於推理的強度（推理 token 數量）。選擇「跟隨客戶端」表示不改寫請求；選擇其他值則強制覆寫 reasoning.effort。可用檔位因模型而異，模型不支援會返回錯誤。",
         "label": "推理等級覆寫",
         "options": {
           "high": "high（更強推理）",
           "inherit": "不覆寫（跟隨客戶端）",
           "low": "low",
           "medium": "medium（預設）",
+          "max": "max（最高強度）",
           "minimal": "minimal（更省資源、更快）",
-          "none": "none（僅 GPT-5.4 mini）",
+          "none": "none",
           "xhigh": "xhigh"
         }
       },

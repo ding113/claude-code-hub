@@ -1,13 +1,20 @@
 import "server-only";
 
-import { and, desc, eq, inArray, isNotNull, isNull, ne, sql } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, isNotNull, isNull, lt, ne, or, sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
-import { providerEndpoints, providers } from "@/drizzle/schema";
+import {
+  type ProviderBatchApplyLedgerResult,
+  type ProviderBatchApplyStoredPreimage,
+  providerBatchApplyOperations,
+  providerEndpoints,
+  providers,
+} from "@/drizzle/schema";
 import { normalizeAllowedModelRules } from "@/lib/allowed-model-rules";
 import { getCachedProviders } from "@/lib/cache/provider-cache";
 import { PROVIDER_TIMEOUT_DEFAULTS } from "@/lib/constants/provider.constants";
 import { resetEndpointCircuit } from "@/lib/endpoint-circuit-breaker";
 import { logger } from "@/lib/logger";
+import { SENSITIVE_PROVIDER_BATCH_UNDO_KEYS } from "@/lib/provider-batch-patch-error-codes";
 import { normalizeProviderModelRedirectRules } from "@/lib/provider-model-redirects";
 import { parseProviderGroups } from "@/lib/utils/provider-group";
 import { resolveSystemTimezone } from "@/lib/utils/timezone";
@@ -1123,6 +1130,91 @@ export interface BatchProviderUpdates {
   mcpPassthroughUrl?: string | null;
 }
 
+type ProviderBatchUpdatedRow = {
+  id: number;
+  providerVendorId: number | null;
+  providerType: Provider["providerType"];
+  url: string;
+};
+
+async function ensureEnabledProviderEndpoints(
+  result: ProviderBatchUpdatedRow[],
+  now: Date
+): Promise<void> {
+  const endpointKeys = new Map<
+    string,
+    { vendorId: number; providerType: Provider["providerType"]; url: string }
+  >();
+
+  for (const row of result) {
+    if (row.providerVendorId == null || typeof row.url !== "string") {
+      continue;
+    }
+
+    const trimmedUrl = row.url.trim();
+    if (!trimmedUrl) {
+      continue;
+    }
+
+    try {
+      // eslint-disable-next-line no-new
+      new URL(trimmedUrl);
+    } catch {
+      logger.warn("updateProvidersBatch:skip_invalid_url", {
+        providerId: row.id,
+        vendorId: row.providerVendorId,
+        providerType: row.providerType,
+        url: trimmedUrl,
+      });
+      continue;
+    }
+
+    const key = `${row.providerVendorId}::${row.providerType}::${trimmedUrl}`;
+    if (endpointKeys.has(key)) continue;
+
+    endpointKeys.set(key, {
+      vendorId: row.providerVendorId,
+      providerType: row.providerType,
+      url: trimmedUrl,
+    });
+  }
+
+  if (endpointKeys.size === 0) {
+    return;
+  }
+
+  try {
+    const inserted = await db
+      .insert(providerEndpoints)
+      .values(
+        Array.from(endpointKeys.values()).map((endpoint) => ({
+          vendorId: endpoint.vendorId,
+          providerType: endpoint.providerType,
+          url: endpoint.url,
+          label: null,
+          updatedAt: now,
+        }))
+      )
+      .onConflictDoNothing({
+        target: [providerEndpoints.vendorId, providerEndpoints.providerType, providerEndpoints.url],
+        where: sql`${providerEndpoints.deletedAt} IS NULL`,
+      })
+      .returning({ id: providerEndpoints.id });
+
+    logger.debug("updateProvidersBatch:ensured_provider_endpoints", {
+      updatedProviders: result.length,
+      candidateEndpoints: endpointKeys.size,
+      insertedEndpoints: inserted.length,
+    });
+  } catch (error) {
+    logger.warn("updateProvidersBatch:ensure_provider_endpoints_failed", {
+      updatedProviders: result.length,
+      candidateEndpoints: endpointKeys.size,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
 export async function updateProvidersBatch(
   ids: number[],
   updates: BatchProviderUpdates
@@ -1300,80 +1392,7 @@ export async function updateProvidersBatch(
 
   // #779/#781：批量启用供应商时，best-effort 确保 endpoint pool 中存在对应 URL（避免历史/竞态导致启用后严格端点被阻断）。
   if (updates.isEnabled === true && result.length > 0) {
-    const endpointKeys = new Map<
-      string,
-      { vendorId: number; providerType: Provider["providerType"]; url: string }
-    >();
-
-    for (const row of result) {
-      if (row.providerVendorId == null || typeof row.url !== "string") {
-        continue;
-      }
-
-      const trimmedUrl = row.url.trim();
-      if (!trimmedUrl) {
-        continue;
-      }
-
-      try {
-        // eslint-disable-next-line no-new
-        new URL(trimmedUrl);
-      } catch {
-        logger.warn("updateProvidersBatch:skip_invalid_url", {
-          providerId: row.id,
-          vendorId: row.providerVendorId,
-          providerType: row.providerType,
-          url: trimmedUrl,
-        });
-        continue;
-      }
-
-      const key = `${row.providerVendorId}::${row.providerType}::${trimmedUrl}`;
-      if (endpointKeys.has(key)) continue;
-
-      endpointKeys.set(key, {
-        vendorId: row.providerVendorId,
-        providerType: row.providerType,
-        url: trimmedUrl,
-      });
-    }
-
-    if (endpointKeys.size > 0) {
-      try {
-        const inserted = await db
-          .insert(providerEndpoints)
-          .values(
-            Array.from(endpointKeys.values()).map((endpoint) => ({
-              vendorId: endpoint.vendorId,
-              providerType: endpoint.providerType,
-              url: endpoint.url,
-              label: null,
-              updatedAt: now,
-            }))
-          )
-          .onConflictDoNothing({
-            target: [
-              providerEndpoints.vendorId,
-              providerEndpoints.providerType,
-              providerEndpoints.url,
-            ],
-            where: sql`${providerEndpoints.deletedAt} IS NULL`,
-          })
-          .returning({ id: providerEndpoints.id });
-
-        logger.debug("updateProvidersBatch:ensured_provider_endpoints", {
-          updatedProviders: result.length,
-          candidateEndpoints: endpointKeys.size,
-          insertedEndpoints: inserted.length,
-        });
-      } catch (error) {
-        logger.warn("updateProvidersBatch:ensure_provider_endpoints_failed", {
-          updatedProviders: result.length,
-          candidateEndpoints: endpointKeys.size,
-          error: error instanceof Error ? error.message : String(error),
-        });
-      }
-    }
+    await ensureEnabledProviderEndpoints(result, now);
   }
 
   logger.debug("updateProvidersBatch:completed", {
@@ -1383,6 +1402,696 @@ export async function updateProvidersBatch(
   });
 
   return result.length;
+}
+
+export interface ProviderBatchUpdateGroup {
+  ids: number[];
+  updates: BatchProviderUpdates;
+}
+
+export interface ProviderBatchExpectedPreimage {
+  providerId: number;
+  providerType: Provider["providerType"];
+  values: Partial<Record<keyof Provider, unknown>>;
+}
+
+export type ProviderBatchConditionalUpdateResult =
+  | { status: "updated"; updatedCount: number }
+  | { status: "stale" };
+
+class ProviderBatchPreimageMismatchError extends Error {}
+
+function buildProviderBatchSetClauses(
+  updates: BatchProviderUpdates,
+  now: Date
+): Record<string, unknown> {
+  const setClauses: Record<string, unknown> = { updatedAt: now };
+  for (const [key, value] of Object.entries(updates)) {
+    if (value !== undefined) {
+      setClauses[key] = value;
+    }
+  }
+  return setClauses;
+}
+
+function isProviderBatchPreimageValueEqual(current: unknown, expected: unknown): boolean {
+  if (Object.is(current, expected)) {
+    return true;
+  }
+  if (
+    current !== null &&
+    expected !== null &&
+    typeof current === "object" &&
+    typeof expected === "object"
+  ) {
+    if (Array.isArray(current) || Array.isArray(expected)) {
+      return (
+        Array.isArray(current) &&
+        Array.isArray(expected) &&
+        current.length === expected.length &&
+        current.every((value, index) => isProviderBatchPreimageValueEqual(value, expected[index]))
+      );
+    }
+    const currentRecord = current as Record<string, unknown>;
+    const expectedRecord = expected as Record<string, unknown>;
+    const currentKeys = Object.keys(currentRecord);
+    const expectedKeys = Object.keys(expectedRecord);
+    return (
+      currentKeys.length === expectedKeys.length &&
+      currentKeys.every(
+        (key) =>
+          Object.hasOwn(expectedRecord, key) &&
+          isProviderBatchPreimageValueEqual(currentRecord[key], expectedRecord[key])
+      )
+    );
+  }
+  return false;
+}
+
+type ProviderBatchApplyLedgerRow = typeof providerBatchApplyOperations.$inferSelect;
+const PROVIDER_BATCH_APPLY_LEDGER_TTL_MS = 24 * 60 * 60 * 1000;
+
+export type ProviderBatchApplyOperationLookupResult =
+  | { status: "replay"; result: ProviderBatchApplyLedgerResult; undoAvailable: boolean }
+  | { status: "idempotency_conflict" }
+  | { status: "preview_consumed" }
+  | { status: "not_found" };
+
+export interface FindProviderBatchApplyOperationInput {
+  claimKey: string;
+  previewToken: string;
+  payloadFingerprint: string;
+}
+
+export interface ApplyProviderBatchOperationIfUnchangedInput
+  extends FindProviderBatchApplyOperationInput {
+  groups: ProviderBatchUpdateGroup[];
+  /** Complete provider set captured by the preview, including excluded providers. */
+  expectedPreimages: ProviderBatchExpectedPreimage[];
+  /** Providers left after applying the caller's exclusion list. */
+  effectiveProviderIds: number[];
+  /** Exact provider-keyed values needed to rebuild the undo snapshot. */
+  undoPreimage: Record<number, Record<string, unknown>>;
+  undoRestorable: boolean;
+  postCommitEffects: ProviderBatchApplyLedgerResult["postCommitEffects"];
+  operationId: string;
+  undoToken: string;
+  undoTtlSeconds: number;
+}
+
+export type ApplyProviderBatchOperationIfUnchangedResult =
+  | { status: "applied"; result: ProviderBatchApplyLedgerResult; undoAvailable: boolean }
+  | { status: "replay"; result: ProviderBatchApplyLedgerResult; undoAvailable: boolean }
+  | { status: "stale" }
+  | { status: "idempotency_conflict" }
+  | { status: "preview_consumed" };
+
+function resolveProviderBatchApplyOperation(
+  rows: ProviderBatchApplyLedgerRow[],
+  input: FindProviderBatchApplyOperationInput,
+  now: Date
+): ProviderBatchApplyOperationLookupResult {
+  const claimOperation = rows.find((row) => row.claimKey === input.claimKey);
+  if (claimOperation) {
+    if (
+      claimOperation.previewToken !== input.previewToken ||
+      claimOperation.payloadFingerprint !== input.payloadFingerprint
+    ) {
+      return { status: "idempotency_conflict" };
+    }
+
+    if (claimOperation.status === "applied" && claimOperation.result) {
+      return {
+        status: "replay",
+        result: claimOperation.result,
+        undoAvailable:
+          claimOperation.result.undoRestorable &&
+          claimOperation.undoConsumedAt === null &&
+          claimOperation.undoExpiresAt !== null &&
+          claimOperation.undoExpiresAt > now,
+      };
+    }
+
+    // An "applying" row must never be committed by this repository. Refuse to
+    // reuse its preview if one is present because its state requires operator repair.
+    return { status: "preview_consumed" };
+  }
+
+  if (rows.some((row) => row.previewToken === input.previewToken)) {
+    return { status: "preview_consumed" };
+  }
+
+  return { status: "not_found" };
+}
+
+async function ensureEnabledProviderEndpointsForIds(providerIds: number[]): Promise<void> {
+  const uniqueIds = [...new Set(providerIds)].sort((a, b) => a - b);
+  if (uniqueIds.length === 0) {
+    return;
+  }
+
+  try {
+    const enabledRows = await db
+      .select({
+        id: providers.id,
+        providerVendorId: providers.providerVendorId,
+        providerType: providers.providerType,
+        url: providers.url,
+      })
+      .from(providers)
+      .where(
+        and(
+          inArray(providers.id, uniqueIds),
+          eq(providers.isEnabled, true),
+          isNull(providers.deletedAt)
+        )
+      );
+
+    if (enabledRows.length > 0) {
+      await ensureEnabledProviderEndpoints(enabledRows, new Date());
+    }
+  } catch (error) {
+    logger.warn("providerBatchApply:ensure_enabled_endpoints_failed", {
+      providerIds: uniqueIds,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
+/**
+ * Reads the durable result before consulting the expiring Redis preview.
+ * This is intentionally side-effect tolerant: replay also re-runs endpoint
+ * reconciliation so a prior post-commit failure can heal on retry.
+ */
+export async function findProviderBatchApplyOperation(
+  input: FindProviderBatchApplyOperationInput
+): Promise<ProviderBatchApplyOperationLookupResult> {
+  const now = new Date();
+  const rows = await db
+    .select()
+    .from(providerBatchApplyOperations)
+    .where(
+      and(
+        gt(providerBatchApplyOperations.expiresAt, now),
+        or(
+          eq(providerBatchApplyOperations.claimKey, input.claimKey),
+          eq(providerBatchApplyOperations.previewToken, input.previewToken)
+        )
+      )
+    );
+
+  const resolved = resolveProviderBatchApplyOperation(rows, input, now);
+  if (resolved.status === "replay") {
+    await ensureEnabledProviderEndpointsForIds(resolved.result.effectiveProviderIds);
+  }
+  return resolved;
+}
+
+/**
+ * Atomically claims a preview, validates its complete provider preimage,
+ * applies the effective subset and persists the replay/undo result.
+ */
+export async function applyProviderBatchOperationIfUnchanged(
+  input: ApplyProviderBatchOperationIfUnchangedInput
+): Promise<ApplyProviderBatchOperationIfUnchangedResult> {
+  if (!/^[a-f0-9]{64}$/i.test(input.payloadFingerprint)) {
+    throw new Error("provider batch payload fingerprint must be a 64-character hex digest");
+  }
+  if (!Number.isInteger(input.undoTtlSeconds) || input.undoTtlSeconds < 1) {
+    throw new Error("provider batch undo TTL must be a positive integer");
+  }
+
+  const expectedById = new Map(input.expectedPreimages.map((entry) => [entry.providerId, entry]));
+  if (expectedById.size !== input.expectedPreimages.length || expectedById.size === 0) {
+    return { status: "stale" };
+  }
+
+  const previewProviderIds = [...expectedById.keys()].sort((a, b) => a - b);
+  const effectiveProviderIds = [...new Set(input.effectiveProviderIds)].sort((a, b) => a - b);
+  if (
+    effectiveProviderIds.length === 0 ||
+    effectiveProviderIds.some((providerId) => !expectedById.has(providerId))
+  ) {
+    return { status: "stale" };
+  }
+
+  const effectiveIdSet = new Set(effectiveProviderIds);
+  const groupProviderIds = new Set<number>();
+  for (const group of input.groups) {
+    for (const providerId of new Set(group.ids)) {
+      if (groupProviderIds.has(providerId)) {
+        throw new Error(`provider ${providerId} appears in multiple batch update groups`);
+      }
+      if (!effectiveIdSet.has(providerId) || !expectedById.has(providerId)) {
+        return { status: "stale" };
+      }
+      groupProviderIds.add(providerId);
+    }
+  }
+
+  const storedPreimages: ProviderBatchApplyStoredPreimage[] = [];
+  for (const providerId of effectiveProviderIds) {
+    const expected = expectedById.get(providerId);
+    const isEnabled = expected?.values.isEnabled;
+    const undoValues = input.undoPreimage[providerId];
+    if (!expected || typeof isEnabled !== "boolean" || !undoValues) {
+      return { status: "stale" };
+    }
+    if (Object.keys(undoValues).some((key) => SENSITIVE_PROVIDER_BATCH_UNDO_KEYS.has(key))) {
+      throw new Error("provider batch durable undo preimage contains a sensitive field");
+    }
+    storedPreimages.push({
+      providerId,
+      providerType: expected.providerType,
+      isEnabled,
+      values: { ...undoValues },
+    });
+  }
+
+  const claimStartedAt = new Date();
+  const ledgerExpiresAt = new Date(claimStartedAt.getTime() + PROVIDER_BATCH_APPLY_LEDGER_TTL_MS);
+
+  // Keep retention cleanup outside the provider-locking transaction so a large
+  // expired backlog cannot extend the critical write section.
+  await db
+    .delete(providerBatchApplyOperations)
+    .where(lt(providerBatchApplyOperations.expiresAt, claimStartedAt));
+
+  try {
+    const transactionResult = await db.transaction(async (tx) => {
+      const inserted = await tx
+        .insert(providerBatchApplyOperations)
+        .values({
+          claimKey: input.claimKey,
+          previewToken: input.previewToken,
+          payloadFingerprint: input.payloadFingerprint,
+          operationId: input.operationId,
+          undoToken: input.undoToken,
+          undoExpiresAt: null,
+          undoConsumedAt: null,
+          status: "applying",
+          result: null,
+          expiresAt: ledgerExpiresAt,
+          createdAt: claimStartedAt,
+          updatedAt: claimStartedAt,
+        })
+        .onConflictDoNothing()
+        .returning({ claimKey: providerBatchApplyOperations.claimKey });
+
+      if (inserted.length === 0) {
+        const existingRows = await tx
+          .select()
+          .from(providerBatchApplyOperations)
+          .where(
+            or(
+              eq(providerBatchApplyOperations.claimKey, input.claimKey),
+              eq(providerBatchApplyOperations.previewToken, input.previewToken)
+            )
+          );
+        const resolved = resolveProviderBatchApplyOperation(existingRows, input, new Date());
+        if (resolved.status === "not_found") {
+          throw new Error("provider batch ledger conflict row disappeared");
+        }
+        return resolved;
+      }
+
+      const lockedRows = await tx
+        .select()
+        .from(providers)
+        .where(and(inArray(providers.id, previewProviderIds), isNull(providers.deletedAt)))
+        .orderBy(providers.id)
+        .for("update");
+
+      if (lockedRows.length !== previewProviderIds.length) {
+        throw new ProviderBatchPreimageMismatchError();
+      }
+
+      for (const row of lockedRows) {
+        const current = toProvider(row);
+        const expected = expectedById.get(current.id);
+        const expectedIsEnabled = expected?.values.isEnabled;
+        if (
+          !expected ||
+          current.providerType !== expected.providerType ||
+          typeof expectedIsEnabled !== "boolean" ||
+          current.isEnabled !== expectedIsEnabled
+        ) {
+          throw new ProviderBatchPreimageMismatchError();
+        }
+
+        for (const [key, expectedValue] of Object.entries(expected.values)) {
+          const providerKey = key as keyof Provider;
+          if (!isProviderBatchPreimageValueEqual(current[providerKey], expectedValue)) {
+            throw new ProviderBatchPreimageMismatchError();
+          }
+        }
+      }
+
+      const updateStartedAt = new Date();
+      let updatedCount = 0;
+      for (const group of input.groups) {
+        const ids = [...new Set(group.ids)].sort((a, b) => a - b);
+        const setClauses = buildProviderBatchSetClauses(group.updates, updateStartedAt);
+        if (ids.length === 0 || Object.keys(setClauses).length === 1) {
+          continue;
+        }
+
+        const updatedRows = await tx
+          .update(providers)
+          .set(setClauses)
+          .where(and(inArray(providers.id, ids), isNull(providers.deletedAt)))
+          .returning({ id: providers.id });
+
+        if (updatedRows.length !== ids.length) {
+          throw new ProviderBatchPreimageMismatchError();
+        }
+        updatedCount += updatedRows.length;
+      }
+
+      const appliedAt = new Date();
+      const undoExpiresAt = new Date(appliedAt.getTime() + input.undoTtlSeconds * 1000);
+
+      const result: ProviderBatchApplyLedgerResult = {
+        applyResult: {
+          operationId: input.operationId,
+          appliedAt: appliedAt.toISOString(),
+          updatedCount,
+          undoToken: input.undoToken,
+          undoExpiresAt: undoExpiresAt.toISOString(),
+        },
+        previewProviderIds,
+        effectiveProviderIds,
+        preimages: storedPreimages,
+        undoRestorable: input.undoRestorable,
+        postCommitEffects: input.postCommitEffects,
+      };
+
+      const completed = await tx
+        .update(providerBatchApplyOperations)
+        .set({
+          status: "applied",
+          result,
+          undoExpiresAt,
+          updatedAt: appliedAt,
+        })
+        .where(
+          and(
+            eq(providerBatchApplyOperations.claimKey, input.claimKey),
+            eq(providerBatchApplyOperations.previewToken, input.previewToken),
+            eq(providerBatchApplyOperations.payloadFingerprint, input.payloadFingerprint),
+            eq(providerBatchApplyOperations.status, "applying")
+          )
+        )
+        .returning({ claimKey: providerBatchApplyOperations.claimKey });
+
+      if (completed.length !== 1) {
+        throw new Error("provider batch ledger completion invariant failed");
+      }
+
+      return { status: "applied" as const, result, undoAvailable: true };
+    });
+
+    if (transactionResult.status === "applied" || transactionResult.status === "replay") {
+      await ensureEnabledProviderEndpointsForIds(transactionResult.result.effectiveProviderIds);
+    }
+
+    return transactionResult;
+  } catch (error) {
+    if (error instanceof ProviderBatchPreimageMismatchError) {
+      return { status: "stale" };
+    }
+    throw error;
+  }
+}
+
+export type ConsumeProviderBatchUndoResult =
+  | { status: "consumed" }
+  | { status: "conflict" }
+  | { status: "expired" };
+
+export type FindProviderBatchUndoOperationResult =
+  | { status: "available"; result: ProviderBatchApplyLedgerResult }
+  | { status: "conflict" }
+  | { status: "expired" };
+
+export async function findProviderBatchUndoOperation(input: {
+  undoToken: string;
+  operationId: string;
+  now: Date;
+}): Promise<FindProviderBatchUndoOperationResult> {
+  const [operation] = await db
+    .select({
+      operationId: providerBatchApplyOperations.operationId,
+      undoExpiresAt: providerBatchApplyOperations.undoExpiresAt,
+      undoConsumedAt: providerBatchApplyOperations.undoConsumedAt,
+      status: providerBatchApplyOperations.status,
+      result: providerBatchApplyOperations.result,
+    })
+    .from(providerBatchApplyOperations)
+    .where(eq(providerBatchApplyOperations.undoToken, input.undoToken))
+    .limit(1);
+
+  if (operation && operation.operationId !== input.operationId) {
+    return { status: "conflict" };
+  }
+  if (
+    !operation ||
+    operation.status !== "applied" ||
+    operation.undoConsumedAt !== null ||
+    operation.undoExpiresAt === null ||
+    operation.undoExpiresAt <= input.now ||
+    !operation.result ||
+    !operation.result.undoRestorable
+  ) {
+    return { status: "expired" };
+  }
+  return { status: "available", result: operation.result };
+}
+
+export async function consumeProviderBatchUndo(input: {
+  undoToken: string;
+  operationId: string;
+  consumedAt: Date;
+}): Promise<ConsumeProviderBatchUndoResult> {
+  const consumed = await db
+    .update(providerBatchApplyOperations)
+    .set({ undoConsumedAt: input.consumedAt, updatedAt: input.consumedAt })
+    .where(
+      and(
+        eq(providerBatchApplyOperations.undoToken, input.undoToken),
+        eq(providerBatchApplyOperations.operationId, input.operationId),
+        eq(providerBatchApplyOperations.status, "applied"),
+        isNull(providerBatchApplyOperations.undoConsumedAt),
+        gt(providerBatchApplyOperations.undoExpiresAt, input.consumedAt)
+      )
+    )
+    .returning({ claimKey: providerBatchApplyOperations.claimKey });
+
+  if (consumed.length === 1) {
+    return { status: "consumed" };
+  }
+
+  const [existing] = await db
+    .select({
+      operationId: providerBatchApplyOperations.operationId,
+      undoExpiresAt: providerBatchApplyOperations.undoExpiresAt,
+      undoConsumedAt: providerBatchApplyOperations.undoConsumedAt,
+    })
+    .from(providerBatchApplyOperations)
+    .where(eq(providerBatchApplyOperations.undoToken, input.undoToken))
+    .limit(1);
+
+  if (existing && existing.operationId !== input.operationId) {
+    return { status: "conflict" };
+  }
+  return { status: "expired" };
+}
+
+export type UndoProviderBatchOperationResult =
+  | { status: "reverted"; revertedCount: number }
+  | { status: "conflict" }
+  | { status: "mismatch" }
+  | { status: "expired" };
+
+export async function undoProviderBatchOperation(input: {
+  undoToken: string;
+  operationId: string;
+  groups: ProviderBatchUpdateGroup[];
+  revertedAt: Date;
+}): Promise<UndoProviderBatchOperationResult> {
+  try {
+    const result = await db.transaction(async (tx): Promise<UndoProviderBatchOperationResult> => {
+      const [operation] = await tx
+        .select({
+          operationId: providerBatchApplyOperations.operationId,
+          undoExpiresAt: providerBatchApplyOperations.undoExpiresAt,
+          undoConsumedAt: providerBatchApplyOperations.undoConsumedAt,
+          status: providerBatchApplyOperations.status,
+        })
+        .from(providerBatchApplyOperations)
+        .where(eq(providerBatchApplyOperations.undoToken, input.undoToken))
+        .for("update")
+        .limit(1);
+
+      if (operation && operation.operationId !== input.operationId) {
+        return { status: "conflict" };
+      }
+      if (
+        !operation ||
+        operation.status !== "applied" ||
+        operation.undoConsumedAt !== null ||
+        operation.undoExpiresAt === null ||
+        operation.undoExpiresAt <= input.revertedAt
+      ) {
+        return { status: "expired" };
+      }
+
+      let revertedCount = 0;
+      for (const group of input.groups) {
+        const ids = [...new Set(group.ids)].sort((a, b) => a - b);
+        if (ids.length === 0) continue;
+        const updated = await tx
+          .update(providers)
+          .set(buildProviderBatchSetClauses(group.updates, input.revertedAt))
+          .where(and(inArray(providers.id, ids), isNull(providers.deletedAt)))
+          .returning({ id: providers.id });
+        if (updated.length !== ids.length) {
+          throw new ProviderBatchPreimageMismatchError();
+        }
+        revertedCount += updated.length;
+      }
+
+      await tx
+        .update(providerBatchApplyOperations)
+        .set({ undoConsumedAt: input.revertedAt, updatedAt: input.revertedAt })
+        .where(eq(providerBatchApplyOperations.undoToken, input.undoToken));
+
+      return { status: "reverted", revertedCount };
+    });
+
+    if (result.status === "reverted") {
+      await ensureEnabledProviderEndpointsForIds(
+        input.groups.flatMap((group) => (group.updates.isEnabled === true ? group.ids : []))
+      );
+    }
+
+    return result;
+  } catch (error) {
+    if (error instanceof ProviderBatchPreimageMismatchError) {
+      return { status: "mismatch" };
+    }
+    throw error;
+  }
+}
+
+export async function updateProviderBatchGroupsIfUnchanged(
+  groups: ProviderBatchUpdateGroup[],
+  expectedPreimages: ProviderBatchExpectedPreimage[]
+): Promise<ProviderBatchConditionalUpdateResult> {
+  const seenIds = new Set<number>();
+  for (const group of groups) {
+    for (const id of new Set(group.ids)) {
+      if (seenIds.has(id)) {
+        throw new Error(`provider ${id} appears in multiple batch update groups`);
+      }
+      seenIds.add(id);
+    }
+  }
+
+  const expectedById = new Map(expectedPreimages.map((entry) => [entry.providerId, entry]));
+  if (expectedById.size !== expectedPreimages.length) {
+    return { status: "stale" };
+  }
+
+  const requestedIds = [...expectedById.keys()].sort((a, b) => a - b);
+  if (requestedIds.length === 0) {
+    return { status: "updated", updatedCount: 0 };
+  }
+
+  if ([...seenIds].some((id) => !expectedById.has(id))) {
+    return { status: "stale" };
+  }
+
+  const now = new Date();
+
+  try {
+    const transactionResult = await db.transaction(async (tx) => {
+      const lockedRows = await tx
+        .select()
+        .from(providers)
+        .where(and(inArray(providers.id, requestedIds), isNull(providers.deletedAt)))
+        .orderBy(providers.id)
+        .for("update");
+
+      if (lockedRows.length !== requestedIds.length) {
+        throw new ProviderBatchPreimageMismatchError();
+      }
+
+      for (const row of lockedRows) {
+        const current = toProvider(row);
+        const expected = expectedById.get(current.id);
+        if (!expected || current.providerType !== expected.providerType) {
+          throw new ProviderBatchPreimageMismatchError();
+        }
+
+        for (const [key, expectedValue] of Object.entries(expected.values)) {
+          const providerKey = key as keyof Provider;
+          if (!isProviderBatchPreimageValueEqual(current[providerKey], expectedValue)) {
+            throw new ProviderBatchPreimageMismatchError();
+          }
+        }
+      }
+
+      let updatedCount = 0;
+      const enabledRows: ProviderBatchUpdatedRow[] = [];
+      for (const group of groups) {
+        const ids = [...new Set(group.ids)].sort((a, b) => a - b);
+        const setClauses = buildProviderBatchSetClauses(group.updates, now);
+        if (Object.keys(setClauses).length === 1) {
+          continue;
+        }
+
+        const updatedRows = await tx
+          .update(providers)
+          .set(setClauses)
+          .where(and(inArray(providers.id, ids), isNull(providers.deletedAt)))
+          .returning({
+            id: providers.id,
+            providerVendorId: providers.providerVendorId,
+            providerType: providers.providerType,
+            url: providers.url,
+          });
+
+        if (updatedRows.length !== ids.length) {
+          throw new ProviderBatchPreimageMismatchError();
+        }
+
+        updatedCount += updatedRows.length;
+        if (group.updates.isEnabled === true) {
+          enabledRows.push(...updatedRows);
+        }
+      }
+
+      return { updatedCount, enabledRows };
+    });
+
+    if (transactionResult.enabledRows.length > 0) {
+      await ensureEnabledProviderEndpoints(transactionResult.enabledRows, now);
+    }
+
+    logger.debug("updateProviderBatchGroupsIfUnchanged:completed", {
+      requestedIds: requestedIds.length,
+      updatedCount: transactionResult.updatedCount,
+      groupCount: groups.length,
+    });
+
+    return { status: "updated", updatedCount: transactionResult.updatedCount };
+  } catch (error) {
+    if (error instanceof ProviderBatchPreimageMismatchError) {
+      return { status: "stale" };
+    }
+    throw error;
+  }
 }
 
 export async function deleteProvidersBatch(ids: number[]): Promise<number> {
