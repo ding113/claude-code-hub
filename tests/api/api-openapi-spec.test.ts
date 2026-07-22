@@ -235,7 +235,7 @@ describe("OpenAPI 规范验证", () => {
     const publicStatusParameters = publicStatusOperation?.parameters;
     expect(publicStatusParameters).toBeDefined();
 
-    const parameterNames = (publicStatusParameters as Array<{ name?: string }>).map(
+    const parameterNames = ((publicStatusParameters ?? []) as Array<{ name?: string }>).map(
       (parameter) => parameter.name
     );
     expect(parameterNames).toEqual(

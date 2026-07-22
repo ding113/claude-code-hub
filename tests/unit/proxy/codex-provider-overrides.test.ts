@@ -706,6 +706,22 @@ describe("Codex 供应商级参数覆写", () => {
     expect((input.reasoning as any).effort).toBe("low");
   });
 
+  it("应将官方新增的 max 思考强度覆写到 Codex 请求", () => {
+    const provider = {
+      providerType: "codex",
+      codexReasoningEffortPreference: "max",
+    };
+    const input: Record<string, unknown> = {
+      model: "gpt-5.6-sol",
+      input: [],
+      reasoning: { effort: "xhigh" },
+    };
+
+    const output = applyCodexProviderOverrides(provider as any, input);
+
+    expect(output.reasoning).toEqual({ effort: "max" });
+  });
+
   it("当请求缺少 reasoning/text 时，强制值应自动补齐对象结构", () => {
     const provider = {
       providerType: "codex",

@@ -1,8 +1,16 @@
 import { extractAnthropicEffortFromRequestBody } from "@/lib/utils/anthropic-effort";
+import { extractCodexReasoningEffortFromRequestBody } from "@/lib/utils/codex-reasoning-effort";
 import { createMessageRequest } from "@/repository/message";
 import type { ProxySession } from "./session";
 
+/** 在供应商确定后创建请求使用记录，并补齐需要随记录持久化的请求审计。 */
 export class ProxyMessageService {
+  /**
+   * 为当前代理请求创建持久化上下文。
+   *
+   * 思考强度必须在创建记录前写入 special_settings，后续供应商覆写审计才能与客户端
+   * 原始值合并，准确展示实际转发给上游的等级。
+   */
   static async ensureContext(session: ProxySession): Promise<void> {
     const authState = session.authState;
     const provider = session.provider;
@@ -21,7 +29,7 @@ export class ProxyMessageService {
     // Extract endpoint from URL pathname (nullable)
     const endpoint = session.getEndpoint() ?? undefined;
 
-    // ⭐ 修复模型重定向记录问题：
+    // 修复模型重定向记录问题：
     // 由于 ensureContext 在模型重定向之前被调用（guard-pipeline 阶段），
     // 此时 session.getOriginalModel() 可能返回 null。
     // 因此需要在这里提前保存当前模型作为 original_model，
@@ -45,6 +53,23 @@ export class ProxyMessageService {
           scope: "request",
           hit: true,
           effort: anthropicEffort,
+        });
+      }
+    }
+
+    const hasCodexReasoningEffortAudit = session
+      .getSpecialSettings()
+      ?.some((setting) => setting.type === "codex_reasoning_effort");
+
+    // Codex 客户端请求值先于供应商参数覆写入库，使用记录据此展示“请求值 -> 实际值”。
+    if (provider.providerType === "codex" && !hasCodexReasoningEffortAudit) {
+      const reasoningEffort = extractCodexReasoningEffortFromRequestBody(session.request.message);
+      if (reasoningEffort) {
+        session.addSpecialSetting({
+          type: "codex_reasoning_effort",
+          scope: "request",
+          hit: true,
+          effort: reasoningEffort,
         });
       }
     }
