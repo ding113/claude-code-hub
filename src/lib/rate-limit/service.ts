@@ -65,6 +65,7 @@
  * ============================================================================
  */
 
+import type { ChainableCommander } from "ioredis";
 import { logger } from "@/lib/logger";
 import { getRedisClient } from "@/lib/redis";
 import {
@@ -78,8 +79,7 @@ import {
   GET_COST_5H_ROLLING_WINDOW,
   GET_COST_DAILY_ROLLING_WINDOW,
   RELEASE_PROVIDER_SESSION,
-  TRACK_COST_5H_ROLLING_WINDOW,
-  TRACK_COST_DAILY_ROLLING_WINDOW,
+  TRACK_COST_ROLLING_WINDOW,
 } from "@/lib/redis/lua-scripts";
 import { SessionTracker } from "@/lib/session-tracker";
 import { ERROR_CODES } from "@/lib/utils/error-messages";
@@ -91,7 +91,12 @@ import {
 } from "@/repository/statistics";
 import { clipStartByResetAt, resolveUser5hCostResetAt } from "./cost-reset-utils";
 import type { LeaseWindowType } from "./lease";
-import { type DecrementLeaseBudgetResult, LeaseService } from "./lease-service";
+import {
+  type DecrementLeaseBudgetResult,
+  LeaseService,
+  type SettleLeaseBudgetsParams,
+  type SettleLeaseBudgetsResult,
+} from "./lease-service";
 import {
   type DailyResetMode,
   getResetAtFromTtlSeconds,
@@ -187,21 +192,61 @@ export class RateLimitService {
     return state.resetAt;
   }
 
-  private static async trackFixedCostWindow(
+  private static queueFixedCostWindow(
+    pipeline: ChainableCommander,
     key: string,
     cost: number,
     ttlSeconds: number
-  ): Promise<void> {
-    const redis = RateLimitService.redis;
-    if (!redis || redis.status !== "ready") return;
-
-    await redis.eval(
+  ): void {
+    pipeline.eval(
       RateLimitService.TRACK_FIXED_COST_WINDOW_LUA,
       1,
       key,
       cost.toString(),
       ttlSeconds
     );
+  }
+
+  private static queueRollingCostWindow(
+    pipeline: ChainableCommander,
+    key: string,
+    cost: number,
+    now: number,
+    windowMs: number,
+    requestId: string,
+    ttlSeconds: number
+  ): void {
+    pipeline.eval(
+      TRACK_COST_ROLLING_WINDOW,
+      1,
+      key,
+      cost.toString(),
+      now.toString(),
+      windowMs.toString(),
+      requestId,
+      ttlSeconds.toString()
+    );
+  }
+
+  private static logCostPipelineErrors(
+    results: Array<[Error | null, unknown]> | null,
+    operation: "trackCost" | "trackUserDailyCost"
+  ): void {
+    if (!results) {
+      logger.error("[RateLimit] Cost pipeline returned null", { operation });
+      return;
+    }
+
+    for (let commandIndex = 0; commandIndex < results.length; commandIndex += 1) {
+      const error = results[commandIndex]?.[0];
+      if (!error) continue;
+
+      logger.error("[RateLimit] Cost pipeline command failed", {
+        operation,
+        commandIndex,
+        error: error.message,
+      });
+    }
   }
 
   private static async warmRollingCostZset(
@@ -927,56 +972,71 @@ export class RateLimitService {
       providerResetTime?: string;
       providerResetMode?: DailyResetMode;
       user5hResetMode?: DailyResetMode;
-      requestId?: number;
+      userResetTime?: string;
+      userResetMode?: DailyResetMode;
+      requestId?: string | number;
       createdAtMs?: number;
     }
   ): Promise<void> {
-    if (!RateLimitService.redis || cost <= 0) return;
+    const redis = RateLimitService.redis;
+    if (!redis || redis.status !== "ready" || cost <= 0) return;
 
     try {
       const keyDailyReset = RateLimitService.resolveDailyReset(options?.keyResetTime);
       const providerDailyReset = RateLimitService.resolveDailyReset(options?.providerResetTime);
+      const userDailyReset = RateLimitService.resolveDailyReset(options?.userResetTime);
       const key5hMode = options?.key5hResetMode ?? "rolling";
       const keyDailyMode = options?.keyResetMode ?? "fixed";
       const provider5hMode = options?.provider5hResetMode ?? "rolling";
       const providerDailyMode = options?.providerResetMode ?? "fixed";
       const user5hMode = options?.user5hResetMode ?? "rolling";
+      const userDailyMode = options?.userResetMode ?? "fixed";
       const now = options?.createdAtMs ?? Date.now();
       const requestId = options?.requestId != null ? String(options.requestId) : "";
       const window5h = 5 * 60 * 60 * 1000; // 5 hours in ms
       const window24h = 24 * 60 * 60 * 1000; // 24 hours in ms
 
-      // 计算动态 TTL（daily/周/月）
-      const ttlDailyKey = await getTTLForPeriodWithMode(
-        "daily",
-        keyDailyReset.normalized,
-        keyDailyMode
-      );
-      const ttlDailyProvider =
-        keyDailyReset.normalized === providerDailyReset.normalized &&
-        keyDailyMode === providerDailyMode
-          ? ttlDailyKey
-          : await getTTLForPeriodWithMode(
-              "daily",
-              providerDailyReset.normalized,
-              providerDailyMode
-            );
-      const ttlWeekly = await getTTLForPeriod("weekly");
-      const ttlMonthly = await getTTLForPeriod("monthly");
+      const dailyTtlPromises = new Map<string, Promise<number>>();
+      const getFixedDailyTtl = (normalizedResetTime: string): Promise<number> => {
+        const cached = dailyTtlPromises.get(normalizedResetTime);
+        if (cached) return cached;
+
+        const pending = getTTLForPeriodWithMode("daily", normalizedResetTime, "fixed");
+        dailyTtlPromises.set(normalizedResetTime, pending);
+        return pending;
+      };
+
+      const [ttlDailyKey, ttlDailyProvider, ttlDailyUser, ttlWeekly, ttlMonthly] =
+        await Promise.all([
+          keyDailyMode === "fixed"
+            ? getFixedDailyTtl(keyDailyReset.normalized)
+            : Promise.resolve(0),
+          providerDailyMode === "fixed"
+            ? getFixedDailyTtl(providerDailyReset.normalized)
+            : Promise.resolve(0),
+          options?.userId != null && userDailyMode === "fixed"
+            ? getFixedDailyTtl(userDailyReset.normalized)
+            : Promise.resolve(0),
+          getTTLForPeriod("weekly"),
+          getTTLForPeriod("monthly"),
+        ]);
+
+      const pipeline = redis.pipeline();
 
       // 1. 5h 窗口：rolling 使用 ZSET，fixed 仅在首个成功记账时创建 TTL 窗口
       if (key5hMode === "rolling") {
-        await RateLimitService.redis.eval(
-          TRACK_COST_5H_ROLLING_WINDOW,
-          1, // KEYS count
-          RateLimitService.get5hCostKey("key", keyId, "rolling"), // KEYS[1]
-          cost.toString(), // ARGV[1]: cost
-          now.toString(), // ARGV[2]: now
-          window5h.toString(), // ARGV[3]: window
-          requestId // ARGV[4]: request_id (optional)
+        RateLimitService.queueRollingCostWindow(
+          pipeline,
+          RateLimitService.get5hCostKey("key", keyId, "rolling"),
+          cost,
+          now,
+          window5h,
+          requestId,
+          21600
         );
       } else {
-        await RateLimitService.trackFixedCostWindow(
+        RateLimitService.queueFixedCostWindow(
+          pipeline,
           RateLimitService.get5hCostKey("key", keyId, "fixed"),
           cost,
           5 * 3600
@@ -984,17 +1044,18 @@ export class RateLimitService {
       }
 
       if (provider5hMode === "rolling") {
-        await RateLimitService.redis.eval(
-          TRACK_COST_5H_ROLLING_WINDOW,
-          1,
+        RateLimitService.queueRollingCostWindow(
+          pipeline,
           RateLimitService.get5hCostKey("provider", providerId, "rolling"),
-          cost.toString(),
-          now.toString(),
-          window5h.toString(),
-          requestId
+          cost,
+          now,
+          window5h,
+          requestId,
+          21600
         );
       } else {
-        await RateLimitService.trackFixedCostWindow(
+        RateLimitService.queueFixedCostWindow(
+          pipeline,
           RateLimitService.get5hCostKey("provider", providerId, "fixed"),
           cost,
           5 * 3600
@@ -1003,17 +1064,18 @@ export class RateLimitService {
 
       if (options?.userId != null) {
         if (user5hMode === "rolling") {
-          await RateLimitService.redis.eval(
-            TRACK_COST_5H_ROLLING_WINDOW,
-            1,
+          RateLimitService.queueRollingCostWindow(
+            pipeline,
             RateLimitService.get5hCostKey("user", options.userId, "rolling"),
-            cost.toString(),
-            now.toString(),
-            window5h.toString(),
-            requestId
+            cost,
+            now,
+            window5h,
+            requestId,
+            21600
           );
         } else {
-          await RateLimitService.trackFixedCostWindow(
+          RateLimitService.queueFixedCostWindow(
+            pipeline,
             RateLimitService.get5hCostKey("user", options.userId, "fixed"),
             cost,
             5 * 3600
@@ -1023,51 +1085,61 @@ export class RateLimitService {
 
       // 2. daily 滚动窗口：使用 Lua 脚本（ZSET）
       if (keyDailyMode === "rolling") {
-        await RateLimitService.redis.eval(
-          TRACK_COST_DAILY_ROLLING_WINDOW,
-          1,
+        RateLimitService.queueRollingCostWindow(
+          pipeline,
           `key:${keyId}:cost_daily_rolling`,
-          cost.toString(),
-          now.toString(),
-          window24h.toString(),
-          requestId
+          cost,
+          now,
+          window24h,
+          requestId,
+          90000
         );
-      }
-
-      if (providerDailyMode === "rolling") {
-        await RateLimitService.redis.eval(
-          TRACK_COST_DAILY_ROLLING_WINDOW,
-          1,
-          `provider:${providerId}:cost_daily_rolling`,
-          cost.toString(),
-          now.toString(),
-          window24h.toString(),
-          requestId
-        );
-      }
-
-      // 3. daily fixed/周/月固定窗口：使用 STRING + 动态 TTL
-      const pipeline = RateLimitService.redis.pipeline();
-
-      // Key 的 daily fixed/周/月消费
-      if (keyDailyMode === "fixed") {
+      } else {
         const keyDailyKey = `key:${keyId}:cost_daily_${keyDailyReset.suffix}`;
         pipeline.incrbyfloat(keyDailyKey, cost);
         pipeline.expire(keyDailyKey, ttlDailyKey);
       }
 
+      if (providerDailyMode === "rolling") {
+        RateLimitService.queueRollingCostWindow(
+          pipeline,
+          `provider:${providerId}:cost_daily_rolling`,
+          cost,
+          now,
+          window24h,
+          requestId,
+          90000
+        );
+      } else {
+        const providerDailyKey = `provider:${providerId}:cost_daily_${providerDailyReset.suffix}`;
+        pipeline.incrbyfloat(providerDailyKey, cost);
+        pipeline.expire(providerDailyKey, ttlDailyProvider);
+      }
+
+      if (options?.userId != null) {
+        if (userDailyMode === "rolling") {
+          RateLimitService.queueRollingCostWindow(
+            pipeline,
+            `user:${options.userId}:cost_daily_rolling`,
+            cost,
+            now,
+            window24h,
+            requestId,
+            90000
+          );
+        } else {
+          const userDailyKey = `user:${options.userId}:cost_daily_${userDailyReset.suffix}`;
+          pipeline.incrbyfloat(userDailyKey, cost);
+          pipeline.expire(userDailyKey, ttlDailyUser);
+        }
+      }
+
+      // 3. Key 与 Provider 的周/月固定窗口。User 长周期限额由 lease + PostgreSQL 权威用量负责。
       pipeline.incrbyfloat(`key:${keyId}:cost_weekly`, cost);
       pipeline.expire(`key:${keyId}:cost_weekly`, ttlWeekly);
 
       pipeline.incrbyfloat(`key:${keyId}:cost_monthly`, cost);
       pipeline.expire(`key:${keyId}:cost_monthly`, ttlMonthly);
-
-      // Provider 的 daily fixed/周/月消费
-      if (providerDailyMode === "fixed") {
-        const providerDailyKey = `provider:${providerId}:cost_daily_${providerDailyReset.suffix}`;
-        pipeline.incrbyfloat(providerDailyKey, cost);
-        pipeline.expire(providerDailyKey, ttlDailyProvider);
-      }
 
       pipeline.incrbyfloat(`provider:${providerId}:cost_weekly`, cost);
       pipeline.expire(`provider:${providerId}:cost_weekly`, ttlWeekly);
@@ -1075,7 +1147,8 @@ export class RateLimitService {
       pipeline.incrbyfloat(`provider:${providerId}:cost_monthly`, cost);
       pipeline.expire(`provider:${providerId}:cost_monthly`, ttlMonthly);
 
-      await pipeline.exec();
+      const results = await pipeline.exec();
+      RateLimitService.logCostPipelineErrors(results, "trackCost");
 
       logger.debug(`[RateLimit] Tracked cost: key=${keyId}, provider=${providerId}, cost=${cost}`);
     } catch (error) {
@@ -1501,42 +1574,47 @@ export class RateLimitService {
     cost: number,
     resetTime?: string,
     resetMode?: DailyResetMode,
-    options?: { requestId?: number; createdAtMs?: number }
+    options?: { requestId?: string | number; createdAtMs?: number }
   ): Promise<void> {
-    if (!RateLimitService.redis || cost <= 0) return;
+    const redis = RateLimitService.redis;
+    if (!redis || redis.status !== "ready" || cost <= 0) return;
 
     const mode = resetMode ?? "fixed";
     const normalizedResetTime = normalizeResetTime(resetTime);
 
     try {
+      const pipeline = redis.pipeline();
+
       if (mode === "rolling") {
-        // Rolling 模式：使用 ZSET + Lua 脚本
         const key = `user:${userId}:cost_daily_rolling`;
         const now = options?.createdAtMs ?? Date.now();
         const window24h = 24 * 60 * 60 * 1000;
         const requestId = options?.requestId != null ? String(options.requestId) : "";
 
-        await RateLimitService.redis.eval(
-          TRACK_COST_DAILY_ROLLING_WINDOW,
-          1,
+        RateLimitService.queueRollingCostWindow(
+          pipeline,
           key,
-          cost.toString(),
-          now.toString(),
-          window24h.toString(),
-          requestId
+          cost,
+          now,
+          window24h,
+          requestId,
+          90000
         );
 
         logger.debug(`[RateLimit] Tracked user daily cost (rolling): user=${userId}, cost=${cost}`);
       } else {
-        // Fixed 模式：使用 STRING 类型
         const suffix = normalizedResetTime.replace(":", "");
         const key = `user:${userId}:cost_daily_${suffix}`;
         const ttl = await getTTLForPeriodWithMode("daily", normalizedResetTime, "fixed");
 
-        await RateLimitService.redis.pipeline().incrbyfloat(key, cost).expire(key, ttl).exec();
+        pipeline.incrbyfloat(key, cost);
+        pipeline.expire(key, ttl);
 
         logger.debug(`[RateLimit] Tracked user daily cost (fixed): user=${userId}, cost=${cost}`);
       }
+
+      const results = await pipeline.exec();
+      RateLimitService.logCostPipelineErrors(results, "trackUserDailyCost");
     } catch (error) {
       logger.error(`[RateLimit] Failed to track user daily cost:`, error);
     }
@@ -1827,5 +1905,14 @@ export class RateLimitService {
       cost,
       resetMode: options?.resetMode,
     });
+  }
+
+  /**
+   * Settle one request's actual cost against the fixed twelve lease budgets.
+   */
+  static async settleLeaseBudgets(
+    params: SettleLeaseBudgetsParams
+  ): Promise<SettleLeaseBudgetsResult> {
+    return LeaseService.settleLeaseBudgets(params);
   }
 }

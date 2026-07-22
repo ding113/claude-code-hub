@@ -4,6 +4,7 @@ import { pipeline as streamPipeline } from "node:stream";
 import { createGunzip, constants as zlibConstants } from "node:zlib";
 import type { Dispatcher } from "undici";
 import { request as undiciRequest } from "undici";
+import { findDbPoolAdmissionError, findSafeDatabaseError } from "@/drizzle/admitted-client";
 import { applyAnthropicProviderOverridesWithAudit } from "@/lib/anthropic/provider-overrides";
 import {
   getCircuitState,
@@ -62,7 +63,6 @@ import { buildProxyUrl } from "../url";
 import { rectifyBillingHeader } from "./billing-header-rectifier";
 import { bindClientAbortListener } from "./client-abort-listener";
 import { deriveClientSafeUpstreamErrorMessage } from "./client-error-message";
-import { combineAbortSignals } from "./combine-abort-signals";
 import { isStandardProxyEndpointPath } from "./endpoint-family-catalog";
 import { resolveEndpointPolicy, shouldEnforceStrictEndpointPoolPolicy } from "./endpoint-policy";
 import {
@@ -1550,7 +1550,8 @@ export class ProxyForwarder {
               detected.isError &&
               (detected.code === "FAKE_200_HTML_BODY" ||
                 detected.code === "FAKE_200_JSON_ERROR_NON_EMPTY" ||
-                detected.code === "FAKE_200_JSON_ERROR_MESSAGE_NON_EMPTY");
+                detected.code === "FAKE_200_JSON_ERROR_MESSAGE_NON_EMPTY" ||
+                detected.code === "FAKE_200_OPENAI_RESPONSE_FAILED");
 
             if (isStrongFake200) {
               const inferredStatus = inferUpstreamErrorStatusCodeFromText(inspectedText);
@@ -1734,10 +1735,15 @@ export class ProxyForwarder {
           // ⭐ 1. 分类错误（供应商错误 vs 系统错误 vs 客户端中断）
           // 使用异步版本确保错误规则已加载
           let errorCategory = await categorizeErrorAsync(lastError);
+          const databaseError = findSafeDatabaseError(lastError);
+          if (databaseError) {
+            errorCategory = ErrorCategory.LOCAL_OVERLOAD;
+          }
           const errorMessage =
-            lastError instanceof ProxyError
+            databaseError?.message ??
+            (lastError instanceof ProxyError
               ? lastError.getDetailedErrorMessage()
-              : lastError.message;
+              : lastError.message);
 
           const isTimeoutError = lastError instanceof ProxyError && lastError.statusCode === 524;
 
@@ -1747,7 +1753,7 @@ export class ProxyForwarder {
             );
           }
 
-          if (activeEndpoint.endpointId != null) {
+          if (!databaseError && activeEndpoint.endpointId != null) {
             if (isTimeoutError || errorCategory === ErrorCategory.SYSTEM_ERROR) {
               await recordEndpointFailure(activeEndpoint.endpointId, lastError);
             }
@@ -1762,7 +1768,7 @@ export class ProxyForwarder {
               totalProvidersAttempted,
             });
 
-            await ProxyForwarder.clearSessionProviderBinding(session);
+            await ProxyForwarder.clearSessionProviderBinding(session, currentProvider.id);
 
             // 记录到决策链（标记为客户端中断）
             session.addProviderToChain(currentProvider, {
@@ -1776,6 +1782,39 @@ export class ProxyForwarder {
                   errorType: "ClientAbort",
                   errorName: "ClientAbort",
                   errorMessage: "Client aborted request",
+                },
+                request: buildRequestDetails(session),
+              },
+            });
+
+            throw lastError;
+          }
+
+          if (databaseError) {
+            const admission = findDbPoolAdmissionError(lastError);
+            logger.warn("ProxyForwarder: Local database operation failed", {
+              providerId: currentProvider.id,
+              providerName: currentProvider.name,
+              endpointId: activeEndpoint.endpointId,
+              pool: admission?.pool,
+              maxOutstanding: admission?.maxOutstanding,
+              attemptNumber: attemptCount,
+            });
+
+            session.addProviderToChain(currentProvider, {
+              ...endpointAudit,
+              reason: "system_error",
+              circuitState: getCircuitState(currentProvider.id),
+              attemptNumber: attemptCount,
+              errorMessage: databaseError.message,
+              errorDetails: {
+                system: {
+                  errorType:
+                    databaseError.kind === "admission" ? "DbPoolAdmissionError" : "DatabaseError",
+                  errorName:
+                    databaseError.kind === "admission" ? "DbPoolAdmissionError" : "DatabaseError",
+                  errorMessage: databaseError.message,
+                  errorCode: databaseError.code,
                 },
                 request: buildRequestDetails(session),
               },
@@ -2338,8 +2377,11 @@ export class ProxyForwarder {
       });
     }
 
-    // ⭐ 不暴露供应商详情，仅返回简单错误
-    await ProxyForwarder.clearSessionProviderBinding(session);
+    // ⭐ 不暴露供应商详情，仅返回简单错误。CAS 清理本次请求实际尝试过的
+    // 所有 provider，避免从 A 切换到 B 后只比较 B 而遗留 A 的 stale binding。
+    const attemptedProviderIds = new Set(failedProviderIds);
+    if (session.provider?.id != null) attemptedProviderIds.add(session.provider.id);
+    await ProxyForwarder.clearSessionProviderBindings(session, attemptedProviderIds);
     throw ProxyForwarder.buildAllProvidersUnavailableError(lastError); // Service Unavailable
   }
 
@@ -2976,23 +3018,31 @@ export class ProxyForwarder {
     }
 
     // 2. 组合双路信号：response + client
-    const signals = [responseController.signal];
-    if (session.clientAbortSignal) {
-      signals.push(session.clientAbortSignal);
-    }
-
-    // 优先 Node 20.3+ 原生 AbortSignal.any（V8 内部管理 listener，无需手动 cleanup）；
-    // Next.js standalone 覆盖全局时 fallback 到 polyfill，由调用方在请求结束时调用
-    // cleanupCombinedSignal 解绑源信号上的 listener，避免持有 session/请求体闭包。
-    const { signal: combinedSignal, cleanup: cleanupCombinedSignal } = combineAbortSignals(signals);
+    const transportController = new AbortController();
+    const abortTransportFrom = (source: AbortSignal) => {
+      if (!transportController.signal.aborted) {
+        transportController.abort(source.reason);
+      }
+    };
+    const cleanupResponseTransportSignal = bindClientAbortListener(responseController.signal, () =>
+      abortTransportFrom(responseController.signal)
+    );
+    const cleanupClientTransportSignal = bindClientAbortListener(session.clientAbortSignal, () => {
+      const clientSignal = session.clientAbortSignal;
+      if (clientSignal) abortTransportFrom(clientSignal);
+    });
+    const cleanupCombinedSignal = () => {
+      cleanupResponseTransportSignal();
+      cleanupClientTransportSignal();
+    };
     logger.debug("ProxyForwarder: Combined abort signals", {
-      signalCount: signals.length,
+      signalCount: session.clientAbortSignal ? 2 : 1,
     });
 
     const init: UndiciFetchOptions = {
       method: session.method,
       headers: processedHeaders,
-      signal: combinedSignal, // 使用组合信号
+      signal: transportController.signal, // 使用组合信号
       ...(requestBody ? { body: requestBody } : {}),
     };
 
@@ -3078,7 +3128,7 @@ export class ProxyForwarder {
               body: requestBodyJson,
               sessionId: getResponsesWsSessionId(session.headers),
               endpointId: responsesWsEndpointId,
-              abortSignal: combinedSignal,
+              abortSignal: transportController.signal,
             });
 
             if ("response" in wsResult) {
@@ -3670,6 +3720,11 @@ export class ProxyForwarder {
       }
     }
 
+    // Successful responses transfer abort ownership to ResponseHandler.
+    // Error bodies are consumed here, so their client listener must remain
+    // attached until fromUpstreamResponse() finishes or is aborted.
+    cleanupClientTransportSignal();
+
     // 将响应超时清理函数和 controller 引用附加到 session，供 response-handler 使用
     // response-handler 会在读到首字节（流式）或完整响应（非流式）后调用此函数
     const sessionWithTimeout = session as ProxySession & {
@@ -3694,7 +3749,7 @@ export class ProxyForwarder {
 
     // Attach agent release callback for in-flight reference counting.
     // response-handler must call this in its finally block after the stream is fully consumed.
-    // 同时复用此回调作为 combineAbortSignals polyfill 的 cleanup 入口：response-handler 已经
+    // 同时复用此回调作为 transport signal 的 cleanup 入口：response-handler 已经
     // 保证在请求结束时（成功/异常）幂等地调用 releaseAgent，把 cleanup 合并到这里就不必再
     // 改造 response-handler 的所有 finally 调用点。两个动作互不影响，cleanup 内部自带 cleaned
     // 标志，重复调用安全。
@@ -3809,7 +3864,9 @@ export class ProxyForwarder {
     const settleFailure = async (error: Error) => {
       if (settled) return;
       settled = true;
-      await ProxyForwarder.clearSessionProviderBinding(session);
+      const attemptedProviderIds = new Set(launchedProviderIds);
+      if (session.provider?.id != null) attemptedProviderIds.add(session.provider.id);
+      await ProxyForwarder.clearSessionProviderBindings(session, attemptedProviderIds);
       resolveResult?.({ error });
     };
 
@@ -3853,6 +3910,7 @@ export class ProxyForwarder {
       const reader = attempt.reader;
       const response = attempt.response;
       const messageRequestId = session.messageContext?.id;
+      const messageRequestCreatedAtMs = session.messageContext?.createdAt.getTime();
       if (!reader || !response || messageRequestId == null) {
         // 无可读响应或无请求行可归属 -> 无法计费，直接释放资源。
         const cancel = reader?.cancel("hedge_loser_no_billing");
@@ -3924,6 +3982,7 @@ export class ProxyForwarder {
 
         await finalizeHedgeLoserBilling({
           messageRequestId,
+          messageRequestCreatedAtMs: messageRequestCreatedAtMs ?? Date.now(),
           loserSession: attempt.session,
           provider: attempt.provider,
           attemptNumber: attempt.sequence,
@@ -4227,8 +4286,10 @@ export class ProxyForwarder {
       let errorCategory = await categorizeErrorAsync(error);
       lastErrorCategory = errorCategory;
       const statusCode = error instanceof ProxyError ? error.statusCode : undefined;
+      const databaseError = findSafeDatabaseError(error);
       const errorMessage =
-        error instanceof ProxyError ? error.getDetailedErrorMessage() : error.message;
+        databaseError?.message ??
+        (error instanceof ProxyError ? error.getDetailedErrorMessage() : error.message);
       let matchedRule: MatchedRuleDetails | undefined;
       let matchedRuleLogContext: Record<string, unknown> = {};
 
@@ -4261,6 +4322,41 @@ export class ProxyForwarder {
             ? error
             : new ProxyError("Request aborted by client", 499, undefined, true)
         );
+        return;
+      }
+
+      if (errorCategory === ErrorCategory.LOCAL_OVERLOAD) {
+        const admission = findDbPoolAdmissionError(error);
+        const safeAdmissionMessage = admission?.message ?? "Database pool admission exceeded";
+        logger.warn("ProxyForwarder: Local database admission rejected during hedge", {
+          providerId: attempt.provider.id,
+          providerName: attempt.provider.name,
+          endpointId: attempt.endpointAudit.endpointId,
+          pool: admission?.pool,
+          maxOutstanding: admission?.maxOutstanding,
+          participantSequence: attempt.sequence,
+          attemptNumber: attempt.requestAttemptCount,
+        });
+
+        session.addProviderToChain(attempt.provider, {
+          ...attempt.endpointAudit,
+          reason: "system_error",
+          attemptNumber: attempt.sequence,
+          errorMessage: safeAdmissionMessage,
+          circuitState: getCircuitState(attempt.provider.id),
+          errorDetails: {
+            system: {
+              errorType: "DbPoolAdmissionError",
+              errorName: "DbPoolAdmissionError",
+              errorMessage: safeAdmissionMessage,
+              errorCode: admission?.code,
+            },
+            request: buildRequestDetails(session),
+          },
+          modelRedirect: getAttemptModelRedirect(attempt),
+        });
+        abortAllAttempts(undefined, "database_pool_overload");
+        await settleFailure(error);
         return;
       }
 
@@ -4895,9 +4991,21 @@ export class ProxyForwarder {
     targetState.releaseAgent = sourceRuntime.releaseAgent;
   }
 
-  private static async clearSessionProviderBinding(session: ProxySession): Promise<void> {
+  private static async clearSessionProviderBinding(
+    session: ProxySession,
+    expectedProviderId: number | null
+  ): Promise<void> {
     if (!session.sessionId) return;
-    await SessionManager.clearSessionProvider(session.sessionId);
+    await SessionManager.clearSessionProvider(session.sessionId, expectedProviderId);
+  }
+
+  private static async clearSessionProviderBindings(
+    session: ProxySession,
+    expectedProviderIds: Iterable<number>
+  ): Promise<void> {
+    for (const providerId of new Set(expectedProviderIds)) {
+      await ProxyForwarder.clearSessionProviderBinding(session, providerId);
+    }
   }
 
   private static markProviderFailed(

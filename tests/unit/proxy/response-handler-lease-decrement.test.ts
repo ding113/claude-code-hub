@@ -1,11 +1,8 @@
 /**
- * TDD: RED Phase - Tests for lease budget decrement in response-handler.ts
+ * TDD: Tests for atomic lease budget settlement in response-handler.ts
  *
- * Tests that decrementLeaseBudget is called correctly after trackCostToRedis completes.
- * - All windows: 5h, daily, weekly, monthly
- * - All entity types: key, user, provider
- * - Zero-cost requests should NOT trigger decrement
- * - Function runs once per request (no duplicates)
+ * Tests that settleLeaseBudgets is called once after trackCostToRedis completes.
+ * The service expands the explicit key/user/provider entities into all twelve windows.
  */
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -14,12 +11,34 @@ import type { ModelPriceData } from "@/types/model-price";
 
 // Track async tasks for draining
 const asyncTasks: Promise<void>[] = [];
+const asyncTaskControllers = new Map<Promise<void>, AbortController>();
+let asyncTaskAdmissionOpen = true;
 
 vi.mock("@/lib/async-task-manager", () => ({
   AsyncTaskManager: {
-    register: (_taskId: string, promise: Promise<void>) => {
+    register: (
+      _taskId: string,
+      factory: (signal: AbortSignal) => Promise<void>,
+      options?: string | { abortController?: AbortController }
+    ) => {
+      const controller =
+        typeof options === "object" && options.abortController
+          ? options.abortController
+          : new AbortController();
+      if (!asyncTaskAdmissionOpen) {
+        controller.abort();
+        return controller;
+      }
+
+      let promise: Promise<void>;
+      try {
+        promise = Promise.resolve(factory(controller.signal));
+      } catch (error) {
+        promise = Promise.reject(error);
+      }
       asyncTasks.push(promise);
-      return new AbortController();
+      asyncTaskControllers.set(promise, controller);
+      return controller;
     },
     touch: vi.fn(() => true),
     cleanup: () => {},
@@ -53,6 +72,8 @@ vi.mock("@/repository/message", () => ({
   updateMessageRequestCost: vi.fn(),
   updateMessageRequestCostWithBreakdown: vi.fn(),
   updateMessageRequestDetails: vi.fn(),
+  updateMessageRequestDetailsDurably: vi.fn(),
+  updateMessageRequestDetailsIfUnfinalized: vi.fn(),
   updateMessageRequestDuration: vi.fn(),
 }));
 
@@ -71,6 +92,7 @@ vi.mock("@/lib/rate-limit", () => ({
     trackCost: vi.fn(),
     trackUserDailyCost: vi.fn(),
     decrementLeaseBudget: vi.fn(),
+    settleLeaseBudgets: vi.fn(),
   },
 }));
 
@@ -97,6 +119,7 @@ import { SessionTracker } from "@/lib/session-tracker";
 import {
   updateMessageRequestCost,
   updateMessageRequestDetails,
+  updateMessageRequestDetailsDurably,
   updateMessageRequestDuration,
 } from "@/repository/message";
 import { findLatestPriceByModel } from "@/repository/model-price";
@@ -317,13 +340,204 @@ function createStreamResponse(usage: { input_tokens: number; output_tokens: numb
 }
 
 async function drainAsyncTasks(): Promise<void> {
-  const tasks = asyncTasks.splice(0, asyncTasks.length);
-  await Promise.all(tasks);
+  const errors: unknown[] = [];
+  const maxDrainRounds = 100;
+  let round = 0;
+
+  while (asyncTasks.length > 0) {
+    if (round >= maxDrainRounds) {
+      asyncTaskAdmissionOpen = false;
+      const overflowTasks = asyncTasks.splice(0, asyncTasks.length);
+      for (const task of overflowTasks) {
+        asyncTaskControllers.get(task)?.abort();
+      }
+      const overflowResults = await Promise.allSettled(overflowTasks);
+      for (let index = 0; index < overflowResults.length; index += 1) {
+        asyncTaskControllers.delete(overflowTasks[index]);
+        const result = overflowResults[index];
+        if (result.status === "rejected") {
+          errors.push(result.reason);
+        }
+      }
+      errors.push(new Error(`Async task drain exceeded ${maxDrainRounds} rounds`));
+      break;
+    }
+    round += 1;
+
+    const tasks = asyncTasks.splice(0, asyncTasks.length);
+    const results = await Promise.allSettled(tasks);
+    for (let index = 0; index < results.length; index += 1) {
+      asyncTaskControllers.delete(tasks[index]);
+      const result = results[index];
+      if (result.status === "rejected") {
+        errors.push(result.reason);
+      }
+    }
+  }
+
+  if (errors.length > 0) {
+    throw new AggregateError(errors, "Async task drain failed");
+  }
 }
 
 beforeEach(() => {
   vi.clearAllMocks();
+  asyncTaskAdmissionOpen = false;
+  for (const controller of asyncTaskControllers.values()) {
+    controller.abort();
+  }
   asyncTasks.splice(0, asyncTasks.length);
+  asyncTaskControllers.clear();
+  asyncTaskAdmissionOpen = true;
+});
+
+describe("drainAsyncTasks", () => {
+  it("waits for a tail task registered while draining the primary task", async () => {
+    let markTailStarted: () => void = () => {};
+    let releaseTail: () => void = () => {};
+    const tailStarted = new Promise<void>((resolve) => {
+      markTailStarted = resolve;
+    });
+    const tailCompleted = vi.fn();
+
+    AsyncTaskManager.register("primary", async () => {
+      await Promise.resolve();
+      AsyncTaskManager.register("tail", async () => {
+        markTailStarted();
+        await new Promise<void>((resolve) => {
+          releaseTail = resolve;
+        });
+        tailCompleted();
+      });
+    });
+
+    const drainPromise = drainAsyncTasks();
+    await tailStarted;
+
+    try {
+      const outcome = await Promise.race([
+        drainPromise.then(() => "drained" as const),
+        new Promise<"pending">((resolve) => {
+          setTimeout(() => resolve("pending"), 0);
+        }),
+      ]);
+
+      expect(outcome).toBe("pending");
+    } finally {
+      releaseTail();
+    }
+
+    await drainPromise;
+    expect(tailCompleted).toHaveBeenCalledTimes(1);
+  });
+
+  it("waits for sibling tail work before reporting tail rejections", async () => {
+    const tailError = new Error("tail task failed");
+    let markPendingTailStarted: () => void = () => {};
+    let releasePendingTail: () => void = () => {};
+    const pendingTailStarted = new Promise<void>((resolve) => {
+      markPendingTailStarted = resolve;
+    });
+
+    AsyncTaskManager.register("primary", async () => {
+      await Promise.resolve();
+      AsyncTaskManager.register("rejecting-tail", async () => {
+        throw tailError;
+      });
+      void asyncTasks.at(-1)?.catch(() => {});
+      AsyncTaskManager.register("pending-tail", async () => {
+        markPendingTailStarted();
+        await new Promise<void>((resolve) => {
+          releasePendingTail = resolve;
+        });
+      });
+    });
+
+    const drainPromise = drainAsyncTasks();
+    await pendingTailStarted;
+
+    try {
+      const earlyOutcome = await Promise.race([
+        drainPromise.then(
+          () => "resolved" as const,
+          () => "rejected" as const
+        ),
+        new Promise<"pending">((resolve) => {
+          setTimeout(() => resolve("pending"), 0);
+        }),
+      ]);
+
+      expect(earlyOutcome).toBe("pending");
+    } finally {
+      releasePendingTail();
+    }
+
+    const rejection = await drainPromise.then(
+      () => undefined,
+      (error: unknown) => error
+    );
+    expect(rejection).toBeInstanceOf(AggregateError);
+    expect((rejection as AggregateError).errors).toEqual([tailError]);
+  });
+
+  it("closes admission and observes overflow work when the drain guard trips", async () => {
+    const overflowError = new Error("overflow task aborted");
+    const blockedTailStarted = vi.fn();
+    let overflowController: AbortController | undefined;
+
+    const registerGeneration = (generation: number): void => {
+      const controller = AsyncTaskManager.register(`generation-${generation}`, async (signal) => {
+        await new Promise<void>((resolve) => {
+          setTimeout(resolve, 0);
+        });
+
+        if (generation <= 100) {
+          registerGeneration(generation + 1);
+          return;
+        }
+
+        await new Promise<void>((_resolve, reject) => {
+          const rejectOnAbort = () => {
+            AsyncTaskManager.register("blocked-overflow-tail", async () => {
+              blockedTailStarted();
+            });
+            reject(overflowError);
+          };
+
+          if (signal.aborted) {
+            rejectOnAbort();
+            return;
+          }
+          signal.addEventListener("abort", rejectOnAbort, { once: true });
+        });
+      });
+
+      if (generation === 101) {
+        overflowController = controller;
+      }
+    };
+
+    registerGeneration(1);
+    const rejection = await drainAsyncTasks().then(
+      () => undefined,
+      (error: unknown) => error
+    );
+
+    try {
+      expect(rejection).toBeInstanceOf(AggregateError);
+      expect((rejection as AggregateError).errors).toContain(overflowError);
+      expect((rejection as AggregateError).errors).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ message: "Async task drain exceeded 100 rounds" }),
+        ])
+      );
+      expect(blockedTailStarted).not.toHaveBeenCalled();
+      expect(asyncTasks).toHaveLength(0);
+    } finally {
+      overflowController?.abort();
+      await Promise.allSettled(asyncTasks.splice(0, asyncTasks.length));
+    }
+  });
 });
 
 describe("Lease Budget Decrement after trackCostToRedis", () => {
@@ -335,7 +549,7 @@ describe("Lease Budget Decrement after trackCostToRedis", () => {
     vi.mocked(findLatestPriceByModel).mockResolvedValue(
       makePriceRecord(originalModel, testPriceData)
     );
-    vi.mocked(updateMessageRequestDetails).mockResolvedValue(undefined);
+    vi.mocked(updateMessageRequestDetailsDurably).mockResolvedValue(true);
     vi.mocked(updateMessageRequestDuration).mockResolvedValue(undefined);
     vi.mocked(SessionManager.storeSessionResponse).mockResolvedValue(undefined);
     vi.mocked(SessionManager.storeSessionResponsePhaseSnapshot).mockResolvedValue(undefined);
@@ -345,10 +559,15 @@ describe("Lease Budget Decrement after trackCostToRedis", () => {
       success: true,
       newRemaining: 10,
     });
+    vi.mocked(RateLimitService.settleLeaseBudgets).mockResolvedValue({
+      requestId: "test",
+      status: "settled",
+      settlements: [],
+    });
     vi.mocked(SessionTracker.refreshSession).mockResolvedValue(undefined);
   });
 
-  it("should call decrementLeaseBudget for all windows and entity types (non-stream)", async () => {
+  it("should settle all windows and entity types in one call (non-stream)", async () => {
     const session = createSession({
       originalModel,
       redirectedModel: originalModel,
@@ -363,33 +582,17 @@ describe("Lease Budget Decrement after trackCostToRedis", () => {
     // Expected cost: (1000 * 0.000003) + (500 * 0.000015) = 0.003 + 0.0075 = 0.0105
     const expectedCost = 0.0105;
 
-    // Should be called 12 times:
-    // 4 windows x 3 entity types = 12 calls
-    // Windows: 5h, daily, weekly, monthly
-    // Entity types: key(456), user(123), provider(99)
-    expect(RateLimitService.decrementLeaseBudget).toHaveBeenCalled();
-
-    const calls = vi.mocked(RateLimitService.decrementLeaseBudget).mock.calls;
-    expect(calls.length).toBe(12);
-
-    // Verify all windows are covered for each entity type
-    const windows = ["5h", "daily", "weekly", "monthly"];
-    const entities = [
-      { id: 456, type: "key" },
-      { id: 123, type: "user" },
-      { id: 99, type: "provider" },
-    ];
-
-    for (const entity of entities) {
-      for (const window of windows) {
-        const matchingCall = calls.find(
-          (call) => call[0] === entity.id && call[1] === entity.type && call[2] === window
-        );
-        expect(matchingCall).toBeDefined();
-        // Cost should be approximately 0.0105
-        expect(matchingCall![3]).toBeCloseTo(expectedCost, 4);
-      }
-    }
+    expect(RateLimitService.settleLeaseBudgets).toHaveBeenCalledTimes(1);
+    expect(RateLimitService.settleLeaseBudgets).toHaveBeenCalledWith({
+      requestId: 5001,
+      cost: expectedCost,
+      entities: {
+        key: { id: 456, resetModes: { "5h": undefined, daily: "fixed" } },
+        user: { id: 123, resetModes: { "5h": undefined, daily: "fixed" } },
+        provider: { id: 99, resetModes: { "5h": undefined, daily: "fixed" } },
+      },
+    });
+    expect(RateLimitService.decrementLeaseBudget).not.toHaveBeenCalled();
   });
 
   it("should refresh task activity while reading chunked non-stream response bodies", async () => {
@@ -422,17 +625,18 @@ describe("Lease Budget Decrement after trackCostToRedis", () => {
       }),
       session.requestSequence
     );
-    expect(updateMessageRequestDetails).toHaveBeenCalledWith(
+    expect(updateMessageRequestDetailsDurably).toHaveBeenCalledWith(
       messageId,
       expect.objectContaining({
         statusCode: 200,
         inputTokens: usage.input_tokens,
         outputTokens: usage.output_tokens,
-      })
+      }),
+      expect.objectContaining({ onCommitted: expect.any(Function) })
     );
   });
 
-  it("should call decrementLeaseBudget for all windows and entity types (stream)", async () => {
+  it("should settle all windows and entity types in one call (stream)", async () => {
     const session = createSession({
       originalModel,
       redirectedModel: originalModel,
@@ -445,14 +649,11 @@ describe("Lease Budget Decrement after trackCostToRedis", () => {
     await clientResponse.text();
     await drainAsyncTasks();
 
-    expect(RateLimitService.decrementLeaseBudget).toHaveBeenCalled();
-    const calls = vi.mocked(RateLimitService.decrementLeaseBudget).mock.calls;
-
-    // Should have exactly 12 calls (4 windows x 3 entity types)
-    expect(calls.length).toBe(12);
+    expect(RateLimitService.settleLeaseBudgets).toHaveBeenCalledTimes(1);
+    expect(RateLimitService.decrementLeaseBudget).not.toHaveBeenCalled();
   });
 
-  it("should NOT call decrementLeaseBudget when cost is zero", async () => {
+  it("should NOT settle lease budgets when cost is zero", async () => {
     // Mock price data that results in zero cost
     const zeroPriceData: ModelPriceData = {
       input_cost_per_token: 0,
@@ -490,7 +691,8 @@ describe("Lease Budget Decrement after trackCostToRedis", () => {
     await ProxyResponseHandler.dispatch(session, response);
     await drainAsyncTasks();
 
-    // Zero cost should NOT trigger decrement
+    // Zero cost should NOT trigger settlement.
+    expect(RateLimitService.settleLeaseBudgets).not.toHaveBeenCalled();
     expect(RateLimitService.decrementLeaseBudget).not.toHaveBeenCalled();
   });
 
@@ -511,18 +713,20 @@ describe("Lease Budget Decrement after trackCostToRedis", () => {
 
     expect(RateLimitService.trackCost).not.toHaveBeenCalled();
     expect(RateLimitService.trackUserDailyCost).not.toHaveBeenCalled();
+    expect(RateLimitService.settleLeaseBudgets).not.toHaveBeenCalled();
     expect(RateLimitService.decrementLeaseBudget).not.toHaveBeenCalled();
-    expect(updateMessageRequestDetails).toHaveBeenCalledWith(
+    expect(updateMessageRequestDetailsDurably).toHaveBeenCalledWith(
       5999,
       expect.objectContaining({
         statusCode: 200,
         inputTokens: usage.input_tokens,
         outputTokens: usage.output_tokens,
-      })
+      }),
+      expect.objectContaining({ onCommitted: expect.any(Function) })
     );
   });
 
-  it("should call decrementLeaseBudget exactly once per request (no duplicates)", async () => {
+  it("should call settleLeaseBudgets exactly once per request", async () => {
     const session = createSession({
       originalModel,
       redirectedModel: originalModel,
@@ -534,16 +738,10 @@ describe("Lease Budget Decrement after trackCostToRedis", () => {
     await ProxyResponseHandler.dispatch(session, response);
     await drainAsyncTasks();
 
-    // Each window/entity combo should be called exactly once
-    const calls = vi.mocked(RateLimitService.decrementLeaseBudget).mock.calls;
-
-    // Create a unique key for each call to check for duplicates
-    const callKeys = calls.map((call) => `${call[0]}-${call[1]}-${call[2]}`);
-    const uniqueKeys = new Set(callKeys);
-
-    // No duplicates: unique keys should equal total calls
-    expect(uniqueKeys.size).toBe(calls.length);
-    expect(calls.length).toBe(12); // 4 windows x 3 entities
+    expect(RateLimitService.settleLeaseBudgets).toHaveBeenCalledTimes(1);
+    expect(RateLimitService.settleLeaseBudgets).toHaveBeenCalledWith(
+      expect.objectContaining({ requestId: 5004 })
+    );
   });
 
   it("should use correct entity IDs from session", async () => {
@@ -607,27 +805,20 @@ describe("Lease Budget Decrement after trackCostToRedis", () => {
     await ProxyResponseHandler.dispatch(session, response);
     await drainAsyncTasks();
 
-    const calls = vi.mocked(RateLimitService.decrementLeaseBudget).mock.calls;
-
-    // Verify key ID
-    const keyCalls = calls.filter((c) => c[1] === "key");
-    expect(keyCalls.every((c) => c[0] === customKeyId)).toBe(true);
-    expect(keyCalls.length).toBe(4);
-
-    // Verify user ID
-    const userCalls = calls.filter((c) => c[1] === "user");
-    expect(userCalls.every((c) => c[0] === customUserId)).toBe(true);
-    expect(userCalls.length).toBe(4);
-
-    // Verify provider ID
-    const providerCalls = calls.filter((c) => c[1] === "provider");
-    expect(providerCalls.every((c) => c[0] === customProviderId)).toBe(true);
-    expect(providerCalls.length).toBe(4);
+    expect(RateLimitService.settleLeaseBudgets).toHaveBeenCalledWith(
+      expect.objectContaining({
+        requestId: 5005,
+        entities: expect.objectContaining({
+          key: expect.objectContaining({ id: customKeyId }),
+          user: expect.objectContaining({ id: customUserId }),
+          provider: expect.objectContaining({ id: customProviderId }),
+        }),
+      })
+    );
   });
 
-  it("should use fire-and-forget pattern (not block on decrement failures)", async () => {
-    // Mock decrementLeaseBudget to fail
-    vi.mocked(RateLimitService.decrementLeaseBudget).mockRejectedValue(
+  it("should preserve fail-open completion when atomic settlement unexpectedly rejects", async () => {
+    vi.mocked(RateLimitService.settleLeaseBudgets).mockRejectedValue(
       new Error("Redis connection failed")
     );
 
@@ -640,11 +831,10 @@ describe("Lease Budget Decrement after trackCostToRedis", () => {
 
     const response = createNonStreamResponse(usage);
 
-    // Should NOT throw even if decrementLeaseBudget fails
+    // Should NOT throw even if the settlement wrapper fails unexpectedly.
     await expect(ProxyResponseHandler.dispatch(session, response)).resolves.toBeDefined();
     await drainAsyncTasks();
 
-    // Verify decrement was attempted
-    expect(RateLimitService.decrementLeaseBudget).toHaveBeenCalled();
+    expect(RateLimitService.settleLeaseBudgets).toHaveBeenCalledTimes(1);
   });
 });

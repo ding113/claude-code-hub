@@ -372,6 +372,78 @@ describe("ProxyForwarder - fake 200 HTML body", () => {
     expect(mocks.recordSuccess).not.toHaveBeenCalledWith(1);
   });
 
+  test("200 + application/json 的非流式 Responses failed 应视为失败并切换供应商", async () => {
+    const provider1 = createProvider({ id: 1, name: "p1", key: "k1", maxRetryAttempts: 1 });
+    const provider2 = createProvider({ id: 2, name: "p2", key: "k2", maxRetryAttempts: 1 });
+
+    const session = createSession();
+    session.requestUrl = new URL("https://example.com/v1/responses");
+    session.originalUrlPathname = "/v1/responses";
+    session.endpointPolicy = resolveEndpointPolicy("/v1/responses");
+    session.setProvider(provider1);
+
+    mocks.pickRandomProviderWithExclusion.mockResolvedValueOnce(provider2);
+
+    const doForward = vi.spyOn(ProxyForwarder as any, "doForward");
+
+    const failedResponseBody = JSON.stringify({
+      id: "resp_failed",
+      object: "response",
+      status: "failed",
+      error: {
+        type: "rate_limit_error",
+        message: "Concurrency limit exceeded for user, please retry later",
+      },
+    });
+    const okJson = JSON.stringify({
+      id: "resp_ok",
+      object: "response",
+      status: "completed",
+      output: [],
+    });
+
+    doForward.mockResolvedValueOnce(
+      new Response(failedResponseBody, {
+        status: 200,
+        headers: {
+          "content-type": "application/json; charset=utf-8",
+          "content-length": String(failedResponseBody.length),
+        },
+      })
+    );
+
+    doForward.mockResolvedValueOnce(
+      new Response(okJson, {
+        status: 200,
+        headers: {
+          "content-type": "application/json; charset=utf-8",
+          "content-length": String(okJson.length),
+        },
+      })
+    );
+
+    const response = await ProxyForwarder.send(session);
+    expect(await response.text()).toContain("resp_ok");
+
+    expect(doForward).toHaveBeenCalledTimes(2);
+    expect(doForward.mock.calls[0][1].id).toBe(1);
+    expect(doForward.mock.calls[1][1].id).toBe(2);
+
+    expect(mocks.pickRandomProviderWithExclusion).toHaveBeenCalledWith(session, [1]);
+    expect(mocks.recordFailure).toHaveBeenCalledWith(
+      1,
+      expect.objectContaining({ message: "FAKE_200_OPENAI_RESPONSE_FAILED" })
+    );
+
+    const failure = mocks.recordFailure.mock.calls[0]?.[1];
+    expect(failure).toBeInstanceOf(ProxyError);
+    expect((failure as ProxyError).statusCode).toBe(502);
+    expect((failure as ProxyError).upstreamError?.rawBody).toBe(failedResponseBody);
+    expect((failure as ProxyError).upstreamError?.rawBodyTruncated).toBe(false);
+    expect(mocks.recordSuccess).toHaveBeenCalledWith(2);
+    expect(mocks.recordSuccess).not.toHaveBeenCalledWith(1);
+  });
+
   test("假200 JSON error 命中 rate limit 关键字时，应推断为 429 并在决策链中标记为推断", async () => {
     const provider1 = createProvider({ id: 1, name: "p1", key: "k1", maxRetryAttempts: 1 });
     const provider2 = createProvider({ id: 2, name: "p2", key: "k2", maxRetryAttempts: 1 });

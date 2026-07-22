@@ -66,10 +66,55 @@ export interface DecrementLeaseBudgetResult {
   failOpen?: boolean;
 }
 
+export interface LeaseSettlementEntity {
+  id: number;
+  resetModes?: Partial<Record<"5h" | "daily", DailyResetMode>>;
+}
+
+export interface SettleLeaseBudgetsParams {
+  requestId: string | number;
+  cost: number;
+  entities: {
+    key: LeaseSettlementEntity;
+    user: LeaseSettlementEntity;
+    provider: LeaseSettlementEntity;
+  };
+}
+
+export type LeaseBudgetSettlementStatus = "decremented" | "missing" | "insufficient";
+
+export interface LeaseBudgetSettlement {
+  entityType: LeaseEntityTypeType;
+  entityId: number;
+  window: LeaseWindowType;
+  status: LeaseBudgetSettlementStatus;
+  newRemaining: number;
+}
+
+export interface SettleLeaseBudgetsResult {
+  requestId: string;
+  status: "settled" | "duplicate" | "fail_open";
+  settlements: LeaseBudgetSettlement[];
+  failOpen?: boolean;
+}
+
+interface LeaseSettlementTarget {
+  entityType: LeaseEntityTypeType;
+  entityId: number;
+  window: LeaseWindowType;
+  resetMode?: DailyResetMode;
+}
+
 /**
  * Lease Service - manages budget leases for rate limiting
  */
 export class LeaseService {
+  private static readonly SETTLEMENT_MARKER_TTL_SECONDS = 5 * 60;
+
+  private static readonly SETTLEMENT_ENTITY_TYPES = ["key", "user", "provider"] as const;
+
+  private static readonly SETTLEMENT_WINDOWS = ["5h", "daily", "weekly", "monthly"] as const;
+
   private static get redis() {
     return getRedisClient();
   }
@@ -386,6 +431,225 @@ export class LeaseService {
 
     return {newRemaining, 1}
   `;
+
+  /**
+   * Atomically settle the fixed 4 windows x 3 entity lease set.
+   *
+   * KEYS[1] is a bounded idempotency marker. KEYS[2..13] are the lease keys in
+   * key/user/provider then 5h/daily/weekly/monthly order. ARGV[1] is the actual
+   * cost and ARGV[2] is the marker TTL in seconds.
+   *
+   * The marker survives the Redis client's bounded reconnect retry cycle while
+   * expiring after five minutes so marker cardinality remains bounded.
+   */
+  private static readonly SETTLE_LEASE_BUDGETS_LUA_SCRIPT = `
+    local markerKey = KEYS[1]
+    local previousSettlement = redis.call("GET", markerKey)
+    if previousSettlement then
+      return {1, previousSettlement}
+    end
+
+    local cost = tonumber(ARGV[1])
+    local markerTtlSeconds = tonumber(ARGV[2])
+    local settlements = {}
+    local pendingWrites = {}
+
+    for keyIndex = 2, #KEYS do
+      local leaseKey = KEYS[keyIndex]
+      local leaseReply = redis.pcall("GET", leaseKey)
+      local leaseReadFailed = type(leaseReply) == "table" and leaseReply.err
+
+      if leaseReadFailed or not leaseReply then
+        settlements[#settlements + 1] = {0, -1}
+      else
+        local decoded, lease = pcall(cjson.decode, leaseReply)
+        local remaining = nil
+        if decoded and type(lease) == "table" then
+          remaining = tonumber(lease.remainingBudget)
+        end
+        local ttl = redis.call("TTL", leaseKey)
+
+        if not remaining or ttl <= 0 then
+          settlements[#settlements + 1] = {0, -1}
+        elseif remaining < cost then
+          -- Consume the cached slice when the request is larger than the
+          -- remaining lease. Keeping a positive balance here lets every
+          -- request in the refresh window repeat the same overshoot.
+          lease.remainingBudget = 0
+          local encodedLeaseOk, encodedLease = pcall(cjson.encode, lease)
+          if not encodedLeaseOk then
+            settlements[#settlements + 1] = {0, -1}
+          else
+            pendingWrites[#pendingWrites + 1] = {leaseKey, ttl, encodedLease}
+            settlements[#settlements + 1] = {-1, 0}
+          end
+        else
+          local newRemaining = remaining - cost
+          lease.remainingBudget = newRemaining
+          local encodedLeaseOk, encodedLease = pcall(cjson.encode, lease)
+          if not encodedLeaseOk then
+            settlements[#settlements + 1] = {0, -1}
+          else
+            pendingWrites[#pendingWrites + 1] = {leaseKey, ttl, encodedLease}
+            settlements[#settlements + 1] = {1, newRemaining}
+          end
+        end
+      end
+    end
+
+    local encodedOk, encoded = pcall(cjson.encode, settlements)
+    if not encodedOk then
+      return redis.error_reply("failed to encode lease settlement results")
+    end
+
+    for writeIndex = 1, #pendingWrites do
+      local pendingWrite = pendingWrites[writeIndex]
+      redis.call("SETEX", pendingWrite[1], pendingWrite[2], pendingWrite[3])
+    end
+
+    redis.call("SETEX", markerKey, markerTtlSeconds, encoded)
+    return {0, encoded}
+  `;
+
+  private static buildSettlementTargets(params: SettleLeaseBudgetsParams): LeaseSettlementTarget[] {
+    const targets: LeaseSettlementTarget[] = [];
+
+    for (const entityType of LeaseService.SETTLEMENT_ENTITY_TYPES) {
+      const entity = params.entities[entityType];
+
+      for (const window of LeaseService.SETTLEMENT_WINDOWS) {
+        targets.push({
+          entityType,
+          entityId: entity.id,
+          window,
+          resetMode:
+            window === "5h" || window === "daily" ? entity.resetModes?.[window] : undefined,
+        });
+      }
+    }
+
+    return targets;
+  }
+
+  private static parseSettlementResults(
+    rawSettlements: unknown,
+    targets: LeaseSettlementTarget[]
+  ): LeaseBudgetSettlement[] {
+    if (typeof rawSettlements !== "string") {
+      throw new Error("Invalid lease settlement payload");
+    }
+
+    const parsed = JSON.parse(rawSettlements) as unknown;
+    if (!Array.isArray(parsed) || parsed.length !== targets.length) {
+      throw new Error("Invalid lease settlement result count");
+    }
+
+    return targets.map((target, index) => {
+      const rawResult = parsed[index];
+      if (!Array.isArray(rawResult) || rawResult.length !== 2) {
+        throw new Error("Invalid lease settlement item");
+      }
+
+      const statusCode = Number(rawResult[0]);
+      const newRemaining = Number(rawResult[1]);
+      if (!Number.isFinite(newRemaining)) {
+        throw new Error("Invalid lease settlement remaining budget");
+      }
+
+      let status: LeaseBudgetSettlementStatus;
+      if (statusCode === 1) {
+        status = "decremented";
+      } else if (statusCode === 0) {
+        status = "missing";
+      } else if (statusCode === -1) {
+        status = "insufficient";
+      } else {
+        throw new Error("Invalid lease settlement status");
+      }
+
+      return {
+        entityType: target.entityType,
+        entityId: target.entityId,
+        window: target.window,
+        status,
+        newRemaining,
+      };
+    });
+  }
+
+  /**
+   * Settle one request's actual cost against all twelve lease budgets.
+   *
+   * A request marker and all lease mutations run in one bounded Lua invocation.
+   * If ioredis resends a command after losing the first reply, the marker returns
+   * the original result without applying the cost again.
+   */
+  static async settleLeaseBudgets(
+    params: SettleLeaseBudgetsParams
+  ): Promise<SettleLeaseBudgetsResult> {
+    const requestId = String(params.requestId).trim();
+
+    try {
+      const redis = LeaseService.redis;
+      if (redis?.status !== "ready") {
+        logger.warn("[LeaseService] Redis not ready, fail-open for batch settlement", {
+          requestId,
+          cost: params.cost,
+        });
+        return { requestId, status: "fail_open", settlements: [], failOpen: true };
+      }
+
+      if (!requestId || !Number.isFinite(params.cost) || params.cost <= 0) {
+        logger.warn("[LeaseService] Invalid batch settlement input, fail-open", {
+          requestId,
+          cost: params.cost,
+        });
+        return { requestId, status: "fail_open", settlements: [], failOpen: true };
+      }
+
+      const targets = LeaseService.buildSettlementTargets(params);
+      const markerKey = `lease:settlement:${requestId}`;
+      const leaseKeys = targets.map((target) =>
+        buildLeaseKey(target.entityType, target.entityId, target.window, target.resetMode)
+      );
+
+      const rawResult = (await redis.eval(
+        LeaseService.SETTLE_LEASE_BUDGETS_LUA_SCRIPT,
+        1 + leaseKeys.length,
+        markerKey,
+        ...leaseKeys,
+        params.cost.toString(),
+        LeaseService.SETTLEMENT_MARKER_TTL_SECONDS.toString()
+      )) as unknown;
+
+      if (!Array.isArray(rawResult) || rawResult.length !== 2) {
+        throw new Error("Invalid lease settlement response");
+      }
+
+      const duplicateFlag = Number(rawResult[0]);
+      if (duplicateFlag !== 0 && duplicateFlag !== 1) {
+        throw new Error("Invalid lease settlement duplicate flag");
+      }
+
+      const settlements = LeaseService.parseSettlementResults(rawResult[1], targets);
+      const status = duplicateFlag === 1 ? "duplicate" : "settled";
+
+      logger.debug("[LeaseService] Batch lease settlement completed", {
+        requestId,
+        status,
+        cost: params.cost,
+      });
+
+      return { requestId, status, settlements };
+    } catch (error) {
+      logger.error("[LeaseService] settleLeaseBudgets failed, fail-open", {
+        requestId,
+        cost: params.cost,
+        error,
+      });
+      return { requestId, status: "fail_open", settlements: [], failOpen: true };
+    }
+  }
 
   /**
    * Decrement lease budget atomically using Lua script

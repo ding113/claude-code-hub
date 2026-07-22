@@ -6,12 +6,14 @@
  * 2. 智能截断：JSON 完整保存，文本限制 500 字符
  * 3. 可读性优先：纯文本格式化，便于排查问题
  */
+import { isDbPoolAdmissionError } from "@/drizzle/admitted-client";
 import { getEnvConfig } from "@/lib/config/env.schema";
 import { type ErrorDetectionResult, errorRuleDetector } from "@/lib/error-rule-detector";
 import { redactJsonString } from "@/lib/utils/message-redaction";
 import { sanitizeErrorTextForDetail } from "@/lib/utils/upstream-error-detection";
 import type { ErrorOverrideResponse } from "@/repository/error-rules";
 import type { ProviderChainItem } from "@/types/message";
+import { RESERVED_INTERNAL_HEADERS } from "../responses-ws/internal-secret";
 import type { ProxySession } from "./session";
 
 /** Marker message for the synthetic terminal error emitted when every provider fails. */
@@ -557,6 +559,7 @@ export enum ErrorCategory {
   CLIENT_ABORT, // 客户端主动中断 → 不计入熔断器 + 不重试 + 直接返回
   NON_RETRYABLE_CLIENT_ERROR, // 客户端输入错误（Prompt 超限、内容过滤、PDF 限制、Thinking 格式、参数缺失/额外参数、非法请求）→ 不计入熔断器 + 不重试 + 直接返回
   RESOURCE_NOT_FOUND, // 上游 404 错误 → 不计入熔断器 + 直接切换供应商
+  LOCAL_OVERLOAD, // 本地数据库等 admission 过载 → 不计入任何熔断器 + 不重试/切换供应商
 }
 
 /**
@@ -914,18 +917,22 @@ export function isEmptyResponseError(error: unknown): error is EmptyResponseErro
  *    → 不应重试（客户端已经不想要结果了）
  *    → 应立即返回错误
  *
- * 3. 系统/网络问题（fetch 网络异常）
+ * 3. 本地 admission 过载（数据库连接池等本地资源耗尽）
+ *    → 不是上游 Provider 故障
+ *    → 不应计入任何熔断器，也不应切换 Provider
+ *
+ * 4. 系统/网络问题（fetch 网络异常）
  *    → 包括：DNS 解析失败、连接被拒绝、连接超时、网络中断等
  *    → 不应计入供应商熔断器（不是供应商服务不可用）
  *    → 应先重试1次当前供应商（可能是临时网络抖动）
  *
- * 4. 不可重试的客户端输入错误（Prompt 超限、内容过滤、PDF 限制、Thinking 参数格式错误、参数缺失、非法请求）
+ * 5. 不可重试的客户端输入错误（Prompt 超限、内容过滤、PDF 限制、Thinking 参数格式错误、参数缺失、非法请求）
  *    → 客户端输入违反了 API 的硬性限制或安全策略
  *    → 不应计入熔断器（不是供应商故障）
  *    → 不应重试（重试也会失败）
  *    → 应立即返回错误，提示用户修正输入
  *
- * 5. 其余供应商问题（ProxyError - 未命中客户端错误规则的 HTTP 错误）
+ * 6. 其余供应商问题（ProxyError - 未命中客户端错误规则的 HTTP 错误）
  *    → 说明请求到达供应商并得到响应，但供应商无法正常处理
  *    → 应计入熔断器，连续失败时触发熔断保护
  *    → 应直接切换到其他供应商
@@ -933,7 +940,7 @@ export function isEmptyResponseError(error: unknown): error is EmptyResponseErro
  * 此函数会确保错误规则已加载后再进行检测
  *
  * @param error - 捕获的错误对象
- * @returns 错误分类（CLIENT_ABORT、NON_RETRYABLE_CLIENT_ERROR、PROVIDER_ERROR 或 SYSTEM_ERROR）
+ * @returns 错误分类（CLIENT_ABORT、LOCAL_OVERLOAD、NON_RETRYABLE_CLIENT_ERROR、PROVIDER_ERROR 或 SYSTEM_ERROR）
  */
 export async function categorizeErrorAsync(error: Error): Promise<ErrorCategory> {
   // 优先级 1: 真实上游 HTTP 5xx 始终表示供应商故障
@@ -953,33 +960,39 @@ export async function categorizeErrorAsync(error: Error): Promise<ErrorCategory>
     return ErrorCategory.CLIENT_ABORT; // 客户端主动中断
   }
 
-  // 优先级 3: Native transport errors — must not be matched by error rules
+  // 优先级 3: 本地 DB admission 过载。Drizzle 会把底层错误包在 cause 中，
+  // 必须在网络/规则分类前识别，避免重试上游或惩罚 Provider/endpoint circuit。
+  if (isDbPoolAdmissionError(error)) {
+    return ErrorCategory.LOCAL_OVERLOAD;
+  }
+
+  // 优先级 4: Native transport errors — must not be matched by error rules
   // These are always SYSTEM_ERROR regardless of message content
   if (isTransportError(error)) {
     return ErrorCategory.SYSTEM_ERROR;
   }
 
-  // 优先级 4: 不可重试的客户端输入错误检测（白名单模式）
+  // 优先级 5: 不可重试的客户端输入错误检测（白名单模式）
   // 使用异步版本确保错误规则已加载
   if (await isNonRetryableClientErrorAsync(error)) {
     return ErrorCategory.NON_RETRYABLE_CLIENT_ERROR; // 客户端输入错误
   }
 
-  // 优先级 5: 其余 ProxyError = HTTP 客户端错误
+  // 优先级 6: 其余 ProxyError = HTTP 客户端错误
   if (error instanceof ProxyError) {
-    // 优先级 5.1: 404 错误特殊处理 - 不计入熔断器，仅触发故障切换
+    // 优先级 6.1: 404 错误特殊处理 - 不计入熔断器，仅触发故障切换
     if (error.statusCode === 404) {
       return ErrorCategory.RESOURCE_NOT_FOUND; // 上游资源不存在
     }
     return ErrorCategory.PROVIDER_ERROR; // 其他 HTTP 错误都是供应商问题
   }
 
-  // 优先级 5.2: 空响应错误 - 计入熔断器 + 触发故障切换
+  // 优先级 6.2: 空响应错误 - 计入熔断器 + 触发故障切换
   if (error instanceof EmptyResponseError) {
     return ErrorCategory.PROVIDER_ERROR; // 空响应视为供应商问题
   }
 
-  // 优先级 6: 其他所有错误都是系统错误
+  // 优先级 7: 其他所有错误都是系统错误
   // 包括：
   // - TypeError: fetch failed (网络层错误)
   // - ENOTFOUND: DNS 解析失败
@@ -1138,6 +1151,13 @@ const SENSITIVE_HEADERS = new Set([
   "cookie",
   "set-cookie",
 ]);
+const RESERVED_INTERNAL_HEADER_SET = new Set(
+  RESERVED_INTERNAL_HEADERS.map((header) => header.toLowerCase())
+);
+function isReservedInternalHeader(name: string): boolean {
+  const lowerName = name.toLowerCase();
+  return lowerName.startsWith("x-cch-") || RESERVED_INTERNAL_HEADER_SET.has(lowerName);
+}
 
 const SENSITIVE_URL_PARAMS = new Set([
   "key",
@@ -1219,6 +1239,7 @@ export function sanitizeHeaders(headers: Headers | string): string {
     const collected: string[] = [];
     headers.forEach((value, key) => {
       const lowerKey = key.toLowerCase();
+      if (isReservedInternalHeader(lowerKey)) return;
       if (SENSITIVE_HEADERS.has(lowerKey)) {
         const maskedValue =
           lowerKey === "authorization" ? maskAuthorizationValue(value) : maskSensitiveValue(value);
@@ -1246,6 +1267,7 @@ export function sanitizeHeaders(headers: Headers | string): string {
     if (!name) return line;
 
     const lowerName = name.toLowerCase();
+    if (isReservedInternalHeader(lowerName)) return null;
     if (!SENSITIVE_HEADERS.has(lowerName)) return line;
 
     const maskedValue =
@@ -1253,7 +1275,7 @@ export function sanitizeHeaders(headers: Headers | string): string {
     return `${name}: ${maskedValue}`;
   });
 
-  return sanitizedLines.join("\n");
+  return sanitizedLines.filter((line): line is string => line !== null).join("\n");
 }
 
 /**

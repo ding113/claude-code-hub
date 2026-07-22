@@ -63,6 +63,7 @@ describe("LeaseService", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date(nowMs));
     vi.clearAllMocks();
+    mockRedis.status = "ready";
   });
 
   afterEach(() => {
@@ -952,6 +953,220 @@ describe("LeaseService", () => {
 
       expect(result.success).toBe(true);
       expect(result.newRemaining).toBe(5.0);
+    });
+  });
+
+  describe("settleLeaseBudgets", () => {
+    const settlementParams = {
+      requestId: 9001,
+      cost: 1.25,
+      entities: {
+        key: {
+          id: 101,
+          resetModes: { "5h": "rolling", daily: "fixed" },
+        },
+        user: {
+          id: 202,
+          resetModes: { "5h": "fixed", daily: "rolling" },
+        },
+        provider: {
+          id: 303,
+          resetModes: { "5h": "rolling", daily: "fixed" },
+        },
+      },
+    } as const;
+
+    const encodedSettlements = JSON.stringify([
+      [1, 8.75],
+      [0, -1],
+      [-1, 0.5],
+      [1, 18.75],
+      [1, 28.75],
+      [1, 38.75],
+      [1, 48.75],
+      [1, 58.75],
+      [1, 68.75],
+      [1, 78.75],
+      [1, 88.75],
+      [1, 98.75],
+    ]);
+
+    it("settles all four windows for key, user, and provider in one bounded eval", async () => {
+      const { LeaseService } = await import("@/lib/rate-limit/lease-service");
+      const { buildLeaseKey } = await import("@/lib/rate-limit/lease");
+
+      mockRedis.eval.mockResolvedValue([0, encodedSettlements]);
+
+      const result = await LeaseService.settleLeaseBudgets(settlementParams);
+
+      expect(result).toEqual({
+        requestId: "9001",
+        status: "settled",
+        settlements: [
+          {
+            entityType: "key",
+            entityId: 101,
+            window: "5h",
+            status: "decremented",
+            newRemaining: 8.75,
+          },
+          {
+            entityType: "key",
+            entityId: 101,
+            window: "daily",
+            status: "missing",
+            newRemaining: -1,
+          },
+          {
+            entityType: "key",
+            entityId: 101,
+            window: "weekly",
+            status: "insufficient",
+            newRemaining: 0.5,
+          },
+          {
+            entityType: "key",
+            entityId: 101,
+            window: "monthly",
+            status: "decremented",
+            newRemaining: 18.75,
+          },
+          {
+            entityType: "user",
+            entityId: 202,
+            window: "5h",
+            status: "decremented",
+            newRemaining: 28.75,
+          },
+          {
+            entityType: "user",
+            entityId: 202,
+            window: "daily",
+            status: "decremented",
+            newRemaining: 38.75,
+          },
+          {
+            entityType: "user",
+            entityId: 202,
+            window: "weekly",
+            status: "decremented",
+            newRemaining: 48.75,
+          },
+          {
+            entityType: "user",
+            entityId: 202,
+            window: "monthly",
+            status: "decremented",
+            newRemaining: 58.75,
+          },
+          {
+            entityType: "provider",
+            entityId: 303,
+            window: "5h",
+            status: "decremented",
+            newRemaining: 68.75,
+          },
+          {
+            entityType: "provider",
+            entityId: 303,
+            window: "daily",
+            status: "decremented",
+            newRemaining: 78.75,
+          },
+          {
+            entityType: "provider",
+            entityId: 303,
+            window: "weekly",
+            status: "decremented",
+            newRemaining: 88.75,
+          },
+          {
+            entityType: "provider",
+            entityId: 303,
+            window: "monthly",
+            status: "decremented",
+            newRemaining: 98.75,
+          },
+        ],
+      });
+
+      expect(mockRedis.eval).toHaveBeenCalledTimes(1);
+      expect(String(mockRedis.eval.mock.calls[0]?.[0])).not.toMatch(/\bSCAN\b/i);
+      expect(mockRedis.eval).toHaveBeenCalledWith(
+        expect.any(String),
+        13,
+        "lease:settlement:9001",
+        buildLeaseKey("key", 101, "5h", "rolling"),
+        buildLeaseKey("key", 101, "daily", "fixed"),
+        buildLeaseKey("key", 101, "weekly"),
+        buildLeaseKey("key", 101, "monthly"),
+        buildLeaseKey("user", 202, "5h", "fixed"),
+        buildLeaseKey("user", 202, "daily", "rolling"),
+        buildLeaseKey("user", 202, "weekly"),
+        buildLeaseKey("user", 202, "monthly"),
+        buildLeaseKey("provider", 303, "5h", "rolling"),
+        buildLeaseKey("provider", 303, "daily", "fixed"),
+        buildLeaseKey("provider", 303, "weekly"),
+        buildLeaseKey("provider", 303, "monthly"),
+        "1.25",
+        "300"
+      );
+    });
+
+    it("reports a replay as duplicate while preserving the original settlement details", async () => {
+      const { LeaseService } = await import("@/lib/rate-limit/lease-service");
+
+      mockRedis.eval
+        .mockResolvedValueOnce([0, encodedSettlements])
+        .mockResolvedValueOnce([1, encodedSettlements]);
+
+      const first = await LeaseService.settleLeaseBudgets(settlementParams);
+      const replay = await LeaseService.settleLeaseBudgets(settlementParams);
+
+      expect(first.status).toBe("settled");
+      expect(replay).toEqual({
+        ...first,
+        status: "duplicate",
+      });
+
+      const script = String(mockRedis.eval.mock.calls[0]?.[0]);
+      expect(script).toContain('redis.call("GET", markerKey)');
+      expect(script).toContain("return {1, previousSettlement}");
+      expect(script).toContain('redis.call("SETEX", markerKey, markerTtlSeconds, encoded)');
+      expect(script.indexOf("return {1, previousSettlement}")).toBeLessThan(
+        script.indexOf("for keyIndex = 2, #KEYS do")
+      );
+    });
+
+    it("validates every lease before mutating any budget", async () => {
+      const { LeaseService } = await import("@/lib/rate-limit/lease-service");
+
+      mockRedis.eval.mockResolvedValue([0, encodedSettlements]);
+      await LeaseService.settleLeaseBudgets(settlementParams);
+
+      const script = String(mockRedis.eval.mock.calls[0]?.[0]);
+      expect(script).toContain('local leaseReply = redis.pcall("GET", leaseKey)');
+      expect(script).toContain("local pendingWrites = {}");
+      expect(script).not.toContain('redis.call("SETEX", leaseKey');
+      expect(script.indexOf("for writeIndex = 1, #pendingWrites do")).toBeLessThan(
+        script.indexOf('redis.call("SETEX", pendingWrite[1]')
+      );
+    });
+
+    it("returns a structured fail-open result when Redis is unavailable", async () => {
+      const { LeaseService } = await import("@/lib/rate-limit/lease-service");
+
+      mockRedis.status = "connecting";
+
+      await expect(LeaseService.settleLeaseBudgets(settlementParams)).resolves.toEqual({
+        requestId: "9001",
+        status: "fail_open",
+        settlements: [],
+        failOpen: true,
+      });
+      expect(mockRedis.eval).not.toHaveBeenCalled();
+
+      mockRedis.status = "ready";
     });
   });
 
