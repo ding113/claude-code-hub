@@ -525,7 +525,7 @@ describe("Endpoint circuit breaker isolation", () => {
     );
     expect(mockRecordEndpointSuccess).not.toHaveBeenCalled();
     expect(mockRecordEndpointFailure).not.toHaveBeenCalled();
-    expect(SessionManager.clearSessionProvider).toHaveBeenCalledWith("fake-session", 1);
+    expect(SessionManager.clearSessionProvider).toHaveBeenCalledWith("fake-session", 1, 456);
     expect(updateMessageRequestDetailsDurably).toHaveBeenCalledWith(
       1,
       expect.objectContaining({
