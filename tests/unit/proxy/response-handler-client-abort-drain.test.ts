@@ -2930,52 +2930,55 @@ describe("ProxyResponseHandler stream client abort finalization", () => {
   it.each([
     ["response timeout", "timeout"],
     ["client abort", "client"],
-  ] as const)("uses the conditional fallback when the non-stream %s finalizer durable write rejects", async (_name, abortSource) => {
-    vi.mocked(updateMessageRequestDetailsDurably).mockRejectedValueOnce(
-      new Error("durable finalizer acknowledgement failed")
-    );
-    const clientController = new AbortController();
-    const responseController = new AbortController();
-    const session = createSession(clientController.signal);
-    Object.assign(session, { responseController });
-    const response = createAbortableNonStreamResponse(
-      abortSource === "timeout" ? responseController.signal : clientController.signal
-    );
+  ] as const)(
+    "uses the conditional fallback when the non-stream %s finalizer durable write rejects",
+    async (_name, abortSource) => {
+      vi.mocked(updateMessageRequestDetailsDurably).mockRejectedValueOnce(
+        new Error("durable finalizer acknowledgement failed")
+      );
+      const clientController = new AbortController();
+      const responseController = new AbortController();
+      const session = createSession(clientController.signal);
+      Object.assign(session, { responseController });
+      const response = createAbortableNonStreamResponse(
+        abortSource === "timeout" ? responseController.signal : clientController.signal
+      );
 
-    await ProxyResponseHandler.dispatch(session, response);
-    const abortError = new Error(`non-stream ${abortSource}`);
-    abortError.name = "AbortError";
-    if (abortSource === "timeout") {
-      responseController.abort(abortError);
-    } else {
-      clientController.abort(abortError);
+      await ProxyResponseHandler.dispatch(session, response);
+      const abortError = new Error(`non-stream ${abortSource}`);
+      abortError.name = "AbortError";
+      if (abortSource === "timeout") {
+        responseController.abort(abortError);
+      } else {
+        clientController.abort(abortError);
+      }
+      await drainAsyncTasks();
+
+      expect(updateMessageRequestDetails).not.toHaveBeenCalled();
+      expect(updateMessageRequestDetailsIfUnfinalized).toHaveBeenCalledTimes(1);
+      expect(updateMessageRequestDetailsIfUnfinalized).toHaveBeenCalledWith(
+        123,
+        expect.objectContaining({
+          statusCode: abortSource === "timeout" ? 502 : 499,
+          ...(abortSource === "timeout"
+            ? { errorMessage: expect.stringContaining("non-stream timeout") }
+            : {}),
+          providerId: 1,
+          providerChain:
+            abortSource === "timeout"
+              ? [
+                  expect.objectContaining({
+                    id: 1,
+                    statusCode: 502,
+                    errorMessage: expect.stringContaining("non-stream timeout"),
+                  }),
+                ]
+              : [],
+        }),
+        expect.objectContaining({ onCommitted: expect.any(Function) })
+      );
     }
-    await drainAsyncTasks();
-
-    expect(updateMessageRequestDetails).not.toHaveBeenCalled();
-    expect(updateMessageRequestDetailsIfUnfinalized).toHaveBeenCalledTimes(1);
-    expect(updateMessageRequestDetailsIfUnfinalized).toHaveBeenCalledWith(
-      123,
-      expect.objectContaining({
-        statusCode: abortSource === "timeout" ? 502 : 499,
-        ...(abortSource === "timeout"
-          ? { errorMessage: expect.stringContaining("non-stream timeout") }
-          : {}),
-        providerId: 1,
-        providerChain:
-          abortSource === "timeout"
-            ? [
-                expect.objectContaining({
-                  id: 1,
-                  statusCode: 502,
-                  errorMessage: expect.stringContaining("non-stream timeout"),
-                }),
-              ]
-            : [],
-      }),
-      expect.objectContaining({ onCommitted: expect.any(Function) })
-    );
-  });
+  );
 
   it("rejects non-stream processing when both terminal persistence attempts fail", async () => {
     vi.mocked(updateMessageRequestDetailsDurably).mockRejectedValueOnce(
@@ -3055,25 +3058,28 @@ describe("ProxyResponseHandler stream client abort finalization", () => {
         model: "gemini-2.0-flash",
       },
     ],
-  ] as const)("keeps non-stream 404 out of the Provider circuit for %s responses", async (_name, overrides) => {
-    const session = createSession(new AbortController().signal, overrides);
-    const response = new Response('{"error":{"message":"model not found"}}', {
-      status: 404,
-      headers: { "content-type": "application/json" },
-    });
+  ] as const)(
+    "keeps non-stream 404 out of the Provider circuit for %s responses",
+    async (_name, overrides) => {
+      const session = createSession(new AbortController().signal, overrides);
+      const response = new Response('{"error":{"message":"model not found"}}', {
+        status: 404,
+        headers: { "content-type": "application/json" },
+      });
 
-    await ProxyResponseHandler.dispatch(session, response);
-    await drainAsyncTasks();
+      await ProxyResponseHandler.dispatch(session, response);
+      await drainAsyncTasks();
 
-    expect(recordFailure).not.toHaveBeenCalled();
-    expect(session.getProviderChain()).toEqual([
-      expect.objectContaining({
-        id: 1,
-        reason: "resource_not_found",
-        statusCode: 404,
-      }),
-    ]);
-  });
+      expect(recordFailure).not.toHaveBeenCalled();
+      expect(session.getProviderChain()).toEqual([
+        expect.objectContaining({
+          id: 1,
+          reason: "resource_not_found",
+          statusCode: 404,
+        }),
+      ]);
+    }
+  );
 
   it("persists Gemini non-stream duration atomically with terminal stats", async () => {
     const session = createSession(new AbortController().signal, {

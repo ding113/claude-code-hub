@@ -851,21 +851,19 @@ describe("provider patch contract", () => {
   });
 
   describe("MCP fields", () => {
-    it.each([
-      "none",
-      "minimax",
-      "glm",
-      "custom",
-    ] as const)("accepts mcp_passthrough_type value: %s", (value) => {
-      const result = prepareProviderBatchApplyUpdates({
-        mcp_passthrough_type: { set: value },
-      });
+    it.each(["none", "minimax", "glm", "custom"] as const)(
+      "accepts mcp_passthrough_type value: %s",
+      (value) => {
+        const result = prepareProviderBatchApplyUpdates({
+          mcp_passthrough_type: { set: value },
+        });
 
-      expect(result.ok).toBe(true);
-      if (!result.ok) return;
+        expect(result.ok).toBe(true);
+        if (!result.ok) return;
 
-      expect(result.data.mcp_passthrough_type).toBe(value);
-    });
+        expect(result.data.mcp_passthrough_type).toBe(value);
+      }
+    );
 
     it("rejects invalid mcp_passthrough_type value", () => {
       const result = normalizeProviderBatchPatchDraft({

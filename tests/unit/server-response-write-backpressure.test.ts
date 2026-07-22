@@ -137,50 +137,50 @@ describe("server response write backpressure", () => {
     await forwarding;
   });
 
-  it.each([
-    "ECONNREFUSED",
-    "ECONNRESET",
-  ])("sends one fatal frame and waits for its acknowledgement on active request error %s", async (code) => {
-    const events: string[] = [];
-    const request = createClientRequest(false, events);
-    vi.spyOn(http, "request").mockImplementation(() => request);
-    const input = requestInput();
-    const sent: string[] = [];
-    let sendCallback: ((error?: Error) => void) | undefined;
-    input.ws.send = (payload, callback) => {
-      sent.push(payload);
-      sendCallback = callback;
-    };
-    const close = vi.fn();
+  it.each(["ECONNREFUSED", "ECONNRESET"])(
+    "sends one fatal frame and waits for its acknowledgement on active request error %s",
+    async (code) => {
+      const events: string[] = [];
+      const request = createClientRequest(false, events);
+      vi.spyOn(http, "request").mockImplementation(() => request);
+      const input = requestInput();
+      const sent: string[] = [];
+      let sendCallback: ((error?: Error) => void) | undefined;
+      input.ws.send = (payload, callback) => {
+        sent.push(payload);
+        sendCallback = callback;
+      };
+      const close = vi.fn();
 
-    const forwarding = serverModule.forwardToInternalHttp(
-      input.ws,
-      input.request,
-      input.body,
-      "request-error-session",
-      undefined,
-      close
-    );
-    let settled = false;
-    void forwarding.then(() => {
-      settled = true;
-    });
+      const forwarding = serverModule.forwardToInternalHttp(
+        input.ws,
+        input.request,
+        input.body,
+        "request-error-session",
+        undefined,
+        close
+      );
+      let settled = false;
+      void forwarding.then(() => {
+        settled = true;
+      });
 
-    request.emit("error", Object.assign(new Error(code), { code }));
-    await new Promise<void>((resolve) => setImmediate(resolve));
+      request.emit("error", Object.assign(new Error(code), { code }));
+      await new Promise<void>((resolve) => setImmediate(resolve));
 
-    expect(sent).toHaveLength(1);
-    expect(JSON.parse(sent[0]).error.code).toBe("internal_request_error");
-    expect(settled).toBe(false);
-    expect(close).not.toHaveBeenCalled();
+      expect(sent).toHaveLength(1);
+      expect(JSON.parse(sent[0]).error.code).toBe("internal_request_error");
+      expect(settled).toBe(false);
+      expect(close).not.toHaveBeenCalled();
 
-    sendCallback?.();
-    await forwarding;
-    expect(close).toHaveBeenCalledWith(1011, "internal_request_error");
+      sendCallback?.();
+      await forwarding;
+      expect(close).toHaveBeenCalledWith(1011, "internal_request_error");
 
-    expect(() => request.emit("error", new Error("late request error"))).not.toThrow();
-    expect(sent).toHaveLength(1);
-  });
+      expect(() => request.emit("error", new Error("late request error"))).not.toThrow();
+      expect(sent).toHaveLength(1);
+    }
+  );
 
   it("force-settles an active turn without relying on request destroy events", async () => {
     const events: string[] = [];

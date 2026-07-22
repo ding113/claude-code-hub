@@ -171,19 +171,19 @@ describe("registerCrashDiagnostics", () => {
       expect(logger.fatal).toHaveBeenCalledTimes(1);
     });
 
-    it.each([
-      "ECONNRESET",
-      "ERR_STREAM_PREMATURE_CLOSE",
-    ])("uncaughtException: ambiguous code %s is NOT suppressed and still exits with code 1", (code) => {
-      // 这些码方向不明（可能来自上游 DB/Redis/provider），进程级无上下文区分，
-      // 必须保持 fail-fast，避免误吞真正的基础设施故障。
-      const { uncaughtException } = captureHandlers();
-      uncaughtException(makeError(code));
+    it.each(["ECONNRESET", "ERR_STREAM_PREMATURE_CLOSE"])(
+      "uncaughtException: ambiguous code %s is NOT suppressed and still exits with code 1",
+      (code) => {
+        // 这些码方向不明（可能来自上游 DB/Redis/provider），进程级无上下文区分，
+        // 必须保持 fail-fast，避免误吞真正的基础设施故障。
+        const { uncaughtException } = captureHandlers();
+        uncaughtException(makeError(code));
 
-      expect(exitSpy).toHaveBeenCalledWith(1);
-      expect(logger.fatal).toHaveBeenCalledTimes(1);
-      expect(logger.warn).not.toHaveBeenCalled();
-    });
+        expect(exitSpy).toHaveBeenCalledWith(1);
+        expect(logger.fatal).toHaveBeenCalledTimes(1);
+        expect(logger.warn).not.toHaveBeenCalled();
+      }
+    );
 
     it("unhandledRejection: a generic rejection exits with code 1", () => {
       const { unhandledRejection } = captureHandlers();
