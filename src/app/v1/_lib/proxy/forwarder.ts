@@ -83,6 +83,8 @@ import {
   isClientAbortError,
   isEmptyResponseError,
   isHttp2Error,
+  isProviderLocalModelUnavailableError,
+  isRetryableUpstreamStorageCapacityError,
   isSSLCertificateError,
   ProxyError,
   sanitizeUrl,
@@ -1020,6 +1022,7 @@ function getReactiveRectifierDisplayName(rectifierType: ReactiveRectifierType): 
 }
 
 async function tryApplyReactiveRectifier(params: {
+  error: Error;
   provider: Provider;
   requestSession: ProxySession;
   persistSession: ProxySession;
@@ -1028,6 +1031,13 @@ async function tryApplyReactiveRectifier(params: {
   retryAttemptNumber: number;
   retryState: ReactiveRectifierRetryState;
 }): Promise<ReactiveRectifierResult> {
+  if (
+    isProviderLocalModelUnavailableError(params.error) ||
+    isRetryableUpstreamStorageCapacityError(params.error)
+  ) {
+    return { matched: false };
+  }
+
   const {
     provider,
     requestSession,
@@ -1628,7 +1638,8 @@ export class ProxyForwarder {
               detected.isError &&
               (detected.code === "FAKE_200_HTML_BODY" ||
                 detected.code === "FAKE_200_JSON_ERROR_NON_EMPTY" ||
-                detected.code === "FAKE_200_JSON_ERROR_MESSAGE_NON_EMPTY");
+                detected.code === "FAKE_200_JSON_ERROR_MESSAGE_NON_EMPTY" ||
+                detected.code === "FAKE_200_OPENAI_RESPONSE_FAILED");
 
             if (isStrongFake200) {
               const inferredStatus = inferUpstreamErrorStatusCodeFromText(inspectedText);
@@ -1642,6 +1653,7 @@ export class ProxyForwarder {
                 // 不参与规则匹配/持久化，避免污染数据库或误触发覆写规则。
                 rawBody: inspectedText,
                 rawBodyTruncated: inspectedTruncated,
+                isSyntheticFake200: true,
                 statusCodeInferred: inferredStatusCode !== undefined,
                 statusCodeInferenceMatcherId: inferredStatus?.matcherId,
               });
@@ -1901,6 +1913,7 @@ export class ProxyForwarder {
 
           // 2.5 Reactive rectifier：命中后对同供应商“整流 + 重试一次”
           const reactiveRectifierResult = await tryApplyReactiveRectifier({
+            error: lastError,
             provider: currentProvider,
             requestSession: session,
             persistSession: session,
@@ -2123,10 +2136,12 @@ export class ProxyForwarder {
             break; // ⭐ 跳出内层循环，进入供应商切换逻辑
           }
 
-          // ⭐ 5. 上游 404 错误处理（不计入熔断器，先重试当前供应商，重试耗尽后切换）
+          // 5. 上游 404 错误处理（不计入熔断器；Provider 局部模型缺口直接切换）
           if (errorCategory === ErrorCategory.RESOURCE_NOT_FOUND) {
             const proxyError = lastError as ProxyError;
-            const willRetry = attemptCount < maxAttemptsPerProvider;
+            const providerLocalModelUnavailable = isProviderLocalModelUnavailableError(proxyError);
+            const willRetry =
+              !providerLocalModelUnavailable && attemptCount < maxAttemptsPerProvider;
 
             logger.warn("ProxyForwarder: Upstream 404 error", {
               providerId: currentProvider.id,
@@ -2137,6 +2152,7 @@ export class ProxyForwarder {
               attemptNumber: attemptCount,
               totalProvidersAttempted,
               willRetry,
+              providerLocalModelUnavailable,
             });
 
             // 记录到决策链（标记为 resource_not_found，不计入熔断）
@@ -4565,6 +4581,7 @@ export class ProxyForwarder {
       }
 
       const reactiveRectifierResult = await tryApplyReactiveRectifier({
+        error,
         provider: attempt.provider,
         requestSession: attempt.session,
         persistSession: session,

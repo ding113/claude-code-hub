@@ -23,6 +23,35 @@ const CACHE_TTL_MS = 60 * 1000;
 let cachedSettings: SystemSettings | null = null;
 let cachedAt: number = 0;
 
+/** Avoid repeating the same invalid environment-variable warning on every request. */
+let hasWarnedInvalidResponsesWebsocketEnv = false;
+
+function getOpenaiResponsesWebsocketEnvOverride(): boolean | undefined {
+  const rawValue = process.env.ENABLE_OPENAI_RESPONSES_WEBSOCKET;
+
+  if (rawValue === undefined) {
+    return undefined;
+  }
+
+  switch (rawValue) {
+    case "true":
+    case "1":
+      return true;
+    case "false":
+    case "0":
+      return false;
+    default:
+      if (!hasWarnedInvalidResponsesWebsocketEnv) {
+        hasWarnedInvalidResponsesWebsocketEnv = true;
+        logger.warn(
+          "[SystemSettingsCache] Invalid ENABLE_OPENAI_RESPONSES_WEBSOCKET, using database setting",
+          { value: rawValue }
+        );
+      }
+      return undefined;
+  }
+}
+
 /**
  * Read the current in-memory settings cache only.
  * Never triggers a DB refresh.
@@ -204,6 +233,11 @@ export async function isHttp2Enabled(): Promise<boolean> {
  * @returns Whether OpenAI Responses WebSocket support is enabled globally.
  */
 export async function isOpenaiResponsesWebsocketEnabled(): Promise<boolean> {
+  const envOverride = getOpenaiResponsesWebsocketEnvOverride();
+  if (envOverride !== undefined) {
+    return envOverride;
+  }
+
   const settings = await getCachedSystemSettings();
   return settings.enableOpenaiResponsesWebsocket;
 }

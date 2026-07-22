@@ -90,6 +90,22 @@ bash scripts/cleanup-test-users.sh
 
 ---
 
+## Provider 批量写 durable ledger（真实 PostgreSQL）
+
+该并发测试使用专用配置，不读取 `.env`，只接受显式提供的
+`PROVIDER_BATCH_TEST_DSN`。数据库名必须包含 `test`；未提供 DSN 时测试会明确跳过。
+
+先对临时数据库应用迁移，再运行测试：
+
+```bash
+DSN='postgres://.../cch_provider_batch_test' bun run db:migrate
+PROVIDER_BATCH_TEST_DSN='postgres://.../cch_provider_batch_test' \
+  bun run test:integration:provider-batch-ledger
+```
+
+测试会创建带 `it-provider-batch-ledger-` 前缀的数据并在结束时清理，不需要 Redis，
+也不会访问或修改线上环境。
+
 ## 📁 目录结构
 
 ```

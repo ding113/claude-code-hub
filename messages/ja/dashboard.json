@@ -131,6 +131,7 @@
       "ip": "IP",
       "provider": "プロバイダー",
       "model": "課金モデル",
+      "reasoningEffort": "推論強度",
       "endpoint": "エンドポイント",
       "inputTokens": "入力",
       "outputTokens": "出力",
@@ -378,6 +379,11 @@
         "label": "Effort",
         "overridden": "プロバイダーにより上書き",
         "tooltip": "クライアントがリクエストボディで指定した思考強度 (output_config.effort)。プロキシは値をそのまま表示し、レベル名を変換しません。"
+      },
+      "reasoningEffort": {
+        "label": "推論強度",
+        "overridden": "プロバイダーにより上書き",
+        "tooltip": "Codex リクエストの推論強度 (reasoning.effort) をそのまま表示します。"
       },
       "logicTrace": {
         "title": "決定チェーン",

@@ -20,13 +20,14 @@ import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { IpDetailsDialog } from "@/app/[locale]/dashboard/_components/ip-details-dialog";
 import { IpDisplayTrigger } from "@/app/[locale]/dashboard/_components/ip-display-trigger";
-import { AnthropicEffortBadge } from "@/components/customs/anthropic-effort-badge";
+import { ThinkingEffortBadge } from "@/components/customs/thinking-effort-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Link } from "@/i18n/routing";
 import { cn, formatTokenAmount } from "@/lib/utils";
 import { extractAnthropicEffortInfo } from "@/lib/utils/anthropic-effort";
+import { extractCodexReasoningEffortInfo } from "@/lib/utils/codex-reasoning-effort";
 import { formatCurrency } from "@/lib/utils/currency";
 import { buildHedgeBillingTable } from "@/lib/utils/hedge-billing";
 import { resolveModelAuditDisplay } from "@/lib/utils/model-audit-display";
@@ -107,7 +108,27 @@ export function SummaryTab({
     getThinkingSignatureModelDetectionSpecialSetting(specialSettings);
   const showNoSignatureBadge =
     thinkingSignatureDetection?.source === "fallback_no_signature_with_thinking";
-  const effortInfo = extractAnthropicEffortInfo(specialSettings);
+  const anthropicEffortInfo = extractAnthropicEffortInfo(specialSettings);
+  const codexReasoningEffortInfo = extractCodexReasoningEffortInfo(specialSettings);
+  const effortDisplay = codexReasoningEffortInfo
+    ? {
+        requestedEffort: codexReasoningEffortInfo.requestedEffort,
+        effectiveEffort: codexReasoningEffortInfo.effectiveEffort,
+        isOverridden: codexReasoningEffortInfo.isOverridden,
+        label: t("reasoningEffort.label"),
+        tooltip: t("reasoningEffort.tooltip"),
+        overridden: t("reasoningEffort.overridden"),
+      }
+    : anthropicEffortInfo
+      ? {
+          requestedEffort: anthropicEffortInfo.originalEffort,
+          effectiveEffort: anthropicEffortInfo.overriddenEffort,
+          isOverridden: anthropicEffortInfo.isOverridden,
+          label: t("effort.label"),
+          tooltip: t("effort.tooltip"),
+          overridden: t("effort.overridden"),
+        }
+      : null;
   const isFake200PostStreamFailure =
     typeof errorMessage === "string" && errorMessage.startsWith("FAKE_200_");
   const fake200Code =
@@ -280,7 +301,7 @@ export function SummaryTab({
       )}
 
       {/* Session Info */}
-      {(sessionId || effortInfo) && (
+      {(sessionId || effortDisplay) && (
         <div className="space-y-2">
           <h4 className="text-sm font-semibold">{t("metadata.sessionInfo")}</h4>
           <div className="rounded-lg border bg-card divide-y">
@@ -314,37 +335,43 @@ export function SummaryTab({
                 </div>
               </div>
             )}
-            {effortInfo && (
+            {effortDisplay && (
               <div className="p-4">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-xs text-muted-foreground">{t("effort.label")}:</span>
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <span>
-                          <AnthropicEffortBadge
-                            effort={effortInfo.originalEffort}
-                            label={effortInfo.originalEffort}
-                          />
-                        </span>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p className="text-xs max-w-xs">{t("effort.tooltip")}</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                  {effortInfo.isOverridden && effortInfo.overriddenEffort && (
+                  <span className="text-xs text-muted-foreground">{effortDisplay.label}:</span>
+                  {effortDisplay.requestedEffort && (
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span>
+                            <ThinkingEffortBadge
+                              effort={effortDisplay.requestedEffort}
+                              label={effortDisplay.requestedEffort}
+                            />
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p className="text-xs max-w-xs">{effortDisplay.tooltip}</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  )}
+                  {effortDisplay.isOverridden && effortDisplay.effectiveEffort && (
                     <>
-                      <ArrowRight className="h-3 w-3 text-muted-foreground" />
-                      <AnthropicEffortBadge
-                        effort={effortInfo.overriddenEffort}
-                        label={effortInfo.overriddenEffort}
+                      {effortDisplay.requestedEffort && (
+                        <ArrowRight className="h-3 w-3 text-muted-foreground" aria-hidden="true" />
+                      )}
+                      <ThinkingEffortBadge
+                        effort={effortDisplay.effectiveEffort}
+                        label={effortDisplay.effectiveEffort}
                       />
                     </>
                   )}
                 </div>
-                {effortInfo.isOverridden && (
-                  <p className="text-[11px] text-muted-foreground mt-1">{t("effort.overridden")}</p>
+                {effortDisplay.isOverridden && (
+                  <p className="text-[11px] text-muted-foreground mt-1">
+                    {effortDisplay.overridden}
+                  </p>
                 )}
               </div>
             )}
