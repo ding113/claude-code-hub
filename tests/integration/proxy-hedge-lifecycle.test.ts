@@ -518,7 +518,8 @@ describe("proxy hedge transport/lifecycle integration (persistence and control-p
           outputTokens: 3,
           providerId: 2,
           statusCode: 200,
-        })
+        }),
+        expect.objectContaining({ onCommitted: expect.any(Function) })
       );
       expect(state.updateMessageRequestDetailsIfUnfinalized).not.toHaveBeenCalled();
 
@@ -615,7 +616,8 @@ describe("proxy hedge transport/lifecycle integration (persistence and control-p
       expect(state.durableTerminal).toHaveBeenCalledOnce();
       expect(state.durableTerminal).toHaveBeenCalledWith(
         MESSAGE.id,
-        expect.objectContaining({ statusCode: 502 })
+        expect.objectContaining({ statusCode: 502 }),
+        expect.objectContaining({ onCommitted: expect.any(Function) })
       );
       expect(agents.release).toHaveBeenCalledOnce();
       expect(agents.pool.getPoolStats().activeRequests).toBe(0);
