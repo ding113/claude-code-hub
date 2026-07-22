@@ -37,6 +37,12 @@ export type MessageRequestUpdatePatch = {
    * null = clear the column explicitly.
    */
   costBreakdown?: StoredCostBreakdown | null;
+  // F3b 缓存效果计费模拟（可空列）
+  cacheCompatibilityKey?: string | null;
+  cacheScoreEligible?: boolean | null;
+  cacheScoreExcludedReason?: string | null;
+  theoreticalCacheTokens?: number | null;
+  cacheTtlBucket?: string | null;
 };
 
 export type MessageRequestUpdateRecord = {
@@ -241,6 +247,11 @@ const COLUMN_MAP: Record<keyof MessageRequestUpdatePatch, string> = {
   swapCacheTtlApplied: "swap_cache_ttl_applied",
   specialSettings: "special_settings",
   costBreakdown: "cost_breakdown",
+  cacheCompatibilityKey: "cache_compatibility_key",
+  cacheScoreEligible: "cache_score_eligible",
+  cacheScoreExcludedReason: "cache_score_excluded_reason",
+  theoreticalCacheTokens: "theoretical_cache_tokens",
+  cacheTtlBucket: "cache_ttl_bucket",
 };
 
 function loadWriterConfig(): WriterConfig {

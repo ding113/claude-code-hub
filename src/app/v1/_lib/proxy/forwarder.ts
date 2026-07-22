@@ -60,6 +60,7 @@ import { RESERVED_INTERNAL_HEADERS } from "../responses-ws/internal-secret";
 import { markResponsesWsUnsupported } from "../responses-ws/unsupported-cache";
 import { tryResponsesWebsocketUpstream } from "../responses-ws/upstream-adapter";
 import { buildProxyUrl } from "../url";
+import { recordAffinityWinner, tombstoneAffinityOnFailure } from "./affinity/affinity-recorder";
 import { rectifyBillingHeader } from "./billing-header-rectifier";
 import { bindClientAbortListener } from "./client-abort-listener";
 import { deriveClientSafeUpstreamErrorMessage } from "./client-error-message";
@@ -99,6 +100,13 @@ import { ProxyProviderResolver } from "./provider-selector";
 import { finalizeHedgeLoserBilling } from "./response-handler";
 import type { ProxySession } from "./session";
 import { setDeferredStreamingFinalization } from "./stream-finalization";
+import { mapProviderTypeToFamily } from "./stream-gate/frame-classifier";
+import {
+  concatChunks,
+  resolveStreamGateCaps,
+  resolveStreamGateMode,
+  runStreamContentGate,
+} from "./stream-gate/stream-content-gate";
 import {
   detectThinkingBudgetRectifierTrigger,
   rectifyThinkingBudget,
@@ -1461,6 +1469,84 @@ export class ProxyForwarder {
           // 解决：Forwarder 只负责尽快把 Response 返回给下游开始透传，
           // 把最终成功/失败结算延迟到 ResponseHandler：等 SSE 正常结束后再基于最终 body 补充检查并更新内部状态。
           if (isSSE) {
+            // ========== F1 流式内容门控（enforce 模式）==========
+            // 在向客户端提交响应前等待首个有效内容帧：
+            // - 中性前缀（ping/metadata/usage-only）缓冲后随提交一并冲刷；
+            // - error/malformed/空流在此抛错 -> 外层 catch 归类 -> 换供应商（客户端零字节）；
+            // - 首字节计时器（doForward 设置，response-handler 读到首字节才清除）
+            //   在门控期间继续生效，天然升级为「首个有效内容超时」。
+            let streamingResponse = response;
+            const gateMode = resolveStreamGateMode();
+            if (
+              gateMode === "enforce" &&
+              response.body &&
+              session.getEndpointPolicy().kind !== "raw_passthrough"
+            ) {
+              const gateFamily = mapProviderTypeToFamily(currentProvider.providerType);
+              if (gateFamily) {
+                const gateReader = response.body.getReader();
+                const gate = await runStreamContentGate(gateReader, {
+                  family: gateFamily,
+                  providerId: currentProvider.id,
+                  providerName: currentProvider.name,
+                  ...resolveStreamGateCaps(),
+                });
+
+                if (!gate.committed) {
+                  const runtime = session as ProxySession & {
+                    responseController?: AbortController;
+                    clearResponseTimeout?: () => void;
+                    releaseAgent?: () => void;
+                  };
+                  // 先于清理读取超时来源：区分首字节/首内容超时与客户端断开
+                  const timedOutBeforeContent =
+                    runtime.responseController?.signal.aborted === true &&
+                    session.clientAbortSignal?.aborted !== true;
+
+                  void gateReader.cancel("stream_gate_precommit").catch(() => undefined);
+                  // response-handler 不会接手该响应：本层负责清理计时器与 agent 引用
+                  runtime.clearResponseTimeout?.();
+                  runtime.releaseAgent?.();
+
+                  if (timedOutBeforeContent) {
+                    throw new ProxyError(
+                      `供应商首个有效内容超时: 门控在收到有效内容帧前被首字节计时器中止`,
+                      524,
+                      {
+                        body: JSON.stringify({
+                          error: {
+                            type: "timeout_error",
+                            message: "Provider failed to deliver first valid content frame",
+                            timeout_type: "streaming_first_valid_content",
+                          },
+                        }),
+                        providerId: currentProvider.id,
+                        providerName: currentProvider.name,
+                      }
+                    );
+                  }
+                  throw gate.error;
+                }
+
+                logger.info("ProxyForwarder: Stream content gate committed", {
+                  providerId: currentProvider.id,
+                  providerName: currentProvider.name,
+                  framesSeen: gate.framesSeen,
+                  prefixChunks: gate.prefixChunks.length,
+                  readerDone: gate.readerDone,
+                });
+
+                streamingResponse = new Response(
+                  ProxyForwarder.buildBufferedPrefixStream(gate.prefixChunks, gateReader),
+                  {
+                    status: response.status,
+                    statusText: response.statusText,
+                    headers: response.headers,
+                  }
+                );
+              }
+            }
+
             setDeferredStreamingFinalization(session, {
               providerId: currentProvider.id,
               providerName: currentProvider.name,
@@ -1482,7 +1568,7 @@ export class ProxyForwarder {
               statusCode: response.status,
             });
 
-            return response;
+            return streamingResponse;
           }
 
           // 非流式响应：检测空响应
@@ -1718,6 +1804,9 @@ export class ProxyForwarder {
             circuitState: getCircuitState(currentProvider.id),
           });
 
+          // F3a 亲和写回（非流式成功；流式由 finalizeStream 的终态副作用负责）
+          void recordAffinityWinner(session, currentProvider.id);
+
           logger.info("ProxyForwarder: Request successful", {
             providerId: currentProvider.id,
             providerName: currentProvider.name,
@@ -1736,6 +1825,14 @@ export class ProxyForwarder {
           const databaseError = findSafeDatabaseError(lastError);
           if (databaseError) {
             errorCategory = ErrorCategory.LOCAL_OVERLOAD;
+          }
+
+          // F3a：亲和提名的供应商发生供应商侧失败 -> 定向写墓碑（短 TTL 自愈防羊群）
+          if (
+            errorCategory === ErrorCategory.PROVIDER_ERROR ||
+            errorCategory === ErrorCategory.RESOURCE_NOT_FOUND
+          ) {
+            void tombstoneAffinityOnFailure(session, currentProvider.id);
           }
           const errorMessage =
             databaseError?.message ??
@@ -4221,18 +4318,41 @@ export class ProxyForwarder {
           attempt.reader = response.body.getReader();
 
           try {
-            const firstChunk = await ProxyForwarder.readFirstReadableChunk(attempt.reader);
-            if (firstChunk.done) {
-              await handleAttemptFailure(
-                attempt,
-                new EmptyResponseError(attempt.provider.id, attempt.provider.name, "empty_body")
-              );
-              return;
-            }
+            // F1 门控（enforce）：胜者判定从「首个非空字节」升级为「首个有效内容帧」。
+            // 级联阈值计时器保持不动——内容慢的 attempt 不提交，自动触发下一候选竞速。
+            const hedgeGateFamily =
+              resolveStreamGateMode() === "enforce" &&
+              session.getEndpointPolicy().kind !== "raw_passthrough"
+                ? mapProviderTypeToFamily(attempt.provider.providerType)
+                : null;
 
-            // 保留首块：若本 attempt 落败且需要计费，drain 时需要补回首块的 usage。
-            attempt.firstChunk = firstChunk.value;
-            await commitWinner(attempt, firstChunk.value);
+            if (hedgeGateFamily) {
+              const gate = await runStreamContentGate(attempt.reader, {
+                family: hedgeGateFamily,
+                providerId: attempt.provider.id,
+                providerName: attempt.provider.name,
+                ...resolveStreamGateCaps(),
+              });
+              if (!gate.committed) {
+                throw gate.error;
+              }
+              // 保留完整门控前缀：若本 attempt 落败且需要计费，drain 时补回前缀里的 usage。
+              attempt.firstChunk = concatChunks(gate.prefixChunks);
+              await commitWinner(attempt, gate.prefixChunks);
+            } else {
+              const firstChunk = await ProxyForwarder.readFirstReadableChunk(attempt.reader);
+              if (firstChunk.done) {
+                await handleAttemptFailure(
+                  attempt,
+                  new EmptyResponseError(attempt.provider.id, attempt.provider.name, "empty_body")
+                );
+                return;
+              }
+
+              // 保留首块：若本 attempt 落败且需要计费，drain 时需要补回首块的 usage。
+              attempt.firstChunk = firstChunk.value;
+              await commitWinner(attempt, [firstChunk.value]);
+            }
 
             // 本 attempt 读到首块却落败（winner 已先提交，commitWinner 早退）：
             // 若开启输家计费且本 attempt 不是赢家，在此发起后台 drain（此时已无并发读）。
@@ -4283,6 +4403,13 @@ export class ProxyForwarder {
 
       let errorCategory = await categorizeErrorAsync(error);
       lastErrorCategory = errorCategory;
+      // F3a：hedge attempt 供应商侧失败且正是亲和提名者 -> 定向墓碑
+      if (
+        errorCategory === ErrorCategory.PROVIDER_ERROR ||
+        errorCategory === ErrorCategory.RESOURCE_NOT_FOUND
+      ) {
+        void tombstoneAffinityOnFailure(session, attempt.provider.id);
+      }
       const statusCode = error instanceof ProxyError ? error.statusCode : undefined;
       const databaseError = findSafeDatabaseError(error);
       const errorMessage =
@@ -4493,7 +4620,7 @@ export class ProxyForwarder {
       await finishIfExhausted();
     };
 
-    const commitWinner = async (attempt: StreamingHedgeAttempt, firstChunk: Uint8Array) => {
+    const commitWinner = async (attempt: StreamingHedgeAttempt, prefixChunks: Uint8Array[]) => {
       if (settled || winnerCommitted || attempt.settled || !attempt.response || !attempt.reader)
         return;
 
@@ -4590,6 +4717,9 @@ export class ProxyForwarder {
         });
       }
 
+      // F3a 亲和写回（与顺序路径 session 绑定块对称；胜者在 commitWinner 即确认）
+      void recordAffinityWinner(session, attempt.provider.id);
+
       setDeferredStreamingFinalization(session, {
         providerId: attempt.provider.id,
         providerName: attempt.provider.name,
@@ -4606,7 +4736,7 @@ export class ProxyForwarder {
       });
 
       const response = new Response(
-        ProxyForwarder.buildBufferedFirstChunkStream(firstChunk, attempt.reader),
+        ProxyForwarder.buildBufferedPrefixStream(prefixChunks, attempt.reader),
         {
           status: attempt.response.status,
           statusText: attempt.response.statusText,
@@ -5086,17 +5216,17 @@ export class ProxyForwarder {
     }
   }
 
-  private static buildBufferedFirstChunkStream(
-    firstChunk: Uint8Array,
+  private static buildBufferedPrefixStream(
+    prefixChunks: Uint8Array[],
     reader: ReadableStreamDefaultReader<Uint8Array>
   ): ReadableStream<Uint8Array> {
-    let firstChunkSent = false;
+    let prefixIndex = 0;
 
     return new ReadableStream<Uint8Array>({
       async pull(controller) {
-        if (!firstChunkSent) {
-          firstChunkSent = true;
-          controller.enqueue(firstChunk);
+        if (prefixIndex < prefixChunks.length) {
+          controller.enqueue(prefixChunks[prefixIndex]);
+          prefixIndex++;
           return;
         }
 

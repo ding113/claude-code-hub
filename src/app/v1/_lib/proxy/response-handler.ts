@@ -5,6 +5,7 @@ import {
 import { ResponseFixer } from "@/app/v1/_lib/proxy/response-fixer";
 import { findSafeDatabaseError } from "@/drizzle/admitted-client";
 import { AsyncTaskManager } from "@/lib/async-task-manager";
+import { computeCacheScoreFields } from "@/lib/cache-effectiveness/gate";
 import { getEnvConfig } from "@/lib/config/env.schema";
 import { getCachedSystemSettings } from "@/lib/config/system-settings-cache";
 import { emitProxyLangfuseTrace } from "@/lib/langfuse/emit-proxy-trace";
@@ -49,17 +50,21 @@ import type { LongContextPricingSpecialSetting } from "@/types/special-settings"
 import { GeminiAdapter } from "../gemini/adapter";
 import type { GeminiResponse } from "../gemini/types";
 import { extractActualResponseModelForProvider } from "./actual-response-model";
+import { recordAffinityWinner, tombstoneAffinityOnFailure } from "./affinity/affinity-recorder";
 import { bindClientAbortListener } from "./client-abort-listener";
 import {
   createDemandDrivenResponsePump,
   type DemandDrivenResponsePump,
 } from "./demand-driven-response-pump";
 import { isClientAbortError, isTransportError } from "./errors";
+import { createReplaySpoolIfOwner } from "./replay/replay-spool";
 import type { ProxySession } from "./session";
 import {
   consumeDeferredStreamingFinalization,
   peekDeferredStreamingFinalization,
 } from "./stream-finalization";
+import { mapProviderTypeToFamily } from "./stream-gate/frame-classifier";
+import { createShadowGateObserver, resolveStreamGateMode } from "./stream-gate/stream-content-gate";
 
 const CLIENT_ABORT_DRAIN_MAX_MS = 60_000;
 const STREAM_STATS_MAX_BUFFER_BYTES = 10 * 1024 * 1024;
@@ -3059,7 +3064,9 @@ export class ProxyResponseHandler {
         ? provider.streamingIdleTimeoutMs
         : Number.POSITIVE_INFINITY;
     const streamTaskStaleTimeoutMs = resolveStreamTaskStaleTimeoutMs();
-    const clientAbortDrainTimeoutMs = CLIENT_ABORT_DRAIN_MAX_MS;
+    // F2：owner 请求（活跃 spool）的断线引流窗口延长到 REPLAY_MAX_DETACHED_MS，
+    // 让上游响应在客户端断开后继续被缓存直至完成；非 replay 请求维持 60s 现状。
+    let clientAbortDrainTimeoutMs = CLIENT_ABORT_DRAIN_MAX_MS;
     let responsePump: DemandDrivenResponsePump | null = null;
 
     // 提升 idleTimeoutId 到外部作用域，以便客户端断开时能清除
@@ -3589,7 +3596,55 @@ export class ProxyResponseHandler {
             }
           });
         }
+
+        // F2 终态屏障：replay completed 只能出现在计费落库（onCommitted）之后；
+        // 任何失败终态（假 200/中断/非 2xx）立即 abort，绝不被已完成重放命中。
+        if (replaySpool) {
+          const isReplayableSuccess =
+            finalized.commitSideEffects !== undefined &&
+            effectiveStatusCode >= 200 &&
+            effectiveStatusCode < 300;
+          if (isReplayableSuccess) {
+            postTerminalSideEffects.push(async () => {
+              try {
+                await replaySpool.completeAfterBilling(messageContext.id);
+              } catch (err) {
+                logger.warn("[ResponseHandler] Replay spool completion failed:", { error: err });
+              }
+            });
+          } else {
+            void replaySpool.abort(streamErrorMessage ?? `status_${effectiveStatusCode}`);
+          }
+        }
+
+        // F3a 亲和写回：owner 成功终态（计费落库后）才绑定 tip/sys -> 胜出供应商
+        if (
+          finalized.commitSideEffects !== undefined &&
+          effectiveStatusCode >= 200 &&
+          effectiveStatusCode < 300 &&
+          session.affinity &&
+          providerIdForPersistence
+        ) {
+          const winnerProviderId = providerIdForPersistence;
+          postTerminalSideEffects.push(async () => {
+            await recordAffinityWinner(session, winnerProviderId);
+          });
+        } else if (session.affinity && providerIdForPersistence && finalized.errorMessage) {
+          // 流终态失败且失败者正是亲和提名的供应商：写墓碑自愈
+          void tombstoneAffinityOnFailure(session, providerIdForPersistence);
+        }
         latestStreamCommitSideEffects = postTerminalSideEffects;
+
+        // F3b 缓存模拟列：仅开关开启时派生（关闭时保持 undefined，不落值）
+        const cacheScoreFields = getEnvConfig().ENABLE_CACHE_EFFECTIVENESS
+          ? computeCacheScoreFields({
+              affinity: session.affinity,
+              succeeded: effectiveStatusCode >= 200 && effectiveStatusCode < 300,
+              usageObservable: usageForCost?.input_tokens != null,
+              streamTruncated: !streamEndedNormally,
+              cacheTtl: usageForCost?.cache_ttl ?? null,
+            })
+          : undefined;
 
         // 保存扩展信息（status code, tokens, provider chain）
         terminalDetailsPersisted = await awaitFinalization(
@@ -3614,6 +3669,7 @@ export class ProxyResponseHandler {
               context1mApplied: session.getContext1mApplied(),
               swapCacheTtlApplied: provider.swapCacheTtlBilling ?? false,
               specialSettings: session.getSpecialSettings() ?? undefined,
+              ...(cacheScoreFields ?? {}),
             },
             {
               onCommitted: scheduleStreamCommitSideEffects,
@@ -3637,11 +3693,38 @@ export class ProxyResponseHandler {
       return streamFinalizationPromise;
     };
 
+    // F1 shadow 模式：旁路逐帧分类，记录「首非空字节 vs 首有效内容」的分歧与延迟差，
+    // 不缓冲、不 failover，仅用于 enforce 灰度前评估误判率。
+    const shadowGateObserver = (() => {
+      if (resolveStreamGateMode() !== "shadow") return null;
+      if (session.getEndpointPolicy().kind === "raw_passthrough") return null;
+      const family = mapProviderTypeToFamily(provider.providerType);
+      if (!family) return null;
+      return createShadowGateObserver({
+        family,
+        providerId: provider.id,
+        providerName: provider.name,
+      });
+    })();
+
+    // F2 owner spool：guard 阶段已抢到 owner 租约的请求，把客户端可见字节
+    // write-behind 喂入 Redis 热层，供并发/断线的相同请求 attach 跟尾。
+    const replaySpool = createReplaySpoolIfOwner(session, response);
+    if (replaySpool) {
+      try {
+        clientAbortDrainTimeoutMs = getEnvConfig().REPLAY_MAX_DETACHED_MS;
+      } catch {
+        // env 解析失败保持 60s 现状
+      }
+    }
+
     const observeChunk = (value: Uint8Array) => {
       const chunkSize = value.length;
       clearIdleTimer();
       streamTextAccumulator.pushBytes(value);
       AsyncTaskManager.touch(taskId);
+      shadowGateObserver?.observe(value);
+      replaySpool?.observe(value);
 
       logger.trace("ResponseHandler: Upstream stream chunk received", {
         taskId,

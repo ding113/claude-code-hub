@@ -6,6 +6,7 @@ import { ProxyModelGuard } from "./model-guard";
 import { ProxyProviderRequestFilter } from "./provider-request-filter";
 import { ProxyProviderResolver } from "./provider-selector";
 import { ProxyRateLimitGuard } from "./rate-limit-guard";
+import { ProxyReplayGuard } from "./replay/replay-guard";
 import { ProxyRequestFilter } from "./request-filter";
 import { ProxySensitiveWordGuard } from "./sensitive-word-guard";
 import type { ProxySession } from "./session";
@@ -36,6 +37,7 @@ export type GuardStepKey =
   | "warmup"
   | "requestFilter"
   | "sensitive"
+  | "replayAttach"
   | "rateLimit"
   | "provider"
   | "providerRequestFilter"
@@ -111,6 +113,14 @@ const Steps: Record<GuardStepKey, GuardStep> = {
     name: "sensitive",
     async execute(session) {
       return ProxySensitiveWordGuard.ensure(session);
+    },
+  },
+  replayAttach: {
+    // F2：相同请求体命中活跃/已完成重放时直接短路返回缓存响应；
+    // 位于 rateLimit 之前（重放命中完全免费），auth/sensitive 等仍在前面
+    name: "replayAttach",
+    async execute(session) {
+      return ProxyReplayGuard.ensure(session);
     },
   },
   rateLimit: {
@@ -209,6 +219,7 @@ export const CHAT_PIPELINE: GuardConfig = {
     "session",
     "warmup",
     "requestFilter",
+    "replayAttach",
     "rateLimit",
     "provider",
     "providerRequestFilter",

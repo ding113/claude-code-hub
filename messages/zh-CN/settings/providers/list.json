@@ -43,5 +43,13 @@
   "actionDelete": "删除",
   "selectProvider": "选择 {name}",
   "schedule": "调度",
-  "proxyEnabled": "已启用代理"
+  "proxyEnabled": "已启用代理",
+  "cacheEffectiveness": {
+    "label": "缓存效果",
+    "hitRate": "命中率",
+    "confidence": "置信度",
+    "samples": "样本",
+    "score": "效果分",
+    "empty": "暂无缓存数据"
+  }
 }

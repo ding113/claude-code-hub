@@ -542,6 +542,16 @@ export const messageRequest = pgTable('message_request', {
   // Messages 数量（用于短请求检测和分析）
   messagesCount: integer('messages_count'),
 
+  // ===== F3b 缓存效果计费模拟（可空，backfill 安全；observed 值复用 cacheReadInputTokens）=====
+  // 缓存兼容键：scopeTag:fp（优先级 Matched > Tip > Sys），聚合任务按此维度回测供应商缓存效力
+  cacheCompatibilityKey: varchar('cache_compatibility_key', { length: 64 }),
+  // 是否纳入缓存效力窗口聚合（失败/竞速败者/replay serve/不可观测/截断样本排除）
+  cacheScoreEligible: boolean('cache_score_eligible'),
+  cacheScoreExcludedReason: varchar('cache_score_excluded_reason', { length: 32 }),
+  // 理论可命中缓存 token（按匹配边界的规范化前缀字节估算）
+  theoreticalCacheTokens: bigint('theoretical_cache_tokens', { mode: 'number' }),
+  cacheTtlBucket: varchar('cache_ttl_bucket', { length: 10 }),
+
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
@@ -1152,6 +1162,55 @@ export const auditLog = pgTable('audit_log', {
   // keyset 分页热路径
   auditLogCreatedAtIdIdx: index('idx_audit_log_created_at_id')
     .on(table.createdAt.desc(), table.id.desc()),
+}));
+
+// F2 Replay 完成持久层：已完成流式响应的客户端可见字节（跨副本/跨小时重放）。
+// Redis 热层（cch:replay:*）承担活跃期与实时跟尾；本表只存已通过计费终态屏障的完整响应。
+export const replayPayloads = pgTable('replay_payloads', {
+  // 确定性 Replay ID（身份哈希截 32 hex，含 scopeTag 租户隔离）
+  replayId: varchar('replay_id', { length: 64 }).primaryKey(),
+  // 身份复核值（不同盐的内容维度哈希，attach 时严格比对防哈希碰撞）
+  verifier: varchar('verifier', { length: 64 }).notNull(),
+  scopeTag: varchar('scope_tag', { length: 16 }).notNull(),
+  keyId: integer('key_id').notNull(),
+  userId: integer('user_id').notNull(),
+  format: varchar('format', { length: 16 }).notNull(),
+  model: varchar('model', { length: 128 }),
+  statusCode: integer('status_code').notNull(),
+  headersJson: jsonb('headers_json').$type<Record<string, string>>(),
+  // 客户端可见字节（SSE UTF-8 文本；上限由 REPLAY_MAX_PAYLOAD_BYTES 控制）
+  payload: text('payload').notNull(),
+  byteSize: integer('byte_size').notNull(),
+  sourceMessageRequestId: integer('source_message_request_id'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+}, (table) => ({
+  replayPayloadsKeyIdIdx: index('idx_replay_payloads_key_id').on(table.keyId),
+  replayPayloadsExpiresAtIdx: index('idx_replay_payloads_expires_at').on(table.expiresAt),
+}));
+
+// F3b 缓存效果窗口聚合历史：按 provider + model + TTL 桶统计理论 vs 实际缓存命中。
+// 定点整数（万分比 bp），禁浮点；仅指标展示，不参与路由。
+export const providerCacheEffectiveness = pgTable('provider_cache_effectiveness', {
+  id: serial('id').primaryKey(),
+  providerId: integer('provider_id').notNull(),
+  model: varchar('model', { length: 128 }).notNull(),
+  cacheTtlBucket: varchar('cache_ttl_bucket', { length: 10 }).notNull(),
+  windowStart: timestamp('window_start', { withTimezone: true }).notNull(),
+  windowEnd: timestamp('window_end', { withTimezone: true }).notNull(),
+  // 窗口内总样本与合格样本数
+  sampleCount: integer('sample_count').notNull().default(0),
+  eligibleCount: integer('eligible_count').notNull().default(0),
+  theoreticalCacheTokens: bigint('theoretical_cache_tokens', { mode: 'number' }).notNull().default(0),
+  observedCacheReadTokens: bigint('observed_cache_read_tokens', { mode: 'number' }).notNull().default(0),
+  // 万分比定点值：raw = clamp(observed/theoretical)；confidence = 可观测率 x 样本量分档
+  rawEffectivenessBp: integer('raw_effectiveness_bp').notNull().default(0),
+  confidenceBp: integer('confidence_bp').notNull().default(0),
+  effectivenessBp: integer('effectiveness_bp').notNull().default(0),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+}, (table) => ({
+  providerCacheEffectivenessWindowIdx: index('idx_provider_cache_effectiveness_window')
+    .on(table.providerId, table.model, table.windowStart.desc()),
 }));
 
 // Relations

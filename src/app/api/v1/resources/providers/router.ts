@@ -4,6 +4,10 @@ import { PUBLIC_PROVIDER_TYPE_VALUES } from "@/lib/api/v1/_shared/constants";
 import { fromZodError } from "@/lib/api/v1/_shared/error-envelope";
 import { ProblemJsonSchema } from "@/lib/api/v1/schemas/_common";
 import {
+  ProviderCacheEffectivenessListQuerySchema,
+  ProviderCacheEffectivenessListResponseSchema,
+} from "@/lib/api/v1/schemas/provider-cache-effectiveness";
+import {
   ProviderApiTestSchema,
   ProviderArrayResponseSchema,
   ProviderBatchPatchApplySchema,
@@ -42,6 +46,7 @@ import {
   getProviderModelSuggestions,
   getProvidersHealth,
   getProviderTestPresets,
+  listProviderCacheEffectiveness,
   listProviderGroups,
   listProviders,
   previewBatchPatch,
@@ -290,6 +295,31 @@ providersRouter.openapi(
     },
   }),
   getProvidersHealth as never
+);
+
+providersRouter.openapi(
+  createRoute({
+    method: "get",
+    path: "/providers/cache-effectiveness",
+    middleware: requireAuth("admin"),
+    tags: ["Providers"],
+    summary: "List provider cache effectiveness windows",
+    description:
+      "Lists aggregated prompt cache effectiveness windows per provider, model, and cache TTL bucket, ordered by window end descending. Read-only metrics; routing and billing are unaffected.",
+    "x-required-access": "admin",
+    security,
+    request: { query: ProviderCacheEffectivenessListQuerySchema },
+    responses: {
+      200: {
+        description: "Cache effectiveness windows.",
+        content: {
+          "application/json": { schema: ProviderCacheEffectivenessListResponseSchema },
+        },
+      },
+      ...problemResponses,
+    },
+  }),
+  listProviderCacheEffectiveness as never
 );
 
 providersRouter.openapi(

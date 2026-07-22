@@ -22,6 +22,7 @@ import {
   jsonResponse,
   noContentResponse,
 } from "@/lib/api/v1/_shared/response-helpers";
+import { ProviderCacheEffectivenessListQuerySchema } from "@/lib/api/v1/schemas/provider-cache-effectiveness";
 import {
   HIDDEN_PROVIDER_TYPES,
   ProviderApiTestSchema,
@@ -337,6 +338,24 @@ export async function listProviderGroups(c: Context): Promise<Response> {
     c.get("auth")
   );
   return result.ok ? jsonResponse({ items: result.data }) : actionError(c, result);
+}
+
+export async function listProviderCacheEffectiveness(c: Context): Promise<Response> {
+  const query = ProviderCacheEffectivenessListQuerySchema.safeParse({
+    providerId: c.req.query("providerId"),
+    limit: c.req.query("limit"),
+  });
+  if (!query.success) return fromZodError(query.error, new URL(c.req.url).pathname);
+
+  const actions = await import("@/actions/provider-cache-effectiveness");
+  const result = await callAction(
+    c,
+    actions.getProviderCacheEffectivenessWindows,
+    [query.data] as never[],
+    c.get("auth")
+  );
+  if (!result.ok) return actionError(c, result);
+  return jsonResponse({ items: result.data });
 }
 
 export async function autoSortProviders(c: Context): Promise<Response> {

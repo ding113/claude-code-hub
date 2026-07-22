@@ -1,8 +1,10 @@
 import { matchesAllowedModelRules } from "@/lib/allowed-model-rules";
 import { getCircuitState, isCircuitOpen } from "@/lib/circuit-breaker";
+import { getEnvConfig } from "@/lib/config/env.schema";
 import { PROVIDER_GROUP } from "@/lib/constants/provider.constants";
 import { logger } from "@/lib/logger";
 import { RateLimitService } from "@/lib/rate-limit";
+import { buildScopeTag } from "@/lib/request-identity";
 import { SessionManager } from "@/lib/session-manager";
 import { parseProviderGroups, resolveProviderGroupsWithDefault } from "@/lib/utils/provider-group";
 import { isProviderActiveNow } from "@/lib/utils/provider-schedule";
@@ -12,6 +14,8 @@ import { findAllProviders, findProviderById } from "@/repository/provider";
 import { getGroupCostMultiplier } from "@/repository/provider-groups";
 import type { ProviderChainItem } from "@/types/message";
 import type { Provider } from "@/types/provider";
+import { getAffinityStore } from "./affinity/affinity-store";
+import { computeFingerprintChain, fingerprintsDeepestFirst } from "./affinity/fingerprint";
 import { isClientAllowedDetailed } from "./client-detector";
 import type { ClientFormat } from "./format-mapper";
 import { getVerboseProviderErrorCached } from "./provider-selector-settings-cache";
@@ -174,6 +178,11 @@ export class ProxyProviderResolver {
           sessionId: session.sessionId || undefined,
         },
       });
+    }
+
+    // === 前缀亲和提名（flag 门控；优先级：显式 session 绑定 > 亲和 > 加权随机）===
+    if (!session.provider) {
+      await ProxyProviderResolver.tryPrefixAffinityNomination(session);
     }
 
     // === 首次选择或重试 ===
@@ -460,6 +469,154 @@ export class ProxyProviderResolver {
   /**
    * 查找可复用的供应商（基于 session）
    */
+  /**
+   * F3a 最长前缀亲和提名（软提名）。
+   *
+   * 显式 session 绑定未命中时：按请求内容计算链式指纹，在 Redis 中做
+   * 最深->最浅的最长前缀查找；命中后候选供应商仍须通过与会话复用完全相同的
+   * 硬校验（enabled/复用开关/调度/熔断/格式/模型/客户端限制/分组），任一不过
+   * 即静默回落加权随机——亲和永远只是提名，不绕过任何硬性约束。
+   *
+   * 指纹链与 scopeTag 无论命中与否都会挂到 session.affinity，
+   * 供成功终态写回与缓存效果指标（F3b）复用。
+   */
+  private static async tryPrefixAffinityNomination(session: ProxySession): Promise<void> {
+    try {
+      const env = getEnvConfig();
+      if (!env.ENABLE_PREFIX_AFFINITY) return;
+      const keyId = session.authState?.key?.id;
+      if (!keyId) return;
+
+      const chain = computeFingerprintChain(
+        session.request.message,
+        session.originalFormat,
+        env.PREFIX_AFFINITY_WINDOW
+      );
+      if (!chain) return;
+
+      const scopeTag = buildScopeTag(keyId, session.originalFormat, session.getOriginalModel());
+      session.affinity = {
+        scopeTag,
+        chain,
+        nominatedProviderId: null,
+        matchedFp: null,
+        matchedTier: null,
+      };
+
+      const hint = await getAffinityStore().lookup(
+        scopeTag,
+        fingerprintsDeepestFirst(chain),
+        env.PREFIX_AFFINITY_TTL_SECONDS
+      );
+      if (!hint) return;
+
+      session.affinity.matchedFp = hint.matchedFp;
+      session.affinity.matchedTier = hint.tier;
+
+      const provider = await ProxyProviderResolver.validateAffinityCandidate(
+        session,
+        hint.providerId
+      );
+      if (!provider) {
+        // 候选不过硬校验：软回落，不写墓碑（可能只是临时熔断/调度窗口外）
+        logger.debug("ProviderSelector: Affinity candidate rejected by hard validation", {
+          providerId: hint.providerId,
+          tier: hint.tier,
+        });
+        return;
+      }
+
+      session.affinity.nominatedProviderId = provider.id;
+      session.setProvider(provider);
+      session.addProviderToChain(provider, {
+        reason: "affinity_hit",
+        selectionMethod: "prefix_affinity",
+        circuitState: getCircuitState(provider.id),
+        decisionContext: {
+          totalProviders: 0,
+          enabledProviders: 0,
+          targetType: provider.providerType as NonNullable<
+            ProviderChainItem["decisionContext"]
+          >["targetType"],
+          requestedModel: session.getOriginalModel() || "",
+          groupFilterApplied: false,
+          beforeHealthCheck: 0,
+          afterHealthCheck: 0,
+          priorityLevels: [provider.priority || 0],
+          selectedPriority: provider.priority || 0,
+          candidatesAtPriority: [
+            {
+              id: provider.id,
+              name: provider.name,
+              weight: provider.weight,
+              costMultiplier: provider.costMultiplier,
+            },
+          ],
+          sessionId: session.sessionId || undefined,
+        },
+      });
+      logger.info("ProviderSelector: Prefix affinity nomination accepted", {
+        providerId: provider.id,
+        providerName: provider.name,
+        tier: hint.tier,
+        matchedIndex: hint.matchedIndex,
+      });
+    } catch (error) {
+      // 亲和路径任何异常都不影响主选路
+      logger.warn("ProviderSelector: Prefix affinity nomination failed, falling back", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  /**
+   * 亲和候选硬校验：与 findReusable 同一套检查（不含 session 绑定清理副作用）。
+   * 任一不过返回 null。
+   */
+  private static async validateAffinityCandidate(
+    session: ProxySession,
+    providerId: number
+  ): Promise<Provider | null> {
+    const provider = await findProviderById(providerId);
+    if (!provider?.isEnabled) return null;
+    // 尊重供应商的会话粘性 opt-out：亲和与会话复用同属粘性机制
+    if (provider.disableSessionReuse) return null;
+
+    const systemTimezone = await resolveSystemTimezone();
+    if (!isProviderActiveNow(provider.activeTimeStart, provider.activeTimeEnd, systemTimezone)) {
+      return null;
+    }
+    if (
+      provider.providerVendorId &&
+      provider.providerVendorId > 0 &&
+      (await isVendorTypeCircuitOpen(provider.providerVendorId, provider.providerType))
+    ) {
+      return null;
+    }
+    if (await isCircuitOpen(provider.id)) return null;
+    if (
+      session.originalFormat &&
+      !checkFormatProviderTypeCompatibility(session.originalFormat, provider.providerType)
+    ) {
+      return null;
+    }
+    const requestedModel = session.getOriginalModel();
+    if (requestedModel && !providerSupportsModel(provider, requestedModel)) return null;
+
+    const clientResult = isClientAllowedDetailed(
+      session,
+      provider.allowedClients ?? [],
+      provider.blockedClients ?? []
+    );
+    if (!clientResult.allowed) return null;
+
+    const effectiveGroup = getEffectiveProviderGroup(session);
+    if (effectiveGroup && !checkProviderGroupMatch(provider.groupTag, effectiveGroup)) {
+      return null;
+    }
+    return provider;
+  }
+
   private static async findReusable(session: ProxySession): Promise<Provider | null> {
     if (!session.shouldReuseProvider() || !session.sessionId) {
       return null;
