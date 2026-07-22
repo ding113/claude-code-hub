@@ -578,7 +578,13 @@ const PROVIDER_LOCAL_MODEL_UNAVAILABLE_MARKER =
 
 /** A model capability gap local to one upstream account pool, not to the request. */
 export function isProviderLocalModelUnavailableError(error: unknown): error is ProxyError {
-  if (!(error instanceof ProxyError) || error.statusCode !== 404) return false;
+  if (
+    !(error instanceof ProxyError) ||
+    error.statusCode !== 404 ||
+    error.upstreamError?.statusCodeInferred === true
+  ) {
+    return false;
+  }
 
   return [error.message, error.upstreamError?.body, error.upstreamError?.rawBody].some((content) =>
     content?.toLowerCase().includes(PROVIDER_LOCAL_MODEL_UNAVAILABLE_MARKER)

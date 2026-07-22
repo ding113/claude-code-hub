@@ -119,4 +119,17 @@ describe("provider-local model availability errors", () => {
     expect(await categorizeErrorAsync(error)).toBe(ErrorCategory.NON_RETRYABLE_CLIENT_ERROR);
     expect(mocks.detectAsync).toHaveBeenCalledOnce();
   });
+
+  it("does not override a synthetic 404 inferred from a fake-200 response", async () => {
+    const error = new ProxyError("not supported by any configured account in this group", 404, {
+      body: '{"error":"model_not_found"}',
+      statusCodeInferred: true,
+      providerId: 96,
+      providerName: "provider-a",
+    });
+
+    expect(isProviderLocalModelUnavailableError(error)).toBe(false);
+    expect(await categorizeErrorAsync(error)).toBe(ErrorCategory.NON_RETRYABLE_CLIENT_ERROR);
+    expect(mocks.detectAsync).toHaveBeenCalledOnce();
+  });
 });
