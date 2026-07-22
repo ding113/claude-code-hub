@@ -75,6 +75,7 @@ import {
   isClientAbortError,
   isEmptyResponseError,
   isHttp2Error,
+  isRetryableUpstreamStorageCapacityError,
   isSSLCertificateError,
   ProxyError,
   sanitizeUrl,
@@ -959,6 +960,7 @@ function getReactiveRectifierDisplayName(rectifierType: ReactiveRectifierType): 
 }
 
 async function tryApplyReactiveRectifier(params: {
+  error: Error;
   provider: Provider;
   requestSession: ProxySession;
   persistSession: ProxySession;
@@ -967,6 +969,10 @@ async function tryApplyReactiveRectifier(params: {
   retryAttemptNumber: number;
   retryState: ReactiveRectifierRetryState;
 }): Promise<ReactiveRectifierResult> {
+  if (isRetryableUpstreamStorageCapacityError(params.error)) {
+    return { matched: false };
+  }
+
   const {
     provider,
     requestSession,
@@ -1825,6 +1831,7 @@ export class ProxyForwarder {
 
           // 2.5 Reactive rectifier：命中后对同供应商“整流 + 重试一次”
           const reactiveRectifierResult = await tryApplyReactiveRectifier({
+            error: lastError,
             provider: currentProvider,
             requestSession: session,
             persistSession: session,
@@ -4361,6 +4368,7 @@ export class ProxyForwarder {
       }
 
       const reactiveRectifierResult = await tryApplyReactiveRectifier({
+        error,
         provider: attempt.provider,
         requestSession: attempt.session,
         persistSession: session,
