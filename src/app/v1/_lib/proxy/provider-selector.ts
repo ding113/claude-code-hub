@@ -492,10 +492,8 @@ export class ProxyProviderResolver {
     }
 
     // 从 Redis 读取该 session 绑定的 provider
-    const providerId = await SessionManager.getSessionProvider(
-      session.sessionId,
-      session.authState?.key?.id ?? null
-    );
+    const keyId = session.authState?.key?.id ?? session.messageContext?.key?.id ?? null;
+    const providerId = await SessionManager.getSessionProvider(session.sessionId, keyId);
     if (!providerId) {
       logger.debug("ProviderSelector: Session has no bound provider", {
         sessionId: session.sessionId,
@@ -510,7 +508,7 @@ export class ProxyProviderResolver {
         sessionId: session.sessionId,
         providerId,
       });
-      await SessionManager.clearSessionProvider(session.sessionId, providerId);
+      await SessionManager.clearSessionProvider(session.sessionId, providerId, keyId);
       return null;
     }
 
@@ -520,7 +518,7 @@ export class ProxyProviderResolver {
         providerId: provider.id,
         providerName: provider.name,
       });
-      await SessionManager.clearSessionProvider(session.sessionId, providerId);
+      await SessionManager.clearSessionProvider(session.sessionId, providerId, keyId);
       return null;
     }
 
@@ -534,7 +532,7 @@ export class ProxyProviderResolver {
         activeTimeEnd: provider.activeTimeEnd,
         timezone: systemTimezone,
       });
-      await SessionManager.clearSessionProvider(session.sessionId, providerId);
+      await SessionManager.clearSessionProvider(session.sessionId, providerId, keyId);
       return null;
     }
 
@@ -575,7 +573,7 @@ export class ProxyProviderResolver {
         providerType: provider.providerType,
         originalFormat: session.originalFormat,
       });
-      await SessionManager.clearSessionProvider(session.sessionId, providerId);
+      await SessionManager.clearSessionProvider(session.sessionId, providerId, keyId);
       return null;
     }
 
@@ -594,7 +592,7 @@ export class ProxyProviderResolver {
       // 清除过时绑定，避免 SET NX 死锁
       // 当 session 内请求模型发生变化时，旧绑定已无意义，
       // 清除后新的成功请求可通过 SET NX 重新绑定匹配的 provider
-      await SessionManager.clearSessionProvider(session.sessionId, providerId);
+      await SessionManager.clearSessionProvider(session.sessionId, providerId, keyId);
       logger.info("ProviderSelector: Cleared stale provider binding (model mismatch)", {
         sessionId: session.sessionId,
         staleProviderId: provider.id,
@@ -650,7 +648,7 @@ export class ProxyProviderResolver {
           ],
         },
       });
-      await SessionManager.clearSessionProvider(session.sessionId, providerId);
+      await SessionManager.clearSessionProvider(session.sessionId, providerId, keyId);
       return null;
     }
 
