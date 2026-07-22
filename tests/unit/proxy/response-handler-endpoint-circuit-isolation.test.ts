@@ -357,7 +357,12 @@ function setupCommonMocks() {
     updatedAt: new Date(),
   });
   vi.mocked(updateMessageRequestDetails).mockResolvedValue(undefined);
-  vi.mocked(updateMessageRequestDetailsDurably).mockResolvedValue(true);
+  vi.mocked(updateMessageRequestDetailsDurably).mockImplementation(
+    async (_id, details, options) => {
+      await options?.onCommitted?.(details);
+      return true;
+    }
+  );
   vi.mocked(updateMessageRequestDuration).mockResolvedValue(undefined);
   vi.mocked(SessionManager.storeSessionResponse).mockResolvedValue(undefined);
   vi.mocked(SessionManager.clearSessionProvider).mockResolvedValue(undefined);
