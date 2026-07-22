@@ -1556,7 +1556,8 @@ export class ProxyForwarder {
               detected.isError &&
               (detected.code === "FAKE_200_HTML_BODY" ||
                 detected.code === "FAKE_200_JSON_ERROR_NON_EMPTY" ||
-                detected.code === "FAKE_200_JSON_ERROR_MESSAGE_NON_EMPTY");
+                detected.code === "FAKE_200_JSON_ERROR_MESSAGE_NON_EMPTY" ||
+                detected.code === "FAKE_200_OPENAI_RESPONSE_FAILED");
 
             if (isStrongFake200) {
               const inferredStatus = inferUpstreamErrorStatusCodeFromText(inspectedText);
@@ -1570,6 +1571,7 @@ export class ProxyForwarder {
                 // 不参与规则匹配/持久化，避免污染数据库或误触发覆写规则。
                 rawBody: inspectedText,
                 rawBodyTruncated: inspectedTruncated,
+                isSyntheticFake200: true,
                 statusCodeInferred: inferredStatusCode !== undefined,
                 statusCodeInferenceMatcherId: inferredStatus?.matcherId,
               });

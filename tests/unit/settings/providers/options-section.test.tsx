@@ -285,11 +285,12 @@ describe("OptionsSection", () => {
 
   describe("conditional rendering - codex provider", () => {
     it("shows Codex overrides for codex type", () => {
-      const { unmount } = renderSection({
+      const { container, unmount } = renderSection({
         state: createMockState({ routing: { providerType: "codex" } }),
       });
 
       expect(getBodyText()).toContain("sections.routing.codexOverrides.title");
+      expect(container.querySelector('[data-value="max"]')).toBeTruthy();
 
       unmount();
     });

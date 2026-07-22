@@ -12,7 +12,8 @@ export type ProviderType =
 
 // Codex（Responses API）请求参数覆写偏好
 // - "inherit": 遵循客户端请求（默认）
-// - 其他值: 强制覆写请求体字段
+// - 其他值: 强制覆写 reasoning.effort；具体模型可能只支持其中一部分档位
+// - "ultra" 是 Codex 产品的子代理模式，不属于 Responses API reasoning.effort
 export type CodexReasoningEffortPreference =
   | "inherit"
   | "none"
@@ -20,7 +21,8 @@ export type CodexReasoningEffortPreference =
   | "low"
   | "medium"
   | "high"
-  | "xhigh";
+  | "xhigh"
+  | "max";
 
 export type CodexReasoningSummaryPreference = "inherit" | "auto" | "detailed";
 
