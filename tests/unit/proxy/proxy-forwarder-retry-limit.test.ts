@@ -354,6 +354,67 @@ describe("ProxyForwarder - retry limit enforcement", () => {
     ]);
   });
 
+  test("provider-local model 404 skips same-provider retries and switches Provider", async () => {
+    const session = createSession();
+    const provider1 = createProvider({
+      id: 1,
+      name: "provider-without-model",
+      providerVendorId: null,
+      maxRetryAttempts: 3,
+    });
+    const provider2 = createProvider({
+      id: 2,
+      name: "provider-with-model",
+      providerVendorId: null,
+    });
+    session.setProvider(provider1);
+
+    mocks.getPreferredProviderEndpoints.mockResolvedValue([]);
+    vi.mocked(categorizeErrorAsync).mockResolvedValue(ErrorCategory.RESOURCE_NOT_FOUND);
+
+    const doForward = vi.spyOn(
+      ProxyForwarder as unknown as { doForward: (...args: unknown[]) => unknown },
+      "doForward"
+    );
+    const selectAlternative = vi.spyOn(
+      ProxyForwarder as unknown as { selectAlternative: (...args: unknown[]) => unknown },
+      "selectAlternative"
+    );
+    const providerLocal404 = new ProxyError(
+      'Model "gpt-5.6-sol" is not supported by any configured account in this group',
+      404,
+      {
+        body: '{"error":{"type":"model_not_found"}}',
+        providerId: provider1.id,
+        providerName: provider1.name,
+      }
+    );
+
+    doForward.mockRejectedValueOnce(providerLocal404).mockResolvedValueOnce(
+      new Response("{}", {
+        status: 200,
+        headers: { "content-type": "application/json", "content-length": "2" },
+      })
+    );
+    selectAlternative.mockResolvedValueOnce(provider2);
+
+    const response = await ProxyForwarder.send(session);
+
+    expect(response.status).toBe(200);
+    expect(doForward).toHaveBeenCalledTimes(2);
+    expect(selectAlternative).toHaveBeenCalledTimes(1);
+    expect(selectAlternative).toHaveBeenCalledWith(session, [provider1.id]);
+    expect(mocks.recordFailure).not.toHaveBeenCalled();
+    expect(session.getProviderChain()).toEqual([
+      expect.objectContaining({
+        id: provider1.id,
+        reason: "resource_not_found",
+        attemptNumber: 1,
+      }),
+      expect.objectContaining({ id: provider2.id, reason: "retry_success", attemptNumber: 1 }),
+    ]);
+  });
+
   test("endpoints > maxRetry: should only use top N lowest-latency endpoints", async () => {
     vi.useFakeTimers();
 

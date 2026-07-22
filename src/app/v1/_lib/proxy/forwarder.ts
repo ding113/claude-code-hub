@@ -75,6 +75,7 @@ import {
   isClientAbortError,
   isEmptyResponseError,
   isHttp2Error,
+  isProviderLocalModelUnavailableError,
   isSSLCertificateError,
   ProxyError,
   sanitizeUrl,
@@ -2045,10 +2046,12 @@ export class ProxyForwarder {
             break; // ⭐ 跳出内层循环，进入供应商切换逻辑
           }
 
-          // ⭐ 5. 上游 404 错误处理（不计入熔断器，先重试当前供应商，重试耗尽后切换）
+          // ⭐ 5. 上游 404 错误处理（不计入熔断器；Provider 局部模型缺口直接切换）
           if (errorCategory === ErrorCategory.RESOURCE_NOT_FOUND) {
             const proxyError = lastError as ProxyError;
-            const willRetry = attemptCount < maxAttemptsPerProvider;
+            const providerLocalModelUnavailable = isProviderLocalModelUnavailableError(proxyError);
+            const willRetry =
+              !providerLocalModelUnavailable && attemptCount < maxAttemptsPerProvider;
 
             logger.warn("ProxyForwarder: Upstream 404 error", {
               providerId: currentProvider.id,
@@ -2059,6 +2062,7 @@ export class ProxyForwarder {
               attemptNumber: attemptCount,
               totalProvidersAttempted,
               willRetry,
+              providerLocalModelUnavailable,
             });
 
             // 记录到决策链（标记为 resource_not_found，不计入熔断）
