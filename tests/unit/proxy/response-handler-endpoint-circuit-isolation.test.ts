@@ -465,7 +465,8 @@ describe("Endpoint circuit breaker isolation", () => {
     setDeferredMeta(session, 42);
 
     const response = createOpenAIResponsesFailedStreamResponse();
-    await ProxyResponseHandler.dispatch(session, response);
+    const clientResponse = await ProxyResponseHandler.dispatch(session, response);
+    await clientResponse.text();
     await drainAsyncTasks();
 
     expect(mockRecordFailure).toHaveBeenCalledWith(
@@ -474,15 +475,16 @@ describe("Endpoint circuit breaker isolation", () => {
     );
     expect(mockRecordEndpointSuccess).not.toHaveBeenCalled();
     expect(mockRecordEndpointFailure).not.toHaveBeenCalled();
-    expect(SessionManager.clearSessionProvider).toHaveBeenCalledWith("fake-session");
-    expect(updateMessageRequestDetails).toHaveBeenCalledWith(
+    expect(SessionManager.clearSessionProvider).toHaveBeenCalledWith("fake-session", 1);
+    expect(updateMessageRequestDetailsDurably).toHaveBeenCalledWith(
       1,
       expect.objectContaining({
         statusCode: 502,
         errorMessage:
           "FAKE_200_OPENAI_RESPONSE_FAILED: Concurrency limit exceeded for user, please retry later",
         providerId: 1,
-      })
+      }),
+      expect.objectContaining({ onCommitted: expect.any(Function) })
     );
     expect(RateLimitService.trackCost).not.toHaveBeenCalled();
   });
