@@ -1584,7 +1584,7 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
         'Model "gpt-5.6-sol" is not supported by any configured account in this group',
         404,
         {
-          body: '{"error":{"type":"model_not_found"}}',
+          body: '{"error":{"type":"model_not_found","message":"invalid request: not supported by any configured account in this group"}}',
           providerId: provider1.id,
           providerName: provider1.name,
         }
