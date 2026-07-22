@@ -311,6 +311,37 @@ function createFake200StreamResponse(errorMessage: string = "invalid api key"): 
   });
 }
 
+/** Create an OpenAI Responses SSE stream that reports a terminal response.failed event. */
+function createOpenAIResponsesFailedStreamResponse(): Response {
+  const body = [
+    "event: response.failed",
+    `data: ${JSON.stringify({
+      type: "response.failed",
+      response: {
+        id: "resp_123",
+        object: "response",
+        status: "failed",
+        error: {
+          code: "rate_limit_exceeded",
+          message: "Concurrency limit exceeded for user, please retry later",
+        },
+      },
+    })}`,
+    "",
+  ].join("\n");
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(encoder.encode(body));
+      controller.close();
+    },
+  });
+  return new Response(stream, {
+    status: 200,
+    headers: { "content-type": "text/event-stream" },
+  });
+}
+
 /** Create an SSE stream that returns non-200 HTTP status with error body. */
 function createNon200StreamResponse(statusCode: number): Response {
   const body = `data: ${JSON.stringify({ error: "rate limit exceeded" })}\n\n`;
@@ -391,12 +422,13 @@ function setupCommonMocks() {
   });
   vi.mocked(updateMessageRequestDetails).mockResolvedValue(undefined);
   vi.mocked(updateMessageRequestDetailsDurably).mockImplementation(
-    async (_messageId, _details, options) => {
-      await options?.onCommitted?.();
+    async (_id, details, options) => {
+      await options?.onCommitted?.(details);
       return true;
     }
   );
   vi.mocked(updateMessageRequestDuration).mockResolvedValue(undefined);
+  vi.mocked(SessionManager.updateSessionUsage).mockResolvedValue(undefined);
   vi.mocked(SessionManager.storeSessionResponse).mockResolvedValue(undefined);
   vi.mocked(SessionManager.clearSessionProvider).mockResolvedValue(undefined);
   vi.mocked(SessionManager.clearVersionedSessionProvider).mockResolvedValue({
@@ -417,7 +449,6 @@ function setupCommonMocks() {
     snapshot,
     legacyFallbackAllowed: false,
   }));
-  vi.mocked(SessionManager.updateSessionUsage).mockResolvedValue(undefined);
   vi.mocked(SessionManager.updateSessionBindingSmart).mockResolvedValue({
     updated: true,
     reason: "test",
@@ -477,6 +508,35 @@ describe("Endpoint circuit breaker isolation", () => {
           item.statusCodeInferred === true
       )
     ).toBe(true);
+  });
+
+  it("OpenAI Responses response.failed with HTTP 200 should be treated as provider failure", async () => {
+    const session = createSession();
+    setDeferredMeta(session, 42);
+
+    const response = createOpenAIResponsesFailedStreamResponse();
+    const clientResponse = await ProxyResponseHandler.dispatch(session, response);
+    await clientResponse.text();
+    await drainAsyncTasks();
+
+    expect(mockRecordFailure).toHaveBeenCalledWith(
+      1,
+      expect.objectContaining({ message: "FAKE_200_OPENAI_RESPONSE_FAILED" })
+    );
+    expect(mockRecordEndpointSuccess).not.toHaveBeenCalled();
+    expect(mockRecordEndpointFailure).not.toHaveBeenCalled();
+    expect(SessionManager.clearSessionProvider).toHaveBeenCalledWith("fake-session", 1);
+    expect(updateMessageRequestDetailsDurably).toHaveBeenCalledWith(
+      1,
+      expect.objectContaining({
+        statusCode: 502,
+        errorMessage:
+          "FAKE_200_OPENAI_RESPONSE_FAILED: Concurrency limit exceeded for user, please retry later",
+        providerId: 1,
+      }),
+      expect.objectContaining({ onCommitted: expect.any(Function) })
+    );
+    expect(RateLimitService.trackCost).not.toHaveBeenCalled();
   });
 
   it("高并发模式下，fake-200 流式错误仍应记录核心失败，但跳过 session 观测写入", async () => {

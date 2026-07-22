@@ -1581,6 +1581,82 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
     }
   });
 
+  test("provider-local model 404 should not cancel another in-flight hedge candidate", async () => {
+    vi.useFakeTimers();
+
+    try {
+      const provider1 = createProvider({ id: 1, name: "p1", firstByteTimeoutStreamingMs: 100 });
+      const provider2 = createProvider({ id: 2, name: "p2", firstByteTimeoutStreamingMs: 100 });
+      const session = createSession();
+      session.setProvider(provider1);
+
+      mocks.pickRandomProviderWithExclusion
+        .mockResolvedValueOnce(provider2)
+        .mockResolvedValueOnce(null);
+      mocks.categorizeErrorAsync.mockResolvedValue(ProxyErrorCategory.RESOURCE_NOT_FOUND);
+
+      const doForward = vi.spyOn(
+        ProxyForwarder as unknown as {
+          doForward: (...args: unknown[]) => Promise<Response>;
+        },
+        "doForward"
+      );
+      const controller1 = new AbortController();
+      const controller2 = new AbortController();
+      const providerLocal404 = new UpstreamProxyError(
+        'Model "gpt-5.6-sol" is not supported by any configured account in this group',
+        404,
+        {
+          body: '{"error":{"type":"model_not_found","message":"invalid request: not supported by any configured account in this group"}}',
+          providerId: provider1.id,
+          providerName: provider1.name,
+        }
+      );
+
+      doForward.mockImplementationOnce(async (attemptSession) => {
+        const runtime = attemptSession as ProxySession & AttemptRuntime;
+        runtime.responseController = controller1;
+        runtime.clearResponseTimeout = vi.fn();
+        return createDelayedFailure({
+          delayMs: 150,
+          error: providerLocal404,
+          controller: controller1,
+        });
+      });
+      doForward.mockImplementationOnce(async (attemptSession) => {
+        const runtime = attemptSession as ProxySession & AttemptRuntime;
+        runtime.responseController = controller2;
+        runtime.clearResponseTimeout = vi.fn();
+        return createStreamingResponse({
+          label: "p2",
+          firstChunkDelayMs: 80,
+          controller: controller2,
+        });
+      });
+
+      const responsePromise = ProxyForwarder.send(session);
+
+      await vi.advanceTimersByTimeAsync(100);
+      expect(doForward).toHaveBeenCalledTimes(2);
+      await vi.advanceTimersByTimeAsync(50);
+      expect(controller2.signal.aborted).toBe(false);
+      await vi.advanceTimersByTimeAsync(30);
+
+      const response = await responsePromise;
+      expect(await response.text()).toContain('"provider":"p2"');
+      expect(controller2.signal.aborted).toBe(false);
+      expect(mocks.recordFailure).not.toHaveBeenCalledWith(provider1.id, providerLocal404);
+      expect(session.getProviderChain()).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ id: provider1.id, reason: "resource_not_found" }),
+          expect.objectContaining({ id: provider2.id, reason: "hedge_winner" }),
+        ])
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   test.each([
     {
       name: "provider error",
@@ -1593,14 +1669,18 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
         }),
     },
     {
-      name: "resource not found",
+      name: "provider-local resource not found",
       category: ProxyErrorCategory.RESOURCE_NOT_FOUND,
       errorFactory: (provider: Provider) =>
-        new UpstreamProxyError("Provider returned 404: model not found", 404, {
-          body: '{"error":"model_not_found"}',
-          providerId: provider.id,
-          providerName: provider.name,
-        }),
+        new UpstreamProxyError(
+          'Model "gpt-5.6-sol" is not supported by any configured account in this group',
+          404,
+          {
+            body: '{"error":{"type":"model_not_found"}}',
+            providerId: provider.id,
+            providerName: provider.name,
+          }
+        ),
     },
     {
       name: "system error",
@@ -1896,6 +1976,98 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
         ]),
         1
       );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("hedge 路径的上游存储容量型 400 应记录失败并启动替代供应商", async () => {
+    vi.useFakeTimers();
+
+    try {
+      const provider1 = createProvider({ id: 1, name: "p1", firstByteTimeoutStreamingMs: 100 });
+      const provider2 = createProvider({ id: 2, name: "p2", firstByteTimeoutStreamingMs: 100 });
+      const provider3 = createProvider({ id: 3, name: "p3", firstByteTimeoutStreamingMs: 100 });
+      const session = createSession();
+      session.setProvider(provider1);
+
+      mocks.pickRandomProviderWithExclusion
+        .mockResolvedValueOnce(provider2)
+        .mockResolvedValueOnce(provider3)
+        .mockResolvedValueOnce(null);
+      mocks.categorizeErrorAsync.mockResolvedValue(ProxyErrorCategory.PROVIDER_ERROR);
+
+      const storageError = new UpstreamProxyError(
+        "invalid request: upstream storage failure",
+        400,
+        {
+          body: '{"error":{"message":"disk storage creation failed: failed to write to temp file; disk free-space floor reached"}}',
+          providerId: provider2.id,
+          providerName: provider2.name,
+        }
+      );
+
+      const doForward = vi.spyOn(
+        ProxyForwarder as unknown as {
+          doForward: (...args: unknown[]) => Promise<Response>;
+        },
+        "doForward"
+      );
+      const controller1 = new AbortController();
+      const controller2 = new AbortController();
+      const controller3 = new AbortController();
+
+      doForward.mockImplementationOnce(async (attemptSession) => {
+        const runtime = attemptSession as ProxySession & AttemptRuntime;
+        runtime.responseController = controller1;
+        runtime.clearResponseTimeout = vi.fn();
+        return createStreamingResponse({
+          label: "p1",
+          firstChunkDelayMs: 500,
+          controller: controller1,
+        });
+      });
+
+      doForward.mockImplementationOnce(async (attemptSession) => {
+        const runtime = attemptSession as ProxySession & AttemptRuntime;
+        runtime.responseController = controller2;
+        runtime.clearResponseTimeout = vi.fn();
+        return createDelayedFailure({
+          delayMs: 50,
+          error: storageError,
+          controller: controller2,
+        });
+      });
+
+      doForward.mockImplementationOnce(async (attemptSession) => {
+        const runtime = attemptSession as ProxySession & AttemptRuntime;
+        runtime.responseController = controller3;
+        runtime.clearResponseTimeout = vi.fn();
+        return createStreamingResponse({
+          label: "p3",
+          firstChunkDelayMs: 20,
+          controller: controller3,
+        });
+      });
+
+      const responsePromise = ProxyForwarder.send(session);
+
+      await vi.advanceTimersByTimeAsync(100);
+      expect(doForward).toHaveBeenCalledTimes(2);
+
+      await vi.advanceTimersByTimeAsync(55);
+      expect(doForward).toHaveBeenCalledTimes(3);
+
+      await vi.advanceTimersByTimeAsync(30);
+      const response = await responsePromise;
+
+      expect(await response.text()).toContain('"provider":"p3"');
+      expect(mocks.recordFailure).toHaveBeenCalledWith(provider2.id, storageError);
+      expect(mocks.storeSessionSpecialSettings).not.toHaveBeenCalled();
+      expect(
+        session.getProviderChain().some((entry) => entry.reason === "client_error_non_retryable")
+      ).toBe(false);
+      expect(controller1.signal.aborted).toBe(true);
     } finally {
       vi.useRealTimers();
     }

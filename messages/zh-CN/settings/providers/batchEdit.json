@@ -57,6 +57,15 @@
     "thinkingBudget": "思考预算",
     "adaptiveThinking": "自适应思考"
   },
+  "errors": {
+    "nothingToApply": "没有可应用的变更。",
+    "previewExpired": "预览已过期，请重新生成预览。",
+    "previewStale": "供应商设置在预览后发生变化，请重新生成预览。",
+    "idempotencyConflict": "该幂等键已用于其他操作。",
+    "undoExpired": "撤销窗口已过期或已被使用。",
+    "undoConflict": "撤销令牌与本次操作不匹配。",
+    "undoStale": "供应商已无法自动恢复，请刷新并检查当前状态。"
+  },
   "toast": {
     "previewFailed": "预览失败: {error}",
     "unknownError": "未知错误",
