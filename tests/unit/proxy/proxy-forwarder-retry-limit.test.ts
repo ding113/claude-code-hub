@@ -243,69 +243,115 @@ describe("ProxyForwarder - raw passthrough fallback parity", () => {
     vi.mocked(categorizeErrorAsync).mockResolvedValue(ErrorCategory.PROVIDER_ERROR);
   });
 
-  test.each([
-    V1_ENDPOINT_PATHS.MESSAGES_COUNT_TOKENS,
-    V1_ENDPOINT_PATHS.RESPONSES_COMPACT,
-  ])("%s 失败时应允许跨 provider fallback，但仍保持 no-circuit", async (pathname) => {
-    vi.useFakeTimers();
+  test.each([V1_ENDPOINT_PATHS.MESSAGES_COUNT_TOKENS, V1_ENDPOINT_PATHS.RESPONSES_COMPACT])(
+    "%s 失败时应允许跨 provider fallback，但仍保持 no-circuit",
+    async (pathname) => {
+      vi.useFakeTimers();
 
-    try {
-      const session = createSession(new URL(`https://example.com${pathname}`));
-      const provider = createProvider({
-        providerType: "claude",
-        providerVendorId: 123,
-        maxRetryAttempts: 3,
-      });
-      session.setProvider(provider);
-
-      mocks.getPreferredProviderEndpoints.mockResolvedValue([
-        makeEndpoint({
-          id: 1,
-          vendorId: 123,
+      try {
+        const session = createSession(new URL(`https://example.com${pathname}`));
+        const provider = createProvider({
           providerType: "claude",
-          url: "https://ep1.example.com",
-        }),
-        makeEndpoint({
-          id: 2,
-          vendorId: 123,
-          providerType: "claude",
-          url: "https://ep2.example.com",
-        }),
-      ]);
+          providerVendorId: 123,
+          maxRetryAttempts: 3,
+        });
+        session.setProvider(provider);
 
-      const doForward = vi.spyOn(
-        ProxyForwarder as unknown as { doForward: (...args: unknown[]) => unknown },
-        "doForward"
-      );
-      const selectAlternative = vi.spyOn(
-        ProxyForwarder as unknown as { selectAlternative: (...args: unknown[]) => unknown },
-        "selectAlternative"
-      );
+        mocks.getPreferredProviderEndpoints.mockResolvedValue([
+          makeEndpoint({
+            id: 1,
+            vendorId: 123,
+            providerType: "claude",
+            url: "https://ep1.example.com",
+          }),
+          makeEndpoint({
+            id: 2,
+            vendorId: 123,
+            providerType: "claude",
+            url: "https://ep2.example.com",
+          }),
+        ]);
 
-      doForward.mockImplementation(async () => {
-        throw new ProxyError("upstream failed", 500);
-      });
+        const doForward = vi.spyOn(
+          ProxyForwarder as unknown as { doForward: (...args: unknown[]) => unknown },
+          "doForward"
+        );
+        const selectAlternative = vi.spyOn(
+          ProxyForwarder as unknown as { selectAlternative: (...args: unknown[]) => unknown },
+          "selectAlternative"
+        );
 
-      const sendPromise = ProxyForwarder.send(session);
-      let caughtError: Error | null = null;
-      sendPromise.catch((error) => {
-        caughtError = error as Error;
-      });
-      await vi.runAllTimersAsync();
+        doForward.mockImplementation(async () => {
+          throw new ProxyError("upstream failed", 500);
+        });
 
-      expect(caughtError).toBeInstanceOf(ProxyError);
-      expect(doForward).toHaveBeenCalledTimes(1);
-      expect(selectAlternative).toHaveBeenCalledTimes(1);
-      expect(mocks.recordFailure).not.toHaveBeenCalled();
-    } finally {
-      vi.useRealTimers();
+        const sendPromise = ProxyForwarder.send(session);
+        let caughtError: Error | null = null;
+        sendPromise.catch((error) => {
+          caughtError = error as Error;
+        });
+        await vi.runAllTimersAsync();
+
+        expect(caughtError).toBeInstanceOf(ProxyError);
+        expect(doForward).toHaveBeenCalledTimes(1);
+        expect(selectAlternative).toHaveBeenCalledTimes(1);
+        expect(mocks.recordFailure).not.toHaveBeenCalled();
+      } finally {
+        vi.useRealTimers();
+      }
     }
-  });
+  );
 });
 
 describe("ProxyForwarder - retry limit enforcement", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  test("local DB admission overload should not retry or penalize Provider and endpoint circuits", async () => {
+    const session = createSession();
+    const provider = createProvider({
+      providerType: "claude",
+      providerVendorId: 123,
+      maxRetryAttempts: 3,
+    });
+    session.setProvider(provider);
+    mocks.getPreferredProviderEndpoints.mockResolvedValue([
+      makeEndpoint({
+        id: 1,
+        vendorId: 123,
+        providerType: "claude",
+        url: "https://ep1.example.com",
+      }),
+    ]);
+
+    vi.mocked(categorizeErrorAsync).mockResolvedValue(5 as ErrorCategory);
+    const admissionCause = Object.assign(new Error("Database pool data is full"), {
+      name: "DbPoolAdmissionError",
+      code: "DB_POOL_ADMISSION_EXCEEDED",
+      pool: "data",
+      maxOutstanding: 32,
+    });
+    const wrappedError = new Error("Failed query", { cause: admissionCause });
+    const doForward = vi.spyOn(
+      ProxyForwarder as unknown as { doForward: (...args: unknown[]) => unknown },
+      "doForward"
+    );
+    doForward.mockRejectedValue(wrappedError);
+
+    await expect(ProxyForwarder.send(session)).rejects.toBeDefined();
+
+    expect(doForward).toHaveBeenCalledTimes(1);
+    expect(mocks.recordEndpointFailure).not.toHaveBeenCalled();
+    expect(mocks.recordFailure).not.toHaveBeenCalled();
+    expect(session.getProviderChain()).toEqual([
+      expect.objectContaining({
+        id: provider.id,
+        endpointId: 1,
+        reason: "system_error",
+        attemptNumber: 1,
+      }),
+    ]);
   });
 
   test("endpoints > maxRetry: should only use top N lowest-latency endpoints", async () => {

@@ -49,6 +49,15 @@ let renewLeaderLockMock: ReturnType<typeof vi.fn>;
 let releaseLeaderLockMock: ReturnType<typeof vi.fn>;
 let findEnabledEndpointsMock: ReturnType<typeof vi.fn>;
 let probeByEndpointMock: ReturnType<typeof vi.fn>;
+const loggerInfoMock = vi.fn();
+const loggerWarnMock = vi.fn();
+
+vi.mock("@/lib/logger", () => ({
+  logger: {
+    info: loggerInfoMock,
+    warn: loggerWarnMock,
+  },
+}));
 
 vi.mock("@/lib/provider-endpoints/leader-lock", () => ({
   acquireLeaderLock: (...args: unknown[]) => acquireLeaderLockMock(...args),
@@ -70,6 +79,131 @@ describe("provider-endpoints: probe scheduler", () => {
     vi.useRealTimers();
     vi.unstubAllEnvs();
     vi.unstubAllGlobals();
+    vi.clearAllMocks();
+  });
+
+  describe("environment configuration", () => {
+    test("uses backward-compatible defaults when variables are unset", async () => {
+      vi.resetModules();
+      vi.stubEnv("ENDPOINT_PROBE_SCHEDULER_ENABLED", undefined);
+      vi.stubEnv("ENDPOINT_PROBE_TIMEOUT_RETRY_INTERVAL_MS", undefined);
+
+      const { getEndpointProbeSchedulerStatus } = await import(
+        "@/lib/provider-endpoints/probe-scheduler"
+      );
+
+      expect(getEndpointProbeSchedulerStatus()).toEqual(
+        expect.objectContaining({
+          enabled: true,
+          timeoutOverrideIntervalMs: 10_000,
+        })
+      );
+      expect(loggerWarnMock).not.toHaveBeenCalled();
+    });
+
+    test.each([
+      { value: "true", expected: true },
+      { value: "1", expected: true },
+      { value: "false", expected: false },
+      { value: "0", expected: false },
+    ])("parses ENDPOINT_PROBE_SCHEDULER_ENABLED=$value", async ({ value, expected }) => {
+      vi.resetModules();
+      vi.stubEnv("ENDPOINT_PROBE_SCHEDULER_ENABLED", value);
+      vi.stubEnv("ENDPOINT_PROBE_TIMEOUT_RETRY_INTERVAL_MS", undefined);
+
+      const { getEndpointProbeSchedulerStatus } = await import(
+        "@/lib/provider-endpoints/probe-scheduler"
+      );
+
+      expect(getEndpointProbeSchedulerStatus().enabled).toBe(expected);
+      expect(loggerWarnMock).not.toHaveBeenCalled();
+    });
+
+    test.each([
+      "enabled",
+      "TRUE",
+      " false ",
+    ])("invalid scheduler switch %s warns and falls back to enabled", async (value) => {
+      vi.resetModules();
+      vi.stubEnv("ENDPOINT_PROBE_SCHEDULER_ENABLED", value);
+      vi.stubEnv("ENDPOINT_PROBE_TIMEOUT_RETRY_INTERVAL_MS", undefined);
+
+      const { getEndpointProbeSchedulerStatus } = await import(
+        "@/lib/provider-endpoints/probe-scheduler"
+      );
+
+      expect(getEndpointProbeSchedulerStatus().enabled).toBe(true);
+      expect(loggerWarnMock).toHaveBeenCalledWith(
+        "[EndpointProbeScheduler] Invalid environment variable, using default",
+        {
+          name: "ENDPOINT_PROBE_SCHEDULER_ENABLED",
+          value,
+          defaultValue: true,
+        }
+      );
+    });
+
+    test.each([
+      "10000ms",
+      "0",
+      "-1",
+      "1.5",
+    ])("invalid timeout retry interval %s warns and falls back to 10000", async (value) => {
+      vi.resetModules();
+      vi.stubEnv("ENDPOINT_PROBE_SCHEDULER_ENABLED", undefined);
+      vi.stubEnv("ENDPOINT_PROBE_TIMEOUT_RETRY_INTERVAL_MS", value);
+
+      const { getEndpointProbeSchedulerStatus } = await import(
+        "@/lib/provider-endpoints/probe-scheduler"
+      );
+
+      expect(getEndpointProbeSchedulerStatus().timeoutOverrideIntervalMs).toBe(10_000);
+      expect(loggerWarnMock).toHaveBeenCalledWith(
+        "[EndpointProbeScheduler] Invalid environment variable, using default",
+        {
+          name: "ENDPOINT_PROBE_TIMEOUT_RETRY_INTERVAL_MS",
+          value,
+          defaultValue: 10_000,
+        }
+      );
+    });
+
+    test("disabled scheduler does not create a timer, acquire a lock, or query endpoints", async () => {
+      vi.resetModules();
+      vi.stubEnv("ENDPOINT_PROBE_SCHEDULER_ENABLED", "false");
+      vi.stubEnv("ENDPOINT_PROBE_TIMEOUT_RETRY_INTERVAL_MS", undefined);
+
+      acquireLeaderLockMock = vi.fn(async () => null);
+      renewLeaderLockMock = vi.fn(async () => false);
+      releaseLeaderLockMock = vi.fn(async () => {});
+      findEnabledEndpointsMock = vi.fn(async () => [makeEndpoint(1)]);
+      probeByEndpointMock = vi.fn(async () => makeOkResult());
+      const setIntervalMock = vi.fn();
+      vi.stubGlobal("setInterval", setIntervalMock);
+
+      const { getEndpointProbeSchedulerStatus, startEndpointProbeScheduler } = await import(
+        "@/lib/provider-endpoints/probe-scheduler"
+      );
+
+      startEndpointProbeScheduler();
+      await flushMicrotasks();
+
+      expect(getEndpointProbeSchedulerStatus()).toEqual(
+        expect.objectContaining({
+          enabled: false,
+          started: false,
+          running: false,
+        })
+      );
+      expect(setIntervalMock).not.toHaveBeenCalled();
+      expect(acquireLeaderLockMock).not.toHaveBeenCalled();
+      expect(findEnabledEndpointsMock).not.toHaveBeenCalled();
+      expect(probeByEndpointMock).not.toHaveBeenCalled();
+      expect(loggerInfoMock).toHaveBeenCalledWith(
+        "[EndpointProbeScheduler] Disabled by configuration",
+        { name: "ENDPOINT_PROBE_SCHEDULER_ENABLED" }
+      );
+    });
   });
 
   test("not leader: scheduled probing does nothing", async () => {
@@ -315,6 +449,69 @@ describe("provider-endpoints: probe scheduler", () => {
       // Only timeout endpoint should be probed
       expect(probeByEndpointMock).toHaveBeenCalledTimes(1);
       expect(probeByEndpointMock.mock.calls[0][0].endpoint.id).toBe(1);
+
+      stopEndpointProbeScheduler();
+    });
+
+    test.each([
+      {
+        scenario: "before the configured threshold",
+        now: "2024-01-01T12:00:15Z",
+        expectedProbeCount: 0,
+      },
+      {
+        scenario: "at the configured threshold",
+        now: "2024-01-01T12:00:30Z",
+        expectedProbeCount: 1,
+      },
+    ])("custom timeout retry interval $scenario", async ({ now, expectedProbeCount }) => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date(now));
+
+      vi.resetModules();
+      vi.stubEnv("ENDPOINT_PROBE_INTERVAL_MS", "60000");
+      vi.stubEnv("ENDPOINT_PROBE_TIMEOUT_RETRY_INTERVAL_MS", "30000");
+      vi.stubEnv("ENDPOINT_PROBE_CYCLE_JITTER_MS", "0");
+
+      acquireLeaderLockMock = vi.fn(async () => ({
+        key: "locks:endpoint-probe-scheduler",
+        lockId: "test",
+        lockType: "memory" as const,
+      }));
+      renewLeaderLockMock = vi.fn(async () => true);
+      releaseLeaderLockMock = vi.fn(async () => {});
+
+      const timeoutEndpoint = makeEndpoint(1, {
+        vendorId: 1,
+        lastProbedAt: new Date("2024-01-01T12:00:00Z"),
+        lastProbeOk: false,
+        lastProbeErrorType: "timeout",
+      });
+      const normalEndpoint = makeEndpoint(2, {
+        vendorId: 1,
+        lastProbedAt: new Date("2024-01-01T12:00:00Z"),
+        lastProbeOk: true,
+      });
+
+      findEnabledEndpointsMock = vi.fn(async () => [timeoutEndpoint, normalEndpoint]);
+      probeByEndpointMock = vi.fn(async () => makeOkResult());
+
+      const {
+        getEndpointProbeSchedulerStatus,
+        startEndpointProbeScheduler,
+        stopEndpointProbeScheduler,
+      } = await import("@/lib/provider-endpoints/probe-scheduler");
+
+      expect(getEndpointProbeSchedulerStatus().timeoutOverrideIntervalMs).toBe(30_000);
+
+      startEndpointProbeScheduler();
+      await flushMicrotasks();
+
+      expect(findEnabledEndpointsMock).toHaveBeenCalledTimes(1);
+      expect(probeByEndpointMock).toHaveBeenCalledTimes(expectedProbeCount);
+      if (expectedProbeCount === 1) {
+        expect(probeByEndpointMock.mock.calls[0][0].endpoint.id).toBe(1);
+      }
 
       stopEndpointProbeScheduler();
     });

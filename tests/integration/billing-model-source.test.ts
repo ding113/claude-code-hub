@@ -3,14 +3,37 @@ import type { ModelPrice, ModelPriceData } from "@/types/model-price";
 import type { SystemSettings } from "@/types/system-config";
 
 const asyncTasks: Promise<void>[] = [];
+const asyncTaskControllers = new Map<Promise<void>, AbortController>();
+let asyncTaskAdmissionOpen = true;
 const cloudPriceSyncRequests: Array<{ reason: string }> = [];
 
 vi.mock("@/lib/async-task-manager", () => ({
   AsyncTaskManager: {
-    register: (_taskId: string, promise: Promise<void>) => {
+    register: (
+      _taskId: string,
+      factory: (signal: AbortSignal) => Promise<void>,
+      options?: string | { abortController?: AbortController }
+    ) => {
+      const controller =
+        typeof options === "object" && options.abortController
+          ? options.abortController
+          : new AbortController();
+      if (!asyncTaskAdmissionOpen) {
+        controller.abort();
+        return controller;
+      }
+
+      let promise: Promise<void>;
+      try {
+        promise = Promise.resolve(factory(controller.signal));
+      } catch (error) {
+        promise = Promise.reject(error);
+      }
       asyncTasks.push(promise);
-      return new AbortController();
+      asyncTaskControllers.set(promise, controller);
+      return controller;
     },
+    touch: () => true,
     cleanup: () => {},
     cancel: () => {},
   },
@@ -43,6 +66,7 @@ vi.mock("@/repository/system-config", () => ({
 vi.mock("@/repository/message", () => ({
   updateMessageRequestCostWithBreakdown: vi.fn(),
   updateMessageRequestDetails: vi.fn(),
+  updateMessageRequestDetailsDurably: vi.fn(),
   updateMessageRequestDuration: vi.fn(),
 }));
 
@@ -60,6 +84,7 @@ vi.mock("@/lib/rate-limit", () => ({
   RateLimitService: {
     trackCost: vi.fn(),
     trackUserDailyCost: vi.fn(),
+    settleLeaseBudgets: vi.fn(),
   },
 }));
 
@@ -79,6 +104,7 @@ vi.mock("@/lib/proxy-status-tracker", () => ({
 
 import { finalizeRequestStats, ProxyResponseHandler } from "@/app/v1/_lib/proxy/response-handler";
 import { ProxySession } from "@/app/v1/_lib/proxy/session";
+import { AsyncTaskManager } from "@/lib/async-task-manager";
 import { getCachedSystemSettings, invalidateSystemSettingsCache } from "@/lib/config";
 import { SessionManager } from "@/lib/session-manager";
 import { RateLimitService } from "@/lib/rate-limit";
@@ -86,6 +112,7 @@ import { SessionTracker } from "@/lib/session-tracker";
 import {
   updateMessageRequestCostWithBreakdown,
   updateMessageRequestDetails,
+  updateMessageRequestDetailsDurably,
   updateMessageRequestDuration,
 } from "@/repository/message";
 import { findLatestPriceByModel } from "@/repository/model-price";
@@ -93,6 +120,13 @@ import { getSystemSettings } from "@/repository/system-config";
 
 beforeEach(() => {
   vi.clearAllMocks();
+  asyncTaskAdmissionOpen = false;
+  for (const controller of asyncTaskControllers.values()) {
+    controller.abort();
+  }
+  asyncTasks.splice(0, asyncTasks.length);
+  asyncTaskControllers.clear();
+  asyncTaskAdmissionOpen = true;
   cloudPriceSyncRequests.splice(0, cloudPriceSyncRequests.length);
   invalidateSystemSettingsCache();
 });
@@ -312,9 +346,194 @@ function createStreamResponse(usage: { input_tokens: number; output_tokens: numb
 }
 
 async function drainAsyncTasks(): Promise<void> {
-  const tasks = asyncTasks.splice(0, asyncTasks.length);
-  await Promise.all(tasks);
+  const errors: unknown[] = [];
+  const maxDrainRounds = 100;
+  let round = 0;
+
+  while (asyncTasks.length > 0) {
+    if (round >= maxDrainRounds) {
+      asyncTaskAdmissionOpen = false;
+      const overflowTasks = asyncTasks.splice(0, asyncTasks.length);
+      for (const task of overflowTasks) {
+        asyncTaskControllers.get(task)?.abort();
+      }
+      const overflowResults = await Promise.allSettled(overflowTasks);
+      for (let index = 0; index < overflowResults.length; index += 1) {
+        asyncTaskControllers.delete(overflowTasks[index]);
+        const result = overflowResults[index];
+        if (result.status === "rejected") {
+          errors.push(result.reason);
+        }
+      }
+      errors.push(new Error(`Async task drain exceeded ${maxDrainRounds} rounds`));
+      break;
+    }
+    round += 1;
+
+    const tasks = asyncTasks.splice(0, asyncTasks.length);
+    const results = await Promise.allSettled(tasks);
+    for (let index = 0; index < results.length; index += 1) {
+      asyncTaskControllers.delete(tasks[index]);
+      const result = results[index];
+      if (result.status === "rejected") {
+        errors.push(result.reason);
+      }
+    }
+  }
+
+  if (errors.length > 0) {
+    throw new AggregateError(errors, "Async task drain failed");
+  }
 }
+
+describe("drainAsyncTasks", () => {
+  it("waits for a tail task registered while draining the primary task", async () => {
+    let markTailStarted: () => void = () => {};
+    let releaseTail: () => void = () => {};
+    const tailStarted = new Promise<void>((resolve) => {
+      markTailStarted = resolve;
+    });
+    const tailCompleted = vi.fn();
+
+    AsyncTaskManager.register("primary", async () => {
+      await Promise.resolve();
+      AsyncTaskManager.register("tail", async () => {
+        markTailStarted();
+        await new Promise<void>((resolve) => {
+          releaseTail = resolve;
+        });
+        tailCompleted();
+      });
+    });
+
+    const drainPromise = drainAsyncTasks();
+    await tailStarted;
+
+    try {
+      const outcome = await Promise.race([
+        drainPromise.then(() => "drained" as const),
+        new Promise<"pending">((resolve) => {
+          setTimeout(() => resolve("pending"), 0);
+        }),
+      ]);
+
+      expect(outcome).toBe("pending");
+    } finally {
+      releaseTail();
+    }
+
+    await drainPromise;
+    expect(tailCompleted).toHaveBeenCalledTimes(1);
+  });
+
+  it("waits for sibling tail work before reporting tail rejections", async () => {
+    const tailError = new Error("tail task failed");
+    let markPendingTailStarted: () => void = () => {};
+    let releasePendingTail: () => void = () => {};
+    const pendingTailStarted = new Promise<void>((resolve) => {
+      markPendingTailStarted = resolve;
+    });
+
+    AsyncTaskManager.register("primary", async () => {
+      await Promise.resolve();
+      AsyncTaskManager.register("rejecting-tail", async () => {
+        throw tailError;
+      });
+      void asyncTasks.at(-1)?.catch(() => {});
+      AsyncTaskManager.register("pending-tail", async () => {
+        markPendingTailStarted();
+        await new Promise<void>((resolve) => {
+          releasePendingTail = resolve;
+        });
+      });
+    });
+
+    const drainPromise = drainAsyncTasks();
+    await pendingTailStarted;
+
+    try {
+      const earlyOutcome = await Promise.race([
+        drainPromise.then(
+          () => "resolved" as const,
+          () => "rejected" as const
+        ),
+        new Promise<"pending">((resolve) => {
+          setTimeout(() => resolve("pending"), 0);
+        }),
+      ]);
+
+      expect(earlyOutcome).toBe("pending");
+    } finally {
+      releasePendingTail();
+    }
+
+    const rejection = await drainPromise.then(
+      () => undefined,
+      (error: unknown) => error
+    );
+    expect(rejection).toBeInstanceOf(AggregateError);
+    expect((rejection as AggregateError).errors).toEqual([tailError]);
+  });
+
+  it("closes admission and observes overflow work when the drain guard trips", async () => {
+    const overflowError = new Error("overflow task aborted");
+    const blockedTailStarted = vi.fn();
+    let overflowController: AbortController | undefined;
+
+    const registerGeneration = (generation: number): void => {
+      const controller = AsyncTaskManager.register(`generation-${generation}`, async (signal) => {
+        await new Promise<void>((resolve) => {
+          setTimeout(resolve, 0);
+        });
+
+        if (generation <= 100) {
+          registerGeneration(generation + 1);
+          return;
+        }
+
+        await new Promise<void>((_resolve, reject) => {
+          const rejectOnAbort = () => {
+            AsyncTaskManager.register("blocked-overflow-tail", async () => {
+              blockedTailStarted();
+            });
+            reject(overflowError);
+          };
+
+          if (signal.aborted) {
+            rejectOnAbort();
+            return;
+          }
+          signal.addEventListener("abort", rejectOnAbort, { once: true });
+        });
+      });
+
+      if (generation === 101) {
+        overflowController = controller;
+      }
+    };
+
+    registerGeneration(1);
+    const rejection = await drainAsyncTasks().then(
+      () => undefined,
+      (error: unknown) => error
+    );
+
+    try {
+      expect(rejection).toBeInstanceOf(AggregateError);
+      expect((rejection as AggregateError).errors).toContain(overflowError);
+      expect((rejection as AggregateError).errors).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ message: "Async task drain exceeded 100 rounds" }),
+        ])
+      );
+      expect(blockedTailStarted).not.toHaveBeenCalled();
+      expect(asyncTasks).toHaveLength(0);
+    } finally {
+      overflowController?.abort();
+      await Promise.allSettled(asyncTasks.splice(0, asyncTasks.length));
+    }
+  });
+});
 
 function captureRateLimitCosts(): number[] {
   const rateLimitCosts: number[] = [];
@@ -367,7 +586,7 @@ async function runScenario({
     return null;
   });
 
-  vi.mocked(updateMessageRequestDetails).mockResolvedValue(undefined);
+  vi.mocked(updateMessageRequestDetailsDurably).mockResolvedValue(undefined);
   vi.mocked(updateMessageRequestDuration).mockResolvedValue(undefined);
   vi.mocked(SessionManager.storeSessionResponse).mockResolvedValue(undefined);
   vi.mocked(RateLimitService.trackUserDailyCost).mockResolvedValue(undefined);
@@ -494,7 +713,7 @@ describe("Billing model source - Redis session cost vs DB cost", () => {
 
   it("nested pricing: gpt-5.5 alias model should bill from pricing.openai when provider is chatgpt", async () => {
     vi.mocked(getSystemSettings).mockResolvedValue(makeSystemSettings("redirected"));
-    vi.mocked(updateMessageRequestDetails).mockResolvedValue(undefined);
+    vi.mocked(updateMessageRequestDetailsDurably).mockResolvedValue(undefined);
     vi.mocked(updateMessageRequestDuration).mockResolvedValue(undefined);
     vi.mocked(SessionManager.storeSessionResponse).mockResolvedValue(undefined);
     vi.mocked(RateLimitService.trackUserDailyCost).mockResolvedValue(undefined);
@@ -556,7 +775,7 @@ describe("Billing model source - Redis session cost vs DB cost", () => {
 
   it("codex fast: requested mode ignores actual priority when request tier is default", async () => {
     vi.mocked(getSystemSettings).mockResolvedValue(makeSystemSettings("redirected"));
-    vi.mocked(updateMessageRequestDetails).mockResolvedValue(undefined);
+    vi.mocked(updateMessageRequestDetailsDurably).mockResolvedValue(undefined);
     vi.mocked(updateMessageRequestDuration).mockResolvedValue(undefined);
     vi.mocked(SessionManager.storeSessionResponse).mockResolvedValue(undefined);
     vi.mocked(RateLimitService.trackUserDailyCost).mockResolvedValue(undefined);
@@ -625,7 +844,7 @@ describe("Billing model source - Redis session cost vs DB cost", () => {
 
   it("codex fast: falls back to requested priority pricing when response omits service_tier", async () => {
     vi.mocked(getSystemSettings).mockResolvedValue(makeSystemSettings("redirected"));
-    vi.mocked(updateMessageRequestDetails).mockResolvedValue(undefined);
+    vi.mocked(updateMessageRequestDetailsDurably).mockResolvedValue(undefined);
     vi.mocked(updateMessageRequestDuration).mockResolvedValue(undefined);
     vi.mocked(SessionManager.storeSessionResponse).mockResolvedValue(undefined);
     vi.mocked(RateLimitService.trackUserDailyCost).mockResolvedValue(undefined);
@@ -681,7 +900,7 @@ describe("Billing model source - Redis session cost vs DB cost", () => {
 
   it("codex fast: uses long-context priority pricing when request is priority and response omits service_tier", async () => {
     vi.mocked(getSystemSettings).mockResolvedValue(makeSystemSettings("redirected"));
-    vi.mocked(updateMessageRequestDetails).mockResolvedValue(undefined);
+    vi.mocked(updateMessageRequestDetailsDurably).mockResolvedValue(undefined);
     vi.mocked(updateMessageRequestDuration).mockResolvedValue(undefined);
     vi.mocked(SessionManager.storeSessionResponse).mockResolvedValue(undefined);
     vi.mocked(RateLimitService.trackUserDailyCost).mockResolvedValue(undefined);
@@ -751,7 +970,7 @@ describe("Billing model source - Redis session cost vs DB cost", () => {
 
   it("codex fast: requested mode keeps priority pricing even when actual tier is downgraded", async () => {
     vi.mocked(getSystemSettings).mockResolvedValue(makeSystemSettings("redirected"));
-    vi.mocked(updateMessageRequestDetails).mockResolvedValue(undefined);
+    vi.mocked(updateMessageRequestDetailsDurably).mockResolvedValue(undefined);
     vi.mocked(updateMessageRequestDuration).mockResolvedValue(undefined);
     vi.mocked(SessionManager.storeSessionResponse).mockResolvedValue(undefined);
     vi.mocked(RateLimitService.trackUserDailyCost).mockResolvedValue(undefined);
@@ -810,7 +1029,7 @@ describe("Billing model source - Redis session cost vs DB cost", () => {
 
   it("codex fast: actual mode uses priority pricing when response reports service_tier=priority", async () => {
     vi.mocked(getSystemSettings).mockResolvedValue(makeSystemSettings("redirected", "actual"));
-    vi.mocked(updateMessageRequestDetails).mockResolvedValue(undefined);
+    vi.mocked(updateMessageRequestDetailsDurably).mockResolvedValue(undefined);
     vi.mocked(updateMessageRequestDuration).mockResolvedValue(undefined);
     vi.mocked(SessionManager.storeSessionResponse).mockResolvedValue(undefined);
     vi.mocked(RateLimitService.trackUserDailyCost).mockResolvedValue(undefined);
@@ -869,7 +1088,7 @@ describe("Billing model source - Redis session cost vs DB cost", () => {
 
   it("codex fast: actual mode does not use priority pricing when response explicitly reports non-priority tier", async () => {
     vi.mocked(getSystemSettings).mockResolvedValue(makeSystemSettings("redirected", "actual"));
-    vi.mocked(updateMessageRequestDetails).mockResolvedValue(undefined);
+    vi.mocked(updateMessageRequestDetailsDurably).mockResolvedValue(undefined);
     vi.mocked(updateMessageRequestDuration).mockResolvedValue(undefined);
     vi.mocked(SessionManager.storeSessionResponse).mockResolvedValue(undefined);
     vi.mocked(RateLimitService.trackUserDailyCost).mockResolvedValue(undefined);
@@ -928,7 +1147,7 @@ describe("Billing model source - Redis session cost vs DB cost", () => {
 
   it("codex fast: actual mode falls back to requested priority pricing when response omits service_tier", async () => {
     vi.mocked(getSystemSettings).mockResolvedValue(makeSystemSettings("redirected", "actual"));
-    vi.mocked(updateMessageRequestDetails).mockResolvedValue(undefined);
+    vi.mocked(updateMessageRequestDetailsDurably).mockResolvedValue(undefined);
     vi.mocked(updateMessageRequestDuration).mockResolvedValue(undefined);
     vi.mocked(SessionManager.storeSessionResponse).mockResolvedValue(undefined);
     vi.mocked(RateLimitService.trackUserDailyCost).mockResolvedValue(undefined);
@@ -987,7 +1206,7 @@ describe("Billing model source - Redis session cost vs DB cost", () => {
     await getCachedSystemSettings();
 
     vi.mocked(getSystemSettings).mockRejectedValueOnce(new Error("db down"));
-    vi.mocked(updateMessageRequestDetails).mockResolvedValue(undefined);
+    vi.mocked(updateMessageRequestDetailsDurably).mockResolvedValue(undefined);
     vi.mocked(updateMessageRequestDuration).mockResolvedValue(undefined);
     vi.mocked(SessionManager.storeSessionResponse).mockResolvedValue(undefined);
     vi.mocked(RateLimitService.trackUserDailyCost).mockResolvedValue(undefined);
@@ -1075,7 +1294,7 @@ describe("模型重定向后的图片按次计费", () => {
       return null;
     });
 
-    vi.mocked(updateMessageRequestDetails).mockResolvedValue(undefined);
+    vi.mocked(updateMessageRequestDetailsDurably).mockResolvedValue(undefined);
     vi.mocked(updateMessageRequestDuration).mockResolvedValue(undefined);
     vi.mocked(SessionManager.storeSessionResponse).mockResolvedValue(undefined);
     vi.mocked(RateLimitService.trackUserDailyCost).mockResolvedValue(undefined);
@@ -1185,7 +1404,7 @@ describe("模型重定向后的图片按次计费", () => {
       return makePriceRecord(modelName, { input_cost_per_request: 0 }, "manual");
     });
 
-    vi.mocked(updateMessageRequestDetails).mockResolvedValue(undefined);
+    vi.mocked(updateMessageRequestDetailsDurably).mockResolvedValue(undefined);
     vi.mocked(updateMessageRequestDuration).mockResolvedValue(undefined);
     vi.mocked(SessionManager.storeSessionResponse).mockResolvedValue(undefined);
     vi.mocked(RateLimitService.trackUserDailyCost).mockResolvedValue(undefined);
@@ -1229,7 +1448,7 @@ describe("模型重定向后的图片按次计费", () => {
       throw new Error("pricing db unavailable");
     });
 
-    vi.mocked(updateMessageRequestDetails).mockResolvedValue(undefined);
+    vi.mocked(updateMessageRequestDetailsDurably).mockResolvedValue(undefined);
     vi.mocked(updateMessageRequestDuration).mockResolvedValue(undefined);
     vi.mocked(SessionManager.storeSessionResponse).mockResolvedValue(undefined);
     vi.mocked(RateLimitService.trackUserDailyCost).mockResolvedValue(undefined);
@@ -1277,7 +1496,7 @@ describe("模型重定向后的图片按次计费", () => {
       return makePriceRecord(modelName, { input_cost_per_request: 0.01 }, "manual");
     });
 
-    vi.mocked(updateMessageRequestDetails).mockResolvedValue(undefined);
+    vi.mocked(updateMessageRequestDetailsDurably).mockResolvedValue(undefined);
     vi.mocked(updateMessageRequestDuration).mockResolvedValue(undefined);
     vi.mocked(SessionManager.storeSessionResponse).mockResolvedValue(undefined);
     vi.mocked(RateLimitService.trackUserDailyCost).mockResolvedValue(undefined);
@@ -1327,7 +1546,7 @@ describe("模型重定向后的图片按次计费", () => {
     });
 
     vi.mocked(updateMessageRequestCostWithBreakdown).mockResolvedValue(undefined);
-    vi.mocked(updateMessageRequestDetails).mockResolvedValue(undefined);
+    vi.mocked(updateMessageRequestDetailsDurably).mockResolvedValue(undefined);
     vi.mocked(RateLimitService.trackCost).mockResolvedValue(undefined);
 
     let sessionUsagePayload: Record<string, unknown> | undefined;
@@ -1390,7 +1609,7 @@ describe("价格表缺失/查询失败：不计费放行", () => {
       });
     }
 
-    vi.mocked(updateMessageRequestDetails).mockResolvedValue(undefined);
+    vi.mocked(updateMessageRequestDetailsDurably).mockResolvedValue(undefined);
     vi.mocked(updateMessageRequestDuration).mockResolvedValue(undefined);
     vi.mocked(SessionManager.storeSessionResponse).mockResolvedValue(undefined);
     vi.mocked(RateLimitService.trackUserDailyCost).mockResolvedValue(undefined);

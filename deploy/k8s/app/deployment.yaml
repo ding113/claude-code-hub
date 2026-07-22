@@ -52,7 +52,7 @@ spec:
             - name: AUTO_MIGRATE
               value: "true"
             - name: DB_POOL_MAX
-              value: "30"
+              value: "24"
             - name: DB_POOL_IDLE_TIMEOUT
               value: "20"
             - name: DB_POOL_CONNECT_TIMEOUT

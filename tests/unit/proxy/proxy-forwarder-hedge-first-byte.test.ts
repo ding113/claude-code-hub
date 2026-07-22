@@ -1454,7 +1454,7 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
       await rejection;
       expect(controller1.signal.aborted).toBe(true);
       expect(controller2.signal.aborted).toBe(true);
-      expect(mocks.clearSessionProvider).toHaveBeenCalledWith("sess-hedge");
+      expect(mocks.clearSessionProvider).toHaveBeenCalledWith("sess-hedge", 1);
       expect(mocks.recordFailure).not.toHaveBeenCalled();
       expect(mocks.recordSuccess).not.toHaveBeenCalled();
 
@@ -1584,74 +1584,74 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
       category: ProxyErrorCategory.SYSTEM_ERROR,
       errorFactory: () => new Error("fetch failed"),
     },
-  ])("when a real hedge race ends with only $name, terminal error should be generic fallback", async ({
-    category,
-    errorFactory,
-  }) => {
-    vi.useFakeTimers();
+  ])(
+    "when a real hedge race ends with only $name, terminal error should be generic fallback",
+    async ({ category, errorFactory }) => {
+      vi.useFakeTimers();
 
-    try {
-      const provider1 = createProvider({ id: 1, name: "p1", firstByteTimeoutStreamingMs: 100 });
-      const provider2 = createProvider({ id: 2, name: "p2", firstByteTimeoutStreamingMs: 100 });
-      const session = createSession();
-      session.setProvider(provider1);
+      try {
+        const provider1 = createProvider({ id: 1, name: "p1", firstByteTimeoutStreamingMs: 100 });
+        const provider2 = createProvider({ id: 2, name: "p2", firstByteTimeoutStreamingMs: 100 });
+        const session = createSession();
+        session.setProvider(provider1);
 
-      mocks.pickRandomProviderWithExclusion
-        .mockResolvedValueOnce(provider2)
-        .mockResolvedValueOnce(null);
-      mocks.categorizeErrorAsync.mockResolvedValueOnce(category).mockResolvedValueOnce(category);
+        mocks.pickRandomProviderWithExclusion
+          .mockResolvedValueOnce(provider2)
+          .mockResolvedValueOnce(null);
+        mocks.categorizeErrorAsync.mockResolvedValueOnce(category).mockResolvedValueOnce(category);
 
-      const doForward = vi.spyOn(
-        ProxyForwarder as unknown as {
-          doForward: (...args: unknown[]) => Promise<Response>;
-        },
-        "doForward"
-      );
+        const doForward = vi.spyOn(
+          ProxyForwarder as unknown as {
+            doForward: (...args: unknown[]) => Promise<Response>;
+          },
+          "doForward"
+        );
 
-      const controller1 = new AbortController();
-      const controller2 = new AbortController();
+        const controller1 = new AbortController();
+        const controller2 = new AbortController();
 
-      doForward.mockImplementationOnce(async (attemptSession) => {
-        const runtime = attemptSession as ProxySession & AttemptRuntime;
-        runtime.responseController = controller1;
-        runtime.clearResponseTimeout = vi.fn();
-        return createDelayedFailure({
-          delayMs: 150,
-          error: errorFactory(provider1),
-          controller: controller1,
+        doForward.mockImplementationOnce(async (attemptSession) => {
+          const runtime = attemptSession as ProxySession & AttemptRuntime;
+          runtime.responseController = controller1;
+          runtime.clearResponseTimeout = vi.fn();
+          return createDelayedFailure({
+            delayMs: 150,
+            error: errorFactory(provider1),
+            controller: controller1,
+          });
         });
-      });
 
-      doForward.mockImplementationOnce(async (attemptSession) => {
-        const runtime = attemptSession as ProxySession & AttemptRuntime;
-        runtime.responseController = controller2;
-        runtime.clearResponseTimeout = vi.fn();
-        return createDelayedFailure({
-          delayMs: 160,
-          error: errorFactory(provider2),
-          controller: controller2,
+        doForward.mockImplementationOnce(async (attemptSession) => {
+          const runtime = attemptSession as ProxySession & AttemptRuntime;
+          runtime.responseController = controller2;
+          runtime.clearResponseTimeout = vi.fn();
+          return createDelayedFailure({
+            delayMs: 160,
+            error: errorFactory(provider2),
+            controller: controller2,
+          });
         });
-      });
 
-      const responsePromise = ProxyForwarder.send(session);
-      const errorPromise = responsePromise.catch((rejection) => rejection as UpstreamProxyError);
+        const responsePromise = ProxyForwarder.send(session);
+        const errorPromise = responsePromise.catch((rejection) => rejection as UpstreamProxyError);
 
-      await vi.advanceTimersByTimeAsync(100);
-      expect(doForward).toHaveBeenCalledTimes(2);
+        await vi.advanceTimersByTimeAsync(100);
+        expect(doForward).toHaveBeenCalledTimes(2);
 
-      await vi.runAllTimersAsync();
-      const error = await errorPromise;
+        await vi.runAllTimersAsync();
+        const error = await errorPromise;
 
-      expect(error).toBeInstanceOf(UpstreamProxyError);
-      expect(error.statusCode).toBe(503);
-      expect(error.message).toBe("所有供应商暂时不可用，请稍后重试");
-      expect(error.message).not.toContain("invalid key");
-      expect(error.message).not.toContain("model not found");
-      expect(mocks.clearSessionProvider).toHaveBeenCalledWith("sess-hedge");
-    } finally {
-      vi.useRealTimers();
+        expect(error).toBeInstanceOf(UpstreamProxyError);
+        expect(error.statusCode).toBe(503);
+        expect(error.message).toBe("所有供应商暂时不可用，请稍后重试");
+        expect(error.message).not.toContain("invalid key");
+        expect(error.message).not.toContain("model not found");
+        expect(mocks.clearSessionProvider).toHaveBeenCalledWith("sess-hedge", 1);
+      } finally {
+        vi.useRealTimers();
+      }
     }
-  });
+  );
 
   test("non-retryable client errors should stop hedge immediately and preserve original error", async () => {
     const provider1 = createProvider({ id: 1, name: "p1", firstByteTimeoutStreamingMs: 100 });
@@ -1694,7 +1694,7 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
     expect(error.message).toBe("prompt too long");
     expect(doForward).toHaveBeenCalledTimes(1);
     expect(mocks.pickRandomProviderWithExclusion).not.toHaveBeenCalled();
-    expect(mocks.clearSessionProvider).toHaveBeenCalledWith("sess-hedge");
+    expect(mocks.clearSessionProvider).toHaveBeenCalledWith("sess-hedge", 1);
     expect(session.getProviderChain()).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -1720,6 +1720,49 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
         matchedRuleHasOverrideStatusCode: true,
       })
     );
+  });
+
+  test("local DB admission overload should stop hedge without circuit mutation or failover", async () => {
+    const provider = createProvider({ id: 1, name: "p1", firstByteTimeoutStreamingMs: 100 });
+    const session = createSession();
+    session.setProvider(provider);
+
+    const admissionCause = Object.assign(new Error("Database pool data is full"), {
+      name: "DbPoolAdmissionError",
+      code: "DB_POOL_ADMISSION_EXCEEDED",
+      pool: "data",
+      maxOutstanding: 32,
+    });
+    const wrappedError = new Error("Failed query", { cause: admissionCause });
+    mocks.categorizeErrorAsync.mockResolvedValueOnce(ProxyErrorCategory.LOCAL_OVERLOAD);
+
+    const doForward = vi.spyOn(
+      ProxyForwarder as unknown as {
+        doForward: (...args: unknown[]) => Promise<Response>;
+      },
+      "doForward"
+    );
+    doForward.mockRejectedValueOnce(wrappedError);
+
+    const error = await ProxyForwarder.send(session).catch((rejection) => rejection as Error);
+
+    expect(error).toBe(wrappedError);
+    expect(doForward).toHaveBeenCalledTimes(1);
+    expect(mocks.pickRandomProviderWithExclusion).not.toHaveBeenCalled();
+    expect(mocks.recordEndpointFailure).not.toHaveBeenCalled();
+    expect(mocks.recordFailure).not.toHaveBeenCalled();
+    expect(mocks.clearSessionProvider).toHaveBeenCalledWith("sess-hedge", 1);
+    expect(session.getProviderChain()).toEqual([
+      expect.objectContaining({
+        id: provider.id,
+        reason: "system_error",
+        errorDetails: expect.objectContaining({
+          system: expect.objectContaining({
+            errorCode: "DB_POOL_ADMISSION_EXCEEDED",
+          }),
+        }),
+      }),
+    ]);
   });
 
   test("hedge 备选供应商命中 thinking signature 错误时，应整流后在同供应商重试并保留审计", async () => {

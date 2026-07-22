@@ -18,9 +18,23 @@ vi.mock("@/app/v1/_lib/proxy/response-fixer", () => ({
 
 vi.mock("@/lib/async-task-manager", () => ({
   AsyncTaskManager: {
-    register: (_taskId: string, promise: Promise<void>) => {
+    register: (
+      _taskId: string,
+      factory: (signal: AbortSignal) => Promise<void>,
+      options?: string | { abortController?: AbortController }
+    ) => {
+      const controller =
+        typeof options === "object" && options.abortController
+          ? options.abortController
+          : new AbortController();
+      let promise: Promise<void>;
+      try {
+        promise = Promise.resolve(factory(controller.signal));
+      } catch (error) {
+        promise = Promise.reject(error);
+      }
       testState.asyncTasks.push(promise);
-      return new AbortController();
+      return controller;
     },
     touch: () => true,
     cleanup: testState.cleanupTask,
@@ -96,13 +110,21 @@ vi.mock("@/lib/endpoint-circuit-breaker", () => ({
 vi.mock("@/repository/message", () => ({
   updateMessageRequestCostWithBreakdown: vi.fn(),
   updateMessageRequestDetails: vi.fn(),
+  updateMessageRequestDetailsDurably: vi.fn(async () => {}),
+  updateMessageRequestDetailsIfUnfinalized: vi.fn(async () => {}),
   updateMessageRequestDuration: vi.fn(),
 }));
 
 async function drainAsyncTasks(): Promise<void> {
   while (testState.asyncTasks.length > 0) {
     const tasks = testState.asyncTasks.splice(0);
-    await Promise.allSettled(tasks);
+    const settlements = await Promise.allSettled(tasks);
+    const failures = settlements
+      .filter((settlement): settlement is PromiseRejectedResult => settlement.status === "rejected")
+      .map((settlement) => settlement.reason);
+    if (failures.length > 0) {
+      throw new AggregateError(failures, "Async task failed during test drain");
+    }
     await new Promise((resolve) => setTimeout(resolve, 0));
   }
 }

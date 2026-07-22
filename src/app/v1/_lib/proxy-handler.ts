@@ -1,4 +1,5 @@
 import type { Context } from "hono";
+import { findSafeDatabaseError } from "@/drizzle/admitted-client";
 import { getCachedSystemSettings } from "@/lib/config";
 import { logger } from "@/lib/logger";
 import { ProxyStatusTracker } from "@/lib/proxy-status-tracker";
@@ -18,6 +19,7 @@ import { ProxySession } from "./proxy/session";
 export async function handleProxyRequest(c: Context): Promise<Response> {
   let session: ProxySession | null = null;
   let cachedSystemSettings: Awaited<ReturnType<typeof getCachedSystemSettings>> | null = null;
+  let acquiredConcurrencySessionId: string | null = null;
   try {
     session = await ProxySession.fromContext(c);
     try {
@@ -29,10 +31,14 @@ export async function handleProxyRequest(c: Context): Promise<Response> {
         cachedSystemSettings.allowNonConversationEndpointProviderFallback ?? true
       );
     } catch (settingsError) {
+      const databaseError = findSafeDatabaseError(settingsError);
       logger.warn(
         "[ProxyHandler] Failed to load proxy system settings, fallback highConcurrency=false and rawCrossProviderFallback=false",
         {
-          error: settingsError,
+          error:
+            databaseError?.message ??
+            (settingsError instanceof Error ? settingsError.message : String(settingsError)),
+          databaseCode: databaseError?.code,
         }
       );
       session.setHighConcurrencyModeEnabled(false);
@@ -88,6 +94,7 @@ export async function handleProxyRequest(c: Context): Promise<Response> {
     // 9. 增加并发计数（在所有检查通过后，请求开始前）- 跳过 count_tokens
     if (session.sessionId && session.getEndpointPolicy().trackConcurrentRequests) {
       await SessionTracker.incrementConcurrentCount(session.sessionId);
+      acquiredConcurrencySessionId = session.sessionId;
     }
 
     // 10. 记录请求开始
@@ -134,7 +141,12 @@ export async function handleProxyRequest(c: Context): Promise<Response> {
 
     return finalResponse;
   } catch (error) {
-    logger.error("Proxy handler error:", error);
+    const databaseError = findSafeDatabaseError(error);
+    logger.error("Proxy handler error:", {
+      error: databaseError?.message ?? (error instanceof Error ? error.message : String(error)),
+      databaseCode: databaseError?.code,
+      databasePool: databaseError?.pool,
+    });
     if (session) {
       return await ProxyErrorHandler.handle(session, error);
     }
@@ -146,8 +158,8 @@ export async function handleProxyRequest(c: Context): Promise<Response> {
     return ProxyResponses.buildError(500, "代理请求发生未知错误");
   } finally {
     // 11. 减少并发计数（确保无论成功失败都执行）- 跳过 count_tokens
-    if (session?.sessionId && session.getEndpointPolicy().trackConcurrentRequests) {
-      await SessionTracker.decrementConcurrentCount(session.sessionId);
+    if (acquiredConcurrencySessionId) {
+      await SessionTracker.decrementConcurrentCount(acquiredConcurrencySessionId);
     }
   }
 }
