@@ -418,69 +418,68 @@ describe("ProxyForwarder - endpoint audit", () => {
   test.each([
     { requestPath: "/v1/messages/count_tokens", providerType: "claude" as const },
     { requestPath: "/v1/responses/compact", providerType: "codex" as const },
-  ])(
-    "raw 端点 $requestPath: endpoint 选择失败时不应静默回退到 provider.url",
-    async ({ requestPath, providerType }) => {
-      const session = createSession(new URL(`https://example.com${requestPath}`));
-      const provider = createProvider({
+  ])("raw 端点 $requestPath: endpoint 选择失败时不应静默回退到 provider.url", async ({
+    requestPath,
+    providerType,
+  }) => {
+    const session = createSession(new URL(`https://example.com${requestPath}`));
+    const provider = createProvider({
+      providerType,
+      providerVendorId: 123,
+      url: `https://provider.example.com${requestPath}?key=SECRET`,
+    });
+    session.setProvider(provider);
+
+    mocks.getPreferredProviderEndpoints.mockRejectedValueOnce(new Error("boom"));
+
+    const doForward = vi.spyOn(
+      ProxyForwarder as unknown as { doForward: (...args: unknown[]) => unknown },
+      "doForward"
+    );
+    doForward.mockResolvedValueOnce(
+      new Response("{}", {
+        status: 200,
+        headers: {
+          "content-type": "application/json",
+          "content-length": "2",
+        },
+      })
+    );
+
+    const rejected = await ProxyForwarder.send(session)
+      .then(() => false)
+      .catch(() => true);
+
+    expect(rejected, `raw 端点 ${requestPath} endpoint 选择失败后不允许静默回退 provider.url`).toBe(
+      true
+    );
+    expect(doForward).not.toHaveBeenCalled();
+
+    expect(logger.warn).toHaveBeenCalledWith(
+      "[ProxyForwarder] Failed to load provider endpoints",
+      expect.objectContaining({
+        providerId: provider.id,
+        vendorId: 123,
         providerType,
-        providerVendorId: 123,
-        url: `https://provider.example.com${requestPath}?key=SECRET`,
-      });
-      session.setProvider(provider);
+        strictEndpointPolicy: true,
+        reason: "selector_error",
+        error: "boom",
+      })
+    );
 
-      mocks.getPreferredProviderEndpoints.mockRejectedValueOnce(new Error("boom"));
-
-      const doForward = vi.spyOn(
-        ProxyForwarder as unknown as { doForward: (...args: unknown[]) => unknown },
-        "doForward"
-      );
-      doForward.mockResolvedValueOnce(
-        new Response("{}", {
-          status: 200,
-          headers: {
-            "content-type": "application/json",
-            "content-length": "2",
-          },
-        })
-      );
-
-      const rejected = await ProxyForwarder.send(session)
-        .then(() => false)
-        .catch(() => true);
-
-      expect(
-        rejected,
-        `raw 端点 ${requestPath} endpoint 选择失败后不允许静默回退 provider.url`
-      ).toBe(true);
-      expect(doForward).not.toHaveBeenCalled();
-
-      expect(logger.warn).toHaveBeenCalledWith(
-        "[ProxyForwarder] Failed to load provider endpoints",
-        expect.objectContaining({
-          providerId: provider.id,
-          vendorId: 123,
-          providerType,
-          strictEndpointPolicy: true,
-          reason: "selector_error",
-          error: "boom",
-        })
-      );
-
-      expect(logger.warn).toHaveBeenCalledWith(
-        "ProxyForwarder: Strict endpoint policy blocked legacy provider.url fallback",
-        expect.objectContaining({
-          providerId: provider.id,
-          vendorId: 123,
-          providerType,
-          requestPath,
-          reason: "strict_blocked_legacy_fallback",
-          strictBlockCause: "selector_error",
-          selectorError: "boom",
-        })
-      );
-    }
-  );
+    expect(logger.warn).toHaveBeenCalledWith(
+      "ProxyForwarder: Strict endpoint policy blocked legacy provider.url fallback",
+      expect.objectContaining({
+        providerId: provider.id,
+        vendorId: 123,
+        providerType,
+        requestPath,
+        reason: "strict_blocked_legacy_fallback",
+        strictBlockCause: "selector_error",
+        selectorError: "boom",
+      })
+    );
+  });
 
   test("raw 端点空候选应记录 no_endpoint_candidates 且不混淆为 selector_error", async () => {
     const requestPath = "/v1/messages/count_tokens";

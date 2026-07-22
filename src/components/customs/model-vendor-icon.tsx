@@ -47,7 +47,6 @@ function RemoteVendorIcon({
     return <MonogramIcon seed={fallbackSeed} className={className} />;
   }
   return (
-    // biome-ignore lint/performance/noImgElement: 远程小尺寸 SVG,无需 next/image 优化管线
     <img
       src={cloudModelIconUrl(file)}
       alt=""

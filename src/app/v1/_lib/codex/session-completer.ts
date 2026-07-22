@@ -154,7 +154,7 @@ async function getOrCreateSessionIdFromFingerprint(
   const ttlSeconds = getSessionTtlSeconds();
   const fingerprintHash = calculateFingerprintHash(args);
 
-  if (!redis || redis.status !== "ready" || !fingerprintHash) {
+  if (redis?.status !== "ready" || !fingerprintHash) {
     return {
       sessionId: generateUuidV7(),
       source: "generated_uuid_v7",

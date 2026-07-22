@@ -28,7 +28,7 @@ import type { ActionResult } from "./types";
 export async function fetchSystemSettings(): Promise<ActionResult<SystemSettings>> {
   try {
     const session = await getSession();
-    if (!session || session.user.role !== "admin") {
+    if (session?.user.role !== "admin") {
       return { ok: false, error: "无权限访问系统设置" };
     }
 
@@ -104,7 +104,7 @@ export async function saveSystemSettings(formData: {
   let before: SystemSettings | null = null;
   try {
     const session = await getSession();
-    if (!session || session.user.role !== "admin") {
+    if (session?.user.role !== "admin") {
       return { ok: false, error: "无权限执行此操作" };
     }
 

@@ -647,80 +647,79 @@ describe("message_request 异步批量写入", () => {
   it.each([
     { databaseOutcome: "成功", shouldReject: false },
     { databaseOutcome: "失败", shouldReject: true },
-  ])(
-    "executor 首次同步重入 stop 时应共享同一 Promise, 并等待 DB $databaseOutcome",
-    async ({ shouldReject }) => {
-      process.env.MESSAGE_REQUEST_WRITE_MODE = "async";
+  ])("executor 首次同步重入 stop 时应共享同一 Promise, 并等待 DB $databaseOutcome", async ({
+    shouldReject,
+  }) => {
+    process.env.MESSAGE_REQUEST_WRITE_MODE = "async";
 
-      const databaseBarrier = createDeferred<Array<{ id: number }>>();
-      const databaseError = new Error("db unavailable");
-      let reentrantStopPromise: Promise<void> | undefined;
-      let stopMessageRequestWriteBuffer!: () => Promise<void>;
+    const databaseBarrier = createDeferred<Array<{ id: number }>>();
+    const databaseError = new Error("db unavailable");
+    let reentrantStopPromise: Promise<void> | undefined;
+    let stopMessageRequestWriteBuffer!: () => Promise<void>;
 
-      executeMock.mockImplementation((query) => {
-        if (!reentrantStopPromise) {
-          reentrantStopPromise = stopMessageRequestWriteBuffer();
-          return databaseBarrier.promise;
-        }
-        return shouldReject
-          ? Promise.reject(databaseError)
-          : Promise.resolve(successfulRowsForQuery(query));
-      });
-
-      const messageWriteBuffer = await import("@/repository/message-write-buffer");
-      stopMessageRequestWriteBuffer = messageWriteBuffer.stopMessageRequestWriteBuffer;
-      messageWriteBuffer.enqueueMessageRequestUpdate(42, { durationMs: 100 });
-
-      const outerStopPromise = stopMessageRequestWriteBuffer();
-      const reentrantPromise = reentrantStopPromise;
-      if (!reentrantPromise) {
-        throw new Error("executor did not synchronously re-enter stop");
+    executeMock.mockImplementation((query) => {
+      if (!reentrantStopPromise) {
+        reentrantStopPromise = stopMessageRequestWriteBuffer();
+        return databaseBarrier.promise;
       }
-      const samePromise = outerStopPromise === reentrantPromise;
-      let outerSettled = false;
-      let reentrantSettled = false;
-      void outerStopPromise.then(
-        () => {
-          outerSettled = true;
-        },
-        () => {
-          outerSettled = true;
-        }
-      );
-      void reentrantPromise.then(
-        () => {
-          reentrantSettled = true;
-        },
-        () => {
-          reentrantSettled = true;
-        }
-      );
-      await new Promise<void>((resolve) => setImmediate(resolve));
-      const settlementsBeforeRelease = [outerSettled, reentrantSettled];
+      return shouldReject
+        ? Promise.reject(databaseError)
+        : Promise.resolve(successfulRowsForQuery(query));
+    });
 
-      if (shouldReject) {
-        databaseBarrier.reject(databaseError);
-      } else {
-        databaseBarrier.resolve([]);
-      }
-      const stopResults = await Promise.allSettled([outerStopPromise, reentrantPromise]);
+    const messageWriteBuffer = await import("@/repository/message-write-buffer");
+    stopMessageRequestWriteBuffer = messageWriteBuffer.stopMessageRequestWriteBuffer;
+    messageWriteBuffer.enqueueMessageRequestUpdate(42, { durationMs: 100 });
 
-      expect(settlementsBeforeRelease).toEqual([false, false]);
-      if (shouldReject) {
-        const shutdownError = "message_request writer shutdown persistence failed";
-        expect(stopResults).toEqual([
-          { status: "rejected", reason: expect.objectContaining({ message: shutdownError }) },
-          { status: "rejected", reason: expect.objectContaining({ message: shutdownError }) },
-        ]);
-      } else {
-        expect(stopResults).toEqual([
-          { status: "fulfilled", value: undefined },
-          { status: "fulfilled", value: undefined },
-        ]);
-      }
-      expect(samePromise).toBe(true);
+    const outerStopPromise = stopMessageRequestWriteBuffer();
+    const reentrantPromise = reentrantStopPromise;
+    if (!reentrantPromise) {
+      throw new Error("executor did not synchronously re-enter stop");
     }
-  );
+    const samePromise = outerStopPromise === reentrantPromise;
+    let outerSettled = false;
+    let reentrantSettled = false;
+    void outerStopPromise.then(
+      () => {
+        outerSettled = true;
+      },
+      () => {
+        outerSettled = true;
+      }
+    );
+    void reentrantPromise.then(
+      () => {
+        reentrantSettled = true;
+      },
+      () => {
+        reentrantSettled = true;
+      }
+    );
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    const settlementsBeforeRelease = [outerSettled, reentrantSettled];
+
+    if (shouldReject) {
+      databaseBarrier.reject(databaseError);
+    } else {
+      databaseBarrier.resolve([]);
+    }
+    const stopResults = await Promise.allSettled([outerStopPromise, reentrantPromise]);
+
+    expect(settlementsBeforeRelease).toEqual([false, false]);
+    if (shouldReject) {
+      const shutdownError = "message_request writer shutdown persistence failed";
+      expect(stopResults).toEqual([
+        { status: "rejected", reason: expect.objectContaining({ message: shutdownError }) },
+        { status: "rejected", reason: expect.objectContaining({ message: shutdownError }) },
+      ]);
+    } else {
+      expect(stopResults).toEqual([
+        { status: "fulfilled", value: undefined },
+        { status: "fulfilled", value: undefined },
+      ]);
+    }
+    expect(samePromise).toBe(true);
+  });
 
   it("stop 无法刷写剩余终态时所有调用都应持续拒绝同一错误", async () => {
     process.env.MESSAGE_REQUEST_WRITE_MODE = "async";

@@ -53,18 +53,21 @@ describe("provider-model-redirect-schema", () => {
   });
 
   describe("regex 模式的 glob 通配符兼容", () => {
-    it.each<[string]>([["*"], ["*."], ["claude-*"], ["*-opus-*"], ["?"]])(
-      "接受 glob 风格的 source: %s",
-      (source) => {
-        const result = PROVIDER_MODEL_REDIRECT_RULE_SCHEMA.safeParse({
-          matchType: "regex",
-          source,
-          target: "claude-sonnet-4-6",
-        });
+    it.each<[string]>([
+      ["*"],
+      ["*."],
+      ["claude-*"],
+      ["*-opus-*"],
+      ["?"],
+    ])("接受 glob 风格的 source: %s", (source) => {
+      const result = PROVIDER_MODEL_REDIRECT_RULE_SCHEMA.safeParse({
+        matchType: "regex",
+        source,
+        target: "claude-sonnet-4-6",
+      });
 
-        expect(result.success).toBe(true);
-      }
-    );
+      expect(result.success).toBe(true);
+    });
 
     it("仍然拒绝纯粹无法解析的正则", () => {
       const result = PROVIDER_MODEL_REDIRECT_RULE_SCHEMA.safeParse({

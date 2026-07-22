@@ -55,7 +55,7 @@ export async function clearUserCostCache(
   const { userId, keyIds, keyHashes, includeActiveSessions = false } = options;
 
   const redis = getRedisClient();
-  if (!redis || redis.status !== "ready") {
+  if (redis?.status !== "ready") {
     return null;
   }
 
@@ -192,7 +192,7 @@ export async function clearUser5hCostCache(
   const { userId, resetMode } = options;
 
   const redis = getRedisClient();
-  if (!redis || redis.status !== "ready") {
+  if (redis?.status !== "ready") {
     return null;
   }
 
@@ -249,7 +249,7 @@ export async function clearSingleKeyCostCache(
   const { keyId, keyHash } = options;
 
   const redis = getRedisClient();
-  if (!redis || redis.status !== "ready") {
+  if (redis?.status !== "ready") {
     return null;
   }
 
@@ -334,7 +334,7 @@ export async function clearSingleProviderCostCache(
   const { providerId } = options;
 
   const redis = getRedisClient();
-  if (!redis || redis.status !== "ready") {
+  if (redis?.status !== "ready") {
     return null;
   }
 

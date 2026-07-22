@@ -26,31 +26,33 @@ function inputs({
 
 describe("detectClientStreamIntent", () => {
   describe("standard formats (claude / openai / response)", () => {
-    test.each<ClientFormat>(["claude", "openai", "response"])(
-      "%s: body.stream === true => stream",
-      (format) => {
-        expect(
-          detectClientStreamIntent(
-            inputs({ format, pathname: "/v1/messages", body: { stream: true } })
-          )
-        ).toBe(true);
-      }
-    );
+    test.each<ClientFormat>([
+      "claude",
+      "openai",
+      "response",
+    ])("%s: body.stream === true => stream", (format) => {
+      expect(
+        detectClientStreamIntent(
+          inputs({ format, pathname: "/v1/messages", body: { stream: true } })
+        )
+      ).toBe(true);
+    });
 
-    test.each<ClientFormat>(["claude", "openai", "response"])(
-      "%s: body.stream missing or false => non-stream",
-      (format) => {
-        expect(
-          detectClientStreamIntent(
-            inputs({ format, pathname: "/v1/messages", body: { stream: false } })
-          )
-        ).toBe(false);
-        expect(
-          detectClientStreamIntent(inputs({ format, pathname: "/v1/messages", body: {} }))
-        ).toBe(false);
-        expect(detectClientStreamIntent(inputs({ format, pathname: "/v1/messages" }))).toBe(false);
-      }
-    );
+    test.each<ClientFormat>([
+      "claude",
+      "openai",
+      "response",
+    ])("%s: body.stream missing or false => non-stream", (format) => {
+      expect(
+        detectClientStreamIntent(
+          inputs({ format, pathname: "/v1/messages", body: { stream: false } })
+        )
+      ).toBe(false);
+      expect(detectClientStreamIntent(inputs({ format, pathname: "/v1/messages", body: {} }))).toBe(
+        false
+      );
+      expect(detectClientStreamIntent(inputs({ format, pathname: "/v1/messages" }))).toBe(false);
+    });
 
     test("standard formats ignore path / query for stream intent", () => {
       expect(
@@ -67,20 +69,20 @@ describe("detectClientStreamIntent", () => {
   });
 
   describe("gemini family", () => {
-    test.each<ClientFormat>(["gemini", "gemini-cli"])(
-      "%s: streamGenerateContent in path => stream",
-      (format) => {
-        expect(
-          detectClientStreamIntent(
-            inputs({
-              format,
-              pathname: "/v1beta/models/gemini-1.5-pro:streamGenerateContent",
-              body: {},
-            })
-          )
-        ).toBe(true);
-      }
-    );
+    test.each<ClientFormat>([
+      "gemini",
+      "gemini-cli",
+    ])("%s: streamGenerateContent in path => stream", (format) => {
+      expect(
+        detectClientStreamIntent(
+          inputs({
+            format,
+            pathname: "/v1beta/models/gemini-1.5-pro:streamGenerateContent",
+            body: {},
+          })
+        )
+      ).toBe(true);
+    });
 
     test.each<ClientFormat>(["gemini", "gemini-cli"])("%s: alt=sse query => stream", (format) => {
       expect(
@@ -95,43 +97,43 @@ describe("detectClientStreamIntent", () => {
       ).toBe(true);
     });
 
-    test.each<ClientFormat>(["gemini", "gemini-cli"])(
-      "%s: body.stream === true => stream",
-      (format) => {
-        expect(
-          detectClientStreamIntent(
-            inputs({
-              format,
-              pathname: "/v1beta/models/gemini-1.5-pro:generateContent",
-              body: { stream: true },
-            })
-          )
-        ).toBe(true);
-      }
-    );
+    test.each<ClientFormat>([
+      "gemini",
+      "gemini-cli",
+    ])("%s: body.stream === true => stream", (format) => {
+      expect(
+        detectClientStreamIntent(
+          inputs({
+            format,
+            pathname: "/v1beta/models/gemini-1.5-pro:generateContent",
+            body: { stream: true },
+          })
+        )
+      ).toBe(true);
+    });
 
-    test.each<ClientFormat>(["gemini", "gemini-cli"])(
-      "%s: no streaming signal => non-stream",
-      (format) => {
-        expect(
-          detectClientStreamIntent(
-            inputs({
-              format,
-              pathname: "/v1beta/models/gemini-1.5-pro:generateContent",
-              body: { stream: false },
-            })
-          )
-        ).toBe(false);
-        expect(
-          detectClientStreamIntent(
-            inputs({
-              format,
-              pathname: "/v1beta/models/gemini-1.5-pro:generateContent",
-            })
-          )
-        ).toBe(false);
-      }
-    );
+    test.each<ClientFormat>([
+      "gemini",
+      "gemini-cli",
+    ])("%s: no streaming signal => non-stream", (format) => {
+      expect(
+        detectClientStreamIntent(
+          inputs({
+            format,
+            pathname: "/v1beta/models/gemini-1.5-pro:generateContent",
+            body: { stream: false },
+          })
+        )
+      ).toBe(false);
+      expect(
+        detectClientStreamIntent(
+          inputs({
+            format,
+            pathname: "/v1beta/models/gemini-1.5-pro:generateContent",
+          })
+        )
+      ).toBe(false);
+    });
 
     test("gemini search supports object form", () => {
       expect(

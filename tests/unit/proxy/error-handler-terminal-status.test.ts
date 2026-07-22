@@ -159,43 +159,36 @@ describe("ProxyErrorHandler.handle terminal status", () => {
     );
   });
 
-  test.each(RATE_LIMIT_CASES)(
-    "maps $limitType limits to HTTP $expectedStatus",
-    async ({ limitType, expectedStatus }) => {
-      const session = await createSession();
-      const error = new RateLimitError(
-        "rate_limit_error",
-        "limit exceeded",
-        limitType,
-        12,
-        20,
-        null
-      );
+  test.each(RATE_LIMIT_CASES)("maps $limitType limits to HTTP $expectedStatus", async ({
+    limitType,
+    expectedStatus,
+  }) => {
+    const session = await createSession();
+    const error = new RateLimitError("rate_limit_error", "limit exceeded", limitType, 12, 20, null);
 
-      const response = await ProxyErrorHandler.handle(session, error);
+    const response = await ProxyErrorHandler.handle(session, error);
 
-      expect(response.status).toBe(expectedStatus);
-      expect(await response.json()).toEqual({
-        error: {
-          type: "rate_limit_error",
-          message: "limit exceeded",
-          code: "rate_limit_exceeded",
-          limit_type: limitType,
-          current: 12,
-          limit: 20,
-          reset_time: null,
-        },
-      });
-      expect(mocks.emitProxyLangfuseTrace).toHaveBeenCalledWith(
-        session,
-        expect.objectContaining({
-          responseText: "",
-          statusCode: expectedStatus,
-          errorMessage: "limit exceeded",
-        })
-      );
-    }
-  );
+    expect(response.status).toBe(expectedStatus);
+    expect(await response.json()).toEqual({
+      error: {
+        type: "rate_limit_error",
+        message: "limit exceeded",
+        code: "rate_limit_exceeded",
+        limit_type: limitType,
+        current: 12,
+        limit: 20,
+        reset_time: null,
+      },
+    });
+    expect(mocks.emitProxyLangfuseTrace).toHaveBeenCalledWith(
+      session,
+      expect.objectContaining({
+        responseText: "",
+        statusCode: expectedStatus,
+        errorMessage: "limit exceeded",
+      })
+    );
+  });
 
   test("keeps fixed-window rate-limit headers", async () => {
     const session = await createSession();

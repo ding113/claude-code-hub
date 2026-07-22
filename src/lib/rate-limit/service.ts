@@ -160,7 +160,7 @@ export class RateLimitService {
     id: number
   ): Promise<{ current: number; resetAt: Date | null; exists: boolean }> {
     const redis = RateLimitService.redis;
-    if (!redis || redis.status !== "ready") {
+    if (redis?.status !== "ready") {
       return { current: 0, resetAt: null, exists: false };
     }
 
@@ -254,7 +254,7 @@ export class RateLimitService {
     entries: Array<{ id: number; createdAt: Date; costUsd: number }>,
     ttlSeconds: number
   ): Promise<void> {
-    if (!RateLimitService.redis || RateLimitService.redis.status !== "ready") return;
+    if (RateLimitService.redis?.status !== "ready") return;
     if (entries.length === 0) return;
 
     const pipeline = RateLimitService.redis.pipeline();
@@ -786,7 +786,7 @@ export class RateLimitService {
       return { allowed: true, keyCount: 0, userCount: 0, trackedKey: false, trackedUser: false };
     }
 
-    if (!RateLimitService.redis || RateLimitService.redis.status !== "ready") {
+    if (RateLimitService.redis?.status !== "ready") {
       logger.warn("[RateLimit] Redis not ready, Fail Open");
       return { allowed: true, keyCount: 0, userCount: 0, trackedKey: false, trackedUser: false };
     }
@@ -867,7 +867,7 @@ export class RateLimitService {
       return { allowed: true, count: 0, tracked: false, referenced: false };
     }
 
-    if (!RateLimitService.redis || RateLimitService.redis.status !== "ready") {
+    if (RateLimitService.redis?.status !== "ready") {
       logger.warn("[RateLimit] Redis not ready, Fail Open");
       return { allowed: true, count: 0, tracked: false, referenced: false };
     }
@@ -925,7 +925,7 @@ export class RateLimitService {
     }
 
     const redis = RateLimitService.redis;
-    if (!redis || redis.status !== "ready") {
+    if (redis?.status !== "ready") {
       return;
     }
 
@@ -979,7 +979,7 @@ export class RateLimitService {
     }
   ): Promise<void> {
     const redis = RateLimitService.redis;
-    if (!redis || redis.status !== "ready" || cost <= 0) return;
+    if (redis?.status !== "ready" || cost <= 0) return;
 
     try {
       const keyDailyReset = RateLimitService.resolveDailyReset(options?.keyResetTime);
@@ -1577,7 +1577,7 @@ export class RateLimitService {
     options?: { requestId?: string | number; createdAtMs?: number }
   ): Promise<void> {
     const redis = RateLimitService.redis;
-    if (!redis || redis.status !== "ready" || cost <= 0) return;
+    if (redis?.status !== "ready" || cost <= 0) return;
 
     const mode = resetMode ?? "fixed";
     const normalizedResetTime = normalizeResetTime(resetTime);
@@ -1649,7 +1649,7 @@ export class RateLimitService {
     }
 
     // Redis 不可用时返回默认值
-    if (!RateLimitService.redis || RateLimitService.redis.status !== "ready") {
+    if (RateLimitService.redis?.status !== "ready") {
       logger.warn("[RateLimit] Redis unavailable for batch cost query, returning zeros");
       return result;
     }

@@ -18,7 +18,7 @@ export async function resetUser5hLimitOnly(
     const tError = await getTranslations("errors");
 
     const session = await getSession();
-    if (!session || session.user.role !== "admin") {
+    if (session?.user.role !== "admin") {
       return {
         ok: false,
         error: tError("PERMISSION_DENIED"),

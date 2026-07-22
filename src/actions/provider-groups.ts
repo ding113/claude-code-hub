@@ -43,7 +43,7 @@ export async function getProviderGroups(): Promise<ActionResult<ProviderGroupWit
   const tError = await getTranslations("errors");
   try {
     const session = await getSession();
-    if (!session || session.user.role !== "admin") {
+    if (session?.user.role !== "admin") {
       return { ok: false, error: tError("UNAUTHORIZED"), errorCode: ERROR_CODES.UNAUTHORIZED };
     }
 
@@ -85,7 +85,7 @@ export async function createProviderGroup(input: {
   const tError = await getTranslations("errors");
   try {
     const session = await getSession();
-    if (!session || session.user.role !== "admin") {
+    if (session?.user.role !== "admin") {
       return { ok: false, error: tError("UNAUTHORIZED"), errorCode: ERROR_CODES.UNAUTHORIZED };
     }
 
@@ -170,7 +170,7 @@ export async function updateProviderGroup(
   const tError = await getTranslations("errors");
   try {
     const session = await getSession();
-    if (!session || session.user.role !== "admin") {
+    if (session?.user.role !== "admin") {
       return { ok: false, error: tError("UNAUTHORIZED"), errorCode: ERROR_CODES.UNAUTHORIZED };
     }
 
@@ -249,7 +249,7 @@ export async function deleteProviderGroup(id: number): Promise<ActionResult<void
   const tError = await getTranslations("errors");
   try {
     const session = await getSession();
-    if (!session || session.user.role !== "admin") {
+    if (session?.user.role !== "admin") {
       return { ok: false, error: tError("UNAUTHORIZED"), errorCode: ERROR_CODES.UNAUTHORIZED };
     }
 
