@@ -579,12 +579,8 @@ describe("computeFingerprintChain - remaining normalization branches", () => {
     expect(a.tail).toHaveLength(1);
 
     const otherUri = structuredClone(body);
-    (
-      (otherUri.contents[1]?.parts as Record<string, unknown>[])[1].fileData as Record<
-        string,
-        unknown
-      >
-    ).fileUri = "gs://bucket/b.mp4";
+    const otherParts = (otherUri.contents[1] as { parts: Record<string, unknown>[] }).parts;
+    (otherParts[1].fileData as Record<string, unknown>).fileUri = "gs://bucket/b.mp4";
     expect(mustChain(otherUri, "gemini").tail[0].fp).not.toBe(a.tail[0].fp);
 
     const noTools = mustChain({ contents: body.contents }, "gemini");
