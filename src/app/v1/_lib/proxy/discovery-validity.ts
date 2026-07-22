@@ -14,6 +14,7 @@ export type DiscoveryValidity = {
 
 export const DISCOVERY_PREFIX_MAX_BYTES = 1024 * 1024;
 export const DISCOVERY_EVENT_MAX_COUNT = 1024;
+const DISCOVERY_TEXT_ENCODER = new TextEncoder();
 
 function hasContent(value: unknown): boolean {
   if (typeof value === "string") return value.trim().length > 0;
@@ -201,7 +202,9 @@ export class DiscoveryValidityParser {
   push(chunk: Uint8Array | string): DiscoveryValidity {
     if (this._error) return this.result;
     this.bytesSeen +=
-      typeof chunk === "string" ? new TextEncoder().encode(chunk).byteLength : chunk.byteLength;
+      typeof chunk === "string"
+        ? DISCOVERY_TEXT_ENCODER.encode(chunk).byteLength
+        : chunk.byteLength;
     if (!this._ready && this.bytesSeen > DISCOVERY_PREFIX_MAX_BYTES) {
       this._error = true;
       this._limitExceeded = true;

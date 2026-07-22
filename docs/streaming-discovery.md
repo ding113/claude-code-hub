@@ -34,9 +34,11 @@ this relationship.
 - A fallback that has produced a valid prefix is held until the current normal
   window closes, all normal candidates fail, or no candidates remain. A normal
   winner always has precedence during the window.
-- Discovery losers are cancelled and their readers/agents/provider-session
-  references are released. They do not enter legacy `bill_hedge_losers`
-  draining.
+- When `bill_hedge_losers` is enabled, a Discovery loser that already produced
+  a protocol-valid prefix and reached ready state may reuse the legacy
+  background drain and billing path. It is billed only after natural stream
+  completion with a completion marker and explicit usage. All other losers are
+  cancelled and their readers/agents/provider-session references are released.
 - Sticky binding is written only after a natural, successful stream completion
   with the protocol completion marker and a generation-aware CAS. Fake-200,
   incomplete, and client-aborted streams do not create or renew Sticky.
