@@ -580,7 +580,7 @@ describe("computeFingerprintChain - remaining normalization branches", () => {
 
     const otherUri = structuredClone(body);
     (
-      (otherUri.contents[1]?.parts as Record<string, unknown>[])[1].fileData as Record<
+      (otherUri.contents[1].parts as Record<string, unknown>[])[1].fileData as Record<
         string,
         unknown
       >
