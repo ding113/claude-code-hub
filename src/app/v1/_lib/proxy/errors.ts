@@ -576,6 +576,24 @@ function extractErrorContentForDetection(error: Error): string {
   return error.message;
 }
 
+const PROVIDER_LOCAL_MODEL_UNAVAILABLE_MARKER =
+  "not supported by any configured account in this group";
+
+/** A model capability gap local to one upstream account pool, not to the request. */
+export function isProviderLocalModelUnavailableError(error: unknown): error is ProxyError {
+  if (
+    !(error instanceof ProxyError) ||
+    error.statusCode !== 404 ||
+    error.upstreamError?.statusCodeInferred === true
+  ) {
+    return false;
+  }
+
+  return [error.message, error.upstreamError?.body].some((content) =>
+    content?.toLowerCase().includes(PROVIDER_LOCAL_MODEL_UNAVAILABLE_MARKER)
+  );
+}
+
 /**
  * 错误规则检测结果缓存
  *
@@ -999,6 +1017,13 @@ export async function categorizeErrorAsync(error: Error): Promise<ErrorCategory>
   // These are always SYSTEM_ERROR regardless of message content
   if (isTransportError(error)) {
     return ErrorCategory.SYSTEM_ERROR;
+  }
+
+  // Some upstream account pools use model_not_found for a provider-local capability
+  // gap. The request may still succeed on another Provider, so classify this exact
+  // 404 before broad client-input rules match the generic model_not_found wording.
+  if (isProviderLocalModelUnavailableError(error)) {
+    return ErrorCategory.RESOURCE_NOT_FOUND;
   }
 
   // Some upstream relays report their own storage-capacity protection as HTTP 400.
