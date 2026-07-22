@@ -2052,7 +2052,7 @@ export class ProxyForwarder {
             break; // ⭐ 跳出内层循环，进入供应商切换逻辑
           }
 
-          // ⭐ 5. 上游 404 错误处理（不计入熔断器；Provider 局部模型缺口直接切换）
+          // 5. 上游 404 错误处理（不计入熔断器；Provider 局部模型缺口直接切换）
           if (errorCategory === ErrorCategory.RESOURCE_NOT_FOUND) {
             const proxyError = lastError as ProxyError;
             const providerLocalModelUnavailable = isProviderLocalModelUnavailableError(proxyError);

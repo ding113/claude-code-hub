@@ -586,7 +586,7 @@ export function isProviderLocalModelUnavailableError(error: unknown): error is P
     return false;
   }
 
-  return [error.message, error.upstreamError?.body, error.upstreamError?.rawBody].some((content) =>
+  return [error.message, error.upstreamError?.body].some((content) =>
     content?.toLowerCase().includes(PROVIDER_LOCAL_MODEL_UNAVAILABLE_MARKER)
   );
 }

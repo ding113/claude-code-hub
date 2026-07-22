@@ -58,7 +58,7 @@ describe("provider-local model availability errors", () => {
     expect(mocks.detectAsync).not.toHaveBeenCalled();
   });
 
-  it("recognizes the marker from the raw upstream body", async () => {
+  it("does not use the raw upstream body for provider-local matching", async () => {
     const error = new ProxyError("model_not_found", 404, {
       body: "{}",
       rawBody: "not supported by any configured account in this group",
@@ -66,9 +66,9 @@ describe("provider-local model availability errors", () => {
       providerName: "provider-a",
     });
 
-    expect(isProviderLocalModelUnavailableError(error)).toBe(true);
-    expect(await categorizeErrorAsync(error)).toBe(ErrorCategory.RESOURCE_NOT_FOUND);
-    expect(mocks.detectAsync).not.toHaveBeenCalled();
+    expect(isProviderLocalModelUnavailableError(error)).toBe(false);
+    expect(await categorizeErrorAsync(error)).toBe(ErrorCategory.NON_RETRYABLE_CLIENT_ERROR);
+    expect(mocks.detectAsync).toHaveBeenCalledOnce();
   });
 
   it("keeps ordinary model_not_found responses non-retryable", async () => {
