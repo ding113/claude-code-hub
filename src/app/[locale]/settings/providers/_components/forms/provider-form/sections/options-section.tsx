@@ -192,15 +192,22 @@ export function OptionsSection({ subSectionRefs }: OptionsSectionProps) {
                             />
                           </SelectTrigger>
                           <SelectContent>
-                            {["inherit", "minimal", "low", "medium", "high", "xhigh", "none"].map(
-                              (val) => (
-                                <SelectItem key={val} value={val}>
-                                  {t(
-                                    `sections.routing.codexOverrides.reasoningEffort.options.${val}`
-                                  )}
-                                </SelectItem>
-                              )
-                            )}
+                            {[
+                              "inherit",
+                              "none",
+                              "minimal",
+                              "low",
+                              "medium",
+                              "high",
+                              "xhigh",
+                              "max",
+                            ].map((val) => (
+                              <SelectItem key={val} value={val}>
+                                {t(
+                                  `sections.routing.codexOverrides.reasoningEffort.options.${val}`
+                                )}
+                              </SelectItem>
+                            ))}
                           </SelectContent>
                         </Select>
                         <Info

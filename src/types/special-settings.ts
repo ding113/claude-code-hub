@@ -16,6 +16,7 @@ export type SpecialSetting =
   | CodexSessionIdCompletionSpecialSetting
   | ClaudeMetadataUserIdInjectionSpecialSetting
   | AnthropicEffortSpecialSetting
+  | CodexReasoningEffortSpecialSetting
   | AnthropicCacheTtlHeaderOverrideSpecialSetting
   | AnthropicContext1mHeaderOverrideSpecialSetting
   | LongContextPricingSpecialSetting
@@ -84,6 +85,19 @@ export type GuardInterceptSpecialSetting = {
  */
 export type AnthropicEffortSpecialSetting = {
   type: "anthropic_effort";
+  scope: "request";
+  hit: boolean;
+  effort: string;
+};
+
+/**
+ * Codex reasoning effort 请求参数审计
+ *
+ * 记录客户端发送给 Codex 供应商的 reasoning.effort；供应商级覆写后的值由
+ * provider_parameter_override 审计补充，使用记录可同时呈现请求值与实际转发值。
+ */
+export type CodexReasoningEffortSpecialSetting = {
+  type: "codex_reasoning_effort";
   scope: "request";
   hit: boolean;
   effort: string;
