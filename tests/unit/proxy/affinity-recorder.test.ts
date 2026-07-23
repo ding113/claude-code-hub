@@ -59,7 +59,6 @@ function makeAffinity(overrides: Partial<SessionAffinityState> = {}): SessionAff
     chain: makeChain(),
     nominatedProviderId: null,
     matchedFp: null,
-    matchedTier: null,
     ...overrides,
   };
 }
@@ -75,15 +74,15 @@ beforeEach(() => {
 });
 
 describe("recordAffinityWinner", () => {
-  it("writes tip + sys bindings for the winning provider with the configured TTL", async () => {
+  it("writes a single tip binding for the winning provider with the configured TTL", async () => {
     await recordAffinityWinner(makeSession(makeAffinity()), 42);
     expect(storeMocks.put).toHaveBeenCalledTimes(1);
-    expect(storeMocks.put).toHaveBeenCalledWith("scope123", "fp2", "sysfp", 42, 3600);
+    expect(storeMocks.put).toHaveBeenCalledWith("scope123", "fp2", 42, 3600);
   });
 
-  it("uses sys as tip when the chain has no conversation boundaries", async () => {
+  it("skips writing when the chain has no conversation boundaries (system-only tip)", async () => {
     await recordAffinityWinner(makeSession(makeAffinity({ chain: makeChain(0) })), 7);
-    expect(storeMocks.put).toHaveBeenCalledWith("scope123", "sysfp", "sysfp", 7, 3600);
+    expect(storeMocks.put).not.toHaveBeenCalled();
   });
 
   it("is a no-op when both the env flag and the ignore-session setting are off", async () => {
@@ -97,7 +96,7 @@ describe("recordAffinityWinner", () => {
     envControl.enabled = false;
     settingsControl.ignoreClientSessionId = true;
     await recordAffinityWinner(makeSession(makeAffinity()), 42);
-    expect(storeMocks.put).toHaveBeenCalledWith("scope123", "fp2", "sysfp", 42, 3600);
+    expect(storeMocks.put).toHaveBeenCalledWith("scope123", "fp2", 42, 3600);
   });
 
   it("is a no-op without affinity state or with a non-positive provider id", async () => {

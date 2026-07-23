@@ -48,13 +48,17 @@ export function fingerprintTip(chain: FingerprintChain): FingerprintBoundary {
   return chain.tail.length > 0 ? chain.tail[chain.tail.length - 1] : chain.sys;
 }
 
-/** 供查找使用的最深 -> 最浅指纹序列（最后一个永远是 Sys）。 */
+/**
+ * 供查找使用的最深 -> 最浅指纹序列。
+ *
+ * 只包含会话消息边界（tail），不含 F_sys：仅系统提示词 + 工具相同的
+ * 跨对话请求不应命中亲和（过宽匹配会把无关对话粘到同一供应商）。
+ */
 export function fingerprintsDeepestFirst(chain: FingerprintChain): string[] {
   const out: string[] = [];
   for (let i = chain.tail.length - 1; i >= 0; i--) {
     out.push(chain.tail[i].fp);
   }
-  out.push(chain.sys.fp);
   return out;
 }
 

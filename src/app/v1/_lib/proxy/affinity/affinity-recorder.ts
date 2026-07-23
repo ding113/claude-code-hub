@@ -11,7 +11,8 @@ import { fingerprintTip } from "./fingerprint";
  */
 
 /**
- * 成功终态写回：tip + sys 两键绑定到胜出供应商，滑动 TTL。
+ * 成功终态写回：tip 单键绑定到胜出供应商，滑动 TTL。
+ * 不写 F_sys 键：仅系统提示词相同不构成前缀亲和（防跨对话过宽匹配）。
  * 调用点：流式 commitSideEffects（计费持久化成功后）与非流式成功分支。
  * replay serve / 竞速败者 / 失败重试不得调用。
  */
@@ -24,10 +25,11 @@ export async function recordAffinityWinner(
   try {
     if (!(await isAffinityRoutingEnabled())) return;
     const tip = fingerprintTip(affinity.chain);
+    // tip 落在系统段（无会话消息）时不写绑定：与查找侧的 sys 排除保持一致
+    if (tip.depth === 0) return;
     await getAffinityStore().put(
       affinity.scopeTag,
       tip.fp,
-      affinity.chain.sys.fp,
       providerId,
       getEnvConfig().PREFIX_AFFINITY_TTL_SECONDS
     );

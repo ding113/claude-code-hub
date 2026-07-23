@@ -40,8 +40,6 @@ const TOMBSTONE_TTL_SECONDS = 60;
 
 export interface AffinityHint {
   providerId: number;
-  /** 命中的边界在传入序列中的位置换算出的深度语义 */
-  tier: "conversation" | "system";
   matchedFp: string;
   /** 0-based：0 = 最深（tip），越大越浅；仅用于观测 */
   matchedIndex: number;
@@ -76,7 +74,8 @@ export class AffinityStore {
   }
 
   /**
-   * 最长前缀查找。fpsDeepestFirst 为最深->最浅指纹序列（最后一个是 F_sys）。
+   * 最长前缀查找。fpsDeepestFirst 为最深->最浅的会话消息边界指纹序列
+   * （不含 F_sys：仅系统提示词相同不构成前缀命中）。
    * 命中活跃绑定即返回并滑动续期；墓碑被 Lua 跳过继续向浅。
    */
   async lookup(
@@ -111,8 +110,6 @@ export class AffinityStore {
         providerId,
         matchedIndex,
         matchedFp: fpsDeepestFirst[matchedIndex] ?? "",
-        // 最后一个键是 F_sys：仅系统提示词命中
-        tier: matchedIndex >= fpsDeepestFirst.length - 1 ? "system" : "conversation",
       };
     } catch (error) {
       logger.warn("[AffinityStore] lookup failed, falling back to no-affinity", {
@@ -124,13 +121,13 @@ export class AffinityStore {
   }
 
   /**
-   * 成功终态写回：只写 tip + sys 两键（对话推进天然累积链条，无需写全窗口）。
+   * 成功终态写回：只写 tip 一键（对话推进天然累积链条，无需写全窗口）。
+   * 不写 F_sys 键：仅系统提示词相同的跨对话请求不应互相粘连。
    * 仅 owner 成功请求调用；replay serve / 竞速败者 / 失败重试不写。
    */
   async put(
     scopeTag: string,
     tipFp: string,
-    sysFp: string,
     providerId: number,
     ttlSeconds: number
   ): Promise<void> {
@@ -141,9 +138,6 @@ export class AffinityStore {
     const value = `1|${providerId}`;
     try {
       await redis.set(this.buildKey(scopeTag, tipFp), value, "EX", ttlSeconds);
-      if (sysFp && sysFp !== tipFp) {
-        await redis.set(this.buildKey(scopeTag, sysFp), value, "EX", ttlSeconds);
-      }
     } catch (error) {
       logger.warn("[AffinityStore] put failed", {
         error: error instanceof Error ? error.message : String(error),

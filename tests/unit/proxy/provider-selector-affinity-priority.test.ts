@@ -86,6 +86,8 @@ vi.mock("@/lib/system-settings/proxy-runtime", () => ({
     streamGateMode: "off" as const,
     affinityIgnoreClientSessionId: settingsControl.ignoreClientSessionId,
   })),
+
+  isCacheEffectivenessEnabled: () => false,
 }));
 vi.mock("@/lib/config/env.schema", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/config/env.schema")>();
@@ -143,6 +145,8 @@ const claudeMessage = {
 
 // Minimal ProxySession stub; loose typing matches sibling selector tests.
 function makeSession(overrides: Record<string, unknown> = {}): any {
+  // 链条目联动：addProviderToChain 推入、getProviderChain 读出（覆盖粘性选择去重逻辑）
+  const chainItems: Array<Record<string, unknown>> = [];
   const session: any = {
     sessionId: null,
     provider: null,
@@ -158,7 +162,10 @@ function makeSession(overrides: Record<string, unknown> = {}): any {
     setProvider(p: Provider) {
       session.provider = p;
     },
-    addProviderToChain: vi.fn(),
+    addProviderToChain: vi.fn((provider: Provider, metadata: Record<string, unknown> = {}) => {
+      chainItems.push({ id: provider.id, ...metadata });
+    }),
+    getProviderChain: vi.fn(() => chainItems),
     setLastSelectionContext: vi.fn((ctx: unknown) => {
       session._ctx = ctx;
     }),
@@ -232,6 +239,10 @@ describe("ensure() nomination priority", () => {
       expect.objectContaining({ id: 42 }),
       expect.objectContaining({ reason: "affinity_hit", selectionMethod: "prefix_affinity" })
     );
+    // 亲和提名已写入链：ensure 不得再补 initial_selection（否则决策链显示为加权随机初选）
+    expect(session.getProviderChain().map((item: { reason?: string }) => item.reason)).toEqual([
+      "affinity_hit",
+    ]);
 
     const [, luaKeysCount] = storeMocks.lookup.mock.calls[0] as unknown as [string, string[]];
     expect(Array.isArray(luaKeysCount)).toBe(true);
