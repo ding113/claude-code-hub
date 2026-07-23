@@ -222,10 +222,6 @@ export const EnvSchema = z.object({
   // 缓存效果计费模拟：理论 vs 实际缓存命中率聚合指标（仅展示，不影响路由，默认开启）
   ENABLE_CACHE_EFFECTIVENESS: z.string().default("true").transform(booleanTransform),
 
-  // Operational canary for the Discovery scheduler. The database feature
-  // switch remains authoritative; this percentage only narrows eligibility.
-  DISCOVERY_ROLLOUT_PERCENT: z.coerce.number().int().min(0).max(100).default(100),
-
   DASHBOARD_LOGS_POLL_INTERVAL_MS: z.coerce.number().int().min(250).max(60000).default(5000),
 
   // Langfuse Observability (optional, auto-enabled when keys are set)

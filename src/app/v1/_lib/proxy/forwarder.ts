@@ -212,20 +212,6 @@ const MAX_PROVIDER_SWITCHES = 20; // 保险栓：最多切换 20 次供应商（
 const DISCOVERY_LEASE_HANDOFF_GRACE_SECONDS = 5;
 const DISCOVERY_TERMINAL_CLEANUP_MAX_MS = 1_000;
 
-function isDiscoveryRolloutEligible(keyId: number, sessionId: string, percent: number): boolean {
-  const normalizedPercent = Math.max(0, Math.min(100, Math.floor(percent)));
-  if (normalizedPercent === 0) return false;
-  if (normalizedPercent === 100) return true;
-
-  // FNV-1a provides a deterministic bucket without persisting rollout state.
-  let hash = 0x811c9dc5;
-  for (const character of `${keyId}:${sessionId}`) {
-    hash ^= character.charCodeAt(0);
-    hash = Math.imul(hash, 0x01000193);
-  }
-  return (hash >>> 0) % 100 < normalizedPercent;
-}
-
 type CacheTtlOption = CacheTtlPreference | null | undefined;
 
 type ProxySessionWithAttemptRuntime = ProxySession & {
@@ -306,7 +292,6 @@ type DiscoveryBypassReason =
   | "raw_cross_provider_fallback"
   | "missing_session"
   | "missing_key"
-  | "rollout_ineligible"
   | "redis_capability_unavailable"
   | "binding_conflict"
   | "lease_conflict"
@@ -4153,9 +4138,6 @@ export class ProxyForwarder {
     const keyId = session.authState?.key?.id ?? session.messageContext?.key?.id ?? null;
     if (!sessionId) return { status: "skipped", reason: "missing_session" };
     if (keyId == null) return { status: "skipped", reason: "missing_key" };
-    if (!isDiscoveryRolloutEligible(keyId, sessionId, getEnvConfig().DISCOVERY_ROLLOUT_PERCENT)) {
-      return { status: "skipped", reason: "rollout_ineligible" };
-    }
 
     const capabilityState = await SessionManager.ensureVersionedBindingCapability();
     if (capabilityState !== "available") {
