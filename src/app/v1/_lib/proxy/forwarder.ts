@@ -5708,6 +5708,7 @@ export class ProxyForwarder {
           // request session, so retry the same attempt session rather than
           // creating a fresh unrectified shadow from the parent session.
           const rectifier = await tryApplyReactiveRectifier({
+            error: lastError,
             provider,
             requestSession: attempt.session,
             persistSession: session,
