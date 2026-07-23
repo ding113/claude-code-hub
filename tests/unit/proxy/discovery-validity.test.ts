@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   DISCOVERY_EVENT_MAX_COUNT,
   DISCOVERY_PREFIX_MAX_BYTES,
@@ -275,6 +275,25 @@ describe("discovery validity", () => {
     const parser = new DiscoveryValidityParser("openai-chat");
     const result = parser.push(`:${"x".repeat(DISCOVERY_PREFIX_MAX_BYTES + 1)}`);
     expect(result).toMatchObject({ ready: false, error: true, limitExceeded: true });
+  });
+
+  it("stops measuring string chunks after the stream becomes ready", () => {
+    const parser = new DiscoveryValidityParser("openai-chat");
+    expect(parser.push('data: {"choices":[{"delta":{"content":"ready"}}]}\n\n')).toMatchObject({
+      ready: true,
+      error: false,
+    });
+
+    const encodeSpy = vi.spyOn(TextEncoder.prototype, "encode");
+    try {
+      expect(parser.push(`:${"界".repeat(DISCOVERY_PREFIX_MAX_BYTES)}`)).toMatchObject({
+        ready: true,
+        error: false,
+      });
+      expect(encodeSpy).not.toHaveBeenCalled();
+    } finally {
+      encodeSpy.mockRestore();
+    }
   });
 
   it("fails metadata-only protocol events after the event limit", () => {

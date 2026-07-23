@@ -415,6 +415,44 @@ describe("message_request 异步批量写入", () => {
     expect(metadataSql.sql).not.toContain("duration_ms");
     expect(ordinarySql.sql).toContain("duration_ms");
     expect(ordinarySql.sql).not.toContain("routing_trace");
+    expect(ordinarySql.sql).toContain('"status_code" IS NULL');
+  });
+
+  it("keeps deferred ordinary updates fenced when the metadata ACK misses the row", async () => {
+    process.env.MESSAGE_REQUEST_WRITE_MODE = "async";
+    const releaseMetadata = createDeferred<unknown[]>();
+    executeMock.mockImplementationOnce(async () => releaseMetadata.promise);
+
+    const {
+      enqueueMessageRequestUpdate,
+      enqueueMessageRequestPostTerminalRoutingTraceDurably,
+      flushMessageRequestWriteBuffer,
+      stopMessageRequestWriteBuffer,
+    } = await import("@/repository/message-write-buffer");
+    const metadata = enqueueMessageRequestPostTerminalRoutingTraceDurably(
+      52_005,
+      createRoutingTrace(5_100)
+    );
+    const metadataResult = expect(metadata).rejects.toThrow(
+      "durable message_request update did not persist id 52005"
+    );
+    const flush = flushMessageRequestWriteBuffer();
+    enqueueMessageRequestUpdate(52_005, { durationMs: 655 });
+
+    releaseMetadata.resolve([]);
+    await flush;
+    await metadataResult;
+    await flushMessageRequestWriteBuffer();
+    await stopMessageRequestWriteBuffer();
+
+    expect(executeMock).toHaveBeenCalledTimes(2);
+    const metadataSql = toSqlText(executeMock.mock.calls[0]?.[0]);
+    const ordinarySql = toSqlText(executeMock.mock.calls[1]?.[0]);
+    expect(metadataSql.sql).toContain("routing_trace");
+    expect(metadataSql.sql).not.toContain("duration_ms");
+    expect(ordinarySql.sql).toContain("duration_ms");
+    expect(ordinarySql.sql).not.toContain("routing_trace");
+    expect(ordinarySql.sql).toContain('"status_code" IS NULL');
   });
 
   it("keeps a failed in-flight ordinary requeue isolated from a newer metadata ACK", async () => {
@@ -452,6 +490,7 @@ describe("message_request 异步批量写入", () => {
     expect(metadataSql.sql).not.toContain("duration_ms");
     expect(retriedOrdinarySql.sql).toContain("duration_ms");
     expect(retriedOrdinarySql.sql).not.toContain("routing_trace");
+    expect(retriedOrdinarySql.sql).toContain('"status_code" IS NULL');
   });
 
   it("coalesces duplicate metadata callers and counts unique tasks against maxPending", async () => {

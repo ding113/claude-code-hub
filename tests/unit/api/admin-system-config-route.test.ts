@@ -85,4 +85,22 @@ describe("POST /api/admin/system-config", () => {
     });
     expect(mocks.updateSystemSettings).not.toHaveBeenCalled();
   });
+
+  it("returns the stable Discovery settings code for an out-of-range field", async () => {
+    const { POST } = await import("@/app/api/admin/system-config/route");
+    const response = await POST(
+      new Request("http://localhost/api/admin/system-config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ discoveryConcurrency: 33 }),
+      })
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({
+      error: "discoverySettingsInvalid",
+      errorCode: "DISCOVERY_SETTINGS_INVALID",
+    });
+    expect(mocks.updateSystemSettings).not.toHaveBeenCalled();
+  });
 });

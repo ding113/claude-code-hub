@@ -74,10 +74,12 @@ type DurableAcknowledgement = {
 type PendingMessageRequestUpdate = {
   patch: MessageRequestUpdatePatch;
   durableAcknowledgement?: DurableAcknowledgement;
+  requiresTerminalFence?: boolean;
 };
 
 type MessageRequestUpdateBatchRecord = MessageRequestUpdateRecord & {
   durableAcknowledgement?: DurableAcknowledgement;
+  requiresTerminalFence?: boolean;
 };
 
 type PostTerminalMetadataTask = {
@@ -302,6 +304,7 @@ function takeBatch(
       id,
       patch: pending.patch,
       durableAcknowledgement: pending.durableAcknowledgement,
+      requiresTerminalFence: pending.requiresTerminalFence,
     });
     evictableIndex.remove(id);
     map.delete(id);
@@ -316,7 +319,7 @@ export function buildBatchUpdateSql(
   updates: MessageRequestUpdateRecord[],
   options: {
     returnUpdatedIds?: boolean;
-    fencedDurableIds?: readonly number[];
+    fencedUpdateIds?: readonly number[];
     monotonicRoutingTraceIds?: readonly number[];
   } = {}
 ): SQL | null {
@@ -415,16 +418,16 @@ export function buildBatchUpdateSql(
     sql`, `
   );
   const updateIds = new Set(ids);
-  const fencedDurableIds = Array.from(new Set(options.fencedDurableIds ?? [])).filter((id) =>
+  const fencedUpdateIds = Array.from(new Set(options.fencedUpdateIds ?? [])).filter((id) =>
     updateIds.has(id)
   );
   const durableFence =
-    fencedDurableIds.length === 0
+    fencedUpdateIds.length === 0
       ? sql``
-      : fencedDurableIds.length === ids.length
+      : fencedUpdateIds.length === ids.length
         ? sql` AND ${sql.identifier("status_code")} IS NULL`
         : sql` AND (id NOT IN (${sql.join(
-            fencedDurableIds.map((id) => sql`${id}`),
+            fencedUpdateIds.map((id) => sql`${id}`),
             sql`, `
           )}) OR ${sql.identifier("status_code")} IS NULL)`;
 
@@ -508,7 +511,12 @@ class MessageRequestWriteBuffer {
       return;
     }
     // existing is older, patch is newer -> for replacement fields newer wins.
-    this.setPending(id, mergePatch(existing?.patch ?? {}, patch), existing?.durableAcknowledgement);
+    this.setPending(
+      id,
+      mergePatch(existing?.patch ?? {}, patch),
+      existing?.durableAcknowledgement,
+      existing?.requiresTerminalFence
+    );
 
     this.enforcePendingLimit();
     this.scheduleFlushIfNeeded();
@@ -807,7 +815,8 @@ class MessageRequestWriteBuffer {
     this.setPending(
       acknowledgement.id,
       mergePatch(existing?.patch ?? {}, patch),
-      existing?.durableAcknowledgement
+      existing?.durableAcknowledgement,
+      true
     );
     this.enforcePendingLimit();
     this.scheduleFlushIfNeeded();
@@ -822,7 +831,8 @@ class MessageRequestWriteBuffer {
   private setPending(
     id: number,
     patch: MessageRequestUpdatePatch,
-    durableAcknowledgement?: DurableAcknowledgement
+    durableAcknowledgement?: DurableAcknowledgement,
+    requiresTerminalFence: boolean = false
   ): void {
     const activeDurableAcknowledgement =
       durableAcknowledgement && !durableAcknowledgement.settled
@@ -831,6 +841,7 @@ class MessageRequestWriteBuffer {
     this.pending.set(id, {
       patch,
       durableAcknowledgement: activeDurableAcknowledgement,
+      requiresTerminalFence,
     });
     if (activeDurableAcknowledgement) {
       this.evictableIndex.remove(id);
@@ -972,15 +983,17 @@ class MessageRequestWriteBuffer {
           const requiresUpdatedIds = batch.some(
             (item) => item.durableAcknowledgement && !item.durableAcknowledgement.settled
           );
-          const fencedDurableIds = batch.flatMap((item) =>
-            item.durableAcknowledgement?.writeScope === "terminal" ? [item.id] : []
+          const fencedUpdateIds = batch.flatMap((item) =>
+            item.requiresTerminalFence || item.durableAcknowledgement?.writeScope === "terminal"
+              ? [item.id]
+              : []
           );
           const monotonicRoutingTraceIds = batch.flatMap((item) =>
             item.durableAcknowledgement?.writeScope === "post-terminal-metadata" ? [item.id] : []
           );
           const query = buildBatchUpdateSql(batch, {
             returnUpdatedIds: requiresUpdatedIds,
-            fencedDurableIds,
+            fencedUpdateIds,
             monotonicRoutingTraceIds,
           });
           if (!query) {
@@ -1044,7 +1057,8 @@ class MessageRequestWriteBuffer {
               this.setPending(
                 item.id,
                 mergePatch(item.patch, existing?.patch ?? {}),
-                durableAcknowledgement
+                durableAcknowledgement,
+                item.requiresTerminalFence || existing?.requiresTerminalFence
               );
             }
             this.enforcePendingLimit();

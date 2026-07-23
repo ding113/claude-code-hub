@@ -201,16 +201,18 @@ export class DiscoveryValidityParser {
 
   push(chunk: Uint8Array | string): DiscoveryValidity {
     if (this._error) return this.result;
-    this.bytesSeen +=
-      typeof chunk === "string"
-        ? DISCOVERY_TEXT_ENCODER.encode(chunk).byteLength
-        : chunk.byteLength;
-    if (!this._ready && this.bytesSeen > DISCOVERY_PREFIX_MAX_BYTES) {
-      this._error = true;
-      this._limitExceeded = true;
-      this.buffered = "";
-      this.dataLines = [];
-      return this.result;
+    if (!this._ready) {
+      this.bytesSeen +=
+        typeof chunk === "string"
+          ? DISCOVERY_TEXT_ENCODER.encode(chunk).byteLength
+          : chunk.byteLength;
+      if (this.bytesSeen > DISCOVERY_PREFIX_MAX_BYTES) {
+        this._error = true;
+        this._limitExceeded = true;
+        this.buffered = "";
+        this.dataLines = [];
+        return this.result;
+      }
     }
     this.buffered +=
       typeof chunk === "string" ? chunk : this.decoder.decode(chunk, { stream: true });

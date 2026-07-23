@@ -17,6 +17,10 @@ const bindingMocks = vi.hoisted(() => ({
   touchSessionBinding: vi.fn(),
 }));
 
+const redisMocks = vi.hoisted(() => ({
+  getRedisClient: vi.fn(),
+}));
+
 let redisClientRef: {
   status: string;
   del: ReturnType<typeof vi.fn>;
@@ -39,7 +43,7 @@ vi.mock("@/lib/logger", () => ({
   },
 }));
 vi.mock("@/lib/redis", () => ({
-  getRedisClient: () => redisClientRef,
+  getRedisClient: redisMocks.getRedisClient,
 }));
 vi.mock("@/lib/redis/session-binding", () => ({
   ...bindingMocks,
@@ -85,6 +89,7 @@ beforeEach(() => {
     set: vi.fn(async () => "OK"),
     setex: vi.fn(async () => "OK"),
   };
+  redisMocks.getRedisClient.mockImplementation(() => redisClientRef);
   bindingMocks.readOrReconcileSessionBinding.mockResolvedValue(snapshot());
   bindingMocks.acquireSessionDiscoveryLease.mockResolvedValue({
     status: "acquired",
@@ -143,6 +148,26 @@ describe("SessionManager versioned binding adapter", () => {
         redis: redisClientRef,
       })
     );
+  });
+
+  it("allows every versioned Discovery adapter to access Redis when rate limiting is disabled", async () => {
+    const binding = snapshot().snapshot;
+
+    await SessionManager.acquireSessionDiscoveryLease(SESSION_ID, KEY_ID, 61, "owner-a");
+    await SessionManager.renewSessionDiscoveryLease(SESSION_ID, KEY_ID, "owner-a", 61);
+    await SessionManager.releaseSessionDiscoveryLease(SESSION_ID, KEY_ID, "owner-a");
+    await SessionManager.getSessionBindingSnapshot(SESSION_ID, KEY_ID);
+    await SessionManager.touchVersionedSessionBinding(binding);
+    await SessionManager.compareAndSetSessionProvider(binding, PROVIDER_ID + 1);
+    await SessionManager.clearVersionedSessionProvider(binding, PROVIDER_ID);
+    await SessionManager.isSessionProviderCoolingDown(SESSION_ID, KEY_ID, PROVIDER_ID);
+
+    expect(redisMocks.getRedisClient).toHaveBeenCalledTimes(8);
+    expect(
+      redisMocks.getRedisClient.mock.calls.every(
+        ([options]) => options?.allowWhenRateLimitDisabled === true
+      )
+    ).toBe(true);
   });
 
   it("returns the tenant-scoped provider without reading the legacy mirror", async () => {

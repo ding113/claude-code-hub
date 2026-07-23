@@ -8,6 +8,7 @@ import {
   invalidateAllStatisticsCaches,
 } from "@/lib/redis";
 import {
+  DISCOVERY_SETTINGS_INVALID_ERROR_CODE,
   DISCOVERY_WINDOW_INVALID_ERROR_CODE,
   getDiscoveryValidationErrorCode,
 } from "@/lib/validation/discovery-settings";
@@ -145,6 +146,9 @@ export async function POST(req: Request) {
       const errorCode = getDiscoveryValidationErrorCode(error.issues);
       if (errorCode === DISCOVERY_WINDOW_INVALID_ERROR_CODE) {
         return Response.json({ error: "discoveryWindowInvalid", errorCode }, { status: 400 });
+      }
+      if (errorCode === DISCOVERY_SETTINGS_INVALID_ERROR_CODE) {
+        return Response.json({ error: "discoverySettingsInvalid", errorCode }, { status: 400 });
       }
       const firstError = error.issues[0];
       return Response.json({ error: firstError.message || "数据验证失败" }, { status: 400 });
