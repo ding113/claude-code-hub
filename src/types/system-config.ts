@@ -146,14 +146,14 @@ export interface SystemSettings {
   publicStatusWindowHours: number;
   publicStatusAggregationIntervalMinutes: number;
 
-  /** Bounded streaming Discovery (PR2; persisted/configured in PR3). */
-  discoveryEnabled?: boolean;
-  discoveryConcurrency?: number;
-  maxDiscoveryRounds?: number;
-  discoverySlaMs?: number;
-  stickySlaMs?: number;
-  racingTotalTimeoutMs?: number;
-  stickyTimeoutCooldownMs?: number;
+  /** Bounded streaming Discovery settings. */
+  discoveryEnabled: boolean;
+  discoveryConcurrency: number;
+  maxDiscoveryRounds: number;
+  discoverySlaMs: number;
+  stickySlaMs: number;
+  racingTotalTimeoutMs: number;
+  stickyTimeoutCooldownMs: number;
 
   createdAt: Date;
   updatedAt: Date;

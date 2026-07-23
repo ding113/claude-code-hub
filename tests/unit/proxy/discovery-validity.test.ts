@@ -27,6 +27,21 @@ describe("discovery validity", () => {
     expect(classifyDiscoveryChunk("data: [DONE]\n\n", "openai-chat").terminal).toBe(true);
   });
 
+  it("accepts Gemini candidates in the supported response wrapper", () => {
+    expect(
+      classifyDiscoveryChunk(
+        '{"response":{"candidates":[{"content":{"parts":[{"text":"hello"}]}}]}}',
+        "gemini"
+      )
+    ).toEqual({ ready: true, terminal: false, error: false });
+  });
+
+  it("keeps wrapped Gemini errors terminal", () => {
+    expect(
+      classifyDiscoveryChunk('{"response":{"error":{"message":"upstream failed"}}}', "gemini")
+    ).toEqual({ ready: false, terminal: true, error: true });
+  });
+
   it("keeps stateless readiness when content and DONE share a chunk", () => {
     expect(
       classifyDiscoveryChunk(
@@ -44,11 +59,25 @@ describe("discovery validity", () => {
       )
     ).toEqual({ ready: true, terminal: false, error: false });
   });
-
   it("rejects errors even when a later chunk contains content", () => {
     const parser = new DiscoveryValidityParser("openai-responses");
     expect(parser.push('{"type":"response.failed","error":{"message":"no"}}').error).toBe(true);
     expect(parser.push('{"type":"response.output_text.delta","delta":"late"}').ready).toBe(false);
+  });
+
+  it.each([
+    '{"type":"response.error"}',
+    '{"failed":true}',
+    '{"type":"response.done","response":{"error":{"message":"no"}}}',
+  ])("rejects Responses protocol error payload %s", (payload) => {
+    const parser = new DiscoveryValidityParser("openai-responses");
+
+    expect(parser.push(payload)).toMatchObject({ ready: false, terminal: true, error: true });
+    expect(parser.push('{"type":"response.done"}')).toMatchObject({
+      ready: false,
+      terminal: true,
+      error: true,
+    });
   });
 
   it("does not promote empty tool or content events", () => {

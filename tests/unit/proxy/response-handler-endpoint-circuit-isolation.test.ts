@@ -841,6 +841,44 @@ describe("Endpoint circuit breaker isolation", () => {
     expect(RateLimitService.releaseProviderSession).toHaveBeenCalledWith(1, "fake-session");
   });
 
+  it("records a Discovery fallback without a completion marker as failed", async () => {
+    const session = createSession();
+    setDeferredStreamingFinalization(session, {
+      providerId: 1,
+      providerName: "test-provider",
+      providerPriority: 10,
+      attemptNumber: 2,
+      totalProvidersAttempted: 2,
+      isFirstAttempt: false,
+      isFailoverSuccess: true,
+      endpointId: 42,
+      endpointUrl: "https://api.test.com",
+      upstreamStatusCode: 200,
+      bindingIntent: "none",
+      requiresCompletionMarker: true,
+    });
+
+    const clientResponse = await ProxyResponseHandler.dispatch(
+      session,
+      createSuccessStreamResponse()
+    );
+    await clientResponse.text();
+    await drainAsyncTasks();
+
+    expect(updateMessageRequestDetailsDurably).toHaveBeenCalledWith(
+      1,
+      expect.objectContaining({
+        statusCode: 502,
+        errorMessage: "STREAM_COMPLETION_MARKER_MISSING",
+      }),
+      expect.objectContaining({ onCommitted: expect.any(Function) })
+    );
+    expect(mockRecordFailure).toHaveBeenCalledOnce();
+    expect(mockRecordSuccess).not.toHaveBeenCalled();
+    expect(SessionManager.compareAndSetSessionProvider).not.toHaveBeenCalled();
+    expect(SessionManager.clearVersionedSessionProvider).not.toHaveBeenCalled();
+  });
+
   it("does not clear a create tombstone when the completion marker is missing", async () => {
     const session = createSession();
     setDeferredStreamingFinalization(session, {
@@ -917,7 +955,65 @@ describe("Endpoint circuit breaker isolation", () => {
     );
   });
 
+  it("does not let response.done override an earlier nested Responses failure", async () => {
+    const session = createSession();
+    session.originalFormat = "response";
+    const snapshot = {
+      sessionId: "fake-session",
+      keyId: 456,
+      providerId: null,
+      generation: "failed-before-done-generation",
+    } as const;
+    setDeferredStreamingFinalization(session, {
+      providerId: 1,
+      providerName: "test-provider",
+      providerPriority: 10,
+      attemptNumber: 1,
+      totalProvidersAttempted: 2,
+      isFirstAttempt: false,
+      isFailoverSuccess: true,
+      endpointId: 42,
+      endpointUrl: "https://api.test.com",
+      upstreamStatusCode: 200,
+      bindingIntent: "create",
+      bindingSnapshot: snapshot,
+      requiresCompletionMarker: true,
+    });
+    const body =
+      `event: response.output_text.delta\ndata: ${JSON.stringify({
+        type: "response.output_text.delta",
+        delta: "partial output",
+      })}\n\n` +
+      `event: response.failed\ndata: ${JSON.stringify({
+        type: "response.failed",
+        response: { status: "failed", error: { message: "upstream failed" } },
+      })}\n\n` +
+      `event: response.done\ndata: ${JSON.stringify({ type: "response.done" })}\n\n`;
+
+    const clientResponse = await ProxyResponseHandler.dispatch(
+      session,
+      new Response(body, {
+        status: 200,
+        headers: { "content-type": "text/event-stream" },
+      })
+    );
+    await clientResponse.text();
+    await drainAsyncTasks();
+
+    expect(SessionManager.compareAndSetSessionProvider).not.toHaveBeenCalled();
+    expect(mockRecordSuccess).not.toHaveBeenCalled();
+    expect(mockRecordFailure).toHaveBeenCalledWith(
+      1,
+      expect.objectContaining({ message: "FAKE_200_OPENAI_RESPONSE_FAILED: upstream failed" })
+    );
+  });
+
   it.each([
+    {
+      label: "Claude data-only stop",
+      format: "claude" as const,
+      body: `data: ${JSON.stringify({ type: "message_stop" })}\n\n`,
+    },
     {
       label: "OpenAI Responses",
       format: "response" as const,
@@ -927,9 +1023,17 @@ describe("Endpoint circuit breaker isolation", () => {
       })}\n\n`,
     },
     {
-      label: "Anthropic data-only",
-      format: "claude" as const,
-      body: `data: ${JSON.stringify({ type: "message_stop" })}\n\n`,
+      label: "OpenAI Responses data-only completed",
+      format: "response" as const,
+      body: `data: ${JSON.stringify({
+        type: "response.completed",
+        response: { id: "resp_data_only_completed" },
+      })}\n\n`,
+    },
+    {
+      label: "OpenAI Responses done",
+      format: "response" as const,
+      body: `event: response.done\ndata: ${JSON.stringify({ type: "response.done" })}\n\n`,
     },
     {
       label: "OpenAI Chat finish reason",
@@ -948,6 +1052,13 @@ describe("Endpoint circuit breaker isolation", () => {
       format: "gemini" as const,
       body: `data: ${JSON.stringify({
         candidates: [{ finishReason: "STOP" }],
+      })}\n\n`,
+    },
+    {
+      label: "Gemini wrapped response",
+      format: "gemini" as const,
+      body: `data: ${JSON.stringify({
+        response: { candidates: [{ finishReason: "STOP" }] },
       })}\n\n`,
     },
     {
@@ -993,6 +1104,7 @@ describe("Endpoint circuit breaker isolation", () => {
     await drainAsyncTasks();
 
     expect(SessionManager.compareAndSetSessionProvider).toHaveBeenCalledWith(snapshot, 1);
+    expect(mockRecordFailure).not.toHaveBeenCalled();
   });
 
   it("releases a create attempt ref when generation CAS loses", async () => {
@@ -1243,7 +1355,7 @@ describe("Endpoint circuit breaker isolation", () => {
     }
   });
 
-  it("touches the captured binding while a Discovery winner remains open", async () => {
+  it("touches the captured binding often enough for a long Discovery winner", async () => {
     vi.useFakeTimers();
     try {
       const session = createSession();
@@ -1288,13 +1400,17 @@ describe("Endpoint circuit breaker isolation", () => {
 
       expect(SessionManager.compareAndSetSessionProvider).toHaveBeenCalledWith(snapshot, 1);
       expect(SessionManager.getSessionBindingSnapshot).not.toHaveBeenCalled();
-      expect(SessionManager.releaseSessionDiscoveryLease).toHaveBeenCalledOnce();
+      expect(SessionManager.releaseSessionDiscoveryLease).toHaveBeenCalledWith(
+        "fake-session",
+        456,
+        "long-stream-owner"
+      );
     } finally {
       vi.useRealTimers();
     }
   });
 
-  it("revokes Sticky writes when a binding heartbeat loses its generation", async () => {
+  it("does not revive a binding after an authority advances its generation", async () => {
     vi.useFakeTimers();
     try {
       const session = createSession();
@@ -1302,7 +1418,7 @@ describe("Endpoint circuit breaker isolation", () => {
         sessionId: "fake-session",
         keyId: 456,
         providerId: 1,
-        generation: "generation-before-conflict",
+        generation: "generation-before-termination",
       } as const;
       setDeferredStreamingFinalization(session, {
         providerId: 1,
@@ -1321,7 +1437,7 @@ describe("Endpoint circuit breaker isolation", () => {
         discoveryLease: {
           sessionId: "fake-session",
           keyId: 456,
-          ownerToken: "conflicted-stream-owner",
+          ownerToken: "terminated-stream-owner",
           ttlSeconds: 3_600,
         },
       });
@@ -1349,7 +1465,11 @@ describe("Endpoint circuit breaker isolation", () => {
       expect(SessionManager.touchVersionedSessionBinding).toHaveBeenCalledTimes(2);
       expect(SessionManager.compareAndSetSessionProvider).not.toHaveBeenCalled();
       expect(SessionManager.getSessionBindingSnapshot).not.toHaveBeenCalled();
-      expect(SessionManager.releaseSessionDiscoveryLease).toHaveBeenCalledOnce();
+      expect(SessionManager.releaseSessionDiscoveryLease).toHaveBeenCalledWith(
+        "fake-session",
+        456,
+        "terminated-stream-owner"
+      );
     } finally {
       vi.useRealTimers();
     }

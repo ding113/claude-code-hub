@@ -47,6 +47,7 @@ import {
   shouldWarnQuotaLeaseCapZero,
   shouldWarnQuotaLeasePercentZero,
 } from "@/lib/utils/validation/quota-lease-warnings";
+import { DISCOVERY_FIELD_LIMITS } from "@/lib/validation/discovery-settings";
 import { DEFAULT_IP_EXTRACTION_CONFIG, type IpExtractionConfig } from "@/types/ip-extraction";
 import type {
   BillingModelSource,
@@ -65,6 +66,13 @@ interface SystemSettingsFormProps {
     | "codexPriorityBillingSource"
     | "billNonSuccessfulRequests"
     | "billHedgeLosers"
+    | "discoveryEnabled"
+    | "discoveryConcurrency"
+    | "maxDiscoveryRounds"
+    | "discoverySlaMs"
+    | "stickySlaMs"
+    | "racingTotalTimeoutMs"
+    | "stickyTimeoutCooldownMs"
     | "timezone"
     | "verboseProviderError"
     | "passThroughUpstreamErrorMessage"
@@ -107,6 +115,7 @@ function formatIpExtractionConfig(config: IpExtractionConfig): string {
 }
 
 const DEFAULT_IP_EXTRACTION_CONFIG_TEXT = formatIpExtractionConfig(DEFAULT_IP_EXTRACTION_CONFIG);
+type DiscoveryNumberValue = number | "";
 
 export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps) {
   const router = useRouter();
@@ -130,6 +139,23 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
     initialSettings.billNonSuccessfulRequests
   );
   const [billHedgeLosers, setBillHedgeLosers] = useState(initialSettings.billHedgeLosers);
+  const [discoveryEnabled, setDiscoveryEnabled] = useState(initialSettings.discoveryEnabled);
+  const [discoveryConcurrency, setDiscoveryConcurrency] = useState<DiscoveryNumberValue>(
+    initialSettings.discoveryConcurrency
+  );
+  const [maxDiscoveryRounds, setMaxDiscoveryRounds] = useState<DiscoveryNumberValue>(
+    initialSettings.maxDiscoveryRounds
+  );
+  const [discoverySlaMs, setDiscoverySlaMs] = useState<DiscoveryNumberValue>(
+    initialSettings.discoverySlaMs
+  );
+  const [stickySlaMs, setStickySlaMs] = useState<DiscoveryNumberValue>(initialSettings.stickySlaMs);
+  const [racingTotalTimeoutMs, setRacingTotalTimeoutMs] = useState<DiscoveryNumberValue>(
+    initialSettings.racingTotalTimeoutMs
+  );
+  const [stickyTimeoutCooldownMs, setStickyTimeoutCooldownMs] = useState<DiscoveryNumberValue>(
+    initialSettings.stickyTimeoutCooldownMs
+  );
   const [timezone, setTimezone] = useState<string | null>(initialSettings.timezone);
   const [verboseProviderError, setVerboseProviderError] = useState(
     initialSettings.verboseProviderError
@@ -230,6 +256,32 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
       return;
     }
 
+    const discoveryConfig = {
+      discoveryConcurrency: Number(discoveryConcurrency),
+      maxDiscoveryRounds: Number(maxDiscoveryRounds),
+      discoverySlaMs: Number(discoverySlaMs),
+      stickySlaMs: Number(stickySlaMs),
+      racingTotalTimeoutMs: Number(racingTotalTimeoutMs),
+      stickyTimeoutCooldownMs: Number(stickyTimeoutCooldownMs),
+    };
+    const discoverySettingsInvalid = Object.entries(discoveryConfig).some(([field, value]) => {
+      const [min, max] = DISCOVERY_FIELD_LIMITS[field as keyof typeof DISCOVERY_FIELD_LIMITS];
+      return !Number.isSafeInteger(value) || value < min || value > max;
+    });
+    if (discoveryEnabled && discoverySettingsInvalid) {
+      toast.error(t("discoverySettingsInvalid"));
+      return;
+    }
+    if (
+      discoveryEnabled &&
+      discoveryConfig.racingTotalTimeoutMs <
+        discoveryConfig.stickySlaMs +
+          discoveryConfig.maxDiscoveryRounds * discoveryConfig.discoverySlaMs
+    ) {
+      toast.error(t("discoveryWindowInvalid"));
+      return;
+    }
+
     const quotaDbRefreshIntervalSecondsToSave = clampQuotaDbRefreshIntervalSeconds(
       quotaDbRefreshIntervalSecondsStr
     );
@@ -311,6 +363,8 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
         codexPriorityBillingSource,
         billNonSuccessfulRequests,
         billHedgeLosers,
+        discoveryEnabled,
+        ...(discoveryEnabled ? discoveryConfig : {}),
         timezone,
         verboseProviderError,
         passThroughUpstreamErrorMessage,
@@ -341,7 +395,13 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
       });
 
       if (!result.ok) {
-        toast.error(result.error || t("saveFailed"));
+        const errorMessage =
+          result.errorCode === "DISCOVERY_WINDOW_INVALID"
+            ? t("discoveryWindowInvalid")
+            : result.errorCode === "DISCOVERY_SETTINGS_INVALID"
+              ? t("discoverySettingsInvalid")
+              : result.error || t("saveFailed");
+        toast.error(errorMessage);
         return;
       }
 
@@ -353,6 +413,13 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
         setCodexPriorityBillingSource(result.data.codexPriorityBillingSource);
         setBillNonSuccessfulRequests(result.data.billNonSuccessfulRequests);
         setBillHedgeLosers(result.data.billHedgeLosers);
+        setDiscoveryEnabled(result.data.discoveryEnabled);
+        setDiscoveryConcurrency(result.data.discoveryConcurrency);
+        setMaxDiscoveryRounds(result.data.maxDiscoveryRounds);
+        setDiscoverySlaMs(result.data.discoverySlaMs);
+        setStickySlaMs(result.data.stickySlaMs);
+        setRacingTotalTimeoutMs(result.data.racingTotalTimeoutMs);
+        setStickyTimeoutCooldownMs(result.data.stickyTimeoutCooldownMs);
         setTimezone(result.data.timezone);
         setVerboseProviderError(result.data.verboseProviderError);
         setPassThroughUpstreamErrorMessage(result.data.passThroughUpstreamErrorMessage);
@@ -634,6 +701,94 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
             onCheckedChange={(checked) => setBillHedgeLosers(checked)}
             disabled={isPending}
           />
+        </div>
+
+        {/* Bounded Streaming Discovery */}
+        <div className="p-4 rounded-xl bg-white/[0.02] border border-white/5 space-y-4">
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex items-start gap-3">
+              <div className="w-8 h-8 flex items-center justify-center rounded-lg bg-cyan-500/10 text-cyan-400 shrink-0">
+                <Zap className="h-4 w-4" />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-foreground">{t("discoveryEnabled")}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">{t("discoveryEnabledDesc")}</p>
+              </div>
+            </div>
+            <Switch
+              id="discovery-enabled"
+              aria-label={t("discoveryEnabled")}
+              checked={discoveryEnabled}
+              onCheckedChange={setDiscoveryEnabled}
+              disabled={isPending}
+            />
+          </div>
+          {discoveryEnabled ? (
+            <>
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {(
+                  [
+                    [
+                      "discoveryConcurrency",
+                      discoveryConcurrency,
+                      setDiscoveryConcurrency,
+                      ...DISCOVERY_FIELD_LIMITS.discoveryConcurrency,
+                    ],
+                    [
+                      "maxDiscoveryRounds",
+                      maxDiscoveryRounds,
+                      setMaxDiscoveryRounds,
+                      ...DISCOVERY_FIELD_LIMITS.maxDiscoveryRounds,
+                    ],
+                    [
+                      "discoverySlaMs",
+                      discoverySlaMs,
+                      setDiscoverySlaMs,
+                      ...DISCOVERY_FIELD_LIMITS.discoverySlaMs,
+                    ],
+                    [
+                      "stickySlaMs",
+                      stickySlaMs,
+                      setStickySlaMs,
+                      ...DISCOVERY_FIELD_LIMITS.stickySlaMs,
+                    ],
+                    [
+                      "racingTotalTimeoutMs",
+                      racingTotalTimeoutMs,
+                      setRacingTotalTimeoutMs,
+                      ...DISCOVERY_FIELD_LIMITS.racingTotalTimeoutMs,
+                    ],
+                    [
+                      "stickyTimeoutCooldownMs",
+                      stickyTimeoutCooldownMs,
+                      setStickyTimeoutCooldownMs,
+                      ...DISCOVERY_FIELD_LIMITS.stickyTimeoutCooldownMs,
+                    ],
+                  ] as const
+                ).map(([key, value, setter, min, max]) => (
+                  <div key={key} className="space-y-1.5">
+                    <Label htmlFor={`discovery-${key}`} className="text-xs">
+                      {t(key)}
+                    </Label>
+                    <Input
+                      id={`discovery-${key}`}
+                      type="number"
+                      min={min}
+                      max={max}
+                      required
+                      value={value === 0 ? "" : value}
+                      onChange={(event) =>
+                        setter(event.target.value === "" ? "" : Number(event.target.value))
+                      }
+                      disabled={isPending}
+                      className={inputClassName}
+                    />
+                  </div>
+                ))}
+              </div>
+              <p className="text-xs text-muted-foreground">{t("discoveryWindowDesc")}</p>
+            </>
+          ) : null}
         </div>
 
         {/* Verbose Provider Error */}

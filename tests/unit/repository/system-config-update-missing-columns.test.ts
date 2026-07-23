@@ -299,7 +299,7 @@ describe("SystemSettings：数据库缺列时的保存兜底", () => {
     vi.setSystemTime(now);
 
     // 第一次 select(fullSelection) 因新列缺失而抛 42703；
-    // 第二次 select(selectionWithoutGeminiFunctionId) 命中——验证新列已加入降级链最外层。
+    // 第二次 select(selectionWithoutDiscoveryColumn) 命中——验证新列已加入降级链最外层。
     const selectMock = vi
       .fn()
       .mockReturnValueOnce(createRejectedThenableQuery({ code: "42703" }))
@@ -339,11 +339,11 @@ describe("SystemSettings：数据库缺列时的保存兜底", () => {
     expect(result.siteTitle).toBe("Claude Code Hub");
     expect(result.enableHttp2).toBe(true);
 
-    // 关键回归保护：第二次 select 必须恰好剥离了新列（最外层降级），
-    // 而非旧行为先剥离 enableThinkingEffortConflictRectifier。若新列未加入降级链最外层，下面两条断言会失败。
+    // 关键回归保护：第二次 select 必须恰好剥离了最新 Discovery 列，
+    // 而非旧行为先剥离 enableGeminiFunctionIdRectifier。
     const secondSelection = selectMock.mock.calls[1]?.[0] as Record<string, unknown>;
-    expect(secondSelection).not.toHaveProperty("enableGeminiFunctionIdRectifier");
-    expect(secondSelection).toHaveProperty("enableThinkingEffortConflictRectifier");
+    expect(secondSelection).not.toHaveProperty("stickyTimeoutCooldownMs");
+    expect(secondSelection).toHaveProperty("racingTotalTimeoutMs");
 
     vi.useRealTimers();
   });

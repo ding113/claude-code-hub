@@ -2555,8 +2555,9 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
     expect(mocks.getCachedSystemSettings).toHaveBeenCalledTimes(1);
   });
 
-  test("foreign binding state fails closed before Discovery acquires a lease", async () => {
-    const provider = createProvider({ id: 1, firstByteTimeoutStreamingMs: 0 });
+  test("foreign binding state uses single-upstream routing with serial fallback", async () => {
+    const provider = createProvider({ id: 1, firstByteTimeoutStreamingMs: 100 });
+    const alternative = createProvider({ id: 2, name: "serial-fallback" });
     const session = createSession();
     session.authState = {
       success: true,
@@ -2571,6 +2572,7 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
       reason: "legacy_owner_mismatch",
       legacyFallbackAllowed: false,
     });
+    mocks.pickRandomProviderWithExclusion.mockResolvedValueOnce(alternative);
 
     const doForward = vi.spyOn(
       ProxyForwarder as unknown as {
@@ -2578,16 +2580,26 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
       },
       "doForward"
     );
-    doForward.mockResolvedValueOnce(
-      new Response('data: {"type":"message_stop"}\n\n', {
-        status: 200,
-        headers: { "content-type": "text/event-stream" },
-      })
-    );
+    doForward
+      .mockRejectedValueOnce(new UpstreamProxyError("initial provider failed", 500))
+      .mockResolvedValueOnce(
+        new Response('data: {"type":"message_stop"}\n\n', {
+          status: 200,
+          headers: { "content-type": "text/event-stream" },
+        })
+      );
 
-    await ProxyForwarder.send(session);
-    expect(doForward).toHaveBeenCalledTimes(1);
+    const response = await ProxyForwarder.send(session);
+    expect(response.status).toBe(200);
+    expect(doForward).toHaveBeenCalledTimes(2);
+    expect(doForward.mock.calls.map((call) => (call[1] as Provider).id)).toEqual([
+      provider.id,
+      alternative.id,
+    ]);
+    expect(mocks.pickRandomProviderWithExclusion).toHaveBeenCalledTimes(1);
+    expect(session.isStreamingHedgeDisabled()).toBe(true);
     expect(session.isSessionBindingAllowed()).toBe(false);
+    expect(peekDeferredStreamingFinalization(session)?.bindingIntent).toBe("none");
     expect(mocks.acquireSessionDiscoveryLease).not.toHaveBeenCalled();
     expect(mocks.pickDiscoveryProviders).not.toHaveBeenCalled();
   });
@@ -2702,6 +2714,243 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
     }
   });
 
+  test("a Sticky rectifier retry stalled in setup still demotes to fallback", async () => {
+    vi.useFakeTimers();
+    try {
+      const sticky = createProvider({ id: 1, name: "sticky", priority: 1 });
+      const normal = createProvider({ id: 2, name: "normal", priority: 1 });
+      const session = createSession();
+      session.authState = {
+        success: true,
+        user: null,
+        key: { id: 36 },
+        apiKey: null,
+      } as typeof session.authState;
+      session.request.message.messages = [
+        { role: "user", content: "first" },
+        { role: "assistant", content: [{ type: "thinking", thinking: "t", signature: "sig" }] },
+      ];
+      setProviderWithSessionRef(session, sticky);
+      session.setSessionBindingSnapshot({
+        sessionId: session.sessionId!,
+        keyId: 36,
+        providerId: sticky.id,
+        generation: "g-sticky-rectifier-setup",
+      });
+      mocks.getCachedSystemSettings.mockResolvedValue({
+        discoveryEnabled: true,
+        discoveryConcurrency: 2,
+        maxDiscoveryRounds: 1,
+        discoverySlaMs: 50,
+        stickySlaMs: 10,
+        racingTotalTimeoutMs: 100,
+        stickyTimeoutCooldownMs: 300_000,
+        enableThinkingSignatureRectifier: true,
+      });
+      mocks.pickDiscoveryProviders.mockResolvedValueOnce([normal]);
+
+      const retrySetup = Promise.withResolvers<{
+        endpointId: number | null;
+        baseUrl: string;
+        endpointUrl: string;
+      }>();
+      const retrySetupStarted = Promise.withResolvers<void>();
+      let stickyEndpointCalls = 0;
+      const endpointResolver = vi.spyOn(
+        ProxyForwarder as unknown as {
+          resolveStreamingHedgeEndpoint: (
+            session: ProxySession,
+            provider: Provider
+          ) => Promise<{ endpointId: number | null; baseUrl: string; endpointUrl: string }>;
+        },
+        "resolveStreamingHedgeEndpoint"
+      );
+      endpointResolver.mockImplementation(async (_attemptSession, provider) => {
+        if (provider.id === sticky.id) {
+          stickyEndpointCalls += 1;
+          if (stickyEndpointCalls > 1) {
+            retrySetupStarted.resolve();
+            return retrySetup.promise;
+          }
+        }
+        return { endpointId: null, baseUrl: provider.url, endpointUrl: provider.url };
+      });
+
+      const signatureError = new UpstreamProxyError(
+        "Invalid `signature` in `thinking` block",
+        400,
+        {
+          body: '{"error":"invalid_signature"}',
+          providerId: sticky.id,
+          providerName: sticky.name,
+        }
+      );
+      const doForward = vi.spyOn(
+        ProxyForwarder as unknown as {
+          doForward: (...args: unknown[]) => Promise<Response>;
+        },
+        "doForward"
+      );
+      doForward.mockImplementation(async (attemptSession) => {
+        if ((attemptSession as ProxySession).provider?.id === sticky.id) throw signatureError;
+        return new Response('data: {"type":"content_block_delta","delta":{"text":"normal"}}\n\n', {
+          headers: { "content-type": "text/event-stream" },
+        });
+      });
+
+      const responsePromise = ProxyForwarder.send(session);
+      await retrySetupStarted.promise;
+      await vi.advanceTimersByTimeAsync(10);
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(mocks.clearVersionedSessionProvider).toHaveBeenCalledWith(
+        expect.objectContaining({ generation: "g-sticky-rectifier-setup" }),
+        sticky.id,
+        300
+      );
+      expect(mocks.pickDiscoveryProviders).toHaveBeenCalledTimes(1);
+      expect(doForward).toHaveBeenCalledTimes(2);
+
+      retrySetup.resolve({ endpointId: null, baseUrl: sticky.url, endpointUrl: sticky.url });
+      await vi.advanceTimersByTimeAsync(0);
+      const response = await responsePromise;
+      expect(await response.text()).toContain('"normal"');
+      expect(doForward).toHaveBeenCalledTimes(2);
+      expect(mocks.releaseProviderSession).toHaveBeenCalledWith(sticky.id, session.sessionId);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("a timed-out Sticky retry setup failure starts exactly one full Discovery wave", async () => {
+    vi.useFakeTimers();
+    try {
+      const sticky = createProvider({ id: 1, name: "sticky", priority: 1 });
+      const normalOne = createProvider({ id: 2, name: "normal-one", priority: 1 });
+      const normalTwo = createProvider({ id: 3, name: "normal-two", priority: 1 });
+      const session = createSession();
+      session.authState = {
+        success: true,
+        user: null,
+        key: { id: 38 },
+        apiKey: null,
+      } as typeof session.authState;
+      session.request.message.messages = [
+        { role: "user", content: "first" },
+        { role: "assistant", content: [{ type: "thinking", thinking: "t", signature: "sig" }] },
+      ];
+      setProviderWithSessionRef(session, sticky);
+      session.setSessionBindingSnapshot({
+        sessionId: session.sessionId!,
+        keyId: 38,
+        providerId: sticky.id,
+        generation: "g-sticky-retry-failure",
+      });
+      mocks.getCachedSystemSettings.mockResolvedValue({
+        discoveryEnabled: true,
+        discoveryConcurrency: 2,
+        maxDiscoveryRounds: 1,
+        discoverySlaMs: 50,
+        stickySlaMs: 10,
+        racingTotalTimeoutMs: 100,
+        stickyTimeoutCooldownMs: 300_000,
+        enableThinkingSignatureRectifier: true,
+      });
+      mocks.pickDiscoveryProviders.mockResolvedValueOnce([normalOne, normalTwo]);
+
+      const clearBinding = Promise.withResolvers<unknown>();
+      mocks.clearVersionedSessionProvider.mockReturnValueOnce(clearBinding.promise);
+      const retrySetup = Promise.withResolvers<{
+        endpointId: number | null;
+        baseUrl: string;
+        endpointUrl: string;
+      }>();
+      const retrySetupStarted = Promise.withResolvers<void>();
+      let stickyEndpointCalls = 0;
+      vi.spyOn(
+        ProxyForwarder as unknown as {
+          resolveStreamingHedgeEndpoint: (
+            session: ProxySession,
+            provider: Provider
+          ) => Promise<{ endpointId: number | null; baseUrl: string; endpointUrl: string }>;
+        },
+        "resolveStreamingHedgeEndpoint"
+      ).mockImplementation(async (_attemptSession, provider) => {
+        if (provider.id === sticky.id && ++stickyEndpointCalls > 1) {
+          retrySetupStarted.resolve();
+          return retrySetup.promise;
+        }
+        return { endpointId: null, baseUrl: provider.url, endpointUrl: provider.url };
+      });
+
+      const signatureError = new UpstreamProxyError(
+        "Invalid `signature` in `thinking` block",
+        400,
+        {
+          body: '{"error":"invalid_signature"}',
+          providerId: sticky.id,
+          providerName: sticky.name,
+        }
+      );
+      const normalTwoResponse = Promise.withResolvers<Response>();
+      const doForward = vi.spyOn(
+        ProxyForwarder as unknown as {
+          doForward: (...args: unknown[]) => Promise<Response>;
+        },
+        "doForward"
+      );
+      doForward.mockImplementation(async (attemptSession) => {
+        const providerId = (attemptSession as ProxySession).provider?.id;
+        if (providerId === sticky.id) throw signatureError;
+        if (providerId === normalTwo.id) return normalTwoResponse.promise;
+        return new Response(new ReadableStream<Uint8Array>(), {
+          headers: { "content-type": "text/event-stream" },
+        });
+      });
+
+      const responsePromise = ProxyForwarder.send(session);
+      await retrySetupStarted.promise;
+      await vi.advanceTimersByTimeAsync(10);
+      retrySetup.reject(new Error("sticky retry setup failed"));
+      await vi.advanceTimersByTimeAsync(0);
+      // The failed rectifier setup frees the fallback slot, but the reserved
+      // wave remains behind the Sticky binding-clear CAS.
+      expect(mocks.pickDiscoveryProviders).not.toHaveBeenCalled();
+
+      clearBinding.resolve({
+        status: "ok",
+        legacyFallbackAllowed: false,
+        source: "cleared",
+        snapshot: {
+          sessionId: session.sessionId!,
+          keyId: 38,
+          providerId: null,
+          generation: "g-sticky-retry-failure-cleared",
+        },
+      });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(mocks.pickDiscoveryProviders).toHaveBeenCalledTimes(1);
+      expect(mocks.pickDiscoveryProviders).toHaveBeenCalledWith(
+        expect.anything(),
+        2,
+        expect.arrayContaining([sticky.id])
+      );
+      normalTwoResponse.resolve(
+        new Response('data: {"type":"content_block_delta","delta":{"text":"winner"}}\n\n', {
+          headers: { "content-type": "text/event-stream" },
+        })
+      );
+      await vi.advanceTimersByTimeAsync(0);
+
+      const response = await responsePromise;
+      expect(await response.text()).toContain('"winner"');
+      expect(mocks.pickDiscoveryProviders).toHaveBeenCalledTimes(1);
+      expect(doForward).toHaveBeenCalledTimes(3);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   test("Sticky timeout and fallback failure consume a single replacement-wave reservation", async () => {
     vi.useFakeTimers();
     try {
@@ -2729,7 +2978,7 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
       mocks.getCachedSystemSettings.mockResolvedValue({
         discoveryEnabled: true,
         discoveryConcurrency: 2,
-        maxDiscoveryRounds: 2,
+        maxDiscoveryRounds: 1,
         discoverySlaMs: 50,
         stickySlaMs: 10,
         racingTotalTimeoutMs: 200,
@@ -2768,15 +3017,6 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
       expect(mocks.clearVersionedSessionProvider).toHaveBeenCalledTimes(1);
       expect(mocks.pickDiscoveryProviders).not.toHaveBeenCalled();
 
-      stickyAttempt.reject(new Error("Sticky fallback failed while binding clear was pending"));
-      await vi.advanceTimersByTimeAsync(0);
-      expect(mocks.pickDiscoveryProviders).toHaveBeenCalledTimes(1);
-      expect(mocks.pickDiscoveryProviders).toHaveBeenCalledWith(
-        expect.anything(),
-        2,
-        expect.arrayContaining([sticky.id])
-      );
-
       clearBinding.resolve({
         status: "ok",
         legacyFallbackAllowed: false,
@@ -2788,8 +3028,17 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
           generation: "g-cleared-single-wave",
         },
       });
+      // Resolve the cooldown and fail the fallback in the same turn. This
+      // exercises the claim-to-queue-start window: the claimed N-1 wave must
+      // remain expandable to full concurrency before placeholders register.
+      stickyAttempt.reject(new Error("Sticky fallback failed while the wave was being claimed"));
       await vi.advanceTimersByTimeAsync(0);
       expect(mocks.pickDiscoveryProviders).toHaveBeenCalledTimes(1);
+      expect(mocks.pickDiscoveryProviders).toHaveBeenCalledWith(
+        expect.anything(),
+        2,
+        expect.arrayContaining([sticky.id])
+      );
 
       replacementWave.resolve([normalOne, normalTwo]);
       await vi.advanceTimersByTimeAsync(0);
@@ -2926,6 +3175,66 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
     }
   });
 
+  test("a racing deadline bounds a stalled Sticky cooldown cleanup", async () => {
+    vi.useFakeTimers();
+    try {
+      const sticky = createProvider({ id: 1, name: "sticky", priority: 1 });
+      const session = createSession();
+      session.authState = {
+        success: true,
+        user: null,
+        key: { id: 39 },
+        apiKey: null,
+      } as typeof session.authState;
+      session.request.message.messages = [
+        { role: "user", content: "first" },
+        { role: "user", content: "second" },
+      ];
+      session.setProvider(sticky);
+      session.setSessionBindingSnapshot({
+        sessionId: session.sessionId!,
+        keyId: 39,
+        providerId: sticky.id,
+        generation: "g-sticky-cleanup-bound",
+      });
+      mocks.getCachedSystemSettings.mockResolvedValue({
+        discoveryEnabled: true,
+        discoveryConcurrency: 2,
+        maxDiscoveryRounds: 1,
+        discoverySlaMs: 20,
+        stickySlaMs: 10,
+        racingTotalTimeoutMs: 30,
+        stickyTimeoutCooldownMs: 300_000,
+      });
+      mocks.clearVersionedSessionProvider.mockReturnValueOnce(new Promise(() => {}));
+      vi.spyOn(
+        ProxyForwarder as unknown as {
+          doForward: (...args: unknown[]) => Promise<Response>;
+        },
+        "doForward"
+      ).mockResolvedValueOnce(
+        new Response(new ReadableStream<Uint8Array>(), {
+          headers: { "content-type": "text/event-stream" },
+        })
+      );
+
+      const observed = ProxyForwarder.send(session).catch((error) => error);
+      await vi.advanceTimersByTimeAsync(30);
+      let settled = false;
+      void observed.then(() => {
+        settled = true;
+      });
+      await vi.advanceTimersByTimeAsync(999);
+      expect(settled).toBe(false);
+
+      await vi.advanceTimersByTimeAsync(1);
+      expect(await observed).toBeInstanceOf(UpstreamProxyError);
+      expect(mocks.releaseSessionDiscoveryLease).toHaveBeenCalledOnce();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   test("client abort preserves an already-reserved Sticky timeout cooldown", async () => {
     vi.useFakeTimers();
     try {
@@ -2991,7 +3300,7 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
       clientAbort.abort(new Error("client disconnected"));
       await vi.advanceTimersByTimeAsync(0);
 
-      expect(requestSettled).toBe(false);
+      expect(requestSettled).toBe(true);
       expect(mocks.clearVersionedSessionProvider).toHaveBeenCalledOnce();
       expect(mocks.clearVersionedSessionProvider).toHaveBeenCalledWith(
         expect.objectContaining({ generation: "g-sticky-cooldown-abort" }),
@@ -3680,12 +3989,342 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
     }
   });
 
-  test("a fallback failure waits for the reserved wave before advancing another round", async () => {
+  test("Discovery round SLA advances while the initial candidate selector is stalled", async () => {
+    vi.useFakeTimers();
+    try {
+      const initial = createProvider({ id: 1, name: "initial", priority: 1 });
+      const winner = createProvider({ id: 2, name: "next-round", priority: 1 });
+      const stale = createProvider({ id: 3, name: "stale", priority: 1 });
+      const session = createSession();
+      session.authState = {
+        success: true,
+        user: null,
+        key: { id: 39 },
+        apiKey: null,
+      } as typeof session.authState;
+      session.setProvider(initial);
+      mocks.getCachedSystemSettings.mockResolvedValue({
+        discoveryEnabled: true,
+        discoveryConcurrency: 2,
+        maxDiscoveryRounds: 2,
+        discoverySlaMs: 10,
+        stickySlaMs: 10,
+        racingTotalTimeoutMs: 100,
+        stickyTimeoutCooldownMs: 300_000,
+      });
+
+      const stalledSelector = Promise.withResolvers<Provider[]>();
+      const selectorStarted = Promise.withResolvers<void>();
+      mocks.pickDiscoveryProviders
+        .mockImplementationOnce(() => {
+          selectorStarted.resolve();
+          return stalledSelector.promise;
+        })
+        .mockResolvedValueOnce([winner]);
+
+      const launchedProviderIds: number[] = [];
+      const doForward = vi.spyOn(
+        ProxyForwarder as unknown as {
+          doForward: (...args: unknown[]) => Promise<Response>;
+        },
+        "doForward"
+      );
+      doForward.mockImplementation(async (attemptSession) => {
+        const providerId = (attemptSession as ProxySession).provider!.id;
+        launchedProviderIds.push(providerId);
+        if (providerId === winner.id) {
+          return new Response('data: {"type":"content_block_delta","delta":{"text":"next"}}\n\n', {
+            headers: { "content-type": "text/event-stream" },
+          });
+        }
+        return new Response(new ReadableStream<Uint8Array>(), {
+          headers: { "content-type": "text/event-stream" },
+        });
+      });
+
+      const responsePromise = ProxyForwarder.send(session);
+      await selectorStarted.promise;
+      await vi.advanceTimersByTimeAsync(10);
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(mocks.pickDiscoveryProviders).toHaveBeenCalledTimes(2);
+      const response = await responsePromise;
+      expect(await response.text()).toContain('"next"');
+
+      stalledSelector.resolve([stale]);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(launchedProviderIds).toEqual([initial.id, winner.id]);
+      expect(doForward).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("a ready fallback stays held until the queued next wave registers", async () => {
+    vi.useFakeTimers();
+    let endpointResolver: ReturnType<typeof vi.spyOn> | null = null;
+    try {
+      const fallback = createProvider({ id: 1, name: "fallback", priority: 1 });
+      const setup = createProvider({
+        id: 2,
+        name: "cancelled-setup",
+        priority: 1,
+        limitConcurrentSessions: 1,
+      });
+      const winner = createProvider({ id: 3, name: "next-round-winner", priority: 1 });
+      const session = createSession();
+      session.authState = {
+        success: true,
+        user: null,
+        key: { id: 40 },
+        apiKey: null,
+      } as typeof session.authState;
+      session.setProvider(fallback);
+      mocks.getCachedSystemSettings.mockResolvedValue({
+        discoveryEnabled: true,
+        discoveryConcurrency: 2,
+        maxDiscoveryRounds: 2,
+        discoverySlaMs: 10,
+        stickySlaMs: 10,
+        racingTotalTimeoutMs: 100,
+        stickyTimeoutCooldownMs: 300_000,
+      });
+      mocks.pickDiscoveryProviders.mockResolvedValueOnce([setup]).mockResolvedValueOnce([winner]);
+
+      endpointResolver = vi.spyOn(
+        ProxyForwarder as unknown as {
+          resolveStreamingHedgeEndpoint: (
+            session: ProxySession,
+            provider: Provider
+          ) => Promise<{ endpointId: number | null; baseUrl: string; endpointUrl: string }>;
+        },
+        "resolveStreamingHedgeEndpoint"
+      );
+      endpointResolver.mockImplementation(async (_attemptSession, provider) => {
+        if (provider.id === setup.id) return new Promise(() => {});
+        return { endpointId: null, baseUrl: provider.url, endpointUrl: provider.url };
+      });
+
+      let fallbackController: ReadableStreamDefaultController<Uint8Array> | null = null;
+      const launchedProviderIds: number[] = [];
+      const doForward = vi.spyOn(
+        ProxyForwarder as unknown as {
+          doForward: (...args: unknown[]) => Promise<Response>;
+        },
+        "doForward"
+      );
+      doForward.mockImplementation(async (attemptSession) => {
+        const providerId = (attemptSession as ProxySession).provider!.id;
+        launchedProviderIds.push(providerId);
+        if (providerId === winner.id) {
+          return new Response(
+            'data: {"type":"content_block_delta","delta":{"text":"winner"}}\n\n',
+            { headers: { "content-type": "text/event-stream" } }
+          );
+        }
+        return new Response(
+          new ReadableStream<Uint8Array>({
+            start(controller) {
+              fallbackController = controller;
+            },
+          }),
+          { headers: { "content-type": "text/event-stream" } }
+        );
+      });
+      mocks.releaseProviderSession.mockImplementation(async (providerId) => {
+        if (providerId !== setup.id || !fallbackController) return;
+        fallbackController.enqueue(
+          new TextEncoder().encode(
+            'data: {"type":"content_block_delta","delta":{"text":"fallback"}}\n\n'
+          )
+        );
+        fallbackController.close();
+      });
+
+      const responsePromise = ProxyForwarder.send(session);
+      await vi.advanceTimersByTimeAsync(10);
+      await vi.advanceTimersByTimeAsync(0);
+
+      const response = await responsePromise;
+      expect(await response.text()).toContain('"winner"');
+      expect(launchedProviderIds).toEqual([fallback.id, winner.id]);
+      expect(mocks.pickDiscoveryProviders).toHaveBeenCalledTimes(2);
+      expect(mocks.releaseProviderSession).toHaveBeenCalledWith(setup.id, session.sessionId);
+    } finally {
+      endpointResolver?.mockRestore();
+      mocks.releaseProviderSession.mockImplementation(async () => {});
+      vi.useRealTimers();
+    }
+  });
+
+  test("a failing fallback waits for the queued next wave handoff", async () => {
+    vi.useFakeTimers();
+    let endpointResolver: ReturnType<typeof vi.spyOn> | null = null;
+    try {
+      const fallback = createProvider({ id: 1, name: "fallback", priority: 1 });
+      const setup = createProvider({ id: 2, name: "cancelled-setup", priority: 1 });
+      const stalled = createProvider({ id: 3, name: "stalled-next-wave", priority: 1 });
+      const winner = createProvider({ id: 4, name: "error-refill-winner", priority: 1 });
+      const session = createSession();
+      session.authState = {
+        success: true,
+        user: null,
+        key: { id: 41 },
+        apiKey: null,
+      } as typeof session.authState;
+      session.setProvider(fallback);
+      mocks.getCachedSystemSettings.mockResolvedValue({
+        discoveryEnabled: true,
+        discoveryConcurrency: 2,
+        maxDiscoveryRounds: 2,
+        discoverySlaMs: 10,
+        stickySlaMs: 10,
+        racingTotalTimeoutMs: 100,
+        stickyTimeoutCooldownMs: 300_000,
+      });
+      const stalledNextWave = Promise.withResolvers<Provider[]>();
+      const stalledNextWaveStarted = Promise.withResolvers<void>();
+      mocks.pickDiscoveryProviders
+        .mockResolvedValueOnce([setup])
+        .mockImplementationOnce(() => {
+          stalledNextWaveStarted.resolve();
+          return stalledNextWave.promise;
+        })
+        .mockResolvedValueOnce([winner]);
+
+      endpointResolver = vi.spyOn(
+        ProxyForwarder as unknown as {
+          resolveStreamingHedgeEndpoint: (
+            session: ProxySession,
+            provider: Provider
+          ) => Promise<{ endpointId: number | null; baseUrl: string; endpointUrl: string }>;
+        },
+        "resolveStreamingHedgeEndpoint"
+      );
+      endpointResolver.mockImplementation(async (_attemptSession, provider) => {
+        if (provider.id === setup.id) return new Promise(() => {});
+        return { endpointId: null, baseUrl: provider.url, endpointUrl: provider.url };
+      });
+
+      const fallbackFailure = Promise.withResolvers<Response>();
+      const launchedProviderIds: number[] = [];
+      vi.spyOn(
+        ProxyForwarder as unknown as {
+          doForward: (...args: unknown[]) => Promise<Response>;
+        },
+        "doForward"
+      ).mockImplementation(async (attemptSession) => {
+        const providerId = (attemptSession as ProxySession).provider!.id;
+        launchedProviderIds.push(providerId);
+        if (providerId === fallback.id) return fallbackFailure.promise;
+        return new Response('data: {"type":"content_block_delta","delta":{"text":"winner"}}\n\n', {
+          headers: { "content-type": "text/event-stream" },
+        });
+      });
+      const responsePromise = ProxyForwarder.send(session);
+      await vi.advanceTimersByTimeAsync(10);
+      await stalledNextWaveStarted.promise;
+      fallbackFailure.reject(new Error("fallback failed after queued-wave handoff"));
+      await vi.advanceTimersByTimeAsync(0);
+
+      const response = await responsePromise;
+      expect(await response.text()).toContain('"winner"');
+      expect(launchedProviderIds).toEqual([fallback.id, winner.id]);
+      expect(mocks.pickDiscoveryProviders).toHaveBeenCalledTimes(3);
+
+      stalledNextWave.resolve([stalled]);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(launchedProviderIds).toEqual([fallback.id, winner.id]);
+    } finally {
+      endpointResolver?.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
+  test("a stale candidate selector cannot launch after its Discovery round closes", async () => {
+    vi.useFakeTimers();
+    try {
+      const initial = createProvider({ id: 1, name: "initial", priority: 1 });
+      const peer = createProvider({ id: 2, name: "peer", priority: 1 });
+      const nextRound = createProvider({ id: 3, name: "next-round", priority: 1 });
+      const stale = createProvider({ id: 4, name: "stale", priority: 1 });
+      const session = createSession();
+      session.authState = {
+        success: true,
+        user: null,
+        key: { id: 37 },
+        apiKey: null,
+      } as typeof session.authState;
+      session.setProvider(initial);
+      mocks.getCachedSystemSettings.mockResolvedValue({
+        discoveryEnabled: true,
+        discoveryConcurrency: 2,
+        maxDiscoveryRounds: 2,
+        discoverySlaMs: 10,
+        stickySlaMs: 10,
+        racingTotalTimeoutMs: 100,
+        stickyTimeoutCooldownMs: 300_000,
+      });
+      const staleSelector = Promise.withResolvers<Provider[]>();
+      const refillStarted = Promise.withResolvers<void>();
+      mocks.pickDiscoveryProviders
+        .mockResolvedValueOnce([peer])
+        .mockImplementationOnce(() => {
+          refillStarted.resolve();
+          return staleSelector.promise;
+        })
+        .mockResolvedValueOnce([nextRound]);
+
+      const launchedProviderIds: number[] = [];
+      const doForward = vi.spyOn(
+        ProxyForwarder as unknown as {
+          doForward: (...args: unknown[]) => Promise<Response>;
+        },
+        "doForward"
+      );
+      doForward.mockImplementation(async (attemptSession) => {
+        const providerId = (attemptSession as ProxySession).provider!.id;
+        launchedProviderIds.push(providerId);
+        if (providerId === initial.id) throw new Error("initial failed");
+        if (providerId === nextRound.id) {
+          return new Response('data: {"type":"content_block_delta","delta":{"text":"next"}}\n\n', {
+            headers: { "content-type": "text/event-stream" },
+          });
+        }
+        return new Response(new ReadableStream<Uint8Array>(), {
+          headers: { "content-type": "text/event-stream" },
+        });
+      });
+
+      const responsePromise = ProxyForwarder.send(session);
+      await refillStarted.promise;
+      await vi.advanceTimersByTimeAsync(10);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(mocks.pickDiscoveryProviders).toHaveBeenCalledTimes(3);
+
+      staleSelector.resolve([stale]);
+      await vi.advanceTimersByTimeAsync(0);
+
+      const response = await responsePromise;
+      expect(await response.text()).toContain('"next"');
+      expect(launchedProviderIds).toEqual([initial.id, peer.id, nextRound.id]);
+      expect(doForward).toHaveBeenCalledTimes(3);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("a fallback failure refills the reserved round without waiting for its stalled selector", async () => {
     vi.useFakeTimers();
     try {
       const fallback = createProvider({ id: 1, name: "fallback", priority: 1 });
       const firstRoundLoser = createProvider({ id: 2, name: "first-round-loser", priority: 1 });
       const nextRoundWinner = createProvider({ id: 3, name: "next-round-winner", priority: 1 });
+      const staleReservedCandidate = createProvider({
+        id: 4,
+        name: "stale-reserved-candidate",
+        priority: 1,
+      });
       const session = createSession();
       session.authState = {
         success: true,
@@ -3707,9 +4346,7 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
       mocks.pickDiscoveryProviders
         .mockResolvedValueOnce([firstRoundLoser])
         .mockReturnValueOnce(reservedWave.promise)
-        .mockResolvedValueOnce([
-          createProvider({ id: 4, name: "unexpected-extra-round", priority: 1 }),
-        ]);
+        .mockResolvedValueOnce([nextRoundWinner]);
 
       const fallbackFailure = Promise.withResolvers<Response>();
       const doForward = vi.spyOn(
@@ -3738,13 +4375,13 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
 
       fallbackFailure.reject(new Error("fallback failed during reserved wave"));
       await vi.advanceTimersByTimeAsync(0);
-      expect(mocks.pickDiscoveryProviders).toHaveBeenCalledTimes(2);
+      expect(mocks.pickDiscoveryProviders).toHaveBeenCalledTimes(3);
 
-      reservedWave.resolve([nextRoundWinner]);
-      await vi.advanceTimersByTimeAsync(0);
       const response = await responsePromise;
       expect(await response.text()).toContain('"winner"');
-      expect(mocks.pickDiscoveryProviders).toHaveBeenCalledTimes(2);
+
+      reservedWave.resolve([staleReservedCandidate]);
+      await vi.advanceTimersByTimeAsync(0);
       expect(doForward).toHaveBeenCalledTimes(3);
     } finally {
       vi.useRealTimers();
@@ -3887,6 +4524,612 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
     expect(initialAdmissionCalls).toHaveLength(0);
     expect(initialReleaseCalls).toHaveLength(0);
     expect(session.hasProviderSessionRef(initial.id)).toBe(true);
+  });
+
+  test("Discovery keeps a healthy peer when rectifier retry setup fails", async () => {
+    const initial = createProvider({ id: 1, name: "initial", limitConcurrentSessions: 1 });
+    const alternative = createProvider({ id: 2, name: "alternative" });
+    const session = createSession();
+    session.authState = {
+      success: true,
+      user: null,
+      key: { id: 24 },
+      apiKey: null,
+    } as typeof session.authState;
+    setProviderWithSessionRef(session, initial);
+    withThinkingBlocks(session);
+    mocks.getCachedSystemSettings.mockResolvedValue({
+      discoveryEnabled: true,
+      discoveryConcurrency: 2,
+      maxDiscoveryRounds: 1,
+      discoverySlaMs: 100,
+      stickySlaMs: 100,
+      racingTotalTimeoutMs: 500,
+      stickyTimeoutCooldownMs: 300_000,
+      enableThinkingSignatureRectifier: true,
+    });
+    mocks.pickDiscoveryProviders.mockResolvedValueOnce([alternative]);
+
+    let initialEndpointAttempts = 0;
+    let allowAlternativeResponse!: () => void;
+    const rectifierRetrySetupAttempted = new Promise<void>((resolve) => {
+      allowAlternativeResponse = resolve;
+    });
+    const endpointResolver = vi.spyOn(
+      ProxyForwarder as unknown as {
+        resolveStreamingHedgeEndpoint: (
+          session: ProxySession,
+          provider: Provider
+        ) => Promise<{ endpointId: number | null; baseUrl: string; endpointUrl: string }>;
+      },
+      "resolveStreamingHedgeEndpoint"
+    );
+    endpointResolver.mockImplementation(async (_attemptSession, provider) => {
+      if (provider.id === initial.id) {
+        initialEndpointAttempts += 1;
+        if (initialEndpointAttempts > 1) {
+          allowAlternativeResponse();
+          throw new Error("rectifier retry endpoint setup failed");
+        }
+      }
+      return {
+        endpointId: null,
+        baseUrl: provider.url,
+        endpointUrl: provider.url,
+      };
+    });
+
+    const signatureError = new UpstreamProxyError("Invalid `signature` in `thinking` block", 400, {
+      body: '{"error":"invalid_signature"}',
+      providerId: initial.id,
+      providerName: initial.name,
+    });
+    const doForward = vi.spyOn(
+      ProxyForwarder as unknown as {
+        doForward: (...args: unknown[]) => Promise<Response>;
+      },
+      "doForward"
+    );
+    doForward.mockImplementation(async (attemptSession) => {
+      const provider = (attemptSession as ProxySession).provider;
+      if (provider?.id === initial.id) throw signatureError;
+      await rectifierRetrySetupAttempted;
+      return new Response(
+        'data: {"type":"content_block_delta","delta":{"text":"alternative"}}\n\n',
+        { headers: { "content-type": "text/event-stream" } }
+      );
+    });
+
+    try {
+      const response = await ProxyForwarder.send(session);
+      expect(await response.text()).toContain('"alternative"');
+      expect(initialEndpointAttempts).toBe(2);
+      expect(session.provider?.id).toBe(alternative.id);
+    } finally {
+      endpointResolver.mockRestore();
+    }
+  });
+
+  test("a rectifier retry setup reservation cannot overfill the next Discovery round", async () => {
+    vi.useFakeTimers();
+    try {
+      const retrying = createProvider({
+        id: 1,
+        name: "retrying",
+        priority: 10,
+        limitConcurrentSessions: 1,
+      });
+      const fallback = createProvider({ id: 2, name: "fallback", priority: 1 });
+      const nextRound = createProvider({ id: 3, name: "next-round", priority: 1 });
+      const unexpected = createProvider({ id: 4, name: "unexpected", priority: 1 });
+      const session = createSession();
+      session.authState = {
+        success: true,
+        user: null,
+        key: { id: 31 },
+        apiKey: null,
+      } as typeof session.authState;
+      setProviderWithSessionRef(session, retrying);
+      withThinkingBlocks(session);
+      mocks.getCachedSystemSettings.mockResolvedValue({
+        discoveryEnabled: true,
+        discoveryConcurrency: 2,
+        maxDiscoveryRounds: 2,
+        discoverySlaMs: 10,
+        stickySlaMs: 10,
+        racingTotalTimeoutMs: 100,
+        stickyTimeoutCooldownMs: 300_000,
+        enableThinkingSignatureRectifier: true,
+      });
+      mocks.pickDiscoveryProviders
+        .mockResolvedValueOnce([fallback])
+        .mockResolvedValueOnce([nextRound])
+        .mockResolvedValueOnce([unexpected]);
+
+      const retrySetup = Promise.withResolvers<{
+        endpointId: number | null;
+        baseUrl: string;
+        endpointUrl: string;
+      }>();
+      const retrySetupStarted = Promise.withResolvers<void>();
+      let retryingEndpointCalls = 0;
+      const endpointResolver = vi.spyOn(
+        ProxyForwarder as unknown as {
+          resolveStreamingHedgeEndpoint: (
+            session: ProxySession,
+            provider: Provider
+          ) => Promise<{ endpointId: number | null; baseUrl: string; endpointUrl: string }>;
+        },
+        "resolveStreamingHedgeEndpoint"
+      );
+      endpointResolver.mockImplementation(async (_attemptSession, provider) => {
+        if (provider.id === retrying.id) {
+          retryingEndpointCalls += 1;
+          if (retryingEndpointCalls > 1) {
+            retrySetupStarted.resolve();
+            return retrySetup.promise;
+          }
+        }
+        return {
+          endpointId: null,
+          baseUrl: provider.url,
+          endpointUrl: provider.url,
+        };
+      });
+
+      const signatureError = new UpstreamProxyError(
+        "Invalid `signature` in `thinking` block",
+        400,
+        {
+          body: '{"error":"invalid_signature"}',
+          providerId: retrying.id,
+          providerName: retrying.name,
+        }
+      );
+      const nextRoundResponse = Promise.withResolvers<Response>();
+      const activeProviders = new Set<number>();
+      let maxActive = 0;
+      const doForward = vi.spyOn(
+        ProxyForwarder as unknown as {
+          doForward: (...args: unknown[]) => Promise<Response>;
+        },
+        "doForward"
+      );
+      doForward.mockImplementation(async (attemptSession, ...args) => {
+        const providerId = (attemptSession as ProxySession).provider!.id;
+        const signal = args.at(-1) as AbortSignal;
+        activeProviders.add(providerId);
+        maxActive = Math.max(maxActive, activeProviders.size);
+        signal.addEventListener("abort", () => activeProviders.delete(providerId), { once: true });
+        if (providerId === retrying.id) {
+          activeProviders.delete(providerId);
+          throw signatureError;
+        }
+        if (providerId === nextRound.id) return nextRoundResponse.promise;
+        return new Response(new ReadableStream<Uint8Array>(), {
+          headers: { "content-type": "text/event-stream" },
+        });
+      });
+
+      const responsePromise = ProxyForwarder.send(session);
+      await retrySetupStarted.promise;
+      await vi.advanceTimersByTimeAsync(10);
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(mocks.pickDiscoveryProviders).toHaveBeenCalledTimes(2);
+      expect(maxActive).toBeLessThanOrEqual(2);
+
+      retrySetup.resolve({
+        endpointId: null,
+        baseUrl: retrying.url,
+        endpointUrl: retrying.url,
+      });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(mocks.pickDiscoveryProviders).toHaveBeenCalledTimes(2);
+      expect(doForward).toHaveBeenCalledTimes(3);
+
+      nextRoundResponse.resolve(
+        new Response('data: {"type":"content_block_delta","delta":{"text":"next"}}\n\n', {
+          headers: { "content-type": "text/event-stream" },
+        })
+      );
+      await vi.advanceTimersByTimeAsync(0);
+      const response = await responsePromise;
+      expect(await response.text()).toContain('"next"');
+      expect(maxActive).toBeLessThanOrEqual(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("the final Discovery boundary cancels a stalled rectifier retry without refilling", async () => {
+    vi.useFakeTimers();
+    try {
+      const retrying = createProvider({
+        id: 1,
+        name: "retrying",
+        priority: 10,
+        limitConcurrentSessions: 1,
+      });
+      const fallback = createProvider({ id: 2, name: "fallback", priority: 1 });
+      const unexpected = createProvider({ id: 3, name: "unexpected", priority: 1 });
+      const session = createSession();
+      session.authState = {
+        success: true,
+        user: null,
+        key: { id: 32 },
+        apiKey: null,
+      } as typeof session.authState;
+      setProviderWithSessionRef(session, retrying);
+      withThinkingBlocks(session);
+      mocks.getCachedSystemSettings.mockResolvedValue({
+        discoveryEnabled: true,
+        discoveryConcurrency: 2,
+        maxDiscoveryRounds: 1,
+        discoverySlaMs: 10,
+        stickySlaMs: 10,
+        racingTotalTimeoutMs: 100,
+        stickyTimeoutCooldownMs: 300_000,
+        enableThinkingSignatureRectifier: true,
+      });
+      mocks.pickDiscoveryProviders
+        .mockResolvedValueOnce([fallback])
+        .mockResolvedValueOnce([unexpected]);
+
+      const retrySetup = Promise.withResolvers<{
+        endpointId: number | null;
+        baseUrl: string;
+        endpointUrl: string;
+      }>();
+      const retrySetupStarted = Promise.withResolvers<void>();
+      let retryingEndpointCalls = 0;
+      const endpointResolver = vi.spyOn(
+        ProxyForwarder as unknown as {
+          resolveStreamingHedgeEndpoint: (
+            session: ProxySession,
+            provider: Provider
+          ) => Promise<{ endpointId: number | null; baseUrl: string; endpointUrl: string }>;
+        },
+        "resolveStreamingHedgeEndpoint"
+      );
+      endpointResolver.mockImplementation(async (_attemptSession, provider) => {
+        if (provider.id === retrying.id) {
+          retryingEndpointCalls += 1;
+          if (retryingEndpointCalls > 1) {
+            retrySetupStarted.resolve();
+            return retrySetup.promise;
+          }
+        }
+        return {
+          endpointId: null,
+          baseUrl: provider.url,
+          endpointUrl: provider.url,
+        };
+      });
+
+      const signatureError = new UpstreamProxyError(
+        "Invalid `signature` in `thinking` block",
+        400,
+        {
+          body: '{"error":"invalid_signature"}',
+          providerId: retrying.id,
+          providerName: retrying.name,
+        }
+      );
+      let fallbackController: ReadableStreamDefaultController<Uint8Array> | null = null;
+      const doForward = vi.spyOn(
+        ProxyForwarder as unknown as {
+          doForward: (...args: unknown[]) => Promise<Response>;
+        },
+        "doForward"
+      );
+      doForward.mockImplementation(async (attemptSession) => {
+        const providerId = (attemptSession as ProxySession).provider!.id;
+        if (providerId === retrying.id) throw signatureError;
+        return new Response(
+          new ReadableStream<Uint8Array>({
+            start(controller) {
+              fallbackController = controller;
+            },
+          }),
+          { headers: { "content-type": "text/event-stream" } }
+        );
+      });
+
+      const responsePromise = ProxyForwarder.send(session);
+      await retrySetupStarted.promise;
+      await vi.advanceTimersByTimeAsync(10);
+      retrySetup.resolve({
+        endpointId: null,
+        baseUrl: retrying.url,
+        endpointUrl: retrying.url,
+      });
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(mocks.pickDiscoveryProviders).toHaveBeenCalledTimes(1);
+      expect(doForward).toHaveBeenCalledTimes(2);
+
+      fallbackController!.enqueue(
+        new TextEncoder().encode(
+          'data: {"type":"content_block_delta","delta":{"text":"fallback"}}\n\n'
+        )
+      );
+      fallbackController!.close();
+      await vi.advanceTimersByTimeAsync(0);
+      const response = await responsePromise;
+      expect(peekDeferredStreamingFinalization(session)).toEqual(
+        expect.objectContaining({
+          bindingIntent: "none",
+          requiresCompletionMarker: true,
+        })
+      );
+      expect(await response.text()).toContain('"fallback"');
+      expect(mocks.pickDiscoveryProviders).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("the Discovery deadline releases a stalled rectifier retry reservation exactly once", async () => {
+    vi.useFakeTimers();
+    try {
+      const provider = createProvider({ id: 1, name: "retrying", limitConcurrentSessions: 1 });
+      const session = createSession();
+      session.authState = {
+        success: true,
+        user: null,
+        key: { id: 33 },
+        apiKey: null,
+      } as typeof session.authState;
+      setProviderWithSessionRef(session, provider);
+      withThinkingBlocks(session);
+      mocks.getCachedSystemSettings.mockResolvedValue({
+        discoveryEnabled: true,
+        discoveryConcurrency: 2,
+        maxDiscoveryRounds: 1,
+        discoverySlaMs: 100,
+        stickySlaMs: 100,
+        racingTotalTimeoutMs: 50,
+        stickyTimeoutCooldownMs: 300_000,
+        enableThinkingSignatureRectifier: true,
+      });
+      mocks.pickDiscoveryProviders.mockResolvedValueOnce([]);
+
+      const retrySetup = Promise.withResolvers<{
+        endpointId: number | null;
+        baseUrl: string;
+        endpointUrl: string;
+      }>();
+      const retrySetupStarted = Promise.withResolvers<void>();
+      let endpointCalls = 0;
+      const endpointResolver = vi.spyOn(
+        ProxyForwarder as unknown as {
+          resolveStreamingHedgeEndpoint: (
+            session: ProxySession,
+            provider: Provider
+          ) => Promise<{ endpointId: number | null; baseUrl: string; endpointUrl: string }>;
+        },
+        "resolveStreamingHedgeEndpoint"
+      );
+      endpointResolver.mockImplementation(async () => {
+        endpointCalls += 1;
+        if (endpointCalls > 1) {
+          retrySetupStarted.resolve();
+          return retrySetup.promise;
+        }
+        return { endpointId: null, baseUrl: provider.url, endpointUrl: provider.url };
+      });
+
+      const signatureError = new UpstreamProxyError(
+        "Invalid `signature` in `thinking` block",
+        400,
+        {
+          body: '{"error":"invalid_signature"}',
+          providerId: provider.id,
+          providerName: provider.name,
+        }
+      );
+      const doForward = vi.spyOn(
+        ProxyForwarder as unknown as {
+          doForward: (...args: unknown[]) => Promise<Response>;
+        },
+        "doForward"
+      );
+      doForward.mockRejectedValueOnce(signatureError);
+
+      const observedError = ProxyForwarder.send(session).catch((error) => error);
+      await retrySetupStarted.promise;
+      await vi.advanceTimersByTimeAsync(50);
+
+      expect(await observedError).toBeInstanceOf(UpstreamProxyError);
+      expect(mocks.releaseProviderSession).toHaveBeenCalledTimes(1);
+      expect(session.hasProviderSessionRef(provider.id)).toBe(false);
+
+      retrySetup.resolve({ endpointId: null, baseUrl: provider.url, endpointUrl: provider.url });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(doForward).toHaveBeenCalledTimes(1);
+      expect(mocks.releaseProviderSession).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("client abort cancels a stalled rectifier retry setup and releases its ref", async () => {
+    vi.useFakeTimers();
+    try {
+      const clientAbort = new AbortController();
+      const provider = createProvider({ id: 1, name: "retrying", limitConcurrentSessions: 1 });
+      const session = createSession(clientAbort.signal);
+      session.authState = {
+        success: true,
+        user: null,
+        key: { id: 35 },
+        apiKey: null,
+      } as typeof session.authState;
+      setProviderWithSessionRef(session, provider);
+      withThinkingBlocks(session);
+      mocks.getCachedSystemSettings.mockResolvedValue({
+        discoveryEnabled: true,
+        discoveryConcurrency: 2,
+        maxDiscoveryRounds: 1,
+        discoverySlaMs: 100,
+        stickySlaMs: 100,
+        racingTotalTimeoutMs: 500,
+        stickyTimeoutCooldownMs: 300_000,
+        enableThinkingSignatureRectifier: true,
+      });
+      mocks.pickDiscoveryProviders.mockResolvedValueOnce([]);
+
+      const retrySetup = Promise.withResolvers<{
+        endpointId: number | null;
+        baseUrl: string;
+        endpointUrl: string;
+      }>();
+      const retrySetupStarted = Promise.withResolvers<void>();
+      let endpointCalls = 0;
+      const endpointResolver = vi.spyOn(
+        ProxyForwarder as unknown as {
+          resolveStreamingHedgeEndpoint: (
+            session: ProxySession,
+            provider: Provider
+          ) => Promise<{ endpointId: number | null; baseUrl: string; endpointUrl: string }>;
+        },
+        "resolveStreamingHedgeEndpoint"
+      );
+      endpointResolver.mockImplementation(async () => {
+        endpointCalls += 1;
+        if (endpointCalls > 1) {
+          retrySetupStarted.resolve();
+          return retrySetup.promise;
+        }
+        return { endpointId: null, baseUrl: provider.url, endpointUrl: provider.url };
+      });
+
+      const signatureError = new UpstreamProxyError(
+        "Invalid `signature` in `thinking` block",
+        400,
+        {
+          body: '{"error":"invalid_signature"}',
+          providerId: provider.id,
+          providerName: provider.name,
+        }
+      );
+      const doForward = vi.spyOn(
+        ProxyForwarder as unknown as {
+          doForward: (...args: unknown[]) => Promise<Response>;
+        },
+        "doForward"
+      );
+      doForward.mockRejectedValueOnce(signatureError);
+
+      const observedError = ProxyForwarder.send(session).catch((error) => error);
+      await retrySetupStarted.promise;
+      clientAbort.abort();
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(await observedError).toBeInstanceOf(UpstreamProxyError);
+      expect(mocks.releaseProviderSession).toHaveBeenCalledTimes(1);
+      expect(session.hasProviderSessionRef(provider.id)).toBe(false);
+
+      retrySetup.resolve({ endpointId: null, baseUrl: provider.url, endpointUrl: provider.url });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(doForward).toHaveBeenCalledTimes(1);
+      expect(mocks.releaseProviderSession).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test.each([
+    {
+      label: "client abort",
+      category: ProxyErrorCategory.CLIENT_ABORT,
+      setupError: new Error("retry setup observed client abort"),
+      expectedStatus: 499,
+    },
+    {
+      label: "local overload",
+      category: ProxyErrorCategory.LOCAL_OVERLOAD,
+      setupError: new DbPoolAdmissionError("data", 32),
+      expectedStatus: null,
+    },
+  ])("rectifier retry setup preserves $label fail-fast semantics", async (scenario) => {
+    const retrying = createProvider({ id: 1, name: "retrying", limitConcurrentSessions: 1 });
+    const peer = createProvider({ id: 2, name: "peer" });
+    const unexpected = createProvider({ id: 3, name: "unexpected" });
+    const session = createSession();
+    session.authState = {
+      success: true,
+      user: null,
+      key: { id: 34 },
+      apiKey: null,
+    } as typeof session.authState;
+    setProviderWithSessionRef(session, retrying);
+    withThinkingBlocks(session);
+    mocks.getCachedSystemSettings.mockResolvedValue({
+      discoveryEnabled: true,
+      discoveryConcurrency: 2,
+      maxDiscoveryRounds: 2,
+      discoverySlaMs: 100,
+      stickySlaMs: 100,
+      racingTotalTimeoutMs: 500,
+      stickyTimeoutCooldownMs: 300_000,
+      enableThinkingSignatureRectifier: true,
+    });
+    mocks.pickDiscoveryProviders.mockResolvedValueOnce([peer]).mockResolvedValueOnce([unexpected]);
+    mocks.categorizeErrorAsync
+      .mockResolvedValueOnce(ProxyErrorCategory.PROVIDER_ERROR)
+      .mockResolvedValueOnce(scenario.category);
+
+    let retryingEndpointCalls = 0;
+    const endpointResolver = vi.spyOn(
+      ProxyForwarder as unknown as {
+        resolveStreamingHedgeEndpoint: (
+          session: ProxySession,
+          provider: Provider
+        ) => Promise<{ endpointId: number | null; baseUrl: string; endpointUrl: string }>;
+      },
+      "resolveStreamingHedgeEndpoint"
+    );
+    endpointResolver.mockImplementation(async (_attemptSession, provider) => {
+      if (provider.id === retrying.id) {
+        retryingEndpointCalls += 1;
+        if (retryingEndpointCalls > 1) throw scenario.setupError;
+      }
+      return { endpointId: null, baseUrl: provider.url, endpointUrl: provider.url };
+    });
+
+    const signatureError = new UpstreamProxyError("Invalid `signature` in `thinking` block", 400, {
+      body: '{"error":"invalid_signature"}',
+      providerId: retrying.id,
+      providerName: retrying.name,
+    });
+    const doForward = vi.spyOn(
+      ProxyForwarder as unknown as {
+        doForward: (...args: unknown[]) => Promise<Response>;
+      },
+      "doForward"
+    );
+    doForward.mockImplementation(async (attemptSession) => {
+      if ((attemptSession as ProxySession).provider?.id === retrying.id) throw signatureError;
+      return new Response(new ReadableStream<Uint8Array>(), {
+        headers: { "content-type": "text/event-stream" },
+      });
+    });
+
+    const observed = await ProxyForwarder.send(session).catch((error) => error);
+    if (scenario.expectedStatus == null) {
+      expect(observed).toBe(scenario.setupError);
+    } else {
+      expect(observed).toBeInstanceOf(UpstreamProxyError);
+      expect((observed as UpstreamProxyError).statusCode).toBe(scenario.expectedStatus);
+    }
+    expect(mocks.pickDiscoveryProviders).toHaveBeenCalledTimes(1);
+    expect(doForward).toHaveBeenCalledTimes(2);
+    expect(mocks.recordFailure).not.toHaveBeenCalled();
+    expect(
+      mocks.releaseProviderSession.mock.calls.filter(([providerId]) => providerId === retrying.id)
+    ).toHaveLength(1);
   });
 
   test("Discovery releases a transferred Provider session ref exactly once when rectifier retry setup fails", async () => {

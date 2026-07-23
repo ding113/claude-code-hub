@@ -20,6 +20,8 @@ export type DiscoveryAttempt = {
   providerId: number;
   priority: number;
   kind: DiscoveryAttemptKind;
+  /** Selector/endpoint setup occupies a slot but cannot become a winner or fallback. */
+  setupOnly?: boolean;
   ready: boolean;
   pending: boolean;
   round: number;
@@ -37,7 +39,7 @@ export type DiscoveryAction =
       promoteAttemptId?: string;
     }
   | { type: "none" }
-  | { type: "terminal_failure" };
+  | { type: "terminal_failure"; cancelAttemptIds?: string[] };
 
 export type DiscoveryCoordinatorOptions = {
   concurrency: number;
@@ -56,6 +58,7 @@ export class DiscoveryCoordinator {
   private attempts = new Map<string, DiscoveryAttempt>();
   private requestEpoch = 0;
   private roundEpoch = 0;
+  private roundOpen = true;
 
   constructor(options: DiscoveryCoordinatorOptions) {
     this.concurrency = Math.max(1, Math.floor(options.concurrency));
@@ -67,12 +70,16 @@ export class DiscoveryCoordinator {
   }
 
   startStickyProbe(): void {
-    if (!this.isTerminal) this.state = "STICKY_PROBING";
+    if (!this.isTerminal) {
+      this.state = "STICKY_PROBING";
+      this.roundOpen = false;
+    }
   }
 
   startDiscoveryAfterSticky(): void {
     if (this.state === "STICKY_PROBING" || this.state === "FALLBACK_READY_HELD") {
       this.state = "DISCOVERY_RACING";
+      this.roundOpen = true;
     }
   }
 
@@ -82,7 +89,10 @@ export class DiscoveryCoordinator {
     }
     this.round += 1;
     this.roundEpoch += 1;
-    if (!this.isTerminal) this.state = "DISCOVERY_RACING";
+    if (!this.isTerminal) {
+      this.state = "DISCOVERY_RACING";
+      this.roundOpen = true;
+    }
     return { ...this.epochs, round: this.round };
   }
 
@@ -96,11 +106,49 @@ export class DiscoveryCoordinator {
     this.attempts.delete(id);
   }
 
+  markSetupOnly(id: string): boolean {
+    if (this.isTerminal) return false;
+    const attempt = this.attempts.get(id);
+    if (!attempt?.pending) return false;
+    attempt.setupOnly = true;
+    attempt.ready = false;
+    return true;
+  }
+
+  bindSetupProvider(
+    id: string,
+    providerId: number,
+    priority: number,
+    requestEpoch = this.requestEpoch,
+    roundEpoch = this.roundEpoch
+  ): boolean {
+    if (!this.acceptsEpoch(requestEpoch, roundEpoch) || !this.roundOpen || this.isTerminal) {
+      return false;
+    }
+    const attempt = this.attempts.get(id);
+    if (!attempt?.pending || attempt.setupOnly !== true) return false;
+    attempt.providerId = providerId;
+    attempt.priority = priority;
+    return true;
+  }
+
+  isSetupPending(
+    id: string,
+    requestEpoch = this.requestEpoch,
+    roundEpoch = this.roundEpoch
+  ): boolean {
+    if (!this.acceptsEpoch(requestEpoch, roundEpoch) || !this.roundOpen || this.isTerminal) {
+      return false;
+    }
+    const attempt = this.attempts.get(id);
+    return attempt?.pending === true && attempt.setupOnly === true;
+  }
+
   /** Mark an already-running attempt as the sole fallback for this request. */
   promoteToFallback(id: string): boolean {
     if (this.isTerminal) return false;
     const attempt = this.attempts.get(id);
-    if (!attempt?.pending) return false;
+    if (!attempt?.pending || attempt.setupOnly === true) return false;
     attempt.kind = "fallback";
     this.state = "FALLBACK_READY_HELD";
     return true;
@@ -116,6 +164,10 @@ export class DiscoveryCoordinator {
 
   get activeAttempts(): DiscoveryAttempt[] {
     return Array.from(this.attempts.values()).filter((attempt) => attempt.pending);
+  }
+
+  get canRefillCurrentRound(): boolean {
+    return this.roundOpen && !this.isTerminal;
   }
 
   get snapshot(): DiscoveryAttempt[] {
@@ -134,7 +186,7 @@ export class DiscoveryCoordinator {
   ): DiscoveryAction {
     if (!this.acceptsEpoch(requestEpoch, roundEpoch) || this.isTerminal) return { type: "none" };
     const attempt = this.attempts.get(id);
-    if (!attempt?.pending) return { type: "none" };
+    if (!attempt?.pending || attempt.setupOnly === true) return { type: "none" };
     attempt.ready = true;
     if (attempt.kind === "fallback") {
       const pendingNormal = Array.from(this.attempts.values()).some(
@@ -158,7 +210,8 @@ export class DiscoveryCoordinator {
   ): boolean {
     if (!this.acceptsEpoch(requestEpoch, roundEpoch) || this.isTerminal) return false;
     const attempt = this.attempts.get(id);
-    if (!attempt?.pending || attempt.kind !== "fallback") return false;
+    if (!attempt?.pending || attempt.setupOnly === true || attempt.kind !== "fallback")
+      return false;
     attempt.ready = true;
     this.state = "FALLBACK_READY_HELD";
     return true;
@@ -196,7 +249,13 @@ export class DiscoveryCoordinator {
   /** A normal ready result may win only after priority gating is satisfied. */
   private chooseReadyNormal(ignorePriorityGate = false): DiscoveryAction {
     const readyNormal = Array.from(this.attempts.values())
-      .filter((attempt) => attempt.pending && attempt.ready && attempt.kind === "normal")
+      .filter(
+        (attempt) =>
+          attempt.pending &&
+          attempt.setupOnly !== true &&
+          attempt.ready &&
+          attempt.kind === "normal"
+      )
       .sort(compareAttempts);
     if (readyNormal.length === 0) return { type: "none" };
     const bestPriority = readyNormal[0].priority;
@@ -212,6 +271,7 @@ export class DiscoveryCoordinator {
     }
     const winner = readyNormal[0];
     this.state = "WINNER_COMMITTED";
+    this.roundOpen = false;
     winner.pending = false;
     return {
       type: "commit_normal",
@@ -226,23 +286,32 @@ export class DiscoveryCoordinator {
    */
   onRoundBoundary(requestEpoch = this.requestEpoch, roundEpoch = this.roundEpoch): DiscoveryAction {
     if (!this.acceptsEpoch(requestEpoch, roundEpoch) || this.isTerminal) return { type: "none" };
+    this.roundOpen = false;
     const readyAction = this.chooseReadyNormal(true);
     if (readyAction.type === "commit_normal") return readyAction;
 
+    const setupAttemptIds = Array.from(this.attempts.values())
+      .filter((attempt) => attempt.pending && attempt.setupOnly === true)
+      .map((attempt) => attempt.id);
+    for (const id of setupAttemptIds) this.attempts.get(id)!.pending = false;
+
     const currentFallback = Array.from(this.attempts.values()).find(
-      (attempt) => attempt.pending && attempt.kind === "fallback"
+      (attempt) => attempt.pending && attempt.setupOnly !== true && attempt.kind === "fallback"
     );
     if (currentFallback?.ready) {
       currentFallback.pending = false;
       this.state = "FALLBACK_ACTIVE";
+      this.roundOpen = false;
       return { type: "promote_fallback", attemptId: currentFallback.id };
     }
 
     const pendingNormal = Array.from(this.attempts.values())
-      .filter((attempt) => attempt.pending && attempt.kind === "normal")
+      .filter(
+        (attempt) => attempt.pending && attempt.setupOnly !== true && attempt.kind === "normal"
+      )
       .sort(compareAttempts);
-    if (currentFallback && pendingNormal.length > 0) {
-      const cancelAttemptIds = pendingNormal.map((attempt) => attempt.id);
+    if (currentFallback && (pendingNormal.length > 0 || setupAttemptIds.length > 0)) {
+      const cancelAttemptIds = [...pendingNormal.map((attempt) => attempt.id), ...setupAttemptIds];
       for (const attempt of pendingNormal) attempt.pending = false;
       if (this.round < this.maxRounds) {
         this.beginRound();
@@ -260,13 +329,25 @@ export class DiscoveryCoordinator {
         this.state = "FALLBACK_READY_HELD";
         return { type: "none" };
       }
+      if (setupAttemptIds.length > 0) {
+        if (this.round >= this.maxRounds) {
+          this.state = "TERMINAL_FAILED";
+          return { type: "terminal_failure", cancelAttemptIds: setupAttemptIds };
+        }
+        this.beginRound();
+        return {
+          type: "launch",
+          slots: this.concurrency,
+          cancelAttemptIds: setupAttemptIds,
+        };
+      }
       return this.finishOrLaunch();
     }
 
     const fallback = pendingNormal[0];
     fallback.kind = "fallback";
     this.state = "FALLBACK_READY_HELD";
-    const losers = pendingNormal.slice(1).map((attempt) => attempt.id);
+    const losers = [...pendingNormal.slice(1).map((attempt) => attempt.id), ...setupAttemptIds];
     for (const id of losers) this.attempts.get(id)!.pending = false;
 
     if (this.round < this.maxRounds) {
@@ -292,9 +373,11 @@ export class DiscoveryCoordinator {
     if (fallback) {
       fallback.pending = false;
       this.state = "FALLBACK_ACTIVE";
+      this.roundOpen = false;
       return { type: "promote_fallback", attemptId: fallback.id };
     }
     this.state = "TERMINAL_FAILED";
+    this.roundOpen = false;
     return { type: "terminal_failure" };
   }
 
@@ -303,6 +386,7 @@ export class DiscoveryCoordinator {
     if (!attempt || this.isTerminal) return { type: "none" };
     attempt.pending = false;
     this.state = attempt.kind === "fallback" ? "FALLBACK_ACTIVE" : "WINNER_COMMITTED";
+    this.roundOpen = false;
     return {
       type: attempt.kind === "fallback" ? "promote_fallback" : "commit_normal",
       attemptId: id,
@@ -315,6 +399,7 @@ export class DiscoveryCoordinator {
     const ids = this.activeAttempts.map((attempt) => attempt.id);
     for (const attempt of this.attempts.values()) attempt.pending = false;
     this.state = "TERMINAL_FAILED";
+    this.roundOpen = false;
     return { type: "cancel", attemptIds: ids };
   }
 
@@ -338,6 +423,7 @@ export class DiscoveryCoordinator {
   private finishOrLaunch(): DiscoveryAction {
     if (this.round >= this.maxRounds) {
       this.state = "TERMINAL_FAILED";
+      this.roundOpen = false;
       return { type: "terminal_failure" };
     }
     this.beginRound();

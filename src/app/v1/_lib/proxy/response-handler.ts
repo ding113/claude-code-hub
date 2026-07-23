@@ -56,6 +56,7 @@ import {
   createDemandDrivenResponsePump,
   type DemandDrivenResponsePump,
 } from "./demand-driven-response-pump";
+import { isDiscoveryProtocolErrorPayload } from "./discovery-validity";
 import { isClientAbortError, isTransportError } from "./errors";
 import type { ProxySession } from "./session";
 import {
@@ -1283,9 +1284,9 @@ function hasOpenAIChatCompletionMarker(data: unknown): boolean {
   );
 }
 
-function hasGeminiCompletionMarker(data: unknown, format: ProxySession["originalFormat"]): boolean {
+function hasGeminiCompletionMarker(data: unknown): boolean {
   if (!isRecord(data)) return false;
-  const payload = format === "gemini-cli" && isRecord(data.response) ? data.response : data;
+  const payload = isRecord(data.response) ? data.response : data;
   if (!Array.isArray(payload.candidates)) return false;
   return payload.candidates.some(
     (candidate) =>
@@ -1307,15 +1308,21 @@ function hasStreamCompletionMarker(text: string, format: ProxySession["originalF
 
   switch (format) {
     case "response":
+      if (events.some((event) => isDiscoveryProtocolErrorPayload(event.data))) return false;
+      return events.some((event) => {
+        if (!isRecord(event.data)) return false;
+        const markerType = event.data.type;
+        if (markerType !== "response.completed" && markerType !== "response.done") return false;
+        if (event.event !== "message" && event.event !== markerType) return false;
+        return markerType === "response.done" || isRecord(event.data.response);
+      });
+    case "claude":
       return events.some(
         (event) =>
-          event.event === "response.completed" &&
+          (event.event === "message_stop" || event.event === "message") &&
           isRecord(event.data) &&
-          event.data.type === "response.completed" &&
-          isRecord(event.data.response)
+          event.data.type === "message_stop"
       );
-    case "claude":
-      return events.some((event) => isRecord(event.data) && event.data.type === "message_stop");
     case "openai":
       return events.some(
         (event) =>
@@ -1326,7 +1333,7 @@ function hasStreamCompletionMarker(text: string, format: ProxySession["originalF
     case "gemini":
     case "gemini-cli":
       return events.some(
-        (event) => event.event === "message" && hasGeminiCompletionMarker(event.data, format)
+        (event) => event.event === "message" && hasGeminiCompletionMarker(event.data)
       );
   }
 }
