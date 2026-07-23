@@ -146,6 +146,15 @@ export interface SystemSettings {
   publicStatusWindowHours: number;
   publicStatusAggregationIntervalMinutes: number;
 
+  /** Bounded streaming Discovery (PR2; persisted/configured in PR3). */
+  discoveryEnabled?: boolean;
+  discoveryConcurrency?: number;
+  maxDiscoveryRounds?: number;
+  discoverySlaMs?: number;
+  stickySlaMs?: number;
+  racingTotalTimeoutMs?: number;
+  stickyTimeoutCooldownMs?: number;
+
   createdAt: Date;
   updatedAt: Date;
 }
@@ -169,6 +178,14 @@ export interface UpdateSystemSettingsInput {
 
   // 供应商竞速输家计费（可选）
   billHedgeLosers?: boolean;
+
+  discoveryEnabled?: boolean;
+  discoveryConcurrency?: number;
+  maxDiscoveryRounds?: number;
+  discoverySlaMs?: number;
+  stickySlaMs?: number;
+  racingTotalTimeoutMs?: number;
+  stickyTimeoutCooldownMs?: number;
 
   // 系统时区配置（可选）
   timezone?: string | null;

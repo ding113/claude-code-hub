@@ -5,11 +5,15 @@ import {
   ProxyResponseHandler,
 } from "@/app/v1/_lib/proxy/response-handler";
 import { ProxySession } from "@/app/v1/_lib/proxy/session";
-import { setDeferredStreamingFinalization } from "@/app/v1/_lib/proxy/stream-finalization";
+import {
+  peekDeferredStreamingFinalization,
+  setDeferredStreamingFinalization,
+} from "@/app/v1/_lib/proxy/stream-finalization";
 import { AsyncTaskManager, shutdownAllAsyncTasks } from "@/lib/async-task-manager";
 import { recordFailure } from "@/lib/circuit-breaker";
 import { emitProxyLangfuseTrace } from "@/lib/langfuse/emit-proxy-trace";
 import { RateLimitService } from "@/lib/rate-limit";
+import type { SessionBindingSnapshot } from "@/lib/redis/session-binding";
 import { SessionManager } from "@/lib/session-manager";
 import {
   updateMessageRequestCostWithBreakdown,
@@ -104,6 +108,7 @@ vi.mock("@/lib/rate-limit", () => ({
     trackUserDailyCost: vi.fn(),
     decrementLeaseBudget: vi.fn(),
     settleLeaseBudgets: vi.fn(),
+    releaseProviderSession: vi.fn(),
   },
 }));
 
@@ -114,6 +119,24 @@ vi.mock("@/lib/redis/live-chain-store", () => ({
 vi.mock("@/lib/session-manager", () => ({
   SessionManager: {
     clearSessionProvider: vi.fn(),
+    clearVersionedSessionProvider: vi.fn(),
+    compareAndSetSessionProvider: vi.fn(),
+    getSessionBindingSnapshot: vi.fn(),
+    getVersionedSessionBindingRefreshIntervalMs: vi.fn(() => 100_000),
+    renewSessionDiscoveryLease: vi.fn(async () => ({
+      status: "renewed",
+      legacyFallbackAllowed: false,
+    })),
+    releaseSessionDiscoveryLease: vi.fn(async () => ({
+      status: "released",
+      legacyFallbackAllowed: false,
+    })),
+    touchVersionedSessionBinding: vi.fn(async (snapshot: SessionBindingSnapshot) => ({
+      status: "ok",
+      source: "touched",
+      snapshot,
+      legacyFallbackAllowed: false,
+    })),
     extractCodexPromptCacheKey: vi.fn(),
     storeSessionResponse: vi.fn(async () => undefined),
     storeSessionRequestPhaseSnapshot: vi.fn(),
@@ -2074,6 +2097,69 @@ describe("ProxyResponseHandler stream client abort finalization", () => {
     );
   });
 
+  it.each([
+    { bindingIntent: "create" as const, providerId: null },
+    { bindingIntent: "renew" as const, providerId: 1 },
+  ])(
+    "preserves binding state for a client-aborted Discovery $bindingIntent stream",
+    async ({ bindingIntent, providerId }) => {
+      const controller = new AbortController();
+      controller.abort();
+      const session = createSession(controller.signal);
+      Object.assign(session, { sessionId: `session-client-abort-${bindingIntent}` });
+      session.recordProviderSessionRef(1);
+      vi.mocked(SessionManager.extractCodexPromptCacheKey).mockReturnValue(
+        "client-abort-cache-key"
+      );
+      setDeferredStreamingFinalization(session, {
+        providerId: 1,
+        providerName: "avemujica-responses",
+        providerPriority: 1,
+        attemptNumber: 1,
+        totalProvidersAttempted: 2,
+        isFirstAttempt: false,
+        isFailoverSuccess: bindingIntent === "create",
+        endpointId: 42,
+        endpointUrl: "https://api.test.invalid/v1",
+        upstreamStatusCode: 200,
+        bindingIntent,
+        bindingSnapshot: {
+          sessionId: `session-client-abort-${bindingIntent}`,
+          keyId: 2,
+          providerId,
+          generation: `${bindingIntent}-generation`,
+        },
+        requiresCompletionMarker: true,
+        discoveryLease: {
+          sessionId: `session-client-abort-${bindingIntent}`,
+          keyId: 2,
+          ownerToken: `client-abort-${bindingIntent}-owner`,
+          ttlSeconds: 30,
+        },
+        providerSessionRefOwned: true,
+      });
+
+      await ProxyResponseHandler.dispatch(session, createCompletedThenErroredResponsesSse());
+      await drainAsyncTasks();
+
+      expect(SessionManager.clearVersionedSessionProvider).not.toHaveBeenCalled();
+      expect(SessionManager.clearSessionProvider).not.toHaveBeenCalled();
+      expect(SessionManager.compareAndSetSessionProvider).not.toHaveBeenCalled();
+      expect(SessionManager.updateSessionBindingSmart).not.toHaveBeenCalled();
+      expect(SessionManager.updateSessionWithCodexCacheKey).not.toHaveBeenCalled();
+      expect(SessionManager.releaseSessionDiscoveryLease).toHaveBeenCalledOnce();
+      expect(SessionManager.releaseSessionDiscoveryLease).toHaveBeenCalledWith(
+        `session-client-abort-${bindingIntent}`,
+        2,
+        `client-abort-${bindingIntent}-owner`
+      );
+      expect(RateLimitService.releaseProviderSession).toHaveBeenCalledWith(
+        1,
+        `session-client-abort-${bindingIntent}`
+      );
+    }
+  );
+
   it("keeps a genuinely aborted upstream responses stream as 499", async () => {
     const controller = new AbortController();
     controller.abort();
@@ -3104,6 +3190,67 @@ describe("ProxyResponseHandler stream client abort finalization", () => {
     );
   });
 
+  it("releases Discovery resources for a non-SSE Gemini winner", async () => {
+    const session = createSession(new AbortController().signal, {
+      providerType: "gemini",
+      originalFormat: "gemini",
+      endpoint: "/v1beta/models/gemini-2.0-flash:streamGenerateContent",
+      model: "gemini-2.0-flash",
+    });
+    session.sessionId = "non-sse-gemini-discovery";
+    session.recordProviderSessionRef(1);
+    setDeferredStreamingFinalization(session, {
+      providerId: 1,
+      providerName: "gemini-discovery",
+      providerPriority: 1,
+      attemptNumber: 1,
+      totalProvidersAttempted: 2,
+      isFirstAttempt: false,
+      isFailoverSuccess: true,
+      endpointId: 42,
+      endpointUrl: "https://api.test.invalid/v1",
+      upstreamStatusCode: 200,
+      bindingIntent: "create",
+      bindingSnapshot: {
+        sessionId: "non-sse-gemini-discovery",
+        keyId: 2,
+        providerId: null,
+        generation: "non-sse-generation",
+      },
+      requiresCompletionMarker: true,
+      discoveryLease: {
+        sessionId: "non-sse-gemini-discovery",
+        keyId: 2,
+        ownerToken: "non-sse-owner",
+        ttlSeconds: 30,
+      },
+      providerSessionRefOwned: true,
+      providerSessionRefRetainOnSuccess: true,
+    });
+    const response = new Response(
+      '{"response":{"candidates":[{"content":{"parts":[{"text":"hello"}]}}]}}',
+      { status: 200, headers: { "content-type": "application/json" } }
+    );
+
+    const returned = await ProxyResponseHandler.dispatch(session, response);
+    expect(returned).toBe(response);
+    await drainAsyncTasks();
+
+    expect(SessionManager.renewSessionDiscoveryLease).toHaveBeenCalled();
+    expect(SessionManager.releaseSessionDiscoveryLease).toHaveBeenCalledOnce();
+    expect(SessionManager.releaseSessionDiscoveryLease).toHaveBeenCalledWith(
+      "non-sse-gemini-discovery",
+      2,
+      "non-sse-owner"
+    );
+    expect(RateLimitService.releaseProviderSession).toHaveBeenCalledWith(
+      1,
+      "non-sse-gemini-discovery"
+    );
+    expect(SessionManager.compareAndSetSessionProvider).not.toHaveBeenCalled();
+    expect(peekDeferredStreamingFinalization(session)).toBeNull();
+  });
+
   it("persists one durable 502 before Provider circuit mutation on non-stream response timeout", async () => {
     const durableAck = createDeferred<void>();
     vi.mocked(updateMessageRequestDetailsDurably).mockImplementationOnce(
@@ -3184,6 +3331,45 @@ describe("ProxyResponseHandler stream client abort finalization", () => {
     );
   });
 
+  it("does not mutate non-stream bindings when the routing mode forbids it", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const session = createSession(controller.signal);
+    Object.assign(session, {
+      sessionId: "lease-conflict-non-stream",
+      isSessionBindingAllowed: () => false,
+    });
+    vi.mocked(SessionManager.extractCodexPromptCacheKey).mockReturnValue("blocked-cache-key");
+    const response = new Response('{"id":"resp_lease_conflict"}', {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+
+    await ProxyResponseHandler.dispatch(session, response);
+    await drainAsyncTasks();
+
+    expect(SessionManager.clearSessionProvider).not.toHaveBeenCalled();
+    expect(SessionManager.updateSessionWithCodexCacheKey).not.toHaveBeenCalled();
+  });
+
+  it("does not create a non-stream Codex cache binding when binding is disabled", async () => {
+    const session = createSession(new AbortController().signal);
+    Object.assign(session, {
+      sessionId: "lease-conflict-non-stream-success",
+      isSessionBindingAllowed: () => false,
+    });
+    vi.mocked(SessionManager.extractCodexPromptCacheKey).mockReturnValue("blocked-cache-key");
+    const response = new Response('{"id":"resp_lease_conflict"}', {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+
+    await ProxyResponseHandler.dispatch(session, response);
+    await drainAsyncTasks();
+
+    expect(SessionManager.updateSessionWithCodexCacheKey).not.toHaveBeenCalled();
+  });
+
   it("publishes a successful stream Codex cache binding only after durable acknowledgement", async () => {
     const durableAck = createDeferred<void>();
     const cacheBinding = createDeferred<void>();
@@ -3243,6 +3429,179 @@ describe("ProxyResponseHandler stream client abort finalization", () => {
     }
   });
 
+  it("publishes a Discovery Codex cache key only after the primary generation CAS succeeds", async () => {
+    const order: string[] = [];
+    vi.mocked(SessionManager.extractCodexPromptCacheKey).mockReturnValueOnce(
+      "discovery-stream-cache-key"
+    );
+    vi.mocked(SessionManager.compareAndSetSessionProvider).mockImplementationOnce(async () => {
+      order.push("primary-cas");
+      return {
+        status: "ok",
+        source: "updated",
+        snapshot: {
+          sessionId: "stream-discovery-cache-binding",
+          keyId: 2,
+          providerId: 1,
+          generation: "discovery-updated-generation",
+        },
+        legacyFallbackAllowed: false,
+      };
+    });
+    vi.mocked(SessionManager.updateSessionWithCodexCacheKey).mockImplementationOnce(async () => {
+      order.push("aux-cache-binding");
+    });
+    const session = createSession(new AbortController().signal);
+    session.sessionId = "stream-discovery-cache-binding";
+    session.recordProviderSessionRef(1);
+    setDeferredStreamingFinalization(session, {
+      providerId: 1,
+      providerName: "avemujica-responses",
+      providerPriority: 1,
+      attemptNumber: 1,
+      totalProvidersAttempted: 2,
+      isFirstAttempt: false,
+      isFailoverSuccess: true,
+      endpointId: 42,
+      endpointUrl: "https://api.test.invalid/v1",
+      upstreamStatusCode: 200,
+      bindingIntent: "create",
+      bindingSnapshot: {
+        sessionId: "stream-discovery-cache-binding",
+        keyId: 2,
+        providerId: null,
+        generation: "discovery-create-generation",
+      },
+      requiresCompletionMarker: true,
+      discoveryLease: {
+        sessionId: "stream-discovery-cache-binding",
+        keyId: 2,
+        ownerToken: "discovery-cache-owner",
+        ttlSeconds: 30,
+      },
+      providerSessionRefOwned: true,
+      providerSessionRefRetainOnSuccess: true,
+    });
+
+    const downstream = await ProxyResponseHandler.dispatch(session, createResponsesSse());
+    await downstream.text();
+    await drainAsyncTasks();
+
+    expect(order).toEqual(["primary-cas", "aux-cache-binding"]);
+    expect(RateLimitService.releaseProviderSession).not.toHaveBeenCalled();
+    expect(SessionManager.releaseSessionDiscoveryLease).toHaveBeenCalledOnce();
+  });
+
+  it("does not publish a Discovery Codex cache key when the primary generation CAS conflicts", async () => {
+    vi.mocked(SessionManager.extractCodexPromptCacheKey).mockReturnValueOnce(
+      "conflicted-discovery-cache-key"
+    );
+    vi.mocked(SessionManager.compareAndSetSessionProvider).mockResolvedValueOnce({
+      status: "conflict",
+      reason: "generation_mismatch",
+      legacyFallbackAllowed: false,
+    });
+    const session = createSession(new AbortController().signal);
+    session.sessionId = "stream-discovery-cache-conflict";
+    session.recordProviderSessionRef(1);
+    setDeferredStreamingFinalization(session, {
+      providerId: 1,
+      providerName: "avemujica-responses",
+      providerPriority: 1,
+      attemptNumber: 1,
+      totalProvidersAttempted: 2,
+      isFirstAttempt: false,
+      isFailoverSuccess: true,
+      endpointId: 42,
+      endpointUrl: "https://api.test.invalid/v1",
+      upstreamStatusCode: 200,
+      bindingIntent: "create",
+      bindingSnapshot: {
+        sessionId: "stream-discovery-cache-conflict",
+        keyId: 2,
+        providerId: null,
+        generation: "stale-discovery-generation",
+      },
+      requiresCompletionMarker: true,
+      discoveryLease: {
+        sessionId: "stream-discovery-cache-conflict",
+        keyId: 2,
+        ownerToken: "conflicted-discovery-owner",
+        ttlSeconds: 30,
+      },
+      providerSessionRefOwned: true,
+    });
+
+    const downstream = await ProxyResponseHandler.dispatch(session, createResponsesSse());
+    await downstream.text();
+    await drainAsyncTasks();
+
+    expect(SessionManager.compareAndSetSessionProvider).toHaveBeenCalledOnce();
+    expect(SessionManager.updateSessionWithCodexCacheKey).not.toHaveBeenCalled();
+    expect(RateLimitService.releaseProviderSession).toHaveBeenCalledWith(
+      1,
+      "stream-discovery-cache-conflict"
+    );
+    expect(SessionManager.releaseSessionDiscoveryLease).toHaveBeenCalledOnce();
+  });
+
+  it("settles a failed Discovery binding before rejecting its auxiliary Codex cache binding", async () => {
+    vi.mocked(SessionManager.extractCodexPromptCacheKey).mockReturnValueOnce(
+      "incomplete-discovery-cache-key"
+    );
+    const session = createSession(new AbortController().signal);
+    session.sessionId = "stream-discovery-cache-incomplete";
+    session.recordProviderSessionRef(1);
+    setDeferredStreamingFinalization(session, {
+      providerId: 1,
+      providerName: "avemujica-responses",
+      providerPriority: 1,
+      attemptNumber: 1,
+      totalProvidersAttempted: 2,
+      isFirstAttempt: false,
+      isFailoverSuccess: true,
+      endpointId: 42,
+      endpointUrl: "https://api.test.invalid/v1",
+      upstreamStatusCode: 200,
+      bindingIntent: "create",
+      bindingSnapshot: {
+        sessionId: "stream-discovery-cache-incomplete",
+        keyId: 2,
+        providerId: null,
+        generation: "incomplete-discovery-generation",
+      },
+      requiresCompletionMarker: true,
+      discoveryLease: {
+        sessionId: "stream-discovery-cache-incomplete",
+        keyId: 2,
+        ownerToken: "incomplete-discovery-owner",
+        ttlSeconds: 30,
+      },
+      providerSessionRefOwned: true,
+    });
+    const incomplete = new Response(
+      `event: response.output_text.done\ndata: ${JSON.stringify({
+        type: "response.output_text.done",
+        text: "partial",
+      })}\n\n`,
+      { status: 200, headers: { "content-type": "text/event-stream" } }
+    );
+
+    const downstream = await ProxyResponseHandler.dispatch(session, incomplete);
+    await downstream.text();
+    for (let index = 0; index < 10 && !getRegisteredTask("post-terminal-side-effects"); index++) {
+      await new Promise<void>((resolve) => setImmediate(resolve));
+    }
+    const sideEffects = getRegisteredTask("post-terminal-side-effects");
+    expect(sideEffects).toBeDefined();
+    await expectTaskToResolveWithoutWaiting(sideEffects as Promise<void>);
+    await drainAsyncTasks();
+
+    expect(SessionManager.compareAndSetSessionProvider).not.toHaveBeenCalled();
+    expect(SessionManager.updateSessionWithCodexCacheKey).not.toHaveBeenCalled();
+    expect(SessionManager.releaseSessionDiscoveryLease).toHaveBeenCalledOnce();
+  });
+
   it("does not publish a stream Codex cache binding for a final non-2xx outcome", async () => {
     vi.mocked(SessionManager.extractCodexPromptCacheKey).mockReturnValueOnce("stream-cache-key-2");
     const session = createSession(new AbortController().signal);
@@ -3273,6 +3632,33 @@ describe("ProxyResponseHandler stream client abort finalization", () => {
       expect.objectContaining({ statusCode: 500 }),
       expect.objectContaining({ onCommitted: expect.any(Function) })
     );
+    expect(SessionManager.updateSessionWithCodexCacheKey).not.toHaveBeenCalled();
+  });
+
+  it("does not publish a Codex cache binding for a Discovery fallback winner", async () => {
+    vi.mocked(SessionManager.extractCodexPromptCacheKey).mockReturnValueOnce(
+      "fallback-stream-cache-key"
+    );
+    const session = createSession(new AbortController().signal);
+    session.sessionId = "stream-codex-fallback";
+    setDeferredStreamingFinalization(session, {
+      providerId: 1,
+      providerName: "avemujica-responses",
+      providerPriority: 1,
+      attemptNumber: 2,
+      totalProvidersAttempted: 2,
+      isFirstAttempt: false,
+      isFailoverSuccess: false,
+      endpointId: 42,
+      endpointUrl: "https://api.test.invalid/v1",
+      upstreamStatusCode: 200,
+      bindingIntent: "none",
+    });
+
+    const downstream = await ProxyResponseHandler.dispatch(session, createResponsesSse());
+    await downstream.text();
+    await drainAsyncTasks();
+
     expect(SessionManager.updateSessionWithCodexCacheKey).not.toHaveBeenCalled();
   });
 

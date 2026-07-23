@@ -707,7 +707,7 @@ describe("ProxyResponseHandler - Gemini stream passthrough timeouts", () => {
       setTimeout(() => {
         try {
           res.end(
-            'data: {"usageMetadata":{"promptTokenCount":3,"candidatesTokenCount":2},"finishReason":"STOP"}\n\n'
+            'data: {"usageMetadata":{"promptTokenCount":3,"candidatesTokenCount":2},"candidates":[{"finishReason":"STOP"}]}\n\n'
           );
         } catch {
           // ignore

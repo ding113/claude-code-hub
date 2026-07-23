@@ -183,6 +183,10 @@ export const EnvSchema = z.object({
   // 超时后主动断开该输家连接，仅用已收到的内容尝试计费（通常计不出 -> 跳过）。
   HEDGE_LOSER_DRAIN_TIMEOUT_MS: z.coerce.number().int().min(1000).default(120_000),
 
+  // Operational canary for the Discovery scheduler. The database feature
+  // switch remains authoritative; this percentage only narrows eligibility.
+  DISCOVERY_ROLLOUT_PERCENT: z.coerce.number().int().min(0).max(100).default(100),
+
   DASHBOARD_LOGS_POLL_INTERVAL_MS: z.coerce.number().int().min(250).max(60000).default(5000),
 
   // Langfuse Observability (optional, auto-enabled when keys are set)

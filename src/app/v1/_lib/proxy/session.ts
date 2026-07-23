@@ -1,6 +1,7 @@
 import type { Context } from "hono";
 import { logger } from "@/lib/logger";
 import { writeLiveChain } from "@/lib/redis/live-chain-store";
+import type { SessionBindingSnapshot } from "@/lib/redis/session-binding";
 import { clientRequestsContext1m as clientRequestsContext1mHelper } from "@/lib/special-attributes";
 import {
   type ResolvedPricing,
@@ -120,6 +121,11 @@ export class ProxySession {
   // Session ID（用于会话粘性和并发限流）
   sessionId: string | null;
 
+  // Discovery lease conflicts must stay on a single upstream and must not
+  // mutate a binding owned by the in-flight discovery request.
+  private streamingHedgeDisabled = false;
+  private sessionBindingAllowed = true;
+
   // 客户端 IP（由 ProxyAuthenticator 按系统设置的 ip_extraction_config 解析后写入）
   clientIp: string | null = null;
 
@@ -202,9 +208,15 @@ export class ProxySession {
    */
   private providersSnapshot: Provider[] | null = null;
 
-  // 本请求已通过 Provider 并发检查获得的引用。
-  // 失败切换 provider 时只能释放这里记录过的引用，避免 hedge/fallback 释放未 acquire 的 Redis 计数。
-  private providerSessionRefs = new Set<number>();
+  // 本请求已通过 Provider 并发检查获得的引用。tracked=true 表示这次
+  // acquire 同时创建了 Provider Session 基线；Sticky CAS 成功时只有
+  // 该引用可以保留，已有基线上的普通 attempt 引用必须在终态释放。
+  private providerSessionRefs = new Map<number, Array<{ retainOnSuccess: boolean }>>();
+
+  // Snapshot captured during provider selection. Discovery reuses this exact
+  // generation for timeout cleanup/finalization instead of performing a
+  // second read that could race with another request's binding update.
+  private sessionBindingSnapshot: SessionBindingSnapshot | null = null;
 
   private constructor(init: {
     startTime: number;
@@ -349,23 +361,56 @@ export class ProxySession {
     }
   }
 
-  recordProviderSessionRef(providerId: number): void {
+  setSessionBindingSnapshot(snapshot: SessionBindingSnapshot | null): void {
+    this.sessionBindingSnapshot = snapshot;
+  }
+
+  getSessionBindingSnapshot(): SessionBindingSnapshot | null {
+    return this.sessionBindingSnapshot;
+  }
+
+  recordProviderSessionRef(providerId: number, options: { retainOnSuccess?: boolean } = {}): void {
     if (!this.providerSessionRefs) {
-      this.providerSessionRefs = new Set<number>();
+      this.providerSessionRefs = new Map<number, Array<{ retainOnSuccess: boolean }>>();
     }
 
     if (Number.isInteger(providerId) && providerId > 0) {
-      this.providerSessionRefs.add(providerId);
+      const refs = this.providerSessionRefs.get(providerId) ?? [];
+      refs.push({ retainOnSuccess: options.retainOnSuccess === true });
+      this.providerSessionRefs.set(providerId, refs);
     }
   }
 
   consumeProviderSessionRef(providerId: number): boolean {
-    if (!this.providerSessionRefs?.has(providerId)) {
-      return false;
-    }
-
-    this.providerSessionRefs.delete(providerId);
+    const refs = this.providerSessionRefs?.get(providerId);
+    if (!refs || refs.length === 0) return false;
+    refs.shift();
+    if (refs.length === 0) this.providerSessionRefs.delete(providerId);
     return true;
+  }
+
+  hasProviderSessionRef(providerId: number): boolean {
+    return (this.providerSessionRefs?.get(providerId)?.length ?? 0) > 0;
+  }
+
+  shouldRetainProviderSessionRefOnSuccess(providerId: number): boolean {
+    return this.providerSessionRefs?.get(providerId)?.[0]?.retainOnSuccess === true;
+  }
+
+  disableStreamingHedge(): void {
+    this.streamingHedgeDisabled = true;
+  }
+
+  isStreamingHedgeDisabled(): boolean {
+    return this.streamingHedgeDisabled === true;
+  }
+
+  setSessionBindingAllowed(allowed: boolean): void {
+    this.sessionBindingAllowed = allowed;
+  }
+
+  isSessionBindingAllowed(): boolean {
+    return this.sessionBindingAllowed !== false;
   }
 
   setCacheTtlResolved(ttl: CacheTtlResolved | null): void {

@@ -195,6 +195,13 @@ export async function getCachedSystemSettings(): Promise<SystemSettings> {
       publicStatusWindowHours: DEFAULT_SETTINGS.publicStatusWindowHours,
       publicStatusAggregationIntervalMinutes:
         DEFAULT_SETTINGS.publicStatusAggregationIntervalMinutes,
+      discoveryEnabled: false,
+      discoveryConcurrency: 2,
+      maxDiscoveryRounds: 2,
+      discoverySlaMs: 10_000,
+      stickySlaMs: 20_000,
+      racingTotalTimeoutMs: 60_000,
+      stickyTimeoutCooldownMs: 300_000,
       quotaDbRefreshIntervalSeconds: 10,
       quotaLeasePercent5h: 0.05,
       quotaLeasePercentDaily: 0.05,

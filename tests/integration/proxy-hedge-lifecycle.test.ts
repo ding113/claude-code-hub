@@ -8,6 +8,7 @@ import { ProxyResponseHandler } from "@/app/v1/_lib/proxy/response-handler";
 import { type MessageContext, ProxySession } from "@/app/v1/_lib/proxy/session";
 import { DbPoolAdmissionError } from "@/drizzle/admitted-client";
 import { getGlobalAgentPool, resetGlobalAgentPool } from "@/lib/proxy-agent";
+import type { SessionBindingSnapshot } from "@/lib/redis/session-binding";
 import type { Key } from "@/types/key";
 import type { Provider } from "@/types/provider";
 import type { User } from "@/types/user";
@@ -16,10 +17,45 @@ const state = vi.hoisted(() => {
   return {
     addLoserCost: vi.fn(),
     billHedgeLosers: false,
-    durableTerminal: vi.fn(async () => {}),
+    discoveryEnabled: false,
+    acquireDiscoveryLease: vi.fn(async () => ({
+      status: "acquired",
+      ownerToken: "integration-lease",
+      legacyFallbackAllowed: false,
+    })),
+    releaseDiscoveryLease: vi.fn(async () => ({
+      status: "released",
+      legacyFallbackAllowed: false,
+    })),
+    renewDiscoveryLease: vi.fn(async () => ({
+      status: "renewed",
+      legacyFallbackAllowed: false,
+    })),
+    compareAndSetBinding: vi.fn(async () => ({
+      status: "ok",
+      source: "updated",
+      legacyFallbackAllowed: false,
+      snapshot: {
+        sessionId: "integration-discovery",
+        keyId: 22,
+        providerId: 2,
+        generation: "g2",
+      },
+    })),
+    durableTerminal: vi.fn(
+      async (
+        _id: number,
+        details: unknown,
+        options?: { onCommitted?: (details: unknown) => void | Promise<void> }
+      ) => {
+        await options?.onCommitted?.(details);
+        return true;
+      }
+    ),
     http2Error: ((): Error | null => null)(),
     loserBilled: Promise.withResolvers<void>(),
     pickAlternative: vi.fn(),
+    pickDiscovery: vi.fn(),
     providers: Array.from<Provider>([]),
     recordFailure: vi.fn(async () => {}),
     settleLeaseBudgets: vi.fn(async () => {}),
@@ -42,10 +78,17 @@ vi.mock("@/lib/config", async (importOriginal) => {
     ...actual,
     getCachedSystemSettings: async () => ({
       billHedgeLosers: state.billHedgeLosers,
+      discoveryConcurrency: 2,
+      discoveryEnabled: state.discoveryEnabled,
+      discoverySlaMs: 100,
       enableBillingHeaderRectifier: false,
       enableClaudeMetadataUserIdInjection: false,
       enableThinkingBudgetRectifier: false,
       enableThinkingSignatureRectifier: false,
+      maxDiscoveryRounds: 1,
+      racingTotalTimeoutMs: 500,
+      stickySlaMs: 100,
+      stickyTimeoutCooldownMs: 300_000,
     }),
     isHttp2Enabled: async () => {
       if (state.http2Error) throw state.http2Error;
@@ -57,8 +100,52 @@ vi.mock("@/lib/config/system-settings-cache", () => ({
   getCachedSystemSettings: async () => ({ billNonSuccessfulRequests: false }),
 }));
 vi.mock("@/app/v1/_lib/proxy/provider-selector", () => ({
-  ProxyProviderResolver: { pickRandomProviderWithExclusion: state.pickAlternative },
+  ProxyProviderResolver: {
+    pickDiscoveryProviders: state.pickDiscovery,
+    pickRandomProviderWithExclusion: state.pickAlternative,
+    resolveEffectivePriorityForSession: (provider: Provider) => provider.priority ?? 0,
+  },
 }));
+vi.mock("@/lib/session-manager", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/session-manager")>();
+  class TestSessionManager extends actual.SessionManager {
+    static override async ensureVersionedBindingCapability() {
+      return "available" as const;
+    }
+    static override async getSessionBindingSnapshot(sessionId: string, keyId: number) {
+      return {
+        status: "ok" as const,
+        source: "existing" as const,
+        legacyFallbackAllowed: false as const,
+        snapshot: { sessionId, keyId, providerId: null, generation: "g1" },
+      };
+    }
+    static override async acquireSessionDiscoveryLease() {
+      return state.acquireDiscoveryLease();
+    }
+    static override async renewSessionDiscoveryLease() {
+      return state.renewDiscoveryLease();
+    }
+    static override getVersionedSessionBindingRefreshIntervalMs() {
+      return 100_000;
+    }
+    static override async touchVersionedSessionBinding(snapshot: SessionBindingSnapshot) {
+      return {
+        status: "ok" as const,
+        source: "touched" as const,
+        snapshot,
+        legacyFallbackAllowed: false as const,
+      };
+    }
+    static override async releaseSessionDiscoveryLease() {
+      return state.releaseDiscoveryLease();
+    }
+    static override async compareAndSetSessionProvider() {
+      return state.compareAndSetBinding();
+    }
+  }
+  return { ...actual, SessionManager: TestSessionManager };
+});
 vi.mock("@/lib/provider-endpoints/endpoint-selector", () => ({
   getEndpointFilterStats: vi.fn(async () => null),
   getPreferredProviderEndpoints: vi.fn(async () => []),
@@ -154,7 +241,10 @@ vi.mock("@/lib/session-tracker", () => ({
 vi.mock("@/lib/proxy-status-tracker", () => ({
   ProxyStatusTracker: { getInstance: () => ({ endRequest: vi.fn() }) },
 }));
-vi.mock("@/lib/redis/live-chain-store", () => ({ deleteLiveChain: vi.fn(async () => {}) }));
+vi.mock("@/lib/redis/live-chain-store", () => ({
+  deleteLiveChain: vi.fn(async () => {}),
+  writeLiveChain: vi.fn(async () => {}),
+}));
 
 const CREATED_AT = new Date(0);
 const USER = {
@@ -386,6 +476,7 @@ beforeEach(async () => {
   await resetGlobalAgentPool();
   vi.clearAllMocks();
   state.billHedgeLosers = false;
+  state.discoveryEnabled = false;
   state.http2Error = null;
   state.loserBilled = Promise.withResolvers<void>();
   state.providers.length = 0;
@@ -394,6 +485,10 @@ beforeEach(async () => {
   state.pickAlternative.mockImplementation(async (_session: unknown, excludedIds: number[]) => {
     return state.providers.find((provider) => !excludedIds.includes(provider.id)) ?? null;
   });
+  state.pickDiscovery.mockImplementation(
+    async (_session: unknown, count: number, excludedIds: number[]) =>
+      state.providers.filter((provider) => !excludedIds.includes(provider.id)).slice(0, count)
+  );
 });
 
 afterEach(async () => {
@@ -403,6 +498,44 @@ afterEach(async () => {
 });
 
 describe("proxy hedge transport/lifecycle integration (persistence and control-plane seams mocked)", () => {
+  it("runs a leased Discovery race over real loopback transports and cancels the loser", async () => {
+    const [loser, winner] = await Promise.all([startUpstream(), startUpstream()]);
+    const client = new AbortController();
+    try {
+      state.discoveryEnabled = true;
+      const initialProvider = createProvider(1, loser.baseUrl, 0);
+      const winningProvider = createProvider(2, winner.baseUrl, 0);
+      winningProvider.priority = initialProvider.priority;
+      state.providers.push(winningProvider);
+      const session = await createSession(initialProvider, "/v1/messages", client.signal);
+      session.sessionId = "integration-discovery";
+      const agents = watchAgentReleases(2);
+
+      const forwarded = ProxyForwarder.send(session);
+      await Promise.all([loser.response, winner.response]);
+      await winner.send(
+        'event: content_block_delta\ndata: {"type":"content_block_delta","delta":{"type":"text_delta","text":"winner"}}\n\n' +
+          'event: message_stop\ndata: {"type":"message_stop"}\n\n'
+      );
+
+      const downstream = await ProxyResponseHandler.dispatch(session, await forwarded);
+      await expect(downstream.text()).resolves.toContain("winner");
+      await settleTasks();
+      await loser.terminated;
+      await agents.released;
+
+      expect(loser.abortCount()).toBe(1);
+      expect(winner.abortCount()).toBe(0);
+      expect(state.acquireDiscoveryLease).toHaveBeenCalledTimes(1);
+      expect(state.compareAndSetBinding).toHaveBeenCalledTimes(1);
+      expect(state.releaseDiscoveryLease).toHaveBeenCalledTimes(1);
+      expect(agents.pool.getPoolStats().activeRequests).toBe(0);
+    } finally {
+      client.abort(new Error("fixture cleanup"));
+      await Promise.all([loser.close(), winner.close()]);
+    }
+  });
+
   it("fences loser timers after winner settlement and releases each launched transport once", async () => {
     const [slow, winner, fenced] = await Promise.all([
       startUpstream(),

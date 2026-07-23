@@ -74,13 +74,17 @@ vi.mock("@/repository/message", () => ({
 
 vi.mock("@/lib/session-manager", () => ({
   SessionManager: {
-    clearVersionedSessionProvider: vi.fn(),
     updateSessionUsage: vi.fn(),
     storeSessionResponse: vi.fn(),
     clearSessionProvider: vi.fn(),
-    extractCodexPromptCacheKey: vi.fn(),
+    clearVersionedSessionProvider: vi.fn(),
+    compareAndSetSessionProvider: vi.fn(),
+    getSessionBindingSnapshot: vi.fn(),
     getVersionedSessionBindingRefreshIntervalMs: vi.fn(),
+    renewSessionDiscoveryLease: vi.fn(),
+    releaseSessionDiscoveryLease: vi.fn(),
     touchVersionedSessionBinding: vi.fn(),
+    extractCodexPromptCacheKey: vi.fn(),
     updateSessionBindingSmart: vi.fn(),
     updateSessionProvider: vi.fn(),
     updateSessionWithCodexCacheKey: vi.fn(),
@@ -93,6 +97,7 @@ vi.mock("@/lib/rate-limit", () => ({
     trackUserDailyCost: vi.fn(),
     decrementLeaseBudget: vi.fn(),
     settleLeaseBudgets: vi.fn(),
+    releaseProviderSession: vi.fn(),
   },
 }));
 
@@ -374,18 +379,50 @@ function createSuccessStreamResponse(): Response {
   });
 }
 
+function createSuccessStreamResponseWithCompletion(): Response {
+  const sseText =
+    `data: ${JSON.stringify({ type: "content_block_delta", delta: { text: "ok" } })}\n\n` +
+    `event: message_stop\ndata: ${JSON.stringify({ type: "message_stop" })}\n\n`;
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(encoder.encode(sseText));
+      controller.close();
+    },
+  });
+  return new Response(stream, {
+    status: 200,
+    headers: { "content-type": "text/event-stream" },
+  });
+}
+
+function createMisleadingCompletionTextResponse(): Response {
+  const sseText =
+    `event: content_block_delta\ndata: ${JSON.stringify({
+      type: "content_block_delta",
+      delta: { text: "the words message_stop and response.completed are ordinary content" },
+    })}\n\n` +
+    `event: message_delta\ndata: ${JSON.stringify({
+      type: "message_delta",
+      delta: { stop_reason: null },
+    })}\n\n`;
+  return new Response(sseText, {
+    status: 200,
+    headers: { "content-type": "text/event-stream" },
+  });
+}
 function createControllableSuccessStreamResponse(): {
   response: Response;
   complete: () => void;
 } {
   const encoder = new TextEncoder();
-  let sourceController: ReadableStreamDefaultController<Uint8Array> | null = null;
+  let streamController!: ReadableStreamDefaultController<Uint8Array>;
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
-      sourceController = controller;
+      streamController = controller;
       controller.enqueue(
         encoder.encode(
-          `event: message_delta\ndata: ${JSON.stringify({ usage: { input_tokens: 100, output_tokens: 50 } })}\n\n`
+          `data: ${JSON.stringify({ type: "content_block_delta", delta: { text: "ok" } })}\n\n`
         )
       );
     },
@@ -395,7 +432,12 @@ function createControllableSuccessStreamResponse(): {
       status: 200,
       headers: { "content-type": "text/event-stream" },
     }),
-    complete: () => sourceController?.close(),
+    complete: () => {
+      streamController.enqueue(
+        encoder.encode(`event: message_stop\ndata: ${JSON.stringify({ type: "message_stop" })}\n\n`)
+      );
+      streamController.close();
+    },
   };
 }
 
@@ -438,17 +480,47 @@ function setupCommonMocks() {
       sessionId: "fake-session",
       keyId: 456,
       providerId: null,
-      generation: "cleared-generation",
+      generation: "cleared",
+    },
+    legacyFallbackAllowed: false,
+  });
+  vi.mocked(SessionManager.compareAndSetSessionProvider).mockResolvedValue({
+    status: "ok",
+    source: "updated",
+    snapshot: {
+      sessionId: "fake-session",
+      keyId: 456,
+      providerId: 1,
+      generation: "updated",
+    },
+    legacyFallbackAllowed: false,
+  });
+  vi.mocked(SessionManager.getSessionBindingSnapshot).mockResolvedValue({
+    status: "ok",
+    source: "existing",
+    snapshot: {
+      sessionId: "fake-session",
+      keyId: 456,
+      providerId: null,
+      generation: "fresh",
     },
     legacyFallbackAllowed: false,
   });
   vi.mocked(SessionManager.getVersionedSessionBindingRefreshIntervalMs).mockReturnValue(100_000);
-  vi.mocked(SessionManager.touchVersionedSessionBinding).mockImplementation(async (snapshot) => ({
+  vi.mocked(SessionManager.renewSessionDiscoveryLease).mockResolvedValue({
+    status: "renewed",
+    legacyFallbackAllowed: false,
+  });
+  vi.mocked(SessionManager.touchVersionedSessionBinding).mockImplementation(async (binding) => ({
     status: "ok",
     source: "touched",
-    snapshot,
+    snapshot: binding,
     legacyFallbackAllowed: false,
   }));
+  vi.mocked(SessionManager.releaseSessionDiscoveryLease).mockResolvedValue({
+    status: "released",
+    legacyFallbackAllowed: false,
+  });
   vi.mocked(SessionManager.updateSessionBindingSmart).mockResolvedValue({
     updated: true,
     reason: "test",
@@ -465,6 +537,7 @@ function setupCommonMocks() {
     status: "settled",
     settlements: [],
   });
+  vi.mocked(RateLimitService.releaseProviderSession).mockResolvedValue(undefined);
   vi.mocked(SessionTracker.refreshSession).mockResolvedValue(undefined);
   mockRecordFailure.mockResolvedValue(undefined);
   mockRecordSuccess.mockResolvedValue(undefined);
@@ -508,6 +581,22 @@ describe("Endpoint circuit breaker isolation", () => {
           item.statusCodeInferred === true
       )
     ).toBe(true);
+  });
+
+  it("does not clear a binding when the request routing mode forbids binding mutations", async () => {
+    const session = createSession();
+    Object.assign(session, { isSessionBindingAllowed: () => false });
+    setDeferredMeta(session, 42);
+
+    const clientResponse = await ProxyResponseHandler.dispatch(
+      session,
+      createFake200StreamResponse()
+    );
+    await clientResponse.text();
+    await drainAsyncTasks();
+
+    expect(SessionManager.clearSessionProvider).not.toHaveBeenCalled();
+    expect(SessionManager.clearVersionedSessionProvider).not.toHaveBeenCalled();
   });
 
   it("OpenAI Responses response.failed with HTTP 200 should be treated as provider failure", async () => {
@@ -649,6 +738,757 @@ describe("Endpoint circuit breaker isolation", () => {
     expect(mockRecordEndpointFailure).not.toHaveBeenCalled();
   });
 
+  it("does not clear a create binding when Discovery finishes with fake-200", async () => {
+    const session = createSession();
+    session.recordProviderSessionRef(1);
+    setDeferredStreamingFinalization(session, {
+      providerId: 1,
+      providerName: "test-provider",
+      providerPriority: 10,
+      attemptNumber: 1,
+      totalProvidersAttempted: 2,
+      isFirstAttempt: false,
+      isFailoverSuccess: true,
+      endpointId: 42,
+      endpointUrl: "https://api.test.com",
+      upstreamStatusCode: 200,
+      bindingIntent: "create",
+      bindingSnapshot: {
+        sessionId: "fake-session",
+        keyId: 456,
+        providerId: null,
+        generation: "create-generation",
+      },
+      providerSessionRefOwned: true,
+    });
+
+    const clientResponse = await ProxyResponseHandler.dispatch(
+      session,
+      createFake200StreamResponse()
+    );
+    await clientResponse.text();
+    await drainAsyncTasks();
+
+    expect(SessionManager.clearVersionedSessionProvider).not.toHaveBeenCalled();
+    expect(SessionManager.clearSessionProvider).not.toHaveBeenCalled();
+    expect(RateLimitService.releaseProviderSession).toHaveBeenCalledOnce();
+    expect(RateLimitService.releaseProviderSession).toHaveBeenCalledWith(1, "fake-session");
+  });
+
+  it("clears only the captured renew snapshot after a fake-200", async () => {
+    const session = createSession();
+    const snapshot = {
+      sessionId: "fake-session",
+      keyId: 456,
+      providerId: 1,
+      generation: "renew-generation",
+    } as const;
+    setDeferredStreamingFinalization(session, {
+      providerId: 1,
+      providerName: "test-provider",
+      providerPriority: 10,
+      attemptNumber: 1,
+      totalProvidersAttempted: 1,
+      isFirstAttempt: true,
+      isFailoverSuccess: false,
+      endpointId: 42,
+      endpointUrl: "https://api.test.com",
+      upstreamStatusCode: 200,
+      bindingIntent: "renew",
+      bindingSnapshot: snapshot,
+    });
+
+    const clientResponse = await ProxyResponseHandler.dispatch(
+      session,
+      createFake200StreamResponse()
+    );
+    await clientResponse.text();
+    await drainAsyncTasks();
+
+    expect(SessionManager.clearVersionedSessionProvider).toHaveBeenCalledWith(snapshot, 1, 0);
+    expect(SessionManager.clearSessionProvider).not.toHaveBeenCalled();
+  });
+
+  it("never mutates a binding for fallback intent none", async () => {
+    const session = createSession();
+    session.recordProviderSessionRef(1);
+    setDeferredStreamingFinalization(session, {
+      providerId: 1,
+      providerName: "test-provider",
+      providerPriority: 10,
+      attemptNumber: 2,
+      totalProvidersAttempted: 2,
+      isFirstAttempt: false,
+      isFailoverSuccess: false,
+      endpointId: 42,
+      endpointUrl: "https://api.test.com",
+      upstreamStatusCode: 200,
+      bindingIntent: "none",
+      providerSessionRefOwned: true,
+    });
+
+    const clientResponse = await ProxyResponseHandler.dispatch(
+      session,
+      createFake200StreamResponse()
+    );
+    await clientResponse.text();
+    await drainAsyncTasks();
+
+    expect(SessionManager.clearVersionedSessionProvider).not.toHaveBeenCalled();
+    expect(SessionManager.clearSessionProvider).not.toHaveBeenCalled();
+    expect(SessionManager.compareAndSetSessionProvider).not.toHaveBeenCalled();
+    expect(SessionManager.updateSessionBindingSmart).not.toHaveBeenCalled();
+    expect(RateLimitService.releaseProviderSession).toHaveBeenCalledWith(1, "fake-session");
+  });
+
+  it("does not clear a create tombstone when the completion marker is missing", async () => {
+    const session = createSession();
+    setDeferredStreamingFinalization(session, {
+      providerId: 1,
+      providerName: "test-provider",
+      providerPriority: 10,
+      attemptNumber: 1,
+      totalProvidersAttempted: 2,
+      isFirstAttempt: false,
+      isFailoverSuccess: true,
+      endpointId: 42,
+      endpointUrl: "https://api.test.com",
+      upstreamStatusCode: 200,
+      bindingIntent: "create",
+      bindingSnapshot: {
+        sessionId: "fake-session",
+        keyId: 456,
+        providerId: null,
+        generation: "incomplete-generation",
+      },
+      requiresCompletionMarker: true,
+    });
+
+    const clientResponse = await ProxyResponseHandler.dispatch(
+      session,
+      createSuccessStreamResponse()
+    );
+    await clientResponse.text();
+    await drainAsyncTasks();
+
+    expect(SessionManager.clearVersionedSessionProvider).not.toHaveBeenCalled();
+    expect(SessionManager.clearSessionProvider).not.toHaveBeenCalled();
+    expect(SessionManager.compareAndSetSessionProvider).not.toHaveBeenCalled();
+  });
+
+  it("does not accept completion marker words embedded in ordinary SSE content", async () => {
+    const session = createSession();
+    setDeferredStreamingFinalization(session, {
+      providerId: 1,
+      providerName: "test-provider",
+      providerPriority: 10,
+      attemptNumber: 1,
+      totalProvidersAttempted: 2,
+      isFirstAttempt: false,
+      isFailoverSuccess: true,
+      endpointId: 42,
+      endpointUrl: "https://api.test.com",
+      upstreamStatusCode: 200,
+      bindingIntent: "create",
+      bindingSnapshot: {
+        sessionId: "fake-session",
+        keyId: 456,
+        providerId: null,
+        generation: "misleading-content-generation",
+      },
+      requiresCompletionMarker: true,
+    });
+
+    const clientResponse = await ProxyResponseHandler.dispatch(
+      session,
+      createMisleadingCompletionTextResponse()
+    );
+    await clientResponse.text();
+    await drainAsyncTasks();
+
+    expect(SessionManager.compareAndSetSessionProvider).not.toHaveBeenCalled();
+    expect(updateMessageRequestDetailsDurably).toHaveBeenCalledWith(
+      1,
+      expect.objectContaining({
+        statusCode: 502,
+        errorMessage: "STREAM_COMPLETION_MARKER_MISSING",
+      }),
+      expect.objectContaining({ onCommitted: expect.any(Function) })
+    );
+  });
+
+  it.each([
+    {
+      label: "OpenAI Responses",
+      format: "response" as const,
+      body: `event: response.completed\ndata: ${JSON.stringify({
+        type: "response.completed",
+        response: { id: "resp_completed" },
+      })}\n\n`,
+    },
+    {
+      label: "Anthropic data-only",
+      format: "claude" as const,
+      body: `data: ${JSON.stringify({ type: "message_stop" })}\n\n`,
+    },
+    {
+      label: "OpenAI Chat finish reason",
+      format: "openai" as const,
+      body: `data: ${JSON.stringify({
+        choices: [{ index: 0, delta: {}, finish_reason: "stop" }],
+      })}\n\n`,
+    },
+    {
+      label: "OpenAI Chat done sentinel",
+      format: "openai" as const,
+      body: "data: [DONE]\n\n",
+    },
+    {
+      label: "Gemini",
+      format: "gemini" as const,
+      body: `data: ${JSON.stringify({
+        candidates: [{ finishReason: "STOP" }],
+      })}\n\n`,
+    },
+    {
+      label: "Gemini CLI",
+      format: "gemini-cli" as const,
+      body: `data: ${JSON.stringify({
+        response: { candidates: [{ finishReason: "STOP" }] },
+      })}\n\n`,
+    },
+  ])("accepts a structurally valid $label completion marker", async ({ format, body }) => {
+    const session = createSession();
+    session.originalFormat = format;
+    const snapshot = {
+      sessionId: "fake-session",
+      keyId: 456,
+      providerId: null,
+      generation: `${format}-completion-generation`,
+    } as const;
+    setDeferredStreamingFinalization(session, {
+      providerId: 1,
+      providerName: "test-provider",
+      providerPriority: 10,
+      attemptNumber: 1,
+      totalProvidersAttempted: 2,
+      isFirstAttempt: false,
+      isFailoverSuccess: true,
+      endpointId: 42,
+      endpointUrl: "https://api.test.com",
+      upstreamStatusCode: 200,
+      bindingIntent: "create",
+      bindingSnapshot: snapshot,
+      requiresCompletionMarker: true,
+    });
+
+    const clientResponse = await ProxyResponseHandler.dispatch(
+      session,
+      new Response(body, {
+        status: 200,
+        headers: { "content-type": "text/event-stream" },
+      })
+    );
+    await clientResponse.text();
+    await drainAsyncTasks();
+
+    expect(SessionManager.compareAndSetSessionProvider).toHaveBeenCalledWith(snapshot, 1);
+  });
+
+  it("releases a create attempt ref when generation CAS loses", async () => {
+    const session = createSession();
+    session.recordProviderSessionRef(1);
+    const snapshot = {
+      sessionId: "fake-session",
+      keyId: 456,
+      providerId: null,
+      generation: "stale-generation",
+    } as const;
+    setDeferredStreamingFinalization(session, {
+      providerId: 1,
+      providerName: "test-provider",
+      providerPriority: 10,
+      attemptNumber: 1,
+      totalProvidersAttempted: 2,
+      isFirstAttempt: false,
+      isFailoverSuccess: true,
+      endpointId: 42,
+      endpointUrl: "https://api.test.com",
+      upstreamStatusCode: 200,
+      bindingIntent: "create",
+      bindingSnapshot: snapshot,
+      requiresCompletionMarker: true,
+      providerSessionRefOwned: true,
+      providerSessionRefRetainOnSuccess: true,
+    });
+    vi.mocked(SessionManager.compareAndSetSessionProvider).mockResolvedValueOnce({
+      status: "conflict",
+      reason: "generation_mismatch",
+      legacyFallbackAllowed: false,
+    });
+
+    const clientResponse = await ProxyResponseHandler.dispatch(
+      session,
+      createSuccessStreamResponseWithCompletion()
+    );
+    await clientResponse.text();
+    await drainAsyncTasks();
+
+    expect(RateLimitService.releaseProviderSession).toHaveBeenCalledOnce();
+    expect(RateLimitService.releaseProviderSession).toHaveBeenCalledWith(1, "fake-session");
+  });
+
+  it("retains an owned Provider ref after a renew generation CAS succeeds", async () => {
+    const session = createSession();
+    session.recordProviderSessionRef(1);
+    const snapshot = {
+      sessionId: "fake-session",
+      keyId: 456,
+      providerId: 1,
+      generation: "renew-generation",
+    } as const;
+    setDeferredStreamingFinalization(session, {
+      providerId: 1,
+      providerName: "test-provider",
+      providerPriority: 10,
+      attemptNumber: 1,
+      totalProvidersAttempted: 1,
+      isFirstAttempt: true,
+      isFailoverSuccess: false,
+      endpointId: 42,
+      endpointUrl: "https://api.test.com",
+      upstreamStatusCode: 200,
+      bindingIntent: "renew",
+      bindingSnapshot: snapshot,
+      requiresCompletionMarker: true,
+      providerSessionRefOwned: true,
+      providerSessionRefRetainOnSuccess: true,
+    });
+
+    const clientResponse = await ProxyResponseHandler.dispatch(
+      session,
+      createSuccessStreamResponseWithCompletion()
+    );
+    await clientResponse.text();
+    await drainAsyncTasks();
+
+    expect(SessionManager.compareAndSetSessionProvider).toHaveBeenCalledWith(snapshot, 1);
+    expect(RateLimitService.releaseProviderSession).not.toHaveBeenCalled();
+  });
+
+  it("releases an owned Provider ref after CAS success when it is not the new baseline", async () => {
+    const session = createSession();
+    session.recordProviderSessionRef(1);
+    const snapshot = {
+      sessionId: "fake-session",
+      keyId: 456,
+      providerId: 1,
+      generation: "existing-baseline-generation",
+    } as const;
+    setDeferredStreamingFinalization(session, {
+      providerId: 1,
+      providerName: "test-provider",
+      providerPriority: 10,
+      attemptNumber: 1,
+      totalProvidersAttempted: 1,
+      isFirstAttempt: true,
+      isFailoverSuccess: false,
+      endpointId: 42,
+      endpointUrl: "https://api.test.com",
+      upstreamStatusCode: 200,
+      bindingIntent: "renew",
+      bindingSnapshot: snapshot,
+      requiresCompletionMarker: true,
+      providerSessionRefOwned: true,
+      providerSessionRefRetainOnSuccess: false,
+    });
+
+    const clientResponse = await ProxyResponseHandler.dispatch(
+      session,
+      createSuccessStreamResponseWithCompletion()
+    );
+    await clientResponse.text();
+    await drainAsyncTasks();
+
+    expect(SessionManager.compareAndSetSessionProvider).toHaveBeenCalledWith(snapshot, 1);
+    expect(RateLimitService.releaseProviderSession).toHaveBeenCalledWith(1, "fake-session");
+  });
+
+  it.each([
+    {
+      label: "lost",
+      leaseResult: {
+        status: "lost",
+        reason: "not_owner_or_missing",
+        legacyFallbackAllowed: false,
+      } as const,
+    },
+    {
+      label: "unavailable",
+      leaseResult: {
+        status: "unavailable",
+        reason: "operation_failed",
+        capabilityState: "unavailable",
+        legacyFallbackAllowed: true,
+      } as const,
+    },
+  ])("fails binding closed when the finalizer lease is $label", async ({ leaseResult }) => {
+    const session = createSession();
+    session.recordProviderSessionRef(1);
+    setDeferredStreamingFinalization(session, {
+      providerId: 1,
+      providerName: "test-provider",
+      providerPriority: 10,
+      attemptNumber: 1,
+      totalProvidersAttempted: 2,
+      isFirstAttempt: false,
+      isFailoverSuccess: true,
+      endpointId: 42,
+      endpointUrl: "https://api.test.com",
+      upstreamStatusCode: 200,
+      bindingIntent: "create",
+      bindingSnapshot: {
+        sessionId: "fake-session",
+        keyId: 456,
+        providerId: null,
+        generation: "lease-guarded-generation",
+      },
+      requiresCompletionMarker: true,
+      discoveryLease: {
+        sessionId: "fake-session",
+        keyId: 456,
+        ownerToken: "lease-owner",
+        ttlSeconds: 30,
+      },
+      providerSessionRefOwned: true,
+    });
+    vi.mocked(SessionManager.renewSessionDiscoveryLease).mockResolvedValueOnce(leaseResult);
+
+    const clientResponse = await ProxyResponseHandler.dispatch(
+      session,
+      createSuccessStreamResponseWithCompletion()
+    );
+    await clientResponse.text();
+    await drainAsyncTasks();
+
+    expect(SessionManager.renewSessionDiscoveryLease).toHaveBeenCalledOnce();
+    expect(SessionManager.compareAndSetSessionProvider).not.toHaveBeenCalled();
+    expect(RateLimitService.releaseProviderSession).toHaveBeenCalledWith(1, "fake-session");
+    expect(SessionManager.releaseSessionDiscoveryLease).toHaveBeenCalledOnce();
+  });
+
+  it("renews a long-stream lease and releases it once after terminal side effects", async () => {
+    vi.useFakeTimers();
+    try {
+      const order: string[] = [];
+      const session = createSession();
+      setDeferredStreamingFinalization(session, {
+        providerId: 1,
+        providerName: "test-provider",
+        providerPriority: 10,
+        attemptNumber: 2,
+        totalProvidersAttempted: 2,
+        isFirstAttempt: false,
+        isFailoverSuccess: false,
+        endpointId: 42,
+        endpointUrl: "https://api.test.com",
+        upstreamStatusCode: 200,
+        bindingIntent: "none",
+        requiresCompletionMarker: false,
+        discoveryLease: {
+          sessionId: "fake-session",
+          keyId: 456,
+          ownerToken: "lease-owner",
+          ttlSeconds: 2,
+        },
+      });
+      mockRecordSuccess.mockImplementationOnce(async () => {
+        order.push("side-effect");
+      });
+      vi.mocked(SessionManager.releaseSessionDiscoveryLease).mockImplementationOnce(async () => {
+        order.push("lease-release");
+        return { status: "released", legacyFallbackAllowed: false };
+      });
+      const controlled = createControllableSuccessStreamResponse();
+
+      const clientResponse = await ProxyResponseHandler.dispatch(session, controlled.response);
+      const bodyPromise = clientResponse.text();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(SessionManager.renewSessionDiscoveryLease).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(1_100);
+      expect(SessionManager.renewSessionDiscoveryLease).toHaveBeenCalledWith(
+        "fake-session",
+        456,
+        "lease-owner",
+        2
+      );
+
+      controlled.complete();
+      await bodyPromise;
+      await drainAsyncTasks();
+
+      expect(SessionManager.releaseSessionDiscoveryLease).toHaveBeenCalledOnce();
+      expect(SessionManager.releaseSessionDiscoveryLease).toHaveBeenCalledWith(
+        "fake-session",
+        456,
+        "lease-owner"
+      );
+      expect(order).toEqual(["side-effect", "lease-release"]);
+
+      const renewCalls = vi.mocked(SessionManager.renewSessionDiscoveryLease).mock.calls.length;
+      await vi.advanceTimersByTimeAsync(5_000);
+      expect(SessionManager.renewSessionDiscoveryLease).toHaveBeenCalledTimes(renewCalls);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("touches the captured binding while a Discovery winner remains open", async () => {
+    vi.useFakeTimers();
+    try {
+      const session = createSession();
+      const snapshot = {
+        sessionId: "fake-session",
+        keyId: 456,
+        providerId: null,
+        generation: "long-stream-generation",
+      } as const;
+      setDeferredStreamingFinalization(session, {
+        providerId: 1,
+        providerName: "test-provider",
+        providerPriority: 10,
+        attemptNumber: 1,
+        totalProvidersAttempted: 2,
+        isFirstAttempt: false,
+        isFailoverSuccess: true,
+        endpointId: 42,
+        endpointUrl: "https://api.test.com",
+        upstreamStatusCode: 200,
+        bindingIntent: "create",
+        bindingSnapshot: snapshot,
+        requiresCompletionMarker: true,
+        discoveryLease: {
+          sessionId: "fake-session",
+          keyId: 456,
+          ownerToken: "long-stream-owner",
+          ttlSeconds: 3_600,
+        },
+      });
+      vi.mocked(SessionManager.getVersionedSessionBindingRefreshIntervalMs).mockReturnValue(1_000);
+      const controlled = createControllableSuccessStreamResponse();
+
+      const clientResponse = await ProxyResponseHandler.dispatch(session, controlled.response);
+      await vi.advanceTimersByTimeAsync(3_000);
+      expect(SessionManager.touchVersionedSessionBinding).toHaveBeenCalledTimes(4);
+      expect(SessionManager.touchVersionedSessionBinding).toHaveBeenLastCalledWith(snapshot);
+
+      controlled.complete();
+      await clientResponse.text();
+      await drainAsyncTasks();
+
+      expect(SessionManager.compareAndSetSessionProvider).toHaveBeenCalledWith(snapshot, 1);
+      expect(SessionManager.getSessionBindingSnapshot).not.toHaveBeenCalled();
+      expect(SessionManager.releaseSessionDiscoveryLease).toHaveBeenCalledOnce();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("revokes Sticky writes when a binding heartbeat loses its generation", async () => {
+    vi.useFakeTimers();
+    try {
+      const session = createSession();
+      const snapshot = {
+        sessionId: "fake-session",
+        keyId: 456,
+        providerId: 1,
+        generation: "generation-before-conflict",
+      } as const;
+      setDeferredStreamingFinalization(session, {
+        providerId: 1,
+        providerName: "test-provider",
+        providerPriority: 10,
+        attemptNumber: 1,
+        totalProvidersAttempted: 1,
+        isFirstAttempt: true,
+        isFailoverSuccess: false,
+        endpointId: 42,
+        endpointUrl: "https://api.test.com",
+        upstreamStatusCode: 200,
+        bindingIntent: "renew",
+        bindingSnapshot: snapshot,
+        requiresCompletionMarker: true,
+        discoveryLease: {
+          sessionId: "fake-session",
+          keyId: 456,
+          ownerToken: "conflicted-stream-owner",
+          ttlSeconds: 3_600,
+        },
+      });
+      vi.mocked(SessionManager.getVersionedSessionBindingRefreshIntervalMs).mockReturnValue(1_000);
+      vi.mocked(SessionManager.touchVersionedSessionBinding)
+        .mockResolvedValueOnce({
+          status: "ok",
+          source: "touched",
+          snapshot,
+          legacyFallbackAllowed: false,
+        })
+        .mockResolvedValueOnce({
+          status: "conflict",
+          reason: "generation_mismatch",
+          legacyFallbackAllowed: false,
+        });
+      const controlled = createControllableSuccessStreamResponse();
+
+      const clientResponse = await ProxyResponseHandler.dispatch(session, controlled.response);
+      await vi.advanceTimersByTimeAsync(1_000);
+      controlled.complete();
+      await clientResponse.text();
+      await drainAsyncTasks();
+
+      expect(SessionManager.touchVersionedSessionBinding).toHaveBeenCalledTimes(2);
+      expect(SessionManager.compareAndSetSessionProvider).not.toHaveBeenCalled();
+      expect(SessionManager.getSessionBindingSnapshot).not.toHaveBeenCalled();
+      expect(SessionManager.releaseSessionDiscoveryLease).toHaveBeenCalledOnce();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not delay downstream delivery while the lease handoff renewal is pending", async () => {
+    const handoffRenewal = Promise.withResolvers<{
+      status: "renewed";
+      legacyFallbackAllowed: false;
+    }>();
+    vi.mocked(SessionManager.renewSessionDiscoveryLease).mockReturnValueOnce(
+      handoffRenewal.promise
+    );
+    const session = createSession();
+    setDeferredStreamingFinalization(session, {
+      providerId: 1,
+      providerName: "test-provider",
+      providerPriority: 10,
+      attemptNumber: 2,
+      totalProvidersAttempted: 2,
+      isFirstAttempt: false,
+      isFailoverSuccess: false,
+      endpointId: 42,
+      endpointUrl: "https://api.test.com",
+      upstreamStatusCode: 200,
+      bindingIntent: "none",
+      requiresCompletionMarker: false,
+      discoveryLease: {
+        sessionId: "fake-session",
+        keyId: 456,
+        ownerToken: "pending-handoff-owner",
+        ttlSeconds: 30,
+      },
+    });
+
+    const clientResponse = await ProxyResponseHandler.dispatch(
+      session,
+      createSuccessStreamResponseWithCompletion()
+    );
+    await expect(clientResponse.text()).resolves.toContain("message_stop");
+    expect(SessionManager.renewSessionDiscoveryLease).toHaveBeenCalledOnce();
+
+    handoffRenewal.resolve({ status: "renewed", legacyFallbackAllowed: false });
+    await drainAsyncTasks();
+    expect(SessionManager.releaseSessionDiscoveryLease).toHaveBeenCalledOnce();
+  });
+
+  it("bounds a stalled lease release and still invokes compare-delete exactly once", async () => {
+    vi.useFakeTimers();
+    try {
+      const session = createSession();
+      setDeferredStreamingFinalization(session, {
+        providerId: 1,
+        providerName: "test-provider",
+        providerPriority: 10,
+        attemptNumber: 2,
+        totalProvidersAttempted: 2,
+        isFirstAttempt: false,
+        isFailoverSuccess: false,
+        endpointId: 42,
+        endpointUrl: "https://api.test.com",
+        upstreamStatusCode: 200,
+        bindingIntent: "none",
+        requiresCompletionMarker: false,
+        discoveryLease: {
+          sessionId: "fake-session",
+          keyId: 456,
+          ownerToken: "stalled-release-owner",
+          ttlSeconds: 30,
+        },
+      });
+      vi.mocked(SessionManager.releaseSessionDiscoveryLease).mockImplementationOnce(
+        () => new Promise(() => undefined)
+      );
+
+      const clientResponse = await ProxyResponseHandler.dispatch(
+        session,
+        createSuccessStreamResponseWithCompletion()
+      );
+      await clientResponse.text();
+      const drainPromise = drainAsyncTasks();
+      await vi.advanceTimersByTimeAsync(5_000);
+      await drainPromise;
+
+      expect(SessionManager.releaseSessionDiscoveryLease).toHaveBeenCalledOnce();
+      expect(SessionManager.releaseSessionDiscoveryLease).toHaveBeenCalledWith(
+        "fake-session",
+        456,
+        "stalled-release-owner"
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("fails closed when the captured Discovery generation has expired", async () => {
+    const session = createSession();
+    const snapshot = {
+      sessionId: "fake-session",
+      keyId: 456,
+      providerId: null,
+      generation: "expired-generation",
+    } as const;
+    setDeferredStreamingFinalization(session, {
+      providerId: 1,
+      providerName: "test-provider",
+      providerPriority: 10,
+      attemptNumber: 1,
+      totalProvidersAttempted: 2,
+      isFirstAttempt: false,
+      isFailoverSuccess: true,
+      endpointId: 42,
+      endpointUrl: "https://api.test.com",
+      upstreamStatusCode: 200,
+      bindingIntent: "create",
+      bindingSnapshot: snapshot,
+      requiresCompletionMarker: true,
+      providerSessionRefOwned: true,
+    });
+    session.recordProviderSessionRef(1);
+    vi.mocked(SessionManager.compareAndSetSessionProvider).mockResolvedValueOnce({
+      status: "conflict",
+      reason: "canonical_missing",
+      legacyFallbackAllowed: false,
+    });
+
+    const clientResponse = await ProxyResponseHandler.dispatch(
+      session,
+      createSuccessStreamResponseWithCompletion()
+    );
+    await clientResponse.text();
+    await drainAsyncTasks();
+
+    expect(SessionManager.getSessionBindingSnapshot).not.toHaveBeenCalled();
+    expect(SessionManager.compareAndSetSessionProvider).toHaveBeenCalledOnce();
+    expect(SessionManager.compareAndSetSessionProvider).toHaveBeenCalledWith(snapshot, 1);
+    expect(RateLimitService.releaseProviderSession).toHaveBeenCalledWith(1, "fake-session");
+  });
+
   it("keeps the captured legacy Hedge winner binding alive throughout a long stream", async () => {
     vi.useFakeTimers();
     try {
@@ -740,8 +1580,6 @@ describe("Endpoint circuit breaker isolation", () => {
     const session = createSession();
     setDeferredMeta(session, 42, {
       isHedgeWinner: true,
-      // The first-byte write read G0, but a concurrent request established
-      // Provider 1 at G1 before its CAS. No authority over G1 was acquired.
       hedgeBindingAuthorityPromise: Promise.resolve({
         snapshot: null,
         legacyClearAllowed: false,
@@ -823,8 +1661,6 @@ describe("Endpoint circuit breaker isolation", () => {
       await bodyPromise;
       await drainAsyncTasks();
 
-      // Completion must not retry after an administrator or concurrent request
-      // advances the generation.
       expect(SessionManager.touchVersionedSessionBinding).toHaveBeenCalledTimes(2);
       expect(SessionManager.updateSessionBindingSmart).not.toHaveBeenCalled();
     } finally {
