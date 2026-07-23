@@ -21,6 +21,7 @@ import type { AllowedModelRuleInput, ProviderModelRedirectRule, ProviderType } f
 import type { FilterOperation } from "@/lib/request-filter-types";
 import type { IpExtractionConfig } from "@/types/ip-extraction";
 import type { AuditCategory } from "@/types/audit-log";
+import type { RoutingTraceV1 } from "@/types/routing-trace";
 
 // Enums
 export const dailyResetModeEnum = pgEnum('daily_reset_mode', ['fixed', 'rolling']);
@@ -557,6 +558,9 @@ export const messageRequest = pgTable('message_request', {
   // 上游决策链（记录尝试的供应商列表）
   providerChain: jsonb('provider_chain').$type<Array<{ id: number; name: string }>>(),
 
+  // 请求路由轨迹（Discovery/legacy 模式、轮次、并发尝试与终态摘要）
+  routingTrace: jsonb('routing_trace').$type<RoutingTraceV1>(),
+
   // HTTP 状态码
   statusCode: integer('status_code'),
 
@@ -849,6 +853,15 @@ export const systemSettings = pgTable('system_settings', {
   //       异步累加进该请求的 cost_usd 总额（与上游对多个供应商分别计费保持一致）
   // 关闭：竞速输家直接取消连接，不计费（旧行为）
   billHedgeLosers: boolean('bill_hedge_losers').notNull().default(true),
+
+  // Bounded streaming Discovery (disabled by default until explicitly enabled).
+  discoveryEnabled: boolean('discovery_enabled').notNull().default(false),
+  discoveryConcurrency: integer('discovery_concurrency').notNull().default(2),
+  maxDiscoveryRounds: integer('max_discovery_rounds').notNull().default(2),
+  discoverySlaMs: integer('discovery_sla_ms').notNull().default(10000),
+  stickySlaMs: integer('sticky_sla_ms').notNull().default(20000),
+  racingTotalTimeoutMs: integer('racing_total_timeout_ms').notNull().default(60000),
+  stickyTimeoutCooldownMs: integer('sticky_timeout_cooldown_ms').notNull().default(300000),
 
   // 系统时区配置 (IANA timezone identifier)
   // 用于统一后端时间边界计算和前端日期/时间显示

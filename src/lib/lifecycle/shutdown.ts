@@ -100,9 +100,20 @@ export async function runApplicationCleanup(
       (async () => {
         const { stopCacheCleanup } = await import("@/lib/cache/session-cache");
         stopCacheCleanup();
+        const stopRoutingTraceOutboxReplayScheduler = (
+          globalThis as typeof globalThis & {
+            __CCH_STOP_ROUTING_TRACE_OUTBOX__?: (options?: {
+              wait?: boolean;
+              maxWaitMs?: number;
+            }) => Promise<void>;
+          }
+        ).__CCH_STOP_ROUTING_TRACE_OUTBOX__;
+        // Stop future ticks immediately, but do not let a slow metadata replay
+        // block async-task and message-writer quiescence below.
+        await stopRoutingTraceOutboxReplayScheduler?.({ wait: false });
       })(),
       stepMs,
-      "stopCacheCleanup"
+      "stopLocalSchedulers"
     );
 
     // 2. 端点探测调度器
@@ -198,6 +209,25 @@ export async function runApplicationCleanup(
       clearTimeout(writerWarningTimer);
       writerQuiescencePending = false;
     }
+
+    // The writer has now settled. Give the already-running outbox cycle a
+    // bounded chance to finish while DB/Redis are still open; a retained Hash
+    // entry is the recovery path if the cycle is still blocked.
+    await awaitQuiescenceBestEffort(
+      (async () => {
+        const stopRoutingTraceOutboxReplayScheduler = (
+          globalThis as typeof globalThis & {
+            __CCH_STOP_ROUTING_TRACE_OUTBOX__?: (options?: {
+              wait?: boolean;
+              maxWaitMs?: number;
+            }) => Promise<void>;
+          }
+        ).__CCH_STOP_ROUTING_TRACE_OUTBOX__;
+        await stopRoutingTraceOutboxReplayScheduler?.({ wait: true, maxWaitMs: stepMs });
+      })(),
+      stepMs,
+      "stopRoutingTraceOutboxReplay"
+    );
 
     // 8. writer flush 完成后再关闭数据库 pool。pool close 也是 critical barrier，
     //    单步 deadline 只能告警，不能让底层 client.end() 脱离 shutdown 生命周期。

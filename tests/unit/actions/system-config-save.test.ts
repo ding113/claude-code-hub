@@ -152,6 +152,33 @@ describe("saveSystemSettings", () => {
     );
   });
 
+  it("returns a structured error code for invalid Discovery field ranges", async () => {
+    const result = await saveSystemSettings({ discoveryConcurrency: 33 });
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: "Discovery settings validation failed.",
+      errorCode: "DISCOVERY_SETTINGS_INVALID",
+    });
+    expect(updateSystemSettingsMock).not.toHaveBeenCalled();
+  });
+
+  it("preserves the structured Discovery window error code from schema validation", async () => {
+    const result = await saveSystemSettings({
+      discoverySlaMs: 10_000,
+      stickySlaMs: 20_000,
+      maxDiscoveryRounds: 2,
+      racingTotalTimeoutMs: 30_000,
+    });
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: "Discovery settings validation failed.",
+      errorCode: "DISCOVERY_WINDOW_INVALID",
+    });
+    expect(updateSystemSettingsMock).not.toHaveBeenCalled();
+  });
+
   it("should invalidate system settings cache after successful save", async () => {
     await saveSystemSettings({ siteTitle: "New Title" });
 

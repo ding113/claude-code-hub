@@ -1,6 +1,11 @@
 import type { Context } from "hono";
 import { logger } from "@/lib/logger";
-import { writeLiveChain } from "@/lib/redis/live-chain-store";
+import {
+  deleteLiveChain,
+  writeLiveChain,
+  writeLiveRoutingTrace,
+} from "@/lib/redis/live-chain-store";
+import type { SessionBindingSnapshot } from "@/lib/redis/session-binding";
 import { clientRequestsContext1m as clientRequestsContext1mHelper } from "@/lib/special-attributes";
 import {
   type ResolvedPricing,
@@ -13,6 +18,16 @@ import type { Key } from "@/types/key";
 import type { ProviderChainItem } from "@/types/message";
 import type { ModelPriceData } from "@/types/model-price";
 import type { Provider, ProviderType } from "@/types/provider";
+import {
+  ROUTING_TRACE_MAX_EVENTS,
+  ROUTING_TRACE_VERSION,
+  type RoutingTraceConfigV1,
+  type RoutingTraceEventV1,
+  type RoutingTraceMode,
+  type RoutingTraceRequestOutcome,
+  type RoutingTraceSummaryV1,
+  type RoutingTraceV1,
+} from "@/types/routing-trace";
 import type { SpecialSetting } from "@/types/special-settings";
 import type { BillingModelSource, CodexPriorityBillingSource } from "@/types/system-config";
 import type { User } from "@/types/user";
@@ -120,6 +135,11 @@ export class ProxySession {
   // Session ID（用于会话粘性和并发限流）
   sessionId: string | null;
 
+  // Discovery lease conflicts must stay on a single upstream and must not
+  // mutate a binding owned by the in-flight discovery request.
+  private streamingHedgeDisabled = false;
+  private sessionBindingAllowed = true;
+
   // 客户端 IP（由 ProxyAuthenticator 按系统设置的 ip_extraction_config 解析后写入）
   clientIp: string | null = null;
 
@@ -147,6 +167,17 @@ export class ProxySession {
 
   // 上游决策链（记录尝试的供应商列表）
   private providerChain: ProviderChainItem[];
+
+  // Request-level routing observability. Discovery attempts live here rather
+  // than providerChain because providerChain is also a billing/retry contract.
+  private routingTrace: RoutingTraceV1 | null = null;
+  private routingTraceSummaryDraft: RoutingTraceSummaryV1 | null = null;
+  private liveChainDirty = false;
+  private liveRoutingTraceDirty = false;
+  private liveObservabilityFlushPromise: Promise<void> | null = null;
+  private liveObservabilityClosePromise: Promise<void> | null = null;
+  private liveObservabilityClosed = false;
+  private routingTraceTerminalLogged = false;
 
   // 上次选择的决策上下文（用于记录到 providerChain）
   private _lastSelectionContext?: ProviderChainItem["decisionContext"];
@@ -202,9 +233,15 @@ export class ProxySession {
    */
   private providersSnapshot: Provider[] | null = null;
 
-  // 本请求已通过 Provider 并发检查获得的引用。
-  // 失败切换 provider 时只能释放这里记录过的引用，避免 hedge/fallback 释放未 acquire 的 Redis 计数。
-  private providerSessionRefs = new Set<number>();
+  // 本请求已通过 Provider 并发检查获得的引用。tracked=true 表示这次
+  // acquire 同时创建了 Provider Session 基线；Sticky CAS 成功时只有
+  // 该引用可以保留，已有基线上的普通 attempt 引用必须在终态释放。
+  private providerSessionRefs = new Map<number, Array<{ retainOnSuccess: boolean }>>();
+
+  // Snapshot captured during provider selection. Discovery reuses this exact
+  // generation for timeout cleanup/finalization instead of performing a
+  // second read that could race with another request's binding update.
+  private sessionBindingSnapshot: SessionBindingSnapshot | null = null;
 
   private constructor(init: {
     startTime: number;
@@ -349,23 +386,56 @@ export class ProxySession {
     }
   }
 
-  recordProviderSessionRef(providerId: number): void {
+  setSessionBindingSnapshot(snapshot: SessionBindingSnapshot | null): void {
+    this.sessionBindingSnapshot = snapshot;
+  }
+
+  getSessionBindingSnapshot(): SessionBindingSnapshot | null {
+    return this.sessionBindingSnapshot;
+  }
+
+  recordProviderSessionRef(providerId: number, options: { retainOnSuccess?: boolean } = {}): void {
     if (!this.providerSessionRefs) {
-      this.providerSessionRefs = new Set<number>();
+      this.providerSessionRefs = new Map<number, Array<{ retainOnSuccess: boolean }>>();
     }
 
     if (Number.isInteger(providerId) && providerId > 0) {
-      this.providerSessionRefs.add(providerId);
+      const refs = this.providerSessionRefs.get(providerId) ?? [];
+      refs.push({ retainOnSuccess: options.retainOnSuccess === true });
+      this.providerSessionRefs.set(providerId, refs);
     }
   }
 
   consumeProviderSessionRef(providerId: number): boolean {
-    if (!this.providerSessionRefs?.has(providerId)) {
-      return false;
-    }
-
-    this.providerSessionRefs.delete(providerId);
+    const refs = this.providerSessionRefs?.get(providerId);
+    if (!refs || refs.length === 0) return false;
+    refs.shift();
+    if (refs.length === 0) this.providerSessionRefs.delete(providerId);
     return true;
+  }
+
+  hasProviderSessionRef(providerId: number): boolean {
+    return (this.providerSessionRefs?.get(providerId)?.length ?? 0) > 0;
+  }
+
+  shouldRetainProviderSessionRefOnSuccess(providerId: number): boolean {
+    return this.providerSessionRefs?.get(providerId)?.[0]?.retainOnSuccess === true;
+  }
+
+  disableStreamingHedge(): void {
+    this.streamingHedgeDisabled = true;
+  }
+
+  isStreamingHedgeDisabled(): boolean {
+    return this.streamingHedgeDisabled === true;
+  }
+
+  setSessionBindingAllowed(allowed: boolean): void {
+    this.sessionBindingAllowed = allowed;
+  }
+
+  isSessionBindingAllowed(): boolean {
+    return this.sessionBindingAllowed !== false;
   }
 
   setCacheTtlResolved(ttl: CacheTtlResolved | null): void {
@@ -684,7 +754,239 @@ export class ProxySession {
   private persistLiveChain(): void {
     if (!this.sessionId || this.requestSequence == null) return;
     if (!this.shouldTrackSessionObservability()) return;
-    void writeLiveChain(this.sessionId, this.requestSequence, this.providerChain);
+    if (this.liveObservabilityClosed) return;
+    this.liveChainDirty = true;
+    this.scheduleLiveObservabilityFlush();
+  }
+
+  private scheduleLiveObservabilityFlush(): void {
+    if (this.liveObservabilityClosed || this.liveObservabilityFlushPromise) return;
+    const flush = Promise.resolve().then(() => this.flushLiveObservability());
+    this.liveObservabilityFlushPromise = flush.finally(() => {
+      this.liveObservabilityFlushPromise = null;
+      if (!this.liveObservabilityClosed && (this.liveChainDirty || this.liveRoutingTraceDirty)) {
+        this.scheduleLiveObservabilityFlush();
+      }
+    });
+  }
+
+  private async flushLiveObservability(): Promise<void> {
+    while (this.liveChainDirty || this.liveRoutingTraceDirty) {
+      const writeChain = this.liveChainDirty;
+      const writeRoutingTrace = this.liveRoutingTraceDirty && this.routingTrace !== null;
+      this.liveChainDirty = false;
+      this.liveRoutingTraceDirty = false;
+
+      const chain = writeChain ? structuredClone(this.providerChain) : null;
+      const routingTrace = writeRoutingTrace ? structuredClone(this.routingTrace) : null;
+      const writes: Promise<void>[] = [];
+      if (chain) {
+        writes.push(
+          writeLiveChain(this.sessionId as string, this.requestSequence as number, chain)
+        );
+      }
+      if (routingTrace) {
+        writes.push(
+          writeLiveRoutingTrace(
+            this.sessionId as string,
+            this.requestSequence as number,
+            routingTrace
+          )
+        );
+      }
+
+      const results = await Promise.allSettled(writes);
+      for (const result of results) {
+        if (result.status === "rejected") {
+          logger.debug("[ProxySession] Failed to persist live routing observability", {
+            error: result.reason,
+          });
+        }
+      }
+    }
+  }
+
+  private persistLiveRoutingTrace(): void {
+    if (!this.sessionId || this.requestSequence == null || !this.routingTrace) return;
+    if (!this.shouldTrackSessionObservability()) return;
+    if (this.liveObservabilityClosed) return;
+    this.liveRoutingTraceDirty = true;
+    this.scheduleLiveObservabilityFlush();
+  }
+
+  private advanceRoutingTraceRevision(observedAt: number): void {
+    if (!this.routingTrace) return;
+    this.routingTrace.updatedAt = Math.max(observedAt, this.routingTrace.updatedAt + 1);
+  }
+
+  initializeRoutingTrace(options: {
+    mode: RoutingTraceMode;
+    discoveryEnabled: boolean;
+    eligible: boolean;
+    bypassReason?: string;
+    config?: RoutingTraceConfigV1;
+    startedAt?: number;
+  }): void {
+    const now = Date.now();
+    this.routingTrace = {
+      version: ROUTING_TRACE_VERSION,
+      mode: options.mode,
+      startedAt: options.startedAt ?? this.startTime,
+      updatedAt: now,
+      discoveryEnabled: options.discoveryEnabled,
+      eligible: options.eligible,
+      ...(options.bypassReason ? { bypassReason: options.bypassReason } : {}),
+      ...(options.config ? { config: structuredClone(options.config) } : {}),
+      events: [
+        {
+          type: "request_started",
+          at: now,
+          elapsedMs: Math.max(0, now - (options.startedAt ?? this.startTime)),
+          reason: options.bypassReason,
+        },
+      ],
+    };
+    this.persistLiveRoutingTrace();
+  }
+
+  appendRoutingTraceEvent(
+    event: Omit<RoutingTraceEventV1, "at" | "elapsedMs"> &
+      Partial<Pick<RoutingTraceEventV1, "at" | "elapsedMs">>
+  ): void {
+    if (!this.routingTrace) return;
+    const at = event.at ?? Date.now();
+    const normalized: RoutingTraceEventV1 = {
+      ...event,
+      at,
+      elapsedMs: event.elapsedMs ?? Math.max(0, at - this.routingTrace.startedAt),
+    };
+    let changed = false;
+    if (this.routingTrace.events.length < ROUTING_TRACE_MAX_EVENTS) {
+      this.routingTrace.events.push(normalized);
+      changed = true;
+    } else {
+      if (this.routingTrace.truncated !== true) {
+        this.routingTrace.truncated = true;
+        changed = true;
+      }
+      if (
+        normalized.type === "winner_committed" ||
+        normalized.type === "binding_finalized" ||
+        normalized.type === "request_finished"
+      ) {
+        const replaceIndex = this.routingTrace.events.findIndex(
+          (existing) =>
+            existing.type !== "winner_committed" &&
+            existing.type !== "binding_finalized" &&
+            existing.type !== "request_finished"
+        );
+        if (replaceIndex >= 0) this.routingTrace.events.splice(replaceIndex, 1);
+        else this.routingTrace.events.shift();
+        this.routingTrace.events.push(normalized);
+        changed = true;
+      }
+    }
+    if (!changed) return;
+    this.advanceRoutingTraceRevision(at);
+    this.persistLiveRoutingTrace();
+  }
+
+  setRoutingTraceSummary(summary: RoutingTraceSummaryV1): void {
+    if (!this.routingTrace) return;
+    // A first-byte winner is not a terminal success. Keep aggregate counters
+    // request-local until ResponseHandler completes stream validation.
+    this.routingTraceSummaryDraft = structuredClone(summary);
+  }
+
+  finalizeRoutingTrace(
+    statusCode: number,
+    outcome?: RoutingTraceRequestOutcome
+  ): RoutingTraceV1 | null {
+    if (!this.routingTrace) return null;
+    const resolvedOutcome =
+      outcome ??
+      (statusCode === 499
+        ? "client_abort"
+        : this.routingTraceSummaryDraft?.outcome === "deadline" ||
+            this.routingTrace.summary?.outcome === "deadline"
+          ? "deadline"
+          : statusCode >= 200 && statusCode < 400
+            ? "success"
+            : "failed");
+    const now = Date.now();
+    const summaryBase = this.routingTraceSummaryDraft ?? this.routingTrace.summary;
+    if (summaryBase) {
+      this.routingTrace.summary = {
+        ...summaryBase,
+        outcome: resolvedOutcome,
+        statusCode,
+        durationMs: Math.max(0, now - this.routingTrace.startedAt),
+        ttfbMs: this.ttfbMs,
+      };
+    }
+    const terminalEvent = this.routingTrace.events.find(
+      (event) => event.type === "request_finished"
+    );
+    if (!terminalEvent) {
+      this.appendRoutingTraceEvent({
+        type: "request_finished",
+        outcome: resolvedOutcome,
+        statusCode,
+      });
+    } else {
+      terminalEvent.at = now;
+      terminalEvent.elapsedMs = Math.max(0, now - this.routingTrace.startedAt);
+      terminalEvent.outcome = resolvedOutcome;
+      terminalEvent.statusCode = statusCode;
+      this.advanceRoutingTraceRevision(now);
+      this.persistLiveRoutingTrace();
+    }
+    return this.getRoutingTrace();
+  }
+
+  getRoutingTrace(): RoutingTraceV1 | null {
+    return this.routingTrace ? structuredClone(this.routingTrace) : null;
+  }
+
+  private logRoutingTraceTerminalSummary(): void {
+    const summary = this.routingTrace?.summary;
+    if (this.routingTraceTerminalLogged || this.routingTrace?.mode !== "discovery" || !summary) {
+      return;
+    }
+    this.routingTraceTerminalLogged = true;
+    logger.info("[DiscoveryMetric] Request aggregate", {
+      event: "request_finished",
+      requestId: this.messageContext?.id ?? null,
+      sessionId: this.sessionId,
+      keyId: this.authState?.key?.id ?? this.messageContext?.key?.id ?? null,
+      outcome: summary.outcome,
+      statusCode: summary.statusCode,
+      winnerOrigin: summary.winnerOrigin,
+      winnerProviderId: summary.winnerProviderId,
+      winnerRound: summary.winnerRound,
+      elapsedMs: summary.durationMs,
+      ttfbMs: summary.ttfbMs,
+      attemptsPerRequest: summary.attemptsPerRequest,
+      maxActiveAttempts: summary.maxActiveAttempts,
+      rounds: summary.rounds,
+      providerMs: summary.providerMs,
+      fallbackPromotions: summary.fallbackPromotions,
+      cancelFailures: summary.cancelFailures,
+    });
+  }
+
+  async closeLiveObservability(): Promise<void> {
+    if (this.liveObservabilityClosePromise) return this.liveObservabilityClosePromise;
+    this.scheduleLiveObservabilityFlush();
+    this.liveObservabilityClosed = true;
+    this.liveObservabilityClosePromise = (async () => {
+      await (this.liveObservabilityFlushPromise ?? Promise.resolve());
+      this.logRoutingTraceTerminalSummary();
+      if (!this.sessionId || this.requestSequence == null) return;
+      if (!this.shouldTrackSessionObservability()) return;
+      await deleteLiveChain(this.sessionId, this.requestSequence);
+    })();
+    return this.liveObservabilityClosePromise;
   }
 
   /**

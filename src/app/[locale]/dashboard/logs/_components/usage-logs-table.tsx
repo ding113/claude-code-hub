@@ -219,6 +219,7 @@ export function UsageLogsTable({
                             <div className="w-full">
                               <ProviderChainPopover
                                 chain={log.providerChain ?? []}
+                                routingTrace={log.routingTrace}
                                 finalProvider={
                                   getFinalProviderName(log.providerChain ?? []) ||
                                   log.providerName ||
@@ -262,7 +263,11 @@ export function UsageLogsTable({
                               )}
                           </div>
                           {/* 显示供应商倍率 Badge（不为 1.0 时） */}
-                          {shouldShowCostBadgeInCell(log.providerChain, multiplier) ? (
+                          {shouldShowCostBadgeInCell(
+                            log.providerChain,
+                            multiplier,
+                            log.routingTrace
+                          ) ? (
                             <Badge
                               variant="outline"
                               className={
@@ -618,6 +623,7 @@ export function UsageLogsTable({
                         statusCode={log.statusCode}
                         errorMessage={log.errorMessage}
                         providerChain={log.providerChain}
+                        routingTrace={log.routingTrace}
                         sessionId={log.sessionId}
                         requestSequence={log.requestSequence}
                         blockedBy={log.blockedBy}

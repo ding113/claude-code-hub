@@ -9,10 +9,11 @@ import { getEnvConfig } from "@/lib/config/env.schema";
 import { getCachedSystemSettings } from "@/lib/config/system-settings-cache";
 import { emitProxyLangfuseTrace } from "@/lib/langfuse/emit-proxy-trace";
 import { logger } from "@/lib/logger";
+import { recordDiscoveryControlEvent } from "@/lib/observability/discovery-metrics";
 import { requestCloudPriceTableSync } from "@/lib/price-sync/cloud-price-updater";
 import { ProxyStatusTracker } from "@/lib/proxy-status-tracker";
 import { RateLimitService } from "@/lib/rate-limit";
-import { deleteLiveChain } from "@/lib/redis/live-chain-store";
+import type { SessionBindingSnapshot } from "@/lib/redis/session-binding";
 import { SessionManager } from "@/lib/session-manager";
 import { SessionTracker } from "@/lib/session-tracker";
 import { CODEX_1M_CONTEXT_TOKEN_THRESHOLD } from "@/lib/special-attributes";
@@ -40,6 +41,7 @@ import {
   updateMessageRequestCostWithBreakdown,
   updateMessageRequestDetailsDurably,
   updateMessageRequestDetailsIfUnfinalized,
+  updateMessageRequestRoutingTrace,
   updateMessageRequestWinnerCost,
 } from "@/repository/message";
 import type { HedgeLoserBilling, StoredCostBreakdown } from "@/types/cost-breakdown";
@@ -48,16 +50,19 @@ import type { SessionUsageUpdate } from "@/types/session";
 import type { LongContextPricingSpecialSetting } from "@/types/special-settings";
 import { GeminiAdapter } from "../gemini/adapter";
 import type { GeminiResponse } from "../gemini/types";
-import { extractActualResponseModelForProvider } from "./actual-response-model";
+import { extractActualResponseModelForProvider, extractJsonChunks } from "./actual-response-model";
 import { bindClientAbortListener } from "./client-abort-listener";
 import {
   createDemandDrivenResponsePump,
   type DemandDrivenResponsePump,
 } from "./demand-driven-response-pump";
+import { isDiscoveryProtocolErrorPayload } from "./discovery-validity";
 import { isClientAbortError, isTransportError } from "./errors";
 import type { ProxySession } from "./session";
 import {
   consumeDeferredStreamingFinalization,
+  type DeferredStreamingBindingHeartbeat,
+  type DeferredStreamingFinalization,
   peekDeferredStreamingFinalization,
 } from "./stream-finalization";
 
@@ -95,7 +100,298 @@ function resolveStreamTaskStaleTimeoutMs(): number {
 
 const STREAM_FINALIZATION_MAX_MS = 120_000;
 const STREAM_FAILURE_PERSISTENCE_MAX_MS = 5_000;
+const DISCOVERY_LEASE_RELEASE_MAX_MS = 5_000;
 const NON_STREAM_TERMINAL_PERSISTENCE_ERROR = Symbol("non_stream_terminal_persistence_error");
+
+type DiscoveryLeaseLifecycle = {
+  active: boolean;
+  ensureOwned: () => Promise<boolean>;
+  release: () => Promise<void>;
+};
+
+function isSessionBindingMutationAllowed(session: ProxySession): boolean {
+  const checker = (session as ProxySession & { isSessionBindingAllowed?: () => boolean })
+    .isSessionBindingAllowed;
+  return checker?.call(session) !== false;
+}
+
+function startDiscoveryLeaseLifecycle(session: ProxySession): DiscoveryLeaseLifecycle {
+  const deferred = peekDeferredStreamingFinalization(session);
+  const lease = deferred?.discoveryLease;
+  if (!lease) {
+    return {
+      active: false,
+      ensureOwned: async () => true,
+      release: async () => undefined,
+    };
+  }
+
+  let renewalTimer: ReturnType<typeof setInterval> | null = null;
+  let renewalInFlight: Promise<boolean> | null = null;
+  let releasePromise: Promise<void> | null = null;
+  let ownershipState: "unknown" | "owned" | "lost" = "unknown";
+  const bindingSnapshot =
+    (deferred?.bindingIntent === "create" || deferred?.bindingIntent === "renew") &&
+    deferred.bindingSnapshot?.sessionId === lease.sessionId &&
+    deferred.bindingSnapshot.keyId === lease.keyId
+      ? deferred.bindingSnapshot
+      : null;
+
+  const stopRenewal = () => {
+    if (renewalTimer) {
+      clearInterval(renewalTimer);
+      renewalTimer = null;
+    }
+  };
+
+  const renew = (): Promise<boolean> => {
+    if (releasePromise || ownershipState === "lost") return Promise.resolve(false);
+    if (renewalInFlight) return renewalInFlight;
+
+    const operation = (async () => {
+      const result = await SessionManager.renewSessionDiscoveryLease(
+        lease.sessionId,
+        lease.keyId,
+        lease.ownerToken,
+        lease.ttlSeconds
+      );
+      if (result.status !== "renewed") {
+        ownershipState = "lost";
+        stopRenewal();
+        logger.warn("[ResponseHandler] Discovery lease renewal stopped", {
+          sessionId: lease.sessionId,
+          keyId: lease.keyId,
+          status: result.status,
+          reason: "reason" in result ? result.reason : undefined,
+        });
+        return false;
+      }
+
+      if (bindingSnapshot) {
+        const touched = await SessionManager.touchVersionedSessionBinding(bindingSnapshot);
+        if (
+          touched.status !== "ok" ||
+          touched.snapshot.generation !== bindingSnapshot.generation ||
+          touched.snapshot.providerId !== bindingSnapshot.providerId
+        ) {
+          ownershipState = "lost";
+          stopRenewal();
+          logger.warn("[ResponseHandler] Discovery binding heartbeat stopped", {
+            sessionId: lease.sessionId,
+            keyId: lease.keyId,
+            status: touched.status,
+            reason: "reason" in touched ? touched.reason : "snapshot_mismatch",
+          });
+          return false;
+        }
+      }
+      ownershipState = "owned";
+      return true;
+    })()
+      .catch((error) => {
+        ownershipState = "lost";
+        stopRenewal();
+        logger.warn("[ResponseHandler] Discovery lease renewal failed", {
+          sessionId: lease.sessionId,
+          keyId: lease.keyId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        return false;
+      })
+      .finally(() => {
+        if (renewalInFlight === operation) renewalInFlight = null;
+      });
+    renewalInFlight = operation;
+    return operation;
+  };
+
+  // Ownership transfers from the Forwarder to the finalizer without delaying
+  // the downstream response. Renew immediately so an expired/lost token is
+  // observed before any terminal Session binding mutation is attempted.
+  const handoffRenewal = renew();
+  const leaseRenewalIntervalMs = Math.floor((lease.ttlSeconds * 1000) / 3);
+  const bindingRefreshIntervalMs = bindingSnapshot
+    ? SessionManager.getVersionedSessionBindingRefreshIntervalMs()
+    : Number.POSITIVE_INFINITY;
+  const renewalIntervalMs = Math.max(
+    250,
+    Math.min(leaseRenewalIntervalMs, bindingRefreshIntervalMs)
+  );
+  renewalTimer = setInterval(() => {
+    void renew();
+  }, renewalIntervalMs);
+  renewalTimer.unref?.();
+
+  return {
+    active: true,
+    ensureOwned: async () => {
+      if (!(await handoffRenewal) || releasePromise || ownershipState !== "owned") return false;
+      // Revalidate with the owner token at the mutation boundary. This runs in
+      // post-terminal side effects, so it cannot add latency to downstream TTFB.
+      return renew();
+    },
+    release: () => {
+      if (releasePromise) return releasePromise;
+      stopRenewal();
+      releasePromise = (async () => {
+        try {
+          const result = await raceWithTimeout(
+            SessionManager.releaseSessionDiscoveryLease(
+              lease.sessionId,
+              lease.keyId,
+              lease.ownerToken
+            ),
+            DISCOVERY_LEASE_RELEASE_MAX_MS,
+            "discovery_lease_release_timeout"
+          );
+          if (result.status !== "released") {
+            logger.debug("[ResponseHandler] Discovery lease release skipped", {
+              sessionId: lease.sessionId,
+              keyId: lease.keyId,
+              status: result.status,
+              reason: "reason" in result ? result.reason : undefined,
+            });
+          }
+        } catch (error) {
+          logger.warn("[ResponseHandler] Discovery lease release failed", {
+            sessionId: lease.sessionId,
+            keyId: lease.keyId,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      })();
+      return releasePromise;
+    },
+  };
+}
+
+async function releaseOwnedProviderSessionRef(
+  session: ProxySession,
+  meta: DeferredStreamingFinalization | null,
+  retainAsBaseline: boolean
+): Promise<void> {
+  if (retainAsBaseline || meta?.providerSessionRefOwned !== true || !session.sessionId) return;
+  if (!session.consumeProviderSessionRef(meta.providerId)) return;
+
+  try {
+    await RateLimitService.releaseProviderSession(meta.providerId, session.sessionId);
+  } catch (error) {
+    logger.warn("[ResponseHandler] Failed to release Discovery Provider session reference", {
+      sessionId: session.sessionId,
+      providerId: meta.providerId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
+async function finalizeNonStreamDiscoveryResources(
+  session: ProxySession,
+  lifecycle: DiscoveryLeaseLifecycle
+): Promise<void> {
+  const deferred = peekDeferredStreamingFinalization(session);
+  if (!deferred?.discoveryLease) return;
+
+  // Non-SSE responses do not run the protocol completion finalizer, so they
+  // cannot safely create or renew Sticky. Consume the metadata and release
+  // both request-scoped resources after body processing instead of waiting
+  // for the Redis lease TTL.
+  const meta = consumeDeferredStreamingFinalization(session);
+  try {
+    await releaseOwnedProviderSessionRef(session, meta, false);
+  } finally {
+    await lifecycle.release();
+  }
+}
+
+function startHedgeBindingHeartbeat(session: ProxySession): void {
+  const deferred = peekDeferredStreamingFinalization(session);
+  const authorityPromise = deferred?.hedgeBindingAuthorityPromise;
+  if (!deferred?.isHedgeWinner || !authorityPromise || deferred.hedgeBindingHeartbeat) return;
+
+  let periodicActive = true;
+  let authorityLost = false;
+  let timer: ReturnType<typeof setInterval> | null = null;
+  let touchInFlight: Promise<boolean> | null = null;
+  let completionPromise: Promise<void> | null = null;
+
+  const stopPeriodic = () => {
+    periodicActive = false;
+    if (timer) {
+      clearInterval(timer);
+      timer = null;
+    }
+  };
+
+  const loseAuthority = (status: string, reason?: string) => {
+    if (authorityLost) return;
+    authorityLost = true;
+    stopPeriodic();
+    logger.warn("[ResponseHandler] Hedge binding heartbeat stopped", {
+      sessionId: session.sessionId,
+      status,
+      reason,
+    });
+  };
+
+  const touch = (allowAfterStop = false): Promise<boolean> => {
+    if (authorityLost || (!periodicActive && !allowAfterStop)) return Promise.resolve(false);
+    if (touchInFlight) return touchInFlight;
+
+    const operation = (async () => {
+      const { snapshot } = await authorityPromise;
+      if (!snapshot) {
+        authorityLost = true;
+        stopPeriodic();
+        return false;
+      }
+      if (authorityLost || (!periodicActive && !allowAfterStop)) return false;
+
+      const touched = await SessionManager.touchVersionedSessionBinding(snapshot);
+      if (
+        touched.status !== "ok" ||
+        touched.snapshot.generation !== snapshot.generation ||
+        touched.snapshot.providerId !== snapshot.providerId
+      ) {
+        loseAuthority(touched.status, "reason" in touched ? touched.reason : "snapshot_mismatch");
+        return false;
+      }
+      return true;
+    })()
+      .catch((error) => {
+        loseAuthority("error", error instanceof Error ? error.message : String(error));
+        return false;
+      })
+      .finally(() => {
+        if (touchInFlight === operation) touchInFlight = null;
+      });
+    touchInFlight = operation;
+    return operation;
+  };
+
+  const lifecycle: DeferredStreamingBindingHeartbeat = {
+    stop: stopPeriodic,
+    complete: () => {
+      if (completionPromise) return completionPromise;
+      stopPeriodic();
+      completionPromise = (async () => {
+        if (touchInFlight) await touchInFlight;
+        if (authorityLost) return;
+        await touch(true);
+      })();
+      return completionPromise;
+    },
+  };
+  deferred.hedgeBindingHeartbeat = lifecycle;
+
+  // The first touch validates that ownership really transferred with the
+  // first-byte CAS. Subsequent touches keep streams longer than SESSION_TTL alive.
+  void touch();
+  const intervalMs = Math.max(250, SessionManager.getVersionedSessionBindingRefreshIntervalMs());
+  timer = setInterval(() => {
+    void touch();
+  }, intervalMs);
+  timer.unref?.();
+}
 
 type MessageRequestTerminalDetails = Parameters<typeof updateMessageRequestDetailsDurably>[1];
 type NonStreamTerminalPersistenceError = Error & {
@@ -584,7 +880,9 @@ function bindTaskAbortToUpstreamResponse(
     }
   };
 
-  abortController.signal.addEventListener("abort", abortUpstream, { once: true });
+  abortController.signal.addEventListener("abort", abortUpstream, {
+    once: true,
+  });
   if (abortController.signal.aborted) {
     abortUpstream();
   }
@@ -974,8 +1272,31 @@ function hasPositiveBillableTokens(usage: UsageMetrics | null): boolean {
   return tokens > 0;
 }
 
-const FINISH_REASON_MARKER = /"finish_reason"\s*:\s*"[a-z_]+"/;
-const GEMINI_FINISH_REASON_MARKER = /"finishReason"\s*:\s*"[A-Z_]+"/;
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function hasOpenAIChatCompletionMarker(data: unknown): boolean {
+  if (!isRecord(data) || !Array.isArray(data.choices)) return false;
+  return data.choices.some(
+    (choice) =>
+      isRecord(choice) &&
+      typeof choice.finish_reason === "string" &&
+      choice.finish_reason.trim().length > 0
+  );
+}
+
+function hasGeminiCompletionMarker(data: unknown): boolean {
+  if (!isRecord(data)) return false;
+  const payload = isRecord(data.response) ? data.response : data;
+  if (!Array.isArray(payload.candidates)) return false;
+  return payload.candidates.some(
+    (candidate) =>
+      isRecord(candidate) &&
+      typeof candidate.finishReason === "string" &&
+      candidate.finishReason.trim().length > 0
+  );
+}
 
 /**
  * 判断流式响应文本中是否存在“与格式匹配的终止完成标记”，用以区分
@@ -984,16 +1305,74 @@ const GEMINI_FINISH_REASON_MARKER = /"finishReason"\s*:\s*"[A-Z_]+"/;
  * 仅 usage>0 不足以证明完成：Anthropic 在首个 `message_start` 即带 usage、
  * Gemini 在中间事件即带 usageMetadata，截断流同样会出现正向 token。
  */
-function hasStreamCompletionMarker(text: string): boolean {
-  if (
-    text.includes("response.completed") || // OpenAI Responses / Codex
-    text.includes("message_stop") || // Anthropic Messages
-    text.includes("[DONE]") // OpenAI Chat Completions
-  ) {
-    return true;
+function inspectStreamCompletion(
+  text: string,
+  format: ProxySession["originalFormat"]
+): { hasMarker: boolean; hasProtocolError: boolean } {
+  const events = parseSSEData(text);
+  const payloads: unknown[] = events.map((event) => event.data);
+
+  // Native Gemini passthrough is NDJSON rather than SSE. Reuse the shared
+  // structured stream extractor so a valid finishReason can authorize Sticky.
+  if (format === "gemini" || format === "gemini-cli") {
+    for (const candidate of extractJsonChunks(text)) {
+      try {
+        payloads.push(JSON.parse(candidate) as unknown);
+      } catch {
+        // Malformed or incomplete JSON cannot establish completion.
+      }
+    }
   }
-  // OpenAI chat / Gemini：非空 finish reason 标记最终块。
-  return FINISH_REASON_MARKER.test(text) || GEMINI_FINISH_REASON_MARKER.test(text);
+
+  const hasProtocolError = payloads.some(isDiscoveryProtocolErrorPayload);
+  if (hasProtocolError) return { hasMarker: false, hasProtocolError: true };
+
+  switch (format) {
+    case "response":
+      return {
+        hasMarker: events.some((event) => {
+          if (!isRecord(event.data)) return false;
+          const markerType = event.data.type;
+          if (markerType !== "response.completed" && markerType !== "response.done") return false;
+          if (event.event !== "message" && event.event !== markerType) return false;
+          return markerType === "response.done" || isRecord(event.data.response);
+        }),
+        hasProtocolError: false,
+      };
+    case "claude":
+      return {
+        hasMarker: events.some(
+          (event) =>
+            (event.event === "message_stop" || event.event === "message") &&
+            isRecord(event.data) &&
+            event.data.type === "message_stop"
+        ),
+        hasProtocolError: false,
+      };
+    case "openai":
+      return {
+        hasMarker: events.some(
+          (event) =>
+            event.event === "message" &&
+            ((typeof event.data === "string" && event.data.trim() === "[DONE]") ||
+              hasOpenAIChatCompletionMarker(event.data))
+        ),
+        hasProtocolError: false,
+      };
+    case "gemini":
+    case "gemini-cli":
+      return {
+        hasMarker: payloads.some(hasGeminiCompletionMarker),
+        hasProtocolError: false,
+      };
+  }
+}
+
+export function hasStreamCompletionMarker(
+  text: string,
+  format: ProxySession["originalFormat"]
+): boolean {
+  return inspectStreamCompletion(text, format).hasMarker;
 }
 
 export async function resolveBillableUsageMetricsForCost(
@@ -1117,6 +1496,12 @@ type FinalizeDeferredStreamingResult = {
   };
   /** Circuit and Session side effects, committed after durable terminal details. */
   commitSideEffects?: () => Promise<void>;
+  /** Attempt-scoped ref cleanup; idempotent via ProxySession ownership consumption. */
+  finalizeAttemptResources?: () => Promise<void>;
+  /** Whether terminal helpers may create auxiliary Sticky bindings (for example Codex cache keys). */
+  allowAuxiliarySessionBinding: boolean;
+  /** Discovery auxiliary bindings must wait for, and depend on, the primary generation CAS. */
+  confirmAuxiliarySessionBinding: () => Promise<boolean>;
 };
 
 /**
@@ -1142,18 +1527,251 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
   upstreamStatusCode: number,
   streamEndedNormally: boolean,
   clientAborted: boolean,
+  discoveryLeaseLifecycle: DiscoveryLeaseLifecycle,
   abortReason?: string
 ): FinalizeDeferredStreamingResult {
   const meta = consumeDeferredStreamingFinalization(session);
   const provider = session.provider;
   const providerIdForPersistence = meta?.providerId ?? provider?.id ?? null;
-  const clearSessionBinding = async () => {
-    if (!session.sessionId) return;
-    await SessionManager.clearSessionProvider(session.sessionId, providerIdForPersistence);
+  let bindingTraceRecorded = false;
+  const recordBindingFinalized = async (options: {
+    bindingAction: "create" | "renew" | "clear" | "none";
+    outcome: string;
+    reason?: string;
+  }): Promise<void> => {
+    if (bindingTraceRecorded || !meta?.discoveryLease) return;
+    bindingTraceRecorded = true;
+    session.appendRoutingTraceEvent({
+      type: "binding_finalized",
+      provider:
+        providerIdForPersistence == null
+          ? undefined
+          : {
+              id: providerIdForPersistence,
+              ...(meta.providerName ? { name: meta.providerName } : {}),
+              priority: meta.providerPriority,
+            },
+      bindingAction: options.bindingAction,
+      outcome: options.outcome,
+      ...(options.reason ? { reason: options.reason } : {}),
+    });
+    const routingTrace = session.getRoutingTrace();
+    if (routingTrace && session.messageContext) {
+      await updateMessageRequestRoutingTrace(session.messageContext.id, routingTrace);
+    }
+  };
+  const clearSessionBinding = async (bindingFailureReason?: string) => {
+    if (!session.sessionId || !isSessionBindingMutationAllowed(session)) return;
+    const hedgeAuthority = meta?.isHedgeWinner
+      ? await meta.hedgeBindingAuthorityPromise
+      : undefined;
+    if (hedgeAuthority?.snapshot) {
+      const hedgeSnapshot = hedgeAuthority.snapshot;
+      const cleared = await SessionManager.clearVersionedSessionProvider(
+        hedgeSnapshot,
+        providerIdForPersistence
+      );
+      if (cleared.status !== "ok") {
+        logger.warn("[ResponseHandler] Hedge winner binding clear stopped", {
+          sessionId: hedgeSnapshot.sessionId,
+          providerId: providerIdForPersistence,
+          reason: cleared.reason,
+        });
+      }
+      return;
+    }
+    if (meta?.isHedgeWinner && !hedgeAuthority?.legacyClearAllowed) {
+      return;
+    }
+    const keyId = session.authState?.key?.id ?? session.messageContext?.key?.id ?? null;
+    if (meta?.bindingIntent === "none" || meta?.bindingIntent === "create") {
+      await recordBindingFinalized({
+        bindingAction: "none",
+        outcome: "skipped",
+        reason:
+          meta.bindingIntent === "create"
+            ? (bindingFailureReason ?? "stream_not_successful")
+            : "binding_not_requested",
+      });
+      return;
+    }
+    if (meta?.bindingIntent === "renew") {
+      // A client disconnect is not evidence that the Sticky Provider failed.
+      // Discovery renewals may only clear the exact binding snapshot that was
+      // observed before the request.
+      if (clientAborted) return;
+      if (
+        !meta.bindingSnapshot ||
+        keyId == null ||
+        meta.bindingSnapshot.keyId !== keyId ||
+        meta.bindingSnapshot.sessionId !== session.sessionId ||
+        meta.bindingSnapshot.providerId !== meta.providerId
+      ) {
+        logger.debug("[ResponseHandler] Discovery binding clear skipped", {
+          sessionId: session.sessionId,
+          keyId,
+          expectedProviderId: meta.providerId,
+          reason: "missing_or_mismatched_snapshot",
+        });
+        await recordBindingFinalized({
+          bindingAction: "clear",
+          outcome: "skipped",
+          reason: "missing_or_mismatched_snapshot",
+        });
+        return;
+      }
+      if (!(await discoveryLeaseLifecycle.ensureOwned())) {
+        logger.warn(
+          "[ResponseHandler] Discovery binding clear skipped after lease ownership loss",
+          {
+            sessionId: meta.bindingSnapshot.sessionId,
+            keyId: meta.bindingSnapshot.keyId,
+            expectedProviderId: meta.bindingSnapshot.providerId,
+          }
+        );
+        await recordBindingFinalized({
+          bindingAction: "clear",
+          outcome: "skipped",
+          reason: "discovery_lease_not_owned",
+        });
+        return;
+      }
+      const cleared = await SessionManager.clearVersionedSessionProvider(
+        meta.bindingSnapshot,
+        meta.providerId,
+        0
+      );
+      if (cleared.status !== "ok") {
+        logger.debug("[ResponseHandler] Discovery binding clear skipped", {
+          sessionId: meta.bindingSnapshot.sessionId,
+          keyId: meta.bindingSnapshot.keyId,
+          expectedProviderId: meta.bindingSnapshot.providerId,
+          reason: cleared.reason,
+        });
+      }
+      await recordBindingFinalized({
+        bindingAction: "clear",
+        outcome: cleared.status === "ok" ? "cleared" : "skipped",
+        reason:
+          cleared.status === "ok" ? (bindingFailureReason ?? "stream_failed") : cleared.reason,
+      });
+      return;
+    }
+
+    // Legacy deferred finalization has no explicit binding intent and keeps its
+    // pre-Discovery behavior.
+    await SessionManager.clearSessionProvider(session.sessionId, providerIdForPersistence, keyId);
+  };
+
+  let retainProviderSessionRef = false;
+  const finalizeProviderSessionRef = () =>
+    releaseOwnedProviderSessionRef(session, meta, retainProviderSessionRef);
+
+  const compareAndSetDiscoveryBinding = async (
+    snapshot: SessionBindingSnapshot,
+    providerId: number,
+    keyId: number
+  ) => {
+    if (
+      !snapshot ||
+      snapshot.keyId !== keyId ||
+      (session.sessionId !== null && snapshot.sessionId !== session.sessionId)
+    )
+      return {
+        updated: false,
+        reason: "missing_snapshot",
+        details: "missing_snapshot",
+      };
+
+    if (!(await discoveryLeaseLifecycle.ensureOwned())) {
+      return {
+        updated: false,
+        reason: "discovery_lease_not_owned",
+        details: "lease_lost_or_unavailable",
+      };
+    }
+
+    let cas: Awaited<ReturnType<typeof SessionManager.compareAndSetSessionProvider>>;
+    try {
+      cas = await SessionManager.compareAndSetSessionProvider(snapshot, providerId);
+    } catch (error) {
+      logger.warn("[ResponseHandler] Discovery binding CAS failed", {
+        sessionId: snapshot.sessionId,
+        keyId,
+        providerId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      await recordBindingFinalized({
+        bindingAction: meta?.bindingIntent === "create" ? "create" : "renew",
+        outcome: "failed",
+        reason: "binding_error",
+      });
+      return {
+        updated: false,
+        reason: "binding_error",
+        details: "binding_error",
+      };
+    }
+    if (cas.status === "conflict") {
+      recordDiscoveryControlEvent("binding_cas_conflict", {
+        requestId: session.messageContext?.id ?? null,
+        sessionId: snapshot.sessionId,
+        keyId,
+        providerId,
+        reason: cas.reason,
+      });
+    }
+
+    await recordBindingFinalized({
+      bindingAction: meta?.bindingIntent === "create" ? "create" : "renew",
+      outcome: cas.status === "ok" ? "updated" : "skipped",
+      reason: cas.status === "ok" ? "generation_cas" : cas.reason,
+    });
+
+    return {
+      updated: cas.status === "ok",
+      reason: cas.status === "ok" ? "discovery_generation_cas" : cas.reason,
+      details: cas.status,
+    };
   };
 
   const isHedgeWinner = meta?.isHedgeWinner === true;
   const billHedgeLosers = meta?.billHedgeLosers === true;
+  const hasDiscoveryBindingIntent =
+    meta?.bindingIntent === "create" || meta?.bindingIntent === "renew";
+  const completionInspection = inspectStreamCompletion(allContent, session.originalFormat);
+  const completionMarkerMissingForBinding =
+    meta?.requiresCompletionMarkerForBinding === true &&
+    hasDiscoveryBindingIntent &&
+    streamEndedNormally &&
+    !completionInspection.hasMarker;
+  const allowAuxiliarySessionBinding =
+    isSessionBindingMutationAllowed(session) &&
+    !completionMarkerMissingForBinding &&
+    (meta?.bindingIntent === undefined || (meta.bindingIntent !== "none" && !clientAborted));
+  let resolvePrimaryDiscoveryBinding: ((updated: boolean) => void) | null = null;
+  const primaryDiscoveryBinding = hasDiscoveryBindingIntent
+    ? new Promise<boolean>((resolve) => {
+        resolvePrimaryDiscoveryBinding = resolve;
+      })
+    : Promise.resolve(allowAuxiliarySessionBinding);
+  let primaryDiscoveryBindingSettled = false;
+  const settlePrimaryDiscoveryBinding = (updated: boolean) => {
+    if (primaryDiscoveryBindingSettled) return;
+    primaryDiscoveryBindingSettled = true;
+    resolvePrimaryDiscoveryBinding?.(updated);
+  };
+  const finalizeFailedDiscoveryBinding = async () => {
+    settlePrimaryDiscoveryBinding(false);
+    await recordBindingFinalized({
+      bindingAction: "none",
+      outcome: "skipped",
+      reason: "stream_not_successful",
+    });
+    await finalizeProviderSessionRef();
+  };
+  const confirmAuxiliarySessionBinding = async () =>
+    allowAuxiliarySessionBinding && (await primaryDiscoveryBinding);
 
   // 仅在“上游 HTTP=200 且流自然结束”时做“假 200”检测：
   // - 非 200：HTTP 已经表明失败（无需额外启发式）
@@ -1161,9 +1779,17 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
   //
   // 此处返回 `{isError:false}` 仅表示“跳过检测”，最终仍会在下面按中断/超时视为失败结算。
   const shouldDetectFake200 = streamEndedNormally && upstreamStatusCode === 200;
-  const detected = shouldDetectFake200
+  const bodyDetected = shouldDetectFake200
     ? detectUpstreamErrorFromSseOrJsonText(allContent)
     : ({ isError: false } as const);
+  const detected =
+    shouldDetectFake200 && !bodyDetected.isError && completionInspection.hasProtocolError
+      ? ({
+          isError: true,
+          code: "UPSTREAM_PROTOCOL_ERROR",
+          detail: "Upstream stream emitted a protocol error event",
+        } as const)
+      : bodyDetected;
   let clientAbortGateUsage: FinalizeDeferredStreamingResult["clientAbortGateUsage"];
   const clientAbortCompleteSuccess = (() => {
     if (!clientAborted || upstreamStatusCode < 200 || upstreamStatusCode >= 300) {
@@ -1182,12 +1808,15 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
     // completion marker is present, proving the upstream finished before the
     // client stopped reading. Otherwise keep the pre-PR safe default (499,
     // unbilled).
-    if (!hasStreamCompletionMarker(allContent)) {
+    if (!hasStreamCompletionMarker(allContent, session.originalFormat)) {
       return false;
     }
 
     const { usageMetrics } = parseUsageFromResponseText(allContent, provider?.providerType);
-    clientAbortGateUsage = { usageMetrics, providerType: provider?.providerType };
+    clientAbortGateUsage = {
+      usageMetrics,
+      providerType: provider?.providerType,
+    };
     return hasPositiveBillableTokens(usageMetrics);
   })();
 
@@ -1239,11 +1868,27 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
     ((clientAborted || !streamEndedNormally) && !clientAbortCompleteSuccess) ||
     detected.isError ||
     (upstreamStatusCode >= 400 && errorMessage !== null);
+  if (shouldClearSessionBindingOnFailure) {
+    meta?.hedgeBindingHeartbeat?.stop();
+  }
 
   // 未启用延迟结算 / provider 缺失：
   // - 只返回“内部状态码 + 错误原因”，由调用方写入统计；
   // - 不在这里更新熔断/绑定（meta 缺失意味着 Forwarder 没有启用延迟结算；provider 缺失意味着无法归因）。
   if (!meta || !provider) {
+    meta?.hedgeBindingHeartbeat?.stop();
+    const commitSideEffects =
+      shouldClearSessionBindingOnFailure ||
+      meta?.providerSessionRefOwned === true ||
+      hasDiscoveryBindingIntent
+        ? async () => {
+            try {
+              if (shouldClearSessionBindingOnFailure) await clearSessionBinding();
+            } finally {
+              await finalizeFailedDiscoveryBinding();
+            }
+          }
+        : undefined;
     return {
       effectiveStatusCode,
       errorMessage,
@@ -1251,7 +1896,10 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
       isHedgeWinner,
       billHedgeLosers,
       clientAbortGateUsage,
-      commitSideEffects: shouldClearSessionBindingOnFailure ? clearSessionBinding : undefined,
+      commitSideEffects,
+      finalizeAttemptResources: finalizeProviderSessionRef,
+      allowAuxiliarySessionBinding,
+      confirmAuxiliarySessionBinding,
     };
   }
 
@@ -1295,22 +1943,26 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
     });
 
     const commitSideEffects = async () => {
-      await clearSessionBinding();
+      try {
+        await clearSessionBinding();
 
-      if (!clientAborted && session.getEndpointPolicy().allowCircuitBreakerAccounting) {
-        try {
-          const { recordFailure } = await import("@/lib/circuit-breaker");
-          await recordFailure(meta.providerId, new Error(errorMessage ?? "STREAM_ABORTED"));
-        } catch (cbError) {
-          logger.warn("[ResponseHandler] Failed to record streaming failure in circuit breaker", {
-            providerId: meta.providerId,
-            sessionId: session.sessionId ?? null,
-            error: cbError,
-          });
+        if (!clientAborted && session.getEndpointPolicy().allowCircuitBreakerAccounting) {
+          try {
+            const { recordFailure } = await import("@/lib/circuit-breaker");
+            await recordFailure(meta.providerId, new Error(errorMessage ?? "STREAM_ABORTED"));
+          } catch (cbError) {
+            logger.warn("[ResponseHandler] Failed to record streaming failure in circuit breaker", {
+              providerId: meta.providerId,
+              sessionId: session.sessionId ?? null,
+              error: cbError,
+            });
+          }
+
+          // Stream aborts are key-level errors. The endpoint delivered HTTP 200,
+          // so only the Provider circuit is updated here.
         }
-
-        // Stream aborts are key-level errors. The endpoint delivered HTTP 200,
-        // so only the Provider circuit is updated here.
+      } finally {
+        await finalizeFailedDiscoveryBinding();
       }
     };
 
@@ -1322,6 +1974,9 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
       billHedgeLosers,
       clientAbortGateUsage,
       commitSideEffects,
+      finalizeAttemptResources: finalizeProviderSessionRef,
+      allowAuxiliarySessionBinding,
+      confirmAuxiliarySessionBinding,
     };
   }
 
@@ -1358,23 +2013,27 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
     });
 
     const commitSideEffects = async () => {
-      await clearSessionBinding();
+      try {
+        await clearSessionBinding();
 
-      // 404 is RESOURCE_NOT_FOUND and must not penalize the Provider circuit.
-      if (
-        effectiveStatusCode !== 404 &&
-        session.getEndpointPolicy().allowCircuitBreakerAccounting
-      ) {
-        try {
-          const { recordFailure } = await import("@/lib/circuit-breaker");
-          await recordFailure(meta.providerId, new Error(detected.code));
-        } catch (cbError) {
-          logger.warn("[ResponseHandler] Failed to record fake-200 error in circuit breaker", {
-            providerId: meta.providerId,
-            sessionId: session.sessionId ?? null,
-            error: cbError,
-          });
+        // 404 is RESOURCE_NOT_FOUND and must not penalize the Provider circuit.
+        if (
+          effectiveStatusCode !== 404 &&
+          session.getEndpointPolicy().allowCircuitBreakerAccounting
+        ) {
+          try {
+            const { recordFailure } = await import("@/lib/circuit-breaker");
+            await recordFailure(meta.providerId, new Error(detected.code));
+          } catch (cbError) {
+            logger.warn("[ResponseHandler] Failed to record fake-200 error in circuit breaker", {
+              providerId: meta.providerId,
+              sessionId: session.sessionId ?? null,
+              error: cbError,
+            });
+          }
         }
+      } finally {
+        await finalizeFailedDiscoveryBinding();
       }
     };
 
@@ -1386,6 +2045,9 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
       billHedgeLosers,
       clientAbortGateUsage,
       commitSideEffects,
+      finalizeAttemptResources: finalizeProviderSessionRef,
+      allowAuxiliarySessionBinding,
+      confirmAuxiliarySessionBinding,
     };
   }
 
@@ -1416,22 +2078,26 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
     });
 
     const commitSideEffects = async () => {
-      await clearSessionBinding();
+      try {
+        await clearSessionBinding();
 
-      if (
-        effectiveStatusCode !== 404 &&
-        session.getEndpointPolicy().allowCircuitBreakerAccounting
-      ) {
-        try {
-          const { recordFailure } = await import("@/lib/circuit-breaker");
-          await recordFailure(meta.providerId, new Error(errorMessage));
-        } catch (cbError) {
-          logger.warn("[ResponseHandler] Failed to record non-200 error in circuit breaker", {
-            providerId: meta.providerId,
-            sessionId: session.sessionId ?? null,
-            error: cbError,
-          });
+        if (
+          effectiveStatusCode !== 404 &&
+          session.getEndpointPolicy().allowCircuitBreakerAccounting
+        ) {
+          try {
+            const { recordFailure } = await import("@/lib/circuit-breaker");
+            await recordFailure(meta.providerId, new Error(errorMessage));
+          } catch (cbError) {
+            logger.warn("[ResponseHandler] Failed to record non-200 error in circuit breaker", {
+              providerId: meta.providerId,
+              sessionId: session.sessionId ?? null,
+              error: cbError,
+            });
+          }
         }
+      } finally {
+        await finalizeFailedDiscoveryBinding();
       }
     };
 
@@ -1443,6 +2109,9 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
       billHedgeLosers,
       clientAbortGateUsage,
       commitSideEffects,
+      finalizeAttemptResources: finalizeProviderSessionRef,
+      allowAuxiliarySessionBinding,
+      confirmAuxiliarySessionBinding,
     };
   }
 
@@ -1461,83 +2130,150 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
     });
   }
 
+  // Stop periodic refresh at the stream boundary and issue one final
+  // generation-safe touch so the next turn receives a full binding TTL.
+  // complete() is idempotent and permanently stops after any authority conflict.
+  const hedgeBindingCompletion = meta.hedgeBindingHeartbeat?.complete();
   const commitSideEffects = async () => {
-    if (meta.endpointId != null) {
-      try {
-        const { recordEndpointSuccess } = await import("@/lib/endpoint-circuit-breaker");
-        await recordEndpointSuccess(meta.endpointId);
-      } catch (endpointError) {
-        logger.warn("[ResponseHandler] Failed to record endpoint success (stream finalized)", {
-          endpointId: meta.endpointId,
-          providerId: meta.providerId,
-          error: endpointError,
-        });
-      }
-    }
-
+    let primaryDiscoveryBindingUpdated = false;
     try {
-      const { recordSuccess } = await import("@/lib/circuit-breaker");
-      await recordSuccess(meta.providerId);
-    } catch (cbError) {
-      logger.warn("[ResponseHandler] Failed to record streaming success in circuit breaker", {
+      await hedgeBindingCompletion;
+      if (meta.endpointId != null) {
+        try {
+          const { recordEndpointSuccess } = await import("@/lib/endpoint-circuit-breaker");
+          await recordEndpointSuccess(meta.endpointId);
+        } catch (endpointError) {
+          logger.warn("[ResponseHandler] Failed to record endpoint success (stream finalized)", {
+            endpointId: meta.endpointId,
+            providerId: meta.providerId,
+            error: endpointError,
+          });
+        }
+      }
+
+      try {
+        const { recordSuccess } = await import("@/lib/circuit-breaker");
+        await recordSuccess(meta.providerId);
+      } catch (cbError) {
+        logger.warn("[ResponseHandler] Failed to record streaming success in circuit breaker", {
+          providerId: meta.providerId,
+          error: cbError,
+        });
+      }
+
+      // A natural 2xx EOF without a protocol marker remains a successful,
+      // billable request, but it cannot create or renew Sticky state.
+      if (completionMarkerMissingForBinding) {
+        if (meta.bindingIntent === "renew") {
+          await clearSessionBinding("completion_marker_missing");
+        } else if (meta.bindingIntent === "create") {
+          await recordBindingFinalized({
+            bindingAction: "create",
+            outcome: "skipped",
+            reason: "completion_marker_missing",
+          });
+        }
+      } else if (
+        meta.bindingIntent !== "none" &&
+        !meta.isHedgeWinner &&
+        !clientAborted &&
+        session.sessionId &&
+        isSessionBindingMutationAllowed(session)
+      ) {
+        const keyId = session.authState?.key?.id ?? session.messageContext?.key?.id ?? null;
+        const isDiscoveryBinding =
+          meta.bindingIntent === "create" || meta.bindingIntent === "renew";
+        const result = isDiscoveryBinding
+          ? meta.bindingSnapshot && keyId != null
+            ? await compareAndSetDiscoveryBinding(meta.bindingSnapshot, meta.providerId, keyId)
+            : {
+                updated: false,
+                reason: "missing_snapshot",
+                details: "missing_snapshot",
+              }
+          : await SessionManager.updateSessionBindingSmart(
+              session.sessionId,
+              meta.providerId,
+              meta.providerPriority,
+              meta.isFirstAttempt,
+              meta.isFailoverSuccess,
+              keyId
+            );
+
+        if (isDiscoveryBinding && !bindingTraceRecorded) {
+          await recordBindingFinalized({
+            bindingAction: meta.bindingIntent === "create" ? "create" : "renew",
+            outcome: "skipped",
+            reason: result.reason,
+          });
+        }
+
+        primaryDiscoveryBindingUpdated = isDiscoveryBinding && result.updated;
+        retainProviderSessionRef =
+          primaryDiscoveryBindingUpdated && meta.providerSessionRefRetainOnSuccess === true;
+
+        if (result.updated) {
+          logger.info("[ResponseHandler] Session binding updated (stream finalized)", {
+            sessionId: session.sessionId,
+            providerId: meta.providerId,
+            providerName: meta.providerName,
+            priority: meta.providerPriority,
+            reason: result.reason,
+            details: result.details,
+            attemptNumber: meta.attemptNumber,
+            totalProvidersAttempted: meta.totalProvidersAttempted,
+          });
+        } else {
+          logger.debug("[ResponseHandler] Session binding not updated (stream finalized)", {
+            sessionId: session.sessionId,
+            providerId: meta.providerId,
+            providerName: meta.providerName,
+            priority: meta.providerPriority,
+            reason: result.reason,
+            details: result.details,
+          });
+        }
+
+        if (session.shouldTrackSessionObservability()) {
+          void SessionManager.updateSessionProvider(session.sessionId, {
+            providerId: meta.providerId,
+            providerName: meta.providerName,
+          }).catch((err) => {
+            logger.error(
+              "[ResponseHandler] Failed to update session provider info (stream finalized)",
+              { error: err }
+            );
+          });
+        }
+      }
+
+      if (meta.discoveryLease && !bindingTraceRecorded) {
+        await recordBindingFinalized({
+          bindingAction:
+            meta.bindingIntent === "create" || meta.bindingIntent === "renew"
+              ? meta.bindingIntent
+              : "none",
+          outcome: "skipped",
+          reason:
+            meta.bindingIntent === "none"
+              ? "fallback_winner"
+              : clientAborted
+                ? "client_aborted"
+                : "binding_not_permitted",
+        });
+      }
+
+      logger.info("[ResponseHandler] Streaming request finalized as success", {
         providerId: meta.providerId,
-        error: cbError,
+        providerName: meta.providerName,
+        attemptNumber: meta.attemptNumber,
+        totalProvidersAttempted: meta.totalProvidersAttempted,
+        statusCode: meta.upstreamStatusCode,
       });
+    } finally {
+      settlePrimaryDiscoveryBinding(primaryDiscoveryBindingUpdated);
+      await finalizeProviderSessionRef();
     }
-
-    // Hedge winner: commitWinner() already performed session binding and chain logging.
-    if (!meta.isHedgeWinner && session.sessionId) {
-      const result = await SessionManager.updateSessionBindingSmart(
-        session.sessionId,
-        meta.providerId,
-        meta.providerPriority,
-        meta.isFirstAttempt,
-        meta.isFailoverSuccess,
-        session.authState?.key?.id ?? session.messageContext?.key?.id ?? null
-      );
-
-      if (result.updated) {
-        logger.info("[ResponseHandler] Session binding updated (stream finalized)", {
-          sessionId: session.sessionId,
-          providerId: meta.providerId,
-          providerName: meta.providerName,
-          priority: meta.providerPriority,
-          reason: result.reason,
-          details: result.details,
-          attemptNumber: meta.attemptNumber,
-          totalProvidersAttempted: meta.totalProvidersAttempted,
-        });
-      } else {
-        logger.debug("[ResponseHandler] Session binding not updated (stream finalized)", {
-          sessionId: session.sessionId,
-          providerId: meta.providerId,
-          providerName: meta.providerName,
-          priority: meta.providerPriority,
-          reason: result.reason,
-          details: result.details,
-        });
-      }
-
-      if (session.shouldTrackSessionObservability()) {
-        void SessionManager.updateSessionProvider(session.sessionId, {
-          providerId: meta.providerId,
-          providerName: meta.providerName,
-        }).catch((err) => {
-          logger.error(
-            "[ResponseHandler] Failed to update session provider info (stream finalized)",
-            { error: err }
-          );
-        });
-      }
-    }
-
-    logger.info("[ResponseHandler] Streaming request finalized as success", {
-      providerId: meta.providerId,
-      providerName: meta.providerName,
-      attemptNumber: meta.attemptNumber,
-      totalProvidersAttempted: meta.totalProvidersAttempted,
-      statusCode: meta.upstreamStatusCode,
-    });
   };
 
   return {
@@ -1548,6 +2284,9 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
     billHedgeLosers,
     clientAbortGateUsage,
     commitSideEffects,
+    finalizeAttemptResources: finalizeProviderSessionRef,
+    allowAuxiliarySessionBinding,
+    confirmAuxiliarySessionBinding,
   };
 }
 
@@ -1596,9 +2335,11 @@ export class ProxyResponseHandler {
   ): Promise<Response> {
     const messageContext = session.messageContext;
     const provider = session.provider;
+    const discoveryLeaseLifecycle = startDiscoveryLeaseLifecycle(session);
     if (!provider) {
       discardBeforeResponseBodySnapshot(session);
       releaseSessionAgent(session);
+      void finalizeNonStreamDiscoveryResources(session, discoveryLeaseLifecycle);
       return response;
     }
 
@@ -1803,10 +2544,11 @@ export class ProxyResponseHandler {
             }
 
             const postTerminalSideEffects: Array<() => Promise<void>> = [];
-            if (session.sessionId) {
+            if (session.sessionId && isSessionBindingMutationAllowed(session)) {
               const sessionId = session.sessionId;
               postTerminalSideEffects.push(async () => {
-                await SessionManager.clearSessionProvider(sessionId, provider.id);
+                const keyId = session.authState?.key?.id ?? session.messageContext?.key?.id ?? null;
+                await SessionManager.clearSessionProvider(sessionId, provider.id, keyId);
               });
             }
             if (
@@ -1854,6 +2596,7 @@ export class ProxyResponseHandler {
                     ...errorDetails,
                     ttfbMs: session.ttfbMs ?? duration,
                     providerChain: session.getProviderChain(),
+                    routingTrace: session.finalizeRoutingTrace(finalizedStatusCode),
                     model: session.getCurrentModel() ?? undefined,
                     providerId: session.provider?.id,
                     context1mApplied: session.getContext1mApplied(),
@@ -1868,6 +2611,7 @@ export class ProxyResponseHandler {
             }
           } finally {
             cleanupTaskAbortBinding();
+            await finalizeNonStreamDiscoveryResources(session, discoveryLeaseLifecycle);
             releaseSessionAgent(session);
           }
         };
@@ -1976,7 +2720,10 @@ export class ProxyResponseHandler {
         if (session.sessionId) {
           const sessionId = session.sessionId;
           postTerminalSideEffects.push(async () => {
-            await SessionManager.clearSessionProvider(sessionId, provider.id);
+            const keyId = session.authState?.key?.id ?? session.messageContext?.key?.id ?? null;
+            if (isSessionBindingMutationAllowed(session)) {
+              await SessionManager.clearSessionProvider(sessionId, provider.id, keyId);
+            }
 
             const sessionUsagePayload: SessionUsageUpdate = {
               status:
@@ -2014,6 +2761,7 @@ export class ProxyResponseHandler {
             ...errorDetails,
             ttfbMs: session.ttfbMs ?? duration,
             providerChain: session.getProviderChain(),
+            routingTrace: session.finalizeRoutingTrace(finalizedStatusCode),
             model: session.getCurrentModel() ?? undefined, // 更新重定向后的模型
             providerId: session.provider?.id, // 更新最终供应商ID（重试切换后）
             context1mApplied: session.getContext1mApplied(),
@@ -2110,7 +2858,8 @@ export class ProxyResponseHandler {
           statusCode >= 200 &&
           statusCode < 300 &&
           session.sessionId &&
-          provider.id
+          provider.id &&
+          isSessionBindingMutationAllowed(session)
         ) {
           try {
             const responseData = JSON.parse(responseText) as Record<string, unknown>;
@@ -2327,6 +3076,7 @@ export class ProxyResponseHandler {
             cacheCreation1hInputTokens: usageMetrics?.cache_creation_1h_input_tokens,
             cacheTtlApplied: usageMetrics?.cache_ttl ?? null,
             providerChain: session.getProviderChain(),
+            routingTrace: session.finalizeRoutingTrace(statusCode),
             ...(terminalErrorMessage ? { errorMessage: terminalErrorMessage } : {}),
             model: session.getCurrentModel() ?? undefined, // 更新重定向后的模型
             actualResponseModel: extractActualResponseModelForProvider(
@@ -2482,6 +3232,7 @@ export class ProxyResponseHandler {
       } finally {
         cleanupTaskAbortBinding();
         cleanupClientAbortListener();
+        await finalizeNonStreamDiscoveryResources(session, discoveryLeaseLifecycle);
         releaseSessionAgent(session);
       }
     };
@@ -2526,12 +3277,20 @@ export class ProxyResponseHandler {
   private static async handleStream(session: ProxySession, response: Response): Promise<Response> {
     const messageContext = session.messageContext;
     const provider = session.provider;
+    const discoveryLeaseLifecycle = startDiscoveryLeaseLifecycle(session);
 
     if (!messageContext || !provider || !response.body) {
       discardBeforeResponseBodySnapshot(session);
       releaseSessionAgent(session);
+      const deferredMeta = peekDeferredStreamingFinalization(session);
+      void (async () => {
+        await releaseOwnedProviderSessionRef(session, deferredMeta, false);
+        await discoveryLeaseLifecycle.release();
+      })();
       return response;
     }
+
+    startHedgeBindingHeartbeat(session);
 
     let processedStream: ReadableStream<Uint8Array> = response.body;
 
@@ -2627,16 +3386,26 @@ export class ProxyResponseHandler {
           let transportReleased = false;
           let commitSideEffectsScheduled = false;
           let latestCommitSideEffects: (() => Promise<void>) | undefined;
+          let latestFinalizeAttemptResources: (() => Promise<void>) | undefined;
           const scheduleCommitSideEffects = (effect: (() => Promise<void>) | undefined) => {
-            if (!effect || commitSideEffectsScheduled) return;
+            if (
+              (!effect && !latestFinalizeAttemptResources && !discoveryLeaseLifecycle.active) ||
+              commitSideEffectsScheduled
+            )
+              return;
             commitSideEffectsScheduled = true;
+            const finalizeAttemptResources = latestFinalizeAttemptResources;
             return schedulePostTerminalSideEffects({
               taskId,
               providerId: provider.id,
               sessionId: session.sessionId,
               commit: async (signal) => {
-                if (signal.aborted) return;
-                await effect();
+                try {
+                  if (!signal.aborted) await effect?.();
+                } finally {
+                  await finalizeAttemptResources?.();
+                  await discoveryLeaseLifecycle.release();
+                }
               },
             });
           };
@@ -2832,9 +3601,11 @@ export class ProxyResponseHandler {
               statusCode,
               streamEndedNormally,
               clientAborted,
+              discoveryLeaseLifecycle,
               abortReason
             );
             latestCommitSideEffects = finalized.commitSideEffects;
+            latestFinalizeAttemptResources = finalized.finalizeAttemptResources;
             const finalizedUsage = await finalizeRequestStats(
               session,
               allContent,
@@ -2902,9 +3673,11 @@ export class ProxyResponseHandler {
                 statusCode,
                 false,
                 clientAborted,
+                discoveryLeaseLifecycle,
                 abortReason
               );
               latestCommitSideEffects = finalized.commitSideEffects;
+              latestFinalizeAttemptResources = finalized.finalizeAttemptResources;
 
               await finalizeRequestStats(
                 session,
@@ -2945,6 +3718,12 @@ export class ProxyResponseHandler {
             }
           } finally {
             releaseTransportResources();
+            if (!commitSideEffectsScheduled) {
+              void (async () => {
+                await latestFinalizeAttemptResources?.();
+                await discoveryLeaseLifecycle.release();
+              })();
+            }
           }
         };
 
@@ -3229,15 +4008,30 @@ export class ProxyResponseHandler {
     let terminalDetailsPersisted = false;
     let streamCommitSideEffectsScheduled = false;
     let latestStreamCommitSideEffects: Array<() => Promise<void>> = [];
+    let latestStreamFinalizeAttemptResources: (() => Promise<void>) | undefined;
     const scheduleStreamCommitSideEffects = () => {
-      if (latestStreamCommitSideEffects.length === 0 || streamCommitSideEffectsScheduled) return;
+      if (
+        (latestStreamCommitSideEffects.length === 0 &&
+          !latestStreamFinalizeAttemptResources &&
+          !discoveryLeaseLifecycle.active) ||
+        streamCommitSideEffectsScheduled
+      )
+        return;
       streamCommitSideEffectsScheduled = true;
       const committedEffects = [...latestStreamCommitSideEffects];
+      const finalizeAttemptResources = latestStreamFinalizeAttemptResources;
       return schedulePostTerminalSideEffects({
         taskId,
         providerId: provider.id,
         sessionId: session.sessionId,
-        commit: (signal) => runPostTerminalSideEffects(committedEffects, signal),
+        commit: async (signal) => {
+          try {
+            await runPostTerminalSideEffects(committedEffects, signal);
+          } finally {
+            await finalizeAttemptResources?.();
+            await discoveryLeaseLifecycle.release();
+          }
+        },
       });
     };
     let streamFailurePersistencePromise: Promise<void> | null = null;
@@ -3288,11 +4082,13 @@ export class ProxyResponseHandler {
           statusCode,
           streamEndedNormally,
           clientAborted,
+          discoveryLeaseLifecycle,
           abortReason
         );
         latestStreamCommitSideEffects = finalized.commitSideEffects
           ? [finalized.commitSideEffects]
           : [];
+        latestStreamFinalizeAttemptResources = finalized.finalizeAttemptResources;
         const effectiveStatusCode = finalized.effectiveStatusCode;
         const streamErrorMessage = finalized.errorMessage;
         const providerIdForPersistence = finalized.providerIdForPersistence;
@@ -3389,7 +4185,8 @@ export class ProxyResponseHandler {
           effectiveStatusCode >= 200 &&
           effectiveStatusCode < 300 &&
           session.sessionId &&
-          provider.id
+          provider.id &&
+          finalized.allowAuxiliarySessionBinding
         ) {
           try {
             const sseEvents = parseSSEData(allContent);
@@ -3577,6 +4374,7 @@ export class ProxyResponseHandler {
         if (codexCacheBinding) {
           const { sessionId, promptCacheKey, providerId, keyId } = codexCacheBinding;
           postTerminalSideEffects.push(async () => {
+            if (!(await finalized.confirmAuxiliarySessionBinding())) return;
             try {
               await SessionManager.updateSessionWithCodexCacheKey(
                 sessionId,
@@ -3607,6 +4405,7 @@ export class ProxyResponseHandler {
               cacheCreation1hInputTokens: usageForCost?.cache_creation_1h_input_tokens,
               cacheTtlApplied: usageForCost?.cache_ttl ?? null,
               providerChain: session.getProviderChain(),
+              routingTrace: session.finalizeRoutingTrace(effectiveStatusCode),
               ...(streamErrorMessage ? { errorMessage: streamErrorMessage } : {}),
               model: currentRequestedModel ?? undefined, // 更新重定向后的模型
               actualResponseModel: finalActualResponseModel,
@@ -3999,6 +4798,12 @@ export class ProxyResponseHandler {
         clearClientAbortDrainTimer();
         clearIdleTimer(); // 清除静默期计时器（防止泄漏）
         releaseSessionAgent(session);
+        if (!streamCommitSideEffectsScheduled) {
+          void (async () => {
+            await latestStreamFinalizeAttemptResources?.();
+            await discoveryLeaseLifecycle.release();
+          })();
+        }
       }
     };
 
@@ -4871,6 +5676,12 @@ export async function finalizeHedgeLoserBilling(params: {
    */
   drainComplete: boolean;
   /**
+   * Discovery only accounts responses that report usage explicitly. Legacy
+   * Hedge leaves this false so complete per-request-priced responses retain
+   * their established billing semantics.
+   */
+  requireUsage?: boolean;
+  /**
    * Billing context captured BEFORE the shared session could be polluted by
    * syncWinningAttemptSession (only set for the INITIAL provider's losing attempt, whose
    * session is overwritten with the winner's model). Shadow-session losers leave this
@@ -4893,6 +5704,7 @@ export async function finalizeHedgeLoserBilling(params: {
     upstreamStatusCode,
     allContent,
     drainComplete,
+    requireUsage = false,
     billingContext,
   } = params;
 
@@ -4909,6 +5721,10 @@ export async function finalizeHedgeLoserBilling(params: {
         loserSession,
         provider.swapCacheTtlBilling
       );
+    }
+
+    if (requireUsage && !usageForCost) {
+      return null;
     }
 
     // Truncated drain (timeout / cap / abort) with no parsed usage: do NOT fall through to
@@ -5132,6 +5948,7 @@ export async function finalizeRequestStats(
       ...(errorMessage ? { errorMessage } : {}),
       ttfbMs: session.ttfbMs ?? duration,
       providerChain: session.getProviderChain(),
+      routingTrace: session.finalizeRoutingTrace(statusCode),
       model: session.getCurrentModel() ?? undefined,
       actualResponseModel: extractActualResponseModelForProvider(
         provider.providerType,
@@ -5249,6 +6066,7 @@ export async function finalizeRequestStats(
     cacheCreation1hInputTokens: normalizedUsage.cache_creation_1h_input_tokens,
     cacheTtlApplied: normalizedUsage.cache_ttl ?? null,
     providerChain: session.getProviderChain(),
+    routingTrace: session.finalizeRoutingTrace(statusCode),
     ...(errorMessage ? { errorMessage } : {}),
     model: session.getCurrentModel() ?? undefined,
     actualResponseModel: extractActualResponseModelForProvider(
@@ -5269,7 +6087,7 @@ export async function finalizeRequestStats(
 
   if (session.sessionId && session.requestSequence != null) {
     if (session.shouldTrackSessionObservability()) {
-      void deleteLiveChain(session.sessionId, session.requestSequence);
+      void session.closeLiveObservability();
     }
   }
 
@@ -5392,11 +6210,17 @@ async function trackCostToRedis(
         },
         user: {
           id: user.id,
-          resetModes: { "5h": user.limit5hResetMode, daily: user.dailyResetMode },
+          resetModes: {
+            "5h": user.limit5hResetMode,
+            daily: user.dailyResetMode,
+          },
         },
         provider: {
           id: provider.id,
-          resetModes: { "5h": provider.limit5hResetMode, daily: provider.dailyResetMode },
+          resetModes: {
+            "5h": provider.limit5hResetMode,
+            daily: provider.dailyResetMode,
+          },
         },
       },
     });
@@ -5495,6 +6319,7 @@ async function persistRequestFailure(options: {
       errorCause,
       ttfbMs: phase === "non-stream" ? (session.ttfbMs ?? duration) : session.ttfbMs,
       providerChain: session.getProviderChain(),
+      routingTrace: session.finalizeRoutingTrace(statusCode),
       model: session.getCurrentModel() ?? undefined,
       providerId: session.provider?.id, // 更新最终供应商ID（重试切换后）
       context1mApplied: session.getContext1mApplied(),
@@ -5502,13 +6327,15 @@ async function persistRequestFailure(options: {
       specialSettings: session.getSpecialSettings() ?? undefined,
     };
     const persistence = options.onCommitted
-      ? detailsWriter(messageContext.id, terminalDetails, { onCommitted: options.onCommitted })
+      ? detailsWriter(messageContext.id, terminalDetails, {
+          onCommitted: options.onCommitted,
+        })
       : detailsWriter(messageContext.id, terminalDetails);
     committed = Boolean(await awaitPersistence(persistence));
 
     if (session.sessionId && session.requestSequence != null) {
       if (session.shouldTrackSessionObservability()) {
-        void deleteLiveChain(session.sessionId, session.requestSequence);
+        void session.closeLiveObservability();
       }
     }
 

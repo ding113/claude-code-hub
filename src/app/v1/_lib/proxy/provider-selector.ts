@@ -320,7 +320,9 @@ export class ProxyProviderResolver {
 
         // === 成功 ===
         if (checkResult.referenced) {
-          session.recordProviderSessionRef(session.provider.id);
+          session.recordProviderSessionRef(session.provider.id, {
+            retainOnSuccess: checkResult.tracked,
+          });
         }
 
         logger.debug("ProviderSelector: Session tracked atomically", {
@@ -484,6 +486,43 @@ export class ProxyProviderResolver {
   }
 
   /**
+   * Select a bounded Discovery batch using the exact same filters, priority
+   * and weighted selection as the normal selector. The method is intentionally
+   * additive: legacy initial selection/fallback keeps its existing behavior.
+   */
+  static async pickDiscoveryProviders(
+    session: ProxySession,
+    count: number,
+    excludeIds: number[] = []
+  ): Promise<Provider[]> {
+    const selected: Provider[] = [];
+    const excluded = new Set(excludeIds);
+    const limit = Math.max(0, Math.floor(count));
+    const keyId = session.authState?.key?.id ?? session.messageContext?.key?.id ?? null;
+    while (selected.length < limit) {
+      const provider = await ProxyProviderResolver.pickRandomProviderWithExclusion(
+        session,
+        Array.from(excluded)
+      );
+      if (!provider || excluded.has(provider.id)) break;
+      if (session.sessionId && keyId != null) {
+        const cooldown = await SessionManager.isSessionProviderCoolingDown(
+          session.sessionId,
+          keyId,
+          provider.id
+        );
+        if (cooldown.status === "ok" && cooldown.coolingDown) {
+          excluded.add(provider.id);
+          continue;
+        }
+      }
+      selected.push(provider);
+      excluded.add(provider.id);
+    }
+    return selected;
+  }
+
+  /**
    * 查找可复用的供应商（基于 session）
    */
   private static async findReusable(session: ProxySession): Promise<Provider | null> {
@@ -491,11 +530,29 @@ export class ProxyProviderResolver {
       return null;
     }
 
-    // 从 Redis 读取该 session 绑定的 provider
-    const providerId = await SessionManager.getSessionProvider(
-      session.sessionId,
-      session.authState?.key?.id ?? null
-    );
+    // Read the binding once and retain its generation for Discovery timeout
+    // cleanup/finalization. Re-reading here would allow an older request to
+    // clear a newer binding (ABA).
+    const sessionId = session.sessionId;
+    const keyId = session.authState?.key?.id ?? session.messageContext?.key?.id ?? null;
+    const clearRejectedProviderBinding = async (providerId: number): Promise<void> => {
+      await SessionManager.clearSessionProvider(sessionId, providerId, keyId);
+      // A clear attempt can advance or race the canonical generation. Force
+      // Discovery to read authoritative state instead of this old snapshot.
+      if (keyId != null) session.setSessionBindingSnapshot(null);
+    };
+    let providerId: number | null = null;
+    if (keyId != null) {
+      const binding = await SessionManager.getSessionBindingSnapshot(session.sessionId, keyId);
+      if (binding.status === "ok") {
+        session.setSessionBindingSnapshot(binding.snapshot);
+        providerId = binding.snapshot.providerId;
+      } else if (binding.legacyFallbackAllowed) {
+        providerId = await SessionManager.getSessionProvider(session.sessionId, keyId);
+      }
+    } else {
+      providerId = await SessionManager.getSessionProvider(session.sessionId, keyId);
+    }
     if (!providerId) {
       logger.debug("ProviderSelector: Session has no bound provider", {
         sessionId: session.sessionId,
@@ -510,7 +567,7 @@ export class ProxyProviderResolver {
         sessionId: session.sessionId,
         providerId,
       });
-      await SessionManager.clearSessionProvider(session.sessionId, providerId);
+      await clearRejectedProviderBinding(providerId);
       return null;
     }
 
@@ -520,7 +577,7 @@ export class ProxyProviderResolver {
         providerId: provider.id,
         providerName: provider.name,
       });
-      await SessionManager.clearSessionProvider(session.sessionId, providerId);
+      await clearRejectedProviderBinding(providerId);
       return null;
     }
 
@@ -534,7 +591,7 @@ export class ProxyProviderResolver {
         activeTimeEnd: provider.activeTimeEnd,
         timezone: systemTimezone,
       });
-      await SessionManager.clearSessionProvider(session.sessionId, providerId);
+      await clearRejectedProviderBinding(providerId);
       return null;
     }
 
@@ -575,7 +632,7 @@ export class ProxyProviderResolver {
         providerType: provider.providerType,
         originalFormat: session.originalFormat,
       });
-      await SessionManager.clearSessionProvider(session.sessionId, providerId);
+      await clearRejectedProviderBinding(providerId);
       return null;
     }
 
@@ -594,7 +651,7 @@ export class ProxyProviderResolver {
       // 清除过时绑定，避免 SET NX 死锁
       // 当 session 内请求模型发生变化时，旧绑定已无意义，
       // 清除后新的成功请求可通过 SET NX 重新绑定匹配的 provider
-      await SessionManager.clearSessionProvider(session.sessionId, providerId);
+      await clearRejectedProviderBinding(providerId);
       logger.info("ProviderSelector: Cleared stale provider binding (model mismatch)", {
         sessionId: session.sessionId,
         staleProviderId: provider.id,
@@ -650,7 +707,7 @@ export class ProxyProviderResolver {
           ],
         },
       });
-      await SessionManager.clearSessionProvider(session.sessionId, providerId);
+      await clearRejectedProviderBinding(providerId);
       return null;
     }
 
@@ -1155,6 +1212,13 @@ export class ProxyProviderResolver {
       }
     }
     return provider.priority ?? 0;
+  }
+
+  static resolveEffectivePriorityForSession(provider: Provider, session: ProxySession): number {
+    return ProxyProviderResolver.resolveEffectivePriority(
+      provider,
+      getEffectiveProviderGroup(session)
+    );
   }
 
   /**

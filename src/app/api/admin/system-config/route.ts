@@ -7,6 +7,11 @@ import {
   invalidateAllOverviewCaches,
   invalidateAllStatisticsCaches,
 } from "@/lib/redis";
+import {
+  DISCOVERY_SETTINGS_INVALID_ERROR_CODE,
+  DISCOVERY_WINDOW_INVALID_ERROR_CODE,
+  getDiscoveryValidationErrorCode,
+} from "@/lib/validation/discovery-settings";
 import { UpdateSystemSettingsSchema } from "@/lib/validation/schemas";
 import { getSystemSettings, updateSystemSettings } from "@/repository/system-config";
 
@@ -56,9 +61,20 @@ export async function POST(req: Request) {
 
   try {
     const body = await req.json();
+    const current = await getSystemSettings();
 
     // 验证请求数据
     const validated = UpdateSystemSettingsSchema.parse(body);
+    const discoverySlaMs = validated.discoverySlaMs ?? current.discoverySlaMs;
+    const stickySlaMs = validated.stickySlaMs ?? current.stickySlaMs;
+    const maxDiscoveryRounds = validated.maxDiscoveryRounds ?? current.maxDiscoveryRounds;
+    const racingTotalTimeoutMs = validated.racingTotalTimeoutMs ?? current.racingTotalTimeoutMs;
+    if (racingTotalTimeoutMs < stickySlaMs + maxDiscoveryRounds * discoverySlaMs) {
+      return Response.json(
+        { error: "discoveryWindowInvalid", errorCode: DISCOVERY_WINDOW_INVALID_ERROR_CODE },
+        { status: 400 }
+      );
+    }
 
     // 更新系统设置
     const updated = await updateSystemSettings({
@@ -67,6 +83,13 @@ export async function POST(req: Request) {
       currencyDisplay: validated.currencyDisplay,
       billingModelSource: validated.billingModelSource,
       codexPriorityBillingSource: validated.codexPriorityBillingSource,
+      discoveryEnabled: validated.discoveryEnabled,
+      discoveryConcurrency: validated.discoveryConcurrency,
+      maxDiscoveryRounds: validated.maxDiscoveryRounds,
+      discoverySlaMs: validated.discoverySlaMs,
+      stickySlaMs: validated.stickySlaMs,
+      racingTotalTimeoutMs: validated.racingTotalTimeoutMs,
+      stickyTimeoutCooldownMs: validated.stickyTimeoutCooldownMs,
       timezone: validated.timezone,
       enableAutoCleanup: validated.enableAutoCleanup,
       cleanupRetentionDays: validated.cleanupRetentionDays,
@@ -120,6 +143,13 @@ export async function POST(req: Request) {
     return Response.json(updated);
   } catch (error) {
     if (error instanceof z.ZodError) {
+      const errorCode = getDiscoveryValidationErrorCode(error.issues);
+      if (errorCode === DISCOVERY_WINDOW_INVALID_ERROR_CODE) {
+        return Response.json({ error: "discoveryWindowInvalid", errorCode }, { status: 400 });
+      }
+      if (errorCode === DISCOVERY_SETTINGS_INVALID_ERROR_CODE) {
+        return Response.json({ error: "discoverySettingsInvalid", errorCode }, { status: 400 });
+      }
       const firstError = error.issues[0];
       return Response.json({ error: firstError.message || "数据验证失败" }, { status: 400 });
     }

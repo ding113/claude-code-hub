@@ -701,6 +701,7 @@ export async function getUsageLogsBatch(
         const snapshot = liveData.get(key);
         if (snapshot) {
           row._liveChain = snapshot;
+          row.routingTrace = snapshot.routingTrace ?? row.routingTrace;
         }
       }
     }

@@ -50,6 +50,9 @@ describe("SessionManager.terminateProviderSessionsBatch", () => {
     expect(pipelineRef.zrange).toHaveBeenCalledTimes(2);
     expect(pipelineRef.zrange).toHaveBeenCalledWith("provider:42:active_sessions", 0, -1);
     expect(pipelineRef.zrange).toHaveBeenCalledWith("provider:43:active_sessions", 0, -1);
-    expect(terminateSessionsBatchSpy).toHaveBeenCalledWith(["sess-a", "sess-b", "sess-c"]);
+    expect(terminateSessionsBatchSpy).toHaveBeenCalledWith(
+      ["sess-a", "sess-b", "sess-c"],
+      [42, 43]
+    );
   });
 });

@@ -74,6 +74,7 @@ vi.mock("@/lib/rate-limit", () => ({
 
 vi.mock("@/lib/redis/live-chain-store", () => ({
   deleteLiveChain: vi.fn(),
+  writeLiveRoutingTrace: vi.fn(),
 }));
 
 vi.mock("@/lib/session-manager", () => ({

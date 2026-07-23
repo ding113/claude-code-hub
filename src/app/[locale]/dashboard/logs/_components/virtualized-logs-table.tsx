@@ -930,7 +930,8 @@ export function VirtualizedLogsTable({
                                   multiplier !== 1;
                                 const showBadgeInTable = shouldShowCostBadgeInCell(
                                   log.providerChain,
-                                  multiplier
+                                  multiplier,
+                                  log.routingTrace
                                 );
 
                                 return (
@@ -938,6 +939,7 @@ export function VirtualizedLogsTable({
                                     <div className="flex-1 min-w-0 overflow-hidden">
                                       <ProviderChainPopover
                                         chain={log.providerChain ?? []}
+                                        routingTrace={log.routingTrace}
                                         finalProvider={
                                           getFinalProviderName(log.providerChain ?? []) ||
                                           log.providerName ||
@@ -1212,6 +1214,7 @@ export function VirtualizedLogsTable({
                           statusCode={log.statusCode}
                           errorMessage={log.errorMessage}
                           providerChain={log.providerChain}
+                          routingTrace={log.routingTrace}
                           sessionId={log.sessionId}
                           requestSequence={log.requestSequence}
                           blockedBy={log.blockedBy}

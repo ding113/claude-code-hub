@@ -74,7 +74,6 @@ describe("SessionTracker - TTL and cleanup", () => {
     pipelineCalls.length = 0;
     vi.useFakeTimers();
     vi.setSystemTime(new Date(nowMs));
-
     redisClientRef = {
       status: "ready",
       exists: vi.fn(async () => 1),
@@ -163,29 +162,16 @@ describe("SessionTracker - TTL and cleanup", () => {
       expect(providerExpireCall![2]).toBe(7200); // should use SESSION_TTL when > 3600
     });
 
-    it("should refresh session binding TTLs using env SESSION_TTL (not hardcoded 300)", async () => {
+    it("should refresh session activity using env SESSION_TTL (not hardcoded 300)", async () => {
       process.env.SESSION_TTL = "600"; // 10 minutes
 
       const { SessionTracker } = await import("@/lib/session-tracker");
 
       await SessionTracker.refreshSession("sess-123", 1, 42);
 
-      // Check expire calls for session bindings use 600 (env value), not 300
-      const providerBindingExpire = pipelineCalls.find(
-        (call) => call[0] === "expire" && String(call[1]) === "session:sess-123:provider"
-      );
-      const keyBindingExpire = pipelineCalls.find(
-        (call) => call[0] === "expire" && String(call[1]) === "session:sess-123:key"
-      );
       const lastSeenSetex = pipelineCalls.find(
         (call) => call[0] === "setex" && String(call[1]) === "session:sess-123:last_seen"
       );
-
-      expect(providerBindingExpire).toBeDefined();
-      expect(providerBindingExpire![2]).toBe(600);
-
-      expect(keyBindingExpire).toBeDefined();
-      expect(keyBindingExpire![2]).toBe(600);
 
       expect(lastSeenSetex).toBeDefined();
       expect(lastSeenSetex![2]).toBe(600);

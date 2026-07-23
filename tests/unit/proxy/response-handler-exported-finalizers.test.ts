@@ -102,7 +102,17 @@ function createProvider(): Provider {
   } satisfies Provider;
 }
 
-async function createSession(provider: Provider | null): Promise<ProxySession> {
+async function createSession(
+  provider: Provider | null,
+  priceData: {
+    input_cost_per_token: number;
+    output_cost_per_token: number;
+    input_cost_per_request?: number;
+  } = {
+    input_cost_per_token: 1,
+    output_cost_per_token: 10,
+  }
+): Promise<ProxySession> {
   const request = new Request("https://hub.test/v1/messages", {
     body: JSON.stringify({ messages: [], model: "claude-test", stream: false }),
     headers: { "content-type": "application/json" },
@@ -118,7 +128,7 @@ async function createSession(provider: Provider | null): Promise<ProxySession> {
     });
     Object.defineProperty(session, "getResolvedPricingByBillingSource", {
       value: vi.fn(async () => ({
-        priceData: { input_cost_per_token: 1, output_cost_per_token: 10 },
+        priceData,
         resolvedModelName: "claude-test",
         resolvedPricingProviderKey: "anthropic",
         source: "official_fallback" as const,
@@ -170,6 +180,30 @@ describe("exported response finalizers", () => {
       messageRequestCreatedAtMs: 0,
       messageRequestId: 71,
       provider,
+      upstreamStatusCode: 200,
+    });
+
+    expect(billed).toBeNull();
+    expect(mocks.addLoserCost).not.toHaveBeenCalled();
+  });
+
+  it("skips Discovery loser billing without explicit usage even for per-request pricing", async () => {
+    const provider = createProvider();
+    const session = await createSession(provider, {
+      input_cost_per_token: 1,
+      output_cost_per_token: 10,
+      input_cost_per_request: 5,
+    });
+
+    const billed = await finalizeHedgeLoserBilling({
+      allContent: 'event: message_stop\ndata: {"type":"message_stop"}\n\n',
+      attemptNumber: 3,
+      drainComplete: true,
+      loserSession: session,
+      messageRequestCreatedAtMs: 0,
+      messageRequestId: 71,
+      provider,
+      requireUsage: true,
       upstreamStatusCode: 200,
     });
 

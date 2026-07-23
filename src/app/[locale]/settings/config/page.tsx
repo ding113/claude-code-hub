@@ -1,6 +1,7 @@
 import { getTranslations } from "next-intl/server";
 import { Suspense } from "react";
 import { Section } from "@/components/section";
+import { getEnvConfig } from "@/lib/config/env.schema";
 import { getSystemSettings } from "@/repository/system-config";
 import { SettingsPageHeader } from "../_components/settings-page-header";
 import { AutoCleanupForm } from "./_components/auto-cleanup-form";
@@ -34,6 +35,7 @@ export default async function SettingsConfigPage({
 async function SettingsConfigContent({ locale }: { locale: string }) {
   const t = await getTranslations({ locale, namespace: "settings" });
   const settings = await getSystemSettings();
+  const sessionTtlSeconds = Math.max(1, Math.floor(getEnvConfig().SESSION_TTL));
 
   return (
     <>
@@ -44,6 +46,7 @@ async function SettingsConfigContent({ locale }: { locale: string }) {
         variant="default"
       >
         <SystemSettingsForm
+          sessionTtlSeconds={sessionTtlSeconds}
           initialSettings={{
             siteTitle: settings.siteTitle,
             allowGlobalUsageView: settings.allowGlobalUsageView,
@@ -52,6 +55,13 @@ async function SettingsConfigContent({ locale }: { locale: string }) {
             codexPriorityBillingSource: settings.codexPriorityBillingSource,
             billNonSuccessfulRequests: settings.billNonSuccessfulRequests,
             billHedgeLosers: settings.billHedgeLosers,
+            discoveryEnabled: settings.discoveryEnabled,
+            discoveryConcurrency: settings.discoveryConcurrency,
+            maxDiscoveryRounds: settings.maxDiscoveryRounds,
+            discoverySlaMs: settings.discoverySlaMs,
+            stickySlaMs: settings.stickySlaMs,
+            racingTotalTimeoutMs: settings.racingTotalTimeoutMs,
+            stickyTimeoutCooldownMs: settings.stickyTimeoutCooldownMs,
             timezone: settings.timezone,
             verboseProviderError: settings.verboseProviderError,
             passThroughUpstreamErrorMessage: settings.passThroughUpstreamErrorMessage,
