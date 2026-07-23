@@ -131,6 +131,7 @@
       "ip": "IP",
       "provider": "供应商",
       "model": "计费模型",
+      "reasoningEffort": "思考强度",
       "endpoint": "端点",
       "inputTokens": "输入",
       "outputTokens": "输出",
@@ -507,6 +508,11 @@
           "client_abort": "客户端已断开",
           "winner_committed": "其他供应商已提交为赢家"
         }
+      },
+      "reasoningEffort": {
+        "label": "思考强度",
+        "overridden": "已被供应商覆写",
+        "tooltip": "Codex 请求中的思考强度（reasoning.effort），按原值显示。"
       },
       "logicTrace": {
         "title": "决策链",

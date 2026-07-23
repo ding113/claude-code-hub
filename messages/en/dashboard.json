@@ -131,6 +131,7 @@
       "ip": "IP",
       "provider": "Provider",
       "model": "Billing Model",
+      "reasoningEffort": "Reasoning Effort",
       "endpoint": "Endpoint",
       "inputTokens": "Input",
       "outputTokens": "Output",
@@ -507,6 +508,11 @@
           "client_abort": "Client disconnected",
           "winner_committed": "Another provider was committed"
         }
+      },
+      "reasoningEffort": {
+        "label": "Reasoning effort",
+        "overridden": "Overridden by provider",
+        "tooltip": "Thinking effort in the Codex request (reasoning.effort), shown verbatim."
       },
       "logicTrace": {
         "title": "Decision Chain",

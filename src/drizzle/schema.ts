@@ -383,6 +383,76 @@ export const providers = pgTable('providers', {
   ),
 }));
 
+// Provider batch apply durable ledger
+//
+// 该表用于把批量 provider 写入的幂等 claim 与最终结果绑定到同一个
+// PostgreSQL 事务中。result 保留完整的 preview 前像和有效补丁，便于
+// 在进程提交后未能返回响应时可靠重放原结果或重建撤销快照。
+export type ProviderBatchApplyOperationStatus = 'applying' | 'applied';
+
+export interface ProviderBatchApplyStoredPreimage {
+  providerId: number;
+  providerType: ProviderType;
+  isEnabled: boolean;
+  values: Record<string, unknown>;
+}
+
+export interface ProviderBatchApplyPostCommitEffects {
+  clearLimit5hCostCache: boolean;
+  circuitBreakerChanged: boolean;
+  nextCircuitBreakerFailureThreshold: number | null;
+}
+
+export interface ProviderBatchApplyLedgerResult {
+  applyResult: {
+    operationId: string;
+    appliedAt: string;
+    updatedCount: number;
+    undoToken: string;
+    undoExpiresAt: string;
+  };
+  // 仅保存 effective provider 的精确 undo 前像；完整 preview 集合记录在 previewProviderIds。
+  previewProviderIds: number[];
+  effectiveProviderIds: number[];
+  preimages: ProviderBatchApplyStoredPreimage[];
+  undoRestorable: boolean;
+  postCommitEffects: ProviderBatchApplyPostCommitEffects;
+}
+
+export const providerBatchApplyOperations = pgTable(
+  'provider_batch_apply_operations',
+  {
+    claimKey: varchar('claim_key', { length: 256 }).primaryKey(),
+    previewToken: varchar('preview_token', { length: 256 }).notNull(),
+    payloadFingerprint: varchar('payload_fingerprint', { length: 128 }).notNull(),
+    operationId: varchar('operation_id', { length: 256 }).notNull(),
+    undoToken: varchar('undo_token', { length: 256 }).notNull(),
+    undoExpiresAt: timestamp('undo_expires_at', { withTimezone: true }),
+    undoConsumedAt: timestamp('undo_consumed_at', { withTimezone: true }),
+    status: varchar('status', { length: 32 })
+      .notNull()
+      .$type<ProviderBatchApplyOperationStatus>(),
+    result: jsonb('result').$type<ProviderBatchApplyLedgerResult | null>(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    providerBatchApplyOperationsPreviewTokenUnique: uniqueIndex(
+      'uniq_provider_batch_apply_operations_preview_token'
+    ).on(table.previewToken),
+    providerBatchApplyOperationsOperationIdUnique: uniqueIndex(
+      'uniq_provider_batch_apply_operations_operation_id'
+    ).on(table.operationId),
+    providerBatchApplyOperationsUndoTokenUnique: uniqueIndex(
+      'uniq_provider_batch_apply_operations_undo_token'
+    ).on(table.undoToken),
+    providerBatchApplyOperationsExpiresAtIdx: index(
+      'idx_provider_batch_apply_operations_expires_at'
+    ).on(table.expiresAt),
+  })
+);
+
 // Provider Endpoints table - 供应商(官网域名) + 类型 维度的端点池
 export const providerEndpoints = pgTable('provider_endpoints', {
   id: serial('id').primaryKey(),

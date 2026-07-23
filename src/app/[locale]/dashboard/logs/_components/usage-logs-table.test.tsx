@@ -104,6 +104,58 @@ const discoveryTrace: RoutingTraceV1 = {
   events: [],
 };
 
+describe("usage-logs-table Codex reasoning effort", () => {
+  test("在计费模型右侧显示思考强度列", () => {
+    const html = renderToStaticMarkup(
+      <UsageLogsTable
+        logs={[
+          makeLog({
+            model: "gpt-5.4",
+            specialSettings: [
+              {
+                type: "codex_reasoning_effort",
+                scope: "request",
+                hit: true,
+                effort: "low",
+              },
+              {
+                type: "provider_parameter_override",
+                scope: "provider",
+                providerId: 1,
+                providerName: "Codex",
+                providerType: "codex",
+                hit: true,
+                changed: true,
+                changes: [{ path: "reasoning.effort", before: "low", after: "max", changed: true }],
+              },
+            ],
+          }),
+        ]}
+        total={1}
+        page={1}
+        pageSize={50}
+        onPageChange={() => {}}
+        isPending={false}
+      />
+    );
+    const container = document.createElement("div");
+    container.innerHTML = html;
+
+    const headers = [...container.querySelectorAll("thead th")].map((node) => node.textContent);
+    expect(headers.slice(6, 9)).toEqual([
+      "logs.columns.model",
+      "logs.columns.reasoningEffort",
+      "logs.columns.tokens",
+    ]);
+
+    const cells = [...container.querySelectorAll("tbody tr:first-child td")];
+    expect(cells[6]?.textContent).toContain("gpt-5.4");
+    expect(cells[7]?.textContent).toContain("low");
+    expect(cells[7]?.textContent).toContain("max");
+    expect(cells[7]?.className).toContain("overflow-hidden");
+  });
+});
+
 describe("usage-logs-table multiplier badge", () => {
   test("does not render multiplier badge for null/undefined/empty/NaN/Infinity", () => {
     for (const costMultiplier of [null, undefined, "", "NaN", "Infinity"] as const) {

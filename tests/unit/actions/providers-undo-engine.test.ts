@@ -1,13 +1,27 @@
 // @vitest-environment node
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { PROVIDER_BATCH_PATCH_ERROR_CODES } from "@/lib/provider-batch-patch-error-codes";
+import type { ProviderBatchApplyLedgerResult } from "@/drizzle/schema";
 import { buildRedisMock, createRedisStore } from "./redis-mock-utils";
 
 const getSessionMock = vi.fn();
 const findAllProvidersFreshMock = vi.fn();
 const updateProvidersBatchMock = vi.fn();
+const findProviderBatchApplyOperationMock = vi.fn();
+const applyProviderBatchOperationIfUnchangedMock = vi.fn();
+const undoProviderBatchOperationMock = vi.fn();
+const findProviderBatchUndoOperationMock = vi.fn();
 const publishCacheInvalidationMock = vi.fn();
 const { store: redisStore, mocks: redisMocks } = createRedisStore();
+const applyLedger = new Map<
+  string,
+  {
+    previewToken: string;
+    payloadFingerprint: string;
+    result: ProviderBatchApplyLedgerResult;
+    undoAvailable: boolean;
+  }
+>();
 
 vi.mock("@/lib/auth", () => ({
   getSession: getSessionMock,
@@ -16,6 +30,10 @@ vi.mock("@/lib/auth", () => ({
 vi.mock("@/repository/provider", () => ({
   findAllProvidersFresh: findAllProvidersFreshMock,
   updateProvidersBatch: updateProvidersBatchMock,
+  findProviderBatchApplyOperation: findProviderBatchApplyOperationMock,
+  applyProviderBatchOperationIfUnchanged: applyProviderBatchOperationIfUnchangedMock,
+  undoProviderBatchOperation: undoProviderBatchOperationMock,
+  findProviderBatchUndoOperation: findProviderBatchUndoOperationMock,
   deleteProvidersBatch: vi.fn(),
 }));
 
@@ -104,14 +122,85 @@ function makeProvider(id: number, overrides: Record<string, unknown> = {}) {
   };
 }
 
+function installApplyLedgerMocks() {
+  findProviderBatchApplyOperationMock.mockImplementation(
+    async ({ claimKey, previewToken, payloadFingerprint }) => {
+      const existing = applyLedger.get(claimKey);
+      if (existing) {
+        return existing.payloadFingerprint === payloadFingerprint
+          ? { status: "replay", result: existing.result, undoAvailable: existing.undoAvailable }
+          : { status: "idempotency_conflict" };
+      }
+      if ([...applyLedger.values()].some((entry) => entry.previewToken === previewToken)) {
+        return { status: "preview_consumed" };
+      }
+      return { status: "not_found" };
+    }
+  );
+  applyProviderBatchOperationIfUnchangedMock.mockImplementation(async (input) => {
+    const lookup = await findProviderBatchApplyOperationMock(input);
+    if (lookup.status !== "not_found") return lookup;
+    const expectedById = new Map(input.expectedPreimages.map((entry) => [entry.providerId, entry]));
+    const updatedCount = new Set(input.groups.flatMap((group) => group.ids)).size;
+    const appliedAt = new Date();
+    const result = {
+      applyResult: {
+        operationId: input.operationId,
+        appliedAt: appliedAt.toISOString(),
+        updatedCount,
+        undoToken: input.undoToken,
+        undoExpiresAt: new Date(appliedAt.getTime() + input.undoTtlSeconds * 1000).toISOString(),
+      },
+      previewProviderIds: input.expectedPreimages.map((entry) => entry.providerId),
+      effectiveProviderIds: input.effectiveProviderIds,
+      preimages: input.effectiveProviderIds.map((providerId) => {
+        const expected = expectedById.get(providerId);
+        return {
+          providerId,
+          providerType: expected.providerType,
+          isEnabled: expected.values.isEnabled,
+          values: input.undoPreimage[providerId],
+        };
+      }),
+      undoRestorable: input.undoRestorable,
+      postCommitEffects: input.postCommitEffects,
+    };
+    applyLedger.set(input.claimKey, {
+      previewToken: input.previewToken,
+      payloadFingerprint: input.payloadFingerprint,
+      result,
+      undoAvailable: true,
+    });
+    return { status: "applied", result, undoAvailable: true };
+  });
+}
+
 describe("Undo Provider Batch Patch Engine", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.resetModules();
     redisStore.clear();
+    applyLedger.clear();
     getSessionMock.mockResolvedValue({ user: { id: 1, role: "admin" } });
     findAllProvidersFreshMock.mockResolvedValue([]);
     updateProvidersBatchMock.mockResolvedValue(0);
+    findProviderBatchUndoOperationMock.mockResolvedValue({ status: "expired" });
+    installApplyLedgerMocks();
+    undoProviderBatchOperationMock.mockImplementation(
+      async ({ undoToken, operationId, groups }) => {
+        const entry = [...applyLedger.values()].find(
+          (candidate) => candidate.result.applyResult.undoToken === undoToken
+        );
+        if (!entry || !entry.undoAvailable) return { status: "expired" };
+        if (entry.result.applyResult.operationId !== operationId) return { status: "conflict" };
+        let revertedCount = 0;
+        for (const group of groups) {
+          revertedCount += await updateProvidersBatchMock(group.ids, group.updates);
+        }
+        entry.undoAvailable = false;
+        return { status: "reverted", revertedCount };
+      }
+    );
     publishCacheInvalidationMock.mockResolvedValue(undefined);
   });
 
@@ -261,6 +350,44 @@ describe("Undo Provider Batch Patch Engine", () => {
     expect(result.errorCode).toBe(PROVIDER_BATCH_PATCH_ERROR_CODES.UNDO_EXPIRED);
   });
 
+  it("should restore a durable batch undo when the Redis snapshot is missing", async () => {
+    const providers = [makeProvider(1, { groupTag: "old" })];
+    const { undoToken, operationId, undoProviderPatch } = await setupPreviewApplyAndGetUndo(
+      providers,
+      [1],
+      { group_tag: { set: "new" } }
+    );
+    const entry = [...applyLedger.values()][0]!;
+    redisStore.clear();
+    findProviderBatchUndoOperationMock.mockResolvedValueOnce({
+      status: "available",
+      result: entry.result,
+    });
+    updateProvidersBatchMock.mockResolvedValue(1);
+
+    const result = await undoProviderPatch({ undoToken, operationId });
+
+    expect(result.ok).toBe(true);
+    expect(undoProviderBatchOperationMock).toHaveBeenCalledWith(
+      expect.objectContaining({ undoToken, operationId })
+    );
+  });
+
+  it("should keep a committed undo successful when cache invalidation fails", async () => {
+    const providers = [makeProvider(1, { groupTag: "old" })];
+    const { undoToken, operationId, undoProviderPatch } = await setupPreviewApplyAndGetUndo(
+      providers,
+      [1],
+      { group_tag: { set: "new" } }
+    );
+    updateProvidersBatchMock.mockResolvedValue(1);
+    publishCacheInvalidationMock.mockRejectedValueOnce(new Error("cache unavailable"));
+
+    const result = await undoProviderPatch({ undoToken, operationId });
+
+    expect(result.ok).toBe(true);
+  });
+
   it("should return UNDO_CONFLICT for mismatched operationId", async () => {
     const providers = [makeProvider(1, { groupTag: "old" })];
 
@@ -351,13 +478,12 @@ describe("Undo Provider Batch Patch Engine", () => {
     expect(result.data.revertedCount).toBe(2);
   });
 
-  it("should handle providerIds without preimage entries gracefully", async () => {
-    // Only provider 1 exists in DB; provider 999 has no preimage
+  it("should reject apply when a requested provider has no approved preimage", async () => {
     const providers = [makeProvider(1, { groupTag: "old" })];
     findAllProvidersFreshMock.mockResolvedValue(providers);
     updateProvidersBatchMock.mockResolvedValue(1);
 
-    const { previewProviderBatchPatch, applyProviderBatchPatch, undoProviderPatch } = await import(
+    const { previewProviderBatchPatch, applyProviderBatchPatch } = await import(
       "@/actions/providers"
     );
 
@@ -373,25 +499,9 @@ describe("Undo Provider Batch Patch Engine", () => {
       providerIds: [1, 999],
       patch: { group_tag: { set: "new" } },
     });
-    if (!apply.ok) throw new Error(`Apply failed: ${apply.error}`);
-
-    updateProvidersBatchMock.mockClear();
-    publishCacheInvalidationMock.mockClear();
-    updateProvidersBatchMock.mockResolvedValue(1);
-
-    const result = await undoProviderPatch({
-      undoToken: apply.data.undoToken,
-      operationId: apply.data.operationId,
-    });
-
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
-    // Only provider 1 has preimage, provider 999 is skipped
-    expect(updateProvidersBatchMock).toHaveBeenCalledTimes(1);
-    expect(updateProvidersBatchMock).toHaveBeenCalledWith(
-      [1],
-      expect.objectContaining({ groupTag: "old" })
-    );
-    expect(result.data.revertedCount).toBe(1);
+    expect(apply.ok).toBe(false);
+    if (apply.ok) return;
+    expect(apply.errorCode).toBe(PROVIDER_BATCH_PATCH_ERROR_CODES.PREVIEW_STALE);
+    expect(applyProviderBatchOperationIfUnchangedMock).not.toHaveBeenCalled();
   });
 });

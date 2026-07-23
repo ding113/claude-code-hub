@@ -11,6 +11,7 @@ vi.mock("@/lib/auth", () => ({
 vi.mock("@/repository/provider", () => ({
   findAllProvidersFresh: findAllProvidersFreshMock,
   updateProvidersBatch: vi.fn(),
+  updateProviderBatchGroupsIfUnchanged: vi.fn(),
   deleteProvidersBatch: vi.fn(),
 }));
 

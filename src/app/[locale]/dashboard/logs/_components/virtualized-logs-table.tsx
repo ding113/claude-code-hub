@@ -42,6 +42,7 @@ import { isProviderFinalized } from "@/lib/utils/provider-display";
 import { hasPriorityServiceTierSpecialSetting } from "@/lib/utils/special-settings";
 import type { UsageLogRow, UsageLogsBatchResult } from "@/repository/usage-logs";
 import type { BillingModelSource } from "@/types/system-config";
+import { CodexReasoningEffortDisplay } from "./codex-reasoning-effort-display";
 import { ErrorDetailsDialog } from "./error-details-dialog";
 import { ModelDisplayWithRedirect } from "./model-display-with-redirect";
 import { ProviderChainPopover } from "./provider-chain-popover";
@@ -639,7 +640,7 @@ export function VirtualizedLogsTable({
 
       {/* Table with virtual scrolling */}
       <div className="overflow-x-auto">
-        <div className="min-w-[800px]">
+        <div className="min-w-[900px]">
           {/* Fixed header */}
           <div className="bg-muted/30 border-b sticky top-0 z-10">
             <div className="flex items-center h-8 text-[11px] font-medium text-muted-foreground/80 tracking-wide">
@@ -691,6 +692,12 @@ export function VirtualizedLogsTable({
                 title={t("logs.columns.model")}
               >
                 {t("logs.columns.model")}
+              </div>
+              <div
+                className="flex-[0.9] min-w-[100px] px-1.5 truncate"
+                title={t("logs.columns.reasoningEffort")}
+              >
+                {t("logs.columns.reasoningEffort")}
               </div>
               {hideTokensColumn ? null : (
                 <div
@@ -996,6 +1003,11 @@ export function VirtualizedLogsTable({
                           </TooltipContent>
                         </Tooltip>
                       </TooltipProvider>
+                    </div>
+
+                    {/* Codex Reasoning Effort */}
+                    <div className="flex-[0.9] min-w-[100px] overflow-hidden px-1.5 font-mono text-xs">
+                      <CodexReasoningEffortDisplay specialSettings={log.specialSettings} />
                     </div>
 
                     {/* Tokens */}
