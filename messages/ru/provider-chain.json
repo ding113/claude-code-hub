@@ -60,6 +60,7 @@
     "concurrent_limit_failed": "Лимит параллельных запросов",
     "http2_fallback": "Откат HTTP/2",
     "session_reuse": "Повторное использование сессии",
+    "affinity_hit": "Переиспользование кэша (префиксная аффинность)",
     "initial_selection": "Первоначальный выбор",
     "endpoint_pool_exhausted": "Пул конечных точек исчерпан",
     "vendor_type_all_timeout": "Тайм-аут всех конечных точек типа поставщика",
@@ -249,6 +250,27 @@
     "session_reuse": "Повторное использование сессии",
     "weighted_random": "Взвешенный случайный",
     "group_filtered": "Фильтрация по группе",
-    "fail_open_fallback": "Резервный вариант при сбое"
+    "fail_open_fallback": "Резервный вариант при сбое",
+    "prefix_affinity": "Аффинность по наибольшему префиксу"
+  },
+  "affinity": {
+    "matchedDepth": "Глубина совпадения",
+    "matchedPrefixBytes": "Байты совпавшего префикса",
+    "matchedFp": "Совпавший отпечаток"
+  },
+  "streamGate": {
+    "title": "Коммит стрим-гейта",
+    "frameIndex": "Триггерный кадр",
+    "chunkIndex": "Триггерный чанк",
+    "eventName": "Триггерное событие",
+    "bufferedBytes": "Буферизовано байт",
+    "echoExcludedBytes": "Исключено байт эха",
+    "gateWaitMs": "Ожидание гейта"
+  },
+  "replayServe": {
+    "sources": {
+      "completed": "Завершённый повтор",
+      "attached_live": "Присоединение к живому потоку"
+    }
   }
 }

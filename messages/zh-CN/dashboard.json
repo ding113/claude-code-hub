@@ -132,6 +132,7 @@
       "provider": "供应商",
       "model": "计费模型",
       "reasoningEffort": "思考强度",
+      "reasoningEffortTooltip": "该模型请求的思考强度",
       "endpoint": "端点",
       "inputTokens": "输入",
       "outputTokens": "输出",
@@ -549,6 +550,11 @@
         "originDecisionLoading": "正在加载原始决策...",
         "originDecisionUnavailable": "原始决策记录不可用",
         "originDecisionExpand": "查看原始选择"
+      },
+      "replayServe": {
+        "title": "由 Replay 缓存服务",
+        "desc": "该请求由 Replay 缓存直接服务(相同请求正在进行或已完成),未发起上游供应商调用,不产生费用。",
+        "replayId": "Replay ID"
       }
     },
     "providerChain": {

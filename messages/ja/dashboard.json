@@ -132,6 +132,7 @@
       "provider": "プロバイダー",
       "model": "課金モデル",
       "reasoningEffort": "推論強度",
+      "reasoningEffortTooltip": "このモデルリクエストの推論強度",
       "endpoint": "エンドポイント",
       "inputTokens": "入力",
       "outputTokens": "出力",
@@ -549,6 +550,11 @@
         "originDecisionLoading": "元の決定を読み込み中...",
         "originDecisionUnavailable": "元の決定記録は利用できません",
         "originDecisionExpand": "元の選択を表示"
+      },
+      "replayServe": {
+        "title": "Replay キャッシュから応答",
+        "desc": "このリクエストは Replay キャッシュから直接応答されました(同一リクエストが進行中または完了済み)。上流プロバイダーへの呼び出しは行われず、費用は発生しません。",
+        "replayId": "Replay ID"
       }
     },
     "providerChain": {

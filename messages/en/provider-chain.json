@@ -60,6 +60,7 @@
     "concurrent_limit_failed": "Concurrent Limit",
     "http2_fallback": "HTTP/2 Fallback",
     "session_reuse": "Session Reuse",
+    "affinity_hit": "Cache Reuse (Prefix Affinity)",
     "initial_selection": "Initial Selection",
     "endpoint_pool_exhausted": "Endpoint Pool Exhausted",
     "vendor_type_all_timeout": "Vendor-Type All Endpoints Timeout",
@@ -249,6 +250,27 @@
     "session_reuse": "Session Reuse",
     "weighted_random": "Weighted Random",
     "group_filtered": "Group Filtered",
-    "fail_open_fallback": "Fail-Open Fallback"
+    "fail_open_fallback": "Fail-Open Fallback",
+    "prefix_affinity": "Longest-Prefix Affinity"
+  },
+  "affinity": {
+    "matchedDepth": "Matched depth",
+    "matchedPrefixBytes": "Matched prefix bytes",
+    "matchedFp": "Matched fingerprint"
+  },
+  "streamGate": {
+    "title": "Stream Gate Commit",
+    "frameIndex": "Trigger frame",
+    "chunkIndex": "Trigger chunk",
+    "eventName": "Trigger event",
+    "bufferedBytes": "Buffered bytes",
+    "echoExcludedBytes": "Echo-excluded bytes",
+    "gateWaitMs": "Gate wait"
+  },
+  "replayServe": {
+    "sources": {
+      "completed": "Completed replay",
+      "attached_live": "Attached to live stream"
+    }
   }
 }

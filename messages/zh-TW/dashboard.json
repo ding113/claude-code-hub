@@ -132,6 +132,7 @@
       "provider": "供應商",
       "model": "計費模型",
       "reasoningEffort": "思考強度",
+      "reasoningEffortTooltip": "該模型請求的思考強度",
       "endpoint": "端點",
       "inputTokens": "輸入",
       "outputTokens": "輸出",
@@ -549,6 +550,11 @@
         "originDecisionLoading": "正在載入原始決策...",
         "originDecisionUnavailable": "原始決策記錄不可用",
         "originDecisionExpand": "查看原始選擇"
+      },
+      "replayServe": {
+        "title": "由 Replay 快取服務",
+        "desc": "該請求由 Replay 快取直接服務（相同請求正在進行或已完成）,未發起上游供應商呼叫,不產生費用。",
+        "replayId": "Replay ID"
       }
     },
     "providerChain": {
