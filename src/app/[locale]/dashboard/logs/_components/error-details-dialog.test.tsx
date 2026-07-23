@@ -1521,8 +1521,7 @@ describe("error-details-dialog routing trace", () => {
   });
 
   test("expands exact Discovery attempts with sanitized provider details and cancellation reasons", () => {
-    const longSecondError =
-      "<script>alert('x')</script> second-attempt-429 " + "x".repeat(8_200) + "TAIL_NOT_RENDERED";
+    const longSecondError = `<script>alert('x')</script> second-attempt-429 ${"x".repeat(8_200)}TAIL_NOT_RENDERED`;
     const detailedTrace: RoutingTraceV1 = {
       version: 1,
       mode: "discovery",

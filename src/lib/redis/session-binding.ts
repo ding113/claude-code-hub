@@ -1279,7 +1279,7 @@ export async function mutateLegacySessionBindingSafely(
   }
 
   const redis = currentRedisClient(input.redis);
-  if (!redis || redis.status !== "ready") return unavailable("redis_not_ready");
+  if (redis?.status !== "ready") return unavailable("redis_not_ready");
 
   const keys = buildSessionBindingKeys(input.sessionId, input.keyId);
   try {

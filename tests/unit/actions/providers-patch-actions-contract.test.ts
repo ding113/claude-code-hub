@@ -188,7 +188,7 @@ describe("Provider Batch Patch Action Contracts", () => {
         const entry = [...applyLedger.values()].find(
           (candidate) => candidate.result.applyResult.undoToken === undoToken
         );
-        if (!entry || !entry.undoAvailable) return { status: "expired" };
+        if (!entry?.undoAvailable) return { status: "expired" };
         if (entry.result.applyResult.operationId !== operationId) return { status: "conflict" };
         let revertedCount = 0;
         for (const group of groups) {

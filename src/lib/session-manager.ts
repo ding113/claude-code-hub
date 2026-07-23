@@ -745,7 +745,7 @@ export class SessionManager {
     ownerToken?: string
   ): Promise<SessionDiscoveryLeaseAcquireResult> {
     const redis = getRedisClient({ allowWhenRateLimitDisabled: true });
-    if (!redis || redis.status !== "ready") return redisUnavailableBindingResult();
+    if (redis?.status !== "ready") return redisUnavailableBindingResult();
     return acquireVersionedSessionDiscoveryLease({
       sessionId,
       keyId,
@@ -762,7 +762,7 @@ export class SessionManager {
     ttlSeconds: number
   ): Promise<SessionDiscoveryLeaseMutationResult> {
     const redis = getRedisClient({ allowWhenRateLimitDisabled: true });
-    if (!redis || redis.status !== "ready") return redisUnavailableBindingResult();
+    if (redis?.status !== "ready") return redisUnavailableBindingResult();
     return renewVersionedSessionDiscoveryLease({
       sessionId,
       keyId,
@@ -778,7 +778,7 @@ export class SessionManager {
     ownerToken: string
   ): Promise<SessionDiscoveryLeaseMutationResult> {
     const redis = getRedisClient({ allowWhenRateLimitDisabled: true });
-    if (!redis || redis.status !== "ready") return redisUnavailableBindingResult();
+    if (redis?.status !== "ready") return redisUnavailableBindingResult();
     return releaseVersionedSessionDiscoveryLease({ sessionId, keyId, ownerToken, redis });
   }
 
@@ -787,7 +787,7 @@ export class SessionManager {
     keyId: number
   ): Promise<SessionBindingResult> {
     const redis = getRedisClient({ allowWhenRateLimitDisabled: true });
-    if (!redis || redis.status !== "ready") return redisUnavailableBindingResult();
+    if (redis?.status !== "ready") return redisUnavailableBindingResult();
     return readOrReconcileSessionBinding({
       sessionId,
       keyId,
@@ -808,7 +808,7 @@ export class SessionManager {
     snapshot: SessionBindingSnapshot
   ): Promise<SessionBindingResult> {
     const redis = getRedisClient({ allowWhenRateLimitDisabled: true });
-    if (!redis || redis.status !== "ready") return redisUnavailableBindingResult();
+    if (redis?.status !== "ready") return redisUnavailableBindingResult();
     return touchSessionBinding({
       sessionId: snapshot.sessionId,
       keyId: snapshot.keyId,
@@ -824,7 +824,7 @@ export class SessionManager {
     providerId: number
   ): Promise<SessionBindingResult> {
     const redis = getRedisClient({ allowWhenRateLimitDisabled: true });
-    if (!redis || redis.status !== "ready") return redisUnavailableBindingResult();
+    if (redis?.status !== "ready") return redisUnavailableBindingResult();
     return compareAndSetSessionBinding({
       sessionId: snapshot.sessionId,
       keyId: snapshot.keyId,
@@ -841,7 +841,7 @@ export class SessionManager {
     cooldownTtlSeconds: number = 0
   ): Promise<SessionBindingResult> {
     const redis = getRedisClient({ allowWhenRateLimitDisabled: true });
-    if (!redis || redis.status !== "ready") return redisUnavailableBindingResult();
+    if (redis?.status !== "ready") return redisUnavailableBindingResult();
     return clearVersionedSessionBinding({
       sessionId: snapshot.sessionId,
       keyId: snapshot.keyId,
@@ -859,7 +859,7 @@ export class SessionManager {
     providerId: number
   ): Promise<SessionProviderCooldownResult> {
     const redis = getRedisClient({ allowWhenRateLimitDisabled: true });
-    if (!redis || redis.status !== "ready") return redisUnavailableBindingResult();
+    if (redis?.status !== "ready") return redisUnavailableBindingResult();
     return readSessionProviderCooldown({
       sessionId,
       keyId,
@@ -1109,7 +1109,7 @@ export class SessionManager {
     if (providerIds.length === 0 || keyId == null) return false;
 
     const redis = getRedisClient();
-    if (!redis || redis.status !== "ready") return false;
+    if (redis?.status !== "ready") return false;
 
     const binding = await readOrReconcileSessionBinding({
       sessionId,
