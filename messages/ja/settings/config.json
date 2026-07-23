@@ -169,7 +169,11 @@
       "off": "オフ",
       "shadow": "シャドウモード",
       "enforce": "有効"
-    }
+    },
+    "replayEnabled": "リクエスト Replay",
+    "replayEnabledDesc": "上流レスポンスをキャッシュし上流接続を再利用します。同一リクエストの並行実行や再接続は進行中のストリームに追随し、プロバイダーへ再送しません。保存するまでは環境変数 ENABLE_REQUEST_REPLAY に従います。デフォルトはオフ。",
+    "cacheEffectivenessEnabled": "プレフィックスキャッシュシミュレーション",
+    "cacheEffectivenessEnabledDesc": "最長プレフィックス一致のキャッシュヒット率(理論値 vs 実測値)を観測目的でシミュレートします。ルーティングには影響しません。保存するまでは環境変数 ENABLE_CACHE_EFFECTIVENESS に従います。デフォルトはオン。"
   },
   "ipLogging": {
     "title": "IP ログと抽出",

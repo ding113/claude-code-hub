@@ -9,10 +9,12 @@ import {
   Eye,
   FileCode,
   Filter,
+  Gauge,
   Globe,
   MapPin,
   Network,
   Pencil,
+  Repeat,
   Route,
   Terminal,
   Thermometer,
@@ -95,6 +97,8 @@ interface SystemSettingsFormProps {
     | "fakeStreamingWhitelist"
     | "streamGateMode"
     | "affinityIgnoreClientSessionId"
+    | "replayEnabled"
+    | "cacheEffectivenessEnabled"
     | "enableCodexSessionIdCompletion"
     | "enableClaudeMetadataUserIdInjection"
     | "enableResponseFixer"
@@ -209,6 +213,11 @@ export function SystemSettingsForm({
   );
   const [affinityIgnoreClientSessionId, setAffinityIgnoreClientSessionId] = useState(
     initialSettings.affinityIgnoreClientSessionId
+  );
+  // null = 尚未覆写（跟随环境变量默认：Replay 关 / 缓存模拟开）；保存后写显式值
+  const [replayEnabled, setReplayEnabled] = useState(initialSettings.replayEnabled ?? false);
+  const [cacheEffectivenessEnabled, setCacheEffectivenessEnabled] = useState(
+    initialSettings.cacheEffectivenessEnabled ?? true
   );
   const [enableThinkingBudgetRectifier, setEnableThinkingBudgetRectifier] = useState(
     initialSettings.enableThinkingBudgetRectifier
@@ -395,6 +404,8 @@ export function SystemSettingsForm({
         fakeStreamingWhitelist: sanitizedFakeStreamingWhitelist,
         streamGateMode,
         affinityIgnoreClientSessionId,
+        replayEnabled,
+        cacheEffectivenessEnabled,
         enableThinkingBudgetRectifier,
         enableThinkingEffortConflictRectifier,
         enableGeminiFunctionIdRectifier,
@@ -459,6 +470,8 @@ export function SystemSettingsForm({
         );
         setStreamGateMode(result.data.streamGateMode);
         setAffinityIgnoreClientSessionId(result.data.affinityIgnoreClientSessionId);
+        setReplayEnabled(result.data.replayEnabled ?? false);
+        setCacheEffectivenessEnabled(result.data.cacheEffectivenessEnabled ?? true);
         setEnableThinkingBudgetRectifier(result.data.enableThinkingBudgetRectifier);
         setEnableThinkingEffortConflictRectifier(result.data.enableThinkingEffortConflictRectifier);
         setEnableGeminiFunctionIdRectifier(result.data.enableGeminiFunctionIdRectifier);
@@ -1155,6 +1168,50 @@ export function SystemSettingsForm({
             aria-label={t("affinityIgnoreClientSessionId")}
             checked={affinityIgnoreClientSessionId}
             onCheckedChange={(checked) => setAffinityIgnoreClientSessionId(checked)}
+            disabled={isPending}
+          />
+        </div>
+
+        {/* F2 Request Replay */}
+        <div className="p-4 rounded-xl bg-white/[0.02] border border-white/5 flex items-center justify-between hover:bg-white/[0.04] transition-colors">
+          <div className="flex items-start gap-3">
+            <div className="w-8 h-8 flex items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-400 shrink-0">
+              <Repeat className="h-4 w-4" />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-foreground">{t("replayEnabled")}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">{t("replayEnabledDesc")}</p>
+            </div>
+          </div>
+          <Switch
+            id="replay-enabled"
+            aria-label={t("replayEnabled")}
+            checked={replayEnabled}
+            onCheckedChange={(checked) => setReplayEnabled(checked)}
+            disabled={isPending}
+          />
+        </div>
+
+        {/* F3b Cache Effectiveness Simulation */}
+        <div className="p-4 rounded-xl bg-white/[0.02] border border-white/5 flex items-center justify-between hover:bg-white/[0.04] transition-colors">
+          <div className="flex items-start gap-3">
+            <div className="w-8 h-8 flex items-center justify-center rounded-lg bg-amber-500/10 text-amber-400 shrink-0">
+              <Gauge className="h-4 w-4" />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-foreground">
+                {t("cacheEffectivenessEnabled")}
+              </p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {t("cacheEffectivenessEnabledDesc")}
+              </p>
+            </div>
+          </div>
+          <Switch
+            id="cache-effectiveness-enabled"
+            aria-label={t("cacheEffectivenessEnabled")}
+            checked={cacheEffectivenessEnabled}
+            onCheckedChange={(checked) => setCacheEffectivenessEnabled(checked)}
             disabled={isPending}
           />
         </div>

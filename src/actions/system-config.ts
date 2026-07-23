@@ -105,6 +105,8 @@ export async function saveSystemSettings(formData: {
   fakeStreamingWhitelist?: FakeStreamingWhitelistEntry[];
   streamGateMode?: StreamGateSettingMode;
   affinityIgnoreClientSessionId?: boolean;
+  replayEnabled?: boolean | null;
+  cacheEffectivenessEnabled?: boolean | null;
   enableCodexSessionIdCompletion?: boolean;
   enableClaudeMetadataUserIdInjection?: boolean;
   enableResponseFixer?: boolean;
@@ -193,6 +195,8 @@ export async function saveSystemSettings(formData: {
       fakeStreamingWhitelist: validated.fakeStreamingWhitelist,
       streamGateMode: validated.streamGateMode,
       affinityIgnoreClientSessionId: validated.affinityIgnoreClientSessionId,
+      replayEnabled: validated.replayEnabled,
+      cacheEffectivenessEnabled: validated.cacheEffectivenessEnabled,
       enableCodexSessionIdCompletion: validated.enableCodexSessionIdCompletion,
       enableClaudeMetadataUserIdInjection: validated.enableClaudeMetadataUserIdInjection,
       enableResponseFixer: validated.enableResponseFixer,

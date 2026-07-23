@@ -158,6 +158,14 @@ export interface SystemSettings {
   // 不可指纹化的请求仍走会话复用
   affinityIgnoreClientSessionId: boolean;
 
+  // F2 Replay（响应缓存与上游连接复用）开关覆写
+  // null = 跟随环境变量 ENABLE_REQUEST_REPLAY（默认 false）
+  replayEnabled: boolean | null;
+
+  // F3b 最长前缀匹配缓存模拟（理论 vs 实际缓存命中率，仅观测不影响路由）开关覆写
+  // null = 跟随环境变量 ENABLE_CACHE_EFFECTIVENESS（默认 true）
+  cacheEffectivenessEnabled: boolean | null;
+
   /** Bounded streaming Discovery settings. */
   discoveryEnabled: boolean;
   discoveryConcurrency: number;
@@ -284,4 +292,10 @@ export interface UpdateSystemSettingsInput {
 
   // 忽略客户端 Session ID（可选）
   affinityIgnoreClientSessionId?: boolean;
+
+  // F2 Replay 开关（可选；null = 清除覆写跟随环境变量）
+  replayEnabled?: boolean | null;
+
+  // F3b 缓存模拟开关（可选；null = 清除覆写跟随环境变量）
+  cacheEffectivenessEnabled?: boolean | null;
 }

@@ -222,6 +222,18 @@ export const SystemSettingsSchema = z
       .describe(
         "Whether fingerprintable requests force longest-prefix affinity for provider stickiness, skipping client session id binding."
       ),
+    replayEnabled: z
+      .boolean()
+      .nullable()
+      .describe(
+        "Request replay (response caching and upstream connection reuse) override. Null follows the ENABLE_REQUEST_REPLAY environment variable."
+      ),
+    cacheEffectivenessEnabled: z
+      .boolean()
+      .nullable()
+      .describe(
+        "Longest-prefix cache-effectiveness simulation override (observability only). Null follows the ENABLE_CACHE_EFFECTIVENESS environment variable."
+      ),
     createdAt: IsoDateTimeStringSchema.describe("Creation time."),
     updatedAt: IsoDateTimeStringSchema.describe("Last update time."),
   })

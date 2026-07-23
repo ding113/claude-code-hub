@@ -1020,6 +1020,12 @@ export const systemSettings = pgTable('system_settings', {
     .notNull()
     .default(true),
 
+  // F2 Replay 开关覆写（null = 跟随环境变量 ENABLE_REQUEST_REPLAY）
+  replayEnabled: boolean('replay_enabled'),
+
+  // F3b 最长前缀匹配缓存模拟开关覆写（null = 跟随环境变量 ENABLE_CACHE_EFFECTIVENESS）
+  cacheEffectivenessEnabled: boolean('cache_effectiveness_enabled'),
+
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
 });

@@ -169,7 +169,11 @@
       "off": "Off",
       "shadow": "Shadow mode",
       "enforce": "Enabled"
-    }
+    },
+    "replayEnabled": "Request Replay",
+    "replayEnabledDesc": "Caches upstream responses and reuses upstream connections: identical concurrent or reconnecting requests attach to the in-flight stream instead of re-hitting the provider. Follows the ENABLE_REQUEST_REPLAY environment variable until saved here. Default off.",
+    "cacheEffectivenessEnabled": "Prefix Cache Simulation",
+    "cacheEffectivenessEnabledDesc": "Simulates longest-prefix cache hit rates (theoretical vs actual) for observability only; never affects routing. Follows the ENABLE_CACHE_EFFECTIVENESS environment variable until saved here. Default on."
   },
   "ipLogging": {
     "title": "IP logging & extraction",

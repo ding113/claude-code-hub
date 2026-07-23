@@ -202,6 +202,8 @@ function createFallbackSettings(): SystemSettings {
     ipGeoLookupEnabled: true,
     streamGateMode: "enforce",
     affinityIgnoreClientSessionId: true,
+    replayEnabled: null,
+    cacheEffectivenessEnabled: null,
     createdAt: now,
     updatedAt: now,
   };
@@ -280,6 +282,19 @@ const RECENT_COLUMN_LADDER: ReadonlyArray<{
   // 本层更新失败（仍有列缺失）时记录的告警
   updateWarn: string;
 }> = [
+  {
+    key: "cacheEffectivenessEnabled",
+    column: systemSettings.cacheEffectivenessEnabled,
+    selectWarn:
+      "system_settings 表除 cacheEffectivenessEnabled 外仍有列缺失，继续回退到上一代字段集。",
+    updateWarn: "system_settings 表除 cacheEffectivenessEnabled 外仍有列缺失，继续降级更新。",
+  },
+  {
+    key: "replayEnabled",
+    column: systemSettings.replayEnabled,
+    selectWarn: "system_settings 表除 replayEnabled 外仍有列缺失，继续回退到上一代字段集。",
+    updateWarn: "system_settings 表除 replayEnabled 外仍有列缺失，继续降级更新。",
+  },
   {
     key: "affinityIgnoreClientSessionId",
     column: systemSettings.affinityIgnoreClientSessionId,
@@ -874,6 +889,16 @@ export async function updateSystemSettings(
     // 忽略客户端 Session ID 开关（如果提供）
     if (payload.affinityIgnoreClientSessionId !== undefined) {
       updates.affinityIgnoreClientSessionId = payload.affinityIgnoreClientSessionId;
+    }
+
+    // F2 Replay 开关覆写（如果提供；null = 清除覆写跟随环境变量）
+    if (payload.replayEnabled !== undefined) {
+      updates.replayEnabled = payload.replayEnabled;
+    }
+
+    // F3b 缓存模拟开关覆写（如果提供；null = 清除覆写跟随环境变量）
+    if (payload.cacheEffectivenessEnabled !== undefined) {
+      updates.cacheEffectivenessEnabled = payload.cacheEffectivenessEnabled;
     }
 
     let updated;

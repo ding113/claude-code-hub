@@ -12240,6 +12240,10 @@ export interface operations {
                         streamGateMode: "off" | "shadow" | "enforce";
                         /** @description Whether fingerprintable requests force longest-prefix affinity for provider stickiness, skipping client session id binding. */
                         affinityIgnoreClientSessionId: boolean;
+                        /** @description Request replay (response caching and upstream connection reuse) override. Null follows the ENABLE_REQUEST_REPLAY environment variable. */
+                        replayEnabled: boolean | null;
+                        /** @description Longest-prefix cache-effectiveness simulation override (observability only). Null follows the ENABLE_CACHE_EFFECTIVENESS environment variable. */
+                        cacheEffectivenessEnabled: boolean | null;
                         /**
                          * Format: date-time
                          * @description Creation time.
@@ -12522,6 +12526,10 @@ export interface operations {
                     streamGateMode?: "off" | "shadow" | "enforce";
                     /** @description Whether fingerprintable requests force longest-prefix affinity for provider stickiness, skipping client session id binding. */
                     affinityIgnoreClientSessionId?: boolean;
+                    /** @description Request replay (response caching and upstream connection reuse) override. Null follows the ENABLE_REQUEST_REPLAY environment variable. */
+                    replayEnabled?: boolean | null;
+                    /** @description Longest-prefix cache-effectiveness simulation override (observability only). Null follows the ENABLE_CACHE_EFFECTIVENESS environment variable. */
+                    cacheEffectivenessEnabled?: boolean | null;
                 };
             };
         };
@@ -12679,6 +12687,10 @@ export interface operations {
                         streamGateMode: "off" | "shadow" | "enforce";
                         /** @description Whether fingerprintable requests force longest-prefix affinity for provider stickiness, skipping client session id binding. */
                         affinityIgnoreClientSessionId: boolean;
+                        /** @description Request replay (response caching and upstream connection reuse) override. Null follows the ENABLE_REQUEST_REPLAY environment variable. */
+                        replayEnabled: boolean | null;
+                        /** @description Longest-prefix cache-effectiveness simulation override (observability only). Null follows the ENABLE_CACHE_EFFECTIVENESS environment variable. */
+                        cacheEffectivenessEnabled: boolean | null;
                         /**
                          * Format: date-time
                          * @description Creation time.
