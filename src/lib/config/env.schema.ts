@@ -183,7 +183,7 @@ export const EnvSchema = z.object({
   // 超时后主动断开该输家连接，仅用已收到的内容尝试计费（通常计不出 -> 跳过）。
   HEDGE_LOSER_DRAIN_TIMEOUT_MS: z.coerce.number().int().min(1000).default(120_000),
 
-  // ===== CCHP 网关移植功能开关（默认全部关闭，flag 门控灰度启用）=====
+  // ===== CCHP 网关移植功能开关 =====
   // 流式内容门控：off=关闭；shadow=旁路分类只记录分歧；enforce=首个有效内容帧前缓冲+failover
   STREAM_GATE_MODE: z.enum(["off", "shadow", "enforce"]).default("off"),
   // 门控 precommit 缓冲上限：超限即视为该供应商流异常，failover 释放内存
@@ -221,6 +221,10 @@ export const EnvSchema = z.object({
   PREFIX_AFFINITY_WINDOW: z.coerce.number().int().min(1).max(64).default(8),
   // 缓存效果计费模拟：理论 vs 实际缓存命中率聚合指标（仅展示，不影响路由，默认开启）
   ENABLE_CACHE_EFFECTIVENESS: z.string().default("true").transform(booleanTransform),
+
+  // Operational canary for the Discovery scheduler. The database feature
+  // switch remains authoritative; this percentage only narrows eligibility.
+  DISCOVERY_ROLLOUT_PERCENT: z.coerce.number().int().min(0).max(100).default(100),
 
   DASHBOARD_LOGS_POLL_INTERVAL_MS: z.coerce.number().int().min(250).max(60000).default(5000),
 

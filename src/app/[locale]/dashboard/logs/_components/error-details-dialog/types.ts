@@ -1,5 +1,6 @@
 import type { HedgeLoserBilling, StoredCostBreakdown } from "@/types/cost-breakdown";
 import type { ProviderChainItem } from "@/types/message";
+import type { RoutingTraceV1 } from "@/types/routing-trace";
 import type { SpecialSetting } from "@/types/special-settings";
 import type { BillingModelSource } from "@/types/system-config";
 
@@ -13,6 +14,8 @@ export interface TabSharedProps {
   errorMessage: string | null;
   /** Provider decision chain */
   providerChain: ProviderChainItem[] | null;
+  /** Versioned routing trace for Discovery and legacy routing decisions */
+  routingTrace?: RoutingTraceV1 | null;
   /** Session ID */
   sessionId: string | null;
   /** Request sequence number within session */

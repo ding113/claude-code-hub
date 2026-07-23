@@ -1,0 +1,500 @@
+/**
+ * Pure state machine for bounded provider discovery.
+ *
+ * The coordinator deliberately has no network or timer dependencies. The
+ * forwarder owns attempts and calls these methods at event boundaries. This
+ * keeps cancellation and stale-event handling deterministic and testable.
+ */
+
+export type DiscoveryAttemptKind = "normal" | "fallback";
+export type DiscoveryState =
+  | "STICKY_PROBING"
+  | "DISCOVERY_RACING"
+  | "FALLBACK_READY_HELD"
+  | "FALLBACK_ACTIVE"
+  | "WINNER_COMMITTED"
+  | "TERMINAL_FAILED";
+
+export type DiscoveryAttempt = {
+  id: string;
+  providerId: number;
+  priority: number;
+  kind: DiscoveryAttemptKind;
+  /**
+   * A final-round rescue is kept alive beside the primary fallback. It can
+   * rescue the request, but it must never establish or renew Sticky.
+   */
+  finalRescue?: boolean;
+  /** Selector/endpoint setup occupies a slot but cannot become a winner or fallback. */
+  setupOnly?: boolean;
+  ready: boolean;
+  pending: boolean;
+  round: number;
+  launchOrder: number;
+};
+
+export type DiscoveryAction =
+  | { type: "commit_normal"; attemptId: string }
+  | { type: "promote_fallback"; attemptId: string }
+  | {
+      type: "cancel";
+      attemptIds: string[];
+      promoteAttemptId?: string;
+      rescueAttemptId?: string;
+    }
+  | {
+      type: "launch";
+      slots: number;
+      cancelAttemptIds?: string[];
+      promoteAttemptId?: string;
+    }
+  | { type: "none" }
+  | { type: "terminal_failure"; cancelAttemptIds?: string[] };
+
+export type DiscoveryCoordinatorOptions = {
+  concurrency: number;
+  maxRounds: number;
+};
+
+function compareAttempts(a: DiscoveryAttempt, b: DiscoveryAttempt): number {
+  return a.priority - b.priority || a.launchOrder - b.launchOrder;
+}
+
+export class DiscoveryCoordinator {
+  readonly concurrency: number;
+  readonly maxRounds: number;
+  state: DiscoveryState = "DISCOVERY_RACING";
+  round = 1;
+  private attempts = new Map<string, DiscoveryAttempt>();
+  private requestEpoch = 0;
+  private roundEpoch = 0;
+  private roundOpen = true;
+  private finalRescueAttemptId: string | null = null;
+
+  constructor(options: DiscoveryCoordinatorOptions) {
+    this.concurrency = Math.max(1, Math.floor(options.concurrency));
+    this.maxRounds = Math.max(1, Math.floor(options.maxRounds));
+  }
+
+  get epochs(): { requestEpoch: number; roundEpoch: number } {
+    return { requestEpoch: this.requestEpoch, roundEpoch: this.roundEpoch };
+  }
+
+  startStickyProbe(): void {
+    if (!this.isTerminal) {
+      this.state = "STICKY_PROBING";
+      this.roundOpen = false;
+    }
+  }
+
+  startDiscoveryAfterSticky(): void {
+    if (this.state === "STICKY_PROBING" || this.state === "FALLBACK_READY_HELD") {
+      this.state = "DISCOVERY_RACING";
+      this.roundOpen = true;
+    }
+  }
+
+  beginRound(): { requestEpoch: number; roundEpoch: number; round: number } {
+    if (this.isTerminal || this.round >= this.maxRounds) {
+      return { ...this.epochs, round: this.round };
+    }
+    this.round += 1;
+    this.roundEpoch += 1;
+    this.finalRescueAttemptId = null;
+    if (!this.isTerminal) {
+      this.state = "DISCOVERY_RACING";
+      this.roundOpen = true;
+    }
+    return { ...this.epochs, round: this.round };
+  }
+
+  addAttempt(attempt: DiscoveryAttempt): boolean {
+    if (this.isTerminal || this.attempts.has(attempt.id)) return false;
+    this.attempts.set(attempt.id, { ...attempt, round: this.round });
+    return true;
+  }
+
+  removeAttempt(id: string): void {
+    this.attempts.delete(id);
+  }
+
+  markSetupOnly(id: string): boolean {
+    if (this.isTerminal) return false;
+    const attempt = this.attempts.get(id);
+    if (!attempt?.pending) return false;
+    attempt.setupOnly = true;
+    attempt.ready = false;
+    return true;
+  }
+
+  bindSetupProvider(
+    id: string,
+    providerId: number,
+    priority: number,
+    requestEpoch = this.requestEpoch,
+    roundEpoch = this.roundEpoch
+  ): boolean {
+    if (!this.acceptsEpoch(requestEpoch, roundEpoch) || !this.roundOpen || this.isTerminal) {
+      return false;
+    }
+    const attempt = this.attempts.get(id);
+    if (!attempt?.pending || attempt.setupOnly !== true) return false;
+    attempt.providerId = providerId;
+    attempt.priority = priority;
+    return true;
+  }
+
+  isSetupPending(
+    id: string,
+    requestEpoch = this.requestEpoch,
+    roundEpoch = this.roundEpoch
+  ): boolean {
+    if (!this.acceptsEpoch(requestEpoch, roundEpoch) || !this.roundOpen || this.isTerminal) {
+      return false;
+    }
+    const attempt = this.attempts.get(id);
+    return attempt?.pending === true && attempt.setupOnly === true;
+  }
+
+  /** Mark an already-running attempt as the sole fallback for this request. */
+  promoteToFallback(id: string): boolean {
+    if (this.isTerminal) return false;
+    const attempt = this.attempts.get(id);
+    if (!attempt?.pending || attempt.setupOnly === true) return false;
+    attempt.kind = "fallback";
+    this.state = "FALLBACK_READY_HELD";
+    return true;
+  }
+
+  get isTerminal(): boolean {
+    return (
+      this.state === "WINNER_COMMITTED" ||
+      this.state === "FALLBACK_ACTIVE" ||
+      this.state === "TERMINAL_FAILED"
+    );
+  }
+
+  get activeAttempts(): DiscoveryAttempt[] {
+    return Array.from(this.attempts.values()).filter((attempt) => attempt.pending);
+  }
+
+  get canRefillCurrentRound(): boolean {
+    return this.roundOpen && !this.isTerminal;
+  }
+
+  get snapshot(): DiscoveryAttempt[] {
+    return Array.from(this.attempts.values()).map((attempt) => ({
+      ...attempt,
+    }));
+  }
+
+  /** Ignore events from a cancelled request or an old round. */
+  acceptsEpoch(requestEpoch: number, roundEpoch: number): boolean {
+    return requestEpoch === this.requestEpoch && roundEpoch === this.roundEpoch;
+  }
+
+  markReady(
+    id: string,
+    requestEpoch = this.requestEpoch,
+    roundEpoch = this.roundEpoch
+  ): DiscoveryAction {
+    if (!this.acceptsEpoch(requestEpoch, roundEpoch) || this.isTerminal) return { type: "none" };
+    const attempt = this.attempts.get(id);
+    if (!attempt?.pending || attempt.setupOnly === true) return { type: "none" };
+    attempt.ready = true;
+    if (attempt.kind === "fallback") {
+      // Once the final rescue lane is open, the primary fallback and the
+      // standby are peers. Whichever produces a valid prefix first may rescue
+      // the request; do not keep a ready fallback waiting for a pending
+      // standby that may never respond.
+      if (this.finalRescueAttemptId) {
+        attempt.pending = false;
+        this.state = "FALLBACK_ACTIVE";
+        return { type: "promote_fallback", attemptId: attempt.id };
+      }
+      const pendingNormal = Array.from(this.attempts.values()).some(
+        (candidate) => candidate.pending && candidate.kind === "normal"
+      );
+      if (!pendingNormal) {
+        attempt.pending = false;
+        this.state = "FALLBACK_ACTIVE";
+        return { type: "promote_fallback", attemptId: attempt.id };
+      }
+      return { type: "none" };
+    }
+    return this.chooseReadyNormal();
+  }
+
+  /** Record a ready fallback without allowing it to preempt a reserved normal wave. */
+  recordReadyHeld(
+    id: string,
+    requestEpoch = this.requestEpoch,
+    roundEpoch = this.roundEpoch
+  ): boolean {
+    if (!this.acceptsEpoch(requestEpoch, roundEpoch) || this.isTerminal) return false;
+    const attempt = this.attempts.get(id);
+    if (!attempt?.pending || attempt.setupOnly === true || attempt.kind !== "fallback")
+      return false;
+    attempt.ready = true;
+    this.state = "FALLBACK_READY_HELD";
+    return true;
+  }
+
+  /** Convert a timed-out Sticky attempt into the request's fallback lane. */
+  demoteToFallback(
+    id: string,
+    requestEpoch = this.requestEpoch,
+    roundEpoch = this.roundEpoch
+  ): boolean {
+    if (!this.acceptsEpoch(requestEpoch, roundEpoch) || this.isTerminal) return false;
+    const attempt = this.attempts.get(id);
+    if (!attempt?.pending) return false;
+    attempt.kind = "fallback";
+    this.state = "FALLBACK_READY_HELD";
+    return true;
+  }
+
+  markFailed(
+    id: string,
+    requestEpoch = this.requestEpoch,
+    roundEpoch = this.roundEpoch
+  ): DiscoveryAction {
+    if (!this.acceptsEpoch(requestEpoch, roundEpoch) || this.isTerminal) return { type: "none" };
+    const attempt = this.attempts.get(id);
+    if (!attempt?.pending) return { type: "none" };
+    attempt.pending = false;
+    attempt.ready = false;
+    const readyAction = this.chooseReadyNormal();
+    if (readyAction.type !== "none") return readyAction;
+    return this.afterAttemptState();
+  }
+
+  /** A normal ready result may win only after priority gating is satisfied. */
+  private chooseReadyNormal(ignorePriorityGate = false): DiscoveryAction {
+    const readyNormal = Array.from(this.attempts.values())
+      .filter(
+        (attempt) =>
+          attempt.pending &&
+          attempt.setupOnly !== true &&
+          attempt.ready &&
+          attempt.kind === "normal"
+      )
+      .sort(compareAttempts);
+    if (readyNormal.length === 0) return { type: "none" };
+    const bestPriority = readyNormal[0].priority;
+    if (!ignorePriorityGate) {
+      const higherTierPending = Array.from(this.attempts.values()).some(
+        (attempt) =>
+          attempt.pending &&
+          attempt.kind === "normal" &&
+          !attempt.ready &&
+          attempt.priority < bestPriority
+      );
+      if (higherTierPending) return { type: "none" };
+    }
+    const winner = readyNormal[0];
+    this.state = "WINNER_COMMITTED";
+    this.roundOpen = false;
+    winner.pending = false;
+    return {
+      type: "commit_normal",
+      attemptId: winner.id,
+    };
+  }
+
+  /**
+   * Close the current SLA window. At a boundary a ready normal always wins;
+   * otherwise the best still-pending normal becomes the primary fallback. A
+   * non-final fallback is held until no normal can still win; the final window
+   * may retain one additional pending normal as a bounded rescue lane.
+   */
+  onRoundBoundary(requestEpoch = this.requestEpoch, roundEpoch = this.roundEpoch): DiscoveryAction {
+    if (!this.acceptsEpoch(requestEpoch, roundEpoch) || this.isTerminal) return { type: "none" };
+    this.roundOpen = false;
+    const readyAction = this.chooseReadyNormal(true);
+    if (readyAction.type === "commit_normal") return readyAction;
+
+    const setupAttemptIds = Array.from(this.attempts.values())
+      .filter((attempt) => attempt.pending && attempt.setupOnly === true)
+      .map((attempt) => attempt.id);
+    for (const id of setupAttemptIds) this.attempts.get(id)!.pending = false;
+
+    const currentFallback = Array.from(this.attempts.values()).find(
+      (attempt) => attempt.pending && attempt.setupOnly !== true && attempt.kind === "fallback"
+    );
+    if (currentFallback?.ready) {
+      currentFallback.pending = false;
+      this.state = "FALLBACK_ACTIVE";
+      this.roundOpen = false;
+      return { type: "promote_fallback", attemptId: currentFallback.id };
+    }
+
+    const pendingNormal = Array.from(this.attempts.values())
+      .filter(
+        (attempt) => attempt.pending && attempt.setupOnly !== true && attempt.kind === "normal"
+      )
+      .sort(compareAttempts);
+    if (currentFallback && (pendingNormal.length > 0 || setupAttemptIds.length > 0)) {
+      // In the final round preserve one best normal alongside the primary
+      // fallback. This is a bounded rescue lane: at most two upstreams stay
+      // alive regardless of the configured discovery concurrency.
+      if (this.round >= this.maxRounds && this.concurrency >= 2 && pendingNormal.length > 0) {
+        const rescue = pendingNormal[0];
+        rescue.finalRescue = true;
+        this.finalRescueAttemptId = rescue.id;
+        const cancelAttemptIds = [
+          ...pendingNormal.slice(1).map((attempt) => attempt.id),
+          ...setupAttemptIds,
+        ];
+        for (const id of cancelAttemptIds) this.attempts.get(id)!.pending = false;
+        this.state = "FALLBACK_READY_HELD";
+        return {
+          type: "cancel",
+          attemptIds: cancelAttemptIds,
+          rescueAttemptId: rescue.id,
+        };
+      }
+
+      const cancelAttemptIds = [...pendingNormal.map((attempt) => attempt.id), ...setupAttemptIds];
+      for (const attempt of pendingNormal) attempt.pending = false;
+      if (this.round < this.maxRounds) {
+        this.beginRound();
+        this.state = "DISCOVERY_RACING";
+        return {
+          type: "launch",
+          slots: Math.max(0, this.concurrency - 1),
+          cancelAttemptIds,
+        };
+      }
+      return { type: "cancel", attemptIds: cancelAttemptIds };
+    }
+    if (pendingNormal.length === 0) {
+      if (currentFallback) {
+        this.state = "FALLBACK_READY_HELD";
+        return { type: "none" };
+      }
+      if (setupAttemptIds.length > 0) {
+        if (this.round >= this.maxRounds) {
+          this.state = "TERMINAL_FAILED";
+          return {
+            type: "terminal_failure",
+            cancelAttemptIds: setupAttemptIds,
+          };
+        }
+        this.beginRound();
+        return {
+          type: "launch",
+          slots: this.concurrency,
+          cancelAttemptIds: setupAttemptIds,
+        };
+      }
+      return this.finishOrLaunch();
+    }
+
+    const fallback = pendingNormal[0];
+    fallback.kind = "fallback";
+    this.state = "FALLBACK_READY_HELD";
+    // In the final round, retain one additional normal as a standby rescue.
+    // It remains a normal candidate for race purposes but is explicitly
+    // ineligible for Sticky binding.
+    const finalRescue =
+      this.round >= this.maxRounds && this.concurrency >= 2 ? pendingNormal[1] : undefined;
+    if (finalRescue) {
+      finalRescue.finalRescue = true;
+      this.finalRescueAttemptId = finalRescue.id;
+    }
+    const losers = [
+      ...pendingNormal.slice(finalRescue ? 2 : 1).map((attempt) => attempt.id),
+      ...setupAttemptIds,
+    ];
+    for (const id of losers) this.attempts.get(id)!.pending = false;
+
+    if (this.round < this.maxRounds) {
+      this.beginRound();
+      this.state = "DISCOVERY_RACING";
+      return {
+        type: "launch",
+        slots: Math.max(0, this.concurrency - 1),
+        cancelAttemptIds: losers,
+        promoteAttemptId: fallback.id,
+      };
+    }
+    return {
+      type: "cancel",
+      attemptIds: losers,
+      promoteAttemptId: fallback.id,
+      ...(finalRescue ? { rescueAttemptId: finalRescue.id } : {}),
+    };
+  }
+
+  onDeadline(): DiscoveryAction {
+    if (this.isTerminal) return { type: "none" };
+    const readyNormal = this.chooseReadyNormal(true);
+    if (readyNormal.type === "commit_normal") return readyNormal;
+    const fallback = Array.from(this.attempts.values()).find(
+      (attempt) => attempt.pending && attempt.kind === "fallback" && attempt.ready
+    );
+    if (fallback) {
+      fallback.pending = false;
+      this.state = "FALLBACK_ACTIVE";
+      this.roundOpen = false;
+      return { type: "promote_fallback", attemptId: fallback.id };
+    }
+    this.state = "TERMINAL_FAILED";
+    this.roundOpen = false;
+    return { type: "terminal_failure" };
+  }
+
+  commitWinner(id: string): DiscoveryAction {
+    const attempt = this.attempts.get(id);
+    if (!attempt || this.isTerminal) return { type: "none" };
+    attempt.pending = false;
+    this.state = attempt.kind === "fallback" ? "FALLBACK_ACTIVE" : "WINNER_COMMITTED";
+    this.roundOpen = false;
+    return {
+      type: attempt.kind === "fallback" ? "promote_fallback" : "commit_normal",
+      attemptId: id,
+    };
+  }
+
+  cancelRequest(): DiscoveryAction {
+    this.requestEpoch += 1;
+    this.roundEpoch += 1;
+    const ids = this.activeAttempts.map((attempt) => attempt.id);
+    for (const attempt of this.attempts.values()) attempt.pending = false;
+    this.state = "TERMINAL_FAILED";
+    this.roundOpen = false;
+    return { type: "cancel", attemptIds: ids };
+  }
+
+  private afterAttemptState(): DiscoveryAction {
+    const pending = this.activeAttempts;
+    if (pending.length === 0) return this.finishOrLaunch();
+
+    // A higher-priority attempt may have been the only gate preventing a
+    // ready lower-priority candidate from winning. Once that attempt fails,
+    // re-run the normal winner selection before waiting for another boundary.
+    const readyNormal = this.chooseReadyNormal();
+    if (readyNormal.type === "commit_normal") return readyNormal;
+
+    const fallback = pending.find((attempt) => attempt.kind === "fallback");
+    if (
+      fallback?.ready &&
+      (this.finalRescueAttemptId != null || pending.every((attempt) => attempt.kind === "fallback"))
+    ) {
+      return this.commitWinner(fallback.id);
+    }
+    return { type: "none" };
+  }
+
+  private finishOrLaunch(): DiscoveryAction {
+    if (this.round >= this.maxRounds) {
+      this.state = "TERMINAL_FAILED";
+      this.roundOpen = false;
+      return { type: "terminal_failure" };
+    }
+    this.beginRound();
+    this.state = "DISCOVERY_RACING";
+    return { type: "launch", slots: this.concurrency };
+  }
+}

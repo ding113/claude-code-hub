@@ -16,6 +16,7 @@ vi.mock("@/lib/vendor-type-circuit-breaker", () => vendorTypeCircuitMocks);
 
 const sessionManagerMocks = vi.hoisted(() => ({
   SessionManager: {
+    getSessionBindingSnapshot: vi.fn(),
     getSessionProvider: vi.fn(async () => null as number | null),
     clearSessionProvider: vi.fn(async () => undefined),
   },
@@ -116,7 +117,8 @@ describe("findReusable - model mismatch clears stale binding", () => {
     expect(result).toBeNull();
     expect(sessionManagerMocks.SessionManager.clearSessionProvider).toHaveBeenCalledWith(
       "sess_disable_reuse",
-      78
+      78,
+      null
     );
   });
 
@@ -141,8 +143,44 @@ describe("findReusable - model mismatch clears stale binding", () => {
     // Key assertion: clearSessionProvider should have been called
     expect(sessionManagerMocks.SessionManager.clearSessionProvider).toHaveBeenCalledWith(
       "4c25cf92",
-      78
+      78,
+      null
     );
+  });
+
+  test("should invalidate a cleared versioned snapshot before Discovery", async () => {
+    const { ProxyProviderResolver } = await import("@/app/v1/_lib/proxy/provider-selector");
+    const snapshot = {
+      sessionId: "versioned-model-mismatch",
+      keyId: 456,
+      providerId: 78,
+      generation: "stale-generation",
+    };
+    sessionManagerMocks.SessionManager.getSessionBindingSnapshot.mockResolvedValueOnce({
+      status: "ok",
+      snapshot,
+    });
+    providerRepositoryMocks.findProviderById.mockResolvedValueOnce(createHaikuOnlyProvider());
+    const setSessionBindingSnapshot = vi.fn();
+    const session = {
+      sessionId: snapshot.sessionId,
+      shouldReuseProvider: () => true,
+      getOriginalModel: () => "claude-opus-4-6",
+      authState: { key: { id: snapshot.keyId } },
+      getCurrentModel: () => null,
+      setSessionBindingSnapshot,
+    } as any;
+
+    const result = await (ProxyProviderResolver as any).findReusable(session);
+
+    expect(result).toBeNull();
+    expect(sessionManagerMocks.SessionManager.clearSessionProvider).toHaveBeenCalledWith(
+      snapshot.sessionId,
+      snapshot.providerId,
+      snapshot.keyId
+    );
+    expect(setSessionBindingSnapshot).toHaveBeenNthCalledWith(1, snapshot);
+    expect(setSessionBindingSnapshot).toHaveBeenNthCalledWith(2, null);
   });
 
   test("should clear stale binding when bound provider type is incompatible with request format", async () => {
@@ -165,7 +203,8 @@ describe("findReusable - model mismatch clears stale binding", () => {
     expect(result).toBeNull();
     expect(sessionManagerMocks.SessionManager.clearSessionProvider).toHaveBeenCalledWith(
       "sess_response_format_mismatch",
-      94
+      94,
+      null
     );
   });
 
@@ -240,7 +279,8 @@ describe("findReusable - model mismatch clears stale binding", () => {
     expect(result).toBeNull();
     expect(sessionManagerMocks.SessionManager.clearSessionProvider).toHaveBeenCalledWith(
       "sess_variant",
-      78
+      78,
+      null
     );
   });
 });

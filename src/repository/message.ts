@@ -13,16 +13,25 @@ import {
 import { formatCostForStorage } from "@/lib/utils/currency";
 import type { HedgeLoserBilling, StoredCostBreakdown } from "@/types/cost-breakdown";
 import type { CreateMessageRequestData, MessageRequest, ProviderChainItem } from "@/types/message";
+import { normalizeRoutingTrace, type RoutingTraceV1 } from "@/types/routing-trace";
 import type { SpecialSetting } from "@/types/special-settings";
 import { LEDGER_BILLING_CONDITION } from "./_shared/ledger-conditions";
 import { EXCLUDE_WARMUP_CONDITION } from "./_shared/message-request-conditions";
 import { toMessageRequest } from "./_shared/transformers";
 import {
   type DurableMessageRequestUpdateOptions,
+  enqueueMessageRequestPostTerminalRoutingTraceDurably,
   enqueueMessageRequestUpdate,
   enqueueMessageRequestUpdateDurably,
   type MessageRequestUpdatePatch,
 } from "./message-write-buffer";
+import {
+  acknowledgeRoutingTraceOutbox,
+  persistRoutingTraceMonotonically,
+  stageRoutingTraceOutbox,
+} from "./routing-trace-outbox";
+
+const POST_TERMINAL_ROUTING_TRACE_ACK_TIMEOUT_MS = 3_000;
 
 type PublicStatusRequestSeed = {
   createdAt: Date;
@@ -238,6 +247,8 @@ export async function createMessageRequest(
     groupCostMultiplier: data.group_cost_multiplier?.toString() ?? undefined, // 分组倍率（转为字符串）
     sessionId: data.session_id, // Session ID
     requestSequence: data.request_sequence, // Request Sequence（Session 内请求序号）
+    routingTrace:
+      data.routing_trace === undefined ? undefined : normalizeRoutingTrace(data.routing_trace),
     userAgent: data.user_agent, // User-Agent
     clientIp: data.client_ip, // 客户端 IP（IPv4/IPv6）
     endpoint: data.endpoint, // 请求端点（可为空）
@@ -262,6 +273,7 @@ export async function createMessageRequest(
     costMultiplier: messageRequest.costMultiplier, // 新增
     sessionId: messageRequest.sessionId, // 新增
     requestSequence: messageRequest.requestSequence, // Request Sequence
+    routingTrace: messageRequest.routingTrace,
     userAgent: messageRequest.userAgent, // 新增
     clientIp: messageRequest.clientIp, // 客户端 IP
     endpoint: messageRequest.endpoint, // 新增：返回端点
@@ -488,6 +500,7 @@ export type MessageRequestDetailsUpdate = {
   cacheCreation1hInputTokens?: number;
   cacheTtlApplied?: string | null;
   providerChain?: CreateMessageRequestData["provider_chain"];
+  routingTrace?: RoutingTraceV1 | null;
   errorMessage?: string;
   errorStack?: string; // 完整堆栈信息
   errorCause?: string; // 嵌套错误原因（JSON 格式）
@@ -561,6 +574,9 @@ export async function updateMessageRequestDetails(
   if (details.providerChain !== undefined) {
     updateData.providerChain = details.providerChain;
   }
+  if (details.routingTrace !== undefined) {
+    updateData.routingTrace = normalizeRoutingTrace(details.routingTrace);
+  }
   if (details.errorMessage !== undefined) {
     updateData.errorMessage = details.errorMessage;
   }
@@ -625,6 +641,79 @@ export async function updateMessageRequestDetails(
     await rollupPromise;
   }
   return true;
+}
+
+/**
+ * Routing trace patch for work that completes after the request's terminal row
+ * has committed. A Redis outbox is staged first so a shutdown-time database
+ * outage can be replayed after restart without touching terminal ownership,
+ * billing, or public-status rollups.
+ */
+export async function updateMessageRequestRoutingTrace(
+  id: number,
+  routingTrace: RoutingTraceV1
+): Promise<void> {
+  const normalized = normalizeRoutingTrace(routingTrace);
+  if (!normalized) {
+    logger.warn("[MessageRequest] Skipped patching invalid routing trace", {
+      requestId: id,
+    });
+    return;
+  }
+
+  const outboxReceipt = await stageRoutingTraceOutbox(id, normalized);
+  let persisted = false;
+
+  if (getEnvConfig().MESSAGE_REQUEST_WRITE_MODE === "async") {
+    let persistenceError: unknown = null;
+    try {
+      persisted = await enqueueMessageRequestPostTerminalRoutingTraceDurably(id, normalized, {
+        timeoutMs: POST_TERMINAL_ROUTING_TRACE_ACK_TIMEOUT_MS,
+      });
+    } catch (error) {
+      persistenceError = error;
+    }
+
+    // A different revision may be coalesced behind an older in-flight writer
+    // task. Normally its outbox receipt is the recovery path; if Redis staging
+    // was unavailable, make one monotonic direct attempt instead of dropping it.
+    if (!persisted && !outboxReceipt) {
+      try {
+        await persistRoutingTraceMonotonically(id, normalized);
+        persisted = true;
+        persistenceError = null;
+      } catch (error) {
+        persistenceError = error;
+      }
+    }
+
+    if (!persisted && persistenceError) {
+      logger.warn("[MessageRequest] Failed to patch finalized routing trace", {
+        requestId: id,
+        recoverable: outboxReceipt !== null,
+        error:
+          persistenceError instanceof Error ? persistenceError.message : String(persistenceError),
+      });
+    }
+    if (persisted && outboxReceipt) {
+      await acknowledgeRoutingTraceOutbox(outboxReceipt);
+    }
+    return;
+  }
+
+  try {
+    await persistRoutingTraceMonotonically(id, normalized);
+    persisted = true;
+  } catch (error) {
+    logger.warn("[MessageRequest] Failed to patch finalized routing trace", {
+      requestId: id,
+      recoverable: outboxReceipt !== null,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+  if (persisted && outboxReceipt) {
+    await acknowledgeRoutingTraceOutbox(outboxReceipt);
+  }
 }
 
 export async function updateMessageRequestDetailsIfUnfinalized(
@@ -764,6 +853,7 @@ export async function findMessageRequestById(id: number): Promise<MessageRequest
       cacheTtlApplied: messageRequest.cacheTtlApplied,
       errorMessage: messageRequest.errorMessage,
       providerChain: messageRequest.providerChain,
+      routingTrace: messageRequest.routingTrace,
       blockedBy: messageRequest.blockedBy,
       blockedReason: messageRequest.blockedReason,
       context1mApplied: messageRequest.context1mApplied,
@@ -844,6 +934,7 @@ export async function findMessageRequestById(id: number): Promise<MessageRequest
     cacheTtlApplied: ledgerRow.cacheTtlApplied,
     errorMessage: null,
     providerChain: null,
+    routingTrace: null,
     blockedBy: null,
     blockedReason: null,
     context1mApplied: ledgerRow.context1mApplied,
@@ -887,6 +978,7 @@ export async function findMessageRequestBySessionId(
       cacheTtlApplied: messageRequest.cacheTtlApplied,
       errorMessage: messageRequest.errorMessage,
       providerChain: messageRequest.providerChain,
+      routingTrace: messageRequest.routingTrace,
       blockedBy: messageRequest.blockedBy,
       blockedReason: messageRequest.blockedReason,
       createdAt: messageRequest.createdAt,
@@ -966,6 +1058,7 @@ export async function findMessageRequestBySessionId(
     cacheTtlApplied: ledgerRow.cacheTtlApplied,
     errorMessage: null,
     providerChain: null,
+    routingTrace: null,
     blockedBy: null,
     blockedReason: null,
     context1mApplied: ledgerRow.context1mApplied,
@@ -1589,6 +1682,7 @@ export async function findUsageLogs(params: {
       cacheTtlApplied: row.cacheTtlApplied,
       errorMessage: null,
       providerChain: null,
+      routingTrace: null,
       blockedBy: null,
       blockedReason: null,
       context1mApplied: row.context1mApplied,

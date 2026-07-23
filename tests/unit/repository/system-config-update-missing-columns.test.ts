@@ -346,6 +346,8 @@ describe("SystemSettings：数据库缺列时的保存兜底", () => {
     const secondSelection = selectMock.mock.calls[1]?.[0] as Record<string, unknown>;
     expect(secondSelection).not.toHaveProperty("affinityIgnoreClientSessionId");
     expect(secondSelection).toHaveProperty("streamGateMode");
+    expect(secondSelection).toHaveProperty("stickyTimeoutCooldownMs");
+    expect(secondSelection).toHaveProperty("racingTotalTimeoutMs");
     expect(secondSelection).toHaveProperty("enableGeminiFunctionIdRectifier");
     expect(secondSelection).toHaveProperty("enableThinkingEffortConflictRectifier");
 

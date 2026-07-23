@@ -5,6 +5,7 @@ import { act } from "react";
 import { describe, expect, test, vi } from "vitest";
 
 import type { UsageLogRow } from "@/repository/usage-logs";
+import type { RoutingTraceV1 } from "@/types/routing-trace";
 
 vi.mock("next-intl", () => ({
   useTranslations: () => (key: string) => key,
@@ -93,6 +94,16 @@ function makeLog(overrides: Partial<UsageLogRow>): UsageLogRow {
   };
 }
 
+const discoveryTrace: RoutingTraceV1 = {
+  version: 1,
+  mode: "discovery",
+  startedAt: 1,
+  updatedAt: 2,
+  discoveryEnabled: true,
+  eligible: true,
+  events: [],
+};
+
 describe("usage-logs-table Codex reasoning effort", () => {
   test("在计费模型右侧显示思考强度列", () => {
     const html = renderToStaticMarkup(
@@ -179,6 +190,37 @@ describe("usage-logs-table multiplier badge", () => {
 
     expect(html).toContain("×0.20");
     expect(html).toContain("0.20x");
+  });
+
+  test("keeps the winner multiplier visible after multiple Discovery attempts", () => {
+    const html = renderToStaticMarkup(
+      <UsageLogsTable
+        logs={[
+          makeLog({
+            id: 1,
+            costMultiplier: "0.01",
+            routingTrace: discoveryTrace,
+            providerChain: [
+              { id: 1, name: "failed", reason: "retry_failed", statusCode: 503 },
+              {
+                id: 2,
+                name: "winner",
+                reason: "retry_success",
+                statusCode: 200,
+                costMultiplier: 0.03,
+              },
+            ],
+          }),
+        ]}
+        total={1}
+        page={1}
+        pageSize={50}
+        onPageChange={() => {}}
+        isPending={false}
+      />
+    );
+
+    expect(html).toContain("×0.03");
   });
 
   test("renders the hedge billing split with cache tokens in the cost tooltip", () => {

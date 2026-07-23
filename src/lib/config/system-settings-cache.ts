@@ -61,7 +61,7 @@ export function getCachedSystemSettingsOnlyCache(): SystemSettings | null {
 }
 
 /** Default settings used when cache fetch fails */
-const DEFAULT_SETTINGS: Pick<
+export const DEFAULT_SETTINGS: Pick<
   SystemSettings,
   | "enableHttp2"
   | "enableOpenaiResponsesWebsocket"
@@ -85,6 +85,13 @@ const DEFAULT_SETTINGS: Pick<
   | "publicStatusAggregationIntervalMinutes"
   | "streamGateMode"
   | "affinityIgnoreClientSessionId"
+  | "discoveryEnabled"
+  | "discoveryConcurrency"
+  | "maxDiscoveryRounds"
+  | "discoverySlaMs"
+  | "stickySlaMs"
+  | "racingTotalTimeoutMs"
+  | "stickyTimeoutCooldownMs"
 > = {
   enableHttp2: false,
   enableOpenaiResponsesWebsocket: true,
@@ -117,6 +124,13 @@ const DEFAULT_SETTINGS: Pick<
   publicStatusAggregationIntervalMinutes: 5,
   streamGateMode: "enforce",
   affinityIgnoreClientSessionId: true,
+  discoveryEnabled: false,
+  discoveryConcurrency: 2,
+  maxDiscoveryRounds: 2,
+  discoverySlaMs: 10_000,
+  stickySlaMs: 20_000,
+  racingTotalTimeoutMs: 60_000,
+  stickyTimeoutCooldownMs: 300_000,
 };
 
 /**
@@ -201,6 +215,13 @@ export async function getCachedSystemSettings(): Promise<SystemSettings> {
         DEFAULT_SETTINGS.publicStatusAggregationIntervalMinutes,
       streamGateMode: DEFAULT_SETTINGS.streamGateMode,
       affinityIgnoreClientSessionId: DEFAULT_SETTINGS.affinityIgnoreClientSessionId,
+      discoveryEnabled: DEFAULT_SETTINGS.discoveryEnabled,
+      discoveryConcurrency: DEFAULT_SETTINGS.discoveryConcurrency,
+      maxDiscoveryRounds: DEFAULT_SETTINGS.maxDiscoveryRounds,
+      discoverySlaMs: DEFAULT_SETTINGS.discoverySlaMs,
+      stickySlaMs: DEFAULT_SETTINGS.stickySlaMs,
+      racingTotalTimeoutMs: DEFAULT_SETTINGS.racingTotalTimeoutMs,
+      stickyTimeoutCooldownMs: DEFAULT_SETTINGS.stickyTimeoutCooldownMs,
       quotaDbRefreshIntervalSeconds: 10,
       quotaLeasePercent5h: 0.05,
       quotaLeasePercentDaily: 0.05,

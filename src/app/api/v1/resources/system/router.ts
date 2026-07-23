@@ -9,6 +9,7 @@ import {
   SystemSettingsUpdateSchema,
   SystemTimezoneResponseSchema,
 } from "@/lib/api/v1/schemas/system-config";
+import { getDiscoveryValidationErrorCode } from "@/lib/validation/discovery-settings";
 import {
   getSystemDisplaySettings,
   getSystemSettings,
@@ -18,7 +19,13 @@ import {
 
 export const systemRouter = new OpenAPIHono({
   defaultHook: (result, c) => {
-    if (!result.success) return fromZodError(result.error, new URL(c.req.url).pathname);
+    if (!result.success) {
+      return fromZodError(
+        result.error,
+        new URL(c.req.url).pathname,
+        getDiscoveryValidationErrorCode(result.error.issues)
+      );
+    }
   },
 });
 

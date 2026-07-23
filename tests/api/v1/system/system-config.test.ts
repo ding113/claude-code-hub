@@ -176,6 +176,21 @@ describe("v1 system config endpoints", () => {
     expect(invalidTimezone.json).toMatchObject({ errorCode: "request.validation_failed" });
   });
 
+  test("returns a stable error code for out-of-range Discovery settings", async () => {
+    const invalidDiscovery = await callV1Route({
+      method: "PUT",
+      pathname: "/api/v1/system/settings",
+      headers: { Authorization: "Bearer admin-token" },
+      body: { discoveryConcurrency: 33 },
+    });
+
+    expect(invalidDiscovery.response.status).toBe(400);
+    expect(invalidDiscovery.json).toMatchObject({
+      errorCode: "DISCOVERY_SETTINGS_INVALID",
+    });
+    expect(saveSystemSettingsMock).not.toHaveBeenCalled();
+  });
+
   test("rejects malformed and non-json system settings update bodies", async () => {
     const handlers = await import("@/app/api/v1/resources/system/handlers");
     const malformed = await handlers.updateSystemSettings({

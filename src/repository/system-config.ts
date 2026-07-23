@@ -191,6 +191,13 @@ function createFallbackSettings(): SystemSettings {
     quotaLeaseCapUsd: null,
     publicStatusWindowHours: 24,
     publicStatusAggregationIntervalMinutes: 5,
+    discoveryEnabled: false,
+    discoveryConcurrency: 2,
+    maxDiscoveryRounds: 2,
+    discoverySlaMs: 10_000,
+    stickySlaMs: 20_000,
+    racingTotalTimeoutMs: 60_000,
+    stickyTimeoutCooldownMs: 300_000,
     ipExtractionConfig: null,
     ipGeoLookupEnabled: true,
     streamGateMode: "enforce",
@@ -249,6 +256,13 @@ const BASE_SETTINGS_COLUMNS: SettingsSelection = {
   quotaLeaseCapUsd: systemSettings.quotaLeaseCapUsd,
   publicStatusWindowHours: systemSettings.publicStatusWindowHours,
   publicStatusAggregationIntervalMinutes: systemSettings.publicStatusAggregationIntervalMinutes,
+  discoveryEnabled: systemSettings.discoveryEnabled,
+  discoveryConcurrency: systemSettings.discoveryConcurrency,
+  maxDiscoveryRounds: systemSettings.maxDiscoveryRounds,
+  discoverySlaMs: systemSettings.discoverySlaMs,
+  stickySlaMs: systemSettings.stickySlaMs,
+  racingTotalTimeoutMs: systemSettings.racingTotalTimeoutMs,
+  stickyTimeoutCooldownMs: systemSettings.stickyTimeoutCooldownMs,
   createdAt: systemSettings.createdAt,
   updatedAt: systemSettings.updatedAt,
   passThroughUpstreamErrorMessage: systemSettings.passThroughUpstreamErrorMessage,
@@ -278,6 +292,48 @@ const RECENT_COLUMN_LADDER: ReadonlyArray<{
     column: systemSettings.streamGateMode,
     selectWarn: "system_settings 表除 streamGateMode 外仍有列缺失，继续回退到上一代字段集。",
     updateWarn: "system_settings 表除 streamGateMode 外仍有列缺失，继续降级更新。",
+  },
+  {
+    key: "stickyTimeoutCooldownMs",
+    column: systemSettings.stickyTimeoutCooldownMs,
+    selectWarn: "system_settings 缺少 stickyTimeoutCooldownMs，回退到上一代字段集。",
+    updateWarn: "system_settings 缺少 stickyTimeoutCooldownMs，回退到上一代字段集。",
+  },
+  {
+    key: "racingTotalTimeoutMs",
+    column: systemSettings.racingTotalTimeoutMs,
+    selectWarn: "system_settings 缺少 racingTotalTimeoutMs，回退到上一代字段集。",
+    updateWarn: "system_settings 缺少 racingTotalTimeoutMs，回退到上一代字段集。",
+  },
+  {
+    key: "stickySlaMs",
+    column: systemSettings.stickySlaMs,
+    selectWarn: "system_settings 缺少 stickySlaMs，回退到上一代字段集。",
+    updateWarn: "system_settings 缺少 stickySlaMs，回退到上一代字段集。",
+  },
+  {
+    key: "discoverySlaMs",
+    column: systemSettings.discoverySlaMs,
+    selectWarn: "system_settings 缺少 discoverySlaMs，回退到上一代字段集。",
+    updateWarn: "system_settings 缺少 discoverySlaMs，回退到上一代字段集。",
+  },
+  {
+    key: "maxDiscoveryRounds",
+    column: systemSettings.maxDiscoveryRounds,
+    selectWarn: "system_settings 缺少 maxDiscoveryRounds，回退到上一代字段集。",
+    updateWarn: "system_settings 缺少 maxDiscoveryRounds，回退到上一代字段集。",
+  },
+  {
+    key: "discoveryConcurrency",
+    column: systemSettings.discoveryConcurrency,
+    selectWarn: "system_settings 缺少 discoveryConcurrency，回退到上一代字段集。",
+    updateWarn: "system_settings 缺少 discoveryConcurrency，回退到上一代字段集。",
+  },
+  {
+    key: "discoveryEnabled",
+    column: systemSettings.discoveryEnabled,
+    selectWarn: "system_settings 缺少 discoveryEnabled，回退到上一代字段集。",
+    updateWarn: "system_settings 缺少 discoveryEnabled，回退到上一代字段集。",
   },
   {
     key: "enableGeminiFunctionIdRectifier",
@@ -633,6 +689,28 @@ export async function updateSystemSettings(
     // 供应商竞速输家计费开关（如果提供）
     if (payload.billHedgeLosers !== undefined) {
       updates.billHedgeLosers = payload.billHedgeLosers;
+    }
+
+    if (payload.discoveryEnabled !== undefined) {
+      updates.discoveryEnabled = payload.discoveryEnabled;
+    }
+    if (payload.discoveryConcurrency !== undefined) {
+      updates.discoveryConcurrency = payload.discoveryConcurrency;
+    }
+    if (payload.maxDiscoveryRounds !== undefined) {
+      updates.maxDiscoveryRounds = payload.maxDiscoveryRounds;
+    }
+    if (payload.discoverySlaMs !== undefined) {
+      updates.discoverySlaMs = payload.discoverySlaMs;
+    }
+    if (payload.stickySlaMs !== undefined) {
+      updates.stickySlaMs = payload.stickySlaMs;
+    }
+    if (payload.racingTotalTimeoutMs !== undefined) {
+      updates.racingTotalTimeoutMs = payload.racingTotalTimeoutMs;
+    }
+    if (payload.stickyTimeoutCooldownMs !== undefined) {
+      updates.stickyTimeoutCooldownMs = payload.stickyTimeoutCooldownMs;
     }
 
     // 系统时区配置字段（如果提供）

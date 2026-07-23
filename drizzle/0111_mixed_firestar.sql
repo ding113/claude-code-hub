@@ -1,2 +1,0 @@
-ALTER TABLE "system_settings" ADD COLUMN "stream_gate_mode" varchar(10) DEFAULT 'enforce' NOT NULL;--> statement-breakpoint
-ALTER TABLE "system_settings" ADD COLUMN "affinity_ignore_client_session_id" boolean DEFAULT true NOT NULL;

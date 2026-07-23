@@ -5,6 +5,7 @@ import type { Key } from "@/types/key";
 import type { MessageRequest } from "@/types/message";
 import type { ModelPrice } from "@/types/model-price";
 import type { Provider } from "@/types/provider";
+import { normalizeRoutingTrace } from "@/types/routing-trace";
 import {
   DEFAULT_FAKE_STREAMING_WHITELIST,
   type FakeStreamingWhitelistEntry,
@@ -183,6 +184,7 @@ export function toMessageRequest(dbMessage: any): MessageRequest {
     context1mApplied: dbMessage?.context1mApplied ?? false,
     swapCacheTtlApplied: dbMessage?.swapCacheTtlApplied ?? false,
     specialSettings: dbMessage?.specialSettings ?? null,
+    routingTrace: normalizeRoutingTrace(dbMessage?.routingTrace),
   };
 }
 
@@ -298,6 +300,13 @@ export function toSystemSettings(dbSettings: any): SystemSettings {
     quotaLeaseCapUsd: dbSettings?.quotaLeaseCapUsd ? parseFloat(dbSettings.quotaLeaseCapUsd) : null,
     publicStatusWindowHours: dbSettings?.publicStatusWindowHours ?? 24,
     publicStatusAggregationIntervalMinutes: dbSettings?.publicStatusAggregationIntervalMinutes ?? 5,
+    discoveryEnabled: dbSettings?.discoveryEnabled ?? false,
+    discoveryConcurrency: dbSettings?.discoveryConcurrency ?? 2,
+    maxDiscoveryRounds: dbSettings?.maxDiscoveryRounds ?? 2,
+    discoverySlaMs: dbSettings?.discoverySlaMs ?? 10_000,
+    stickySlaMs: dbSettings?.stickySlaMs ?? 20_000,
+    racingTotalTimeoutMs: dbSettings?.racingTotalTimeoutMs ?? 60_000,
+    stickyTimeoutCooldownMs: dbSettings?.stickyTimeoutCooldownMs ?? 300_000,
     ipExtractionConfig: dbSettings?.ipExtractionConfig ?? null,
     ipGeoLookupEnabled: dbSettings?.ipGeoLookupEnabled ?? true,
     streamGateMode:

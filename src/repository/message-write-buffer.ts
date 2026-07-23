@@ -8,6 +8,8 @@ import { getEnvConfig } from "@/lib/config/env.schema";
 import { logger } from "@/lib/logger";
 import type { StoredCostBreakdown } from "@/types/cost-breakdown";
 import type { CreateMessageRequestData } from "@/types/message";
+import { normalizeRoutingTrace, type RoutingTraceV1 } from "@/types/routing-trace";
+import { buildMonotonicRoutingTraceAssignments } from "./routing-trace-persistence";
 
 export type MessageRequestUpdatePatch = {
   durationMs?: number;
@@ -22,6 +24,7 @@ export type MessageRequestUpdatePatch = {
   cacheCreation1hInputTokens?: number;
   cacheTtlApplied?: string | null;
   providerChain?: CreateMessageRequestData["provider_chain"];
+  routingTrace?: RoutingTraceV1 | null;
   errorMessage?: string;
   errorStack?: string;
   errorCause?: string;
@@ -53,6 +56,12 @@ export type MessageRequestUpdateRecord = {
 export type DurableMessageRequestUpdateOptions = {
   timeoutMs?: number;
   onCommitted?: (patch: Readonly<MessageRequestUpdatePatch>) => void | Promise<void>;
+  /**
+   * terminal (default) owns the request outcome and only updates an unfinalized row.
+   * post-terminal-metadata is acknowledged after commit but may update an already
+   * finalized row; callers must use it only for idempotent metadata patches.
+   */
+  writeScope?: "terminal" | "post-terminal-metadata";
 };
 
 type DurableAcknowledgement = {
@@ -64,16 +73,25 @@ type DurableAcknowledgement = {
   settled: boolean;
   timeoutId: NodeJS.Timeout | null;
   commitNotified: boolean;
+  writeScope: NonNullable<DurableMessageRequestUpdateOptions["writeScope"]>;
   onCommittedCallbacks: Set<NonNullable<DurableMessageRequestUpdateOptions["onCommitted"]>>;
 };
 
 type PendingMessageRequestUpdate = {
   patch: MessageRequestUpdatePatch;
   durableAcknowledgement?: DurableAcknowledgement;
+  requiresTerminalFence?: boolean;
 };
 
 type MessageRequestUpdateBatchRecord = MessageRequestUpdateRecord & {
   durableAcknowledgement?: DurableAcknowledgement;
+  requiresTerminalFence?: boolean;
+};
+
+type PostTerminalMetadataTask = {
+  promise: Promise<boolean>;
+  routingTraceUpdatedAt: number;
+  routingTracePayload: string;
 };
 
 type WriterConfig = {
@@ -84,6 +102,25 @@ type WriterConfig = {
 
 const DEFAULT_DURABLE_ACK_TIMEOUT_MS = 120_000;
 const OVERFLOW_LOG_AGGREGATION_MS = 1_000;
+const SHUTDOWN_POST_TERMINAL_FLUSH_ATTEMPTS = 2;
+
+function resolveDurableAcknowledgementTimeoutMs(
+  options: DurableMessageRequestUpdateOptions
+): number {
+  const timeoutMs = options.timeoutMs ?? DEFAULT_DURABLE_ACK_TIMEOUT_MS;
+  return Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : DEFAULT_DURABLE_ACK_TIMEOUT_MS;
+}
+
+function durableAcknowledgementTimeoutError(): Error {
+  return new Error("durable message_request acknowledgement timed out");
+}
+
+function isRoutingTraceOnlyPatch(patch: MessageRequestUpdatePatch): boolean {
+  return (
+    patch.routingTrace !== undefined &&
+    Object.entries(patch).every(([key, value]) => value === undefined || key === "routingTrace")
+  );
+}
 
 type EvictablePendingEntry = {
   id: number;
@@ -237,6 +274,7 @@ const COLUMN_MAP: Record<keyof MessageRequestUpdatePatch, string> = {
   cacheCreation1hInputTokens: "cache_creation_1h_input_tokens",
   cacheTtlApplied: "cache_ttl_applied",
   providerChain: "provider_chain",
+  routingTrace: "routing_trace",
   errorMessage: "error_message",
   errorStack: "error_stack",
   errorCause: "error_cause",
@@ -277,6 +315,7 @@ function takeBatch(
       id,
       patch: pending.patch,
       durableAcknowledgement: pending.durableAcknowledgement,
+      requiresTerminalFence: pending.requiresTerminalFence,
     });
     evictableIndex.remove(id);
     map.delete(id);
@@ -289,13 +328,18 @@ function takeBatch(
 
 export function buildBatchUpdateSql(
   updates: MessageRequestUpdateRecord[],
-  options: { returnUpdatedIds?: boolean; durableIds?: readonly number[] } = {}
+  options: {
+    returnUpdatedIds?: boolean;
+    fencedUpdateIds?: readonly number[];
+    monotonicRoutingTraceIds?: readonly number[];
+  } = {}
 ): SQL | null {
   if (updates.length === 0) {
     return null;
   }
 
   const ids = updates.map((u) => u.id);
+  const monotonicRoutingTraceIds = new Set(options.monotonicRoutingTraceIds ?? []);
 
   const setClauses: SQL[] = [];
   for (const [key, columnName] of Object.entries(COLUMN_MAP) as Array<
@@ -308,13 +352,34 @@ export function buildBatchUpdateSql(
         continue;
       }
 
-      if (key === "providerChain" || key === "specialSettings" || key === "costBreakdown") {
+      if (
+        key === "providerChain" ||
+        key === "routingTrace" ||
+        key === "specialSettings" ||
+        key === "costBreakdown"
+      ) {
         if (value === null) {
           cases.push(sql`WHEN ${update.id} THEN NULL`);
           continue;
         }
-        const json = JSON.stringify(value);
-        cases.push(sql`WHEN ${update.id} THEN ${json}::jsonb`);
+        if (key === "routingTrace") {
+          const normalizedTrace = normalizeRoutingTrace(value);
+          if (!normalizedTrace) {
+            cases.push(sql`WHEN ${update.id} THEN NULL`);
+            continue;
+          }
+          if (!monotonicRoutingTraceIds.has(update.id)) {
+            cases.push(sql`WHEN ${update.id} THEN ${JSON.stringify(normalizedTrace)}::jsonb`);
+            continue;
+          }
+          const assignments = buildMonotonicRoutingTraceAssignments(normalizedTrace, {
+            routingTrace: sql`${sql.identifier("routing_trace")}`,
+            updatedAt: sql`${sql.identifier("updated_at")}`,
+          });
+          cases.push(sql`WHEN ${update.id} THEN ${assignments.routingTrace}`);
+          continue;
+        }
+        cases.push(sql`WHEN ${update.id} THEN ${JSON.stringify(value)}::jsonb`);
         continue;
       }
 
@@ -340,24 +405,40 @@ export function buildBatchUpdateSql(
     return null;
   }
 
-  // 所有更新统一刷新 updated_at
-  setClauses.push(sql`${sql.identifier("updated_at")} = NOW()`);
+  if (monotonicRoutingTraceIds.size > 0) {
+    const cases: SQL[] = [];
+    for (const update of updates) {
+      if (!monotonicRoutingTraceIds.has(update.id) || !update.patch.routingTrace) continue;
+      const assignments = buildMonotonicRoutingTraceAssignments(update.patch.routingTrace, {
+        routingTrace: sql`${sql.identifier("routing_trace")}`,
+        updatedAt: sql`${sql.identifier("updated_at")}`,
+      });
+      cases.push(sql`WHEN ${update.id} THEN ${assignments.updatedAt}`);
+    }
+    setClauses.push(
+      cases.length > 0
+        ? sql`${sql.identifier("updated_at")} = CASE id ${sql.join(cases, sql` `)} ELSE NOW() END`
+        : sql`${sql.identifier("updated_at")} = NOW()`
+    );
+  } else {
+    setClauses.push(sql`${sql.identifier("updated_at")} = NOW()`);
+  }
 
   const idList = sql.join(
     ids.map((id) => sql`${id}`),
     sql`, `
   );
   const updateIds = new Set(ids);
-  const durableIds = Array.from(new Set(options.durableIds ?? [])).filter((id) =>
+  const fencedUpdateIds = Array.from(new Set(options.fencedUpdateIds ?? [])).filter((id) =>
     updateIds.has(id)
   );
   const durableFence =
-    durableIds.length === 0
+    fencedUpdateIds.length === 0
       ? sql``
-      : durableIds.length === ids.length
+      : fencedUpdateIds.length === ids.length
         ? sql` AND ${sql.identifier("status_code")} IS NULL`
         : sql` AND (id NOT IN (${sql.join(
-            durableIds.map((id) => sql`${id}`),
+            fencedUpdateIds.map((id) => sql`${id}`),
             sql`, `
           )}) OR ${sql.identifier("status_code")} IS NULL)`;
 
@@ -405,6 +486,8 @@ function getPatchRetentionPriority(patch: MessageRequestUpdatePatch): number {
 class MessageRequestWriteBuffer {
   private readonly config: WriterConfig;
   private readonly pending = new Map<number, PendingMessageRequestUpdate>();
+  private readonly deferredOrdinary = new Map<number, MessageRequestUpdatePatch>();
+  private readonly postTerminalMetadataTasks = new Map<number, PostTerminalMetadataTask>();
   private readonly evictableIndex = new EvictablePendingIndex();
   private readonly durableAcknowledgements = new Map<number, DurableAcknowledgement>();
   private flushTimer: NodeJS.Timeout | null = null;
@@ -417,6 +500,7 @@ class MessageRequestWriteBuffer {
   private flushAgainAfterCurrent = false;
   private flushInFlight: Promise<void> | null = null;
   private readonly commitCallbacksInFlight = new Set<Promise<void>>();
+  private stopDrainAcceptingLateMetadata = false;
   private stopping = false;
 
   constructor(config: WriterConfig) {
@@ -425,8 +509,25 @@ class MessageRequestWriteBuffer {
 
   enqueue(id: number, patch: MessageRequestUpdatePatch): void {
     const existing = this.pending.get(id);
+    const activeAcknowledgement = this.durableAcknowledgements.get(id);
+    const postTerminalAcknowledgement =
+      (existing?.durableAcknowledgement ?? activeAcknowledgement)?.writeScope ===
+        "post-terminal-metadata" &&
+      !(existing?.durableAcknowledgement ?? activeAcknowledgement)?.settled;
+    if (postTerminalAcknowledgement) {
+      // A late ordinary update must never be merged into a trace-only ACK: that
+      // would let terminal/billing fields bypass the terminal status fence.
+      const deferred = this.deferredOrdinary.get(id);
+      this.deferredOrdinary.set(id, mergePatch(deferred ?? {}, patch));
+      return;
+    }
     // existing is older, patch is newer -> for replacement fields newer wins.
-    this.setPending(id, mergePatch(existing?.patch ?? {}, patch), existing?.durableAcknowledgement);
+    this.setPending(
+      id,
+      mergePatch(existing?.patch ?? {}, patch),
+      existing?.durableAcknowledgement,
+      existing?.requiresTerminalFence
+    );
 
     this.enforcePendingLimit();
     this.scheduleFlushIfNeeded();
@@ -437,23 +538,26 @@ class MessageRequestWriteBuffer {
     patch: MessageRequestUpdatePatch,
     options: DurableMessageRequestUpdateOptions = {}
   ): Promise<boolean> {
+    if (options.writeScope === "post-terminal-metadata") {
+      return this.enqueuePostTerminalMetadataDurably(id, patch, options);
+    }
     if (this.stopping) {
       return Promise.reject(new Error("message_request writer is stopping"));
     }
 
     const activeAcknowledgement = this.durableAcknowledgements.get(id);
     if (activeAcknowledgement && !activeAcknowledgement.settled) {
-      // The first durable claimant owns both the terminal patch and its commit
+      // The first terminal claimant owns both the terminal patch and its commit
       // callback. Later contenders may observe its SQL acknowledgement, but
       // must not merge a contradictory terminal outcome or publish side effects.
       return activeAcknowledgement.promise.then(() => false);
     }
-
     if (this.durableAcknowledgements.size >= this.config.maxPending) {
       return Promise.reject(new Error("durable message_request queue is full"));
     }
 
-    const acknowledgement = this.createDurableAcknowledgement(id, options);
+    const deadlineAt = Date.now() + resolveDurableAcknowledgementTimeoutMs(options);
+    const acknowledgement = this.createDurableAcknowledgement(id, options, deadlineAt);
     const existing = this.pending.get(id);
     this.setPending(id, mergePatch(existing?.patch ?? {}, patch), acknowledgement);
 
@@ -470,9 +574,152 @@ class MessageRequestWriteBuffer {
     return acknowledgement.promise.then(() => true);
   }
 
+  private enqueuePostTerminalMetadataDurably(
+    id: number,
+    patch: MessageRequestUpdatePatch,
+    options: DurableMessageRequestUpdateOptions
+  ): Promise<boolean> {
+    if (!isRoutingTraceOnlyPatch(patch)) {
+      return Promise.reject(
+        new Error("post-terminal metadata updates may only contain routingTrace")
+      );
+    }
+    const normalizedTrace = normalizeRoutingTrace(patch.routingTrace);
+    if (!normalizedTrace) {
+      return Promise.reject(new Error("post-terminal routing trace is invalid"));
+    }
+    const routingTracePayload = JSON.stringify(normalizedTrace);
+    const existingTask = this.postTerminalMetadataTasks.get(id);
+    if (existingTask) {
+      // Exact duplicates may share the same ACK. A different revision remains
+      // in the Redis outbox and must not be acknowledged as if this SQL wrote it.
+      if (
+        existingTask.routingTraceUpdatedAt === normalizedTrace.updatedAt &&
+        existingTask.routingTracePayload === routingTracePayload
+      ) {
+        return existingTask.promise;
+      }
+      return existingTask.promise.then(() => false);
+    }
+    if (
+      this.stopping &&
+      (!this.stopDrainAcceptingLateMetadata || this.commitCallbacksInFlight.size === 0)
+    ) {
+      return Promise.reject(new Error("message_request writer is stopping"));
+    }
+    if (this.postTerminalMetadataTasks.size >= this.config.maxPending) {
+      return Promise.reject(new Error("durable message_request queue is full"));
+    }
+
+    const task: PostTerminalMetadataTask = {
+      promise: Promise.resolve(false),
+      routingTraceUpdatedAt: normalizedTrace.updatedAt,
+      routingTracePayload,
+    };
+    task.promise = this.persistPostTerminalMetadataDurably(id, patch, options).finally(() => {
+      if (this.postTerminalMetadataTasks.get(id) === task) {
+        this.postTerminalMetadataTasks.delete(id);
+      }
+    });
+    this.postTerminalMetadataTasks.set(id, task);
+    return task.promise;
+  }
+
+  private async persistPostTerminalMetadataDurably(
+    id: number,
+    patch: MessageRequestUpdatePatch,
+    options: DurableMessageRequestUpdateOptions
+  ): Promise<boolean> {
+    const deadlineAt = Date.now() + resolveDurableAcknowledgementTimeoutMs(options);
+    while (true) {
+      if (Date.now() >= deadlineAt) throw durableAcknowledgementTimeoutError();
+      const activeAcknowledgement = this.durableAcknowledgements.get(id);
+      if (activeAcknowledgement && !activeAcknowledgement.settled) {
+        await this.waitForAcknowledgementSettlement(activeAcknowledgement, deadlineAt);
+        continue;
+      }
+      if (this.pending.has(id)) {
+        await this.flush();
+        if (this.pending.has(id)) await this.waitForRetry(deadlineAt);
+        continue;
+      }
+      break;
+    }
+
+    if (this.durableAcknowledgements.size >= this.config.maxPending) {
+      throw new Error("durable message_request queue is full");
+    }
+    const acknowledgement = this.createDurableAcknowledgement(id, options, deadlineAt);
+    this.setPending(id, patch, acknowledgement);
+    if (!this.enforcePendingLimit()) {
+      this.deletePending(id);
+      this.rejectDurableAcknowledgement(
+        acknowledgement,
+        new Error("durable message_request queue is full")
+      );
+    } else {
+      this.scheduleFlushIfNeeded();
+    }
+
+    if (this.stopping) {
+      for (
+        let attempt = 0;
+        attempt < SHUTDOWN_POST_TERMINAL_FLUSH_ATTEMPTS && !acknowledgement.settled;
+        attempt++
+      ) {
+        await this.flush();
+      }
+      if (!acknowledgement.settled) {
+        const pending = this.pending.get(id);
+        if (pending?.durableAcknowledgement === acknowledgement) {
+          this.deletePending(id);
+        }
+        this.rejectDurableAcknowledgement(
+          acknowledgement,
+          new Error("post-terminal metadata did not persist during writer shutdown")
+        );
+      }
+    }
+    await acknowledgement.promise;
+    return true;
+  }
+
+  private async waitForAcknowledgementSettlement(
+    acknowledgement: DurableAcknowledgement,
+    deadlineAt: number
+  ): Promise<void> {
+    const remainingMs = deadlineAt - Date.now();
+    if (remainingMs <= 0) throw durableAcknowledgementTimeoutError();
+    let timeoutId: NodeJS.Timeout | null = null;
+    try {
+      await Promise.race([
+        acknowledgement.promise.then(
+          () => undefined,
+          () => undefined
+        ),
+        new Promise<never>((_, reject) => {
+          timeoutId = setTimeout(() => reject(durableAcknowledgementTimeoutError()), remainingMs);
+          timeoutId.unref?.();
+        }),
+      ]);
+    } finally {
+      if (timeoutId) clearTimeout(timeoutId);
+    }
+  }
+
+  private async waitForRetry(deadlineAt: number): Promise<void> {
+    const remainingMs = deadlineAt - Date.now();
+    if (remainingMs <= 0) throw durableAcknowledgementTimeoutError();
+    await new Promise<void>((resolve) => {
+      const timeoutId = setTimeout(resolve, Math.min(50, remainingMs));
+      timeoutId.unref?.();
+    });
+  }
+
   private createDurableAcknowledgement(
     id: number,
-    options: DurableMessageRequestUpdateOptions
+    options: DurableMessageRequestUpdateOptions,
+    deadlineAt: number
   ): DurableAcknowledgement {
     let resolvePromise!: () => void;
     let rejectPromise!: (error: Error) => void;
@@ -489,22 +736,18 @@ class MessageRequestWriteBuffer {
       settled: false,
       timeoutId: null,
       commitNotified: false,
+      writeScope: options.writeScope ?? "terminal",
       onCommittedCallbacks: new Set(options.onCommitted ? [options.onCommitted] : []),
     };
 
-    const timeoutMs = options.timeoutMs ?? DEFAULT_DURABLE_ACK_TIMEOUT_MS;
-    const effectiveTimeoutMs =
-      Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : DEFAULT_DURABLE_ACK_TIMEOUT_MS;
+    const remainingMs = Math.max(1, deadlineAt - Date.now());
     acknowledgement.timeoutId = setTimeout(() => {
       const pending = this.pending.get(id);
       if (pending?.durableAcknowledgement === acknowledgement) {
         this.deletePending(id);
       }
-      this.rejectDurableAcknowledgement(
-        acknowledgement,
-        new Error("durable message_request acknowledgement timed out")
-      );
-    }, effectiveTimeoutMs);
+      this.rejectDurableAcknowledgement(acknowledgement, durableAcknowledgementTimeoutError());
+    }, remainingMs);
     acknowledgement.timeoutId.unref?.();
 
     this.durableAcknowledgements.set(id, acknowledgement);
@@ -519,28 +762,22 @@ class MessageRequestWriteBuffer {
     acknowledgement.commitNotified = true;
 
     for (const callback of acknowledgement.onCommittedCallbacks) {
-      try {
-        const result = callback(patch);
-        if (result && typeof result.then === "function") {
-          let callbackPromise: Promise<void>;
-          callbackPromise = Promise.resolve(result)
-            .catch((error: unknown) => {
-              logger.error("[MessageRequestWriteBuffer] Durable commit callback failed", {
-                error: error instanceof Error ? error.message : String(error),
-                messageRequestId: acknowledgement.id,
-              });
-            })
-            .finally(() => {
-              this.commitCallbacksInFlight.delete(callbackPromise);
-            });
-          this.commitCallbacksInFlight.add(callbackPromise);
-        }
-      } catch (error) {
-        logger.error("[MessageRequestWriteBuffer] Durable commit callback failed", {
-          error: error instanceof Error ? error.message : String(error),
-          messageRequestId: acknowledgement.id,
+      // Register the callback before invoking it. A callback may enqueue the
+      // post-terminal routing trace while the writer is already stopping; the
+      // shutdown drain must see that work as in-flight and keep accepting it.
+      let callbackPromise: Promise<void>;
+      callbackPromise = Promise.resolve()
+        .then(() => callback(patch))
+        .catch((error: unknown) => {
+          logger.error("[MessageRequestWriteBuffer] Durable commit callback failed", {
+            error: error instanceof Error ? error.message : String(error),
+            messageRequestId: acknowledgement.id,
+          });
+        })
+        .finally(() => {
+          this.commitCallbacksInFlight.delete(callbackPromise);
         });
-      }
+      this.commitCallbacksInFlight.add(callbackPromise);
     }
     acknowledgement.onCommittedCallbacks.clear();
   }
@@ -555,6 +792,7 @@ class MessageRequestWriteBuffer {
     if (this.durableAcknowledgements.get(acknowledgement.id) === acknowledgement) {
       this.durableAcknowledgements.delete(acknowledgement.id);
     }
+    this.releaseDeferredOrdinary(acknowledgement);
     acknowledgement.resolve();
   }
 
@@ -571,7 +809,28 @@ class MessageRequestWriteBuffer {
     if (this.durableAcknowledgements.get(acknowledgement.id) === acknowledgement) {
       this.durableAcknowledgements.delete(acknowledgement.id);
     }
+    this.releaseDeferredOrdinary(acknowledgement);
     acknowledgement.reject(error);
+  }
+
+  private releaseDeferredOrdinary(acknowledgement: DurableAcknowledgement): void {
+    if (acknowledgement.writeScope !== "post-terminal-metadata") {
+      return;
+    }
+    const patch = this.deferredOrdinary.get(acknowledgement.id);
+    if (!patch) {
+      return;
+    }
+    this.deferredOrdinary.delete(acknowledgement.id);
+    const existing = this.pending.get(acknowledgement.id);
+    this.setPending(
+      acknowledgement.id,
+      mergePatch(existing?.patch ?? {}, patch),
+      existing?.durableAcknowledgement,
+      true
+    );
+    this.enforcePendingLimit();
+    this.scheduleFlushIfNeeded();
   }
 
   private rejectAllDurableAcknowledgements(error: Error): void {
@@ -583,7 +842,8 @@ class MessageRequestWriteBuffer {
   private setPending(
     id: number,
     patch: MessageRequestUpdatePatch,
-    durableAcknowledgement?: DurableAcknowledgement
+    durableAcknowledgement?: DurableAcknowledgement,
+    requiresTerminalFence: boolean = false
   ): void {
     const activeDurableAcknowledgement =
       durableAcknowledgement && !durableAcknowledgement.settled
@@ -592,6 +852,7 @@ class MessageRequestWriteBuffer {
     this.pending.set(id, {
       patch,
       durableAcknowledgement: activeDurableAcknowledgement,
+      requiresTerminalFence,
     });
     if (activeDurableAcknowledgement) {
       this.evictableIndex.remove(id);
@@ -733,12 +994,18 @@ class MessageRequestWriteBuffer {
           const requiresUpdatedIds = batch.some(
             (item) => item.durableAcknowledgement && !item.durableAcknowledgement.settled
           );
-          const durableIds = batch.flatMap((item) =>
-            item.durableAcknowledgement ? [item.id] : []
+          const fencedUpdateIds = batch.flatMap((item) =>
+            item.requiresTerminalFence || item.durableAcknowledgement?.writeScope === "terminal"
+              ? [item.id]
+              : []
+          );
+          const monotonicRoutingTraceIds = batch.flatMap((item) =>
+            item.durableAcknowledgement?.writeScope === "post-terminal-metadata" ? [item.id] : []
           );
           const query = buildBatchUpdateSql(batch, {
             returnUpdatedIds: requiresUpdatedIds,
-            durableIds,
+            fencedUpdateIds,
+            monotonicRoutingTraceIds,
           });
           if (!query) {
             for (const item of batch) {
@@ -782,6 +1049,15 @@ class MessageRequestWriteBuffer {
                 continue;
               }
               const existing = this.pending.get(item.id);
+              if (
+                !item.durableAcknowledgement &&
+                existing?.durableAcknowledgement?.writeScope === "post-terminal-metadata" &&
+                !existing.durableAcknowledgement.settled
+              ) {
+                const deferred = this.deferredOrdinary.get(item.id);
+                this.deferredOrdinary.set(item.id, mergePatch(item.patch, deferred ?? {}));
+                continue;
+              }
               const durableAcknowledgement =
                 item.durableAcknowledgement && !item.durableAcknowledgement.settled
                   ? item.durableAcknowledgement
@@ -792,7 +1068,8 @@ class MessageRequestWriteBuffer {
               this.setPending(
                 item.id,
                 mergePatch(item.patch, existing?.patch ?? {}),
-                durableAcknowledgement
+                durableAcknowledgement,
+                item.requiresTerminalFence || existing?.requiresTerminalFence
               );
             }
             this.enforcePendingLimit();
@@ -826,33 +1103,62 @@ class MessageRequestWriteBuffer {
 
   async stop(): Promise<void> {
     this.stopping = true;
+    this.stopDrainAcceptingLateMetadata = true;
     this.clearFlushTimer();
-    await this.flush();
-    // stop 期间尽量补刷一次，避免极小概率竞态导致的 tail 更新残留
-    if (this.pending.size > 0) {
+
+    const flushForShutdown = async (): Promise<boolean> => {
       await this.flush();
+      // A failed batch is requeued. Give shutdown one bounded retry, matching
+      // the previous stop behavior without accepting an unbounded retry loop.
+      if (this.pending.size > 0) await this.flush();
+      return this.pending.size === 0;
+    };
+
+    let shutdownError: Error | null = null;
+    if (!(await flushForShutdown())) {
+      shutdownError = new Error("message_request writer shutdown persistence failed");
     }
-    if (this.pending.size > 0) {
-      const error = new Error("message_request writer shutdown persistence failed");
-      this.rejectAllDurableAcknowledgements(error);
-      this.clearOverflowLogTimer();
-      this.flushOverflowLog();
-      this.pending.clear();
-      this.evictableIndex.clear();
-      throw error;
+
+    // Terminal onCommitted callbacks may perform one acknowledged routing-trace
+    // patch. That dedicated path actively flushes while stopping, so join the
+    // callbacks before closing late-metadata admission or clearing the queue.
+    while (
+      !shutdownError &&
+      (this.commitCallbacksInFlight.size > 0 || this.postTerminalMetadataTasks.size > 0)
+    ) {
+      await Promise.allSettled([
+        ...this.commitCallbacksInFlight,
+        ...Array.from(this.postTerminalMetadataTasks.values(), (task) => task.promise),
+      ]);
     }
-    if (this.durableAcknowledgements.size > 0) {
+
+    this.stopDrainAcceptingLateMetadata = false;
+    // A callback can settle immediately after its final acknowledged enqueue.
+    // Drain that tail before deciding whether shutdown completed durably.
+    if (!shutdownError && !(await flushForShutdown())) {
+      shutdownError = new Error("message_request writer shutdown persistence failed");
+    }
+
+    if (shutdownError) {
+      this.rejectAllDurableAcknowledgements(shutdownError);
+    } else if (this.durableAcknowledgements.size > 0) {
       this.rejectAllDurableAcknowledgements(
         new Error("message_request writer stopped before durable commit")
       );
     }
-    while (this.commitCallbacksInFlight.size > 0) {
-      await Promise.allSettled([...this.commitCallbacksInFlight]);
+    while (this.commitCallbacksInFlight.size > 0 || this.postTerminalMetadataTasks.size > 0) {
+      await Promise.allSettled([
+        ...this.commitCallbacksInFlight,
+        ...Array.from(this.postTerminalMetadataTasks.values(), (task) => task.promise),
+      ]);
     }
     this.clearOverflowLogTimer();
     this.flushOverflowLog();
     this.pending.clear();
+    this.deferredOrdinary.clear();
+    this.postTerminalMetadataTasks.clear();
     this.evictableIndex.clear();
+    if (shutdownError) throw shutdownError;
   }
 }
 
@@ -892,11 +1198,30 @@ export function enqueueMessageRequestUpdateDurably(
       new Error("durable message_request buffer API requires async write mode")
     );
   }
-  const buffer = getBuffer();
+  const buffer =
+    options?.writeScope === "post-terminal-metadata" && _bufferState === "stopping"
+      ? _buffer
+      : getBuffer();
   if (!buffer) {
     return Promise.reject(new Error("message_request writer is not running"));
   }
   return buffer.enqueueDurably(id, patch, options);
+}
+
+export function enqueueMessageRequestPostTerminalRoutingTraceDurably(
+  id: number,
+  routingTrace: RoutingTraceV1,
+  options: Omit<DurableMessageRequestUpdateOptions, "writeScope"> = {}
+): Promise<boolean> {
+  const normalized = normalizeRoutingTrace(routingTrace);
+  if (!normalized) {
+    return Promise.reject(new Error("post-terminal routing trace is invalid"));
+  }
+  return enqueueMessageRequestUpdateDurably(
+    id,
+    { routingTrace: normalized },
+    { ...options, writeScope: "post-terminal-metadata" }
+  );
 }
 
 export async function flushMessageRequestWriteBuffer(): Promise<void> {

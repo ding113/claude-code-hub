@@ -158,6 +158,15 @@ export interface SystemSettings {
   // 不可指纹化的请求仍走会话复用
   affinityIgnoreClientSessionId: boolean;
 
+  /** Bounded streaming Discovery settings. */
+  discoveryEnabled: boolean;
+  discoveryConcurrency: number;
+  maxDiscoveryRounds: number;
+  discoverySlaMs: number;
+  stickySlaMs: number;
+  racingTotalTimeoutMs: number;
+  stickyTimeoutCooldownMs: number;
+
   createdAt: Date;
   updatedAt: Date;
 }
@@ -181,6 +190,14 @@ export interface UpdateSystemSettingsInput {
 
   // 供应商竞速输家计费（可选）
   billHedgeLosers?: boolean;
+
+  discoveryEnabled?: boolean;
+  discoveryConcurrency?: number;
+  maxDiscoveryRounds?: number;
+  discoverySlaMs?: number;
+  stickySlaMs?: number;
+  racingTotalTimeoutMs?: number;
+  stickyTimeoutCooldownMs?: number;
 
   // 系统时区配置（可选）
   timezone?: string | null;

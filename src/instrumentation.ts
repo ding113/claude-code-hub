@@ -237,6 +237,21 @@ async function startCloudPriceSyncScheduler(): Promise<void> {
   }
 }
 
+async function startRoutingTraceOutboxRecovery(): Promise<void> {
+  if (!process.env.REDIS_URL) return;
+  try {
+    const { startRoutingTraceOutboxReplayScheduler } = await import(
+      "@/repository/routing-trace-outbox"
+    );
+    await startRoutingTraceOutboxReplayScheduler();
+    logger.info("[Instrumentation] Routing trace outbox recovery started");
+  } catch (error) {
+    logger.warn("[Instrumentation] Routing trace outbox recovery failed to start", {
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
 /**
  * F3b：缓存效果窗口聚合定时任务（每 5 分钟，ENABLE_CACHE_EFFECTIVENESS 开启时）。
  * 服务内部有 advisory lock 防多副本重复跑；tick 失败仅记日志。
@@ -436,6 +451,8 @@ export async function register() {
         });
       }
 
+      await startRoutingTraceOutboxRecovery();
+
       // Ledger backfill: fire-and-forget after migration (non-blocking, idempotent)
       Promise.all([import("@/lib/async-task-manager"), import("@/lib/ledger-backfill")])
         .then(([{ AsyncTaskManager }, { backfillUsageLedger }]) => {
@@ -623,6 +640,7 @@ export async function register() {
       const isConnected = await checkDatabaseConnection();
       if (isConnected) {
         await runMigrations();
+        await startRoutingTraceOutboxRecovery();
 
         // Ledger backfill: fire-and-forget after migration (non-blocking, idempotent)
         Promise.all([import("@/lib/async-task-manager"), import("@/lib/ledger-backfill")])

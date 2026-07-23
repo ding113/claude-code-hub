@@ -1,4 +1,24 @@
+import type { SessionBindingSnapshot } from "@/lib/redis/session-binding";
 import type { ProxySession } from "./session";
+
+export type DeferredStreamingDiscoveryLease = {
+  sessionId: string;
+  keyId: number;
+  ownerToken: string;
+  ttlSeconds: number;
+};
+
+export type DeferredStreamingBindingHeartbeat = {
+  stop: () => void;
+  complete: () => Promise<void>;
+};
+
+export type DeferredStreamingHedgeBindingAuthority = {
+  /** Exact versioned generation written by the first-byte winner, when available. */
+  snapshot: SessionBindingSnapshot | null;
+  /** Only a confirmed successful legacy write may use the non-versioned clear path. */
+  legacyClearAllowed: boolean;
+};
 
 /**
  * 流式响应（SSE）在“收到响应头”时无法确定成功与否：
@@ -35,6 +55,21 @@ export type DeferredStreamingFinalization = {
    * coexists with asynchronously accumulated loser costs without clobbering.
    */
   billHedgeLosers?: boolean;
+  /** Discovery delays binding until the stream has a valid completion marker. */
+  bindingIntent?: "create" | "renew" | "none";
+  bindingSnapshot?: SessionBindingSnapshot | null;
+  /** Discovery create/renew intents must satisfy the protocol completion marker before binding. */
+  requiresCompletionMarkerForBinding?: boolean;
+  /** Lease already acquired by Forwarder and owned until terminal side effects finish. */
+  discoveryLease?: DeferredStreamingDiscoveryLease;
+  /** Whether this attempt owns a Provider concurrent-session reference. */
+  providerSessionRefOwned?: boolean;
+  /** CAS success converts this attempt ref into the binding baseline when true. */
+  providerSessionRefRetainOnSuccess?: boolean;
+  /** Binding authority established by the legacy Hedge winner's first-byte write. */
+  hedgeBindingAuthorityPromise?: Promise<DeferredStreamingHedgeBindingAuthority>;
+  /** ResponseHandler-owned runtime lifecycle; attached when streaming starts. */
+  hedgeBindingHeartbeat?: DeferredStreamingBindingHeartbeat;
 };
 
 const deferredMeta = new WeakMap<ProxySession, DeferredStreamingFinalization>();

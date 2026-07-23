@@ -15,6 +15,7 @@ import {
   Link2,
   RefreshCw,
   Server,
+  ShieldCheck,
   XCircle,
   Zap,
 } from "lucide-react";
@@ -28,7 +29,9 @@ import { formatCurrency } from "@/lib/utils/currency";
 import { findHedgeLoserCost, summarizeHedgeBilling } from "@/lib/utils/hedge-billing";
 import { formatProbability, formatProviderTimeline } from "@/lib/utils/provider-chain-formatter";
 import type { ProviderChainItem } from "@/types/message";
+import { normalizeRoutingTrace } from "@/types/routing-trace";
 import { type LogicTraceTabProps, parseBlockedReason } from "../types";
+import { DiscoveryTraceView, RoutingModeBanner } from "./DiscoveryTraceView";
 import { StepCard, type StepStatus } from "./StepCard";
 
 function getRequestStatus(item: ProviderChainItem): StepStatus {
@@ -63,6 +66,7 @@ function getRequestStatus(item: ProviderChainItem): StepStatus {
 export function LogicTraceTab({
   statusCode: _statusCode,
   providerChain,
+  routingTrace,
   sessionId,
   blockedBy,
   blockedReason,
@@ -184,9 +188,33 @@ export function LogicTraceTab({
   // Count providers at each stage
   const totalProviders = decisionContext?.totalProviders || 0;
   const afterHealthCheck = decisionContext?.afterHealthCheck || 0;
+  const normalizedRoutingTrace = normalizeRoutingTrace(routingTrace);
+  const isLeaseConflictProtection =
+    normalizedRoutingTrace?.mode === "single_upstream" &&
+    normalizedRoutingTrace.bypassReason === "lease_conflict";
 
   // Calculate step offset for session reuse flow
   const sessionReuseStepOffset = isSessionReuseFlow ? 1 : 0;
+
+  if (normalizedRoutingTrace?.mode === "discovery") {
+    return (
+      <div className="space-y-5">
+        <RoutingModeBanner trace={normalizedRoutingTrace} />
+        <DiscoveryTraceView
+          trace={normalizedRoutingTrace}
+          providerChain={providerChain ?? []}
+          hedgeLosers={hedgeLosers}
+          costUsd={costUsd}
+          winnerUsage={{
+            inputTokens,
+            outputTokens,
+            cacheCreationInputTokens,
+            cacheReadInputTokens,
+          }}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -243,17 +271,23 @@ export function LogicTraceTab({
         </div>
       )}
 
+      {normalizedRoutingTrace && <RoutingModeBanner trace={normalizedRoutingTrace} />}
+
       {/* Decision Chain Header */}
       {providerChain && providerChain.length > 0 && (
         <div className="space-y-2">
           <div className="flex items-center justify-between">
             <h4 className="text-sm font-semibold flex items-center gap-2">
-              {isSessionReuseFlow ? (
+              {isLeaseConflictProtection ? (
+                <ShieldCheck className="h-4 w-4 text-amber-600" />
+              ) : isSessionReuseFlow ? (
                 <Link2 className="h-4 w-4 text-violet-600" />
               ) : (
                 <GitBranch className="h-4 w-4 text-blue-600" />
               )}
-              {t("logicTrace.title")}
+              {isLeaseConflictProtection
+                ? t("logicTrace.singleRouteSelectionTitle")
+                : t("logicTrace.title")}
             </h4>
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
               {isSessionReuseFlow ? (

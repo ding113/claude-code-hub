@@ -2,6 +2,7 @@ import type { Numeric } from "decimal.js-light";
 import type { CacheTtlApplied } from "./cache";
 import type { HedgeLoserBilling } from "./cost-breakdown";
 import type { ProviderType } from "./provider";
+import type { RoutingTraceV1 } from "./routing-trace";
 import type { SpecialSetting } from "./special-settings";
 
 /**
@@ -274,6 +275,9 @@ export interface MessageRequest {
   // 上游决策链（记录尝试的供应商列表）
   providerChain?: ProviderChainItem[];
 
+  // 请求路由轨迹（Discovery/legacy 模式及调度生命周期）
+  routingTrace?: RoutingTraceV1 | null;
+
   // HTTP 状态码
   statusCode?: number;
 
@@ -349,6 +353,9 @@ export interface CreateMessageRequestData {
 
   // 上游决策链
   provider_chain?: ProviderChainItem[];
+
+  // 请求路由轨迹
+  routing_trace?: RoutingTraceV1 | null;
 
   // HTTP 状态码
   status_code?: number;

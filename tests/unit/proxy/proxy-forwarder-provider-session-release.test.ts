@@ -22,6 +22,20 @@ describe("ProxyForwarder provider failure session release", () => {
     mocks.releaseProviderSession.mockClear();
   });
 
+  it("tracks baseline ownership independently for consecutive refs to one Provider", async () => {
+    const { ProxySession } = await import("@/app/v1/_lib/proxy/session");
+    const session = Object.create(ProxySession.prototype) as ProxySession;
+
+    session.recordProviderSessionRef(42, { retainOnSuccess: true });
+    session.recordProviderSessionRef(42, { retainOnSuccess: false });
+
+    expect(session.shouldRetainProviderSessionRefOnSuccess(42)).toBe(true);
+    expect(session.consumeProviderSessionRef(42)).toBe(true);
+    expect(session.shouldRetainProviderSessionRefOnSuccess(42)).toBe(false);
+    expect(session.consumeProviderSessionRef(42)).toBe(true);
+    expect(session.hasProviderSessionRef(42)).toBe(false);
+  });
+
   it("标记供应商失败时仅释放本请求已获取的 provider session ref", async () => {
     const { ProxyForwarder } = await import("@/app/v1/_lib/proxy/forwarder");
     const forwarderInternals = ProxyForwarder as unknown as {
@@ -66,6 +80,22 @@ describe("ProxyForwarder provider failure session release", () => {
     expect(failedProviderIds).toEqual([42]);
     expect(consumeProviderSessionRef).toHaveBeenCalledWith(42);
     expect(mocks.releaseProviderSession).not.toHaveBeenCalled();
+  });
+
+  it("endpoint resolution rollback releases only a recorded provider ref", async () => {
+    const { ProxyForwarder } = await import("@/app/v1/_lib/proxy/forwarder");
+    const forwarderInternals = ProxyForwarder as unknown as {
+      releaseProviderSessionRef: (session: ProxySession, providerId: number) => boolean;
+    };
+    const consumeProviderSessionRef = vi.fn(() => true);
+    const session = {
+      sessionId: "sess_endpoint_failure",
+      consumeProviderSessionRef,
+    } as unknown as ProxySession;
+
+    expect(forwarderInternals.releaseProviderSessionRef(session, 42)).toBe(true);
+    expect(consumeProviderSessionRef).toHaveBeenCalledWith(42);
+    expect(mocks.releaseProviderSession).toHaveBeenCalledWith(42, "sess_endpoint_failure");
   });
 
   it("重复标记同一供应商时只释放一次，避免 hedge 路径重复 ZREM", async () => {

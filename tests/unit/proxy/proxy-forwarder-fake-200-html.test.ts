@@ -489,6 +489,7 @@ describe("ProxyForwarder - fake 200 HTML body", () => {
     const failure = mocks.recordFailure.mock.calls[0]?.[1];
     expect(failure).toBeInstanceOf(ProxyError);
     expect((failure as ProxyError).statusCode).toBe(429);
+    expect((failure as ProxyError).upstreamError?.isSyntheticFake200).toBe(true);
     expect((failure as ProxyError).upstreamError?.statusCodeInferred).toBe(true);
 
     const chain = session.getProviderChain();

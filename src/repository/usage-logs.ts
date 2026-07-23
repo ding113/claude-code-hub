@@ -10,6 +10,7 @@ import { isNonBillingEndpoint } from "@/lib/utils/performance-formatter";
 import { buildUnifiedSpecialSettings } from "@/lib/utils/special-settings";
 import type { HedgeLoserBilling, StoredCostBreakdown } from "@/types/cost-breakdown";
 import type { ProviderChainItem } from "@/types/message";
+import { normalizeRoutingTrace, type RoutingTraceV1 } from "@/types/routing-trace";
 import type { SpecialSetting } from "@/types/special-settings";
 import { LEDGER_BILLING_CONDITION } from "./_shared/ledger-conditions";
 import { escapeLike } from "./_shared/like";
@@ -75,6 +76,7 @@ export interface UsageLogRow {
   ttfbMs: number | null;
   errorMessage: string | null;
   providerChain: ProviderChainItem[] | null;
+  routingTrace?: RoutingTraceV1 | null;
   blockedBy: string | null; // 拦截类型（如 'sensitive_word'）
   blockedReason: string | null; // 拦截原因（JSON 字符串）
   userAgent: string | null; // User-Agent（客户端信息）
@@ -83,7 +85,12 @@ export interface UsageLogRow {
   context1mApplied: boolean | null; // 是否应用了1M上下文窗口
   swapCacheTtlApplied: boolean | null; // 是否启用了swap cache TTL billing
   specialSettings: SpecialSetting[] | null; // 特殊设置（审计/展示）
-  _liveChain?: { chain: ProviderChainItem[]; phase: string; updatedAt: number } | null;
+  _liveChain?: {
+    chain: ProviderChainItem[];
+    phase: string;
+    updatedAt: number;
+    routingTrace?: RoutingTraceV1 | null;
+  } | null;
   anthropicEffort?: string | null;
 }
 
@@ -211,6 +218,7 @@ export async function findUsageLogsBatch(
       ttfbMs: messageRequest.ttfbMs,
       errorMessage: messageRequest.errorMessage,
       providerChain: messageRequest.providerChain,
+      routingTrace: messageRequest.routingTrace,
       blockedBy: messageRequest.blockedBy,
       blockedReason: messageRequest.blockedReason,
       userAgent: messageRequest.userAgent,
@@ -269,6 +277,7 @@ export async function findUsageLogsBatch(
       costBreakdown: (row.costBreakdown as StoredCostBreakdown) ?? null,
       hedgeLosers: Array.isArray(row.hedgeLosers) ? (row.hedgeLosers as HedgeLoserBilling[]) : null,
       providerChain: row.providerChain as ProviderChainItem[] | null,
+      routingTrace: normalizeRoutingTrace(row.routingTrace),
       endpoint: row.endpoint,
       specialSettings: unifiedSpecialSettings,
       anthropicEffort,
@@ -446,6 +455,7 @@ export async function findUsageLogsBatch(
       ttfbMs: row.ttfbMs,
       errorMessage: null,
       providerChain: null,
+      routingTrace: null,
       blockedBy: null,
       blockedReason: null,
       userAgent: null,
@@ -989,6 +999,7 @@ function mapUsageLogRowFromMessageResult(row: {
   ttfbMs: number | null;
   errorMessage: string | null;
   providerChain: ProviderChainItem[] | null;
+  routingTrace: RoutingTraceV1 | null;
   blockedBy: string | null;
   blockedReason: string | null;
   userAgent: string | null;
@@ -1024,6 +1035,7 @@ function mapUsageLogRowFromMessageResult(row: {
     costBreakdown: row.costBreakdown ?? null,
     hedgeLosers: Array.isArray(row.hedgeLosers) ? row.hedgeLosers : null,
     providerChain: row.providerChain ?? null,
+    routingTrace: normalizeRoutingTrace(row.routingTrace),
     specialSettings: unifiedSpecialSettings,
     anthropicEffort,
   } satisfies UsageLogRow;
@@ -1094,6 +1106,7 @@ function mapUsageLogRowFromLedgerResult(row: {
     ttfbMs: row.ttfbMs,
     errorMessage: null,
     providerChain: null,
+    routingTrace: null,
     blockedBy: null,
     blockedReason: null,
     userAgent: null,
@@ -1150,6 +1163,7 @@ export async function findReadonlyUsageLogsBatchForKey(
         ttfbMs: messageRequest.ttfbMs,
         errorMessage: messageRequest.errorMessage,
         providerChain: messageRequest.providerChain,
+        routingTrace: messageRequest.routingTrace,
         blockedBy: messageRequest.blockedBy,
         blockedReason: messageRequest.blockedReason,
         userAgent: messageRequest.userAgent,
@@ -1401,6 +1415,7 @@ export async function findUsageLogsWithDetails(filters: UsageLogFilters): Promis
       ttfbMs: messageRequest.ttfbMs,
       errorMessage: messageRequest.errorMessage,
       providerChain: messageRequest.providerChain,
+      routingTrace: messageRequest.routingTrace,
       blockedBy: messageRequest.blockedBy, // 拦截类型
       blockedReason: messageRequest.blockedReason, // 拦截原因
       userAgent: messageRequest.userAgent, // User-Agent
@@ -1464,6 +1479,7 @@ export async function findUsageLogsWithDetails(filters: UsageLogFilters): Promis
       costBreakdown: (row.costBreakdown as StoredCostBreakdown) ?? null,
       hedgeLosers: Array.isArray(row.hedgeLosers) ? (row.hedgeLosers as HedgeLoserBilling[]) : null,
       providerChain: row.providerChain as ProviderChainItem[] | null,
+      routingTrace: normalizeRoutingTrace(row.routingTrace),
       endpoint: row.endpoint,
       specialSettings: unifiedSpecialSettings,
       anthropicEffort,

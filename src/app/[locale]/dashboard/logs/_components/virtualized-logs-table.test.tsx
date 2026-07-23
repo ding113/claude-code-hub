@@ -5,6 +5,7 @@ import { act } from "react";
 import { describe, expect, test, vi } from "vitest";
 
 import type { UsageLogRow } from "@/repository/usage-logs";
+import type { RoutingTraceV1 } from "@/types/routing-trace";
 
 let mockLogs: UsageLogRow[] = [];
 let mockIsLoading = false;
@@ -157,6 +158,16 @@ function makeLog(overrides: Partial<UsageLogRow>): UsageLogRow {
   };
 }
 
+const discoveryTrace: RoutingTraceV1 = {
+  version: 1,
+  mode: "discovery",
+  startedAt: 1,
+  updatedAt: 2,
+  discoveryEnabled: true,
+  eligible: true,
+  events: [],
+};
+
 function renderTableWithLog(overrides: Partial<UsageLogRow>) {
   mockIsLoading = false;
   mockIsError = false;
@@ -299,6 +310,25 @@ describe("virtualized-logs-table multiplier badge", () => {
       <VirtualizedLogsTable filters={{}} autoRefreshEnabled={false} />
     );
     expect(html).toContain("x0.20");
+  });
+
+  test("keeps the winner multiplier visible after multiple Discovery attempts", () => {
+    const html = renderTableWithLog({
+      costMultiplier: "0.01",
+      routingTrace: discoveryTrace,
+      providerChain: [
+        { id: 1, name: "failed", reason: "retry_failed", statusCode: 503 },
+        {
+          id: 2,
+          name: "winner",
+          reason: "retry_success",
+          statusCode: 200,
+          costMultiplier: 0.03,
+        },
+      ],
+    });
+
+    expect(html).toContain("x0.03");
   });
 
   test("shows scroll-to-top button after scroll and triggers scrollTo", async () => {
