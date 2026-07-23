@@ -37,4 +37,9 @@ describe("fn_upsert_usage_ledger trigger SQL", () => {
   it("creates trigger binding", () => {
     expect(sql).toContain("CREATE TRIGGER trg_upsert_usage_ledger");
   });
+
+  it("does not run the accounting projection for routing-trace-only updates", () => {
+    expect(sql).toContain("AFTER INSERT OR UPDATE OF");
+    expect(sql).not.toMatch(/UPDATE OF[\s\S]*routing_trace[\s\S]*ON message_request/);
+  });
 });

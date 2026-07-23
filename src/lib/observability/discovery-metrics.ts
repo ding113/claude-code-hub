@@ -1,4 +1,5 @@
 import { logger } from "@/lib/logger";
+import type { RoutingTraceSummaryV1 } from "@/types/routing-trace";
 
 export type DiscoveryLifecycleEvent =
   | "request_started"
@@ -11,7 +12,7 @@ export type DiscoveryLifecycleEvent =
   | "binding_cas_conflict"
   | "request_finished";
 
-export type DiscoveryWinnerOrigin = "normal" | "fallback" | "none";
+export type DiscoveryWinnerOrigin = "sticky" | "normal" | "fallback" | "none";
 
 type DiscoveryMetricIdentity = {
   requestId: number | string | null;
@@ -36,7 +37,7 @@ export class DiscoveryRequestMetrics {
   private providerMs = 0;
   private fallbackPromotions = 0;
   private cancelFailures = 0;
-  private finished = false;
+  private summary: RoutingTraceSummaryV1 | null = null;
 
   constructor(
     private readonly identity: DiscoveryMetricIdentity,
@@ -99,18 +100,32 @@ export class DiscoveryRequestMetrics {
     });
   }
 
-  finish(context: {
+  snapshot(context: {
     outcome: "success" | "failed" | "client_abort" | "deadline";
     statusCode: number;
     winnerOrigin?: DiscoveryWinnerOrigin;
     winnerProviderId?: number | null;
     winnerRound?: number | null;
-  }): void {
-    if (this.finished) return;
-    this.finished = true;
+  }): RoutingTraceSummaryV1 {
+    if (this.summary) return this.summary;
     const elapsedMs = Math.max(0, Date.now() - this.startedAt);
-    logger.info("[DiscoveryMetric] Request aggregate", {
-      event: "request_finished",
+    this.summary = {
+      outcome: context.outcome,
+      statusCode: context.statusCode,
+      durationMs: elapsedMs,
+      ttfbMs: context.outcome === "success" ? elapsedMs : null,
+      attemptsPerRequest: this.attempts,
+      maxActiveAttempts: this.maxActive,
+      rounds: this.maxRound,
+      providerMs: this.providerMs,
+      fallbackPromotions: this.fallbackPromotions,
+      cancelFailures: this.cancelFailures,
+      winnerOrigin: context.winnerOrigin ?? "none",
+      winnerProviderId: context.winnerProviderId ?? null,
+      winnerRound: context.winnerRound ?? null,
+    };
+    logger.debug("[DiscoveryMetric] Aggregate snapshot", {
+      event: context.outcome === "success" ? "winner_committed" : "request_failed",
       ...this.identity,
       ...context,
       elapsedMs,
@@ -122,5 +137,6 @@ export class DiscoveryRequestMetrics {
       fallbackPromotions: this.fallbackPromotions,
       cancelFailures: this.cancelFailures,
     });
+    return this.summary;
   }
 }

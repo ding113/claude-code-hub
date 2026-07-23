@@ -57,6 +57,8 @@ import type {
 } from "@/types/system-config";
 
 interface SystemSettingsFormProps {
+  /** Read-only runtime value; SESSION_TTL is not a persisted system setting. */
+  sessionTtlSeconds?: number;
   initialSettings: Pick<
     SystemSettings,
     | "siteTitle"
@@ -117,7 +119,10 @@ function formatIpExtractionConfig(config: IpExtractionConfig): string {
 const DEFAULT_IP_EXTRACTION_CONFIG_TEXT = formatIpExtractionConfig(DEFAULT_IP_EXTRACTION_CONFIG);
 type DiscoveryNumberValue = number | "";
 
-export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps) {
+export function SystemSettingsForm({
+  initialSettings,
+  sessionTtlSeconds = 300,
+}: SystemSettingsFormProps) {
   const router = useRouter();
   const t = useTranslations("settings.config.form");
   const tSettings = useTranslations("settings");
@@ -785,6 +790,15 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
                     />
                   </div>
                 ))}
+              </div>
+              <div className="rounded-lg border border-cyan-500/20 bg-cyan-500/5 px-3 py-2.5">
+                <div className="flex items-center justify-between gap-3 text-xs">
+                  <span className="font-medium text-foreground">{t("stickyBindingTtl")}</span>
+                  <span className="font-mono text-muted-foreground">{sessionTtlSeconds}s</span>
+                </div>
+                <p className="mt-1 text-[11px] text-muted-foreground">
+                  {t("stickyBindingTtlDesc")}
+                </p>
               </div>
               <p className="text-xs text-muted-foreground">{t("discoveryWindowDesc")}</p>
             </>

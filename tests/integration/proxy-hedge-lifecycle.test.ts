@@ -244,6 +244,7 @@ vi.mock("@/lib/proxy-status-tracker", () => ({
 vi.mock("@/lib/redis/live-chain-store", () => ({
   deleteLiveChain: vi.fn(async () => {}),
   writeLiveChain: vi.fn(async () => {}),
+  writeLiveRoutingTrace: vi.fn(async () => {}),
 }));
 
 const CREATED_AT = new Date(0);

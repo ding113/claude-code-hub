@@ -128,6 +128,8 @@
     "stickySlaMs": "SLA Sticky (миллисекунды)",
     "racingTotalTimeoutMs": "Общий тайм-аут Discovery (миллисекунды)",
     "stickyTimeoutCooldownMs": "Пауза после тайм-аута Sticky (миллисекунды)",
+    "stickyBindingTtl": "Срок действия привязки Sticky",
+    "stickyBindingTtlDesc": "Только для чтения. Значение следует переменной окружения SESSION_TTL и используется другими снимками Session.",
     "discoveryWindowDesc": "Общий тайм-аут должен быть не меньше SLA Sticky + максимальное число раундов × SLA Discovery.",
     "discoveryWindowInvalid": "Общий тайм-аут Discovery меньше настроенного окна Sticky и Discovery.",
     "discoverySettingsInvalid": "Одно или несколько значений Discovery находятся вне допустимого диапазона.",

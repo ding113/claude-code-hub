@@ -73,7 +73,9 @@ vi.mock("@/lib/async-task-manager", () => ({
 }));
 
 vi.mock("@/lib/config/system-settings-cache", () => ({
-  getCachedSystemSettings: vi.fn(async () => ({ billNonSuccessfulRequests: false })),
+  getCachedSystemSettings: vi.fn(async () => ({
+    billNonSuccessfulRequests: false,
+  })),
 }));
 
 vi.mock("@/lib/langfuse/emit-proxy-trace", () => ({
@@ -114,6 +116,7 @@ vi.mock("@/lib/rate-limit", () => ({
 
 vi.mock("@/lib/redis/live-chain-store", () => ({
   deleteLiveChain: vi.fn(),
+  writeLiveRoutingTrace: vi.fn(),
 }));
 
 vi.mock("@/lib/session-manager", () => ({
@@ -148,7 +151,10 @@ vi.mock("@/lib/session-manager", () => ({
     storeSessionUpstreamResponseMeta: vi.fn(),
     updateSessionProvider: vi.fn(),
     updateSessionUsage: vi.fn(),
-    updateSessionBindingSmart: vi.fn(async () => ({ updated: false, reason: "test" })),
+    updateSessionBindingSmart: vi.fn(async () => ({
+      updated: false,
+      reason: "test",
+    })),
     updateSessionWithCodexCacheKey: vi.fn(),
   },
 }));
@@ -294,7 +300,11 @@ function createSession(
     userAgent: "Go-http-client/1.1",
     userName: "admin",
     addProviderToChain(this: ProxySession & { providerChain: unknown[] }, prov: Provider, meta) {
-      this.providerChain.push({ id: prov.id, name: prov.name, ...(meta ?? {}) });
+      this.providerChain.push({
+        id: prov.id,
+        name: prov.name,
+        ...(meta ?? {}),
+      });
     },
     clearResponseTimeout: vi.fn(),
     getContext1mApplied: () => false,
@@ -1641,7 +1651,10 @@ describe("ProxyResponseHandler stream client abort finalization", () => {
       await expectAllFulfilled(tasks);
       expect(updateMessageRequestDetailsDurably).toHaveBeenCalledWith(
         123,
-        expect.objectContaining({ durationMs: expect.any(Number), statusCode: 200 }),
+        expect.objectContaining({
+          durationMs: expect.any(Number),
+          statusCode: 200,
+        }),
         expect.objectContaining({ onCommitted: expect.any(Function) })
       );
     } finally {
@@ -1787,7 +1800,10 @@ describe("ProxyResponseHandler stream client abort finalization", () => {
     expect(updateMessageRequestDuration).not.toHaveBeenCalled();
     expect(updateMessageRequestDetailsDurably).toHaveBeenCalledWith(
       123,
-      expect.objectContaining({ durationMs: expect.any(Number), statusCode: 200 }),
+      expect.objectContaining({
+        durationMs: expect.any(Number),
+        statusCode: 200,
+      }),
       expect.objectContaining({ onCommitted: expect.any(Function) })
     );
   });
@@ -2106,7 +2122,9 @@ describe("ProxyResponseHandler stream client abort finalization", () => {
       const controller = new AbortController();
       controller.abort();
       const session = createSession(controller.signal);
-      Object.assign(session, { sessionId: `session-client-abort-${bindingIntent}` });
+      Object.assign(session, {
+        sessionId: `session-client-abort-${bindingIntent}`,
+      });
       session.recordProviderSessionRef(1);
       vi.mocked(SessionManager.extractCodexPromptCacheKey).mockReturnValue(
         "client-abort-cache-key"
@@ -2129,7 +2147,7 @@ describe("ProxyResponseHandler stream client abort finalization", () => {
           providerId,
           generation: `${bindingIntent}-generation`,
         },
-        requiresCompletionMarker: true,
+        requiresCompletionMarkerForBinding: true,
         discoveryLease: {
           sessionId: `session-client-abort-${bindingIntent}`,
           keyId: 2,
@@ -2226,7 +2244,9 @@ describe("ProxyResponseHandler stream client abort finalization", () => {
     );
     // Must NOT have been recorded as a billed 200 success.
     const calls = (
-      updateMessageRequestDetailsDurably as unknown as { mock: { calls: unknown[][] } }
+      updateMessageRequestDetailsDurably as unknown as {
+        mock: { calls: unknown[][] };
+      }
     ).mock.calls;
     const recorded = calls.find((c) => (c[0] as number) === 123)?.[1] as
       | { statusCode?: number }
@@ -2964,7 +2984,9 @@ describe("ProxyResponseHandler stream client abort finalization", () => {
     expect(recordFailure).toHaveBeenCalledTimes(1);
     expect(recordFailure).toHaveBeenCalledWith(
       1,
-      expect.objectContaining({ message: "FAKE_200_JSON_ERROR_MESSAGE_NON_EMPTY" })
+      expect.objectContaining({
+        message: "FAKE_200_JSON_ERROR_MESSAGE_NON_EMPTY",
+      })
     );
   });
 
@@ -3129,7 +3151,9 @@ describe("ProxyResponseHandler stream client abort finalization", () => {
     expect(recordFailure).toHaveBeenCalledTimes(1);
     expect(recordFailure).toHaveBeenCalledWith(
       1,
-      expect.objectContaining({ message: "FAKE_200_JSON_ERROR_MESSAGE_NON_EMPTY" })
+      expect.objectContaining({
+        message: "FAKE_200_JSON_ERROR_MESSAGE_NON_EMPTY",
+      })
     );
   });
 
@@ -3185,7 +3209,10 @@ describe("ProxyResponseHandler stream client abort finalization", () => {
     expect(updateMessageRequestDuration).not.toHaveBeenCalled();
     expect(updateMessageRequestDetailsDurably).toHaveBeenCalledWith(
       123,
-      expect.objectContaining({ durationMs: expect.any(Number), statusCode: 200 }),
+      expect.objectContaining({
+        durationMs: expect.any(Number),
+        statusCode: 200,
+      }),
       expect.objectContaining({ onCommitted: expect.any(Function) })
     );
   });
@@ -3217,7 +3244,7 @@ describe("ProxyResponseHandler stream client abort finalization", () => {
         providerId: null,
         generation: "non-sse-generation",
       },
-      requiresCompletionMarker: true,
+      requiresCompletionMarkerForBinding: true,
       discoveryLease: {
         sessionId: "non-sse-gemini-discovery",
         keyId: 2,
@@ -3472,7 +3499,7 @@ describe("ProxyResponseHandler stream client abort finalization", () => {
         providerId: null,
         generation: "discovery-create-generation",
       },
-      requiresCompletionMarker: true,
+      requiresCompletionMarkerForBinding: true,
       discoveryLease: {
         sessionId: "stream-discovery-cache-binding",
         keyId: 2,
@@ -3522,7 +3549,7 @@ describe("ProxyResponseHandler stream client abort finalization", () => {
         providerId: null,
         generation: "stale-discovery-generation",
       },
-      requiresCompletionMarker: true,
+      requiresCompletionMarkerForBinding: true,
       discoveryLease: {
         sessionId: "stream-discovery-cache-conflict",
         keyId: 2,
@@ -3570,7 +3597,7 @@ describe("ProxyResponseHandler stream client abort finalization", () => {
         providerId: null,
         generation: "incomplete-discovery-generation",
       },
-      requiresCompletionMarker: true,
+      requiresCompletionMarkerForBinding: true,
       discoveryLease: {
         sessionId: "stream-discovery-cache-incomplete",
         keyId: 2,

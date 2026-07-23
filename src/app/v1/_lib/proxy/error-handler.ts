@@ -664,6 +664,7 @@ export class ProxyErrorHandler {
       durationMs: duration,
       errorMessage: finalErrorMessage,
       providerChain: session.getProviderChain(),
+      routingTrace: session.finalizeRoutingTrace(statusCode),
       statusCode: statusCode,
       model: session.getCurrentModel() ?? undefined,
       providerId: session.provider?.id, // ⭐ 更新最终供应商ID（重试切换后）
@@ -673,6 +674,11 @@ export class ProxyErrorHandler {
 
     // 记录请求结束
     ProxyErrorHandler.endRequestTracking(session);
+    void session.closeLiveObservability().catch((error) => {
+      logger.warn("ProxyErrorHandler: Failed to close live observability", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    });
   }
 
   private static endRequestTracking(session: ProxySession): void {

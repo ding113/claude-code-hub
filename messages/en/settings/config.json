@@ -126,6 +126,8 @@
     "stickySlaMs": "Sticky SLA (milliseconds)",
     "racingTotalTimeoutMs": "Discovery total timeout (milliseconds)",
     "stickyTimeoutCooldownMs": "Sticky timeout cooldown (milliseconds)",
+    "stickyBindingTtl": "Sticky binding validity",
+    "stickyBindingTtlDesc": "Read-only. This follows the SESSION_TTL environment variable and is shared with other session snapshots.",
     "discoveryWindowDesc": "The total timeout must be at least Sticky SLA + maximum rounds × Discovery SLA. Discovery losers are cancelled and are not drained or billed by the legacy Hedge path.",
     "discoveryWindowInvalid": "Discovery total timeout is shorter than the configured Sticky and Discovery windows.",
     "discoverySettingsInvalid": "One or more Discovery values are outside the allowed range.",

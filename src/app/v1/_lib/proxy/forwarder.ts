@@ -286,6 +286,28 @@ type PreparedStreamingDiscovery = {
   };
 };
 
+type DiscoveryBypassReason =
+  | "disabled"
+  | "non_streaming"
+  | "retry_not_allowed"
+  | "provider_switch_not_allowed"
+  | "raw_passthrough"
+  | "unsupported_protocol"
+  | "websocket"
+  | "streaming_hedge_disabled"
+  | "raw_cross_provider_fallback"
+  | "missing_session"
+  | "missing_key"
+  | "rollout_ineligible"
+  | "redis_capability_unavailable"
+  | "binding_conflict"
+  | "lease_conflict"
+  | "lease_unavailable";
+
+type PrepareStreamingDiscoveryResult =
+  | { status: "prepared"; prepared: PreparedStreamingDiscovery }
+  | { status: "skipped"; reason: DiscoveryBypassReason };
+
 type StreamingHedgeAttempt = {
   provider: Provider;
   session: ProxySession;
@@ -447,14 +469,18 @@ async function readResponseTextUpTo(
       // because the tee controller waits for internal queue drainage while the other
       // branch has not started consuming yet. This deadlocks the main request path.
       reader.cancel().catch((cancelErr) => {
-        logger.debug("readResponseTextUpTo: failed to cancel reader", { error: cancelErr });
+        logger.debug("readResponseTextUpTo: failed to cancel reader", {
+          error: cancelErr,
+        });
       });
     }
 
     try {
       reader.releaseLock();
     } catch (releaseErr) {
-      logger.debug("readResponseTextUpTo: failed to release reader lock", { error: releaseErr });
+      logger.debug("readResponseTextUpTo: failed to release reader lock", {
+        error: releaseErr,
+      });
     }
   }
 
@@ -1296,21 +1322,65 @@ export class ProxyForwarder {
 
     const requestStartedAt = Date.now();
     const discoverySettings = await getCachedSystemSettings();
-    const preparedDiscovery = await ProxyForwarder.prepareStreamingDiscovery(
+    const configuredSessionTtlSeconds = getEnvConfig().SESSION_TTL;
+    const sessionTtlSeconds = Number.isFinite(configuredSessionTtlSeconds)
+      ? Math.max(1, Math.floor(configuredSessionTtlSeconds))
+      : 300;
+    const discoveryPreparation = await ProxyForwarder.prepareStreamingDiscovery(
       session,
       discoverySettings,
       requestStartedAt
     );
-    if (preparedDiscovery) {
+    if (discoveryPreparation.status === "prepared") {
+      session.initializeRoutingTrace({
+        mode: "discovery",
+        discoveryEnabled: true,
+        eligible: true,
+        startedAt: requestStartedAt,
+        config: {
+          discoveryConcurrency: Math.max(
+            2,
+            Math.floor(discoverySettings.discoveryConcurrency ?? 2)
+          ),
+          maxDiscoveryRounds: Math.max(1, Math.floor(discoverySettings.maxDiscoveryRounds ?? 2)),
+          discoverySlaMs: Math.max(1, discoverySettings.discoverySlaMs ?? 10_000),
+          stickySlaMs: Math.max(1, discoverySettings.stickySlaMs ?? 20_000),
+          racingTotalTimeoutMs: Math.max(1, discoverySettings.racingTotalTimeoutMs ?? 60_000),
+          stickyTimeoutCooldownMs: Math.max(
+            1,
+            discoverySettings.stickyTimeoutCooldownMs ?? 300_000
+          ),
+          sessionTtlSeconds,
+        },
+      });
       const discoveryPromise = ProxyForwarder.sendStreamingWithDiscovery(
         session,
-        preparedDiscovery
+        discoveryPreparation.prepared
       );
       void discoveryPromise.catch(() => undefined);
       return await discoveryPromise;
     }
 
-    if (ProxyForwarder.shouldUseStreamingHedge(session)) {
+    const useStreamingHedge = ProxyForwarder.shouldUseStreamingHedge(session);
+    const singleUpstream =
+      discoveryPreparation.reason === "binding_conflict" ||
+      discoveryPreparation.reason === "lease_conflict" ||
+      (session.isStreamingHedgeDisabled() && !session.isSessionBindingAllowed()) ||
+      !ProxyForwarder.getEndpointPolicy(session).allowRetry ||
+      !ProxyForwarder.getEndpointPolicy(session).allowProviderSwitch;
+    session.initializeRoutingTrace({
+      mode: singleUpstream
+        ? "single_upstream"
+        : useStreamingHedge
+          ? "legacy_hedge"
+          : "legacy_serial",
+      discoveryEnabled: discoverySettings.discoveryEnabled === true,
+      eligible: false,
+      bypassReason: discoveryPreparation.reason,
+      startedAt: requestStartedAt,
+    });
+
+    if (useStreamingHedge) {
       const hedgePromise = ProxyForwarder.sendStreamingWithHedge(session);
       void hedgePromise.catch(() => undefined);
       return await hedgePromise;
@@ -1361,10 +1431,16 @@ export class ProxyForwarder {
         providerVendorId > 0;
       let endpointSelectionError: Error | null = null;
 
-      const endpointCandidates: Array<{ endpointId: number | null; baseUrl: string }> = [];
+      const endpointCandidates: Array<{
+        endpointId: number | null;
+        baseUrl: string;
+      }> = [];
 
       if (isMcpRequest) {
-        endpointCandidates.push({ endpointId: null, baseUrl: currentProvider.url });
+        endpointCandidates.push({
+          endpointId: null,
+          baseUrl: currentProvider.url,
+        });
       } else if (providerVendorId > 0) {
         try {
           const preferred = await getPreferredProviderEndpoints({
@@ -1408,7 +1484,9 @@ export class ProxyForwarder {
           );
 
           // Record endpoint pool exhaustion in provider chain for audit trail
-          const exhaustionContext: Record<string, unknown> = { strictBlockCause };
+          const exhaustionContext: Record<string, unknown> = {
+            strictBlockCause,
+          };
           if (endpointSelectionError) {
             exhaustionContext.selectorError = endpointSelectionError.message;
           }
@@ -1462,7 +1540,10 @@ export class ProxyForwarder {
           ProxyForwarder.markProviderFailed(session, failedProviderIds, currentProvider.id);
           attemptCount = maxAttemptsPerProvider;
         } else {
-          endpointCandidates.push({ endpointId: null, baseUrl: currentProvider.url });
+          endpointCandidates.push({
+            endpointId: null,
+            baseUrl: currentProvider.url,
+          });
         }
       }
 
@@ -3548,7 +3629,10 @@ export class ProxyForwarder {
 
         // 记录到决策链（标记为 HTTP/2 回退）
         session.addProviderToChain(provider, {
-          ...(endpointAudit ?? { endpointId: null, endpointUrl: sanitizeUrl(baseUrl) }),
+          ...(endpointAudit ?? {
+            endpointId: null,
+            endpointUrl: sanitizeUrl(baseUrl),
+          }),
           reason: "http2_fallback",
           circuitState: getCircuitState(provider.id),
           attemptNumber: attemptNumber ?? 1,
@@ -3947,38 +4031,38 @@ export class ProxyForwarder {
     session: ProxySession,
     settings: SystemSettings,
     requestStartedAt: number
-  ): Promise<PreparedStreamingDiscovery | null> {
+  ): Promise<PrepareStreamingDiscoveryResult> {
     if (settings.discoveryEnabled !== true) {
-      return null;
+      return { status: "skipped", reason: "disabled" };
     }
     const endpointPolicy = ProxyForwarder.getEndpointPolicy(session);
     const protocol = ProxyForwarder.discoveryProtocol(session);
     const message = session.request.message as Record<string, unknown>;
-    if (
-      !endpointPolicy.allowRetry ||
-      !endpointPolicy.allowProviderSwitch ||
-      message?.stream !== true ||
-      endpointPolicy.bypassForwarderPreprocessing ||
-      protocol === "unknown" ||
-      isWebsocketClientRequest(session.headers) ||
-      session.isStreamingHedgeDisabled() ||
-      session.isRawCrossProviderFallbackEnabled()
-    ) {
-      return null;
-    }
+    if (!endpointPolicy.allowRetry) return { status: "skipped", reason: "retry_not_allowed" };
+    if (!endpointPolicy.allowProviderSwitch)
+      return { status: "skipped", reason: "provider_switch_not_allowed" };
+    if (message?.stream !== true) return { status: "skipped", reason: "non_streaming" };
+    if (endpointPolicy.bypassForwarderPreprocessing)
+      return { status: "skipped", reason: "raw_passthrough" };
+    if (protocol === "unknown") return { status: "skipped", reason: "unsupported_protocol" };
+    if (isWebsocketClientRequest(session.headers))
+      return { status: "skipped", reason: "websocket" };
+    if (session.isStreamingHedgeDisabled())
+      return { status: "skipped", reason: "streaming_hedge_disabled" };
+    if (session.isRawCrossProviderFallbackEnabled())
+      return { status: "skipped", reason: "raw_cross_provider_fallback" };
 
     const sessionId = session.sessionId;
     const keyId = session.authState?.key?.id ?? session.messageContext?.key?.id ?? null;
-    if (!sessionId || keyId == null) {
-      return null;
-    }
+    if (!sessionId) return { status: "skipped", reason: "missing_session" };
+    if (keyId == null) return { status: "skipped", reason: "missing_key" };
     if (!isDiscoveryRolloutEligible(keyId, sessionId, getEnvConfig().DISCOVERY_ROLLOUT_PERCENT)) {
-      return null;
+      return { status: "skipped", reason: "rollout_ineligible" };
     }
 
     const capabilityState = await SessionManager.ensureVersionedBindingCapability();
     if (capabilityState !== "available") {
-      return null;
+      return { status: "skipped", reason: "redis_capability_unavailable" };
     }
 
     let bindingSnapshot = session.getSessionBindingSnapshot();
@@ -3997,7 +4081,11 @@ export class ProxyForwarder {
           session.disableStreamingHedge();
           session.setSessionBindingAllowed(false);
         }
-        return null;
+        return {
+          status: "skipped",
+          reason:
+            binding.status === "conflict" ? "binding_conflict" : "redis_capability_unavailable",
+        };
       }
       bindingSnapshot = binding.snapshot;
       session.setSessionBindingSnapshot(binding.snapshot);
@@ -4026,18 +4114,24 @@ export class ProxyForwarder {
           keyId,
         });
       }
-      return null;
+      return {
+        status: "skipped",
+        reason: lease.status === "conflict" ? "lease_conflict" : "lease_unavailable",
+      };
     }
 
     return {
-      settings,
-      bindingSnapshot,
-      requestStartedAt,
-      lease: {
-        sessionId,
-        keyId,
-        ownerToken: lease.ownerToken,
-        ttlSeconds,
+      status: "prepared",
+      prepared: {
+        settings,
+        bindingSnapshot,
+        requestStartedAt,
+        lease: {
+          sessionId,
+          keyId,
+          ownerToken: lease.ownerToken,
+          ttlSeconds,
+        },
       },
     };
   }
@@ -5086,6 +5180,8 @@ export class ProxyForwarder {
         pending: boolean;
         ready: boolean;
         round: number;
+        traceRound: number;
+        traceFinished: boolean;
         readerTransferred: boolean;
         readerCancelled: boolean;
         providerSessionRefOwned: boolean;
@@ -5115,17 +5211,75 @@ export class ProxyForwarder {
     const roundLaunchIdleWaiters = new Set<() => void>();
     const queuedRoundLaunchStartWaiters = new Set<() => void>();
     let fallbackPromotionBlocked = false;
-    type StickyTimeoutWaveReservation = { fallbackAttemptId: string; slots: number };
+    type StickyTimeoutWaveReservation = {
+      fallbackAttemptId: string;
+      slots: number;
+    };
     let stickyTimeoutWaveReservation: StickyTimeoutWaveReservation | null = null;
     let stickyTimeoutWaveClaim: StickyTimeoutWaveReservation | null = null;
     let stickyTimeoutWaveLaunchPromise: Promise<void> | null = null;
     let stickyTimeoutCooldownPromise: Promise<void> | null = null;
+    const tracedFallbackPromotions = new Set<string>();
+    const tracedRounds = new Set<number>();
     const hasSticky =
       session.shouldReuseProvider() &&
       !!session.sessionId &&
       bindingSnapshot.providerId === initialProvider.id;
     let stickyProbeActive = hasSticky;
-    if (hasSticky) coordinator.startStickyProbe();
+    if (hasSticky) {
+      coordinator.startStickyProbe();
+      session.appendRoutingTraceEvent({
+        type: "sticky_probe_started",
+        round: 0,
+        attemptKind: "sticky",
+        provider: {
+          id: initialProvider.id,
+          name: initialProvider.name,
+          priority: ProxyProviderResolver.resolveEffectivePriorityForSession(
+            initialProvider,
+            session
+          ),
+        },
+      });
+    }
+
+    const recordFallbackPromotion = (
+      attemptId: string,
+      providerId: number,
+      round: number,
+      provider?: Provider
+    ) => {
+      discoveryMetrics.fallbackPromoted(attemptId, providerId, round);
+      if (tracedFallbackPromotions.has(attemptId)) return;
+      tracedFallbackPromotions.add(attemptId);
+      session.appendRoutingTraceEvent({
+        type: "fallback_promoted",
+        attemptId,
+        attemptKind: "fallback",
+        round,
+        provider: {
+          id: providerId,
+          ...(provider?.name ? { name: provider.name } : {}),
+          ...(provider
+            ? {
+                priority: ProxyProviderResolver.resolveEffectivePriorityForSession(
+                  provider,
+                  session
+                ),
+              }
+            : {}),
+        },
+      });
+    };
+    const recordRoundStarted = (round: number, slots: number) => {
+      if (tracedRounds.has(round)) return;
+      tracedRounds.add(round);
+      session.appendRoutingTraceEvent({
+        type: "round_started",
+        round,
+        reason: `slots:${slots}`,
+      });
+    };
     const waitForRoundLaunches = (): Promise<void> => {
       if (roundLaunchesInProgress === 0) return Promise.resolve();
       return new Promise<void>((resolve) => roundLaunchIdleWaiters.add(resolve));
@@ -5251,7 +5405,8 @@ export class ProxyForwarder {
 
     const cleanupAttempt = (
       attempt: (typeof winner & { id: string }) | null,
-      cancellationKind: DiscoveryCancellationKind | null
+      cancellationKind: DiscoveryCancellationKind | null,
+      failure?: { statusCode?: number; reason?: string }
     ) => {
       if (attempt?.readerTransferred) return;
       if (!attempt) return;
@@ -5281,7 +5436,10 @@ export class ProxyForwarder {
           );
         } catch (error) {
           discoveryMetrics.cancelFailed(attempt.id, attempt.provider.id, error);
-          logger.debug("[Discovery] Reader cancel failed", { cancellationKind, error });
+          logger.debug("[Discovery] Reader cancel failed", {
+            cancellationKind,
+            error,
+          });
         }
       }
       if (attempt.releaseAgent && !attempt.agentReleased) {
@@ -5299,6 +5457,28 @@ export class ProxyForwarder {
         outcome: cancellationKind ? "cancelled" : "failed",
         cancellationKind,
       });
+      if (!attempt.traceFinished) {
+        attempt.traceFinished = true;
+        session.appendRoutingTraceEvent({
+          type: "attempt_finished",
+          attemptId: attempt.id,
+          attemptKind:
+            attempt.traceRound === 0 && attempt.kind === "normal" ? "sticky" : attempt.kind,
+          round: attempt.traceRound,
+          provider: {
+            id: attempt.provider.id,
+            name: attempt.provider.name,
+            priority: ProxyProviderResolver.resolveEffectivePriorityForSession(
+              attempt.provider,
+              session
+            ),
+          },
+          outcome: cancellationKind ? "cancelled" : "failed",
+          ...(cancellationKind ? { cancellationKind } : {}),
+          ...(failure?.statusCode != null ? { statusCode: failure.statusCode } : {}),
+          ...(failure?.reason ? { reason: failure.reason } : {}),
+        });
+      }
     };
 
     const cancelAttempt = (
@@ -5393,16 +5573,18 @@ export class ProxyForwarder {
         }
       }
       const statusCode = error instanceof ProxyError ? error.statusCode : 503;
-      discoveryMetrics.finish({
-        outcome:
-          options.cancellationKind === "client_abort" || statusCode === 499
-            ? "client_abort"
-            : options.cancellationKind === "request_deadline"
-              ? "deadline"
-              : "failed",
-        statusCode,
-        winnerOrigin: "none",
-      });
+      session.setRoutingTraceSummary(
+        discoveryMetrics.snapshot({
+          outcome:
+            options.cancellationKind === "client_abort" || statusCode === 499
+              ? "client_abort"
+              : options.cancellationKind === "request_deadline"
+                ? "deadline"
+                : "failed",
+          statusCode,
+          winnerOrigin: "none",
+        })
+      );
       resolveResult?.({ error });
     };
 
@@ -5431,20 +5613,62 @@ export class ProxyForwarder {
         providerId: attempt.provider.id,
         outcome: "winner",
       });
-      discoveryMetrics.finish({
-        outcome: "success",
+      const winnerOrigin =
+        attempt.traceRound === 0 && attempt.kind === "normal" ? "sticky" : attempt.kind;
+      if (!attempt.traceFinished) {
+        attempt.traceFinished = true;
+        session.appendRoutingTraceEvent({
+          type: "attempt_finished",
+          attemptId: attempt.id,
+          attemptKind: winnerOrigin,
+          round: attempt.traceRound,
+          provider: {
+            id: attempt.provider.id,
+            name: attempt.provider.name,
+            priority: ProxyProviderResolver.resolveEffectivePriorityForSession(
+              attempt.provider,
+              session
+            ),
+          },
+          outcome: "winner",
+          statusCode: attempt.response.status,
+        });
+      }
+      session.appendRoutingTraceEvent({
+        type: "winner_committed",
+        attemptId: attempt.id,
+        attemptKind: winnerOrigin,
+        round: attempt.traceRound,
+        provider: {
+          id: attempt.provider.id,
+          name: attempt.provider.name,
+          priority: ProxyProviderResolver.resolveEffectivePriorityForSession(
+            attempt.provider,
+            session
+          ),
+        },
+        outcome: "winner",
         statusCode: attempt.response.status,
-        winnerOrigin: attempt.kind,
-        winnerProviderId: attempt.provider.id,
-        winnerRound:
-          hasSticky && attempt.provider.id === initialProvider.id && stickyProbeActive
-            ? 0
-            : attempt.round,
       });
+      session.setRoutingTraceSummary(
+        discoveryMetrics.snapshot({
+          outcome: "success",
+          statusCode: attempt.response.status,
+          winnerOrigin,
+          winnerProviderId: attempt.provider.id,
+          winnerRound: attempt.traceRound,
+        })
+      );
       session.setProvider(attempt.provider);
       if (attempt.session !== session)
         ProxyForwarder.syncWinningAttemptSession(session, attempt.session);
 
+      const bindingIntent =
+        attempt.kind === "fallback" || !bindingWriteAllowed || !session.isSessionBindingAllowed()
+          ? "none"
+          : bindingSnapshot?.providerId == null
+            ? "create"
+            : "renew";
       setDeferredStreamingFinalization(session, {
         providerId: attempt.provider.id,
         providerName: attempt.provider.name,
@@ -5458,16 +5682,9 @@ export class ProxyForwarder {
         upstreamStatusCode: attempt.response.status,
         isHedgeWinner: false,
         billHedgeLosers: false,
-        bindingIntent:
-          attempt.kind === "fallback" || !bindingWriteAllowed || !session.isSessionBindingAllowed()
-            ? "none"
-            : bindingSnapshot?.providerId == null
-              ? "create"
-              : "renew",
+        bindingIntent,
         bindingSnapshot,
-        // Fallbacks cannot create Sticky, but an incomplete fallback stream must
-        // still be classified as failed rather than as a successful truncated 200.
-        requiresCompletionMarker: true,
+        requiresCompletionMarkerForBinding: bindingIntent === "create" || bindingIntent === "renew",
         discoveryLease: lease,
         providerSessionRefOwned: attempt.providerSessionRefOwned,
         providerSessionRefRetainOnSuccess: attempt.providerSessionRefRetainOnSuccess,
@@ -5748,6 +5965,13 @@ export class ProxyForwarder {
       }
       const controller = new AbortController();
       const id = `${provider.id}:${sequence + 1}`;
+      const isStickyAttempt =
+        stickyProbeActive && provider.id === initialProvider.id && effectiveKind === "normal";
+      const traceRound = isStickyAttempt ? 0 : currentRound;
+      const effectivePriority = ProxyProviderResolver.resolveEffectivePriorityForSession(
+        provider,
+        session
+      );
       const attempt = {
         id,
         kind: effectiveKind,
@@ -5757,6 +5981,8 @@ export class ProxyForwarder {
         pending: true,
         ready: false,
         round: currentRound,
+        traceRound,
+        traceFinished: false,
         readerTransferred: false,
         readerCancelled: false,
         providerSessionRefOwned: providerSessionRefTracked,
@@ -5766,7 +5992,10 @@ export class ProxyForwarder {
         provider,
         session: attemptSession,
         baseUrl: endpoint.baseUrl,
-        endpointAudit: { endpointId: endpoint.endpointId, endpointUrl: endpoint.endpointUrl },
+        endpointAudit: {
+          endpointId: endpoint.endpointId,
+          endpointUrl: endpoint.endpointUrl,
+        },
         modelRedirect: undefined,
         responseController: null,
         clearResponseTimeout: null,
@@ -5799,6 +6028,8 @@ export class ProxyForwarder {
         pending: boolean;
         ready: boolean;
         round: number;
+        traceRound: number;
+        traceFinished: boolean;
         readerTransferred: boolean;
         readerCancelled: boolean;
         providerSessionRefOwned: boolean;
@@ -5809,7 +6040,7 @@ export class ProxyForwarder {
       const registered = coordinator.addAttempt({
         id,
         providerId: provider.id,
-        priority: ProxyProviderResolver.resolveEffectivePriorityForSession(provider, session),
+        priority: effectivePriority,
         kind: effectiveKind,
         ready: false,
         pending: true,
@@ -5831,11 +6062,19 @@ export class ProxyForwarder {
       discoveryMetrics.attemptStarted({
         attemptId: id,
         providerId: provider.id,
-        round:
-          stickyProbeActive && provider.id === initialProvider.id && effectiveKind === "normal"
-            ? 0
-            : currentRound,
+        round: traceRound,
         kind: effectiveKind,
+      });
+      session.appendRoutingTraceEvent({
+        type: "attempt_started",
+        attemptId: id,
+        attemptKind: isStickyAttempt ? "sticky" : effectiveKind,
+        round: traceRound,
+        provider: {
+          id: provider.id,
+          name: provider.name,
+          priority: effectivePriority,
+        },
       });
 
       void ProxyForwarder.doForward(
@@ -5890,6 +6129,22 @@ export class ProxyForwarder {
               throw new ProxyError("Invalid upstream discovery response", 502);
             if (!validity.ready) continue;
             attempt.ready = true;
+            session.appendRoutingTraceEvent({
+              type: "attempt_ready",
+              attemptId: id,
+              attemptKind:
+                attempt.traceRound === 0 && attempt.kind === "normal" ? "sticky" : attempt.kind,
+              round: attempt.traceRound,
+              provider: {
+                id: provider.id,
+                name: provider.name,
+                priority: ProxyProviderResolver.resolveEffectivePriorityForSession(
+                  provider,
+                  session
+                ),
+              },
+              outcome: "ready",
+            });
             if (
               attempt.kind === "fallback" &&
               (fallbackPromotionBlocked ||
@@ -5901,6 +6156,15 @@ export class ProxyForwarder {
               // without promoting so the total deadline can still recover the
               // buffered fallback if that setup stalls.
               coordinator.recordReadyHeld(id);
+              session.appendRoutingTraceEvent({
+                type: "attempt_held",
+                attemptId: id,
+                attemptKind: "fallback",
+                round: attempt.traceRound,
+                provider: { id: provider.id, name: provider.name },
+                outcome: "held",
+                reason: "replacement_wave_pending",
+              });
               return;
             }
             // Record readiness even when the priority gate holds this attempt.
@@ -5915,7 +6179,19 @@ export class ProxyForwarder {
             // The coordinator owns priority gating. A ready lower-priority
             // candidate stays held while a higher tier is still pending. Stop
             // reading so later chunks are not consumed before promotion.
-            if (action.type === "none") return;
+            if (action.type === "none") {
+              session.appendRoutingTraceEvent({
+                type: "attempt_held",
+                attemptId: id,
+                attemptKind:
+                  attempt.traceRound === 0 && attempt.kind === "normal" ? "sticky" : attempt.kind,
+                round: attempt.traceRound,
+                provider: { id: provider.id, name: provider.name },
+                outcome: "held",
+                reason: "priority_gate",
+              });
+              return;
+            }
             return;
           }
         })
@@ -5983,7 +6259,10 @@ export class ProxyForwarder {
                 request: buildRequestDetails(session),
               },
             });
-            cleanupAttempt(attempt, null);
+            cleanupAttempt(attempt, null, {
+              statusCode: lastError instanceof ProxyError ? lastError.statusCode : 503,
+              reason: "local_overload",
+            });
             await settleFailure(lastError, { preserveBinding: true });
             return;
           }
@@ -6033,12 +6312,15 @@ export class ProxyForwarder {
               attempt.providerSessionRefOwned = false;
             }
             attempt.pending = false;
-            cleanupAttempt(attempt, null);
+            cleanupAttempt(attempt, null, {
+              statusCode: lastError instanceof ProxyError ? lastError.statusCode : undefined,
+              reason: "rectifier_retry",
+            });
             session.addProviderToChain(provider, {
               ...buildRetryFailedChainEntry(
                 provider,
                 attempt.endpointAudit,
-                attempt.requestAttemptCount,
+                attempt.sequence,
                 lastError,
                 errorMessage,
                 rectifier.requestDetailsBeforeRectify,
@@ -6150,7 +6432,13 @@ export class ProxyForwarder {
           ) {
             await recordFailure(provider.id, lastError).catch(() => undefined);
           }
-          cleanupAttempt(attempt, null);
+          cleanupAttempt(attempt, null, {
+            statusCode: lastError instanceof ProxyError ? lastError.statusCode : undefined,
+            reason:
+              lastErrorCategory == null
+                ? "unknown_error"
+                : ErrorCategory[lastErrorCategory].toLowerCase(),
+          });
           if (lastErrorCategory === ErrorCategory.NON_RETRYABLE_CLIENT_ERROR) {
             // Client/input errors are independent of the selected provider.
             // Stop Discovery immediately so the same invalid request is not
@@ -6459,6 +6747,7 @@ export class ProxyForwarder {
         // launch batch is still in flight.
         if (!slotState.timerStarted && !committed && !settled) {
           clearRoundTimer();
+          recordRoundStarted(currentRound, requestedSlots());
           scheduleRoundBoundary(discoverySlaMs);
           slotState.timerStarted = true;
         }
@@ -6638,10 +6927,6 @@ export class ProxyForwarder {
           if (candidateSetupReservation) {
             cancelSetupReservation(candidateSetupReservation, "discovery_sla_timeout");
           }
-          // Coordinator marks cancelled attempts non-pending before returning
-          // the action. Restore the transport-facing state long enough for the
-          // exactly-once cancellation/release path to run.
-          if (attempt && !attempt.readerTransferred) attempt.pending = true;
           if (attempt) cancelAttempt(attempt, "discovery_sla_timeout");
         }
         if ("promoteAttemptId" in action && action.promoteAttemptId) {
@@ -6649,13 +6934,18 @@ export class ProxyForwarder {
           const retrySetupReservation = retrySetupReservations.get(action.promoteAttemptId);
           if (fallback) {
             fallback.kind = "fallback";
-            discoveryMetrics.fallbackPromoted(fallback.id, fallback.provider.id, fallback.round);
+            recordFallbackPromotion(
+              fallback.id,
+              fallback.provider.id,
+              fallback.traceRound,
+              fallback.provider
+            );
           }
           if (retrySetupReservation) {
             const epoch = coordinator.epochs;
             retrySetupReservation.requestEpoch = epoch.requestEpoch;
             retrySetupReservation.roundEpoch = epoch.roundEpoch;
-            discoveryMetrics.fallbackPromoted(
+            recordFallbackPromotion(
               action.promoteAttemptId,
               retrySetupReservation.providerId,
               coordinator.round
@@ -6706,6 +6996,7 @@ export class ProxyForwarder {
 
     const orchestrate = async () => {
       let initialLaunchFailed = false;
+      if (!hasSticky) recordRoundStarted(currentRound, concurrency);
       try {
         await launch(initialProvider, "normal");
       } catch (error) {
@@ -6742,6 +7033,20 @@ export class ProxyForwarder {
                   ? (attempts.get(stickyRetryReservation.placeholderAttemptId) ?? null)
                   : null);
               if (stickyAttempt || stickyRetryReservation) {
+                session.appendRoutingTraceEvent({
+                  type: "sticky_timeout",
+                  round: 0,
+                  attemptKind: "sticky",
+                  provider: {
+                    id: initialProvider.id,
+                    name: initialProvider.name,
+                    priority: ProxyProviderResolver.resolveEffectivePriorityForSession(
+                      initialProvider,
+                      session
+                    ),
+                  },
+                  outcome: "timeout",
+                });
                 const stickyAttemptId =
                   stickyRetryReservation?.placeholderAttemptId ?? stickyAttempt?.id;
                 if (!stickyAttemptId || !coordinator.demoteToFallback(stickyAttemptId)) return;
@@ -6753,7 +7058,7 @@ export class ProxyForwarder {
                   stickyRetryReservation.requestEpoch = epoch.requestEpoch;
                   stickyRetryReservation.roundEpoch = epoch.roundEpoch;
                 }
-                discoveryMetrics.fallbackPromoted(stickyAttemptId, initialProvider.id, 0);
+                recordFallbackPromotion(stickyAttemptId, initialProvider.id, 0, initialProvider);
                 fallbackPromotionBlocked = true;
                 stickyTimeoutWaveReservation = {
                   fallbackAttemptId: stickyAttemptId,
@@ -6764,13 +7069,17 @@ export class ProxyForwarder {
                     Math.ceil((settings.stickyTimeoutCooldownMs ?? 300_000) / 1000)
                   ).finally(() => {
                     void launchReservedStickyTimeoutWave().catch((error) =>
-                      logger.warn("[Discovery] Sticky round launch failed", { error })
+                      logger.warn("[Discovery] Sticky round launch failed", {
+                        error,
+                      })
                     );
                   });
                   return;
                 }
                 void launchReservedStickyTimeoutWave().catch((error) =>
-                  logger.warn("[Discovery] Sticky round launch failed", { error })
+                  logger.warn("[Discovery] Sticky round launch failed", {
+                    error,
+                  })
                 );
               }
             },
@@ -6828,7 +7137,11 @@ export class ProxyForwarder {
   private static async resolveStreamingHedgeEndpoint(
     session: ProxySession,
     provider: Provider
-  ): Promise<{ endpointId: number | null; baseUrl: string; endpointUrl: string }> {
+  ): Promise<{
+    endpointId: number | null;
+    baseUrl: string;
+    endpointUrl: string;
+  }> {
     const requestPath = session.requestUrl.pathname;
     const providerVendorId = provider.providerVendorId ?? 0;
     const isMcpRequest =
@@ -6852,13 +7165,20 @@ export class ProxyForwarder {
       });
     }
 
-    const endpointCandidates: Array<{ endpointId: number | null; endpointUrl: string }> = [];
+    const endpointCandidates: Array<{
+      endpointId: number | null;
+      endpointUrl: string;
+    }> = [];
     let endpointSelectionError: Error | null = null;
 
     if (isMcpRequest) {
       const sanitizedUrl = sanitizeUrl(provider.url);
       endpointCandidates.push({ endpointId: null, endpointUrl: sanitizedUrl });
-      return { endpointId: null, baseUrl: provider.url, endpointUrl: sanitizedUrl };
+      return {
+        endpointId: null,
+        baseUrl: provider.url,
+        endpointUrl: sanitizedUrl,
+      };
     }
 
     if (providerVendorId > 0) {
@@ -6868,7 +7188,10 @@ export class ProxyForwarder {
           providerType: provider.providerType,
         });
         endpointCandidates.push(
-          ...preferred.map((endpoint) => ({ endpointId: endpoint.id, endpointUrl: endpoint.url }))
+          ...preferred.map((endpoint) => ({
+            endpointId: endpoint.id,
+            endpointUrl: endpoint.url,
+          }))
         );
       } catch (error) {
         endpointSelectionError = error instanceof Error ? error : new Error(String(error));
@@ -6901,7 +7224,11 @@ export class ProxyForwarder {
       }
 
       const sanitizedUrl = sanitizeUrl(provider.url);
-      return { endpointId: null, baseUrl: provider.url, endpointUrl: sanitizedUrl };
+      return {
+        endpointId: null,
+        baseUrl: provider.url,
+        endpointUrl: sanitizedUrl,
+      };
     }
 
     return {

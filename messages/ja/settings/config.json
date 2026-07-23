@@ -128,6 +128,8 @@
     "stickySlaMs": "Sticky SLA（ミリ秒）",
     "racingTotalTimeoutMs": "Discovery 合計タイムアウト（ミリ秒）",
     "stickyTimeoutCooldownMs": "Sticky タイムアウト後のクールダウン（ミリ秒）",
+    "stickyBindingTtl": "Sticky バインドの有効期間",
+    "stickyBindingTtlDesc": "読み取り専用です。この値は環境変数 SESSION_TTL に従い、他の Session スナップショットと共有されます。",
     "discoveryWindowDesc": "合計タイムアウトは Sticky SLA + 最大ラウンド数 × Discovery SLA 以上にしてください。",
     "discoveryWindowInvalid": "Discovery 合計タイムアウトが設定された Sticky/Discovery ウィンドウより短くなっています。",
     "discoverySettingsInvalid": "1 つ以上の Discovery 設定値が許容範囲外です。",

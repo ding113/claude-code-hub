@@ -58,8 +58,8 @@ export type DeferredStreamingFinalization = {
   /** Discovery delays binding until the stream has a valid completion marker. */
   bindingIntent?: "create" | "renew" | "none";
   bindingSnapshot?: SessionBindingSnapshot | null;
-  /** Discovery winners must satisfy the protocol completion marker before binding. */
-  requiresCompletionMarker?: boolean;
+  /** Discovery create/renew intents must satisfy the protocol completion marker before binding. */
+  requiresCompletionMarkerForBinding?: boolean;
   /** Lease already acquired by Forwarder and owned until terminal side effects finish. */
   discoveryLease?: DeferredStreamingDiscoveryLease;
   /** Whether this attempt owns a Provider concurrent-session reference. */

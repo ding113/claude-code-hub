@@ -47,6 +47,26 @@ function createDeferred<T>() {
   return { promise, resolve, reject };
 }
 
+function createRoutingTrace(at: number) {
+  return {
+    version: 1 as const,
+    mode: "discovery" as const,
+    startedAt: at - 100,
+    updatedAt: at,
+    discoveryEnabled: true,
+    eligible: true,
+    events: [
+      {
+        type: "binding_finalized" as const,
+        at,
+        elapsedMs: 100,
+        bindingAction: "create" as const,
+        outcome: "updated",
+      },
+    ],
+  };
+}
+
 describe("message_request 异步批量写入", () => {
   const envKeys = [
     "NODE_ENV",
@@ -171,6 +191,27 @@ describe("message_request 异步批量写入", () => {
     expect(defaultExecuteMock).not.toHaveBeenCalled();
   });
 
+  it("非法 routing trace 应写入 SQL NULL 而不是 JSON null", async () => {
+    process.env.MESSAGE_REQUEST_WRITE_MODE = "async";
+
+    const {
+      enqueueMessageRequestUpdate,
+      flushMessageRequestWriteBuffer,
+      stopMessageRequestWriteBuffer,
+    } = await import("@/repository/message-write-buffer");
+
+    enqueueMessageRequestUpdate(44, {
+      routingTrace: { version: 999, events: [] } as never,
+    });
+    await flushMessageRequestWriteBuffer();
+    await stopMessageRequestWriteBuffer();
+
+    const built = toSqlText(executeMock.mock.calls[0]?.[0]);
+    expect(built.sql).toContain('"routing_trace" = CASE id');
+    expect(built.sql).toContain("THEN NULL");
+    expect(built.params).not.toContain("null");
+  });
+
   it("普通 enqueue 立即返回，但 durable enqueue 应等待批量 SQL 成功", async () => {
     process.env.MESSAGE_REQUEST_WRITE_MODE = "async";
 
@@ -238,6 +279,349 @@ describe("message_request 异步批量写入", () => {
     await flushPromise;
     await expect(durablePromise).resolves.toBe(true);
     await stopMessageRequestWriteBuffer();
+  });
+
+  it("post-terminal routing trace uses RETURNING ACK without the terminal status fence", async () => {
+    process.env.MESSAGE_REQUEST_WRITE_MODE = "async";
+
+    const {
+      enqueueMessageRequestPostTerminalRoutingTraceDurably,
+      flushMessageRequestWriteBuffer,
+      stopMessageRequestWriteBuffer,
+    } = await import("@/repository/message-write-buffer");
+    const routingTrace = createRoutingTrace(1_100);
+    const metadata = enqueueMessageRequestPostTerminalRoutingTraceDurably(52_001, routingTrace);
+
+    await flushMessageRequestWriteBuffer();
+    await expect(metadata).resolves.toBe(true);
+    await stopMessageRequestWriteBuffer();
+
+    const built = toSqlText(executeMock.mock.calls[0]?.[0]);
+    expect(built.sql).toContain("RETURNING id");
+    expect(built.sql).toContain("routing_trace");
+    expect(built.sql).toContain("jsonb_typeof");
+    expect(built.sql).toContain("'updatedAt'");
+    expect(built.sql).toContain("'-Infinity'::numeric");
+    expect(built.sql).toContain('"updated_at" = CASE id');
+    expect(built.sql).toContain('ELSE "updated_at" END');
+    expect(built.sql).not.toContain("status_code IS NULL");
+    expect(built.sql).not.toContain("duration_ms");
+    expect(
+      built.params.some(
+        (value) => typeof value === "string" && value.includes('"binding_finalized"')
+      )
+    ).toBe(true);
+  });
+
+  it("keeps post-terminal routing trace pending beyond three transient DB failures", async () => {
+    process.env.MESSAGE_REQUEST_WRITE_MODE = "async";
+    executeMock
+      .mockRejectedValueOnce(new Error("writer unavailable 1"))
+      .mockRejectedValueOnce(new Error("writer unavailable 2"))
+      .mockRejectedValueOnce(new Error("writer unavailable 3"));
+
+    const {
+      enqueueMessageRequestPostTerminalRoutingTraceDurably,
+      flushMessageRequestWriteBuffer,
+      stopMessageRequestWriteBuffer,
+    } = await import("@/repository/message-write-buffer");
+    const metadata = enqueueMessageRequestPostTerminalRoutingTraceDurably(
+      52_005,
+      createRoutingTrace(1_500)
+    );
+    let settled = false;
+    void metadata.finally(() => {
+      settled = true;
+    });
+
+    await flushMessageRequestWriteBuffer();
+    await flushMessageRequestWriteBuffer();
+    await flushMessageRequestWriteBuffer();
+    expect(settled).toBe(false);
+
+    await flushMessageRequestWriteBuffer();
+    await expect(metadata).resolves.toBe(true);
+    expect(executeMock).toHaveBeenCalledTimes(4);
+    await stopMessageRequestWriteBuffer();
+  });
+
+  it("waits for the same id terminal ACK before enqueuing post-terminal metadata", async () => {
+    process.env.MESSAGE_REQUEST_WRITE_MODE = "async";
+    const deferred = createDeferred<unknown[]>();
+    executeMock.mockImplementationOnce(async () => deferred.promise);
+
+    const {
+      enqueueMessageRequestUpdateDurably,
+      enqueueMessageRequestPostTerminalRoutingTraceDurably,
+      flushMessageRequestWriteBuffer,
+      stopMessageRequestWriteBuffer,
+    } = await import("@/repository/message-write-buffer");
+    const terminal = enqueueMessageRequestUpdateDurably(52_002, { statusCode: 200 });
+    const terminalFlush = flushMessageRequestWriteBuffer();
+    const metadata = enqueueMessageRequestPostTerminalRoutingTraceDurably(
+      52_002,
+      createRoutingTrace(2_100)
+    );
+    let metadataSettled = false;
+    void metadata.finally(() => {
+      metadataSettled = true;
+    });
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(metadataSettled).toBe(false);
+
+    deferred.resolve([{ id: 52_002 }]);
+    await terminalFlush;
+    await terminal;
+    await flushMessageRequestWriteBuffer();
+    await expect(metadata).resolves.toBe(true);
+    await stopMessageRequestWriteBuffer();
+
+    expect(executeMock).toHaveBeenCalledTimes(2);
+    const terminalSql = toSqlText(executeMock.mock.calls[0]?.[0]);
+    const metadataSql = toSqlText(executeMock.mock.calls[1]?.[0]);
+    expect(terminalSql.sql).toContain('"status_code" IS NULL');
+    expect(metadataSql.sql).not.toContain('"status_code" IS NULL');
+    expect(metadataSql.sql).toContain("routing_trace");
+  });
+
+  it("does not merge ordinary updates into an in-flight post-terminal metadata ACK", async () => {
+    process.env.MESSAGE_REQUEST_WRITE_MODE = "async";
+    const releaseMetadata = createDeferred<unknown[]>();
+    executeMock.mockImplementationOnce(async () => releaseMetadata.promise);
+
+    const {
+      enqueueMessageRequestUpdate,
+      enqueueMessageRequestPostTerminalRoutingTraceDurably,
+      flushMessageRequestWriteBuffer,
+      stopMessageRequestWriteBuffer,
+    } = await import("@/repository/message-write-buffer");
+    const metadata = enqueueMessageRequestPostTerminalRoutingTraceDurably(
+      52_004,
+      createRoutingTrace(4_100)
+    );
+    const metadataFlush = flushMessageRequestWriteBuffer();
+    enqueueMessageRequestUpdate(52_004, { durationMs: 654 });
+
+    releaseMetadata.resolve([{ id: 52_004 }]);
+    await metadataFlush;
+    await expect(metadata).resolves.toBe(true);
+    await flushMessageRequestWriteBuffer();
+    await stopMessageRequestWriteBuffer();
+
+    expect(executeMock).toHaveBeenCalledTimes(2);
+    const metadataSql = toSqlText(executeMock.mock.calls[0]?.[0]);
+    const ordinarySql = toSqlText(executeMock.mock.calls[1]?.[0]);
+    expect(metadataSql.sql).toContain("routing_trace");
+    expect(metadataSql.sql).not.toContain("duration_ms");
+    expect(ordinarySql.sql).toContain("duration_ms");
+    expect(ordinarySql.sql).not.toContain("routing_trace");
+  });
+
+  it("keeps a failed in-flight ordinary requeue isolated from a newer metadata ACK", async () => {
+    process.env.MESSAGE_REQUEST_WRITE_MODE = "async";
+    const releaseOrdinary = createDeferred<void>();
+    executeMock.mockImplementationOnce(async () => {
+      await releaseOrdinary.promise;
+      throw new Error("ordinary write failed");
+    });
+
+    const {
+      enqueueMessageRequestUpdate,
+      enqueueMessageRequestPostTerminalRoutingTraceDurably,
+      flushMessageRequestWriteBuffer,
+      stopMessageRequestWriteBuffer,
+    } = await import("@/repository/message-write-buffer");
+    enqueueMessageRequestUpdate(52_006, { durationMs: 777 });
+    const flush = flushMessageRequestWriteBuffer();
+    const metadata = enqueueMessageRequestPostTerminalRoutingTraceDurably(
+      52_006,
+      createRoutingTrace(6_100)
+    );
+
+    releaseOrdinary.resolve();
+    await flush;
+    await expect(metadata).resolves.toBe(true);
+    await stopMessageRequestWriteBuffer();
+
+    expect(executeMock).toHaveBeenCalledTimes(3);
+    const failedOrdinarySql = toSqlText(executeMock.mock.calls[0]?.[0]);
+    const metadataSql = toSqlText(executeMock.mock.calls[1]?.[0]);
+    const retriedOrdinarySql = toSqlText(executeMock.mock.calls[2]?.[0]);
+    expect(failedOrdinarySql.sql).toContain("duration_ms");
+    expect(metadataSql.sql).toContain("routing_trace");
+    expect(metadataSql.sql).not.toContain("duration_ms");
+    expect(retriedOrdinarySql.sql).toContain("duration_ms");
+    expect(retriedOrdinarySql.sql).not.toContain("routing_trace");
+  });
+
+  it("coalesces duplicate metadata callers and counts unique tasks against maxPending", async () => {
+    process.env.MESSAGE_REQUEST_WRITE_MODE = "async";
+    process.env.MESSAGE_REQUEST_ASYNC_MAX_PENDING = "100";
+    const trace = createRoutingTrace(7_100);
+
+    const {
+      enqueueMessageRequestPostTerminalRoutingTraceDurably,
+      flushMessageRequestWriteBuffer,
+      stopMessageRequestWriteBuffer,
+    } = await import("@/repository/message-write-buffer");
+    const first = enqueueMessageRequestPostTerminalRoutingTraceDurably(52_007, trace);
+    const duplicate = enqueueMessageRequestPostTerminalRoutingTraceDurably(52_007, trace);
+    const admitted = [first];
+    for (let index = 1; index < 100; index++) {
+      admitted.push(
+        enqueueMessageRequestPostTerminalRoutingTraceDurably(
+          52_007 + index,
+          createRoutingTrace(7_100 + index)
+        )
+      );
+    }
+    const overflow = enqueueMessageRequestPostTerminalRoutingTraceDurably(
+      53_000,
+      createRoutingTrace(7_300)
+    );
+
+    expect(duplicate).toBe(first);
+    await expect(overflow).rejects.toThrow("durable message_request queue is full");
+    await flushMessageRequestWriteBuffer();
+    await expect(Promise.all(admitted)).resolves.toHaveLength(100);
+    expect(executeMock).toHaveBeenCalledTimes(1);
+    await stopMessageRequestWriteBuffer();
+  });
+
+  it("does not acknowledge a newer revision through an older in-flight metadata task", async () => {
+    process.env.MESSAGE_REQUEST_WRITE_MODE = "async";
+    const releaseOld = createDeferred<unknown[]>();
+    executeMock.mockImplementationOnce(async () => releaseOld.promise);
+
+    const {
+      enqueueMessageRequestPostTerminalRoutingTraceDurably,
+      flushMessageRequestWriteBuffer,
+      stopMessageRequestWriteBuffer,
+    } = await import("@/repository/message-write-buffer");
+    const oldTrace = createRoutingTrace(7_100);
+    const newTrace = createRoutingTrace(7_101);
+    const oldWrite = enqueueMessageRequestPostTerminalRoutingTraceDurably(52_107, oldTrace);
+    const flush = flushMessageRequestWriteBuffer();
+    const newerWrite = enqueueMessageRequestPostTerminalRoutingTraceDurably(52_107, newTrace);
+
+    releaseOld.resolve([{ id: 52_107 }]);
+    await flush;
+    await expect(oldWrite).resolves.toBe(true);
+    await expect(newerWrite).resolves.toBe(false);
+    expect(executeMock).toHaveBeenCalledOnce();
+    const built = toSqlText(executeMock.mock.calls[0]?.[0]);
+    expect(
+      built.params.some((value) => typeof value === "string" && value.includes('"updatedAt":7100'))
+    ).toBe(true);
+    expect(
+      built.params.some((value) => typeof value === "string" && value.includes('"updatedAt":7101'))
+    ).toBe(false);
+    await stopMessageRequestWriteBuffer();
+  });
+
+  it("flushes an existing ordinary patch before isolating post-terminal metadata", async () => {
+    process.env.MESSAGE_REQUEST_WRITE_MODE = "async";
+
+    const {
+      enqueueMessageRequestUpdate,
+      enqueueMessageRequestPostTerminalRoutingTraceDurably,
+      flushMessageRequestWriteBuffer,
+      stopMessageRequestWriteBuffer,
+    } = await import("@/repository/message-write-buffer");
+    enqueueMessageRequestUpdate(52_003, { durationMs: 321 });
+    const metadata = enqueueMessageRequestPostTerminalRoutingTraceDurably(
+      52_003,
+      createRoutingTrace(3_100)
+    );
+
+    await flushMessageRequestWriteBuffer();
+    await flushMessageRequestWriteBuffer();
+    await expect(metadata).resolves.toBe(true);
+    await stopMessageRequestWriteBuffer();
+
+    expect(executeMock).toHaveBeenCalledTimes(2);
+    const ordinarySql = toSqlText(executeMock.mock.calls[0]?.[0]);
+    const metadataSql = toSqlText(executeMock.mock.calls[1]?.[0]);
+    expect(ordinarySql.sql).toContain("duration_ms");
+    expect(ordinarySql.sql).not.toContain("routing_trace");
+    expect(metadataSql.sql).toContain("routing_trace");
+    expect(metadataSql.sql).not.toContain("duration_ms");
+  });
+
+  it("stop waits for a callback's late post-terminal metadata ACK", async () => {
+    process.env.MESSAGE_REQUEST_WRITE_MODE = "async";
+
+    const {
+      enqueueMessageRequestUpdateDurably,
+      enqueueMessageRequestPostTerminalRoutingTraceDurably,
+      stopMessageRequestWriteBuffer,
+    } = await import("@/repository/message-write-buffer");
+    let metadataResult: unknown;
+    const terminal = enqueueMessageRequestUpdateDurably(
+      52_004,
+      { statusCode: 200 },
+      {
+        onCommitted: async () => {
+          metadataResult = await enqueueMessageRequestPostTerminalRoutingTraceDurably(
+            52_004,
+            createRoutingTrace(4_100)
+          );
+        },
+      }
+    );
+
+    await stopMessageRequestWriteBuffer();
+    await expect(terminal).resolves.toBe(true);
+    expect(metadataResult).toBe(true);
+
+    expect(executeMock).toHaveBeenCalledTimes(2);
+    const metadataSql = toSqlText(executeMock.mock.calls[1]?.[0]);
+    expect(metadataSql.sql).toContain("RETURNING id");
+    expect(metadataSql.sql).toContain("routing_trace");
+    expect(metadataSql.sql).not.toContain("status_code IS NULL");
+  });
+
+  it("stop bounds a failing late metadata write to the shutdown flush budget", async () => {
+    process.env.MESSAGE_REQUEST_WRITE_MODE = "async";
+    executeMock
+      .mockImplementationOnce(async (query) => successfulRowsForQuery(query))
+      .mockRejectedValue(new Error("writer unavailable during shutdown"));
+
+    const {
+      enqueueMessageRequestUpdateDurably,
+      enqueueMessageRequestPostTerminalRoutingTraceDurably,
+      stopMessageRequestWriteBuffer,
+    } = await import("@/repository/message-write-buffer");
+    let metadata!: Promise<boolean>;
+    const terminal = enqueueMessageRequestUpdateDurably(
+      52_009,
+      { statusCode: 200 },
+      {
+        onCommitted: () => {
+          metadata = enqueueMessageRequestPostTerminalRoutingTraceDurably(
+            52_009,
+            createRoutingTrace(9_100)
+          );
+          return metadata;
+        },
+      }
+    );
+
+    await expect(stopMessageRequestWriteBuffer()).rejects.toThrow(
+      "message_request writer shutdown persistence failed"
+    );
+    await expect(terminal).resolves.toBe(true);
+    await expect(metadata).rejects.toThrow(
+      "post-terminal metadata did not persist during writer shutdown"
+    );
+    expect(executeMock).toHaveBeenCalledTimes(3);
+    expect(loggerErrorMock).toHaveBeenCalledWith(
+      "[MessageRequestWriteBuffer] Durable commit callback failed",
+      expect.objectContaining({
+        error: "post-terminal metadata did not persist during writer shutdown",
+        messageRequestId: 52_009,
+      })
+    );
   });
 
   it("多个 durable 终态应由同一次 batch flush 共同确认", async () => {
@@ -995,6 +1379,46 @@ describe("message_request 异步批量写入", () => {
     expect(built.sql).toContain('"cost_usd" = CASE id');
     expect(built.sql).toContain("::numeric");
     expect(built.sql).not.toContain("COALESCE");
+  });
+
+  it("routingTrace 应作为 jsonb 写入且保留终态摘要", async () => {
+    process.env.MESSAGE_REQUEST_WRITE_MODE = "async";
+
+    const { enqueueMessageRequestUpdate, stopMessageRequestWriteBuffer } = await import(
+      "@/repository/message-write-buffer"
+    );
+    const routingTrace = {
+      version: 1 as const,
+      mode: "discovery" as const,
+      startedAt: 1_000,
+      updatedAt: 1_100,
+      discoveryEnabled: true,
+      eligible: true,
+      events: [{ type: "request_finished" as const, at: 1_100, elapsedMs: 100 }],
+      summary: {
+        outcome: "success" as const,
+        statusCode: 200,
+        durationMs: 100,
+        ttfbMs: 50,
+        attemptsPerRequest: 2,
+        maxActiveAttempts: 2,
+        rounds: 1,
+        providerMs: 180,
+        fallbackPromotions: 0,
+        cancelFailures: 0,
+        winnerOrigin: "normal" as const,
+        winnerProviderId: 7,
+        winnerRound: 1,
+      },
+    };
+
+    enqueueMessageRequestUpdate(12, { routingTrace });
+    await stopMessageRequestWriteBuffer();
+
+    const built = toSqlText(executeMock.mock.calls[0]?.[0]);
+    expect(built.sql).toContain('"routing_trace" = CASE id');
+    expect(built.sql).toContain("::jsonb");
+    expect(built.params).toContain(JSON.stringify(routingTrace));
   });
 });
 

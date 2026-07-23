@@ -181,7 +181,13 @@ describe("SessionManager.updateSessionBindingSmart forceUpdate", () => {
     expect(findProviderById).not.toHaveBeenCalled();
     expect(isCircuitOpen).not.toHaveBeenCalled();
     // forceUpdate goes straight to the persistence path.
-    expect(findProviderById).not.toHaveBeenCalled();
+    expect(bindingMocks.mutateLegacySessionBindingSafely).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionId: SID,
+        keyId: KEY_ID,
+        mutation: { type: "set", providerId: 2 },
+      })
+    );
   });
 
   it("forceUpdate=true also persists the keyId binding with TTL", async () => {

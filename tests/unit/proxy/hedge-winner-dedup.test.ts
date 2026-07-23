@@ -115,6 +115,7 @@ vi.mock("@/repository/provider", () => ({
 
 vi.mock("@/lib/redis/live-chain-store", () => ({
   writeLiveChain: vi.fn(),
+  writeLiveRoutingTrace: vi.fn(),
 }));
 
 import { ProxySession } from "@/app/v1/_lib/proxy/session";

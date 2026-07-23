@@ -5,6 +5,7 @@ import type { Key } from "@/types/key";
 import type { MessageRequest } from "@/types/message";
 import type { ModelPrice } from "@/types/model-price";
 import type { Provider } from "@/types/provider";
+import { normalizeRoutingTrace } from "@/types/routing-trace";
 import {
   DEFAULT_FAKE_STREAMING_WHITELIST,
   type FakeStreamingWhitelistEntry,
@@ -183,6 +184,7 @@ export function toMessageRequest(dbMessage: any): MessageRequest {
     context1mApplied: dbMessage?.context1mApplied ?? false,
     swapCacheTtlApplied: dbMessage?.swapCacheTtlApplied ?? false,
     specialSettings: dbMessage?.specialSettings ?? null,
+    routingTrace: normalizeRoutingTrace(dbMessage?.routingTrace),
   };
 }
 
