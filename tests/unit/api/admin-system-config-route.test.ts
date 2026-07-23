@@ -62,4 +62,27 @@ describe("POST /api/admin/system-config", () => {
     });
     expect(mocks.updateSystemSettings).not.toHaveBeenCalled();
   });
+
+  it("returns the same stable Discovery window code for a complete update", async () => {
+    const { POST } = await import("@/app/api/admin/system-config/route");
+    const response = await POST(
+      new Request("http://localhost/api/admin/system-config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          discoverySlaMs: 10_000,
+          stickySlaMs: 20_000,
+          maxDiscoveryRounds: 2,
+          racingTotalTimeoutMs: 39_999,
+        }),
+      })
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({
+      error: "discoveryWindowInvalid",
+      errorCode: "DISCOVERY_WINDOW_INVALID",
+    });
+    expect(mocks.updateSystemSettings).not.toHaveBeenCalled();
+  });
 });

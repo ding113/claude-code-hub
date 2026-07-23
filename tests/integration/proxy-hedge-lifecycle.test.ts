@@ -504,6 +504,7 @@ describe("proxy hedge transport/lifecycle integration (persistence and control-p
     const client = new AbortController();
     try {
       state.discoveryEnabled = true;
+      state.billHedgeLosers = true;
       const initialProvider = createProvider(1, loser.baseUrl, 0);
       const winningProvider = createProvider(2, winner.baseUrl, 0);
       winningProvider.priority = initialProvider.priority;
@@ -527,9 +528,148 @@ describe("proxy hedge transport/lifecycle integration (persistence and control-p
 
       expect(loser.abortCount()).toBe(1);
       expect(winner.abortCount()).toBe(0);
+      expect(state.addLoserCost).not.toHaveBeenCalled();
       expect(state.acquireDiscoveryLease).toHaveBeenCalledTimes(1);
       expect(state.compareAndSetBinding).toHaveBeenCalledTimes(1);
       expect(state.releaseDiscoveryLease).toHaveBeenCalledTimes(1);
+      expect(agents.pool.getPoolStats().activeRequests).toBe(0);
+    } finally {
+      client.abort(new Error("fixture cleanup"));
+      await Promise.all([loser.close(), winner.close()]);
+    }
+  });
+
+  it("drains and bills only a ready Discovery loser after a normal winner commits", async () => {
+    const [loser, winner] = await Promise.all([startUpstream(), startUpstream()]);
+    const client = new AbortController();
+    try {
+      state.discoveryEnabled = true;
+      state.billHedgeLosers = true;
+      const initialProvider = createProvider(1, loser.baseUrl, 0);
+      const winningProvider = createProvider(2, winner.baseUrl, 0);
+      // The lower-priority initial attempt may become ready, but the priority
+      // gate keeps it held until the preferred candidate resolves.
+      initialProvider.priority = 2;
+      winningProvider.priority = 1;
+      state.providers.push(winningProvider);
+      const session = await createSession(initialProvider, "/v1/messages", client.signal);
+      session.sessionId = "integration-discovery";
+      const agents = watchAgentReleases(2);
+
+      const forwarded = ProxyForwarder.send(session);
+      const [loserResponse] = await Promise.all([loser.response, winner.response]);
+      loserResponse.write(
+        'event: content_block_delta\ndata: {"type":"content_block_delta","delta":{"type":"text_delta","text":"loser"}}\n\n'
+      );
+      await vi.waitFor(() => {
+        expect(session.getRoutingTrace()?.events).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              attemptId: `${initialProvider.id}:1`,
+              outcome: "held",
+              type: "attempt_held",
+            }),
+          ])
+        );
+      });
+
+      await winner.send(
+        'event: content_block_delta\ndata: {"type":"content_block_delta","delta":{"type":"text_delta","text":"winner"}}\n\n' +
+          'event: message_delta\ndata: {"type":"message_delta","usage":{"input_tokens":8,"output_tokens":2}}\n\n' +
+          'event: message_stop\ndata: {"type":"message_stop"}\n\n'
+      );
+      const forwardedResponse = await forwarded;
+      await loser.send(
+        'event: message_delta\ndata: {"type":"message_delta","usage":{"input_tokens":7,"output_tokens":2}}\n\n' +
+          'event: message_stop\ndata: {"type":"message_stop"}\n\n'
+      );
+      const downstream = await ProxyResponseHandler.dispatch(session, forwardedResponse);
+      await expect(downstream.text()).resolves.toContain("winner");
+      await state.loserBilled.promise;
+      await settleTasks();
+      await agents.released;
+
+      expect(state.addLoserCost).toHaveBeenCalledTimes(1);
+      expect(state.addLoserCost).toHaveBeenCalledWith(
+        MESSAGE.id,
+        expect.objectContaining({ toString: expect.any(Function) }),
+        expect.objectContaining({
+          attemptNumber: 1,
+          costUsd: "0.011",
+          providerId: initialProvider.id,
+        })
+      );
+      expect(state.updateWinnerCost).toHaveBeenCalledTimes(1);
+      expect(state.updateMessageRequestCostWithBreakdown).not.toHaveBeenCalled();
+      expect(session.getRoutingTrace()?.events).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            attemptId: `${initialProvider.id}:1`,
+            cancellationKind: "discovery_loser",
+            outcome: "cancelled",
+            type: "attempt_finished",
+          }),
+        ])
+      );
+      expect(loser.abortCount()).toBe(0);
+      expect(winner.abortCount()).toBe(0);
+      expect(agents.release).toHaveBeenCalledTimes(2);
+      expect(agents.pool.getPoolStats().activeRequests).toBe(0);
+    } finally {
+      client.abort(new Error("fixture cleanup"));
+      await Promise.all([loser.close(), winner.close()]);
+    }
+  });
+
+  it("does not bill a drained Discovery loser without a protocol completion marker", async () => {
+    const [loser, winner] = await Promise.all([startUpstream(), startUpstream()]);
+    const client = new AbortController();
+    try {
+      state.discoveryEnabled = true;
+      state.billHedgeLosers = true;
+      const initialProvider = createProvider(1, loser.baseUrl, 0);
+      const winningProvider = createProvider(2, winner.baseUrl, 0);
+      initialProvider.priority = 2;
+      winningProvider.priority = 1;
+      state.providers.push(winningProvider);
+      const session = await createSession(initialProvider, "/v1/messages", client.signal);
+      session.sessionId = "integration-discovery";
+      const agents = watchAgentReleases(2);
+
+      const forwarded = ProxyForwarder.send(session);
+      const [loserResponse] = await Promise.all([loser.response, winner.response]);
+      loserResponse.write(
+        'event: content_block_delta\ndata: {"type":"content_block_delta","delta":{"type":"text_delta","text":"partial loser"}}\n\n'
+      );
+      await vi.waitFor(() => {
+        expect(session.getRoutingTrace()?.events).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              attemptId: `${initialProvider.id}:1`,
+              outcome: "held",
+              type: "attempt_held",
+            }),
+          ])
+        );
+      });
+
+      await winner.send(
+        'event: content_block_delta\ndata: {"type":"content_block_delta","delta":{"type":"text_delta","text":"winner"}}\n\n' +
+          'event: message_stop\ndata: {"type":"message_stop"}\n\n'
+      );
+      const forwardedResponse = await forwarded;
+      // Positive usage alone is insufficient: without message_stop this is a
+      // truncated Anthropic stream and must not be added to the request cost.
+      await loser.send(
+        'event: message_delta\ndata: {"type":"message_delta","usage":{"input_tokens":7,"output_tokens":2}}\n\n'
+      );
+      const downstream = await ProxyResponseHandler.dispatch(session, forwardedResponse);
+      await expect(downstream.text()).resolves.toContain("winner");
+      await agents.released;
+
+      expect(state.addLoserCost).not.toHaveBeenCalled();
+      expect(loser.abortCount()).toBe(0);
+      expect(winner.abortCount()).toBe(0);
       expect(agents.pool.getPoolStats().activeRequests).toBe(0);
     } finally {
       client.abort(new Error("fixture cleanup"));

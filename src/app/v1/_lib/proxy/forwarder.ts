@@ -106,7 +106,7 @@ import {
   validateOpenAIImageRequest,
 } from "./openai-image-compat";
 import { ProxyProviderResolver } from "./provider-selector";
-import { finalizeHedgeLoserBilling } from "./response-handler";
+import { finalizeHedgeLoserBilling, hasStreamCompletionMarker } from "./response-handler";
 import type { ProxySession } from "./session";
 import {
   type DeferredStreamingHedgeBindingAuthority,
@@ -5157,6 +5157,10 @@ export class ProxyForwarder {
     const racingDeadlineAt = requestStartedAt + totalTimeoutMs;
     const protocol = ProxyForwarder.discoveryProtocol(session);
     const rawCrossProviderFallbackEnabled = session.isRawCrossProviderFallbackEnabled();
+    // Discovery uses the same opt-in loser billing switch as legacy Hedge. The
+    // attempt is only kept alive after a winner commits when it already has a
+    // protocol-valid prefix and a readable response body (see cancelLosers).
+    const billHedgeLosers = settings.billHedgeLosers === true && session.messageContext?.id != null;
     const coordinator = new DiscoveryCoordinator({ concurrency, maxRounds });
     const discoveryMetrics = new DiscoveryRequestMetrics(
       {
@@ -5174,6 +5178,8 @@ export class ProxyForwarder {
       StreamingHedgeAttempt & {
         id: string;
         kind: "normal" | "fallback";
+        /** Retained beside the primary fallback in the final round. */
+        finalRescue: boolean;
         controller: AbortController;
         parser: DiscoveryValidityParser;
         chunks: Uint8Array[];
@@ -5403,6 +5409,148 @@ export class ProxyForwarder {
       return attempt.modelRedirect;
     };
 
+    /**
+     * Drain a Discovery loser only after a winner has committed and only when
+     * the loser already produced a protocol-valid prefix. Discovery attempts
+     * that were still waiting for headers/first byte are cancelled normally;
+     * retaining those would turn an SLA race into an unbounded cost fan-out.
+     *
+     * The helper deliberately requires a natural drain completion before
+     * invoking finalizeHedgeLoserBilling. A cancellation, transport error, or
+     * drain cap therefore never creates a cost entry for Discovery.
+     */
+    const startDiscoveryLoserBilling = (attempt: (typeof winner & { id: string }) | null) => {
+      if (!attempt || attempt.loserBillingStarted) return;
+      attempt.loserBillingStarted = true;
+
+      const reader = attempt.reader;
+      const response = attempt.response;
+      const messageRequestId = session.messageContext?.id;
+      const messageRequestCreatedAtMs = session.messageContext?.createdAt.getTime();
+      if (!reader || !response || messageRequestId == null) {
+        const cancelPromise = reader?.cancel("discovery_loser_no_billing");
+        cancelPromise?.catch(() => undefined);
+        releaseProviderRef(attempt);
+        if (attempt.releaseAgent && !attempt.agentReleased) {
+          attempt.agentReleased = true;
+          try {
+            attempt.releaseAgent();
+          } catch {
+            /* release is best effort */
+          }
+        }
+        return;
+      }
+
+      attempt.clearResponseTimeout?.();
+      const controller = attempt.responseController;
+      const drainTimeoutMs = getEnvConfig().HEDGE_LOSER_DRAIN_TIMEOUT_MS;
+      const drainTimer = setTimeout(() => {
+        try {
+          controller?.abort(new Error("discovery_loser_drain_timeout"));
+        } catch {
+          /* abort is best effort */
+        }
+      }, drainTimeoutMs);
+
+      void (async () => {
+        const decoder = new TextDecoder();
+        const chunks: string[] = [];
+        let totalBytes = 0;
+        let drainComplete = false;
+        const MAX_DRAIN_BYTES = 32 * 1024 * 1024;
+
+        // The validity parser may have consumed one or more chunks before the
+        // loser was held. Replay those bytes so usage markers in the prefix
+        // (for example Anthropic message_start) are available to billing.
+        const bufferedChunks = attempt.chunks.splice(0);
+        for (const chunk of bufferedChunks) {
+          chunks.push(decoder.decode(chunk, { stream: true }));
+          totalBytes += chunk.byteLength;
+        }
+
+        try {
+          while (true) {
+            const { value, done } = await reader.read();
+            if (done) {
+              drainComplete = true;
+              break;
+            }
+            if (!value) continue;
+            chunks.push(decoder.decode(value, { stream: true }));
+            totalBytes += value.byteLength;
+            if (totalBytes > MAX_DRAIN_BYTES) {
+              logger.warn("[Discovery] Loser drain exceeded cap; skipping billing", {
+                sessionId: attempt.session.sessionId ?? null,
+                providerId: attempt.provider.id,
+                providerName: attempt.provider.name,
+                totalBytes,
+              });
+              try {
+                controller?.abort(new Error("discovery_loser_drain_cap"));
+              } catch {
+                /* abort is best effort */
+              }
+              break;
+            }
+          }
+        } catch (drainError) {
+          logger.debug("[Discovery] Loser drain ended before natural completion", {
+            sessionId: attempt.session.sessionId ?? null,
+            providerId: attempt.provider.id,
+            providerName: attempt.provider.name,
+            error: drainError instanceof Error ? drainError.message : String(drainError),
+          });
+        }
+
+        const flushed = decoder.decode();
+        if (flushed) chunks.push(flushed);
+        const allContent = chunks.join("");
+
+        // Discovery billing is intentionally stricter than the legacy helper's
+        // partial-usage safety net: a cancelled/failed drain is not a billable
+        // loser. This avoids charging a provider whose response was cut off by
+        // winner handoff or the drain cap.
+        if (
+          drainComplete &&
+          hasStreamCompletionMarker(allContent, attempt.session.originalFormat)
+        ) {
+          await finalizeHedgeLoserBilling({
+            messageRequestId,
+            messageRequestCreatedAtMs: messageRequestCreatedAtMs ?? Date.now(),
+            loserSession: attempt.session,
+            provider: attempt.provider,
+            attemptNumber: attempt.sequence,
+            upstreamStatusCode: response.status,
+            allContent,
+            drainComplete: true,
+            requireUsage: true,
+            billingContext: attempt.billingSnapshot ?? undefined,
+          });
+        }
+      })()
+        .catch((billingError) => {
+          logger.debug("[Discovery] Loser billing task failed", {
+            sessionId: attempt.session.sessionId ?? null,
+            providerId: attempt.provider.id,
+            providerName: attempt.provider.name,
+            error: billingError instanceof Error ? billingError.message : String(billingError),
+          });
+        })
+        .finally(() => {
+          clearTimeout(drainTimer);
+          releaseProviderRef(attempt);
+          if (attempt.releaseAgent && !attempt.agentReleased) {
+            attempt.agentReleased = true;
+            try {
+              attempt.releaseAgent();
+            } catch {
+              /* release is best effort */
+            }
+          }
+        });
+    };
+
     const cleanupAttempt = (
       attempt: (typeof winner & { id: string }) | null,
       cancellationKind: DiscoveryCancellationKind | null,
@@ -5410,11 +5558,21 @@ export class ProxyForwarder {
     ) => {
       if (attempt?.readerTransferred) return;
       if (!attempt) return;
+      // This flag is set only by cancelLosers when a winner has committed. It
+      // prevents terminal cleanup, round SLA cancellation and client aborts
+      // from accidentally entering the billing drain path.
+      const preserveForLoserBilling =
+        cancellationKind === "discovery_loser" &&
+        attempt.billAsLoser &&
+        attempt.ready &&
+        attempt.response != null &&
+        attempt.reader != null &&
+        !attempt.readerCancelled;
       attempt.pending = false;
       if (cancellationKind && !attempt.cancellationKind) {
         attempt.cancellationKind = cancellationKind;
       }
-      if (!attempt.controller.signal.aborted) {
+      if (!preserveForLoserBilling && !attempt.controller.signal.aborted) {
         try {
           attempt.controller.abort(
             cancellationKind
@@ -5425,7 +5583,7 @@ export class ProxyForwarder {
           /* abort is best effort */
         }
       }
-      if (attempt.reader && !attempt.readerCancelled) {
+      if (!preserveForLoserBilling && attempt.reader && !attempt.readerCancelled) {
         attempt.readerCancelled = true;
         try {
           const cancelPromise = attempt.reader.cancel(
@@ -5442,7 +5600,7 @@ export class ProxyForwarder {
           });
         }
       }
-      if (attempt.releaseAgent && !attempt.agentReleased) {
+      if (!preserveForLoserBilling && attempt.releaseAgent && !attempt.agentReleased) {
         attempt.agentReleased = true;
         try {
           attempt.releaseAgent();
@@ -5450,8 +5608,10 @@ export class ProxyForwarder {
           /* release is idempotent */
         }
       }
-      releaseProviderRef(attempt);
-      attempt.chunks.length = 0;
+      if (!preserveForLoserBilling) {
+        releaseProviderRef(attempt);
+        attempt.chunks.length = 0;
+      }
       discoveryMetrics.attemptFinished(attempt.id, {
         providerId: attempt.provider.id,
         outcome: cancellationKind ? "cancelled" : "failed",
@@ -5479,6 +5639,9 @@ export class ProxyForwarder {
           ...(failure?.reason ? { reason: failure.reason } : {}),
         });
       }
+      if (preserveForLoserBilling) {
+        startDiscoveryLoserBilling(attempt);
+      }
     };
 
     const cancelAttempt = (
@@ -5491,7 +5654,23 @@ export class ProxyForwarder {
       cancellationKind: DiscoveryCancellationKind = "discovery_loser"
     ) => {
       for (const attempt of attempts.values()) {
-        if (attempt !== keep) cancelAttempt(attempt, cancellationKind);
+        if (attempt === keep) continue;
+        // Only a committed winner may authorize loser billing. In particular,
+        // terminal failure and deadline cleanup must not retain upstreams just
+        // because the global setting is enabled.
+        if (
+          keep &&
+          cancellationKind === "discovery_loser" &&
+          billHedgeLosers &&
+          attempt.pending &&
+          attempt.ready &&
+          attempt.response != null &&
+          attempt.reader != null &&
+          !attempt.readerCancelled
+        ) {
+          attempt.billAsLoser = true;
+        }
+        cancelAttempt(attempt, cancellationKind);
       }
     };
 
@@ -5601,6 +5780,35 @@ export class ProxyForwarder {
       committed = true;
       winner = attempt;
       attempt.pending = false;
+      // Snapshot the original-session billing context before an alternative
+      // winner is synced onto the parent session. Otherwise a loser that uses
+      // the parent session would be priced with the winner's redirected model
+      // or group multiplier.
+      if (billHedgeLosers && attempt.session !== session) {
+        for (const other of attempts.values()) {
+          if (
+            other !== attempt &&
+            other.pending &&
+            other.ready &&
+            other.response != null &&
+            other.reader != null &&
+            !other.readerCancelled
+          ) {
+            other.billAsLoser = true;
+            if (other.session === session && !other.billingSnapshot) {
+              const loserRequest = session.request.message as Record<string, unknown>;
+              other.billingSnapshot = {
+                originalModel: session.getOriginalModel(),
+                redirectedModel: session.getCurrentModel(),
+                requestedServiceTier:
+                  typeof loserRequest.service_tier === "string" ? loserRequest.service_tier : null,
+                context1mApplied: session.getContext1mApplied(),
+                groupCostMultiplier: session.getGroupCostMultiplier(),
+              };
+            }
+          }
+        }
+      }
       // From this point ResponseHandler owns the reader and agent release.
       // No coordinator/timer path may cancel or release this attempt again.
       attempt.readerTransferred = true;
@@ -5614,7 +5822,11 @@ export class ProxyForwarder {
         outcome: "winner",
       });
       const winnerOrigin =
-        attempt.traceRound === 0 && attempt.kind === "normal" ? "sticky" : attempt.kind;
+        attempt.traceRound === 0 && attempt.kind === "normal" && !attempt.finalRescue
+          ? "sticky"
+          : attempt.kind === "fallback" || attempt.finalRescue
+            ? "fallback"
+            : "normal";
       if (!attempt.traceFinished) {
         attempt.traceFinished = true;
         session.appendRoutingTraceEvent({
@@ -5664,7 +5876,10 @@ export class ProxyForwarder {
         ProxyForwarder.syncWinningAttemptSession(session, attempt.session);
 
       const bindingIntent =
-        attempt.kind === "fallback" || !bindingWriteAllowed || !session.isSessionBindingAllowed()
+        attempt.kind === "fallback" ||
+        attempt.finalRescue ||
+        !bindingWriteAllowed ||
+        !session.isSessionBindingAllowed()
           ? "none"
           : bindingSnapshot?.providerId == null
             ? "create"
@@ -5681,7 +5896,7 @@ export class ProxyForwarder {
         endpointUrl: attempt.endpointAudit.endpointUrl,
         upstreamStatusCode: attempt.response.status,
         isHedgeWinner: false,
-        billHedgeLosers: false,
+        billHedgeLosers,
         bindingIntent,
         bindingSnapshot,
         requiresCompletionMarkerForBinding: bindingIntent === "create" || bindingIntent === "renew",
@@ -5937,6 +6152,7 @@ export class ProxyForwarder {
         return false;
       }
       let effectiveKind = kind;
+      let effectiveFinalRescue = false;
       if (retrySetupReservation) {
         const reservedAttempt = coordinator.snapshot.find(
           (candidate) => candidate.id === retrySetupReservation.placeholderAttemptId
@@ -5946,6 +6162,7 @@ export class ProxyForwarder {
           return false;
         }
         effectiveKind = reservedAttempt.kind;
+        effectiveFinalRescue = reservedAttempt.finalRescue === true;
         coordinator.removeAttempt(retrySetupReservation.placeholderAttemptId);
         if (providerSessionRefOwnedByReservation) {
           retrySetupReservation.providerSessionRefOwned = false;
@@ -5975,6 +6192,7 @@ export class ProxyForwarder {
       const attempt = {
         id,
         kind: effectiveKind,
+        finalRescue: effectiveFinalRescue,
         controller,
         parser: new DiscoveryValidityParser(protocol),
         chunks: [],
@@ -6022,6 +6240,7 @@ export class ProxyForwarder {
       } as typeof winner & {
         id: string;
         kind: "normal" | "fallback";
+        finalRescue: boolean;
         controller: AbortController;
         parser: DiscoveryValidityParser;
         chunks: Uint8Array[];
@@ -6042,6 +6261,7 @@ export class ProxyForwarder {
         providerId: provider.id,
         priority: effectivePriority,
         kind: effectiveKind,
+        finalRescue: effectiveFinalRescue,
         ready: false,
         pending: true,
         round: currentRound,
@@ -6950,6 +7170,15 @@ export class ProxyForwarder {
               retrySetupReservation.providerId,
               coordinator.round
             );
+          }
+        }
+        if ("rescueAttemptId" in action && action.rescueAttemptId) {
+          const rescue = attempts.get(action.rescueAttemptId);
+          if (rescue) {
+            // The coordinator retains this attempt only as a final rescue
+            // lane. It may win the request, but its response must never create
+            // or renew Sticky.
+            rescue.finalRescue = true;
           }
         }
         // A final-round fallback may still be waiting for a protocol-valid

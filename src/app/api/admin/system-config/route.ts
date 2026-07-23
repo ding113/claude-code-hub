@@ -7,7 +7,10 @@ import {
   invalidateAllOverviewCaches,
   invalidateAllStatisticsCaches,
 } from "@/lib/redis";
-import { DISCOVERY_WINDOW_INVALID_ERROR_CODE } from "@/lib/validation/discovery-settings";
+import {
+  DISCOVERY_WINDOW_INVALID_ERROR_CODE,
+  getDiscoveryValidationErrorCode,
+} from "@/lib/validation/discovery-settings";
 import { UpdateSystemSettingsSchema } from "@/lib/validation/schemas";
 import { getSystemSettings, updateSystemSettings } from "@/repository/system-config";
 
@@ -139,6 +142,10 @@ export async function POST(req: Request) {
     return Response.json(updated);
   } catch (error) {
     if (error instanceof z.ZodError) {
+      const errorCode = getDiscoveryValidationErrorCode(error.issues);
+      if (errorCode === DISCOVERY_WINDOW_INVALID_ERROR_CODE) {
+        return Response.json({ error: "discoveryWindowInvalid", errorCode }, { status: 400 });
+      }
       const firstError = error.issues[0];
       return Response.json({ error: firstError.message || "数据验证失败" }, { status: 400 });
     }

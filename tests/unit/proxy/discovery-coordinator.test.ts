@@ -60,10 +60,106 @@ describe("DiscoveryCoordinator", () => {
 
     expect(coordinator.onRoundBoundary()).toEqual({
       type: "cancel",
-      attemptIds: ["b"],
+      attemptIds: [],
       promoteAttemptId: "a",
+      rescueAttemptId: "b",
+    });
+    expect(coordinator.snapshot.find((item) => item.id === "a")).toMatchObject({
+      kind: "fallback",
+      pending: true,
+    });
+    expect(coordinator.snapshot.find((item) => item.id === "b")).toMatchObject({
+      kind: "normal",
+      finalRescue: true,
+      pending: true,
     });
     expect(coordinator.canRefillCurrentRound).toBe(false);
+  });
+
+  it("retains one final rescue beside an existing fallback", () => {
+    const coordinator = new DiscoveryCoordinator({
+      concurrency: 3,
+      maxRounds: 1,
+    });
+    coordinator.addAttempt(attempt("fallback", 1, "fallback"));
+    coordinator.addAttempt(attempt("normal-a", 2));
+    coordinator.addAttempt(attempt("normal-b", 3));
+
+    expect(coordinator.onRoundBoundary()).toEqual({
+      type: "cancel",
+      attemptIds: ["normal-b"],
+      rescueAttemptId: "normal-a",
+    });
+    expect(coordinator.snapshot.find((item) => item.id === "fallback")).toMatchObject({
+      kind: "fallback",
+      pending: true,
+    });
+    expect(coordinator.snapshot.find((item) => item.id === "normal-a")).toMatchObject({
+      kind: "normal",
+      finalRescue: true,
+      pending: true,
+    });
+    expect(coordinator.snapshot.find((item) => item.id === "normal-b")?.pending).toBe(false);
+  });
+
+  it("lets either final rescue lane win, without opening Sticky eligibility", () => {
+    const fallbackFirst = new DiscoveryCoordinator({
+      concurrency: 2,
+      maxRounds: 1,
+    });
+    fallbackFirst.addAttempt(attempt("fallback", 1, "fallback"));
+    fallbackFirst.addAttempt(attempt("standby", 2));
+    const boundary = fallbackFirst.onRoundBoundary();
+    expect(boundary).toMatchObject({ rescueAttemptId: "standby" });
+    expect(fallbackFirst.markReady("fallback")).toEqual({
+      type: "promote_fallback",
+      attemptId: "fallback",
+    });
+
+    const standbyFirst = new DiscoveryCoordinator({
+      concurrency: 2,
+      maxRounds: 1,
+    });
+    standbyFirst.addAttempt(attempt("fallback", 1, "fallback"));
+    standbyFirst.addAttempt(attempt("standby", 2));
+    standbyFirst.onRoundBoundary();
+    expect(standbyFirst.markReady("standby")).toEqual({
+      type: "commit_normal",
+      attemptId: "standby",
+    });
+  });
+
+  it("does not create a final rescue lane when concurrency is one", () => {
+    const coordinator = new DiscoveryCoordinator({
+      concurrency: 1,
+      maxRounds: 1,
+    });
+    coordinator.addAttempt(attempt("fallback", 1, "fallback"));
+    coordinator.addAttempt(attempt("normal", 2));
+
+    expect(coordinator.onRoundBoundary()).toEqual({
+      type: "cancel",
+      attemptIds: ["normal"],
+    });
+    expect(coordinator.snapshot.find((item) => item.id === "fallback")?.pending).toBe(true);
+    expect(coordinator.snapshot.find((item) => item.id === "normal")?.pending).toBe(false);
+  });
+
+  it("waits for a final rescue after the primary fallback fails", () => {
+    const coordinator = new DiscoveryCoordinator({
+      concurrency: 2,
+      maxRounds: 1,
+    });
+    coordinator.addAttempt(attempt("fallback", 1, "fallback"));
+    coordinator.addAttempt(attempt("standby", 2));
+    coordinator.onRoundBoundary();
+
+    expect(coordinator.markFailed("fallback")).toEqual({ type: "none" });
+    expect(coordinator.snapshot.find((item) => item.id === "standby")?.pending).toBe(true);
+    expect(coordinator.markReady("standby")).toEqual({
+      type: "commit_normal",
+      attemptId: "standby",
+    });
   });
 
   it("counts setup reservations as occupied slots without promoting them to fallback", () => {

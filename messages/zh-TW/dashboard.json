@@ -300,6 +300,7 @@
         "title": "計費詳情",
         "input": "輸入",
         "output": "輸出",
+        "cacheWrite": "快取寫入",
         "cacheWrite5m": "快取寫入（5m）",
         "cacheWrite1h": "快取寫入（1h）",
         "cacheRead": "快取讀取",
@@ -497,7 +498,12 @@
           "endpoint": "端點",
           "error": "上游錯誤",
           "cancellation": "取消緣由",
-          "timeline": "嘗試時間線"
+          "timeline": "嘗試時間線",
+          "billing": "費用與用量",
+          "billed": "已計入總費用",
+          "billedCost": "已計入費用",
+          "winnerCost": "贏家費用",
+          "notObtained": "已中止，未取得用量"
         },
         "cancellationKinds": {
           "discovery_loser": "其他 Discovery 嘗試已勝出",

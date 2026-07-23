@@ -3609,7 +3609,7 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
       expect(await response.text()).toContain('"sticky-fallback"');
       expect(session.provider?.id).toBe(sticky.id);
       expect(deferred?.bindingIntent).toBe("none");
-      expect(deferred?.requiresCompletionMarker).toBe(true);
+      expect(deferred?.requiresCompletionMarkerForBinding).toBe(false);
 
       stalledSelector.resolve([]);
       await vi.advanceTimersByTimeAsync(0);
@@ -5303,6 +5303,182 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
       );
       expect(await response.text()).toContain('"fallback"');
       expect(mocks.pickDiscoveryProviders).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("a final-round standby can rescue after the boundary without writing Sticky", async () => {
+    vi.useFakeTimers();
+    try {
+      const primary = createProvider({ id: 1, name: "primary", priority: 1 });
+      const standby = createProvider({ id: 2, name: "standby", priority: 2 });
+      const session = createSession();
+      session.authState = {
+        success: true,
+        user: null,
+        key: { id: 36 },
+        apiKey: null,
+      } as typeof session.authState;
+      session.setProvider(primary);
+      mocks.getCachedSystemSettings.mockResolvedValue({
+        discoveryEnabled: true,
+        discoveryConcurrency: 2,
+        maxDiscoveryRounds: 1,
+        discoverySlaMs: 10,
+        stickySlaMs: 10,
+        racingTotalTimeoutMs: 100,
+        stickyTimeoutCooldownMs: 300_000,
+      });
+      mocks.pickDiscoveryProviders.mockResolvedValueOnce([standby]);
+
+      const streamControllers = new Map<number, ReadableStreamDefaultController<Uint8Array>>();
+      const abortedProviders = new Set<number>();
+      const doForward = vi.spyOn(
+        ProxyForwarder as unknown as {
+          doForward: (...args: unknown[]) => Promise<Response>;
+        },
+        "doForward"
+      );
+      doForward.mockImplementation(
+        async (attemptSession, _provider, _baseUrl, _audit, _count, _stream, signal) => {
+          const providerId = (attemptSession as ProxySession).provider!.id;
+          return new Response(
+            new ReadableStream<Uint8Array>({
+              start(controller) {
+                streamControllers.set(providerId, controller);
+                signal?.addEventListener(
+                  "abort",
+                  () => {
+                    abortedProviders.add(providerId);
+                    try {
+                      controller.close();
+                    } catch {
+                      // The winner can close naturally before loser cleanup.
+                    }
+                  },
+                  { once: true }
+                );
+              },
+            }),
+            { headers: { "content-type": "text/event-stream" } }
+          );
+        }
+      );
+
+      const responsePromise = ProxyForwarder.send(session);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(doForward).toHaveBeenCalledTimes(2);
+
+      // Both attempts are still pending when the only Discovery SLA window
+      // closes. The primary becomes the fallback and standby becomes the one
+      // retained final rescue lane.
+      await vi.advanceTimersByTimeAsync(10);
+      streamControllers
+        .get(standby.id)!
+        .enqueue(
+          new TextEncoder().encode(
+            'data: {"type":"content_block_delta","delta":{"text":"standby"}}\n\n'
+          )
+        );
+      streamControllers.get(standby.id)!.close();
+      await vi.advanceTimersByTimeAsync(0);
+
+      const response = await responsePromise;
+      expect(await response.text()).toContain('"standby"');
+      expect(session.provider?.id).toBe(standby.id);
+      expect(abortedProviders).toContain(primary.id);
+      expect(peekDeferredStreamingFinalization(session)).toEqual(
+        expect.objectContaining({
+          providerId: standby.id,
+          bindingIntent: "none",
+          requiresCompletionMarkerForBinding: false,
+        })
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("a rectified final-round standby remains ineligible for Sticky", async () => {
+    vi.useFakeTimers();
+    try {
+      const primary = createProvider({ id: 1, name: "primary", priority: 1 });
+      const standby = createProvider({ id: 2, name: "standby", priority: 2 });
+      const session = createSession();
+      session.authState = {
+        success: true,
+        user: null,
+        key: { id: 37 },
+        apiKey: null,
+      } as typeof session.authState;
+      session.setProvider(primary);
+      withThinkingBlocks(session);
+      mocks.getCachedSystemSettings.mockResolvedValue({
+        discoveryEnabled: true,
+        discoveryConcurrency: 2,
+        maxDiscoveryRounds: 1,
+        discoverySlaMs: 10,
+        stickySlaMs: 10,
+        racingTotalTimeoutMs: 100,
+        stickyTimeoutCooldownMs: 300_000,
+        enableThinkingSignatureRectifier: true,
+      });
+      mocks.pickDiscoveryProviders.mockResolvedValueOnce([standby]);
+
+      const standbyFirst = Promise.withResolvers<Response>();
+      const signatureError = new UpstreamProxyError(
+        "Invalid `signature` in `thinking` block",
+        400,
+        {
+          body: '{"error":"invalid_signature"}',
+          providerId: standby.id,
+          providerName: standby.name,
+        }
+      );
+      let standbyAttempts = 0;
+      const doForward = vi.spyOn(
+        ProxyForwarder as unknown as {
+          doForward: (...args: unknown[]) => Promise<Response>;
+        },
+        "doForward"
+      );
+      doForward.mockImplementation(async (attemptSession) => {
+        const providerId = (attemptSession as ProxySession).provider!.id;
+        if (providerId === primary.id) {
+          return new Response(new ReadableStream<Uint8Array>(), {
+            headers: { "content-type": "text/event-stream" },
+          });
+        }
+        standbyAttempts += 1;
+        if (standbyAttempts === 1) return standbyFirst.promise;
+        return new Response(
+          'data: {"type":"content_block_delta","delta":{"text":"rectified standby"}}\n\n',
+          { headers: { "content-type": "text/event-stream" } }
+        );
+      });
+
+      const responsePromise = ProxyForwarder.send(session);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(doForward).toHaveBeenCalledTimes(2);
+
+      // The boundary first marks this still-pending normal as the final rescue.
+      // Its provider-local rectifier retry must inherit that no-Sticky role.
+      await vi.advanceTimersByTimeAsync(10);
+      standbyFirst.reject(signatureError);
+      await vi.advanceTimersByTimeAsync(0);
+
+      const response = await responsePromise;
+      expect(await response.text()).toContain('"rectified standby"');
+      expect(standbyAttempts).toBe(2);
+      expect(session.provider?.id).toBe(standby.id);
+      expect(peekDeferredStreamingFinalization(session)).toEqual(
+        expect.objectContaining({
+          providerId: standby.id,
+          bindingIntent: "none",
+          requiresCompletionMarkerForBinding: false,
+        })
+      );
     } finally {
       vi.useRealTimers();
     }

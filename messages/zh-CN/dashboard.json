@@ -300,6 +300,7 @@
         "title": "计费详情",
         "input": "输入",
         "output": "输出",
+        "cacheWrite": "缓存写入",
         "cacheWrite5m": "缓存写入 (5m)",
         "cacheWrite1h": "缓存写入 (1h)",
         "cacheRead": "缓存读取",
@@ -497,7 +498,12 @@
           "endpoint": "端点",
           "error": "上游错误",
           "cancellation": "取消原因",
-          "timeline": "尝试时间线"
+          "timeline": "尝试时间线",
+          "billing": "费用与用量",
+          "billed": "已计入总费用",
+          "billedCost": "已计入费用",
+          "winnerCost": "赢家费用",
+          "notObtained": "已取消，未取得用量"
         },
         "cancellationKinds": {
           "discovery_loser": "其他 Discovery 尝试已胜出",

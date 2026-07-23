@@ -300,6 +300,7 @@
         "title": "Детали биллинга",
         "input": "Входные",
         "output": "Выходные",
+        "cacheWrite": "Запись в кэш",
         "cacheWrite5m": "Запись кэша (5m)",
         "cacheWrite1h": "Запись кэша (1h)",
         "cacheRead": "Чтение кэша",
@@ -497,7 +498,12 @@
           "endpoint": "Upstream",
           "error": "Ошибка upstream",
           "cancellation": "Причина отмены",
-          "timeline": "Хронология попытки"
+          "timeline": "Хронология попытки",
+          "billing": "Стоимость и использование",
+          "billed": "Включено в общую стоимость",
+          "billedCost": "Начисленная стоимость",
+          "winnerCost": "Стоимость победителя",
+          "notObtained": "Отменено, usage не получен"
         },
         "cancellationKinds": {
           "discovery_loser": "Победила другая попытка Discovery",
