@@ -36,6 +36,18 @@ const sessionManagerMocks = vi.hoisted(() => ({
   SessionManager: {
     getSessionProvider: vi.fn(async () => null as number | null),
     clearSessionProvider: vi.fn(async () => undefined),
+    // 版本化绑定读不可用 -> findReusable 走 legacy getSessionProvider 回退，测试意图不变
+    getSessionBindingSnapshot: vi.fn(async () => ({
+      status: "unavailable" as const,
+      reason: "redis_unavailable",
+      capabilityState: "unknown",
+      legacyFallbackAllowed: true,
+    })),
+    isSessionProviderCoolingDown: vi.fn(async () => ({
+      status: "ok" as const,
+      coolingDown: false,
+      legacyFallbackAllowed: false as const,
+    })),
   },
 }));
 

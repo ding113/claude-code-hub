@@ -6032,22 +6032,9 @@ export class ProxyForwarder {
         providerSessionRefRetainOnSuccess: attempt.providerSessionRefRetainOnSuccess,
       });
       leaseTransferred = true;
-      const prefix =
-        attempt.chunks.length === 1
-          ? attempt.chunks[0]
-          : (() => {
-              const size = attempt.chunks.reduce((sum, chunk) => sum + chunk.byteLength, 0);
-              const output = new Uint8Array(size);
-              let offset = 0;
-              for (const chunk of attempt.chunks) {
-                output.set(chunk, offset);
-                offset += chunk.byteLength;
-              }
-              return output;
-            })();
       resolveResult?.({
         response: new Response(
-          ProxyForwarder.buildBufferedFirstChunkStream(prefix, attempt.reader),
+          ProxyForwarder.buildBufferedPrefixStream(attempt.chunks, attempt.reader),
           {
             status: attempt.response.status,
             statusText: attempt.response.statusText,
