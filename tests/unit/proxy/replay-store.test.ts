@@ -83,8 +83,9 @@ vi.mock("@/drizzle/db", () => ({
       },
     }),
     delete: () => ({
-      where: async (condition: unknown) => {
+      where: (condition: unknown) => {
         dbState.deleteWheres.push(condition);
+        return { returning: async () => [] as { replayId: string }[] };
       },
     }),
     select: () => ({
@@ -106,10 +107,12 @@ vi.mock("@/drizzle/db", () => ({
 function createFakeRedis() {
   const kv = new Map<string, string>();
   const lists = new Map<string, string[]>();
+  const listTtls = new Map<string, number>();
   return {
     status: "ready",
     kv,
     lists,
+    listTtls,
     setex: vi.fn(async (key: string, _ttl: number, value: string) => {
       kv.set(key, value);
       return "OK";
@@ -131,19 +134,28 @@ function createFakeRedis() {
       kv.set(key, value);
       return "OK";
     }),
-    eval: vi.fn(async (_script: string, _numkeys: number, key: string, token: string) => {
-      if (kv.get(key) === token) {
-        kv.delete(key);
-        return 1;
+    // 按脚本内容分发：RPUSH+EXPIRE（list 追加）/ compare-expire（续租）/ compare-delete（释放）
+    eval: vi.fn(
+      async (script: string, _numkeys: number, key: string, ...args: (string | number)[]) => {
+        if (script.includes("RPUSH")) {
+          const [ttl, ...values] = args;
+          const list = lists.get(key) ?? [];
+          list.push(...values.map(String));
+          lists.set(key, list);
+          if (Number(ttl) > 0) listTtls.set(key, Number(ttl));
+          return list.length;
+        }
+        const token = args[0] as string;
+        if (script.includes("EXPIRE")) {
+          return kv.get(key) === token ? 1 : 0;
+        }
+        if (kv.get(key) === token) {
+          kv.delete(key);
+          return 1;
+        }
+        return 0;
       }
-      return 0;
-    }),
-    rpush: vi.fn(async (key: string, ...values: string[]) => {
-      const list = lists.get(key) ?? [];
-      list.push(...values);
-      lists.set(key, list);
-      return list.length;
-    }),
+    ),
     lrange: vi.fn(async (key: string, start: number, stop: number) => {
       const list = lists.get(key) ?? [];
       return stop === -1 ? list.slice(start) : list.slice(start, stop + 1);
@@ -214,7 +226,7 @@ function currentRedis(): FakeRedis {
 }
 
 describe("ReplayStore：Redis 不可用时全部 fail-open", () => {
-  it("client 为 null 时读 miss、写放弃、租约失败，均不抛", async () => {
+  it("client 为 null 时读 miss、写放弃、claim 失败，均不抛", async () => {
     redisControl.client = null;
     const store = new ReplayStore();
 
@@ -223,7 +235,8 @@ describe("ReplayStore：Redis 不可用时全部 fail-open", () => {
     await expect(store.appendChunks("r1", ["a"])).resolves.toBeNull();
     await expect(store.readChunks("r1", 0)).resolves.toBeNull();
     await expect(store.tryClaimOwner("r1", "tok")).resolves.toBe(false);
-    await expect(store.renewOwnerLease("r1", "tok")).resolves.toBeUndefined();
+    // 续租时 Redis 不可用 = 状态未知：返回 true 不惩罚正在冲刷的 owner
+    await expect(store.renewOwnerLease("r1", "tok")).resolves.toBe(true);
     await expect(store.releaseOwner("r1", "tok")).resolves.toBeUndefined();
     await expect(store.deleteEntry("r1")).resolves.toBeUndefined();
     await expect(store.deleteChunks("r1")).resolves.toBeUndefined();
@@ -248,7 +261,8 @@ describe("ReplayStore：Redis 不可用时全部 fail-open", () => {
     const store = new ReplayStore();
 
     await expect(store.tryClaimOwner("r1", "tok")).resolves.toBe(false);
-    await expect(store.renewOwnerLease("r1", "tok")).resolves.toBeUndefined();
+    // 续租异常保守视为所有权已失
+    await expect(store.renewOwnerLease("r1", "tok")).resolves.toBe(false);
     await expect(store.releaseOwner("r1", "tok")).resolves.toBeUndefined();
   });
 });
@@ -307,14 +321,21 @@ describe("ReplayStore：meta 状态机（Redis 热层）", () => {
 });
 
 describe("ReplayStore：chunks 热层", () => {
-  it("appendChunks 批量追加返回累计长度并续期，readChunks 支持 offset 跟尾", async () => {
+  it("appendChunks 单条 Lua 原子追加返回累计长度并续期，readChunks 支持 offset 跟尾", async () => {
     envControl.replayTtlSeconds = 300;
     const store = new ReplayStore();
 
     await expect(store.appendChunks("r1", ["a", "b"])).resolves.toBe(2);
     await expect(store.appendChunks("r1", ["c"])).resolves.toBe(3);
-    expect(currentRedis().rpush).toHaveBeenCalledWith("cch:replay:chunks:r1", "a", "b");
-    expect(currentRedis().expire).toHaveBeenCalledWith("cch:replay:chunks:r1", 300);
+    expect(currentRedis().eval).toHaveBeenCalledWith(
+      expect.stringContaining("RPUSH"),
+      1,
+      "cch:replay:chunks:r1",
+      300,
+      "a",
+      "b"
+    );
+    expect(currentRedis().listTtls.get("cch:replay:chunks:r1")).toBe(300);
 
     await expect(store.readChunks("r1", 0)).resolves.toEqual(["a", "b", "c"]);
     await expect(store.readChunks("r1", 2)).resolves.toEqual(["c"]);
@@ -332,22 +353,30 @@ describe("ReplayStore：owner 租约", () => {
     expect(currentRedis().kv.get("cch:replay:owner:r1")).toBe("tok-a");
   });
 
-  it("renewOwnerLease 用 XX 只续已有租约，租约不存在时不写入", async () => {
+  it("renewOwnerLease 是 compare-and-expire：token 仍属自己时续期返回 true", async () => {
     const store = new ReplayStore();
-
-    await store.renewOwnerLease("r1", "tok-a");
-    expect(currentRedis().kv.has("cch:replay:owner:r1")).toBe(false);
-
     await store.tryClaimOwner("r1", "tok-a");
-    await store.renewOwnerLease("r1", "tok-a");
-    expect(currentRedis().set).toHaveBeenLastCalledWith(
+
+    await expect(store.renewOwnerLease("r1", "tok-a")).resolves.toBe(true);
+    expect(currentRedis().eval).toHaveBeenLastCalledWith(
+      expect.stringContaining("EXPIRE"),
+      1,
       "cch:replay:owner:r1",
       "tok-a",
-      "EX",
-      45,
-      "XX"
+      45
     );
     expect(currentRedis().kv.get("cch:replay:owner:r1")).toBe("tok-a");
+  });
+
+  it("renewOwnerLease 在租约不存在或已被接管时返回 false，且绝不覆写他人租约", async () => {
+    const store = new ReplayStore();
+
+    await expect(store.renewOwnerLease("r1", "tok-a")).resolves.toBe(false);
+    expect(currentRedis().kv.has("cch:replay:owner:r1")).toBe(false);
+
+    await store.tryClaimOwner("r1", "tok-b");
+    await expect(store.renewOwnerLease("r1", "tok-a")).resolves.toBe(false);
+    expect(currentRedis().kv.get("cch:replay:owner:r1")).toBe("tok-b");
   });
 
   it("releaseOwner 是 compare-delete：token 不匹配不删，匹配才删", async () => {
@@ -364,7 +393,7 @@ describe("ReplayStore：owner 租约", () => {
 });
 
 describe("ReplayStore：PG 完成持久层", () => {
-  it("persistCompleted 写入行（expiresAt = now + REPLAY_COMPLETED_TTL_SECONDS）并机会式清理过期行", async () => {
+  it("persistCompleted 写入行（expiresAt = now + REPLAY_COMPLETED_TTL_SECONDS），写路径不顺带清理", async () => {
     envControl.completedTtlSeconds = 1000;
     const store = new ReplayStore();
     const row = makePersistedRow();
@@ -394,18 +423,24 @@ describe("ReplayStore：PG 完成持久层", () => {
     expect(expiresAt).toBeLessThanOrEqual(after + 1000 * 1000);
     expect(dbState.onConflictCalls).toBe(1);
 
-    // 机会式清理：delete where expires_at < now
-    expect(dbState.deleteWheres).toHaveLength(1);
-    const deleteSql = toSqlText(dbState.deleteWheres[0]);
-    expect(deleteSql).toContain('"expires_at" <');
+    // 过期行清理只归定时调度器：写路径不做机会式扫尾
+    expect(dbState.deleteWheres).toHaveLength(0);
   });
 
-  it("persistCompleted 遇 PG 异常 fail-open 不抛（replay 保持 redis-only）", async () => {
+  it("persistCompleted 遇 PG 异常必须抛出（complete 屏障依赖异常走 abort）", async () => {
     dbState.insertError = new Error("pg down");
     const store = new ReplayStore();
 
-    await expect(store.persistCompleted(makePersistedRow())).resolves.toBeUndefined();
-    expect(dbState.deleteWheres).toHaveLength(0);
+    await expect(store.persistCompleted(makePersistedRow())).rejects.toThrow("pg down");
+  });
+
+  it("cleanupExpired 删除过期行（供定时调度器调用）", async () => {
+    const store = new ReplayStore();
+    await expect(store.cleanupExpired()).resolves.toBe(0);
+
+    expect(dbState.deleteWheres).toHaveLength(1);
+    const deleteSql = toSqlText(dbState.deleteWheres[0]);
+    expect(deleteSql).toContain('"expires_at" <');
   });
 
   it("findCompleted 只按 replayId + 未过期条件查询并返回首行", async () => {

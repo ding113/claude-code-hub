@@ -193,6 +193,8 @@ function createFallbackSettings(): SystemSettings {
     publicStatusAggregationIntervalMinutes: 5,
     ipExtractionConfig: null,
     ipGeoLookupEnabled: true,
+    streamGateMode: "enforce",
+    affinityIgnoreClientSessionId: true,
     createdAt: now,
     updatedAt: now,
   };
@@ -264,6 +266,19 @@ const RECENT_COLUMN_LADDER: ReadonlyArray<{
   // 本层更新失败（仍有列缺失）时记录的告警
   updateWarn: string;
 }> = [
+  {
+    key: "affinityIgnoreClientSessionId",
+    column: systemSettings.affinityIgnoreClientSessionId,
+    selectWarn:
+      "system_settings 表除 affinityIgnoreClientSessionId 外仍有列缺失，继续回退到上一代字段集。",
+    updateWarn: "system_settings 表除 affinityIgnoreClientSessionId 外仍有列缺失，继续降级更新。",
+  },
+  {
+    key: "streamGateMode",
+    column: systemSettings.streamGateMode,
+    selectWarn: "system_settings 表除 streamGateMode 外仍有列缺失，继续回退到上一代字段集。",
+    updateWarn: "system_settings 表除 streamGateMode 外仍有列缺失，继续降级更新。",
+  },
   {
     key: "enableGeminiFunctionIdRectifier",
     column: systemSettings.enableGeminiFunctionIdRectifier,
@@ -771,6 +786,16 @@ export async function updateSystemSettings(
     // Fake 流式输出白名单（如果提供；空数组表示显式禁用，null 留待 transformer 落默认）
     if (payload.fakeStreamingWhitelist !== undefined) {
       updates.fakeStreamingWhitelist = payload.fakeStreamingWhitelist;
+    }
+
+    // F1 流式内容门控模式（如果提供）
+    if (payload.streamGateMode !== undefined) {
+      updates.streamGateMode = payload.streamGateMode;
+    }
+
+    // 忽略客户端 Session ID 开关（如果提供）
+    if (payload.affinityIgnoreClientSessionId !== undefined) {
+      updates.affinityIgnoreClientSessionId = payload.affinityIgnoreClientSessionId;
     }
 
     let updated;

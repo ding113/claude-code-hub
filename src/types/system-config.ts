@@ -5,6 +5,9 @@ import type { IpExtractionConfig } from "@/types/ip-extraction";
 export type BillingModelSource = "original" | "redirected";
 export type CodexPriorityBillingSource = "requested" | "actual";
 
+// F1 流式内容门控模式: 'off' (关闭) | 'shadow' (仅旁路统计) | 'enforce' (启用)
+export type StreamGateSettingMode = "off" | "shadow" | "enforce";
+
 export interface ResponseFixerConfig {
   fixTruncatedJson: boolean;
   fixSseFormat: boolean;
@@ -146,6 +149,15 @@ export interface SystemSettings {
   publicStatusWindowHours: number;
   publicStatusAggregationIntervalMinutes: number;
 
+  // F1 流式内容门控模式（默认 enforce）
+  // enforce：首个有效内容帧前缓冲，错误/空流时自动切换供应商；shadow：仅旁路统计分歧
+  streamGateMode: StreamGateSettingMode;
+
+  // 忽略客户端 Session ID（默认开启）
+  // 开启后：可指纹化的请求强制使用最长前缀亲和做供应商粘性（跳过客户端 Session ID 绑定），
+  // 不可指纹化的请求仍走会话复用
+  affinityIgnoreClientSessionId: boolean;
+
   createdAt: Date;
   updatedAt: Date;
 }
@@ -249,4 +261,10 @@ export interface UpdateSystemSettingsInput {
   // Public Status 全局配置（可选）
   publicStatusWindowHours?: number;
   publicStatusAggregationIntervalMinutes?: number;
+
+  // F1 流式内容门控模式（可选）
+  streamGateMode?: StreamGateSettingMode;
+
+  // 忽略客户端 Session ID（可选）
+  affinityIgnoreClientSessionId?: boolean;
 }

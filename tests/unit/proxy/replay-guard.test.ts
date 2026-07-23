@@ -14,7 +14,7 @@ import type { ProxySession } from "@/app/v1/_lib/proxy/session";
  * - identity 用真实 deriveReplayIdentity（env mock 打开 flag），保证 guard 与
  *   identity 的推导一致；
  * - store 通过 mock "@/app/v1/_lib/proxy/replay/replay-store".getReplayStore
- *   注入可控 mock（getMeta/readChunks/findCompleted/tryClaimOwner）；
+ *   注入可控 mock（getMeta/readChunks/findCompleted/tryClaimOwner/deleteChunks）；
  * - 审计行通过 mock "@/drizzle/db" 捕获 messageRequest insert values。
  */
 
@@ -28,6 +28,7 @@ const storeControl = vi.hoisted(() => ({
   readChunks: vi.fn(async (): Promise<string[] | null> => null),
   findCompleted: vi.fn(async (): Promise<unknown> => null),
   tryClaimOwner: vi.fn(async (): Promise<boolean> => false),
+  deleteChunks: vi.fn(async (): Promise<void> => undefined),
 }));
 
 const dbControl = vi.hoisted(() => ({
@@ -155,7 +156,7 @@ describe("ProxyReplayGuard：放行路径", () => {
     expect(storeControl.getMeta).not.toHaveBeenCalled();
   });
 
-  it("Redis miss + PG miss 时放行，claim 成功则挂 owner 角色", async () => {
+  it("Redis miss + PG miss 时放行，claim 成功则清残块后挂 owner 角色", async () => {
     storeControl.tryClaimOwner.mockResolvedValueOnce(true);
     const session = makeSession();
     const identity = expectedIdentity();
@@ -170,7 +171,16 @@ describe("ProxyReplayGuard：放行路径", () => {
     const ownerToken = session.replayState?.ownerToken;
     expect(typeof ownerToken).toBe("string");
     expect(storeControl.tryClaimOwner).toHaveBeenCalledWith(identity.replayId, ownerToken);
+    // 上一 owner 异常退出遗留的旧 LIST 残块在挂角色前清除
+    expect(storeControl.deleteChunks).toHaveBeenCalledWith(identity.replayId);
     expect(dbControl.rows).toHaveLength(0);
+  });
+
+  it("claim 竞态输掉时不清残块（他人 LIST 不可碰）", async () => {
+    storeControl.tryClaimOwner.mockResolvedValueOnce(false);
+
+    await expect(ProxyReplayGuard.ensure(makeSession())).resolves.toBeNull();
+    expect(storeControl.deleteChunks).not.toHaveBeenCalled();
   });
 
   it("claim 竞态输掉时放行且不带 replay 角色", async () => {
@@ -233,14 +243,43 @@ describe("ProxyReplayGuard：放行路径", () => {
     expect(storeControl.readChunks).not.toHaveBeenCalled();
   });
 
-  it("x-cch-no-replay: 1 跳过 attach（不读 meta），但仍尝试成为 owner", async () => {
+  it("x-cch-no-replay: 1 跳过 attach（不重放），条目缺失/未完成时仍可成为 owner", async () => {
     const identity = expectedIdentity();
-    storeControl.getMeta.mockResolvedValue(makeMeta(identity, { status: "completed" }));
+    storeControl.getMeta.mockResolvedValueOnce(makeMeta(identity, { status: "owning" }));
     storeControl.tryClaimOwner.mockResolvedValueOnce(true);
     const session = makeSession({ headers: { [REPLAY_BYPASS_HEADER]: "1" } });
 
     await expect(ProxyReplayGuard.ensure(session)).resolves.toBeNull();
-    expect(storeControl.getMeta).not.toHaveBeenCalled();
+    // 不 attach：不读 chunks、不写审计行
+    expect(storeControl.readChunks).not.toHaveBeenCalled();
+    expect(dbControl.rows).toHaveLength(0);
+    expect(storeControl.tryClaimOwner).toHaveBeenCalledWith(identity.replayId, expect.any(String));
+    expect(session.replayState?.role).toBe("owner");
+  });
+
+  it("x-cch-no-replay: 1 遇已完成条目（verifier 匹配）：不 claim 不覆写，保留给其他客户端", async () => {
+    const identity = expectedIdentity();
+    storeControl.getMeta.mockResolvedValueOnce(makeMeta(identity, { status: "completed" }));
+    const session = makeSession({ headers: { [REPLAY_BYPASS_HEADER]: "1" } });
+
+    await expect(ProxyReplayGuard.ensure(session)).resolves.toBeNull();
+    expect(storeControl.tryClaimOwner).not.toHaveBeenCalled();
+    expect(storeControl.deleteChunks).not.toHaveBeenCalled();
+    expect(session.replayState).toBeNull();
+    // 也不重放：照常执行（有意重复采样语义）
+    expect(storeControl.readChunks).not.toHaveBeenCalled();
+    expect(dbControl.rows).toHaveLength(0);
+  });
+
+  it("x-cch-no-replay: 1 遇 completed 但 verifier 不符（哈希碰撞）：不受保护，仍可 claim", async () => {
+    const identity = expectedIdentity();
+    storeControl.getMeta.mockResolvedValueOnce(
+      makeMeta(identity, { status: "completed", verifier: "f".repeat(32) })
+    );
+    storeControl.tryClaimOwner.mockResolvedValueOnce(true);
+    const session = makeSession({ headers: { [REPLAY_BYPASS_HEADER]: "1" } });
+
+    await expect(ProxyReplayGuard.ensure(session)).resolves.toBeNull();
     expect(storeControl.tryClaimOwner).toHaveBeenCalledWith(identity.replayId, expect.any(String));
     expect(session.replayState?.role).toBe("owner");
   });

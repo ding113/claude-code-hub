@@ -2,13 +2,18 @@ import { beforeEach, describe, expect, test, vi } from "vitest";
 import type { Provider } from "@/types/provider";
 
 /**
- * F3a nomination priority inside ProxyProviderResolver.ensure():
- * with "ignore client session id" off: explicit session binding > affinity hint > weighted random;
- * with it on (product default) fingerprintable requests skip the session binding read entirely.
- * An affinity hint must still pass the full hard validation either way.
+ * F3a "ignore client session id" semantics and review fixes in ensure():
+ * - affinity candidates must not bypass cost limits (windowed + total);
+ * - ignore on + fingerprintable request skips the session binding read;
+ * - ignore on + non-fingerprintable body keeps legacy session reuse;
+ * - metrics-only mode (ENABLE_CACHE_EFFECTIVENESS) fingerprints without nominating;
+ * - non-default endpoint policies never build affinity state.
  */
 
-const envControl = vi.hoisted(() => ({ affinityEnabled: true }));
+const envControl = vi.hoisted(() => ({
+  affinityEnabled: true,
+  cacheEffectiveness: false,
+}));
 
 const settingsControl = vi.hoisted(() => ({ ignoreClientSessionId: true }));
 
@@ -41,8 +46,8 @@ const providerRepositoryMocks = vi.hoisted(() => ({
 
 const rateLimitMocks = vi.hoisted(() => ({
   RateLimitService: {
-    checkCostLimitsWithLease: vi.fn(async () => ({ allowed: true })),
-    checkTotalCostLimit: vi.fn(async () => ({ allowed: true, current: 0 })),
+    checkCostLimitsWithLease: vi.fn(async (_providerId: number) => ({ allowed: true })),
+    checkTotalCostLimit: vi.fn(async (_providerId: number) => ({ allowed: true, current: 0 })),
     checkAndTrackProviderSession: vi.fn(async () => ({
       allowed: true,
       count: 1,
@@ -83,8 +88,7 @@ vi.mock("@/lib/config/env.schema", async (importOriginal) => {
     getEnvConfig: () => ({
       ...baseEnv,
       ENABLE_PREFIX_AFFINITY: envControl.affinityEnabled,
-      // 指标模式（F3b）默认开启会独立建指纹状态；本文件聚焦提名优先级，显式关闭
-      ENABLE_CACHE_EFFECTIVENESS: false,
+      ENABLE_CACHE_EFFECTIVENESS: envControl.cacheEffectiveness,
       PREFIX_AFFINITY_WINDOW: 8,
       PREFIX_AFFINITY_TTL_SECONDS: 3600,
     }),
@@ -158,9 +162,17 @@ function makeSession(overrides: Record<string, unknown> = {}): any {
   return Object.assign(session, overrides);
 }
 
+const affinityHint = {
+  providerId: 42,
+  matchedFp: "deepfp",
+  matchedIndex: 0,
+  tier: "conversation" as const,
+};
+
 beforeEach(() => {
   vi.clearAllMocks();
   envControl.affinityEnabled = true;
+  envControl.cacheEffectiveness = false;
   settingsControl.ignoreClientSessionId = true;
   storeMocks.lookup.mockResolvedValue(null);
   circuitBreakerMocks.isCircuitOpen.mockResolvedValue(false);
@@ -178,9 +190,52 @@ beforeEach(() => {
   });
 });
 
-describe("ensure() nomination priority", () => {
-  test("ignore-session off: explicit session binding wins and affinity lookup is never consulted", async () => {
-    settingsControl.ignoreClientSessionId = false;
+describe("affinity candidate cost limits", () => {
+  test("candidate over windowed cost limits is rejected and falls back to weighted random", async () => {
+    storeMocks.lookup.mockResolvedValue(affinityHint);
+    providerRepositoryMocks.findProviderById.mockResolvedValue(makeProvider(42));
+    rateLimitMocks.RateLimitService.checkCostLimitsWithLease.mockImplementation(
+      async (providerId: number) => ({ allowed: providerId !== 42 })
+    );
+
+    const session = makeSession();
+    const result = await ProxyProviderResolver.ensure(session);
+
+    expect(result).toBeNull();
+    expect(session.provider?.id).toBe(55);
+    expect(session.affinity?.matchedFp).toBe("deepfp");
+    expect(session.affinity?.nominatedProviderId).toBeNull();
+    expect(rateLimitMocks.RateLimitService.checkCostLimitsWithLease).toHaveBeenCalledWith(
+      42,
+      "provider",
+      expect.any(Object)
+    );
+  });
+
+  test("candidate over total cost limit is rejected and falls back to weighted random", async () => {
+    storeMocks.lookup.mockResolvedValue(affinityHint);
+    providerRepositoryMocks.findProviderById.mockResolvedValue(makeProvider(42));
+    rateLimitMocks.RateLimitService.checkTotalCostLimit.mockImplementation(
+      async (providerId: number) => ({ allowed: providerId !== 42, current: 0 })
+    );
+
+    const session = makeSession();
+    const result = await ProxyProviderResolver.ensure(session);
+
+    expect(result).toBeNull();
+    expect(session.provider?.id).toBe(55);
+    expect(session.affinity?.nominatedProviderId).toBeNull();
+    expect(rateLimitMocks.RateLimitService.checkTotalCostLimit).toHaveBeenCalledWith(
+      42,
+      "provider",
+      null,
+      expect.any(Object)
+    );
+  });
+});
+
+describe("ignore client session id semantics", () => {
+  test("ignore on + fingerprintable request never reads the session binding", async () => {
     sessionManagerMocks.SessionManager.getSessionProvider.mockResolvedValue(91);
     providerRepositoryMocks.findProviderById.mockResolvedValue(makeProvider(91));
 
@@ -192,97 +247,64 @@ describe("ensure() nomination priority", () => {
     const result = await ProxyProviderResolver.ensure(session);
 
     expect(result).toBeNull();
-    expect(session.provider?.id).toBe(91);
-    expect(storeMocks.lookup).not.toHaveBeenCalled();
-    // 复用命中轮次仍要指纹状态：供终态写回加深前缀与 F3b 落值
-    expect(session.affinity).not.toBeNull();
-    expect(session.affinity?.nominatedProviderId).toBeNull();
-  });
-
-  test("affinity hit wins over weighted random and records affinity_hit in the chain", async () => {
-    storeMocks.lookup.mockResolvedValue({
-      providerId: 42,
-      matchedFp: "deepfp",
-      matchedIndex: 0,
-      tier: "conversation",
-    });
-    providerRepositoryMocks.findProviderById.mockResolvedValue(makeProvider(42));
-
-    const session = makeSession();
-    const result = await ProxyProviderResolver.ensure(session);
-
-    expect(result).toBeNull();
-    expect(session.provider?.id).toBe(42);
-    expect(session.affinity?.nominatedProviderId).toBe(42);
-    expect(session.affinity?.matchedFp).toBe("deepfp");
-    expect(session.getProvidersSnapshot).not.toHaveBeenCalled();
-    expect(session.addProviderToChain).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 42 }),
-      expect.objectContaining({ reason: "affinity_hit", selectionMethod: "prefix_affinity" })
-    );
-
-    const [, luaKeysCount] = storeMocks.lookup.mock.calls[0] as unknown as [string, string[]];
-    expect(Array.isArray(luaKeysCount)).toBe(true);
-  });
-
-  test("affinity miss falls back to weighted random selection", async () => {
-    const session = makeSession();
-    const result = await ProxyProviderResolver.ensure(session);
-
-    expect(result).toBeNull();
+    expect(sessionManagerMocks.SessionManager.getSessionProvider).not.toHaveBeenCalled();
     expect(storeMocks.lookup).toHaveBeenCalledTimes(1);
-    expect(session.provider?.id).toBe(55);
     expect(session.affinity).not.toBeNull();
-    expect(session.affinity?.nominatedProviderId).toBeNull();
+    // affinity miss: weighted random, not the stale session binding
+    expect(session.provider?.id).toBe(55);
   });
 
-  test("affinity hit that fails hard validation falls back without nomination", async () => {
-    storeMocks.lookup.mockResolvedValue({
-      providerId: 42,
-      matchedFp: "deepfp",
-      matchedIndex: 0,
-      tier: "conversation",
-    });
-    providerRepositoryMocks.findProviderById.mockResolvedValue(
-      makeProvider(42, { isEnabled: false })
-    );
+  test("ignore on + non-fingerprintable body still uses legacy session reuse", async () => {
+    sessionManagerMocks.SessionManager.getSessionProvider.mockResolvedValue(91);
+    providerRepositoryMocks.findProviderById.mockResolvedValue(makeProvider(91));
 
-    const session = makeSession();
+    const session = makeSession({
+      sessionId: "sess_bound",
+      shouldReuseProvider: () => true,
+      // 无 messages 数组：不可指纹化（如 Codex 非 chat 体），保住既有粘性
+      request: { message: { model: "claude-sonnet-4-5" } },
+    });
+
     const result = await ProxyProviderResolver.ensure(session);
 
     expect(result).toBeNull();
-    expect(session.provider?.id).toBe(55);
-    expect(session.affinity?.matchedFp).toBe("deepfp");
-    expect(session.affinity?.nominatedProviderId).toBeNull();
+    expect(sessionManagerMocks.SessionManager.getSessionProvider).toHaveBeenCalledTimes(1);
+    expect(session.provider?.id).toBe(91);
+    expect(session.affinity).toBeNull();
+    expect(storeMocks.lookup).not.toHaveBeenCalled();
+    expect(session.addProviderToChain).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 91 }),
+      expect.objectContaining({ reason: "session_reuse" })
+    );
   });
+});
 
-  test("circuit-open affinity candidate is rejected by hard validation", async () => {
-    storeMocks.lookup.mockResolvedValue({
-      providerId: 42,
-      matchedFp: "deepfp",
-      matchedIndex: 0,
-      tier: "conversation",
-    });
-    providerRepositoryMocks.findProviderById.mockResolvedValue(makeProvider(42));
-    circuitBreakerMocks.isCircuitOpen.mockImplementation(async (id: number) => id === 42);
-
-    const session = makeSession();
-    await ProxyProviderResolver.ensure(session);
-
-    expect(session.provider?.id).toBe(55);
-    expect(session.affinity?.nominatedProviderId).toBeNull();
-  });
-
-  test("env flag off and ignore-session setting off disable affinity entirely", async () => {
+describe("metrics-only and endpoint policy gating", () => {
+  test("cache-effectiveness only: fingerprints the request but never looks up or nominates", async () => {
     envControl.affinityEnabled = false;
+    envControl.cacheEffectiveness = true;
     settingsControl.ignoreClientSessionId = false;
 
     const session = makeSession();
     const result = await ProxyProviderResolver.ensure(session);
 
     expect(result).toBeNull();
+    expect(session.affinity).not.toBeNull();
+    expect(session.affinity?.nominatedProviderId).toBeNull();
     expect(storeMocks.lookup).not.toHaveBeenCalled();
+    expect(session.provider?.id).toBe(55);
+  });
+
+  test("non-default endpoint policy never builds affinity state", async () => {
+    const session = makeSession({
+      getEndpointPolicy: () => ({ kind: "raw_passthrough" }),
+    });
+
+    const result = await ProxyProviderResolver.ensure(session);
+
+    expect(result).toBeNull();
     expect(session.affinity).toBeNull();
+    expect(storeMocks.lookup).not.toHaveBeenCalled();
     expect(session.provider?.id).toBe(55);
   });
 });

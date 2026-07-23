@@ -6,6 +6,7 @@ import { logger } from "@/lib/logger";
 import { RateLimitService } from "@/lib/rate-limit";
 import { buildScopeTag } from "@/lib/request-identity";
 import { SessionManager } from "@/lib/session-manager";
+import { getProxyRuntimeSettings } from "@/lib/system-settings/proxy-runtime";
 import {
   parseProviderGroups,
   resolveBillingProviderGroups,
@@ -19,6 +20,7 @@ import { getGroupCostMultiplier } from "@/repository/provider-groups";
 import type { ProviderChainItem } from "@/types/message";
 import type { Provider } from "@/types/provider";
 import { getAffinityStore } from "./affinity/affinity-store";
+import { isAffinityRoutingEnabledWith } from "./affinity/config";
 import { computeFingerprintChain, fingerprintsDeepestFirst } from "./affinity/fingerprint";
 import { isClientAllowedDetailed } from "./client-detector";
 import type { ClientFormat } from "./format-mapper";
@@ -189,43 +191,67 @@ export class ProxyProviderResolver {
     // 动态尝试所有可用供应商（避免无限循环通过 excludedProviders 和 null 返回）
     const excludedProviders: number[] = [];
 
-    // === 会话复用 ===
-    const reusedProvider = await ProxyProviderResolver.findReusable(session);
-    if (reusedProvider) {
-      session.setProvider(reusedProvider);
-
-      // 记录会话复用上下文
-      session.addProviderToChain(reusedProvider, {
-        reason: "session_reuse",
-        selectionMethod: "session_reuse",
-        circuitState: getCircuitState(reusedProvider.id),
-        decisionContext: {
-          totalProviders: 0, // 复用不需要筛选
-          enabledProviders: 0,
-          targetType: reusedProvider.providerType as NonNullable<
-            ProviderChainItem["decisionContext"]
-          >["targetType"],
-          requestedModel: session.getOriginalModel() || "",
-          groupFilterApplied: false,
-          beforeHealthCheck: 0,
-          afterHealthCheck: 0,
-          priorityLevels: [reusedProvider.priority || 0],
-          selectedPriority: reusedProvider.priority || 0,
-          candidatesAtPriority: [
-            {
-              id: reusedProvider.id,
-              name: reusedProvider.name,
-              weight: reusedProvider.weight,
-              costMultiplier: reusedProvider.costMultiplier,
-            },
-          ],
-          sessionId: session.sessionId || undefined,
-        },
+    // === F3a 前置：读一次运行时设置并计算指纹状态 ===
+    // 「忽略客户端 Session ID」开启且请求可指纹化时，粘性交给最长前缀亲和，
+    // 跳过 session-ID 绑定的读取；不可指纹化（如非 chat 体）仍走既有会话复用。
+    // 任何异常整体退回旧顺序（会话复用正常执行），绝不影响主选路。
+    let affinityRoutingEnabled = false;
+    let skipSessionBinding = false;
+    try {
+      const runtimeSettings = await getProxyRuntimeSettings();
+      affinityRoutingEnabled = isAffinityRoutingEnabledWith(runtimeSettings);
+      const fingerprintable = ProxyProviderResolver.ensureAffinityState(
+        session,
+        affinityRoutingEnabled
+      );
+      skipSessionBinding = runtimeSettings.affinityIgnoreClientSessionId && fingerprintable;
+    } catch (error) {
+      affinityRoutingEnabled = false;
+      skipSessionBinding = false;
+      logger.warn("ProviderSelector: Affinity settings unavailable, using legacy order", {
+        error: error instanceof Error ? error.message : String(error),
       });
     }
 
-    // === 前缀亲和提名（flag 门控；优先级：显式 session 绑定 > 亲和 > 加权随机）===
-    if (!session.provider) {
+    // === 会话复用（「忽略客户端 Session ID」语义下仅跳过读取；写路径不变）===
+    if (!skipSessionBinding) {
+      const reusedProvider = await ProxyProviderResolver.findReusable(session);
+      if (reusedProvider) {
+        session.setProvider(reusedProvider);
+
+        // 记录会话复用上下文
+        session.addProviderToChain(reusedProvider, {
+          reason: "session_reuse",
+          selectionMethod: "session_reuse",
+          circuitState: getCircuitState(reusedProvider.id),
+          decisionContext: {
+            totalProviders: 0, // 复用不需要筛选
+            enabledProviders: 0,
+            targetType: reusedProvider.providerType as NonNullable<
+              ProviderChainItem["decisionContext"]
+            >["targetType"],
+            requestedModel: session.getOriginalModel() || "",
+            groupFilterApplied: false,
+            beforeHealthCheck: 0,
+            afterHealthCheck: 0,
+            priorityLevels: [reusedProvider.priority || 0],
+            selectedPriority: reusedProvider.priority || 0,
+            candidatesAtPriority: [
+              {
+                id: reusedProvider.id,
+                name: reusedProvider.name,
+                weight: reusedProvider.weight,
+                costMultiplier: reusedProvider.costMultiplier,
+              },
+            ],
+            sessionId: session.sessionId || undefined,
+          },
+        });
+      }
+    }
+
+    // === 前缀亲和提名（优先级：显式 session 绑定 > 亲和 > 加权随机）===
+    if (affinityRoutingEnabled && !session.provider) {
       await ProxyProviderResolver.tryPrefixAffinityNomination(session);
     }
 
@@ -493,51 +519,63 @@ export class ProxyProviderResolver {
   }
 
   /**
-   * 查找可复用的供应商（基于 session）
+   * F3a 指纹状态：计算链式指纹与 scopeTag 挂到 session.affinity（幂等，已有则跳过）。
+   *
+   * 仅 default endpoint policy 建状态——raw 端点（如 count_tokens）绝不建，
+   * 各终态写回随之全部 no-op；亲和路由与缓存效果指标（F3b）任一开启即计算，
+   * 仅指标模式下也要指纹供终态落值。返回 session.affinity 是否可用（可指纹化）。
    */
+  private static ensureAffinityState(
+    session: ProxySession,
+    affinityRoutingEnabled: boolean
+  ): boolean {
+    if (session.affinity) return true;
+    if (session.getEndpointPolicy().kind !== "default") return false;
+    const keyId = session.authState?.key?.id;
+    if (!keyId) return false;
+
+    const env = getEnvConfig();
+    if (!affinityRoutingEnabled && !env.ENABLE_CACHE_EFFECTIVENESS) return false;
+
+    const chain = computeFingerprintChain(
+      session.request.message,
+      session.originalFormat,
+      env.PREFIX_AFFINITY_WINDOW
+    );
+    if (!chain) return false;
+
+    session.affinity = {
+      scopeTag: buildScopeTag(keyId, session.originalFormat, session.getOriginalModel()),
+      chain,
+      nominatedProviderId: null,
+      matchedFp: null,
+      matchedTier: null,
+    };
+    return true;
+  }
+
   /**
    * F3a 最长前缀亲和提名（软提名）。
    *
-   * 显式 session 绑定未命中时：按请求内容计算链式指纹，在 Redis 中做
-   * 最深->最浅的最长前缀查找；命中后候选供应商仍须通过与会话复用完全相同的
-   * 硬校验（enabled/复用开关/调度/熔断/格式/模型/客户端限制/分组），任一不过
-   * 即静默回落加权随机——亲和永远只是提名，不绕过任何硬性约束。
-   *
-   * 指纹链与 scopeTag 无论命中与否都会挂到 session.affinity，
-   * 供成功终态写回与缓存效果指标（F3b）复用。
+   * 基于 ensureAffinityState 挂好的指纹链，在 Redis 中做最深->最浅的最长前缀
+   * 查找；命中后候选供应商仍须通过与会话复用完全相同的硬校验（见
+   * validateAffinityCandidate），任一不过即静默回落加权随机——亲和永远只是
+   * 提名，不绕过任何硬性约束。
    */
   private static async tryPrefixAffinityNomination(session: ProxySession): Promise<void> {
     try {
-      const env = getEnvConfig();
-      if (!env.ENABLE_PREFIX_AFFINITY) return;
-      const keyId = session.authState?.key?.id;
-      if (!keyId) return;
-
-      const chain = computeFingerprintChain(
-        session.request.message,
-        session.originalFormat,
-        env.PREFIX_AFFINITY_WINDOW
-      );
-      if (!chain) return;
-
-      const scopeTag = buildScopeTag(keyId, session.originalFormat, session.getOriginalModel());
-      session.affinity = {
-        scopeTag,
-        chain,
-        nominatedProviderId: null,
-        matchedFp: null,
-        matchedTier: null,
-      };
+      const affinity = session.affinity;
+      if (!affinity) return;
 
       const hint = await getAffinityStore().lookup(
-        scopeTag,
-        fingerprintsDeepestFirst(chain),
-        env.PREFIX_AFFINITY_TTL_SECONDS
+        affinity.scopeTag,
+        fingerprintsDeepestFirst(affinity.chain),
+        getEnvConfig().PREFIX_AFFINITY_TTL_SECONDS
       );
       if (!hint) return;
 
-      session.affinity.matchedFp = hint.matchedFp;
-      session.affinity.matchedTier = hint.tier;
+      affinity.matchedFp = hint.matchedFp;
+      affinity.matchedTier = hint.tier;
 
       const provider = await ProxyProviderResolver.validateAffinityCandidate(
         session,
@@ -552,7 +590,7 @@ export class ProxyProviderResolver {
         return;
       }
 
-      session.affinity.nominatedProviderId = provider.id;
+      affinity.nominatedProviderId = provider.id;
       session.setProvider(provider);
       session.addProviderToChain(provider, {
         reason: "affinity_hit",
@@ -596,7 +634,8 @@ export class ProxyProviderResolver {
   }
 
   /**
-   * 亲和候选硬校验：与 findReusable 同一套检查（不含 session 绑定清理副作用）。
+   * 亲和候选硬校验：与 findReusable 同一套检查——enabled/粘性 opt-out/调度窗口/
+   * 熔断/格式/模型/客户端限制/分组/金额限额（不含 session 绑定的清理副作用）。
    * 任一不过返回 null。
    */
   private static async validateAffinityCandidate(
@@ -640,9 +679,35 @@ export class ProxyProviderResolver {
     if (effectiveGroup && !checkProviderGroupMatch(provider.groupTag, effectiveGroup)) {
       return null;
     }
+
+    // 亲和提名同样不得绕过金额限额（5h/日/周/月 + 总额），与 findReusable 一致
+    const costCheck = await RateLimitService.checkCostLimitsWithLease(provider.id, "provider", {
+      limit_5h_usd: provider.limit5hUsd,
+      limit_5h_reset_mode: provider.limit5hResetMode,
+      limit_daily_usd: provider.limitDailyUsd,
+      daily_reset_mode: provider.dailyResetMode,
+      daily_reset_time: provider.dailyResetTime,
+      limit_weekly_usd: provider.limitWeeklyUsd,
+      limit_monthly_usd: provider.limitMonthlyUsd,
+    });
+    if (!costCheck.allowed) return null;
+
+    const totalCheck = await RateLimitService.checkTotalCostLimit(
+      provider.id,
+      "provider",
+      provider.limitTotalUsd,
+      {
+        resetAt: provider.totalCostResetAt,
+      }
+    );
+    if (!totalCheck.allowed) return null;
+
     return provider;
   }
 
+  /**
+   * 查找可复用的供应商（基于 session）
+   */
   private static async findReusable(session: ProxySession): Promise<Provider | null> {
     if (!session.shouldReuseProvider() || !session.sessionId) {
       return null;

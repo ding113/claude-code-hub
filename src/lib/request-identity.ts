@@ -14,6 +14,8 @@ export function sha256Hex(input: string | Uint8Array): string {
 /**
  * 请求体的规范字节：优先原始 body buffer（逐字节稳定），
  * 无 buffer 时对已解析 message 做键序稳定序列化。
+ * 注意：Replay 身份已改为直接 stableStringify 过滤后 message（不受原始 buffer 影响），
+ * 本函数保留为需要「过滤前原始字节」语义场景的通用原语，当前 src 内暂无调用方。
  */
 export function canonicalRequestBytes(request: {
   buffer?: ArrayBuffer;

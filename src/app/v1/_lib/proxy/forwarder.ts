@@ -4718,9 +4718,6 @@ export class ProxyForwarder {
         });
       }
 
-      // F3a 亲和写回（与顺序路径 session 绑定块对称；胜者在 commitWinner 即确认）
-      void recordAffinityWinner(session, attempt.provider.id);
-
       setDeferredStreamingFinalization(session, {
         providerId: attempt.provider.id,
         providerName: attempt.provider.name,

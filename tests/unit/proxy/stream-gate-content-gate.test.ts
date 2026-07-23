@@ -133,6 +133,29 @@ describe("runStreamContentGate", () => {
     expect((result.error as StreamPrecommitError).gateReason).toBe("prebuffer_overflow");
   });
 
+  it("fails with prebuffer_overflow when a single chunk carries more frames than the event cap", async () => {
+    // event 上限是逐帧硬上限：单 chunk 内塞满小中性帧同样触发
+    const manyFramesOneChunk = Array.from({ length: 20 }, () => PING).join("");
+    const reader = readerFromChunks([manyFramesOneChunk]);
+    const result = await runStreamContentGate(reader, {
+      ...GATE_OPTIONS,
+      prebufferEventCap: 10,
+    });
+    expect(result.committed).toBe(false);
+    if (result.committed) return;
+    expect((result.error as StreamPrecommitError).gateReason).toBe("prebuffer_overflow");
+  });
+
+  it("commits when content arrives right at the event cap boundary", async () => {
+    // 第 cap 帧仍允许缓冲（framesSeen > cap 才溢出）；下一帧即 content 应正常提交
+    const reader = readerFromChunks([PING + PING + PING + TEXT_DELTA]);
+    const result = await runStreamContentGate(reader, {
+      ...GATE_OPTIONS,
+      prebufferEventCap: 3,
+    });
+    expect(result.committed).toBe(true);
+  });
+
   it("fails with prebuffer_overflow when byte cap exceeded", async () => {
     const bigNeutral = `event: ping\ndata: {"type":"ping","pad":"${"x".repeat(4000)}"}\n\n`;
     const reader = readerFromChunks([bigNeutral, bigNeutral, bigNeutral]);

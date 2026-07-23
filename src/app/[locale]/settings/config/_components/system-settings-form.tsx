@@ -8,10 +8,12 @@ import {
   Coins,
   Eye,
   FileCode,
+  Filter,
   Globe,
   MapPin,
   Network,
   Pencil,
+  Route,
   Terminal,
   Thermometer,
   Trophy,
@@ -52,6 +54,7 @@ import type {
   BillingModelSource,
   CodexPriorityBillingSource,
   FakeStreamingWhitelistEntry,
+  StreamGateSettingMode,
   SystemSettings,
 } from "@/types/system-config";
 
@@ -80,6 +83,8 @@ interface SystemSettingsFormProps {
     | "enableGeminiFunctionIdRectifier"
     | "allowNonConversationEndpointProviderFallback"
     | "fakeStreamingWhitelist"
+    | "streamGateMode"
+    | "affinityIgnoreClientSessionId"
     | "enableCodexSessionIdCompletion"
     | "enableClaudeMetadataUserIdInjection"
     | "enableResponseFixer"
@@ -167,6 +172,12 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
       model: entry.model,
       groupTags: [...entry.groupTags],
     }))
+  );
+  const [streamGateMode, setStreamGateMode] = useState<StreamGateSettingMode>(
+    initialSettings.streamGateMode
+  );
+  const [affinityIgnoreClientSessionId, setAffinityIgnoreClientSessionId] = useState(
+    initialSettings.affinityIgnoreClientSessionId
   );
   const [enableThinkingBudgetRectifier, setEnableThinkingBudgetRectifier] = useState(
     initialSettings.enableThinkingBudgetRectifier
@@ -323,6 +334,8 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
         enableResponseInputRectifier,
         allowNonConversationEndpointProviderFallback,
         fakeStreamingWhitelist: sanitizedFakeStreamingWhitelist,
+        streamGateMode,
+        affinityIgnoreClientSessionId,
         enableThinkingBudgetRectifier,
         enableThinkingEffortConflictRectifier,
         enableGeminiFunctionIdRectifier,
@@ -372,6 +385,8 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
             groupTags: [...entry.groupTags],
           }))
         );
+        setStreamGateMode(result.data.streamGateMode);
+        setAffinityIgnoreClientSessionId(result.data.affinityIgnoreClientSessionId);
         setEnableThinkingBudgetRectifier(result.data.enableThinkingBudgetRectifier);
         setEnableThinkingEffortConflictRectifier(result.data.enableThinkingEffortConflictRectifier);
         setEnableGeminiFunctionIdRectifier(result.data.enableGeminiFunctionIdRectifier);
@@ -918,6 +933,59 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
             id="allow-non-conversation-endpoint-provider-fallback"
             checked={allowNonConversationEndpointProviderFallback}
             onCheckedChange={(checked) => setAllowNonConversationEndpointProviderFallback(checked)}
+            disabled={isPending}
+          />
+        </div>
+
+        {/* Stream Content Gate Mode */}
+        <div className="p-4 rounded-xl bg-white/[0.02] border border-white/5 hover:bg-white/[0.04] transition-colors space-y-3">
+          <div className="flex items-start gap-3">
+            <div className="w-8 h-8 flex items-center justify-center rounded-lg bg-rose-500/10 text-rose-400 shrink-0">
+              <Filter className="h-4 w-4" />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-foreground">{t("streamGateMode")}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">{t("streamGateModeDesc")}</p>
+            </div>
+          </div>
+          <div className="pl-11">
+            <Select
+              value={streamGateMode}
+              onValueChange={(value) => setStreamGateMode(value as StreamGateSettingMode)}
+              disabled={isPending}
+            >
+              <SelectTrigger id="stream-gate-mode" className={selectTriggerClassName}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="off">{t("streamGateModeOptions.off")}</SelectItem>
+                <SelectItem value="shadow">{t("streamGateModeOptions.shadow")}</SelectItem>
+                <SelectItem value="enforce">{t("streamGateModeOptions.enforce")}</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        {/* Affinity: Ignore Client Session ID */}
+        <div className="p-4 rounded-xl bg-white/[0.02] border border-white/5 flex items-center justify-between hover:bg-white/[0.04] transition-colors">
+          <div className="flex items-start gap-3">
+            <div className="w-8 h-8 flex items-center justify-center rounded-lg bg-sky-500/10 text-sky-400 shrink-0">
+              <Route className="h-4 w-4" />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-foreground">
+                {t("affinityIgnoreClientSessionId")}
+              </p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {t("affinityIgnoreClientSessionIdDesc")}
+              </p>
+            </div>
+          </div>
+          <Switch
+            id="affinity-ignore-client-session-id"
+            aria-label={t("affinityIgnoreClientSessionId")}
+            checked={affinityIgnoreClientSessionId}
+            onCheckedChange={(checked) => setAffinityIgnoreClientSessionId(checked)}
             disabled={isPending}
           />
         </div>

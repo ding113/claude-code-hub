@@ -219,8 +219,8 @@ export const EnvSchema = z.object({
   PREFIX_AFFINITY_TTL_SECONDS: z.coerce.number().int().min(60).max(86400).default(3600),
   // 指纹链回看窗口（尾部边界数）：覆盖编辑回退场景的拐点，超过 8 收益递减
   PREFIX_AFFINITY_WINDOW: z.coerce.number().int().min(1).max(64).default(8),
-  // 缓存效果计费模拟：理论 vs 实际缓存命中率聚合指标（仅展示，不影响路由）
-  ENABLE_CACHE_EFFECTIVENESS: z.string().default("false").transform(booleanTransform),
+  // 缓存效果计费模拟：理论 vs 实际缓存命中率聚合指标（仅展示，不影响路由，默认开启）
+  ENABLE_CACHE_EFFECTIVENESS: z.string().default("true").transform(booleanTransform),
 
   DASHBOARD_LOGS_POLL_INTERVAL_MS: z.coerce.number().int().min(250).max(60000).default(5000),
 

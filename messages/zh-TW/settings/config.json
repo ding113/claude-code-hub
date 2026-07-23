@@ -106,8 +106,6 @@
     "saveFailed": "儲存失敗",
     "saveSettings": "儲存設定",
     "saveSuccess": "儲存成功",
-    "publicStatusProjectionWarning": "系統設定已儲存，但 public status Redis 投影尚未刷新。",
-    "publicStatusBackgroundRefreshPending": "系統設定已儲存，但公開狀態頁可能會在背景刷新成功前暫時維持舊資料。",
     "siteTitle": "站台標題",
     "siteTitleDesc": "用於設定瀏覽器分頁標題以及系統預設顯示名稱。",
     "siteTitlePlaceholder": "例：Claude Code Hub",
@@ -149,6 +147,15 @@
         "leasePercentZero": "目前比例為 0，可能導致租約預算始終為 0。",
         "leaseCapZero": "租約上限為 0 可能導致單次租約預算為 0。"
       }
+    },
+    "affinityIgnoreClientSessionId": "忽略用戶端 Session ID",
+    "affinityIgnoreClientSessionIdDesc": "開啟後，可指紋化的請求強制使用最長前綴親和做供應商黏性（跳過用戶端 Session ID 綁定）；不可指紋化的請求仍走會話複用。預設開啟。",
+    "streamGateMode": "串流內容閘控",
+    "streamGateModeDesc": "在首個有效內容影格到達前先行緩衝，遇到錯誤影格或空串流時自動切換供應商重試；影子模式僅旁路統計判定分歧，不影響轉發。預設啟用。",
+    "streamGateModeOptions": {
+      "off": "關閉",
+      "shadow": "影子模式",
+      "enforce": "啟用"
     }
   },
   "ipLogging": {

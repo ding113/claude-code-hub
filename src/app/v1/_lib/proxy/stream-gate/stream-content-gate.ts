@@ -1,5 +1,6 @@
 import { getEnvConfig } from "@/lib/config/env.schema";
 import { logger } from "@/lib/logger";
+import { getCachedProxyRuntimeSettings } from "@/lib/system-settings/proxy-runtime";
 import { ProxyError } from "../errors";
 import { classifyFrame, type FrameVerdict, type ProtocolFamily } from "./frame-classifier";
 import { SseFrameParser } from "./sse-frames";
@@ -80,9 +81,13 @@ function buildGateErrorBody(
 
 export type StreamGateMode = "off" | "shadow" | "enforce";
 
+/**
+ * 门控模式：系统设置快照优先（每请求的 provider-selector 读取与开机预热保鲜），
+ * 无快照时回退 env STREAM_GATE_MODE。
+ */
 export function resolveStreamGateMode(): StreamGateMode {
   try {
-    return getEnvConfig().STREAM_GATE_MODE;
+    return getCachedProxyRuntimeSettings()?.streamGateMode ?? getEnvConfig().STREAM_GATE_MODE;
   } catch {
     return "off";
   }
@@ -192,10 +197,13 @@ export async function runStreamContentGate(
         // 干净终止先于任何内容 = 空流
         return failure("empty_stream", frame.data);
       }
-      // neutral: 继续缓冲
+      // neutral: 继续缓冲；event 上限为逐帧硬上限（单 chunk 大量小帧也会触发）
+      if (framesSeen > options.prebufferEventCap) {
+        return failure("prebuffer_overflow");
+      }
     }
 
-    if (framesSeen > options.prebufferEventCap || bufferedBytes > options.prebufferByteCap) {
+    if (bufferedBytes > options.prebufferByteCap) {
       return failure("prebuffer_overflow");
     }
   }

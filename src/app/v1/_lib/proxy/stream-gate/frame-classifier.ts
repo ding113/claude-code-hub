@@ -8,7 +8,7 @@
  * - terminal：干净终止标记（[DONE] / message_stop 等），不开启透传
  * - neutral：bookkeeping / 未知事件，继续缓冲，由首块超时兜底
  *
- * 判定优先级：sentinel(terminal) > malformed > error > content > terminal > neutral。
+ * 判定优先级：doneSentinel(terminal) > malformed(非 JSON) > error > content > terminalRules > neutral。
  * error 先于 content：fake-200 上游可能在 error 帧里附带残缺内容字段。
  * 未知事件一律中性（provider 新增 lifecycle 事件前向兼容）。
  *

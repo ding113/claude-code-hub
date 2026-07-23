@@ -6,6 +6,7 @@ import {
   ReplaySpool,
 } from "@/app/v1/_lib/proxy/replay/replay-spool";
 import type { ProxySession } from "@/app/v1/_lib/proxy/session";
+import { logger } from "@/lib/logger";
 
 /**
  * F2 owner 侧 spool 单测。
@@ -34,6 +35,7 @@ const storeControl = vi.hoisted(() => {
     }),
     renewOwnerLease: vi.fn(async () => {
       order.push("renew");
+      return true;
     }),
     releaseOwner: vi.fn(async () => {
       order.push("release");
@@ -198,6 +200,77 @@ describe("ReplaySpool：write-behind 批量冲刷", () => {
     expect(storeControl.store.setMeta).not.toHaveBeenCalled();
     expect(getActiveReplaySpoolCount()).toBe(0);
   });
+
+  it("冲刷续接体异常（setMeta 抛错）时 disable：链不被 poisoned、条目删除、租约释放", async () => {
+    storeControl.store.setMeta.mockRejectedValueOnce(new Error("redis exploded"));
+    const spool = makeSpool();
+    spool.observe(encoder.encode("data: a\n\n"));
+
+    await vi.advanceTimersByTimeAsync(100);
+    // 链必须 resolve 而非 reject（unhandled rejection 防护）
+    await expect(drainWriteChain(spool)).resolves.toBeUndefined();
+
+    expect(storeControl.store.deleteEntry).toHaveBeenCalledWith(identity.replayId);
+    expect(storeControl.store.releaseOwner).toHaveBeenCalledWith(identity.replayId, "owner-token");
+    expect(spool.isTerminal).toBe(true);
+    expect(getActiveReplaySpoolCount()).toBe(0);
+
+    // 失效后 observe/complete 均为 no-op
+    spool.observe(encoder.encode("data: late\n\n"));
+    await vi.advanceTimersByTimeAsync(200);
+    await spool.completeAfterBilling(1);
+    expect(storeControl.store.persistCompleted).not.toHaveBeenCalled();
+  });
+
+  it("bootstrap 续接体异常同样 disable 而不 poison 链", async () => {
+    storeControl.store.setMeta.mockRejectedValueOnce(new Error("redis exploded"));
+    const spool = makeSpool();
+    spool.bootstrap();
+
+    await expect(drainWriteChain(spool)).resolves.toBeUndefined();
+    expect(storeControl.store.deleteEntry).toHaveBeenCalledWith(identity.replayId);
+    expect(spool.isTerminal).toBe(true);
+    expect(getActiveReplaySpoolCount()).toBe(0);
+  });
+});
+
+describe("ReplaySpool：续租丢失 halt", () => {
+  it("renewOwnerLease 返回 false 时停止 spool、释放自方租约，但绝不删条目", async () => {
+    storeControl.store.renewOwnerLease.mockResolvedValueOnce(false);
+    const spool = makeSpool();
+    spool.observe(encoder.encode("data: a\n\n"));
+
+    await vi.advanceTimersByTimeAsync(100);
+    await drainWriteChain(spool);
+
+    // 新 owner 可能已在写同一 LIST：只 compare-delete 自己的租约，不碰 chunks/meta
+    expect(storeControl.store.releaseOwner).toHaveBeenCalledWith(identity.replayId, "owner-token");
+    expect(storeControl.store.deleteEntry).not.toHaveBeenCalled();
+    expect(storeControl.store.deleteChunks).not.toHaveBeenCalled();
+    expect(spool.isTerminal).toBe(true);
+    expect(getActiveReplaySpoolCount()).toBe(0);
+
+    // halt 后 abort 不得再写 aborted meta 覆盖新 owner
+    storeControl.store.setMeta.mockClear();
+    await spool.abort("late_abort");
+    expect(storeControl.store.setMeta).not.toHaveBeenCalled();
+    expect(storeControl.store.deleteChunks).not.toHaveBeenCalled();
+  });
+
+  it("halt 后 complete 为 no-op", async () => {
+    storeControl.store.renewOwnerLease.mockResolvedValueOnce(false);
+    const spool = makeSpool();
+    spool.observe(encoder.encode("data: a\n\n"));
+    await vi.advanceTimersByTimeAsync(100);
+    await drainWriteChain(spool);
+
+    await spool.completeAfterBilling(1);
+    expect(storeControl.store.persistCompleted).not.toHaveBeenCalled();
+    const metaStatuses = storeControl.store.setMeta.mock.calls.map(
+      (call) => (call[1] as { status: string }).status
+    );
+    expect(metaStatuses).not.toContain("completed");
+  });
 });
 
 describe("ReplaySpool：超尺寸自失效", () => {
@@ -207,9 +280,11 @@ describe("ReplaySpool：超尺寸自失效", () => {
 
     spool.observe(encoder.encode("x".repeat(32)));
 
+    // 计数同步归还；存储清理顺着 writeChain 串行执行（避免与 in-flight append 竞态）
+    expect(getActiveReplaySpoolCount()).toBe(0);
+    await drainWriteChain(spool);
     expect(storeControl.store.deleteEntry).toHaveBeenCalledWith(identity.replayId);
     expect(storeControl.store.releaseOwner).toHaveBeenCalledWith(identity.replayId, "owner-token");
-    expect(getActiveReplaySpoolCount()).toBe(0);
 
     // 已失效：后续 observe 与 complete 均为 no-op
     spool.observe(encoder.encode("more"));
@@ -256,7 +331,7 @@ describe("ReplaySpool：completeAfterBilling 终态屏障", () => {
     expect(getActiveReplaySpoolCount()).toBe(0);
   });
 
-  it("completed 只出现在 persistCompleted 成功之后；persist 失败则降级为 aborted", async () => {
+  it("completed 只出现在 persistCompleted 成功之后；persist 失败则降级为 aborted 并清残块", async () => {
     storeControl.store.persistCompleted.mockRejectedValueOnce(new Error("pg down"));
     const spool = makeSpool();
     spool.observe(encoder.encode("data: a\n\n"));
@@ -268,7 +343,50 @@ describe("ReplaySpool：completeAfterBilling 终态屏障", () => {
     );
     expect(metaStatuses).not.toContain("completed");
     expect(metaStatuses).toContain("aborted");
+    expect(storeControl.store.deleteChunks).toHaveBeenCalledWith(identity.replayId);
     expect(storeControl.store.releaseOwner).toHaveBeenCalledWith(identity.replayId, "owner-token");
+    expect(logger.warn).toHaveBeenCalledWith(
+      "[ReplaySpool] complete failed, aborting entry",
+      expect.objectContaining({ pgPersisted: false })
+    );
+    expect(getActiveReplaySpoolCount()).toBe(0);
+  });
+
+  it("尾批冲刷返回 null（Redis 不可用）时终止为 aborted，绝不置 completed 也不写 PG", async () => {
+    storeControl.store.appendChunks.mockResolvedValueOnce(null);
+    const spool = makeSpool();
+    spool.observe(encoder.encode("data: a\n\n"));
+
+    await spool.completeAfterBilling(5);
+
+    expect(storeControl.store.persistCompleted).not.toHaveBeenCalled();
+    const metaStatuses = storeControl.store.setMeta.mock.calls.map(
+      (call) => (call[1] as { status: string }).status
+    );
+    expect(metaStatuses).not.toContain("completed");
+    expect(metaStatuses).toContain("aborted");
+    expect(storeControl.store.deleteChunks).toHaveBeenCalledWith(identity.replayId);
+    expect(storeControl.store.releaseOwner).toHaveBeenCalledWith(identity.replayId, "owner-token");
+    expect(getActiveReplaySpoolCount()).toBe(0);
+  });
+
+  it("persist 成功但 completed 翻转失败：日志标记 pgPersisted=true，热层封死为 aborted", async () => {
+    // 首次 setMeta 即 complete 续接体里的 completed 写入（无 bootstrap、定时器未触发）
+    storeControl.store.setMeta.mockRejectedValueOnce(new Error("redis down"));
+    const spool = makeSpool();
+    spool.observe(encoder.encode("data: a\n\n"));
+
+    await spool.completeAfterBilling(7);
+
+    expect(storeControl.store.persistCompleted).toHaveBeenCalledTimes(1);
+    expect(logger.warn).toHaveBeenCalledWith(
+      "[ReplaySpool] complete failed, aborting entry",
+      expect.objectContaining({ pgPersisted: true })
+    );
+    const metaStatuses = storeControl.store.setMeta.mock.calls.map(
+      (call) => (call[1] as { status: string }).status
+    );
+    expect(metaStatuses).toContain("aborted");
     expect(getActiveReplaySpoolCount()).toBe(0);
   });
 
@@ -329,31 +447,59 @@ describe("ReplaySpool：abort 终态", () => {
   });
 });
 
+describe("ReplaySpool：isTerminal", () => {
+  it("abort 置 terminal，disable（超限）置 disabled，两者均视为终态", async () => {
+    const aborted = makeSpool();
+    expect(aborted.isTerminal).toBe(false);
+    await aborted.abort("done");
+    expect(aborted.isTerminal).toBe(true);
+
+    envControl.maxPayloadBytes = 4;
+    const oversized = makeSpool();
+    oversized.observe(encoder.encode("12345678"));
+    expect(oversized.isTerminal).toBe(true);
+    await drainWriteChain(oversized);
+  });
+});
+
 describe("createReplaySpoolIfOwner", () => {
-  it("非 owner 会话返回 null", () => {
+  it("非 owner 会话返回 null（无租约可释放）", () => {
     const session = { replayState: null } as unknown as ProxySession;
     expect(createReplaySpoolIfOwner(session, sseResponse())).toBeNull();
+    expect(storeControl.store.releaseOwner).not.toHaveBeenCalled();
   });
 
-  it("功能开关关闭返回 null", () => {
+  it("功能开关关闭返回 null，并释放租约、清 replayState", () => {
     envControl.enableReplay = false;
-    expect(createReplaySpoolIfOwner(makeOwnerSession(), sseResponse())).toBeNull();
+    const session = makeOwnerSession();
+    expect(createReplaySpoolIfOwner(session, sseResponse())).toBeNull();
+    expect(storeControl.store.releaseOwner).toHaveBeenCalledWith(identity.replayId, "owner-token");
+    expect(session.replayState).toBeNull();
   });
 
-  it("非 2xx 或非 SSE 响应返回 null", () => {
-    expect(createReplaySpoolIfOwner(makeOwnerSession(), sseResponse(500))).toBeNull();
-    expect(
-      createReplaySpoolIfOwner(makeOwnerSession(), sseResponse(200, "application/json"))
-    ).toBeNull();
+  it("非 2xx 或非 SSE 响应返回 null，并释放租约、清 replayState", () => {
+    const non2xx = makeOwnerSession();
+    expect(createReplaySpoolIfOwner(non2xx, sseResponse(500))).toBeNull();
+    expect(non2xx.replayState).toBeNull();
+
+    const nonSse = makeOwnerSession();
+    expect(createReplaySpoolIfOwner(nonSse, sseResponse(200, "application/json"))).toBeNull();
+    expect(nonSse.replayState).toBeNull();
+
+    expect(storeControl.store.releaseOwner).toHaveBeenCalledTimes(2);
+    expect(storeControl.store.releaseOwner).toHaveBeenCalledWith(identity.replayId, "owner-token");
   });
 
-  it("并发 spool 达上限时返回 null", async () => {
+  it("并发 spool 达上限时返回 null，并释放落选者租约", async () => {
     envControl.maxConcurrentSpools = 1;
     const first = createReplaySpoolIfOwner(makeOwnerSession(), sseResponse());
     expect(first).toBeInstanceOf(ReplaySpool);
+    expect(storeControl.store.releaseOwner).not.toHaveBeenCalled();
 
-    const second = createReplaySpoolIfOwner(makeOwnerSession(), sseResponse());
-    expect(second).toBeNull();
+    const second = makeOwnerSession();
+    expect(createReplaySpoolIfOwner(second, sseResponse())).toBeNull();
+    expect(second.replayState).toBeNull();
+    expect(storeControl.store.releaseOwner).toHaveBeenCalledWith(identity.replayId, "owner-token");
 
     await first?.abort("test_cleanup");
   });

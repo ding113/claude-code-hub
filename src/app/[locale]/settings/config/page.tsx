@@ -68,6 +68,8 @@ async function SettingsConfigContent({ locale }: { locale: string }) {
             allowNonConversationEndpointProviderFallback:
               settings.allowNonConversationEndpointProviderFallback,
             fakeStreamingWhitelist: settings.fakeStreamingWhitelist,
+            streamGateMode: settings.streamGateMode,
+            affinityIgnoreClientSessionId: settings.affinityIgnoreClientSessionId,
             enableCodexSessionIdCompletion: settings.enableCodexSessionIdCompletion,
             enableClaudeMetadataUserIdInjection: settings.enableClaudeMetadataUserIdInjection,
             enableResponseFixer: settings.enableResponseFixer,

@@ -1,5 +1,5 @@
 import { getEnvConfig } from "@/lib/config/env.schema";
-import { buildScopeTag, canonicalRequestBytes, sha256Hex } from "@/lib/request-identity";
+import { buildScopeTag, sha256Hex, stableStringify } from "@/lib/request-identity";
 import type { ClientFormat } from "../format-mapper";
 import type { ProxySession } from "../session";
 
@@ -11,10 +11,14 @@ import type { ProxySession } from "../session";
  * verifier：仅内容维度（body 哈希 + endpoint + model + stream）的不同盐哈希，
  *   attach 时严格比对，防 replayId 哈希碰撞（CCHP 主 ID 含 principal / verifier 仅内容的结构对齐）。
  *
+ * body 哈希基于过滤后的逻辑请求体（guard 位于 requestFilter 之后的
+ * session.request.message，键序稳定序列化），不取过滤前的原始 buffer：
+ * 过滤规则变更后自然产生新身份，绝不命中旧规则时代的条目。
+ *
  * 不合格条件（返回 null，请求按现状处理）：
  * - 功能开关关闭；非 default endpoint policy（raw passthrough 等）
  * - 非 POST；非流式请求（stream !== true）
- * - 缺认证主体（key/user）；请求体为空
+ * - 缺认证主体（key/user）
  * （probe/warmup/count_tokens 由 guard 管线顺序与 preset 天然排除，不达本步。）
  */
 
@@ -45,14 +49,11 @@ export function deriveReplayIdentity(session: ProxySession): ReplayIdentity | nu
     const userId = session.authState?.user?.id;
     if (!keyId || !userId) return null;
 
-    const bodyBytes = canonicalRequestBytes(session.request);
-    if (bodyBytes.byteLength === 0) return null;
-
     const format = session.originalFormat;
     const model = session.getOriginalModel();
     const endpoint = session.getEndpoint() ?? "/";
     const scopeTag = buildScopeTag(keyId, format, model);
-    const bodyHash = sha256Hex(bodyBytes);
+    const bodyHash = sha256Hex(stableStringify(message));
     const idempotencyKey =
       session.headers.get("idempotency-key")?.trim() ||
       session.headers.get("x-idempotency-key")?.trim() ||

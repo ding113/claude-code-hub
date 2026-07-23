@@ -20,7 +20,8 @@ import { getReplayStore, type ReplayMeta, type ReplayStore } from "./replay-stor
  *                                          （挂 session.replayState，spool 由 handleStream 建），
  *                                          失败（竞态輸掉且不可 attach）则放弃 replay 照常执行
  * - verifier 不符（哈希碰撞）             -> 视为无 replay，照常执行
- * - x-cch-no-replay: 1                   -> 跳过 attach（有意重复采样），仍可成为 owner
+ * - x-cch-no-replay: 1                   -> 跳过 attach（有意重复采样），仍可成为 owner；
+ *                                          但条目已 completed 时不 claim（不覆写，保留给其他客户端）
  *
  * 一切异常 fail-open：返回 null 让请求照常执行。
  */
@@ -43,7 +44,14 @@ export class ProxyReplayGuard {
       const store = getReplayStore();
       const bypassAttach = session.headers.get(REPLAY_BYPASS_HEADER) === "1";
 
-      if (!bypassAttach) {
+      if (bypassAttach) {
+        // 有意重复采样：跳过 attach，但已完成条目不可被覆写——
+        // 不 claim、照常执行，条目保留给其他客户端
+        const meta = await store.getMeta(identity.replayId);
+        if (meta?.status === "completed" && meta.verifier === identity.verifier) {
+          return null;
+        }
+      } else {
         const served = await ProxyReplayGuard.tryServe(session, identity, store, env);
         if (served) return served;
       }
@@ -52,6 +60,8 @@ export class ProxyReplayGuard {
       const ownerToken = randomUUID();
       const claimed = await store.tryClaimOwner(identity.replayId, ownerToken);
       if (claimed) {
+        // 清掉上一 owner 异常退出遗留的旧 LIST 残块，防止与新流拼接
+        await store.deleteChunks(identity.replayId);
         session.replayState = { identity, ownerToken, role: "owner" };
       }
       // claim 失败：竞态输掉且（去重关闭/绕过/不可 attach）——照常执行，无 replay 角色

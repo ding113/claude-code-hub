@@ -778,6 +778,13 @@
       "when": 1784759248530,
       "tag": "0110_strong_dracula",
       "breakpoints": true
+    },
+    {
+      "idx": 111,
+      "version": "7",
+      "when": 1784787138535,
+      "tag": "0111_mixed_firestar",
+      "breakpoints": true
     }
   ]
 }

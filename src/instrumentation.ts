@@ -598,6 +598,20 @@ export async function register() {
       await startCacheEffectivenessScheduler();
       await startReplayCleanupScheduler();
 
+      // F1/F3a：预热代理运行时设置快照（stream gate / affinity 的同步读取路径）
+      try {
+        const { getProxyRuntimeSettings } = await import("@/lib/system-settings/proxy-runtime");
+        void getProxyRuntimeSettings().catch((error) => {
+          logger.warn("[Instrumentation] Proxy runtime settings warmup failed", {
+            error: error instanceof Error ? error.message : String(error),
+          });
+        });
+      } catch (error) {
+        logger.warn("[Instrumentation] Proxy runtime settings warmup init failed", {
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+
       logger.info("Application ready");
     }
     // 开发环境: 执行迁移 + 初始化价格表（禁用 Bull Queue 避免 Turbopack 冲突）
@@ -746,6 +760,20 @@ export async function register() {
 
         await startCacheEffectivenessScheduler();
         await startReplayCleanupScheduler();
+
+        // F1/F3a：预热代理运行时设置快照（stream gate / affinity 的同步读取路径）
+        try {
+          const { getProxyRuntimeSettings } = await import("@/lib/system-settings/proxy-runtime");
+          void getProxyRuntimeSettings().catch((error) => {
+            logger.warn("[Instrumentation] Proxy runtime settings warmup failed", {
+              error: error instanceof Error ? error.message : String(error),
+            });
+          });
+        } catch (error) {
+          logger.warn("[Instrumentation] Proxy runtime settings warmup init failed", {
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
       } else {
         logger.warn(
           "[Instrumentation] Database unavailable: skipping endpoint probe scheduler and cleanup"

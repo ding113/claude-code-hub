@@ -106,8 +106,6 @@
     "saveFailed": "保存に失敗しました",
     "saveSettings": "設定を保存",
     "saveSuccess": "正常に保存されました",
-    "publicStatusProjectionWarning": "システム設定は保存されましたが、public status の Redis 投影は更新されませんでした。",
-    "publicStatusBackgroundRefreshPending": "システム設定は保存されましたが、バックグラウンド更新が成功するまで公開ステータスページに古いデータが表示される場合があります。",
     "siteTitle": "サイトタイトル",
     "siteTitleDesc": "ブラウザタブのタイトルとシステムのデフォルト表示名を設定するために使用されます。",
     "siteTitlePlaceholder": "例：Claude Code Hub",
@@ -149,6 +147,15 @@
         "leasePercentZero": "比率が 0 です。リース予算が常に 0 になる可能性があります。",
         "leaseCapZero": "上限が 0 です。リースごとの予算が 0 になる可能性があります。"
       }
+    },
+    "affinityIgnoreClientSessionId": "クライアント Session ID を無視",
+    "affinityIgnoreClientSessionIdDesc": "有効にすると、フィンガープリント可能なリクエストは最長プレフィックス親和性によるプロバイダー固定を強制します（クライアント Session ID バインディングをスキップ）。フィンガープリント不可能なリクエストは従来どおりセッション再利用を使用します。デフォルトで有効。",
+    "streamGateMode": "ストリーム内容ゲート",
+    "streamGateModeDesc": "最初の有効なコンテンツフレームが到着するまでバッファリングし、エラーフレームや空ストリームの場合はプロバイダーを自動的に切り替えて再試行します。シャドウモードは転送に影響せず、判定乖離の統計のみを記録します。デフォルトで有効。",
+    "streamGateModeOptions": {
+      "off": "オフ",
+      "shadow": "シャドウモード",
+      "enforce": "有効"
     }
   },
   "ipLogging": {

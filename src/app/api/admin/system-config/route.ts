@@ -84,6 +84,8 @@ export async function POST(req: Request) {
       enableGeminiFunctionIdRectifier: validated.enableGeminiFunctionIdRectifier,
       enableBillingHeaderRectifier: validated.enableBillingHeaderRectifier,
       enableResponseInputRectifier: validated.enableResponseInputRectifier,
+      streamGateMode: validated.streamGateMode,
+      affinityIgnoreClientSessionId: validated.affinityIgnoreClientSessionId,
       enableCodexSessionIdCompletion: validated.enableCodexSessionIdCompletion,
       enableClaudeMetadataUserIdInjection: validated.enableClaudeMetadataUserIdInjection,
       enableResponseFixer: validated.enableResponseFixer,

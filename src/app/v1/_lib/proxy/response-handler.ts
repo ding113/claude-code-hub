@@ -57,7 +57,7 @@ import {
   type DemandDrivenResponsePump,
 } from "./demand-driven-response-pump";
 import { isClientAbortError, isTransportError } from "./errors";
-import { createReplaySpoolIfOwner } from "./replay/replay-spool";
+import { createReplaySpoolIfOwner, releaseReplayOwnership } from "./replay/replay-spool";
 import type { ProxySession } from "./session";
 import {
   consumeDeferredStreamingFinalization,
@@ -1599,6 +1599,8 @@ export class ProxyResponseHandler {
     session: ProxySession,
     response: Response
   ): Promise<Response> {
+    // F2：stream 请求被上游以非流响应回答时不做 replay，立即让出 owner 租约
+    releaseReplayOwnership(session);
     const messageContext = session.messageContext;
     const provider = session.provider;
     if (!provider) {
@@ -2533,6 +2535,7 @@ export class ProxyResponseHandler {
     const provider = session.provider;
 
     if (!messageContext || !provider || !response.body) {
+      releaseReplayOwnership(session);
       discardBeforeResponseBodySnapshot(session);
       releaseSessionAgent(session);
       return response;
@@ -2556,6 +2559,22 @@ export class ProxyResponseHandler {
           reason: "Client receives untouched chunks observed by the authoritative pump",
         });
         discardBeforeResponseBodySnapshot(session);
+
+        // F2：passthrough 分支不建 replay spool——owner 租约立即释放并清角色
+        releaseReplayOwnership(session);
+
+        // F1 shadow 遥测：enforce 已在 forwarder 作用于该流量，shadow 观察同样不留盲区
+        const passthroughShadowObserver = (() => {
+          if (resolveStreamGateMode() !== "shadow") return null;
+          if (session.getEndpointPolicy().kind === "raw_passthrough") return null;
+          const family = mapProviderTypeToFamily(provider.providerType);
+          if (!family) return null;
+          return createShadowGateObserver({
+            family,
+            providerId: provider.id,
+            providerName: provider.name,
+          });
+        })();
 
         // 注意：不要在“仅收到响应头”时清除首字节超时。
         // 背景：部分上游可能会快速返回 200 + SSE headers，但随后长时间不发送任何 body 数据。
@@ -2589,7 +2608,10 @@ export class ProxyResponseHandler {
         passthroughPump = createDemandDrivenResponsePump({
           source: response.body,
           onReadStart: () => observePassthroughReadStart(),
-          onChunk: (value) => observePassthroughChunk(value),
+          onChunk: (value) => {
+            passthroughShadowObserver?.observe(value);
+            observePassthroughChunk(value);
+          },
           onClientCancel: (reason) => {
             startPassthroughDrain(reason);
           },
@@ -3690,6 +3712,14 @@ export class ProxyResponseHandler {
           errorMessage: streamErrorMessage ?? undefined,
         });
       })();
+      // F2 兜底：finalize 在终态决策点之前抛出时，spool 会永挂 owning、租约悬置、
+      // activeSpoolCount 泄漏。旁路 catch 只做 abort，不吞异常——原 promise 仍向
+      // 调用方原样 reject（既有传播语义不变）。
+      streamFinalizationPromise.catch(() => {
+        if (replaySpool && !replaySpool.isTerminal) {
+          void replaySpool.abort("finalize_error");
+        }
+      });
       return streamFinalizationPromise;
     };
 

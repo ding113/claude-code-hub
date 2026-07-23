@@ -20,8 +20,12 @@ import { logger } from "@/lib/logger";
  */
 
 const LOCK_KEY = 20260722;
-/** 终态迟到缓冲：窗口终点留 5 分钟余量，避免统计到未完成结算的行 */
-const WINDOW_SAFETY_LAG_MS = 5 * 60 * 1000;
+/**
+ * 终态迟到缓冲：窗口终点留 15 分钟余量，避免统计到未完成结算的行。
+ * message_request.updated_at 无 $onUpdate 自动更新语义，只能按 created_at 过滤；
+ * 超过 15 分钟才终态的流仍会漏计，展示级指标可接受。
+ */
+const WINDOW_SAFETY_LAG_MS = 15 * 60 * 1000;
 /** 首次运行回看窗口 */
 const INITIAL_LOOKBACK_MS = 60 * 60 * 1000;
 

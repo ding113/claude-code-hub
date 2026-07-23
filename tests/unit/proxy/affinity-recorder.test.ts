@@ -7,6 +7,8 @@ const envControl = vi.hoisted(() => ({
   ttlSeconds: 3600,
 }));
 
+const settingsControl = vi.hoisted(() => ({ ignoreClientSessionId: false }));
+
 const storeMocks = vi.hoisted(() => ({
   put: vi.fn(async () => {}),
   tombstone: vi.fn(async () => {}),
@@ -22,6 +24,13 @@ vi.mock("@/lib/config/env.schema", () => ({
 
 vi.mock("@/app/v1/_lib/proxy/affinity/affinity-store", () => ({
   getAffinityStore: () => storeMocks,
+}));
+
+vi.mock("@/lib/system-settings/proxy-runtime", () => ({
+  getProxyRuntimeSettings: vi.fn(async () => ({
+    streamGateMode: "off" as const,
+    affinityIgnoreClientSessionId: settingsControl.ignoreClientSessionId,
+  })),
 }));
 
 vi.mock("@/lib/logger", () => ({
@@ -62,6 +71,7 @@ function makeSession(affinity: SessionAffinityState | null): ProxySession {
 beforeEach(() => {
   envControl.enabled = true;
   envControl.ttlSeconds = 3600;
+  settingsControl.ignoreClientSessionId = false;
 });
 
 describe("recordAffinityWinner", () => {
@@ -76,10 +86,18 @@ describe("recordAffinityWinner", () => {
     expect(storeMocks.put).toHaveBeenCalledWith("scope123", "sysfp", "sysfp", 7, 3600);
   });
 
-  it("is a no-op when ENABLE_PREFIX_AFFINITY is off", async () => {
+  it("is a no-op when both the env flag and the ignore-session setting are off", async () => {
     envControl.enabled = false;
+    settingsControl.ignoreClientSessionId = false;
     await recordAffinityWinner(makeSession(makeAffinity()), 42);
     expect(storeMocks.put).not.toHaveBeenCalled();
+  });
+
+  it("writes when the env flag is off but the ignore-session setting is on", async () => {
+    envControl.enabled = false;
+    settingsControl.ignoreClientSessionId = true;
+    await recordAffinityWinner(makeSession(makeAffinity()), 42);
+    expect(storeMocks.put).toHaveBeenCalledWith("scope123", "fp2", "sysfp", 42, 3600);
   });
 
   it("is a no-op without affinity state or with a non-positive provider id", async () => {
@@ -126,6 +144,22 @@ describe("tombstoneAffinityOnFailure", () => {
   it("is a no-op without affinity state (flag off never populates it)", async () => {
     await tombstoneAffinityOnFailure(makeSession(null), 42);
     expect(storeMocks.tombstone).not.toHaveBeenCalled();
+  });
+
+  it("is a no-op when affinity routing is fully disabled", async () => {
+    envControl.enabled = false;
+    settingsControl.ignoreClientSessionId = false;
+    const session = makeSession(makeAffinity({ nominatedProviderId: 42, matchedFp: "fp2" }));
+    await tombstoneAffinityOnFailure(session, 42);
+    expect(storeMocks.tombstone).not.toHaveBeenCalled();
+  });
+
+  it("tombstones when the env flag is off but the ignore-session setting is on", async () => {
+    envControl.enabled = false;
+    settingsControl.ignoreClientSessionId = true;
+    const session = makeSession(makeAffinity({ nominatedProviderId: 42, matchedFp: "fp2" }));
+    await tombstoneAffinityOnFailure(session, 42);
+    expect(storeMocks.tombstone).toHaveBeenCalledWith("scope123", "fp2", "failover");
   });
 
   it("swallows store failures", async () => {

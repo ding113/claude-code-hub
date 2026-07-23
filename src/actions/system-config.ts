@@ -21,6 +21,7 @@ import type {
   CodexPriorityBillingSource,
   FakeStreamingWhitelistEntry,
   ResponseFixerConfig,
+  StreamGateSettingMode,
   SystemSettings,
 } from "@/types/system-config";
 import type { ActionResult } from "./types";
@@ -84,6 +85,8 @@ export async function saveSystemSettings(formData: {
   enableResponseInputRectifier?: boolean;
   allowNonConversationEndpointProviderFallback?: boolean;
   fakeStreamingWhitelist?: FakeStreamingWhitelistEntry[];
+  streamGateMode?: StreamGateSettingMode;
+  affinityIgnoreClientSessionId?: boolean;
   enableCodexSessionIdCompletion?: boolean;
   enableClaudeMetadataUserIdInjection?: boolean;
   enableResponseFixer?: boolean;
@@ -139,6 +142,8 @@ export async function saveSystemSettings(formData: {
       allowNonConversationEndpointProviderFallback:
         validated.allowNonConversationEndpointProviderFallback,
       fakeStreamingWhitelist: validated.fakeStreamingWhitelist,
+      streamGateMode: validated.streamGateMode,
+      affinityIgnoreClientSessionId: validated.affinityIgnoreClientSessionId,
       enableCodexSessionIdCompletion: validated.enableCodexSessionIdCompletion,
       enableClaudeMetadataUserIdInjection: validated.enableClaudeMetadataUserIdInjection,
       enableResponseFixer: validated.enableResponseFixer,

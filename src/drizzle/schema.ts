@@ -996,6 +996,17 @@ export const systemSettings = pgTable('system_settings', {
     .notNull()
     .default(5),
 
+  // F1 流式内容门控模式: 'off' | 'shadow' | 'enforce'（默认 enforce）
+  // enforce：首个有效内容帧前缓冲，错误/空流时自动切换供应商；shadow：仅旁路统计分歧
+  streamGateMode: varchar('stream_gate_mode', { length: 10 }).notNull().default('enforce'),
+
+  // 忽略客户端 Session ID（默认开启）
+  // 开启后：可指纹化的请求强制使用最长前缀亲和做供应商粘性（跳过客户端 Session ID 绑定），
+  // 不可指纹化的请求仍走会话复用
+  affinityIgnoreClientSessionId: boolean('affinity_ignore_client_session_id')
+    .notNull()
+    .default(true),
+
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
 });

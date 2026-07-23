@@ -2,9 +2,19 @@ import "server-only";
 
 import type Redis from "ioredis";
 import { logger } from "@/lib/logger";
-import { getRedisClient } from "./client";
+import { getRedisClient } from "@/lib/redis/client";
 
-type RedisListClient = Pick<Redis, "status" | "rpush" | "lrange" | "llen" | "expire" | "del">;
+type RedisListClient = Pick<Redis, "status" | "lrange" | "llen" | "expire" | "del"> & {
+  eval(...args: [script: string, numkeys: number, ...rest: (string | number)[]]): Promise<unknown>;
+};
+
+/** RPUSH 全部值并（ttl>0 时）续期，单条脚本原子执行；返回追加后的列表长度。 */
+const LUA_RPUSH_EXPIRE = `
+local len = redis.call('RPUSH', KEYS[1], unpack(ARGV, 2))
+if tonumber(ARGV[1]) > 0 then
+  redis.call('EXPIRE', KEYS[1], ARGV[1])
+end
+return len`;
 
 export interface RedisListStoreOptions {
   prefix: string;
@@ -49,18 +59,19 @@ export class RedisListStore {
     return `${this.prefix}${key}`;
   }
 
-  /** 批量追加并（可选）续期；返回追加后的列表长度，失败返回 null。 */
+  /**
+   * 批量追加并（可选）续期，单条 Lua 原子执行——追加成功即带 TTL，
+   * 不存在「RPUSH 成功但 EXPIRE 失败留下永久 key」的窗口；失败返回 null。
+   */
   async rpushBatch(key: string, values: string[], ttlSeconds?: number): Promise<number | null> {
     if (values.length === 0) return null;
     const redis = this.getReadyRedis();
     if (!redis) return null;
     const fullKey = this.buildKey(key);
     try {
-      const length = await redis.rpush(fullKey, ...values);
-      if (ttlSeconds && ttlSeconds > 0) {
-        await redis.expire(fullKey, ttlSeconds);
-      }
-      return length;
+      const ttl = ttlSeconds && ttlSeconds > 0 ? ttlSeconds : 0;
+      const length = await redis.eval(LUA_RPUSH_EXPIRE, 1, fullKey, ttl, ...values);
+      return typeof length === "number" ? length : Number(length);
     } catch (error) {
       logger.error("[RedisListStore] Failed to rpush", {
         error: toLogError(error),

@@ -2,6 +2,7 @@ import { getEnvConfig } from "@/lib/config/env.schema";
 import { logger } from "@/lib/logger";
 import type { ProxySession } from "../session";
 import { getAffinityStore } from "./affinity-store";
+import { isAffinityRoutingEnabled } from "./config";
 import { fingerprintTip } from "./fingerprint";
 
 /**
@@ -21,15 +22,14 @@ export async function recordAffinityWinner(
   const affinity = session.affinity;
   if (!affinity || providerId <= 0) return;
   try {
-    const env = getEnvConfig();
-    if (!env.ENABLE_PREFIX_AFFINITY) return;
+    if (!(await isAffinityRoutingEnabled())) return;
     const tip = fingerprintTip(affinity.chain);
     await getAffinityStore().put(
       affinity.scopeTag,
       tip.fp,
       affinity.chain.sys.fp,
       providerId,
-      env.PREFIX_AFFINITY_TTL_SECONDS
+      getEnvConfig().PREFIX_AFFINITY_TTL_SECONDS
     );
   } catch (error) {
     logger.debug("[AffinityRecorder] winner writeback failed", {
@@ -56,6 +56,7 @@ export async function tombstoneAffinityOnFailure(
     return;
   }
   try {
+    if (!(await isAffinityRoutingEnabled())) return;
     await getAffinityStore().tombstone(affinity.scopeTag, affinity.matchedFp, "failover");
   } catch (error) {
     logger.debug("[AffinityRecorder] tombstone failed", {

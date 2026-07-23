@@ -47,6 +47,13 @@ if redis.call('GET', KEYS[1]) == ARGV[1] then
 end
 return 0`;
 
+const LUA_COMPARE_EXPIRE = `
+if redis.call('GET', KEYS[1]) == ARGV[1] then
+  redis.call('EXPIRE', KEYS[1], ARGV[2])
+  return 1
+end
+return 0`;
+
 type RedisRawClient = Pick<Redis, "status" | "set" | "del"> & {
   eval(...args: [script: string, numkeys: number, ...rest: (string | number)[]]): Promise<unknown>;
 };
@@ -131,20 +138,26 @@ export class ReplayStore {
     }
   }
 
-  /** 心跳续租：spool 冲刷时调用，防止长流中租约过期被并发 claim 抢走。 */
-  async renewOwnerLease(replayId: string, ownerToken: string): Promise<void> {
+  /**
+   * 心跳续租（compare-and-expire）：仅 token 仍属自己时续期，防止租约过期后
+   * 被并发 claim 抢走、旧 owner 却继续无条件覆写租约。
+   * 返回 false 表示所有权已失（或续租异常，保守视为失去）；
+   * Redis 不可用返回 true——状态未知，不惩罚仍在正常冲刷的 owner。
+   */
+  async renewOwnerLease(replayId: string, ownerToken: string): Promise<boolean> {
     const redis = this.getRawRedis();
-    if (!redis) return;
+    if (!redis) return true;
     try {
-      await redis.set(
+      const result = await redis.eval(
+        LUA_COMPARE_EXPIRE,
+        1,
         `cch:replay:owner:${replayId}`,
         ownerToken,
-        "EX",
-        OWNER_LEASE_TTL_SECONDS,
-        "XX"
+        OWNER_LEASE_TTL_SECONDS
       );
+      return result === 1;
     } catch {
-      // 续租失败不致命：租约过期后 attach 读者按 stall 收尾
+      return false;
     }
   }
 
@@ -161,6 +174,11 @@ export class ReplayStore {
 
   // ===== PG 完成持久层 =====
 
+  /**
+   * 写 PG 完成持久层。失败必须向调用方抛出：completeAfterBilling 依赖该异常
+   * 走 abort——payload 未 durable 时绝不能把 meta 翻成 completed。
+   * （过期行清理由 instrumentation 定时调度器负责，不在写路径顺带执行。）
+   */
   async persistCompleted(row: ReplayPersistedRow): Promise<void> {
     const env = getEnvConfig();
     const expiresAt = new Date(Date.now() + env.REPLAY_COMPLETED_TTL_SECONDS * 1000);
@@ -183,13 +201,12 @@ export class ReplayStore {
           expiresAt,
         })
         .onConflictDoNothing();
-      // 机会式清理过期行：写入时顺带扫尾（低流量期由定时清理兜底）
-      await this.cleanupExpired();
     } catch (error) {
-      logger.warn("[ReplayStore] persistCompleted failed (replay stays redis-only)", {
+      logger.warn("[ReplayStore] persistCompleted failed", {
         error: error instanceof Error ? error.message : String(error),
         replayId: row.replayId.slice(0, 12),
       });
+      throw error;
     }
   }
 

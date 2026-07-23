@@ -77,7 +77,7 @@ describe("deriveReplayIdentity：确定性", () => {
     expect(second?.verifier).toBe(first?.verifier);
   });
 
-  it("无原始 buffer 时 message 键序不同但内容相同应得到相同 replayId", () => {
+  it("message 键序不同但内容相同应得到相同 replayId（键序稳定序列化）", () => {
     const a = deriveReplayIdentity(
       makeSession({ message: { max_tokens: 8, stream: true, model: DEFAULT_MODEL } })
     );
@@ -88,11 +88,20 @@ describe("deriveReplayIdentity：确定性", () => {
     expect(a?.verifier).toBe(b?.verifier);
   });
 
-  it("提供原始 buffer 时以 buffer 字节为准（message 差异不影响）", () => {
-    const buffer = new TextEncoder().encode('{"stream":true,"q":"same"}').buffer as ArrayBuffer;
-    const a = deriveReplayIdentity(makeSession({ buffer, message: { stream: true, x: 1 } }));
-    const b = deriveReplayIdentity(makeSession({ buffer, message: { stream: true, x: 2 } }));
+  it("身份基于过滤后 message，不受原始 buffer 影响（同 message 不同 buffer 同 ID）", () => {
+    const bufferA = new TextEncoder().encode('{"stream":true,"raw":"a"}').buffer as ArrayBuffer;
+    const bufferB = new TextEncoder().encode('{"stream":true,"raw":"b"}').buffer as ArrayBuffer;
+    const message = { stream: true, model: DEFAULT_MODEL, messages: [{ role: "user" }] };
+    const a = deriveReplayIdentity(makeSession({ buffer: bufferA, message: { ...message } }));
+    const b = deriveReplayIdentity(makeSession({ buffer: bufferB, message: { ...message } }));
     expect(a?.replayId).toBe(b?.replayId);
+    expect(a?.verifier).toBe(b?.verifier);
+
+    // 反向：buffer 相同但过滤后 message 不同 -> 身份不同（过滤规则变更产生新身份）
+    const c = deriveReplayIdentity(
+      makeSession({ buffer: bufferA, message: { ...message, extra: 1 } })
+    );
+    expect(c?.replayId).not.toBe(a?.replayId);
   });
 
   it("长度与格式稳定：replayId/verifier 为 32 位小写 hex，scopeTag 为 16 位 hex", () => {

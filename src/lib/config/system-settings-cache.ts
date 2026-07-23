@@ -83,6 +83,8 @@ const DEFAULT_SETTINGS: Pick<
   | "passThroughUpstreamErrorMessage"
   | "publicStatusWindowHours"
   | "publicStatusAggregationIntervalMinutes"
+  | "streamGateMode"
+  | "affinityIgnoreClientSessionId"
 > = {
   enableHttp2: false,
   enableOpenaiResponsesWebsocket: true,
@@ -113,6 +115,8 @@ const DEFAULT_SETTINGS: Pick<
   },
   publicStatusWindowHours: 24,
   publicStatusAggregationIntervalMinutes: 5,
+  streamGateMode: "enforce",
+  affinityIgnoreClientSessionId: true,
 };
 
 /**
@@ -195,6 +199,8 @@ export async function getCachedSystemSettings(): Promise<SystemSettings> {
       publicStatusWindowHours: DEFAULT_SETTINGS.publicStatusWindowHours,
       publicStatusAggregationIntervalMinutes:
         DEFAULT_SETTINGS.publicStatusAggregationIntervalMinutes,
+      streamGateMode: DEFAULT_SETTINGS.streamGateMode,
+      affinityIgnoreClientSessionId: DEFAULT_SETTINGS.affinityIgnoreClientSessionId,
       quotaDbRefreshIntervalSeconds: 10,
       quotaLeasePercent5h: 0.05,
       quotaLeasePercentDaily: 0.05,
