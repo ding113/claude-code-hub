@@ -1,5 +1,10 @@
-import { apiGet, searchParams, toActionResult, unwrapItems } from "./_compat";
-import type { ActionResult } from "./types";
+import {
+  apiGet,
+  searchParams,
+  toActionResult,
+  unwrapItems,
+} from "@/lib/api-client/v1/actions/_compat";
+import type { ActionResult } from "@/lib/api-client/v1/actions/types";
 
 export interface ProviderCacheEffectivenessWindowDto {
   id: number;

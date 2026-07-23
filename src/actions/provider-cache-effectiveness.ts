@@ -1,12 +1,12 @@
 "use server";
 
 import { getTranslations } from "next-intl/server";
+import type { ActionResult } from "@/actions/types";
 import { getSession } from "@/lib/auth";
 import { logger } from "@/lib/logger";
 import { ERROR_CODES } from "@/lib/utils/error-messages";
 import { listProviderCacheEffectivenessWindows } from "@/repository/provider-cache-effectiveness";
 import type { ProviderCacheEffectivenessWindow } from "@/types/provider-cache-effectiveness";
-import type { ActionResult } from "./types";
 
 export interface GetProviderCacheEffectivenessInput {
   providerId?: number;

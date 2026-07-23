@@ -1,5 +1,5 @@
 import { z } from "@hono/zod-openapi";
-import { IsoDateTimeStringSchema } from "./_common";
+import { IsoDateTimeStringSchema } from "@/lib/api/v1/schemas/_common";
 
 export const ProviderCacheEffectivenessListQuerySchema = z.object({
   providerId: z.coerce

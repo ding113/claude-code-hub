@@ -43,13 +43,5 @@
   "actionDelete": "Удалить",
   "selectProvider": "Выбрать {name}",
   "schedule": "Расписание",
-  "proxyEnabled": "Прокси включен",
-  "cacheEffectiveness": {
-    "label": "Эффект кэша",
-    "hitRate": "Попадания",
-    "confidence": "Достоверность",
-    "samples": "Выборка",
-    "score": "Оценка",
-    "empty": "Данных кэша пока нет"
-  }
+  "proxyEnabled": "Прокси включен"
 }

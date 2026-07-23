@@ -12220,6 +12220,13 @@ export interface operations {
                         /** @description Public status aggregation interval in minutes. */
                         publicStatusAggregationIntervalMinutes: number;
                         /**
+                         * @description Stream content gate mode: buffer until the first valid content frame and fail over on error or empty streams (enforce), observe divergence only (shadow), or disable (off).
+                         * @enum {string}
+                         */
+                        streamGateMode: "off" | "shadow" | "enforce";
+                        /** @description Whether fingerprintable requests force longest-prefix affinity for provider stickiness, skipping client session id binding. */
+                        affinityIgnoreClientSessionId: boolean;
+                        /**
                          * Format: date-time
                          * @description Creation time.
                          */
@@ -12480,6 +12487,13 @@ export interface operations {
                     publicStatusWindowHours?: number;
                     /** @description Public status aggregation interval in minutes. */
                     publicStatusAggregationIntervalMinutes?: number;
+                    /**
+                     * @description Stream content gate mode: buffer until the first valid content frame and fail over on error or empty streams (enforce), observe divergence only (shadow), or disable (off).
+                     * @enum {string}
+                     */
+                    streamGateMode?: "off" | "shadow" | "enforce";
+                    /** @description Whether fingerprintable requests force longest-prefix affinity for provider stickiness, skipping client session id binding. */
+                    affinityIgnoreClientSessionId?: boolean;
                 };
             };
         };
@@ -12616,6 +12630,13 @@ export interface operations {
                         publicStatusWindowHours: number;
                         /** @description Public status aggregation interval in minutes. */
                         publicStatusAggregationIntervalMinutes: number;
+                        /**
+                         * @description Stream content gate mode: buffer until the first valid content frame and fail over on error or empty streams (enforce), observe divergence only (shadow), or disable (off).
+                         * @enum {string}
+                         */
+                        streamGateMode: "off" | "shadow" | "enforce";
+                        /** @description Whether fingerprintable requests force longest-prefix affinity for provider stickiness, skipping client session id binding. */
+                        affinityIgnoreClientSessionId: boolean;
                         /**
                          * Format: date-time
                          * @description Creation time.

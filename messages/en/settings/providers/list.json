@@ -43,13 +43,5 @@
   "actionDelete": "Delete",
   "selectProvider": "Select {name}",
   "schedule": "Schedule",
-  "proxyEnabled": "Proxy enabled",
-  "cacheEffectiveness": {
-    "label": "Cache Effect",
-    "hitRate": "Hit Rate",
-    "confidence": "Confidence",
-    "samples": "Samples",
-    "score": "Score",
-    "empty": "No cache data yet"
-  }
+  "proxyEnabled": "Proxy enabled"
 }

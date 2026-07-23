@@ -43,13 +43,5 @@
   "actionDelete": "刪除",
   "selectProvider": "選擇 {name}",
   "schedule": "排程",
-  "proxyEnabled": "已啟用代理",
-  "cacheEffectiveness": {
-    "label": "快取成效",
-    "hitRate": "命中率",
-    "confidence": "信心度",
-    "samples": "樣本",
-    "score": "成效分",
-    "empty": "尚無快取資料"
-  }
+  "proxyEnabled": "已啟用代理"
 }

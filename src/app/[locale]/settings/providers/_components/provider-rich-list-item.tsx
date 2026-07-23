@@ -82,7 +82,6 @@ import { GroupEditCombobox } from "./group-edit-combobox";
 import { InlineEditPopover } from "./inline-edit-popover";
 import { invalidateProviderQueries } from "./invalidate-provider-queries";
 import { PriorityEditPopover } from "./priority-edit-popover";
-import { ProviderCacheEffectivenessCard } from "./provider-cache-effectiveness-card";
 import { ProviderEndpointHover } from "./provider-endpoint-hover";
 import { ProviderFormDialogContent } from "./provider-form-dialog-content";
 
@@ -963,9 +962,6 @@ function ProviderRichListItemInner({
             </>
           )}
         </div>
-
-        {/* Desktop: latest cache effectiveness window */}
-        <ProviderCacheEffectivenessCard providerId={provider.id} />
 
         {/* Desktop: action buttons */}
         <div className="hidden md:flex items-center gap-1 flex-shrink-0">

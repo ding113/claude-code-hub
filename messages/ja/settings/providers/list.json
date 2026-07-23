@@ -43,13 +43,5 @@
   "actionDelete": "削除",
   "selectProvider": "{name} を選択",
   "schedule": "スケジュール",
-  "proxyEnabled": "プロキシ有効",
-  "cacheEffectiveness": {
-    "label": "キャッシュ効果",
-    "hitRate": "ヒット率",
-    "confidence": "信頼度",
-    "samples": "サンプル",
-    "score": "スコア",
-    "empty": "キャッシュデータはまだありません"
-  }
+  "proxyEnabled": "プロキシ有効"
 }
