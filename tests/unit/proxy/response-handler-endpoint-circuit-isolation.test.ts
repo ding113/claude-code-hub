@@ -1004,7 +1004,7 @@ describe("Endpoint circuit breaker isolation", () => {
     expect(mockRecordSuccess).not.toHaveBeenCalled();
     expect(mockRecordFailure).toHaveBeenCalledWith(
       1,
-      expect.objectContaining({ message: "STREAM_COMPLETION_MARKER_MISSING" })
+      expect.objectContaining({ message: "FAKE_200_OPENAI_RESPONSE_FAILED: upstream failed" })
     );
   });
 
