@@ -104,7 +104,7 @@ const discoveryTrace: RoutingTraceV1 = {
   events: [],
 };
 
-describe("usage-logs-table Codex reasoning effort", () => {
+describe("usage-logs-table thinking effort", () => {
   test("在计费模型右侧显示思考强度列", () => {
     const html = renderToStaticMarkup(
       <UsageLogsTable
@@ -153,6 +153,83 @@ describe("usage-logs-table Codex reasoning effort", () => {
     expect(cells[7]?.textContent).toContain("low");
     expect(cells[7]?.textContent).toContain("max");
     expect(cells[7]?.className).toContain("overflow-hidden");
+  });
+
+  test("显示 Anthropic 请求的思考强度", () => {
+    const html = renderToStaticMarkup(
+      <UsageLogsTable
+        logs={[
+          makeLog({
+            model: "claude-opus-4-5",
+            specialSettings: [
+              {
+                type: "anthropic_effort",
+                scope: "request",
+                hit: true,
+                effort: "medium",
+              },
+            ],
+          }),
+        ]}
+        total={1}
+        page={1}
+        pageSize={50}
+        onPageChange={() => {}}
+        isPending={false}
+      />
+    );
+    const container = document.createElement("div");
+    container.innerHTML = html;
+
+    const cells = [...container.querySelectorAll("tbody tr:first-child td")];
+    expect(cells[7]?.textContent).toContain("medium");
+  });
+
+  test("hiddenColumns 含 reasoningEffort 时隐藏思考强度列", () => {
+    const html = renderToStaticMarkup(
+      <UsageLogsTable
+        logs={[
+          makeLog({
+            specialSettings: [
+              { type: "codex_reasoning_effort", scope: "request", hit: true, effort: "high" },
+            ],
+          }),
+        ]}
+        total={1}
+        page={1}
+        pageSize={50}
+        onPageChange={() => {}}
+        isPending={false}
+        hiddenColumns={["reasoningEffort"]}
+      />
+    );
+    const container = document.createElement("div");
+    container.innerHTML = html;
+
+    const headers = [...container.querySelectorAll("thead th")].map((node) => node.textContent);
+    expect(headers).not.toContain("logs.columns.reasoningEffort");
+    expect(headers).toHaveLength(12);
+    expect(container.querySelectorAll("tbody tr:first-child td")).toHaveLength(12);
+    expect(html).not.toContain('data-slot="thinking-effort"');
+  });
+
+  test("隐藏思考强度列后空态占满全部可见列", () => {
+    const html = renderToStaticMarkup(
+      <UsageLogsTable
+        logs={[]}
+        total={0}
+        page={1}
+        pageSize={50}
+        onPageChange={() => {}}
+        isPending={false}
+        hiddenColumns={["reasoningEffort"]}
+      />
+    );
+    const container = document.createElement("div");
+    container.innerHTML = html;
+
+    const emptyCell = container.querySelector("tbody td");
+    expect(emptyCell?.getAttribute("colspan")).toBe("12");
   });
 });
 

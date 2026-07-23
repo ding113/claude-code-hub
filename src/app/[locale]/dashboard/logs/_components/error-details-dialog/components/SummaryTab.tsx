@@ -26,8 +26,6 @@ import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Link } from "@/i18n/routing";
 import { cn, formatTokenAmount } from "@/lib/utils";
-import { extractAnthropicEffortInfo } from "@/lib/utils/anthropic-effort";
-import { extractCodexReasoningEffortInfo } from "@/lib/utils/codex-reasoning-effort";
 import { formatCurrency } from "@/lib/utils/currency";
 import { buildHedgeBillingTable } from "@/lib/utils/hedge-billing";
 import { resolveModelAuditDisplay } from "@/lib/utils/model-audit-display";
@@ -36,6 +34,7 @@ import {
   getThinkingSignatureModelDetectionSpecialSetting,
   hasPriorityServiceTierSpecialSetting,
 } from "@/lib/utils/special-settings";
+import { extractThinkingEffortInfo } from "@/lib/utils/thinking-effort";
 import { getFake200ReasonKey } from "../../fake200-reason";
 import { Fake200RetryTooltip } from "../../fake200-retry-tooltip";
 import {
@@ -109,27 +108,18 @@ export function SummaryTab({
     getThinkingSignatureModelDetectionSpecialSetting(specialSettings);
   const showNoSignatureBadge =
     thinkingSignatureDetection?.source === "fallback_no_signature_with_thinking";
-  const anthropicEffortInfo = extractAnthropicEffortInfo(specialSettings);
-  const codexReasoningEffortInfo = extractCodexReasoningEffortInfo(specialSettings);
-  const effortDisplay = codexReasoningEffortInfo
+  const thinkingEffortInfo = extractThinkingEffortInfo(specialSettings);
+  const effortMessageKey = thinkingEffortInfo?.source === "codex" ? "reasoningEffort" : "effort";
+  const effortDisplay = thinkingEffortInfo
     ? {
-        requestedEffort: codexReasoningEffortInfo.requestedEffort,
-        effectiveEffort: codexReasoningEffortInfo.effectiveEffort,
-        isOverridden: codexReasoningEffortInfo.isOverridden,
-        label: t("reasoningEffort.label"),
-        tooltip: t("reasoningEffort.tooltip"),
-        overridden: t("reasoningEffort.overridden"),
+        requestedEffort: thinkingEffortInfo.requestedEffort,
+        effectiveEffort: thinkingEffortInfo.effectiveEffort,
+        isOverridden: thinkingEffortInfo.isOverridden,
+        label: t(`${effortMessageKey}.label`),
+        tooltip: t(`${effortMessageKey}.tooltip`),
+        overridden: t(`${effortMessageKey}.overridden`),
       }
-    : anthropicEffortInfo
-      ? {
-          requestedEffort: anthropicEffortInfo.originalEffort,
-          effectiveEffort: anthropicEffortInfo.overriddenEffort,
-          isOverridden: anthropicEffortInfo.isOverridden,
-          label: t("effort.label"),
-          tooltip: t("effort.tooltip"),
-          overridden: t("effort.overridden"),
-        }
-      : null;
+    : null;
   const isFake200PostStreamFailure =
     typeof errorMessage === "string" && errorMessage.startsWith("FAKE_200_");
   const fake200Code =

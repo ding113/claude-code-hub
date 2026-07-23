@@ -42,10 +42,10 @@ import { isProviderFinalized } from "@/lib/utils/provider-display";
 import { hasPriorityServiceTierSpecialSetting } from "@/lib/utils/special-settings";
 import type { UsageLogRow, UsageLogsBatchResult } from "@/repository/usage-logs";
 import type { BillingModelSource } from "@/types/system-config";
-import { CodexReasoningEffortDisplay } from "./codex-reasoning-effort-display";
 import { ErrorDetailsDialog } from "./error-details-dialog";
 import { ModelDisplayWithRedirect } from "./model-display-with-redirect";
 import { ProviderChainPopover } from "./provider-chain-popover";
+import { ThinkingEffortDisplay } from "./thinking-effort-display";
 
 const BATCH_SIZE = 50;
 const ROW_HEIGHT = 52; // Estimated row height in pixels
@@ -139,6 +139,7 @@ export function VirtualizedLogsTable({
   const shouldPoll = autoRefreshEnabled && !isHistoryBrowsing;
 
   const hideProviderColumn = hiddenColumns?.includes("provider") ?? false;
+  const hideReasoningEffortColumn = hiddenColumns?.includes("reasoningEffort") ?? false;
   const hideUserColumn = hiddenColumns?.includes("user") ?? false;
   const hideKeyColumn = hiddenColumns?.includes("key") ?? false;
   const hideSessionIdColumn = hiddenColumns?.includes("sessionId") ?? false;
@@ -693,12 +694,14 @@ export function VirtualizedLogsTable({
               >
                 {t("logs.columns.model")}
               </div>
-              <div
-                className="flex-[0.9] min-w-[100px] px-1.5 truncate"
-                title={t("logs.columns.reasoningEffort")}
-              >
-                {t("logs.columns.reasoningEffort")}
-              </div>
+              {hideReasoningEffortColumn ? null : (
+                <div
+                  className="flex-[0.6] min-w-[64px] px-1.5 truncate"
+                  title={t("logs.columns.reasoningEffortTooltip")}
+                >
+                  {t("logs.columns.reasoningEffort")}
+                </div>
+              )}
               {hideTokensColumn ? null : (
                 <div
                   className="flex-[0.7] min-w-[70px] text-right px-1.5 truncate"
@@ -1005,10 +1008,12 @@ export function VirtualizedLogsTable({
                       </TooltipProvider>
                     </div>
 
-                    {/* Codex Reasoning Effort */}
-                    <div className="flex-[0.9] min-w-[100px] overflow-hidden px-1.5 font-mono text-xs">
-                      <CodexReasoningEffortDisplay specialSettings={log.specialSettings} />
-                    </div>
+                    {/* Thinking Effort */}
+                    {hideReasoningEffortColumn ? null : (
+                      <div className="flex-[0.6] min-w-[64px] overflow-hidden px-1.5 font-mono text-xs">
+                        <ThinkingEffortDisplay specialSettings={log.specialSettings} />
+                      </div>
+                    )}
 
                     {/* Tokens */}
                     {hideTokensColumn ? null : (
