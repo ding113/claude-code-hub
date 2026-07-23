@@ -1161,7 +1161,7 @@ describe("Endpoint circuit breaker isolation", () => {
     expect(mockRecordSuccess).not.toHaveBeenCalled();
     expect(mockRecordFailure).toHaveBeenCalledWith(
       1,
-      expect.objectContaining({ message: "UPSTREAM_PROTOCOL_ERROR" })
+      expect.objectContaining({ message: "FAKE_200_OPENAI_RESPONSE_FAILED" })
     );
   });
 
