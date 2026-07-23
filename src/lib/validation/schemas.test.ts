@@ -158,6 +158,39 @@ describe("Provider schemas - priority/weight/costMultiplier 规则对齐", () =>
   });
 });
 
+describe("Provider schemas - Codex reasoning effort", () => {
+  const baseCreate = {
+    name: "Codex max",
+    url: "https://api.openai.com",
+    key: "sk-test",
+    provider_type: "codex" as const,
+  };
+
+  test("创建和更新供应商时接受官方 max 档位", () => {
+    expect(
+      CreateProviderSchema.safeParse({
+        ...baseCreate,
+        codex_reasoning_effort_preference: "max",
+      }).success
+    ).toBe(true);
+    expect(
+      UpdateProviderSchema.safeParse({ codex_reasoning_effort_preference: "max" }).success
+    ).toBe(true);
+  });
+
+  test("ultra 是 Codex 产品模式，不是 Responses API reasoning.effort", () => {
+    expect(
+      CreateProviderSchema.safeParse({
+        ...baseCreate,
+        codex_reasoning_effort_preference: "ultra",
+      }).success
+    ).toBe(false);
+    expect(
+      UpdateProviderSchema.safeParse({ codex_reasoning_effort_preference: "ultra" }).success
+    ).toBe(false);
+  });
+});
+
 describe("Provider schemas - custom_headers", () => {
   const baseCreate = {
     name: "测试供应商",

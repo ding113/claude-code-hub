@@ -33,6 +33,7 @@ import {
   undoProviderDelete,
   undoProviderPatch,
 } from "@/lib/api-client/v1/actions/providers";
+import { getProviderBatchErrorTranslationKey } from "@/lib/provider-batch-error-i18n";
 import { PROVIDER_BATCH_PATCH_ERROR_CODES } from "@/lib/provider-batch-patch-error-codes";
 import type { ProviderDisplay } from "@/types/provider";
 import { FormTabNav } from "../forms/provider-form/components/form-tab-nav";
@@ -191,7 +192,8 @@ function BatchEditDialogContent({
       if (result.ok) {
         setPreviewResult(result.data);
       } else {
-        toast.error(t("toast.previewFailed", { error: result.error }));
+        const key = getProviderBatchErrorTranslationKey(result.errorCode);
+        toast.error(t("toast.previewFailed", { error: key ? t(key) : result.error }));
         setStep("edit");
       }
     } catch (error) {
@@ -242,7 +244,8 @@ function BatchEditDialogContent({
                   toast.success(t("toast.undoSuccess", { count: undoResult.data.revertedCount }));
                   queryClient.invalidateQueries({ queryKey: ["providers"] });
                 } else {
-                  toast.error(t("toast.undoFailed", { error: undoResult.error }));
+                  const key = getProviderBatchErrorTranslationKey(undoResult.errorCode);
+                  toast.error(t("toast.undoFailed", { error: key ? t(key) : undoResult.error }));
                 }
               } catch (err) {
                 const msg = err instanceof Error ? err.message : t("toast.unknownError");
@@ -252,7 +255,8 @@ function BatchEditDialogContent({
           },
         });
       } else {
-        toast.error(t("toast.failed", { error: result.error }));
+        const key = getProviderBatchErrorTranslationKey(result.errorCode);
+        toast.error(t("toast.failed", { error: key ? t(key) : result.error }));
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : t("toast.unknownError");

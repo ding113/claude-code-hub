@@ -131,6 +131,7 @@
       "ip": "IP",
       "provider": "プロバイダー",
       "model": "課金モデル",
+      "reasoningEffort": "推論強度",
       "endpoint": "エンドポイント",
       "inputTokens": "入力",
       "outputTokens": "出力",
@@ -513,6 +514,11 @@
           "client_abort": "クライアントが切断しました",
           "winner_committed": "別の Provider が勝者として確定しました"
         }
+      },
+      "reasoningEffort": {
+        "label": "推論強度",
+        "overridden": "プロバイダーにより上書き",
+        "tooltip": "Codex リクエストの推論強度 (reasoning.effort) をそのまま表示します。"
       },
       "logicTrace": {
         "title": "決定チェーン",

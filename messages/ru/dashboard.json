@@ -131,6 +131,7 @@
       "ip": "IP",
       "provider": "Поставщик",
       "model": "Модель тарификации",
+      "reasoningEffort": "Интенсивность рассуждений",
       "endpoint": "Эндпоинт",
       "inputTokens": "Вход",
       "outputTokens": "Выход",
@@ -513,6 +514,11 @@
           "client_abort": "Клиент отключился",
           "winner_committed": "Другой провайдер был выбран победителем"
         }
+      },
+      "reasoningEffort": {
+        "label": "Интенсивность рассуждений",
+        "overridden": "Переопределено провайдером",
+        "tooltip": "Интенсивность рассуждений в запросе Codex (reasoning.effort), показанная без изменений."
       },
       "logicTrace": {
         "title": "Цепочка решений",

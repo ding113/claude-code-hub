@@ -36,6 +36,7 @@ import {
 } from "@/lib/utils/special-settings";
 import type { UsageLogRow } from "@/repository/usage-logs";
 import type { BillingModelSource } from "@/types/system-config";
+import { CodexReasoningEffortDisplay } from "./codex-reasoning-effort-display";
 import { ErrorDetailsDialog } from "./error-details-dialog";
 import { ModelDisplayWithRedirect } from "./model-display-with-redirect";
 import { ProviderChainPopover } from "./provider-chain-popover";
@@ -105,6 +106,7 @@ export function UsageLogsTable({
               <TableHead className="w-[140px] max-w-[140px]">{t("logs.columns.ip")}</TableHead>
               <TableHead>{t("logs.columns.provider")}</TableHead>
               <TableHead>{t("logs.columns.model")}</TableHead>
+              <TableHead>{t("logs.columns.reasoningEffort")}</TableHead>
               <TableHead className="text-right">{t("logs.columns.tokens")}</TableHead>
               <TableHead className="text-right">{t("logs.columns.cache")}</TableHead>
               <TableHead className="text-right">{t("logs.columns.cost")}</TableHead>
@@ -115,7 +117,7 @@ export function UsageLogsTable({
           <TableBody>
             {logs.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={12} className="text-center text-muted-foreground">
+                <TableCell colSpan={13} className="text-center text-muted-foreground">
                   {t("logs.table.noData")}
                 </TableCell>
               </TableRow>
@@ -301,6 +303,9 @@ export function UsageLogsTable({
                           </TooltipContent>
                         </Tooltip>
                       </TooltipProvider>
+                    </TableCell>
+                    <TableCell className="font-mono text-xs w-[120px] max-w-[120px] overflow-hidden">
+                      <CodexReasoningEffortDisplay specialSettings={log.specialSettings} />
                     </TableCell>
                     <TableCell className="text-right font-mono text-xs">
                       <TooltipProvider>

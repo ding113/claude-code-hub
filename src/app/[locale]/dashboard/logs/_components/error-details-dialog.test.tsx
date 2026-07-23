@@ -284,6 +284,11 @@ const messages = {
           technicalTimeline: "Technical Timeline",
           copyTimeline: "Copy Timeline",
         },
+        reasoningEffort: {
+          label: "Reasoning effort",
+          overridden: "Overridden by provider",
+          tooltip: "Thinking effort in the Codex request (reasoning.effort), shown verbatim.",
+        },
         logicTrace: {
           title: "Decision Chain",
           singleRouteSelectionTitle: "Provider selection under single-route protection",
@@ -465,6 +470,48 @@ describe("error-details-dialog layout", () => {
 
     expect(html).toContain("Special settings");
     expect(html).toContain("provider_parameter_override");
+  });
+
+  test("renders Codex reasoning effort and provider override in request details", () => {
+    const html = renderWithIntl(
+      <ErrorDetailsDialog
+        externalOpen
+        statusCode={200}
+        errorMessage={null}
+        providerChain={null}
+        sessionId={null}
+        specialSettings={[
+          {
+            type: "codex_reasoning_effort",
+            scope: "request",
+            hit: true,
+            effort: "low",
+          },
+          {
+            type: "provider_parameter_override",
+            scope: "provider",
+            providerId: 1,
+            providerName: "Codex",
+            providerType: "codex",
+            hit: true,
+            changed: true,
+            changes: [{ path: "reasoning.effort", before: "low", after: "high", changed: true }],
+          },
+        ]}
+      />
+    );
+
+    expect(html).toContain("Reasoning effort");
+    expect(html).toContain("Thinking effort in the Codex request");
+    expect(html).toContain("Overridden by provider");
+    expect(html).toContain("low");
+    expect(html).toContain("high");
+
+    const container = document.createElement("div");
+    container.innerHTML = html;
+    expect(container.querySelector("svg.lucide-arrow-right")?.getAttribute("aria-hidden")).toBe(
+      "true"
+    );
   });
 
   test("renders key metrics when cost and duration are present", () => {

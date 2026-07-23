@@ -34,6 +34,7 @@ import {
   previewProviderBatchPatch,
   undoProviderPatch,
 } from "@/lib/api-client/v1/actions/providers";
+import { getProviderBatchErrorTranslationKey } from "@/lib/provider-batch-error-i18n";
 import { cn } from "@/lib/utils";
 import type { ProviderDisplay } from "@/types/provider";
 import {
@@ -183,7 +184,8 @@ export function BatchTestDialog({ open, onOpenChange, providers }: BatchTestDial
         const patch = { is_enabled: { set: enabled } };
         const preview = await previewProviderBatchPatch({ providerIds, patch });
         if (!preview.ok) {
-          toast.error(t("toast.bulkFailed", { error: preview.error }));
+          const key = getProviderBatchErrorTranslationKey(preview.errorCode);
+          toast.error(t("toast.bulkFailed", { error: key ? t(key) : preview.error }));
           return;
         }
         const result = await applyProviderBatchPatch({
@@ -194,7 +196,8 @@ export function BatchTestDialog({ open, onOpenChange, providers }: BatchTestDial
           excludeProviderIds: [],
         });
         if (!result.ok) {
-          toast.error(t("toast.bulkFailed", { error: result.error }));
+          const key = getProviderBatchErrorTranslationKey(result.errorCode);
+          toast.error(t("toast.bulkFailed", { error: key ? t(key) : result.error }));
           return;
         }
 
@@ -223,7 +226,8 @@ export function BatchTestDialog({ open, onOpenChange, providers }: BatchTestDial
                   toast.success(t("toast.undoSuccess", { count: undoResult.data.revertedCount }));
                   queryClient.invalidateQueries({ queryKey: ["providers"] });
                 } else {
-                  toast.error(t("toast.undoFailed", { error: undoResult.error }));
+                  const key = getProviderBatchErrorTranslationKey(undoResult.errorCode);
+                  toast.error(t("toast.undoFailed", { error: key ? t(key) : undoResult.error }));
                 }
               } catch (err) {
                 const msg = err instanceof Error ? err.message : t("toast.unknownError");

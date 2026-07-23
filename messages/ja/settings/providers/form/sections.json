@@ -237,15 +237,16 @@
         }
       },
       "reasoningEffort": {
-        "help": "回答前にモデルが使う推論の強度（推論トークン量）を制御します。「クライアントに従う」はリクエストを変更しません。その他の値は reasoning.effort を強制します。注意: none は GPT-5.4 mini のみ、未対応モデルではエラーになります。",
+        "help": "回答前にモデルが使う推論の強度（推論トークン量）を制御します。「クライアントに従う」はリクエストを変更しません。その他の値は reasoning.effort を強制します。利用可能なレベルはモデルごとに異なり、未対応の値ではエラーになります。",
         "label": "推論強度オーバーライド",
         "options": {
           "high": "high",
           "inherit": "オーバーライドしない（クライアントに従う）",
           "low": "low",
+          "max": "max（最高強度）",
           "medium": "medium（デフォルト）",
           "minimal": "minimal",
-          "none": "none（GPT-5.4 mini のみ）",
+          "none": "none",
           "xhigh": "xhigh"
         }
       },

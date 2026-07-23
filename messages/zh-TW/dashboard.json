@@ -131,6 +131,7 @@
       "ip": "IP",
       "provider": "供應商",
       "model": "計費模型",
+      "reasoningEffort": "思考強度",
       "endpoint": "端點",
       "inputTokens": "輸入",
       "outputTokens": "輸出",
@@ -513,6 +514,11 @@
           "client_abort": "客戶端已斷開",
           "winner_committed": "其他供應商已提交為贏家"
         }
+      },
+      "reasoningEffort": {
+        "label": "思考強度",
+        "overridden": "已被供應商覆寫",
+        "tooltip": "Codex 請求中的思考強度（reasoning.effort），按原值顯示。"
       },
       "logicTrace": {
         "title": "決策鏈",

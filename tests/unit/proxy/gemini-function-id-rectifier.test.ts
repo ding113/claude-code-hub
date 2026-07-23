@@ -42,6 +42,27 @@ Invalid JSON payload received. Unknown name "id" at 'contents[2].parts[0].functi
       expect(trigger).toBe("unknown_function_id_field");
     });
 
+    it("should detect JSON-escaped quotes in forwarder detailed error messages", () => {
+      // 转发链路把上游 JSON body 原样拼进错误消息，message 字段内层引号为 \" 转义形态
+      const trigger = detectGeminiFunctionIdRectifierTrigger(
+        `Provider Vertex AI returned 400: Provider returned 400: Bad Request | Upstream: {
+  "error": {
+    "code": 400,
+    "message": "Invalid JSON payload received. Unknown name \\"id\\" at 'contents[2].parts[0].function_call': Cannot find field.\\nInvalid JSON payload received. Unknown name \\"id\\" at 'contents[3].parts[0].function_response': Cannot find field.",
+    "status": "INVALID_ARGUMENT"
+  }
+}`
+      );
+      expect(trigger).toBe("unknown_function_id_field");
+    });
+
+    it("should not detect JSON-escaped id violation on unrelated path", () => {
+      const trigger = detectGeminiFunctionIdRectifierTrigger(
+        `Provider returned 400 | Upstream: {"error":{"message":"Invalid JSON payload received. Unknown name \\"id\\" at 'generation_config': Cannot find field."}}`
+      );
+      expect(trigger).toBeNull();
+    });
+
     it("should not cross-match id violation on one path with function field on another", () => {
       const trigger = detectGeminiFunctionIdRectifierTrigger(
         `Invalid JSON payload received. Unknown name "id" at 'generation_config': Cannot find field.
@@ -62,6 +83,19 @@ Invalid JSON payload received. Unknown name "foo" at 'contents[0].parts[0].funct
         `Unknown name "foo" at generation_config Unknown name "id" at contents[0].parts[0].function_call`
       );
       expect(trigger).toBe("unknown_function_id_field");
+    });
+
+    it("should not match function_calling_config paths via substring", () => {
+      expect(
+        detectGeminiFunctionIdRectifierTrigger(
+          `Invalid JSON payload received. Unknown name "id" at 'tool_config.function_calling_config': Cannot find field.`
+        )
+      ).toBeNull();
+      expect(
+        detectGeminiFunctionIdRectifierTrigger(
+          `Unknown name "id" at 'toolConfig.functionCallingConfig'`
+        )
+      ).toBeNull();
     });
 
     it("should return null when unknown field is not id", () => {
