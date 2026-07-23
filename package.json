@@ -20,6 +20,7 @@
     "test:ui": "vitest --ui --watch",
     "test:e2e": "vitest run --config tests/configs/e2e.config.ts --reporter=verbose",
     "test:integration": "vitest run --config tests/configs/integration.config.ts --reporter=verbose",
+    "test:integration:provider-batch-ledger": "vitest run --config tests/configs/provider-batch-ledger-postgres.config.ts",
     "test:coverage": "vitest run --coverage",
     "test:coverage:logs-sessionid-time-filter": "vitest run --config tests/configs/logs-sessionid-time-filter.config.ts --coverage",
     "test:coverage:codex-session-id-completer": "vitest run --config tests/configs/codex-session-id-completer.config.ts --coverage",

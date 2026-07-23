@@ -20,7 +20,20 @@ export type GeminiFunctionIdRectifierResult = {
 // 逐条提取 `unknown name "id" at <path>` 违规中的 path，引号路径与无引号路径分开捕获
 // （兼容网关改写文案）：引号路径在闭合引号截断，无引号路径在空白/冒号/换行截断，
 // 防止多条违规被合并到一行时跨违规误捕获。
-const ID_VIOLATION_PATTERN = /unknown name "id" at\s+(?:'([^':\n]+)'|([^\s':\n]+))/g;
+// `id` 两侧允许任意个反斜杠：转发链路常把上游 JSON body 原样拼进错误消息
+// （如 `... | Upstream: {"error":{"message":"... Unknown name \"id\" ..."}}`），
+// 此时消息字段内层引号处于 JSON 转义形态，裸引号正则会漏检。
+const ID_VIOLATION_PATTERN = /unknown name \\*"id\\*" at\s+(?:'([^':\n]+)'|([^\s':\n]+))/g;
+
+// 函数字段的路径段全名（小写化后）。必须整段精确匹配而非子串包含：
+// `tool_config.function_calling_config` 等真实 Gemini 路径含 `function_call` 子串，
+// 子串匹配会把无关违规误判为函数字段 id 违规。
+const FUNCTION_FIELD_SEGMENTS = new Set([
+  "function_call",
+  "function_response",
+  "functioncall",
+  "functionresponse",
+]);
 
 export function detectGeminiFunctionIdRectifierTrigger(
   errorMessage: string | null | undefined
@@ -34,12 +47,11 @@ export function detectGeminiFunctionIdRectifierTrigger(
   // 兼容 snake_case（Vertex 错误文案）与 camelCase（部分兼容网关）两种路径写法。
   for (const match of lower.matchAll(ID_VIOLATION_PATTERN)) {
     const path = match[1] ?? match[2] ?? "";
-    if (
-      path.includes("function_call") ||
-      path.includes("function_response") ||
-      path.includes("functioncall") ||
-      path.includes("functionresponse")
-    ) {
+    const hasFunctionFieldSegment = path
+      .split(".")
+      .some((segment) => FUNCTION_FIELD_SEGMENTS.has(segment.replace(/\[\d+\]$/, "")));
+
+    if (hasFunctionFieldSegment) {
       return "unknown_function_id_field";
     }
   }

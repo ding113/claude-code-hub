@@ -57,6 +57,15 @@
     "thinkingBudget": "Thinking Budget",
     "adaptiveThinking": "Adaptive Thinking"
   },
+  "errors": {
+    "nothingToApply": "There are no changes to apply.",
+    "previewExpired": "The preview expired. Create a new preview.",
+    "previewStale": "Provider settings changed after the preview. Create a new preview.",
+    "idempotencyConflict": "This idempotency key was already used for another operation.",
+    "undoExpired": "The undo window expired or was already used.",
+    "undoConflict": "The undo token does not match this operation.",
+    "undoStale": "The provider can no longer be restored automatically. Refresh and review its current state."
+  },
   "toast": {
     "previewFailed": "Preview failed: {error}",
     "unknownError": "Unknown error",

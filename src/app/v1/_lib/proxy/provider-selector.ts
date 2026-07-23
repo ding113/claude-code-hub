@@ -4,7 +4,11 @@ import { PROVIDER_GROUP } from "@/lib/constants/provider.constants";
 import { logger } from "@/lib/logger";
 import { RateLimitService } from "@/lib/rate-limit";
 import { SessionManager } from "@/lib/session-manager";
-import { parseProviderGroups, resolveProviderGroupsWithDefault } from "@/lib/utils/provider-group";
+import {
+  parseProviderGroups,
+  resolveBillingProviderGroups,
+  resolveProviderGroupsWithDefault,
+} from "@/lib/utils/provider-group";
 import { isProviderActiveNow } from "@/lib/utils/provider-schedule";
 import { resolveSystemTimezone } from "@/lib/utils/timezone";
 import { isVendorTypeCircuitOpen } from "@/lib/vendor-type-circuit-breaker";
@@ -61,6 +65,46 @@ function checkProviderGroupMatch(providerGroupTag: string | null, userGroups: st
   const providerTags = resolveProviderGroupsWithDefault(providerGroupTag);
 
   return providerTags.some((tag) => groups.includes(tag));
+}
+
+async function resolveGroupCostMultiplierForProvider(session: ProxySession): Promise<void> {
+  const effectiveGroup = getEffectiveProviderGroup(session);
+  const provider = session.provider;
+
+  if (!effectiveGroup || !provider) {
+    session.setGroupCostMultiplier(1.0);
+    return;
+  }
+
+  const billingGroups = resolveBillingProviderGroups(provider.groupTag, effectiveGroup);
+  if (billingGroups.length === 0) {
+    logger.warn(
+      "[ProviderResolver] Selected provider has no billing group intersection, falling back to 1.0",
+      {
+        providerId: provider.id,
+        providerName: provider.name,
+        providerGroups: provider.groupTag,
+        effectiveGroup,
+      }
+    );
+    session.setGroupCostMultiplier(1.0);
+    return;
+  }
+
+  const billingGroup = billingGroups.join(",");
+
+  try {
+    const multiplier = await getGroupCostMultiplier(billingGroup);
+    session.setGroupCostMultiplier(multiplier);
+  } catch (error) {
+    logger.warn("[ProviderResolver] Failed to resolve group cost multiplier, falling back to 1.0", {
+      billingGroup,
+      effectiveGroup,
+      providerId: provider.id,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    session.setGroupCostMultiplier(1.0);
+  }
 }
 
 /**
@@ -184,26 +228,6 @@ export class ProxyProviderResolver {
       );
       session.setProvider(provider);
       session.setLastSelectionContext(context); // 保存用于后续记录
-    }
-
-    // === Resolve group cost multiplier ===
-    // Fail soft: if the lookup throws (Redis/DB hiccup), fall back to 1.0 so
-    // request handling proceeds without billing disruption.
-    const effectiveGroup = getEffectiveProviderGroup(session);
-    if (effectiveGroup) {
-      try {
-        const multiplier = await getGroupCostMultiplier(effectiveGroup);
-        session.setGroupCostMultiplier(multiplier);
-      } catch (error) {
-        logger.warn(
-          "[ProviderResolver] Failed to resolve group cost multiplier, falling back to 1.0",
-          {
-            effectiveGroup,
-            error: error instanceof Error ? error.message : String(error),
-          }
-        );
-        session.setGroupCostMultiplier(1.0);
-      }
     }
 
     // === 故障转移循环 ===
@@ -343,11 +367,13 @@ export class ProxyProviderResolver {
         // 修复：延迟到 forwarder 请求成功后统一更新（见 forwarder.ts:75-80）
         // void SessionManager.updateSessionProvider(...); // ❌ 已移除
 
+        await resolveGroupCostMultiplierForProvider(session);
         return null; // 成功
       }
 
       // sessionId 为空的情况（理论上不应该发生）
       logger.warn("ProviderSelector: sessionId is null, skipping concurrent check");
+      await resolveGroupCostMultiplierForProvider(session);
       return null;
     }
 

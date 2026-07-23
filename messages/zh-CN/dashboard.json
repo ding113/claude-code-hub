@@ -131,6 +131,7 @@
       "ip": "IP",
       "provider": "供应商",
       "model": "计费模型",
+      "reasoningEffort": "思考强度",
       "endpoint": "端点",
       "inputTokens": "输入",
       "outputTokens": "输出",
@@ -378,6 +379,11 @@
         "label": "Effort",
         "overridden": "已被供应商覆写",
         "tooltip": "客户端在请求体中声明的思考强度（output_config.effort），按原值显示，代理不会重命名或转换等级。"
+      },
+      "reasoningEffort": {
+        "label": "思考强度",
+        "overridden": "已被供应商覆写",
+        "tooltip": "Codex 请求中的思考强度（reasoning.effort），按原值显示。"
       },
       "logicTrace": {
         "title": "决策链",

@@ -39,6 +39,7 @@ const CODEX_REASONING_EFFORT_PREFERENCE = z.enum([
   "medium",
   "high",
   "xhigh",
+  "max",
 ]);
 const CODEX_REASONING_SUMMARY_PREFERENCE = z.enum(["inherit", "auto", "detailed"]);
 const CODEX_TEXT_VERBOSITY_PREFERENCE = z.enum(["inherit", "low", "medium", "high"]);

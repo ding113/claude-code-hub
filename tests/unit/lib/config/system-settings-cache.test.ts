@@ -7,6 +7,8 @@ const loggerDebugMock = vi.fn();
 const loggerWarnMock = vi.fn();
 const loggerInfoMock = vi.fn();
 
+const originalResponsesWebsocketEnv = process.env.ENABLE_OPENAI_RESPONSES_WEBSOCKET;
+
 vi.mock("server-only", () => ({}));
 
 vi.mock("@/repository/system-config", () => ({
@@ -73,6 +75,7 @@ async function loadCache() {
   return {
     getCachedSystemSettings: mod.getCachedSystemSettings,
     isHttp2Enabled: mod.isHttp2Enabled,
+    isOpenaiResponsesWebsocketEnabled: mod.isOpenaiResponsesWebsocketEnabled,
     invalidateSystemSettingsCache: mod.invalidateSystemSettingsCache,
   };
 }
@@ -82,10 +85,16 @@ beforeEach(() => {
   vi.resetModules();
   vi.useFakeTimers();
   vi.setSystemTime(new Date("2026-01-03T00:00:00.000Z"));
+  delete process.env.ENABLE_OPENAI_RESPONSES_WEBSOCKET;
 });
 
 afterEach(() => {
   vi.useRealTimers();
+  if (originalResponsesWebsocketEnv === undefined) {
+    delete process.env.ENABLE_OPENAI_RESPONSES_WEBSOCKET;
+  } else {
+    process.env.ENABLE_OPENAI_RESPONSES_WEBSOCKET = originalResponsesWebsocketEnv;
+  }
 });
 
 describe("SystemSettingsCache", () => {
@@ -177,5 +186,48 @@ describe("SystemSettingsCache", () => {
     const { isHttp2Enabled } = await loadCache();
 
     expect(await isHttp2Enabled()).toBe(true);
+  });
+
+  test.each([
+    ["true", true],
+    ["1", true],
+    ["false", false],
+    ["0", false],
+  ])("ENABLE_OPENAI_RESPONSES_WEBSOCKET=%s 应覆盖数据库设置", async (value, expected) => {
+    process.env.ENABLE_OPENAI_RESPONSES_WEBSOCKET = value;
+    getSystemSettingsMock.mockResolvedValueOnce(
+      createSettings({ enableOpenaiResponsesWebsocket: !expected })
+    );
+    const { isOpenaiResponsesWebsocketEnabled } = await loadCache();
+
+    expect(await isOpenaiResponsesWebsocketEnabled()).toBe(expected);
+    expect(getSystemSettingsMock).not.toHaveBeenCalled();
+  });
+
+  test("未设置 ENABLE_OPENAI_RESPONSES_WEBSOCKET 时应读取数据库设置", async () => {
+    getSystemSettingsMock.mockResolvedValueOnce(
+      createSettings({ enableOpenaiResponsesWebsocket: false })
+    );
+    const { isOpenaiResponsesWebsocketEnabled } = await loadCache();
+
+    expect(await isOpenaiResponsesWebsocketEnabled()).toBe(false);
+    expect(getSystemSettingsMock).toHaveBeenCalledTimes(1);
+  });
+
+  test("ENABLE_OPENAI_RESPONSES_WEBSOCKET 非法时应仅警告一次并回退数据库设置", async () => {
+    process.env.ENABLE_OPENAI_RESPONSES_WEBSOCKET = " false ";
+    getSystemSettingsMock.mockResolvedValueOnce(
+      createSettings({ enableOpenaiResponsesWebsocket: true })
+    );
+    const { isOpenaiResponsesWebsocketEnabled } = await loadCache();
+
+    expect(await isOpenaiResponsesWebsocketEnabled()).toBe(true);
+    expect(await isOpenaiResponsesWebsocketEnabled()).toBe(true);
+    expect(getSystemSettingsMock).toHaveBeenCalledTimes(1);
+    expect(loggerWarnMock).toHaveBeenCalledTimes(1);
+    expect(loggerWarnMock).toHaveBeenCalledWith(
+      "[SystemSettingsCache] Invalid ENABLE_OPENAI_RESPONSES_WEBSOCKET, using database setting",
+      { value: " false " }
+    );
   });
 });

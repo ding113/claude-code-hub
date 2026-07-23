@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import {
+  ALWAYS_VISIBLE_COLUMNS,
   DEFAULT_HIDDEN_COLUMNS,
   DEFAULT_VISIBLE_COLUMNS,
   getHiddenColumns,
@@ -49,6 +50,10 @@ describe("column-visibility", () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+  });
+
+  test("keeps reasoning effort visible beside the billing model", () => {
+    expect(ALWAYS_VISIBLE_COLUMNS).toEqual(["time", "model", "reasoningEffort", "status"]);
   });
 
   describe("getHiddenColumns", () => {
