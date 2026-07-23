@@ -2,7 +2,12 @@ import { getEnvConfig } from "@/lib/config/env.schema";
 import { logger } from "@/lib/logger";
 import { getCachedProxyRuntimeSettings } from "@/lib/system-settings/proxy-runtime";
 import { ProxyError } from "../errors";
-import { classifyFrame, type FrameVerdict, type ProtocolFamily } from "./frame-classifier";
+import {
+  classifyFrame,
+  type FrameVerdict,
+  isRequestEchoFrame,
+  type ProtocolFamily,
+} from "./frame-classifier";
 import { SseFrameParser } from "./sse-frames";
 
 /**
@@ -12,6 +17,8 @@ import { SseFrameParser } from "./sse-frames";
  * - error / malformed 帧 -> precommit 失败：调用方抛错走现有供应商切换循环
  * - terminal 先于 content / 流提前结束 -> 空流失败
  * - neutral 帧入缓冲；超过 event/byte 上限 -> prebuffer_overflow 失败
+ *   （请求回显帧不计入字节上限，见 isRequestEchoFrame）
+ * - 读间隔超过 idleTimeoutMs -> idle_timeout 失败（调用方按静默超时归类）
  * - read 拒绝（首字节超时 abort / 客户端断开）-> 原样返回错误，由调用方按来源归类
  *
  * 客户端在提交前收到的字节数恒为 0：失败时整段前缀被丢弃。
@@ -21,7 +28,8 @@ export type StreamGateFailureReason =
   | "gate_error"
   | "decode_error"
   | "empty_stream"
-  | "prebuffer_overflow";
+  | "prebuffer_overflow"
+  | "idle_timeout";
 
 /**
  * 门控 precommit 错误。继承 ProxyError（statusCode 502）——
@@ -41,6 +49,7 @@ export class StreamPrecommitError extends ProxyError {
       frameData?: string;
       framesSeen?: number;
       bufferedBytes?: number;
+      echoExcludedBytes?: number;
     }
   ) {
     const message = `Stream content gate rejected upstream before first valid content (${reason})`;
@@ -61,6 +70,7 @@ function buildGateErrorBody(
     frameData?: string;
     framesSeen?: number;
     bufferedBytes?: number;
+    echoExcludedBytes?: number;
   }
 ): string {
   if (reason === "gate_error" && detail.frameData) {
@@ -74,6 +84,7 @@ function buildGateErrorBody(
       family: detail.family,
       frames_seen: detail.framesSeen,
       buffered_bytes: detail.bufferedBytes,
+      ...(detail.echoExcludedBytes ? { echo_excluded_bytes: detail.echoExcludedBytes } : {}),
       ...(detail.frameData ? { frame_preview: detail.frameData.slice(0, 500) } : {}),
     },
   });
@@ -106,7 +117,7 @@ export function resolveStreamGateCaps(): StreamGateCaps {
       prebufferByteCap: env.STREAM_GATE_PREBUFFER_BYTE_CAP,
     };
   } catch {
-    return { prebufferEventCap: 64, prebufferByteCap: 256 * 1024 };
+    return { prebufferEventCap: 64, prebufferByteCap: 10 * 1024 * 1024 };
   }
 }
 
@@ -114,10 +125,36 @@ export interface StreamGateOptions extends StreamGateCaps {
   family: ProtocolFamily;
   providerId: number;
   providerName: string;
+  /** 首个非空上游 chunk 到达时回调一次（调用方用于清除首字节计时器，恢复其原始语义） */
+  onFirstByte?: () => void;
+  /** 门控等待期的读间隔静默上限（毫秒；<=0 或未设不启用），对齐提交后 response-handler 的静默超时 */
+  idleTimeoutMs?: number;
+  /** 记录触发提交的帧信息（高并发模式下关闭以省开销） */
+  captureCommitMarker?: boolean;
+}
+
+/** 触发门控提交的帧/chunk 标记（用于 Message 详情可观测性）。 */
+export interface StreamGateCommitMarker {
+  /** 触发提交的帧序号（1-based，含中性前缀帧） */
+  frameIndex: number;
+  /** 触发提交的帧所在网络 chunk 序号（1-based） */
+  chunkIndex: number;
+  /** 触发提交的 SSE event 名（无事件行时为 null） */
+  eventName: string | null;
+  /** 提交时已缓冲的前缀字节数 */
+  bufferedBytes: number;
+  /** 被排除出字节计数的请求回显帧字节数 */
+  echoExcludedBytes: number;
 }
 
 export type StreamGateResult =
-  | { committed: true; prefixChunks: Uint8Array[]; framesSeen: number; readerDone: boolean }
+  | {
+      committed: true;
+      prefixChunks: Uint8Array[];
+      framesSeen: number;
+      readerDone: boolean;
+      commitMarker: StreamGateCommitMarker | null;
+    }
   | { committed: false; error: Error };
 
 /**
@@ -134,7 +171,10 @@ export async function runStreamContentGate(
   const parser = new SseFrameParser();
   const buffered: Uint8Array[] = [];
   let bufferedBytes = 0;
+  let echoExcludedBytes = 0;
   let framesSeen = 0;
+  let chunkIndex = 0;
+  let firstByteSeen = false;
 
   const failure = (reason: StreamGateFailureReason, frameData?: string): StreamGateResult => ({
     committed: false,
@@ -145,13 +185,28 @@ export async function runStreamContentGate(
       frameData,
       framesSeen,
       bufferedBytes,
+      echoExcludedBytes,
     }),
+  });
+
+  const commit = (eventName: string | null, readerDone: boolean): StreamGateResult => ({
+    committed: true,
+    prefixChunks: buffered,
+    framesSeen,
+    readerDone,
+    commitMarker: options.captureCommitMarker
+      ? { frameIndex: framesSeen, chunkIndex, eventName, bufferedBytes, echoExcludedBytes }
+      : null,
   });
 
   while (true) {
     let readResult: ReadableStreamReadResult<Uint8Array>;
     try {
-      readResult = await reader.read();
+      const raced = await readWithIdleTimeout(reader, options.idleTimeoutMs);
+      if (raced === IDLE_TIMEOUT) {
+        return failure("idle_timeout");
+      }
+      readResult = raced;
     } catch (readError) {
       // 首字节超时 abort / 客户端断开 / 传输错误：原样上抛，调用方按来源归类
       return {
@@ -166,7 +221,7 @@ export async function runStreamContentGate(
         framesSeen++;
         const verdict = classifyFrame(options.family, frame.eventName, frame.data);
         if (verdict === "content") {
-          return { committed: true, prefixChunks: buffered, framesSeen, readerDone: true };
+          return commit(frame.eventName, true);
         }
         if (verdict === "error") return failure("gate_error", frame.data);
         if (verdict === "malformed") return failure("decode_error", frame.data);
@@ -178,6 +233,12 @@ export async function runStreamContentGate(
     if (!chunk || chunk.byteLength === 0) {
       continue;
     }
+    if (!firstByteSeen) {
+      firstByteSeen = true;
+      // 上游已开始响应：调用方在此清除首字节计时器（保持「首字节」而非「首内容」语义）
+      options.onFirstByte?.();
+    }
+    chunkIndex++;
     buffered.push(chunk);
     bufferedBytes += chunk.byteLength;
 
@@ -185,7 +246,7 @@ export async function runStreamContentGate(
       framesSeen++;
       const verdict: FrameVerdict = classifyFrame(options.family, frame.eventName, frame.data);
       if (verdict === "content") {
-        return { committed: true, prefixChunks: buffered, framesSeen, readerDone: false };
+        return commit(frame.eventName, false);
       }
       if (verdict === "error") {
         return failure("gate_error", frame.data);
@@ -197,15 +258,47 @@ export async function runStreamContentGate(
         // 干净终止先于任何内容 = 空流
         return failure("empty_stream", frame.data);
       }
-      // neutral: 继续缓冲；event 上限为逐帧硬上限（单 chunk 大量小帧也会触发）
+      // neutral: 继续缓冲；请求回显帧的载荷不计入字节上限（内存仍占用，由回显体积自然有界）
+      if (isRequestEchoFrame(options.family, frame.eventName, frame.data)) {
+        echoExcludedBytes += Buffer.byteLength(frame.data, "utf8");
+      }
+      // event 上限为逐帧硬上限（单 chunk 大量小帧也会触发）
       if (framesSeen > options.prebufferEventCap) {
         return failure("prebuffer_overflow");
       }
     }
 
-    if (bufferedBytes > options.prebufferByteCap) {
+    if (bufferedBytes - echoExcludedBytes > options.prebufferByteCap) {
       return failure("prebuffer_overflow");
     }
+  }
+}
+
+const IDLE_TIMEOUT = Symbol("stream_gate_idle_timeout");
+
+/**
+ * 单次 read 与静默计时器竞速。计时器胜出时挂起的 read 由调用方随后的
+ * reader.cancel 收尾；对其附加空 catch 防止孤儿 rejection。
+ */
+async function readWithIdleTimeout(
+  reader: ReadableStreamDefaultReader<Uint8Array>,
+  idleTimeoutMs: number | undefined
+): Promise<ReadableStreamReadResult<Uint8Array> | typeof IDLE_TIMEOUT> {
+  if (!idleTimeoutMs || idleTimeoutMs <= 0) {
+    return reader.read();
+  }
+  const readPromise = reader.read();
+  let timer: NodeJS.Timeout | undefined;
+  try {
+    return await Promise.race([
+      readPromise,
+      new Promise<typeof IDLE_TIMEOUT>((resolve) => {
+        timer = setTimeout(() => resolve(IDLE_TIMEOUT), idleTimeoutMs);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+    readPromise.catch(() => undefined);
   }
 }
 

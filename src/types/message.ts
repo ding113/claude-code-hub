@@ -248,6 +248,23 @@ export interface ProviderChainItem {
       | "ws_not_yet_implemented"
       | "ws_error_pre_first_event";
   };
+
+  // === F1 流式内容门控提交标记（enforce 提交成功时记录；高并发模式下省略） ===
+  streamGate?: {
+    frameIndex: number; // 触发提交的帧序号（1-based，含中性前缀帧）
+    chunkIndex: number; // 触发提交的帧所在网络 chunk 序号（1-based）
+    eventName: string | null; // 触发提交的 SSE event 名
+    bufferedBytes: number; // 提交时已缓冲的前缀字节数
+    echoExcludedBytes: number; // 被排除出字节计数的请求回显帧字节数
+    gateWaitMs: number; // 门控等待时长（首字节到提交）
+  };
+
+  // === F3a 亲和命中详情（reason === "affinity_hit" 时记录） ===
+  affinity?: {
+    matchedDepth: number | null; // 命中边界的消息深度（null = 无法定位）
+    matchedPrefixBytes: number | null; // 命中边界的规范化前缀字节数
+    matchedFp: string; // 命中的链式指纹（截断哈希）
+  };
 }
 
 /**

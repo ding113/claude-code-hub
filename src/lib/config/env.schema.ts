@@ -187,13 +187,14 @@ export const EnvSchema = z.object({
   // 流式内容门控：off=关闭；shadow=旁路分类只记录分歧；enforce=首个有效内容帧前缓冲+failover
   STREAM_GATE_MODE: z.enum(["off", "shadow", "enforce"]).default("off"),
   // 门控 precommit 缓冲上限：超限即视为该供应商流异常，failover 释放内存
+  // （字节计数排除请求回显帧，见 stream-gate/frame-classifier.ts isRequestEchoFrame）
   STREAM_GATE_PREBUFFER_EVENT_CAP: z.coerce.number().int().min(1).max(4096).default(64),
   STREAM_GATE_PREBUFFER_BYTE_CAP: z.coerce
     .number()
     .int()
     .min(1024)
-    .max(16 * 1024 * 1024)
-    .default(256 * 1024),
+    .max(64 * 1024 * 1024)
+    .default(10 * 1024 * 1024),
   // 请求分离 + Replay：客户端断开后上游继续引流缓存，相同请求体重发续传
   ENABLE_REQUEST_REPLAY: z.string().default("false").transform(booleanTransform),
   // owner 客户端仍在线时的并发相同请求去重（attached-live）；关闭后仅 detached/completed 可命中

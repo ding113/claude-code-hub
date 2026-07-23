@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   classifyFrame,
+  isRequestEchoFrame,
   mapProviderTypeToFamily,
 } from "@/app/v1/_lib/proxy/stream-gate/frame-classifier";
 
@@ -398,5 +399,35 @@ describe("classifyFrame: shared edge cases", () => {
 
   it("neutral: JSON array payloads with no rule hits", () => {
     expect(classifyFrame("openai-chat", null, "[]")).toBe("neutral");
+  });
+});
+
+describe("isRequestEchoFrame", () => {
+  it("recognizes openai-responses lifecycle echo frames by event name", () => {
+    expect(isRequestEchoFrame("openai-responses", "response.created", "{}")).toBe(true);
+    expect(isRequestEchoFrame("openai-responses", "response.in_progress", "{}")).toBe(true);
+    expect(isRequestEchoFrame("openai-responses", "response.queued", "{}")).toBe(true);
+    expect(isRequestEchoFrame("openai-responses", "response.output_text.delta", "{}")).toBe(false);
+  });
+
+  it("sniffs the data head when the event line is absent", () => {
+    expect(
+      isRequestEchoFrame("openai-responses", null, '{"type":"response.created","response":{}}')
+    ).toBe(true);
+    expect(isRequestEchoFrame("openai-responses", null, '{"type":"other"}')).toBe(false);
+    // type 不在头部 64 字节内则不嗅探（上游实践中 type 总在最前）
+    expect(
+      isRequestEchoFrame(
+        "openai-responses",
+        null,
+        `{"pad":"${"z".repeat(80)}","type":"response.created"}`
+      )
+    ).toBe(false);
+  });
+
+  it("never matches for families without echo frames", () => {
+    expect(isRequestEchoFrame("anthropic", "response.created", "{}")).toBe(false);
+    expect(isRequestEchoFrame("openai-chat", null, '{"type":"response.created"}')).toBe(false);
+    expect(isRequestEchoFrame("gemini", null, '{"type":"response.created"}')).toBe(false);
   });
 });

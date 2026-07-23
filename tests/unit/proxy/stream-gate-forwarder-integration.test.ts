@@ -369,7 +369,15 @@ describe("F1 stream content gate x ProxyForwarder sequential path", () => {
         });
         return createSseResponse([PING_FRAME, ERROR_FRAME]);
       });
-      doForward.mockImplementationOnce(async () => createSseResponse(WINNER_FRAMES));
+      const clearResponseTimeout2 = vi.fn();
+      const releaseAgent2 = vi.fn();
+      doForward.mockImplementationOnce(async (attemptSession) => {
+        attachAttemptRuntime(attemptSession, {
+          clearResponseTimeout: clearResponseTimeout2,
+          releaseAgent: releaseAgent2,
+        });
+        return createSseResponse(WINNER_FRAMES);
+      });
 
       const response = await ProxyForwarder.send(session);
       const text = await response.text();
@@ -383,8 +391,9 @@ describe("F1 stream content gate x ProxyForwarder sequential path", () => {
       expect(text).not.toContain("overloaded_error");
 
       // precommit 失败按 PROVIDER_ERROR 结算：计入熔断器并清理计时器 / agent 引用
+      // 首字节到达即清一次（onFirstByte 保持首字节超时语义），失败清理再兜底一次
       expect(mocks.recordFailure).toHaveBeenCalledWith(provider1.id, expect.any(Error));
-      expect(clearResponseTimeout1).toHaveBeenCalledTimes(1);
+      expect(clearResponseTimeout1).toHaveBeenCalledTimes(2);
       expect(releaseAgent1).toHaveBeenCalledTimes(1);
       expect(session.provider?.id).toBe(provider2.id);
 

@@ -255,6 +255,33 @@ export function mapProviderTypeToFamily(
 }
 
 /**
+ * 请求回显帧：openai-responses 家族的生命周期首帧（response.created /
+ * response.in_progress / response.queued）会在 data.response 里回显完整请求体
+ * （instructions + input），大上下文请求单帧即可达数百 KB。
+ * 门控 prebuffer 的字节计数应排除这类帧，避免把「请求大」误判成「流异常」。
+ */
+const REQUEST_ECHO_EVENTS: Partial<Record<ProtocolFamily, ReadonlySet<string>>> = {
+  "openai-responses": new Set(["response.created", "response.in_progress", "response.queued"]),
+};
+
+export function isRequestEchoFrame(
+  family: ProtocolFamily,
+  eventName: string | null,
+  data: string
+): boolean {
+  const events = REQUEST_ECHO_EVENTS[family];
+  if (!events) return false;
+  const effective = (eventName ?? "").trim();
+  if (effective !== "") return events.has(effective);
+  // 无 event 行时嗅探 data 头部的 type 字段（上游实践中 type 总在最前）
+  const head = data.slice(0, 64);
+  for (const event of events) {
+    if (head.includes(`"type":"${event}"`)) return true;
+  }
+  return false;
+}
+
+/**
  * 对单个完整 SSE 帧分类。
  *
  * eventName 为空时取 data 顶层 "type" 字段作为事件判别值（OpenAI Responses /
