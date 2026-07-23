@@ -665,6 +665,7 @@
       "cost": "Cost",
       "cacheHitRequests": "Cache-eligible Requests",
       "cacheHitRate": "Cache Hit Rate",
+      "cacheCoefficient": "Cache Coefficient",
       "cacheReadTokens": "Cache Read Tokens",
       "totalTokens": "Total Tokens",
       "cacheCreationConsumedAmount": "Cache Creation Spend",

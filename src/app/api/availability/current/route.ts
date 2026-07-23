@@ -15,7 +15,7 @@ import { getCurrentProviderStatus } from "@/lib/availability";
 export async function GET(_request: NextRequest) {
   // Verify admin authentication using session cookies (consistent with /api/availability)
   const session = await getSession();
-  if (!session || session.user.role !== "admin") {
+  if (session?.user.role !== "admin") {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

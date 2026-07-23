@@ -365,7 +365,7 @@ export class SessionManager {
    */
   static async getNextRequestSequence(sessionId: string): Promise<number> {
     const redis = getRedisClient();
-    if (!redis || redis.status !== "ready") {
+    if (redis?.status !== "ready") {
       // 改进的 fallback：使用时间戳 + 随机数生成伪唯一序号
       // 避免 Redis 不可用时所有请求都返回 1 导致的冲突
       const fallbackSeq = (Date.now() % 1000000) + Math.floor(Math.random() * 1000);
@@ -410,7 +410,7 @@ export class SessionManager {
    */
   static async getSessionRequestCount(sessionId: string): Promise<number> {
     const redis = getRedisClient();
-    if (!redis || redis.status !== "ready") return 0;
+    if (redis?.status !== "ready") return 0;
 
     try {
       const count = await redis.get(`session:${sessionId}:seq`);
@@ -645,7 +645,7 @@ export class SessionManager {
     keyId: number
   ): Promise<void> {
     const redis = getRedisClient();
-    if (!redis || redis.status !== "ready") return;
+    if (redis?.status !== "ready") return;
 
     try {
       const binding = await readOrReconcileSessionBinding({
@@ -695,7 +695,7 @@ export class SessionManager {
    */
   private static async refreshSessionTTL(sessionId: string, keyId?: number | null): Promise<void> {
     const redis = getRedisClient();
-    if (!redis || redis.status !== "ready") return;
+    if (redis?.status !== "ready") return;
 
     try {
       const pipeline = redis.pipeline();
@@ -745,7 +745,7 @@ export class SessionManager {
     ownerToken?: string
   ): Promise<SessionDiscoveryLeaseAcquireResult> {
     const redis = getRedisClient({ allowWhenRateLimitDisabled: true });
-    if (!redis || redis.status !== "ready") return redisUnavailableBindingResult();
+    if (redis?.status !== "ready") return redisUnavailableBindingResult();
     return acquireVersionedSessionDiscoveryLease({
       sessionId,
       keyId,
@@ -762,7 +762,7 @@ export class SessionManager {
     ttlSeconds: number
   ): Promise<SessionDiscoveryLeaseMutationResult> {
     const redis = getRedisClient({ allowWhenRateLimitDisabled: true });
-    if (!redis || redis.status !== "ready") return redisUnavailableBindingResult();
+    if (redis?.status !== "ready") return redisUnavailableBindingResult();
     return renewVersionedSessionDiscoveryLease({
       sessionId,
       keyId,
@@ -778,7 +778,7 @@ export class SessionManager {
     ownerToken: string
   ): Promise<SessionDiscoveryLeaseMutationResult> {
     const redis = getRedisClient({ allowWhenRateLimitDisabled: true });
-    if (!redis || redis.status !== "ready") return redisUnavailableBindingResult();
+    if (redis?.status !== "ready") return redisUnavailableBindingResult();
     return releaseVersionedSessionDiscoveryLease({ sessionId, keyId, ownerToken, redis });
   }
 
@@ -787,7 +787,7 @@ export class SessionManager {
     keyId: number
   ): Promise<SessionBindingResult> {
     const redis = getRedisClient({ allowWhenRateLimitDisabled: true });
-    if (!redis || redis.status !== "ready") return redisUnavailableBindingResult();
+    if (redis?.status !== "ready") return redisUnavailableBindingResult();
     return readOrReconcileSessionBinding({
       sessionId,
       keyId,
@@ -808,7 +808,7 @@ export class SessionManager {
     snapshot: SessionBindingSnapshot
   ): Promise<SessionBindingResult> {
     const redis = getRedisClient({ allowWhenRateLimitDisabled: true });
-    if (!redis || redis.status !== "ready") return redisUnavailableBindingResult();
+    if (redis?.status !== "ready") return redisUnavailableBindingResult();
     return touchSessionBinding({
       sessionId: snapshot.sessionId,
       keyId: snapshot.keyId,
@@ -824,7 +824,7 @@ export class SessionManager {
     providerId: number
   ): Promise<SessionBindingResult> {
     const redis = getRedisClient({ allowWhenRateLimitDisabled: true });
-    if (!redis || redis.status !== "ready") return redisUnavailableBindingResult();
+    if (redis?.status !== "ready") return redisUnavailableBindingResult();
     return compareAndSetSessionBinding({
       sessionId: snapshot.sessionId,
       keyId: snapshot.keyId,
@@ -841,7 +841,7 @@ export class SessionManager {
     cooldownTtlSeconds: number = 0
   ): Promise<SessionBindingResult> {
     const redis = getRedisClient({ allowWhenRateLimitDisabled: true });
-    if (!redis || redis.status !== "ready") return redisUnavailableBindingResult();
+    if (redis?.status !== "ready") return redisUnavailableBindingResult();
     return clearVersionedSessionBinding({
       sessionId: snapshot.sessionId,
       keyId: snapshot.keyId,
@@ -859,7 +859,7 @@ export class SessionManager {
     providerId: number
   ): Promise<SessionProviderCooldownResult> {
     const redis = getRedisClient({ allowWhenRateLimitDisabled: true });
-    if (!redis || redis.status !== "ready") return redisUnavailableBindingResult();
+    if (redis?.status !== "ready") return redisUnavailableBindingResult();
     return readSessionProviderCooldown({
       sessionId,
       keyId,
@@ -877,7 +877,7 @@ export class SessionManager {
     keyId?: number | null
   ): Promise<void> {
     const redis = getRedisClient();
-    if (!redis || redis.status !== "ready") return;
+    if (redis?.status !== "ready") return;
 
     try {
       if (keyId != null) {
@@ -959,7 +959,7 @@ export class SessionManager {
     keyId?: number | null
   ): Promise<number | null> {
     const redis = getRedisClient();
-    if (!redis || redis.status !== "ready") return null;
+    if (redis?.status !== "ready") return null;
 
     try {
       if (keyId != null) {
@@ -1029,7 +1029,7 @@ export class SessionManager {
     keyId?: number | null
   ): Promise<boolean> {
     const redis = getRedisClient();
-    if (!redis || redis.status !== "ready") return false;
+    if (redis?.status !== "ready") return false;
 
     try {
       if (keyId != null) {
@@ -1109,7 +1109,7 @@ export class SessionManager {
     if (providerIds.length === 0 || keyId == null) return false;
 
     const redis = getRedisClient();
-    if (!redis || redis.status !== "ready") return false;
+    if (redis?.status !== "ready") return false;
 
     const binding = await readOrReconcileSessionBinding({
       sessionId,
@@ -1156,7 +1156,7 @@ export class SessionManager {
     keyId?: number | null
   ): Promise<number | null> {
     const redis = getRedisClient();
-    if (!redis || redis.status !== "ready") return null;
+    if (redis?.status !== "ready") return null;
 
     try {
       const providerId = await SessionManager.getSessionProvider(sessionId, keyId);
@@ -1204,7 +1204,7 @@ export class SessionManager {
     legacyBindingUpdated?: boolean;
   }> {
     const redis = getRedisClient();
-    if (!redis || redis.status !== "ready") {
+    if (redis?.status !== "ready") {
       return { updated: false, reason: "redis_not_ready" };
     }
 
@@ -1468,7 +1468,7 @@ export class SessionManager {
    */
   static async storeSessionInfo(sessionId: string, info: SessionStoreInfo): Promise<void> {
     const redis = getRedisClient();
-    if (!redis || redis.status !== "ready") return;
+    if (redis?.status !== "ready") return;
 
     try {
       const pipeline = redis.pipeline();
@@ -1503,7 +1503,7 @@ export class SessionManager {
     providerInfo: SessionProviderInfo
   ): Promise<void> {
     const redis = getRedisClient();
-    if (!redis || redis.status !== "ready") return;
+    if (redis?.status !== "ready") return;
 
     try {
       const pipeline = redis.pipeline();
@@ -1534,7 +1534,7 @@ export class SessionManager {
    */
   static async updateSessionUsage(sessionId: string, usage: SessionUsageUpdate): Promise<void> {
     const redis = getRedisClient();
-    if (!redis || redis.status !== "ready") return;
+    if (redis?.status !== "ready") return;
 
     try {
       const pipeline = redis.pipeline();
@@ -1602,7 +1602,7 @@ export class SessionManager {
     requestSequence?: number
   ): Promise<void> {
     const redis = getRedisClient();
-    if (!redis || redis.status !== "ready") return;
+    if (redis?.status !== "ready") return;
 
     try {
       // 根据配置决定是否脱敏
@@ -1686,7 +1686,7 @@ export class SessionManager {
    */
   static async getActiveSessions(): Promise<ActiveSessionInfo[]> {
     const redis = getRedisClient();
-    if (!redis || redis.status !== "ready") {
+    if (redis?.status !== "ready") {
       logger.warn("SessionManager: Redis not ready, returning empty list");
       return [];
     }
@@ -1762,7 +1762,7 @@ export class SessionManager {
     inactive: ActiveSessionInfo[];
   }> {
     const redis = getRedisClient();
-    if (!redis || redis.status !== "ready") {
+    if (redis?.status !== "ready") {
       logger.warn("SessionManager: Redis not ready, returning empty lists");
       return { active: [], inactive: [] };
     }
@@ -1861,7 +1861,7 @@ export class SessionManager {
    */
   static async getAllSessionIds(): Promise<string[]> {
     const redis = getRedisClient();
-    if (!redis || redis.status !== "ready") {
+    if (redis?.status !== "ready") {
       logger.warn("SessionManager: Redis not ready, returning empty list");
       return [];
     }
@@ -1911,7 +1911,7 @@ export class SessionManager {
     requestSequence?: number
   ): Promise<unknown | null> {
     const redis = getRedisClient();
-    if (!redis || redis.status !== "ready") return null;
+    if (redis?.status !== "ready") return null;
 
     try {
       // 优先尝试新格式
@@ -1948,7 +1948,7 @@ export class SessionManager {
    */
   static async hasAnySessionMessages(sessionId: string): Promise<boolean> {
     const redis = getRedisClient();
-    if (!redis || redis.status !== "ready") return false;
+    if (redis?.status !== "ready") return false;
 
     try {
       // 1. 先检查旧格式（直接 EXISTS 更高效）
@@ -2009,7 +2009,7 @@ export class SessionManager {
     if (!getEnvConfig().STORE_SESSION_RESPONSE_BODY) return;
 
     const redis = getRedisClient();
-    if (!redis || redis.status !== "ready") return;
+    if (redis?.status !== "ready") return;
 
     try {
       let responseString: string;
@@ -2069,7 +2069,7 @@ export class SessionManager {
     requestSequence?: number
   ): Promise<void> {
     const redis = getRedisClient();
-    if (!redis || redis.status !== "ready") return;
+    if (redis?.status !== "ready") return;
 
     try {
       const sequence = normalizeRequestSequence(requestSequence) ?? 1;
@@ -2104,7 +2104,7 @@ export class SessionManager {
     requestSequence?: number
   ): Promise<unknown | null> {
     const redis = getRedisClient();
-    if (!redis || redis.status !== "ready") return null;
+    if (redis?.status !== "ready") return null;
 
     try {
       const sequence = normalizeRequestSequence(requestSequence);
@@ -2136,7 +2136,7 @@ export class SessionManager {
     }
 
     const redis = getRedisClient();
-    if (!redis || redis.status !== "ready") return;
+    if (redis?.status !== "ready") return;
 
     try {
       const sequence = normalizeRequestSequence(requestSequence) ?? 1;
@@ -2153,7 +2153,7 @@ export class SessionManager {
     requestSequence?: number
   ): Promise<SpecialSetting[] | null> {
     const redis = getRedisClient();
-    if (!redis || redis.status !== "ready") return null;
+    if (redis?.status !== "ready") return null;
 
     try {
       const sequence = normalizeRequestSequence(requestSequence);
@@ -2184,7 +2184,7 @@ export class SessionManager {
     requestSequence?: number
   ): Promise<void> {
     const redis = getRedisClient();
-    if (!redis || redis.status !== "ready") return;
+    if (redis?.status !== "ready") return;
 
     try {
       const sequence = normalizeRequestSequence(requestSequence) ?? 1;
@@ -2204,7 +2204,7 @@ export class SessionManager {
     requestSequence?: number
   ): Promise<SessionRequestMeta | null> {
     const redis = getRedisClient();
-    if (!redis || redis.status !== "ready") return null;
+    if (redis?.status !== "ready") return null;
 
     try {
       const sequence = normalizeRequestSequence(requestSequence);
@@ -2237,7 +2237,7 @@ export class SessionManager {
     requestSequence?: number
   ): Promise<void> {
     const redis = getRedisClient();
-    if (!redis || redis.status !== "ready") return;
+    if (redis?.status !== "ready") return;
 
     try {
       const sequence = normalizeRequestSequence(requestSequence) ?? 1;
@@ -2257,7 +2257,7 @@ export class SessionManager {
     requestSequence?: number
   ): Promise<SessionRequestMeta | null> {
     const redis = getRedisClient();
-    if (!redis || redis.status !== "ready") return null;
+    if (redis?.status !== "ready") return null;
 
     try {
       const sequence = normalizeRequestSequence(requestSequence);
@@ -2290,7 +2290,7 @@ export class SessionManager {
     requestSequence?: number
   ): Promise<void> {
     const redis = getRedisClient();
-    if (!redis || redis.status !== "ready") return;
+    if (redis?.status !== "ready") return;
 
     try {
       const sequence = normalizeRequestSequence(requestSequence) ?? 1;
@@ -2310,7 +2310,7 @@ export class SessionManager {
     requestSequence?: number
   ): Promise<SessionResponseMeta | null> {
     const redis = getRedisClient();
-    if (!redis || redis.status !== "ready") return null;
+    if (redis?.status !== "ready") return null;
 
     try {
       const sequence = normalizeRequestSequence(requestSequence);
@@ -2336,7 +2336,7 @@ export class SessionManager {
     requestSequence?: number
   ): Promise<void> {
     const redis = getRedisClient();
-    if (!redis || redis.status !== "ready") return;
+    if (redis?.status !== "ready") return;
 
     try {
       const sequence = normalizeRequestSequence(requestSequence) ?? 1;
@@ -2359,7 +2359,7 @@ export class SessionManager {
     requestSequence?: number
   ): Promise<void> {
     const redis = getRedisClient();
-    if (!redis || redis.status !== "ready") return;
+    if (redis?.status !== "ready") return;
 
     try {
       const sequence = normalizeRequestSequence(requestSequence) ?? 1;
@@ -2384,7 +2384,7 @@ export class SessionManager {
     requestSequence?: number
   ): Promise<Record<string, string> | null> {
     const redis = getRedisClient();
-    if (!redis || redis.status !== "ready") return null;
+    if (redis?.status !== "ready") return null;
 
     try {
       const sequence = normalizeRequestSequence(requestSequence);
@@ -2404,7 +2404,7 @@ export class SessionManager {
     requestSequence?: number
   ): Promise<Record<string, string> | null> {
     const redis = getRedisClient();
-    if (!redis || redis.status !== "ready") return null;
+    if (redis?.status !== "ready") return null;
 
     try {
       const sequence = normalizeRequestSequence(requestSequence);
@@ -2431,7 +2431,7 @@ export class SessionManager {
     requestSequence?: number
   ): Promise<string | null> {
     const redis = getRedisClient();
-    if (!redis || redis.status !== "ready") return null;
+    if (redis?.status !== "ready") return null;
 
     try {
       // 优先尝试新格式
@@ -2462,7 +2462,7 @@ export class SessionManager {
     requestSequence?: number
   ): Promise<void> {
     const redis = getRedisClient();
-    if (!redis || redis.status !== "ready") return;
+    if (redis?.status !== "ready") return;
 
     try {
       const sequence = normalizeRequestSequence(requestSequence) ?? 1;
@@ -2542,7 +2542,7 @@ export class SessionManager {
     requestSequence?: number
   ): Promise<SessionDetailRequestSnapshot | null> {
     const redis = getRedisClient();
-    if (!redis || redis.status !== "ready") return null;
+    if (redis?.status !== "ready") return null;
 
     try {
       const sequence = normalizeRequestSequence(requestSequence);
@@ -2598,7 +2598,7 @@ export class SessionManager {
     requestSequence?: number
   ): Promise<void> {
     const redis = getRedisClient();
-    if (!redis || redis.status !== "ready") return;
+    if (redis?.status !== "ready") return;
 
     try {
       const sequence = normalizeRequestSequence(requestSequence) ?? 1;
@@ -2680,7 +2680,7 @@ export class SessionManager {
     requestSequence?: number
   ): Promise<SessionDetailResponseSnapshot | null> {
     const redis = getRedisClient();
-    if (!redis || redis.status !== "ready") return null;
+    if (redis?.status !== "ready") return null;
 
     try {
       const sequence = normalizeRequestSequence(requestSequence);
@@ -2774,7 +2774,7 @@ export class SessionManager {
     keyId?: number | null
   ): Promise<{ sessionId: string; updated: boolean }> {
     const redis = getRedisClient();
-    if (!redis || redis.status !== "ready") {
+    if (redis?.status !== "ready") {
       logger.debug("SessionManager: Redis not ready, skipping Codex session update");
       return { sessionId: currentSessionId, updated: false };
     }
@@ -2888,7 +2888,7 @@ export class SessionManager {
     expectedProviderIds?: readonly number[]
   ): Promise<boolean> {
     const redis = getRedisClient();
-    if (!redis || redis.status !== "ready") {
+    if (redis?.status !== "ready") {
       logger.warn("SessionManager: Redis not ready, cannot terminate session");
       return false;
     }
@@ -3158,7 +3158,7 @@ export class SessionManager {
     }
 
     const redis = getRedisClient();
-    if (!redis || redis.status !== "ready") {
+    if (redis?.status !== "ready") {
       logger.warn("SessionManager: Redis not ready, cannot terminate provider sessions");
       return 0;
     }
@@ -3254,7 +3254,7 @@ export class SessionManager {
     }
 
     const redis = getRedisClient();
-    if (!redis || redis.status !== "ready") {
+    if (redis?.status !== "ready") {
       logger.warn("SessionManager: Redis not ready, cannot terminate sessions");
       return 0;
     }

@@ -64,6 +64,12 @@ export interface LeaderboardFilters {
 }
 
 /**
+ * 缓存值 shape 版本：条目结构变更时递增，避免 60s TTL 内新旧 payload 混用。
+ * v2: provider / providerCacheHitRate 条目新增 cacheCoefficientBp
+ */
+const CACHE_SHAPE_VERSION = "v2";
+
+/**
  * 构建缓存键
  * @param timezone - 已解析的系统时区（调用者应使用 resolveSystemTimezone() 获取）
  */
@@ -94,24 +100,26 @@ function buildCacheKey(
     userFilterSuffix = tagsPart + groupsPart;
   }
 
+  const prefix = `leaderboard:${CACHE_SHAPE_VERSION}:${scope}`;
+
   if (period === "custom" && dateRange) {
-    // leaderboard:{scope}:custom:2025-01-01_2025-01-15:USD
-    return `leaderboard:${scope}:custom:${dateRange.startDate}_${dateRange.endDate}:tz:${timezone}:${currencyDisplay}${providerTypeSuffix}${includeModelStatsSuffix}${userFilterSuffix}`;
+    // leaderboard:v2:{scope}:custom:2025-01-01_2025-01-15:USD
+    return `${prefix}:custom:${dateRange.startDate}_${dateRange.endDate}:tz:${timezone}:${currencyDisplay}${providerTypeSuffix}${includeModelStatsSuffix}${userFilterSuffix}`;
   } else if (period === "daily") {
-    // leaderboard:{scope}:daily:2025-01-15:USD
+    // leaderboard:v2:{scope}:daily:2025-01-15:USD
     const dateStr = formatInTimeZone(now, timezone, "yyyy-MM-dd");
-    return `leaderboard:${scope}:daily:${dateStr}:tz:${timezone}:${currencyDisplay}${providerTypeSuffix}${includeModelStatsSuffix}${userFilterSuffix}`;
+    return `${prefix}:daily:${dateStr}:tz:${timezone}:${currencyDisplay}${providerTypeSuffix}${includeModelStatsSuffix}${userFilterSuffix}`;
   } else if (period === "weekly") {
-    // leaderboard:{scope}:weekly:2025-W03:USD (ISO week)
+    // leaderboard:v2:{scope}:weekly:2025-W03:USD (ISO week)
     const weekStr = formatInTimeZone(now, timezone, "yyyy-'W'ww");
-    return `leaderboard:${scope}:weekly:${weekStr}:tz:${timezone}:${currencyDisplay}${providerTypeSuffix}${includeModelStatsSuffix}${userFilterSuffix}`;
+    return `${prefix}:weekly:${weekStr}:tz:${timezone}:${currencyDisplay}${providerTypeSuffix}${includeModelStatsSuffix}${userFilterSuffix}`;
   } else if (period === "monthly") {
-    // leaderboard:{scope}:monthly:2025-01:USD
+    // leaderboard:v2:{scope}:monthly:2025-01:USD
     const monthStr = formatInTimeZone(now, timezone, "yyyy-MM");
-    return `leaderboard:${scope}:monthly:${monthStr}:tz:${timezone}:${currencyDisplay}${providerTypeSuffix}${includeModelStatsSuffix}${userFilterSuffix}`;
+    return `${prefix}:monthly:${monthStr}:tz:${timezone}:${currencyDisplay}${providerTypeSuffix}${includeModelStatsSuffix}${userFilterSuffix}`;
   } else {
-    // allTime: leaderboard:{scope}:allTime:USD (no date component)
-    return `leaderboard:${scope}:allTime:tz:${timezone}:${currencyDisplay}${providerTypeSuffix}${includeModelStatsSuffix}${userFilterSuffix}`;
+    // allTime: leaderboard:v2:{scope}:allTime:USD (no date component)
+    return `${prefix}:allTime:tz:${timezone}:${currencyDisplay}${providerTypeSuffix}${includeModelStatsSuffix}${userFilterSuffix}`;
   }
 }
 

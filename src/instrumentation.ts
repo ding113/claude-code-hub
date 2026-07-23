@@ -19,6 +19,10 @@ const instrumentationState = globalThis as unknown as {
   __CCH_SHUTDOWN_IN_PROGRESS__?: boolean;
   __CCH_CLOUD_PRICE_SYNC_STARTED__?: boolean;
   __CCH_CLOUD_PRICE_SYNC_INTERVAL_ID__?: ReturnType<typeof setInterval>;
+  __CCH_CACHE_EFFECTIVENESS_STARTED__?: boolean;
+  __CCH_CACHE_EFFECTIVENESS_INTERVAL_ID__?: ReturnType<typeof setInterval>;
+  __CCH_REPLAY_CLEANUP_STARTED__?: boolean;
+  __CCH_REPLAY_CLEANUP_INTERVAL_ID__?: ReturnType<typeof setInterval>;
   __CCH_API_KEY_VF_SYNC_STARTED__?: boolean;
   __CCH_API_KEY_VF_SYNC_CLEANUP__?: (() => void) | null;
   __CCH_LIFECYCLE_MARKERS_LOGGED__?: boolean;
@@ -243,6 +247,80 @@ async function startRoutingTraceOutboxRecovery(): Promise<void> {
     logger.info("[Instrumentation] Routing trace outbox recovery started");
   } catch (error) {
     logger.warn("[Instrumentation] Routing trace outbox recovery failed to start", {
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
+/**
+ * F3b：缓存效果窗口聚合定时任务（每 5 分钟，ENABLE_CACHE_EFFECTIVENESS 开启时）。
+ * 服务内部有 advisory lock 防多副本重复跑；tick 失败仅记日志。
+ */
+async function startCacheEffectivenessScheduler(): Promise<void> {
+  if (instrumentationState.__CCH_CACHE_EFFECTIVENESS_STARTED__) {
+    return;
+  }
+
+  try {
+    const { getEnvConfig } = await import("@/lib/config/env.schema");
+    if (!getEnvConfig().ENABLE_CACHE_EFFECTIVENESS) {
+      return;
+    }
+    const { aggregateCacheEffectiveness } = await import("@/lib/cache-effectiveness/service");
+    const intervalMs = 5 * 60 * 1000;
+
+    instrumentationState.__CCH_CACHE_EFFECTIVENESS_INTERVAL_ID__ = setInterval(() => {
+      void aggregateCacheEffectiveness().catch((error) => {
+        logger.warn("[Instrumentation] Cache effectiveness aggregation tick failed", {
+          error: error instanceof Error ? error.message : String(error),
+        });
+      });
+    }, intervalMs);
+
+    instrumentationState.__CCH_CACHE_EFFECTIVENESS_STARTED__ = true;
+    logger.info("[Instrumentation] Cache effectiveness scheduler started", {
+      intervalSeconds: intervalMs / 1000,
+    });
+  } catch (error) {
+    logger.warn("[Instrumentation] Cache effectiveness scheduler init failed", {
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
+/**
+ * F2：Replay PG 持久层过期行清理（每 10 分钟，ENABLE_REQUEST_REPLAY 开启时）。
+ * 写入路径已有机会式扫尾，此任务兜底低流量期无写入的场景。
+ */
+async function startReplayCleanupScheduler(): Promise<void> {
+  if (instrumentationState.__CCH_REPLAY_CLEANUP_STARTED__) {
+    return;
+  }
+
+  try {
+    const { getEnvConfig } = await import("@/lib/config/env.schema");
+    if (!getEnvConfig().ENABLE_REQUEST_REPLAY) {
+      return;
+    }
+    const { getReplayStore } = await import("@/app/v1/_lib/proxy/replay/replay-store");
+    const intervalMs = 10 * 60 * 1000;
+
+    instrumentationState.__CCH_REPLAY_CLEANUP_INTERVAL_ID__ = setInterval(() => {
+      void getReplayStore()
+        .cleanupExpired()
+        .catch((error) => {
+          logger.warn("[Instrumentation] Replay cleanup tick failed", {
+            error: error instanceof Error ? error.message : String(error),
+          });
+        });
+    }, intervalMs);
+
+    instrumentationState.__CCH_REPLAY_CLEANUP_STARTED__ = true;
+    logger.info("[Instrumentation] Replay cleanup scheduler started", {
+      intervalSeconds: intervalMs / 1000,
+    });
+  } catch (error) {
+    logger.warn("[Instrumentation] Replay cleanup scheduler init failed", {
       error: error instanceof Error ? error.message : String(error),
     });
   }
@@ -534,6 +612,23 @@ export async function register() {
         });
       }
 
+      await startCacheEffectivenessScheduler();
+      await startReplayCleanupScheduler();
+
+      // F1/F3a：预热代理运行时设置快照（stream gate / affinity 的同步读取路径）
+      try {
+        const { getProxyRuntimeSettings } = await import("@/lib/system-settings/proxy-runtime");
+        void getProxyRuntimeSettings().catch((error) => {
+          logger.warn("[Instrumentation] Proxy runtime settings warmup failed", {
+            error: error instanceof Error ? error.message : String(error),
+          });
+        });
+      } catch (error) {
+        logger.warn("[Instrumentation] Proxy runtime settings warmup init failed", {
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+
       logger.info("Application ready");
     }
     // 开发环境: 执行迁移 + 初始化价格表（禁用 Bull Queue 避免 Turbopack 冲突）
@@ -677,6 +772,23 @@ export async function register() {
           startEndpointProbeLogCleanup();
         } catch (error) {
           logger.warn("[Instrumentation] Failed to start endpoint probe log cleanup", {
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+
+        await startCacheEffectivenessScheduler();
+        await startReplayCleanupScheduler();
+
+        // F1/F3a：预热代理运行时设置快照（stream gate / affinity 的同步读取路径）
+        try {
+          const { getProxyRuntimeSettings } = await import("@/lib/system-settings/proxy-runtime");
+          void getProxyRuntimeSettings().catch((error) => {
+            logger.warn("[Instrumentation] Proxy runtime settings warmup failed", {
+              error: error instanceof Error ? error.message : String(error),
+            });
+          });
+        } catch (error) {
+          logger.warn("[Instrumentation] Proxy runtime settings warmup init failed", {
             error: error instanceof Error ? error.message : String(error),
           });
         }

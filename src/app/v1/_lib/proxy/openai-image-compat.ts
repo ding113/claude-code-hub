@@ -1024,7 +1024,7 @@ export async function validateOpenAIImageRequest(options: {
   }
 
   if (endpoint === "variations") {
-    if (!options.imageRequestMetadata || options.imageRequestMetadata.bodyKind !== "multipart") {
+    if (options.imageRequestMetadata?.bodyKind !== "multipart") {
       return fail("Invalid request: /images/variations requires multipart/form-data.");
     }
     return validateVariationsMultipartRequest(options.imageRequestMetadata);

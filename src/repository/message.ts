@@ -510,6 +510,12 @@ export type MessageRequestDetailsUpdate = {
   context1mApplied?: boolean; // 是否应用了1M上下文窗口
   swapCacheTtlApplied?: boolean; // Swap Cache TTL Billing active at request time
   specialSettings?: CreateMessageRequestData["special_settings"]; // 特殊设置（审计/展示）
+  // F3b 缓存效果计费模拟（可空列，仅指标聚合使用）
+  cacheCompatibilityKey?: string | null;
+  cacheScoreEligible?: boolean | null;
+  cacheScoreExcludedReason?: string | null;
+  theoreticalCacheTokens?: number | null;
+  cacheTtlBucket?: string | null;
 };
 
 /**
@@ -597,6 +603,21 @@ export async function updateMessageRequestDetails(
   }
   if (details.specialSettings !== undefined) {
     updateData.specialSettings = details.specialSettings;
+  }
+  if (details.cacheCompatibilityKey !== undefined) {
+    updateData.cacheCompatibilityKey = details.cacheCompatibilityKey;
+  }
+  if (details.cacheScoreEligible !== undefined) {
+    updateData.cacheScoreEligible = details.cacheScoreEligible;
+  }
+  if (details.cacheScoreExcludedReason !== undefined) {
+    updateData.cacheScoreExcludedReason = details.cacheScoreExcludedReason;
+  }
+  if (details.theoreticalCacheTokens !== undefined) {
+    updateData.theoreticalCacheTokens = details.theoreticalCacheTokens;
+  }
+  if (details.cacheTtlBucket !== undefined) {
+    updateData.cacheTtlBucket = details.cacheTtlBucket;
   }
 
   if (options.onlyIfUnfinalized) {

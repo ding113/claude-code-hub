@@ -14,8 +14,20 @@ import { logger } from "@/lib/logger";
  * 说明：
  * - 这些测试只覆盖 adapter 的“通用执行器”逻辑
  * - 不依赖 Next/Hono 的完整运行时
- * - 重点验证：参数映射、返回值包装、错误/异常处理、requiresAuth=false 分支
+ * - 重点验证：参数映射、返回值包装、错误/异常处理、requiresAuth 认证链路
  */
+
+const authMocks = vi.hoisted(() => ({
+  validateAuthToken: vi.fn(),
+}));
+
+vi.mock("@/lib/auth", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/auth")>();
+  return {
+    ...actual,
+    validateAuthToken: authMocks.validateAuthToken,
+  };
+});
 
 function createMockContext(options?: { body?: unknown; jsonThrows?: boolean }) {
   const body = options?.body ?? {};
@@ -284,6 +296,197 @@ describe("Action Adapter：createActionRoute（单元测试）", () => {
     expect(JSON.stringify(debugSpy.mock.calls)).not.toContain("shared-secret");
     expect(JSON.stringify(debugSpy.mock.calls)).not.toContain("alert-secret");
     debugSpy.mockRestore();
+  });
+});
+
+function createAuthedMockContext(options?: {
+  body?: unknown;
+  headers?: Record<string, string>;
+  rawCookieHeader?: string;
+}) {
+  const headerMap = new Map(
+    Object.entries(options?.headers ?? {}).map(([name, value]) => [name.toLowerCase(), value])
+  );
+  const rawHeaders = new Headers();
+  if (options?.rawCookieHeader) {
+    rawHeaders.set("Cookie", options.rawCookieHeader);
+  }
+
+  return {
+    req: {
+      json: async () => options?.body ?? {},
+      header: (name: string) => headerMap.get(name.toLowerCase()),
+      raw: { headers: rawHeaders },
+    },
+    json: (payload: unknown, status = 200) =>
+      new Response(JSON.stringify(payload), {
+        status,
+        headers: { "content-type": "application/json" },
+      }),
+  } as const;
+}
+
+describe("Action Adapter：requiresAuth 认证链路（单元测试）", () => {
+  const adminSession = {
+    user: { id: 1, role: "admin" },
+    key: { canLoginWebUi: true },
+  };
+
+  test("默认 requiresAuth：无任何凭证应返回 401 未认证", async () => {
+    const action = vi.fn(async () => "should-not-run");
+    const { handler } = createActionRoute("test", "authMissing", action as any, {});
+
+    const response = (await handler(createAuthedMockContext() as any)) as Response;
+    expect(response.status).toBe(401);
+    await expect(response.json()).resolves.toEqual({ ok: false, error: "未认证" });
+    expect(action).not.toHaveBeenCalled();
+    expect(authMocks.validateAuthToken).not.toHaveBeenCalled();
+  });
+
+  test("Bearer 令牌无效：validateAuthToken 返回 null 时应返回 401", async () => {
+    authMocks.validateAuthToken.mockResolvedValue(null);
+    const action = vi.fn(async () => "should-not-run");
+    const { handler } = createActionRoute("test", "authInvalid", action as any, {
+      allowReadOnlyAccess: true,
+    });
+
+    const response = (await handler(
+      createAuthedMockContext({ headers: { authorization: "Bearer bad-token" } }) as any
+    )) as Response;
+
+    expect(response.status).toBe(401);
+    await expect(response.json()).resolves.toEqual({ ok: false, error: "认证无效或已过期" });
+    expect(authMocks.validateAuthToken).toHaveBeenCalledWith("bad-token", {
+      allowReadOnlyAccess: true,
+    });
+    expect(action).not.toHaveBeenCalled();
+  });
+
+  test("requiredRole=admin：普通用户会话应返回 403", async () => {
+    authMocks.validateAuthToken.mockResolvedValue({
+      user: { id: 2, role: "user" },
+      key: { canLoginWebUi: true },
+    });
+    const action = vi.fn(async () => "should-not-run");
+    const { handler } = createActionRoute("test", "authForbidden", action as any, {
+      requiredRole: "admin",
+    });
+
+    const response = (await handler(
+      createAuthedMockContext({ headers: { authorization: "Bearer user-token" } }) as any
+    )) as Response;
+
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toEqual({ ok: false, error: "权限不足" });
+    expect(action).not.toHaveBeenCalled();
+  });
+
+  test("Bearer 管理员会话：应在会话作用域内执行 action 并返回 200", async () => {
+    authMocks.validateAuthToken.mockResolvedValue(adminSession);
+    const action = vi.fn(async () => ({ ok: true, data: "done" }));
+    const { handler } = createActionRoute("test", "authOk", action as any, {
+      requiredRole: "admin",
+    });
+
+    const response = (await handler(
+      createAuthedMockContext({
+        headers: { authorization: "Bearer admin-token", "user-agent": "vitest-agent" },
+      }) as any
+    )) as Response;
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({ ok: true, data: "done" });
+    expect(authMocks.validateAuthToken).toHaveBeenCalledWith("admin-token", {
+      allowReadOnlyAccess: false,
+    });
+    expect(action).toHaveBeenCalledTimes(1);
+  });
+
+  test("Cookie 头解析：getCookie 缺失时应回退解析 cookie 请求头", async () => {
+    authMocks.validateAuthToken.mockResolvedValue(adminSession);
+    const action = vi.fn(async () => "ok");
+    const { handler } = createActionRoute("test", "authCookieFallback", action as any, {});
+
+    const response = (await handler(
+      createAuthedMockContext({
+        headers: { cookie: "other=1; auth-token=tok%20en" },
+      }) as any
+    )) as Response;
+
+    expect(response.status).toBe(200);
+    expect(authMocks.validateAuthToken).toHaveBeenCalledWith("tok en", {
+      allowReadOnlyAccess: false,
+    });
+  });
+
+  test("Cookie 原始头：raw Cookie 请求头也应被识别", async () => {
+    authMocks.validateAuthToken.mockResolvedValue(adminSession);
+    const action = vi.fn(async () => "ok");
+    const { handler } = createActionRoute("test", "authRawCookie", action as any, {});
+
+    const response = (await handler(
+      createAuthedMockContext({ rawCookieHeader: "auth-token=raw-tok" }) as any
+    )) as Response;
+
+    expect(response.status).toBe(200);
+    expect(authMocks.validateAuthToken).toHaveBeenCalledWith("raw-tok", {
+      allowReadOnlyAccess: false,
+    });
+  });
+
+  test("Cookie 值为空或编码非法：应视为未认证", async () => {
+    const action = vi.fn(async () => "should-not-run");
+    const { handler } = createActionRoute("test", "authBadCookie", action as any, {});
+
+    const emptyValue = (await handler(
+      createAuthedMockContext({ headers: { cookie: "auth-token=" } }) as any
+    )) as Response;
+    expect(emptyValue.status).toBe(401);
+
+    const badEncoding = (await handler(
+      createAuthedMockContext({ headers: { cookie: "auth-token=%E4%ZZ" } }) as any
+    )) as Response;
+    expect(badEncoding.status).toBe(401);
+
+    expect(authMocks.validateAuthToken).not.toHaveBeenCalled();
+    expect(action).not.toHaveBeenCalled();
+  });
+
+  test("Authorization 头格式边界：空白或空 Bearer 令牌应返回 401", async () => {
+    const action = vi.fn(async () => "should-not-run");
+    const { handler } = createActionRoute("test", "authBadBearer", action as any, {});
+
+    const blank = (await handler(
+      createAuthedMockContext({ headers: { authorization: "   " } }) as any
+    )) as Response;
+    expect(blank.status).toBe(401);
+
+    const emptyToken = (await handler(
+      createAuthedMockContext({ headers: { authorization: "Bearer    " } }) as any
+    )) as Response;
+    expect(emptyToken.status).toBe(401);
+
+    const nonBearer = (await handler(
+      createAuthedMockContext({ headers: { authorization: "Token abc" } }) as any
+    )) as Response;
+    expect(nonBearer.status).toBe(401);
+
+    expect(authMocks.validateAuthToken).not.toHaveBeenCalled();
+    expect(action).not.toHaveBeenCalled();
+  });
+
+  test("非对象 requestSchema：应将整个 body 作为唯一参数传递", async () => {
+    const action = vi.fn(async (value: string) => value);
+    const { handler } = createActionRoute("test", "rawBodySchema", action as any, {
+      requiresAuth: false,
+      requestSchema: z.string(),
+    });
+
+    const response = (await handler(createAuthedMockContext({ body: "hello" }) as any)) as Response;
+
+    expect(response.status).toBe(200);
+    expect(action).toHaveBeenCalledWith("hello");
+    await expect(response.json()).resolves.toEqual({ ok: true, data: "hello" });
   });
 });
 

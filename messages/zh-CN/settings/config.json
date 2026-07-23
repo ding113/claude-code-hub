@@ -87,6 +87,15 @@
     "enableResponseInputRectifierDesc": "自动将 /v1/responses 请求中的非数组 input（字符串简写或带 role/type 的单消息对象）规范化为标准数组格式后再处理（默认开启）。",
     "allowNonConversationEndpointProviderFallback": "允许非对话端点跨供应商 fallback",
     "allowNonConversationEndpointProviderFallbackDesc": "控制 /v1/messages/count_tokens 与 /v1/responses/compact 在当前供应商失败时，是否沿用现有决策链切换到兼容供应商重试。默认开启，并继续保持 raw passthrough 与非计费语义。",
+    "streamGateMode": "流式内容门控",
+    "streamGateModeDesc": "在首个有效内容帧到达前先行缓冲，遇到错误帧或空流时自动切换供应商重试；影子模式仅旁路统计判定分歧，不影响转发。默认启用。",
+    "streamGateModeOptions": {
+      "off": "关闭",
+      "shadow": "影子模式",
+      "enforce": "启用"
+    },
+    "affinityIgnoreClientSessionId": "忽略客户端 Session ID",
+    "affinityIgnoreClientSessionIdDesc": "开启后，可指纹化的请求强制使用最长前缀亲和做供应商粘性（跳过客户端 Session ID 绑定）；不可指纹化的请求仍走会话复用。默认开启。",
     "fakeStreaming": {
       "title": "Fake 流式输出白名单",
       "description": "针对图像 / 视频等长耗时同步生成场景（容易超过 Cloudflare 120 秒无响应体超时），CCH 会先返回 SSE 心跳保活，并在内部串行调用上游供应商，仅在最终拿到非空结果时回写最终响应。命中白名单的模型会启用 fake streaming；列表为空表示完全禁用。",

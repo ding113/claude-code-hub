@@ -665,6 +665,7 @@
       "cost": "Стоимость",
       "cacheHitRequests": "Запросы (учтены в hit rate)",
       "cacheHitRate": "Попадания в кэш",
+      "cacheCoefficient": "Коэффициент кэша",
       "cacheReadTokens": "Токены чтения из кэша",
       "totalTokens": "Всего токенов",
       "cacheCreationConsumedAmount": "Расход на создание кэша",

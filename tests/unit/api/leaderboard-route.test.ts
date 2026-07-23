@@ -115,6 +115,7 @@ describe("GET /api/leaderboard", () => {
           avgTokensPerSecond: 50,
           avgCostPerRequest: 0.05,
           avgCostPerMillionTokens: 10.0,
+          cacheCoefficientBp: 8600,
         },
       ]);
 
@@ -130,6 +131,7 @@ describe("GET /api/leaderboard", () => {
       // Additive fields must be present
       expect(entry).toHaveProperty("avgCostPerRequest", 0.05);
       expect(entry).toHaveProperty("avgCostPerMillionTokens", 10.0);
+      expect(entry).toHaveProperty("cacheCoefficientBp", 8600);
       // Formatted variants should exist
       expect(entry).toHaveProperty("avgCostPerRequestFormatted");
       expect(entry).toHaveProperty("avgCostPerMillionTokensFormatted");
@@ -214,6 +216,7 @@ describe("GET /api/leaderboard", () => {
           totalInputTokens: 20000,
           totalTokens: 20000,
           cacheHitRate: 0.5,
+          cacheCoefficientBp: 6450,
           modelStats: [
             {
               model: "claude-3-opus",
@@ -242,6 +245,7 @@ describe("GET /api/leaderboard", () => {
       expect(body).toHaveLength(1);
 
       const entry = body[0];
+      expect(entry).toHaveProperty("cacheCoefficientBp", 6450);
       expect(entry).toHaveProperty("modelStats");
       expect(entry.modelStats).toHaveLength(2);
       expect(entry.modelStats[0]).toHaveProperty("model", "claude-3-opus");

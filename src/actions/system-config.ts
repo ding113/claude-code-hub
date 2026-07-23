@@ -27,6 +27,7 @@ import type {
   CodexPriorityBillingSource,
   FakeStreamingWhitelistEntry,
   ResponseFixerConfig,
+  StreamGateSettingMode,
   SystemSettings,
 } from "@/types/system-config";
 import type { ActionResult } from "./types";
@@ -39,7 +40,7 @@ function discoveryValidationErrorCode(error: unknown): string | null {
 export async function fetchSystemSettings(): Promise<ActionResult<SystemSettings>> {
   try {
     const session = await getSession();
-    if (!session || session.user.role !== "admin") {
+    if (session?.user.role !== "admin") {
       return { ok: false, error: "无权限访问系统设置" };
     }
 
@@ -102,6 +103,8 @@ export async function saveSystemSettings(formData: {
   enableResponseInputRectifier?: boolean;
   allowNonConversationEndpointProviderFallback?: boolean;
   fakeStreamingWhitelist?: FakeStreamingWhitelistEntry[];
+  streamGateMode?: StreamGateSettingMode;
+  affinityIgnoreClientSessionId?: boolean;
   enableCodexSessionIdCompletion?: boolean;
   enableClaudeMetadataUserIdInjection?: boolean;
   enableResponseFixer?: boolean;
@@ -122,7 +125,7 @@ export async function saveSystemSettings(formData: {
   let before: SystemSettings | null = null;
   try {
     const session = await getSession();
-    if (!session || session.user.role !== "admin") {
+    if (session?.user.role !== "admin") {
       return { ok: false, error: "无权限执行此操作" };
     }
 
@@ -188,6 +191,8 @@ export async function saveSystemSettings(formData: {
       allowNonConversationEndpointProviderFallback:
         validated.allowNonConversationEndpointProviderFallback,
       fakeStreamingWhitelist: validated.fakeStreamingWhitelist,
+      streamGateMode: validated.streamGateMode,
+      affinityIgnoreClientSessionId: validated.affinityIgnoreClientSessionId,
       enableCodexSessionIdCompletion: validated.enableCodexSessionIdCompletion,
       enableClaudeMetadataUserIdInjection: validated.enableClaudeMetadataUserIdInjection,
       enableResponseFixer: validated.enableResponseFixer,

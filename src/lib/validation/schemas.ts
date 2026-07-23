@@ -1112,6 +1112,12 @@ export const UpdateSystemSettingsSchema = z
         }
       })
       .optional(),
+    // F1 流式内容门控模式（可选）
+    streamGateMode: z
+      .enum(["off", "shadow", "enforce"], { message: "不支持的流式门控模式" })
+      .optional(),
+    // 忽略客户端 Session ID（可选）
+    affinityIgnoreClientSessionId: z.boolean().optional(),
     // Codex Session ID 补全（可选）
     enableCodexSessionIdCompletion: z.boolean().optional(),
     // Claude metadata.user_id 注入（可选）

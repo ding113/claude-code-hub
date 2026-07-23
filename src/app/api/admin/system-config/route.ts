@@ -25,7 +25,7 @@ export const runtime = "nodejs";
 export async function GET() {
   const session = await getSession();
 
-  if (!session || session.user.role !== "admin") {
+  if (session?.user.role !== "admin") {
     return new Response("Unauthorized", { status: 401 });
   }
 
@@ -55,7 +55,7 @@ export async function GET() {
 export async function POST(req: Request) {
   const session = await getSession();
 
-  if (!session || session.user.role !== "admin") {
+  if (session?.user.role !== "admin") {
     return new Response("Unauthorized", { status: 401 });
   }
 
@@ -107,6 +107,8 @@ export async function POST(req: Request) {
       enableGeminiFunctionIdRectifier: validated.enableGeminiFunctionIdRectifier,
       enableBillingHeaderRectifier: validated.enableBillingHeaderRectifier,
       enableResponseInputRectifier: validated.enableResponseInputRectifier,
+      streamGateMode: validated.streamGateMode,
+      affinityIgnoreClientSessionId: validated.affinityIgnoreClientSessionId,
       enableCodexSessionIdCompletion: validated.enableCodexSessionIdCompletion,
       enableClaudeMetadataUserIdInjection: validated.enableClaudeMetadataUserIdInjection,
       enableResponseFixer: validated.enableResponseFixer,

@@ -10,7 +10,7 @@ export default async function KeysQuotaPage({ params }: { params: Promise<{ loca
   const session = await getSession();
 
   // 权限检查：仅 admin 用户可访问
-  if (!session || session.user.role !== "admin") {
+  if (session?.user.role !== "admin") {
     redirect({ href: session ? "/dashboard/my-quota" : "/login", locale });
   }
 

@@ -1,3 +1,5 @@
+import { parseSseBody } from "../stream-gate/sse-frames";
+
 export type ProtocolFamily = "anthropic" | "openai-chat" | "openai-responses" | "gemini";
 
 export type ValidationFailureCode =
@@ -308,50 +310,23 @@ interface SseEvent {
   data: string;
 }
 
+// SSE 分帧复用 stream-gate 的共享增量分帧器；本函数只做 kind 映射
+// （[DONE] / event:error 识别与空载荷过滤），判定语义与历史实现一致。
 function collectSseEvents(body: string): SseEvent[] {
   const events: SseEvent[] = [];
-  const dataLines: string[] = [];
-  let currentEvent: string | null = null;
-
-  const flush = () => {
-    if (dataLines.length === 0) {
-      currentEvent = null;
-      return;
-    }
-    const payload = dataLines.join("\n").trim();
-    dataLines.length = 0;
-    const event = currentEvent;
-    currentEvent = null;
-    if (!payload) return;
+  for (const frame of parseSseBody(body)) {
+    const payload = frame.data.trim();
+    if (!payload) continue;
     if (payload === "[DONE]") {
-      events.push({ kind: "done", eventName: event, data: payload });
-      return;
-    }
-    if (event === "error") {
-      events.push({ kind: "error", eventName: event, data: payload });
-      return;
-    }
-    events.push({ kind: "data", eventName: event, data: payload });
-  };
-
-  for (const rawLine of body.split(/\r?\n/)) {
-    const line = rawLine;
-    if (line.length === 0) {
-      flush();
+      events.push({ kind: "done", eventName: frame.eventName, data: payload });
       continue;
     }
-    if (line.startsWith(":")) continue; // SSE comment
-    if (line.startsWith("event:")) {
-      currentEvent = line.slice(6).trim();
+    if (frame.eventName === "error") {
+      events.push({ kind: "error", eventName: frame.eventName, data: payload });
       continue;
     }
-    if (line.startsWith("data:")) {
-      dataLines.push(line.slice(5).replace(/^\s/, ""));
-    }
-    // `id:` / `retry:` are valid SSE fields that don't carry deliverable data,
-    // so we intentionally skip them without bumping any state.
+    events.push({ kind: "data", eventName: frame.eventName, data: payload });
   }
-  flush();
   return events;
 }
 

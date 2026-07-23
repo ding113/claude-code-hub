@@ -26,7 +26,7 @@ type ServerModule = {
       request: http.ClientRequest,
       response?: http.IncomingMessage | null,
       settleTurn?: () => boolean
-    ) => boolean | void,
+    ) => boolean | undefined,
     close?: (code: number, reason: string) => void
   ) => Promise<void>;
 };

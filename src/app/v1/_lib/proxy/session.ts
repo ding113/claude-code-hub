@@ -31,6 +31,7 @@ import {
 import type { SpecialSetting } from "@/types/special-settings";
 import type { BillingModelSource, CodexPriorityBillingSource } from "@/types/system-config";
 import type { User } from "@/types/user";
+import type { FingerprintChain } from "./affinity/fingerprint";
 import { isCountTokensEndpointPath } from "./endpoint-paths";
 import { type EndpointPolicy, resolveEndpointPolicy } from "./endpoint-policy";
 import { ProxyError } from "./errors";
@@ -44,7 +45,26 @@ import {
   type OpenAIImageRequestMetadata,
   parseOpenAIImageMultipartMetadata,
 } from "./openai-image-compat";
+import type { ReplayIdentity } from "./replay/replay-identity";
 import { decodeRequestBody } from "./request-body-codec";
+
+/** F2 Replay 的会话内状态：guard 阶段抢到 owner 租约后填充。 */
+export interface SessionReplayState {
+  identity: ReplayIdentity;
+  ownerToken: string;
+  role: "owner";
+}
+
+/** F3a 前缀亲和的会话内状态：指纹链计算一次，供提名、写回与缓存效果指标复用。 */
+export interface SessionAffinityState {
+  scopeTag: string;
+  chain: FingerprintChain;
+  /** 亲和提名成功并 setProvider 后填充；用于 failover 时定向写墓碑 */
+  nominatedProviderId: number | null;
+  /** 查找命中的边界指纹（未命中为 null） */
+  matchedFp: string | null;
+  matchedTier: "conversation" | "system" | null;
+}
 
 /**
  * Classification of an auth failure, used to decide whether to record the
@@ -149,6 +169,12 @@ export class ProxySession {
   // 请求格式追踪：记录原始请求格式和供应商类型
   originalFormat: ClientFormat = "claude";
   providerType: ProviderType | null = null;
+
+  // 最长前缀亲和状态（F3a 计算一次，供提名/写回/缓存效果指标复用）
+  affinity: SessionAffinityState | null = null;
+
+  // Replay 角色状态（F2 guard 阶段 claim owner 成功后填充，spool 由 handleStream 建立）
+  replayState: SessionReplayState | null = null;
 
   private readonly endpointPolicy: EndpointPolicy;
 
@@ -681,12 +707,14 @@ export class ProxySession {
         | "hedge_winner" // 该供应商赢得 Hedge 竞速（最先收到首字节）
         | "hedge_loser_cancelled" // 该供应商输掉 Hedge 竞速，请求被取消（未计费）
         | "hedge_loser_billed" // 该供应商输掉 Hedge 竞速，但其响应被后台拿回并计费
-        | "client_abort"; // 客户端在响应完成前断开连接
+        | "client_abort" // 客户端在响应完成前断开连接
+        | "affinity_hit"; // 最长前缀亲和命中（软提名，已通过全套硬校验）
       selectionMethod?:
         | "session_reuse"
         | "weighted_random"
         | "group_filtered"
-        | "fail_open_fallback";
+        | "fail_open_fallback"
+        | "prefix_affinity";
       circuitState?: "closed" | "open" | "half-open";
       attemptNumber?: number;
       errorMessage?: string; // 错误信息（失败时记录）
@@ -1183,7 +1211,7 @@ export class ProxySession {
     }
 
     const text = typeof blockObj.text === "string" ? blockObj.text.trim() : "";
-    if (!text || text.toLowerCase() !== "warmup") {
+    if (text?.toLowerCase() !== "warmup") {
       return false;
     }
 

@@ -665,6 +665,7 @@
       "cost": "コスト",
       "cacheHitRequests": "キャッシュ対象リクエスト数(命中率計算対象)",
       "cacheHitRate": "キャッシュ命中率",
+      "cacheCoefficient": "キャッシュ係数",
       "cacheReadTokens": "キャッシュ読取トークン数",
       "totalTokens": "総トークン数",
       "cacheCreationConsumedAmount": "キャッシュ作成消費額",

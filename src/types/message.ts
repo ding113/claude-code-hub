@@ -48,14 +48,16 @@ export interface ProviderChainItem {
     | "hedge_winner" // 该供应商赢得 Hedge 竞速（最先收到首字节）
     | "hedge_loser_cancelled" // 该供应商输掉 Hedge 竞速，请求被取消（未对输家计费）
     | "hedge_loser_billed" // 该供应商输掉 Hedge 竞速，但其上游响应被后台拿回并计费
-    | "client_abort"; // 客户端在响应完成前断开连接
+    | "client_abort" // 客户端在响应完成前断开连接
+    | "affinity_hit"; // 最长前缀亲和命中（软提名，已通过全套硬校验）
 
   // === 选择方法（细化） ===
   selectionMethod?:
     | "session_reuse" // 会话复用
     | "weighted_random" // 加权随机
     | "group_filtered" // 分组筛选后随机
-    | "fail_open_fallback"; // Fail Open 降级
+    | "fail_open_fallback" // Fail Open 降级
+    | "prefix_affinity"; // 最长前缀亲和
 
   // 供应商配置（决策依据）
   priority?: number;

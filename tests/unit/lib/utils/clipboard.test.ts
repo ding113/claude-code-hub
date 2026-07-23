@@ -1,6 +1,12 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
 
-import { copyTextToClipboard, copyToClipboard, isClipboardSupported } from "@/lib/utils/clipboard";
+import {
+  copyTextToClipboard,
+  copyToClipboard,
+  isClipboardReadSupported,
+  isClipboardSupported,
+  readFromClipboard,
+} from "@/lib/utils/clipboard";
 
 function stubSecureContext(value: boolean) {
   Object.defineProperty(window, "isSecureContext", {
@@ -12,6 +18,13 @@ function stubSecureContext(value: boolean) {
 function stubClipboard(writeText: (text: string) => Promise<void> | void) {
   Object.defineProperty(navigator, "clipboard", {
     value: { writeText },
+    configurable: true,
+  });
+}
+
+function stubClipboardRead(readText: () => Promise<string> | string) {
+  Object.defineProperty(navigator, "clipboard", {
+    value: { readText },
     configurable: true,
   });
 }
@@ -115,5 +128,51 @@ describe("clipboard utils", () => {
     vi.stubGlobal("document", undefined as unknown as Document);
 
     await expect(copyTextToClipboard("abc")).resolves.toBe(false);
+  });
+
+  test("SSR 环境：isClipboardReadSupported/readFromClipboard 应返回不支持", async () => {
+    vi.stubGlobal("window", undefined as unknown as Window);
+
+    expect(isClipboardReadSupported()).toBe(false);
+    await expect(readFromClipboard()).resolves.toBeNull();
+  });
+
+  test("isClipboardReadSupported: 仅在安全上下文且 readText 可用时为 true", () => {
+    stubSecureContext(false);
+    stubClipboardRead(vi.fn());
+    expect(isClipboardReadSupported()).toBe(false);
+
+    stubSecureContext(true);
+    Object.defineProperty(navigator, "clipboard", { value: undefined, configurable: true });
+    expect(isClipboardReadSupported()).toBe(false);
+
+    stubSecureContext(true);
+    stubClipboardRead(vi.fn());
+    expect(isClipboardReadSupported()).toBe(true);
+  });
+
+  test("readFromClipboard: readText 成功时返回剪贴板文本", async () => {
+    stubSecureContext(true);
+    const readText = vi.fn().mockResolvedValue("hello");
+    stubClipboardRead(readText);
+
+    await expect(readFromClipboard()).resolves.toBe("hello");
+    expect(readText).toHaveBeenCalledTimes(1);
+  });
+
+  test("readFromClipboard: readText 抛错时返回 null", async () => {
+    stubSecureContext(true);
+    const readText = vi.fn().mockRejectedValue(new Error("denied"));
+    stubClipboardRead(readText);
+
+    await expect(readFromClipboard()).resolves.toBeNull();
+    expect(readText).toHaveBeenCalledTimes(1);
+  });
+
+  test("readFromClipboard: 不支持读取时返回 null", async () => {
+    stubSecureContext(false);
+    Object.defineProperty(navigator, "clipboard", { value: undefined, configurable: true });
+
+    await expect(readFromClipboard()).resolves.toBeNull();
   });
 });

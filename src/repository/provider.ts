@@ -1855,8 +1855,7 @@ export async function findProviderBatchUndoOperation(input: {
     return { status: "conflict" };
   }
   if (
-    !operation ||
-    operation.status !== "applied" ||
+    operation?.status !== "applied" ||
     operation.undoConsumedAt !== null ||
     operation.undoExpiresAt === null ||
     operation.undoExpiresAt <= input.now ||
@@ -1937,8 +1936,7 @@ export async function undoProviderBatchOperation(input: {
         return { status: "conflict" };
       }
       if (
-        !operation ||
-        operation.status !== "applied" ||
+        operation?.status !== "applied" ||
         operation.undoConsumedAt !== null ||
         operation.undoExpiresAt === null ||
         operation.undoExpiresAt <= input.revertedAt

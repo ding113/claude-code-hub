@@ -239,9 +239,9 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
       : scope === "userCacheHitRate"
         ? 6
         : scope === "provider"
-          ? 10
+          ? 11
           : scope === "providerCacheHitRate"
-            ? 8
+            ? 7
             : scope === "model"
               ? 6
               : 5;
@@ -379,6 +379,16 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
       sortKey: "avgCostPerMillionTokens",
       getValue: (row) => row.avgCostPerMillionTokens ?? 0,
     },
+    {
+      header: t("columns.cacheCoefficient"),
+      className: "text-right",
+      cell: (row) => {
+        const bp = "cacheCoefficientBp" in row ? row.cacheCoefficientBp : null;
+        return bp == null ? "–" : (bp / 10000).toFixed(2);
+      },
+      sortKey: "cacheCoefficientBp",
+      getValue: (row) => ("cacheCoefficientBp" in row ? row.cacheCoefficientBp : null),
+    },
   ];
 
   const providerCacheHitRateColumns: ColumnDef<ProviderCacheHitRateTableRow>[] = [
@@ -413,6 +423,16 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
       },
       sortKey: "cacheHitRate",
       getValue: (row) => row.cacheHitRate,
+    },
+    {
+      header: t("columns.cacheCoefficient"),
+      className: "text-right",
+      cell: (row) => {
+        const bp = "cacheCoefficientBp" in row ? row.cacheCoefficientBp : null;
+        return bp == null ? "–" : (bp / 10000).toFixed(2);
+      },
+      sortKey: "cacheCoefficientBp",
+      getValue: (row) => ("cacheCoefficientBp" in row ? row.cacheCoefficientBp : null),
     },
     {
       header: t("columns.cacheReadTokens"),

@@ -70,6 +70,14 @@ export const ACTION_MIGRATION_MATRIX = [
     exportPolicy: "all-action-exports",
   },
   {
+    module: "provider-cache-effectiveness",
+    sourceFile: "provider-cache-effectiveness.ts",
+    resource: "providers",
+    endpointFamilies: ["/api/v1/providers/cache-effectiveness"],
+    access: "admin",
+    exportPolicy: "all-action-exports",
+  },
+  {
     module: "provider-endpoints",
     sourceFile: "provider-endpoints.ts",
     resource: "provider-endpoints",

@@ -212,6 +212,16 @@ export const SystemSettingsSchema = z
       .number()
       .int()
       .describe("Public status aggregation interval in minutes."),
+    streamGateMode: z
+      .enum(["off", "shadow", "enforce"])
+      .describe(
+        "Stream content gate mode: buffer until the first valid content frame and fail over on error or empty streams (enforce), observe divergence only (shadow), or disable (off)."
+      ),
+    affinityIgnoreClientSessionId: z
+      .boolean()
+      .describe(
+        "Whether fingerprintable requests force longest-prefix affinity for provider stickiness, skipping client session id binding."
+      ),
     createdAt: IsoDateTimeStringSchema.describe("Creation time."),
     updatedAt: IsoDateTimeStringSchema.describe("Last update time."),
   })

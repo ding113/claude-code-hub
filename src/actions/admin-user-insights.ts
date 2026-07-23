@@ -40,7 +40,7 @@ export async function getUserInsightsOverview(
   }>
 > {
   const session = await getSession();
-  if (!session || session.user.role !== "admin") {
+  if (session?.user.role !== "admin") {
     return { ok: false, error: "Unauthorized" };
   }
 
@@ -75,7 +75,7 @@ export async function getUserInsightsKeyTrend(
   timeRange: string
 ): Promise<ActionResult<DatabaseKeyStatRow[]>> {
   const session = await getSession();
-  if (!session || session.user.role !== "admin") {
+  if (session?.user.role !== "admin") {
     return { ok: false, error: "Unauthorized" };
   }
 
@@ -130,7 +130,7 @@ export async function getUserInsightsModelBreakdown(
   }>
 > {
   const session = await getSession();
-  if (!session || session.user.role !== "admin") {
+  if (session?.user.role !== "admin") {
     return { ok: false, error: "Unauthorized" };
   }
 
@@ -166,7 +166,7 @@ export async function getUserInsightsProviderBreakdown(
   }>
 > {
   const session = await getSession();
-  if (!session || session.user.role !== "admin") {
+  if (session?.user.role !== "admin") {
     return { ok: false, error: "Unauthorized" };
   }
 

@@ -309,6 +309,13 @@ export function toSystemSettings(dbSettings: any): SystemSettings {
     stickyTimeoutCooldownMs: dbSettings?.stickyTimeoutCooldownMs ?? 300_000,
     ipExtractionConfig: dbSettings?.ipExtractionConfig ?? null,
     ipGeoLookupEnabled: dbSettings?.ipGeoLookupEnabled ?? true,
+    streamGateMode:
+      dbSettings?.streamGateMode === "off" ||
+      dbSettings?.streamGateMode === "shadow" ||
+      dbSettings?.streamGateMode === "enforce"
+        ? dbSettings.streamGateMode
+        : "enforce",
+    affinityIgnoreClientSessionId: dbSettings?.affinityIgnoreClientSessionId ?? true,
     createdAt: dbSettings?.createdAt ? new Date(dbSettings.createdAt) : new Date(),
     updatedAt: dbSettings?.updatedAt ? new Date(dbSettings.updatedAt) : new Date(),
   };

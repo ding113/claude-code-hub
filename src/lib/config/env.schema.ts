@@ -183,9 +183,44 @@ export const EnvSchema = z.object({
   // 超时后主动断开该输家连接，仅用已收到的内容尝试计费（通常计不出 -> 跳过）。
   HEDGE_LOSER_DRAIN_TIMEOUT_MS: z.coerce.number().int().min(1000).default(120_000),
 
-  // Operational canary for the Discovery scheduler. The database feature
-  // switch remains authoritative; this percentage only narrows eligibility.
-  DISCOVERY_ROLLOUT_PERCENT: z.coerce.number().int().min(0).max(100).default(100),
+  // ===== CCHP 网关移植功能开关 =====
+  // 流式内容门控：off=关闭；shadow=旁路分类只记录分歧；enforce=首个有效内容帧前缓冲+failover
+  STREAM_GATE_MODE: z.enum(["off", "shadow", "enforce"]).default("off"),
+  // 门控 precommit 缓冲上限：超限即视为该供应商流异常，failover 释放内存
+  STREAM_GATE_PREBUFFER_EVENT_CAP: z.coerce.number().int().min(1).max(4096).default(64),
+  STREAM_GATE_PREBUFFER_BYTE_CAP: z.coerce
+    .number()
+    .int()
+    .min(1024)
+    .max(16 * 1024 * 1024)
+    .default(256 * 1024),
+  // 请求分离 + Replay：客户端断开后上游继续引流缓存，相同请求体重发续传
+  ENABLE_REQUEST_REPLAY: z.string().default("false").transform(booleanTransform),
+  // owner 客户端仍在线时的并发相同请求去重（attached-live）；关闭后仅 detached/completed 可命中
+  REPLAY_LIVE_DEDUP_ENABLED: z.string().default("true").transform(booleanTransform),
+  // 客户端断开后上游继续引流的最长时长（毫秒；替代默认 60s drain 上限）
+  REPLAY_MAX_DETACHED_MS: z.coerce.number().int().min(10_000).max(1_800_000).default(300_000),
+  // 单节点并发 spool 上限（超出的请求不做 replay，回退现状）
+  REPLAY_MAX_CONCURRENT_SPOOLS: z.coerce.number().int().min(1).max(1024).default(64),
+  // Redis 热层 TTL（活跃/刚完成的响应块与元数据）
+  REPLAY_TTL_SECONDS: z.coerce.number().int().min(60).max(7200).default(600),
+  // PG 完成持久层 TTL（跨小时级重放窗口）
+  REPLAY_COMPLETED_TTL_SECONDS: z.coerce.number().int().min(300).max(86400).default(3600),
+  // 单响应缓存上限（超限即放弃 spool，fail-open 回现状）
+  REPLAY_MAX_PAYLOAD_BYTES: z.coerce
+    .number()
+    .int()
+    .min(64 * 1024)
+    .max(64 * 1024 * 1024)
+    .default(8 * 1024 * 1024),
+  // 最长前缀亲和路由：链式指纹匹配的供应商粘性（软提名，仍走全套硬校验）
+  ENABLE_PREFIX_AFFINITY: z.string().default("false").transform(booleanTransform),
+  // 亲和绑定滑动 TTL（秒）：读即续期，目标是把供应商粘性拉长到接近 prompt cache 保留期
+  PREFIX_AFFINITY_TTL_SECONDS: z.coerce.number().int().min(60).max(86400).default(3600),
+  // 指纹链回看窗口（尾部边界数）：覆盖编辑回退场景的拐点，超过 8 收益递减
+  PREFIX_AFFINITY_WINDOW: z.coerce.number().int().min(1).max(64).default(8),
+  // 缓存效果计费模拟：理论 vs 实际缓存命中率聚合指标（仅展示，不影响路由，默认开启）
+  ENABLE_CACHE_EFFECTIVENESS: z.string().default("true").transform(booleanTransform),
 
   DASHBOARD_LOGS_POLL_INTERVAL_MS: z.coerce.number().int().min(250).max(60000).default(5000),
 

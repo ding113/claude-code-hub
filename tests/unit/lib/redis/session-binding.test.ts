@@ -441,6 +441,31 @@ describe("session Discovery lease operations", () => {
     });
   });
 
+  it("parses Buffer and null lease mutation flags from Lua results", async () => {
+    const mock = createMockRedis({
+      operationResponses: {
+        [RENEW_SESSION_DISCOVERY_LEASE]: [Buffer.from("1"), null],
+        [RELEASE_SESSION_DISCOVERY_LEASE]: [Buffer.from("0")],
+      },
+    });
+    const identity = { sessionId: "sid", keyId: 4, ownerToken: "owner-a", redis: mock.redis };
+
+    await expect(renewSessionDiscoveryLease({ ...identity, ttlSeconds: 45 })).resolves.toEqual({
+      status: "renewed",
+      legacyFallbackAllowed: false,
+    });
+    await expect(renewSessionDiscoveryLease({ ...identity, ttlSeconds: 45 })).resolves.toEqual({
+      status: "lost",
+      reason: "not_owner_or_missing",
+      legacyFallbackAllowed: false,
+    });
+    await expect(releaseSessionDiscoveryLease(identity)).resolves.toEqual({
+      status: "lost",
+      reason: "not_owner_or_missing",
+      legacyFallbackAllowed: false,
+    });
+  });
+
   it("rejects invalid identities before touching Redis", async () => {
     const mock = createMockRedis();
 
@@ -615,6 +640,46 @@ describe("versioned session binding operations", () => {
       legacyFallbackAllowed: false,
     });
     expect(getVersionedBindingCapabilityState()).toBe("available");
+  });
+
+  it("normalizes numeric Lua values into string binding fields", async () => {
+    const mock = createMockRedis({
+      operationResponses: {
+        [READ_OR_RECONCILE_SESSION_BINDING]: [["ok", "existing", 1710000, 8]],
+      },
+    });
+
+    const result = await readOrReconcileSessionBinding({
+      sessionId: "sid",
+      keyId: 2,
+      redis: mock.redis,
+    });
+
+    expect(result).toMatchObject({
+      status: "ok",
+      source: "existing",
+      snapshot: { sessionId: "sid", keyId: 2, generation: "1710000", providerId: 8 },
+    });
+  });
+
+  it("fails closed when the Lua result is truncated or lacks a generation", async () => {
+    const mock = createMockRedis({
+      operationResponses: {
+        [READ_OR_RECONCILE_SESSION_BINDING]: [["ok"], ["ok", "existing", "", "8"]],
+      },
+    });
+    const identity = { sessionId: "sid", keyId: 2, redis: mock.redis };
+
+    await expect(readOrReconcileSessionBinding(identity)).resolves.toEqual({
+      status: "conflict",
+      reason: "canonical_corrupt",
+      legacyFallbackAllowed: false,
+    });
+    await expect(readOrReconcileSessionBinding(identity)).resolves.toEqual({
+      status: "conflict",
+      reason: "canonical_corrupt",
+      legacyFallbackAllowed: false,
+    });
   });
 
   it("CAS updates the provider and rotates generation", async () => {

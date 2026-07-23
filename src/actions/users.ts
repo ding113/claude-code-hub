@@ -1344,7 +1344,7 @@ export async function addUser(data: {
 
     // 权限检查：只有管理员可以添加用户
     const session = await getSession();
-    if (!session || session.user.role !== "admin") {
+    if (session?.user.role !== "admin") {
       return {
         ok: false,
         error: tError("PERMISSION_DENIED"),
@@ -1546,7 +1546,7 @@ export async function createUserOnly(data: {
 
     // Permission check: only admin can add users
     const session = await getSession();
-    if (!session || session.user.role !== "admin") {
+    if (session?.user.role !== "admin") {
       return {
         ok: false,
         error: tError("PERMISSION_DENIED"),
@@ -1883,7 +1883,7 @@ export async function removeUser(userId: number): Promise<ActionResult> {
     const tError = await getTranslations("errors");
 
     const session = await getSession();
-    if (!session || session.user.role !== "admin") {
+    if (session?.user.role !== "admin") {
       return {
         ok: false,
         error: tError("PERMISSION_DENIED"),
@@ -2018,7 +2018,7 @@ export async function renewUser(
     const tError = await getTranslations("errors");
 
     const session = await getSession();
-    if (!session || session.user.role !== "admin") {
+    if (session?.user.role !== "admin") {
       return {
         ok: false,
         error: tError("PERMISSION_DENIED"),
@@ -2094,7 +2094,7 @@ export async function toggleUserEnabled(userId: number, enabled: boolean): Promi
     const tError = await getTranslations("errors");
 
     const session = await getSession();
-    if (!session || session.user.role !== "admin") {
+    if (session?.user.role !== "admin") {
       return {
         ok: false,
         error: tError("PERMISSION_DENIED"),
@@ -2234,7 +2234,7 @@ export async function resetUserLimitsOnly(userId: number): Promise<ActionResult>
     const tError = await getTranslations("errors");
 
     const session = await getSession();
-    if (!session || session.user.role !== "admin") {
+    if (session?.user.role !== "admin") {
       return {
         ok: false,
         error: tError("PERMISSION_DENIED"),
@@ -2259,7 +2259,7 @@ export async function resetUserLimitsOnly(userId: number): Promise<ActionResult>
 
     if (requiresRedisForFixed5h) {
       const redis = getRedisClient();
-      if (!redis || redis.status !== "ready") {
+      if (redis?.status !== "ready") {
         return {
           ok: false,
           error: tError("USER_5H_FIXED_RESET_REQUIRES_REDIS"),
@@ -2348,7 +2348,7 @@ export async function resetUserAllStatistics(userId: number): Promise<ActionResu
     const tError = await getTranslations("errors");
 
     const session = await getSession();
-    if (!session || session.user.role !== "admin") {
+    if (session?.user.role !== "admin") {
       return {
         ok: false,
         error: tError("PERMISSION_DENIED"),
@@ -2373,7 +2373,7 @@ export async function resetUserAllStatistics(userId: number): Promise<ActionResu
 
     if (requiresRedisForFixed5h) {
       const redis = getRedisClient();
-      if (!redis || redis.status !== "ready") {
+      if (redis?.status !== "ready") {
         return {
           ok: false,
           error: tError("USER_5H_FIXED_RESET_REQUIRES_REDIS"),

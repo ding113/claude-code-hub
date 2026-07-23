@@ -128,7 +128,7 @@ export class LeaseService {
     entityId: number
   ): Promise<{ currentUsage: number; windowResetAtMs: number | null }> {
     const redis = LeaseService.redis;
-    if (!redis || redis.status !== "ready") {
+    if (redis?.status !== "ready") {
       throw new Error("Redis not ready for fixed 5h lease refresh");
     }
 
@@ -671,7 +671,7 @@ export class LeaseService {
       const redis = LeaseService.redis;
 
       // Fail-open if Redis is not ready
-      if (!redis || redis.status !== "ready") {
+      if (redis?.status !== "ready") {
         logger.warn("[LeaseService] Redis not ready, fail-open for decrement", {
           entityType,
           entityId,

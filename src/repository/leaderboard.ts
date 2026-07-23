@@ -11,6 +11,10 @@ import {
   LEDGER_SUCCESS_RATE_COUNTABLE_CONDITION,
   LEDGER_SUCCESS_RATE_SUCCESS_CONDITION,
 } from "./_shared/ledger-conditions";
+import {
+  getProviderCacheCoefficients,
+  resolveLeaderboardWindow,
+} from "./provider-cache-effectiveness";
 import { getSystemSettings } from "./system-config";
 
 const clampRatio01 = (value: number | null | undefined) => Math.min(Math.max(value ?? 0, 0), 1);
@@ -68,6 +72,8 @@ export interface ProviderLeaderboardEntry {
   avgTokensPerSecond: number; // tok/s（仅统计流式且可计算的请求）
   avgCostPerRequest: number | null; // totalCost / totalRequests, null when totalRequests === 0
   avgCostPerMillionTokens: number | null; // totalCost * 1_000_000 / totalTokens, null when totalTokens === 0
+  /** F3b 缓存系数（万分比定点值，effectivenessBp 汇总口径）；周期内无聚合数据时为 null */
+  cacheCoefficientBp: number | null;
   /**
    * 可选：按模型拆分
    * - undefined: 未请求 includeModelStats
@@ -122,6 +128,8 @@ export interface ProviderCacheHitRateLeaderboardEntry {
   /** @deprecated Use totalInputTokens instead */
   totalTokens: number;
   cacheHitRate: number; // 0-1 之间的小数，UI 层负责格式化为百分比
+  /** F3b 缓存系数（万分比定点值，effectivenessBp 汇总口径）；周期内无聚合数据时为 null */
+  cacheCoefficientBp: number | null;
   modelStats: ModelCacheHitStat[];
 }
 
@@ -698,6 +706,11 @@ async function findProviderLeaderboardWithTimezone(
     .groupBy(usageLedger.finalProviderId, providers.name)
     .orderBy(desc(sql`COALESCE(sum(${usageLedger.costUsd}), 0)`));
 
+  // F3b 缓存系数合并（只加列不改序：用量榜保持 cost DESC）
+  const cacheCoefficients = await getProviderCacheCoefficients(
+    resolveLeaderboardWindow(period, timezone, dateRange)
+  );
+
   const baseEntries: ProviderLeaderboardEntry[] = rankings.map((entry) => {
     const totalCost = parseFloat(entry.totalCost);
     const totalRequests = entry.totalRequests;
@@ -712,6 +725,7 @@ async function findProviderLeaderboardWithTimezone(
       successRate: clampRatio01Nullable(entry.successRate),
       avgTtfbMs: entry.avgTtfbMs ?? 0,
       avgTokensPerSecond: entry.avgTokensPerSecond ?? 0,
+      cacheCoefficientBp: cacheCoefficients.get(entry.providerId)?.coefficientBp ?? null,
       ...avgCosts,
     };
   });
@@ -846,6 +860,11 @@ async function findProviderCacheHitRateLeaderboardWithTimezone(
     .groupBy(usageLedger.finalProviderId, providers.name)
     .orderBy(desc(cacheHitRateExpr), desc(sql`count(*)`));
 
+  // F3b 缓存系数合并（合并后做最终排序）
+  const cacheCoefficients = await getProviderCacheCoefficients(
+    resolveLeaderboardWindow(period, timezone, dateRange)
+  );
+
   // Model-level cache hit breakdown per provider
   const systemSettings = await getSystemSettings();
   const billingModelSource = systemSettings.billingModelSource;
@@ -897,7 +916,7 @@ async function findProviderCacheHitRateLeaderboardWithTimezone(
     modelStatsByProvider.set(row.providerId, stats);
   }
 
-  return rankings.map((entry) => ({
+  const entries: ProviderCacheHitRateLeaderboardEntry[] = rankings.map((entry) => ({
     providerId: entry.providerId,
     providerName: entry.providerName,
     totalRequests: entry.totalRequests,
@@ -907,8 +926,20 @@ async function findProviderCacheHitRateLeaderboardWithTimezone(
     totalInputTokens: entry.totalInputTokens,
     totalTokens: entry.totalInputTokens, // deprecated, for backward compatibility
     cacheHitRate: clampRatio01(entry.cacheHitRate),
+    cacheCoefficientBp: cacheCoefficients.get(entry.providerId)?.coefficientBp ?? null,
     modelStats: modelStatsByProvider.get(entry.providerId) ?? [],
   }));
+
+  // 默认排序：缓存系数 DESC（无数据排最后），并列再按缓存命中率 DESC
+  entries.sort((a, b) => {
+    if (a.cacheCoefficientBp !== b.cacheCoefficientBp) {
+      if (a.cacheCoefficientBp == null) return 1;
+      if (b.cacheCoefficientBp == null) return -1;
+      return b.cacheCoefficientBp - a.cacheCoefficientBp;
+    }
+    return b.cacheHitRate - a.cacheHitRate;
+  });
+  return entries;
 }
 
 /**

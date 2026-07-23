@@ -665,6 +665,7 @@
       "cost": "成本",
       "cacheHitRequests": "缓存触发请求数",
       "cacheHitRate": "缓存命中率",
+      "cacheCoefficient": "缓存系数",
       "cacheReadTokens": "缓存读取 Token 数",
       "totalTokens": "总 Token 数",
       "cacheCreationConsumedAmount": "缓存创建消耗金额",

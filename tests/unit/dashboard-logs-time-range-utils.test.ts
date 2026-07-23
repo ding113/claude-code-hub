@@ -1,3 +1,4 @@
+import { format } from "date-fns";
 import { describe, expect, test } from "vitest";
 import {
   dateStringWithClockToTimestamp,
@@ -5,6 +6,7 @@ import {
   getQuickDateRange,
   inclusiveEndTimestampFromExclusive,
   parseClockString,
+  type QuickPeriod,
 } from "@/app/[locale]/dashboard/logs/_utils/time-range";
 
 describe("dashboard logs time range utils", () => {
@@ -67,5 +69,50 @@ describe("dashboard logs time range utils", () => {
       startDate: "2024-01-02",
       endDate: "2024-01-02",
     });
+  });
+
+  test("formatClockFromTimestamp renders the clock in the given timezone", () => {
+    const ts = Date.UTC(2024, 0, 1, 12, 34, 56);
+    expect(formatClockFromTimestamp(ts, "UTC")).toBe("12:34:56");
+    expect(formatClockFromTimestamp(ts, "Asia/Shanghai")).toBe("20:34:56");
+  });
+
+  test("dateStringWithClockToTimestamp interprets date + clock in the given timezone", () => {
+    const ts = dateStringWithClockToTimestamp("2024-01-01", "08:00:00", "Asia/Shanghai");
+    expect(ts).toBe(Date.UTC(2024, 0, 1, 0, 0, 0));
+  });
+
+  test("dateStringWithClockToTimestamp rejects month/day overflow", () => {
+    expect(dateStringWithClockToTimestamp("2024-02-30", "00:00:00")).toBeUndefined();
+    expect(dateStringWithClockToTimestamp("2024-01-01", "24:00:00")).toBeUndefined();
+  });
+
+  test("getQuickDateRange computes last7days/last30days windows", () => {
+    const now = new Date("2024-01-31T12:00:00Z");
+    const tz = "UTC";
+
+    expect(getQuickDateRange("last7days", tz, now)).toEqual({
+      startDate: "2024-01-25",
+      endDate: "2024-01-31",
+    });
+    expect(getQuickDateRange("last30days", tz, now)).toEqual({
+      startDate: "2024-01-02",
+      endDate: "2024-01-31",
+    });
+  });
+
+  test("getQuickDateRange falls back to today for unknown periods without timezone", () => {
+    const now = new Date(2024, 0, 15, 12, 0, 0);
+    const range = getQuickDateRange("unknown" as unknown as QuickPeriod, undefined, now);
+    expect(range).toEqual({ startDate: "2024-01-15", endDate: "2024-01-15" });
+  });
+
+  test("getQuickDateRange defaults to the current time", () => {
+    const before = format(new Date(), "yyyy-MM-dd");
+    const range = getQuickDateRange("today");
+    const after = format(new Date(), "yyyy-MM-dd");
+
+    expect([before, after]).toContain(range.startDate);
+    expect(range.endDate).toBe(range.startDate);
   });
 });

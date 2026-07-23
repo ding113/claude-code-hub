@@ -18,7 +18,7 @@ export const dynamic = "force-dynamic";
  */
 export async function GET() {
   const session = await getSession();
-  if (!session || session.user.role !== "admin") {
+  if (session?.user.role !== "admin") {
     return NextResponse.json({ ok: false, error: "无权限访问此资源" }, { status: 403 });
   }
 

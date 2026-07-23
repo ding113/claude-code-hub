@@ -262,7 +262,7 @@ export async function getProviders(): Promise<ProviderDisplay[]> {
       role: session?.user.role,
     });
 
-    if (!session || session.user.role !== "admin") {
+    if (session?.user.role !== "admin") {
       logger.trace("getProviders:unauthorized", {
         hasSession: !!session,
         role: session?.user.role,
@@ -420,7 +420,7 @@ export async function getProviders(): Promise<ProviderDisplay[]> {
 export async function getProviderStatisticsAsync(): Promise<ProviderStatisticsMap> {
   try {
     const session = await getSession();
-    if (!session || session.user.role !== "admin") return {};
+    if (session?.user.role !== "admin") return {};
 
     const statistics = await getProviderStatistics();
 
@@ -591,7 +591,7 @@ export async function addProvider(data: {
 }): Promise<ActionResult<{ id: number }>> {
   try {
     const session = await getSession();
-    if (!session || session.user.role !== "admin") {
+    if (session?.user.role !== "admin") {
       return { ok: false, error: "无权限执行此操作" };
     }
 
@@ -809,7 +809,7 @@ export async function editProvider(
 ): Promise<ActionResult<EditProviderResult>> {
   try {
     const session = await getSession();
-    if (!session || session.user.role !== "admin") {
+    if (session?.user.role !== "admin") {
       return { ok: false, error: "无权限执行此操作" };
     }
 
@@ -1007,7 +1007,7 @@ export async function removeProvider(
 ): Promise<ActionResult<RemoveProviderResult>> {
   try {
     const session = await getSession();
-    if (!session || session.user.role !== "admin") {
+    if (session?.user.role !== "admin") {
       return { ok: false, error: "无权限执行此操作" };
     }
 
@@ -1094,7 +1094,7 @@ export async function autoSortProviderPriority(args: {
 }): Promise<ActionResult<AutoSortResult>> {
   try {
     const session = await getSession();
-    if (!session || session.user.role !== "admin") {
+    if (session?.user.role !== "admin") {
       return { ok: false, error: "无权限执行此操作" };
     }
 
@@ -1222,7 +1222,7 @@ export async function autoSortProviderPriority(args: {
 export async function getProvidersHealthStatus() {
   try {
     const session = await getSession();
-    if (!session || session.user.role !== "admin") {
+    if (session?.user.role !== "admin") {
       return {};
     }
 
@@ -1270,7 +1270,7 @@ export async function getProvidersHealthStatus() {
 export async function resetProviderCircuit(providerId: number): Promise<ActionResult> {
   try {
     const session = await getSession();
-    if (!session || session.user.role !== "admin") {
+    if (session?.user.role !== "admin") {
       return { ok: false, error: "无权限执行此操作" };
     }
 
@@ -1293,7 +1293,7 @@ export async function resetProviderCircuit(providerId: number): Promise<ActionRe
 export async function resetProviderTotalUsage(providerId: number): Promise<ActionResult> {
   try {
     const session = await getSession();
-    if (!session || session.user.role !== "admin") {
+    if (session?.user.role !== "admin") {
       return { ok: false, error: "无权限执行此操作" };
     }
 
@@ -2174,7 +2174,7 @@ export async function previewProviderBatchPatch(
 ): Promise<ActionResult<PreviewProviderBatchPatchResult>> {
   try {
     const session = await getSession();
-    if (!session || session.user.role !== "admin") {
+    if (session?.user.role !== "admin") {
       return { ok: false, error: "无权限执行此操作" };
     }
 
@@ -2254,7 +2254,7 @@ export async function applyProviderBatchPatch(
 ): Promise<ActionResult<ApplyProviderBatchPatchResult>> {
   try {
     const session = await getSession();
-    if (!session || session.user.role !== "admin") {
+    if (session?.user.role !== "admin") {
       return { ok: false, error: "无权限执行此操作" };
     }
 
@@ -2464,7 +2464,7 @@ export async function undoProviderPatch(
 ): Promise<ActionResult<UndoProviderPatchResult>> {
   try {
     const session = await getSession();
-    if (!session || session.user.role !== "admin") {
+    if (session?.user.role !== "admin") {
       return { ok: false, error: "无权限执行此操作" };
     }
 
@@ -2723,7 +2723,7 @@ export async function batchUpdateProviders(
 ): Promise<ActionResult<{ updatedCount: number }>> {
   try {
     const session = await getSession();
-    if (!session || session.user.role !== "admin") {
+    if (session?.user.role !== "admin") {
       return { ok: false, error: "无权限执行此操作" };
     }
 
@@ -2892,7 +2892,7 @@ export async function batchDeleteProviders(
 ): Promise<ActionResult<BatchDeleteProvidersResult>> {
   try {
     const session = await getSession();
-    if (!session || session.user.role !== "admin") {
+    if (session?.user.role !== "admin") {
       return { ok: false, error: "无权限执行此操作" };
     }
 
@@ -2957,7 +2957,7 @@ export async function undoProviderDelete(
 ): Promise<ActionResult<UndoProviderDeleteResult>> {
   try {
     const session = await getSession();
-    if (!session || session.user.role !== "admin") {
+    if (session?.user.role !== "admin") {
       return { ok: false, error: "无权限执行此操作" };
     }
 
@@ -3021,7 +3021,7 @@ export async function batchResetProviderCircuits(
 ): Promise<ActionResult<{ resetCount: number }>> {
   try {
     const session = await getSession();
-    if (!session || session.user.role !== "admin") {
+    if (session?.user.role !== "admin") {
       return { ok: false, error: "无权限执行此操作" };
     }
 
@@ -3070,7 +3070,7 @@ export async function getProviderLimitUsage(providerId: number): Promise<
 > {
   try {
     const session = await getSession();
-    if (!session || session.user.role !== "admin") {
+    if (session?.user.role !== "admin") {
       return { ok: false, error: "无权限执行此操作" };
     }
 
@@ -3224,7 +3224,7 @@ export async function getProviderLimitUsageBatch(
 
   try {
     const session = await getSession();
-    if (!session || session.user.role !== "admin") {
+    if (session?.user.role !== "admin") {
       logger.warn("getProviderLimitUsageBatch: 无权限执行此操作");
       return result;
     }
@@ -3366,7 +3366,7 @@ export async function testProviderProxy(data: {
 > {
   try {
     const session = await getSession();
-    if (!session || session.user.role !== "admin") {
+    if (session?.user.role !== "admin") {
       return { ok: false, error: "无权限执行此操作" };
     }
 
@@ -3492,7 +3492,7 @@ export async function getUnmaskedProviderKey(id: number): Promise<ActionResult<{
 
   try {
     const session = await getSession();
-    if (!session || session.user.role !== "admin") {
+    if (session?.user.role !== "admin") {
       return { ok: false, error: "权限不足：仅管理员可查看完整密钥" };
     }
 
@@ -4247,7 +4247,7 @@ async function executeProviderApiTest(
 ): Promise<ProviderApiTestResult> {
   try {
     const session = await getSession();
-    if (!session || session.user.role !== "admin") {
+    if (session?.user.role !== "admin") {
       return { ok: false, error: "无权限执行此操作" };
     }
 
@@ -5001,7 +5001,7 @@ async function isUrlSafeForApiTest(
  */
 export async function testProviderUnified(data: UnifiedTestArgs): Promise<UnifiedTestResult> {
   const session = await getSession();
-  if (!session || session.user.role !== "admin") {
+  if (session?.user.role !== "admin") {
     return {
       ok: false,
       error: "未授权",
@@ -5125,7 +5125,7 @@ export async function testProviderById(
   args?: TestProviderByIdArgs
 ): Promise<UnifiedTestResult> {
   const session = await getSession();
-  if (!session || session.user.role !== "admin") {
+  if (session?.user.role !== "admin") {
     return {
       ok: false,
       error: "未授权",
@@ -5217,7 +5217,7 @@ export async function getProviderTestPresets(
   providerType: ProviderType
 ): Promise<ActionResult<PresetConfigResponse[]>> {
   const session = await getSession();
-  if (!session || session.user.role !== "admin") {
+  if (session?.user.role !== "admin") {
     return {
       ok: false,
       error: "未授权",
@@ -5394,7 +5394,7 @@ export async function fetchUpstreamModels(
 ): Promise<FetchUpstreamModelsResult> {
   try {
     const session = await getSession();
-    if (!session || session.user.role !== "admin") {
+    if (session?.user.role !== "admin") {
       return { ok: false, error: "无权限执行此操作" };
     }
 
@@ -5689,7 +5689,7 @@ export async function reclusterProviderVendors(args: {
 }): Promise<ActionResult<ReclusterResult>> {
   try {
     const session = await getSession();
-    if (!session || session.user.role !== "admin") {
+    if (session?.user.role !== "admin") {
       return { ok: false, error: "NO_PERMISSION" };
     }
 
