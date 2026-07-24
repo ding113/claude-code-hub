@@ -261,11 +261,25 @@ describe("request echo frame byte-cap exclusion", () => {
     'event: response.output_text.delta\ndata: {"type":"response.output_text.delta","delta":"hi"}\n\n';
 
   it("does not count request echo frames against the byte cap", async () => {
+    // cap 4096 < 帧总字节（约 4186）：若不豁免必溢出；回显在豁免额度（=cap）内则放行
     const reader = readerFromChunks([ECHO_FRAME, RESPONSES_DELTA]);
-    const result = await runStreamContentGate(reader, RESPONSES_OPTIONS);
+    const result = await runStreamContentGate(reader, {
+      ...RESPONSES_OPTIONS,
+      prebufferByteCap: 4096,
+    });
     expect(result.committed).toBe(true);
     if (!result.committed) return;
     expect(await drainPrefix(result.prefixChunks)).toContain("response.created");
+  });
+
+  it("caps the echo exemption at prebufferByteCap so echo floods still overflow", async () => {
+    // 豁免额度上限 = cap（1024）：4KB 回显超出上限部分照常计入，缓冲总量被压在 2×cap 内
+    const reader = readerFromChunks([ECHO_FRAME, RESPONSES_DELTA]);
+    const result = await runStreamContentGate(reader, RESPONSES_OPTIONS);
+    expect(result.committed).toBe(false);
+    if (result.committed) return;
+    expect(result.error).toBeInstanceOf(StreamPrecommitError);
+    expect((result.error as StreamPrecommitError).gateReason).toBe("prebuffer_overflow");
   });
 
   it("still overflows on oversized non-echo neutral frames", async () => {
@@ -279,9 +293,9 @@ describe("request echo frame byte-cap exclusion", () => {
   });
 
   it("reports echo-excluded bytes in the overflow error body", async () => {
-    const bigNonEcho = `event: response.in_progress\ndata: {"type":"response.in_progress","response":{"instructions":"${bigPayload}"}}\n\n`;
+    const bigEchoFrame = `event: response.in_progress\ndata: {"type":"response.in_progress","response":{"instructions":"${bigPayload}"}}\n\n`;
     const oversizedTail = `event: response.output_item.added\ndata: {"item":"${"y".repeat(4096)}"}\n\n`;
-    const reader = readerFromChunks([bigNonEcho, oversizedTail, RESPONSES_DELTA]);
+    const reader = readerFromChunks([bigEchoFrame, oversizedTail, RESPONSES_DELTA]);
     const result = await runStreamContentGate(reader, RESPONSES_OPTIONS);
     expect(result.committed).toBe(false);
     if (result.committed) return;

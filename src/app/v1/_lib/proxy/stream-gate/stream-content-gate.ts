@@ -258,7 +258,7 @@ export async function runStreamContentGate(
         // 干净终止先于任何内容 = 空流
         return failure("empty_stream", frame.data);
       }
-      // neutral: 继续缓冲；请求回显帧的载荷不计入字节上限（内存仍占用，由回显体积自然有界）
+      // neutral: 继续缓冲；请求回显帧的载荷不计入字节上限（豁免额度另有上限，见下方判定）
       if (isRequestEchoFrame(options.family, frame.eventName, frame.data)) {
         echoExcludedBytes += Buffer.byteLength(frame.data, "utf8");
       }
@@ -268,7 +268,9 @@ export async function runStreamContentGate(
       }
     }
 
-    if (bufferedBytes - echoExcludedBytes > options.prebufferByteCap) {
+    // 豁免额度以 cap 为自身上限：伪装成回显的中性帧最多把缓冲总量抬到 2×cap，不会无界占用内存
+    const cappedEchoExcluded = Math.min(echoExcludedBytes, options.prebufferByteCap);
+    if (bufferedBytes - cappedEchoExcluded > options.prebufferByteCap) {
       return failure("prebuffer_overflow");
     }
   }
