@@ -60,7 +60,7 @@
     "concurrent_limit_failed": "並發限制",
     "http2_fallback": "HTTP/2 回退",
     "session_reuse": "會話複用",
-    "affinity_hit": "快取複用(前綴親和)",
+    "affinity_hit": "快取複用（前綴親和）",
     "initial_selection": "首次選擇",
     "endpoint_pool_exhausted": "端點池耗盡",
     "vendor_type_all_timeout": "供應商類型全端點逾時",
