@@ -60,6 +60,17 @@ vi.mock("@/lib/config/env.schema", async (importOriginal) => {
   };
 });
 
+vi.mock("@/lib/system-settings/proxy-runtime", () => ({
+  // ensure() 每请求刷新一次快照；单测让同步快照为空，isReplayEnabled 走上方 env mock
+  getProxyRuntimeSettings: vi.fn(async () => ({
+    streamGateMode: "off",
+    affinityIgnoreClientSessionId: true,
+    replayEnabled: false,
+    cacheEffectivenessEnabled: true,
+  })),
+  getCachedProxyRuntimeSettings: () => null,
+}));
+
 vi.mock("@/app/v1/_lib/proxy/replay/replay-store", () => ({
   getReplayStore: () => storeControl,
 }));
