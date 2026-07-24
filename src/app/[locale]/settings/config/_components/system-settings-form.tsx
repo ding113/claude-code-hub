@@ -214,10 +214,11 @@ export function SystemSettingsForm({
   const [affinityIgnoreClientSessionId, setAffinityIgnoreClientSessionId] = useState(
     initialSettings.affinityIgnoreClientSessionId
   );
-  // null = 尚未覆写（跟随环境变量默认：Replay 关 / 缓存模拟开）；保存后写显式值
-  const [replayEnabled, setReplayEnabled] = useState(initialSettings.replayEnabled ?? false);
-  const [cacheEffectivenessEnabled, setCacheEffectivenessEnabled] = useState(
-    initialSettings.cacheEffectivenessEnabled ?? true
+  // null = 跟随环境变量（Replay 默认关 / 缓存模拟默认开）：未触碰开关时按 null 原样保存，
+  // 避免无关字段的保存把覆写写死为布尔值；仅用户切换后才落显式值
+  const [replayEnabled, setReplayEnabled] = useState<boolean | null>(initialSettings.replayEnabled);
+  const [cacheEffectivenessEnabled, setCacheEffectivenessEnabled] = useState<boolean | null>(
+    initialSettings.cacheEffectivenessEnabled
   );
   const [enableThinkingBudgetRectifier, setEnableThinkingBudgetRectifier] = useState(
     initialSettings.enableThinkingBudgetRectifier
@@ -470,8 +471,8 @@ export function SystemSettingsForm({
         );
         setStreamGateMode(result.data.streamGateMode);
         setAffinityIgnoreClientSessionId(result.data.affinityIgnoreClientSessionId);
-        setReplayEnabled(result.data.replayEnabled ?? false);
-        setCacheEffectivenessEnabled(result.data.cacheEffectivenessEnabled ?? true);
+        setReplayEnabled(result.data.replayEnabled ?? null);
+        setCacheEffectivenessEnabled(result.data.cacheEffectivenessEnabled ?? null);
         setEnableThinkingBudgetRectifier(result.data.enableThinkingBudgetRectifier);
         setEnableThinkingEffortConflictRectifier(result.data.enableThinkingEffortConflictRectifier);
         setEnableGeminiFunctionIdRectifier(result.data.enableGeminiFunctionIdRectifier);
@@ -1186,7 +1187,7 @@ export function SystemSettingsForm({
           <Switch
             id="replay-enabled"
             aria-label={t("replayEnabled")}
-            checked={replayEnabled}
+            checked={replayEnabled ?? false}
             onCheckedChange={(checked) => setReplayEnabled(checked)}
             disabled={isPending}
           />
@@ -1210,7 +1211,7 @@ export function SystemSettingsForm({
           <Switch
             id="cache-effectiveness-enabled"
             aria-label={t("cacheEffectivenessEnabled")}
-            checked={cacheEffectivenessEnabled}
+            checked={cacheEffectivenessEnabled ?? true}
             onCheckedChange={(checked) => setCacheEffectivenessEnabled(checked)}
             disabled={isPending}
           />
