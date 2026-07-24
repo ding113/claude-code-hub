@@ -16,6 +16,35 @@ function expectBuiltUrl(baseUrl: string, requestPath: string, expectedUrl: strin
 }
 
 describe("buildProxyUrl", () => {
+  test("preserves regional MiniMax protocol base paths", () => {
+    const cases = [
+      {
+        baseUrl: "https://api.minimax.io/v1",
+        requestPath: "/v1/chat/completions",
+        expectedUrl: "https://api.minimax.io/v1/chat/completions",
+      },
+      {
+        baseUrl: "https://api.minimaxi.com/v1",
+        requestPath: "/v1/chat/completions",
+        expectedUrl: "https://api.minimaxi.com/v1/chat/completions",
+      },
+      {
+        baseUrl: "https://api.minimax.io/anthropic",
+        requestPath: "/v1/messages",
+        expectedUrl: "https://api.minimax.io/anthropic/v1/messages",
+      },
+      {
+        baseUrl: "https://api.minimaxi.com/anthropic",
+        requestPath: "/v1/messages",
+        expectedUrl: "https://api.minimaxi.com/anthropic/v1/messages",
+      },
+    ];
+
+    for (const { baseUrl, requestPath, expectedUrl } of cases) {
+      expectBuiltUrl(baseUrl, requestPath, expectedUrl);
+    }
+  });
+
   test("标准拼接：baseUrl 无路径时使用 requestPath + search", () => {
     expectBuiltUrl(
       "https://api.example.com",
