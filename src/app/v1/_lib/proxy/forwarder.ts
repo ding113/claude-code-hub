@@ -568,6 +568,35 @@ export function mergeAnthropicCacheTtlBetaFlag(existing: string | null | undefin
   return Array.from(betaFlags).join(", ");
 }
 
+/**
+ * 门控等待期静默超时 -> 524 streaming_idle_timeout。
+ * 与提交后的静默超时同构：错误规则/熔断/切换逻辑无需区分静默发生在门控前后；
+ * 串行与 hedge 竞速路径共用，保证同一故障归类一致。
+ */
+function buildStreamingIdleTimeoutError(provider: {
+  id: number;
+  name: string;
+  streamingIdleTimeoutMs: number;
+}): ProxyError {
+  const parsed = {
+    error: {
+      type: "streaming_idle_timeout",
+      message: `Provider stopped sending data for ${provider.streamingIdleTimeoutMs}ms`,
+      timeout_ms: provider.streamingIdleTimeoutMs,
+    },
+  };
+  return new ProxyError(
+    `供应商流式响应静默超时: ${provider.streamingIdleTimeoutMs}ms 内未收到新数据`,
+    524,
+    {
+      body: JSON.stringify(parsed),
+      parsed,
+      providerId: provider.id,
+      providerName: provider.name,
+    }
+  );
+}
+
 function clampRetryAttempts(value: number): number {
   const numeric = Number(value);
   if (!Number.isFinite(numeric)) return RETRY_LIMITS.MIN;
@@ -1702,30 +1731,7 @@ export class ProxyForwarder {
                     gate.error instanceof StreamPrecommitError &&
                     gate.error.gateReason === "idle_timeout"
                   ) {
-                    // 与提交后的静默超时同构（524 + streaming_idle_timeout）：
-                    // 错误规则/熔断/切换逻辑无需区分静默发生在门控前后
-                    throw new ProxyError(
-                      `供应商流式响应静默超时: ${currentProvider.streamingIdleTimeoutMs}ms 内未收到新数据`,
-                      524,
-                      {
-                        body: JSON.stringify({
-                          error: {
-                            type: "streaming_idle_timeout",
-                            message: `Provider stopped sending data for ${currentProvider.streamingIdleTimeoutMs}ms`,
-                            timeout_ms: currentProvider.streamingIdleTimeoutMs,
-                          },
-                        }),
-                        parsed: {
-                          error: {
-                            type: "streaming_idle_timeout",
-                            message: `Provider stopped sending data for ${currentProvider.streamingIdleTimeoutMs}ms`,
-                            timeout_ms: currentProvider.streamingIdleTimeoutMs,
-                          },
-                        },
-                        providerId: currentProvider.id,
-                        providerName: currentProvider.name,
-                      }
-                    );
+                    throw buildStreamingIdleTimeoutError(currentProvider);
                   }
 
                   if (timedOutBeforeContent) {
@@ -4722,6 +4728,13 @@ export class ProxyForwarder {
                 captureCommitMarker: !session.isHighConcurrencyModeEnabled(),
               });
               if (!gate.committed) {
+                if (
+                  gate.error instanceof StreamPrecommitError &&
+                  gate.error.gateReason === "idle_timeout"
+                ) {
+                  // 与串行路径同一 524 归类，熔断/超时判定不因 hedge 模式而漂移
+                  throw buildStreamingIdleTimeoutError(attempt.provider);
+                }
                 throw gate.error;
               }
               if (gate.commitMarker) {
