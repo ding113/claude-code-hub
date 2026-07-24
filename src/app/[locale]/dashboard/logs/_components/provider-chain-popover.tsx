@@ -287,6 +287,13 @@ function getItemStatus(item: ProviderChainItem): {
       bgColor: "bg-amber-50 dark:bg-amber-950/30",
     };
   }
+  if (item.reason === "affinity_hit") {
+    return {
+      icon: DatabaseZap,
+      color: "text-teal-600",
+      bgColor: "bg-teal-50 dark:bg-teal-950/30",
+    };
+  }
   return {
     icon: RefreshCw,
     color: "text-slate-500",
@@ -513,10 +520,12 @@ export function ProviderChainPopover({
   const isSessionReuse =
     chain[0]?.reason === "session_reuse" || chain[0]?.selectionMethod === "session_reuse";
 
-  // F3a: prefix affinity hit (cache reuse nomination)
-  const affinityHitItem = chain.find(
-    (item) => item.reason === "affinity_hit" || item.selectionMethod === "prefix_affinity"
-  );
+  // F3a: prefix affinity hit (cache reuse nomination); chain[0]-based like
+  // session reuse so mid-chain retries are not misread as cache reuse
+  const affinityHitItem =
+    chain[0]?.reason === "affinity_hit" || chain[0]?.selectionMethod === "prefix_affinity"
+      ? chain[0]
+      : undefined;
   const isAffinityHit = Boolean(affinityHitItem);
 
   // Get initial selection context for tooltip
