@@ -262,15 +262,18 @@ async function startCacheEffectivenessScheduler(): Promise<void> {
   }
 
   try {
-    const { getEnvConfig } = await import("@/lib/config/env.schema");
-    if (!getEnvConfig().ENABLE_CACHE_EFFECTIVENESS) {
-      return;
-    }
+    // 开关支持系统设置运行时覆写：调度器常驻，每 tick 异步刷新有效开关——
+    // 低流量实例没有请求路径保鲜快照，只读同步快照会一直陈旧
+    const { getProxyRuntimeSettings } = await import("@/lib/system-settings/proxy-runtime");
     const { aggregateCacheEffectiveness } = await import("@/lib/cache-effectiveness/service");
     const intervalMs = 5 * 60 * 1000;
 
     instrumentationState.__CCH_CACHE_EFFECTIVENESS_INTERVAL_ID__ = setInterval(() => {
-      void aggregateCacheEffectiveness().catch((error) => {
+      void (async () => {
+        const settings = await getProxyRuntimeSettings();
+        if (!settings.cacheEffectivenessEnabled) return;
+        await aggregateCacheEffectiveness();
+      })().catch((error) => {
         logger.warn("[Instrumentation] Cache effectiveness aggregation tick failed", {
           error: error instanceof Error ? error.message : String(error),
         });

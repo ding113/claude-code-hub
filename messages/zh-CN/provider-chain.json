@@ -60,6 +60,7 @@
     "concurrent_limit_failed": "并发限制",
     "http2_fallback": "HTTP/2 回退",
     "session_reuse": "会话复用",
+    "affinity_hit": "缓存复用（前缀亲和）",
     "initial_selection": "首次选择",
     "endpoint_pool_exhausted": "端点池耗尽",
     "vendor_type_all_timeout": "供应商类型全端点超时",
@@ -249,6 +250,27 @@
     "session_reuse": "会话复用",
     "weighted_random": "加权随机",
     "group_filtered": "分组过滤",
-    "fail_open_fallback": "故障开放回退"
+    "fail_open_fallback": "故障开放回退",
+    "prefix_affinity": "最长前缀亲和"
+  },
+  "affinity": {
+    "matchedDepth": "命中深度",
+    "matchedPrefixBytes": "命中前缀字节",
+    "matchedFp": "命中指纹"
+  },
+  "streamGate": {
+    "title": "流式门控提交",
+    "frameIndex": "触发帧序号",
+    "chunkIndex": "触发 Chunk 序号",
+    "eventName": "触发事件",
+    "bufferedBytes": "已缓冲字节",
+    "echoExcludedBytes": "回显排除字节",
+    "gateWaitMs": "门控等待"
+  },
+  "replayServe": {
+    "sources": {
+      "completed": "已完成重放",
+      "attached_live": "跟尾在途流"
+    }
   }
 }

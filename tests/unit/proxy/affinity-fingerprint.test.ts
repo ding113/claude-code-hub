@@ -314,7 +314,8 @@ describe("computeFingerprintChain - edge cases", () => {
     expect(chain.tail).toHaveLength(0);
     expect(chain.sys.fp).toMatch(HEX32);
     expect(fingerprintTip(chain)).toBe(chain.sys);
-    expect(fingerprintsDeepestFirst(chain)).toEqual([chain.sys.fp]);
+    // 仅系统提示词不构成前缀亲和：查找序列不含 F_sys
+    expect(fingerprintsDeepestFirst(chain)).toEqual([]);
   });
 
   it("missing system and tools still produce a valid chain", () => {
@@ -471,10 +472,11 @@ describe("computeFingerprintChain - gemini formats", () => {
 });
 
 describe("fingerprintsDeepestFirst", () => {
-  it("orders tail deepest-first with sys always last", () => {
+  it("orders tail deepest-first and excludes sys (system-only prefixes never match)", () => {
     const chain = mustChain(claudeBody([U1, A1, U2]));
     const fps = fingerprintsDeepestFirst(chain);
-    expect(fps).toEqual([chain.tail[2].fp, chain.tail[1].fp, chain.tail[0].fp, chain.sys.fp]);
+    expect(fps).toEqual([chain.tail[2].fp, chain.tail[1].fp, chain.tail[0].fp]);
+    expect(fps).not.toContain(chain.sys.fp);
   });
 });
 

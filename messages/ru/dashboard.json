@@ -132,6 +132,7 @@
       "provider": "Поставщик",
       "model": "Модель тарификации",
       "reasoningEffort": "Интенсивность рассуждений",
+      "reasoningEffortTooltip": "Интенсивность рассуждений для запроса этой модели",
       "endpoint": "Эндпоинт",
       "inputTokens": "Вход",
       "outputTokens": "Выход",
@@ -549,6 +550,11 @@
         "originDecisionLoading": "Загрузка исходного решения...",
         "originDecisionUnavailable": "Запись исходного решения недоступна",
         "originDecisionExpand": "Просмотр исходного выбора"
+      },
+      "replayServe": {
+        "title": "Обслужено из Replay-кэша",
+        "desc": "Запрос обслужен из Replay-кэша (идентичный запрос уже выполняется или завершён). Обращение к провайдеру не выполнялось, затрат нет.",
+        "replayId": "Replay ID"
       }
     },
     "providerChain": {

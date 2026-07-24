@@ -119,6 +119,7 @@ import {
   resolveStreamGateCaps,
   resolveStreamGateMode,
   runStreamContentGate,
+  StreamPrecommitError,
 } from "./stream-gate/stream-content-gate";
 import {
   detectThinkingBudgetRectifierTrigger,
@@ -330,6 +331,8 @@ type StreamingHedgeAttempt = {
    * usage lives in the first chunk).
    */
   firstChunk: Uint8Array | null;
+  /** F1 门控提交标记（该 attempt 门控提交时记录，随 hedge_winner 链条目落库）。 */
+  gateAudit?: ProviderChainItem["streamGate"];
   /**
    * Billing context snapshot for the INITIAL provider's losing attempt, captured BEFORE
    * commitWinner overwrites the shared session's model/context with the winner's. Null for
@@ -563,6 +566,35 @@ export function mergeAnthropicCacheTtlBetaFlag(existing: string | null | undefin
   // extended-cache-ttl 依赖 prompt-caching；无条件补齐避免客户端只带其它 beta 时漏掉依赖
   betaFlags.add("prompt-caching-2024-07-31");
   return Array.from(betaFlags).join(", ");
+}
+
+/**
+ * 门控等待期静默超时 -> 524 streaming_idle_timeout。
+ * 与提交后的静默超时同构：错误规则/熔断/切换逻辑无需区分静默发生在门控前后；
+ * 串行与 hedge 竞速路径共用，保证同一故障归类一致。
+ */
+function buildStreamingIdleTimeoutError(provider: {
+  id: number;
+  name: string;
+  streamingIdleTimeoutMs: number;
+}): ProxyError {
+  const parsed = {
+    error: {
+      type: "streaming_idle_timeout",
+      message: `Provider stopped sending data for ${provider.streamingIdleTimeoutMs}ms`,
+      timeout_ms: provider.streamingIdleTimeoutMs,
+    },
+  };
+  return new ProxyError(
+    `供应商流式响应静默超时: ${provider.streamingIdleTimeoutMs}ms 内未收到新数据`,
+    524,
+    {
+      body: JSON.stringify(parsed),
+      parsed,
+      providerId: provider.id,
+      providerName: provider.name,
+    }
+  );
 }
 
 function clampRetryAttempts(value: number): number {
@@ -1655,6 +1687,7 @@ export class ProxyForwarder {
             // - 首字节计时器（doForward 设置，response-handler 读到首字节才清除）
             //   在门控期间继续生效，天然升级为「首个有效内容超时」。
             let streamingResponse = response;
+            let gateChainAudit: ProviderChainItem["streamGate"];
             const gateMode = resolveStreamGateMode();
             if (
               gateMode === "enforce" &&
@@ -1663,20 +1696,27 @@ export class ProxyForwarder {
             ) {
               const gateFamily = mapProviderTypeToFamily(currentProvider.providerType);
               if (gateFamily) {
+                const runtime = session as ProxySession & {
+                  responseController?: AbortController;
+                  clearResponseTimeout?: () => void;
+                  releaseAgent?: () => void;
+                };
                 const gateReader = response.body.getReader();
+                const gateStartedAt = Date.now();
                 const gate = await runStreamContentGate(gateReader, {
                   family: gateFamily,
                   providerId: currentProvider.id,
                   providerName: currentProvider.name,
                   ...resolveStreamGateCaps(),
+                  // 首字节到达即清除首字节计时器，保持「首字节超时」的原始语义——
+                  // 思考型模型可在首个内容帧前长时间输出中性帧，不应触发该计时器
+                  onFirstByte: () => runtime.clearResponseTimeout?.(),
+                  // 门控等待期沿用供应商静默超时（与提交后 response-handler 的行为对齐）
+                  idleTimeoutMs: currentProvider.streamingIdleTimeoutMs,
+                  captureCommitMarker: !session.isHighConcurrencyModeEnabled(),
                 });
 
                 if (!gate.committed) {
-                  const runtime = session as ProxySession & {
-                    responseController?: AbortController;
-                    clearResponseTimeout?: () => void;
-                    releaseAgent?: () => void;
-                  };
                   // 先于清理读取超时来源：区分首字节/首内容超时与客户端断开
                   const timedOutBeforeContent =
                     runtime.responseController?.signal.aborted === true &&
@@ -1686,6 +1726,13 @@ export class ProxyForwarder {
                   // response-handler 不会接手该响应：本层负责清理计时器与 agent 引用
                   runtime.clearResponseTimeout?.();
                   runtime.releaseAgent?.();
+
+                  if (
+                    gate.error instanceof StreamPrecommitError &&
+                    gate.error.gateReason === "idle_timeout"
+                  ) {
+                    throw buildStreamingIdleTimeoutError(currentProvider);
+                  }
 
                   if (timedOutBeforeContent) {
                     throw new ProxyError(
@@ -1707,12 +1754,26 @@ export class ProxyForwarder {
                   throw gate.error;
                 }
 
+                if (gate.commitMarker) {
+                  gateChainAudit = {
+                    ...gate.commitMarker,
+                    gateWaitMs: Date.now() - gateStartedAt,
+                  };
+                }
+
                 logger.info("ProxyForwarder: Stream content gate committed", {
                   providerId: currentProvider.id,
                   providerName: currentProvider.name,
                   framesSeen: gate.framesSeen,
                   prefixChunks: gate.prefixChunks.length,
                   readerDone: gate.readerDone,
+                  ...(gateChainAudit
+                    ? {
+                        commitEventName: gateChainAudit.eventName,
+                        gateWaitMs: gateChainAudit.gateWaitMs,
+                        echoExcludedBytes: gateChainAudit.echoExcludedBytes,
+                      }
+                    : {}),
                 });
 
                 streamingResponse = new Response(
@@ -1727,6 +1788,7 @@ export class ProxyForwarder {
             }
 
             setDeferredStreamingFinalization(session, {
+              ...(gateChainAudit ? { streamGate: gateChainAudit } : {}),
               providerId: currentProvider.id,
               providerName: currentProvider.name,
               providerPriority: currentProvider.priority || 0,
@@ -4655,14 +4717,31 @@ export class ProxyForwarder {
                 : null;
 
             if (hedgeGateFamily) {
+              const gateStartedAt = Date.now();
               const gate = await runStreamContentGate(attempt.reader, {
                 family: hedgeGateFamily,
                 providerId: attempt.provider.id,
                 providerName: attempt.provider.name,
                 ...resolveStreamGateCaps(),
+                // 竞速路径首字节计时器已在响应头到达时清除；门控等待期沿用供应商静默超时
+                idleTimeoutMs: attempt.provider.streamingIdleTimeoutMs,
+                captureCommitMarker: !session.isHighConcurrencyModeEnabled(),
               });
               if (!gate.committed) {
+                if (
+                  gate.error instanceof StreamPrecommitError &&
+                  gate.error.gateReason === "idle_timeout"
+                ) {
+                  // 与串行路径同一 524 归类，熔断/超时判定不因 hedge 模式而漂移
+                  throw buildStreamingIdleTimeoutError(attempt.provider);
+                }
                 throw gate.error;
+              }
+              if (gate.commitMarker) {
+                attempt.gateAudit = {
+                  ...gate.commitMarker,
+                  gateWaitMs: Date.now() - gateStartedAt,
+                };
               }
               // 保留完整门控前缀：若本 attempt 落败且需要计费，drain 时补回前缀里的 usage。
               attempt.firstChunk = concatChunks(gate.prefixChunks);
@@ -5006,6 +5085,7 @@ export class ProxyForwarder {
         attemptNumber: attempt.sequence,
         statusCode: attempt.response.status,
         modelRedirect: getAttemptModelRedirect(attempt),
+        streamGate: attempt.gateAudit,
       });
 
       abortAllAttempts(attempt, "hedge_loser");

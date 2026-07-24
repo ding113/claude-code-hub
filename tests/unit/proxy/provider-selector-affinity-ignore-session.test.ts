@@ -91,6 +91,7 @@ vi.mock("@/lib/system-settings/proxy-runtime", () => ({
     streamGateMode: "off" as const,
     affinityIgnoreClientSessionId: settingsControl.ignoreClientSessionId,
   })),
+  isCacheEffectivenessEnabled: () => envControl.cacheEffectiveness,
 }));
 vi.mock("@/lib/config/env.schema", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/config/env.schema")>();
@@ -163,6 +164,7 @@ function makeSession(overrides: Record<string, unknown> = {}): any {
       session.provider = p;
     },
     addProviderToChain: vi.fn(),
+    getProviderChain: vi.fn(() => []),
     setLastSelectionContext: vi.fn((ctx: unknown) => {
       session._ctx = ctx;
     }),

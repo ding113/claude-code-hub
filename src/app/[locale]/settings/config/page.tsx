@@ -80,6 +80,8 @@ async function SettingsConfigContent({ locale }: { locale: string }) {
             fakeStreamingWhitelist: settings.fakeStreamingWhitelist,
             streamGateMode: settings.streamGateMode,
             affinityIgnoreClientSessionId: settings.affinityIgnoreClientSessionId,
+            replayEnabled: settings.replayEnabled,
+            cacheEffectivenessEnabled: settings.cacheEffectivenessEnabled,
             enableCodexSessionIdCompletion: settings.enableCodexSessionIdCompletion,
             enableClaudeMetadataUserIdInjection: settings.enableClaudeMetadataUserIdInjection,
             enableResponseFixer: settings.enableResponseFixer,

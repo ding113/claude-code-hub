@@ -33,6 +33,7 @@ const COLUMN_LABEL_KEYS: Record<LogsTableColumn, string> = {
   sessionId: "logs.columns.sessionId",
   ip: "logs.columns.ip",
   provider: "logs.columns.provider",
+  reasoningEffort: "logs.columns.reasoningEffort",
   tokens: "logs.columns.tokens",
   cost: "logs.columns.cost",
   cache: "logs.columns.cache",

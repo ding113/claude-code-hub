@@ -8,6 +8,7 @@ import {
   Clock,
   Copy,
   Database,
+  DatabaseZap,
   Filter,
   GitBranch,
   Globe,
@@ -37,6 +38,10 @@ import { StepCard, type StepStatus } from "./StepCard";
 function getRequestStatus(item: ProviderChainItem): StepStatus {
   // Check for session reuse first
   if (item.reason === "session_reuse" || item.selectionMethod === "session_reuse") {
+    return "session_reuse";
+  }
+  // Affinity hit is a reuse-style nomination step: same visual family as session reuse
+  if (item.reason === "affinity_hit" || item.selectionMethod === "prefix_affinity") {
     return "session_reuse";
   }
   if (
@@ -174,8 +179,15 @@ export function LogicTraceTab({
   const sessionReuseContext = isSessionReuseFlow ? providerChain?.[0]?.decisionContext : undefined;
   const sessionReuseProvider = isSessionReuseFlow ? providerChain?.[0] : undefined;
 
-  // Extract decision context from first chain item (not used for session reuse)
-  const decisionContext = isSessionReuseFlow ? undefined : providerChain?.[0]?.decisionContext;
+  // F3a: prefix affinity hit flow (cache-reuse nomination replaces initial selection)
+  const isAffinityHitFlow =
+    providerChain?.[0]?.reason === "affinity_hit" ||
+    providerChain?.[0]?.selectionMethod === "prefix_affinity";
+
+  // Extract decision context from first chain item (not used for reuse-style flows,
+  // whose first item carries an empty placeholder context)
+  const decisionContext =
+    isSessionReuseFlow || isAffinityHitFlow ? undefined : providerChain?.[0]?.decisionContext;
 
   // Extract filtered providers from all chain items (not applicable for session reuse)
   const filteredProviders = isSessionReuseFlow
@@ -234,8 +246,36 @@ export function LogicTraceTab({
         </div>
       )}
 
+      {/* F2 Replay Serve Info (cache hit served without upstream call) */}
+      {blockedBy === "replay_serve" && (
+        <div className="rounded-lg border bg-teal-50 dark:bg-teal-950/20 border-teal-200 dark:border-teal-800 p-4 space-y-2">
+          <div className="flex items-center gap-2">
+            <DatabaseZap className="h-4 w-4 text-teal-600" />
+            <span className="text-sm font-medium text-teal-900 dark:text-teal-100">
+              {t("replayServe.title")}
+            </span>
+            {parsedBlockedReason?.source && (
+              <Badge variant="outline" className="border-teal-600 text-teal-700 dark:text-teal-300">
+                {tChain.has(`replayServe.sources.${parsedBlockedReason.source}`)
+                  ? tChain(`replayServe.sources.${parsedBlockedReason.source}`)
+                  : parsedBlockedReason.source}
+              </Badge>
+            )}
+          </div>
+          <p className="text-xs text-teal-800 dark:text-teal-200">{t("replayServe.desc")}</p>
+          {parsedBlockedReason?.replayId && (
+            <div className="flex items-center gap-2 text-xs">
+              <span className="text-teal-900 dark:text-teal-100">{t("replayServe.replayId")}:</span>
+              <code className="bg-teal-100 dark:bg-teal-900/50 px-2 py-0.5 rounded font-mono">
+                {parsedBlockedReason.replayId}
+              </code>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Block Info */}
-      {isBlocked && blockedBy && (
+      {isBlocked && blockedBy && blockedBy !== "replay_serve" && (
         <div className="rounded-lg border bg-orange-50 dark:bg-orange-950/20 border-orange-200 dark:border-orange-800 p-4 space-y-2">
           <div className="flex items-center gap-2">
             <AlertCircle className="h-4 w-4 text-orange-600" />
@@ -282,6 +322,8 @@ export function LogicTraceTab({
                 <ShieldCheck className="h-4 w-4 text-amber-600" />
               ) : isSessionReuseFlow ? (
                 <Link2 className="h-4 w-4 text-violet-600" />
+              ) : isAffinityHitFlow ? (
+                <DatabaseZap className="h-4 w-4 text-teal-600" />
               ) : (
                 <GitBranch className="h-4 w-4 text-blue-600" />
               )}
@@ -296,6 +338,13 @@ export function LogicTraceTab({
                   className="text-[10px] bg-violet-50 dark:bg-violet-950/20 border-violet-200 dark:border-violet-800 text-violet-700 dark:text-violet-300"
                 >
                   {t("logicTrace.sessionReuse")}
+                </Badge>
+              ) : isAffinityHitFlow ? (
+                <Badge
+                  variant="outline"
+                  className="text-[10px] bg-teal-50 dark:bg-teal-950/20 border-teal-200 dark:border-teal-800 text-teal-700 dark:text-teal-300"
+                >
+                  {tChain("reasons.affinity_hit")}
                 </Badge>
               ) : (
                 <>
@@ -820,6 +869,8 @@ export function LogicTraceTab({
             const isRetry = item.attemptNumber && item.attemptNumber > 1;
             const isSessionReuse =
               item.reason === "session_reuse" || item.selectionMethod === "session_reuse";
+            const isAffinityHit =
+              item.reason === "affinity_hit" || item.selectionMethod === "prefix_affinity";
 
             // Determine icon based on type
             const isHedgeTriggered = item.reason === "hedge_triggered";
@@ -835,35 +886,39 @@ export function LogicTraceTab({
                 : null;
             const stepIcon = isSessionReuse
               ? Link2
-              : isHedgeTriggered
-                ? GitBranch
-                : isHedgeLoser || isHedgeLoserBilled || isClientAbort
-                  ? XCircle
-                  : isRetry
-                    ? RefreshCw
-                    : status === "success"
-                      ? CheckCircle
-                      : status === "failure"
-                        ? XCircle
-                        : Server;
+              : isAffinityHit
+                ? DatabaseZap
+                : isHedgeTriggered
+                  ? GitBranch
+                  : isHedgeLoser || isHedgeLoserBilled || isClientAbort
+                    ? XCircle
+                    : isRetry
+                      ? RefreshCw
+                      : status === "success"
+                        ? CheckCircle
+                        : status === "failure"
+                          ? XCircle
+                          : Server;
 
             // Determine title based on type
             // For session reuse flow, show simplified "Execute Request" title for the first item
             const stepTitle = isSessionReuse
               ? t("logicTrace.executeRequest")
-              : isHedgeTriggered
-                ? tChain("timeline.hedgeTriggered")
-                : isHedgeLoser
-                  ? tChain("timeline.hedgeLoserCancelled")
-                  : isHedgeLoserBilled
-                    ? tChain("timeline.hedgeLoserBilled")
-                    : isClientAbort
-                      ? tChain("timeline.clientAbort")
-                      : isRetry
-                        ? t("logicTrace.retryAttempt", { number: item.attemptNumber ?? 1 })
-                        : item.reason === "hedge_winner"
-                          ? tChain("timeline.hedgeWinner")
-                          : t("logicTrace.attemptProvider", { provider: item.name });
+              : isAffinityHit
+                ? tChain("reasons.affinity_hit")
+                : isHedgeTriggered
+                  ? tChain("timeline.hedgeTriggered")
+                  : isHedgeLoser
+                    ? tChain("timeline.hedgeLoserCancelled")
+                    : isHedgeLoserBilled
+                      ? tChain("timeline.hedgeLoserBilled")
+                      : isClientAbort
+                        ? tChain("timeline.clientAbort")
+                        : isRetry
+                          ? t("logicTrace.retryAttempt", { number: item.attemptNumber ?? 1 })
+                          : item.reason === "hedge_winner"
+                            ? tChain("timeline.hedgeWinner")
+                            : t("logicTrace.attemptProvider", { provider: item.name });
 
             return (
               <StepCard
@@ -872,7 +927,7 @@ export function LogicTraceTab({
                 icon={stepIcon}
                 title={stepTitle}
                 subtitle={
-                  isSessionReuse
+                  isSessionReuse || isAffinityHit
                     ? item.statusCode
                       ? t("logicTrace.httpStatus", {
                           code: item.statusCode,
@@ -943,6 +998,98 @@ export function LogicTraceTab({
                           )}
                           <div className="text-muted-foreground text-[10px] mt-1">
                             {tChain("timeline.basedOnCache")}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* F3a Affinity Hit Info */}
+                    {isAffinityHit && (
+                      <div className="pb-2 border-b border-muted/50">
+                        <div className="flex items-center gap-1 text-teal-600 dark:text-teal-400 mb-2">
+                          <DatabaseZap className="h-3 w-3" />
+                          <span className="font-medium">{tChain("reasons.affinity_hit")}</span>
+                        </div>
+                        <div className="grid grid-cols-2 gap-x-3 gap-y-1 min-w-0 text-[11px]">
+                          {item.affinity?.matchedDepth != null && (
+                            <div className="min-w-0">
+                              <span className="text-muted-foreground">
+                                {tChain("affinity.matchedDepth")}:
+                              </span>{" "}
+                              <span className="font-mono">{item.affinity.matchedDepth}</span>
+                            </div>
+                          )}
+                          {item.affinity?.matchedPrefixBytes != null && (
+                            <div className="min-w-0">
+                              <span className="text-muted-foreground">
+                                {tChain("affinity.matchedPrefixBytes")}:
+                              </span>{" "}
+                              <span className="font-mono">{item.affinity.matchedPrefixBytes}</span>
+                            </div>
+                          )}
+                          {item.affinity?.matchedFp && (
+                            <div className="col-span-2 min-w-0">
+                              <span className="text-muted-foreground">
+                                {tChain("affinity.matchedFp")}:
+                              </span>{" "}
+                              <code className="text-[10px] px-1.5 py-0.5 bg-teal-100 dark:bg-teal-900/30 rounded font-mono break-all">
+                                {item.affinity.matchedFp}
+                              </code>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* F1 Stream Gate Commit Marker */}
+                    {item.streamGate && (
+                      <div className="pb-2 border-b border-muted/50">
+                        <div className="flex items-center gap-1 text-rose-600 dark:text-rose-400 mb-2">
+                          <Filter className="h-3 w-3" />
+                          <span className="font-medium">{tChain("streamGate.title")}</span>
+                        </div>
+                        <div className="grid grid-cols-2 gap-x-3 gap-y-1 min-w-0 text-[11px]">
+                          <div className="min-w-0">
+                            <span className="text-muted-foreground">
+                              {tChain("streamGate.frameIndex")}:
+                            </span>{" "}
+                            <span className="font-mono">#{item.streamGate.frameIndex}</span>
+                          </div>
+                          <div className="min-w-0">
+                            <span className="text-muted-foreground">
+                              {tChain("streamGate.chunkIndex")}:
+                            </span>{" "}
+                            <span className="font-mono">#{item.streamGate.chunkIndex}</span>
+                          </div>
+                          {item.streamGate.eventName && (
+                            <div className="col-span-2 min-w-0">
+                              <span className="text-muted-foreground">
+                                {tChain("streamGate.eventName")}:
+                              </span>{" "}
+                              <code className="text-[10px] px-1.5 py-0.5 bg-rose-100 dark:bg-rose-900/30 rounded font-mono break-all">
+                                {item.streamGate.eventName}
+                              </code>
+                            </div>
+                          )}
+                          <div className="min-w-0">
+                            <span className="text-muted-foreground">
+                              {tChain("streamGate.bufferedBytes")}:
+                            </span>{" "}
+                            <span className="font-mono">{item.streamGate.bufferedBytes}</span>
+                          </div>
+                          {item.streamGate.echoExcludedBytes > 0 && (
+                            <div className="min-w-0">
+                              <span className="text-muted-foreground">
+                                {tChain("streamGate.echoExcludedBytes")}:
+                              </span>{" "}
+                              <span className="font-mono">{item.streamGate.echoExcludedBytes}</span>
+                            </div>
+                          )}
+                          <div className="min-w-0">
+                            <span className="text-muted-foreground">
+                              {tChain("streamGate.gateWaitMs")}:
+                            </span>{" "}
+                            <span className="font-mono">{item.streamGate.gateWaitMs}ms</span>
                           </div>
                         </div>
                       </div>

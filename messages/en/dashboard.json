@@ -132,6 +132,7 @@
       "provider": "Provider",
       "model": "Billing Model",
       "reasoningEffort": "Reasoning Effort",
+      "reasoningEffortTooltip": "Thinking effort of the model request",
       "endpoint": "Endpoint",
       "inputTokens": "Input",
       "outputTokens": "Output",
@@ -258,7 +259,7 @@
         "responseModelLabel": "Actual Response Model",
         "mismatchTooltip": "The upstream provider returned a different model than the one requested. Billing is still based on the requested model.",
         "secondaryLineAriaLabel": "Actual response model: {model}",
-        "arrowPrefix": "\u21b3",
+        "arrowPrefix": "↳",
         "noSignatureBadge": "No thinking signature",
         "noSignatureTooltip": "Thinking was enabled but no thinking signature was returned in the stream; the actual response model falls back to the plain model field from message_start."
       },
@@ -549,6 +550,11 @@
         "originDecisionLoading": "Loading original decision...",
         "originDecisionUnavailable": "Original decision record unavailable",
         "originDecisionExpand": "View original selection"
+      },
+      "replayServe": {
+        "title": "Served from Replay Cache",
+        "desc": "This request was served from the replay cache (identical request already in flight or completed). No upstream provider call was made and no cost was incurred.",
+        "replayId": "Replay ID"
       }
     },
     "providerChain": {

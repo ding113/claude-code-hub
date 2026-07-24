@@ -1,5 +1,6 @@
 import { getEnvConfig } from "@/lib/config/env.schema";
 import { buildScopeTag, sha256Hex, stableStringify } from "@/lib/request-identity";
+import { getCachedProxyRuntimeSettings } from "@/lib/system-settings/proxy-runtime";
 import type { ClientFormat } from "../format-mapper";
 import type { ProxySession } from "../session";
 
@@ -35,10 +36,18 @@ export interface ReplayIdentity {
 
 export const REPLAY_BYPASS_HEADER = "x-cch-no-replay";
 
+/** F2 有效开关：系统设置覆写优先（同步快照），null/无快照时跟随 env。 */
+export function isReplayEnabled(): boolean {
+  try {
+    return getCachedProxyRuntimeSettings()?.replayEnabled ?? getEnvConfig().ENABLE_REQUEST_REPLAY;
+  } catch {
+    return false;
+  }
+}
+
 export function deriveReplayIdentity(session: ProxySession): ReplayIdentity | null {
   try {
-    const env = getEnvConfig();
-    if (!env.ENABLE_REQUEST_REPLAY) return null;
+    if (!isReplayEnabled()) return null;
     if (session.getEndpointPolicy().kind !== "default") return null;
     if (session.method !== "POST") return null;
 

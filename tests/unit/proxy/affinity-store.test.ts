@@ -52,7 +52,6 @@ describe("AffinityStore.lookup", () => {
       providerId: 42,
       matchedIndex: 0,
       matchedFp: "deep",
-      tier: "conversation",
     });
   });
 
@@ -79,14 +78,13 @@ describe("AffinityStore.lookup", () => {
       providerId: 7,
       matchedIndex: 1,
       matchedFp: "mid",
-      tier: "conversation",
     });
   });
 
-  it("maps a match on the last (sys) fingerprint to the system tier", async () => {
-    const { client } = createLuaFakeRedis({ [key("s1", "sysf")]: "1|9" });
-    const hint = await makeStore(client).lookup("s1", ["deep", "mid", "sysf"], 600);
-    expect(hint?.tier).toBe("system");
+  it("matches the shallowest boundary when only it is active", async () => {
+    const { client } = createLuaFakeRedis({ [key("s1", "shallow")]: "1|9" });
+    const hint = await makeStore(client).lookup("s1", ["deep", "mid", "shallow"], 600);
+    expect(hint?.matchedFp).toBe("shallow");
     expect(hint?.matchedIndex).toBe(2);
   });
 
@@ -133,31 +131,20 @@ describe("AffinityStore.lookup", () => {
 });
 
 describe("AffinityStore.put", () => {
-  it("writes only tip + sys boundaries with the active encoding and TTL", async () => {
+  it("writes only the tip boundary with the active encoding and TTL", async () => {
     const { client } = createLuaFakeRedis();
-    await makeStore(client).put("s1", "tipfp", "sysfp", 42, 900);
-    expect(client.set).toHaveBeenCalledTimes(2);
-    expect(client.set).toHaveBeenNthCalledWith(1, key("s1", "tipfp"), "1|42", "EX", 900);
-    expect(client.set).toHaveBeenNthCalledWith(2, key("s1", "sysfp"), "1|42", "EX", 900);
-  });
-
-  it("writes a single key when tip and sys collide or sys is empty", async () => {
-    const { client } = createLuaFakeRedis();
-    const store = makeStore(client);
-    await store.put("s1", "same", "same", 42, 900);
-    await store.put("s1", "solo", "", 42, 900);
-    expect(client.set).toHaveBeenCalledTimes(2);
-    expect(client.set).toHaveBeenNthCalledWith(1, key("s1", "same"), "1|42", "EX", 900);
-    expect(client.set).toHaveBeenNthCalledWith(2, key("s1", "solo"), "1|42", "EX", 900);
+    await makeStore(client).put("s1", "tipfp", 42, 900);
+    expect(client.set).toHaveBeenCalledTimes(1);
+    expect(client.set).toHaveBeenCalledWith(key("s1", "tipfp"), "1|42", "EX", 900);
   });
 
   it("ignores invalid arguments", async () => {
     const { client } = createLuaFakeRedis();
     const store = makeStore(client);
-    await store.put("", "tip", "sys", 42, 900);
-    await store.put("s1", "", "sys", 42, 900);
-    await store.put("s1", "tip", "sys", 0, 900);
-    await store.put("s1", "tip", "sys", 42, 0);
+    await store.put("", "tip", 42, 900);
+    await store.put("s1", "", 42, 900);
+    await store.put("s1", "tip", 0, 900);
+    await store.put("s1", "tip", 42, 0);
     expect(client.set).not.toHaveBeenCalled();
   });
 });
@@ -188,28 +175,19 @@ describe("AffinityStore.tombstone", () => {
 });
 
 describe("AffinityStore round-trip through the fake Lua", () => {
-  it("put -> lookup hits, tombstone on tip falls back to sys, tombstone on sys misses", async () => {
+  it("put -> lookup hits the tip; tombstone on tip misses (no sys fallback)", async () => {
     const { client } = createLuaFakeRedis();
     const store = makeStore(client);
 
-    await store.put("s1", "tip", "sysf", 42, 600);
-    expect(await store.lookup("s1", ["tip", "sysf"], 600)).toEqual({
+    await store.put("s1", "tip", 42, 600);
+    expect(await store.lookup("s1", ["tip"], 600)).toEqual({
       providerId: 42,
       matchedIndex: 0,
       matchedFp: "tip",
-      tier: "conversation",
     });
 
     await store.tombstone("s1", "tip", "failover");
-    expect(await store.lookup("s1", ["tip", "sysf"], 600)).toEqual({
-      providerId: 42,
-      matchedIndex: 1,
-      matchedFp: "sysf",
-      tier: "system",
-    });
-
-    await store.tombstone("s1", "sysf", "failover");
-    expect(await store.lookup("s1", ["tip", "sysf"], 600)).toBeNull();
+    expect(await store.lookup("s1", ["tip"], 600)).toBeNull();
   });
 });
 
@@ -217,14 +195,14 @@ describe("AffinityStore fail-open behavior", () => {
   it("fails open when redis is unavailable or not ready", async () => {
     const nullStore = makeStore(null);
     expect(await nullStore.lookup("s1", ["fp"], 600)).toBeNull();
-    await expect(nullStore.put("s1", "tip", "sys", 42, 600)).resolves.toBeUndefined();
+    await expect(nullStore.put("s1", "tip", 42, 600)).resolves.toBeUndefined();
     await expect(nullStore.tombstone("s1", "fp", "r")).resolves.toBeUndefined();
 
     const { client } = createLuaFakeRedis();
     client.status = "connecting";
     const store = makeStore(client);
     expect(await store.lookup("s1", ["fp"], 600)).toBeNull();
-    await store.put("s1", "tip", "sys", 42, 600);
+    await store.put("s1", "tip", 42, 600);
     await store.tombstone("s1", "fp", "r");
     expect(client.eval).not.toHaveBeenCalled();
     expect(client.set).not.toHaveBeenCalled();
@@ -236,7 +214,7 @@ describe("AffinityStore fail-open behavior", () => {
     client.set.mockRejectedValue(new Error("boom"));
     const store = makeStore(client);
     expect(await store.lookup("s1", ["fp"], 600)).toBeNull();
-    await expect(store.put("s1", "tip", "sys", 42, 600)).resolves.toBeUndefined();
+    await expect(store.put("s1", "tip", 42, 600)).resolves.toBeUndefined();
     await expect(store.tombstone("s1", "fp", "r")).resolves.toBeUndefined();
   });
 
@@ -246,7 +224,7 @@ describe("AffinityStore fail-open behavior", () => {
     client.set.mockRejectedValue("string failure");
     const store = makeStore(client);
     expect(await store.lookup("s1", ["fp"], 600)).toBeNull();
-    await expect(store.put("s1", "tip", "sys", 42, 600)).resolves.toBeUndefined();
+    await expect(store.put("s1", "tip", 42, 600)).resolves.toBeUndefined();
     await expect(store.tombstone("s1", "fp", "r")).resolves.toBeUndefined();
   });
 });

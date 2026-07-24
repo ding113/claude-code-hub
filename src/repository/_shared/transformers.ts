@@ -316,6 +316,8 @@ export function toSystemSettings(dbSettings: any): SystemSettings {
         ? dbSettings.streamGateMode
         : "enforce",
     affinityIgnoreClientSessionId: dbSettings?.affinityIgnoreClientSessionId ?? true,
+    replayEnabled: dbSettings?.replayEnabled ?? null,
+    cacheEffectivenessEnabled: dbSettings?.cacheEffectivenessEnabled ?? null,
     createdAt: dbSettings?.createdAt ? new Date(dbSettings.createdAt) : new Date(),
     updatedAt: dbSettings?.updatedAt ? new Date(dbSettings.updatedAt) : new Date(),
   };

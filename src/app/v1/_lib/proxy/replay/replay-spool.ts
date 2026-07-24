@@ -1,7 +1,7 @@
 import { getEnvConfig } from "@/lib/config/env.schema";
 import { logger } from "@/lib/logger";
 import type { ProxySession } from "../session";
-import type { ReplayIdentity } from "./replay-identity";
+import { isReplayEnabled, type ReplayIdentity } from "./replay-identity";
 import { getReplayStore, type ReplayMeta } from "./replay-store";
 
 /**
@@ -344,7 +344,7 @@ export function createReplaySpoolIfOwner(
   };
   try {
     const env = getEnvConfig();
-    if (!env.ENABLE_REQUEST_REPLAY) return declineOwnership();
+    if (!isReplayEnabled()) return declineOwnership();
     if (activeSpoolCount >= env.REPLAY_MAX_CONCURRENT_SPOOLS) {
       logger.debug("[ReplaySpool] concurrent spool cap reached, skipping replay", {
         active: activeSpoolCount,

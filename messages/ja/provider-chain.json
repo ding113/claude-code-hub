@@ -60,6 +60,7 @@
     "concurrent_limit_failed": "同時実行制限",
     "http2_fallback": "HTTP/2 フォールバック",
     "session_reuse": "セッション再利用",
+    "affinity_hit": "キャッシュ再利用(プレフィックス親和)",
     "initial_selection": "初期選択",
     "endpoint_pool_exhausted": "エンドポイントプール枯渇",
     "vendor_type_all_timeout": "ベンダータイプ全エンドポイントタイムアウト",
@@ -249,6 +250,27 @@
     "session_reuse": "セッション再利用",
     "weighted_random": "重み付きランダム",
     "group_filtered": "グループフィルタ",
-    "fail_open_fallback": "フェイルオープンフォールバック"
+    "fail_open_fallback": "フェイルオープンフォールバック",
+    "prefix_affinity": "最長プレフィックス親和"
+  },
+  "affinity": {
+    "matchedDepth": "一致深度",
+    "matchedPrefixBytes": "一致プレフィックスバイト数",
+    "matchedFp": "一致フィンガープリント"
+  },
+  "streamGate": {
+    "title": "ストリームゲートコミット",
+    "frameIndex": "トリガーフレーム番号",
+    "chunkIndex": "トリガーチャンク番号",
+    "eventName": "トリガーイベント",
+    "bufferedBytes": "バッファ済みバイト数",
+    "echoExcludedBytes": "エコー除外バイト数",
+    "gateWaitMs": "ゲート待機"
+  },
+  "replayServe": {
+    "sources": {
+      "completed": "完了済みリプレイ",
+      "attached_live": "ライブストリームに追随"
+    }
   }
 }

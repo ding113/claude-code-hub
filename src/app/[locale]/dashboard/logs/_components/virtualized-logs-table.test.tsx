@@ -195,7 +195,7 @@ function renderCostTooltipWithLog(overrides: Partial<UsageLogRow>) {
   return tooltip;
 }
 
-describe("virtualized-logs-table Codex reasoning effort", () => {
+describe("virtualized-logs-table thinking effort", () => {
   test("在计费模型右侧显示思考强度列", () => {
     const html = renderTableWithLog({
       model: "gpt-5.4",
@@ -229,10 +229,56 @@ describe("virtualized-logs-table Codex reasoning effort", () => {
     expect(effortIndex).toBeGreaterThan(modelIndex);
     expect(tokensIndex).toBeGreaterThan(effortIndex);
 
-    const effortDisplay = container.querySelector('[data-slot="codex-reasoning-effort"]');
+    const effortDisplay = container.querySelector('[data-slot="thinking-effort"]');
     expect(effortDisplay?.textContent).toContain("low");
     expect(effortDisplay?.textContent).toContain("max");
     expect(effortDisplay?.closest(".overflow-hidden")).not.toBeNull();
+  });
+
+  test("显示 Anthropic 请求的思考强度", () => {
+    const html = renderTableWithLog({
+      model: "claude-opus-4-5",
+      specialSettings: [
+        {
+          type: "anthropic_effort",
+          scope: "request",
+          hit: true,
+          effort: "medium",
+        },
+      ],
+    });
+    const container = document.createElement("div");
+    container.innerHTML = html;
+
+    const effortDisplay = container.querySelector('[data-slot="thinking-effort"]');
+    expect(effortDisplay?.textContent).toContain("medium");
+  });
+
+  test("hides reasoning effort column when hiddenColumns includes reasoningEffort", () => {
+    mockIsLoading = false;
+    mockIsError = false;
+    mockError = null;
+    mockHasNextPage = false;
+    mockIsFetchingNextPage = false;
+
+    mockLogs = [
+      makeLog({
+        id: 1,
+        specialSettings: [
+          { type: "codex_reasoning_effort", scope: "request", hit: true, effort: "high" },
+        ],
+      }),
+    ];
+
+    const htmlHidden = renderToStaticMarkup(
+      <VirtualizedLogsTable
+        filters={{}}
+        autoRefreshEnabled={false}
+        hiddenColumns={["reasoningEffort"]}
+      />
+    );
+    expect(htmlHidden).not.toContain("logs.columns.reasoningEffort");
+    expect(htmlHidden).not.toContain('data-slot="thinking-effort"');
   });
 });
 

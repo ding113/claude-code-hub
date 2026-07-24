@@ -94,6 +94,10 @@
       "shadow": "影子模式",
       "enforce": "启用"
     },
+    "replayEnabled": "请求 Replay",
+    "replayEnabledDesc": "缓存上游响应并复用上游连接:并发或断线重连的相同请求直接跟尾在途流,不再重复请求供应商。保存前跟随环境变量 ENABLE_REQUEST_REPLAY,默认关闭。",
+    "cacheEffectivenessEnabled": "前缀缓存模拟",
+    "cacheEffectivenessEnabledDesc": "模拟最长前缀匹配的缓存命中率(理论 vs 实际),仅用于观测,不影响路由。保存前跟随环境变量 ENABLE_CACHE_EFFECTIVENESS,默认开启。",
     "affinityIgnoreClientSessionId": "忽略客户端 Session ID",
     "affinityIgnoreClientSessionIdDesc": "开启后，可指纹化的请求强制使用最长前缀亲和做供应商粘性（跳过客户端 Session ID 绑定）；不可指纹化的请求仍走会话复用。默认开启。",
     "fakeStreaming": {

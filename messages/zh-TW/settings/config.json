@@ -169,7 +169,11 @@
       "off": "關閉",
       "shadow": "影子模式",
       "enforce": "啟用"
-    }
+    },
+    "replayEnabled": "請求 Replay",
+    "replayEnabledDesc": "快取上游回應並重用上游連線:並發或斷線重連的相同請求直接跟尾在途串流,不再重複請求供應商。儲存前跟隨環境變數 ENABLE_REQUEST_REPLAY,預設關閉。",
+    "cacheEffectivenessEnabled": "前綴快取模擬",
+    "cacheEffectivenessEnabledDesc": "模擬最長前綴匹配的快取命中率(理論 vs 實際),僅用於觀測,不影響路由。儲存前跟隨環境變數 ENABLE_CACHE_EFFECTIVENESS,預設開啟。"
   },
   "ipLogging": {
     "title": "IP 記錄與提取",

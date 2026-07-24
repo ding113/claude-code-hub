@@ -6,7 +6,10 @@ import { logger } from "@/lib/logger";
 import { RateLimitService } from "@/lib/rate-limit";
 import { buildScopeTag } from "@/lib/request-identity";
 import { SessionManager } from "@/lib/session-manager";
-import { getProxyRuntimeSettings } from "@/lib/system-settings/proxy-runtime";
+import {
+  getProxyRuntimeSettings,
+  isCacheEffectivenessEnabled,
+} from "@/lib/system-settings/proxy-runtime";
 import {
   parseProviderGroups,
   resolveBillingProviderGroups,
@@ -367,8 +370,14 @@ export class ProxyProviderResolver {
           attempt: attemptCount,
         });
 
-        // 只在首次选择时记录到决策链（重试时的记录由 forwarder.ts 在请求完成后统一记录）
-        if (attemptCount === 1) {
+        // 只在首次选择时记录到决策链（重试时的记录由 forwarder.ts 在请求完成后统一记录）。
+        // 供应商由会话复用/亲和提名预先确定时，对应链条目已写入且携带真实 selectionMethod，
+        // 不得再补一条 initial_selection（否则决策链看起来全部是加权随机初选）。
+        const lastChainItem = session.getProviderChain().at(-1);
+        const stickySelectionRecorded =
+          lastChainItem?.id === session.provider.id &&
+          (lastChainItem.reason === "session_reuse" || lastChainItem.reason === "affinity_hit");
+        if (attemptCount === 1 && !stickySelectionRecorded) {
           const successContext = session.getLastSelectionContext();
           session.addProviderToChain(session.provider, {
             reason: "initial_selection",
@@ -537,7 +546,7 @@ export class ProxyProviderResolver {
     if (!keyId) return false;
 
     const env = getEnvConfig();
-    if (!affinityRoutingEnabled && !env.ENABLE_CACHE_EFFECTIVENESS) return false;
+    if (!affinityRoutingEnabled && !isCacheEffectivenessEnabled()) return false;
 
     const chain = computeFingerprintChain(
       session.request.message,
@@ -551,7 +560,6 @@ export class ProxyProviderResolver {
       chain,
       nominatedProviderId: null,
       matchedFp: null,
-      matchedTier: null,
     };
     return true;
   }
@@ -577,7 +585,6 @@ export class ProxyProviderResolver {
       if (!hint) return;
 
       affinity.matchedFp = hint.matchedFp;
-      affinity.matchedTier = hint.tier;
 
       const provider = await ProxyProviderResolver.validateAffinityCandidate(
         session,
@@ -587,10 +594,14 @@ export class ProxyProviderResolver {
         // 候选不过硬校验：软回落，不写墓碑（可能只是临时熔断/调度窗口外）
         logger.debug("ProviderSelector: Affinity candidate rejected by hard validation", {
           providerId: hint.providerId,
-          tier: hint.tier,
+          matchedIndex: hint.matchedIndex,
         });
         return;
       }
+
+      // 命中边界详情：随决策链落库，供请求详情展示「具体匹配到哪个前缀」
+      const matchedBoundary =
+        affinity.chain.tail.find((boundary) => boundary.fp === hint.matchedFp) ?? null;
 
       affinity.nominatedProviderId = provider.id;
       session.setProvider(provider);
@@ -598,6 +609,11 @@ export class ProxyProviderResolver {
         reason: "affinity_hit",
         selectionMethod: "prefix_affinity",
         circuitState: getCircuitState(provider.id),
+        affinity: {
+          matchedDepth: matchedBoundary?.depth ?? null,
+          matchedPrefixBytes: matchedBoundary?.prefixBytes ?? null,
+          matchedFp: hint.matchedFp,
+        },
         decisionContext: {
           totalProviders: 0,
           enabledProviders: 0,
@@ -624,8 +640,8 @@ export class ProxyProviderResolver {
       logger.info("ProviderSelector: Prefix affinity nomination accepted", {
         providerId: provider.id,
         providerName: provider.name,
-        tier: hint.tier,
         matchedIndex: hint.matchedIndex,
+        matchedDepth: matchedBoundary?.depth ?? null,
       });
     } catch (error) {
       // 亲和路径任何异常都不影响主选路

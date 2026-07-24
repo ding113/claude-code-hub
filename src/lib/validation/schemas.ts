@@ -1118,6 +1118,10 @@ export const UpdateSystemSettingsSchema = z
       .optional(),
     // 忽略客户端 Session ID（可选）
     affinityIgnoreClientSessionId: z.boolean().optional(),
+    // F2 Replay 响应缓存与复用（可选；null = 跟随环境变量）
+    replayEnabled: z.boolean().nullable().optional(),
+    // F3b 最长前缀匹配缓存模拟（可选；null = 跟随环境变量）
+    cacheEffectivenessEnabled: z.boolean().nullable().optional(),
     // Codex Session ID 补全（可选）
     enableCodexSessionIdCompletion: z.boolean().optional(),
     // Claude metadata.user_id 注入（可选）

@@ -1,4 +1,5 @@
 import type { SessionBindingSnapshot } from "@/lib/redis/session-binding";
+import type { ProviderChainItem } from "@/types/message";
 import type { ProxySession } from "./session";
 
 export type DeferredStreamingDiscoveryLease = {
@@ -70,6 +71,8 @@ export type DeferredStreamingFinalization = {
   hedgeBindingAuthorityPromise?: Promise<DeferredStreamingHedgeBindingAuthority>;
   /** ResponseHandler-owned runtime lifecycle; attached when streaming starts. */
   hedgeBindingHeartbeat?: DeferredStreamingBindingHeartbeat;
+  /** F1 门控提交标记：随成功链条目落库（高并发模式下为空）。 */
+  streamGate?: ProviderChainItem["streamGate"];
 };
 
 const deferredMeta = new WeakMap<ProxySession, DeferredStreamingFinalization>();

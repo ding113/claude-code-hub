@@ -291,7 +291,7 @@ describe("SystemSettings：数据库缺列时的保存兜底", () => {
     vi.useRealTimers();
   });
 
-  test("getSystemSettings 在仅缺 affinity_ignore_client_session_id 新列时应降级读取并默认开启", async () => {
+  test("getSystemSettings 在仅缺 cache_effectiveness_enabled 新列时应降级读取", async () => {
     vi.resetModules();
 
     const now = new Date("2026-01-04T00:00:00.000Z");
@@ -299,7 +299,7 @@ describe("SystemSettings：数据库缺列时的保存兜底", () => {
     vi.setSystemTime(now);
 
     // 第一次 select(fullSelection) 因新列缺失而抛 42703；
-    // 第二次 select(selectionWithoutAffinityIgnore) 命中——验证新列已加入降级链最外层。
+    // 第二次 select(去掉 cacheEffectivenessEnabled)命中——验证新列已加入降级链最外层。
     const selectMock = vi
       .fn()
       .mockReturnValueOnce(createRejectedThenableQuery({ code: "42703" }))
@@ -344,7 +344,9 @@ describe("SystemSettings：数据库缺列时的保存兜底", () => {
     // 关键回归保护：第二次 select 必须恰好剥离了最新列（最外层降级），
     // 而非旧行为先剥离更早引入的列。若新列未加入降级链最外层，下面断言会失败。
     const secondSelection = selectMock.mock.calls[1]?.[0] as Record<string, unknown>;
-    expect(secondSelection).not.toHaveProperty("affinityIgnoreClientSessionId");
+    expect(secondSelection).not.toHaveProperty("cacheEffectivenessEnabled");
+    expect(secondSelection).toHaveProperty("replayEnabled");
+    expect(secondSelection).toHaveProperty("affinityIgnoreClientSessionId");
     expect(secondSelection).toHaveProperty("streamGateMode");
     expect(secondSelection).toHaveProperty("stickyTimeoutCooldownMs");
     expect(secondSelection).toHaveProperty("racingTotalTimeoutMs");

@@ -5,6 +5,7 @@ import {
   CheckCircle,
   ChevronRight,
   Clock3,
+  DatabaseZap,
   GitBranch,
   InfoIcon,
   Link2,
@@ -286,6 +287,13 @@ function getItemStatus(item: ProviderChainItem): {
       bgColor: "bg-amber-50 dark:bg-amber-950/30",
     };
   }
+  if (item.reason === "affinity_hit") {
+    return {
+      icon: DatabaseZap,
+      color: "text-teal-600",
+      bgColor: "bg-teal-50 dark:bg-teal-950/30",
+    };
+  }
   return {
     icon: RefreshCw,
     color: "text-slate-500",
@@ -512,6 +520,14 @@ export function ProviderChainPopover({
   const isSessionReuse =
     chain[0]?.reason === "session_reuse" || chain[0]?.selectionMethod === "session_reuse";
 
+  // F3a: prefix affinity hit (cache reuse nomination); chain[0]-based like
+  // session reuse so mid-chain retries are not misread as cache reuse
+  const affinityHitItem =
+    chain[0]?.reason === "affinity_hit" || chain[0]?.selectionMethod === "prefix_affinity"
+      ? chain[0]
+      : undefined;
+  const isAffinityHit = Boolean(affinityHitItem);
+
   // Get initial selection context for tooltip
   const initialSelection = chain.find((item) => item.reason === "initial_selection");
   const selectionContext = initialSelection?.decisionContext;
@@ -537,6 +553,10 @@ export function ProviderChainPopover({
                 {/* Session reuse indicator */}
                 {isSessionReuse && !isLeaseConflictProtection && (
                   <Link2 className="h-3 w-3 shrink-0 text-violet-500" />
+                )}
+                {/* Affinity hit (cache reuse) indicator */}
+                {isAffinityHit && !isSessionReuse && !isLeaseConflictProtection && (
+                  <DatabaseZap className="h-3 w-3 shrink-0 text-teal-500" />
                 )}
                 {/* Initial selection: show compact priority badge before name */}
                 {!isSessionReuse && selectionContext && (
@@ -665,6 +685,48 @@ export function ProviderChainPopover({
                         })}
                       </div>
                     )}
+                  </div>
+                )}
+
+                {/* Affinity hit (cache reuse) detailed info */}
+                {isAffinityHit && !isSessionReuse && (
+                  <div className="space-y-1.5 pt-1 border-t border-zinc-600 dark:border-zinc-300">
+                    <div className="flex items-center gap-1.5 text-[10px] text-teal-400 dark:text-teal-600 font-medium">
+                      <DatabaseZap className="h-3 w-3" />
+                      <span>{tChain("reasons.affinity_hit")}</span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[10px] pl-1">
+                      {affinityHitItem?.affinity?.matchedDepth != null && (
+                        <div>
+                          <span className="text-zinc-400 dark:text-zinc-500">
+                            {tChain("affinity.matchedDepth")}:
+                          </span>{" "}
+                          <span className="text-zinc-200 dark:text-zinc-700">
+                            {affinityHitItem.affinity.matchedDepth}
+                          </span>
+                        </div>
+                      )}
+                      {affinityHitItem?.affinity?.matchedPrefixBytes != null && (
+                        <div>
+                          <span className="text-zinc-400 dark:text-zinc-500">
+                            {tChain("affinity.matchedPrefixBytes")}:
+                          </span>{" "}
+                          <span className="text-zinc-200 dark:text-zinc-700">
+                            {affinityHitItem.affinity.matchedPrefixBytes}
+                          </span>
+                        </div>
+                      )}
+                      {affinityHitItem?.affinity?.matchedFp && (
+                        <div className="col-span-2">
+                          <span className="text-zinc-400 dark:text-zinc-500">
+                            {tChain("affinity.matchedFp")}:
+                          </span>{" "}
+                          <span className="font-mono text-zinc-200 dark:text-zinc-700">
+                            {affinityHitItem.affinity.matchedFp.slice(0, 16)}
+                          </span>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )}
 

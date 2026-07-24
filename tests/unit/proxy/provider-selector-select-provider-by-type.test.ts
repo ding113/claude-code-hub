@@ -159,6 +159,7 @@ describe("ProxyProviderResolver.ensure - 分组倍率", () => {
       getLastSelectionContext: vi.fn(() => null),
       setGroupCostMultiplier,
       addProviderToChain: vi.fn(),
+      getProviderChain: vi.fn(() => []),
       getOriginalModel: vi.fn(() => "gpt-5.5"),
     } as unknown as Parameters<typeof ProxyProviderResolver.ensure>[0];
 
@@ -243,6 +244,7 @@ describe("ProxyProviderResolver.ensure - 分组倍率", () => {
       getLastSelectionContext: vi.fn(() => context),
       setGroupCostMultiplier,
       addProviderToChain: vi.fn(),
+      getProviderChain: vi.fn(() => []),
       getOriginalModel: vi.fn(() => "gpt-5.5"),
       recordProviderSessionRef: vi.fn(),
     } as unknown as Parameters<typeof ProxyProviderResolver.ensure>[0];

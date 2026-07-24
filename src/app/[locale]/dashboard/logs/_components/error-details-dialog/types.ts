@@ -114,9 +114,14 @@ export interface MetadataTabProps extends TabSharedProps {
 /**
  * Parse blocked reason JSON string
  */
-export function parseBlockedReason(
-  blockedReason: string | null | undefined
-): { word?: string; matchType?: string; matchedText?: string } | null {
+export function parseBlockedReason(blockedReason: string | null | undefined): {
+  word?: string;
+  matchType?: string;
+  matchedText?: string;
+  // F2 replay_serve audit payload
+  source?: string;
+  replayId?: string;
+} | null {
   if (!blockedReason) return null;
   try {
     return JSON.parse(blockedReason);

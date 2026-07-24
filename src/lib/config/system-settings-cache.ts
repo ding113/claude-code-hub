@@ -215,6 +215,8 @@ export async function getCachedSystemSettings(): Promise<SystemSettings> {
         DEFAULT_SETTINGS.publicStatusAggregationIntervalMinutes,
       streamGateMode: DEFAULT_SETTINGS.streamGateMode,
       affinityIgnoreClientSessionId: DEFAULT_SETTINGS.affinityIgnoreClientSessionId,
+      replayEnabled: null,
+      cacheEffectivenessEnabled: null,
       discoveryEnabled: DEFAULT_SETTINGS.discoveryEnabled,
       discoveryConcurrency: DEFAULT_SETTINGS.discoveryConcurrency,
       maxDiscoveryRounds: DEFAULT_SETTINGS.maxDiscoveryRounds,

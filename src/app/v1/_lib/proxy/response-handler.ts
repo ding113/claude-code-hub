@@ -18,6 +18,7 @@ import type { SessionBindingSnapshot } from "@/lib/redis/session-binding";
 import { SessionManager } from "@/lib/session-manager";
 import { SessionTracker } from "@/lib/session-tracker";
 import { CODEX_1M_CONTEXT_TOKEN_THRESHOLD } from "@/lib/special-attributes";
+import { isCacheEffectivenessEnabled } from "@/lib/system-settings/proxy-runtime";
 import type {
   CostBreakdown,
   RequestCostCalculationOptions,
@@ -2132,6 +2133,7 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
       reason: meta.isFirstAttempt ? "request_success" : "retry_success",
       attemptNumber: meta.attemptNumber,
       statusCode: meta.upstreamStatusCode,
+      streamGate: meta.streamGate,
     });
   }
 
@@ -4456,7 +4458,7 @@ export class ProxyResponseHandler {
         latestStreamCommitSideEffects = postTerminalSideEffects;
 
         // F3b 缓存模拟列：仅开关开启时派生（关闭时保持 undefined，不落值）
-        const cacheScoreFields = getEnvConfig().ENABLE_CACHE_EFFECTIVENESS
+        const cacheScoreFields = isCacheEffectivenessEnabled()
           ? computeCacheScoreFields({
               affinity: session.affinity,
               succeeded: effectiveStatusCode >= 200 && effectiveStatusCode < 300,

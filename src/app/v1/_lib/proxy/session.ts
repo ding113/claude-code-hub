@@ -63,7 +63,6 @@ export interface SessionAffinityState {
   nominatedProviderId: number | null;
   /** 查找命中的边界指纹（未命中为 null） */
   matchedFp: string | null;
-  matchedTier: "conversation" | "system" | null;
 }
 
 /**
@@ -731,6 +730,8 @@ export class ProxySession {
       endpointFilterStats?: ProviderChainItem["endpointFilterStats"]; // endpoint filter statistics
       modelRedirect?: ProviderChainItem["modelRedirect"];
       rawCrossProviderFallbackEnabled?: boolean;
+      streamGate?: ProviderChainItem["streamGate"]; // F1 门控提交标记
+      affinity?: ProviderChainItem["affinity"]; // F3a 亲和命中详情
     }
   ): void {
     const item: ProviderChainItem = {
@@ -762,6 +763,8 @@ export class ProxySession {
       endpointFilterStats: metadata?.endpointFilterStats,
       modelRedirect: metadata?.modelRedirect ?? this.getCurrentModelRedirect(provider.id),
       rawCrossProviderFallbackEnabled: metadata?.rawCrossProviderFallbackEnabled,
+      streamGate: metadata?.streamGate,
+      affinity: metadata?.affinity,
     };
 
     // 避免重复添加同一个供应商

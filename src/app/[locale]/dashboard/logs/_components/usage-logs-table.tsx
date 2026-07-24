@@ -17,6 +17,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import type { LogsTableColumn } from "@/lib/column-visibility";
 import { cn, formatTokenAmount } from "@/lib/utils";
 import { copyTextToClipboard } from "@/lib/utils/clipboard";
 import type { CurrencyCode } from "@/lib/utils/currency";
@@ -36,10 +37,10 @@ import {
 } from "@/lib/utils/special-settings";
 import type { UsageLogRow } from "@/repository/usage-logs";
 import type { BillingModelSource } from "@/types/system-config";
-import { CodexReasoningEffortDisplay } from "./codex-reasoning-effort-display";
 import { ErrorDetailsDialog } from "./error-details-dialog";
 import { ModelDisplayWithRedirect } from "./model-display-with-redirect";
 import { ProviderChainPopover } from "./provider-chain-popover";
+import { ThinkingEffortDisplay } from "./thinking-effort-display";
 
 interface UsageLogsTableProps {
   logs: UsageLogRow[];
@@ -51,6 +52,7 @@ interface UsageLogsTableProps {
   newLogIds?: Set<number>; // 新增记录 ID 集合（用于动画高亮）
   currencyCode?: CurrencyCode;
   billingModelSource?: BillingModelSource;
+  hiddenColumns?: LogsTableColumn[];
 }
 
 export function UsageLogsTable({
@@ -63,10 +65,13 @@ export function UsageLogsTable({
   newLogIds,
   currencyCode = "USD",
   billingModelSource = "original",
+  hiddenColumns,
 }: UsageLogsTableProps) {
   const t = useTranslations("dashboard");
   const tChain = useTranslations("provider-chain");
   const totalPages = Math.ceil(total / pageSize);
+  const hideReasoningEffortColumn = hiddenColumns?.includes("reasoningEffort") ?? false;
+  const visibleColumnCount = 13 - (hideReasoningEffortColumn ? 1 : 0);
   const getPricingSourceLabel = (source: string) =>
     t(`logs.billingDetails.pricingSource.${source}`);
 
@@ -106,7 +111,11 @@ export function UsageLogsTable({
               <TableHead className="w-[140px] max-w-[140px]">{t("logs.columns.ip")}</TableHead>
               <TableHead>{t("logs.columns.provider")}</TableHead>
               <TableHead>{t("logs.columns.model")}</TableHead>
-              <TableHead>{t("logs.columns.reasoningEffort")}</TableHead>
+              {hideReasoningEffortColumn ? null : (
+                <TableHead title={t("logs.columns.reasoningEffortTooltip")}>
+                  {t("logs.columns.reasoningEffort")}
+                </TableHead>
+              )}
               <TableHead className="text-right">{t("logs.columns.tokens")}</TableHead>
               <TableHead className="text-right">{t("logs.columns.cache")}</TableHead>
               <TableHead className="text-right">{t("logs.columns.cost")}</TableHead>
@@ -117,7 +126,10 @@ export function UsageLogsTable({
           <TableBody>
             {logs.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={13} className="text-center text-muted-foreground">
+                <TableCell
+                  colSpan={visibleColumnCount}
+                  className="text-center text-muted-foreground"
+                >
                   {t("logs.table.noData")}
                 </TableCell>
               </TableRow>
@@ -304,9 +316,11 @@ export function UsageLogsTable({
                         </Tooltip>
                       </TooltipProvider>
                     </TableCell>
-                    <TableCell className="font-mono text-xs w-[120px] max-w-[120px] overflow-hidden">
-                      <CodexReasoningEffortDisplay specialSettings={log.specialSettings} />
-                    </TableCell>
+                    {hideReasoningEffortColumn ? null : (
+                      <TableCell className="font-mono text-xs w-[84px] max-w-[84px] overflow-hidden">
+                        <ThinkingEffortDisplay specialSettings={log.specialSettings} />
+                      </TableCell>
+                    )}
                     <TableCell className="text-right font-mono text-xs">
                       <TooltipProvider>
                         <Tooltip delayDuration={250}>
