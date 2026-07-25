@@ -7,9 +7,9 @@ describe("enableGeminiFunctionIdRectifier system setting", () => {
     const { toSystemSettings } = await import("@/repository/_shared/transformers");
 
     expect(toSystemSettings(undefined).enableGeminiFunctionIdRectifier).toBe(true);
-    expect(
-      toSystemSettings({ id: 1, siteTitle: "Claude Code Hub" }).enableGeminiFunctionIdRectifier
-    ).toBe(true);
+    expect(toSystemSettings({ id: 1, siteTitle: "CC Hub" }).enableGeminiFunctionIdRectifier).toBe(
+      true
+    );
     expect(
       toSystemSettings({ id: 1, enableGeminiFunctionIdRectifier: false })
         .enableGeminiFunctionIdRectifier

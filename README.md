@@ -4,7 +4,7 @@
 
 <div align="center">
 
-# Claude Code Hub
+# CC Hub
 
 **🚀 智能 AI API 代理中转服务平台｜面向团队的多供应商统一接入、弹性调度与精细化运营中心**
 
@@ -14,7 +14,7 @@
 [![Telegram Group](https://img.shields.io/badge/Telegram-交流群-blue?logo=telegram)](https://t.me/ygxz_group)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/ding113/claude-code-hub)
 
-Claude Code Hub 通过 Next.js 15 + Hono + PostgreSQL + Redis 组合，实现 Claude/OpenAI 兼容 API 代理、智能负载均衡、实时监控、价格管理与自动化文档，帮助团队安全、可观测地管理多家 AI 服务商。
+CC Hub 通过 Next.js 15 + Hono + PostgreSQL + Redis 组合，实现 Claude/OpenAI 兼容 API 代理、智能负载均衡、实时监控、价格管理与自动化文档，帮助团队安全、可观测地管理多家 AI 服务商。
 
 💬 **加入讨论**：有部署、功能或技术问题？欢迎加入 [Telegram 交流群](https://t.me/ygxz_group) 与社区一起讨论！
 
@@ -25,7 +25,7 @@ Claude Code Hub 通过 Next.js 15 + Hono + PostgreSQL + Redis 组合，实现 Cl
 > [!IMPORTANT]
 > **当前项目正处于积极重构阶段**
 >
-> Claude Code Hub 的重构版本 Claude Code Hub Plus 预计将于第三季度以 AGPL 形式开源。Claude Code Hub Plus 致力于打造高性能、稳定的商用级 LLM 网关，提供格式转换、隐私过滤、模型广场、充值计费等完善的商用功能，并显著提升转发核心的理论性能。重构版本开发期间，Node.js 版本的开发进度和社区支持可能延误，敬请理解。
+> CC Hub 的重构版本 CC Hub Plus 预计将于第三季度以 AGPL 形式开源。CC Hub Plus 致力于打造高性能、稳定的商用级 LLM 网关，提供格式转换、隐私过滤、模型广场、充值计费等完善的商用功能，并显著提升转发核心的理论性能。重构版本开发期间，Node.js 版本的开发进度和社区支持可能延误，敬请理解。
 
 <table>
 <tr>
@@ -405,3 +405,7 @@ cch doctor            # 诊断集群与部署状态
 ## 📜 许可证 License
 
 本项目采用 [MIT License](LICENSE)，可自由使用与二次开发，仍需遵守条款并保留致谢信息。
+
+---
+
+<sub>CC Hub 并非 Anthropic 官方项目，与其无任何关联。Claude Code、Claude 等均属 Anthropic 公司的商标。</sub>

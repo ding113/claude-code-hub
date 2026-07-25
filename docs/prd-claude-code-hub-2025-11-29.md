@@ -11,7 +11,7 @@
 
 ## Document Overview
 
-This Product Requirements Document (PRD) defines the functional and non-functional requirements for Claude Code Hub. It serves as the source of truth for what will be built and provides traceability from requirements through implementation.
+This Product Requirements Document (PRD) defines the functional and non-functional requirements for CC Hub. It serves as the source of truth for what will be built and provides traceability from requirements through implementation.
 
 **Related Documents:**
 
@@ -21,7 +21,7 @@ This Product Requirements Document (PRD) defines the functional and non-function
 
 ## Executive Summary
 
-Claude Code Hub is an intelligent AI API proxy platform designed for agile development teams, AI-driven development teams, startups, and small-medium software companies. It provides observable, highly available AI coding infrastructure with multi-provider auto-switching, circuit breaker, seamless retry, complete logging, and billing management - ideal for team collaboration and shared usage scenarios.
+CC Hub is an intelligent AI API proxy platform designed for agile development teams, AI-driven development teams, startups, and small-medium software companies. It provides observable, highly available AI coding infrastructure with multi-provider auto-switching, circuit breaker, seamless retry, complete logging, and billing management - ideal for team collaboration and shared usage scenarios.
 
 ---
 

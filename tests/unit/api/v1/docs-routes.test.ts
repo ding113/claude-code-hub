@@ -40,7 +40,7 @@ describe("v1 management docs routes", () => {
 
     expect(response.status).toBe(200);
     expect(document.openapi).toBe("3.1.0");
-    expect(document.info.title).toBe("Claude Code Hub Management API");
+    expect(document.info.title).toBe("CC Hub Management API");
     expect(document.info.version).toBe("1.0.0");
     expect(document.servers?.[0]?.url).toBe("/");
     expect(document.components?.securitySchemes).toHaveProperty("bearerAuth");

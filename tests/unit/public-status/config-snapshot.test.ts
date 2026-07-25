@@ -104,7 +104,7 @@ describe("public-status config snapshot", () => {
 
     const snapshot = mod.buildPublicStatusConfigSnapshot({
       configVersion: "cfg-2",
-      siteTitle: "Claude Code Hub Status",
+      siteTitle: "CC Hub Status",
       siteDescription: "Request-derived public status",
       defaultIntervalMinutes: 5,
       defaultRangeHours: 24,
@@ -130,7 +130,7 @@ describe("public-status config snapshot", () => {
 
     expect(snapshot).toMatchObject({
       configVersion: "cfg-2",
-      siteTitle: "Claude Code Hub Status",
+      siteTitle: "CC Hub Status",
       siteDescription: "Request-derived public status",
       groups: [
         {
@@ -165,14 +165,14 @@ describe("public-status config snapshot", () => {
         .mockResolvedValueOnce(
           JSON.stringify({
             configVersion: "cfg-2",
-            siteTitle: "Claude Code Hub Status",
+            siteTitle: "CC Hub Status",
             siteDescription: "Request-derived public status",
           })
         ),
     };
 
     await expect(mod.readPublicStatusSiteMetadata({ redis })).resolves.toEqual({
-      siteTitle: "Claude Code Hub Status",
+      siteTitle: "CC Hub Status",
       siteDescription: "Request-derived public status",
     });
   });

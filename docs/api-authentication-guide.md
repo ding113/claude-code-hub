@@ -2,7 +2,7 @@
 
 ## 概述
 
-Claude Code Hub 的新版管理 API 位于 `/api/v1/*`。它和代理 API `/v1/*`
+CC Hub 的新版管理 API 位于 `/api/v1/*`。它和代理 API `/v1/*`
 互相独立，也和已弃用的 Server Action 适配层 `/api/actions/*` 独立。
 
 新版管理 API 支持三种凭据传递方式：
@@ -35,7 +35,7 @@ Cookie 认证的写操作需要 CSRF 保护：先调用 `GET /api/v1/auth/csrf`�
 
 适合浏览器内测试和 Scalar/Swagger UI。
 
-1. 访问 Claude Code Hub 登录页面。
+1. 访问 CC Hub 登录页面。
 2. 使用 `ADMIN_TOKEN` 或允许 Web UI 登录的用户 API Key 登录。
 3. 浏览器会设置 `auth-token` Cookie。
 4. 在同一浏览器访问 `/api/v1/scalar` 或 `/api/v1/docs`，文档页会自动携带

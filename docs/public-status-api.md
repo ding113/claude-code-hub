@@ -2,7 +2,7 @@
 
 ## 概述
 
-Claude Code Hub 提供两条无需认证的公开状态接口：
+CC Hub 提供两条无需认证的公开状态接口：
 
 - `GET /api/public-status`
 - `GET /api/public-site-meta`
@@ -121,8 +121,8 @@ curl "http://localhost:23000/api/public-status?groupSlug=anthropic&status=failed
     ]
   },
   "meta": {
-    "siteTitle": "Claude Code Hub",
-    "siteDescription": "Claude Code Hub public status",
+    "siteTitle": "CC Hub",
+    "siteDescription": "CC Hub public status",
     "timeZone": "UTC"
   },
   "groups": []
@@ -213,8 +213,8 @@ curl "http://localhost:23000/api/public-site-meta"
 ```json
 {
   "available": true,
-  "siteTitle": "Claude Code Hub",
-  "siteDescription": "Claude Code Hub public status",
+  "siteTitle": "CC Hub",
+  "siteDescription": "CC Hub public status",
   "timeZone": "UTC",
   "source": "projection"
 }

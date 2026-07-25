@@ -108,7 +108,7 @@
     "saveSuccess": "Сохранено успешно",
     "siteTitle": "Название сайта",
     "siteTitleDesc": "Используется для установки заголовка вкладки браузера и имени системы по умолчанию.",
-    "siteTitlePlaceholder": "например: Claude Code Hub",
+    "siteTitlePlaceholder": "например: CC Hub",
     "siteTitleRequired": "Название сайта не может быть пустым",
     "ipLoggingInvalidJson": "Конфигурация извлечения IP не является валидным JSON: {message}",
     "ipLoggingInvalidShape": "Конфигурация извлечения IP должна быть объектом с массивом `headers`.",

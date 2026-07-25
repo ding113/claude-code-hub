@@ -1,7 +1,7 @@
 {
-  "pageTitle": "Realtime big screen - Claude Code Hub",
-  "pageDescription": "Claude Code Hub realtime monitoring big screen",
-  "title": "CLAUDE CODE HUB",
+  "pageTitle": "Realtime big screen - CC Hub",
+  "pageDescription": "CC Hub realtime monitoring big screen",
+  "title": "CC HUB",
   "subtitle": "REALTIME DATA MONITOR",
   "metrics": {
     "concurrent": "Concurrency",

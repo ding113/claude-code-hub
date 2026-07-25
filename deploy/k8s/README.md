@@ -1,4 +1,4 @@
-# Claude Code Hub — K8s Manifests
+# CC Hub — K8s Manifests
 
 本目录是 Kubernetes 部署清单模板,由 `scripts/deploy-k8s.sh` 在部署时做占位符替换后下发到集群。
 不建议直接 `kubectl apply -f` 本目录 — 文件中包含 `{{VAR}}` 占位符,需先渲染。

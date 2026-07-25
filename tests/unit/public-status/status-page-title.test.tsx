@@ -30,11 +30,11 @@ describe("public status page title", () => {
       intervalMinutes: 5,
       rangeHours: 24,
       followServerDefaults: true,
-      siteTitle: "Claude Code Hub",
+      siteTitle: "CC Hub",
       timeZone: "UTC",
       meta: {
-        siteTitle: "Claude Code Hub",
-        siteDescription: "Claude Code Hub public status",
+        siteTitle: "CC Hub",
+        siteDescription: "CC Hub public status",
         timeZone: "UTC",
       },
     });
@@ -47,7 +47,7 @@ describe("public status page title", () => {
 
     expect(mockPublicStatusView).toHaveBeenCalledWith(
       expect.objectContaining({
-        siteTitle: "Claude Code Hub",
+        siteTitle: "CC Hub",
       }),
       undefined
     );
@@ -110,11 +110,11 @@ describe("public status page title", () => {
       intervalMinutes: 5,
       rangeHours: 24,
       followServerDefaults: true,
-      siteTitle: "Claude Code Hub",
+      siteTitle: "CC Hub",
       timeZone: "UTC",
       meta: {
-        siteTitle: "Claude Code Hub",
-        siteDescription: "Claude Code Hub public status",
+        siteTitle: "CC Hub",
+        siteDescription: "CC Hub public status",
         timeZone: "UTC",
       },
     });

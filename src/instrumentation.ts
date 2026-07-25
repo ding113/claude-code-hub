@@ -429,7 +429,7 @@ export async function register() {
         "@/lib/migrate"
       );
 
-      logger.info("Initializing Claude Code Hub");
+      logger.info("Initializing CC Hub");
 
       // 等待数据库连接
       const isConnected = await checkDatabaseConnection();

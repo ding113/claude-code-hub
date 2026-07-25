@@ -11,7 +11,7 @@
 
 ## Document Overview
 
-This document defines the system architecture for Claude Code Hub. It provides the technical blueprint for implementation, addressing all functional and non-functional requirements from the PRD.
+This document defines the system architecture for CC Hub. It provides the technical blueprint for implementation, addressing all functional and non-functional requirements from the PRD.
 
 **Related Documents:**
 
@@ -22,7 +22,7 @@ This document defines the system architecture for Claude Code Hub. It provides t
 
 ## Executive Summary
 
-Claude Code Hub (CCH) is an intelligent AI API proxy platform built on a **Modular Monolith** architecture using Next.js 15 with App Router and Hono. The system provides multi-provider management, intelligent load balancing, circuit breaker patterns, and comprehensive monitoring for AI coding tools like Claude Code and Codex.
+CC Hub (CCH) is an intelligent AI API proxy platform built on a **Modular Monolith** architecture using Next.js 15 with App Router and Hono. The system provides multi-provider management, intelligent load balancing, circuit breaker patterns, and comprehensive monitoring for AI coding tools like Claude Code and Codex.
 
 The architecture emphasizes:
 
@@ -61,7 +61,7 @@ These requirements heavily influence architectural decisions:
 
 ### High-Level Architecture
 
-Claude Code Hub follows a **Modular Monolith** pattern with clear internal boundaries:
+CC Hub follows a **Modular Monolith** pattern with clear internal boundaries:
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐

@@ -4,7 +4,7 @@
 
 <div align="center">
 
-# Claude Code Hub
+# CC Hub
 
 **🚀 Intelligent AI API relay platform — the control center for multi-provider onboarding, elastic routing, and granular operations**
 
@@ -14,7 +14,7 @@
 [![Telegram Group](https://img.shields.io/badge/Telegram-Join%20Group-blue?logo=telegram)](https://t.me/ygxz_group)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/ding113/claude-code-hub)
 
-Claude Code Hub combines Next.js 15, Hono, PostgreSQL, and Redis to deliver a Claude/OpenAI-compatible API gateway with smart load balancing, live observability, price governance, and automated documentation, enabling teams to manage multiple AI vendors safely and transparently.
+CC Hub combines Next.js 15, Hono, PostgreSQL, and Redis to deliver a Claude/OpenAI-compatible API gateway with smart load balancing, live observability, price governance, and automated documentation, enabling teams to manage multiple AI vendors safely and transparently.
 
 💬 **Join the discussion**: Questions about deployment, features or technical issues? Join our [Telegram community](https://t.me/ygxz_group)!
 
@@ -25,7 +25,7 @@ Claude Code Hub combines Next.js 15, Hono, PostgreSQL, and Redis to deliver a Cl
 > [!IMPORTANT]
 > **This project is currently under active refactoring**
 >
-> Claude Code Hub Plus, the refactored version of Claude Code Hub, is expected to be open-sourced under the AGPL license in Q3. Claude Code Hub Plus is dedicated to building a high-performance, stable, commercial-grade LLM gateway, offering comprehensive commercial features such as format conversion, privacy filtering, a model marketplace, and top-up billing, while significantly improving the theoretical performance of the forwarding core. During development of the refactored version, progress and community support for the Node.js version may be delayed — thank you for your understanding.
+> CC Hub Plus, the refactored version of CC Hub, is expected to be open-sourced under the AGPL license in Q3. CC Hub Plus is dedicated to building a high-performance, stable, commercial-grade LLM gateway, offering comprehensive commercial features such as format conversion, privacy filtering, a model marketplace, and top-up billing, while significantly improving the theoretical performance of the forwarding core. During development of the refactored version, progress and community support for the Node.js version may be delayed — thank you for your understanding.
 
 <table>
 <tr>
@@ -392,3 +392,7 @@ This project builds on [zsio/claude-code-hub](https://github.com/zsio/claude-cod
 ## 📜 License
 
 Released under the [MIT License](LICENSE). You’re welcome to use and extend the project as long as you comply with the license and retain the attribution.
+
+---
+
+<sub>CC Hub is not an official Anthropic project and is not affiliated with Anthropic. Claude Code and Claude are trademarks of Anthropic.</sub>

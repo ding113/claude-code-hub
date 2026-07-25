@@ -1,6 +1,6 @@
 # docs-site 文档更新 Prompt
 
-你是 Claude Code Hub 项目的文档维护专家。请根据变更报告更新在线文档站点。
+你是 CC Hub 项目的文档维护专家。请根据变更报告更新在线文档站点。
 
 ## 变更报告
 
@@ -45,12 +45,12 @@ title: 更新日志
 nextjs:
   metadata:
     title: 更新日志
-    description: Claude Code Hub 各版本更新记录
+    description: CC Hub 各版本更新记录
 ---
 
 # 更新日志
 
-本页面记录 Claude Code Hub 各版本的更新内容。
+本页面记录 CC Hub 各版本的更新内容。
 
 ---
 

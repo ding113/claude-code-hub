@@ -40,7 +40,7 @@ const getEnvConfigMock = vi.mocked(getEnvConfig);
 function createSettings(overrides: Partial<SystemSettings> = {}): SystemSettings {
   return {
     id: 1,
-    siteTitle: "Claude Code Hub",
+    siteTitle: "CC Hub",
     allowGlobalUsageView: false,
     currencyDisplay: "USD",
     billingModelSource: "original",

@@ -24,7 +24,7 @@
 
 ### 1. 介绍 Introduction
 
-Claude Code Hub 是一个面向团队的 AI API 代理平台，支持统一管理多家供应商、智能分流和现代化运维工具。本文档说明如何按照项目既定流程参与贡献，帮助你提交高质量的 Pull Request（PR）。
+CC Hub 是一个面向团队的 AI API 代理平台，支持统一管理多家供应商、智能分流和现代化运维工具。本文档说明如何按照项目既定流程参与贡献，帮助你提交高质量的 Pull Request（PR）。
 
 ### 2. 行为准则 Code of Conduct
 
@@ -166,7 +166,7 @@ docker compose build
 
 ### 1. Introduction
 
-Claude Code Hub centralizes multiple AI providers with smart routing, tenant controls, and observability. This document explains how to deliver high-quality Pull Requests (PRs) that align with the project roadmap.
+CC Hub centralizes multiple AI providers with smart routing, tenant controls, and observability. This document explains how to deliver high-quality Pull Requests (PRs) that align with the project roadmap.
 
 ### 2. Code of Conduct
 
@@ -272,4 +272,4 @@ GitHub Actions runs `Docker Build Test` on every PR to `dev` and `main`; see `.g
 
 ---
 
-感谢你为 Claude Code Hub 做出的贡献！Thanks for helping improve Claude Code Hub!
+感谢你为 CC Hub 做出的贡献！Thanks for helping improve CC Hub!

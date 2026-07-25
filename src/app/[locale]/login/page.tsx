@@ -340,7 +340,6 @@ function LoginPageContent() {
                             id="apiKey"
                             ref={apiKeyInputRef}
                             type={showPassword ? "text" : "password"}
-                            placeholder={t("placeholders.apiKeyExample")}
                             value={apiKey}
                             onChange={(e) => setApiKey(e.target.value)}
                             className="pl-9 pr-10"
@@ -412,6 +411,13 @@ function LoginPageContent() {
           className="text-center text-xs text-muted-foreground"
         >
           {siteTitle}
+        </p>
+
+        <p
+          data-testid="login-disclaimer"
+          className="max-w-md px-4 text-center text-[11px] leading-relaxed text-muted-foreground/80"
+        >
+          {t("brand.disclaimer")}
         </p>
 
         {versionInfo?.current ? (

@@ -839,7 +839,7 @@ export const sensitiveWords = pgTable('sensitive_words', {
 // System Settings table
 export const systemSettings = pgTable('system_settings', {
   id: serial('id').primaryKey(),
-  siteTitle: varchar('site_title', { length: 128 }).notNull().default('Claude Code Hub'),
+  siteTitle: varchar('site_title', { length: 128 }).notNull().default('CC Hub'),
   allowGlobalUsageView: boolean('allow_global_usage_view').notNull().default(false),
 
   // 货币显示配置

@@ -13,6 +13,7 @@
  */
 
 import { logger } from "@/lib/logger";
+import { DEFAULT_SITE_TITLE } from "@/lib/site-title";
 import { getSystemSettings } from "@/repository/system-config";
 import type { SystemSettings } from "@/types/system-config";
 
@@ -178,7 +179,7 @@ export async function getCachedSystemSettings(): Promise<SystemSettings> {
     // since getSystemSettings creates default row if not exists
     return {
       id: 0,
-      siteTitle: "Claude Code Hub",
+      siteTitle: DEFAULT_SITE_TITLE,
       allowGlobalUsageView: false,
       currencyDisplay: "USD",
       billingModelSource: "original",

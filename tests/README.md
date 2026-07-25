@@ -1,4 +1,4 @@
-# 🧪 Claude Code Hub 测试指南
+# 🧪 CC Hub 测试指南
 
 > **统一 Vitest 框架** | 38 个基础测试 + 103 个集成测试 ✅
 
@@ -279,7 +279,7 @@ bun run test
 
 ---
 
-**维护者**: Claude Code Hub Team
+**维护者**: CC Hub Team
 **测试框架**: Vitest 4.0.16
 **基础测试**: 100% (38/38)
 **最后更新**: 2025-12-17

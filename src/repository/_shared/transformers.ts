@@ -1,5 +1,6 @@
 import { PROVIDER_TIMEOUT_DEFAULTS } from "@/lib/constants/provider.constants";
 import { normalizeProviderModelRedirectRules } from "@/lib/provider-model-redirects";
+import { DEFAULT_SITE_TITLE } from "@/lib/site-title";
 import { formatCostForStorage } from "@/lib/utils/currency";
 import type { Key } from "@/types/key";
 import type { MessageRequest } from "@/types/message";
@@ -244,7 +245,7 @@ export function toSystemSettings(dbSettings: any): SystemSettings {
 
   return {
     id: dbSettings?.id ?? 0,
-    siteTitle: dbSettings?.siteTitle ?? "Claude Code Hub",
+    siteTitle: dbSettings?.siteTitle ?? DEFAULT_SITE_TITLE,
     allowGlobalUsageView: dbSettings?.allowGlobalUsageView ?? true,
     currencyDisplay: dbSettings?.currencyDisplay ?? "USD",
     billingModelSource: dbSettings?.billingModelSource ?? "original",

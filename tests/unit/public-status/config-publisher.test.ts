@@ -42,7 +42,7 @@ describe("public-status config publisher", () => {
     vi.clearAllMocks();
 
     mockGetSystemSettings.mockResolvedValue({
-      siteTitle: "Claude Code Hub",
+      siteTitle: "CC Hub",
       timezone: "UTC",
       publicStatusAggregationIntervalMinutes: 5,
       publicStatusWindowHours: 24,
@@ -96,7 +96,7 @@ describe("public-status config publisher", () => {
     expect(mockPublishPublicStatusConfigSnapshot).toHaveBeenCalledWith(
       expect.objectContaining({
         snapshot: expect.objectContaining({
-          siteDescription: "Claude Code Hub public status",
+          siteDescription: "CC Hub public status",
           groups: [
             expect.objectContaining({
               models: [

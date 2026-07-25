@@ -37,7 +37,7 @@ vi.mock("next-themes", () => ({
 }));
 
 const globalFetch = global.fetch;
-const DEFAULT_SITE_TITLE = "Claude Code Hub";
+const DEFAULT_SITE_TITLE = "CC Hub";
 
 function getRequestPath(input: string | URL | Request): string {
   if (typeof input === "string") {
@@ -141,5 +141,21 @@ describe("login page site title", () => {
     expect(
       container.querySelector<HTMLElement>('[data-testid="login-site-title-footer"]')?.textContent
     ).toBe(DEFAULT_SITE_TITLE);
+  });
+
+  it("shows the trademark disclaimer and leaves the API key field without a placeholder", async () => {
+    (global.fetch as ReturnType<typeof vi.fn>).mockImplementation(() =>
+      Promise.resolve(mockJsonResponse({ current: "1.0.0", hasUpdate: false }))
+    );
+
+    await render();
+    await flushMicrotasks();
+
+    expect(
+      container.querySelector<HTMLElement>('[data-testid="login-disclaimer"]')?.textContent
+    ).toBe("t:brand.disclaimer");
+    expect(container.querySelector<HTMLInputElement>("#apiKey")?.getAttribute("placeholder")).toBe(
+      null
+    );
   });
 });

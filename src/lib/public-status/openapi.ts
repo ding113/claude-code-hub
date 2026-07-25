@@ -367,8 +367,8 @@ export function appendPublicStatusOpenApi(
                           include: ["meta", "defaults", "groups", "timeline"],
                         },
                         meta: {
-                          siteTitle: "Claude Code Hub",
-                          siteDescription: "Claude Code Hub public status",
+                          siteTitle: "CC Hub",
+                          siteDescription: "CC Hub public status",
                           timeZone: "UTC",
                         },
                         groups: [
@@ -503,8 +503,8 @@ export function appendPublicStatusOpenApi(
                       summary: "projection 可用",
                       value: {
                         available: true,
-                        siteTitle: "Claude Code Hub",
-                        siteDescription: "Claude Code Hub public status",
+                        siteTitle: "CC Hub",
+                        siteDescription: "CC Hub public status",
                         timeZone: "UTC",
                         source: "projection",
                       },

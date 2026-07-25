@@ -1,6 +1,6 @@
 # Kubernetes / k3s 部署指南
 
-本文说明如何把 Claude Code Hub 部署到 Kubernetes(含轻量级 k3s)集群。若你只需要单机 Docker 部署,请参考 [`scripts/deploy.sh`](../scripts/deploy.sh) 与 [`docker-compose.yaml`](../docker-compose.yaml)。
+本文说明如何把 CC Hub 部署到 Kubernetes(含轻量级 k3s)集群。若你只需要单机 Docker 部署,请参考 [`scripts/deploy.sh`](../scripts/deploy.sh) 与 [`docker-compose.yaml`](../docker-compose.yaml)。
 
 ---
 
@@ -106,7 +106,7 @@ bash scripts/deploy-k8s.sh --install-k3s -y
 
 ```console
 +================================================================+
-|              Claude Code Hub Deployment Complete!              |
+|                  CC Hub Deployment Complete!                   |
 +================================================================+
 
 Access URL:           http://<node-ip>:<nodeport>
