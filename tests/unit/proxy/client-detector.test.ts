@@ -85,12 +85,13 @@ describe("client-detector", () => {
       expect(isBuiltinKeyword(pattern)).toBe(true);
     });
 
-    test.each(["gemini-cli", "codex-cli", "custom-pattern"])(
-      "should return false for non-builtin keyword: %s",
-      (pattern) => {
-        expect(isBuiltinKeyword(pattern)).toBe(false);
-      }
-    );
+    test.each([
+      "gemini-cli",
+      "codex-cli",
+      "custom-pattern",
+    ])("should return false for non-builtin keyword: %s", (pattern) => {
+      expect(isBuiltinKeyword(pattern)).toBe(false);
+    });
   });
 
   describe("confirmClaudeCodeSignals via detectClientFull", () => {

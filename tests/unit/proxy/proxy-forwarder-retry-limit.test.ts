@@ -243,64 +243,64 @@ describe("ProxyForwarder - raw passthrough fallback parity", () => {
     vi.mocked(categorizeErrorAsync).mockResolvedValue(ErrorCategory.PROVIDER_ERROR);
   });
 
-  test.each([V1_ENDPOINT_PATHS.MESSAGES_COUNT_TOKENS, V1_ENDPOINT_PATHS.RESPONSES_COMPACT])(
-    "%s 失败时应允许跨 provider fallback，但仍保持 no-circuit",
-    async (pathname) => {
-      vi.useFakeTimers();
+  test.each([
+    V1_ENDPOINT_PATHS.MESSAGES_COUNT_TOKENS,
+    V1_ENDPOINT_PATHS.RESPONSES_COMPACT,
+  ])("%s 失败时应允许跨 provider fallback，但仍保持 no-circuit", async (pathname) => {
+    vi.useFakeTimers();
 
-      try {
-        const session = createSession(new URL(`https://example.com${pathname}`));
-        const provider = createProvider({
+    try {
+      const session = createSession(new URL(`https://example.com${pathname}`));
+      const provider = createProvider({
+        providerType: "claude",
+        providerVendorId: 123,
+        maxRetryAttempts: 3,
+      });
+      session.setProvider(provider);
+
+      mocks.getPreferredProviderEndpoints.mockResolvedValue([
+        makeEndpoint({
+          id: 1,
+          vendorId: 123,
           providerType: "claude",
-          providerVendorId: 123,
-          maxRetryAttempts: 3,
-        });
-        session.setProvider(provider);
+          url: "https://ep1.example.com",
+        }),
+        makeEndpoint({
+          id: 2,
+          vendorId: 123,
+          providerType: "claude",
+          url: "https://ep2.example.com",
+        }),
+      ]);
 
-        mocks.getPreferredProviderEndpoints.mockResolvedValue([
-          makeEndpoint({
-            id: 1,
-            vendorId: 123,
-            providerType: "claude",
-            url: "https://ep1.example.com",
-          }),
-          makeEndpoint({
-            id: 2,
-            vendorId: 123,
-            providerType: "claude",
-            url: "https://ep2.example.com",
-          }),
-        ]);
+      const doForward = vi.spyOn(
+        ProxyForwarder as unknown as { doForward: (...args: unknown[]) => unknown },
+        "doForward"
+      );
+      const selectAlternative = vi.spyOn(
+        ProxyForwarder as unknown as { selectAlternative: (...args: unknown[]) => unknown },
+        "selectAlternative"
+      );
 
-        const doForward = vi.spyOn(
-          ProxyForwarder as unknown as { doForward: (...args: unknown[]) => unknown },
-          "doForward"
-        );
-        const selectAlternative = vi.spyOn(
-          ProxyForwarder as unknown as { selectAlternative: (...args: unknown[]) => unknown },
-          "selectAlternative"
-        );
+      doForward.mockImplementation(async () => {
+        throw new ProxyError("upstream failed", 500);
+      });
 
-        doForward.mockImplementation(async () => {
-          throw new ProxyError("upstream failed", 500);
-        });
+      const sendPromise = ProxyForwarder.send(session);
+      let caughtError: Error | null = null;
+      sendPromise.catch((error) => {
+        caughtError = error as Error;
+      });
+      await vi.runAllTimersAsync();
 
-        const sendPromise = ProxyForwarder.send(session);
-        let caughtError: Error | null = null;
-        sendPromise.catch((error) => {
-          caughtError = error as Error;
-        });
-        await vi.runAllTimersAsync();
-
-        expect(caughtError).toBeInstanceOf(ProxyError);
-        expect(doForward).toHaveBeenCalledTimes(1);
-        expect(selectAlternative).toHaveBeenCalledTimes(1);
-        expect(mocks.recordFailure).not.toHaveBeenCalled();
-      } finally {
-        vi.useRealTimers();
-      }
+      expect(caughtError).toBeInstanceOf(ProxyError);
+      expect(doForward).toHaveBeenCalledTimes(1);
+      expect(selectAlternative).toHaveBeenCalledTimes(1);
+      expect(mocks.recordFailure).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
     }
-  );
+  });
 });
 
 describe("ProxyForwarder - retry limit enforcement", () => {

@@ -61,20 +61,20 @@ describe("buildRedisOptionsForUrl", () => {
     expect(result.isTLS).toBe(true);
   });
 
-  it.each(["redis://localhost:6379", "rediss://localhost:6380"])(
-    "supports REDIS_COMMAND_TIMEOUT_MS override for %s",
-    async (redisUrl) => {
-      process.env.REDIS_COMMAND_TIMEOUT_MS = "2500";
-      vi.resetModules();
-      const { buildRedisOptionsForUrl: buildFreshOptions } = await import("@/lib/redis/client");
+  it.each([
+    "redis://localhost:6379",
+    "rediss://localhost:6380",
+  ])("supports REDIS_COMMAND_TIMEOUT_MS override for %s", async (redisUrl) => {
+    process.env.REDIS_COMMAND_TIMEOUT_MS = "2500";
+    vi.resetModules();
+    const { buildRedisOptionsForUrl: buildFreshOptions } = await import("@/lib/redis/client");
 
-      const result = buildFreshOptions(redisUrl);
+    const result = buildFreshOptions(redisUrl);
 
-      expect(result.options.commandTimeout).toBe(2_500);
-      expect(result.options.socketTimeout).toBe(7_500);
-      expect(result.options.autoResendUnfulfilledCommands).toBe(false);
-    }
-  );
+    expect(result.options.commandTimeout).toBe(2_500);
+    expect(result.options.socketTimeout).toBe(7_500);
+    expect(result.options.autoResendUnfulfilledCommands).toBe(false);
+  });
 });
 
 describe("getRedisClient", () => {

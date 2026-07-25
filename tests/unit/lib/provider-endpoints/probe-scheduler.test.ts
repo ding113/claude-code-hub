@@ -119,51 +119,54 @@ describe("provider-endpoints: probe scheduler", () => {
       expect(loggerWarnMock).not.toHaveBeenCalled();
     });
 
-    test.each(["enabled", "TRUE", " false "])(
-      "invalid scheduler switch %s warns and falls back to enabled",
-      async (value) => {
-        vi.resetModules();
-        vi.stubEnv("ENDPOINT_PROBE_SCHEDULER_ENABLED", value);
-        vi.stubEnv("ENDPOINT_PROBE_TIMEOUT_RETRY_INTERVAL_MS", undefined);
+    test.each([
+      "enabled",
+      "TRUE",
+      " false ",
+    ])("invalid scheduler switch %s warns and falls back to enabled", async (value) => {
+      vi.resetModules();
+      vi.stubEnv("ENDPOINT_PROBE_SCHEDULER_ENABLED", value);
+      vi.stubEnv("ENDPOINT_PROBE_TIMEOUT_RETRY_INTERVAL_MS", undefined);
 
-        const { getEndpointProbeSchedulerStatus } = await import(
-          "@/lib/provider-endpoints/probe-scheduler"
-        );
+      const { getEndpointProbeSchedulerStatus } = await import(
+        "@/lib/provider-endpoints/probe-scheduler"
+      );
 
-        expect(getEndpointProbeSchedulerStatus().enabled).toBe(true);
-        expect(loggerWarnMock).toHaveBeenCalledWith(
-          "[EndpointProbeScheduler] Invalid environment variable, using default",
-          {
-            name: "ENDPOINT_PROBE_SCHEDULER_ENABLED",
-            value,
-            defaultValue: true,
-          }
-        );
-      }
-    );
+      expect(getEndpointProbeSchedulerStatus().enabled).toBe(true);
+      expect(loggerWarnMock).toHaveBeenCalledWith(
+        "[EndpointProbeScheduler] Invalid environment variable, using default",
+        {
+          name: "ENDPOINT_PROBE_SCHEDULER_ENABLED",
+          value,
+          defaultValue: true,
+        }
+      );
+    });
 
-    test.each(["10000ms", "0", "-1", "1.5"])(
-      "invalid timeout retry interval %s warns and falls back to 10000",
-      async (value) => {
-        vi.resetModules();
-        vi.stubEnv("ENDPOINT_PROBE_SCHEDULER_ENABLED", undefined);
-        vi.stubEnv("ENDPOINT_PROBE_TIMEOUT_RETRY_INTERVAL_MS", value);
+    test.each([
+      "10000ms",
+      "0",
+      "-1",
+      "1.5",
+    ])("invalid timeout retry interval %s warns and falls back to 10000", async (value) => {
+      vi.resetModules();
+      vi.stubEnv("ENDPOINT_PROBE_SCHEDULER_ENABLED", undefined);
+      vi.stubEnv("ENDPOINT_PROBE_TIMEOUT_RETRY_INTERVAL_MS", value);
 
-        const { getEndpointProbeSchedulerStatus } = await import(
-          "@/lib/provider-endpoints/probe-scheduler"
-        );
+      const { getEndpointProbeSchedulerStatus } = await import(
+        "@/lib/provider-endpoints/probe-scheduler"
+      );
 
-        expect(getEndpointProbeSchedulerStatus().timeoutOverrideIntervalMs).toBe(10_000);
-        expect(loggerWarnMock).toHaveBeenCalledWith(
-          "[EndpointProbeScheduler] Invalid environment variable, using default",
-          {
-            name: "ENDPOINT_PROBE_TIMEOUT_RETRY_INTERVAL_MS",
-            value,
-            defaultValue: 10_000,
-          }
-        );
-      }
-    );
+      expect(getEndpointProbeSchedulerStatus().timeoutOverrideIntervalMs).toBe(10_000);
+      expect(loggerWarnMock).toHaveBeenCalledWith(
+        "[EndpointProbeScheduler] Invalid environment variable, using default",
+        {
+          name: "ENDPOINT_PROBE_TIMEOUT_RETRY_INTERVAL_MS",
+          value,
+          defaultValue: 10_000,
+        }
+      );
+    });
 
     test("disabled scheduler does not create a timer, acquire a lock, or query endpoints", async () => {
       vi.resetModules();

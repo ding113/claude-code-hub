@@ -65,32 +65,31 @@ function getString(messages: Record<string, unknown>, keyPath: readonly string[]
 describe.each(LOCALES)("key creation copy (%s)", (locale) => {
   const dashboard = loadMessages(locale, "dashboard.json");
 
-  test.each(COPY_PATHS.map((p) => [p.join("."), p] as const))(
-    "%s matches the actual reveal behavior",
-    (_label, keyPath) => {
-      const copy = getString(dashboard, keyPath);
+  test.each(
+    COPY_PATHS.map((p) => [p.join("."), p] as const)
+  )("%s matches the actual reveal behavior", (_label, keyPath) => {
+    const copy = getString(dashboard, keyPath);
 
-      expect(copy.trim().length).toBeGreaterThan(0);
-      for (const pattern of ONE_TIME_CLAIM_PATTERNS) {
-        expect(copy).not.toMatch(pattern);
-      }
-      expect(copy).toMatch(REVIEWABLE_MARKERS[locale]);
+    expect(copy.trim().length).toBeGreaterThan(0);
+    for (const pattern of ONE_TIME_CLAIM_PATTERNS) {
+      expect(copy).not.toMatch(pattern);
     }
-  );
+    expect(copy).toMatch(REVIEWABLE_MARKERS[locale]);
+  });
 });
 
 describe.each(LOCALES)("removeKey error code translations (%s)", (locale) => {
   const errors = loadMessages(locale, "errors.json");
 
-  test.each(["CANNOT_DELETE_LAST_KEY", "CANNOT_DELETE_LAST_GROUP_KEY"])(
-    "errors namespace translates %s",
-    (code) => {
-      const value = errors[code];
-      expect(value, `${locale}/errors.json must define ${code}`).toBeTypeOf("string");
-      expect((value as string).trim().length).toBeGreaterThan(0);
-      // Must be a distinct, specific message rather than a copy of a generic one.
-      expect(value).not.toBe(errors.OPERATION_FAILED);
-      expect(value).not.toBe(errors.DELETE_FAILED);
-    }
-  );
+  test.each([
+    "CANNOT_DELETE_LAST_KEY",
+    "CANNOT_DELETE_LAST_GROUP_KEY",
+  ])("errors namespace translates %s", (code) => {
+    const value = errors[code];
+    expect(value, `${locale}/errors.json must define ${code}`).toBeTypeOf("string");
+    expect((value as string).trim().length).toBeGreaterThan(0);
+    // Must be a distinct, specific message rather than a copy of a generic one.
+    expect(value).not.toBe(errors.OPERATION_FAILED);
+    expect(value).not.toBe(errors.DELETE_FAILED);
+  });
 });

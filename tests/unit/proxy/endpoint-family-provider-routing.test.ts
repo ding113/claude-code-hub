@@ -385,31 +385,32 @@ describe("endpoint family -> provider routing matrix", () => {
     );
   });
 
-  test.each(ENDPOINT_PROVIDER_CASES)(
-    "$id should route $path to $expectedProviderType",
-    async ({ path, expectedProviderType, requestedModel }) => {
-      const ProxyProviderResolver = await setupResolverMocks();
+  test.each(ENDPOINT_PROVIDER_CASES)("$id should route $path to $expectedProviderType", async ({
+    path,
+    expectedProviderType,
+    requestedModel,
+  }) => {
+    const ProxyProviderResolver = await setupResolverMocks();
 
-      const providers: Provider[] = [
-        createTestProvider(1, "claude"),
-        createTestProvider(2, "claude-auth"),
-        createTestProvider(3, "codex"),
-        createTestProvider(4, "openai-compatible"),
-        createTestProvider(5, "gemini"),
-        createTestProvider(6, "gemini-cli"),
-      ];
-      const session = createSessionStub(path, requestedModel);
-      session.getProvidersSnapshot = async () => providers;
+    const providers: Provider[] = [
+      createTestProvider(1, "claude"),
+      createTestProvider(2, "claude-auth"),
+      createTestProvider(3, "codex"),
+      createTestProvider(4, "openai-compatible"),
+      createTestProvider(5, "gemini"),
+      createTestProvider(6, "gemini-cli"),
+    ];
+    const session = createSessionStub(path, requestedModel);
+    session.getProvidersSnapshot = async () => providers;
 
-      const { provider, context } = await (ProxyProviderResolver as any).pickRandomProvider(
-        session,
-        []
-      );
+    const { provider, context } = await (ProxyProviderResolver as any).pickRandomProvider(
+      session,
+      []
+    );
 
-      expect(provider?.providerType).toBe(expectedProviderType);
-      expect(context.requestedModel).toBe(requestedModel);
-    }
-  );
+    expect(provider?.providerType).toBe(expectedProviderType);
+    expect(context.requestedModel).toBe(requestedModel);
+  });
 
   test("/v1/chat/completions should never select codex when openai-compatible is available", async () => {
     const ProxyProviderResolver = await setupResolverMocks();

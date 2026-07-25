@@ -477,52 +477,52 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
     expect(mocks.acquireSessionDiscoveryLease).toHaveBeenCalledTimes(1);
   });
 
-  test.each(["unknown", "unavailable"] as const)(
-    "Discovery fails closed when the binding capability probe returns %s",
-    async (capabilityState) => {
-      const provider = createProvider({ id: 1 });
-      const session = createSession();
-      session.authState = {
-        success: true,
-        user: null,
-        key: { id: 21 },
-        apiKey: null,
-      } as typeof session.authState;
-      session.setProvider(provider);
-      mocks.ensureVersionedBindingCapability.mockResolvedValueOnce(capabilityState);
+  test.each([
+    "unknown",
+    "unavailable",
+  ] as const)("Discovery fails closed when the binding capability probe returns %s", async (capabilityState) => {
+    const provider = createProvider({ id: 1 });
+    const session = createSession();
+    session.authState = {
+      success: true,
+      user: null,
+      key: { id: 21 },
+      apiKey: null,
+    } as typeof session.authState;
+    session.setProvider(provider);
+    mocks.ensureVersionedBindingCapability.mockResolvedValueOnce(capabilityState);
 
-      const prepareStreamingDiscovery = (
-        ProxyForwarder as unknown as {
-          prepareStreamingDiscovery: (
-            session: ProxySession,
-            settings: SystemSettings,
-            requestStartedAt: number
-          ) => Promise<unknown>;
-        }
-      ).prepareStreamingDiscovery;
-      const prepared = await prepareStreamingDiscovery(
-        session,
-        {
-          discoveryEnabled: true,
-          discoveryConcurrency: 2,
-          maxDiscoveryRounds: 1,
-          discoverySlaMs: 50,
-          stickySlaMs: 50,
-          racingTotalTimeoutMs: 200,
-          stickyTimeoutCooldownMs: 300_000,
-        } as SystemSettings,
-        Date.now()
-      );
+    const prepareStreamingDiscovery = (
+      ProxyForwarder as unknown as {
+        prepareStreamingDiscovery: (
+          session: ProxySession,
+          settings: SystemSettings,
+          requestStartedAt: number
+        ) => Promise<unknown>;
+      }
+    ).prepareStreamingDiscovery;
+    const prepared = await prepareStreamingDiscovery(
+      session,
+      {
+        discoveryEnabled: true,
+        discoveryConcurrency: 2,
+        maxDiscoveryRounds: 1,
+        discoverySlaMs: 50,
+        stickySlaMs: 50,
+        racingTotalTimeoutMs: 200,
+        stickyTimeoutCooldownMs: 300_000,
+      } as SystemSettings,
+      Date.now()
+    );
 
-      expect(prepared).toEqual({
-        status: "skipped",
-        reason: "redis_capability_unavailable",
-      });
-      expect(mocks.ensureVersionedBindingCapability).toHaveBeenCalledTimes(1);
-      expect(mocks.getSessionBindingSnapshot).not.toHaveBeenCalled();
-      expect(mocks.acquireSessionDiscoveryLease).not.toHaveBeenCalled();
-    }
-  );
+    expect(prepared).toEqual({
+      status: "skipped",
+      reason: "redis_capability_unavailable",
+    });
+    expect(mocks.ensureVersionedBindingCapability).toHaveBeenCalledTimes(1);
+    expect(mocks.getSessionBindingSnapshot).not.toHaveBeenCalled();
+    expect(mocks.acquireSessionDiscoveryLease).not.toHaveBeenCalled();
+  });
 
   test("shadow session redirect should not overwrite initial provider redirect and winner should keep its own redirect", () => {
     const requestedModel = "claude-haiku-4-5-20251001";
@@ -1976,86 +1976,82 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
       category: ProxyErrorCategory.SYSTEM_ERROR,
       errorFactory: () => new Error("fetch failed"),
     },
-  ])(
-    "when a real hedge race ends with only $name, terminal error should be generic fallback",
-    async ({ category, errorFactory }) => {
-      vi.useFakeTimers();
+  ])("when a real hedge race ends with only $name, terminal error should be generic fallback", async ({
+    category,
+    errorFactory,
+  }) => {
+    vi.useFakeTimers();
 
-      try {
-        const provider1 = createProvider({
-          id: 1,
-          name: "p1",
-          firstByteTimeoutStreamingMs: 100,
+    try {
+      const provider1 = createProvider({
+        id: 1,
+        name: "p1",
+        firstByteTimeoutStreamingMs: 100,
+      });
+      const provider2 = createProvider({
+        id: 2,
+        name: "p2",
+        firstByteTimeoutStreamingMs: 100,
+      });
+      const session = createSession();
+      session.setProvider(provider1);
+
+      mocks.pickRandomProviderWithExclusion
+        .mockResolvedValueOnce(provider2)
+        .mockResolvedValueOnce(null);
+      mocks.categorizeErrorAsync.mockResolvedValueOnce(category).mockResolvedValueOnce(category);
+
+      const doForward = vi.spyOn(
+        ProxyForwarder as unknown as {
+          doForward: (...args: unknown[]) => Promise<Response>;
+        },
+        "doForward"
+      );
+
+      const controller1 = new AbortController();
+      const controller2 = new AbortController();
+
+      doForward.mockImplementationOnce(async (attemptSession) => {
+        const runtime = attemptSession as ProxySession & AttemptRuntime;
+        runtime.responseController = controller1;
+        runtime.clearResponseTimeout = vi.fn();
+        return createDelayedFailure({
+          delayMs: 150,
+          error: errorFactory(provider1),
+          controller: controller1,
         });
-        const provider2 = createProvider({
-          id: 2,
-          name: "p2",
-          firstByteTimeoutStreamingMs: 100,
+      });
+
+      doForward.mockImplementationOnce(async (attemptSession) => {
+        const runtime = attemptSession as ProxySession & AttemptRuntime;
+        runtime.responseController = controller2;
+        runtime.clearResponseTimeout = vi.fn();
+        return createDelayedFailure({
+          delayMs: 160,
+          error: errorFactory(provider2),
+          controller: controller2,
         });
-        const session = createSession();
-        session.setProvider(provider1);
+      });
 
-        mocks.pickRandomProviderWithExclusion
-          .mockResolvedValueOnce(provider2)
-          .mockResolvedValueOnce(null);
-        mocks.categorizeErrorAsync.mockResolvedValueOnce(category).mockResolvedValueOnce(category);
+      const responsePromise = ProxyForwarder.send(session);
+      const errorPromise = responsePromise.catch((rejection) => rejection as UpstreamProxyError);
 
-        const doForward = vi.spyOn(
-          ProxyForwarder as unknown as {
-            doForward: (...args: unknown[]) => Promise<Response>;
-          },
-          "doForward"
-        );
+      await vi.advanceTimersByTimeAsync(100);
+      expect(doForward).toHaveBeenCalledTimes(2);
 
-        const controller1 = new AbortController();
-        const controller2 = new AbortController();
+      await vi.runAllTimersAsync();
+      const error = await errorPromise;
 
-        doForward.mockImplementationOnce(async (attemptSession) => {
-          const runtime = attemptSession as ProxySession & AttemptRuntime;
-          runtime.responseController = controller1;
-          runtime.clearResponseTimeout = vi.fn();
-          return createDelayedFailure({
-            delayMs: 150,
-            error: errorFactory(provider1),
-            controller: controller1,
-          });
-        });
-
-        doForward.mockImplementationOnce(async (attemptSession) => {
-          const runtime = attemptSession as ProxySession & AttemptRuntime;
-          runtime.responseController = controller2;
-          runtime.clearResponseTimeout = vi.fn();
-          return createDelayedFailure({
-            delayMs: 160,
-            error: errorFactory(provider2),
-            controller: controller2,
-          });
-        });
-
-        const responsePromise = ProxyForwarder.send(session);
-        const errorPromise = responsePromise.catch((rejection) => rejection as UpstreamProxyError);
-
-        await vi.advanceTimersByTimeAsync(100);
-        expect(doForward).toHaveBeenCalledTimes(2);
-
-        await vi.runAllTimersAsync();
-        const error = await errorPromise;
-
-        expect(error).toBeInstanceOf(UpstreamProxyError);
-        expect(error.statusCode).toBe(503);
-        expect(error.message).toBe("所有供应商暂时不可用，请稍后重试");
-        expect(error.message).not.toContain("invalid key");
-        expect(error.message).not.toContain("model not found");
-        expect(mocks.clearSessionProviders).toHaveBeenCalledWith(
-          "sess-hedge",
-          new Set([1, 2]),
-          null
-        );
-      } finally {
-        vi.useRealTimers();
-      }
+      expect(error).toBeInstanceOf(UpstreamProxyError);
+      expect(error.statusCode).toBe(503);
+      expect(error.message).toBe("所有供应商暂时不可用，请稍后重试");
+      expect(error.message).not.toContain("invalid key");
+      expect(error.message).not.toContain("model not found");
+      expect(mocks.clearSessionProviders).toHaveBeenCalledWith("sess-hedge", new Set([1, 2]), null);
+    } finally {
+      vi.useRealTimers();
     }
-  );
+  });
 
   test("non-retryable client errors should stop hedge immediately and preserve original error", async () => {
     const provider1 = createProvider({
