@@ -212,27 +212,27 @@ describe("connected non-reader response lifetime", () => {
     expect(settlements.every((settlement) => settlement.status === "fulfilled")).toBe(true);
   });
 
-  it.each([
-    true,
-    false,
-  ])("detaches client cancellation after headers with signal=%s", async (hasClientSignal) => {
-    const clientController = new AbortController();
-    const session = await createGeminiSession(hasClientSignal ? clientController.signal : null);
-    let transportSignal: AbortSignal | undefined;
-    transportMocks.request.mockImplementation(async (_url, options) => {
-      transportSignal = options.signal;
-      return {
-        statusCode: 200,
-        headers: { "content-type": "text/event-stream" },
-        body: Readable.from(["data: {}\n\n"]),
-      };
-    });
+  it.each([true, false])(
+    "detaches client cancellation after headers with signal=%s",
+    async (hasClientSignal) => {
+      const clientController = new AbortController();
+      const session = await createGeminiSession(hasClientSignal ? clientController.signal : null);
+      let transportSignal: AbortSignal | undefined;
+      transportMocks.request.mockImplementation(async (_url, options) => {
+        transportSignal = options.signal;
+        return {
+          statusCode: 200,
+          headers: { "content-type": "text/event-stream" },
+          body: Readable.from(["data: {}\n\n"]),
+        };
+      });
 
-    const response = await ProxyForwarder.send(session);
-    clientController.abort(new Error("client disconnected after headers"));
-    expect(transportSignal?.aborted).toBe(false);
-    await response.body?.cancel();
-  });
+      const response = await ProxyForwarder.send(session);
+      clientController.abort(new Error("client disconnected after headers"));
+      expect(transportSignal?.aborted).toBe(false);
+      await response.body?.cancel();
+    }
+  );
 
   it("detaches transport signals after an upstream error response", async () => {
     const clientController = new AbortController();

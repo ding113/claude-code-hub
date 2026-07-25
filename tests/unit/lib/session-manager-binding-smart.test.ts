@@ -319,45 +319,45 @@ describe("SessionManager.updateSessionBindingSmart forceUpdate", () => {
   it.each([
     { isFailoverSuccess: false, forceUpdate: true },
     { isFailoverSuccess: true, forceUpdate: false },
-  ])("does not let a stale versioned winner overwrite a newer binding (%o)", async ({
-    isFailoverSuccess,
-    forceUpdate,
-  }) => {
-    bindingMocks.readOrReconcileSessionBinding.mockResolvedValue({
-      status: "ok",
-      source: "existing",
-      snapshot: {
-        sessionId: SID,
-        keyId: KEY_ID,
-        providerId: 1,
-        generation: "generation-before-concurrent-update",
-      },
-      legacyFallbackAllowed: false,
-    });
-    bindingMocks.compareAndSetSessionBinding.mockResolvedValue({
-      status: "conflict",
-      reason: "generation_mismatch",
-      legacyFallbackAllowed: false,
-    });
+  ])(
+    "does not let a stale versioned winner overwrite a newer binding (%o)",
+    async ({ isFailoverSuccess, forceUpdate }) => {
+      bindingMocks.readOrReconcileSessionBinding.mockResolvedValue({
+        status: "ok",
+        source: "existing",
+        snapshot: {
+          sessionId: SID,
+          keyId: KEY_ID,
+          providerId: 1,
+          generation: "generation-before-concurrent-update",
+        },
+        legacyFallbackAllowed: false,
+      });
+      bindingMocks.compareAndSetSessionBinding.mockResolvedValue({
+        status: "conflict",
+        reason: "generation_mismatch",
+        legacyFallbackAllowed: false,
+      });
 
-    const result = await SessionManager.updateSessionBindingSmart(
-      SID,
-      2,
-      10,
-      false,
-      isFailoverSuccess,
-      KEY_ID,
-      forceUpdate
-    );
+      const result = await SessionManager.updateSessionBindingSmart(
+        SID,
+        2,
+        10,
+        false,
+        isFailoverSuccess,
+        KEY_ID,
+        forceUpdate
+      );
 
-    expect(result).toEqual({
-      updated: false,
-      reason: "concurrent_binding_changed",
-      details: "Session binding changed before the update committed",
-    });
-    expect(bindingMocks.compareAndSetSessionBinding).toHaveBeenCalledTimes(1);
-    expect(bindingMocks.mutateLegacySessionBindingSafely).not.toHaveBeenCalled();
-  });
+      expect(result).toEqual({
+        updated: false,
+        reason: "concurrent_binding_changed",
+        details: "Session binding changed before the update committed",
+      });
+      expect(bindingMocks.compareAndSetSessionBinding).toHaveBeenCalledTimes(1);
+      expect(bindingMocks.mutateLegacySessionBindingSafely).not.toHaveBeenCalled();
+    }
+  );
 
   it("does not fall back to legacy writes for a foreign owner conflict", async () => {
     bindingMocks.readOrReconcileSessionBinding.mockResolvedValue({

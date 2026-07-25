@@ -38,17 +38,15 @@ describe("endpoint path normalization", () => {
     expect(isRawPassthroughEndpointPath(pathname)).toBe(true);
   });
 
-  test.each([
-    "/v1/messages",
-    "/v1/responses",
-    "/v1/messages/count",
-    "/v1/responses/mini",
-  ])("non-target path is not misclassified for %s", (pathname) => {
-    expect(isCountTokensEndpointPath(pathname)).toBe(false);
-    expect(isResponseCompactEndpointPath(pathname)).toBe(false);
-    expect(isRawPassthroughEndpointPath(pathname)).toBe(false);
-    expect(isCountTokensRequestWithEndpoint(pathname)).toBe(false);
-  });
+  test.each(["/v1/messages", "/v1/responses", "/v1/messages/count", "/v1/responses/mini"])(
+    "non-target path is not misclassified for %s",
+    (pathname) => {
+      expect(isCountTokensEndpointPath(pathname)).toBe(false);
+      expect(isResponseCompactEndpointPath(pathname)).toBe(false);
+      expect(isRawPassthroughEndpointPath(pathname)).toBe(false);
+      expect(isCountTokensRequestWithEndpoint(pathname)).toBe(false);
+    }
+  );
 
   test("session count_tokens detection handles null endpoint", () => {
     expect(isCountTokensRequestWithEndpoint(null)).toBe(false);
