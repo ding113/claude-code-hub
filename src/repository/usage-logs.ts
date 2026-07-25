@@ -73,7 +73,8 @@ export interface UsageLogRow {
   costBreakdown: StoredCostBreakdown | null; // 费用明细
   hedgeLosers: HedgeLoserBilling[] | null; // 竞速输家计费明细（费用已计入 costUsd 总额）
   durationMs: number | null;
-  ttfbMs: number | null;
+  tfftMs: number | null;
+  firstByteMs: number | null;
   errorMessage: string | null;
   providerChain: ProviderChainItem[] | null;
   routingTrace?: RoutingTraceV1 | null;
@@ -215,7 +216,8 @@ export async function findUsageLogsBatch(
       costBreakdown: messageRequest.costBreakdown,
       hedgeLosers: messageRequest.hedgeLosers,
       durationMs: messageRequest.durationMs,
-      ttfbMs: messageRequest.ttfbMs,
+      tfftMs: messageRequest.tfftMs,
+      firstByteMs: messageRequest.firstByteMs,
       errorMessage: messageRequest.errorMessage,
       providerChain: messageRequest.providerChain,
       routingTrace: messageRequest.routingTrace,
@@ -396,7 +398,8 @@ export async function findUsageLogsBatch(
       costMultiplier: usageLedger.costMultiplier,
       groupCostMultiplier: usageLedger.groupCostMultiplier,
       durationMs: usageLedger.durationMs,
-      ttfbMs: usageLedger.ttfbMs,
+      tfftMs: usageLedger.tfftMs,
+      firstByteMs: usageLedger.firstByteMs,
       clientIp: usageLedger.clientIp,
       context1mApplied: usageLedger.context1mApplied,
       swapCacheTtlApplied: usageLedger.swapCacheTtlApplied,
@@ -452,7 +455,8 @@ export async function findUsageLogsBatch(
       costBreakdown: null,
       hedgeLosers: null,
       durationMs: row.durationMs,
-      ttfbMs: row.ttfbMs,
+      tfftMs: row.tfftMs,
+      firstByteMs: row.firstByteMs,
       errorMessage: null,
       providerChain: null,
       routingTrace: null,
@@ -996,7 +1000,8 @@ function mapUsageLogRowFromMessageResult(row: {
   costBreakdown: StoredCostBreakdown | null;
   hedgeLosers: HedgeLoserBilling[] | null;
   durationMs: number | null;
-  ttfbMs: number | null;
+  tfftMs: number | null;
+  firstByteMs: number | null;
   errorMessage: string | null;
   providerChain: ProviderChainItem[] | null;
   routingTrace: RoutingTraceV1 | null;
@@ -1066,7 +1071,8 @@ function mapUsageLogRowFromLedgerResult(row: {
   costMultiplier: string | null | { toString(): string };
   groupCostMultiplier: string | null | { toString(): string };
   durationMs: number | null;
-  ttfbMs: number | null;
+  tfftMs: number | null;
+  firstByteMs: number | null;
   clientIp: string | null;
   context1mApplied: boolean | null;
   swapCacheTtlApplied: boolean | null;
@@ -1103,7 +1109,8 @@ function mapUsageLogRowFromLedgerResult(row: {
     groupCostMultiplier: row.groupCostMultiplier?.toString() ?? null,
     costBreakdown: null,
     durationMs: row.durationMs,
-    ttfbMs: row.ttfbMs,
+    tfftMs: row.tfftMs,
+    firstByteMs: row.firstByteMs,
     errorMessage: null,
     providerChain: null,
     routingTrace: null,
@@ -1160,7 +1167,8 @@ export async function findReadonlyUsageLogsBatchForKey(
         costBreakdown: messageRequest.costBreakdown,
         hedgeLosers: messageRequest.hedgeLosers,
         durationMs: messageRequest.durationMs,
-        ttfbMs: messageRequest.ttfbMs,
+        tfftMs: messageRequest.tfftMs,
+        firstByteMs: messageRequest.firstByteMs,
         errorMessage: messageRequest.errorMessage,
         providerChain: messageRequest.providerChain,
         routingTrace: messageRequest.routingTrace,
@@ -1208,7 +1216,8 @@ export async function findReadonlyUsageLogsBatchForKey(
             costMultiplier: usageLedger.costMultiplier,
             groupCostMultiplier: usageLedger.groupCostMultiplier,
             durationMs: usageLedger.durationMs,
-            ttfbMs: usageLedger.ttfbMs,
+            tfftMs: usageLedger.tfftMs,
+            firstByteMs: usageLedger.firstByteMs,
             clientIp: usageLedger.clientIp,
             context1mApplied: usageLedger.context1mApplied,
             swapCacheTtlApplied: usageLedger.swapCacheTtlApplied,
@@ -1412,7 +1421,8 @@ export async function findUsageLogsWithDetails(filters: UsageLogFilters): Promis
       costBreakdown: messageRequest.costBreakdown, // 费用明细
       hedgeLosers: messageRequest.hedgeLosers, // 竞速输家计费明细
       durationMs: messageRequest.durationMs,
-      ttfbMs: messageRequest.ttfbMs,
+      tfftMs: messageRequest.tfftMs,
+      firstByteMs: messageRequest.firstByteMs,
       errorMessage: messageRequest.errorMessage,
       providerChain: messageRequest.providerChain,
       routingTrace: messageRequest.routingTrace,

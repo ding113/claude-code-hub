@@ -277,7 +277,8 @@ export interface MessageRequest {
   key: string;
   model?: string;
   durationMs?: number;
-  ttfbMs?: number | null;
+  tfftMs?: number | null; // 首 Token 时间（DB 列名为历史遗留的 ttfb_ms）
+  firstByteMs?: number | null; // 首字节时间（真 TTFB）
   costUsd?: string; // 单次请求费用（美元），保持高精度字符串表示
 
   // 供应商倍率（记录该请求使用的 cost_multiplier）

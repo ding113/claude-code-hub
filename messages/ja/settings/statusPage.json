@@ -3,7 +3,7 @@
   "description": "公開ステータスページの統計ウィンドウ、チャートのバケットサイズ、および公開するグループ/モデルを設定します。",
   "form": {
     "windowHours": "統計ウィンドウ（時間）",
-    "windowHoursDesc": "TTFB と可用率の算出に使う統計期間であり、チャートがカバーする総期間でもあります。既定値は 24 時間です。",
+    "windowHoursDesc": "TFFT と可用率の算出に使う統計期間であり、チャートがカバーする総期間でもあります。既定値は 24 時間です。",
     "aggregationIntervalMinutes": "チャートのバケット（分）",
     "aggregationIntervalMinutesDesc": "チャート時間軸の各バケットの長さで、チャートの粒度を決定します。5 / 15 / 30 / 60 分から選択できます。",
     "aggregationIntervalMinutesInvalid": "公開ステータスの集計間隔は 5、15、30、60 分のいずれかである必要があります。",
@@ -46,7 +46,7 @@
     "heroPrimary": "AI SERVICES",
     "heroSecondary": "SERVICE STATUS DASHBOARD",
     "generatedAt": "更新",
-    "ttfb": "TTFB",
+    "ttfb": "TFFT",
     "tps": "TPS",
     "history": "履歴",
     "freshnessWindow": "スナップショット有効期限",
@@ -76,7 +76,7 @@
     },
     "tooltip": {
       "availability": "可用率",
-      "ttfb": "TTFB",
+      "ttfb": "TFFT",
       "tps": "TPS",
       "samples": "サンプル数",
       "inferredFromNeighbors": "この期間はリクエストがないため、隣接データから推定",

@@ -663,17 +663,19 @@ async function findProviderLeaderboardWithTimezone(
     0::double precision
   )`;
   const successRateExpr = LEDGER_SUCCESS_RATE_EXPR;
-  const avgTtfbMsExpr = sql<number>`COALESCE(avg(${usageLedger.ttfbMs})::double precision, 0::double precision)`;
+  // 展示用的均值走 ttfb_ms 列，该列存的是 TFFT（见 schema.ts）
+  const avgTtfbMsExpr = sql<number>`COALESCE(avg(${usageLedger.tfftMs})::double precision, 0::double precision)`;
+  // TPS 必须以真 TTFB 为基准；first_byte_ms 为 NULL 的历史行由 IS NOT NULL 排除
   const avgTokensPerSecondExpr = sql<number>`COALESCE(
     avg(
       CASE
         WHEN ${usageLedger.outputTokens} > 0
           AND ${usageLedger.durationMs} IS NOT NULL
-          AND ${usageLedger.ttfbMs} IS NOT NULL
-          AND ${usageLedger.ttfbMs} < ${usageLedger.durationMs}
-          AND (${usageLedger.durationMs} - ${usageLedger.ttfbMs}) >= 100
+          AND ${usageLedger.firstByteMs} IS NOT NULL
+          AND ${usageLedger.firstByteMs} < ${usageLedger.durationMs}
+          AND (${usageLedger.durationMs} - ${usageLedger.firstByteMs}) >= 100
         THEN (${usageLedger.outputTokens}::double precision)
-          / ((${usageLedger.durationMs} - ${usageLedger.ttfbMs}) / 1000.0)
+          / ((${usageLedger.durationMs} - ${usageLedger.firstByteMs}) / 1000.0)
       END
     )::double precision,
     0::double precision

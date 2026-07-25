@@ -44,7 +44,8 @@ type PublicStatusFinalDetails = {
   durationMs?: number;
   statusCode?: number;
   outputTokens?: number;
-  ttfbMs?: number | null;
+  tfftMs?: number | null;
+  firstByteMs?: number | null;
   providerChain?: CreateMessageRequestData["provider_chain"];
   errorMessage?: string;
   model?: string;
@@ -190,7 +191,8 @@ function queuePublicStatusRollupForFinalDetails(
           model: details.model ?? seed.model,
           originalModel: seed.originalModel,
           durationMs: seed.durationMs,
-          ttfbMs: details.ttfbMs,
+          tfftMs: details.tfftMs,
+          firstByteMs: details.firstByteMs,
           outputTokens: details.outputTokens,
           providerChain: details.providerChain,
         },
@@ -493,7 +495,8 @@ export type MessageRequestDetailsUpdate = {
   statusCode?: number;
   inputTokens?: number;
   outputTokens?: number;
-  ttfbMs?: number | null;
+  tfftMs?: number | null;
+  firstByteMs?: number | null;
   cacheCreationInputTokens?: number;
   cacheReadInputTokens?: number;
   cacheCreation5mInputTokens?: number;
@@ -553,8 +556,11 @@ export async function updateMessageRequestDetails(
   if (details.outputTokens !== undefined) {
     updateData.outputTokens = details.outputTokens;
   }
-  if (details.ttfbMs !== undefined) {
-    updateData.ttfbMs = details.ttfbMs;
+  if (details.tfftMs !== undefined) {
+    updateData.tfftMs = details.tfftMs;
+  }
+  if (details.firstByteMs !== undefined) {
+    updateData.firstByteMs = details.firstByteMs;
   }
   if (details.cacheCreationInputTokens !== undefined) {
     updateData.cacheCreationInputTokens = details.cacheCreationInputTokens;
@@ -835,7 +841,8 @@ export async function findMessageRequestById(id: number): Promise<MessageRequest
       model: messageRequest.model,
       originalModel: messageRequest.originalModel,
       durationMs: messageRequest.durationMs,
-      ttfbMs: messageRequest.ttfbMs,
+      tfftMs: messageRequest.tfftMs,
+      firstByteMs: messageRequest.firstByteMs,
       costUsd: messageRequest.costUsd,
       costMultiplier: messageRequest.costMultiplier,
       sessionId: messageRequest.sessionId,
@@ -897,7 +904,8 @@ export async function findMessageRequestById(id: number): Promise<MessageRequest
       context1mApplied: usageLedger.context1mApplied,
       swapCacheTtlApplied: usageLedger.swapCacheTtlApplied,
       durationMs: usageLedger.durationMs,
-      ttfbMs: usageLedger.ttfbMs,
+      tfftMs: usageLedger.tfftMs,
+      firstByteMs: usageLedger.firstByteMs,
       sessionId: usageLedger.sessionId,
       createdAt: usageLedger.createdAt,
     })
@@ -917,7 +925,8 @@ export async function findMessageRequestById(id: number): Promise<MessageRequest
     model: ledgerRow.model,
     originalModel: ledgerRow.originalModel,
     durationMs: ledgerRow.durationMs,
-    ttfbMs: ledgerRow.ttfbMs,
+    tfftMs: ledgerRow.tfftMs,
+    firstByteMs: ledgerRow.firstByteMs,
     costUsd: ledgerRow.costUsd,
     costMultiplier: ledgerRow.costMultiplier,
     sessionId: ledgerRow.sessionId,
@@ -1020,7 +1029,8 @@ export async function findMessageRequestBySessionId(
       context1mApplied: usageLedger.context1mApplied,
       swapCacheTtlApplied: usageLedger.swapCacheTtlApplied,
       durationMs: usageLedger.durationMs,
-      ttfbMs: usageLedger.ttfbMs,
+      tfftMs: usageLedger.tfftMs,
+      firstByteMs: usageLedger.firstByteMs,
       sessionId: usageLedger.sessionId,
       createdAt: usageLedger.createdAt,
     })
@@ -1041,7 +1051,8 @@ export async function findMessageRequestBySessionId(
     model: ledgerRow.model,
     originalModel: ledgerRow.originalModel,
     durationMs: ledgerRow.durationMs,
-    ttfbMs: ledgerRow.ttfbMs,
+    tfftMs: ledgerRow.tfftMs,
+    firstByteMs: ledgerRow.firstByteMs,
     costUsd: ledgerRow.costUsd,
     costMultiplier: ledgerRow.costMultiplier,
     sessionId: ledgerRow.sessionId,
@@ -1646,7 +1657,8 @@ export async function findUsageLogs(params: {
       context1mApplied: usageLedger.context1mApplied,
       swapCacheTtlApplied: usageLedger.swapCacheTtlApplied,
       durationMs: usageLedger.durationMs,
-      ttfbMs: usageLedger.ttfbMs,
+      tfftMs: usageLedger.tfftMs,
+      firstByteMs: usageLedger.firstByteMs,
       sessionId: usageLedger.sessionId,
       createdAt: usageLedger.createdAt,
     })
@@ -1665,7 +1677,8 @@ export async function findUsageLogs(params: {
       model: row.model,
       originalModel: row.originalModel,
       durationMs: row.durationMs,
-      ttfbMs: row.ttfbMs,
+      tfftMs: row.tfftMs,
+      firstByteMs: row.firstByteMs,
       costUsd: row.costUsd,
       costMultiplier: row.costMultiplier,
       sessionId: row.sessionId,

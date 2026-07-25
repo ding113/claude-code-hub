@@ -154,7 +154,7 @@ describe("message repository findUsageLogs", () => {
         context1mApplied: true,
         swapCacheTtlApplied: false,
         durationMs: 250,
-        ttfbMs: 40,
+        tfftMs: 40,
         sessionId: "session-ledger",
         createdAt,
       },

@@ -579,7 +579,11 @@ export const messageRequest = pgTable('message_request', {
   // Token 使用信息
   inputTokens: bigint('input_tokens', { mode: 'number' }),
   outputTokens: bigint('output_tokens', { mode: 'number' }),
-  ttfbMs: integer('ttfb_ms'),
+  // 首 Token 时间（TFFT）。列名 ttfb_ms 是历史遗留：流式输出门禁上线后，
+  // 这个时间戳打在首个内容帧上，语义已是 TFFT 而非 TTFB。真 TTFB 见 firstByteMs。
+  tfftMs: integer('ttfb_ms'),
+  // 首字节时间（TTFB）：上游响应体第一个字节到达。门禁旁路时等于 tfftMs。
+  firstByteMs: integer('first_byte_ms'),
   cacheCreationInputTokens: bigint('cache_creation_input_tokens', { mode: 'number' }),
   cacheReadInputTokens: bigint('cache_read_input_tokens', { mode: 'number' }),
   cacheCreation5mInputTokens: bigint('cache_creation_5m_input_tokens', { mode: 'number' }),
@@ -1172,7 +1176,9 @@ export const usageLedger = pgTable('usage_ledger', {
   context1mApplied: boolean('context_1m_applied').default(false),
   swapCacheTtlApplied: boolean('swap_cache_ttl_applied').default(false),
   durationMs: integer('duration_ms'),
-  ttfbMs: integer('ttfb_ms'),
+  // 列名 ttfb_ms 存的是 TFFT，见 messageRequest.tfftMs 的说明
+  tfftMs: integer('ttfb_ms'),
+  firstByteMs: integer('first_byte_ms'),
   // 客户端 IP（从 message_request 拷贝；永久保留，避免被清理任务删除）
   clientIp: varchar('client_ip', { length: 45 }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull(),

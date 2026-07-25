@@ -348,25 +348,25 @@
       "performance": {
         "title": "Производительность",
         "ttfb": "TTFB",
+        "tfft": "TFFT",
         "duration": "Общее время",
-        "outputRate": "Скорость вывода"
+        "outputRate": "Скорость вывода",
+        "outputTokens": "Токены вывода"
       },
       "performanceTab": {
         "noPerformanceData": "Нет данных о производительности",
-        "ttfbGauge": "Время до первого байта",
+        "tfftGauge": "Время до первого токена",
         "outputRateGauge": "Скорость вывода",
         "latencyBreakdown": "Разбивка задержки",
         "generationTime": "Время генерации",
+        "segmentTtfb": "TTFB",
+        "segmentTfft": "Ожидание токена",
+        "segmentTotal": "Всего",
         "assessment": {
           "excellent": "Отлично",
           "good": "Хорошо",
           "warning": "Предупреждение",
           "poor": "Плохо"
-        },
-        "thresholds": {
-          "ttfbGood": "TTFB < 1с",
-          "ttfbWarning": "TTFB 1-2с",
-          "ttfbPoor": "TTFB > 3с"
         }
       },
       "metadata": {
@@ -678,7 +678,7 @@
       "totalConsumedAmount": "Общие расходы",
       "successRate": "Процент успеха",
       "avgResponseTime": "Среднее время ответа",
-      "avgTtfbMs": "Средний TTFB",
+      "avgTtfbMs": "Средний TFFT",
       "avgTokensPerSecond": "Средн. ток/с",
       "avgCostPerRequest": "Ср. стоимость/запрос",
       "avgCostPerMillionTokens": "Ср. стоимость/1М токенов",

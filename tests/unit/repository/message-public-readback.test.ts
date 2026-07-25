@@ -61,7 +61,7 @@ const MESSAGE_ROW = {
   ...LATEST_ROW,
   model: "gpt-4.1",
   originalModel: "gpt-4.1-mini",
-  ttfbMs: 120,
+  tfftMs: 120,
   costMultiplier: "1.5",
   sessionId: "public-session",
   userAgent: "vitest",
@@ -105,7 +105,7 @@ const LEDGER_ROW = {
   context1mApplied: false,
   swapCacheTtlApplied: true,
   durationMs: 1_500,
-  ttfbMs: 250,
+  tfftMs: 250,
   sessionId: "ledger-session",
   createdAt: CREATED_AT,
 };

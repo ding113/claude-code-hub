@@ -232,8 +232,9 @@ function createSession(opts?: { sessionId?: string | null }): ProxySession {
     getCurrentModel: () => "test-model",
     getProviderChain: () => session.providerChain,
     getCachedPriceDataByBillingSource: async () => testPriceData,
-    recordTtfb: () => 100,
-    ttfbMs: null,
+    recordTfft: () => 100,
+    tfftMs: null,
+    firstByteMs: null,
     getRequestSequence: () => 1,
     addProviderToChain: function (
       this: ProxySession & { providerChain: Record<string, unknown>[] },
@@ -1025,54 +1026,54 @@ describe("Endpoint circuit breaker isolation", () => {
       format: "gemini" as const,
       body: `${JSON.stringify({ candidates: [{ content: { parts: [{ text: "ok" }] } }] })}\n`,
     },
-  ])(
-    "keeps a naturally completed $label stream successful but unbound without a marker",
-    async ({ format, body }) => {
-      const session = createSession();
-      session.originalFormat = format;
-      if (format === "gemini" || format === "gemini-cli") {
-        session.provider = { ...session.provider!, providerType: format };
-      }
-      const snapshot = {
-        sessionId: "fake-session",
-        keyId: 456,
-        providerId: null,
-        generation: `${format}-natural-eof-generation`,
-      } as const;
-      setDeferredStreamingFinalization(session, {
-        providerId: 1,
-        providerName: "test-provider",
-        providerPriority: 10,
-        attemptNumber: 1,
-        totalProvidersAttempted: 2,
-        isFirstAttempt: false,
-        isFailoverSuccess: true,
-        endpointId: 42,
-        endpointUrl: "https://api.test.com",
-        upstreamStatusCode: 200,
-        bindingIntent: "create",
-        bindingSnapshot: snapshot,
-        requiresCompletionMarkerForBinding: true,
-      });
-
-      const clientResponse = await ProxyResponseHandler.dispatch(
-        session,
-        new Response(body, {
-          status: 200,
-          headers: { "content-type": "text/event-stream" },
-        })
-      );
-      await expect(clientResponse.text()).resolves.toContain("ok");
-      await drainAsyncTasks();
-
-      expect(SessionManager.compareAndSetSessionProvider).not.toHaveBeenCalled();
-      expect(mockRecordFailure).not.toHaveBeenCalled();
-      expect(mockRecordSuccess).toHaveBeenCalledWith(1);
-      const details = vi.mocked(updateMessageRequestDetailsDurably).mock.calls.at(-1)?.[1];
-      expect(details).toEqual(expect.objectContaining({ statusCode: 200 }));
-      expect(details).not.toHaveProperty("errorMessage");
+  ])("keeps a naturally completed $label stream successful but unbound without a marker", async ({
+    format,
+    body,
+  }) => {
+    const session = createSession();
+    session.originalFormat = format;
+    if (format === "gemini" || format === "gemini-cli") {
+      session.provider = { ...session.provider!, providerType: format };
     }
-  );
+    const snapshot = {
+      sessionId: "fake-session",
+      keyId: 456,
+      providerId: null,
+      generation: `${format}-natural-eof-generation`,
+    } as const;
+    setDeferredStreamingFinalization(session, {
+      providerId: 1,
+      providerName: "test-provider",
+      providerPriority: 10,
+      attemptNumber: 1,
+      totalProvidersAttempted: 2,
+      isFirstAttempt: false,
+      isFailoverSuccess: true,
+      endpointId: 42,
+      endpointUrl: "https://api.test.com",
+      upstreamStatusCode: 200,
+      bindingIntent: "create",
+      bindingSnapshot: snapshot,
+      requiresCompletionMarkerForBinding: true,
+    });
+
+    const clientResponse = await ProxyResponseHandler.dispatch(
+      session,
+      new Response(body, {
+        status: 200,
+        headers: { "content-type": "text/event-stream" },
+      })
+    );
+    await expect(clientResponse.text()).resolves.toContain("ok");
+    await drainAsyncTasks();
+
+    expect(SessionManager.compareAndSetSessionProvider).not.toHaveBeenCalled();
+    expect(mockRecordFailure).not.toHaveBeenCalled();
+    expect(mockRecordSuccess).toHaveBeenCalledWith(1);
+    const details = vi.mocked(updateMessageRequestDetailsDurably).mock.calls.at(-1)?.[1];
+    expect(details).toEqual(expect.objectContaining({ statusCode: 200 }));
+    expect(details).not.toHaveProperty("errorMessage");
+  });
 
   it("does not accept completion marker words embedded in ordinary SSE content", async () => {
     const session = createSession();

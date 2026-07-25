@@ -333,6 +333,8 @@ type StreamingHedgeAttempt = {
   firstChunk: Uint8Array | null;
   /** F1 门控提交标记（该 attempt 门控提交时记录，随 hedge_winner 链条目落库）。 */
   gateAudit?: ProviderChainItem["streamGate"];
+  /** 该 attempt 首字节到达时刻（epoch ms）；只有赢家的值会被记为 session TTFB。 */
+  firstByteAt?: number | null;
   /**
    * Billing context snapshot for the INITIAL provider's losing attempt, captured BEFORE
    * commitWinner overwrites the shared session's model/context with the winner's. Null for
@@ -1703,6 +1705,9 @@ export class ProxyForwarder {
                 };
                 const gateReader = response.body.getReader();
                 const gateStartedAt = Date.now();
+                // TTFB 只在门控提交后写入 session：提交前失败的尝试不会被服务，
+                // 记下它的首字节会低估 TTFB 并放大 TPS 的分母。
+                let gateFirstByteAt: number | null = null;
                 const gate = await runStreamContentGate(gateReader, {
                   family: gateFamily,
                   providerId: currentProvider.id,
@@ -1710,7 +1715,10 @@ export class ProxyForwarder {
                   ...resolveStreamGateCaps(),
                   // 首字节到达即清除首字节计时器，保持「首字节超时」的原始语义——
                   // 思考型模型可在首个内容帧前长时间输出中性帧，不应触发该计时器
-                  onFirstByte: () => runtime.clearResponseTimeout?.(),
+                  onFirstByte: () => {
+                    gateFirstByteAt ??= Date.now();
+                    runtime.clearResponseTimeout?.();
+                  },
                   // 门控等待期沿用供应商静默超时（与提交后 response-handler 的行为对齐）
                   idleTimeoutMs: currentProvider.streamingIdleTimeoutMs,
                   captureCommitMarker: !session.isHighConcurrencyModeEnabled(),
@@ -1752,6 +1760,10 @@ export class ProxyForwarder {
                     );
                   }
                   throw gate.error;
+                }
+
+                if (gateFirstByteAt !== null) {
+                  session.recordFirstByte(gateFirstByteAt);
                 }
 
                 if (gate.commitMarker) {
@@ -4723,6 +4735,10 @@ export class ProxyForwarder {
                 providerId: attempt.provider.id,
                 providerName: attempt.provider.name,
                 ...resolveStreamGateCaps(),
+                // 首字节时刻先挂在 attempt 上，由 commitWinner 决定是否记为 session TTFB
+                onFirstByte: () => {
+                  attempt.firstByteAt ??= Date.now();
+                },
                 // 竞速路径首字节计时器已在响应头到达时清除；门控等待期沿用供应商静默超时
                 idleTimeoutMs: attempt.provider.streamingIdleTimeoutMs,
                 captureCommitMarker: !session.isHighConcurrencyModeEnabled(),
@@ -5034,6 +5050,10 @@ export class ProxyForwarder {
 
       winnerCommitted = true;
       winnerAttempt = attempt;
+
+      if (attempt.firstByteAt != null) {
+        session.recordFirstByte(attempt.firstByteAt);
+      }
 
       if (attempt.thresholdTimer) {
         clearTimeout(attempt.thresholdTimer);
@@ -6061,6 +6081,9 @@ export class ProxyForwarder {
         })
       );
       session.setProvider(attempt.provider);
+      if (attempt.firstByteAt != null) {
+        session.recordFirstByte(attempt.firstByteAt);
+      }
       if (attempt.session !== session)
         ProxyForwarder.syncWinningAttemptSession(session, attempt.session);
 
@@ -6508,6 +6531,9 @@ export class ProxyForwarder {
               throw new EmptyResponseError(provider.id, provider.name, "empty_body");
             }
             if (!item.value || item.value.byteLength === 0) continue;
+            // 首字节时刻先挂在 attempt 上；DiscoveryValidityParser 的 ready 判定同样基于内容，
+            // 不在此记录会让 discovery 模式的 TTFB 恒等于 TFFT。
+            attempt.firstByteAt ??= Date.now();
             attempt.chunks.push(item.value);
             const validity = attempt.parser.push(item.value);
             // A single read can contain both deliverable content and the

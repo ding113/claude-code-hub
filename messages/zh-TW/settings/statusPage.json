@@ -3,7 +3,7 @@
   "description": "設定公開狀態頁面的統計視窗、圖表分桶，以及需要對外展示的分組和模型。",
   "form": {
     "windowHours": "統計視窗（小時）",
-    "windowHoursDesc": "用於計算 TTFB 與在線率的統計視窗長度，也是圖表覆蓋的總時間跨度。預設 24 小時。",
+    "windowHoursDesc": "用於計算 TFFT 與在線率的統計視窗長度，也是圖表覆蓋的總時間跨度。預設 24 小時。",
     "aggregationIntervalMinutes": "圖表分桶（分鐘）",
     "aggregationIntervalMinutesDesc": "圖表時間軸每個分桶的時長，決定圖表粒度。可選 5 / 15 / 30 / 60 分鐘。",
     "aggregationIntervalMinutesInvalid": "公開狀態聚合間隔只能是 5、15、30、60 分鐘之一。",
@@ -46,7 +46,7 @@
     "heroPrimary": "AI 服務",
     "heroSecondary": "服務狀態面板",
     "generatedAt": "更新於",
-    "ttfb": "TTFB",
+    "ttfb": "TFFT",
     "tps": "TPS",
     "history": "歷史",
     "freshnessWindow": "快照新鮮期剩餘",
@@ -76,7 +76,7 @@
     },
     "tooltip": {
       "availability": "可用率",
-      "ttfb": "TTFB",
+      "ttfb": "TFFT",
       "tps": "TPS",
       "samples": "樣本數",
       "inferredFromNeighbors": "該時段無請求，依相鄰時段狀態推斷",

@@ -255,25 +255,25 @@ const messages = {
         performance: {
           title: "Performance",
           ttfb: "TTFB",
+          tfft: "TFFT",
           duration: "Duration",
           outputRate: "Output rate",
+          outputTokens: "Output Tokens",
         },
         performanceTab: {
           noPerformanceData: "No performance data",
-          ttfbGauge: "Time to First Byte",
+          tfftGauge: "Time to First Token",
           outputRateGauge: "Output Rate",
           latencyBreakdown: "Latency Breakdown",
           generationTime: "Generation Time",
+          segmentTtfb: "TTFB",
+          segmentTfft: "Token Wait",
+          segmentTotal: "Total",
           assessment: {
             excellent: "Excellent",
             good: "Good",
             warning: "Warning",
             poor: "Poor",
-          },
-          thresholds: {
-            ttfbGood: "TTFB < 300ms",
-            ttfbWarning: "TTFB 300-600ms",
-            ttfbPoor: "TTFB > 1000ms",
           },
         },
         metadata: {
@@ -526,7 +526,8 @@ describe("error-details-dialog layout", () => {
         inputTokens={100}
         outputTokens={80}
         durationMs={900}
-        ttfbMs={100}
+        tfftMs={100}
+        firstByteMs={100}
       />
     );
 
@@ -546,7 +547,8 @@ describe("error-details-dialog layout", () => {
         inputTokens={100}
         outputTokens={0}
         durationMs={null}
-        ttfbMs={null}
+        tfftMs={null}
+        firstByteMs={null}
       />
     );
 
@@ -566,7 +568,8 @@ describe("error-details-dialog layout", () => {
         inputTokens={null}
         outputTokens={80}
         durationMs={900}
-        ttfbMs={100}
+        tfftMs={100}
+        firstByteMs={100}
       />
     );
 
@@ -576,7 +579,7 @@ describe("error-details-dialog layout", () => {
 
   test("hides tok/s when TTFB is close to duration and rate is abnormally high", () => {
     // Rule: generationTimeMs / durationMs < 0.1 && outputRate > 5000 => hide tok/s
-    // durationMs=1000, ttfbMs=950 => generationTimeMs=50, ratio=0.05 < 0.1
+    // durationMs=1000, firstByteMs=950 => generationTimeMs=50, ratio=0.05 < 0.1
     // outputTokens=300 => rate = 300 / 0.05 = 6000 > 5000 => should hide
     const html = renderWithIntl(
       <ErrorDetailsDialog
@@ -589,7 +592,8 @@ describe("error-details-dialog layout", () => {
         inputTokens={null}
         outputTokens={300}
         durationMs={1000}
-        ttfbMs={950}
+        tfftMs={950}
+        firstByteMs={950}
       />
     );
 
@@ -601,7 +605,7 @@ describe("error-details-dialog layout", () => {
   });
 
   test("shows tok/s in dialog when conditions are normal", () => {
-    // durationMs=1000, ttfbMs=500 => generationTimeMs=500, ratio=0.5 >= 0.1
+    // durationMs=1000, firstByteMs=500 => generationTimeMs=500, ratio=0.5 >= 0.1
     // outputTokens=50 => rate = 50 / 0.5 = 100 <= 5000 => should show
     const html = renderWithIntl(
       <ErrorDetailsDialog
@@ -614,7 +618,8 @@ describe("error-details-dialog layout", () => {
         inputTokens={null}
         outputTokens={50}
         durationMs={1000}
-        ttfbMs={500}
+        tfftMs={500}
+        firstByteMs={500}
       />
     );
 
@@ -1194,12 +1199,13 @@ describe("error-details-dialog tabs", () => {
         providerChain={null}
         sessionId={null}
         durationMs={1000}
-        ttfbMs={200}
+        tfftMs={200}
+        firstByteMs={200}
         outputTokens={500}
       />
     );
 
-    expect(html).toContain("Time to First Byte");
+    expect(html).toContain("Time to First Token");
     expect(html).toContain("Output Rate");
     expect(html).toContain("Latency Breakdown");
   });

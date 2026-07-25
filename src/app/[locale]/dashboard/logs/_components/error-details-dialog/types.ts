@@ -72,8 +72,10 @@ export interface TabSharedProps {
   context1mApplied?: boolean | null;
   /** Total request duration in ms */
   durationMs?: number | null;
-  /** Time to first byte in ms */
-  ttfbMs?: number | null;
+  /** Time to first token in ms */
+  tfftMs?: number | null;
+  /** Time to first byte in ms (null on rows persisted before it was recorded) */
+  firstByteMs?: number | null;
 }
 
 /**
@@ -128,56 +130,6 @@ export function parseBlockedReason(blockedReason: string | null | undefined): {
   } catch {
     return null;
   }
-}
-
-/**
- * Calculate output tokens per second
- */
-export function calculateOutputRate(
-  outputTokens: number | null | undefined,
-  durationMs: number | null | undefined,
-  ttfbMs: number | null | undefined
-): number | null {
-  if (
-    outputTokens === null ||
-    outputTokens === undefined ||
-    outputTokens <= 0 ||
-    durationMs === null ||
-    durationMs === undefined ||
-    ttfbMs === null ||
-    ttfbMs === undefined ||
-    ttfbMs >= durationMs
-  ) {
-    return null;
-  }
-  const seconds = (durationMs - ttfbMs) / 1000;
-  if (seconds <= 0) return null;
-  return outputTokens / seconds;
-}
-
-/**
- * Determine if output rate should be hidden due to blocked streaming request.
- * Rule: Hide when generationTimeMs / durationMs < 0.1 AND outputRate > 5000
- * This indicates TTFB is very close to total duration with abnormally high tok/s.
- */
-export function shouldHideOutputRate(
-  outputRate: number | null,
-  durationMs: number | null | undefined,
-  ttfbMs: number | null | undefined
-): boolean {
-  if (
-    outputRate == null ||
-    !Number.isFinite(outputRate) ||
-    durationMs == null ||
-    durationMs <= 0 ||
-    ttfbMs == null
-  ) {
-    return false;
-  }
-  const generationTimeMs = durationMs - ttfbMs;
-  if (generationTimeMs <= 0) return false;
-  const ratio = generationTimeMs / durationMs;
-  return ratio < 0.1 && outputRate > 5000;
 }
 
 /**

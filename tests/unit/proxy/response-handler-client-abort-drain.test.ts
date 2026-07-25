@@ -296,7 +296,8 @@ function createSession(
     sessionId: null,
     specialSettings: [],
     startTime: Date.now(),
-    ttfbMs: null,
+    tfftMs: null,
+    firstByteMs: null,
     userAgent: "Go-http-client/1.1",
     userName: "admin",
     addProviderToChain(this: ProxySession & { providerChain: unknown[] }, prov: Provider, meta) {
@@ -317,7 +318,7 @@ function createSession(
     getResolvedPricingByBillingSource: async () => null,
     getSpecialSettings: () => [],
     isHeaderModified: () => false,
-    recordTtfb: vi.fn(),
+    recordTfft: vi.fn(),
     releaseAgent: vi.fn(),
     setContext1mApplied: vi.fn(),
     shouldPersistSessionDebugArtifacts: () => false,
@@ -1422,7 +1423,7 @@ describe("ProxyResponseHandler stream client abort finalization", () => {
     await downstream.text();
     await drainAsyncTasks();
 
-    expect(session.recordTtfb).not.toHaveBeenCalled();
+    expect(session.recordTfft).not.toHaveBeenCalled();
     expect(session.clearResponseTimeout).toHaveBeenCalledTimes(1);
   });
 
@@ -2116,67 +2117,65 @@ describe("ProxyResponseHandler stream client abort finalization", () => {
   it.each([
     { bindingIntent: "create" as const, providerId: null },
     { bindingIntent: "renew" as const, providerId: 1 },
-  ])(
-    "preserves binding state for a client-aborted Discovery $bindingIntent stream",
-    async ({ bindingIntent, providerId }) => {
-      const controller = new AbortController();
-      controller.abort();
-      const session = createSession(controller.signal);
-      Object.assign(session, {
+  ])("preserves binding state for a client-aborted Discovery $bindingIntent stream", async ({
+    bindingIntent,
+    providerId,
+  }) => {
+    const controller = new AbortController();
+    controller.abort();
+    const session = createSession(controller.signal);
+    Object.assign(session, {
+      sessionId: `session-client-abort-${bindingIntent}`,
+    });
+    session.recordProviderSessionRef(1);
+    vi.mocked(SessionManager.extractCodexPromptCacheKey).mockReturnValue("client-abort-cache-key");
+    setDeferredStreamingFinalization(session, {
+      providerId: 1,
+      providerName: "avemujica-responses",
+      providerPriority: 1,
+      attemptNumber: 1,
+      totalProvidersAttempted: 2,
+      isFirstAttempt: false,
+      isFailoverSuccess: bindingIntent === "create",
+      endpointId: 42,
+      endpointUrl: "https://api.test.invalid/v1",
+      upstreamStatusCode: 200,
+      bindingIntent,
+      bindingSnapshot: {
         sessionId: `session-client-abort-${bindingIntent}`,
-      });
-      session.recordProviderSessionRef(1);
-      vi.mocked(SessionManager.extractCodexPromptCacheKey).mockReturnValue(
-        "client-abort-cache-key"
-      );
-      setDeferredStreamingFinalization(session, {
-        providerId: 1,
-        providerName: "avemujica-responses",
-        providerPriority: 1,
-        attemptNumber: 1,
-        totalProvidersAttempted: 2,
-        isFirstAttempt: false,
-        isFailoverSuccess: bindingIntent === "create",
-        endpointId: 42,
-        endpointUrl: "https://api.test.invalid/v1",
-        upstreamStatusCode: 200,
-        bindingIntent,
-        bindingSnapshot: {
-          sessionId: `session-client-abort-${bindingIntent}`,
-          keyId: 2,
-          providerId,
-          generation: `${bindingIntent}-generation`,
-        },
-        requiresCompletionMarkerForBinding: true,
-        discoveryLease: {
-          sessionId: `session-client-abort-${bindingIntent}`,
-          keyId: 2,
-          ownerToken: `client-abort-${bindingIntent}-owner`,
-          ttlSeconds: 30,
-        },
-        providerSessionRefOwned: true,
-      });
+        keyId: 2,
+        providerId,
+        generation: `${bindingIntent}-generation`,
+      },
+      requiresCompletionMarkerForBinding: true,
+      discoveryLease: {
+        sessionId: `session-client-abort-${bindingIntent}`,
+        keyId: 2,
+        ownerToken: `client-abort-${bindingIntent}-owner`,
+        ttlSeconds: 30,
+      },
+      providerSessionRefOwned: true,
+    });
 
-      await ProxyResponseHandler.dispatch(session, createCompletedThenErroredResponsesSse());
-      await drainAsyncTasks();
+    await ProxyResponseHandler.dispatch(session, createCompletedThenErroredResponsesSse());
+    await drainAsyncTasks();
 
-      expect(SessionManager.clearVersionedSessionProvider).not.toHaveBeenCalled();
-      expect(SessionManager.clearSessionProvider).not.toHaveBeenCalled();
-      expect(SessionManager.compareAndSetSessionProvider).not.toHaveBeenCalled();
-      expect(SessionManager.updateSessionBindingSmart).not.toHaveBeenCalled();
-      expect(SessionManager.updateSessionWithCodexCacheKey).not.toHaveBeenCalled();
-      expect(SessionManager.releaseSessionDiscoveryLease).toHaveBeenCalledOnce();
-      expect(SessionManager.releaseSessionDiscoveryLease).toHaveBeenCalledWith(
-        `session-client-abort-${bindingIntent}`,
-        2,
-        `client-abort-${bindingIntent}-owner`
-      );
-      expect(RateLimitService.releaseProviderSession).toHaveBeenCalledWith(
-        1,
-        `session-client-abort-${bindingIntent}`
-      );
-    }
-  );
+    expect(SessionManager.clearVersionedSessionProvider).not.toHaveBeenCalled();
+    expect(SessionManager.clearSessionProvider).not.toHaveBeenCalled();
+    expect(SessionManager.compareAndSetSessionProvider).not.toHaveBeenCalled();
+    expect(SessionManager.updateSessionBindingSmart).not.toHaveBeenCalled();
+    expect(SessionManager.updateSessionWithCodexCacheKey).not.toHaveBeenCalled();
+    expect(SessionManager.releaseSessionDiscoveryLease).toHaveBeenCalledOnce();
+    expect(SessionManager.releaseSessionDiscoveryLease).toHaveBeenCalledWith(
+      `session-client-abort-${bindingIntent}`,
+      2,
+      `client-abort-${bindingIntent}-owner`
+    );
+    expect(RateLimitService.releaseProviderSession).toHaveBeenCalledWith(
+      1,
+      `session-client-abort-${bindingIntent}`
+    );
+  });
 
   it("keeps a genuinely aborted upstream responses stream as 499", async () => {
     const controller = new AbortController();
@@ -3038,55 +3037,52 @@ describe("ProxyResponseHandler stream client abort finalization", () => {
   it.each([
     ["response timeout", "timeout"],
     ["client abort", "client"],
-  ] as const)(
-    "uses the conditional fallback when the non-stream %s finalizer durable write rejects",
-    async (_name, abortSource) => {
-      vi.mocked(updateMessageRequestDetailsDurably).mockRejectedValueOnce(
-        new Error("durable finalizer acknowledgement failed")
-      );
-      const clientController = new AbortController();
-      const responseController = new AbortController();
-      const session = createSession(clientController.signal);
-      Object.assign(session, { responseController });
-      const response = createAbortableNonStreamResponse(
-        abortSource === "timeout" ? responseController.signal : clientController.signal
-      );
+  ] as const)("uses the conditional fallback when the non-stream %s finalizer durable write rejects", async (_name, abortSource) => {
+    vi.mocked(updateMessageRequestDetailsDurably).mockRejectedValueOnce(
+      new Error("durable finalizer acknowledgement failed")
+    );
+    const clientController = new AbortController();
+    const responseController = new AbortController();
+    const session = createSession(clientController.signal);
+    Object.assign(session, { responseController });
+    const response = createAbortableNonStreamResponse(
+      abortSource === "timeout" ? responseController.signal : clientController.signal
+    );
 
-      await ProxyResponseHandler.dispatch(session, response);
-      const abortError = new Error(`non-stream ${abortSource}`);
-      abortError.name = "AbortError";
-      if (abortSource === "timeout") {
-        responseController.abort(abortError);
-      } else {
-        clientController.abort(abortError);
-      }
-      await drainAsyncTasks();
-
-      expect(updateMessageRequestDetails).not.toHaveBeenCalled();
-      expect(updateMessageRequestDetailsIfUnfinalized).toHaveBeenCalledTimes(1);
-      expect(updateMessageRequestDetailsIfUnfinalized).toHaveBeenCalledWith(
-        123,
-        expect.objectContaining({
-          statusCode: abortSource === "timeout" ? 502 : 499,
-          ...(abortSource === "timeout"
-            ? { errorMessage: expect.stringContaining("non-stream timeout") }
-            : {}),
-          providerId: 1,
-          providerChain:
-            abortSource === "timeout"
-              ? [
-                  expect.objectContaining({
-                    id: 1,
-                    statusCode: 502,
-                    errorMessage: expect.stringContaining("non-stream timeout"),
-                  }),
-                ]
-              : [],
-        }),
-        expect.objectContaining({ onCommitted: expect.any(Function) })
-      );
+    await ProxyResponseHandler.dispatch(session, response);
+    const abortError = new Error(`non-stream ${abortSource}`);
+    abortError.name = "AbortError";
+    if (abortSource === "timeout") {
+      responseController.abort(abortError);
+    } else {
+      clientController.abort(abortError);
     }
-  );
+    await drainAsyncTasks();
+
+    expect(updateMessageRequestDetails).not.toHaveBeenCalled();
+    expect(updateMessageRequestDetailsIfUnfinalized).toHaveBeenCalledTimes(1);
+    expect(updateMessageRequestDetailsIfUnfinalized).toHaveBeenCalledWith(
+      123,
+      expect.objectContaining({
+        statusCode: abortSource === "timeout" ? 502 : 499,
+        ...(abortSource === "timeout"
+          ? { errorMessage: expect.stringContaining("non-stream timeout") }
+          : {}),
+        providerId: 1,
+        providerChain:
+          abortSource === "timeout"
+            ? [
+                expect.objectContaining({
+                  id: 1,
+                  statusCode: 502,
+                  errorMessage: expect.stringContaining("non-stream timeout"),
+                }),
+              ]
+            : [],
+      }),
+      expect.objectContaining({ onCommitted: expect.any(Function) })
+    );
+  });
 
   it("rejects non-stream processing when both terminal persistence attempts fail", async () => {
     vi.mocked(updateMessageRequestDetailsDurably).mockRejectedValueOnce(
@@ -3168,28 +3164,25 @@ describe("ProxyResponseHandler stream client abort finalization", () => {
         model: "gemini-2.0-flash",
       },
     ],
-  ] as const)(
-    "keeps non-stream 404 out of the Provider circuit for %s responses",
-    async (_name, overrides) => {
-      const session = createSession(new AbortController().signal, overrides);
-      const response = new Response('{"error":{"message":"model not found"}}', {
-        status: 404,
-        headers: { "content-type": "application/json" },
-      });
+  ] as const)("keeps non-stream 404 out of the Provider circuit for %s responses", async (_name, overrides) => {
+    const session = createSession(new AbortController().signal, overrides);
+    const response = new Response('{"error":{"message":"model not found"}}', {
+      status: 404,
+      headers: { "content-type": "application/json" },
+    });
 
-      await ProxyResponseHandler.dispatch(session, response);
-      await drainAsyncTasks();
+    await ProxyResponseHandler.dispatch(session, response);
+    await drainAsyncTasks();
 
-      expect(recordFailure).not.toHaveBeenCalled();
-      expect(session.getProviderChain()).toEqual([
-        expect.objectContaining({
-          id: 1,
-          reason: "resource_not_found",
-          statusCode: 404,
-        }),
-      ]);
-    }
-  );
+    expect(recordFailure).not.toHaveBeenCalled();
+    expect(session.getProviderChain()).toEqual([
+      expect.objectContaining({
+        id: 1,
+        reason: "resource_not_found",
+        statusCode: 404,
+      }),
+    ]);
+  });
 
   it("persists Gemini non-stream duration atomically with terminal stats", async () => {
     const session = createSession(new AbortController().signal, {
