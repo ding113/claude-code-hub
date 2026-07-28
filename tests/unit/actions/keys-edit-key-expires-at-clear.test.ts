@@ -105,6 +105,43 @@ describe("editKey: expiresAt 清除/不更新语义", () => {
     expect(Object.hasOwn(updatePayload, "expires_at")).toBe(false);
   });
 
+  test("局部更新不得用 schema 默认值覆盖 providerGroup 和 Key 设置", async () => {
+    findKeyByIdMock.mockResolvedValueOnce({
+      id: 1,
+      userId: 10,
+      key: "sk-test",
+      name: "k",
+      isEnabled: true,
+      expiresAt: new Date("2026-01-04T23:59:59.999Z"),
+      canLoginWebUi: false,
+      limit5hUsd: null,
+      limitDailyUsd: null,
+      dailyResetMode: "rolling",
+      dailyResetTime: "08:00",
+      limitWeeklyUsd: null,
+      limitMonthlyUsd: null,
+      limitTotalUsd: null,
+      limitConcurrentSessions: 7,
+      providerGroup: "codex-plus",
+      cacheTtlPreference: "5m",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      deletedAt: null,
+    });
+
+    const { editKey } = await import("@/actions/keys");
+    const res = await editKey(1, { name: "k2", expiresAt: "2026-02-01" });
+
+    expect(res.ok).toBe(true);
+    const updatePayload = updateKeyMock.mock.calls[0]?.[1] as Record<string, unknown>;
+    expect(updatePayload).toEqual(expect.objectContaining({ name: "k2" }));
+    expect(Object.hasOwn(updatePayload, "provider_group")).toBe(false);
+    expect(Object.hasOwn(updatePayload, "can_login_web_ui")).toBe(false);
+    expect(Object.hasOwn(updatePayload, "limit_5h_reset_mode")).toBe(false);
+    expect(Object.hasOwn(updatePayload, "daily_reset_mode")).toBe(false);
+    expect(Object.hasOwn(updatePayload, "cache_ttl_preference")).toBe(false);
+  });
+
   test("携带 expiresAt=undefined 时应清除 expires_at（写入 null）", async () => {
     const { editKey } = await import("@/actions/keys");
 
