@@ -198,21 +198,18 @@ describe("providerSupportsModel - direct unit tests (#832)", () => {
     },
   ];
 
-  test.each(cases)("$name", async ({
-    providerType,
-    allowedModels,
-    modelRedirects,
-    requestedModel,
-    expected,
-  }) => {
-    const { providerSupportsModel } = await import("@/app/v1/_lib/proxy/provider-selector");
-    const provider = createProvider({
-      providerType,
-      allowedModels,
-      ...(modelRedirects && { modelRedirects }),
-    });
-    expect(providerSupportsModel(provider, requestedModel)).toBe(expected);
-  });
+  test.each(cases)(
+    "$name",
+    async ({ providerType, allowedModels, modelRedirects, requestedModel, expected }) => {
+      const { providerSupportsModel } = await import("@/app/v1/_lib/proxy/provider-selector");
+      const provider = createProvider({
+        providerType,
+        allowedModels,
+        ...(modelRedirects && { modelRedirects }),
+      });
+      expect(providerSupportsModel(provider, requestedModel)).toBe(expected);
+    }
+  );
 });
 
 // ══════════════════════════════════════════════════════════════════

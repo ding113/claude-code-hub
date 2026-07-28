@@ -40,15 +40,13 @@ function parseSseEvents(body: string): Array<{ event: string | null; data: strin
 }
 
 describe("emitFinalNonStream", () => {
-  test.each<ProtocolFamily>([
-    "anthropic",
-    "openai-chat",
-    "openai-responses",
-    "gemini",
-  ])("%s: returns the validated final body verbatim", (family) => {
-    const body = JSON.stringify({ id: "x", model: "m", content: [{ type: "text", text: "hi" }] });
-    expect(emitFinalNonStream({ family, finalBody: body })).toBe(body);
-  });
+  test.each<ProtocolFamily>(["anthropic", "openai-chat", "openai-responses", "gemini"])(
+    "%s: returns the validated final body verbatim",
+    (family) => {
+      const body = JSON.stringify({ id: "x", model: "m", content: [{ type: "text", text: "hi" }] });
+      expect(emitFinalNonStream({ family, finalBody: body })).toBe(body);
+    }
+  );
 });
 
 describe("emitFinalStream — anthropic", () => {

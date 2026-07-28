@@ -15,64 +15,54 @@ function failure(family: ProtocolFamily, body: string, isStream: boolean, status
 
 describe("validateUpstreamResponse", () => {
   describe("status code handling", () => {
-    test.each<ProtocolFamily>([
-      "anthropic",
-      "openai-chat",
-      "openai-responses",
-      "gemini",
-    ])("%s: non-2xx is failure regardless of body", (family) => {
-      const valid = `{"id":"ok","model":"m","content":[{"type":"text","text":"hi"}]}`;
-      expect(failure(family, valid, false, 500).ok).toBe(false);
-      expect(failure(family, valid, false, 502).ok).toBe(false);
-      expect(failure(family, valid, false, 429).ok).toBe(false);
-      expect(failure(family, valid, false, 401).ok).toBe(false);
-    });
+    test.each<ProtocolFamily>(["anthropic", "openai-chat", "openai-responses", "gemini"])(
+      "%s: non-2xx is failure regardless of body",
+      (family) => {
+        const valid = `{"id":"ok","model":"m","content":[{"type":"text","text":"hi"}]}`;
+        expect(failure(family, valid, false, 500).ok).toBe(false);
+        expect(failure(family, valid, false, 502).ok).toBe(false);
+        expect(failure(family, valid, false, 429).ok).toBe(false);
+        expect(failure(family, valid, false, 401).ok).toBe(false);
+      }
+    );
   });
 
   describe("empty / whitespace bodies", () => {
-    test.each<ProtocolFamily>([
-      "anthropic",
-      "openai-chat",
-      "openai-responses",
-      "gemini",
-    ])("%s: empty body fails (non-stream)", (family) => {
-      expect(failure(family, "", false).ok).toBe(false);
-      expect(failure(family, "   ", false).ok).toBe(false);
-      expect(failure(family, "\n\n  \t\n", false).ok).toBe(false);
-    });
+    test.each<ProtocolFamily>(["anthropic", "openai-chat", "openai-responses", "gemini"])(
+      "%s: empty body fails (non-stream)",
+      (family) => {
+        expect(failure(family, "", false).ok).toBe(false);
+        expect(failure(family, "   ", false).ok).toBe(false);
+        expect(failure(family, "\n\n  \t\n", false).ok).toBe(false);
+      }
+    );
 
-    test.each<ProtocolFamily>([
-      "anthropic",
-      "openai-chat",
-      "openai-responses",
-      "gemini",
-    ])("%s: empty body fails (stream)", (family) => {
-      expect(failure(family, "", true).ok).toBe(false);
-      expect(failure(family, "   ", true).ok).toBe(false);
-    });
+    test.each<ProtocolFamily>(["anthropic", "openai-chat", "openai-responses", "gemini"])(
+      "%s: empty body fails (stream)",
+      (family) => {
+        expect(failure(family, "", true).ok).toBe(false);
+        expect(failure(family, "   ", true).ok).toBe(false);
+      }
+    );
   });
 
   describe("invalid JSON for non-stream", () => {
-    test.each<ProtocolFamily>([
-      "anthropic",
-      "openai-chat",
-      "openai-responses",
-      "gemini",
-    ])("%s: invalid JSON fails non-stream", (family) => {
-      expect(failure(family, "not-json", false).ok).toBe(false);
-      expect(failure(family, "{ truncated", false).ok).toBe(false);
-    });
+    test.each<ProtocolFamily>(["anthropic", "openai-chat", "openai-responses", "gemini"])(
+      "%s: invalid JSON fails non-stream",
+      (family) => {
+        expect(failure(family, "not-json", false).ok).toBe(false);
+        expect(failure(family, "{ truncated", false).ok).toBe(false);
+      }
+    );
   });
 
   describe("SSE failure cases", () => {
-    test.each<ProtocolFamily>([
-      "anthropic",
-      "openai-chat",
-      "openai-responses",
-      "gemini",
-    ])("%s: comment-only SSE fails", (family) => {
-      expect(failure(family, ": ping\n\n: ping\n\n", true).ok).toBe(false);
-    });
+    test.each<ProtocolFamily>(["anthropic", "openai-chat", "openai-responses", "gemini"])(
+      "%s: comment-only SSE fails",
+      (family) => {
+        expect(failure(family, ": ping\n\n: ping\n\n", true).ok).toBe(false);
+      }
+    );
 
     test("openai-chat: [DONE]-only SSE fails", () => {
       expect(failure("openai-chat", "data: [DONE]\n\n", true).ok).toBe(false);
