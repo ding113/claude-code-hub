@@ -20,17 +20,24 @@ describe("site title migration", () => {
       readMigrationFile("drizzle/meta/_journal.json")
     ) as MigrationJournal;
     const indexes = journal.entries.map(({ idx }) => idx);
-    const ttfbMigration = journal.entries.find(
-      ({ tag }) => tag === "0114_overconfident_ronan"
-    );
-    const siteTitleMigration = journal.entries.find(
-      ({ tag }) => tag === "0115_breezy_polaris"
-    );
+    const tags = journal.entries.map(({ tag }) => tag);
+    const ttfbMigrationIndex = tags.indexOf("0114_overconfident_ronan");
+    const siteTitleMigrationIndex = tags.indexOf("0115_breezy_polaris");
     const snapshot = JSON.parse(readMigrationFile("drizzle/meta/0115_snapshot.json"));
 
     expect(new Set(indexes).size).toBe(indexes.length);
-    expect(ttfbMigration).toMatchObject({ idx: 114, tag: "0114_overconfident_ronan" });
-    expect(siteTitleMigration).toMatchObject({ idx: 115, tag: "0115_breezy_polaris" });
+    expect(tags.filter((tag) => tag === "0114_overconfident_ronan")).toHaveLength(1);
+    expect(tags.filter((tag) => tag === "0115_breezy_polaris")).toHaveLength(1);
+    expect(ttfbMigrationIndex).toBeGreaterThanOrEqual(0);
+    expect(siteTitleMigrationIndex).toBeGreaterThan(ttfbMigrationIndex);
+    expect(journal.entries[ttfbMigrationIndex]).toMatchObject({
+      idx: 114,
+      tag: "0114_overconfident_ronan",
+    });
+    expect(journal.entries[siteTitleMigrationIndex]).toMatchObject({
+      idx: 115,
+      tag: "0115_breezy_polaris",
+    });
     expect(snapshot).toMatchObject({
       tables: {
         "public.message_request": {
