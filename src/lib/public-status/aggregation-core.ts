@@ -13,10 +13,16 @@ export interface PublicStatusConfiguredGroup {
   }>;
 }
 
+/**
+ * TPS = 输出 token / 生成窗口，生成窗口以真 TTFB 为起点。
+ *
+ * firstByteMs 缺失即返回 null：流式门禁上线前的历史行只有 TFFT，用它当分母会排除
+ * 上游排队/中性帧窗口，系统性高估 TPS。
+ */
 export function computeTokensPerSecond(input: {
   outputTokens?: number | null;
   durationMs?: number | null;
-  ttfbMs?: number | null;
+  firstByteMs?: number | null;
 }): number | null {
   if (!input.outputTokens || input.outputTokens <= 0) {
     return null;
@@ -26,7 +32,11 @@ export function computeTokensPerSecond(input: {
     return null;
   }
 
-  const generationMs = input.durationMs - (input.ttfbMs ?? 0);
+  if (input.firstByteMs == null) {
+    return null;
+  }
+
+  const generationMs = input.durationMs - input.firstByteMs;
   if (generationMs <= 0) {
     return null;
   }

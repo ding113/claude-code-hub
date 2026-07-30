@@ -3,7 +3,7 @@
   "description": "配置公开状态页面的统计窗口、图表分桶,以及需要对外展示的分组和模型。",
   "form": {
     "windowHours": "统计窗口（小时）",
-    "windowHoursDesc": "用于计算 TTFB 与在线率的统计窗口长度，也是图表覆盖的总时间跨度。默认 24 小时。",
+    "windowHoursDesc": "用于计算 TFFT 与在线率的统计窗口长度，也是图表覆盖的总时间跨度。默认 24 小时。",
     "aggregationIntervalMinutes": "图表分桶（分钟）",
     "aggregationIntervalMinutesDesc": "图表时间线每个分桶的时长，决定图表粒度。可选 5 / 15 / 30 / 60 分钟。",
     "aggregationIntervalMinutesInvalid": "公开状态聚合间隔只能是 5、15、30、60 分钟之一。",
@@ -46,7 +46,7 @@
     "heroPrimary": "AI 服务",
     "heroSecondary": "服务状态面板",
     "generatedAt": "更新于",
-    "ttfb": "TTFB",
+    "ttfb": "TFFT",
     "tps": "TPS",
     "history": "历史",
     "freshnessWindow": "快照新鲜期剩余",
@@ -76,7 +76,7 @@
     },
     "tooltip": {
       "availability": "可用率",
-      "ttfb": "TTFB",
+      "ttfb": "TFFT",
       "tps": "TPS",
       "samples": "样本数",
       "inferredFromNeighbors": "该时段无请求，根据相邻时段状态推断",

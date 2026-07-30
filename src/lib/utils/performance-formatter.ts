@@ -44,16 +44,20 @@ export function formatDuration(durationMs: number | null): string {
 
 /**
  * 计算输出速率（tokens/second）
+ *
+ * 生成窗口以真 TTFB 为起点。firstByteMs 缺失（流式门禁上线前的历史行）返回 null，
+ * 不再退回总耗时——那会把上游排队和中性帧窗口算进生成时间，高估速率。
  */
 export function calculateOutputRate(
   outputTokens: number | null,
   durationMs: number | null,
-  ttfbMs: number | null
+  firstByteMs: number | null
 ): number | null {
   if (outputTokens == null || outputTokens <= 0 || durationMs == null || durationMs <= 0) {
     return null;
   }
-  const generationTimeMs = ttfbMs != null ? durationMs - ttfbMs : durationMs;
+  if (firstByteMs == null) return null;
+  const generationTimeMs = durationMs - firstByteMs;
   if (generationTimeMs <= 0) return null;
   return outputTokens / (generationTimeMs / 1000);
 }
@@ -66,18 +70,18 @@ export function calculateOutputRate(
 export function shouldHideOutputRate(
   outputRate: number | null,
   durationMs: number | null,
-  ttfbMs: number | null
+  firstByteMs: number | null
 ): boolean {
   if (
     outputRate == null ||
     !Number.isFinite(outputRate) ||
     durationMs == null ||
     durationMs <= 0 ||
-    ttfbMs == null
+    firstByteMs == null
   ) {
     return false;
   }
-  const generationTimeMs = durationMs - ttfbMs;
+  const generationTimeMs = durationMs - firstByteMs;
   if (generationTimeMs <= 0) return false;
   const ratio = generationTimeMs / durationMs;
   return ratio < 0.1 && outputRate > 5000;

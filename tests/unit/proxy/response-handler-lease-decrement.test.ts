@@ -210,8 +210,9 @@ function createSession(opts: {
       source: "cloud_exact" as const,
       priceData: testPriceData,
     }),
-    recordTtfb: () => 100,
-    ttfbMs: null,
+    recordTfft: () => 100,
+    tfftMs: null,
+    firstByteMs: null,
     getRequestSequence: () => 1,
   });
 

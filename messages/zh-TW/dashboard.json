@@ -348,25 +348,25 @@
       "performance": {
         "title": "效能資料",
         "ttfb": "首字節時間（TTFB）",
+        "tfft": "首 Token 時間（TFFT）",
         "duration": "總耗時",
-        "outputRate": "輸出速率"
+        "outputRate": "輸出速率",
+        "outputTokens": "輸出 Tokens"
       },
       "performanceTab": {
         "noPerformanceData": "暫無效能資料",
-        "ttfbGauge": "首字節時間",
+        "tfftGauge": "首 Token 時間",
         "outputRateGauge": "輸出速率",
         "latencyBreakdown": "延遲分解",
         "generationTime": "生成時間",
+        "segmentTtfb": "TTFB",
+        "segmentTfft": "等待首 Token",
+        "segmentTotal": "總計",
         "assessment": {
           "excellent": "優秀",
           "good": "良好",
           "warning": "警告",
           "poor": "較差"
-        },
-        "thresholds": {
-          "ttfbGood": "TTFB < 1s",
-          "ttfbWarning": "TTFB 1-2s",
-          "ttfbPoor": "TTFB > 3s"
         }
       },
       "metadata": {
@@ -678,7 +678,7 @@
       "totalConsumedAmount": "總消耗金額",
       "successRate": "成功率（%）",
       "avgResponseTime": "平均回覆時間",
-      "avgTtfbMs": "平均 TTFB（ms）",
+      "avgTtfbMs": "平均 TFFT（ms）",
       "avgTokensPerSecond": "平均輸出速率",
       "avgCostPerRequest": "平均每次請求成本",
       "avgCostPerMillionTokens": "平均每百萬 Token 成本",
