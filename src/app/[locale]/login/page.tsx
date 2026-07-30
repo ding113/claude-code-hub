@@ -304,7 +304,9 @@ function LoginPageContent() {
                     <CardTitle className="text-2xl font-bold tracking-tight">
                       {t("form.title")}
                     </CardTitle>
-                    <CardDescription className="text-base">{t("form.description")}</CardDescription>
+                    <CardDescription className="text-base text-balance">
+                      {t("form.description")}
+                    </CardDescription>
                   </div>
                 </CardHeader>
                 <CardContent className="px-8 pb-8">
@@ -415,7 +417,7 @@ function LoginPageContent() {
 
         <p
           data-testid="login-disclaimer"
-          className="max-w-md px-4 text-center text-[11px] leading-relaxed text-muted-foreground/80"
+          className="max-w-md px-4 text-center text-[11px] leading-relaxed text-balance text-muted-foreground/80 lg:max-w-lg"
         >
           {t("brand.disclaimer")}
         </p>

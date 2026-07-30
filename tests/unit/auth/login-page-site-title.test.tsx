@@ -176,4 +176,20 @@ describe("login page site title", () => {
     expect(page?.className).not.toMatch(/\boverflow-hidden\b/);
     expect(page?.lastElementChild).toBe(footer);
   });
+
+  it("balances card description wrapping and widens the disclaimer on large screens", async () => {
+    (global.fetch as ReturnType<typeof vi.fn>).mockImplementation(() =>
+      Promise.resolve(mockJsonResponse({ current: "1.0.0", hasUpdate: false }))
+    );
+
+    await render();
+    await flushMicrotasks();
+
+    const description = container.querySelector<HTMLElement>('[data-slot="card-description"]');
+    const disclaimer = container.querySelector<HTMLElement>('[data-testid="login-disclaimer"]');
+
+    expect(description?.className).toContain("text-balance");
+    expect(disclaimer?.className).toContain("text-balance");
+    expect(disclaimer?.className).toContain("lg:max-w-lg");
+  });
 });
