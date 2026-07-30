@@ -3,9 +3,11 @@ import { createServer, type ServerResponse } from "node:http";
 import type { Socket } from "node:net";
 import { Context } from "hono";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { DiscoveryValidityParser } from "@/app/v1/_lib/proxy/discovery-validity";
 import { ProxyForwarder } from "@/app/v1/_lib/proxy/forwarder";
 import { ProxyResponseHandler } from "@/app/v1/_lib/proxy/response-handler";
 import { type MessageContext, ProxySession } from "@/app/v1/_lib/proxy/session";
+import { SseFrameParser } from "@/app/v1/_lib/proxy/stream-gate/sse-frames";
 import { DbPoolAdmissionError } from "@/drizzle/admitted-client";
 import { getGlobalAgentPool, resetGlobalAgentPool } from "@/lib/proxy-agent";
 import type { SessionBindingSnapshot } from "@/lib/redis/session-binding";
@@ -59,6 +61,7 @@ const state = vi.hoisted(() => {
     providers: Array.from<Provider>([]),
     recordFailure: vi.fn(async () => {}),
     settleLeaseBudgets: vi.fn(async () => {}),
+    streamGateMode: "off",
     tasks: Array.from<Promise<void>>([]),
     trackCost: vi.fn(async () => {}),
     updateMessageRequestCostWithBreakdown: vi.fn(async () => {}),
@@ -99,6 +102,18 @@ vi.mock("@/lib/config", async (importOriginal) => {
 vi.mock("@/lib/config/system-settings-cache", () => ({
   getCachedSystemSettings: async () => ({ billNonSuccessfulRequests: false }),
 }));
+vi.mock("@/lib/system-settings/proxy-runtime", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/system-settings/proxy-runtime")>();
+  return {
+    ...actual,
+    getCachedProxyRuntimeSettings: () => ({
+      affinityIgnoreClientSessionId: true,
+      cacheEffectivenessEnabled: true,
+      replayEnabled: false,
+      streamGateMode: state.streamGateMode,
+    }),
+  };
+});
 vi.mock("@/app/v1/_lib/proxy/provider-selector", () => ({
   ProxyProviderResolver: {
     pickDiscoveryProviders: state.pickDiscovery,
@@ -367,6 +382,7 @@ type Upstream = {
   readonly response: Promise<ServerResponse>;
   readonly send: (body: string) => Promise<void>;
   readonly terminated: Promise<void>;
+  readonly write: (body: string) => Promise<void>;
 };
 
 async function startUpstream(): Promise<Upstream> {
@@ -416,6 +432,18 @@ async function startUpstream(): Promise<Upstream> {
       await new Promise<void>((resolve) => response.end(body, resolve));
     },
     terminated: terminationGate.promise,
+    write: async (body) => {
+      const response = await responseGate.promise;
+      await new Promise<void>((resolve, reject) => {
+        response.write(body, (error) => {
+          if (error) {
+            reject(error);
+            return;
+          }
+          resolve();
+        });
+      });
+    },
   };
 }
 
@@ -424,13 +452,23 @@ async function createSession(
   pathname: string = "/v1/messages",
   signal?: AbortSignal
 ): Promise<ProxySession> {
+  const isResponsesRequest = pathname === "/v1/responses";
   const request = new Request(`https://hub.test${pathname}`, {
-    body: JSON.stringify({
-      max_tokens: 32,
-      messages: [{ content: "integration", role: "user" }],
-      model: "claude-test",
-      stream: true,
-    }),
+    body: JSON.stringify(
+      isResponsesRequest
+        ? {
+            input: [{ content: "integration", role: "user" }],
+            model: "gpt-5.6-sol",
+            store: false,
+            stream: true,
+          }
+        : {
+            max_tokens: 32,
+            messages: [{ content: "integration", role: "user" }],
+            model: "claude-test",
+            stream: true,
+          }
+    ),
     headers: { "content-type": "application/json" },
     method: "POST",
     ...(signal ? { signal } : {}),
@@ -438,8 +476,8 @@ async function createSession(
   const session = await ProxySession.fromContext(new Context(request));
   session.setAuthState({ apiKey: KEY.key, key: KEY, success: true, user: USER });
   session.setMessageContext(MESSAGE);
-  session.setOriginalFormat("claude");
-  session.setOriginalModel("claude-test");
+  session.setOriginalFormat(isResponsesRequest ? "response" : "claude");
+  session.setOriginalModel(isResponsesRequest ? "gpt-5.6-sol" : "claude-test");
   session.setProvider(provider);
   return session;
 }
@@ -448,6 +486,94 @@ function sse(inputTokens: number, outputTokens: number): string {
   return `event: message_delta\ndata: ${JSON.stringify({
     usage: { input_tokens: inputTokens, output_tokens: outputTokens },
   })}\n\nevent: message_stop\ndata: {"type":"message_stop"}\n\n`;
+}
+
+function responsesFrame(eventName: string, data: Record<string, unknown>): string {
+  return `event: ${eventName}\ndata: ${JSON.stringify(data)}\n\n`;
+}
+
+function responsesStreamFixture(responseId: string, itemId: string) {
+  return {
+    neutralPrefix: [
+      responsesFrame("response.created", {
+        response: { id: responseId, status: "in_progress" },
+        sequence_number: 0,
+        type: "response.created",
+      }),
+      responsesFrame("response.in_progress", {
+        response: { id: responseId, status: "in_progress" },
+        sequence_number: 1,
+        type: "response.in_progress",
+      }),
+      responsesFrame("response.output_item.added", {
+        item: {
+          content: [],
+          id: itemId,
+          role: "assistant",
+          status: "in_progress",
+          type: "message",
+        },
+        output_index: 0,
+        sequence_number: 2,
+        type: "response.output_item.added",
+      }),
+      responsesFrame("response.content_part.added", {
+        content_index: 0,
+        item_id: itemId,
+        output_index: 0,
+        part: { annotations: [], logprobs: [], text: "", type: "output_text" },
+        sequence_number: 3,
+        type: "response.content_part.added",
+      }),
+    ],
+    firstContent: responsesFrame("response.output_text.delta", {
+      content_index: 0,
+      delta: "我",
+      item_id: itemId,
+      logprobs: [],
+      output_index: 0,
+      sequence_number: 5,
+      type: "response.output_text.delta",
+    }),
+    completed: responsesFrame("response.completed", {
+      response: {
+        id: responseId,
+        status: "completed",
+        usage: { input_tokens: 1, output_tokens: 1 },
+      },
+      sequence_number: 6,
+      type: "response.completed",
+    }),
+  } as const;
+}
+
+function watchNeutralResponsesPrefixConsumption() {
+  const consumed = Promise.withResolvers<void>();
+  const decoder = new TextDecoder();
+  let observed = "";
+  const observe = (chunk: Uint8Array | string) => {
+    observed += typeof chunk === "string" ? chunk : decoder.decode(chunk, { stream: true });
+    if (observed.includes('"sequence_number":3')) consumed.resolve();
+  };
+  const originalGatePush = SseFrameParser.prototype.push;
+  const gateSpy = vi.spyOn(SseFrameParser.prototype, "push").mockImplementation(function (chunk) {
+    observe(chunk);
+    return originalGatePush.call(this, chunk);
+  });
+  const originalDiscoveryPush = DiscoveryValidityParser.prototype.push;
+  const discoverySpy = vi
+    .spyOn(DiscoveryValidityParser.prototype, "push")
+    .mockImplementation(function (chunk) {
+      observe(chunk);
+      return originalDiscoveryPush.call(this, chunk);
+    });
+  return {
+    consumed: consumed.promise,
+    restore: () => {
+      gateSpy.mockRestore();
+      discoverySpy.mockRestore();
+    },
+  } as const;
 }
 
 async function settleTasks(): Promise<void> {
@@ -481,6 +607,7 @@ beforeEach(async () => {
   state.http2Error = null;
   state.loserBilled = Promise.withResolvers<void>();
   state.providers.length = 0;
+  state.streamGateMode = "off";
   state.tasks.length = 0;
   state.addLoserCost.mockImplementation(async () => state.loserBilled.resolve());
   state.pickAlternative.mockImplementation(async (_session: unknown, excludedIds: number[]) => {
@@ -499,6 +626,144 @@ afterEach(async () => {
 });
 
 describe("proxy hedge transport/lifecycle integration (persistence and control-plane seams mocked)", () => {
+  it.each([
+    {
+      expectedMode: "legacy_serial",
+      firstByteTimeoutStreamingMs: 0,
+      pathName: "sequential",
+    },
+    {
+      expectedMode: "legacy_hedge",
+      firstByteTimeoutStreamingMs: 5_000,
+      pathName: "first-byte hedge",
+    },
+  ])(
+    "records TFFT at the enforced Responses gate commit before downstream reads ($pathName path)",
+    async ({ expectedMode, firstByteTimeoutStreamingMs }) => {
+      const upstream = await startUpstream();
+      const client = new AbortController();
+      const now = vi.spyOn(Date, "now");
+      const neutralPrefixConsumption = watchNeutralResponsesPrefixConsumption();
+      try {
+        // Given: the real fixture's four neutral events precede its first text delta.
+        now.mockReturnValue(10_000);
+        state.streamGateMode = "enforce";
+        const provider = createProvider(1, upstream.baseUrl, firstByteTimeoutStreamingMs);
+        provider.providerType = "codex";
+        const session = await createSession(provider, "/v1/responses", client.signal);
+        const agents = watchAgentReleases(1);
+        const stream = responsesStreamFixture("resp_gate", "msg_gate");
+
+        const forwarded = ProxyForwarder.send(session);
+        await upstream.response;
+        now.mockReturnValue(10_050);
+        await upstream.write(stream.neutralPrefix.join(""));
+        await neutralPrefixConsumption.consumed;
+        expect(session.firstByteMs).toBeNull();
+        expect(session.tfftMs).toBeNull();
+
+        // When: sequence 5 arrives, it is the first user-visible content boundary.
+        now.mockReturnValue(10_125);
+        await upstream.write(stream.firstContent);
+        const forwardedResponse = await forwarded;
+
+        // Then: TTFB and TFFT remain distinct before any downstream read occurs.
+        expect(session.firstByteMs).toBe(50);
+        expect(session.tfftMs).toBe(125);
+        expect(session.getRoutingTrace()?.mode).toBe(expectedMode);
+        const firstByteMsAtCommit = session.firstByteMs;
+
+        now.mockReturnValue(10_900);
+        const downstream = await ProxyResponseHandler.dispatch(session, forwardedResponse);
+        await upstream.send(stream.completed);
+        await expect(downstream.text()).resolves.toBe(
+          [...stream.neutralPrefix, stream.firstContent, stream.completed].join("")
+        );
+        await settleTasks();
+        await agents.released;
+
+        expect(session.firstByteMs).toBe(firstByteMsAtCommit);
+        expect(session.tfftMs).toBe(125);
+        expect(session.getProviderChain()).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              streamGate: expect.objectContaining({
+                eventName: "response.output_text.delta",
+                frameIndex: 5,
+              }),
+            }),
+          ])
+        );
+        expect(agents.pool.getPoolStats().activeRequests).toBe(0);
+      } finally {
+        client.abort(new Error("fixture cleanup"));
+        neutralPrefixConsumption.restore();
+        now.mockRestore();
+        await upstream.close();
+      }
+    }
+  );
+
+  it("records TFFT when a Discovery Responses winner commits before downstream reads", async () => {
+    const [loser, winner] = await Promise.all([startUpstream(), startUpstream()]);
+    const client = new AbortController();
+    const now = vi.spyOn(Date, "now");
+    const neutralPrefixConsumption = watchNeutralResponsesPrefixConsumption();
+    try {
+      // Given: Discovery has two Codex attempts and only the alternative emits the real fixture.
+      now.mockReturnValue(10_000);
+      state.discoveryEnabled = true;
+      const initialProvider = createProvider(1, loser.baseUrl, 0);
+      initialProvider.providerType = "codex";
+      const winningProvider = createProvider(2, winner.baseUrl, 0);
+      winningProvider.priority = initialProvider.priority;
+      winningProvider.providerType = "codex";
+      state.providers.push(winningProvider);
+      const session = await createSession(initialProvider, "/v1/responses", client.signal);
+      session.sessionId = "integration-discovery-tfft";
+      const agents = watchAgentReleases(2);
+      const stream = responsesStreamFixture("resp_discovery", "msg_discovery");
+
+      const forwarded = ProxyForwarder.send(session);
+      await Promise.all([loser.response, winner.response]);
+      now.mockReturnValue(10_050);
+      await winner.write(stream.neutralPrefix.join(""));
+      await neutralPrefixConsumption.consumed;
+      expect(session.tfftMs).toBeNull();
+
+      // When: sequence 5 makes the alternative ready and Discovery commits it.
+      now.mockReturnValue(10_125);
+      await winner.write(stream.firstContent);
+      const forwardedResponse = await forwarded;
+
+      // Then: TFFT is fixed at winner commit, before ResponseHandler reads the stream.
+      expect(session.firstByteMs).toBe(50);
+      expect(session.tfftMs).toBe(125);
+      const firstByteMsAtCommit = session.firstByteMs;
+
+      now.mockReturnValue(10_900);
+      const downstream = await ProxyResponseHandler.dispatch(session, forwardedResponse);
+      await winner.send(stream.completed);
+      await expect(downstream.text()).resolves.toBe(
+        [...stream.neutralPrefix, stream.firstContent, stream.completed].join("")
+      );
+      await settleTasks();
+      await loser.terminated;
+      await agents.released;
+
+      expect(session.firstByteMs).toBe(firstByteMsAtCommit);
+      expect(session.tfftMs).toBe(125);
+      expect(loser.abortCount()).toBe(1);
+      expect(winner.abortCount()).toBe(0);
+      expect(agents.pool.getPoolStats().activeRequests).toBe(0);
+    } finally {
+      client.abort(new Error("fixture cleanup"));
+      neutralPrefixConsumption.restore();
+      now.mockRestore();
+      await Promise.all([loser.close(), winner.close()]);
+    }
+  });
+
   it("runs a leased Discovery race over real loopback transports and cancels the loser", async () => {
     const [loser, winner] = await Promise.all([startUpstream(), startUpstream()]);
     const client = new AbortController();

@@ -1765,6 +1765,7 @@ export class ProxyForwarder {
                 if (gateFirstByteAt !== null) {
                   session.recordFirstByte(gateFirstByteAt);
                 }
+                session.recordTfft();
 
                 if (gate.commitMarker) {
                   gateChainAudit = {
@@ -4761,7 +4762,7 @@ export class ProxyForwarder {
               }
               // 保留完整门控前缀：若本 attempt 落败且需要计费，drain 时补回前缀里的 usage。
               attempt.firstChunk = concatChunks(gate.prefixChunks);
-              await commitWinner(attempt, gate.prefixChunks);
+              await commitWinner(attempt, gate.prefixChunks, true);
             } else {
               const firstChunk = await ProxyForwarder.readFirstReadableChunk(attempt.reader);
               if (firstChunk.done) {
@@ -4774,7 +4775,7 @@ export class ProxyForwarder {
 
               // 保留首块：若本 attempt 落败且需要计费，drain 时需要补回首块的 usage。
               attempt.firstChunk = firstChunk.value;
-              await commitWinner(attempt, [firstChunk.value]);
+              await commitWinner(attempt, [firstChunk.value], false);
             }
 
             // 本 attempt 读到首块却落败（winner 已先提交，commitWinner 早退）：
@@ -5044,7 +5045,11 @@ export class ProxyForwarder {
       await finishIfExhausted();
     };
 
-    const commitWinner = async (attempt: StreamingHedgeAttempt, prefixChunks: Uint8Array[]) => {
+    const commitWinner = async (
+      attempt: StreamingHedgeAttempt,
+      prefixChunks: Uint8Array[],
+      contentGateCommitted: boolean
+    ) => {
       if (settled || winnerCommitted || attempt.settled || !attempt.response || !attempt.reader)
         return;
 
@@ -5053,6 +5058,9 @@ export class ProxyForwarder {
 
       if (attempt.firstByteAt != null) {
         session.recordFirstByte(attempt.firstByteAt);
+      }
+      if (contentGateCommitted) {
+        session.recordTfft();
       }
 
       if (attempt.thresholdTimer) {
@@ -6084,6 +6092,7 @@ export class ProxyForwarder {
       if (attempt.firstByteAt != null) {
         session.recordFirstByte(attempt.firstByteAt);
       }
+      session.recordTfft();
       if (attempt.session !== session)
         ProxyForwarder.syncWinningAttemptSession(session, attempt.session);
 
