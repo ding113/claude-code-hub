@@ -158,4 +158,22 @@ describe("login page site title", () => {
       null
     );
   });
+
+  it("keeps the disclaimer footer in page flow on short viewports", async () => {
+    (global.fetch as ReturnType<typeof vi.fn>).mockImplementation(() =>
+      Promise.resolve(mockJsonResponse({ current: "1.0.0", hasUpdate: false }))
+    );
+
+    await render();
+    await flushMicrotasks();
+
+    const disclaimer = container.querySelector<HTMLElement>('[data-testid="login-disclaimer"]');
+    const footer = disclaimer?.parentElement;
+    const page = footer?.parentElement;
+
+    expect(footer?.className).not.toMatch(/\babsolute\b/);
+    expect(page?.className).toContain("overflow-x-hidden");
+    expect(page?.className).not.toMatch(/\boverflow-hidden\b/);
+    expect(page?.lastElementChild).toBe(footer);
+  });
 });
