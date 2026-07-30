@@ -14,7 +14,7 @@
 [![Telegram Group](https://img.shields.io/badge/Telegram-交流群-blue?logo=telegram)](https://t.me/ygxz_group)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/ding113/claude-code-hub)
 
-CC Hub 通过 Next.js 15 + Hono + PostgreSQL + Redis 组合，实现 Claude/OpenAI 兼容 API 代理、智能负载均衡、实时监控、价格管理与自动化文档，帮助团队安全、可观测地管理多家 AI 服务商。
+CC Hub 通过 Next.js 16 + Hono + PostgreSQL + Redis 组合，实现 Claude/OpenAI 兼容 API 代理、智能负载均衡、实时监控、价格管理与自动化文档，帮助团队安全、可观测地管理多家 AI 服务商。
 
 💬 **加入讨论**：有部署、功能或技术问题？欢迎加入 [Telegram 交流群](https://t.me/ygxz_group) 与社区一起讨论！
 
@@ -238,7 +238,7 @@ Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process -Force
 客户端 / CLI / 第三方系统
         │
         ▼
-Next.js 15 App Router (v1 API 路由)
+Next.js 16 App Router (v1 API 路由)
         │
 Hono + Proxy Pipeline (认证 → Session 分配 → 限流 → 供应商选择 → 请求转发 → 响应处理)
         │

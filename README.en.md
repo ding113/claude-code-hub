@@ -14,7 +14,7 @@
 [![Telegram Group](https://img.shields.io/badge/Telegram-Join%20Group-blue?logo=telegram)](https://t.me/ygxz_group)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/ding113/claude-code-hub)
 
-CC Hub combines Next.js 15, Hono, PostgreSQL, and Redis to deliver a Claude/OpenAI-compatible API gateway with smart load balancing, live observability, price governance, and automated documentation, enabling teams to manage multiple AI vendors safely and transparently.
+CC Hub combines Next.js 16, Hono, PostgreSQL, and Redis to deliver a Claude/OpenAI-compatible API gateway with smart load balancing, live observability, price governance, and automated documentation, enabling teams to manage multiple AI vendors safely and transparently.
 
 💬 **Join the discussion**: Questions about deployment, features or technical issues? Join our [Telegram community](https://t.me/ygxz_group)!
 
@@ -233,7 +233,7 @@ Once started:
 Clients / CLI / Integrations
         │
         ▼
-Next.js 15 App Router (v1 API routes)
+Next.js 16 App Router (v1 API routes)
         │
 Hono + Proxy Pipeline (Auth → Session Allocation → Rate Limiting → Provider Selection → Forwarding → Response Handling)
         │
