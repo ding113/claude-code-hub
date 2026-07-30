@@ -1,4 +1,4 @@
-# CC Hub - One-Click Deployment Script for Windows
+﻿# CC Hub - One-Click Deployment Script for Windows
 # PowerShell 5.1+ required
 
 #Requires -Version 5.1
