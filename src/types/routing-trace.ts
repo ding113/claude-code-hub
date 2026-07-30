@@ -63,6 +63,7 @@ export interface RoutingTraceSummaryV1 {
   statusCode: number;
   durationMs: number;
   ttfbMs: number | null;
+  ttftMs?: number | null;
   attemptsPerRequest: number;
   maxActiveAttempts: number;
   rounds: number;
@@ -237,6 +238,11 @@ function normalizeRoutingTraceSummary(value: unknown): RoutingTraceSummaryV1 | u
     !winnerOrigins.has(summary.winnerOrigin as RoutingTraceWinnerOrigin) ||
     numericKeys.some((key) => finiteNumber(summary[key]) === undefined) ||
     !(summary.ttfbMs === null || finiteNumber(summary.ttfbMs) !== undefined) ||
+    !(
+      summary.ttftMs === undefined ||
+      summary.ttftMs === null ||
+      finiteNumber(summary.ttftMs) !== undefined
+    ) ||
     !(summary.winnerProviderId === null || finiteNumber(summary.winnerProviderId) !== undefined) ||
     !(summary.winnerRound === null || finiteNumber(summary.winnerRound) !== undefined)
   ) {
@@ -247,6 +253,7 @@ function normalizeRoutingTraceSummary(value: unknown): RoutingTraceSummaryV1 | u
     statusCode: summary.statusCode as number,
     durationMs: summary.durationMs as number,
     ttfbMs: summary.ttfbMs as number | null,
+    ttftMs: (summary.ttftMs as number | null | undefined) ?? null,
     attemptsPerRequest: summary.attemptsPerRequest as number,
     maxActiveAttempts: summary.maxActiveAttempts as number,
     rounds: summary.rounds as number,

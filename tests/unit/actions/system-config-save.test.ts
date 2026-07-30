@@ -4,7 +4,7 @@ import { locales } from "@/i18n/config";
 // Mock dependencies
 const getSessionMock = vi.fn();
 const revalidatePathMock = vi.fn();
-const invalidateSystemSettingsCacheMock = vi.fn();
+const primeSystemSettingsCacheMock = vi.fn();
 const updateSystemSettingsMock = vi.fn();
 const getSystemSettingsMock = vi.fn();
 const publishCurrentPublicStatusConfigProjectionMock = vi.fn();
@@ -19,7 +19,7 @@ vi.mock("next/cache", () => ({
 }));
 
 vi.mock("@/lib/config", () => ({
-  invalidateSystemSettingsCache: () => invalidateSystemSettingsCacheMock(),
+  primeSystemSettingsCache: (...args: unknown[]) => primeSystemSettingsCacheMock(...args),
 }));
 
 vi.mock("@/lib/logger", () => ({
@@ -179,10 +179,12 @@ describe("saveSystemSettings", () => {
     expect(updateSystemSettingsMock).not.toHaveBeenCalled();
   });
 
-  it("should invalidate system settings cache after successful save", async () => {
+  it("should prime system settings cache after successful save", async () => {
     await saveSystemSettings({ siteTitle: "New Title" });
 
-    expect(invalidateSystemSettingsCacheMock).toHaveBeenCalled();
+    expect(primeSystemSettingsCacheMock).toHaveBeenCalledWith(
+      expect.objectContaining({ siteTitle: "Test Site" })
+    );
   });
 
   it("should republish the public-status projection and queue a rebuild for relevant config changes", async () => {

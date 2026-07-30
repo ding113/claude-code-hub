@@ -38,55 +38,52 @@ function createSession(startTime: number): ProxySession {
   });
 }
 
-describe("ProxySession TTFB / TFFT", () => {
-  it("门控旁路时 recordTfft 同时补齐 TTFB（两者同一时刻）", () => {
+describe("ProxySession TTFB / TTFT", () => {
+  it("分别记录响应头与首个有效内容耗时", () => {
     const session = createSession(Date.now() - 1_200);
 
-    const tfft = session.recordTfft();
+    const ttfb = session.recordTtfb(200);
+    const ttft = session.recordTtft(800);
 
-    expect(session.tfftMs).toBe(tfft);
-    expect(session.firstByteMs).toBe(tfft);
+    expect(session.ttfbMs).toBe(ttfb);
+    expect(session.ttftMs).toBe(ttft);
   });
 
-  it("门控提交时先记 TTFB，recordTfft 不覆盖它", () => {
-    const startTime = Date.now() - 3_000;
-    const session = createSession(startTime);
+  it("TTFT 不覆盖已经记录的 TTFB", () => {
+    const session = createSession(Date.now() - 3_000);
 
-    session.recordFirstByte(startTime + 400);
-    const tfft = session.recordTfft();
+    session.recordTtfb(400);
+    const ttft = session.recordTtft(1_200);
 
-    expect(session.firstByteMs).toBe(400);
-    expect(session.tfftMs).toBe(tfft);
-    // TTFB 必须早于 TFFT，否则延迟分解与 TPS 分母都会失真
-    expect(session.firstByteMs!).toBeLessThan(session.tfftMs!);
+    expect(session.ttfbMs).toBe(400);
+    expect(session.ttftMs).toBe(ttft);
+    expect(session.ttfbMs!).toBeLessThan(session.ttftMs!);
   });
 
-  it("recordFirstByte 首写生效：failover 后不会被后续尝试改写", () => {
-    const startTime = Date.now() - 5_000;
-    const session = createSession(startTime);
+  it("recordTtfb 首写生效，后续尝试不会改写 winner timing", () => {
+    const session = createSession(Date.now() - 5_000);
 
-    session.recordFirstByte(startTime + 900);
-    session.recordFirstByte(startTime + 2_500);
+    session.recordTtfb(900);
+    session.recordTtfb(2_500);
 
-    expect(session.firstByteMs).toBe(900);
+    expect(session.ttfbMs).toBe(900);
   });
 
-  it("recordFirstByte 对早于 startTime 的时刻钳到 0", () => {
-    const startTime = Date.now();
-    const session = createSession(startTime);
+  it("recordTtfb 将负耗时钳到 0", () => {
+    const session = createSession(Date.now());
 
-    session.recordFirstByte(startTime - 50);
+    session.recordTtfb(-50);
 
-    expect(session.firstByteMs).toBe(0);
+    expect(session.ttfbMs).toBe(0);
   });
 
-  it("recordTfft 幂等：重复调用不改变已记录的值", () => {
+  it("recordTtft 幂等，重复调用不改变已记录的值", () => {
     const session = createSession(Date.now() - 800);
 
-    const first = session.recordTfft();
-    const second = session.recordTfft();
+    const first = session.recordTtft(500);
+    const second = session.recordTtft(700);
 
     expect(second).toBe(first);
-    expect(session.firstByteMs).toBe(first);
+    expect(session.ttftMs).toBe(first);
   });
 });

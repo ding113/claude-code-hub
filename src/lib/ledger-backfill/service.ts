@@ -90,8 +90,9 @@ export async function backfillUsageLedger(
             mr.context_1m_applied,
             mr.swap_cache_ttl_applied,
             mr.duration_ms,
-            mr.ttfb_ms,
-            mr.first_byte_ms,
+          mr.ttfb_ms,
+          mr.ttft_ms,
+          mr.timing_semantics_version,
             mr.created_at,
             ul.request_id AS existing_request_id
           FROM message_request mr
@@ -122,7 +123,7 @@ export async function backfillUsageLedger(
             cache_creation_input_tokens, cache_read_input_tokens,
             cache_creation_5m_input_tokens, cache_creation_1h_input_tokens,
             cache_ttl_applied, context_1m_applied, swap_cache_ttl_applied,
-            duration_ms, ttfb_ms, first_byte_ms, created_at
+          duration_ms, ttfb_ms, ttft_ms, timing_semantics_version, created_at
           )
           SELECT
             batch.id,
@@ -152,8 +153,9 @@ export async function backfillUsageLedger(
             batch.context_1m_applied,
             batch.swap_cache_ttl_applied,
             batch.duration_ms,
-            batch.ttfb_ms,
-            batch.first_byte_ms,
+          batch.ttfb_ms,
+          batch.ttft_ms,
+          batch.timing_semantics_version,
             batch.created_at
           FROM batch
           ON CONFLICT (request_id) DO UPDATE SET

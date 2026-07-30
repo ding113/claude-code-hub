@@ -8,6 +8,7 @@ import { formatTtfb } from "../_lib/format-ttfb";
 export interface PublicStatusTimelineLabels {
   availability: string;
   ttfb: string;
+  ttft: string;
   tps: string;
   noData: string;
   historyAriaLabel: string;
@@ -90,6 +91,7 @@ export function PublicStatusTimeline({
       availability:
         activeBucket.availabilityPct === null ? "—" : `${activeBucket.availabilityPct.toFixed(2)}%`,
       ttfb: formatTtfb(activeBucket.ttfbMs),
+      ttft: formatTtfb(activeBucket.ttftMs),
       tps: activeBucket.tps === null ? "—" : activeBucket.tps.toFixed(1),
     };
   }, [activeBucket, activeIsPlaceholder, locale, timeZone]);
@@ -132,13 +134,16 @@ export function PublicStatusTimeline({
           {activeSummary.range ? (
             <p className="mb-1 font-medium tabular-nums">{activeSummary.range}</p>
           ) : null}
-          <div className="grid grid-cols-3 gap-2 font-mono">
+          <div className="grid grid-cols-2 gap-2 font-mono sm:grid-cols-4">
             <span>
               <span className="text-muted-foreground">{labels.availability}</span>{" "}
               {activeSummary.availability}
             </span>
             <span>
               <span className="text-muted-foreground">{labels.ttfb}</span> {activeSummary.ttfb}
+            </span>
+            <span>
+              <span className="text-muted-foreground">{labels.ttft}</span> {activeSummary.ttft}
             </span>
             <span>
               <span className="text-muted-foreground">{labels.tps}</span> {activeSummary.tps}

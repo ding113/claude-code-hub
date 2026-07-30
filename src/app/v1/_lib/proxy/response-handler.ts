@@ -75,7 +75,11 @@ import {
   peekDeferredStreamingFinalization,
 } from "./stream-finalization";
 import { mapProviderTypeToFamily } from "./stream-gate/frame-classifier";
-import { createShadowGateObserver, resolveStreamGateMode } from "./stream-gate/stream-content-gate";
+import {
+  createContentTimingObserver,
+  createShadowGateObserver,
+  resolveStreamGateMode,
+} from "./stream-gate/stream-content-gate";
 import {
   createStreamProtocolObserver,
   type StreamProtocolObservation,
@@ -2677,8 +2681,9 @@ export class ProxyResponseHandler {
                   details: {
                     statusCode: finalizedStatusCode,
                     ...errorDetails,
-                    tfftMs: session.tfftMs ?? duration,
-                    firstByteMs: session.firstByteMs ?? duration,
+                    ttfbMs: session.ttfbMs,
+                    ttftMs: session.ttftMs,
+                    timingSemanticsVersion: 2,
                     providerChain: session.getProviderChain(),
                     routingTrace: session.finalizeRoutingTrace(finalizedStatusCode),
                     model: session.getCurrentModel() ?? undefined,
@@ -2875,8 +2880,9 @@ export class ProxyResponseHandler {
           const terminalDetails: MessageRequestTerminalDetails = {
             statusCode: finalizedStatusCode,
             ...errorDetails,
-            tfftMs: session.tfftMs ?? duration,
-            firstByteMs: session.firstByteMs ?? duration,
+            ttfbMs: session.ttfbMs,
+            ttftMs: session.ttftMs,
+            timingSemanticsVersion: 2,
             providerChain: session.getProviderChain(),
             routingTrace: session.finalizeRoutingTrace(finalizedStatusCode),
             model: session.getCurrentModel() ?? undefined, // 更新重定向后的模型
@@ -3222,8 +3228,9 @@ export class ProxyResponseHandler {
             statusCode: statusCode,
             inputTokens: usageMetrics?.input_tokens,
             outputTokens: usageMetrics?.output_tokens,
-            tfftMs: session.tfftMs ?? duration,
-            firstByteMs: session.firstByteMs ?? duration,
+            ttfbMs: session.ttfbMs,
+            ttftMs: session.ttftMs,
+            timingSemanticsVersion: 2,
             cacheCreationInputTokens: usageMetrics?.cache_creation_input_tokens,
             cacheReadInputTokens: usageMetrics?.cache_read_input_tokens,
             cacheCreation5mInputTokens: usageMetrics?.cache_creation_5m_input_tokens,
@@ -3672,7 +3679,7 @@ export class ProxyResponseHandler {
             clearIdleTimer();
             if (isFirstChunk) {
               isFirstChunk = false;
-              session.recordTfft();
+              session.recordTtft();
               clearResponseTimeoutOnce(value.byteLength);
             }
             streamTextAccumulator.pushBytes(value);
@@ -4630,8 +4637,9 @@ export class ProxyResponseHandler {
               durationMs: duration,
               inputTokens: usageForCost?.input_tokens,
               outputTokens: usageForCost?.output_tokens,
-              tfftMs: session.tfftMs,
-              firstByteMs: session.firstByteMs,
+              ttfbMs: session.ttfbMs,
+              ttftMs: session.ttftMs,
+              timingSemanticsVersion: 2,
               cacheCreationInputTokens: usageForCost?.cache_creation_input_tokens,
               cacheReadInputTokens: usageForCost?.cache_read_input_tokens,
               cacheCreation5mInputTokens: usageForCost?.cache_creation_5m_input_tokens,
@@ -4692,6 +4700,16 @@ export class ProxyResponseHandler {
       });
     })();
 
+    const contentTimingObserver = (() => {
+      if (session.getEndpointPolicy().kind === "raw_passthrough") return null;
+      const family = mapProviderTypeToFamily(provider.providerType);
+      if (!family) return null;
+      return createContentTimingObserver({
+        family,
+        onContent: () => session.recordTtft(),
+      });
+    })();
+
     // F2 owner spool：guard 阶段已抢到 owner 租约的请求，把客户端可见字节
     // write-behind 喂入 Redis 热层，供并发/断线的相同请求 attach 跟尾。
     const replaySpool = createReplaySpoolIfOwner(session, response);
@@ -4715,6 +4733,7 @@ export class ProxyResponseHandler {
       clearIdleTimer();
       streamTextAccumulator.pushBytes(value);
       AsyncTaskManager.touch(taskId);
+      contentTimingObserver?.observe(value);
       shadowGateObserver?.observe(value);
       replayProtocolObserver?.observe(value);
       replaySpool?.observe(value);
@@ -4728,7 +4747,9 @@ export class ProxyResponseHandler {
       });
 
       if (isFirstChunk) {
-        session.recordTfft();
+        if (!contentTimingObserver) {
+          session.recordTtft();
+        }
         isFirstChunk = false;
         if (clearResponseTimeoutOnce()) {
           logger.debug("ResponseHandler: First chunk received, response timeout cleared", {
@@ -6219,12 +6240,22 @@ export async function finalizeRequestStats(
       });
     }
 
+    const cacheScoreFields = isCacheEffectivenessEnabled()
+      ? computeCacheScoreFields({
+          affinity: session.affinity,
+          succeeded: statusCode >= 200 && statusCode < 300,
+          usageObservable: false,
+          streamTruncated: false,
+          cacheTtl: null,
+        })
+      : undefined;
     const terminalDetails = {
       statusCode: statusCode,
       durationMs: duration,
       ...(errorMessage ? { errorMessage } : {}),
-      tfftMs: session.tfftMs ?? duration,
-      firstByteMs: session.firstByteMs ?? duration,
+      ttfbMs: session.ttfbMs,
+      ttftMs: session.ttftMs,
+      timingSemanticsVersion: 2,
       providerChain: session.getProviderChain(),
       routingTrace: session.finalizeRoutingTrace(statusCode),
       model: session.getCurrentModel() ?? undefined,
@@ -6237,6 +6268,7 @@ export async function finalizeRequestStats(
       context1mApplied: session.getContext1mApplied(),
       swapCacheTtlApplied: session.provider?.swapCacheTtlBilling ?? false,
       specialSettings: session.getSpecialSettings() ?? undefined,
+      ...(cacheScoreFields ?? {}),
     };
     if (onCommitted) {
       await updateMessageRequestDetailsDurably(messageContext.id, terminalDetails, {
@@ -6332,13 +6364,23 @@ export async function finalizeRequestStats(
   }
 
   // 7. 更新请求详情
+  const cacheScoreFields = isCacheEffectivenessEnabled()
+    ? computeCacheScoreFields({
+        affinity: session.affinity,
+        succeeded: statusCode >= 200 && statusCode < 300,
+        usageObservable: normalizedUsage.input_tokens != null,
+        streamTruncated: false,
+        cacheTtl: normalizedUsage.cache_ttl ?? null,
+      })
+    : undefined;
   const terminalDetails = {
     statusCode: statusCode,
     durationMs: duration,
     inputTokens: normalizedUsage.input_tokens,
     outputTokens: normalizedUsage.output_tokens,
-    tfftMs: session.tfftMs ?? duration,
-    firstByteMs: session.firstByteMs ?? duration,
+    ttfbMs: session.ttfbMs,
+    ttftMs: session.ttftMs,
+    timingSemanticsVersion: 2,
     cacheCreationInputTokens: normalizedUsage.cache_creation_input_tokens,
     cacheReadInputTokens: normalizedUsage.cache_read_input_tokens,
     cacheCreation5mInputTokens: normalizedUsage.cache_creation_5m_input_tokens,
@@ -6357,6 +6399,7 @@ export async function finalizeRequestStats(
     context1mApplied: session.getContext1mApplied(),
     swapCacheTtlApplied: provider.swapCacheTtlBilling ?? false,
     specialSettings: session.getSpecialSettings() ?? undefined,
+    ...(cacheScoreFields ?? {}),
   };
   if (onCommitted) {
     await updateMessageRequestDetailsDurably(messageContext.id, terminalDetails, { onCommitted });
@@ -6596,8 +6639,9 @@ async function persistRequestFailure(options: {
       errorMessage,
       errorStack,
       errorCause,
-      tfftMs: phase === "non-stream" ? (session.tfftMs ?? duration) : session.tfftMs,
-      firstByteMs: phase === "non-stream" ? (session.firstByteMs ?? duration) : session.firstByteMs,
+      ttfbMs: session.ttfbMs,
+      ttftMs: session.ttftMs,
+      timingSemanticsVersion: 2,
       providerChain: session.getProviderChain(),
       routingTrace: session.finalizeRoutingTrace(statusCode),
       model: session.getCurrentModel() ?? undefined,

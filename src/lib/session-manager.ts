@@ -7,6 +7,7 @@ import { RESERVED_INTERNAL_HEADERS } from "@/app/v1/_lib/responses-ws/internal-s
 import { parseClaudeMetadataUserId } from "@/lib/claude-code/metadata-user-id";
 import { getEnvConfig } from "@/lib/config/env.schema";
 import { logger } from "@/lib/logger";
+import { getSessionSnapshotStore } from "@/lib/session-snapshot/store";
 import {
   redactMessages,
   redactRequestBody,
@@ -135,8 +136,6 @@ type SessionResponseMeta = {
   statusCode: number;
 };
 
-type SessionDetailSnapshotKind = "request" | "response";
-type SessionDetailSnapshotField = "body" | "messages" | "headers" | "meta";
 type SessionDetailSnapshotHeadersInput = Headers | Record<string, string> | null;
 type SessionDetailRequestSnapshotInput = Omit<Partial<SessionDetailRequestSnapshot>, "headers"> & {
   headers?: SessionDetailSnapshotHeadersInput;
@@ -147,16 +146,6 @@ type SessionDetailResponseSnapshotInput = Omit<
 > & {
   headers?: SessionDetailSnapshotHeadersInput;
 };
-
-function buildSessionDetailSnapshotKey(
-  sessionId: string,
-  sequence: number,
-  kind: SessionDetailSnapshotKind,
-  phase: SessionDetailViewMode,
-  field: SessionDetailSnapshotField
-): string {
-  return `session:${sessionId}:req:${sequence}:snapshot:${kind}:${phase}:${field}`;
-}
 
 function normalizeSnapshotHeaders(
   headers: Headers | Record<string, string> | null | undefined
@@ -186,9 +175,9 @@ function parseJsonStringIfPossible(value: unknown): unknown {
   }
 }
 
-function parseSessionDetailRequestMeta(value: string): SessionDetailRequestMeta | null {
+function parseSessionDetailRequestMeta(value: unknown): SessionDetailRequestMeta | null {
   try {
-    const parsed: unknown = JSON.parse(value);
+    const parsed: unknown = typeof value === "string" ? JSON.parse(value) : value;
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
       return null;
     }
@@ -205,9 +194,9 @@ function parseSessionDetailRequestMeta(value: string): SessionDetailRequestMeta 
   }
 }
 
-function parseSessionDetailResponseMeta(value: string): SessionDetailResponseMeta | null {
+function parseSessionDetailResponseMeta(value: unknown): SessionDetailResponseMeta | null {
   try {
-    const parsed: unknown = JSON.parse(value);
+    const parsed: unknown = typeof value === "string" ? JSON.parse(value) : value;
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
       return null;
     }
@@ -221,6 +210,11 @@ function parseSessionDetailResponseMeta(value: string): SessionDetailResponseMet
     logger.error("SessionManager: Failed to parse response detail snapshot meta", { error });
     return null;
   }
+}
+
+function parseStoredSnapshotHeaders(value: unknown): Record<string, string> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  return normalizeSnapshotHeaders(value as Record<string, string>);
 }
 
 function buildTenantContentHashSessionKey(keyId: number, contentHash: string): string {
@@ -2461,25 +2455,16 @@ export class SessionManager {
     snapshot: SessionDetailRequestSnapshotInput,
     requestSequence?: number
   ): Promise<void> {
-    const redis = getRedisClient();
-    if (redis?.status !== "ready") return;
-
     try {
       const sequence = normalizeRequestSequence(requestSequence) ?? 1;
-      const writes: Array<Promise<unknown>> = [];
+      const patch: Record<string, unknown> = {};
 
       if ("body" in snapshot) {
         const normalizedBody = parseJsonStringIfPossible(snapshot.body ?? null);
         const bodyToStore = SessionManager.STORE_MESSAGES
           ? normalizedBody
           : redactRequestBody(normalizedBody);
-        writes.push(
-          redis.setex(
-            buildSessionDetailSnapshotKey(sessionId, sequence, "request", phase, "body"),
-            SessionManager.SESSION_TTL,
-            JSON.stringify(bodyToStore)
-          )
-        );
+        patch.body = bodyToStore;
       }
 
       if ("messages" in snapshot) {
@@ -2487,46 +2472,34 @@ export class SessionManager {
         const messagesToStore = SessionManager.STORE_MESSAGES
           ? normalizedMessages
           : redactMessages(normalizedMessages);
-        writes.push(
-          redis.setex(
-            buildSessionDetailSnapshotKey(sessionId, sequence, "request", phase, "messages"),
-            SessionManager.SESSION_TTL,
-            JSON.stringify(messagesToStore)
-          )
-        );
+        patch.messages = messagesToStore;
       }
 
       if ("headers" in snapshot) {
-        writes.push(
-          redis.setex(
-            buildSessionDetailSnapshotKey(sessionId, sequence, "request", phase, "headers"),
-            SessionManager.SESSION_TTL,
-            JSON.stringify(normalizeSnapshotHeaders(snapshot.headers))
-          )
-        );
+        patch.headers = normalizeSnapshotHeaders(snapshot.headers);
       }
 
       if ("meta" in snapshot) {
-        writes.push(
-          redis.setex(
-            buildSessionDetailSnapshotKey(sessionId, sequence, "request", phase, "meta"),
-            SessionManager.SESSION_TTL,
-            JSON.stringify({
-              clientUrl:
-                typeof snapshot.meta?.clientUrl === "string"
-                  ? sanitizeUrl(snapshot.meta.clientUrl)
-                  : null,
-              upstreamUrl:
-                typeof snapshot.meta?.upstreamUrl === "string"
-                  ? sanitizeUrl(snapshot.meta.upstreamUrl)
-                  : null,
-              method: snapshot.meta?.method ?? null,
-            } satisfies SessionDetailRequestMeta)
-          )
-        );
+        patch.meta = {
+          clientUrl:
+            typeof snapshot.meta?.clientUrl === "string"
+              ? sanitizeUrl(snapshot.meta.clientUrl)
+              : null,
+          upstreamUrl:
+            typeof snapshot.meta?.upstreamUrl === "string"
+              ? sanitizeUrl(snapshot.meta.upstreamUrl)
+              : null,
+          method: snapshot.meta?.method ?? null,
+        } satisfies SessionDetailRequestMeta;
       }
 
-      await Promise.all(writes);
+      if (Object.keys(patch).length > 0) {
+        getSessionSnapshotStore().enqueuePatch(
+          { sessionId, sequence, kind: "request", phase },
+          patch,
+          SessionManager.SESSION_TTL
+        );
+      }
     } catch (error) {
       logger.error("SessionManager: Failed to store request detail snapshot", {
         error,
@@ -2541,37 +2514,25 @@ export class SessionManager {
     phase: SessionDetailViewMode,
     requestSequence?: number
   ): Promise<SessionDetailRequestSnapshot | null> {
-    const redis = getRedisClient();
-    if (redis?.status !== "ready") return null;
-
     try {
       const sequence = normalizeRequestSequence(requestSequence);
       if (!sequence) return null;
-
-      const [bodyValue, messagesValue, headersValue, metaValue] = await Promise.all([
-        redis.get(buildSessionDetailSnapshotKey(sessionId, sequence, "request", phase, "body")),
-        redis.get(buildSessionDetailSnapshotKey(sessionId, sequence, "request", phase, "messages")),
-        redis.get(buildSessionDetailSnapshotKey(sessionId, sequence, "request", phase, "headers")),
-        redis.get(buildSessionDetailSnapshotKey(sessionId, sequence, "request", phase, "meta")),
-      ]);
-
-      if (
-        bodyValue === null &&
-        messagesValue === null &&
-        headersValue === null &&
-        metaValue === null
-      ) {
-        return null;
-      }
+      const stored = await getSessionSnapshotStore().get({
+        sessionId,
+        sequence,
+        kind: "request",
+        phase,
+      });
+      if (!stored) return null;
 
       return {
-        body: bodyValue === null ? null : (JSON.parse(bodyValue) as unknown),
-        messages: messagesValue === null ? null : (JSON.parse(messagesValue) as unknown),
-        headers: headersValue === null ? null : parseHeaderRecord(headersValue),
+        body: "body" in stored ? stored.body : null,
+        messages: "messages" in stored ? stored.messages : null,
+        headers: parseStoredSnapshotHeaders(stored.headers),
         meta:
-          metaValue === null
+          stored.meta == null
             ? { clientUrl: null, upstreamUrl: null, method: null }
-            : (parseSessionDetailRequestMeta(metaValue) ?? {
+            : (parseSessionDetailRequestMeta(stored.meta) ?? {
                 clientUrl: null,
                 upstreamUrl: null,
                 method: null,
@@ -2597,12 +2558,9 @@ export class SessionManager {
     snapshot: SessionDetailResponseSnapshotInput,
     requestSequence?: number
   ): Promise<void> {
-    const redis = getRedisClient();
-    if (redis?.status !== "ready") return;
-
     try {
       const sequence = normalizeRequestSequence(requestSequence) ?? 1;
-      const writes: Array<Promise<unknown>> = [];
+      const patch: Record<string, unknown> = {};
 
       if ("body" in snapshot) {
         if (!getEnvConfig().STORE_SESSION_RESPONSE_BODY) {
@@ -2627,44 +2585,32 @@ export class SessionManager {
           }
 
           if (bodyToStore !== null) {
-            writes.push(
-              redis.setex(
-                buildSessionDetailSnapshotKey(sessionId, sequence, "response", phase, "body"),
-                SessionManager.SESSION_TTL,
-                bodyToStore
-              )
-            );
+            patch.body = bodyToStore;
           }
         }
       }
 
       if ("headers" in snapshot) {
-        writes.push(
-          redis.setex(
-            buildSessionDetailSnapshotKey(sessionId, sequence, "response", phase, "headers"),
-            SessionManager.SESSION_TTL,
-            JSON.stringify(normalizeSnapshotHeaders(snapshot.headers))
-          )
-        );
+        patch.headers = normalizeSnapshotHeaders(snapshot.headers);
       }
 
       if ("meta" in snapshot) {
-        writes.push(
-          redis.setex(
-            buildSessionDetailSnapshotKey(sessionId, sequence, "response", phase, "meta"),
-            SessionManager.SESSION_TTL,
-            JSON.stringify({
-              upstreamUrl:
-                typeof snapshot.meta?.upstreamUrl === "string"
-                  ? sanitizeUrl(snapshot.meta.upstreamUrl)
-                  : null,
-              statusCode: snapshot.meta?.statusCode ?? null,
-            } satisfies SessionDetailResponseMeta)
-          )
-        );
+        patch.meta = {
+          upstreamUrl:
+            typeof snapshot.meta?.upstreamUrl === "string"
+              ? sanitizeUrl(snapshot.meta.upstreamUrl)
+              : null,
+          statusCode: snapshot.meta?.statusCode ?? null,
+        } satisfies SessionDetailResponseMeta;
       }
 
-      await Promise.all(writes);
+      if (Object.keys(patch).length > 0) {
+        getSessionSnapshotStore().enqueuePatch(
+          { sessionId, sequence, kind: "response", phase },
+          patch,
+          SessionManager.SESSION_TTL
+        );
+      }
     } catch (error) {
       logger.error("SessionManager: Failed to store response detail snapshot", {
         error,
@@ -2679,30 +2625,24 @@ export class SessionManager {
     phase: SessionDetailViewMode,
     requestSequence?: number
   ): Promise<SessionDetailResponseSnapshot | null> {
-    const redis = getRedisClient();
-    if (redis?.status !== "ready") return null;
-
     try {
       const sequence = normalizeRequestSequence(requestSequence);
       if (!sequence) return null;
-
-      const [bodyValue, headersValue, metaValue] = await Promise.all([
-        redis.get(buildSessionDetailSnapshotKey(sessionId, sequence, "response", phase, "body")),
-        redis.get(buildSessionDetailSnapshotKey(sessionId, sequence, "response", phase, "headers")),
-        redis.get(buildSessionDetailSnapshotKey(sessionId, sequence, "response", phase, "meta")),
-      ]);
-
-      if (bodyValue === null && headersValue === null && metaValue === null) {
-        return null;
-      }
+      const stored = await getSessionSnapshotStore().get({
+        sessionId,
+        sequence,
+        kind: "response",
+        phase,
+      });
+      if (!stored) return null;
 
       return {
-        body: bodyValue,
-        headers: headersValue === null ? null : parseHeaderRecord(headersValue),
+        body: typeof stored.body === "string" ? stored.body : null,
+        headers: parseStoredSnapshotHeaders(stored.headers),
         meta:
-          metaValue === null
+          stored.meta == null
             ? { upstreamUrl: null, statusCode: null }
-            : (parseSessionDetailResponseMeta(metaValue) ?? {
+            : (parseSessionDetailResponseMeta(stored.meta) ?? {
                 upstreamUrl: null,
                 statusCode: null,
               }),

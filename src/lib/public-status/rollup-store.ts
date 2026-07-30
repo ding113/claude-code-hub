@@ -31,6 +31,8 @@ export type PublicStatusRollupMetric =
   | "failure"
   | "ttfb_sum"
   | "ttfb_count"
+  | "ttft_sum"
+  | "ttft_count"
   | "tps_sum"
   | "tps_count";
 
@@ -39,8 +41,9 @@ export interface PublicStatusRollupEvent {
   model?: string | null;
   originalModel?: string | null;
   durationMs?: number | null;
-  tfftMs?: number | null;
-  firstByteMs?: number | null;
+  ttfbMs?: number | null;
+  ttftMs?: number | null;
+  timingSemanticsVersion?: number | null;
   outputTokens?: number | null;
   providerChain?: ProviderChainItem[] | null;
 }
@@ -160,6 +163,8 @@ export function parsePublicStatusRollupField(
     metric !== "failure" &&
     metric !== "ttfb_sum" &&
     metric !== "ttfb_count" &&
+    metric !== "ttft_sum" &&
+    metric !== "ttft_count" &&
     metric !== "tps_sum" &&
     metric !== "tps_count"
   ) {
@@ -340,12 +345,13 @@ export function buildPublicStatusRollupIncrements(input: {
     }
   }
 
-  // ttfb_sum / ttfb_count 是既有 rollup 键名，存的是 TFFT（改名会作废已积累的桶）
-  const tfftMs = normalizeNumber(input.event.tfftMs);
+  const hasCurrentTimingSemantics = input.event.timingSemanticsVersion === 2;
+  const ttfbMs = hasCurrentTimingSemantics ? normalizeNumber(input.event.ttfbMs) : null;
+  const ttftMs = hasCurrentTimingSemantics ? normalizeNumber(input.event.ttftMs) : null;
   const tps = computeTokensPerSecond({
     outputTokens: input.event.outputTokens,
     durationMs: input.event.durationMs,
-    firstByteMs: normalizeNumber(input.event.firstByteMs),
+    ttftMs,
   });
   const increments: PublicStatusRollupIncrement[] = [];
 
@@ -369,10 +375,16 @@ export function buildPublicStatusRollupIncrements(input: {
       metric: outcome === "success" ? "success" : "failure",
       value: 1,
     });
-    if (outcome === "success" && tfftMs !== null) {
+    if (outcome === "success" && ttfbMs !== null) {
       increments.push(
-        { groupId, modelKey, metric: "ttfb_sum", value: tfftMs },
+        { groupId, modelKey, metric: "ttfb_sum", value: ttfbMs },
         { groupId, modelKey, metric: "ttfb_count", value: 1 }
+      );
+    }
+    if (outcome === "success" && ttftMs !== null) {
+      increments.push(
+        { groupId, modelKey, metric: "ttft_sum", value: ttftMs },
+        { groupId, modelKey, metric: "ttft_count", value: 1 }
       );
     }
     if (outcome === "success" && tps !== null) {
@@ -677,6 +689,18 @@ export function buildPublicStatusPayloadFromRollups(input: {
                 modelKey: model.publicModelKey,
                 metric: "ttfb_count",
               });
+              acc.ttftSum += getRollupValue({
+                bucket,
+                groupId,
+                modelKey: model.publicModelKey,
+                metric: "ttft_sum",
+              });
+              acc.ttftCount += getRollupValue({
+                bucket,
+                groupId,
+                modelKey: model.publicModelKey,
+                metric: "ttft_count",
+              });
               acc.tpsSum += getRollupValue({
                 bucket,
                 groupId,
@@ -698,6 +722,8 @@ export function buildPublicStatusPayloadFromRollups(input: {
             failureCount: 0,
             ttfbSum: 0,
             ttfbCount: 0,
+            ttftSum: 0,
+            ttftCount: 0,
             tpsSum: 0,
             tpsCount: 0,
           }
@@ -714,6 +740,7 @@ export function buildPublicStatusPayloadFromRollups(input: {
       const filledTimeline = applyBoundedGapFill({ timeline: rawTimeline });
 
       let latestTtfbMs: number | null = null;
+      let latestTtftMs: number | null = null;
       let latestTps: number | null = null;
       const timeline: PublicStatusTimelineBucket[] = aggregateBuckets.map((bucket, index) => {
         const bucketStartMs = Date.parse(bucket.bucketStart);
@@ -727,10 +754,14 @@ export function buildPublicStatusPayloadFromRollups(input: {
                 : null
             : Number(((bucket.successCount / total) * 100).toFixed(2));
         const ttfbMs = average(bucket.ttfbSum, bucket.ttfbCount);
+        const ttftMs = average(bucket.ttftSum, bucket.ttftCount);
         const tps = average(bucket.tpsSum, bucket.tpsCount);
 
         if (ttfbMs !== null) {
           latestTtfbMs = ttfbMs;
+        }
+        if (ttftMs !== null) {
+          latestTtftMs = ttftMs;
         }
         if (tps !== null) {
           latestTps = tps;
@@ -747,6 +778,7 @@ export function buildPublicStatusPayloadFromRollups(input: {
                 : "no_data",
           availabilityPct,
           ttfbMs,
+          ttftMs,
           tps,
           sampleCount: total,
         };
@@ -789,6 +821,7 @@ export function buildPublicStatusPayloadFromRollups(input: {
                 : "no_data",
         availabilityPct,
         latestTtfbMs,
+        latestTtftMs,
         latestTps,
         timeline,
       } satisfies PublicStatusPayload["groups"][number]["models"][number];

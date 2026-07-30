@@ -1,9 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
- * 排行榜的两个延迟指标口径不同，必须分开：
- * - 展示用的 avgTtfbMs 走 usage_ledger.ttfb_ms（该列存的是 TFFT）
- * - avgTokensPerSecond 的分母必须是真 TTFB（first_byte_ms），历史行由 IS NOT NULL 排除
+ * 排行榜的延迟指标必须分开：
+ * - avgTtfbMs 使用响应头到达时间
+ * - avgTtftMs 使用首个有效内容到达时间
+ * - avgTokensPerSecond 的生成窗口从 TTFT 开始
  */
 
 const createChainMock = (resolvedData: unknown[]) => ({
@@ -46,8 +47,9 @@ vi.mock("@/drizzle/schema", () => ({
     successRateOutcome: "successRateOutcome",
     blockedBy: "blockedBy",
     createdAt: "createdAt",
-    tfftMs: "tfftMs",
-    firstByteMs: "firstByteMs",
+    ttfbMs: "ttfbMs",
+    ttftMs: "ttftMs",
+    timingSemanticsVersion: "timingSemanticsVersion",
     durationMs: "durationMs",
     model: "model",
     originalModel: "originalModel",
@@ -79,7 +81,7 @@ beforeEach(() => {
 });
 
 describe("排行榜延迟指标口径", () => {
-  it("TPS 分母用 first_byte_ms，展示均值仍用 ttfb_ms 列", async () => {
+  it("TPS 使用 TTFT 生成窗口，并分别聚合 TTFB 与 TTFT", async () => {
     const { findDailyProviderLeaderboard } = await import("@/repository/leaderboard");
     await findDailyProviderLeaderboard();
 
@@ -90,11 +92,16 @@ describe("排行榜延迟指标口径", () => {
     expect(projection).toBeDefined();
 
     const tpsSql = JSON.stringify(projection?.avgTokensPerSecond);
-    expect(tpsSql).toContain("firstByteMs");
-    expect(tpsSql).not.toContain("tfftMs");
+    expect(tpsSql).toContain("ttftMs");
+    expect(tpsSql).not.toContain("ttfbMs");
+    expect(tpsSql).toContain("timingSemanticsVersion");
 
-    const avgLatencySql = JSON.stringify(projection?.avgTtfbMs);
-    expect(avgLatencySql).toContain("tfftMs");
-    expect(avgLatencySql).not.toContain("firstByteMs");
+    const avgTtfbSql = JSON.stringify(projection?.avgTtfbMs);
+    expect(avgTtfbSql).toContain("ttfbMs");
+    expect(avgTtfbSql).not.toContain("ttftMs");
+
+    const avgTtftSql = JSON.stringify(projection?.avgTtftMs);
+    expect(avgTtftSql).toContain("ttftMs");
+    expect(avgTtftSql).not.toContain("ttfbMs");
   });
 });

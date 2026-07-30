@@ -2,9 +2,11 @@ type ProbeTarget = {
   id: number;
   url: string;
   vendorId: number;
+  providerType: "claude";
   lastProbedAt: Date | null;
   lastProbeOk: boolean | null;
   lastProbeErrorType: string | null;
+  consecutiveProbeFailures: number;
 };
 
 type ProbeResult = {
@@ -21,9 +23,11 @@ function makeEndpoint(id: number, overrides: Partial<ProbeTarget> = {}): ProbeTa
     id,
     url: `https://example.com/${id}`,
     vendorId: overrides.vendorId ?? 1,
+    providerType: "claude",
     lastProbedAt: overrides.lastProbedAt ?? null,
     lastProbeOk: overrides.lastProbeOk ?? null,
     lastProbeErrorType: overrides.lastProbeErrorType ?? null,
+    consecutiveProbeFailures: overrides.consecutiveProbeFailures ?? 0,
   };
 }
 
@@ -96,6 +100,7 @@ describe("provider-endpoints: probe scheduler", () => {
         expect.objectContaining({
           enabled: true,
           timeoutOverrideIntervalMs: 10_000,
+          failureBackoffMaxMs: 600_000,
         })
       );
       expect(loggerWarnMock).not.toHaveBeenCalled();
@@ -425,6 +430,7 @@ describe("provider-endpoints: probe scheduler", () => {
         lastProbedAt: new Date("2024-01-01T12:00:00Z"),
         lastProbeOk: false,
         lastProbeErrorType: "timeout",
+        consecutiveProbeFailures: 1,
       });
       // Normal endpoint from same vendor probed 15s ago - not due (60s interval)
       const normalEndpoint = makeEndpoint(2, {
@@ -537,6 +543,7 @@ describe("provider-endpoints: probe scheduler", () => {
         lastProbedAt: new Date("2024-01-01T12:00:00Z"),
         lastProbeOk: false,
         lastProbeErrorType: "timeout",
+        consecutiveProbeFailures: 1,
       });
 
       findEnabledEndpointsMock = vi.fn(async () => [timeoutSingleVendor]);
@@ -577,6 +584,7 @@ describe("provider-endpoints: probe scheduler", () => {
         lastProbedAt: new Date("2024-01-01T12:00:00Z"), // 15s ago
         lastProbeOk: true, // recovered!
         lastProbeErrorType: "timeout", // had timeout before
+        consecutiveProbeFailures: 0,
       });
       // Multi-vendor so 60s base interval applies
       const otherEndpoint = makeEndpoint(2, {
@@ -600,6 +608,51 @@ describe("provider-endpoints: probe scheduler", () => {
 
       stopEndpointProbeScheduler();
     });
+
+    test.each([
+      { now: "2024-01-01T12:00:39Z", expectedProbeCount: 0 },
+      { now: "2024-01-01T12:00:40Z", expectedProbeCount: 1 },
+    ])(
+      "third consecutive failure uses a 40s retry interval at $now",
+      async ({ now, expectedProbeCount }) => {
+        vi.useFakeTimers();
+        vi.setSystemTime(new Date(now));
+
+        vi.resetModules();
+        vi.stubEnv("ENDPOINT_PROBE_INTERVAL_MS", "60000");
+        vi.stubEnv("ENDPOINT_PROBE_CYCLE_JITTER_MS", "0");
+
+        acquireLeaderLockMock = vi.fn(async () => ({
+          key: "locks:endpoint-probe-scheduler",
+          lockId: "test",
+          lockType: "memory" as const,
+        }));
+        renewLeaderLockMock = vi.fn(async () => true);
+        releaseLeaderLockMock = vi.fn(async () => {});
+
+        const failedEndpoint = makeEndpoint(1, {
+          lastProbedAt: new Date("2024-01-01T12:00:00Z"),
+          lastProbeOk: false,
+          lastProbeErrorType: "timeout",
+          consecutiveProbeFailures: 3,
+        });
+        const healthyPeer = makeEndpoint(2, {
+          lastProbedAt: new Date("2024-01-01T12:00:30Z"),
+          lastProbeOk: true,
+        });
+        findEnabledEndpointsMock = vi.fn(async () => [failedEndpoint, healthyPeer]);
+        probeByEndpointMock = vi.fn(async () => makeOkResult());
+
+        const { startEndpointProbeScheduler, stopEndpointProbeScheduler } = await import(
+          "@/lib/provider-endpoints/probe-scheduler"
+        );
+        startEndpointProbeScheduler();
+        await flushMicrotasks();
+
+        expect(probeByEndpointMock).toHaveBeenCalledTimes(expectedProbeCount);
+        stopEndpointProbeScheduler();
+      }
+    );
 
     test("null lastProbedAt is always due for probing", async () => {
       vi.useFakeTimers();

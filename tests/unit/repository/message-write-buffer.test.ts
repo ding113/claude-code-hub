@@ -154,7 +154,12 @@ describe("message_request 异步批量写入", () => {
     } = await import("@/repository/message-write-buffer");
 
     enqueueMessageRequestUpdate(42, { durationMs: 100 });
-    enqueueMessageRequestUpdate(42, { statusCode: 200, tfftMs: 10 });
+    enqueueMessageRequestUpdate(42, {
+      statusCode: 200,
+      ttfbMs: 5,
+      ttftMs: 10,
+      timingSemanticsVersion: 2,
+    });
 
     await flushMessageRequestWriteBuffer();
     await stopMessageRequestWriteBuffer();
@@ -168,6 +173,8 @@ describe("message_request 异步批量写入", () => {
     expect(built.sql).toContain("duration_ms");
     expect(built.sql).toContain("status_code");
     expect(built.sql).toContain("ttfb_ms");
+    expect(built.sql).toContain("ttft_ms");
+    expect(built.sql).toContain("timing_semantics_version");
     expect(built.sql).toContain("updated_at");
     expect(built.sql).toContain("deleted_at IS NULL");
     expect(built.sql).not.toContain("RETURNING id");
@@ -1439,6 +1446,7 @@ describe("message_request 异步批量写入", () => {
         statusCode: 200,
         durationMs: 100,
         ttfbMs: 50,
+        ttftMs: 70,
         attemptsPerRequest: 2,
         maxActiveAttempts: 2,
         rounds: 1,

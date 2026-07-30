@@ -13,6 +13,7 @@ import {
 } from "./_shared/ledger-conditions";
 import {
   getProviderCacheCoefficients,
+  getProviderModelCacheCoefficients,
   resolveLeaderboardWindow,
 } from "./provider-cache-effectiveness";
 import { getSystemSettings } from "./system-config";
@@ -68,7 +69,8 @@ export interface ProviderLeaderboardEntry {
   totalCost: number;
   totalTokens: number;
   successRate: number | null; // 0-1 之间的小数，UI 层负责格式化为百分比
-  avgTtfbMs: number; // 毫秒
+  avgTtfbMs: number | null; // 毫秒；旧口径窗口无可用样本时为 null
+  avgTtftMs: number | null; // 毫秒
   avgTokensPerSecond: number; // tok/s（仅统计流式且可计算的请求）
   avgCostPerRequest: number | null; // totalCost / totalRequests, null when totalRequests === 0
   avgCostPerMillionTokens: number | null; // totalCost * 1_000_000 / totalTokens, null when totalTokens === 0
@@ -91,15 +93,17 @@ export interface ModelProviderStat {
   totalCost: number;
   totalTokens: number;
   successRate: number | null; // 0-1
-  avgTtfbMs: number; // 毫秒
+  avgTtfbMs: number | null; // 毫秒
+  avgTtftMs: number | null; // 毫秒
   avgTokensPerSecond: number; // tok/s
   avgCostPerRequest: number | null;
   avgCostPerMillionTokens: number | null;
+  /** 重定向模型口径的缓存系数；original 口径无法可靠映射时为 null */
+  cacheCoefficientBp: number | null;
   rowIdentityBasis?: BillingModelSource;
-  successRateBasis?: "original" | "unavailable";
+  successRateBasis?: BillingModelSource;
   costTokensBasis?: BillingModelSource;
   basisDisclosureRequired?: boolean;
-  successRateUnavailableReason?: "redirected_billing_model";
 }
 
 /**
@@ -111,6 +115,8 @@ export interface ModelCacheHitStat {
   cacheReadTokens: number;
   totalInputTokens: number;
   cacheHitRate: number; // 0-1
+  /** 重定向模型口径的缓存系数；original 口径无法可靠映射时为 null */
+  cacheCoefficientBp: number | null;
 }
 
 /**
@@ -170,10 +176,9 @@ export interface ModelLeaderboardEntry {
   totalTokens: number;
   successRate: number | null; // 0-1 之间的小数，UI 层负责格式化为百分比
   rowIdentityBasis?: BillingModelSource;
-  successRateBasis?: "original" | "unavailable";
+  successRateBasis?: BillingModelSource;
   costTokensBasis?: BillingModelSource;
   basisDisclosureRequired?: boolean;
-  successRateUnavailableReason?: "redirected_billing_model";
 }
 
 /**
@@ -663,19 +668,27 @@ async function findProviderLeaderboardWithTimezone(
     0::double precision
   )`;
   const successRateExpr = LEDGER_SUCCESS_RATE_EXPR;
-  // 展示用的均值走 ttfb_ms 列，该列存的是 TFFT（见 schema.ts）
-  const avgTtfbMsExpr = sql<number>`COALESCE(avg(${usageLedger.tfftMs})::double precision, 0::double precision)`;
-  // TPS 必须以真 TTFB 为基准；first_byte_ms 为 NULL 的历史行由 IS NOT NULL 排除
+  const avgTtfbMsExpr = sql<number | null>`avg(
+    CASE
+      WHEN ${usageLedger.timingSemanticsVersion} = 2 THEN ${usageLedger.ttfbMs}
+    END
+  )::double precision`;
+  const avgTtftMsExpr = sql<number | null>`avg(
+    CASE
+      WHEN ${usageLedger.timingSemanticsVersion} = 2 THEN ${usageLedger.ttftMs}
+    END
+  )::double precision`;
   const avgTokensPerSecondExpr = sql<number>`COALESCE(
     avg(
       CASE
         WHEN ${usageLedger.outputTokens} > 0
           AND ${usageLedger.durationMs} IS NOT NULL
-          AND ${usageLedger.firstByteMs} IS NOT NULL
-          AND ${usageLedger.firstByteMs} < ${usageLedger.durationMs}
-          AND (${usageLedger.durationMs} - ${usageLedger.firstByteMs}) >= 100
+          AND ${usageLedger.timingSemanticsVersion} = 2
+          AND ${usageLedger.ttftMs} IS NOT NULL
+          AND ${usageLedger.ttftMs} < ${usageLedger.durationMs}
+          AND (${usageLedger.durationMs} - ${usageLedger.ttftMs}) >= 100
         THEN (${usageLedger.outputTokens}::double precision)
-          / ((${usageLedger.durationMs} - ${usageLedger.firstByteMs}) / 1000.0)
+          / ((${usageLedger.durationMs} - ${usageLedger.ttftMs}) / 1000.0)
       END
     )::double precision,
     0::double precision
@@ -695,6 +708,7 @@ async function findProviderLeaderboardWithTimezone(
       totalTokens: totalTokensExpr,
       successRate: successRateExpr,
       avgTtfbMs: avgTtfbMsExpr,
+      avgTtftMs: avgTtftMsExpr,
       avgTokensPerSecond: avgTokensPerSecondExpr,
     })
     .from(usageLedger)
@@ -725,7 +739,8 @@ async function findProviderLeaderboardWithTimezone(
       totalCost,
       totalTokens,
       successRate: clampRatio01Nullable(entry.successRate),
-      avgTtfbMs: entry.avgTtfbMs ?? 0,
+      avgTtfbMs: entry.avgTtfbMs ?? null,
+      avgTtftMs: entry.avgTtftMs ?? null,
       avgTokensPerSecond: entry.avgTokensPerSecond ?? 0,
       cacheCoefficientBp: cacheCoefficients.get(entry.providerId)?.coefficientBp ?? null,
       ...avgCosts,
@@ -737,6 +752,10 @@ async function findProviderLeaderboardWithTimezone(
   // Model breakdown per provider
   const systemSettings = await getSystemSettings();
   const billingModelSource = systemSettings.billingModelSource;
+  const modelCacheCoefficientsPromise =
+    billingModelSource === "redirected"
+      ? getProviderModelCacheCoefficients(resolveLeaderboardWindow(period, timezone, dateRange))
+      : Promise.resolve(new Map());
   const rawModelField =
     billingModelSource === "original"
       ? sql<string>`COALESCE(${usageLedger.originalModel}, ${usageLedger.model})`
@@ -752,6 +771,7 @@ async function findProviderLeaderboardWithTimezone(
       totalTokens: totalTokensExpr,
       successRate: successRateExpr,
       avgTtfbMs: avgTtfbMsExpr,
+      avgTtftMs: avgTtftMsExpr,
       avgTokensPerSecond: avgTokensPerSecondExpr,
     })
     .from(usageLedger)
@@ -764,6 +784,7 @@ async function findProviderLeaderboardWithTimezone(
     )
     .groupBy(usageLedger.finalProviderId, modelField)
     .orderBy(desc(sql`COALESCE(sum(${usageLedger.costUsd}), 0)`), desc(sql`count(*)`));
+  const modelCacheCoefficients = await modelCacheCoefficientsPromise;
 
   const modelStatsByProvider = new Map<number, ModelProviderStat[]>();
   for (const row of modelRows) {
@@ -779,16 +800,16 @@ async function findProviderLeaderboardWithTimezone(
       totalRequests,
       totalCost,
       totalTokens,
-      successRate: basisDisclosureRequired ? null : clampRatio01Nullable(row.successRate),
-      avgTtfbMs: row.avgTtfbMs ?? 0,
+      successRate: clampRatio01Nullable(row.successRate),
+      avgTtfbMs: row.avgTtfbMs ?? null,
+      avgTtftMs: row.avgTtftMs ?? null,
       avgTokensPerSecond: row.avgTokensPerSecond ?? 0,
+      cacheCoefficientBp:
+        modelCacheCoefficients.get(row.providerId)?.get(row.model)?.coefficientBp ?? null,
       rowIdentityBasis: billingModelSource,
-      successRateBasis: basisDisclosureRequired ? "unavailable" : "original",
+      successRateBasis: billingModelSource,
       costTokensBasis: billingModelSource,
       basisDisclosureRequired,
-      successRateUnavailableReason: basisDisclosureRequired
-        ? "redirected_billing_model"
-        : undefined,
       ...avgCosts,
     });
     modelStatsByProvider.set(row.providerId, stats);
@@ -870,6 +891,10 @@ async function findProviderCacheHitRateLeaderboardWithTimezone(
   // Model-level cache hit breakdown per provider
   const systemSettings = await getSystemSettings();
   const billingModelSource = systemSettings.billingModelSource;
+  const modelCacheCoefficientsPromise =
+    billingModelSource === "redirected"
+      ? getProviderModelCacheCoefficients(resolveLeaderboardWindow(period, timezone, dateRange))
+      : Promise.resolve(new Map());
   const rawModelField =
     billingModelSource === "original"
       ? sql<string>`COALESCE(${usageLedger.originalModel}, ${usageLedger.model})`
@@ -902,6 +927,7 @@ async function findProviderCacheHitRateLeaderboardWithTimezone(
     )
     .groupBy(usageLedger.finalProviderId, modelField)
     .orderBy(desc(modelCacheHitRate), desc(sql`count(*)`));
+  const modelCacheCoefficients = await modelCacheCoefficientsPromise;
 
   // Group model stats by providerId
   const modelStatsByProvider = new Map<number, ModelCacheHitStat[]>();
@@ -914,6 +940,8 @@ async function findProviderCacheHitRateLeaderboardWithTimezone(
       cacheReadTokens: row.cacheReadTokens,
       totalInputTokens: row.totalInputTokens,
       cacheHitRate: clampRatio01(row.cacheHitRate),
+      cacheCoefficientBp:
+        modelCacheCoefficients.get(row.providerId)?.get(row.model)?.coefficientBp ?? null,
     });
     modelStatsByProvider.set(row.providerId, stats);
   }
@@ -1195,14 +1223,11 @@ async function findModelLeaderboardWithTimezone(
       totalRequests: entry.totalRequests,
       totalCost: parseFloat(entry.totalCost),
       totalTokens: entry.totalTokens,
-      successRate:
-        billingModelSource === "original" ? clampRatio01Nullable(entry.successRate) : null,
+      successRate: clampRatio01Nullable(entry.successRate),
       rowIdentityBasis: billingModelSource,
-      successRateBasis: billingModelSource === "original" ? "original" : "unavailable",
+      successRateBasis: billingModelSource,
       costTokensBasis: billingModelSource,
       basisDisclosureRequired: billingModelSource !== "original",
-      successRateUnavailableReason:
-        billingModelSource !== "original" ? "redirected_billing_model" : undefined,
     }));
 }
 

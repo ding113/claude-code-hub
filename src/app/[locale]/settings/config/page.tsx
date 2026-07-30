@@ -82,6 +82,7 @@ async function SettingsConfigContent({ locale }: { locale: string }) {
             affinityIgnoreClientSessionId: settings.affinityIgnoreClientSessionId,
             replayEnabled: settings.replayEnabled,
             cacheEffectivenessEnabled: settings.cacheEffectivenessEnabled,
+            sessionSnapshotStore: settings.sessionSnapshotStore,
             enableCodexSessionIdCompletion: settings.enableCodexSessionIdCompletion,
             enableClaudeMetadataUserIdInjection: settings.enableClaudeMetadataUserIdInjection,
             enableResponseFixer: settings.enableResponseFixer,

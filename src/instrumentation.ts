@@ -21,8 +21,12 @@ const instrumentationState = globalThis as unknown as {
   __CCH_CLOUD_PRICE_SYNC_INTERVAL_ID__?: ReturnType<typeof setInterval>;
   __CCH_CACHE_EFFECTIVENESS_STARTED__?: boolean;
   __CCH_CACHE_EFFECTIVENESS_INTERVAL_ID__?: ReturnType<typeof setInterval>;
+  __CCH_CACHE_EFFECTIVENESS_CURRENT_PROMISE__?: Promise<void>;
+  __CCH_CACHE_EFFECTIVENESS_STOP_REQUESTED__?: boolean;
   __CCH_REPLAY_CLEANUP_STARTED__?: boolean;
   __CCH_REPLAY_CLEANUP_INTERVAL_ID__?: ReturnType<typeof setInterval>;
+  __CCH_REPLAY_CLEANUP_CURRENT_PROMISE__?: Promise<void>;
+  __CCH_REPLAY_CLEANUP_STOP_REQUESTED__?: boolean;
   __CCH_API_KEY_VF_SYNC_STARTED__?: boolean;
   __CCH_API_KEY_VF_SYNC_CLEANUP__?: (() => void) | null;
   __CCH_LIFECYCLE_MARKERS_LOGGED__?: boolean;
@@ -268,19 +272,36 @@ async function startCacheEffectivenessScheduler(): Promise<void> {
     const { aggregateCacheEffectiveness } = await import("@/lib/cache-effectiveness/service");
     const intervalMs = 5 * 60 * 1000;
 
-    instrumentationState.__CCH_CACHE_EFFECTIVENESS_INTERVAL_ID__ = setInterval(() => {
-      void (async () => {
+    instrumentationState.__CCH_CACHE_EFFECTIVENESS_STOP_REQUESTED__ = false;
+    const tick = () => {
+      if (
+        instrumentationState.__CCH_CACHE_EFFECTIVENESS_STOP_REQUESTED__ ||
+        instrumentationState.__CCH_CACHE_EFFECTIVENESS_CURRENT_PROMISE__
+      ) {
+        return;
+      }
+      const current = (async () => {
         const settings = await getProxyRuntimeSettings();
         if (!settings.cacheEffectivenessEnabled) return;
         await aggregateCacheEffectiveness();
-      })().catch((error) => {
-        logger.warn("[Instrumentation] Cache effectiveness aggregation tick failed", {
-          error: error instanceof Error ? error.message : String(error),
+      })()
+        .catch((error) => {
+          logger.warn("[Instrumentation] Cache effectiveness aggregation tick failed", {
+            error: error instanceof Error ? error.message : String(error),
+          });
+        })
+        .finally(() => {
+          if (instrumentationState.__CCH_CACHE_EFFECTIVENESS_CURRENT_PROMISE__ === current) {
+            instrumentationState.__CCH_CACHE_EFFECTIVENESS_CURRENT_PROMISE__ = undefined;
+          }
         });
-      });
-    }, intervalMs);
+      instrumentationState.__CCH_CACHE_EFFECTIVENESS_CURRENT_PROMISE__ = current;
+    };
+
+    instrumentationState.__CCH_CACHE_EFFECTIVENESS_INTERVAL_ID__ = setInterval(tick, intervalMs);
 
     instrumentationState.__CCH_CACHE_EFFECTIVENESS_STARTED__ = true;
+    tick();
     logger.info("[Instrumentation] Cache effectiveness scheduler started", {
       intervalSeconds: intervalMs / 1000,
     });
@@ -306,19 +327,40 @@ async function startReplayCleanupScheduler(): Promise<void> {
       return;
     }
     const { getReplayStore } = await import("@/app/v1/_lib/proxy/replay/replay-store");
+    const { withAdvisoryLock } = await import("@/lib/migrate");
     const intervalMs = 10 * 60 * 1000;
 
-    instrumentationState.__CCH_REPLAY_CLEANUP_INTERVAL_ID__ = setInterval(() => {
-      void getReplayStore()
-        .cleanupExpired()
+    instrumentationState.__CCH_REPLAY_CLEANUP_STOP_REQUESTED__ = false;
+    const tick = () => {
+      if (
+        instrumentationState.__CCH_REPLAY_CLEANUP_STOP_REQUESTED__ ||
+        instrumentationState.__CCH_REPLAY_CLEANUP_CURRENT_PROMISE__
+      ) {
+        return;
+      }
+      const current = withAdvisoryLock(
+        "claude-code-hub:replay-cleanup",
+        () => getReplayStore().cleanupExpired(),
+        { skipIfLocked: true }
+      )
         .catch((error) => {
           logger.warn("[Instrumentation] Replay cleanup tick failed", {
             error: error instanceof Error ? error.message : String(error),
           });
+        })
+        .then(() => undefined)
+        .finally(() => {
+          if (instrumentationState.__CCH_REPLAY_CLEANUP_CURRENT_PROMISE__ === current) {
+            instrumentationState.__CCH_REPLAY_CLEANUP_CURRENT_PROMISE__ = undefined;
+          }
         });
-    }, intervalMs);
+      instrumentationState.__CCH_REPLAY_CLEANUP_CURRENT_PROMISE__ = current;
+    };
+
+    instrumentationState.__CCH_REPLAY_CLEANUP_INTERVAL_ID__ = setInterval(tick, intervalMs);
 
     instrumentationState.__CCH_REPLAY_CLEANUP_STARTED__ = true;
+    tick();
     logger.info("[Instrumentation] Replay cleanup scheduler started", {
       intervalSeconds: intervalMs / 1000,
     });
@@ -421,6 +463,16 @@ export async function register() {
       // 挂到 globalThis 让 server.js 桥接调用。
       const { bindLifecycleGlobals } = await import("@/lib/lifecycle/shutdown");
       bindLifecycleGlobals();
+    }
+
+    try {
+      const { startSessionSnapshotStore } = await import("@/lib/session-snapshot/store");
+      await startSessionSnapshotStore();
+      logger.info("[Instrumentation] Session snapshot store started");
+    } catch (error) {
+      logger.warn("[Instrumentation] Session snapshot store unavailable; snapshots disabled", {
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
 
     // 生产环境: 执行完整初始化(迁移 + 价格表 + 清理任务 + 通知任务)

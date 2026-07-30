@@ -321,6 +321,8 @@ type StreamingHedgeAttempt = {
   thresholdTimer: NodeJS.Timeout | null;
   reader: ReadableStreamDefaultReader<Uint8Array> | null;
   response: Response | null;
+  headersElapsedMs: number | null;
+  ttftElapsedMs: number | null;
   releaseAgent: (() => void) | null;
   agentReleased: boolean;
   /** When true, this losing attempt is kept alive, drained, and billed instead of cancelled. */
@@ -335,8 +337,6 @@ type StreamingHedgeAttempt = {
   firstChunk: Uint8Array | null;
   /** F1 门控提交标记（该 attempt 门控提交时记录，随 hedge_winner 链条目落库）。 */
   gateAudit?: ProviderChainItem["streamGate"];
-  /** 该 attempt 首字节到达时刻（epoch ms）；只有赢家的值会被记为 session TTFB。 */
-  firstByteAt?: number | null;
   /**
    * Billing context snapshot for the INITIAL provider's losing attempt, captured BEFORE
    * commitWinner overwrites the shared session's model/context with the winner's. Null for
@@ -1671,6 +1671,7 @@ export class ProxyForwarder {
             endpointAudit,
             attemptCount
           );
+          const responseHeadersElapsedMs = Math.max(0, Date.now() - session.startTime);
 
           // ========== 空响应检测（仅非流式）==========
           const contentType = response.headers.get("content-type") || "";
@@ -1716,9 +1717,6 @@ export class ProxyForwarder {
                 };
                 const gateReader = response.body.getReader();
                 const gateStartedAt = Date.now();
-                // TTFB 只在门控提交后写入 session：提交前失败的尝试不会被服务，
-                // 记下它的首字节会低估 TTFB 并放大 TPS 的分母。
-                let gateFirstByteAt: number | null = null;
                 const gate = await runStreamContentGate(gateReader, {
                   family: gateFamily,
                   providerId: currentProvider.id,
@@ -1727,7 +1725,6 @@ export class ProxyForwarder {
                   // 首字节到达即清除首字节计时器，保持「首字节超时」的原始语义——
                   // 思考型模型可在首个内容帧前长时间输出中性帧，不应触发该计时器
                   onFirstByte: () => {
-                    gateFirstByteAt ??= Date.now();
                     runtime.clearResponseTimeout?.();
                   },
                   // 门控等待期沿用供应商静默超时（与提交后 response-handler 的行为对齐）
@@ -1773,10 +1770,8 @@ export class ProxyForwarder {
                   throw gate.error;
                 }
 
-                if (gateFirstByteAt !== null) {
-                  session.recordFirstByte(gateFirstByteAt);
-                }
-                session.recordTfft();
+                session.recordTtfb(responseHeadersElapsedMs);
+                session.recordTtft();
 
                 if (gate.commitMarker) {
                   gateChainAudit = {
@@ -1833,6 +1828,8 @@ export class ProxyForwarder {
               totalProvidersAttempted,
               statusCode: response.status,
             });
+
+            session.recordTtfb(responseHeadersElapsedMs);
 
             return streamingResponse;
           }
@@ -2118,6 +2115,7 @@ export class ProxyForwarder {
             statusCode: response.status,
           });
 
+          session.recordTtfb(responseHeadersElapsedMs);
           return response; // ⭐ 成功：立即返回，结束所有循环
         } catch (error) {
           lastError = error as Error;
@@ -4755,6 +4753,7 @@ export class ProxyForwarder {
           attempt.releaseAgent = attemptRuntime.releaseAgent ?? null;
           attempt.clearResponseTimeout?.();
           attempt.response = response;
+          attempt.headersElapsedMs = Math.max(0, Date.now() - session.startTime);
 
           if (!response.body) {
             await handleAttemptFailure(
@@ -4783,10 +4782,6 @@ export class ProxyForwarder {
                 providerId: attempt.provider.id,
                 providerName: attempt.provider.name,
                 ...resolveStreamGateCaps(),
-                // 首字节时刻先挂在 attempt 上，由 commitWinner 决定是否记为 session TTFB
-                onFirstByte: () => {
-                  attempt.firstByteAt ??= Date.now();
-                },
                 // 竞速路径首字节计时器已在响应头到达时清除；门控等待期沿用供应商静默超时
                 idleTimeoutMs: attempt.provider.streamingIdleTimeoutMs,
                 captureCommitMarker: !session.isHighConcurrencyModeEnabled(),
@@ -4809,7 +4804,8 @@ export class ProxyForwarder {
               }
               // 保留完整门控前缀：若本 attempt 落败且需要计费，drain 时补回前缀里的 usage。
               attempt.firstChunk = concatChunks(gate.prefixChunks);
-              await commitWinner(attempt, gate.prefixChunks, true);
+              attempt.ttftElapsedMs = Math.max(0, Date.now() - session.startTime);
+              await commitWinner(attempt, gate.prefixChunks);
             } else {
               const firstChunk = await ProxyForwarder.readFirstReadableChunk(attempt.reader);
               if (firstChunk.done) {
@@ -4822,7 +4818,7 @@ export class ProxyForwarder {
 
               // 保留首块：若本 attempt 落败且需要计费，drain 时需要补回首块的 usage。
               attempt.firstChunk = firstChunk.value;
-              await commitWinner(attempt, [firstChunk.value], false);
+              await commitWinner(attempt, [firstChunk.value]);
             }
 
             // 本 attempt 读到首块却落败（winner 已先提交，commitWinner 早退）：
@@ -5092,23 +5088,12 @@ export class ProxyForwarder {
       await finishIfExhausted();
     };
 
-    const commitWinner = async (
-      attempt: StreamingHedgeAttempt,
-      prefixChunks: Uint8Array[],
-      contentGateCommitted: boolean
-    ) => {
+    const commitWinner = async (attempt: StreamingHedgeAttempt, prefixChunks: Uint8Array[]) => {
       if (settled || winnerCommitted || attempt.settled || !attempt.response || !attempt.reader)
         return;
 
       winnerCommitted = true;
       winnerAttempt = attempt;
-
-      if (attempt.firstByteAt != null) {
-        session.recordFirstByte(attempt.firstByteAt);
-      }
-      if (contentGateCommitted) {
-        session.recordTfft();
-      }
 
       if (attempt.thresholdTimer) {
         clearTimeout(attempt.thresholdTimer);
@@ -5148,6 +5133,10 @@ export class ProxyForwarder {
         detailSnapshotSession.detailSnapshotResponseBefore
       );
       session.setProvider(attempt.provider);
+      session.recordTtfb(attempt.headersElapsedMs ?? undefined);
+      if (attempt.ttftElapsedMs !== null) {
+        session.recordTtft(attempt.ttftElapsedMs);
+      }
 
       // Determine if this is truly a hedge winner or just a regular success
       // Only mark as hedge_winner when an actual hedge race occurred
@@ -5333,6 +5322,8 @@ export class ProxyForwarder {
         thresholdTimer: null,
         reader: null,
         response: null,
+        headersElapsedMs: null,
+        ttftElapsedMs: null,
         releaseAgent: null,
         agentReleased: false,
         // Only keep a loser alive for billing if there is a request row to bill back to;
@@ -6126,20 +6117,22 @@ export class ProxyForwarder {
         outcome: "winner",
         statusCode: attempt.response.status,
       });
+      session.recordTtfb(attempt.headersElapsedMs ?? undefined);
+      if (attempt.ttftElapsedMs !== null) {
+        session.recordTtft(attempt.ttftElapsedMs);
+      }
       session.setRoutingTraceSummary(
         discoveryMetrics.snapshot({
           outcome: "success",
           statusCode: attempt.response.status,
+          ttfbMs: session.ttfbMs,
+          ttftMs: session.ttftMs,
           winnerOrigin,
           winnerProviderId: attempt.provider.id,
           winnerRound: attempt.traceRound,
         })
       );
       session.setProvider(attempt.provider);
-      if (attempt.firstByteAt != null) {
-        session.recordFirstByte(attempt.firstByteAt);
-      }
-      session.recordTfft();
       if (attempt.session !== session)
         ProxyForwarder.syncWinningAttemptSession(session, attempt.session);
 
@@ -6486,6 +6479,8 @@ export class ProxyForwarder {
         thresholdTimer: null,
         reader: null,
         response: null,
+        headersElapsedMs: null,
+        ttftElapsedMs: null,
         releaseAgent: null,
         agentReleased: false,
         billAsLoser: false,
@@ -6568,6 +6563,7 @@ export class ProxyForwarder {
           attempt.releaseAgent = runtime.releaseAgent ?? null;
           attempt.clearResponseTimeout?.();
           attempt.response = response;
+          attempt.headersElapsedMs = Math.max(0, Date.now() - session.startTime);
           if (!attempt.pending || committed || settled) {
             if (response.body && !attempt.reader) attempt.reader = response.body.getReader();
             cleanupAttempt(attempt, attempt.cancellationKind);
@@ -6587,9 +6583,6 @@ export class ProxyForwarder {
               throw new EmptyResponseError(provider.id, provider.name, "empty_body");
             }
             if (!item.value || item.value.byteLength === 0) continue;
-            // 首字节时刻先挂在 attempt 上；DiscoveryValidityParser 的 ready 判定同样基于内容，
-            // 不在此记录会让 discovery 模式的 TTFB 恒等于 TFFT。
-            attempt.firstByteAt ??= Date.now();
             attempt.chunks.push(item.value);
             const validity = attempt.parser.push(item.value);
             // A single read can contain both deliverable content and the
@@ -6605,6 +6598,9 @@ export class ProxyForwarder {
             }
             if (validity.error || (validity.terminal && !validity.ready))
               throw new ProxyError("Invalid upstream discovery response", 502);
+            if (validity.ready && attempt.ttftElapsedMs === null) {
+              attempt.ttftElapsedMs = Math.max(0, Date.now() - session.startTime);
+            }
             if (!validity.ready) continue;
             attempt.ready = true;
             session.appendRoutingTraceEvent({

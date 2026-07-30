@@ -18,6 +18,7 @@ import {
 import { Activity } from "lucide-react";
 import { startTransition, useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { PublicStatusPayload } from "@/lib/public-status/payload";
 import {
   type PublicStatusRouteResponse,
@@ -40,6 +41,7 @@ import {
 import {
   CHART_BUCKETS,
   computeAvgTtfb,
+  computeAvgTtft,
   computeUptimePct,
   sliceTimelineForChart,
 } from "../_lib/timeline-windows";
@@ -71,6 +73,7 @@ interface PublicStatusViewProps {
     history: string;
     availability: string;
     ttfb: string;
+    ttft: string;
     freshnessWindow: string;
     fresh: string;
     stale: string;
@@ -89,6 +92,7 @@ interface PublicStatusViewProps {
     tooltip: {
       availability: string;
       ttfb: string;
+      ttft: string;
       tps: string;
       historyAriaLabel: string;
     };
@@ -273,8 +277,9 @@ export function PublicStatusView({
             ? model.availabilityPct
             : computeUptimePct(model.timeline);
         const ttfb24h = computeAvgTtfb(model.timeline);
+        const ttft24h = computeAvgTtft(model.timeline);
         const latest = deriveCurrentModelState(viewModel);
-        return { model, chartCells, uptime24h, ttfb24h, latest };
+        return { model, chartCells, uptime24h, ttfb24h, ttft24h, latest };
       });
       const issueCount = derivedModels.filter((d) => d.latest === "failed").length;
       const groupState = aggregateByFailed(derivedModels.map((d) => d.latest));
@@ -363,6 +368,7 @@ export function PublicStatusView({
   const timelineLabels: PublicStatusTimelineLabels = {
     availability: labels.tooltip.availability,
     ttfb: labels.tooltip.ttfb,
+    ttft: labels.tooltip.ttft,
     tps: labels.tooltip.tps,
     noData: labels.noData,
     historyAriaLabel: labels.tooltip.historyAriaLabel,
@@ -459,7 +465,7 @@ export function PublicStatusView({
                     >
                       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                         {entry.derivedModels.map(
-                          ({ model, chartCells, uptime24h, ttfb24h, latest }) => {
+                          ({ model, chartCells, uptime24h, ttfb24h, ttft24h, latest }) => {
                             const variant = badgeVariant(latest);
                             const { Icon } = getPublicStatusVendorIconComponent({
                               modelName: model.publicModelKey,
@@ -509,17 +515,29 @@ export function PublicStatusView({
                                       {uptime24h === null ? "—" : `${uptime24h.toFixed(2)}%`}
                                     </div>
                                   </div>
-                                  <div className="rounded-md border border-border/40 bg-muted/20 p-2">
-                                    <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                                      {labels.ttfb}{" "}
-                                      <span className="normal-case opacity-70">
-                                        ({rangeHours}H)
-                                      </span>
-                                    </div>
-                                    <div className="mt-1 font-mono text-base">
-                                      {formatTtfb(ttfb24h)}
-                                    </div>
-                                  </div>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <div className="cursor-help rounded-md border border-border/40 bg-muted/20 p-2">
+                                        <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                                          {labels.ttfb}{" "}
+                                          <span className="normal-case opacity-70">
+                                            ({rangeHours}H)
+                                          </span>
+                                        </div>
+                                        <div className="mt-1 font-mono text-base">
+                                          {formatTtfb(ttfb24h)}
+                                        </div>
+                                      </div>
+                                    </TooltipTrigger>
+                                    <TooltipContent className="space-y-1 text-xs">
+                                      <div>
+                                        {labels.tooltip.ttfb}: {formatTtfb(ttfb24h)}
+                                      </div>
+                                      <div>
+                                        {labels.tooltip.ttft}: {formatTtfb(ttft24h)}
+                                      </div>
+                                    </TooltipContent>
+                                  </Tooltip>
                                 </div>
 
                                 <PublicStatusTimeline

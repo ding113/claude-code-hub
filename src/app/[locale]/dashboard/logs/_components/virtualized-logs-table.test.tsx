@@ -143,8 +143,9 @@ function makeLog(overrides: Partial<UsageLogRow>): UsageLogRow {
     costBreakdown: null,
     hedgeLosers: null,
     durationMs: 100,
-    tfftMs: 50,
-    firstByteMs: 50,
+    ttfbMs: 50,
+    ttftMs: 60,
+    timingSemanticsVersion: 2,
     errorMessage: null,
     providerChain: null,
     blockedBy: null,
@@ -485,7 +486,7 @@ describe("virtualized-logs-table multiplier badge", () => {
     expect(html).toContain("logs.table.loadingMore");
   });
 
-  test("hides tok/s when TTFB is close to duration and rate is abnormally high", () => {
+  test("hides tok/s when TTFT is close to duration and rate is abnormally high", () => {
     mockIsLoading = false;
     mockIsError = false;
     mockError = null;
@@ -493,11 +494,9 @@ describe("virtualized-logs-table multiplier badge", () => {
     mockIsFetchingNextPage = false;
 
     // Rule: generationTimeMs / durationMs < 0.1 && outputRate > 5000 => hide tok/s
-    // durationMs=1000, firstByteMs=950 => generationTimeMs=50, ratio=0.05 < 0.1
+    // durationMs=1000, ttftMs=950 => generationTimeMs=50, ratio=0.05 < 0.1
     // outputTokens=300 => rate = 300 / 0.05 = 6000 > 5000 => should hide
-    mockLogs = [
-      makeLog({ id: 1, durationMs: 1000, tfftMs: 950, firstByteMs: 950, outputTokens: 300 }),
-    ];
+    mockLogs = [makeLog({ id: 1, durationMs: 1000, ttftMs: 950, outputTokens: 300 })];
     const html = renderToStaticMarkup(
       <VirtualizedLogsTable filters={{}} autoRefreshEnabled={false} />
     );
@@ -505,7 +504,7 @@ describe("virtualized-logs-table multiplier badge", () => {
     // tok/s should NOT appear
     expect(html).not.toContain("tok/s");
     // TFFT 行仍应出现
-    expect(html).toContain("logs.details.performance.tfft");
+    expect(html).toContain("logs.details.performance.ttfb");
   });
 
   test("shows tok/s when conditions are normal", () => {
@@ -515,11 +514,9 @@ describe("virtualized-logs-table multiplier badge", () => {
     mockHasNextPage = false;
     mockIsFetchingNextPage = false;
 
-    // durationMs=1000, firstByteMs=500 => generationTimeMs=500, ratio=0.5 >= 0.1
+    // durationMs=1000, ttftMs=500 => generationTimeMs=500, ratio=0.5 >= 0.1
     // outputTokens=50 => rate = 50 / 0.5 = 100 <= 5000 => should show
-    mockLogs = [
-      makeLog({ id: 1, durationMs: 1000, tfftMs: 500, firstByteMs: 500, outputTokens: 50 }),
-    ];
+    mockLogs = [makeLog({ id: 1, durationMs: 1000, ttftMs: 500, outputTokens: 50 })];
     const html = renderToStaticMarkup(
       <VirtualizedLogsTable filters={{}} autoRefreshEnabled={false} />
     );
@@ -527,7 +524,7 @@ describe("virtualized-logs-table multiplier badge", () => {
     // tok/s should appear
     expect(html).toContain("tok/s");
     // TFFT 行同样应出现
-    expect(html).toContain("logs.details.performance.tfft");
+    expect(html).toContain("logs.details.performance.ttfb");
   });
 
   test("renders swap indicator on cacheTtl badge when swapCacheTtlApplied is true", () => {

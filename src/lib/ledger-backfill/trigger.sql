@@ -202,7 +202,7 @@ BEGIN
     cache_creation_input_tokens, cache_read_input_tokens,
     cache_creation_5m_input_tokens, cache_creation_1h_input_tokens,
     cache_ttl_applied, context_1m_applied, swap_cache_ttl_applied,
-    duration_ms, ttfb_ms, first_byte_ms, client_ip, created_at
+    duration_ms, ttfb_ms, ttft_ms, timing_semantics_version, client_ip, created_at
   ) VALUES (
     NEW.id, NEW.user_id, NEW.key, NEW.provider_id, v_final_provider_id,
     NEW.model, NEW.original_model, NEW.actual_response_model, NEW.endpoint, NEW.api_type, NEW.session_id,
@@ -212,7 +212,7 @@ BEGIN
     NEW.cache_creation_input_tokens, NEW.cache_read_input_tokens,
     NEW.cache_creation_5m_input_tokens, NEW.cache_creation_1h_input_tokens,
     NEW.cache_ttl_applied, NEW.context_1m_applied, NEW.swap_cache_ttl_applied,
-    NEW.duration_ms, NEW.ttfb_ms, NEW.first_byte_ms, NEW.client_ip, NEW.created_at
+    NEW.duration_ms, NEW.ttfb_ms, NEW.ttft_ms, NEW.timing_semantics_version, NEW.client_ip, NEW.created_at
   )
   ON CONFLICT (request_id) DO UPDATE SET
     user_id = EXCLUDED.user_id,
@@ -243,7 +243,8 @@ BEGIN
     swap_cache_ttl_applied = EXCLUDED.swap_cache_ttl_applied,
     duration_ms = EXCLUDED.duration_ms,
     ttfb_ms = EXCLUDED.ttfb_ms,
-    first_byte_ms = EXCLUDED.first_byte_ms,
+    ttft_ms = EXCLUDED.ttft_ms,
+    timing_semantics_version = EXCLUDED.timing_semantics_version,
     client_ip = EXCLUDED.client_ip;
     -- created_at deliberately NOT updated on conflict: it represents the
     -- original insert time of the ledger row, which is immutable by design.
@@ -286,7 +287,8 @@ AFTER INSERT OR UPDATE OF
   swap_cache_ttl_applied,
   duration_ms,
   ttfb_ms,
-  first_byte_ms,
+  ttft_ms,
+  timing_semantics_version,
   client_ip,
   created_at
 ON message_request

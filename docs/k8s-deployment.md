@@ -17,7 +17,7 @@
               └────────┬─────────┘
                        │
               ┌────────▼─────────┐
-              │  Deployment       │  HPA 2~6 副本,CPU 70% / Memory 80%
+              │  Deployment       │  HPA 2~6 副本,CPU 70%
               │  claude-code-hub  │  PDB maxUnavailable=1
               └────┬─────────┬────┘
                    │         │
@@ -31,11 +31,11 @@
 | 维度 | Docker Compose | Kubernetes |
 |------|----------------|-----------|
 | 高可用 | 单容器 | HPA + PDB,滚动更新不中断 |
-| 存储 | 本地卷 | PVC (由集群 StorageClass 管理) |
+| 存储 | 本地卷 | PostgreSQL/Redis 使用 PVC;Session 快照默认使用节点 hostPath |
 | 域名 | Caddy (可选) | Ingress / Traefik IngressRoute / NodePort |
 | 密钥 | `.env` 文件 | Kubernetes Secret |
 | 升级 | `docker compose pull` | `cch update` (带迁移 + 回滚) |
-| 适用 | 个人/小团队 | 生产 / 多节点 / 企业 |
+| 适用 | 个人/小团队 | 单节点 k3s;多节点需为 Session 快照改用 Redis 或共享存储 |
 
 ---
 
@@ -58,6 +58,11 @@
 - **Linux**: 建议 4 vCPU / 8GB RAM 起步。Ubuntu 22.04+/Debian 12+/Rocky 9+/CentOS Stream 9 等主流发行版
 - **macOS** 只用于管理端 (kubectl),集群侧建议 Linux
 - 磁盘 ≥ 80GB (PostgreSQL 50GB + Redis 10GB + 系统)
+
+> 默认 `sessionSnapshotStore=filesystem`,App Pod 挂载节点本地
+> `/var/lib/claude-code-hub/session-snapshots`。普通 `hostPath` 不跨节点共享,因此默认模板要求单节点,
+> 或由运维明确保证所有 App Pod 调度到同一节点。多节点集群必须把 Session 快照切换为 Redis,
+> 或自行替换为共享文件系统;数据库 PVC 不受这一限制。
 
 ### 集群选型
 
@@ -213,6 +218,9 @@ bash scripts/deploy-k8s.sh --replicas 3 --hpa-min 3 --hpa-max 10 -y
 默认模板保留 `replicas=2`,但 `AUTO_MIGRATE` 入口 `src/instrumentation.ts` 会先获取 PostgreSQL advisory lock,
 因此首次多副本启动时迁移会串行执行。如果你更关心首启速度,也可以先用 `--replicas 1` 部署,确认健康后再扩容。
 
+filesystem Session 快照的 `hostPath` 只能在同一节点上的副本间共享。不要在普通多节点调度下依赖它
+读取其他节点写入的快照;多节点部署请在 Dashboard 系统设置中切换到 Redis,或提供共享文件系统。
+
 ### Codex `/v1/responses` WebSocket 反代
 
 `/v1/responses` 端点对 Codex 客户端会走 **WebSocket 升级**(其余路径仍是 HTTP)。
@@ -307,7 +315,9 @@ WS,务必把 `/v1/responses` 排除在缓存规则之外。
 
 ### 修改应用环境变量
 
-`deploy/k8s/app/deployment.yaml` 里枚举了常用环境变量(连接池、超时、限流开关、MESSAGE_REQUEST 批量参数等)。建议流程:
+`deploy/k8s/app/deployment.yaml` 里枚举了常用环境变量(连接池、超时、限流开关、MESSAGE_REQUEST 批量参数等)。
+当前 App 默认 `DB_POOL_MAX=8`、`DASHBOARD_LOGS_POLL_INTERVAL_MS=10000`,Session 快照根目录为
+`/var/lib/claude-code-hub/session-snapshots`。建议流程:
 
 1. 修改 `deploy/k8s/app/deployment.yaml` 模板
 2. 运行 `bash scripts/deploy-k8s.sh -y` 走升级分支(自动保留 Secret)
@@ -435,7 +445,7 @@ cch backup
 
 ```bash
 # 1. 停 app (避免写入):先删掉 HPA,再直接 kubectl 缩到 0 (cch scale 要求 >=1)
-# CPU/内存 HPA 不支持直接把 minReplicas 改成 0
+# HPA 不支持直接把 minReplicas 改成 0
 kubectl -n claude-code-hub delete hpa claude-code-hub 2>/dev/null || true
 kubectl -n claude-code-hub scale deployment/claude-code-hub --replicas=0
 
@@ -540,7 +550,7 @@ deploy/k8s/
 ├── app/
 │   ├── deployment.yaml        # replicas, env, resources, 3 个 probe, preStop sleep
 │   ├── service.yaml           # ClusterIP / NodePort
-│   ├── hpa.yaml               # CPU 70% / 内存 80%, scaleUp/Down 策略
+│   ├── hpa.yaml               # CPU 70%, scaleUp/Down 策略
 │   ├── pdb.yaml               # maxUnavailable=1
 │   └── networkpolicy.yaml     # 仅在 Ingress 模式应用
 ├── postgres/
@@ -585,6 +595,8 @@ deploy/k8s/
 | 环境变量 | `env_file: .env` | Secret + Deployment.env |
 | 端口 | `23000:3000` | Ingress / NodePort |
 | 持久化 | `./data/postgres`、`./data/redis` | PVC (StorageClass) |
+
+App 的 Session 快照是例外:默认使用节点本地 hostPath,不新增 PVC。它只保证同节点共享,不提供跨节点一致性。
 
 ### 进一步阅读
 

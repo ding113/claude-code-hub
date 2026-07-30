@@ -100,8 +100,8 @@ function createMockSession(overrides: Record<string, unknown> = {}) {
       user: { id: 7, name: "testuser" },
       key: { name: "default-key" },
     },
-    tfftMs: 200,
-    firstByteMs: 200,
+    ttfbMs: 200,
+    ttftMs: 200,
     forwardStartTime: startTime + 5,
     forwardedRequestBody: null,
     getEndpoint: () => "/v1/messages",
@@ -464,12 +464,12 @@ describe("traceProxyRequest", () => {
     expect(llmCall[1].metadata.originalModel).toBe("claude-sonnet-4-20250514");
   });
 
-  test("should set completionStartTime from tfftMs", async () => {
+  test("should set completionStartTime from ttftMs", async () => {
     const { traceProxyRequest } = await import("@/lib/langfuse/trace-proxy-request");
 
     const startTime = Date.now() - 500;
     await traceProxyRequest({
-      session: createMockSession({ startTime, tfftMs: 200 }),
+      session: createMockSession({ startTime, ttfbMs: 100, ttftMs: 200 }),
       responseHeaders: new Headers(),
       durationMs: 500,
       statusCode: 200,
@@ -890,8 +890,8 @@ describe("traceProxyRequest", () => {
       session: createMockSession({
         startTime,
         forwardStartTime,
-        tfftMs: 105,
-        firstByteMs: 105,
+        ttfbMs: 105,
+        ttftMs: 205,
         getProviderChain: () => [
           { id: 1, name: "p1", reason: "retry_failed", timestamp: startTime + 50 },
           { id: 2, name: "p2", reason: "request_success", timestamp: startTime + 100 },
@@ -906,8 +906,9 @@ describe("traceProxyRequest", () => {
     const expectedTimingBreakdown = {
       guardPipelineMs: 5,
       upstreamTotalMs: 495,
-      tfftFromForwardMs: 100, // tfftMs(105) - guardPipelineMs(5)
-      tokenGenerationMs: 395, // durationMs(500) - tfftMs(105)
+      ttfbFromForwardMs: 100, // ttfbMs(105) - guardPipelineMs(5)
+      ttftFromForwardMs: 200, // ttftMs(205) - guardPipelineMs(5)
+      tokenGenerationMs: 295, // durationMs(500) - ttftMs(205)
       failedAttempts: 1, // only retry_failed is non-success
       providersAttempted: 2, // 2 unique provider ids
     };

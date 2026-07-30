@@ -462,6 +462,7 @@ describe("readPublicStatusPayload", () => {
               latestState: "operational",
               availabilityPct: 99.5,
               latestTtfbMs: 120,
+              latestTtftMs: null,
               latestTps: 4.2,
               timeline: [
                 {
@@ -470,6 +471,7 @@ describe("readPublicStatusPayload", () => {
                   state: "operational",
                   availabilityPct: 99.5,
                   ttfbMs: 120,
+                  ttftMs: null,
                   tps: 4.2,
                   sampleCount: 10,
                 },
@@ -686,6 +688,7 @@ describe("readPublicStatusPayload", () => {
           state: "operational",
           availabilityPct: 99.5,
           ttfbMs: 120,
+          ttftMs: null,
           tps: 4.2,
           sampleCount: 10,
         },

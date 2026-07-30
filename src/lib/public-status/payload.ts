@@ -8,6 +8,7 @@ export interface PublicStatusTimelineBucket {
   state: PublicStatusTimelineState;
   availabilityPct: number | null;
   ttfbMs: number | null;
+  ttftMs: number | null;
   tps: number | null;
   sampleCount: number;
 }
@@ -20,6 +21,7 @@ export interface PublicStatusModelSnapshot {
   latestState: PublicStatusTimelineState;
   availabilityPct: number | null;
   latestTtfbMs: number | null;
+  latestTtftMs: number | null;
   latestTps: number | null;
   timeline: PublicStatusTimelineBucket[];
 }

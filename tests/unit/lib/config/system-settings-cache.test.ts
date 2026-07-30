@@ -76,7 +76,9 @@ async function loadCache() {
     getCachedSystemSettings: mod.getCachedSystemSettings,
     isHttp2Enabled: mod.isHttp2Enabled,
     isOpenaiResponsesWebsocketEnabled: mod.isOpenaiResponsesWebsocketEnabled,
+    getCachedSystemSettingsOnlyCache: mod.getCachedSystemSettingsOnlyCache,
     invalidateSystemSettingsCache: mod.invalidateSystemSettingsCache,
+    primeSystemSettingsCache: mod.primeSystemSettingsCache,
   };
 }
 
@@ -179,6 +181,18 @@ describe("SystemSettingsCache", () => {
 
     expect(await getCachedSystemSettings()).toBe(settingsB);
     expect(getSystemSettingsMock).toHaveBeenCalledTimes(2);
+  });
+
+  test("primeSystemSettingsCache 应原子替换缓存且不触发数据库读取", async () => {
+    const settings = createSettings({ id: 403 });
+    const { getCachedSystemSettings, getCachedSystemSettingsOnlyCache, primeSystemSettingsCache } =
+      await loadCache();
+
+    primeSystemSettingsCache(settings);
+
+    expect(getCachedSystemSettingsOnlyCache()).toBe(settings);
+    expect(await getCachedSystemSettings()).toBe(settings);
+    expect(getSystemSettingsMock).not.toHaveBeenCalled();
   });
 
   test("isHttp2Enabled 应读取缓存并返回 enableHttp2", async () => {

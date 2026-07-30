@@ -47,6 +47,29 @@ describe("k8s deploy review regressions", () => {
     expect(traefikIngressRoute).toContain("forwardedHeaders.trustedIPs");
   });
 
+  it("bounds app resources and stores session snapshots without adding a component", () => {
+    const deployment = readRepoFile("deploy/k8s/app/deployment.yaml");
+    const hpa = readRepoFile("deploy/k8s/app/hpa.yaml");
+
+    expect(deployment).toContain('- name: DB_POOL_MAX\n              value: "8"');
+    expect(deployment).toContain("- name: SESSION_SNAPSHOT_ROOT");
+    expect(deployment).toContain("value: /var/lib/claude-code-hub/session-snapshots");
+    expect(deployment).toContain(
+      '- name: DASHBOARD_LOGS_POLL_INTERVAL_MS\n              value: "10000"'
+    );
+    expect(deployment).toContain("cpu: 250m\n              memory: 2Gi");
+    expect(deployment).toContain('cpu: "2"\n              memory: 5Gi');
+    expect(deployment).toContain("path: /api/health/live");
+    expect(deployment).toContain("path: /api/health/ready");
+    expect(deployment).toContain(
+      "hostPath:\n            path: /var/lib/claude-code-hub/session-snapshots"
+    );
+    expect(deployment).toContain("type: DirectoryOrCreate");
+    expect(deployment).not.toContain("kind: PersistentVolumeClaim");
+    expect(hpa).toContain("name: cpu");
+    expect(hpa).not.toContain("name: memory");
+  });
+
   it("documents and enforces the NodePort-safe deployment path", () => {
     const deployScript = readRepoFile("scripts/deploy-k8s.sh");
 
@@ -101,7 +124,7 @@ describe("k8s deploy review regressions", () => {
     expect(cchScript).toContain("if detect_runtime; then");
   });
 
-  it("keeps the restore playbook compatible with CPU/memory HPA", () => {
+  it("keeps the restore playbook compatible with CPU HPA and documents hostPath limits", () => {
     const docs = readRepoFile("docs/k8s-deployment.md");
     const k8sReadme = readRepoFile("deploy/k8s/README.md");
 
@@ -116,6 +139,7 @@ describe("k8s deploy review regressions", () => {
     );
     expect(docs).toContain("kubectl -n claude-code-hub delete hpa claude-code-hub");
     expect(docs).toContain("恢复到 max(升级前实际副本数, HPA minReplicas)");
+    expect(docs).toContain("普通 `hostPath` 不跨节点共享");
     expect(docs).toContain("<repeat-your-original-cli-args>");
     expect(docs).not.toContain('minReplicas":0');
     expect(docs).toContain("```text");
@@ -126,5 +150,6 @@ describe("k8s deploy review regressions", () => {
     expect(k8sReadme).toContain("X-Forwarded-For");
     expect(k8sReadme).toContain("allow-snippet-annotations=false");
     expect(k8sReadme).toContain("proxy-real-ip");
+    expect(k8sReadme).toContain("这个目录只在同一节点上的 Pod 间共享");
   });
 });

@@ -52,7 +52,7 @@ spec:
             - name: AUTO_MIGRATE
               value: "true"
             - name: DB_POOL_MAX
-              value: "24"
+              value: "8"
             - name: DB_POOL_IDLE_TIMEOUT
               value: "20"
             - name: DB_POOL_CONNECT_TIMEOUT
@@ -78,6 +78,10 @@ spec:
               value: "604800"
             - name: SESSION_TTL
               value: "300"
+            - name: SESSION_SNAPSHOT_ROOT
+              value: /var/lib/claude-code-hub/session-snapshots
+            - name: DASHBOARD_LOGS_POLL_INTERVAL_MS
+              value: "10000"
             - name: MESSAGE_REQUEST_WRITE_MODE
               value: "async"
             - name: MESSAGE_REQUEST_ASYNC_FLUSH_INTERVAL_MS
@@ -90,14 +94,14 @@ spec:
               value: {{TIMEZONE}}
           resources:
             requests:
-              cpu: 500m
-              memory: 512Mi
+              cpu: 250m
+              memory: 2Gi
             limits:
-              cpu: "4"
-              memory: 4Gi
+              cpu: "2"
+              memory: 5Gi
           livenessProbe:
             httpGet:
-              path: /api/actions/health
+              path: /api/health/live
               port: 3000
             initialDelaySeconds: 15
             periodSeconds: 15
@@ -105,15 +109,15 @@ spec:
             failureThreshold: 3
           readinessProbe:
             httpGet:
-              path: /api/actions/health
+              path: /api/health/ready
               port: 3000
             initialDelaySeconds: 5
             periodSeconds: 5
-            timeoutSeconds: 3
+            timeoutSeconds: 5
             failureThreshold: 2
           startupProbe:
             httpGet:
-              path: /api/actions/health
+              path: /api/health/live
               port: 3000
             initialDelaySeconds: 5
             periodSeconds: 5
@@ -131,3 +135,11 @@ spec:
             capabilities:
               drop:
                 - ALL
+          volumeMounts:
+            - name: session-snapshots
+              mountPath: /var/lib/claude-code-hub/session-snapshots
+      volumes:
+        - name: session-snapshots
+          hostPath:
+            path: /var/lib/claude-code-hub/session-snapshots
+            type: DirectoryOrCreate

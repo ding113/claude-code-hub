@@ -11,6 +11,10 @@ export interface LeaderLock {
 
 const inMemoryLocks = new Map<string, { owner: string; expiresAt: number }>();
 
+function allowMemoryFallback(): boolean {
+  return process.env.NODE_ENV !== "production";
+}
+
 function generateLockId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
@@ -40,11 +44,19 @@ export async function acquireLeaderLock(key: string, ttlMs: number): Promise<Lea
 
       return null;
     } catch (error) {
-      logger.warn("[LeaderLock] Redis acquire failed, falling back to memory lock", {
+      logger.warn("[LeaderLock] Redis acquire failed", {
         key,
+        action: allowMemoryFallback() ? "falling_back_to_memory" : "skipping_leader_task",
         error: error instanceof Error ? error.message : String(error),
       });
     }
+  }
+
+  if (!allowMemoryFallback()) {
+    if (redis?.status !== "ready") {
+      logger.warn("[LeaderLock] Redis unavailable; leader task skipped in production", { key });
+    }
+    return null;
   }
 
   const now = Date.now();

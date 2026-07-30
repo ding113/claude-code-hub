@@ -61,6 +61,16 @@ export function getCachedSystemSettingsOnlyCache(): SystemSettings | null {
   return cachedSettings;
 }
 
+/**
+ * Replace the in-memory cache with a freshly persisted settings row.
+ * Update paths use this to avoid a cache-miss window after a successful save.
+ */
+export function primeSystemSettingsCache(settings: SystemSettings): void {
+  cachedSettings = settings;
+  cachedAt = Date.now();
+  logger.info("[SystemSettingsCache] Cache primed from persisted settings");
+}
+
 /** Default settings used when cache fetch fails */
 export const DEFAULT_SETTINGS: Pick<
   SystemSettings,
@@ -93,6 +103,7 @@ export const DEFAULT_SETTINGS: Pick<
   | "stickySlaMs"
   | "racingTotalTimeoutMs"
   | "stickyTimeoutCooldownMs"
+  | "sessionSnapshotStore"
 > = {
   enableHttp2: false,
   enableOpenaiResponsesWebsocket: true,
@@ -132,6 +143,7 @@ export const DEFAULT_SETTINGS: Pick<
   stickySlaMs: 20_000,
   racingTotalTimeoutMs: 60_000,
   stickyTimeoutCooldownMs: 300_000,
+  sessionSnapshotStore: "filesystem",
 };
 
 /**
@@ -218,6 +230,7 @@ export async function getCachedSystemSettings(): Promise<SystemSettings> {
       affinityIgnoreClientSessionId: DEFAULT_SETTINGS.affinityIgnoreClientSessionId,
       replayEnabled: null,
       cacheEffectivenessEnabled: null,
+      sessionSnapshotStore: DEFAULT_SETTINGS.sessionSnapshotStore,
       discoveryEnabled: DEFAULT_SETTINGS.discoveryEnabled,
       discoveryConcurrency: DEFAULT_SETTINGS.discoveryConcurrency,
       maxDiscoveryRounds: DEFAULT_SETTINGS.maxDiscoveryRounds,

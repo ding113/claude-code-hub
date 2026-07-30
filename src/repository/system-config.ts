@@ -204,6 +204,7 @@ function createFallbackSettings(): SystemSettings {
     affinityIgnoreClientSessionId: true,
     replayEnabled: null,
     cacheEffectivenessEnabled: null,
+    sessionSnapshotStore: "filesystem",
     createdAt: now,
     updatedAt: now,
   };
@@ -282,6 +283,12 @@ const RECENT_COLUMN_LADDER: ReadonlyArray<{
   // 本层更新失败（仍有列缺失）时记录的告警
   updateWarn: string;
 }> = [
+  {
+    key: "sessionSnapshotStore",
+    column: systemSettings.sessionSnapshotStore,
+    selectWarn: "system_settings 表除 sessionSnapshotStore 外仍有列缺失，继续回退到上一代字段集。",
+    updateWarn: "system_settings 表除 sessionSnapshotStore 外仍有列缺失，继续降级更新。",
+  },
   {
     key: "cacheEffectivenessEnabled",
     column: systemSettings.cacheEffectivenessEnabled,
@@ -899,6 +906,10 @@ export async function updateSystemSettings(
     // F3b 缓存模拟开关覆写（如果提供；null = 清除覆写跟随环境变量）
     if (payload.cacheEffectivenessEnabled !== undefined) {
       updates.cacheEffectivenessEnabled = payload.cacheEffectivenessEnabled;
+    }
+
+    if (payload.sessionSnapshotStore !== undefined) {
+      updates.sessionSnapshotStore = payload.sessionSnapshotStore;
     }
 
     let updated;

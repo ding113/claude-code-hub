@@ -38,3 +38,18 @@ export function computeAvgTtfb(timeline: PublicStatusTimelineBucket[]): number |
   }
   return Math.round(weightedSum / sampleTotal);
 }
+
+export function computeAvgTtft(timeline: PublicStatusTimelineBucket[]): number | null {
+  let weightedSum = 0;
+  let sampleTotal = 0;
+  for (const bucket of timeline) {
+    if (bucket.sampleCount > 0 && bucket.ttftMs !== null) {
+      weightedSum += bucket.ttftMs * bucket.sampleCount;
+      sampleTotal += bucket.sampleCount;
+    }
+  }
+  if (sampleTotal === 0) {
+    return null;
+  }
+  return Math.round(weightedSum / sampleTotal);
+}

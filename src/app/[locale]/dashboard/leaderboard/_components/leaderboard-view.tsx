@@ -21,6 +21,7 @@ import { ProviderTypeFilter } from "@/app/[locale]/settings/providers/_component
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TagInput } from "@/components/ui/tag-input";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Link } from "@/i18n/routing";
 import { getAllUserKeyGroups, getAllUserTags } from "@/lib/api-client/v1/actions/users";
 import { formatTokenAmount } from "@/lib/utils";
@@ -344,7 +345,25 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
       className: "text-right",
       cell: (row) => {
         const val = row.avgTtfbMs;
-        return val && val > 0 ? `${Math.round(val).toLocaleString()} ms` : "-";
+        if (val == null || val <= 0) return "-";
+        return (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="cursor-help">{Math.round(val).toLocaleString()} ms</span>
+            </TooltipTrigger>
+            <TooltipContent className="space-y-1 text-xs">
+              <div>
+                {t("columns.avgTtfbMs")}: {Math.round(val).toLocaleString()} ms
+              </div>
+              <div>
+                {t("columns.avgTtftMs")}:{" "}
+                {row.avgTtftMs == null
+                  ? t("columns.timingUnavailable")
+                  : `${Math.round(row.avgTtftMs).toLocaleString()} ms`}
+              </div>
+            </TooltipContent>
+          </Tooltip>
+        );
       },
       sortKey: "avgTtfbMs",
       getValue: (row) => row.avgTtfbMs ?? 0,
@@ -383,11 +402,11 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
       header: t("columns.cacheCoefficient"),
       className: "text-right",
       cell: (row) => {
-        const bp = "cacheCoefficientBp" in row ? row.cacheCoefficientBp : null;
+        const bp = row.cacheCoefficientBp;
         return bp == null ? "–" : (bp / 10000).toFixed(2);
       },
       sortKey: "cacheCoefficientBp",
-      getValue: (row) => ("cacheCoefficientBp" in row ? row.cacheCoefficientBp : null),
+      getValue: (row) => row.cacheCoefficientBp,
     },
   ];
 
@@ -428,11 +447,11 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
       header: t("columns.cacheCoefficient"),
       className: "text-right",
       cell: (row) => {
-        const bp = "cacheCoefficientBp" in row ? row.cacheCoefficientBp : null;
+        const bp = row.cacheCoefficientBp;
         return bp == null ? "–" : (bp / 10000).toFixed(2);
       },
       sortKey: "cacheCoefficientBp",
-      getValue: (row) => ("cacheCoefficientBp" in row ? row.cacheCoefficientBp : null),
+      getValue: (row) => row.cacheCoefficientBp,
     },
     {
       header: t("columns.cacheReadTokens"),

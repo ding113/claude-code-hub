@@ -15,12 +15,12 @@ export function getSuccessRateCellDisplay(
   if (typeof row.successRate === "number") {
     return {
       label: `${(Number(row.successRate) * 100).toFixed(1)}%`,
-      title: undefined,
+      title: row.basisDisclosureRequired ? t("columns.successRateBasisDisclosure") : undefined,
     };
   }
 
   return {
     label: t("columns.successRateUnavailable"),
-    title: row.basisDisclosureRequired ? t("columns.successRateBasisDisclosure") : undefined,
+    title: undefined,
   };
 }

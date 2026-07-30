@@ -10,31 +10,31 @@ import type { PerformanceTabProps } from "../types";
 import { LatencyBreakdownBar } from "./LatencyBreakdownBar";
 
 /**
- * Get TFFT performance assessment
+ * Get TTFB performance assessment
  * Thresholds: <1s excellent, <2s good, <3s warning, >=3s poor
  */
-function getTfftAssessment(tfftMs: number | null): {
+function getTtfbAssessment(ttfbMs: number | null): {
   label: string;
   color: string;
   bgColor: string;
 } | null {
-  if (tfftMs === null) return null;
+  if (ttfbMs === null) return null;
 
-  if (tfftMs < 1000) {
+  if (ttfbMs < 1000) {
     return {
       label: "excellent",
       color: "text-emerald-600",
       bgColor: "bg-emerald-50 dark:bg-emerald-950/20",
     };
   }
-  if (tfftMs < 2000) {
+  if (ttfbMs < 2000) {
     return {
       label: "good",
       color: "text-blue-600",
       bgColor: "bg-blue-50 dark:bg-blue-950/20",
     };
   }
-  if (tfftMs < 3000) {
+  if (ttfbMs < 3000) {
     return {
       label: "warning",
       color: "text-amber-600",
@@ -88,36 +88,37 @@ function getOutputRateAssessment(rate: number | null): {
 
 export function PerformanceTab({
   durationMs,
-  tfftMs,
-  firstByteMs,
+  ttfbMs,
+  ttftMs,
+  timingSemanticsVersion,
   outputTokens,
 }: PerformanceTabProps) {
   const t = useTranslations("dashboard.logs.details");
 
-  // Normalize undefined to null for consistent handling
+  const hasCurrentTimingSemantics = timingSemanticsVersion === 2;
   const normalizedDurationMs = durationMs ?? null;
-  const normalizedTfftMs = tfftMs ?? null;
-  const normalizedFirstByteMs = firstByteMs ?? null;
+  const normalizedTtfbMs = hasCurrentTimingSemantics ? (ttfbMs ?? null) : null;
+  const normalizedTtftMs = hasCurrentTimingSemantics ? (ttftMs ?? null) : null;
   const normalizedOutputTokens = outputTokens ?? null;
 
   const outputRate = calculateOutputRate(
     normalizedOutputTokens,
     normalizedDurationMs,
-    normalizedFirstByteMs
+    normalizedTtftMs
   );
-  const hideRate = shouldHideOutputRate(outputRate, normalizedDurationMs, normalizedFirstByteMs);
+  const hideRate = shouldHideOutputRate(outputRate, normalizedDurationMs, normalizedTtftMs);
   const generationMs =
-    normalizedDurationMs !== null && normalizedTfftMs !== null
-      ? normalizedDurationMs - normalizedTfftMs
+    normalizedDurationMs !== null && normalizedTtftMs !== null
+      ? normalizedDurationMs - normalizedTtftMs
       : null;
-
-  const tfftAssessment = getTfftAssessment(normalizedTfftMs);
+  const ttfbAssessment = getTtfbAssessment(normalizedTtfbMs);
+  const ttftAssessment = getTtfbAssessment(normalizedTtftMs);
   const rateAssessment = getOutputRateAssessment(outputRate);
 
   const hasData =
     normalizedDurationMs !== null ||
-    normalizedTfftMs !== null ||
-    normalizedFirstByteMs !== null ||
+    normalizedTtfbMs !== null ||
+    normalizedTtftMs !== null ||
     (outputRate !== null && !hideRate) ||
     normalizedOutputTokens !== null;
 
@@ -132,19 +133,25 @@ export function PerformanceTab({
 
   return (
     <div className="space-y-6">
+      {!hasCurrentTimingSemantics && (ttfbMs != null || ttftMs != null) && (
+        <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
+          {t("performance.timingUnavailable")}
+        </div>
+      )}
+
       {/* Gauges Row */}
-      <div className="flex flex-col sm:flex-row gap-4">
-        {/* TFFT Gauge */}
-        {normalizedTfftMs !== null && (
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        {/* TTFB Gauge */}
+        {normalizedTtfbMs !== null && (
           <div
             className={cn(
               "flex-1 flex items-center gap-4 p-4 rounded-lg border",
-              tfftAssessment?.bgColor || "bg-muted/50"
+              ttfbAssessment?.bgColor || "bg-muted/50"
             )}
           >
             <div className="relative">
               <CircularProgress
-                value={Math.min(normalizedTfftMs, 3000)}
+                value={Math.min(normalizedTtfbMs, 3000)}
                 max={3000}
                 size={64}
                 strokeWidth={5}
@@ -152,20 +159,57 @@ export function PerformanceTab({
               />
               <div className="absolute inset-0 flex items-center justify-center">
                 <Clock
-                  className={cn("h-5 w-5", tfftAssessment?.color || "text-muted-foreground")}
+                  className={cn("h-5 w-5", ttfbAssessment?.color || "text-muted-foreground")}
                 />
               </div>
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-xs text-muted-foreground">{t("performanceTab.tfftGauge")}</p>
+              <p className="text-xs text-muted-foreground">{t("performanceTab.ttfbGauge")}</p>
               <p className="text-xl font-bold font-mono">
-                {normalizedTfftMs >= 1000
-                  ? `${(normalizedTfftMs / 1000).toFixed(2)}s`
-                  : `${Math.round(normalizedTfftMs)}ms`}
+                {normalizedTtfbMs >= 1000
+                  ? `${(normalizedTtfbMs / 1000).toFixed(2)}s`
+                  : `${Math.round(normalizedTtfbMs)}ms`}
               </p>
-              {tfftAssessment && (
-                <Badge variant="outline" className={cn("text-[10px] mt-1", tfftAssessment.color)}>
-                  {t(`performanceTab.assessment.${tfftAssessment.label}`)}
+              {ttfbAssessment && (
+                <Badge variant="outline" className={cn("text-[10px] mt-1", ttfbAssessment.color)}>
+                  {t(`performanceTab.assessment.${ttfbAssessment.label}`)}
+                </Badge>
+              )}
+            </div>
+          </div>
+        )}
+
+        {normalizedTtftMs !== null && (
+          <div
+            className={cn(
+              "flex items-center gap-4 rounded-lg border p-4",
+              ttftAssessment?.bgColor || "bg-muted/50"
+            )}
+          >
+            <div className="relative">
+              <CircularProgress
+                value={Math.min(normalizedTtftMs, 3000)}
+                max={3000}
+                size={64}
+                strokeWidth={5}
+                showPercentage={false}
+              />
+              <div className="absolute inset-0 flex items-center justify-center">
+                <Gauge
+                  className={cn("h-5 w-5", ttftAssessment?.color || "text-muted-foreground")}
+                />
+              </div>
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-xs text-muted-foreground">{t("performanceTab.ttftGauge")}</p>
+              <p className="font-mono text-xl font-bold">
+                {normalizedTtftMs >= 1000
+                  ? `${(normalizedTtftMs / 1000).toFixed(2)}s`
+                  : `${Math.round(normalizedTtftMs)}ms`}
+              </p>
+              {ttftAssessment && (
+                <Badge variant="outline" className={cn("mt-1 text-[10px]", ttftAssessment.color)}>
+                  {t(`performanceTab.assessment.${ttftAssessment.label}`)}
                 </Badge>
               )}
             </div>
@@ -206,7 +250,7 @@ export function PerformanceTab({
       </div>
 
       {/* Latency Breakdown Bar */}
-      {normalizedTfftMs !== null && normalizedDurationMs !== null && (
+      {normalizedTtfbMs !== null && normalizedTtftMs !== null && normalizedDurationMs !== null && (
         <div className="space-y-2">
           <h4 className="text-sm font-semibold flex items-center gap-2">
             <Gauge className="h-4 w-4 text-purple-600" />
@@ -214,8 +258,8 @@ export function PerformanceTab({
           </h4>
           <div className="p-4 rounded-lg border bg-card">
             <LatencyBreakdownBar
-              firstByteMs={normalizedFirstByteMs}
-              tfftMs={normalizedTfftMs}
+              ttfbMs={normalizedTtfbMs}
+              ttftMs={normalizedTtftMs}
               durationMs={normalizedDurationMs}
             />
           </div>
@@ -226,30 +270,30 @@ export function PerformanceTab({
       <div className="space-y-2">
         <h4 className="text-sm font-semibold">{t("performance.title")}</h4>
         <div className="rounded-lg border bg-card divide-y">
-          {normalizedFirstByteMs !== null && (
+          {normalizedTtfbMs !== null && (
             <div className="flex justify-between items-center px-4 py-3">
               <span className="text-sm text-muted-foreground">{t("performance.ttfb")}</span>
               <span className="text-sm font-mono font-medium">
-                {normalizedFirstByteMs >= 1000
-                  ? `${(normalizedFirstByteMs / 1000).toFixed(2)}s`
-                  : `${Math.round(normalizedFirstByteMs)}ms`}
+                {normalizedTtfbMs >= 1000
+                  ? `${(normalizedTtfbMs / 1000).toFixed(2)}s`
+                  : `${Math.round(normalizedTtfbMs)}ms`}
               </span>
             </div>
           )}
-          {normalizedTfftMs !== null && (
-            <div className="flex justify-between items-center px-4 py-3">
-              <span className="text-sm text-muted-foreground">{t("performance.tfft")}</span>
-              <span className="text-sm font-mono font-medium">
-                {normalizedTfftMs >= 1000
-                  ? `${(normalizedTfftMs / 1000).toFixed(2)}s`
-                  : `${Math.round(normalizedTfftMs)}ms`}
+          {normalizedTtftMs !== null && (
+            <div className="flex items-center justify-between px-4 py-3">
+              <span className="text-sm text-muted-foreground">{t("performance.ttft")}</span>
+              <span className="font-mono text-sm font-medium">
+                {normalizedTtftMs >= 1000
+                  ? `${(normalizedTtftMs / 1000).toFixed(2)}s`
+                  : `${Math.round(normalizedTtftMs)}ms`}
               </span>
             </div>
           )}
           {generationMs !== null && (
             <div className="flex justify-between items-center px-4 py-3">
               <span className="text-sm text-muted-foreground">
-                {t("performanceTab.generationTime")}
+                {t("performanceTab.generationAfterFirstToken")}
               </span>
               <span className="text-sm font-mono font-medium">
                 {generationMs >= 1000

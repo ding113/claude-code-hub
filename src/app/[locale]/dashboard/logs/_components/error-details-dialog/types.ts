@@ -72,10 +72,10 @@ export interface TabSharedProps {
   context1mApplied?: boolean | null;
   /** Total request duration in ms */
   durationMs?: number | null;
-  /** Time to first token in ms */
-  tfftMs?: number | null;
-  /** Time to first byte in ms (null on rows persisted before it was recorded) */
-  firstByteMs?: number | null;
+  /** Time to first byte in ms */
+  ttfbMs?: number | null;
+  ttftMs?: number | null;
+  timingSemanticsVersion?: number | null;
 }
 
 /**

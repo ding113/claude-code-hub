@@ -299,9 +299,10 @@ describe("SystemSettings：数据库缺列时的保存兜底", () => {
     vi.setSystemTime(now);
 
     // 第一次 select(fullSelection) 因新列缺失而抛 42703；
-    // 第二次 select(去掉 cacheEffectivenessEnabled)命中——验证新列已加入降级链最外层。
+    // 第二次先剥离更新的 sessionSnapshotStore，第三次再剥离 cacheEffectivenessEnabled。
     const selectMock = vi
       .fn()
+      .mockReturnValueOnce(createRejectedThenableQuery({ code: "42703" }))
       .mockReturnValueOnce(createRejectedThenableQuery({ code: "42703" }))
       .mockReturnValueOnce(
         createThenableQuery([
@@ -335,23 +336,27 @@ describe("SystemSettings：数据库缺列时的保存兜底", () => {
     const result = await getSystemSettings();
 
     // 降级读取成功（未抛错），缺失列由 transformer 落默认值。
-    expect(selectMock).toHaveBeenCalledTimes(2);
+    expect(selectMock).toHaveBeenCalledTimes(3);
     expect(result.siteTitle).toBe("CC Hub");
     expect(result.enableHttp2).toBe(true);
     expect(result.affinityIgnoreClientSessionId).toBe(true);
     expect(result.streamGateMode).toBe("enforce");
 
-    // 关键回归保护：第二次 select 必须恰好剥离了最新列（最外层降级），
-    // 而非旧行为先剥离更早引入的列。若新列未加入降级链最外层，下面断言会失败。
+    // 关键回归保护：降级链必须按 migration 新旧顺序逐层剥离。
     const secondSelection = selectMock.mock.calls[1]?.[0] as Record<string, unknown>;
-    expect(secondSelection).not.toHaveProperty("cacheEffectivenessEnabled");
-    expect(secondSelection).toHaveProperty("replayEnabled");
-    expect(secondSelection).toHaveProperty("affinityIgnoreClientSessionId");
-    expect(secondSelection).toHaveProperty("streamGateMode");
-    expect(secondSelection).toHaveProperty("stickyTimeoutCooldownMs");
-    expect(secondSelection).toHaveProperty("racingTotalTimeoutMs");
-    expect(secondSelection).toHaveProperty("enableGeminiFunctionIdRectifier");
-    expect(secondSelection).toHaveProperty("enableThinkingEffortConflictRectifier");
+    expect(secondSelection).not.toHaveProperty("sessionSnapshotStore");
+    expect(secondSelection).toHaveProperty("cacheEffectivenessEnabled");
+
+    const thirdSelection = selectMock.mock.calls[2]?.[0] as Record<string, unknown>;
+    expect(thirdSelection).not.toHaveProperty("sessionSnapshotStore");
+    expect(thirdSelection).not.toHaveProperty("cacheEffectivenessEnabled");
+    expect(thirdSelection).toHaveProperty("replayEnabled");
+    expect(thirdSelection).toHaveProperty("affinityIgnoreClientSessionId");
+    expect(thirdSelection).toHaveProperty("streamGateMode");
+    expect(thirdSelection).toHaveProperty("stickyTimeoutCooldownMs");
+    expect(thirdSelection).toHaveProperty("racingTotalTimeoutMs");
+    expect(thirdSelection).toHaveProperty("enableGeminiFunctionIdRectifier");
+    expect(thirdSelection).toHaveProperty("enableThinkingEffortConflictRectifier");
 
     vi.useRealTimers();
   });

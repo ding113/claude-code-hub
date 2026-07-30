@@ -100,6 +100,33 @@ export async function runApplicationCleanup(
       (async () => {
         const { stopCacheCleanup } = await import("@/lib/cache/session-cache");
         stopCacheCleanup();
+        const { stopSessionSnapshotStores } = await import("@/lib/session-snapshot/store");
+        await stopSessionSnapshotStores();
+        const schedulerState = globalThis as typeof globalThis & {
+          __CCH_CLOUD_PRICE_SYNC_INTERVAL_ID__?: ReturnType<typeof setInterval>;
+          __CCH_CACHE_EFFECTIVENESS_INTERVAL_ID__?: ReturnType<typeof setInterval>;
+          __CCH_CACHE_EFFECTIVENESS_CURRENT_PROMISE__?: Promise<void>;
+          __CCH_CACHE_EFFECTIVENESS_STOP_REQUESTED__?: boolean;
+          __CCH_REPLAY_CLEANUP_INTERVAL_ID__?: ReturnType<typeof setInterval>;
+          __CCH_REPLAY_CLEANUP_CURRENT_PROMISE__?: Promise<void>;
+          __CCH_REPLAY_CLEANUP_STOP_REQUESTED__?: boolean;
+        };
+        schedulerState.__CCH_CACHE_EFFECTIVENESS_STOP_REQUESTED__ = true;
+        schedulerState.__CCH_REPLAY_CLEANUP_STOP_REQUESTED__ = true;
+        for (const intervalId of [
+          schedulerState.__CCH_CLOUD_PRICE_SYNC_INTERVAL_ID__,
+          schedulerState.__CCH_CACHE_EFFECTIVENESS_INTERVAL_ID__,
+          schedulerState.__CCH_REPLAY_CLEANUP_INTERVAL_ID__,
+        ]) {
+          if (intervalId) clearInterval(intervalId);
+        }
+        schedulerState.__CCH_CLOUD_PRICE_SYNC_INTERVAL_ID__ = undefined;
+        schedulerState.__CCH_CACHE_EFFECTIVENESS_INTERVAL_ID__ = undefined;
+        schedulerState.__CCH_REPLAY_CLEANUP_INTERVAL_ID__ = undefined;
+        await Promise.allSettled([
+          schedulerState.__CCH_CACHE_EFFECTIVENESS_CURRENT_PROMISE__,
+          schedulerState.__CCH_REPLAY_CLEANUP_CURRENT_PROMISE__,
+        ]);
         const stopRoutingTraceOutboxReplayScheduler = (
           globalThis as typeof globalThis & {
             __CCH_STOP_ROUTING_TRACE_OUTBOX__?: (options?: {

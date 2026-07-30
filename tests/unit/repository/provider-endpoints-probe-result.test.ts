@@ -1,5 +1,24 @@
 import { describe, expect, test, vi } from "vitest";
 
+function sqlToString(value: unknown): string {
+  const seen = new Set<unknown>();
+  const visit = (node: unknown): string => {
+    if (node == null || seen.has(node)) return "";
+    if (typeof node === "string") return node;
+    if (typeof node !== "object") return String(node);
+    seen.add(node);
+    if (Array.isArray(node)) return node.map(visit).join(" ");
+
+    const record = node as Record<string, unknown>;
+    if (typeof record.name === "string") return record.name;
+    if (Array.isArray(record.value)) return record.value.map(visit).join(" ");
+    if (record.value != null) return visit(record.value);
+    if (record.queryChunks != null) return visit(record.queryChunks);
+    return "";
+  };
+  return visit(value);
+}
+
 describe("provider-endpoints repository - recordProviderEndpointProbeResult", () => {
   test("endpoint 不存在/已删除时应静默忽略（不写 probe log）", async () => {
     vi.resetModules();
@@ -38,6 +57,7 @@ describe("provider-endpoints repository - recordProviderEndpointProbeResult", ()
     ).resolves.toBeUndefined();
 
     expect(updateMock).toHaveBeenCalledTimes(1);
+    expect(setMock).toHaveBeenCalledWith(expect.objectContaining({ consecutiveProbeFailures: 0 }));
     expect(insertMock).not.toHaveBeenCalled();
     expect(valuesMock).not.toHaveBeenCalled();
   });
@@ -77,6 +97,11 @@ describe("provider-endpoints repository - recordProviderEndpointProbeResult", ()
     });
 
     expect(updateMock).toHaveBeenCalledTimes(1);
+    const updatePatch = setMock.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(sqlToString(updatePatch.consecutiveProbeFailures)).toContain(
+      "consecutive_probe_failures"
+    );
+    expect(sqlToString(updatePatch.consecutiveProbeFailures)).toContain("+ 1");
     expect(insertMock).toHaveBeenCalledTimes(1);
     expect(valuesMock).toHaveBeenCalledTimes(1);
     expect(valuesMock).toHaveBeenCalledWith(

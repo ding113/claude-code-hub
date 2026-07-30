@@ -758,6 +758,7 @@ export interface ProviderEndpoint {
   lastProbeLatencyMs: number | null;
   lastProbeErrorType: string | null;
   lastProbeErrorMessage: string | null;
+  consecutiveProbeFailures: number;
   createdAt: Date;
   updatedAt: Date;
   deletedAt: Date | null;

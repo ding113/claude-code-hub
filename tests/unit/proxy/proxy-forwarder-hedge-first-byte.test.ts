@@ -275,6 +275,8 @@ function createSession(clientAbortSignal: AbortSignal | null = null): ProxySessi
     authState: { success: true, user: null, key: null, apiKey: null },
     provider: null,
     messageContext: null,
+    ttfbMs: null,
+    ttftMs: null,
     sessionId: "sess-hedge",
     streamingHedgeDisabled: false,
     sessionBindingAllowed: true,
@@ -1557,6 +1559,7 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
 
       await vi.advanceTimersByTimeAsync(45);
       const response = await responsePromise;
+      expect(session.ttftMs).toBeNull();
       expect(await response.text()).toContain('"provider":"p1"');
       expect(controller1.signal.aborted).toBe(false);
       expect(controller2.signal.aborted).toBe(true);

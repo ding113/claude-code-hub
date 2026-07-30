@@ -9,9 +9,9 @@
 deploy/k8s/
 ├── namespace.yaml                     # 命名空间
 ├── app/                               # 应用层
-│   ├── deployment.yaml                #   Deployment (2 副本基线;迁移由 PG advisory lock 串行化)
+│   ├── deployment.yaml                #   Deployment (2 副本基线;Session 快照使用节点 hostPath)
 │   ├── service.yaml                   #   Service (可渲染为 ClusterIP/NodePort)
-│   ├── hpa.yaml                       #   HPA (CPU 70% / 内存 80%)
+│   ├── hpa.yaml                       #   HPA (CPU 70%)
 │   ├── pdb.yaml                       #   PodDisruptionBudget (maxUnavailable=1)
 │   └── networkpolicy.yaml             #   NetworkPolicy (仅在 Ingress 模式应用)
 ├── postgres/                          # PostgreSQL StatefulSet
@@ -53,6 +53,11 @@ deploy/k8s/
 | `{{INGRESS_HOST}}` | 绑定域名 | 用户参数 |
 | `{{INGRESS_CLASS}}` | Ingress className | 自动探测 |
 | `{{TIMEZONE}}` | 容器时区 | `Asia/Shanghai` |
+
+> App 的 filesystem Session 快照不使用 PVC,而是挂载节点本地
+> `/var/lib/claude-code-hub/session-snapshots` hostPath。这个目录只在同一节点上的 Pod 间共享;
+> 默认配置适用于单节点 k3s,或明确保证所有 App Pod 位于同一节点的部署。多节点集群应在系统设置中
+> 切换为 Redis,或自行提供真正的共享文件系统。PostgreSQL/Redis 仍使用 StorageClass/PVC。
 
 > NodePort 回落模式下,`scripts/deploy-k8s.sh` 会自动跳过 `app/networkpolicy.yaml`,
 > 避免默认的 Ingress 命名空间白名单阻断外部访问。

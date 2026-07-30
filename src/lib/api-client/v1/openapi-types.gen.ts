@@ -12245,6 +12245,11 @@ export interface operations {
                         /** @description Longest-prefix cache-effectiveness simulation override (observability only). Null follows the ENABLE_CACHE_EFFECTIVENESS environment variable. */
                         cacheEffectivenessEnabled: boolean | null;
                         /**
+                         * @description Session detail snapshot backend. Filesystem is the default bounded asynchronous store; Redis is retained for compatibility.
+                         * @enum {string}
+                         */
+                        sessionSnapshotStore: "disabled" | "filesystem" | "redis";
+                        /**
                          * Format: date-time
                          * @description Creation time.
                          */
@@ -12530,6 +12535,11 @@ export interface operations {
                     replayEnabled?: boolean | null;
                     /** @description Longest-prefix cache-effectiveness simulation override (observability only). Null follows the ENABLE_CACHE_EFFECTIVENESS environment variable. */
                     cacheEffectivenessEnabled?: boolean | null;
+                    /**
+                     * @description Session detail snapshot backend. Filesystem is the default bounded asynchronous store; Redis is retained for compatibility.
+                     * @enum {string}
+                     */
+                    sessionSnapshotStore?: "disabled" | "filesystem" | "redis";
                 };
             };
         };
@@ -12691,6 +12701,11 @@ export interface operations {
                         replayEnabled: boolean | null;
                         /** @description Longest-prefix cache-effectiveness simulation override (observability only). Null follows the ENABLE_CACHE_EFFECTIVENESS environment variable. */
                         cacheEffectivenessEnabled: boolean | null;
+                        /**
+                         * @description Session detail snapshot backend. Filesystem is the default bounded asynchronous store; Redis is retained for compatibility.
+                         * @enum {string}
+                         */
+                        sessionSnapshotStore: "disabled" | "filesystem" | "redis";
                         /**
                          * Format: date-time
                          * @description Creation time.

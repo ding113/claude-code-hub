@@ -245,7 +245,9 @@ describe("message terminal write APIs", () => {
     const details = {
       inputTokens: 101,
       outputTokens: 23,
-      tfftMs: null,
+      ttfbMs: null,
+      ttftMs: null,
+      timingSemanticsVersion: 2,
       cacheCreationInputTokens: 7,
       cacheReadInputTokens: 8,
       cacheCreation5mInputTokens: 3,

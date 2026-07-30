@@ -209,6 +209,7 @@ function toProviderEndpoint(row: any): ProviderEndpoint {
     lastProbeLatencyMs: row.lastProbeLatencyMs ?? null,
     lastProbeErrorType: row.lastProbeErrorType ?? null,
     lastProbeErrorMessage: row.lastProbeErrorMessage ?? null,
+    consecutiveProbeFailures: row.consecutiveProbeFailures ?? 0,
     createdAt: toDate(row.createdAt),
     updatedAt: toDate(row.updatedAt),
     deletedAt: toNullableDate(row.deletedAt),
@@ -229,6 +230,7 @@ const providerEndpointSelectFields = {
   lastProbeLatencyMs: providerEndpoints.lastProbeLatencyMs,
   lastProbeErrorType: providerEndpoints.lastProbeErrorType,
   lastProbeErrorMessage: providerEndpoints.lastProbeErrorMessage,
+  consecutiveProbeFailures: providerEndpoints.consecutiveProbeFailures,
   createdAt: providerEndpoints.createdAt,
   updatedAt: providerEndpoints.updatedAt,
   deletedAt: providerEndpoints.deletedAt,
@@ -320,7 +322,14 @@ function toProviderEndpointProbeLog(row: any): ProviderEndpointProbeLog {
 
 export type ProviderEndpointProbeTarget = Pick<
   ProviderEndpoint,
-  "id" | "url" | "vendorId" | "providerType" | "lastProbedAt" | "lastProbeOk" | "lastProbeErrorType"
+  | "id"
+  | "url"
+  | "vendorId"
+  | "providerType"
+  | "lastProbedAt"
+  | "lastProbeOk"
+  | "lastProbeErrorType"
+  | "consecutiveProbeFailures"
 >;
 
 export async function findEnabledProviderEndpointsForProbing(): Promise<
@@ -345,7 +354,8 @@ export async function findEnabledProviderEndpointsForProbing(): Promise<
       e.provider_type AS "providerType",
       e.last_probed_at AS "lastProbedAt",
       e.last_probe_ok AS "lastProbeOk",
-      e.last_probe_error_type AS "lastProbeErrorType"
+      e.last_probe_error_type AS "lastProbeErrorType",
+      e.consecutive_probe_failures AS "consecutiveProbeFailures"
     FROM ${providerEndpoints} e
     INNER JOIN enabled_vendor_types vt
       ON vt.vendor_id = e.vendor_id
@@ -367,6 +377,7 @@ export async function findEnabledProviderEndpointsForProbing(): Promise<
     lastProbedAt: toNullableDate(row.lastProbedAt),
     lastProbeOk: (row.lastProbeOk as boolean | null) ?? null,
     lastProbeErrorType: (row.lastProbeErrorType as string | null) ?? null,
+    consecutiveProbeFailures: Number(row.consecutiveProbeFailures ?? 0),
   }));
 }
 
@@ -2179,6 +2190,9 @@ export async function recordProviderEndpointProbeResult(input: {
         lastProbeLatencyMs: input.latencyMs ?? null,
         lastProbeErrorType: input.ok ? null : (input.errorType ?? null),
         lastProbeErrorMessage: input.ok ? null : (input.errorMessage ?? null),
+        consecutiveProbeFailures: input.ok
+          ? 0
+          : sql`${providerEndpoints.consecutiveProbeFailures} + 1`,
         updatedAt: new Date(),
       })
       .where(and(eq(providerEndpoints.id, input.endpointId), isNull(providerEndpoints.deletedAt)))

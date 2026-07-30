@@ -581,20 +581,19 @@ export function UsageLogsTable({
                     </TableCell>
                     <TableCell className="text-right font-mono text-xs">
                       {(() => {
+                        const currentTiming = log.timingSemanticsVersion === 2;
+                        const displayTtfbMs = currentTiming ? log.ttfbMs : null;
+                        const displayTtftMs = currentTiming ? log.ttftMs : null;
                         const rate = calculateOutputRate(
                           log.outputTokens,
                           log.durationMs,
-                          log.firstByteMs
+                          displayTtftMs
                         );
-                        const hideRate = shouldHideOutputRate(
-                          rate,
-                          log.durationMs,
-                          log.firstByteMs
-                        );
+                        const hideRate = shouldHideOutputRate(rate, log.durationMs, displayTtftMs);
                         const secondLine = [
-                          log.tfftMs != null &&
-                            log.tfftMs > 0 &&
-                            `${t("logs.details.performance.tfft")} ${formatDuration(log.tfftMs)}`,
+                          displayTtfbMs != null &&
+                            displayTtfbMs > 0 &&
+                            `TTFB ${formatDuration(displayTtfbMs)}`,
                           rate !== null && !hideRate && `${rate.toFixed(0)} tok/s`,
                         ]
                           .filter(Boolean)
@@ -618,18 +617,20 @@ export function UsageLogsTable({
                                   {t("logs.details.performance.duration")}:{" "}
                                   {formatDuration(log.durationMs)}
                                 </div>
-                                {log.tfftMs != null && (
-                                  <div>
-                                    {t("logs.details.performance.tfft")}:{" "}
-                                    {formatDuration(log.tfftMs)}
-                                  </div>
-                                )}
-                                {log.firstByteMs != null && (
+                                {displayTtfbMs != null && (
                                   <div>
                                     {t("logs.details.performance.ttfb")}:{" "}
-                                    {formatDuration(log.firstByteMs)}
+                                    {formatDuration(displayTtfbMs)}
                                   </div>
                                 )}
+                                {displayTtftMs != null ? (
+                                  <div>
+                                    {t("logs.details.performance.ttft")}:{" "}
+                                    {formatDuration(displayTtftMs)}
+                                  </div>
+                                ) : !currentTiming ? (
+                                  <div>{t("logs.details.performance.timingUnavailable")}</div>
+                                ) : null}
                                 {rate !== null && !hideRate && (
                                   <div>
                                     {t("logs.details.performance.outputRate")}: {rate.toFixed(1)}{" "}
@@ -676,8 +677,9 @@ export function UsageLogsTable({
                         hedgeLosers={log.hedgeLosers}
                         context1mApplied={log.context1mApplied}
                         durationMs={log.durationMs}
-                        tfftMs={log.tfftMs}
-                        firstByteMs={log.firstByteMs}
+                        ttfbMs={log.ttfbMs}
+                        ttftMs={log.ttftMs}
+                        timingSemanticsVersion={log.timingSemanticsVersion}
                         externalOpen={dialogState.logId === log.id ? true : undefined}
                         onExternalOpenChange={(open) => {
                           if (!open) setDialogState({ logId: null, scrollToRedirect: false });

@@ -64,7 +64,8 @@ export function SummaryTab({
   routingTrace,
   context1mApplied,
   durationMs,
-  firstByteMs,
+  ttftMs,
+  timingSemanticsVersion,
   sessionId,
   requestSequence,
   userAgent,
@@ -80,12 +81,9 @@ export function SummaryTab({
 
   const isSuccess = isSuccessStatus(statusCode);
   const isInProgress = isInProgressStatus(statusCode);
-  const outputRate = calculateOutputRate(
-    outputTokens ?? null,
-    durationMs ?? null,
-    firstByteMs ?? null
-  );
-  const hideRate = shouldHideOutputRate(outputRate, durationMs ?? null, firstByteMs ?? null);
+  const currentTtftMs = timingSemanticsVersion === 2 ? (ttftMs ?? null) : null;
+  const outputRate = calculateOutputRate(outputTokens ?? null, durationMs ?? null, currentTtftMs);
+  const hideRate = shouldHideOutputRate(outputRate, durationMs ?? null, currentTtftMs);
   const totalTokens = (inputTokens ?? 0) + (outputTokens ?? 0);
   const hasRedirect = originalModel && currentModel && originalModel !== currentModel;
   const modelAudit = resolveModelAuditDisplay({

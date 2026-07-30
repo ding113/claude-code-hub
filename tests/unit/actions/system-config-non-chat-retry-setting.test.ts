@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 const getSystemSettingsMock = vi.fn();
 const loggerWarnMock = vi.fn();
 const invalidateSystemSettingsCacheMock = vi.fn();
+const primeSystemSettingsCacheMock = vi.fn();
 const updateSystemSettingsMock = vi.fn();
 const getSessionMock = vi.fn();
 
@@ -36,6 +37,7 @@ vi.mock("@/lib/config", async (importOriginal) => {
   return {
     ...actual,
     invalidateSystemSettingsCache: () => invalidateSystemSettingsCacheMock(),
+    primeSystemSettingsCache: (...args: unknown[]) => primeSystemSettingsCacheMock(...args),
   };
 });
 
@@ -173,7 +175,7 @@ describe("non-chat fallback system setting", () => {
     expect(cachedFallback.allowNonConversationEndpointProviderFallback).toBe(false);
   });
 
-  test("persists update and invalidates cache", async () => {
+  test("persists update and primes cache", async () => {
     updateSystemSettingsMock.mockResolvedValueOnce(
       createSettings({
         allowNonConversationEndpointProviderFallback: false,
@@ -191,7 +193,9 @@ describe("non-chat fallback system setting", () => {
         allowNonConversationEndpointProviderFallback: false,
       })
     );
-    expect(invalidateSystemSettingsCacheMock).toHaveBeenCalledTimes(1);
+    expect(primeSystemSettingsCacheMock).toHaveBeenCalledWith(
+      expect.objectContaining({ allowNonConversationEndpointProviderFallback: false })
+    );
     expect(result).toMatchObject({
       ok: true,
       data: {

@@ -232,9 +232,9 @@ function createSession(opts?: { sessionId?: string | null }): ProxySession {
     getCurrentModel: () => "test-model",
     getProviderChain: () => session.providerChain,
     getCachedPriceDataByBillingSource: async () => testPriceData,
-    recordTfft: () => 100,
-    tfftMs: null,
-    firstByteMs: null,
+    recordTtft: () => 100,
+    ttfbMs: null,
+    ttftMs: null,
     getRequestSequence: () => 1,
     addProviderToChain: function (
       this: ProxySession & { providerChain: Record<string, unknown>[] },

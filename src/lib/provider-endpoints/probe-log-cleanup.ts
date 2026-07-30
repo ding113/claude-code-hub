@@ -1,13 +1,8 @@
 import { logger } from "@/lib/logger";
-import {
-  acquireLeaderLock,
-  type LeaderLock,
-  releaseLeaderLock,
-  startLeaderLockKeepAlive,
-} from "@/lib/provider-endpoints/leader-lock";
+import { withAdvisoryLock } from "@/lib/migrate";
 import { deleteProviderEndpointProbeLogsBeforeDateBatch } from "@/repository";
 
-const LOCK_KEY = "locks:endpoint-probe-log-cleanup";
+const LOCK_KEY = "claude-code-hub:endpoint-probe-log-cleanup";
 
 function parseIntWithDefault(value: string | undefined, fallback: number): number {
   const n = value ? Number.parseInt(value, 10) : Number.NaN;
@@ -23,12 +18,10 @@ const CLEANUP_BATCH_SIZE = Math.max(
   parseIntWithDefault(process.env.ENDPOINT_PROBE_LOG_CLEANUP_BATCH_SIZE, 10_000)
 );
 const CLEANUP_INTERVAL_MS = 24 * 60 * 60 * 1000;
-const LOCK_TTL_MS = 5 * 60 * 1000;
 
 const cleanupState = globalThis as unknown as {
   __CCH_ENDPOINT_PROBE_LOG_CLEANUP_STARTED__?: boolean;
   __CCH_ENDPOINT_PROBE_LOG_CLEANUP_INTERVAL_ID__?: ReturnType<typeof setInterval>;
-  __CCH_ENDPOINT_PROBE_LOG_CLEANUP_LOCK__?: LeaderLock;
   __CCH_ENDPOINT_PROBE_LOG_CLEANUP_RUNNING__?: boolean;
   __CCH_ENDPOINT_PROBE_LOG_CLEANUP_CURRENT_PROMISE__?: Promise<void>;
   __CCH_ENDPOINT_PROBE_LOG_CLEANUP_STOP_REQUESTED__?: boolean;
@@ -42,64 +35,33 @@ async function runCleanupOnce(): Promise<void> {
 
   cleanupState.__CCH_ENDPOINT_PROBE_LOG_CLEANUP_RUNNING__ = true;
 
-  let lock: LeaderLock | null = null;
-  let leadershipLost = false;
-  let stopKeepAlive: (() => void) | undefined;
-
   try {
-    lock = await acquireLeaderLock(LOCK_KEY, LOCK_TTL_MS);
-    if (!lock) {
-      return;
-    }
+    const locked = await withAdvisoryLock(
+      LOCK_KEY,
+      async () => {
+        const now = Date.now();
+        const retentionMs = Math.max(0, RETENTION_DAYS) * 24 * 60 * 60 * 1000;
+        const beforeDate = new Date(now - retentionMs);
 
-    cleanupState.__CCH_ENDPOINT_PROBE_LOG_CLEANUP_LOCK__ = lock;
-
-    stopKeepAlive = startLeaderLockKeepAlive({
-      getLock: () => cleanupState.__CCH_ENDPOINT_PROBE_LOG_CLEANUP_LOCK__,
-      clearLock: () => {
-        cleanupState.__CCH_ENDPOINT_PROBE_LOG_CLEANUP_LOCK__ = undefined;
+        let totalDeleted = 0;
+        while (!cleanupState.__CCH_ENDPOINT_PROBE_LOG_CLEANUP_STOP_REQUESTED__) {
+          const deleted = await deleteProviderEndpointProbeLogsBeforeDateBatch({
+            beforeDate,
+            batchSize: CLEANUP_BATCH_SIZE,
+          });
+          if (deleted <= 0) break;
+          totalDeleted += deleted;
+          if (deleted < CLEANUP_BATCH_SIZE) break;
+        }
+        return totalDeleted;
       },
-      ttlMs: LOCK_TTL_MS,
-      logTag: "EndpointProbeLogCleanup",
-      onLost: () => {
-        leadershipLost = true;
-      },
-    }).stop;
+      { skipIfLocked: true }
+    );
 
-    const now = Date.now();
-    const retentionMs = Math.max(0, RETENTION_DAYS) * 24 * 60 * 60 * 1000;
-    const beforeDate = new Date(now - retentionMs);
-
-    let totalDeleted = 0;
-    while (true) {
-      if (leadershipLost || cleanupState.__CCH_ENDPOINT_PROBE_LOG_CLEANUP_STOP_REQUESTED__) {
-        return;
-      }
-
-      const deleted = await deleteProviderEndpointProbeLogsBeforeDateBatch({
-        beforeDate,
-        batchSize: CLEANUP_BATCH_SIZE,
-      });
-
-      if (cleanupState.__CCH_ENDPOINT_PROBE_LOG_CLEANUP_STOP_REQUESTED__) {
-        return;
-      }
-
-      if (deleted <= 0) {
-        break;
-      }
-
-      totalDeleted += deleted;
-
-      if (deleted < CLEANUP_BATCH_SIZE) {
-        break;
-      }
-    }
-
-    if (totalDeleted > 0) {
+    if (locked.ran && (locked.result ?? 0) > 0) {
       logger.info("[EndpointProbeLogCleanup] Completed", {
         retentionDays: RETENTION_DAYS,
-        totalDeleted,
+        totalDeleted: locked.result,
       });
     }
   } catch (error) {
@@ -107,13 +69,7 @@ async function runCleanupOnce(): Promise<void> {
       error: error instanceof Error ? error.message : String(error),
     });
   } finally {
-    stopKeepAlive?.();
     cleanupState.__CCH_ENDPOINT_PROBE_LOG_CLEANUP_RUNNING__ = false;
-
-    if (lock) {
-      cleanupState.__CCH_ENDPOINT_PROBE_LOG_CLEANUP_LOCK__ = undefined;
-      await releaseLeaderLock(lock);
-    }
   }
 }
 
@@ -157,10 +113,4 @@ export async function stopEndpointProbeLogCleanup(): Promise<void> {
   cleanupState.__CCH_ENDPOINT_PROBE_LOG_CLEANUP_STARTED__ = false;
 
   await cleanupState.__CCH_ENDPOINT_PROBE_LOG_CLEANUP_CURRENT_PROMISE__;
-
-  const lock = cleanupState.__CCH_ENDPOINT_PROBE_LOG_CLEANUP_LOCK__;
-  cleanupState.__CCH_ENDPOINT_PROBE_LOG_CLEANUP_LOCK__ = undefined;
-  if (lock) {
-    await releaseLeaderLock(lock);
-  }
 }

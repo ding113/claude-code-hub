@@ -1122,6 +1122,9 @@ export const UpdateSystemSettingsSchema = z
     replayEnabled: z.boolean().nullable().optional(),
     // F3b 最长前缀匹配缓存模拟（可选；null = 跟随环境变量）
     cacheEffectivenessEnabled: z.boolean().nullable().optional(),
+    sessionSnapshotStore: z
+      .enum(["disabled", "filesystem", "redis"], { message: "不支持的 Session 快照后端" })
+      .optional(),
     // Codex Session ID 补全（可选）
     enableCodexSessionIdCompletion: z.boolean().optional(),
     // Claude metadata.user_id 注入（可选）

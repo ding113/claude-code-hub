@@ -101,7 +101,9 @@ const LEDGER_ROW = {
   context1mApplied: true,
   swapCacheTtlApplied: false,
   durationMs: 1_200,
-  tfftMs: 200,
+  ttfbMs: 100,
+  ttftMs: 200,
+  timingSemanticsVersion: 2,
   sessionId: "ledger-session-readback",
   createdAt: CREATED_AT,
 };

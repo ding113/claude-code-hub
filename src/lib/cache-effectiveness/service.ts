@@ -20,6 +20,7 @@ import { logger } from "@/lib/logger";
  */
 
 const LOCK_KEY = 20260722;
+const TASK_KEY = "cache-effectiveness";
 /**
  * 终态迟到缓冲：窗口终点留 15 分钟余量，避免统计到未完成结算的行。
  * message_request.updated_at 无 $onUpdate 自动更新语义，只能按 created_at 过滤；
@@ -59,15 +60,22 @@ export async function aggregateCacheEffectiveness(
       };
     }
 
-    const windowEnd = new Date(Date.now() - WINDOW_SAFETY_LAG_MS);
-    const lastWindowResult = await tx.execute(sql`
-      SELECT MAX(window_end) AS last_end FROM provider_cache_effectiveness
+    const now = Date.now();
+    const windowEnd = new Date(now - WINDOW_SAFETY_LAG_MS);
+    const initialCursor = new Date(now - INITIAL_LOOKBACK_MS);
+    await tx.execute(sql`
+      INSERT INTO background_task_cursor (task_key, cursor_at, updated_at)
+      VALUES (${TASK_KEY}, ${initialCursor}, NOW())
+      ON CONFLICT (task_key) DO NOTHING
     `);
-    const lastEndRaw = (lastWindowResult as unknown as Array<{ last_end: string | Date | null }>)[0]
-      ?.last_end;
-    const windowStart = lastEndRaw
-      ? new Date(lastEndRaw)
-      : new Date(Date.now() - INITIAL_LOOKBACK_MS);
+    const cursorResult = await tx.execute(sql`
+      SELECT cursor_at
+      FROM background_task_cursor
+      WHERE task_key = ${TASK_KEY}
+      FOR UPDATE
+    `);
+    const cursorAt = (cursorResult as unknown as Array<{ cursor_at: string | Date }>)[0]?.cursor_at;
+    const windowStart = cursorAt ? new Date(cursorAt) : initialCursor;
 
     if (windowStart >= windowEnd) {
       return {
@@ -139,10 +147,24 @@ export async function aggregateCacheEffectiveness(
         ((s.observable_bp * s.sample_factor_bp) / 10000)::int,
         ((s.raw_bp * ((s.observable_bp * s.sample_factor_bp) / 10000)) / 10000)::int
       FROM scored s
+      ON CONFLICT (provider_id, model, cache_ttl_bucket, window_start, window_end)
+      DO UPDATE SET
+        sample_count = EXCLUDED.sample_count,
+        eligible_count = EXCLUDED.eligible_count,
+        theoretical_cache_tokens = EXCLUDED.theoretical_cache_tokens,
+        observed_cache_read_tokens = EXCLUDED.observed_cache_read_tokens,
+        raw_effectiveness_bp = EXCLUDED.raw_effectiveness_bp,
+        confidence_bp = EXCLUDED.confidence_bp,
+        effectiveness_bp = EXCLUDED.effectiveness_bp
       RETURNING id
     `);
 
     const groupsWritten = Array.isArray(inserted) ? inserted.length : 0;
+    await tx.execute(sql`
+      UPDATE background_task_cursor
+      SET cursor_at = ${windowEnd}, updated_at = NOW()
+      WHERE task_key = ${TASK_KEY}
+    `);
     if (groupsWritten > 0) {
       logger.info("[CacheEffectiveness] window aggregated", {
         windowStart: windowStart.toISOString(),

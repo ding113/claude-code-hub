@@ -142,13 +142,11 @@ export class ProxySession {
   provider: Provider | null;
   messageContext: MessageContext | null;
 
-  // Time To First Token (ms). Streaming: first chunk handed to the response handler,
-  // which under an enforcing stream gate is the first *content* frame. Non-stream: equals durationMs.
-  tfftMs: number | null = null;
+  // End-to-end time from gateway ingress to the final winner's HTTP response headers.
+  ttfbMs: number | null = null;
 
-  // Time To First Byte (ms). First body byte from the upstream, reported by the stream gate.
-  // Equals tfftMs whenever no gate ran (gate off/shadow, raw passthrough, non-SSE).
-  firstByteMs: number | null = null;
+  // End-to-end time from gateway ingress to the first protocol-valid content frame.
+  ttftMs: number | null = null;
 
   // Timestamp when guard pipeline finished and forwarding started (epoch ms).
   forwardStartTime: number | null = null;
@@ -556,44 +554,27 @@ export class ProxySession {
     }
   }
 
-  /**
-   * Record Time To First Token (TFFT) for streaming responses.
-   *
-   * Definition: first body chunk handed to the response handler. With the stream content
-   * gate enforcing, that chunk is the first content frame, so this is TFFT, not TTFB.
-   * Non-stream responses should persist TFFT as `durationMs` at finalize time.
-   *
-   * Doubles as the TTFB fallback: paths where no gate ran never call `recordFirstByte`,
-   * and there TTFB and TFFT are the same moment.
-   */
-  recordTfft(): number {
-    if (this.tfftMs !== null) {
-      return this.tfftMs;
+  /** Record the final winner's end-to-end HTTP response-header latency. */
+  recordTtfb(elapsedMs?: number): number {
+    if (this.ttfbMs !== null) {
+      return this.ttfbMs;
     }
-
-    const value = Math.max(0, Date.now() - this.startTime);
-    this.tfftMs = value;
-    if (this.firstByteMs === null) {
-      this.firstByteMs = value;
-    }
+    const value = Math.max(0, elapsedMs ?? Date.now() - this.startTime);
+    this.ttfbMs = value;
     this.persistLiveChain();
     return value;
   }
 
-  /**
-   * Record Time To First Byte (TTFB) from an upstream first-byte timestamp.
-   *
-   * Callers must only commit the timestamp of the attempt that actually gets served —
-   * committing a failed attempt's first byte would understate TTFB and inflate the
-   * generation window that TPS divides by.
-   */
-  recordFirstByte(atEpochMs: number): void {
-    if (this.firstByteMs !== null) {
-      return;
+  /** Record the first protocol-valid content latency for the final winner. */
+  recordTtft(elapsedMs?: number): number {
+    if (this.ttftMs !== null) {
+      return this.ttftMs;
     }
 
-    this.firstByteMs = Math.max(0, atEpochMs - this.startTime);
+    const value = Math.max(0, elapsedMs ?? Date.now() - this.startTime);
+    this.ttftMs = value;
     this.persistLiveChain();
+    return value;
   }
 
   /**
@@ -980,7 +961,8 @@ export class ProxySession {
         outcome: resolvedOutcome,
         statusCode,
         durationMs: Math.max(0, now - this.routingTrace.startedAt),
-        ttfbMs: this.tfftMs,
+        ttfbMs: this.ttfbMs,
+        ttftMs: this.ttftMs,
       };
     }
     const terminalEvent = this.routingTrace.events.find(
@@ -1025,6 +1007,7 @@ export class ProxySession {
       winnerRound: summary.winnerRound,
       elapsedMs: summary.durationMs,
       ttfbMs: summary.ttfbMs,
+      ttftMs: summary.ttftMs ?? null,
       attemptsPerRequest: summary.attemptsPerRequest,
       maxActiveAttempts: summary.maxActiveAttempts,
       rounds: summary.rounds,

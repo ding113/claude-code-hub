@@ -15,18 +15,32 @@ describe("getSuccessRateCellDisplay", () => {
     });
   });
 
-  it("shows unavailable label with disclosure when basis diverges", () => {
+  it("keeps a numeric redirected-basis success rate visible with disclosure", () => {
     expect(
       getSuccessRateCellDisplay(
         {
-          successRate: null,
+          successRate: 0.875,
           basisDisclosureRequired: true,
         },
         t as never
       )
     ).toEqual({
-      label: "N/A",
+      label: "87.5%",
       title: "basis disclosure",
+    });
+  });
+
+  it("shows unavailable only when there is no countable outcome", () => {
+    expect(
+      getSuccessRateCellDisplay(
+        {
+          successRate: null,
+        },
+        t as never
+      )
+    ).toEqual({
+      label: "N/A",
+      title: undefined,
     });
   });
 });

@@ -9,4 +9,5 @@ export {
   getCachedSystemSettingsOnlyCache,
   invalidateSystemSettingsCache,
   isHttp2Enabled,
+  primeSystemSettingsCache,
 } from "./system-settings-cache";

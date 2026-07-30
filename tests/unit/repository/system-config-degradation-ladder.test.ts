@@ -7,6 +7,7 @@ import type { UpdateSystemSettingsInput } from "@/types/system-config";
 
 // 近代新增列（最新在前），降级链按引入顺序逐层累计剥离。
 const RECENT_COLUMNS = [
+  "sessionSnapshotStore",
   "cacheEffectivenessEnabled",
   "replayEnabled",
   "affinityIgnoreClientSessionId",
@@ -29,6 +30,7 @@ const RECENT_COLUMNS = [
 
 // 全量字段集（46 列）。
 const FULL_COLUMNS = [
+  "sessionSnapshotStore",
   "cacheEffectivenessEnabled",
   "replayEnabled",
   "affinityIgnoreClientSessionId",
@@ -189,7 +191,7 @@ describe("SystemSettings：列降级阶梯的尝试序列锁定", () => {
     const selectMock = vi.fn((selection: Record<string, unknown>) => {
       selections.push(sortedKeys(selection));
       callIndex += 1;
-      if (callIndex < 20) {
+      if (callIndex < 21) {
         return createRejectingSelectQuery({ code: "42703" });
       }
       return createResolvingSelectQuery([
@@ -222,14 +224,14 @@ describe("SystemSettings：列降级阶梯的尝试序列锁定", () => {
 
     const result = await getSystemSettings();
 
-    expect(selectMock).toHaveBeenCalledTimes(20);
-    // 第 19 次（近代链末层）不含这些新列；第 20 次（passThrough 世代）重新包含旧列。
-    expect(selections[18]).not.toContain("enableThinkingEffortConflictRectifier");
-    expect(selections[18]).not.toContain("allowNonConversationEndpointProviderFallback");
-    expect(selections[18]).toContain("passThroughUpstreamErrorMessage");
-    expect(selections[19]).toContain("enableThinkingEffortConflictRectifier");
-    expect(selections[19]).toContain("allowNonConversationEndpointProviderFallback");
-    expect(selections[19]).not.toContain("passThroughUpstreamErrorMessage");
+    expect(selectMock).toHaveBeenCalledTimes(21);
+    // 第 20 次（近代链末层）不含这些新列；第 21 次（passThrough 世代）重新包含旧列。
+    expect(selections[19]).not.toContain("enableThinkingEffortConflictRectifier");
+    expect(selections[19]).not.toContain("allowNonConversationEndpointProviderFallback");
+    expect(selections[19]).toContain("passThroughUpstreamErrorMessage");
+    expect(selections[20]).toContain("enableThinkingEffortConflictRectifier");
+    expect(selections[20]).toContain("allowNonConversationEndpointProviderFallback");
+    expect(selections[20]).not.toContain("passThroughUpstreamErrorMessage");
 
     // 世代字段集选出的真实值要透传，缺失列由 transformer 落默认值。
     expect(result.siteTitle).toBe("Era Row");
@@ -309,7 +311,7 @@ describe("SystemSettings：列降级阶梯的尝试序列锁定", () => {
       "system_settings 表列缺失，请执行数据库迁移以升级数据库结构。"
     );
 
-    expect(updateMock).toHaveBeenCalledTimes(22);
+    expect(updateMock).toHaveBeenCalledTimes(23);
 
     const expectedReturningSequence = [
       [...FULL_COLUMNS],

@@ -44,8 +44,9 @@ type PublicStatusFinalDetails = {
   durationMs?: number;
   statusCode?: number;
   outputTokens?: number;
-  tfftMs?: number | null;
-  firstByteMs?: number | null;
+  ttfbMs?: number | null;
+  ttftMs?: number | null;
+  timingSemanticsVersion?: number | null;
   providerChain?: CreateMessageRequestData["provider_chain"];
   errorMessage?: string;
   model?: string;
@@ -191,8 +192,9 @@ function queuePublicStatusRollupForFinalDetails(
           model: details.model ?? seed.model,
           originalModel: seed.originalModel,
           durationMs: seed.durationMs,
-          tfftMs: details.tfftMs,
-          firstByteMs: details.firstByteMs,
+          ttfbMs: details.ttfbMs,
+          ttftMs: details.ttftMs,
+          timingSemanticsVersion: details.timingSemanticsVersion,
           outputTokens: details.outputTokens,
           providerChain: details.providerChain,
         },
@@ -495,8 +497,9 @@ export type MessageRequestDetailsUpdate = {
   statusCode?: number;
   inputTokens?: number;
   outputTokens?: number;
-  tfftMs?: number | null;
-  firstByteMs?: number | null;
+  ttfbMs?: number | null;
+  ttftMs?: number | null;
+  timingSemanticsVersion?: number | null;
   cacheCreationInputTokens?: number;
   cacheReadInputTokens?: number;
   cacheCreation5mInputTokens?: number;
@@ -556,11 +559,14 @@ export async function updateMessageRequestDetails(
   if (details.outputTokens !== undefined) {
     updateData.outputTokens = details.outputTokens;
   }
-  if (details.tfftMs !== undefined) {
-    updateData.tfftMs = details.tfftMs;
+  if (details.ttfbMs !== undefined) {
+    updateData.ttfbMs = details.ttfbMs;
   }
-  if (details.firstByteMs !== undefined) {
-    updateData.firstByteMs = details.firstByteMs;
+  if (details.ttftMs !== undefined) {
+    updateData.ttftMs = details.ttftMs;
+  }
+  if (details.timingSemanticsVersion !== undefined) {
+    updateData.timingSemanticsVersion = details.timingSemanticsVersion;
   }
   if (details.cacheCreationInputTokens !== undefined) {
     updateData.cacheCreationInputTokens = details.cacheCreationInputTokens;
@@ -841,8 +847,9 @@ export async function findMessageRequestById(id: number): Promise<MessageRequest
       model: messageRequest.model,
       originalModel: messageRequest.originalModel,
       durationMs: messageRequest.durationMs,
-      tfftMs: messageRequest.tfftMs,
-      firstByteMs: messageRequest.firstByteMs,
+      ttfbMs: messageRequest.ttfbMs,
+      ttftMs: messageRequest.ttftMs,
+      timingSemanticsVersion: messageRequest.timingSemanticsVersion,
       costUsd: messageRequest.costUsd,
       costMultiplier: messageRequest.costMultiplier,
       sessionId: messageRequest.sessionId,
@@ -904,8 +911,9 @@ export async function findMessageRequestById(id: number): Promise<MessageRequest
       context1mApplied: usageLedger.context1mApplied,
       swapCacheTtlApplied: usageLedger.swapCacheTtlApplied,
       durationMs: usageLedger.durationMs,
-      tfftMs: usageLedger.tfftMs,
-      firstByteMs: usageLedger.firstByteMs,
+      ttfbMs: usageLedger.ttfbMs,
+      ttftMs: usageLedger.ttftMs,
+      timingSemanticsVersion: usageLedger.timingSemanticsVersion,
       sessionId: usageLedger.sessionId,
       createdAt: usageLedger.createdAt,
     })
@@ -925,8 +933,9 @@ export async function findMessageRequestById(id: number): Promise<MessageRequest
     model: ledgerRow.model,
     originalModel: ledgerRow.originalModel,
     durationMs: ledgerRow.durationMs,
-    tfftMs: ledgerRow.tfftMs,
-    firstByteMs: ledgerRow.firstByteMs,
+    ttfbMs: ledgerRow.ttfbMs,
+    ttftMs: ledgerRow.ttftMs,
+    timingSemanticsVersion: ledgerRow.timingSemanticsVersion,
     costUsd: ledgerRow.costUsd,
     costMultiplier: ledgerRow.costMultiplier,
     sessionId: ledgerRow.sessionId,
@@ -1029,8 +1038,9 @@ export async function findMessageRequestBySessionId(
       context1mApplied: usageLedger.context1mApplied,
       swapCacheTtlApplied: usageLedger.swapCacheTtlApplied,
       durationMs: usageLedger.durationMs,
-      tfftMs: usageLedger.tfftMs,
-      firstByteMs: usageLedger.firstByteMs,
+      ttfbMs: usageLedger.ttfbMs,
+      ttftMs: usageLedger.ttftMs,
+      timingSemanticsVersion: usageLedger.timingSemanticsVersion,
       sessionId: usageLedger.sessionId,
       createdAt: usageLedger.createdAt,
     })
@@ -1051,8 +1061,9 @@ export async function findMessageRequestBySessionId(
     model: ledgerRow.model,
     originalModel: ledgerRow.originalModel,
     durationMs: ledgerRow.durationMs,
-    tfftMs: ledgerRow.tfftMs,
-    firstByteMs: ledgerRow.firstByteMs,
+    ttfbMs: ledgerRow.ttfbMs,
+    ttftMs: ledgerRow.ttftMs,
+    timingSemanticsVersion: ledgerRow.timingSemanticsVersion,
     costUsd: ledgerRow.costUsd,
     costMultiplier: ledgerRow.costMultiplier,
     sessionId: ledgerRow.sessionId,
@@ -1657,8 +1668,9 @@ export async function findUsageLogs(params: {
       context1mApplied: usageLedger.context1mApplied,
       swapCacheTtlApplied: usageLedger.swapCacheTtlApplied,
       durationMs: usageLedger.durationMs,
-      tfftMs: usageLedger.tfftMs,
-      firstByteMs: usageLedger.firstByteMs,
+      ttfbMs: usageLedger.ttfbMs,
+      ttftMs: usageLedger.ttftMs,
+      timingSemanticsVersion: usageLedger.timingSemanticsVersion,
       sessionId: usageLedger.sessionId,
       createdAt: usageLedger.createdAt,
     })
@@ -1677,8 +1689,9 @@ export async function findUsageLogs(params: {
       model: row.model,
       originalModel: row.originalModel,
       durationMs: row.durationMs,
-      tfftMs: row.tfftMs,
-      firstByteMs: row.firstByteMs,
+      ttfbMs: row.ttfbMs,
+      ttftMs: row.ttftMs,
+      timingSemanticsVersion: row.timingSemanticsVersion,
       costUsd: row.costUsd,
       costMultiplier: row.costMultiplier,
       sessionId: row.sessionId,

@@ -68,6 +68,7 @@ const baseSettings = {
   // null = 跟随环境变量：本组用例的核心前置
   replayEnabled: null,
   cacheEffectivenessEnabled: null,
+  sessionSnapshotStore: "filesystem",
 } satisfies Pick<
   SystemSettings,
   | "siteTitle"
@@ -101,6 +102,7 @@ const baseSettings = {
   | "ipExtractionConfig"
   | "replayEnabled"
   | "cacheEffectivenessEnabled"
+  | "sessionSnapshotStore"
 >;
 
 function loadMessages(locale: string) {
@@ -163,6 +165,7 @@ describe("SystemSettingsForm replay/cache-effectiveness null 三态", () => {
       expect.objectContaining({
         replayEnabled: null,
         cacheEffectivenessEnabled: null,
+        sessionSnapshotStore: "filesystem",
       })
     );
 

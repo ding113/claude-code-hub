@@ -234,6 +234,11 @@ export const SystemSettingsSchema = z
       .describe(
         "Longest-prefix cache-effectiveness simulation override (observability only). Null follows the ENABLE_CACHE_EFFECTIVENESS environment variable."
       ),
+    sessionSnapshotStore: z
+      .enum(["disabled", "filesystem", "redis"])
+      .describe(
+        "Session detail snapshot backend. Filesystem is the default bounded asynchronous store; Redis is retained for compatibility."
+      ),
     createdAt: IsoDateTimeStringSchema.describe("Creation time."),
     updatedAt: IsoDateTimeStringSchema.describe("Last update time."),
   })

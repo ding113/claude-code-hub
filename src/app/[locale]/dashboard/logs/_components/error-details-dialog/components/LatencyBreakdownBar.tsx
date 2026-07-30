@@ -4,10 +4,10 @@ import { useTranslations } from "next-intl";
 import { cn } from "@/lib/utils";
 
 interface LatencyBreakdownBarProps {
-  /** Time to first byte in milliseconds (null on rows persisted before it was recorded) */
-  firstByteMs: number | null;
-  /** Time to first token in milliseconds */
-  tfftMs: number | null;
+  /** Time to first byte in milliseconds */
+  ttfbMs: number | null;
+  /** Time to first protocol-valid content in milliseconds */
+  ttftMs: number | null;
   /** Total duration in milliseconds */
   durationMs: number | null;
   /** Optional className */
@@ -24,8 +24,8 @@ function formatMs(ms: number): string {
 }
 
 export function LatencyBreakdownBar({
-  firstByteMs,
-  tfftMs,
+  ttfbMs,
+  ttftMs,
   durationMs,
   className,
   showLabels = true,
@@ -34,89 +34,82 @@ export function LatencyBreakdownBar({
 
   // Handle null/invalid values
   if (
-    tfftMs === null ||
+    ttfbMs === null ||
+    ttftMs === null ||
     durationMs === null ||
-    tfftMs < 0 ||
+    ttfbMs < 0 ||
+    ttftMs < ttfbMs ||
     durationMs <= 0 ||
-    tfftMs > durationMs
+    ttftMs > durationMs
   ) {
     return null;
   }
 
-  // 历史行没有真 TTFB：首段退化为整个 TFFT，中间段消失
-  const ttfbMs =
-    firstByteMs !== null && firstByteMs >= 0 && firstByteMs <= tfftMs ? firstByteMs : tfftMs;
-  const tokenWaitMs = tfftMs - ttfbMs;
-  const generationMs = durationMs - tfftMs;
-
-  const percent = (ms: number) => (ms / durationMs) * 100;
-  // Minimum width for visibility (3%)
-  const minWidth = 3;
-  const width = (ms: number) => Math.max(percent(ms), ms > 0 ? minWidth : 0);
-
-  const segments = [
-    {
-      key: "ttfb",
-      ms: ttfbMs,
-      label: t("segmentTtfb"),
-      barClass: "bg-blue-500",
-      dotClass: "bg-blue-500",
-    },
-    {
-      key: "tokenWait",
-      ms: tokenWaitMs,
-      label: t("segmentTfft"),
-      barClass: "bg-violet-500",
-      dotClass: "bg-violet-500",
-    },
-    {
-      key: "generation",
-      ms: generationMs,
-      label: t("generationTime"),
-      barClass: "bg-emerald-500",
-      dotClass: "bg-emerald-500",
-    },
-  ];
+  const firstByteToFirstTokenMs = ttftMs - ttfbMs;
+  const generationMs = durationMs - ttftMs;
+  const ttfbPercent = (ttfbMs / durationMs) * 100;
+  const firstByteToFirstTokenPercent = (firstByteToFirstTokenMs / durationMs) * 100;
+  const generationPercent = (generationMs / durationMs) * 100;
 
   return (
     <div className={cn("space-y-2", className)}>
       {/* Bar container */}
       <div className="flex h-6 w-full overflow-hidden rounded-lg bg-muted/50">
-        {segments.map((segment) =>
-          segment.ms > 0 ? (
-            <div
-              key={segment.key}
-              className={cn(
-                "flex items-center justify-center text-white text-[10px] font-medium transition-all duration-300",
-                segment.barClass
-              )}
-              style={{ width: `${width(segment.ms)}%` }}
-              title={`${segment.label}: ${formatMs(segment.ms)} (${percent(segment.ms).toFixed(1)}%)`}
-            >
-              {percent(segment.ms) >= 15 && <span>{segment.label}</span>}
-            </div>
-          ) : null
+        {/* TTFB segment */}
+        {ttfbMs > 0 && (
+          <div
+            className="flex items-center justify-center bg-blue-500 text-white text-[10px] font-medium transition-all duration-300"
+            style={{ flexGrow: ttfbMs, minWidth: "3%" }}
+            title={`${t("ttfb")}: ${formatMs(ttfbMs)} (${ttfbPercent.toFixed(1)}%)`}
+          >
+            {ttfbPercent >= 15 && <span>TTFB</span>}
+          </div>
+        )}
+        {firstByteToFirstTokenMs > 0 && (
+          <div
+            className="flex items-center justify-center bg-amber-500 text-[10px] font-medium text-white transition-all duration-300"
+            style={{ flexGrow: firstByteToFirstTokenMs, minWidth: "3%" }}
+            title={`${t("firstByteToFirstToken")}: ${formatMs(firstByteToFirstTokenMs)} (${firstByteToFirstTokenPercent.toFixed(1)}%)`}
+          >
+            {firstByteToFirstTokenPercent >= 15 && <span>{t("ttft")}</span>}
+          </div>
+        )}
+        {/* Generation segment */}
+        {generationMs > 0 && (
+          <div
+            className="flex items-center justify-center bg-emerald-500 text-white text-[10px] font-medium transition-all duration-300"
+            style={{ flexGrow: generationMs, minWidth: "3%" }}
+            title={`${t("generationAfterFirstToken")}: ${formatMs(generationMs)} (${generationPercent.toFixed(1)}%)`}
+          >
+            {generationPercent >= 15 && <span>{t("generationAfterFirstToken")}</span>}
+          </div>
         )}
       </div>
 
       {/* Labels */}
       {showLabels && (
-        <div className="flex flex-wrap justify-between gap-x-3 gap-y-1 text-xs">
-          {segments.map((segment) =>
-            segment.ms > 0 ? (
-              <div key={segment.key} className="flex items-center gap-1.5">
-                <div className={cn("h-2.5 w-2.5 rounded-sm", segment.dotClass)} />
-                <span className="text-muted-foreground">{segment.label}:</span>
-                <span className="font-mono font-medium">{formatMs(segment.ms)}</span>
-              </div>
-            ) : null
-          )}
+        <div className="grid gap-2 text-xs sm:grid-cols-3">
+          <div className="flex items-center gap-1.5">
+            <div className="h-2.5 w-2.5 rounded-sm bg-blue-500" />
+            <span className="text-muted-foreground">{t("ttfb")}:</span>
+            <span className="font-mono font-medium">{formatMs(ttfbMs)}</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <div className="h-2.5 w-2.5 rounded-sm bg-amber-500" />
+            <span className="text-muted-foreground">{t("firstByteToFirstToken")}:</span>
+            <span className="font-mono font-medium">{formatMs(firstByteToFirstTokenMs)}</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <div className="h-2.5 w-2.5 rounded-sm bg-emerald-500" />
+            <span className="text-muted-foreground">{t("generationAfterFirstToken")}:</span>
+            <span className="font-mono font-medium">{formatMs(generationMs)}</span>
+          </div>
         </div>
       )}
 
       {/* Total */}
       <div className="text-xs text-muted-foreground text-center">
-        {t("segmentTotal")}: <span className="font-mono font-medium">{formatMs(durationMs)}</span>
+        {t("totalDuration")}: <span className="font-mono font-medium">{formatMs(durationMs)}</span>
       </div>
     </div>
   );

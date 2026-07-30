@@ -42,8 +42,9 @@ describe("public-status rollup store", () => {
         createdAt: "2026-04-21T10:02:00.000Z",
         originalModel: "gpt-4.1",
         durationMs: 1200,
-        tfftMs: 200,
-        firstByteMs: 200,
+        ttfbMs: 200,
+        ttftMs: 200,
+        timingSemanticsVersion: 2,
         outputTokens: 50,
         providerChain: [
           {
@@ -63,6 +64,8 @@ describe("public-status rollup store", () => {
         { groupId: "42", modelKey: "gpt-4.1", metric: "success", value: 1 },
         { groupId: "42", modelKey: "gpt-4.1", metric: "ttfb_sum", value: 200 },
         { groupId: "42", modelKey: "gpt-4.1", metric: "ttfb_count", value: 1 },
+        { groupId: "42", modelKey: "gpt-4.1", metric: "ttft_sum", value: 200 },
+        { groupId: "42", modelKey: "gpt-4.1", metric: "ttft_count", value: 1 },
         { groupId: "42", modelKey: "gpt-4.1", metric: "tps_sum", value: 50 },
         { groupId: "42", modelKey: "gpt-4.1", metric: "tps_count", value: 1 },
       ])
@@ -72,6 +75,34 @@ describe("public-status rollup store", () => {
       expect(increment.groupId).toBe("42");
       expect(JSON.stringify(increment)).not.toContain("private.example.com");
     }
+  });
+
+  it("keeps availability but excludes legacy timing values from latency rollups", () => {
+    const increments = buildPublicStatusRollupIncrements({
+      groups,
+      event: {
+        createdAt: "2026-04-21T10:02:00.000Z",
+        originalModel: "gpt-4.1",
+        durationMs: 1200,
+        ttfbMs: 900,
+        ttftMs: 1000,
+        timingSemanticsVersion: 1,
+        outputTokens: 50,
+        providerChain: [
+          {
+            id: 7,
+            name: "legacy-provider",
+            groupTag: "openai",
+            reason: "request_success",
+            statusCode: 200,
+          },
+        ],
+      },
+    });
+
+    expect(increments).toEqual([
+      { groupId: "42", modelKey: "gpt-4.1", metric: "success", value: 1 },
+    ]);
   });
 
   it("excludes local/client failures from rollup counts", () => {
@@ -150,8 +181,9 @@ describe("public-status rollup store", () => {
         createdAt: "2026-04-21T10:02:00.000Z",
         originalModel: "gpt-4.1",
         durationMs: 1200,
-        tfftMs: 200,
-        firstByteMs: 200,
+        ttfbMs: 200,
+        ttftMs: 200,
+        timingSemanticsVersion: 2,
         outputTokens: 50,
         providerChain: [
           {
@@ -178,6 +210,8 @@ describe("public-status rollup store", () => {
         { groupId: "43", modelKey: "gpt-4.1", metric: "success", value: 1 },
         { groupId: "43", modelKey: "gpt-4.1", metric: "ttfb_sum", value: 200 },
         { groupId: "43", modelKey: "gpt-4.1", metric: "ttfb_count", value: 1 },
+        { groupId: "43", modelKey: "gpt-4.1", metric: "ttft_sum", value: 200 },
+        { groupId: "43", modelKey: "gpt-4.1", metric: "ttft_count", value: 1 },
         { groupId: "43", modelKey: "gpt-4.1", metric: "tps_sum", value: 50 },
         { groupId: "43", modelKey: "gpt-4.1", metric: "tps_count", value: 1 },
       ])
@@ -186,6 +220,8 @@ describe("public-status rollup store", () => {
       expect.arrayContaining([
         expect.objectContaining({ groupId: "42", metric: "ttfb_sum" }),
         expect.objectContaining({ groupId: "42", metric: "ttfb_count" }),
+        expect.objectContaining({ groupId: "42", metric: "ttft_sum" }),
+        expect.objectContaining({ groupId: "42", metric: "ttft_count" }),
         expect.objectContaining({ groupId: "42", metric: "tps_sum" }),
         expect.objectContaining({ groupId: "42", metric: "tps_count" }),
       ])
@@ -201,6 +237,8 @@ describe("public-status rollup store", () => {
       set: vi.fn(),
       expire: vi.fn(),
       exec: vi.fn(async () => [
+        [null, "1"],
+        [null, "1"],
         [null, "1"],
         [null, "1"],
         [null, "1"],
@@ -227,8 +265,9 @@ describe("public-status rollup store", () => {
         createdAt: "2026-04-21T10:02:00.000Z",
         originalModel: "gpt-4.1",
         durationMs: 1200,
-        tfftMs: 200,
-        firstByteMs: 200,
+        ttfbMs: 200,
+        ttftMs: 200,
+        timingSemanticsVersion: 2,
         outputTokens: 50,
         providerChain: [
           {
@@ -250,6 +289,8 @@ describe("public-status rollup store", () => {
     });
     expect(redis.hincrbyfloat).not.toHaveBeenCalled();
     expect(pipeline.hincrbyfloat.mock.calls.map(([key]) => key)).toEqual([
+      result.key,
+      result.key,
       result.key,
       result.key,
       result.key,
@@ -293,6 +334,8 @@ describe("public-status rollup store", () => {
         [null, "1"],
         [null, "1"],
         [null, "1"],
+        [null, "1"],
+        [null, "1"],
         [null, "OK"],
         [null, 1],
         [null, 1],
@@ -312,8 +355,9 @@ describe("public-status rollup store", () => {
           createdAt: "2026-04-21T10:02:00.000Z",
           originalModel: "gpt-4.1",
           durationMs: 1200,
-          tfftMs: 200,
-          firstByteMs: 200,
+          ttfbMs: 200,
+          ttftMs: 200,
+          timingSemanticsVersion: 2,
           outputTokens: 50,
           providerChain: [
             {
@@ -350,8 +394,9 @@ describe("public-status rollup store", () => {
           createdAt: "2026-04-21T10:02:00.000Z",
           originalModel: "gpt-4.1",
           durationMs: 1200,
-          tfftMs: 200,
-          firstByteMs: 200,
+          ttfbMs: 200,
+          ttftMs: 200,
+          timingSemanticsVersion: 2,
           outputTokens: 50,
           providerChain: [
             {
@@ -538,5 +583,14 @@ describe("public-status rollup store", () => {
       modelKey: "vendor/model|v1",
       metric: "failure",
     });
+    expect(
+      parsePublicStatusRollupField(
+        buildPublicStatusRollupField({
+          groupId: 42,
+          modelKey: "gpt-4.1",
+          metric: "ttft_sum",
+        })
+      )
+    ).toEqual({ groupId: "42", modelKey: "gpt-4.1", metric: "ttft_sum" });
   });
 });

@@ -94,10 +94,22 @@ const TIMEOUT_OVERRIDE_INTERVAL_MS = parsePositiveIntWithDefault(
   10_000,
   "ENDPOINT_PROBE_TIMEOUT_RETRY_INTERVAL_MS"
 );
+const FAILURE_BACKOFF_MAX_MS = parsePositiveIntWithDefault(
+  process.env.ENDPOINT_PROBE_FAILURE_BACKOFF_MAX_MS,
+  10 * 60_000,
+  "ENDPOINT_PROBE_FAILURE_BACKOFF_MAX_MS"
+);
 // Scheduler tick interval - use shortest possible interval to support timeout override
 const TICK_INTERVAL_MS = Math.min(BASE_INTERVAL_MS, TIMEOUT_OVERRIDE_INTERVAL_MS);
 // Max idle DB polling interval (bounded by base interval)
-const IDLE_DB_POLL_INTERVAL_MS = Math.min(BASE_INTERVAL_MS, 30_000);
+const IDLE_DB_POLL_INTERVAL_MS = Math.min(
+  BASE_INTERVAL_MS,
+  parsePositiveIntWithDefault(
+    process.env.ENDPOINT_PROBE_IDLE_DB_POLL_INTERVAL_MS,
+    30_000,
+    "ENDPOINT_PROBE_IDLE_DB_POLL_INTERVAL_MS"
+  )
+);
 const TIMEOUT_MS = Math.max(1, parseIntWithDefault(process.env.ENDPOINT_PROBE_TIMEOUT_MS, 5_000));
 const CONCURRENCY = Math.max(1, parseIntWithDefault(process.env.ENDPOINT_PROBE_CONCURRENCY, 10));
 const CYCLE_JITTER_MS = Math.max(
@@ -150,21 +162,20 @@ function countEndpointsByVendorType(endpoints: ProviderEndpointProbeTarget[]): M
 
 /**
  * Calculate effective interval for an endpoint based on:
- * 1. Timeout override (10s) - if lastProbeErrorType === "timeout" and lastProbeOk !== true
+ * 1. Failure backoff (10s, 20s, 40s... capped) while the endpoint remains unhealthy
  * 2. Single-vendor interval (10min) - if vendor has only 1 enabled endpoint
  * 3. Base interval (60s) - default
  *
- * Priority: timeout override > single-vendor > base
+ * Priority: failure backoff > single-vendor > base
  */
 function getEffectiveIntervalMs(
   endpoint: ProviderEndpointProbeTarget,
   vendorEndpointCounts: Map<string, number>
 ): number {
-  // Timeout override takes highest priority
-  const hasTimeoutError =
-    endpoint.lastProbeErrorType === "timeout" && endpoint.lastProbeOk !== true;
-  if (hasTimeoutError) {
-    return TIMEOUT_OVERRIDE_INTERVAL_MS;
+  if (endpoint.lastProbeOk === false) {
+    const failures = Math.max(1, endpoint.consecutiveProbeFailures);
+    const exponent = Math.min(30, failures - 1);
+    return Math.min(TIMEOUT_OVERRIDE_INTERVAL_MS * 2 ** exponent, FAILURE_BACKOFF_MAX_MS);
   }
 
   // Single-vendor interval
@@ -359,6 +370,9 @@ async function runProbeCycle(): Promise<void> {
           endpoint.lastProbedAt = new Date();
           endpoint.lastProbeOk = result.ok;
           endpoint.lastProbeErrorType = result.ok ? null : result.errorType;
+          endpoint.consecutiveProbeFailures = result.ok
+            ? 0
+            : Math.max(0, endpoint.consecutiveProbeFailures) + 1;
         } catch (error) {
           logger.warn("[EndpointProbeScheduler] Probe failed", {
             endpointId: endpoint.id,
@@ -427,6 +441,7 @@ export function startEndpointProbeScheduler(): void {
     baseIntervalMs: BASE_INTERVAL_MS,
     singleVendorIntervalMs: SINGLE_VENDOR_INTERVAL_MS,
     timeoutOverrideIntervalMs: TIMEOUT_OVERRIDE_INTERVAL_MS,
+    failureBackoffMaxMs: FAILURE_BACKOFF_MAX_MS,
     tickIntervalMs: TICK_INTERVAL_MS,
     idleDbPollIntervalMs: IDLE_DB_POLL_INTERVAL_MS,
     timeoutMs: TIMEOUT_MS,
@@ -464,6 +479,7 @@ export function getEndpointProbeSchedulerStatus(): {
   baseIntervalMs: number;
   singleVendorIntervalMs: number;
   timeoutOverrideIntervalMs: number;
+  failureBackoffMaxMs: number;
   tickIntervalMs: number;
   idleDbPollIntervalMs: number;
   timeoutMs: number;
@@ -478,6 +494,7 @@ export function getEndpointProbeSchedulerStatus(): {
     baseIntervalMs: BASE_INTERVAL_MS,
     singleVendorIntervalMs: SINGLE_VENDOR_INTERVAL_MS,
     timeoutOverrideIntervalMs: TIMEOUT_OVERRIDE_INTERVAL_MS,
+    failureBackoffMaxMs: FAILURE_BACKOFF_MAX_MS,
     tickIntervalMs: TICK_INTERVAL_MS,
     idleDbPollIntervalMs: IDLE_DB_POLL_INTERVAL_MS,
     timeoutMs: TIMEOUT_MS,

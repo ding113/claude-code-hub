@@ -49,6 +49,28 @@ vi.mock("@/lib/redis", () => ({
   getRedisClient: () => redisMock,
 }));
 
+const snapshotStore = new Map<string, Record<string, unknown>>();
+const snapshotStoreMock = {
+  enqueuePatch: vi.fn(
+    (
+      key: { sessionId: string; sequence: number; kind: string; phase: string },
+      patch: Record<string, unknown>
+    ) => {
+      const id = `${key.sessionId}:${key.sequence}:${key.kind}:${key.phase}`;
+      snapshotStore.set(id, { ...(snapshotStore.get(id) ?? {}), ...patch });
+      return true;
+    }
+  ),
+  get: vi.fn(
+    async (key: { sessionId: string; sequence: number; kind: string; phase: string }) =>
+      snapshotStore.get(`${key.sessionId}:${key.sequence}:${key.kind}:${key.phase}`) ?? null
+  ),
+};
+
+vi.mock("@/lib/session-snapshot/store", () => ({
+  getSessionSnapshotStore: () => snapshotStoreMock,
+}));
+
 let mockStoreMessages = false;
 let mockStoreSessionResponseBody = true;
 
@@ -66,6 +88,7 @@ describe("SessionManager detail snapshots", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     redisStore.clear();
+    snapshotStore.clear();
     mockStoreMessages = false;
     mockStoreSessionResponseBody = true;
   });
@@ -235,13 +258,16 @@ describe("SessionManager detail snapshots", () => {
       },
     });
 
-    const keys = redisMock.setex.mock.calls.map((call) => call[0]);
-    expect(keys).toContain("session:sess_snap:req:1:snapshot:request:before:body");
-    expect(keys).toContain("session:sess_snap:req:1:snapshot:request:before:messages");
-    expect(keys).toContain("session:sess_snap:req:1:snapshot:request:after:headers");
-    expect(keys).toContain("session:sess_snap:req:1:snapshot:response:before:meta");
-    expect(keys).toContain("session:sess_snap:req:1:snapshot:response:after:body");
-    expect(redisMock.setex.mock.calls.every((call) => call[1] === 300)).toBe(true);
+    expect(snapshotStoreMock.enqueuePatch).toHaveBeenCalledWith(
+      { sessionId: "sess_snap", sequence: 1, kind: "request", phase: "before" },
+      expect.objectContaining({ body: expect.any(Object), messages: expect.any(Array) }),
+      300
+    );
+    expect(snapshotStoreMock.enqueuePatch).toHaveBeenCalledWith(
+      { sessionId: "sess_snap", sequence: 1, kind: "response", phase: "after" },
+      expect.objectContaining({ body: expect.any(String), meta: expect.any(Object) }),
+      300
+    );
   });
 
   it("returns null when a specific phase snapshot is absent", async () => {
@@ -293,11 +319,8 @@ describe("SessionManager detail snapshots", () => {
       1
     );
 
-    expect(redisMock.setex).not.toHaveBeenCalledWith(
-      "session:sess_no_response_body:req:1:snapshot:response:after:body",
-      expect.anything(),
-      expect.anything()
-    );
+    const responsePatch = snapshotStoreMock.enqueuePatch.mock.calls.at(-1)?.[1];
+    expect(responsePatch).not.toHaveProperty("body");
     expect(
       await SessionManager.getSessionResponsePhaseSnapshot("sess_no_response_body", "after", 1)
     ).toEqual({

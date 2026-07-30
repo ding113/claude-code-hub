@@ -31,6 +31,7 @@ const mocks = vi.hoisted(() => ({
   resolveSystemTimezone: vi.fn(),
   getSystemSettings: vi.fn(),
   getProviderCacheCoefficients: vi.fn(),
+  getProviderModelCacheCoefficients: vi.fn(),
 }));
 
 vi.mock("@/drizzle/db", () => ({
@@ -53,8 +54,9 @@ vi.mock("@/drizzle/schema", () => ({
     successRateOutcome: "successRateOutcome",
     blockedBy: "blockedBy",
     createdAt: "createdAt",
-    tfftMs: "tfftMs",
-    firstByteMs: "firstByteMs",
+    ttfbMs: "ttfbMs",
+    ttftMs: "ttftMs",
+    timingSemanticsVersion: "timingSemanticsVersion",
     durationMs: "durationMs",
     model: "model",
     originalModel: "originalModel",
@@ -71,8 +73,9 @@ vi.mock("@/drizzle/schema", () => ({
     errorMessage: "errorMessage",
     blockedBy: "blockedBy",
     createdAt: "createdAt",
-    tfftMs: "tfftMs",
-    firstByteMs: "firstByteMs",
+    ttfbMs: "ttfbMs",
+    ttftMs: "ttftMs",
+    timingSemanticsVersion: "timingSemanticsVersion",
     durationMs: "durationMs",
     model: "model",
     originalModel: "originalModel",
@@ -96,12 +99,25 @@ vi.mock("@/repository/system-config", () => ({
 
 vi.mock("@/repository/provider-cache-effectiveness", () => ({
   getProviderCacheCoefficients: mocks.getProviderCacheCoefficients,
+  getProviderModelCacheCoefficients: mocks.getProviderModelCacheCoefficients,
   resolveLeaderboardWindow: () => ({ start: new Date(0), end: new Date() }),
 }));
 
 /** 构造 getProviderCacheCoefficients 返回的 Map */
 function coefficientMap(entries: Array<{ providerId: number; coefficientBp: number }>) {
   return new Map(entries.map((e) => [e.providerId, { ...e, sampleCount: 100 }] as const));
+}
+
+function modelCoefficientMap(
+  entries: Array<{ providerId: number; model: string; coefficientBp: number }>
+) {
+  const result = new Map<number, Map<string, object>>();
+  for (const entry of entries) {
+    const providerModels = result.get(entry.providerId) ?? new Map<string, object>();
+    providerModels.set(entry.model, { ...entry, sampleCount: 100 });
+    result.set(entry.providerId, providerModels);
+  }
+  return result;
 }
 
 describe("Provider Leaderboard Average Cost Metrics", () => {
@@ -113,6 +129,7 @@ describe("Provider Leaderboard Average Cost Metrics", () => {
     mocks.resolveSystemTimezone.mockResolvedValue("UTC");
     mocks.getSystemSettings.mockResolvedValue({ billingModelSource: "redirected" });
     mocks.getProviderCacheCoefficients.mockResolvedValue(new Map());
+    mocks.getProviderModelCacheCoefficients.mockResolvedValue(new Map());
   });
 
   it("computes avgCostPerRequest = totalCost / totalRequests for valid denominators", async () => {
@@ -282,9 +299,16 @@ describe("Provider Leaderboard Model Breakdown", () => {
     mocks.resolveSystemTimezone.mockResolvedValue("UTC");
     mocks.getSystemSettings.mockResolvedValue({ billingModelSource: "redirected" });
     mocks.getProviderCacheCoefficients.mockResolvedValue(new Map());
+    mocks.getProviderModelCacheCoefficients.mockResolvedValue(new Map());
   });
 
   it("includes modelStats when includeModelStats=true and excludes empty model names", async () => {
+    mocks.getProviderModelCacheCoefficients.mockResolvedValue(
+      modelCoefficientMap([
+        { providerId: 1, model: "model-a", coefficientBp: 6400 },
+        { providerId: 2, model: "model-c", coefficientBp: 3200 },
+      ])
+    );
     chainMocks = [
       createChainMock([
         {
@@ -362,6 +386,8 @@ describe("Provider Leaderboard Model Breakdown", () => {
     expect(p1!.modelStats).toBeDefined();
     expect(p1!.modelStats).toHaveLength(2);
     expect(p1!.modelStats![0].model).toBe("model-a");
+    expect(p1!.modelStats![0].cacheCoefficientBp).toBe(6400);
+    expect(p1!.modelStats![1].cacheCoefficientBp).toBeNull();
     expect(p1!.modelStats![0].avgCostPerRequest).toBeCloseTo(6.0 / 60);
     expect(p1!.modelStats![0].avgCostPerMillionTokens).toBeCloseTo((6.0 * 1_000_000) / 600);
 
@@ -370,9 +396,10 @@ describe("Provider Leaderboard Model Breakdown", () => {
     // Empty model must be excluded
     expect(p2!.modelStats).toHaveLength(1);
     expect(p2!.modelStats![0].model).toBe("model-c");
+    expect(p2!.modelStats![0].cacheCoefficientBp).toBe(3200);
   });
 
-  it("marks model-grain successRate as unavailable when billingModelSource is redirected", async () => {
+  it("keeps model-grain successRate available when billingModelSource is redirected", async () => {
     chainMocks = [
       createChainMock([
         {
@@ -406,13 +433,13 @@ describe("Provider Leaderboard Model Breakdown", () => {
 
     expect(modelStat).toMatchObject({
       model: "redirected-model",
-      successRate: null,
+      successRate: 0.9,
       rowIdentityBasis: "redirected",
-      successRateBasis: "unavailable",
+      successRateBasis: "redirected",
       costTokensBasis: "redirected",
       basisDisclosureRequired: true,
-      successRateUnavailableReason: "redirected_billing_model",
     });
+    expect(modelStat).not.toHaveProperty("successRateUnavailableReason");
   });
 });
 
@@ -425,9 +452,13 @@ describe("Provider Cache Hit Rate Model Breakdown", () => {
     mocks.resolveSystemTimezone.mockResolvedValue("UTC");
     mocks.getSystemSettings.mockResolvedValue({ billingModelSource: "redirected" });
     mocks.getProviderCacheCoefficients.mockResolvedValue(new Map());
+    mocks.getProviderModelCacheCoefficients.mockResolvedValue(new Map());
   });
 
   it("includes modelStats field on cache-hit leaderboard entries", async () => {
+    mocks.getProviderModelCacheCoefficients.mockResolvedValue(
+      modelCoefficientMap([{ providerId: 1, model: "claude-3-opus", coefficientBp: 5700 }])
+    );
     chainMocks = [
       createChainMock([
         {
@@ -470,6 +501,8 @@ describe("Provider Cache Hit Rate Model Breakdown", () => {
     expect(Array.isArray(entry.modelStats)).toBe(true);
     expect(entry.modelStats).toHaveLength(2);
     expect(entry.modelStats[0].model).toBe("claude-3-opus");
+    expect(entry.modelStats[0].cacheCoefficientBp).toBe(5700);
+    expect(entry.modelStats[1].cacheCoefficientBp).toBeNull();
   });
 
   it("falls back to cacheHitRate descending when no provider has a cache coefficient", async () => {
@@ -681,6 +714,7 @@ describe("Provider Leaderboard Cache Coefficient", () => {
     mocks.resolveSystemTimezone.mockResolvedValue("UTC");
     mocks.getSystemSettings.mockResolvedValue({ billingModelSource: "redirected" });
     mocks.getProviderCacheCoefficients.mockResolvedValue(new Map());
+    mocks.getProviderModelCacheCoefficients.mockResolvedValue(new Map());
   });
 
   const usageRow = (providerId: number, providerName: string, totalCost: string) => ({
@@ -788,9 +822,10 @@ describe("Model Leaderboard basis handling", () => {
     mocks.resolveSystemTimezone.mockResolvedValue("UTC");
     mocks.getSystemSettings.mockResolvedValue({ billingModelSource: "redirected" });
     mocks.getProviderCacheCoefficients.mockResolvedValue(new Map());
+    mocks.getProviderModelCacheCoefficients.mockResolvedValue(new Map());
   });
 
-  it("marks top-level model successRate as unavailable when billingModelSource is redirected", async () => {
+  it("keeps top-level model successRate available when billingModelSource is redirected", async () => {
     chainMocks = [
       createChainMock([
         {
@@ -808,12 +843,35 @@ describe("Model Leaderboard basis handling", () => {
 
     expect(result[0]).toMatchObject({
       model: "redirected-model",
-      successRate: null,
+      successRate: 0.8,
       rowIdentityBasis: "redirected",
-      successRateBasis: "unavailable",
+      successRateBasis: "redirected",
       costTokensBasis: "redirected",
       basisDisclosureRequired: true,
-      successRateUnavailableReason: "redirected_billing_model",
+    });
+    expect(result[0]).not.toHaveProperty("successRateUnavailableReason");
+  });
+
+  it("keeps null successRate when redirected rows have no countable outcome", async () => {
+    chainMocks = [
+      createChainMock([
+        {
+          model: "redirected-model",
+          totalRequests: 12,
+          totalCost: "3.0",
+          totalTokens: 1200,
+          successRate: null,
+        },
+      ]),
+    ];
+
+    const { findDailyModelLeaderboard } = await import("@/repository/leaderboard");
+    const result = await findDailyModelLeaderboard();
+
+    expect(result[0]).toMatchObject({
+      successRate: null,
+      successRateBasis: "redirected",
+      basisDisclosureRequired: true,
     });
   });
 });
@@ -827,6 +885,7 @@ describe("Model Leaderboard sort order", () => {
     mocks.resolveSystemTimezone.mockResolvedValue("UTC");
     mocks.getSystemSettings.mockResolvedValue({ billingModelSource: "redirected" });
     mocks.getProviderCacheCoefficients.mockResolvedValue(new Map());
+    mocks.getProviderModelCacheCoefficients.mockResolvedValue(new Map());
   });
 
   it("orders by total cost descending with request count as tiebreaker", async () => {

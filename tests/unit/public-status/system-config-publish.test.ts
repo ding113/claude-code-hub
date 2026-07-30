@@ -5,7 +5,7 @@ const mockGetSystemSettings = vi.hoisted(() => vi.fn());
 const mockUpdateSystemSettings = vi.hoisted(() => vi.fn());
 const mockPublishCurrentPublicStatusConfigProjection = vi.hoisted(() => vi.fn());
 const mockSchedulePublicStatusRebuild = vi.hoisted(() => vi.fn());
-const mockInvalidateSystemSettingsCache = vi.hoisted(() => vi.fn());
+const mockPrimeSystemSettingsCache = vi.hoisted(() => vi.fn());
 const mockRevalidatePath = vi.hoisted(() => vi.fn());
 
 vi.mock("@/lib/auth", () => ({
@@ -26,7 +26,7 @@ vi.mock("@/lib/public-status/rebuild-hints", () => ({
 }));
 
 vi.mock("@/lib/config", () => ({
-  invalidateSystemSettingsCache: mockInvalidateSystemSettingsCache,
+  primeSystemSettingsCache: mockPrimeSystemSettingsCache,
 }));
 
 vi.mock("next/cache", () => ({
@@ -89,7 +89,9 @@ describe("system settings public-status republish", () => {
       rangeHours: 48,
       reason: "system-settings-updated",
     });
-    expect(mockInvalidateSystemSettingsCache).toHaveBeenCalled();
+    expect(mockPrimeSystemSettingsCache).toHaveBeenCalledWith(
+      expect.objectContaining({ publicStatusWindowHours: 24 })
+    );
     expect(mockRevalidatePath).toHaveBeenCalled();
   });
 });

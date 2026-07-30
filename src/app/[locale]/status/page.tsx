@@ -39,6 +39,7 @@ export default async function PublicStatusPage({
         history: t("history"),
         availability: t("availability"),
         ttfb: t("ttfb"),
+        ttft: t("ttft"),
         freshnessWindow: t("freshnessWindow"),
         fresh: t("fresh"),
         stale: t("stale"),
@@ -62,6 +63,7 @@ export default async function PublicStatusPage({
         tooltip: {
           availability: t("tooltip.availability"),
           ttfb: t("tooltip.ttfb"),
+          ttft: t("tooltip.ttft"),
           tps: t("tooltip.tps"),
           historyAriaLabel: t("tooltip.historyAriaLabel"),
         },

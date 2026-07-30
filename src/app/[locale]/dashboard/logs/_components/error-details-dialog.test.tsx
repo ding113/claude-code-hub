@@ -255,20 +255,24 @@ const messages = {
         performance: {
           title: "Performance",
           ttfb: "TTFB",
-          tfft: "TFFT",
+          ttft: "TTFT",
+          timingUnavailable: "Timing unavailable",
           duration: "Duration",
           outputRate: "Output rate",
-          outputTokens: "Output Tokens",
+          outputTokens: "Output tokens",
         },
         performanceTab: {
           noPerformanceData: "No performance data",
-          tfftGauge: "Time to First Token",
+          ttfb: "TTFB",
+          ttft: "TTFT",
+          ttfbGauge: "Time to First Byte",
+          ttftGauge: "Time to First Token",
           outputRateGauge: "Output Rate",
           latencyBreakdown: "Latency Breakdown",
           generationTime: "Generation Time",
-          segmentTtfb: "TTFB",
-          segmentTfft: "Token Wait",
-          segmentTotal: "Total",
+          firstByteToFirstToken: "First byte to first token",
+          generationAfterFirstToken: "Generation after first token",
+          totalDuration: "Total duration",
           assessment: {
             excellent: "Excellent",
             good: "Good",
@@ -526,8 +530,9 @@ describe("error-details-dialog layout", () => {
         inputTokens={100}
         outputTokens={80}
         durationMs={900}
-        tfftMs={100}
-        firstByteMs={100}
+        ttfbMs={100}
+        ttftMs={250}
+        timingSemanticsVersion={2}
       />
     );
 
@@ -547,8 +552,9 @@ describe("error-details-dialog layout", () => {
         inputTokens={100}
         outputTokens={0}
         durationMs={null}
-        tfftMs={null}
-        firstByteMs={null}
+        ttfbMs={null}
+        ttftMs={null}
+        timingSemanticsVersion={2}
       />
     );
 
@@ -568,8 +574,9 @@ describe("error-details-dialog layout", () => {
         inputTokens={null}
         outputTokens={80}
         durationMs={900}
-        tfftMs={100}
-        firstByteMs={100}
+        ttfbMs={100}
+        ttftMs={100}
+        timingSemanticsVersion={2}
       />
     );
 
@@ -577,9 +584,9 @@ describe("error-details-dialog layout", () => {
     expect(html).toContain("100.0 tok/s");
   });
 
-  test("hides tok/s when TTFB is close to duration and rate is abnormally high", () => {
+  test("hides tok/s when TTFT is close to duration and rate is abnormally high", () => {
     // Rule: generationTimeMs / durationMs < 0.1 && outputRate > 5000 => hide tok/s
-    // durationMs=1000, firstByteMs=950 => generationTimeMs=50, ratio=0.05 < 0.1
+    // durationMs=1000, ttftMs=950 => generationTimeMs=50, ratio=0.05 < 0.1
     // outputTokens=300 => rate = 300 / 0.05 = 6000 > 5000 => should hide
     const html = renderWithIntl(
       <ErrorDetailsDialog
@@ -592,8 +599,9 @@ describe("error-details-dialog layout", () => {
         inputTokens={null}
         outputTokens={300}
         durationMs={1000}
-        tfftMs={950}
-        firstByteMs={950}
+        ttfbMs={100}
+        ttftMs={950}
+        timingSemanticsVersion={2}
       />
     );
 
@@ -605,7 +613,7 @@ describe("error-details-dialog layout", () => {
   });
 
   test("shows tok/s in dialog when conditions are normal", () => {
-    // durationMs=1000, firstByteMs=500 => generationTimeMs=500, ratio=0.5 >= 0.1
+    // durationMs=1000, ttftMs=500 => generationTimeMs=500, ratio=0.5 >= 0.1
     // outputTokens=50 => rate = 50 / 0.5 = 100 <= 5000 => should show
     const html = renderWithIntl(
       <ErrorDetailsDialog
@@ -618,8 +626,9 @@ describe("error-details-dialog layout", () => {
         inputTokens={null}
         outputTokens={50}
         durationMs={1000}
-        tfftMs={500}
-        firstByteMs={500}
+        ttfbMs={100}
+        ttftMs={500}
+        timingSemanticsVersion={2}
       />
     );
 
@@ -1199,8 +1208,9 @@ describe("error-details-dialog tabs", () => {
         providerChain={null}
         sessionId={null}
         durationMs={1000}
-        tfftMs={200}
-        firstByteMs={200}
+        ttfbMs={200}
+        ttftMs={400}
+        timingSemanticsVersion={2}
         outputTokens={500}
       />
     );

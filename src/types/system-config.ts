@@ -7,6 +7,7 @@ export type CodexPriorityBillingSource = "requested" | "actual";
 
 // F1 流式内容门控模式: 'off' (关闭) | 'shadow' (仅旁路统计) | 'enforce' (启用)
 export type StreamGateSettingMode = "off" | "shadow" | "enforce";
+export type SessionSnapshotStoreSetting = "disabled" | "filesystem" | "redis";
 
 export interface ResponseFixerConfig {
   fixTruncatedJson: boolean;
@@ -166,6 +167,9 @@ export interface SystemSettings {
   // null = 跟随环境变量 ENABLE_CACHE_EFFECTIVENESS（默认 true）
   cacheEffectivenessEnabled: boolean | null;
 
+  // Session 调试快照后端。filesystem 默认写入共享目录，redis 用于兼容，disabled 完全关闭。
+  sessionSnapshotStore: SessionSnapshotStoreSetting;
+
   /** Bounded streaming Discovery settings. */
   discoveryEnabled: boolean;
   discoveryConcurrency: number;
@@ -298,4 +302,6 @@ export interface UpdateSystemSettingsInput {
 
   // F3b 缓存模拟开关（可选；null = 清除覆写跟随环境变量）
   cacheEffectivenessEnabled?: boolean | null;
+
+  sessionSnapshotStore?: SessionSnapshotStoreSetting;
 }

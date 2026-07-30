@@ -5,7 +5,7 @@ import { getTranslations } from "next-intl/server";
 import { db } from "@/drizzle/db";
 import { locales } from "@/i18n/config";
 import { getSession } from "@/lib/auth";
-import { invalidateSystemSettingsCache } from "@/lib/config";
+import { primeSystemSettingsCache } from "@/lib/config";
 import { logger } from "@/lib/logger";
 import {
   collectEnabledPublicStatusGroups,
@@ -193,7 +193,7 @@ export async function savePublicStatusSettings(input: SavePublicStatusSettingsIn
       }
     }
 
-    invalidateSystemSettingsCache();
+    primeSystemSettingsCache(settings);
     invalidateConfiguredPublicStatusGroupsCache();
 
     for (const locale of locales) {

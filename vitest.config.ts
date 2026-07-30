@@ -36,11 +36,14 @@ export default defineConfig({
     // UI 配置
     // Vitest UI/Server 使用的是 test.api（不是 Vite 的 server 配置）
     // 默认仅允许本机访问，避免浏览器尝试连接 0.0.0.0 导致 UI 显示 Disconnected
-    api: {
-      host: process.env.VITEST_API_HOST || "127.0.0.1",
-      port: Number(process.env.VITEST_API_PORT || 51204),
-      strictPort: false,
-    },
+    api:
+      process.env.VITEST_API_DISABLED === "1"
+        ? false
+        : {
+            host: process.env.VITEST_API_HOST || "127.0.0.1",
+            port: Number(process.env.VITEST_API_PORT || 51204),
+            strictPort: false,
+          },
     open: false, // 不自动打开浏览器（手动访问 http://localhost:51204/__vitest__/）
 
     // ==================== 覆盖率配置 ====================

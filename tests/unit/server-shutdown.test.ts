@@ -252,6 +252,9 @@ describe.sequential("registerOrchestratedShutdown", () => {
     process.env.SHUTDOWN_HARD_EXIT_MS = "1000";
 
     vi.doMock("@/lib/cache/session-cache", () => ({ stopCacheCleanup: () => {} }));
+    vi.doMock("@/lib/session-snapshot/store", () => ({
+      stopSessionSnapshotStores: async () => {},
+    }));
     vi.doMock("@/lib/provider-endpoints/probe-scheduler", () => ({
       stopEndpointProbeScheduler: () => {},
     }));

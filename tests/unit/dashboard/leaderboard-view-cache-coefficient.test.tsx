@@ -102,6 +102,16 @@ describe("LeaderboardView cache coefficient column", () => {
               providerId: 1,
               providerName: "with-coefficient",
               cacheCoefficientBp: 8600,
+              modelStats: [
+                {
+                  model: "model-with-coefficient",
+                  totalRequests: 6,
+                  cacheReadTokens: 400,
+                  totalInputTokens: 700,
+                  cacheHitRate: 0.57,
+                  cacheCoefficientBp: 6400,
+                },
+              ],
             }),
             cacheHitEntry({
               providerId: 2,
@@ -122,6 +132,16 @@ describe("LeaderboardView cache coefficient column", () => {
     expect(text).toContain("columns.cacheCoefficient");
     expect(text).toContain("0.86");
     expect(text).toContain("–");
+
+    const expandButton = container!.querySelector(
+      'button[aria-label="expandModelStats"]'
+    ) as HTMLButtonElement | null;
+    expect(expandButton).toBeTruthy();
+    await act(async () => {
+      expandButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    expect(container!.textContent).toContain("model-with-coefficient");
+    expect(container!.textContent).toContain("0.64");
   });
 
   it("renders the coefficient column on the provider usage board too", async () => {
@@ -145,7 +165,21 @@ describe("LeaderboardView cache coefficient column", () => {
               avgCostPerRequest: 0.35,
               avgCostPerMillionTokens: 1750,
               cacheCoefficientBp: 1234,
-              modelStats: [],
+              modelStats: [
+                {
+                  model: "usage-model",
+                  totalRequests: 8,
+                  totalCost: 2.8,
+                  totalTokens: 1600,
+                  successRate: 0.92,
+                  avgTtfbMs: 140,
+                  avgTtftMs: 220,
+                  avgTokensPerSecond: 45,
+                  avgCostPerRequest: 0.35,
+                  avgCostPerMillionTokens: 1750,
+                  cacheCoefficientBp: 5700,
+                },
+              ],
             },
           ],
         } as Response;
@@ -160,5 +194,15 @@ describe("LeaderboardView cache coefficient column", () => {
     const text = container!.textContent ?? "";
     expect(text).toContain("columns.cacheCoefficient");
     expect(text).toContain("0.12");
+
+    const expandButton = container!.querySelector(
+      'button[aria-label="expandModelStats"]'
+    ) as HTMLButtonElement | null;
+    expect(expandButton).toBeTruthy();
+    await act(async () => {
+      expandButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    expect(container!.textContent).toContain("usage-model");
+    expect(container!.textContent).toContain("0.57");
   });
 });

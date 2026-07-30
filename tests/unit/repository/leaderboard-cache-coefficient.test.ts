@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   getProviderCacheCoefficients,
+  getProviderModelCacheCoefficients,
   resolveLeaderboardWindow,
 } from "@/repository/provider-cache-effectiveness";
 
@@ -92,6 +93,42 @@ describe("getProviderCacheCoefficients", () => {
 
   it("returns an empty map when no windows fall inside the range", async () => {
     const result = await getProviderCacheCoefficients(window);
+
+    expect(result.size).toBe(0);
+  });
+});
+
+describe("getProviderModelCacheCoefficients", () => {
+  beforeEach(() => {
+    dbMocks.groupBy.mockResolvedValue([]);
+  });
+
+  const window = {
+    start: new Date("2026-07-22T00:00:00Z"),
+    end: new Date("2026-07-22T01:00:00Z"),
+  };
+
+  it("recomputes coefficients independently for each provider and model", async () => {
+    dbMocks.groupBy.mockResolvedValue([
+      { ...aggregateRow(7, "200", "150", "100000", "86000"), model: "model-a" },
+      { ...aggregateRow(7, "5", "5", "100", "100"), model: "model-b" },
+      { ...aggregateRow(8, "10", "10", "100", "50"), model: "model-a" },
+    ]);
+
+    const result = await getProviderModelCacheCoefficients(window);
+
+    expect(result.get(7)?.get("model-a")).toEqual({
+      providerId: 7,
+      model: "model-a",
+      coefficientBp: 6450,
+      sampleCount: 200,
+    });
+    expect(result.get(7)?.get("model-b")?.coefficientBp).toBe(3000);
+    expect(result.get(8)?.get("model-a")?.coefficientBp).toBe(1500);
+  });
+
+  it("returns an empty map when no model windows fall inside the range", async () => {
+    const result = await getProviderModelCacheCoefficients(window);
 
     expect(result.size).toBe(0);
   });

@@ -34,8 +34,9 @@ describe("public-status aggregation", () => {
           createdAt: "2026-04-21T10:10:00.000Z",
           originalModel: "gpt-4.1",
           durationMs: 1000,
-          tfftMs: 200,
-          firstByteMs: 200,
+          ttfbMs: 200,
+          ttftMs: 200,
+          timingSemanticsVersion: 2,
           outputTokens: 80,
           providerChain: [
             {
@@ -52,8 +53,9 @@ describe("public-status aggregation", () => {
           createdAt: "2026-04-21T10:40:00.000Z",
           originalModel: "gpt-4.1",
           durationMs: 1400,
-          tfftMs: 300,
-          firstByteMs: 300,
+          ttfbMs: 300,
+          ttftMs: 400,
+          timingSemanticsVersion: 2,
           outputTokens: 60,
           providerChain: [
             {
@@ -103,8 +105,8 @@ describe("public-status aggregation", () => {
           createdAt: "2026-04-21T10:25:00.000Z",
           originalModel: "gpt-4.1",
           durationMs: 1500,
-          tfftMs: 500,
-          firstByteMs: 500,
+          ttfbMs: 500,
+          ttftMs: 500,
           outputTokens: null,
           providerChain: [
             {
@@ -229,8 +231,9 @@ describe("public-status aggregation", () => {
           createdAt: "2026-04-21T10:10:00.000Z",
           originalModel: "gpt-4.1",
           durationMs: 1200,
-          tfftMs: 200,
-          firstByteMs: 200,
+          ttfbMs: 200,
+          ttftMs: 200,
+          timingSemanticsVersion: 2,
           outputTokens: 50,
           providerChain: [
             {
@@ -257,20 +260,76 @@ describe("public-status aggregation", () => {
 
     expect(failedModel?.availabilityPct).toBe(0);
     expect(failedModel?.latestTtfbMs).toBeNull();
+    expect(failedModel?.latestTtftMs).toBeNull();
     expect(failedModel?.latestTps).toBeNull();
     expect(failedModel?.timeline.find((bucket) => bucket.sampleCount > 0)).toMatchObject({
       sampleCount: 1,
       ttfbMs: null,
+      ttftMs: null,
       tps: null,
     });
     expect(successfulModel?.availabilityPct).toBe(100);
     expect(successfulModel?.latestTtfbMs).toBe(200);
+    expect(successfulModel?.latestTtftMs).toBe(200);
     expect(successfulModel?.latestTps).toBe(50);
     expect(successfulModel?.timeline.find((bucket) => bucket.sampleCount > 0)).toMatchObject({
       sampleCount: 1,
       ttfbMs: 200,
+      ttftMs: 200,
       tps: 50,
     });
+  });
+
+  it("excludes legacy timing semantics while preserving availability", () => {
+    const result = buildPublicStatusPayloadFromRequests({
+      rangeHours: 1,
+      intervalMinutes: 15,
+      now: "2026-04-21T11:00:00.000Z",
+      groups: [
+        {
+          sourceGroupName: "openai",
+          publicGroupSlug: "openai",
+          displayName: "OpenAI",
+          explanatoryCopy: null,
+          sortOrder: 1,
+          models: [
+            {
+              publicModelKey: "gpt-4.1",
+              label: "GPT-4.1",
+              vendorIconKey: "openai",
+              requestTypeBadge: "openaiCompatible",
+            },
+          ],
+        },
+      ],
+      requests: [
+        {
+          id: 41,
+          createdAt: "2026-04-21T10:10:00.000Z",
+          originalModel: "gpt-4.1",
+          durationMs: 1200,
+          ttfbMs: 900,
+          ttftMs: 1000,
+          timingSemanticsVersion: null,
+          outputTokens: 50,
+          providerChain: [
+            {
+              id: 401,
+              name: "legacy-provider",
+              groupTag: "openai",
+              reason: "request_success",
+              statusCode: 200,
+            },
+          ],
+        },
+      ],
+    });
+
+    const model = result.groups[0]?.models[0];
+    expect(model?.availabilityPct).toBe(100);
+    expect(model?.latestTtfbMs).toBeNull();
+    expect(model?.latestTtftMs).toBeNull();
+    expect(model?.latestTps).toBeNull();
   });
 
   it("uses originalModel before redirected model for grouping", () => {

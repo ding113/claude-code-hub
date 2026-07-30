@@ -164,7 +164,9 @@ describe("ErrorDetailsDialog - warmup skip indicator", () => {
         costMultiplier={null}
         context1mApplied={false}
         durationMs={null}
-        tfftMs={null}
+        ttfbMs={null}
+        ttftMs={null}
+        timingSemanticsVersion={2}
         externalOpen
       />
     );

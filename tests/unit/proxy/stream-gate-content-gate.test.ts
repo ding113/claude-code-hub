@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { EmptyResponseError, ProxyError } from "@/app/v1/_lib/proxy/errors";
 import {
   concatChunks,
+  createContentTimingObserver,
   runStreamContentGate,
   StreamPrecommitError,
 } from "@/app/v1/_lib/proxy/stream-gate/stream-content-gate";
@@ -233,6 +234,76 @@ describe("concatChunks", () => {
     expect(concatChunks([single])).toBe(single);
     const merged = concatChunks([encoder.encode("ab"), encoder.encode("cd")]);
     expect(new TextDecoder().decode(merged as Uint8Array)).toBe("abcd");
+  });
+});
+
+describe("createContentTimingObserver", () => {
+  it("waits through neutral Anthropic frames and fragmented SSE before recording content once", () => {
+    let contentCount = 0;
+    const observer = createContentTimingObserver({
+      family: "anthropic",
+      onContent: () => {
+        contentCount += 1;
+      },
+    });
+    const body = encoder.encode(PING + MESSAGE_START + TEXT_DELTA + TEXT_DELTA);
+
+    observer.observe(body.slice(0, 17));
+    observer.observe(body.slice(17, 91));
+    expect(contentCount).toBe(0);
+    observer.observe(body.slice(91));
+    observer.observe(encoder.encode(TEXT_DELTA));
+
+    expect(contentCount).toBe(1);
+  });
+
+  it.each([
+    {
+      family: "openai-chat" as const,
+      neutral: 'data: {"choices":[{"delta":{"role":"assistant"}}]}\n\n',
+      content: 'data: {"choices":[{"delta":{"content":"hello"}}]}\n\n',
+    },
+    {
+      family: "gemini" as const,
+      neutral: 'data: {"usageMetadata":{"totalTokenCount":1}}\n\n',
+      content: 'data: {"candidates":[{"content":{"parts":[{"text":"hello"}]}}]}\n\n',
+    },
+  ])("records the first protocol content for $family", ({ family, neutral, content }) => {
+    let contentCount = 0;
+    const observer = createContentTimingObserver({
+      family,
+      onContent: () => {
+        contentCount += 1;
+      },
+    });
+
+    observer.observe(encoder.encode(neutral));
+    expect(contentCount).toBe(0);
+    observer.observe(encoder.encode(content));
+    expect(contentCount).toBe(1);
+  });
+
+  it("settles without recording when an error or terminal frame arrives first", () => {
+    let contentCount = 0;
+    const errorObserver = createContentTimingObserver({
+      family: "anthropic",
+      onContent: () => {
+        contentCount += 1;
+      },
+    });
+    errorObserver.observe(encoder.encode(ERROR_FRAME));
+    errorObserver.observe(encoder.encode(TEXT_DELTA));
+
+    const terminalObserver = createContentTimingObserver({
+      family: "anthropic",
+      onContent: () => {
+        contentCount += 1;
+      },
+    });
+    terminalObserver.observe(encoder.encode(MESSAGE_STOP));
+    terminalObserver.observe(encoder.encode(TEXT_DELTA));
+
+    expect(contentCount).toBe(0);
   });
 });
 

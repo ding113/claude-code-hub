@@ -5,7 +5,7 @@ import { ZodError } from "zod";
 import { locales } from "@/i18n/config";
 import { emitActionAudit } from "@/lib/audit/emit";
 import { getSession } from "@/lib/auth";
-import { invalidateSystemSettingsCache } from "@/lib/config";
+import { primeSystemSettingsCache } from "@/lib/config";
 import { DEFAULT_SETTINGS } from "@/lib/config/system-settings-cache";
 import { logger } from "@/lib/logger";
 import { publishCurrentPublicStatusConfigProjection } from "@/lib/public-status/config-publisher";
@@ -27,6 +27,7 @@ import type {
   CodexPriorityBillingSource,
   FakeStreamingWhitelistEntry,
   ResponseFixerConfig,
+  SessionSnapshotStoreSetting,
   StreamGateSettingMode,
   SystemSettings,
 } from "@/types/system-config";
@@ -107,6 +108,7 @@ export async function saveSystemSettings(formData: {
   affinityIgnoreClientSessionId?: boolean;
   replayEnabled?: boolean | null;
   cacheEffectivenessEnabled?: boolean | null;
+  sessionSnapshotStore?: SessionSnapshotStoreSetting;
   enableCodexSessionIdCompletion?: boolean;
   enableClaudeMetadataUserIdInjection?: boolean;
   enableResponseFixer?: boolean;
@@ -197,6 +199,7 @@ export async function saveSystemSettings(formData: {
       affinityIgnoreClientSessionId: validated.affinityIgnoreClientSessionId,
       replayEnabled: validated.replayEnabled,
       cacheEffectivenessEnabled: validated.cacheEffectivenessEnabled,
+      sessionSnapshotStore: validated.sessionSnapshotStore,
       enableCodexSessionIdCompletion: validated.enableCodexSessionIdCompletion,
       enableClaudeMetadataUserIdInjection: validated.enableClaudeMetadataUserIdInjection,
       enableResponseFixer: validated.enableResponseFixer,
@@ -213,8 +216,13 @@ export async function saveSystemSettings(formData: {
       ipGeoLookupEnabled: validated.ipGeoLookupEnabled,
     });
 
-    // Invalidate the system settings cache so proxy requests get fresh settings
-    invalidateSystemSettingsCache();
+    primeSystemSettingsCache(updated);
+    if (validated.sessionSnapshotStore !== undefined) {
+      const { reconfigureSessionSnapshotStore } = await import("@/lib/session-snapshot/store");
+      await reconfigureSessionSnapshotStore(updated.sessionSnapshotStore).catch((error) => {
+        logger.warn("[SystemSettings] Failed to reconfigure session snapshot store", { error });
+      });
+    }
     const { invalidateProviderSelectorSystemSettingsCache } = await import(
       "@/app/v1/_lib/proxy/provider-selector-settings-cache"
     );

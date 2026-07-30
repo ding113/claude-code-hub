@@ -204,7 +204,26 @@ export function requestCloudPriceTableSync(options: {
         taskId,
         async () => {
           try {
-            const result = await syncCloudPriceTableToDatabase();
+            const { withAdvisoryLock } = await import("@/lib/migrate");
+            const locked = await withAdvisoryLock(
+              "claude-code-hub:cloud-price-sync",
+              () => syncCloudPriceTableToDatabase(),
+              { skipIfLocked: true }
+            );
+            if (!locked.ran) {
+              logger.debug("[PriceSync] Cloud price sync skipped; another instance owns the lock", {
+                reason: options.reason,
+              });
+              return;
+            }
+
+            const result = locked.result;
+            if (!result) {
+              logger.warn("[PriceSync] Cloud price sync lock completed without a result", {
+                reason: options.reason,
+              });
+              return;
+            }
             if (!result.ok) {
               logger.warn("[PriceSync] Cloud price sync task failed", {
                 reason: options.reason,

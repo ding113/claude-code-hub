@@ -475,6 +475,7 @@ export const providerEndpoints = pgTable('provider_endpoints', {
   lastProbeLatencyMs: integer('last_probe_latency_ms'),
   lastProbeErrorType: varchar('last_probe_error_type', { length: 64 }),
   lastProbeErrorMessage: text('last_probe_error_message'),
+  consecutiveProbeFailures: integer('consecutive_probe_failures').notNull().default(0),
 
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
@@ -579,11 +580,9 @@ export const messageRequest = pgTable('message_request', {
   // Token 使用信息
   inputTokens: bigint('input_tokens', { mode: 'number' }),
   outputTokens: bigint('output_tokens', { mode: 'number' }),
-  // 首 Token 时间（TFFT）。列名 ttfb_ms 是历史遗留：流式输出门禁上线后，
-  // 这个时间戳打在首个内容帧上，语义已是 TFFT 而非 TTFB。真 TTFB 见 firstByteMs。
-  tfftMs: integer('ttfb_ms'),
-  // 首字节时间（TTFB）：上游响应体第一个字节到达。门禁旁路时等于 tfftMs。
-  firstByteMs: integer('first_byte_ms'),
+  ttfbMs: integer('ttfb_ms'),
+  ttftMs: integer('ttft_ms'),
+  timingSemanticsVersion: integer('timing_semantics_version'),
   cacheCreationInputTokens: bigint('cache_creation_input_tokens', { mode: 'number' }),
   cacheReadInputTokens: bigint('cache_read_input_tokens', { mode: 'number' }),
   cacheCreation5mInputTokens: bigint('cache_creation_5m_input_tokens', { mode: 'number' }),
@@ -1030,6 +1029,11 @@ export const systemSettings = pgTable('system_settings', {
   // F3b 最长前缀匹配缓存模拟开关覆写（null = 跟随环境变量 ENABLE_CACHE_EFFECTIVENESS）
   cacheEffectivenessEnabled: boolean('cache_effectiveness_enabled'),
 
+  // Session 调试快照后端：默认使用异步 filesystem，避免大对象挤占 Redis。
+  sessionSnapshotStore: varchar('session_snapshot_store', { length: 16 })
+    .notNull()
+    .default('filesystem'),
+
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
 });
@@ -1176,9 +1180,9 @@ export const usageLedger = pgTable('usage_ledger', {
   context1mApplied: boolean('context_1m_applied').default(false),
   swapCacheTtlApplied: boolean('swap_cache_ttl_applied').default(false),
   durationMs: integer('duration_ms'),
-  // 列名 ttfb_ms 存的是 TFFT，见 messageRequest.tfftMs 的说明
-  tfftMs: integer('ttfb_ms'),
-  firstByteMs: integer('first_byte_ms'),
+  ttfbMs: integer('ttfb_ms'),
+  ttftMs: integer('ttft_ms'),
+  timingSemanticsVersion: integer('timing_semantics_version'),
   // 客户端 IP（从 message_request 拷贝；永久保留，避免被清理任务删除）
   clientIp: varchar('client_ip', { length: 45 }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
@@ -1295,6 +1299,14 @@ export const replayPayloads = pgTable('replay_payloads', {
   replayPayloadsExpiresAtIdx: index('idx_replay_payloads_expires_at').on(table.expiresAt),
 }));
 
+// 多副本后台聚合任务的持久进度。cursor 与聚合结果在同一事务内推进，
+// 避免空窗口反复扫描或进程重启后丢失进度。
+export const backgroundTaskCursors = pgTable('background_task_cursor', {
+  taskKey: varchar('task_key', { length: 128 }).primaryKey(),
+  cursorAt: timestamp('cursor_at', { withTimezone: true }).notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+});
+
 // F3b 缓存效果窗口聚合历史：按 provider + model + TTL 桶统计理论 vs 实际缓存命中。
 // 定点整数（万分比 bp），禁浮点；仅指标展示，不参与路由。
 export const providerCacheEffectiveness = pgTable('provider_cache_effectiveness', {
@@ -1317,6 +1329,9 @@ export const providerCacheEffectiveness = pgTable('provider_cache_effectiveness'
 }, (table) => ({
   providerCacheEffectivenessWindowIdx: index('idx_provider_cache_effectiveness_window')
     .on(table.providerId, table.model, table.windowStart.desc()),
+  providerCacheEffectivenessWindowUnique: uniqueIndex(
+    'uq_provider_cache_effectiveness_window'
+  ).on(table.providerId, table.model, table.cacheTtlBucket, table.windowStart, table.windowEnd),
 }));
 
 // Relations

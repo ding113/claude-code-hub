@@ -9,7 +9,7 @@ const mockUpdateProviderGroup = vi.hoisted(() => vi.fn());
 const mockFindLatestPricesByModels = vi.hoisted(() => vi.fn());
 const mockPublishCurrentPublicStatusConfigProjection = vi.hoisted(() => vi.fn());
 const mockSchedulePublicStatusRebuild = vi.hoisted(() => vi.fn());
-const mockInvalidateSystemSettingsCache = vi.hoisted(() => vi.fn());
+const mockPrimeSystemSettingsCache = vi.hoisted(() => vi.fn());
 const mockRevalidatePath = vi.hoisted(() => vi.fn());
 const mockLoggerInfo = vi.hoisted(() => vi.fn());
 const mockLoggerError = vi.hoisted(() => vi.fn());
@@ -52,7 +52,7 @@ vi.mock("@/lib/public-status/rebuild-hints", () => ({
 }));
 
 vi.mock("@/lib/config", () => ({
-  invalidateSystemSettingsCache: mockInvalidateSystemSettingsCache,
+  primeSystemSettingsCache: mockPrimeSystemSettingsCache,
 }));
 
 vi.mock("next/cache", () => ({
@@ -174,7 +174,9 @@ describe("public-status config publish integration", () => {
       rangeHours: 24,
       reason: "config-updated",
     });
-    expect(mockInvalidateSystemSettingsCache).toHaveBeenCalledTimes(1);
+    expect(mockPrimeSystemSettingsCache).toHaveBeenCalledWith(
+      expect.objectContaining({ publicStatusWindowHours: 24 })
+    );
     expect(mockRevalidatePath).toHaveBeenCalled();
   });
 

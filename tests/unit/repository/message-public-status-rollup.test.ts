@@ -349,6 +349,9 @@ describe("repository/message public status rollup hook", () => {
       durationMs: 1_500,
       statusCode: 200,
       outputTokens: 10,
+      ttfbMs: 250,
+      ttftMs: 400,
+      timingSemanticsVersion: 2,
       providerChain: [{ id: 1, name: "provider-a", groupTag: "openai" }],
       model: "gpt-4.1",
     } satisfies Readonly<MessageRequestUpdatePatch>;
@@ -366,7 +369,12 @@ describe("repository/message public status rollup hook", () => {
     expect(mockQueuePublicStatusRollupWrite).toHaveBeenCalledTimes(1);
     expect(mockQueuePublicStatusRollupWrite).toHaveBeenCalledWith(
       expect.objectContaining({
-        event: expect.objectContaining({ durationMs: 1_500 }),
+        event: expect.objectContaining({
+          durationMs: 1_500,
+          ttfbMs: 250,
+          ttftMs: 400,
+          timingSemanticsVersion: 2,
+        }),
       })
     );
   });
@@ -440,7 +448,9 @@ describe("repository/message public status rollup hook", () => {
 
     const finalDetails = {
       statusCode: 200,
-      tfftMs: 200,
+      ttfbMs: 200,
+      ttftMs: 300,
+      timingSemanticsVersion: 2,
       outputTokens: 50,
       providerChain: [
         {
@@ -469,7 +479,9 @@ describe("repository/message public status rollup hook", () => {
           originalModel: "gpt-4.1",
           model: "gpt-4.1",
           outputTokens: 50,
-          tfftMs: 200,
+          ttfbMs: 200,
+          ttftMs: 300,
+          timingSemanticsVersion: 2,
         }),
       })
     );
@@ -489,7 +501,9 @@ describe("repository/message public status rollup hook", () => {
 
     await updateMessageRequestDetails(202, {
       statusCode: 200,
-      tfftMs: 250,
+      ttfbMs: 250,
+      ttftMs: 400,
+      timingSemanticsVersion: 2,
       outputTokens: 75,
       providerChain: [
         {
@@ -513,7 +527,9 @@ describe("repository/message public status rollup hook", () => {
           originalModel: "gpt-4.1",
           model: "gpt-4.1",
           outputTokens: 75,
-          tfftMs: 250,
+          ttfbMs: 250,
+          ttftMs: 400,
+          timingSemanticsVersion: 2,
         }),
       })
     );
@@ -577,7 +593,9 @@ describe("repository/message public status rollup hook", () => {
 
     const finalDetails = {
       statusCode: 200,
-      tfftMs: 300,
+      ttfbMs: 300,
+      ttftMs: 500,
+      timingSemanticsVersion: 2,
       outputTokens: 90,
       providerChain: [
         {
@@ -604,7 +622,9 @@ describe("repository/message public status rollup hook", () => {
           createdAt: new Date("2026-04-21T10:04:00.000Z"),
           durationMs: 1800,
           outputTokens: 90,
-          tfftMs: 300,
+          ttfbMs: 300,
+          ttftMs: 500,
+          timingSemanticsVersion: 2,
         }),
       })
     );
@@ -661,7 +681,7 @@ describe("repository/message public status rollup hook", () => {
 
     const finalDetails = {
       statusCode: 200,
-      tfftMs: 300,
+      ttfbMs: 300,
       outputTokens: 90,
       providerChain: [
         {
@@ -750,7 +770,7 @@ describe("repository/message public status rollup hook", () => {
 
     const finalDetails = {
       statusCode: 200,
-      tfftMs: 320,
+      ttfbMs: 320,
       outputTokens: 95,
       providerChain: [
         {
@@ -776,7 +796,7 @@ describe("repository/message public status rollup hook", () => {
           createdAt: new Date("2026-04-21T10:06:00.000Z"),
           durationMs: 1900,
           outputTokens: 95,
-          tfftMs: 320,
+          ttfbMs: 320,
         }),
       })
     );

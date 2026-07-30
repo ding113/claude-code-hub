@@ -11,6 +11,7 @@ import {
   Filter,
   Gauge,
   Globe,
+  HardDrive,
   MapPin,
   Network,
   Pencil,
@@ -57,6 +58,7 @@ import type {
   BillingModelSource,
   CodexPriorityBillingSource,
   FakeStreamingWhitelistEntry,
+  SessionSnapshotStoreSetting,
   StreamGateSettingMode,
   SystemSettings,
 } from "@/types/system-config";
@@ -99,6 +101,7 @@ interface SystemSettingsFormProps {
     | "affinityIgnoreClientSessionId"
     | "replayEnabled"
     | "cacheEffectivenessEnabled"
+    | "sessionSnapshotStore"
     | "enableCodexSessionIdCompletion"
     | "enableClaudeMetadataUserIdInjection"
     | "enableResponseFixer"
@@ -219,6 +222,9 @@ export function SystemSettingsForm({
   const [replayEnabled, setReplayEnabled] = useState<boolean | null>(initialSettings.replayEnabled);
   const [cacheEffectivenessEnabled, setCacheEffectivenessEnabled] = useState<boolean | null>(
     initialSettings.cacheEffectivenessEnabled
+  );
+  const [sessionSnapshotStore, setSessionSnapshotStore] = useState<SessionSnapshotStoreSetting>(
+    initialSettings.sessionSnapshotStore
   );
   const [enableThinkingBudgetRectifier, setEnableThinkingBudgetRectifier] = useState(
     initialSettings.enableThinkingBudgetRectifier
@@ -407,6 +413,7 @@ export function SystemSettingsForm({
         affinityIgnoreClientSessionId,
         replayEnabled,
         cacheEffectivenessEnabled,
+        sessionSnapshotStore,
         enableThinkingBudgetRectifier,
         enableThinkingEffortConflictRectifier,
         enableGeminiFunctionIdRectifier,
@@ -473,6 +480,7 @@ export function SystemSettingsForm({
         setAffinityIgnoreClientSessionId(result.data.affinityIgnoreClientSessionId);
         setReplayEnabled(result.data.replayEnabled ?? null);
         setCacheEffectivenessEnabled(result.data.cacheEffectivenessEnabled ?? null);
+        setSessionSnapshotStore(result.data.sessionSnapshotStore);
         setEnableThinkingBudgetRectifier(result.data.enableThinkingBudgetRectifier);
         setEnableThinkingEffortConflictRectifier(result.data.enableThinkingEffortConflictRectifier);
         setEnableGeminiFunctionIdRectifier(result.data.enableGeminiFunctionIdRectifier);
@@ -1215,6 +1223,42 @@ export function SystemSettingsForm({
             onCheckedChange={(checked) => setCacheEffectivenessEnabled(checked)}
             disabled={isPending}
           />
+        </div>
+
+        <div className="p-4 rounded-xl bg-white/[0.02] border border-white/5 hover:bg-white/[0.04] transition-colors space-y-3">
+          <div className="flex items-start gap-3">
+            <div className="w-8 h-8 flex items-center justify-center rounded-lg bg-cyan-500/10 text-cyan-400 shrink-0">
+              <HardDrive className="h-4 w-4" />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-foreground">{t("sessionSnapshotStore")}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {t("sessionSnapshotStoreDesc", { ttl: sessionTtlSeconds })}
+              </p>
+            </div>
+          </div>
+          <div className="pl-11">
+            <Select
+              value={sessionSnapshotStore}
+              onValueChange={(value) =>
+                setSessionSnapshotStore(value as SessionSnapshotStoreSetting)
+              }
+              disabled={isPending}
+            >
+              <SelectTrigger id="session-snapshot-store" className={selectTriggerClassName}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="filesystem">
+                  {t("sessionSnapshotStoreOptions.filesystem")}
+                </SelectItem>
+                <SelectItem value="redis">{t("sessionSnapshotStoreOptions.redis")}</SelectItem>
+                <SelectItem value="disabled">
+                  {t("sessionSnapshotStoreOptions.disabled")}
+                </SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </div>
 
         {/* Enable Codex Session ID Completion */}

@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { getSession } from "@/lib/auth";
-import { invalidateSystemSettingsCache } from "@/lib/config";
+import { primeSystemSettingsCache } from "@/lib/config";
 import { logger } from "@/lib/logger";
 import {
   invalidateAllLeaderboardCaches,
@@ -109,6 +109,9 @@ export async function POST(req: Request) {
       enableResponseInputRectifier: validated.enableResponseInputRectifier,
       streamGateMode: validated.streamGateMode,
       affinityIgnoreClientSessionId: validated.affinityIgnoreClientSessionId,
+      replayEnabled: validated.replayEnabled,
+      cacheEffectivenessEnabled: validated.cacheEffectivenessEnabled,
+      sessionSnapshotStore: validated.sessionSnapshotStore,
       enableCodexSessionIdCompletion: validated.enableCodexSessionIdCompletion,
       enableClaudeMetadataUserIdInjection: validated.enableClaudeMetadataUserIdInjection,
       enableResponseFixer: validated.enableResponseFixer,
@@ -125,7 +128,13 @@ export async function POST(req: Request) {
       userId: session.user.id,
       changes: validated,
     });
-    invalidateSystemSettingsCache();
+    primeSystemSettingsCache(updated);
+    if (validated.sessionSnapshotStore !== undefined) {
+      const { reconfigureSessionSnapshotStore } = await import("@/lib/session-snapshot/store");
+      await reconfigureSessionSnapshotStore(updated.sessionSnapshotStore).catch((error) => {
+        logger.warn("[SystemSettings] Failed to reconfigure session snapshot store", { error });
+      });
+    }
     const { invalidateProviderSelectorSystemSettingsCache } = await import(
       "@/app/v1/_lib/proxy/provider-selector-settings-cache"
     );

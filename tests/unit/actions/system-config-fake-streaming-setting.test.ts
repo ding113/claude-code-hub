@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 const getSystemSettingsMock = vi.fn();
 const loggerWarnMock = vi.fn();
 const invalidateSystemSettingsCacheMock = vi.fn();
+const primeSystemSettingsCacheMock = vi.fn();
 const updateSystemSettingsMock = vi.fn();
 const getSessionMock = vi.fn();
 
@@ -36,6 +37,7 @@ vi.mock("@/lib/config", async (importOriginal) => {
   return {
     ...actual,
     invalidateSystemSettingsCache: () => invalidateSystemSettingsCacheMock(),
+    primeSystemSettingsCache: (...args: unknown[]) => primeSystemSettingsCacheMock(...args),
   };
 });
 
@@ -285,7 +287,7 @@ describe("fake streaming whitelist system setting", () => {
   });
 
   describe("save action", () => {
-    test("saves fake streaming whitelist entry for all groups and invalidates cache", async () => {
+    test("saves fake streaming whitelist entry for all groups and primes cache", async () => {
       const persisted = [
         { model: "gpt-image-2", groupTags: [] },
         { model: "gpt-image-1.5", groupTags: ["group-a", "group-b"] },
@@ -306,7 +308,9 @@ describe("fake streaming whitelist system setting", () => {
           fakeStreamingWhitelist: persisted,
         })
       );
-      expect(invalidateSystemSettingsCacheMock).toHaveBeenCalledTimes(1);
+      expect(primeSystemSettingsCacheMock).toHaveBeenCalledWith(
+        expect.objectContaining({ fakeStreamingWhitelist: persisted })
+      );
       if (result.ok) {
         expect(result.data.fakeStreamingWhitelist).toEqual(persisted);
       }

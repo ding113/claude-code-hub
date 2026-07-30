@@ -103,6 +103,8 @@ export class DiscoveryRequestMetrics {
   snapshot(context: {
     outcome: "success" | "failed" | "client_abort" | "deadline";
     statusCode: number;
+    ttfbMs?: number | null;
+    ttftMs?: number | null;
     winnerOrigin?: DiscoveryWinnerOrigin;
     winnerProviderId?: number | null;
     winnerRound?: number | null;
@@ -113,7 +115,8 @@ export class DiscoveryRequestMetrics {
       outcome: context.outcome,
       statusCode: context.statusCode,
       durationMs: elapsedMs,
-      ttfbMs: context.outcome === "success" ? elapsedMs : null,
+      ttfbMs: context.ttfbMs ?? null,
+      ttftMs: context.ttftMs ?? null,
       attemptsPerRequest: this.attempts,
       maxActiveAttempts: this.maxActive,
       rounds: this.maxRound,
@@ -129,7 +132,8 @@ export class DiscoveryRequestMetrics {
       ...this.identity,
       ...context,
       elapsedMs,
-      ttfbMs: context.outcome === "success" ? elapsedMs : null,
+      ttfbMs: context.ttfbMs ?? null,
+      ttftMs: context.ttftMs ?? null,
       attemptsPerRequest: this.attempts,
       maxActiveAttempts: this.maxActive,
       rounds: this.maxRound,

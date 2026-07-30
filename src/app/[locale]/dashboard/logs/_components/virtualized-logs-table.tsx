@@ -1154,19 +1154,22 @@ export function VirtualizedLogsTable({
                     {hidePerformanceColumn ? null : (
                       <div className="flex-[0.8] min-w-[80px] text-right font-mono text-xs px-1.5">
                         {(() => {
+                          const currentTiming = log.timingSemanticsVersion === 2;
+                          const displayTtfbMs = currentTiming ? log.ttfbMs : null;
+                          const displayTtftMs = currentTiming ? log.ttftMs : null;
                           const rate = calculateOutputRate(
                             log.outputTokens,
                             log.durationMs,
-                            log.firstByteMs
+                            displayTtftMs
                           );
                           const hideRate = shouldHideOutputRate(
                             rate,
                             log.durationMs,
-                            log.firstByteMs
+                            displayTtftMs
                           );
-                          const tfftLine =
-                            log.tfftMs != null && log.tfftMs > 0
-                              ? `${t("logs.details.performance.tfft")} ${formatDuration(log.tfftMs)}`
+                          const ttfbLine =
+                            displayTtfbMs != null && displayTtfbMs > 0
+                              ? `TTFB ${formatDuration(displayTtfbMs)}`
                               : null;
                           const rateLine =
                             rate !== null && !hideRate ? `${rate.toFixed(0)} tok/s` : null;
@@ -1177,9 +1180,9 @@ export function VirtualizedLogsTable({
                                 <TooltipTrigger asChild>
                                   <div className="flex flex-col items-end cursor-help">
                                     <span>{formatDuration(log.durationMs)}</span>
-                                    {tfftLine && (
+                                    {ttfbLine && (
                                       <span className="text-muted-foreground text-[10px]">
-                                        {tfftLine}
+                                        {ttfbLine}
                                       </span>
                                     )}
                                     {rateLine && (
@@ -1194,18 +1197,20 @@ export function VirtualizedLogsTable({
                                     {t("logs.details.performance.duration")}:{" "}
                                     {formatDuration(log.durationMs)}
                                   </div>
-                                  {log.tfftMs != null && (
-                                    <div>
-                                      {t("logs.details.performance.tfft")}:{" "}
-                                      {formatDuration(log.tfftMs)}
-                                    </div>
-                                  )}
-                                  {log.firstByteMs != null && (
+                                  {displayTtfbMs != null && (
                                     <div>
                                       {t("logs.details.performance.ttfb")}:{" "}
-                                      {formatDuration(log.firstByteMs)}
+                                      {formatDuration(displayTtfbMs)}
                                     </div>
                                   )}
+                                  {displayTtftMs != null ? (
+                                    <div>
+                                      {t("logs.details.performance.ttft")}:{" "}
+                                      {formatDuration(displayTtftMs)}
+                                    </div>
+                                  ) : !currentTiming ? (
+                                    <div>{t("logs.details.performance.timingUnavailable")}</div>
+                                  ) : null}
                                   {rate !== null && !hideRate && (
                                     <div>
                                       {t("logs.details.performance.outputRate")}: {rate.toFixed(1)}{" "}
@@ -1258,8 +1263,9 @@ export function VirtualizedLogsTable({
                           hedgeLosers={log.hedgeLosers}
                           context1mApplied={log.context1mApplied}
                           durationMs={log.durationMs}
-                          tfftMs={log.tfftMs}
-                          firstByteMs={log.firstByteMs}
+                          ttfbMs={log.ttfbMs}
+                          ttftMs={log.ttftMs}
+                          timingSemanticsVersion={log.timingSemanticsVersion}
                           externalOpen={dialogState.logId === log.id ? true : undefined}
                           onExternalOpenChange={(open) => {
                             if (!open) setDialogState({ logId: null, scrollToRedirect: false });

@@ -4,6 +4,12 @@ import type { CloudPriceTableResult } from "@/lib/price-sync/cloud-price-table";
 const asyncTasks: Promise<void>[] = [];
 
 let asyncTaskManagerLoaded = false;
+const withAdvisoryLockMock = vi.fn(
+  async <T>(_lockName: string, fn: () => Promise<T>): Promise<{ ran: boolean; result?: T }> => ({
+    ran: true,
+    result: await fn(),
+  })
+);
 
 vi.mock("@/lib/logger", () => ({
   logger: {
@@ -43,6 +49,10 @@ vi.mock("@/lib/async-task-manager", () => {
     },
   };
 });
+
+vi.mock("@/lib/migrate", () => ({
+  withAdvisoryLock: (...args: unknown[]) => withAdvisoryLockMock(...args),
+}));
 
 vi.mock("@/actions/model-prices", () => ({
   processPriceTableInternal: vi.fn(async () => ({
@@ -114,6 +124,12 @@ describe("syncCloudPriceTableToDatabase", () => {
     asyncTasks.splice(0, asyncTasks.length);
     vi.unstubAllGlobals();
     asyncTaskManagerLoaded = false;
+    withAdvisoryLockMock.mockImplementation(
+      async <T>(
+        _lockName: string,
+        fn: () => Promise<T>
+      ): Promise<{ ran: boolean; result?: T }> => ({ ran: true, result: await fn() })
+    );
   });
 
   it("returns ok=false when cloud fetch fails with HTTP error", async () => {
@@ -635,6 +651,19 @@ describe("requestCloudPriceTableSync", () => {
     const { logger } = await import("@/lib/logger");
     expect(vi.mocked(logger.info)).toHaveBeenCalled();
     expect(typeof g.__CCH_CLOUD_PRICE_SYNC_LAST_AT__).toBe("number");
+  });
+
+  it("skips the cloud fetch when another instance owns the advisory lock", async () => {
+    withAdvisoryLockMock.mockResolvedValueOnce({ ran: false });
+    const { requestCloudPriceTableSync } = await import("@/lib/price-sync/cloud-price-updater");
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    requestCloudPriceTableSync({ reason: "scheduled", throttleMs: 0 });
+    await flushAsync();
+    await Promise.all(asyncTasks.splice(0, asyncTasks.length));
+
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("logs warn when sync task fails", async () => {

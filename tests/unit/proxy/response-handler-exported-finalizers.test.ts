@@ -5,12 +5,14 @@ import {
   finalizeRequestStats,
 } from "@/app/v1/_lib/proxy/response-handler";
 import { ProxySession } from "@/app/v1/_lib/proxy/session";
+import type { FingerprintBoundary } from "@/app/v1/_lib/proxy/affinity/fingerprint";
 import type { Provider } from "@/types/provider";
 
 const mocks = vi.hoisted(() => ({
   addLoserCost: vi.fn<(id: number, cost: object, entry: object) => Promise<void>>(),
   durable: vi.fn<(id: number, details: object) => Promise<void>>(),
   updateCost: vi.fn<(id: number, cost: object, breakdown: object) => Promise<void>>(),
+  cacheEffectivenessEnabled: vi.fn(() => true),
 }));
 
 vi.mock("@/lib/logger", () => ({
@@ -31,8 +33,15 @@ vi.mock("@/repository/message", () => ({
   updateMessageRequestDuration: vi.fn(),
   updateMessageRequestWinnerCost: vi.fn(),
 }));
+vi.mock("@/lib/system-settings/proxy-runtime", () => ({
+  isCacheEffectivenessEnabled: mocks.cacheEffectivenessEnabled,
+}));
 
 const CREATED_AT = new Date(0);
+
+function boundary(depth: number, fp: string, prefixBytes: number): FingerprintBoundary {
+  return { depth, fp, prefixBytes };
+}
 
 function createProvider(): Provider {
   return {
@@ -144,6 +153,7 @@ describe("exported response finalizers", () => {
     mocks.addLoserCost.mockResolvedValue(undefined);
     mocks.durable.mockResolvedValue(undefined);
     mocks.updateCost.mockResolvedValue(undefined);
+    mocks.cacheEffectivenessEnabled.mockReturnValue(true);
   });
 
   it("skips request finalization without provider and message context", async () => {
@@ -157,6 +167,16 @@ describe("exported response finalizers", () => {
 
   it("returns parsed usage and durably persists request statistics", async () => {
     const session = await createSession(createProvider());
+    session.affinity = {
+      scopeTag: "k42",
+      chain: {
+        sys: boundary(0, "sysfp", 41),
+        tail: [boundary(1, "tipfp", 103)],
+      },
+      nominatedProviderId: null,
+      matchedFp: null,
+      matchedTier: null,
+    };
     const responseText = JSON.stringify({ usage: { input_tokens: 2, output_tokens: 3 } });
 
     const usage = await finalizeRequestStats(session, responseText, 200, 15);
@@ -164,8 +184,55 @@ describe("exported response finalizers", () => {
     expect(usage).toMatchObject({ input_tokens: 2, output_tokens: 3 });
     expect(mocks.durable).toHaveBeenCalledWith(
       71,
-      expect.objectContaining({ inputTokens: 2, outputTokens: 3, statusCode: 200 })
+      expect.objectContaining({
+        inputTokens: 2,
+        outputTokens: 3,
+        statusCode: 200,
+        cacheCompatibilityKey: "k42:tipfp",
+        cacheScoreEligible: true,
+        cacheScoreExcludedReason: null,
+        theoreticalCacheTokens: 25,
+        cacheTtlBucket: "5m",
+      })
     );
+  });
+
+  it("persists non-observable cache score fields when upstream usage is absent", async () => {
+    const session = await createSession(createProvider());
+    session.affinity = {
+      scopeTag: "k42",
+      chain: { sys: boundary(0, "sysfp", 41), tail: [] },
+      nominatedProviderId: null,
+      matchedFp: null,
+      matchedTier: null,
+    };
+
+    await finalizeRequestStats(session, "{}", 200, 15);
+
+    expect(mocks.durable).toHaveBeenCalledWith(
+      71,
+      expect.objectContaining({
+        cacheCompatibilityKey: "k42:sysfp",
+        cacheScoreEligible: false,
+        cacheScoreExcludedReason: "not_observable",
+      })
+    );
+  });
+
+  it("does not write cache score fields when cache effectiveness is disabled", async () => {
+    mocks.cacheEffectivenessEnabled.mockReturnValue(false);
+    const session = await createSession(createProvider());
+
+    await finalizeRequestStats(
+      session,
+      JSON.stringify({ usage: { input_tokens: 2, output_tokens: 3 } }),
+      200,
+      15
+    );
+
+    const details = mocks.durable.mock.calls[0]?.[1] as Record<string, unknown>;
+    expect(details).not.toHaveProperty("cacheCompatibilityKey");
+    expect(details).not.toHaveProperty("cacheScoreEligible");
   });
 
   it("skips incomplete hedge drains that contain no usage", async () => {

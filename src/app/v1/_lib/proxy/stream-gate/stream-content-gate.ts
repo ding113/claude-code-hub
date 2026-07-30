@@ -328,6 +328,41 @@ export interface ShadowGateObserver {
   observe(chunk: Uint8Array): void;
 }
 
+export interface ContentTimingObserver {
+  observe(chunk: Uint8Array): void;
+}
+
+/** Lightweight protocol parser used only to timestamp the first valid content frame. */
+export function createContentTimingObserver(context: {
+  family: ProtocolFamily;
+  onContent: () => void;
+}): ContentTimingObserver {
+  const parser = new SseFrameParser();
+  let settled = false;
+
+  return {
+    observe(chunk: Uint8Array): void {
+      if (settled) return;
+      try {
+        for (const frame of parser.push(chunk)) {
+          const verdict = classifyFrame(context.family, frame.eventName, frame.data);
+          if (verdict === "content") {
+            settled = true;
+            context.onContent();
+            return;
+          }
+          if (verdict === "error" || verdict === "malformed" || verdict === "terminal") {
+            settled = true;
+            return;
+          }
+        }
+      } catch {
+        settled = true;
+      }
+    },
+  };
+}
+
 export function createShadowGateObserver(context: {
   family: ProtocolFamily;
   providerId: number;

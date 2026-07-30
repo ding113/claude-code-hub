@@ -190,11 +190,15 @@ export async function traceProxyRequest(ctx: TraceContext): Promise<void> {
       guardPipelineMs,
       upstreamTotalMs:
         guardPipelineMs != null ? Math.max(0, durationMs - guardPipelineMs) : durationMs,
-      tfftFromForwardMs:
-        guardPipelineMs != null && session.tfftMs != null
-          ? Math.max(0, session.tfftMs - guardPipelineMs)
+      ttfbFromForwardMs:
+        guardPipelineMs != null && session.ttfbMs != null
+          ? Math.max(0, session.ttfbMs - guardPipelineMs)
           : null,
-      tokenGenerationMs: session.tfftMs != null ? Math.max(0, durationMs - session.tfftMs) : null,
+      ttftFromForwardMs:
+        guardPipelineMs != null && session.ttftMs != null
+          ? Math.max(0, session.ttftMs - guardPipelineMs)
+          : null,
+      tokenGenerationMs: session.ttftMs != null ? Math.max(0, durationMs - session.ttftMs) : null,
       failedAttempts: session.getProviderChain().filter((i) => !isSuccessReason(i.reason)).length,
       providersAttempted: new Set(session.getProviderChain().map((i) => i.id)).size,
     };
@@ -278,8 +282,8 @@ export async function traceProxyRequest(ctx: TraceContext): Promise<void> {
       keyName: messageContext?.key?.name,
       // Timing
       durationMs,
-      tfftMs: session.tfftMs,
-      firstByteMs: session.firstByteMs,
+      ttfbMs: session.ttfbMs,
+      ttftMs: session.ttftMs,
       timingBreakdown,
       // Flags
       isStreaming,
@@ -433,10 +437,10 @@ export async function traceProxyRequest(ctx: TraceContext): Promise<void> {
           { asType: "generation", startTime: generationStartTime } as { asType: "generation" }
         );
 
-        // Set TTFB as completionStartTime
-        if (session.tfftMs != null) {
+        // Langfuse completionStartTime is the first generated content, not HTTP headers.
+        if (session.ttftMs != null) {
           generation.update({
-            completionStartTime: new Date(session.startTime + session.tfftMs),
+            completionStartTime: new Date(session.startTime + session.ttftMs),
           });
         }
 
