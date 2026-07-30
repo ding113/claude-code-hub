@@ -585,6 +585,11 @@ export async function register() {
         });
       }
 
+      const { reconcilePublicStatusSiteTitleAtStartup } = await import(
+        "@/lib/public-status/startup-reconciliation"
+      );
+      await reconcilePublicStatusSiteTitleAtStartup();
+
       try {
         const { startPublicStatusRebuildScheduler } = await import("@/lib/public-status/scheduler");
         startPublicStatusRebuildScheduler();
@@ -746,6 +751,11 @@ export async function register() {
             error: error instanceof Error ? error.message : String(error),
           });
         }
+
+        const { reconcilePublicStatusSiteTitleAtStartup } = await import(
+          "@/lib/public-status/startup-reconciliation"
+        );
+        await reconcilePublicStatusSiteTitleAtStartup();
 
         try {
           const { startPublicStatusRebuildScheduler } = await import(
