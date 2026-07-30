@@ -181,7 +181,7 @@ export async function publishCurrentPublicStatusConfigProjection(input: {
 export async function reconcilePublicStatusSiteTitleProjection(): Promise<boolean> {
   const settings = await getSystemSettings();
   const currentSnapshot = await readCurrentPublicStatusConfigSnapshot();
-  if (currentSnapshot?.siteTitle.trim() === settings.siteTitle.trim()) {
+  if (currentSnapshot?.siteTitle?.trim() === settings.siteTitle.trim()) {
     return true;
   }
   const result = await publishCurrentPublicStatusConfigProjection({

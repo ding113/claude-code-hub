@@ -172,6 +172,26 @@ describe("public-status config publisher", () => {
     );
   });
 
+  it("republishes a snapshot missing siteTitle while reusing its configVersion", async () => {
+    mockReadCurrentPublicStatusConfigSnapshot.mockResolvedValue({
+      configVersion: "cfg-legacy",
+    });
+    const mod = await import("@/lib/public-status/config-publisher");
+
+    const written = await mod.reconcilePublicStatusSiteTitleProjection();
+
+    expect(written).toBe(true);
+    expect(mockPublishPublicStatusConfigSnapshot).toHaveBeenCalledWith(
+      expect.objectContaining({
+        reason: "startup-site-title-reconciliation",
+        snapshot: expect.objectContaining({ configVersion: "cfg-legacy", siteTitle: "CC Hub" }),
+      })
+    );
+    expect(mockPublishCurrentPublicStatusConfigPointers).toHaveBeenCalledWith(
+      expect.objectContaining({ configVersion: "cfg-legacy" })
+    );
+  });
+
   it("reports when a missing Redis projection cannot be written", async () => {
     mockPublishInternalPublicStatusConfigSnapshot.mockResolvedValue({
       configVersion: "cfg-test",
