@@ -29,17 +29,17 @@ CC Hub is an intelligent AI API proxy platform designed for agile development te
 
 ### Business Objectives
 
-- Establish CCH as the recognized open-source AI Coding proxy platform
+- Establish CC Hub as the recognized open-source AI Coding proxy platform
 - Grow community awareness and adoption
-- Build a community willing to use and contribute to CCH
+- Build a community willing to use and contribute to CC Hub
 - Sustainable development through sponsorship model
 - Expand product line (server + client versions in future)
 
 ### Success Metrics
 
 - Community recognition and adoption
-- Users willing to use CCH
-- Contributors willing to help maintain CCH
+- Users willing to use CC Hub
+- Contributors willing to help maintain CC Hub
 - Growing awareness in the AI Coding tool ecosystem
 - KOL recommendations in developer community
 
@@ -1109,7 +1109,7 @@ Implement the foundational proxy functionality that routes requests to upstream 
 **Priority:** Must Have
 
 **Business Value:**
-This is the core value proposition of CCH - without this, there is no product. Enables seamless multi-provider experience with high availability.
+This is the core value proposition of CC Hub - without this, there is no product. Enables seamless multi-provider experience with high availability.
 
 ---
 
@@ -1178,7 +1178,7 @@ Implement admin dashboard with comprehensive system management capabilities.
 **Priority:** Should Have
 
 **Business Value:**
-Enables system administrators to manage CCH effectively without direct database access or code changes.
+Enables system administrators to manage CC Hub effectively without direct database access or code changes.
 
 ---
 
@@ -1200,7 +1200,7 @@ Implement API endpoints compatible with major AI coding tool formats.
 **Priority:** Must Have
 
 **Business Value:**
-Enables CCH to work with all major AI coding tools without client-side changes.
+Enables CC Hub to work with all major AI coding tools without client-side changes.
 
 ---
 
@@ -1255,7 +1255,7 @@ These are preliminary stories. Detailed stories will be created in Phase 4 (Impl
 
 ### EPIC-001: Core Proxy Engine
 
-- As a **developer**, I want to connect my Claude Code CLI to CCH so that I can use AI assistance without managing provider configuration.
+- As a **developer**, I want to connect my Claude Code CLI to CC Hub so that I can use AI assistance without managing provider configuration.
 - As a **developer**, I want my requests to automatically failover to backup providers so that I experience uninterrupted service.
 - As an **admin**, I want to add multiple providers with different weights so that I can distribute load according to my service agreements.
 - As a **developer**, I want session stickiness so that my conversation context is maintained and cache hits improve.
@@ -1282,7 +1282,7 @@ These are preliminary stories. Detailed stories will be created in Phase 4 (Impl
 
 - As a **developer using Claude Code**, I want to use standard Claude API endpoints so that I don't need special configuration.
 - As a **developer using Codex CLI**, I want to use Response API format so that my existing tooling works.
-- As a **developer**, I want to access API documentation so that I can integrate CCH into custom tools.
+- As a **developer**, I want to access API documentation so that I can integrate CC Hub into custom tools.
 
 ---
 
@@ -1362,31 +1362,31 @@ These are preliminary stories. Detailed stories will be created in Phase 4 (Impl
 
 ## User Flows
 
-### Flow 1: Developer Connects to CCH
+### Flow 1: Developer Connects to CC Hub
 
 1. Admin provides developer with API key
-2. Developer sets CCH URL as API endpoint in Claude Code
+2. Developer sets CC Hub URL as API endpoint in Claude Code
 3. Developer sets provided API key as authentication
-4. Claude Code connects through CCH transparently
+4. Claude Code connects through CC Hub transparently
 5. Developer uses AI coding as normal
 
 ### Flow 2: Admin Adds New Provider
 
-1. Admin logs into CCH admin dashboard
+1. Admin logs into CC Hub admin dashboard
 2. Admin navigates to Provider Management
 3. Admin clicks "Add Provider"
 4. Admin enters provider details (name, URL, API key, type)
 5. Admin configures weight, priority, limits
 6. Admin enables provider
-7. CCH begins routing traffic to new provider
+7. CC Hub begins routing traffic to new provider
 
 ### Flow 3: Automatic Failover During Outage
 
-1. Developer sends request to CCH
-2. CCH routes to primary provider
+1. Developer sends request to CC Hub
+2. CC Hub routes to primary provider
 3. Primary provider returns error
 4. Circuit breaker records failure
-5. CCH automatically retries on secondary provider
+5. CC Hub automatically retries on secondary provider
 6. Secondary provider returns success
 7. Developer receives response (unaware of failover)
 8. After threshold, circuit breaker opens for primary
