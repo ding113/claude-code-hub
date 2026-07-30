@@ -23,6 +23,7 @@ import { getReplayStore, type ReplayDelivery, type ReplayMeta } from "./replay-s
 const FLUSH_INTERVAL_MS = 100;
 const FLUSH_BYTES_THRESHOLD = 64 * 1024;
 const OWNER_HEARTBEAT_INTERVAL_MS = 15_000;
+const PRE_SPOOL_ABORT_WAIT_MS = 100;
 
 let activeSpoolCount = 0;
 
@@ -413,9 +414,25 @@ export async function abortReplayOwnership(session: ProxySession, reason: string
     heartbeatAt: Date.now(),
     abortReason: reason,
   };
-  await getReplayStore()
-    .abortOwned(identity.replayId, ownerToken, meta)
-    .catch(() => false);
+  const store = getReplayStore();
+  const cleanup = (async () => {
+    const aborted = await store.abortOwned(identity.replayId, ownerToken, meta).catch(() => false);
+    if (aborted) return;
+
+    logger.warn("[ReplaySpool] failed to abort pre-spool replay ownership", {
+      replayId: identity.replayId.slice(0, 12),
+      reason,
+    });
+    await store.releaseOwner(identity.replayId, ownerToken).catch(() => undefined);
+  })();
+
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  const deadline = new Promise<void>((resolve) => {
+    timer = setTimeout(resolve, PRE_SPOOL_ABORT_WAIT_MS);
+    timer.unref?.();
+  });
+  await Promise.race([cleanup, deadline]);
+  if (timer) clearTimeout(timer);
 }
 
 /**

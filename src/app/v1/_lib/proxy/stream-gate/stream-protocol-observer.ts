@@ -1,6 +1,8 @@
 import { classifyFrame, type ProtocolFamily } from "./frame-classifier";
 import { type SseFrame, SseFrameParser } from "./sse-frames";
 
+export const REPLAY_PROTOCOL_OBSERVER_MAX_BUFFER_CHARACTERS = 1024 * 1024;
+
 export interface StreamProtocolFailure {
   verdict: "error" | "malformed";
   eventName: string | null;
@@ -18,7 +20,9 @@ export interface StreamProtocolObserver {
 }
 
 export function createStreamProtocolObserver(family: ProtocolFamily): StreamProtocolObserver {
-  const parser = new SseFrameParser();
+  const parser = new SseFrameParser({
+    maxBufferedCharacters: REPLAY_PROTOCOL_OBSERVER_MAX_BUFFER_CHARACTERS,
+  });
   const observation: StreamProtocolObservation = {
     sawContent: false,
     sawTerminal: false,
@@ -26,6 +30,11 @@ export function createStreamProtocolObserver(family: ProtocolFamily): StreamProt
   };
   let finished = false;
   let disabled = false;
+
+  const disableWithMalformedFailure = (): void => {
+    disabled = true;
+    observation.failure ??= { verdict: "malformed", eventName: null };
+  };
 
   const record = (frame: SseFrame): void => {
     const verdict = classifyFrame(family, frame.eventName, frame.data);
@@ -43,7 +52,7 @@ export function createStreamProtocolObserver(family: ProtocolFamily): StreamProt
         for (const frame of parser.push(chunk)) record(frame);
       } catch {
         // 旁路观察器异常不得改变客户端流或计费热路径。
-        disabled = true;
+        disableWithMalformedFailure();
       }
     },
 
@@ -54,7 +63,7 @@ export function createStreamProtocolObserver(family: ProtocolFamily): StreamProt
           try {
             for (const frame of parser.finish()) record(frame);
           } catch {
-            disabled = true;
+            disableWithMalformedFailure();
           }
         }
       }

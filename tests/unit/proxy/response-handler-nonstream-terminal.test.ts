@@ -344,6 +344,43 @@ describe("ProxyResponseHandler.dispatch nonstream terminal behavior", () => {
     expect(replayControl.spool.abort).not.toHaveBeenCalled();
   });
 
+  it.each(["application/json", "application/problem+json; charset=utf-8"])(
+    "声明为 %s 的 malformed body 不得 completed Replay",
+    async (contentType) => {
+      replayControl.state.enabled = true;
+      const session = await createSession(vi.fn(), { stream: true });
+      const body = '{"id":"truncated"';
+
+      const returned = await ProxyResponseHandler.dispatch(
+        session,
+        new Response(body, { headers: { "content-type": contentType } })
+      );
+      await expect(returned.text()).resolves.toBe(body);
+      await settleTasks();
+
+      expect(replayControl.spool.observe).not.toHaveBeenCalled();
+      expect(replayControl.spool.completeAfterBilling).not.toHaveBeenCalled();
+      expect(replayControl.spool.abort).toHaveBeenCalledWith("non_stream_malformed_json");
+    }
+  );
+
+  it("非 JSON buffered body 不做 JSON parse，可正常 completed Replay", async () => {
+    replayControl.state.enabled = true;
+    const session = await createSession(vi.fn(), { stream: true });
+    const body = "{not-json";
+
+    const returned = await ProxyResponseHandler.dispatch(
+      session,
+      new Response(body, { headers: { "content-type": "text/plain" } })
+    );
+    await expect(returned.text()).resolves.toBe(body);
+    await settleTasks();
+
+    expect(replayControl.spool.observe).toHaveBeenCalledOnce();
+    expect(replayControl.spool.completeAfterBilling).toHaveBeenCalledWith(MESSAGE.id);
+    expect(replayControl.spool.abort).not.toHaveBeenCalled();
+  });
+
   it("terminal persistence 全部失败时 abort buffered Replay，绝不 completed", async () => {
     replayControl.state.enabled = true;
     mocks.durable.mockRejectedValueOnce(new Error("primary unavailable"));
@@ -379,6 +416,8 @@ describe("ProxyResponseHandler.dispatch nonstream terminal behavior", () => {
     );
     const returnedBody = await returned.text();
     await settleTasks();
+
+    expect(returned.headers.get("content-type")).toContain("application/json");
 
     const observed = replayControl.spool.observe.mock.calls[0]?.[0] as Uint8Array;
     const observedBody = new TextDecoder().decode(observed);
@@ -444,5 +483,23 @@ describe("ProxyResponseHandler.dispatch nonstream terminal behavior", () => {
     const observed = replayControl.spool.observe.mock.calls[0]?.[0] as Uint8Array;
     expect(new TextDecoder().decode(observed)).toBe(upstreamBody);
     expect(replayControl.spool.completeAfterBilling).toHaveBeenCalledWith(MESSAGE.id);
+  });
+
+  it("Gemini passthrough 的 malformed JSON 会 abort Replay 且不发布 chunks", async () => {
+    replayControl.state.enabled = true;
+    const session = await createSession(vi.fn(), { stream: true, providerType: "gemini" });
+    session.setOriginalFormat("gemini");
+    const upstreamBody = '{"candidates":[';
+
+    const returned = await ProxyResponseHandler.dispatch(
+      session,
+      new Response(upstreamBody, { headers: { "content-type": "application/json" } })
+    );
+    await expect(returned.text()).resolves.toBe(upstreamBody);
+    await settleTasks();
+
+    expect(replayControl.spool.observe).not.toHaveBeenCalled();
+    expect(replayControl.spool.completeAfterBilling).not.toHaveBeenCalled();
+    expect(replayControl.spool.abort).toHaveBeenCalledWith("non_stream_malformed_json");
   });
 });

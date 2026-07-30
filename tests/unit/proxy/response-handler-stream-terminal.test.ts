@@ -59,6 +59,7 @@ vi.mock("@/lib/proxy-status-tracker", () => ({
   ProxyStatusTracker: { getInstance: () => ({ endRequest: mocks.trackerEnd }) },
 }));
 vi.mock("@/app/v1/_lib/proxy/replay/replay-spool", () => ({
+  abortReplayOwnership: vi.fn(async () => undefined),
   createReplaySpoolIfOwner: (session: ProxySession) =>
     session.replayState?.role === "owner"
       ? {

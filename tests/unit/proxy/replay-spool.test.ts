@@ -166,8 +166,18 @@ beforeEach(() => {
   envControl.maxConcurrentSpools = 64;
   storeControl.order.length = 0;
   storeControl.resetOwnedChunkCount();
-  storeControl.store.abortOwned.mockClear();
+  storeControl.store.abortOwned.mockImplementation(
+    async (_replayId: string, _ownerToken: string, meta: { status: string }) => {
+      storeControl.order.push(`meta:${meta.status}`);
+      storeControl.order.push("deleteChunks");
+      storeControl.order.push("release");
+      return true;
+    }
+  );
   storeControl.store.completeOwned.mockClear();
+  storeControl.store.releaseOwner.mockImplementation(async () => {
+    storeControl.order.push("release");
+  });
   storeControl.store.writeOwned.mockClear();
   vi.useFakeTimers();
 });
@@ -704,6 +714,7 @@ describe("abortReplayOwnership", () => {
 
     await abortReplayOwnership(session, "duplicate");
     expect(storeControl.store.abortOwned).toHaveBeenCalledTimes(1);
+    expect(vi.getTimerCount()).toBe(0);
   });
 
   it("非 owner 会话不触碰 store", async () => {
@@ -712,5 +723,55 @@ describe("abortReplayOwnership", () => {
     await abortReplayOwnership(session, "forward_failed");
 
     expect(storeControl.store.abortOwned).not.toHaveBeenCalled();
+  });
+
+  it("fenced abort 返回 false 时尝试释放 owner lease", async () => {
+    storeControl.store.abortOwned.mockResolvedValueOnce(false);
+    const session = makeOwnerSession();
+
+    await abortReplayOwnership(session, "forward_failed");
+
+    expect(storeControl.store.releaseOwner).toHaveBeenCalledWith(identity.replayId, "owner-token");
+    expect(logger.warn).toHaveBeenCalledWith(
+      "[ReplaySpool] failed to abort pre-spool replay ownership",
+      expect.objectContaining({
+        replayId: identity.replayId.slice(0, 12),
+        reason: "forward_failed",
+      })
+    );
+  });
+
+  it("cleanup 卡住时只同步等待 100ms，随后继续 detached cleanup", async () => {
+    let resolveAbort: ((value: boolean) => void) | undefined;
+    let resolveRelease: (() => void) | undefined;
+    const releaseCalled = new Promise<void>((resolve) => {
+      resolveRelease = resolve;
+    });
+    storeControl.store.abortOwned.mockImplementationOnce(
+      async () =>
+        await new Promise<boolean>((resolve) => {
+          resolveAbort = resolve;
+        })
+    );
+    storeControl.store.releaseOwner.mockImplementationOnce(async () => {
+      storeControl.order.push("release");
+      resolveRelease?.();
+    });
+    const session = makeOwnerSession();
+    let settled = false;
+    const aborting = abortReplayOwnership(session, "forward_failed").then(() => {
+      settled = true;
+    });
+
+    await vi.advanceTimersByTimeAsync(99);
+    expect(settled).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    await aborting;
+    expect(settled).toBe(true);
+    expect(session.replayState).toBeNull();
+
+    resolveAbort?.(false);
+    await releaseCalled;
+    expect(storeControl.store.releaseOwner).toHaveBeenCalledWith(identity.replayId, "owner-token");
   });
 });

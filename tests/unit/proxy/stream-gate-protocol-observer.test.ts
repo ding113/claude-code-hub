@@ -1,5 +1,8 @@
 import { describe, expect, test } from "vitest";
-import { createStreamProtocolObserver } from "@/app/v1/_lib/proxy/stream-gate/stream-protocol-observer";
+import {
+  createStreamProtocolObserver,
+  REPLAY_PROTOCOL_OBSERVER_MAX_BUFFER_CHARACTERS,
+} from "@/app/v1/_lib/proxy/stream-gate/stream-protocol-observer";
 
 const encoder = new TextEncoder();
 
@@ -119,6 +122,37 @@ describe("StreamProtocolObserver", () => {
       sawContent: false,
       sawTerminal: false,
       failure: { verdict: "malformed", eventName: "response.completed" },
+    });
+  });
+
+  test("超长未终止 SSE 行会 fail closed，而不是被视为干净流", () => {
+    const observer = createStreamProtocolObserver("openai-responses");
+    observer.observe(
+      encoder.encode(`data: ${"x".repeat(REPLAY_PROTOCOL_OBSERVER_MAX_BUFFER_CHARACTERS + 1)}`)
+    );
+
+    expect(observer.finish()).toEqual({
+      sawContent: false,
+      sawTerminal: false,
+      failure: { verdict: "malformed", eventName: null },
+    });
+  });
+
+  test("首内容后 observer 超限仍保留 content，并阻止 Replay completed", () => {
+    const observer = createStreamProtocolObserver("openai-responses");
+    observer.observe(
+      encoder.encode(
+        'event: response.output_text.delta\ndata: {"type":"response.output_text.delta","delta":"ok"}\n\n'
+      )
+    );
+    observer.observe(
+      encoder.encode(`data: ${"x".repeat(REPLAY_PROTOCOL_OBSERVER_MAX_BUFFER_CHARACTERS + 1)}`)
+    );
+
+    expect(observer.finish()).toEqual({
+      sawContent: true,
+      sawTerminal: false,
+      failure: { verdict: "malformed", eventName: null },
     });
   });
 });

@@ -66,6 +66,7 @@ import {
   createReplaySpoolIfOwner,
   releaseReplayOwnership,
 } from "./replay/replay-spool";
+import { isMalformedJsonResponseBody } from "./response-content-type";
 import type { ProxySession } from "./session";
 import {
   consumeDeferredStreamingFinalization,
@@ -2447,7 +2448,6 @@ export class ProxyResponseHandler {
         const runStatsTask = async () => {
           try {
             const responseText = await readResponseTextWithTaskActivity(responseForStats, taskId);
-            replaySpool?.observe(RESPONSE_TEXT_ENCODER.encode(responseText));
 
             const sessionWithCleanup = session as typeof session & {
               clearResponseTimeout?: () => void;
@@ -2532,14 +2532,28 @@ export class ProxyResponseHandler {
               postTerminalSideEffects.push(commitProviderFailure);
             }
             if (replaySpool) {
+              const replayMalformedJson = isMalformedJsonResponseBody(
+                response.headers.get("content-type"),
+                responseText
+              );
               const replayDetected = detectUpstreamErrorFromSseOrJsonText(responseText);
-              if (statusCode >= 200 && statusCode < 300 && !replayDetected.isError) {
+              if (
+                statusCode >= 200 &&
+                statusCode < 300 &&
+                !replayMalformedJson &&
+                !replayDetected.isError
+              ) {
+                replaySpool.observe(RESPONSE_TEXT_ENCODER.encode(responseText));
                 postTerminalSideEffects.push(() =>
                   replaySpool.completeAfterBilling(messageContext?.id ?? null)
                 );
               } else {
                 await replaySpool.abort(
-                  replayDetected.isError ? "non_stream_upstream_error" : "non_stream_http_error"
+                  replayMalformedJson
+                    ? "non_stream_malformed_json"
+                    : replayDetected.isError
+                      ? "non_stream_upstream_error"
+                      : "non_stream_http_error"
                 );
               }
             }
@@ -2739,6 +2753,17 @@ export class ProxyResponseHandler {
 
           const transformed = GeminiAdapter.transformResponse(responseData, false);
           const transformedBody = JSON.stringify(transformed);
+          if (transformedBody === undefined) {
+            throw new Error("Gemini response transform produced no JSON body");
+          }
+          const transformedJson = JSON.parse(transformedBody) as unknown;
+          if (
+            !transformedJson ||
+            typeof transformedJson !== "object" ||
+            Array.isArray(transformedJson)
+          ) {
+            throw new Error("Gemini response transform produced an invalid JSON object");
+          }
 
           logger.debug(
             "[ResponseHandler] Transformed Gemini non-stream response to client format",
@@ -2751,10 +2776,12 @@ export class ProxyResponseHandler {
 
           // ⭐ 清理传输 headers（body 已从流转为 JSON 字符串）
           finalResponseBodyForSnapshot = transformedBody;
+          const transformedHeaders = cleanResponseHeaders(response.headers);
+          transformedHeaders.set("content-type", "application/json");
           finalResponse = new Response(transformedBody, {
             status: response.status,
             statusText: response.statusText,
-            headers: cleanResponseHeaders(response.headers),
+            headers: transformedHeaders,
           });
         } catch (error) {
           logger.error("[ResponseHandler] Failed to transform Gemini non-stream response:", error);
@@ -2765,13 +2792,10 @@ export class ProxyResponseHandler {
       }
     }
 
-    let replaySpool: ReturnType<typeof createReplaySpoolIfOwner>;
     if (responseTransformFailed) {
       await abortReplayOwnership(session, "non_stream_transform_error");
-      replaySpool = null;
-    } else {
-      replaySpool = createBufferedReplaySpool(finalResponse);
     }
+    const replaySpool = responseTransformFailed ? null : createBufferedReplaySpool(finalResponse);
     let replayCompletionScheduled = false;
 
     // 使用 AsyncTaskManager 管理后台处理任务
@@ -2837,9 +2861,10 @@ export class ProxyResponseHandler {
             commit: (signal) => runPostTerminalSideEffects(postTerminalSideEffects, signal),
           });
           if (replaySpool) {
+            const activeReplaySpool = replaySpool;
             void completion.finally(() => {
-              if (!replaySpool.isTerminal) {
-                void replaySpool.abort("post_terminal_effects_incomplete");
+              if (!activeReplaySpool.isTerminal) {
+                void activeReplaySpool.abort("post_terminal_effects_incomplete");
               }
             });
           }
@@ -2910,15 +2935,28 @@ export class ProxyResponseHandler {
         let usageMetrics: UsageMetrics | null = null;
         const postTerminalSideEffects: Array<() => Promise<void>> = [];
         if (replaySpool) {
-          replaySpool.observe(RESPONSE_TEXT_ENCODER.encode(clientVisibleResponseText));
+          const replayMalformedJson = isMalformedJsonResponseBody(
+            finalResponse.headers.get("content-type"),
+            clientVisibleResponseText
+          );
           const replayDetected = detectUpstreamErrorFromSseOrJsonText(responseText);
-          if (statusCode >= 200 && statusCode < 300 && !replayDetected.isError) {
+          if (
+            statusCode >= 200 &&
+            statusCode < 300 &&
+            !replayMalformedJson &&
+            !replayDetected.isError
+          ) {
+            replaySpool.observe(RESPONSE_TEXT_ENCODER.encode(clientVisibleResponseText));
             postTerminalSideEffects.push(() =>
               replaySpool.completeAfterBilling(messageContext?.id ?? null)
             );
           } else {
             await replaySpool.abort(
-              replayDetected.isError ? "non_stream_upstream_error" : "non_stream_http_error"
+              replayMalformedJson
+                ? "non_stream_malformed_json"
+                : replayDetected.isError
+                  ? "non_stream_upstream_error"
+                  : "non_stream_http_error"
             );
           }
         }
@@ -3168,9 +3206,10 @@ export class ProxyResponseHandler {
             commit: (signal) => runPostTerminalSideEffects(postTerminalSideEffects, signal),
           });
           if (replaySpool) {
+            const activeReplaySpool = replaySpool;
             void completion.finally(() => {
-              if (!replaySpool.isTerminal) {
-                void replaySpool.abort("post_terminal_effects_incomplete");
+              if (!activeReplaySpool.isTerminal) {
+                void activeReplaySpool.abort("post_terminal_effects_incomplete");
               }
             });
           }
