@@ -1,10 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ReplayIdentity } from "@/app/v1/_lib/proxy/replay/replay-identity";
 import {
+  abortReplayOwnership,
   createReplaySpoolIfOwner,
   getActiveReplaySpoolCount,
   ReplaySpool,
 } from "@/app/v1/_lib/proxy/replay/replay-spool";
+import type { ReplayDelivery } from "@/app/v1/_lib/proxy/replay/replay-store";
 import type { ProxySession } from "@/app/v1/_lib/proxy/session";
 import { logger } from "@/lib/logger";
 
@@ -24,6 +26,7 @@ const envControl = vi.hoisted(() => ({
 
 const storeControl = vi.hoisted(() => {
   const order: string[] = [];
+  let ownedChunkCount = 0;
   const store = {
     appendChunks: vi.fn(async (_replayId: string, values: string[]) => {
       order.push(`append:${values.join("|")}`);
@@ -33,6 +36,25 @@ const storeControl = vi.hoisted(() => {
       order.push(`meta:${meta.status}`);
       return true;
     }),
+    writeOwned: vi.fn(
+      async (
+        _replayId: string,
+        _ownerToken: string,
+        _meta: { status: string },
+        values: string[] = []
+      ) => {
+        order.push(`write:${values.join("|")}`);
+        ownedChunkCount += values.length;
+        return ownedChunkCount;
+      }
+    ),
+    completeOwned: vi.fn(
+      async (_replayId: string, _ownerToken: string, meta: { status: string }) => {
+        order.push(`meta:${meta.status}`);
+        order.push("release");
+        return true;
+      }
+    ),
     renewOwnerLease: vi.fn(async () => {
       order.push("renew");
       return true;
@@ -49,8 +71,20 @@ const storeControl = vi.hoisted(() => {
     deleteChunks: vi.fn(async () => {
       order.push("deleteChunks");
     }),
+    abortOwned: vi.fn(async (_replayId: string, _ownerToken: string, meta: { status: string }) => {
+      order.push(`meta:${meta.status}`);
+      order.push("deleteChunks");
+      order.push("release");
+      return true;
+    }),
   };
-  return { order, store };
+  return {
+    order,
+    store,
+    resetOwnedChunkCount: () => {
+      ownedChunkCount = 0;
+    },
+  };
 });
 
 vi.mock("@/lib/logger", () => ({
@@ -95,8 +129,18 @@ const identity: ReplayIdentity = {
 
 const encoder = new TextEncoder();
 
-function makeSpool(statusCode = 200, contentType = "text/event-stream"): ReplaySpool {
-  return new ReplaySpool(identity, "owner-token", statusCode, contentType);
+function makeSpool(
+  statusCode = 200,
+  contentType = "text/event-stream",
+  delivery: ReplayDelivery = "stream"
+): ReplaySpool {
+  return new ReplaySpool(
+    identity,
+    "owner-token",
+    statusCode,
+    { "content-type": contentType },
+    delivery
+  );
 }
 
 async function drainWriteChain(spool: ReplaySpool): Promise<void> {
@@ -116,10 +160,15 @@ function sseResponse(status = 200, contentType: string | null = "text/event-stre
 }
 
 beforeEach(() => {
+  vi.clearAllMocks();
   envControl.enableReplay = true;
   envControl.maxPayloadBytes = 8 * 1024 * 1024;
   envControl.maxConcurrentSpools = 64;
   storeControl.order.length = 0;
+  storeControl.resetOwnedChunkCount();
+  storeControl.store.abortOwned.mockClear();
+  storeControl.store.completeOwned.mockClear();
+  storeControl.store.writeOwned.mockClear();
   vi.useFakeTimers();
 });
 
@@ -129,23 +178,20 @@ afterEach(() => {
 });
 
 describe("ReplaySpool：write-behind 批量冲刷", () => {
-  it("小块累积由 100ms 定时批量 RPUSH，并同步续 meta 心跳与 owner 租约", async () => {
+  it("小块累积由 100ms 定时通过 fenced write 原子追加并更新 meta/owner 租约", async () => {
     const spool = makeSpool();
     spool.observe(encoder.encode("data: a\n\n"));
     spool.observe(encoder.encode("data: b\n\n"));
 
-    expect(storeControl.store.appendChunks).not.toHaveBeenCalled();
+    expect(storeControl.store.writeOwned).not.toHaveBeenCalled();
 
     await vi.advanceTimersByTimeAsync(100);
     await drainWriteChain(spool);
 
-    expect(storeControl.store.appendChunks).toHaveBeenCalledTimes(1);
-    expect(storeControl.store.appendChunks).toHaveBeenCalledWith(identity.replayId, [
-      "data: a\n\n",
-      "data: b\n\n",
-    ]);
-    expect(storeControl.store.setMeta).toHaveBeenCalledWith(
+    expect(storeControl.store.writeOwned).toHaveBeenCalledTimes(1);
+    expect(storeControl.store.writeOwned).toHaveBeenCalledWith(
       identity.replayId,
+      "owner-token",
       expect.objectContaining({
         status: "owning",
         verifier: identity.verifier,
@@ -155,11 +201,8 @@ describe("ReplaySpool：write-behind 批量冲刷", () => {
         chunkCount: 2,
         byteSize: 18,
         heartbeatAt: expect.any(Number),
-      })
-    );
-    expect(storeControl.store.renewOwnerLease).toHaveBeenCalledWith(
-      identity.replayId,
-      "owner-token"
+      }),
+      ["data: a\n\n", "data: b\n\n"]
     );
 
     await spool.abort("test_cleanup");
@@ -171,7 +214,7 @@ describe("ReplaySpool：write-behind 批量冲刷", () => {
 
     await drainWriteChain(spool);
 
-    expect(storeControl.store.appendChunks).toHaveBeenCalledTimes(1);
+    expect(storeControl.store.writeOwned).toHaveBeenCalledTimes(1);
 
     await spool.abort("test_cleanup");
   });
@@ -182,27 +225,43 @@ describe("ReplaySpool：write-behind 批量冲刷", () => {
 
     await vi.advanceTimersByTimeAsync(200);
     await drainWriteChain(spool);
-    expect(storeControl.store.appendChunks).not.toHaveBeenCalled();
+    expect(storeControl.store.writeOwned).not.toHaveBeenCalled();
 
     await spool.abort("test_cleanup");
   });
 
-  it("appendChunks 返回 null（Redis 不可用）时放弃 spool", async () => {
-    storeControl.store.appendChunks.mockResolvedValueOnce(null);
+  it("没有响应 chunk 时仍按 15 秒间隔续租 owner", async () => {
+    const spool = makeSpool();
+
+    await vi.advanceTimersByTimeAsync(15_000);
+    await drainWriteChain(spool);
+
+    expect(storeControl.store.renewOwnerLease).toHaveBeenCalledWith(
+      identity.replayId,
+      "owner-token"
+    );
+    await spool.abort("test_cleanup");
+  });
+
+  it("writeOwned 返回 null（Redis 不可用）时放弃 spool", async () => {
+    storeControl.store.writeOwned.mockResolvedValueOnce(null);
     const spool = makeSpool();
     spool.observe(encoder.encode("data: a\n\n"));
 
     await vi.advanceTimersByTimeAsync(100);
     await drainWriteChain(spool);
 
-    expect(storeControl.store.deleteEntry).toHaveBeenCalledWith(identity.replayId);
-    expect(storeControl.store.releaseOwner).toHaveBeenCalledWith(identity.replayId, "owner-token");
+    expect(storeControl.store.abortOwned).toHaveBeenCalledWith(
+      identity.replayId,
+      "owner-token",
+      expect.objectContaining({ status: "aborted", abortReason: "redis_unavailable" })
+    );
     expect(storeControl.store.setMeta).not.toHaveBeenCalled();
     expect(getActiveReplaySpoolCount()).toBe(0);
   });
 
-  it("冲刷续接体异常（setMeta 抛错）时 disable：链不被 poisoned、条目删除、租约释放", async () => {
-    storeControl.store.setMeta.mockRejectedValueOnce(new Error("redis exploded"));
+  it("冲刷续接体异常时 disable：链不被 poisoned、条目删除、租约释放", async () => {
+    storeControl.store.writeOwned.mockRejectedValueOnce(new Error("redis exploded"));
     const spool = makeSpool();
     spool.observe(encoder.encode("data: a\n\n"));
 
@@ -210,8 +269,11 @@ describe("ReplaySpool：write-behind 批量冲刷", () => {
     // 链必须 resolve 而非 reject（unhandled rejection 防护）
     await expect(drainWriteChain(spool)).resolves.toBeUndefined();
 
-    expect(storeControl.store.deleteEntry).toHaveBeenCalledWith(identity.replayId);
-    expect(storeControl.store.releaseOwner).toHaveBeenCalledWith(identity.replayId, "owner-token");
+    expect(storeControl.store.abortOwned).toHaveBeenCalledWith(
+      identity.replayId,
+      "owner-token",
+      expect.objectContaining({ status: "aborted", abortReason: "flush_error" })
+    );
     expect(spool.isTerminal).toBe(true);
     expect(getActiveReplaySpoolCount()).toBe(0);
 
@@ -223,20 +285,24 @@ describe("ReplaySpool：write-behind 批量冲刷", () => {
   });
 
   it("bootstrap 续接体异常同样 disable 而不 poison 链", async () => {
-    storeControl.store.setMeta.mockRejectedValueOnce(new Error("redis exploded"));
+    storeControl.store.writeOwned.mockRejectedValueOnce(new Error("redis exploded"));
     const spool = makeSpool();
     spool.bootstrap();
 
     await expect(drainWriteChain(spool)).resolves.toBeUndefined();
-    expect(storeControl.store.deleteEntry).toHaveBeenCalledWith(identity.replayId);
+    expect(storeControl.store.abortOwned).toHaveBeenCalledWith(
+      identity.replayId,
+      "owner-token",
+      expect.objectContaining({ status: "aborted", abortReason: "flush_error" })
+    );
     expect(spool.isTerminal).toBe(true);
     expect(getActiveReplaySpoolCount()).toBe(0);
   });
 });
 
 describe("ReplaySpool：续租丢失 halt", () => {
-  it("renewOwnerLease 返回 false 时停止 spool、释放自方租约，但绝不删条目", async () => {
-    storeControl.store.renewOwnerLease.mockResolvedValueOnce(false);
+  it("writeOwned 返回 false 时停止 spool、释放自方租约，但绝不删条目", async () => {
+    storeControl.store.writeOwned.mockResolvedValueOnce(false);
     const spool = makeSpool();
     spool.observe(encoder.encode("data: a\n\n"));
 
@@ -245,7 +311,7 @@ describe("ReplaySpool：续租丢失 halt", () => {
 
     // 新 owner 可能已在写同一 LIST：只 compare-delete 自己的租约，不碰 chunks/meta
     expect(storeControl.store.releaseOwner).toHaveBeenCalledWith(identity.replayId, "owner-token");
-    expect(storeControl.store.deleteEntry).not.toHaveBeenCalled();
+    expect(storeControl.store.abortOwned).not.toHaveBeenCalled();
     expect(storeControl.store.deleteChunks).not.toHaveBeenCalled();
     expect(spool.isTerminal).toBe(true);
     expect(getActiveReplaySpoolCount()).toBe(0);
@@ -258,7 +324,7 @@ describe("ReplaySpool：续租丢失 halt", () => {
   });
 
   it("halt 后 complete 为 no-op", async () => {
-    storeControl.store.renewOwnerLease.mockResolvedValueOnce(false);
+    storeControl.store.writeOwned.mockResolvedValueOnce(false);
     const spool = makeSpool();
     spool.observe(encoder.encode("data: a\n\n"));
     await vi.advanceTimersByTimeAsync(100);
@@ -266,8 +332,8 @@ describe("ReplaySpool：续租丢失 halt", () => {
 
     await spool.completeAfterBilling(1);
     expect(storeControl.store.persistCompleted).not.toHaveBeenCalled();
-    const metaStatuses = storeControl.store.setMeta.mock.calls.map(
-      (call) => (call[1] as { status: string }).status
+    const metaStatuses = storeControl.store.writeOwned.mock.calls.map(
+      (call) => (call[2] as { status: string }).status
     );
     expect(metaStatuses).not.toContain("completed");
   });
@@ -283,21 +349,24 @@ describe("ReplaySpool：超尺寸自失效", () => {
     // 计数同步归还；存储清理顺着 writeChain 串行执行（避免与 in-flight append 竞态）
     expect(getActiveReplaySpoolCount()).toBe(0);
     await drainWriteChain(spool);
-    expect(storeControl.store.deleteEntry).toHaveBeenCalledWith(identity.replayId);
-    expect(storeControl.store.releaseOwner).toHaveBeenCalledWith(identity.replayId, "owner-token");
+    expect(storeControl.store.abortOwned).toHaveBeenCalledWith(
+      identity.replayId,
+      "owner-token",
+      expect.objectContaining({ status: "aborted", abortReason: "payload_too_large" })
+    );
 
     // 已失效：后续 observe 与 complete 均为 no-op
     spool.observe(encoder.encode("more"));
     await vi.advanceTimersByTimeAsync(200);
     await spool.completeAfterBilling(1);
-    expect(storeControl.store.appendChunks).not.toHaveBeenCalled();
+    expect(storeControl.store.writeOwned).not.toHaveBeenCalled();
     expect(storeControl.store.persistCompleted).not.toHaveBeenCalled();
     expect(storeControl.store.setMeta).not.toHaveBeenCalled();
   });
 });
 
 describe("ReplaySpool：completeAfterBilling 终态屏障", () => {
-  it("按 尾批冲刷 -> PG 持久化 -> completed meta -> 释放租约 顺序执行", async () => {
+  it("按 fenced 尾批冲刷 -> PG 持久化 -> completed meta 顺序执行", async () => {
     const spool = makeSpool(200, "text/event-stream; charset=utf-8");
     spool.observe(encoder.encode("data: hello \n\n"));
     spool.observe(encoder.encode("data: world\n\n"));
@@ -305,7 +374,7 @@ describe("ReplaySpool：completeAfterBilling 终态屏障", () => {
     await spool.completeAfterBilling(42);
 
     expect(storeControl.order).toEqual([
-      "append:data: hello \n\n|data: world\n\n",
+      "write:data: hello \n\n|data: world\n\n",
       "persist",
       "meta:completed",
       "release",
@@ -324,8 +393,9 @@ describe("ReplaySpool：completeAfterBilling 终态屏障", () => {
       byteSize: 27,
       sourceMessageRequestId: 42,
     });
-    expect(storeControl.store.setMeta).toHaveBeenCalledWith(
+    expect(storeControl.store.completeOwned).toHaveBeenCalledWith(
       identity.replayId,
+      "owner-token",
       expect.objectContaining({ status: "completed", messageRequestId: 42, chunkCount: 2 })
     );
     expect(getActiveReplaySpoolCount()).toBe(0);
@@ -338,13 +408,12 @@ describe("ReplaySpool：completeAfterBilling 终态屏障", () => {
 
     await spool.completeAfterBilling(7);
 
-    const metaStatuses = storeControl.store.setMeta.mock.calls.map(
-      (call) => (call[1] as { status: string }).status
+    expect(storeControl.store.completeOwned).not.toHaveBeenCalled();
+    expect(storeControl.store.abortOwned).toHaveBeenCalledWith(
+      identity.replayId,
+      "owner-token",
+      expect.objectContaining({ status: "aborted", abortReason: "complete_failed" })
     );
-    expect(metaStatuses).not.toContain("completed");
-    expect(metaStatuses).toContain("aborted");
-    expect(storeControl.store.deleteChunks).toHaveBeenCalledWith(identity.replayId);
-    expect(storeControl.store.releaseOwner).toHaveBeenCalledWith(identity.replayId, "owner-token");
     expect(logger.warn).toHaveBeenCalledWith(
       "[ReplaySpool] complete failed, aborting entry",
       expect.objectContaining({ pgPersisted: false })
@@ -352,27 +421,25 @@ describe("ReplaySpool：completeAfterBilling 终态屏障", () => {
     expect(getActiveReplaySpoolCount()).toBe(0);
   });
 
-  it("尾批冲刷返回 null（Redis 不可用）时终止为 aborted，绝不置 completed 也不写 PG", async () => {
-    storeControl.store.appendChunks.mockResolvedValueOnce(null);
+  it("尾批 fenced write 返回 null（Redis 不可用）时终止为 aborted，绝不置 completed 也不写 PG", async () => {
+    storeControl.store.writeOwned.mockResolvedValueOnce(null);
     const spool = makeSpool();
     spool.observe(encoder.encode("data: a\n\n"));
 
     await spool.completeAfterBilling(5);
 
     expect(storeControl.store.persistCompleted).not.toHaveBeenCalled();
-    const metaStatuses = storeControl.store.setMeta.mock.calls.map(
-      (call) => (call[1] as { status: string }).status
+    expect(storeControl.store.completeOwned).not.toHaveBeenCalled();
+    expect(storeControl.store.abortOwned).toHaveBeenCalledWith(
+      identity.replayId,
+      "owner-token",
+      expect.objectContaining({ status: "aborted", abortReason: "complete_failed" })
     );
-    expect(metaStatuses).not.toContain("completed");
-    expect(metaStatuses).toContain("aborted");
-    expect(storeControl.store.deleteChunks).toHaveBeenCalledWith(identity.replayId);
-    expect(storeControl.store.releaseOwner).toHaveBeenCalledWith(identity.replayId, "owner-token");
     expect(getActiveReplaySpoolCount()).toBe(0);
   });
 
   it("persist 成功但 completed 翻转失败：日志标记 pgPersisted=true，热层封死为 aborted", async () => {
-    // 首次 setMeta 即 complete 续接体里的 completed 写入（无 bootstrap、定时器未触发）
-    storeControl.store.setMeta.mockRejectedValueOnce(new Error("redis down"));
+    storeControl.store.completeOwned.mockResolvedValueOnce(false);
     const spool = makeSpool();
     spool.observe(encoder.encode("data: a\n\n"));
 
@@ -383,22 +450,52 @@ describe("ReplaySpool：completeAfterBilling 终态屏障", () => {
       "[ReplaySpool] complete failed, aborting entry",
       expect.objectContaining({ pgPersisted: true })
     );
-    const metaStatuses = storeControl.store.setMeta.mock.calls.map(
-      (call) => (call[1] as { status: string }).status
+    expect(storeControl.store.abortOwned).toHaveBeenCalledWith(
+      identity.replayId,
+      "owner-token",
+      expect.objectContaining({ status: "aborted", abortReason: "complete_failed" })
     );
-    expect(metaStatuses).toContain("aborted");
     expect(getActiveReplaySpoolCount()).toBe(0);
+  });
+
+  it("PG 持久化阻塞期间 heartbeat 独立续租，不被 writeChain 阻塞", async () => {
+    let resolvePersist!: () => void;
+    storeControl.store.persistCompleted.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          resolvePersist = resolve;
+        })
+    );
+    const spool = makeSpool();
+    spool.observe(encoder.encode("data: a\n\n"));
+
+    const completion = spool.completeAfterBilling(8);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(storeControl.store.persistCompleted).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(storeControl.store.renewOwnerLease).toHaveBeenCalledTimes(2);
+    expect(storeControl.store.completeOwned).not.toHaveBeenCalled();
+
+    resolvePersist();
+    await completion;
+    expect(storeControl.store.completeOwned).toHaveBeenCalledTimes(1);
   });
 
   it("跨 chunk 截断的 UTF-8 序列在 complete 时冲刷解码尾部", async () => {
     const spool = makeSpool();
     // "中" (0xE4 0xB8 0xAD) 只送前两字节：observe 阶段解码挂起，complete 时 flush 出替换字符
     spool.observe(new Uint8Array([0xe4, 0xb8]));
-    expect(storeControl.store.appendChunks).not.toHaveBeenCalled();
+    expect(storeControl.store.writeOwned).not.toHaveBeenCalled();
 
     await spool.completeAfterBilling(9);
 
-    expect(storeControl.store.appendChunks).toHaveBeenCalledWith(identity.replayId, ["\uFFFD"]);
+    expect(storeControl.store.writeOwned).toHaveBeenCalledWith(
+      identity.replayId,
+      "owner-token",
+      expect.objectContaining({ status: "owning", chunkCount: 1 }),
+      ["\uFFFD"]
+    );
     expect(storeControl.store.persistCompleted).toHaveBeenCalledWith(
       expect.objectContaining({ payload: "\uFFFD", byteSize: 2 })
     );
@@ -422,12 +519,11 @@ describe("ReplaySpool：abort 终态", () => {
 
     await spool.abort("upstream_error");
 
-    expect(storeControl.store.setMeta).toHaveBeenCalledWith(
+    expect(storeControl.store.abortOwned).toHaveBeenCalledWith(
       identity.replayId,
+      "owner-token",
       expect.objectContaining({ status: "aborted", abortReason: "upstream_error" })
     );
-    expect(storeControl.store.deleteChunks).toHaveBeenCalledWith(identity.replayId);
-    expect(storeControl.store.releaseOwner).toHaveBeenCalledWith(identity.replayId, "owner-token");
     expect(storeControl.order).toEqual(["meta:aborted", "deleteChunks", "release"]);
     expect(getActiveReplaySpoolCount()).toBe(0);
   });
@@ -442,7 +538,7 @@ describe("ReplaySpool：abort 终态", () => {
     await spool.completeAfterBilling(1);
 
     expect(storeControl.order).toEqual([]);
-    expect(storeControl.store.appendChunks).not.toHaveBeenCalled();
+    expect(storeControl.store.writeOwned).not.toHaveBeenCalled();
     expect(storeControl.store.persistCompleted).not.toHaveBeenCalled();
   });
 });
@@ -477,7 +573,7 @@ describe("createReplaySpoolIfOwner", () => {
     expect(session.replayState).toBeNull();
   });
 
-  it("非 2xx 或非 SSE 响应返回 null，并释放租约、清 replayState", () => {
+  it("非 2xx 或 stream delivery 收到非 SSE 响应时返回 null，并释放租约、清 replayState", () => {
     const non2xx = makeOwnerSession();
     expect(createReplaySpoolIfOwner(non2xx, sseResponse(500))).toBeNull();
     expect(non2xx.replayState).toBeNull();
@@ -488,6 +584,48 @@ describe("createReplaySpoolIfOwner", () => {
 
     expect(storeControl.store.releaseOwner).toHaveBeenCalledTimes(2);
     expect(storeControl.store.releaseOwner).toHaveBeenCalledWith(identity.replayId, "owner-token");
+  });
+
+  it("buffered delivery 捕获成功 JSON 的语义 headers，并过滤传输 headers", async () => {
+    const response = new Response(null, {
+      headers: {
+        connection: "keep-alive",
+        "content-encoding": "gzip",
+        "content-length": "123",
+        "content-type": "application/json; charset=utf-8",
+        "set-cookie": "session=secret",
+        "x-provider-request-id": "req-1",
+      },
+    });
+    const spool = createReplaySpoolIfOwner(makeOwnerSession(), response, "buffered");
+    expect(spool).toBeInstanceOf(ReplaySpool);
+
+    await drainWriteChain(spool as ReplaySpool);
+    expect(storeControl.store.writeOwned).toHaveBeenCalledWith(
+      identity.replayId,
+      "owner-token",
+      expect.objectContaining({
+        delivery: "buffered",
+        headers: {
+          "content-type": "application/json; charset=utf-8",
+          "x-provider-request-id": "req-1",
+        },
+      })
+    );
+
+    spool?.observe(encoder.encode('{"ok":true}'));
+    await spool?.completeAfterBilling(42);
+    expect(storeControl.store.persistCompleted).toHaveBeenCalledWith(
+      expect.objectContaining({
+        statusCode: 200,
+        headers: {
+          "content-type": "application/json; charset=utf-8",
+          "x-provider-request-id": "req-1",
+        },
+        payload: '{"ok":true}',
+        sourceMessageRequestId: 42,
+      })
+    );
   });
 
   it("并发 spool 达上限时返回 null，并释放落选者租约", async () => {
@@ -510,9 +648,15 @@ describe("createReplaySpoolIfOwner", () => {
     expect(getActiveReplaySpoolCount()).toBe(1);
 
     await drainWriteChain(spool as ReplaySpool);
-    expect(storeControl.store.setMeta).toHaveBeenCalledWith(
+    expect(storeControl.store.writeOwned).toHaveBeenCalledWith(
       identity.replayId,
-      expect.objectContaining({ status: "owning", chunkCount: 0, byteSize: 0 })
+      "owner-token",
+      expect.objectContaining({
+        status: "owning",
+        delivery: "stream",
+        chunkCount: 0,
+        byteSize: 0,
+      })
     );
 
     await spool?.abort("test_cleanup");
@@ -523,11 +667,50 @@ describe("createReplaySpoolIfOwner", () => {
     expect(spool).toBeInstanceOf(ReplaySpool);
 
     await drainWriteChain(spool as ReplaySpool);
-    expect(storeControl.store.setMeta).toHaveBeenCalledWith(
+    expect(storeControl.store.writeOwned).toHaveBeenCalledWith(
       identity.replayId,
+      "owner-token",
       expect.objectContaining({ headers: { "content-type": "text/event-stream" } })
     );
 
     await spool?.abort("test_cleanup");
+  });
+});
+
+describe("abortReplayOwnership", () => {
+  it("以 owner token 原子终止 pre-spool 条目，并在 await 前清空 session 状态", async () => {
+    const session = makeOwnerSession();
+
+    await abortReplayOwnership(session, "forward_failed");
+
+    expect(session.replayState).toBeNull();
+    expect(storeControl.store.abortOwned).toHaveBeenCalledWith(
+      identity.replayId,
+      "owner-token",
+      expect.objectContaining({
+        status: "aborted",
+        verifier: identity.verifier,
+        scopeTag: identity.scopeTag,
+        statusCode: 502,
+        headers: {},
+        format: identity.format,
+        model: identity.model,
+        chunkCount: 0,
+        byteSize: 0,
+        heartbeatAt: expect.any(Number),
+        abortReason: "forward_failed",
+      })
+    );
+
+    await abortReplayOwnership(session, "duplicate");
+    expect(storeControl.store.abortOwned).toHaveBeenCalledTimes(1);
+  });
+
+  it("非 owner 会话不触碰 store", async () => {
+    const session = { replayState: null } as unknown as ProxySession;
+
+    await abortReplayOwnership(session, "forward_failed");
+
+    expect(storeControl.store.abortOwned).not.toHaveBeenCalled();
   });
 });

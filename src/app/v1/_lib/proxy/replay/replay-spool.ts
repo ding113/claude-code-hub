@@ -1,8 +1,9 @@
 import { getEnvConfig } from "@/lib/config/env.schema";
 import { logger } from "@/lib/logger";
 import type { ProxySession } from "../session";
+import { captureReplayResponseHeaders } from "./replay-headers";
 import { isReplayEnabled, type ReplayIdentity } from "./replay-identity";
-import { getReplayStore, type ReplayMeta } from "./replay-store";
+import { getReplayStore, type ReplayDelivery, type ReplayMeta } from "./replay-store";
 
 /**
  * F2 owner 侧 spool：把客户端可见字节（pump 处理后流）以 write-behind 方式
@@ -21,6 +22,7 @@ import { getReplayStore, type ReplayMeta } from "./replay-store";
 
 const FLUSH_INTERVAL_MS = 100;
 const FLUSH_BYTES_THRESHOLD = 64 * 1024;
+const OWNER_HEARTBEAT_INTERVAL_MS = 15_000;
 
 let activeSpoolCount = 0;
 
@@ -39,6 +41,8 @@ export class ReplaySpool {
   private disabled = false;
   private terminal = false;
   private flushTimer: ReturnType<typeof setTimeout> | null = null;
+  private ownerHeartbeatTimer: ReturnType<typeof setInterval> | null = null;
+  private ownerHeartbeatInFlight = false;
   private writeChain: Promise<void> = Promise.resolve();
   private metaWritten = false;
 
@@ -46,9 +50,11 @@ export class ReplaySpool {
     private readonly identity: ReplayIdentity,
     private readonly ownerToken: string,
     private readonly statusCode: number,
-    private readonly contentType: string
+    private readonly headers: Record<string, string>,
+    private readonly delivery: ReplayDelivery = "stream"
   ) {
     activeSpoolCount++;
+    this.startOwnerHeartbeat();
   }
 
   /** 已达终态（complete/abort）或已失效（disable/halt）：调用方兜底判断用。 */
@@ -113,21 +119,25 @@ export class ReplaySpool {
     this.writeChain = this.writeChain.then(async () => {
       try {
         if (this.disabled) return;
-        const appended = await this.store.appendChunks(this.identity.replayId, batch);
+        const expectedChunkCount = this.chunkCount + batch.length;
+        const appended = await this.store.writeOwned(
+          this.identity.replayId,
+          this.ownerToken,
+          this.buildMeta("owning", { chunkCount: expectedChunkCount }),
+          batch
+        );
         if (this.disabled) return;
         if (appended === null) {
-          // Redis 不可用：本次 replay 放弃（已写块靠 TTL 清理）
+          // Redis 不可用：本次 replay 放弃（热层写是原子的，不会留下半批数据）
           this.disable("redis_unavailable");
           return;
         }
-        this.chunkCount = appended;
-        await this.writeMeta("owning");
-        if (this.disabled) return;
-        const leaseHeld = await this.store.renewOwnerLease(this.identity.replayId, this.ownerToken);
-        if (!leaseHeld) {
-          // 所有权已失（租约被他人接管）：停止 spool，但绝不删条目
+        if (appended === false) {
           this.halt("owner_lease_lost");
+          return;
         }
+        this.chunkCount = appended;
+        this.metaWritten = true;
       } catch (error) {
         logger.debug("[ReplaySpool] flush failed, disabling spool", {
           error: error instanceof Error ? error.message : String(error),
@@ -137,16 +147,14 @@ export class ReplaySpool {
     });
   }
 
-  private async writeMeta(
-    status: ReplayMeta["status"],
-    extra?: Partial<ReplayMeta>
-  ): Promise<void> {
-    const meta: ReplayMeta = {
+  private buildMeta(status: ReplayMeta["status"], extra?: Partial<ReplayMeta>): ReplayMeta {
+    return {
       status,
       verifier: this.identity.verifier,
       scopeTag: this.identity.scopeTag,
       statusCode: this.statusCode,
-      headers: { "content-type": this.contentType },
+      headers: this.headers,
+      delivery: this.delivery,
       format: this.identity.format,
       model: this.identity.model,
       chunkCount: this.chunkCount,
@@ -154,8 +162,25 @@ export class ReplaySpool {
       heartbeatAt: Date.now(),
       ...extra,
     };
-    await this.store.setMeta(this.identity.replayId, meta);
-    this.metaWritten = true;
+  }
+
+  private startOwnerHeartbeat(): void {
+    this.ownerHeartbeatTimer = setInterval(() => {
+      if (this.disabled || this.released || this.ownerHeartbeatInFlight) return;
+      this.ownerHeartbeatInFlight = true;
+      void this.store
+        .renewOwnerLease(this.identity.replayId, this.ownerToken)
+        .then((leaseHeld) => {
+          if (!leaseHeld && !this.released) this.halt("owner_lease_lost");
+        })
+        .catch(() => {
+          if (!this.released) this.halt("owner_lease_lost");
+        })
+        .finally(() => {
+          this.ownerHeartbeatInFlight = false;
+        });
+    }, OWNER_HEARTBEAT_INTERVAL_MS);
+    this.ownerHeartbeatTimer.unref?.();
   }
 
   /** 立即建立 owning meta（handleStream 创建 spool 时调用，供 attach 读者尽早看到状态）。 */
@@ -163,7 +188,21 @@ export class ReplaySpool {
     this.writeChain = this.writeChain.then(async () => {
       try {
         if (this.disabled || this.metaWritten) return;
-        await this.writeMeta("owning");
+        const chunkCount = await this.store.writeOwned(
+          this.identity.replayId,
+          this.ownerToken,
+          this.buildMeta("owning")
+        );
+        if (chunkCount === null) {
+          this.disable("redis_unavailable");
+          return;
+        }
+        if (chunkCount === false) {
+          this.halt("owner_lease_lost");
+          return;
+        }
+        this.chunkCount = chunkCount;
+        this.metaWritten = true;
       } catch (error) {
         logger.debug("[ReplaySpool] bootstrap failed, disabling spool", {
           error: error instanceof Error ? error.message : String(error),
@@ -180,7 +219,7 @@ export class ReplaySpool {
   async completeAfterBilling(messageRequestId: number | null): Promise<void> {
     if (this.disabled || this.terminal) return;
     this.terminal = true;
-    this.clearTimer();
+    this.clearFlushTimer();
     const tail = this.decoder.decode();
     if (tail.length > 0) {
       this.pending.push(tail);
@@ -194,14 +233,22 @@ export class ReplaySpool {
       let pgPersisted = false;
       try {
         if (this.disabled) return;
-        if (batch.length > 0) {
-          const appended = await this.store.appendChunks(this.identity.replayId, batch);
-          if (appended === null) {
-            // 尾批丢失则热层条目不完整，绝不能置 completed
-            throw new Error("final replay flush failed");
-          }
-          this.chunkCount = appended;
+        const expectedChunkCount = this.chunkCount + batch.length;
+        const appended = await this.store.writeOwned(
+          this.identity.replayId,
+          this.ownerToken,
+          this.buildMeta("owning", { chunkCount: expectedChunkCount }),
+          batch
+        );
+        if (appended === false) {
+          throw new Error("replay owner lease lost before completion");
         }
+        if (appended === null) {
+          // 尾批或 owning meta 丢失时热层条目不完整，绝不能置 completed
+          throw new Error("final replay flush failed");
+        }
+        this.chunkCount = appended;
+        this.metaWritten = true;
         // 先写 PG（持久 payload），再翻 Redis meta 为 completed（热层可服务）
         await this.store.persistCompleted({
           replayId: this.identity.replayId,
@@ -212,13 +259,20 @@ export class ReplaySpool {
           format: this.identity.format,
           model: this.identity.model,
           statusCode: this.statusCode,
-          headers: { "content-type": this.contentType },
+          headers: this.headers,
           payload: this.parts.join(""),
           byteSize: this.totalBytes,
           sourceMessageRequestId: messageRequestId,
         });
         pgPersisted = true;
-        await this.writeMeta("completed", { messageRequestId });
+        const completed = await this.store.completeOwned(
+          this.identity.replayId,
+          this.ownerToken,
+          this.buildMeta("completed", { messageRequestId })
+        );
+        if (!completed) {
+          throw new Error("replay owner lease lost before completed meta");
+        }
         logger.info("[ReplaySpool] replay entry completed", {
           replayId: this.identity.replayId.slice(0, 12),
           chunkCount: this.chunkCount,
@@ -231,10 +285,14 @@ export class ReplaySpool {
           error: error instanceof Error ? error.message : String(error),
           pgPersisted,
         });
-        await this.writeMeta("aborted", { abortReason: "complete_failed" }).catch(() => undefined);
-        await this.store.deleteChunks(this.identity.replayId).catch(() => undefined);
+        await this.store
+          .abortOwned(
+            this.identity.replayId,
+            this.ownerToken,
+            this.buildMeta("aborted", { abortReason: "complete_failed" })
+          )
+          .catch(() => false);
       } finally {
-        await this.store.releaseOwner(this.identity.replayId, this.ownerToken);
         this.release();
       }
     });
@@ -252,13 +310,14 @@ export class ReplaySpool {
       try {
         // 已失效（disable 已清理 / halt 已让渡所有权）：不得再写 meta 覆盖新 owner
         if (this.disabled) return;
-        // aborted meta 保留（短 TTL）供 attach 读者感知终态；块立即删除
-        await this.writeMeta("aborted", { abortReason: reason });
-        await this.store.deleteChunks(this.identity.replayId);
+        await this.store.abortOwned(
+          this.identity.replayId,
+          this.ownerToken,
+          this.buildMeta("aborted", { abortReason: reason })
+        );
       } catch {
         // 热层清理失败靠 TTL 兜底
       } finally {
-        await this.store.releaseOwner(this.identity.replayId, this.ownerToken);
         this.release();
       }
     });
@@ -285,10 +344,19 @@ export class ReplaySpool {
     // 清理顺着 writeChain 串行：与 in-flight append 竞态时绝不出现「删除后又写回」
     this.writeChain = this.writeChain.then(async () => {
       if (deleteEntry) {
-        await this.store.deleteEntry(this.identity.replayId).catch(() => undefined);
+        await this.store
+          .abortOwned(
+            this.identity.replayId,
+            this.ownerToken,
+            this.buildMeta("aborted", { abortReason: reason })
+          )
+          .catch(() => false);
+      } else {
+        // compare-delete 只删自己的 token：所有权已失时为安全 no-op
+        await this.store
+          .releaseOwner(this.identity.replayId, this.ownerToken)
+          .catch(() => undefined);
       }
-      // compare-delete 只删自己的 token：所有权已失时为安全 no-op
-      await this.store.releaseOwner(this.identity.replayId, this.ownerToken).catch(() => undefined);
     });
     logger.debug("[ReplaySpool] spool disabled", {
       replayId: this.identity.replayId.slice(0, 12),
@@ -302,15 +370,52 @@ export class ReplaySpool {
   private release(): void {
     if (this.released) return;
     this.released = true;
+    this.clearOwnerHeartbeat();
     activeSpoolCount = Math.max(0, activeSpoolCount - 1);
   }
 
-  private clearTimer(): void {
-    if (this.flushTimer) {
-      clearTimeout(this.flushTimer);
-      this.flushTimer = null;
-    }
+  private clearFlushTimer(): void {
+    if (!this.flushTimer) return;
+    clearTimeout(this.flushTimer);
+    this.flushTimer = null;
   }
+
+  private clearOwnerHeartbeat(): void {
+    if (!this.ownerHeartbeatTimer) return;
+    clearInterval(this.ownerHeartbeatTimer);
+    this.ownerHeartbeatTimer = null;
+  }
+
+  private clearTimer(): void {
+    this.clearFlushTimer();
+    this.clearOwnerHeartbeat();
+  }
+}
+
+/** Forwarder 在 spool 创建前终止时，以 owner token 原子封死 Replay 条目。 */
+export async function abortReplayOwnership(session: ProxySession, reason: string): Promise<void> {
+  const replayState = session.replayState;
+  if (replayState?.role !== "owner") return;
+
+  // 先清本地角色形成幂等门；Redis 失败时保留 fail-open，租约最终由 TTL 回收。
+  session.replayState = null;
+  const { identity, ownerToken } = replayState;
+  const meta: ReplayMeta = {
+    status: "aborted",
+    verifier: identity.verifier,
+    scopeTag: identity.scopeTag,
+    statusCode: 502,
+    headers: {},
+    format: identity.format,
+    model: identity.model,
+    chunkCount: 0,
+    byteSize: 0,
+    heartbeatAt: Date.now(),
+    abortReason: reason,
+  };
+  await getReplayStore()
+    .abortOwned(identity.replayId, ownerToken, meta)
+    .catch(() => false);
 }
 
 /**
@@ -329,12 +434,13 @@ export function releaseReplayOwnership(session: ProxySession): void {
 /**
  * handleStream 建 pump 时创建 owner spool。
  * 前置：guard 阶段已成功 claim owner（session.replayState.role === "owner"）。
- * 并发 spool 超上限 / 非 2xx / 非 SSE / 开关关闭 / 异常时返回 null（本请求不做
- * replay），并立即释放 owner 租约。
+ * 并发 spool 超上限 / 非 2xx / 响应类型与 delivery 不匹配 / 开关关闭 / 异常时返回
+ * null（本请求不做 replay），并立即释放 owner 租约。
  */
 export function createReplaySpoolIfOwner(
   session: ProxySession,
-  response: Response
+  response: Response,
+  delivery: ReplayDelivery = "stream"
 ): ReplaySpool | null {
   const replayState = session.replayState;
   if (replayState?.role !== "owner") return null;
@@ -352,14 +458,24 @@ export function createReplaySpoolIfOwner(
       return declineOwnership();
     }
     if (response.status < 200 || response.status >= 300) return declineOwnership();
-    const contentType = response.headers.get("content-type") ?? "text/event-stream";
-    if (!contentType.toLowerCase().includes("text/event-stream")) return declineOwnership();
+    const contentType = response.headers.get("content-type");
+    const isSse = contentType
+      ? contentType.toLowerCase().includes("text/event-stream")
+      : delivery === "stream";
+    if ((delivery === "stream" && !isSse) || (delivery === "buffered" && isSse)) {
+      return declineOwnership();
+    }
+    const headers = captureReplayResponseHeaders(
+      response.headers,
+      delivery === "stream" ? "text/event-stream" : undefined
+    );
 
     const spool = new ReplaySpool(
       replayState.identity,
       replayState.ownerToken,
       response.status,
-      contentType
+      headers,
+      delivery
     );
     spool.bootstrap();
     return spool;

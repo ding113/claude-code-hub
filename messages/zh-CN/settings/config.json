@@ -88,7 +88,7 @@
     "allowNonConversationEndpointProviderFallback": "允许非对话端点跨供应商 fallback",
     "allowNonConversationEndpointProviderFallbackDesc": "控制 /v1/messages/count_tokens 与 /v1/responses/compact 在当前供应商失败时，是否沿用现有决策链切换到兼容供应商重试。默认开启，并继续保持 raw passthrough 与非计费语义。",
     "streamGateMode": "流式内容门控",
-    "streamGateModeDesc": "在首个有效内容帧到达前先行缓冲，遇到错误帧或空流时自动切换供应商重试；影子模式仅旁路统计判定分歧，不影响转发。默认启用。",
+    "streamGateModeDesc": "控制普通请求的首个有效内容帧门控：启用时遇到错误帧或空流会自动切换供应商重试，影子模式仅旁路统计判定分歧，关闭时直接转发。Replay owner 无论选择哪种模式，始终保留首内容前的安全判定。默认启用。",
     "streamGateModeOptions": {
       "off": "关闭",
       "shadow": "影子模式",

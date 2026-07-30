@@ -134,9 +134,22 @@ function createFakeRedis() {
       kv.set(key, value);
       return "OK";
     }),
-    // 按脚本内容分发：RPUSH+EXPIRE（list 追加）/ compare-expire（续租）/ compare-delete（释放）
+    // 按脚本内容分发：fenced owner write / RPUSH+EXPIRE / terminal fencing / lease fencing
     eval: vi.fn(
       async (script: string, _numkeys: number, key: string, ...args: (string | number)[]) => {
+        if (script.includes("LLEN") && _numkeys === 3) {
+          const [metaKey, chunksKey, token, replayTtl, _ownerTtl, serializedMeta, ...values] = args;
+          if (kv.get(key) !== token) return -1;
+          const listKey = String(chunksKey);
+          const list = lists.get(listKey) ?? [];
+          list.push(...values.map(String));
+          lists.set(listKey, list);
+          if (values.length > 0 && Number(replayTtl) > 0) {
+            listTtls.set(listKey, Number(replayTtl));
+          }
+          kv.set(String(metaKey), String(serializedMeta));
+          return list.length;
+        }
         if (script.includes("RPUSH")) {
           const [ttl, ...values] = args;
           const list = lists.get(key) ?? [];
@@ -144,6 +157,21 @@ function createFakeRedis() {
           lists.set(key, list);
           if (Number(ttl) > 0) listTtls.set(key, Number(ttl));
           return list.length;
+        }
+        if (script.includes("SETEX") && _numkeys === 3) {
+          const [metaKey, chunksKey, token, ttl, serializedMeta] = args;
+          if (kv.get(key) !== token) return 0;
+          kv.set(String(metaKey), String(serializedMeta));
+          lists.delete(String(chunksKey));
+          kv.delete(key);
+          return Number(ttl) > 0 ? 1 : 0;
+        }
+        if (script.includes("SETEX") && _numkeys === 2) {
+          const [metaKey, token, ttl, serializedMeta] = args;
+          if (kv.get(key) !== token) return 0;
+          kv.set(String(metaKey), String(serializedMeta));
+          kv.delete(key);
+          return Number(ttl) > 0 ? 1 : 0;
         }
         const token = args[0] as string;
         if (script.includes("EXPIRE")) {
@@ -379,6 +407,48 @@ describe("ReplayStore：owner 租约", () => {
     expect(currentRedis().kv.get("cch:replay:owner:r1")).toBe("tok-b");
   });
 
+  it("writeOwned 原子追加 chunks、更新 owning meta 并续租", async () => {
+    const store = new ReplayStore();
+    const owningMeta = makeMeta({ chunkCount: 2, byteSize: 8 });
+    await store.tryClaimOwner("r1", "tok-a");
+
+    await expect(store.writeOwned("r1", "tok-a", owningMeta, ["part-a", "part-b"])).resolves.toBe(
+      2
+    );
+
+    expect(currentRedis().eval).toHaveBeenLastCalledWith(
+      expect.stringContaining("LLEN"),
+      3,
+      "cch:replay:owner:r1",
+      "cch:replay:meta:r1",
+      "cch:replay:chunks:r1",
+      "tok-a",
+      600,
+      45,
+      JSON.stringify(owningMeta),
+      "part-a",
+      "part-b"
+    );
+    await expect(store.getMeta("r1")).resolves.toEqual(owningMeta);
+    await expect(store.readChunks("r1", 0)).resolves.toEqual(["part-a", "part-b"]);
+    expect(currentRedis().listTtls.get("cch:replay:chunks:r1")).toBe(600);
+  });
+
+  it("writeOwned 拒绝 stale token，且不污染新 owner 的 meta 或 chunks", async () => {
+    const store = new ReplayStore();
+    const currentMeta = makeMeta({ verifier: "new-owner" });
+    await store.tryClaimOwner("r1", "tok-new");
+    await store.writeOwned("r1", "tok-new", currentMeta, ["new-data"]);
+
+    await expect(
+      store.writeOwned("r1", "tok-old", makeMeta({ verifier: "stale-owner" }), ["stale-data"])
+    ).resolves.toBe(false);
+
+    await expect(store.getMeta("r1")).resolves.toEqual(currentMeta);
+    await expect(store.readChunks("r1", 0)).resolves.toEqual(["new-data"]);
+    expect(currentRedis().kv.get("cch:replay:owner:r1")).toBe("tok-new");
+  });
+
   it("releaseOwner 是 compare-delete：token 不匹配不删，匹配才删", async () => {
     const store = new ReplayStore();
     await store.tryClaimOwner("r1", "tok-a");
@@ -389,6 +459,60 @@ describe("ReplayStore：owner 租约", () => {
     await store.releaseOwner("r1", "tok-a");
     expect(currentRedis().kv.has("cch:replay:owner:r1")).toBe(false);
     await expect(store.tryClaimOwner("r1", "tok-b")).resolves.toBe(true);
+  });
+
+  it("abortOwned 在 token 匹配时原子写 aborted、删除 chunks 并释放租约", async () => {
+    const store = new ReplayStore();
+    const abortedMeta = makeMeta({ status: "aborted", abortReason: "forward_failed" });
+    await store.tryClaimOwner("r1", "tok-a");
+    await store.setMeta("r1", makeMeta());
+    await store.appendChunks("r1", ["partial"]);
+
+    await expect(store.abortOwned("r1", "tok-a", abortedMeta)).resolves.toBe(true);
+
+    expect(currentRedis().eval).toHaveBeenLastCalledWith(
+      expect.stringContaining("SETEX"),
+      3,
+      "cch:replay:owner:r1",
+      "cch:replay:meta:r1",
+      "cch:replay:chunks:r1",
+      "tok-a",
+      600,
+      JSON.stringify(abortedMeta)
+    );
+    await expect(store.getMeta("r1")).resolves.toEqual(abortedMeta);
+    await expect(store.readChunks("r1", 0)).resolves.toEqual([]);
+    expect(currentRedis().kv.has("cch:replay:owner:r1")).toBe(false);
+  });
+
+  it("abortOwned 在 token 不匹配时不覆盖新 owner 的 meta、chunks 或租约", async () => {
+    const store = new ReplayStore();
+    const currentMeta = makeMeta({ verifier: "new-owner" });
+    await store.tryClaimOwner("r1", "tok-new");
+    await store.setMeta("r1", currentMeta);
+    await store.appendChunks("r1", ["new-data"]);
+
+    await expect(
+      store.abortOwned("r1", "tok-old", makeMeta({ status: "aborted", abortReason: "stale_owner" }))
+    ).resolves.toBe(false);
+
+    await expect(store.getMeta("r1")).resolves.toEqual(currentMeta);
+    await expect(store.readChunks("r1", 0)).resolves.toEqual(["new-data"]);
+    expect(currentRedis().kv.get("cch:replay:owner:r1")).toBe("tok-new");
+  });
+
+  it("completeOwned 仅在 token 匹配时原子写 completed meta 并释放租约", async () => {
+    const store = new ReplayStore();
+    const completedMeta = makeMeta({ status: "completed", chunkCount: 2 });
+    await store.tryClaimOwner("r1", "tok-a");
+
+    await expect(store.completeOwned("r1", "tok-other", completedMeta)).resolves.toBe(false);
+    expect(currentRedis().kv.get("cch:replay:owner:r1")).toBe("tok-a");
+    await expect(store.getMeta("r1")).resolves.toBeNull();
+
+    await expect(store.completeOwned("r1", "tok-a", completedMeta)).resolves.toBe(true);
+    await expect(store.getMeta("r1")).resolves.toEqual(completedMeta);
+    expect(currentRedis().kv.has("cch:replay:owner:r1")).toBe(false);
   });
 });
 

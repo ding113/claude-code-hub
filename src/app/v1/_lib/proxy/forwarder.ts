@@ -107,6 +107,7 @@ import {
   validateOpenAIImageRequest,
 } from "./openai-image-compat";
 import { ProxyProviderResolver } from "./provider-selector";
+import { abortReplayOwnership } from "./replay/replay-spool";
 import { finalizeHedgeLoserBilling, hasStreamCompletionMarker } from "./response-handler";
 import type { ProxySession } from "./session";
 import {
@@ -1343,6 +1344,15 @@ function applyClaudeMetadataUserIdInjectionWithAudit(
 
 export class ProxyForwarder {
   static async send(session: ProxySession): Promise<Response> {
+    try {
+      return await ProxyForwarder.sendInternal(session);
+    } catch (error) {
+      await abortReplayOwnership(session, "forward_failed");
+      throw error;
+    }
+  }
+
+  private static async sendInternal(session: ProxySession): Promise<Response> {
     if (!session.provider || !session.authState?.success) {
       throw new Error("代理上下文缺少供应商或鉴权信息");
     }
@@ -1682,7 +1692,7 @@ export class ProxyForwarder {
           // 解决：Forwarder 只负责尽快把 Response 返回给下游开始透传，
           // 把最终成功/失败结算延迟到 ResponseHandler：等 SSE 正常结束后再基于最终 body 补充检查并更新内部状态。
           if (isSSE) {
-            // ========== F1 流式内容门控（enforce 模式）==========
+            // ========== F1 流式内容门控（enforce 或 Replay owner）==========
             // 在向客户端提交响应前等待首个有效内容帧：
             // - 中性前缀（ping/metadata/usage-only）缓冲后随提交一并冲刷；
             // - error/malformed/空流在此抛错 -> 外层 catch 归类 -> 换供应商（客户端零字节）；
@@ -1691,8 +1701,10 @@ export class ProxyForwarder {
             let streamingResponse = response;
             let gateChainAudit: ProviderChainItem["streamGate"];
             const gateMode = resolveStreamGateMode();
+            const shouldRunPrecommitGate =
+              gateMode === "enforce" || session.replayState?.role === "owner";
             if (
-              gateMode === "enforce" &&
+              shouldRunPrecommitGate &&
               response.body &&
               session.getEndpointPolicy().kind !== "raw_passthrough"
             ) {
@@ -4721,10 +4733,11 @@ export class ProxyForwarder {
           attempt.reader = response.body.getReader();
 
           try {
-            // F1 门控（enforce）：胜者判定从「首个非空字节」升级为「首个有效内容帧」。
+            // F1 门控（enforce 或 Replay owner）：胜者判定从「首个非空字节」升级为
+            // 「首个有效内容帧」。
             // 级联阈值计时器保持不动——内容慢的 attempt 不提交，自动触发下一候选竞速。
             const hedgeGateFamily =
-              resolveStreamGateMode() === "enforce" &&
+              (resolveStreamGateMode() === "enforce" || session.replayState?.role === "owner") &&
               session.getEndpointPolicy().kind !== "raw_passthrough"
                 ? mapProviderTypeToFamily(attempt.provider.providerType)
                 : null;
