@@ -128,13 +128,13 @@ describe("v1 action compatibility client", () => {
         })
       )
       .mockResolvedValueOnce({
-        siteTitle: "Claude Code Hub",
+        siteTitle: "CC Hub",
         currencyDisplay: "USD",
         billingModelSource: "original",
       });
 
     await expect(systemConfig.getSystemSettings()).resolves.toEqual({
-      siteTitle: "Claude Code Hub",
+      siteTitle: "CC Hub",
       currencyDisplay: "USD",
       billingModelSource: "original",
     });

@@ -45,7 +45,7 @@ describe("SystemSettings：数据库缺列时的保存兜底", () => {
     const selectQuery = createThenableQuery([
       {
         id: 1,
-        siteTitle: "AutoBits Claude Code Hub",
+        siteTitle: "AutoBits CC Hub",
         allowGlobalUsageView: false,
         currencyDisplay: "USD",
         billingModelSource: "original",
@@ -127,7 +127,7 @@ describe("SystemSettings：数据库缺列时的保存兜底", () => {
     const selectQuery = createThenableQuery([
       {
         id: 1,
-        siteTitle: "Claude Code Hub",
+        siteTitle: "CC Hub",
         allowGlobalUsageView: false,
         currencyDisplay: "USD",
         billingModelSource: "original",
@@ -164,7 +164,7 @@ describe("SystemSettings：数据库缺列时的保存兜底", () => {
 
     const { updateSystemSettings } = await import("@/repository/system-config");
 
-    await expect(updateSystemSettings({ siteTitle: "AutoBits Claude Code Hub" })).rejects.toThrow(
+    await expect(updateSystemSettings({ siteTitle: "AutoBits CC Hub" })).rejects.toThrow(
       "system_settings 表列缺失"
     );
 
@@ -181,7 +181,7 @@ describe("SystemSettings：数据库缺列时的保存兜底", () => {
     const selectQuery = createThenableQuery([
       {
         id: 1,
-        siteTitle: "Claude Code Hub",
+        siteTitle: "CC Hub",
         allowGlobalUsageView: false,
         currencyDisplay: "USD",
         billingModelSource: "original",
@@ -207,7 +207,7 @@ describe("SystemSettings：数据库缺列时的保存兜底", () => {
 
     const { updateSystemSettings } = await import("@/repository/system-config");
 
-    await expect(updateSystemSettings({ siteTitle: "AutoBits Claude Code Hub" })).rejects.toThrow(
+    await expect(updateSystemSettings({ siteTitle: "AutoBits CC Hub" })).rejects.toThrow(
       "系统设置数据表不存在"
     );
 
@@ -228,7 +228,7 @@ describe("SystemSettings：数据库缺列时的保存兜底", () => {
         createThenableQuery([
           {
             id: 1,
-            siteTitle: "Claude Code Hub",
+            siteTitle: "CC Hub",
             allowGlobalUsageView: false,
             currencyDisplay: "USD",
             billingModelSource: "original",
@@ -307,7 +307,7 @@ describe("SystemSettings：数据库缺列时的保存兜底", () => {
         createThenableQuery([
           {
             id: 1,
-            siteTitle: "Claude Code Hub",
+            siteTitle: "CC Hub",
             allowGlobalUsageView: false,
             currencyDisplay: "USD",
             billingModelSource: "original",
@@ -336,7 +336,7 @@ describe("SystemSettings：数据库缺列时的保存兜底", () => {
 
     // 降级读取成功（未抛错），缺失列由 transformer 落默认值。
     expect(selectMock).toHaveBeenCalledTimes(2);
-    expect(result.siteTitle).toBe("Claude Code Hub");
+    expect(result.siteTitle).toBe("CC Hub");
     expect(result.enableHttp2).toBe(true);
     expect(result.affinityIgnoreClientSessionId).toBe(true);
     expect(result.streamGateMode).toBe("enforce");
@@ -372,7 +372,7 @@ describe("SystemSettings：数据库缺列时的保存兜底", () => {
         createThenableQuery([
           {
             id: 1,
-            siteTitle: "Claude Code Hub",
+            siteTitle: "CC Hub",
             allowGlobalUsageView: false,
             currencyDisplay: "USD",
             billingModelSource: "original",
@@ -404,12 +404,12 @@ describe("SystemSettings：数据库缺列时的保存兜底", () => {
 
     const result = await getSystemSettings();
 
-    expect(result.siteTitle).toBe("Claude Code Hub");
+    expect(result.siteTitle).toBe("CC Hub");
     expect(result.codexPriorityBillingSource).toBe("requested");
     expect(insertMock).toHaveBeenCalledTimes(2);
     expect(legacyInsertQuery.values).toHaveBeenCalledWith(
       expect.objectContaining({
-        siteTitle: "Claude Code Hub",
+        siteTitle: "CC Hub",
         allowGlobalUsageView: false,
         currencyDisplay: "USD",
         billingModelSource: "original",
@@ -443,7 +443,7 @@ describe("SystemSettings：数据库缺列时的保存兜底", () => {
         createThenableQuery([
           {
             id: 1,
-            siteTitle: "Claude Code Hub",
+            siteTitle: "CC Hub",
             allowGlobalUsageView: false,
             currencyDisplay: "USD",
             billingModelSource: "original",
@@ -526,7 +526,7 @@ describe("SystemSettings：数据库缺列时的保存兜底", () => {
         createThenableQuery([
           {
             id: 1,
-            siteTitle: "Claude Code Hub",
+            siteTitle: "CC Hub",
             allowGlobalUsageView: false,
             currencyDisplay: "USD",
             billingModelSource: "original",
@@ -584,7 +584,7 @@ describe("SystemSettings：数据库缺列时的保存兜底", () => {
       createThenableQuery([
         {
           id: 1,
-          siteTitle: "Claude Code Hub",
+          siteTitle: "CC Hub",
           allowGlobalUsageView: false,
           currencyDisplay: "USD",
           billingModelSource: "original",

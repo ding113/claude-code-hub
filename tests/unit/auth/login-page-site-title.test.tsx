@@ -37,7 +37,7 @@ vi.mock("next-themes", () => ({
 }));
 
 const globalFetch = global.fetch;
-const DEFAULT_SITE_TITLE = "Claude Code Hub";
+const DEFAULT_SITE_TITLE = "CC Hub";
 
 function getRequestPath(input: string | URL | Request): string {
   if (typeof input === "string") {
@@ -141,5 +141,55 @@ describe("login page site title", () => {
     expect(
       container.querySelector<HTMLElement>('[data-testid="login-site-title-footer"]')?.textContent
     ).toBe(DEFAULT_SITE_TITLE);
+  });
+
+  it("shows the trademark disclaimer and leaves the API key field without a placeholder", async () => {
+    (global.fetch as ReturnType<typeof vi.fn>).mockImplementation(() =>
+      Promise.resolve(mockJsonResponse({ current: "1.0.0", hasUpdate: false }))
+    );
+
+    await render();
+    await flushMicrotasks();
+
+    expect(
+      container.querySelector<HTMLElement>('[data-testid="login-disclaimer"]')?.textContent
+    ).toBe("t:brand.disclaimer");
+    expect(container.querySelector<HTMLInputElement>("#apiKey")?.getAttribute("placeholder")).toBe(
+      null
+    );
+  });
+
+  it("keeps the disclaimer footer in page flow on short viewports", async () => {
+    (global.fetch as ReturnType<typeof vi.fn>).mockImplementation(() =>
+      Promise.resolve(mockJsonResponse({ current: "1.0.0", hasUpdate: false }))
+    );
+
+    await render();
+    await flushMicrotasks();
+
+    const disclaimer = container.querySelector<HTMLElement>('[data-testid="login-disclaimer"]');
+    const footer = disclaimer?.parentElement;
+    const page = footer?.parentElement;
+
+    expect(footer?.className).not.toMatch(/\babsolute\b/);
+    expect(page?.className).toContain("overflow-x-hidden");
+    expect(page?.className).not.toMatch(/\boverflow-hidden\b/);
+    expect(page?.lastElementChild).toBe(footer);
+  });
+
+  it("balances card description wrapping and widens the disclaimer on large screens", async () => {
+    (global.fetch as ReturnType<typeof vi.fn>).mockImplementation(() =>
+      Promise.resolve(mockJsonResponse({ current: "1.0.0", hasUpdate: false }))
+    );
+
+    await render();
+    await flushMicrotasks();
+
+    const description = container.querySelector<HTMLElement>('[data-slot="card-description"]');
+    const disclaimer = container.querySelector<HTMLElement>('[data-testid="login-disclaimer"]');
+
+    expect(description?.className).toContain("text-balance");
+    expect(disclaimer?.className).toContain("text-balance");
+    expect(disclaimer?.className).toContain("lg:max-w-lg");
   });
 });

@@ -1,6 +1,6 @@
 # CHANGELOG.md 更新 Prompt
 
-你是 Claude Code Hub 项目的 Changelog 编辑专家。请根据变更报告更新项目的 CHANGELOG.md 文件。
+你是 CC Hub 项目的 Changelog 编辑专家。请根据变更报告更新项目的 CHANGELOG.md 文件。
 
 ## 变更报告
 

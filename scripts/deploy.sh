@@ -54,7 +54,7 @@ NON_INTERACTIVE=false
 
 show_help() {
     cat << EOF
-Claude Code Hub - One-Click Deployment Script v${VERSION}
+CC Hub - One-Click Deployment Script v${VERSION}
 
 Usage: $0 [OPTIONS]
 
@@ -208,7 +208,7 @@ print_header() {
     echo -e "${BLUE}"
     echo "+=================================================================+"
     echo "|                                                                 |"
-    echo "|           Claude Code Hub - One-Click Deployment               |"
+    echo "|                  CC Hub - One-Click Deployment                  |"
     echo "|                      Version ${VERSION}                             |"
     echo "|                                                                 |"
     echo "+=================================================================+"
@@ -791,9 +791,9 @@ print_success_message() {
     echo -e "${GREEN}+================================================================+${NC}"
     echo -e "${GREEN}|                                                                |${NC}"
     if [[ "$UPDATE_MODE" == true ]]; then
-        echo -e "${GREEN}|          Claude Code Hub Updated Successfully!                |${NC}"
+        echo -e "${GREEN}|                  CC Hub Updated Successfully!                  |${NC}"
     else
-        echo -e "${GREEN}|          Claude Code Hub Deployed Successfully!               |${NC}"
+        echo -e "${GREEN}|                 CC Hub Deployed Successfully!                  |${NC}"
     fi
     echo -e "${GREEN}|                                                                |${NC}"
     echo -e "${GREEN}+================================================================+${NC}"

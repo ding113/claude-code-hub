@@ -248,7 +248,7 @@ describe("SystemSettings：列降级阶梯的尝试序列锁定", () => {
       createResolvingSelectQuery([
         {
           id: 1,
-          siteTitle: "Claude Code Hub",
+          siteTitle: "CC Hub",
           allowGlobalUsageView: false,
           currencyDisplay: "USD",
           billingModelSource: "original",
@@ -367,7 +367,7 @@ describe("SystemSettings：列降级阶梯的尝试序列锁定", () => {
       createResolvingSelectQuery([
         {
           id: 1,
-          siteTitle: "Claude Code Hub",
+          siteTitle: "CC Hub",
           allowGlobalUsageView: false,
           currencyDisplay: "USD",
           billingModelSource: "original",
@@ -432,7 +432,7 @@ describe("SystemSettings：列降级阶梯的尝试序列锁定", () => {
       createResolvingSelectQuery([
         {
           id: 1,
-          siteTitle: "Claude Code Hub",
+          siteTitle: "CC Hub",
           allowGlobalUsageView: false,
           currencyDisplay: "USD",
           billingModelSource: "original",

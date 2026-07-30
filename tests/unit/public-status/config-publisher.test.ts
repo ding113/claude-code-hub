@@ -6,6 +6,7 @@ const mockFindLatestPricesByModels = vi.hoisted(() => vi.fn());
 const mockPublishInternalPublicStatusConfigSnapshot = vi.hoisted(() => vi.fn());
 const mockPublishPublicStatusConfigSnapshot = vi.hoisted(() => vi.fn());
 const mockPublishCurrentPublicStatusConfigPointers = vi.hoisted(() => vi.fn());
+const mockReadCurrentPublicStatusConfigSnapshot = vi.hoisted(() => vi.fn());
 const mockGetRedisClient = vi.hoisted(() => vi.fn());
 
 vi.mock("@/repository/system-config", () => ({
@@ -34,6 +35,7 @@ vi.mock("@/lib/public-status/config-snapshot", async () => {
     publishInternalPublicStatusConfigSnapshot: mockPublishInternalPublicStatusConfigSnapshot,
     publishPublicStatusConfigSnapshot: mockPublishPublicStatusConfigSnapshot,
     publishCurrentPublicStatusConfigPointers: mockPublishCurrentPublicStatusConfigPointers,
+    readCurrentPublicStatusConfigSnapshot: mockReadCurrentPublicStatusConfigSnapshot,
   };
 });
 
@@ -42,12 +44,14 @@ describe("public-status config publisher", () => {
     vi.clearAllMocks();
 
     mockGetSystemSettings.mockResolvedValue({
-      siteTitle: "Claude Code Hub",
+      siteTitle: "CC Hub",
       timezone: "UTC",
       publicStatusAggregationIntervalMinutes: 5,
       publicStatusWindowHours: 24,
     });
     mockGetRedisClient.mockReturnValue({});
+    mockFindAllProviderGroups.mockResolvedValue([]);
+    mockReadCurrentPublicStatusConfigSnapshot.mockResolvedValue(null);
     mockPublishInternalPublicStatusConfigSnapshot.mockResolvedValue({
       configVersion: "cfg-test",
       key: "internal",
@@ -96,7 +100,7 @@ describe("public-status config publisher", () => {
     expect(mockPublishPublicStatusConfigSnapshot).toHaveBeenCalledWith(
       expect.objectContaining({
         snapshot: expect.objectContaining({
-          siteDescription: "Claude Code Hub public status",
+          siteDescription: "CC Hub public status",
           groups: [
             expect.objectContaining({
               models: [
@@ -117,6 +121,90 @@ describe("public-status config publisher", () => {
       })
     );
   }, 80_000);
+
+  it("publishes the database title when the current snapshot is missing", async () => {
+    const mod = await import("@/lib/public-status/config-publisher");
+
+    const written = await mod.reconcilePublicStatusSiteTitleProjection();
+
+    expect(written).toBe(true);
+    expect(mockPublishPublicStatusConfigSnapshot).toHaveBeenCalledWith(
+      expect.objectContaining({
+        reason: "startup-site-title-reconciliation",
+        snapshot: expect.objectContaining({ siteTitle: "CC Hub" }),
+      })
+    );
+  });
+
+  it("skips Redis writes when the current snapshot title already matches", async () => {
+    mockReadCurrentPublicStatusConfigSnapshot.mockResolvedValue({
+      configVersion: "cfg-current",
+      siteTitle: " CC Hub ",
+    });
+    const mod = await import("@/lib/public-status/config-publisher");
+
+    const written = await mod.reconcilePublicStatusSiteTitleProjection();
+
+    expect(written).toBe(true);
+    expect(mockPublishInternalPublicStatusConfigSnapshot).not.toHaveBeenCalled();
+    expect(mockPublishPublicStatusConfigSnapshot).not.toHaveBeenCalled();
+    expect(mockPublishCurrentPublicStatusConfigPointers).not.toHaveBeenCalled();
+  });
+
+  it("reuses the current config version when replacing a stale title", async () => {
+    mockReadCurrentPublicStatusConfigSnapshot.mockResolvedValue({
+      configVersion: "cfg-current",
+      siteTitle: "Claude Code Hub",
+    });
+    const mod = await import("@/lib/public-status/config-publisher");
+
+    const written = await mod.reconcilePublicStatusSiteTitleProjection();
+
+    expect(written).toBe(true);
+    expect(mockPublishPublicStatusConfigSnapshot).toHaveBeenCalledWith(
+      expect.objectContaining({
+        reason: "startup-site-title-reconciliation",
+        snapshot: expect.objectContaining({ configVersion: "cfg-current", siteTitle: "CC Hub" }),
+      })
+    );
+    expect(mockPublishCurrentPublicStatusConfigPointers).toHaveBeenCalledWith(
+      expect.objectContaining({ configVersion: "cfg-current" })
+    );
+  });
+
+  it("republishes a snapshot missing siteTitle while reusing its configVersion", async () => {
+    mockReadCurrentPublicStatusConfigSnapshot.mockResolvedValue({
+      configVersion: "cfg-legacy",
+    });
+    const mod = await import("@/lib/public-status/config-publisher");
+
+    const written = await mod.reconcilePublicStatusSiteTitleProjection();
+
+    expect(written).toBe(true);
+    expect(mockPublishPublicStatusConfigSnapshot).toHaveBeenCalledWith(
+      expect.objectContaining({
+        reason: "startup-site-title-reconciliation",
+        snapshot: expect.objectContaining({ configVersion: "cfg-legacy", siteTitle: "CC Hub" }),
+      })
+    );
+    expect(mockPublishCurrentPublicStatusConfigPointers).toHaveBeenCalledWith(
+      expect.objectContaining({ configVersion: "cfg-legacy" })
+    );
+  });
+
+  it("reports when a missing Redis projection cannot be written", async () => {
+    mockPublishInternalPublicStatusConfigSnapshot.mockResolvedValue({
+      configVersion: "cfg-test",
+      key: "internal",
+      written: false,
+    });
+    const mod = await import("@/lib/public-status/config-publisher");
+
+    const written = await mod.reconcilePublicStatusSiteTitleProjection();
+
+    expect(written).toBe(false);
+    expect(mockPublishCurrentPublicStatusConfigPointers).not.toHaveBeenCalled();
+  });
 
   it("uses shared model-prefix matching for vendor icons without changing request type badges", async () => {
     mockFindAllProviderGroups.mockResolvedValue([

@@ -108,7 +108,7 @@
     "saveSuccess": "正常に保存されました",
     "siteTitle": "サイトタイトル",
     "siteTitleDesc": "ブラウザタブのタイトルとシステムのデフォルト表示名を設定するために使用されます。",
-    "siteTitlePlaceholder": "例：Claude Code Hub",
+    "siteTitlePlaceholder": "例：CC Hub",
     "siteTitleRequired": "サイトタイトルは空にできません",
     "ipLoggingInvalidJson": "IP 抽出設定が有効な JSON ではありません：{message}",
     "ipLoggingInvalidShape": "IP 抽出設定は `headers` 配列を持つオブジェクトである必要があります。",

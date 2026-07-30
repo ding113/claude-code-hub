@@ -17,7 +17,7 @@
   },
   "form": {
     "siteTitle": "站点标题",
-    "siteTitlePlaceholder": "例如：Claude Code Hub",
+    "siteTitlePlaceholder": "例如：CC Hub",
     "siteTitleRequired": "站点标题不能为空",
     "ipLoggingInvalidJson": "IP 提取配置不是合法的 JSON：{message}",
     "ipLoggingInvalidShape": "IP 提取配置必须是包含 `headers` 数组的对象。",

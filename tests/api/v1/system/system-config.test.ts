@@ -37,7 +37,7 @@ const userSession = {
 
 const settings: SystemSettings = {
   id: 1,
-  siteTitle: "Claude Code Hub",
+  siteTitle: "CC Hub",
   allowGlobalUsageView: true,
   currencyDisplay: "USD",
   billingModelSource: "original",
@@ -105,7 +105,7 @@ describe("v1 system config endpoints", () => {
     });
     expect(got.response.status).toBe(200);
     expect(got.json).toMatchObject({
-      siteTitle: "Claude Code Hub",
+      siteTitle: "CC Hub",
       updatedAt: "2026-04-28T00:00:00.000Z",
     });
 
@@ -144,7 +144,7 @@ describe("v1 system config endpoints", () => {
 
     expect(got.response.status).toBe(200);
     expect(got.json).toEqual({
-      siteTitle: "Claude Code Hub",
+      siteTitle: "CC Hub",
       currencyDisplay: "USD",
       billingModelSource: "original",
     });

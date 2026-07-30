@@ -8,8 +8,7 @@ describe("enableThinkingEffortConflictRectifier system setting", () => {
 
     expect(toSystemSettings(undefined).enableThinkingEffortConflictRectifier).toBe(true);
     expect(
-      toSystemSettings({ id: 1, siteTitle: "Claude Code Hub" })
-        .enableThinkingEffortConflictRectifier
+      toSystemSettings({ id: 1, siteTitle: "CC Hub" }).enableThinkingEffortConflictRectifier
     ).toBe(true);
     expect(
       toSystemSettings({ id: 1, enableThinkingEffortConflictRectifier: false })

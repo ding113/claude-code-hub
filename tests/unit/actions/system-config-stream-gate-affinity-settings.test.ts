@@ -8,12 +8,10 @@ describe("streamGateMode / affinityIgnoreClientSessionId system settings", () =>
 
     expect(toSystemSettings(undefined).streamGateMode).toBe("enforce");
     expect(toSystemSettings(undefined).affinityIgnoreClientSessionId).toBe(true);
-    expect(toSystemSettings({ id: 1, siteTitle: "Claude Code Hub" }).streamGateMode).toBe(
-      "enforce"
+    expect(toSystemSettings({ id: 1, siteTitle: "CC Hub" }).streamGateMode).toBe("enforce");
+    expect(toSystemSettings({ id: 1, siteTitle: "CC Hub" }).affinityIgnoreClientSessionId).toBe(
+      true
     );
-    expect(
-      toSystemSettings({ id: 1, siteTitle: "Claude Code Hub" }).affinityIgnoreClientSessionId
-    ).toBe(true);
     expect(toSystemSettings({ id: 1, streamGateMode: "shadow" }).streamGateMode).toBe("shadow");
     // varchar 脏值回落产品默认
     expect(toSystemSettings({ id: 1, streamGateMode: "bogus" }).streamGateMode).toBe("enforce");

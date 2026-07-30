@@ -28,7 +28,7 @@ vi.mock("@/lib/logger", () => ({
 function createSettings(overrides: Partial<SystemSettings> = {}): SystemSettings {
   const base: SystemSettings = {
     id: 1,
-    siteTitle: "Claude Code Hub",
+    siteTitle: "CC Hub",
     allowGlobalUsageView: false,
     currencyDisplay: "USD",
     billingModelSource: "original",
@@ -154,7 +154,7 @@ describe("SystemSettingsCache", () => {
     const settings = await getCachedSystemSettings();
     expect(settings).toEqual(
       expect.objectContaining({
-        siteTitle: "Claude Code Hub",
+        siteTitle: "CC Hub",
         enableHttp2: false,
         enableHighConcurrencyMode: false,
         interceptAnthropicWarmupRequests: false,

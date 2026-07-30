@@ -429,7 +429,7 @@ export async function register() {
         "@/lib/migrate"
       );
 
-      logger.info("Initializing Claude Code Hub");
+      logger.info("Initializing CC Hub");
 
       // 等待数据库连接
       const isConnected = await checkDatabaseConnection();
@@ -584,6 +584,11 @@ export async function register() {
           error: error instanceof Error ? error.message : String(error),
         });
       }
+
+      const { reconcilePublicStatusSiteTitleAtStartup } = await import(
+        "@/lib/public-status/startup-reconciliation"
+      );
+      await reconcilePublicStatusSiteTitleAtStartup();
 
       try {
         const { startPublicStatusRebuildScheduler } = await import("@/lib/public-status/scheduler");
@@ -746,6 +751,11 @@ export async function register() {
             error: error instanceof Error ? error.message : String(error),
           });
         }
+
+        const { reconcilePublicStatusSiteTitleAtStartup } = await import(
+          "@/lib/public-status/startup-reconciliation"
+        );
+        await reconcilePublicStatusSiteTitleAtStartup();
 
         try {
           const { startPublicStatusRebuildScheduler } = await import(

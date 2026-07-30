@@ -1,6 +1,6 @@
 # Management REST API v1
 
-`/api/v1/*` is the REST management API for Claude Code Hub. Its HTTP surface is
+`/api/v1/*` is the REST management API for CC Hub. Its HTTP surface is
 mounted separately from:
 
 - `/v1/*`: Claude/OpenAI-compatible proxy endpoints.

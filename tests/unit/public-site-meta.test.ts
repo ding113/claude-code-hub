@@ -67,8 +67,8 @@ describe("readPublicSiteMeta", () => {
     const { readPublicSiteMeta } = await import("@/lib/public-site-meta");
 
     await expect(readPublicSiteMeta()).resolves.toEqual({
-      siteTitle: "Claude Code Hub",
-      siteDescription: "Claude Code Hub public status",
+      siteTitle: "CC Hub",
+      siteDescription: "CC Hub public status",
     });
     expect(mockLoggerWarn).toHaveBeenCalledWith(
       "readPublicSiteMeta: failed to load system settings; falling back to defaults",

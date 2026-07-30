@@ -72,7 +72,7 @@ function loadMessages() {
 }
 
 const baseSettings: FormSettings = {
-  siteTitle: "Claude Code Hub",
+  siteTitle: "CC Hub",
   allowGlobalUsageView: true,
   currencyDisplay: "USD",
   billingModelSource: "redirected",

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# cch - Claude Code Hub Kubernetes Management CLI
+# cch - CC Hub Kubernetes Management CLI
 # 兼容 k3s 与标准 Kubernetes,通过 env / ~/.config/cch/config 可覆盖默认值
 # Reference: docs/k8s-deployment.md
 set -euo pipefail
@@ -274,7 +274,7 @@ cmd_update() {
     local TIMESTAMP
     TIMESTAMP=$(date +%Y%m%d%H%M%S)
     echo -e "${CYAN}=========================================${NC}"
-    echo -e "${CYAN}  Claude Code Hub Upgrade - $TIMESTAMP${NC}"
+    echo -e "${CYAN}  CC Hub Upgrade - $TIMESTAMP${NC}"
     echo -e "${CYAN}=========================================${NC}"
     echo ""
 
@@ -695,7 +695,7 @@ cmd_uninstall() {
 ###############################################################################
 cmd_help() {
     cat <<EOF
-cch - Claude Code Hub Kubernetes Management CLI v${VERSION}
+cch - CC Hub Kubernetes Management CLI v${VERSION}
 
 Usage: cch <command> [args]
 
