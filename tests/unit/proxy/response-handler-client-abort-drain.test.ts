@@ -296,7 +296,8 @@ function createSession(
     sessionId: null,
     specialSettings: [],
     startTime: Date.now(),
-    ttfbMs: null,
+    tfftMs: null,
+    firstByteMs: null,
     userAgent: "Go-http-client/1.1",
     userName: "admin",
     addProviderToChain(this: ProxySession & { providerChain: unknown[] }, prov: Provider, meta) {
@@ -317,7 +318,7 @@ function createSession(
     getResolvedPricingByBillingSource: async () => null,
     getSpecialSettings: () => [],
     isHeaderModified: () => false,
-    recordTtfb: vi.fn(),
+    recordTfft: vi.fn(),
     releaseAgent: vi.fn(),
     setContext1mApplied: vi.fn(),
     shouldPersistSessionDebugArtifacts: () => false,
@@ -1422,7 +1423,7 @@ describe("ProxyResponseHandler stream client abort finalization", () => {
     await downstream.text();
     await drainAsyncTasks();
 
-    expect(session.recordTtfb).not.toHaveBeenCalled();
+    expect(session.recordTfft).not.toHaveBeenCalled();
     expect(session.clearResponseTimeout).toHaveBeenCalledTimes(1);
   });
 

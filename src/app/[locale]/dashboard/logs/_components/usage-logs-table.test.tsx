@@ -79,7 +79,8 @@ function makeLog(overrides: Partial<UsageLogRow>): UsageLogRow {
     costBreakdown: null,
     hedgeLosers: null,
     durationMs: 100,
-    ttfbMs: 50,
+    tfftMs: 50,
+    firstByteMs: 50,
     errorMessage: null,
     providerChain: null,
     blockedBy: null,
@@ -414,11 +415,13 @@ describe("usage-logs-table multiplier badge", () => {
 
   test("hides tok/s when TTFB is close to duration and rate is abnormally high", () => {
     // Rule: generationTimeMs / durationMs < 0.1 && outputRate > 5000 => hide tok/s
-    // durationMs=1000, ttfbMs=950 => generationTimeMs=50, ratio=0.05 < 0.1
+    // durationMs=1000, firstByteMs=950 => generationTimeMs=50, ratio=0.05 < 0.1
     // outputTokens=300 => rate = 300 / 0.05 = 6000 > 5000 => should hide
     const html = renderToStaticMarkup(
       <UsageLogsTable
-        logs={[makeLog({ id: 1, durationMs: 1000, ttfbMs: 950, outputTokens: 300 })]}
+        logs={[
+          makeLog({ id: 1, durationMs: 1000, tfftMs: 950, firstByteMs: 950, outputTokens: 300 }),
+        ]}
         total={1}
         page={1}
         pageSize={50}
@@ -429,16 +432,18 @@ describe("usage-logs-table multiplier badge", () => {
 
     // tok/s should NOT appear
     expect(html).not.toContain("tok/s");
-    // TTFB should still appear
-    expect(html).toContain("TTFB");
+    // TFFT 行仍应出现
+    expect(html).toContain("logs.details.performance.tfft");
   });
 
   test("shows tok/s when conditions are normal", () => {
-    // durationMs=1000, ttfbMs=500 => generationTimeMs=500, ratio=0.5 >= 0.1
+    // durationMs=1000, firstByteMs=500 => generationTimeMs=500, ratio=0.5 >= 0.1
     // outputTokens=50 => rate = 50 / 0.5 = 100 <= 5000 => should show
     const html = renderToStaticMarkup(
       <UsageLogsTable
-        logs={[makeLog({ id: 1, durationMs: 1000, ttfbMs: 500, outputTokens: 50 })]}
+        logs={[
+          makeLog({ id: 1, durationMs: 1000, tfftMs: 500, firstByteMs: 500, outputTokens: 50 }),
+        ]}
         total={1}
         page={1}
         pageSize={50}
@@ -449,8 +454,8 @@ describe("usage-logs-table multiplier badge", () => {
 
     // tok/s should appear
     expect(html).toContain("tok/s");
-    // TTFB should also appear
-    expect(html).toContain("TTFB");
+    // TFFT 行同样应出现
+    expect(html).toContain("logs.details.performance.tfft");
   });
 
   test("renders swap indicator on cacheTtl badge when swapCacheTtlApplied is true", () => {

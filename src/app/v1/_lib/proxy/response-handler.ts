@@ -2603,7 +2603,8 @@ export class ProxyResponseHandler {
                   details: {
                     statusCode: finalizedStatusCode,
                     ...errorDetails,
-                    ttfbMs: session.ttfbMs ?? duration,
+                    tfftMs: session.tfftMs ?? duration,
+                    firstByteMs: session.firstByteMs ?? duration,
                     providerChain: session.getProviderChain(),
                     routingTrace: session.finalizeRoutingTrace(finalizedStatusCode),
                     model: session.getCurrentModel() ?? undefined,
@@ -2768,7 +2769,8 @@ export class ProxyResponseHandler {
           const terminalDetails: MessageRequestTerminalDetails = {
             statusCode: finalizedStatusCode,
             ...errorDetails,
-            ttfbMs: session.ttfbMs ?? duration,
+            tfftMs: session.tfftMs ?? duration,
+            firstByteMs: session.firstByteMs ?? duration,
             providerChain: session.getProviderChain(),
             routingTrace: session.finalizeRoutingTrace(finalizedStatusCode),
             model: session.getCurrentModel() ?? undefined, // 更新重定向后的模型
@@ -3078,7 +3080,8 @@ export class ProxyResponseHandler {
             statusCode: statusCode,
             inputTokens: usageMetrics?.input_tokens,
             outputTokens: usageMetrics?.output_tokens,
-            ttfbMs: session.ttfbMs ?? duration,
+            tfftMs: session.tfftMs ?? duration,
+            firstByteMs: session.firstByteMs ?? duration,
             cacheCreationInputTokens: usageMetrics?.cache_creation_input_tokens,
             cacheReadInputTokens: usageMetrics?.cache_read_input_tokens,
             cacheCreation5mInputTokens: usageMetrics?.cache_creation_5m_input_tokens,
@@ -3524,7 +3527,7 @@ export class ProxyResponseHandler {
             clearIdleTimer();
             if (isFirstChunk) {
               isFirstChunk = false;
-              session.recordTtfb();
+              session.recordTfft();
               clearResponseTimeoutOnce(value.byteLength);
             }
             streamTextAccumulator.pushBytes(value);
@@ -4477,7 +4480,8 @@ export class ProxyResponseHandler {
               durationMs: duration,
               inputTokens: usageForCost?.input_tokens,
               outputTokens: usageForCost?.output_tokens,
-              ttfbMs: session.ttfbMs,
+              tfftMs: session.tfftMs,
+              firstByteMs: session.firstByteMs,
               cacheCreationInputTokens: usageForCost?.cache_creation_input_tokens,
               cacheReadInputTokens: usageForCost?.cache_read_input_tokens,
               cacheCreation5mInputTokens: usageForCost?.cache_creation_5m_input_tokens,
@@ -4566,7 +4570,7 @@ export class ProxyResponseHandler {
       });
 
       if (isFirstChunk) {
-        session.recordTtfb();
+        session.recordTfft();
         isFirstChunk = false;
         if (clearResponseTimeoutOnce()) {
           logger.debug("ResponseHandler: First chunk received, response timeout cleared", {
@@ -6061,7 +6065,8 @@ export async function finalizeRequestStats(
       statusCode: statusCode,
       durationMs: duration,
       ...(errorMessage ? { errorMessage } : {}),
-      ttfbMs: session.ttfbMs ?? duration,
+      tfftMs: session.tfftMs ?? duration,
+      firstByteMs: session.firstByteMs ?? duration,
       providerChain: session.getProviderChain(),
       routingTrace: session.finalizeRoutingTrace(statusCode),
       model: session.getCurrentModel() ?? undefined,
@@ -6174,7 +6179,8 @@ export async function finalizeRequestStats(
     durationMs: duration,
     inputTokens: normalizedUsage.input_tokens,
     outputTokens: normalizedUsage.output_tokens,
-    ttfbMs: session.ttfbMs ?? duration,
+    tfftMs: session.tfftMs ?? duration,
+    firstByteMs: session.firstByteMs ?? duration,
     cacheCreationInputTokens: normalizedUsage.cache_creation_input_tokens,
     cacheReadInputTokens: normalizedUsage.cache_read_input_tokens,
     cacheCreation5mInputTokens: normalizedUsage.cache_creation_5m_input_tokens,
@@ -6432,7 +6438,8 @@ async function persistRequestFailure(options: {
       errorMessage,
       errorStack,
       errorCause,
-      ttfbMs: phase === "non-stream" ? (session.ttfbMs ?? duration) : session.ttfbMs,
+      tfftMs: phase === "non-stream" ? (session.tfftMs ?? duration) : session.tfftMs,
+      firstByteMs: phase === "non-stream" ? (session.firstByteMs ?? duration) : session.firstByteMs,
       providerChain: session.getProviderChain(),
       routingTrace: session.finalizeRoutingTrace(statusCode),
       model: session.getCurrentModel() ?? undefined,

@@ -34,7 +34,8 @@ describe("public-status aggregation", () => {
           createdAt: "2026-04-21T10:10:00.000Z",
           originalModel: "gpt-4.1",
           durationMs: 1000,
-          ttfbMs: 200,
+          tfftMs: 200,
+          firstByteMs: 200,
           outputTokens: 80,
           providerChain: [
             {
@@ -51,7 +52,8 @@ describe("public-status aggregation", () => {
           createdAt: "2026-04-21T10:40:00.000Z",
           originalModel: "gpt-4.1",
           durationMs: 1400,
-          ttfbMs: 300,
+          tfftMs: 300,
+          firstByteMs: 300,
           outputTokens: 60,
           providerChain: [
             {
@@ -101,7 +103,8 @@ describe("public-status aggregation", () => {
           createdAt: "2026-04-21T10:25:00.000Z",
           originalModel: "gpt-4.1",
           durationMs: 1500,
-          ttfbMs: 500,
+          tfftMs: 500,
+          firstByteMs: 500,
           outputTokens: null,
           providerChain: [
             {
@@ -226,7 +229,8 @@ describe("public-status aggregation", () => {
           createdAt: "2026-04-21T10:10:00.000Z",
           originalModel: "gpt-4.1",
           durationMs: 1200,
-          ttfbMs: 200,
+          tfftMs: 200,
+          firstByteMs: 200,
           outputTokens: 50,
           providerChain: [
             {

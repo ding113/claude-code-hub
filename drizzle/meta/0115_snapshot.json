@@ -1,6 +1,6 @@
 {
-  "id": "63b9d353-72a5-432c-88ff-77e871ddfb68",
-  "prevId": "87e53bfd-94b5-42d6-b589-0ec54a331157",
+  "id": "6ef3f512-a210-4d69-801a-9cd1ee9e1e52",
+  "prevId": "63b9d353-72a5-432c-88ff-77e871ddfb68",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -3865,7 +3865,7 @@
           "type": "varchar(128)",
           "primaryKey": false,
           "notNull": true,
-          "default": "'Claude Code Hub'"
+          "default": "'CC Hub'"
         },
         "allow_global_usage_view": {
           "name": "allow_global_usage_view",

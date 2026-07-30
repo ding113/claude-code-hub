@@ -17,7 +17,8 @@ export type MessageRequestUpdatePatch = {
   statusCode?: number;
   inputTokens?: number;
   outputTokens?: number;
-  ttfbMs?: number | null;
+  tfftMs?: number | null;
+  firstByteMs?: number | null;
   cacheCreationInputTokens?: number;
   cacheReadInputTokens?: number;
   cacheCreation5mInputTokens?: number;
@@ -267,7 +268,9 @@ const COLUMN_MAP: Record<keyof MessageRequestUpdatePatch, string> = {
   statusCode: "status_code",
   inputTokens: "input_tokens",
   outputTokens: "output_tokens",
-  ttfbMs: "ttfb_ms",
+  // ttfb_ms 是 TFFT 的历史列名，见 schema.ts 的说明
+  tfftMs: "ttfb_ms",
+  firstByteMs: "first_byte_ms",
   cacheCreationInputTokens: "cache_creation_input_tokens",
   cacheReadInputTokens: "cache_read_input_tokens",
   cacheCreation5mInputTokens: "cache_creation_5m_input_tokens",

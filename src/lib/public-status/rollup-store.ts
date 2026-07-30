@@ -39,7 +39,8 @@ export interface PublicStatusRollupEvent {
   model?: string | null;
   originalModel?: string | null;
   durationMs?: number | null;
-  ttfbMs?: number | null;
+  tfftMs?: number | null;
+  firstByteMs?: number | null;
   outputTokens?: number | null;
   providerChain?: ProviderChainItem[] | null;
 }
@@ -339,11 +340,12 @@ export function buildPublicStatusRollupIncrements(input: {
     }
   }
 
-  const ttfbMs = normalizeNumber(input.event.ttfbMs);
+  // ttfb_sum / ttfb_count 是既有 rollup 键名，存的是 TFFT（改名会作废已积累的桶）
+  const tfftMs = normalizeNumber(input.event.tfftMs);
   const tps = computeTokensPerSecond({
     outputTokens: input.event.outputTokens,
     durationMs: input.event.durationMs,
-    ttfbMs,
+    firstByteMs: normalizeNumber(input.event.firstByteMs),
   });
   const increments: PublicStatusRollupIncrement[] = [];
 
@@ -367,9 +369,9 @@ export function buildPublicStatusRollupIncrements(input: {
       metric: outcome === "success" ? "success" : "failure",
       value: 1,
     });
-    if (outcome === "success" && ttfbMs !== null) {
+    if (outcome === "success" && tfftMs !== null) {
       increments.push(
-        { groupId, modelKey, metric: "ttfb_sum", value: ttfbMs },
+        { groupId, modelKey, metric: "ttfb_sum", value: tfftMs },
         { groupId, modelKey, metric: "ttfb_count", value: 1 }
       );
     }

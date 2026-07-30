@@ -29,6 +29,7 @@ import { cn, formatTokenAmount } from "@/lib/utils";
 import { formatCurrency } from "@/lib/utils/currency";
 import { buildHedgeBillingTable } from "@/lib/utils/hedge-billing";
 import { resolveModelAuditDisplay } from "@/lib/utils/model-audit-display";
+import { calculateOutputRate, shouldHideOutputRate } from "@/lib/utils/performance-formatter";
 import {
   getPricingResolutionSpecialSetting,
   getThinkingSignatureModelDetectionSpecialSetting,
@@ -37,13 +38,7 @@ import {
 import { extractThinkingEffortInfo } from "@/lib/utils/thinking-effort";
 import { getFake200ReasonKey } from "../../fake200-reason";
 import { Fake200RetryTooltip } from "../../fake200-retry-tooltip";
-import {
-  calculateOutputRate,
-  isInProgressStatus,
-  isSuccessStatus,
-  type SummaryTabProps,
-  shouldHideOutputRate,
-} from "../types";
+import { isInProgressStatus, isSuccessStatus, type SummaryTabProps } from "../types";
 
 export function SummaryTab({
   statusCode,
@@ -69,7 +64,7 @@ export function SummaryTab({
   routingTrace,
   context1mApplied,
   durationMs,
-  ttfbMs,
+  firstByteMs,
   sessionId,
   requestSequence,
   userAgent,
@@ -85,8 +80,12 @@ export function SummaryTab({
 
   const isSuccess = isSuccessStatus(statusCode);
   const isInProgress = isInProgressStatus(statusCode);
-  const outputRate = calculateOutputRate(outputTokens, durationMs, ttfbMs);
-  const hideRate = shouldHideOutputRate(outputRate, durationMs, ttfbMs);
+  const outputRate = calculateOutputRate(
+    outputTokens ?? null,
+    durationMs ?? null,
+    firstByteMs ?? null
+  );
+  const hideRate = shouldHideOutputRate(outputRate, durationMs ?? null, firstByteMs ?? null);
   const totalTokens = (inputTokens ?? 0) + (outputTokens ?? 0);
   const hasRedirect = originalModel && currentModel && originalModel !== currentModel;
   const modelAudit = resolveModelAuditDisplay({

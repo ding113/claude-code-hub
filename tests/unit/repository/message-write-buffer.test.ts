@@ -154,7 +154,7 @@ describe("message_request 异步批量写入", () => {
     } = await import("@/repository/message-write-buffer");
 
     enqueueMessageRequestUpdate(42, { durationMs: 100 });
-    enqueueMessageRequestUpdate(42, { statusCode: 200, ttfbMs: 10 });
+    enqueueMessageRequestUpdate(42, { statusCode: 200, tfftMs: 10 });
 
     await flushMessageRequestWriteBuffer();
     await stopMessageRequestWriteBuffer();

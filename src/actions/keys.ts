@@ -513,6 +513,17 @@ export async function editKey(
     // 仅当调用方显式携带 expiresAt 字段时才更新/清除该字段：
     // - 避免像“仅修改限额”这类局部更新把 expiresAt 意外清空
     const hasExpiresAtField = Object.hasOwn(data, "expiresAt");
+    const hasCanLoginWebUiField = Object.hasOwn(data, "canLoginWebUi");
+    const hasLimit5hUsdField = Object.hasOwn(data, "limit5hUsd");
+    const hasLimit5hResetModeField = Object.hasOwn(data, "limit5hResetMode");
+    const hasLimitDailyUsdField = Object.hasOwn(data, "limitDailyUsd");
+    const hasDailyResetModeField = Object.hasOwn(data, "dailyResetMode");
+    const hasDailyResetTimeField = Object.hasOwn(data, "dailyResetTime");
+    const hasLimitWeeklyUsdField = Object.hasOwn(data, "limitWeeklyUsd");
+    const hasLimitMonthlyUsdField = Object.hasOwn(data, "limitMonthlyUsd");
+    const hasLimitTotalUsdField = Object.hasOwn(data, "limitTotalUsd");
+    const hasLimitConcurrentSessionsField = Object.hasOwn(data, "limitConcurrentSessions");
+    const hasCacheTtlPreferenceField = Object.hasOwn(data, "cacheTtlPreference");
 
     const validatedData = KeyFormSchema.parse(data);
 
@@ -646,30 +657,36 @@ export async function editKey(
 
     const isAdmin = session.user.role === "admin";
     const prevProviderGroup = normalizeProviderGroup(key.providerGroup);
-    const nextProviderGroup = isAdmin ? normalizeProviderGroup(validatedData.providerGroup) : null;
-    const providerGroupChanged = isAdmin && nextProviderGroup !== prevProviderGroup;
+    const nextProviderGroup =
+      isAdmin && providerGroupProvided ? normalizeProviderGroup(validatedData.providerGroup) : null;
+    const providerGroupChanged =
+      isAdmin && providerGroupProvided && nextProviderGroup !== prevProviderGroup;
 
     await updateKey(keyId, {
       name: validatedData.name,
       ...(hasExpiresAtField ? { expires_at: expiresAt } : {}),
-      can_login_web_ui: validatedData.canLoginWebUi,
+      ...(hasCanLoginWebUiField ? { can_login_web_ui: validatedData.canLoginWebUi } : {}),
       ...(data.isEnabled !== undefined ? { is_enabled: data.isEnabled } : {}),
-      limit_5h_usd: validatedData.limit5hUsd,
-      limit_5h_reset_mode: validatedData.limit5hResetMode,
-      limit_daily_usd: validatedData.limitDailyUsd,
-      daily_reset_mode: validatedData.dailyResetMode,
-      daily_reset_time: validatedData.dailyResetTime,
-      limit_weekly_usd: validatedData.limitWeeklyUsd,
-      limit_monthly_usd: validatedData.limitMonthlyUsd,
-      limit_total_usd: validatedData.limitTotalUsd,
-      limit_concurrent_sessions: validatedData.limitConcurrentSessions,
+      ...(hasLimit5hUsdField ? { limit_5h_usd: validatedData.limit5hUsd } : {}),
+      ...(hasLimit5hResetModeField ? { limit_5h_reset_mode: validatedData.limit5hResetMode } : {}),
+      ...(hasLimitDailyUsdField ? { limit_daily_usd: validatedData.limitDailyUsd } : {}),
+      ...(hasDailyResetModeField ? { daily_reset_mode: validatedData.dailyResetMode } : {}),
+      ...(hasDailyResetTimeField ? { daily_reset_time: validatedData.dailyResetTime } : {}),
+      ...(hasLimitWeeklyUsdField ? { limit_weekly_usd: validatedData.limitWeeklyUsd } : {}),
+      ...(hasLimitMonthlyUsdField ? { limit_monthly_usd: validatedData.limitMonthlyUsd } : {}),
+      ...(hasLimitTotalUsdField ? { limit_total_usd: validatedData.limitTotalUsd } : {}),
+      ...(hasLimitConcurrentSessionsField
+        ? { limit_concurrent_sessions: validatedData.limitConcurrentSessions }
+        : {}),
       // providerGroup 为 admin-only 字段：非管理员不允许更新该字段
-      ...(isAdmin
+      ...(isAdmin && providerGroupProvided
         ? {
             provider_group: normalizeProviderGroup(validatedData.providerGroup),
           }
         : {}),
-      cache_ttl_preference: validatedData.cacheTtlPreference,
+      ...(hasCacheTtlPreferenceField
+        ? { cache_ttl_preference: validatedData.cacheTtlPreference }
+        : {}),
     });
 
     // 自动同步用户分组（用户分组 = Key 分组并集）
@@ -677,10 +694,7 @@ export async function editKey(
       await syncUserProviderGroupFromKeys(key.userId);
     }
 
-    if (
-      validatedData.limit5hResetMode !== undefined &&
-      validatedData.limit5hResetMode !== key.limit5hResetMode
-    ) {
+    if (hasLimit5hResetModeField && validatedData.limit5hResetMode !== key.limit5hResetMode) {
       const { clearSingleKeyCostCache } = await import("@/lib/redis/cost-cache-cleanup");
       await invalidateCachedKey(key.key).catch(() => null);
       await clearSingleKeyCostCache({
@@ -719,18 +733,25 @@ export async function editKey(
         name: validatedData.name,
         isEnabled: data.isEnabled,
         expiresAt: hasExpiresAtField ? expiresAt : undefined,
-        canLoginWebUi: validatedData.canLoginWebUi,
-        providerGroup: isAdmin ? normalizeProviderGroup(validatedData.providerGroup) : undefined,
-        limit5hUsd: validatedData.limit5hUsd,
-        limit5hResetMode: validatedData.limit5hResetMode,
-        limitDailyUsd: validatedData.limitDailyUsd,
-        limitWeeklyUsd: validatedData.limitWeeklyUsd,
-        limitMonthlyUsd: validatedData.limitMonthlyUsd,
-        limitTotalUsd: validatedData.limitTotalUsd,
-        limitConcurrentSessions: validatedData.limitConcurrentSessions,
-        dailyResetMode: validatedData.dailyResetMode,
-        dailyResetTime: validatedData.dailyResetTime,
-        cacheTtlPreference: validatedData.cacheTtlPreference,
+        canLoginWebUi: hasCanLoginWebUiField ? validatedData.canLoginWebUi : undefined,
+        providerGroup:
+          isAdmin && providerGroupProvided
+            ? normalizeProviderGroup(validatedData.providerGroup)
+            : undefined,
+        limit5hUsd: hasLimit5hUsdField ? validatedData.limit5hUsd : undefined,
+        limit5hResetMode: hasLimit5hResetModeField ? validatedData.limit5hResetMode : undefined,
+        limitDailyUsd: hasLimitDailyUsdField ? validatedData.limitDailyUsd : undefined,
+        limitWeeklyUsd: hasLimitWeeklyUsdField ? validatedData.limitWeeklyUsd : undefined,
+        limitMonthlyUsd: hasLimitMonthlyUsdField ? validatedData.limitMonthlyUsd : undefined,
+        limitTotalUsd: hasLimitTotalUsdField ? validatedData.limitTotalUsd : undefined,
+        limitConcurrentSessions: hasLimitConcurrentSessionsField
+          ? validatedData.limitConcurrentSessions
+          : undefined,
+        dailyResetMode: hasDailyResetModeField ? validatedData.dailyResetMode : undefined,
+        dailyResetTime: hasDailyResetTimeField ? validatedData.dailyResetTime : undefined,
+        cacheTtlPreference: hasCacheTtlPreferenceField
+          ? validatedData.cacheTtlPreference
+          : undefined,
       },
       success: true,
       redactExtraKeys: ["key"],

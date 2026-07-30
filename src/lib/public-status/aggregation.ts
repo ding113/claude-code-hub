@@ -39,7 +39,8 @@ export interface PublicStatusRequestRow {
   model?: string | null;
   originalModel?: string | null;
   durationMs?: number | null;
-  ttfbMs?: number | null;
+  tfftMs?: number | null;
+  firstByteMs?: number | null;
   outputTokens?: number | null;
   providerChain?: PublicStatusRequestChainItem[] | null;
 }
@@ -304,7 +305,7 @@ export function buildPublicStatusPayloadFromRequests(input: {
     const tps = computeTokensPerSecond({
       outputTokens: request.outputTokens,
       durationMs: request.durationMs,
-      ttfbMs: request.ttfbMs,
+      firstByteMs: request.firstByteMs,
     });
 
     for (const [sourceGroupName, outcome] of groupOutcome.entries()) {
@@ -323,8 +324,9 @@ export function buildPublicStatusPayloadFromRequests(input: {
         bucket.failureCount += 1;
       }
 
-      if (outcome === "success" && typeof request.ttfbMs === "number") {
-        bucket.ttfbValues.push(request.ttfbMs);
+      // ttfbValues -> bucket.ttfbMs 是对外 payload 字段，装的是 TFFT
+      if (outcome === "success" && typeof request.tfftMs === "number") {
+        bucket.ttfbValues.push(request.tfftMs);
       }
       if (outcome === "success" && typeof tps === "number") {
         bucket.tpsValues.push(tps);
@@ -455,7 +457,8 @@ export async function queryPublicStatusRequests(input: {
       model: messageRequest.model,
       originalModel: messageRequest.originalModel,
       durationMs: messageRequest.durationMs,
-      ttfbMs: messageRequest.ttfbMs,
+      tfftMs: messageRequest.tfftMs,
+      firstByteMs: messageRequest.firstByteMs,
       outputTokens: messageRequest.outputTokens,
       statusCode: messageRequest.statusCode,
       errorMessage: messageRequest.errorMessage,
@@ -495,7 +498,8 @@ export async function queryPublicStatusRequests(input: {
         model: row.model,
         originalModel: row.originalModel,
         durationMs: row.durationMs,
-        ttfbMs: row.ttfbMs,
+        tfftMs: row.tfftMs,
+        firstByteMs: row.firstByteMs,
         outputTokens: row.outputTokens,
         providerChain: existingChain,
       },

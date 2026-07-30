@@ -194,8 +194,9 @@ function createSession(opts: {
     getCurrentModel: () => redirectedModel,
     getProviderChain: () => session.providerChain,
     getCachedPriceDataByBillingSource: async () => testPriceData,
-    recordTtfb: () => 100,
-    ttfbMs: null,
+    recordTfft: () => 100,
+    tfftMs: null,
+    firstByteMs: null,
     getRequestSequence: () => 1,
     addProviderToChain: function (
       prov: Provider,
