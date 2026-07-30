@@ -22,7 +22,7 @@ This document defines the system architecture for CC Hub. It provides the techni
 
 ## Executive Summary
 
-CC Hub (CCH) is an intelligent AI API proxy platform built on a **Modular Monolith** architecture using Next.js 15 with App Router and Hono. The system provides multi-provider management, intelligent load balancing, circuit breaker patterns, and comprehensive monitoring for AI coding tools like Claude Code and Codex.
+CC Hub (CCH) is an intelligent AI API proxy platform built on a **Modular Monolith** architecture using Next.js 16 with App Router and Hono. The system provides multi-provider management, intelligent load balancing, circuit breaker patterns, and comprehensive monitoring for AI coding tools like Claude Code and Codex.
 
 The architecture emphasizes:
 
@@ -75,7 +75,7 @@ CC Hub follows a **Modular Monolith** pattern with clear internal boundaries:
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                           API GATEWAY LAYER                                  │
 │  ┌─────────────────────────────────────────────────────────────────────┐    │
-│  │                    Next.js 15 + Hono Router                          │    │
+│  │                    Next.js 16 + Hono Router                          │    │
 │  │  ┌───────────┐  ┌───────────┐  ┌───────────┐  ┌───────────┐         │    │
 │  │  │ /v1/      │  │ /api/     │  │ /settings │  │ /dashboard│         │    │
 │  │  │ messages  │  │ actions   │  │ (UI)      │  │ (UI)      │         │    │
@@ -217,11 +217,11 @@ flowchart TB
 
 ### Frontend
 
-**Choice:** Next.js 15 (App Router) + React 19 + Tailwind CSS + shadcn/ui
+**Choice:** Next.js 16 (App Router) + React 19 + Tailwind CSS + shadcn/ui
 
 **Rationale:**
 
-- **Next.js 15**: Latest stable with App Router, Server Components, and Server Actions
+- **Next.js 16**: Latest stable with App Router, Server Components, and Server Actions
 - **React 19**: Latest features for optimal performance
 - **Tailwind CSS**: Utility-first CSS for rapid UI development
 - **shadcn/ui**: High-quality, accessible component library
@@ -1780,7 +1780,7 @@ _To continue: Run `/workflow-status` to see your progress and next recommended w
 
 | Category   | Choice     | Alternatives Considered | Key Factor                 |
 | ---------- | ---------- | ----------------------- | -------------------------- |
-| Framework  | Next.js 15 | Remix, Nuxt             | SSR + API in one           |
+| Framework  | Next.js 16 | Remix, Nuxt             | SSR + API in one           |
 | Router     | Hono       | Express, Fastify        | Performance                |
 | ORM        | Drizzle    | Prisma, TypeORM         | Type safety + SQL          |
 | Database   | PostgreSQL | MySQL, SQLite           | JSON support + reliability |
