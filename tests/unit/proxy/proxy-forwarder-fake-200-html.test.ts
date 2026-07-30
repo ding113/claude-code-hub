@@ -194,9 +194,144 @@ function createSession(): ProxySession {
   return session as ProxySession;
 }
 
+function attachReplayOwner(session: ProxySession): void {
+  session.request.message.stream = true;
+  session.replayState = {
+    role: "owner",
+    ownerToken: "owner-token",
+    identity: {
+      replayId: "0123456789abcdef0123456789abcdef",
+      verifier: "fedcba9876543210fedcba9876543210",
+      scopeTag: "0011223344556677",
+      keyId: 11,
+      userId: 22,
+      format: "claude",
+      model: "claude-test",
+      endpoint: "/v1/messages",
+    },
+  };
+}
+
 describe("ProxyForwarder - fake 200 HTML body", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  test("Replay owner 收到 malformed buffered JSON 时在提交前切换供应商", async () => {
+    const provider1 = createProvider({
+      id: 1,
+      name: "p1",
+      key: "k1",
+      maxRetryAttempts: 1,
+      firstByteTimeoutStreamingMs: 0,
+    });
+    const provider2 = createProvider({
+      id: 2,
+      name: "p2",
+      key: "k2",
+      maxRetryAttempts: 1,
+      firstByteTimeoutStreamingMs: 0,
+    });
+    const session = createSession();
+    session.setProvider(provider1);
+    attachReplayOwner(session);
+
+    mocks.pickRandomProviderWithExclusion.mockResolvedValueOnce(provider2);
+    const doForward = vi.spyOn(ProxyForwarder as any, "doForward");
+    const malformedBody = `{"padding":"${"x".repeat(40 * 1024)}","content":[`;
+    const okJson = JSON.stringify({ type: "message", content: [{ type: "text", text: "ok" }] });
+
+    doForward.mockResolvedValueOnce(
+      new Response(malformedBody, {
+        status: 200,
+        headers: {
+          "content-type": "application/problem+json; charset=utf-8",
+          "content-length": String(malformedBody.length),
+        },
+      })
+    );
+    doForward.mockResolvedValueOnce(
+      new Response(okJson, {
+        status: 200,
+        headers: {
+          "content-type": "application/json",
+          "content-length": String(okJson.length),
+        },
+      })
+    );
+
+    const response = await ProxyForwarder.send(session);
+
+    await expect(response.text()).resolves.toBe(okJson);
+    expect(doForward).toHaveBeenCalledTimes(2);
+    expect(mocks.recordFailure).toHaveBeenCalledWith(
+      provider1.id,
+      expect.objectContaining({ message: "MALFORMED_BUFFERED_JSON" })
+    );
+    expect(mocks.recordSuccess).toHaveBeenCalledWith(provider2.id);
+    expect(mocks.recordSuccess).not.toHaveBeenCalledWith(provider1.id);
+  });
+
+  test("Replay owner 的非 JSON buffered body 保持原样，不触发 strict JSON fallback", async () => {
+    const provider = createProvider({
+      id: 1,
+      name: "p1",
+      key: "k1",
+      maxRetryAttempts: 1,
+      firstByteTimeoutStreamingMs: 0,
+    });
+    const session = createSession();
+    session.setProvider(provider);
+    attachReplayOwner(session);
+    const doForward = vi.spyOn(ProxyForwarder as any, "doForward");
+    const body = "{not-json";
+
+    doForward.mockResolvedValueOnce(
+      new Response(body, {
+        status: 200,
+        headers: { "content-type": "text/plain", "content-length": String(body.length) },
+      })
+    );
+
+    const response = await ProxyForwarder.send(session);
+
+    await expect(response.text()).resolves.toBe(body);
+    expect(doForward).toHaveBeenCalledOnce();
+    expect(mocks.recordFailure).not.toHaveBeenCalled();
+    expect(mocks.recordSuccess).toHaveBeenCalledWith(provider.id);
+  });
+
+  test("Replay JSON 声明体积超过缓存上限时释放 ownership 并保持响应透传", async () => {
+    const provider = createProvider({
+      id: 1,
+      name: "p1",
+      key: "k1",
+      maxRetryAttempts: 1,
+      firstByteTimeoutStreamingMs: 0,
+    });
+    const session = createSession();
+    session.setProvider(provider);
+    attachReplayOwner(session);
+    const doForward = vi.spyOn(ProxyForwarder as any, "doForward");
+    const body = '{"ok":true}';
+
+    doForward.mockResolvedValueOnce(
+      new Response(body, {
+        status: 200,
+        headers: {
+          "content-type": "application/json",
+          "content-length": "1000000000",
+        },
+      })
+    );
+
+    const response = await ProxyForwarder.send(session);
+
+    await expect(response.text()).resolves.toBe(body);
+    expect(session.replayState).toBeNull();
+    expect(doForward).toHaveBeenCalledOnce();
+    expect(mocks.recordFailure).not.toHaveBeenCalled();
+    expect(mocks.recordSuccess).toHaveBeenCalledWith(provider.id);
   });
 
   test("200 + text/html 的 HTML 页面应视为失败并切换供应商", async () => {

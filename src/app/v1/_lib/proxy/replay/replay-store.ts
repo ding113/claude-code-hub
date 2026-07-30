@@ -20,6 +20,7 @@ import { RedisListStore } from "@/lib/redis/redis-list-store";
  */
 
 export type ReplayStatus = "owning" | "completed" | "aborted";
+export type ReplayDelivery = "stream" | "buffered";
 
 export interface ReplayMeta {
   status: ReplayStatus;
@@ -28,6 +29,8 @@ export interface ReplayMeta {
   statusCode: number;
   /** 仅保留承载语义的响应头（content-type 等） */
   headers: Record<string, string>;
+  /** buffered owner 不公开 live attach；缺失字段按旧版 stream 条目处理。 */
+  delivery?: ReplayDelivery;
   format: string;
   model: string | null;
   chunkCount: number;
@@ -53,6 +56,38 @@ if redis.call('GET', KEYS[1]) == ARGV[1] then
   return 1
 end
 return 0`;
+
+const LUA_WRITE_OWNED = `
+if redis.call('GET', KEYS[1]) ~= ARGV[1] then
+  return -1
+end
+local len = redis.call('LLEN', KEYS[3])
+if #ARGV > 4 then
+  len = redis.call('RPUSH', KEYS[3], unpack(ARGV, 5))
+  if tonumber(ARGV[2]) > 0 then
+    redis.call('EXPIRE', KEYS[3], ARGV[2])
+  end
+end
+redis.call('SETEX', KEYS[2], ARGV[2], ARGV[4])
+redis.call('EXPIRE', KEYS[1], ARGV[3])
+return len`;
+
+const LUA_ABORT_OWNED = `
+if redis.call('GET', KEYS[1]) ~= ARGV[1] then
+  return 0
+end
+redis.call('SETEX', KEYS[2], ARGV[2], ARGV[3])
+redis.call('DEL', KEYS[3])
+redis.call('DEL', KEYS[1])
+return 1`;
+
+const LUA_COMPLETE_OWNED = `
+if redis.call('GET', KEYS[1]) ~= ARGV[1] then
+  return 0
+end
+redis.call('SETEX', KEYS[2], ARGV[2], ARGV[3])
+redis.call('DEL', KEYS[1])
+return 1`;
 
 type RedisRawClient = Pick<Redis, "status" | "set" | "del"> & {
   eval(...args: [script: string, numkeys: number, ...rest: (string | number)[]]): Promise<unknown>;
@@ -102,6 +137,43 @@ export class ReplayStore {
 
   async appendChunks(replayId: string, values: string[]): Promise<number | null> {
     return this.chunks.rpushBatch(replayId, values, resolveReplayTtlSeconds());
+  }
+
+  /**
+   * owner 热层写入：token 校验、chunk 追加、owning meta 更新和租约续期在同一 Lua
+   * 内完成，避免旧 owner 在租约交接窗口污染新 owner 的 chunks/meta。
+   * null 表示 Redis 不可用，false 表示 token 已失效，number 为当前 chunk 总数。
+   */
+  async writeOwned(
+    replayId: string,
+    ownerToken: string,
+    meta: ReplayMeta,
+    values: string[] = []
+  ): Promise<number | null | false> {
+    const redis = this.getRawRedis();
+    if (!redis) return null;
+    try {
+      const result = await redis.eval(
+        LUA_WRITE_OWNED,
+        3,
+        `cch:replay:owner:${replayId}`,
+        `cch:replay:meta:${replayId}`,
+        `cch:replay:chunks:${replayId}`,
+        ownerToken,
+        resolveReplayTtlSeconds(),
+        OWNER_LEASE_TTL_SECONDS,
+        JSON.stringify(meta),
+        ...values
+      );
+      const length = typeof result === "number" ? result : Number(result);
+      return length === -1 ? false : length;
+    } catch (error) {
+      logger.debug("[ReplayStore] fenced owner write failed", {
+        replayId: replayId.slice(0, 12),
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return null;
+    }
   }
 
   /** 从 offset（0-based）读到当前末尾；Redis 不可用返回 null。 */
@@ -169,6 +241,55 @@ export class ReplayStore {
       await redis.eval(LUA_COMPARE_DELETE, 1, `cch:replay:owner:${replayId}`, ownerToken);
     } catch {
       // 租约会自然过期
+    }
+  }
+
+  /** 仅当前 token 仍持有租约时，原子终止条目并清理热层响应块。 */
+  async abortOwned(replayId: string, ownerToken: string, meta: ReplayMeta): Promise<boolean> {
+    const redis = this.getRawRedis();
+    if (!redis) return false;
+    try {
+      const result = await redis.eval(
+        LUA_ABORT_OWNED,
+        3,
+        `cch:replay:owner:${replayId}`,
+        `cch:replay:meta:${replayId}`,
+        `cch:replay:chunks:${replayId}`,
+        ownerToken,
+        resolveReplayTtlSeconds(),
+        JSON.stringify(meta)
+      );
+      return result === 1;
+    } catch (error) {
+      logger.debug("[ReplayStore] fenced abort failed", {
+        replayId: replayId.slice(0, 12),
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return false;
+    }
+  }
+
+  /** 仅当前 token 仍持有租约时，原子翻转 completed meta 并释放租约。 */
+  async completeOwned(replayId: string, ownerToken: string, meta: ReplayMeta): Promise<boolean> {
+    const redis = this.getRawRedis();
+    if (!redis) return false;
+    try {
+      const result = await redis.eval(
+        LUA_COMPLETE_OWNED,
+        2,
+        `cch:replay:owner:${replayId}`,
+        `cch:replay:meta:${replayId}`,
+        ownerToken,
+        resolveReplayTtlSeconds(),
+        JSON.stringify(meta)
+      );
+      return result === 1;
+    } catch (error) {
+      logger.debug("[ReplayStore] fenced completion failed", {
+        replayId: replayId.slice(0, 12),
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return false;
     }
   }
 

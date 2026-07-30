@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { parseSseBody, SseFrameParser } from "@/app/v1/_lib/proxy/stream-gate/sse-frames";
+import {
+  parseSseBody,
+  SseFrameBufferLimitError,
+  SseFrameParser,
+} from "@/app/v1/_lib/proxy/stream-gate/sse-frames";
 
 function collectAll(parser: SseFrameParser, chunks: Uint8Array[]) {
   const frames = chunks.flatMap((chunk) => parser.push(chunk));
@@ -94,5 +98,27 @@ describe("SseFrameParser", () => {
       chunks.push(bytes.slice(i, i + 1));
     }
     expect(collectAll(parser, chunks)).toEqual(expected);
+  });
+
+  it("rejects an unterminated line that exceeds the configured retained buffer", () => {
+    const parser = new SseFrameParser({ maxBufferedCharacters: 16 });
+
+    expect(() => parser.push(new TextEncoder().encode(`data: ${"x".repeat(20)}`))).toThrow(
+      SseFrameBufferLimitError
+    );
+  });
+
+  it("counts accumulated data lines before an event is dispatched", () => {
+    const parser = new SseFrameParser({ maxBufferedCharacters: 10 });
+
+    expect(() => parser.push(new TextEncoder().encode("data: 12345\ndata: 67890\n"))).toThrow(
+      SseFrameBufferLimitError
+    );
+  });
+
+  it("keeps the existing unlimited behavior when no retained buffer limit is configured", () => {
+    const data = "x".repeat(1024 * 1024 + 1);
+
+    expect(parseSseBody(`data: ${data}\n\n`)).toEqual([{ eventName: null, data }]);
   });
 });

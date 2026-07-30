@@ -107,6 +107,8 @@ import {
   validateOpenAIImageRequest,
 } from "./openai-image-compat";
 import { ProxyProviderResolver } from "./provider-selector";
+import { abortReplayOwnership, releaseReplayOwnership } from "./replay/replay-spool";
+import { isJsonResponseContentType, isMalformedJsonResponseBody } from "./response-content-type";
 import { finalizeHedgeLoserBilling, hasStreamCompletionMarker } from "./response-handler";
 import type { ProxySession } from "./session";
 import {
@@ -1343,6 +1345,15 @@ function applyClaudeMetadataUserIdInjectionWithAudit(
 
 export class ProxyForwarder {
   static async send(session: ProxySession): Promise<Response> {
+    try {
+      return await ProxyForwarder.sendInternal(session);
+    } catch (error) {
+      await abortReplayOwnership(session, "forward_failed");
+      throw error;
+    }
+  }
+
+  private static async sendInternal(session: ProxySession): Promise<Response> {
     if (!session.provider || !session.authState?.success) {
       throw new Error("代理上下文缺少供应商或鉴权信息");
     }
@@ -1653,7 +1664,7 @@ export class ProxyForwarder {
         };
 
         try {
-          const response = await ProxyForwarder.doForward(
+          let response = await ProxyForwarder.doForward(
             session,
             currentProvider,
             activeEndpoint.baseUrl,
@@ -1668,9 +1679,7 @@ export class ProxyForwarder {
           const isHtml =
             normalizedContentType.includes("text/html") ||
             normalizedContentType.includes("application/xhtml+xml");
-          const isJson =
-            normalizedContentType.includes("application/json") ||
-            normalizedContentType.includes("+json");
+          const isJson = isJsonResponseContentType(contentType);
 
           // ========== 流式响应：延迟成功判定（避免“假 200”）==========
           // 背景：上游可能返回 HTTP 200，但 SSE 内容为错误 JSON（如 {"error": "..."}）。
@@ -1682,7 +1691,7 @@ export class ProxyForwarder {
           // 解决：Forwarder 只负责尽快把 Response 返回给下游开始透传，
           // 把最终成功/失败结算延迟到 ResponseHandler：等 SSE 正常结束后再基于最终 body 补充检查并更新内部状态。
           if (isSSE) {
-            // ========== F1 流式内容门控（enforce 模式）==========
+            // ========== F1 流式内容门控（enforce 或 Replay owner）==========
             // 在向客户端提交响应前等待首个有效内容帧：
             // - 中性前缀（ping/metadata/usage-only）缓冲后随提交一并冲刷；
             // - error/malformed/空流在此抛错 -> 外层 catch 归类 -> 换供应商（客户端零字节）；
@@ -1691,8 +1700,10 @@ export class ProxyForwarder {
             let streamingResponse = response;
             let gateChainAudit: ProviderChainItem["streamGate"];
             const gateMode = resolveStreamGateMode();
+            const shouldRunPrecommitGate =
+              gateMode === "enforce" || session.replayState?.role === "owner";
             if (
-              gateMode === "enforce" &&
+              shouldRunPrecommitGate &&
               response.body &&
               session.getEndpointPolicy().kind !== "raw_passthrough"
             ) {
@@ -1854,7 +1865,11 @@ export class ProxyForwarder {
           // 因此这里在进入成功分支前做一次强信号检测：仅当 body 看起来是完整 HTML 文档时才视为错误。
           let inspectedText: string | undefined;
           let inspectedTruncated = false;
-          // 注意：这里不会对“大体积 JSON”做假 200 检测（例如 Content-Length > 32KiB）。
+          // Replay owner 的 buffered JSON 必须在提交前完整验证，确保 malformed body 能进入
+          // 现有 provider fallback，且不会被 ResponseHandler 持久化为 completed Replay。
+          const shouldStrictValidateReplayJson = isJson && session.replayState?.role === "owner";
+          let replayJsonValidationExceededLimit = false;
+          // 普通非 Replay 请求仍不会对“大体积 JSON”做假 200 检测（例如 Content-Length > 32KiB）。
           // 原因：
           // - 非流式路径需要 clone 并额外读取响应体，会带来额外的内存/延迟开销；
           // - 大体积 JSON 更可能是正常响应（而不是网关/WAF 的短错误 JSON）。
@@ -1864,7 +1879,22 @@ export class ProxyForwarder {
             hasValidContentLength &&
             contentLengthBytes <= NON_STREAM_BODY_INSPECTION_MAX_BYTES;
           const shouldInspectBody = isHtml || !hasValidContentLength || shouldInspectJson;
-          if (shouldInspectBody) {
+          if (shouldStrictValidateReplayJson) {
+            const validationLimit = getEnvConfig().REPLAY_MAX_PAYLOAD_BYTES;
+            if (contentLengthBytes !== null && contentLengthBytes > validationLimit) {
+              replayJsonValidationExceededLimit = true;
+              releaseReplayOwnership(session);
+            } else {
+              const validation = await ProxyForwarder.bufferReplayJsonResponse(
+                response,
+                validationLimit
+              );
+              response = validation.response;
+              inspectedText = validation.text;
+              replayJsonValidationExceededLimit = validation.exceededLimit;
+              if (validation.exceededLimit) releaseReplayOwnership(session);
+            }
+          } else if (shouldInspectBody) {
             // 注意：Response.clone() 会 tee 底层 ReadableStream，可能带来一定的瞬时内存开销；
             // 这里通过“最多读取 32 KiB”并在截断时 cancel 克隆分支来控制开销。
             const clonedResponse = response.clone();
@@ -1913,9 +1943,25 @@ export class ProxyForwarder {
             }
           }
 
+          if (
+            shouldStrictValidateReplayJson &&
+            inspectedText !== undefined &&
+            isMalformedJsonResponseBody(contentType, inspectedText)
+          ) {
+            const rawBodyMaxChars = 4096;
+            throw new ProxyError("MALFORMED_BUFFERED_JSON", 502, {
+              body: "Upstream returned malformed JSON",
+              providerId: currentProvider.id,
+              providerName: currentProvider.name,
+              rawBody: inspectedText.slice(0, rawBodyMaxChars),
+              rawBodyTruncated: inspectedText.length > rawBodyMaxChars,
+              isSyntheticFake200: true,
+            });
+          }
+
           // 对于缺失或非法 Content-Length 的情况，需要 clone 并检查响应体
           // 注意：这会增加一定的性能开销，但对于非流式响应是可接受的
-          if (!contentLength || !hasValidContentLength) {
+          if ((!contentLength || !hasValidContentLength) && !replayJsonValidationExceededLimit) {
             const responseText = inspectedText ?? "";
 
             if (!responseText || responseText.trim() === "") {
@@ -4721,10 +4767,11 @@ export class ProxyForwarder {
           attempt.reader = response.body.getReader();
 
           try {
-            // F1 门控（enforce）：胜者判定从「首个非空字节」升级为「首个有效内容帧」。
+            // F1 门控（enforce 或 Replay owner）：胜者判定从「首个非空字节」升级为
+            // 「首个有效内容帧」。
             // 级联阈值计时器保持不动——内容慢的 attempt 不提交，自动触发下一候选竞速。
             const hedgeGateFamily =
-              resolveStreamGateMode() === "enforce" &&
+              (resolveStreamGateMode() === "enforce" || session.replayState?.role === "owner") &&
               session.getEndpointPolicy().kind !== "raw_passthrough"
                 ? mapProviderTypeToFamily(attempt.provider.providerType)
                 : null;
@@ -7920,6 +7967,51 @@ export class ProxyForwarder {
       // must be silently skipped to avoid treating them as a valid "first byte" event.
       if (result.value && result.value.byteLength > 0) {
         return result;
+      }
+    }
+  }
+
+  private static async bufferReplayJsonResponse(
+    response: Response,
+    maxBytes: number
+  ): Promise<{ response: Response; text: string | undefined; exceededLimit: boolean }> {
+    const reader = response.body?.getReader();
+    if (!reader) {
+      return { response, text: "", exceededLimit: false };
+    }
+
+    const chunks: Uint8Array[] = [];
+    let totalBytes = 0;
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) {
+        reader.releaseLock();
+        const combined = chunks.length > 0 ? concatChunks(chunks) : null;
+        const body = combined ? new Uint8Array(combined) : new Uint8Array(0);
+        return {
+          response: new Response(body, {
+            status: response.status,
+            statusText: response.statusText,
+            headers: response.headers,
+          }),
+          text: new TextDecoder().decode(body),
+          exceededLimit: false,
+        };
+      }
+      if (!value || value.byteLength === 0) continue;
+
+      chunks.push(value);
+      totalBytes += value.byteLength;
+      if (totalBytes > maxBytes) {
+        return {
+          response: new Response(ProxyForwarder.buildBufferedPrefixStream(chunks, reader), {
+            status: response.status,
+            statusText: response.statusText,
+            headers: response.headers,
+          }),
+          text: undefined,
+          exceededLimit: true,
+        };
       }
     }
   }

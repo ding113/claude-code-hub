@@ -61,7 +61,12 @@ import {
 } from "./demand-driven-response-pump";
 import { isDiscoveryProtocolErrorPayload } from "./discovery-validity";
 import { isClientAbortError, isTransportError } from "./errors";
-import { createReplaySpoolIfOwner, releaseReplayOwnership } from "./replay/replay-spool";
+import {
+  abortReplayOwnership,
+  createReplaySpoolIfOwner,
+  releaseReplayOwnership,
+} from "./replay/replay-spool";
+import { isMalformedJsonResponseBody } from "./response-content-type";
 import type { ProxySession } from "./session";
 import {
   consumeDeferredStreamingFinalization,
@@ -71,6 +76,11 @@ import {
 } from "./stream-finalization";
 import { mapProviderTypeToFamily } from "./stream-gate/frame-classifier";
 import { createShadowGateObserver, resolveStreamGateMode } from "./stream-gate/stream-content-gate";
+import {
+  createStreamProtocolObserver,
+  type StreamProtocolObservation,
+  type StreamProtocolObserver,
+} from "./stream-gate/stream-protocol-observer";
 
 const CLIENT_ABORT_DRAIN_MAX_MS = 60_000;
 const STREAM_STATS_MAX_BUFFER_BYTES = 10 * 1024 * 1024;
@@ -78,6 +88,7 @@ const STREAM_STATS_HEAD_BYTES = 1024 * 1024;
 const STREAM_STATS_TAIL_BYTES = STREAM_STATS_MAX_BUFFER_BYTES - STREAM_STATS_HEAD_BYTES;
 const STREAM_STATS_TAIL_CHUNKS = 8192;
 const STREAM_STATS_TRUNCATED_MARKER = "\n\n: [cch_truncated]\n\n";
+const RESPONSE_TEXT_ENCODER = new TextEncoder();
 
 type BoundedStreamTextSnapshot = {
   text: string;
@@ -1534,6 +1545,7 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
   streamEndedNormally: boolean,
   clientAborted: boolean,
   discoveryLeaseLifecycle: DiscoveryLeaseLifecycle,
+  protocolObservation: StreamProtocolObservation | null,
   abortReason?: string
 ): FinalizeDeferredStreamingResult {
   const meta = consumeDeferredStreamingFinalization(session);
@@ -1788,12 +1800,21 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
   const bodyDetected = shouldDetectFake200
     ? detectUpstreamErrorFromSseOrJsonText(allContent)
     : ({ isError: false } as const);
+  const protocolFailure = protocolObservation?.failure ?? null;
+  const successfulHttpProtocolFailure =
+    streamEndedNormally && upstreamStatusCode >= 200 && upstreamStatusCode < 300 && protocolFailure;
   const detected =
-    shouldDetectFake200 && !bodyDetected.isError && completionInspection.hasProtocolError
+    !bodyDetected.isError &&
+    ((shouldDetectFake200 && completionInspection.hasProtocolError) ||
+      successfulHttpProtocolFailure)
       ? ({
           isError: true,
           code: "UPSTREAM_PROTOCOL_ERROR",
-          detail: "Upstream stream emitted a protocol error event",
+          detail: protocolFailure
+            ? `Upstream stream emitted a ${protocolFailure.verdict} frame${
+                protocolFailure.eventName ? ` (${protocolFailure.eventName})` : ""
+              }`
+            : "Upstream stream emitted a protocol error event",
         } as const)
       : bodyDetected;
   let clientAbortGateUsage: FinalizeDeferredStreamingResult["clientAbortGateUsage"];
@@ -1801,6 +1822,7 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
     if (!clientAborted || upstreamStatusCode < 200 || upstreamStatusCode >= 300) {
       return false;
     }
+    if (protocolFailure) return false;
 
     const abortDetected = detectUpstreamErrorFromSseOrJsonText(allContent);
     if (abortDetected.isError) {
@@ -2340,23 +2362,35 @@ export class ProxyResponseHandler {
     session: ProxySession,
     response: Response
   ): Promise<Response> {
-    // F2：stream 请求被上游以非流响应回答时不做 replay，立即让出 owner 租约
-    releaseReplayOwnership(session);
     const messageContext = session.messageContext;
     const provider = session.provider;
     const discoveryLeaseLifecycle = startDiscoveryLeaseLifecycle(session);
     if (!provider) {
+      void abortReplayOwnership(session, "non_stream_missing_provider");
       discardBeforeResponseBodySnapshot(session);
       releaseSessionAgent(session);
       void finalizeNonStreamDiscoveryResources(session, discoveryLeaseLifecycle);
       return response;
     }
 
+    const createBufferedReplaySpool = (targetResponse: Response) => {
+      if (!messageContext) {
+        void abortReplayOwnership(session, "non_stream_missing_message_context");
+        return null;
+      }
+      if (targetResponse.status < 200 || targetResponse.status >= 300) {
+        void abortReplayOwnership(session, "non_stream_http_error");
+        return null;
+      }
+      return createReplaySpoolIfOwner(session, targetResponse, "buffered");
+    };
+
     const responseForLog = response.clone();
     const statusCode = response.status;
 
     let finalResponse = response;
     let finalResponseBodyForSnapshot: string | null = null;
+    let responseTransformFailed = false;
     const persistNonStreamAfterSnapshot = (targetResponse: Response, body: string) => {
       if (!session.sessionId || !session.shouldPersistSessionDebugArtifacts()) {
         return;
@@ -2401,6 +2435,8 @@ export class ProxyResponseHandler {
 
         const responseForStats = response.clone();
         const statusCode = response.status;
+        const replaySpool = createBufferedReplaySpool(response);
+        let replayCompletionScheduled = false;
 
         const taskId = `non-stream-passthrough-${messageContext?.id || `unknown-${Date.now()}`}`;
         const statsAbortController = new AbortController();
@@ -2491,19 +2527,57 @@ export class ProxyResponseHandler {
 
             // 使用共享的统计处理方法
             const duration = Date.now() - session.startTime;
-            let providerFailureScheduled = false;
-            const scheduleProviderFailure = () => {
-              if (!commitProviderFailure || providerFailureScheduled) return;
-              providerFailureScheduled = true;
-              return schedulePostTerminalSideEffects({
+            const postTerminalSideEffects: Array<() => Promise<void>> = [];
+            if (commitProviderFailure) {
+              postTerminalSideEffects.push(commitProviderFailure);
+            }
+            if (replaySpool) {
+              const replayMalformedJson = isMalformedJsonResponseBody(
+                response.headers.get("content-type"),
+                responseText
+              );
+              const replayDetected = detectUpstreamErrorFromSseOrJsonText(responseText);
+              if (
+                statusCode >= 200 &&
+                statusCode < 300 &&
+                !replayMalformedJson &&
+                !replayDetected.isError
+              ) {
+                replaySpool.observe(RESPONSE_TEXT_ENCODER.encode(responseText));
+                postTerminalSideEffects.push(() =>
+                  replaySpool.completeAfterBilling(messageContext?.id ?? null)
+                );
+              } else {
+                await replaySpool.abort(
+                  replayMalformedJson
+                    ? "non_stream_malformed_json"
+                    : replayDetected.isError
+                      ? "non_stream_upstream_error"
+                      : "non_stream_http_error"
+                );
+              }
+            }
+            let postTerminalSideEffectsScheduled = false;
+            const scheduleCommittedSideEffects = () => {
+              if (postTerminalSideEffects.length === 0 || postTerminalSideEffectsScheduled) return;
+              postTerminalSideEffectsScheduled = true;
+              if (replaySpool && !replaySpool.isTerminal) {
+                replayCompletionScheduled = true;
+              }
+              const completion = schedulePostTerminalSideEffects({
                 taskId,
                 providerId: provider.id,
                 sessionId: session.sessionId,
-                commit: async (signal) => {
-                  if (signal.aborted) return;
-                  await commitProviderFailure();
-                },
+                commit: (signal) => runPostTerminalSideEffects(postTerminalSideEffects, signal),
               });
+              if (replaySpool) {
+                void completion.finally(() => {
+                  if (!replaySpool.isTerminal) {
+                    void replaySpool.abort("post_terminal_effects_incomplete");
+                  }
+                });
+              }
+              return completion;
             };
             const finalizedUsage = await finalizeRequestStats(
               session,
@@ -2513,7 +2587,7 @@ export class ProxyResponseHandler {
               errorMessageForFinalize,
               undefined,
               false, // Gemini 非流式透传
-              scheduleProviderFailure
+              scheduleCommittedSideEffects
             );
             emitProxyLangfuseTrace(session, {
               responseHeaders: response.headers,
@@ -2620,6 +2694,9 @@ export class ProxyResponseHandler {
               }
             }
           } finally {
+            if (replaySpool && !replaySpool.isTerminal && !replayCompletionScheduled) {
+              await replaySpool.abort("non_stream_finalize_error");
+            }
             cleanupTaskAbortBinding();
             await finalizeNonStreamDiscoveryResources(session, discoveryLeaseLifecycle);
             releaseSessionAgent(session);
@@ -2676,6 +2753,17 @@ export class ProxyResponseHandler {
 
           const transformed = GeminiAdapter.transformResponse(responseData, false);
           const transformedBody = JSON.stringify(transformed);
+          if (transformedBody === undefined) {
+            throw new Error("Gemini response transform produced no JSON body");
+          }
+          const transformedJson = JSON.parse(transformedBody) as unknown;
+          if (
+            !transformedJson ||
+            typeof transformedJson !== "object" ||
+            Array.isArray(transformedJson)
+          ) {
+            throw new Error("Gemini response transform produced an invalid JSON object");
+          }
 
           logger.debug(
             "[ResponseHandler] Transformed Gemini non-stream response to client format",
@@ -2688,18 +2776,27 @@ export class ProxyResponseHandler {
 
           // ⭐ 清理传输 headers（body 已从流转为 JSON 字符串）
           finalResponseBodyForSnapshot = transformedBody;
+          const transformedHeaders = cleanResponseHeaders(response.headers);
+          transformedHeaders.set("content-type", "application/json");
           finalResponse = new Response(transformedBody, {
             status: response.status,
             statusText: response.statusText,
-            headers: cleanResponseHeaders(response.headers),
+            headers: transformedHeaders,
           });
         } catch (error) {
           logger.error("[ResponseHandler] Failed to transform Gemini non-stream response:", error);
+          responseTransformFailed = true;
           finalResponse = response;
           finalResponseBodyForSnapshot = null;
         }
       }
     }
+
+    if (responseTransformFailed) {
+      await abortReplayOwnership(session, "non_stream_transform_error");
+    }
+    const replaySpool = responseTransformFailed ? null : createBufferedReplaySpool(finalResponse);
+    let replayCompletionScheduled = false;
 
     // 使用 AsyncTaskManager 管理后台处理任务
     const taskId = `non-stream-${messageContext?.id || `unknown-${Date.now()}`}`;
@@ -2757,12 +2854,21 @@ export class ProxyResponseHandler {
         const scheduleCommittedSideEffects = () => {
           if (postTerminalSideEffects.length === 0 || postTerminalSideEffectsScheduled) return;
           postTerminalSideEffectsScheduled = true;
-          return schedulePostTerminalSideEffects({
+          const completion = schedulePostTerminalSideEffects({
             taskId,
             providerId: provider.id,
             sessionId: session.sessionId,
             commit: (signal) => runPostTerminalSideEffects(postTerminalSideEffects, signal),
           });
+          if (replaySpool) {
+            const activeReplaySpool = replaySpool;
+            void completion.finally(() => {
+              if (!activeReplaySpool.isTerminal) {
+                void activeReplaySpool.abort("post_terminal_effects_incomplete");
+              }
+            });
+          }
+          return completion;
         };
         if (messageContext) {
           const duration = Date.now() - session.startTime;
@@ -2817,6 +2923,7 @@ export class ProxyResponseHandler {
 
         // ⭐ 非流式：读取完整响应体（会等待所有数据下载完成）
         const responseText = await readResponseTextWithTaskActivity(responseForLog, taskId);
+        const clientVisibleResponseText = finalResponseBodyForSnapshot ?? responseText;
 
         // ⭐ 响应体读取完成：清除响应超时定时器
         const sessionWithCleanup = session as typeof session & {
@@ -2827,6 +2934,32 @@ export class ProxyResponseHandler {
         }
         let usageMetrics: UsageMetrics | null = null;
         const postTerminalSideEffects: Array<() => Promise<void>> = [];
+        if (replaySpool) {
+          const replayMalformedJson = isMalformedJsonResponseBody(
+            finalResponse.headers.get("content-type"),
+            clientVisibleResponseText
+          );
+          const replayDetected = detectUpstreamErrorFromSseOrJsonText(responseText);
+          if (
+            statusCode >= 200 &&
+            statusCode < 300 &&
+            !replayMalformedJson &&
+            !replayDetected.isError
+          ) {
+            replaySpool.observe(RESPONSE_TEXT_ENCODER.encode(clientVisibleResponseText));
+            postTerminalSideEffects.push(() =>
+              replaySpool.completeAfterBilling(messageContext?.id ?? null)
+            );
+          } else {
+            await replaySpool.abort(
+              replayMalformedJson
+                ? "non_stream_malformed_json"
+                : replayDetected.isError
+                  ? "non_stream_upstream_error"
+                  : "non_stream_http_error"
+            );
+          }
+        }
 
         const usageResult = parseUsageFromResponseText(responseText, provider.providerType);
         usageMetrics = usageResult.usageMetrics;
@@ -2919,10 +3052,7 @@ export class ProxyResponseHandler {
 
           // after 快照复用本任务已经读取到的响应文本，避免再启动一个未受
           // AsyncTaskManager 管理的 clone().text() 读取分支。
-          persistNonStreamAfterSnapshot(
-            finalResponse,
-            finalResponseBodyForSnapshot ?? responseText
-          );
+          persistNonStreamAfterSnapshot(finalResponse, clientVisibleResponseText);
         }
 
         if (billableUsageMetrics && messageContext) {
@@ -3066,12 +3196,24 @@ export class ProxyResponseHandler {
         const scheduleCommittedSideEffects = () => {
           if (postTerminalSideEffects.length === 0 || postTerminalSideEffectsScheduled) return;
           postTerminalSideEffectsScheduled = true;
-          return schedulePostTerminalSideEffects({
+          if (replaySpool && !replaySpool.isTerminal) {
+            replayCompletionScheduled = true;
+          }
+          const completion = schedulePostTerminalSideEffects({
             taskId,
             providerId: provider.id,
             sessionId: session.sessionId,
             commit: (signal) => runPostTerminalSideEffects(postTerminalSideEffects, signal),
           });
+          if (replaySpool) {
+            const activeReplaySpool = replaySpool;
+            void completion.finally(() => {
+              if (!activeReplaySpool.isTerminal) {
+                void activeReplaySpool.abort("post_terminal_effects_incomplete");
+              }
+            });
+          }
+          return completion;
         };
 
         if (messageContext) {
@@ -3242,6 +3384,9 @@ export class ProxyResponseHandler {
           });
         }
       } finally {
+        if (replaySpool && !replaySpool.isTerminal && !replayCompletionScheduled) {
+          await replaySpool.abort("non_stream_finalize_error");
+        }
         cleanupTaskAbortBinding();
         cleanupClientAbortListener();
         await finalizeNonStreamDiscoveryResources(session, discoveryLeaseLifecycle);
@@ -3634,6 +3779,7 @@ export class ProxyResponseHandler {
               streamEndedNormally,
               clientAborted,
               discoveryLeaseLifecycle,
+              null,
               abortReason
             );
             latestCommitSideEffects = finalized.commitSideEffects;
@@ -3706,6 +3852,7 @@ export class ProxyResponseHandler {
                 false,
                 clientAborted,
                 discoveryLeaseLifecycle,
+                null,
                 abortReason
               );
               latestCommitSideEffects = finalized.commitSideEffects;
@@ -4099,6 +4246,7 @@ export class ProxyResponseHandler {
     };
 
     let streamFinalizationPromise: Promise<void> | null = null;
+    let replayProtocolObserver: StreamProtocolObserver | null = null;
     const finalizeStream = (
       allContent: string,
       streamEndedNormally: boolean,
@@ -4117,6 +4265,7 @@ export class ProxyResponseHandler {
           streamEndedNormally,
           clientAborted,
           discoveryLeaseLifecycle,
+          replayProtocolObserver?.finish() ?? null,
           abortReason
         );
         latestStreamCommitSideEffects = finalized.commitSideEffects
@@ -4428,7 +4577,8 @@ export class ProxyResponseHandler {
           const isReplayableSuccess =
             finalized.commitSideEffects !== undefined &&
             effectiveStatusCode >= 200 &&
-            effectiveStatusCode < 300;
+            effectiveStatusCode < 300 &&
+            hasStreamCompletionMarker(allContent, session.originalFormat);
           if (isReplayableSuccess) {
             postTerminalSideEffects.push(async () => {
               try {
@@ -4546,6 +4696,13 @@ export class ProxyResponseHandler {
     // write-behind 喂入 Redis 热层，供并发/断线的相同请求 attach 跟尾。
     const replaySpool = createReplaySpoolIfOwner(session, response);
     if (replaySpool) {
+      const replayProtocolFamily =
+        session.getEndpointPolicy().kind === "raw_passthrough"
+          ? null
+          : mapProviderTypeToFamily(provider.providerType);
+      replayProtocolObserver = replayProtocolFamily
+        ? createStreamProtocolObserver(replayProtocolFamily)
+        : null;
       try {
         clientAbortDrainTimeoutMs = getEnvConfig().REPLAY_MAX_DETACHED_MS;
       } catch {
@@ -4559,6 +4716,7 @@ export class ProxyResponseHandler {
       streamTextAccumulator.pushBytes(value);
       AsyncTaskManager.touch(taskId);
       shadowGateObserver?.observe(value);
+      replayProtocolObserver?.observe(value);
       replaySpool?.observe(value);
 
       logger.trace("ResponseHandler: Upstream stream chunk received", {

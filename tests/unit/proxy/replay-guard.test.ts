@@ -194,6 +194,20 @@ describe("ProxyReplayGuard：放行路径", () => {
     expect(storeControl.deleteChunks).not.toHaveBeenCalled();
   });
 
+  it("buffered owner 不提供 attached_live，竞争请求按 miss 路径 fail-open", async () => {
+    const identity = expectedIdentity();
+    storeControl.getMeta.mockResolvedValueOnce(
+      makeMeta(identity, { status: "owning", delivery: "buffered" })
+    );
+
+    await expect(ProxyReplayGuard.ensure(makeSession())).resolves.toBeNull();
+
+    expect(storeControl.readChunks).not.toHaveBeenCalled();
+    expect(storeControl.findCompleted).not.toHaveBeenCalled();
+    expect(storeControl.tryClaimOwner).toHaveBeenCalledWith(identity.replayId, expect.any(String));
+    expect(dbControl.rows).toHaveLength(0);
+  });
+
   it("claim 竞态输掉时放行且不带 replay 角色", async () => {
     storeControl.tryClaimOwner.mockResolvedValueOnce(false);
     const session = makeSession();
@@ -339,6 +353,36 @@ describe("ProxyReplayGuard：completed 全量重放", () => {
     });
     expect(String(dbControl.rows[0].blockedReason)).toContain("redis_completed");
     expect(String(dbControl.rows[0].blockedReason)).toContain(identity.replayId.slice(0, 12));
+  });
+
+  it("completed JSON 恢复语义 headers 和原始 body，不注入 SSE headers", async () => {
+    const identity = expectedIdentity();
+    storeControl.getMeta.mockResolvedValueOnce(
+      makeMeta(identity, {
+        status: "completed",
+        statusCode: 201,
+        delivery: "buffered",
+        headers: {
+          connection: "keep-alive",
+          "content-length": "999",
+          "content-type": "application/json; charset=utf-8",
+          "cache-control": "private, max-age=30",
+          "x-provider-request-id": "req-json",
+        },
+      })
+    );
+    storeControl.readChunks.mockResolvedValueOnce(['{"id":"resp_1","status":"completed"}']);
+
+    const response = await ProxyReplayGuard.ensure(makeSession());
+
+    expect(response?.status).toBe(201);
+    expect(response?.headers.get("content-type")).toBe("application/json; charset=utf-8");
+    expect(response?.headers.get("cache-control")).toBe("private, max-age=30");
+    expect(response?.headers.get("x-provider-request-id")).toBe("req-json");
+    expect(response?.headers.get("connection")).toBeNull();
+    expect(response?.headers.get("content-length")).toBeNull();
+    expect(response?.headers.get("x-cch-replay")).toBe("completed");
+    await expect(response?.text()).resolves.toBe('{"id":"resp_1","status":"completed"}');
   });
 
   it("热层块已过期时落 PG 持久层重放", async () => {

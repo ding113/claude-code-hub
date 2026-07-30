@@ -215,7 +215,7 @@ export const SystemSettingsSchema = z
     streamGateMode: z
       .enum(["off", "shadow", "enforce"])
       .describe(
-        "Stream content gate mode: buffer until the first valid content frame and fail over on error or empty streams (enforce), observe divergence only (shadow), or disable (off)."
+        "Stream content gate mode for ordinary requests: buffer until the first valid content frame and fail over on error or empty streams (enforce), observe divergence only (shadow), or disable (off). Replay owners always retain the pre-content safety gate."
       ),
     affinityIgnoreClientSessionId: z
       .boolean()

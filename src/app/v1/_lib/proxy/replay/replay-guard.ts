@@ -5,6 +5,7 @@ import { getEnvConfig } from "@/lib/config/env.schema";
 import { logger } from "@/lib/logger";
 import { getProxyRuntimeSettings } from "@/lib/system-settings/proxy-runtime";
 import type { ProxySession } from "../session";
+import { restoreReplayResponseHeaders } from "./replay-headers";
 import { deriveReplayIdentity, REPLAY_BYPASS_HEADER, type ReplayIdentity } from "./replay-identity";
 import { getReplayStore, type ReplayMeta, type ReplayStore } from "./replay-store";
 
@@ -108,7 +109,7 @@ export class ProxyReplayGuard {
         // 热层块已过期：落 PG
       } else if (meta.status === "owning") {
         const heartbeatFresh = Date.now() - meta.heartbeatAt < ATTACH_STALL_MS;
-        if (env.REPLAY_LIVE_DEDUP_ENABLED && heartbeatFresh) {
+        if (meta.delivery !== "buffered" && env.REPLAY_LIVE_DEDUP_ENABLED && heartbeatFresh) {
           await ProxyReplayGuard.writeAuditRow(session, identity, meta.statusCode, "attached_live");
           return ProxyReplayGuard.buildLiveAttachResponse(identity, meta, store);
         }
@@ -226,9 +227,14 @@ export class ProxyReplayGuard {
     stored: Record<string, string>,
     mode: "completed" | "live"
   ): Headers {
-    const headers = new Headers();
-    headers.set("content-type", stored["content-type"] ?? "text/event-stream");
-    headers.set("cache-control", "no-cache");
+    const headers = restoreReplayResponseHeaders(stored);
+    const contentType = headers.get("content-type")?.toLowerCase() ?? "";
+    if (mode === "live" && !contentType) {
+      headers.set("content-type", "text/event-stream");
+    }
+    if (mode === "live" || contentType.includes("text/event-stream")) {
+      headers.set("cache-control", "no-cache");
+    }
     headers.set("x-cch-replay", mode);
     return headers;
   }

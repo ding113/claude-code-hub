@@ -19,11 +19,25 @@ export interface SseFrame {
   data: string;
 }
 
+export interface SseFrameParserOptions {
+  maxBufferedCharacters?: number;
+}
+
+export class SseFrameBufferLimitError extends Error {
+  constructor(maxBufferedCharacters: number) {
+    super(`SSE parser buffered data exceeded ${maxBufferedCharacters} characters`);
+    this.name = "SseFrameBufferLimitError";
+  }
+}
+
 export class SseFrameParser {
   private readonly decoder = new TextDecoder("utf-8");
   private lineTail = "";
   private currentEvent: string | null = null;
   private dataLines: string[] = [];
+  private dataCharacters = 0;
+
+  constructor(private readonly options: SseFrameParserOptions = {}) {}
 
   /** 喂入一个网络 chunk，返回其中完成的帧（可能为空数组）。 */
   push(chunk: Uint8Array): SseFrame[] {
@@ -62,6 +76,7 @@ export class SseFrameParser {
     const lines = buffer.split(/\r\n|\n|\r/);
     // 最后一段是未完成行，保留
     this.lineTail = (lines.pop() ?? "") + (holdCr ? "\r" : "");
+    this.assertBufferLimit();
     for (const line of lines) {
       const frame = this.handleLine(line);
       if (frame) frames.push(frame);
@@ -78,10 +93,15 @@ export class SseFrameParser {
     }
     if (line.startsWith("event:")) {
       this.currentEvent = line.slice(6).trim();
+      this.assertBufferLimit();
       return null;
     }
     if (line.startsWith("data:")) {
-      this.dataLines.push(line.slice(5).replace(/^\s/, ""));
+      const data = line.slice(5).replace(/^\s/, "");
+      if (this.dataLines.length > 0) this.dataCharacters += 1;
+      this.dataCharacters += data.length;
+      this.dataLines.push(data);
+      this.assertBufferLimit();
       return null;
     }
     // id: / retry: / 未知字段：忽略
@@ -96,7 +116,19 @@ export class SseFrameParser {
     }
     const data = this.dataLines.join("\n");
     this.dataLines = [];
+    this.dataCharacters = 0;
     return { eventName: event, data };
+  }
+
+  private assertBufferLimit(): void {
+    const maxBufferedCharacters = this.options.maxBufferedCharacters;
+    if (maxBufferedCharacters === undefined) return;
+
+    const bufferedCharacters =
+      this.lineTail.length + (this.currentEvent?.length ?? 0) + this.dataCharacters;
+    if (bufferedCharacters > maxBufferedCharacters) {
+      throw new SseFrameBufferLimitError(maxBufferedCharacters);
+    }
   }
 }
 

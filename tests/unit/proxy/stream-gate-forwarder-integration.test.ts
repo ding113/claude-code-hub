@@ -188,6 +188,73 @@ const MESSAGE_STOP_FRAME = sseFrame("message_stop", { type: "message_stop" });
 // failover 后获胜供应商的正常内容流
 const WINNER_FRAMES = [MESSAGE_START_FRAME, CONTENT_DELTA_FRAME, MESSAGE_STOP_FRAME];
 
+function createOpenAiResponsesOverloadFrames(): string[] {
+  const requestEcho = "x".repeat(500_000);
+  const error = {
+    type: "server_error",
+    code: "server_is_overloaded",
+    message: "Our servers are currently overloaded. Please try again later.",
+  };
+
+  return [
+    sseFrame("response.created", {
+      type: "response.created",
+      response: { id: "resp_failed", status: "in_progress", instructions: requestEcho },
+    }),
+    sseFrame("response.in_progress", {
+      type: "response.in_progress",
+      response: { id: "resp_failed", status: "in_progress", instructions: requestEcho },
+    }),
+    sseFrame("error", { type: "error", ...error }),
+    sseFrame("response.failed", {
+      type: "response.failed",
+      response: { id: "resp_failed", status: "failed", error },
+    }),
+  ];
+}
+
+const OPENAI_RESPONSES_WINNER_FRAMES = [
+  sseFrame("response.output_text.delta", {
+    type: "response.output_text.delta",
+    delta: "winner",
+  }),
+  sseFrame("response.completed", {
+    type: "response.completed",
+    response: { id: "resp_winner", status: "completed" },
+  }),
+];
+
+type ReplayGateCase = {
+  name: string;
+  providerType: Provider["providerType"];
+  endpoint: "/v1/messages" | "/v1/responses";
+  format: "claude" | "response";
+  failedFrames: () => string[];
+  winnerFrames: string[];
+  failedMarkers: string[];
+};
+
+const REPLAY_GATE_CASES: ReplayGateCase[] = [
+  {
+    name: "OpenAI Responses server overload",
+    providerType: "codex",
+    endpoint: "/v1/responses",
+    format: "response",
+    failedFrames: createOpenAiResponsesOverloadFrames,
+    winnerFrames: OPENAI_RESPONSES_WINNER_FRAMES,
+    failedMarkers: ["server_is_overloaded", "resp_failed"],
+  },
+  {
+    name: "Anthropic overloaded_error",
+    providerType: "claude",
+    endpoint: "/v1/messages",
+    format: "claude",
+    failedFrames: () => [PING_FRAME, ERROR_FRAME],
+    winnerFrames: WINNER_FRAMES,
+    failedMarkers: ["overloaded_error"],
+  },
+];
+
 function createProvider(overrides: Partial<Provider> = {}): Provider {
   return {
     id: 1,
@@ -295,6 +362,28 @@ function createSession(clientAbortSignal: AbortSignal | null = null): ProxySessi
   });
 
   return session as ProxySession;
+}
+
+function attachReplayOwner(session: ProxySession, testCase: ReplayGateCase): void {
+  Object.assign(session, {
+    requestUrl: new URL(`https://example.com${testCase.endpoint}`),
+    originalFormat: testCase.format,
+    endpointPolicy: resolveEndpointPolicy(testCase.endpoint),
+  });
+  session.replayState = {
+    role: "owner",
+    ownerToken: "owner-token",
+    identity: {
+      replayId: "replay-id",
+      verifier: "verifier",
+      scopeTag: "scope-tag",
+      keyId: 1,
+      userId: 1,
+      format: testCase.format,
+      model: "claude-test",
+      endpoint: testCase.endpoint,
+    },
+  };
 }
 
 function createSseResponse(frames: string[]): Response {
@@ -479,6 +568,60 @@ describe("F1 stream content gate x ProxyForwarder sequential path", () => {
       expect(text).toContain("overloaded_error");
       expect(mocks.pickRandomProviderWithExclusion).not.toHaveBeenCalled();
       expect(mocks.recordFailure).not.toHaveBeenCalled();
+    });
+
+    test.each(REPLAY_GATE_CASES)(
+      "Replay owner 仍拦截首内容前的 $name，并切换到成功供应商",
+      async (testCase) => {
+        const provider1 = createProvider({
+          id: 1,
+          name: "replay-p1",
+          providerType: testCase.providerType,
+        });
+        const provider2 = createProvider({
+          id: 2,
+          name: "replay-p2",
+          providerType: testCase.providerType,
+        });
+        const session = createSession();
+        session.setProvider(provider1);
+        attachReplayOwner(session, testCase);
+
+        mocks.pickRandomProviderWithExclusion.mockResolvedValueOnce(provider2);
+        const doForward = spyOnDoForward();
+        doForward.mockImplementationOnce(async () => createSseResponse(testCase.failedFrames()));
+        doForward.mockImplementationOnce(async () => createSseResponse(testCase.winnerFrames));
+
+        const response = await ProxyForwarder.send(session);
+        const text = await response.text();
+
+        expect(doForward).toHaveBeenCalledTimes(2);
+        expect((doForward.mock.calls[1] as unknown[])[1]).toMatchObject({ id: provider2.id });
+        expect(text).toBe(testCase.winnerFrames.join(""));
+        for (const marker of testCase.failedMarkers) {
+          expect(text).not.toContain(marker);
+        }
+        expect(mocks.recordFailure).toHaveBeenCalledWith(provider1.id, expect.any(Error));
+        expect(session.provider?.id).toBe(provider2.id);
+      }
+    );
+
+    test("Replay owner 在所有 precommit attempt 失败后立即释放所有权", async () => {
+      const provider = createProvider({ id: 1, name: "replay-only", providerType: "codex" });
+      const session = createSession();
+      session.setProvider(provider);
+      attachReplayOwner(session, REPLAY_GATE_CASES[0]);
+
+      mocks.pickRandomProviderWithExclusion.mockResolvedValueOnce(null);
+      const doForward = spyOnDoForward();
+      doForward.mockImplementationOnce(async () =>
+        createSseResponse(createOpenAiResponsesOverloadFrames())
+      );
+
+      await expect(ProxyForwarder.send(session)).rejects.toThrow();
+
+      expect(doForward).toHaveBeenCalledTimes(1);
+      expect(session.replayState).toBeNull();
     });
   });
 });

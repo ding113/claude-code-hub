@@ -164,7 +164,7 @@
     "affinityIgnoreClientSessionId": "Ignore Client Session ID",
     "affinityIgnoreClientSessionIdDesc": "When enabled, fingerprintable requests are forced to use longest-prefix affinity for provider stickiness (skipping client Session ID binding); non-fingerprintable requests still use session reuse. Default on.",
     "streamGateMode": "Stream Content Gate",
-    "streamGateModeDesc": "Buffers upstream output until the first valid content frame arrives, and automatically fails over to another provider on error frames or empty streams; shadow mode only records divergence statistics without affecting forwarding. Default enabled.",
+    "streamGateModeDesc": "Controls the first-valid-content gate for ordinary requests: enabled mode fails over on error frames or empty streams, shadow mode only records divergence, and off mode forwards directly. Replay owners always retain the pre-content safety gate regardless of this setting. Default enabled.",
     "streamGateModeOptions": {
       "off": "Off",
       "shadow": "Shadow mode",
