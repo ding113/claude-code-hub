@@ -1,9 +1,13 @@
 "use server";
 
-import { and, desc, eq, inArray, isNull, notInArray, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, notInArray, or, sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import { keys as keysTable, messageRequest, providers, users } from "@/drizzle/schema";
 import { logger } from "@/lib/logger";
+
+const messageSessionIdentity = sql<
+  string | null
+>`COALESCE(${messageRequest.sessionIdentity}, ${messageRequest.sessionId})`;
 
 /**
  * 活动流条目（单个请求记录）
@@ -63,7 +67,7 @@ export async function findRecentActivityStream(limit = 20): Promise<ActivityStre
   try {
     // 1. 从 Redis 获取活跃 session ID
     const { SessionTracker } = await import("@/lib/session-tracker");
-    const activeSessionIds = await SessionTracker.getActiveSessions();
+    const activeSessionIds = await SessionTracker.getObservedActiveSessions();
 
     let activityItems: ActivityStreamItem[] = [];
 
@@ -73,7 +77,7 @@ export async function findRecentActivityStream(limit = 20): Promise<ActivityStre
       const activeSessionRequests = await db
         .select({
           id: messageRequest.id,
-          sessionId: messageRequest.sessionId,
+          sessionId: messageSessionIdentity,
           userName: users.name,
           userId: messageRequest.userId,
           keyId: keysTable.id,
@@ -90,7 +94,7 @@ export async function findRecentActivityStream(limit = 20): Promise<ActivityStre
           outputTokens: messageRequest.outputTokens,
           cacheCreationInputTokens: messageRequest.cacheCreationInputTokens,
           cacheReadInputTokens: messageRequest.cacheReadInputTokens,
-          rowNum: sql<number>`ROW_NUMBER() OVER (PARTITION BY ${messageRequest.sessionId} ORDER BY ${messageRequest.createdAt} DESC)`,
+          rowNum: sql<number>`ROW_NUMBER() OVER (PARTITION BY ${messageSessionIdentity} ORDER BY ${messageRequest.createdAt} DESC)`,
         })
         .from(messageRequest)
         .leftJoin(users, eq(messageRequest.userId, users.id))
@@ -100,7 +104,10 @@ export async function findRecentActivityStream(limit = 20): Promise<ActivityStre
           and(
             isNull(messageRequest.deletedAt),
             eq(messageRequest.isReplay, false),
-            inArray(messageRequest.sessionId, activeSessionIds)
+            or(
+              inArray(messageSessionIdentity, activeSessionIds),
+              inArray(messageRequest.sessionId, activeSessionIds)
+            )
           )
         )
         .orderBy(desc(messageRequest.createdAt))
@@ -147,13 +154,16 @@ export async function findRecentActivityStream(limit = 20): Promise<ActivityStre
 
       const conditions = [isNull(messageRequest.deletedAt), eq(messageRequest.isReplay, false)];
       if (excludedSessionIds.length > 0) {
-        conditions.push(notInArray(messageRequest.sessionId, excludedSessionIds));
+        conditions.push(
+          notInArray(messageSessionIdentity, excludedSessionIds),
+          notInArray(messageRequest.sessionId, excludedSessionIds)
+        );
       }
 
       const recentRequests = await db
         .select({
           id: messageRequest.id,
-          sessionId: messageRequest.sessionId,
+          sessionId: messageSessionIdentity,
           userName: users.name,
           userId: messageRequest.userId,
           keyId: keysTable.id,

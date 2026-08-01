@@ -5,7 +5,7 @@ const activeSessionIdsMock = vi.fn<() => Promise<string[]>>();
 
 vi.mock("@/lib/session-tracker", () => ({
   SessionTracker: {
-    getActiveSessions: activeSessionIdsMock,
+    getObservedActiveSessions: activeSessionIdsMock,
   },
 }));
 
@@ -80,5 +80,20 @@ describe("activity stream Replay exclusion", () => {
     await findRecentActivityStream(1);
 
     expectReplayExcluded(boundary.whereConditions[0]);
+  });
+
+  it("reads canonical prefix identities from the observed session tracker", async () => {
+    activeSessionIdsMock.mockResolvedValueOnce(["pfx:scope:fingerprint"]);
+    const boundary = installDbBoundary([
+      { ...REQUEST_ROW, sessionId: "physical-session", rowNum: 1 },
+    ]);
+    const { findRecentActivityStream } = await import("@/repository/activity-stream");
+
+    await findRecentActivityStream(1);
+
+    const condition = new PgDialect().sqlToQuery(boundary.whereConditions[0] as never);
+    expect(condition.sql).toContain("session_identity");
+    expect(condition.sql).toContain("session_id");
+    expect(activeSessionIdsMock).toHaveBeenCalledOnce();
   });
 });
