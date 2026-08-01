@@ -2885,7 +2885,8 @@ export class SessionManager {
    */
   static async terminateSession(
     sessionId: string,
-    expectedProviderIds?: readonly number[]
+    expectedProviderIds?: readonly number[],
+    expectedKeyId?: number
   ): Promise<boolean> {
     const redis = getRedisClient();
     if (redis?.status !== "ready") {
@@ -2919,6 +2920,14 @@ export class SessionManager {
         }
         if (userId !== null && (!Number.isSafeInteger(userId) || userId <= 0)) {
           userId = null;
+        }
+        if (expectedKeyId !== undefined && keyId !== expectedKeyId) {
+          logger.warn("SessionManager: Session owner changed before termination", {
+            sessionId,
+            expectedKeyId,
+            actualKeyId: keyId,
+          });
+          return false;
         }
       } catch (lookupError) {
         // Redis 查询失败不应阻止清理操作，继续执行删除

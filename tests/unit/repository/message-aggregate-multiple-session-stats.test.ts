@@ -107,6 +107,8 @@ describe("message repository aggregateMultipleSessionStats", () => {
     boundary.execute.mockResolvedValueOnce([
       {
         session_id: "session-a",
+        session_identity_kind: "session_id",
+        session_fingerprint: null,
         user_name: "Alice",
         user_id: 1,
         key_name: "Key A",
@@ -116,6 +118,8 @@ describe("message repository aggregateMultipleSessionStats", () => {
       },
       {
         session_id: "session-b",
+        session_identity_kind: "prefix_affinity",
+        session_fingerprint: "fingerprint-b",
         user_name: "Bob",
         user_id: 2,
         key_name: "Key B",
@@ -134,6 +138,8 @@ describe("message repository aggregateMultipleSessionStats", () => {
     expect(result).toEqual([
       {
         sessionId: "session-b",
+        sessionIdentityKind: "prefix_affinity",
+        sessionFingerprint: "fingerprint-b",
         requestCount: 2,
         totalCostUsd: "2.000000000000",
         totalInputTokens: 20,
@@ -158,6 +164,8 @@ describe("message repository aggregateMultipleSessionStats", () => {
       },
       {
         sessionId: "session-a",
+        sessionIdentityKind: "session_id",
+        sessionFingerprint: null,
         requestCount: 1,
         totalCostUsd: "1.000000000000",
         totalInputTokens: 10,
@@ -186,5 +194,38 @@ describe("message repository aggregateMultipleSessionStats", () => {
     expect(cacheTtlList.trace.from).toEqual([usageLedger]);
     expect(sqlText(boundary.execute.mock.calls.at(0)?.at(0))).toContain("unnest");
     expect(sqlText(boundary.execute.mock.calls.at(0)?.at(0))).toContain("order by created_at");
+  });
+
+  test("returns Replay-only owners with zero billing aggregates", async () => {
+    boundary.select.mockReturnValueOnce(createDrizzleQuery([]));
+    boundary.selectDistinct
+      .mockReturnValueOnce(createDrizzleQuery([]))
+      .mockReturnValueOnce(createDrizzleQuery([]))
+      .mockReturnValueOnce(createDrizzleQuery([]));
+    boundary.execute.mockResolvedValueOnce([
+      {
+        session_id: "pfx:scope:replay",
+        session_identity_kind: "prefix_affinity",
+        session_fingerprint: "replay",
+        user_name: "Replay User",
+        user_id: 3,
+        key_name: "Replay Key",
+        key_id: 303,
+        user_agent: null,
+        api_type: "claude",
+      },
+    ]);
+
+    await expect(aggregateMultipleSessionStats(["pfx:scope:replay"])).resolves.toEqual([
+      expect.objectContaining({
+        sessionId: "pfx:scope:replay",
+        sessionIdentityKind: "prefix_affinity",
+        sessionFingerprint: "replay",
+        requestCount: 0,
+        totalCostUsd: "0",
+        totalInputTokens: 0,
+        totalOutputTokens: 0,
+      }),
+    ]);
   });
 });

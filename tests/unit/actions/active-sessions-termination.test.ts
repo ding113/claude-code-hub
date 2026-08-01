@@ -4,6 +4,7 @@ const getSessionMock = vi.fn();
 const aggregateSessionStatsMock = vi.fn();
 const aggregateMultipleSessionStatsMock = vi.fn();
 const resolveSessionIdentityMock = vi.fn();
+const listPhysicalSessionSourcesForIdentityMock = vi.fn();
 const terminateSessionMock = vi.fn();
 const terminateSessionsBatchMock = vi.fn();
 const terminateObservedSessionMock = vi.fn();
@@ -14,6 +15,7 @@ vi.mock("@/repository/message", () => ({
   aggregateSessionStats: aggregateSessionStatsMock,
   aggregateMultipleSessionStats: aggregateMultipleSessionStatsMock,
   resolveSessionIdentity: resolveSessionIdentityMock,
+  listPhysicalSessionSourcesForIdentity: listPhysicalSessionSourcesForIdentityMock,
 }));
 vi.mock("@/lib/session-manager", () => ({
   SessionManager: {
@@ -68,18 +70,25 @@ describe("active Session termination identity contract", () => {
     terminateSessionMock.mockResolvedValue(true);
     terminateSessionsBatchMock.mockResolvedValue(0);
     terminateObservedSessionMock.mockResolvedValue(true);
+    listPhysicalSessionSourcesForIdentityMock.mockResolvedValue([
+      { sessionId: "physical-session", userId: 1, keyId: 11, providerIds: [41, 42] },
+      { sessionId: "physical-session-2", userId: 1, keyId: 12, providerIds: [43] },
+    ]);
   });
 
-  test("terminating a prefix identity clears affinity and observed state without treating it as a physical Session", async () => {
+  test("terminating a prefix identity clears only physical bindings still owned by its key and providers", async () => {
     const { terminateActiveSession } = await import("@/actions/active-sessions");
 
     await expect(terminateActiveSession("pfx:scope:tip")).resolves.toEqual({
       ok: true,
       data: undefined,
     });
-    expect(invalidateMock).toHaveBeenCalledWith("scope", ["tip", "parent", "root"]);
+    expect(invalidateMock).toHaveBeenCalledWith("scope", "tip", ["tip", "parent", "root"]);
+    expect(listPhysicalSessionSourcesForIdentityMock).toHaveBeenCalledWith("pfx:scope:tip");
+    expect(terminateSessionMock).toHaveBeenCalledTimes(2);
+    expect(terminateSessionMock).toHaveBeenCalledWith("physical-session", [41, 42], 11);
+    expect(terminateSessionMock).toHaveBeenCalledWith("physical-session-2", [43], 12);
     expect(terminateObservedSessionMock).toHaveBeenCalledWith("pfx:scope:tip");
-    expect(terminateSessionMock).not.toHaveBeenCalled();
   });
 
   test("prefix termination fails when affinity invalidation fails", async () => {
@@ -93,7 +102,9 @@ describe("active Session termination identity contract", () => {
       ok: false,
       error: "终止 Session 失败（Redis 不可用或 Session 已过期）",
     });
-    expect(terminateObservedSessionMock).toHaveBeenCalledWith("pfx:scope:tip");
+    expect(listPhysicalSessionSourcesForIdentityMock).not.toHaveBeenCalled();
+    expect(terminateSessionMock).not.toHaveBeenCalled();
+    expect(terminateObservedSessionMock).not.toHaveBeenCalled();
   });
 
   test("prefix termination succeeds when observed state has already expired", async () => {
@@ -106,6 +117,20 @@ describe("active Session termination identity contract", () => {
       ok: true,
       data: undefined,
     });
+  });
+
+  test("prefix termination does not force-delete quota state for an expired or superseded source", async () => {
+    terminateSessionMock.mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+
+    const { terminateActiveSession } = await import("@/actions/active-sessions");
+
+    await expect(terminateActiveSession("pfx:scope:tip")).resolves.toEqual({
+      ok: true,
+      data: undefined,
+    });
+    expect(terminateSessionMock).toHaveBeenCalledWith("physical-session", [41, 42], 11);
+    expect(terminateSessionMock).toHaveBeenCalledWith("physical-session-2", [43], 12);
+    expect(terminateObservedSessionMock).toHaveBeenCalledWith("pfx:scope:tip");
   });
 
   test("treats a client-controlled pfx-prefixed physical Session as a physical Session", async () => {
@@ -163,8 +188,11 @@ describe("active Session termination identity contract", () => {
       requestedCount: 2,
       processedCount: 2,
     });
-    expect(invalidateMock).toHaveBeenCalledWith("scope", ["tip", "parent"]);
-    expect(terminateSessionMock).toHaveBeenCalledTimes(1);
+    expect(invalidateMock).toHaveBeenCalledWith("scope", "tip", ["tip", "parent"]);
+    expect(listPhysicalSessionSourcesForIdentityMock).toHaveBeenCalledWith("pfx:scope:tip");
+    expect(terminateSessionMock).toHaveBeenCalledTimes(3);
+    expect(terminateSessionMock).toHaveBeenCalledWith("physical-session", [41, 42], 11);
+    expect(terminateSessionMock).toHaveBeenCalledWith("physical-session-2", [43], 12);
     expect(terminateSessionMock).toHaveBeenCalledWith("physical-session");
     expect(terminateSessionsBatchMock).not.toHaveBeenCalled();
     expect(terminateObservedSessionMock).toHaveBeenCalledWith("pfx:scope:tip");

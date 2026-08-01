@@ -3,8 +3,8 @@ import {
   SESSION_REPLAY_INDEX_MARKER,
   SESSION_REPLAY_INDEX_SPECS,
   SESSION_REPLAY_MIGRATION_CREATED_AT,
-  runPendingSessionReplayIndexPreflight,
   runSessionReplayIndexPreflight,
+  runSessionReplayMigrationPlan,
   type MigrationIndexState,
 } from "@/lib/migrations/session-replay-index-preflight";
 
@@ -48,15 +48,6 @@ function createFakeExecutor(initial: Record<string, MigrationIndexState> = {}) {
 
 describe("0116 concurrent index preflight", () => {
   const spec = SESSION_REPLAY_INDEX_SPECS[0];
-
-  test("does not run after migration 0116 has already been recorded", async () => {
-    const { executor, execute, inspectIndex } = createFakeExecutor();
-
-    await runPendingSessionReplayIndexPreflight(executor, SESSION_REPLAY_MIGRATION_CREATED_AT);
-
-    expect(execute).not.toHaveBeenCalled();
-    expect(inspectIndex).not.toHaveBeenCalled();
-  });
 
   test("builds and validates a temporary index before replacing the canonical index", async () => {
     const { executor, execute, states } = createFakeExecutor({
@@ -147,5 +138,87 @@ describe("0116 concurrent index preflight", () => {
         .flat()
         .some((sql) => sql.includes(`DROP INDEX CONCURRENTLY IF EXISTS "${spec.canonicalName}"`))
     ).toBe(false);
+  });
+
+  test("postflight reconciles indexes without reacquiring table DDL locks", async () => {
+    const { executor, execute } = createFakeExecutor({
+      [spec.canonicalName]: {
+        exists: true,
+        valid: true,
+        marker: SESSION_REPLAY_INDEX_MARKER,
+      },
+    });
+
+    await runSessionReplayIndexPreflight(executor, [spec], { ensureColumns: false });
+
+    const statements = execute.mock.calls.map(([statement]) => statement);
+    expect(statements.some((statement) => statement.includes("ALTER TABLE"))).toBe(false);
+    expect(statements.some((statement) => statement.includes("lock_timeout"))).toBe(false);
+  });
+});
+
+describe("0116 migration orchestration", () => {
+  test("migrates a fresh database before installing concurrent indexes", async () => {
+    const calls: string[] = [];
+
+    await runSessionReplayMigrationPlan({
+      baseTablesReady: false,
+      latestMigrationCreatedAt: null,
+      migrate: async () => {
+        calls.push("migrate");
+      },
+      runIndexPreflight: async () => {
+        calls.push("indexes");
+      },
+    });
+
+    expect(calls).toEqual(["migrate", "indexes"]);
+  });
+
+  test("prebuilds indexes for an existing upgrade and verifies them after migration", async () => {
+    const calls: string[] = [];
+
+    await runSessionReplayMigrationPlan({
+      baseTablesReady: true,
+      latestMigrationCreatedAt: SESSION_REPLAY_MIGRATION_CREATED_AT - 1,
+      migrate: async () => {
+        calls.push("migrate");
+      },
+      runIndexPreflight: async () => {
+        calls.push("indexes");
+      },
+    });
+
+    expect(calls).toEqual(["indexes", "migrate", "indexes"]);
+  });
+
+  test("repairs indexes in postflight after migration 0116 was recorded", async () => {
+    const calls: string[] = [];
+
+    await runSessionReplayMigrationPlan({
+      baseTablesReady: true,
+      latestMigrationCreatedAt: SESSION_REPLAY_MIGRATION_CREATED_AT,
+      migrate: async () => {
+        calls.push("migrate");
+      },
+      runIndexPreflight: async () => {
+        calls.push("indexes");
+      },
+    });
+
+    expect(calls).toEqual(["migrate", "indexes"]);
+  });
+
+  test("fails the migration flow when concurrent index postflight fails", async () => {
+    await expect(
+      runSessionReplayMigrationPlan({
+        baseTablesReady: false,
+        latestMigrationCreatedAt: null,
+        migrate: async () => undefined,
+        runIndexPreflight: async () => {
+          throw new Error("concurrent build failed");
+        },
+      })
+    ).rejects.toThrow("concurrent build failed");
   });
 });

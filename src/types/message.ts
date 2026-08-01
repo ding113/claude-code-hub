@@ -294,6 +294,10 @@ export interface MessageRequest {
   affinityFingerprint?: string | null;
   affinityFingerprintChain?: string[];
 
+  // Replay 审计标记与来源请求 provenance
+  isReplay?: boolean;
+  replaySourceRequestId?: number | null;
+
   // Request Sequence（Session 内请求序号）
   requestSequence?: number;
 

@@ -256,7 +256,10 @@ function UsageLogsViewContent({
 
   const statsFilters = filters;
 
-  const hasStatsFilters = Object.values(statsFilters).some((v) => v !== undefined && v !== false);
+  const hasStatsFilters = Object.entries(statsFilters).some(
+    ([key, value]) =>
+      value !== undefined && value !== false && !(key === "replayFilter" && value === "all")
+  );
 
   const activeFilterCount = useMemo(() => {
     let count = 0;

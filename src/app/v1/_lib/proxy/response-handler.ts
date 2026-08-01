@@ -6513,11 +6513,12 @@ async function trackCostToRedis(
       );
     }
     if (session.shouldTrackSessionObservability()) {
-      void SessionTracker.refreshObservedSession(
-        session.getSessionIdentityMetadata().identity
-      ).catch((error) => {
-        logger.error("[ResponseHandler] Failed to refresh observed session tracker:", error);
-      });
+      const observedIdentity = session.getSessionIdentityMetadata().identity;
+      if (observedIdentity) {
+        void SessionTracker.refreshObservedSession(observedIdentity).catch((error) => {
+          logger.error("[ResponseHandler] Failed to refresh observed session tracker:", error);
+        });
+      }
     }
   } catch (error) {
     logger.error("[ResponseHandler] Failed to track cost to Redis, skipping", {

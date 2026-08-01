@@ -66,6 +66,7 @@ export function SummaryTab({
   durationMs,
   firstByteMs,
   sessionId,
+  sourceSessionId,
   requestSequence,
   userAgent,
   clientIp,
@@ -88,6 +89,16 @@ export function SummaryTab({
   const hideRate = shouldHideOutputRate(outputRate, durationMs ?? null, firstByteMs ?? null);
   const totalTokens = (inputTokens ?? 0) + (outputTokens ?? 0);
   const hasRedirect = originalModel && currentModel && originalModel !== currentModel;
+  const sessionRequestParams = new URLSearchParams();
+  if (requestSequence != null) {
+    sessionRequestParams.set("seq", String(requestSequence));
+  }
+  if (sourceSessionId) {
+    sessionRequestParams.set("sourceSessionId", sourceSessionId);
+  }
+  const sessionMessagesHref = sessionId
+    ? `/dashboard/sessions/${sessionId}/messages${sessionRequestParams.size > 0 ? `?${sessionRequestParams.toString()}` : ""}`
+    : "";
   const modelAudit = resolveModelAuditDisplay({
     originalModel: originalModel ?? null,
     model: currentModel ?? null,
@@ -309,13 +320,7 @@ export function SummaryTab({
                     </div>
                   </div>
                   {hasMessages && !checkingMessages && (
-                    <Link
-                      href={
-                        requestSequence
-                          ? `/dashboard/sessions/${sessionId}/messages?seq=${requestSequence}`
-                          : `/dashboard/sessions/${sessionId}/messages`
-                      }
-                    >
+                    <Link href={sessionMessagesHref}>
                       <Button variant="outline" size="sm">
                         <ExternalLink className="h-4 w-4 mr-2" />
                         {t("viewDetails")}

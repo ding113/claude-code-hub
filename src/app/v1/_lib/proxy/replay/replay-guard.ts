@@ -297,6 +297,7 @@ export class ProxyReplayGuard {
   ): Promise<number | null> {
     try {
       if (!session.authState?.user || !session.authState.apiKey) return null;
+      const sessionIdentity = session.getSessionIdentityMetadata();
       const [auditRow] = await db
         .insert(messageRequest)
         .values({
@@ -305,6 +306,11 @@ export class ProxyReplayGuard {
           key: session.authState.apiKey,
           model: session.request.model ?? undefined,
           sessionId: session.sessionId ?? undefined,
+          sessionIdentity: sessionIdentity.identity || session.sessionId || undefined,
+          sessionIdentityKind: sessionIdentity.kind,
+          affinityScopeTag: sessionIdentity.scopeTag,
+          affinityFingerprint: sessionIdentity.fingerprint,
+          affinityFingerprintChain: sessionIdentity.fingerprints,
           requestSequence: session.requestSequence,
           statusCode: statusCode || 200,
           costUsd: "0",

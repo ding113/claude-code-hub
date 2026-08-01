@@ -9,6 +9,7 @@ import { AffinityStore, getAffinityStore } from "@/app/v1/_lib/proxy/affinity/af
  */
 function createLuaFakeRedis(initial: Record<string, string> = {}) {
   const data = new Map(Object.entries(initial));
+  const sets = new Map<string, Set<string>>();
   const expired: Array<{ key: string; ttl: number }> = [];
   const client = {
     status: "ready",
@@ -21,55 +22,97 @@ function createLuaFakeRedis(initial: Record<string, string> = {}) {
       for (const redisKey of keys) data.delete(redisKey);
       return keys.length;
     }),
+    smembers: vi.fn(async (redisKey: string) => [...(sets.get(redisKey) ?? [])]),
     eval: vi.fn(async (script: string, numkeys: number, ...rest: (string | number)[]) => {
       const keys = rest.slice(0, numkeys) as string[];
       const args = rest.slice(numkeys).map(String);
 
-      if (script.includes("affinity_lookup_v2")) {
-        const generationKey = keys.at(-1) as string;
-        if (!data.has(generationKey)) data.set(generationKey, "0");
-        const generation = data.get(generationKey) as string;
-        const ttl = Number(args[0]);
+      if (script.includes("affinity_lookup_candidates_v4")) {
+        const legacyGenerationKey = keys.at(-1) as string;
+        const legacyGeneration = data.get(legacyGenerationKey) ?? "0";
+        const candidates: Array<number | string> = [];
         for (let i = 0; i < keys.length - 1; i++) {
           const value = data.get(keys[i]);
-          const bindingGeneration = value?.split("|")[2] ?? "0";
-          if (value?.startsWith("1|") && bindingGeneration === generation) {
-            if (ttl > 0) expired.push({ key: keys[i], ttl });
-            return [i + 1, value, generation];
+          if (!value?.startsWith("1|")) continue;
+          const parts = value.split("|");
+          if (
+            parts.length === 4 ||
+            parts.length === 2 ||
+            (parts.length === 3 && parts[2] === legacyGeneration)
+          ) {
+            candidates.push(i + 1, value);
           }
         }
-        return [0, "", generation];
+        return candidates;
       }
 
-      if (script.includes("affinity_cas_write_v1")) {
-        const [generationKey, bindingKey] = keys;
-        const [expectedGeneration, value, ttlRaw] = args;
-        if (data.get(generationKey) !== expectedGeneration) return 0;
-        data.set(bindingKey, value);
-        expired.push({ key: bindingKey, ttl: Number(ttlRaw) });
+      if (script.includes("affinity_validate_hit_v4")) {
+        const [bindingKey, identityGenerationKey, descendantsKey] = keys;
+        const [expectedValue, expectedGeneration, migratedValue, ttlRaw, generationTtlRaw] = args;
+        if (data.get(bindingKey) !== expectedValue) return 0;
+        if (!data.has(identityGenerationKey)) data.set(identityGenerationKey, expectedGeneration);
+        if (data.get(identityGenerationKey) !== expectedGeneration) return 0;
+        if (migratedValue) data.set(bindingKey, migratedValue);
+        const ttl = Number(ttlRaw);
+        if (ttl > 0) expired.push({ key: bindingKey, ttl });
+        expired.push({ key: identityGenerationKey, ttl: Number(generationTtlRaw) });
+        const descendants = sets.get(descendantsKey) ?? new Set<string>();
+        descendants.add(bindingKey);
+        sets.set(descendantsKey, descendants);
+        if (ttl > 0) expired.push({ key: descendantsKey, ttl });
         return 1;
       }
 
-      if (script.includes("affinity_invalidate_v1")) {
-        const [generationKey, ...bindingKeys] = keys;
-        const generation = Number(data.get(generationKey) ?? "0") + 1;
-        data.set(generationKey, String(generation));
+      if (script.includes("affinity_ensure_generation_v4")) {
+        const [candidateGeneration, generationTtlRaw] = args;
+        if (!data.has(keys[0])) data.set(keys[0], candidateGeneration);
+        expired.push({ key: keys[0], ttl: Number(generationTtlRaw) });
+        return data.get(keys[0]);
+      }
+
+      if (script.includes("affinity_cas_write_v2")) {
+        const [generationKey, bindingKey, descendantsKey] = keys;
+        const [expectedGeneration, value, ttlRaw, generationTtlRaw] = args;
+        if (data.get(generationKey) !== expectedGeneration) return 0;
+        data.set(bindingKey, value);
+        expired.push({ key: bindingKey, ttl: Number(ttlRaw) });
+        const descendants = sets.get(descendantsKey) ?? new Set<string>();
+        descendants.add(bindingKey);
+        sets.set(descendantsKey, descendants);
+        expired.push({ key: descendantsKey, ttl: Number(ttlRaw) });
+        expired.push({ key: generationKey, ttl: Number(generationTtlRaw) });
+        return 1;
+      }
+
+      if (script.includes("affinity_invalidate_v2")) {
+        const [generationKey, descendantsKey, ...bindingKeys] = keys;
+        const [generation, generationTtlRaw] = args;
+        data.set(generationKey, generation);
+        expired.push({ key: generationKey, ttl: Number(generationTtlRaw) });
         for (const bindingKey of bindingKeys) data.delete(bindingKey);
+        sets.delete(descendantsKey);
         return generation;
       }
 
       throw new Error("unexpected lua script");
     }),
   };
-  return { client, data, expired };
+  return { client, data, expired, sets };
 }
 
 function makeStore(client: unknown) {
-  return new AffinityStore({ redisClient: client as never });
+  let tokenSequence = 0;
+  return new AffinityStore({
+    redisClient: client as never,
+    generationToken: () => `v3:test-${++tokenSequence}`,
+  });
 }
 
 const key = (scope: string, fp: string) => `cch:pfx:{${scope}}:fp:${fp}`;
-const generationKey = (scope: string) => `cch:pfx:{${scope}}:generation`;
+const generationKey = (scope: string, identityFp: string) => `cch:pfx:{${scope}}:gen:${identityFp}`;
+const descendantsKey = (scope: string, identityFp: string) =>
+  `cch:pfx:{${scope}}:desc:${identityFp}`;
+const legacyGenerationKey = (scope: string) => `cch:pfx:{${scope}}:generation`;
 
 describe("AffinityStore.lookup", () => {
   it("returns the deepest active binding (MGET-style deepest-first scan)", async () => {
@@ -80,7 +123,8 @@ describe("AffinityStore.lookup", () => {
     });
     const hint = await makeStore(client).lookup("s1", ["deep", "mid", "sysf"], 600);
     expect(hint).toEqual({
-      generation: "0",
+      generation: "v3:test-1",
+      identityFp: "deep",
       hint: {
         providerId: 42,
         matchedIndex: 0,
@@ -89,17 +133,55 @@ describe("AffinityStore.lookup", () => {
     });
   });
 
+  it("preserves the root identity stored on a descendant binding", async () => {
+    const { client } = createLuaFakeRedis({
+      [key("s1", "child")]: "1|42|root|3",
+      [generationKey("s1", "root")]: "3",
+    });
+
+    await expect(makeStore(client).lookup("s1", ["child", "root"], 600)).resolves.toEqual({
+      generation: "3",
+      identityFp: "root",
+      hint: {
+        providerId: 42,
+        matchedIndex: 0,
+        matchedFp: "child",
+      },
+    });
+  });
+
+  it("reads the previous three-part encoding while its scope generation is current", async () => {
+    const { client } = createLuaFakeRedis({
+      [key("s1", "child")]: "1|42|2",
+      [legacyGenerationKey("s1")]: "2",
+    });
+
+    await expect(makeStore(client).lookup("s1", ["child"], 600)).resolves.toMatchObject({
+      generation: "v3:test-1",
+      identityFp: "child",
+      hint: { providerId: 42 },
+    });
+  });
+
   it("passes keys deepest-first with the scope hash-tag key format and sliding ttl", async () => {
     const { client } = createLuaFakeRedis();
     await makeStore(client).lookup("tag", ["deep", "mid", "sysf"], 300.9);
-    expect(client.eval).toHaveBeenCalledWith(
-      expect.stringContaining("GET"),
+    expect(client.eval).toHaveBeenNthCalledWith(
+      1,
+      expect.stringContaining("affinity_lookup_candidates_v4"),
       4,
       key("tag", "deep"),
       key("tag", "mid"),
       key("tag", "sysf"),
-      generationKey("tag"),
-      "300"
+      legacyGenerationKey("tag")
+    );
+    expect(client.eval).toHaveBeenNthCalledWith(
+      2,
+      expect.stringContaining("affinity_ensure_generation_v4"),
+      1,
+      generationKey("tag", "deep"),
+      "v3:test-1",
+      172800
     );
   });
 
@@ -110,7 +192,8 @@ describe("AffinityStore.lookup", () => {
     });
     const hint = await makeStore(client).lookup("s1", ["deep", "mid", "sysf"], 600);
     expect(hint).toEqual({
-      generation: "0",
+      generation: "v3:test-1",
+      identityFp: "mid",
       hint: {
         providerId: 7,
         matchedIndex: 1,
@@ -136,28 +219,48 @@ describe("AffinityStore.lookup", () => {
     expect((await store.lookup("s1", ["missing-a", "missing-b"], 600))?.hint).toBeNull();
   });
 
+  it("bounds per-identity generation state with a stale-write-safe TTL", async () => {
+    const { client, expired } = createLuaFakeRedis();
+
+    await makeStore(client).lookup("s1", ["new-root"], 600);
+
+    expect(expired).toContainEqual({
+      key: generationKey("s1", "new-root"),
+      ttl: 172800,
+    });
+  });
+
   it("slides the TTL on hit and skips renewal when ttl is not positive", async () => {
     const { client, expired } = createLuaFakeRedis({ [key("s1", "deep")]: "1|3" });
     const store = makeStore(client);
     await store.lookup("s1", ["deep"], 900);
-    expect(expired).toEqual([{ key: key("s1", "deep"), ttl: 900 }]);
+    expect(expired).toEqual([
+      { key: key("s1", "deep"), ttl: 900 },
+      { key: generationKey("s1", "deep"), ttl: 172800 },
+      { key: descendantsKey("s1", "deep"), ttl: 900 },
+    ]);
 
     await store.lookup("s1", ["deep"], -10);
     expect(client.eval).toHaveBeenLastCalledWith(
-      expect.any(String),
-      2,
+      expect.stringContaining("affinity_validate_hit_v4"),
+      3,
       key("s1", "deep"),
-      generationKey("s1"),
-      "0"
+      generationKey("s1", "deep"),
+      descendantsKey("s1", "deep"),
+      "1|3|deep|v3:test-1",
+      "v3:test-1",
+      "",
+      "0",
+      172800
     );
-    expect(expired).toHaveLength(1);
+    expect(expired).toHaveLength(4);
   });
 
   it("rejects malformed or non-positive provider ids", async () => {
     const { client } = createLuaFakeRedis();
     const store = makeStore(client);
     for (const value of ["1|abc", "1|0", "1|-5"]) {
-      client.eval.mockResolvedValueOnce([1, value, "0"]);
+      client.eval.mockResolvedValueOnce([1, value]);
       expect((await store.lookup("s1", ["deep"], 600))?.hint).toBeNull();
     }
     client.eval.mockResolvedValueOnce("garbage");
@@ -176,107 +279,144 @@ describe("AffinityStore.lookup", () => {
 
 describe("AffinityStore.put", () => {
   it("writes only the tip boundary with the active encoding and TTL", async () => {
-    const { client } = createLuaFakeRedis({ [generationKey("s1")]: "0" });
-    await expect(makeStore(client).put("s1", "tipfp", 42, 900, "0")).resolves.toBe(true);
+    const { client } = createLuaFakeRedis({ [generationKey("s1", "rootfp")]: "0" });
+    await expect(makeStore(client).put("s1", "tipfp", 42, 900, "rootfp", "0")).resolves.toBe(true);
     expect(client.eval).toHaveBeenCalledWith(
-      expect.stringContaining("affinity_cas_write_v1"),
-      2,
-      generationKey("s1"),
+      expect.stringContaining("affinity_cas_write_v2"),
+      3,
+      generationKey("s1", "rootfp"),
       key("s1", "tipfp"),
+      descendantsKey("s1", "rootfp"),
       "0",
-      "1|42|0",
-      900
+      "1|42|rootfp|0",
+      900,
+      172800
     );
   });
 
   it("ignores invalid arguments", async () => {
     const { client } = createLuaFakeRedis();
     const store = makeStore(client);
-    await store.put("", "tip", 42, 900, "0");
-    await store.put("s1", "", 42, 900, "0");
-    await store.put("s1", "tip", 0, 900, "0");
-    await store.put("s1", "tip", 42, 0, "0");
-    await store.put("s1", "tip", 42, 900, null);
+    await store.put("", "tip", 42, 900, "root", "0");
+    await store.put("s1", "", 42, 900, "root", "0");
+    await store.put("s1", "tip", 0, 900, "root", "0");
+    await store.put("s1", "tip", 42, 0, "root", "0");
+    await store.put("s1", "tip", 42, 900, null, "0");
+    await store.put("s1", "tip", 42, 900, "root", null);
     expect(client.eval).not.toHaveBeenCalled();
   });
 });
 
 describe("AffinityStore.tombstone", () => {
   it("writes a short-TTL tombstone with a truncated reason", async () => {
-    const { client } = createLuaFakeRedis({ [generationKey("s1")]: "0" });
+    const { client } = createLuaFakeRedis({ [generationKey("s1", "rootfp")]: "0" });
     const store = makeStore(client);
-    await store.tombstone("s1", "deadfp", "failover", "0");
+    await store.tombstone("s1", "deadfp", "failover", "rootfp", "0");
     expect(client.eval).toHaveBeenCalledWith(
-      expect.stringContaining("affinity_cas_write_v1"),
-      2,
-      generationKey("s1"),
+      expect.stringContaining("affinity_cas_write_v2"),
+      3,
+      generationKey("s1", "rootfp"),
       key("s1", "deadfp"),
+      descendantsKey("s1", "rootfp"),
       "0",
-      "0|failover|0",
-      60
+      "0|failover|rootfp|0",
+      60,
+      172800
     );
 
-    await store.tombstone("s1", "deadfp", "x".repeat(50), "0");
+    await store.tombstone("s1", "deadfp", "x".repeat(50), "rootfp", "0");
     expect(client.eval).toHaveBeenLastCalledWith(
-      expect.stringContaining("affinity_cas_write_v1"),
-      2,
-      generationKey("s1"),
+      expect.stringContaining("affinity_cas_write_v2"),
+      3,
+      generationKey("s1", "rootfp"),
       key("s1", "deadfp"),
+      descendantsKey("s1", "rootfp"),
       "0",
-      `0|${"x".repeat(32)}|0`,
-      60
+      `0|${"x".repeat(32)}|rootfp|0`,
+      60,
+      172800
     );
   });
 
   it("ignores empty scope or fingerprint", async () => {
     const { client } = createLuaFakeRedis();
     const store = makeStore(client);
-    await store.tombstone("", "fp", "r", "0");
-    await store.tombstone("s1", "", "r", "0");
-    await store.tombstone("s1", "fp", "r", null);
+    await store.tombstone("", "fp", "r", "root", "0");
+    await store.tombstone("s1", "", "r", "root", "0");
+    await store.tombstone("s1", "fp", "r", null, "0");
+    await store.tombstone("s1", "fp", "r", "root", null);
     expect(client.eval).not.toHaveBeenCalled();
   });
 });
 
 describe("AffinityStore.invalidate", () => {
+  it("invalidates one identity and its descendants without touching another identity in the scope", async () => {
+    const { client } = createLuaFakeRedis();
+    const store = makeStore(client);
+
+    const identityA = await store.lookup("s1", ["a-root"], 600);
+    await store.put("s1", "a-root", 42, 600, "a-root", identityA?.generation);
+    await store.put("s1", "a-child", 42, 600, "a-root", identityA?.generation);
+
+    const identityB = await store.lookup("s1", ["b-root"], 600);
+    await store.put("s1", "b-root", 7, 600, "b-root", identityB?.generation);
+
+    await expect(store.invalidate("s1", "a-root", ["a-root"])).resolves.toBe(true);
+
+    await expect(store.lookup("s1", ["b-root"], 600)).resolves.toMatchObject({
+      identityFp: "b-root",
+      hint: { providerId: 7 },
+    });
+    await expect(
+      store.put("s1", "a-child", 99, 600, "a-root", identityA?.generation)
+    ).resolves.toBe(false);
+  });
+
   it("deletes the target and known ancestor bindings in one call", async () => {
     const { client, data } = createLuaFakeRedis({
       [key("s1", "deep")]: "1|42",
       [key("s1", "mid")]: "1|7",
     });
 
-    await expect(makeStore(client).invalidate("s1", ["deep", "mid"])).resolves.toBe(true);
+    await expect(makeStore(client).invalidate("s1", "deep", ["mid"])).resolves.toBe(true);
 
-    expect(data.get(generationKey("s1"))).toBe("1");
+    expect(data.get(generationKey("s1", "deep"))).toBe("v3:test-1");
     expect(data.has(key("s1", "deep"))).toBe(false);
     expect(data.has(key("s1", "mid"))).toBe(false);
   });
 
   it("treats a zero-count DEL as an idempotent success", async () => {
     const { client } = createLuaFakeRedis();
-    await expect(makeStore(client).invalidate("s1", ["missing"])).resolves.toBe(true);
+    await expect(makeStore(client).invalidate("s1", "missing", [])).resolves.toBe(true);
   });
 
   it("returns false when redis is unavailable or DEL fails", async () => {
-    await expect(makeStore(null).invalidate("s1", ["deep"])).resolves.toBe(false);
+    await expect(makeStore(null).invalidate("s1", "deep", [])).resolves.toBe(false);
 
     const { client } = createLuaFakeRedis();
     client.eval.mockRejectedValueOnce(new Error("boom"));
-    await expect(makeStore(client).invalidate("s1", ["deep"])).resolves.toBe(false);
+    await expect(makeStore(client).invalidate("s1", "deep", [])).resolves.toBe(false);
   });
 
-  it("invalidates unknown descendants through the scope generation", async () => {
+  it("invalidates descendants registered under the identity", async () => {
     const { client } = createLuaFakeRedis();
     const store = makeStore(client);
-    const initial = await store.lookup("s1", ["child", "parent"], 600);
+    const initial = await store.lookup("s1", ["parent"], 600);
 
-    expect(initial).toMatchObject({ hint: null, generation: "0" });
-    await expect(store.put("s1", "child", 42, 600, initial?.generation)).resolves.toBe(true);
-    await expect(store.invalidate("s1", ["parent"])).resolves.toBe(true);
+    expect(initial).toMatchObject({
+      hint: null,
+      identityFp: "parent",
+      generation: "v3:test-1",
+    });
+    await expect(
+      store.put("s1", "child", 42, 600, initial?.identityFp, initial?.generation)
+    ).resolves.toBe(true);
+    await expect(store.invalidate("s1", "parent", ["parent"])).resolves.toBe(true);
 
     await expect(store.lookup("s1", ["child", "parent"], 600)).resolves.toMatchObject({
       hint: null,
-      generation: "1",
+      identityFp: "child",
+      generation: "v3:test-3",
     });
   });
 
@@ -285,14 +425,43 @@ describe("AffinityStore.invalidate", () => {
     const store = makeStore(client);
     const stale = await store.lookup("s1", ["tip"], 600);
 
-    await expect(store.invalidate("s1", ["tip"])).resolves.toBe(true);
-    await expect(store.put("s1", "tip", 42, 600, stale?.generation)).resolves.toBe(false);
+    await expect(store.invalidate("s1", "tip", [])).resolves.toBe(true);
+    await expect(
+      store.put("s1", "tip", 42, 600, stale?.identityFp, stale?.generation)
+    ).resolves.toBe(false);
 
     const fresh = await store.lookup("s1", ["tip"], 600);
-    await expect(store.put("s1", "tip", 7, 600, fresh?.generation)).resolves.toBe(true);
+    await expect(
+      store.put("s1", "tip", 7, 600, fresh?.identityFp, fresh?.generation)
+    ).resolves.toBe(true);
     await expect(store.lookup("s1", ["tip"], 600)).resolves.toMatchObject({
       hint: { providerId: 7, matchedFp: "tip" },
-      generation: "1",
+      identityFp: "tip",
+      generation: "v3:test-2",
+    });
+  });
+
+  it("uses a non-repeating fence when invalidating a migrated legacy binding", async () => {
+    const { client } = createLuaFakeRedis({
+      [key("s1", "tip")]: "1|42|1",
+      [legacyGenerationKey("s1")]: "1",
+    });
+    const store = makeStore(client);
+
+    const legacy = await store.lookup("s1", ["tip"], 600);
+    expect(legacy).toMatchObject({
+      identityFp: "tip",
+      generation: "v3:test-1",
+      hint: { providerId: 42 },
+    });
+
+    await expect(store.invalidate("s1", "tip", [])).resolves.toBe(true);
+    await expect(
+      store.put("s1", "tip", 99, 600, legacy?.identityFp, legacy?.generation)
+    ).resolves.toBe(false);
+    await expect(store.lookup("s1", ["tip"], 600)).resolves.toMatchObject({
+      hint: null,
+      generation: "v3:test-2",
     });
   });
 });
@@ -303,9 +472,10 @@ describe("AffinityStore round-trip through the fake Lua", () => {
     const store = makeStore(client);
 
     const lookup = await store.lookup("s1", ["tip"], 600);
-    await store.put("s1", "tip", 42, 600, lookup?.generation);
+    await store.put("s1", "tip", 42, 600, lookup?.identityFp, lookup?.generation);
     expect(await store.lookup("s1", ["tip"], 600)).toEqual({
-      generation: "0",
+      generation: "v3:test-1",
+      identityFp: "tip",
       hint: {
         providerId: 42,
         matchedIndex: 0,
@@ -313,7 +483,7 @@ describe("AffinityStore round-trip through the fake Lua", () => {
       },
     });
 
-    await store.tombstone("s1", "tip", "failover", lookup?.generation);
+    await store.tombstone("s1", "tip", "failover", lookup?.identityFp, lookup?.generation);
     expect((await store.lookup("s1", ["tip"], 600))?.hint).toBeNull();
   });
 });
@@ -322,15 +492,15 @@ describe("AffinityStore fail-open behavior", () => {
   it("fails open when redis is unavailable or not ready", async () => {
     const nullStore = makeStore(null);
     expect(await nullStore.lookup("s1", ["fp"], 600)).toBeNull();
-    await expect(nullStore.put("s1", "tip", 42, 600, "0")).resolves.toBe(false);
-    await expect(nullStore.tombstone("s1", "fp", "r", "0")).resolves.toBe(false);
+    await expect(nullStore.put("s1", "tip", 42, 600, "tip", "0")).resolves.toBe(false);
+    await expect(nullStore.tombstone("s1", "fp", "r", "fp", "0")).resolves.toBe(false);
 
     const { client } = createLuaFakeRedis();
     client.status = "connecting";
     const store = makeStore(client);
     expect(await store.lookup("s1", ["fp"], 600)).toBeNull();
-    await store.put("s1", "tip", 42, 600, "0");
-    await store.tombstone("s1", "fp", "r", "0");
+    await store.put("s1", "tip", 42, 600, "tip", "0");
+    await store.tombstone("s1", "fp", "r", "fp", "0");
     expect(client.eval).not.toHaveBeenCalled();
     expect(client.set).not.toHaveBeenCalled();
   });
@@ -341,8 +511,8 @@ describe("AffinityStore fail-open behavior", () => {
     client.set.mockRejectedValue(new Error("boom"));
     const store = makeStore(client);
     expect(await store.lookup("s1", ["fp"], 600)).toBeNull();
-    await expect(store.put("s1", "tip", 42, 600, "0")).resolves.toBe(false);
-    await expect(store.tombstone("s1", "fp", "r", "0")).resolves.toBe(false);
+    await expect(store.put("s1", "tip", 42, 600, "tip", "0")).resolves.toBe(false);
+    await expect(store.tombstone("s1", "fp", "r", "fp", "0")).resolves.toBe(false);
   });
 
   it("fails open when redis rejects with a non-Error value", async () => {
@@ -351,8 +521,8 @@ describe("AffinityStore fail-open behavior", () => {
     client.set.mockRejectedValue("string failure");
     const store = makeStore(client);
     expect(await store.lookup("s1", ["fp"], 600)).toBeNull();
-    await expect(store.put("s1", "tip", 42, 600, "0")).resolves.toBe(false);
-    await expect(store.tombstone("s1", "fp", "r", "0")).resolves.toBe(false);
+    await expect(store.put("s1", "tip", 42, 600, "tip", "0")).resolves.toBe(false);
+    await expect(store.tombstone("s1", "fp", "r", "fp", "0")).resolves.toBe(false);
   });
 });
 

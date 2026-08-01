@@ -95,9 +95,12 @@ ALTER TABLE "usage_ledger"
 
 export async function runSessionReplayIndexPreflight(
   executor: MigrationIndexPreflightExecutor,
-  specs: readonly SessionReplayIndexSpec[] = SESSION_REPLAY_INDEX_SPECS
+  specs: readonly SessionReplayIndexSpec[] = SESSION_REPLAY_INDEX_SPECS,
+  options: { ensureColumns?: boolean } = {}
 ): Promise<void> {
-  await ensurePreflightColumns(executor);
+  if (options.ensureColumns !== false) {
+    await ensurePreflightColumns(executor);
+  }
 
   for (const spec of specs) {
     const canonical = await executor.inspectIndex(spec.canonicalName);
@@ -138,17 +141,23 @@ export async function runSessionReplayIndexPreflight(
   }
 }
 
-export async function runPendingSessionReplayIndexPreflight(
-  executor: MigrationIndexPreflightExecutor,
-  latestMigrationCreatedAt: number | null
-): Promise<void> {
+export async function runSessionReplayMigrationPlan(input: {
+  baseTablesReady: boolean;
+  latestMigrationCreatedAt: number | null;
+  migrate(): Promise<void>;
+  runIndexPreflight(options: { ensureColumns: boolean }): Promise<void>;
+}): Promise<void> {
+  const { baseTablesReady, latestMigrationCreatedAt, migrate, runIndexPreflight } = input;
+
   if (
-    latestMigrationCreatedAt != null &&
-    Number.isFinite(latestMigrationCreatedAt) &&
-    latestMigrationCreatedAt >= SESSION_REPLAY_MIGRATION_CREATED_AT
+    baseTablesReady &&
+    (latestMigrationCreatedAt == null ||
+      !Number.isFinite(latestMigrationCreatedAt) ||
+      latestMigrationCreatedAt < SESSION_REPLAY_MIGRATION_CREATED_AT)
   ) {
-    return;
+    await runIndexPreflight({ ensureColumns: true });
   }
 
-  await runSessionReplayIndexPreflight(executor);
+  await migrate();
+  await runIndexPreflight({ ensureColumns: false });
 }

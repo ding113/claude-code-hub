@@ -73,6 +73,7 @@ export function LogicTraceTab({
   providerChain,
   routingTrace,
   sessionId,
+  sourceSessionId,
   blockedBy,
   blockedReason,
   isReplay,
@@ -480,7 +481,11 @@ export function LogicTraceTab({
                 setOriginOpen(open);
                 if (open && originChain === undefined && !originLoading) {
                   setOriginLoading(true);
-                  getSessionOriginChain(sessionId)
+                  getSessionOriginChain(
+                    sessionId,
+                    requestSequence ?? undefined,
+                    sourceSessionId ?? undefined
+                  )
                     .then((result) => {
                       setOriginChain(result.ok ? result.data : null);
                     })

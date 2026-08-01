@@ -188,7 +188,16 @@ export async function backfillUsageLedger(
             batch.created_at
           FROM batch
           ON CONFLICT (request_id) DO UPDATE SET
-            success_rate_outcome = EXCLUDED.success_rate_outcome,
+            user_id = EXCLUDED.user_id,
+            key = EXCLUDED.key,
+            provider_id = EXCLUDED.provider_id,
+            final_provider_id = EXCLUDED.final_provider_id,
+            model = EXCLUDED.model,
+            original_model = EXCLUDED.original_model,
+            actual_response_model = EXCLUDED.actual_response_model,
+            endpoint = EXCLUDED.endpoint,
+            api_type = EXCLUDED.api_type,
+            session_id = EXCLUDED.session_id,
             session_identity = EXCLUDED.session_identity,
             session_identity_kind = EXCLUDED.session_identity_kind,
             affinity_scope_tag = EXCLUDED.affinity_scope_tag,
@@ -196,10 +205,26 @@ export async function backfillUsageLedger(
             affinity_fingerprint_chain = EXCLUDED.affinity_fingerprint_chain,
             is_replay = EXCLUDED.is_replay,
             replay_source_request_id = EXCLUDED.replay_source_request_id,
+            status_code = EXCLUDED.status_code,
+            is_success = EXCLUDED.is_success,
+            success_rate_outcome = EXCLUDED.success_rate_outcome,
+            blocked_by = EXCLUDED.blocked_by,
             cost_usd = EXCLUDED.cost_usd,
+            cost_multiplier = EXCLUDED.cost_multiplier,
             group_cost_multiplier = EXCLUDED.group_cost_multiplier,
-            client_ip = EXCLUDED.client_ip,
-            is_success = EXCLUDED.is_success
+            input_tokens = EXCLUDED.input_tokens,
+            output_tokens = EXCLUDED.output_tokens,
+            cache_creation_input_tokens = EXCLUDED.cache_creation_input_tokens,
+            cache_read_input_tokens = EXCLUDED.cache_read_input_tokens,
+            cache_creation_5m_input_tokens = EXCLUDED.cache_creation_5m_input_tokens,
+            cache_creation_1h_input_tokens = EXCLUDED.cache_creation_1h_input_tokens,
+            cache_ttl_applied = EXCLUDED.cache_ttl_applied,
+            context_1m_applied = EXCLUDED.context_1m_applied,
+            swap_cache_ttl_applied = EXCLUDED.swap_cache_ttl_applied,
+            duration_ms = EXCLUDED.duration_ms,
+            ttfb_ms = EXCLUDED.ttfb_ms,
+            first_byte_ms = EXCLUDED.first_byte_ms,
+            client_ip = EXCLUDED.client_ip
           RETURNING request_id
         )
         SELECT

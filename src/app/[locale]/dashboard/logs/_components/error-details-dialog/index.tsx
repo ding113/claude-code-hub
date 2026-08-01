@@ -22,6 +22,7 @@ interface ErrorDetailsDialogProps {
   providerChain: ProviderChainItem[] | null;
   routingTrace?: RoutingTraceV1 | null;
   sessionId: string | null;
+  sourceSessionId?: string | null;
   requestSequence?: number | null;
   blockedBy?: string | null;
   blockedReason?: string | null;
@@ -70,6 +71,7 @@ export function ErrorDetailsDialog({
   providerChain,
   routingTrace,
   sessionId,
+  sourceSessionId,
   requestSequence,
   blockedBy,
   blockedReason,
@@ -135,7 +137,7 @@ export function ErrorDetailsDialog({
     if (open && sessionId) {
       const requestId = ++messageCheckRequestIdRef.current;
       setCheckingMessages(true);
-      hasSessionMessages(sessionId, requestSequence ?? undefined)
+      hasSessionMessages(sessionId, requestSequence ?? undefined, sourceSessionId ?? undefined)
         .then((result) => {
           if (requestId !== messageCheckRequestIdRef.current) return;
           if (result.ok) {
@@ -155,7 +157,7 @@ export function ErrorDetailsDialog({
       setHasMessages(false);
       setCheckingMessages(false);
     }
-  }, [open, sessionId, requestSequence]);
+  }, [open, sessionId, requestSequence, sourceSessionId]);
 
   // Handle scrollToRedirect - switch to metadata tab when redirect info needs focus
   useEffect(() => {
@@ -223,6 +225,7 @@ export function ErrorDetailsDialog({
     providerChain,
     routingTrace,
     sessionId,
+    sourceSessionId,
     requestSequence,
     blockedBy,
     blockedReason,

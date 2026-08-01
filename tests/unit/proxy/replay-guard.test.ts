@@ -99,6 +99,13 @@ interface GuardSessionOverrides {
   message?: Record<string, unknown>;
   headers?: Record<string, string>;
   apiKey?: string | null;
+  sessionIdentity?: {
+    identity: string;
+    kind: "session_id" | "prefix_affinity";
+    scopeTag: string | null;
+    fingerprint: string | null;
+    fingerprints: string[];
+  };
 }
 
 function makeSession(overrides: GuardSessionOverrides = {}): ProxySession {
@@ -126,6 +133,14 @@ function makeSession(overrides: GuardSessionOverrides = {}): ProxySession {
     getOriginalModel: () => "claude-sonnet-4",
     getEndpoint: () => "/v1/messages",
     getMessagesLength: () => 1,
+    getSessionIdentityMetadata: () =>
+      overrides.sessionIdentity ?? {
+        identity: "sess-1",
+        kind: "session_id",
+        scopeTag: null,
+        fingerprint: null,
+        fingerprints: [],
+      },
   } as unknown as ProxySession;
 }
 
@@ -335,7 +350,15 @@ describe("ProxyReplayGuard：completed 全量重放", () => {
       makeMeta(identity, { status: "completed", statusCode: 200, messageRequestId: 101 })
     );
     storeControl.readChunks.mockResolvedValueOnce(["data: a\n\n", "data: b\n\n"]);
-    const session = makeSession();
+    const session = makeSession({
+      sessionIdentity: {
+        identity: "pfx:scope:current",
+        kind: "prefix_affinity",
+        scopeTag: "scope",
+        fingerprint: "current",
+        fingerprints: ["current", "parent"],
+      },
+    });
 
     const response = await ProxyReplayGuard.ensure(session);
 
@@ -356,6 +379,11 @@ describe("ProxyReplayGuard：completed 全量重放", () => {
       key: "sk-test",
       model: "claude-sonnet-4",
       sessionId: "sess-1",
+      sessionIdentity: "pfx:scope:current",
+      sessionIdentityKind: "prefix_affinity",
+      affinityScopeTag: "scope",
+      affinityFingerprint: "current",
+      affinityFingerprintChain: ["current", "parent"],
       statusCode: 200,
       costUsd: "0",
       blockedBy: null,

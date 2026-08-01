@@ -20,6 +20,7 @@ function makeAffinity(overrides: Partial<SessionAffinityState> = {}): SessionAff
     },
     nominatedProviderId: null,
     matchedFp: null,
+    identityFp: "tailfp1",
     generation: "0",
     matchedTier: null,
     ...overrides,

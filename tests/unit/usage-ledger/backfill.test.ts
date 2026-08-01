@@ -71,12 +71,50 @@ describe("backfillUsageLedger", () => {
   });
 
   it("keeps the recovery projection aligned with the trigger", () => {
-    expect(serviceSource).toContain("mr.group_cost_multiplier");
-    expect(serviceSource).toContain("mr.client_ip");
-    expect(serviceSource).toContain("mr.status_code IS NULL OR mr.status_code < 400");
-    expect(serviceSource).toContain("group_cost_multiplier = EXCLUDED.group_cost_multiplier");
-    expect(serviceSource).toContain("client_ip = EXCLUDED.client_ip");
-    expect(serviceSource).toContain("is_success = EXCLUDED.is_success");
+    const conflictColumns = [
+      "user_id",
+      "key",
+      "provider_id",
+      "final_provider_id",
+      "model",
+      "original_model",
+      "actual_response_model",
+      "endpoint",
+      "api_type",
+      "session_id",
+      "session_identity",
+      "session_identity_kind",
+      "affinity_scope_tag",
+      "affinity_fingerprint",
+      "affinity_fingerprint_chain",
+      "is_replay",
+      "replay_source_request_id",
+      "status_code",
+      "is_success",
+      "success_rate_outcome",
+      "blocked_by",
+      "cost_usd",
+      "cost_multiplier",
+      "group_cost_multiplier",
+      "input_tokens",
+      "output_tokens",
+      "cache_creation_input_tokens",
+      "cache_read_input_tokens",
+      "cache_creation_5m_input_tokens",
+      "cache_creation_1h_input_tokens",
+      "cache_ttl_applied",
+      "context_1m_applied",
+      "swap_cache_ttl_applied",
+      "duration_ms",
+      "ttfb_ms",
+      "first_byte_ms",
+      "client_ip",
+    ];
+
+    for (const column of conflictColumns) {
+      expect(serviceSource).toContain(`${column} = EXCLUDED.${column}`);
+    }
+    expect(serviceSource).not.toContain("created_at = EXCLUDED.created_at");
   });
 
   it("rejects before opening a transaction when already aborted", async () => {

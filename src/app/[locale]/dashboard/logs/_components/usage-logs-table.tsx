@@ -649,9 +649,12 @@ export function UsageLogsTable({
                         providerChain={log.providerChain}
                         routingTrace={log.routingTrace}
                         sessionId={log.sessionId}
+                        sourceSessionId={log.sourceSessionId}
                         requestSequence={log.requestSequence}
                         blockedBy={log.blockedBy}
                         blockedReason={log.blockedReason}
+                        isReplay={log.isReplay}
+                        replaySourceRequestId={log.replaySourceRequestId}
                         originalModel={log.originalModel}
                         currentModel={log.model}
                         actualResponseModel={log.actualResponseModel}

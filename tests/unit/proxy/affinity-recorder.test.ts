@@ -10,10 +10,12 @@ const envControl = vi.hoisted(() => ({
 const settingsControl = vi.hoisted(() => ({ ignoreClientSessionId: false }));
 
 const storeMocks = vi.hoisted(() => ({
-  put: vi.fn(async () => {}),
-  tombstone: vi.fn(async () => {}),
+  put: vi.fn(async () => true),
+  tombstone: vi.fn(async () => true),
   lookup: vi.fn(async () => null),
 }));
+
+const loggerDebugMock = vi.hoisted(() => vi.fn());
 
 vi.mock("@/lib/config/env.schema", () => ({
   getEnvConfig: () => ({
@@ -34,7 +36,7 @@ vi.mock("@/lib/system-settings/proxy-runtime", () => ({
 }));
 
 vi.mock("@/lib/logger", () => ({
-  logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+  logger: { debug: loggerDebugMock, info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
 
 import {
@@ -59,6 +61,7 @@ function makeAffinity(overrides: Partial<SessionAffinityState> = {}): SessionAff
     chain: makeChain(),
     nominatedProviderId: null,
     matchedFp: null,
+    identityFp: "fp1",
     generation: "0",
     ...overrides,
   };
@@ -69,16 +72,19 @@ function makeSession(affinity: SessionAffinityState | null): ProxySession {
 }
 
 beforeEach(() => {
+  vi.clearAllMocks();
   envControl.enabled = true;
   envControl.ttlSeconds = 3600;
   settingsControl.ignoreClientSessionId = false;
+  storeMocks.put.mockResolvedValue(true);
+  storeMocks.tombstone.mockResolvedValue(true);
 });
 
 describe("recordAffinityWinner", () => {
   it("writes a single tip binding for the winning provider with the configured TTL", async () => {
     await recordAffinityWinner(makeSession(makeAffinity()), 42);
     expect(storeMocks.put).toHaveBeenCalledTimes(1);
-    expect(storeMocks.put).toHaveBeenCalledWith("scope123", "fp2", 42, 3600, "0");
+    expect(storeMocks.put).toHaveBeenCalledWith("scope123", "fp2", 42, 3600, "fp1", "0");
   });
 
   it("skips writing when the chain has no conversation boundaries (system-only tip)", async () => {
@@ -97,7 +103,7 @@ describe("recordAffinityWinner", () => {
     envControl.enabled = false;
     settingsControl.ignoreClientSessionId = true;
     await recordAffinityWinner(makeSession(makeAffinity()), 42);
-    expect(storeMocks.put).toHaveBeenCalledWith("scope123", "fp2", 42, 3600, "0");
+    expect(storeMocks.put).toHaveBeenCalledWith("scope123", "fp2", 42, 3600, "fp1", "0");
   });
 
   it("is a no-op without affinity state or with a non-positive provider id", async () => {
@@ -113,6 +119,17 @@ describe("recordAffinityWinner", () => {
     storeMocks.put.mockRejectedValueOnce("non-error failure");
     await expect(recordAffinityWinner(makeSession(makeAffinity()), 42)).resolves.toBeUndefined();
   });
+
+  it("logs a rejected CAS writeback", async () => {
+    storeMocks.put.mockResolvedValueOnce(false);
+
+    await recordAffinityWinner(makeSession(makeAffinity()), 42);
+
+    expect(loggerDebugMock).toHaveBeenCalledWith(
+      "[AffinityRecorder] winner writeback rejected",
+      expect.objectContaining({ providerId: 42, scopeTag: "scope123" })
+    );
+  });
 });
 
 describe("tombstoneAffinityOnFailure", () => {
@@ -120,7 +137,7 @@ describe("tombstoneAffinityOnFailure", () => {
     const session = makeSession(makeAffinity({ nominatedProviderId: 42, matchedFp: "fp2" }));
     await tombstoneAffinityOnFailure(session, 42);
     expect(storeMocks.tombstone).toHaveBeenCalledTimes(1);
-    expect(storeMocks.tombstone).toHaveBeenCalledWith("scope123", "fp2", "failover", "0");
+    expect(storeMocks.tombstone).toHaveBeenCalledWith("scope123", "fp2", "failover", "fp1", "0");
   });
 
   it("is a no-op when the failed provider differs from the nominated one", async () => {
@@ -159,7 +176,7 @@ describe("tombstoneAffinityOnFailure", () => {
     settingsControl.ignoreClientSessionId = true;
     const session = makeSession(makeAffinity({ nominatedProviderId: 42, matchedFp: "fp2" }));
     await tombstoneAffinityOnFailure(session, 42);
-    expect(storeMocks.tombstone).toHaveBeenCalledWith("scope123", "fp2", "failover", "0");
+    expect(storeMocks.tombstone).toHaveBeenCalledWith("scope123", "fp2", "failover", "fp1", "0");
   });
 
   it("swallows store failures", async () => {
@@ -168,5 +185,17 @@ describe("tombstoneAffinityOnFailure", () => {
     await expect(tombstoneAffinityOnFailure(session, 42)).resolves.toBeUndefined();
     storeMocks.tombstone.mockRejectedValueOnce("non-error failure");
     await expect(tombstoneAffinityOnFailure(session, 42)).resolves.toBeUndefined();
+  });
+
+  it("logs a rejected tombstone CAS", async () => {
+    storeMocks.tombstone.mockResolvedValueOnce(false);
+    const session = makeSession(makeAffinity({ nominatedProviderId: 42, matchedFp: "fp2" }));
+
+    await tombstoneAffinityOnFailure(session, 42);
+
+    expect(loggerDebugMock).toHaveBeenCalledWith(
+      "[AffinityRecorder] tombstone rejected",
+      expect.objectContaining({ failedProviderId: 42, scopeTag: "scope123" })
+    );
   });
 });

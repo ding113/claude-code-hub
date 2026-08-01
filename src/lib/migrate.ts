@@ -8,7 +8,9 @@ import postgres from "postgres";
 import { logger } from "@/lib/logger";
 import {
   type MigrationIndexPreflightExecutor,
-  runPendingSessionReplayIndexPreflight,
+  runSessionReplayIndexPreflight,
+  runSessionReplayMigrationPlan,
+  SESSION_REPLAY_INDEX_SPECS,
 } from "@/lib/migrations/session-replay-index-preflight";
 
 const MIGRATION_ADVISORY_LOCK_NAME = "claude-code-hub:migrations";
@@ -184,6 +186,15 @@ async function getLatestDrizzleMigrationCreatedAt(
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+async function sessionReplayBaseTablesExist(client: ReturnType<typeof postgres>): Promise<boolean> {
+  const [row] = await client`
+    SELECT
+      to_regclass('public.message_request') IS NOT NULL AS message_request_exists,
+      to_regclass('public.usage_ledger') IS NOT NULL AS usage_ledger_exists
+  `;
+  return row?.message_request_exists === true && row?.usage_ledger_exists === true;
+}
+
 /**
  * 自动执行数据库迁移
  * 在生产环境启动时自动运行
@@ -209,13 +220,14 @@ export async function runMigrations() {
 
     await ensureDrizzleMigrationsTableExists(migrationClient);
     await repairDrizzleMigrationsCreatedAt({ client: migrationClient, migrationsFolder });
-    await runPendingSessionReplayIndexPreflight(
-      createMigrationIndexPreflightExecutor(migrationClient),
-      await getLatestDrizzleMigrationCreatedAt(migrationClient)
-    );
-
-    // 执行迁移
-    await migrate(db, { migrationsFolder });
+    const indexExecutor = createMigrationIndexPreflightExecutor(migrationClient);
+    await runSessionReplayMigrationPlan({
+      baseTablesReady: await sessionReplayBaseTablesExist(migrationClient),
+      latestMigrationCreatedAt: await getLatestDrizzleMigrationCreatedAt(migrationClient),
+      migrate: () => migrate(db, { migrationsFolder }),
+      runIndexPreflight: (options) =>
+        runSessionReplayIndexPreflight(indexExecutor, SESSION_REPLAY_INDEX_SPECS, options),
+    });
 
     logger.info("Database migrations completed successfully");
   } catch (error) {

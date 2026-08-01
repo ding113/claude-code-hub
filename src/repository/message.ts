@@ -1,6 +1,6 @@
 "use server";
 
-import { and, asc, desc, eq, gt, inArray, isNotNull, isNull, lt, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, isNotNull, isNull, lt, or, sql } from "drizzle-orm";
 import { db, getMessageWriterDb } from "@/drizzle/db";
 import { keys as keysTable, messageRequest, providers, usageLedger, users } from "@/drizzle/schema";
 import { getEnvConfig } from "@/lib/config/env.schema";
@@ -15,7 +15,7 @@ import type { HedgeLoserBilling, StoredCostBreakdown } from "@/types/cost-breakd
 import type { CreateMessageRequestData, MessageRequest, ProviderChainItem } from "@/types/message";
 import { normalizeRoutingTrace, type RoutingTraceV1 } from "@/types/routing-trace";
 import type { SpecialSetting } from "@/types/special-settings";
-import { LEDGER_BILLING_CONDITION } from "./_shared/ledger-conditions";
+import { LEDGER_AUDIT_CONDITION, LEDGER_BILLING_CONDITION } from "./_shared/ledger-conditions";
 import { EXCLUDE_WARMUP_CONDITION } from "./_shared/message-request-conditions";
 import { toMessageRequest } from "./_shared/transformers";
 import {
@@ -34,6 +34,20 @@ import {
 const POST_TERMINAL_ROUTING_TRACE_ACK_TIMEOUT_MS = 3_000;
 const ledgerSessionIdentity = sql<string>`COALESCE(${usageLedger.sessionIdentity}, ${usageLedger.sessionId})`;
 const messageSessionIdentity = sql<string>`COALESCE(${messageRequest.sessionIdentity}, ${messageRequest.sessionId})`;
+
+function ledgerSessionLookup(identityOrPhysicalId: string) {
+  return or(
+    eq(ledgerSessionIdentity, identityOrPhysicalId),
+    eq(usageLedger.sessionId, identityOrPhysicalId)
+  );
+}
+
+function messageSessionLookup(identityOrPhysicalId: string) {
+  return or(
+    eq(messageSessionIdentity, identityOrPhysicalId),
+    eq(messageRequest.sessionId, identityOrPhysicalId)
+  );
+}
 
 type PublicStatusRequestSeed = {
   createdAt: Date;
@@ -341,11 +355,6 @@ export async function materializeReplayAuditFromSource(
       context_1m_applied = source.context_1m_applied,
       swap_cache_ttl_applied = source.swap_cache_ttl_applied,
       special_settings = source.special_settings,
-      session_identity = source.session_identity,
-      session_identity_kind = source.session_identity_kind,
-      affinity_scope_tag = source.affinity_scope_tag,
-      affinity_fingerprint = source.affinity_fingerprint,
-      affinity_fingerprint_chain = source.affinity_fingerprint_chain,
       replay_source_request_id = source.id,
       is_replay = TRUE,
       cost_usd = 0,
@@ -355,7 +364,11 @@ export async function materializeReplayAuditFromSource(
     FROM message_request AS source
     WHERE replay.id = ${replayRequestId}
       AND replay.is_replay = TRUE
+      AND replay.deleted_at IS NULL
       AND source.id = ${sourceRequestId}
+      AND source.id <> replay.id
+      AND source.is_replay = FALSE
+      AND source.deleted_at IS NULL
       AND source.status_code >= 200
       AND source.status_code < 400
       AND COALESCE(source.error_message, '') = ''
@@ -930,6 +943,8 @@ export async function findMessageRequestById(id: number): Promise<MessageRequest
       context1mApplied: messageRequest.context1mApplied,
       swapCacheTtlApplied: messageRequest.swapCacheTtlApplied,
       specialSettings: messageRequest.specialSettings,
+      isReplay: messageRequest.isReplay,
+      replaySourceRequestId: messageRequest.replaySourceRequestId,
       createdAt: messageRequest.createdAt,
       updatedAt: messageRequest.updatedAt,
       deletedAt: messageRequest.deletedAt,
@@ -971,10 +986,12 @@ export async function findMessageRequestById(id: number): Promise<MessageRequest
       tfftMs: usageLedger.tfftMs,
       firstByteMs: usageLedger.firstByteMs,
       sessionId: usageLedger.sessionId,
+      isReplay: usageLedger.isReplay,
+      replaySourceRequestId: usageLedger.replaySourceRequestId,
       createdAt: usageLedger.createdAt,
     })
     .from(usageLedger)
-    .where(and(eq(usageLedger.requestId, id), LEDGER_BILLING_CONDITION))
+    .where(and(eq(usageLedger.requestId, id), LEDGER_AUDIT_CONDITION))
     .limit(1);
 
   if (!ledgerRow) {
@@ -994,6 +1011,8 @@ export async function findMessageRequestById(id: number): Promise<MessageRequest
     costUsd: ledgerRow.costUsd,
     costMultiplier: ledgerRow.costMultiplier,
     sessionId: ledgerRow.sessionId,
+    isReplay: ledgerRow.isReplay,
+    replaySourceRequestId: ledgerRow.replaySourceRequestId,
     userAgent: null,
     endpoint: ledgerRow.endpoint,
     messagesCount: null,
@@ -1054,6 +1073,8 @@ export async function findMessageRequestBySessionId(
       routingTrace: messageRequest.routingTrace,
       blockedBy: messageRequest.blockedBy,
       blockedReason: messageRequest.blockedReason,
+      isReplay: messageRequest.isReplay,
+      replaySourceRequestId: messageRequest.replaySourceRequestId,
       createdAt: messageRequest.createdAt,
       updatedAt: messageRequest.updatedAt,
       deletedAt: messageRequest.deletedAt,
@@ -1096,10 +1117,12 @@ export async function findMessageRequestBySessionId(
       tfftMs: usageLedger.tfftMs,
       firstByteMs: usageLedger.firstByteMs,
       sessionId: usageLedger.sessionId,
+      isReplay: usageLedger.isReplay,
+      replaySourceRequestId: usageLedger.replaySourceRequestId,
       createdAt: usageLedger.createdAt,
     })
     .from(usageLedger)
-    .where(and(eq(usageLedger.sessionId, sessionId), LEDGER_BILLING_CONDITION))
+    .where(and(eq(usageLedger.sessionId, sessionId), LEDGER_AUDIT_CONDITION))
     .orderBy(desc(usageLedger.createdAt), desc(usageLedger.requestId))
     .limit(1);
 
@@ -1120,6 +1143,8 @@ export async function findMessageRequestBySessionId(
     costUsd: ledgerRow.costUsd,
     costMultiplier: ledgerRow.costMultiplier,
     sessionId: ledgerRow.sessionId,
+    isReplay: ledgerRow.isReplay,
+    replaySourceRequestId: ledgerRow.replaySourceRequestId,
     userAgent: null,
     endpoint: ledgerRow.endpoint,
     messagesCount: null,
@@ -1264,11 +1289,19 @@ export async function aggregateSessionStats(sessionId: string): Promise<{
       lastRequestAt: sql<Date>`max(${usageLedger.createdAt})`,
     })
     .from(usageLedger)
-    .where(and(eq(ledgerSessionIdentity, sessionId), LEDGER_BILLING_CONDITION));
+    .where(and(ledgerSessionLookup(sessionId), LEDGER_BILLING_CONDITION));
 
-  if (!stats || stats.requestCount === 0) {
-    return null;
-  }
+  const billingStats = stats ?? {
+    requestCount: 0,
+    totalCostUsd: "0",
+    totalInputTokens: 0,
+    totalOutputTokens: 0,
+    totalCacheCreationTokens: 0,
+    totalCacheReadTokens: 0,
+    totalDurationMs: 0,
+    firstRequestAt: null,
+    lastRequestAt: null,
+  };
 
   // 2. 查询供应商列表（去重）
   const providerList = await db
@@ -1280,7 +1313,7 @@ export async function aggregateSessionStats(sessionId: string): Promise<{
     .leftJoin(providers, eq(usageLedger.finalProviderId, providers.id))
     .where(
       and(
-        eq(ledgerSessionIdentity, sessionId),
+        ledgerSessionLookup(sessionId),
         LEDGER_BILLING_CONDITION,
         sql`${usageLedger.finalProviderId} IS NOT NULL`
       )
@@ -1292,7 +1325,7 @@ export async function aggregateSessionStats(sessionId: string): Promise<{
     .from(usageLedger)
     .where(
       and(
-        eq(ledgerSessionIdentity, sessionId),
+        ledgerSessionLookup(sessionId),
         LEDGER_BILLING_CONDITION,
         sql`${usageLedger.model} IS NOT NULL`
       )
@@ -1304,7 +1337,7 @@ export async function aggregateSessionStats(sessionId: string): Promise<{
     .from(usageLedger)
     .where(
       and(
-        eq(ledgerSessionIdentity, sessionId),
+        ledgerSessionLookup(sessionId),
         LEDGER_BILLING_CONDITION,
         sql`${usageLedger.cacheTtlApplied} IS NOT NULL`
       )
@@ -1332,7 +1365,7 @@ export async function aggregateSessionStats(sessionId: string): Promise<{
     .from(messageRequest)
     .innerJoin(users, eq(messageRequest.userId, users.id))
     .innerJoin(keysTable, eq(messageRequest.key, keysTable.key))
-    .where(and(eq(messageSessionIdentity, sessionId), isNull(messageRequest.deletedAt)))
+    .where(and(messageSessionLookup(sessionId), isNull(messageRequest.deletedAt)))
     .orderBy(messageRequest.createdAt)
     .limit(1);
 
@@ -1342,15 +1375,15 @@ export async function aggregateSessionStats(sessionId: string): Promise<{
 
   return {
     sessionId,
-    requestCount: stats.requestCount,
-    totalCostUsd: stats.totalCostUsd,
-    totalInputTokens: stats.totalInputTokens,
-    totalOutputTokens: stats.totalOutputTokens,
-    totalCacheCreationTokens: stats.totalCacheCreationTokens,
-    totalCacheReadTokens: stats.totalCacheReadTokens,
-    totalDurationMs: stats.totalDurationMs,
-    firstRequestAt: stats.firstRequestAt,
-    lastRequestAt: stats.lastRequestAt,
+    requestCount: billingStats.requestCount,
+    totalCostUsd: billingStats.totalCostUsd,
+    totalInputTokens: billingStats.totalInputTokens,
+    totalOutputTokens: billingStats.totalOutputTokens,
+    totalCacheCreationTokens: billingStats.totalCacheCreationTokens,
+    totalCacheReadTokens: billingStats.totalCacheReadTokens,
+    totalDurationMs: billingStats.totalDurationMs,
+    firstRequestAt: billingStats.firstRequestAt,
+    lastRequestAt: billingStats.lastRequestAt,
     providers: providerList.map((p) => ({
       id: p.providerId!,
       name: p.providerName || `Provider #${p.providerId}`,
@@ -1409,6 +1442,60 @@ export async function resolveSessionIdentity(identity: string): Promise<{
     fingerprint: rows.find((row) => row.fingerprint)?.fingerprint ?? null,
     fingerprints: [...fingerprints],
   };
+}
+
+export type PhysicalSessionSource = {
+  sessionId: string;
+  userId: number;
+  keyId: number;
+  providerIds: number[];
+};
+
+/** Enumerate the physical Session and Provider memberships owned by a public identity. */
+export async function listPhysicalSessionSourcesForIdentity(
+  identity: string
+): Promise<PhysicalSessionSource[]> {
+  const rows = await db
+    .select({
+      sessionId: messageRequest.sessionId,
+      userId: messageRequest.userId,
+      keyId: keysTable.id,
+      providerId: messageRequest.providerId,
+    })
+    .from(messageRequest)
+    .innerJoin(keysTable, eq(messageRequest.key, keysTable.key))
+    .where(
+      and(
+        eq(messageSessionIdentity, identity),
+        isNotNull(messageRequest.sessionId),
+        eq(messageRequest.isReplay, false),
+        isNull(messageRequest.deletedAt)
+      )
+    );
+
+  const sourcesBySession = new Map<
+    string,
+    { userId: number; keyId: number; providerIds: Set<number> }
+  >();
+  for (const row of rows) {
+    if (!row.sessionId) continue;
+    const source = sourcesBySession.get(row.sessionId) ?? {
+      userId: row.userId,
+      keyId: row.keyId,
+      providerIds: new Set<number>(),
+    };
+    if (Number.isInteger(row.providerId) && row.providerId > 0) {
+      source.providerIds.add(row.providerId);
+    }
+    sourcesBySession.set(row.sessionId, source);
+  }
+
+  return [...sourcesBySession].map(([sessionId, source]) => ({
+    sessionId,
+    userId: source.userId,
+    keyId: source.keyId,
+    providerIds: [...source.providerIds],
+  }));
 }
 
 /** 验证物理 Session 是否属于指定的聚合 identity。 */
@@ -1489,6 +1576,8 @@ export async function findSessionRequestLocator(
 export async function aggregateMultipleSessionStats(sessionIds: string[]): Promise<
   Array<{
     sessionId: string;
+    sessionIdentityKind: "session_id" | "prefix_affinity";
+    sessionFingerprint: string | null;
     requestCount: number;
     totalCostUsd: string;
     totalInputTokens: number;
@@ -1634,11 +1723,16 @@ export async function aggregateMultipleSessionStats(sessionIds: string[]): Promi
       u.id AS user_id,
       k.name AS key_name,
       k.id AS key_id,
+      CASE
+        WHEN mr.session_identity_kind = 'prefix_affinity' THEN 'prefix_affinity'
+        ELSE 'session_id'
+      END AS session_identity_kind,
+      mr.affinity_fingerprint AS session_fingerprint,
       mr.user_agent,
       mr.api_type
     FROM unnest(ARRAY[${sessionIdParams}]::varchar[]) AS sid
     CROSS JOIN LATERAL (
-      SELECT user_id, key, user_agent, api_type
+      SELECT user_id, key, session_identity_kind, affinity_fingerprint, user_agent, api_type
       FROM message_request
       WHERE COALESCE(session_identity, session_id) = sid AND deleted_at IS NULL
       ORDER BY created_at
@@ -1653,6 +1747,8 @@ export async function aggregateMultipleSessionStats(sessionIds: string[]): Promi
     string,
     {
       sessionId: string;
+      sessionIdentityKind: "session_id" | "prefix_affinity";
+      sessionFingerprint: string | null;
       userName: string;
       userId: number;
       keyName: string;
@@ -1667,6 +1763,8 @@ export async function aggregateMultipleSessionStats(sessionIds: string[]): Promi
     user_id: number;
     key_name: string;
     key_id: number;
+    session_identity_kind: "session_id" | "prefix_affinity";
+    session_fingerprint: string | null;
     user_agent: string | null;
     api_type: string | null;
   }>) {
@@ -1676,6 +1774,8 @@ export async function aggregateMultipleSessionStats(sessionIds: string[]): Promi
       userId: row.user_id,
       keyName: row.key_name,
       keyId: row.key_id,
+      sessionIdentityKind: row.session_identity_kind,
+      sessionFingerprint: row.session_fingerprint,
       userAgent: row.user_agent,
       apiType: row.api_type,
     });
@@ -1689,21 +1789,35 @@ export async function aggregateMultipleSessionStats(sessionIds: string[]): Promi
     const userInfo = userInfoMap.get(sessionId);
 
     // 跳过没有数据的 session
-    if (!stats || !userInfo || stats.requestCount === 0) {
+    if (!userInfo) {
       continue;
     }
 
+    const billingStats = stats ?? {
+      requestCount: 0,
+      totalCostUsd: "0",
+      totalInputTokens: 0,
+      totalOutputTokens: 0,
+      totalCacheCreationTokens: 0,
+      totalCacheReadTokens: 0,
+      totalDurationMs: 0,
+      firstRequestAt: null,
+      lastRequestAt: null,
+    };
+
     results.push({
       sessionId,
-      requestCount: stats.requestCount,
-      totalCostUsd: stats.totalCostUsd,
-      totalInputTokens: stats.totalInputTokens,
-      totalOutputTokens: stats.totalOutputTokens,
-      totalCacheCreationTokens: stats.totalCacheCreationTokens,
-      totalCacheReadTokens: stats.totalCacheReadTokens,
-      totalDurationMs: stats.totalDurationMs,
-      firstRequestAt: stats.firstRequestAt,
-      lastRequestAt: stats.lastRequestAt,
+      sessionIdentityKind: userInfo.sessionIdentityKind,
+      sessionFingerprint: userInfo.sessionFingerprint,
+      requestCount: billingStats.requestCount,
+      totalCostUsd: billingStats.totalCostUsd,
+      totalInputTokens: billingStats.totalInputTokens,
+      totalOutputTokens: billingStats.totalOutputTokens,
+      totalCacheCreationTokens: billingStats.totalCacheCreationTokens,
+      totalCacheReadTokens: billingStats.totalCacheReadTokens,
+      totalDurationMs: billingStats.totalDurationMs,
+      firstRequestAt: billingStats.firstRequestAt,
+      lastRequestAt: billingStats.lastRequestAt,
       providers: providersMap.get(sessionId) || [],
       models: modelsMap.get(sessionId) || [],
       userName: userInfo.userName,
@@ -1786,7 +1900,7 @@ export async function findUsageLogs(params: {
     return { logs, total };
   }
 
-  const ledgerConditions = [LEDGER_BILLING_CONDITION];
+  const ledgerConditions = [LEDGER_AUDIT_CONDITION];
 
   if (userId !== undefined) {
     ledgerConditions.push(eq(usageLedger.userId, userId));
@@ -1836,6 +1950,8 @@ export async function findUsageLogs(params: {
       tfftMs: usageLedger.tfftMs,
       firstByteMs: usageLedger.firstByteMs,
       sessionId: usageLedger.sessionId,
+      isReplay: usageLedger.isReplay,
+      replaySourceRequestId: usageLedger.replaySourceRequestId,
       createdAt: usageLedger.createdAt,
     })
     .from(usageLedger)
@@ -1858,6 +1974,8 @@ export async function findUsageLogs(params: {
       costUsd: row.costUsd,
       costMultiplier: row.costMultiplier,
       sessionId: row.sessionId,
+      isReplay: row.isReplay,
+      replaySourceRequestId: row.replaySourceRequestId,
       userAgent: null,
       endpoint: row.endpoint,
       messagesCount: null,

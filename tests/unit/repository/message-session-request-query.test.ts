@@ -1,10 +1,12 @@
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { messageRequest } from "@/drizzle/schema";
+import { keys as keysTable } from "@/drizzle/schema";
 import {
   findAdjacentRequestSequences,
   findRequestsBySessionId,
   findRequestsBySessionIdentity,
   findSessionRequestLocator,
+  listPhysicalSessionSourcesForIdentity,
 } from "@/repository/message";
 import { createDrizzleQuery, sqlText } from "./message-query-test-support";
 
@@ -224,6 +226,28 @@ describe("message repository session request queries", () => {
     expect(where).toContain("physical-a");
     expect(where).toContain("= 3");
     expect(where).toContain("deleted_at");
+  });
+
+  test("lists distinct physical Session and Provider pairs for prefix termination", async () => {
+    const sources = createDrizzleQuery([
+      { sessionId: "physical-a", providerId: 41, userId: 7, keyId: 17 },
+      { sessionId: "physical-a", providerId: 0, userId: 7, keyId: 17 },
+      { sessionId: "physical-a", providerId: 42, userId: 7, keyId: 17 },
+      { sessionId: "physical-b", providerId: 43, userId: 8, keyId: 18 },
+    ]);
+    boundary.select.mockReturnValueOnce(sources);
+
+    await expect(listPhysicalSessionSourcesForIdentity("pfx:scope:fingerprint")).resolves.toEqual([
+      { sessionId: "physical-a", userId: 7, keyId: 17, providerIds: [41, 42] },
+      { sessionId: "physical-b", userId: 8, keyId: 18, providerIds: [43] },
+    ]);
+
+    expect(sqlText(sources.trace.where)).toContain("pfx:scope:fingerprint");
+    expect(sqlText(sources.trace.where)).toContain("session_id");
+    expect(sqlText(sources.trace.where)).toContain("is_replay");
+    expect(sqlText(sources.trace.where)).toContain("false");
+    expect(sqlText(sources.trace.where)).toContain("deleted_at");
+    expect(sources.trace.innerJoins.map(({ source }) => source)).toEqual([keysTable]);
   });
 
   test("returns adjacent neighbors using session-scoped sequence predicates", async () => {

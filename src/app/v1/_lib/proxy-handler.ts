@@ -28,7 +28,11 @@ export async function handleProxyRequest(c: Context): Promise<Response> {
     const identity = resolvedSession.getSessionIdentityMetadata();
     if (!identity.identity) return null;
 
-    void SessionTracker.trackObservedSession(identity.identity);
+    void SessionTracker.trackObservedSession(identity.identity).catch((error) => {
+      logger.warn("[ProxyHandler] Failed to track observed session", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    });
     const authState = resolvedSession.authState;
     if (authState?.user && authState.key) {
       void SessionManager.storeSessionInfo(identity.identity, {
@@ -38,6 +42,10 @@ export async function handleProxyRequest(c: Context): Promise<Response> {
         keyName: authState.key.name,
         model: resolvedSession.request.model,
         apiType: resolvedSession.originalFormat === "openai" ? "codex" : "chat",
+      }).catch((error) => {
+        logger.warn("[ProxyHandler] Failed to store observed session info", {
+          error: error instanceof Error ? error.message : String(error),
+        });
       });
     }
     return identity.identity;

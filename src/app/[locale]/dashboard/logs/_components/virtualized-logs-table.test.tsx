@@ -104,8 +104,17 @@ vi.mock("./model-display-with-redirect", () => ({
   ),
 }));
 
+const dialogProps = vi.hoisted(() => ({ latest: null as Record<string, unknown> | null }));
+
 vi.mock("./error-details-dialog", () => ({
-  ErrorDetailsDialog: () => <div data-slot="error-details-dialog" />,
+  ErrorDetailsDialog: (props: Record<string, unknown>) => {
+    dialogProps.latest = props;
+    return (
+      <div data-slot="error-details-dialog" data-replay={String(props.isReplay ?? false)}>
+        {props.isReplay ? `Replay source ${String(props.replaySourceRequestId ?? "")}` : ""}
+      </div>
+    );
+  },
 }));
 
 let mockIsProviderFinalized = true;
@@ -120,6 +129,7 @@ function makeLog(overrides: Partial<UsageLogRow>): UsageLogRow {
     id: 1,
     createdAt: new Date(),
     sessionId: null,
+    sourceSessionId: null,
     requestSequence: null,
     userName: "u",
     keyName: "k",
@@ -220,6 +230,15 @@ function renderPerformanceWithLog(overrides: Partial<UsageLogRow>) {
 }
 
 describe("virtualized-logs-table thinking effort", () => {
+  test("forwards Replay provenance to the details dialog", () => {
+    const html = renderTableWithLog({ isReplay: true, replaySourceRequestId: 7 });
+
+    expect(dialogProps.latest).toEqual(
+      expect.objectContaining({ isReplay: true, replaySourceRequestId: 7 })
+    );
+    expect(html).toContain("Replay source 7");
+  });
+
   test("在计费模型右侧显示思考强度列", () => {
     const html = renderTableWithLog({
       model: "gpt-5.4",

@@ -9,6 +9,7 @@ const loggerInfoMock = vi.fn();
 
 const originalResponsesWebsocketEnv = process.env.ENABLE_OPENAI_RESPONSES_WEBSOCKET;
 const originalStreamGateMode = process.env.STREAM_GATE_MODE;
+const originalSessionTtl = process.env.SESSION_TTL;
 
 vi.mock("server-only", () => ({}));
 
@@ -101,6 +102,11 @@ afterEach(() => {
   } else {
     process.env.STREAM_GATE_MODE = originalStreamGateMode;
   }
+  if (originalSessionTtl === undefined) {
+    delete process.env.SESSION_TTL;
+  } else {
+    process.env.SESSION_TTL = originalSessionTtl;
+  }
 });
 
 describe("SystemSettingsCache", () => {
@@ -179,6 +185,35 @@ describe("SystemSettingsCache", () => {
     const settings = await getCachedSystemSettings();
     expect(settings.streamGateMode).toBe("off");
   });
+
+  test("其他环境变量无效时，冷缓存回退仍强制开启 Stream Gate 并记录告警", async () => {
+    delete process.env.STREAM_GATE_MODE;
+    process.env.SESSION_TTL = "invalid";
+    getSystemSettingsMock.mockRejectedValueOnce(new Error("db down"));
+    const { getCachedSystemSettings } = await loadCache();
+
+    const settings = await getCachedSystemSettings();
+
+    expect(settings.streamGateMode).toBe("enforce");
+    expect(loggerWarnMock).toHaveBeenCalledWith(
+      "[SystemSettingsCache] Invalid environment fallback, using Stream Gate enforce",
+      expect.objectContaining({ value: undefined })
+    );
+  });
+
+  test.each(["off", "shadow"] as const)(
+    "其他环境变量无效时仍保留显式 STREAM_GATE_MODE=%s",
+    async (streamGateMode) => {
+      process.env.STREAM_GATE_MODE = streamGateMode;
+      process.env.SESSION_TTL = "invalid";
+      getSystemSettingsMock.mockRejectedValueOnce(new Error("db down"));
+      const { getCachedSystemSettings } = await loadCache();
+
+      const settings = await getCachedSystemSettings();
+
+      expect(settings.streamGateMode).toBe(streamGateMode);
+    }
+  );
 
   test("invalidateSystemSettingsCache 应清空缓存并触发下一次重新获取", async () => {
     const settingsA = createSettings({ id: 401 });

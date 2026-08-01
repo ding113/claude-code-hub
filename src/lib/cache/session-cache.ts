@@ -48,6 +48,8 @@ class SessionCache<T> {
 const activeSessionsCache = new SessionCache<
   Array<{
     sessionId: string;
+    sessionIdentityKind: "session_id" | "prefix_affinity";
+    sessionFingerprint: string | null;
     requestCount: number;
     totalCostUsd: string;
     totalInputTokens: number;

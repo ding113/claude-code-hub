@@ -7,6 +7,7 @@ const getSessionDetailsCacheMock = vi.fn();
 const setSessionDetailsCacheMock = vi.fn();
 
 const getSessionRequestCountMock = vi.fn();
+const hasAnySessionMessagesMock = vi.fn();
 const getSessionRequestBodyMock = vi.fn();
 const getSessionMessagesMock = vi.fn();
 const getSessionResponseMock = vi.fn();
@@ -53,6 +54,7 @@ vi.mock("@/lib/logger", () => ({
 vi.mock("@/lib/session-manager", () => ({
   SessionManager: {
     getSessionRequestCount: getSessionRequestCountMock,
+    hasAnySessionMessages: hasAnySessionMessagesMock,
     getSessionRequestBody: getSessionRequestBodyMock,
     getSessionMessages: getSessionMessagesMock,
     getSessionResponse: getSessionResponseMock,
@@ -124,6 +126,7 @@ describe("getSessionDetails - additive detail snapshots contract", () => {
     findMessageRequestAuditBySessionIdAndSequenceMock.mockResolvedValue(null);
 
     getSessionRequestCountMock.mockResolvedValue(1);
+    hasAnySessionMessagesMock.mockResolvedValue(true);
     getSessionRequestBodyMock.mockResolvedValue({ model: "gpt-5.5", input: "hi" });
     getSessionMessagesMock.mockResolvedValue([{ role: "user", content: "hi" }]);
     getSessionResponseMock.mockResolvedValue('{"ok":true}');
@@ -491,5 +494,15 @@ describe("getSessionDetails - additive detail snapshots contract", () => {
         statusCode: 200,
       },
     });
+  });
+
+  test("非法请求序号归一化为空时检查 Session 是否存在任意 messages", async () => {
+    const { hasSessionMessages } = await import("@/actions/active-sessions");
+
+    const result = await hasSessionMessages("sess_x", 0);
+
+    expect(result).toEqual({ ok: true, data: true });
+    expect(hasAnySessionMessagesMock).toHaveBeenCalledWith("sess_x");
+    expect(getSessionMessagesMock).not.toHaveBeenCalled();
   });
 });

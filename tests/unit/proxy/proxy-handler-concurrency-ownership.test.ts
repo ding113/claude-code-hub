@@ -13,8 +13,10 @@ const boundary = vi.hoisted(() => ({
   incrementConcurrentCount: vi.fn<(sessionId: string) => Promise<void>>(),
   incrementObservedConcurrentCount: vi.fn<(sessionId: string) => Promise<void>>(),
   loadSettings: vi.fn<() => Promise<ProxySettingsFixture>>(),
+  loggerWarn: vi.fn(),
   runGuards: vi.fn<(session: ProxySession) => Promise<Response | null>>(),
   send: vi.fn<(session: ProxySession) => Promise<Response>>(),
+  storeSessionInfo: vi.fn<(sessionId: string, info: Record<string, unknown>) => Promise<void>>(),
   trackObservedSession: vi.fn<(sessionId: string) => Promise<void>>(),
 }));
 
@@ -40,6 +42,22 @@ vi.mock("@/lib/session-tracker", () => ({
     incrementConcurrentCount: boundary.incrementConcurrentCount,
     incrementObservedConcurrentCount: boundary.incrementObservedConcurrentCount,
     trackObservedSession: boundary.trackObservedSession,
+  },
+}));
+
+vi.mock("@/lib/session-manager", () => ({
+  SessionManager: {
+    storeSessionInfo: boundary.storeSessionInfo,
+  },
+}));
+
+vi.mock("@/lib/logger", () => ({
+  logger: {
+    debug: vi.fn(),
+    error: vi.fn(),
+    info: vi.fn(),
+    trace: vi.fn(),
+    warn: boundary.loggerWarn,
   },
 }));
 
@@ -71,6 +89,8 @@ describe("handleProxyRequest concurrency ownership", () => {
     boundary.incrementObservedConcurrentCount.mockReset();
     boundary.decrementObservedConcurrentCount.mockReset();
     boundary.trackObservedSession.mockReset();
+    boundary.storeSessionInfo.mockReset();
+    boundary.loggerWarn.mockReset();
     boundary.loadSettings.mockResolvedValue({
       enableHighConcurrencyMode: false,
       allowNonConversationEndpointProviderFallback: true,
@@ -80,6 +100,7 @@ describe("handleProxyRequest concurrency ownership", () => {
     boundary.incrementObservedConcurrentCount.mockResolvedValue(undefined);
     boundary.decrementObservedConcurrentCount.mockResolvedValue(undefined);
     boundary.trackObservedSession.mockResolvedValue(undefined);
+    boundary.storeSessionInfo.mockResolvedValue(undefined);
     boundary.send.mockResolvedValue(new Response("unused", { status: 200 }));
   });
 
@@ -162,5 +183,34 @@ describe("handleProxyRequest concurrency ownership", () => {
     expect(boundary.incrementConcurrentCount).toHaveBeenCalledWith("session-forwarded");
     expect(boundary.decrementConcurrentCount).toHaveBeenCalledOnce();
     expect(boundary.decrementConcurrentCount).toHaveBeenCalledWith("session-forwarded");
+  });
+
+  it("isolates observed Session persistence failures from the proxy response", async () => {
+    boundary.trackObservedSession.mockRejectedValueOnce(new Error("tracker unavailable"));
+    boundary.storeSessionInfo.mockRejectedValueOnce(new Error("session cache unavailable"));
+    boundary.runGuards.mockImplementation(async (session) => {
+      session.setSessionId("session-observed-failure");
+      session.setAuthState({
+        success: true,
+        apiKey: "test-key",
+        user: { id: 1, name: "user" },
+        key: { id: 2, name: "key" },
+      } as never);
+      return new Response("guard response", { status: 202 });
+    });
+
+    const response = await handleProxyRequest(createContext());
+    await Promise.resolve();
+
+    expect(response.status).toBe(202);
+    expect(await response.text()).toBe("guard response");
+    expect(boundary.loggerWarn).toHaveBeenCalledWith(
+      "[ProxyHandler] Failed to track observed session",
+      expect.objectContaining({ error: "tracker unavailable" })
+    );
+    expect(boundary.loggerWarn).toHaveBeenCalledWith(
+      "[ProxyHandler] Failed to store observed session info",
+      expect.objectContaining({ error: "session cache unavailable" })
+    );
   });
 });

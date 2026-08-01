@@ -225,6 +225,19 @@ describe("UsageLogsViewVirtualized filter navigation", () => {
     unmount();
   });
 
+  it('treats replayFilter="all" as no statistics filter', () => {
+    searchParamMocks.value = new URLSearchParams("replayFilter=all");
+
+    const { container, unmount } = renderUsageLogsView();
+
+    expect(filterPropMocks.controls?.replayFilter).toBe("all");
+    expect(filterPropMocks.table?.replayFilter).toBe("all");
+    expect(filterPropMocks.panel).toBeUndefined();
+    expect(container.querySelector('[data-testid="usage-logs-stats-panel"]')).toBeNull();
+
+    unmount();
+  });
+
   it("applies exclude-200 status filter through the locale-aware dashboard route", () => {
     const { container, unmount } = renderUsageLogsView();
 

@@ -201,10 +201,19 @@ beforeEach(() => {
 });
 
 describe("ensure() nomination priority", () => {
-  test("ignore-session off: explicit session binding wins and affinity lookup is never consulted", async () => {
+  test("ignore-session off: explicit session binding wins while affinity writeback state is initialized", async () => {
     settingsControl.ignoreClientSessionId = false;
     sessionManagerMocks.SessionManager.getSessionProvider.mockResolvedValue(91);
     providerRepositoryMocks.findProviderById.mockResolvedValue(makeProvider(91));
+    storeMocks.lookup.mockResolvedValue({
+      generation: "3",
+      identityFp: "rootfp",
+      hint: {
+        providerId: 42,
+        matchedFp: "deepfp",
+        matchedIndex: 0,
+      },
+    });
 
     const session = makeSession({
       sessionId: "sess_bound",
@@ -215,15 +224,19 @@ describe("ensure() nomination priority", () => {
 
     expect(result).toBeNull();
     expect(session.provider?.id).toBe(91);
-    expect(storeMocks.lookup).not.toHaveBeenCalled();
+    expect(storeMocks.lookup).toHaveBeenCalledTimes(1);
     // 复用命中轮次仍要指纹状态：供终态写回加深前缀与 F3b 落值
     expect(session.affinity).not.toBeNull();
     expect(session.affinity?.nominatedProviderId).toBeNull();
+    expect(session.affinity?.matchedFp).toBeNull();
+    expect(session.affinity?.identityFp).toBe("rootfp");
+    expect(session.affinity?.generation).toBe("3");
   });
 
   test("affinity hit wins over weighted random and records affinity_hit in the chain", async () => {
     storeMocks.lookup.mockResolvedValue({
       generation: "0",
+      identityFp: "rootfp",
       hint: {
         providerId: 42,
         matchedFp: "deepfp",
@@ -233,13 +246,22 @@ describe("ensure() nomination priority", () => {
     });
     providerRepositoryMocks.findProviderById.mockResolvedValue(makeProvider(42));
 
-    const session = makeSession();
+    const session = makeSession({ sessionId: "physical-session" });
     const result = await ProxyProviderResolver.ensure(session);
 
     expect(result).toBeNull();
     expect(session.provider?.id).toBe(42);
     expect(session.affinity?.nominatedProviderId).toBe(42);
     expect(session.affinity?.matchedFp).toBe("deepfp");
+    expect(session.affinity?.identityFp).toBe("rootfp");
+    expect(session.setSessionIdentityMetadata).toHaveBeenCalledWith(
+      expect.objectContaining({
+        identity: `pfx:${session.affinity?.scopeTag}:rootfp`,
+        kind: "prefix_affinity",
+        fingerprint: "rootfp",
+        fingerprints: expect.arrayContaining(["rootfp"]),
+      })
+    );
     expect(session.getProvidersSnapshot).not.toHaveBeenCalled();
     expect(session.addProviderToChain).toHaveBeenCalledWith(
       expect.objectContaining({ id: 42 }),
@@ -255,6 +277,11 @@ describe("ensure() nomination priority", () => {
   });
 
   test("affinity miss falls back to weighted random selection", async () => {
+    storeMocks.lookup.mockResolvedValue({
+      generation: "0",
+      identityFp: "deepfp",
+      hint: null,
+    });
     const session = makeSession();
     const result = await ProxyProviderResolver.ensure(session);
 
@@ -263,11 +290,13 @@ describe("ensure() nomination priority", () => {
     expect(session.provider?.id).toBe(55);
     expect(session.affinity).not.toBeNull();
     expect(session.affinity?.nominatedProviderId).toBeNull();
+    expect(session.affinity?.identityFp).toBe("deepfp");
   });
 
   test("affinity hit that fails hard validation falls back without nomination", async () => {
     storeMocks.lookup.mockResolvedValue({
       generation: "0",
+      identityFp: "rootfp",
       hint: {
         providerId: 42,
         matchedFp: "deepfp",
@@ -291,6 +320,7 @@ describe("ensure() nomination priority", () => {
   test("circuit-open affinity candidate is rejected by hard validation", async () => {
     storeMocks.lookup.mockResolvedValue({
       generation: "0",
+      identityFp: "rootfp",
       hint: {
         providerId: 42,
         matchedFp: "deepfp",

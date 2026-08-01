@@ -27,6 +27,7 @@ let cachedAt: number = 0;
 
 /** Avoid repeating the same invalid environment-variable warning on every request. */
 let hasWarnedInvalidResponsesWebsocketEnv = false;
+let hasWarnedInvalidStreamGateEnv = false;
 
 function getOpenaiResponsesWebsocketEnvOverride(): boolean | undefined {
   const rawValue = process.env.ENABLE_OPENAI_RESPONSES_WEBSOCKET;
@@ -55,10 +56,22 @@ function getOpenaiResponsesWebsocketEnvOverride(): boolean | undefined {
 }
 
 function getFallbackStreamGateMode(): "off" | "shadow" | "enforce" {
+  const rawValue = process.env.STREAM_GATE_MODE;
+  if (rawValue === "off" || rawValue === "shadow" || rawValue === "enforce") {
+    return rawValue;
+  }
+
   try {
     return getEnvConfig().STREAM_GATE_MODE;
-  } catch {
-    return "off";
+  } catch (error) {
+    if (!hasWarnedInvalidStreamGateEnv) {
+      hasWarnedInvalidStreamGateEnv = true;
+      logger.warn("[SystemSettingsCache] Invalid environment fallback, using Stream Gate enforce", {
+        error: error instanceof Error ? error.message : String(error),
+        value: process.env.STREAM_GATE_MODE,
+      });
+    }
+    return "enforce";
   }
 }
 

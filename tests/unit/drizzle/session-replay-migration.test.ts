@@ -6,6 +6,9 @@ const migration = readFileSync(
   resolve(process.cwd(), "drizzle/0116_gigantic_zombie.sql"),
   "utf-8"
 );
+const packageJson = JSON.parse(readFileSync(resolve(process.cwd(), "package.json"), "utf-8")) as {
+  scripts: Record<string, string>;
+};
 
 describe("0116 Session identity and Replay migration", () => {
   test.each(["message_request", "usage_ledger"])(
@@ -45,20 +48,15 @@ describe("0116 Session identity and Replay migration", () => {
     );
   });
 
-  test("creates the identity and Replay-aware billing indexes idempotently", () => {
-    expect(migration).toContain(
-      'CREATE INDEX IF NOT EXISTS "idx_message_request_session_identity_created_at"'
+  test("does not build Session and Replay indexes inside the transactional migration", () => {
+    expect(migration).not.toMatch(
+      /CREATE\s+INDEX(?:\s+CONCURRENTLY)?[^;]*idx_(?:message_request|usage_ledger)_/i
     );
-    expect(migration).toContain(
-      'CREATE INDEX IF NOT EXISTS "idx_usage_ledger_session_identity_created_at"'
-    );
-    expect(migration).toContain('"usage_ledger"."is_replay" = false');
-    expect(migration).not.toMatch(/^CREATE INDEX (?!IF NOT EXISTS)/m);
+    expect(migration).not.toContain("cch:migration:0116:session-replay-index:v1");
   });
 
-  test("preserves concurrently prebuilt 0116 indexes through marker guards", () => {
-    expect(migration).toContain("cch:migration:0116:session-replay-index:v1");
-    expect(migration).toContain("obj_description");
-    expect(migration).not.toMatch(/^DROP INDEX IF EXISTS/m);
+  test("routes manual migrations through the application migration orchestrator", () => {
+    expect(packageJson.scripts["db:migrate"]).toContain("scripts/migrate.ts");
+    expect(packageJson.scripts["db:migrate"]).not.toContain("drizzle-kit migrate");
   });
 });

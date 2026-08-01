@@ -1237,6 +1237,7 @@ export function VirtualizedLogsTable({
                           providerChain={log.providerChain}
                           routingTrace={log.routingTrace}
                           sessionId={log.sessionId}
+                          sourceSessionId={log.sourceSessionId}
                           requestSequence={log.requestSequence}
                           blockedBy={log.blockedBy}
                           blockedReason={log.blockedReason}

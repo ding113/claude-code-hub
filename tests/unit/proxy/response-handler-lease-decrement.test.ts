@@ -98,6 +98,7 @@ vi.mock("@/lib/rate-limit", () => ({
 
 vi.mock("@/lib/session-tracker", () => ({
   SessionTracker: {
+    refreshObservedSession: vi.fn(),
     refreshSession: vi.fn(),
   },
 }));
@@ -566,6 +567,29 @@ describe("Lease Budget Decrement after trackCostToRedis", () => {
       settlements: [],
     });
     vi.mocked(SessionTracker.refreshSession).mockResolvedValue(undefined);
+    vi.mocked(SessionTracker.refreshObservedSession).mockResolvedValue(undefined);
+  });
+
+  it("does not refresh an empty observed Session identity", async () => {
+    const session = createSession({
+      originalModel,
+      redirectedModel: originalModel,
+      sessionId: "sess-empty-observed-identity",
+      messageId: 5000,
+    });
+    vi.spyOn(session, "shouldTrackSessionObservability").mockReturnValue(true);
+    vi.spyOn(session, "getSessionIdentityMetadata").mockReturnValue({
+      identity: "",
+      kind: "session_id",
+      scopeTag: null,
+      fingerprint: null,
+      fingerprints: [],
+    });
+
+    await ProxyResponseHandler.dispatch(session, createNonStreamResponse(usage));
+    await drainAsyncTasks();
+
+    expect(SessionTracker.refreshObservedSession).not.toHaveBeenCalled();
   });
 
   it("should settle all windows and entity types in one call (non-stream)", async () => {

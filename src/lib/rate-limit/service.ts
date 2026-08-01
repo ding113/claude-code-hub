@@ -76,6 +76,8 @@ import {
 import {
   CHECK_AND_TRACK_KEY_USER_SESSION,
   CHECK_AND_TRACK_SESSION,
+  FORCE_TERMINATE_KEY_USER_SESSION,
+  FORCE_TERMINATE_PROVIDER_SESSION,
   GET_COST_5H_ROLLING_WINDOW,
   GET_COST_DAILY_ROLLING_WINDOW,
   RELEASE_PROVIDER_SESSION,
@@ -951,6 +953,85 @@ export class RateLimitService {
         sessionId,
         error,
       });
+    }
+  }
+
+  /** Remove every provider concurrency reference owned by a terminated physical Session. */
+  static async forceTerminateProviderSession(
+    providerId: number,
+    sessionId: string
+  ): Promise<boolean> {
+    if (!Number.isInteger(providerId) || providerId <= 0 || sessionId.trim().length === 0) {
+      return false;
+    }
+
+    const redis = RateLimitService.redis;
+    if (redis?.status !== "ready") {
+      return false;
+    }
+
+    try {
+      const [removedSession, removedRefs] = (await redis.eval(
+        FORCE_TERMINATE_PROVIDER_SESSION,
+        2,
+        `provider:${providerId}:active_sessions`,
+        `provider:${providerId}:active_session_refs`,
+        sessionId
+      )) as [number, number];
+      logger.debug("[RateLimit] Force-terminated provider session", {
+        providerId,
+        sessionId,
+        removedSession,
+        removedRefs,
+      });
+      return true;
+    } catch (error) {
+      logger.error("[RateLimit] Failed to force-terminate provider session", {
+        providerId,
+        sessionId,
+        error,
+      });
+      return false;
+    }
+  }
+
+  /** Remove one terminated physical Session from global/key/user concurrency indexes. */
+  static async forceTerminateKeyUserSession(
+    keyId: number,
+    userId: number,
+    sessionId: string
+  ): Promise<boolean> {
+    if (
+      !Number.isInteger(keyId) ||
+      keyId <= 0 ||
+      !Number.isInteger(userId) ||
+      userId <= 0 ||
+      sessionId.trim().length === 0
+    ) {
+      return false;
+    }
+
+    const redis = RateLimitService.redis;
+    if (redis?.status !== "ready") return false;
+
+    try {
+      await redis.eval(
+        FORCE_TERMINATE_KEY_USER_SESSION,
+        3,
+        getGlobalActiveSessionsKey(),
+        getKeyActiveSessionsKey(keyId),
+        getUserActiveSessionsKey(userId),
+        sessionId
+      );
+      return true;
+    } catch (error) {
+      logger.error("[RateLimit] Failed to force-terminate key/user session", {
+        keyId,
+        userId,
+        sessionId,
+        error,
+      });
+      return false;
     }
   }
 

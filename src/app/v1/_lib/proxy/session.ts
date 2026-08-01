@@ -64,7 +64,9 @@ export interface SessionAffinityState {
   nominatedProviderId: number | null;
   /** 查找命中的边界指纹（未命中为 null） */
   matchedFp: string | null;
-  /** lookup 捕获的 scope generation；终态写回必须以此做 CAS。 */
+  /** 当前对话绑定所属的 identity root；后续 tip 写回保持该值。 */
+  identityFp: string | null;
+  /** lookup 捕获的 identity generation；终态写回必须以此做 CAS。 */
   generation: string | null;
 }
 

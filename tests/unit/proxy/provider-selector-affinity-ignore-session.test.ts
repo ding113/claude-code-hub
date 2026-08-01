@@ -293,12 +293,13 @@ describe("ignore client session id semantics", () => {
     expect(identities).toEqual(["fingerprint-f", "fingerprint-g", "fingerprint-g"]);
   });
 
-  test("stores only the matched fingerprint and its ancestors for an intermediate hit", async () => {
+  test("stores the stable root and complete fingerprint chain for an intermediate hit", async () => {
     let deepestFirst: string[] = [];
     storeMocks.lookup.mockImplementation(async (_scopeTag, fingerprints: string[]) => {
       deepestFirst = fingerprints;
       return {
         generation: "0",
+        identityFp: fingerprints[1],
         hint: {
           ...affinityHint.hint,
           matchedFp: fingerprints[1],
@@ -330,9 +331,8 @@ describe("ignore client session id semantics", () => {
     expect(session._sessionIdentityMetadata).toMatchObject({
       identity: expect.stringContaining(`:${deepestFirst[1]}`),
       fingerprint: deepestFirst[1],
-      fingerprints: deepestFirst.slice(1),
+      fingerprints: [...new Set([deepestFirst[1], ...deepestFirst])],
     });
-    expect(session._sessionIdentityMetadata.fingerprints).not.toContain(deepestFirst[0]);
   });
 
   test("ignore on + fingerprintable request never reads the session binding", async () => {

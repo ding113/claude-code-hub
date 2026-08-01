@@ -10,6 +10,7 @@ import {
 import { logger } from "@/lib/logger";
 import { extractAfterRequestMessages, isSessionMessages } from "@/lib/session-detail-snapshots";
 import { resolveSessionRequestLocator } from "@/lib/session-request-locator";
+import { normalizeRequestSequence } from "@/lib/utils/request-sequence";
 import { buildUnifiedSpecialSettings } from "@/lib/utils/special-settings";
 import {
   type ActiveSessionInfo,
@@ -22,14 +23,56 @@ import type { SpecialSetting } from "@/types/special-settings";
 import { summarizeTerminateSessionsBatch } from "./active-sessions-utils";
 import type { ActionResult } from "./types";
 
-function isPrefixAffinityIdentity(identity: string): boolean {
-  return identity.startsWith("pfx:");
-}
+type ResolvedSessionIdentity = NonNullable<
+  Awaited<ReturnType<typeof import("@/repository/message").resolveSessionIdentity>>
+>;
 
-function getSessionFingerprint(identity: string): string | null {
-  if (!isPrefixAffinityIdentity(identity)) return null;
-  const fingerprint = identity.split(":").at(-1);
-  return fingerprint || null;
+async function terminateResolvedSessionIdentity(
+  identity: string,
+  resolution: ResolvedSessionIdentity | null
+): Promise<boolean> {
+  const { SessionManager } = await import("@/lib/session-manager");
+  const { SessionTracker } = await import("@/lib/session-tracker");
+
+  if (
+    resolution?.identityKind !== "prefix_affinity" ||
+    !resolution.scopeTag ||
+    !resolution.fingerprint
+  ) {
+    const terminated = await SessionManager.terminateSession(
+      resolution?.sourceSessionId ?? identity
+    );
+    if (terminated) {
+      await SessionTracker.terminateObservedSession(identity);
+    }
+    return terminated;
+  }
+
+  const { getAffinityStore } = await import("@/app/v1/_lib/proxy/affinity/affinity-store");
+  const invalidated = await getAffinityStore().invalidate(
+    resolution.scopeTag,
+    resolution.fingerprint,
+    [...new Set([resolution.fingerprint, ...resolution.fingerprints])]
+  );
+  if (!invalidated) return false;
+
+  const { listPhysicalSessionSourcesForIdentity } = await import("@/repository/message");
+  const physicalSources = await listPhysicalSessionSourcesForIdentity(identity);
+
+  for (const source of physicalSources) {
+    if (source.providerIds.length === 0) continue;
+    if (
+      !(await SessionManager.terminateSession(source.sessionId, source.providerIds, source.keyId))
+    ) {
+      logger.debug("[ActiveSessions] Physical Session state already absent or superseded", {
+        identity,
+        sourceSessionId: source.sessionId,
+      });
+    }
+  }
+
+  await SessionTracker.terminateObservedSession(identity);
+  return true;
 }
 
 function normalizeRequestSnapshot(
@@ -196,10 +239,8 @@ export async function getActiveSessions(): Promise<ActionResult<ActiveSessionInf
           const concurrentCount = concurrentCounts.get(s.sessionId) ?? 0;
           return {
             sessionId: s.sessionId,
-            sessionIdentityKind: isPrefixAffinityIdentity(s.sessionId)
-              ? "prefix_affinity"
-              : "session_id",
-            sessionFingerprint: getSessionFingerprint(s.sessionId),
+            sessionIdentityKind: s.sessionIdentityKind,
+            sessionFingerprint: s.sessionFingerprint,
             userName: s.userName,
             userId: s.userId,
             keyId: s.keyId,
@@ -257,10 +298,8 @@ export async function getActiveSessions(): Promise<ActionResult<ActiveSessionInf
       const concurrentCount = concurrentCounts.get(s.sessionId) ?? 0;
       return {
         sessionId: s.sessionId,
-        sessionIdentityKind: isPrefixAffinityIdentity(s.sessionId)
-          ? "prefix_affinity"
-          : "session_id",
-        sessionFingerprint: getSessionFingerprint(s.sessionId),
+        sessionIdentityKind: s.sessionIdentityKind,
+        sessionFingerprint: s.sessionFingerprint,
         userName: s.userName,
         userId: s.userId,
         keyId: s.keyId,
@@ -370,10 +409,8 @@ export async function getAllSessions(
         const lastRequestTime = s.lastRequestAt ? new Date(s.lastRequestAt).getTime() : 0;
         const sessionInfo: ActiveSessionInfo = {
           sessionId: s.sessionId,
-          sessionIdentityKind: isPrefixAffinityIdentity(s.sessionId)
-            ? "prefix_affinity"
-            : "session_id",
-          sessionFingerprint: getSessionFingerprint(s.sessionId),
+          sessionIdentityKind: s.sessionIdentityKind,
+          sessionFingerprint: s.sessionFingerprint,
           userName: s.userName,
           userId: s.userId,
           keyId: s.keyId,
@@ -433,12 +470,7 @@ export async function getAllSessions(
       SessionTracker.getObservedActiveSessions(),
       SessionManager.getAllSessionIds(),
     ]);
-    const allSessionIds = Array.from(
-      new Set([
-        ...observedSessionIds,
-        ...storedSessionIds.filter((id) => !isPrefixAffinityIdentity(id)),
-      ])
-    );
+    const allSessionIds = Array.from(new Set([...observedSessionIds, ...storedSessionIds]));
 
     if (allSessionIds.length === 0) {
       return {
@@ -477,10 +509,8 @@ export async function getAllSessions(
       const lastRequestTime = s.lastRequestAt ? new Date(s.lastRequestAt).getTime() : 0;
       const sessionInfo: ActiveSessionInfo = {
         sessionId: s.sessionId,
-        sessionIdentityKind: isPrefixAffinityIdentity(s.sessionId)
-          ? "prefix_affinity"
-          : "session_id",
-        sessionFingerprint: getSessionFingerprint(s.sessionId),
+        sessionIdentityKind: s.sessionIdentityKind,
+        sessionFingerprint: s.sessionFingerprint,
         userName: s.userName,
         userId: s.userId,
         keyId: s.keyId,
@@ -684,8 +714,8 @@ export async function hasSessionMessages(
     const { SessionManager } = await import("@/lib/session-manager");
     const sourceSessionId = locatorResult.locator.sourceSessionId;
 
-    // 如果指定了序号，检查特定请求
-    if (requestSequence !== undefined) {
+    // 只有有效的显式序号才检查特定请求；非法值按未指定序号处理。
+    if (normalizeRequestSequence(requestSequence) !== null) {
       const messages = await SessionManager.getSessionMessages(
         sourceSessionId,
         locatorResult.locator.requestSequence
@@ -1124,27 +1154,7 @@ export async function terminateActiveSession(sessionId: string): Promise<ActionR
 
     // 3. 按 identity 类型终止对应的绑定与观测状态
     const identityResolution = await resolveSessionIdentity(sessionId);
-    const { SessionTracker } = await import("@/lib/session-tracker");
-    let success: boolean;
-    if (
-      identityResolution?.identityKind === "prefix_affinity" &&
-      identityResolution.scopeTag &&
-      identityResolution.fingerprint
-    ) {
-      const { getAffinityStore } = await import("@/app/v1/_lib/proxy/affinity/affinity-store");
-      success = await getAffinityStore().invalidate(identityResolution.scopeTag, [
-        ...new Set([identityResolution.fingerprint, ...identityResolution.fingerprints]),
-      ]);
-      await SessionTracker.terminateObservedSession(sessionId);
-    } else {
-      const { SessionManager } = await import("@/lib/session-manager");
-      success = await SessionManager.terminateSession(
-        identityResolution?.sourceSessionId ?? sessionId
-      );
-      if (success) {
-        await SessionTracker.terminateObservedSession(sessionId);
-      }
-    }
+    const success = await terminateResolvedSessionIdentity(sessionId, identityResolution);
 
     if (!success) {
       return {
@@ -1297,28 +1307,11 @@ export async function terminateActiveSessionsBatch(
     }
 
     // 3. 批量终止
-    const { SessionManager } = await import("@/lib/session-manager");
-    const { SessionTracker } = await import("@/lib/session-tracker");
     let successCount = 0;
     for (const identity of allowedSessionIds) {
       const resolution = await resolveSessionIdentity(identity);
-      if (
-        resolution?.identityKind === "prefix_affinity" &&
-        resolution.scopeTag &&
-        resolution.fingerprint
-      ) {
-        const { getAffinityStore } = await import("@/app/v1/_lib/proxy/affinity/affinity-store");
-        const invalidated = await getAffinityStore().invalidate(resolution.scopeTag, [
-          ...new Set([resolution.fingerprint, ...resolution.fingerprints]),
-        ]);
-        await SessionTracker.terminateObservedSession(identity);
-        if (invalidated) successCount += 1;
-        continue;
-      }
-
-      if (await SessionManager.terminateSession(resolution?.sourceSessionId ?? identity)) {
+      if (await terminateResolvedSessionIdentity(identity, resolution)) {
         successCount += 1;
-        await SessionTracker.terminateObservedSession(identity);
       }
     }
     const processedCount = allowedSessionIds.length;

@@ -3,11 +3,16 @@ import { getCachedSystemSettings } from "@/lib/config";
 import { getEnvConfig } from "@/lib/config/env.schema";
 import { logger } from "@/lib/logger";
 import { resolveKeyUserConcurrentSessionLimits } from "@/lib/rate-limit/concurrent-session-limit";
-import { buildScopeTag } from "@/lib/request-identity";
+import { buildPublicSessionIdentity, buildScopeTag } from "@/lib/request-identity";
 import { headersToSanitizedObject, SessionManager } from "@/lib/session-manager";
 import { SessionTracker } from "@/lib/session-tracker";
 import { completeCodexSessionIdentifiers } from "../codex/session-completer";
-import { computeFingerprintChain, fingerprintTip } from "./affinity/fingerprint";
+import { getAffinityStore } from "./affinity/affinity-store";
+import {
+  computeFingerprintChain,
+  fingerprintsDeepestFirst,
+  fingerprintTip,
+} from "./affinity/fingerprint";
 import type { ProxySession } from "./session";
 
 const CLIENT_HEADER_SNAPSHOT_BLOCKLIST = [
@@ -146,6 +151,13 @@ export class ProxySessionGuard {
 
       // 4. 设置到 session 对象
       session.setSessionId(sessionId);
+      session.setSessionIdentityMetadata({
+        identity: buildPublicSessionIdentity(sessionId, keyId),
+        kind: "session_id",
+        scopeTag: null,
+        fingerprint: null,
+        fingerprints: [],
+      });
 
       if (
         systemSettings.affinityIgnoreClientSessionId &&
@@ -166,9 +178,17 @@ export class ProxySessionGuard {
             chain,
             nominatedProviderId: null,
             matchedFp: null,
+            identityFp: null,
             generation: null,
           };
-          const fingerprint = fingerprintTip(chain).fp;
+          const lookup = await getAffinityStore().lookup(
+            session.affinity.scopeTag,
+            fingerprintsDeepestFirst(chain),
+            getEnvConfig().PREFIX_AFFINITY_TTL_SECONDS
+          );
+          const fingerprint = lookup?.identityFp ?? fingerprintTip(chain).fp;
+          session.affinity.identityFp = lookup?.identityFp ?? null;
+          session.affinity.generation = lookup?.generation ?? null;
           session.setSessionIdentityMetadata({
             identity: `pfx:${session.affinity.scopeTag}:${fingerprint}`,
             kind: "prefix_affinity",

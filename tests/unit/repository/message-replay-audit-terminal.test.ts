@@ -57,6 +57,13 @@ describe("materializeReplayAuditFromSource", () => {
     expect(query.sql).toMatch(/source\.status_code\s*<\s*400/i);
     expect(query.sql).toMatch(/COALESCE\(source\.error_message, ''\)\s*=\s*''/i);
     expect(query.sql).toMatch(/replay_source_request_id\s*=\s*source\.id/i);
+    expect(query.sql).not.toMatch(/session_identity\s*=\s*source\.session_identity/i);
+    expect(query.sql).not.toMatch(/session_identity_kind\s*=\s*source\.session_identity_kind/i);
+    expect(query.sql).not.toMatch(/affinity_[a-z_]+\s*=\s*source\.affinity_/i);
+    expect(query.sql).toMatch(/replay\.deleted_at\s+IS\s+NULL/i);
+    expect(query.sql).toMatch(/source\.deleted_at\s+IS\s+NULL/i);
+    expect(query.sql).toMatch(/source\.is_replay\s*=\s*FALSE/i);
+    expect(query.sql).toMatch(/source\.id\s*<>\s*replay\.id/i);
     expect(query.sql).toMatch(/is_replay\s*=\s*TRUE/i);
     expect(query.sql).toMatch(/cost_usd\s*=\s*0/i);
     expect(query.sql).toMatch(/cost_breakdown\s*=\s*NULL/i);
