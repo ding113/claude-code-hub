@@ -1776,7 +1776,7 @@ export class ProxyForwarder {
                 if (gateFirstByteAt !== null) {
                   session.recordFirstByte(gateFirstByteAt);
                 }
-                session.recordTfft();
+                session.recordTtft();
 
                 if (gate.commitMarker) {
                   gateChainAudit = {
@@ -5107,7 +5107,7 @@ export class ProxyForwarder {
         session.recordFirstByte(attempt.firstByteAt);
       }
       if (contentGateCommitted) {
-        session.recordTfft();
+        session.recordTtft();
       }
 
       if (attempt.thresholdTimer) {
@@ -6139,7 +6139,7 @@ export class ProxyForwarder {
       if (attempt.firstByteAt != null) {
         session.recordFirstByte(attempt.firstByteAt);
       }
-      session.recordTfft();
+      session.recordTtft();
       if (attempt.session !== session)
         ProxyForwarder.syncWinningAttemptSession(session, attempt.session);
 
@@ -6590,7 +6590,7 @@ export class ProxyForwarder {
             }
             if (!item.value || item.value.byteLength === 0) continue;
             // 首字节时刻先挂在 attempt 上；DiscoveryValidityParser 的 ready 判定同样基于内容，
-            // 不在此记录会让 discovery 模式的 TTFB 恒等于 TFFT。
+            // 不在此记录会让 discovery 模式的 TTFB 恒等于 TTFT。
             attempt.firstByteAt ??= Date.now();
             attempt.chunks.push(item.value);
             const validity = attempt.parser.push(item.value);

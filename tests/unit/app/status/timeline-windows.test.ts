@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { PublicStatusTimelineBucket } from "@/lib/public-status/payload";
 import {
   CHART_BUCKETS,
-  computeAvgTtfb,
+  computeAvgTtft,
   computeUptimePct,
   sliceTimelineForChart,
 } from "@/app/[locale]/status/_lib/timeline-windows";
@@ -16,7 +16,7 @@ function makeBucket(
     bucketEnd: "",
     state: "operational",
     availabilityPct: 100,
-    ttfbMs: 200,
+    ttftMs: 200,
     tps: 50,
     sampleCount: 10,
     ...overrides,
@@ -68,23 +68,23 @@ describe("computeUptimePct", () => {
   });
 });
 
-describe("computeAvgTtfb", () => {
+describe("computeAvgTtft", () => {
   it("returns null when no samples", () => {
-    expect(computeAvgTtfb([])).toBeNull();
+    expect(computeAvgTtft([])).toBeNull();
   });
 
   it("computes weighted integer average", () => {
-    const result = computeAvgTtfb([
-      makeBucket(0, { ttfbMs: 100, sampleCount: 4 }),
-      makeBucket(1, { ttfbMs: 300, sampleCount: 4 }),
+    const result = computeAvgTtft([
+      makeBucket(0, { ttftMs: 100, sampleCount: 4 }),
+      makeBucket(1, { ttftMs: 300, sampleCount: 4 }),
     ]);
     expect(result).toBe(200);
   });
 
   it("skips buckets with null ttfb", () => {
-    const result = computeAvgTtfb([
-      makeBucket(0, { ttfbMs: 200, sampleCount: 5 }),
-      makeBucket(1, { ttfbMs: null, sampleCount: 5 }),
+    const result = computeAvgTtft([
+      makeBucket(0, { ttftMs: 200, sampleCount: 5 }),
+      makeBucket(1, { ttftMs: null, sampleCount: 5 }),
     ]);
     expect(result).toBe(200);
   });

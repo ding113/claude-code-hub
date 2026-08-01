@@ -140,7 +140,7 @@ describe("LeaderboardView cache coefficient column", () => {
               totalCostFormatted: "$4.20",
               totalTokens: 2400,
               successRate: 0.9,
-              avgTtfbMs: 150,
+              avgTtftMs: 150,
               avgTokensPerSecond: 42,
               avgCostPerRequest: 0.35,
               avgCostPerMillionTokens: 1750,

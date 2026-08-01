@@ -34,7 +34,7 @@ describe("public-status aggregation", () => {
           createdAt: "2026-04-21T10:10:00.000Z",
           originalModel: "gpt-4.1",
           durationMs: 1000,
-          tfftMs: 200,
+          ttftMs: 200,
           firstByteMs: 200,
           outputTokens: 80,
           providerChain: [
@@ -52,7 +52,7 @@ describe("public-status aggregation", () => {
           createdAt: "2026-04-21T10:40:00.000Z",
           originalModel: "gpt-4.1",
           durationMs: 1400,
-          tfftMs: 300,
+          ttftMs: 300,
           firstByteMs: 300,
           outputTokens: 60,
           providerChain: [
@@ -103,7 +103,7 @@ describe("public-status aggregation", () => {
           createdAt: "2026-04-21T10:25:00.000Z",
           originalModel: "gpt-4.1",
           durationMs: 1500,
-          tfftMs: 500,
+          ttftMs: 500,
           firstByteMs: 500,
           outputTokens: null,
           providerChain: [
@@ -229,7 +229,7 @@ describe("public-status aggregation", () => {
           createdAt: "2026-04-21T10:10:00.000Z",
           originalModel: "gpt-4.1",
           durationMs: 1200,
-          tfftMs: 200,
+          ttftMs: 200,
           firstByteMs: 200,
           outputTokens: 50,
           providerChain: [
@@ -256,19 +256,19 @@ describe("public-status aggregation", () => {
     const successfulModel = result.groups[1]?.models[0];
 
     expect(failedModel?.availabilityPct).toBe(0);
-    expect(failedModel?.latestTtfbMs).toBeNull();
+    expect(failedModel?.latestTtftMs).toBeNull();
     expect(failedModel?.latestTps).toBeNull();
     expect(failedModel?.timeline.find((bucket) => bucket.sampleCount > 0)).toMatchObject({
       sampleCount: 1,
-      ttfbMs: null,
+      ttftMs: null,
       tps: null,
     });
     expect(successfulModel?.availabilityPct).toBe(100);
-    expect(successfulModel?.latestTtfbMs).toBe(200);
+    expect(successfulModel?.latestTtftMs).toBe(200);
     expect(successfulModel?.latestTps).toBe(50);
     expect(successfulModel?.timeline.find((bucket) => bucket.sampleCount > 0)).toMatchObject({
       sampleCount: 1,
-      ttfbMs: 200,
+      ttftMs: 200,
       tps: 50,
     });
   });

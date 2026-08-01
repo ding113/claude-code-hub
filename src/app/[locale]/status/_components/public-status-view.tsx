@@ -28,7 +28,7 @@ import { getPublicStatusVendorIconComponent } from "@/lib/public-status/vendor-i
 import { cn } from "@/lib/utils";
 import { type DisplayState, deriveLatestModelState } from "../_lib/derive-display-state";
 import { fillDisplayTimeline } from "../_lib/fill-display-timeline";
-import { formatTtfb } from "../_lib/format-ttfb";
+import { formatTtft } from "../_lib/format-ttft";
 import {
   clearGroupOrder,
   loadCollapsedSet,
@@ -39,7 +39,7 @@ import {
 } from "../_lib/group-order-store";
 import {
   CHART_BUCKETS,
-  computeAvgTtfb,
+  computeAvgTtft,
   computeUptimePct,
   sliceTimelineForChart,
 } from "../_lib/timeline-windows";
@@ -70,7 +70,7 @@ interface PublicStatusViewProps {
     generatedAt: string;
     history: string;
     availability: string;
-    ttfb: string;
+    ttft: string;
     freshnessWindow: string;
     fresh: string;
     stale: string;
@@ -88,7 +88,7 @@ interface PublicStatusViewProps {
     };
     tooltip: {
       availability: string;
-      ttfb: string;
+      ttft: string;
       tps: string;
       historyAriaLabel: string;
     };
@@ -272,9 +272,9 @@ export function PublicStatusView({
           useServerSummary && model.availabilityPct !== null
             ? model.availabilityPct
             : computeUptimePct(model.timeline);
-        const ttfb24h = computeAvgTtfb(model.timeline);
+        const ttft24h = computeAvgTtft(model.timeline);
         const latest = deriveCurrentModelState(viewModel);
-        return { model, chartCells, uptime24h, ttfb24h, latest };
+        return { model, chartCells, uptime24h, ttft24h, latest };
       });
       const issueCount = derivedModels.filter((d) => d.latest === "failed").length;
       const groupState = aggregateByFailed(derivedModels.map((d) => d.latest));
@@ -362,7 +362,7 @@ export function PublicStatusView({
 
   const timelineLabels: PublicStatusTimelineLabels = {
     availability: labels.tooltip.availability,
-    ttfb: labels.tooltip.ttfb,
+    ttft: labels.tooltip.ttft,
     tps: labels.tooltip.tps,
     noData: labels.noData,
     historyAriaLabel: labels.tooltip.historyAriaLabel,
@@ -459,7 +459,7 @@ export function PublicStatusView({
                     >
                       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                         {entry.derivedModels.map(
-                          ({ model, chartCells, uptime24h, ttfb24h, latest }) => {
+                          ({ model, chartCells, uptime24h, ttft24h, latest }) => {
                             const variant = badgeVariant(latest);
                             const { Icon } = getPublicStatusVendorIconComponent({
                               modelName: model.publicModelKey,
@@ -511,13 +511,13 @@ export function PublicStatusView({
                                   </div>
                                   <div className="rounded-md border border-border/40 bg-muted/20 p-2">
                                     <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                                      {labels.ttfb}{" "}
+                                      {labels.ttft}{" "}
                                       <span className="normal-case opacity-70">
                                         ({rangeHours}H)
                                       </span>
                                     </div>
                                     <div className="mt-1 font-mono text-base">
-                                      {formatTtfb(ttfb24h)}
+                                      {formatTtft(ttft24h)}
                                     </div>
                                   </div>
                                 </div>

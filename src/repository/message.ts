@@ -60,7 +60,7 @@ type PublicStatusFinalDetails = {
   durationMs?: number;
   statusCode?: number;
   outputTokens?: number;
-  tfftMs?: number | null;
+  ttftMs?: number | null;
   firstByteMs?: number | null;
   providerChain?: CreateMessageRequestData["provider_chain"];
   errorMessage?: string;
@@ -207,7 +207,7 @@ function queuePublicStatusRollupForFinalDetails(
           model: details.model ?? seed.model,
           originalModel: seed.originalModel,
           durationMs: seed.durationMs,
-          tfftMs: details.tfftMs,
+          ttftMs: details.ttftMs,
           firstByteMs: details.firstByteMs,
           outputTokens: details.outputTokens,
           providerChain: details.providerChain,
@@ -572,7 +572,7 @@ export type MessageRequestDetailsUpdate = {
   statusCode?: number;
   inputTokens?: number;
   outputTokens?: number;
-  tfftMs?: number | null;
+  ttftMs?: number | null;
   firstByteMs?: number | null;
   cacheCreationInputTokens?: number;
   cacheReadInputTokens?: number;
@@ -633,8 +633,8 @@ export async function updateMessageRequestDetails(
   if (details.outputTokens !== undefined) {
     updateData.outputTokens = details.outputTokens;
   }
-  if (details.tfftMs !== undefined) {
-    updateData.tfftMs = details.tfftMs;
+  if (details.ttftMs !== undefined) {
+    updateData.ttftMs = details.ttftMs;
   }
   if (details.firstByteMs !== undefined) {
     updateData.firstByteMs = details.firstByteMs;
@@ -918,7 +918,7 @@ export async function findMessageRequestById(id: number): Promise<MessageRequest
       model: messageRequest.model,
       originalModel: messageRequest.originalModel,
       durationMs: messageRequest.durationMs,
-      tfftMs: messageRequest.tfftMs,
+      ttftMs: messageRequest.ttftMs,
       firstByteMs: messageRequest.firstByteMs,
       costUsd: messageRequest.costUsd,
       costMultiplier: messageRequest.costMultiplier,
@@ -983,7 +983,7 @@ export async function findMessageRequestById(id: number): Promise<MessageRequest
       context1mApplied: usageLedger.context1mApplied,
       swapCacheTtlApplied: usageLedger.swapCacheTtlApplied,
       durationMs: usageLedger.durationMs,
-      tfftMs: usageLedger.tfftMs,
+      ttftMs: usageLedger.ttftMs,
       firstByteMs: usageLedger.firstByteMs,
       sessionId: usageLedger.sessionId,
       isReplay: usageLedger.isReplay,
@@ -1006,7 +1006,7 @@ export async function findMessageRequestById(id: number): Promise<MessageRequest
     model: ledgerRow.model,
     originalModel: ledgerRow.originalModel,
     durationMs: ledgerRow.durationMs,
-    tfftMs: ledgerRow.tfftMs,
+    ttftMs: ledgerRow.ttftMs,
     firstByteMs: ledgerRow.firstByteMs,
     costUsd: ledgerRow.costUsd,
     costMultiplier: ledgerRow.costMultiplier,
@@ -1114,7 +1114,7 @@ export async function findMessageRequestBySessionId(
       context1mApplied: usageLedger.context1mApplied,
       swapCacheTtlApplied: usageLedger.swapCacheTtlApplied,
       durationMs: usageLedger.durationMs,
-      tfftMs: usageLedger.tfftMs,
+      ttftMs: usageLedger.ttftMs,
       firstByteMs: usageLedger.firstByteMs,
       sessionId: usageLedger.sessionId,
       isReplay: usageLedger.isReplay,
@@ -1138,7 +1138,7 @@ export async function findMessageRequestBySessionId(
     model: ledgerRow.model,
     originalModel: ledgerRow.originalModel,
     durationMs: ledgerRow.durationMs,
-    tfftMs: ledgerRow.tfftMs,
+    ttftMs: ledgerRow.ttftMs,
     firstByteMs: ledgerRow.firstByteMs,
     costUsd: ledgerRow.costUsd,
     costMultiplier: ledgerRow.costMultiplier,
@@ -2026,7 +2026,7 @@ export async function findUsageLogs(params: {
       context1mApplied: usageLedger.context1mApplied,
       swapCacheTtlApplied: usageLedger.swapCacheTtlApplied,
       durationMs: usageLedger.durationMs,
-      tfftMs: usageLedger.tfftMs,
+      ttftMs: usageLedger.ttftMs,
       firstByteMs: usageLedger.firstByteMs,
       sessionId: usageLedger.sessionId,
       isReplay: usageLedger.isReplay,
@@ -2048,7 +2048,7 @@ export async function findUsageLogs(params: {
       model: row.model,
       originalModel: row.originalModel,
       durationMs: row.durationMs,
-      tfftMs: row.tfftMs,
+      ttftMs: row.ttftMs,
       firstByteMs: row.firstByteMs,
       costUsd: row.costUsd,
       costMultiplier: row.costMultiplier,

@@ -38,7 +38,7 @@ describe("normalizeRoutingTrace", () => {
         outcome: "success",
         statusCode: 200,
         durationMs: 5_000,
-        ttfbMs: 1_000,
+        ttftMs: 1_000,
         attemptsPerRequest: 2,
         maxActiveAttempts: 2,
         rounds: 1,

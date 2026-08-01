@@ -644,7 +644,7 @@ describe("proxy hedge transport/lifecycle integration (persistence and control-p
       pathName: "first-byte hedge",
     },
   ])(
-    "records TFFT at the enforced Responses gate commit before downstream reads ($pathName path)",
+    "records TTFT at the enforced Responses gate commit before downstream reads ($pathName path)",
     async ({ expectedMode, firstByteTimeoutStreamingMs }) => {
       const upstream = await startUpstream();
       const client = new AbortController();
@@ -666,16 +666,16 @@ describe("proxy hedge transport/lifecycle integration (persistence and control-p
         await upstream.write(stream.neutralPrefix.join(""));
         await neutralPrefixConsumption.consumed;
         expect(session.firstByteMs).toBeNull();
-        expect(session.tfftMs).toBeNull();
+        expect(session.ttftMs).toBeNull();
 
         // When: sequence 5 arrives, it is the first user-visible content boundary.
         now.mockReturnValue(10_125);
         await upstream.write(stream.firstContent);
         const forwardedResponse = await forwarded;
 
-        // Then: TTFB and TFFT remain distinct before any downstream read occurs.
+        // Then: TTFB and TTFT remain distinct before any downstream read occurs.
         expect(session.firstByteMs).toBe(50);
-        expect(session.tfftMs).toBe(125);
+        expect(session.ttftMs).toBe(125);
         expect(session.getRoutingTrace()?.mode).toBe(expectedMode);
         const firstByteMsAtCommit = session.firstByteMs;
 
@@ -689,7 +689,7 @@ describe("proxy hedge transport/lifecycle integration (persistence and control-p
         await agents.released;
 
         expect(session.firstByteMs).toBe(firstByteMsAtCommit);
-        expect(session.tfftMs).toBe(125);
+        expect(session.ttftMs).toBe(125);
         expect(session.getProviderChain()).toEqual(
           expect.arrayContaining([
             expect.objectContaining({
@@ -710,7 +710,7 @@ describe("proxy hedge transport/lifecycle integration (persistence and control-p
     }
   );
 
-  it("records TFFT when a Discovery Responses winner commits before downstream reads", async () => {
+  it("records TTFT when a Discovery Responses winner commits before downstream reads", async () => {
     const [loser, winner] = await Promise.all([startUpstream(), startUpstream()]);
     const client = new AbortController();
     const now = vi.spyOn(Date, "now");
@@ -726,7 +726,7 @@ describe("proxy hedge transport/lifecycle integration (persistence and control-p
       winningProvider.providerType = "codex";
       state.providers.push(winningProvider);
       const session = await createSession(initialProvider, "/v1/responses", client.signal);
-      session.sessionId = "integration-discovery-tfft";
+      session.sessionId = "integration-discovery-ttft";
       const agents = watchAgentReleases(2);
       const stream = responsesStreamFixture("resp_discovery", "msg_discovery");
 
@@ -735,16 +735,16 @@ describe("proxy hedge transport/lifecycle integration (persistence and control-p
       now.mockReturnValue(10_050);
       await winner.write(stream.neutralPrefix.join(""));
       await neutralPrefixConsumption.consumed;
-      expect(session.tfftMs).toBeNull();
+      expect(session.ttftMs).toBeNull();
 
       // When: sequence 5 makes the alternative ready and Discovery commits it.
       now.mockReturnValue(10_125);
       await winner.write(stream.firstContent);
       const forwardedResponse = await forwarded;
 
-      // Then: TFFT is fixed at winner commit, before ResponseHandler reads the stream.
+      // Then: TTFT is fixed at winner commit, before ResponseHandler reads the stream.
       expect(session.firstByteMs).toBe(50);
-      expect(session.tfftMs).toBe(125);
+      expect(session.ttftMs).toBe(125);
       const firstByteMsAtCommit = session.firstByteMs;
 
       now.mockReturnValue(10_900);
@@ -758,7 +758,7 @@ describe("proxy hedge transport/lifecycle integration (persistence and control-p
       await agents.released;
 
       expect(session.firstByteMs).toBe(firstByteMsAtCommit);
-      expect(session.tfftMs).toBe(125);
+      expect(session.ttftMs).toBe(125);
       expect(loser.abortCount()).toBe(1);
       expect(winner.abortCount()).toBe(0);
       expect(agents.pool.getPoolStats().activeRequests).toBe(0);

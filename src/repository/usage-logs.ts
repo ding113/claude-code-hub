@@ -94,7 +94,7 @@ export interface UsageLogRow {
   costBreakdown: StoredCostBreakdown | null; // 费用明细
   hedgeLosers: HedgeLoserBilling[] | null; // 竞速输家计费明细（费用已计入 costUsd 总额）
   durationMs: number | null;
-  tfftMs: number | null;
+  ttftMs: number | null;
   firstByteMs: number | null;
   errorMessage: string | null;
   providerChain: ProviderChainItem[] | null;
@@ -240,7 +240,7 @@ export async function findUsageLogsBatch(
       costBreakdown: messageRequest.costBreakdown,
       hedgeLosers: messageRequest.hedgeLosers,
       durationMs: messageRequest.durationMs,
-      tfftMs: messageRequest.tfftMs,
+      ttftMs: messageRequest.ttftMs,
       firstByteMs: messageRequest.firstByteMs,
       errorMessage: messageRequest.errorMessage,
       providerChain: messageRequest.providerChain,
@@ -425,7 +425,7 @@ export async function findUsageLogsBatch(
       costMultiplier: usageLedger.costMultiplier,
       groupCostMultiplier: usageLedger.groupCostMultiplier,
       durationMs: usageLedger.durationMs,
-      tfftMs: usageLedger.tfftMs,
+      ttftMs: usageLedger.ttftMs,
       firstByteMs: usageLedger.firstByteMs,
       clientIp: usageLedger.clientIp,
       context1mApplied: usageLedger.context1mApplied,
@@ -485,7 +485,7 @@ export async function findUsageLogsBatch(
       costBreakdown: null,
       hedgeLosers: null,
       durationMs: row.durationMs,
-      tfftMs: row.tfftMs,
+      ttftMs: row.ttftMs,
       firstByteMs: row.firstByteMs,
       errorMessage: null,
       providerChain: null,
@@ -1045,7 +1045,7 @@ function mapUsageLogRowFromMessageResult(row: {
   costBreakdown: StoredCostBreakdown | null;
   hedgeLosers: HedgeLoserBilling[] | null;
   durationMs: number | null;
-  tfftMs: number | null;
+  ttftMs: number | null;
   firstByteMs: number | null;
   errorMessage: string | null;
   providerChain: ProviderChainItem[] | null;
@@ -1119,7 +1119,7 @@ function mapUsageLogRowFromLedgerResult(row: {
   costMultiplier: string | null | { toString(): string };
   groupCostMultiplier: string | null | { toString(): string };
   durationMs: number | null;
-  tfftMs: number | null;
+  ttftMs: number | null;
   firstByteMs: number | null;
   clientIp: string | null;
   context1mApplied: boolean | null;
@@ -1160,7 +1160,7 @@ function mapUsageLogRowFromLedgerResult(row: {
     groupCostMultiplier: row.groupCostMultiplier?.toString() ?? null,
     costBreakdown: null,
     durationMs: row.durationMs,
-    tfftMs: row.tfftMs,
+    ttftMs: row.ttftMs,
     firstByteMs: row.firstByteMs,
     errorMessage: null,
     providerChain: null,
@@ -1221,7 +1221,7 @@ export async function findReadonlyUsageLogsBatchForKey(
         costBreakdown: messageRequest.costBreakdown,
         hedgeLosers: messageRequest.hedgeLosers,
         durationMs: messageRequest.durationMs,
-        tfftMs: messageRequest.tfftMs,
+        ttftMs: messageRequest.ttftMs,
         firstByteMs: messageRequest.firstByteMs,
         errorMessage: messageRequest.errorMessage,
         providerChain: messageRequest.providerChain,
@@ -1273,7 +1273,7 @@ export async function findReadonlyUsageLogsBatchForKey(
             costMultiplier: usageLedger.costMultiplier,
             groupCostMultiplier: usageLedger.groupCostMultiplier,
             durationMs: usageLedger.durationMs,
-            tfftMs: usageLedger.tfftMs,
+            ttftMs: usageLedger.ttftMs,
             firstByteMs: usageLedger.firstByteMs,
             clientIp: usageLedger.clientIp,
             context1mApplied: usageLedger.context1mApplied,
@@ -1481,7 +1481,7 @@ export async function findUsageLogsWithDetails(filters: UsageLogFilters): Promis
       costBreakdown: messageRequest.costBreakdown, // 费用明细
       hedgeLosers: messageRequest.hedgeLosers, // 竞速输家计费明细
       durationMs: messageRequest.durationMs,
-      tfftMs: messageRequest.tfftMs,
+      ttftMs: messageRequest.ttftMs,
       firstByteMs: messageRequest.firstByteMs,
       errorMessage: messageRequest.errorMessage,
       providerChain: messageRequest.providerChain,

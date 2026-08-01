@@ -264,19 +264,20 @@ const messages = {
         performance: {
           title: "Performance",
           ttfb: "TTFB",
-          tfft: "TFFT",
+          ttft: "TTFT",
+          ttftShort: "TTFT",
           duration: "Duration",
           outputRate: "Output rate",
           outputTokens: "Output Tokens",
         },
         performanceTab: {
           noPerformanceData: "No performance data",
-          tfftGauge: "Time to First Token",
+          ttftGauge: "Time to First Token",
           outputRateGauge: "Output Rate",
           latencyBreakdown: "Latency Breakdown",
           generationTime: "Generation Time",
           segmentTtfb: "TTFB",
-          segmentTfft: "Token Wait",
+          segmentTtft: "Token Wait",
           segmentTotal: "Total",
           assessment: {
             excellent: "Excellent",
@@ -600,7 +601,7 @@ describe("error-details-dialog layout", () => {
         inputTokens={100}
         outputTokens={80}
         durationMs={900}
-        tfftMs={100}
+        ttftMs={100}
         firstByteMs={100}
       />
     );
@@ -621,7 +622,7 @@ describe("error-details-dialog layout", () => {
         inputTokens={100}
         outputTokens={0}
         durationMs={null}
-        tfftMs={null}
+        ttftMs={null}
         firstByteMs={null}
       />
     );
@@ -642,7 +643,7 @@ describe("error-details-dialog layout", () => {
         inputTokens={null}
         outputTokens={80}
         durationMs={900}
-        tfftMs={100}
+        ttftMs={100}
         firstByteMs={100}
       />
     );
@@ -666,7 +667,7 @@ describe("error-details-dialog layout", () => {
         inputTokens={null}
         outputTokens={300}
         durationMs={1000}
-        tfftMs={950}
+        ttftMs={950}
         firstByteMs={950}
       />
     );
@@ -692,7 +693,7 @@ describe("error-details-dialog layout", () => {
         inputTokens={null}
         outputTokens={50}
         durationMs={1000}
-        tfftMs={500}
+        ttftMs={500}
         firstByteMs={500}
       />
     );
@@ -1273,7 +1274,7 @@ describe("error-details-dialog tabs", () => {
         providerChain={null}
         sessionId={null}
         durationMs={1000}
-        tfftMs={200}
+        ttftMs={200}
         firstByteMs={200}
         outputTokens={500}
       />
@@ -1388,7 +1389,7 @@ describe("error-details-dialog routing trace", () => {
       outcome: "success",
       statusCode: 200,
       durationMs: 12_000,
-      ttfbMs: 3_000,
+      ttftMs: 3_000,
       attemptsPerRequest: 3,
       maxActiveAttempts: 2,
       rounds: 1,
@@ -1488,7 +1489,7 @@ describe("error-details-dialog routing trace", () => {
       summary: {
         ...discoveryTrace.summary!,
         durationMs: 20_000,
-        ttfbMs: 19_000,
+        ttftMs: 19_000,
         attemptsPerRequest: 1,
         rounds: 1,
         fallbackPromotions: 1,
@@ -1880,7 +1881,7 @@ describe("error-details-dialog routing trace", () => {
         outcome: "success",
         statusCode: 200,
         durationMs: 7_000,
-        ttfbMs: 1_500,
+        ttftMs: 1_500,
         attemptsPerRequest: 4,
         maxActiveAttempts: 4,
         rounds: 1,
@@ -2022,7 +2023,7 @@ describe("error-details-dialog routing trace", () => {
         outcome: "success",
         statusCode: 200,
         durationMs: 2_000,
-        ttfbMs: 1_100,
+        ttftMs: 1_100,
         attemptsPerRequest: 2,
         maxActiveAttempts: 2,
         rounds: 1,

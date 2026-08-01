@@ -106,7 +106,7 @@ const LEDGER_ROW = {
   context1mApplied: true,
   swapCacheTtlApplied: false,
   durationMs: 1_200,
-  tfftMs: 200,
+  ttftMs: 200,
   sessionId: "ledger-session-readback",
   isReplay: true,
   replaySourceRequestId: 911,

@@ -50,7 +50,7 @@ vi.mock("@/actions/usage-logs", () => ({
           costUsd: "0.000001",
           costMultiplier: null,
           durationMs: 10,
-          tfftMs: 5,
+          ttftMs: 5,
           errorMessage: null,
           providerChain: null,
           blockedBy: null,

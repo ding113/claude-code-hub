@@ -12,7 +12,7 @@ function bucket(
     bucketEnd: `2026-04-22T00:${String(index + 1).padStart(2, "0")}:00.000Z`,
     state,
     availabilityPct: pct,
-    ttfbMs: state === "no_data" ? null : 200,
+    ttftMs: state === "no_data" ? null : 200,
     tps: state === "no_data" ? null : 50,
     sampleCount: state === "no_data" ? 0 : 5,
   };

@@ -3,11 +3,11 @@
 import { useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
 import type { FilledTimelineCell } from "../_lib/fill-display-timeline";
-import { formatTtfb } from "../_lib/format-ttfb";
+import { formatTtft } from "../_lib/format-ttft";
 
 export interface PublicStatusTimelineLabels {
   availability: string;
-  ttfb: string;
+  ttft: string;
   tps: string;
   noData: string;
   historyAriaLabel: string;
@@ -89,7 +89,7 @@ export function PublicStatusTimeline({
         : formatRange(activeBucket.bucketStart, activeBucket.bucketEnd, locale, timeZone),
       availability:
         activeBucket.availabilityPct === null ? "—" : `${activeBucket.availabilityPct.toFixed(2)}%`,
-      ttfb: formatTtfb(activeBucket.ttfbMs),
+      ttft: formatTtft(activeBucket.ttftMs),
       tps: activeBucket.tps === null ? "—" : activeBucket.tps.toFixed(1),
     };
   }, [activeBucket, activeIsPlaceholder, locale, timeZone]);
@@ -138,7 +138,7 @@ export function PublicStatusTimeline({
               {activeSummary.availability}
             </span>
             <span>
-              <span className="text-muted-foreground">{labels.ttfb}</span> {activeSummary.ttfb}
+              <span className="text-muted-foreground">{labels.ttft}</span> {activeSummary.ttft}
             </span>
             <span>
               <span className="text-muted-foreground">{labels.tps}</span> {activeSummary.tps}

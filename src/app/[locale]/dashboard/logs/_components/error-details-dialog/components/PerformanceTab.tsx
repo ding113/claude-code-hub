@@ -10,31 +10,31 @@ import type { PerformanceTabProps } from "../types";
 import { LatencyBreakdownBar } from "./LatencyBreakdownBar";
 
 /**
- * Get TFFT performance assessment
+ * Get TTFT performance assessment
  * Thresholds: <1s excellent, <2s good, <3s warning, >=3s poor
  */
-function getTfftAssessment(tfftMs: number | null): {
+function getTtftAssessment(ttftMs: number | null): {
   label: string;
   color: string;
   bgColor: string;
 } | null {
-  if (tfftMs === null) return null;
+  if (ttftMs === null) return null;
 
-  if (tfftMs < 1000) {
+  if (ttftMs < 1000) {
     return {
       label: "excellent",
       color: "text-emerald-600",
       bgColor: "bg-emerald-50 dark:bg-emerald-950/20",
     };
   }
-  if (tfftMs < 2000) {
+  if (ttftMs < 2000) {
     return {
       label: "good",
       color: "text-blue-600",
       bgColor: "bg-blue-50 dark:bg-blue-950/20",
     };
   }
-  if (tfftMs < 3000) {
+  if (ttftMs < 3000) {
     return {
       label: "warning",
       color: "text-amber-600",
@@ -88,7 +88,7 @@ function getOutputRateAssessment(rate: number | null): {
 
 export function PerformanceTab({
   durationMs,
-  tfftMs,
+  ttftMs,
   firstByteMs,
   outputTokens,
 }: PerformanceTabProps) {
@@ -96,7 +96,7 @@ export function PerformanceTab({
 
   // Normalize undefined to null for consistent handling
   const normalizedDurationMs = durationMs ?? null;
-  const normalizedTfftMs = tfftMs ?? null;
+  const normalizedTtftMs = ttftMs ?? null;
   const normalizedFirstByteMs = firstByteMs ?? null;
   const normalizedOutputTokens = outputTokens ?? null;
 
@@ -107,16 +107,16 @@ export function PerformanceTab({
   );
   const hideRate = shouldHideOutputRate(outputRate, normalizedDurationMs, normalizedFirstByteMs);
   const generationMs =
-    normalizedDurationMs !== null && normalizedTfftMs !== null
-      ? normalizedDurationMs - normalizedTfftMs
+    normalizedDurationMs !== null && normalizedTtftMs !== null
+      ? normalizedDurationMs - normalizedTtftMs
       : null;
 
-  const tfftAssessment = getTfftAssessment(normalizedTfftMs);
+  const ttftAssessment = getTtftAssessment(normalizedTtftMs);
   const rateAssessment = getOutputRateAssessment(outputRate);
 
   const hasData =
     normalizedDurationMs !== null ||
-    normalizedTfftMs !== null ||
+    normalizedTtftMs !== null ||
     normalizedFirstByteMs !== null ||
     (outputRate !== null && !hideRate) ||
     normalizedOutputTokens !== null;
@@ -134,17 +134,17 @@ export function PerformanceTab({
     <div className="space-y-6">
       {/* Gauges Row */}
       <div className="flex flex-col sm:flex-row gap-4">
-        {/* TFFT Gauge */}
-        {normalizedTfftMs !== null && (
+        {/* TTFT Gauge */}
+        {normalizedTtftMs !== null && (
           <div
             className={cn(
               "flex-1 flex items-center gap-4 p-4 rounded-lg border",
-              tfftAssessment?.bgColor || "bg-muted/50"
+              ttftAssessment?.bgColor || "bg-muted/50"
             )}
           >
             <div className="relative">
               <CircularProgress
-                value={Math.min(normalizedTfftMs, 3000)}
+                value={Math.min(normalizedTtftMs, 3000)}
                 max={3000}
                 size={64}
                 strokeWidth={5}
@@ -152,20 +152,20 @@ export function PerformanceTab({
               />
               <div className="absolute inset-0 flex items-center justify-center">
                 <Clock
-                  className={cn("h-5 w-5", tfftAssessment?.color || "text-muted-foreground")}
+                  className={cn("h-5 w-5", ttftAssessment?.color || "text-muted-foreground")}
                 />
               </div>
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-xs text-muted-foreground">{t("performanceTab.tfftGauge")}</p>
+              <p className="text-xs text-muted-foreground">{t("performanceTab.ttftGauge")}</p>
               <p className="text-xl font-bold font-mono">
-                {normalizedTfftMs >= 1000
-                  ? `${(normalizedTfftMs / 1000).toFixed(2)}s`
-                  : `${Math.round(normalizedTfftMs)}ms`}
+                {normalizedTtftMs >= 1000
+                  ? `${(normalizedTtftMs / 1000).toFixed(2)}s`
+                  : `${Math.round(normalizedTtftMs)}ms`}
               </p>
-              {tfftAssessment && (
-                <Badge variant="outline" className={cn("text-[10px] mt-1", tfftAssessment.color)}>
-                  {t(`performanceTab.assessment.${tfftAssessment.label}`)}
+              {ttftAssessment && (
+                <Badge variant="outline" className={cn("text-[10px] mt-1", ttftAssessment.color)}>
+                  {t(`performanceTab.assessment.${ttftAssessment.label}`)}
                 </Badge>
               )}
             </div>
@@ -206,7 +206,7 @@ export function PerformanceTab({
       </div>
 
       {/* Latency Breakdown Bar */}
-      {normalizedTfftMs !== null && normalizedDurationMs !== null && (
+      {normalizedTtftMs !== null && normalizedDurationMs !== null && (
         <div className="space-y-2">
           <h4 className="text-sm font-semibold flex items-center gap-2">
             <Gauge className="h-4 w-4 text-purple-600" />
@@ -215,7 +215,7 @@ export function PerformanceTab({
           <div className="p-4 rounded-lg border bg-card">
             <LatencyBreakdownBar
               firstByteMs={normalizedFirstByteMs}
-              tfftMs={normalizedTfftMs}
+              ttftMs={normalizedTtftMs}
               durationMs={normalizedDurationMs}
             />
           </div>
@@ -236,13 +236,13 @@ export function PerformanceTab({
               </span>
             </div>
           )}
-          {normalizedTfftMs !== null && (
+          {normalizedTtftMs !== null && (
             <div className="flex justify-between items-center px-4 py-3">
-              <span className="text-sm text-muted-foreground">{t("performance.tfft")}</span>
+              <span className="text-sm text-muted-foreground">{t("performance.ttft")}</span>
               <span className="text-sm font-mono font-medium">
-                {normalizedTfftMs >= 1000
-                  ? `${(normalizedTfftMs / 1000).toFixed(2)}s`
-                  : `${Math.round(normalizedTfftMs)}ms`}
+                {normalizedTtftMs >= 1000
+                  ? `${(normalizedTtftMs / 1000).toFixed(2)}s`
+                  : `${Math.round(normalizedTtftMs)}ms`}
               </span>
             </div>
           )}

@@ -2773,7 +2773,7 @@ export class ProxyResponseHandler {
                   details: {
                     statusCode: finalizedStatusCode,
                     ...errorDetails,
-                    tfftMs: session.tfftMs ?? duration,
+                    ttftMs: session.ttftMs ?? duration,
                     firstByteMs: session.firstByteMs ?? duration,
                     providerChain: session.getProviderChain(),
                     routingTrace: session.finalizeRoutingTrace(finalizedStatusCode),
@@ -2971,7 +2971,7 @@ export class ProxyResponseHandler {
           const terminalDetails: MessageRequestTerminalDetails = {
             statusCode: finalizedStatusCode,
             ...errorDetails,
-            tfftMs: session.tfftMs ?? duration,
+            ttftMs: session.ttftMs ?? duration,
             firstByteMs: session.firstByteMs ?? duration,
             providerChain: session.getProviderChain(),
             routingTrace: session.finalizeRoutingTrace(finalizedStatusCode),
@@ -3318,7 +3318,7 @@ export class ProxyResponseHandler {
             statusCode: statusCode,
             inputTokens: usageMetrics?.input_tokens,
             outputTokens: usageMetrics?.output_tokens,
-            tfftMs: session.tfftMs ?? duration,
+            ttftMs: session.ttftMs ?? duration,
             firstByteMs: session.firstByteMs ?? duration,
             cacheCreationInputTokens: usageMetrics?.cache_creation_input_tokens,
             cacheReadInputTokens: usageMetrics?.cache_read_input_tokens,
@@ -3778,7 +3778,7 @@ export class ProxyResponseHandler {
             clearIdleTimer();
             if (isFirstChunk) {
               isFirstChunk = false;
-              session.recordTfft();
+              session.recordTtft();
               clearResponseTimeoutOnce(value.byteLength);
             }
             AsyncTaskManager.touch(taskId);
@@ -4741,7 +4741,7 @@ export class ProxyResponseHandler {
               durationMs: duration,
               inputTokens: usageForCost?.input_tokens,
               outputTokens: usageForCost?.output_tokens,
-              tfftMs: session.tfftMs,
+              ttftMs: session.ttftMs,
               firstByteMs: session.firstByteMs,
               cacheCreationInputTokens: usageForCost?.cache_creation_input_tokens,
               cacheReadInputTokens: usageForCost?.cache_read_input_tokens,
@@ -4841,7 +4841,7 @@ export class ProxyResponseHandler {
       });
 
       if (isFirstChunk) {
-        session.recordTfft();
+        session.recordTtft();
         isFirstChunk = false;
         if (clearResponseTimeoutOnce()) {
           logger.debug("ResponseHandler: First chunk received, response timeout cleared", {
@@ -6371,7 +6371,7 @@ export async function finalizeRequestStats(
       statusCode: statusCode,
       durationMs: duration,
       ...(errorMessage ? { errorMessage } : {}),
-      tfftMs: session.tfftMs ?? duration,
+      ttftMs: session.ttftMs ?? duration,
       firstByteMs: session.firstByteMs ?? duration,
       providerChain: session.getProviderChain(),
       routingTrace: session.finalizeRoutingTrace(statusCode),
@@ -6485,7 +6485,7 @@ export async function finalizeRequestStats(
     durationMs: duration,
     inputTokens: normalizedUsage.input_tokens,
     outputTokens: normalizedUsage.output_tokens,
-    tfftMs: session.tfftMs ?? duration,
+    ttftMs: session.ttftMs ?? duration,
     firstByteMs: session.firstByteMs ?? duration,
     cacheCreationInputTokens: normalizedUsage.cache_creation_input_tokens,
     cacheReadInputTokens: normalizedUsage.cache_read_input_tokens,
@@ -6752,7 +6752,7 @@ async function persistRequestFailure(options: {
       errorMessage,
       errorStack,
       errorCause,
-      tfftMs: phase === "non-stream" ? (session.tfftMs ?? duration) : session.tfftMs,
+      ttftMs: phase === "non-stream" ? (session.ttftMs ?? duration) : session.ttftMs,
       firstByteMs: phase === "non-stream" ? (session.firstByteMs ?? duration) : session.firstByteMs,
       providerChain: session.getProviderChain(),
       routingTrace: session.finalizeRoutingTrace(statusCode),

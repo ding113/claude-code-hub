@@ -3,7 +3,7 @@
   "description": "Configure the public status page's stats window, chart bucket size, and which groups/models should be exposed.",
   "form": {
     "windowHours": "Stats Window (hours)",
-    "windowHoursDesc": "Window length used to compute TFFT and availability, and the total span the chart covers. Default: 24 hours.",
+    "windowHoursDesc": "Window length used to compute TTFT and availability, and the total span the chart covers. Default: 24 hours.",
     "aggregationIntervalMinutes": "Chart Bucket (minutes)",
     "aggregationIntervalMinutesDesc": "Length of each bucket on the chart timeline; controls chart granularity. Choose 5 / 15 / 30 / 60 minutes.",
     "aggregationIntervalMinutesInvalid": "Public status aggregation interval must be one of 5, 15, 30, or 60 minutes.",
@@ -46,7 +46,7 @@
     "heroPrimary": "AI SERVICES",
     "heroSecondary": "SERVICE STATUS DASHBOARD",
     "generatedAt": "Updated",
-    "ttfb": "TFFT",
+    "ttft": "TTFT",
     "tps": "TPS",
     "history": "History",
     "freshnessWindow": "Snapshot freshness",
@@ -76,7 +76,7 @@
     },
     "tooltip": {
       "availability": "Availability",
-      "ttfb": "TFFT",
+      "ttft": "TTFT",
       "tps": "TPS",
       "samples": "Samples",
       "inferredFromNeighbors": "No requests in this window — inferred from neighbors",

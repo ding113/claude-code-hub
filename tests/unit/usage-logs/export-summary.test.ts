@@ -29,7 +29,7 @@ function makeLog(overrides: Partial<UsageLogRow> = {}): UsageLogRow {
     groupCostMultiplier: null,
     costBreakdown: null,
     durationMs: 100,
-    ttfbMs: null,
+    ttftMs: null,
     errorMessage: null,
     providerChain: null,
     blockedBy: null,

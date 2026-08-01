@@ -80,7 +80,7 @@ export class ProxyWarmupGuard {
         messagesCount: session.getMessagesLength(),
         statusCode: 200,
         durationMs,
-        tfftMs: durationMs,
+        ttftMs: durationMs,
         firstByteMs: durationMs,
         // 不计费：显式写 NULL，避免前端误显示 “$0”
         costUsd: null,
