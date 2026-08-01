@@ -1398,7 +1398,8 @@ export function hasStreamCompletionMarker(
 
 function hasTerminalStreamUsageEvidence(
   text: string,
-  format: ProxySession["originalFormat"]
+  format: ProxySession["originalFormat"],
+  hasCompletionMarker: boolean
 ): boolean {
   const events = parseSSEData(text);
   const hasPositiveUsage = (value: unknown): boolean =>
@@ -1406,13 +1407,16 @@ function hasTerminalStreamUsageEvidence(
 
   switch (format) {
     case "response":
-      return events.some((event) => {
-        if (!isRecord(event.data)) return false;
-        const type = event.data.type;
-        if (type !== "response.completed" && type !== "response.done") return false;
-        const response = isRecord(event.data.response) ? event.data.response : null;
-        return hasPositiveUsage(event.data.usage) || hasPositiveUsage(response?.usage);
-      });
+      return (
+        hasCompletionMarker &&
+        events.some((event) => {
+          if (!isRecord(event.data)) return false;
+          const type = event.data.type;
+          if (type !== "response.completed" && type !== "response.done") return false;
+          const response = isRecord(event.data.response) ? event.data.response : null;
+          return hasPositiveUsage(event.data.usage) || hasPositiveUsage(response?.usage);
+        })
+      );
     case "claude": {
       const hasTerminalUsage = events.some((event) => {
         if (!isRecord(event.data)) return false;
@@ -1421,7 +1425,7 @@ function hasTerminalStreamUsageEvidence(
         const delta = isRecord(event.data.delta) ? event.data.delta : null;
         return hasPositiveUsage(event.data.usage) || hasPositiveUsage(delta?.usage);
       });
-      return hasTerminalUsage && inspectStreamCompletion(text, format).hasMarker;
+      return hasTerminalUsage && hasCompletionMarker;
     }
     case "openai": {
       const hasTerminalUsage = events.some((event) => {
@@ -1432,7 +1436,7 @@ function hasTerminalStreamUsageEvidence(
           hasOpenAIChatCompletionMarker(event.data)
         );
       });
-      return hasTerminalUsage && inspectStreamCompletion(text, format).hasMarker;
+      return hasTerminalUsage && hasCompletionMarker;
     }
     case "gemini":
     case "gemini-cli": {
@@ -1868,7 +1872,9 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
     : ({ isError: false } as const);
   const protocolFailure = protocolObservation?.failure ?? null;
   const replayIneligibleReason =
-    protocolFailure?.verdict === "malformed" ? ("protocol_malformed" as const) : undefined;
+    protocolFailure?.verdict === "malformed" || protocolFailure?.sawMalformed
+      ? ("protocol_malformed" as const)
+      : undefined;
   const postcommitMalformed =
     streamEndedNormally &&
     upstreamStatusCode >= 200 &&
@@ -1876,7 +1882,12 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
     protocolFailure?.verdict === "malformed" &&
     protocolFailure.afterContent;
   const successfulPostcommitMalformed =
-    postcommitMalformed && hasTerminalStreamUsageEvidence(allContent, session.originalFormat);
+    postcommitMalformed &&
+    hasTerminalStreamUsageEvidence(
+      allContent,
+      session.originalFormat,
+      completionInspection.hasMarker
+    );
   const successfulHttpProtocolFailure =
     streamEndedNormally &&
     upstreamStatusCode >= 200 &&

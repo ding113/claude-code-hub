@@ -420,6 +420,16 @@ describe("classifyFrame: gemini", () => {
     ).toBe("error");
   });
 
+  it("error precedence: wrapper error beats response content", () => {
+    expect(
+      classifyFrame(
+        "gemini",
+        null,
+        '{"error":{"message":"failed"},"response":{"candidates":[{"content":{"parts":[{"text":"must not commit"}]}}]}}'
+      )
+    ).toBe("error");
+  });
+
   it("content precedence: normal STOP with text is content, not terminal", () => {
     expect(
       classifyFrame(

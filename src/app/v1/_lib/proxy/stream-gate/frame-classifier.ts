@@ -316,13 +316,14 @@ export function classifyFrame(
   data: string
 ): FrameVerdict {
   try {
-    return classifyFrameInner(STREAM_SIGNALS[family], eventName, data);
+    return classifyFrameInner(family, STREAM_SIGNALS[family], eventName, data);
   } catch {
     return "neutral";
   }
 }
 
 function classifyFrameInner(
+  family: ProtocolFamily,
   signal: StreamSignal,
   eventName: string | null,
   data: string
@@ -348,6 +349,24 @@ function classifyFrameInner(
     return "malformed";
   }
 
+  const outerVerdict = classifyParsedFrame(signal, eventName, parsed);
+  if (outerVerdict !== "neutral" || family !== "gemini" || Array.isArray(parsed)) {
+    return outerVerdict;
+  }
+
+  // Gemini SDK 可能把原生 chunk 包在 response 中；先保留 envelope 外层错误优先级，
+  // 只有外层中性时才解包，供所有门控与 observer 共用同一分类结果。
+  const response = (parsed as Record<string, unknown>).response;
+  return response && typeof response === "object" && !Array.isArray(response)
+    ? classifyParsedFrame(signal, eventName, response)
+    : outerVerdict;
+}
+
+function classifyParsedFrame(
+  signal: StreamSignal,
+  eventName: string | null,
+  parsed: object
+): FrameVerdict {
   let effective = (eventName ?? "").trim();
   if (effective === "" && !Array.isArray(parsed)) {
     const typeField = (parsed as Record<string, unknown>).type;

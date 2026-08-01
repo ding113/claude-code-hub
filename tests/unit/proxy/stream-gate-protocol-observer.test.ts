@@ -74,6 +74,31 @@ describe("StreamProtocolObserver", () => {
     });
   });
 
+  test("显式 protocol error 覆盖较早的 malformed，但保留 Replay 禁用证据", () => {
+    const observer = createStreamProtocolObserver("openai-responses");
+    observer.observe(
+      encoder.encode(
+        [
+          'event: response.output_text.delta\ndata: {"type":"response.output_text.delta","delta":"ok"}\n\n',
+          "event: response.in_progress\ndata: not-json\n\n",
+          'event: response.failed\ndata: {"type":"response.failed","response":{"status":"failed"}}\n\n',
+        ].join("")
+      )
+    );
+
+    expect(observer.finish()).toEqual({
+      sawContent: true,
+      sawTerminal: false,
+      observationIncomplete: false,
+      failure: {
+        afterContent: true,
+        verdict: "error",
+        eventName: "response.failed",
+        sawMalformed: true,
+      },
+    });
+  });
+
   test("Anthropic tool metadata alone does not count as committed content", () => {
     const observer = createStreamProtocolObserver("anthropic");
     observer.observe(

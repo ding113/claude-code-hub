@@ -339,6 +339,28 @@ describe("ProxyResponseHandler.dispatch stream terminal behavior", () => {
     );
   });
 
+  it("treats malformed after wrapped Gemini content as postcommit", async () => {
+    const { session } = await createSession({});
+    session.setProvider({ ...createProvider(), providerType: "gemini" });
+    session.originalFormat = "gemini";
+    const body = [
+      '{"response":{"candidates":[{"content":{"parts":[{"text":"ok"}]}}]}}',
+      "{not-json}",
+      '{"response":{"candidates":[{"finishReason":"STOP"}],"usageMetadata":{"promptTokenCount":10,"candidatesTokenCount":2}}}',
+      "",
+    ].join("\n");
+
+    const returned = await ProxyResponseHandler.dispatch(session, sseResponse(body));
+    expect(await returned.text()).toBe(body);
+    await settleTasks();
+
+    expect(mocks.durable).toHaveBeenCalledWith(
+      MESSAGE.id,
+      expect.objectContaining({ inputTokens: 10, outputTokens: 2, statusCode: 200 }),
+      expect.objectContaining({ onCommitted: expect.any(Function) })
+    );
+  });
+
   it("bills a naturally completed postcommit malformed stream with terminal usage but rejects Replay", async () => {
     const { session } = await createSession({});
     session.setProvider({ ...createProvider(), providerType: "codex" });
@@ -386,8 +408,42 @@ describe("ProxyResponseHandler.dispatch stream terminal behavior", () => {
       expect.objectContaining({ inputTokens: 10, outputTokens: 2, statusCode: 200 }),
       expect.objectContaining({ onCommitted: expect.any(Function) })
     );
-    expect(mocks.replayAbort).toHaveBeenCalledWith(expect.stringContaining("protocol_malformed"));
+    expect(mocks.replayAbort).toHaveBeenLastCalledWith("protocol_malformed");
     expect(mocks.replayComplete).not.toHaveBeenCalled();
+  });
+
+  it("rejects a Responses usage payload without a valid completion marker after malformed", async () => {
+    const { session } = await createSession({});
+    session.setProvider({ ...createProvider(), providerType: "codex" });
+    session.originalFormat = "response";
+    setDeferredStreamingFinalization(session, {
+      providerId: session.provider?.id ?? 0,
+      providerName: session.provider?.name ?? "provider",
+      providerPriority: session.provider?.priority ?? 0,
+      attemptNumber: 1,
+      totalProvidersAttempted: 1,
+      isFirstAttempt: true,
+      isFailoverSuccess: false,
+      endpointId: null,
+      endpointUrl: session.provider?.url ?? "",
+      upstreamStatusCode: 200,
+      bindingIntent: "none",
+    });
+    const body = [
+      'event: response.output_text.delta\ndata: {"type":"response.output_text.delta","delta":"ok"}\n\n',
+      "event: response.in_progress\ndata: not-json\n\n",
+      'event: unrelated.event\ndata: {"type":"response.completed","usage":{"output_tokens":2}}\n\n',
+    ].join("");
+
+    const returned = await ProxyResponseHandler.dispatch(session, sseResponse(body));
+    expect(await returned.text()).toBe(body);
+    await settleTasks();
+
+    expect(mocks.durable).toHaveBeenCalledWith(
+      MESSAGE.id,
+      expect.objectContaining({ statusCode: 502 }),
+      expect.objectContaining({ onCommitted: expect.any(Function) })
+    );
   });
 
   it.each([
@@ -786,6 +842,48 @@ describe("ProxyResponseHandler.dispatch stream terminal behavior", () => {
       expect.objectContaining({ statusCode: 502 }),
       expect.objectContaining({ onCommitted: expect.any(Function) })
     );
+  });
+
+  it("does not recover malformed when a later protocol error is outside the bounded snapshot", async () => {
+    const { session } = await createSession({});
+    session.setProvider({ ...createProvider(), providerType: "codex" });
+    session.originalFormat = "response";
+    session.replayState = {
+      role: "owner",
+      ownerToken: "owner-token-malformed-then-error",
+      identity: {
+        replayId: "replay-malformed-then-error",
+        verifier: "verifier",
+        scopeTag: "scope-tag",
+        keyId: KEY.id,
+        userId: USER.id,
+        format: "response",
+        model: "gpt-test",
+        endpoint: "/v1/responses",
+      },
+    };
+    const headFiller = "x".repeat(2 * 1024 * 1024);
+    const tailFiller = "y".repeat(10 * 1024 * 1024);
+    const body = [
+      'event: response.output_text.delta\ndata: {"type":"response.output_text.delta","delta":"ok"}\n\n',
+      "event: response.in_progress\ndata: not-json\n\n",
+      `event: response.in_progress\ndata: ${JSON.stringify({ type: "response.in_progress", headFiller })}\n\n`,
+      'event: response.failed\ndata: {"type":"response.failed","response":{"status":"failed"}}\n\n',
+      `event: response.in_progress\ndata: ${JSON.stringify({ type: "response.in_progress", tailFiller })}\n\n`,
+      'event: response.completed\ndata: {"type":"response.completed","response":{"status":"completed","usage":{"input_tokens":10,"output_tokens":2}}}\n\n',
+    ].join("");
+
+    const returned = await ProxyResponseHandler.dispatch(session, sseResponse(body));
+    expect((await returned.text()).length).toBe(body.length);
+    await settleTasks();
+
+    expect(mocks.durable).toHaveBeenCalledWith(
+      MESSAGE.id,
+      expect.objectContaining({ statusCode: 502 }),
+      expect.objectContaining({ onCommitted: expect.any(Function) })
+    );
+    expect(mocks.replayAbort).toHaveBeenLastCalledWith("protocol_malformed");
+    expect(mocks.replayComplete).not.toHaveBeenCalled();
   });
 
   it("aborts Replay when a successful non-200 2xx stream contains a late protocol error", async () => {

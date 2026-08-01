@@ -9,6 +9,7 @@ export interface StreamProtocolFailure {
   afterContent: boolean;
   verdict: "error" | "malformed";
   eventName: string | null;
+  sawMalformed?: true;
 }
 
 export interface StreamProtocolObservation {
@@ -33,7 +34,10 @@ export function createStreamProtocolObserver(family: ProtocolFamily): StreamProt
     bufferLimitExemption: {
       // 门禁对 request echo 的豁免额度最多把总缓冲抬到 2x cap；observer 采用同一边界，
       // 允许合法的大请求回显，同时继续阻止伪装 echo 的无界单帧。
-      maxBufferedCharacters: streamGatePrebufferCharacters * 2,
+      maxBufferedCharacters: Math.max(
+        streamGatePrebufferCharacters * 2,
+        STREAM_PROTOCOL_OBSERVER_MAX_BUFFER_CHARACTERS
+      ),
       matches: (eventName, dataHead) => isRequestEchoFrame(family, eventName, dataHead),
     },
     maxBufferedCharacters: STREAM_PROTOCOL_OBSERVER_MAX_BUFFER_CHARACTERS,
@@ -56,12 +60,26 @@ export function createStreamProtocolObserver(family: ProtocolFamily): StreamProt
     const verdict = classifyFrame(family, frame.eventName, frame.data);
     if (verdict === "content") observation.sawContent = true;
     if (verdict === "terminal") observation.sawTerminal = true;
-    if ((verdict === "error" || verdict === "malformed") && !observation.failure) {
+    if (verdict !== "error" && verdict !== "malformed") return;
+
+    if (!observation.failure) {
       observation.failure = {
         afterContent: observation.sawContent,
         verdict,
         eventName: frame.eventName,
       };
+      return;
+    }
+
+    if (verdict === "error" && observation.failure.verdict === "malformed") {
+      observation.failure = {
+        afterContent: observation.sawContent,
+        verdict,
+        eventName: frame.eventName,
+        sawMalformed: true,
+      };
+    } else if (verdict === "malformed" && observation.failure.verdict === "error") {
+      observation.failure = { ...observation.failure, sawMalformed: true };
     }
   };
 

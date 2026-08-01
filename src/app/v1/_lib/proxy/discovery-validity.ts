@@ -72,32 +72,38 @@ function classifyProtocolFrame(
   const family = DISCOVERY_PROTOCOL_FAMILIES[protocol];
   if (!family) return { ready: false, terminal: false, error: false };
 
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(data) as unknown;
+    // 同帧的通用失败标志优先于 content；fake-200 失败响应不能赢得 Discovery。
+    if (isDiscoveryProtocolErrorPayload(parsed)) {
+      return { ready: false, terminal: true, error: true };
+    }
+  } catch {
+    parsed = undefined;
+  }
+
   let verdict = classifyFrame(family, eventName, data);
   if (verdict !== "neutral") return validityFromVerdict(verdict);
 
-  try {
-    const value = JSON.parse(data) as unknown;
-    if (isDiscoveryProtocolErrorPayload(value)) {
-      return { ready: false, terminal: true, error: true };
-    }
-
-    // Gemini SDK wrappers may expose the native candidate chunk under response.
-    if (
-      family === "gemini" &&
-      value &&
-      typeof value === "object" &&
-      !Array.isArray(value) &&
-      (value as Record<string, unknown>).response &&
-      typeof (value as Record<string, unknown>).response === "object"
-    ) {
+  // Gemini SDK wrappers may expose the native candidate chunk under response.
+  if (
+    family === "gemini" &&
+    parsed &&
+    typeof parsed === "object" &&
+    !Array.isArray(parsed) &&
+    (parsed as Record<string, unknown>).response &&
+    typeof (parsed as Record<string, unknown>).response === "object"
+  ) {
+    try {
       verdict = classifyFrame(
         family,
         eventName,
-        JSON.stringify((value as Record<string, unknown>).response)
+        JSON.stringify((parsed as Record<string, unknown>).response)
       );
+    } catch {
+      return validityFromVerdict("malformed");
     }
-  } catch {
-    return validityFromVerdict("malformed");
   }
 
   return validityFromVerdict(verdict);

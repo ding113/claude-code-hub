@@ -80,6 +80,15 @@ describe("discovery validity", () => {
     });
   });
 
+  it("keeps a Responses error terminal when the same frame also carries content", () => {
+    expect(
+      classifyDiscoveryChunk(
+        '{"type":"response.output_text.delta","delta":"must not win","failed":true}',
+        "openai-responses"
+      )
+    ).toEqual({ ready: false, terminal: true, error: true });
+  });
+
   it("does not promote empty tool or content events", () => {
     expect(
       classifyDiscoveryChunk(
