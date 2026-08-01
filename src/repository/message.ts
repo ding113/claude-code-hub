@@ -1719,7 +1719,8 @@ export async function aggregateMultipleSessionStats(sessionIds: string[]): Promi
     api_type: string | null;
   }>) {
     canonicalByRequested.set(row.requested_session_id, row.session_id);
-    if (!userInfoMap.has(row.session_id)) {
+    const existing = userInfoMap.get(row.session_id);
+    if (!existing) {
       userInfoMap.set(row.session_id, {
         sessionId: row.session_id,
         requestedSessionIds: [row.requested_session_id],
@@ -1732,11 +1733,8 @@ export async function aggregateMultipleSessionStats(sessionIds: string[]): Promi
         userAgent: row.user_agent,
         apiType: row.api_type,
       });
-    }
-    if (!userInfoMap.has(row.session_id)) continue;
-    const requestedIds = userInfoMap.get(row.session_id)?.requestedSessionIds;
-    if (requestedIds && !requestedIds.includes(row.requested_session_id)) {
-      requestedIds.push(row.requested_session_id);
+    } else if (!existing.requestedSessionIds.includes(row.requested_session_id)) {
+      existing.requestedSessionIds.push(row.requested_session_id);
     }
   }
 
@@ -2167,6 +2165,7 @@ export async function findRequestsBySessionIdentity(
   const where = and(
     eq(messageSessionIdentity, identity),
     isNotNull(messageRequest.sessionId),
+    eq(messageRequest.isReplay, false),
     isNull(messageRequest.deletedAt)
   );
   const [countResult] = await db
@@ -2278,6 +2277,7 @@ export async function findAdjacentSessionRequests(
       and(
         eq(messageSessionIdentity, identity),
         eq(messageRequest.id, requestId),
+        eq(messageRequest.isReplay, false),
         isNull(messageRequest.deletedAt)
       )
     )
@@ -2296,6 +2296,7 @@ export async function findAdjacentSessionRequests(
     eq(messageSessionIdentity, identity),
     isNotNull(messageRequest.sessionId),
     isNotNull(messageRequest.requestSequence),
+    eq(messageRequest.isReplay, false),
     isNull(messageRequest.deletedAt)
   );
 

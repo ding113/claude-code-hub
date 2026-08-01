@@ -194,7 +194,11 @@ describe("message repository session request queries", () => {
       { sourceSessionId: "physical-a", sequence: 1 },
       { sourceSessionId: "physical-b", sequence: 1 },
     ]);
+    expect(sqlText(count.trace.where)).toContain("is_replay");
+    expect(sqlText(count.trace.where)).toContain("false");
     expect(sqlText(rows.trace.where)).toContain("pfx:scope:fingerprint");
+    expect(sqlText(rows.trace.where)).toContain("is_replay");
+    expect(sqlText(rows.trace.where)).toContain("false");
   });
 
   test("resolves an exact request locator inside a prefix identity", async () => {
@@ -308,10 +312,16 @@ describe("message repository session request queries", () => {
     });
     expect(sqlText(current.trace.where)).toContain("pfx:scope:fingerprint");
     expect(sqlText(current.trace.where)).toContain("= 302");
+    expect(sqlText(current.trace.where)).toContain("is_replay");
+    expect(sqlText(current.trace.where)).toContain("false");
     expect(sqlText(previous.trace.where)).toContain("created_at");
+    expect(sqlText(previous.trace.where)).toContain("is_replay");
+    expect(sqlText(previous.trace.where)).toContain("false");
     expect(sqlText(previous.trace.orderBy)).toContain("created_at desc");
     expect(sqlText(previous.trace.orderBy)).toContain("id desc");
     expect(sqlText(next.trace.where)).toContain("created_at");
+    expect(sqlText(next.trace.where)).toContain("is_replay");
+    expect(sqlText(next.trace.where)).toContain("false");
     expect(sqlText(next.trace.orderBy)).toContain("created_at asc");
     expect(sqlText(next.trace.orderBy)).toContain("id asc");
     expect(previous.trace.limit).toEqual([1]);
