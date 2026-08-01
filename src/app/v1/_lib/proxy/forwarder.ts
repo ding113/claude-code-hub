@@ -6449,7 +6449,9 @@ export class ProxyForwarder {
         kind: effectiveKind,
         finalRescue: effectiveFinalRescue,
         controller,
-        parser: new DiscoveryValidityParser(protocol),
+        parser: new DiscoveryValidityParser(
+          mapProviderTypeToFamily(provider.providerType) ?? protocol
+        ),
         chunks: [],
         pending: true,
         ready: false,

@@ -79,7 +79,6 @@ import { createShadowGateObserver, resolveStreamGateMode } from "./stream-gate/s
 import {
   createStreamProtocolObserver,
   type StreamProtocolObservation,
-  type StreamProtocolObserver,
 } from "./stream-gate/stream-protocol-observer";
 
 const CLIENT_ABORT_DRAIN_MAX_MS = 60_000;
@@ -1289,6 +1288,11 @@ function hasPositiveBillableTokens(usage: UsageMetrics | null): boolean {
   return tokens > 0;
 }
 
+function hasPositiveOutputTokens(usage: UsageMetrics | null): boolean {
+  if (!usage) return false;
+  return (usage.output_tokens ?? 0) + (usage.output_image_tokens ?? 0) > 0;
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -1390,6 +1394,66 @@ export function hasStreamCompletionMarker(
   format: ProxySession["originalFormat"]
 ): boolean {
   return inspectStreamCompletion(text, format).hasMarker;
+}
+
+function hasTerminalStreamUsageEvidence(
+  text: string,
+  format: ProxySession["originalFormat"]
+): boolean {
+  const events = parseSSEData(text);
+  const hasPositiveUsage = (value: unknown): boolean =>
+    hasPositiveOutputTokens(extractUsageMetrics(value));
+
+  switch (format) {
+    case "response":
+      return events.some((event) => {
+        if (!isRecord(event.data)) return false;
+        const type = event.data.type;
+        if (type !== "response.completed" && type !== "response.done") return false;
+        const response = isRecord(event.data.response) ? event.data.response : null;
+        return hasPositiveUsage(event.data.usage) || hasPositiveUsage(response?.usage);
+      });
+    case "claude": {
+      const hasTerminalUsage = events.some((event) => {
+        if (!isRecord(event.data)) return false;
+        const type = event.data.type;
+        if (event.event !== "message_delta" && type !== "message_delta") return false;
+        const delta = isRecord(event.data.delta) ? event.data.delta : null;
+        return hasPositiveUsage(event.data.usage) || hasPositiveUsage(delta?.usage);
+      });
+      return hasTerminalUsage && inspectStreamCompletion(text, format).hasMarker;
+    }
+    case "openai": {
+      const hasTerminalUsage = events.some((event) => {
+        if (!isRecord(event.data) || !hasPositiveUsage(event.data.usage)) return false;
+        const choices = event.data.choices;
+        return (
+          (Array.isArray(choices) && choices.length === 0) ||
+          hasOpenAIChatCompletionMarker(event.data)
+        );
+      });
+      return hasTerminalUsage && inspectStreamCompletion(text, format).hasMarker;
+    }
+    case "gemini":
+    case "gemini-cli": {
+      const payloads: unknown[] = events.map((event) => event.data);
+      for (const candidate of extractJsonChunks(text)) {
+        try {
+          payloads.push(JSON.parse(candidate) as unknown);
+        } catch {
+          // 不完整 JSON 不能建立终态 usage 证据。
+        }
+      }
+      return payloads.some((value) => {
+        if (!isRecord(value)) return false;
+        const payload = isRecord(value.response) ? value.response : value;
+        return (
+          hasGeminiCompletionMarker(payload) &&
+          (hasPositiveUsage(payload.usageMetadata) || hasPositiveUsage(payload.usage))
+        );
+      });
+    }
+  }
 }
 
 export async function resolveBillableUsageMetricsForCost(
@@ -1519,6 +1583,8 @@ type FinalizeDeferredStreamingResult = {
   allowAuxiliarySessionBinding: boolean;
   /** Discovery auxiliary bindings must wait for, and depend on, the primary generation CAS. */
   confirmAuxiliarySessionBinding: () => Promise<boolean>;
+  /** 协议层已确认不可作为 Replay 来源，但不一定改变本次请求的成功/计费终态。 */
+  replayIneligibleReason?: "protocol_malformed";
 };
 
 /**
@@ -1801,8 +1867,22 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
     ? detectUpstreamErrorFromSseOrJsonText(allContent)
     : ({ isError: false } as const);
   const protocolFailure = protocolObservation?.failure ?? null;
+  const replayIneligibleReason =
+    protocolFailure?.verdict === "malformed" ? ("protocol_malformed" as const) : undefined;
+  const postcommitMalformed =
+    streamEndedNormally &&
+    upstreamStatusCode >= 200 &&
+    upstreamStatusCode < 300 &&
+    protocolFailure?.verdict === "malformed" &&
+    protocolFailure.afterContent;
+  const successfulPostcommitMalformed =
+    postcommitMalformed && hasTerminalStreamUsageEvidence(allContent, session.originalFormat);
   const successfulHttpProtocolFailure =
-    streamEndedNormally && upstreamStatusCode >= 200 && upstreamStatusCode < 300 && protocolFailure;
+    streamEndedNormally &&
+    upstreamStatusCode >= 200 &&
+    upstreamStatusCode < 300 &&
+    protocolFailure &&
+    !successfulPostcommitMalformed;
   const detected =
     !bodyDetected.isError &&
     ((shouldDetectFake200 && completionInspection.hasProtocolError) ||
@@ -1928,6 +2008,7 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
       finalizeAttemptResources: finalizeProviderSessionRef,
       allowAuxiliarySessionBinding,
       confirmAuxiliarySessionBinding,
+      replayIneligibleReason,
     };
   }
 
@@ -2005,6 +2086,7 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
       finalizeAttemptResources: finalizeProviderSessionRef,
       allowAuxiliarySessionBinding,
       confirmAuxiliarySessionBinding,
+      replayIneligibleReason,
     };
   }
 
@@ -2076,6 +2158,7 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
       finalizeAttemptResources: finalizeProviderSessionRef,
       allowAuxiliarySessionBinding,
       confirmAuxiliarySessionBinding,
+      replayIneligibleReason,
     };
   }
 
@@ -2140,6 +2223,7 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
       finalizeAttemptResources: finalizeProviderSessionRef,
       allowAuxiliarySessionBinding,
       confirmAuxiliarySessionBinding,
+      replayIneligibleReason,
     };
   }
 
@@ -2316,6 +2400,7 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
     finalizeAttemptResources: finalizeProviderSessionRef,
     allowAuxiliarySessionBinding,
     confirmAuxiliarySessionBinding,
+    replayIneligibleReason,
   };
 }
 
@@ -3451,6 +3536,14 @@ export class ProxyResponseHandler {
     startHedgeBindingHeartbeat(session);
 
     let processedStream: ReadableStream<Uint8Array> = response.body;
+    const nativeStreamProtocolFamily =
+      session.getEndpointPolicy().kind === "raw_passthrough"
+        ? null
+        : mapProviderTypeToFamily(provider.providerType);
+    const streamProtocolObserver = nativeStreamProtocolFamily
+      ? createStreamProtocolObserver(nativeStreamProtocolFamily)
+      : null;
+    let protocolObservedBeforeProcessing = false;
 
     // --- GEMINI STREAM HANDLING ---
     if (provider.providerType === "gemini" || provider.providerType === "gemini-cli") {
@@ -3490,6 +3583,8 @@ export class ProxyResponseHandler {
         // 若在 headers 阶段就 clearResponseTimeout，会导致首字节超时失效，客户端与服务端都会表现为一直“请求中”。
         // 透传场景下，我们在后台 stats 读取到第一块数据时再清除超时（与非透传路径口径一致）。
 
+        const streamTextAccumulator = new BoundedStreamTextAccumulator();
+        let lastStreamTextSnapshot: BoundedStreamTextSnapshot | null = null;
         let observePassthroughChunk = (_value: Uint8Array) => {};
         let observePassthroughReadStart = () => {};
         let observePassthroughDrainStart = () => {};
@@ -3519,6 +3614,8 @@ export class ProxyResponseHandler {
           onReadStart: () => observePassthroughReadStart(),
           onChunk: (value) => {
             passthroughShadowObserver?.observe(value);
+            streamProtocolObserver?.observe(value);
+            streamTextAccumulator.pushBytes(value);
             observePassthroughChunk(value);
           },
           onClientCancel: (reason) => {
@@ -3550,8 +3647,6 @@ export class ProxyResponseHandler {
             responseController?: AbortController;
           };
 
-          const streamTextAccumulator = new BoundedStreamTextAccumulator();
-          let lastStreamTextSnapshot: BoundedStreamTextSnapshot | null = null;
           const getCollectedChunkCount = () =>
             lastStreamTextSnapshot?.chunkCount ?? streamTextAccumulator.chunkCount;
           let isFirstChunk = true;
@@ -3675,7 +3770,6 @@ export class ProxyResponseHandler {
               session.recordTfft();
               clearResponseTimeoutOnce(value.byteLength);
             }
-            streamTextAccumulator.pushBytes(value);
             AsyncTaskManager.touch(taskId);
           };
 
@@ -3779,7 +3873,7 @@ export class ProxyResponseHandler {
               streamEndedNormally,
               clientAborted,
               discoveryLeaseLifecycle,
-              null,
+              streamProtocolObserver?.finish() ?? null,
               abortReason
             );
             latestCommitSideEffects = finalized.commitSideEffects;
@@ -3960,8 +4054,10 @@ export class ProxyResponseHandler {
         });
 
         let buffer = "";
+        protocolObservedBeforeProcessing = true;
         const transformStream = new TransformStream<Uint8Array, Uint8Array>({
           transform(chunk, controller) {
+            streamProtocolObserver?.observe(chunk);
             const decoder = new TextDecoder();
             const text = decoder.decode(chunk, { stream: true });
             buffer += text;
@@ -4246,7 +4342,6 @@ export class ProxyResponseHandler {
     };
 
     let streamFinalizationPromise: Promise<void> | null = null;
-    let replayProtocolObserver: StreamProtocolObserver | null = null;
     const finalizeStream = (
       allContent: string,
       streamEndedNormally: boolean,
@@ -4265,7 +4360,7 @@ export class ProxyResponseHandler {
           streamEndedNormally,
           clientAborted,
           discoveryLeaseLifecycle,
-          replayProtocolObserver?.finish() ?? null,
+          streamProtocolObserver?.finish() ?? null,
           abortReason
         );
         latestStreamCommitSideEffects = finalized.commitSideEffects
@@ -4578,6 +4673,7 @@ export class ProxyResponseHandler {
             finalized.commitSideEffects !== undefined &&
             effectiveStatusCode >= 200 &&
             effectiveStatusCode < 300 &&
+            !finalized.replayIneligibleReason &&
             hasStreamCompletionMarker(allContent, session.originalFormat);
           if (isReplayableSuccess) {
             postTerminalSideEffects.push(async () => {
@@ -4588,7 +4684,11 @@ export class ProxyResponseHandler {
               }
             });
           } else {
-            void replaySpool.abort(streamErrorMessage ?? `status_${effectiveStatusCode}`);
+            void replaySpool.abort(
+              finalized.replayIneligibleReason ??
+                streamErrorMessage ??
+                `status_${effectiveStatusCode}`
+            );
           }
         }
 
@@ -4696,13 +4796,6 @@ export class ProxyResponseHandler {
     // write-behind 喂入 Redis 热层，供并发/断线的相同请求 attach 跟尾。
     const replaySpool = createReplaySpoolIfOwner(session, response);
     if (replaySpool) {
-      const replayProtocolFamily =
-        session.getEndpointPolicy().kind === "raw_passthrough"
-          ? null
-          : mapProviderTypeToFamily(provider.providerType);
-      replayProtocolObserver = replayProtocolFamily
-        ? createStreamProtocolObserver(replayProtocolFamily)
-        : null;
       try {
         clientAbortDrainTimeoutMs = getEnvConfig().REPLAY_MAX_DETACHED_MS;
       } catch {
@@ -4716,8 +4809,17 @@ export class ProxyResponseHandler {
       streamTextAccumulator.pushBytes(value);
       AsyncTaskManager.touch(taskId);
       shadowGateObserver?.observe(value);
-      replayProtocolObserver?.observe(value);
-      replaySpool?.observe(value);
+      const protocolFailure = protocolObservedBeforeProcessing
+        ? null
+        : (streamProtocolObserver?.observe(value) ?? null);
+      if (protocolFailure && replaySpool && !replaySpool.isTerminal) {
+        void replaySpool.abort(
+          `stream_protocol_${protocolFailure.verdict}_${
+            protocolFailure.afterContent ? "after" : "before"
+          }_content`
+        );
+      }
+      if (!replaySpool?.isTerminal) replaySpool?.observe(value);
 
       logger.trace("ResponseHandler: Upstream stream chunk received", {
         taskId,
@@ -5488,6 +5590,41 @@ export function parseUsageFromResponseText(
     }
   } catch {
     // Fallback to SSE parsing when body is not valid JSON
+  }
+
+  // Native Gemini passthrough may be NDJSON: the whole body is not one JSON value,
+  // while each line is an independent response chunk. Usage is cumulative, so the
+  // last valid usageMetadata/usage object is authoritative.
+  if (!usageMetrics && (providerType === "gemini" || providerType === "gemini-cli")) {
+    let lastGeminiUsageRecord: Record<string, unknown> | null = null;
+    let lastGeminiUsageMetrics: UsageMetrics | null = null;
+    for (const candidate of extractJsonChunks(responseText)) {
+      try {
+        const parsed = JSON.parse(candidate) as unknown;
+        if (!isRecord(parsed)) continue;
+        const payload = isRecord(parsed.response) ? parsed.response : parsed;
+        const usageValue = isRecord(payload.usageMetadata)
+          ? payload.usageMetadata
+          : isRecord(payload.usage)
+            ? payload.usage
+            : null;
+        if (!usageValue) continue;
+        const extracted = extractUsageMetrics(usageValue);
+        if (!extracted) continue;
+        lastGeminiUsageRecord = usageValue;
+        lastGeminiUsageMetrics = extracted;
+      } catch {
+        // malformed line 不影响后续独立 NDJSON chunk 的 usage 提取。
+      }
+    }
+    if (lastGeminiUsageMetrics) {
+      usageRecord = lastGeminiUsageRecord;
+      usageMetrics = adjustUsageForProviderType(
+        lastGeminiUsageMetrics,
+        providerType,
+        lastGeminiUsageRecord
+      );
+    }
   }
 
   // SSE 解析：支持两种格式

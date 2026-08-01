@@ -1,9 +1,12 @@
-import { classifyFrame, type ProtocolFamily } from "./frame-classifier";
+import { classifyFrame, isRequestEchoFrame, type ProtocolFamily } from "./frame-classifier";
 import { type SseFrame, SseFrameParser } from "./sse-frames";
+import { resolveStreamGateCaps } from "./stream-content-gate";
 
-export const REPLAY_PROTOCOL_OBSERVER_MAX_BUFFER_CHARACTERS = 1024 * 1024;
+export const STREAM_PROTOCOL_OBSERVER_MAX_BUFFER_CHARACTERS = 10 * 1024 * 1024;
+const DEFAULT_STREAM_GATE_PREBUFFER_CHARACTERS = 10 * 1024 * 1024;
 
 export interface StreamProtocolFailure {
+  afterContent: boolean;
   verdict: "error" | "malformed";
   eventName: string | null;
 }
@@ -11,29 +14,42 @@ export interface StreamProtocolFailure {
 export interface StreamProtocolObservation {
   sawContent: boolean;
   sawTerminal: boolean;
+  observationIncomplete: boolean;
   failure: StreamProtocolFailure | null;
 }
 
 export interface StreamProtocolObserver {
-  observe(chunk: Uint8Array): void;
+  observe(chunk: Uint8Array): StreamProtocolFailure | null;
   finish(): StreamProtocolObservation;
 }
 
 export function createStreamProtocolObserver(family: ProtocolFamily): StreamProtocolObserver {
+  const { prebufferByteCap } = resolveStreamGateCaps();
+  const streamGatePrebufferCharacters =
+    Number.isSafeInteger(prebufferByteCap) && prebufferByteCap > 0
+      ? prebufferByteCap
+      : DEFAULT_STREAM_GATE_PREBUFFER_CHARACTERS;
   const parser = new SseFrameParser({
-    maxBufferedCharacters: REPLAY_PROTOCOL_OBSERVER_MAX_BUFFER_CHARACTERS,
+    bufferLimitExemption: {
+      // 门禁对 request echo 的豁免额度最多把总缓冲抬到 2x cap；observer 采用同一边界，
+      // 允许合法的大请求回显，同时继续阻止伪装 echo 的无界单帧。
+      maxBufferedCharacters: streamGatePrebufferCharacters * 2,
+      matches: (eventName, dataHead) => isRequestEchoFrame(family, eventName, dataHead),
+    },
+    maxBufferedCharacters: STREAM_PROTOCOL_OBSERVER_MAX_BUFFER_CHARACTERS,
   });
   const observation: StreamProtocolObservation = {
     sawContent: false,
     sawTerminal: false,
+    observationIncomplete: false,
     failure: null,
   };
   let finished = false;
   let disabled = false;
 
-  const disableWithMalformedFailure = (): void => {
+  const disableIncompleteObservation = (): void => {
     disabled = true;
-    observation.failure ??= { verdict: "malformed", eventName: null };
+    observation.observationIncomplete = true;
   };
 
   const record = (frame: SseFrame): void => {
@@ -41,19 +57,25 @@ export function createStreamProtocolObserver(family: ProtocolFamily): StreamProt
     if (verdict === "content") observation.sawContent = true;
     if (verdict === "terminal") observation.sawTerminal = true;
     if ((verdict === "error" || verdict === "malformed") && !observation.failure) {
-      observation.failure = { verdict, eventName: frame.eventName };
+      observation.failure = {
+        afterContent: observation.sawContent,
+        verdict,
+        eventName: frame.eventName,
+      };
     }
   };
 
   return {
-    observe(chunk: Uint8Array): void {
-      if (finished || disabled || chunk.byteLength === 0) return;
+    observe(chunk: Uint8Array): StreamProtocolFailure | null {
+      if (finished || disabled || chunk.byteLength === 0) return observation.failure;
       try {
         for (const frame of parser.push(chunk)) record(frame);
       } catch {
-        // 旁路观察器异常不得改变客户端流或计费热路径。
-        disableWithMalformedFailure();
+        // parser 容量保护和本地观察异常只能说明观察不完整，不能伪造上游 malformed。
+        // 旁路 observer 必须 fail-open，避免本地资源或实现问题改写客户端流与计费终态。
+        disableIncompleteObservation();
       }
+      return observation.failure;
     },
 
     finish(): StreamProtocolObservation {
@@ -63,13 +85,14 @@ export function createStreamProtocolObserver(family: ProtocolFamily): StreamProt
           try {
             for (const frame of parser.finish()) record(frame);
           } catch {
-            disableWithMalformedFailure();
+            disableIncompleteObservation();
           }
         }
       }
       return {
         sawContent: observation.sawContent,
         sawTerminal: observation.sawTerminal,
+        observationIncomplete: observation.observationIncomplete,
         failure: observation.failure ? { ...observation.failure } : null,
       };
     },

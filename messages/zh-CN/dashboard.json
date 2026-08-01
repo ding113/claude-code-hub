@@ -319,6 +319,7 @@
           "local_manual": "本地手动价格",
           "cloud_exact": "云端精确提供商价格",
           "cloud_model_fallback": "回退模型的提供商价格",
+          "cloud_official": "云端官方价格",
           "priority_fallback": "优先级回退价格",
           "single_provider_top_level": "顶层单提供商价格",
           "official_fallback": "官方价格"
@@ -594,6 +595,7 @@
         "local_manual": "本地手动价格",
         "cloud_exact": "云端精确提供商价格",
         "cloud_model_fallback": "回退模型的提供商价格",
+        "cloud_official": "云端官方价格",
         "priority_fallback": "优先级回退价格",
         "single_provider_top_level": "顶层单提供商价格",
         "official_fallback": "官方价格"

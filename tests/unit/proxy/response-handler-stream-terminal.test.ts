@@ -298,6 +298,439 @@ describe("ProxyResponseHandler.dispatch stream terminal behavior", () => {
     expect(releaseAgent).toHaveBeenCalledOnce();
   });
 
+  it("fails closed on a late Gemini passthrough NDJSON error", async () => {
+    const { session } = await createSession({});
+    session.setProvider({ ...createProvider(), providerType: "gemini" });
+    session.originalFormat = "gemini";
+    const body = [
+      '{"candidates":[{"content":{"parts":[{"text":"ok"}]}}]}',
+      '{"error":{"message":"late upstream failure"}}',
+      "",
+    ].join("\n");
+
+    const returned = await ProxyResponseHandler.dispatch(session, sseResponse(body));
+    await returned.text();
+    await settleTasks();
+
+    expect(mocks.durable).toHaveBeenCalledWith(
+      MESSAGE.id,
+      expect.objectContaining({ statusCode: 502 }),
+      expect.objectContaining({ onCommitted: expect.any(Function) })
+    );
+  });
+
+  it("observes native Gemini failures before transforming the client stream", async () => {
+    const { session } = await createSession({});
+    session.setProvider({ ...createProvider(), providerType: "gemini" });
+    session.originalFormat = "claude";
+    const body = [
+      'data: {"candidates":[{"content":{"parts":[{"text":"ok"}]}}]}\n\n',
+      'data: {"error":{"message":"late upstream failure"}}\n\n',
+    ].join("");
+
+    const returned = await ProxyResponseHandler.dispatch(session, sseResponse(body));
+    await returned.text();
+    await settleTasks();
+
+    expect(mocks.durable).toHaveBeenCalledWith(
+      MESSAGE.id,
+      expect.objectContaining({ statusCode: 502 }),
+      expect.objectContaining({ onCommitted: expect.any(Function) })
+    );
+  });
+
+  it("bills a naturally completed postcommit malformed stream with terminal usage but rejects Replay", async () => {
+    const { session } = await createSession({});
+    session.setProvider({ ...createProvider(), providerType: "codex" });
+    session.originalFormat = "response";
+    session.replayState = {
+      role: "owner",
+      ownerToken: "owner-token-malformed-usage",
+      identity: {
+        replayId: "replay-malformed-usage",
+        verifier: "verifier",
+        scopeTag: "scope-tag",
+        keyId: KEY.id,
+        userId: USER.id,
+        format: "response",
+        model: "gpt-test",
+        endpoint: "/v1/responses",
+      },
+    };
+    setDeferredStreamingFinalization(session, {
+      providerId: session.provider?.id ?? 0,
+      providerName: session.provider?.name ?? "provider",
+      providerPriority: session.provider?.priority ?? 0,
+      attemptNumber: 1,
+      totalProvidersAttempted: 1,
+      isFirstAttempt: true,
+      isFailoverSuccess: false,
+      endpointId: null,
+      endpointUrl: session.provider?.url ?? "",
+      upstreamStatusCode: 200,
+      bindingIntent: "none",
+    });
+    const malformed = "event: response.in_progress\ndata: not-json\n\n";
+    const body = [
+      'event: response.output_text.delta\ndata: {"type":"response.output_text.delta","delta":"ok"}\n\n',
+      malformed,
+      'event: response.completed\ndata: {"type":"response.completed","response":{"status":"completed","usage":{"input_tokens":10,"output_tokens":2}}}\n\n',
+    ].join("");
+
+    const returned = await ProxyResponseHandler.dispatch(session, sseResponse(body));
+    expect(await returned.text()).toContain(malformed);
+    await settleTasks();
+
+    expect(mocks.durable).toHaveBeenCalledWith(
+      MESSAGE.id,
+      expect.objectContaining({ inputTokens: 10, outputTokens: 2, statusCode: 200 }),
+      expect.objectContaining({ onCommitted: expect.any(Function) })
+    );
+    expect(mocks.replayAbort).toHaveBeenCalledWith(expect.stringContaining("protocol_malformed"));
+    expect(mocks.replayComplete).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    {
+      label: "Anthropic",
+      providerType: "claude" as const,
+      format: "claude" as const,
+      body: [
+        'event: message_start\ndata: {"type":"message_start","message":{"usage":{"input_tokens":10}}}\n\n',
+        'event: content_block_delta\ndata: {"type":"content_block_delta","delta":{"text":"ok"}}\n\n',
+        "event: ping\ndata: not-json\n\n",
+        'event: message_delta\ndata: {"type":"message_delta","usage":{"output_tokens":2}}\n\n',
+        'event: message_stop\ndata: {"type":"message_stop"}\n\n',
+      ].join(""),
+    },
+    {
+      label: "OpenAI Chat",
+      providerType: "openai-compatible" as const,
+      format: "openai" as const,
+      body: [
+        'data: {"choices":[{"delta":{"content":"ok"}}]}\n\n',
+        "data: not-json\n\n",
+        'data: {"choices":[],"usage":{"prompt_tokens":10,"completion_tokens":2}}\n\n',
+        "data: [DONE]\n\n",
+      ].join(""),
+    },
+    {
+      label: "Gemini",
+      providerType: "gemini" as const,
+      format: "gemini" as const,
+      body: [
+        '{"candidates":[{"content":{"parts":[{"text":"ok"}]}}]}',
+        "{not-json}",
+        '{"candidates":[{"finishReason":"STOP"}],"usageMetadata":{"promptTokenCount":10,"candidatesTokenCount":2}}',
+        "",
+      ].join("\n"),
+    },
+  ])(
+    "records a naturally completed $label postcommit malformed stream as successful with terminal usage",
+    async ({ providerType, format, body }) => {
+      const { session } = await createSession({});
+      session.setProvider({ ...createProvider(), providerType });
+      session.originalFormat = format;
+      setDeferredStreamingFinalization(session, {
+        providerId: session.provider?.id ?? 0,
+        providerName: session.provider?.name ?? "provider",
+        providerPriority: session.provider?.priority ?? 0,
+        attemptNumber: 1,
+        totalProvidersAttempted: 1,
+        isFirstAttempt: true,
+        isFailoverSuccess: false,
+        endpointId: null,
+        endpointUrl: session.provider?.url ?? "",
+        upstreamStatusCode: 200,
+        bindingIntent: "none",
+      });
+
+      const returned = await ProxyResponseHandler.dispatch(session, sseResponse(body));
+      expect(await returned.text()).toBe(body);
+      await settleTasks();
+
+      expect(mocks.durable).toHaveBeenCalledWith(
+        MESSAGE.id,
+        expect.objectContaining({ inputTokens: 10, outputTokens: 2, statusCode: 200 }),
+        expect.objectContaining({ onCommitted: expect.any(Function) })
+      );
+    }
+  );
+
+  it("does not treat Anthropic message_start usage as terminal usage evidence", async () => {
+    const { session } = await createSession({});
+    setDeferredStreamingFinalization(session, {
+      providerId: session.provider?.id ?? 0,
+      providerName: session.provider?.name ?? "provider",
+      providerPriority: session.provider?.priority ?? 0,
+      attemptNumber: 1,
+      totalProvidersAttempted: 1,
+      isFirstAttempt: true,
+      isFailoverSuccess: false,
+      endpointId: null,
+      endpointUrl: session.provider?.url ?? "",
+      upstreamStatusCode: 200,
+      bindingIntent: "none",
+    });
+    const body = [
+      'event: message_start\ndata: {"type":"message_start","message":{"usage":{"input_tokens":10}}}\n\n',
+      'event: content_block_delta\ndata: {"type":"content_block_delta","delta":{"text":"ok"}}\n\n',
+      "event: ping\ndata: not-json\n\n",
+      'event: message_stop\ndata: {"type":"message_stop"}\n\n',
+    ].join("");
+
+    const returned = await ProxyResponseHandler.dispatch(session, sseResponse(body));
+    expect(await returned.text()).toBe(body);
+    await settleTasks();
+
+    expect(mocks.durable).toHaveBeenCalledWith(
+      MESSAGE.id,
+      expect.objectContaining({ statusCode: 502 }),
+      expect.objectContaining({ onCommitted: expect.any(Function) })
+    );
+  });
+
+  it("does not treat zero terminal usage as billable success after malformed", async () => {
+    const { session } = await createSession({});
+    session.setProvider({ ...createProvider(), providerType: "codex" });
+    session.originalFormat = "response";
+    setDeferredStreamingFinalization(session, {
+      providerId: session.provider?.id ?? 0,
+      providerName: session.provider?.name ?? "provider",
+      providerPriority: session.provider?.priority ?? 0,
+      attemptNumber: 1,
+      totalProvidersAttempted: 1,
+      isFirstAttempt: true,
+      isFailoverSuccess: false,
+      endpointId: null,
+      endpointUrl: session.provider?.url ?? "",
+      upstreamStatusCode: 200,
+      bindingIntent: "none",
+    });
+    const body = [
+      'event: response.output_text.delta\ndata: {"type":"response.output_text.delta","delta":"ok"}\n\n',
+      "event: response.in_progress\ndata: not-json\n\n",
+      'event: response.completed\ndata: {"type":"response.completed","response":{"status":"completed","usage":{"input_tokens":0,"output_tokens":0}}}\n\n',
+    ].join("");
+
+    const returned = await ProxyResponseHandler.dispatch(session, sseResponse(body));
+    expect(await returned.text()).toBe(body);
+    await settleTasks();
+
+    expect(mocks.durable).toHaveBeenCalledWith(
+      MESSAGE.id,
+      expect.objectContaining({ statusCode: 502 }),
+      expect.objectContaining({ onCommitted: expect.any(Function) })
+    );
+  });
+
+  it.each([
+    {
+      label: "OpenAI Responses",
+      providerType: "codex" as const,
+      format: "response" as const,
+      body: [
+        'event: response.in_progress\ndata: {"type":"response.in_progress","response":{"status":"in_progress","usage":{"input_tokens":10}}}\n\n',
+        'event: response.output_text.delta\ndata: {"type":"response.output_text.delta","delta":"ok"}\n\n',
+        "event: response.in_progress\ndata: not-json\n\n",
+        'event: response.completed\ndata: {"type":"response.completed","response":{"status":"completed","usage":{}}}\n\n',
+      ].join(""),
+    },
+    {
+      label: "Anthropic",
+      providerType: "claude" as const,
+      format: "claude" as const,
+      body: [
+        'event: message_start\ndata: {"type":"message_start","message":{"usage":{"input_tokens":10}}}\n\n',
+        'event: content_block_delta\ndata: {"type":"content_block_delta","delta":{"text":"ok"}}\n\n',
+        "event: ping\ndata: not-json\n\n",
+        'event: message_delta\ndata: {"type":"message_delta","usage":{}}\n\n',
+        'event: message_stop\ndata: {"type":"message_stop"}\n\n',
+      ].join(""),
+    },
+    {
+      label: "OpenAI Chat",
+      providerType: "openai-compatible" as const,
+      format: "openai" as const,
+      body: [
+        'data: {"choices":[{"delta":{"role":"assistant"}}],"usage":{"prompt_tokens":10}}\n\n',
+        'data: {"choices":[{"delta":{"content":"ok"}}]}\n\n',
+        "data: not-json\n\n",
+        'data: {"choices":[],"usage":{}}\n\n',
+        "data: [DONE]\n\n",
+      ].join(""),
+    },
+    {
+      label: "Gemini",
+      providerType: "gemini" as const,
+      format: "gemini" as const,
+      body: [
+        '{"usageMetadata":{"promptTokenCount":10}}',
+        '{"candidates":[{"content":{"parts":[{"text":"ok"}]}}]}',
+        "{not-json}",
+        '{"candidates":[{"finishReason":"STOP"}],"usageMetadata":{}}',
+        "",
+      ].join("\n"),
+    },
+  ])(
+    "does not combine early $label usage with empty terminal usage after malformed",
+    async ({ providerType, format, body }) => {
+      const { session } = await createSession({});
+      session.setProvider({ ...createProvider(), providerType });
+      session.originalFormat = format;
+      setDeferredStreamingFinalization(session, {
+        providerId: session.provider?.id ?? 0,
+        providerName: session.provider?.name ?? "provider",
+        providerPriority: session.provider?.priority ?? 0,
+        attemptNumber: 1,
+        totalProvidersAttempted: 1,
+        isFirstAttempt: true,
+        isFailoverSuccess: false,
+        endpointId: null,
+        endpointUrl: session.provider?.url ?? "",
+        upstreamStatusCode: 200,
+        bindingIntent: "none",
+      });
+
+      const returned = await ProxyResponseHandler.dispatch(session, sseResponse(body));
+      expect(await returned.text()).toBe(body);
+      await settleTasks();
+
+      expect(mocks.durable).toHaveBeenCalledWith(
+        MESSAGE.id,
+        expect.objectContaining({ statusCode: 502 }),
+        expect.objectContaining({ onCommitted: expect.any(Function) })
+      );
+    }
+  );
+
+  it.each([
+    {
+      label: "OpenAI Responses",
+      providerType: "codex" as const,
+      format: "response" as const,
+      body: [
+        'event: response.output_text.delta\ndata: {"type":"response.output_text.delta","delta":"ok"}\n\n',
+        "event: response.in_progress\ndata: not-json\n\n",
+        'event: response.completed\ndata: {"type":"response.completed","response":{"status":"completed","usage":{"input_tokens":10,"output_tokens":0}}}\n\n',
+      ].join(""),
+    },
+    {
+      label: "Anthropic",
+      providerType: "claude" as const,
+      format: "claude" as const,
+      body: [
+        'event: content_block_delta\ndata: {"type":"content_block_delta","delta":{"text":"ok"}}\n\n',
+        "event: ping\ndata: not-json\n\n",
+        'event: message_delta\ndata: {"type":"message_delta","usage":{"input_tokens":10,"output_tokens":0}}\n\n',
+        'event: message_stop\ndata: {"type":"message_stop"}\n\n',
+      ].join(""),
+    },
+    {
+      label: "OpenAI Chat",
+      providerType: "openai-compatible" as const,
+      format: "openai" as const,
+      body: [
+        'data: {"choices":[{"delta":{"content":"ok"}}]}\n\n',
+        "data: not-json\n\n",
+        'data: {"choices":[],"usage":{"prompt_tokens":10,"completion_tokens":0}}\n\n',
+        "data: [DONE]\n\n",
+      ].join(""),
+    },
+    {
+      label: "Gemini",
+      providerType: "gemini" as const,
+      format: "gemini" as const,
+      body: [
+        '{"candidates":[{"content":{"parts":[{"text":"ok"}]}}]}',
+        "{not-json}",
+        '{"candidates":[{"finishReason":"STOP"}],"usageMetadata":{"promptTokenCount":10,"candidatesTokenCount":0}}',
+        "",
+      ].join("\n"),
+    },
+  ])(
+    "does not treat terminal input-only $label usage as successful after malformed",
+    async ({ providerType, format, body }) => {
+      const { session } = await createSession({});
+      session.setProvider({ ...createProvider(), providerType });
+      session.originalFormat = format;
+      setDeferredStreamingFinalization(session, {
+        providerId: session.provider?.id ?? 0,
+        providerName: session.provider?.name ?? "provider",
+        providerPriority: session.provider?.priority ?? 0,
+        attemptNumber: 1,
+        totalProvidersAttempted: 1,
+        isFirstAttempt: true,
+        isFailoverSuccess: false,
+        endpointId: null,
+        endpointUrl: session.provider?.url ?? "",
+        upstreamStatusCode: 200,
+        bindingIntent: "none",
+      });
+
+      const returned = await ProxyResponseHandler.dispatch(session, sseResponse(body));
+      expect(await returned.text()).toBe(body);
+      await settleTasks();
+
+      expect(mocks.durable).toHaveBeenCalledWith(
+        MESSAGE.id,
+        expect.objectContaining({ statusCode: 502 }),
+        expect.objectContaining({ onCommitted: expect.any(Function) })
+      );
+    }
+  );
+
+  it("allows observation overflow to complete a successful Replay entry", async () => {
+    const { session } = await createSession({});
+    session.setProvider({ ...createProvider(), providerType: "codex" });
+    session.originalFormat = "response";
+    session.replayState = {
+      role: "owner",
+      ownerToken: "owner-token-overflow",
+      identity: {
+        replayId: "replay-overflow",
+        verifier: "verifier",
+        scopeTag: "scope-tag",
+        keyId: KEY.id,
+        userId: USER.id,
+        format: "response",
+        model: "gpt-test",
+        endpoint: "/v1/responses",
+      },
+    };
+    setDeferredStreamingFinalization(session, {
+      providerId: session.provider?.id ?? 0,
+      providerName: session.provider?.name ?? "provider",
+      providerPriority: session.provider?.priority ?? 0,
+      attemptNumber: 1,
+      totalProvidersAttempted: 1,
+      isFirstAttempt: true,
+      isFailoverSuccess: false,
+      endpointId: null,
+      endpointUrl: session.provider?.url ?? "",
+      upstreamStatusCode: 200,
+      bindingIntent: "none",
+    });
+    const oversizedDelta = "x".repeat(10 * 1024 * 1024 + 1);
+    const body = [
+      'event: response.output_text.delta\ndata: {"type":"response.output_text.delta","delta":"ok"}\n\n',
+      `event: response.output_text.delta\ndata: ${JSON.stringify({ type: "response.output_text.delta", delta: oversizedDelta })}\n\n`,
+      'event: response.completed\ndata: {"type":"response.completed","response":{"status":"completed","usage":{"input_tokens":10,"output_tokens":2}}}\n\n',
+    ].join("");
+
+    const returned = await ProxyResponseHandler.dispatch(session, sseResponse(body));
+    expect((await returned.text()).length).toBe(body.length);
+    await settleTasks();
+
+    expect(mocks.durable).toHaveBeenCalledWith(
+      MESSAGE.id,
+      expect.objectContaining({ inputTokens: 10, outputTokens: 2, statusCode: 200 }),
+      expect.objectContaining({ onCommitted: expect.any(Function) })
+    );
+    expect(mocks.replayAbort).not.toHaveBeenCalled();
+    expect(mocks.replayComplete).toHaveBeenCalledWith(MESSAGE.id);
+  });
+
   it("aborts Replay when a late protocol error is outside the bounded text snapshot", async () => {
     const { session } = await createSession({});
     session.setProvider({ ...createProvider(), providerType: "codex" });

@@ -319,6 +319,7 @@
           "local_manual": "Локальная ручная цена",
           "cloud_exact": "Точная облачная цена провайдера",
           "cloud_model_fallback": "Цена провайдера из резервной модели",
+          "cloud_official": "Официальная облачная цена",
           "priority_fallback": "Приоритетная резервная цена",
           "single_provider_top_level": "Цена верхнего уровня для одного провайдера",
           "official_fallback": "Официальная цена"
@@ -594,6 +595,7 @@
         "local_manual": "Локальная ручная цена",
         "cloud_exact": "Точная облачная цена провайдера",
         "cloud_model_fallback": "Цена провайдера из резервной модели",
+        "cloud_official": "Официальная облачная цена",
         "priority_fallback": "Приоритетная резервная цена",
         "single_provider_top_level": "Цена верхнего уровня для одного провайдера",
         "official_fallback": "Официальная цена"

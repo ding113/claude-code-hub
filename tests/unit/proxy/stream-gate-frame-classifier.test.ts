@@ -57,14 +57,14 @@ describe("classifyFrame: anthropic", () => {
     ).toBe("neutral");
   });
 
-  it("content: content_block_start carrying entity payload (tool_use)", () => {
+  it("neutral: content_block_start carrying only tool metadata", () => {
     expect(
       classifyFrame(
         "anthropic",
         "content_block_start",
         '{"type":"content_block_start","content_block":{"type":"tool_use","id":"t1","name":"f"}}'
       )
-    ).toBe("content");
+    ).toBe("neutral");
   });
 
   it("neutral: content_block_start for empty text block", () => {
@@ -75,6 +75,37 @@ describe("classifyFrame: anthropic", () => {
         '{"type":"content_block_start","content_block":{"type":"text","text":""}}'
       )
     ).toBe("neutral");
+  });
+
+  it("requires entity payload before structured content_block_start commits", () => {
+    expect(
+      classifyFrame(
+        "anthropic",
+        "content_block_start",
+        '{"type":"content_block_start","content_block":{"type":"redacted_thinking","data":""}}'
+      )
+    ).toBe("neutral");
+    expect(
+      classifyFrame(
+        "anthropic",
+        "content_block_start",
+        '{"type":"content_block_start","content_block":{"type":"web_search_tool_result","tool_use_id":"srvtoolu_1","content":[]}}'
+      )
+    ).toBe("neutral");
+    expect(
+      classifyFrame(
+        "anthropic",
+        "content_block_start",
+        '{"type":"content_block_start","content_block":{"type":"redacted_thinking","data":"opaque"}}'
+      )
+    ).toBe("content");
+    expect(
+      classifyFrame(
+        "anthropic",
+        "content_block_start",
+        '{"type":"content_block_start","content_block":{"type":"web_search_tool_result","tool_use_id":"srvtoolu_1","content":[{"type":"web_search_result","url":"https://example.com"}]}}'
+      )
+    ).toBe("content");
   });
 
   it("neutral: message_start / ping / message_delta bookkeeping", () => {
@@ -128,7 +159,7 @@ describe("classifyFrame: anthropic", () => {
 });
 
 describe("classifyFrame: openai-chat", () => {
-  it("content: delta content / tool_calls / refusal / audio", () => {
+  it("content: delta content / tool arguments / refusal / audio", () => {
     expect(classifyFrame("openai-chat", null, '{"choices":[{"delta":{"content":"hi"}}]}')).toBe(
       "content"
     );
@@ -136,7 +167,7 @@ describe("classifyFrame: openai-chat", () => {
       classifyFrame(
         "openai-chat",
         null,
-        '{"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"name":"f"}}]}}]}'
+        '{"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"name":"f","arguments":"{}"}}]}}]}'
       )
     ).toBe("content");
     expect(classifyFrame("openai-chat", null, '{"choices":[{"delta":{"refusal":"no"}}]}')).toBe(
@@ -157,6 +188,13 @@ describe("classifyFrame: openai-chat", () => {
     expect(classifyFrame("openai-chat", null, '{"choices":[],"usage":{"total_tokens":10}}')).toBe(
       "neutral"
     );
+    expect(
+      classifyFrame(
+        "openai-chat",
+        null,
+        '{"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_1","function":{"name":"f","arguments":""}}]}}]}'
+      )
+    ).toBe("neutral");
   });
 
   it("neutral: empty string content delta", () => {
@@ -222,12 +260,22 @@ describe("classifyFrame: openai-responses", () => {
     ).toBe("content");
   });
 
-  it("content: output_item.added carrying tool name", () => {
+  it("neutral: output_item.added carrying only tool metadata", () => {
     expect(
       classifyFrame(
         "openai-responses",
         "response.output_item.added",
         '{"type":"response.output_item.added","item":{"type":"function_call","name":"get_x"}}'
+      )
+    ).toBe("neutral");
+  });
+
+  it("content: output_item tool payload with complete arguments", () => {
+    expect(
+      classifyFrame(
+        "openai-responses",
+        "response.output_item.done",
+        '{"type":"response.output_item.done","item":{"type":"function_call","name":"get_x","arguments":"{}"}}'
       )
     ).toBe("content");
   });
@@ -265,6 +313,13 @@ describe("classifyFrame: openai-responses", () => {
   it("error: top-level error event / response.failed / populated response.error", () => {
     expect(
       classifyFrame("openai-responses", "error", '{"type":"error","code":"x","message":"m"}')
+    ).toBe("error");
+    expect(
+      classifyFrame(
+        "openai-responses",
+        "response.error",
+        '{"type":"response.error","code":"stream_read_error","message":"stream_read_error"}'
+      )
     ).toBe("error");
     expect(
       classifyFrame(

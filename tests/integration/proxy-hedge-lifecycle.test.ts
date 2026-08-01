@@ -375,6 +375,7 @@ function createProvider(id: number, url: string, firstByteTimeoutStreamingMs: nu
 }
 
 type Upstream = {
+  readonly abort: (error?: Error) => Promise<void>;
   readonly abortCount: () => number;
   readonly baseUrl: string;
   readonly close: () => Promise<void>;
@@ -418,6 +419,11 @@ async function startUpstream(): Promise<Upstream> {
     });
   });
   return {
+    abort: async (error = new Error("upstream stream aborted")) => {
+      const response = await responseGate.promise;
+      response.destroy(error);
+      await terminationGate.promise;
+    },
     abortCount: () => aborts,
     baseUrl,
     close: async () => {
@@ -761,6 +767,236 @@ describe("proxy hedge transport/lifecycle integration (persistence and control-p
       neutralPrefixConsumption.restore();
       now.mockRestore();
       await Promise.all([loser.close(), winner.close()]);
+    }
+  });
+
+  it.each([
+    ...[false, true].flatMap((discoveryEnabled) => [
+      {
+        discoveryEnabled,
+        failureBody: responsesFrame("response.failed", {
+          response: {
+            error: { message: "upstream connection closed before completion" },
+            id: "resp_failed",
+            status: "failed",
+          },
+          type: "response.failed",
+        }),
+        failureName: "response.failed",
+        pathName: discoveryEnabled ? "Discovery" : "enforced gate",
+      },
+      {
+        discoveryEnabled,
+        failureBody: responsesFrame("response.error", {
+          code: "stream_read_error",
+          message: "stream_read_error",
+          type: "response.error",
+        }),
+        failureName: "response.error",
+        pathName: discoveryEnabled ? "Discovery" : "enforced gate",
+      },
+      {
+        discoveryEnabled,
+        failureBody:
+          'event: response.in_progress\ndata: {"type":"response.in_progress","response":\n\n',
+        failureName: "malformed frame",
+        pathName: discoveryEnabled ? "Discovery" : "enforced gate",
+      },
+    ]),
+  ])(
+    "keeps Responses tool metadata precommit and falls back on $failureName ($pathName)",
+    async ({ discoveryEnabled, failureBody }) => {
+      const [failed, fallback] = await Promise.all([startUpstream(), startUpstream()]);
+      const client = new AbortController();
+      try {
+        state.discoveryEnabled = discoveryEnabled;
+        state.streamGateMode = "enforce";
+        const initialProvider = createProvider(1, failed.baseUrl, 0);
+        initialProvider.providerType = "codex";
+        const fallbackProvider = createProvider(2, fallback.baseUrl, 0);
+        fallbackProvider.priority = initialProvider.priority;
+        fallbackProvider.providerType = "codex";
+        state.providers.push(fallbackProvider);
+        const session = await createSession(initialProvider, "/v1/responses", client.signal);
+        session.sessionId = `integration-responses-precommit-${discoveryEnabled}`;
+
+        const forwarded = ProxyForwarder.send(session);
+        await failed.response;
+        if (discoveryEnabled) await fallback.response;
+
+        await failed.write(
+          responsesFrame("response.output_item.added", {
+            item: {
+              arguments: "",
+              id: "fc_failed",
+              name: "lookup",
+              status: "in_progress",
+              type: "function_call",
+            },
+            output_index: 0,
+            type: "response.output_item.added",
+          })
+        );
+
+        const precommitState = await Promise.race([
+          forwarded.then(
+            () => "resolved" as const,
+            () => "rejected" as const
+          ),
+          new Promise<"pending">((resolve) => setTimeout(() => resolve("pending"), 25)),
+        ]);
+        expect(precommitState).toBe("pending");
+
+        await failed.send(failureBody);
+        await fallback.response;
+        const fallbackStream = responsesStreamFixture("resp_fallback", "msg_fallback");
+        await fallback.send(`${fallbackStream.firstContent}${fallbackStream.completed}`);
+
+        const downstream = await ProxyResponseHandler.dispatch(session, await forwarded);
+        const body = await downstream.text();
+        await settleTasks();
+
+        expect(body).toContain('"delta":"我"');
+        expect(body).not.toContain("fc_failed");
+        expect(session.provider?.id).toBe(fallbackProvider.id);
+        if (discoveryEnabled) {
+          expect(session.getRoutingTrace()?.mode).toBe("discovery");
+        }
+        expect(session.getProviderChain()).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ id: initialProvider.id }),
+            expect.objectContaining({ id: fallbackProvider.id, statusCode: 200 }),
+          ])
+        );
+      } finally {
+        client.abort(new Error("fixture cleanup"));
+        await Promise.all([failed.close(), fallback.close()]);
+      }
+    }
+  );
+
+  it.each(
+    [false, true].flatMap((discoveryEnabled) => [
+      {
+        discoveryEnabled,
+        metadataBody:
+          'event: content_block_start\ndata: {"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"tu_failed","name":"lookup","input":{}}}\n\n',
+        metadataName: "tool start",
+        pathName: discoveryEnabled ? "Discovery" : "enforced gate",
+      },
+      {
+        discoveryEnabled,
+        metadataBody:
+          'event: content_block_start\ndata: {"type":"content_block_start","index":0,"content_block":{"type":"thinking","thinking":""}}\n\n',
+        metadataName: "empty thinking start",
+        pathName: discoveryEnabled ? "Discovery" : "enforced gate",
+      },
+      {
+        discoveryEnabled,
+        metadataBody:
+          'event: content_block_start\ndata: {"type":"content_block_start","index":0,"content_block":{"type":"redacted_thinking","data":""}}\n\n',
+        metadataName: "empty redacted thinking start",
+        pathName: discoveryEnabled ? "Discovery" : "enforced gate",
+      },
+    ])
+  )(
+    "keeps Anthropic $metadataName precommit and falls back on transport abort ($pathName)",
+    async ({ discoveryEnabled, metadataBody }) => {
+      const [failed, fallback] = await Promise.all([startUpstream(), startUpstream()]);
+      const client = new AbortController();
+      try {
+        state.discoveryEnabled = discoveryEnabled;
+        state.streamGateMode = "enforce";
+        const initialProvider = createProvider(1, failed.baseUrl, 0);
+        const fallbackProvider = createProvider(2, fallback.baseUrl, 0);
+        fallbackProvider.priority = initialProvider.priority;
+        state.providers.push(fallbackProvider);
+        const session = await createSession(initialProvider, "/v1/messages", client.signal);
+        session.sessionId = `integration-anthropic-precommit-${discoveryEnabled}`;
+
+        const forwarded = ProxyForwarder.send(session);
+        await failed.response;
+        if (discoveryEnabled) await fallback.response;
+
+        await failed.write(metadataBody);
+
+        const precommitState = await Promise.race([
+          forwarded.then(
+            () => "resolved" as const,
+            () => "rejected" as const
+          ),
+          new Promise<"pending">((resolve) => setTimeout(() => resolve("pending"), 25)),
+        ]);
+        expect(precommitState).toBe("pending");
+
+        await failed.abort(new Error("stream interrupted before completion"));
+        await fallback.response;
+        await fallback.send(
+          'event: content_block_delta\ndata: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"fallback"}}\n\n' +
+            'event: message_stop\ndata: {"type":"message_stop"}\n\n'
+        );
+
+        const downstream = await ProxyResponseHandler.dispatch(session, await forwarded);
+        const body = await downstream.text();
+        await settleTasks();
+
+        expect(body).toContain('"text":"fallback"');
+        expect(body).not.toContain("tu_failed");
+        expect(session.provider?.id).toBe(fallbackProvider.id);
+        expect(session.getProviderChain()).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ id: initialProvider.id }),
+            expect.objectContaining({ id: fallbackProvider.id, statusCode: 200 }),
+          ])
+        );
+      } finally {
+        client.abort(new Error("fixture cleanup"));
+        await Promise.all([failed.close(), fallback.close()]);
+      }
+    }
+  );
+
+  it("does not splice a fallback stream after real Responses content is committed", async () => {
+    const [committed, fallback] = await Promise.all([startUpstream(), startUpstream()]);
+    const client = new AbortController();
+    try {
+      state.streamGateMode = "enforce";
+      const initialProvider = createProvider(1, committed.baseUrl, 0);
+      initialProvider.providerType = "codex";
+      const fallbackProvider = createProvider(2, fallback.baseUrl, 0);
+      fallbackProvider.providerType = "codex";
+      state.providers.push(fallbackProvider);
+      const session = await createSession(initialProvider, "/v1/responses", client.signal);
+      const stream = responsesStreamFixture("resp_committed", "msg_committed");
+
+      const forwarded = ProxyForwarder.send(session);
+      await committed.response;
+      await committed.write(stream.firstContent);
+
+      const downstream = await ProxyResponseHandler.dispatch(session, await forwarded);
+      expect(fallback.requestCount()).toBe(0);
+
+      const malformed =
+        'event: response.in_progress\ndata: {"type":"response.in_progress","response":\n\n';
+      await committed.send(`${malformed}${stream.completed}`);
+      const body = await downstream.text();
+      await settleTasks();
+
+      expect(body).toContain('"delta":"我"');
+      expect(body).toContain(malformed);
+      expect(fallback.requestCount()).toBe(0);
+      expect(state.durableTerminal).toHaveBeenCalledWith(
+        MESSAGE.id,
+        expect.objectContaining({
+          inputTokens: 1,
+          outputTokens: 1,
+          statusCode: 200,
+        }),
+        expect.objectContaining({ onCommitted: expect.any(Function) })
+      );
+    } finally {
+      client.abort(new Error("fixture cleanup"));
+      await Promise.all([committed.close(), fallback.close()]);
     }
   });
 

@@ -57,15 +57,21 @@ const STREAM_SIGNALS: Record<ProtocolFamily, StreamSignal> = {
         ],
       },
       {
-        // start 帧即携带实体 payload 的内容块；text/thinking 空启动块等 delta
+        // start 帧即携带完整实体 payload 的内容块。tool_use 系列只提供 id/name，
+        // Anthropic SDK 需要后续 input_json_delta 才能得到可执行 input，不能在这里提交。
         eventTypes: ["content_block_start"],
+        anyPaths: [
+          "content_block.data",
+          "content_block.content",
+          "content_block.file_id",
+          "content_block.fileId",
+          "content_block.url",
+          "content_block.result",
+        ],
         valueMatches: [
           {
             path: "content_block.type",
             values: [
-              "tool_use",
-              "server_tool_use",
-              "mcp_tool_use",
               "redacted_thinking",
               "web_search_tool_result",
               "web_fetch_tool_result",
@@ -82,7 +88,7 @@ const STREAM_SIGNALS: Record<ProtocolFamily, StreamSignal> = {
     ],
     errorRules: [
       // SSE event: error + data {"type":"error","error":{...}}
-      { eventTypes: ["error"] },
+      { eventTypes: ["error", "response.error"] },
       // 任意帧携带非空顶层 error 对象（非规范上游 fake-200 兜底）
       { anyPaths: ["error"] },
     ],
@@ -94,8 +100,8 @@ const STREAM_SIGNALS: Record<ProtocolFamily, StreamSignal> = {
         // chunk 无事件名；delta 携带 content/tool_calls/refusal/audio 即内容
         anyPaths: [
           "choices.#.delta.content",
-          "choices.#.delta.tool_calls",
-          "choices.#.delta.function_call",
+          "choices.#.delta.tool_calls.#.function.arguments",
+          "choices.#.delta.function_call.arguments",
           "choices.#.delta.refusal",
           "choices.#.delta.audio.data",
           "choices.#.delta.audio.transcript",
@@ -161,21 +167,34 @@ const STREAM_SIGNALS: Record<ProtocolFamily, StreamSignal> = {
         anyPaths: ["code"],
       },
       {
-        // function_call / mcp_call output item 携带工具名 = 模型已决定调用工具
-        eventTypes: ["response.output_item.added"],
-        anyPaths: ["item.name"],
+        // output_item.added 的 name/id/status 只是结构元数据；真实 payload 到达前不能提交，
+        // 否则紧随其后的 response.failed / 断流将失去透明 fallback 机会。
+        // fake-streaming 的完整 item 会在 added/done 中携带 arguments/input/action，仍可提交。
+        eventTypes: ["response.output_item.added", "response.output_item.done"],
+        anyPaths: [
+          "item.content.#.text",
+          "item.summary.#.text",
+          "item.arguments",
+          "item.input",
+          "item.action",
+          "item.queries",
+          "item.query",
+          "item.code",
+          "item.command",
+          "item.operation",
+        ],
       },
     ],
     errorRules: [
       // 顶层 error 事件（code/message/param）
-      { eventTypes: ["error"] },
+      { eventTypes: ["error", "response.error"] },
       // 整个 response 失败（response.error 已填充）；
       // 子工具失败（mcp_call.failed 等）模型可继续，为中性
       { eventTypes: ["response.failed"] },
       // 任意帧携带非空 error 对象（response.* 事件的 error:null 不命中）
       { anyPaths: ["error", "response.error"] },
     ],
-    terminalEvents: ["response.completed", "response.incomplete"],
+    terminalEvents: ["response.completed", "response.incomplete", "response.done"],
   },
   gemini: {
     contentRules: [

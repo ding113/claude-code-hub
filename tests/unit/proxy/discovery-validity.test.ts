@@ -95,7 +95,7 @@ describe("discovery validity", () => {
     ).toBe(false);
     expect(
       classifyDiscoveryChunk(
-        'data: {"type":"response.output_text.delta","delta":"  "}\n\n',
+        'data: {"type":"response.output_text.delta","delta":""}\n\n',
         "openai-responses"
       ).ready
     ).toBe(false);
@@ -156,7 +156,19 @@ describe("discovery validity", () => {
     ).toBe(false);
     expect(
       classifyDiscoveryChunk(
+        'data: {"type":"response.output_item.added","item":{"id":"fc_1","type":"function_call","name":"lookup","arguments":""}}\n\n',
+        "openai-responses"
+      ).ready
+    ).toBe(false);
+    expect(
+      classifyDiscoveryChunk(
         'data: {"type":"response.output_item.added","item":{"id":"fc_1","type":"function_call","name":"lookup","arguments":"{}"}}\n\n',
+        "openai-responses"
+      ).ready
+    ).toBe(true);
+    expect(
+      classifyDiscoveryChunk(
+        'data: {"type":"response.output_item.done","item":{"id":"fc_1","type":"function_call","name":"lookup","arguments":"{}"}}\n\n',
         "openai-responses"
       ).ready
     ).toBe(true);
@@ -256,17 +268,44 @@ describe("discovery validity", () => {
     ).toMatchObject({ ready: true, error: false });
   });
 
-  it("accepts Anthropic tool-use starts and partial JSON deltas", () => {
+  it("holds Anthropic tool-use starts until partial JSON deltas arrive", () => {
     expect(
       classifyDiscoveryChunk(
         'data: {"type":"content_block_start","content_block":{"type":"tool_use","id":"tu_1","name":"search","input":{}}}\n\n',
         "anthropic"
       ).ready
-    ).toBe(true);
+    ).toBe(false);
     expect(
       classifyDiscoveryChunk(
         'data: {"type":"content_block_delta","delta":{"type":"input_json_delta","partial_json":"{\\"q\\":1}"}}\n\n',
         "anthropic"
+      ).ready
+    ).toBe(true);
+  });
+
+  it("shares the enforced gate content boundary for structured protocol frames", () => {
+    expect(
+      classifyDiscoveryChunk(
+        'event: content_block_start\ndata: {"type":"content_block_start","content_block":{"type":"thinking","thinking":""}}\n\n',
+        "anthropic"
+      ).ready
+    ).toBe(false);
+    expect(
+      classifyDiscoveryChunk(
+        'event: content_block_start\ndata: {"type":"content_block_start","content_block":{"type":"redacted_thinking","data":"opaque"}}\n\n',
+        "anthropic"
+      ).ready
+    ).toBe(true);
+    expect(
+      classifyDiscoveryChunk(
+        'event: response.refusal.delta\ndata: {"type":"response.refusal.delta","delta":"blocked"}\n\n',
+        "openai-responses"
+      ).ready
+    ).toBe(true);
+    expect(
+      classifyDiscoveryChunk(
+        'event: response.output_item.done\ndata: {"type":"response.output_item.done","item":{"type":"computer_call","action":{"type":"click","x":10,"y":20}}}\n\n',
+        "openai-responses"
       ).ready
     ).toBe(true);
   });
