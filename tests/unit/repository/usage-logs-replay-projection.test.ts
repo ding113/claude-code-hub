@@ -55,7 +55,7 @@ function makeReplayRow(overrides: Record<string, unknown> = {}) {
     costBreakdown: null,
     hedgeLosers: null,
     durationMs: null,
-    tfftMs: null,
+    ttftMs: null,
     firstByteMs: null,
     errorMessage: null,
     providerChain: null,

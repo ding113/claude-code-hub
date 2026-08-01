@@ -154,7 +154,7 @@ describe("message_request 异步批量写入", () => {
     } = await import("@/repository/message-write-buffer");
 
     enqueueMessageRequestUpdate(42, { durationMs: 100 });
-    enqueueMessageRequestUpdate(42, { statusCode: 200, tfftMs: 10 });
+    enqueueMessageRequestUpdate(42, { statusCode: 200, ttftMs: 10 });
 
     await flushMessageRequestWriteBuffer();
     await stopMessageRequestWriteBuffer();
@@ -1438,7 +1438,7 @@ describe("message_request 异步批量写入", () => {
         outcome: "success" as const,
         statusCode: 200,
         durationMs: 100,
-        ttfbMs: 50,
+        ttftMs: 50,
         attemptsPerRequest: 2,
         maxActiveAttempts: 2,
         rounds: 1,

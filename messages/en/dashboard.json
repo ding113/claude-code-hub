@@ -356,20 +356,20 @@
       "performance": {
         "title": "Performance",
         "ttfb": "TTFB",
-        "tfft": "TFFT",
-        "tfftShort": "TFFT",
+        "ttft": "TTFT",
+        "ttftShort": "TTFT",
         "duration": "Total Duration",
         "outputRate": "Output Rate",
         "outputTokens": "Output Tokens"
       },
       "performanceTab": {
         "noPerformanceData": "No performance data available",
-        "tfftGauge": "Time to First Token",
+        "ttftGauge": "Time to First Token",
         "outputRateGauge": "Output Rate",
         "latencyBreakdown": "Latency Breakdown",
         "generationTime": "Generation Time",
         "segmentTtfb": "TTFB",
-        "segmentTfft": "Token Wait",
+        "segmentTtft": "Token Wait",
         "segmentTotal": "Total",
         "assessment": {
           "excellent": "Excellent",
@@ -689,7 +689,7 @@
       "totalConsumedAmount": "Total Spend",
       "successRate": "Success Rate",
       "avgResponseTime": "Avg Response Time",
-      "avgTtfbMs": "Avg TFFT",
+      "avgTtftMs": "Avg TTFT",
       "avgTokensPerSecond": "Avg tok/s",
       "avgCostPerRequest": "Avg Cost/Req",
       "avgCostPerMillionTokens": "Avg Cost/1M Tokens",

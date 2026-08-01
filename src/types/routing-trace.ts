@@ -62,7 +62,7 @@ export interface RoutingTraceSummaryV1 {
   outcome: RoutingTraceRequestOutcome;
   statusCode: number;
   durationMs: number;
-  ttfbMs: number | null;
+  ttftMs: number | null;
   attemptsPerRequest: number;
   maxActiveAttempts: number;
   rounds: number;
@@ -232,11 +232,12 @@ function normalizeRoutingTraceSummary(value: unknown): RoutingTraceSummaryV1 | u
     "fallbackPromotions",
     "cancelFailures",
   ] as const;
+  const ttftMs = summary.ttftMs !== undefined ? summary.ttftMs : summary.ttfbMs;
   if (
     !outcomes.has(summary.outcome as RoutingTraceRequestOutcome) ||
     !winnerOrigins.has(summary.winnerOrigin as RoutingTraceWinnerOrigin) ||
     numericKeys.some((key) => finiteNumber(summary[key]) === undefined) ||
-    !(summary.ttfbMs === null || finiteNumber(summary.ttfbMs) !== undefined) ||
+    !(ttftMs === null || finiteNumber(ttftMs) !== undefined) ||
     !(summary.winnerProviderId === null || finiteNumber(summary.winnerProviderId) !== undefined) ||
     !(summary.winnerRound === null || finiteNumber(summary.winnerRound) !== undefined)
   ) {
@@ -246,7 +247,7 @@ function normalizeRoutingTraceSummary(value: unknown): RoutingTraceSummaryV1 | u
     outcome: summary.outcome as RoutingTraceRequestOutcome,
     statusCode: summary.statusCode as number,
     durationMs: summary.durationMs as number,
-    ttfbMs: summary.ttfbMs as number | null,
+    ttftMs: ttftMs as number | null,
     attemptsPerRequest: summary.attemptsPerRequest as number,
     maxActiveAttempts: summary.maxActiveAttempts as number,
     rounds: summary.rounds as number,

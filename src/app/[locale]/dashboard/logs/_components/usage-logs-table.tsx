@@ -592,9 +592,9 @@ export function UsageLogsTable({
                           log.firstByteMs
                         );
                         const secondLine = [
-                          log.tfftMs != null &&
-                            log.tfftMs > 0 &&
-                            `${t("logs.details.performance.tfft")} ${formatDuration(log.tfftMs)}`,
+                          log.ttftMs != null &&
+                            log.ttftMs > 0 &&
+                            `${t("logs.details.performance.ttft")} ${formatDuration(log.ttftMs)}`,
                           rate !== null && !hideRate && `${rate.toFixed(0)} tok/s`,
                         ]
                           .filter(Boolean)
@@ -618,10 +618,10 @@ export function UsageLogsTable({
                                   {t("logs.details.performance.duration")}:{" "}
                                   {formatDuration(log.durationMs)}
                                 </div>
-                                {log.tfftMs != null && (
+                                {log.ttftMs != null && (
                                   <div>
-                                    {t("logs.details.performance.tfft")}:{" "}
-                                    {formatDuration(log.tfftMs)}
+                                    {t("logs.details.performance.ttft")}:{" "}
+                                    {formatDuration(log.ttftMs)}
                                   </div>
                                 )}
                                 {log.firstByteMs != null && (
@@ -679,7 +679,7 @@ export function UsageLogsTable({
                         hedgeLosers={log.hedgeLosers}
                         context1mApplied={log.context1mApplied}
                         durationMs={log.durationMs}
-                        tfftMs={log.tfftMs}
+                        ttftMs={log.ttftMs}
                         firstByteMs={log.firstByteMs}
                         externalOpen={dialogState.logId === log.id ? true : undefined}
                         onExternalOpenChange={(open) => {

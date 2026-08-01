@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
  * 排行榜的两个延迟指标口径不同，必须分开：
- * - 展示用的 avgTtfbMs 走 usage_ledger.ttfb_ms（该列存的是 TFFT）
+ * - 展示用的 avgTtftMs 走 usage_ledger.ttfb_ms（该列存的是 TTFT）
  * - avgTokensPerSecond 的分母必须是真 TTFB（first_byte_ms），历史行由 IS NOT NULL 排除
  */
 
@@ -46,7 +46,7 @@ vi.mock("@/drizzle/schema", () => ({
     successRateOutcome: "successRateOutcome",
     blockedBy: "blockedBy",
     createdAt: "createdAt",
-    tfftMs: "tfftMs",
+    ttftMs: "ttftMs",
     firstByteMs: "firstByteMs",
     durationMs: "durationMs",
     model: "model",
@@ -91,10 +91,10 @@ describe("排行榜延迟指标口径", () => {
 
     const tpsSql = JSON.stringify(projection?.avgTokensPerSecond);
     expect(tpsSql).toContain("firstByteMs");
-    expect(tpsSql).not.toContain("tfftMs");
+    expect(tpsSql).not.toContain("ttftMs");
 
-    const avgLatencySql = JSON.stringify(projection?.avgTtfbMs);
-    expect(avgLatencySql).toContain("tfftMs");
+    const avgLatencySql = JSON.stringify(projection?.avgTtftMs);
+    expect(avgLatencySql).toContain("ttftMs");
     expect(avgLatencySql).not.toContain("firstByteMs");
   });
 });

@@ -77,7 +77,7 @@ function buildLangfuseSessionSnapshot(session: ProxySession): ProxySession {
     userAgent: session.userAgent,
     provider: session.provider,
     messageContext: session.messageContext,
-    tfftMs: session.tfftMs,
+    ttftMs: session.ttftMs,
     firstByteMs: session.firstByteMs,
     forwardStartTime: session.forwardStartTime,
     forwardedRequestBody,

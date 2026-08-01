@@ -356,20 +356,20 @@
       "performance": {
         "title": "パフォーマンス",
         "ttfb": "TTFB",
-        "tfft": "TFFT",
-        "tfftShort": "TFFT",
+        "ttft": "TTFT",
+        "ttftShort": "TTFT",
         "duration": "総所要時間",
         "outputRate": "出力速度",
         "outputTokens": "出力トークン"
       },
       "performanceTab": {
         "noPerformanceData": "パフォーマンスデータがありません",
-        "tfftGauge": "初トークン到達時間",
+        "ttftGauge": "初トークン到達時間",
         "outputRateGauge": "出力速度",
         "latencyBreakdown": "レイテンシ内訳",
         "generationTime": "生成時間",
         "segmentTtfb": "TTFB",
-        "segmentTfft": "トークン待機",
+        "segmentTtft": "トークン待機",
         "segmentTotal": "合計",
         "assessment": {
           "excellent": "優秀",
@@ -689,7 +689,7 @@
       "totalConsumedAmount": "総消費額",
       "successRate": "成功率(%)",
       "avgResponseTime": "平均応答時間",
-      "avgTtfbMs": "平均TFFT",
+      "avgTtftMs": "平均TTFT",
       "avgTokensPerSecond": "平均トークン/秒",
       "avgCostPerRequest": "平均リクエスト単価",
       "avgCostPerMillionTokens": "100万トークンあたりコスト",

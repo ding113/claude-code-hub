@@ -15,8 +15,8 @@ describe("computeTokensPerSecond", () => {
     expect(computeTokensPerSecond({ outputTokens: 50, durationMs: 1000 })).toBeNull();
   });
 
-  it("TTFB 基准得到的 TPS 低于（被门控放大的）TFFT 基准", () => {
-    const basedOnTfft = computeTokensPerSecond({
+  it("TTFB 基准得到的 TPS 低于（被门控放大的）TTFT 基准", () => {
+    const basedOnTtft = computeTokensPerSecond({
       outputTokens: 50,
       durationMs: 1000,
       firstByteMs: 900,
@@ -27,7 +27,7 @@ describe("computeTokensPerSecond", () => {
       firstByteMs: 200,
     });
 
-    expect(basedOnTfft).toBe(500);
+    expect(basedOnTtft).toBe(500);
     expect(basedOnTtfb).toBe(62.5);
   });
 

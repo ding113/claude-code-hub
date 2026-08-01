@@ -7,7 +7,7 @@ interface LatencyBreakdownBarProps {
   /** Time to first byte in milliseconds (null on rows persisted before it was recorded) */
   firstByteMs: number | null;
   /** Time to first token in milliseconds */
-  tfftMs: number | null;
+  ttftMs: number | null;
   /** Total duration in milliseconds */
   durationMs: number | null;
   /** Optional className */
@@ -25,7 +25,7 @@ function formatMs(ms: number): string {
 
 export function LatencyBreakdownBar({
   firstByteMs,
-  tfftMs,
+  ttftMs,
   durationMs,
   className,
   showLabels = true,
@@ -34,20 +34,20 @@ export function LatencyBreakdownBar({
 
   // Handle null/invalid values
   if (
-    tfftMs === null ||
+    ttftMs === null ||
     durationMs === null ||
-    tfftMs < 0 ||
+    ttftMs < 0 ||
     durationMs <= 0 ||
-    tfftMs > durationMs
+    ttftMs > durationMs
   ) {
     return null;
   }
 
-  // 历史行没有真 TTFB：首段退化为整个 TFFT，中间段消失
+  // 历史行没有真 TTFB：首段退化为整个 TTFT，中间段消失
   const ttfbMs =
-    firstByteMs !== null && firstByteMs >= 0 && firstByteMs <= tfftMs ? firstByteMs : tfftMs;
-  const tokenWaitMs = tfftMs - ttfbMs;
-  const generationMs = durationMs - tfftMs;
+    firstByteMs !== null && firstByteMs >= 0 && firstByteMs <= ttftMs ? firstByteMs : ttftMs;
+  const tokenWaitMs = ttftMs - ttfbMs;
+  const generationMs = durationMs - ttftMs;
 
   const percent = (ms: number) => (ms / durationMs) * 100;
   // Minimum width for visibility (3%)
@@ -65,7 +65,7 @@ export function LatencyBreakdownBar({
     {
       key: "tokenWait",
       ms: tokenWaitMs,
-      label: t("segmentTfft"),
+      label: t("segmentTtft"),
       barClass: "bg-violet-500",
       dotClass: "bg-violet-500",
     },

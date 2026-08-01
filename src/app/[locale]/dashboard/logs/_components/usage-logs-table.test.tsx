@@ -93,7 +93,7 @@ function makeLog(overrides: Partial<UsageLogRow>): UsageLogRow {
     costBreakdown: null,
     hedgeLosers: null,
     durationMs: 100,
-    tfftMs: 50,
+    ttftMs: 50,
     firstByteMs: 50,
     errorMessage: null,
     providerChain: null,
@@ -454,7 +454,7 @@ describe("usage-logs-table multiplier badge", () => {
     const html = renderToStaticMarkup(
       <UsageLogsTable
         logs={[
-          makeLog({ id: 1, durationMs: 1000, tfftMs: 950, firstByteMs: 950, outputTokens: 300 }),
+          makeLog({ id: 1, durationMs: 1000, ttftMs: 950, firstByteMs: 950, outputTokens: 300 }),
         ]}
         total={1}
         page={1}
@@ -466,8 +466,8 @@ describe("usage-logs-table multiplier badge", () => {
 
     // tok/s should NOT appear
     expect(html).not.toContain("tok/s");
-    // TFFT 行仍应出现
-    expect(html).toContain("logs.details.performance.tfft");
+    // TTFT 行仍应出现
+    expect(html).toContain("logs.details.performance.ttft");
   });
 
   test("shows tok/s when conditions are normal", () => {
@@ -476,7 +476,7 @@ describe("usage-logs-table multiplier badge", () => {
     const html = renderToStaticMarkup(
       <UsageLogsTable
         logs={[
-          makeLog({ id: 1, durationMs: 1000, tfftMs: 500, firstByteMs: 500, outputTokens: 50 }),
+          makeLog({ id: 1, durationMs: 1000, ttftMs: 500, firstByteMs: 500, outputTokens: 50 }),
         ]}
         total={1}
         page={1}
@@ -488,8 +488,8 @@ describe("usage-logs-table multiplier badge", () => {
 
     // tok/s should appear
     expect(html).toContain("tok/s");
-    // TFFT 行同样应出现
-    expect(html).toContain("logs.details.performance.tfft");
+    // TTFT 行同样应出现
+    expect(html).toContain("logs.details.performance.ttft");
   });
 
   test("renders swap indicator on cacheTtl badge when swapCacheTtlApplied is true", () => {

@@ -63,7 +63,7 @@ function makeTraceSession(startTime = 1_000): ProxySession {
     liveObservabilityClosed: false,
     routingTraceTerminalLogged: false,
     providerChain: [],
-    ttfbMs: null,
+    ttftMs: null,
   });
   return session;
 }
@@ -292,7 +292,7 @@ describe("ProxySession routing trace recorder", () => {
       outcome: "success",
       statusCode: 200,
       durationMs: 50,
-      ttfbMs: 50,
+      ttftMs: 50,
       attemptsPerRequest: 2,
       maxActiveAttempts: 2,
       rounds: 1,

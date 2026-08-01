@@ -407,7 +407,7 @@ describe("readPublicStatusPayload", () => {
                 requestTypeBadge: "openaiCompatible",
                 latestState: "operational",
                 availabilityPct: 99.5,
-                latestTtfbMs: 120,
+                latestTtftMs: 120,
                 latestTps: 4.2,
                 endpointUrl: "https://internal.example.com",
                 timeline: [
@@ -416,7 +416,7 @@ describe("readPublicStatusPayload", () => {
                     bucketEnd: "2026-04-21T10:00:00.000Z",
                     state: "operational",
                     availabilityPct: 99.5,
-                    ttfbMs: 120,
+                    ttftMs: 120,
                     tps: 4.2,
                     sampleCount: 10,
                     providerFailures: 1,
@@ -461,7 +461,7 @@ describe("readPublicStatusPayload", () => {
               requestTypeBadge: "openaiCompatible",
               latestState: "operational",
               availabilityPct: 99.5,
-              latestTtfbMs: 120,
+              latestTtftMs: 120,
               latestTps: 4.2,
               timeline: [
                 {
@@ -469,7 +469,7 @@ describe("readPublicStatusPayload", () => {
                   bucketEnd: "2026-04-21T10:00:00.000Z",
                   state: "operational",
                   availabilityPct: 99.5,
-                  ttfbMs: 120,
+                  ttftMs: 120,
                   tps: 4.2,
                   sampleCount: 10,
                 },
@@ -479,6 +479,82 @@ describe("readPublicStatusPayload", () => {
         },
       ],
     });
+  });
+
+  it("reads legacy TTFB field names from snapshots and exposes only TTFT names", async () => {
+    const triggerRebuildHint = vi.fn();
+    const redis = createRedisReader({
+      [buildPublicStatusManifestKey({
+        configVersion: "cfg-1",
+        intervalMinutes: 5,
+        rangeHours: 24,
+      })]: {
+        configVersion: "cfg-1",
+        intervalMinutes: 5,
+        rangeHours: 24,
+        generation: "gen-1",
+        sourceGeneration: "gen-1",
+        coveredFrom: "2026-04-20T10:00:00.000Z",
+        coveredTo: "2026-04-21T10:00:00.000Z",
+        generatedAt: "2026-04-21T09:59:00.000Z",
+        freshUntil: "2026-04-21T10:04:00.000Z",
+        rebuildState: "idle",
+        lastCompleteGeneration: "gen-1",
+      },
+      [buildPublicStatusCurrentSnapshotKey({
+        intervalMinutes: 5,
+        rangeHours: 24,
+        generation: "gen-1",
+      })]: {
+        sourceGeneration: "gen-1",
+        generatedAt: "2026-04-21T09:59:00.000Z",
+        freshUntil: "2026-04-21T10:04:00.000Z",
+        groups: [
+          {
+            publicGroupSlug: "openai",
+            displayName: "OpenAI",
+            explanatoryCopy: null,
+            models: [
+              {
+                publicModelKey: "gpt-4.1",
+                label: "GPT-4.1",
+                vendorIconKey: "openai",
+                requestTypeBadge: "openaiCompatible",
+                latestTtfbMs: 120,
+                timeline: [
+                  {
+                    bucketStart: "2026-04-21T09:55:00.000Z",
+                    bucketEnd: "2026-04-21T10:00:00.000Z",
+                    state: "operational",
+                    availabilityPct: 99.5,
+                    ttfbMs: 110,
+                    tps: 4.2,
+                    sampleCount: 10,
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    const payload = await readPublicStatusPayload({
+      intervalMinutes: 5,
+      rangeHours: 24,
+      nowIso: "2026-04-21T10:01:00.000Z",
+      configVersion: "cfg-1",
+      hasConfiguredGroups: true,
+      redis,
+      triggerRebuildHint,
+    });
+
+    expect(payload.groups[0]?.models[0]).toMatchObject({
+      latestTtftMs: 120,
+      timeline: [{ ttftMs: 110 }],
+    });
+    expect(JSON.stringify(payload)).not.toContain("ttfbMs");
+    expect(JSON.stringify(payload)).not.toContain("latestTtfbMs");
   });
 
   it("preserves degraded latestState and timeline states from redis snapshots", async () => {
@@ -522,7 +598,7 @@ describe("readPublicStatusPayload", () => {
                 requestTypeBadge: "openaiCompatible",
                 latestState: "degraded",
                 availabilityPct: 92.5,
-                latestTtfbMs: 180,
+                latestTtftMs: 180,
                 latestTps: 3.1,
                 timeline: [
                   {
@@ -530,7 +606,7 @@ describe("readPublicStatusPayload", () => {
                     bucketEnd: "2026-04-21T10:00:00.000Z",
                     state: "degraded",
                     availabilityPct: 92.5,
-                    ttfbMs: 180,
+                    ttftMs: 180,
                     tps: 3.1,
                     sampleCount: 8,
                   },
@@ -560,7 +636,7 @@ describe("readPublicStatusPayload", () => {
           bucketEnd: "2026-04-21T10:00:00.000Z",
           state: "degraded",
           availabilityPct: 92.5,
-          ttfbMs: 180,
+          ttftMs: 180,
           tps: 3.1,
           sampleCount: 8,
         },
@@ -627,7 +703,7 @@ describe("readPublicStatusPayload", () => {
                   requestTypeBadge: "openaiCompatible",
                   latestState: "operational",
                   availabilityPct: 99.5,
-                  latestTtfbMs: 120,
+                  latestTtftMs: 120,
                   latestTps: 4.2,
                   timeline: [
                     {
@@ -635,7 +711,7 @@ describe("readPublicStatusPayload", () => {
                       bucketEnd: "2026-04-21T09:50:00.000Z",
                       state: "operational",
                       availabilityPct: 99.1,
-                      ttfbMs: 110,
+                      ttftMs: 110,
                       tps: 4,
                       sampleCount: Number.NaN,
                     },
@@ -644,7 +720,7 @@ describe("readPublicStatusPayload", () => {
                       bucketEnd: "2026-04-21T09:55:00.000Z",
                       state: "operational",
                       availabilityPct: 99.3,
-                      ttfbMs: 115,
+                      ttftMs: 115,
                       tps: 4.1,
                       sampleCount: Number.POSITIVE_INFINITY,
                     },
@@ -653,7 +729,7 @@ describe("readPublicStatusPayload", () => {
                       bucketEnd: "2026-04-21T10:00:00.000Z",
                       state: "operational",
                       availabilityPct: 99.5,
-                      ttfbMs: 120,
+                      ttftMs: 120,
                       tps: 4.2,
                       sampleCount: 10,
                     },
@@ -685,7 +761,7 @@ describe("readPublicStatusPayload", () => {
           bucketEnd: "2026-04-21T10:00:00.000Z",
           state: "operational",
           availabilityPct: 99.5,
-          ttfbMs: 120,
+          ttftMs: 120,
           tps: 4.2,
           sampleCount: 10,
         },

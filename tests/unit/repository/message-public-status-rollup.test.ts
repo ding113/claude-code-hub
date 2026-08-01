@@ -440,7 +440,7 @@ describe("repository/message public status rollup hook", () => {
 
     const finalDetails = {
       statusCode: 200,
-      tfftMs: 200,
+      ttftMs: 200,
       outputTokens: 50,
       providerChain: [
         {
@@ -469,7 +469,7 @@ describe("repository/message public status rollup hook", () => {
           originalModel: "gpt-4.1",
           model: "gpt-4.1",
           outputTokens: 50,
-          tfftMs: 200,
+          ttftMs: 200,
         }),
       })
     );
@@ -489,7 +489,7 @@ describe("repository/message public status rollup hook", () => {
 
     await updateMessageRequestDetails(202, {
       statusCode: 200,
-      tfftMs: 250,
+      ttftMs: 250,
       outputTokens: 75,
       providerChain: [
         {
@@ -513,7 +513,7 @@ describe("repository/message public status rollup hook", () => {
           originalModel: "gpt-4.1",
           model: "gpt-4.1",
           outputTokens: 75,
-          tfftMs: 250,
+          ttftMs: 250,
         }),
       })
     );
@@ -577,7 +577,7 @@ describe("repository/message public status rollup hook", () => {
 
     const finalDetails = {
       statusCode: 200,
-      tfftMs: 300,
+      ttftMs: 300,
       outputTokens: 90,
       providerChain: [
         {
@@ -604,7 +604,7 @@ describe("repository/message public status rollup hook", () => {
           createdAt: new Date("2026-04-21T10:04:00.000Z"),
           durationMs: 1800,
           outputTokens: 90,
-          tfftMs: 300,
+          ttftMs: 300,
         }),
       })
     );
@@ -661,7 +661,7 @@ describe("repository/message public status rollup hook", () => {
 
     const finalDetails = {
       statusCode: 200,
-      tfftMs: 300,
+      ttftMs: 300,
       outputTokens: 90,
       providerChain: [
         {
@@ -750,7 +750,7 @@ describe("repository/message public status rollup hook", () => {
 
     const finalDetails = {
       statusCode: 200,
-      tfftMs: 320,
+      ttftMs: 320,
       outputTokens: 95,
       providerChain: [
         {
@@ -776,7 +776,7 @@ describe("repository/message public status rollup hook", () => {
           createdAt: new Date("2026-04-21T10:06:00.000Z"),
           durationMs: 1900,
           outputTokens: 95,
-          tfftMs: 320,
+          ttftMs: 320,
         }),
       })
     );

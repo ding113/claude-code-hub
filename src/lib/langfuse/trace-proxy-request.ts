@@ -190,11 +190,11 @@ export async function traceProxyRequest(ctx: TraceContext): Promise<void> {
       guardPipelineMs,
       upstreamTotalMs:
         guardPipelineMs != null ? Math.max(0, durationMs - guardPipelineMs) : durationMs,
-      tfftFromForwardMs:
-        guardPipelineMs != null && session.tfftMs != null
-          ? Math.max(0, session.tfftMs - guardPipelineMs)
+      ttftFromForwardMs:
+        guardPipelineMs != null && session.ttftMs != null
+          ? Math.max(0, session.ttftMs - guardPipelineMs)
           : null,
-      tokenGenerationMs: session.tfftMs != null ? Math.max(0, durationMs - session.tfftMs) : null,
+      tokenGenerationMs: session.ttftMs != null ? Math.max(0, durationMs - session.ttftMs) : null,
       failedAttempts: session.getProviderChain().filter((i) => !isSuccessReason(i.reason)).length,
       providersAttempted: new Set(session.getProviderChain().map((i) => i.id)).size,
     };
@@ -278,7 +278,7 @@ export async function traceProxyRequest(ctx: TraceContext): Promise<void> {
       keyName: messageContext?.key?.name,
       // Timing
       durationMs,
-      tfftMs: session.tfftMs,
+      ttftMs: session.ttftMs,
       firstByteMs: session.firstByteMs,
       timingBreakdown,
       // Flags
@@ -433,10 +433,10 @@ export async function traceProxyRequest(ctx: TraceContext): Promise<void> {
           { asType: "generation", startTime: generationStartTime } as { asType: "generation" }
         );
 
-        // Set TTFB as completionStartTime
-        if (session.tfftMs != null) {
+        // Set TTFT as completionStartTime
+        if (session.ttftMs != null) {
           generation.update({
-            completionStartTime: new Date(session.startTime + session.tfftMs),
+            completionStartTime: new Date(session.startTime + session.ttftMs),
           });
         }
 

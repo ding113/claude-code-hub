@@ -356,20 +356,20 @@
       "performance": {
         "title": "性能数据",
         "ttfb": "首字节时间（TTFB）",
-        "tfft": "首 Token 时间（TFFT）",
-        "tfftShort": "TFFT",
+        "ttft": "首 Token 时间（TTFT）",
+        "ttftShort": "TTFT",
         "duration": "总耗时",
         "outputRate": "输出速率",
         "outputTokens": "输出 Tokens"
       },
       "performanceTab": {
         "noPerformanceData": "暂无性能数据",
-        "tfftGauge": "首 Token 时间",
+        "ttftGauge": "首 Token 时间",
         "outputRateGauge": "输出速率",
         "latencyBreakdown": "延迟分解",
         "generationTime": "生成时间",
         "segmentTtfb": "TTFB",
-        "segmentTfft": "等待首 Token",
+        "segmentTtft": "等待首 Token",
         "segmentTotal": "总计",
         "assessment": {
           "excellent": "优秀",
@@ -689,7 +689,7 @@
       "totalConsumedAmount": "总消耗金额",
       "successRate": "成功率",
       "avgResponseTime": "平均响应时间",
-      "avgTtfbMs": "平均 TFFT",
+      "avgTtftMs": "平均 TTFT",
       "avgTokensPerSecond": "平均输出速率",
       "avgCostPerRequest": "平均单次请求成本",
       "avgCostPerMillionTokens": "平均百万 Token 成本",

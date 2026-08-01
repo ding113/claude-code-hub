@@ -47,7 +47,7 @@ async function importAggregationModule() {
         originalModel?: string | null;
         model?: string | null;
         durationMs?: number | null;
-        ttfbMs?: number | null;
+        ttftMs?: number | null;
         outputTokens?: number | null;
         providerChain?: Array<{
           id: number;
@@ -200,7 +200,7 @@ describe("public-status rebuild worker", () => {
           createdAt: "2026-04-21T10:10:00.000Z",
           originalModel: "gpt-4.1",
           durationMs: 1000,
-          ttfbMs: 200,
+          ttftMs: 200,
           outputTokens: 80,
           providerChain: [
             {
@@ -217,7 +217,7 @@ describe("public-status rebuild worker", () => {
           createdAt: "2026-04-21T10:40:00.000Z",
           originalModel: "gpt-4.1",
           durationMs: 1400,
-          ttfbMs: 300,
+          ttftMs: 300,
           outputTokens: 60,
           providerChain: [
             {

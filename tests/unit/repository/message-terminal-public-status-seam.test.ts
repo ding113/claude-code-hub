@@ -303,7 +303,7 @@ describe("message terminal public-status public seam", () => {
       statusCode: 502,
       inputTokens: 31,
       outputTokens: 3,
-      tfftMs: 900,
+      ttftMs: 900,
       providerChain: [
         {
           id: 11,
@@ -321,7 +321,7 @@ describe("message terminal public-status public seam", () => {
       durationMs: 1_500,
       statusCode: 200,
       outputTokens: 96,
-      tfftMs: 300,
+      ttftMs: 300,
       providerChain: [
         {
           id: 22,
@@ -337,7 +337,7 @@ describe("message terminal public-status public seam", () => {
     const row: TerminalRow & {
       inputTokens: number | null;
       outputTokens: number | null;
-      tfftMs: number | null;
+      ttftMs: number | null;
       providerChain: unknown;
       providerId: number | null;
     } = {
@@ -349,7 +349,7 @@ describe("message terminal public-status public seam", () => {
       statusCode: null,
       inputTokens: null,
       outputTokens: null,
-      tfftMs: null,
+      ttftMs: null,
       providerChain: null,
       providerId: null,
     };
@@ -385,7 +385,7 @@ describe("message terminal public-status public seam", () => {
       row.statusCode = Number(readCaseValue("status_code"));
       row.inputTokens = Number(readCaseValue("input_tokens"));
       row.outputTokens = Number(readCaseValue("output_tokens"));
-      row.tfftMs = Number(readCaseValue("ttfb_ms"));
+      row.ttftMs = Number(readCaseValue("ttfb_ms"));
       row.providerChain = JSON.parse(String(readCaseValue("provider_chain")));
       row.providerId = Number(readCaseValue("provider_id"));
       return [{ id }];
@@ -525,7 +525,7 @@ describe("message terminal public-status public seam", () => {
       statusCode: oldFailureDetails.statusCode,
       inputTokens: oldFailureDetails.inputTokens,
       outputTokens: oldFailureDetails.outputTokens,
-      tfftMs: oldFailureDetails.tfftMs,
+      ttftMs: oldFailureDetails.ttftMs,
       providerChain: oldFailureDetails.providerChain,
       providerId: oldFailureDetails.providerId,
     });

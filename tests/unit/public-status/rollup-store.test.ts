@@ -42,7 +42,7 @@ describe("public-status rollup store", () => {
         createdAt: "2026-04-21T10:02:00.000Z",
         originalModel: "gpt-4.1",
         durationMs: 1200,
-        tfftMs: 200,
+        ttftMs: 200,
         firstByteMs: 200,
         outputTokens: 50,
         providerChain: [
@@ -150,7 +150,7 @@ describe("public-status rollup store", () => {
         createdAt: "2026-04-21T10:02:00.000Z",
         originalModel: "gpt-4.1",
         durationMs: 1200,
-        tfftMs: 200,
+        ttftMs: 200,
         firstByteMs: 200,
         outputTokens: 50,
         providerChain: [
@@ -227,7 +227,7 @@ describe("public-status rollup store", () => {
         createdAt: "2026-04-21T10:02:00.000Z",
         originalModel: "gpt-4.1",
         durationMs: 1200,
-        tfftMs: 200,
+        ttftMs: 200,
         firstByteMs: 200,
         outputTokens: 50,
         providerChain: [
@@ -312,7 +312,7 @@ describe("public-status rollup store", () => {
           createdAt: "2026-04-21T10:02:00.000Z",
           originalModel: "gpt-4.1",
           durationMs: 1200,
-          tfftMs: 200,
+          ttftMs: 200,
           firstByteMs: 200,
           outputTokens: 50,
           providerChain: [
@@ -350,7 +350,7 @@ describe("public-status rollup store", () => {
           createdAt: "2026-04-21T10:02:00.000Z",
           originalModel: "gpt-4.1",
           durationMs: 1200,
-          tfftMs: 200,
+          ttftMs: 200,
           firstByteMs: 200,
           outputTokens: 50,
           providerChain: [

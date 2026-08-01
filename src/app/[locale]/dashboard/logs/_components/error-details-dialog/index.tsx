@@ -52,7 +52,7 @@ interface ErrorDetailsDialogProps {
   hedgeLosers?: HedgeLoserBilling[] | null;
   context1mApplied?: boolean | null;
   durationMs?: number | null;
-  tfftMs?: number | null;
+  ttftMs?: number | null;
   firstByteMs?: number | null;
   externalOpen?: boolean;
   onExternalOpenChange?: (open: boolean) => void;
@@ -101,7 +101,7 @@ export function ErrorDetailsDialog({
   hedgeLosers,
   context1mApplied,
   durationMs,
-  tfftMs,
+  ttftMs,
   firstByteMs,
   externalOpen,
   onExternalOpenChange,
@@ -255,7 +255,7 @@ export function ErrorDetailsDialog({
     hedgeLosers,
     context1mApplied,
     durationMs,
-    tfftMs,
+    ttftMs,
     firstByteMs,
   };
 

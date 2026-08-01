@@ -14,7 +14,7 @@ function makeBucket(
     bucketEnd: "2026-04-22T00:05:00.000Z",
     state: "operational",
     availabilityPct: 100,
-    ttfbMs: 200,
+    ttftMs: 200,
     tps: 50,
     sampleCount: 10,
     ...overrides,

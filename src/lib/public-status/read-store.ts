@@ -123,7 +123,7 @@ function sanitizeTimelineBuckets(input: unknown): PublicStatusTimelineBucket[] {
         bucketEnd: value.bucketEnd,
         state: normalizeTimelineState(value.state),
         availabilityPct: normalizeNullableNumber(value.availabilityPct),
-        ttfbMs: normalizeNullableNumber(value.ttfbMs),
+        ttftMs: normalizeNullableNumber(value.ttftMs !== undefined ? value.ttftMs : value.ttfbMs),
         tps: normalizeNullableNumber(value.tps),
         sampleCount: value.sampleCount,
       },
@@ -159,7 +159,9 @@ function sanitizeModelSnapshots(input: unknown): PublicStatusModelSnapshot[] {
         requestTypeBadge: value.requestTypeBadge,
         latestState: normalizeTimelineState(value.latestState),
         availabilityPct: normalizeNullableNumber(value.availabilityPct),
-        latestTtfbMs: normalizeNullableNumber(value.latestTtfbMs),
+        latestTtftMs: normalizeNullableNumber(
+          value.latestTtftMs !== undefined ? value.latestTtftMs : value.latestTtfbMs
+        ),
         latestTps: normalizeNullableNumber(value.latestTps),
         timeline: sanitizeTimelineBuckets(value.timeline),
       },

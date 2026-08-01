@@ -340,14 +340,14 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
       getValue: (row) => row.successRate,
     },
     {
-      header: t("columns.avgTtfbMs"),
+      header: t("columns.avgTtftMs"),
       className: "text-right",
       cell: (row) => {
-        const val = row.avgTtfbMs;
+        const val = row.avgTtftMs;
         return val && val > 0 ? `${Math.round(val).toLocaleString()} ms` : "-";
       },
-      sortKey: "avgTtfbMs",
-      getValue: (row) => row.avgTtfbMs ?? 0,
+      sortKey: "avgTtftMs",
+      getValue: (row) => row.avgTtftMs ?? 0,
     },
     {
       header: t("columns.avgTokensPerSecond"),

@@ -8,17 +8,17 @@ describe("calculateOutputRate", () => {
   });
 
   it("firstByteMs 缺失返回 null，不再回退到总耗时", () => {
-    // 门禁上线前的历史行只有 TFFT。用总耗时兜底会把上游排队算进生成时间。
+    // 门禁上线前的历史行只有 TTFT。用总耗时兜底会把上游排队算进生成时间。
     expect(calculateOutputRate(50, 1000, null)).toBeNull();
   });
 
-  it("TTFB 大于 TFFT 会让 TPS 偏高，TTFB 基准才是准确值", () => {
-    const basedOnTfft = calculateOutputRate(50, 1000, 900);
+  it("TTFT 大于 TTFB 会让 TPS 偏高，TTFB 基准才是准确值", () => {
+    const basedOnTtft = calculateOutputRate(50, 1000, 900);
     const basedOnTtfb = calculateOutputRate(50, 1000, 200);
 
-    expect(basedOnTfft).toBe(500);
+    expect(basedOnTtft).toBe(500);
     expect(basedOnTtfb).toBe(62.5);
-    expect(basedOnTtfb!).toBeLessThan(basedOnTfft!);
+    expect(basedOnTtfb!).toBeLessThan(basedOnTtft!);
   });
 
   it("生成窗口非正、无 token、无耗时都返回 null", () => {

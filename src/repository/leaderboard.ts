@@ -68,7 +68,7 @@ export interface ProviderLeaderboardEntry {
   totalCost: number;
   totalTokens: number;
   successRate: number | null; // 0-1 之间的小数，UI 层负责格式化为百分比
-  avgTtfbMs: number; // 毫秒
+  avgTtftMs: number; // 毫秒
   avgTokensPerSecond: number; // tok/s（仅统计流式且可计算的请求）
   avgCostPerRequest: number | null; // totalCost / totalRequests, null when totalRequests === 0
   avgCostPerMillionTokens: number | null; // totalCost * 1_000_000 / totalTokens, null when totalTokens === 0
@@ -91,7 +91,7 @@ export interface ModelProviderStat {
   totalCost: number;
   totalTokens: number;
   successRate: number | null; // 0-1
-  avgTtfbMs: number; // 毫秒
+  avgTtftMs: number; // 毫秒
   avgTokensPerSecond: number; // tok/s
   avgCostPerRequest: number | null;
   avgCostPerMillionTokens: number | null;
@@ -663,8 +663,8 @@ async function findProviderLeaderboardWithTimezone(
     0::double precision
   )`;
   const successRateExpr = LEDGER_SUCCESS_RATE_EXPR;
-  // 展示用的均值走 ttfb_ms 列，该列存的是 TFFT（见 schema.ts）
-  const avgTtfbMsExpr = sql<number>`COALESCE(avg(${usageLedger.tfftMs})::double precision, 0::double precision)`;
+  // 展示用的均值走 ttfb_ms 列，该列存的是 TTFT（见 schema.ts）
+  const avgTtftMsExpr = sql<number>`COALESCE(avg(${usageLedger.ttftMs})::double precision, 0::double precision)`;
   // TPS 必须以真 TTFB 为基准；first_byte_ms 为 NULL 的历史行由 IS NOT NULL 排除
   const avgTokensPerSecondExpr = sql<number>`COALESCE(
     avg(
@@ -694,7 +694,7 @@ async function findProviderLeaderboardWithTimezone(
       totalCost: totalCostExpr,
       totalTokens: totalTokensExpr,
       successRate: successRateExpr,
-      avgTtfbMs: avgTtfbMsExpr,
+      avgTtftMs: avgTtftMsExpr,
       avgTokensPerSecond: avgTokensPerSecondExpr,
     })
     .from(usageLedger)
@@ -725,7 +725,7 @@ async function findProviderLeaderboardWithTimezone(
       totalCost,
       totalTokens,
       successRate: clampRatio01Nullable(entry.successRate),
-      avgTtfbMs: entry.avgTtfbMs ?? 0,
+      avgTtftMs: entry.avgTtftMs ?? 0,
       avgTokensPerSecond: entry.avgTokensPerSecond ?? 0,
       cacheCoefficientBp: cacheCoefficients.get(entry.providerId)?.coefficientBp ?? null,
       ...avgCosts,
@@ -751,7 +751,7 @@ async function findProviderLeaderboardWithTimezone(
       totalCost: totalCostExpr,
       totalTokens: totalTokensExpr,
       successRate: successRateExpr,
-      avgTtfbMs: avgTtfbMsExpr,
+      avgTtftMs: avgTtftMsExpr,
       avgTokensPerSecond: avgTokensPerSecondExpr,
     })
     .from(usageLedger)
@@ -780,7 +780,7 @@ async function findProviderLeaderboardWithTimezone(
       totalCost,
       totalTokens,
       successRate: basisDisclosureRequired ? null : clampRatio01Nullable(row.successRate),
-      avgTtfbMs: row.avgTtfbMs ?? 0,
+      avgTtftMs: row.avgTtftMs ?? 0,
       avgTokensPerSecond: row.avgTokensPerSecond ?? 0,
       rowIdentityBasis: billingModelSource,
       successRateBasis: basisDisclosureRequired ? "unavailable" : "original",
