@@ -8,6 +8,7 @@ function createThenableQuery<T>(result: T, whereArgs?: unknown[]) {
   query.innerJoin = vi.fn(() => query);
   query.leftJoin = vi.fn(() => query);
   query.orderBy = vi.fn(() => query);
+  query.groupBy = vi.fn(() => query);
   query.limit = vi.fn(() => query);
   query.offset = vi.fn(() => query);
   query.where = vi.fn((condition: unknown) => {
@@ -77,7 +78,10 @@ function makeReplayRow(overrides: Record<string, unknown> = {}) {
 describe("findUsageLogsBatch Replay projection", () => {
   test("projects Replay provenance from message_request", async () => {
     vi.resetModules();
-    const selectMock = vi.fn(() => createThenableQuery([makeReplayRow()]));
+    const selectMock = vi
+      .fn()
+      .mockImplementationOnce(() => createThenableQuery([makeReplayRow()]))
+      .mockImplementationOnce(() => createThenableQuery([]));
 
     vi.doMock("@/drizzle/db", () => ({ db: { select: selectMock } }));
     vi.doMock("@/lib/ledger-fallback", () => ({
@@ -104,7 +108,8 @@ describe("findUsageLogsBatch Replay projection", () => {
     const selectMock = vi
       .fn()
       .mockImplementationOnce(() => createThenableQuery([]))
-      .mockImplementationOnce(() => createThenableQuery([ledgerRow]));
+      .mockImplementationOnce(() => createThenableQuery([ledgerRow]))
+      .mockImplementationOnce(() => createThenableQuery([]));
 
     vi.doMock("@/drizzle/db", () => ({ db: { select: selectMock } }));
     vi.doMock("@/lib/ledger-fallback", () => ({

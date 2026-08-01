@@ -9,9 +9,13 @@ vi.mock("@/lib/session-tracker", () => ({
   },
 }));
 
-function installDbBoundary(rows: readonly unknown[]) {
+function installDbBoundary(rows: readonly unknown[] | readonly (readonly unknown[])[]) {
   const whereConditions: unknown[] = [];
+  let selectIndex = 0;
   const select = vi.fn(() => {
+    const selectedRows = Array.isArray(rows[0])
+      ? ((rows as readonly (readonly unknown[])[])[selectIndex++] ?? [])
+      : (rows as readonly unknown[]);
     const query = {
       from: vi.fn(() => query),
       leftJoin: vi.fn(() => query),
@@ -20,7 +24,7 @@ function installDbBoundary(rows: readonly unknown[]) {
         return query;
       }),
       orderBy: vi.fn(() => query),
-      limit: vi.fn(async () => rows),
+      limit: vi.fn(async () => selectedRows),
     };
     return query;
   });
@@ -95,5 +99,20 @@ describe("activity stream Replay exclusion", () => {
     expect(condition.sql).toContain("session_identity");
     expect(condition.sql).toContain("session_id");
     expect(activeSessionIdsMock).toHaveBeenCalledOnce();
+  });
+
+  it("does not exclude fallback rows through the physical session ID", async () => {
+    activeSessionIdsMock.mockResolvedValueOnce(["pfx:scope:fingerprint"]);
+    const boundary = installDbBoundary([
+      [{ ...REQUEST_ROW, sessionId: "pfx:scope:fingerprint", rowNum: 1 }],
+      [],
+    ]);
+    const { findRecentActivityStream } = await import("@/repository/activity-stream");
+
+    await findRecentActivityStream(2);
+
+    const condition = new PgDialect().sqlToQuery(boundary.whereConditions[1] as never);
+    expect(condition.sql.toLowerCase()).toContain("coalesce");
+    expect(condition.sql).not.toContain('and "message_request"."session_id" not in');
   });
 });

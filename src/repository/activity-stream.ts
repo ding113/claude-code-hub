@@ -154,10 +154,7 @@ export async function findRecentActivityStream(limit = 20): Promise<ActivityStre
 
       const conditions = [isNull(messageRequest.deletedAt), eq(messageRequest.isReplay, false)];
       if (excludedSessionIds.length > 0) {
-        conditions.push(
-          notInArray(messageSessionIdentity, excludedSessionIds),
-          notInArray(messageRequest.sessionId, excludedSessionIds)
-        );
+        conditions.push(notInArray(messageSessionIdentity, excludedSessionIds));
       }
 
       const recentRequests = await db
