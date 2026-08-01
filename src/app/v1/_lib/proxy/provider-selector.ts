@@ -604,6 +604,7 @@ export class ProxyProviderResolver {
       matchedFp: null,
       identityFp: null,
       generation: null,
+      lookup: null,
     };
     return true;
   }
@@ -700,6 +701,12 @@ export class ProxyProviderResolver {
     const affinity = session.affinity;
     if (!affinity) return null;
 
+    if (affinity.lookup) {
+      affinity.identityFp = affinity.lookup.identityFp;
+      affinity.generation = affinity.lookup.generation;
+      return affinity.lookup;
+    }
+
     const lookup = await getAffinityStore().lookup(
       affinity.scopeTag,
       fingerprintsDeepestFirst(affinity.chain),
@@ -709,6 +716,7 @@ export class ProxyProviderResolver {
 
     affinity.identityFp = lookup.identityFp;
     affinity.generation = lookup.generation;
+    affinity.lookup = lookup;
     return lookup;
   }
 

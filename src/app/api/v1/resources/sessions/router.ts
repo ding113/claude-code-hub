@@ -6,6 +6,7 @@ import {
   BatchTerminateSessionsResponseSchema,
   BatchTerminateSessionsSchema,
   SessionBooleanResponseSchema,
+  SessionDetailQuerySchema,
   SessionGenericResponseSchema,
   SessionIdParamSchema,
   SessionListResponseSchema,
@@ -117,7 +118,7 @@ sessionsRouter.openapi(
     description: "Returns session detail, snapshots, request metadata, and response metadata.",
     "x-required-access": "read",
     security,
-    request: { params: SessionIdParamSchema, query: SessionSequenceQuerySchema },
+    request: { params: SessionIdParamSchema, query: SessionDetailQuerySchema },
     responses: {
       200: {
         description: "Session detail.",

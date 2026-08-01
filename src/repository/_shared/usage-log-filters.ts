@@ -141,7 +141,9 @@ export function buildUsageLogConditions(filters: UsageLogFilterParams): SQL[] {
 
   const trimmedSessionId = filters.sessionId?.trim();
   if (trimmedSessionId) {
-    conditions.push(eq(messageRequest.sessionId, trimmedSessionId));
+    conditions.push(
+      sql`COALESCE(${messageRequest.sessionIdentity}, ${messageRequest.sessionId}) = ${trimmedSessionId}`
+    );
   }
 
   if (filters.startTime !== undefined) {

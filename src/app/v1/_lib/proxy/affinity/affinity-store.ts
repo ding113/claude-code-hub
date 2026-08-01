@@ -46,12 +46,14 @@ return candidates
 `;
 
 const VALIDATE_LOOKUP_HIT_LUA = `
--- affinity_validate_hit_v4
+-- affinity_validate_hit_v5
 local expectedValue = ARGV[1]
 local expectedGeneration = ARGV[2]
 local migratedValue = ARGV[3]
 local ttl = tonumber(ARGV[4])
 local generationTtl = tonumber(ARGV[5])
+local now = tonumber(ARGV[6])
+local bindingExpiresAt = tonumber(ARGV[7])
 
 local function extendTtl(key, requestedTtl)
   if not requestedTtl or requestedTtl <= 0 then return end
@@ -75,8 +77,11 @@ if ttl and ttl > 0 then
   redis.call('EXPIRE', KEYS[1], ttl)
 end
 extendTtl(KEYS[2], generationTtl)
-redis.call('SADD', KEYS[3], KEYS[1])
-extendTtl(KEYS[3], ttl)
+redis.call('ZREMRANGEBYSCORE', KEYS[3], '-inf', now)
+if ttl and ttl > 0 then
+  redis.call('ZADD', KEYS[3], bindingExpiresAt, KEYS[1])
+  extendTtl(KEYS[3], ttl)
+end
 return 1
 `;
 
@@ -93,13 +98,14 @@ return redis.call('GET', KEYS[1])
 `;
 
 const CAS_WRITE_LUA = `
--- affinity_cas_write_v2
+-- affinity_cas_write_v3
 local generation = redis.call('GET', KEYS[1])
 if not generation or generation ~= ARGV[1] then
   return 0
 end
 redis.call('SET', KEYS[2], ARGV[2], 'EX', tonumber(ARGV[3]))
-redis.call('SADD', KEYS[3], KEYS[2])
+redis.call('ZREMRANGEBYSCORE', KEYS[3], '-inf', tonumber(ARGV[5]))
+redis.call('ZADD', KEYS[3], tonumber(ARGV[6]), KEYS[2])
 local registryTtl = redis.call('TTL', KEYS[3])
 if registryTtl < tonumber(ARGV[3]) then
   redis.call('EXPIRE', KEYS[3], tonumber(ARGV[3]))
@@ -112,13 +118,14 @@ return 1
 `;
 
 const INVALIDATE_LUA = `
--- affinity_invalidate_v2
+-- affinity_invalidate_v3
 local generation = ARGV[1]
 redis.call('SET', KEYS[1], generation, 'EX', tonumber(ARGV[2]))
-for i = 3, #KEYS do
+for i = 4, #KEYS do
   redis.call('DEL', KEYS[i])
 end
 redis.call('DEL', KEYS[2])
+redis.call('DEL', KEYS[3])
 return generation
 `;
 
@@ -138,7 +145,10 @@ export interface AffinityLookupResult {
   generation: string;
 }
 
-type RedisLuaClient = Pick<Redis, "status" | "set" | "del" | "smembers"> & {
+type RedisLuaClient = Pick<
+  Redis,
+  "status" | "set" | "del" | "smembers" | "zrange" | "zremrangebyscore"
+> & {
   eval(...args: [script: string, numkeys: number, ...rest: (string | number)[]]): Promise<unknown>;
 };
 
@@ -175,6 +185,10 @@ export class AffinityStore {
 
   private buildDescendantsKey(scopeTag: string, identityFp: string): string {
     return `cch:pfx:{${scopeTag}}:desc:${identityFp}`;
+  }
+
+  private buildDescendantsV2Key(scopeTag: string, identityFp: string): string {
+    return `cch:pfx:{${scopeTag}}:desc-v2:${identityFp}`;
   }
 
   private buildLegacyGenerationKey(scopeTag: string): string {
@@ -232,17 +246,21 @@ export class AffinityStore {
           migratedValue = `1|${providerId}|${identityFp}|${generation}`;
         }
 
+        const ttlSeconds = Math.max(0, Math.floor(slidingTtlSeconds));
+        const now = Math.floor(Date.now() / 1000);
         const validated = await redis.eval(
           VALIDATE_LOOKUP_HIT_LUA,
           3,
           bindingKey,
           this.buildGenerationKey(scopeTag, identityFp),
-          this.buildDescendantsKey(scopeTag, identityFp),
+          this.buildDescendantsV2Key(scopeTag, identityFp),
           value,
           generation,
           migratedValue,
-          String(Math.max(0, Math.floor(slidingTtlSeconds))),
-          GENERATION_FENCE_TTL_SECONDS
+          String(ttlSeconds),
+          GENERATION_FENCE_TTL_SECONDS,
+          now,
+          now + ttlSeconds
         );
         if (Number(validated) !== 1) continue;
 
@@ -306,17 +324,20 @@ export class AffinityStore {
     if (!redis) return false;
 
     const value = `1|${providerId}|${identityFp}|${expectedGeneration}`;
+    const now = Math.floor(Date.now() / 1000);
     try {
       const result = await redis.eval(
         CAS_WRITE_LUA,
         3,
         this.buildGenerationKey(scopeTag, identityFp),
         this.buildKey(scopeTag, tipFp),
-        this.buildDescendantsKey(scopeTag, identityFp),
+        this.buildDescendantsV2Key(scopeTag, identityFp),
         expectedGeneration,
         value,
         ttlSeconds,
-        GENERATION_FENCE_TTL_SECONDS
+        GENERATION_FENCE_TTL_SECONDS,
+        now,
+        now + ttlSeconds
       );
       return Number(result) === 1;
     } catch (error) {
@@ -340,17 +361,20 @@ export class AffinityStore {
     if (!scopeTag || !fp || !identityFp || !expectedGeneration) return false;
     const redis = this.getReadyRedis();
     if (!redis) return false;
+    const now = Math.floor(Date.now() / 1000);
     try {
       const result = await redis.eval(
         CAS_WRITE_LUA,
         3,
         this.buildGenerationKey(scopeTag, identityFp),
         this.buildKey(scopeTag, fp),
-        this.buildDescendantsKey(scopeTag, identityFp),
+        this.buildDescendantsV2Key(scopeTag, identityFp),
         expectedGeneration,
         `0|${reason.slice(0, 32)}|${identityFp}|${expectedGeneration}`,
         TOMBSTONE_TTL_SECONDS,
-        GENERATION_FENCE_TTL_SECONDS
+        GENERATION_FENCE_TTL_SECONDS,
+        now,
+        now + TOMBSTONE_TTL_SECONDS
       );
       return Number(result) === 1;
     } catch (error) {
@@ -377,13 +401,20 @@ export class AffinityStore {
 
     try {
       const descendantsKey = this.buildDescendantsKey(scopeTag, identityFp);
-      const descendants = await redis.smembers(descendantsKey);
-      const keys = [...new Set([...knownKeys, ...descendants])];
+      const descendantsV2Key = this.buildDescendantsV2Key(scopeTag, identityFp);
+      const now = Math.floor(Date.now() / 1000);
+      await redis.zremrangebyscore(descendantsV2Key, "-inf", now);
+      const [legacyDescendants, descendants] = await Promise.all([
+        redis.smembers(descendantsKey),
+        redis.zrange(descendantsV2Key, 0, -1),
+      ]);
+      const keys = [...new Set([...knownKeys, ...legacyDescendants, ...descendants])];
       await redis.eval(
         INVALIDATE_LUA,
-        keys.length + 2,
+        keys.length + 3,
         this.buildGenerationKey(scopeTag, identityFp),
         descendantsKey,
+        descendantsV2Key,
         ...keys,
         this.generationToken(),
         GENERATION_FENCE_TTL_SECONDS

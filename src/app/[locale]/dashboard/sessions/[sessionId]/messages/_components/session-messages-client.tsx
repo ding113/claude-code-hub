@@ -66,9 +66,16 @@ export function SessionMessagesClient() {
   // URL state
   const seqParam = searchParams.get("seq");
   const selectedSourceSessionId = searchParams.get("sourceSessionId");
+  const requestIdParam = searchParams.get("requestId");
   const selectedSeq = (() => {
     if (!seqParam) return null;
     const parsed = Number.parseInt(seqParam, 10);
+    if (!Number.isFinite(parsed) || parsed <= 0) return null;
+    return parsed;
+  })();
+  const selectedRequestId = (() => {
+    if (!requestIdParam) return null;
+    const parsed = Number.parseInt(requestIdParam, 10);
     if (!Number.isFinite(parsed) || parsed <= 0) return null;
     return parsed;
   })();
@@ -86,10 +93,17 @@ export function SessionMessagesClient() {
     useState<
       Extract<Awaited<ReturnType<typeof getSessionDetails>>, { ok: true }>["data"]["sessionStats"]
     >(null);
-  const [currentSourceSessionId, setCurrentSourceSessionId] = useState<string | null>(null);
   const [currentSequence, setCurrentSequence] = useState<number | null>(null);
-  const [prevSequence, setPrevSequence] = useState<number | null>(null);
-  const [nextSequence, setNextSequence] = useState<number | null>(null);
+  const [prevRequest, setPrevRequest] = useState<{
+    requestId: number;
+    sourceSessionId: string;
+    requestSequence: number;
+  } | null>(null);
+  const [nextRequest, setNextRequest] = useState<{
+    requestId: number;
+    sourceSessionId: string;
+    requestSequence: number;
+  } | null>(null);
 
   // UI State
   const [isLoading, setIsLoading] = useState(true);
@@ -107,10 +121,9 @@ export function SessionMessagesClient() {
     setSnapshots(null);
     setSpecialSettings(null);
     setSessionStats(null);
-    setCurrentSourceSessionId(null);
     setCurrentSequence(null);
-    setPrevSequence(null);
-    setNextSequence(null);
+    setPrevRequest(null);
+    setNextRequest(null);
   }, []);
 
   const { data: systemSettings } = useQuery({
@@ -121,13 +134,18 @@ export function SessionMessagesClient() {
   const currencyCode = systemSettings?.currencyDisplay || "USD";
 
   const handleSelectRequest = useCallback(
-    (sourceSessionId: string | null, seq: number) => {
+    (sourceSessionId: string | null, seq: number, requestId?: number) => {
       const params = new URLSearchParams(window.location.search);
       params.set("seq", seq.toString());
       if (sourceSessionId) {
         params.set("sourceSessionId", sourceSessionId);
       } else {
         params.delete("sourceSessionId");
+      }
+      if (requestId) {
+        params.set("requestId", requestId.toString());
+      } else {
+        params.delete("requestId");
       }
       router.replace(`${pathname}?${params.toString()}`);
       setIsMobileMenuOpen(false);
@@ -146,7 +164,8 @@ export function SessionMessagesClient() {
         const result = await getSessionDetails(
           sessionId,
           selectedSeq ?? undefined,
-          selectedSourceSessionId ?? undefined
+          selectedSourceSessionId ?? undefined,
+          selectedRequestId ?? undefined
         );
         if (cancelled) return;
 
@@ -154,10 +173,9 @@ export function SessionMessagesClient() {
           setSnapshots(result.data.snapshots);
           setSpecialSettings(result.data.specialSettings);
           setSessionStats(result.data.sessionStats);
-          setCurrentSourceSessionId(result.data.currentSourceSessionId);
           setCurrentSequence(result.data.currentSequence);
-          setPrevSequence(result.data.prevSequence);
-          setNextSequence(result.data.nextSequence);
+          setPrevRequest(result.data.prevRequest);
+          setNextRequest(result.data.nextRequest);
         } else {
           resetDetailsState();
           setError(
@@ -182,7 +200,15 @@ export function SessionMessagesClient() {
     return () => {
       cancelled = true;
     };
-  }, [resetDetailsState, selectedSeq, selectedSourceSessionId, sessionId, t, tErrors]);
+  }, [
+    resetDetailsState,
+    selectedRequestId,
+    selectedSeq,
+    selectedSourceSessionId,
+    sessionId,
+    t,
+    tErrors,
+  ]);
 
   const currentRequestSnapshot = snapshots?.request[viewMode] ?? null;
   const currentResponseSnapshot = snapshots?.response[viewMode] ?? null;
@@ -487,12 +513,13 @@ export function SessionMessagesClient() {
                       <Button
                         variant="outline"
                         size="sm"
-                        disabled={!prevSequence}
+                        disabled={!prevRequest}
                         onClick={() =>
-                          prevSequence &&
+                          prevRequest &&
                           handleSelectRequest(
-                            selectedSourceSessionId ?? currentSourceSessionId,
-                            prevSequence
+                            prevRequest.sourceSessionId,
+                            prevRequest.requestSequence,
+                            prevRequest.requestId
                           )
                         }
                       >
@@ -503,12 +530,13 @@ export function SessionMessagesClient() {
                       <Button
                         variant="outline"
                         size="sm"
-                        disabled={!nextSequence}
+                        disabled={!nextRequest}
                         onClick={() =>
-                          nextSequence &&
+                          nextRequest &&
                           handleSelectRequest(
-                            selectedSourceSessionId ?? currentSourceSessionId,
-                            nextSequence
+                            nextRequest.sourceSessionId,
+                            nextRequest.requestSequence,
+                            nextRequest.requestId
                           )
                         }
                         className="flex-row-reverse"

@@ -1461,6 +1461,19 @@ export async function listPhysicalSessionSourcesForIdentity(
       userId: messageRequest.userId,
       keyId: keysTable.id,
       providerId: messageRequest.providerId,
+      finalProviderId: sql<number | null>`COALESCE(
+        CASE
+          WHEN ${messageRequest.providerChain} IS NOT NULL
+            AND jsonb_typeof(${messageRequest.providerChain}) = 'array'
+            AND jsonb_array_length(${messageRequest.providerChain}) > 0
+            AND jsonb_typeof(${messageRequest.providerChain} -> -1) = 'object'
+            AND (${messageRequest.providerChain} -> -1 ? 'id')
+            AND (${messageRequest.providerChain} -> -1 ->> 'id') ~ '^[0-9]+$'
+          THEN (${messageRequest.providerChain} -> -1 ->> 'id')::integer
+          ELSE NULL
+        END,
+        ${messageRequest.providerId}
+      )`,
     })
     .from(messageRequest)
     .innerJoin(keysTable, eq(messageRequest.key, keysTable.key))
@@ -1469,17 +1482,33 @@ export async function listPhysicalSessionSourcesForIdentity(
         eq(messageSessionIdentity, identity),
         isNotNull(messageRequest.sessionId),
         eq(messageRequest.isReplay, false),
-        isNull(messageRequest.deletedAt)
+        isNull(messageRequest.deletedAt),
+        sql`${messageSessionIdentity} = (
+          SELECT COALESCE(latest.session_identity, latest.session_id)
+          FROM message_request latest
+          WHERE latest.session_id = ${messageRequest.sessionId}
+            AND latest.deleted_at IS NULL
+            AND latest.is_replay = false
+          ORDER BY latest.created_at DESC, latest.id DESC
+          LIMIT 1
+        )`
       )
     );
 
-  const sourcesBySession = new Map<
+  const sourcesBySessionAndKey = new Map<
     string,
-    { userId: number; keyId: number; providerIds: Set<number> }
+    {
+      sessionId: string;
+      userId: number;
+      keyId: number;
+      providerIds: Set<number>;
+    }
   >();
   for (const row of rows) {
     if (!row.sessionId) continue;
-    const source = sourcesBySession.get(row.sessionId) ?? {
+    const sourceKey = JSON.stringify([row.sessionId, row.keyId]);
+    const source = sourcesBySessionAndKey.get(sourceKey) ?? {
+      sessionId: row.sessionId,
       userId: row.userId,
       keyId: row.keyId,
       providerIds: new Set<number>(),
@@ -1487,11 +1516,18 @@ export async function listPhysicalSessionSourcesForIdentity(
     if (Number.isInteger(row.providerId) && row.providerId > 0) {
       source.providerIds.add(row.providerId);
     }
-    sourcesBySession.set(row.sessionId, source);
+    if (
+      typeof row.finalProviderId === "number" &&
+      Number.isInteger(row.finalProviderId) &&
+      row.finalProviderId > 0
+    ) {
+      source.providerIds.add(row.finalProviderId);
+    }
+    sourcesBySessionAndKey.set(sourceKey, source);
   }
 
-  return [...sourcesBySession].map(([sessionId, source]) => ({
-    sessionId,
+  return [...sourcesBySessionAndKey.values()].map((source) => ({
+    sessionId: source.sessionId,
     userId: source.userId,
     keyId: source.keyId,
     providerIds: [...source.providerIds],
@@ -1520,8 +1556,9 @@ export async function isSessionSourceForIdentity(
 
 export async function findSessionRequestLocator(
   identity: string,
-  selector: { sourceSessionId?: string; requestSequence?: number } = {}
+  selector: { requestId?: number; sourceSessionId?: string; requestSequence?: number } = {}
 ): Promise<{
+  requestId: number;
   sourceSessionId: string;
   requestSequence: number;
   identityKind: "session_id" | "prefix_affinity";
@@ -1530,6 +1567,7 @@ export async function findSessionRequestLocator(
 } | null> {
   const [row] = await db
     .select({
+      requestId: messageRequest.id,
       sourceSessionId: messageRequest.sessionId,
       requestSequence: messageRequest.requestSequence,
       identityKind: messageRequest.sessionIdentityKind,
@@ -1542,6 +1580,7 @@ export async function findSessionRequestLocator(
         eq(messageSessionIdentity, identity),
         isNotNull(messageRequest.sessionId),
         isNotNull(messageRequest.requestSequence),
+        selector.requestId !== undefined ? eq(messageRequest.id, selector.requestId) : undefined,
         selector.sourceSessionId
           ? eq(messageRequest.sessionId, selector.sourceSessionId)
           : undefined,
@@ -1554,9 +1593,10 @@ export async function findSessionRequestLocator(
     .orderBy(desc(messageRequest.createdAt), desc(messageRequest.id))
     .limit(1);
 
-  if (!row?.sourceSessionId || row.requestSequence == null) return null;
+  if (!row?.requestId || !row.sourceSessionId || row.requestSequence == null) return null;
 
   return {
+    requestId: row.requestId,
     sourceSessionId: row.sourceSessionId,
     requestSequence: row.requestSequence,
     identityKind: row.identityKind === "prefix_affinity" ? "prefix_affinity" : "session_id",
@@ -1576,6 +1616,7 @@ export async function findSessionRequestLocator(
 export async function aggregateMultipleSessionStats(sessionIds: string[]): Promise<
   Array<{
     sessionId: string;
+    requestedSessionIds?: string[];
     sessionIdentityKind: "session_id" | "prefix_affinity";
     sessionFingerprint: string | null;
     requestCount: number;
@@ -1602,7 +1643,117 @@ export async function aggregateMultipleSessionStats(sessionIds: string[]): Promi
     return [];
   }
 
-  // 1. 批量聚合统计（从 usageLedger，单次查询）
+  // 1. Resolve physical Session IDs to their canonical public identity before ledger aggregation.
+  const sessionIdParams = sql.join(
+    sessionIds.map((id) => sql`${id}`),
+    sql.raw(", ")
+  );
+  const userInfoRows = await db.execute(sql`
+    SELECT
+      sid AS requested_session_id,
+      COALESCE(mr.session_identity, mr.session_id) AS session_id,
+      u.name AS user_name,
+      u.id AS user_id,
+      k.name AS key_name,
+      k.id AS key_id,
+      CASE
+        WHEN mr.session_identity_kind = 'prefix_affinity' THEN 'prefix_affinity'
+        ELSE 'session_id'
+      END AS session_identity_kind,
+      mr.affinity_fingerprint AS session_fingerprint,
+      mr.user_agent,
+      mr.api_type
+    FROM unnest(ARRAY[${sessionIdParams}]::varchar[]) WITH ORDINALITY AS requested(sid, ordinality)
+    CROSS JOIN LATERAL (
+      SELECT
+        id,
+        session_id,
+        session_identity,
+        user_id,
+        key,
+        session_identity_kind,
+        affinity_fingerprint,
+        user_agent,
+        api_type
+      FROM message_request
+      WHERE
+        (COALESCE(session_identity, session_id) = sid OR session_id = sid)
+        AND deleted_at IS NULL
+      ORDER BY
+        CASE WHEN COALESCE(session_identity, session_id) = sid THEN 0 ELSE 1 END,
+        created_at DESC,
+        id DESC
+      LIMIT 1
+    ) mr
+    INNER JOIN users u ON mr.user_id = u.id
+    INNER JOIN keys k ON mr.key = k.key
+    ORDER BY ordinality
+  `);
+
+  const canonicalByRequested = new Map<string, string>();
+  const userInfoMap = new Map<
+    string,
+    {
+      sessionId: string;
+      requestedSessionIds: string[];
+      sessionIdentityKind: "session_id" | "prefix_affinity";
+      sessionFingerprint: string | null;
+      userName: string;
+      userId: number;
+      keyName: string;
+      keyId: number;
+      userAgent: string | null;
+      apiType: string | null;
+    }
+  >();
+  for (const row of Array.from(userInfoRows) as Array<{
+    requested_session_id: string;
+    session_id: string;
+    user_name: string;
+    user_id: number;
+    key_name: string;
+    key_id: number;
+    session_identity_kind: "session_id" | "prefix_affinity";
+    session_fingerprint: string | null;
+    user_agent: string | null;
+    api_type: string | null;
+  }>) {
+    canonicalByRequested.set(row.requested_session_id, row.session_id);
+    if (!userInfoMap.has(row.session_id)) {
+      userInfoMap.set(row.session_id, {
+        sessionId: row.session_id,
+        requestedSessionIds: [row.requested_session_id],
+        userName: row.user_name,
+        userId: row.user_id,
+        keyName: row.key_name,
+        keyId: row.key_id,
+        sessionIdentityKind: row.session_identity_kind,
+        sessionFingerprint: row.session_fingerprint,
+        userAgent: row.user_agent,
+        apiType: row.api_type,
+      });
+    }
+    if (!userInfoMap.has(row.session_id)) continue;
+    const requestedIds = userInfoMap.get(row.session_id)?.requestedSessionIds;
+    if (requestedIds && !requestedIds.includes(row.requested_session_id)) {
+      requestedIds.push(row.requested_session_id);
+    }
+  }
+
+  const canonicalSessionIds: string[] = [];
+  const seenCanonicalIds = new Set<string>();
+  for (const requestedSessionId of sessionIds) {
+    const canonicalSessionId = canonicalByRequested.get(requestedSessionId);
+    if (!canonicalSessionId || seenCanonicalIds.has(canonicalSessionId)) continue;
+    seenCanonicalIds.add(canonicalSessionId);
+    canonicalSessionIds.push(canonicalSessionId);
+  }
+
+  if (canonicalSessionIds.length === 0) {
+    return [];
+  }
+
+  // 2. 批量聚合统计（从 usageLedger，单次查询）
   const statsResults = await db
     .select({
       sessionId: ledgerSessionIdentity,
@@ -1617,13 +1768,13 @@ export async function aggregateMultipleSessionStats(sessionIds: string[]): Promi
       lastRequestAt: sql<Date>`max(${usageLedger.createdAt})`,
     })
     .from(usageLedger)
-    .where(and(inArray(ledgerSessionIdentity, sessionIds), LEDGER_BILLING_CONDITION))
+    .where(and(inArray(ledgerSessionIdentity, canonicalSessionIds), LEDGER_BILLING_CONDITION))
     .groupBy(ledgerSessionIdentity);
 
   // 创建 sessionId → stats 的 Map
   const statsMap = new Map(statsResults.map((s) => [s.sessionId, s]));
 
-  // 2. 批量查询供应商列表（按 session 分组）
+  // 3. 批量查询供应商列表（按 session 分组）
   const providerResults = await db
     .selectDistinct({
       sessionId: ledgerSessionIdentity,
@@ -1634,7 +1785,7 @@ export async function aggregateMultipleSessionStats(sessionIds: string[]): Promi
     .leftJoin(providers, eq(usageLedger.finalProviderId, providers.id))
     .where(
       and(
-        inArray(ledgerSessionIdentity, sessionIds),
+        inArray(ledgerSessionIdentity, canonicalSessionIds),
         LEDGER_BILLING_CONDITION,
         sql`${usageLedger.finalProviderId} IS NOT NULL`
       )
@@ -1655,7 +1806,7 @@ export async function aggregateMultipleSessionStats(sessionIds: string[]): Promi
     });
   }
 
-  // 3. 批量查询模型列表（按 session 分组）
+  // 4. 批量查询模型列表（按 session 分组）
   const modelResults = await db
     .selectDistinct({
       sessionId: ledgerSessionIdentity,
@@ -1664,7 +1815,7 @@ export async function aggregateMultipleSessionStats(sessionIds: string[]): Promi
     .from(usageLedger)
     .where(
       and(
-        inArray(ledgerSessionIdentity, sessionIds),
+        inArray(ledgerSessionIdentity, canonicalSessionIds),
         LEDGER_BILLING_CONDITION,
         sql`${usageLedger.model} IS NOT NULL`
       )
@@ -1682,7 +1833,7 @@ export async function aggregateMultipleSessionStats(sessionIds: string[]): Promi
     modelsMap.get(m.sessionId)?.push(m.model!);
   }
 
-  // 3.1 批量查询 Cache TTL 列表（按 session 分组）
+  // 5. 批量查询 Cache TTL 列表（按 session 分组）
   const cacheTtlResults = await db
     .selectDistinct({
       sessionId: ledgerSessionIdentity,
@@ -1691,7 +1842,7 @@ export async function aggregateMultipleSessionStats(sessionIds: string[]): Promi
     .from(usageLedger)
     .where(
       and(
-        inArray(ledgerSessionIdentity, sessionIds),
+        inArray(ledgerSessionIdentity, canonicalSessionIds),
         LEDGER_BILLING_CONDITION,
         sql`${usageLedger.cacheTtlApplied} IS NOT NULL`
       )
@@ -1710,81 +1861,10 @@ export async function aggregateMultipleSessionStats(sessionIds: string[]): Promi
     }
   }
 
-  // 4. 批量获取用户信息（每个 session 的第一条请求）
-  // LATERAL JOIN: 每个 session_id 做 1 次索引探测，无全局排序
-  const sessionIdParams = sql.join(
-    sessionIds.map((id) => sql`${id}`),
-    sql.raw(", ")
-  );
-  const userInfoRows = await db.execute(sql`
-    SELECT
-      sid AS session_id,
-      u.name AS user_name,
-      u.id AS user_id,
-      k.name AS key_name,
-      k.id AS key_id,
-      CASE
-        WHEN mr.session_identity_kind = 'prefix_affinity' THEN 'prefix_affinity'
-        ELSE 'session_id'
-      END AS session_identity_kind,
-      mr.affinity_fingerprint AS session_fingerprint,
-      mr.user_agent,
-      mr.api_type
-    FROM unnest(ARRAY[${sessionIdParams}]::varchar[]) AS sid
-    CROSS JOIN LATERAL (
-      SELECT user_id, key, session_identity_kind, affinity_fingerprint, user_agent, api_type
-      FROM message_request
-      WHERE COALESCE(session_identity, session_id) = sid AND deleted_at IS NULL
-      ORDER BY created_at
-      LIMIT 1
-    ) mr
-    INNER JOIN users u ON mr.user_id = u.id
-    INNER JOIN keys k ON mr.key = k.key
-  `);
-
-  // 创建 sessionId → userInfo 的 Map
-  const userInfoMap = new Map<
-    string,
-    {
-      sessionId: string;
-      sessionIdentityKind: "session_id" | "prefix_affinity";
-      sessionFingerprint: string | null;
-      userName: string;
-      userId: number;
-      keyName: string;
-      keyId: number;
-      userAgent: string | null;
-      apiType: string | null;
-    }
-  >();
-  for (const row of Array.from(userInfoRows) as Array<{
-    session_id: string;
-    user_name: string;
-    user_id: number;
-    key_name: string;
-    key_id: number;
-    session_identity_kind: "session_id" | "prefix_affinity";
-    session_fingerprint: string | null;
-    user_agent: string | null;
-    api_type: string | null;
-  }>) {
-    userInfoMap.set(row.session_id, {
-      sessionId: row.session_id,
-      userName: row.user_name,
-      userId: row.user_id,
-      keyName: row.key_name,
-      keyId: row.key_id,
-      sessionIdentityKind: row.session_identity_kind,
-      sessionFingerprint: row.session_fingerprint,
-      userAgent: row.user_agent,
-      apiType: row.api_type,
-    });
-  }
-
-  // 5. 组装最终结果
+  // 6. 组装最终结果
   const results: Awaited<ReturnType<typeof aggregateMultipleSessionStats>> = [];
 
-  for (const sessionId of sessionIds) {
+  for (const sessionId of canonicalSessionIds) {
     const stats = statsMap.get(sessionId);
     const userInfo = userInfoMap.get(sessionId);
 
@@ -1807,6 +1887,7 @@ export async function aggregateMultipleSessionStats(sessionIds: string[]): Promi
 
     results.push({
       sessionId,
+      requestedSessionIds: userInfo.requestedSessionIds,
       sessionIdentityKind: userInfo.sessionIdentityKind,
       sessionFingerprint: userInfo.sessionFingerprint,
       requestCount: billingStats.requestCount,
@@ -2170,5 +2251,102 @@ export async function findAdjacentRequestSequences(
   return {
     prevSequence: prev?.sequence ?? null,
     nextSequence: next?.sequence ?? null,
+  };
+}
+
+export type SessionRequestNavigationTarget = {
+  requestId: number;
+  sourceSessionId: string;
+  requestSequence: number;
+};
+
+/** Resolve adjacent requests on the public Session timeline, including cross-source boundaries. */
+export async function findAdjacentSessionRequests(
+  identity: string,
+  requestId: number
+): Promise<{
+  prevRequest: SessionRequestNavigationTarget | null;
+  nextRequest: SessionRequestNavigationTarget | null;
+}> {
+  const [current] = await db
+    .select({
+      requestId: messageRequest.id,
+      createdAt: messageRequest.createdAt,
+    })
+    .from(messageRequest)
+    .where(
+      and(
+        eq(messageSessionIdentity, identity),
+        eq(messageRequest.id, requestId),
+        isNull(messageRequest.deletedAt)
+      )
+    )
+    .limit(1);
+
+  if (!current?.requestId || !current.createdAt) {
+    return { prevRequest: null, nextRequest: null };
+  }
+
+  const selection = {
+    requestId: messageRequest.id,
+    sourceSessionId: messageRequest.sessionId,
+    requestSequence: messageRequest.requestSequence,
+  };
+  const timelineFilter = and(
+    eq(messageSessionIdentity, identity),
+    isNotNull(messageRequest.sessionId),
+    isNotNull(messageRequest.requestSequence),
+    isNull(messageRequest.deletedAt)
+  );
+
+  const [previous] = await db
+    .select(selection)
+    .from(messageRequest)
+    .where(
+      and(
+        timelineFilter,
+        or(
+          lt(messageRequest.createdAt, current.createdAt),
+          and(
+            eq(messageRequest.createdAt, current.createdAt),
+            lt(messageRequest.id, current.requestId)
+          )
+        )
+      )
+    )
+    .orderBy(desc(messageRequest.createdAt), desc(messageRequest.id))
+    .limit(1);
+  const [next] = await db
+    .select(selection)
+    .from(messageRequest)
+    .where(
+      and(
+        timelineFilter,
+        or(
+          gt(messageRequest.createdAt, current.createdAt),
+          and(
+            eq(messageRequest.createdAt, current.createdAt),
+            gt(messageRequest.id, current.requestId)
+          )
+        )
+      )
+    )
+    .orderBy(asc(messageRequest.createdAt), asc(messageRequest.id))
+    .limit(1);
+
+  const toTarget = (
+    row: typeof previous | typeof next | undefined
+  ): SessionRequestNavigationTarget | null => {
+    if (!row?.requestId || !row.sourceSessionId || row.requestSequence == null) return null;
+    return {
+      requestId: row.requestId,
+      sourceSessionId: row.sourceSessionId,
+      requestSequence: row.requestSequence,
+    };
+  };
+
+  return {
+    prevRequest: toTarget(previous),
+    nextRequest: toTarget(next),
   };
 }

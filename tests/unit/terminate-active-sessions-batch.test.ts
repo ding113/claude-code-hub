@@ -29,6 +29,10 @@ function buildSessionEntry(
     keyId: overrides.keyId ?? 1,
     userAgent: overrides.userAgent ?? null,
     apiType: overrides.apiType ?? "chat",
+    requestedSessionIds: overrides.requestedSessionIds,
+    sessionIdentityKind: overrides.sessionIdentityKind ?? "session_id",
+    sessionFingerprint: overrides.sessionFingerprint ?? null,
+    cacheTtlApplied: overrides.cacheTtlApplied ?? null,
   };
 }
 
@@ -57,5 +61,61 @@ describe("Session 批量终止摘要", () => {
     expect(summary.allowedSessionIds).toEqual(["sess-4"]);
     expect(summary.unauthorizedSessionIds).toEqual([]);
     expect(summary.missingSessionIds).toEqual(["sess-5"]);
+  });
+
+  test("physical alias 应归入 canonical Session 且不重复计为缺失", () => {
+    const summary = summarizeTerminateSessionsBatch(
+      ["physical-a"],
+      [
+        buildSessionEntry({
+          sessionId: "pfx:scope:root",
+          requestedSessionIds: ["physical-a"],
+          userId: 10,
+        }),
+      ],
+      10,
+      false
+    );
+
+    expect(summary.allowedSessionIds).toEqual(["pfx:scope:root"]);
+    expect(summary.unauthorizedSessionIds).toEqual([]);
+    expect(summary.missingSessionIds).toEqual([]);
+  });
+
+  test("public 与 physical alias 应只终止一次", () => {
+    const summary = summarizeTerminateSessionsBatch(
+      ["pfx:scope:root", "physical-a"],
+      [
+        buildSessionEntry({
+          sessionId: "pfx:scope:root",
+          requestedSessionIds: ["pfx:scope:root", "physical-a"],
+          userId: 10,
+        }),
+      ],
+      10,
+      false
+    );
+
+    expect(summary.allowedSessionIds).toEqual(["pfx:scope:root"]);
+    expect(summary.missingSessionIds).toEqual([]);
+  });
+
+  test("未授权 physical alias 不应同时计为缺失", () => {
+    const summary = summarizeTerminateSessionsBatch(
+      ["physical-a"],
+      [
+        buildSessionEntry({
+          sessionId: "pfx:scope:root",
+          requestedSessionIds: ["physical-a"],
+          userId: 99,
+        }),
+      ],
+      10,
+      false
+    );
+
+    expect(summary.allowedSessionIds).toEqual([]);
+    expect(summary.unauthorizedSessionIds).toEqual(["pfx:scope:root"]);
+    expect(summary.missingSessionIds).toEqual([]);
   });
 });

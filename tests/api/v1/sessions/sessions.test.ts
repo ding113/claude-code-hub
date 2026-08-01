@@ -97,11 +97,11 @@ describe("v1 session endpoints", () => {
 
     const detail = await callV1Route({
       method: "GET",
-      pathname: "/api/v1/sessions/s1?requestSequence=2&sourceSessionId=physical-1",
+      pathname: "/api/v1/sessions/s1?requestId=203",
       headers,
     });
     expect(detail.response.status).toBe(200);
-    expect(getSessionDetailsMock).toHaveBeenCalledWith("s1", 2, "physical-1");
+    expect(getSessionDetailsMock).toHaveBeenCalledWith("s1", undefined, undefined, 203);
   });
 
   test("reads session payload subresources", async () => {
@@ -203,5 +203,24 @@ describe("v1 session endpoints", () => {
     expect(doc.paths).toHaveProperty("/api/v1/sessions/{sessionId}/requests");
     expect(doc.paths).toHaveProperty("/api/v1/sessions/{sessionId}/origin-chain");
     expect(doc.paths).toHaveProperty("/api/v1/sessions/{sessionId}/response");
+
+    const queryParameterNames = (path: string) => {
+      const operation = doc.paths[path] as {
+        get?: { parameters?: Array<{ in?: string; name?: string }> };
+      };
+      return (operation.get?.parameters ?? [])
+        .filter((parameter) => parameter.in === "query")
+        .map((parameter) => parameter.name);
+    };
+
+    expect(queryParameterNames("/api/v1/sessions/{sessionId}")).toContain("requestId");
+    expect(queryParameterNames("/api/v1/sessions/{sessionId}/messages")).not.toContain("requestId");
+    expect(queryParameterNames("/api/v1/sessions/{sessionId}/messages/exists")).not.toContain(
+      "requestId"
+    );
+    expect(queryParameterNames("/api/v1/sessions/{sessionId}/origin-chain")).not.toContain(
+      "requestId"
+    );
+    expect(queryParameterNames("/api/v1/sessions/{sessionId}/response")).not.toContain("requestId");
   });
 });

@@ -13,7 +13,8 @@ type SessionRequestLocatorResult =
 export async function resolveSessionRequestLocator(
   identity: string,
   requestSequence?: number,
-  sourceSessionId?: string
+  sourceSessionId?: string,
+  requestId?: number
 ): Promise<SessionRequestLocatorResult> {
   const normalizedSequence = normalizeRequestSequence(requestSequence);
   const identityLocator = await findSessionRequestLocator(identity);
@@ -21,26 +22,28 @@ export async function resolveSessionRequestLocator(
   if (!identityLocator) {
     return {
       ok: false,
-      error: "Request source does not belong to this session.",
+      error: BUSINESS_ERRORS.SESSION_REQUEST_SOURCE_MISMATCH,
       errorCode: BUSINESS_ERRORS.SESSION_REQUEST_SOURCE_MISMATCH,
     };
   }
 
   if (
     identityLocator.identityKind === "prefix_affinity" &&
+    requestId === undefined &&
     ((normalizedSequence !== null && !sourceSessionId) ||
       (normalizedSequence === null && sourceSessionId))
   ) {
     return {
       ok: false,
-      error: "Prefix Session requests must specify both the physical source and request sequence.",
+      error: BUSINESS_ERRORS.SESSION_REQUEST_SELECTOR_INCOMPLETE,
       errorCode: BUSINESS_ERRORS.SESSION_REQUEST_SELECTOR_INCOMPLETE,
     };
   }
 
   const locator =
-    normalizedSequence !== null || sourceSessionId
+    normalizedSequence !== null || sourceSessionId || requestId !== undefined
       ? await findSessionRequestLocator(identity, {
+          requestId,
           requestSequence: normalizedSequence ?? undefined,
           sourceSessionId,
         })
@@ -50,7 +53,7 @@ export async function resolveSessionRequestLocator(
     ? { ok: true, locator }
     : {
         ok: false,
-        error: "Request source does not belong to this session.",
+        error: BUSINESS_ERRORS.SESSION_REQUEST_SOURCE_MISMATCH,
         errorCode: BUSINESS_ERRORS.SESSION_REQUEST_SOURCE_MISMATCH,
       };
 }

@@ -10,6 +10,7 @@ import { parseHonoJsonBody } from "@/lib/api/v1/_shared/request-body";
 import { jsonResponse, noContentResponse } from "@/lib/api/v1/_shared/response-helpers";
 import {
   BatchTerminateSessionsSchema,
+  SessionDetailQuerySchema,
   SessionIdParamSchema,
   SessionRequestsQuerySchema,
   SessionSequenceQuerySchema,
@@ -42,9 +43,10 @@ export async function listSessions(c: Context): Promise<Response> {
 export async function getSessionDetail(c: Context): Promise<Response> {
   const params = parseSessionParams(c);
   if (params instanceof Response) return params;
-  const query = SessionSequenceQuerySchema.safeParse({
+  const query = SessionDetailQuerySchema.safeParse({
     requestSequence: c.req.query("requestSequence"),
     sourceSessionId: c.req.query("sourceSessionId"),
+    requestId: c.req.query("requestId"),
   });
   if (!query.success) return fromZodError(query.error, new URL(c.req.url).pathname);
 
@@ -54,7 +56,12 @@ export async function getSessionDetail(c: Context): Promise<Response> {
     await callAction(
       c,
       actions.getSessionDetails,
-      [params.sessionId, query.data.requestSequence, query.data.sourceSessionId] as never[],
+      [
+        params.sessionId,
+        query.data.requestSequence,
+        query.data.sourceSessionId,
+        query.data.requestId,
+      ] as never[],
       c.get("auth")
     )
   );

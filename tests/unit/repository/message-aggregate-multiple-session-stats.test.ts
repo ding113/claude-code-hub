@@ -106,6 +106,7 @@ describe("message repository aggregateMultipleSessionStats", () => {
       .mockReturnValueOnce(cacheTtlList);
     boundary.execute.mockResolvedValueOnce([
       {
+        requested_session_id: "session-a",
         session_id: "session-a",
         session_identity_kind: "session_id",
         session_fingerprint: null,
@@ -117,6 +118,7 @@ describe("message repository aggregateMultipleSessionStats", () => {
         api_type: "claude",
       },
       {
+        requested_session_id: "session-b",
         session_id: "session-b",
         session_identity_kind: "prefix_affinity",
         session_fingerprint: "fingerprint-b",
@@ -138,6 +140,7 @@ describe("message repository aggregateMultipleSessionStats", () => {
     expect(result).toEqual([
       {
         sessionId: "session-b",
+        requestedSessionIds: ["session-b"],
         sessionIdentityKind: "prefix_affinity",
         sessionFingerprint: "fingerprint-b",
         requestCount: 2,
@@ -164,6 +167,7 @@ describe("message repository aggregateMultipleSessionStats", () => {
       },
       {
         sessionId: "session-a",
+        requestedSessionIds: ["session-a"],
         sessionIdentityKind: "session_id",
         sessionFingerprint: null,
         requestCount: 1,
@@ -187,13 +191,16 @@ describe("message repository aggregateMultipleSessionStats", () => {
       },
     ]);
     expect(stats.trace.from).toEqual([usageLedger]);
-    expect(sqlText(stats.trace.where)).toContain("session-without-owner");
+    expect(sqlText(stats.trace.where)).not.toContain("session-without-owner");
     expect(sqlText(stats.trace.groupBy)).toContain("session_id");
     expect(providerList.trace.leftJoins.map(({ source }) => source)).toEqual([providers]);
     expect(modelList.trace.from).toEqual([usageLedger]);
     expect(cacheTtlList.trace.from).toEqual([usageLedger]);
-    expect(sqlText(boundary.execute.mock.calls.at(0)?.at(0))).toContain("unnest");
-    expect(sqlText(boundary.execute.mock.calls.at(0)?.at(0))).toContain("order by created_at");
+    const ownerQuery = sqlText(boundary.execute.mock.calls.at(0)?.at(0));
+    expect(ownerQuery).toContain("unnest");
+    expect(ownerQuery).toContain("session-without-owner");
+    expect(ownerQuery).toContain("order by case when coalesce");
+    expect(ownerQuery).toContain("created_at desc, id desc");
   });
 
   test("returns Replay-only owners with zero billing aggregates", async () => {
@@ -204,6 +211,7 @@ describe("message repository aggregateMultipleSessionStats", () => {
       .mockReturnValueOnce(createDrizzleQuery([]));
     boundary.execute.mockResolvedValueOnce([
       {
+        requested_session_id: "pfx:scope:replay",
         session_id: "pfx:scope:replay",
         session_identity_kind: "prefix_affinity",
         session_fingerprint: "replay",
@@ -219,6 +227,7 @@ describe("message repository aggregateMultipleSessionStats", () => {
     await expect(aggregateMultipleSessionStats(["pfx:scope:replay"])).resolves.toEqual([
       expect.objectContaining({
         sessionId: "pfx:scope:replay",
+        requestedSessionIds: ["pfx:scope:replay"],
         sessionIdentityKind: "prefix_affinity",
         sessionFingerprint: "replay",
         requestCount: 0,
@@ -227,5 +236,115 @@ describe("message repository aggregateMultipleSessionStats", () => {
         totalOutputTokens: 0,
       }),
     ]);
+  });
+
+  test("canonicalizes a physical Session id to its prefix identity before batch aggregation", async () => {
+    const canonicalId = "pfx:scope:root";
+    boundary.select.mockReturnValueOnce(createDrizzleQuery([statsRow(canonicalId, 1)]));
+    boundary.selectDistinct
+      .mockReturnValueOnce(createDrizzleQuery([]))
+      .mockReturnValueOnce(createDrizzleQuery([]))
+      .mockReturnValueOnce(createDrizzleQuery([]));
+    boundary.execute.mockResolvedValueOnce([
+      {
+        requested_session_id: "physical-a",
+        session_id: canonicalId,
+        session_identity_kind: "prefix_affinity",
+        session_fingerprint: "root",
+        user_name: "Alice",
+        user_id: 1,
+        key_name: "Key A",
+        key_id: 101,
+        user_agent: null,
+        api_type: "claude",
+      },
+    ]);
+
+    await expect(aggregateMultipleSessionStats(["physical-a"])).resolves.toEqual([
+      expect.objectContaining({
+        sessionId: canonicalId,
+        requestedSessionIds: ["physical-a"],
+        sessionIdentityKind: "prefix_affinity",
+        requestCount: 1,
+      }),
+    ]);
+    const ownerQuery = sqlText(boundary.execute.mock.calls.at(0)?.at(0)).toLowerCase();
+    expect(ownerQuery).toContain("session_id = sid");
+    expect(ownerQuery).toContain("requested_session_id");
+  });
+
+  test("deduplicates current public and physical aliases using the latest identity", async () => {
+    const canonicalId = "pfx:scope:new";
+    boundary.select.mockReturnValueOnce(createDrizzleQuery([statsRow(canonicalId, 1)]));
+    boundary.selectDistinct
+      .mockReturnValueOnce(createDrizzleQuery([]))
+      .mockReturnValueOnce(createDrizzleQuery([]))
+      .mockReturnValueOnce(createDrizzleQuery([]));
+    boundary.execute.mockResolvedValueOnce([
+      {
+        requested_session_id: canonicalId,
+        session_id: canonicalId,
+        session_identity_kind: "prefix_affinity",
+        session_fingerprint: "new",
+        user_name: "Alice",
+        user_id: 1,
+        key_name: "Key A",
+        key_id: 101,
+        user_agent: null,
+        api_type: "claude",
+      },
+      {
+        requested_session_id: "physical-a",
+        session_id: canonicalId,
+        session_identity_kind: "prefix_affinity",
+        session_fingerprint: "new",
+        user_name: "Alice",
+        user_id: 1,
+        key_name: "Key A",
+        key_id: 101,
+        user_agent: null,
+        api_type: "claude",
+      },
+    ]);
+
+    await expect(aggregateMultipleSessionStats([canonicalId, "physical-a"])).resolves.toEqual([
+      expect.objectContaining({
+        sessionId: canonicalId,
+        requestedSessionIds: [canonicalId, "physical-a"],
+      }),
+    ]);
+    const ownerQuery = sqlText(boundary.execute.mock.calls.at(0)?.at(0)).toLowerCase();
+    expect(ownerQuery).toContain("order by case when coalesce");
+    expect(ownerQuery).toContain("created_at desc, id desc");
+  });
+
+  test("prefers an exact public identity over a newer same-named physical Session", async () => {
+    const canonicalId = "pfx:scope:root";
+    boundary.select.mockReturnValueOnce(createDrizzleQuery([statsRow(canonicalId, 1)]));
+    boundary.selectDistinct
+      .mockReturnValueOnce(createDrizzleQuery([]))
+      .mockReturnValueOnce(createDrizzleQuery([]))
+      .mockReturnValueOnce(createDrizzleQuery([]));
+    boundary.execute.mockResolvedValueOnce([
+      {
+        requested_session_id: canonicalId,
+        session_id: canonicalId,
+        session_identity_kind: "prefix_affinity",
+        session_fingerprint: "root",
+        user_name: "Alice",
+        user_id: 1,
+        key_name: "Key A",
+        key_id: 101,
+        user_agent: null,
+        api_type: "claude",
+      },
+    ]);
+
+    await aggregateMultipleSessionStats([canonicalId]);
+
+    const ownerQuery = sqlText(boundary.execute.mock.calls.at(0)?.at(0)).toLowerCase();
+    expect(ownerQuery).toContain("case when coalesce");
+    expect(ownerQuery).toContain("= sid then 0 else 1 end");
+    expect(ownerQuery).toContain("created_at desc, id desc");
   });
 });

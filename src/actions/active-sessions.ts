@@ -27,12 +27,41 @@ type ResolvedSessionIdentity = NonNullable<
   Awaited<ReturnType<typeof import("@/repository/message").resolveSessionIdentity>>
 >;
 
+type SessionTerminationDependencies = {
+  SessionManager: typeof import("@/lib/session-manager").SessionManager;
+  SessionTracker: typeof import("@/lib/session-tracker").SessionTracker;
+  getAffinityStore: typeof import("@/app/v1/_lib/proxy/affinity/affinity-store").getAffinityStore;
+  listPhysicalSessionSourcesForIdentity: typeof import("@/repository/message").listPhysicalSessionSourcesForIdentity;
+};
+
+async function loadSessionTerminationDependencies(): Promise<SessionTerminationDependencies> {
+  const [sessionManagerModule, sessionTrackerModule, affinityStoreModule, messageRepository] =
+    await Promise.all([
+      import("@/lib/session-manager"),
+      import("@/lib/session-tracker"),
+      import("@/app/v1/_lib/proxy/affinity/affinity-store"),
+      import("@/repository/message"),
+    ]);
+
+  return {
+    SessionManager: sessionManagerModule.SessionManager,
+    SessionTracker: sessionTrackerModule.SessionTracker,
+    getAffinityStore: affinityStoreModule.getAffinityStore,
+    listPhysicalSessionSourcesForIdentity: messageRepository.listPhysicalSessionSourcesForIdentity,
+  };
+}
+
 async function terminateResolvedSessionIdentity(
   identity: string,
-  resolution: ResolvedSessionIdentity | null
+  resolution: ResolvedSessionIdentity | null,
+  dependencies?: SessionTerminationDependencies
 ): Promise<boolean> {
-  const { SessionManager } = await import("@/lib/session-manager");
-  const { SessionTracker } = await import("@/lib/session-tracker");
+  const {
+    SessionManager,
+    SessionTracker,
+    getAffinityStore,
+    listPhysicalSessionSourcesForIdentity,
+  } = dependencies ?? (await loadSessionTerminationDependencies());
 
   if (
     resolution?.identityKind !== "prefix_affinity" ||
@@ -48,7 +77,6 @@ async function terminateResolvedSessionIdentity(
     return terminated;
   }
 
-  const { getAffinityStore } = await import("@/app/v1/_lib/proxy/affinity/affinity-store");
   const invalidated = await getAffinityStore().invalidate(
     resolution.scopeTag,
     resolution.fingerprint,
@@ -56,13 +84,15 @@ async function terminateResolvedSessionIdentity(
   );
   if (!invalidated) return false;
 
-  const { listPhysicalSessionSourcesForIdentity } = await import("@/repository/message");
   const physicalSources = await listPhysicalSessionSourcesForIdentity(identity);
 
   for (const source of physicalSources) {
-    if (source.providerIds.length === 0) continue;
     if (
-      !(await SessionManager.terminateSession(source.sessionId, source.providerIds, source.keyId))
+      !(await SessionManager.terminateSession(
+        source.sessionId,
+        source.providerIds.length > 0 ? source.providerIds : undefined,
+        source.keyId
+      ))
     ) {
       logger.debug("[ActiveSessions] Physical Session state already absent or superseded", {
         identity,
@@ -756,7 +786,8 @@ export async function hasSessionMessages(
 export async function getSessionDetails(
   sessionId: string,
   requestSequence?: number,
-  requestedSourceSessionId?: string
+  requestedSourceSessionId?: string,
+  requestId?: number
 ): Promise<
   ActionResult<{
     requestBody: unknown | null;
@@ -773,6 +804,8 @@ export async function getSessionDetails(
     > | null;
     currentSourceSessionId: string;
     currentSequence: number | null;
+    prevRequest: { requestId: number; sourceSessionId: string; requestSequence: number } | null;
+    nextRequest: { requestId: number; sourceSessionId: string; requestSequence: number } | null;
     prevSequence: number | null;
     nextSequence: number | null;
   }>
@@ -834,22 +867,24 @@ export async function getSessionDetails(
     const locatorResult = await resolveSessionRequestLocator(
       sessionId,
       requestSequence,
-      requestedSourceSessionId
+      requestedSourceSessionId,
+      requestId
     );
     if (!locatorResult.ok) return locatorResult;
 
     const sourceSessionId = locatorResult.locator.sourceSessionId;
     const effectiveSequence = locatorResult.locator.requestSequence;
+    const effectiveRequestId = locatorResult.locator.requestId;
 
     // 5. 请求 locator 已同时验证 identity、物理 Session 和序号，后续所有读取必须复用它。
     const { SessionManager } = await import("@/lib/session-manager");
 
-    const { findAdjacentRequestSequences, findMessageRequestAuditBySessionIdAndSequence } =
+    const { findAdjacentSessionRequests, findMessageRequestAuditBySessionIdAndSequence } =
       await import("@/repository/message");
     const adjacent =
       effectiveSequence == null
-        ? { prevSequence: null, nextSequence: null }
-        : await findAdjacentRequestSequences(sourceSessionId, effectiveSequence);
+        ? { prevRequest: null, nextRequest: null }
+        : await findAdjacentSessionRequests(sessionId, effectiveRequestId);
 
     const parseJsonStringOrNull = (value: unknown): unknown => {
       if (typeof value !== "string") return value;
@@ -1001,8 +1036,10 @@ export async function getSessionDetails(
         sessionStats,
         currentSourceSessionId: sourceSessionId,
         currentSequence: effectiveSequence ?? null,
-        prevSequence: adjacent.prevSequence,
-        nextSequence: adjacent.nextSequence,
+        prevRequest: adjacent.prevRequest,
+        nextRequest: adjacent.nextRequest,
+        prevSequence: adjacent.prevRequest?.requestSequence ?? null,
+        nextSequence: adjacent.nextRequest?.requestSequence ?? null,
       },
     };
   } catch (error) {
@@ -1131,8 +1168,10 @@ export async function terminateActiveSession(sessionId: string): Promise<ActionR
     const currentUserId = authSession.user.id;
 
     // 1. 获取 session 统计数据以验证所有权
-    const { aggregateSessionStats, resolveSessionIdentity } = await import("@/repository/message");
-    const sessionStats = await aggregateSessionStats(sessionId);
+    const { aggregateMultipleSessionStats, resolveSessionIdentity } = await import(
+      "@/repository/message"
+    );
+    const [sessionStats] = await aggregateMultipleSessionStats([sessionId]);
 
     if (!sessionStats) {
       return {
@@ -1153,8 +1192,9 @@ export async function terminateActiveSession(sessionId: string): Promise<ActionR
     }
 
     // 3. 按 identity 类型终止对应的绑定与观测状态
-    const identityResolution = await resolveSessionIdentity(sessionId);
-    const success = await terminateResolvedSessionIdentity(sessionId, identityResolution);
+    const canonicalSessionId = sessionStats.sessionId;
+    const identityResolution = await resolveSessionIdentity(canonicalSessionId);
+    const success = await terminateResolvedSessionIdentity(canonicalSessionId, identityResolution);
 
     if (!success) {
       return {
@@ -1169,10 +1209,14 @@ export async function terminateActiveSession(sessionId: string): Promise<ActionR
 
     clearActiveSessionsCache();
     clearSessionDetailsCache(sessionId);
+    if (canonicalSessionId !== sessionId) {
+      clearSessionDetailsCache(canonicalSessionId);
+    }
     clearAllSessionsQueryCache();
 
     logger.info("Session terminated by user", {
       sessionId,
+      canonicalSessionId,
       terminatedByUserId: currentUserId,
       sessionOwnerUserId: sessionStats.userId,
       isAdmin,
@@ -1308,10 +1352,25 @@ export async function terminateActiveSessionsBatch(
 
     // 3. 批量终止
     let successCount = 0;
-    for (const identity of allowedSessionIds) {
-      const resolution = await resolveSessionIdentity(identity);
-      if (await terminateResolvedSessionIdentity(identity, resolution)) {
-        successCount += 1;
+    const terminationChunkSize = 20;
+    const terminationDependencies = await loadSessionTerminationDependencies();
+    for (let offset = 0; offset < allowedSessionIds.length; offset += terminationChunkSize) {
+      const chunk = allowedSessionIds.slice(offset, offset + terminationChunkSize);
+      const outcomes = await Promise.allSettled(
+        chunk.map(async (identity) => {
+          const resolution = await resolveSessionIdentity(identity);
+          return terminateResolvedSessionIdentity(identity, resolution, terminationDependencies);
+        })
+      );
+      for (const [index, outcome] of outcomes.entries()) {
+        if (outcome.status === "fulfilled" && outcome.value) {
+          successCount += 1;
+        } else if (outcome.status === "rejected") {
+          logger.warn("Batch Session termination item failed", {
+            identity: chunk[index],
+            error: outcome.reason,
+          });
+        }
       }
     }
     const processedCount = allowedSessionIds.length;

@@ -110,9 +110,13 @@ vi.mock("./error-details-dialog", () => ({
   ErrorDetailsDialog: (props: Record<string, unknown>) => {
     dialogProps.latest = props;
     return (
-      <div data-slot="error-details-dialog" data-replay={String(props.isReplay ?? false)}>
-        {props.isReplay ? `Replay source ${String(props.replaySourceRequestId ?? "")}` : ""}
-      </div>
+      <div
+        data-slot="error-details-dialog"
+        data-replay={String(props.isReplay ?? false)}
+        data-replay-source-request-id={
+          props.isReplay ? String(props.replaySourceRequestId ?? "") : undefined
+        }
+      />
     );
   },
 }));
@@ -236,7 +240,7 @@ describe("virtualized-logs-table thinking effort", () => {
     expect(dialogProps.latest).toEqual(
       expect.objectContaining({ isReplay: true, replaySourceRequestId: 7 })
     );
-    expect(html).toContain("Replay source 7");
+    expect(html).toContain('data-replay-source-request-id="7"');
   });
 
   test("在计费模型右侧显示思考强度列", () => {

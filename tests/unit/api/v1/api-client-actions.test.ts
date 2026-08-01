@@ -61,10 +61,10 @@ describe("v1 action compatibility client", () => {
   test("preserves the physical source Session when fetching an aggregated Session request", async () => {
     getMock.mockResolvedValue({ currentSequence: 1 });
 
-    await activeSessions.getSessionDetails("pfx:scope:fingerprint", 1, "physical-session");
+    await activeSessions.getSessionDetails("pfx:scope:fingerprint", 1, "physical-session", 203);
 
     expect(getMock).toHaveBeenCalledWith(
-      "/api/v1/sessions/pfx%3Ascope%3Afingerprint?requestSequence=1&sourceSessionId=physical-session"
+      "/api/v1/sessions/pfx%3Ascope%3Afingerprint?requestSequence=1&sourceSessionId=physical-session&requestId=203"
     );
   });
 

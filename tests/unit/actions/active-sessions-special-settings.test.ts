@@ -20,7 +20,7 @@ const getSessionResponsePhaseSnapshotMock = vi.fn();
 
 const aggregateSessionStatsMock = vi.fn();
 const findSessionRequestLocatorMock = vi.fn();
-const findAdjacentRequestSequencesMock = vi.fn();
+const findAdjacentSessionRequestsMock = vi.fn();
 const findMessageRequestAuditBySessionIdAndSequenceMock = vi.fn();
 
 vi.mock("@/lib/auth", () => ({
@@ -67,7 +67,7 @@ vi.mock("@/lib/session-manager", () => ({
 vi.mock("@/repository/message", () => ({
   aggregateSessionStats: aggregateSessionStatsMock,
   findSessionRequestLocator: findSessionRequestLocatorMock,
-  findAdjacentRequestSequences: findAdjacentRequestSequencesMock,
+  findAdjacentSessionRequests: findAdjacentSessionRequestsMock,
   findMessageRequestAuditBySessionIdAndSequence: findMessageRequestAuditBySessionIdAndSequenceMock,
 }));
 
@@ -107,7 +107,7 @@ describe("getSessionDetails - unified specialSettings", () => {
       fingerprint: null,
     });
 
-    findAdjacentRequestSequencesMock.mockResolvedValue({ prevSequence: null, nextSequence: null });
+    findAdjacentSessionRequestsMock.mockResolvedValue({ prevRequest: null, nextRequest: null });
 
     getSessionRequestCountMock.mockResolvedValue(1);
     getSessionRequestBodyMock.mockResolvedValue(null);

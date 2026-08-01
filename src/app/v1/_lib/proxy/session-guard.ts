@@ -180,12 +180,14 @@ export class ProxySessionGuard {
             matchedFp: null,
             identityFp: null,
             generation: null,
+            lookup: null,
           };
           const lookup = await getAffinityStore().lookup(
             session.affinity.scopeTag,
             fingerprintsDeepestFirst(chain),
             getEnvConfig().PREFIX_AFFINITY_TTL_SECONDS
           );
+          session.affinity.lookup = lookup;
           const fingerprint = lookup?.identityFp ?? fingerprintTip(chain).fp;
           session.affinity.identityFp = lookup?.identityFp ?? null;
           session.affinity.generation = lookup?.generation ?? null;

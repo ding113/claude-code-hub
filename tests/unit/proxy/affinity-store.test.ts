@@ -10,6 +10,7 @@ import { AffinityStore, getAffinityStore } from "@/app/v1/_lib/proxy/affinity/af
 function createLuaFakeRedis(initial: Record<string, string> = {}) {
   const data = new Map(Object.entries(initial));
   const sets = new Map<string, Set<string>>();
+  const zsets = new Map<string, Map<string, number>>();
   const expired: Array<{ key: string; ttl: number }> = [];
   const client = {
     status: "ready",
@@ -23,6 +24,23 @@ function createLuaFakeRedis(initial: Record<string, string> = {}) {
       return keys.length;
     }),
     smembers: vi.fn(async (redisKey: string) => [...(sets.get(redisKey) ?? [])]),
+    zrange: vi.fn(async (redisKey: string, _start: number, _stop: number) =>
+      [...(zsets.get(redisKey) ?? new Map()).entries()]
+        .sort((a, b) => a[1] - b[1])
+        .map(([member]) => member)
+    ),
+    zremrangebyscore: vi.fn(async (redisKey: string, _min: string, max: number) => {
+      const zset = zsets.get(redisKey);
+      if (!zset) return 0;
+      let removed = 0;
+      for (const [member, score] of zset) {
+        if (score <= Number(max)) {
+          zset.delete(member);
+          removed += 1;
+        }
+      }
+      return removed;
+    }),
     eval: vi.fn(async (script: string, numkeys: number, ...rest: (string | number)[]) => {
       const keys = rest.slice(0, numkeys) as string[];
       const args = rest.slice(numkeys).map(String);
@@ -46,9 +64,17 @@ function createLuaFakeRedis(initial: Record<string, string> = {}) {
         return candidates;
       }
 
-      if (script.includes("affinity_validate_hit_v4")) {
+      if (script.includes("affinity_validate_hit_v5")) {
         const [bindingKey, identityGenerationKey, descendantsKey] = keys;
-        const [expectedValue, expectedGeneration, migratedValue, ttlRaw, generationTtlRaw] = args;
+        const [
+          expectedValue,
+          expectedGeneration,
+          migratedValue,
+          ttlRaw,
+          generationTtlRaw,
+          nowRaw,
+          expiresAtRaw,
+        ] = args;
         if (data.get(bindingKey) !== expectedValue) return 0;
         if (!data.has(identityGenerationKey)) data.set(identityGenerationKey, expectedGeneration);
         if (data.get(identityGenerationKey) !== expectedGeneration) return 0;
@@ -56,10 +82,15 @@ function createLuaFakeRedis(initial: Record<string, string> = {}) {
         const ttl = Number(ttlRaw);
         if (ttl > 0) expired.push({ key: bindingKey, ttl });
         expired.push({ key: identityGenerationKey, ttl: Number(generationTtlRaw) });
-        const descendants = sets.get(descendantsKey) ?? new Set<string>();
-        descendants.add(bindingKey);
-        sets.set(descendantsKey, descendants);
-        if (ttl > 0) expired.push({ key: descendantsKey, ttl });
+        const zset = zsets.get(descendantsKey) ?? new Map<string, number>();
+        for (const [member, score] of zset) {
+          if (score <= Number(nowRaw)) zset.delete(member);
+        }
+        if (ttl > 0) {
+          zset.set(bindingKey, Number(expiresAtRaw));
+          zsets.set(descendantsKey, zset);
+          expired.push({ key: descendantsKey, ttl });
+        }
         return 1;
       }
 
@@ -70,34 +101,38 @@ function createLuaFakeRedis(initial: Record<string, string> = {}) {
         return data.get(keys[0]);
       }
 
-      if (script.includes("affinity_cas_write_v2")) {
+      if (script.includes("affinity_cas_write_v3")) {
         const [generationKey, bindingKey, descendantsKey] = keys;
-        const [expectedGeneration, value, ttlRaw, generationTtlRaw] = args;
+        const [expectedGeneration, value, ttlRaw, generationTtlRaw, nowRaw, expiresAtRaw] = args;
         if (data.get(generationKey) !== expectedGeneration) return 0;
         data.set(bindingKey, value);
         expired.push({ key: bindingKey, ttl: Number(ttlRaw) });
-        const descendants = sets.get(descendantsKey) ?? new Set<string>();
-        descendants.add(bindingKey);
-        sets.set(descendantsKey, descendants);
+        const zset = zsets.get(descendantsKey) ?? new Map<string, number>();
+        for (const [member, score] of zset) {
+          if (score <= Number(nowRaw)) zset.delete(member);
+        }
+        zset.set(bindingKey, Number(expiresAtRaw));
+        zsets.set(descendantsKey, zset);
         expired.push({ key: descendantsKey, ttl: Number(ttlRaw) });
         expired.push({ key: generationKey, ttl: Number(generationTtlRaw) });
         return 1;
       }
 
-      if (script.includes("affinity_invalidate_v2")) {
-        const [generationKey, descendantsKey, ...bindingKeys] = keys;
+      if (script.includes("affinity_invalidate_v3")) {
+        const [generationKey, legacyDescendantsKey, descendantsKey, ...bindingKeys] = keys;
         const [generation, generationTtlRaw] = args;
         data.set(generationKey, generation);
         expired.push({ key: generationKey, ttl: Number(generationTtlRaw) });
         for (const bindingKey of bindingKeys) data.delete(bindingKey);
-        sets.delete(descendantsKey);
+        sets.delete(legacyDescendantsKey);
+        zsets.delete(descendantsKey);
         return generation;
       }
 
       throw new Error("unexpected lua script");
     }),
   };
-  return { client, data, expired, sets };
+  return { client, data, expired, sets, zsets };
 }
 
 function makeStore(client: unknown) {
@@ -112,6 +147,8 @@ const key = (scope: string, fp: string) => `cch:pfx:{${scope}}:fp:${fp}`;
 const generationKey = (scope: string, identityFp: string) => `cch:pfx:{${scope}}:gen:${identityFp}`;
 const descendantsKey = (scope: string, identityFp: string) =>
   `cch:pfx:{${scope}}:desc:${identityFp}`;
+const descendantsV2Key = (scope: string, identityFp: string) =>
+  `cch:pfx:{${scope}}:desc-v2:${identityFp}`;
 const legacyGenerationKey = (scope: string) => `cch:pfx:{${scope}}:generation`;
 
 describe("AffinityStore.lookup", () => {
@@ -237,21 +274,23 @@ describe("AffinityStore.lookup", () => {
     expect(expired).toEqual([
       { key: key("s1", "deep"), ttl: 900 },
       { key: generationKey("s1", "deep"), ttl: 172800 },
-      { key: descendantsKey("s1", "deep"), ttl: 900 },
+      { key: descendantsV2Key("s1", "deep"), ttl: 900 },
     ]);
 
     await store.lookup("s1", ["deep"], -10);
     expect(client.eval).toHaveBeenLastCalledWith(
-      expect.stringContaining("affinity_validate_hit_v4"),
+      expect.stringContaining("affinity_validate_hit_v5"),
       3,
       key("s1", "deep"),
       generationKey("s1", "deep"),
-      descendantsKey("s1", "deep"),
+      descendantsV2Key("s1", "deep"),
       "1|3|deep|v3:test-1",
       "v3:test-1",
       "",
       "0",
-      172800
+      172800,
+      expect.any(Number),
+      expect.any(Number)
     );
     expect(expired).toHaveLength(4);
   });
@@ -282,15 +321,17 @@ describe("AffinityStore.put", () => {
     const { client } = createLuaFakeRedis({ [generationKey("s1", "rootfp")]: "0" });
     await expect(makeStore(client).put("s1", "tipfp", 42, 900, "rootfp", "0")).resolves.toBe(true);
     expect(client.eval).toHaveBeenCalledWith(
-      expect.stringContaining("affinity_cas_write_v2"),
+      expect.stringContaining("affinity_cas_write_v3"),
       3,
       generationKey("s1", "rootfp"),
       key("s1", "tipfp"),
-      descendantsKey("s1", "rootfp"),
+      descendantsV2Key("s1", "rootfp"),
       "0",
       "1|42|rootfp|0",
       900,
-      172800
+      172800,
+      expect.any(Number),
+      expect.any(Number)
     );
   });
 
@@ -305,6 +346,19 @@ describe("AffinityStore.put", () => {
     await store.put("s1", "tip", 42, 900, "root", null);
     expect(client.eval).not.toHaveBeenCalled();
   });
+
+  it("prunes expired descendants from the v2 registry before adding a live binding", async () => {
+    const { client, zsets } = createLuaFakeRedis({ [generationKey("s1", "rootfp")]: "0" });
+    zsets.set(descendantsV2Key("s1", "rootfp"), new Map([[key("s1", "expired-tip"), 0]]));
+
+    await expect(makeStore(client).put("s1", "live-tip", 42, 900, "rootfp", "0")).resolves.toBe(
+      true
+    );
+
+    expect([...(zsets.get(descendantsV2Key("s1", "rootfp")) ?? new Map()).keys()]).toEqual([
+      key("s1", "live-tip"),
+    ]);
+  });
 });
 
 describe("AffinityStore.tombstone", () => {
@@ -313,28 +367,32 @@ describe("AffinityStore.tombstone", () => {
     const store = makeStore(client);
     await store.tombstone("s1", "deadfp", "failover", "rootfp", "0");
     expect(client.eval).toHaveBeenCalledWith(
-      expect.stringContaining("affinity_cas_write_v2"),
+      expect.stringContaining("affinity_cas_write_v3"),
       3,
       generationKey("s1", "rootfp"),
       key("s1", "deadfp"),
-      descendantsKey("s1", "rootfp"),
+      descendantsV2Key("s1", "rootfp"),
       "0",
       "0|failover|rootfp|0",
       60,
-      172800
+      172800,
+      expect.any(Number),
+      expect.any(Number)
     );
 
     await store.tombstone("s1", "deadfp", "x".repeat(50), "rootfp", "0");
     expect(client.eval).toHaveBeenLastCalledWith(
-      expect.stringContaining("affinity_cas_write_v2"),
+      expect.stringContaining("affinity_cas_write_v3"),
       3,
       generationKey("s1", "rootfp"),
       key("s1", "deadfp"),
-      descendantsKey("s1", "rootfp"),
+      descendantsV2Key("s1", "rootfp"),
       "0",
       `0|${"x".repeat(32)}|rootfp|0`,
       60,
-      172800
+      172800,
+      expect.any(Number),
+      expect.any(Number)
     );
   });
 
@@ -463,6 +521,25 @@ describe("AffinityStore.invalidate", () => {
       hint: null,
       generation: "v3:test-2",
     });
+  });
+
+  it("merges legacy Set and v2 ZSET descendants during invalidation", async () => {
+    const legacyBinding = key("s1", "legacy-child");
+    const currentBinding = key("s1", "current-child");
+    const { client, data, sets, zsets } = createLuaFakeRedis({
+      [generationKey("s1", "root")]: "0",
+      [legacyBinding]: "1|41|root|0",
+    });
+    sets.set(descendantsKey("s1", "root"), new Set([legacyBinding]));
+    const store = makeStore(client);
+    await store.put("s1", "current-child", 42, 600, "root", "0");
+
+    await expect(store.invalidate("s1", "root", [])).resolves.toBe(true);
+
+    expect(data.has(legacyBinding)).toBe(false);
+    expect(data.has(currentBinding)).toBe(false);
+    expect(sets.has(descendantsKey("s1", "root"))).toBe(false);
+    expect(zsets.has(descendantsV2Key("s1", "root"))).toBe(false);
   });
 });
 

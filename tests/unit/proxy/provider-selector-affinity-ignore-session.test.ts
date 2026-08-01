@@ -109,6 +109,7 @@ vi.mock("@/lib/config/env.schema", async (importOriginal) => {
 });
 
 import { ProxyProviderResolver } from "@/app/v1/_lib/proxy/provider-selector";
+import { computeFingerprintChain } from "@/app/v1/_lib/proxy/affinity/fingerprint";
 
 function makeProvider(id: number, overrides: Partial<Provider> = {}): Provider {
   return {
@@ -333,6 +334,33 @@ describe("ignore client session id semantics", () => {
       fingerprint: deepestFirst[1],
       fingerprints: [...new Set([deepestFirst[1], ...deepestFirst])],
     });
+  });
+
+  test("reuses the affinity lookup captured while resolving the public Session identity", async () => {
+    const chain = computeFingerprintChain(claudeMessage, "claude", 8);
+    expect(chain).not.toBeNull();
+    const cachedLookup = {
+      ...affinityHint,
+      identityFp: "stable-root",
+    };
+    providerRepositoryMocks.findProviderById.mockResolvedValue(makeProvider(42));
+    const session = makeSession({
+      affinity: {
+        scopeTag: "scope",
+        chain,
+        nominatedProviderId: null,
+        matchedFp: null,
+        identityFp: "stable-root",
+        generation: "0",
+        lookup: cachedLookup,
+      },
+    });
+
+    await ProxyProviderResolver.ensure(session);
+
+    expect(storeMocks.lookup).not.toHaveBeenCalled();
+    expect(session.provider?.id).toBe(42);
+    expect(session.affinity.matchedFp).toBe("deepfp");
   });
 
   test("ignore on + fingerprintable request never reads the session binding", async () => {

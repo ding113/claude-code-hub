@@ -24,7 +24,7 @@ const aggregateSessionStatsMock = vi.fn();
 const resolveSessionIdentityMock = vi.fn();
 const isSessionSourceForIdentityMock = vi.fn();
 const findSessionRequestLocatorMock = vi.fn();
-const findAdjacentRequestSequencesMock = vi.fn();
+const findAdjacentSessionRequestsMock = vi.fn();
 const findMessageRequestAuditBySessionIdAndSequenceMock = vi.fn();
 
 vi.mock("@/lib/auth", () => ({
@@ -74,7 +74,7 @@ vi.mock("@/repository/message", () => ({
   resolveSessionIdentity: resolveSessionIdentityMock,
   isSessionSourceForIdentity: isSessionSourceForIdentityMock,
   findSessionRequestLocator: findSessionRequestLocatorMock,
-  findAdjacentRequestSequences: findAdjacentRequestSequencesMock,
+  findAdjacentSessionRequests: findAdjacentSessionRequestsMock,
   findMessageRequestAuditBySessionIdAndSequence: findMessageRequestAuditBySessionIdAndSequenceMock,
 }));
 
@@ -112,8 +112,9 @@ describe("getSessionDetails - additive detail snapshots contract", () => {
     findSessionRequestLocatorMock.mockImplementation(
       async (
         identity: string,
-        selector: { sourceSessionId?: string; requestSequence?: number } = {}
+        selector: { requestId?: number; sourceSessionId?: string; requestSequence?: number } = {}
       ) => ({
+        requestId: selector.requestId ?? 101,
         sourceSessionId: selector.sourceSessionId ?? identity,
         requestSequence: selector.requestSequence ?? 1,
         identityKind: identity.startsWith("pfx:") ? "prefix_affinity" : "session_id",
@@ -122,7 +123,7 @@ describe("getSessionDetails - additive detail snapshots contract", () => {
       })
     );
 
-    findAdjacentRequestSequencesMock.mockResolvedValue({ prevSequence: null, nextSequence: null });
+    findAdjacentSessionRequestsMock.mockResolvedValue({ prevRequest: null, nextRequest: null });
     findMessageRequestAuditBySessionIdAndSequenceMock.mockResolvedValue(null);
 
     getSessionRequestCountMock.mockResolvedValue(1);
@@ -229,18 +230,19 @@ describe("getSessionDetails - additive detail snapshots contract", () => {
     });
 
     const { getSessionDetails } = await import("@/actions/active-sessions");
-    const result = await getSessionDetails("pfx:scope:fingerprint", 1, "physical-selected");
+    const result = await getSessionDetails("pfx:scope:fingerprint", 1, "physical-selected", 101);
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.data.currentSourceSessionId).toBe("physical-selected");
     expect(result.data.currentSequence).toBe(1);
     expect(findSessionRequestLocatorMock).toHaveBeenCalledWith("pfx:scope:fingerprint", {
+      requestId: 101,
       requestSequence: 1,
       sourceSessionId: "physical-selected",
     });
     expect(getSessionRequestBodyMock).toHaveBeenCalledWith("physical-selected", 1);
-    expect(findAdjacentRequestSequencesMock).toHaveBeenCalledWith("physical-selected", 1);
+    expect(findAdjacentSessionRequestsMock).toHaveBeenCalledWith("pfx:scope:fingerprint", 101);
     expect(findMessageRequestAuditBySessionIdAndSequenceMock).toHaveBeenCalledWith(
       "physical-selected",
       1
@@ -267,7 +269,7 @@ describe("getSessionDetails - additive detail snapshots contract", () => {
 
     expect(result).toEqual({
       ok: false,
-      error: "Request source does not belong to this session.",
+      error: "SESSION_REQUEST_SOURCE_MISMATCH",
       errorCode: "SESSION_REQUEST_SOURCE_MISMATCH",
     });
     expect(getSessionRequestBodyMock).not.toHaveBeenCalled();
@@ -284,7 +286,7 @@ describe("getSessionDetails - additive detail snapshots contract", () => {
 
     expect(result).toEqual({
       ok: false,
-      error: "Prefix Session requests must specify both the physical source and request sequence.",
+      error: "SESSION_REQUEST_SELECTOR_INCOMPLETE",
       errorCode: "SESSION_REQUEST_SELECTOR_INCOMPLETE",
     });
     expect(findSessionRequestLocatorMock).toHaveBeenCalledTimes(1);
@@ -434,7 +436,10 @@ describe("getSessionDetails - additive detail snapshots contract", () => {
       scopeTag: null,
       fingerprint: null,
     });
-    findAdjacentRequestSequencesMock.mockResolvedValue({ prevSequence: 2, nextSequence: null });
+    findAdjacentSessionRequestsMock.mockResolvedValue({
+      prevRequest: { requestId: 102, sourceSessionId: "sess_x", requestSequence: 2 },
+      nextRequest: null,
+    });
     getSessionRequestPhaseSnapshotMock.mockResolvedValueOnce(null).mockResolvedValueOnce({
       body: JSON.stringify({ model: "gpt-5.5", messages: [] }),
       messages: null,
@@ -456,6 +461,11 @@ describe("getSessionDetails - additive detail snapshots contract", () => {
     expect(getSessionRequestPhaseSnapshotMock).toHaveBeenCalledWith("sess_x", "before", 3);
     expect(getSessionRequestPhaseSnapshotMock).toHaveBeenCalledWith("sess_x", "after", 3);
     expect(result.data.currentSequence).toBe(3);
+    expect(result.data.prevRequest).toEqual({
+      requestId: 102,
+      sourceSessionId: "sess_x",
+      requestSequence: 2,
+    });
     expect(result.data.prevSequence).toBe(2);
     expect(result.data.snapshots.request.after?.messages).toEqual([]);
   });

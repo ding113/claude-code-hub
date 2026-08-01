@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, test, vi } from "vitest";
 import { messageRequest } from "@/drizzle/schema";
 import { keys as keysTable } from "@/drizzle/schema";
 import {
+  findAdjacentSessionRequests,
   findAdjacentRequestSequences,
   findRequestsBySessionId,
   findRequestsBySessionIdentity,
@@ -199,6 +200,7 @@ describe("message repository session request queries", () => {
   test("resolves an exact request locator inside a prefix identity", async () => {
     const locator = createDrizzleQuery([
       {
+        requestId: 203,
         sourceSessionId: "physical-a",
         requestSequence: 3,
         identityKind: "prefix_affinity",
@@ -210,10 +212,12 @@ describe("message repository session request queries", () => {
 
     await expect(
       findSessionRequestLocator("pfx:scope:fingerprint", {
+        requestId: 203,
         sourceSessionId: "physical-a",
         requestSequence: 3,
       })
     ).resolves.toEqual({
+      requestId: 203,
       sourceSessionId: "physical-a",
       requestSequence: 3,
       identityKind: "prefix_affinity",
@@ -225,20 +229,23 @@ describe("message repository session request queries", () => {
     expect(where).toContain("pfx:scope:fingerprint");
     expect(where).toContain("physical-a");
     expect(where).toContain("= 3");
+    expect(where).toContain("= 203");
     expect(where).toContain("deleted_at");
   });
 
   test("lists distinct physical Session and Provider pairs for prefix termination", async () => {
     const sources = createDrizzleQuery([
-      { sessionId: "physical-a", providerId: 41, userId: 7, keyId: 17 },
-      { sessionId: "physical-a", providerId: 0, userId: 7, keyId: 17 },
-      { sessionId: "physical-a", providerId: 42, userId: 7, keyId: 17 },
-      { sessionId: "physical-b", providerId: 43, userId: 8, keyId: 18 },
+      { sessionId: "physical-a", providerId: 41, finalProviderId: 42, userId: 7, keyId: 17 },
+      { sessionId: "physical-a", providerId: 0, finalProviderId: 0, userId: 7, keyId: 17 },
+      { sessionId: "physical-a", providerId: 42, finalProviderId: 42, userId: 7, keyId: 17 },
+      { sessionId: "physical-a", providerId: 44, finalProviderId: 44, userId: 9, keyId: 19 },
+      { sessionId: "physical-b", providerId: 43, finalProviderId: 43, userId: 8, keyId: 18 },
     ]);
     boundary.select.mockReturnValueOnce(sources);
 
     await expect(listPhysicalSessionSourcesForIdentity("pfx:scope:fingerprint")).resolves.toEqual([
       { sessionId: "physical-a", userId: 7, keyId: 17, providerIds: [41, 42] },
+      { sessionId: "physical-a", userId: 9, keyId: 19, providerIds: [44] },
       { sessionId: "physical-b", userId: 8, keyId: 18, providerIds: [43] },
     ]);
 
@@ -247,7 +254,12 @@ describe("message repository session request queries", () => {
     expect(sqlText(sources.trace.where)).toContain("is_replay");
     expect(sqlText(sources.trace.where)).toContain("false");
     expect(sqlText(sources.trace.where)).toContain("deleted_at");
+    expect(sqlText(sources.trace.where)).toContain("latest.created_at desc");
     expect(sources.trace.innerJoins.map(({ source }) => source)).toEqual([keysTable]);
+    const selection = sqlText(boundary.select.mock.calls.at(0)?.at(0)).toLowerCase();
+    expect(selection).toContain("provider_chain");
+    expect(selection).toContain("-> -1");
+    expect(selection).toContain("coalesce");
   });
 
   test("returns adjacent neighbors using session-scoped sequence predicates", async () => {
@@ -275,5 +287,34 @@ describe("message repository session request queries", () => {
     const result = await findAdjacentRequestSequences("session-isolated", 1);
 
     expect(result).toEqual({ prevSequence: null, nextSequence: null });
+  });
+
+  test("returns adjacent requests across physical sources on the public identity timeline", async () => {
+    const current = createDrizzleQuery([{ requestId: 302, createdAt: secondCreatedAt }]);
+    const previous = createDrizzleQuery([
+      { requestId: 301, sourceSessionId: "physical-a", requestSequence: 2 },
+    ]);
+    const next = createDrizzleQuery([
+      { requestId: 303, sourceSessionId: "physical-b", requestSequence: 1 },
+    ]);
+    boundary.select
+      .mockReturnValueOnce(current)
+      .mockReturnValueOnce(previous)
+      .mockReturnValueOnce(next);
+
+    await expect(findAdjacentSessionRequests("pfx:scope:fingerprint", 302)).resolves.toEqual({
+      prevRequest: { requestId: 301, sourceSessionId: "physical-a", requestSequence: 2 },
+      nextRequest: { requestId: 303, sourceSessionId: "physical-b", requestSequence: 1 },
+    });
+    expect(sqlText(current.trace.where)).toContain("pfx:scope:fingerprint");
+    expect(sqlText(current.trace.where)).toContain("= 302");
+    expect(sqlText(previous.trace.where)).toContain("created_at");
+    expect(sqlText(previous.trace.orderBy)).toContain("created_at desc");
+    expect(sqlText(previous.trace.orderBy)).toContain("id desc");
+    expect(sqlText(next.trace.where)).toContain("created_at");
+    expect(sqlText(next.trace.orderBy)).toContain("created_at asc");
+    expect(sqlText(next.trace.orderBy)).toContain("id asc");
+    expect(previous.trace.limit).toEqual([1]);
+    expect(next.trace.limit).toEqual([1]);
   });
 });

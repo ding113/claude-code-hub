@@ -61,13 +61,15 @@ export function hasSessionMessages(
 export function getSessionDetails(
   sessionId: string,
   requestSequence?: number,
-  sourceSessionId?: string
+  sourceSessionId?: string,
+  requestId?: number
 ) {
   return toActionResult(
     apiGet(
       `/api/v1/sessions/${encodeURIComponent(sessionId)}${searchParams({
         requestSequence,
         sourceSessionId,
+        requestId,
       })}`
     )
   );

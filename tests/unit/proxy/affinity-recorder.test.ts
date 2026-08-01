@@ -63,6 +63,7 @@ function makeAffinity(overrides: Partial<SessionAffinityState> = {}): SessionAff
     matchedFp: null,
     identityFp: "fp1",
     generation: "0",
+    lookup: null,
     ...overrides,
   };
 }

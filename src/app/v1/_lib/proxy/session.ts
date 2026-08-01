@@ -32,6 +32,7 @@ import type { SessionIdentityMetadata } from "@/types/session";
 import type { SpecialSetting } from "@/types/special-settings";
 import type { BillingModelSource, CodexPriorityBillingSource } from "@/types/system-config";
 import type { User } from "@/types/user";
+import type { AffinityLookupResult } from "./affinity/affinity-store";
 import type { FingerprintChain } from "./affinity/fingerprint";
 import { isCountTokensEndpointPath } from "./endpoint-paths";
 import { type EndpointPolicy, resolveEndpointPolicy } from "./endpoint-policy";
@@ -68,6 +69,8 @@ export interface SessionAffinityState {
   identityFp: string | null;
   /** lookup 捕获的 identity generation；终态写回必须以此做 CAS。 */
   generation: string | null;
+  /** SessionGuard 已完成的 lookup，供 provider selector 复用，避免同一请求重复访问 Redis。 */
+  lookup: AffinityLookupResult | null;
 }
 
 /**

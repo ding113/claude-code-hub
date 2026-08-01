@@ -35,7 +35,7 @@ interface RequestListSidebarProps {
   sessionId: string;
   selectedSeq: number | null;
   selectedSourceSessionId: string | null;
-  onSelect: (sourceSessionId: string, seq: number) => void;
+  onSelect: (sourceSessionId: string, seq: number, requestId: number) => void;
   collapsed?: boolean;
   className?: string;
 }
@@ -120,7 +120,7 @@ export function RequestListSidebar({
                 <button
                   key={req.id}
                   type="button"
-                  onClick={() => onSelect(req.sourceSessionId, req.sequence)}
+                  onClick={() => onSelect(req.sourceSessionId, req.sequence, req.id)}
                   className={cn(
                     "relative flex items-center justify-center w-8 h-8 rounded-full transition-all",
                     selectedSeq === req.sequence &&
@@ -226,7 +226,7 @@ export function RequestListSidebar({
                       selectedSourceSessionId === request.sourceSessionId) &&
                     "bg-muted/60 hover:bg-muted/70"
                 )}
-                onClick={() => onSelect(request.sourceSessionId, request.sequence)}
+                onClick={() => onSelect(request.sourceSessionId, request.sequence, request.id)}
               >
                 {/* Active Indicator */}
                 {selectedSeq === request.sequence &&
