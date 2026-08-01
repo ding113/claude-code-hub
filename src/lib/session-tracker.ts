@@ -2,6 +2,7 @@ import { logger } from "@/lib/logger";
 import {
   getGlobalActiveSessionsKey,
   getKeyActiveSessionsKey,
+  getObservedGlobalActiveSessionsKey,
   getUserActiveSessionsKey,
 } from "@/lib/redis/active-session-keys";
 import { getRedisClient } from "./redis";
@@ -128,6 +129,68 @@ export class SessionTracker {
       logger.trace("SessionTracker: Tracked session", { sessionId, keyId });
     } catch (error) {
       logger.error("SessionTracker: Failed to track session", { error });
+    }
+  }
+
+  /** 记录用于 Dashboard/Sessions 页统一统计的有效 Session identity。 */
+  static async trackObservedSession(sessionIdentity: string): Promise<void> {
+    const redis = getRedisClient();
+    if (redis?.status !== "ready" || !sessionIdentity) return;
+
+    try {
+      const key = getObservedGlobalActiveSessionsKey();
+      const pipeline = redis.pipeline();
+      pipeline.zadd(key, Date.now(), sessionIdentity);
+      pipeline.expire(key, 3600);
+      await pipeline.exec();
+    } catch (error) {
+      logger.error("SessionTracker: Failed to track observed session", {
+        error,
+        sessionIdentity,
+      });
+    }
+  }
+
+  /** 响应完成后刷新有效 Session identity 的滑动窗口。 */
+  static async refreshObservedSession(sessionIdentity: string): Promise<void> {
+    const redis = getRedisClient();
+    if (redis?.status !== "ready" || !sessionIdentity) return;
+
+    try {
+      const key = getObservedGlobalActiveSessionsKey();
+      const pipeline = redis.pipeline();
+      pipeline.zadd(key, Date.now(), sessionIdentity);
+      pipeline.expire(key, Math.max(3600, SessionTracker.SESSION_TTL_SECONDS));
+      pipeline.expire(`session:${sessionIdentity}:info`, SessionTracker.SESSION_TTL_SECONDS);
+      await pipeline.exec();
+    } catch (error) {
+      logger.error("SessionTracker: Failed to refresh observed session", {
+        error,
+        sessionIdentity,
+      });
+    }
+  }
+
+  /** 终止 Dashboard/Sessions 页使用的 observed Session identity。 */
+  static async terminateObservedSession(sessionIdentity: string): Promise<boolean> {
+    const redis = getRedisClient();
+    if (redis?.status !== "ready" || !sessionIdentity) return false;
+
+    try {
+      const pipeline = redis.pipeline();
+      pipeline.zrem(getObservedGlobalActiveSessionsKey(), sessionIdentity);
+      pipeline.del(`observed_session:${sessionIdentity}:concurrent_count`);
+      pipeline.del(`session:${sessionIdentity}:info`);
+      const results = await pipeline.exec();
+      if (!results) return false;
+
+      return results.some(([error, deleted]) => error === null && Number(deleted) > 0);
+    } catch (error) {
+      logger.error("SessionTracker: Failed to terminate observed session", {
+        error,
+        sessionIdentity,
+      });
+      return false;
     }
   }
 
@@ -317,6 +380,24 @@ export class SessionTracker {
     } catch (error) {
       logger.error("SessionTracker: Failed to get global session count", { error });
       return 0; // Fail Open
+    }
+  }
+
+  static async getObservedGlobalSessionCount(): Promise<number> {
+    const redis = getRedisClient();
+    if (redis?.status !== "ready") return 0;
+
+    try {
+      const key = getObservedGlobalActiveSessionsKey();
+      if ((await redis.exists(key)) !== 1) return 0;
+      if ((await redis.type(key)) !== "zset") {
+        await redis.del(key);
+        return 0;
+      }
+      return await SessionTracker.countFromZSet(key);
+    } catch (error) {
+      logger.error("SessionTracker: Failed to count observed sessions", { error });
+      return 0;
     }
   }
 
@@ -594,6 +675,39 @@ export class SessionTracker {
     }
   }
 
+  static async getObservedActiveSessions(): Promise<string[]> {
+    const redis = getRedisClient();
+    if (redis?.status !== "ready") return [];
+
+    try {
+      const key = getObservedGlobalActiveSessionsKey();
+      if ((await redis.exists(key)) !== 1) return [];
+      if ((await redis.type(key)) !== "zset") {
+        await redis.del(key);
+        return [];
+      }
+      const cutoffMs = Date.now() - SessionTracker.SESSION_TTL_MS;
+      await redis.zremrangebyscore(key, "-inf", cutoffMs);
+      const sessionIdentities = await redis.zrange(key, 0, -1);
+      if (sessionIdentities.length === 0) return [];
+
+      const pipeline = redis.pipeline();
+      for (const sessionIdentity of sessionIdentities) {
+        pipeline.exists(`session:${sessionIdentity}:info`);
+      }
+      const results = await pipeline.exec();
+      if (!results) return [];
+
+      return sessionIdentities.filter((_, index) => {
+        const result = results[index];
+        return result?.[0] === null && result[1] === 1;
+      });
+    } catch (error) {
+      logger.error("SessionTracker: Failed to get observed sessions", { error });
+      return [];
+    }
+  }
+
   /**
    * 从 ZSET 计数（新格式）
    *
@@ -678,6 +792,22 @@ export class SessionTracker {
     }
   }
 
+  static async incrementObservedConcurrentCount(sessionIdentity: string): Promise<void> {
+    const redis = getRedisClient();
+    if (redis?.status !== "ready" || !sessionIdentity) return;
+
+    try {
+      const key = `observed_session:${sessionIdentity}:concurrent_count`;
+      await redis.incr(key);
+      await redis.expire(key, 600);
+    } catch (error) {
+      logger.error("SessionTracker: Failed to increment observed concurrent count", {
+        error,
+        sessionIdentity,
+      });
+    }
+  }
+
   /**
    * 减少 session 并发计数
    *
@@ -701,6 +831,22 @@ export class SessionTracker {
       logger.trace("SessionTracker: Decremented concurrent count", { sessionId, newCount });
     } catch (error) {
       logger.error("SessionTracker: Failed to decrement concurrent count", { error, sessionId });
+    }
+  }
+
+  static async decrementObservedConcurrentCount(sessionIdentity: string): Promise<void> {
+    const redis = getRedisClient();
+    if (redis?.status !== "ready" || !sessionIdentity) return;
+
+    try {
+      const key = `observed_session:${sessionIdentity}:concurrent_count`;
+      const newCount = await redis.decr(key);
+      if (newCount <= 0) await redis.del(key);
+    } catch (error) {
+      logger.error("SessionTracker: Failed to decrement observed concurrent count", {
+        error,
+        sessionIdentity,
+      });
     }
   }
 
@@ -756,6 +902,34 @@ export class SessionTracker {
       for (const id of sessionIds) {
         result.set(id, 0);
       }
+      return result;
+    }
+  }
+
+  static async getObservedConcurrentCountBatch(
+    sessionIdentities: string[]
+  ): Promise<Map<string, number>> {
+    const result = new Map<string, number>();
+    if (sessionIdentities.length === 0) return result;
+
+    const redis = getRedisClient();
+    if (redis?.status !== "ready") return result;
+
+    try {
+      const pipeline = redis.pipeline();
+      for (const identity of sessionIdentities) {
+        pipeline.get(`observed_session:${identity}:concurrent_count`);
+      }
+      const values = await pipeline.exec();
+      if (!values) return result;
+      values.forEach((entry, index) => {
+        const raw = entry?.[0] ? null : entry?.[1];
+        const count = typeof raw === "string" ? Number.parseInt(raw, 10) : Number(raw ?? 0);
+        result.set(sessionIdentities[index], Number.isFinite(count) ? Math.max(0, count) : 0);
+      });
+      return result;
+    } catch (error) {
+      logger.error("SessionTracker: Failed to get observed concurrent counts", { error });
       return result;
     }
   }

@@ -289,6 +289,7 @@ export async function findProviderModelCacheHitRateMetricsForAlert(
 
   const whereConditionsRaw = [
     isNull(messageRequest.deletedAt),
+    eq(messageRequest.isReplay, false),
     EXCLUDE_WARMUP_CONDITION,
     gte(messageRequest.createdAt, timeRange.start),
     lt(messageRequest.createdAt, timeRange.end),
@@ -332,6 +333,7 @@ export async function findProviderModelCacheHitRateMetricsForAlert(
         eq(prev.sessionId, messageRequest.sessionId),
         eq(prev.requestSequence, sql<number>`(${messageRequest.requestSequence} - 1)`),
         isNull(prev.deletedAt),
+        eq(prev.isReplay, false),
         prevExcludeWarmupCondition
       )
     )

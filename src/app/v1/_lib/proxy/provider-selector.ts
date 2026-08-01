@@ -4,7 +4,7 @@ import { getEnvConfig } from "@/lib/config/env.schema";
 import { PROVIDER_GROUP } from "@/lib/constants/provider.constants";
 import { logger } from "@/lib/logger";
 import { RateLimitService } from "@/lib/rate-limit";
-import { buildScopeTag } from "@/lib/request-identity";
+import { buildPublicSessionIdentity, buildScopeTag } from "@/lib/request-identity";
 import { SessionManager } from "@/lib/session-manager";
 import {
   getProxyRuntimeSettings,
@@ -24,7 +24,11 @@ import type { ProviderChainItem } from "@/types/message";
 import type { Provider } from "@/types/provider";
 import { getAffinityStore } from "./affinity/affinity-store";
 import { isAffinityRoutingEnabledWith } from "./affinity/config";
-import { computeFingerprintChain, fingerprintsDeepestFirst } from "./affinity/fingerprint";
+import {
+  computeFingerprintChain,
+  fingerprintsDeepestFirst,
+  fingerprintTip,
+} from "./affinity/fingerprint";
 import { isClientAllowedDetailed } from "./client-detector";
 import type { ClientFormat } from "./format-mapper";
 import { getVerboseProviderErrorCached } from "./provider-selector-settings-cache";
@@ -266,6 +270,34 @@ export class ProxyProviderResolver {
       );
       session.setProvider(provider);
       session.setLastSelectionContext(context); // 保存用于后续记录
+    }
+
+    const affinityIdentityEnabled =
+      skipSessionBinding && session.affinity !== null && session.sessionId !== null;
+    if (affinityIdentityEnabled && session.affinity) {
+      const fingerprint = session.affinity.matchedFp ?? fingerprintTip(session.affinity.chain).fp;
+      const fingerprints = fingerprintsDeepestFirst(session.affinity.chain);
+      const matchedIndex = session.affinity.matchedFp
+        ? fingerprints.indexOf(session.affinity.matchedFp)
+        : 0;
+      session.setSessionIdentityMetadata({
+        identity: `pfx:${session.affinity.scopeTag}:${fingerprint}`,
+        kind: "prefix_affinity",
+        scopeTag: session.affinity.scopeTag,
+        fingerprint,
+        fingerprints: matchedIndex >= 0 ? fingerprints.slice(matchedIndex) : [fingerprint],
+      });
+    } else if (session.sessionId) {
+      session.setSessionIdentityMetadata({
+        identity: buildPublicSessionIdentity(
+          session.sessionId,
+          session.authState?.key?.id ?? "unbound"
+        ),
+        kind: "session_id",
+        scopeTag: null,
+        fingerprint: null,
+        fingerprints: [],
+      });
     }
 
     // === 故障转移循环 ===
@@ -560,6 +592,7 @@ export class ProxyProviderResolver {
       chain,
       nominatedProviderId: null,
       matchedFp: null,
+      generation: null,
     };
     return true;
   }
@@ -577,11 +610,15 @@ export class ProxyProviderResolver {
       const affinity = session.affinity;
       if (!affinity) return;
 
-      const hint = await getAffinityStore().lookup(
+      const lookup = await getAffinityStore().lookup(
         affinity.scopeTag,
         fingerprintsDeepestFirst(affinity.chain),
         getEnvConfig().PREFIX_AFFINITY_TTL_SECONDS
       );
+      if (!lookup) return;
+
+      affinity.generation = lookup.generation;
+      const hint = lookup.hint;
       if (!hint) return;
 
       affinity.matchedFp = hint.matchedFp;

@@ -75,7 +75,19 @@ vi.mock("sonner", () => {
 
 vi.mock("./request-list-sidebar", () => {
   return {
-    RequestListSidebar: () => <div data-testid="mock-request-list-sidebar" />,
+    RequestListSidebar: (props: {
+      onSelect: (sourceSessionId: string, sequence: number) => void;
+    }) => (
+      <div data-testid="mock-request-list-sidebar">
+        <button
+          type="button"
+          data-testid="mock-select-physical-request"
+          onClick={() => props.onSelect("physical-selected", 1)}
+        >
+          select request
+        </button>
+      </div>
+    ),
   };
 });
 
@@ -168,6 +180,7 @@ function buildDetailsData(
   overrides: Partial<{
     snapshots: SessionDetailSnapshots | null;
     sessionStats: unknown | null;
+    currentSourceSessionId: string | null;
     currentSequence: number | null;
     prevSequence: number | null;
     nextSequence: number | null;
@@ -188,6 +201,7 @@ function buildDetailsData(
     snapshots: createSnapshots(),
     specialSettings: null,
     sessionStats: null,
+    currentSourceSessionId: "physical-current",
     currentSequence: 7,
     prevSequence: null,
     nextSequence: null,
@@ -351,12 +365,32 @@ describe("SessionMessagesClient (request export actions)", () => {
     click(nextBtn as HTMLButtonElement);
 
     expect(routerReplaceMock).toHaveBeenCalledWith(
-      "/dashboard/sessions/0123456789abcdef/messages?seq=6"
+      "/dashboard/sessions/0123456789abcdef/messages?seq=6&sourceSessionId=physical-current"
     );
     expect(routerReplaceMock).toHaveBeenCalledWith(
-      "/dashboard/sessions/0123456789abcdef/messages?seq=8"
+      "/dashboard/sessions/0123456789abcdef/messages?seq=8&sourceSessionId=physical-current"
     );
     expect(container.querySelector("[data-testid='mock-view-mode']")?.textContent).toBe("before");
+
+    unmount();
+  });
+
+  test("stores the physical source Session together with the selected sequence", async () => {
+    getSessionDetailsMock.mockResolvedValue({
+      ok: true,
+      data: buildDetailsData({ currentSequence: 1 }),
+    });
+
+    const { container, unmount } = renderClient(<SessionMessagesClient />);
+    await flushEffects();
+
+    click(
+      container.querySelector("[data-testid='mock-select-physical-request']") as HTMLButtonElement
+    );
+
+    expect(routerReplaceMock).toHaveBeenCalledWith(
+      "/dashboard/sessions/0123456789abcdef/messages?seq=1&sourceSessionId=physical-selected"
+    );
 
     unmount();
   });
@@ -525,13 +559,15 @@ describe("SessionMessagesClient (request export actions)", () => {
   test("shows error when getSessionDetails returns ok:false", async () => {
     getSessionDetailsMock.mockResolvedValue({
       ok: false,
-      error: "ERR_FETCH",
+      error: "legacy fallback",
+      errorCode: "SESSION_REQUEST_SOURCE_MISMATCH",
     });
 
     const { container, unmount } = renderClient(<SessionMessagesClient />);
     await flushEffects();
 
-    expect(container.textContent).toContain("ERR_FETCH");
+    expect(container.textContent).toContain("SESSION_REQUEST_SOURCE_MISMATCH");
+    expect(container.textContent).not.toContain("legacy fallback");
 
     unmount();
   });

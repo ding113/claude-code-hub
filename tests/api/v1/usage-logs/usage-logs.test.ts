@@ -262,6 +262,47 @@ describe("v1 usage log endpoints", () => {
     });
   });
 
+  test("passes the Replay filter through list, stats, and export requests", async () => {
+    const list = await callV1Route({
+      method: "GET",
+      pathname: "/api/v1/usage-logs?limit=15&replayFilter=replay",
+      headers,
+    });
+    expect(list.response.status).toBe(200);
+    expect(getUsageLogsBatchMock).toHaveBeenCalledWith(
+      expect.objectContaining({ limit: 15, replayFilter: "replay" })
+    );
+
+    const stats = await callV1Route({
+      method: "GET",
+      pathname: "/api/v1/usage-logs/stats?replayFilter=non-replay",
+      headers,
+    });
+    expect(stats.response.status).toBe(200);
+    expect(getUsageLogsStatsMock).toHaveBeenCalledWith(
+      expect.objectContaining({ replayFilter: "non-replay" })
+    );
+
+    const asyncExport = await callV1Route({
+      method: "POST",
+      pathname: "/api/v1/usage-logs/exports",
+      headers: { ...headers, Prefer: "respond-async" },
+      body: { replayFilter: "replay" },
+    });
+    expect(asyncExport.response.status).toBe(202);
+    expect(startUsageLogsExportMock).toHaveBeenCalledWith({
+      replayFilter: "replay",
+      format: "csv",
+    });
+
+    const invalid = await callV1Route({
+      method: "GET",
+      pathname: "/api/v1/usage-logs?replayFilter=invalid",
+      headers,
+    });
+    expect(invalid.response.status).toBe(400);
+  });
+
   test("keeps global usage-log metadata admin-only", async () => {
     validateAuthTokenMock.mockResolvedValue(userSession);
 

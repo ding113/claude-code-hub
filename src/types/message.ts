@@ -287,6 +287,13 @@ export interface MessageRequest {
   // Session ID（用于会话粘性和日志追踪）
   sessionId?: string;
 
+  // 活跃 Session 聚合 identity；保留 sessionId 作为物理请求/快照主键
+  sessionIdentity?: string;
+  sessionIdentityKind?: "session_id" | "prefix_affinity";
+  affinityScopeTag?: string | null;
+  affinityFingerprint?: string | null;
+  affinityFingerprintChain?: string[];
+
   // Request Sequence（Session 内请求序号）
   requestSequence?: number;
 
@@ -365,6 +372,15 @@ export interface CreateMessageRequestData {
 
   // Session ID（用于会话粘性和日志追踪）
   session_id?: string;
+
+  // 活跃 Session 聚合 identity；保留 session_id 作为物理请求/快照主键
+  session_identity?: string;
+  session_identity_kind?: "session_id" | "prefix_affinity";
+  affinity_scope_tag?: string | null;
+  affinity_fingerprint?: string | null;
+  affinity_fingerprint_chain?: string[];
+  is_replay?: boolean;
+  replay_source_request_id?: number | null;
 
   // Request Sequence（Session 内请求序号，用于区分同一 Session 的不同请求）
   request_sequence?: number;

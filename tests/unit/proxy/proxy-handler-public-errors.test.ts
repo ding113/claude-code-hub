@@ -13,12 +13,15 @@ type ProxySettingsFixture = {
 
 const boundary = vi.hoisted(() => ({
   decrementConcurrentCount: vi.fn<(sessionId: string) => Promise<void>>(),
+  decrementObservedConcurrentCount: vi.fn<(identity: string) => Promise<void>>(),
   emitProxyLangfuseTrace: vi.fn(),
   getErrorOverride: vi.fn<(error: Error) => Promise<null>>(),
   incrementConcurrentCount: vi.fn<(sessionId: string) => Promise<void>>(),
+  incrementObservedConcurrentCount: vi.fn<(identity: string) => Promise<void>>(),
   loadSettings: vi.fn<() => Promise<ProxySettingsFixture>>(),
   runGuards: vi.fn<(session: ProxySession) => Promise<Response | null>>(),
   send: vi.fn<(session: ProxySession) => Promise<Response>>(),
+  trackObservedSession: vi.fn<(identity: string) => Promise<void>>(),
   updateMessageRequestDetailsDurably: vi.fn(),
 }));
 
@@ -58,8 +61,11 @@ vi.mock("@/repository/message", () => ({
 vi.mock("@/lib/session-tracker", () => ({
   SessionTracker: {
     decrementConcurrentCount: boundary.decrementConcurrentCount,
+    decrementObservedConcurrentCount: boundary.decrementObservedConcurrentCount,
     incrementConcurrentCount: boundary.incrementConcurrentCount,
+    incrementObservedConcurrentCount: boundary.incrementObservedConcurrentCount,
     refreshSession: vi.fn(),
+    trackObservedSession: boundary.trackObservedSession,
   },
 }));
 
@@ -96,12 +102,18 @@ describe("handleProxyRequest public error behavior", () => {
     boundary.send.mockReset();
     boundary.incrementConcurrentCount.mockReset();
     boundary.decrementConcurrentCount.mockReset();
+    boundary.incrementObservedConcurrentCount.mockReset();
+    boundary.decrementObservedConcurrentCount.mockReset();
+    boundary.trackObservedSession.mockReset();
     boundary.loadSettings.mockReset();
     boundary.getErrorOverride.mockReset();
     boundary.loadSettings.mockResolvedValue(settings);
     boundary.getErrorOverride.mockResolvedValue(null);
     boundary.incrementConcurrentCount.mockResolvedValue(undefined);
     boundary.decrementConcurrentCount.mockResolvedValue(undefined);
+    boundary.incrementObservedConcurrentCount.mockResolvedValue(undefined);
+    boundary.decrementObservedConcurrentCount.mockResolvedValue(undefined);
+    boundary.trackObservedSession.mockResolvedValue(undefined);
   });
 
   it("translates a post-session forwarding error through the real error handler", async () => {

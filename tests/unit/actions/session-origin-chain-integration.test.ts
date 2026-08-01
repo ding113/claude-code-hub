@@ -1,12 +1,7 @@
 import { describe, expect, test, vi } from "vitest";
 import type { ProviderChainItem } from "../../../src/types/message";
 
-type SessionRequestRow = {
-  requestSequence: number;
-  providerChain: ProviderChainItem[];
-};
-
-describe("getSessionOriginChain integration", () => {
+describe("getSessionOriginChain", () => {
   test("returns the first request origin chain for a multi-request session", async () => {
     vi.resetModules();
 
@@ -19,37 +14,18 @@ describe("getSessionOriginChain integration", () => {
       },
     ];
 
-    const secondRequestChain: ProviderChainItem[] = [
-      {
-        id: 101,
-        name: "provider-a",
-        reason: "session_reuse",
-        selectionMethod: "session_reuse",
-      },
-    ];
+    const aggregateSessionStatsMock = vi.fn().mockResolvedValue({ userId: 1 });
+    const findSessionRequestLocatorMock = vi.fn().mockResolvedValue({
+      identityKind: "direct",
+      sourceSessionId: "test-session",
+      requestSequence: 1,
+    });
+    const findSessionOriginChainMock = vi.fn().mockResolvedValue(firstRequestChain);
 
-    const sessionRequests: SessionRequestRow[] = [
-      { requestSequence: 1, providerChain: firstRequestChain },
-      { requestSequence: 2, providerChain: secondRequestChain },
-    ];
-
-    const limitMock = vi.fn((limit: number) =>
-      Promise.resolve(
-        [...sessionRequests]
-          .sort((a, b) => a.requestSequence - b.requestSequence)
-          .slice(0, limit)
-          .map((row) => ({ providerChain: row.providerChain }))
-      )
-    );
-    const orderByMock = vi.fn(() => ({ limit: limitMock }));
-    const whereMock = vi.fn(() => ({ orderBy: orderByMock }));
-    const fromMock = vi.fn(() => ({ where: whereMock }));
-    const selectMock = vi.fn(() => ({ from: fromMock }));
-
-    vi.doMock("@/drizzle/db", () => ({
-      db: {
-        select: selectMock,
-      },
+    vi.doMock("@/repository/message", () => ({
+      aggregateSessionStats: aggregateSessionStatsMock,
+      findSessionOriginChain: findSessionOriginChainMock,
+      findSessionRequestLocator: findSessionRequestLocatorMock,
     }));
 
     vi.doMock("@/lib/auth", () => ({
@@ -80,8 +56,7 @@ describe("getSessionOriginChain integration", () => {
     }
 
     expect(result.data[0]?.reason).toBe("initial_selection");
-    expect(result.data).not.toEqual(secondRequestChain);
-    expect(selectMock).toHaveBeenCalledTimes(1);
-    expect(limitMock).toHaveBeenCalledWith(1);
+    expect(findSessionRequestLocatorMock).toHaveBeenCalledWith("test-session");
+    expect(findSessionOriginChainMock).toHaveBeenCalledWith("test-session");
   });
 });

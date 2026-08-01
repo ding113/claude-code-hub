@@ -168,6 +168,7 @@ function parseUsageLogsQuery(c: Context): UsageLogsActionQueryInput | Response {
     excludeStatusCode200: c.req.query("excludeStatusCode200"),
     endpoint: c.req.query("endpoint"),
     minRetryCount: c.req.query("minRetryCount"),
+    replayFilter: c.req.query("replayFilter"),
     startTime: c.req.query("startTime"),
     endTime: c.req.query("endTime"),
   });

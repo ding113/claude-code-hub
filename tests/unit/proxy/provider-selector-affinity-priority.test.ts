@@ -173,6 +173,9 @@ function makeSession(overrides: Record<string, unknown> = {}): any {
     setGroupCostMultiplier: vi.fn(),
     getProvidersSnapshot: vi.fn(async () => [makeProvider(55)]),
     recordProviderSessionRef: vi.fn(),
+    setSessionIdentityMetadata: vi.fn((metadata: unknown) => {
+      session._sessionIdentityMetadata = metadata;
+    }),
   };
   return Object.assign(session, overrides);
 }
@@ -220,10 +223,13 @@ describe("ensure() nomination priority", () => {
 
   test("affinity hit wins over weighted random and records affinity_hit in the chain", async () => {
     storeMocks.lookup.mockResolvedValue({
-      providerId: 42,
-      matchedFp: "deepfp",
-      matchedIndex: 0,
-      tier: "conversation",
+      generation: "0",
+      hint: {
+        providerId: 42,
+        matchedFp: "deepfp",
+        matchedIndex: 0,
+        tier: "conversation",
+      },
     });
     providerRepositoryMocks.findProviderById.mockResolvedValue(makeProvider(42));
 
@@ -261,10 +267,13 @@ describe("ensure() nomination priority", () => {
 
   test("affinity hit that fails hard validation falls back without nomination", async () => {
     storeMocks.lookup.mockResolvedValue({
-      providerId: 42,
-      matchedFp: "deepfp",
-      matchedIndex: 0,
-      tier: "conversation",
+      generation: "0",
+      hint: {
+        providerId: 42,
+        matchedFp: "deepfp",
+        matchedIndex: 0,
+        tier: "conversation",
+      },
     });
     providerRepositoryMocks.findProviderById.mockResolvedValue(
       makeProvider(42, { isEnabled: false })
@@ -281,10 +290,13 @@ describe("ensure() nomination priority", () => {
 
   test("circuit-open affinity candidate is rejected by hard validation", async () => {
     storeMocks.lookup.mockResolvedValue({
-      providerId: 42,
-      matchedFp: "deepfp",
-      matchedIndex: 0,
-      tier: "conversation",
+      generation: "0",
+      hint: {
+        providerId: 42,
+        matchedFp: "deepfp",
+        matchedIndex: 0,
+        tier: "conversation",
+      },
     });
     providerRepositoryMocks.findProviderById.mockResolvedValue(makeProvider(42));
     circuitBreakerMocks.isCircuitOpen.mockImplementation(async (id: number) => id === 42);

@@ -247,6 +247,7 @@ describe("ProxyProviderResolver.ensure - 分组倍率", () => {
       getProviderChain: vi.fn(() => []),
       getOriginalModel: vi.fn(() => "gpt-5.5"),
       recordProviderSessionRef: vi.fn(),
+      setSessionIdentityMetadata: vi.fn(),
     } as unknown as Parameters<typeof ProxyProviderResolver.ensure>[0];
 
     try {

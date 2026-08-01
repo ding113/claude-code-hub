@@ -6,6 +6,10 @@ import { drizzle } from "drizzle-orm/postgres-js";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import postgres from "postgres";
 import { logger } from "@/lib/logger";
+import {
+  type MigrationIndexPreflightExecutor,
+  runPendingSessionReplayIndexPreflight,
+} from "@/lib/migrations/session-replay-index-preflight";
 
 const MIGRATION_ADVISORY_LOCK_NAME = "claude-code-hub:migrations";
 
@@ -140,6 +144,46 @@ async function repairDrizzleMigrationsCreatedAt(input: {
   });
 }
 
+function createMigrationIndexPreflightExecutor(
+  client: ReturnType<typeof postgres>
+): MigrationIndexPreflightExecutor {
+  return {
+    execute: async (sql) => {
+      await client.unsafe(sql);
+    },
+    inspectIndex: async (name) => {
+      const qualifiedName = `public."${name}"`;
+      const [row] = await client`
+        SELECT
+          c.oid IS NOT NULL AS exists,
+          COALESCE(i.indisvalid, false) AS valid,
+          obj_description(c.oid, 'pg_class') AS marker
+        FROM (SELECT to_regclass(${qualifiedName}) AS oid) resolved
+        LEFT JOIN pg_class c ON c.oid = resolved.oid
+        LEFT JOIN pg_index i ON i.indexrelid = c.oid
+      `;
+      return {
+        exists: row?.exists === true,
+        valid: row?.valid === true,
+        marker: typeof row?.marker === "string" ? row.marker : null,
+      };
+    },
+  };
+}
+
+async function getLatestDrizzleMigrationCreatedAt(
+  client: ReturnType<typeof postgres>
+): Promise<number | null> {
+  const [row] = await client`
+    SELECT MAX(created_at) AS latest_created_at
+    FROM "drizzle"."__drizzle_migrations"
+  `;
+  const value = row?.latest_created_at;
+  const parsed =
+    typeof value === "number" ? value : typeof value === "string" ? Number(value) : NaN;
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 /**
  * 自动执行数据库迁移
  * 在生产环境启动时自动运行
@@ -165,6 +209,10 @@ export async function runMigrations() {
 
     await ensureDrizzleMigrationsTableExists(migrationClient);
     await repairDrizzleMigrationsCreatedAt({ client: migrationClient, migrationsFolder });
+    await runPendingSessionReplayIndexPreflight(
+      createMigrationIndexPreflightExecutor(migrationClient),
+      await getLatestDrizzleMigrationCreatedAt(migrationClient)
+    );
 
     // 执行迁移
     await migrate(db, { migrationsFolder });

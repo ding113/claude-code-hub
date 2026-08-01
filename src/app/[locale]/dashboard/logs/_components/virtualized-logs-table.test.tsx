@@ -149,6 +149,8 @@ function makeLog(overrides: Partial<UsageLogRow>): UsageLogRow {
     providerChain: null,
     blockedBy: null,
     blockedReason: null,
+    isReplay: false,
+    replaySourceRequestId: null,
     userAgent: null,
     clientIp: null,
     messagesCount: null,
@@ -194,6 +196,27 @@ function renderCostTooltipWithLog(overrides: Partial<UsageLogRow>) {
   }
 
   return tooltip;
+}
+
+function renderPerformanceWithLog(overrides: Partial<UsageLogRow>) {
+  const html = renderTableWithLog(overrides);
+  const container = document.createElement("div");
+  container.innerHTML = html;
+
+  const tooltip = [...container.querySelectorAll('[data-slot="tooltip-content"]')].find((node) =>
+    node.textContent?.includes("logs.details.performance.duration")
+  );
+
+  if (!(tooltip instanceof HTMLDivElement) || !(tooltip.parentElement instanceof HTMLDivElement)) {
+    throw new Error("Performance tooltip content not found");
+  }
+
+  const trigger = tooltip.parentElement.firstElementChild;
+  if (!(trigger instanceof HTMLDivElement)) {
+    throw new Error("Performance tooltip trigger not found");
+  }
+
+  return { tooltip, trigger };
 }
 
 describe("virtualized-logs-table thinking effort", () => {
@@ -441,6 +464,22 @@ describe("virtualized-logs-table multiplier badge", () => {
     expect(html).toContain("animate-spin");
   });
 
+  test("renders Replay badge without treating the request as blocked", () => {
+    mockIsLoading = false;
+    mockIsError = false;
+    mockError = null;
+    mockHasNextPage = false;
+    mockIsFetchingNextPage = false;
+
+    mockLogs = [makeLog({ id: 1, isReplay: true, replaySourceRequestId: 7 })];
+    const html = renderToStaticMarkup(
+      <VirtualizedLogsTable filters={{}} autoRefreshEnabled={false} />
+    );
+
+    expect(html).toContain("logs.table.replay");
+    expect(html).not.toContain("logs.table.blocked");
+  });
+
   test("hides provider column when hiddenColumns includes provider", () => {
     mockIsLoading = false;
     mockIsError = false;
@@ -528,6 +567,27 @@ describe("virtualized-logs-table multiplier badge", () => {
     expect(html).toContain("tok/s");
     // TFFT 行同样应出现
     expect(html).toContain("logs.details.performance.tfft");
+  });
+
+  test("性能列使用 TFFT 缩写", () => {
+    const { trigger } = renderPerformanceWithLog({
+      durationMs: 1000,
+      tfftMs: 500,
+      firstByteMs: 250,
+    });
+
+    expect(trigger.textContent).toContain("logs.details.performance.tfftShort");
+  });
+
+  test("性能 Tooltip 保留 TFFT 和 TTFB 完整术语", () => {
+    const { tooltip } = renderPerformanceWithLog({
+      durationMs: 1000,
+      tfftMs: 500,
+      firstByteMs: 250,
+    });
+
+    expect(tooltip.textContent).toContain("logs.details.performance.tfft");
+    expect(tooltip.textContent).toContain("logs.details.performance.ttfb");
   });
 
   test("renders swap indicator on cacheTtl badge when swapCacheTtlApplied is true", () => {

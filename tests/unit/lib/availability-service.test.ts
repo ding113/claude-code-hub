@@ -332,6 +332,8 @@ describe("availability-service", () => {
     // 终态记录的 success/failure/excluded 分类仍由 outcome 函数完成。
     expect(queryText).toContain("fn_compute_message_request_success_rate_outcome");
     expect(queryText).toContain('avg("durationms") filter');
+    expect(queryText).toContain('"message_request"."is_replay" =');
+    expect(sqlToQuery(executeMock.mock.calls[0]?.[0]).params).toContain(false);
   });
 
   it("queryProviderAvailability 计算 currentStatus 时会按最近 buckets 的请求量加权", async () => {
@@ -750,6 +752,8 @@ describe("availability-service", () => {
     expect(queryText).toContain("<= now()");
     expect(queryText).toContain("count(*) filter");
     expect(queryText).toContain("max(");
+    expect(queryText).toContain('"message_request"."is_replay" =');
+    expect(sqlToQuery(executeMock.mock.calls[0]?.[0]).params).toContain(false);
   });
 
   it("getCurrentProviderStatus 在提供商无聚合数据时返回 unknown", async () => {

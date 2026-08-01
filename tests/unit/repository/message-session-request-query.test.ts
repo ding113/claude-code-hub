@@ -1,6 +1,11 @@
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { messageRequest } from "@/drizzle/schema";
-import { findAdjacentRequestSequences, findRequestsBySessionId } from "@/repository/message";
+import {
+  findAdjacentRequestSequences,
+  findRequestsBySessionId,
+  findRequestsBySessionIdentity,
+  findSessionRequestLocator,
+} from "@/repository/message";
 import { createDrizzleQuery, sqlText } from "./message-query-test-support";
 
 const boundary = vi.hoisted(() => {
@@ -34,6 +39,7 @@ type RequestRow = Pick<
   | "inputTokens"
   | "outputTokens"
   | "errorMessage"
+  | "sessionId"
 > & { readonly sequence: MessageRow["requestSequence"] };
 
 const firstCreatedAt = new Date("2026-05-04T10:00:00.000Z");
@@ -51,6 +57,7 @@ describe("message repository session request queries", () => {
     const rows = createDrizzleQuery<readonly RequestRow[]>([
       {
         id: 31,
+        sessionId: "session-requests",
         sequence: null,
         model: "model-a",
         statusCode: 200,
@@ -62,6 +69,7 @@ describe("message repository session request queries", () => {
       },
       {
         id: 32,
+        sessionId: "session-requests",
         sequence: 3,
         model: "model-b",
         statusCode: 429,
@@ -81,6 +89,7 @@ describe("message repository session request queries", () => {
       requests: [
         {
           id: 31,
+          sourceSessionId: "session-requests",
           sequence: 1,
           model: "model-a",
           statusCode: 200,
@@ -92,6 +101,7 @@ describe("message repository session request queries", () => {
         },
         {
           id: 32,
+          sourceSessionId: "session-requests",
           sequence: 3,
           model: "model-b",
           statusCode: 429,
@@ -117,6 +127,7 @@ describe("message repository session request queries", () => {
     const rows = createDrizzleQuery<readonly RequestRow[]>([
       {
         id: 35,
+        sessionId: "session-desc",
         sequence: 5,
         model: null,
         statusCode: null,
@@ -140,6 +151,79 @@ describe("message repository session request queries", () => {
     expect(sqlText(rows.trace.orderBy)).toContain("request_sequence desc");
     expect(rows.trace.limit).toEqual([1]);
     expect(rows.trace.offset).toEqual([2]);
+  });
+
+  test("preserves the physical source Session for requests aggregated by prefix identity", async () => {
+    const count = createDrizzleQuery([{ count: 2 }]);
+    const rows = createDrizzleQuery<readonly RequestRow[]>([
+      {
+        id: 41,
+        sessionId: "physical-a",
+        sequence: 1,
+        model: "model-a",
+        statusCode: 200,
+        costUsd: "0",
+        createdAt: firstCreatedAt,
+        inputTokens: 10,
+        outputTokens: 5,
+        errorMessage: null,
+      },
+      {
+        id: 42,
+        sessionId: "physical-b",
+        sequence: 1,
+        model: "model-b",
+        statusCode: 200,
+        costUsd: "0",
+        createdAt: secondCreatedAt,
+        inputTokens: 20,
+        outputTokens: 8,
+        errorMessage: null,
+      },
+    ]);
+    boundary.select.mockReturnValueOnce(count).mockReturnValueOnce(rows);
+
+    const result = await findRequestsBySessionIdentity("pfx:scope:fingerprint");
+
+    expect(
+      result.requests.map(({ sourceSessionId, sequence }) => ({ sourceSessionId, sequence }))
+    ).toEqual([
+      { sourceSessionId: "physical-a", sequence: 1 },
+      { sourceSessionId: "physical-b", sequence: 1 },
+    ]);
+    expect(sqlText(rows.trace.where)).toContain("pfx:scope:fingerprint");
+  });
+
+  test("resolves an exact request locator inside a prefix identity", async () => {
+    const locator = createDrizzleQuery([
+      {
+        sourceSessionId: "physical-a",
+        requestSequence: 3,
+        identityKind: "prefix_affinity",
+        scopeTag: "scope",
+        fingerprint: "fingerprint",
+      },
+    ]);
+    boundary.select.mockReturnValueOnce(locator);
+
+    await expect(
+      findSessionRequestLocator("pfx:scope:fingerprint", {
+        sourceSessionId: "physical-a",
+        requestSequence: 3,
+      })
+    ).resolves.toEqual({
+      sourceSessionId: "physical-a",
+      requestSequence: 3,
+      identityKind: "prefix_affinity",
+      scopeTag: "scope",
+      fingerprint: "fingerprint",
+    });
+
+    const where = sqlText(locator.trace.where);
+    expect(where).toContain("pfx:scope:fingerprint");
+    expect(where).toContain("physical-a");
+    expect(where).toContain("= 3");
+    expect(where).toContain("deleted_at");
   });
 
   test("returns adjacent neighbors using session-scoped sequence predicates", async () => {

@@ -97,29 +97,30 @@ describe("v1 session endpoints", () => {
 
     const detail = await callV1Route({
       method: "GET",
-      pathname: "/api/v1/sessions/s1?requestSequence=2",
+      pathname: "/api/v1/sessions/s1?requestSequence=2&sourceSessionId=physical-1",
       headers,
     });
     expect(detail.response.status).toBe(200);
-    expect(getSessionDetailsMock).toHaveBeenCalledWith("s1", 2);
+    expect(getSessionDetailsMock).toHaveBeenCalledWith("s1", 2, "physical-1");
   });
 
   test("reads session payload subresources", async () => {
     const headers = { Authorization: "Bearer admin-token" };
     const messages = await callV1Route({
       method: "GET",
-      pathname: "/api/v1/sessions/s1/messages?requestSequence=2",
+      pathname: "/api/v1/sessions/s1/messages?requestSequence=2&sourceSessionId=physical-1",
       headers,
     });
     expect(messages.response.status).toBe(200);
-    expect(getSessionMessagesMock).toHaveBeenCalledWith("s1", 2);
+    expect(getSessionMessagesMock).toHaveBeenCalledWith("s1", 2, "physical-1");
 
     const exists = await callV1Route({
       method: "GET",
-      pathname: "/api/v1/sessions/s1/messages/exists",
+      pathname: "/api/v1/sessions/s1/messages/exists?requestSequence=2&sourceSessionId=physical-1",
       headers,
     });
     expect(exists.json).toEqual({ exists: true });
+    expect(hasSessionMessagesMock).toHaveBeenCalledWith("s1", 2, "physical-1");
 
     const requests = await callV1Route({
       method: "GET",
@@ -131,17 +132,19 @@ describe("v1 session endpoints", () => {
 
     const origin = await callV1Route({
       method: "GET",
-      pathname: "/api/v1/sessions/s1/origin-chain",
+      pathname: "/api/v1/sessions/s1/origin-chain?requestSequence=2&sourceSessionId=physical-1",
       headers,
     });
     expect(origin.response.status).toBe(200);
+    expect(getSessionOriginChainMock).toHaveBeenCalledWith("s1", 2, "physical-1");
 
     const response = await callV1Route({
       method: "GET",
-      pathname: "/api/v1/sessions/s1/response",
+      pathname: "/api/v1/sessions/s1/response?requestSequence=2&sourceSessionId=physical-1",
       headers,
     });
     expect(response.json).toEqual({ response: "ok" });
+    expect(getSessionResponseMock).toHaveBeenCalledWith("s1", 2, "physical-1");
   });
 
   test("terminates sessions and returns problem+json for action failures", async () => {
@@ -171,6 +174,21 @@ describe("v1 session endpoints", () => {
     });
     expect(missing.response.status).toBe(404);
     expect(missing.json).toMatchObject({ errorCode: "session.not_found" });
+
+    getSessionDetailsMock.mockResolvedValueOnce({
+      ok: false,
+      error: "Request source does not belong to this session.",
+      errorCode: "SESSION_REQUEST_SOURCE_MISMATCH",
+    });
+    const mismatchedSource = await callV1Route({
+      method: "GET",
+      pathname: "/api/v1/sessions/s1?requestSequence=2&sourceSessionId=physical-other",
+      headers,
+    });
+    expect(mismatchedSource.response.status).toBe(400);
+    expect(mismatchedSource.json).toMatchObject({
+      errorCode: "SESSION_REQUEST_SOURCE_MISMATCH",
+    });
   });
 
   test("documents session REST paths", async () => {

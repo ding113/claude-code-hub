@@ -16,6 +16,7 @@ import { logger } from "@/lib/logger";
 import { DEFAULT_SITE_TITLE } from "@/lib/site-title";
 import { getSystemSettings } from "@/repository/system-config";
 import type { SystemSettings } from "@/types/system-config";
+import { getEnvConfig } from "./env.schema";
 
 /** Cache TTL in milliseconds (1 minute) */
 const CACHE_TTL_MS = 60 * 1000;
@@ -50,6 +51,14 @@ function getOpenaiResponsesWebsocketEnvOverride(): boolean | undefined {
         );
       }
       return undefined;
+  }
+}
+
+function getFallbackStreamGateMode(): "off" | "shadow" | "enforce" {
+  try {
+    return getEnvConfig().STREAM_GATE_MODE;
+  } catch {
+    return "off";
   }
 }
 
@@ -214,7 +223,7 @@ export async function getCachedSystemSettings(): Promise<SystemSettings> {
       publicStatusWindowHours: DEFAULT_SETTINGS.publicStatusWindowHours,
       publicStatusAggregationIntervalMinutes:
         DEFAULT_SETTINGS.publicStatusAggregationIntervalMinutes,
-      streamGateMode: DEFAULT_SETTINGS.streamGateMode,
+      streamGateMode: getFallbackStreamGateMode(),
       affinityIgnoreClientSessionId: DEFAULT_SETTINGS.affinityIgnoreClientSessionId,
       replayEnabled: null,
       cacheEffectivenessEnabled: null,

@@ -237,6 +237,13 @@ const messages = {
           warmup: "Warmup",
           desc: "Warmup skipped",
         },
+        replayServe: {
+          ...dashboardMessages.logs.details.replayServe,
+          title: "Replay",
+          desc: "Served from Replay without a new upstream charge.",
+          replayId: "Replay ID",
+          sourceRequestId: "Source request",
+        },
         blocked: {
           title: "Blocked",
           sensitiveWord: "Sensitive word",
@@ -422,6 +429,26 @@ function click(element: Element | null) {
 }
 
 describe("error-details-dialog layout", () => {
+  test("marks Replay requests and shows their source request", () => {
+    const html = renderWithIntl(
+      <ErrorDetailsDialog
+        externalOpen
+        statusCode={200}
+        errorMessage={null}
+        providerChain={null}
+        sessionId={null}
+        isReplay
+        replaySourceRequestId={7}
+        blockedBy={null}
+      />
+    );
+
+    expect(html).toContain("Replay");
+    expect(html).toContain("Source request");
+    expect(html).toContain("7");
+    expect(html).not.toContain(">Blocked<");
+  });
+
   test("renders fake-200 forwarded notice when errorMessage is a FAKE_200_* code", () => {
     const html = renderWithIntl(
       <ErrorDetailsDialog

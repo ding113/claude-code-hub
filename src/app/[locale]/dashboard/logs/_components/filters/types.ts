@@ -19,6 +19,7 @@ export interface UsageLogFilters {
   actualResponseModelMismatch?: boolean;
   endpoint?: string;
   minRetryCount?: number;
+  replayFilter?: "all" | "replay" | "non-replay";
 }
 
 /**

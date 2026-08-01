@@ -1,10 +1,13 @@
 import { injectClaudeMetadataUserIdWithContext } from "@/lib/claude-code/metadata-user-id";
 import { getCachedSystemSettings } from "@/lib/config";
+import { getEnvConfig } from "@/lib/config/env.schema";
 import { logger } from "@/lib/logger";
 import { resolveKeyUserConcurrentSessionLimits } from "@/lib/rate-limit/concurrent-session-limit";
+import { buildScopeTag } from "@/lib/request-identity";
 import { headersToSanitizedObject, SessionManager } from "@/lib/session-manager";
 import { SessionTracker } from "@/lib/session-tracker";
 import { completeCodexSessionIdentifiers } from "../codex/session-completer";
+import { computeFingerprintChain, fingerprintTip } from "./affinity/fingerprint";
 import type { ProxySession } from "./session";
 
 const CLIENT_HEADER_SNAPSHOT_BLOCKLIST = [
@@ -143,6 +146,38 @@ export class ProxySessionGuard {
 
       // 4. 设置到 session 对象
       session.setSessionId(sessionId);
+
+      if (
+        systemSettings.affinityIgnoreClientSessionId &&
+        session.getEndpointPolicy().kind === "default"
+      ) {
+        const chain = computeFingerprintChain(
+          session.request.message as Record<string, unknown>,
+          session.originalFormat,
+          getEnvConfig().PREFIX_AFFINITY_WINDOW
+        );
+        if (chain) {
+          session.affinity = {
+            scopeTag: buildScopeTag(
+              keyId,
+              session.originalFormat,
+              session.getOriginalModel() ?? session.request.model
+            ),
+            chain,
+            nominatedProviderId: null,
+            matchedFp: null,
+            generation: null,
+          };
+          const fingerprint = fingerprintTip(chain).fp;
+          session.setSessionIdentityMetadata({
+            identity: `pfx:${session.affinity.scopeTag}:${fingerprint}`,
+            kind: "prefix_affinity",
+            scopeTag: session.affinity.scopeTag,
+            fingerprint,
+            fingerprints: chain.tail.map((boundary) => boundary.fp).reverse(),
+          });
+        }
+      }
 
       if (
         !allowRawSessionContext &&

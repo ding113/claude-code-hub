@@ -88,6 +88,12 @@
       "minRetryCount": "重试次数≥",
       "minRetryCountPlaceholder": "输入次数（0 表示不限）",
       "enabled": "已开启",
+      "replay": {
+        "label": "Replay",
+        "all": "全部请求",
+        "only": "仅 Replay 请求",
+        "exclude": "排除 Replay 请求"
+      },
       "apply": "应用筛选",
       "reset": "重置",
       "last7days": "近7天",
@@ -164,6 +170,7 @@
       "prevPage": "上一页",
       "nextPage": "下一页",
       "blocked": "被拦截",
+      "replay": "Replay",
       "nonBilling": "非计费",
       "skipped": "已跳过",
       "specialSettings": "特殊设置",
@@ -349,6 +356,7 @@
         "title": "性能数据",
         "ttfb": "首字节时间（TTFB）",
         "tfft": "首 Token 时间（TFFT）",
+        "tfftShort": "TFFT",
         "duration": "总耗时",
         "outputRate": "输出速率",
         "outputTokens": "输出 Tokens"
@@ -554,7 +562,8 @@
       "replayServe": {
         "title": "由 Replay 缓存服务",
         "desc": "该请求由 Replay 缓存直接服务（相同请求正在进行或已完成），未发起上游供应商调用，不产生费用。",
-        "replayId": "Replay ID"
+        "replayId": "Replay ID",
+        "sourceRequestId": "源请求"
       }
     },
     "providerChain": {

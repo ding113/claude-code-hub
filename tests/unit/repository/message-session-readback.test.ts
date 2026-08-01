@@ -235,7 +235,10 @@ describe("message session readback", () => {
     });
 
     expect(result).toEqual({
-      requests: [rows[0], { ...rows[1], sequence: 1 }],
+      requests: [
+        { ...rows[0], sourceSessionId: "session-readback" },
+        { ...rows[1], sourceSessionId: "session-readback", sequence: 1 },
+      ],
       total: 2,
     });
     expect(events).toEqual(["limit:2", "offset:1"]);

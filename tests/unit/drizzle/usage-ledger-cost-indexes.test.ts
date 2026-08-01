@@ -1,3 +1,5 @@
+import type { SQL } from "drizzle-orm";
+import { CasingCache } from "drizzle-orm/casing";
 import { getTableConfig } from "drizzle-orm/pg-core";
 import { describe, expect, it } from "vitest";
 import { usageLedger } from "@/drizzle/schema";
@@ -27,6 +29,22 @@ describe("usage_ledger cost covering indexes", () => {
     });
   };
 
+  const indexPredicate = (name: string): string => {
+    const index = indexes.find((entry) => entry.config.name === name);
+    if (!index?.config.where) {
+      throw new Error(`index "${name}" has no predicate`);
+    }
+    return (index.config.where as SQL)
+      .toQuery({
+        escapeName: (value) => `"${value}"`,
+        escapeParam: (num) => `$${num}`,
+        escapeString: (value) => `'${value}'`,
+        casing: new CasingCache(),
+        paramStartIndex: { value: 1 },
+      })
+      .sql.toLowerCase();
+  };
+
   it.each([
     ["idx_usage_ledger_user_cost_cover", ["user_id", "created_at", "cost_usd", "endpoint"]],
     [
@@ -36,5 +54,19 @@ describe("usage_ledger cost covering indexes", () => {
     ["idx_usage_ledger_key_cost", ["key", "created_at", "cost_usd", "endpoint"]],
   ])("%s keeps endpoint as a trailing column so SUM(cost_usd) stays index-only", (name, expected) => {
     expect(indexColumns(name)).toEqual(expected);
+  });
+
+  it.each([
+    "idx_usage_ledger_user_created_at",
+    "idx_usage_ledger_key_created_at",
+    "idx_usage_ledger_provider_created_at",
+    "idx_usage_ledger_key_cost",
+    "idx_usage_ledger_user_cost_cover",
+    "idx_usage_ledger_provider_cost_cover",
+    "idx_usage_ledger_key_created_at_desc_cover",
+  ])("%s excludes blocked and Replay audit rows", (name) => {
+    const predicate = indexPredicate(name);
+    expect(predicate).toContain('"usage_ledger"."blocked_by" is null');
+    expect(predicate).toContain('"usage_ledger"."is_replay" = false');
   });
 });

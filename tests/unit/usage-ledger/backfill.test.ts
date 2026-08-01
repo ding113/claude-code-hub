@@ -47,6 +47,38 @@ describe("backfillUsageLedger", () => {
     expect(serviceSource).toContain("fn_compute_message_request_success_rate_outcome");
   });
 
+  it("repairs Session identity and Replay provenance in existing ledger rows", () => {
+    const projectionFields = [
+      "session_identity",
+      "session_identity_kind",
+      "affinity_scope_tag",
+      "affinity_fingerprint",
+      "affinity_fingerprint_chain",
+      "is_replay",
+      "replay_source_request_id",
+    ];
+
+    for (const field of projectionFields) {
+      expect(serviceSource).toContain(`mr.${field}`);
+      expect(serviceSource).toContain(`${field} = EXCLUDED.${field}`);
+      expect(serviceSource).toContain(`ul.${field} IS DISTINCT FROM mr.${field}`);
+    }
+  });
+
+  it("forces Replay rows to zero cost during backfill", () => {
+    expect(serviceSource).toContain("CASE WHEN mr.is_replay THEN 0 ELSE mr.cost_usd END");
+    expect(serviceSource).toContain("mr.is_replay AND ul.cost_usd IS DISTINCT FROM 0");
+  });
+
+  it("keeps the recovery projection aligned with the trigger", () => {
+    expect(serviceSource).toContain("mr.group_cost_multiplier");
+    expect(serviceSource).toContain("mr.client_ip");
+    expect(serviceSource).toContain("mr.status_code IS NULL OR mr.status_code < 400");
+    expect(serviceSource).toContain("group_cost_multiplier = EXCLUDED.group_cost_multiplier");
+    expect(serviceSource).toContain("client_ip = EXCLUDED.client_ip");
+    expect(serviceSource).toContain("is_success = EXCLUDED.is_success");
+  });
+
   it("rejects before opening a transaction when already aborted", async () => {
     const controller = new AbortController();
     controller.abort();

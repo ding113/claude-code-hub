@@ -114,6 +114,17 @@ describe("message repository aggregateSessionStats", () => {
     expect(boundary.selectDistinct).not.toHaveBeenCalled();
   });
 
+  test("按 session identity 聚合并兼容 migration 前的 sessionId", async () => {
+    const stats = createDrizzleQuery<readonly StatsRow[]>([]);
+    boundary.select.mockReturnValueOnce(stats);
+
+    await aggregateSessionStats("pfx:scope123:fp-deep");
+
+    const whereSql = sqlText(stats.trace.where);
+    expect(whereSql).toContain("session_identity");
+    expect(whereSql).toContain("session_id");
+  });
+
   test("returns populated statistics and preserves a single cache TTL", async () => {
     const queries = queuePopulatedAggregate(["1h"]);
 

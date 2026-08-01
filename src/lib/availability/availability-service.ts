@@ -130,6 +130,7 @@ function buildAvailabilityRequestConditions(input: {
     inArray(messageRequest.providerId, input.providerIds),
     buildTimestampLowerBound(messageRequest.createdAt, input.startDate, "startTime"),
     isNull(messageRequest.deletedAt),
+    eq(messageRequest.isReplay, false),
     buildAvailabilityFinalizedCondition(),
   ];
 
@@ -595,6 +596,7 @@ export async function getCurrentProviderStatus(): Promise<
     buildRelativeNowLowerBound(messageRequest.createdAt, CURRENT_PROVIDER_STATUS_WINDOW_MINUTES),
     buildNowUpperBound(messageRequest.createdAt),
     isNull(messageRequest.deletedAt),
+    eq(messageRequest.isReplay, false),
     buildAvailabilityFinalizedCondition()
   );
 

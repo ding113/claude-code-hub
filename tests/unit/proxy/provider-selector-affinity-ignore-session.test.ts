@@ -172,15 +172,21 @@ function makeSession(overrides: Record<string, unknown> = {}): any {
     setGroupCostMultiplier: vi.fn(),
     getProvidersSnapshot: vi.fn(async () => [makeProvider(55)]),
     recordProviderSessionRef: vi.fn(),
+    setSessionIdentityMetadata: vi.fn((metadata: unknown) => {
+      session._sessionIdentityMetadata = metadata;
+    }),
   };
   return Object.assign(session, overrides);
 }
 
 const affinityHint = {
-  providerId: 42,
-  matchedFp: "deepfp",
-  matchedIndex: 0,
-  tier: "conversation" as const,
+  generation: "0",
+  hint: {
+    providerId: 42,
+    matchedFp: "deepfp",
+    matchedIndex: 0,
+    tier: "conversation" as const,
+  },
 };
 
 beforeEach(() => {
@@ -249,6 +255,86 @@ describe("affinity candidate cost limits", () => {
 });
 
 describe("ignore client session id semantics", () => {
+  test("uses the actual matched fingerprint as the prefix Session identity", async () => {
+    storeMocks.lookup
+      .mockResolvedValueOnce({
+        ...affinityHint,
+        hint: { ...affinityHint.hint, matchedFp: "fingerprint-f" },
+      })
+      .mockResolvedValueOnce({
+        ...affinityHint,
+        hint: { ...affinityHint.hint, matchedFp: "fingerprint-g" },
+      })
+      .mockResolvedValueOnce({
+        ...affinityHint,
+        hint: { ...affinityHint.hint, matchedFp: "fingerprint-g" },
+      });
+    providerRepositoryMocks.findProviderById.mockResolvedValue(makeProvider(42));
+
+    const sessions = [
+      makeSession({ sessionId: "physical-session-1" }),
+      makeSession({ sessionId: "physical-session-2" }),
+      makeSession({ sessionId: "physical-session-3" }),
+    ];
+    for (const session of sessions) {
+      await ProxyProviderResolver.ensure(session);
+    }
+
+    const identities = sessions.map((session) => {
+      const metadata = session._sessionIdentityMetadata as {
+        identity: string;
+        scopeTag: string;
+        fingerprint: string;
+      };
+      expect(metadata.identity).toBe(`pfx:${metadata.scopeTag}:${metadata.fingerprint}`);
+      return metadata.fingerprint;
+    });
+
+    expect(identities).toEqual(["fingerprint-f", "fingerprint-g", "fingerprint-g"]);
+  });
+
+  test("stores only the matched fingerprint and its ancestors for an intermediate hit", async () => {
+    let deepestFirst: string[] = [];
+    storeMocks.lookup.mockImplementation(async (_scopeTag, fingerprints: string[]) => {
+      deepestFirst = fingerprints;
+      return {
+        generation: "0",
+        hint: {
+          ...affinityHint.hint,
+          matchedFp: fingerprints[1],
+          matchedIndex: 1,
+        },
+      };
+    });
+    providerRepositoryMocks.findProviderById.mockResolvedValue(makeProvider(42));
+
+    const session = makeSession({
+      sessionId: "physical-session",
+      request: {
+        message: {
+          ...claudeMessage,
+          messages: [
+            { role: "user", content: "one" },
+            { role: "assistant", content: "two" },
+            { role: "user", content: "three" },
+            { role: "assistant", content: "four" },
+            { role: "user", content: "five" },
+          ],
+        },
+      },
+    });
+
+    await ProxyProviderResolver.ensure(session);
+
+    expect(deepestFirst.length).toBeGreaterThan(1);
+    expect(session._sessionIdentityMetadata).toMatchObject({
+      identity: expect.stringContaining(`:${deepestFirst[1]}`),
+      fingerprint: deepestFirst[1],
+      fingerprints: deepestFirst.slice(1),
+    });
+    expect(session._sessionIdentityMetadata.fingerprints).not.toContain(deepestFirst[0]);
+  });
+
   test("ignore on + fingerprintable request never reads the session binding", async () => {
     sessionManagerMocks.SessionManager.getSessionProvider.mockResolvedValue(91);
     providerRepositoryMocks.findProviderById.mockResolvedValue(makeProvider(91));
@@ -291,6 +377,80 @@ describe("ignore client session id semantics", () => {
       expect.objectContaining({ reason: "session_reuse" })
     );
   });
+
+  test("escapes a client-controlled pfx prefix from the logical Session identity namespace", async () => {
+    const session = makeSession({
+      sessionId: "pfx:foreign-scope:foreign-fingerprint",
+      request: { message: { model: "claude-sonnet-4-5" } },
+    });
+
+    const result = await ProxyProviderResolver.ensure(session);
+
+    expect(result).toBeNull();
+    expect(session.setSessionIdentityMetadata).toHaveBeenCalledWith({
+      identity: "sid:ce9895f7ae1c9727ce21d234b659482e",
+      kind: "session_id",
+      scopeTag: null,
+      fingerprint: null,
+      fingerprints: [],
+    });
+  });
+
+  test("isolates both reserved physical Session namespaces without changing ordinary identities", async () => {
+    const reservedPfx = makeSession({
+      sessionId: "pfx:foreign-scope:foreign-fingerprint",
+      request: { message: { model: "claude-sonnet-4-5" } },
+    });
+    const reservedSid = makeSession({
+      sessionId: "sid:pfx:foreign-scope:foreign-fingerprint",
+      request: { message: { model: "claude-sonnet-4-5" } },
+    });
+    const otherKey = makeSession({
+      sessionId: "pfx:foreign-scope:foreign-fingerprint",
+      authState: { key: { id: 6, providerGroup: "default" }, user: null },
+      request: { message: { model: "claude-sonnet-4-5" } },
+    });
+    const ordinary = makeSession({
+      sessionId: "physical-session-1",
+      request: { message: { model: "claude-sonnet-4-5" } },
+    });
+
+    for (const session of [reservedPfx, reservedSid, otherKey, ordinary]) {
+      await ProxyProviderResolver.ensure(session);
+    }
+
+    expect(reservedPfx._sessionIdentityMetadata.identity).toBe(
+      "sid:ce9895f7ae1c9727ce21d234b659482e"
+    );
+    expect(reservedSid._sessionIdentityMetadata.identity).toBe(
+      "sid:c300a896dbf9af49bbe231ce1ed2767a"
+    );
+    expect(otherKey._sessionIdentityMetadata.identity).toBe("sid:11d7b35b031557d5573098565a9ee514");
+    expect(
+      new Set([
+        reservedPfx._sessionIdentityMetadata.identity,
+        reservedSid._sessionIdentityMetadata.identity,
+        otherKey._sessionIdentityMetadata.identity,
+      ])
+    ).toHaveLength(3);
+    expect(reservedPfx._sessionIdentityMetadata.identity).toHaveLength(36);
+    expect(ordinary._sessionIdentityMetadata.identity).toBe("physical-session-1");
+  });
+
+  test.each(["pfx:", "sid:"])(
+    "keeps a 64-character %s physical Session identity inside the database limit",
+    async (prefix) => {
+      const session = makeSession({
+        sessionId: `${prefix}${"x".repeat(64 - prefix.length)}`,
+        request: { message: { model: "claude-sonnet-4-5" } },
+      });
+
+      await ProxyProviderResolver.ensure(session);
+
+      expect(session._sessionIdentityMetadata.identity).toMatch(/^sid:[0-9a-f]{32}$/);
+      expect(session._sessionIdentityMetadata.identity.length).toBeLessThanOrEqual(64);
+    }
+  );
 });
 
 describe("metrics-only and endpoint policy gating", () => {

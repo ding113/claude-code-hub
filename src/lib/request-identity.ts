@@ -40,6 +40,22 @@ export function buildScopeTag(
 }
 
 /**
+ * 构造用户可见的物理 Session identity。
+ *
+ * `pfx:` 是前缀亲和 identity namespace，`sid:` 是物理 Session 的转义 namespace。
+ * 对客户端可控的保留前缀做 key-bound 定长编码，避免 namespace alias 与 varchar(64)
+ * 溢出；普通 Session ID 保持原样，保留现有展示和查询语义。
+ */
+export function buildPublicSessionIdentity(sessionId: string, keyId: number | string): string {
+  if (!sessionId.startsWith("pfx:") && !sessionId.startsWith("sid:")) {
+    return sessionId;
+  }
+
+  const digest = sha256Hex(`session-identity:v1\0${keyId}\0${sessionId}`).slice(0, 32);
+  return `sid:${digest}`;
+}
+
+/**
  * 键序稳定的 JSON 序列化（对象键按字典序排序，数组保序）。
  * 用于无原始 buffer 时从解析后 message 派生确定性字节。
  */

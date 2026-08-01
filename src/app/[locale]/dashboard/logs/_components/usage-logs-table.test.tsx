@@ -85,6 +85,8 @@ function makeLog(overrides: Partial<UsageLogRow>): UsageLogRow {
     providerChain: null,
     blockedBy: null,
     blockedReason: null,
+    isReplay: false,
+    replaySourceRequestId: null,
     userAgent: null,
     clientIp: null,
     messagesCount: null,

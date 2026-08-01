@@ -9,7 +9,7 @@ import {
 } from "@/lib/cache/session-cache";
 import { logger } from "@/lib/logger";
 import { extractAfterRequestMessages, isSessionMessages } from "@/lib/session-detail-snapshots";
-import { normalizeRequestSequence } from "@/lib/utils/request-sequence";
+import { resolveSessionRequestLocator } from "@/lib/session-request-locator";
 import { buildUnifiedSpecialSettings } from "@/lib/utils/special-settings";
 import {
   type ActiveSessionInfo,
@@ -21,6 +21,16 @@ import {
 import type { SpecialSetting } from "@/types/special-settings";
 import { summarizeTerminateSessionsBatch } from "./active-sessions-utils";
 import type { ActionResult } from "./types";
+
+function isPrefixAffinityIdentity(identity: string): boolean {
+  return identity.startsWith("pfx:");
+}
+
+function getSessionFingerprint(identity: string): string | null {
+  if (!isPrefixAffinityIdentity(identity)) return null;
+  const fingerprint = identity.split(":").at(-1);
+  return fingerprint || null;
+}
 
 function normalizeRequestSnapshot(
   snapshot: Awaited<
@@ -177,7 +187,8 @@ export async function getActiveSessions(): Promise<ActionResult<ActiveSessionInf
       // 获取并发计数（即使缓存命中也需要实时获取）
       const { SessionTracker } = await import("@/lib/session-tracker");
       const cachedSessionIds = filteredData.map((s) => s.sessionId);
-      const concurrentCounts = await SessionTracker.getConcurrentCountBatch(cachedSessionIds);
+      const concurrentCounts =
+        await SessionTracker.getObservedConcurrentCountBatch(cachedSessionIds);
 
       return {
         ok: true,
@@ -185,6 +196,10 @@ export async function getActiveSessions(): Promise<ActionResult<ActiveSessionInf
           const concurrentCount = concurrentCounts.get(s.sessionId) ?? 0;
           return {
             sessionId: s.sessionId,
+            sessionIdentityKind: isPrefixAffinityIdentity(s.sessionId)
+              ? "prefix_affinity"
+              : "session_id",
+            sessionFingerprint: getSessionFingerprint(s.sessionId),
             userName: s.userName,
             userId: s.userId,
             keyId: s.keyId,
@@ -215,7 +230,7 @@ export async function getActiveSessions(): Promise<ActionResult<ActiveSessionInf
 
     // 2. 从 SessionTracker 获取活跃 session ID 列表
     const { SessionTracker } = await import("@/lib/session-tracker");
-    const sessionIds = await SessionTracker.getActiveSessions();
+    const sessionIds = await SessionTracker.getObservedActiveSessions();
 
     if (sessionIds.length === 0) {
       return { ok: true, data: [] };
@@ -227,7 +242,7 @@ export async function getActiveSessions(): Promise<ActionResult<ActiveSessionInf
 
     // 3.1 批量获取并发计数（用于实时状态计算）
     const allSessionIds = sessionsData.map((s) => s.sessionId);
-    const concurrentCounts = await SessionTracker.getConcurrentCountBatch(allSessionIds);
+    const concurrentCounts = await SessionTracker.getObservedConcurrentCountBatch(allSessionIds);
 
     // 4. 写入缓存
     setActiveSessionsCache(sessionsData);
@@ -242,6 +257,10 @@ export async function getActiveSessions(): Promise<ActionResult<ActiveSessionInf
       const concurrentCount = concurrentCounts.get(s.sessionId) ?? 0;
       return {
         sessionId: s.sessionId,
+        sessionIdentityKind: isPrefixAffinityIdentity(s.sessionId)
+          ? "prefix_affinity"
+          : "session_id",
+        sessionFingerprint: getSessionFingerprint(s.sessionId),
         userName: s.userName,
         userId: s.userId,
         keyId: s.keyId,
@@ -351,6 +370,10 @@ export async function getAllSessions(
         const lastRequestTime = s.lastRequestAt ? new Date(s.lastRequestAt).getTime() : 0;
         const sessionInfo: ActiveSessionInfo = {
           sessionId: s.sessionId,
+          sessionIdentityKind: isPrefixAffinityIdentity(s.sessionId)
+            ? "prefix_affinity"
+            : "session_id",
+          sessionFingerprint: getSessionFingerprint(s.sessionId),
           userName: s.userName,
           userId: s.userId,
           keyId: s.keyId,
@@ -405,7 +428,17 @@ export async function getAllSessions(
 
     // 2. 从 Redis 获取所有 session ID（包括活跃和非活跃）
     const { SessionManager } = await import("@/lib/session-manager");
-    const allSessionIds = await SessionManager.getAllSessionIds();
+    const { SessionTracker } = await import("@/lib/session-tracker");
+    const [observedSessionIds, storedSessionIds] = await Promise.all([
+      SessionTracker.getObservedActiveSessions(),
+      SessionManager.getAllSessionIds(),
+    ]);
+    const allSessionIds = Array.from(
+      new Set([
+        ...observedSessionIds,
+        ...storedSessionIds.filter((id) => !isPrefixAffinityIdentity(id)),
+      ])
+    );
 
     if (allSessionIds.length === 0) {
       return {
@@ -444,6 +477,10 @@ export async function getAllSessions(
       const lastRequestTime = s.lastRequestAt ? new Date(s.lastRequestAt).getTime() : 0;
       const sessionInfo: ActiveSessionInfo = {
         sessionId: s.sessionId,
+        sessionIdentityKind: isPrefixAffinityIdentity(s.sessionId)
+          ? "prefix_affinity"
+          : "session_id",
+        sessionFingerprint: getSessionFingerprint(s.sessionId),
         userName: s.userName,
         userId: s.userId,
         keyId: s.keyId,
@@ -516,7 +553,11 @@ export async function getAllSessions(
  *
  * 安全修复：添加用户权限检查
  */
-export async function getSessionMessages(sessionId: string): Promise<ActionResult<unknown>> {
+export async function getSessionMessages(
+  sessionId: string,
+  requestSequence?: number,
+  requestedSourceSessionId?: string
+): Promise<ActionResult<unknown>> {
   try {
     // 0. 验证用户权限
     const authSession = await getSession();
@@ -553,8 +594,18 @@ export async function getSessionMessages(sessionId: string): Promise<ActionResul
     }
 
     // 3. 获取 messages
+    const locatorResult = await resolveSessionRequestLocator(
+      sessionId,
+      requestSequence,
+      requestedSourceSessionId
+    );
+    if (!locatorResult.ok) return locatorResult;
+
     const { SessionManager } = await import("@/lib/session-manager");
-    const messages = await SessionManager.getSessionMessages(sessionId);
+    const messages = await SessionManager.getSessionMessages(
+      locatorResult.locator.sourceSessionId,
+      locatorResult.locator.requestSequence
+    );
     if (messages === null) {
       return {
         ok: false,
@@ -585,7 +636,8 @@ export async function getSessionMessages(sessionId: string): Promise<ActionResul
  */
 export async function hasSessionMessages(
   sessionId: string,
-  requestSequence?: number
+  requestSequence?: number,
+  requestedSourceSessionId?: string
 ): Promise<ActionResult<boolean>> {
   try {
     // 验证用户权限
@@ -622,11 +674,22 @@ export async function hasSessionMessages(
       };
     }
 
+    const locatorResult = await resolveSessionRequestLocator(
+      sessionId,
+      requestSequence,
+      requestedSourceSessionId
+    );
+    if (!locatorResult.ok) return locatorResult;
+
     const { SessionManager } = await import("@/lib/session-manager");
+    const sourceSessionId = locatorResult.locator.sourceSessionId;
 
     // 如果指定了序号，检查特定请求
     if (requestSequence !== undefined) {
-      const messages = await SessionManager.getSessionMessages(sessionId, requestSequence);
+      const messages = await SessionManager.getSessionMessages(
+        sourceSessionId,
+        locatorResult.locator.requestSequence
+      );
       return {
         ok: true,
         data: messages !== null,
@@ -634,7 +697,7 @@ export async function hasSessionMessages(
     }
 
     // 否则检查 Session 是否有任意请求的 messages
-    const hasAny = await SessionManager.hasAnySessionMessages(sessionId);
+    const hasAny = await SessionManager.hasAnySessionMessages(sourceSessionId);
     return {
       ok: true,
       data: hasAny,
@@ -656,12 +719,14 @@ export async function hasSessionMessages(
  *
  * @param sessionId - Session ID
  * @param requestSequence - 请求序号（可选，用于获取 Session 内特定请求的消息）
+ * @param requestedSourceSessionId - 聚合 identity 下的物理 Session ID
  *
  * 安全修复：添加用户权限检查
  */
 export async function getSessionDetails(
   sessionId: string,
-  requestSequence?: number
+  requestSequence?: number,
+  requestedSourceSessionId?: string
 ): Promise<
   ActionResult<{
     requestBody: unknown | null;
@@ -676,6 +741,7 @@ export async function getSessionDetails(
     sessionStats: Awaited<
       ReturnType<typeof import("@/repository/message").aggregateSessionStats>
     > | null;
+    currentSourceSessionId: string;
     currentSequence: number | null;
     prevSequence: number | null;
     nextSequence: number | null;
@@ -735,18 +801,25 @@ export async function getSessionDetails(
       };
     }
 
-    // 5. 解析 requestSequence：未指定时默认取当前最新请求序号
+    const locatorResult = await resolveSessionRequestLocator(
+      sessionId,
+      requestSequence,
+      requestedSourceSessionId
+    );
+    if (!locatorResult.ok) return locatorResult;
+
+    const sourceSessionId = locatorResult.locator.sourceSessionId;
+    const effectiveSequence = locatorResult.locator.requestSequence;
+
+    // 5. 请求 locator 已同时验证 identity、物理 Session 和序号，后续所有读取必须复用它。
     const { SessionManager } = await import("@/lib/session-manager");
-    const requestCount = await SessionManager.getSessionRequestCount(sessionId);
-    const normalizedSequence = normalizeRequestSequence(requestSequence);
-    const effectiveSequence = normalizedSequence ?? (requestCount > 0 ? requestCount : undefined);
 
     const { findAdjacentRequestSequences, findMessageRequestAuditBySessionIdAndSequence } =
       await import("@/repository/message");
     const adjacent =
       effectiveSequence == null
         ? { prevSequence: null, nextSequence: null }
-        : await findAdjacentRequestSequences(sessionId, effectiveSequence);
+        : await findAdjacentRequestSequences(sourceSessionId, effectiveSequence);
 
     const parseJsonStringOrNull = (value: unknown): unknown => {
       if (typeof value !== "string") return value;
@@ -787,22 +860,22 @@ export async function getSessionDetails(
       responseSnapshotBefore,
       responseSnapshotAfter,
     ] = await Promise.all([
-      SessionManager.getSessionRequestBody(sessionId, effectiveSequence),
-      SessionManager.getSessionMessages(sessionId, effectiveSequence),
-      SessionManager.getSessionResponse(sessionId, effectiveSequence),
-      SessionManager.getSessionRequestHeaders(sessionId, effectiveSequence),
-      SessionManager.getSessionResponseHeaders(sessionId, effectiveSequence),
-      SessionManager.getSessionClientRequestMeta(sessionId, effectiveSequence),
-      SessionManager.getSessionUpstreamRequestMeta(sessionId, effectiveSequence),
-      SessionManager.getSessionUpstreamResponseMeta(sessionId, effectiveSequence),
-      SessionManager.getSessionSpecialSettings(sessionId, effectiveSequence),
+      SessionManager.getSessionRequestBody(sourceSessionId, effectiveSequence),
+      SessionManager.getSessionMessages(sourceSessionId, effectiveSequence),
+      SessionManager.getSessionResponse(sourceSessionId, effectiveSequence),
+      SessionManager.getSessionRequestHeaders(sourceSessionId, effectiveSequence),
+      SessionManager.getSessionResponseHeaders(sourceSessionId, effectiveSequence),
+      SessionManager.getSessionClientRequestMeta(sourceSessionId, effectiveSequence),
+      SessionManager.getSessionUpstreamRequestMeta(sourceSessionId, effectiveSequence),
+      SessionManager.getSessionUpstreamResponseMeta(sourceSessionId, effectiveSequence),
+      SessionManager.getSessionSpecialSettings(sourceSessionId, effectiveSequence),
       effectiveSequence
-        ? findMessageRequestAuditBySessionIdAndSequence(sessionId, effectiveSequence)
+        ? findMessageRequestAuditBySessionIdAndSequence(sourceSessionId, effectiveSequence)
         : Promise.resolve(null),
-      SessionManager.getSessionRequestPhaseSnapshot(sessionId, "before", effectiveSequence),
-      SessionManager.getSessionRequestPhaseSnapshot(sessionId, "after", effectiveSequence),
-      SessionManager.getSessionResponsePhaseSnapshot(sessionId, "before", effectiveSequence),
-      SessionManager.getSessionResponsePhaseSnapshot(sessionId, "after", effectiveSequence),
+      SessionManager.getSessionRequestPhaseSnapshot(sourceSessionId, "before", effectiveSequence),
+      SessionManager.getSessionRequestPhaseSnapshot(sourceSessionId, "after", effectiveSequence),
+      SessionManager.getSessionResponsePhaseSnapshot(sourceSessionId, "before", effectiveSequence),
+      SessionManager.getSessionResponsePhaseSnapshot(sourceSessionId, "after", effectiveSequence),
     ]);
 
     // 兼容：历史/异常数据可能是 JSON 字符串（前端需要根级对象/数组）
@@ -896,6 +969,7 @@ export async function getSessionDetails(
         snapshots: effectiveSnapshots,
         specialSettings: unifiedSpecialSettings,
         sessionStats,
+        currentSourceSessionId: sourceSessionId,
         currentSequence: effectiveSequence ?? null,
         prevSequence: adjacent.prevSequence,
         nextSequence: adjacent.nextSequence,
@@ -930,6 +1004,7 @@ export async function getSessionRequests(
   ActionResult<{
     requests: Array<{
       id: number;
+      sourceSessionId: string;
       sequence: number;
       model: string | null;
       statusCode: number | null;
@@ -978,9 +1053,9 @@ export async function getSessionRequests(
     }
 
     // 2. 查询请求列表
-    const { findRequestsBySessionId } = await import("@/repository/message");
+    const { findRequestsBySessionIdentity } = await import("@/repository/message");
     const offset = (page - 1) * pageSize;
-    const { requests, total } = await findRequestsBySessionId(sessionId, {
+    const { requests, total } = await findRequestsBySessionIdentity(sessionId, {
       limit: pageSize,
       offset,
       order,
@@ -1026,7 +1101,7 @@ export async function terminateActiveSession(sessionId: string): Promise<ActionR
     const currentUserId = authSession.user.id;
 
     // 1. 获取 session 统计数据以验证所有权
-    const { aggregateSessionStats } = await import("@/repository/message");
+    const { aggregateSessionStats, resolveSessionIdentity } = await import("@/repository/message");
     const sessionStats = await aggregateSessionStats(sessionId);
 
     if (!sessionStats) {
@@ -1047,9 +1122,29 @@ export async function terminateActiveSession(sessionId: string): Promise<ActionR
       };
     }
 
-    // 3. 终止 Session
-    const { SessionManager } = await import("@/lib/session-manager");
-    const success = await SessionManager.terminateSession(sessionId);
+    // 3. 按 identity 类型终止对应的绑定与观测状态
+    const identityResolution = await resolveSessionIdentity(sessionId);
+    const { SessionTracker } = await import("@/lib/session-tracker");
+    let success: boolean;
+    if (
+      identityResolution?.identityKind === "prefix_affinity" &&
+      identityResolution.scopeTag &&
+      identityResolution.fingerprint
+    ) {
+      const { getAffinityStore } = await import("@/app/v1/_lib/proxy/affinity/affinity-store");
+      success = await getAffinityStore().invalidate(identityResolution.scopeTag, [
+        ...new Set([identityResolution.fingerprint, ...identityResolution.fingerprints]),
+      ]);
+      await SessionTracker.terminateObservedSession(sessionId);
+    } else {
+      const { SessionManager } = await import("@/lib/session-manager");
+      success = await SessionManager.terminateSession(
+        identityResolution?.sourceSessionId ?? sessionId
+      );
+      if (success) {
+        await SessionTracker.terminateObservedSession(sessionId);
+      }
+    }
 
     if (!success) {
       return {
@@ -1139,7 +1234,9 @@ export async function terminateActiveSessionsBatch(
     }
 
     // 1. 验证每个 Session 的所有权
-    const { aggregateMultipleSessionStats } = await import("@/repository/message");
+    const { aggregateMultipleSessionStats, resolveSessionIdentity } = await import(
+      "@/repository/message"
+    );
     const sessionsData = await aggregateMultipleSessionStats(uniqueSessionIds);
 
     const { uniqueRequestedIds, allowedSessionIds, unauthorizedSessionIds, missingSessionIds } =
@@ -1201,7 +1298,29 @@ export async function terminateActiveSessionsBatch(
 
     // 3. 批量终止
     const { SessionManager } = await import("@/lib/session-manager");
-    const successCount = await SessionManager.terminateSessionsBatch(allowedSessionIds);
+    const { SessionTracker } = await import("@/lib/session-tracker");
+    let successCount = 0;
+    for (const identity of allowedSessionIds) {
+      const resolution = await resolveSessionIdentity(identity);
+      if (
+        resolution?.identityKind === "prefix_affinity" &&
+        resolution.scopeTag &&
+        resolution.fingerprint
+      ) {
+        const { getAffinityStore } = await import("@/app/v1/_lib/proxy/affinity/affinity-store");
+        const invalidated = await getAffinityStore().invalidate(resolution.scopeTag, [
+          ...new Set([resolution.fingerprint, ...resolution.fingerprints]),
+        ]);
+        await SessionTracker.terminateObservedSession(identity);
+        if (invalidated) successCount += 1;
+        continue;
+      }
+
+      if (await SessionManager.terminateSession(resolution?.sourceSessionId ?? identity)) {
+        successCount += 1;
+        await SessionTracker.terminateObservedSession(identity);
+      }
+    }
     const processedCount = allowedSessionIds.length;
     const allowedFailedCount = Math.max(processedCount - successCount, 0);
     const failedCount = allowedFailedCount + unauthorizedCount + missingCount;

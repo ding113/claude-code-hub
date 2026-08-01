@@ -143,4 +143,25 @@ describe.skipIf(!process.env.DATABASE_URL)("Ledger data consistency", () => {
     const row = requireSingleRow<{ checked_count: number; mismatch_count: number }>(result);
     expect(row.mismatch_count).toBe(0);
   });
+
+  it("Session identity and Replay provenance match message_request", async () => {
+    const result = await db.execute(sql`
+      SELECT COUNT(*) FILTER (
+        WHERE ul.session_identity IS DISTINCT FROM mr.session_identity
+          OR ul.session_identity_kind IS DISTINCT FROM mr.session_identity_kind
+          OR ul.affinity_scope_tag IS DISTINCT FROM mr.affinity_scope_tag
+          OR ul.affinity_fingerprint IS DISTINCT FROM mr.affinity_fingerprint
+          OR ul.affinity_fingerprint_chain IS DISTINCT FROM mr.affinity_fingerprint_chain
+          OR ul.is_replay IS DISTINCT FROM mr.is_replay
+          OR ul.replay_source_request_id IS DISTINCT FROM mr.replay_source_request_id
+          OR (ul.is_replay AND ul.cost_usd IS DISTINCT FROM 0)
+      )::integer AS mismatch_count
+      FROM message_request mr
+      JOIN usage_ledger ul ON ul.request_id = mr.id
+      WHERE mr.blocked_by IS DISTINCT FROM 'warmup'
+    `);
+
+    const row = requireSingleRow<{ mismatch_count: number }>(result);
+    expect(row.mismatch_count).toBe(0);
+  });
 });

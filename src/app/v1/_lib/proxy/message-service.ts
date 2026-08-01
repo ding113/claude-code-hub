@@ -28,6 +28,7 @@ export class ProxyMessageService {
 
     // Extract endpoint from URL pathname (nullable)
     const endpoint = session.getEndpoint() ?? undefined;
+    const sessionIdentity = session.getSessionIdentityMetadata();
 
     // 修复模型重定向记录问题：
     // 由于 ensureContext 在模型重定向之前被调用（guard-pipeline 阶段），
@@ -80,6 +81,11 @@ export class ProxyMessageService {
       key: authState.apiKey,
       model: session.request.model ?? undefined,
       session_id: session.sessionId ?? undefined, // 传入 session_id
+      session_identity: sessionIdentity.identity || session.sessionId || undefined,
+      session_identity_kind: sessionIdentity.kind,
+      affinity_scope_tag: sessionIdentity.scopeTag,
+      affinity_fingerprint: sessionIdentity.fingerprint,
+      affinity_fingerprint_chain: sessionIdentity.fingerprints,
       request_sequence: session.getRequestSequence(), // 传入请求序号（Session 内）
       cost_multiplier: provider.costMultiplier, // 传入 cost_multiplier
       group_cost_multiplier: session.getGroupCostMultiplier(), // 传入分组倍率

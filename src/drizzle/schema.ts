@@ -552,6 +552,17 @@ export const messageRequest = pgTable('message_request', {
   // Session ID（用于会话粘性和日志追踪）
   sessionId: varchar('session_id', { length: 64 }),
 
+  // 活跃 Session 聚合 identity；session_id 仍保留物理请求/快照归属
+  sessionIdentity: varchar('session_identity', { length: 64 }),
+  sessionIdentityKind: varchar('session_identity_kind', { length: 20 }).$type<'session_id' | 'prefix_affinity'>(),
+  affinityScopeTag: varchar('affinity_scope_tag', { length: 16 }),
+  affinityFingerprint: varchar('affinity_fingerprint', { length: 64 }),
+  affinityFingerprintChain: jsonb('affinity_fingerprint_chain').$type<string[]>(),
+
+  // Replay 审计标记与原始请求 provenance；Replay 永远保持零成本
+  isReplay: boolean('is_replay').notNull().default(false),
+  replaySourceRequestId: integer('replay_source_request_id'),
+
   // Request Sequence（Session 内请求序号，用于区分同一 Session 的不同请求）
   requestSequence: integer('request_sequence').default(1),
 
@@ -656,6 +667,11 @@ export const messageRequest = pgTable('message_request', {
   messageRequestSessionIdPrefixIdx: index('idx_message_request_session_id_prefix').on(sql`${table.sessionId} varchar_pattern_ops`).where(sql`${table.deletedAt} IS NULL AND (${table.blockedBy} IS NULL OR ${table.blockedBy} <> 'warmup')`),
   // Session + Sequence 复合索引（用于 Session 内请求列表查询）
   messageRequestSessionSeqIdx: index('idx_message_request_session_seq').on(table.sessionId, table.requestSequence).where(sql`${table.deletedAt} IS NULL`),
+  messageRequestSessionIdentityCreatedAtIdx: index(
+    'idx_message_request_session_identity_created_at'
+  )
+    .on(sql`COALESCE(${table.sessionIdentity}, ${table.sessionId})`, table.createdAt.desc())
+    .where(sql`${table.deletedAt} IS NULL`),
   // Endpoint 过滤查询索引（仅针对未删除数据）
   messageRequestEndpointIdx: index('idx_message_request_endpoint').on(table.endpoint).where(sql`${table.deletedAt} IS NULL`),
   // blocked_by 过滤查询索引（用于排除 warmup/sensitive 等拦截请求）
@@ -1159,6 +1175,13 @@ export const usageLedger = pgTable('usage_ledger', {
   endpoint: varchar('endpoint', { length: 256 }),
   apiType: varchar('api_type', { length: 20 }),
   sessionId: varchar('session_id', { length: 64 }),
+  sessionIdentity: varchar('session_identity', { length: 64 }),
+  sessionIdentityKind: varchar('session_identity_kind', { length: 20 }).$type<'session_id' | 'prefix_affinity'>(),
+  affinityScopeTag: varchar('affinity_scope_tag', { length: 16 }),
+  affinityFingerprint: varchar('affinity_fingerprint', { length: 64 }),
+  affinityFingerprintChain: jsonb('affinity_fingerprint_chain').$type<string[]>(),
+  isReplay: boolean('is_replay').notNull().default(false),
+  replaySourceRequestId: integer('replay_source_request_id'),
   statusCode: integer('status_code'),
   isSuccess: boolean('is_success').notNull().default(false),
   successRateOutcome: varchar('success_rate_outcome', { length: 16 }),
@@ -1187,13 +1210,13 @@ export const usageLedger = pgTable('usage_ledger', {
   usageLedgerRequestIdIdx: uniqueIndex('idx_usage_ledger_request_id').on(table.requestId),
   usageLedgerUserCreatedAtIdx: index('idx_usage_ledger_user_created_at')
     .on(table.userId, table.createdAt)
-    .where(sql`${table.blockedBy} IS NULL`),
+    .where(sql`${table.blockedBy} IS NULL AND ${table.isReplay} = false`),
   usageLedgerKeyCreatedAtIdx: index('idx_usage_ledger_key_created_at')
     .on(table.key, table.createdAt)
-    .where(sql`${table.blockedBy} IS NULL`),
+    .where(sql`${table.blockedBy} IS NULL AND ${table.isReplay} = false`),
   usageLedgerProviderCreatedAtIdx: index('idx_usage_ledger_provider_created_at')
     .on(table.finalProviderId, table.createdAt)
-    .where(sql`${table.blockedBy} IS NULL`),
+    .where(sql`${table.blockedBy} IS NULL AND ${table.isReplay} = false`),
   // Expression index on minute truncation - AT TIME ZONE 'UTC' makes date_trunc IMMUTABLE on timestamptz
   usageLedgerCreatedAtMinuteIdx: index('idx_usage_ledger_created_at_minute')
     .on(sql`date_trunc('minute', ${table.createdAt} AT TIME ZONE 'UTC')`),
@@ -1202,6 +1225,11 @@ export const usageLedger = pgTable('usage_ledger', {
   usageLedgerSessionIdIdx: index('idx_usage_ledger_session_id')
     .on(table.sessionId)
     .where(sql`${table.sessionId} IS NOT NULL`),
+  usageLedgerSessionIdentityCreatedAtIdx: index(
+    'idx_usage_ledger_session_identity_created_at'
+  )
+    .on(sql`COALESCE(${table.sessionIdentity}, ${table.sessionId})`, table.createdAt.desc())
+    .where(sql`${table.blockedBy} IS NULL AND ${table.isReplay} = false`),
   usageLedgerModelIdx: index('idx_usage_ledger_model')
     .on(table.model)
     .where(sql`${table.model} IS NOT NULL`),
@@ -1209,23 +1237,23 @@ export const usageLedger = pgTable('usage_ledger', {
   // endpoint trailing column keeps LEDGER_BILLING_CONDITION's non-billing-endpoint filter index-only (Drizzle lacks INCLUDE support)
   usageLedgerKeyCostIdx: index('idx_usage_ledger_key_cost')
     .on(table.key, table.createdAt, table.costUsd, table.endpoint)
-    .where(sql`${table.blockedBy} IS NULL`),
+    .where(sql`${table.blockedBy} IS NULL AND ${table.isReplay} = false`),
   // #slow-query: covering index for SUM(cost_usd) per user (Quotas page + rate-limit total)
   // Keys: user_id (equality), created_at (range filter), cost_usd (aggregation, index-only scan)
   // endpoint trailing column keeps LEDGER_BILLING_CONDITION's non-billing-endpoint filter index-only (Drizzle lacks INCLUDE support)
   usageLedgerUserCostCoverIdx: index('idx_usage_ledger_user_cost_cover')
     .on(table.userId, table.createdAt, table.costUsd, table.endpoint)
-    .where(sql`${table.blockedBy} IS NULL`),
+    .where(sql`${table.blockedBy} IS NULL AND ${table.isReplay} = false`),
   // #slow-query: covering index for SUM(cost_usd) per provider (rate-limit total)
   // endpoint trailing column keeps LEDGER_BILLING_CONDITION's non-billing-endpoint filter index-only (Drizzle lacks INCLUDE support)
   usageLedgerProviderCostCoverIdx: index('idx_usage_ledger_provider_cost_cover')
     .on(table.finalProviderId, table.createdAt, table.costUsd, table.endpoint)
-    .where(sql`${table.blockedBy} IS NULL`),
+    .where(sql`${table.blockedBy} IS NULL AND ${table.isReplay} = false`),
   // #slow-query: covering index for LATERAL last-usage per key (getUsers)
   // finalProviderId as trailing key column for index-only scan (Drizzle lacks INCLUDE support)
   usageLedgerKeyCreatedAtDescCoverIdx: index('idx_usage_ledger_key_created_at_desc_cover')
     .on(table.key, sql`${table.createdAt} DESC NULLS LAST`, table.finalProviderId)
-    .where(sql`${table.blockedBy} IS NULL`),
+    .where(sql`${table.blockedBy} IS NULL AND ${table.isReplay} = false`),
 }));
 
 // Audit Log table - 面板登录和后台操作审计日志

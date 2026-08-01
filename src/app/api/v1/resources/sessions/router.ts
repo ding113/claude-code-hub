@@ -205,7 +205,7 @@ sessionsRouter.openapi(
     description: "Returns provider origin chain information for a session.",
     "x-required-access": "read",
     security,
-    request: { params: SessionIdParamSchema },
+    request: { params: SessionIdParamSchema, query: SessionSequenceQuerySchema },
     responses: {
       200: {
         description: "Session origin chain.",
@@ -227,7 +227,7 @@ sessionsRouter.openapi(
     description: "Returns the stored response body for a session.",
     "x-required-access": "read",
     security,
-    request: { params: SessionIdParamSchema },
+    request: { params: SessionIdParamSchema, query: SessionSequenceQuerySchema },
     responses: {
       200: {
         description: "Session response body.",

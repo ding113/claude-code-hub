@@ -38,6 +38,15 @@ const usageLogs = await vi.importActual<typeof import("@/lib/api-client/v1/actio
 const keys = await vi.importActual<typeof import("@/lib/api-client/v1/actions/keys")>(
   "@/lib/api-client/v1/actions/keys"
 );
+const activeSessions = await vi.importActual<
+  typeof import("@/lib/api-client/v1/actions/active-sessions")
+>("@/lib/api-client/v1/actions/active-sessions");
+const sessionResponse = await vi.importActual<
+  typeof import("@/lib/api-client/v1/actions/session-response")
+>("@/lib/api-client/v1/actions/session-response");
+const sessionOriginChain = await vi.importActual<
+  typeof import("@/lib/api-client/v1/actions/session-origin-chain")
+>("@/lib/api-client/v1/actions/session-origin-chain");
 
 describe("v1 action compatibility client", () => {
   beforeEach(() => {
@@ -47,6 +56,43 @@ describe("v1 action compatibility client", () => {
   // Always restore globals, even if a stubbed-fetch test throws mid-assertion.
   afterEach(() => {
     vi.unstubAllGlobals();
+  });
+
+  test("preserves the physical source Session when fetching an aggregated Session request", async () => {
+    getMock.mockResolvedValue({ currentSequence: 1 });
+
+    await activeSessions.getSessionDetails("pfx:scope:fingerprint", 1, "physical-session");
+
+    expect(getMock).toHaveBeenCalledWith(
+      "/api/v1/sessions/pfx%3Ascope%3Afingerprint?requestSequence=1&sourceSessionId=physical-session"
+    );
+  });
+
+  test("preserves the physical request locator for every Session payload endpoint", async () => {
+    getMock.mockResolvedValue({ exists: true, response: "ok" });
+
+    await activeSessions.getSessionMessages("pfx:scope:fingerprint", 2, "physical-session");
+    await activeSessions.hasSessionMessages("pfx:scope:fingerprint", 2, "physical-session");
+    await sessionResponse.getSessionResponse("pfx:scope:fingerprint", 2, "physical-session");
+    await sessionOriginChain.getSessionOriginChain("pfx:scope:fingerprint", 2, "physical-session");
+
+    const query = "requestSequence=2&sourceSessionId=physical-session";
+    expect(getMock).toHaveBeenNthCalledWith(
+      1,
+      `/api/v1/sessions/pfx%3Ascope%3Afingerprint/messages?${query}`
+    );
+    expect(getMock).toHaveBeenNthCalledWith(
+      2,
+      `/api/v1/sessions/pfx%3Ascope%3Afingerprint/messages/exists?${query}`
+    );
+    expect(getMock).toHaveBeenNthCalledWith(
+      3,
+      `/api/v1/sessions/pfx%3Ascope%3Afingerprint/response?${query}`
+    );
+    expect(getMock).toHaveBeenNthCalledWith(
+      4,
+      `/api/v1/sessions/pfx%3Ascope%3Afingerprint/origin-chain?${query}`
+    );
   });
 
   test("preserves provider edit undo metadata from response headers", async () => {

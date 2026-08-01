@@ -223,7 +223,9 @@ describe("connected non-reader response lifetime", () => {
         return {
           statusCode: 200,
           headers: { "content-type": "text/event-stream" },
-          body: Readable.from(["data: {}\n\n"]),
+          body: Readable.from([
+            encoder.encode('data: {"candidates":[{"content":{"parts":[{"text":"ok"}]}}]}\n\n'),
+          ]),
         };
       });
 

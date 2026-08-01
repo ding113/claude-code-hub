@@ -8,6 +8,7 @@ const loggerWarnMock = vi.fn();
 const loggerInfoMock = vi.fn();
 
 const originalResponsesWebsocketEnv = process.env.ENABLE_OPENAI_RESPONSES_WEBSOCKET;
+const originalStreamGateMode = process.env.STREAM_GATE_MODE;
 
 vi.mock("server-only", () => ({}));
 
@@ -95,6 +96,11 @@ afterEach(() => {
   } else {
     process.env.ENABLE_OPENAI_RESPONSES_WEBSOCKET = originalResponsesWebsocketEnv;
   }
+  if (originalStreamGateMode === undefined) {
+    delete process.env.STREAM_GATE_MODE;
+  } else {
+    process.env.STREAM_GATE_MODE = originalStreamGateMode;
+  }
 });
 
 describe("SystemSettingsCache", () => {
@@ -163,6 +169,15 @@ describe("SystemSettingsCache", () => {
       })
     );
     expect(loggerWarnMock).toHaveBeenCalledTimes(1);
+  });
+
+  test("冷缓存读取失败时保留显式 STREAM_GATE_MODE=off", async () => {
+    process.env.STREAM_GATE_MODE = "off";
+    getSystemSettingsMock.mockRejectedValueOnce(new Error("db down"));
+    const { getCachedSystemSettings } = await loadCache();
+
+    const settings = await getCachedSystemSettings();
+    expect(settings.streamGateMode).toBe("off");
   });
 
   test("invalidateSystemSettingsCache 应清空缓存并触发下一次重新获取", async () => {

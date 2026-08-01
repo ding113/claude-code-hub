@@ -147,6 +147,14 @@ export function ActiveFiltersDisplay({
       });
     }
 
+    if (filters.replayFilter && filters.replayFilter !== "all") {
+      result.push({
+        key: "replayFilter",
+        label: t("replay.label"),
+        value: t(filters.replayFilter === "replay" ? "replay.only" : "replay.exclude"),
+      });
+    }
+
     return result;
   }, [filters, displayNames, isAdmin, serverTimeZone, t]);
 

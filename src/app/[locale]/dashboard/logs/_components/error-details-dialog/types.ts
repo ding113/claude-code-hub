@@ -24,6 +24,10 @@ export interface TabSharedProps {
   blockedBy?: string | null;
   /** Block reason (JSON string) */
   blockedReason?: string | null;
+  /** Whether this audit row was served by Request Replay */
+  isReplay?: boolean;
+  /** Source terminal request copied into this Replay audit row */
+  replaySourceRequestId?: number | null;
   /** Original model before redirect */
   originalModel?: string | null;
   /** Current model after redirect */

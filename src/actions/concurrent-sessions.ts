@@ -1,7 +1,7 @@
 "use server";
 
 import { logger } from "@/lib/logger";
-import { getActiveConcurrentSessions } from "@/lib/redis";
+import { SessionTracker } from "@/lib/session-tracker";
 import type { ActionResult } from "./types";
 
 /**
@@ -9,7 +9,7 @@ import type { ActionResult } from "./types";
  */
 export async function getConcurrentSessions(): Promise<ActionResult<number>> {
   try {
-    const count = await getActiveConcurrentSessions();
+    const count = await SessionTracker.getObservedGlobalSessionCount();
     return {
       ok: true,
       data: count,

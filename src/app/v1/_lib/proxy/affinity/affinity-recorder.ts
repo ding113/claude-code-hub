@@ -31,7 +31,8 @@ export async function recordAffinityWinner(
       affinity.scopeTag,
       tip.fp,
       providerId,
-      getEnvConfig().PREFIX_AFFINITY_TTL_SECONDS
+      getEnvConfig().PREFIX_AFFINITY_TTL_SECONDS,
+      affinity.generation
     );
   } catch (error) {
     logger.debug("[AffinityRecorder] winner writeback failed", {
@@ -59,7 +60,12 @@ export async function tombstoneAffinityOnFailure(
   }
   try {
     if (!(await isAffinityRoutingEnabled())) return;
-    await getAffinityStore().tombstone(affinity.scopeTag, affinity.matchedFp, "failover");
+    await getAffinityStore().tombstone(
+      affinity.scopeTag,
+      affinity.matchedFp,
+      "failover",
+      affinity.generation
+    );
   } catch (error) {
     logger.debug("[AffinityRecorder] tombstone failed", {
       error: error instanceof Error ? error.message : String(error),

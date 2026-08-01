@@ -20,6 +20,7 @@ import { cn } from "@/lib/utils";
 
 interface RequestItem {
   id: number;
+  sourceSessionId: string;
   sequence: number;
   model: string | null;
   statusCode: number | null;
@@ -33,7 +34,8 @@ interface RequestItem {
 interface RequestListSidebarProps {
   sessionId: string;
   selectedSeq: number | null;
-  onSelect: (seq: number) => void;
+  selectedSourceSessionId: string | null;
+  onSelect: (sourceSessionId: string, seq: number) => void;
   collapsed?: boolean;
   className?: string;
 }
@@ -41,6 +43,7 @@ interface RequestListSidebarProps {
 export function RequestListSidebar({
   sessionId,
   selectedSeq,
+  selectedSourceSessionId,
   onSelect,
   collapsed = false,
   className,
@@ -117,10 +120,11 @@ export function RequestListSidebar({
                 <button
                   key={req.id}
                   type="button"
-                  onClick={() => onSelect(req.sequence)}
+                  onClick={() => onSelect(req.sourceSessionId, req.sequence)}
                   className={cn(
                     "relative flex items-center justify-center w-8 h-8 rounded-full transition-all",
-                    selectedSeq === req.sequence
+                    selectedSeq === req.sequence &&
+                      (!selectedSourceSessionId || selectedSourceSessionId === req.sourceSessionId)
                       ? "bg-primary text-primary-foreground shadow-sm"
                       : "hover:bg-muted"
                   )}
@@ -217,21 +221,30 @@ export function RequestListSidebar({
                 type="button"
                 className={cn(
                   "w-full px-4 py-3 text-left transition-all hover:bg-muted/50 group relative",
-                  selectedSeq === request.sequence && "bg-muted/60 hover:bg-muted/70"
+                  selectedSeq === request.sequence &&
+                    (!selectedSourceSessionId ||
+                      selectedSourceSessionId === request.sourceSessionId) &&
+                    "bg-muted/60 hover:bg-muted/70"
                 )}
-                onClick={() => onSelect(request.sequence)}
+                onClick={() => onSelect(request.sourceSessionId, request.sequence)}
               >
                 {/* Active Indicator */}
-                {selectedSeq === request.sequence && (
-                  <div className="absolute left-0 top-0 bottom-0 w-1 bg-primary" />
-                )}
+                {selectedSeq === request.sequence &&
+                  (!selectedSourceSessionId ||
+                    selectedSourceSessionId === request.sourceSessionId) && (
+                    <div className="absolute left-0 top-0 bottom-0 w-1 bg-primary" />
+                  )}
 
                 <div className="flex justify-between items-start mb-1">
                   <div className="flex items-center gap-2">
                     <span
                       className={cn(
                         "text-xs font-mono font-medium px-1.5 py-0.5 rounded-md bg-muted",
-                        selectedSeq === request.sequence ? "bg-background shadow-sm" : ""
+                        selectedSeq === request.sequence &&
+                          (!selectedSourceSessionId ||
+                            selectedSourceSessionId === request.sourceSessionId)
+                          ? "bg-background shadow-sm"
+                          : ""
                       )}
                     >
                       #{request.sequence}

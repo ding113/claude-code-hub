@@ -28,6 +28,7 @@ import {
   type RoutingTraceSummaryV1,
   type RoutingTraceV1,
 } from "@/types/routing-trace";
+import type { SessionIdentityMetadata } from "@/types/session";
 import type { SpecialSetting } from "@/types/special-settings";
 import type { BillingModelSource, CodexPriorityBillingSource } from "@/types/system-config";
 import type { User } from "@/types/user";
@@ -63,6 +64,8 @@ export interface SessionAffinityState {
   nominatedProviderId: number | null;
   /** 查找命中的边界指纹（未命中为 null） */
   matchedFp: string | null;
+  /** lookup 捕获的 scope generation；终态写回必须以此做 CAS。 */
+  generation: string | null;
 }
 
 /**
@@ -176,6 +179,7 @@ export class ProxySession {
 
   // 最长前缀亲和状态（F3a 计算一次，供提名/写回/缓存效果指标复用）
   affinity: SessionAffinityState | null = null;
+  private sessionIdentityMetadata: SessionIdentityMetadata | null = null;
 
   // Replay 角色状态（F2 guard 阶段 claim owner 成功后填充，spool 由 handleStream 建立）
   replayState: SessionReplayState | null = null;
@@ -611,6 +615,22 @@ export class ProxySession {
    */
   setSessionId(sessionId: string): void {
     this.sessionId = sessionId;
+  }
+
+  setSessionIdentityMetadata(metadata: SessionIdentityMetadata): void {
+    this.sessionIdentityMetadata = metadata;
+  }
+
+  getSessionIdentityMetadata(): SessionIdentityMetadata {
+    return (
+      this.sessionIdentityMetadata ?? {
+        identity: this.sessionId ?? "",
+        kind: "session_id",
+        scopeTag: null,
+        fingerprint: null,
+        fingerprints: [],
+      }
+    );
   }
 
   /**

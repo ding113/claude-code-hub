@@ -164,6 +164,7 @@ export class ProxyStatusTracker {
         and(
           isNull(messageRequest.deletedAt),
           isNull(messageRequest.durationMs),
+          eq(messageRequest.isReplay, false),
           isNull(providers.deletedAt)
         )
       );
@@ -186,6 +187,7 @@ export class ProxyStatusTracker {
       JOIN providers p ON mr.provider_id = p.id AND p.deleted_at IS NULL
       LEFT JOIN keys k ON k.key = mr.key AND k.deleted_at IS NULL
       WHERE mr.deleted_at IS NULL
+        AND mr.is_replay = false
         AND (mr.blocked_by IS NULL OR mr.blocked_by <> 'warmup')
       ORDER BY mr.user_id, mr.updated_at DESC
     `;

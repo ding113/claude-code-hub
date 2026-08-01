@@ -42,6 +42,7 @@ import {
   terminateActiveSession,
 } from "@/lib/api-client/v1/actions/active-sessions";
 import { getSystemSettings } from "@/lib/api-client/v1/actions/system-config";
+import { getErrorMessage } from "@/lib/utils/error-messages";
 import {
   DEFAULT_SESSION_DETAIL_VIEW_MODE,
   type SessionDetailSnapshots,
@@ -54,6 +55,7 @@ import { SessionStats } from "./session-stats";
 
 export function SessionMessagesClient() {
   const t = useTranslations("dashboard.sessions");
+  const tErrors = useTranslations("errors");
 
   const params = useParams();
   const searchParams = useSearchParams();
@@ -63,6 +65,7 @@ export function SessionMessagesClient() {
 
   // URL state
   const seqParam = searchParams.get("seq");
+  const selectedSourceSessionId = searchParams.get("sourceSessionId");
   const selectedSeq = (() => {
     if (!seqParam) return null;
     const parsed = Number.parseInt(seqParam, 10);
@@ -83,6 +86,7 @@ export function SessionMessagesClient() {
     useState<
       Extract<Awaited<ReturnType<typeof getSessionDetails>>, { ok: true }>["data"]["sessionStats"]
     >(null);
+  const [currentSourceSessionId, setCurrentSourceSessionId] = useState<string | null>(null);
   const [currentSequence, setCurrentSequence] = useState<number | null>(null);
   const [prevSequence, setPrevSequence] = useState<number | null>(null);
   const [nextSequence, setNextSequence] = useState<number | null>(null);
@@ -103,6 +107,7 @@ export function SessionMessagesClient() {
     setSnapshots(null);
     setSpecialSettings(null);
     setSessionStats(null);
+    setCurrentSourceSessionId(null);
     setCurrentSequence(null);
     setPrevSequence(null);
     setNextSequence(null);
@@ -116,9 +121,14 @@ export function SessionMessagesClient() {
   const currencyCode = systemSettings?.currencyDisplay || "USD";
 
   const handleSelectRequest = useCallback(
-    (seq: number) => {
+    (sourceSessionId: string | null, seq: number) => {
       const params = new URLSearchParams(window.location.search);
       params.set("seq", seq.toString());
+      if (sourceSessionId) {
+        params.set("sourceSessionId", sourceSessionId);
+      } else {
+        params.delete("sourceSessionId");
+      }
       router.replace(`${pathname}?${params.toString()}`);
       setIsMobileMenuOpen(false);
     },
@@ -133,19 +143,28 @@ export function SessionMessagesClient() {
       setError(null);
 
       try {
-        const result = await getSessionDetails(sessionId, selectedSeq ?? undefined);
+        const result = await getSessionDetails(
+          sessionId,
+          selectedSeq ?? undefined,
+          selectedSourceSessionId ?? undefined
+        );
         if (cancelled) return;
 
         if (result.ok) {
           setSnapshots(result.data.snapshots);
           setSpecialSettings(result.data.specialSettings);
           setSessionStats(result.data.sessionStats);
+          setCurrentSourceSessionId(result.data.currentSourceSessionId);
           setCurrentSequence(result.data.currentSequence);
           setPrevSequence(result.data.prevSequence);
           setNextSequence(result.data.nextSequence);
         } else {
           resetDetailsState();
-          setError(result.error || t("status.fetchFailed"));
+          setError(
+            result.errorCode
+              ? getErrorMessage(tErrors, result.errorCode, result.errorParams)
+              : result.error || t("status.fetchFailed")
+          );
         }
       } catch (err) {
         if (cancelled) return;
@@ -163,7 +182,7 @@ export function SessionMessagesClient() {
     return () => {
       cancelled = true;
     };
-  }, [resetDetailsState, sessionId, selectedSeq, t]);
+  }, [resetDetailsState, selectedSeq, selectedSourceSessionId, sessionId, t, tErrors]);
 
   const currentRequestSnapshot = snapshots?.request[viewMode] ?? null;
   const currentResponseSnapshot = snapshots?.response[viewMode] ?? null;
@@ -264,6 +283,7 @@ export function SessionMessagesClient() {
             <RequestListSidebar
               sessionId={sessionId}
               selectedSeq={selectedSeq ?? currentSequence}
+              selectedSourceSessionId={selectedSourceSessionId}
               onSelect={handleSelectRequest}
               className="border-none w-full"
             />
@@ -289,6 +309,7 @@ export function SessionMessagesClient() {
           <RequestListSidebar
             sessionId={sessionId}
             selectedSeq={selectedSeq ?? currentSequence}
+            selectedSourceSessionId={selectedSourceSessionId}
             onSelect={handleSelectRequest}
             collapsed={sidebarCollapsed}
             className="h-full"
@@ -467,7 +488,13 @@ export function SessionMessagesClient() {
                         variant="outline"
                         size="sm"
                         disabled={!prevSequence}
-                        onClick={() => prevSequence && handleSelectRequest(prevSequence)}
+                        onClick={() =>
+                          prevSequence &&
+                          handleSelectRequest(
+                            selectedSourceSessionId ?? currentSourceSessionId,
+                            prevSequence
+                          )
+                        }
                       >
                         <ArrowLeft className="h-4 w-4 mr-2" />
                         {t("details.prevRequest")}
@@ -477,7 +504,13 @@ export function SessionMessagesClient() {
                         variant="outline"
                         size="sm"
                         disabled={!nextSequence}
-                        onClick={() => nextSequence && handleSelectRequest(nextSequence)}
+                        onClick={() =>
+                          nextSequence &&
+                          handleSelectRequest(
+                            selectedSourceSessionId ?? currentSourceSessionId,
+                            nextSequence
+                          )
+                        }
                         className="flex-row-reverse"
                       >
                         <ArrowLeft className="h-4 w-4 ml-2 rotate-180" />
