@@ -102,6 +102,71 @@ describe("live-chain routing trace storage", () => {
     });
   });
 
+  it("derives all currently connected Discovery providers from attempt lifecycle events", async () => {
+    const trace = makeTrace({
+      updatedAt: 240,
+      events: [
+        {
+          type: "attempt_started",
+          at: 200,
+          elapsedMs: 100,
+          round: 1,
+          attemptId: "11:1",
+          attemptKind: "normal",
+          provider: { id: 11, name: "provider-a" },
+        },
+        {
+          type: "attempt_started",
+          at: 210,
+          elapsedMs: 110,
+          round: 1,
+          attemptId: "12:1",
+          attemptKind: "normal",
+          provider: { id: 12, name: "provider-b" },
+        },
+        {
+          type: "attempt_finished",
+          at: 220,
+          elapsedMs: 120,
+          round: 1,
+          attemptId: "11:1",
+          attemptKind: "normal",
+          provider: { id: 11, name: "provider-a" },
+          outcome: "failed",
+        },
+        {
+          type: "attempt_started",
+          at: 230,
+          elapsedMs: 130,
+          round: 1,
+          attemptId: "13:1",
+          attemptKind: "fallback",
+          provider: { id: 13, name: "provider-c" },
+        },
+      ],
+    });
+    await writeLiveRoutingTrace("racing", 1, trace);
+
+    await expect(readLiveChain("racing", 1)).resolves.toMatchObject({
+      activeProviders: [
+        { id: 12, name: "provider-b" },
+        { id: 13, name: "provider-c" },
+      ],
+    });
+  });
+
+  it("switches the active legacy provider after a serial fallback", async () => {
+    await writeLiveChain("fallback", 1, [
+      { id: 21, name: "primary", reason: "initial_selection", timestamp: 100 },
+      { id: 21, name: "primary", reason: "retry_failed", timestamp: 200 },
+      { id: 22, name: "fallback", reason: "initial_selection", timestamp: 210 },
+    ]);
+
+    await expect(readLiveChain("fallback", 1)).resolves.toMatchObject({
+      activeProviders: [{ id: 22, name: "fallback" }],
+    });
+  });
+
   it("returns an early trace before the provider chain snapshot exists", async () => {
     const trace = makeTrace({
       updatedAt: 150,

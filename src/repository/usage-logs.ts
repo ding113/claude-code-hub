@@ -113,6 +113,7 @@ export interface UsageLogRow {
     chain: ProviderChainItem[];
     phase: string;
     updatedAt: number;
+    activeProviders?: Array<{ id: number; name: string }>;
     routingTrace?: RoutingTraceV1 | null;
   } | null;
   anthropicEffort?: string | null;

@@ -279,7 +279,7 @@ describe("virtualized-logs-table thinking effort", () => {
     const effortDisplay = container.querySelector('[data-slot="thinking-effort"]');
     expect(effortDisplay?.textContent).toContain("low");
     expect(effortDisplay?.textContent).toContain("max");
-    expect(effortDisplay?.closest(".overflow-hidden")).not.toBeNull();
+    expect(effortDisplay?.closest(".overflow-visible")).not.toBeNull();
   });
 
   test("显示 Anthropic 请求的思考强度", () => {
@@ -941,6 +941,64 @@ describe("virtualized-logs-table live chain display", () => {
       <VirtualizedLogsTable filters={{}} autoRefreshEnabled={false} />
     );
     expect(html).toContain("text-indigo-500");
+  });
+
+  test("stacks every currently connected racing provider and exposes the full list", () => {
+    setupLiveChainDefaults();
+    mockLogs = [
+      makeLog({
+        id: 1,
+        statusCode: null,
+        providerChain: null,
+        _liveChain: {
+          chain: [],
+          activeProviders: [
+            { id: 1, name: "openai-east-with-a-long-name" },
+            { id: 2, name: "anthropic-west-with-a-long-name" },
+            { id: 3, name: "gemini-central-with-a-long-name" },
+          ],
+          phase: "hedge_racing",
+          updatedAt: Date.now(),
+        },
+      }),
+    ];
+
+    const html = renderToStaticMarkup(
+      <VirtualizedLogsTable filters={{}} autoRefreshEnabled={false} />
+    );
+
+    expect(html).toContain('data-slot="live-provider-stack"');
+    expect(html).toContain("openai-east-with-a-long-name");
+    expect(html).toContain("anthropic-west-with-a-long-name");
+    expect(html).toContain("gemini-central-with-a-long-name");
+    expect(html).toContain('data-slot="live-provider-tooltip"');
+  });
+
+  test("shows only the newly active provider after fallback switches", () => {
+    setupLiveChainDefaults();
+    mockLogs = [
+      makeLog({
+        id: 1,
+        statusCode: null,
+        providerChain: null,
+        _liveChain: {
+          chain: [
+            { id: 1, name: "primary-provider", reason: "retry_failed" },
+            { id: 2, name: "fallback-provider", reason: "initial_selection" },
+          ],
+          activeProviders: [{ id: 2, name: "fallback-provider" }],
+          phase: "provider_selected",
+          updatedAt: Date.now(),
+        },
+      }),
+    ];
+
+    const html = renderToStaticMarkup(
+      <VirtualizedLogsTable filters={{}} autoRefreshEnabled={false} />
+    );
+
+    expect(html).toContain("fallback-provider");
+    expect(html).not.toContain("primary-provider");
   });
 
   test("renders generic in-progress when live chain is empty", () => {

@@ -317,7 +317,7 @@ export function UsageLogsTable({
                       </TooltipProvider>
                     </TableCell>
                     {hideReasoningEffortColumn ? null : (
-                      <TableCell className="font-mono text-xs w-[84px] max-w-[84px] overflow-hidden">
+                      <TableCell className="relative z-20 w-[84px] max-w-[84px] overflow-visible font-mono text-xs">
                         <ThinkingEffortDisplay specialSettings={log.specialSettings} />
                       </TableCell>
                     )}

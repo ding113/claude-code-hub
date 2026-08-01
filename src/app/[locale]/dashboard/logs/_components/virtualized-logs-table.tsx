@@ -97,6 +97,47 @@ function StatusBadgeOnly({ statusCode }: { statusCode: number | null }) {
   );
 }
 
+function LiveProviderStack({ providers }: { providers: Array<{ id: number; name: string }> }) {
+  const visibleProviders = providers.slice(0, 3);
+  const hiddenProviderCount = providers.length - visibleProviders.length;
+
+  return (
+    <TooltipProvider>
+      <Tooltip delayDuration={250}>
+        <TooltipTrigger asChild>
+          <span
+            className="flex min-w-0 items-center -space-x-2 cursor-help"
+            data-slot="live-provider-stack"
+          >
+            {visibleProviders.map((provider) => (
+              <span
+                key={provider.id}
+                className="relative max-w-[68px] truncate rounded-md border bg-background px-1.5 py-0.5 text-xs text-foreground shadow-sm"
+              >
+                {provider.name}
+              </span>
+            ))}
+            {hiddenProviderCount > 0 && (
+              <span className="relative rounded-md border bg-muted px-1.5 py-0.5 text-xs text-muted-foreground shadow-sm">
+                +{hiddenProviderCount}
+              </span>
+            )}
+          </span>
+        </TooltipTrigger>
+        <TooltipContent className="max-w-[320px]" side="bottom" align="start">
+          <div data-slot="live-provider-tooltip">
+            <ul className="space-y-1 text-xs whitespace-normal break-words">
+              {providers.map((provider) => (
+                <li key={provider.id}>{provider.name}</li>
+              ))}
+            </ul>
+          </div>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
+
 interface VirtualizedLogsTableProps {
   filters: VirtualizedLogsTableFilters;
   currencyCode?: CurrencyCode;
@@ -887,11 +928,21 @@ export function VirtualizedLogsTable({
                           log._liveChain ? (
                             <div className="flex items-center gap-1.5 min-w-0">
                               <Loader2 className="h-3 w-3 animate-spin text-blue-500 shrink-0" />
-                              <span className="text-xs text-muted-foreground truncate">
-                                {log._liveChain.chain.length > 0
-                                  ? log._liveChain.chain[log._liveChain.chain.length - 1].name
-                                  : t("logs.details.inProgress")}
-                              </span>
+                              {log._liveChain.activeProviders ? (
+                                log._liveChain.activeProviders.length > 0 ? (
+                                  <LiveProviderStack providers={log._liveChain.activeProviders} />
+                                ) : (
+                                  <span className="text-xs text-muted-foreground truncate">
+                                    {t("logs.details.inProgress")}
+                                  </span>
+                                )
+                              ) : (
+                                <span className="text-xs text-muted-foreground truncate">
+                                  {log._liveChain.chain.length > 0
+                                    ? log._liveChain.chain[log._liveChain.chain.length - 1].name
+                                    : t("logs.details.inProgress")}
+                                </span>
+                              )}
                               {log._liveChain.phase === "retrying" && (
                                 <Badge
                                   variant="outline"
@@ -1016,7 +1067,7 @@ export function VirtualizedLogsTable({
 
                     {/* Thinking Effort */}
                     {hideReasoningEffortColumn ? null : (
-                      <div className="flex-[0.6] min-w-[64px] overflow-hidden px-1.5 font-mono text-xs">
+                      <div className="relative z-20 flex-[0.6] min-w-[64px] overflow-visible px-1.5 font-mono text-xs">
                         <ThinkingEffortDisplay specialSettings={log.specialSettings} />
                       </div>
                     )}

@@ -4558,6 +4558,7 @@ export class ProxyForwarder {
         attempt.thresholdTimer = null;
       }
       attempts.delete(attempt);
+      session.removeLiveActiveProvider(attempt.provider.id);
 
       // 竞速输家计费开启：仅标记 + 记录决策链，不取消连接、不释放 agent。
       // 实际的后台 drain 由 runAttempt 的 .then 流程发起（它独占 reader，避免并发读）。
@@ -4855,6 +4856,9 @@ export class ProxyForwarder {
     };
 
     const handleAttemptFailure = async (attempt: StreamingHedgeAttempt, error: Error) => {
+      if (attempt !== winnerAttempt) {
+        session.removeLiveActiveProvider(attempt.provider.id);
+      }
       // 已被标记为计费输家、billing 尚未启动、却在此失败（如首块读取出错 / 赢家已提交）：
       // 此时 abortAttempt 已早退（未取消连接/未释放 agent），由这里兜底清理，避免 reader/agent 泄漏。
       if (
@@ -5344,6 +5348,7 @@ export class ProxyForwarder {
       };
 
       attempts.add(attempt);
+      session.addLiveActiveProvider(provider);
 
       // Record hedge participant launch in decision chain
       // (first provider is already recorded via initial_selection or session_reuse)

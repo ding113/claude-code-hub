@@ -2,6 +2,7 @@ import type { Context } from "hono";
 import { logger } from "@/lib/logger";
 import {
   deleteLiveChain,
+  type LiveProviderSnapshot,
   writeLiveChain,
   writeLiveRoutingTrace,
 } from "@/lib/redis/live-chain-store";
@@ -206,6 +207,8 @@ export class ProxySession {
 
   // 上游决策链（记录尝试的供应商列表）
   private providerChain: ProviderChainItem[];
+  private liveActiveProviders = new Map<number, LiveProviderSnapshot>();
+  private liveActiveProviderCounts = new Map<number, number>();
 
   // Request-level routing observability. Discovery attempts live here rather
   // than providerChain because providerChain is also a billing/retry contract.
@@ -423,6 +426,45 @@ export class ProxySession {
     if (provider) {
       this.providerType = provider.providerType as ProviderType;
     }
+    if (!this.liveActiveProviders) {
+      this.liveActiveProviders = new Map<number, LiveProviderSnapshot>();
+    }
+    if (!this.liveActiveProviderCounts) {
+      this.liveActiveProviderCounts = new Map<number, number>();
+    }
+    this.liveActiveProviders.clear();
+    this.liveActiveProviderCounts.clear();
+    if (provider) {
+      this.liveActiveProviders.set(provider.id, { id: provider.id, name: provider.name });
+      this.liveActiveProviderCounts.set(provider.id, 1);
+    }
+    this.persistLiveChain();
+  }
+
+  addLiveActiveProvider(provider: Pick<Provider, "id" | "name">): void {
+    if (!this.liveActiveProviders) {
+      this.liveActiveProviders = new Map<number, LiveProviderSnapshot>();
+    }
+    if (!this.liveActiveProviderCounts) {
+      this.liveActiveProviderCounts = new Map<number, number>();
+    }
+    this.liveActiveProviders.set(provider.id, { id: provider.id, name: provider.name });
+    this.liveActiveProviderCounts.set(
+      provider.id,
+      (this.liveActiveProviderCounts.get(provider.id) ?? 0) + 1
+    );
+    this.persistLiveChain();
+  }
+
+  removeLiveActiveProvider(providerId: number): void {
+    const count = this.liveActiveProviderCounts?.get(providerId) ?? 0;
+    if (count <= 1) {
+      this.liveActiveProviderCounts?.delete(providerId);
+      if (this.liveActiveProviders?.delete(providerId)) this.persistLiveChain();
+      return;
+    }
+    this.liveActiveProviderCounts.set(providerId, count - 1);
+    this.persistLiveChain();
   }
 
   setSessionBindingSnapshot(snapshot: SessionBindingSnapshot | null): void {
@@ -862,11 +904,19 @@ export class ProxySession {
       this.liveRoutingTraceDirty = false;
 
       const chain = writeChain ? structuredClone(this.providerChain) : null;
+      const activeProviders = writeChain
+        ? structuredClone([...this.liveActiveProviders.values()])
+        : null;
       const routingTrace = writeRoutingTrace ? structuredClone(this.routingTrace) : null;
       const writes: Promise<void>[] = [];
       if (chain) {
         writes.push(
-          writeLiveChain(this.sessionId as string, this.requestSequence as number, chain)
+          writeLiveChain(
+            this.sessionId as string,
+            this.requestSequence as number,
+            chain,
+            activeProviders ?? []
+          )
         );
       }
       if (routingTrace) {

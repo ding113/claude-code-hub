@@ -34,7 +34,7 @@ export function ThinkingEffortDisplay({ specialSettings }: ThinkingEffortDisplay
       <Tooltip delayDuration={250}>
         <TooltipTrigger asChild>
           <span
-            className="inline-flex items-center gap-1 whitespace-nowrap"
+            className="relative z-20 inline-flex items-center gap-1 whitespace-nowrap"
             data-slot="thinking-effort"
           >
             {effortInfo.requestedEffort && (
