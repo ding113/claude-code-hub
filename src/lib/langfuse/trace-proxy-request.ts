@@ -433,7 +433,7 @@ export async function traceProxyRequest(ctx: TraceContext): Promise<void> {
           { asType: "generation", startTime: generationStartTime } as { asType: "generation" }
         );
 
-        // Set TTFB as completionStartTime
+        // Set TTFT as completionStartTime
         if (session.ttftMs != null) {
           generation.update({
             completionStartTime: new Date(session.startTime + session.ttftMs),

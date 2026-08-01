@@ -38,7 +38,7 @@ describe("PublicStatusPage locale handling", () => {
             generatedAt: "Updated",
             history: "History",
             availability: "Availability",
-            ttft: "TTFB",
+            ttft: "TTFT",
             freshnessWindow: "Snapshot freshness",
             fresh: "Fresh",
             stale: "Stale",
@@ -66,7 +66,7 @@ describe("PublicStatusPage locale handling", () => {
             "statusBadge.failed": "Failed",
             "statusBadge.noData": "No data",
             "tooltip.availability": "Availability tooltip",
-            "tooltip.ttft": "TTFB tooltip",
+            "tooltip.ttft": "TTFT tooltip",
             "tooltip.tps": "TPS tooltip",
             "tooltip.historyAriaLabel": "History aria",
           };

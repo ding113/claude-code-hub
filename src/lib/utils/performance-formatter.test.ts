@@ -12,7 +12,7 @@ describe("calculateOutputRate", () => {
     expect(calculateOutputRate(50, 1000, null)).toBeNull();
   });
 
-  it("TTFB 大于 TTFT 会让 TPS 偏高，TTFB 基准才是准确值", () => {
+  it("TTFT 大于 TTFB 会让 TPS 偏高，TTFB 基准才是准确值", () => {
     const basedOnTtft = calculateOutputRate(50, 1000, 900);
     const basedOnTtfb = calculateOutputRate(50, 1000, 200);
 

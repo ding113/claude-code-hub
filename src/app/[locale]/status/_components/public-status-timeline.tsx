@@ -1,9 +1,9 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { formatTtft } from "@/app/[locale]/status/_lib/format-ttft";
 import { cn } from "@/lib/utils";
 import type { FilledTimelineCell } from "../_lib/fill-display-timeline";
-import { formatTtft } from "../_lib/format-ttft";
 
 export interface PublicStatusTimelineLabels {
   availability: string;

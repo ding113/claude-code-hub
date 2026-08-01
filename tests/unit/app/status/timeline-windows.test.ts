@@ -81,7 +81,7 @@ describe("computeAvgTtft", () => {
     expect(result).toBe(200);
   });
 
-  it("skips buckets with null ttfb", () => {
+  it("skips buckets with null ttft", () => {
     const result = computeAvgTtft([
       makeBucket(0, { ttftMs: 200, sampleCount: 5 }),
       makeBucket(1, { ttftMs: null, sampleCount: 5 }),

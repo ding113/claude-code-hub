@@ -17,6 +17,7 @@ import {
 } from "@dnd-kit/sortable";
 import { Activity } from "lucide-react";
 import { startTransition, useEffect, useMemo, useState } from "react";
+import { formatTtft } from "@/app/[locale]/status/_lib/format-ttft";
 import { Badge } from "@/components/ui/badge";
 import type { PublicStatusPayload } from "@/lib/public-status/payload";
 import {
@@ -28,7 +29,6 @@ import { getPublicStatusVendorIconComponent } from "@/lib/public-status/vendor-i
 import { cn } from "@/lib/utils";
 import { type DisplayState, deriveLatestModelState } from "../_lib/derive-display-state";
 import { fillDisplayTimeline } from "../_lib/fill-display-timeline";
-import { formatTtft } from "../_lib/format-ttft";
 import {
   clearGroupOrder,
   loadCollapsedSet,

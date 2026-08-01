@@ -83,6 +83,36 @@ describe("normalizeRoutingTrace", () => {
     expect(trace?.summary).not.toHaveProperty("rawErrorBody");
   });
 
+  it("读取旧版 summary.ttfbMs 并归一化为 ttftMs", () => {
+    const trace = normalizeRoutingTrace({
+      version: 1,
+      mode: "single_upstream",
+      startedAt: 1,
+      updatedAt: 2,
+      discoveryEnabled: false,
+      eligible: false,
+      summary: {
+        outcome: "success",
+        statusCode: 200,
+        durationMs: 5_000,
+        ttfbMs: 1_000,
+        attemptsPerRequest: 1,
+        maxActiveAttempts: 1,
+        rounds: 1,
+        providerMs: 3_000,
+        fallbackPromotions: 0,
+        cancelFailures: 0,
+        winnerOrigin: "normal",
+        winnerProviderId: 7,
+        winnerRound: 1,
+      },
+      events: [],
+    });
+
+    expect(trace?.summary).toMatchObject({ ttftMs: 1_000 });
+    expect(trace?.summary).not.toHaveProperty("ttfbMs");
+  });
+
   it("限制事件数量并标记 truncated", () => {
     const events = Array.from({ length: ROUTING_TRACE_MAX_EVENTS + 1 }, (_, index) => ({
       type: "round_started",

@@ -173,7 +173,7 @@ function buildLabels() {
     generatedAt: "Updated",
     history: "History",
     availability: "Availability",
-    ttft: "TTFB",
+    ttft: "TTFT",
     freshnessWindow: "Snapshot freshness",
     fresh: "Fresh",
     stale: "Stale",
@@ -196,7 +196,7 @@ function buildLabels() {
     },
     tooltip: {
       availability: "Availability tooltip",
-      ttft: "TTFB tooltip",
+      ttft: "TTFT tooltip",
       tps: "TPS tooltip",
       historyAriaLabel: "History aria",
     },

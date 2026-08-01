@@ -232,11 +232,12 @@ function normalizeRoutingTraceSummary(value: unknown): RoutingTraceSummaryV1 | u
     "fallbackPromotions",
     "cancelFailures",
   ] as const;
+  const ttftMs = summary.ttftMs !== undefined ? summary.ttftMs : summary.ttfbMs;
   if (
     !outcomes.has(summary.outcome as RoutingTraceRequestOutcome) ||
     !winnerOrigins.has(summary.winnerOrigin as RoutingTraceWinnerOrigin) ||
     numericKeys.some((key) => finiteNumber(summary[key]) === undefined) ||
-    !(summary.ttftMs === null || finiteNumber(summary.ttftMs) !== undefined) ||
+    !(ttftMs === null || finiteNumber(ttftMs) !== undefined) ||
     !(summary.winnerProviderId === null || finiteNumber(summary.winnerProviderId) !== undefined) ||
     !(summary.winnerRound === null || finiteNumber(summary.winnerRound) !== undefined)
   ) {
@@ -246,7 +247,7 @@ function normalizeRoutingTraceSummary(value: unknown): RoutingTraceSummaryV1 | u
     outcome: summary.outcome as RoutingTraceRequestOutcome,
     statusCode: summary.statusCode as number,
     durationMs: summary.durationMs as number,
-    ttftMs: summary.ttftMs as number | null,
+    ttftMs: ttftMs as number | null,
     attemptsPerRequest: summary.attemptsPerRequest as number,
     maxActiveAttempts: summary.maxActiveAttempts as number,
     rounds: summary.rounds as number,
