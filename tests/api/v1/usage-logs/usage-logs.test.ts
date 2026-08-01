@@ -173,6 +173,56 @@ describe("v1 usage log endpoints", () => {
     expect(getUsageLogsBatchMock).not.toHaveBeenCalled();
   });
 
+  test("preserves source session identity mappings in list responses", async () => {
+    getUsageLogsMock.mockResolvedValueOnce({
+      ok: true,
+      data: {
+        logs: [{ id: 1, model: "claude" }],
+        total: 1,
+        page: 1,
+        pageSize: 20,
+        sourceSessionIdsByIdentity: {
+          "offset:identity": ["offset-source-a", "offset-source-b"],
+        },
+      },
+    });
+    getUsageLogsBatchMock.mockResolvedValueOnce({
+      ok: true,
+      data: {
+        logs: [{ id: 2, model: "codex" }],
+        nextCursor: null,
+        hasMore: false,
+        sourceSessionIdsByIdentity: {
+          "cursor:identity": ["cursor-source-a", "cursor-source-b"],
+        },
+      },
+    });
+
+    const offset = await callV1Route({
+      method: "GET",
+      pathname: "/api/v1/usage-logs?page=1&pageSize=20",
+      headers,
+    });
+    expect(offset.response.status).toBe(200);
+    expect(offset.json).toMatchObject({
+      sourceSessionIdsByIdentity: {
+        "offset:identity": ["offset-source-a", "offset-source-b"],
+      },
+    });
+
+    const cursor = await callV1Route({
+      method: "GET",
+      pathname: "/api/v1/usage-logs?limit=15",
+      headers,
+    });
+    expect(cursor.response.status).toBe(200);
+    expect(cursor.json).toMatchObject({
+      sourceSessionIdsByIdentity: {
+        "cursor:identity": ["cursor-source-a", "cursor-source-b"],
+      },
+    });
+  });
+
   test("reads stats filters lists and session suggestions", async () => {
     const stats = await callV1Route({
       method: "GET",

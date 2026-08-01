@@ -1,4 +1,11 @@
-import { describe, expect, test, vi } from "vitest";
+import { getTableName } from "drizzle-orm";
+import { beforeEach, describe, expect, test, vi } from "vitest";
+
+const isLedgerOnlyModeMock = vi.hoisted(() => vi.fn<() => Promise<boolean>>());
+
+vi.mock("@/lib/ledger-fallback", () => ({
+  isLedgerOnlyMode: isLedgerOnlyModeMock,
+}));
 
 function sqlToString(sqlObj: unknown): string {
   const visited = new Set<unknown>();
@@ -36,6 +43,7 @@ function sqlToString(sqlObj: unknown): string {
 function createThenableQuery<T>(
   result: T,
   opts?: {
+    fromArgs?: unknown[];
     whereArgs?: unknown[];
     groupByArgs?: unknown[];
     orderByArgs?: unknown[];
@@ -44,7 +52,10 @@ function createThenableQuery<T>(
 ) {
   const query: any = Promise.resolve(result);
 
-  query.from = vi.fn(() => query);
+  query.from = vi.fn((arg: unknown) => {
+    opts?.fromArgs?.push(arg);
+    return query;
+  });
   query.innerJoin = vi.fn(() => query);
   query.leftJoin = vi.fn(() => query);
   query.where = vi.fn((arg: unknown) => {
@@ -68,6 +79,11 @@ function createThenableQuery<T>(
 }
 
 describe("Usage logs sessionId suggestions", () => {
+  beforeEach(() => {
+    isLedgerOnlyModeMock.mockReset();
+    isLedgerOnlyModeMock.mockResolvedValue(false);
+  });
+
   test("term 为空/空白：应直接返回空数组且不查询 DB", async () => {
     vi.resetModules();
 
@@ -178,6 +194,50 @@ describe("Usage logs sessionId suggestions", () => {
     await expect(findUsageLogSessionIdSuggestions({ term: "session-", limit: 2 })).resolves.toEqual(
       ["session-shared", "session-physical"]
     );
+  });
+
+  test("returns canonical and physical candidates from ledger-only storage", async () => {
+    vi.resetModules();
+    isLedgerOnlyModeMock.mockResolvedValueOnce(true);
+
+    const fromArgs: unknown[] = [];
+    const whereArgs: unknown[] = [];
+    const selectMock = vi
+      .fn()
+      .mockImplementationOnce(() =>
+        createThenableQuery(
+          [{ sessionId: "pfx:scope:fingerprint", firstSeen: new Date("2026-01-03T00:00:00Z") }],
+          { fromArgs, whereArgs }
+        )
+      )
+      .mockImplementationOnce(() =>
+        createThenableQuery(
+          [{ sessionId: "physical-client", firstSeen: new Date("2026-01-02T00:00:00Z") }],
+          { fromArgs, whereArgs }
+        )
+      );
+    vi.doMock("@/drizzle/db", () => ({ db: { select: selectMock } }));
+
+    const { findUsageLogSessionIdSuggestions } = await import("@/repository/usage-logs");
+    await expect(
+      findUsageLogSessionIdSuggestions({
+        term: "p",
+        userId: 1,
+        keyId: 2,
+        providerId: 3,
+        limit: 20,
+      })
+    ).resolves.toEqual(["pfx:scope:fingerprint", "physical-client"]);
+
+    expect(isLedgerOnlyModeMock).toHaveBeenCalledOnce();
+    expect(
+      fromArgs.map((table) => getTableName(table as Parameters<typeof getTableName>[0]))
+    ).toEqual(["usage_ledger", "usage_ledger"]);
+    expect(whereArgs).toHaveLength(2);
+    for (const condition of whereArgs) {
+      const whereSql = sqlToString(condition).toLowerCase();
+      expect(whereSql).not.toContain("message_request");
+    }
   });
 
   test("ignores candidates whose latest createdAt is NULL", async () => {

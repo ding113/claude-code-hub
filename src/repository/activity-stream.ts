@@ -1,6 +1,6 @@
 "use server";
 
-import { and, desc, eq, inArray, isNull, notInArray, or, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, notInArray, sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import { keys as keysTable, messageRequest, providers, users } from "@/drizzle/schema";
 import { logger } from "@/lib/logger";
@@ -104,10 +104,7 @@ export async function findRecentActivityStream(limit = 20): Promise<ActivityStre
           and(
             isNull(messageRequest.deletedAt),
             eq(messageRequest.isReplay, false),
-            or(
-              inArray(messageSessionIdentity, activeSessionIds),
-              inArray(messageRequest.sessionId, activeSessionIds)
-            )
+            inArray(messageSessionIdentity, activeSessionIds)
           )
         )
         .orderBy(desc(messageRequest.createdAt))

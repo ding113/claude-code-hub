@@ -1823,6 +1823,11 @@ export interface UsageLogSessionIdSuggestionFilters {
   limit?: number;
 }
 
+interface UsageLogSessionIdSuggestionRow {
+  sessionId: string | null;
+  firstSeen: Date | null;
+}
+
 export async function findUsageLogSessionIdSuggestions(
   filters: UsageLogSessionIdSuggestionFilters
 ): Promise<string[]> {
@@ -1832,52 +1837,106 @@ export async function findUsageLogSessionIdSuggestions(
   if (!trimmedTerm) return [];
 
   const pattern = `${escapeLike(trimmedTerm)}%`;
-  const sharedConditions = [isNull(messageRequest.deletedAt), EXCLUDE_WARMUP_CONDITION];
+  const ledgerOnly = await isLedgerOnlyMode();
+  let canonicalResults: UsageLogSessionIdSuggestionRow[];
+  let physicalResults: UsageLogSessionIdSuggestionRow[];
 
-  if (userId !== undefined) {
-    sharedConditions.push(eq(messageRequest.userId, userId));
-  }
+  if (ledgerOnly) {
+    const sharedConditions = [isNull(usageLedger.blockedBy)];
 
-  if (keyId !== undefined) {
-    sharedConditions.push(eq(keysTable.id, keyId));
-  }
+    if (userId !== undefined) {
+      sharedConditions.push(eq(usageLedger.userId, userId));
+    }
 
-  if (providerId !== undefined) {
-    sharedConditions.push(eq(messageRequest.providerId, providerId));
-  }
+    if (keyId !== undefined) {
+      sharedConditions.push(eq(keysTable.id, keyId));
+    }
 
-  const queryCandidates = async (
-    candidate: SQL<string | null> | typeof messageRequest.sessionId
-  ) => {
-    const baseQuery = db
-      .select({
-        sessionId: candidate,
-        firstSeen: sql<Date | null>`max(${messageRequest.createdAt})`,
-      })
-      .from(messageRequest);
-    const query =
-      keyId !== undefined
-        ? baseQuery.innerJoin(keysTable, eq(messageRequest.key, keysTable.key))
-        : baseQuery;
+    if (providerId !== undefined) {
+      sharedConditions.push(eq(usageLedger.finalProviderId, providerId));
+    }
 
-    return query
-      .where(
-        and(
-          ...sharedConditions,
-          sql`${candidate} IS NOT NULL`,
-          sql`length(${candidate}) > 0`,
-          sql`${candidate} LIKE ${pattern} ESCAPE '\\'`
+    const queryCandidates = async (
+      candidate: SQL<string | null> | typeof usageLedger.sessionId
+    ) => {
+      const baseQuery = db
+        .select({
+          sessionId: candidate,
+          firstSeen: sql<Date | null>`max(${usageLedger.createdAt})`,
+        })
+        .from(usageLedger);
+      const query =
+        keyId !== undefined
+          ? baseQuery.innerJoin(keysTable, eq(usageLedger.key, keysTable.key))
+          : baseQuery;
+
+      return query
+        .where(
+          and(
+            ...sharedConditions,
+            sql`${candidate} IS NOT NULL`,
+            sql`length(${candidate}) > 0`,
+            sql`${candidate} LIKE ${pattern} ESCAPE '\\'`
+          )
         )
-      )
-      .groupBy(candidate)
-      .orderBy(desc(sql`max(${messageRequest.createdAt})`))
-      .limit(limit);
-  };
+        .groupBy(candidate)
+        .orderBy(desc(sql`max(${usageLedger.createdAt})`))
+        .limit(limit);
+    };
 
-  const [canonicalResults, physicalResults] = await Promise.all([
-    queryCandidates(messageSessionIdentity),
-    queryCandidates(messageRequest.sessionId),
-  ]);
+    [canonicalResults, physicalResults] = await Promise.all([
+      queryCandidates(ledgerSessionIdentity),
+      queryCandidates(usageLedger.sessionId),
+    ]);
+  } else {
+    const sharedConditions = [isNull(messageRequest.deletedAt), EXCLUDE_WARMUP_CONDITION];
+
+    if (userId !== undefined) {
+      sharedConditions.push(eq(messageRequest.userId, userId));
+    }
+
+    if (keyId !== undefined) {
+      sharedConditions.push(eq(keysTable.id, keyId));
+    }
+
+    if (providerId !== undefined) {
+      sharedConditions.push(eq(messageRequest.providerId, providerId));
+    }
+
+    const queryCandidates = async (
+      candidate: SQL<string | null> | typeof messageRequest.sessionId
+    ) => {
+      const baseQuery = db
+        .select({
+          sessionId: candidate,
+          firstSeen: sql<Date | null>`max(${messageRequest.createdAt})`,
+        })
+        .from(messageRequest);
+      const query =
+        keyId !== undefined
+          ? baseQuery.innerJoin(keysTable, eq(messageRequest.key, keysTable.key))
+          : baseQuery;
+
+      return query
+        .where(
+          and(
+            ...sharedConditions,
+            sql`${candidate} IS NOT NULL`,
+            sql`length(${candidate}) > 0`,
+            sql`${candidate} LIKE ${pattern} ESCAPE '\\'`
+          )
+        )
+        .groupBy(candidate)
+        .orderBy(desc(sql`max(${messageRequest.createdAt})`))
+        .limit(limit);
+    };
+
+    [canonicalResults, physicalResults] = await Promise.all([
+      queryCandidates(messageSessionIdentity),
+      queryCandidates(messageRequest.sessionId),
+    ]);
+  }
+
   const bySessionId = new Map<string, Date>();
   for (const row of [...canonicalResults, ...physicalResults]) {
     if (!row.sessionId || !row.firstSeen) continue;
