@@ -65,12 +65,21 @@ const messageSessionIdentity = sql<
 const ledgerSessionIdentity = sql<
   string | null
 >`COALESCE(${usageLedger.sessionIdentity}, ${usageLedger.sessionId})`;
+const messageSourceSessionIds = sql<string[]>`
+  ARRAY_AGG(${messageRequest.sessionId}) FILTER (WHERE ${messageRequest.sessionId} IS NOT NULL)
+    OVER (PARTITION BY ${messageSessionIdentity})
+`;
+const ledgerSourceSessionIds = sql<string[]>`
+  ARRAY_AGG(${usageLedger.sessionId}) FILTER (WHERE ${usageLedger.sessionId} IS NOT NULL)
+    OVER (PARTITION BY ${ledgerSessionIdentity})
+`;
 
 export interface UsageLogRow {
   id: number;
   createdAt: Date | null;
   sessionId: string | null; // Public Session identity
   sourceSessionId: string | null; // Physical Session source for request-scoped readback
+  sourceSessionIds?: string[]; // All physical client session IDs grouped under the public identity
   requestSequence: number | null; // Request Sequence（Session 内请求序号）
   userName: string;
   keyName: string;
@@ -218,6 +227,9 @@ export async function findUsageLogsBatch(
       createdAtRaw: sql<string>`to_char(${messageRequest.createdAt} AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`,
       sessionId: messageSessionIdentity,
       sourceSessionId: messageRequest.sessionId,
+      sourceSessionIds: sql<
+        string[]
+      >`ARRAY_AGG(${messageRequest.sessionId}) FILTER (WHERE ${messageRequest.sessionId} IS NOT NULL) OVER (PARTITION BY ${messageSessionIdentity})`,
       requestSequence: messageRequest.requestSequence,
       userName: users.name,
       keyName: keysTable.name,
@@ -295,6 +307,7 @@ export async function findUsageLogsBatch(
 
     return {
       ...row,
+      sourceSessionIds: row.sourceSessionIds ? [...new Set(row.sourceSessionIds)] : undefined,
       requestSequence: row.requestSequence ?? null,
       totalTokens: totalRowTokens,
       cacheCreation5mInputTokens: row.cacheCreation5mInputTokens,
@@ -340,7 +353,12 @@ export async function findUsageLogsBatch(
 
   const trimmedSessionId = filters.sessionId?.trim();
   if (trimmedSessionId) {
-    ledgerConditions.push(eq(ledgerSessionIdentity, trimmedSessionId));
+    ledgerConditions.push(
+      sql`(
+        ${ledgerSessionIdentity} = ${trimmedSessionId}
+        OR ${usageLedger.sessionId} = ${trimmedSessionId}
+      )`
+    );
   }
 
   if (filters.startTime !== undefined) {
@@ -404,6 +422,7 @@ export async function findUsageLogsBatch(
       createdAtRaw: sql<string>`to_char(${usageLedger.createdAt} AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`,
       sessionId: ledgerSessionIdentity,
       sourceSessionId: usageLedger.sessionId,
+      sourceSessionIds: ledgerSourceSessionIds,
       userId: usageLedger.userId,
       userName: users.name,
       key: usageLedger.key,
@@ -462,6 +481,7 @@ export async function findUsageLogsBatch(
       createdAt: row.createdAt,
       sessionId: row.sessionId,
       sourceSessionId: row.sourceSessionId,
+      sourceSessionIds: row.sourceSessionIds ? [...new Set(row.sourceSessionIds)] : undefined,
       requestSequence: null,
       userName: row.userName ?? `User #${row.userId}`,
       keyName: row.keyName ?? row.key,
@@ -1023,6 +1043,7 @@ function mapUsageLogRowFromMessageResult(row: {
   createdAt: Date | null;
   sessionId: string | null;
   sourceSessionId: string | null;
+  sourceSessionIds?: string[];
   requestSequence: number | null;
   userName: string;
   keyName: string;
@@ -1079,6 +1100,7 @@ function mapUsageLogRowFromMessageResult(row: {
 
   return {
     ...row,
+    sourceSessionIds: row.sourceSessionIds ? [...new Set(row.sourceSessionIds)] : undefined,
     requestSequence: row.requestSequence ?? null,
     totalTokens: totalRowTokens,
     costUsd: row.costUsd?.toString() ?? null,
@@ -1098,6 +1120,7 @@ function mapUsageLogRowFromLedgerResult(row: {
   createdAt: Date | null;
   sessionId: string | null;
   sourceSessionId: string | null;
+  sourceSessionIds?: string[];
   userId: number;
   userName: string | null;
   key: string;
@@ -1138,6 +1161,7 @@ function mapUsageLogRowFromLedgerResult(row: {
     createdAt: row.createdAt,
     sessionId: row.sessionId,
     sourceSessionId: row.sourceSessionId,
+    sourceSessionIds: row.sourceSessionIds ? [...new Set(row.sourceSessionIds)] : undefined,
     requestSequence: null,
     userName: row.userName ?? `User #${row.userId}`,
     keyName: row.keyName ?? row.key,
@@ -1199,6 +1223,7 @@ export async function findReadonlyUsageLogsBatchForKey(
         createdAtRaw: sql<string>`to_char(${messageRequest.createdAt} AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`,
         sessionId: messageSessionIdentity,
         sourceSessionId: messageRequest.sessionId,
+        sourceSessionIds: messageSourceSessionIds,
         requestSequence: messageRequest.requestSequence,
         userName: users.name,
         keyName: keysTable.name,
@@ -1252,6 +1277,7 @@ export async function findReadonlyUsageLogsBatchForKey(
             createdAtRaw: sql<string>`to_char(${usageLedger.createdAt} AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`,
             sessionId: ledgerSessionIdentity,
             sourceSessionId: usageLedger.sessionId,
+            sourceSessionIds: ledgerSourceSessionIds,
             userId: usageLedger.userId,
             userName: users.name,
             key: usageLedger.key,
@@ -1459,6 +1485,7 @@ export async function findUsageLogsWithDetails(filters: UsageLogFilters): Promis
       createdAt: messageRequest.createdAt,
       sessionId: messageSessionIdentity, // Public Session identity
       sourceSessionId: messageRequest.sessionId, // Physical Session source
+      sourceSessionIds: messageSourceSessionIds,
       requestSequence: messageRequest.requestSequence, // Request Sequence
       userName: users.name,
       keyName: keysTable.name,
@@ -1646,7 +1673,10 @@ export async function findUsageLogSessionIdSuggestions(
     EXCLUDE_WARMUP_CONDITION,
     sql`${messageSessionIdentity} IS NOT NULL`,
     sql`length(${messageSessionIdentity}) > 0`,
-    sql`${messageSessionIdentity} LIKE ${pattern} ESCAPE '\\'`,
+    sql`(
+      ${messageSessionIdentity} LIKE ${pattern} ESCAPE '\\'
+      OR ${messageRequest.sessionId} LIKE ${pattern} ESCAPE '\\'
+    )`,
   ];
 
   if (userId !== undefined) {
@@ -1664,6 +1694,7 @@ export async function findUsageLogSessionIdSuggestions(
   const baseQuery = db
     .select({
       sessionId: messageSessionIdentity,
+      sourceSessionId: messageRequest.sessionId,
       firstSeen: sql<Date>`min(${messageRequest.createdAt})`,
     })
     .from(messageRequest);
@@ -1675,11 +1706,16 @@ export async function findUsageLogSessionIdSuggestions(
 
   const results = await query
     .where(and(...conditions))
-    .groupBy(messageSessionIdentity)
+    .groupBy(messageSessionIdentity, messageRequest.sessionId)
     .orderBy(desc(sql`min(${messageRequest.createdAt})`))
     .limit(limit);
 
-  return results.map((r) => r.sessionId).filter((id): id is string => Boolean(id));
+  const suggestions = new Set<string>();
+  for (const row of results) {
+    if (row.sessionId) suggestions.add(row.sessionId);
+    if (row.sourceSessionId) suggestions.add(row.sourceSessionId);
+  }
+  return [...suggestions].slice(0, limit);
 }
 
 /**

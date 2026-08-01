@@ -838,15 +838,30 @@ export function VirtualizedLogsTable({
                                 <button
                                   type="button"
                                   className="w-full text-left font-mono text-xs truncate cursor-pointer hover:underline"
-                                  data-session-id={log.sessionId}
+                                  data-session-id={log.sourceSessionId ?? log.sessionId}
                                   onClick={handleCopySessionIdClick}
                                 >
-                                  {log.sessionId}
+                                  {log.sourceSessionId ?? log.sessionId}
                                 </button>
                               </TooltipTrigger>
                               <TooltipContent side="bottom" align="start" className="max-w-[500px]">
                                 <p className="text-xs whitespace-normal break-words font-mono">
-                                  {log.sessionId}
+                                  {(log.sourceSessionIds?.length
+                                    ? log.sourceSessionIds
+                                    : [log.sourceSessionId]
+                                  )
+                                    .filter((id): id is string => Boolean(id))
+                                    .map((id) => (
+                                      <span className="block" key={id}>
+                                        {id}
+                                      </span>
+                                    ))}
+                                  {log.sessionId &&
+                                    !log.sourceSessionIds?.includes(log.sessionId) && (
+                                      <span className="mt-1 block text-muted-foreground">
+                                        {log.sessionId}
+                                      </span>
+                                    )}
                                 </p>
                               </TooltipContent>
                             </Tooltip>

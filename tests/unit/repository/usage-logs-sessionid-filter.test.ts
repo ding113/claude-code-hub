@@ -115,6 +115,31 @@ describe("Usage logs sessionId filter", () => {
     expect(ledgerWhereSql).not.toContain("  abc  ");
   });
 
+  test("findUsageLogsBatch: sessionId should match canonical and physical identities", async () => {
+    vi.resetModules();
+
+    const whereArgs: unknown[] = [];
+    const selectMock = vi.fn(() => createThenableQuery([], whereArgs));
+
+    vi.doMock("@/drizzle/db", () => ({
+      db: {
+        select: selectMock,
+        execute: vi.fn(async () => ({ count: 0 })),
+      },
+    }));
+    vi.doMock("@/lib/ledger-fallback", () => ({
+      isLedgerOnlyMode: vi.fn(async () => false),
+    }));
+
+    const { findUsageLogsBatch } = await import("@/repository/usage-logs");
+    await findUsageLogsBatch({ sessionId: "client-session" });
+
+    const primaryWhereSql = sqlToString(whereArgs[0]).toLowerCase();
+    expect(primaryWhereSql).toContain("session_identity");
+    expect(primaryWhereSql).toContain("session_id");
+    expect(primaryWhereSql).toContain(" or ");
+  });
+
   test("findUsageLogsBatch: hasMore 为 true 时缺失 createdAtRaw 应直接报错，避免静默截断", async () => {
     vi.resetModules();
 
@@ -125,6 +150,7 @@ describe("Usage logs sessionId filter", () => {
           createdAt: new Date("2026-03-21T00:00:00Z"),
           createdAtRaw: null,
           sessionId: null,
+          sourceSessionIds: [],
           requestSequence: null,
           userName: "u",
           keyName: "k",

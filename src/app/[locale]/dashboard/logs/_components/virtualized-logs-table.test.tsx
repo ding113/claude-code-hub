@@ -196,6 +196,18 @@ function renderTableWithLog(overrides: Partial<UsageLogRow>) {
   return renderToStaticMarkup(<VirtualizedLogsTable filters={{}} autoRefreshEnabled={false} />);
 }
 
+test("shows the client session ID and canonical prefix identity in the virtualized tooltip", () => {
+  const html = renderTableWithLog({
+    sessionId: "pfx:scope:fingerprint",
+    sourceSessionId: "client-session-id",
+    sourceSessionIds: ["client-session-id", "client-session-id-2"],
+  });
+
+  expect(html).toContain("client-session-id");
+  expect(html).toContain("client-session-id-2");
+  expect(html).toContain("pfx:scope:fingerprint");
+});
+
 function renderCostTooltipWithLog(overrides: Partial<UsageLogRow>) {
   const html = renderTableWithLog(overrides);
   const container = document.createElement("div");

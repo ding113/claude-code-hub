@@ -133,6 +133,27 @@ describe("Usage logs sessionId suggestions", () => {
     expect(limitArgs).toEqual([20]);
   });
 
+  test("returns both canonical and client session identities", async () => {
+    vi.resetModules();
+
+    const selectMock = vi.fn(() =>
+      createThenableQuery([
+        {
+          sessionId: "pfx:scope:fingerprint",
+          sourceSessionId: "client-session",
+          firstSeen: new Date("2026-01-01T00:00:00Z"),
+        },
+      ])
+    );
+    vi.doMock("@/drizzle/db", () => ({ db: { select: selectMock } }));
+
+    const { findUsageLogSessionIdSuggestions } = await import("@/repository/usage-logs");
+    await expect(findUsageLogSessionIdSuggestions({ term: "client", limit: 20 })).resolves.toEqual([
+      "pfx:scope:fingerprint",
+      "client-session",
+    ]);
+  });
+
   test("term 含 %/_/\\\\：应按字面量前缀匹配（需转义）", async () => {
     vi.resetModules();
 

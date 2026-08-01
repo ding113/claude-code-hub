@@ -142,7 +142,10 @@ export function buildUsageLogConditions(filters: UsageLogFilterParams): SQL[] {
   const trimmedSessionId = filters.sessionId?.trim();
   if (trimmedSessionId) {
     conditions.push(
-      sql`COALESCE(${messageRequest.sessionIdentity}, ${messageRequest.sessionId}) = ${trimmedSessionId}`
+      sql`(
+        COALESCE(${messageRequest.sessionIdentity}, ${messageRequest.sessionId}) = ${trimmedSessionId}
+        OR ${messageRequest.sessionId} = ${trimmedSessionId}
+      )`
     );
   }
 

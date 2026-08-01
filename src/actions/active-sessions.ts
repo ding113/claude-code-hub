@@ -425,8 +425,13 @@ export async function getAllSessions(
     if (cached) {
       logger.debug("[SessionCache] All sessions cache hit");
 
+      const { SessionTracker } = await import("@/lib/session-tracker");
+
       // 过滤：管理员可查看所有，普通用户只能查看自己的
       const filteredCached = isAdmin ? cached : cached.filter((s) => s.userId === currentUserId);
+      const concurrentCounts = await SessionTracker.getObservedConcurrentCountBatch(
+        filteredCached.map((s) => s.sessionId)
+      );
 
       // 分离活跃和非活跃（5 分钟内有请求为活跃）
       const now = Date.now();
@@ -460,9 +465,10 @@ export async function getAllSessions(
             s.totalCacheCreationTokens +
             s.totalCacheReadTokens,
           costUsd: s.totalCostUsd,
-          status: "completed",
+          status: (concurrentCounts.get(s.sessionId) ?? 0) > 0 ? "in_progress" : "completed",
           durationMs: s.totalDurationMs,
           requestCount: s.requestCount,
+          concurrentCount: concurrentCounts.get(s.sessionId) ?? 0,
         };
 
         if (lastRequestTime >= fiveMinutesAgo) {
@@ -520,6 +526,10 @@ export async function getAllSessions(
     const { aggregateMultipleSessionStats } = await import("@/repository/message");
     const sessionsData = await aggregateMultipleSessionStats(allSessionIds);
 
+    const concurrentCounts = await SessionTracker.getObservedConcurrentCountBatch(
+      sessionsData.map((s) => s.sessionId)
+    );
+
     // 4. 写入缓存
     setActiveSessionsCache(sessionsData, cacheKey);
 
@@ -560,9 +570,10 @@ export async function getAllSessions(
           s.totalCacheCreationTokens +
           s.totalCacheReadTokens,
         costUsd: s.totalCostUsd,
-        status: "completed",
+        status: (concurrentCounts.get(s.sessionId) ?? 0) > 0 ? "in_progress" : "completed",
         durationMs: s.totalDurationMs,
         requestCount: s.requestCount,
+        concurrentCount: concurrentCounts.get(s.sessionId) ?? 0,
       };
 
       if (lastRequestTime >= fiveMinutesAgo) {

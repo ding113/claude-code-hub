@@ -606,6 +606,28 @@ describe("usage-logs-table multiplier badge", () => {
     });
     container.remove();
   });
+
+  test("shows the client session ID and keeps the canonical prefix identity in the tooltip", () => {
+    const html = renderToStaticMarkup(
+      <UsageLogsTable
+        logs={[
+          makeLog({
+            sessionId: "pfx:scope:fingerprint",
+            sourceSessionId: "client-session-id",
+          }),
+        ]}
+        total={1}
+        page={1}
+        pageSize={50}
+        onPageChange={() => {}}
+        isPending={false}
+      />
+    );
+
+    expect(html).toContain('data-session-id="client-session-id"');
+    expect(html).toContain("client-session-id");
+    expect(html).toContain("pfx:scope:fingerprint");
+  });
 });
 
 describe("usage-logs-table pricing resolution", () => {
