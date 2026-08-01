@@ -23,6 +23,7 @@ interface UsageLogsStatsPanelProps {
     model?: string;
     endpoint?: string;
     minRetryCount?: number;
+    replayFilter?: "all" | "replay" | "non-replay";
   };
   currencyCode?: CurrencyCode;
   /**

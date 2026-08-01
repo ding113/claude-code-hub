@@ -16,6 +16,7 @@ import { logger } from "@/lib/logger";
 import { DEFAULT_SITE_TITLE } from "@/lib/site-title";
 import { getSystemSettings } from "@/repository/system-config";
 import type { SystemSettings } from "@/types/system-config";
+import { getEnvConfig } from "./env.schema";
 
 /** Cache TTL in milliseconds (1 minute) */
 const CACHE_TTL_MS = 60 * 1000;
@@ -26,6 +27,7 @@ let cachedAt: number = 0;
 
 /** Avoid repeating the same invalid environment-variable warning on every request. */
 let hasWarnedInvalidResponsesWebsocketEnv = false;
+let hasWarnedInvalidStreamGateEnv = false;
 
 function getOpenaiResponsesWebsocketEnvOverride(): boolean | undefined {
   const rawValue = process.env.ENABLE_OPENAI_RESPONSES_WEBSOCKET;
@@ -50,6 +52,26 @@ function getOpenaiResponsesWebsocketEnvOverride(): boolean | undefined {
         );
       }
       return undefined;
+  }
+}
+
+function getFallbackStreamGateMode(): "off" | "shadow" | "enforce" {
+  const rawValue = process.env.STREAM_GATE_MODE;
+  if (rawValue === "off" || rawValue === "shadow" || rawValue === "enforce") {
+    return rawValue;
+  }
+
+  try {
+    return getEnvConfig().STREAM_GATE_MODE;
+  } catch (error) {
+    if (!hasWarnedInvalidStreamGateEnv) {
+      hasWarnedInvalidStreamGateEnv = true;
+      logger.warn("[SystemSettingsCache] Invalid environment fallback, using Stream Gate enforce", {
+        error: error instanceof Error ? error.message : String(error),
+        value: process.env.STREAM_GATE_MODE,
+      });
+    }
+    return "enforce";
   }
 }
 
@@ -214,7 +236,7 @@ export async function getCachedSystemSettings(): Promise<SystemSettings> {
       publicStatusWindowHours: DEFAULT_SETTINGS.publicStatusWindowHours,
       publicStatusAggregationIntervalMinutes:
         DEFAULT_SETTINGS.publicStatusAggregationIntervalMinutes,
-      streamGateMode: DEFAULT_SETTINGS.streamGateMode,
+      streamGateMode: getFallbackStreamGateMode(),
       affinityIgnoreClientSessionId: DEFAULT_SETTINGS.affinityIgnoreClientSessionId,
       replayEnabled: null,
       cacheEffectivenessEnabled: null,

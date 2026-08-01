@@ -147,6 +147,29 @@ return {removed, remaining_refs}
 `;
 
 /**
+ * Termination cleanup removes all provider references for one physical Session.
+ * Unlike RELEASE_PROVIDER_SESSION, this is not an attempt-level decrement.
+ */
+export const FORCE_TERMINATE_PROVIDER_SESSION = `
+local provider_key = KEYS[1]
+local ref_key = KEYS[2]
+local session_id = ARGV[1]
+
+local removed_refs = redis.call('HDEL', ref_key, session_id)
+local removed_session = redis.call('ZREM', provider_key, session_id)
+return {removed_session, removed_refs}
+`;
+
+/** Remove one physical Session from the shared global/key/user quota indexes. */
+export const FORCE_TERMINATE_KEY_USER_SESSION = `
+local session_id = ARGV[1]
+local removed_global = redis.call('ZREM', KEYS[1], session_id)
+local removed_key = redis.call('ZREM', KEYS[2], session_id)
+local removed_user = redis.call('ZREM', KEYS[3], session_id)
+return {removed_global, removed_key, removed_user}
+`;
+
+/**
  * Key/User 并发：原子性检查 + 追踪（修复竞态条件）
  *
  * 目标：

@@ -73,8 +73,11 @@ export function LogicTraceTab({
   providerChain,
   routingTrace,
   sessionId,
+  sourceSessionId,
   blockedBy,
   blockedReason,
+  isReplay,
+  replaySourceRequestId,
   requestSequence,
   hedgeLosers,
   costUsd,
@@ -167,7 +170,7 @@ export function LogicTraceTab({
   };
 
   const isWarmupSkipped = blockedBy === "warmup";
-  const isBlocked = !!blockedBy && !isWarmupSkipped;
+  const isBlocked = !!blockedBy && !isWarmupSkipped && !isReplay;
   const parsedBlockedReason = parseBlockedReason(blockedReason);
 
   // Check if this is a session reuse flow (provider reused from session cache)
@@ -246,8 +249,8 @@ export function LogicTraceTab({
         </div>
       )}
 
-      {/* F2 Replay Serve Info (cache hit served without upstream call) */}
-      {blockedBy === "replay_serve" && (
+      {/* Replay audit info (served without a new upstream charge) */}
+      {isReplay && (
         <div className="rounded-lg border bg-teal-50 dark:bg-teal-950/20 border-teal-200 dark:border-teal-800 p-4 space-y-2">
           <div className="flex items-center gap-2">
             <DatabaseZap className="h-4 w-4 text-teal-600" />
@@ -271,11 +274,21 @@ export function LogicTraceTab({
               </code>
             </div>
           )}
+          {replaySourceRequestId != null && (
+            <div className="flex items-center gap-2 text-xs">
+              <span className="text-teal-900 dark:text-teal-100">
+                {t("replayServe.sourceRequestId")}:
+              </span>
+              <code className="bg-teal-100 dark:bg-teal-900/50 px-2 py-0.5 rounded font-mono">
+                {replaySourceRequestId}
+              </code>
+            </div>
+          )}
         </div>
       )}
 
       {/* Block Info */}
-      {isBlocked && blockedBy && blockedBy !== "replay_serve" && (
+      {isBlocked && blockedBy && (
         <div className="rounded-lg border bg-orange-50 dark:bg-orange-950/20 border-orange-200 dark:border-orange-800 p-4 space-y-2">
           <div className="flex items-center gap-2">
             <AlertCircle className="h-4 w-4 text-orange-600" />
@@ -468,7 +481,11 @@ export function LogicTraceTab({
                 setOriginOpen(open);
                 if (open && originChain === undefined && !originLoading) {
                   setOriginLoading(true);
-                  getSessionOriginChain(sessionId)
+                  getSessionOriginChain(
+                    sessionId,
+                    requestSequence ?? undefined,
+                    sourceSessionId ?? undefined
+                  )
                     .then((result) => {
                       setOriginChain(result.ok ? result.data : null);
                     })

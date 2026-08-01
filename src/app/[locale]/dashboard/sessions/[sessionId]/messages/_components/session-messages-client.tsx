@@ -42,6 +42,7 @@ import {
   terminateActiveSession,
 } from "@/lib/api-client/v1/actions/active-sessions";
 import { getSystemSettings } from "@/lib/api-client/v1/actions/system-config";
+import { getErrorMessage } from "@/lib/utils/error-messages";
 import {
   DEFAULT_SESSION_DETAIL_VIEW_MODE,
   type SessionDetailSnapshots,
@@ -54,6 +55,7 @@ import { SessionStats } from "./session-stats";
 
 export function SessionMessagesClient() {
   const t = useTranslations("dashboard.sessions");
+  const tErrors = useTranslations("errors");
 
   const params = useParams();
   const searchParams = useSearchParams();
@@ -63,9 +65,17 @@ export function SessionMessagesClient() {
 
   // URL state
   const seqParam = searchParams.get("seq");
+  const selectedSourceSessionId = searchParams.get("sourceSessionId");
+  const requestIdParam = searchParams.get("requestId");
   const selectedSeq = (() => {
     if (!seqParam) return null;
     const parsed = Number.parseInt(seqParam, 10);
+    if (!Number.isFinite(parsed) || parsed <= 0) return null;
+    return parsed;
+  })();
+  const selectedRequestId = (() => {
+    if (!requestIdParam) return null;
+    const parsed = Number.parseInt(requestIdParam, 10);
     if (!Number.isFinite(parsed) || parsed <= 0) return null;
     return parsed;
   })();
@@ -84,8 +94,16 @@ export function SessionMessagesClient() {
       Extract<Awaited<ReturnType<typeof getSessionDetails>>, { ok: true }>["data"]["sessionStats"]
     >(null);
   const [currentSequence, setCurrentSequence] = useState<number | null>(null);
-  const [prevSequence, setPrevSequence] = useState<number | null>(null);
-  const [nextSequence, setNextSequence] = useState<number | null>(null);
+  const [prevRequest, setPrevRequest] = useState<{
+    requestId: number;
+    sourceSessionId: string;
+    requestSequence: number;
+  } | null>(null);
+  const [nextRequest, setNextRequest] = useState<{
+    requestId: number;
+    sourceSessionId: string;
+    requestSequence: number;
+  } | null>(null);
 
   // UI State
   const [isLoading, setIsLoading] = useState(true);
@@ -104,8 +122,8 @@ export function SessionMessagesClient() {
     setSpecialSettings(null);
     setSessionStats(null);
     setCurrentSequence(null);
-    setPrevSequence(null);
-    setNextSequence(null);
+    setPrevRequest(null);
+    setNextRequest(null);
   }, []);
 
   const { data: systemSettings } = useQuery({
@@ -116,9 +134,19 @@ export function SessionMessagesClient() {
   const currencyCode = systemSettings?.currencyDisplay || "USD";
 
   const handleSelectRequest = useCallback(
-    (seq: number) => {
+    (sourceSessionId: string | null, seq: number, requestId?: number) => {
       const params = new URLSearchParams(window.location.search);
       params.set("seq", seq.toString());
+      if (sourceSessionId) {
+        params.set("sourceSessionId", sourceSessionId);
+      } else {
+        params.delete("sourceSessionId");
+      }
+      if (requestId) {
+        params.set("requestId", requestId.toString());
+      } else {
+        params.delete("requestId");
+      }
       router.replace(`${pathname}?${params.toString()}`);
       setIsMobileMenuOpen(false);
     },
@@ -133,7 +161,12 @@ export function SessionMessagesClient() {
       setError(null);
 
       try {
-        const result = await getSessionDetails(sessionId, selectedSeq ?? undefined);
+        const result = await getSessionDetails(
+          sessionId,
+          selectedSeq ?? undefined,
+          selectedSourceSessionId ?? undefined,
+          selectedRequestId ?? undefined
+        );
         if (cancelled) return;
 
         if (result.ok) {
@@ -141,11 +174,15 @@ export function SessionMessagesClient() {
           setSpecialSettings(result.data.specialSettings);
           setSessionStats(result.data.sessionStats);
           setCurrentSequence(result.data.currentSequence);
-          setPrevSequence(result.data.prevSequence);
-          setNextSequence(result.data.nextSequence);
+          setPrevRequest(result.data.prevRequest);
+          setNextRequest(result.data.nextRequest);
         } else {
           resetDetailsState();
-          setError(result.error || t("status.fetchFailed"));
+          setError(
+            result.errorCode
+              ? getErrorMessage(tErrors, result.errorCode, result.errorParams)
+              : result.error || t("status.fetchFailed")
+          );
         }
       } catch (err) {
         if (cancelled) return;
@@ -163,7 +200,15 @@ export function SessionMessagesClient() {
     return () => {
       cancelled = true;
     };
-  }, [resetDetailsState, sessionId, selectedSeq, t]);
+  }, [
+    resetDetailsState,
+    selectedRequestId,
+    selectedSeq,
+    selectedSourceSessionId,
+    sessionId,
+    t,
+    tErrors,
+  ]);
 
   const currentRequestSnapshot = snapshots?.request[viewMode] ?? null;
   const currentResponseSnapshot = snapshots?.response[viewMode] ?? null;
@@ -264,6 +309,7 @@ export function SessionMessagesClient() {
             <RequestListSidebar
               sessionId={sessionId}
               selectedSeq={selectedSeq ?? currentSequence}
+              selectedSourceSessionId={selectedSourceSessionId}
               onSelect={handleSelectRequest}
               className="border-none w-full"
             />
@@ -289,6 +335,7 @@ export function SessionMessagesClient() {
           <RequestListSidebar
             sessionId={sessionId}
             selectedSeq={selectedSeq ?? currentSequence}
+            selectedSourceSessionId={selectedSourceSessionId}
             onSelect={handleSelectRequest}
             collapsed={sidebarCollapsed}
             className="h-full"
@@ -466,8 +513,15 @@ export function SessionMessagesClient() {
                       <Button
                         variant="outline"
                         size="sm"
-                        disabled={!prevSequence}
-                        onClick={() => prevSequence && handleSelectRequest(prevSequence)}
+                        disabled={!prevRequest}
+                        onClick={() =>
+                          prevRequest &&
+                          handleSelectRequest(
+                            prevRequest.sourceSessionId,
+                            prevRequest.requestSequence,
+                            prevRequest.requestId
+                          )
+                        }
                       >
                         <ArrowLeft className="h-4 w-4 mr-2" />
                         {t("details.prevRequest")}
@@ -476,8 +530,15 @@ export function SessionMessagesClient() {
                       <Button
                         variant="outline"
                         size="sm"
-                        disabled={!nextSequence}
-                        onClick={() => nextSequence && handleSelectRequest(nextSequence)}
+                        disabled={!nextRequest}
+                        onClick={() =>
+                          nextRequest &&
+                          handleSelectRequest(
+                            nextRequest.sourceSessionId,
+                            nextRequest.requestSequence,
+                            nextRequest.requestId
+                          )
+                        }
                         className="flex-row-reverse"
                       >
                         <ArrowLeft className="h-4 w-4 ml-2 rotate-180" />

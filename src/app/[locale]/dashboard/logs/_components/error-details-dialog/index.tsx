@@ -22,9 +22,12 @@ interface ErrorDetailsDialogProps {
   providerChain: ProviderChainItem[] | null;
   routingTrace?: RoutingTraceV1 | null;
   sessionId: string | null;
+  sourceSessionId?: string | null;
   requestSequence?: number | null;
   blockedBy?: string | null;
   blockedReason?: string | null;
+  isReplay?: boolean;
+  replaySourceRequestId?: number | null;
   originalModel?: string | null;
   currentModel?: string | null;
   actualResponseModel?: string | null;
@@ -68,9 +71,12 @@ export function ErrorDetailsDialog({
   providerChain,
   routingTrace,
   sessionId,
+  sourceSessionId,
   requestSequence,
   blockedBy,
   blockedReason,
+  isReplay = false,
+  replaySourceRequestId,
   originalModel,
   currentModel,
   actualResponseModel,
@@ -131,7 +137,7 @@ export function ErrorDetailsDialog({
     if (open && sessionId) {
       const requestId = ++messageCheckRequestIdRef.current;
       setCheckingMessages(true);
-      hasSessionMessages(sessionId, requestSequence ?? undefined)
+      hasSessionMessages(sessionId, requestSequence ?? undefined, sourceSessionId ?? undefined)
         .then((result) => {
           if (requestId !== messageCheckRequestIdRef.current) return;
           if (result.ok) {
@@ -151,7 +157,7 @@ export function ErrorDetailsDialog({
       setHasMessages(false);
       setCheckingMessages(false);
     }
-  }, [open, sessionId, requestSequence]);
+  }, [open, sessionId, requestSequence, sourceSessionId]);
 
   // Handle scrollToRedirect - switch to metadata tab when redirect info needs focus
   useEffect(() => {
@@ -219,9 +225,12 @@ export function ErrorDetailsDialog({
     providerChain,
     routingTrace,
     sessionId,
+    sourceSessionId,
     requestSequence,
     blockedBy,
     blockedReason,
+    isReplay,
+    replaySourceRequestId,
     originalModel,
     currentModel,
     actualResponseModel,
@@ -264,7 +273,14 @@ export function ErrorDetailsDialog({
         className="w-[95vw] sm:w-[480px] md:w-[540px] lg:w-[600px] xl:w-[640px] sm:max-w-none overflow-y-auto px-4 sm:px-6"
       >
         <SheetHeader className="pb-2">
-          <SheetTitle>{t("title")}</SheetTitle>
+          <SheetTitle className="flex items-center gap-2">
+            {t("title")}
+            {isReplay && (
+              <Badge variant="outline" className="border-teal-600 text-teal-700 dark:text-teal-300">
+                {t("replayServe.title")}
+              </Badge>
+            )}
+          </SheetTitle>
         </SheetHeader>
 
         <div className="pb-8">

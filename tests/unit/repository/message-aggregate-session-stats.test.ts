@@ -101,17 +101,45 @@ describe("message repository aggregateSessionStats", () => {
     boundary.ledgerOnly.mockReset();
   });
 
-  test("returns null when the session has no billable ledger rows", async () => {
+  test("returns zero billing statistics for a Replay-only session owner", async () => {
     const stats = createDrizzleQuery<readonly StatsRow[]>([]);
-    boundary.select.mockReturnValueOnce(stats);
+    const userInfo = createDrizzleQuery([userInfoRow]);
+    boundary.select.mockReturnValueOnce(stats).mockReturnValueOnce(userInfo);
+    boundary.selectDistinct
+      .mockReturnValueOnce(createDrizzleQuery([]))
+      .mockReturnValueOnce(createDrizzleQuery([]))
+      .mockReturnValueOnce(createDrizzleQuery([]));
 
-    const result = await aggregateSessionStats("session-empty");
+    const result = await aggregateSessionStats("session-replay-only");
 
-    expect(result).toBeNull();
+    expect(result).toMatchObject({
+      sessionId: "session-replay-only",
+      requestCount: 0,
+      totalCostUsd: "0",
+      totalInputTokens: 0,
+      totalOutputTokens: 0,
+      providers: [],
+      models: [],
+    });
     expect(stats.trace.from).toEqual([usageLedger]);
-    expect(sqlText(stats.trace.where)).toContain("session-empty");
+    expect(sqlText(stats.trace.where)).toContain("session-replay-only");
     expect(sqlText(stats.trace.where)).toContain("blocked_by");
-    expect(boundary.selectDistinct).not.toHaveBeenCalled();
+  });
+
+  test("按 session identity 聚合并兼容 migration 前的 sessionId", async () => {
+    const stats = createDrizzleQuery<readonly StatsRow[]>([]);
+    boundary.select.mockReturnValueOnce(stats).mockReturnValueOnce(createDrizzleQuery([]));
+    boundary.selectDistinct
+      .mockReturnValueOnce(createDrizzleQuery([]))
+      .mockReturnValueOnce(createDrizzleQuery([]))
+      .mockReturnValueOnce(createDrizzleQuery([]));
+
+    await aggregateSessionStats("pfx:scope123:fp-deep");
+
+    const whereSql = sqlText(stats.trace.where);
+    expect(whereSql).toContain("session_identity");
+    expect(whereSql).toContain("session_id");
+    expect(whereSql.match(/pfx:scope123:fp-deep/g)).toHaveLength(2);
   });
 
   test("returns populated statistics and preserves a single cache TTL", async () => {

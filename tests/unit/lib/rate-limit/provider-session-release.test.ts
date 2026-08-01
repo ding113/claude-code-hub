@@ -95,3 +95,62 @@ describe("RateLimitService.releaseProviderSession", () => {
     });
   });
 });
+
+describe("RateLimitService.forceTerminateProviderSession", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    evalMock = vi.fn(async () => [1, 1]);
+    redisClientRef = {
+      status: "ready",
+      eval: evalMock,
+    };
+  });
+
+  it("removes the provider membership and every remaining reference", async () => {
+    const { RateLimitService } = await import("@/lib/rate-limit/service");
+
+    await expect(
+      RateLimitService.forceTerminateProviderSession(42, "physical-session")
+    ).resolves.toBe(true);
+
+    expect(evalMock).toHaveBeenCalledWith(
+      expect.any(String),
+      2,
+      "provider:42:active_sessions",
+      "provider:42:active_session_refs",
+      "physical-session"
+    );
+    const script = String(evalMock.mock.calls[0]?.[0]);
+    expect(script).toContain("HDEL");
+    expect(script).toContain("ZREM");
+    expect(script).not.toContain("HINCRBY");
+  });
+});
+
+describe("RateLimitService.forceTerminateKeyUserSession", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    evalMock = vi.fn(async () => [1, 1]);
+    redisClientRef = {
+      status: "ready",
+      eval: evalMock,
+    };
+  });
+
+  it("removes global, key and user concurrency memberships atomically", async () => {
+    const { RateLimitService } = await import("@/lib/rate-limit/service");
+
+    await expect(
+      RateLimitService.forceTerminateKeyUserSession(11, 7, "physical-session")
+    ).resolves.toBe(true);
+
+    expect(evalMock).toHaveBeenCalledWith(
+      expect.any(String),
+      3,
+      "{active_sessions}:global:active_sessions",
+      "{active_sessions}:key:11:active_sessions",
+      "{active_sessions}:user:7:active_sessions",
+      "physical-session"
+    );
+  });
+});

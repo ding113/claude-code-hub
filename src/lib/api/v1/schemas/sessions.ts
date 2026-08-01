@@ -13,6 +13,11 @@ export const SessionsListQuerySchema = z.object({
 
 export const SessionSequenceQuerySchema = z.object({
   requestSequence: z.coerce.number().int().positive().optional().describe("Request sequence."),
+  sourceSessionId: z.string().min(1).optional().describe("Physical source session id."),
+});
+
+export const SessionDetailQuerySchema = SessionSequenceQuerySchema.extend({
+  requestId: z.coerce.number().int().positive().optional().describe("Stable request id."),
 });
 
 export const SessionRequestsQuerySchema = z.object({

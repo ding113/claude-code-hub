@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { sqlText } from "./message-query-test-support";
 
 function installDbBoundary(db: object): void {
   vi.doMock("@/drizzle/db", () => ({
@@ -15,6 +16,7 @@ function installDbBoundary(db: object): void {
 function createLimitSelect(responses: readonly (readonly unknown[])[]) {
   let callIndex = 0;
   const events: string[] = [];
+  const whereConditions: unknown[] = [];
   const select = vi.fn((_selection: unknown) => {
     const rows = responses[callIndex] ?? [];
     callIndex += 1;
@@ -26,8 +28,9 @@ function createLimitSelect(responses: readonly (readonly unknown[])[]) {
       events.push("orderBy");
       return { limit };
     });
-    const where = vi.fn((_condition: unknown) => {
+    const where = vi.fn((condition: unknown) => {
       events.push("where");
+      whereConditions.push(condition);
       return { limit, orderBy };
     });
     const from = vi.fn((_table: unknown) => {
@@ -36,17 +39,17 @@ function createLimitSelect(responses: readonly (readonly unknown[])[]) {
     });
     return { from };
   });
-  return { events, select };
+  return { events, select, whereConditions };
 }
 
 function installLimitBoundaries(
   responses: readonly (readonly unknown[])[],
   messageTableHasData = true
 ) {
-  const { events, select } = createLimitSelect(responses);
+  const { events, select, whereConditions } = createLimitSelect(responses);
   const execute = vi.fn(async (_query: unknown) => [{ has_data: messageTableHasData }]);
   installDbBoundary({ select, execute, update: vi.fn() });
-  return { events, execute, select };
+  return { events, execute, select, whereConditions };
 }
 
 const CREATED_AT = new Date("2026-07-15T11:00:00.000Z");
@@ -76,6 +79,8 @@ const SESSION_ROW = {
   providerChain: null,
   blockedBy: null,
   blockedReason: null,
+  isReplay: true,
+  replaySourceRequestId: 910,
   createdAt: CREATED_AT,
   updatedAt: CREATED_AT,
   deletedAt: null,
@@ -103,6 +108,8 @@ const LEDGER_ROW = {
   durationMs: 1_200,
   tfftMs: 200,
   sessionId: "ledger-session-readback",
+  isReplay: true,
+  replaySourceRequestId: 911,
   createdAt: CREATED_AT,
 };
 
@@ -124,7 +131,15 @@ describe("message session readback", () => {
       id: 1_101,
       sessionId: "session-readback",
       costMultiplier: 1.25,
+      isReplay: true,
+      replaySourceRequestId: 910,
     });
+    expect(boundary.select.mock.calls[0]?.[0]).toEqual(
+      expect.objectContaining({
+        isReplay: expect.anything(),
+        replaySourceRequestId: expect.anything(),
+      })
+    );
     expect(boundary.events).toEqual(["from", "where", "orderBy", "limit"]);
     expect(boundary.execute).not.toHaveBeenCalled();
   });
@@ -142,9 +157,14 @@ describe("message session readback", () => {
       sessionId: "ledger-session-readback",
       endpoint: "/v1/responses",
       userAgent: null,
+      isReplay: true,
+      replaySourceRequestId: 911,
     });
     expect(boundary.select).toHaveBeenCalledTimes(2);
     expect(boundary.execute).toHaveBeenCalledTimes(1);
+    const ledgerWhere = sqlText(boundary.whereConditions[1]);
+    expect(ledgerWhere).toContain("blocked_by");
+    expect(ledgerWhere).not.toContain("is_replay = false");
   });
 
   it("returns null for a missing session when the message table remains authoritative", async () => {
@@ -235,7 +255,10 @@ describe("message session readback", () => {
     });
 
     expect(result).toEqual({
-      requests: [rows[0], { ...rows[1], sequence: 1 }],
+      requests: [
+        { ...rows[0], sourceSessionId: "session-readback" },
+        { ...rows[1], sourceSessionId: "session-readback", sequence: 1 },
+      ],
       total: 2,
     });
     expect(events).toEqual(["limit:2", "offset:1"]);

@@ -12,13 +12,15 @@ describe("logs-query", () => {
       endTime: 2000,
       statusCode: 500,
       model: "claude-sonnet",
+      actualResponseModelMismatch: undefined,
       endpoint: "/v1/messages",
       minRetryCount: 1,
+      replayFilter: "replay",
       page: 3,
     });
 
     expect(query.toString()).toBe(
-      "userId=2&keyId=3&providerId=4&sessionId=session-abc&startTime=1000&endTime=2000&statusCode=500&model=claude-sonnet&endpoint=%2Fv1%2Fmessages&minRetry=1&page=3"
+      "userId=2&keyId=3&providerId=4&sessionId=session-abc&startTime=1000&endTime=2000&statusCode=500&model=claude-sonnet&endpoint=%2Fv1%2Fmessages&minRetry=1&replayFilter=replay&page=3"
     );
   });
 
@@ -44,6 +46,7 @@ describe("logs-query", () => {
         model: "claude-sonnet",
         endpoint: "/v1/messages",
         minRetry: "1",
+        replayFilter: "non-replay",
         page: "3",
       })
     ).toEqual({
@@ -56,9 +59,15 @@ describe("logs-query", () => {
       statusCode: undefined,
       excludeStatusCode200: true,
       model: "claude-sonnet",
+      actualResponseModelMismatch: undefined,
       endpoint: "/v1/messages",
       minRetryCount: 1,
+      replayFilter: "non-replay",
       page: 3,
     });
+  });
+
+  it("ignores invalid Replay filter values", () => {
+    expect(parseLogsUrlFilters({ replayFilter: "invalid" }).replayFilter).toBeUndefined();
   });
 });

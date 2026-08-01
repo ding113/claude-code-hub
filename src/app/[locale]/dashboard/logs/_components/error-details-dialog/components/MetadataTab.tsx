@@ -28,6 +28,7 @@ import type { MetadataTabProps } from "../types";
 
 export function MetadataTab({
   sessionId,
+  sourceSessionId,
   requestSequence,
   userAgent,
   endpoint,
@@ -48,6 +49,16 @@ export function MetadataTab({
   checkingMessages,
 }: MetadataTabProps) {
   const t = useTranslations("dashboard.logs.details");
+  const sessionRequestParams = new URLSearchParams();
+  if (requestSequence != null) {
+    sessionRequestParams.set("seq", String(requestSequence));
+  }
+  if (sourceSessionId) {
+    sessionRequestParams.set("sourceSessionId", sourceSessionId);
+  }
+  const sessionMessagesHref = sessionId
+    ? `/dashboard/sessions/${sessionId}/messages${sessionRequestParams.size > 0 ? `?${sessionRequestParams.toString()}` : ""}`
+    : "";
   const tChain = useTranslations("provider-chain");
   const [timelineCopied, setTimelineCopied] = useState(false);
 
@@ -104,13 +115,7 @@ export function MetadataTab({
                 </div>
               </div>
               {hasMessages && !checkingMessages && (
-                <Link
-                  href={
-                    requestSequence
-                      ? `/dashboard/sessions/${sessionId}/messages?seq=${requestSequence}`
-                      : `/dashboard/sessions/${sessionId}/messages`
-                  }
-                >
+                <Link href={sessionMessagesHref}>
                   <Button variant="outline" size="sm">
                     <ExternalLink className="h-4 w-4 mr-2" />
                     {t("viewDetails")}

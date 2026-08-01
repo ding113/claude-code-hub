@@ -29,6 +29,10 @@ export const UsageLogsQuerySchema = z.object({
   excludeStatusCode200: BooleanQuerySchema.describe("Exclude successful responses."),
   endpoint: z.string().optional().describe("Endpoint filter."),
   minRetryCount: z.coerce.number().int().min(0).optional().describe("Minimum retry count."),
+  replayFilter: z
+    .enum(["all", "replay", "non-replay"])
+    .optional()
+    .describe("Replay request filter."),
   startTime: NumberQuerySchema.describe("Start timestamp in milliseconds."),
   endTime: NumberQuerySchema.describe("End timestamp in milliseconds."),
 });

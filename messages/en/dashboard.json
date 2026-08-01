@@ -88,6 +88,12 @@
       "minRetryCount": "Retry Count ≥",
       "minRetryCountPlaceholder": "Enter minimum retries",
       "enabled": "On",
+      "replay": {
+        "label": "Replay",
+        "all": "All requests",
+        "only": "Replay only",
+        "exclude": "Exclude Replay"
+      },
       "apply": "Apply Filter",
       "reset": "Reset",
       "last7days": "7d",
@@ -164,6 +170,7 @@
       "prevPage": "Previous Page",
       "nextPage": "Next Page",
       "blocked": "Blocked",
+      "replay": "Replay",
       "nonBilling": "Non-Billing",
       "skipped": "Skipped",
       "specialSettings": "Special",
@@ -349,6 +356,7 @@
         "title": "Performance",
         "ttfb": "TTFB",
         "tfft": "TFFT",
+        "tfftShort": "TFFT",
         "duration": "Total Duration",
         "outputRate": "Output Rate",
         "outputTokens": "Output Tokens"
@@ -554,7 +562,8 @@
       "replayServe": {
         "title": "Served from Replay Cache",
         "desc": "This request was served from the replay cache (identical request already in flight or completed). No upstream provider call was made and no cost was incurred.",
-        "replayId": "Replay ID"
+        "replayId": "Replay ID",
+        "sourceRequestId": "Source request"
       }
     },
     "providerChain": {

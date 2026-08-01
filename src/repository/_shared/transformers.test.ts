@@ -256,6 +256,8 @@ describe("src/repository/_shared/transformers.ts", () => {
       expect(result.cacheCreation1hInputTokens).toBeUndefined();
       expect(result.cacheTtlApplied).toBeNull();
       expect(result.context1mApplied).toBe(false);
+      expect(result.isReplay).toBe(false);
+      expect(result.replaySourceRequestId).toBeNull();
       expect(result.createdAt).toEqual(now);
       expect(result.updatedAt).toEqual(now);
     });

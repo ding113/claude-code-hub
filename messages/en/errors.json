@@ -30,6 +30,8 @@
   "PERMISSION_DENIED": "Permission denied",
   "TOKEN_REQUIRED": "Authentication token required",
   "INVALID_TOKEN": "Invalid authentication token",
+  "SESSION_REQUEST_SOURCE_MISMATCH": "The request source does not belong to this session",
+  "SESSION_REQUEST_SELECTOR_INCOMPLETE": "Prefix Session requests must specify both the physical source and request sequence",
   "PROXY_INVALID_API_KEY": "Invalid API key. The provided key does not exist or has been deleted.",
   "PROXY_API_KEY_DISABLED": "This API key has been disabled. Please contact your administrator to re-enable it, or use a different key.",
   "PROXY_API_KEY_EXPIRED": "This API key has expired. Please contact your administrator to renew it or rotate to a new key.",

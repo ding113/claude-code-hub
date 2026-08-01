@@ -2335,6 +2335,7 @@ export async function getProviderStatistics(): Promise<ProviderStatisticsRow[]> 
             COUNT(*)::integer AS today_calls
           FROM usage_ledger
           WHERE blocked_by IS NULL
+            AND is_replay = false
             AND created_at >= (SELECT today_start FROM bounds)
             AND created_at < (SELECT tomorrow_start FROM bounds)
           GROUP BY final_provider_id
@@ -2346,6 +2347,7 @@ export async function getProviderStatistics(): Promise<ProviderStatisticsRow[]> 
             model AS last_call_model
           FROM usage_ledger
           WHERE blocked_by IS NULL
+            AND is_replay = false
             AND created_at >= (SELECT last7_start FROM bounds)
           -- 性能优化：添加 7 天时间范围限制（避免扫描历史数据）
           ORDER BY final_provider_id, created_at DESC, id DESC

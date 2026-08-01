@@ -4,6 +4,7 @@ import { messageRequest } from "@/drizzle/schema";
 import { getEnvConfig } from "@/lib/config/env.schema";
 import { logger } from "@/lib/logger";
 import { getProxyRuntimeSettings } from "@/lib/system-settings/proxy-runtime";
+import { materializeReplayAuditFromSource } from "@/repository/message";
 import type { ProxySession } from "../session";
 import { restoreReplayResponseHeaders } from "./replay-headers";
 import { deriveReplayIdentity, REPLAY_BYPASS_HEADER, type ReplayIdentity } from "./replay-identity";
@@ -102,7 +103,8 @@ export class ProxyReplayGuard {
             session,
             identity,
             meta.statusCode,
-            "redis_completed"
+            "redis_completed",
+            meta.messageRequestId
           );
           return ProxyReplayGuard.buildStaticResponse(meta, chunks.join(""));
         }
@@ -110,8 +112,7 @@ export class ProxyReplayGuard {
       } else if (meta.status === "owning") {
         const heartbeatFresh = Date.now() - meta.heartbeatAt < ATTACH_STALL_MS;
         if (meta.delivery !== "buffered" && env.REPLAY_LIVE_DEDUP_ENABLED && heartbeatFresh) {
-          await ProxyReplayGuard.writeAuditRow(session, identity, meta.statusCode, "attached_live");
-          return ProxyReplayGuard.buildLiveAttachResponse(identity, meta, store);
+          return ProxyReplayGuard.buildLiveAttachResponse(session, identity, meta, store);
         }
         // 心跳过期（owner 崩溃/停机）：不 attach 半截死流；owner 租约到期后可被重新 claim
         return null;
@@ -124,7 +125,13 @@ export class ProxyReplayGuard {
     // Redis miss：查 PG 完成持久层（跨小时/跨副本/跨滚动发布）
     const persisted = await store.findCompleted(identity.replayId);
     if (persisted && persisted.verifier === identity.verifier && persisted.payload.length > 0) {
-      await ProxyReplayGuard.writeAuditRow(session, identity, persisted.statusCode, "pg_completed");
+      await ProxyReplayGuard.writeAuditRow(
+        session,
+        identity,
+        persisted.statusCode,
+        "pg_completed",
+        persisted.sourceMessageRequestId
+      );
       return ProxyReplayGuard.buildStaticResponse(
         {
           statusCode: persisted.statusCode,
@@ -157,6 +164,7 @@ export class ProxyReplayGuard {
    * 订阅者断开只影响自身（cancel 时停止轮询），对 owner 零影响。
    */
   private static buildLiveAttachResponse(
+    session: ProxySession,
     identity: ReplayIdentity,
     initialMeta: ReplayMeta,
     store: ReplayStore
@@ -168,6 +176,13 @@ export class ProxyReplayGuard {
     let pollDelay = ATTACH_POLL_INITIAL_MS;
     const startedAt = Date.now();
     let lastProgressAt = Date.now();
+
+    void ProxyReplayGuard.observeLiveAuditCompletion(session, identity, store).catch((error) => {
+      logger.warn("[ReplayGuard] live audit observer failed", {
+        replayId: identity.replayId.slice(0, 12),
+        error: error instanceof Error ? error.message : String(error),
+      });
+    });
 
     const body = new ReadableStream<Uint8Array>({
       async pull(controller) {
@@ -223,6 +238,39 @@ export class ProxyReplayGuard {
     return new Response(body, { status: initialMeta.statusCode || 200, headers });
   }
 
+  /**
+   * live attach 的审计生命周期独立于客户端 reader。只有 source 已完成且携带
+   * durable messageRequestId 时才创建 Replay 审计；失败、超时或取消不留下伪成功行。
+   */
+  private static async observeLiveAuditCompletion(
+    session: ProxySession,
+    identity: ReplayIdentity,
+    store: ReplayStore
+  ): Promise<void> {
+    const startedAt = Date.now();
+    let pollDelay = ATTACH_POLL_INITIAL_MS;
+
+    while (Date.now() - startedAt <= ATTACH_MAX_WAIT_MS) {
+      const meta = await store.getMeta(identity.replayId);
+      if (!meta || meta.verifier !== identity.verifier || meta.status === "aborted") return;
+      if (meta.status === "completed") {
+        if (meta.messageRequestId) {
+          await ProxyReplayGuard.writeAuditRow(
+            session,
+            identity,
+            meta.statusCode,
+            "attached_live",
+            meta.messageRequestId
+          );
+        }
+        return;
+      }
+      if (Date.now() - meta.heartbeatAt > ATTACH_STALL_MS) return;
+      await sleep(pollDelay);
+      pollDelay = Math.min(pollDelay * 2, ATTACH_POLL_MAX_MS);
+    }
+  }
+
   private static buildServeHeaders(
     stored: Record<string, string>,
     mode: "completed" | "live"
@@ -239,34 +287,69 @@ export class ProxyReplayGuard {
     return headers;
   }
 
-  /** 审计行：costUsd 0、blockedBy replay_serve；不写 usageLedger、不绑 session/亲和。 */
+  /** 审计行：保留 Replay provenance 与 usage 投影，costUsd 恒为 0。 */
   private static async writeAuditRow(
     session: ProxySession,
     identity: ReplayIdentity,
     statusCode: number,
-    source: string
-  ): Promise<void> {
+    source: string,
+    sourceRequestId?: number | null
+  ): Promise<number | null> {
     try {
-      if (!session.authState?.user || !session.authState.apiKey) return;
-      await db.insert(messageRequest).values({
-        providerId: 0,
-        userId: session.authState.user.id,
-        key: session.authState.apiKey,
-        model: session.request.model ?? undefined,
-        sessionId: session.sessionId ?? undefined,
-        statusCode: statusCode || 200,
-        costUsd: "0",
-        blockedBy: "replay_serve",
-        blockedReason: JSON.stringify({
-          source,
-          replayId: identity.replayId.slice(0, 12),
-        }),
-        endpoint: identity.endpoint,
-        messagesCount: session.getMessagesLength(),
-        userAgent: session.userAgent ?? undefined,
-      });
+      if (!session.authState?.user || !session.authState.apiKey) return null;
+      const sessionIdentity = session.getSessionIdentityMetadata();
+      const [auditRow] = await db
+        .insert(messageRequest)
+        .values({
+          providerId: 0,
+          userId: session.authState.user.id,
+          key: session.authState.apiKey,
+          model: session.request.model ?? undefined,
+          sessionId: session.sessionId ?? undefined,
+          sessionIdentity: sessionIdentity.identity || session.sessionId || undefined,
+          sessionIdentityKind: sessionIdentity.kind,
+          affinityScopeTag: sessionIdentity.scopeTag,
+          affinityFingerprint: sessionIdentity.fingerprint,
+          affinityFingerprintChain: sessionIdentity.fingerprints,
+          requestSequence: session.requestSequence,
+          statusCode: statusCode || 200,
+          costUsd: "0",
+          blockedBy: null,
+          isReplay: true,
+          replaySourceRequestId: sourceRequestId,
+          blockedReason: JSON.stringify({
+            source,
+            sourceRequestId: sourceRequestId ?? null,
+            replayId: identity.replayId.slice(0, 12),
+          }),
+          endpoint: identity.endpoint,
+          messagesCount: session.getMessagesLength(),
+          userAgent: session.userAgent ?? undefined,
+        })
+        .returning({ id: messageRequest.id });
+
+      if (auditRow && sourceRequestId) {
+        await ProxyReplayGuard.tryMaterializeAudit(auditRow.id, sourceRequestId);
+      }
+      return auditRow?.id ?? null;
     } catch (error) {
       logger.warn("[ReplayGuard] audit row insert failed", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return null;
+    }
+  }
+
+  private static async tryMaterializeAudit(
+    replayRequestId: number,
+    sourceRequestId: number
+  ): Promise<void> {
+    try {
+      await materializeReplayAuditFromSource(replayRequestId, sourceRequestId);
+    } catch (error) {
+      logger.warn("[ReplayGuard] audit materialization failed", {
+        replayRequestId,
+        sourceRequestId,
         error: error instanceof Error ? error.message : String(error),
       });
     }

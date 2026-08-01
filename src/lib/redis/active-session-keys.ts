@@ -6,12 +6,18 @@
  * - 目前仅对 global/key/user 三类 active_sessions key 统一加 hash tag；provider 维度不需要。
  */
 const ACTIVE_SESSIONS_HASH_TAG = "{active_sessions}";
+const OBSERVED_SESSIONS_HASH_TAG = "{observed_sessions}";
 
 /**
  * 全局活跃 Session ZSET（仅用于观测 / Sessions 页面）。
  */
 export function getGlobalActiveSessionsKey(): string {
   return `${ACTIVE_SESSIONS_HASH_TAG}:global:active_sessions`;
+}
+
+/** 统一后的有效 Session identity 观测集合。 */
+export function getObservedGlobalActiveSessionsKey(): string {
+  return `${OBSERVED_SESSIONS_HASH_TAG}:global:active_sessions`;
 }
 
 /**

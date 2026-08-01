@@ -104,8 +104,21 @@ vi.mock("./model-display-with-redirect", () => ({
   ),
 }));
 
+const dialogProps = vi.hoisted(() => ({ latest: null as Record<string, unknown> | null }));
+
 vi.mock("./error-details-dialog", () => ({
-  ErrorDetailsDialog: () => <div data-slot="error-details-dialog" />,
+  ErrorDetailsDialog: (props: Record<string, unknown>) => {
+    dialogProps.latest = props;
+    return (
+      <div
+        data-slot="error-details-dialog"
+        data-replay={String(props.isReplay ?? false)}
+        data-replay-source-request-id={
+          props.isReplay ? String(props.replaySourceRequestId ?? "") : undefined
+        }
+      />
+    );
+  },
 }));
 
 let mockIsProviderFinalized = true;
@@ -120,6 +133,7 @@ function makeLog(overrides: Partial<UsageLogRow>): UsageLogRow {
     id: 1,
     createdAt: new Date(),
     sessionId: null,
+    sourceSessionId: null,
     requestSequence: null,
     userName: "u",
     keyName: "k",
@@ -149,6 +163,8 @@ function makeLog(overrides: Partial<UsageLogRow>): UsageLogRow {
     providerChain: null,
     blockedBy: null,
     blockedReason: null,
+    isReplay: false,
+    replaySourceRequestId: null,
     userAgent: null,
     clientIp: null,
     messagesCount: null,
@@ -196,7 +212,37 @@ function renderCostTooltipWithLog(overrides: Partial<UsageLogRow>) {
   return tooltip;
 }
 
+function renderPerformanceWithLog(overrides: Partial<UsageLogRow>) {
+  const html = renderTableWithLog(overrides);
+  const container = document.createElement("div");
+  container.innerHTML = html;
+
+  const tooltip = [...container.querySelectorAll('[data-slot="tooltip-content"]')].find((node) =>
+    node.textContent?.includes("logs.details.performance.duration")
+  );
+
+  if (!(tooltip instanceof HTMLDivElement) || !(tooltip.parentElement instanceof HTMLDivElement)) {
+    throw new Error("Performance tooltip content not found");
+  }
+
+  const trigger = tooltip.parentElement.firstElementChild;
+  if (!(trigger instanceof HTMLDivElement)) {
+    throw new Error("Performance tooltip trigger not found");
+  }
+
+  return { tooltip, trigger };
+}
+
 describe("virtualized-logs-table thinking effort", () => {
+  test("forwards Replay provenance to the details dialog", () => {
+    const html = renderTableWithLog({ isReplay: true, replaySourceRequestId: 7 });
+
+    expect(dialogProps.latest).toEqual(
+      expect.objectContaining({ isReplay: true, replaySourceRequestId: 7 })
+    );
+    expect(html).toContain('data-replay-source-request-id="7"');
+  });
+
   test("在计费模型右侧显示思考强度列", () => {
     const html = renderTableWithLog({
       model: "gpt-5.4",
@@ -441,6 +487,22 @@ describe("virtualized-logs-table multiplier badge", () => {
     expect(html).toContain("animate-spin");
   });
 
+  test("renders Replay badge without treating the request as blocked", () => {
+    mockIsLoading = false;
+    mockIsError = false;
+    mockError = null;
+    mockHasNextPage = false;
+    mockIsFetchingNextPage = false;
+
+    mockLogs = [makeLog({ id: 1, isReplay: true, replaySourceRequestId: 7 })];
+    const html = renderToStaticMarkup(
+      <VirtualizedLogsTable filters={{}} autoRefreshEnabled={false} />
+    );
+
+    expect(html).toContain("logs.table.replay");
+    expect(html).not.toContain("logs.table.blocked");
+  });
+
   test("hides provider column when hiddenColumns includes provider", () => {
     mockIsLoading = false;
     mockIsError = false;
@@ -528,6 +590,27 @@ describe("virtualized-logs-table multiplier badge", () => {
     expect(html).toContain("tok/s");
     // TFFT 行同样应出现
     expect(html).toContain("logs.details.performance.tfft");
+  });
+
+  test("性能列使用 TFFT 缩写", () => {
+    const { trigger } = renderPerformanceWithLog({
+      durationMs: 1000,
+      tfftMs: 500,
+      firstByteMs: 250,
+    });
+
+    expect(trigger.textContent).toContain("logs.details.performance.tfftShort");
+  });
+
+  test("性能 Tooltip 保留 TFFT 和 TTFB 完整术语", () => {
+    const { tooltip } = renderPerformanceWithLog({
+      durationMs: 1000,
+      tfftMs: 500,
+      firstByteMs: 250,
+    });
+
+    expect(tooltip.textContent).toContain("logs.details.performance.tfft");
+    expect(tooltip.textContent).toContain("logs.details.performance.ttfb");
   });
 
   test("renders swap indicator on cacheTtl badge when swapCacheTtlApplied is true", () => {

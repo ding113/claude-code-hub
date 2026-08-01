@@ -3,6 +3,8 @@ import { eq, gte, lt, sql } from "drizzle-orm";
 import { messageRequest } from "@/drizzle/schema";
 import { NON_BILLING_ENDPOINTS } from "@/lib/utils/performance-formatter";
 
+export type UsageLogReplayFilter = "all" | "replay" | "non-replay";
+
 export interface UsageLogFilterParams {
   sessionId?: string;
   startTime?: number;
@@ -13,6 +15,7 @@ export interface UsageLogFilterParams {
   actualResponseModelMismatch?: boolean;
   endpoint?: string;
   minRetryCount?: number;
+  replayFilter?: UsageLogReplayFilter;
 }
 
 export const DEFAULT_HIDDEN_USAGE_LOG_ENDPOINTS = [...NON_BILLING_ENDPOINTS];
@@ -138,7 +141,9 @@ export function buildUsageLogConditions(filters: UsageLogFilterParams): SQL[] {
 
   const trimmedSessionId = filters.sessionId?.trim();
   if (trimmedSessionId) {
-    conditions.push(eq(messageRequest.sessionId, trimmedSessionId));
+    conditions.push(
+      sql`COALESCE(${messageRequest.sessionIdentity}, ${messageRequest.sessionId}) = ${trimmedSessionId}`
+    );
   }
 
   if (filters.startTime !== undefined) {
@@ -171,6 +176,12 @@ export function buildUsageLogConditions(filters: UsageLogFilterParams): SQL[] {
         messageRequest.originalModel
       )
     );
+  }
+
+  if (filters.replayFilter === "replay") {
+    conditions.push(eq(messageRequest.isReplay, true));
+  } else if (filters.replayFilter === "non-replay") {
+    conditions.push(eq(messageRequest.isReplay, false));
   }
 
   const hiddenEndpointCondition = buildDefaultHiddenUsageLogEndpointCondition(

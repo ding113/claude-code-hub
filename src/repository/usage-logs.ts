@@ -12,7 +12,6 @@ import type { HedgeLoserBilling, StoredCostBreakdown } from "@/types/cost-breakd
 import type { ProviderChainItem } from "@/types/message";
 import { normalizeRoutingTrace, type RoutingTraceV1 } from "@/types/routing-trace";
 import type { SpecialSetting } from "@/types/special-settings";
-import { LEDGER_BILLING_CONDITION } from "./_shared/ledger-conditions";
 import { escapeLike } from "./_shared/like";
 import { EXCLUDE_WARMUP_CONDITION } from "./_shared/message-request-conditions";
 import {
@@ -21,6 +20,7 @@ import {
   buildUsageLogConditions,
   buildUsageLogEndpointMatchCondition,
   RETRY_COUNT_EXPR,
+  type UsageLogReplayFilter,
 } from "./_shared/usage-log-filters";
 
 export interface UsageLogFilters {
@@ -42,14 +42,35 @@ export interface UsageLogFilters {
   endpoint?: string;
   /** 最低重试次数（按 provider_chain 中“实际请求”数量 - 1 计算；<= 0 视为不筛选） */
   minRetryCount?: number;
+  replayFilter?: UsageLogReplayFilter;
   page?: number;
   pageSize?: number;
 }
 
+function buildLedgerUsageLogConditions(replayFilter: UsageLogReplayFilter | undefined) {
+  const conditions = [isNull(usageLedger.blockedBy)];
+
+  if (replayFilter === "replay") {
+    conditions.push(eq(usageLedger.isReplay, true));
+  } else if (replayFilter === "non-replay") {
+    conditions.push(eq(usageLedger.isReplay, false));
+  }
+
+  return conditions;
+}
+
+const messageSessionIdentity = sql<
+  string | null
+>`COALESCE(${messageRequest.sessionIdentity}, ${messageRequest.sessionId})`;
+const ledgerSessionIdentity = sql<
+  string | null
+>`COALESCE(${usageLedger.sessionIdentity}, ${usageLedger.sessionId})`;
+
 export interface UsageLogRow {
   id: number;
   createdAt: Date | null;
-  sessionId: string | null; // Session ID
+  sessionId: string | null; // Public Session identity
+  sourceSessionId: string | null; // Physical Session source for request-scoped readback
   requestSequence: number | null; // Request Sequence（Session 内请求序号）
   userName: string;
   keyName: string;
@@ -80,6 +101,8 @@ export interface UsageLogRow {
   routingTrace?: RoutingTraceV1 | null;
   blockedBy: string | null; // 拦截类型（如 'sensitive_word'）
   blockedReason: string | null; // 拦截原因（JSON 字符串）
+  isReplay: boolean;
+  replaySourceRequestId: number | null;
   userAgent: string | null; // User-Agent（客户端信息）
   clientIp: string | null; // 客户端 IP（IPv4/IPv6）
   messagesCount: number | null; // Messages 数量
@@ -193,7 +216,8 @@ export async function findUsageLogsBatch(
       id: messageRequest.id,
       createdAt: messageRequest.createdAt,
       createdAtRaw: sql<string>`to_char(${messageRequest.createdAt} AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`,
-      sessionId: messageRequest.sessionId,
+      sessionId: messageSessionIdentity,
+      sourceSessionId: messageRequest.sessionId,
       requestSequence: messageRequest.requestSequence,
       userName: users.name,
       keyName: keysTable.name,
@@ -223,6 +247,8 @@ export async function findUsageLogsBatch(
       routingTrace: messageRequest.routingTrace,
       blockedBy: messageRequest.blockedBy,
       blockedReason: messageRequest.blockedReason,
+      isReplay: messageRequest.isReplay,
+      replaySourceRequestId: messageRequest.replaySourceRequestId,
       userAgent: messageRequest.userAgent,
       clientIp: messageRequest.clientIp,
       messagesCount: messageRequest.messagesCount,
@@ -298,7 +324,7 @@ export async function findUsageLogsBatch(
     return { logs: [], nextCursor: null, hasMore: false };
   }
 
-  const ledgerConditions = [LEDGER_BILLING_CONDITION];
+  const ledgerConditions = buildLedgerUsageLogConditions(filters.replayFilter);
 
   if (userId !== undefined) {
     ledgerConditions.push(eq(usageLedger.userId, userId));
@@ -314,7 +340,7 @@ export async function findUsageLogsBatch(
 
   const trimmedSessionId = filters.sessionId?.trim();
   if (trimmedSessionId) {
-    ledgerConditions.push(eq(usageLedger.sessionId, trimmedSessionId));
+    ledgerConditions.push(eq(ledgerSessionIdentity, trimmedSessionId));
   }
 
   if (filters.startTime !== undefined) {
@@ -376,7 +402,8 @@ export async function findUsageLogsBatch(
       id: usageLedger.requestId,
       createdAt: usageLedger.createdAt,
       createdAtRaw: sql<string>`to_char(${usageLedger.createdAt} AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`,
-      sessionId: usageLedger.sessionId,
+      sessionId: ledgerSessionIdentity,
+      sourceSessionId: usageLedger.sessionId,
       userId: usageLedger.userId,
       userName: users.name,
       key: usageLedger.key,
@@ -403,6 +430,8 @@ export async function findUsageLogsBatch(
       clientIp: usageLedger.clientIp,
       context1mApplied: usageLedger.context1mApplied,
       swapCacheTtlApplied: usageLedger.swapCacheTtlApplied,
+      isReplay: usageLedger.isReplay,
+      replaySourceRequestId: usageLedger.replaySourceRequestId,
     })
     .from(usageLedger)
     .leftJoin(users, eq(usageLedger.userId, users.id))
@@ -432,6 +461,7 @@ export async function findUsageLogsBatch(
       id: row.id,
       createdAt: row.createdAt,
       sessionId: row.sessionId,
+      sourceSessionId: row.sourceSessionId,
       requestSequence: null,
       userName: row.userName ?? `User #${row.userId}`,
       keyName: row.keyName ?? row.key,
@@ -462,6 +492,8 @@ export async function findUsageLogsBatch(
       routingTrace: null,
       blockedBy: null,
       blockedReason: null,
+      isReplay: row.isReplay,
+      replaySourceRequestId: row.replaySourceRequestId,
       userAgent: null,
       clientIp: row.clientIp ?? null,
       messagesCount: null,
@@ -490,6 +522,7 @@ interface UsageLogSlimFilters {
   endpoint?: string;
   /** 最低重试次数（按 provider_chain 中“实际请求”数量 - 1 计算；<= 0 视为不筛选） */
   minRetryCount?: number;
+  replayFilter?: UsageLogReplayFilter;
 }
 
 interface UsageLogSlimBatchFilters extends UsageLogSlimFilters {
@@ -514,6 +547,8 @@ interface UsageLogSlimRow {
   cacheCreation5mInputTokens: number | null;
   cacheCreation1hInputTokens: number | null;
   cacheTtlApplied: string | null;
+  isReplay: boolean;
+  replaySourceRequestId: number | null;
   anthropicEffort?: string | null;
 }
 
@@ -543,6 +578,7 @@ export async function findUsageLogsForKeySlim(
     filters.actualResponseModelMismatch ? "1" : "0",
     filters.endpoint ?? "",
     filters.minRetryCount ?? "",
+    filters.replayFilter ?? "all",
   ].join("\u0001");
   const cachedTotal = usageLogSlimTotalCache.get(totalCacheKey);
 
@@ -647,6 +683,8 @@ function mapUsageLogSlimRow(row: {
   cacheCreation5mInputTokens: number | null;
   cacheCreation1hInputTokens: number | null;
   cacheTtlApplied: string | null;
+  isReplay: boolean;
+  replaySourceRequestId: number | null;
   specialSettings?: SpecialSetting[] | null;
 }): UsageLogSlimRow {
   const { specialSettings, ...rest } = row;
@@ -725,7 +763,7 @@ function buildKeyLedgerConditions(
   }
 
   const conditions = [
-    LEDGER_BILLING_CONDITION,
+    ...buildLedgerUsageLogConditions(filters.replayFilter),
     eq(usageLedger.key, keyString),
     sql`not exists (
       select 1
@@ -738,7 +776,7 @@ function buildKeyLedgerConditions(
 
   const trimmedSessionId = filters.sessionId?.trim();
   if (trimmedSessionId) {
-    conditions.push(eq(usageLedger.sessionId, trimmedSessionId));
+    conditions.push(eq(ledgerSessionIdentity, trimmedSessionId));
   }
 
   if (filters.startTime) {
@@ -821,6 +859,8 @@ async function selectKeyScopedMessageSlimRows(
       cacheCreation5mInputTokens: messageRequest.cacheCreation5mInputTokens,
       cacheCreation1hInputTokens: messageRequest.cacheCreation1hInputTokens,
       cacheTtlApplied: messageRequest.cacheTtlApplied,
+      isReplay: messageRequest.isReplay,
+      replaySourceRequestId: messageRequest.replaySourceRequestId,
       specialSettings: messageRequest.specialSettings,
     })
     .from(messageRequest)
@@ -865,6 +905,8 @@ async function selectKeyScopedLedgerSlimRows(
       cacheCreation5mInputTokens: usageLedger.cacheCreation5mInputTokens,
       cacheCreation1hInputTokens: usageLedger.cacheCreation1hInputTokens,
       cacheTtlApplied: usageLedger.cacheTtlApplied,
+      isReplay: usageLedger.isReplay,
+      replaySourceRequestId: usageLedger.replaySourceRequestId,
     })
     .from(usageLedger)
     .where(and(...ledgerConditions))
@@ -890,6 +932,8 @@ async function selectKeyScopedLedgerSlimRows(
     cacheCreation5mInputTokens: row.cacheCreation5mInputTokens,
     cacheCreation1hInputTokens: row.cacheCreation1hInputTokens,
     cacheTtlApplied: row.cacheTtlApplied,
+    isReplay: row.isReplay,
+    replaySourceRequestId: row.replaySourceRequestId,
     anthropicEffort: null,
   }));
 }
@@ -978,6 +1022,7 @@ function mapUsageLogRowFromMessageResult(row: {
   id: number;
   createdAt: Date | null;
   sessionId: string | null;
+  sourceSessionId: string | null;
   requestSequence: number | null;
   userName: string;
   keyName: string;
@@ -1007,6 +1052,8 @@ function mapUsageLogRowFromMessageResult(row: {
   routingTrace: RoutingTraceV1 | null;
   blockedBy: string | null;
   blockedReason: string | null;
+  isReplay: boolean;
+  replaySourceRequestId: number | null;
   userAgent: string | null;
   clientIp: string | null;
   messagesCount: number | null;
@@ -1050,6 +1097,7 @@ function mapUsageLogRowFromLedgerResult(row: {
   id: number;
   createdAt: Date | null;
   sessionId: string | null;
+  sourceSessionId: string | null;
   userId: number;
   userName: string | null;
   key: string;
@@ -1076,6 +1124,8 @@ function mapUsageLogRowFromLedgerResult(row: {
   clientIp: string | null;
   context1mApplied: boolean | null;
   swapCacheTtlApplied: boolean | null;
+  isReplay: boolean;
+  replaySourceRequestId: number | null;
 }) {
   const totalRowTokens =
     (row.inputTokens ?? 0) +
@@ -1087,6 +1137,7 @@ function mapUsageLogRowFromLedgerResult(row: {
     id: row.id,
     createdAt: row.createdAt,
     sessionId: row.sessionId,
+    sourceSessionId: row.sourceSessionId,
     requestSequence: null,
     userName: row.userName ?? `User #${row.userId}`,
     keyName: row.keyName ?? row.key,
@@ -1116,6 +1167,8 @@ function mapUsageLogRowFromLedgerResult(row: {
     routingTrace: null,
     blockedBy: null,
     blockedReason: null,
+    isReplay: row.isReplay,
+    replaySourceRequestId: row.replaySourceRequestId,
     userAgent: null,
     clientIp: row.clientIp ?? null,
     messagesCount: null,
@@ -1144,7 +1197,8 @@ export async function findReadonlyUsageLogsBatchForKey(
         id: messageRequest.id,
         createdAt: messageRequest.createdAt,
         createdAtRaw: sql<string>`to_char(${messageRequest.createdAt} AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`,
-        sessionId: messageRequest.sessionId,
+        sessionId: messageSessionIdentity,
+        sourceSessionId: messageRequest.sessionId,
         requestSequence: messageRequest.requestSequence,
         userName: users.name,
         keyName: keysTable.name,
@@ -1174,6 +1228,8 @@ export async function findReadonlyUsageLogsBatchForKey(
         routingTrace: messageRequest.routingTrace,
         blockedBy: messageRequest.blockedBy,
         blockedReason: messageRequest.blockedReason,
+        isReplay: messageRequest.isReplay,
+        replaySourceRequestId: messageRequest.replaySourceRequestId,
         userAgent: messageRequest.userAgent,
         clientIp: messageRequest.clientIp,
         messagesCount: messageRequest.messagesCount,
@@ -1194,7 +1250,8 @@ export async function findReadonlyUsageLogsBatchForKey(
             id: usageLedger.requestId,
             createdAt: usageLedger.createdAt,
             createdAtRaw: sql<string>`to_char(${usageLedger.createdAt} AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`,
-            sessionId: usageLedger.sessionId,
+            sessionId: ledgerSessionIdentity,
+            sourceSessionId: usageLedger.sessionId,
             userId: usageLedger.userId,
             userName: users.name,
             key: usageLedger.key,
@@ -1221,6 +1278,8 @@ export async function findReadonlyUsageLogsBatchForKey(
             clientIp: usageLedger.clientIp,
             context1mApplied: usageLedger.context1mApplied,
             swapCacheTtlApplied: usageLedger.swapCacheTtlApplied,
+            isReplay: usageLedger.isReplay,
+            replaySourceRequestId: usageLedger.replaySourceRequestId,
           })
           .from(usageLedger)
           .leftJoin(users, eq(usageLedger.userId, users.id))
@@ -1398,7 +1457,8 @@ export async function findUsageLogsWithDetails(filters: UsageLogFilters): Promis
     .select({
       id: messageRequest.id,
       createdAt: messageRequest.createdAt,
-      sessionId: messageRequest.sessionId, // Session ID
+      sessionId: messageSessionIdentity, // Public Session identity
+      sourceSessionId: messageRequest.sessionId, // Physical Session source
       requestSequence: messageRequest.requestSequence, // Request Sequence
       userName: users.name,
       keyName: keysTable.name,
@@ -1428,6 +1488,8 @@ export async function findUsageLogsWithDetails(filters: UsageLogFilters): Promis
       routingTrace: messageRequest.routingTrace,
       blockedBy: messageRequest.blockedBy, // 拦截类型
       blockedReason: messageRequest.blockedReason, // 拦截原因
+      isReplay: messageRequest.isReplay,
+      replaySourceRequestId: messageRequest.replaySourceRequestId,
       userAgent: messageRequest.userAgent, // User-Agent
       clientIp: messageRequest.clientIp, // 客户端 IP
       messagesCount: messageRequest.messagesCount, // Messages 数量
@@ -1582,9 +1644,9 @@ export async function findUsageLogSessionIdSuggestions(
   const conditions = [
     isNull(messageRequest.deletedAt),
     EXCLUDE_WARMUP_CONDITION,
-    sql`${messageRequest.sessionId} IS NOT NULL`,
-    sql`length(${messageRequest.sessionId}) > 0`,
-    sql`${messageRequest.sessionId} LIKE ${pattern} ESCAPE '\\'`,
+    sql`${messageSessionIdentity} IS NOT NULL`,
+    sql`length(${messageSessionIdentity}) > 0`,
+    sql`${messageSessionIdentity} LIKE ${pattern} ESCAPE '\\'`,
   ];
 
   if (userId !== undefined) {
@@ -1601,7 +1663,7 @@ export async function findUsageLogSessionIdSuggestions(
 
   const baseQuery = db
     .select({
-      sessionId: messageRequest.sessionId,
+      sessionId: messageSessionIdentity,
       firstSeen: sql<Date>`min(${messageRequest.createdAt})`,
     })
     .from(messageRequest);
@@ -1613,7 +1675,7 @@ export async function findUsageLogSessionIdSuggestions(
 
   const results = await query
     .where(and(...conditions))
-    .groupBy(messageRequest.sessionId)
+    .groupBy(messageSessionIdentity)
     .orderBy(desc(sql`min(${messageRequest.createdAt})`))
     .limit(limit);
 
@@ -1701,7 +1763,7 @@ export async function findUsageLogsStats(
     };
   }
 
-  const conditions = [LEDGER_BILLING_CONDITION];
+  const conditions = buildLedgerUsageLogConditions(filters.replayFilter);
 
   if (userId !== undefined) {
     conditions.push(eq(usageLedger.userId, userId));
@@ -1717,7 +1779,7 @@ export async function findUsageLogsStats(
 
   const trimmedSessionId = filters.sessionId?.trim();
   if (trimmedSessionId) {
-    conditions.push(eq(usageLedger.sessionId, trimmedSessionId));
+    conditions.push(eq(ledgerSessionIdentity, trimmedSessionId));
   }
 
   if (filters.startTime !== undefined) {

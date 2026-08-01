@@ -6,6 +6,7 @@ import {
   BatchTerminateSessionsResponseSchema,
   BatchTerminateSessionsSchema,
   SessionBooleanResponseSchema,
+  SessionDetailQuerySchema,
   SessionGenericResponseSchema,
   SessionIdParamSchema,
   SessionListResponseSchema,
@@ -117,7 +118,7 @@ sessionsRouter.openapi(
     description: "Returns session detail, snapshots, request metadata, and response metadata.",
     "x-required-access": "read",
     security,
-    request: { params: SessionIdParamSchema, query: SessionSequenceQuerySchema },
+    request: { params: SessionIdParamSchema, query: SessionDetailQuerySchema },
     responses: {
       200: {
         description: "Session detail.",
@@ -205,7 +206,7 @@ sessionsRouter.openapi(
     description: "Returns provider origin chain information for a session.",
     "x-required-access": "read",
     security,
-    request: { params: SessionIdParamSchema },
+    request: { params: SessionIdParamSchema, query: SessionSequenceQuerySchema },
     responses: {
       200: {
         description: "Session origin chain.",
@@ -227,7 +228,7 @@ sessionsRouter.openapi(
     description: "Returns the stored response body for a session.",
     "x-required-access": "read",
     security,
-    request: { params: SessionIdParamSchema },
+    request: { params: SessionIdParamSchema, query: SessionSequenceQuerySchema },
     responses: {
       200: {
         description: "Session response body.",

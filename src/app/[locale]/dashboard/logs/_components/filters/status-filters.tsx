@@ -53,6 +53,13 @@ export function StatusFilters({ filters, onFiltersChange }: StatusFiltersProps) 
     });
   };
 
+  const handleReplayFilterChange = (value: string) => {
+    onFiltersChange({
+      ...filters,
+      replayFilter: value as NonNullable<UsageLogFilters["replayFilter"]>,
+    });
+  };
+
   return (
     <div className="grid gap-4 sm:grid-cols-2">
       {/* Status code selector */}
@@ -101,6 +108,21 @@ export function StatusFilters({ filters, onFiltersChange }: StatusFiltersProps) 
           placeholder={t("logs.filters.minRetryCountPlaceholder")}
           onChange={handleMinRetryCountChange}
         />
+      </div>
+
+      {/* Replay audit selector */}
+      <div className="space-y-2">
+        <Label>{t("logs.filters.replay.label")}</Label>
+        <Select value={filters.replayFilter ?? "all"} onValueChange={handleReplayFilterChange}>
+          <SelectTrigger>
+            <SelectValue placeholder={t("logs.filters.replay.all")} />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">{t("logs.filters.replay.all")}</SelectItem>
+            <SelectItem value="replay">{t("logs.filters.replay.only")}</SelectItem>
+            <SelectItem value="non-replay">{t("logs.filters.replay.exclude")}</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
     </div>
   );

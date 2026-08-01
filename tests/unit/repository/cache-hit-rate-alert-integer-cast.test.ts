@@ -13,11 +13,12 @@ function sqlToString(sqlObj: unknown): string {
   const visited = new Set<unknown>();
 
   const walk = (node: unknown): string => {
-    if (!node || visited.has(node)) return "";
+    if (node === null || node === undefined || visited.has(node)) return "";
     visited.add(node);
 
     if (typeof node === "string") return node;
     if (typeof node === "number") return String(node);
+    if (typeof node === "boolean") return String(node);
 
     if (typeof node === "object") {
       const anyNode = node as Record<string, unknown>;
@@ -50,6 +51,7 @@ function sqlToString(sqlObj: unknown): string {
 }
 
 let capturedSelectArgs: unknown = null;
+const capturedCalls: Array<{ method: string; args: unknown[] }> = [];
 
 vi.mock("server-only", () => ({}));
 
@@ -65,7 +67,10 @@ vi.mock("@/drizzle/db", () => {
           return new Proxy({}, handler);
         };
       }
-      return (..._args: unknown[]) => new Proxy({}, handler);
+      return (...args: unknown[]) => {
+        capturedCalls.push({ method: String(prop), args });
+        return new Proxy({}, handler);
+      };
     },
   };
   return {
@@ -91,6 +96,7 @@ vi.mock("@/drizzle/schema", () => ({
     cacheCreation1hInputTokens: "cache_creation_1h_input_tokens",
     cacheTtlApplied: "cache_ttl_applied",
     swapCacheTtlApplied: "swap_cache_ttl_applied",
+    isReplay: "is_replay",
   },
   providers: {
     id: "id",
@@ -111,7 +117,13 @@ vi.mock("drizzle-orm/pg-core", async () => {
   const actual = await vi.importActual("drizzle-orm/pg-core");
   return {
     ...(actual as object),
-    alias: (table: Record<string, unknown>) => ({ ...table }),
+    alias: (table: Record<string, unknown>) =>
+      Object.fromEntries(
+        Object.entries(table).map(([key, value]) => [
+          key,
+          typeof value === "string" ? `prev_${value}` : value,
+        ])
+      ),
   };
 });
 
@@ -128,6 +140,7 @@ vi.mock("@/lib/logger", () => ({
 describe("cache-hit-rate-alert - integer cast regression", () => {
   beforeEach(() => {
     capturedSelectArgs = null;
+    capturedCalls.length = 0;
   });
 
   it("ttlFallbackSecondsExpr CASE must cast THEN/ELSE values to ::integer", async () => {
@@ -151,5 +164,25 @@ describe("cache-hit-rate-alert - integer cast regression", () => {
     // we must see at least 2 distinct ::integer casts (THEN + ELSE branches).
     const integerCastCount = (sqlStr.match(/::integer/g) || []).length;
     expect(integerCastCount).toBeGreaterThanOrEqual(2);
+  });
+
+  it("excludes Replay rows from both the aggregate and predecessor eligibility join", async () => {
+    const { findProviderModelCacheHitRateMetricsForAlert } = await import(
+      "@/repository/cache-hit-rate-alert"
+    );
+
+    const end = new Date("2026-08-01T12:00:00.000Z");
+    await findProviderModelCacheHitRateMetricsForAlert({
+      start: new Date(end.getTime() - 3600_000),
+      end,
+    });
+
+    const whereCall = capturedCalls.find((call) => call.method === "where");
+    const leftJoinCall = capturedCalls.find((call) => call.method === "leftJoin");
+    const whereSql = sqlToString(whereCall?.args[0]).replace(/\s+/g, " ").toLowerCase();
+    const joinSql = sqlToString(leftJoinCall?.args[1]).replace(/\s+/g, " ").toLowerCase();
+
+    expect(whereSql).toContain("is_replay = false");
+    expect(joinSql).toContain("prev_is_replayfalse");
   });
 });

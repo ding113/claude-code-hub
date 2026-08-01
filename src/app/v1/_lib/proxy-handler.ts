@@ -3,6 +3,7 @@ import { findSafeDatabaseError } from "@/drizzle/admitted-client";
 import { getCachedSystemSettings } from "@/lib/config";
 import { logger } from "@/lib/logger";
 import { ProxyStatusTracker } from "@/lib/proxy-status-tracker";
+import { SessionManager } from "@/lib/session-manager";
 import { SessionTracker } from "@/lib/session-tracker";
 import { ProxyErrorHandler } from "./proxy/error-handler";
 import { attachSessionIdToErrorResponse } from "./proxy/error-session-id";
@@ -20,6 +21,35 @@ export async function handleProxyRequest(c: Context): Promise<Response> {
   let session: ProxySession | null = null;
   let cachedSystemSettings: Awaited<ReturnType<typeof getCachedSystemSettings>> | null = null;
   let acquiredConcurrencySessionId: string | null = null;
+  let acquiredObservedSessionIdentity: string | null = null;
+
+  const trackObservedSession = async (resolvedSession: ProxySession): Promise<string | null> => {
+    if (!resolvedSession.shouldTrackSessionObservability()) return null;
+    const identity = resolvedSession.getSessionIdentityMetadata();
+    if (!identity.identity) return null;
+
+    void SessionTracker.trackObservedSession(identity.identity).catch((error) => {
+      logger.warn("[ProxyHandler] Failed to track observed session", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    });
+    const authState = resolvedSession.authState;
+    if (authState?.user && authState.key) {
+      void SessionManager.storeSessionInfo(identity.identity, {
+        userName: authState.user.name,
+        userId: authState.user.id,
+        keyId: authState.key.id,
+        keyName: authState.key.name,
+        model: resolvedSession.request.model,
+        apiType: resolvedSession.originalFormat === "openai" ? "codex" : "chat",
+      }).catch((error) => {
+        logger.warn("[ProxyHandler] Failed to store observed session info", {
+          error: error instanceof Error ? error.message : String(error),
+        });
+      });
+    }
+    return identity.identity;
+  };
   try {
     session = await ProxySession.fromContext(c);
     try {
@@ -88,13 +118,24 @@ export async function handleProxyRequest(c: Context): Promise<Response> {
     // Run guard chain; may return early Response
     const early = await pipeline.run(session);
     if (early) {
+      const isReplayServe = early.headers.has("x-cch-replay");
+      const isHandledWarmup = early.status === 200 && session.isWarmupRequest();
+      if (!isReplayServe && !isHandledWarmup) {
+        await trackObservedSession(session);
+      }
       return await attachSessionIdToErrorResponse(session.sessionId, early);
     }
+
+    const observedSessionIdentity = await trackObservedSession(session);
 
     // 9. 增加并发计数（在所有检查通过后，请求开始前）- 跳过 count_tokens
     if (session.sessionId && session.getEndpointPolicy().trackConcurrentRequests) {
       await SessionTracker.incrementConcurrentCount(session.sessionId);
       acquiredConcurrencySessionId = session.sessionId;
+    }
+    if (observedSessionIdentity && session.getEndpointPolicy().trackConcurrentRequests) {
+      await SessionTracker.incrementObservedConcurrentCount(observedSessionIdentity);
+      acquiredObservedSessionIdentity = observedSessionIdentity;
     }
 
     // 10. 记录请求开始
@@ -160,6 +201,9 @@ export async function handleProxyRequest(c: Context): Promise<Response> {
     // 11. 减少并发计数（确保无论成功失败都执行）- 跳过 count_tokens
     if (acquiredConcurrencySessionId) {
       await SessionTracker.decrementConcurrentCount(acquiredConcurrencySessionId);
+    }
+    if (acquiredObservedSessionIdentity) {
+      await SessionTracker.decrementObservedConcurrentCount(acquiredObservedSessionIdentity);
     }
   }
 }

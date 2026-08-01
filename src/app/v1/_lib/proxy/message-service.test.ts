@@ -36,6 +36,13 @@ function createSession(providerType: string, message: Record<string, unknown>) {
     getRequestSequence: () => 1,
     getGroupCostMultiplier: () => "1",
     getMessagesLength: () => 1,
+    getSessionIdentityMetadata: () => ({
+      identity: "pfx:scope123:fp-deep",
+      kind: "prefix_affinity",
+      scopeTag: "scope123",
+      fingerprint: "fp-deep",
+      fingerprints: ["fp-deep", "fp-mid"],
+    }),
     setMessageContext,
   } as unknown as ProxySession;
 
@@ -101,5 +108,22 @@ describe("ProxyMessageService Codex reasoning effort audit", () => {
     await ProxyMessageService.ensureContext(session);
 
     expect(specialSettings).toHaveLength(1);
+  });
+
+  test("前缀亲和 Session identity 与原始 sessionId 一起写入请求记录", async () => {
+    const { session } = createSession("codex", { reasoning: { effort: "high" } });
+
+    await ProxyMessageService.ensureContext(session);
+
+    expect(createMessageRequestMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        session_id: "session-1",
+        session_identity: "pfx:scope123:fp-deep",
+        session_identity_kind: "prefix_affinity",
+        affinity_scope_tag: "scope123",
+        affinity_fingerprint: "fp-deep",
+        affinity_fingerprint_chain: ["fp-deep", "fp-mid"],
+      })
+    );
   });
 });

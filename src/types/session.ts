@@ -38,6 +38,16 @@ export interface ActiveSessionInfo {
   durationMs?: number; // 总耗时
   requestCount?: number; // 请求次数
   concurrentCount?: number; // 并发请求数（用于实时状态计算）
+  sessionIdentityKind?: "session_id" | "prefix_affinity";
+  sessionFingerprint?: string | null;
+}
+
+export interface SessionIdentityMetadata {
+  identity: string;
+  kind: "session_id" | "prefix_affinity";
+  scopeTag: string | null;
+  fingerprint: string | null;
+  fingerprints: string[];
 }
 
 /**

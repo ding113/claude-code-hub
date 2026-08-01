@@ -1,5 +1,6 @@
 import "server-only";
 
+import { randomUUID } from "node:crypto";
 import type Redis from "ioredis";
 import { logger } from "@/lib/logger";
 import { getRedisClient } from "@/lib/redis/client";
@@ -12,31 +13,124 @@ import { getRedisClient } from "@/lib/redis/client";
  *   多键 Lua 在集群下无 CROSSSLOT；单机 Redis 下花括号只是键名的一部分，无副作用。）
  *
  * 值格式（管道串，避免 JSON 编解码开销）：
- *   活跃绑定  "1|<providerId>"
- *   墓碑      "0|<reason>"（failover 后短 TTL 防羊群，查找时跳过继续向浅——
+ *   活跃绑定  "1|<providerId>|<identityFp>|<generation>"
+ *   墓碑      "0|<reason>|<identityFp>|<generation>"（failover 后短 TTL 防羊群，查找时跳过继续向浅——
  *              修复 CCHP 已知缺陷：最深命中为 disabled 时直接判 miss）
  *
- * 查找：单次 Lua 往返，KEYS 按最深->最浅传入，首个活跃值即最长前缀命中，
- * 命中时 EXPIRE 滑动续期（对齐 prompt cache 的「读即续」语义）。
+ * 查找：先按最深->最浅读取候选，再用显式声明的 binding/generation/registry KEYS
+ * 原子校验首个有效候选；命中时 EXPIRE 滑动续期（对齐 prompt cache 的「读即续」语义）。
  *
- * 一切 Redis 失败 fail-open：lookup 返回 null（回落加权随机），写操作静默放弃。
+ * 路由路径上的 Redis 失败 fail-open：lookup 返回 null（回落加权随机），写操作静默放弃。
+ * 管理终止使用 invalidate 的 boolean 结果区分命令成功与 Redis 故障。
  */
 
-const LOOKUP_LONGEST_PREFIX_LUA = `
-local ttl = tonumber(ARGV[1])
-for i = 1, #KEYS do
+const LOOKUP_CANDIDATES_LUA = `
+-- affinity_lookup_candidates_v4
+local legacyGeneration = redis.call('GET', KEYS[#KEYS]) or '0'
+local candidates = {}
+
+for i = 1, #KEYS - 1 do
   local v = redis.call('GET', KEYS[i])
   if v and string.sub(v, 1, 2) == '1|' then
-    if ttl and ttl > 0 then
-      redis.call('EXPIRE', KEYS[i], ttl)
+    local fourPartProvider = string.match(v, '^1|([^|]+)|([^|]+)|([^|]+)$')
+    local threePartProvider, threePartGeneration = string.match(v, '^1|([^|]+)|([^|]+)$')
+    local twoPartProvider = string.match(v, '^1|([^|]+)$')
+    if fourPartProvider or twoPartProvider or
+       (threePartProvider and threePartGeneration == legacyGeneration) then
+      candidates[#candidates + 1] = i
+      candidates[#candidates + 1] = v
     end
-    return {i, v}
   end
 end
-return nil
+return candidates
+`;
+
+const VALIDATE_LOOKUP_HIT_LUA = `
+-- affinity_validate_hit_v5
+local expectedValue = ARGV[1]
+local expectedGeneration = ARGV[2]
+local migratedValue = ARGV[3]
+local ttl = tonumber(ARGV[4])
+local generationTtl = tonumber(ARGV[5])
+local now = tonumber(ARGV[6])
+local bindingExpiresAt = tonumber(ARGV[7])
+
+local function extendTtl(key, requestedTtl)
+  if not requestedTtl or requestedTtl <= 0 then return end
+  local currentTtl = redis.call('TTL', key)
+  if currentTtl < requestedTtl then
+    redis.call('EXPIRE', key, requestedTtl)
+  end
+end
+
+if redis.call('GET', KEYS[1]) ~= expectedValue then
+  return 0
+end
+redis.call('SET', KEYS[2], expectedGeneration, 'EX', generationTtl, 'NX')
+if redis.call('GET', KEYS[2]) ~= expectedGeneration then
+  return 0
+end
+if migratedValue ~= '' then
+  redis.call('SET', KEYS[1], migratedValue, 'KEEPTTL')
+end
+if ttl and ttl > 0 then
+  redis.call('EXPIRE', KEYS[1], ttl)
+end
+extendTtl(KEYS[2], generationTtl)
+redis.call('ZREMRANGEBYSCORE', KEYS[3], '-inf', now)
+if ttl and ttl > 0 then
+  redis.call('ZADD', KEYS[3], bindingExpiresAt, KEYS[1])
+  extendTtl(KEYS[3], ttl)
+end
+return 1
+`;
+
+const ENSURE_GENERATION_LUA = `
+-- affinity_ensure_generation_v4
+local candidateGeneration = ARGV[1]
+local generationTtl = tonumber(ARGV[2])
+redis.call('SET', KEYS[1], candidateGeneration, 'EX', generationTtl, 'NX')
+local currentTtl = redis.call('TTL', KEYS[1])
+if currentTtl < generationTtl then
+  redis.call('EXPIRE', KEYS[1], generationTtl)
+end
+return redis.call('GET', KEYS[1])
+`;
+
+const CAS_WRITE_LUA = `
+-- affinity_cas_write_v3
+local generation = redis.call('GET', KEYS[1])
+if not generation or generation ~= ARGV[1] then
+  return 0
+end
+redis.call('SET', KEYS[2], ARGV[2], 'EX', tonumber(ARGV[3]))
+redis.call('ZREMRANGEBYSCORE', KEYS[3], '-inf', tonumber(ARGV[5]))
+redis.call('ZADD', KEYS[3], tonumber(ARGV[6]), KEYS[2])
+local registryTtl = redis.call('TTL', KEYS[3])
+if registryTtl < tonumber(ARGV[3]) then
+  redis.call('EXPIRE', KEYS[3], tonumber(ARGV[3]))
+end
+local generationTtl = redis.call('TTL', KEYS[1])
+if generationTtl < tonumber(ARGV[4]) then
+  redis.call('EXPIRE', KEYS[1], tonumber(ARGV[4]))
+end
+return 1
+`;
+
+const INVALIDATE_LUA = `
+-- affinity_invalidate_v3
+local generation = ARGV[1]
+redis.call('SET', KEYS[1], generation, 'EX', tonumber(ARGV[2]))
+for i = 4, #KEYS do
+  redis.call('DEL', KEYS[i])
+end
+redis.call('DEL', KEYS[2])
+redis.call('DEL', KEYS[3])
+return generation
 `;
 
 const TOMBSTONE_TTL_SECONDS = 60;
+const GENERATION_FENCE_TTL_SECONDS = 2 * 24 * 60 * 60;
 
 export interface AffinityHint {
   providerId: number;
@@ -45,19 +139,31 @@ export interface AffinityHint {
   matchedIndex: number;
 }
 
-type RedisLuaClient = Pick<Redis, "status" | "set" | "del"> & {
+export interface AffinityLookupResult {
+  hint: AffinityHint | null;
+  identityFp: string;
+  generation: string;
+}
+
+type RedisLuaClient = Pick<
+  Redis,
+  "status" | "set" | "del" | "smembers" | "zrange" | "zremrangebyscore"
+> & {
   eval(...args: [script: string, numkeys: number, ...rest: (string | number)[]]): Promise<unknown>;
 };
 
 export interface AffinityStoreOptions {
   redisClient?: RedisLuaClient | null;
+  generationToken?: () => string;
 }
 
 export class AffinityStore {
   private readonly injectedClient?: RedisLuaClient | null;
+  private readonly generationToken: () => string;
 
   constructor(options: AffinityStoreOptions = {}) {
     this.injectedClient = options.redisClient;
+    this.generationToken = options.generationToken ?? (() => `v3:${randomUUID()}`);
   }
 
   private getReadyRedis(): RedisLuaClient | null {
@@ -73,6 +179,22 @@ export class AffinityStore {
     return `cch:pfx:{${scopeTag}}:fp:${fp}`;
   }
 
+  private buildGenerationKey(scopeTag: string, identityFp: string): string {
+    return `cch:pfx:{${scopeTag}}:gen:${identityFp}`;
+  }
+
+  private buildDescendantsKey(scopeTag: string, identityFp: string): string {
+    return `cch:pfx:{${scopeTag}}:desc:${identityFp}`;
+  }
+
+  private buildDescendantsV2Key(scopeTag: string, identityFp: string): string {
+    return `cch:pfx:{${scopeTag}}:desc-v2:${identityFp}`;
+  }
+
+  private buildLegacyGenerationKey(scopeTag: string): string {
+    return `cch:pfx:{${scopeTag}}:generation`;
+  }
+
   /**
    * 最长前缀查找。fpsDeepestFirst 为最深->最浅的会话消息边界指纹序列
    * （不含 F_sys：仅系统提示词相同不构成前缀命中）。
@@ -82,34 +204,89 @@ export class AffinityStore {
     scopeTag: string,
     fpsDeepestFirst: string[],
     slidingTtlSeconds: number
-  ): Promise<AffinityHint | null> {
+  ): Promise<AffinityLookupResult | null> {
     if (!scopeTag || fpsDeepestFirst.length === 0) return null;
     const redis = this.getReadyRedis();
     if (!redis) return null;
 
-    const keys = fpsDeepestFirst
-      .filter((fp) => fp.length > 0)
-      .map((fp) => this.buildKey(scopeTag, fp));
-    if (keys.length === 0) return null;
+    const fingerprints = fpsDeepestFirst.filter((fp) => fp.length > 0);
+    const keys = fingerprints.map((fp) => this.buildKey(scopeTag, fp));
+    const missIdentityFp = fingerprints[0];
+    if (keys.length === 0 || !missIdentityFp) return null;
 
     try {
-      const result = (await redis.eval(
-        LOOKUP_LONGEST_PREFIX_LUA,
-        keys.length,
+      const candidates = (await redis.eval(
+        LOOKUP_CANDIDATES_LUA,
+        keys.length + 1,
         ...keys,
-        String(Math.max(0, Math.floor(slidingTtlSeconds)))
-      )) as [number, string] | null;
+        this.buildLegacyGenerationKey(scopeTag)
+      )) as unknown;
 
-      if (!result || !Array.isArray(result) || result.length < 2) return null;
-      const [index, value] = result;
-      const providerId = Number.parseInt(String(value).slice(2), 10);
-      if (!Number.isFinite(providerId) || providerId <= 0) return null;
+      if (!Array.isArray(candidates)) return null;
+      for (let offset = 0; offset + 1 < candidates.length; offset += 2) {
+        const matchedIndex = Number(candidates[offset]) - 1;
+        const value = String(candidates[offset + 1] ?? "");
+        const matchedFp = fingerprints[matchedIndex];
+        const bindingKey = keys[matchedIndex];
+        if (matchedIndex < 0 || !matchedFp || !bindingKey) continue;
 
-      const matchedIndex = Number(index) - 1;
+        const parts = value.split("|");
+        const providerId = Number.parseInt(parts[1] ?? "", 10);
+        if (!Number.isFinite(providerId) || providerId <= 0) continue;
+
+        let identityFp: string;
+        let generation: string;
+        let migratedValue = "";
+        if (parts.length === 4 && parts[2] && parts[3]) {
+          identityFp = parts[2];
+          generation = parts[3];
+        } else {
+          identityFp = matchedFp;
+          generation = this.generationToken();
+          migratedValue = `1|${providerId}|${identityFp}|${generation}`;
+        }
+
+        const ttlSeconds = Math.max(0, Math.floor(slidingTtlSeconds));
+        const now = Math.floor(Date.now() / 1000);
+        const validated = await redis.eval(
+          VALIDATE_LOOKUP_HIT_LUA,
+          3,
+          bindingKey,
+          this.buildGenerationKey(scopeTag, identityFp),
+          this.buildDescendantsV2Key(scopeTag, identityFp),
+          value,
+          generation,
+          migratedValue,
+          String(ttlSeconds),
+          GENERATION_FENCE_TTL_SECONDS,
+          now,
+          now + ttlSeconds
+        );
+        if (Number(validated) !== 1) continue;
+
+        return {
+          generation,
+          identityFp,
+          hint: {
+            providerId,
+            matchedIndex,
+            matchedFp,
+          },
+        };
+      }
+
+      const generation = await redis.eval(
+        ENSURE_GENERATION_LUA,
+        1,
+        this.buildGenerationKey(scopeTag, missIdentityFp),
+        this.generationToken(),
+        GENERATION_FENCE_TTL_SECONDS
+      );
+      if (!generation) return null;
       return {
-        providerId,
-        matchedIndex,
-        matchedFp: fpsDeepestFirst[matchedIndex] ?? "",
+        generation: String(generation),
+        identityFp: missIdentityFp,
+        hint: null,
       };
     } catch (error) {
       logger.warn("[AffinityStore] lookup failed, falling back to no-affinity", {
@@ -129,41 +306,126 @@ export class AffinityStore {
     scopeTag: string,
     tipFp: string,
     providerId: number,
-    ttlSeconds: number
-  ): Promise<void> {
-    if (!scopeTag || !tipFp || providerId <= 0 || ttlSeconds <= 0) return;
+    ttlSeconds: number,
+    identityFp: string | null | undefined,
+    expectedGeneration: string | null | undefined
+  ): Promise<boolean> {
+    if (
+      !scopeTag ||
+      !tipFp ||
+      providerId <= 0 ||
+      ttlSeconds <= 0 ||
+      !identityFp ||
+      !expectedGeneration
+    ) {
+      return false;
+    }
     const redis = this.getReadyRedis();
-    if (!redis) return;
+    if (!redis) return false;
 
-    const value = `1|${providerId}`;
+    const value = `1|${providerId}|${identityFp}|${expectedGeneration}`;
+    const now = Math.floor(Date.now() / 1000);
     try {
-      await redis.set(this.buildKey(scopeTag, tipFp), value, "EX", ttlSeconds);
+      const result = await redis.eval(
+        CAS_WRITE_LUA,
+        3,
+        this.buildGenerationKey(scopeTag, identityFp),
+        this.buildKey(scopeTag, tipFp),
+        this.buildDescendantsV2Key(scopeTag, identityFp),
+        expectedGeneration,
+        value,
+        ttlSeconds,
+        GENERATION_FENCE_TTL_SECONDS,
+        now,
+        now + ttlSeconds
+      );
+      return Number(result) === 1;
     } catch (error) {
       logger.warn("[AffinityStore] put failed", {
         error: error instanceof Error ? error.message : String(error),
         scopeTag,
         providerId,
       });
+      return false;
     }
   }
 
   /** failover 墓碑：短 TTL 覆盖，阻止旧绑定立即复活，同时允许查找向浅回落。 */
-  async tombstone(scopeTag: string, fp: string, reason: string): Promise<void> {
-    if (!scopeTag || !fp) return;
+  async tombstone(
+    scopeTag: string,
+    fp: string,
+    reason: string,
+    identityFp: string | null | undefined,
+    expectedGeneration: string | null | undefined
+  ): Promise<boolean> {
+    if (!scopeTag || !fp || !identityFp || !expectedGeneration) return false;
     const redis = this.getReadyRedis();
-    if (!redis) return;
+    if (!redis) return false;
+    const now = Math.floor(Date.now() / 1000);
     try {
-      await redis.set(
+      const result = await redis.eval(
+        CAS_WRITE_LUA,
+        3,
+        this.buildGenerationKey(scopeTag, identityFp),
         this.buildKey(scopeTag, fp),
-        `0|${reason.slice(0, 32)}`,
-        "EX",
-        TOMBSTONE_TTL_SECONDS
+        this.buildDescendantsV2Key(scopeTag, identityFp),
+        expectedGeneration,
+        `0|${reason.slice(0, 32)}|${identityFp}|${expectedGeneration}`,
+        TOMBSTONE_TTL_SECONDS,
+        GENERATION_FENCE_TTL_SECONDS,
+        now,
+        now + TOMBSTONE_TTL_SECONDS
       );
+      return Number(result) === 1;
     } catch (error) {
       logger.warn("[AffinityStore] tombstone failed", {
         error: error instanceof Error ? error.message : String(error),
         scopeTag,
       });
+      return false;
+    }
+  }
+
+  /**
+   * 管理员终止前缀 Session 时原子递增 identity generation，再删除已登记 descendant
+   * 及调用方已知祖先。在途旧请求仍携带旧 generation，后续 CAS write 会被拒绝。
+   */
+  async invalidate(scopeTag: string, identityFp: string, fingerprints: string[]): Promise<boolean> {
+    if (!scopeTag || !identityFp) return false;
+    const redis = this.getReadyRedis();
+    if (!redis) return false;
+
+    const knownKeys = [...new Set([identityFp, ...fingerprints].filter(Boolean))].map((fp) =>
+      this.buildKey(scopeTag, fp)
+    );
+
+    try {
+      const descendantsKey = this.buildDescendantsKey(scopeTag, identityFp);
+      const descendantsV2Key = this.buildDescendantsV2Key(scopeTag, identityFp);
+      const now = Math.floor(Date.now() / 1000);
+      await redis.zremrangebyscore(descendantsV2Key, "-inf", now);
+      const [legacyDescendants, descendants] = await Promise.all([
+        redis.smembers(descendantsKey),
+        redis.zrange(descendantsV2Key, 0, -1),
+      ]);
+      const keys = [...new Set([...knownKeys, ...legacyDescendants, ...descendants])];
+      await redis.eval(
+        INVALIDATE_LUA,
+        keys.length + 3,
+        this.buildGenerationKey(scopeTag, identityFp),
+        descendantsKey,
+        descendantsV2Key,
+        ...keys,
+        this.generationToken(),
+        GENERATION_FENCE_TTL_SECONDS
+      );
+      return true;
+    } catch (error) {
+      logger.warn("[AffinityStore] invalidate failed", {
+        error: error instanceof Error ? error.message : String(error),
+        scopeTag,
+      });
+      return false;
     }
   }
 }

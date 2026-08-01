@@ -184,6 +184,8 @@ export function toMessageRequest(dbMessage: any): MessageRequest {
     cacheTtlApplied: dbMessage?.cacheTtlApplied ?? null,
     context1mApplied: dbMessage?.context1mApplied ?? false,
     swapCacheTtlApplied: dbMessage?.swapCacheTtlApplied ?? false,
+    isReplay: dbMessage?.isReplay ?? false,
+    replaySourceRequestId: dbMessage?.replaySourceRequestId ?? null,
     specialSettings: dbMessage?.specialSettings ?? null,
     routingTrace: normalizeRoutingTrace(dbMessage?.routingTrace),
   };

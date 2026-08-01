@@ -18,12 +18,18 @@ export interface TabSharedProps {
   routingTrace?: RoutingTraceV1 | null;
   /** Session ID */
   sessionId: string | null;
+  /** Physical Session source for request-scoped readback */
+  sourceSessionId?: string | null;
   /** Request sequence number within session */
   requestSequence?: number | null;
   /** Block type (e.g., "sensitive_word", "warmup") */
   blockedBy?: string | null;
   /** Block reason (JSON string) */
   blockedReason?: string | null;
+  /** Whether this audit row was served by Request Replay */
+  isReplay?: boolean;
+  /** Source terminal request copied into this Replay audit row */
+  replaySourceRequestId?: number | null;
   /** Original model before redirect */
   originalModel?: string | null;
   /** Current model after redirect */

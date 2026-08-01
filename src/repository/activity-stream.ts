@@ -97,7 +97,11 @@ export async function findRecentActivityStream(limit = 20): Promise<ActivityStre
         .leftJoin(keysTable, eq(messageRequest.key, keysTable.key))
         .leftJoin(providers, eq(messageRequest.providerId, providers.id))
         .where(
-          and(isNull(messageRequest.deletedAt), inArray(messageRequest.sessionId, activeSessionIds))
+          and(
+            isNull(messageRequest.deletedAt),
+            eq(messageRequest.isReplay, false),
+            inArray(messageRequest.sessionId, activeSessionIds)
+          )
         )
         .orderBy(desc(messageRequest.createdAt))
         .limit(limit * 2); // 获取足够的数据，后面会过滤
@@ -141,7 +145,7 @@ export async function findRecentActivityStream(limit = 20): Promise<ActivityStre
         .map((item) => item.sessionId)
         .filter((sid): sid is string => sid !== null);
 
-      const conditions = [isNull(messageRequest.deletedAt)];
+      const conditions = [isNull(messageRequest.deletedAt), eq(messageRequest.isReplay, false)];
       if (excludedSessionIds.length > 0) {
         conditions.push(notInArray(messageRequest.sessionId, excludedSessionIds));
       }

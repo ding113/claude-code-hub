@@ -88,6 +88,12 @@
       "minRetryCount": "重試次數≥",
       "minRetryCountPlaceholder": "輸入次數（0 表示不限）",
       "enabled": "已開啟",
+      "replay": {
+        "label": "Replay",
+        "all": "全部請求",
+        "only": "僅 Replay 請求",
+        "exclude": "排除 Replay 請求"
+      },
       "apply": "套用篩選",
       "reset": "重設",
       "last7days": "近 7 天",
@@ -164,6 +170,7 @@
       "prevPage": "上一頁",
       "nextPage": "下一頁",
       "blocked": "已攔截",
+      "replay": "Replay",
       "nonBilling": "非計費",
       "skipped": "已跳過",
       "specialSettings": "特殊設定",
@@ -349,6 +356,7 @@
         "title": "效能資料",
         "ttfb": "首字節時間（TTFB）",
         "tfft": "首 Token 時間（TFFT）",
+        "tfftShort": "TFFT",
         "duration": "總耗時",
         "outputRate": "輸出速率",
         "outputTokens": "輸出 Tokens"
@@ -554,7 +562,8 @@
       "replayServe": {
         "title": "由 Replay 快取服務",
         "desc": "該請求由 Replay 快取直接服務（相同請求正在進行或已完成），未發起上游供應商呼叫，不產生費用。",
-        "replayId": "Replay ID"
+        "replayId": "Replay ID",
+        "sourceRequestId": "來源請求"
       }
     },
     "providerChain": {

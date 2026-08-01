@@ -15,6 +15,10 @@ function sqlToString(sqlObj: unknown): string {
         return anyNode.map(walk).join("");
       }
 
+      if (typeof anyNode.name === "string") {
+        return anyNode.name;
+      }
+
       if (anyNode.value) {
         if (Array.isArray(anyNode.value)) {
           return anyNode.value.map(String).join("");
@@ -104,6 +108,8 @@ describe("Usage logs sessionId filter", () => {
     const primaryWhereSql = sqlToString(whereArgs[0]).toLowerCase();
     const ledgerWhereSql = sqlToString(whereArgs[1]).toLowerCase();
     expect(primaryWhereSql).toContain("abc");
+    expect(primaryWhereSql).toContain("session_identity");
+    expect(primaryWhereSql).toContain("coalesce");
     expect(primaryWhereSql).not.toContain("  abc  ");
     expect(ledgerWhereSql).toContain("abc");
     expect(ledgerWhereSql).not.toContain("  abc  ");

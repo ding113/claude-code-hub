@@ -23094,6 +23094,10 @@ export interface operations {
             query?: {
                 /** @description Request sequence. */
                 requestSequence?: number;
+                /** @description Physical source session id. */
+                sourceSessionId?: string;
+                /** @description Stable request id. */
+                requestId?: number;
             };
             header?: never;
             path: {
@@ -23442,6 +23446,8 @@ export interface operations {
             query?: {
                 /** @description Request sequence. */
                 requestSequence?: number;
+                /** @description Physical source session id. */
+                sourceSessionId?: string;
             };
             header?: never;
             path: {
@@ -23616,6 +23622,8 @@ export interface operations {
             query?: {
                 /** @description Request sequence. */
                 requestSequence?: number;
+                /** @description Physical source session id. */
+                sourceSessionId?: string;
             };
             header?: never;
             path: {
@@ -23970,7 +23978,12 @@ export interface operations {
     };
     getSessionsBySessionidOriginChain: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Request sequence. */
+                requestSequence?: number;
+                /** @description Physical source session id. */
+                sourceSessionId?: string;
+            };
             header?: never;
             path: {
                 /** @description Session id. */
@@ -24141,7 +24154,12 @@ export interface operations {
     };
     getSessionsBySessionidResponse: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Request sequence. */
+                requestSequence?: number;
+                /** @description Physical source session id. */
+                sourceSessionId?: string;
+            };
             header?: never;
             path: {
                 /** @description Session id. */
@@ -35659,6 +35677,8 @@ export interface operations {
                 endpoint?: string;
                 /** @description Minimum retry count. */
                 minRetryCount?: number | null;
+                /** @description Replay request filter. */
+                replayFilter?: "all" | "replay" | "non-replay";
                 /** @description Start timestamp in milliseconds. */
                 startTime?: number | null;
                 /** @description End timestamp in milliseconds. */
@@ -35864,6 +35884,8 @@ export interface operations {
                 endpoint?: string;
                 /** @description Minimum retry count. */
                 minRetryCount?: number | null;
+                /** @description Replay request filter. */
+                replayFilter?: "all" | "replay" | "non-replay";
                 /** @description Start timestamp in milliseconds. */
                 startTime?: number | null;
                 /** @description End timestamp in milliseconds. */
@@ -36934,6 +36956,11 @@ export interface operations {
                     endpoint?: string;
                     /** @description Minimum retry count. */
                     minRetryCount?: number | null;
+                    /**
+                     * @description Replay request filter.
+                     * @enum {string}
+                     */
+                    replayFilter?: "all" | "replay" | "non-replay";
                     /** @description Start timestamp in milliseconds. */
                     startTime?: number | null;
                     /** @description End timestamp in milliseconds. */

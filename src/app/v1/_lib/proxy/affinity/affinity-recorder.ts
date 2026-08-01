@@ -27,12 +27,20 @@ export async function recordAffinityWinner(
     const tip = fingerprintTip(affinity.chain);
     // tip 落在系统段（无会话消息）时不写绑定：与查找侧的 sys 排除保持一致
     if (tip.depth === 0) return;
-    await getAffinityStore().put(
+    const stored = await getAffinityStore().put(
       affinity.scopeTag,
       tip.fp,
       providerId,
-      getEnvConfig().PREFIX_AFFINITY_TTL_SECONDS
+      getEnvConfig().PREFIX_AFFINITY_TTL_SECONDS,
+      affinity.identityFp,
+      affinity.generation
     );
+    if (!stored) {
+      logger.debug("[AffinityRecorder] winner writeback rejected", {
+        providerId,
+        scopeTag: affinity.scopeTag,
+      });
+    }
   } catch (error) {
     logger.debug("[AffinityRecorder] winner writeback failed", {
       error: error instanceof Error ? error.message : String(error),
@@ -59,7 +67,19 @@ export async function tombstoneAffinityOnFailure(
   }
   try {
     if (!(await isAffinityRoutingEnabled())) return;
-    await getAffinityStore().tombstone(affinity.scopeTag, affinity.matchedFp, "failover");
+    const stored = await getAffinityStore().tombstone(
+      affinity.scopeTag,
+      affinity.matchedFp,
+      "failover",
+      affinity.identityFp,
+      affinity.generation
+    );
+    if (!stored) {
+      logger.debug("[AffinityRecorder] tombstone rejected", {
+        failedProviderId,
+        scopeTag: affinity.scopeTag,
+      });
+    }
   } catch (error) {
     logger.debug("[AffinityRecorder] tombstone failed", {
       error: error instanceof Error ? error.message : String(error),

@@ -6512,6 +6512,14 @@ async function trackCostToRedis(
         }
       );
     }
+    if (session.shouldTrackSessionObservability()) {
+      const observedIdentity = session.getSessionIdentityMetadata().identity;
+      if (observedIdentity) {
+        void SessionTracker.refreshObservedSession(observedIdentity).catch((error) => {
+          logger.error("[ResponseHandler] Failed to refresh observed session tracker:", error);
+        });
+      }
+    }
   } catch (error) {
     logger.error("[ResponseHandler] Failed to track cost to Redis, skipping", {
       error: error instanceof Error ? error.message : String(error),

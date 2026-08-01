@@ -25,6 +25,7 @@ const h = vi.hoisted(() => ({
       h.session.rawCrossProviderFallbackEnabled = enabled;
     },
     isRawCrossProviderFallbackEnabled: () => !!h.session.rawCrossProviderFallbackEnabled,
+    shouldTrackSessionObservability: () => false,
     recordForwardStart: () => {},
     messageContext: null,
     provider: null,

@@ -4,7 +4,7 @@ import { getEnvConfig } from "@/lib/config/env.schema";
 import { PROVIDER_GROUP } from "@/lib/constants/provider.constants";
 import { logger } from "@/lib/logger";
 import { RateLimitService } from "@/lib/rate-limit";
-import { buildScopeTag } from "@/lib/request-identity";
+import { buildPublicSessionIdentity, buildScopeTag } from "@/lib/request-identity";
 import { SessionManager } from "@/lib/session-manager";
 import {
   getProxyRuntimeSettings,
@@ -22,9 +22,13 @@ import { findAllProviders, findProviderById } from "@/repository/provider";
 import { getGroupCostMultiplier } from "@/repository/provider-groups";
 import type { ProviderChainItem } from "@/types/message";
 import type { Provider } from "@/types/provider";
-import { getAffinityStore } from "./affinity/affinity-store";
+import { type AffinityLookupResult, getAffinityStore } from "./affinity/affinity-store";
 import { isAffinityRoutingEnabledWith } from "./affinity/config";
-import { computeFingerprintChain, fingerprintsDeepestFirst } from "./affinity/fingerprint";
+import {
+  computeFingerprintChain,
+  fingerprintsDeepestFirst,
+  fingerprintTip,
+} from "./affinity/fingerprint";
 import { isClientAllowedDetailed } from "./client-detector";
 import type { ClientFormat } from "./format-mapper";
 import { getVerboseProviderErrorCached } from "./provider-selector-settings-cache";
@@ -250,6 +254,16 @@ export class ProxyProviderResolver {
             sessionId: session.sessionId || undefined,
           },
         });
+
+        if (affinityRoutingEnabled && session.affinity) {
+          try {
+            await ProxyProviderResolver.lookupAffinityState(session);
+          } catch (error) {
+            logger.warn("ProviderSelector: Affinity writeback state initialization failed", {
+              error: error instanceof Error ? error.message : String(error),
+            });
+          }
+        }
       }
     }
 
@@ -266,6 +280,34 @@ export class ProxyProviderResolver {
       );
       session.setProvider(provider);
       session.setLastSelectionContext(context); // 保存用于后续记录
+    }
+
+    const affinityIdentityEnabled =
+      skipSessionBinding && session.affinity !== null && session.sessionId !== null;
+    if (affinityIdentityEnabled && session.affinity) {
+      const fingerprints = fingerprintsDeepestFirst(session.affinity.chain);
+      const fingerprint =
+        session.affinity.identityFp ??
+        session.affinity.matchedFp ??
+        fingerprintTip(session.affinity.chain).fp;
+      session.setSessionIdentityMetadata({
+        identity: `pfx:${session.affinity.scopeTag}:${fingerprint}`,
+        kind: "prefix_affinity",
+        scopeTag: session.affinity.scopeTag,
+        fingerprint,
+        fingerprints: [...new Set([fingerprint, ...fingerprints])],
+      });
+    } else if (session.sessionId) {
+      session.setSessionIdentityMetadata({
+        identity: buildPublicSessionIdentity(
+          session.sessionId,
+          session.authState?.key?.id ?? "unbound"
+        ),
+        kind: "session_id",
+        scopeTag: null,
+        fingerprint: null,
+        fingerprints: [],
+      });
     }
 
     // === 故障转移循环 ===
@@ -560,6 +602,9 @@ export class ProxyProviderResolver {
       chain,
       nominatedProviderId: null,
       matchedFp: null,
+      identityFp: null,
+      generation: null,
+      lookup: null,
     };
     return true;
   }
@@ -577,11 +622,10 @@ export class ProxyProviderResolver {
       const affinity = session.affinity;
       if (!affinity) return;
 
-      const hint = await getAffinityStore().lookup(
-        affinity.scopeTag,
-        fingerprintsDeepestFirst(affinity.chain),
-        getEnvConfig().PREFIX_AFFINITY_TTL_SECONDS
-      );
+      const lookup = await ProxyProviderResolver.lookupAffinityState(session);
+      if (!lookup) return;
+
+      const hint = lookup.hint;
       if (!hint) return;
 
       affinity.matchedFp = hint.matchedFp;
@@ -649,6 +693,31 @@ export class ProxyProviderResolver {
         error: error instanceof Error ? error.message : String(error),
       });
     }
+  }
+
+  private static async lookupAffinityState(
+    session: ProxySession
+  ): Promise<AffinityLookupResult | null> {
+    const affinity = session.affinity;
+    if (!affinity) return null;
+
+    if (affinity.lookup) {
+      affinity.identityFp = affinity.lookup.identityFp;
+      affinity.generation = affinity.lookup.generation;
+      return affinity.lookup;
+    }
+
+    const lookup = await getAffinityStore().lookup(
+      affinity.scopeTag,
+      fingerprintsDeepestFirst(affinity.chain),
+      getEnvConfig().PREFIX_AFFINITY_TTL_SECONDS
+    );
+    if (!lookup) return null;
+
+    affinity.identityFp = lookup.identityFp;
+    affinity.generation = lookup.generation;
+    affinity.lookup = lookup;
+    return lookup;
   }
 
   /**

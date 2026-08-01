@@ -28,29 +28,50 @@ export function getAllSessions(activePage?: number, inactivePage?: number, pageS
   );
 }
 
-export function getSessionMessages(sessionId: string, requestSequence?: number) {
+export function getSessionMessages(
+  sessionId: string,
+  requestSequence?: number,
+  sourceSessionId?: string
+) {
   return toActionResult(
     apiGet(
       `/api/v1/sessions/${encodeURIComponent(sessionId)}/messages${searchParams({
         requestSequence,
+        sourceSessionId,
       })}`
     )
   );
 }
 
-export function hasSessionMessages(sessionId: string, requestSequence?: number) {
+export function hasSessionMessages(
+  sessionId: string,
+  requestSequence?: number,
+  sourceSessionId?: string
+) {
   return toActionResult(
     apiGet<{ exists: boolean }>(
       `/api/v1/sessions/${encodeURIComponent(sessionId)}/messages/exists${searchParams({
         requestSequence,
+        sourceSessionId,
       })}`
     ).then((body) => body.exists)
   );
 }
 
-export function getSessionDetails(sessionId: string, requestSequence?: number) {
+export function getSessionDetails(
+  sessionId: string,
+  requestSequence?: number,
+  sourceSessionId?: string,
+  requestId?: number
+) {
   return toActionResult(
-    apiGet(`/api/v1/sessions/${encodeURIComponent(sessionId)}${searchParams({ requestSequence })}`)
+    apiGet(
+      `/api/v1/sessions/${encodeURIComponent(sessionId)}${searchParams({
+        requestSequence,
+        sourceSessionId,
+        requestId,
+      })}`
+    )
   );
 }
 

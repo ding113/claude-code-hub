@@ -998,6 +998,7 @@ async function _findKeysStatisticsBatchInternal(
       FROM usage_ledger ul
       WHERE ul.key = k.key_val
         AND ul.blocked_by IS NULL
+        AND ul.is_replay = false
       ORDER BY ul.created_at DESC
       LIMIT 1
     ) lr ON true

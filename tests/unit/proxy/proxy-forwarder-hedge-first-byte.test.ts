@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { resolveEndpointPolicy } from "@/app/v1/_lib/proxy/endpoint-policy";
 
 const mocks = vi.hoisted(() => ({
@@ -331,7 +331,11 @@ function createStreamingResponse(params: {
           controller.close();
           return;
         }
-        controller.enqueue(encoder.encode(`data: {"provider":"${params.label}"}\n\n`));
+        controller.enqueue(
+          encoder.encode(
+            `data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"${params.label}"},"provider":"${params.label}"}\n\n`
+          )
+        );
         controller.close();
       }, params.firstChunkDelayMs);
     },
@@ -433,6 +437,11 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
     }));
     mocks.categorizeErrorAsync.mockResolvedValue(ProxyErrorCategory.PROVIDER_ERROR);
     mocks.isWebsocketClientRequest.mockReturnValue(false);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
   });
 
   test("Discovery actively probes an unknown binding capability before acquiring its lease", async () => {
@@ -2698,7 +2707,7 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
       "doForward"
     );
     doForward.mockResolvedValueOnce(
-      new Response('data: {"type":"message_stop"}\n\n', {
+      new Response('data: {"type":"content_block_delta","delta":{"text":"lease-conflict"}}\n\n', {
         status: 200,
         headers: { "content-type": "text/event-stream" },
       })
@@ -2745,10 +2754,13 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
     doForward
       .mockRejectedValueOnce(new UpstreamProxyError("initial provider failed", 500))
       .mockResolvedValueOnce(
-        new Response('data: {"type":"message_stop"}\n\n', {
-          status: 200,
-          headers: { "content-type": "text/event-stream" },
-        })
+        new Response(
+          'data: {"type":"content_block_delta","delta":{"text":"serial-fallback"}}\n\n',
+          {
+            status: 200,
+            headers: { "content-type": "text/event-stream" },
+          }
+        )
       );
 
     const response = await ProxyForwarder.send(session);
@@ -4058,7 +4070,7 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
       "doForward"
     );
     doForward.mockResolvedValueOnce(
-      new Response('data: {"type":"message_stop"}\n\n', {
+      new Response('data: {"type":"content_block_delta","delta":{"text":"websocket"}}\n\n', {
         status: 200,
         headers: { "content-type": "text/event-stream" },
       })

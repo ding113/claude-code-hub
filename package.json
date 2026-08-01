@@ -39,7 +39,7 @@
     "openapi:lint": "bun scripts/lint-openapi.ts",
     "cui": "npx cui-server --host 0.0.0.0 --port 30000 --token a7564bc8882aa9a2d25d8b4ea6ea1e2e",
     "db:generate": "drizzle-kit generate && node scripts/validate-migrations.js",
-    "db:migrate": "drizzle-kit migrate",
+    "db:migrate": "bun --conditions=react-server scripts/migrate.ts",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
     "validate:migrations": "node scripts/validate-migrations.js",

@@ -88,6 +88,12 @@
       "minRetryCount": "Количество ретраев ≥",
       "minRetryCountPlaceholder": "Введите минимум (0 — без ограничения)",
       "enabled": "Вкл.",
+      "replay": {
+        "label": "Replay",
+        "all": "Все запросы",
+        "only": "Только Replay",
+        "exclude": "Исключить Replay"
+      },
       "apply": "Применить фильтр",
       "reset": "Сброс",
       "last7days": "7д",
@@ -164,6 +170,7 @@
       "prevPage": "Предыдущая",
       "nextPage": "Следующая",
       "blocked": "Заблокировано",
+      "replay": "Replay",
       "nonBilling": "Не тарифицируется",
       "skipped": "Пропущено",
       "specialSettings": "Особые",
@@ -349,6 +356,7 @@
         "title": "Производительность",
         "ttfb": "TTFB",
         "tfft": "TFFT",
+        "tfftShort": "TFFT",
         "duration": "Общее время",
         "outputRate": "Скорость вывода",
         "outputTokens": "Токены вывода"
@@ -554,7 +562,8 @@
       "replayServe": {
         "title": "Обслужено из Replay-кэша",
         "desc": "Запрос обслужен из Replay-кэша (идентичный запрос уже выполняется или завершён). Обращение к провайдеру не выполнялось, затрат нет.",
-        "replayId": "Replay ID"
+        "replayId": "Replay ID",
+        "sourceRequestId": "Исходный запрос"
       }
     },
     "providerChain": {

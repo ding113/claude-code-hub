@@ -1,8 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { sqlText } from "./message-query-test-support";
 
 function createLimitSelect(responses: readonly (readonly unknown[])[]) {
   let callIndex = 0;
   const events: string[] = [];
+  const whereConditions: unknown[] = [];
   const select = vi.fn((_selection: unknown) => {
     const rows = responses[callIndex] ?? [];
     callIndex += 1;
@@ -14,8 +16,9 @@ function createLimitSelect(responses: readonly (readonly unknown[])[]) {
       events.push("orderBy");
       return { limit };
     });
-    const where = vi.fn((_condition: unknown) => {
+    const where = vi.fn((condition: unknown) => {
       events.push("where");
+      whereConditions.push(condition);
       return { limit, orderBy };
     });
     const from = vi.fn((_table: unknown) => {
@@ -24,14 +27,14 @@ function createLimitSelect(responses: readonly (readonly unknown[])[]) {
     });
     return { from };
   });
-  return { events, select };
+  return { events, select, whereConditions };
 }
 
 function installReadBoundaries(
   responses: readonly (readonly unknown[])[],
   messageTableHasData = true
 ) {
-  const { events, select } = createLimitSelect(responses);
+  const { events, select, whereConditions } = createLimitSelect(responses);
   const execute = vi.fn(async (_query: unknown) => [{ has_data: messageTableHasData }]);
   vi.doMock("@/drizzle/db", () => ({
     db: { select, execute, update: vi.fn() },
@@ -42,7 +45,7 @@ function installReadBoundaries(
     isDevelopment: vi.fn(() => false),
   }));
   vi.doMock("@/lib/redis", () => ({ getRedisClient: vi.fn(() => null) }));
-  return { events, execute, select };
+  return { events, execute, select, whereConditions };
 }
 
 const CREATED_AT = new Date("2026-07-15T10:00:00.000Z");
@@ -83,6 +86,8 @@ const MESSAGE_ROW = {
   context1mApplied: true,
   swapCacheTtlApplied: false,
   specialSettings: null,
+  isReplay: true,
+  replaySourceRequestId: 900,
 };
 const LEDGER_ROW = {
   requestId: 1_002,
@@ -107,6 +112,8 @@ const LEDGER_ROW = {
   durationMs: 1_500,
   tfftMs: 250,
   sessionId: "ledger-session",
+  isReplay: true,
+  replaySourceRequestId: 901,
   createdAt: CREATED_AT,
 };
 
@@ -140,7 +147,15 @@ describe("message public readback", () => {
       model: "gpt-4.1",
       costMultiplier: 1.5,
       context1mApplied: true,
+      isReplay: true,
+      replaySourceRequestId: 900,
     });
+    expect(boundary.select.mock.calls[0]?.[0]).toEqual(
+      expect.objectContaining({
+        isReplay: expect.anything(),
+        replaySourceRequestId: expect.anything(),
+      })
+    );
     expect(boundary.execute).not.toHaveBeenCalled();
   });
 
@@ -158,9 +173,14 @@ describe("message public readback", () => {
       costMultiplier: 2,
       sessionId: "ledger-session",
       userAgent: null,
+      isReplay: true,
+      replaySourceRequestId: 901,
     });
     expect(boundary.select).toHaveBeenCalledTimes(2);
     expect(boundary.execute).toHaveBeenCalledTimes(1);
+    const ledgerWhere = sqlText(boundary.whereConditions[1]);
+    expect(ledgerWhere).toContain("blocked_by");
+    expect(ledgerWhere).not.toContain("is_replay = false");
   });
 
   it("returns null when neither direct data nor ledger-only mode applies", async () => {

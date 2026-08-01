@@ -12,14 +12,16 @@ import type { RoutingTraceV1 } from "@/types/routing-trace";
 
 const hasSessionMessagesMock = vi.fn();
 
-vi.mock("@/actions/active-sessions", () => ({
-  hasSessionMessages: (...args: [string, number | undefined]) => hasSessionMessagesMock(...args),
+vi.mock("@/lib/api-client/v1/actions/active-sessions", () => ({
+  hasSessionMessages: (...args: [string, number | undefined, string | undefined]) =>
+    hasSessionMessagesMock(...args),
 }));
 
 const getSessionOriginChainMock = vi.fn();
 
-vi.mock("@/actions/session-origin-chain", () => ({
-  getSessionOriginChain: (...args: [string]) => getSessionOriginChainMock(...args),
+vi.mock("@/lib/api-client/v1/actions/session-origin-chain", () => ({
+  getSessionOriginChain: (...args: [string, number | undefined, string | undefined]) =>
+    getSessionOriginChainMock(...args),
 }));
 
 const useRealProviderTimelineMock = vi.fn(() => false);
@@ -237,6 +239,13 @@ const messages = {
           warmup: "Warmup",
           desc: "Warmup skipped",
         },
+        replayServe: {
+          ...dashboardMessages.logs.details.replayServe,
+          title: "Replay",
+          desc: "Served from Replay without a new upstream charge.",
+          replayId: "Replay ID",
+          sourceRequestId: "Source request",
+        },
         blocked: {
           title: "Blocked",
           sensitiveWord: "Sensitive word",
@@ -422,6 +431,71 @@ function click(element: Element | null) {
 }
 
 describe("error-details-dialog layout", () => {
+  test("uses the physical source when checking messages for a prefix Session request", async () => {
+    const { unmount } = renderClientWithIntl(
+      <ErrorDetailsDialog
+        externalOpen
+        statusCode={200}
+        errorMessage={null}
+        providerChain={null}
+        sessionId="pfx:scope:root"
+        sourceSessionId="physical-a"
+        requestSequence={3}
+      />
+    );
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(hasSessionMessagesMock).toHaveBeenCalledWith("pfx:scope:root", 3, "physical-a");
+    unmount();
+  });
+
+  test("includes the physical source in the Session detail link", async () => {
+    hasSessionMessagesMock.mockResolvedValue({ ok: true, data: true });
+    const { container, unmount } = renderClientWithIntl(
+      <ErrorDetailsDialog
+        externalOpen
+        statusCode={200}
+        errorMessage={null}
+        providerChain={null}
+        sessionId="pfx:scope:root"
+        sourceSessionId="physical-a"
+        requestSequence={3}
+      />
+    );
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(container.querySelector('a[href*="sourceSessionId=physical-a"]')).toBeTruthy();
+    expect(container.querySelector('a[href*="seq=3"]')).toBeTruthy();
+    unmount();
+  });
+
+  test("marks Replay requests and shows their source request", () => {
+    const html = renderWithIntl(
+      <ErrorDetailsDialog
+        externalOpen
+        statusCode={200}
+        errorMessage={null}
+        providerChain={null}
+        sessionId={null}
+        isReplay
+        replaySourceRequestId={7}
+        blockedBy={null}
+      />
+    );
+
+    expect(html).toContain("Replay");
+    expect(html).toContain("Source request");
+    expect(html).toContain("7");
+    expect(html).not.toContain(">Blocked<");
+  });
+
   test("renders fake-200 forwarded notice when errorMessage is a FAKE_200_* code", () => {
     const html = renderWithIntl(
       <ErrorDetailsDialog
@@ -2200,7 +2274,9 @@ describe("error-details-dialog origin decision chain", () => {
         externalOpen
         statusCode={200}
         errorMessage={null}
-        sessionId={"sess-origin-3"}
+        sessionId={"pfx:scope:root"}
+        sourceSessionId="physical-origin"
+        requestSequence={3}
         providerChain={
           [
             {
@@ -2224,7 +2300,7 @@ describe("error-details-dialog origin decision chain", () => {
       await Promise.resolve();
     });
 
-    expect(getSessionOriginChainMock).toHaveBeenCalledWith("sess-origin-3");
+    expect(getSessionOriginChainMock).toHaveBeenCalledWith("pfx:scope:root", 3, "physical-origin");
     expect(getSessionOriginChainMock).toHaveBeenCalledTimes(1);
     expect(container.textContent).toContain("Original decision record unavailable");
     unmount();

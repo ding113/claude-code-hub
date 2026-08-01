@@ -1,4 +1,5 @@
 import { describe, expect, test, vi } from "vitest";
+import { sqlText } from "./message-query-test-support";
 
 /**
  * Verifies that `actualResponseModel` is threaded through both the primary
@@ -86,6 +87,11 @@ describe("findUsageLogsBatch: actualResponseModel propagation", () => {
       originalModel: "gpt-4.1",
       actualResponseModel: "gpt-4.1-2025-04-14",
     });
+
+    const selection = selectMock.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(sqlText(selection.sourceSessionId)).toContain("session_id");
+    expect(sqlText(selection.sessionId)).toContain("session_identity");
+    expect(sqlText(selection.sessionId)).toContain("session_id");
   });
 
   test("ledger-only fallback path: field flows from usageLedger select to UsageLogRow", async () => {

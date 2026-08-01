@@ -88,6 +88,12 @@
       "minRetryCount": "リトライ回数≥",
       "minRetryCountPlaceholder": "回数を入力(0 で制限なし)",
       "enabled": "オン",
+      "replay": {
+        "label": "Replay",
+        "all": "すべてのリクエスト",
+        "only": "Replay のみ",
+        "exclude": "Replay を除外"
+      },
       "apply": "フィルターを適用",
       "reset": "リセット",
       "last7days": "7日",
@@ -164,6 +170,7 @@
       "prevPage": "前へ",
       "nextPage": "次へ",
       "blocked": "ブロック済み",
+      "replay": "Replay",
       "nonBilling": "非課金",
       "skipped": "スキップ",
       "specialSettings": "特殊設定",
@@ -349,6 +356,7 @@
         "title": "パフォーマンス",
         "ttfb": "TTFB",
         "tfft": "TFFT",
+        "tfftShort": "TFFT",
         "duration": "総所要時間",
         "outputRate": "出力速度",
         "outputTokens": "出力トークン"
@@ -554,7 +562,8 @@
       "replayServe": {
         "title": "Replay キャッシュから応答",
         "desc": "このリクエストは Replay キャッシュから直接応答されました(同一リクエストが進行中または完了済み)。上流プロバイダーへの呼び出しは行われず、費用は発生しません。",
-        "replayId": "Replay ID"
+        "replayId": "Replay ID",
+        "sourceRequestId": "元のリクエスト"
       }
     },
     "providerChain": {

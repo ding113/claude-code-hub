@@ -70,6 +70,7 @@ export interface VirtualizedLogsTableFilters {
   actualResponseModelMismatch?: boolean;
   endpoint?: string;
   minRetryCount?: number;
+  replayFilter?: "all" | "replay" | "non-replay";
 }
 
 const STATUS_BADGE_FALLBACK =
@@ -872,7 +873,12 @@ export function VirtualizedLogsTable({
                     {/* Provider */}
                     {hideProviderColumn ? null : (
                       <div className="flex-[1.5] min-w-[100px] px-1.5">
-                        {log.blockedBy ? (
+                        {log.isReplay ? (
+                          <span className="inline-flex items-center gap-1 rounded-md bg-teal-100 dark:bg-teal-950 px-2 py-1 text-xs font-medium text-teal-700 dark:text-teal-300">
+                            <span className="h-1.5 w-1.5 rounded-full bg-teal-600 dark:bg-teal-400" />
+                            {t("logs.table.replay")}
+                          </span>
+                        ) : log.blockedBy ? (
                           <span className="inline-flex items-center gap-1 rounded-md bg-orange-100 dark:bg-orange-950 px-2 py-1 text-xs font-medium text-orange-700 dark:text-orange-300">
                             <span className="h-1.5 w-1.5 rounded-full bg-orange-600 dark:bg-orange-400" />
                             {t("logs.table.blocked")}
@@ -1166,7 +1172,7 @@ export function VirtualizedLogsTable({
                           );
                           const tfftLine =
                             log.tfftMs != null && log.tfftMs > 0
-                              ? `${t("logs.details.performance.tfft")} ${formatDuration(log.tfftMs)}`
+                              ? `${t("logs.details.performance.tfftShort")} ${formatDuration(log.tfftMs)}`
                               : null;
                           const rateLine =
                             rate !== null && !hideRate ? `${rate.toFixed(0)} tok/s` : null;
@@ -1231,9 +1237,12 @@ export function VirtualizedLogsTable({
                           providerChain={log.providerChain}
                           routingTrace={log.routingTrace}
                           sessionId={log.sessionId}
+                          sourceSessionId={log.sourceSessionId}
                           requestSequence={log.requestSequence}
                           blockedBy={log.blockedBy}
                           blockedReason={log.blockedReason}
+                          isReplay={log.isReplay}
+                          replaySourceRequestId={log.replaySourceRequestId}
                           originalModel={log.originalModel}
                           currentModel={log.model}
                           actualResponseModel={log.actualResponseModel}
