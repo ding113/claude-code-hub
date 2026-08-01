@@ -1,4 +1,4 @@
-import { createCoverageConfig } from "../vitest.base";
+import { createCoverageConfig } from "../vitest.base.mts";
 
 export default createCoverageConfig({
   name: "proxy-guard-pipeline",

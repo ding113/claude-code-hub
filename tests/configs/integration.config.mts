@@ -1,4 +1,4 @@
-import { createTestRunnerConfig } from "../vitest.base";
+import { createTestRunnerConfig } from "../vitest.base.mts";
 
 export default createTestRunnerConfig({
   environment: "node",

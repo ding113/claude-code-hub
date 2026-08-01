@@ -406,7 +406,7 @@ export class AffinityStore {
       await redis.zremrangebyscore(descendantsV2Key, "-inf", now);
       const [legacyDescendants, descendants] = await Promise.all([
         redis.smembers(descendantsKey),
-        redis.zrange(descendantsV2Key, 0, -1),
+        redis.zrange(descendantsV2Key, "0", "-1"),
       ]);
       const keys = [...new Set([...knownKeys, ...legacyDescendants, ...descendants])];
       await redis.eval(

@@ -368,6 +368,9 @@ const maplibreMocks = vi.hoisted(() => {
 
 vi.mock("maplibre-gl/dist/maplibre-gl.css", () => ({}));
 vi.mock("maplibre-gl", () => ({
+  Map: maplibreMocks.FakeMap,
+  Marker: maplibreMocks.FakeMarker,
+  Popup: maplibreMocks.FakePopup,
   default: {
     Map: maplibreMocks.FakeMap,
     Marker: maplibreMocks.FakeMarker,
