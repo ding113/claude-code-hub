@@ -203,6 +203,13 @@ export function VirtualizedLogsTable({
   // Flatten all pages into a single array
   const pages = data?.pages;
   const allLogs = useMemo(() => pages?.flatMap((page) => page.logs) ?? [], [pages]);
+  const sourceSessionIdsByIdentity = useMemo<Record<string, string[]>>(
+    () =>
+      Object.fromEntries(
+        pages?.flatMap((page) => Object.entries(page.sourceSessionIdsByIdentity ?? {})) ?? []
+      ),
+    [pages]
+  );
   const filtersResetKey = useMemo(() => JSON.stringify(filters), [filters]);
   const previousFiltersResetKeyRef = useRef(filtersResetKey);
 
@@ -781,6 +788,16 @@ export function VirtualizedLogsTable({
                 }
 
                 const isNonBilling = isNonBillingEndpoint(log.endpoint);
+                const mappedSourceSessionIds = log.sessionId
+                  ? sourceSessionIdsByIdentity[log.sessionId]
+                  : undefined;
+                const displayedSourceSessionIds = (
+                  mappedSourceSessionIds?.length
+                    ? mappedSourceSessionIds
+                    : log.sourceSessionIds?.length
+                      ? log.sourceSessionIds
+                      : [log.sourceSessionId]
+                ).filter((id): id is string => Boolean(id));
                 const _isWarmupSkipped = log.blockedBy === "warmup";
                 return (
                   <div
@@ -846,18 +863,13 @@ export function VirtualizedLogsTable({
                               </TooltipTrigger>
                               <TooltipContent side="bottom" align="start" className="max-w-[500px]">
                                 <p className="text-xs whitespace-normal break-words font-mono">
-                                  {(log.sourceSessionIds?.length
-                                    ? log.sourceSessionIds
-                                    : [log.sourceSessionId]
-                                  )
-                                    .filter((id): id is string => Boolean(id))
-                                    .map((id) => (
-                                      <span className="block" key={id}>
-                                        {id}
-                                      </span>
-                                    ))}
+                                  {displayedSourceSessionIds.map((id) => (
+                                    <span className="block" key={id}>
+                                      {id}
+                                    </span>
+                                  ))}
                                   {log.sessionId &&
-                                    !log.sourceSessionIds?.includes(log.sessionId) && (
+                                    !displayedSourceSessionIds.includes(log.sessionId) && (
                                       <span className="mt-1 block text-muted-foreground">
                                         {log.sessionId}
                                       </span>

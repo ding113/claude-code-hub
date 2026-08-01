@@ -442,6 +442,7 @@ export async function getAllSessions(
 
       for (const s of filteredCached) {
         const lastRequestTime = s.lastRequestAt ? new Date(s.lastRequestAt).getTime() : 0;
+        const concurrentCount = concurrentCounts.get(s.sessionId) ?? 0;
         const sessionInfo: ActiveSessionInfo = {
           sessionId: s.sessionId,
           sessionIdentityKind: s.sessionIdentityKind,
@@ -465,13 +466,14 @@ export async function getAllSessions(
             s.totalCacheCreationTokens +
             s.totalCacheReadTokens,
           costUsd: s.totalCostUsd,
-          status: (concurrentCounts.get(s.sessionId) ?? 0) > 0 ? "in_progress" : "completed",
+          status: concurrentCount > 0 ? "in_progress" : "completed",
           durationMs: s.totalDurationMs,
           requestCount: s.requestCount,
-          concurrentCount: concurrentCounts.get(s.sessionId) ?? 0,
+          concurrentCount,
         };
 
-        if (lastRequestTime >= fiveMinutesAgo) {
+        const isConcurrent = concurrentCount > 0;
+        if (isConcurrent || lastRequestTime >= fiveMinutesAgo) {
           active.push(sessionInfo);
         } else {
           inactive.push(sessionInfo);
@@ -547,6 +549,7 @@ export async function getAllSessions(
 
     for (const s of filteredSessions) {
       const lastRequestTime = s.lastRequestAt ? new Date(s.lastRequestAt).getTime() : 0;
+      const concurrentCount = concurrentCounts.get(s.sessionId) ?? 0;
       const sessionInfo: ActiveSessionInfo = {
         sessionId: s.sessionId,
         sessionIdentityKind: s.sessionIdentityKind,
@@ -570,13 +573,14 @@ export async function getAllSessions(
           s.totalCacheCreationTokens +
           s.totalCacheReadTokens,
         costUsd: s.totalCostUsd,
-        status: (concurrentCounts.get(s.sessionId) ?? 0) > 0 ? "in_progress" : "completed",
+        status: concurrentCount > 0 ? "in_progress" : "completed",
         durationMs: s.totalDurationMs,
         requestCount: s.requestCount,
-        concurrentCount: concurrentCounts.get(s.sessionId) ?? 0,
+        concurrentCount,
       };
 
-      if (lastRequestTime >= fiveMinutesAgo) {
+      const isConcurrent = concurrentCount > 0;
+      if (isConcurrent || lastRequestTime >= fiveMinutesAgo) {
         active.push(sessionInfo);
       } else {
         inactive.push(sessionInfo);

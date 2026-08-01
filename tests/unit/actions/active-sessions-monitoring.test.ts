@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 const getSessionMock = vi.fn();
 const getActiveSessionsCacheMock = vi.fn();
@@ -63,8 +63,12 @@ const SESSION_STATS = {
   cacheTtlApplied: null,
 };
 
+const NOW = new Date("2026-08-02T00:02:00.000Z");
+
 describe("getAllSessions monitoring status", () => {
   beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
     vi.clearAllMocks();
     getSessionMock.mockResolvedValue({ user: { id: 1, role: "admin" } });
     getActiveSessionsCacheMock.mockReturnValue(null);
@@ -72,6 +76,10 @@ describe("getAllSessions monitoring status", () => {
     getAllSessionIdsMock.mockResolvedValue([]);
     aggregateMultipleSessionStatsMock.mockResolvedValue([SESSION_STATS]);
     getObservedConcurrentCountBatchMock.mockResolvedValue(new Map([[SESSION_STATS.sessionId, 1]]));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   test("marks an observed prefix session as in progress", async () => {
@@ -95,5 +103,58 @@ describe("getAllSessions monitoring status", () => {
       })
     );
     expect(getObservedConcurrentCountBatchMock).toHaveBeenCalledWith([SESSION_STATS.sessionId]);
+  });
+
+  test("keeps an in-progress session active when its last request is older than five minutes", async () => {
+    aggregateMultipleSessionStatsMock.mockResolvedValue([
+      {
+        ...SESSION_STATS,
+        lastRequestAt: new Date("2026-08-01T23:00:00.000Z"),
+      },
+    ]);
+
+    const { getAllSessions } = await import("@/actions/active-sessions");
+    const result = await getAllSessions(1, 1, 20);
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        ok: true,
+        data: expect.objectContaining({
+          active: [
+            expect.objectContaining({
+              sessionId: SESSION_STATS.sessionId,
+              status: "in_progress",
+              concurrentCount: 1,
+            }),
+          ],
+          inactive: [],
+          totalActive: 1,
+          totalInactive: 0,
+        }),
+      })
+    );
+  });
+
+  test("keeps a cached in-progress session in the active page", async () => {
+    getActiveSessionsCacheMock.mockReturnValue([
+      {
+        ...SESSION_STATS,
+        lastRequestAt: new Date("2026-08-01T23:00:00.000Z"),
+      },
+    ]);
+
+    const { getAllSessions } = await import("@/actions/active-sessions");
+    const result = await getAllSessions(1, 1, 20);
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        ok: true,
+        data: expect.objectContaining({
+          active: [expect.objectContaining({ status: "in_progress", concurrentCount: 1 })],
+          inactive: [],
+        }),
+      })
+    );
+    expect(aggregateMultipleSessionStatsMock).not.toHaveBeenCalled();
   });
 });
