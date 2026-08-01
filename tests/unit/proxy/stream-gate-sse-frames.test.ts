@@ -34,6 +34,13 @@ describe("SseFrameParser", () => {
     expect(frames).toEqual([{ eventName: null, data: "x" }]);
   });
 
+  it("parses newline-delimited raw JSON frames", () => {
+    expect(parseSseBody('{"candidates":[]}\n{"error":{"message":"failed"}}\n')).toEqual([
+      { eventName: null, data: '{"candidates":[]}' },
+      { eventName: null, data: '{"error":{"message":"failed"}}' },
+    ]);
+  });
+
   it("event without data emits no frame and resets event name", () => {
     const frames = parseSseBody("event: orphan\n\ndata: y\n\n");
     expect(frames).toEqual([{ eventName: null, data: "y" }]);
@@ -112,6 +119,44 @@ describe("SseFrameParser", () => {
     const parser = new SseFrameParser({ maxBufferedCharacters: 10 });
 
     expect(() => parser.push(new TextEncoder().encode("data: 12345\ndata: 67890\n"))).toThrow(
+      SseFrameBufferLimitError
+    );
+  });
+
+  it("supports a separately bounded buffer exemption for recognized frames", () => {
+    const parser = new SseFrameParser({
+      bufferLimitExemption: {
+        maxBufferedCharacters: 128,
+        matches: (eventName, dataHead) =>
+          eventName === "response.created" && dataHead.includes('"type":"response.created"'),
+      },
+      maxBufferedCharacters: 16,
+    });
+    const data = '{"type":"response.created","response":{"input":"large"}}';
+
+    expect(
+      collectAll(parser, [new TextEncoder().encode(`event: response.created\ndata: ${data}\n\n`)])
+    ).toEqual([{ eventName: "response.created", data }]);
+  });
+
+  it("keeps the exemption bounded and resets it after the matching frame", () => {
+    const parser = new SseFrameParser({
+      bufferLimitExemption: {
+        maxBufferedCharacters: 80,
+        matches: (eventName) => eventName === "response.created",
+      },
+      maxBufferedCharacters: 16,
+    });
+    const encoder = new TextEncoder();
+
+    expect(() =>
+      parser.push(encoder.encode(`event: response.created\ndata: ${"x".repeat(81)}\n\n`))
+    ).toThrow(SseFrameBufferLimitError);
+
+    expect(
+      parser.push(encoder.encode("event: response.created\ndata: 12345678901234567890\n\n"))
+    ).toEqual([{ eventName: "response.created", data: "12345678901234567890" }]);
+    expect(() => parser.push(encoder.encode(`data: ${"x".repeat(20)}`))).toThrow(
       SseFrameBufferLimitError
     );
   });

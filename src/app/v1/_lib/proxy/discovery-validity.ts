@@ -1,3 +1,9 @@
+import {
+  classifyFrame,
+  type FrameVerdict,
+  type ProtocolFamily,
+} from "./stream-gate/frame-classifier";
+
 export type DiscoveryProtocol =
   | "anthropic"
   | "openai-chat"
@@ -16,76 +22,12 @@ export const DISCOVERY_PREFIX_MAX_BYTES = 1024 * 1024;
 export const DISCOVERY_EVENT_MAX_COUNT = 1024;
 const DISCOVERY_TEXT_ENCODER = new TextEncoder();
 
-function hasContent(value: unknown): boolean {
-  if (typeof value === "string") return value.trim().length > 0;
-  if (!value || typeof value !== "object") return false;
-  if (Array.isArray(value)) return value.some(hasContent);
-  const object = value as Record<string, unknown>;
-  return [
-    "text",
-    "content",
-    "delta",
-    "output_text",
-    "thinking",
-    "tool_use",
-    "tool_calls",
-    "functionCall",
-    "function_call",
-    "function",
-    "arguments",
-    "partial_json",
-    "id",
-    "name",
-    "input",
-    "parts",
-  ].some((key) => hasContent(object[key]));
-}
-
-function hasAnthropicContentBlock(value: unknown): boolean {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
-  const block = value as Record<string, unknown>;
-  if (typeof block.type !== "string" || block.type.length === 0) return false;
-  // Text blocks need non-empty text; tool_use/thinking/image blocks are
-  // deliverable as soon as their typed block starts, even with empty input.
-  return block.type === "text" ? hasContent(block.text) : true;
-}
-
-function hasOpenAIResponsesOutputItem(value: unknown): boolean {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
-  const item = value as Record<string, unknown>;
-  if (typeof item.type !== "string") return false;
-
-  switch (item.type) {
-    case "message":
-      return hasContent(item.content);
-    case "reasoning":
-      return hasContent(item.summary) || hasContent(item.content);
-    case "function_call":
-    case "mcp_call":
-      return hasContent(item.name) || hasContent(item.arguments);
-    case "custom_tool_call":
-      return hasContent(item.name) || hasContent(item.input);
-    case "computer_call":
-    case "web_search_call":
-    case "file_search_call":
-    case "code_interpreter_call":
-    case "local_shell_call":
-    case "shell_call":
-    case "apply_patch_call":
-      return [
-        item.action,
-        item.arguments,
-        item.input,
-        item.queries,
-        item.query,
-        item.code,
-        item.command,
-        item.operation,
-      ].some(hasContent);
-    default:
-      return false;
-  }
-}
+const DISCOVERY_PROTOCOL_FAMILIES: Partial<Record<DiscoveryProtocol, ProtocolFamily>> = {
+  anthropic: "anthropic",
+  "openai-chat": "openai-chat",
+  "openai-responses": "openai-responses",
+  gemini: "gemini",
+};
 
 /**
  * Protocol-level error signals that must remain terminal even if a provider
@@ -114,69 +56,57 @@ export function isDiscoveryProtocolErrorPayload(value: unknown): boolean {
   );
 }
 
-function classifyJson(value: unknown, protocol: DiscoveryProtocol): DiscoveryValidity {
-  if (!value || typeof value !== "object") return { ready: false, terminal: false, error: true };
-  const object = value as Record<string, unknown>;
-  if (isDiscoveryProtocolErrorPayload(value)) {
-    return { ready: false, terminal: true, error: true };
-  }
-  if (protocol === "openai-chat") {
-    const choices = Array.isArray(object.choices) ? object.choices : [];
-    const ready = choices.some((choice) => {
-      if (!choice || typeof choice !== "object") return false;
-      const choiceObject = choice as Record<string, unknown>;
-      const delta = choiceObject.delta;
-      return hasContent(delta) || hasContent(choiceObject.message);
-    });
-    return { ready, terminal: false, error: false };
-  }
-  if (protocol === "openai-responses") {
-    if (object.type === "response.completed" || object.type === "response.done") {
-      return { ready: false, terminal: true, error: false };
-    }
-    return {
-      ready:
-        (object.type === "response.output_text.delta" && hasContent(object.delta)) ||
-        (object.type === "response.function_call_arguments.delta" && hasContent(object.delta)) ||
-        (object.type === "response.reasoning_summary_text.delta" && hasContent(object.delta)) ||
-        (object.type === "response.output_item.added" && hasOpenAIResponsesOutputItem(object.item)),
-      terminal: false,
-      error: false,
-    };
-  }
-  if (protocol === "gemini") {
-    const response =
-      object.response && typeof object.response === "object" && !Array.isArray(object.response)
-        ? (object.response as Record<string, unknown>)
-        : null;
-    const candidatesValue = response?.candidates ?? object.candidates;
-    const candidates = Array.isArray(candidatesValue) ? candidatesValue : [];
-    return {
-      ready: candidates.some((candidate) => hasContent(candidate)),
-      terminal: false,
-      error: false,
-    };
-  }
-  // Anthropic SSE data events: message_start/message_delta are metadata; a
-  // content_block_delta or tool use is the first deliverable event.
-  if (
-    object.type === "message_start" ||
-    object.type === "message_delta" ||
-    object.type === "ping"
-  ) {
-    return { ready: false, terminal: false, error: false };
-  }
-  if (object.type === "message_stop") {
-    return { ready: false, terminal: true, error: false };
-  }
+function validityFromVerdict(verdict: FrameVerdict): DiscoveryValidity {
   return {
-    ready:
-      (object.type === "content_block_delta" && hasContent(object.delta)) ||
-      (object.type === "content_block_start" && hasAnthropicContentBlock(object.content_block)) ||
-      hasContent(object.content),
-    terminal: false,
-    error: false,
+    ready: verdict === "content",
+    terminal: verdict === "terminal" || verdict === "error" || verdict === "malformed",
+    error: verdict === "error" || verdict === "malformed",
   };
+}
+
+function classifyProtocolFrame(
+  data: string,
+  protocol: DiscoveryProtocol,
+  eventName: string | null
+): DiscoveryValidity {
+  const family = DISCOVERY_PROTOCOL_FAMILIES[protocol];
+  if (!family) return { ready: false, terminal: false, error: false };
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(data) as unknown;
+    // 同帧的通用失败标志优先于 content；fake-200 失败响应不能赢得 Discovery。
+    if (isDiscoveryProtocolErrorPayload(parsed)) {
+      return { ready: false, terminal: true, error: true };
+    }
+  } catch {
+    parsed = undefined;
+  }
+
+  let verdict = classifyFrame(family, eventName, data);
+  if (verdict !== "neutral") return validityFromVerdict(verdict);
+
+  // Gemini SDK wrappers may expose the native candidate chunk under response.
+  if (
+    family === "gemini" &&
+    parsed &&
+    typeof parsed === "object" &&
+    !Array.isArray(parsed) &&
+    (parsed as Record<string, unknown>).response &&
+    typeof (parsed as Record<string, unknown>).response === "object"
+  ) {
+    try {
+      verdict = classifyFrame(
+        family,
+        eventName,
+        JSON.stringify((parsed as Record<string, unknown>).response)
+      );
+    } catch {
+      return validityFromVerdict("malformed");
+    }
+  }
+
+  return validityFromVerdict(verdict);
 }
 
 export function classifyDiscoveryChunk(
@@ -189,6 +119,7 @@ export function classifyDiscoveryChunk(
 export class DiscoveryValidityParser {
   private buffered = "";
   private dataLines: string[] = [];
+  private eventName: string | null = null;
   private readonly decoder = new TextDecoder();
   private _ready = false;
   private _terminal = false;
@@ -211,6 +142,7 @@ export class DiscoveryValidityParser {
         this._limitExceeded = true;
         this.buffered = "";
         this.dataLines = [];
+        this.eventName = null;
         return this.result;
       }
     }
@@ -229,6 +161,7 @@ export class DiscoveryValidityParser {
         if (this._error) {
           this.buffered = "";
           this.dataLines = [];
+          this.eventName = null;
           return this.result;
         }
       }
@@ -263,6 +196,10 @@ export class DiscoveryValidityParser {
 
     const colonIndex = line.indexOf(":");
     const field = colonIndex === -1 ? line : line.slice(0, colonIndex);
+    if (field === "event") {
+      this.eventName = (colonIndex === -1 ? "" : line.slice(colonIndex + 1)).trim();
+      return;
+    }
     if (field === "data") {
       let value = colonIndex === -1 ? "" : line.slice(colonIndex + 1);
       if (value.startsWith(" ")) value = value.slice(1);
@@ -273,7 +210,7 @@ export class DiscoveryValidityParser {
     // event/id/retry and unknown SSE fields carry framing metadata only. A
     // bare JSON line is supported for providers returning non-SSE JSON, but
     // never while an SSE data event is pending.
-    if (field === "event" || field === "id" || field === "retry" || this.dataLines.length > 0) {
+    if (field === "id" || field === "retry" || this.dataLines.length > 0) {
       return;
     }
     const candidate = line.trim();
@@ -287,24 +224,18 @@ export class DiscoveryValidityParser {
   }
 
   private flushSseEvent(): void {
+    const eventName = this.eventName;
+    this.eventName = null;
     if (this.dataLines.length === 0) return;
     const candidate = this.dataLines.join("\n");
     this.dataLines = [];
     if (!this.beginEvent()) return;
-    if (candidate.trim() === "[DONE]") {
-      this._terminal = true;
-      return;
-    }
-    try {
-      this.consumeValue(JSON.parse(candidate) as unknown);
-    } catch {
-      // A complete but non-JSON SSE event cannot establish protocol validity.
-    }
+    this.consumeFrame(candidate, eventName);
   }
 
   private consumeEventValue(value: unknown): void {
     if (!this.beginEvent()) return;
-    this.consumeValue(value);
+    this.consumeFrame(JSON.stringify(value), null);
   }
 
   private beginEvent(): boolean {
@@ -317,8 +248,8 @@ export class DiscoveryValidityParser {
     return true;
   }
 
-  private consumeValue(value: unknown): void {
-    const result = classifyJson(value, this.protocol);
+  private consumeFrame(data: string, eventName: string | null): void {
+    const result = classifyProtocolFrame(data, this.protocol, eventName);
     this._ready ||= result.ready;
     this._terminal ||= result.terminal;
     this._error ||= result.error;

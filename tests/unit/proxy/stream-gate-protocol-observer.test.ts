@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
 import {
   createStreamProtocolObserver,
-  REPLAY_PROTOCOL_OBSERVER_MAX_BUFFER_CHARACTERS,
+  STREAM_PROTOCOL_OBSERVER_MAX_BUFFER_CHARACTERS,
 } from "@/app/v1/_lib/proxy/stream-gate/stream-protocol-observer";
 
 const encoder = new TextEncoder();
@@ -15,6 +15,7 @@ function observeAtEveryBoundary(stream: string): void {
     expect(observer.finish()).toEqual({
       sawContent: true,
       sawTerminal: true,
+      observationIncomplete: false,
       failure: null,
     });
   }
@@ -47,9 +48,11 @@ describe("StreamProtocolObserver", () => {
     expect(result.sawContent).toBe(true);
     expect(result.sawTerminal).toBe(true);
     expect(result.failure).toEqual({
+      afterContent: true,
       verdict: "error",
       eventName: "response.failed",
     });
+    expect(result.observationIncomplete).toBe(false);
   });
 
   test("把 malformed data 记录为终态失败", () => {
@@ -66,11 +69,37 @@ describe("StreamProtocolObserver", () => {
     expect(observer.finish()).toEqual({
       sawContent: true,
       sawTerminal: false,
-      failure: { verdict: "malformed", eventName: "message_stop" },
+      observationIncomplete: false,
+      failure: { afterContent: true, verdict: "malformed", eventName: "message_stop" },
     });
   });
 
-  test("成功 Anthropic tool_use/message_stop 可 completed", () => {
+  test("显式 protocol error 覆盖较早的 malformed，但保留 Replay 禁用证据", () => {
+    const observer = createStreamProtocolObserver("openai-responses");
+    observer.observe(
+      encoder.encode(
+        [
+          'event: response.output_text.delta\ndata: {"type":"response.output_text.delta","delta":"ok"}\n\n',
+          "event: response.in_progress\ndata: not-json\n\n",
+          'event: response.failed\ndata: {"type":"response.failed","response":{"status":"failed"}}\n\n',
+        ].join("")
+      )
+    );
+
+    expect(observer.finish()).toEqual({
+      sawContent: true,
+      sawTerminal: false,
+      observationIncomplete: false,
+      failure: {
+        afterContent: true,
+        verdict: "error",
+        eventName: "response.failed",
+        sawMalformed: true,
+      },
+    });
+  });
+
+  test("Anthropic tool metadata alone does not count as committed content", () => {
     const observer = createStreamProtocolObserver("anthropic");
     observer.observe(
       encoder.encode(
@@ -82,8 +111,9 @@ describe("StreamProtocolObserver", () => {
     );
 
     expect(observer.finish()).toEqual({
-      sawContent: true,
+      sawContent: false,
       sawTerminal: true,
+      observationIncomplete: false,
       failure: null,
     });
   });
@@ -95,6 +125,7 @@ describe("StreamProtocolObserver", () => {
     expect(observer.finish()).toEqual({
       sawContent: true,
       sawTerminal: false,
+      observationIncomplete: false,
       failure: null,
     });
   });
@@ -110,6 +141,7 @@ describe("StreamProtocolObserver", () => {
     expect(observer.finish()).toEqual({
       sawContent: true,
       sawTerminal: true,
+      observationIncomplete: false,
       failure: null,
     });
   });
@@ -121,24 +153,83 @@ describe("StreamProtocolObserver", () => {
     expect(observer.finish()).toEqual({
       sawContent: false,
       sawTerminal: false,
-      failure: { verdict: "malformed", eventName: "response.completed" },
+      observationIncomplete: false,
+      failure: { afterContent: false, verdict: "malformed", eventName: "response.completed" },
     });
   });
 
-  test("超长未终止 SSE 行会 fail closed，而不是被视为干净流", () => {
+  test("observer 为单个未完成协议帧保留 10 MiB 观察空间", () => {
+    expect(STREAM_PROTOCOL_OBSERVER_MAX_BUFFER_CHARACTERS).toBe(10 * 1024 * 1024);
+  });
+
+  test("超长未终止 SSE 行只会使观察不完整，不会伪造 malformed", () => {
     const observer = createStreamProtocolObserver("openai-responses");
     observer.observe(
-      encoder.encode(`data: ${"x".repeat(REPLAY_PROTOCOL_OBSERVER_MAX_BUFFER_CHARACTERS + 1)}`)
+      encoder.encode(`data: ${"x".repeat(STREAM_PROTOCOL_OBSERVER_MAX_BUFFER_CHARACTERS + 1)}`)
     );
 
     expect(observer.finish()).toEqual({
       sawContent: false,
       sawTerminal: false,
-      failure: { verdict: "malformed", eventName: null },
+      observationIncomplete: true,
+      failure: null,
     });
   });
 
-  test("首内容后 observer 超限仍保留 content，并阻止 Replay completed", () => {
+  test("大型 Responses request echo 后的正常内容不会被误判为 malformed", () => {
+    const observer = createStreamProtocolObserver("openai-responses");
+    const requestEcho = [
+      "event: response.created\n",
+      `data: ${JSON.stringify({
+        response: {
+          id: "resp_large_echo",
+          instructions: "x".repeat(STREAM_PROTOCOL_OBSERVER_MAX_BUFFER_CHARACTERS + 1),
+          status: "in_progress",
+        },
+        type: "response.created",
+      })}\n\n`,
+    ].join("");
+    const suffix = [
+      'event: response.output_text.delta\ndata: {"type":"response.output_text.delta","delta":"ok"}\n\n',
+      'event: response.completed\ndata: {"type":"response.completed","response":{"status":"completed"}}\n\n',
+    ].join("");
+    const bytes = encoder.encode(`${requestEcho}${suffix}`);
+    for (let offset = 0; offset < bytes.length; offset += 16 * 1024) {
+      observer.observe(bytes.subarray(offset, offset + 16 * 1024));
+    }
+
+    expect(observer.finish()).toEqual({
+      sawContent: true,
+      sawTerminal: true,
+      observationIncomplete: false,
+      failure: null,
+    });
+  });
+
+  test("大型非 request echo 帧达到资源上限时标记 observation incomplete", () => {
+    const observer = createStreamProtocolObserver("openai-responses");
+    observer.observe(
+      encoder.encode(
+        `event: response.output_item.added\ndata: ${JSON.stringify({
+          item: {
+            id: "msg_oversized",
+            payload: "x".repeat(STREAM_PROTOCOL_OBSERVER_MAX_BUFFER_CHARACTERS + 1),
+            type: "message",
+          },
+          type: "response.output_item.added",
+        })}\n\n`
+      )
+    );
+
+    expect(observer.finish()).toEqual({
+      sawContent: false,
+      sawTerminal: false,
+      observationIncomplete: true,
+      failure: null,
+    });
+  });
+
+  test("首内容后 observer 超限保留 content，并把资源上限与协议失败分开", () => {
     const observer = createStreamProtocolObserver("openai-responses");
     observer.observe(
       encoder.encode(
@@ -146,13 +237,14 @@ describe("StreamProtocolObserver", () => {
       )
     );
     observer.observe(
-      encoder.encode(`data: ${"x".repeat(REPLAY_PROTOCOL_OBSERVER_MAX_BUFFER_CHARACTERS + 1)}`)
+      encoder.encode(`data: ${"x".repeat(STREAM_PROTOCOL_OBSERVER_MAX_BUFFER_CHARACTERS + 1)}`)
     );
 
     expect(observer.finish()).toEqual({
       sawContent: true,
       sawTerminal: false,
-      failure: { verdict: "malformed", eventName: null },
+      observationIncomplete: true,
+      failure: null,
     });
   });
 });

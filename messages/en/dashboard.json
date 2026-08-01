@@ -326,6 +326,7 @@
           "local_manual": "Local manual pricing",
           "cloud_exact": "Exact cloud provider pricing",
           "cloud_model_fallback": "Fallback model provider pricing",
+          "cloud_official": "Official cloud pricing",
           "priority_fallback": "Priority provider fallback pricing",
           "single_provider_top_level": "Top-level single-provider pricing",
           "official_fallback": "Official pricing"
@@ -603,6 +604,7 @@
         "local_manual": "Local manual pricing",
         "cloud_exact": "Exact cloud provider pricing",
         "cloud_model_fallback": "Fallback model provider pricing",
+        "cloud_official": "Official cloud pricing",
         "priority_fallback": "Priority provider fallback pricing",
         "single_provider_top_level": "Top-level single-provider pricing",
         "official_fallback": "Official pricing"

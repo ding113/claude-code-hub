@@ -1236,9 +1236,14 @@ describe("Endpoint circuit breaker isolation", () => {
   ])("accepts a structurally valid $label completion marker", async ({ format, body }) => {
     const session = createSession();
     session.originalFormat = format;
-    if (format === "gemini" || format === "gemini-cli") {
-      session.provider = { ...session.provider!, providerType: format };
-    }
+    const providerTypeByFormat = {
+      claude: "claude",
+      gemini: "gemini",
+      "gemini-cli": "gemini-cli",
+      openai: "openai-compatible",
+      response: "codex",
+    } as const;
+    session.provider = { ...session.provider!, providerType: providerTypeByFormat[format] };
     const snapshot = {
       sessionId: "fake-session",
       keyId: 456,
