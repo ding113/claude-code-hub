@@ -1,4 +1,5 @@
 import "@/lib/polyfills/file";
+import "@/lib/polyfills/worker-threads";
 import { Hono } from "hono";
 import { handle } from "hono/vercel";
 import { registerCors } from "@/app/v1/_lib/cors";
