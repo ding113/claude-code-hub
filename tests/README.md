@@ -174,7 +174,7 @@ echo 'DSN=postgres://postgres:postgres@localhost:5432/claude_code_hub' > .env.te
 
 3. **启用所有测试**：
 
-编辑 `vitest.config.ts`，注释掉 exclude 中的这几行：
+编辑 `vitest.config.mts`，注释掉 exclude 中的这几行：
 ```typescript
 // "tests/integration/**",
 // "tests/api/users-actions.test.ts",
@@ -272,7 +272,7 @@ bun run test:ui
 # 启动数据库
 docker compose up -d postgres redis
 
-# 启用所有测试（修改 vitest.config.ts）
+# 启用所有测试（修改 vitest.config.mts）
 # 然后运行
 bun run test
 ```

@@ -69,7 +69,7 @@ const PUBLIC_STATUS_VENDOR_ICON_REGISTRY: Record<
   qwen: Qwen.Color,
   sensenova: SenseNova.Color,
   spark: Spark.Color,
-  stepfun: Stepfun.Color,
+  stepfun: Stepfun,
   together: Together.Color,
   volcengine: Doubao.Color,
   wenxin: Wenxin.Color,

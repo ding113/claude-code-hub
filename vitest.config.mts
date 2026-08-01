@@ -1,6 +1,6 @@
 import { availableParallelism } from "node:os";
 import { defineConfig } from "vitest/config";
-import { parsePositiveInt, parseWorkerLimit, sharedResolve } from "./tests/vitest.base";
+import { parsePositiveInt, parseWorkerLimit, sharedResolve } from "./tests/vitest.base.mts";
 
 const isIntegrationFileFilterRequested = process.argv.some((arg) =>
   /tests[\\/]+integration(?:[\\/].+\.(test|spec)\.[cm]?[jt]sx?|[\\/]?$)/.test(arg)
@@ -144,7 +144,15 @@ export default defineConfig({
     resolveSnapshotPath: (testPath, snapExtension) => {
       return testPath.replace(/\.test\.([tj]sx?)$/, `${snapExtension}.$1`);
     },
+    server: {
+      deps: {
+        inline: ["@lobehub/icons", "@lobehub/ui", "@lobehub/fluent-emoji"],
+      },
+    },
   },
 
   resolve: sharedResolve({ includeMessages: true }),
+  ssr: {
+    noExternal: ["@lobehub/icons", "@lobehub/ui", "@lobehub/fluent-emoji"],
+  },
 });

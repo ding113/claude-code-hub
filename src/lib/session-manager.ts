@@ -3175,7 +3175,7 @@ export class SessionManager {
     try {
       const pipeline = redis.pipeline();
       for (const providerId of uniqueProviderIds) {
-        pipeline.zrange(`provider:${providerId}:active_sessions`, 0, -1);
+        pipeline.zrange(`provider:${providerId}:active_sessions`, "0", "-1");
       }
 
       const results = await pipeline.exec();

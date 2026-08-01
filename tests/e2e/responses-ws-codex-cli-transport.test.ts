@@ -12,9 +12,9 @@ import WebSocket, { type RawData, WebSocketServer } from "ws";
  *
  * Default Vitest/E2E runs skip this file's body. To run it locally:
  *   PowerShell:
- *     $env:CCH_CODEX_E2E="1"; $env:CCH_CODEX_E2E_EXPECT_TRANSPORT="websocket"; npx vitest run --config tests/configs/e2e.config.ts tests/e2e/responses-ws-codex-cli-transport.test.ts
+ *     $env:CCH_CODEX_E2E="1"; $env:CCH_CODEX_E2E_EXPECT_TRANSPORT="websocket"; npx vitest run --config tests/configs/e2e.config.mts tests/e2e/responses-ws-codex-cli-transport.test.ts
  *   POSIX:
- *     CCH_CODEX_E2E=1 CCH_CODEX_E2E_EXPECT_TRANSPORT=websocket npx vitest run --config tests/configs/e2e.config.ts tests/e2e/responses-ws-codex-cli-transport.test.ts
+ *     CCH_CODEX_E2E=1 CCH_CODEX_E2E_EXPECT_TRANSPORT=websocket npx vitest run --config tests/configs/e2e.config.mts tests/e2e/responses-ws-codex-cli-transport.test.ts
  *
  * `CCH_CODEX_E2E_EXPECT_TRANSPORT=any|http|websocket` controls how strict the
  * assertion is. Use `websocket` when validating a Codex build that should speak
@@ -23,7 +23,7 @@ import WebSocket, { type RawData, WebSocketServer } from "ws";
  *
  * Fault-injection probes are also opt-in:
  *   PowerShell:
- *     $env:CCH_CODEX_E2E="1"; $env:CCH_CODEX_E2E_FAULTS="1"; npx vitest run --config tests/configs/e2e.config.ts tests/e2e/responses-ws-codex-cli-transport.test.ts
+ *     $env:CCH_CODEX_E2E="1"; $env:CCH_CODEX_E2E_FAULTS="1"; npx vitest run --config tests/configs/e2e.config.mts tests/e2e/responses-ws-codex-cli-transport.test.ts
  */
 
 type ProbeEvent =

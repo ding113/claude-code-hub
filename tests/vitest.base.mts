@@ -13,6 +13,11 @@ export function sharedResolve(opts?: { includeMessages?: boolean }) {
   const alias: Record<string, string> = {
     "@": path.resolve(root, "src"),
     "server-only": path.resolve(root, "tests/server-only.mock.ts"),
+    "@lobehub/fluent-emoji/es/FluentEmoji": path.resolve(
+      root,
+      "node_modules/@lobehub/fluent-emoji/es/FluentEmoji/index.js"
+    ),
+    "@lobehub/fluent-emoji": path.resolve(root, "tests/fluent-emoji.mock.tsx"),
   };
   if (opts?.includeMessages) {
     alias["@messages"] = path.resolve(root, "messages");
@@ -106,13 +111,25 @@ export function createCoverageConfig(opts: CoverageConfigOptions) {
         thresholds: opts.thresholds,
       },
       reporters: ["verbose"],
+      testTimeout: 10000,
+      hookTimeout: 10000,
+      teardownTimeout: parsePositiveInt(process.env.VITEST_TEARDOWN_TIMEOUT_MS, 15000),
+      slowTestThreshold: parsePositiveInt(process.env.VITEST_SLOW_TEST_THRESHOLD_MS, 1000),
       isolate: true,
       mockReset: true,
       restoreMocks: true,
       clearMocks: true,
       resolveSnapshotPath,
+      server: {
+        deps: {
+          inline: ["@lobehub/icons", "@lobehub/ui", "@lobehub/fluent-emoji"],
+        },
+      },
     },
     resolve: sharedResolve(),
+    ssr: {
+      noExternal: ["@lobehub/icons", "@lobehub/ui", "@lobehub/fluent-emoji"],
+    },
   });
 }
 

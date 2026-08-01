@@ -1,7 +1,7 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
-import { sharedResolve } from "../vitest.base";
+import { sharedResolve } from "../vitest.base.mts";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 

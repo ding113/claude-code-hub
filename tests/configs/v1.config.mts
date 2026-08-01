@@ -1,5 +1,5 @@
 import { defineConfig } from "vitest/config";
-import { sharedResolve } from "../vitest.base";
+import { sharedResolve } from "../vitest.base.mts";
 
 export default defineConfig({
   test: {

@@ -9,7 +9,7 @@
     "../src/**/*.d.ts",
     "../src/**/*.ts",
     "integration/provider-batch-ledger-postgres.test.ts",
-    "configs/provider-batch-ledger-postgres.config.ts"
+    "configs/provider-batch-ledger-postgres.config.mts"
   ],
   "exclude": ["../node_modules", "../.next", "../dist", "../build"]
 }

@@ -536,7 +536,7 @@ export class SessionTracker {
         cleanupPipeline.zrangebyscore(key, "-inf", cutoffMs);
         cleanupPipeline.zremrangebyscore(key, "-inf", cutoffMs);
         // 获取剩余 session IDs
-        cleanupPipeline.zrange(key, 0, -1);
+        cleanupPipeline.zrange(key, "0", "-1");
       }
 
       const cleanupResults = await cleanupPipeline.exec();
@@ -665,7 +665,7 @@ export class SessionTracker {
         await redis.zremrangebyscore(key, "-inf", cutoffMs);
 
         // 获取剩余的 session ID
-        return await redis.zrange(key, 0, -1);
+        return await redis.zrange(key, "0", "-1");
       }
 
       return [];
@@ -688,7 +688,7 @@ export class SessionTracker {
       }
       const cutoffMs = Date.now() - SessionTracker.SESSION_TTL_MS;
       await redis.zremrangebyscore(key, "-inf", cutoffMs);
-      const sessionIdentities = await redis.zrange(key, 0, -1);
+      const sessionIdentities = await redis.zrange(key, "0", "-1");
       if (sessionIdentities.length === 0) return [];
 
       const pipeline = redis.pipeline();
@@ -739,7 +739,7 @@ export class SessionTracker {
       }
 
       // 2. 获取剩余的 session ID
-      const sessionIds = await redis.zrange(key, 0, -1);
+      const sessionIds = await redis.zrange(key, "0", "-1");
       if (sessionIds.length === 0) return 0;
 
       // 3. 批量验证 info 是否存在
