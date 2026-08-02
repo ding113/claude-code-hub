@@ -542,17 +542,20 @@ describe("ReplayStore：owner 租约", () => {
     expect(currentRedis().kv.has("cch:replay:owner:r1")).toBe(false);
   });
 
-  it("completeOwned 仅在 token 匹配时原子写 completed meta 并释放租约", async () => {
+  it("completeOwned 仅在 token 匹配时原子写 completed meta、保留 chunks 并释放租约", async () => {
     const store = new ReplayStore();
     const completedMeta = makeMeta({ status: "completed", chunkCount: 2 });
     await store.tryClaimOwner("r1", "tok-a");
+    await store.appendChunks("r1", ["first", "second"]);
 
     await expect(store.completeOwned("r1", "tok-other", completedMeta)).resolves.toBe(false);
     expect(currentRedis().kv.get("cch:replay:owner:r1")).toBe("tok-a");
     await expect(store.getMeta("r1")).resolves.toBeNull();
+    await expect(store.readChunks("r1", 0)).resolves.toEqual(["first", "second"]);
 
     await expect(store.completeOwned("r1", "tok-a", completedMeta)).resolves.toBe(true);
     await expect(store.getMeta("r1")).resolves.toEqual(completedMeta);
+    await expect(store.readChunks("r1", 0)).resolves.toEqual(["first", "second"]);
     expect(currentRedis().kv.has("cch:replay:owner:r1")).toBe(false);
   });
 });

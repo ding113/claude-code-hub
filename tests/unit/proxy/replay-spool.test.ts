@@ -440,15 +440,19 @@ describe("ReplaySpool：completeAfterBilling 终态屏障", () => {
     expect(getActiveReplaySpoolCount()).toBe(0);
   });
 
-  it("复用已有 durable winner 时丢弃当前热层候选，不写 aborted", async () => {
+  it("复用已有 durable winner 时发布 completed 终态并保留 live attachment", async () => {
     storeControl.store.persistCompleted.mockResolvedValueOnce("existing");
     const spool = makeSpool();
     spool.observe(encoder.encode("data: a\n\n"));
 
     await spool.completeAfterBilling(7);
 
-    expect(storeControl.store.discardOwned).toHaveBeenCalledWith(identity.replayId, "owner-token");
-    expect(storeControl.store.completeOwned).not.toHaveBeenCalled();
+    expect(storeControl.store.completeOwned).toHaveBeenCalledWith(
+      identity.replayId,
+      "owner-token",
+      expect.objectContaining({ status: "completed", messageRequestId: 7, chunkCount: 1 })
+    );
+    expect(storeControl.store.discardOwned).not.toHaveBeenCalled();
     expect(storeControl.store.abortOwned).not.toHaveBeenCalled();
   });
 
