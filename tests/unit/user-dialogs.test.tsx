@@ -45,6 +45,7 @@ const mockToggleUserEnabled = vi.fn().mockResolvedValue({ ok: true });
 const mockResetUser5hLimitOnly = vi.fn().mockResolvedValue({ ok: true });
 const mockResetUserLimitsOnly = vi.fn().mockResolvedValue({ ok: true });
 const mockResetUserAllStatistics = vi.fn().mockResolvedValue({ ok: true });
+const mockGetUserStatisticsReset = vi.fn();
 const mockAddKey = vi.fn().mockResolvedValue({ ok: true, data: { key: "sk-test-key" } });
 const mockEditKey = vi.fn().mockResolvedValue({ ok: true });
 const mockCreateUserOnly = vi.fn().mockResolvedValue({ ok: true, data: { user: { id: 1 } } });
@@ -57,6 +58,34 @@ vi.mock("@/actions/users", () => ({
   resetUserAllStatistics: (...args: unknown[]) => mockResetUserAllStatistics(...args),
   createUserOnly: (...args: unknown[]) => mockCreateUserOnly(...args),
 }));
+
+vi.mock("@/lib/api-client/v1/actions/users", () => ({
+  editUser: (...args: unknown[]) => mockEditUser(...args),
+  getUserStatisticsReset: (...args: unknown[]) => mockGetUserStatisticsReset(...args),
+  removeUser: (...args: unknown[]) => mockRemoveUser(...args),
+  resetUserLimitsOnly: (...args: unknown[]) => mockResetUserLimitsOnly(...args),
+  resetUserAllStatistics: (...args: unknown[]) => mockResetUserAllStatistics(...args),
+  toggleUserEnabled: (...args: unknown[]) => mockToggleUserEnabled(...args),
+}));
+
+vi.mock("@/components/ui/alert-dialog", () => {
+  type PropsWithChildren = { children?: ReactNode };
+  const Wrap = ({ children }: PropsWithChildren) => <div>{children}</div>;
+  const Button = ({ children, ...props }: PropsWithChildren & Record<string, unknown>) => (
+    <button {...props}>{children}</button>
+  );
+  return {
+    AlertDialog: Wrap,
+    AlertDialogAction: Button,
+    AlertDialogCancel: Button,
+    AlertDialogContent: Wrap,
+    AlertDialogDescription: Wrap,
+    AlertDialogFooter: Wrap,
+    AlertDialogHeader: Wrap,
+    AlertDialogTitle: Wrap,
+    AlertDialogTrigger: Wrap,
+  };
+});
 
 vi.mock("@/app/[locale]/dashboard/_components/user/actions/reset-user-5h-limit", () => ({
   resetUser5hLimitOnly: (...args: unknown[]) => mockResetUser5hLimitOnly(...args),
@@ -258,6 +287,20 @@ describe("EditUserDialog", () => {
       defaultOptions: { queries: { retry: false } },
     });
     vi.clearAllMocks();
+    mockResetUserAllStatistics.mockResolvedValue({
+      ok: true,
+      data: {
+        resetId: "00000000-0000-4000-8000-000000000001",
+        userId: 1,
+        status: "queued",
+        requestedAt: "2026-08-02T12:00:00.000Z",
+        startedAt: null,
+        completedAt: null,
+        deletedMessageRequests: 0,
+        deletedUsageLedger: 0,
+        errorCode: null,
+      },
+    });
   });
 
   afterEach(() => {
@@ -380,6 +423,40 @@ describe("EditUserDialog", () => {
     ).toBe(true);
 
     unmount();
+  });
+
+  test("marks a statistics reset failed after five consecutive polling retries", async () => {
+    vi.useFakeTimers();
+    mockGetUserStatisticsReset.mockResolvedValue({
+      ok: false,
+      error: "Service unavailable",
+      errorCode: "CONNECTION_FAILED",
+    });
+    const { container, unmount } = renderWithProviders(
+      <EditUserDialog open={true} onOpenChange={vi.fn()} user={mockUser} />
+    );
+    const buttons = Array.from(container.querySelectorAll("button"));
+    const resetButton = buttons.find(
+      (button) =>
+        button.textContent?.trim() === messages.dashboard.userManagement.editDialog.resetData.button
+    );
+    const confirmButton = buttons.find(
+      (button) =>
+        button.textContent?.trim() ===
+        messages.dashboard.userManagement.editDialog.resetData.confirm
+    );
+
+    act(() => resetButton?.click());
+    await act(async () => confirmButton?.click());
+    await act(async () => vi.advanceTimersByTimeAsync(32_000));
+
+    expect(mockGetUserStatisticsReset).toHaveBeenCalledTimes(6);
+    expect(container.querySelector('[data-testid="statistics-reset-status"]')?.textContent).toBe(
+      messages.dashboard.userManagement.editDialog.resetData.failed
+    );
+
+    unmount();
+    vi.useRealTimers();
   });
 });
 
