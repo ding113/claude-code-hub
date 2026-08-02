@@ -25,6 +25,7 @@ import {
   UsersUsageBatchSchema,
   UserUpdateSchema,
 } from "@/lib/api/v1/schemas/users";
+import type { UserStatisticsResetRecord } from "@/lib/user-statistics-reset/types";
 
 export async function listUsers(c: Context): Promise<Response> {
   const query = UserListQuerySchema.safeParse({
@@ -239,7 +240,7 @@ export async function getUserStatisticsReset(c: Context): Promise<Response> {
   if (!params.success) return fromZodError(params.error, new URL(c.req.url).pathname);
 
   const { findUserStatisticsReset } = await import("@/lib/user-statistics-reset/reset-queue");
-  let reset;
+  let reset: UserStatisticsResetRecord | null;
   try {
     reset = await findUserStatisticsReset(params.data.id, params.data.resetId);
   } catch {
@@ -255,7 +256,7 @@ export async function getUserStatisticsReset(c: Context): Promise<Response> {
       status: 404,
       instance: new URL(c.req.url).pathname,
       errorCode: "user.statistics_reset_not_found",
-      detail: "Statistics reset not found.",
+      detail: publicActionErrorDetail(404),
     });
   }
   return jsonResponse(reset);
