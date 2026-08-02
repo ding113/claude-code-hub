@@ -63,6 +63,7 @@ import {
   PROVIDER_TIMEOUT_DEFAULTS,
 } from "@/lib/constants/provider.constants";
 import { PROVIDER_BATCH_PATCH_ERROR_CODES } from "@/lib/provider-batch-patch-error-codes";
+import type { HealthTestSloThresholds } from "@/lib/provider-health-test/slo-thresholds";
 import { getProviderTypeConfig, getProviderTypeTranslationKey } from "@/lib/provider-type-utils";
 import { cn } from "@/lib/utils";
 import { copyToClipboard, isClipboardSupported } from "@/lib/utils/clipboard";
@@ -101,6 +102,8 @@ interface ProviderRichListItemProps {
   statistics?: ProviderStatistics;
   statisticsLoading?: boolean;
   currencyCode?: CurrencyCode;
+  healthWindowSize?: number;
+  healthSloThresholds?: Partial<HealthTestSloThresholds> | null;
   enableMultiProviderTypes: boolean;
   isMultiSelectMode?: boolean;
   isSelected?: boolean;
@@ -123,6 +126,8 @@ function ProviderRichListItemInner({
   statistics,
   statisticsLoading = false,
   currencyCode = "USD",
+  healthWindowSize = 10,
+  healthSloThresholds,
   enableMultiProviderTypes,
   isMultiSelectMode = false,
   isSelected = false,
@@ -664,6 +669,8 @@ function ProviderRichListItemInner({
             canEdit={canEdit}
             compact
             currencyCode={currencyCode}
+            windowSize={healthWindowSize}
+            sloThresholds={healthSloThresholds}
           />
         </div>
 
@@ -980,6 +987,8 @@ function ProviderRichListItemInner({
             provider={provider}
             canEdit={canEdit}
             currencyCode={currencyCode}
+            windowSize={healthWindowSize}
+            sloThresholds={healthSloThresholds}
           />
         </div>
 
@@ -1177,6 +1186,8 @@ export const ProviderRichListItem = memo(ProviderRichListItemInner, (prev, next)
     prev.statistics === next.statistics &&
     prev.statisticsLoading === next.statisticsLoading &&
     prev.currencyCode === next.currencyCode &&
+    prev.healthWindowSize === next.healthWindowSize &&
+    prev.healthSloThresholds === next.healthSloThresholds &&
     prev.enableMultiProviderTypes === next.enableMultiProviderTypes &&
     prev.isMultiSelectMode === next.isMultiSelectMode &&
     prev.isSelected === next.isSelected &&

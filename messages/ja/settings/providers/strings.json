@@ -47,6 +47,7 @@
   "viewMode": "表示モード",
   "viewModeList": "リスト",
   "viewModeVendor": "ベンダー",
+  "viewModeSites": "サイト",
   "viewModeGroups": "グループ",
   "endpoints": "エンドポイント",
   "manualProbe": "テスト",

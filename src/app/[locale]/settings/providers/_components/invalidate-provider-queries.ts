@@ -1,16 +1,17 @@
 import type { QueryClient } from "@tanstack/react-query";
 
-/** Invalidate all provider-related queries in one batch */
-export function invalidateProviderQueries(queryClient: QueryClient): Promise<void> {
-  return queryClient.invalidateQueries({
-    predicate: (query) => {
-      const key = query.queryKey[0];
-      return (
-        key === "providers" ||
-        key === "providers-health" ||
-        key === "providers-statistics" ||
-        key === "provider-vendors"
-      );
-    },
-  });
+/** Invalidate and immediately refetch all active provider-related queries. */
+export async function invalidateProviderQueries(queryClient: QueryClient): Promise<void> {
+  const predicate = (query: { queryKey: readonly unknown[] }) => {
+    const key = query.queryKey[0];
+    return (
+      key === "providers" ||
+      key === "providers-health" ||
+      key === "providers-statistics" ||
+      key === "provider-vendors"
+    );
+  };
+
+  await queryClient.invalidateQueries({ predicate, refetchType: "none" });
+  await queryClient.refetchQueries({ predicate, type: "active" });
 }

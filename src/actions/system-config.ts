@@ -61,11 +61,23 @@ export async function saveSystemSettings(formData: {
   allowGlobalUsageView?: boolean;
   currencyDisplay?: string;
   healthTestDailyBudgetCny?: number;
+  healthTestPerProviderDailyBudget?: number;
   healthTestGlobalBudgetSuspendedDay?: string | null;
+  healthTestScheduleMode?: "dynamic" | "always_on";
+  healthTestWindowSize?: number;
+  healthTestIntervalSeconds?: number;
+  healthTestTimeoutSeconds?: number;
+  healthTestMinOnlineRatePercent?: number;
+  healthTestMaxAvgLatencySeconds?: number;
+  siteCaptchaProvider?: string;
+  siteCaptchaApiKey?: string | null;
+  siteCaptchaEndpoint?: string | null;
   billingModelSource?: string;
   codexPriorityBillingSource?: CodexPriorityBillingSource;
   billNonSuccessfulRequests?: boolean;
   billHedgeLosers?: boolean;
+  streamingRaceMode?: "single" | "timeout_race" | "dual_fast";
+  streamingRaceFirstByteMs?: number;
   timezone?: string | null;
   enableAutoCleanup?: boolean;
   cleanupRetentionDays?: number;
@@ -117,11 +129,23 @@ export async function saveSystemSettings(formData: {
       allowGlobalUsageView: validated.allowGlobalUsageView,
       currencyDisplay: validated.currencyDisplay,
       healthTestDailyBudgetCny: validated.healthTestDailyBudgetCny,
+      healthTestPerProviderDailyBudget: validated.healthTestPerProviderDailyBudget,
       healthTestGlobalBudgetSuspendedDay: validated.healthTestGlobalBudgetSuspendedDay,
+      healthTestScheduleMode: validated.healthTestScheduleMode,
+      healthTestWindowSize: validated.healthTestWindowSize,
+      healthTestIntervalSeconds: validated.healthTestIntervalSeconds,
+      healthTestTimeoutSeconds: validated.healthTestTimeoutSeconds,
+      healthTestMinOnlineRatePercent: validated.healthTestMinOnlineRatePercent,
+      healthTestMaxAvgLatencySeconds: validated.healthTestMaxAvgLatencySeconds,
+      siteCaptchaProvider: validated.siteCaptchaProvider,
+      siteCaptchaApiKey: validated.siteCaptchaApiKey,
+      siteCaptchaEndpoint: validated.siteCaptchaEndpoint,
       billingModelSource: validated.billingModelSource,
       codexPriorityBillingSource: validated.codexPriorityBillingSource,
       billNonSuccessfulRequests: validated.billNonSuccessfulRequests,
       billHedgeLosers: validated.billHedgeLosers,
+      streamingRaceMode: validated.streamingRaceMode,
+      streamingRaceFirstByteMs: validated.streamingRaceFirstByteMs,
       timezone: validated.timezone,
       enableAutoCleanup: validated.enableAutoCleanup,
       cleanupRetentionDays: validated.cleanupRetentionDays,
@@ -165,6 +189,23 @@ export async function saveSystemSettings(formData: {
       "@/app/v1/_lib/proxy/provider-selector-settings-cache"
     );
     invalidateProviderSelectorSystemSettingsCache();
+
+    // Switching to always_on should reopen SLO-auto-disabled peers.
+    // Fire-and-forget: awaiting multi-row updates + cache publish freezes the UI toggle.
+    if (
+      validated.healthTestScheduleMode === "always_on" &&
+      before?.healthTestScheduleMode !== "always_on"
+    ) {
+      void import("@/repository/provider-health-test")
+        .then(({ reopenSloAutoDisabledScheduledHealthTests }) =>
+          reopenSloAutoDisabledScheduledHealthTests()
+        )
+        .catch((error) => {
+          logger.warn("[SystemSettings] always_on reopen failed", {
+            error: error instanceof Error ? error.message : String(error),
+          });
+        });
+    }
 
     if (validated.timezone !== undefined) {
       await Promise.all([
@@ -222,12 +263,38 @@ export async function saveSystemSettings(formData: {
       }
     }
 
-    // Revalidate paths for all locales to ensure cache invalidation across i18n routes
-    for (const locale of locales) {
-      revalidatePath(`/${locale}/settings/config`);
-      revalidatePath(`/${locale}/dashboard`);
+    // Provider-page toggles (race mode / health schedule mode / budget) update via
+    // React Query only. revalidatePath("/", "layout") rebuilds the whole RSC tree and
+    // freezes desktop when switching segmented controls on the providers page.
+    const hotToggleKeys = new Set([
+      "streamingRaceMode",
+      "streamingRaceFirstByteMs",
+      "healthTestScheduleMode",
+      "healthTestWindowSize",
+      "healthTestIntervalSeconds",
+      "healthTestTimeoutSeconds",
+      "healthTestMinOnlineRatePercent",
+      "healthTestMaxAvgLatencySeconds",
+      "siteCaptchaProvider",
+      "siteCaptchaApiKey",
+      "siteCaptchaEndpoint",
+      "healthTestDailyBudgetCny", "healthTestPerProviderDailyBudget",
+      "healthTestGlobalBudgetSuspendedDay",
+    ]);
+    const providedKeys = Object.entries(validated)
+      .filter(([, value]) => value !== undefined)
+      .map(([key]) => key);
+    const isProvidersPageHotToggleOnly =
+      providedKeys.length > 0 && providedKeys.every((key) => hotToggleKeys.has(key));
+
+    if (!isProvidersPageHotToggleOnly) {
+      // Revalidate paths for all locales to ensure cache invalidation across i18n routes
+      for (const locale of locales) {
+        revalidatePath(`/${locale}/settings/config`);
+        revalidatePath(`/${locale}/dashboard`);
+      }
+      revalidatePath("/", "layout");
     }
-    revalidatePath("/", "layout");
 
     emitActionAudit({
       category: "system_settings",

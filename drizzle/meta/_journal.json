@@ -799,6 +799,76 @@
       "when": 1763632800000,
       "tag": "0113_health_test_global_budget",
       "breakpoints": true
+    },
+    {
+      "idx": 114,
+      "version": "7",
+      "when": 1763640000000,
+      "tag": "0114_provider_group_health_test_model",
+      "breakpoints": true
+    },
+    {
+      "idx": 115,
+      "version": "7",
+      "when": 1785200000000,
+      "tag": "0115_provider_sites_and_group_rates",
+      "breakpoints": true
+    },
+    {
+      "idx": 116,
+      "version": "7",
+      "when": 1785240700482,
+      "tag": "0124_provider_site_credentials_and_balance",
+      "breakpoints": true
+    },
+    {
+      "idx": 117,
+      "version": "7",
+      "when": 1785244258374,
+      "tag": "0125_provider_group_shared_settings",
+      "breakpoints": true
+    },
+    {
+      "idx": 118,
+      "version": "7",
+      "when": 1785249000000,
+      "tag": "0126_provider_group_match_rules_and_sort",
+      "breakpoints": true
+    },
+    {
+      "idx": 119,
+      "version": "7",
+      "when": 1785387802748,
+      "tag": "0127_provider_sites_sort_and_global_captcha",
+      "breakpoints": true
+    },
+    {
+      "idx": 120,
+      "version": "7",
+      "when": 1785510937817,
+      "tag": "0128_provider_group_model_match_rules",
+      "breakpoints": true
+    },
+    {
+      "idx": 121,
+      "version": "7",
+      "when": 1785570219878,
+      "tag": "0121_provider_balance_auto_disabled",
+      "breakpoints": true
+    },
+    {
+      "idx": 122,
+      "version": "7",
+      "when": 1785644386267,
+      "tag": "0122_dazzling_shotgun",
+      "breakpoints": true
+    },
+    {
+      "idx": 123,
+      "version": "7",
+      "when": 1785670533047,
+      "tag": "0129_user_balance_and_site_balance_cleanup",
+      "breakpoints": true
     }
   ]
 }

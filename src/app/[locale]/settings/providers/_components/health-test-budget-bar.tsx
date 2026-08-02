@@ -19,6 +19,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import {
   getHealthTestBudgetOverview,
   setHealthTestGlobalDailyBudget,
+  setHealthTestPerProviderDailyBudget,
 } from "@/lib/api-client/v1/actions/providers";
 import { cn } from "@/lib/utils";
 import { type CurrencyCode, formatCurrency, toDecimal } from "@/lib/utils/currency";
@@ -41,8 +42,10 @@ export function HealthTestBudgetBar({
 }) {
   const t = useTranslations("settings.providers.list");
   const queryClient = useQueryClient();
-  const [editOpen, setEditOpen] = useState(false);
-  const [draft, setDraft] = useState("");
+  const [editGlobalOpen, setEditGlobalOpen] = useState(false);
+  const [editPerOpen, setEditPerOpen] = useState(false);
+  const [draftGlobal, setDraftGlobal] = useState("");
+  const [draftPer, setDraftPer] = useState("");
 
   const { data, isLoading } = useQuery({
     queryKey: ["health-test-budget"],
@@ -57,7 +60,7 @@ export function HealthTestBudgetBar({
     refetchInterval: 30_000,
   });
 
-  const mutation = useMutation({
+  const globalMutation = useMutation({
     mutationFn: async (budget: number) => {
       const res = await setHealthTestGlobalDailyBudget(budget);
       if (!res.ok) {
@@ -67,7 +70,7 @@ export function HealthTestBudgetBar({
     },
     onSuccess: async () => {
       toast.success(t("healthTestBudgetSaved"));
-      setEditOpen(false);
+      setEditGlobalOpen(false);
       await queryClient.invalidateQueries({ queryKey: ["health-test-budget"] });
       await queryClient.invalidateQueries({ queryKey: ["providers"] });
     },
@@ -76,26 +79,45 @@ export function HealthTestBudgetBar({
     },
   });
 
+  const perMutation = useMutation({
+    mutationFn: async (budget: number) => {
+      const res = await setHealthTestPerProviderDailyBudget(budget);
+      if (!res.ok) {
+        throw new Error((res as { error?: string }).error || "save failed");
+      }
+      return res.data;
+    },
+    onSuccess: async () => {
+      toast.success(t("healthTestPerProviderBudgetSaved"));
+      setEditPerOpen(false);
+      await queryClient.invalidateQueries({ queryKey: ["health-test-budget"] });
+      await queryClient.invalidateQueries({ queryKey: ["providers"] });
+    },
+    onError: (err: Error) => {
+      toast.error(t("healthTestPerProviderBudgetSaveFailed"), { description: err.message });
+    },
+  });
+
   const todayCost = data?.todayCost ?? 0;
   const budget = data?.budget ?? 1;
+  const perProviderBudget = data?.perProviderBudget ?? 0.1;
   const suspended = data?.isSuspendedToday ?? false;
   const ratio = budget > 0 ? Math.min(1, todayCost / budget) : 0;
   const over = budget > 0 && todayCost >= budget;
-
-  const openEdit = () => {
-    setDraft(String(budget));
-    setEditOpen(true);
-  };
+  const perText =
+    perProviderBudget <= 0
+      ? t("healthTestProviderBudgetUnlimited")
+      : formatAmount(perProviderBudget, currencyCode);
 
   return (
     <div
       className={cn(
-        "rounded-md border border-border/70 bg-muted/20 px-3 py-2 flex flex-col gap-1.5 min-w-[16rem] max-w-md",
+        "flex h-full min-w-0 flex-col gap-2.5 rounded-xl border border-border/60 bg-card/40 px-3.5 py-3 shadow-[0_1px_0_rgba(0,0,0,0.02)]",
         className
       )}
     >
       <div className="flex items-center justify-between gap-2">
-        <span className="text-[11px] font-medium text-muted-foreground">
+        <span className="text-[12px] font-semibold tracking-tight text-foreground">
           {t("healthTestBudgetTitle")}
         </span>
         {suspended ? (
@@ -113,7 +135,10 @@ export function HealthTestBudgetBar({
             <TooltipTrigger asChild>
               <button
                 type="button"
-                onClick={openEdit}
+                onClick={() => {
+                  setDraftGlobal(String(budget));
+                  setEditGlobalOpen(true);
+                }}
                 className={cn(
                   "inline-flex items-center gap-1 rounded-sm px-1 -mx-1 py-0.5 shrink-0",
                   "text-foreground hover:bg-muted/80 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
@@ -149,9 +174,37 @@ export function HealthTestBudgetBar({
           style={{ width: `${Math.min(100, ratio * 100)}%` }}
         />
       </div>
+
+      <div className="flex items-center justify-between gap-2 text-[11px]">
+        <span className="text-muted-foreground shrink-0">{t("healthTestPerProviderBudgetLabel")}</span>
+        <Tooltip delayDuration={200}>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              onClick={() => {
+                setDraftPer(String(perProviderBudget));
+                setEditPerOpen(true);
+              }}
+              className={cn(
+                "inline-flex items-center gap-1 rounded-sm px-1 py-0.5 font-mono tabular-nums font-medium",
+                "text-foreground hover:bg-muted/80 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+                "transition-colors"
+              )}
+              aria-label={t("healthTestPerProviderBudgetEditHint")}
+            >
+              <span>{isLoading ? "…" : perText}</span>
+              <Pencil className="h-3 w-3 text-muted-foreground" />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="top" className="text-xs">
+            {t("healthTestPerProviderBudgetEditHint")}
+          </TooltipContent>
+        </Tooltip>
+      </div>
+
       <p className="text-[10px] text-muted-foreground leading-snug">{t("healthTestBudgetHelp")}</p>
 
-      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+      <Dialog open={editGlobalOpen} onOpenChange={setEditGlobalOpen}>
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
             <DialogTitle>{t("healthTestBudgetEditTitle")}</DialogTitle>
@@ -163,24 +216,64 @@ export function HealthTestBudgetBar({
               type="number"
               min={0.01}
               step={0.1}
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
+              value={draftGlobal}
+              onChange={(e) => setDraftGlobal(e.target.value)}
             />
             <p className="text-xs text-muted-foreground">{t("healthTestBudgetEditDesc")}</p>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setEditOpen(false)}>
+            <Button variant="outline" onClick={() => setEditGlobalOpen(false)}>
               {t("cancel")}
             </Button>
             <Button
-              disabled={mutation.isPending}
+              disabled={globalMutation.isPending}
               onClick={() => {
-                const n = Number.parseFloat(draft);
+                const n = Number.parseFloat(draftGlobal);
                 if (!Number.isFinite(n) || n < 0.01) {
                   toast.error(t("healthTestBudgetInvalid"));
                   return;
                 }
-                mutation.mutate(n);
+                globalMutation.mutate(n);
+              }}
+            >
+              {t("save")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={editPerOpen} onOpenChange={setEditPerOpen}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>{t("healthTestPerProviderBudgetEditTitle")}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2 py-1">
+            <Label htmlFor="health-test-per-provider-budget-input">
+              {t("healthTestPerProviderBudgetEditLabel")}
+            </Label>
+            <Input
+              id="health-test-per-provider-budget-input"
+              type="number"
+              min={0}
+              step={0.01}
+              value={draftPer}
+              onChange={(e) => setDraftPer(e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">{t("healthTestPerProviderBudgetEditDesc")}</p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditPerOpen(false)}>
+              {t("cancel")}
+            </Button>
+            <Button
+              disabled={perMutation.isPending}
+              onClick={() => {
+                const n = Number.parseFloat(draftPer);
+                if (!Number.isFinite(n) || n < 0 || (n > 0 && n < 0.01)) {
+                  toast.error(t("healthTestPerProviderBudgetInvalid"));
+                  return;
+                }
+                perMutation.mutate(n);
               }}
             >
               {t("save")}

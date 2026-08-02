@@ -6,6 +6,9 @@ import { getSession } from "@/lib/auth";
 import { PROVIDER_GROUP } from "@/lib/constants/provider.constants";
 import { logger } from "@/lib/logger";
 import { bootstrapProviderGroupsFromProviders } from "@/lib/provider-groups/bootstrap";
+import { normalizeProviderGroupMatchRules } from "@/lib/provider-groups/match-rules";
+import { normalizeProviderGroupModelMatchRules } from "@/lib/provider-groups/model-match-rules";
+import { normalizeProviderGroupSharedSettings } from "@/lib/provider-groups/shared-settings";
 import {
   parsePublicStatusDescription,
   serializePublicStatusDescription,
@@ -13,14 +16,21 @@ import {
 import { exceedsProviderGroupDescriptionLimit } from "@/lib/public-status/description-limit";
 import { ERROR_CODES } from "@/lib/utils/error-messages";
 import {
+  applyProviderGroupSharedSettingsToMembers,
   countProvidersUsingGroup,
-  findProviderGroupById,
-  findProviderGroupByName,
   createProviderGroup as repoCreateProviderGroup,
   deleteProviderGroup as repoDeleteProviderGroup,
+  findProviderGroupById,
+  findProviderGroupByName,
+  reorderProviderGroups as repoReorderProviderGroups,
   updateProviderGroup as repoUpdateProviderGroup,
 } from "@/repository/provider-groups";
-import type { ProviderGroup } from "@/types/provider-group";
+import type {
+  ProviderGroup,
+  ProviderGroupMatchRule,
+  ProviderGroupModelMatchRule,
+  ProviderGroupSharedSettings,
+} from "@/types/provider-group";
 import type { ActionResult } from "./types";
 
 // ---------------------------------------------------------------------------
@@ -81,7 +91,12 @@ export async function createProviderGroup(input: {
   costMultiplier?: number;
   description?: string;
   healthTestModel?: string | null;
-}): Promise<ActionResult<ProviderGroup>> {
+  sharedSettings?: ProviderGroupSharedSettings | null;
+  applySharedSettingsToMembers?: boolean;
+  sortOrder?: number;
+  matchRules?: ProviderGroupMatchRule[] | null;
+  modelMatchRules?: ProviderGroupModelMatchRule[] | null;
+}): Promise<ActionResult<ProviderGroup & { appliedMembers?: number }>> {
   const t = await getTranslations("settings.providers.providerGroups");
   const tError = await getTranslations("errors");
   try {
@@ -128,13 +143,31 @@ export async function createProviderGroup(input: {
       input.healthTestModel != null && String(input.healthTestModel).trim()
         ? String(input.healthTestModel).trim()
         : null;
+    const sharedSettings = normalizeProviderGroupSharedSettings(input.sharedSettings);
+    const matchRules = normalizeProviderGroupMatchRules(input.matchRules);
+    const modelMatchRules = normalizeProviderGroupModelMatchRules(input.modelMatchRules);
 
     const group = await repoCreateProviderGroup({
       name,
       costMultiplier: input.costMultiplier,
       description: input.description ?? null,
       healthTestModel,
+      sharedSettings,
+      sortOrder: input.sortOrder,
+      matchRules,
+      modelMatchRules,
     });
+
+    let appliedMembers = 0;
+    if (input.applySharedSettingsToMembers && sharedSettings) {
+      appliedMembers = await applyProviderGroupSharedSettingsToMembers(group.name, sharedSettings);
+      try {
+        const { publishProviderCacheInvalidation } = await import("@/lib/cache/provider-cache");
+        await publishProviderCacheInvalidation();
+      } catch {
+        // best-effort
+      }
+    }
 
     emitActionAudit({
       category: "provider_group",
@@ -148,10 +181,15 @@ export async function createProviderGroup(input: {
         costMultiplier: group.costMultiplier,
         description: group.description,
         healthTestModel: group.healthTestModel,
+        sharedSettings: group.sharedSettings,
+        sortOrder: group.sortOrder,
+        matchRules: group.matchRules,
+        modelMatchRules: group.modelMatchRules,
+        appliedMembers,
       },
       success: true,
     });
-    return { ok: true, data: group };
+    return { ok: true, data: { ...group, appliedMembers } };
   } catch (error) {
     logger.error("Failed to create provider group:", error);
     emitActionAudit({
@@ -177,8 +215,13 @@ export async function updateProviderGroup(
     description?: string | null;
     descriptionNote?: string | null;
     healthTestModel?: string | null;
+    sharedSettings?: ProviderGroupSharedSettings | null;
+    applySharedSettingsToMembers?: boolean;
+    sortOrder?: number;
+    matchRules?: ProviderGroupMatchRule[] | null;
+    modelMatchRules?: ProviderGroupModelMatchRule[] | null;
   }
-): Promise<ActionResult<ProviderGroup>> {
+): Promise<ActionResult<ProviderGroup & { appliedMembers?: number }>> {
   const t = await getTranslations("settings.providers.providerGroups");
   const tError = await getTranslations("errors");
   try {
@@ -221,14 +264,47 @@ export async function updateProviderGroup(
           ? String(input.healthTestModel).trim()
           : null;
 
+    const sharedSettingsPatch =
+      input.sharedSettings === undefined
+        ? undefined
+        : normalizeProviderGroupSharedSettings(input.sharedSettings);
+    const matchRulesPatch =
+      input.matchRules === undefined
+        ? undefined
+        : normalizeProviderGroupMatchRules(input.matchRules);
+    const modelMatchRulesPatch =
+      input.modelMatchRules === undefined
+        ? undefined
+        : normalizeProviderGroupModelMatchRules(input.modelMatchRules);
+
     const updated = await repoUpdateProviderGroup(id, {
       costMultiplier: input.costMultiplier,
       description: nextDescription,
       ...(healthTestModelPatch !== undefined ? { healthTestModel: healthTestModelPatch } : {}),
+      ...(sharedSettingsPatch !== undefined ? { sharedSettings: sharedSettingsPatch } : {}),
+      ...(input.sortOrder !== undefined ? { sortOrder: input.sortOrder } : {}),
+      ...(matchRulesPatch !== undefined ? { matchRules: matchRulesPatch } : {}),
+      ...(modelMatchRulesPatch !== undefined ? { modelMatchRules: modelMatchRulesPatch } : {}),
     });
 
     if (!updated) {
       return { ok: false, error: tError("NOT_FOUND"), errorCode: ERROR_CODES.NOT_FOUND };
+    }
+
+    let appliedMembers = 0;
+    const settingsToApply =
+      sharedSettingsPatch !== undefined ? sharedSettingsPatch : updated.sharedSettings;
+    if (input.applySharedSettingsToMembers && settingsToApply) {
+      appliedMembers = await applyProviderGroupSharedSettingsToMembers(
+        updated.name,
+        settingsToApply
+      );
+      try {
+        const { publishProviderCacheInvalidation } = await import("@/lib/cache/provider-cache");
+        await publishProviderCacheInvalidation();
+      } catch {
+        // best-effort
+      }
     }
 
     emitActionAudit({
@@ -243,10 +319,16 @@ export async function updateProviderGroup(
         name: updated.name,
         costMultiplier: updated.costMultiplier,
         description: updated.description,
+        healthTestModel: updated.healthTestModel,
+        sharedSettings: updated.sharedSettings,
+        sortOrder: updated.sortOrder,
+        matchRules: updated.matchRules,
+        modelMatchRules: updated.modelMatchRules,
+        appliedMembers,
       },
       success: true,
     });
-    return { ok: true, data: updated };
+    return { ok: true, data: { ...updated, appliedMembers } };
   } catch (error) {
     logger.error("Failed to update provider group:", error);
     emitActionAudit({
@@ -321,5 +403,52 @@ export async function deleteProviderGroup(id: number): Promise<ActionResult<void
       errorMessage: "DELETE_FAILED",
     });
     return { ok: false, error: t("deleteFailed"), errorCode: ERROR_CODES.DELETE_FAILED };
+  }
+}
+
+/**
+ * Reorder provider groups for keyword classification priority.
+ * Admin-only. orderedIds is top-to-bottom; default is ignored/pinned.
+ */
+export async function reorderProviderGroups(
+  orderedIds: number[]
+): Promise<ActionResult<ProviderGroupWithCount[]>> {
+  const t = await getTranslations("settings.providers.providerGroups");
+  const tError = await getTranslations("errors");
+  try {
+    const session = await getSession();
+    if (!session || session.user.role !== "admin") {
+      return { ok: false, error: tError("UNAUTHORIZED"), errorCode: ERROR_CODES.UNAUTHORIZED };
+    }
+
+    if (!Array.isArray(orderedIds) || orderedIds.length === 0) {
+      return { ok: false, error: t("reorderInvalid"), errorCode: "INVALID_ORDER" };
+    }
+
+    const groups = await repoReorderProviderGroups(orderedIds);
+    const data: ProviderGroupWithCount[] = [];
+    for (const group of groups) {
+      const providerCount = await countProvidersUsingGroup(group.name);
+      data.push({ ...group, providerCount });
+    }
+
+    emitActionAudit({
+      category: "provider_group",
+      action: "provider_group.reorder",
+      targetType: "provider_group",
+      after: { orderedIds },
+      success: true,
+    });
+    return { ok: true, data };
+  } catch (error) {
+    logger.error("Failed to reorder provider groups:", error);
+    emitActionAudit({
+      category: "provider_group",
+      action: "provider_group.reorder",
+      targetType: "provider_group",
+      success: false,
+      errorMessage: "UPDATE_FAILED",
+    });
+    return { ok: false, error: t("reorderFailed"), errorCode: ERROR_CODES.UPDATE_FAILED };
   }
 }

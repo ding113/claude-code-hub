@@ -324,6 +324,9 @@ export async function getProviders(): Promise<ProviderDisplay[]> {
         name: provider.name,
         url: provider.url,
         maskedKey: maskKey(provider.key),
+        siteId: provider.siteId ?? null,
+        siteGroupName: provider.siteGroupName ?? null,
+        billingMode: provider.billingMode ?? "catalog_estimate",
         isEnabled: provider.isEnabled,
         weight: provider.weight,
         priority: provider.priority,
@@ -5576,6 +5579,7 @@ export async function getHealthTestBudgetOverview(): Promise<
   ActionResult<{
     todayCost: number;
     budget: number;
+    perProviderBudget: number;
     isSuspendedToday: boolean;
     localDay: string;
   }>
@@ -5648,3 +5652,70 @@ export async function setHealthTestGlobalDailyBudget(
     };
   }
 }
+
+/**
+ * Update a single provider's health-test daily budget (display units, default 0.01).
+ * If the provider was budget-suspended and new cap > today cost, re-enable scheduled probes.
+ */
+/**
+ * Update site-wide per-provider health-test daily budget (display units, default 0.1).
+ * Applies to every provider. 0 = unlimited per provider (global fleet budget still applies).
+ * Re-enables providers that were budget-suspended when new cap allows.
+ */
+export async function setHealthTestPerProviderDailyBudget(
+  budget: number
+): Promise<ActionResult<{ budget: number }>> {
+  const session = await getSession();
+  if (!session || session.user.role !== "admin") {
+    return { ok: false, error: "未授权" };
+  }
+  if (!Number.isFinite(budget) || budget < 0) {
+    return { ok: false, error: "预算无效" };
+  }
+  if (budget > 0 && budget < 0.01) {
+    return { ok: false, error: "预算无效" };
+  }
+  try {
+    const { updateSystemSettings } = await import("@/repository/system-config");
+    await updateSystemSettings({
+      healthTestPerProviderDailyBudget: budget,
+    });
+
+    // Re-open budget-tagged offs when raising cap (or setting unlimited).
+    // Best-effort: reopen all budget-suspended rows; next probe will re-suspend if still over.
+    if (budget <= 0 || budget > 0) {
+      const { db } = await import("@/drizzle/db");
+      const { providers } = await import("@/drizzle/schema");
+      const { and, eq, isNull, sql } = await import("drizzle-orm");
+      await db
+        .update(providers)
+        .set({
+          scheduledHealthTestEnabled: true,
+          healthTestBudgetSuspendedDay: null,
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            isNull(providers.deletedAt),
+            eq(providers.scheduledHealthTestEnabled, false),
+            sql`${providers.healthTestBudgetSuspendedDay} IS NOT NULL`
+          )
+        );
+    }
+
+    try {
+      const { publishProviderCacheInvalidation } = await import("@/lib/cache/provider-cache");
+      await publishProviderCacheInvalidation();
+    } catch {
+      // best-effort
+    }
+
+    return { ok: true, data: { budget } };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : "保存单商测试限额失败",
+    };
+  }
+}
+

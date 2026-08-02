@@ -262,6 +262,7 @@ export function getHealthTestBudgetOverview() {
     apiGet<{
       todayCost: number;
       budget: number;
+      perProviderBudget: number;
       isSuspendedToday: boolean;
       localDay: string;
     }>("/api/v1/providers/health-test-budget", dashboardCompatOptions)
@@ -272,6 +273,16 @@ export function setHealthTestGlobalDailyBudget(budget: number) {
   return toActionResult(
     apiPost<{ budget: number }>(
       "/api/v1/providers/health-test-budget:set",
+      { budget },
+      dashboardCompatOptions
+    )
+  );
+}
+
+export function setHealthTestPerProviderDailyBudget(budget: number) {
+  return toActionResult(
+    apiPost<{ budget: number }>(
+      "/api/v1/providers/health-test-per-provider-budget:set",
       { budget },
       dashboardCompatOptions
     )

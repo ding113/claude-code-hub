@@ -1,20 +1,12 @@
+import { getHealthTestSampleCount } from "@/lib/provider-dispatch/health-aware-select";
+import type { HealthTestSloThresholds } from "@/lib/provider-health-test/slo-thresholds";
+import { normalizeHealthTestSloThresholds } from "@/lib/provider-health-test/slo-thresholds";
 import type { ProviderType } from "@/types/provider";
-import {
-  HEALTH_DISPATCH_MAX_AVG_FIRST_BYTE_MS,
-  HEALTH_DISPATCH_MIN_ONLINE_RATE,
-  HEALTH_DISPATCH_MIN_SAMPLE_COUNT,
-  getHealthTestSampleCount,
-} from "@/lib/provider-dispatch/health-aware-select";
 
 /** How many SLO-qualified providers to keep probing per type pool (primary + backup). */
 export const HEALTH_TEST_SLO_KEEP_COUNT = 2;
 
-export type HealthRebalancePool =
-  | "claude"
-  | "codex"
-  | "openai-compatible"
-  | "gemini"
-  | "other";
+export type HealthRebalancePool = "claude" | "codex" | "openai-compatible" | "gemini" | "other";
 
 export interface HealthRebalanceProvider {
   id: number;
@@ -81,17 +73,21 @@ export function getHealthRebalancePool(
 
 /**
  * Metrics SLO for rebalance champions:
- * - full recent window (≥5 samples) — re-opened providers must re-accumulate
- * - onlineRate ≥ 80%
- * - avg first-byte ≤ 10s
+ * - full configured recent window — re-opened providers must re-accumulate
+ * - onlineRate meets the configured minimum
+ * - avg first-byte meets the configured ceiling
  * Does NOT require scheduled tests to be on (caller still requires isEnabled).
  */
-export function meetsHealthMetricsSlo(provider: {
-  healthTestOnlineRate: number | null | undefined;
-  healthTestAvgFirstByteMs: number | null | undefined;
-  healthTestRecentResults?: unknown;
-}): boolean {
-  if (getHealthTestSampleCount(provider) < HEALTH_DISPATCH_MIN_SAMPLE_COUNT) {
+export function meetsHealthMetricsSlo(
+  provider: {
+    healthTestOnlineRate: number | null | undefined;
+    healthTestAvgFirstByteMs: number | null | undefined;
+    healthTestRecentResults?: unknown;
+  },
+  thresholds?: Partial<HealthTestSloThresholds> | null
+): boolean {
+  const normalizedThresholds = normalizeHealthTestSloThresholds(thresholds);
+  if (getHealthTestSampleCount(provider) < normalizedThresholds.minSampleCount) {
     return false;
   }
   const onlineRate = provider.healthTestOnlineRate;
@@ -99,8 +95,8 @@ export function meetsHealthMetricsSlo(provider: {
   if (onlineRate == null || !Number.isFinite(onlineRate)) return false;
   if (avgFirstByteMs == null || !Number.isFinite(avgFirstByteMs)) return false;
   return (
-    onlineRate >= HEALTH_DISPATCH_MIN_ONLINE_RATE &&
-    avgFirstByteMs <= HEALTH_DISPATCH_MAX_AVG_FIRST_BYTE_MS
+    onlineRate >= normalizedThresholds.minOnlineRate &&
+    avgFirstByteMs <= normalizedThresholds.maxAvgFirstByteMs
   );
 }
 
@@ -159,23 +155,24 @@ function pushDisable(
 /**
  * Pure rebalance for one type pool.
  *
- * When ≥2 SLO-qualified champions exist (enabled + full 5-sample window + 80%/10s):
+ * When ≥2 SLO-qualified champions exist (enabled + full configured window + configured SLO):
  *   top1 / top2 = sort by priority ASC, then avg first-byte ASC, then id
  *   KEEP above top1 priority + top1 + top2; DISABLE everything else below top1.
  *
  * When <2 qualify → explore: re-open auto-disabled among enabled providers.
  * Never force-on: budget suspended or manual off. Disabled providers never top1/top2.
- * SLO = full window (≥10) + 80% online + avg first-byte ≤10s.
+ * SLO = full configured window + configured online rate + configured avg first-byte ceiling.
  */
 export function planHealthTestSloRebalanceForPool(
   providers: HealthRebalanceProvider[],
-  keepCount: number = HEALTH_TEST_SLO_KEEP_COUNT
+  keepCount: number = HEALTH_TEST_SLO_KEEP_COUNT,
+  thresholds?: Partial<HealthTestSloThresholds> | null
 ): Omit<HealthRebalancePoolResult, "pool"> {
   const decisions: HealthRebalanceDecision[] = [];
   const k = Math.max(1, keepCount);
 
   const active = providers.filter((p) => p.isEnabled === true);
-  const qualified = active.filter((p) => meetsHealthMetricsSlo(p)).sort(sortChampions);
+  const qualified = active.filter((p) => meetsHealthMetricsSlo(p, thresholds)).sort(sortChampions);
 
   if (qualified.length < k) {
     for (const p of active) {
@@ -279,7 +276,8 @@ export function planHealthTestSloRebalanceForPool(
 
 export function planHealthTestSloRebalanceAll(
   providers: HealthRebalanceProvider[],
-  keepCount: number = HEALTH_TEST_SLO_KEEP_COUNT
+  keepCount: number = HEALTH_TEST_SLO_KEEP_COUNT,
+  thresholds?: Partial<HealthTestSloThresholds> | null
 ): HealthRebalancePoolResult[] {
   const byPool = new Map<HealthRebalancePool, HealthRebalanceProvider[]>();
   for (const p of providers) {
@@ -291,7 +289,7 @@ export function planHealthTestSloRebalanceAll(
 
   const results: HealthRebalancePoolResult[] = [];
   for (const [pool, list] of byPool) {
-    const planned = planHealthTestSloRebalanceForPool(list, keepCount);
+    const planned = planHealthTestSloRebalanceForPool(list, keepCount, thresholds);
     results.push({ pool, ...planned });
   }
   return results;

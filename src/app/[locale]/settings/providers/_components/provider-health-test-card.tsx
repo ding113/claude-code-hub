@@ -6,6 +6,13 @@ import { useMemo } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
+  DEFAULT_HEALTH_TEST_SLO_THRESHOLDS,
+  type HealthTestSloThresholds,
+  hasHealthTestSloMetrics,
+  meetsHealthTestSloMetrics,
+  normalizeHealthTestSloThresholds,
+} from "@/lib/provider-health-test/slo-thresholds";
+import {
   formatOnlineRatePercent,
   normalizeHealthTestRecentResults,
   type ProviderHealthTestSample,
@@ -20,18 +27,15 @@ function formatLatencyMs(ms: number | null | undefined): string {
   return `${(ms / 1000).toFixed(2)}s`;
 }
 
-/** Match dispatch SLO (10s) + a soft warn band for successful-but-slow probes. */
-const HEALTH_FB_OK_MS = 10_000;
-const HEALTH_FB_WARN_MS = 5_000;
-
 function firstByteTone(
   ms: number | null | undefined,
-  ok?: boolean | null
+  ok?: boolean | null,
+  maxAvgFirstByteMs = DEFAULT_HEALTH_TEST_SLO_THRESHOLDS.maxAvgFirstByteMs
 ): "ok" | "warn" | "bad" | "neutral" {
   if (ok === false) return "bad";
   if (ms == null || !Number.isFinite(ms)) return "neutral";
-  if (ms > HEALTH_FB_OK_MS) return "bad";
-  if (ms > HEALTH_FB_WARN_MS) return "warn";
+  if (ms > maxAvgFirstByteMs) return "bad";
+  if (ms > maxAvgFirstByteMs / 2) return "warn";
   return "ok";
 }
 
@@ -42,17 +46,20 @@ function firstByteValueClass(tone: "ok" | "warn" | "bad" | "neutral"): string {
     case "warn":
       return "text-amber-600 dark:text-amber-400";
     case "bad":
-      // Successful but past SLO (>10s): orange, not failure-red.
+      // Successful but past the configured first-byte SLO: orange, not failure-red.
       return "text-orange-600 dark:text-orange-400";
     default:
       return "";
   }
 }
 
-function sampleBarClass(sample: ProviderHealthTestSample): string {
+function sampleBarClass(
+  sample: ProviderHealthTestSample,
+  maxAvgFirstByteMs = DEFAULT_HEALTH_TEST_SLO_THRESHOLDS.maxAvgFirstByteMs
+): string {
   // Failure: true red (rose reads as pink on light backgrounds).
   if (!sample.ok) return "bg-red-600 dark:bg-red-500";
-  const tone = firstByteTone(sample.firstByteMs, true);
+  const tone = firstByteTone(sample.firstByteMs, true, maxAvgFirstByteMs);
   if (tone === "bad") return "bg-orange-500 dark:bg-orange-500";
   if (tone === "warn") return "bg-amber-400 dark:bg-amber-500";
   return "bg-emerald-500 dark:bg-emerald-500";
@@ -93,51 +100,88 @@ function formatProbeCost(value: number | null | undefined, currencyCode: Currenc
   return formatCurrency(decimal, currencyCode, digits);
 }
 
-function statusLabel(
+export function getProviderHealthTestStatus(
   provider: ProviderDisplay,
-  t: (key: string) => string
-): { text: string; className: string } {
-  // Provider disabled or scheduled probes off → no live window; show muted state.
-  if (provider.isEnabled === false || provider.scheduledHealthTestEnabled === false) {
+  t: (key: string) => string,
+  thresholds?: Partial<HealthTestSloThresholds> | null,
+  windowSize = 10
+): {
+  text: string;
+  className: string;
+  state: "off" | "disabled" | "pending" | "ok" | "failed";
+} {
+  // Provider key itself disabled.
+  if (provider.isEnabled === false) {
+    return {
+      text: t("healthTestProviderOff"),
+      className: "bg-muted text-muted-foreground border-border",
+      state: "off",
+    };
+  }
+  // Scheduled probes off.
+  if (provider.scheduledHealthTestEnabled === false || provider.healthTestSloAutoDisabled) {
     if (provider.healthTestBudgetSuspendedDay) {
       return {
         text: t("healthTestBudgetSuspended"),
         className:
           "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-800",
+        state: "disabled",
+      };
+    }
+    if (provider.healthTestSloAutoDisabled) {
+      return {
+        text: t("healthTestSloOff"),
+        className:
+          "bg-violet-50 text-violet-700 border-violet-200 dark:bg-violet-950/40 dark:text-violet-300 dark:border-violet-800",
+        state: "disabled",
       };
     }
     return {
       text: t("healthTestDisabled"),
       className: "bg-muted text-muted-foreground border-border",
+      state: "disabled",
     };
   }
-  // No recent probe samples → pending / not scheduled (e.g. group has no default model).
+  const requiredWindow = Math.min(50, Math.max(1, Math.trunc(windowSize) || 10));
   const recent = normalizeHealthTestRecentResults(provider.healthTestRecentResults);
-  if (!recent || recent.length === 0) {
+  // A partial rolling window is not enough to qualify a provider.
+  if (!recent || recent.length < requiredWindow) {
     return {
       text: t("healthTestPending"),
       className:
         "bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800/50 dark:text-slate-300 dark:border-slate-700",
+      state: "pending",
     };
   }
-  if (provider.lastHealthTestOk == null) {
+  if (!hasHealthTestSloMetrics(provider)) {
+    if (provider.lastHealthTestOk === false) {
+      return {
+        text: t("healthTestFailed"),
+        className:
+          "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/40 dark:text-rose-400 dark:border-rose-800",
+        state: "failed",
+      };
+    }
     return {
       text: t("healthTestPending"),
       className:
         "bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800/50 dark:text-slate-300 dark:border-slate-700",
+      state: "pending",
     };
   }
-  if (provider.lastHealthTestOk) {
+  if (meetsHealthTestSloMetrics(provider, thresholds)) {
     return {
       text: t("healthTestOk"),
       className:
         "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800",
+      state: "ok",
     };
   }
   return {
     text: t("healthTestFailed"),
     className:
       "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/40 dark:text-rose-400 dark:border-rose-800",
+    state: "failed",
   };
 }
 
@@ -145,12 +189,16 @@ function HealthBars({
   results,
   currencyCode,
   t,
+  windowSize = 10,
+  maxAvgFirstByteMs = DEFAULT_HEALTH_TEST_SLO_THRESHOLDS.maxAvgFirstByteMs,
 }: {
   results: ProviderHealthTestSample[] | boolean[] | null | undefined;
   currencyCode: CurrencyCode;
   t: (key: string, values?: Record<string, string | number | Date>) => string;
+  windowSize?: number;
+  maxAvgFirstByteMs?: number;
 }) {
-  const WINDOW = 10;
+  const WINDOW = Math.min(50, Math.max(1, Math.trunc(windowSize) || 10));
   const samples = normalizeHealthTestRecentResults(results) ?? [];
   const bars = samples.length > 0 ? samples.slice(-WINDOW) : [];
   const padded: Array<ProviderHealthTestSample | null> = [
@@ -200,7 +248,7 @@ function HealthBars({
               <span
                 className={cn(
                   "flex-1 min-w-0 rounded-sm cursor-default transition-opacity hover:opacity-90",
-                  sampleBarClass(sample)
+                  sampleBarClass(sample, maxAvgFirstByteMs)
                 )}
                 aria-label={`${outcome}, ${firstByte}`}
               />
@@ -208,10 +256,10 @@ function HealthBars({
             <TooltipContent side="top" className="max-w-xs text-xs space-y-0.5">
               <div className="font-medium">
                 {outcome}
-                {sample.ok && firstByteTone(sample.firstByteMs, true) === "warn"
+                {sample.ok && firstByteTone(sample.firstByteMs, true, maxAvgFirstByteMs) === "warn"
                   ? ` · ${t("healthTestSlow")}`
                   : ""}
-                {sample.ok && firstByteTone(sample.firstByteMs, true) === "bad"
+                {sample.ok && firstByteTone(sample.firstByteMs, true, maxAvgFirstByteMs) === "bad"
                   ? ` · ${t("healthTestVerySlow")}`
                   : ""}
                 {sample.httpStatusCode != null ? ` · HTTP ${sample.httpStatusCode}` : ""}
@@ -261,26 +309,42 @@ interface ProviderHealthTestCardProps {
   canEdit?: boolean;
   className?: string;
   compact?: boolean;
+  /** Render the health status in the containing provider header instead. */
+  hideStatusBadge?: boolean;
   currencyCode?: CurrencyCode;
+  /** Rolling window size for sparkline / label (from system settings). */
+  windowSize?: number;
+  /** Runtime SLO thresholds used for status and first-byte tones. */
+  sloThresholds?: Partial<HealthTestSloThresholds> | null;
 }
 
 export function ProviderHealthTestCard({
   provider,
-  canEdit = false,
+  canEdit: _canEdit = false,
   className,
   compact = false,
+  hideStatusBadge = false,
   currencyCode = "USD",
+  windowSize = 10,
+  sloThresholds,
 }: ProviderHealthTestCardProps) {
   const t = useTranslations("settings.providers.list");
-  const status = useMemo(() => statusLabel(provider, t), [provider, t]);
+  const normalizedSloThresholds = useMemo(
+    () => normalizeHealthTestSloThresholds(sloThresholds),
+    [sloThresholds]
+  );
+  const status = useMemo(
+    () => getProviderHealthTestStatus(provider, t, normalizedSloThresholds, windowSize),
+    [normalizedSloThresholds, provider, t, windowSize]
+  );
 
-  // No probe window when provider is off or scheduled health tests are off,
-  // or when there is no recent sample window (group has no default model / cleared).
-  const recentNormalized = normalizeHealthTestRecentResults(provider.healthTestRecentResults);
-  const probesActive =
+  // Persisted aggregates remain visible while scheduled tests are enabled;
+  // recent samples are used only for the trend bars and sample count.
+  const probesEnabled =
     provider.isEnabled !== false &&
     provider.scheduledHealthTestEnabled !== false &&
-    Boolean(recentNormalized && recentNormalized.length > 0);
+    provider.healthTestSloAutoDisabled !== true;
+  const probesActive = probesEnabled;
 
   const onlineRateText = probesActive
     ? formatOnlineRatePercent(provider.healthTestOnlineRate)
@@ -291,15 +355,28 @@ export function ProviderHealthTestCard({
       ? formatLatencyMs(provider.lastHealthTestFirstByteMs)
       : "-";
   const avgFbTone = probesActive
-    ? firstByteTone(provider.healthTestAvgFirstByteMs, true)
+    ? firstByteTone(
+        provider.healthTestAvgFirstByteMs,
+        true,
+        normalizedSloThresholds.maxAvgFirstByteMs
+      )
     : "neutral";
   const lastFbTone = probesActive
-    ? firstByteTone(provider.lastHealthTestFirstByteMs, provider.lastHealthTestOk)
+    ? firstByteTone(
+        provider.lastHealthTestFirstByteMs,
+        provider.lastHealthTestOk,
+        normalizedSloThresholds.maxAvgFirstByteMs
+      )
     : "neutral";
   const model = probesActive ? provider.lastHealthTestModel : null;
   const todayCalls = provider.healthTestTodayCalls ?? 0;
   const todayCost = formatProbeCost(provider.healthTestTodayCostUsd ?? 0, currencyCode);
   const recentResults = probesActive ? provider.healthTestRecentResults : null;
+  const effectiveWindowSize = Math.min(50, Math.max(1, Math.trunc(windowSize) || 10));
+  const recentSampleCount = Math.min(
+    effectiveWindowSize,
+    normalizeHealthTestRecentResults(recentResults)?.length ?? 0
+  );
 
   return (
     <div
@@ -314,11 +391,13 @@ export function ProviderHealthTestCard({
           <Activity
             className={cn(
               "h-3.5 w-3.5 flex-shrink-0",
-              !probesActive
+              status.state === "off" || status.state === "disabled"
                 ? "text-muted-foreground/60"
-                : provider.lastHealthTestOk === false
+                : status.state === "failed"
                   ? "text-rose-500"
-                  : "text-emerald-600 dark:text-emerald-400"
+                  : status.state === "pending"
+                    ? "text-amber-500"
+                    : "text-emerald-600 dark:text-emerald-400"
             )}
           />
           <span className="text-[11px] font-medium text-foreground/80 truncate">
@@ -330,17 +409,16 @@ export function ProviderHealthTestCard({
             </span>
           ) : null}
         </div>
-        <div className="flex items-center gap-1.5 flex-shrink-0">
-          <Badge
-            variant="outline"
-            className={cn(
-              "text-[10px] px-1.5 py-0 h-5 font-medium border",
-              status.className
-            )}
-          >
-            {status.text}
-          </Badge>
-        </div>
+        {!hideStatusBadge ? (
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            <Badge
+              variant="outline"
+              className={cn("text-[10px] px-1.5 py-0 h-5 font-medium border", status.className)}
+            >
+              {status.text}
+            </Badge>
+          </div>
+        ) : null}
       </div>
 
       <div className={cn("grid gap-1.5", compact ? "grid-cols-2" : "grid-cols-3")}>
@@ -370,30 +448,24 @@ export function ProviderHealthTestCard({
             {lastFb}
           </div>
         </div>
-        {!compact && (
-          <div className="min-w-0 rounded-md bg-background/70 dark:bg-background/30 px-2 py-1.5 border border-border/40">
-            <div className="text-[10px] uppercase tracking-wider text-muted-foreground/70 leading-none">
-              {t("healthTestOnlineRate")}
-            </div>
-            <div
-              className={cn(
-                "mt-1 text-sm font-semibold tabular-nums tracking-tight whitespace-nowrap",
-                provider.healthTestOnlineRate != null &&
-                  provider.healthTestOnlineRate >= 0.99 &&
-                  "text-emerald-600 dark:text-emerald-400",
-                provider.healthTestOnlineRate != null &&
-                  provider.healthTestOnlineRate >= 0.8 &&
-                  provider.healthTestOnlineRate < 0.99 &&
-                  "text-amber-600 dark:text-amber-400",
-                provider.healthTestOnlineRate != null &&
-                  provider.healthTestOnlineRate < 0.8 &&
-                  "text-rose-600 dark:text-rose-400"
-              )}
-            >
-              {onlineRateText}
-            </div>
+        <div className="min-w-0 rounded-md bg-background/70 dark:bg-background/30 px-2 py-1.5 border border-border/40">
+          <div className="text-[10px] uppercase tracking-wider text-muted-foreground/70 leading-none">
+            {t("healthTestOnlineRate")}
           </div>
-        )}
+          <div
+            className={cn(
+              "mt-1 text-sm font-semibold tabular-nums tracking-tight whitespace-nowrap",
+              provider.healthTestOnlineRate != null &&
+                provider.healthTestOnlineRate >= normalizedSloThresholds.minOnlineRate &&
+                "text-emerald-600 dark:text-emerald-400",
+              provider.healthTestOnlineRate != null &&
+                provider.healthTestOnlineRate < normalizedSloThresholds.minOnlineRate &&
+                "text-rose-600 dark:text-rose-400"
+            )}
+          >
+            {onlineRateText}
+          </div>
+        </div>
       </div>
 
       <div className="flex items-stretch gap-1.5">
@@ -433,24 +505,20 @@ export function ProviderHealthTestCard({
       <div className="space-y-1">
         <div className="flex items-center justify-between gap-2 text-[10px] text-muted-foreground">
           <span className="uppercase tracking-wider text-muted-foreground/70">
-            {t("healthTestRecent60")}
+            {t("healthTestRecent60", { count: effectiveWindowSize })}
           </span>
-          {compact ? (
-            <span
-              className={cn(
-                "font-medium tabular-nums",
-                provider.healthTestOnlineRate != null &&
-                  provider.healthTestOnlineRate >= 0.99 &&
-                  "text-emerald-600 dark:text-emerald-400"
-              )}
-            >
-              {onlineRateText}
-            </span>
-          ) : null}
+          <span className="font-medium tabular-nums text-muted-foreground/80">
+            {recentSampleCount}/{effectiveWindowSize}
+          </span>
         </div>
-        <HealthBars results={recentResults} currencyCode={currencyCode} t={t} />
+        <HealthBars
+          results={recentResults}
+          currencyCode={currencyCode}
+          t={t}
+          windowSize={windowSize}
+          maxAvgFirstByteMs={normalizedSloThresholds.maxAvgFirstByteMs}
+        />
       </div>
     </div>
   );
 }
-

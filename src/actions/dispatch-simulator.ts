@@ -13,11 +13,13 @@ import { getCircuitState, isCircuitOpen } from "@/lib/circuit-breaker";
 import { PROVIDER_GROUP } from "@/lib/constants/provider.constants";
 import { logger } from "@/lib/logger";
 import { getEndpointFilterStats } from "@/lib/provider-endpoints/endpoint-selector";
+import type { ProviderGroupModelMatchRule } from "@/lib/provider-groups/model-match-rules";
 import { getProviderModelRedirectTarget } from "@/lib/provider-model-redirects";
 import { RateLimitService } from "@/lib/rate-limit";
 import { resolveSystemTimezone } from "@/lib/utils/timezone";
 import { isVendorTypeCircuitOpen } from "@/lib/vendor-type-circuit-breaker";
 import { findAllProvidersFresh } from "@/repository/provider";
+import { getProviderGroupModelMatchRules } from "@/repository/provider-groups";
 import type {
   DispatchSimulatorEndpointStats,
   DispatchSimulatorInput,
@@ -168,6 +170,14 @@ export async function simulateDispatchDecisionTree(
   const normalizedModelName = input.modelName.trim();
   const groupFilter = getGroupFilterValue(input.groupTags);
   const systemTimezone = options?.systemTimezone ?? (await resolveSystemTimezone());
+  let groupModelMatchRules: ReadonlyMap<string, ProviderGroupModelMatchRule[] | null> = new Map();
+  try {
+    groupModelMatchRules = await getProviderGroupModelMatchRules();
+  } catch (error) {
+    logger.warn("Dispatch simulator: failed to resolve group model rules", {
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
   const steps: DispatchSimulatorStep[] = [];
 
   let currentProviders = providers;
@@ -256,7 +266,9 @@ export async function simulateDispatchDecisionTree(
   const allowlistEligible =
     normalizedModelName === ""
       ? currentProviders
-      : currentProviders.filter((provider) => providerSupportsModel(provider, normalizedModelName));
+      : currentProviders.filter((provider) =>
+          providerSupportsModel(provider, normalizedModelName, groupModelMatchRules)
+        );
   steps.push(
     buildStep(
       "modelAllowlist",

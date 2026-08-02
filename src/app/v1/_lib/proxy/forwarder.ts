@@ -95,6 +95,7 @@ import {
   syncOpenAIImageMultipartFromLogicalBody,
   validateOpenAIImageRequest,
 } from "./openai-image-compat";
+import { selectHedgeAlternative } from "./provider-fallback";
 import { ProxyProviderResolver } from "./provider-selector";
 import { finalizeHedgeLoserBilling } from "./response-handler";
 import type { ProxySession } from "./session";
@@ -3779,6 +3780,12 @@ export class ProxyForwarder {
       throw new Error("代理上下文缺少供应商");
     }
 
+    // Capture immutable request ownership before winner synchronization can mutate a
+    // shared/shadow session. Loser billing must always settle against the original
+    // message request and authenticated CCH user, not whichever attempt wins.
+    const ownerMessageRequestId = session.messageContext?.id ?? null;
+    const ownerUserId = session.authState?.user?.id ?? session.messageContext?.user?.id ?? null;
+
     const rawCrossProviderFallbackEnabled = session.isRawCrossProviderFallbackEnabled();
     // 竞速输家计费开关：开启时落败供应商不被直接掐断，而是后台 drain 并计费。
     const billHedgeLosers = (await getCachedSystemSettings()).billHedgeLosers === true;
@@ -3851,7 +3858,7 @@ export class ProxyForwarder {
 
       const reader = attempt.reader;
       const response = attempt.response;
-      const messageRequestId = session.messageContext?.id;
+      const messageRequestId = ownerMessageRequestId;
       if (!reader || !response || messageRequestId == null) {
         // 无可读响应或无请求行可归属 -> 无法计费，直接释放资源。
         const cancel = reader?.cancel("hedge_loser_no_billing");
@@ -3923,6 +3930,7 @@ export class ProxyForwarder {
 
         await finalizeHedgeLoserBilling({
           messageRequestId,
+          userId: ownerUserId,
           loserSession: attempt.session,
           provider: attempt.provider,
           attemptNumber: attempt.sequence,
@@ -4023,7 +4031,7 @@ export class ProxyForwarder {
           attemptNumber: attempt.sequence,
           circuitState: getCircuitState(attempt.provider.id),
         });
-        void launchAlternative();
+        void launchAlternative({ allowNonSloFallback: false });
       }, attempt.firstByteTimeoutMs);
     };
 
@@ -4040,27 +4048,60 @@ export class ProxyForwarder {
       }
     };
 
-    const launchAlternative = async () => {
+    const launchAlternative = async (options: { allowNonSloFallback: boolean }) => {
+      const { allowNonSloFallback } = options;
       if (settled || winnerCommitted || noMoreProviders) return;
       if (launchingAlternative) {
         await launchingAlternative;
-        return;
+        // A health-only launch can finish without starting anything. If the
+        // failed attempt has no other in-flight peer, give the caller that is
+        // allowed to fall back to the ordinary candidate pool another chance.
+        if (
+          !allowNonSloFallback ||
+          settled ||
+          winnerCommitted ||
+          noMoreProviders ||
+          attempts.size > 0
+        ) {
+          return;
+        }
       }
 
       launchingAlternative = (async () => {
         while (!settled && !winnerCommitted && !noMoreProviders) {
-          // Hedge alternate must be next health-SLO qualified peer only.
-          // No remaining SLO peer → no race (leave primary running alone).
-          const alternativeProvider = await ProxyProviderResolver.pickHealthSloAlternate(
-            session,
-            Array.from(launchedProviderIds)
-          );
+          const alternativeSelection = await selectHedgeAlternative({
+            allowNonSloFallback,
+            launchedProviderIds,
+            failedProviderIds,
+            selectHealthSlo: (excludeProviderIds) =>
+              ProxyProviderResolver.pickHealthSloAlternate(session, excludeProviderIds),
+            selectOrdinary: (excludeProviderIds) =>
+              ProxyProviderResolver.pickRandomProviderWithExclusion(session, excludeProviderIds),
+          });
+          const alternativeProvider = alternativeSelection.provider;
+
+          if (alternativeSelection.mode === "ordinary") {
+            logger.info(
+              "ProxyForwarder: Falling back to next ordinary provider after failed hedge attempt",
+              {
+                providerId: alternativeProvider?.id,
+                providerName: alternativeProvider?.name,
+                excludedProviderCount: alternativeSelection.excludedProviderIds.length,
+              }
+            );
+          }
+
           if (!alternativeProvider) {
-            noMoreProviders = true;
-            // No alternative providers available — let in-flight attempt(s) continue.
-            // If all attempts already completed, settle with last error.
-            if (attempts.size === 0) {
-              await finishIfExhausted();
+            // A health-only launch must not mark the request exhausted: the
+            // primary may still succeed, and a later failure can request the
+            // ordinary fallback path above.
+            if (allowNonSloFallback) {
+              noMoreProviders = true;
+              // No alternative providers available — let in-flight attempt(s) continue.
+              // If all attempts already completed, settle with last error.
+              if (attempts.size === 0) {
+                await finishIfExhausted();
+              }
             }
             return;
           }
@@ -4396,7 +4437,7 @@ export class ProxyForwarder {
         return;
       }
 
-      await launchAlternative();
+      await launchAlternative({ allowNonSloFallback: attempts.size === 0 });
       await finishIfExhausted();
     };
 
@@ -4657,7 +4698,7 @@ export class ProxyForwarder {
     try {
       const initialLaunched = await startAttempt(initialProvider, true);
       if (!initialLaunched) {
-        await launchAlternative();
+        await launchAlternative({ allowNonSloFallback: true });
       }
       await finishIfExhausted();
       const result = await resultPromise;

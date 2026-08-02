@@ -5,6 +5,8 @@ import { useTranslations } from "next-intl";
 import { useMemo } from "react";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { getProviderVendors } from "@/lib/api-client/v1/actions/provider-endpoints";
+import { getSystemSettings } from "@/lib/api-client/v1/actions/system-config";
+import { normalizeHealthTestSloThresholds } from "@/lib/provider-health-test/slo-thresholds";
 import type { CurrencyCode } from "@/lib/utils/currency";
 import type { ProviderDisplay, ProviderStatisticsMap } from "@/types/provider";
 import type { User } from "@/types/user";
@@ -72,6 +74,23 @@ export function ProviderList({
     refetchOnWindowFocus: false,
   });
 
+  const { data: systemSettings } = useQuery({
+    queryKey: ["system-settings"],
+    queryFn: getSystemSettings,
+    staleTime: 30_000,
+    refetchOnWindowFocus: false,
+  });
+
+  const healthSloThresholds = useMemo(
+    () =>
+      normalizeHealthTestSloThresholds({
+        minOnlineRate: Number(systemSettings?.healthTestMinOnlineRatePercent) / 100,
+        maxAvgFirstByteMs: Number(systemSettings?.healthTestMaxAvgLatencySeconds) * 1000,
+        minSampleCount: Number(systemSettings?.healthTestWindowSize),
+      }),
+    [systemSettings]
+  );
+
   const vendorById = useMemo(() => {
     return new Map(vendors.map((vendor) => [vendor.id, vendor]));
   }, [vendors]);
@@ -104,6 +123,8 @@ export function ProviderList({
             statistics={statistics[provider.id]}
             statisticsLoading={statisticsLoading}
             currencyCode={currencyCode}
+            healthWindowSize={healthSloThresholds.minSampleCount}
+            healthSloThresholds={healthSloThresholds}
             enableMultiProviderTypes={enableMultiProviderTypes}
             activeGroupFilter={activeGroupFilter}
             isMultiSelectMode={isMultiSelectMode}

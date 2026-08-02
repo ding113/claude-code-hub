@@ -86,6 +86,76 @@ export const SystemSettingsSchema = z
     siteTitle: z.string().describe("Site title shown in the dashboard."),
     allowGlobalUsageView: z.boolean().describe("Whether users can view global usage data."),
     currencyDisplay: CurrencyCodeSchema,
+    healthTestDailyBudgetCny: z
+      .number()
+      .optional()
+      .describe("Global daily health-test budget in display currency units."),
+    healthTestGlobalBudgetSuspendedDay: z
+      .string()
+      .nullable()
+      .optional()
+      .describe("Local day when scheduled health tests were globally suspended for budget."),
+    healthTestScheduleMode: z
+      .enum(["dynamic", "always_on"])
+      .optional()
+      .describe(
+        "Scheduled health-test policy: dynamic (SLO rebalance top1/top2) or always_on (keep fleet probing without SLO auto-disable)."
+      ),
+    healthTestWindowSize: z
+      .number()
+      .int()
+      .min(1)
+      .max(50)
+      .optional()
+      .describe("Rolling health-test sample window size for online-rate / sparkline / SLO averages."),
+    healthTestIntervalSeconds: z
+      .number()
+      .int()
+      .min(10)
+      .max(3600)
+      .optional()
+      .describe("Scheduled health-test interval in seconds (wall-clock aligned)."),
+    healthTestTimeoutSeconds: z
+      .number()
+      .int()
+      .min(5)
+      .max(300)
+      .optional()
+      .describe("Scheduled health-test total timeout in seconds."),
+    healthTestMinOnlineRatePercent: z
+      .number()
+      .int()
+      .min(1)
+      .max(100)
+      .optional()
+      .describe("Minimum online-rate percent for health SLO qualification (single gate)."),
+    healthTestMaxAvgLatencySeconds: z
+      .number()
+      .int()
+      .min(1)
+      .max(300)
+      .optional()
+      .describe("Maximum average first-byte latency seconds for health SLO qualification (single gate)."),
+    siteCaptchaProvider: z
+      .enum(["none", "yescaptcha", "capsolver", "2captcha", "anticaptcha"])
+      .optional()
+      .describe("Global captcha vendor for provider-site upstream login."),
+    siteCaptchaApiKey: z
+      .string()
+      .max(512)
+      .nullable()
+      .optional()
+      .describe("Global captcha API key; omit to keep, empty/null to clear."),
+    siteCaptchaEndpoint: z
+      .string()
+      .max(2000)
+      .nullable()
+      .optional()
+      .describe("Optional global captcha API endpoint override."),
+    hasSiteCaptchaApiKey: z
+      .boolean()
+      .optional()
+      .describe("Whether a global captcha API key is stored."),
     billingModelSource: BillingModelSourceSchema,
     codexPriorityBillingSource: CodexPriorityBillingSourceSchema,
     billNonSuccessfulRequests: z
@@ -97,6 +167,19 @@ export const SystemSettingsSchema = z
       .boolean()
       .describe(
         "Whether streaming-hedge (provider racing) losers are kept alive, drained, and billed (their cost accumulates into the request total)."
+      ),
+    streamingRaceMode: z
+      .enum(["single", "timeout_race", "dual_fast"])
+      .describe(
+        "Streaming multi-provider race policy: single (no race), timeout_race (relay after first-byte threshold), dual_fast (top1+top2 immediately)."
+      ),
+    streamingRaceFirstByteMs: z
+      .number()
+      .int()
+      .min(0)
+      .max(180000)
+      .describe(
+        "Global first-byte threshold in ms for timeout_race. 0 disables (used with single mode)."
       ),
     timezone: TimeZoneSchema.nullable().describe(
       "Configured system timezone, or null for default."
@@ -186,6 +269,12 @@ export const SystemSettingsUpdateSchema = SystemSettingsSchema.omit({
       .optional()
       .describe("System timezone, or null to use default."),
     responseFixerConfig: ResponseFixerConfigSchema.partial().optional(),
+    healthTestPerProviderDailyBudget: z
+      .number()
+      .min(0)
+      .max(100000)
+      .optional()
+      .describe("Site-wide per-provider daily health-test spend cap (display units, default 0.1). 0 = unlimited."),
   })
   .partial()
   .strict()

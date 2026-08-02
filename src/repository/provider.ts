@@ -292,6 +292,9 @@ export async function createProvider(providerData: CreateProviderData): Promise<
         priority: providers.priority,
         costMultiplier: providers.costMultiplier,
         groupTag: providers.groupTag,
+        siteId: providers.siteId,
+        siteGroupName: providers.siteGroupName,
+        billingMode: providers.billingMode,
         providerType: providers.providerType,
         preserveClientIp: providers.preserveClientIp,
         disableSessionReuse: providers.disableSessionReuse,
@@ -397,6 +400,9 @@ export async function findProviderList(
       groupPriorities: providers.groupPriorities,
       costMultiplier: providers.costMultiplier,
       groupTag: providers.groupTag,
+      siteId: providers.siteId,
+      siteGroupName: providers.siteGroupName,
+      billingMode: providers.billingMode,
       providerType: providers.providerType,
       preserveClientIp: providers.preserveClientIp,
       disableSessionReuse: providers.disableSessionReuse,
@@ -502,6 +508,9 @@ export async function findAllProvidersFresh(): Promise<Provider[]> {
       groupPriorities: providers.groupPriorities,
       costMultiplier: providers.costMultiplier,
       groupTag: providers.groupTag,
+      siteId: providers.siteId,
+      siteGroupName: providers.siteGroupName,
+      billingMode: providers.billingMode,
       providerType: providers.providerType,
       preserveClientIp: providers.preserveClientIp,
       disableSessionReuse: providers.disableSessionReuse,
@@ -611,6 +620,9 @@ export async function findProviderById(id: number): Promise<Provider | null> {
       groupPriorities: providers.groupPriorities,
       costMultiplier: providers.costMultiplier,
       groupTag: providers.groupTag,
+      siteId: providers.siteId,
+      siteGroupName: providers.siteGroupName,
+      billingMode: providers.billingMode,
       providerType: providers.providerType,
       preserveClientIp: providers.preserveClientIp,
       disableSessionReuse: providers.disableSessionReuse,
@@ -703,7 +715,11 @@ export async function updateProvider(
   if (providerData.name !== undefined) dbData.name = providerData.name;
   if (providerData.url !== undefined) dbData.url = providerData.url;
   if (providerData.key !== undefined) dbData.key = providerData.key;
-  if (providerData.is_enabled !== undefined) dbData.isEnabled = providerData.is_enabled;
+  if (providerData.is_enabled !== undefined) {
+    dbData.isEnabled = providerData.is_enabled;
+    // An explicit admin toggle must not be re-opened by a later balance sync.
+    dbData.balanceAutoDisabled = false;
+  }
   if (providerData.weight !== undefined) dbData.weight = providerData.weight;
   if (providerData.priority !== undefined) dbData.priority = providerData.priority;
   if (providerData.group_priorities !== undefined)
@@ -878,6 +894,9 @@ export async function updateProvider(
         groupPriorities: providers.groupPriorities,
         costMultiplier: providers.costMultiplier,
         groupTag: providers.groupTag,
+        siteId: providers.siteId,
+        siteGroupName: providers.siteGroupName,
+        billingMode: providers.billingMode,
         providerType: providers.providerType,
         preserveClientIp: providers.preserveClientIp,
         disableSessionReuse: providers.disableSessionReuse,
@@ -1245,6 +1264,8 @@ export async function updateProvidersBatch(
 
   if (updates.isEnabled !== undefined) {
     setClauses.isEnabled = updates.isEnabled;
+    // An explicit batch toggle is also a manual decision.
+    setClauses.balanceAutoDisabled = false;
   }
   if (updates.priority !== undefined) {
     setClauses.priority = updates.priority;

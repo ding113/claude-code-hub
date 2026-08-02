@@ -4,10 +4,12 @@ import {
   getDefaultHealthTestModel,
   HEALTH_TEST_GLOBAL_DAILY_BUDGET_DEFAULT,
   healthTestDailyBudgetAmount,
-  isHealthTestDueForBucket,
+  isHealthTestDue,
   isHealthTestOverDailyBudget,
   MANUAL_HEALTH_TEST_TIMEOUT_MS,
   msUntilNextHealthTestBoundary,
+  normalizeHealthTestIntervalSeconds,
+  normalizeHealthTestTimeoutSeconds,
   SCHEDULED_HEALTH_TEST_TIMEOUT_MS,
 } from "@/lib/provider-health-test/defaults";
 
@@ -31,12 +33,21 @@ describe("default health test models", () => {
   });
 });
 
-describe("wall-clock minute alignment", () => {
-  it("marks provider due once per wall-clock minute bucket", () => {
-    const now = new Date("2026-07-20T12:00:30.000Z");
-    expect(isHealthTestDueForBucket(new Date("2026-07-20T12:00:05.000Z"), now)).toBe(false);
-    expect(isHealthTestDueForBucket(new Date("2026-07-20T11:59:59.000Z"), now)).toBe(true);
-    expect(isHealthTestDueForBucket(null, now)).toBe(true);
+describe("scheduled health-test runtime settings", () => {
+  it("normalizes the live interval and timeout values", () => {
+    expect(normalizeHealthTestIntervalSeconds(180)).toBe(180);
+    expect(normalizeHealthTestIntervalSeconds(5)).toBe(10);
+    expect(normalizeHealthTestIntervalSeconds(4000)).toBe(3600);
+    expect(normalizeHealthTestTimeoutSeconds(120)).toBe(120);
+    expect(normalizeHealthTestTimeoutSeconds(1)).toBe(5);
+    expect(normalizeHealthTestTimeoutSeconds(400)).toBe(300);
+  });
+
+  it("uses elapsed time instead of the scheduler poll boundary", () => {
+    const last = new Date("2026-07-20T12:00:30.000Z");
+    expect(isHealthTestDue(last, new Date("2026-07-20T12:03:29.999Z"), 180_000)).toBe(false);
+    expect(isHealthTestDue(last, new Date("2026-07-20T12:03:30.000Z"), 180_000)).toBe(true);
+    expect(isHealthTestDue(null, last, 180_000)).toBe(true);
   });
 
   it("computes delay to next minute boundary", () => {

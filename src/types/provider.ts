@@ -321,6 +321,12 @@ export interface Provider {
   key: string;
   // 供应商聚合实体（按官网域名归一）
   providerVendorId: number | null;
+  /** Parent upstream website / 中转单位 */
+  siteId: number | null;
+  /** Upstream group name on the parent site */
+  siteGroupName: string | null;
+  /** catalog_estimate | site_group_ratio */
+  billingMode: string;
   // 是否启用
   isEnabled: boolean;
   // 权重（0-100）
@@ -478,6 +484,9 @@ export interface ProviderDisplay {
   providerType: ProviderType;
   // 供应商聚合实体（按官网域名归一）
   providerVendorId: number | null;
+  siteId: number | null;
+  siteGroupName: string | null;
+  billingMode: string;
   // 是否透传客户端 IP
   preserveClientIp: boolean;
   // 是否跳过当前供应商的 sticky session 复用

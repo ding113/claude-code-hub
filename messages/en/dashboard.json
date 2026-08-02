@@ -2011,6 +2011,11 @@
           "label": "Provider Group",
           "placeholder": "default"
         },
+        "balanceUsd": {
+          "label": "Account Balance (USD)",
+          "placeholder": "Leave empty for unlimited",
+          "description": "Charged from the CCH user balance after each request; leave empty for unlimited."
+        },
         "allowedClients": {
           "label": "Client Restrictions",
           "description": "Restrict which CLI/IDE clients can use this account. Empty = no restriction.",

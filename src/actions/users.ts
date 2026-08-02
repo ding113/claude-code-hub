@@ -225,6 +225,7 @@ async function buildUserDisplays(
         role: user.role,
         rpm: user.rpm,
         dailyQuota: user.dailyQuota,
+        balanceUsd: user.balanceUsd ?? null,
         providerGroup: user.providerGroup || undefined,
         tags: user.tags || [],
         limit5hUsd: user.limit5hUsd ?? null,
@@ -292,6 +293,7 @@ async function buildUserDisplays(
         role: user.role,
         rpm: user.rpm,
         dailyQuota: user.dailyQuota,
+        balanceUsd: user.balanceUsd ?? null,
         providerGroup: user.providerGroup || undefined,
         tags: user.tags || [],
         limit5hUsd: user.limit5hUsd ?? null,
@@ -366,6 +368,7 @@ export interface BatchUpdateUsersParams {
     tags?: string[];
     rpm?: number | null;
     dailyQuota?: number | null;
+    balanceUsd?: number | null;
     limit5hUsd?: number | null;
     limit5hResetMode?: "fixed" | "rolling";
     limitWeeklyUsd?: number | null;
@@ -905,6 +908,7 @@ export async function getUsersBatchCore(
         role: user.role,
         rpm: user.rpm,
         dailyQuota: user.dailyQuota,
+        balanceUsd: user.balanceUsd ?? null,
         providerGroup: user.providerGroup || undefined,
         tags: user.tags || [],
         limit5hUsd: user.limit5hUsd ?? null,
@@ -1297,6 +1301,7 @@ export async function addUser(data: {
   tags?: string[];
   rpm?: number | null;
   dailyQuota?: number | null;
+  balanceUsd?: number | null;
   limit5hUsd?: number | null;
   limit5hResetMode?: "fixed" | "rolling";
   limitWeeklyUsd?: number | null;
@@ -1321,6 +1326,7 @@ export async function addUser(data: {
       expiresAt: Date | null;
       rpm: number | null;
       dailyQuota: number | null;
+      balanceUsd: number | null;
       providerGroup?: string;
       tags: string[];
       limit5hUsd: number | null;
@@ -1360,6 +1366,7 @@ export async function addUser(data: {
       tags: data.tags || [],
       rpm: data.rpm ?? null,
       dailyQuota: data.dailyQuota ?? null,
+      balanceUsd: data.balanceUsd ?? null,
       limit5hUsd: data.limit5hUsd,
       limit5hResetMode: data.limit5hResetMode,
       limitWeeklyUsd: data.limitWeeklyUsd,
@@ -1421,6 +1428,7 @@ export async function addUser(data: {
       tags: validatedData.tags,
       rpm: validatedData.rpm,
       dailyQuota: validatedData.dailyQuota ?? undefined,
+      balanceUsd: validatedData.balanceUsd ?? undefined,
       limit5hUsd: validatedData.limit5hUsd ?? undefined,
       limit5hResetMode: validatedData.limit5hResetMode,
       limitWeeklyUsd: validatedData.limitWeeklyUsd ?? undefined,
@@ -1461,6 +1469,7 @@ export async function addUser(data: {
           expiresAt: newUser.expiresAt ?? null,
           rpm: newUser.rpm,
           dailyQuota: newUser.dailyQuota,
+          balanceUsd: newUser.balanceUsd ?? null,
           providerGroup: newUser.providerGroup || undefined,
           tags: newUser.tags || [],
           limit5hUsd: newUser.limit5hUsd ?? null,
@@ -1506,6 +1515,7 @@ export async function createUserOnly(data: {
   tags?: string[];
   rpm?: number | null;
   dailyQuota?: number | null;
+  balanceUsd?: number | null;
   limit5hUsd?: number | null;
   limit5hResetMode?: "fixed" | "rolling";
   limitWeeklyUsd?: number | null;
@@ -1530,6 +1540,7 @@ export async function createUserOnly(data: {
       expiresAt: Date | null;
       rpm: number | null;
       dailyQuota: number | null;
+      balanceUsd: number | null;
       providerGroup?: string;
       tags: string[];
       limit5hUsd: number | null;
@@ -1562,6 +1573,7 @@ export async function createUserOnly(data: {
       tags: data.tags || [],
       rpm: data.rpm ?? null,
       dailyQuota: data.dailyQuota ?? null,
+      balanceUsd: data.balanceUsd ?? null,
       limit5hUsd: data.limit5hUsd,
       limit5hResetMode: data.limit5hResetMode,
       limitWeeklyUsd: data.limitWeeklyUsd,
@@ -1622,6 +1634,7 @@ export async function createUserOnly(data: {
       tags: validatedData.tags,
       rpm: validatedData.rpm,
       dailyQuota: validatedData.dailyQuota ?? undefined,
+      balanceUsd: validatedData.balanceUsd ?? undefined,
       limit5hUsd: validatedData.limit5hUsd ?? undefined,
       limit5hResetMode: validatedData.limit5hResetMode,
       limitWeeklyUsd: validatedData.limitWeeklyUsd ?? undefined,
@@ -1651,6 +1664,7 @@ export async function createUserOnly(data: {
           expiresAt: newUser.expiresAt ?? null,
           rpm: newUser.rpm,
           dailyQuota: newUser.dailyQuota,
+          balanceUsd: newUser.balanceUsd ?? null,
           providerGroup: newUser.providerGroup || undefined,
           tags: newUser.tags || [],
           limit5hUsd: newUser.limit5hUsd ?? null,
@@ -1692,6 +1706,7 @@ export async function editUser(
     tags?: string[];
     rpm?: number | null;
     dailyQuota?: number | null;
+    balanceUsd?: number | null;
     limit5hUsd?: number | null;
     limit5hResetMode?: "fixed" | "rolling";
     limitWeeklyUsd?: number | null;
@@ -1800,6 +1815,7 @@ export async function editUser(
       tags: validatedData.tags,
       rpm: validatedData.rpm,
       dailyQuota: validatedData.dailyQuota,
+      balanceUsd: validatedData.balanceUsd,
       limit5hUsd: validatedData.limit5hUsd,
       limit5hResetMode: validatedData.limit5hResetMode,
       limitWeeklyUsd: validatedData.limitWeeklyUsd,

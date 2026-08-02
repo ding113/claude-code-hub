@@ -4,6 +4,12 @@ import { asc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import { providerGroups, providers } from "@/drizzle/schema";
 import { PROVIDER_GROUP } from "@/lib/constants/provider.constants";
+import { normalizeProviderGroupMatchRules } from "@/lib/provider-groups/match-rules";
+import {
+  normalizeProviderGroupModelMatchRules,
+  type ProviderGroupModelMatchRule,
+} from "@/lib/provider-groups/model-match-rules";
+import { normalizeProviderGroupSharedSettings } from "@/lib/provider-groups/shared-settings";
 import { parseProviderGroups } from "@/lib/utils/provider-group";
 import type {
   CreateProviderGroupInput,
@@ -30,6 +36,10 @@ function toProviderGroup(row: ProviderGroupRow): ProviderGroup {
       row.healthTestModel != null && String(row.healthTestModel).trim()
         ? String(row.healthTestModel).trim()
         : null,
+    sharedSettings: normalizeProviderGroupSharedSettings(row.sharedSettings),
+    sortOrder: Number.isFinite(Number(row.sortOrder)) ? Number(row.sortOrder) : 0,
+    matchRules: normalizeProviderGroupMatchRules(row.matchRules),
+    modelMatchRules: normalizeProviderGroupModelMatchRules(row.modelMatchRules),
     createdAt: row.createdAt!,
     updatedAt: row.updatedAt!,
   };
@@ -47,6 +57,10 @@ interface CacheEntry {
 }
 
 const multiplierCache = new Map<string, CacheEntry>();
+let modelMatchRulesCache: {
+  value: ReadonlyMap<string, ProviderGroupModelMatchRule[] | null>;
+  expiresAt: number;
+} | null = null;
 
 /**
  * Invalidate the in-memory cost multiplier cache.
@@ -54,6 +68,26 @@ const multiplierCache = new Map<string, CacheEntry>();
  */
 export function invalidateGroupMultiplierCache(): void {
   multiplierCache.clear();
+  modelMatchRulesCache = null;
+}
+
+/** Return cached request-model rules for all provider groups. */
+export async function getProviderGroupModelMatchRules(): Promise<
+  ReadonlyMap<string, ProviderGroupModelMatchRule[] | null>
+> {
+  const now = Date.now();
+  if (modelMatchRulesCache && modelMatchRulesCache.expiresAt > now) {
+    return modelMatchRulesCache.value;
+  }
+
+  const rows = await db
+    .select({ name: providerGroups.name, modelMatchRules: providerGroups.modelMatchRules })
+    .from(providerGroups);
+  const value = new Map(
+    rows.map((row) => [row.name, normalizeProviderGroupModelMatchRules(row.modelMatchRules)])
+  );
+  modelMatchRulesCache = { value, expiresAt: now + CACHE_TTL_MS };
+  return value;
 }
 
 // ---------------------------------------------------------------------------
@@ -61,7 +95,8 @@ export function invalidateGroupMultiplierCache(): void {
 // ---------------------------------------------------------------------------
 
 /**
- * Return all provider groups sorted by name, with "default" always first.
+ * Return all provider groups ordered for classification:
+ * "default" always first, then sort_order ASC, then name.
  */
 export async function findAllProviderGroups(): Promise<ProviderGroup[]> {
   const rows = await db
@@ -69,6 +104,7 @@ export async function findAllProviderGroups(): Promise<ProviderGroup[]> {
     .from(providerGroups)
     .orderBy(
       sql`CASE WHEN ${providerGroups.name} = ${PROVIDER_GROUP.DEFAULT} THEN 0 ELSE 1 END`,
+      asc(providerGroups.sortOrder),
       asc(providerGroups.name)
     );
 
@@ -112,6 +148,14 @@ export async function findProviderGroupById(
  * Create a new provider group.
  */
 export async function createProviderGroup(input: CreateProviderGroupInput): Promise<ProviderGroup> {
+  const maxSort = await db
+    .select({ value: sql<number>`coalesce(max(${providerGroups.sortOrder}), 0)` })
+    .from(providerGroups);
+  const nextSort =
+    input.sortOrder !== undefined && Number.isFinite(input.sortOrder)
+      ? Math.trunc(input.sortOrder)
+      : Number(maxSort[0]?.value ?? 0) + 10;
+
   const [row] = await db
     .insert(providerGroups)
     .values({
@@ -122,6 +166,10 @@ export async function createProviderGroup(input: CreateProviderGroupInput): Prom
         input.healthTestModel != null && String(input.healthTestModel).trim()
           ? String(input.healthTestModel).trim()
           : null,
+      sharedSettings: normalizeProviderGroupSharedSettings(input.sharedSettings),
+      sortOrder: nextSort,
+      matchRules: normalizeProviderGroupMatchRules(input.matchRules),
+      modelMatchRules: normalizeProviderGroupModelMatchRules(input.modelMatchRules),
     })
     .returning();
 
@@ -152,6 +200,18 @@ export async function updateProviderGroup(
     const raw = input.healthTestModel;
     setData.healthTestModel =
       raw != null && String(raw).trim() ? String(raw).trim() : null;
+  }
+  if (input.sharedSettings !== undefined) {
+    setData.sharedSettings = normalizeProviderGroupSharedSettings(input.sharedSettings);
+  }
+  if (input.sortOrder !== undefined && Number.isFinite(input.sortOrder)) {
+    setData.sortOrder = Math.trunc(input.sortOrder);
+  }
+  if (input.matchRules !== undefined) {
+    setData.matchRules = normalizeProviderGroupMatchRules(input.matchRules);
+  }
+  if (input.modelMatchRules !== undefined) {
+    setData.modelMatchRules = normalizeProviderGroupModelMatchRules(input.modelMatchRules);
   }
 
   const [row] = await executor
@@ -229,6 +289,41 @@ export async function deleteProviderGroup(id: number): Promise<void> {
 
   await db.delete(providerGroups).where(eq(providerGroups.id, id));
   invalidateGroupMultiplierCache();
+}
+
+/**
+ * Persist a full non-default group order. `orderedIds` is top-to-bottom match priority.
+ * The default group keeps sort_order=0 and is never reordered here.
+ */
+export async function reorderProviderGroups(orderedIds: number[]): Promise<ProviderGroup[]> {
+  const uniqueIds = Array.from(
+    new Set(orderedIds.filter((id) => Number.isInteger(id) && id > 0))
+  );
+  if (uniqueIds.length === 0) {
+    return findAllProviderGroups();
+  }
+
+  await db.transaction(async (tx) => {
+    const rows = await tx
+      .select({ id: providerGroups.id, name: providerGroups.name })
+      .from(providerGroups)
+      .where(inArray(providerGroups.id, uniqueIds));
+
+    const byId = new Map(rows.map((row) => [row.id, row]));
+    let rank = 10;
+    for (const id of uniqueIds) {
+      const row = byId.get(id);
+      if (!row || row.name === PROVIDER_GROUP.DEFAULT) continue;
+      await tx
+        .update(providerGroups)
+        .set({ sortOrder: rank, updatedAt: new Date() })
+        .where(eq(providerGroups.id, id));
+      rank += 10;
+    }
+  });
+
+  invalidateGroupMultiplierCache();
+  return findAllProviderGroups();
 }
 
 // ---------------------------------------------------------------------------
@@ -362,4 +457,39 @@ export async function getProviderGroupHealthTestModelMap(): Promise<Map<string, 
     );
   }
   return map;
+}
+
+
+/**
+ * Apply group shared_settings onto all non-deleted providers whose groupTag
+ * includes the group name. Returns number of providers updated.
+ */
+export async function applyProviderGroupSharedSettingsToMembers(
+  groupName: string,
+  sharedSettings: import("@/lib/provider-groups/shared-settings").ProviderGroupSharedSettings | null
+): Promise<number> {
+  const { sharedSettingsToProviderPatch } = await import(
+    "@/lib/provider-groups/shared-settings"
+  );
+  const patch = sharedSettingsToProviderPatch(sharedSettings);
+  if (Object.keys(patch).length === 0) return 0;
+
+  const rows = await db
+    .select({ id: providers.id, groupTag: providers.groupTag })
+    .from(providers)
+    .where(isNull(providers.deletedAt));
+
+  const ids: number[] = [];
+  for (const row of rows) {
+    const tags = parseProviderGroups(row.groupTag);
+    if (tags.includes(groupName)) ids.push(row.id);
+  }
+  if (ids.length === 0) return 0;
+
+  await db
+    .update(providers)
+    .set({ ...patch, updatedAt: new Date() })
+    .where(inArray(providers.id, ids));
+
+  return ids.length;
 }

@@ -3,6 +3,15 @@ import type { IpExtractionConfig } from "@/types/ip-extraction";
 
 // 计费模型来源: 'original' (重定向前) | 'redirected' (重定向后)
 export type BillingModelSource = "original" | "redirected";
+
+/** Streaming multi-provider race policy (site-wide). */
+export type StreamingRaceMode = "single" | "timeout_race" | "dual_fast";
+/**
+ * Site-wide scheduled health-test policy:
+ * - dynamic: SLO rebalance (top1/top2 per group_tag)
+ * - always_on: no SLO auto-disable; keep fleet probing
+ */
+export type HealthTestScheduleMode = "dynamic" | "always_on";
 export type CodexPriorityBillingSource = "requested" | "actual";
 
 export interface ResponseFixerConfig {
@@ -34,8 +43,39 @@ export interface SystemSettings {
 
   /** Global daily health-test spend cap (display units, default 1). */
   healthTestDailyBudgetCny: number;
+  /**
+   * Site-wide per-provider daily health-test spend cap (display units, default 0.1).
+   * Same cap for every provider; over budget suspends only that provider.
+   */
+  healthTestPerProviderDailyBudget: number;
   /** Local day when ALL scheduled health tests were auto-disabled for global budget. */
   healthTestGlobalBudgetSuspendedDay: string | null;
+
+  /**
+   * Scheduled health-test policy:
+   * - dynamic: SLO rebalance keeps top1/top2
+   * - always_on: skip SLO rebalance auto-disable; reopen auto-disabled peers
+   */
+  healthTestScheduleMode: HealthTestScheduleMode;
+  /** Rolling health-test sample window (1–50, default 10). */
+  healthTestWindowSize: number;
+  /** Scheduled probe interval in seconds (10–3600, default 60). */
+  healthTestIntervalSeconds: number;
+  /** Scheduled probe total timeout in seconds (5–300, default 30). */
+  healthTestTimeoutSeconds: number;
+  /** Min online rate percent for health SLO (1–100, default 90). */
+  healthTestMinOnlineRatePercent: number;
+  /** Legacy persisted/API field name; its value is the max average first-byte latency in seconds (1–300, default 20). */
+  healthTestMaxAvgLatencySeconds: number;
+
+  /**
+   * Global captcha vendor for provider-site upstream login.
+   * Sites can pick "global" to reuse these credentials.
+   */
+  siteCaptchaProvider: string;
+  /** Whether a global captcha API key is stored (never return ciphertext). */
+  hasSiteCaptchaApiKey: boolean;
+  siteCaptchaEndpoint: string | null;
 
   // 计费模型来源配置
   billingModelSource: BillingModelSource;
@@ -52,6 +92,16 @@ export interface SystemSettings {
   // 开启后：竞速落败的供应商不再被直接掐断，而是后台拿回其上游响应并按 token 用量计费，
   //         其费用异步累加进该请求的总花费（与上游对多个供应商分别计费保持一致）。
   billHedgeLosers: boolean;
+
+  /**
+   * Streaming race policy:
+   * - single: no multi-provider race
+   * - timeout_race: keep primary; launch SLO alternate after first-byte threshold
+   * - dual_fast: launch top1+top2 immediately; use fastest first-byte
+   */
+  streamingRaceMode: StreamingRaceMode;
+  /** Global first-byte threshold (ms) for timeout_race / dual_fast. */
+  streamingRaceFirstByteMs: number;
 
   // 系统时区配置 (IANA timezone identifier)
   // 用于统一后端时间边界计算和前端日期/时间显示
@@ -165,7 +215,21 @@ export interface UpdateSystemSettingsInput {
 
   /** Global daily health-test budget (display units). */
   healthTestDailyBudgetCny?: number;
+  healthTestPerProviderDailyBudget?: number;
   healthTestGlobalBudgetSuspendedDay?: string | null;
+
+  healthTestScheduleMode?: HealthTestScheduleMode;
+  healthTestWindowSize?: number;
+  healthTestIntervalSeconds?: number;
+  healthTestTimeoutSeconds?: number;
+  healthTestMinOnlineRatePercent?: number;
+  healthTestMaxAvgLatencySeconds?: number;
+
+  /** Global captcha for provider-site login: none | yescaptcha | capsolver | 2captcha | anticaptcha */
+  siteCaptchaProvider?: string;
+  /** Plain API key; omit/empty keeps existing; null clears. */
+  siteCaptchaApiKey?: string | null;
+  siteCaptchaEndpoint?: string | null;
 
   // 计费模型来源配置（可选）
   billingModelSource?: BillingModelSource;
@@ -178,6 +242,9 @@ export interface UpdateSystemSettingsInput {
 
   // 供应商竞速输家计费（可选）
   billHedgeLosers?: boolean;
+
+  streamingRaceMode?: StreamingRaceMode;
+  streamingRaceFirstByteMs?: number;
 
   // 系统时区配置（可选）
   timezone?: string | null;

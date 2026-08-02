@@ -19,6 +19,7 @@ export interface User {
   limitWeeklyUsd?: number; // 周消费上限（美元）
   limitMonthlyUsd?: number; // 月消费上限（美元）
   limitTotalUsd?: number | null; // 总消费上限（美元）
+  balanceUsd?: number | null; // CCH 本地账户余额（美元），null = 不限额
   costResetAt?: Date | null; // Cost reset timestamp for limits-only reset
   limit5hCostResetAt?: Date | null; // Rolling 5h reset boundary timestamp
   limitConcurrentSessions?: number; // 并发 Session 上限
@@ -51,6 +52,7 @@ export interface CreateUserData {
   limitWeeklyUsd?: number;
   limitMonthlyUsd?: number;
   limitTotalUsd?: number | null;
+  balanceUsd?: number | null; // CCH 本地账户余额（美元），null = 不限额
   limitConcurrentSessions?: number;
   // Daily quota reset mode
   dailyResetMode?: "fixed" | "rolling";
@@ -81,6 +83,7 @@ export interface UpdateUserData {
   limitWeeklyUsd?: number | null;
   limitMonthlyUsd?: number | null;
   limitTotalUsd?: number | null;
+  balanceUsd?: number | null; // CCH 本地账户余额（美元），null = 不限额
   limitConcurrentSessions?: number | null;
   // Daily quota reset mode
   dailyResetMode?: "fixed" | "rolling";
@@ -162,6 +165,7 @@ export interface UserDisplay {
   limitWeeklyUsd?: number | null;
   limitMonthlyUsd?: number | null;
   limitTotalUsd?: number | null;
+  balanceUsd?: number | null; // CCH 本地账户余额（美元），null = 不限额
   costResetAt?: Date | null; // Cost reset timestamp for limits-only reset
   limitConcurrentSessions?: number | null;
   // Daily quota reset mode

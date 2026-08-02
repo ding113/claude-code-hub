@@ -9,11 +9,15 @@ import {
 import {
   HEALTH_TEST_INTERVAL_MS,
   msUntilNextHealthTestBoundary,
+  normalizeHealthTestIntervalSeconds,
+  normalizeHealthTestTimeoutSeconds,
+  SCHEDULED_HEALTH_TEST_TIMEOUT_MS,
 } from "@/lib/provider-health-test/defaults";
 import {
   getScheduledHealthTestInFlightCount,
   runDueScheduledHealthTests,
 } from "@/lib/provider-health-test/run-test";
+import { shouldRunSloRebalance } from "@/lib/provider-health-test/schedule-mode";
 
 // rebalance imported dynamically inside cycle to keep startup light
 
@@ -42,7 +46,25 @@ const schedulerState = globalThis as unknown as {
   __CCH_PROVIDER_HEALTH_TEST_DISPATCHING__?: boolean;
   __CCH_PROVIDER_HEALTH_TEST_LOCK__?: LeaderLock;
   __CCH_PROVIDER_HEALTH_TEST_STOP__?: boolean;
+  __CCH_PROVIDER_HEALTH_TEST_CADENCE_WAKE_TIMERS__?: Set<ReturnType<typeof setTimeout>>;
 };
+
+const cadenceWakeTimers =
+  schedulerState.__CCH_PROVIDER_HEALTH_TEST_CADENCE_WAKE_TIMERS__ ??
+  (schedulerState.__CCH_PROVIDER_HEALTH_TEST_CADENCE_WAKE_TIMERS__ = new Set());
+
+function scheduleCadenceWake(delayMs: number): void {
+  if (schedulerState.__CCH_PROVIDER_HEALTH_TEST_STOP__) return;
+
+  const normalizedDelayMs = Math.max(0, delayMs);
+  let timer: ReturnType<typeof setTimeout>;
+  timer = setTimeout(() => {
+    cadenceWakeTimers.delete(timer);
+    if (schedulerState.__CCH_PROVIDER_HEALTH_TEST_STOP__) return;
+    void runCycle();
+  }, normalizedDelayMs);
+  cadenceWakeTimers.add(timer);
+}
 
 async function ensureLeaderLock(): Promise<boolean> {
   const current = schedulerState.__CCH_PROVIDER_HEALTH_TEST_LOCK__;
@@ -60,7 +82,7 @@ async function ensureLeaderLock(): Promise<boolean> {
 }
 
 /**
- * Minute tick: start any due providers that are not already in-flight.
+ * Poll/cadence tick: start any due providers that are not already in-flight.
  * Must NOT wait for slow providers — that used to skip the next minute globally.
  */
 async function runCycle(): Promise<void> {
@@ -70,6 +92,8 @@ async function runCycle(): Promise<void> {
   schedulerState.__CCH_PROVIDER_HEALTH_TEST_DISPATCHING__ = true;
   let leadershipLost = false;
   let stopKeepAlive: (() => void) | undefined;
+  let dueIntervalMs = INTERVAL_MS;
+  let scheduledTimeoutMs = SCHEDULED_HEALTH_TEST_TIMEOUT_MS;
 
   try {
     const isLeader = await ensureLeaderLock();
@@ -89,15 +113,32 @@ async function runCycle(): Promise<void> {
 
     if (leadershipLost || schedulerState.__CCH_PROVIDER_HEALTH_TEST_STOP__) return;
 
-    // Rebalance scheduled toggles before dispatching probes so newly enabled
-    // providers can be due this minute and disabled ones are skipped.
+    // Respect the site-wide schedule policy before dispatching probes. Dynamic
+    // mode rebalances to the best SLO peers; always_on skips that auto-disable
+    // step and reopens peers previously closed by the dynamic policy.
     try {
-      const { rebalanceScheduledHealthTestsBySlo } = await import(
-        "@/repository/provider-health-test"
-      );
-      const rebalance = await rebalanceScheduledHealthTestsBySlo();
-      if (rebalance.changed > 0) {
-        logger.info("[ProviderHealthTestScheduler] SLO rebalance", rebalance);
+      const [{ getSystemSettings }, healthTestRepository] = await Promise.all([
+        import("@/repository/system-config"),
+        import("@/repository/provider-health-test"),
+      ]);
+      const settings = await getSystemSettings();
+      dueIntervalMs = normalizeHealthTestIntervalSeconds(settings.healthTestIntervalSeconds) * 1000;
+      scheduledTimeoutMs =
+        normalizeHealthTestTimeoutSeconds(settings.healthTestTimeoutSeconds) * 1000;
+
+      if (shouldRunSloRebalance(settings.healthTestScheduleMode)) {
+        const rebalance = await healthTestRepository.rebalanceScheduledHealthTestsBySlo();
+        if (rebalance.changed > 0) {
+          logger.info("[ProviderHealthTestScheduler] SLO rebalance", rebalance);
+        }
+      } else {
+        const reopened = await healthTestRepository.reopenSloAutoDisabledScheduledHealthTests();
+        if (reopened.reopened > 0) {
+          logger.info("[ProviderHealthTestScheduler] always_on reopened SLO auto-disabled", {
+            count: reopened.reopened,
+            providerIds: reopened.providerIds,
+          });
+        }
       }
     } catch (error) {
       logger.warn("[ProviderHealthTestScheduler] SLO rebalance failed", {
@@ -108,12 +149,17 @@ async function runCycle(): Promise<void> {
     if (leadershipLost || schedulerState.__CCH_PROVIDER_HEALTH_TEST_STOP__) return;
 
     const result = await runDueScheduledHealthTests({
-      intervalMs: INTERVAL_MS,
+      intervalMs: dueIntervalMs,
+      timeoutMs: scheduledTimeoutMs,
+      onProviderFinished: () => scheduleCadenceWake(dueIntervalMs),
     });
 
     if (result.due > 0 || result.started > 0 || result.skippedInFlight > 0) {
       logger.info("[ProviderHealthTestScheduler] cycle dispatched", {
         ...result,
+        dueIntervalMs,
+        scheduledTimeoutMs,
+        pollIntervalMs: INTERVAL_MS,
         mode: "per_provider_independent",
       });
     }
@@ -140,7 +186,7 @@ export function startProviderHealthTestScheduler(): void {
   // Align first fire to the next wall-clock boundary (e.g. next :00 second),
   // then keep a steady interval so cycles land on whole minutes.
   const delayMs = msUntilNextHealthTestBoundary(Date.now(), INTERVAL_MS);
-  logger.info("[ProviderHealthTestScheduler] Started (wall-clock aligned)", {
+  logger.info("[ProviderHealthTestScheduler] Started (poll wall-clock aligned)", {
     intervalMs: INTERVAL_MS,
     firstFireInMs: delayMs,
     mode: "per_provider_independent",
@@ -165,6 +211,8 @@ export function stopProviderHealthTestScheduler(): void {
   const intervalId = schedulerState.__CCH_PROVIDER_HEALTH_TEST_INTERVAL_ID__;
   if (intervalId) clearInterval(intervalId);
   schedulerState.__CCH_PROVIDER_HEALTH_TEST_INTERVAL_ID__ = undefined;
+  for (const timer of cadenceWakeTimers) clearTimeout(timer);
+  cadenceWakeTimers.clear();
   schedulerState.__CCH_PROVIDER_HEALTH_TEST_STARTED__ = false;
 
   const lock = schedulerState.__CCH_PROVIDER_HEALTH_TEST_LOCK__;

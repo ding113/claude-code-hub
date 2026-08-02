@@ -1947,6 +1947,11 @@
           "label": "プロバイダーグループ",
           "placeholder": "default"
         },
+        "balanceUsd": {
+          "label": "アカウント残高（USD）",
+          "placeholder": "空欄で無制限",
+          "description": "リクエスト完了後に CCH ユーザー残高から引き落とします。空欄は無制限です。"
+        },
         "allowedClients": {
           "label": "クライアント制限",
           "description": "このアカウントを使用できるCLI/IDEクライアントを制限します。空欄は制限なし。",

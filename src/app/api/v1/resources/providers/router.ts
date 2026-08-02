@@ -53,6 +53,7 @@ import {
   testProviderAnthropic,
   getHealthTestBudgetOverview,
   setHealthTestGlobalDailyBudget,
+  setHealthTestPerProviderDailyBudget,
   setProviderScheduledHealthTestEnabled,
   testProviderById,
   testProviderGemini,
@@ -744,6 +745,38 @@ providersRouter.openapi(
     },
   }),
   setHealthTestGlobalDailyBudget as never
+);
+
+providersRouter.openapi(
+  createRoute({
+    method: "post",
+    path: "/providers/health-test-per-provider-budget:set",
+    middleware: requireAuth("admin"),
+    tags: ["Providers"],
+    summary: "Set site-wide per-provider health-test daily budget",
+    description:
+      "Updates the site-wide daily health-test spend cap applied to each provider (display currency units, default 0.1). 0 disables the per-provider cap. Budget-suspended providers may re-open when the new cap allows.",
+    "x-required-access": "admin",
+    security,
+    request: {
+      body: {
+        required: true,
+        content: {
+          "application/json": {
+            schema: z.object({ budget: z.number().min(0).max(100000) }).strict(),
+          },
+        },
+      },
+    },
+    responses: {
+      200: {
+        description: "Provider budget updated.",
+        content: { "application/json": { schema: ProviderGenericResponseSchema } },
+      },
+      ...problemResponses,
+    },
+  }),
+  setHealthTestPerProviderDailyBudget as never
 );
 
 providersRouter.openapi(

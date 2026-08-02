@@ -143,6 +143,16 @@ export const CreateUserSchema = z.object({
     .max(USER_LIMITS.DAILY_QUOTA.MAX, `每日额度不能超过${USER_LIMITS.DAILY_QUOTA.MAX}美元`)
     .nullable()
     .optional(),
+  balanceUsd: z
+    .preprocess(
+      (value) => (value === "" ? null : value),
+      z.coerce
+        .number()
+        .min(0, "用户余额不能为负数")
+        .max(10000000, "用户余额不能超过10000000美元")
+    )
+    .nullable()
+    .optional(),
   limit5hUsd: z.coerce
     .number()
     .min(0, "5小时消费上限不能为负数")
@@ -262,6 +272,16 @@ export const UpdateUserSchema = z.object({
     .number()
     .min(USER_LIMITS.DAILY_QUOTA.MIN, `每日额度不能低于${USER_LIMITS.DAILY_QUOTA.MIN}美元`)
     .max(USER_LIMITS.DAILY_QUOTA.MAX, `每日额度不能超过${USER_LIMITS.DAILY_QUOTA.MAX}美元`)
+    .nullable()
+    .optional(),
+  balanceUsd: z
+    .preprocess(
+      (value) => (value === "" ? null : value),
+      z.coerce
+        .number()
+        .min(0, "用户余额不能为负数")
+        .max(10000000, "用户余额不能超过10000000美元")
+    )
     .nullable()
     .optional(),
   limit5hUsd: z.coerce
@@ -965,6 +985,12 @@ export const UpdateSystemSettingsSchema = z.object({
     .max(100000, "测试日预算过大")
     .optional(),
   healthTestGlobalBudgetSuspendedDay: z.string().nullable().optional(),
+  // Site-wide per-provider health-test daily budget (0 = unlimited per provider)
+  healthTestPerProviderDailyBudget: z.coerce
+    .number()
+    .min(0, "单商测试日限额不能为负")
+    .max(100000, "单商测试日限额过大")
+    .optional(),
   // 计费模型来源配置（可选）
   billingModelSource: z
     .enum(["original", "redirected"], { message: "不支持的计费模型来源" })
@@ -1008,6 +1034,26 @@ export const UpdateSystemSettingsSchema = z.object({
   billNonSuccessfulRequests: z.boolean().optional(),
   // 供应商竞速输家计费（可选；默认开启）
   billHedgeLosers: z.boolean().optional(),
+  streamingRaceMode: z.enum(["single", "timeout_race", "dual_fast"]).optional(),
+  // 0 = disabled (used when race mode is single); timeout_race needs 1–180s
+  streamingRaceFirstByteMs: z.coerce.number().int().min(0).max(180000).optional(),
+  healthTestScheduleMode: z.enum(["dynamic", "always_on"]).optional(),
+  // Rolling sample window for online-rate / sparkline / SLO (default 10). Min 1: no full-window gate.
+  healthTestWindowSize: z.coerce.number().int().min(1).max(50).optional(),
+  // Scheduled probe interval seconds (default 60).
+  healthTestIntervalSeconds: z.coerce.number().int().min(10).max(3600).optional(),
+  // Scheduled probe total timeout seconds (default 30).
+  healthTestTimeoutSeconds: z.coerce.number().int().min(5).max(300).optional(),
+  // Single SLO gate: min online rate percent (default 90).
+  healthTestMinOnlineRatePercent: z.coerce.number().int().min(1).max(100).optional(),
+  // Legacy field name; single SLO gate: max average first-byte latency seconds (default 20).
+  healthTestMaxAvgLatencySeconds: z.coerce.number().int().min(1).max(300).optional(),
+  // Global captcha for provider-site login.
+  siteCaptchaProvider: z
+    .enum(["none", "yescaptcha", "capsolver", "2captcha", "anticaptcha"])
+    .optional(),
+  siteCaptchaApiKey: z.string().max(512).nullable().optional(),
+  siteCaptchaEndpoint: z.string().max(2000).nullable().optional(),
   // 启用 OpenAI Responses WebSocket 支持（可选，仅 Codex 类型供应商生效）
   enableOpenaiResponsesWebsocket: z.boolean().optional(),
   // 高并发模式（可选）

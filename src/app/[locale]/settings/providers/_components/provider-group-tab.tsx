@@ -2,9 +2,27 @@
 
 import { useQueryClient } from "@tanstack/react-query";
 import {
+  closestCenter,
+  DndContext,
+  type DragEndEvent,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import {
   ChevronDown,
   ChevronRight,
   Edit,
+  GripVertical,
   Layers,
   Loader2,
   Pencil,
@@ -16,6 +34,16 @@ import type * as React from "react";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
 import type { BatchActionMode } from "@/app/[locale]/settings/providers/_components/batch-edit/provider-batch-actions";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -29,6 +57,14 @@ import {
 } from "@/components/ui/dialog";
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from "@/components/ui/drawer";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   Table,
@@ -43,8 +79,12 @@ import {
   createProviderGroup,
   deleteProviderGroup,
   getProviderGroups,
+  reorderProviderGroups,
   updateProviderGroup,
 } from "@/lib/api-client/v1/actions/provider-groups";
+import type { ProviderGroupMatchRule } from "@/lib/provider-groups/match-rules";
+import type { ProviderGroupModelMatchRule } from "@/lib/provider-groups/model-match-rules";
+import type { ProviderGroupSharedSettings } from "@/lib/provider-groups/shared-settings";
 import { editProvider } from "@/lib/api-client/v1/actions/providers";
 import { PROVIDER_GROUP } from "@/lib/constants/provider.constants";
 import { useMediaQuery } from "@/lib/hooks/use-media-query";
@@ -53,8 +93,9 @@ import { parsePublicStatusDescription } from "@/lib/public-status/config";
 import { exceedsProviderGroupDescriptionLimit } from "@/lib/public-status/description-limit";
 import { cn } from "@/lib/utils";
 import { resolveProviderGroupsWithDefault } from "@/lib/utils/provider-group";
-import type { ProviderDisplay } from "@/types/provider";
+import type { ProviderDisplay, ProviderType } from "@/types/provider";
 import { ProviderBatchActions, ProviderBatchDialog, ProviderBatchToolbar } from "./batch-edit";
+import { GroupMatchRulesEditor } from "./group-match-rules-editor";
 import { InlineEditPopover } from "./inline-edit-popover";
 import { invalidateProviderQueries } from "./invalidate-provider-queries";
 
@@ -63,6 +104,26 @@ interface GroupFormState {
   costMultiplier: string;
   description: string;
   healthTestModel: string;
+  matchRules: ProviderGroupMatchRule[];
+  modelMatchRules: ProviderGroupModelMatchRule[];
+  sharedProviderType: string; // "" | ProviderType
+  sharedPriority: string;
+  sharedWeight: string;
+  sharedProxyUrl: string;
+  sharedProxyFallback: boolean;
+  sharedPreserveClientIp: boolean;
+  sharedDisableSessionReuse: boolean;
+  sharedMaxRetryAttempts: string;
+  sharedCbFailureThreshold: string;
+  sharedCbOpenDurationSec: string;
+  sharedCbHalfOpenSuccess: string;
+  sharedLimit5hUsd: string;
+  sharedLimitDailyUsd: string;
+  sharedLimitWeeklyUsd: string;
+  sharedLimitMonthlyUsd: string;
+  sharedLimitTotalUsd: string;
+  sharedLimitConcurrent: string;
+  applySharedToMembers: boolean;
 }
 
 interface ProviderGroupTabProps {
@@ -76,7 +137,118 @@ const INITIAL_FORM: GroupFormState = {
   costMultiplier: "1.0",
   description: "",
   healthTestModel: "",
+  matchRules: [],
+  modelMatchRules: [],
+  sharedProviderType: "",
+  sharedPriority: "",
+  sharedWeight: "",
+  sharedProxyUrl: "",
+  sharedProxyFallback: false,
+  sharedPreserveClientIp: false,
+  sharedDisableSessionReuse: false,
+  sharedMaxRetryAttempts: "",
+  sharedCbFailureThreshold: "",
+  sharedCbOpenDurationSec: "",
+  sharedCbHalfOpenSuccess: "",
+  sharedLimit5hUsd: "",
+  sharedLimitDailyUsd: "",
+  sharedLimitWeeklyUsd: "",
+  sharedLimitMonthlyUsd: "",
+  sharedLimitTotalUsd: "",
+  sharedLimitConcurrent: "",
+  applySharedToMembers: true,
 };
+
+const PROVIDER_TYPE_OPTIONS: ProviderType[] = [
+  "claude",
+  "codex",
+  "gemini",
+  "openai-compatible",
+];
+
+function formToOptionalNumber(raw: string): number | null | undefined {
+  const trimmed = raw.trim();
+  if (!trimmed) return undefined;
+  const n = Number(trimmed);
+  if (!Number.isFinite(n)) return undefined;
+  return n;
+}
+
+function numToForm(value: number | null | undefined): string {
+  return value == null || !Number.isFinite(Number(value)) ? "" : String(value);
+}
+
+function sharedSettingsFromForm(form: GroupFormState): ProviderGroupSharedSettings | null {
+  const out: ProviderGroupSharedSettings = {};
+  if (form.sharedProviderType && form.sharedProviderType !== "inherit") {
+    out.providerType = form.sharedProviderType as ProviderType;
+  }
+  const priority = formToOptionalNumber(form.sharedPriority);
+  const weight = formToOptionalNumber(form.sharedWeight);
+  if (priority !== undefined) out.priority = priority;
+  if (weight !== undefined) out.weight = weight;
+  if (form.sharedProxyUrl.trim()) out.proxyUrl = form.sharedProxyUrl.trim();
+  if (form.sharedProxyFallback) out.proxyFallbackToDirect = true;
+  if (form.sharedPreserveClientIp) out.preserveClientIp = true;
+  if (form.sharedDisableSessionReuse) out.disableSessionReuse = true;
+  const retry = formToOptionalNumber(form.sharedMaxRetryAttempts);
+  if (retry !== undefined) out.maxRetryAttempts = retry;
+  const fail = formToOptionalNumber(form.sharedCbFailureThreshold);
+  if (fail !== undefined) out.circuitBreakerFailureThreshold = fail;
+  const open = formToOptionalNumber(form.sharedCbOpenDurationSec);
+  if (open !== undefined) out.circuitBreakerOpenDuration = open == null ? null : Math.round(open * 1000);
+  const half = formToOptionalNumber(form.sharedCbHalfOpenSuccess);
+  if (half !== undefined) out.circuitBreakerHalfOpenSuccessThreshold = half;
+  const l5 = formToOptionalNumber(form.sharedLimit5hUsd);
+  if (l5 !== undefined) out.limit5hUsd = l5;
+  const ld = formToOptionalNumber(form.sharedLimitDailyUsd);
+  if (ld !== undefined) out.limitDailyUsd = ld;
+  const lw = formToOptionalNumber(form.sharedLimitWeeklyUsd);
+  if (lw !== undefined) out.limitWeeklyUsd = lw;
+  const lm = formToOptionalNumber(form.sharedLimitMonthlyUsd);
+  if (lm !== undefined) out.limitMonthlyUsd = lm;
+  const lt = formToOptionalNumber(form.sharedLimitTotalUsd);
+  if (lt !== undefined) out.limitTotalUsd = lt;
+  const lc = formToOptionalNumber(form.sharedLimitConcurrent);
+  if (lc !== undefined) out.limitConcurrentSessions = lc;
+  return Object.keys(out).length > 0 ? out : null;
+}
+
+function formFromSharedSettings(
+  shared: ProviderGroupSharedSettings | null | undefined
+): Partial<GroupFormState> {
+  if (!shared) return {};
+  return {
+    sharedProviderType: shared.providerType ?? "",
+    sharedPriority: numToForm(shared.priority),
+    sharedWeight: numToForm(shared.weight),
+    sharedProxyUrl: shared.proxyUrl ?? "",
+    sharedProxyFallback: Boolean(shared.proxyFallbackToDirect),
+    sharedPreserveClientIp: Boolean(shared.preserveClientIp),
+    sharedDisableSessionReuse: Boolean(shared.disableSessionReuse),
+    sharedMaxRetryAttempts: numToForm(shared.maxRetryAttempts),
+    sharedCbFailureThreshold: numToForm(shared.circuitBreakerFailureThreshold),
+    sharedCbOpenDurationSec:
+      shared.circuitBreakerOpenDuration == null
+        ? ""
+        : String(shared.circuitBreakerOpenDuration / 1000),
+    sharedCbHalfOpenSuccess: numToForm(shared.circuitBreakerHalfOpenSuccessThreshold),
+    sharedLimit5hUsd: numToForm(shared.limit5hUsd),
+    sharedLimitDailyUsd: numToForm(shared.limitDailyUsd),
+    sharedLimitWeeklyUsd: numToForm(shared.limitWeeklyUsd),
+    sharedLimitMonthlyUsd: numToForm(shared.limitMonthlyUsd),
+    sharedLimitTotalUsd: numToForm(shared.limitTotalUsd),
+    sharedLimitConcurrent: numToForm(shared.limitConcurrentSessions),
+  };
+}
+
+
+
+
+
+
+
+
 
 function getProviderGroupDescriptionNote(description: string | null | undefined): string {
   return parsePublicStatusDescription(description).note ?? "";
@@ -88,15 +260,22 @@ export function ProviderGroupTab({
   onRequestEditProvider,
 }: ProviderGroupTabProps) {
   const t = useTranslations("settings.providers.providerGroups");
+  const queryClient = useQueryClient();
   const [groups, setGroups] = useState<ProviderGroupWithCount[]>([]);
   const [expandedGroups, setExpandedGroups] = useState<Set<number>>(new Set());
   const [isLoading, startLoadTransition] = useTransition();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingGroup, setEditingGroup] = useState<ProviderGroupWithCount | null>(null);
+  const [deletingGroup, setDeletingGroup] = useState<ProviderGroupWithCount | null>(null);
+  const [isDeleting, startDelete] = useTransition();
   const [form, setForm] = useState<GroupFormState>(INITIAL_FORM);
   const [isSaving, startSaveTransition] = useTransition();
-  const [deleteTarget, setDeleteTarget] = useState<ProviderGroupWithCount | null>(null);
-  const [isDeleting, startDeleteTransition] = useTransition();
+  const [isReordering, startReorderTransition] = useTransition();
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  );
 
   const fetchGroups = useCallback(() => {
     startLoadTransition(async () => {
@@ -112,6 +291,41 @@ export function ProviderGroupTab({
   useEffect(() => {
     fetchGroups();
   }, [fetchGroups]);
+
+  const handleDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      if (!isAdmin) return;
+      const { active, over } = event;
+      if (!over || active.id === over.id) return;
+
+      const sortableGroups = groups.filter((g) => g.name !== PROVIDER_GROUP.DEFAULT);
+      const oldIndex = sortableGroups.findIndex((g) => g.id === Number(active.id));
+      const newIndex = sortableGroups.findIndex((g) => g.id === Number(over.id));
+      if (oldIndex < 0 || newIndex < 0 || oldIndex === newIndex) return;
+
+      const reordered = arrayMove(sortableGroups, oldIndex, newIndex);
+      const defaultGroup = groups.find((g) => g.name === PROVIDER_GROUP.DEFAULT);
+      const optimistic = defaultGroup ? [defaultGroup, ...reordered] : reordered;
+      setGroups(
+        optimistic.map((g) => ({
+          ...g,
+          providerCount: groups.find((x) => x.id === g.id)?.providerCount ?? g.providerCount,
+        }))
+      );
+
+      startReorderTransition(async () => {
+        const result = await reorderProviderGroups(reordered.map((g) => g.id));
+        if (result.ok) {
+          setGroups(result.data);
+          toast.success(t("reorderSuccess"));
+        } else {
+          toast.error(result.error ?? t("reorderFailed"));
+          fetchGroups();
+        }
+      });
+    },
+    [fetchGroups, groups, isAdmin, t]
+  );
 
   const toggleExpand = useCallback((groupId: number) => {
     setExpandedGroups((prev) => {
@@ -134,10 +348,15 @@ export function ProviderGroupTab({
   const openEditDialog = useCallback((group: ProviderGroupWithCount) => {
     setEditingGroup(group);
     setForm({
+      ...INITIAL_FORM,
       name: group.name,
       costMultiplier: String(group.costMultiplier),
       description: getProviderGroupDescriptionNote(group.description),
       healthTestModel: group.healthTestModel ?? "",
+      matchRules: group.matchRules ?? [],
+      modelMatchRules: group.modelMatchRules ?? [],
+      ...formFromSharedSettings(group.sharedSettings),
+      applySharedToMembers: true,
     });
     setDialogOpen(true);
   }, []);
@@ -174,6 +393,10 @@ export function ProviderGroupTab({
         description?: string | null;
         descriptionNote?: string | null;
         healthTestModel?: string | null;
+        matchRules?: ProviderGroupMatchRule[] | null;
+        modelMatchRules?: ProviderGroupModelMatchRule[] | null;
+        sharedSettings?: ProviderGroupSharedSettings | null;
+        applySharedSettingsToMembers?: boolean;
       }
     ): Promise<boolean> => {
       const result = await updateProviderGroup(groupId, patch);
@@ -187,6 +410,20 @@ export function ProviderGroupTab({
     },
     [fetchGroups, mapSaveError, t]
   );
+
+  const handleDeleteGroup = useCallback(() => {
+    if (!deletingGroup) return;
+    startDelete(async () => {
+      const result = await deleteProviderGroup(deletingGroup.id);
+      if (!result.ok) {
+        toast.error(result.error ?? t("deleteFailed"));
+        return;
+      }
+      toast.success(t("deleteSuccess"));
+      setDeletingGroup(null);
+      fetchGroups();
+    });
+  }, [deletingGroup, fetchGroups, t]);
 
   const handleSave = useCallback(() => {
     const costMultiplier = Number.parseFloat(form.costMultiplier);
@@ -207,13 +444,22 @@ export function ProviderGroupTab({
     }
 
     startSaveTransition(async () => {
+      const sharedSettings = sharedSettingsFromForm(form);
       if (editingGroup) {
         const ok = await saveGroupPatch(editingGroup.id, {
           costMultiplier,
           descriptionNote: trimmedDescription || null,
           healthTestModel: form.healthTestModel.trim() || null,
+          matchRules: form.matchRules,
+          modelMatchRules: form.modelMatchRules,
+          sharedSettings,
+          applySharedSettingsToMembers: form.applySharedToMembers,
         });
         if (ok) {
+          if (form.applySharedToMembers && sharedSettings) {
+            toast.success(t("sharedAppliedHint"));
+            await invalidateProviderQueries(queryClient);
+          }
           closeDialog();
         }
         return;
@@ -224,43 +470,27 @@ export function ProviderGroupTab({
         costMultiplier,
         healthTestModel: form.healthTestModel.trim() || null,
         description: trimmedDescription || undefined,
+        matchRules: form.matchRules,
+        modelMatchRules: form.modelMatchRules,
+        sharedSettings,
+        applySharedSettingsToMembers: form.applySharedToMembers,
       });
       if (result.ok) {
-        toast.success(t("createSuccess"));
+        toast.success(
+          form.applySharedToMembers && sharedSettings
+            ? t("createSuccessWithApply")
+            : t("createSuccess")
+        );
         closeDialog();
         fetchGroups();
+        if (form.applySharedToMembers && sharedSettings) {
+          await invalidateProviderQueries(queryClient);
+        }
       } else {
         toast.error(mapSaveError(result.errorCode, result.error ?? t("createFailed")));
       }
     });
-  }, [closeDialog, editingGroup, fetchGroups, form, mapSaveError, saveGroupPatch, t]);
-
-  const openDeleteConfirm = useCallback((group: ProviderGroupWithCount) => {
-    setDeleteTarget(group);
-  }, []);
-
-  const closeDeleteConfirm = useCallback(() => {
-    setDeleteTarget(null);
-  }, []);
-
-  const handleDelete = useCallback(() => {
-    if (!deleteTarget) return;
-
-    startDeleteTransition(async () => {
-      const result = await deleteProviderGroup(deleteTarget.id);
-      if (result.ok) {
-        toast.success(t("deleteSuccess"));
-        closeDeleteConfirm();
-        fetchGroups();
-      } else if (result.errorCode === "GROUP_IN_USE") {
-        toast.error(t("groupInUse"));
-      } else if (result.errorCode === "CANNOT_DELETE_DEFAULT") {
-        toast.error(t("cannotDeleteDefault"));
-      } else {
-        toast.error(result.error ?? t("deleteFailed"));
-      }
-    });
-  }, [closeDeleteConfirm, deleteTarget, fetchGroups, t]);
+  }, [closeDialog, editingGroup, fetchGroups, form, mapSaveError, queryClient, saveGroupPatch, t]);
 
   const validateCostMultiplier = useCallback(
     (raw: string) => {
@@ -312,221 +542,351 @@ export function ProviderGroupTab({
         </div>
       ) : (
         <div className="overflow-hidden rounded-xl border bg-card shadow-sm">
-          <Table>
+          <Table className="table-fixed">
             <TableHeader>
               <TableRow>
-                <TableHead className="w-[44px]" />
-                <TableHead>{t("groupName")}</TableHead>
-                <TableHead className="w-[180px]">{t("costMultiplier")}</TableHead>
-                <TableHead>{t("descriptionLabel")}</TableHead>
-                <TableHead className="w-[200px]">{t("healthTestModel")}</TableHead>
-                <TableHead className="w-[120px] text-center">{t("providerCount")}</TableHead>
-                <TableHead className="w-[96px]" />
+                {isAdmin ? <TableHead className="w-9" /> : null}
+                <TableHead className="w-10" />
+                <TableHead className="w-[12%]">{t("groupName")}</TableHead>
+                <TableHead className="w-[9%]">{t("costMultiplier")}</TableHead>
+                <TableHead className="w-[18%]">{t("descriptionLabel")}</TableHead>
+                <TableHead className="w-[16%]">{t("colMatchRules")}</TableHead>
+                <TableHead className="w-[18%]">{t("healthTestModel")}</TableHead>
+                <TableHead className="w-[8%] text-center">{t("providerCount")}</TableHead>
+                <TableHead className="w-12" />
               </TableRow>
             </TableHeader>
             <TableBody>
-              {groups.map((group) => {
-                const isDefault = group.name === PROVIDER_GROUP.DEFAULT;
-                const isExpanded = expandedGroups.has(group.id);
-                const members = filterGroupMembers(providers, group.name);
-
-                return (
-                  <Fragment key={group.id}>
-                    <TableRow className={cn("align-top", isExpanded && "bg-muted/20")}>
-                      <TableCell>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8"
-                          onClick={() => toggleExpand(group.id)}
-                          aria-label={t("groupMembers")}
-                        >
-                          {isExpanded ? (
-                            <ChevronDown className="h-4 w-4" />
-                          ) : (
-                            <ChevronRight className="h-4 w-4" />
-                          )}
-                        </Button>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          <span className="font-medium">{group.name}</span>
-                          {isDefault ? (
-                            <Badge variant="secondary">{t("defaultGroup")}</Badge>
-                          ) : null}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        {isAdmin ? (
-                          <InlineEditPopover
-                            value={group.costMultiplier}
-                            label={t("groupMultiplierLabel")}
-                            validator={validateCostMultiplier}
-                            onSave={(value) => saveGroupPatch(group.id, { costMultiplier: value })}
-                            suffix="x"
-                            type="number"
-                          />
-                        ) : (
-                          <span className="font-mono">{group.costMultiplier}x</span>
-                        )}
-                      </TableCell>
-                      <TableCell className="max-w-[360px]">
-                        {isAdmin ? (
-                          <InlineTextEditPopover
-                            value={getProviderGroupDescriptionNote(group.description)}
-                            emptyLabel={t("noDescription")}
-                            label={t("groupDescriptionLabel")}
-                            placeholder={t("descriptionPlaceholder")}
-                            validator={validateDescription}
-                            onSave={(value) =>
-                              saveGroupPatch(group.id, {
-                                descriptionNote: value || null,
-                              })
-                            }
-                          />
-                        ) : getProviderGroupDescriptionNote(group.description) ? (
-                          <span className="text-muted-foreground">
-                            {getProviderGroupDescriptionNote(group.description)}
-                          </span>
-                        ) : (
-                          <span className="text-muted-foreground">{t("noDescription")}</span>
-                        )}
-                      </TableCell>
-                      <TableCell className="max-w-[220px]">
-                        {isAdmin ? (
-                          <InlineTextEditPopover
-                            value={group.healthTestModel ?? ""}
-                            emptyLabel={t("healthTestModelEmpty")}
-                            label={t("groupHealthTestModelLabel")}
-                            placeholder={t("healthTestModelPlaceholder")}
-                            validator={(raw) => {
-                              if (raw.length > 200) return t("descriptionTooLong");
-                              return null;
-                            }}
-                            onSave={(value) =>
-                              saveGroupPatch(group.id, {
-                                healthTestModel: value.trim() || null,
-                              })
-                            }
-                          />
-                        ) : group.healthTestModel ? (
-                          <span className="font-mono text-sm">{group.healthTestModel}</span>
-                        ) : (
-                          <span className="text-muted-foreground text-xs">{t("healthTestModelEmpty")}</span>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-center">
-                        <Badge variant="outline" className="tabular-nums">
-                          {group.providerCount}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        {isAdmin ? (
-                          <div className="flex items-center justify-end gap-1">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8"
-                              onClick={() => openEditDialog(group)}
-                              title={t("editGroup")}
-                            >
-                              <Pencil className="h-3.5 w-3.5" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8 text-destructive hover:text-destructive"
-                              onClick={() => openDeleteConfirm(group)}
-                              disabled={isDefault}
-                              title={isDefault ? t("cannotDeleteDefault") : t("deleteGroup")}
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </Button>
-                          </div>
-                        ) : null}
-                      </TableCell>
-                    </TableRow>
-
-                    {isExpanded ? (
-                      <TableRow>
-                        <TableCell colSpan={6} className="bg-muted/20 p-0">
-                          <GroupMembersPanel
-                            groupName={group.name}
-                            members={members}
-                            canEdit={isAdmin}
-                            onSaved={fetchGroups}
-                            onRequestEditProvider={onRequestEditProvider}
-                          />
-                        </TableCell>
-                      </TableRow>
-                    ) : null}
-                  </Fragment>
-                );
-              })}
+              <DndContext
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                onDragEnd={handleDragEnd}
+              >
+                <SortableContext
+                  items={groups
+                    .filter((g) => g.name !== PROVIDER_GROUP.DEFAULT)
+                    .map((g) => g.id)}
+                  strategy={verticalListSortingStrategy}
+                >
+                  {groups.map((group) => {
+                    const isDefault = group.name === PROVIDER_GROUP.DEFAULT;
+                    const isExpanded = expandedGroups.has(group.id);
+                    const members = filterGroupMembers(providers, group.name);
+                    return (
+                      <SortableGroupRow
+                        key={group.id}
+                        group={group}
+                        isDefault={isDefault}
+                        isExpanded={isExpanded}
+                        isAdmin={isAdmin}
+                        members={members}
+                        disabled={!isAdmin || isReordering || isDefault}
+                        onToggleExpand={() => toggleExpand(group.id)}
+                        onEdit={() => openEditDialog(group)}
+                        onDelete={isDefault ? undefined : () => setDeletingGroup(group)}
+                        saveGroupPatch={saveGroupPatch}
+                        validateCostMultiplier={validateCostMultiplier}
+                        validateDescription={validateDescription}
+                        onRequestEditProvider={onRequestEditProvider}
+                        onSaved={fetchGroups}
+                        t={t}
+                      />
+                    );
+                  })}
+                </SortableContext>
+              </DndContext>
             </TableBody>
           </Table>
         </div>
       )}
 
       <Dialog open={dialogOpen} onOpenChange={(open) => !open && closeDialog()}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editingGroup ? t("editGroup") : t("addGroup")}</DialogTitle>
             <DialogDescription>{t("description")}</DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <label htmlFor="group-name" className="text-sm font-medium">
-                {t("groupName")}
-              </label>
-              <Input
-                id="group-name"
-                value={form.name}
-                onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
-                placeholder={t("groupNamePlaceholder")}
-                readOnly={!!editingGroup}
-                disabled={!!editingGroup}
-              />
-            </div>
+          <div className="space-y-5 py-2">
+            <section className="space-y-3 rounded-xl border bg-muted/10 p-4">
+              <div className="text-sm font-medium">{t("sectionBasic")}</div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-2 sm:col-span-2">
+                  <Label htmlFor="group-name">{t("groupName")}</Label>
+                  <Input
+                    id="group-name"
+                    value={form.name}
+                    onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
+                    placeholder={t("groupNamePlaceholder")}
+                    readOnly={!!editingGroup}
+                    disabled={!!editingGroup}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="group-multiplier">{t("costMultiplier")}</Label>
+                  <Input
+                    id="group-multiplier"
+                    type="number"
+                    min={0}
+                    step={0.01}
+                    value={form.costMultiplier}
+                    onChange={(e) => setForm((prev) => ({ ...prev, costMultiplier: e.target.value }))}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="group-health-model">{t("healthTestModel")}</Label>
+                  <Input
+                    id="group-health-model"
+                    value={form.healthTestModel}
+                    onChange={(e) => setForm((prev) => ({ ...prev, healthTestModel: e.target.value }))}
+                    placeholder={t("healthTestModelPlaceholder")}
+                  />
+                </div>
+                <div className="space-y-2 sm:col-span-2">
+                  <Label htmlFor="group-description">{t("descriptionLabel")}</Label>
+                  <Input
+                    id="group-description"
+                    value={form.description}
+                    onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))}
+                    placeholder={t("descriptionPlaceholder")}
+                  />
+                  <p className="text-xs text-muted-foreground">{t("healthTestModelHelp")}</p>
+                </div>
+              </div>
+            </section>
 
-            <div className="space-y-2">
-              <label htmlFor="group-multiplier" className="text-sm font-medium">
-                {t("costMultiplier")}
-              </label>
-              <Input
-                id="group-multiplier"
-                type="number"
-                min={0}
-                step={0.01}
-                value={form.costMultiplier}
-                onChange={(e) => setForm((prev) => ({ ...prev, costMultiplier: e.target.value }))}
+            <section className="space-y-3 rounded-xl border bg-muted/10 p-4">
+              <div className="text-sm font-medium">{t("sectionMatch")}</div>
+              <GroupMatchRulesEditor
+                value={form.matchRules}
+                onChange={(matchRules) => setForm((prev) => ({ ...prev, matchRules }))}
+                disabled={isSaving}
               />
-            </div>
+            </section>
 
-            <div className="space-y-2">
-              <label htmlFor="group-description" className="text-sm font-medium">
-                {t("descriptionLabel")}
-              </label>
-              <Input
-                id="group-description"
-                value={form.description}
-                onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))}
-                placeholder={t("descriptionPlaceholder")}
+            <section className="space-y-3 rounded-xl border bg-muted/10 p-4">
+              <div className="text-sm font-medium">{t("sectionModelMatch")}</div>
+              <GroupMatchRulesEditor
+                value={form.modelMatchRules}
+                onChange={(modelMatchRules) => setForm((prev) => ({ ...prev, modelMatchRules }))}
+                disabled={isSaving}
+                title={t("modelMatchRulesTitle")}
+                help={t("modelMatchRulesHelp")}
+                emptyLabel={t("modelMatchRulesEmpty")}
+                patternLabel={t("modelPatternLabel")}
+                patternPlaceholder={t("modelPatternPlaceholder")}
+                idPrefix="group-model-match"
               />
-            </div>
+            </section>
+
+            <section className="space-y-3 rounded-xl border bg-muted/10 p-4">
+              <div>
+                <div className="text-sm font-medium">{t("sharedSettingsTitle")}</div>
+                <p className="text-xs text-muted-foreground">{t("sharedSettingsHelp")}</p>
+              </div>
+
+              <div className="space-y-2">
+                <Label>{t("sharedProviderType")}</Label>
+                <Select
+                  value={form.sharedProviderType || "inherit"}
+                  onValueChange={(value) =>
+                    setForm((prev) => ({
+                      ...prev,
+                      sharedProviderType: value === "inherit" ? "" : value,
+                    }))
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={t("sharedProviderTypeInherit")} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="inherit">{t("sharedProviderTypeInherit")}</SelectItem>
+                    {PROVIDER_TYPE_OPTIONS.map((type) => (
+                      <SelectItem key={type} value={type}>
+                        {type}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">{t("sharedProviderTypeHelp")}</p>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label className="text-xs">{t("sharedPriority")}</Label>
+                  <Input
+                    type="number"
+                    value={form.sharedPriority}
+                    onChange={(e) => setForm((prev) => ({ ...prev, sharedPriority: e.target.value }))}
+                    placeholder={t("sharedLeaveEmpty")}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">{t("sharedWeight")}</Label>
+                  <Input
+                    type="number"
+                    value={form.sharedWeight}
+                    onChange={(e) => setForm((prev) => ({ ...prev, sharedWeight: e.target.value }))}
+                    placeholder={t("sharedLeaveEmpty")}
+                  />
+                </div>
+                <div className="space-y-1.5 sm:col-span-2">
+                  <Label className="text-xs">{t("sharedProxyUrl")}</Label>
+                  <Input
+                    value={form.sharedProxyUrl}
+                    onChange={(e) => setForm((prev) => ({ ...prev, sharedProxyUrl: e.target.value }))}
+                    placeholder="socks5://..."
+                  />
+                </div>
+                <label className="flex items-center gap-2 text-xs sm:col-span-2">
+                  <Checkbox
+                    checked={form.sharedProxyFallback}
+                    onCheckedChange={(checked) =>
+                      setForm((prev) => ({ ...prev, sharedProxyFallback: checked === true }))
+                    }
+                  />
+                  {t("sharedProxyFallback")}
+                </label>
+                <label className="flex items-center gap-2 text-xs sm:col-span-2">
+                  <Checkbox
+                    checked={form.sharedPreserveClientIp}
+                    onCheckedChange={(checked) =>
+                      setForm((prev) => ({ ...prev, sharedPreserveClientIp: checked === true }))
+                    }
+                  />
+                  {t("sharedPreserveClientIp")}
+                </label>
+                <label className="flex items-center gap-2 text-xs sm:col-span-2">
+                  <Checkbox
+                    checked={form.sharedDisableSessionReuse}
+                    onCheckedChange={(checked) =>
+                      setForm((prev) => ({ ...prev, sharedDisableSessionReuse: checked === true }))
+                    }
+                  />
+                  {t("sharedDisableSessionReuse")}
+                </label>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">{t("sharedMaxRetry")}</Label>
+                  <Input
+                    type="number"
+                    value={form.sharedMaxRetryAttempts}
+                    onChange={(e) =>
+                      setForm((prev) => ({ ...prev, sharedMaxRetryAttempts: e.target.value }))
+                    }
+                    placeholder={t("sharedLeaveEmpty")}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">{t("sharedCbFailure")}</Label>
+                  <Input
+                    type="number"
+                    value={form.sharedCbFailureThreshold}
+                    onChange={(e) =>
+                      setForm((prev) => ({ ...prev, sharedCbFailureThreshold: e.target.value }))
+                    }
+                    placeholder={t("sharedLeaveEmpty")}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">{t("sharedCbOpen")}</Label>
+                  <Input
+                    type="number"
+                    value={form.sharedCbOpenDurationSec}
+                    onChange={(e) =>
+                      setForm((prev) => ({ ...prev, sharedCbOpenDurationSec: e.target.value }))
+                    }
+                    placeholder={t("sharedSecondsPlaceholder")}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">{t("sharedCbHalfOpen")}</Label>
+                  <Input
+                    type="number"
+                    value={form.sharedCbHalfOpenSuccess}
+                    onChange={(e) =>
+                      setForm((prev) => ({ ...prev, sharedCbHalfOpenSuccess: e.target.value }))
+                    }
+                    placeholder={t("sharedLeaveEmpty")}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">{t("sharedLimitDaily")}</Label>
+                  <Input
+                    type="number"
+                    value={form.sharedLimitDailyUsd}
+                    onChange={(e) =>
+                      setForm((prev) => ({ ...prev, sharedLimitDailyUsd: e.target.value }))
+                    }
+                    placeholder={t("sharedLeaveEmpty")}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">{t("sharedLimit5h")}</Label>
+                  <Input
+                    type="number"
+                    value={form.sharedLimit5hUsd}
+                    onChange={(e) => setForm((prev) => ({ ...prev, sharedLimit5hUsd: e.target.value }))}
+                    placeholder={t("sharedLeaveEmpty")}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">{t("sharedLimitWeekly")}</Label>
+                  <Input
+                    type="number"
+                    value={form.sharedLimitWeeklyUsd}
+                    onChange={(e) =>
+                      setForm((prev) => ({ ...prev, sharedLimitWeeklyUsd: e.target.value }))
+                    }
+                    placeholder={t("sharedLeaveEmpty")}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">{t("sharedLimitMonthly")}</Label>
+                  <Input
+                    type="number"
+                    value={form.sharedLimitMonthlyUsd}
+                    onChange={(e) =>
+                      setForm((prev) => ({ ...prev, sharedLimitMonthlyUsd: e.target.value }))
+                    }
+                    placeholder={t("sharedLeaveEmpty")}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">{t("sharedLimitTotal")}</Label>
+                  <Input
+                    type="number"
+                    value={form.sharedLimitTotalUsd}
+                    onChange={(e) =>
+                      setForm((prev) => ({ ...prev, sharedLimitTotalUsd: e.target.value }))
+                    }
+                    placeholder={t("sharedLeaveEmpty")}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">{t("sharedLimitConcurrent")}</Label>
+                  <Input
+                    type="number"
+                    value={form.sharedLimitConcurrent}
+                    onChange={(e) =>
+                      setForm((prev) => ({ ...prev, sharedLimitConcurrent: e.target.value }))
+                    }
+                    placeholder={t("sharedLeaveEmpty")}
+                  />
+                </div>
+              </div>
+
+              <label className="flex items-start gap-2 text-xs">
+                <Checkbox
+                  checked={form.applySharedToMembers}
+                  onCheckedChange={(checked) =>
+                    setForm((prev) => ({ ...prev, applySharedToMembers: checked === true }))
+                  }
+                  className="mt-0.5"
+                />
+                <span>{t("applySharedToMembers")}</span>
+              </label>
+            </section>
           </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">{t("healthTestModel")}</label>
-                    <Input
-                      value={form.healthTestModel}
-                      onChange={(e) =>
-                        setForm((prev) => ({ ...prev, healthTestModel: e.target.value }))
-                      }
-                      placeholder={t("healthTestModelPlaceholder")}
-                    />
-                    <p className="text-xs text-muted-foreground">{t("healthTestModelHelp")}</p>
-                  </div>
 
           <DialogFooter>
             <Button variant="outline" onClick={closeDialog} disabled={isSaving}>
@@ -540,26 +900,269 @@ export function ProviderGroupTab({
         </DialogContent>
       </Dialog>
 
-      <Dialog open={!!deleteTarget} onOpenChange={(open) => !open && closeDeleteConfirm()}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>{t("confirmDeleteTitle")}</DialogTitle>
-            <DialogDescription>
-              {deleteTarget ? t("confirmDeleteDesc", { name: deleteTarget.name }) : ""}
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={closeDeleteConfirm} disabled={isDeleting}>
-              {t("cancel")}
-            </Button>
-            <Button variant="destructive" onClick={handleDelete} disabled={isDeleting}>
+      <AlertDialog open={!!deletingGroup} onOpenChange={(open) => !open && setDeletingGroup(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("deleteGroup")}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t("deleteGroupConfirm", { name: deletingGroup?.name ?? "" })}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>{t("cancel")}</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                handleDeleteGroup();
+              }}
+              disabled={isDeleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
               {isDeleting && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}
-              {t("confirm")}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+              {t("deleteConfirm")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
     </div>
+  );
+}
+
+interface SortableGroupRowProps {
+  group: ProviderGroupWithCount;
+  isDefault: boolean;
+  isExpanded: boolean;
+  isAdmin: boolean;
+  members: ProviderDisplay[];
+  disabled: boolean;
+  onToggleExpand: () => void;
+  onEdit: () => void;
+  onDelete?: () => void;
+  saveGroupPatch: (
+    groupId: number,
+    patch: {
+      costMultiplier?: number;
+      description?: string | null;
+      descriptionNote?: string | null;
+      healthTestModel?: string | null;
+      matchRules?: ProviderGroupMatchRule[] | null;
+    }
+  ) => Promise<boolean>;
+  validateCostMultiplier: (raw: string) => string | null;
+  validateDescription: (raw: string) => string | null;
+  onRequestEditProvider: (providerId: number) => void;
+  onSaved: () => void;
+  t: (key: string, values?: Record<string, string | number | Date>) => string;
+}
+
+function SortableGroupRow({
+  group,
+  isDefault,
+  isExpanded,
+  isAdmin,
+  members,
+  disabled,
+  onToggleExpand,
+  onEdit,
+  onDelete,
+  saveGroupPatch,
+  validateCostMultiplier,
+  validateDescription,
+  onRequestEditProvider,
+  onSaved,
+  t,
+}: SortableGroupRowProps) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: group.id,
+    disabled,
+  });
+
+  const style: React.CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.7 : 1,
+  };
+
+  const ruleCount = group.matchRules?.length ?? 0;
+  const rulePreview = (group.matchRules ?? [])
+    .slice(0, 2)
+    .map((r) => r.pattern)
+    .join(", ");
+
+  return (
+    <Fragment>
+      <TableRow
+        ref={setNodeRef}
+        style={style}
+        className={cn(
+          "group/row align-middle",
+          isExpanded && "bg-muted/20",
+          isDragging && "bg-primary/5"
+        )}
+      >
+        {isAdmin ? (
+          <TableCell className="w-[36px] pr-0">
+            {isDefault ? (
+              <span className="inline-flex h-8 w-8 items-center justify-center text-muted-foreground/40">
+                <GripVertical className="h-4 w-4" />
+              </span>
+            ) : (
+              <button
+                type="button"
+                className="inline-flex h-8 w-8 cursor-grab items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground active:cursor-grabbing disabled:cursor-not-allowed disabled:opacity-40"
+                aria-label={t("dragHandle")}
+                disabled={disabled}
+                {...attributes}
+                {...listeners}
+              >
+                <GripVertical className="h-4 w-4" />
+              </button>
+            )}
+          </TableCell>
+        ) : null}
+        <TableCell>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8"
+            onClick={onToggleExpand}
+            aria-label={t("groupMembers")}
+          >
+            {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+          </Button>
+        </TableCell>
+        <TableCell>
+          <div className="flex items-center gap-2">
+            <span className="font-medium">{group.name}</span>
+            {isDefault ? <Badge variant="secondary">{t("defaultGroup")}</Badge> : null}
+          </div>
+        </TableCell>
+        <TableCell>
+          {isAdmin ? (
+            <InlineEditPopover
+              value={group.costMultiplier}
+              label={t("groupMultiplierLabel")}
+              validator={validateCostMultiplier}
+              onSave={(value) => saveGroupPatch(group.id, { costMultiplier: value })}
+              suffix="x"
+              type="number"
+            />
+          ) : (
+            <span className="font-mono">{group.costMultiplier}x</span>
+          )}
+        </TableCell>
+        <TableCell className="min-w-0 overflow-hidden">
+          {isAdmin ? (
+            <InlineTextEditPopover
+              value={getProviderGroupDescriptionNote(group.description)}
+              emptyLabel={t("noDescription")}
+              label={t("groupDescriptionLabel")}
+              placeholder={t("descriptionPlaceholder")}
+              validator={validateDescription}
+              onSave={(value) =>
+                saveGroupPatch(group.id, {
+                  descriptionNote: value || null,
+                })
+              }
+            />
+          ) : getProviderGroupDescriptionNote(group.description) ? (
+            <span className="text-muted-foreground">
+              {getProviderGroupDescriptionNote(group.description)}
+            </span>
+          ) : (
+            <span className="text-muted-foreground">{t("noDescription")}</span>
+          )}
+        </TableCell>
+        <TableCell className="min-w-0 overflow-hidden">
+          {ruleCount > 0 ? (
+            <button
+              type="button"
+              className="block w-full min-w-0 text-left text-xs text-muted-foreground hover:text-foreground"
+              onClick={onEdit}
+              title={rulePreview}
+            >
+              <span className="font-medium text-foreground/80">
+                {t("matchRulesCount", { count: ruleCount })}
+              </span>
+              {rulePreview ? (
+                <span className="mt-0.5 block truncate font-mono text-[11px]">{rulePreview}</span>
+              ) : null}
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="block w-full min-w-0 truncate text-xs text-muted-foreground hover:text-foreground"
+              onClick={onEdit}
+              title={t("matchRulesEmpty")}
+            >
+              {t("matchRulesEmptyShort")}
+            </button>
+          )}
+        </TableCell>
+        <TableCell className="min-w-0 overflow-hidden">
+          {isAdmin ? (
+            <InlineTextEditPopover
+              value={group.healthTestModel ?? ""}
+              emptyLabel={t("healthTestModelEmpty")}
+              label={t("groupHealthTestModelLabel")}
+              placeholder={t("healthTestModelPlaceholder")}
+              validator={(raw) => {
+                if (raw.length > 200) return t("descriptionTooLong");
+                return null;
+              }}
+              onSave={(value) =>
+                saveGroupPatch(group.id, {
+                  healthTestModel: value.trim() || null,
+                })
+              }
+            />
+          ) : group.healthTestModel ? (
+            <span className="font-mono text-sm">{group.healthTestModel}</span>
+          ) : (
+            <span className="text-xs text-muted-foreground">{t("healthTestModelEmpty")}</span>
+          )}
+        </TableCell>
+        <TableCell className="text-center">
+          <Badge variant="outline" className="tabular-nums">
+            {group.providerCount}
+          </Badge>
+        </TableCell>
+        <TableCell>
+          {isAdmin ? (
+            <div className="flex items-center justify-end gap-1">
+              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onEdit} title={t("editGroup")}>
+                <Pencil className="h-3.5 w-3.5" />
+              </Button>
+              {onDelete ? (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 text-muted-foreground opacity-0 transition-opacity hover:text-destructive group-hover/row:opacity-100"
+                  onClick={onDelete}
+                  title={t("deleteGroup")}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
+              ) : null}
+            </div>
+          ) : null}
+        </TableCell>
+      </TableRow>
+      {isExpanded ? (
+        <TableRow>
+          <TableCell colSpan={isAdmin ? 9 : 8} className="bg-muted/20 p-0">
+            <GroupMembersPanel
+              groupName={group.name}
+              members={members}
+              canEdit={isAdmin}
+              onSaved={onSaved}
+              onRequestEditProvider={onRequestEditProvider}
+            />
+          </TableCell>
+        </TableRow>
+      ) : null}
+    </Fragment>
   );
 }
 
@@ -585,6 +1188,7 @@ function GroupMembersPanel({
   onRequestEditProvider,
 }: GroupMembersPanelProps) {
   const t = useTranslations("settings.providers.providerGroups");
+  const queryClient = useQueryClient();
   const [isMultiSelectMode, setIsMultiSelectMode] = useState(false);
   const [selectedProviderIds, setSelectedProviderIds] = useState<Set<number>>(new Set());
   const [batchDialogOpen, setBatchDialogOpen] = useState(false);

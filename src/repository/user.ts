@@ -55,6 +55,7 @@ export async function createUser(userData: CreateUserData): Promise<User> {
     limitWeeklyUsd: userData.limitWeeklyUsd?.toString(),
     limitMonthlyUsd: userData.limitMonthlyUsd?.toString(),
     limitTotalUsd: userData.limitTotalUsd?.toString(),
+    balanceUsd: userData.balanceUsd == null ? null : userData.balanceUsd.toString(),
     limitConcurrentSessions: userData.limitConcurrentSessions,
     dailyResetMode: userData.dailyResetMode ?? "fixed",
     dailyResetTime: userData.dailyResetTime ?? "00:00",
@@ -77,6 +78,7 @@ export async function createUser(userData: CreateUserData): Promise<User> {
     createdAt: users.createdAt,
     updatedAt: users.updatedAt,
     deletedAt: users.deletedAt,
+    balanceUsd: users.balanceUsd,
     limit5hUsd: users.limit5hUsd,
     limit5hResetMode: users.limit5hResetMode,
     limitWeeklyUsd: users.limitWeeklyUsd,
@@ -113,6 +115,7 @@ export async function findUserList(limit: number = 50, offset: number = 0): Prom
       createdAt: users.createdAt,
       updatedAt: users.updatedAt,
       deletedAt: users.deletedAt,
+      balanceUsd: users.balanceUsd,
       limit5hUsd: users.limit5hUsd,
       limit5hResetMode: users.limit5hResetMode,
       limitWeeklyUsd: users.limitWeeklyUsd,
@@ -363,6 +366,7 @@ export async function findUserListBatch(
       createdAt: users.createdAt,
       updatedAt: users.updatedAt,
       deletedAt: users.deletedAt,
+      balanceUsd: users.balanceUsd,
       limit5hUsd: users.limit5hUsd,
       limit5hResetMode: users.limit5hResetMode,
       limitWeeklyUsd: users.limitWeeklyUsd,
@@ -424,6 +428,7 @@ export async function findUserById(id: number): Promise<User | null> {
       createdAt: users.createdAt,
       updatedAt: users.updatedAt,
       deletedAt: users.deletedAt,
+      balanceUsd: users.balanceUsd,
       limit5hUsd: users.limit5hUsd,
       limit5hResetMode: users.limit5hResetMode,
       limitWeeklyUsd: users.limitWeeklyUsd,
@@ -461,6 +466,7 @@ export async function updateUser(id: number, userData: UpdateUserData): Promise<
     providerGroup?: string | null;
     tags?: string[];
     updatedAt?: Date;
+    balanceUsd?: string | null;
     limit5hUsd?: string | null;
     limit5hResetMode?: "fixed" | "rolling";
     limitWeeklyUsd?: string | null;
@@ -486,6 +492,8 @@ export async function updateUser(id: number, userData: UpdateUserData): Promise<
     dbData.dailyLimitUsd = userData.dailyQuota === null ? null : userData.dailyQuota.toString();
   if (userData.providerGroup !== undefined) dbData.providerGroup = userData.providerGroup;
   if (userData.tags !== undefined) dbData.tags = userData.tags;
+  if (userData.balanceUsd !== undefined)
+    dbData.balanceUsd = userData.balanceUsd === null ? null : userData.balanceUsd.toString();
   if (userData.limit5hUsd !== undefined)
     dbData.limit5hUsd = userData.limit5hUsd === null ? null : userData.limit5hUsd.toString();
   if (userData.limit5hResetMode !== undefined) dbData.limit5hResetMode = userData.limit5hResetMode;
@@ -524,6 +532,7 @@ export async function updateUser(id: number, userData: UpdateUserData): Promise<
       createdAt: users.createdAt,
       updatedAt: users.updatedAt,
       deletedAt: users.deletedAt,
+      balanceUsd: users.balanceUsd,
       limit5hUsd: users.limit5hUsd,
       limit5hResetMode: users.limit5hResetMode,
       limitWeeklyUsd: users.limitWeeklyUsd,

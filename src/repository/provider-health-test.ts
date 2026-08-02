@@ -3,18 +3,18 @@ import "server-only";
 import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import { providerHealthTestLogs, providers } from "@/drizzle/schema";
+import { getCachedSystemSettings } from "@/lib/config/system-settings-cache";
 import { logger } from "@/lib/logger";
 import {
-  computeHealthTestStats,
-  type HealthTestLogLike,
-} from "@/lib/provider-health-test/stats";
-import {
-  HEALTH_TEST_WINDOW_SIZE,
   HEALTH_TEST_GLOBAL_DAILY_BUDGET_DEFAULT,
+  HEALTH_TEST_PROVIDER_DAILY_BUDGET_DEFAULT,
+  HEALTH_TEST_WINDOW_SIZE,
   healthTestDailyBudgetAmount,
   isHealthTestOverDailyBudget,
 } from "@/lib/provider-health-test/defaults";
 import type { HealthRebalanceProvider } from "@/lib/provider-health-test/slo-rebalance";
+import type { HealthTestSloThresholds } from "@/lib/provider-health-test/slo-thresholds";
+import { computeHealthTestStats, type HealthTestLogLike } from "@/lib/provider-health-test/stats";
 import type { Provider, ProviderType } from "@/types/provider";
 
 export type ProviderHealthTestSource = "scheduled" | "manual";
@@ -118,12 +118,15 @@ function localDayKey(d: Date = new Date()): string {
 export async function getHealthTestGlobalBudgetStatus(): Promise<{
   todayCost: number;
   budget: number;
+  /** Site-wide per-provider daily cap (same for every provider). 0 = unlimited. */
+  perProviderBudget: number;
   suspendedDay: string | null;
   isSuspendedToday: boolean;
   localDay: string;
 }> {
   const today = localDayKey();
   let budget = HEALTH_TEST_GLOBAL_DAILY_BUDGET_DEFAULT;
+  let perProviderBudget = HEALTH_TEST_PROVIDER_DAILY_BUDGET_DEFAULT;
   let suspendedDay: string | null = null;
   try {
     const { getSystemSettings } = await import("@/repository/system-config");
@@ -133,12 +136,18 @@ export async function getHealthTestGlobalBudgetStatus(): Promise<{
         ? settings.healthTestDailyBudgetCny
         : HEALTH_TEST_GLOBAL_DAILY_BUDGET_DEFAULT
     );
+    if (
+      settings.healthTestPerProviderDailyBudget != null &&
+      Number.isFinite(settings.healthTestPerProviderDailyBudget)
+    ) {
+      // 0 means unlimited for per-provider; do not clamp via healthTestDailyBudgetAmount
+      perProviderBudget = Math.max(0, Number(settings.healthTestPerProviderDailyBudget));
+    }
     suspendedDay = settings.healthTestGlobalBudgetSuspendedDay ?? null;
   } catch {
     // defaults
   }
 
-  // Sum today's per-provider health-test counters (local day).
   const rows = await db
     .select({
       cost: providers.healthTestTodayCostUsd,
@@ -156,6 +165,7 @@ export async function getHealthTestGlobalBudgetStatus(): Promise<{
   return {
     todayCost,
     budget,
+    perProviderBudget,
     suspendedDay,
     isSuspendedToday: suspendedDay === today,
     localDay: today,
@@ -179,20 +189,18 @@ export async function suspendAllScheduledHealthTestsForGlobalBudget(
       healthTestBudgetSuspendedDay: today,
       updatedAt: new Date(),
     })
-    .where(
-      and(
-        isNull(providers.deletedAt),
-        eq(providers.scheduledHealthTestEnabled, true)
-      )
-    )
+    .where(and(isNull(providers.deletedAt), eq(providers.scheduledHealthTestEnabled, true)))
     .returning({ id: providers.id });
 
   if (disabled.length > 0) {
-    logger.warn("[ProviderHealthTest] GLOBAL daily budget exceeded; all scheduled tests disabled until next day", {
-      today,
-      disabled: disabled.length,
-      providerIds: disabled.map((d) => d.id).slice(0, 40),
-    });
+    logger.warn(
+      "[ProviderHealthTest] GLOBAL daily budget exceeded; all scheduled tests disabled until next day",
+      {
+        today,
+        disabled: disabled.length,
+        providerIds: disabled.map((d) => d.id).slice(0, 40),
+      }
+    );
     try {
       const { publishProviderCacheInvalidation } = await import("@/lib/cache/provider-cache");
       await publishProviderCacheInvalidation();
@@ -405,7 +413,17 @@ export async function recordProviderHealthTestResult(input: {
     createdAt: testedAt,
   });
 
-  const recent = await findProviderHealthTestLogs(input.providerId, HEALTH_TEST_WINDOW_SIZE);
+  let windowSize = HEALTH_TEST_WINDOW_SIZE;
+  try {
+    const { getSystemSettings } = await import("@/repository/system-config");
+    const settings = await getSystemSettings();
+    if (Number.isFinite(settings.healthTestWindowSize) && settings.healthTestWindowSize > 0) {
+      windowSize = Math.min(50, Math.max(1, Math.trunc(settings.healthTestWindowSize)));
+    }
+  } catch {
+    // keep default
+  }
+  const recent = await findProviderHealthTestLogs(input.providerId, windowSize);
   const stats = computeHealthTestStats(
     recent.map(
       (log): HealthTestLogLike => ({
@@ -423,7 +441,8 @@ export async function recordProviderHealthTestResult(input: {
         costUsd: log.costUsd,
         createdAt: log.createdAt,
       })
-    )
+    ),
+    windowSize
   );
 
   // Rolling day counters for health-test spend (local day boundary).
@@ -459,8 +478,7 @@ export async function recordProviderHealthTestResult(input: {
       lastHealthTestModel: input.model ?? null,
       lastHealthTestErrorType: input.ok ? null : (input.errorType ?? null),
       lastHealthTestErrorMessage: input.ok ? null : (input.errorMessage ?? null),
-      healthTestOnlineRate:
-        stats.onlineRate == null ? null : stats.onlineRate.toFixed(4),
+      healthTestOnlineRate: stats.onlineRate == null ? null : stats.onlineRate.toFixed(4),
       healthTestAvgFirstByteMs: stats.avgFirstByteMs,
       healthTestRecentResults: stats.recentResults,
       healthTestTodayCostUsd: nextCost.toFixed(15),
@@ -532,9 +550,7 @@ export async function recordProviderHealthTestResult(input: {
  * Does NOT reset today's cost counters (budget accounting is separate).
  */
 export async function clearProviderHealthTestHistory(providerId: number): Promise<void> {
-  await db
-    .delete(providerHealthTestLogs)
-    .where(eq(providerHealthTestLogs.providerId, providerId));
+  await db.delete(providerHealthTestLogs).where(eq(providerHealthTestLogs.providerId, providerId));
 
   await db
     .update(providers)
@@ -598,6 +614,48 @@ export async function updateProviderScheduledHealthTestEnabled(
 }
 
 /**
+ * Re-open providers that were auto-disabled by SLO rebalance (not budget).
+ * Used when schedule mode switches to always_on.
+ */
+export async function reopenSloAutoDisabledScheduledHealthTests(): Promise<{
+  reopened: number;
+  providerIds: number[];
+}> {
+  const reopened = await db
+    .update(providers)
+    .set({
+      scheduledHealthTestEnabled: true,
+      healthTestSloAutoDisabled: false,
+      updatedAt: new Date(),
+    })
+    .where(
+      and(
+        isNull(providers.deletedAt),
+        eq(providers.isEnabled, true),
+        eq(providers.healthTestSloAutoDisabled, true),
+        // Budget-tagged offs stay off until budget day rollover / budget raise.
+        sql`${providers.healthTestBudgetSuspendedDay} IS NULL`
+      )
+    )
+    .returning({ id: providers.id });
+
+  if (reopened.length > 0) {
+    logger.info("[ProviderHealthTest] always_on reopened SLO auto-disabled", {
+      count: reopened.length,
+      providerIds: reopened.map((r) => r.id),
+    });
+    try {
+      const { publishProviderCacheInvalidation } = await import("@/lib/cache/provider-cache");
+      await publishProviderCacheInvalidation();
+    } catch {
+      // best-effort
+    }
+  }
+
+  return { reopened: reopened.length, providerIds: reopened.map((r) => r.id) };
+}
+
+/**
  * Per-type-pool rebalance: keep top-2 SLO-qualified (priority then first-byte),
  * auto-disable the rest; if fewer than 2 qualify, re-open auto-disabled for exploration.
  */
@@ -641,7 +699,13 @@ export async function rebalanceScheduledHealthTestsBySlo(): Promise<{
     healthTestRecentResults: row.healthTestRecentResults ?? null,
   }));
 
-  const plans = planHealthTestSloRebalanceAll(list);
+  const settings = await getCachedSystemSettings();
+  const thresholds: HealthTestSloThresholds = {
+    minOnlineRate: settings.healthTestMinOnlineRatePercent / 100,
+    maxAvgFirstByteMs: settings.healthTestMaxAvgLatencySeconds * 1000,
+    minSampleCount: settings.healthTestWindowSize,
+  };
+  const plans = planHealthTestSloRebalanceAll(list, undefined, thresholds);
   const poolSummaries: Array<{ pool: string; mode: string; keepIds: number[]; changed: number }> =
     [];
   let changed = 0;

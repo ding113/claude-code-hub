@@ -41,6 +41,7 @@ import {
   updateMessageRequestDuration,
   updateMessageRequestWinnerCost,
 } from "@/repository/message";
+import { chargeUserBalance } from "@/repository/user-balance";
 import type { HedgeLoserBilling, StoredCostBreakdown } from "@/types/cost-breakdown";
 import type { Provider } from "@/types/provider";
 import type { SessionUsageUpdate } from "@/types/session";
@@ -700,6 +701,57 @@ function buildCostCalculationOptions(
 
 function isNonBillingUsageEndpoint(session: ProxySession): boolean {
   return isNonBillingEndpoint(session.getEndpoint());
+}
+
+async function chargeRequestBalancesForCost(
+  messageId: number,
+  session: ProxySession,
+  provider: Provider,
+  costUsd: string,
+  chargeKey: string,
+  userIdOverride?: number | null
+): Promise<void> {
+  const user = session.authState?.user ?? session.messageContext?.user;
+  const userId = userIdOverride ?? user?.id;
+  if (userId == null) {
+    logger.warn("[UserBalance] Missing CCH user while finalizing request charge", {
+      messageId,
+      providerId: provider.id,
+      costUsd,
+      chargeKey,
+    });
+    return;
+  }
+
+  try {
+    const result = await chargeUserBalance({
+      userId,
+      requestId: messageId,
+      providerId: provider.id,
+      chargeKey,
+      amountUsd: costUsd,
+    });
+
+    if (result.status === "user_not_found" || result.status === "invalid") {
+      logger.warn("[UserBalance] Unable to record CCH user charge", {
+        messageId,
+        userId,
+        providerId: provider.id,
+        costUsd,
+        chargeKey,
+        status: result.status,
+      });
+    }
+  } catch (error) {
+    logger.error("[UserBalance] Failed to debit CCH user balance", {
+      messageId,
+      userId,
+      providerId: provider.id,
+      costUsd,
+      chargeKey,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
 }
 
 function hasBillableInputCostPerRequest(priceData: { input_cost_per_request?: unknown }): boolean {
@@ -4073,6 +4125,16 @@ async function updateRequestCostFromUsage(
       } else {
         await updateMessageRequestCostWithBreakdown(messageId, cost, storedBreakdown);
       }
+      if (provider) {
+        await chargeRequestBalancesForCost(
+          messageId,
+          session,
+          provider,
+          cost.toString(),
+          "winner",
+          billing.userId
+        );
+      }
       return {
         costUsd: cost.toString(),
         resolvedPricing,
@@ -4126,6 +4188,8 @@ async function updateRequestCostFromUsage(
  */
 export async function finalizeHedgeLoserBilling(params: {
   messageRequestId: number;
+  /** Immutable authenticated CCH user id from the owning request session. */
+  userId?: number | null;
   /** Loser's session — used for pricing/multiplier resolution and Redis cost tracking. */
   loserSession: ProxySession;
   provider: Provider;
@@ -4158,6 +4222,7 @@ export async function finalizeHedgeLoserBilling(params: {
 }): Promise<string | null> {
   const {
     messageRequestId,
+    userId,
     loserSession,
     provider,
     attemptNumber,
@@ -4262,6 +4327,14 @@ export async function finalizeHedgeLoserBilling(params: {
     };
 
     await addMessageRequestHedgeLoserCost(messageRequestId, cost, loserEntry);
+    await chargeRequestBalancesForCost(
+      messageRequestId,
+      loserSession,
+      provider,
+      cost.toString(),
+      `loser:${attemptNumber}`,
+      userId
+    );
 
     // Track the loser cost into the same Redis spend counters the winner uses, so the
     // key/user/provider rate limits account for it (DB and limit enforcement stay in sync).
@@ -4538,6 +4611,7 @@ export async function finalizeRequestStats(
  */
 type BillingComputeInputs = {
   provider: Provider | null;
+  userId?: number | null;
   costMultiplier: number;
   context1mApplied: boolean;
   priorityServiceTierApplied: boolean;
@@ -4551,6 +4625,7 @@ function sessionBillingInputs(
 ): BillingComputeInputs {
   return {
     provider,
+    userId: session.authState?.user?.id ?? session.messageContext?.user?.id ?? null,
     costMultiplier: provider.costMultiplier,
     context1mApplied: session.getContext1mApplied(),
     priorityServiceTierApplied,

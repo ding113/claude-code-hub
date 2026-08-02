@@ -3,7 +3,7 @@
 import { Calendar, Gauge, Loader2, ShieldCheck, ShieldOff, User } from "lucide-react";
 import { useMemo, useState } from "react";
 import { DatePickerField } from "@/components/form/date-picker-field";
-import { ArrayTagInputField, TextField } from "@/components/form/form-field";
+import { ArrayTagInputField, NumberField, TextField } from "@/components/form/form-field";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -33,6 +33,7 @@ export interface UserEditSectionProps {
     tags?: string[];
     expiresAt?: Date | null;
     providerGroup?: string | null;
+    balanceUsd?: number | null;
     // 所有限额字段
     rpm?: number | null;
     limit5hUsd?: number | null;
@@ -82,6 +83,11 @@ export interface UserEditSectionProps {
         errors?: {
           loadFailed?: string;
         };
+      };
+      balanceUsd: {
+        label: string;
+        placeholder: string;
+        description: string;
       };
       enableStatus?: {
         label: string;
@@ -418,6 +424,17 @@ export function UserEditSection({
                 </AlertDialog>
               </div>
             )}
+
+            <NumberField
+              label={translations.fields.balanceUsd.label}
+              placeholder={translations.fields.balanceUsd.placeholder}
+              value={user.balanceUsd == null ? "" : String(user.balanceUsd)}
+              min={0}
+              step="any"
+              inputMode="decimal"
+              onChange={(value) => emitChange("balanceUsd", value === "" ? null : value)}
+              description={translations.fields.balanceUsd.description}
+            />
           </div>
 
           <div className="space-y-3">

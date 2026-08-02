@@ -29,3 +29,11 @@ export function updateProviderGroup(id: number, data: unknown) {
 export function deleteProviderGroup(id: number) {
   return toVoidActionResult(apiDelete(`/api/v1/provider-groups/${id}`));
 }
+
+export function reorderProviderGroups(orderedIds: number[]) {
+  return toActionResult(
+    apiPost<{ items?: ProviderGroupWithCount[] }>("/api/v1/provider-groups:reorder", {
+      orderedIds,
+    }).then((body) => body.items ?? [])
+  );
+}

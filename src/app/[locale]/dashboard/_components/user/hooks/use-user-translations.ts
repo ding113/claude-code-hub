@@ -38,6 +38,11 @@ export interface UserEditTranslations {
         loadFailed?: string;
       };
     };
+    balanceUsd: {
+      label: string;
+      placeholder: string;
+      description: string;
+    };
     enableStatus: {
       label: string;
       enabledDescription: string;
@@ -215,6 +220,11 @@ export function useUserTranslations(
               },
             }
           : undefined,
+        balanceUsd: {
+          label: t("userEditSection.fields.balanceUsd.label"),
+          placeholder: t("userEditSection.fields.balanceUsd.placeholder"),
+          description: t("userEditSection.fields.balanceUsd.description"),
+        },
         enableStatus: {
           label: t("userEditSection.fields.enableStatus.label"),
           enabledDescription: t("userEditSection.fields.enableStatus.enabledDescription"),

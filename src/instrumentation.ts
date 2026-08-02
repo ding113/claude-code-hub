@@ -462,6 +462,28 @@ export async function register() {
       }
 
       try {
+        const { startProviderSiteRateSyncScheduler } = await import(
+          "@/lib/provider-sites/scheduler"
+        );
+        startProviderSiteRateSyncScheduler();
+      } catch (error) {
+        logger.warn("[Instrumentation] Failed to start provider site rate sync scheduler", {
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+
+      try {
+        const { startProviderSiteRateSyncScheduler } = await import(
+          "@/lib/provider-sites/scheduler"
+        );
+        startProviderSiteRateSyncScheduler();
+      } catch (error) {
+        logger.warn("[Instrumentation] Failed to start provider site rate sync scheduler", {
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+
+      try {
         const { startPublicStatusRebuildScheduler } = await import("@/lib/public-status/scheduler");
         startPublicStatusRebuildScheduler();
       } catch (error) {

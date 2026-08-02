@@ -2,36 +2,63 @@ import type { ProviderType } from "@/types/provider";
 
 /**
  * Rolling window size for online rate + sparkline + dispatch SLO.
- * Keep small (5) so re-open after clear / top collapse can re-qualify in ~5 min.
+ * Default matches system_settings.health_test_window_size (10).
+ * Runtime path reads live settings when available.
  */
-export const HEALTH_TEST_WINDOW_SIZE = 5;
+export const HEALTH_TEST_WINDOW_SIZE = 10;
 
-/** Default schedule interval: 1 minute (wall-clock aligned). */
+/** Default scheduler poll interval: 1 minute. */
 export const HEALTH_TEST_INTERVAL_MS = 60_000;
 
-/**
- * Wall-clock bucket for scheduled tests: floor(ts / intervalMs).
- * Providers due once per bucket (e.g. once each wall-clock minute).
- */
-export function getHealthTestTimeBucket(
-  at: Date | number,
-  intervalMs: number = HEALTH_TEST_INTERVAL_MS
+const HEALTH_TEST_INTERVAL_MIN_SECONDS = 10;
+const HEALTH_TEST_INTERVAL_MAX_SECONDS = 3600;
+const HEALTH_TEST_TIMEOUT_MIN_SECONDS = 5;
+const HEALTH_TEST_TIMEOUT_MAX_SECONDS = 300;
+
+function normalizeHealthTestSeconds(
+  value: unknown,
+  fallback: number,
+  min: number,
+  max: number
 ): number {
-  const ts = typeof at === "number" ? at : at.getTime();
-  return Math.floor(ts / intervalMs);
+  const parsed = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.min(max, Math.max(min, Math.trunc(parsed)));
 }
 
-/** True when provider has no test yet, or last test is in an earlier wall-clock bucket. */
-export function isHealthTestDueForBucket(
+/** Normalize the live system setting used for the per-provider schedule. */
+export function normalizeHealthTestIntervalSeconds(value: unknown): number {
+  return normalizeHealthTestSeconds(
+    value,
+    HEALTH_TEST_INTERVAL_MS / 1000,
+    HEALTH_TEST_INTERVAL_MIN_SECONDS,
+    HEALTH_TEST_INTERVAL_MAX_SECONDS
+  );
+}
+
+/** Normalize the live system setting used for the scheduled request deadline. */
+export function normalizeHealthTestTimeoutSeconds(value: unknown): number {
+  return normalizeHealthTestSeconds(
+    value,
+    SCHEDULED_HEALTH_TEST_TIMEOUT_MS / 1000,
+    HEALTH_TEST_TIMEOUT_MIN_SECONDS,
+    HEALTH_TEST_TIMEOUT_MAX_SECONDS
+  );
+}
+
+/** True when the provider has no test yet or its elapsed interval has passed. */
+export function isHealthTestDue(
   lastHealthTestAt: Date | null | undefined,
   now: Date | number = Date.now(),
   intervalMs: number = HEALTH_TEST_INTERVAL_MS
 ): boolean {
   if (!lastHealthTestAt) return true;
-  return (
-    getHealthTestTimeBucket(lastHealthTestAt, intervalMs) <
-    getHealthTestTimeBucket(now, intervalMs)
-  );
+  const lastTs = lastHealthTestAt.getTime();
+  const nowTs = typeof now === "number" ? now : now.getTime();
+  if (!Number.isFinite(lastTs) || !Number.isFinite(nowTs)) return true;
+  const normalizedIntervalMs =
+    Number.isFinite(intervalMs) && intervalMs > 0 ? intervalMs : HEALTH_TEST_INTERVAL_MS;
+  return nowTs - lastTs >= normalizedIntervalMs;
 }
 
 /** Ms until the next wall-clock interval boundary (e.g. next :00 second for 60s). */
@@ -75,6 +102,13 @@ export const DEFAULT_HEALTH_TEST_MODELS: Record<ProviderType, string> = {
 export function getDefaultHealthTestModel(providerType: ProviderType): string {
   return DEFAULT_HEALTH_TEST_MODELS[providerType] ?? "gpt-4.1-mini";
 }
+
+/**
+ * Default site-wide per-provider daily health-test spend cap (display currency units).
+ * Stored on system_settings.health_test_per_provider_daily_budget (default 0.1).
+ * Same cap for every provider; over budget suspends only that provider.
+ */
+export const HEALTH_TEST_PROVIDER_DAILY_BUDGET_DEFAULT = 0.1;
 
 /**
  * Default global daily scheduled health-test spend cap (display currency units).

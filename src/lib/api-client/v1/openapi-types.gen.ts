@@ -514,10 +514,90 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Run provider test by id
+         * Run unified provider test by id
          * @description Runs the unified relay-style provider API test against a stored provider using its saved credentials and proxy configuration.
          */
         post: operations["postProvidersByIdTest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/providers/health-test-budget": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get global health-test budget status
+         * @description Returns today's total estimated health-test spend vs the global daily budget, and whether scheduled tests are suspended for the day.
+         */
+        get: operations["getProvidersHealthTestBudget"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/providers/health-test-budget:set": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Set global health-test daily budget
+         * @description Updates the global daily health-test spend cap (display currency units). Clears today's global suspend and re-enables budget-suspended scheduled tests.
+         */
+        post: operations["postProvidersHealthTestBudgetSet"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/providers/health-test-per-provider-budget:set": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Set site-wide per-provider health-test daily budget
+         * @description Updates the site-wide daily health-test spend cap applied to each provider (display currency units, default 0.1). 0 disables the per-provider cap. Budget-suspended providers may re-open when the new cap allows.
+         */
+        post: operations["postProvidersHealthTestPerProviderBudgetSet"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/providers/{id}/scheduled-health-test:set-enabled": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Enable or disable scheduled LLM health test
+         * @description Toggles the per-minute scheduled LLM first-byte health test for a provider. Default is enabled.
+         */
+        post: operations["postProvidersByIdScheduledHealthTestSetEnabled"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1226,6 +1306,178 @@ export interface paths {
          * @description Partially updates provider group metadata.
          */
         patch: operations["patchProviderGroupsById"];
+        trace?: never;
+    };
+    "/api/v1/provider-groups:reorder": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reorder provider groups
+         * @description Sets keyword classification priority by ordered group ids (top first).
+         */
+        post: operations["postProviderGroupsReorder"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/provider-sites": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List provider sites
+         * @description Lists upstream websites with expandable group rates.
+         */
+        get: operations["getProviderSites"];
+        put?: never;
+        /**
+         * Create provider site
+         * @description Creates an upstream website configuration unit.
+         */
+        post: operations["postProviderSites"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/provider-sites/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete provider site
+         * @description Deletes a provider site and detaches linked providers.
+         */
+        delete: operations["deleteProviderSitesById"];
+        options?: never;
+        head?: never;
+        /**
+         * Update provider site
+         * @description Partially updates a provider site.
+         */
+        patch: operations["patchProviderSitesById"];
+        trace?: never;
+    };
+    "/api/v1/provider-sites:reorder": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reorder provider sites
+         * @description Persists manual display order for provider site cards.
+         */
+        post: operations["postProviderSitesReorder"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/provider-sites/{id}/group-rates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Upsert site group rate
+         * @description Creates or updates one upstream group rate under a site.
+         */
+        put: operations["putProviderSitesByIdGroupRates"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/provider-sites/group-rates/{rateId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete site group rate
+         * @description Deletes one site group rate.
+         */
+        delete: operations["deleteProviderSitesGroupRatesByRateid"];
+        options?: never;
+        head?: never;
+        /**
+         * Update site group rate
+         * @description Partially updates one site group rate.
+         */
+        patch: operations["patchProviderSitesGroupRatesByRateid"];
+        trace?: never;
+    };
+    "/api/v1/provider-sites/{id}/sync-rates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Sync one site group rates
+         * @description Logs into the upstream website with stored credentials and refreshes group rates + balance.
+         */
+        post: operations["postProviderSitesByIdSyncRates"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/provider-sites/sync-rates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Sync all enabled site group rates
+         * @description Refreshes group rates and balances for all enabled provider sites with credentials.
+         */
+        post: operations["postProviderSitesSyncRates"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/v1/admin/users/{userId}/insights/overview": {
@@ -4341,6 +4593,15 @@ export interface operations {
                             costMultiplier: number;
                             /** @description Provider group tag. */
                             groupTag: string | null;
+                            /** @description Parent provider site id. */
+                            siteId?: number | null;
+                            /** @description Upstream group name on the parent site. */
+                            siteGroupName?: string | null;
+                            /**
+                             * @description Billing mode for site-linked providers.
+                             * @enum {string}
+                             */
+                            billingMode?: "catalog_estimate" | "site_group_ratio";
                             /**
                              * @description Supported provider type. Hidden legacy provider types are intentionally excluded.
                              * @enum {string}
@@ -4443,6 +4704,52 @@ export interface operations {
                             anthropicAdaptiveThinking?: unknown;
                             /** @description Gemini Google Search preference. */
                             geminiGoogleSearchPreference: string | null;
+                            /** @description Whether the per-minute LLM health test is enabled for this provider. */
+                            scheduledHealthTestEnabled: boolean;
+                            /** @description Last LLM health test timestamp. */
+                            lastHealthTestAt: string | null;
+                            /** @description Whether the last LLM health test succeeded. */
+                            lastHealthTestOk: boolean | null;
+                            /** @description Last LLM health test status (green/yellow/red). */
+                            lastHealthTestStatus: string | null;
+                            /** @description Last successful first-byte latency in milliseconds. */
+                            lastHealthTestFirstByteMs: number | null;
+                            /** @description Last health test total latency in milliseconds. */
+                            lastHealthTestLatencyMs: number | null;
+                            /** @description Model used in the last health test. */
+                            lastHealthTestModel: string | null;
+                            /** @description Last health test error type. */
+                            lastHealthTestErrorType: string | null;
+                            /** @description Last health test error message. */
+                            lastHealthTestErrorMessage: string | null;
+                            /** @description Online rate over the last up to 60 health tests (0-1). */
+                            healthTestOnlineRate: number | null;
+                            /** @description Average first-byte latency over successful health tests in the window. */
+                            healthTestAvgFirstByteMs: number | null;
+                            /** @description Recent health test samples oldest→newest for sparkline/tooltips (legacy boolean[] still accepted). */
+                            healthTestRecentResults: (boolean | {
+                                ok: boolean;
+                                firstByteMs?: number | null;
+                                latencyMs?: number | null;
+                                status?: string | null;
+                                model?: string | null;
+                                source?: string | null;
+                                errorType?: string | null;
+                                errorMessage?: string | null;
+                                httpStatusCode?: number | null;
+                                inputTokens?: number | null;
+                                outputTokens?: number | null;
+                                costUsd?: number | null;
+                                testedAt?: string;
+                            })[] | null;
+                            /** @description Estimated upstream health-test spend for the current local day (not user billing). */
+                            healthTestTodayCostUsd?: number | null;
+                            /** @description Number of health tests run today for this provider. */
+                            healthTestTodayCalls?: number | null;
+                            /** @description Local day (YYYY-MM-DD) when scheduled health tests were auto-disabled for daily budget; null if not budget-suspended. */
+                            healthTestBudgetSuspendedDay?: string | null;
+                            /** @description True when scheduled probes were auto-disabled by SLO rebalance (keep top-2 per type pool). */
+                            healthTestSloAutoDisabled?: boolean;
                             /** @description Deprecated. Mirrors statistics.todayCost when include=statistics is requested; otherwise defaults to '0'. */
                             todayTotalCostUsd?: string;
                             /** @description Deprecated. Mirrors statistics.todayCalls when include=statistics is requested; otherwise defaults to 0. */
@@ -4806,6 +5113,15 @@ export interface operations {
                         costMultiplier: number;
                         /** @description Provider group tag. */
                         groupTag: string | null;
+                        /** @description Parent provider site id. */
+                        siteId?: number | null;
+                        /** @description Upstream group name on the parent site. */
+                        siteGroupName?: string | null;
+                        /**
+                         * @description Billing mode for site-linked providers.
+                         * @enum {string}
+                         */
+                        billingMode?: "catalog_estimate" | "site_group_ratio";
                         /**
                          * @description Supported provider type. Hidden legacy provider types are intentionally excluded.
                          * @enum {string}
@@ -4908,6 +5224,52 @@ export interface operations {
                         anthropicAdaptiveThinking?: unknown;
                         /** @description Gemini Google Search preference. */
                         geminiGoogleSearchPreference: string | null;
+                        /** @description Whether the per-minute LLM health test is enabled for this provider. */
+                        scheduledHealthTestEnabled: boolean;
+                        /** @description Last LLM health test timestamp. */
+                        lastHealthTestAt: string | null;
+                        /** @description Whether the last LLM health test succeeded. */
+                        lastHealthTestOk: boolean | null;
+                        /** @description Last LLM health test status (green/yellow/red). */
+                        lastHealthTestStatus: string | null;
+                        /** @description Last successful first-byte latency in milliseconds. */
+                        lastHealthTestFirstByteMs: number | null;
+                        /** @description Last health test total latency in milliseconds. */
+                        lastHealthTestLatencyMs: number | null;
+                        /** @description Model used in the last health test. */
+                        lastHealthTestModel: string | null;
+                        /** @description Last health test error type. */
+                        lastHealthTestErrorType: string | null;
+                        /** @description Last health test error message. */
+                        lastHealthTestErrorMessage: string | null;
+                        /** @description Online rate over the last up to 60 health tests (0-1). */
+                        healthTestOnlineRate: number | null;
+                        /** @description Average first-byte latency over successful health tests in the window. */
+                        healthTestAvgFirstByteMs: number | null;
+                        /** @description Recent health test samples oldest→newest for sparkline/tooltips (legacy boolean[] still accepted). */
+                        healthTestRecentResults: (boolean | {
+                            ok: boolean;
+                            firstByteMs?: number | null;
+                            latencyMs?: number | null;
+                            status?: string | null;
+                            model?: string | null;
+                            source?: string | null;
+                            errorType?: string | null;
+                            errorMessage?: string | null;
+                            httpStatusCode?: number | null;
+                            inputTokens?: number | null;
+                            outputTokens?: number | null;
+                            costUsd?: number | null;
+                            testedAt?: string;
+                        })[] | null;
+                        /** @description Estimated upstream health-test spend for the current local day (not user billing). */
+                        healthTestTodayCostUsd?: number | null;
+                        /** @description Number of health tests run today for this provider. */
+                        healthTestTodayCalls?: number | null;
+                        /** @description Local day (YYYY-MM-DD) when scheduled health tests were auto-disabled for daily budget; null if not budget-suspended. */
+                        healthTestBudgetSuspendedDay?: string | null;
+                        /** @description True when scheduled probes were auto-disabled by SLO rebalance (keep top-2 per type pool). */
+                        healthTestSloAutoDisabled?: boolean;
                         /** @description Deprecated. Mirrors statistics.todayCost when include=statistics is requested; otherwise defaults to '0'. */
                         todayTotalCostUsd?: string;
                         /** @description Deprecated. Mirrors statistics.todayCalls when include=statistics is requested; otherwise defaults to 0. */
@@ -5128,6 +5490,15 @@ export interface operations {
                         costMultiplier: number;
                         /** @description Provider group tag. */
                         groupTag: string | null;
+                        /** @description Parent provider site id. */
+                        siteId?: number | null;
+                        /** @description Upstream group name on the parent site. */
+                        siteGroupName?: string | null;
+                        /**
+                         * @description Billing mode for site-linked providers.
+                         * @enum {string}
+                         */
+                        billingMode?: "catalog_estimate" | "site_group_ratio";
                         /**
                          * @description Supported provider type. Hidden legacy provider types are intentionally excluded.
                          * @enum {string}
@@ -5230,6 +5601,52 @@ export interface operations {
                         anthropicAdaptiveThinking?: unknown;
                         /** @description Gemini Google Search preference. */
                         geminiGoogleSearchPreference: string | null;
+                        /** @description Whether the per-minute LLM health test is enabled for this provider. */
+                        scheduledHealthTestEnabled: boolean;
+                        /** @description Last LLM health test timestamp. */
+                        lastHealthTestAt: string | null;
+                        /** @description Whether the last LLM health test succeeded. */
+                        lastHealthTestOk: boolean | null;
+                        /** @description Last LLM health test status (green/yellow/red). */
+                        lastHealthTestStatus: string | null;
+                        /** @description Last successful first-byte latency in milliseconds. */
+                        lastHealthTestFirstByteMs: number | null;
+                        /** @description Last health test total latency in milliseconds. */
+                        lastHealthTestLatencyMs: number | null;
+                        /** @description Model used in the last health test. */
+                        lastHealthTestModel: string | null;
+                        /** @description Last health test error type. */
+                        lastHealthTestErrorType: string | null;
+                        /** @description Last health test error message. */
+                        lastHealthTestErrorMessage: string | null;
+                        /** @description Online rate over the last up to 60 health tests (0-1). */
+                        healthTestOnlineRate: number | null;
+                        /** @description Average first-byte latency over successful health tests in the window. */
+                        healthTestAvgFirstByteMs: number | null;
+                        /** @description Recent health test samples oldest→newest for sparkline/tooltips (legacy boolean[] still accepted). */
+                        healthTestRecentResults: (boolean | {
+                            ok: boolean;
+                            firstByteMs?: number | null;
+                            latencyMs?: number | null;
+                            status?: string | null;
+                            model?: string | null;
+                            source?: string | null;
+                            errorType?: string | null;
+                            errorMessage?: string | null;
+                            httpStatusCode?: number | null;
+                            inputTokens?: number | null;
+                            outputTokens?: number | null;
+                            costUsd?: number | null;
+                            testedAt?: string;
+                        })[] | null;
+                        /** @description Estimated upstream health-test spend for the current local day (not user billing). */
+                        healthTestTodayCostUsd?: number | null;
+                        /** @description Number of health tests run today for this provider. */
+                        healthTestTodayCalls?: number | null;
+                        /** @description Local day (YYYY-MM-DD) when scheduled health tests were auto-disabled for daily budget; null if not budget-suspended. */
+                        healthTestBudgetSuspendedDay?: string | null;
+                        /** @description True when scheduled probes were auto-disabled by SLO rebalance (keep top-2 per type pool). */
+                        healthTestSloAutoDisabled?: boolean;
                         /** @description Deprecated. Mirrors statistics.todayCost when include=statistics is requested; otherwise defaults to '0'. */
                         todayTotalCostUsd?: string;
                         /** @description Deprecated. Mirrors statistics.todayCalls when include=statistics is requested; otherwise defaults to 0. */
@@ -5774,6 +6191,15 @@ export interface operations {
                         costMultiplier: number;
                         /** @description Provider group tag. */
                         groupTag: string | null;
+                        /** @description Parent provider site id. */
+                        siteId?: number | null;
+                        /** @description Upstream group name on the parent site. */
+                        siteGroupName?: string | null;
+                        /**
+                         * @description Billing mode for site-linked providers.
+                         * @enum {string}
+                         */
+                        billingMode?: "catalog_estimate" | "site_group_ratio";
                         /**
                          * @description Supported provider type. Hidden legacy provider types are intentionally excluded.
                          * @enum {string}
@@ -5876,6 +6302,52 @@ export interface operations {
                         anthropicAdaptiveThinking?: unknown;
                         /** @description Gemini Google Search preference. */
                         geminiGoogleSearchPreference: string | null;
+                        /** @description Whether the per-minute LLM health test is enabled for this provider. */
+                        scheduledHealthTestEnabled: boolean;
+                        /** @description Last LLM health test timestamp. */
+                        lastHealthTestAt: string | null;
+                        /** @description Whether the last LLM health test succeeded. */
+                        lastHealthTestOk: boolean | null;
+                        /** @description Last LLM health test status (green/yellow/red). */
+                        lastHealthTestStatus: string | null;
+                        /** @description Last successful first-byte latency in milliseconds. */
+                        lastHealthTestFirstByteMs: number | null;
+                        /** @description Last health test total latency in milliseconds. */
+                        lastHealthTestLatencyMs: number | null;
+                        /** @description Model used in the last health test. */
+                        lastHealthTestModel: string | null;
+                        /** @description Last health test error type. */
+                        lastHealthTestErrorType: string | null;
+                        /** @description Last health test error message. */
+                        lastHealthTestErrorMessage: string | null;
+                        /** @description Online rate over the last up to 60 health tests (0-1). */
+                        healthTestOnlineRate: number | null;
+                        /** @description Average first-byte latency over successful health tests in the window. */
+                        healthTestAvgFirstByteMs: number | null;
+                        /** @description Recent health test samples oldest→newest for sparkline/tooltips (legacy boolean[] still accepted). */
+                        healthTestRecentResults: (boolean | {
+                            ok: boolean;
+                            firstByteMs?: number | null;
+                            latencyMs?: number | null;
+                            status?: string | null;
+                            model?: string | null;
+                            source?: string | null;
+                            errorType?: string | null;
+                            errorMessage?: string | null;
+                            httpStatusCode?: number | null;
+                            inputTokens?: number | null;
+                            outputTokens?: number | null;
+                            costUsd?: number | null;
+                            testedAt?: string;
+                        })[] | null;
+                        /** @description Estimated upstream health-test spend for the current local day (not user billing). */
+                        healthTestTodayCostUsd?: number | null;
+                        /** @description Number of health tests run today for this provider. */
+                        healthTestTodayCalls?: number | null;
+                        /** @description Local day (YYYY-MM-DD) when scheduled health tests were auto-disabled for daily budget; null if not budget-suspended. */
+                        healthTestBudgetSuspendedDay?: string | null;
+                        /** @description True when scheduled probes were auto-disabled by SLO rebalance (keep top-2 per type pool). */
+                        healthTestSloAutoDisabled?: boolean;
                         /** @description Deprecated. Mirrors statistics.todayCost when include=statistics is requested; otherwise defaults to '0'. */
                         todayTotalCostUsd?: string;
                         /** @description Deprecated. Mirrors statistics.todayCalls when include=statistics is requested; otherwise defaults to 0. */
@@ -9374,6 +9846,716 @@ export interface operations {
             };
         };
     };
+    getProvidersHealthTestBudget: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Budget overview. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Invalid request. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        /** @description Stable problem type URI or URN. */
+                        type: string;
+                        /** @description Short problem title. */
+                        title: string;
+                        /** @description HTTP status code. */
+                        status: number;
+                        /** @description Human-readable error detail. */
+                        detail: string;
+                        /** @description Request path that produced the problem. */
+                        instance: string;
+                        /** @description Application error code for frontend i18n. */
+                        errorCode: string;
+                        /** @description Optional i18n parameters. */
+                        errorParams?: {
+                            [key: string]: unknown;
+                        };
+                        /** @description Optional request trace identifier. */
+                        traceId?: string;
+                        /** @description Validation failure details. */
+                        invalidParams?: {
+                            /** @description Path to the invalid input field. */
+                            path: (string | number)[];
+                            /** @description Machine-readable validation error code. */
+                            code: string;
+                            /** @description Validation error message. */
+                            message: string;
+                        }[];
+                    };
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        /** @description Stable problem type URI or URN. */
+                        type: string;
+                        /** @description Short problem title. */
+                        title: string;
+                        /** @description HTTP status code. */
+                        status: number;
+                        /** @description Human-readable error detail. */
+                        detail: string;
+                        /** @description Request path that produced the problem. */
+                        instance: string;
+                        /** @description Application error code for frontend i18n. */
+                        errorCode: string;
+                        /** @description Optional i18n parameters. */
+                        errorParams?: {
+                            [key: string]: unknown;
+                        };
+                        /** @description Optional request trace identifier. */
+                        traceId?: string;
+                        /** @description Validation failure details. */
+                        invalidParams?: {
+                            /** @description Path to the invalid input field. */
+                            path: (string | number)[];
+                            /** @description Machine-readable validation error code. */
+                            code: string;
+                            /** @description Validation error message. */
+                            message: string;
+                        }[];
+                    };
+                };
+            };
+            /** @description Admin access required. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        /** @description Stable problem type URI or URN. */
+                        type: string;
+                        /** @description Short problem title. */
+                        title: string;
+                        /** @description HTTP status code. */
+                        status: number;
+                        /** @description Human-readable error detail. */
+                        detail: string;
+                        /** @description Request path that produced the problem. */
+                        instance: string;
+                        /** @description Application error code for frontend i18n. */
+                        errorCode: string;
+                        /** @description Optional i18n parameters. */
+                        errorParams?: {
+                            [key: string]: unknown;
+                        };
+                        /** @description Optional request trace identifier. */
+                        traceId?: string;
+                        /** @description Validation failure details. */
+                        invalidParams?: {
+                            /** @description Path to the invalid input field. */
+                            path: (string | number)[];
+                            /** @description Machine-readable validation error code. */
+                            code: string;
+                            /** @description Validation error message. */
+                            message: string;
+                        }[];
+                    };
+                };
+            };
+            /** @description Provider not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        /** @description Stable problem type URI or URN. */
+                        type: string;
+                        /** @description Short problem title. */
+                        title: string;
+                        /** @description HTTP status code. */
+                        status: number;
+                        /** @description Human-readable error detail. */
+                        detail: string;
+                        /** @description Request path that produced the problem. */
+                        instance: string;
+                        /** @description Application error code for frontend i18n. */
+                        errorCode: string;
+                        /** @description Optional i18n parameters. */
+                        errorParams?: {
+                            [key: string]: unknown;
+                        };
+                        /** @description Optional request trace identifier. */
+                        traceId?: string;
+                        /** @description Validation failure details. */
+                        invalidParams?: {
+                            /** @description Path to the invalid input field. */
+                            path: (string | number)[];
+                            /** @description Machine-readable validation error code. */
+                            code: string;
+                            /** @description Validation error message. */
+                            message: string;
+                        }[];
+                    };
+                };
+            };
+        };
+    };
+    postProvidersHealthTestBudgetSet: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Required only when authenticating with the auth-token cookie on mutation requests. */
+                "X-CCH-CSRF"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    budget: number;
+                };
+            };
+        };
+        responses: {
+            /** @description Budget updated. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Invalid request. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        /** @description Stable problem type URI or URN. */
+                        type: string;
+                        /** @description Short problem title. */
+                        title: string;
+                        /** @description HTTP status code. */
+                        status: number;
+                        /** @description Human-readable error detail. */
+                        detail: string;
+                        /** @description Request path that produced the problem. */
+                        instance: string;
+                        /** @description Application error code for frontend i18n. */
+                        errorCode: string;
+                        /** @description Optional i18n parameters. */
+                        errorParams?: {
+                            [key: string]: unknown;
+                        };
+                        /** @description Optional request trace identifier. */
+                        traceId?: string;
+                        /** @description Validation failure details. */
+                        invalidParams?: {
+                            /** @description Path to the invalid input field. */
+                            path: (string | number)[];
+                            /** @description Machine-readable validation error code. */
+                            code: string;
+                            /** @description Validation error message. */
+                            message: string;
+                        }[];
+                    };
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        /** @description Stable problem type URI or URN. */
+                        type: string;
+                        /** @description Short problem title. */
+                        title: string;
+                        /** @description HTTP status code. */
+                        status: number;
+                        /** @description Human-readable error detail. */
+                        detail: string;
+                        /** @description Request path that produced the problem. */
+                        instance: string;
+                        /** @description Application error code for frontend i18n. */
+                        errorCode: string;
+                        /** @description Optional i18n parameters. */
+                        errorParams?: {
+                            [key: string]: unknown;
+                        };
+                        /** @description Optional request trace identifier. */
+                        traceId?: string;
+                        /** @description Validation failure details. */
+                        invalidParams?: {
+                            /** @description Path to the invalid input field. */
+                            path: (string | number)[];
+                            /** @description Machine-readable validation error code. */
+                            code: string;
+                            /** @description Validation error message. */
+                            message: string;
+                        }[];
+                    };
+                };
+            };
+            /** @description Admin access required. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        /** @description Stable problem type URI or URN. */
+                        type: string;
+                        /** @description Short problem title. */
+                        title: string;
+                        /** @description HTTP status code. */
+                        status: number;
+                        /** @description Human-readable error detail. */
+                        detail: string;
+                        /** @description Request path that produced the problem. */
+                        instance: string;
+                        /** @description Application error code for frontend i18n. */
+                        errorCode: string;
+                        /** @description Optional i18n parameters. */
+                        errorParams?: {
+                            [key: string]: unknown;
+                        };
+                        /** @description Optional request trace identifier. */
+                        traceId?: string;
+                        /** @description Validation failure details. */
+                        invalidParams?: {
+                            /** @description Path to the invalid input field. */
+                            path: (string | number)[];
+                            /** @description Machine-readable validation error code. */
+                            code: string;
+                            /** @description Validation error message. */
+                            message: string;
+                        }[];
+                    };
+                };
+            };
+            /** @description Provider not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        /** @description Stable problem type URI or URN. */
+                        type: string;
+                        /** @description Short problem title. */
+                        title: string;
+                        /** @description HTTP status code. */
+                        status: number;
+                        /** @description Human-readable error detail. */
+                        detail: string;
+                        /** @description Request path that produced the problem. */
+                        instance: string;
+                        /** @description Application error code for frontend i18n. */
+                        errorCode: string;
+                        /** @description Optional i18n parameters. */
+                        errorParams?: {
+                            [key: string]: unknown;
+                        };
+                        /** @description Optional request trace identifier. */
+                        traceId?: string;
+                        /** @description Validation failure details. */
+                        invalidParams?: {
+                            /** @description Path to the invalid input field. */
+                            path: (string | number)[];
+                            /** @description Machine-readable validation error code. */
+                            code: string;
+                            /** @description Validation error message. */
+                            message: string;
+                        }[];
+                    };
+                };
+            };
+        };
+    };
+    postProvidersHealthTestPerProviderBudgetSet: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Required only when authenticating with the auth-token cookie on mutation requests. */
+                "X-CCH-CSRF"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    budget: number;
+                };
+            };
+        };
+        responses: {
+            /** @description Provider budget updated. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Invalid request. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        /** @description Stable problem type URI or URN. */
+                        type: string;
+                        /** @description Short problem title. */
+                        title: string;
+                        /** @description HTTP status code. */
+                        status: number;
+                        /** @description Human-readable error detail. */
+                        detail: string;
+                        /** @description Request path that produced the problem. */
+                        instance: string;
+                        /** @description Application error code for frontend i18n. */
+                        errorCode: string;
+                        /** @description Optional i18n parameters. */
+                        errorParams?: {
+                            [key: string]: unknown;
+                        };
+                        /** @description Optional request trace identifier. */
+                        traceId?: string;
+                        /** @description Validation failure details. */
+                        invalidParams?: {
+                            /** @description Path to the invalid input field. */
+                            path: (string | number)[];
+                            /** @description Machine-readable validation error code. */
+                            code: string;
+                            /** @description Validation error message. */
+                            message: string;
+                        }[];
+                    };
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        /** @description Stable problem type URI or URN. */
+                        type: string;
+                        /** @description Short problem title. */
+                        title: string;
+                        /** @description HTTP status code. */
+                        status: number;
+                        /** @description Human-readable error detail. */
+                        detail: string;
+                        /** @description Request path that produced the problem. */
+                        instance: string;
+                        /** @description Application error code for frontend i18n. */
+                        errorCode: string;
+                        /** @description Optional i18n parameters. */
+                        errorParams?: {
+                            [key: string]: unknown;
+                        };
+                        /** @description Optional request trace identifier. */
+                        traceId?: string;
+                        /** @description Validation failure details. */
+                        invalidParams?: {
+                            /** @description Path to the invalid input field. */
+                            path: (string | number)[];
+                            /** @description Machine-readable validation error code. */
+                            code: string;
+                            /** @description Validation error message. */
+                            message: string;
+                        }[];
+                    };
+                };
+            };
+            /** @description Admin access required. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        /** @description Stable problem type URI or URN. */
+                        type: string;
+                        /** @description Short problem title. */
+                        title: string;
+                        /** @description HTTP status code. */
+                        status: number;
+                        /** @description Human-readable error detail. */
+                        detail: string;
+                        /** @description Request path that produced the problem. */
+                        instance: string;
+                        /** @description Application error code for frontend i18n. */
+                        errorCode: string;
+                        /** @description Optional i18n parameters. */
+                        errorParams?: {
+                            [key: string]: unknown;
+                        };
+                        /** @description Optional request trace identifier. */
+                        traceId?: string;
+                        /** @description Validation failure details. */
+                        invalidParams?: {
+                            /** @description Path to the invalid input field. */
+                            path: (string | number)[];
+                            /** @description Machine-readable validation error code. */
+                            code: string;
+                            /** @description Validation error message. */
+                            message: string;
+                        }[];
+                    };
+                };
+            };
+            /** @description Provider not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        /** @description Stable problem type URI or URN. */
+                        type: string;
+                        /** @description Short problem title. */
+                        title: string;
+                        /** @description HTTP status code. */
+                        status: number;
+                        /** @description Human-readable error detail. */
+                        detail: string;
+                        /** @description Request path that produced the problem. */
+                        instance: string;
+                        /** @description Application error code for frontend i18n. */
+                        errorCode: string;
+                        /** @description Optional i18n parameters. */
+                        errorParams?: {
+                            [key: string]: unknown;
+                        };
+                        /** @description Optional request trace identifier. */
+                        traceId?: string;
+                        /** @description Validation failure details. */
+                        invalidParams?: {
+                            /** @description Path to the invalid input field. */
+                            path: (string | number)[];
+                            /** @description Machine-readable validation error code. */
+                            code: string;
+                            /** @description Validation error message. */
+                            message: string;
+                        }[];
+                    };
+                };
+            };
+        };
+    };
+    postProvidersByIdScheduledHealthTestSetEnabled: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Required only when authenticating with the auth-token cookie on mutation requests. */
+                "X-CCH-CSRF"?: string;
+            };
+            path: {
+                /** @description Provider id. */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    enabled: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description Toggle result. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Invalid request. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        /** @description Stable problem type URI or URN. */
+                        type: string;
+                        /** @description Short problem title. */
+                        title: string;
+                        /** @description HTTP status code. */
+                        status: number;
+                        /** @description Human-readable error detail. */
+                        detail: string;
+                        /** @description Request path that produced the problem. */
+                        instance: string;
+                        /** @description Application error code for frontend i18n. */
+                        errorCode: string;
+                        /** @description Optional i18n parameters. */
+                        errorParams?: {
+                            [key: string]: unknown;
+                        };
+                        /** @description Optional request trace identifier. */
+                        traceId?: string;
+                        /** @description Validation failure details. */
+                        invalidParams?: {
+                            /** @description Path to the invalid input field. */
+                            path: (string | number)[];
+                            /** @description Machine-readable validation error code. */
+                            code: string;
+                            /** @description Validation error message. */
+                            message: string;
+                        }[];
+                    };
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        /** @description Stable problem type URI or URN. */
+                        type: string;
+                        /** @description Short problem title. */
+                        title: string;
+                        /** @description HTTP status code. */
+                        status: number;
+                        /** @description Human-readable error detail. */
+                        detail: string;
+                        /** @description Request path that produced the problem. */
+                        instance: string;
+                        /** @description Application error code for frontend i18n. */
+                        errorCode: string;
+                        /** @description Optional i18n parameters. */
+                        errorParams?: {
+                            [key: string]: unknown;
+                        };
+                        /** @description Optional request trace identifier. */
+                        traceId?: string;
+                        /** @description Validation failure details. */
+                        invalidParams?: {
+                            /** @description Path to the invalid input field. */
+                            path: (string | number)[];
+                            /** @description Machine-readable validation error code. */
+                            code: string;
+                            /** @description Validation error message. */
+                            message: string;
+                        }[];
+                    };
+                };
+            };
+            /** @description Admin access required. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        /** @description Stable problem type URI or URN. */
+                        type: string;
+                        /** @description Short problem title. */
+                        title: string;
+                        /** @description HTTP status code. */
+                        status: number;
+                        /** @description Human-readable error detail. */
+                        detail: string;
+                        /** @description Request path that produced the problem. */
+                        instance: string;
+                        /** @description Application error code for frontend i18n. */
+                        errorCode: string;
+                        /** @description Optional i18n parameters. */
+                        errorParams?: {
+                            [key: string]: unknown;
+                        };
+                        /** @description Optional request trace identifier. */
+                        traceId?: string;
+                        /** @description Validation failure details. */
+                        invalidParams?: {
+                            /** @description Path to the invalid input field. */
+                            path: (string | number)[];
+                            /** @description Machine-readable validation error code. */
+                            code: string;
+                            /** @description Validation error message. */
+                            message: string;
+                        }[];
+                    };
+                };
+            };
+            /** @description Provider not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        /** @description Stable problem type URI or URN. */
+                        type: string;
+                        /** @description Short problem title. */
+                        title: string;
+                        /** @description HTTP status code. */
+                        status: number;
+                        /** @description Human-readable error detail. */
+                        detail: string;
+                        /** @description Request path that produced the problem. */
+                        instance: string;
+                        /** @description Application error code for frontend i18n. */
+                        errorCode: string;
+                        /** @description Optional i18n parameters. */
+                        errorParams?: {
+                            [key: string]: unknown;
+                        };
+                        /** @description Optional request trace identifier. */
+                        traceId?: string;
+                        /** @description Validation failure details. */
+                        invalidParams?: {
+                            /** @description Path to the invalid input field. */
+                            path: (string | number)[];
+                            /** @description Machine-readable validation error code. */
+                            code: string;
+                            /** @description Validation error message. */
+                            message: string;
+                        }[];
+                    };
+                };
+            };
+        };
+    };
     postProvidersTestAnthropicMessages: {
         parameters: {
             query?: never;
@@ -11871,6 +13053,36 @@ export interface operations {
                          * @enum {string}
                          */
                         currencyDisplay: "USD" | "CNY" | "EUR" | "JPY" | "GBP" | "HKD" | "TWD" | "KRW" | "SGD";
+                        /** @description Global daily health-test budget in display currency units. */
+                        healthTestDailyBudgetCny?: number;
+                        /** @description Local day when scheduled health tests were globally suspended for budget. */
+                        healthTestGlobalBudgetSuspendedDay?: string | null;
+                        /**
+                         * @description Scheduled health-test policy: dynamic (SLO rebalance top1/top2) or always_on (keep fleet probing without SLO auto-disable).
+                         * @enum {string}
+                         */
+                        healthTestScheduleMode?: "dynamic" | "always_on";
+                        /** @description Rolling health-test sample window size for online-rate / sparkline / SLO averages. */
+                        healthTestWindowSize?: number;
+                        /** @description Scheduled health-test interval in seconds (wall-clock aligned). */
+                        healthTestIntervalSeconds?: number;
+                        /** @description Scheduled health-test total timeout in seconds. */
+                        healthTestTimeoutSeconds?: number;
+                        /** @description Minimum online-rate percent for health SLO qualification (single gate). */
+                        healthTestMinOnlineRatePercent?: number;
+                        /** @description Maximum average first-byte latency seconds for health SLO qualification (single gate). */
+                        healthTestMaxAvgLatencySeconds?: number;
+                        /**
+                         * @description Global captcha vendor for provider-site upstream login.
+                         * @enum {string}
+                         */
+                        siteCaptchaProvider?: "none" | "yescaptcha" | "capsolver" | "2captcha" | "anticaptcha";
+                        /** @description Global captcha API key; omit to keep, empty/null to clear. */
+                        siteCaptchaApiKey?: string | null;
+                        /** @description Optional global captcha API endpoint override. */
+                        siteCaptchaEndpoint?: string | null;
+                        /** @description Whether a global captcha API key is stored. */
+                        hasSiteCaptchaApiKey?: boolean;
                         /**
                          * @description Whether billing uses the originally requested model or the redirected model.
                          * @enum {string}
@@ -11885,6 +13097,13 @@ export interface operations {
                         billNonSuccessfulRequests: boolean;
                         /** @description Whether streaming-hedge (provider racing) losers are kept alive, drained, and billed (their cost accumulates into the request total). */
                         billHedgeLosers: boolean;
+                        /**
+                         * @description Streaming multi-provider race policy: single (no race), timeout_race (relay after first-byte threshold), dual_fast (top1+top2 immediately).
+                         * @enum {string}
+                         */
+                        streamingRaceMode: "single" | "timeout_race" | "dual_fast";
+                        /** @description Global first-byte threshold in ms for timeout_race. 0 disables (used with single mode). */
+                        streamingRaceFirstByteMs: number;
                         /** @description Configured system timezone, or null for default. */
                         timezone: string | null;
                         /** @description Whether usage-log cleanup is enabled. */
@@ -12133,6 +13352,36 @@ export interface operations {
                      * @enum {string}
                      */
                     currencyDisplay?: "USD" | "CNY" | "EUR" | "JPY" | "GBP" | "HKD" | "TWD" | "KRW" | "SGD";
+                    /** @description Global daily health-test budget in display currency units. */
+                    healthTestDailyBudgetCny?: number;
+                    /** @description Local day when scheduled health tests were globally suspended for budget. */
+                    healthTestGlobalBudgetSuspendedDay?: string | null;
+                    /**
+                     * @description Scheduled health-test policy: dynamic (SLO rebalance top1/top2) or always_on (keep fleet probing without SLO auto-disable).
+                     * @enum {string}
+                     */
+                    healthTestScheduleMode?: "dynamic" | "always_on";
+                    /** @description Rolling health-test sample window size for online-rate / sparkline / SLO averages. */
+                    healthTestWindowSize?: number;
+                    /** @description Scheduled health-test interval in seconds (wall-clock aligned). */
+                    healthTestIntervalSeconds?: number;
+                    /** @description Scheduled health-test total timeout in seconds. */
+                    healthTestTimeoutSeconds?: number;
+                    /** @description Minimum online-rate percent for health SLO qualification (single gate). */
+                    healthTestMinOnlineRatePercent?: number;
+                    /** @description Maximum average first-byte latency seconds for health SLO qualification (single gate). */
+                    healthTestMaxAvgLatencySeconds?: number;
+                    /**
+                     * @description Global captcha vendor for provider-site upstream login.
+                     * @enum {string}
+                     */
+                    siteCaptchaProvider?: "none" | "yescaptcha" | "capsolver" | "2captcha" | "anticaptcha";
+                    /** @description Global captcha API key; omit to keep, empty/null to clear. */
+                    siteCaptchaApiKey?: string | null;
+                    /** @description Optional global captcha API endpoint override. */
+                    siteCaptchaEndpoint?: string | null;
+                    /** @description Whether a global captcha API key is stored. */
+                    hasSiteCaptchaApiKey?: boolean;
                     /**
                      * @description Whether billing uses the originally requested model or the redirected model.
                      * @enum {string}
@@ -12147,6 +13396,13 @@ export interface operations {
                     billNonSuccessfulRequests?: boolean;
                     /** @description Whether streaming-hedge (provider racing) losers are kept alive, drained, and billed (their cost accumulates into the request total). */
                     billHedgeLosers?: boolean;
+                    /**
+                     * @description Streaming multi-provider race policy: single (no race), timeout_race (relay after first-byte threshold), dual_fast (top1+top2 immediately).
+                     * @enum {string}
+                     */
+                    streamingRaceMode?: "single" | "timeout_race" | "dual_fast";
+                    /** @description Global first-byte threshold in ms for timeout_race. 0 disables (used with single mode). */
+                    streamingRaceFirstByteMs?: number;
                     /** @description System timezone, or null to use default. */
                     timezone?: string | null;
                     /** @description Whether usage-log cleanup is enabled. */
@@ -12246,6 +13502,8 @@ export interface operations {
                     publicStatusWindowHours?: number;
                     /** @description Public status aggregation interval in minutes. */
                     publicStatusAggregationIntervalMinutes?: number;
+                    /** @description Site-wide per-provider daily health-test spend cap (display units, default 0.1). 0 = unlimited. */
+                    healthTestPerProviderDailyBudget?: number;
                 };
             };
         };
@@ -12268,6 +13526,36 @@ export interface operations {
                          * @enum {string}
                          */
                         currencyDisplay: "USD" | "CNY" | "EUR" | "JPY" | "GBP" | "HKD" | "TWD" | "KRW" | "SGD";
+                        /** @description Global daily health-test budget in display currency units. */
+                        healthTestDailyBudgetCny?: number;
+                        /** @description Local day when scheduled health tests were globally suspended for budget. */
+                        healthTestGlobalBudgetSuspendedDay?: string | null;
+                        /**
+                         * @description Scheduled health-test policy: dynamic (SLO rebalance top1/top2) or always_on (keep fleet probing without SLO auto-disable).
+                         * @enum {string}
+                         */
+                        healthTestScheduleMode?: "dynamic" | "always_on";
+                        /** @description Rolling health-test sample window size for online-rate / sparkline / SLO averages. */
+                        healthTestWindowSize?: number;
+                        /** @description Scheduled health-test interval in seconds (wall-clock aligned). */
+                        healthTestIntervalSeconds?: number;
+                        /** @description Scheduled health-test total timeout in seconds. */
+                        healthTestTimeoutSeconds?: number;
+                        /** @description Minimum online-rate percent for health SLO qualification (single gate). */
+                        healthTestMinOnlineRatePercent?: number;
+                        /** @description Maximum average first-byte latency seconds for health SLO qualification (single gate). */
+                        healthTestMaxAvgLatencySeconds?: number;
+                        /**
+                         * @description Global captcha vendor for provider-site upstream login.
+                         * @enum {string}
+                         */
+                        siteCaptchaProvider?: "none" | "yescaptcha" | "capsolver" | "2captcha" | "anticaptcha";
+                        /** @description Global captcha API key; omit to keep, empty/null to clear. */
+                        siteCaptchaApiKey?: string | null;
+                        /** @description Optional global captcha API endpoint override. */
+                        siteCaptchaEndpoint?: string | null;
+                        /** @description Whether a global captcha API key is stored. */
+                        hasSiteCaptchaApiKey?: boolean;
                         /**
                          * @description Whether billing uses the originally requested model or the redirected model.
                          * @enum {string}
@@ -12282,6 +13570,13 @@ export interface operations {
                         billNonSuccessfulRequests: boolean;
                         /** @description Whether streaming-hedge (provider racing) losers are kept alive, drained, and billed (their cost accumulates into the request total). */
                         billHedgeLosers: boolean;
+                        /**
+                         * @description Streaming multi-provider race policy: single (no race), timeout_race (relay after first-byte threshold), dual_fast (top1+top2 immediately).
+                         * @enum {string}
+                         */
+                        streamingRaceMode: "single" | "timeout_race" | "dual_fast";
+                        /** @description Global first-byte threshold in ms for timeout_race. 0 disables (used with single mode). */
+                        streamingRaceFirstByteMs: number;
                         /** @description Configured system timezone, or null for default. */
                         timezone: string | null;
                         /** @description Whether usage-log cleanup is enabled. */
@@ -17378,6 +18673,44 @@ export interface operations {
                             costMultiplier: number;
                             /** @description Optional group description. */
                             description: string | null;
+                            /** @description Default scheduled health-test model; null/empty = skip scheduled tests. */
+                            healthTestModel?: string | null;
+                            /** @description Shared provider defaults for this group (no website/endpoint/timeouts). */
+                            sharedSettings?: {
+                                /** @enum {string|null} */
+                                providerType?: "claude" | "codex" | "gemini" | "openai-compatible" | null;
+                                priority?: number | null;
+                                weight?: number | null;
+                                costMultiplier?: number | null;
+                                preserveClientIp?: boolean | null;
+                                disableSessionReuse?: boolean | null;
+                                proxyUrl?: string | null;
+                                proxyFallbackToDirect?: boolean | null;
+                                maxRetryAttempts?: number | null;
+                                circuitBreakerFailureThreshold?: number | null;
+                                circuitBreakerOpenDuration?: number | null;
+                                circuitBreakerHalfOpenSuccessThreshold?: number | null;
+                                limit5hUsd?: number | null;
+                                limitDailyUsd?: number | null;
+                                limitWeeklyUsd?: number | null;
+                                limitMonthlyUsd?: number | null;
+                                limitTotalUsd?: number | null;
+                                limitConcurrentSessions?: number | null;
+                            } | null;
+                            /** @description Keyword match priority; lower runs first. */
+                            sortOrder?: number;
+                            /** @description Keyword rules for classifying upstream site groups into this pool. */
+                            matchRules?: {
+                                /** @enum {string} */
+                                matchType: "exact" | "prefix" | "suffix" | "contains" | "regex";
+                                pattern: string;
+                            }[] | null;
+                            /** @description Request-model rules for providers in this pool. */
+                            modelMatchRules?: {
+                                /** @enum {string} */
+                                matchType: "exact" | "prefix" | "suffix" | "contains" | "regex";
+                                pattern: string;
+                            }[] | null;
                             /** @description Number of providers using the group. */
                             providerCount?: number;
                             /**
@@ -17563,6 +18896,46 @@ export interface operations {
                     costMultiplier?: number;
                     /** @description Optional group description. */
                     description?: string;
+                    /** @description Default scheduled health-test model; empty = skip scheduled tests. */
+                    healthTestModel?: string | null;
+                    /** @description Shared provider defaults for this group (no website/endpoint/timeouts). */
+                    sharedSettings?: {
+                        /** @enum {string|null} */
+                        providerType?: "claude" | "codex" | "gemini" | "openai-compatible" | null;
+                        priority?: number | null;
+                        weight?: number | null;
+                        costMultiplier?: number | null;
+                        preserveClientIp?: boolean | null;
+                        disableSessionReuse?: boolean | null;
+                        proxyUrl?: string | null;
+                        proxyFallbackToDirect?: boolean | null;
+                        maxRetryAttempts?: number | null;
+                        circuitBreakerFailureThreshold?: number | null;
+                        circuitBreakerOpenDuration?: number | null;
+                        circuitBreakerHalfOpenSuccessThreshold?: number | null;
+                        limit5hUsd?: number | null;
+                        limitDailyUsd?: number | null;
+                        limitWeeklyUsd?: number | null;
+                        limitMonthlyUsd?: number | null;
+                        limitTotalUsd?: number | null;
+                        limitConcurrentSessions?: number | null;
+                    } | null;
+                    /** @description When true, push sharedSettings onto all providers in this group. */
+                    applySharedSettingsToMembers?: boolean;
+                    /** @description Keyword match priority. */
+                    sortOrder?: number;
+                    /** @description Keyword rules for site-group classification. */
+                    matchRules?: {
+                        /** @enum {string} */
+                        matchType: "exact" | "prefix" | "suffix" | "contains" | "regex";
+                        pattern: string;
+                    }[] | null;
+                    /** @description Request-model rules for providers in this pool. */
+                    modelMatchRules?: {
+                        /** @enum {string} */
+                        matchType: "exact" | "prefix" | "suffix" | "contains" | "regex";
+                        pattern: string;
+                    }[] | null;
                 };
             };
         };
@@ -17582,6 +18955,44 @@ export interface operations {
                         costMultiplier: number;
                         /** @description Optional group description. */
                         description: string | null;
+                        /** @description Default scheduled health-test model; null/empty = skip scheduled tests. */
+                        healthTestModel?: string | null;
+                        /** @description Shared provider defaults for this group (no website/endpoint/timeouts). */
+                        sharedSettings?: {
+                            /** @enum {string|null} */
+                            providerType?: "claude" | "codex" | "gemini" | "openai-compatible" | null;
+                            priority?: number | null;
+                            weight?: number | null;
+                            costMultiplier?: number | null;
+                            preserveClientIp?: boolean | null;
+                            disableSessionReuse?: boolean | null;
+                            proxyUrl?: string | null;
+                            proxyFallbackToDirect?: boolean | null;
+                            maxRetryAttempts?: number | null;
+                            circuitBreakerFailureThreshold?: number | null;
+                            circuitBreakerOpenDuration?: number | null;
+                            circuitBreakerHalfOpenSuccessThreshold?: number | null;
+                            limit5hUsd?: number | null;
+                            limitDailyUsd?: number | null;
+                            limitWeeklyUsd?: number | null;
+                            limitMonthlyUsd?: number | null;
+                            limitTotalUsd?: number | null;
+                            limitConcurrentSessions?: number | null;
+                        } | null;
+                        /** @description Keyword match priority; lower runs first. */
+                        sortOrder?: number;
+                        /** @description Keyword rules for classifying upstream site groups into this pool. */
+                        matchRules?: {
+                            /** @enum {string} */
+                            matchType: "exact" | "prefix" | "suffix" | "contains" | "regex";
+                            pattern: string;
+                        }[] | null;
+                        /** @description Request-model rules for providers in this pool. */
+                        modelMatchRules?: {
+                            /** @enum {string} */
+                            matchType: "exact" | "prefix" | "suffix" | "contains" | "regex";
+                            pattern: string;
+                        }[] | null;
                         /** @description Number of providers using the group. */
                         providerCount?: number;
                         /**
@@ -17941,6 +19352,46 @@ export interface operations {
                     description?: string | null;
                     /** @description Optional plain description note. */
                     descriptionNote?: string | null;
+                    /** @description Default scheduled health-test model; empty = skip scheduled tests. */
+                    healthTestModel?: string | null;
+                    /** @description Shared provider defaults for this group (no website/endpoint/timeouts). */
+                    sharedSettings?: {
+                        /** @enum {string|null} */
+                        providerType?: "claude" | "codex" | "gemini" | "openai-compatible" | null;
+                        priority?: number | null;
+                        weight?: number | null;
+                        costMultiplier?: number | null;
+                        preserveClientIp?: boolean | null;
+                        disableSessionReuse?: boolean | null;
+                        proxyUrl?: string | null;
+                        proxyFallbackToDirect?: boolean | null;
+                        maxRetryAttempts?: number | null;
+                        circuitBreakerFailureThreshold?: number | null;
+                        circuitBreakerOpenDuration?: number | null;
+                        circuitBreakerHalfOpenSuccessThreshold?: number | null;
+                        limit5hUsd?: number | null;
+                        limitDailyUsd?: number | null;
+                        limitWeeklyUsd?: number | null;
+                        limitMonthlyUsd?: number | null;
+                        limitTotalUsd?: number | null;
+                        limitConcurrentSessions?: number | null;
+                    } | null;
+                    /** @description When true, push sharedSettings onto all providers in this group. */
+                    applySharedSettingsToMembers?: boolean;
+                    /** @description Keyword match priority. */
+                    sortOrder?: number;
+                    /** @description Keyword rules for site-group classification. */
+                    matchRules?: {
+                        /** @enum {string} */
+                        matchType: "exact" | "prefix" | "suffix" | "contains" | "regex";
+                        pattern: string;
+                    }[] | null;
+                    /** @description Request-model rules for providers in this pool. */
+                    modelMatchRules?: {
+                        /** @enum {string} */
+                        matchType: "exact" | "prefix" | "suffix" | "contains" | "regex";
+                        pattern: string;
+                    }[] | null;
                 };
             };
         };
@@ -17960,6 +19411,44 @@ export interface operations {
                         costMultiplier: number;
                         /** @description Optional group description. */
                         description: string | null;
+                        /** @description Default scheduled health-test model; null/empty = skip scheduled tests. */
+                        healthTestModel?: string | null;
+                        /** @description Shared provider defaults for this group (no website/endpoint/timeouts). */
+                        sharedSettings?: {
+                            /** @enum {string|null} */
+                            providerType?: "claude" | "codex" | "gemini" | "openai-compatible" | null;
+                            priority?: number | null;
+                            weight?: number | null;
+                            costMultiplier?: number | null;
+                            preserveClientIp?: boolean | null;
+                            disableSessionReuse?: boolean | null;
+                            proxyUrl?: string | null;
+                            proxyFallbackToDirect?: boolean | null;
+                            maxRetryAttempts?: number | null;
+                            circuitBreakerFailureThreshold?: number | null;
+                            circuitBreakerOpenDuration?: number | null;
+                            circuitBreakerHalfOpenSuccessThreshold?: number | null;
+                            limit5hUsd?: number | null;
+                            limitDailyUsd?: number | null;
+                            limitWeeklyUsd?: number | null;
+                            limitMonthlyUsd?: number | null;
+                            limitTotalUsd?: number | null;
+                            limitConcurrentSessions?: number | null;
+                        } | null;
+                        /** @description Keyword match priority; lower runs first. */
+                        sortOrder?: number;
+                        /** @description Keyword rules for classifying upstream site groups into this pool. */
+                        matchRules?: {
+                            /** @enum {string} */
+                            matchType: "exact" | "prefix" | "suffix" | "contains" | "regex";
+                            pattern: string;
+                        }[] | null;
+                        /** @description Request-model rules for providers in this pool. */
+                        modelMatchRules?: {
+                            /** @enum {string} */
+                            matchType: "exact" | "prefix" | "suffix" | "contains" | "regex";
+                            pattern: string;
+                        }[] | null;
                         /** @description Number of providers using the group. */
                         providerCount?: number;
                         /**
@@ -18087,6 +19576,2569 @@ export interface operations {
                 };
             };
             /** @description Provider group not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        /** @description Stable problem type URI or URN. */
+                        type: string;
+                        /** @description Short problem title. */
+                        title: string;
+                        /** @description HTTP status code. */
+                        status: number;
+                        /** @description Human-readable error detail. */
+                        detail: string;
+                        /** @description Request path that produced the problem. */
+                        instance: string;
+                        /** @description Application error code for frontend i18n. */
+                        errorCode: string;
+                        /** @description Optional i18n parameters. */
+                        errorParams?: {
+                            [key: string]: unknown;
+                        };
+                        /** @description Optional request trace identifier. */
+                        traceId?: string;
+                        /** @description Validation failure details. */
+                        invalidParams?: {
+                            /** @description Path to the invalid input field. */
+                            path: (string | number)[];
+                            /** @description Machine-readable validation error code. */
+                            code: string;
+                            /** @description Validation error message. */
+                            message: string;
+                        }[];
+                    };
+                };
+            };
+        };
+    };
+    postProviderGroupsReorder: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Required only when authenticating with the auth-token cookie on mutation requests. */
+                "X-CCH-CSRF"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description Provider group ids in match priority order (top first). */
+                    orderedIds: number[];
+                };
+            };
+        };
+        responses: {
+            /** @description Reordered provider groups. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @description Provider groups. */
+                        items: {
+                            /** @description Provider group id. */
+                            id: number;
+                            /** @description Provider group name. */
+                            name: string;
+                            /** @description Group cost multiplier. */
+                            costMultiplier: number;
+                            /** @description Optional group description. */
+                            description: string | null;
+                            /** @description Default scheduled health-test model; null/empty = skip scheduled tests. */
+                            healthTestModel?: string | null;
+                            /** @description Shared provider defaults for this group (no website/endpoint/timeouts). */
+                            sharedSettings?: {
+                                /** @enum {string|null} */
+                                providerType?: "claude" | "codex" | "gemini" | "openai-compatible" | null;
+                                priority?: number | null;
+                                weight?: number | null;
+                                costMultiplier?: number | null;
+                                preserveClientIp?: boolean | null;
+                                disableSessionReuse?: boolean | null;
+                                proxyUrl?: string | null;
+                                proxyFallbackToDirect?: boolean | null;
+                                maxRetryAttempts?: number | null;
+                                circuitBreakerFailureThreshold?: number | null;
+                                circuitBreakerOpenDuration?: number | null;
+                                circuitBreakerHalfOpenSuccessThreshold?: number | null;
+                                limit5hUsd?: number | null;
+                                limitDailyUsd?: number | null;
+                                limitWeeklyUsd?: number | null;
+                                limitMonthlyUsd?: number | null;
+                                limitTotalUsd?: number | null;
+                                limitConcurrentSessions?: number | null;
+                            } | null;
+                            /** @description Keyword match priority; lower runs first. */
+                            sortOrder?: number;
+                            /** @description Keyword rules for classifying upstream site groups into this pool. */
+                            matchRules?: {
+                                /** @enum {string} */
+                                matchType: "exact" | "prefix" | "suffix" | "contains" | "regex";
+                                pattern: string;
+                            }[] | null;
+                            /** @description Request-model rules for providers in this pool. */
+                            modelMatchRules?: {
+                                /** @enum {string} */
+                                matchType: "exact" | "prefix" | "suffix" | "contains" | "regex";
+                                pattern: string;
+                            }[] | null;
+                            /** @description Number of providers using the group. */
+                            providerCount?: number;
+                            /**
+                             * Format: date-time
+                             * @description Creation time.
+                             */
+                            createdAt: string;
+                            /**
+                             * Format: date-time
+                             * @description Last update time.
+                             */
+                            updatedAt: string;
+                        }[];
+                    };
+                };
+            };
+            /** @description Invalid request. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        /** @description Stable problem type URI or URN. */
+                        type: string;
+                        /** @description Short problem title. */
+                        title: string;
+                        /** @description HTTP status code. */
+                        status: number;
+                        /** @description Human-readable error detail. */
+                        detail: string;
+                        /** @description Request path that produced the problem. */
+                        instance: string;
+                        /** @description Application error code for frontend i18n. */
+                        errorCode: string;
+                        /** @description Optional i18n parameters. */
+                        errorParams?: {
+                            [key: string]: unknown;
+                        };
+                        /** @description Optional request trace identifier. */
+                        traceId?: string;
+                        /** @description Validation failure details. */
+                        invalidParams?: {
+                            /** @description Path to the invalid input field. */
+                            path: (string | number)[];
+                            /** @description Machine-readable validation error code. */
+                            code: string;
+                            /** @description Validation error message. */
+                            message: string;
+                        }[];
+                    };
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        /** @description Stable problem type URI or URN. */
+                        type: string;
+                        /** @description Short problem title. */
+                        title: string;
+                        /** @description HTTP status code. */
+                        status: number;
+                        /** @description Human-readable error detail. */
+                        detail: string;
+                        /** @description Request path that produced the problem. */
+                        instance: string;
+                        /** @description Application error code for frontend i18n. */
+                        errorCode: string;
+                        /** @description Optional i18n parameters. */
+                        errorParams?: {
+                            [key: string]: unknown;
+                        };
+                        /** @description Optional request trace identifier. */
+                        traceId?: string;
+                        /** @description Validation failure details. */
+                        invalidParams?: {
+                            /** @description Path to the invalid input field. */
+                            path: (string | number)[];
+                            /** @description Machine-readable validation error code. */
+                            code: string;
+                            /** @description Validation error message. */
+                            message: string;
+                        }[];
+                    };
+                };
+            };
+            /** @description Admin access required. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        /** @description Stable problem type URI or URN. */
+                        type: string;
+                        /** @description Short problem title. */
+                        title: string;
+                        /** @description HTTP status code. */
+                        status: number;
+                        /** @description Human-readable error detail. */
+                        detail: string;
+                        /** @description Request path that produced the problem. */
+                        instance: string;
+                        /** @description Application error code for frontend i18n. */
+                        errorCode: string;
+                        /** @description Optional i18n parameters. */
+                        errorParams?: {
+                            [key: string]: unknown;
+                        };
+                        /** @description Optional request trace identifier. */
+                        traceId?: string;
+                        /** @description Validation failure details. */
+                        invalidParams?: {
+                            /** @description Path to the invalid input field. */
+                            path: (string | number)[];
+                            /** @description Machine-readable validation error code. */
+                            code: string;
+                            /** @description Validation error message. */
+                            message: string;
+                        }[];
+                    };
+                };
+            };
+            /** @description Provider group not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        /** @description Stable problem type URI or URN. */
+                        type: string;
+                        /** @description Short problem title. */
+                        title: string;
+                        /** @description HTTP status code. */
+                        status: number;
+                        /** @description Human-readable error detail. */
+                        detail: string;
+                        /** @description Request path that produced the problem. */
+                        instance: string;
+                        /** @description Application error code for frontend i18n. */
+                        errorCode: string;
+                        /** @description Optional i18n parameters. */
+                        errorParams?: {
+                            [key: string]: unknown;
+                        };
+                        /** @description Optional request trace identifier. */
+                        traceId?: string;
+                        /** @description Validation failure details. */
+                        invalidParams?: {
+                            /** @description Path to the invalid input field. */
+                            path: (string | number)[];
+                            /** @description Machine-readable validation error code. */
+                            code: string;
+                            /** @description Validation error message. */
+                            message: string;
+                        }[];
+                    };
+                };
+            };
+        };
+    };
+    getProviderSites: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Provider sites. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @description Provider sites. */
+                        items: {
+                            /** @description Provider site id. */
+                            id: number;
+                            /** @description Display name for the upstream website. */
+                            name: string;
+                            /**
+                             * Format: uri
+                             * @description Website base URL.
+                             */
+                            siteUrl: string;
+                            /** @description Site type: sub2api | newapi | custom. */
+                            siteType: string;
+                            /** @description Optional vendor id. */
+                            providerVendorId: number | null;
+                            /** @description Optional notes. */
+                            notes: string | null;
+                            /** @description Whether the site is enabled. */
+                            isEnabled: boolean;
+                            /** @description Manual display order (lower first). */
+                            sortOrder?: number;
+                            /** @description Optional Upstream Hub channel id. */
+                            upstreamHubChannelId: number | null;
+                            /** @description Upstream login username/email. */
+                            username?: string | null;
+                            /** @description Whether a password is stored. */
+                            hasPassword?: boolean;
+                            /** @description Whether Turnstile captcha is required. */
+                            turnstileEnabled?: boolean;
+                            /** @description Captcha selection: none | global | yescaptcha | capsolver | 2captcha | anticaptcha. */
+                            captchaProvider?: string;
+                            /** @description Whether captcha API key is stored. */
+                            hasCaptchaApiKey?: boolean;
+                            /** @description Optional captcha API endpoint override. */
+                            captchaEndpoint?: string | null;
+                            /** @description Last known upstream balance. */
+                            lastBalance?: number | null;
+                            /**
+                             * Format: date-time
+                             * @description Last balance sample time.
+                             */
+                            lastBalanceAt?: string | null;
+                            /** @description Upstream today cost if available. */
+                            todayCost?: number | null;
+                            /** @description Upstream total cost if available. */
+                            totalCost?: number | null;
+                            /** @description Last sync error message. */
+                            lastSyncError?: string | null;
+                            /**
+                             * Format: date-time
+                             * @description Last sync attempt time.
+                             */
+                            lastSyncAt?: string | null;
+                            /**
+                             * Format: date-time
+                             * @description Last rate sync time.
+                             */
+                            lastRateSyncedAt: string | null;
+                            /**
+                             * Format: date-time
+                             * @description Last cost sync time.
+                             */
+                            lastCostSyncedAt: string | null;
+                            /**
+                             * Format: date-time
+                             * @description Creation time.
+                             */
+                            createdAt: string;
+                            /**
+                             * Format: date-time
+                             * @description Last update time.
+                             */
+                            updatedAt: string;
+                            /** @description Upstream group rates under this site. */
+                            groupRates?: {
+                                /** @description Site group rate id. */
+                                id: number;
+                                /** @description Parent provider site id. */
+                                siteId: number;
+                                /** @description Upstream website group name. */
+                                groupName: string;
+                                /** @description Optional group description. */
+                                description: string | null;
+                                /** @description Upstream group ratio / rate multiplier. */
+                                ratio: number;
+                                /** @description Optional completion/output ratio; 0 or null means unused. */
+                                completionRatio: number | null;
+                                /** @description CCH dispatch pool tag after classification. */
+                                dispatchGroupTag: string | null;
+                                /**
+                                 * Format: date-time
+                                 * @description Last seen / synced time.
+                                 */
+                                lastSeenAt: string;
+                                /**
+                                 * Format: date-time
+                                 * @description Creation time.
+                                 */
+                                createdAt: string;
+                                /**
+                                 * Format: date-time
+                                 * @description Last update time.
+                                 */
+                                updatedAt: string;
+                            }[];
+                            /** @description Number of providers attached to this site. */
+                            providerCount?: number;
+                            /** @description Number of enabled providers attached to this site. */
+                            enabledProviderCount?: number;
+                        }[];
+                    };
+                };
+            };
+            /** @description Invalid request. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        /** @description Stable problem type URI or URN. */
+                        type: string;
+                        /** @description Short problem title. */
+                        title: string;
+                        /** @description HTTP status code. */
+                        status: number;
+                        /** @description Human-readable error detail. */
+                        detail: string;
+                        /** @description Request path that produced the problem. */
+                        instance: string;
+                        /** @description Application error code for frontend i18n. */
+                        errorCode: string;
+                        /** @description Optional i18n parameters. */
+                        errorParams?: {
+                            [key: string]: unknown;
+                        };
+                        /** @description Optional request trace identifier. */
+                        traceId?: string;
+                        /** @description Validation failure details. */
+                        invalidParams?: {
+                            /** @description Path to the invalid input field. */
+                            path: (string | number)[];
+                            /** @description Machine-readable validation error code. */
+                            code: string;
+                            /** @description Validation error message. */
+                            message: string;
+                        }[];
+                    };
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        /** @description Stable problem type URI or URN. */
+                        type: string;
+                        /** @description Short problem title. */
+                        title: string;
+                        /** @description HTTP status code. */
+                        status: number;
+                        /** @description Human-readable error detail. */
+                        detail: string;
+                        /** @description Request path that produced the problem. */
+                        instance: string;
+                        /** @description Application error code for frontend i18n. */
+                        errorCode: string;
+                        /** @description Optional i18n parameters. */
+                        errorParams?: {
+                            [key: string]: unknown;
+                        };
+                        /** @description Optional request trace identifier. */
+                        traceId?: string;
+                        /** @description Validation failure details. */
+                        invalidParams?: {
+                            /** @description Path to the invalid input field. */
+                            path: (string | number)[];
+                            /** @description Machine-readable validation error code. */
+                            code: string;
+                            /** @description Validation error message. */
+                            message: string;
+                        }[];
+                    };
+                };
+            };
+            /** @description Admin access required. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        /** @description Stable problem type URI or URN. */
+                        type: string;
+                        /** @description Short problem title. */
+                        title: string;
+                        /** @description HTTP status code. */
+                        status: number;
+                        /** @description Human-readable error detail. */
+                        detail: string;
+                        /** @description Request path that produced the problem. */
+                        instance: string;
+                        /** @description Application error code for frontend i18n. */
+                        errorCode: string;
+                        /** @description Optional i18n parameters. */
+                        errorParams?: {
+                            [key: string]: unknown;
+                        };
+                        /** @description Optional request trace identifier. */
+                        traceId?: string;
+                        /** @description Validation failure details. */
+                        invalidParams?: {
+                            /** @description Path to the invalid input field. */
+                            path: (string | number)[];
+                            /** @description Machine-readable validation error code. */
+                            code: string;
+                            /** @description Validation error message. */
+                            message: string;
+                        }[];
+                    };
+                };
+            };
+            /** @description Provider site not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        /** @description Stable problem type URI or URN. */
+                        type: string;
+                        /** @description Short problem title. */
+                        title: string;
+                        /** @description HTTP status code. */
+                        status: number;
+                        /** @description Human-readable error detail. */
+                        detail: string;
+                        /** @description Request path that produced the problem. */
+                        instance: string;
+                        /** @description Application error code for frontend i18n. */
+                        errorCode: string;
+                        /** @description Optional i18n parameters. */
+                        errorParams?: {
+                            [key: string]: unknown;
+                        };
+                        /** @description Optional request trace identifier. */
+                        traceId?: string;
+                        /** @description Validation failure details. */
+                        invalidParams?: {
+                            /** @description Path to the invalid input field. */
+                            path: (string | number)[];
+                            /** @description Machine-readable validation error code. */
+                            code: string;
+                            /** @description Validation error message. */
+                            message: string;
+                        }[];
+                    };
+                };
+            };
+        };
+    };
+    postProviderSites: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Required only when authenticating with the auth-token cookie on mutation requests. */
+                "X-CCH-CSRF"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description Site display name. */
+                    name: string;
+                    /**
+                     * Format: uri
+                     * @description Website base URL.
+                     */
+                    siteUrl: string;
+                    /**
+                     * @description Site type.
+                     * @enum {string}
+                     */
+                    siteType?: "sub2api" | "newapi" | "custom";
+                    providerVendorId?: number | null;
+                    notes?: string | null;
+                    isEnabled?: boolean;
+                    sortOrder?: number;
+                    upstreamHubChannelId?: number | null;
+                    username?: string | null;
+                    password?: string | null;
+                    turnstileEnabled?: boolean;
+                    /** @enum {string} */
+                    captchaProvider?: "none" | "global" | "yescaptcha" | "capsolver" | "2captcha" | "anticaptcha";
+                    captchaApiKey?: string | null;
+                    captchaEndpoint?: string | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Created provider site. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @description Provider site id. */
+                        id: number;
+                        /** @description Display name for the upstream website. */
+                        name: string;
+                        /**
+                         * Format: uri
+                         * @description Website base URL.
+                         */
+                        siteUrl: string;
+                        /** @description Site type: sub2api | newapi | custom. */
+                        siteType: string;
+                        /** @description Optional vendor id. */
+                        providerVendorId: number | null;
+                        /** @description Optional notes. */
+                        notes: string | null;
+                        /** @description Whether the site is enabled. */
+                        isEnabled: boolean;
+                        /** @description Manual display order (lower first). */
+                        sortOrder?: number;
+                        /** @description Optional Upstream Hub channel id. */
+                        upstreamHubChannelId: number | null;
+                        /** @description Upstream login username/email. */
+                        username?: string | null;
+                        /** @description Whether a password is stored. */
+                        hasPassword?: boolean;
+                        /** @description Whether Turnstile captcha is required. */
+                        turnstileEnabled?: boolean;
+                        /** @description Captcha selection: none | global | yescaptcha | capsolver | 2captcha | anticaptcha. */
+                        captchaProvider?: string;
+                        /** @description Whether captcha API key is stored. */
+                        hasCaptchaApiKey?: boolean;
+                        /** @description Optional captcha API endpoint override. */
+                        captchaEndpoint?: string | null;
+                        /** @description Last known upstream balance. */
+                        lastBalance?: number | null;
+                        /**
+                         * Format: date-time
+                         * @description Last balance sample time.
+                         */
+                        lastBalanceAt?: string | null;
+                        /** @description Upstream today cost if available. */
+                        todayCost?: number | null;
+                        /** @description Upstream total cost if available. */
+                        totalCost?: number | null;
+                        /** @description Last sync error message. */
+                        lastSyncError?: string | null;
+                        /**
+                         * Format: date-time
+                         * @description Last sync attempt time.
+                         */
+                        lastSyncAt?: string | null;
+                        /**
+                         * Format: date-time
+                         * @description Last rate sync time.
+                         */
+                        lastRateSyncedAt: string | null;
+                        /**
+                         * Format: date-time
+                         * @description Last cost sync time.
+                         */
+                        lastCostSyncedAt: string | null;
+                        /**
+                         * Format: date-time
+                         * @description Creation time.
+                         */
+                        createdAt: string;
+                        /**
+                         * Format: date-time
+                         * @description Last update time.
+                         */
+                        updatedAt: string;
+                        /** @description Upstream group rates under this site. */
+                        groupRates?: {
+                            /** @description Site group rate id. */
+                            id: number;
+                            /** @description Parent provider site id. */
+                            siteId: number;
+                            /** @description Upstream website group name. */
+                            groupName: string;
+                            /** @description Optional group description. */
+                            description: string | null;
+                            /** @description Upstream group ratio / rate multiplier. */
+                            ratio: number;
+                            /** @description Optional completion/output ratio; 0 or null means unused. */
+                            completionRatio: number | null;
+                            /** @description CCH dispatch pool tag after classification. */
+                            dispatchGroupTag: string | null;
+                            /**
+                             * Format: date-time
+                             * @description Last seen / synced time.
+                             */
+                            lastSeenAt: string;
+                            /**
+                             * Format: date-time
+                             * @description Creation time.
+                             */
+                            createdAt: string;
+                            /**
+                             * Format: date-time
+                             * @description Last update time.
+                             */
+                            updatedAt: string;
+                        }[];
+                        /** @description Number of providers attached to this site. */
+                        providerCount?: number;
+                        /** @description Number of enabled providers attached to this site. */
+                        enabledProviderCount?: number;
+                    };
+                };
+            };
+            /** @description Invalid request. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        /** @description Stable problem type URI or URN. */
+                        type: string;
+                        /** @description Short problem title. */
+                        title: string;
+                        /** @description HTTP status code. */
+                        status: number;
+                        /** @description Human-readable error detail. */
+                        detail: string;
+                        /** @description Request path that produced the problem. */
+                        instance: string;
+                        /** @description Application error code for frontend i18n. */
+                        errorCode: string;
+                        /** @description Optional i18n parameters. */
+                        errorParams?: {
+                            [key: string]: unknown;
+                        };
+                        /** @description Optional request trace identifier. */
+                        traceId?: string;
+                        /** @description Validation failure details. */
+                        invalidParams?: {
+                            /** @description Path to the invalid input field. */
+                            path: (string | number)[];
+                            /** @description Machine-readable validation error code. */
+                            code: string;
+                            /** @description Validation error message. */
+                            message: string;
+                        }[];
+                    };
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        /** @description Stable problem type URI or URN. */
+                        type: string;
+                        /** @description Short problem title. */
+                        title: string;
+                        /** @description HTTP status code. */
+                        status: number;
+                        /** @description Human-readable error detail. */
+                        detail: string;
+                        /** @description Request path that produced the problem. */
+                        instance: string;
+                        /** @description Application error code for frontend i18n. */
+                        errorCode: string;
+                        /** @description Optional i18n parameters. */
+                        errorParams?: {
+                            [key: string]: unknown;
+                        };
+                        /** @description Optional request trace identifier. */
+                        traceId?: string;
+                        /** @description Validation failure details. */
+                        invalidParams?: {
+                            /** @description Path to the invalid input field. */
+                            path: (string | number)[];
+                            /** @description Machine-readable validation error code. */
+                            code: string;
+                            /** @description Validation error message. */
+                            message: string;
+                        }[];
+                    };
+                };
+            };
+            /** @description Admin access required. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        /** @description Stable problem type URI or URN. */
+                        type: string;
+                        /** @description Short problem title. */
+                        title: string;
+                        /** @description HTTP status code. */
+                        status: number;
+                        /** @description Human-readable error detail. */
+                        detail: string;
+                        /** @description Request path that produced the problem. */
+                        instance: string;
+                        /** @description Application error code for frontend i18n. */
+                        errorCode: string;
+                        /** @description Optional i18n parameters. */
+                        errorParams?: {
+                            [key: string]: unknown;
+                        };
+                        /** @description Optional request trace identifier. */
+                        traceId?: string;
+                        /** @description Validation failure details. */
+                        invalidParams?: {
+                            /** @description Path to the invalid input field. */
+                            path: (string | number)[];
+                            /** @description Machine-readable validation error code. */
+                            code: string;
+                            /** @description Validation error message. */
+                            message: string;
+                        }[];
+                    };
+                };
+            };
+            /** @description Provider site not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        /** @description Stable problem type URI or URN. */
+                        type: string;
+                        /** @description Short problem title. */
+                        title: string;
+                        /** @description HTTP status code. */
+                        status: number;
+                        /** @description Human-readable error detail. */
+                        detail: string;
+                        /** @description Request path that produced the problem. */
+                        instance: string;
+                        /** @description Application error code for frontend i18n. */
+                        errorCode: string;
+                        /** @description Optional i18n parameters. */
+                        errorParams?: {
+                            [key: string]: unknown;
+                        };
+                        /** @description Optional request trace identifier. */
+                        traceId?: string;
+                        /** @description Validation failure details. */
+                        invalidParams?: {
+                            /** @description Path to the invalid input field. */
+                            path: (string | number)[];
+                            /** @description Machine-readable validation error code. */
+                            code: string;
+                            /** @description Validation error message. */
+                            message: string;
+                        }[];
+                    };
+                };
+            };
+        };
+    };
+    deleteProviderSitesById: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Required only when authenticating with the auth-token cookie on mutation requests. */
+                "X-CCH-CSRF"?: string;
+            };
+            path: {
+                /** @description Provider site id. */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Provider site deleted. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid request. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        /** @description Stable problem type URI or URN. */
+                        type: string;
+                        /** @description Short problem title. */
+                        title: string;
+                        /** @description HTTP status code. */
+                        status: number;
+                        /** @description Human-readable error detail. */
+                        detail: string;
+                        /** @description Request path that produced the problem. */
+                        instance: string;
+                        /** @description Application error code for frontend i18n. */
+                        errorCode: string;
+                        /** @description Optional i18n parameters. */
+                        errorParams?: {
+                            [key: string]: unknown;
+                        };
+                        /** @description Optional request trace identifier. */
+                        traceId?: string;
+                        /** @description Validation failure details. */
+                        invalidParams?: {
+                            /** @description Path to the invalid input field. */
+                            path: (string | number)[];
+                            /** @description Machine-readable validation error code. */
+                            code: string;
+                            /** @description Validation error message. */
+                            message: string;
+                        }[];
+                    };
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        /** @description Stable problem type URI or URN. */
+                        type: string;
+                        /** @description Short problem title. */
+                        title: string;
+                        /** @description HTTP status code. */
+                        status: number;
+                        /** @description Human-readable error detail. */
+                        detail: string;
+                        /** @description Request path that produced the problem. */
+                        instance: string;
+                        /** @description Application error code for frontend i18n. */
+                        errorCode: string;
+                        /** @description Optional i18n parameters. */
+                        errorParams?: {
+                            [key: string]: unknown;
+                        };
+                        /** @description Optional request trace identifier. */
+                        traceId?: string;
+                        /** @description Validation failure details. */
+                        invalidParams?: {
+                            /** @description Path to the invalid input field. */
+                            path: (string | number)[];
+                            /** @description Machine-readable validation error code. */
+                            code: string;
+                            /** @description Validation error message. */
+                            message: string;
+                        }[];
+                    };
+                };
+            };
+            /** @description Admin access required. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        /** @description Stable problem type URI or URN. */
+                        type: string;
+                        /** @description Short problem title. */
+                        title: string;
+                        /** @description HTTP status code. */
+                        status: number;
+                        /** @description Human-readable error detail. */
+                        detail: string;
+                        /** @description Request path that produced the problem. */
+                        instance: string;
+                        /** @description Application error code for frontend i18n. */
+                        errorCode: string;
+                        /** @description Optional i18n parameters. */
+                        errorParams?: {
+                            [key: string]: unknown;
+                        };
+                        /** @description Optional request trace identifier. */
+                        traceId?: string;
+                        /** @description Validation failure details. */
+                        invalidParams?: {
+                            /** @description Path to the invalid input field. */
+                            path: (string | number)[];
+                            /** @description Machine-readable validation error code. */
+                            code: string;
+                            /** @description Validation error message. */
+                            message: string;
+                        }[];
+                    };
+                };
+            };
+            /** @description Provider site not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        /** @description Stable problem type URI or URN. */
+                        type: string;
+                        /** @description Short problem title. */
+                        title: string;
+                        /** @description HTTP status code. */
+                        status: number;
+                        /** @description Human-readable error detail. */
+                        detail: string;
+                        /** @description Request path that produced the problem. */
+                        instance: string;
+                        /** @description Application error code for frontend i18n. */
+                        errorCode: string;
+                        /** @description Optional i18n parameters. */
+                        errorParams?: {
+                            [key: string]: unknown;
+                        };
+                        /** @description Optional request trace identifier. */
+                        traceId?: string;
+                        /** @description Validation failure details. */
+                        invalidParams?: {
+                            /** @description Path to the invalid input field. */
+                            path: (string | number)[];
+                            /** @description Machine-readable validation error code. */
+                            code: string;
+                            /** @description Validation error message. */
+                            message: string;
+                        }[];
+                    };
+                };
+            };
+        };
+    };
+    patchProviderSitesById: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Required only when authenticating with the auth-token cookie on mutation requests. */
+                "X-CCH-CSRF"?: string;
+            };
+            path: {
+                /** @description Provider site id. */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    name?: string;
+                    /** Format: uri */
+                    siteUrl?: string;
+                    /** @enum {string} */
+                    siteType?: "sub2api" | "newapi" | "custom";
+                    providerVendorId?: number | null;
+                    notes?: string | null;
+                    isEnabled?: boolean;
+                    sortOrder?: number;
+                    upstreamHubChannelId?: number | null;
+                    username?: string | null;
+                    password?: string | null;
+                    turnstileEnabled?: boolean;
+                    /** @enum {string} */
+                    captchaProvider?: "none" | "global" | "yescaptcha" | "capsolver" | "2captcha" | "anticaptcha";
+                    captchaApiKey?: string | null;
+                    captchaEndpoint?: string | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Updated provider site. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @description Provider site id. */
+                        id: number;
+                        /** @description Display name for the upstream website. */
+                        name: string;
+                        /**
+                         * Format: uri
+                         * @description Website base URL.
+                         */
+                        siteUrl: string;
+                        /** @description Site type: sub2api | newapi | custom. */
+                        siteType: string;
+                        /** @description Optional vendor id. */
+                        providerVendorId: number | null;
+                        /** @description Optional notes. */
+                        notes: string | null;
+                        /** @description Whether the site is enabled. */
+                        isEnabled: boolean;
+                        /** @description Manual display order (lower first). */
+                        sortOrder?: number;
+                        /** @description Optional Upstream Hub channel id. */
+                        upstreamHubChannelId: number | null;
+                        /** @description Upstream login username/email. */
+                        username?: string | null;
+                        /** @description Whether a password is stored. */
+                        hasPassword?: boolean;
+                        /** @description Whether Turnstile captcha is required. */
+                        turnstileEnabled?: boolean;
+                        /** @description Captcha selection: none | global | yescaptcha | capsolver | 2captcha | anticaptcha. */
+                        captchaProvider?: string;
+                        /** @description Whether captcha API key is stored. */
+                        hasCaptchaApiKey?: boolean;
+                        /** @description Optional captcha API endpoint override. */
+                        captchaEndpoint?: string | null;
+                        /** @description Last known upstream balance. */
+                        lastBalance?: number | null;
+                        /**
+                         * Format: date-time
+                         * @description Last balance sample time.
+                         */
+                        lastBalanceAt?: string | null;
+                        /** @description Upstream today cost if available. */
+                        todayCost?: number | null;
+                        /** @description Upstream total cost if available. */
+                        totalCost?: number | null;
+                        /** @description Last sync error message. */
+                        lastSyncError?: string | null;
+                        /**
+                         * Format: date-time
+                         * @description Last sync attempt time.
+                         */
+                        lastSyncAt?: string | null;
+                        /**
+                         * Format: date-time
+                         * @description Last rate sync time.
+                         */
+                        lastRateSyncedAt: string | null;
+                        /**
+                         * Format: date-time
+                         * @description Last cost sync time.
+                         */
+                        lastCostSyncedAt: string | null;
+                        /**
+                         * Format: date-time
+                         * @description Creation time.
+                         */
+                        createdAt: string;
+                        /**
+                         * Format: date-time
+                         * @description Last update time.
+                         */
+                        updatedAt: string;
+                        /** @description Upstream group rates under this site. */
+                        groupRates?: {
+                            /** @description Site group rate id. */
+                            id: number;
+                            /** @description Parent provider site id. */
+                            siteId: number;
+                            /** @description Upstream website group name. */
+                            groupName: string;
+                            /** @description Optional group description. */
+                            description: string | null;
+                            /** @description Upstream group ratio / rate multiplier. */
+                            ratio: number;
+                            /** @description Optional completion/output ratio; 0 or null means unused. */
+                            completionRatio: number | null;
+                            /** @description CCH dispatch pool tag after classification. */
+                            dispatchGroupTag: string | null;
+                            /**
+                             * Format: date-time
+                             * @description Last seen / synced time.
+                             */
+                            lastSeenAt: string;
+                            /**
+                             * Format: date-time
+                             * @description Creation time.
+                             */
+                            createdAt: string;
+                            /**
+                             * Format: date-time
+                             * @description Last update time.
+                             */
+                            updatedAt: string;
+                        }[];
+                        /** @description Number of providers attached to this site. */
+                        providerCount?: number;
+                        /** @description Number of enabled providers attached to this site. */
+                        enabledProviderCount?: number;
+                    };
+                };
+            };
+            /** @description Invalid request. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        /** @description Stable problem type URI or URN. */
+                        type: string;
+                        /** @description Short problem title. */
+                        title: string;
+                        /** @description HTTP status code. */
+                        status: number;
+                        /** @description Human-readable error detail. */
+                        detail: string;
+                        /** @description Request path that produced the problem. */
+                        instance: string;
+                        /** @description Application error code for frontend i18n. */
+                        errorCode: string;
+                        /** @description Optional i18n parameters. */
+                        errorParams?: {
+                            [key: string]: unknown;
+                        };
+                        /** @description Optional request trace identifier. */
+                        traceId?: string;
+                        /** @description Validation failure details. */
+                        invalidParams?: {
+                            /** @description Path to the invalid input field. */
+                            path: (string | number)[];
+                            /** @description Machine-readable validation error code. */
+                            code: string;
+                            /** @description Validation error message. */
+                            message: string;
+                        }[];
+                    };
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        /** @description Stable problem type URI or URN. */
+                        type: string;
+                        /** @description Short problem title. */
+                        title: string;
+                        /** @description HTTP status code. */
+                        status: number;
+                        /** @description Human-readable error detail. */
+                        detail: string;
+                        /** @description Request path that produced the problem. */
+                        instance: string;
+                        /** @description Application error code for frontend i18n. */
+                        errorCode: string;
+                        /** @description Optional i18n parameters. */
+                        errorParams?: {
+                            [key: string]: unknown;
+                        };
+                        /** @description Optional request trace identifier. */
+                        traceId?: string;
+                        /** @description Validation failure details. */
+                        invalidParams?: {
+                            /** @description Path to the invalid input field. */
+                            path: (string | number)[];
+                            /** @description Machine-readable validation error code. */
+                            code: string;
+                            /** @description Validation error message. */
+                            message: string;
+                        }[];
+                    };
+                };
+            };
+            /** @description Admin access required. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        /** @description Stable problem type URI or URN. */
+                        type: string;
+                        /** @description Short problem title. */
+                        title: string;
+                        /** @description HTTP status code. */
+                        status: number;
+                        /** @description Human-readable error detail. */
+                        detail: string;
+                        /** @description Request path that produced the problem. */
+                        instance: string;
+                        /** @description Application error code for frontend i18n. */
+                        errorCode: string;
+                        /** @description Optional i18n parameters. */
+                        errorParams?: {
+                            [key: string]: unknown;
+                        };
+                        /** @description Optional request trace identifier. */
+                        traceId?: string;
+                        /** @description Validation failure details. */
+                        invalidParams?: {
+                            /** @description Path to the invalid input field. */
+                            path: (string | number)[];
+                            /** @description Machine-readable validation error code. */
+                            code: string;
+                            /** @description Validation error message. */
+                            message: string;
+                        }[];
+                    };
+                };
+            };
+            /** @description Provider site not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        /** @description Stable problem type URI or URN. */
+                        type: string;
+                        /** @description Short problem title. */
+                        title: string;
+                        /** @description HTTP status code. */
+                        status: number;
+                        /** @description Human-readable error detail. */
+                        detail: string;
+                        /** @description Request path that produced the problem. */
+                        instance: string;
+                        /** @description Application error code for frontend i18n. */
+                        errorCode: string;
+                        /** @description Optional i18n parameters. */
+                        errorParams?: {
+                            [key: string]: unknown;
+                        };
+                        /** @description Optional request trace identifier. */
+                        traceId?: string;
+                        /** @description Validation failure details. */
+                        invalidParams?: {
+                            /** @description Path to the invalid input field. */
+                            path: (string | number)[];
+                            /** @description Machine-readable validation error code. */
+                            code: string;
+                            /** @description Validation error message. */
+                            message: string;
+                        }[];
+                    };
+                };
+            };
+        };
+    };
+    postProviderSitesReorder: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Required only when authenticating with the auth-token cookie on mutation requests. */
+                "X-CCH-CSRF"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description Site ids in display order. */
+                    orderedIds: number[];
+                };
+            };
+        };
+        responses: {
+            /** @description Reordered provider sites. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @description Provider sites. */
+                        items: {
+                            /** @description Provider site id. */
+                            id: number;
+                            /** @description Display name for the upstream website. */
+                            name: string;
+                            /**
+                             * Format: uri
+                             * @description Website base URL.
+                             */
+                            siteUrl: string;
+                            /** @description Site type: sub2api | newapi | custom. */
+                            siteType: string;
+                            /** @description Optional vendor id. */
+                            providerVendorId: number | null;
+                            /** @description Optional notes. */
+                            notes: string | null;
+                            /** @description Whether the site is enabled. */
+                            isEnabled: boolean;
+                            /** @description Manual display order (lower first). */
+                            sortOrder?: number;
+                            /** @description Optional Upstream Hub channel id. */
+                            upstreamHubChannelId: number | null;
+                            /** @description Upstream login username/email. */
+                            username?: string | null;
+                            /** @description Whether a password is stored. */
+                            hasPassword?: boolean;
+                            /** @description Whether Turnstile captcha is required. */
+                            turnstileEnabled?: boolean;
+                            /** @description Captcha selection: none | global | yescaptcha | capsolver | 2captcha | anticaptcha. */
+                            captchaProvider?: string;
+                            /** @description Whether captcha API key is stored. */
+                            hasCaptchaApiKey?: boolean;
+                            /** @description Optional captcha API endpoint override. */
+                            captchaEndpoint?: string | null;
+                            /** @description Last known upstream balance. */
+                            lastBalance?: number | null;
+                            /**
+                             * Format: date-time
+                             * @description Last balance sample time.
+                             */
+                            lastBalanceAt?: string | null;
+                            /** @description Upstream today cost if available. */
+                            todayCost?: number | null;
+                            /** @description Upstream total cost if available. */
+                            totalCost?: number | null;
+                            /** @description Last sync error message. */
+                            lastSyncError?: string | null;
+                            /**
+                             * Format: date-time
+                             * @description Last sync attempt time.
+                             */
+                            lastSyncAt?: string | null;
+                            /**
+                             * Format: date-time
+                             * @description Last rate sync time.
+                             */
+                            lastRateSyncedAt: string | null;
+                            /**
+                             * Format: date-time
+                             * @description Last cost sync time.
+                             */
+                            lastCostSyncedAt: string | null;
+                            /**
+                             * Format: date-time
+                             * @description Creation time.
+                             */
+                            createdAt: string;
+                            /**
+                             * Format: date-time
+                             * @description Last update time.
+                             */
+                            updatedAt: string;
+                            /** @description Upstream group rates under this site. */
+                            groupRates?: {
+                                /** @description Site group rate id. */
+                                id: number;
+                                /** @description Parent provider site id. */
+                                siteId: number;
+                                /** @description Upstream website group name. */
+                                groupName: string;
+                                /** @description Optional group description. */
+                                description: string | null;
+                                /** @description Upstream group ratio / rate multiplier. */
+                                ratio: number;
+                                /** @description Optional completion/output ratio; 0 or null means unused. */
+                                completionRatio: number | null;
+                                /** @description CCH dispatch pool tag after classification. */
+                                dispatchGroupTag: string | null;
+                                /**
+                                 * Format: date-time
+                                 * @description Last seen / synced time.
+                                 */
+                                lastSeenAt: string;
+                                /**
+                                 * Format: date-time
+                                 * @description Creation time.
+                                 */
+                                createdAt: string;
+                                /**
+                                 * Format: date-time
+                                 * @description Last update time.
+                                 */
+                                updatedAt: string;
+                            }[];
+                            /** @description Number of providers attached to this site. */
+                            providerCount?: number;
+                            /** @description Number of enabled providers attached to this site. */
+                            enabledProviderCount?: number;
+                        }[];
+                    };
+                };
+            };
+            /** @description Invalid request. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        /** @description Stable problem type URI or URN. */
+                        type: string;
+                        /** @description Short problem title. */
+                        title: string;
+                        /** @description HTTP status code. */
+                        status: number;
+                        /** @description Human-readable error detail. */
+                        detail: string;
+                        /** @description Request path that produced the problem. */
+                        instance: string;
+                        /** @description Application error code for frontend i18n. */
+                        errorCode: string;
+                        /** @description Optional i18n parameters. */
+                        errorParams?: {
+                            [key: string]: unknown;
+                        };
+                        /** @description Optional request trace identifier. */
+                        traceId?: string;
+                        /** @description Validation failure details. */
+                        invalidParams?: {
+                            /** @description Path to the invalid input field. */
+                            path: (string | number)[];
+                            /** @description Machine-readable validation error code. */
+                            code: string;
+                            /** @description Validation error message. */
+                            message: string;
+                        }[];
+                    };
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        /** @description Stable problem type URI or URN. */
+                        type: string;
+                        /** @description Short problem title. */
+                        title: string;
+                        /** @description HTTP status code. */
+                        status: number;
+                        /** @description Human-readable error detail. */
+                        detail: string;
+                        /** @description Request path that produced the problem. */
+                        instance: string;
+                        /** @description Application error code for frontend i18n. */
+                        errorCode: string;
+                        /** @description Optional i18n parameters. */
+                        errorParams?: {
+                            [key: string]: unknown;
+                        };
+                        /** @description Optional request trace identifier. */
+                        traceId?: string;
+                        /** @description Validation failure details. */
+                        invalidParams?: {
+                            /** @description Path to the invalid input field. */
+                            path: (string | number)[];
+                            /** @description Machine-readable validation error code. */
+                            code: string;
+                            /** @description Validation error message. */
+                            message: string;
+                        }[];
+                    };
+                };
+            };
+            /** @description Admin access required. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        /** @description Stable problem type URI or URN. */
+                        type: string;
+                        /** @description Short problem title. */
+                        title: string;
+                        /** @description HTTP status code. */
+                        status: number;
+                        /** @description Human-readable error detail. */
+                        detail: string;
+                        /** @description Request path that produced the problem. */
+                        instance: string;
+                        /** @description Application error code for frontend i18n. */
+                        errorCode: string;
+                        /** @description Optional i18n parameters. */
+                        errorParams?: {
+                            [key: string]: unknown;
+                        };
+                        /** @description Optional request trace identifier. */
+                        traceId?: string;
+                        /** @description Validation failure details. */
+                        invalidParams?: {
+                            /** @description Path to the invalid input field. */
+                            path: (string | number)[];
+                            /** @description Machine-readable validation error code. */
+                            code: string;
+                            /** @description Validation error message. */
+                            message: string;
+                        }[];
+                    };
+                };
+            };
+            /** @description Provider site not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        /** @description Stable problem type URI or URN. */
+                        type: string;
+                        /** @description Short problem title. */
+                        title: string;
+                        /** @description HTTP status code. */
+                        status: number;
+                        /** @description Human-readable error detail. */
+                        detail: string;
+                        /** @description Request path that produced the problem. */
+                        instance: string;
+                        /** @description Application error code for frontend i18n. */
+                        errorCode: string;
+                        /** @description Optional i18n parameters. */
+                        errorParams?: {
+                            [key: string]: unknown;
+                        };
+                        /** @description Optional request trace identifier. */
+                        traceId?: string;
+                        /** @description Validation failure details. */
+                        invalidParams?: {
+                            /** @description Path to the invalid input field. */
+                            path: (string | number)[];
+                            /** @description Machine-readable validation error code. */
+                            code: string;
+                            /** @description Validation error message. */
+                            message: string;
+                        }[];
+                    };
+                };
+            };
+        };
+    };
+    putProviderSitesByIdGroupRates: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Required only when authenticating with the auth-token cookie on mutation requests. */
+                "X-CCH-CSRF"?: string;
+            };
+            path: {
+                /** @description Provider site id. */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description Upstream group name. */
+                    groupName: string;
+                    description?: string | null;
+                    /** @description Group ratio / multiplier. */
+                    ratio?: number;
+                    completionRatio?: number | null;
+                    dispatchGroupTag?: string | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Upserted group rate. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @description Site group rate id. */
+                        id: number;
+                        /** @description Parent provider site id. */
+                        siteId: number;
+                        /** @description Upstream website group name. */
+                        groupName: string;
+                        /** @description Optional group description. */
+                        description: string | null;
+                        /** @description Upstream group ratio / rate multiplier. */
+                        ratio: number;
+                        /** @description Optional completion/output ratio; 0 or null means unused. */
+                        completionRatio: number | null;
+                        /** @description CCH dispatch pool tag after classification. */
+                        dispatchGroupTag: string | null;
+                        /**
+                         * Format: date-time
+                         * @description Last seen / synced time.
+                         */
+                        lastSeenAt: string;
+                        /**
+                         * Format: date-time
+                         * @description Creation time.
+                         */
+                        createdAt: string;
+                        /**
+                         * Format: date-time
+                         * @description Last update time.
+                         */
+                        updatedAt: string;
+                    };
+                };
+            };
+            /** @description Invalid request. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        /** @description Stable problem type URI or URN. */
+                        type: string;
+                        /** @description Short problem title. */
+                        title: string;
+                        /** @description HTTP status code. */
+                        status: number;
+                        /** @description Human-readable error detail. */
+                        detail: string;
+                        /** @description Request path that produced the problem. */
+                        instance: string;
+                        /** @description Application error code for frontend i18n. */
+                        errorCode: string;
+                        /** @description Optional i18n parameters. */
+                        errorParams?: {
+                            [key: string]: unknown;
+                        };
+                        /** @description Optional request trace identifier. */
+                        traceId?: string;
+                        /** @description Validation failure details. */
+                        invalidParams?: {
+                            /** @description Path to the invalid input field. */
+                            path: (string | number)[];
+                            /** @description Machine-readable validation error code. */
+                            code: string;
+                            /** @description Validation error message. */
+                            message: string;
+                        }[];
+                    };
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        /** @description Stable problem type URI or URN. */
+                        type: string;
+                        /** @description Short problem title. */
+                        title: string;
+                        /** @description HTTP status code. */
+                        status: number;
+                        /** @description Human-readable error detail. */
+                        detail: string;
+                        /** @description Request path that produced the problem. */
+                        instance: string;
+                        /** @description Application error code for frontend i18n. */
+                        errorCode: string;
+                        /** @description Optional i18n parameters. */
+                        errorParams?: {
+                            [key: string]: unknown;
+                        };
+                        /** @description Optional request trace identifier. */
+                        traceId?: string;
+                        /** @description Validation failure details. */
+                        invalidParams?: {
+                            /** @description Path to the invalid input field. */
+                            path: (string | number)[];
+                            /** @description Machine-readable validation error code. */
+                            code: string;
+                            /** @description Validation error message. */
+                            message: string;
+                        }[];
+                    };
+                };
+            };
+            /** @description Admin access required. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        /** @description Stable problem type URI or URN. */
+                        type: string;
+                        /** @description Short problem title. */
+                        title: string;
+                        /** @description HTTP status code. */
+                        status: number;
+                        /** @description Human-readable error detail. */
+                        detail: string;
+                        /** @description Request path that produced the problem. */
+                        instance: string;
+                        /** @description Application error code for frontend i18n. */
+                        errorCode: string;
+                        /** @description Optional i18n parameters. */
+                        errorParams?: {
+                            [key: string]: unknown;
+                        };
+                        /** @description Optional request trace identifier. */
+                        traceId?: string;
+                        /** @description Validation failure details. */
+                        invalidParams?: {
+                            /** @description Path to the invalid input field. */
+                            path: (string | number)[];
+                            /** @description Machine-readable validation error code. */
+                            code: string;
+                            /** @description Validation error message. */
+                            message: string;
+                        }[];
+                    };
+                };
+            };
+            /** @description Provider site not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        /** @description Stable problem type URI or URN. */
+                        type: string;
+                        /** @description Short problem title. */
+                        title: string;
+                        /** @description HTTP status code. */
+                        status: number;
+                        /** @description Human-readable error detail. */
+                        detail: string;
+                        /** @description Request path that produced the problem. */
+                        instance: string;
+                        /** @description Application error code for frontend i18n. */
+                        errorCode: string;
+                        /** @description Optional i18n parameters. */
+                        errorParams?: {
+                            [key: string]: unknown;
+                        };
+                        /** @description Optional request trace identifier. */
+                        traceId?: string;
+                        /** @description Validation failure details. */
+                        invalidParams?: {
+                            /** @description Path to the invalid input field. */
+                            path: (string | number)[];
+                            /** @description Machine-readable validation error code. */
+                            code: string;
+                            /** @description Validation error message. */
+                            message: string;
+                        }[];
+                    };
+                };
+            };
+        };
+    };
+    deleteProviderSitesGroupRatesByRateid: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Required only when authenticating with the auth-token cookie on mutation requests. */
+                "X-CCH-CSRF"?: string;
+            };
+            path: {
+                /** @description Site group rate id. */
+                rateId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Group rate deleted. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid request. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        /** @description Stable problem type URI or URN. */
+                        type: string;
+                        /** @description Short problem title. */
+                        title: string;
+                        /** @description HTTP status code. */
+                        status: number;
+                        /** @description Human-readable error detail. */
+                        detail: string;
+                        /** @description Request path that produced the problem. */
+                        instance: string;
+                        /** @description Application error code for frontend i18n. */
+                        errorCode: string;
+                        /** @description Optional i18n parameters. */
+                        errorParams?: {
+                            [key: string]: unknown;
+                        };
+                        /** @description Optional request trace identifier. */
+                        traceId?: string;
+                        /** @description Validation failure details. */
+                        invalidParams?: {
+                            /** @description Path to the invalid input field. */
+                            path: (string | number)[];
+                            /** @description Machine-readable validation error code. */
+                            code: string;
+                            /** @description Validation error message. */
+                            message: string;
+                        }[];
+                    };
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        /** @description Stable problem type URI or URN. */
+                        type: string;
+                        /** @description Short problem title. */
+                        title: string;
+                        /** @description HTTP status code. */
+                        status: number;
+                        /** @description Human-readable error detail. */
+                        detail: string;
+                        /** @description Request path that produced the problem. */
+                        instance: string;
+                        /** @description Application error code for frontend i18n. */
+                        errorCode: string;
+                        /** @description Optional i18n parameters. */
+                        errorParams?: {
+                            [key: string]: unknown;
+                        };
+                        /** @description Optional request trace identifier. */
+                        traceId?: string;
+                        /** @description Validation failure details. */
+                        invalidParams?: {
+                            /** @description Path to the invalid input field. */
+                            path: (string | number)[];
+                            /** @description Machine-readable validation error code. */
+                            code: string;
+                            /** @description Validation error message. */
+                            message: string;
+                        }[];
+                    };
+                };
+            };
+            /** @description Admin access required. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        /** @description Stable problem type URI or URN. */
+                        type: string;
+                        /** @description Short problem title. */
+                        title: string;
+                        /** @description HTTP status code. */
+                        status: number;
+                        /** @description Human-readable error detail. */
+                        detail: string;
+                        /** @description Request path that produced the problem. */
+                        instance: string;
+                        /** @description Application error code for frontend i18n. */
+                        errorCode: string;
+                        /** @description Optional i18n parameters. */
+                        errorParams?: {
+                            [key: string]: unknown;
+                        };
+                        /** @description Optional request trace identifier. */
+                        traceId?: string;
+                        /** @description Validation failure details. */
+                        invalidParams?: {
+                            /** @description Path to the invalid input field. */
+                            path: (string | number)[];
+                            /** @description Machine-readable validation error code. */
+                            code: string;
+                            /** @description Validation error message. */
+                            message: string;
+                        }[];
+                    };
+                };
+            };
+            /** @description Provider site not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        /** @description Stable problem type URI or URN. */
+                        type: string;
+                        /** @description Short problem title. */
+                        title: string;
+                        /** @description HTTP status code. */
+                        status: number;
+                        /** @description Human-readable error detail. */
+                        detail: string;
+                        /** @description Request path that produced the problem. */
+                        instance: string;
+                        /** @description Application error code for frontend i18n. */
+                        errorCode: string;
+                        /** @description Optional i18n parameters. */
+                        errorParams?: {
+                            [key: string]: unknown;
+                        };
+                        /** @description Optional request trace identifier. */
+                        traceId?: string;
+                        /** @description Validation failure details. */
+                        invalidParams?: {
+                            /** @description Path to the invalid input field. */
+                            path: (string | number)[];
+                            /** @description Machine-readable validation error code. */
+                            code: string;
+                            /** @description Validation error message. */
+                            message: string;
+                        }[];
+                    };
+                };
+            };
+        };
+    };
+    patchProviderSitesGroupRatesByRateid: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Required only when authenticating with the auth-token cookie on mutation requests. */
+                "X-CCH-CSRF"?: string;
+            };
+            path: {
+                /** @description Site group rate id. */
+                rateId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    groupName?: string;
+                    description?: string | null;
+                    ratio?: number;
+                    completionRatio?: number | null;
+                    dispatchGroupTag?: string | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Updated group rate. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @description Site group rate id. */
+                        id: number;
+                        /** @description Parent provider site id. */
+                        siteId: number;
+                        /** @description Upstream website group name. */
+                        groupName: string;
+                        /** @description Optional group description. */
+                        description: string | null;
+                        /** @description Upstream group ratio / rate multiplier. */
+                        ratio: number;
+                        /** @description Optional completion/output ratio; 0 or null means unused. */
+                        completionRatio: number | null;
+                        /** @description CCH dispatch pool tag after classification. */
+                        dispatchGroupTag: string | null;
+                        /**
+                         * Format: date-time
+                         * @description Last seen / synced time.
+                         */
+                        lastSeenAt: string;
+                        /**
+                         * Format: date-time
+                         * @description Creation time.
+                         */
+                        createdAt: string;
+                        /**
+                         * Format: date-time
+                         * @description Last update time.
+                         */
+                        updatedAt: string;
+                    };
+                };
+            };
+            /** @description Invalid request. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        /** @description Stable problem type URI or URN. */
+                        type: string;
+                        /** @description Short problem title. */
+                        title: string;
+                        /** @description HTTP status code. */
+                        status: number;
+                        /** @description Human-readable error detail. */
+                        detail: string;
+                        /** @description Request path that produced the problem. */
+                        instance: string;
+                        /** @description Application error code for frontend i18n. */
+                        errorCode: string;
+                        /** @description Optional i18n parameters. */
+                        errorParams?: {
+                            [key: string]: unknown;
+                        };
+                        /** @description Optional request trace identifier. */
+                        traceId?: string;
+                        /** @description Validation failure details. */
+                        invalidParams?: {
+                            /** @description Path to the invalid input field. */
+                            path: (string | number)[];
+                            /** @description Machine-readable validation error code. */
+                            code: string;
+                            /** @description Validation error message. */
+                            message: string;
+                        }[];
+                    };
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        /** @description Stable problem type URI or URN. */
+                        type: string;
+                        /** @description Short problem title. */
+                        title: string;
+                        /** @description HTTP status code. */
+                        status: number;
+                        /** @description Human-readable error detail. */
+                        detail: string;
+                        /** @description Request path that produced the problem. */
+                        instance: string;
+                        /** @description Application error code for frontend i18n. */
+                        errorCode: string;
+                        /** @description Optional i18n parameters. */
+                        errorParams?: {
+                            [key: string]: unknown;
+                        };
+                        /** @description Optional request trace identifier. */
+                        traceId?: string;
+                        /** @description Validation failure details. */
+                        invalidParams?: {
+                            /** @description Path to the invalid input field. */
+                            path: (string | number)[];
+                            /** @description Machine-readable validation error code. */
+                            code: string;
+                            /** @description Validation error message. */
+                            message: string;
+                        }[];
+                    };
+                };
+            };
+            /** @description Admin access required. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        /** @description Stable problem type URI or URN. */
+                        type: string;
+                        /** @description Short problem title. */
+                        title: string;
+                        /** @description HTTP status code. */
+                        status: number;
+                        /** @description Human-readable error detail. */
+                        detail: string;
+                        /** @description Request path that produced the problem. */
+                        instance: string;
+                        /** @description Application error code for frontend i18n. */
+                        errorCode: string;
+                        /** @description Optional i18n parameters. */
+                        errorParams?: {
+                            [key: string]: unknown;
+                        };
+                        /** @description Optional request trace identifier. */
+                        traceId?: string;
+                        /** @description Validation failure details. */
+                        invalidParams?: {
+                            /** @description Path to the invalid input field. */
+                            path: (string | number)[];
+                            /** @description Machine-readable validation error code. */
+                            code: string;
+                            /** @description Validation error message. */
+                            message: string;
+                        }[];
+                    };
+                };
+            };
+            /** @description Provider site not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        /** @description Stable problem type URI or URN. */
+                        type: string;
+                        /** @description Short problem title. */
+                        title: string;
+                        /** @description HTTP status code. */
+                        status: number;
+                        /** @description Human-readable error detail. */
+                        detail: string;
+                        /** @description Request path that produced the problem. */
+                        instance: string;
+                        /** @description Application error code for frontend i18n. */
+                        errorCode: string;
+                        /** @description Optional i18n parameters. */
+                        errorParams?: {
+                            [key: string]: unknown;
+                        };
+                        /** @description Optional request trace identifier. */
+                        traceId?: string;
+                        /** @description Validation failure details. */
+                        invalidParams?: {
+                            /** @description Path to the invalid input field. */
+                            path: (string | number)[];
+                            /** @description Machine-readable validation error code. */
+                            code: string;
+                            /** @description Validation error message. */
+                            message: string;
+                        }[];
+                    };
+                };
+            };
+        };
+    };
+    postProviderSitesByIdSyncRates: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Required only when authenticating with the auth-token cookie on mutation requests. */
+                "X-CCH-CSRF"?: string;
+            };
+            path: {
+                /** @description Provider site id. */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Sync result. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        siteId: number;
+                        siteName: string;
+                        ok: boolean;
+                        groupsUpserted: number;
+                        groupsSeen: number;
+                        balance: number | null;
+                        todayCost: number | null;
+                        totalCost: number | null;
+                        error?: string;
+                        durationMs: number;
+                    };
+                };
+            };
+            /** @description Invalid request. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        /** @description Stable problem type URI or URN. */
+                        type: string;
+                        /** @description Short problem title. */
+                        title: string;
+                        /** @description HTTP status code. */
+                        status: number;
+                        /** @description Human-readable error detail. */
+                        detail: string;
+                        /** @description Request path that produced the problem. */
+                        instance: string;
+                        /** @description Application error code for frontend i18n. */
+                        errorCode: string;
+                        /** @description Optional i18n parameters. */
+                        errorParams?: {
+                            [key: string]: unknown;
+                        };
+                        /** @description Optional request trace identifier. */
+                        traceId?: string;
+                        /** @description Validation failure details. */
+                        invalidParams?: {
+                            /** @description Path to the invalid input field. */
+                            path: (string | number)[];
+                            /** @description Machine-readable validation error code. */
+                            code: string;
+                            /** @description Validation error message. */
+                            message: string;
+                        }[];
+                    };
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        /** @description Stable problem type URI or URN. */
+                        type: string;
+                        /** @description Short problem title. */
+                        title: string;
+                        /** @description HTTP status code. */
+                        status: number;
+                        /** @description Human-readable error detail. */
+                        detail: string;
+                        /** @description Request path that produced the problem. */
+                        instance: string;
+                        /** @description Application error code for frontend i18n. */
+                        errorCode: string;
+                        /** @description Optional i18n parameters. */
+                        errorParams?: {
+                            [key: string]: unknown;
+                        };
+                        /** @description Optional request trace identifier. */
+                        traceId?: string;
+                        /** @description Validation failure details. */
+                        invalidParams?: {
+                            /** @description Path to the invalid input field. */
+                            path: (string | number)[];
+                            /** @description Machine-readable validation error code. */
+                            code: string;
+                            /** @description Validation error message. */
+                            message: string;
+                        }[];
+                    };
+                };
+            };
+            /** @description Admin access required. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        /** @description Stable problem type URI or URN. */
+                        type: string;
+                        /** @description Short problem title. */
+                        title: string;
+                        /** @description HTTP status code. */
+                        status: number;
+                        /** @description Human-readable error detail. */
+                        detail: string;
+                        /** @description Request path that produced the problem. */
+                        instance: string;
+                        /** @description Application error code for frontend i18n. */
+                        errorCode: string;
+                        /** @description Optional i18n parameters. */
+                        errorParams?: {
+                            [key: string]: unknown;
+                        };
+                        /** @description Optional request trace identifier. */
+                        traceId?: string;
+                        /** @description Validation failure details. */
+                        invalidParams?: {
+                            /** @description Path to the invalid input field. */
+                            path: (string | number)[];
+                            /** @description Machine-readable validation error code. */
+                            code: string;
+                            /** @description Validation error message. */
+                            message: string;
+                        }[];
+                    };
+                };
+            };
+            /** @description Provider site not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        /** @description Stable problem type URI or URN. */
+                        type: string;
+                        /** @description Short problem title. */
+                        title: string;
+                        /** @description HTTP status code. */
+                        status: number;
+                        /** @description Human-readable error detail. */
+                        detail: string;
+                        /** @description Request path that produced the problem. */
+                        instance: string;
+                        /** @description Application error code for frontend i18n. */
+                        errorCode: string;
+                        /** @description Optional i18n parameters. */
+                        errorParams?: {
+                            [key: string]: unknown;
+                        };
+                        /** @description Optional request trace identifier. */
+                        traceId?: string;
+                        /** @description Validation failure details. */
+                        invalidParams?: {
+                            /** @description Path to the invalid input field. */
+                            path: (string | number)[];
+                            /** @description Machine-readable validation error code. */
+                            code: string;
+                            /** @description Validation error message. */
+                            message: string;
+                        }[];
+                    };
+                };
+            };
+        };
+    };
+    postProviderSitesSyncRates: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Required only when authenticating with the auth-token cookie on mutation requests. */
+                "X-CCH-CSRF"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Sync results. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: {
+                            siteId: number;
+                            siteName: string;
+                            ok: boolean;
+                            groupsUpserted: number;
+                            groupsSeen: number;
+                            balance: number | null;
+                            todayCost: number | null;
+                            totalCost: number | null;
+                            error?: string;
+                            durationMs: number;
+                        }[];
+                    };
+                };
+            };
+            /** @description Invalid request. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        /** @description Stable problem type URI or URN. */
+                        type: string;
+                        /** @description Short problem title. */
+                        title: string;
+                        /** @description HTTP status code. */
+                        status: number;
+                        /** @description Human-readable error detail. */
+                        detail: string;
+                        /** @description Request path that produced the problem. */
+                        instance: string;
+                        /** @description Application error code for frontend i18n. */
+                        errorCode: string;
+                        /** @description Optional i18n parameters. */
+                        errorParams?: {
+                            [key: string]: unknown;
+                        };
+                        /** @description Optional request trace identifier. */
+                        traceId?: string;
+                        /** @description Validation failure details. */
+                        invalidParams?: {
+                            /** @description Path to the invalid input field. */
+                            path: (string | number)[];
+                            /** @description Machine-readable validation error code. */
+                            code: string;
+                            /** @description Validation error message. */
+                            message: string;
+                        }[];
+                    };
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        /** @description Stable problem type URI or URN. */
+                        type: string;
+                        /** @description Short problem title. */
+                        title: string;
+                        /** @description HTTP status code. */
+                        status: number;
+                        /** @description Human-readable error detail. */
+                        detail: string;
+                        /** @description Request path that produced the problem. */
+                        instance: string;
+                        /** @description Application error code for frontend i18n. */
+                        errorCode: string;
+                        /** @description Optional i18n parameters. */
+                        errorParams?: {
+                            [key: string]: unknown;
+                        };
+                        /** @description Optional request trace identifier. */
+                        traceId?: string;
+                        /** @description Validation failure details. */
+                        invalidParams?: {
+                            /** @description Path to the invalid input field. */
+                            path: (string | number)[];
+                            /** @description Machine-readable validation error code. */
+                            code: string;
+                            /** @description Validation error message. */
+                            message: string;
+                        }[];
+                    };
+                };
+            };
+            /** @description Admin access required. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        /** @description Stable problem type URI or URN. */
+                        type: string;
+                        /** @description Short problem title. */
+                        title: string;
+                        /** @description HTTP status code. */
+                        status: number;
+                        /** @description Human-readable error detail. */
+                        detail: string;
+                        /** @description Request path that produced the problem. */
+                        instance: string;
+                        /** @description Application error code for frontend i18n. */
+                        errorCode: string;
+                        /** @description Optional i18n parameters. */
+                        errorParams?: {
+                            [key: string]: unknown;
+                        };
+                        /** @description Optional request trace identifier. */
+                        traceId?: string;
+                        /** @description Validation failure details. */
+                        invalidParams?: {
+                            /** @description Path to the invalid input field. */
+                            path: (string | number)[];
+                            /** @description Machine-readable validation error code. */
+                            code: string;
+                            /** @description Validation error message. */
+                            message: string;
+                        }[];
+                    };
+                };
+            };
+            /** @description Provider site not found. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -21831,7 +25883,7 @@ export interface operations {
                 /** @description Optional key id filter. */
                 keyId?: number;
                 /** @description Optional rate limit type filter. */
-                limitType?: "rpm" | "usd_5h" | "usd_weekly" | "usd_monthly" | "usd_total" | "concurrent_sessions" | "daily_quota";
+                limitType?: "rpm" | "usd_5h" | "usd_weekly" | "usd_monthly" | "usd_total" | "balance" | "concurrent_sessions" | "daily_quota";
                 /** @description Optional start time. */
                 startTime?: string;
                 /** @description Optional end time. */
@@ -28211,6 +32263,8 @@ export interface operations {
                     rpm?: number | null;
                     /** @description Daily USD quota. */
                     dailyQuota?: number | null;
+                    /** @description CCH-local prepaid request balance in USD; null means unlimited. */
+                    balanceUsd?: number | null;
                     /** @description Five-hour USD quota. */
                     limit5hUsd?: number | null;
                     /**
@@ -30291,6 +34345,8 @@ export interface operations {
                         rpm: number | null;
                         /** @description Daily USD quota, or null for unlimited. */
                         dailyQuota: number | null;
+                        /** @description CCH-local prepaid request balance in USD; null means unlimited. */
+                        balanceUsd?: number | null;
                         /** @description Provider group expression, or null. */
                         providerGroup: string | null;
                         /** @description User tags. */
@@ -30858,6 +34914,8 @@ export interface operations {
                     rpm?: number | null;
                     /** @description Daily USD quota. */
                     dailyQuota?: number | null;
+                    /** @description CCH-local prepaid request balance in USD; null means unlimited. */
+                    balanceUsd?: number | null;
                     /** @description Five-hour USD quota. */
                     limit5hUsd?: number | null;
                     /**

@@ -90,6 +90,7 @@ export type RateLimitType =
   | "usd_weekly"
   | "usd_monthly"
   | "usd_total"
+  | "balance"
   | "concurrent_sessions"
   | "daily_quota";
 

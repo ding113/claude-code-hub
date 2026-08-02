@@ -64,6 +64,7 @@
   "RATE_LIMIT_WEEKLY_EXCEEDED": "周消费超限：当前 ${current} USD（限制：${limit} USD）。将于 {resetTime} 重置",
   "RATE_LIMIT_MONTHLY_EXCEEDED": "月消费超限：当前 ${current} USD（限制：${limit} USD）。将于 {resetTime} 重置",
   "RATE_LIMIT_TOTAL_EXCEEDED": "总消费上限已达到：${current} / ${limit} USD",
+  "USER_BALANCE_EXHAUSTED": "账户余额已用尽，请联系管理员充值后再试",
   "RATE_LIMIT_CONCURRENT_SESSIONS_EXCEEDED": "并发 Session 超限：当前 {current} 个（限制：{limit} 个）。请等待活跃 Session 完成",
   "RESOURCE_BUSY": "资源正在使用中",
   "INVALID_STATE": "当前状态不允许此操作",

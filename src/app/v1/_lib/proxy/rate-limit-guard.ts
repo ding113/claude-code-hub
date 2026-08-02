@@ -58,6 +58,27 @@ export class ProxyRateLimitGuard {
 
     if (!user || !key) return;
 
+    // A user balance is remaining prepaid credit, not a usage limit window.
+    // Only an exhausted/non-positive balance can be rejected before provider
+    // selection; a positive balance may still be smaller than the final cost,
+    // which is unknown until upstream usage is finalized.
+    if (user.balanceUsd != null && user.balanceUsd <= 0) {
+      logger.warn(`[RateLimit] User balance exhausted: user=${user.id}`);
+      const { getLocale } = await import("next-intl/server");
+      const locale = await getLocale();
+      const message = await getErrorMessageServer(locale, ERROR_CODES.USER_BALANCE_EXHAUSTED);
+
+      throw new RateLimitError(
+        "rate_limit_error",
+        message,
+        "balance",
+        0,
+        0,
+        "9999-12-31T23:59:59.999Z",
+        null
+      );
+    }
+
     const keyCostResetAt = resolveKeyCostResetAt(key.costResetAt ?? null, user.costResetAt ?? null);
     const user5hCostResetAt = resolveUser5hCostResetAt(
       user.costResetAt ?? null,

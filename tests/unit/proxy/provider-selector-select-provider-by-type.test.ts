@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, test, vi } from "vitest";
 import type { Provider } from "@/types/provider";
 import { ProxyProviderResolver } from "@/app/v1/_lib/proxy/provider-selector";
 
-const findAllProvidersMock = vi.hoisted(() => vi.fn<[], Promise<Provider[]>>());
+const findAllProvidersMock = vi.hoisted(() => vi.fn<() => Promise<Provider[]>>());
 
 vi.mock("@/repository/provider", () => {
   return {

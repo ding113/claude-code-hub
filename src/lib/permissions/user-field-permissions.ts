@@ -12,6 +12,7 @@ export const USER_FIELD_PERMISSIONS = {
   providerGroup: { requiredRole: "admin" },
 
   // Admin-only fields (user-level quota fields)
+  balanceUsd: { requiredRole: "admin" },
   limit5hUsd: { requiredRole: "admin" },
   limit5hResetMode: { requiredRole: "admin" },
   limitWeeklyUsd: { requiredRole: "admin" },

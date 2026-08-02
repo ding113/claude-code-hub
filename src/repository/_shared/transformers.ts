@@ -46,6 +46,7 @@ export function toUser(dbUser: any): User {
     })(),
     providerGroup: dbUser?.providerGroup ?? null,
     tags: dbUser?.tags ?? [],
+    balanceUsd: parseOptionalNumber(dbUser?.balanceUsd),
     limit5hUsd: parseOptionalNumber(dbUser?.limit5hUsd),
     limit5hResetMode: dbUser?.limit5hResetMode ?? "rolling",
     limitWeeklyUsd: parseOptionalNumber(dbUser?.limitWeeklyUsd),
@@ -97,6 +98,9 @@ export function toProvider(dbProvider: any): Provider {
   return {
     ...dbProvider,
     providerVendorId: dbProvider?.providerVendorId ?? null,
+    siteId: dbProvider?.siteId ?? null,
+    siteGroupName: dbProvider?.siteGroupName ?? null,
+    billingMode: dbProvider?.billingMode ?? "catalog_estimate",
     isEnabled: dbProvider?.isEnabled ?? true,
     weight: dbProvider?.weight ?? 1,
     priority: dbProvider?.priority ?? 0,
@@ -276,9 +280,57 @@ export function toSystemSettings(dbSettings: any): SystemSettings {
       dbSettings?.healthTestDailyBudgetCny != null && dbSettings?.healthTestDailyBudgetCny !== undefined
         ? parseFloat(String(dbSettings.healthTestDailyBudgetCny))
         : 1,
+    healthTestPerProviderDailyBudget:
+      dbSettings?.healthTestPerProviderDailyBudget != null &&
+      dbSettings?.healthTestPerProviderDailyBudget !== undefined
+        ? parseFloat(String(dbSettings.healthTestPerProviderDailyBudget))
+        : 0.1,
     healthTestGlobalBudgetSuspendedDay: dbSettings?.healthTestGlobalBudgetSuspendedDay
       ? String(dbSettings.healthTestGlobalBudgetSuspendedDay)
       : null,
+    healthTestScheduleMode:
+      dbSettings?.healthTestScheduleMode === "always_on" ||
+      dbSettings?.healthTestScheduleMode === "dynamic"
+        ? dbSettings.healthTestScheduleMode
+        : "dynamic",
+    healthTestWindowSize: (() => {
+      const n = Number(dbSettings?.healthTestWindowSize);
+      if (!Number.isFinite(n)) return 10;
+      return Math.min(50, Math.max(1, Math.trunc(n)));
+    })(),
+    healthTestIntervalSeconds: (() => {
+      const n = Number(dbSettings?.healthTestIntervalSeconds);
+      if (!Number.isFinite(n)) return 60;
+      return Math.min(3600, Math.max(10, Math.trunc(n)));
+    })(),
+    healthTestTimeoutSeconds: (() => {
+      const n = Number(dbSettings?.healthTestTimeoutSeconds);
+      if (!Number.isFinite(n)) return 30;
+      return Math.min(300, Math.max(5, Math.trunc(n)));
+    })(),
+    healthTestMinOnlineRatePercent: (() => {
+      const n = Number(dbSettings?.healthTestMinOnlineRatePercent);
+      if (!Number.isFinite(n)) return 90;
+      return Math.min(100, Math.max(1, Math.trunc(n)));
+    })(),
+    healthTestMaxAvgLatencySeconds: (() => {
+      const n = Number(dbSettings?.healthTestMaxAvgLatencySeconds);
+      if (!Number.isFinite(n)) return 20;
+      return Math.min(300, Math.max(1, Math.trunc(n)));
+    })(),
+    siteCaptchaProvider: (() => {
+      const raw = String(dbSettings?.siteCaptchaProvider ?? "none").trim().toLowerCase();
+      if (["yescaptcha", "capsolver", "2captcha", "anticaptcha"].includes(raw)) return raw;
+      return "none";
+    })(),
+    hasSiteCaptchaApiKey: Boolean(
+      typeof dbSettings?.siteCaptchaApiKeyCipher === "string" &&
+        dbSettings.siteCaptchaApiKeyCipher.length > 0
+    ),
+    siteCaptchaEndpoint:
+      typeof dbSettings?.siteCaptchaEndpoint === "string" && dbSettings.siteCaptchaEndpoint.trim()
+        ? dbSettings.siteCaptchaEndpoint.trim()
+        : null,
     billingModelSource: dbSettings?.billingModelSource ?? "original",
     codexPriorityBillingSource:
       dbSettings?.codexPriorityBillingSource === "requested" ||
@@ -287,6 +339,18 @@ export function toSystemSettings(dbSettings: any): SystemSettings {
         : "requested",
     billNonSuccessfulRequests: dbSettings?.billNonSuccessfulRequests ?? false,
     billHedgeLosers: dbSettings?.billHedgeLosers ?? true,
+    streamingRaceMode:
+      dbSettings?.streamingRaceMode === "timeout_race" ||
+      dbSettings?.streamingRaceMode === "dual_fast" ||
+      dbSettings?.streamingRaceMode === "single"
+        ? dbSettings.streamingRaceMode
+        : "single",
+    streamingRaceFirstByteMs:
+      dbSettings?.streamingRaceFirstByteMs != null &&
+      dbSettings?.streamingRaceFirstByteMs !== undefined &&
+      Number.isFinite(Number(dbSettings.streamingRaceFirstByteMs))
+        ? Math.trunc(Number(dbSettings.streamingRaceFirstByteMs))
+        : 20000,
     timezone: dbSettings?.timezone ?? null,
     enableAutoCleanup: dbSettings?.enableAutoCleanup ?? false,
     cleanupRetentionDays: dbSettings?.cleanupRetentionDays ?? 30,

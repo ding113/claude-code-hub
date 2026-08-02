@@ -63,6 +63,10 @@ export const users = pgTable('users', {
   limit5hCostResetAt: timestamp('limit_5h_cost_reset_at', { withTimezone: true }),
   limitConcurrentSessions: integer('limit_concurrent_sessions'),
 
+  // CCH-local prepaid credit. Null means unlimited; unlike the quota fields
+  // above, this stores the remaining account balance and is debited at billing.
+  balanceUsd: numeric('balance_usd', { precision: 21, scale: 15 }),
+
   // Daily quota reset mode (fixed: reset at specific time, rolling: 24h window)
   dailyResetMode: dailyResetModeEnum('daily_reset_mode')
     .default('fixed')
@@ -169,17 +173,170 @@ export const providerVendors = pgTable('provider_vendors', {
   providerVendorsCreatedAtIdx: index('idx_provider_vendors_created_at').on(table.createdAt),
 }));
 
+/**
+ * Provider Sites — one upstream website/account (opentoken, mdkj, nikoapi...).
+ * Inspired by Upstream Hub channels: configure by site, then attach groups/keys.
+ */
+export const providerSites = pgTable(
+  "provider_sites",
+  {
+    id: serial("id").primaryKey(),
+    name: varchar("name", { length: 128 }).notNull(),
+    siteUrl: text("site_url").notNull(),
+    /** sub2api | newapi | custom */
+    siteType: varchar("site_type", { length: 32 }).notNull().default("sub2api"),
+    providerVendorId: integer("provider_vendor_id").references(() => providerVendors.id, {
+      onDelete: "set null",
+    }),
+    notes: text("notes"),
+    isEnabled: boolean("is_enabled").notNull().default(true),
+    /** Manual display order for site cards (lower first). */
+    sortOrder: integer("sort_order").notNull().default(0),
+    /** Optional Upstream Hub channel id (legacy bridge; direct login preferred) */
+    upstreamHubChannelId: integer("upstream_hub_channel_id"),
+    /** Upstream website login username/email */
+    username: varchar("username", { length: 256 }),
+    /** AES-GCM encrypted password */
+    passwordCipher: text("password_cipher"),
+    turnstileEnabled: boolean("turnstile_enabled").notNull().default(false),
+    /**
+     * Per-site captcha selection:
+     * none | global | yescaptcha | capsolver | 2captcha | anticaptcha
+     * "global" uses system_settings site captcha credentials.
+     */
+    captchaProvider: varchar("captcha_provider", { length: 32 }).notNull().default("global"),
+    captchaApiKeyCipher: text("captcha_api_key_cipher"),
+    captchaEndpoint: text("captcha_endpoint"),
+    lastBalance: numeric("last_balance", { precision: 18, scale: 6 }),
+    lastBalanceAt: timestamp("last_balance_at", { withTimezone: true }),
+    todayCost: numeric("today_cost", { precision: 18, scale: 6 }),
+    totalCost: numeric("total_cost", { precision: 18, scale: 6 }),
+    lastSyncError: text("last_sync_error"),
+    lastSyncAt: timestamp("last_sync_at", { withTimezone: true }),
+    sessionAccessTokenCipher: text("session_access_token_cipher"),
+    sessionCookieCipher: text("session_cookie_cipher"),
+    sessionUserId: varchar("session_user_id", { length: 64 }),
+    sessionExpiresAt: timestamp("session_expires_at", { withTimezone: true }),
+    lastRateSyncedAt: timestamp("last_rate_synced_at", { withTimezone: true }),
+    lastCostSyncedAt: timestamp("last_cost_synced_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    providerSitesNameUnique: uniqueIndex("uniq_provider_sites_name").on(table.name),
+    providerSitesVendorIdx: index("idx_provider_sites_vendor").on(table.providerVendorId),
+    providerSitesSortOrderIdx: index("idx_provider_sites_sort_order").on(table.sortOrder),
+  })
+);
+
+/**
+ * Idempotency ledger for CCH-local user balance charges.
+ * A charge key identifies one billing leg: the winner or a hedge loser attempt.
+ */
+export const userBalanceCharges = pgTable(
+  "user_balance_charges",
+  {
+    id: serial("id").primaryKey(),
+    userId: integer("user_id").notNull(),
+    requestId: integer("request_id").notNull(),
+    providerId: integer("provider_id").notNull(),
+    chargeKey: varchar("charge_key", { length: 128 }).notNull(),
+    amountUsd: numeric("amount_usd", { precision: 21, scale: 15 }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    userBalanceChargeRequestKeyUnique: uniqueIndex("uniq_user_balance_charge_request_key").on(
+      table.requestId,
+      table.chargeKey
+    ),
+    userBalanceChargeUserCreatedAtIdx: index("idx_user_balance_charge_user_created_at").on(
+      table.userId,
+      table.createdAt
+    ),
+    userBalanceChargeRequestIdx: index("idx_user_balance_charge_request").on(table.requestId),
+  })
+);
+
+/**
+ * Per-site upstream group rates (UH rate_snapshots equivalent).
+ * ModelName in UH is actually the group name (Claude Kiro / codex-Plus / ...).
+ */
+export const providerSiteGroupRates = pgTable(
+  "provider_site_group_rates",
+  {
+    id: serial("id").primaryKey(),
+    siteId: integer("site_id")
+      .notNull()
+      .references(() => providerSites.id, { onDelete: "cascade" }),
+    groupName: varchar("group_name", { length: 256 }).notNull(),
+    description: text("description"),
+    /** Upstream group ratio / rate_multiplier */
+    ratio: numeric("ratio", { precision: 12, scale: 6 }).notNull().default("1"),
+    completionRatio: numeric("completion_ratio", { precision: 12, scale: 6 }).default("0"),
+    /**
+     * CCH dispatch pool this group belongs to after classification:
+     * image | grok | claude | codex | other
+     */
+    dispatchGroupTag: varchar("dispatch_group_tag", { length: 64 }),
+    lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).defaultNow().notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    providerSiteGroupUnique: uniqueIndex("uniq_provider_site_group_rates_site_group").on(
+      table.siteId,
+      table.groupName
+    ),
+    providerSiteGroupSiteIdx: index("idx_provider_site_group_rates_site").on(table.siteId),
+  })
+);
+
 // Provider Groups table
-export const providerGroups = pgTable('provider_groups', {
-  id: serial('id').primaryKey(),
-  name: varchar('name', { length: 200 }).notNull().unique(),
-  costMultiplier: numeric('cost_multiplier', { precision: 10, scale: 4 }).notNull().default('1.0'),
-  description: text('description'),
-  /** Scheduled health-test model for this group; null/empty = skip scheduled tests */
-  healthTestModel: varchar('health_test_model', { length: 200 }),
-  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
-});
+export const providerGroups = pgTable(
+  "provider_groups",
+  {
+    id: serial("id").primaryKey(),
+    name: varchar("name", { length: 200 }).notNull().unique(),
+    costMultiplier: numeric("cost_multiplier", { precision: 10, scale: 4 }).notNull().default("1.0"),
+    description: text("description"),
+    /** Scheduled health-test model for this group; null/empty = skip scheduled tests */
+    healthTestModel: varchar("health_test_model", { length: 200 }),
+    /**
+     * Optional shared defaults for providers in this group (routing/network/circuit/limits).
+     * Applied to members when admin saves with applyToMembers=true.
+     */
+    sharedSettings: jsonb("shared_settings").$type<
+      import("@/lib/provider-groups/shared-settings").ProviderGroupSharedSettings | null
+    >(),
+    /**
+     * Keyword match order for classifying upstream site group names into this pool.
+     * Lower runs first. default group is pinned visually and skipped for classify.
+     */
+    sortOrder: integer("sort_order").notNull().default(0),
+    /**
+     * Keyword rules (exact/prefix/suffix/contains/regex) used by site-rate classify.
+     * Empty/null = group does not participate unless builtin fallback applies.
+     */
+    matchRules: jsonb("match_rules").$type<
+      import("@/lib/provider-groups/match-rules").ProviderGroupMatchRule[] | null
+    >(),
+    /**
+     * Request-model allowlist for providers in this dispatch group.
+     * Empty/null = this group does not restrict models.
+     */
+    modelMatchRules: jsonb("model_match_rules").$type<
+      import("@/lib/provider-groups/model-match-rules").ProviderGroupModelMatchRule[] | null
+    >(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    providerGroupsSortOrderIdx: index("idx_provider_groups_sort_order").on(
+      table.sortOrder,
+      table.id
+    ),
+  })
+);
 
 // Providers table
 export const providers = pgTable('providers', {
@@ -193,7 +350,25 @@ export const providers = pgTable('providers', {
     .references(() => providerVendors.id, {
       onDelete: 'restrict',
     }),
+  /**
+   * Optional parent site. When set, this provider is one group-key under a website.
+   * Null keeps legacy flat provider configuration.
+   */
+  siteId: integer("site_id").references(() => providerSites.id, {
+    onDelete: "set null",
+  }),
+  /** Upstream group name on the parent site (e.g. Claude Kiro). */
+  siteGroupName: varchar("site_group_name", { length: 256 }),
+  /**
+   * Billing mode:
+   * - catalog_estimate: tokens × CCH model_prices × cost_multiplier × group multiplier (legacy)
+   * - site_group_ratio: tokens × CCH model_prices × site group ratio (and optional completion ratio)
+   */
+  billingMode: varchar("billing_mode", { length: 32 }).notNull().default("catalog_estimate"),
   isEnabled: boolean('is_enabled').notNull().default(true),
+  // True only when the site-balance policy disabled this provider. Manual
+  // enable/disable operations clear the marker and remain sticky.
+  balanceAutoDisabled: boolean('balance_auto_disabled').notNull().default(false),
   weight: integer('weight').notNull().default(1),
 
   // 优先级和分组配置
@@ -404,6 +579,7 @@ export const providers = pgTable('providers', {
   ).where(sql`${table.deletedAt} IS NULL`),
   // 分组查询优化
   providersGroupIdx: index('idx_providers_group').on(table.groupTag).where(sql`${table.deletedAt} IS NULL`),
+  providersSiteIdx: index('idx_providers_site').on(table.siteId).where(sql`${table.deletedAt} IS NULL`),
   // #779：加速“旧 URL 是否仍被引用”的判断（vendor/type/url 精确匹配）
   providersVendorTypeUrlActiveIdx: index('idx_providers_vendor_type_url_active').on(table.providerVendorId, table.providerType, table.url).where(sql`${table.deletedAt} IS NULL`),
   // 基础索引
@@ -835,6 +1011,27 @@ export const systemSettings = pgTable('system_settings', {
   // Over budget → disable ALL scheduled health tests until next local day.
   healthTestDailyBudgetCny: numeric('health_test_daily_budget_cny', { precision: 12, scale: 4 }).notNull().default('1'),
   healthTestGlobalBudgetSuspendedDay: date('health_test_global_budget_suspended_day'),
+  // Site-wide per-provider health-test daily spend cap (display units, default 0.1).
+  healthTestPerProviderDailyBudget: numeric('health_test_per_provider_daily_budget', { precision: 12, scale: 4 }).notNull().default('0.1'),
+  // Scheduled health-test policy:
+  // - dynamic: SLO rebalance (top1/top2 per group_tag)
+  // - always_on: no SLO auto-disable; keep fleet probing
+  healthTestScheduleMode: varchar('health_test_schedule_mode', { length: 20 }).notNull().default('dynamic'),
+  healthTestWindowSize: integer('health_test_window_size').notNull().default(10),
+  healthTestIntervalSeconds: integer('health_test_interval_seconds').notNull().default(60),
+  healthTestTimeoutSeconds: integer('health_test_timeout_seconds').notNull().default(30),
+  // Single health SLO gate (no multi-tier): min online rate percent (default 90).
+  healthTestMinOnlineRatePercent: integer('health_test_min_online_rate_percent').notNull().default(90),
+  // Legacy column name; value is max average first-byte latency seconds for health SLO (default 20).
+  healthTestMaxAvgLatencySeconds: integer('health_test_max_avg_latency_seconds').notNull().default(20),
+
+  /**
+   * Global captcha vendor for provider-site upstream login (Turnstile).
+   * Sites can select "global" to reuse these credentials.
+   */
+  siteCaptchaProvider: varchar('site_captcha_provider', { length: 32 }).notNull().default('none'),
+  siteCaptchaApiKeyCipher: text('site_captcha_api_key_cipher'),
+  siteCaptchaEndpoint: text('site_captcha_endpoint'),
 
   // 计费模型来源配置: 'original' (重定向前) | 'redirected' (重定向后)
   billingModelSource: varchar('billing_model_source', { length: 20 }).notNull().default('original'),
@@ -854,6 +1051,10 @@ export const systemSettings = pgTable('system_settings', {
   //       异步累加进该请求的 cost_usd 总额（与上游对多个供应商分别计费保持一致）
   // 关闭：竞速输家直接取消连接，不计费（旧行为）
   billHedgeLosers: boolean('bill_hedge_losers').notNull().default(true),
+  // Streaming race mode: single | timeout_race | dual_fast
+  streamingRaceMode: varchar('streaming_race_mode', { length: 20 }).notNull().default('single'),
+  // Global first-byte threshold used by timeout_race / dual_fast (ms)
+  streamingRaceFirstByteMs: integer('streaming_race_first_byte_ms').notNull().default(20000),
 
   // 系统时区配置 (IANA timezone identifier)
   // 用于统一后端时间边界计算和前端日期/时间显示
@@ -1248,12 +1449,33 @@ export const providersRelations = relations(providers, ({ many, one }) => ({
     fields: [providers.providerVendorId],
     references: [providerVendors.id],
   }),
+  site: one(providerSites, {
+    fields: [providers.siteId],
+    references: [providerSites.id],
+  }),
   messageRequests: many(messageRequest),
   healthTestLogs: many(providerHealthTestLogs),
 }));
 
+export const providerSitesRelations = relations(providerSites, ({ many, one }) => ({
+  vendor: one(providerVendors, {
+    fields: [providerSites.providerVendorId],
+    references: [providerVendors.id],
+  }),
+  groupRates: many(providerSiteGroupRates),
+  providers: many(providers),
+}));
+
+export const providerSiteGroupRatesRelations = relations(providerSiteGroupRates, ({ one }) => ({
+  site: one(providerSites, {
+    fields: [providerSiteGroupRates.siteId],
+    references: [providerSites.id],
+  }),
+}));
+
 export const providerVendorsRelations = relations(providerVendors, ({ many }) => ({
   providers: many(providers),
+  sites: many(providerSites),
   endpoints: many(providerEndpoints),
 }));
 

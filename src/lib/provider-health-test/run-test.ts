@@ -4,21 +4,26 @@ import { GeminiAuth } from "@/app/v1/_lib/gemini/auth";
 import { logger } from "@/lib/logger";
 import {
   getDefaultHealthTestModel,
-  isHealthTestDueForBucket,
+  isHealthTestDue,
   MANUAL_HEALTH_TEST_GEMINI_TIMEOUT_MS,
   MANUAL_HEALTH_TEST_TIMEOUT_MS,
+  normalizeHealthTestTimeoutSeconds,
   SCHEDULED_HEALTH_TEST_TIMEOUT_MS,
 } from "@/lib/provider-health-test/defaults";
 import { executeProviderTest } from "@/lib/provider-testing/test-service";
-import type { ProviderTestConfig, ProviderTestResult, TokenUsage } from "@/lib/provider-testing/types";
+import type {
+  ProviderTestConfig,
+  ProviderTestResult,
+  TokenUsage,
+} from "@/lib/provider-testing/types";
 import { calculateRequestCost } from "@/lib/utils/cost-calculation";
 import { formatCostForStorage } from "@/lib/utils/currency";
 import { findLatestPriceByModel } from "@/repository/model-price";
 import {
   findProvidersForScheduledHealthTest,
-  recordProviderHealthTestResult,
   type ProviderHealthTestSource,
   type ProviderHealthTestTarget,
+  recordProviderHealthTestResult,
 } from "@/repository/provider-health-test";
 import type { ProviderType } from "@/types/provider";
 
@@ -38,6 +43,8 @@ export interface RunProviderHealthTestInput {
       };
   source: ProviderHealthTestSource;
   model?: string;
+  /** Runtime timeout for scheduled tests, supplied by system settings. */
+  timeoutMs?: number;
 }
 
 /**
@@ -53,6 +60,11 @@ export function getScheduledHealthTestInFlightCount(): number {
 
 export function getScheduledHealthTestInFlightIds(): number[] {
   return Array.from(scheduledInFlight);
+}
+
+function resolveScheduledHealthTestTimeoutMs(timeoutMs: number | undefined): number {
+  if (timeoutMs == null || !Number.isFinite(timeoutMs)) return SCHEDULED_HEALTH_TEST_TIMEOUT_MS;
+  return normalizeHealthTestTimeoutSeconds(timeoutMs / 1000) * 1000;
 }
 
 async function resolveApiKey(
@@ -109,12 +121,15 @@ async function estimateHealthTestCostUsd(input: {
     };
   }
 
-  const inputTokens = Number.isFinite(usage.inputTokens) ? Math.max(0, Math.round(usage.inputTokens)) : null;
+  const inputTokens = Number.isFinite(usage.inputTokens)
+    ? Math.max(0, Math.round(usage.inputTokens))
+    : null;
   const outputTokens = Number.isFinite(usage.outputTokens)
     ? Math.max(0, Math.round(usage.outputTokens))
     : null;
   const cacheCreationInputTokens =
-    typeof usage.cacheCreationInputTokens === "number" && Number.isFinite(usage.cacheCreationInputTokens)
+    typeof usage.cacheCreationInputTokens === "number" &&
+    Number.isFinite(usage.cacheCreationInputTokens)
       ? Math.max(0, Math.round(usage.cacheCreationInputTokens))
       : null;
   const cacheReadInputTokens =
@@ -160,8 +175,7 @@ export async function runProviderHealthTest(
   input: RunProviderHealthTestInput
 ): Promise<ProviderTestResult> {
   const provider = input.provider;
-  const isGemini =
-    provider.providerType === "gemini" || provider.providerType === "gemini-cli";
+  const isGemini = provider.providerType === "gemini" || provider.providerType === "gemini-cli";
   const { apiKey, geminiBearerAuth } = await resolveApiKey(provider.providerType, provider.key);
   // Scheduled: must use group-configured model (already filtered if missing).
   // Manual: allow override, else type default (manual still works without group model).
@@ -170,9 +184,7 @@ export async function runProviderHealthTest(
     ("healthTestModel" in provider && provider.healthTestModel
       ? String(provider.healthTestModel).trim()
       : "") ||
-    (input.source === "scheduled"
-      ? ""
-      : getDefaultHealthTestModel(provider.providerType));
+    (input.source === "scheduled" ? "" : getDefaultHealthTestModel(provider.providerType));
   if (!model) {
     throw new Error("health_test_model_not_configured");
   }
@@ -192,7 +204,7 @@ export async function runProviderHealthTest(
         ? isGemini
           ? MANUAL_HEALTH_TEST_GEMINI_TIMEOUT_MS
           : MANUAL_HEALTH_TEST_TIMEOUT_MS
-        : SCHEDULED_HEALTH_TEST_TIMEOUT_MS,
+        : resolveScheduledHealthTestTimeoutMs(input.timeoutMs),
     // No first-token hard deadline for manual or scheduled — measure TTFB but
     // let slow first tokens finish within total timeout (avoids false 15s kills).
     firstByteTimeoutMs: undefined,
@@ -227,9 +239,13 @@ export async function runProviderHealthTest(
   return result;
 }
 
-async function runOneScheduledProvider(current: ProviderHealthTestTarget): Promise<boolean> {
+async function runOneScheduledProvider(
+  current: ProviderHealthTestTarget,
+  timeoutMs: number | undefined,
+  onProviderFinished?: () => void
+): Promise<boolean> {
   try {
-    await runProviderHealthTest({ provider: current, source: "scheduled" });
+    await runProviderHealthTest({ provider: current, source: "scheduled", timeoutMs });
     return true;
   } catch (error) {
     logger.warn("[ProviderHealthTest] scheduled run failed", {
@@ -262,6 +278,14 @@ async function runOneScheduledProvider(current: ProviderHealthTestTarget): Promi
         error: error instanceof Error ? error.message : String(error),
       });
     }
+    try {
+      onProviderFinished?.();
+    } catch (error) {
+      logger.debug("[ProviderHealthTest] cadence wake callback skipped", {
+        providerId: current.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 }
 
@@ -270,20 +294,23 @@ async function runOneScheduledProvider(current: ProviderHealthTestTarget): Promi
  *
  * - Does NOT await all providers (no global wait on the slowest).
  * - Skips providers already in-flight so a long run cannot be double-started.
- * - Fast providers become due again next wall-clock bucket even if others are still running.
+ * - Each provider gets a precise completion-based cadence wake; the minute poll remains a fallback.
  */
 export async function runDueScheduledHealthTests(options?: {
   intervalMs?: number;
+  timeoutMs?: number;
   now?: Date;
+  onProviderFinished?: () => void;
 }): Promise<{ due: number; started: number; skippedInFlight: number; inFlight: number }> {
   const intervalMs = options?.intervalMs ?? 60_000;
+  const timeoutMs = options?.timeoutMs;
+  const onProviderFinished = options?.onProviderFinished;
   const now = options?.now ?? new Date();
   const targets = await findProvidersForScheduledHealthTest();
 
-  // Wall-clock buckets: once per minute boundary (or custom intervalMs).
-  const dueCandidates = targets.filter((p) =>
-    isHealthTestDueForBucket(p.lastHealthTestAt, now, intervalMs)
-  );
+  // Elapsed interval: the poller may wake every minute, but a provider only runs
+  // after its configured interval has elapsed since the previous result.
+  const dueCandidates = targets.filter((p) => isHealthTestDue(p.lastHealthTestAt, now, intervalMs));
 
   let skippedInFlight = 0;
   const toStart: ProviderHealthTestTarget[] = [];
@@ -311,7 +338,7 @@ export async function runDueScheduledHealthTests(options?: {
 
   // Fire-and-forget: each provider has its own timer; scheduler cycle returns immediately.
   for (const current of toStart) {
-    void runOneScheduledProvider(current);
+    void runOneScheduledProvider(current, timeoutMs, onProviderFinished);
   }
 
   return {

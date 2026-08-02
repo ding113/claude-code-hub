@@ -28,6 +28,7 @@ import providersSection from "./providers/section.json";
 import providersSort from "./providers/sort.json";
 import providersStrings from "./providers/strings.json";
 import providersProviderGroups from "./providers/providerGroups.json";
+import providersProviderSites from "./providers/providerSites.json";
 import providersTypes from "./providers/types.json";
 
 import providersFormApiTest from "./providers/form/apiTest.json";
@@ -93,6 +94,7 @@ const providers = {
   inlineEdit: providersInlineEdit,
   list: providersList,
   providerGroups: providersProviderGroups,
+  providerSites: providersProviderSites,
   recluster: providersRecluster,
   schedulingDialog: providersSchedulingDialog,
   search: providersSearch,

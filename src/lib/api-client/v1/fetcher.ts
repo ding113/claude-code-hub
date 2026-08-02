@@ -43,6 +43,7 @@ export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): 
     ...options,
     method,
     credentials: options.credentials ?? "include",
+    cache: options.cache ?? "no-store",
     headers,
     body: hasBody ? JSON.stringify(options.body) : undefined,
   });

@@ -64,6 +64,7 @@
   "RATE_LIMIT_WEEKLY_EXCEEDED": "Превышен недельный лимит расходов: ${current} USD (лимит: ${limit} USD). Сброс в {resetTime}",
   "RATE_LIMIT_MONTHLY_EXCEEDED": "Превышен месячный лимит расходов: ${current} USD (лимит: ${limit} USD). Сброс в {resetTime}",
   "RATE_LIMIT_TOTAL_EXCEEDED": "Превышен общий лимит расходов: ${current} / ${limit} USD",
+  "USER_BALANCE_EXHAUSTED": "Баланс аккаунта исчерпан. Обратитесь к администратору для пополнения.",
   "RATE_LIMIT_CONCURRENT_SESSIONS_EXCEEDED": "Превышен лимит одновременных сессий: {current} сессий (лимит: {limit}). Пожалуйста, дождитесь завершения активных сессий",
   "RESOURCE_BUSY": "Ресурс в настоящее время используется",
   "INVALID_STATE": "Операция не разрешена в текущем состоянии",

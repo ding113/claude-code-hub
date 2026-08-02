@@ -16,6 +16,13 @@ const UserMutationFieldsSchema = {
   tags: z.array(z.string().max(32)).max(20).optional().describe("User tags."),
   rpm: z.number().int().min(0).max(1_000_000).nullable().optional().describe("RPM limit."),
   dailyQuota: z.number().min(0).max(10_000).nullable().optional().describe("Daily USD quota."),
+  balanceUsd: z
+    .number()
+    .min(0)
+    .max(10_000_000)
+    .nullable()
+    .optional()
+    .describe("CCH-local prepaid request balance in USD; null means unlimited."),
   limit5hUsd: z.number().min(0).max(10_000).nullable().optional().describe("Five-hour USD quota."),
   limit5hResetMode: ResetModeSchema.optional().describe("Five-hour reset mode."),
   limitWeeklyUsd: z.number().min(0).max(50_000).nullable().optional().describe("Weekly USD quota."),
@@ -153,6 +160,11 @@ export const UserDetailResponseSchema = z
     role: z.enum(["admin", "user"]).describe("User role."),
     rpm: z.number().nullable().describe("Per-minute request limit, or null for unlimited."),
     dailyQuota: z.number().nullable().describe("Daily USD quota, or null for unlimited."),
+    balanceUsd: z
+      .number()
+      .nullable()
+      .optional()
+      .describe("CCH-local prepaid request balance in USD; null means unlimited."),
     providerGroup: z.string().nullable().describe("Provider group expression, or null."),
     tags: z.array(z.string()).optional().describe("User tags."),
     createdAt: IsoDateTimeSchema.describe("Creation timestamp."),

@@ -1955,6 +1955,11 @@
           "label": "供應商分組",
           "placeholder": "default"
         },
+        "balanceUsd": {
+          "label": "帳戶餘額（美元）",
+          "placeholder": "留空表示不限額",
+          "description": "請求完成後從 CCH 使用者餘額扣款；留空表示不限額。"
+        },
         "allowedClients": {
           "label": "用戶端限制",
           "description": "限制哪些 CLI/IDE 用戶端可以使用此帳戶。留空表示無限制。",

@@ -1,8 +1,14 @@
 import { matchesAllowedModelRules } from "@/lib/allowed-model-rules";
 import { getCircuitState, isCircuitOpen } from "@/lib/circuit-breaker";
+import { getCachedSystemSettings } from "@/lib/config/system-settings-cache";
 import { PROVIDER_GROUP } from "@/lib/constants/provider.constants";
 import { logger } from "@/lib/logger";
 import { selectBestHealthDispatchProvider } from "@/lib/provider-dispatch/health-aware-select";
+import {
+  matchesProviderGroupModelMatchRules,
+  type ProviderGroupModelMatchRule,
+  type ProviderGroupModelMatchRulesByName,
+} from "@/lib/provider-groups/model-match-rules";
 import { RateLimitService } from "@/lib/rate-limit";
 import { SessionManager } from "@/lib/session-manager";
 import { parseProviderGroups, resolveProviderGroupsWithDefault } from "@/lib/utils/provider-group";
@@ -10,8 +16,12 @@ import { isProviderActiveNow } from "@/lib/utils/provider-schedule";
 import { resolveSystemTimezone } from "@/lib/utils/timezone";
 import { isVendorTypeCircuitOpen } from "@/lib/vendor-type-circuit-breaker";
 import { findAllProviders, findProviderById } from "@/repository/provider";
-import { getGroupCostMultiplier } from "@/repository/provider-groups";
+import {
+  getGroupCostMultiplier,
+  getProviderGroupModelMatchRules,
+} from "@/repository/provider-groups";
 import type { ProviderChainItem } from "@/types/message";
+import type { HealthTestSloThresholds } from "@/lib/provider-health-test/slo-thresholds";
 import type { Provider } from "@/types/provider";
 import { isClientAllowedDetailed } from "./client-detector";
 import type { ClientFormat } from "./format-mapper";
@@ -31,18 +41,57 @@ import type { ProxySession } from "./session";
  * @param session - 代理会话对象
  * @returns 有效分组字符串，或 null（无认证信息时）
  */
+export function resolveEffectiveProviderGroup(input: {
+  providerGroup?: string | null;
+  key?: { providerGroup?: string | null } | null;
+  user?: { providerGroup?: string | null } | null;
+}): string | null {
+  const selectedProviderGroup = input.providerGroup?.trim();
+  if (selectedProviderGroup) {
+    return selectedProviderGroup;
+  }
+
+  if (input.key) {
+    return input.key.providerGroup || PROVIDER_GROUP.DEFAULT;
+  }
+
+  if (input.user) {
+    return input.user.providerGroup || PROVIDER_GROUP.DEFAULT;
+  }
+
+  return null;
+}
+
 function getEffectiveProviderGroup(session?: ProxySession): string | null {
-  if (!session?.authState) {
-    return null;
+  return resolveEffectiveProviderGroup({
+    providerGroup: session?.provider?.groupTag,
+    key: session?.authState?.key,
+    user: session?.authState?.user,
+  });
+}
+
+async function resolveAndSetGroupCostMultiplier(session: ProxySession): Promise<void> {
+  // Fail soft: if the lookup throws (Redis/DB hiccup), fall back to 1.0 so
+  // request handling proceeds without billing disruption.
+  const effectiveGroup = getEffectiveProviderGroup(session);
+  if (!effectiveGroup) {
+    session.setGroupCostMultiplier(1.0);
+    return;
   }
-  const { key, user } = session.authState;
-  if (key) {
-    return key.providerGroup || PROVIDER_GROUP.DEFAULT;
+
+  try {
+    const multiplier = await getGroupCostMultiplier(effectiveGroup);
+    session.setGroupCostMultiplier(multiplier);
+  } catch (error) {
+    logger.warn(
+      "[ProviderResolver] Failed to resolve group cost multiplier, falling back to 1.0",
+      {
+        effectiveGroup,
+        error: error instanceof Error ? error.message : String(error),
+      }
+    );
+    session.setGroupCostMultiplier(1.0);
   }
-  if (user) {
-    return user.providerGroup || PROVIDER_GROUP.DEFAULT;
-  }
-  return PROVIDER_GROUP.DEFAULT;
 }
 
 /**
@@ -64,29 +113,51 @@ function checkProviderGroupMatch(providerGroupTag: string | null, userGroups: st
   return providerTags.some((tag) => groups.includes(tag));
 }
 
+async function getHealthSloThresholds(): Promise<HealthTestSloThresholds> {
+  const settings = await getCachedSystemSettings();
+  return {
+    minOnlineRate: settings.healthTestMinOnlineRatePercent / 100,
+    maxAvgFirstByteMs: settings.healthTestMaxAvgLatencySeconds * 1000,
+    minSampleCount: settings.healthTestWindowSize,
+  };
+}
+
 /**
  * 检查供应商是否支持指定模型（用于调度器匹配）
  *
  * 核心逻辑（统一所有供应商类型）：
- * 1. 未设置 allowedModels（null 或空数组）：接受任意模型（格式兼容性由 checkFormatProviderTypeCompatibility 保证）
- * 2. 设置了 allowedModels：仅当原始请求模型命中 allowedModels 时才支持
+ * 1. 未设置 provider.allowedModels 或 group.modelMatchRules：该层接受任意模型
+ * 2. 配置任一层规则：原始请求模型必须命中该层规则；两层规则同时配置时都必须通过
  * 3. modelRedirects 仅在供应商已被选中后用于改写上游模型，不参与调度放行
  *
- * 注意：allowedModels 是声明性列表（用户可填写任意字符串），用于调度器匹配，不是真实模型校验。
+ * 注意：allowedModels 与 group.modelMatchRules 都是声明性列表（用户可填写任意字符串），
+ * 用于调度器匹配，不是真实模型校验。group.matchRules 只负责上游站点分组分类，
+ * 不参与请求模型匹配。
  * 格式兼容性（如 claude 格式请求只路由到 claude 类型供应商）由 checkFormatProviderTypeCompatibility 独立保证。
  *
  * @param provider - 供应商信息
  * @param requestedModel - 用户请求的模型名称
  * @returns 是否支持该模型（用于调度器筛选）
  */
-function providerSupportsModel(provider: Provider, requestedModel: string): boolean {
-  // 1. 未设置 allowedModels（null 或空数组）：接受任意模型
-  if (!provider.allowedModels || provider.allowedModels.length === 0) {
-    return true;
+function providerSupportsModel(
+  provider: Provider,
+  requestedModel: string,
+  groupModelMatchRules: ProviderGroupModelMatchRulesByName = new Map()
+): boolean {
+  // Provider-level and group-level rules are both allowlists when configured.
+  if (
+    provider.allowedModels &&
+    provider.allowedModels.length > 0 &&
+    !matchesAllowedModelRules(requestedModel, provider.allowedModels)
+  ) {
+    return false;
   }
 
-  // 2. 设置了 allowedModels：只按原始请求模型做白名单匹配
-  return matchesAllowedModelRules(requestedModel, provider.allowedModels);
+  return matchesProviderGroupModelMatchRules(
+    requestedModel,
+    resolveProviderGroupsWithDefault(provider.groupTag),
+    groupModelMatchRules
+  );
 }
 
 /**
@@ -157,24 +228,7 @@ export class ProxyProviderResolver {
     }
 
     // === Resolve group cost multiplier ===
-    // Fail soft: if the lookup throws (Redis/DB hiccup), fall back to 1.0 so
-    // request handling proceeds without billing disruption.
-    const effectiveGroup = getEffectiveProviderGroup(session);
-    if (effectiveGroup) {
-      try {
-        const multiplier = await getGroupCostMultiplier(effectiveGroup);
-        session.setGroupCostMultiplier(multiplier);
-      } catch (error) {
-        logger.warn(
-          "[ProviderResolver] Failed to resolve group cost multiplier, falling back to 1.0",
-          {
-            effectiveGroup,
-            error: error instanceof Error ? error.message : String(error),
-          }
-        );
-        session.setGroupCostMultiplier(1.0);
-      }
-    }
+    await resolveAndSetGroupCostMultiplier(session);
 
     // === 故障转移循环 ===
     let attemptCount = 0;
@@ -261,6 +315,7 @@ export class ProxyProviderResolver {
           // 切换到新供应商
           session.setProvider(fallbackProvider);
           session.setLastSelectionContext(retryContext);
+          await resolveAndSetGroupCostMultiplier(session);
           continue; // 继续下一次循环，检查新供应商
         }
 
@@ -430,13 +485,13 @@ export class ProxyProviderResolver {
   /**
    * First-byte hedge alternate: next health-SLO qualified peer after excludes.
    * Returns null when no remaining SLO-qualified candidate exists → do not race.
-   * Does not fall back to legacy priority+weight.
+   * Does not fall back to non-SLO peers. Ranking is cheapest cost first.
    */
   static async pickHealthSloAlternate(
     session: ProxySession,
     excludeIds: number[]
   ): Promise<Provider | null> {
-    const { selectNextHealthDispatchAlternate } = await import(
+    const { selectNextHealthDispatchAlternate, resolveDispatchCost } = await import(
       "@/lib/provider-dispatch/health-aware-select"
     );
     const { isProviderActiveNow } = await import("@/lib/utils/provider-schedule");
@@ -447,6 +502,16 @@ export class ProxyProviderResolver {
     const excludeSet = new Set(excludeIds);
     const effectiveGroupPick = getEffectiveProviderGroup(session);
     const requestedModel = session.getOriginalModel() || "";
+    let groupModelMatchRules: ReadonlyMap<string, ProviderGroupModelMatchRule[] | null> = new Map();
+    if (requestedModel) {
+      try {
+        groupModelMatchRules = await getProviderGroupModelMatchRules();
+      } catch (error) {
+        logger.warn("ProviderSelector: Failed to resolve group model rules; allowing by group", {
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
     const systemTimezone = await resolveSystemTimezone();
 
     let pool = allProviders.filter((provider) => {
@@ -464,16 +529,21 @@ export class ProxyProviderResolver {
           return false;
         }
       }
-      if (requestedModel && !providerSupportsModel(provider, requestedModel)) {
+      if (
+        requestedModel &&
+        !providerSupportsModel(provider, requestedModel, groupModelMatchRules)
+      ) {
         return false;
       }
       return true;
     });
 
+    const healthSloThresholds = await getHealthSloThresholds();
     return selectNextHealthDispatchAlternate(
       pool,
-      (p) => ProxyProviderResolver.resolveEffectivePriority(p, effectiveGroupPick),
-      excludeIds
+      resolveDispatchCost,
+      excludeIds,
+      healthSloThresholds
     );
   }
 
@@ -499,6 +569,16 @@ export class ProxyProviderResolver {
     // 如果没有 session，回退到 findAllProviders（内部已使用缓存）
     const allProviders = session ? await session.getProvidersSnapshot() : await findAllProviders();
     const requestedModel = session?.getOriginalModel() || "";
+    let groupModelMatchRules: ReadonlyMap<string, ProviderGroupModelMatchRule[] | null> = new Map();
+    if (requestedModel) {
+      try {
+        groupModelMatchRules = await getProviderGroupModelMatchRules();
+      } catch (error) {
+        logger.warn("ProviderSelector: Failed to resolve group model rules; allowing by group", {
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
 
     // === Step 1: 分组预过滤（静默，用户只能看到自己分组内的供应商）===
     const effectiveGroupPick = getEffectiveProviderGroup(session);
@@ -645,7 +725,7 @@ export class ProxyProviderResolver {
         return true;
       }
 
-      return providerSupportsModel(provider, requestedModel);
+      return providerSupportsModel(provider, requestedModel, groupModelMatchRules);
     });
 
     context.enabledProviders = enabledProviders.length;
@@ -679,7 +759,10 @@ export class ProxyProviderResolver {
         ) {
           reason = "format_type_mismatch";
           details = `原始格式 ${session.originalFormat} 与供应商类型 ${p.providerType} 不兼容`;
-        } else if (requestedModel && !providerSupportsModel(p, requestedModel)) {
+        } else if (
+          requestedModel &&
+          !providerSupportsModel(p, requestedModel, groupModelMatchRules)
+        ) {
           reason = "model_not_allowed";
           details = `不支持模型 ${requestedModel}`;
         }
@@ -756,57 +839,58 @@ export class ProxyProviderResolver {
       return { provider: null, context };
     }
 
-    // Step 5/6: health-aware dispatch when possible, else legacy priority + weight
-    const priorities = [
-      ...new Set(
-        healthyProviders.map((p) =>
-          ProxyProviderResolver.resolveEffectivePriority(p, effectiveGroupPick ?? null)
-        )
-      ),
+    // Step 5/6: health-aware cheapest-first, else cheapest among remaining peers.
+    // priority/weight are no longer used for ranking (fields kept for schema/UI).
+    const { resolveDispatchCost, selectCheapestProvider } = await import(
+      "@/lib/provider-dispatch/health-aware-select"
+    );
+    const costLevels = [
+      ...new Set(healthyProviders.map((p) => resolveDispatchCost(p))),
     ].sort((a, b) => a - b);
-    context.priorityLevels = priorities;
+    // Reuse priorityLevels field in decision context as cost ladder for logs/UI.
+    context.priorityLevels = costLevels;
 
-    const healthPick = selectBestHealthDispatchProvider(healthyProviders, (p) =>
-      ProxyProviderResolver.resolveEffectivePriority(p, effectiveGroupPick ?? null)
+    const healthSloThresholds = await getHealthSloThresholds();
+    const healthPick = selectBestHealthDispatchProvider(
+      healthyProviders,
+      resolveDispatchCost,
+      healthSloThresholds
     );
 
     let selected: Provider;
-    let selectionMode: "health_slo" | "legacy_priority_weight";
+    let selectionMode: "health_slo" | "legacy_cost";
 
     if (healthPick) {
       selected = healthPick.provider;
       selectionMode = "health_slo";
-      context.selectedPriority = healthPick.candidates[0]?.priority ?? selected.priority ?? 0;
-      // Candidates = all SLO-qualified providers at the chosen priority (for chain logging)
-      const bestPriority = context.selectedPriority;
-      const samePriority = healthPick.candidates.filter((c) => c.priority === bestPriority);
-      context.candidatesAtPriority = samePriority.map((c) => ({
+      const bestCost = healthPick.candidates[0]?.costMultiplier ?? resolveDispatchCost(selected);
+      context.selectedPriority = bestCost;
+      const sameCost = healthPick.candidates.filter((c) => c.costMultiplier === bestCost);
+      context.candidatesAtPriority = sameCost.map((c) => ({
         id: c.provider.id,
         name: c.provider.name,
-        weight: c.provider.weight,
-        costMultiplier: c.provider.costMultiplier,
-        probability: samePriority.length > 0 ? 1 / samePriority.length : 0,
+        weight: 1,
+        costMultiplier: c.costMultiplier,
+        probability: sameCost.length > 0 ? 1 / sameCost.length : 0,
       }));
     } else {
-      const topPriorityProviders = ProxyProviderResolver.selectTopPriority(
-        healthyProviders,
-        effectiveGroupPick
-      );
-      context.selectedPriority = Math.min(
-        ...healthyProviders.map((p) =>
-          ProxyProviderResolver.resolveEffectivePriority(p, effectiveGroupPick ?? null)
-        )
-      );
-      const totalWeight = topPriorityProviders.reduce((sum, p) => sum + p.weight, 0);
-      context.candidatesAtPriority = topPriorityProviders.map((p) => ({
+      const cheapest = selectCheapestProvider(healthyProviders, resolveDispatchCost);
+      if (!cheapest) {
+        logger.warn("ProviderSelector: No providers after cost ranking");
+        return { provider: null, context };
+      }
+      selected = cheapest;
+      selectionMode = "legacy_cost";
+      const bestCost = resolveDispatchCost(selected);
+      context.selectedPriority = bestCost;
+      const sameCost = healthyProviders.filter((p) => resolveDispatchCost(p) === bestCost);
+      context.candidatesAtPriority = sameCost.map((p) => ({
         id: p.id,
         name: p.name,
-        weight: p.weight,
-        costMultiplier: p.costMultiplier,
-        probability: totalWeight > 0 ? p.weight / totalWeight : 0,
+        weight: 1,
+        costMultiplier: resolveDispatchCost(p),
+        probability: sameCost.length > 0 ? 1 / sameCost.length : 0,
       }));
-      selected = ProxyProviderResolver.selectOptimal(topPriorityProviders);
-      selectionMode = "legacy_priority_weight";
     }
 
     // 详细的选择日志
@@ -823,19 +907,17 @@ export class ProxyProviderResolver {
       healthSloCandidates: healthPick?.candidates.map((c) => ({
         id: c.provider.id,
         name: c.provider.name,
-        priority: c.priority,
+        cost: c.costMultiplier,
         onlineRate: c.onlineRate,
         avgFirstByteMs: c.avgFirstByteMs,
       })),
-      topPriorityLevel: context.selectedPriority,
-      topPriorityCandidates: context.candidatesAtPriority,
+      topCostLevel: context.selectedPriority,
+      topCostCandidates: context.candidatesAtPriority,
       selected: {
         name: selected.name,
         id: selected.id,
         type: selected.providerType,
-        priority: selected.priority,
-        weight: selected.weight,
-        cost: selected.costMultiplier,
+        cost: resolveDispatchCost(selected),
         onlineRate: selected.healthTestOnlineRate,
         avgFirstByteMs: selected.healthTestAvgFirstByteMs,
         circuitState: getCircuitState(selected.id),
@@ -922,85 +1004,55 @@ export class ProxyProviderResolver {
   }
 
   /**
-   * 解析供应商的有效优先级：优先使用分组覆盖值，回退到全局默认值
-   * 支持逗号分隔的多分组（如 "cli,admin"），取匹配到的最小优先级
+   * @deprecated Dispatch no longer uses priority. Kept for older tests / log shape.
+   * Returns provider.costMultiplier (cheaper = smaller) so callers that still sort
+   * by "priority ascending" get cost-first behavior.
    */
-  static resolveEffectivePriority(provider: Provider, userGroup: string | null): number {
-    if (userGroup && provider.groupPriorities) {
-      const groups = parseProviderGroups(userGroup);
-      const overrides = groups
-        .map((g) => provider.groupPriorities?.[g])
-        .filter((v): v is number => v !== undefined);
-      if (overrides.length > 0) {
-        return Math.min(...overrides);
-      }
-    }
-    return provider.priority ?? 0;
+  static resolveEffectivePriority(provider: Provider, _userGroup: string | null): number {
+    const raw = Number(provider.costMultiplier);
+    return Number.isFinite(raw) && raw >= 0 ? raw : 1;
   }
 
   /**
-   * 优先级分层：只选择最高优先级的供应商（支持分组优先级覆盖）
+   * Cheapest cost tier among candidates (replaces old priority tier).
+   * Exported via private static so existing unit tests that spy on it keep working.
    */
-  private static selectTopPriority(providers: Provider[], userGroup?: string | null): Provider[] {
-    if (providers.length === 0) {
-      return [];
-    }
-
-    const group = userGroup ?? null;
-    const minPriority = Math.min(
-      ...providers.map((p) => ProxyProviderResolver.resolveEffectivePriority(p, group))
-    );
-
-    return providers.filter(
-      (p) => ProxyProviderResolver.resolveEffectivePriority(p, group) === minPriority
-    );
+  private static selectTopPriority(providers: Provider[], _userGroup?: string | null): Provider[] {
+    if (providers.length === 0) return [];
+    const costs = providers.map((p) => {
+      const raw = Number(p.costMultiplier);
+      return Number.isFinite(raw) && raw >= 0 ? raw : 1;
+    });
+    const minCost = Math.min(...costs);
+    return providers.filter((p) => {
+      const raw = Number(p.costMultiplier);
+      const cost = Number.isFinite(raw) && raw >= 0 ? raw : 1;
+      return cost === minCost;
+    });
   }
 
   /**
-   * 成本排序 + 加权选择：在同优先级内，按成本排序后加权随机
+   * Deterministic cheapest pick (no weight random).
    */
   private static selectOptimal(providers: Provider[]): Provider {
     if (providers.length === 0) {
       throw new Error("No providers available for selection");
     }
-
-    if (providers.length === 1) {
-      return providers[0];
-    }
-
-    // 按成本倍率排序（倍率低的在前）
+    if (providers.length === 1) return providers[0];
     const sorted = [...providers].sort((a, b) => {
-      const costA = a.costMultiplier;
-      const costB = b.costMultiplier;
-      return costA - costB;
+      const costA = Number.isFinite(a.costMultiplier) ? a.costMultiplier : 1;
+      const costB = Number.isFinite(b.costMultiplier) ? b.costMultiplier : 1;
+      if (costA !== costB) return costA - costB;
+      return a.id - b.id;
     });
-
-    // 加权随机选择（复用现有逻辑）
-    return ProxyProviderResolver.weightedRandom(sorted);
+    return sorted[0];
   }
 
   /**
-   * 加权随机选择
+   * @deprecated Weight random removed from dispatch. Always returns cheapest by cost.
    */
   private static weightedRandom(providers: Provider[]): Provider {
-    const totalWeight = providers.reduce((sum, p) => sum + p.weight, 0);
-
-    if (totalWeight === 0) {
-      const randomIndex = Math.floor(Math.random() * providers.length);
-      return providers[randomIndex];
-    }
-
-    const random = Math.random() * totalWeight;
-    let cumulativeWeight = 0;
-
-    for (const provider of providers) {
-      cumulativeWeight += provider.weight;
-      if (random < cumulativeWeight) {
-        return provider;
-      }
-    }
-
-    return providers[providers.length - 1];
+    return ProxyProviderResolver.selectOptimal(providers);
   }
 
   /**
@@ -1095,9 +1147,15 @@ export class ProxyProviderResolver {
       };
     }
 
-    // Health-aware first, else legacy priority + weight
-    const healthPick = selectBestHealthDispatchProvider(healthyProviders, (p) =>
-      ProxyProviderResolver.resolveEffectivePriority(p, effectiveGroupPick ?? null)
+    // Health-aware cheapest-first, else cheapest among remaining peers.
+    const { resolveDispatchCost, selectCheapestProvider } = await import(
+      "@/lib/provider-dispatch/health-aware-select"
+    );
+    const healthSloThresholds = await getHealthSloThresholds();
+    const healthPick = selectBestHealthDispatchProvider(
+      healthyProviders,
+      resolveDispatchCost,
+      healthSloThresholds
     );
 
     let selected: Provider;
@@ -1111,28 +1169,45 @@ export class ProxyProviderResolver {
 
     if (healthPick) {
       selected = healthPick.provider;
-      const bestPriority = healthPick.candidates[0]?.priority ?? selected.priority ?? 0;
-      const samePriority = healthPick.candidates.filter((c) => c.priority === bestPriority);
-      candidates = samePriority.map((c) => ({
+      const bestCost = healthPick.candidates[0]?.costMultiplier ?? resolveDispatchCost(selected);
+      const sameCost = healthPick.candidates.filter((c) => c.costMultiplier === bestCost);
+      candidates = sameCost.map((c) => ({
         id: c.provider.id,
         name: c.provider.name,
-        weight: c.provider.weight,
-        costMultiplier: c.provider.costMultiplier,
-        probability: samePriority.length > 0 ? 1 / samePriority.length : 0,
+        weight: 1,
+        costMultiplier: c.costMultiplier,
+        probability: sameCost.length > 0 ? 1 / sameCost.length : 0,
       }));
     } else {
-      const topPriorityProviders = ProxyProviderResolver.selectTopPriority(
-        healthyProviders,
-        effectiveGroupPick
-      );
-      selected = ProxyProviderResolver.selectOptimal(topPriorityProviders);
-      const totalWeight = topPriorityProviders.reduce((sum, p) => sum + p.weight, 0);
-      candidates = topPriorityProviders.map((p) => ({
+      const cheapest = selectCheapestProvider(healthyProviders, resolveDispatchCost);
+      if (!cheapest) {
+        return {
+          provider: null,
+          context: {
+            totalProviders: visibleProviders.length,
+            enabledProviders: typeFiltered.length,
+            targetType,
+            requestedModel: "",
+            groupFilterApplied: !!effectiveGroupPick,
+            userGroup: effectiveGroupPick || undefined,
+            beforeHealthCheck: typeFiltered.length,
+            afterHealthCheck: healthyProviders.length,
+            filteredProviders: [],
+            priorityLevels: [],
+            selectedPriority: 0,
+            candidatesAtPriority: [],
+          },
+        };
+      }
+      selected = cheapest;
+      const bestCost = resolveDispatchCost(selected);
+      const sameCost = healthyProviders.filter((p) => resolveDispatchCost(p) === bestCost);
+      candidates = sameCost.map((p) => ({
         id: p.id,
         name: p.name,
-        weight: p.weight,
-        costMultiplier: p.costMultiplier,
-        probability: totalWeight > 0 ? p.weight / totalWeight : 1 / topPriorityProviders.length,
+        weight: 1,
+        costMultiplier: resolveDispatchCost(p),
+        probability: sameCost.length > 0 ? 1 / sameCost.length : 0,
       }));
     }
 
@@ -1148,17 +1223,10 @@ export class ProxyProviderResolver {
         beforeHealthCheck: typeFiltered.length,
         afterHealthCheck: healthyProviders.length,
         filteredProviders: [],
-        priorityLevels: [
-          ...new Set(
-            healthyProviders.map((p) =>
-              ProxyProviderResolver.resolveEffectivePriority(p, effectiveGroupPick ?? null)
-            )
-          ),
-        ].sort((a, b) => a - b),
-        selectedPriority: ProxyProviderResolver.resolveEffectivePriority(
-          selected,
-          effectiveGroupPick ?? null
+        priorityLevels: [...new Set(healthyProviders.map((p) => resolveDispatchCost(p)))].sort(
+          (a, b) => a - b
         ),
+        selectedPriority: resolveDispatchCost(selected),
         candidatesAtPriority: candidates,
       },
     };

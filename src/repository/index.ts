@@ -76,6 +76,7 @@ export {
   getHealthTestGlobalBudgetStatus,
   recordProviderHealthTestResult,
   rebalanceScheduledHealthTestsBySlo,
+  reopenSloAutoDisabledScheduledHealthTests,
   suspendAllScheduledHealthTestsForGlobalBudget,
   updateProviderScheduledHealthTestEnabled,
 } from "./provider-health-test";

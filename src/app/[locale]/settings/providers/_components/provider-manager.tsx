@@ -2,6 +2,7 @@
 import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
 import {
   AlertTriangle,
+  Building2,
   Filter,
   Layers,
   LayoutGrid,
@@ -49,6 +50,10 @@ import { ProviderList } from "./provider-list";
 import { ProviderSortDropdown, type SortKey } from "./provider-sort-dropdown";
 import { ProviderTypeFilter } from "./provider-type-filter";
 import { HealthTestBudgetBar } from "./health-test-budget-bar";
+import { HealthTestRuntimeConfigControl } from "./health-test-runtime-config-control";
+import { HealthTestScheduleModeControl } from "./health-test-schedule-mode-control";
+import { StreamingRaceModeControl } from "./streaming-race-mode-control";
+import { ProviderSitesView } from "./provider-sites-view";
 import { ProviderVendorView } from "./provider-vendor-view";
 
 /** Per-endpoint circuit breaker state, keyed by provider ID */
@@ -97,7 +102,7 @@ export function ProviderManager({
   const [typeFilter, setTypeFilter] = useState<ProviderType | "all">("all");
   const [sortBy, setSortBy] = useState<SortKey>("priority");
   const [searchTerm, setSearchTerm] = useState("");
-  const [viewMode, setViewMode] = useState<"list" | "vendor" | "groups">("list");
+  const [viewMode, setViewMode] = useState<"list" | "vendor" | "groups" | "sites">("sites");
   const debouncedSearchTerm = useDebounce(searchTerm, 500);
 
   // Status and group filters
@@ -381,9 +386,8 @@ export function ProviderManager({
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <HealthTestBudgetBar currencyCode={currencyCode} />
-        <div className="flex flex-wrap items-center gap-2 ml-auto">
+      <div className="flex flex-col gap-3">
+        <div className="flex flex-wrap items-center justify-end gap-2">
           <ProviderBatchToolbar
             isMultiSelectMode={isMultiSelectMode}
             allSelected={allSelected}
@@ -399,6 +403,13 @@ export function ProviderManager({
             onSelectByGroup={handleSelectByGroup}
           />
           {addDialogSlot ? <div>{addDialogSlot}</div> : null}
+        </div>
+
+        <div className="grid w-full grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+          <HealthTestBudgetBar currencyCode={currencyCode} className="w-full min-w-0" />
+          <HealthTestScheduleModeControl className="w-full min-w-0" />
+          <StreamingRaceModeControl className="w-full min-w-0" />
+          <HealthTestRuntimeConfigControl className="w-full min-w-0 md:col-span-2 xl:col-span-3" />
         </div>
       </div>
       {/* Filter section */}
@@ -521,6 +532,16 @@ export function ProviderManager({
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
             {/* View Mode Toggle */}
             <div className="flex items-center border rounded-md bg-muted/50 p-1">
+              <Button
+                variant={viewMode === "sites" ? "secondary" : "ghost"}
+                size="sm"
+                className="h-7 px-2 gap-1.5 text-xs"
+                onClick={() => setViewMode("sites")}
+                title={tStrings("viewModeSites")}
+              >
+                <Building2 className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">{tStrings("viewModeSites")}</span>
+              </Button>
               <Button
                 variant={viewMode === "list" ? "secondary" : "ghost"}
                 size="sm"
@@ -663,10 +684,16 @@ export function ProviderManager({
         </div>
       </div>
 
-      {/* Provider list / vendor view / groups tab */}
+      {/* Provider list / vendor / sites / groups */}
       {viewMode === "groups" ? (
         <ProviderGroupTab
           providers={providers}
+          isAdmin={isAdmin}
+          onRequestEditProvider={handleRequestEditProvider}
+        />
+      ) : viewMode === "sites" ? (
+        <ProviderSitesView
+          providers={filteredProviders}
           isAdmin={isAdmin}
           onRequestEditProvider={handleRequestEditProvider}
         />
@@ -689,8 +716,8 @@ export function ProviderManager({
               activeGroupFilter={groupFilter.length === 1 ? groupFilter[0] : null}
               isMultiSelectMode={isMultiSelectMode}
               selectedProviderIds={selectedProviderIds}
-              onSelectProvider={handleSelectProvider}
               onEditProvider={handleOpenProviderEditor}
+              onSelectProvider={handleSelectProvider}
               allGroups={allGroups}
               userGroups={userGroups}
               isAdmin={isAdmin}

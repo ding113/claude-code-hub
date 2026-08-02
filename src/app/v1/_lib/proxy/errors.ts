@@ -805,6 +805,7 @@ export class RateLimitError extends Error {
       | "usd_weekly"
       | "usd_monthly"
       | "usd_total"
+      | "balance"
       | "concurrent_sessions"
       | "daily_quota",
     public readonly currentUsage: number,

@@ -6,6 +6,7 @@ import {
   ProviderGroupCreateSchema,
   ProviderGroupIdParamSchema,
   ProviderGroupListResponseSchema,
+  ProviderGroupReorderSchema,
   ProviderGroupSchema,
   ProviderGroupUpdateSchema,
 } from "@/lib/api/v1/schemas/provider-groups";
@@ -13,6 +14,7 @@ import {
   createProviderGroup,
   deleteProviderGroup,
   listProviderGroups,
+  reorderProviderGroups,
   updateProviderGroup,
 } from "./handlers";
 
@@ -121,6 +123,33 @@ providerGroupsRouter.openapi(
     },
   }),
   updateProviderGroup as never
+);
+
+providerGroupsRouter.openapi(
+  createRoute({
+    method: "post",
+    path: "/provider-groups:reorder",
+    middleware: requireAuth("admin"),
+    tags: ["Provider Groups"],
+    summary: "Reorder provider groups",
+    description: "Sets keyword classification priority by ordered group ids (top first).",
+    "x-required-access": "admin",
+    security,
+    request: {
+      body: {
+        required: true,
+        content: { "application/json": { schema: ProviderGroupReorderSchema } },
+      },
+    },
+    responses: {
+      200: {
+        description: "Reordered provider groups.",
+        content: { "application/json": { schema: ProviderGroupListResponseSchema } },
+      },
+      ...problemResponses,
+    },
+  }),
+  reorderProviderGroups as never
 );
 
 providerGroupsRouter.openapi(

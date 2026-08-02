@@ -46,6 +46,7 @@ vi.mock("@/lib/utils/error-messages", () => ({
     RATE_LIMIT_5H_ROLLING_EXCEEDED: "RATE_LIMIT_5H_ROLLING_EXCEEDED",
     RATE_LIMIT_WEEKLY_EXCEEDED: "RATE_LIMIT_WEEKLY_EXCEEDED",
     RATE_LIMIT_MONTHLY_EXCEEDED: "RATE_LIMIT_MONTHLY_EXCEEDED",
+    USER_BALANCE_EXHAUSTED: "USER_BALANCE_EXHAUSTED",
   },
   getErrorMessageServer: getErrorMessageServerMock,
 }));
@@ -54,6 +55,7 @@ describe("ProxyRateLimitGuard - key daily limit enforcement", () => {
   const createSession = (overrides?: {
     user?: Partial<{
       id: number;
+      balanceUsd: number | null;
       rpm: number | null;
       dailyQuota: number | null;
       dailyResetMode: "fixed" | "rolling";
@@ -84,6 +86,7 @@ describe("ProxyRateLimitGuard - key daily limit enforcement", () => {
       authState: {
         user: {
           id: 1,
+          balanceUsd: null,
           rpm: null,
           dailyQuota: null,
           dailyResetMode: "fixed",
@@ -136,6 +139,32 @@ describe("ProxyRateLimitGuard - key daily limit enforcement", () => {
     rateLimitServiceMock.checkUserDailyCost.mockResolvedValue({ allowed: true });
     rateLimitServiceMock.checkCostLimitsWithLease.mockResolvedValue({ allowed: true });
     rateLimitServiceMock.get5hWindowResetAt.mockResolvedValue(null);
+  });
+
+  it("余额为零时在所有额度查询前拦截请求", async () => {
+    const { ProxyRateLimitGuard } = await import("@/app/v1/_lib/proxy/rate-limit-guard");
+
+    const session = createSession({ user: { balanceUsd: 0 } });
+
+    await expect(ProxyRateLimitGuard.ensure(session)).rejects.toMatchObject({
+      name: "RateLimitError",
+      limitType: "balance",
+      currentUsage: 0,
+      limitValue: 0,
+    });
+
+    expect(rateLimitServiceMock.checkTotalCostLimit).not.toHaveBeenCalled();
+    expect(rateLimitServiceMock.checkAndTrackKeyUserSession).not.toHaveBeenCalled();
+  });
+
+  it("正余额不触发余额闸门并继续常规限额检查", async () => {
+    const { ProxyRateLimitGuard } = await import("@/app/v1/_lib/proxy/rate-limit-guard");
+
+    const session = createSession({ user: { balanceUsd: 0.0001 } });
+
+    await expect(ProxyRateLimitGuard.ensure(session)).resolves.toBeUndefined();
+    expect(rateLimitServiceMock.checkTotalCostLimit).toHaveBeenCalled();
+    expect(rateLimitServiceMock.checkAndTrackKeyUserSession).toHaveBeenCalled();
   });
 
   it("当用户未设置每日额度时，Key 每日额度已超限也必须拦截", async () => {

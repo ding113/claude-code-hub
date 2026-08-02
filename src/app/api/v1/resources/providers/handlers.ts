@@ -474,6 +474,24 @@ export async function setHealthTestGlobalDailyBudget(c: Context): Promise<Respon
   );
 }
 
+export async function setHealthTestPerProviderDailyBudget(c: Context): Promise<Response> {
+  const body = await parseJson(
+    c,
+    z.object({ budget: z.number().min(0).max(100000) }).strict()
+  );
+  if (body instanceof Response) return body;
+  const providerActions = await import("@/actions/providers");
+  return actionJson(
+    c,
+    await callAction(
+      c,
+      providerActions.setHealthTestPerProviderDailyBudget,
+      [body.budget] as never[],
+      c.get("auth")
+    )
+  );
+}
+
 export async function setProviderScheduledHealthTestEnabled(c: Context): Promise<Response> {
   const id = Number(c.req.param("id"));
   if (!Number.isInteger(id) || id <= 0) {
@@ -669,6 +687,10 @@ function sanitizeProvider(
     groupPriorities: provider.groupPriorities,
     costMultiplier: provider.costMultiplier,
     groupTag: provider.groupTag,
+    siteId: provider.siteId ?? null,
+    siteGroupName: provider.siteGroupName ?? null,
+    billingMode:
+      provider.billingMode === "site_group_ratio" ? "site_group_ratio" : "catalog_estimate",
     providerType: provider.providerType as ProviderSummaryResponse["providerType"],
     providerVendorId: provider.providerVendorId,
     preserveClientIp: provider.preserveClientIp,

@@ -147,11 +147,23 @@ function createFallbackSettings(): SystemSettings {
     allowGlobalUsageView: false,
     currencyDisplay: "USD",
     healthTestDailyBudgetCny: 1,
+    healthTestPerProviderDailyBudget: 0.1,
     healthTestGlobalBudgetSuspendedDay: null,
+    healthTestScheduleMode: "dynamic",
+    healthTestWindowSize: 10,
+    healthTestIntervalSeconds: 60,
+    healthTestTimeoutSeconds: 30,
+    healthTestMinOnlineRatePercent: 90,
+    healthTestMaxAvgLatencySeconds: 20,
+    siteCaptchaProvider: "none",
+    hasSiteCaptchaApiKey: false,
+    siteCaptchaEndpoint: null,
     billingModelSource: "original",
     codexPriorityBillingSource: "requested",
     billNonSuccessfulRequests: false,
     billHedgeLosers: true,
+    streamingRaceMode: "single",
+    streamingRaceFirstByteMs: 20000,
     timezone: null,
     enableAutoCleanup: false,
     cleanupRetentionDays: 30,
@@ -267,11 +279,93 @@ const RECENT_COLUMN_LADDER: ReadonlyArray<{
   updateWarn: string;
 }> = [
   {
+    key: "siteCaptchaEndpoint",
+    column: systemSettings.siteCaptchaEndpoint,
+    selectWarn: "system_settings 表除 siteCaptchaEndpoint 外仍有列缺失，继续回退到上一代字段集。",
+    updateWarn: "system_settings 表除 siteCaptchaEndpoint 外仍有列缺失，继续降级更新。",
+  },
+  {
+    key: "siteCaptchaApiKeyCipher",
+    column: systemSettings.siteCaptchaApiKeyCipher,
+    selectWarn:
+      "system_settings 表除 siteCaptchaApiKeyCipher 外仍有列缺失，继续回退到上一代字段集。",
+    updateWarn: "system_settings 表除 siteCaptchaApiKeyCipher 外仍有列缺失，继续降级更新。",
+  },
+  {
+    key: "siteCaptchaProvider",
+    column: systemSettings.siteCaptchaProvider,
+    selectWarn: "system_settings 表除 siteCaptchaProvider 外仍有列缺失，继续回退到上一代字段集。",
+    updateWarn: "system_settings 表除 siteCaptchaProvider 外仍有列缺失，继续降级更新。",
+  },
+  {
+    key: "healthTestMaxAvgLatencySeconds",
+    column: systemSettings.healthTestMaxAvgLatencySeconds,
+    selectWarn:
+      "system_settings 表除 healthTestMaxAvgLatencySeconds 外仍有列缺失，继续回退到上一代字段集。",
+    updateWarn: "system_settings 表除 healthTestMaxAvgLatencySeconds 外仍有列缺失，继续降级更新。",
+  },
+  {
+    key: "healthTestMinOnlineRatePercent",
+    column: systemSettings.healthTestMinOnlineRatePercent,
+    selectWarn:
+      "system_settings 表除 healthTestMinOnlineRatePercent 外仍有列缺失，继续回退到上一代字段集。",
+    updateWarn: "system_settings 表除 healthTestMinOnlineRatePercent 外仍有列缺失，继续降级更新。",
+  },
+  {
+    key: "healthTestTimeoutSeconds",
+    column: systemSettings.healthTestTimeoutSeconds,
+    selectWarn:
+      "system_settings 表除 healthTestTimeoutSeconds 外仍有列缺失，继续回退到上一代字段集。",
+    updateWarn: "system_settings 表除 healthTestTimeoutSeconds 外仍有列缺失，继续降级更新。",
+  },
+  {
+    key: "healthTestIntervalSeconds",
+    column: systemSettings.healthTestIntervalSeconds,
+    selectWarn:
+      "system_settings 表除 healthTestIntervalSeconds 外仍有列缺失，继续回退到上一代字段集。",
+    updateWarn: "system_settings 表除 healthTestIntervalSeconds 外仍有列缺失，继续降级更新。",
+  },
+  {
+    key: "healthTestWindowSize",
+    column: systemSettings.healthTestWindowSize,
+    selectWarn:
+      "system_settings 表除 healthTestWindowSize 外仍有列缺失，继续回退到上一代字段集。",
+    updateWarn: "system_settings 表除 healthTestWindowSize 外仍有列缺失，继续降级更新。",
+  },
+  {
+    key: "healthTestScheduleMode",
+    column: systemSettings.healthTestScheduleMode,
+    selectWarn:
+      "system_settings 表除 healthTestScheduleMode 外仍有列缺失，继续回退到上一代字段集。",
+    updateWarn: "system_settings 表除 healthTestScheduleMode 外仍有列缺失，继续降级更新。",
+  },
+  {
+    key: "streamingRaceFirstByteMs",
+    column: systemSettings.streamingRaceFirstByteMs,
+    selectWarn:
+      "system_settings 表除 streamingRaceFirstByteMs 外仍有列缺失，继续回退到上一代字段集。",
+    updateWarn: "system_settings 表除 streamingRaceFirstByteMs 外仍有列缺失，继续降级更新。",
+  },
+  {
+    key: "streamingRaceMode",
+    column: systemSettings.streamingRaceMode,
+    selectWarn:
+      "system_settings 表除 streamingRaceMode 外仍有列缺失，继续回退到上一代字段集。",
+    updateWarn: "system_settings 表除 streamingRaceMode 外仍有列缺失，继续降级更新。",
+  },
+  {
     key: "healthTestGlobalBudgetSuspendedDay",
     column: systemSettings.healthTestGlobalBudgetSuspendedDay,
     selectWarn:
       "system_settings 表除 healthTestGlobalBudgetSuspendedDay 外仍有列缺失，继续回退到上一代字段集。",
     updateWarn: "system_settings 表除 healthTestGlobalBudgetSuspendedDay 外仍有列缺失，继续降级更新。",
+  },
+  {
+    key: "healthTestPerProviderDailyBudget",
+    column: systemSettings.healthTestPerProviderDailyBudget,
+    selectWarn:
+      "system_settings 表除 healthTestPerProviderDailyBudget 外仍有列缺失，继续回退到上一代字段集。",
+    updateWarn: "system_settings 表除 healthTestPerProviderDailyBudget 外仍有列缺失，继续降级更新。",
   },
   {
     key: "healthTestDailyBudgetCny",
@@ -622,8 +716,55 @@ export async function updateSystemSettings(
     if (payload.healthTestDailyBudgetCny !== undefined) {
       updates.healthTestDailyBudgetCny = String(payload.healthTestDailyBudgetCny);
     }
+    if (payload.healthTestPerProviderDailyBudget !== undefined) {
+      updates.healthTestPerProviderDailyBudget = String(payload.healthTestPerProviderDailyBudget);
+    }
     if (payload.healthTestGlobalBudgetSuspendedDay !== undefined) {
       updates.healthTestGlobalBudgetSuspendedDay = payload.healthTestGlobalBudgetSuspendedDay;
+    }
+    if (payload.healthTestScheduleMode !== undefined) {
+      updates.healthTestScheduleMode = payload.healthTestScheduleMode;
+    }
+    if (payload.healthTestWindowSize !== undefined) {
+      updates.healthTestWindowSize = payload.healthTestWindowSize;
+    }
+    if (payload.healthTestIntervalSeconds !== undefined) {
+      updates.healthTestIntervalSeconds = payload.healthTestIntervalSeconds;
+    }
+    if (payload.healthTestTimeoutSeconds !== undefined) {
+      updates.healthTestTimeoutSeconds = payload.healthTestTimeoutSeconds;
+    }
+    if (payload.healthTestMinOnlineRatePercent !== undefined) {
+      updates.healthTestMinOnlineRatePercent = payload.healthTestMinOnlineRatePercent;
+    }
+    if (payload.healthTestMaxAvgLatencySeconds !== undefined) {
+      updates.healthTestMaxAvgLatencySeconds = payload.healthTestMaxAvgLatencySeconds;
+    }
+    if (payload.siteCaptchaProvider !== undefined) {
+      const raw = String(payload.siteCaptchaProvider || "none").trim().toLowerCase();
+      updates.siteCaptchaProvider = [
+        "none",
+        "yescaptcha",
+        "capsolver",
+        "2captcha",
+        "anticaptcha",
+      ].includes(raw)
+        ? raw
+        : "none";
+    }
+    if (payload.siteCaptchaApiKey !== undefined) {
+      const { encryptSecret } = await import("@/lib/provider-sites/secret-box");
+      if (payload.siteCaptchaApiKey === null || payload.siteCaptchaApiKey === "") {
+        updates.siteCaptchaApiKeyCipher = null;
+      } else {
+        updates.siteCaptchaApiKeyCipher = encryptSecret(payload.siteCaptchaApiKey);
+      }
+    }
+    if (payload.siteCaptchaEndpoint !== undefined) {
+      updates.siteCaptchaEndpoint =
+        payload.siteCaptchaEndpoint == null || !String(payload.siteCaptchaEndpoint).trim()
+          ? null
+          : String(payload.siteCaptchaEndpoint).trim();
     }
 
     // 计费模型来源配置字段（如果提供）
@@ -632,6 +773,14 @@ export async function updateSystemSettings(
     }
     if (payload.codexPriorityBillingSource !== undefined) {
       updates.codexPriorityBillingSource = payload.codexPriorityBillingSource;
+    }
+
+    // Streaming race policy
+    if (payload.streamingRaceMode !== undefined) {
+      updates.streamingRaceMode = payload.streamingRaceMode;
+    }
+    if (payload.streamingRaceFirstByteMs !== undefined) {
+      updates.streamingRaceFirstByteMs = payload.streamingRaceFirstByteMs;
     }
 
     // 非成功请求按 token 用量计费开关（如果提供）

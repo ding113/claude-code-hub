@@ -15,6 +15,7 @@ import {
 import {
   ProviderGroupCreateSchema,
   ProviderGroupIdParamSchema,
+  ProviderGroupReorderSchema,
   ProviderGroupUpdateSchema,
 } from "@/lib/api/v1/schemas/provider-groups";
 
@@ -53,6 +54,20 @@ export async function updateProviderGroup(c: Context): Promise<Response> {
   );
   if (!result.ok) return actionError(c, result);
   return jsonResponse(result.data);
+}
+
+export async function reorderProviderGroups(c: Context): Promise<Response> {
+  const body = await parseHonoJsonBody(c, ProviderGroupReorderSchema);
+  if (!body.ok) return body.response;
+  const actions = await import("@/actions/provider-groups");
+  const result = await callAction(
+    c,
+    actions.reorderProviderGroups,
+    [body.data.orderedIds] as never[],
+    c.get("auth")
+  );
+  if (!result.ok) return actionError(c, result);
+  return jsonResponse({ items: result.data });
 }
 
 export async function deleteProviderGroup(c: Context): Promise<Response> {

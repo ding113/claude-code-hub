@@ -36,6 +36,14 @@ export const ProviderSummarySchema = z
     groupPriorities: z.record(z.string(), z.number()).nullable().describe("Per-group priorities."),
     costMultiplier: z.number().describe("Provider cost multiplier."),
     groupTag: NullableStringSchema.describe("Provider group tag."),
+    siteId: z.number().int().positive().nullable().optional().describe("Parent provider site id."),
+    siteGroupName: NullableStringSchema.optional().describe(
+      "Upstream group name on the parent site."
+    ),
+    billingMode: z
+      .enum(["catalog_estimate", "site_group_ratio"])
+      .optional()
+      .describe("Billing mode for site-linked providers."),
     providerType: ProviderTypeSchema,
     providerVendorId: z.number().int().nullable().describe("Provider vendor id."),
     preserveClientIp: z.boolean().describe("Whether client IP is preserved upstream."),

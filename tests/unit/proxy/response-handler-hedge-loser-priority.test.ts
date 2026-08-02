@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   addMessageRequestHedgeLoserCost: vi.fn(async () => {}),
+  chargeUserBalance: vi.fn(async () => ({ status: "charged" as const, balanceUsd: "0" })),
   detectUpstreamErrorFromSseOrJsonText: vi.fn(() => ({ isError: false })),
   isNonBillingEndpoint: vi.fn(() => false),
   trackCost: vi.fn(async () => {}),
@@ -15,6 +16,10 @@ vi.mock("@/repository/message", () => ({
   updateMessageRequestDetails: vi.fn(),
   updateMessageRequestDuration: vi.fn(),
   updateMessageRequestWinnerCost: vi.fn(),
+}));
+
+vi.mock("@/repository/user-balance", () => ({
+  chargeUserBalance: mocks.chargeUserBalance,
 }));
 
 vi.mock("@/lib/logger", () => ({
@@ -183,6 +188,7 @@ function createLoserSession(
 describe("finalizeHedgeLoserBilling Codex priority snapshot", () => {
   beforeEach(() => {
     mocks.addMessageRequestHedgeLoserCost.mockClear();
+    mocks.chargeUserBalance.mockClear();
     mocks.detectUpstreamErrorFromSseOrJsonText.mockReturnValue({ isError: false });
     mocks.isNonBillingEndpoint.mockReturnValue(false);
     mocks.trackCost.mockClear();
@@ -202,6 +208,7 @@ describe("finalizeHedgeLoserBilling Codex priority snapshot", () => {
 
     const billed = await finalizeHedgeLoserBilling({
       messageRequestId: 123,
+      userId: 42,
       loserSession: loserSession as any,
       provider,
       attemptNumber: 1,
@@ -220,6 +227,13 @@ describe("finalizeHedgeLoserBilling Codex priority snapshot", () => {
     expect(billed).toBe("400");
     expect(mocks.addMessageRequestHedgeLoserCost).toHaveBeenCalledTimes(1);
     expect(mocks.addMessageRequestHedgeLoserCost.mock.calls[0]?.[1].toString()).toBe("400");
+    expect(mocks.chargeUserBalance).toHaveBeenCalledWith({
+      userId: 42,
+      requestId: 123,
+      providerId: 11,
+      chargeKey: "loser:1",
+      amountUsd: "400",
+    });
   });
 
   it("tracks Redis loser cost with the captured billing provider and multiplier", async () => {

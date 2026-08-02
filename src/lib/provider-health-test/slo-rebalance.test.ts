@@ -9,7 +9,7 @@ import {
 } from "@/lib/provider-health-test/slo-rebalance";
 
 function fullWindow(ok = true) {
-  return Array.from({ length: 5 }, () => ({ ok }));
+  return Array.from({ length: 10 }, () => ({ ok }));
 }
 
 function p(
@@ -40,11 +40,11 @@ describe("getHealthRebalancePool", () => {
 });
 
 describe("meetsHealthMetricsSlo", () => {
-  it("requires full 5-sample window + 80% + ≤10s", () => {
+  it("requires full 10-sample window + 90% + ≤20s average first byte", () => {
     expect(
       meetsHealthMetricsSlo({
-        healthTestOnlineRate: 0.8,
-        healthTestAvgFirstByteMs: 10_000,
+        healthTestOnlineRate: 0.9,
+        healthTestAvgFirstByteMs: 20_000,
         healthTestRecentResults: fullWindow(true),
       })
     ).toBe(true);
@@ -57,8 +57,8 @@ describe("meetsHealthMetricsSlo", () => {
     ).toBe(false);
     expect(
       meetsHealthMetricsSlo({
-        healthTestOnlineRate: 0.79,
-        healthTestAvgFirstByteMs: 10_000,
+        healthTestOnlineRate: 0.89,
+        healthTestAvgFirstByteMs: 20_000,
         healthTestRecentResults: fullWindow(true),
       })
     ).toBe(false);
