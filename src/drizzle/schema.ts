@@ -1230,6 +1230,8 @@ export const usageLedger = pgTable('usage_ledger', {
   )
     .on(sql`COALESCE(${table.sessionIdentity}, ${table.sessionId})`, table.createdAt.desc())
     .where(sql`${table.blockedBy} IS NULL AND ${table.isReplay} = false`),
+  usageLedgerSessionIdentityIdx: index('idx_usage_ledger_session_identity')
+    .on(sql`COALESCE(${table.sessionIdentity}, ${table.sessionId})`),
   usageLedgerModelIdx: index('idx_usage_ledger_model')
     .on(table.model)
     .where(sql`${table.model} IS NOT NULL`),

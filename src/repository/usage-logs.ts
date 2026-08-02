@@ -20,6 +20,7 @@ import {
   buildDefaultHiddenUsageLogEndpointCondition,
   buildUsageLogConditions,
   buildUsageLogEndpointMatchCondition,
+  isReservedSessionIdentity,
   RETRY_COUNT_EXPR,
   type UsageLogReplayFilter,
 } from "./_shared/usage-log-filters";
@@ -61,10 +62,10 @@ function buildLedgerUsageLogConditions(replayFilter: UsageLogReplayFilter | unde
 }
 
 function buildLedgerSessionIdCondition(sessionId: string) {
-  return sql`(
-    ${ledgerSessionIdentity} = ${sessionId}
-    OR ${usageLedger.sessionId} = ${sessionId}
-  )`;
+  const canonicalCondition = sql`${ledgerSessionIdentity} = ${sessionId}`;
+  return isReservedSessionIdentity(sessionId)
+    ? canonicalCondition
+    : sql`(${canonicalCondition} OR ${usageLedger.sessionId} = ${sessionId})`;
 }
 
 const messageSessionIdentity = sql<

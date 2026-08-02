@@ -1,6 +1,8 @@
 import { describe, expect, test, vi } from "vitest";
+import { PgDialect } from "drizzle-orm/pg-core";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { buildUsageLogConditions } from "@/repository/_shared/usage-log-filters";
 
 function sqlToString(sqlObj: unknown): string {
   const visited = new Set<unknown>();
@@ -145,6 +147,14 @@ describe("Usage logs sessionId filter", () => {
     expect(primaryWhereSql).toContain("session_identity");
     expect(primaryWhereSql).toContain("session_id");
     expect(primaryWhereSql).toContain(" or ");
+  });
+
+  test("reserved session identities do not alias raw physical session IDs", () => {
+    const [condition] = buildUsageLogConditions({ sessionId: "pfx:scope:fingerprint" });
+    const sql = new PgDialect().sqlToQuery(condition).sql.toLowerCase();
+
+    expect(sql).toContain("coalesce");
+    expect(sql).not.toContain('"message_request"."session_id" =');
   });
 
   test("findUsageLogsBatch: hasMore 为 true 时缺失 createdAtRaw 应直接报错，避免静默截断", async () => {
@@ -704,5 +714,29 @@ describe("Usage logs sessionId filter", () => {
     const ledgerSql = whereArgs.map((arg) => sqlToString(arg).toLowerCase()).join("\n");
     expect(ledgerSql).toContain("session_identity");
     expect(ledgerSql.match(/ or /g)?.length ?? 0).toBeGreaterThanOrEqual(2);
+  });
+
+  test("ledger reserved session identities do not alias raw physical session IDs", async () => {
+    vi.resetModules();
+
+    const whereArgs: unknown[] = [];
+    const selectMock = vi.fn(() => createThenableQuery([], whereArgs));
+
+    vi.doMock("@/drizzle/db", () => ({
+      db: {
+        select: selectMock,
+        execute: vi.fn(async () => ({ count: 0 })),
+      },
+    }));
+    vi.doMock("@/lib/ledger-fallback", () => ({
+      isLedgerOnlyMode: vi.fn(async () => true),
+    }));
+
+    const { findUsageLogsBatch } = await import("@/repository/usage-logs");
+    await findUsageLogsBatch({ sessionId: "pfx:scope:fingerprint" });
+
+    const ledgerWhereSql = new PgDialect().sqlToQuery(whereArgs[1] as never).sql.toLowerCase();
+    expect(ledgerWhereSql).toContain("coalesce");
+    expect(ledgerWhereSql).not.toContain('"usage_ledger"."session_id" =');
   });
 });
