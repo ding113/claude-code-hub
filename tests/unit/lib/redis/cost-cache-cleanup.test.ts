@@ -312,6 +312,29 @@ describe("clearUserCostCache", () => {
     );
   });
 
+  test("pipeline exceptions include scan failures in the returned error count", async () => {
+    let scanCall = 0;
+    scanPatternMock.mockImplementation(async () => {
+      scanCall += 1;
+      if (scanCall === 1) throw new Error("scan failed");
+      if (scanCall === 2) return ["key:1:cost_daily"];
+      return [];
+    });
+    redisPipelineMock.exec.mockRejectedValue(new Error("Connection reset"));
+
+    const { clearUserCostCache } = await import("@/lib/redis/cost-cache-cleanup");
+    const result = await clearUserCostCache({
+      userId: 10,
+      keyIds: [1],
+      keyHashes: [],
+    });
+
+    expect(result).toMatchObject({
+      cleanupFailed: true,
+      errorCount: 2,
+    });
+  });
+
   test("no keys (empty keyIds/keyHashes) -- only user patterns scanned", async () => {
     scanPatternMock.mockResolvedValue([]);
 
