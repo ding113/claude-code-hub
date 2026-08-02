@@ -11,6 +11,7 @@ vi.mock("@/lib/session-tracker", () => ({
 
 function installDbBoundary(rows: readonly unknown[] | readonly (readonly unknown[])[]) {
   const whereConditions: unknown[] = [];
+  const limits: unknown[] = [];
   let selectIndex = 0;
   const select = vi.fn(() => {
     const selectedRows = Array.isArray(rows[0])
@@ -24,13 +25,19 @@ function installDbBoundary(rows: readonly unknown[] | readonly (readonly unknown
         return query;
       }),
       orderBy: vi.fn(() => query),
-      limit: vi.fn(async () => selectedRows),
+      limit: vi.fn(async (value: unknown) => {
+        limits.push(value);
+        return selectedRows;
+      }),
+      // biome-ignore lint/suspicious/noThenProperty: 模拟 Drizzle 可直接 await 的 query builder。
+      then: (resolve: (value: readonly unknown[]) => unknown) =>
+        Promise.resolve(selectedRows).then(resolve),
     };
     return query;
   });
 
   vi.doMock("@/drizzle/db", () => ({ db: { select } }));
-  return { whereConditions };
+  return { whereConditions, limits };
 }
 
 function expectReplayExcluded(condition: unknown) {
@@ -117,5 +124,22 @@ describe("activity stream Replay exclusion", () => {
     const condition = new PgDialect().sqlToQuery(boundary.whereConditions[1] as never);
     expect(condition.sql.toLowerCase()).toContain("coalesce");
     expect(condition.sql).not.toContain('and "message_request"."session_id" not in');
+  });
+
+  it("does not limit raw active requests before canonical-session deduplication", async () => {
+    activeSessionIdsMock.mockResolvedValueOnce(["session-a", "session-b"]);
+    const boundary = installDbBoundary([
+      [
+        { ...REQUEST_ROW, id: 3, sessionId: "session-a", rowNum: 1 },
+        { ...REQUEST_ROW, id: 2, sessionId: "session-a", rowNum: 2 },
+        { ...REQUEST_ROW, id: 1, sessionId: "session-b", rowNum: 1 },
+      ],
+    ]);
+    const { findRecentActivityStream } = await import("@/repository/activity-stream");
+
+    const result = await findRecentActivityStream(1);
+
+    expect(result).toHaveLength(1);
+    expect(boundary.limits).toEqual([]);
   });
 });

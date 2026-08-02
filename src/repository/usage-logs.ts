@@ -1490,7 +1490,7 @@ export async function findReadonlyUsageLogsBatchForKey(
       ? await loadUsageLogSourceSessionIdsByIdentity(
           logs,
           { keyString },
-          { message: messageRows.length > 0, ledger: ledgerRows.length > 0 }
+          { message: true, ledger: true }
         )
       : undefined,
     nextCursor,

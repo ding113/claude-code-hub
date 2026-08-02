@@ -107,8 +107,7 @@ export async function findRecentActivityStream(limit = 20): Promise<ActivityStre
             inArray(messageSessionIdentity, activeSessionIds)
           )
         )
-        .orderBy(desc(messageRequest.createdAt))
-        .limit(limit * 2); // 获取足够的数据，后面会过滤
+        .orderBy(desc(messageRequest.createdAt));
 
       // 过滤出每个 session 的最新一条（rowNum = 1）
       const latestPerSession = activeSessionRequests

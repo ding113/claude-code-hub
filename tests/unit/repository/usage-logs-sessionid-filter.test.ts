@@ -1,4 +1,6 @@
 import { describe, expect, test, vi } from "vitest";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 
 function sqlToString(sqlObj: unknown): string {
   const visited = new Set<unknown>();
@@ -56,6 +58,11 @@ function createThenableQuery<T>(result: T, whereArgs?: unknown[]) {
 }
 
 describe("Usage logs sessionId filter", () => {
+  test("readonly key hydration queries both backing stores even when one page is empty", () => {
+    const source = readFileSync(resolve(process.cwd(), "src/repository/usage-logs.ts"), "utf8");
+    expect(source).toContain("{ message: true, ledger: true }");
+  });
+
   test("findUsageLogsBatch: sessionId 为空/空白不应追加条件", async () => {
     vi.resetModules();
 
