@@ -33,9 +33,13 @@ function createLimitSelect(responses: readonly (readonly unknown[])[]) {
       whereConditions.push(condition);
       return { limit, orderBy };
     });
+    const innerJoin = vi.fn((_table: unknown, _condition: unknown) => {
+      events.push("innerJoin");
+      return { innerJoin, where };
+    });
     const from = vi.fn((_table: unknown) => {
       events.push("from");
-      return { where };
+      return { innerJoin, where };
     });
     return { from };
   });
@@ -178,7 +182,7 @@ describe("message session readback", () => {
     expect(boundary.select).toHaveBeenCalledTimes(1);
   });
 
-  it("returns the first initial-selection provider chain by request sequence", async () => {
+  it("returns the nearest initial-selection provider chain for the selected request", async () => {
     vi.resetModules();
     const providerChain = [
       {
@@ -191,10 +195,17 @@ describe("message session readback", () => {
     const boundary = installLimitBoundaries([[{ providerChain }]]);
     const { findSessionOriginChain } = await import("@/repository/message");
 
-    const result = await findSessionOriginChain("session-readback");
+    const result = await findSessionOriginChain(1_101, 1, 41);
 
     expect(result).toEqual(providerChain);
-    expect(boundary.events).toEqual(["from", "where", "orderBy", "limit"]);
+    expect(boundary.events).toEqual([
+      "from",
+      "innerJoin",
+      "innerJoin",
+      "where",
+      "orderBy",
+      "limit",
+    ]);
   });
 
   it("returns paged requests in repository order with the legacy sequence fallback", async () => {

@@ -123,9 +123,11 @@ describe("getSessionDetails - additive detail snapshots contract", () => {
         selector: { requestId?: number; sourceSessionId?: string; requestSequence?: number } = {}
       ) => ({
         requestId: selector.requestId ?? 101,
+        canonicalSessionId: identity,
         sourceSessionId: selector.sourceSessionId ?? identity,
         requestSequence: selector.requestSequence ?? 1,
         keyId: 1,
+        userId: 1,
         identityKind: identity.startsWith("pfx:") ? "prefix_affinity" : "session_id",
         scopeTag: identity.startsWith("pfx:") ? "scope" : null,
         fingerprint: identity.startsWith("pfx:") ? "fingerprint" : null,
@@ -253,12 +255,56 @@ describe("getSessionDetails - additive detail snapshots contract", () => {
         requestSequence: 1,
         sourceSessionId: "physical-selected",
       },
-      1
+      undefined
     );
     expect(getSessionRequestBodyMock).toHaveBeenCalledWith("physical-selected", 1);
     expect(findAdjacentSessionRequestsMock).toHaveBeenCalledWith("pfx:scope:fingerprint", 101, 1);
     expect(findMessageRequestAuditByIdMock).toHaveBeenCalledWith(101, 1);
     expect(isSessionRequestOwnedByKeyMock).toHaveBeenCalledWith("physical-selected", 1, 1);
+  });
+
+  test("anchors an admin request-id lookup to the selected row owner", async () => {
+    findSessionRequestLocatorMock.mockResolvedValueOnce({
+      requestId: 202,
+      canonicalSessionId: "sid:owner-two",
+      sourceSessionId: "shared-client-session",
+      requestSequence: 4,
+      keyId: 22,
+      userId: 2,
+      identityKind: "session_id",
+      scopeTag: null,
+      fingerprint: null,
+    });
+    aggregateMultipleSessionStatsMock.mockResolvedValueOnce([
+      {
+        sessionId: "sid:owner-two",
+        userId: 2,
+        requestCount: 1,
+        providers: [],
+        models: [],
+      },
+    ]);
+
+    const { getSessionDetails } = await import("@/actions/active-sessions");
+    const result = await getSessionDetails(
+      "shared-client-session",
+      4,
+      "shared-client-session",
+      202
+    );
+
+    expect(result.ok).toBe(true);
+    expect(findSessionRequestLocatorMock).toHaveBeenCalledWith(
+      "shared-client-session",
+      {
+        requestId: 202,
+        requestSequence: 4,
+        sourceSessionId: "shared-client-session",
+      },
+      undefined
+    );
+    expect(aggregateMultipleSessionStatsMock).toHaveBeenCalledWith(["sid:owner-two"], 2);
+    expect(findMessageRequestAuditByIdMock).toHaveBeenCalledWith(202, 2);
   });
 
   test("rejects a physical source and sequence that do not belong to the prefix identity", async () => {
@@ -537,30 +583,46 @@ describe("getSessionDetails - additive detail snapshots contract", () => {
 
     expect(result).toEqual({ ok: true, data: true });
     expect(findSessionRequestLocatorMock).toHaveBeenLastCalledWith(
-      "sess_x",
+      "pfx:scope:root",
       {
         requestId: 203,
         requestSequence: undefined,
         sourceSessionId: "physical-a",
       },
-      1
+      undefined
     );
     expect(getSessionMessagesMock).toHaveBeenCalledWith("physical-a", 1);
     expect(hasAnySessionMessagesMock).not.toHaveBeenCalled();
   });
 
-  test("fails closed before reading request details when the owner marker is missing", async () => {
+  test("keeps database-backed details when the Redis owner marker is missing", async () => {
     isSessionRequestOwnedByKeyMock.mockResolvedValueOnce(false);
+    findMessageRequestAuditByIdMock.mockResolvedValueOnce({
+      statusCode: 429,
+      blockedBy: "rate_limit",
+      blockedReason: "quota exceeded",
+      cacheTtlApplied: null,
+      context1mApplied: null,
+      swapCacheTtlApplied: null,
+      specialSettings: null,
+    });
     const { getSessionDetails } = await import("@/actions/active-sessions");
 
-    await expect(getSessionDetails("sess_x", 1)).resolves.toEqual({
-      ok: false,
-      error: "Session 请求详情已过期",
-    });
+    const result = await getSessionDetails("sess_x", 1);
 
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.data.requestBody).toBeNull();
+    expect(result.data.messages).toBeNull();
+    expect(result.data.response).toBeNull();
     expect(getSessionRequestBodyMock).not.toHaveBeenCalled();
     expect(getSessionMessagesMock).not.toHaveBeenCalled();
-    expect(findMessageRequestAuditByIdMock).not.toHaveBeenCalled();
+    expect(findMessageRequestAuditByIdMock).toHaveBeenCalledWith(101, 1);
+    expect(result.data.specialSettings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: "guard_intercept", guard: "rate_limit" }),
+      ])
+    );
   });
 
   test("hides the details link when the request owner marker is missing", async () => {

@@ -42,25 +42,15 @@ describe("resolveSessionRequestLocator", () => {
   });
 
   it("resolves a prefix request by stable request id without the legacy source tuple", async () => {
-    findSessionRequestLocatorMock
-      .mockResolvedValueOnce({
-        requestId: 108,
-        sourceSessionId: "physical-latest",
-        requestSequence: 8,
-        keyId: 23,
-        identityKind: "prefix_affinity",
-        scopeTag: "scope",
-        fingerprint: "fingerprint",
-      })
-      .mockResolvedValueOnce({
-        requestId: 107,
-        sourceSessionId: "physical-selected",
-        requestSequence: 7,
-        keyId: 23,
-        identityKind: "prefix_affinity",
-        scopeTag: "scope",
-        fingerprint: "fingerprint",
-      });
+    findSessionRequestLocatorMock.mockResolvedValueOnce({
+      requestId: 107,
+      sourceSessionId: "physical-selected",
+      requestSequence: 7,
+      keyId: 23,
+      identityKind: "prefix_affinity",
+      scopeTag: "scope",
+      fingerprint: "fingerprint",
+    });
     const { resolveSessionRequestLocator } = await import("@/lib/session-request-locator");
 
     await expect(
@@ -85,38 +75,22 @@ describe("resolveSessionRequestLocator", () => {
     );
   });
 
-  it("forwards the resolved owner scope to both locator queries", async () => {
-    findSessionRequestLocatorMock
-      .mockResolvedValueOnce({
-        requestId: 108,
-        sourceSessionId: "physical-latest",
-        requestSequence: 8,
-        keyId: 23,
-        identityKind: "prefix_affinity",
-        scopeTag: "scope",
-        fingerprint: "fingerprint",
-      })
-      .mockResolvedValueOnce({
-        requestId: 107,
-        sourceSessionId: "physical-selected",
-        requestSequence: 7,
-        keyId: 23,
-        identityKind: "prefix_affinity",
-        scopeTag: "scope",
-        fingerprint: "fingerprint",
-      });
+  it("forwards the resolved owner scope to the exact request-id query", async () => {
+    findSessionRequestLocatorMock.mockResolvedValueOnce({
+      requestId: 107,
+      sourceSessionId: "physical-selected",
+      requestSequence: 7,
+      keyId: 23,
+      identityKind: "prefix_affinity",
+      scopeTag: "scope",
+      fingerprint: "fingerprint",
+    });
     const { resolveSessionRequestLocator } = await import("@/lib/session-request-locator");
 
     await resolveSessionRequestLocator("pfx:scope:fingerprint", undefined, undefined, 107, 23);
 
-    expect(findSessionRequestLocatorMock).toHaveBeenNthCalledWith(
-      1,
-      "pfx:scope:fingerprint",
-      {},
-      23
-    );
-    expect(findSessionRequestLocatorMock).toHaveBeenNthCalledWith(
-      2,
+    expect(findSessionRequestLocatorMock).toHaveBeenCalledOnce();
+    expect(findSessionRequestLocatorMock).toHaveBeenCalledWith(
       "pfx:scope:fingerprint",
       {
         requestId: 107,
@@ -128,17 +102,7 @@ describe("resolveSessionRequestLocator", () => {
   });
 
   it("returns the source-mismatch code when the selected physical request is outside the identity", async () => {
-    findSessionRequestLocatorMock
-      .mockResolvedValueOnce({
-        requestId: 108,
-        sourceSessionId: "physical-latest",
-        requestSequence: 8,
-        keyId: 23,
-        identityKind: "prefix_affinity",
-        scopeTag: "scope",
-        fingerprint: "fingerprint",
-      })
-      .mockResolvedValueOnce(null);
+    findSessionRequestLocatorMock.mockResolvedValueOnce(null);
     const { resolveSessionRequestLocator } = await import("@/lib/session-request-locator");
 
     await expect(

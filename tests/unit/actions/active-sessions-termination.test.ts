@@ -119,6 +119,32 @@ describe("active Session termination identity contract", () => {
     expect(invalidateMock).toHaveBeenCalledWith("scope", "tip", ["tip", "parent", "root"]);
     expect(clearSessionDetailsCacheMock).toHaveBeenCalledWith("physical-session");
     expect(clearSessionDetailsCacheMock).toHaveBeenCalledWith("pfx:scope:tip");
+    expect(clearSessionDetailsCacheMock).toHaveBeenCalledWith("physical-session-2");
+  });
+
+  test("ordinary identity termination clears observed state after physical cleanup", async () => {
+    aggregateMultipleSessionStatsMock.mockResolvedValueOnce([
+      {
+        sessionId: "ordinary-client-session",
+        requestedSessionIds: ["ordinary-client-session"],
+        userId: 1,
+      },
+    ]);
+    resolveSessionIdentityMock.mockResolvedValueOnce({
+      sourceSessionId: "ordinary-client-session",
+      identityKind: "session_id",
+      scopeTag: null,
+      fingerprint: null,
+      fingerprints: [],
+    });
+
+    const { terminateActiveSession } = await import("@/actions/active-sessions");
+
+    await expect(terminateActiveSession("ordinary-client-session")).resolves.toEqual({
+      ok: true,
+      data: undefined,
+    });
+    expect(terminateObservedSessionMock).toHaveBeenCalledWith("ordinary-client-session");
   });
 
   test("prefix termination fails when affinity invalidation fails", async () => {
@@ -265,7 +291,7 @@ describe("active Session termination identity contract", () => {
     expect(terminateSessionMock).toHaveBeenCalledWith("physical-session", undefined, 13);
     expect(terminateSessionsBatchMock).not.toHaveBeenCalled();
     expect(terminateObservedSessionMock).toHaveBeenCalledWith("pfx:scope:tip");
-    expect(terminateObservedSessionMock).not.toHaveBeenCalledWith("physical-session");
+    expect(terminateObservedSessionMock).toHaveBeenCalledWith("physical-session");
   });
 
   test("batch termination clears physical aliases and canonical detail caches", async () => {
@@ -285,6 +311,7 @@ describe("active Session termination identity contract", () => {
 
     expect(clearSessionDetailsCacheMock).toHaveBeenCalledWith("physical-session");
     expect(clearSessionDetailsCacheMock).toHaveBeenCalledWith("pfx:scope:tip");
+    expect(clearSessionDetailsCacheMock).toHaveBeenCalledWith("physical-session-2");
   });
 
   test("batch counts affinity invalidation failures instead of observed cleanup results", async () => {

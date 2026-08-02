@@ -378,12 +378,24 @@ export class SessionManager {
 
     try {
       const key = `session:${sessionId}:seq`;
-      const sequence = await redis.incr(key);
-      const ownerKey = `session:${sessionId}:req:${sequence}:owner`;
-      const pipeline = redis.pipeline();
-      pipeline.expire(key, SessionManager.SESSION_TTL);
-      pipeline.setex(ownerKey, SessionManager.SESSION_TTL, String(keyId));
-      await pipeline.exec();
+      const rawSequence = await redis.eval(
+        `
+          local sequence = redis.call('INCR', KEYS[1])
+          redis.call('PERSIST', KEYS[1])
+          local ownerKey = ARGV[1] .. sequence .. ':owner'
+          redis.call('SETEX', ownerKey, ARGV[2], ARGV[3])
+          return sequence
+        `,
+        1,
+        key,
+        `session:${sessionId}:req:`,
+        String(SessionManager.SESSION_TTL),
+        String(keyId)
+      );
+      const sequence = Number(rawSequence);
+      if (!Number.isSafeInteger(sequence) || sequence <= 0) {
+        throw new Error("Redis returned an invalid request sequence");
+      }
 
       logger.trace("SessionManager: Got next request sequence", {
         sessionId,
@@ -422,6 +434,20 @@ export class SessionManager {
       });
       return false;
     }
+  }
+
+  private static async refreshSessionRequestOwner(
+    redis: NonNullable<ReturnType<typeof getRedisClient>>,
+    sessionId: string,
+    requestSequence: number,
+    keyId?: number
+  ): Promise<void> {
+    if (keyId === undefined) return;
+    await redis.setex(
+      `session:${sessionId}:req:${requestSequence}:owner`,
+      SessionManager.SESSION_TTL,
+      String(keyId)
+    );
   }
 
   /**
@@ -1936,13 +1962,13 @@ export class SessionManager {
     if (redis?.status !== "ready") return null;
 
     try {
-      // 优先尝试新格式
-      if (requestSequence) {
-        const newKey = `session:${sessionId}:req:${requestSequence}:messages`;
+      if (requestSequence !== undefined) {
+        const sequence = normalizeRequestSequence(requestSequence);
+        if (sequence === null) return null;
+
+        const newKey = `session:${sessionId}:req:${sequence}:messages`;
         const messagesJson = await redis.get(newKey);
-        if (messagesJson) {
-          return JSON.parse(messagesJson);
-        }
+        return messagesJson ? JSON.parse(messagesJson) : null;
       }
 
       // 向后兼容：尝试旧格式
@@ -2024,7 +2050,8 @@ export class SessionManager {
   static async storeSessionResponse(
     sessionId: string,
     response: string | object,
-    requestSequence?: number
+    requestSequence?: number,
+    keyId?: number
   ): Promise<void> {
     // 允许通过环境变量显式关闭响应体存储（例如隐私/节省 Redis 内存）。
     // 注意：这里仅关闭“写入 Redis”这一步；调用方仍然可能在内存中读取响应体用于统计或错误检测。
@@ -2057,9 +2084,13 @@ export class SessionManager {
 
       // 新格式：session:{sessionId}:req:{sequence}:response（独立存储每个请求）
       // 旧格式：session:{sessionId}:response（向后兼容）
-      const key = requestSequence
-        ? `session:${sessionId}:req:${requestSequence}:response`
+      const sequence = normalizeRequestSequence(requestSequence);
+      const key = sequence
+        ? `session:${sessionId}:req:${sequence}:response`
         : `session:${sessionId}:response`;
+      if (sequence) {
+        await SessionManager.refreshSessionRequestOwner(redis, sessionId, sequence, keyId);
+      }
       await redis.setex(key, SessionManager.SESSION_TTL, responseString);
       logger.trace("SessionManager: Stored session response", {
         sessionId,
@@ -2309,13 +2340,15 @@ export class SessionManager {
   static async storeSessionUpstreamResponseMeta(
     sessionId: string,
     meta: { url: string | URL; statusCode: number },
-    requestSequence?: number
+    requestSequence?: number,
+    keyId?: number
   ): Promise<void> {
     const redis = getRedisClient();
     if (redis?.status !== "ready") return;
 
     try {
       const sequence = normalizeRequestSequence(requestSequence) ?? 1;
+      await SessionManager.refreshSessionRequestOwner(redis, sessionId, sequence, keyId);
       const key = `session:${sessionId}:req:${sequence}:upstreamResMeta`;
       const payload: SessionResponseMeta = {
         url: sanitizeUrl(meta.url),
@@ -2378,13 +2411,15 @@ export class SessionManager {
   static async storeSessionResponseHeaders(
     sessionId: string,
     headers: Headers,
-    requestSequence?: number
+    requestSequence?: number,
+    keyId?: number
   ): Promise<void> {
     const redis = getRedisClient();
     if (redis?.status !== "ready") return;
 
     try {
       const sequence = normalizeRequestSequence(requestSequence) ?? 1;
+      await SessionManager.refreshSessionRequestOwner(redis, sessionId, sequence, keyId);
       const key = `session:${sessionId}:req:${sequence}:resHeaders`;
       const headersJson = JSON.stringify(headersToSanitizedObject(headers));
       await redis.setex(key, SessionManager.SESSION_TTL, headersJson);
@@ -2456,11 +2491,13 @@ export class SessionManager {
     if (redis?.status !== "ready") return null;
 
     try {
-      // 优先尝试新格式
-      if (requestSequence) {
-        const newKey = `session:${sessionId}:req:${requestSequence}:response`;
+      if (requestSequence !== undefined) {
+        const sequence = normalizeRequestSequence(requestSequence);
+        if (sequence === null) return null;
+
+        const newKey = `session:${sessionId}:req:${sequence}:response`;
         const response = await redis.get(newKey);
-        if (response) return response;
+        return response;
       }
 
       // 向后兼容：尝试旧格式
@@ -2617,13 +2654,15 @@ export class SessionManager {
     sessionId: string,
     phase: SessionDetailViewMode,
     snapshot: SessionDetailResponseSnapshotInput,
-    requestSequence?: number
+    requestSequence?: number,
+    keyId?: number
   ): Promise<void> {
     const redis = getRedisClient();
     if (redis?.status !== "ready") return;
 
     try {
       const sequence = normalizeRequestSequence(requestSequence) ?? 1;
+      await SessionManager.refreshSessionRequestOwner(redis, sessionId, sequence, keyId);
       const writes: Array<Promise<unknown>> = [];
 
       if ("body" in snapshot) {
@@ -2952,6 +2991,15 @@ export class SessionManager {
           return false;
         }
       } catch (lookupError) {
+        if (expectedKeyId !== undefined) {
+          logger.warn("SessionManager: Failed to verify session owner before termination", {
+            sessionId,
+            expectedKeyId,
+            error: lookupError,
+          });
+          return false;
+        }
+
         // Redis 查询失败不应阻止清理操作，继续执行删除
         logger.warn(
           "SessionManager: Failed to lookup session binding info, continuing with cleanup",

@@ -761,7 +761,8 @@ async function persistResponseBeforeSnapshot(
       headers: snapshot.headers,
       meta: snapshot.meta,
     },
-    session.requestSequence
+    session.requestSequence,
+    session.authState?.key?.id ?? session.messageContext?.key?.id ?? undefined
   ).catch((err) => {
     logger.error("Failed to store response before snapshot meta:", err);
   });
@@ -8328,13 +8329,15 @@ export class ProxyForwarder {
       void SessionManager.storeSessionResponseHeaders(
         session.sessionId,
         responseHeaders,
-        session.requestSequence
+        session.requestSequence,
+        session.authState?.key?.id ?? session.messageContext?.key?.id ?? undefined
       ).catch((err) => logger.error("Failed to store response headers:", err));
 
       void SessionManager.storeSessionUpstreamResponseMeta(
         session.sessionId,
         { url, statusCode: undiciRes.statusCode },
-        session.requestSequence
+        session.requestSequence,
+        session.authState?.key?.id ?? session.messageContext?.key?.id ?? undefined
       ).catch((err) => logger.error("Failed to store upstream response meta:", err));
 
       if (!deferDetailSnapshotPersistence) {

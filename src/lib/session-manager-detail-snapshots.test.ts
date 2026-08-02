@@ -48,6 +48,7 @@ const redisMock = {
   set: vi.fn().mockResolvedValue("OK"),
   expire: vi.fn().mockResolvedValue(1),
   incr: vi.fn().mockResolvedValue(1),
+  eval: vi.fn().mockResolvedValue(1),
   pipeline: vi.fn(() => redisPipeline),
 };
 
@@ -77,15 +78,21 @@ describe("SessionManager detail snapshots", () => {
     mockStoreSessionResponseBody = true;
   });
 
-  it("refreshes the sequence TTL and records the immutable request owner", async () => {
-    redisMock.incr.mockResolvedValueOnce(1);
+  it("atomically persists the request sequence while expiring its owner marker", async () => {
+    redisMock.eval.mockResolvedValueOnce(1);
 
     await expect(SessionManager.getNextRequestSequence("sess_owner", 42)).resolves.toBe(1);
 
-    expect(redisMock.incr).toHaveBeenCalledWith("session:sess_owner:seq");
-    expect(pipelineExpireMock).toHaveBeenCalledWith("session:sess_owner:seq", 300);
-    expect(pipelineSetexMock).toHaveBeenCalledWith("session:sess_owner:req:1:owner", 300, "42");
-    expect(pipelineExecMock).toHaveBeenCalledOnce();
+    expect(redisMock.eval).toHaveBeenCalledWith(
+      expect.stringContaining("redis.call('PERSIST', KEYS[1])"),
+      1,
+      "session:sess_owner:seq",
+      "session:sess_owner:req:",
+      "300",
+      "42"
+    );
+    expect(redisMock.incr).not.toHaveBeenCalled();
+    expect(redisMock.pipeline).not.toHaveBeenCalled();
   });
 
   it("validates request artifacts against their immutable key owner", async () => {
@@ -109,6 +116,43 @@ describe("SessionManager detail snapshots", () => {
       false
     );
     expect(redisMock.get).not.toHaveBeenCalled();
+  });
+
+  it("refreshes the request owner when a late response snapshot is stored", async () => {
+    await SessionManager.storeSessionResponsePhaseSnapshot(
+      "sess_late_response",
+      "after",
+      { body: "late response" },
+      7,
+      42
+    );
+
+    expect(redisMock.setex).toHaveBeenCalledWith(
+      "session:sess_late_response:req:7:owner",
+      300,
+      "42"
+    );
+  });
+
+  it("does not use legacy messages for a missing scoped request", async () => {
+    redisStore.set(
+      "session:sess_scoped_messages:messages",
+      JSON.stringify([{ role: "user", content: "legacy" }])
+    );
+
+    await expect(SessionManager.getSessionMessages("sess_scoped_messages", 7)).resolves.toBeNull();
+    await expect(SessionManager.getSessionMessages("sess_scoped_messages")).resolves.toEqual([
+      { role: "user", content: "legacy" },
+    ]);
+  });
+
+  it("does not use legacy response for a missing scoped request", async () => {
+    redisStore.set("session:sess_scoped_response:response", "legacy response");
+
+    await expect(SessionManager.getSessionResponse("sess_scoped_response", 7)).resolves.toBeNull();
+    await expect(SessionManager.getSessionResponse("sess_scoped_response")).resolves.toBe(
+      "legacy response"
+    );
   });
 
   it("stores and retrieves request/response before-after snapshots with TTL and redaction", async () => {

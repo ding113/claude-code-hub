@@ -78,7 +78,7 @@ describe("getSessionOriginChain", () => {
     const result = await getSessionOriginChain("pfx:scope:fingerprint", 2, "physical-selected");
 
     expect(result).toEqual({ ok: true, data: chain });
-    expect(findSessionOriginChainMock).toHaveBeenCalledWith("physical-selected", 2);
+    expect(findSessionOriginChainMock).toHaveBeenCalledWith(101, 1, 2);
     expect(findKeyListMock).not.toHaveBeenCalled();
     expect(dbSelectMock).not.toHaveBeenCalled();
   });
@@ -100,7 +100,7 @@ describe("getSessionOriginChain", () => {
 
     expect(result).toEqual({ ok: true, data: chain });
     expect(aggregateMultipleSessionStatsMock).toHaveBeenCalledWith(["pfx:scope:fingerprint"], 2);
-    expect(findSessionOriginChainMock).toHaveBeenCalledWith("physical-selected", 2);
+    expect(findSessionOriginChainMock).toHaveBeenCalledWith(101, 1, 2);
   });
 
   test("unauthenticated: returns not logged in", async () => {
@@ -149,7 +149,7 @@ describe("getSessionOriginChain", () => {
     const result = await getSessionOriginChain("sess-not-found");
 
     expect(result).toEqual({ ok: true, data: null });
-    expect(findSessionOriginChainMock).toHaveBeenCalledWith("sess-not-found", 1);
+    expect(findSessionOriginChainMock).toHaveBeenCalledWith(101, 1, 1);
     expect(findKeyListMock).not.toHaveBeenCalled();
     expect(dbSelectMock).not.toHaveBeenCalled();
   });

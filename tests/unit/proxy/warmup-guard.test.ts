@@ -142,11 +142,17 @@ describe("ProxyWarmupGuard.ensure", () => {
     );
 
     expect(storeSessionResponseMock).toHaveBeenCalledTimes(1);
-    expect(storeSessionResponseMock).toHaveBeenCalledWith("session_test", expect.any(String), 2);
+    expect(storeSessionResponseMock).toHaveBeenCalledWith(
+      "session_test",
+      expect.any(String),
+      2,
+      456
+    );
     expect(storeSessionResponseHeadersMock).toHaveBeenCalledWith(
       "session_test",
       expect.any(Headers),
-      2
+      2,
+      456
     );
     expect(storeSessionUpstreamRequestMetaMock).toHaveBeenCalledWith(
       "session_test",
@@ -156,7 +162,8 @@ describe("ProxyWarmupGuard.ensure", () => {
     expect(storeSessionUpstreamResponseMetaMock).toHaveBeenCalledWith(
       "session_test",
       { url: "/__cch__/warmup", statusCode: 200 },
-      2
+      2,
+      456
     );
 
     expect(dbInsertMock).toHaveBeenCalledTimes(1);

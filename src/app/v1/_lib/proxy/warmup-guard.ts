@@ -48,8 +48,13 @@ export class ProxyWarmupGuard {
     if (session.sessionId && session.shouldPersistSessionDebugArtifacts()) {
       const seq = session.getRequestSequence();
       await Promise.allSettled([
-        SessionManager.storeSessionResponse(session.sessionId, responseText, seq),
-        SessionManager.storeSessionResponseHeaders(session.sessionId, responseHeaders, seq),
+        SessionManager.storeSessionResponse(session.sessionId, responseText, seq, authState.key.id),
+        SessionManager.storeSessionResponseHeaders(
+          session.sessionId,
+          responseHeaders,
+          seq,
+          authState.key.id
+        ),
         SessionManager.storeSessionUpstreamRequestMeta(
           session.sessionId,
           { url: WARMUP_UPSTREAM_META_URL, method: session.method },
@@ -58,7 +63,8 @@ export class ProxyWarmupGuard {
         SessionManager.storeSessionUpstreamResponseMeta(
           session.sessionId,
           { url: WARMUP_UPSTREAM_META_URL, statusCode: 200 },
-          seq
+          seq,
+          authState.key.id
         ),
       ]);
     }
