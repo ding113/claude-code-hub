@@ -270,13 +270,6 @@ export class ReplaySpool {
           byteSize: this.totalBytes,
           sourceMessageRequestId: messageRequestId,
         });
-        if (persistResult === "existing") {
-          await this.store.discardOwned(this.identity.replayId, this.ownerToken);
-          logger.info("[ReplaySpool] reused existing durable replay winner", {
-            replayId: this.identity.replayId.slice(0, 12),
-          });
-          return;
-        }
         pgPersisted = true;
         const completed = await this.store.completeOwned(
           this.identity.replayId,
@@ -286,11 +279,17 @@ export class ReplaySpool {
         if (!completed) {
           throw new Error("replay owner lease lost before completed meta");
         }
-        logger.info("[ReplaySpool] replay entry completed", {
-          replayId: this.identity.replayId.slice(0, 12),
-          chunkCount: this.chunkCount,
-          byteSize: this.totalBytes,
-        });
+        if (persistResult === "existing") {
+          logger.info("[ReplaySpool] reused existing durable replay winner", {
+            replayId: this.identity.replayId.slice(0, 12),
+          });
+        } else {
+          logger.info("[ReplaySpool] replay entry completed", {
+            replayId: this.identity.replayId.slice(0, 12),
+            chunkCount: this.chunkCount,
+            byteSize: this.totalBytes,
+          });
+        }
       } catch (error) {
         if (error instanceof ReplayDurableConflictError) {
           logger.warn("[ReplaySpool] discarded conflicting durable replay candidate", {
