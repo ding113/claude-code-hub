@@ -237,6 +237,34 @@ describe("message repository session request queries", () => {
     expect(rowsWhere.match(/shared-session/g)).toHaveLength(1);
   });
 
+  test("includes a legacy null-identity physical fallback for owner-scoped reserved identities", async () => {
+    const count = createDrizzleQuery([{ count: 1 }]);
+    const rows = createDrizzleQuery<readonly RequestRow[]>([]);
+    boundary.select.mockReturnValueOnce(count).mockReturnValueOnce(rows);
+
+    await findRequestsBySessionIdentity("pfx:legacy-client", { ownerUserId: 17 } as never);
+
+    for (const where of [sqlText(count.trace.where), sqlText(rows.trace.where)]) {
+      expect(where).toContain("user_id");
+      expect(where).toContain("is null");
+      expect(where).toContain("session_id");
+      expect(where.match(/pfx:legacy-client/g)).toHaveLength(2);
+    }
+  });
+
+  test("does not add the legacy physical fallback for unscoped reserved identities", async () => {
+    const count = createDrizzleQuery([{ count: 1 }]);
+    const rows = createDrizzleQuery<readonly RequestRow[]>([]);
+    boundary.select.mockReturnValueOnce(count).mockReturnValueOnce(rows);
+
+    await findRequestsBySessionIdentity("pfx:canonical", {} as never);
+
+    for (const where of [sqlText(count.trace.where), sqlText(rows.trace.where)]) {
+      expect(where).not.toContain("session_identity is null");
+      expect(where.match(/pfx:canonical/g)).toHaveLength(1);
+    }
+  });
+
   test("does not treat a reserved canonical identity as a physical Session alias", async () => {
     const locator = createDrizzleQuery([
       {
