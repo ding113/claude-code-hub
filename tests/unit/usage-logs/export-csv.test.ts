@@ -50,6 +50,8 @@ const TIME_IDX = 0;
 const STATUS_IDX = HEADER.indexOf("Status Code");
 const COST_IDX = HEADER.indexOf("Cost (USD)");
 const DURATION_IDX = HEADER.indexOf("Duration (ms)");
+const PREFIX_ID_IDX = HEADER.indexOf("Prefix ID");
+const SESSION_ID_IDX = HEADER.indexOf("Session ID");
 
 describe("buildCsvHeaderLine", () => {
   test("annotates the time column with the timezone", () => {
@@ -113,6 +115,22 @@ describe("buildCsvRows", () => {
       "UTC"
     );
     expect(row.split(",")[retryIdx]).toBe("1");
+  });
+
+  test("exports prefix identity separately from the physical Session ID", () => {
+    const [row] = buildCsvRows(
+      [
+        makeLog({
+          sessionId: "pfx:scope/root",
+          sourceSessionId: "physical-session",
+          sessionIdentityKind: "prefix_affinity",
+        }),
+      ],
+      "UTC"
+    );
+    const cells = row.split(",");
+    expect(cells[PREFIX_ID_IDX]).toBe("pfx:scope/root");
+    expect(cells[SESSION_ID_IDX]).toBe("physical-session");
   });
 });
 

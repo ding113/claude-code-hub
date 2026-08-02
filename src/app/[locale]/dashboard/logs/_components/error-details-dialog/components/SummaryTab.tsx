@@ -39,6 +39,8 @@ import { extractThinkingEffortInfo } from "@/lib/utils/thinking-effort";
 import { getFake200ReasonKey } from "../../fake200-reason";
 import { Fake200RetryTooltip } from "../../fake200-retry-tooltip";
 import { isInProgressStatus, isSuccessStatus, type SummaryTabProps } from "../types";
+import { CachePerformance } from "./CachePerformance";
+import { buildLogsFilterHref } from "./logs-filter-href";
 
 export function SummaryTab({
   statusCode,
@@ -54,6 +56,12 @@ export function SummaryTab({
   cacheCreation1hInputTokens,
   cacheReadInputTokens,
   cacheTtlApplied,
+  theoreticalCacheTokens,
+  cacheInputTotal,
+  actualCacheRate,
+  theoreticalCacheRate,
+  requestCacheCoefficientBp,
+  requestCacheMetricAvailability,
   swapCacheTtlApplied,
   costUsd,
   costMultiplier,
@@ -67,6 +75,7 @@ export function SummaryTab({
   firstByteMs,
   sessionId,
   sourceSessionId,
+  sessionIdentityKind,
   requestSequence,
   userAgent,
   clientIp,
@@ -97,8 +106,22 @@ export function SummaryTab({
     sessionRequestParams.set("sourceSessionId", sourceSessionId);
   }
   const sessionMessagesHref = sessionId
-    ? `/dashboard/sessions/${sessionId}/messages${sessionRequestParams.size > 0 ? `?${sessionRequestParams.toString()}` : ""}`
+    ? `/dashboard/sessions/${encodeURIComponent(sessionId)}/messages${sessionRequestParams.size > 0 ? `?${sessionRequestParams.toString()}` : ""}`
     : "";
+  const identityRows = [
+    sessionId
+      ? {
+          label:
+            sessionIdentityKind === "prefix_affinity"
+              ? t("metadata.prefixId")
+              : t("metadata.sessionId"),
+          value: sessionId,
+        }
+      : null,
+    sourceSessionId && sourceSessionId !== sessionId
+      ? { label: t("metadata.sessionId"), value: sourceSessionId }
+      : null,
+  ].filter((item): item is { label: string; value: string } => item !== null);
   const modelAudit = resolveModelAuditDisplay({
     originalModel: originalModel ?? null,
     model: currentModel ?? null,
@@ -301,25 +324,43 @@ export function SummaryTab({
         </div>
       )}
 
+      <CachePerformance
+        actualCacheRate={actualCacheRate ?? null}
+        theoreticalCacheRate={theoreticalCacheRate ?? null}
+        requestCacheCoefficientBp={requestCacheCoefficientBp ?? null}
+        requestCacheMetricAvailability={requestCacheMetricAvailability}
+        cacheInputTotal={cacheInputTotal ?? null}
+        cacheReadInputTokens={cacheReadInputTokens ?? null}
+        theoreticalCacheTokens={theoreticalCacheTokens ?? null}
+      />
+
       {/* Session Info */}
-      {(sessionId || effortDisplay) && (
+      {(identityRows.length > 0 || effortDisplay) && (
         <div className="space-y-2">
           <h4 className="text-sm font-semibold">{t("metadata.sessionInfo")}</h4>
           <div className="rounded-lg border bg-card divide-y">
-            {sessionId && (
-              <div className="p-4">
+            {identityRows.map((identity) => (
+              <div className="p-4" key={`${identity.label}-${identity.value}`}>
                 <div className="flex items-center gap-3">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <code className="text-xs font-mono break-all">{sessionId}</code>
-                      {requestSequence && (
+                      <span className="text-xs text-muted-foreground shrink-0">
+                        {identity.label}:
+                      </span>
+                      <Link
+                        href={buildLogsFilterHref(identity.value)}
+                        className="text-xs font-mono break-all underline-offset-2 hover:underline"
+                      >
+                        {identity.value}
+                      </Link>
+                      {identity.value === sessionId && requestSequence && (
                         <Badge variant="outline" className="text-xs shrink-0">
                           #{requestSequence}
                         </Badge>
                       )}
                     </div>
                   </div>
-                  {hasMessages && !checkingMessages && (
+                  {identity.value === sessionId && hasMessages && !checkingMessages && (
                     <Link href={sessionMessagesHref}>
                       <Button variant="outline" size="sm">
                         <ExternalLink className="h-4 w-4 mr-2" />
@@ -329,7 +370,7 @@ export function SummaryTab({
                   )}
                 </div>
               </div>
-            )}
+            ))}
             {effortDisplay && (
               <div className="p-4">
                 <div className="flex items-center gap-2 flex-wrap">

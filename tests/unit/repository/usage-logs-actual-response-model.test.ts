@@ -102,7 +102,9 @@ describe("findUsageLogsBatch: actualResponseModel propagation", () => {
         id: 99,
         createdAt: new Date("2026-04-24T09:00:00Z"),
         createdAtRaw: "2026-04-24T09:00:00.000000Z",
-        sessionId: null,
+        sessionId: "pfx:scope:ledger",
+        sourceSessionId: "physical-ledger-session",
+        sessionIdentityKind: "prefix_affinity",
         userId: 1,
         userName: "u",
         key: "sk-x",
@@ -151,7 +153,13 @@ describe("findUsageLogsBatch: actualResponseModel propagation", () => {
       id: 99,
       model: "gemini-2.5-flash",
       actualResponseModel: "gemini-2.5-flash-lite",
+      sessionId: "pfx:scope:ledger",
+      sourceSessionId: "physical-ledger-session",
+      sessionIdentityKind: "prefix_affinity",
     });
+
+    const selection = selectMock.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(selection.sessionIdentityKind).toBeDefined();
   });
 
   test("explicit null actualResponseModel surfaces as null (not undefined)", async () => {
@@ -205,5 +213,68 @@ describe("findUsageLogsBatch: actualResponseModel propagation", () => {
     const result = await findUsageLogsBatch({});
 
     expect(result.logs[0].actualResponseModel).toBeNull();
+  });
+
+  test("readonly ledger path preserves Prefix ID and physical Session ID provenance", async () => {
+    vi.resetModules();
+
+    const ledgerRow = {
+      id: 501,
+      createdAt: new Date("2026-04-24T08:00:00Z"),
+      createdAtRaw: "2026-04-24T08:00:00.000000Z",
+      sessionId: "pfx:scope:readonly",
+      sourceSessionId: "physical-readonly-session",
+      sessionIdentityKind: "prefix_affinity",
+      userId: 1,
+      userName: "u",
+      key: "sk-readonly",
+      keyName: "k",
+      providerName: "p",
+      model: "m",
+      originalModel: "m-original",
+      actualResponseModel: null,
+      endpoint: "/v1/messages",
+      statusCode: 200,
+      inputTokens: 100,
+      outputTokens: 10,
+      cacheCreationInputTokens: 20,
+      cacheReadInputTokens: 30,
+      cacheCreation5mInputTokens: 20,
+      cacheCreation1hInputTokens: 0,
+      cacheTtlApplied: "5m",
+      costUsd: "0.01",
+      costMultiplier: null,
+      groupCostMultiplier: null,
+      durationMs: 10,
+      ttftMs: 5,
+      firstByteMs: 5,
+      clientIp: null,
+      context1mApplied: false,
+      swapCacheTtlApplied: false,
+      isReplay: false,
+      replaySourceRequestId: null,
+    };
+    const projections: Array<Record<string, unknown>> = [];
+    const rowsByCall = [[], [ledgerRow]];
+    const selectMock = vi.fn((projection: Record<string, unknown>) => {
+      projections.push(projection);
+      return createThenableQuery(rowsByCall[projections.length - 1] ?? []);
+    });
+
+    vi.doMock("@/drizzle/db", () => ({ db: { select: selectMock } }));
+
+    const { findReadonlyUsageLogsBatchForKey } = await import("@/repository/usage-logs");
+    const result = await findReadonlyUsageLogsBatchForKey({
+      keyString: "sk-readonly",
+      includeSourceSessionIds: false,
+    });
+
+    expect(result.logs[0]).toMatchObject({
+      sessionId: "pfx:scope:readonly",
+      sourceSessionId: "physical-readonly-session",
+      sessionIdentityKind: "prefix_affinity",
+      requestCacheMetricAvailability: "not_recorded",
+    });
+    expect(Object.keys(projections[1] ?? {})).toContain("sessionIdentityKind");
   });
 });

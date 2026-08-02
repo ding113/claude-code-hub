@@ -5,6 +5,10 @@ import { and, desc, eq, gte, inArray, isNull, lt, sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import { keys as keysTable, messageRequest, providers, usageLedger, users } from "@/drizzle/schema";
 import { TTLMap } from "@/lib/cache/ttl-map";
+import {
+  deriveRequestCacheMetrics,
+  type RequestCacheMetricAvailability,
+} from "@/lib/cache-effectiveness/request-metrics";
 import { isLedgerOnlyMode } from "@/lib/ledger-fallback";
 import { extractAnthropicEffortFromSpecialSettings } from "@/lib/utils/anthropic-effort";
 import { isNonBillingEndpoint } from "@/lib/utils/performance-formatter";
@@ -215,6 +219,7 @@ export interface UsageLogRow {
   sessionId: string | null; // Public Session identity
   sourceSessionId: string | null; // Physical Session source for request-scoped readback
   sourceSessionIds?: string[]; // All physical client session IDs grouped under the public identity
+  sessionIdentityKind?: "session_id" | "prefix_affinity" | null;
   requestSequence: number | null; // Request Sequence（Session 内请求序号）
   userName: string;
   keyName: string;
@@ -231,6 +236,14 @@ export interface UsageLogRow {
   cacheCreation5mInputTokens: number | null;
   cacheCreation1hInputTokens: number | null;
   cacheTtlApplied: string | null;
+  theoreticalCacheTokens: number | null;
+  cacheScoreEligible: boolean | null;
+  cacheScoreExcludedReason: string | null;
+  cacheInputTotal: number;
+  actualCacheRate: number | null;
+  theoreticalCacheRate: number | null;
+  requestCacheCoefficientBp: number | null;
+  requestCacheMetricAvailability: RequestCacheMetricAvailability;
   totalTokens: number;
   costUsd: string | null;
   costMultiplier: string | null; // 供应商倍率
@@ -366,6 +379,7 @@ export async function findUsageLogsBatch(
       createdAtRaw: sql<string>`to_char(${messageRequest.createdAt} AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`,
       sessionId: messageSessionIdentity,
       sourceSessionId: messageRequest.sessionId,
+      sessionIdentityKind: messageRequest.sessionIdentityKind,
       requestSequence: messageRequest.requestSequence,
       userName: users.name,
       keyName: keysTable.name,
@@ -382,6 +396,9 @@ export async function findUsageLogsBatch(
       cacheCreation5mInputTokens: messageRequest.cacheCreation5mInputTokens,
       cacheCreation1hInputTokens: messageRequest.cacheCreation1hInputTokens,
       cacheTtlApplied: messageRequest.cacheTtlApplied,
+      theoreticalCacheTokens: messageRequest.theoreticalCacheTokens,
+      cacheScoreEligible: messageRequest.cacheScoreEligible,
+      cacheScoreExcludedReason: messageRequest.cacheScoreExcludedReason,
       costUsd: messageRequest.costUsd,
       costMultiplier: messageRequest.costMultiplier,
       groupCostMultiplier: messageRequest.groupCostMultiplier,
@@ -440,6 +457,15 @@ export async function findUsageLogsBatch(
       context1mApplied: row.context1mApplied,
     });
     const anthropicEffort = extractAnthropicEffortFromSpecialSettings(unifiedSpecialSettings);
+    const cacheMetrics = deriveRequestCacheMetrics({
+      inputTokens: row.inputTokens,
+      cacheCreationInputTokens: row.cacheCreationInputTokens,
+      cacheReadInputTokens: row.cacheReadInputTokens,
+      theoreticalCacheTokens: row.theoreticalCacheTokens,
+      cacheScoreEligible: row.cacheScoreEligible,
+      cacheScoreExcludedReason: row.cacheScoreExcludedReason,
+      sessionIdentityKind: row.sessionIdentityKind,
+    });
 
     return {
       ...row,
@@ -448,6 +474,7 @@ export async function findUsageLogsBatch(
       cacheCreation5mInputTokens: row.cacheCreation5mInputTokens,
       cacheCreation1hInputTokens: row.cacheCreation1hInputTokens,
       cacheTtlApplied: row.cacheTtlApplied,
+      ...cacheMetrics,
       costUsd: row.costUsd?.toString() ?? null,
       groupCostMultiplier: row.groupCostMultiplier?.toString() ?? null,
       costBreakdown: (row.costBreakdown as StoredCostBreakdown) ?? null,
@@ -564,6 +591,7 @@ export async function findUsageLogsBatch(
       createdAtRaw: sql<string>`to_char(${usageLedger.createdAt} AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`,
       sessionId: ledgerSessionIdentity,
       sourceSessionId: usageLedger.sessionId,
+      sessionIdentityKind: usageLedger.sessionIdentityKind,
       userId: usageLedger.userId,
       userName: users.name,
       key: usageLedger.key,
@@ -616,12 +644,22 @@ export async function findUsageLogsBatch(
       (row.outputTokens ?? 0) +
       (row.cacheCreationInputTokens ?? 0) +
       (row.cacheReadInputTokens ?? 0);
+    const cacheMetrics = deriveRequestCacheMetrics({
+      inputTokens: row.inputTokens,
+      cacheCreationInputTokens: row.cacheCreationInputTokens,
+      cacheReadInputTokens: row.cacheReadInputTokens,
+      theoreticalCacheTokens: null,
+      cacheScoreEligible: null,
+      cacheScoreExcludedReason: null,
+      sessionIdentityKind: row.sessionIdentityKind,
+    });
 
     return {
       id: row.id,
       createdAt: row.createdAt,
       sessionId: row.sessionId,
       sourceSessionId: row.sourceSessionId,
+      sessionIdentityKind: row.sessionIdentityKind,
       requestSequence: null,
       userName: row.userName ?? `User #${row.userId}`,
       keyName: row.keyName ?? row.key,
@@ -638,6 +676,10 @@ export async function findUsageLogsBatch(
       cacheCreation5mInputTokens: row.cacheCreation5mInputTokens,
       cacheCreation1hInputTokens: row.cacheCreation1hInputTokens,
       cacheTtlApplied: row.cacheTtlApplied,
+      theoreticalCacheTokens: null,
+      cacheScoreEligible: null,
+      cacheScoreExcludedReason: null,
+      ...cacheMetrics,
       totalTokens: totalRowTokens,
       costUsd: row.costUsd?.toString() ?? null,
       costMultiplier: row.costMultiplier?.toString() ?? null,
@@ -704,6 +746,7 @@ interface UsageLogSlimBatchFilters extends UsageLogSlimFilters {
 interface UsageLogSlimRow {
   id: number;
   createdAt: Date | null;
+  sessionIdentityKind: "session_id" | "prefix_affinity" | null;
   model: string | null;
   originalModel: string | null;
   actualResponseModel: string | null;
@@ -718,6 +761,14 @@ interface UsageLogSlimRow {
   cacheCreation5mInputTokens: number | null;
   cacheCreation1hInputTokens: number | null;
   cacheTtlApplied: string | null;
+  theoreticalCacheTokens: number | null;
+  cacheScoreEligible: boolean | null;
+  cacheScoreExcludedReason: string | null;
+  cacheInputTotal: number;
+  actualCacheRate: number | null;
+  theoreticalCacheRate: number | null;
+  requestCacheCoefficientBp: number | null;
+  requestCacheMetricAvailability: RequestCacheMetricAvailability;
   isReplay: boolean;
   replaySourceRequestId: number | null;
   anthropicEffort?: string | null;
@@ -840,6 +891,7 @@ function buildNextCursorOrThrow(
 function mapUsageLogSlimRow(row: {
   id: number;
   createdAt: Date | null;
+  sessionIdentityKind: "session_id" | "prefix_affinity" | null;
   model: string | null;
   originalModel: string | null;
   actualResponseModel: string | null;
@@ -854,6 +906,9 @@ function mapUsageLogSlimRow(row: {
   cacheCreation5mInputTokens: number | null;
   cacheCreation1hInputTokens: number | null;
   cacheTtlApplied: string | null;
+  theoreticalCacheTokens: number | null;
+  cacheScoreEligible: boolean | null;
+  cacheScoreExcludedReason: string | null;
   isReplay: boolean;
   replaySourceRequestId: number | null;
   specialSettings?: SpecialSetting[] | null;
@@ -868,9 +923,19 @@ function mapUsageLogSlimRow(row: {
     context1mApplied: null,
   });
   const anthropicEffort = extractAnthropicEffortFromSpecialSettings(unifiedSpecialSettings);
+  const cacheMetrics = deriveRequestCacheMetrics({
+    inputTokens: rest.inputTokens,
+    cacheCreationInputTokens: rest.cacheCreationInputTokens,
+    cacheReadInputTokens: rest.cacheReadInputTokens,
+    theoreticalCacheTokens: rest.theoreticalCacheTokens,
+    cacheScoreEligible: rest.cacheScoreEligible,
+    cacheScoreExcludedReason: rest.cacheScoreExcludedReason,
+    sessionIdentityKind: rest.sessionIdentityKind,
+  });
 
   return {
     ...rest,
+    ...cacheMetrics,
     costUsd: rest.costUsd?.toString() ?? null,
     anthropicEffort,
   };
@@ -1016,6 +1081,7 @@ async function selectKeyScopedMessageSlimRows(
       id: messageRequest.id,
       createdAt: messageRequest.createdAt,
       createdAtRaw: sql<string>`to_char(${messageRequest.createdAt} AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`,
+      sessionIdentityKind: messageRequest.sessionIdentityKind,
       model: messageRequest.model,
       originalModel: messageRequest.originalModel,
       actualResponseModel: messageRequest.actualResponseModel,
@@ -1030,6 +1096,9 @@ async function selectKeyScopedMessageSlimRows(
       cacheCreation5mInputTokens: messageRequest.cacheCreation5mInputTokens,
       cacheCreation1hInputTokens: messageRequest.cacheCreation1hInputTokens,
       cacheTtlApplied: messageRequest.cacheTtlApplied,
+      theoreticalCacheTokens: messageRequest.theoreticalCacheTokens,
+      cacheScoreEligible: messageRequest.cacheScoreEligible,
+      cacheScoreExcludedReason: messageRequest.cacheScoreExcludedReason,
       isReplay: messageRequest.isReplay,
       replaySourceRequestId: messageRequest.replaySourceRequestId,
       specialSettings: messageRequest.specialSettings,
@@ -1062,6 +1131,7 @@ async function selectKeyScopedLedgerSlimRows(
       id: usageLedger.requestId,
       createdAt: usageLedger.createdAt,
       createdAtRaw: sql<string>`to_char(${usageLedger.createdAt} AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`,
+      sessionIdentityKind: usageLedger.sessionIdentityKind,
       model: usageLedger.model,
       originalModel: usageLedger.originalModel,
       actualResponseModel: usageLedger.actualResponseModel,
@@ -1086,26 +1156,15 @@ async function selectKeyScopedLedgerSlimRows(
     .offset(offset);
 
   return rows.map((row) => ({
-    id: row.id,
-    createdAt: row.createdAt,
+    ...mapUsageLogSlimRow({
+      ...row,
+      costUsd: row.costUsd?.toString() ?? null,
+      theoreticalCacheTokens: null,
+      cacheScoreEligible: null,
+      cacheScoreExcludedReason: null,
+      specialSettings: null,
+    }),
     createdAtRaw: row.createdAtRaw,
-    model: row.model,
-    originalModel: row.originalModel,
-    actualResponseModel: row.actualResponseModel,
-    endpoint: row.endpoint,
-    statusCode: row.statusCode,
-    inputTokens: row.inputTokens,
-    outputTokens: row.outputTokens,
-    costUsd: row.costUsd?.toString() ?? null,
-    durationMs: row.durationMs,
-    cacheCreationInputTokens: row.cacheCreationInputTokens,
-    cacheReadInputTokens: row.cacheReadInputTokens,
-    cacheCreation5mInputTokens: row.cacheCreation5mInputTokens,
-    cacheCreation1hInputTokens: row.cacheCreation1hInputTokens,
-    cacheTtlApplied: row.cacheTtlApplied,
-    isReplay: row.isReplay,
-    replaySourceRequestId: row.replaySourceRequestId,
-    anthropicEffort: null,
   }));
 }
 
@@ -1195,6 +1254,7 @@ function mapUsageLogRowFromMessageResult(row: {
   sessionId: string | null;
   sourceSessionId: string | null;
   sourceSessionIds?: string[];
+  sessionIdentityKind: "session_id" | "prefix_affinity" | null;
   requestSequence: number | null;
   userName: string;
   keyName: string;
@@ -1211,6 +1271,9 @@ function mapUsageLogRowFromMessageResult(row: {
   cacheCreation5mInputTokens: number | null;
   cacheCreation1hInputTokens: number | null;
   cacheTtlApplied: string | null;
+  theoreticalCacheTokens: number | null;
+  cacheScoreEligible: boolean | null;
+  cacheScoreExcludedReason: string | null;
   costUsd: string | null | { toString(): string };
   costMultiplier: string | null | { toString(): string };
   groupCostMultiplier: string | null | { toString(): string };
@@ -1248,13 +1311,24 @@ function mapUsageLogRowFromMessageResult(row: {
     context1mApplied: row.context1mApplied,
   });
   const anthropicEffort = extractAnthropicEffortFromSpecialSettings(unifiedSpecialSettings);
+  const cacheMetrics = deriveRequestCacheMetrics({
+    inputTokens: row.inputTokens,
+    cacheCreationInputTokens: row.cacheCreationInputTokens,
+    cacheReadInputTokens: row.cacheReadInputTokens,
+    theoreticalCacheTokens: row.theoreticalCacheTokens,
+    cacheScoreEligible: row.cacheScoreEligible,
+    cacheScoreExcludedReason: row.cacheScoreExcludedReason,
+    sessionIdentityKind: row.sessionIdentityKind,
+  });
 
   return {
     ...row,
     sourceSessionIds: row.sourceSessionIds ? [...new Set(row.sourceSessionIds)] : undefined,
+    sessionIdentityKind: row.sessionIdentityKind,
     requestSequence: row.requestSequence ?? null,
     totalTokens: totalRowTokens,
     costUsd: row.costUsd?.toString() ?? null,
+    ...cacheMetrics,
     costMultiplier: row.costMultiplier?.toString() ?? null,
     groupCostMultiplier: row.groupCostMultiplier?.toString() ?? null,
     costBreakdown: row.costBreakdown ?? null,
@@ -1272,6 +1346,7 @@ function mapUsageLogRowFromLedgerResult(row: {
   sessionId: string | null;
   sourceSessionId: string | null;
   sourceSessionIds?: string[];
+  sessionIdentityKind: "session_id" | "prefix_affinity" | null;
   userId: number;
   userName: string | null;
   key: string;
@@ -1306,6 +1381,15 @@ function mapUsageLogRowFromLedgerResult(row: {
     (row.outputTokens ?? 0) +
     (row.cacheCreationInputTokens ?? 0) +
     (row.cacheReadInputTokens ?? 0);
+  const cacheMetrics = deriveRequestCacheMetrics({
+    inputTokens: row.inputTokens,
+    cacheCreationInputTokens: row.cacheCreationInputTokens,
+    cacheReadInputTokens: row.cacheReadInputTokens,
+    theoreticalCacheTokens: null,
+    cacheScoreEligible: null,
+    cacheScoreExcludedReason: null,
+    sessionIdentityKind: row.sessionIdentityKind,
+  });
 
   return {
     id: row.id,
@@ -1313,6 +1397,7 @@ function mapUsageLogRowFromLedgerResult(row: {
     sessionId: row.sessionId,
     sourceSessionId: row.sourceSessionId,
     sourceSessionIds: row.sourceSessionIds ? [...new Set(row.sourceSessionIds)] : undefined,
+    sessionIdentityKind: row.sessionIdentityKind,
     requestSequence: null,
     userName: row.userName ?? `User #${row.userId}`,
     keyName: row.keyName ?? row.key,
@@ -1329,6 +1414,10 @@ function mapUsageLogRowFromLedgerResult(row: {
     cacheCreation5mInputTokens: row.cacheCreation5mInputTokens,
     cacheCreation1hInputTokens: row.cacheCreation1hInputTokens,
     cacheTtlApplied: row.cacheTtlApplied,
+    theoreticalCacheTokens: null,
+    cacheScoreEligible: null,
+    cacheScoreExcludedReason: null,
+    ...cacheMetrics,
     totalTokens: totalRowTokens,
     costUsd: row.costUsd?.toString() ?? null,
     costMultiplier: row.costMultiplier?.toString() ?? null,
@@ -1374,6 +1463,7 @@ export async function findReadonlyUsageLogsBatchForKey(
         createdAtRaw: sql<string>`to_char(${messageRequest.createdAt} AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`,
         sessionId: messageSessionIdentity,
         sourceSessionId: messageRequest.sessionId,
+        sessionIdentityKind: messageRequest.sessionIdentityKind,
         requestSequence: messageRequest.requestSequence,
         userName: users.name,
         keyName: keysTable.name,
@@ -1390,6 +1480,9 @@ export async function findReadonlyUsageLogsBatchForKey(
         cacheCreation5mInputTokens: messageRequest.cacheCreation5mInputTokens,
         cacheCreation1hInputTokens: messageRequest.cacheCreation1hInputTokens,
         cacheTtlApplied: messageRequest.cacheTtlApplied,
+        theoreticalCacheTokens: messageRequest.theoreticalCacheTokens,
+        cacheScoreEligible: messageRequest.cacheScoreEligible,
+        cacheScoreExcludedReason: messageRequest.cacheScoreExcludedReason,
         costUsd: messageRequest.costUsd,
         costMultiplier: messageRequest.costMultiplier,
         groupCostMultiplier: messageRequest.groupCostMultiplier,
@@ -1427,6 +1520,7 @@ export async function findReadonlyUsageLogsBatchForKey(
             createdAtRaw: sql<string>`to_char(${usageLedger.createdAt} AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`,
             sessionId: ledgerSessionIdentity,
             sourceSessionId: usageLedger.sessionId,
+            sessionIdentityKind: usageLedger.sessionIdentityKind,
             userId: usageLedger.userId,
             userName: users.name,
             key: usageLedger.key,
@@ -1645,6 +1739,7 @@ export async function findUsageLogsWithDetails(
       createdAt: messageRequest.createdAt,
       sessionId: messageSessionIdentity, // Public Session identity
       sourceSessionId: messageRequest.sessionId, // Physical Session source
+      sessionIdentityKind: messageRequest.sessionIdentityKind,
       requestSequence: messageRequest.requestSequence, // Request Sequence
       userName: users.name,
       keyName: keysTable.name,
@@ -1661,6 +1756,9 @@ export async function findUsageLogsWithDetails(
       cacheCreation5mInputTokens: messageRequest.cacheCreation5mInputTokens,
       cacheCreation1hInputTokens: messageRequest.cacheCreation1hInputTokens,
       cacheTtlApplied: messageRequest.cacheTtlApplied,
+      theoreticalCacheTokens: messageRequest.theoreticalCacheTokens,
+      cacheScoreEligible: messageRequest.cacheScoreEligible,
+      cacheScoreExcludedReason: messageRequest.cacheScoreExcludedReason,
       costUsd: messageRequest.costUsd,
       costMultiplier: messageRequest.costMultiplier, // 供应商倍率
       groupCostMultiplier: messageRequest.groupCostMultiplier, // 分组倍率
@@ -1724,6 +1822,15 @@ export async function findUsageLogsWithDetails(
       context1mApplied: row.context1mApplied,
     });
     const anthropicEffort = extractAnthropicEffortFromSpecialSettings(unifiedSpecialSettings);
+    const cacheMetrics = deriveRequestCacheMetrics({
+      inputTokens: row.inputTokens,
+      cacheCreationInputTokens: row.cacheCreationInputTokens,
+      cacheReadInputTokens: row.cacheReadInputTokens,
+      theoreticalCacheTokens: row.theoreticalCacheTokens,
+      cacheScoreEligible: row.cacheScoreEligible,
+      cacheScoreExcludedReason: row.cacheScoreExcludedReason,
+      sessionIdentityKind: row.sessionIdentityKind,
+    });
 
     return {
       ...row,
@@ -1732,6 +1839,7 @@ export async function findUsageLogsWithDetails(
       cacheCreation5mInputTokens: row.cacheCreation5mInputTokens,
       cacheCreation1hInputTokens: row.cacheCreation1hInputTokens,
       cacheTtlApplied: row.cacheTtlApplied,
+      ...cacheMetrics,
       costUsd: row.costUsd?.toString() ?? null,
       groupCostMultiplier: row.groupCostMultiplier?.toString() ?? null,
       costBreakdown: (row.costBreakdown as StoredCostBreakdown) ?? null,

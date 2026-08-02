@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   getProviderCacheCoefficients,
+  getProviderModelCacheCoefficients,
   resolveLeaderboardWindow,
 } from "@/repository/provider-cache-effectiveness";
 
@@ -38,6 +39,20 @@ function aggregateRow(
   };
 }
 
+function modelAggregateRow(
+  providerId: number,
+  model: string,
+  sample: string,
+  eligible: string,
+  theoretical: string,
+  observed: string
+) {
+  return {
+    ...aggregateRow(providerId, sample, eligible, theoretical, observed),
+    model,
+  };
+}
+
 describe("getProviderCacheCoefficients", () => {
   beforeEach(() => {
     dbMocks.groupBy.mockResolvedValue([]);
@@ -63,6 +78,14 @@ describe("getProviderCacheCoefficients", () => {
 
     // raw clamp 10000 -> effectiveness = confidenceBp = 7500
     expect(result.get(1)?.coefficientBp).toBe(7500);
+  });
+
+  it("clamps rawBp at 0 when observed tokens are negative", async () => {
+    dbMocks.groupBy.mockResolvedValue([aggregateRow(1, "200", "150", "100000", "-100")]);
+
+    const result = await getProviderCacheCoefficients(window);
+
+    expect(result.get(1)?.coefficientBp).toBe(0);
   });
 
   it("returns 0 coefficient when theoretical tokens are zero", async () => {
@@ -94,6 +117,28 @@ describe("getProviderCacheCoefficients", () => {
     const result = await getProviderCacheCoefficients(window);
 
     expect(result.size).toBe(0);
+  });
+});
+
+describe("getProviderModelCacheCoefficients", () => {
+  const window = { start: new Date("2026-07-22T00:00:00Z"), end: new Date("2026-07-22T01:00:00Z") };
+
+  beforeEach(() => {
+    dbMocks.groupBy.mockResolvedValue([]);
+  });
+
+  it("returns independently recomputed coefficients for each provider and model", async () => {
+    dbMocks.groupBy.mockResolvedValue([
+      modelAggregateRow(7, "claude-sonnet", "200", "150", "100000", "86000"),
+      modelAggregateRow(7, "claude-haiku", "5", "5", "100", "100"),
+      modelAggregateRow(8, "claude-sonnet", "4", "4", "100", "50"),
+    ]);
+
+    const result = await getProviderModelCacheCoefficients(window);
+
+    expect(result.get(7)?.get("claude-sonnet")?.coefficientBp).toBe(6450);
+    expect(result.get(7)?.get("claude-haiku")?.coefficientBp).toBe(3000);
+    expect(result.get(8)?.get("claude-sonnet")?.coefficientBp).toBe(500);
   });
 });
 

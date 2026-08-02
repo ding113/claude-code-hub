@@ -23,6 +23,7 @@ interface ErrorDetailsDialogProps {
   routingTrace?: RoutingTraceV1 | null;
   sessionId: string | null;
   sourceSessionId?: string | null;
+  sessionIdentityKind?: "session_id" | "prefix_affinity" | null;
   requestSequence?: number | null;
   blockedBy?: string | null;
   blockedReason?: string | null;
@@ -44,6 +45,14 @@ interface ErrorDetailsDialogProps {
   cacheCreation1hInputTokens?: number | null;
   cacheReadInputTokens?: number | null;
   cacheTtlApplied?: string | null;
+  theoreticalCacheTokens?: number | null;
+  cacheScoreEligible?: boolean | null;
+  cacheScoreExcludedReason?: string | null;
+  cacheInputTotal?: number | null;
+  actualCacheRate?: number | null;
+  theoreticalCacheRate?: number | null;
+  requestCacheCoefficientBp?: number | null;
+  requestCacheMetricAvailability?: import("@/lib/cache-effectiveness/request-metrics").RequestCacheMetricAvailability;
   swapCacheTtlApplied?: boolean | null;
   costUsd?: string | null;
   costMultiplier?: string | null;
@@ -72,6 +81,7 @@ export function ErrorDetailsDialog({
   routingTrace,
   sessionId,
   sourceSessionId,
+  sessionIdentityKind,
   requestSequence,
   blockedBy,
   blockedReason,
@@ -93,6 +103,14 @@ export function ErrorDetailsDialog({
   cacheCreation1hInputTokens,
   cacheReadInputTokens,
   cacheTtlApplied,
+  theoreticalCacheTokens,
+  cacheScoreEligible,
+  cacheScoreExcludedReason,
+  cacheInputTotal,
+  actualCacheRate,
+  theoreticalCacheRate,
+  requestCacheCoefficientBp,
+  requestCacheMetricAvailability,
   swapCacheTtlApplied,
   costUsd,
   costMultiplier,
@@ -226,6 +244,7 @@ export function ErrorDetailsDialog({
     routingTrace,
     sessionId,
     sourceSessionId,
+    sessionIdentityKind,
     requestSequence,
     blockedBy,
     blockedReason,
@@ -247,6 +266,14 @@ export function ErrorDetailsDialog({
     cacheCreation1hInputTokens,
     cacheReadInputTokens,
     cacheTtlApplied,
+    theoreticalCacheTokens,
+    cacheScoreEligible,
+    cacheScoreExcludedReason,
+    cacheInputTotal,
+    actualCacheRate,
+    theoreticalCacheRate,
+    requestCacheCoefficientBp,
+    requestCacheMetricAvailability,
     swapCacheTtlApplied,
     costUsd,
     costMultiplier,

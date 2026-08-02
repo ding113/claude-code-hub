@@ -61,13 +61,13 @@
     "filters": {
       "user": "Пользователь",
       "provider": "Поставщик",
-      "sessionId": "ID сессии",
+      "sessionId": "Session / Prefix ID",
       "searchUser": "Поиск пользователей...",
       "searchProvider": "Поиск провайдеров...",
-      "searchSessionId": "Поиск ID сессии...",
+      "searchSessionId": "Поиск Session или Prefix ID...",
       "noUserFound": "Пользователи не найдены",
       "noProviderFound": "Провайдеры не найдены",
-      "noSessionFound": "ID сессии не найдены",
+      "noSessionFound": "Session или Prefix ID не найдены",
       "model": "Модель",
       "actualResponseModelMismatch": "Модель тарификации отличается от фактической",
       "endpoint": "Эндпоинт",
@@ -220,6 +220,23 @@
         "outputRate": "Скорость вывода",
         "viewFullError": "Показать полную ошибку",
         "viewSession": "Просмотр сеанса"
+      },
+      "cachePerformance": {
+        "title": "Эффективность кэша",
+        "actualRate": "Фактическая доля кэша",
+        "theoreticalRate": "Теоретическая доля кэша",
+        "coefficient": "Коэффициент кэша запроса",
+        "rawCoefficient": "Необработанный коэффициент одного запроса; поправка доверия провайдера не применяется.",
+        "estimateNote": "Теоретическая доля оценивается по самому длинному нормализованному префиксу (байты / 4).",
+        "availability": {
+          "available": "Запрос подходит для оценки кэша префикса.",
+          "no_input": "Для запроса не записаны входные токены.",
+          "no_affinity_key": "Prefix ID не записан, поэтому теоретическая доля и коэффициент недоступны.",
+          "attempt_failed": "Попытка запроса завершилась ошибкой; коэффициент исключен.",
+          "not_observable": "Использование кэша у провайдера не наблюдалось; коэффициент исключен.",
+          "stream_truncated": "Поток был усечен; коэффициент исключен.",
+          "not_recorded": "Для этого запроса не записаны метрики кэша префикса."
+        }
       },
       "specialSettings": {
         "title": "Особые настройки"
@@ -381,6 +398,8 @@
       "metadata": {
         "noMetadata": "Нет метаданных",
         "sessionInfo": "Информация о сеансе",
+        "sessionId": "Session ID",
+        "prefixId": "Prefix ID",
         "clientInfo": "Информация о клиенте",
         "billingInfo": "Информация о биллинге",
         "technicalTimeline": "Техническая хронология",
@@ -695,7 +714,7 @@
       "avgCostPerMillionTokens": "Ср. стоимость/1М токенов",
       "unknownModel": "Неизвестно",
       "successRateUnavailable": "Н/Д",
-      "successRateBasisDisclosure": "В режиме redirected billing одна строка может объединять несколько исходных моделей, поэтому здесь успешность скрыта, чтобы не вводить в заблуждение."
+      "successRateBasisDisclosure": "За выбранный период у этой модели нет учитываемых успешных или неуспешных исходов, поэтому успешность не рассчитывается."
     },
     "expandModelStats": "Развернуть модели",
     "collapseModelStats": "Свернуть модели",

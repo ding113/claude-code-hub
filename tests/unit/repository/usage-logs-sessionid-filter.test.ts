@@ -294,6 +294,7 @@ describe("Usage logs sessionId filter", () => {
             createdAtRaw: "2026-03-21T00:00:00.000000Z",
             sessionId: "pfx:scope:fingerprint",
             sourceSessionId: "client-old",
+            sessionIdentityKind: "prefix_affinity",
             requestSequence: 1,
             userName: "u",
             keyName: "k",
@@ -303,13 +304,16 @@ describe("Usage logs sessionId filter", () => {
             actualResponseModel: null,
             endpoint: "/v1/messages",
             statusCode: 200,
-            inputTokens: 1,
+            inputTokens: 50,
             outputTokens: 1,
             cacheCreationInputTokens: 0,
-            cacheReadInputTokens: 0,
+            cacheReadInputTokens: 25,
             cacheCreation5mInputTokens: 0,
             cacheCreation1hInputTokens: 0,
             cacheTtlApplied: null,
+            theoreticalCacheTokens: 50,
+            cacheScoreEligible: true,
+            cacheScoreExcludedReason: null,
             costUsd: "0.01",
             costMultiplier: null,
             groupCostMultiplier: null,
@@ -354,6 +358,15 @@ describe("Usage logs sessionId filter", () => {
     const result = await findUsageLogsBatch({ cursor: { createdAt: "2026-03-22", id: 102 } });
 
     expect(result.logs[0]?.sourceSessionIds).toBeUndefined();
+    expect(result.logs[0]).toMatchObject({
+      sessionIdentityKind: "prefix_affinity",
+      theoreticalCacheTokens: 50,
+      cacheScoreEligible: true,
+      actualCacheRate: 1 / 3,
+      theoreticalCacheRate: 2 / 3,
+      requestCacheCoefficientBp: 5000,
+      requestCacheMetricAvailability: "available",
+    });
     expect(result.sourceSessionIdsByIdentity).toEqual({
       "pfx:scope:fingerprint": ["client-new", "client-old"],
     });
@@ -481,6 +494,132 @@ describe("Usage logs sessionId filter", () => {
     await expect(findUsageLogsForKeyBatch({ keyString: "k", limit: 1 })).rejects.toThrow(
       "findUsageLogsForKeyBatch: expected next cursor when hasMore is true"
     );
+  });
+
+  test.each(["offset", "cursor"] as const)(
+    "key-scoped %s path returns F3b fields and derived cache metrics",
+    async (mode) => {
+      vi.resetModules();
+
+      const projections: Array<Record<string, unknown>> = [];
+      const messageRow = {
+        id: 301,
+        createdAt: new Date("2026-03-21T00:00:00Z"),
+        createdAtRaw: "2026-03-21T00:00:00.000000Z",
+        sessionIdentityKind: "prefix_affinity",
+        model: "m",
+        originalModel: "m-original",
+        actualResponseModel: null,
+        endpoint: "/v1/messages",
+        statusCode: 200,
+        inputTokens: 100,
+        outputTokens: 10,
+        costUsd: "0.01",
+        durationMs: 10,
+        cacheCreationInputTokens: 20,
+        cacheReadInputTokens: 30,
+        cacheCreation5mInputTokens: 20,
+        cacheCreation1hInputTokens: 0,
+        cacheTtlApplied: "5m",
+        theoreticalCacheTokens: 60,
+        cacheScoreEligible: true,
+        cacheScoreExcludedReason: null,
+        isReplay: false,
+        replaySourceRequestId: null,
+        specialSettings: null,
+      };
+      const rowsByCall =
+        mode === "offset"
+          ? [[messageRow], [], [{ totalRows: 1 }], [{ totalRows: 0 }]]
+          : [[messageRow], []];
+      const selectMock = vi.fn((projection: Record<string, unknown>) => {
+        projections.push(projection);
+        return createThenableQuery(rowsByCall[projections.length - 1] ?? []);
+      });
+
+      vi.doMock("@/drizzle/db", () => ({ db: { select: selectMock } }));
+
+      const repository = await import("@/repository/usage-logs");
+      const result =
+        mode === "offset"
+          ? await repository.findUsageLogsForKeySlim({ keyString: "key", page: 1, pageSize: 20 })
+          : await repository.findUsageLogsForKeyBatch({
+              keyString: "key",
+              cursor: { createdAt: "2026-03-22T00:00:00Z", id: 302 },
+              limit: 20,
+            });
+
+      expect(result.logs[0]).toMatchObject({
+        sessionIdentityKind: "prefix_affinity",
+        theoreticalCacheTokens: 60,
+        cacheScoreEligible: true,
+        cacheScoreExcludedReason: null,
+        cacheInputTotal: 150,
+        actualCacheRate: 0.2,
+        theoreticalCacheRate: 0.4,
+        requestCacheCoefficientBp: 5000,
+        requestCacheMetricAvailability: "available",
+      });
+      expect(Object.keys(projections[0] ?? {})).toEqual(
+        expect.arrayContaining([
+          "sessionIdentityKind",
+          "theoreticalCacheTokens",
+          "cacheScoreEligible",
+          "cacheScoreExcludedReason",
+        ])
+      );
+    }
+  );
+
+  test("key-scoped ledger rows preserve identity kind and report unrecorded F3b metrics", async () => {
+    vi.resetModules();
+
+    const projections: Array<Record<string, unknown>> = [];
+    const ledgerRow = {
+      id: 401,
+      createdAt: new Date("2026-03-21T00:00:00Z"),
+      createdAtRaw: "2026-03-21T00:00:00.000000Z",
+      sessionIdentityKind: "prefix_affinity",
+      model: "m",
+      originalModel: "m-original",
+      actualResponseModel: null,
+      endpoint: "/v1/messages",
+      statusCode: 200,
+      inputTokens: 100,
+      outputTokens: 10,
+      costUsd: "0.01",
+      durationMs: 10,
+      cacheCreationInputTokens: 20,
+      cacheReadInputTokens: 30,
+      cacheCreation5mInputTokens: 20,
+      cacheCreation1hInputTokens: 0,
+      cacheTtlApplied: "5m",
+      isReplay: false,
+      replaySourceRequestId: null,
+    };
+    const rowsByCall = [[], [ledgerRow]];
+    const selectMock = vi.fn((projection: Record<string, unknown>) => {
+      projections.push(projection);
+      return createThenableQuery(rowsByCall[projections.length - 1] ?? []);
+    });
+
+    vi.doMock("@/drizzle/db", () => ({ db: { select: selectMock } }));
+
+    const { findUsageLogsForKeyBatch } = await import("@/repository/usage-logs");
+    const result = await findUsageLogsForKeyBatch({ keyString: "key", limit: 20 });
+
+    expect(result.logs[0]).toMatchObject({
+      sessionIdentityKind: "prefix_affinity",
+      theoreticalCacheTokens: null,
+      cacheScoreEligible: null,
+      cacheScoreExcludedReason: null,
+      cacheInputTotal: 150,
+      actualCacheRate: 0.2,
+      theoreticalCacheRate: null,
+      requestCacheCoefficientBp: null,
+      requestCacheMetricAvailability: "not_recorded",
+    });
+    expect(Object.keys(projections[1] ?? {})).toContain("sessionIdentityKind");
   });
 
   test("findUsageLogsWithDetails: sessionId 为空/空白不应追加条件", async () => {

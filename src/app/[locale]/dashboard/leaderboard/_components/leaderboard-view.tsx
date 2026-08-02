@@ -81,7 +81,11 @@ type AnyEntry =
   | ModelEntry;
 
 function renderSuccessRateCell(
-  row: { successRate: number | null; basisDisclosureRequired?: boolean },
+  row: {
+    successRate: number | null;
+    basisDisclosureRequired?: boolean;
+    successRateUnavailableReason?: "no_countable_outcomes";
+  },
   t: ReturnType<typeof useTranslations>
 ) {
   const display = getSuccessRateCellDisplay(row, t);

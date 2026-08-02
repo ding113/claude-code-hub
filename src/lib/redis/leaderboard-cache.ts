@@ -67,8 +67,9 @@ export interface LeaderboardFilters {
  * 缓存值 shape 版本：条目结构变更时递增，避免 60s TTL 内新旧 payload 混用。
  * v2: provider / providerCacheHitRate 条目新增 cacheCoefficientBp
  * v3: leaderboard latency fields use avgTtftMs instead of avgTtfbMs
+ * v4: provider model breakdown entries include cacheCoefficientBp
  */
-const CACHE_SHAPE_VERSION = "v3";
+const CACHE_SHAPE_VERSION = "v4";
 
 /**
  * 构建缓存键
@@ -104,22 +105,22 @@ function buildCacheKey(
   const prefix = `leaderboard:${CACHE_SHAPE_VERSION}:${scope}`;
 
   if (period === "custom" && dateRange) {
-    // leaderboard:v3:{scope}:custom:2025-01-01_2025-01-15:USD
+    // leaderboard:v4:{scope}:custom:2025-01-01_2025-01-15:USD
     return `${prefix}:custom:${dateRange.startDate}_${dateRange.endDate}:tz:${timezone}:${currencyDisplay}${providerTypeSuffix}${includeModelStatsSuffix}${userFilterSuffix}`;
   } else if (period === "daily") {
-    // leaderboard:v3:{scope}:daily:2025-01-15:USD
+    // leaderboard:v4:{scope}:daily:2025-01-15:USD
     const dateStr = formatInTimeZone(now, timezone, "yyyy-MM-dd");
     return `${prefix}:daily:${dateStr}:tz:${timezone}:${currencyDisplay}${providerTypeSuffix}${includeModelStatsSuffix}${userFilterSuffix}`;
   } else if (period === "weekly") {
-    // leaderboard:v3:{scope}:weekly:2025-W03:USD (ISO week)
+    // leaderboard:v4:{scope}:weekly:2025-W03:USD (ISO week)
     const weekStr = formatInTimeZone(now, timezone, "yyyy-'W'ww");
     return `${prefix}:weekly:${weekStr}:tz:${timezone}:${currencyDisplay}${providerTypeSuffix}${includeModelStatsSuffix}${userFilterSuffix}`;
   } else if (period === "monthly") {
-    // leaderboard:v3:{scope}:monthly:2025-01:USD
+    // leaderboard:v4:{scope}:monthly:2025-01:USD
     const monthStr = formatInTimeZone(now, timezone, "yyyy-MM");
     return `${prefix}:monthly:${monthStr}:tz:${timezone}:${currencyDisplay}${providerTypeSuffix}${includeModelStatsSuffix}${userFilterSuffix}`;
   } else {
-    // allTime: leaderboard:v3:{scope}:allTime:USD (no date component)
+    // allTime: leaderboard:v4:{scope}:allTime:USD (no date component)
     return `${prefix}:allTime:tz:${timezone}:${currencyDisplay}${providerTypeSuffix}${includeModelStatsSuffix}${userFilterSuffix}`;
   }
 }

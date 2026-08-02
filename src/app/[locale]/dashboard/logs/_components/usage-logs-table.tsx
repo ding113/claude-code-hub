@@ -663,6 +663,7 @@ export function UsageLogsTable({
                         routingTrace={log.routingTrace}
                         sessionId={log.sessionId}
                         sourceSessionId={log.sourceSessionId}
+                        sessionIdentityKind={log.sessionIdentityKind}
                         requestSequence={log.requestSequence}
                         blockedBy={log.blockedBy}
                         blockedReason={log.blockedReason}
@@ -684,6 +685,14 @@ export function UsageLogsTable({
                         cacheCreation1hInputTokens={log.cacheCreation1hInputTokens}
                         cacheReadInputTokens={log.cacheReadInputTokens}
                         cacheTtlApplied={log.cacheTtlApplied}
+                        theoreticalCacheTokens={log.theoreticalCacheTokens}
+                        cacheScoreEligible={log.cacheScoreEligible}
+                        cacheScoreExcludedReason={log.cacheScoreExcludedReason}
+                        cacheInputTotal={log.cacheInputTotal}
+                        actualCacheRate={log.actualCacheRate}
+                        theoreticalCacheRate={log.theoreticalCacheRate}
+                        requestCacheCoefficientBp={log.requestCacheCoefficientBp}
+                        requestCacheMetricAvailability={log.requestCacheMetricAvailability}
                         swapCacheTtlApplied={log.swapCacheTtlApplied}
                         costUsd={log.costUsd}
                         costMultiplier={log.costMultiplier}

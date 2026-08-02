@@ -210,6 +210,7 @@ const messages = {
         endpoint: "Endpoint",
       },
       details: {
+        ...dashboardMessages.logs.details,
         routingTrace: dashboardMessages.logs.details.routingTrace,
         modelAudit: dashboardMessages.logs.details.modelAudit,
         title: "Request Details",
@@ -289,6 +290,8 @@ const messages = {
         metadata: {
           noMetadata: "No metadata",
           sessionInfo: "Session Info",
+          sessionId: "Session ID",
+          prefixId: "Prefix ID",
           clientInfo: "Client Info",
           billingInfo: "Billing Info",
           technicalTimeline: "Technical Timeline",
@@ -300,6 +303,7 @@ const messages = {
           tooltip: "Thinking effort in the Codex request (reasoning.effort), shown verbatim.",
         },
         logicTrace: {
+          ...dashboardMessages.logs.details.logicTrace,
           title: "Decision Chain",
           singleRouteSelectionTitle: "Provider selection under single-route protection",
           noDecisionData: "No decision data",
@@ -441,6 +445,7 @@ describe("error-details-dialog layout", () => {
         providerChain={null}
         sessionId="pfx:scope:root"
         sourceSessionId="physical-a"
+        sessionIdentityKind="prefix_affinity"
         requestSequence={3}
       />
     );
@@ -463,6 +468,7 @@ describe("error-details-dialog layout", () => {
         providerChain={null}
         sessionId="pfx:scope:root"
         sourceSessionId="physical-a"
+        sessionIdentityKind="prefix_affinity"
         requestSequence={3}
       />
     );
@@ -474,6 +480,129 @@ describe("error-details-dialog layout", () => {
 
     expect(container.querySelector('a[href*="sourceSessionId=physical-a"]')).toBeTruthy();
     expect(container.querySelector('a[href*="seq=3"]')).toBeTruthy();
+    expect(container.querySelector('a[href*="sessionId=pfx%3Ascope%3Aroot"]')).toBeTruthy();
+    expect(container.querySelector('a[href*="sessionId=physical-a"]')).toBeTruthy();
+    unmount();
+  });
+
+  test("links both Prefix ID and physical Session ID from the Logic Trace", async () => {
+    const { container, unmount } = renderClientWithIntl(
+      <ErrorDetailsDialog
+        externalOpen
+        initialTab="logic-trace"
+        statusCode={200}
+        errorMessage={null}
+        providerChain={
+          [
+            {
+              id: 1,
+              name: "prefix-provider",
+              reason: "session_reuse",
+              decisionContext: { sessionId: "pfx:scope/root?branch#frag" },
+            },
+          ] as any
+        }
+        sessionId="pfx:scope/root?branch#frag"
+        sourceSessionId="physical-session"
+        sessionIdentityKind="prefix_affinity"
+      />
+    );
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const reuseStep = Array.from(container.querySelectorAll('[data-slot="step-card"]')).find(
+      (element) => element.textContent?.includes("Session Reuse Selection")
+    );
+    expect(reuseStep).toBeTruthy();
+
+    expect(
+      container.querySelector('a[href*="sessionId=pfx%3Ascope%2Froot%3Fbranch%23frag"]')
+    ).toBeTruthy();
+    expect(container.querySelector('a[href*="sessionId=physical-session"]')).toBeTruthy();
+    expect(container.textContent).toContain("Prefix ID");
+    expect(container.textContent).toContain("Session ID");
+    unmount();
+  });
+
+  test("shows cache metrics and encoded identity links in the Prefix Affinity step", async () => {
+    const { container, unmount } = renderClientWithIntl(
+      <ErrorDetailsDialog
+        externalOpen
+        initialTab="logic-trace"
+        statusCode={200}
+        errorMessage={null}
+        providerChain={
+          [
+            {
+              id: 1,
+              name: "affinity-provider",
+              reason: "affinity_hit",
+              selectionMethod: "prefix_affinity",
+              affinity: { matchedDepth: 2, matchedPrefixBytes: 240 },
+            },
+          ] as any
+        }
+        sessionId="pfx:scope/root?branch#frag"
+        sourceSessionId="physical-session"
+        sessionIdentityKind="prefix_affinity"
+        cacheInputTotal={150}
+        cacheReadInputTokens={30}
+        theoreticalCacheTokens={60}
+        actualCacheRate={0.2}
+        theoreticalCacheRate={0.4}
+        requestCacheCoefficientBp={5000}
+        requestCacheMetricAvailability="available"
+      />
+    );
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const affinityStep = Array.from(container.querySelectorAll('[data-slot="step-card"]')).find(
+      (element) => element.textContent?.includes("affinity-provider")
+    );
+    expect(affinityStep).toBeTruthy();
+    expect(
+      affinityStep?.querySelector('a[href*="sessionId=pfx%3Ascope%2Froot%3Fbranch%23frag"]')
+    ).toBeTruthy();
+    expect(affinityStep?.querySelector('a[href*="sessionId=physical-session"]')).toBeTruthy();
+    expect(affinityStep?.textContent).toContain("Cache Performance");
+    expect(affinityStep?.textContent).toContain("20.0%");
+    expect(affinityStep?.textContent).toContain("40.0%");
+    expect(affinityStep?.textContent).toContain("0.50");
+    unmount();
+  });
+
+  test("encodes prefix identities in the Session detail path", async () => {
+    hasSessionMessagesMock.mockResolvedValue({ ok: true, data: true });
+    const { container, unmount } = renderClientWithIntl(
+      <ErrorDetailsDialog
+        externalOpen
+        statusCode={200}
+        errorMessage={null}
+        providerChain={null}
+        sessionId="pfx:scope/root?branch#frag"
+        sourceSessionId="physical-a"
+        sessionIdentityKind="prefix_affinity"
+        requestSequence={3}
+      />
+    );
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(
+      container.querySelector(
+        'a[href*="/dashboard/sessions/pfx%3Ascope%2Froot%3Fbranch%23frag/messages"]'
+      )
+    ).toBeTruthy();
     unmount();
   });
 

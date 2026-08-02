@@ -1,6 +1,7 @@
 import { strFromU8, unzipSync } from "fflate";
 import { describe, expect, test } from "vitest";
 import type { UsageLogRow } from "@/repository/usage-logs";
+import { buildDetailHeaders } from "@/lib/usage-logs/export/columns";
 import { buildUsageLogsXlsx, columnRef } from "@/lib/usage-logs/export/xlsx";
 
 function makeLog(overrides: Partial<UsageLogRow> = {}): UsageLogRow {
@@ -65,6 +66,9 @@ const COST_COL = columnRef(14); // O
 const TIME_COL = columnRef(0); // A
 const MODEL_COL = columnRef(4); // E
 const STATUS_COL = columnRef(7); // H
+const HEADER = buildDetailHeaders("UTC");
+const PREFIX_ID_COL = columnRef(HEADER.indexOf("Prefix ID"));
+const SESSION_ID_COL = columnRef(HEADER.indexOf("Session ID"));
 
 describe("buildUsageLogsXlsx", () => {
   test("produces a valid two-sheet workbook package", async () => {
@@ -112,6 +116,26 @@ describe("buildUsageLogsXlsx", () => {
     const statusCell = cell(files["xl/worksheets/sheet1.xml"], `${STATUS_COL}2`) ?? "";
     expect(statusCell).toContain("<v>200</v>");
     expect(statusCell).not.toContain("inlineStr");
+  });
+
+  test("exports prefix identity separately from the physical Session ID", async () => {
+    const files = unzip(
+      await buildUsageLogsXlsx(
+        [
+          makeLog({
+            sessionId: "pfx:scope/root",
+            sourceSessionId: "physical-session",
+            sessionIdentityKind: "prefix_affinity",
+          }),
+        ],
+        "UTC"
+      )
+    );
+    const sheet1 = files["xl/worksheets/sheet1.xml"];
+    const prefixCell = cell(sheet1, `${PREFIX_ID_COL}2`) ?? "";
+    const sessionCell = cell(sheet1, `${SESSION_ID_COL}2`) ?? "";
+    expect(prefixCell).toContain("pfx:scope/root");
+    expect(sessionCell).toContain("physical-session");
   });
 
   test("timestamp is a real Excel date serial reflecting the system timezone", async () => {

@@ -23,7 +23,7 @@ vi.mock("@/lib/logger", () => ({
 }));
 
 import { logger } from "@/lib/logger";
-import { registerCrashDiagnostics } from "@/instrumentation";
+import { describeSchedulerError, registerCrashDiagnostics } from "@/instrumentation";
 
 type CrashHandler = (arg: unknown) => void;
 
@@ -191,6 +191,31 @@ describe("registerCrashDiagnostics", () => {
 
       expect(exitSpy).toHaveBeenCalledWith(1);
       expect(logger.fatal).toHaveBeenCalledTimes(1);
+    });
+  });
+});
+
+describe("describeSchedulerError", () => {
+  it("truncates Error causes and preserves their metadata", () => {
+    const cause = Object.assign(new Error("x".repeat(700)), { code: "ERR_DRIVER" });
+    const error = new Error("outer", { cause });
+
+    expect(describeSchedulerError(error)).toEqual({
+      error: "outer",
+      errorName: "Error",
+      errorCause: "x".repeat(500),
+      errorCauseName: "Error",
+      errorCauseCode: "ERR_DRIVER",
+    });
+  });
+
+  it("keeps cause fields undefined when no cause exists", () => {
+    expect(describeSchedulerError(new Error("outer"))).toEqual({
+      error: "outer",
+      errorName: "Error",
+      errorCause: undefined,
+      errorCauseName: undefined,
+      errorCauseCode: undefined,
     });
   });
 });

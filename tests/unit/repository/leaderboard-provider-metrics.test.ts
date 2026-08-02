@@ -31,6 +31,7 @@ const mocks = vi.hoisted(() => ({
   resolveSystemTimezone: vi.fn(),
   getSystemSettings: vi.fn(),
   getProviderCacheCoefficients: vi.fn(),
+  getProviderModelCacheCoefficients: vi.fn().mockResolvedValue(new Map()),
 }));
 
 vi.mock("@/drizzle/db", () => ({
@@ -96,6 +97,7 @@ vi.mock("@/repository/system-config", () => ({
 
 vi.mock("@/repository/provider-cache-effectiveness", () => ({
   getProviderCacheCoefficients: mocks.getProviderCacheCoefficients,
+  getProviderModelCacheCoefficients: mocks.getProviderModelCacheCoefficients,
   resolveLeaderboardWindow: () => ({ start: new Date(0), end: new Date() }),
 }));
 
@@ -372,7 +374,7 @@ describe("Provider Leaderboard Model Breakdown", () => {
     expect(p2!.modelStats![0].model).toBe("model-c");
   });
 
-  it("marks model-grain successRate as unavailable when billingModelSource is redirected", async () => {
+  it("keeps redirected model successRate and joins the model cache coefficient", async () => {
     chainMocks = [
       createChainMock([
         {
@@ -399,6 +401,24 @@ describe("Provider Leaderboard Model Breakdown", () => {
         },
       ]),
     ];
+    mocks.getProviderModelCacheCoefficients.mockResolvedValue(
+      new Map([
+        [
+          1,
+          new Map([
+            [
+              "redirected-model",
+              {
+                providerId: 1,
+                model: "redirected-model",
+                coefficientBp: 4200,
+                sampleCount: 10,
+              },
+            ],
+          ]),
+        ],
+      ])
+    );
 
     const { findDailyProviderLeaderboard } = await import("@/repository/leaderboard");
     const result = await findDailyProviderLeaderboard(undefined, true);
@@ -406,13 +426,14 @@ describe("Provider Leaderboard Model Breakdown", () => {
 
     expect(modelStat).toMatchObject({
       model: "redirected-model",
-      successRate: null,
+      successRate: 0.9,
       rowIdentityBasis: "redirected",
-      successRateBasis: "unavailable",
+      successRateBasis: "redirected",
       costTokensBasis: "redirected",
       basisDisclosureRequired: true,
-      successRateUnavailableReason: "redirected_billing_model",
+      cacheCoefficientBp: 4200,
     });
+    expect(modelStat).not.toHaveProperty("successRateUnavailableReason");
   });
 });
 
@@ -470,6 +491,56 @@ describe("Provider Cache Hit Rate Model Breakdown", () => {
     expect(Array.isArray(entry.modelStats)).toBe(true);
     expect(entry.modelStats).toHaveLength(2);
     expect(entry.modelStats[0].model).toBe("claude-3-opus");
+  });
+
+  it("matches cache coefficients with a normalized model key", async () => {
+    chainMocks = [
+      createChainMock([
+        {
+          providerId: 1,
+          providerName: "cache-provider",
+          totalRequests: 10,
+          totalCost: "1.0",
+          cacheReadTokens: 500,
+          cacheCreationCost: "0.2",
+          totalInputTokens: 1000,
+          cacheHitRate: 0.5,
+        },
+      ]),
+      createChainMock([
+        {
+          providerId: 1,
+          model: "  claude-3-opus  ",
+          totalRequests: 10,
+          cacheReadTokens: 500,
+          totalInputTokens: 1000,
+          cacheHitRate: 0.5,
+        },
+      ]),
+    ];
+    mocks.getProviderModelCacheCoefficients.mockResolvedValue(
+      new Map([
+        [
+          1,
+          new Map([
+            [
+              "claude-3-opus",
+              {
+                providerId: 1,
+                model: "claude-3-opus",
+                coefficientBp: 6400,
+                sampleCount: 10,
+              },
+            ],
+          ]),
+        ],
+      ])
+    );
+
+    const { findDailyProviderCacheHitRateLeaderboard } = await import("@/repository/leaderboard");
+    const result = await findDailyProviderCacheHitRateLeaderboard();
+
+    expect(result[0]?.modelStats[0]?.cacheCoefficientBp).toBe(6400);
   });
 
   it("falls back to cacheHitRate descending when no provider has a cache coefficient", async () => {
@@ -790,7 +861,7 @@ describe("Model Leaderboard basis handling", () => {
     mocks.getProviderCacheCoefficients.mockResolvedValue(new Map());
   });
 
-  it("marks top-level model successRate as unavailable when billingModelSource is redirected", async () => {
+  it("keeps top-level redirected model successRate", async () => {
     chainMocks = [
       createChainMock([
         {
@@ -808,12 +879,35 @@ describe("Model Leaderboard basis handling", () => {
 
     expect(result[0]).toMatchObject({
       model: "redirected-model",
-      successRate: null,
+      successRate: 0.8,
       rowIdentityBasis: "redirected",
-      successRateBasis: "unavailable",
+      successRateBasis: "redirected",
       costTokensBasis: "redirected",
       basisDisclosureRequired: true,
-      successRateUnavailableReason: "redirected_billing_model",
+    });
+    expect(result[0]).not.toHaveProperty("successRateUnavailableReason");
+  });
+
+  it("uses no_countable_outcomes only when the SQL success rate is null", async () => {
+    chainMocks = [
+      createChainMock([
+        {
+          model: "redirected-model",
+          totalRequests: 12,
+          totalCost: "3.0",
+          totalTokens: 1200,
+          successRate: null,
+        },
+      ]),
+    ];
+
+    const { findDailyModelLeaderboard } = await import("@/repository/leaderboard");
+    const result = await findDailyModelLeaderboard();
+
+    expect(result[0]).toMatchObject({
+      successRate: null,
+      successRateBasis: "redirected",
+      successRateUnavailableReason: "no_countable_outcomes",
     });
   });
 });
