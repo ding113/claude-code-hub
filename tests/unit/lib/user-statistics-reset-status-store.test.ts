@@ -1,15 +1,24 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const boundary = vi.hoisted(() => ({
+  listeners: new Map<string, Set<(...args: unknown[]) => void>>(),
   redis: {
     status: "ready",
     get: vi.fn(),
     set: vi.fn(),
     del: vi.fn(),
     eval: vi.fn(),
+    once: vi.fn(),
+    removeListener: vi.fn(),
   },
   storeSet: vi.fn(),
 }));
+
+function emitRedis(event: string, ...args: unknown[]) {
+  const listeners = [...(boundary.listeners.get(event) ?? [])];
+  boundary.listeners.delete(event);
+  for (const listener of listeners) listener(...args);
+}
 
 vi.mock("@/lib/redis/client", () => ({
   getRedisClient: () => boundary.redis,
@@ -46,15 +55,32 @@ const record = {
 describe("user statistics reset status store", () => {
   beforeEach(() => {
     boundary.redis.status = "ready";
+    boundary.listeners.clear();
     for (const mock of [
       boundary.redis.get,
       boundary.redis.set,
       boundary.redis.del,
       boundary.redis.eval,
+      boundary.redis.once,
+      boundary.redis.removeListener,
       boundary.storeSet,
     ]) {
       mock.mockReset();
     }
+    boundary.redis.once.mockImplementation(
+      (event: string, listener: (...args: unknown[]) => void) => {
+        const listeners = boundary.listeners.get(event) ?? new Set();
+        listeners.add(listener);
+        boundary.listeners.set(event, listeners);
+        return boundary.redis;
+      }
+    );
+    boundary.redis.removeListener.mockImplementation(
+      (event: string, listener: (...args: unknown[]) => void) => {
+        boundary.listeners.get(event)?.delete(listener);
+        return boundary.redis;
+      }
+    );
     boundary.storeSet.mockResolvedValue(true);
   });
 
@@ -78,11 +104,24 @@ describe("user statistics reset status store", () => {
     await expect(getUserStatisticsResetStatus(record.resetId)).rejects.toThrow(
       "USER_STATISTICS_RESET_STATUS_INVALID"
     );
+  });
 
+  it("waits for the shared Redis client to become ready before reading and writing", async () => {
     boundary.redis.status = "connecting";
-    await expect(getUserStatisticsResetStatus(record.resetId)).rejects.toThrow(
-      "USER_STATISTICS_RESET_REDIS_UNAVAILABLE"
-    );
+    boundary.redis.get.mockResolvedValue(JSON.stringify(record));
+
+    const read = getUserStatisticsResetStatus(record.resetId);
+    const write = setUserStatisticsResetStatus(record);
+    expect(boundary.redis.get).not.toHaveBeenCalled();
+    expect(boundary.storeSet).not.toHaveBeenCalled();
+
+    boundary.redis.status = "ready";
+    emitRedis("ready");
+
+    await expect(read).resolves.toEqual(record);
+    await expect(write).resolves.toBeUndefined();
+    expect(boundary.redis.get).toHaveBeenCalledOnce();
+    expect(boundary.storeSet).toHaveBeenCalledWith(record.resetId, record);
   });
 
   it("normalizes legacy records without fixed 5h key ids", async () => {
