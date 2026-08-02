@@ -1,6 +1,6 @@
 "use server";
 
-import { and, asc, desc, eq, gt, inArray, isNotNull, isNull, lt, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, isNotNull, isNull, lt, or, sql } from "drizzle-orm";
 import { db, getMessageWriterDb } from "@/drizzle/db";
 import { keys as keysTable, messageRequest, providers, usageLedger, users } from "@/drizzle/schema";
 import { getEnvConfig } from "@/lib/config/env.schema";
@@ -18,6 +18,7 @@ import type { SpecialSetting } from "@/types/special-settings";
 import { LEDGER_AUDIT_CONDITION, LEDGER_BILLING_CONDITION } from "./_shared/ledger-conditions";
 import { EXCLUDE_WARMUP_CONDITION } from "./_shared/message-request-conditions";
 import { toMessageRequest } from "./_shared/transformers";
+import { isReservedSessionIdentity } from "./_shared/usage-log-filters";
 import {
   type DurableMessageRequestUpdateOptions,
   enqueueMessageRequestPostTerminalRoutingTraceDurably,
@@ -35,17 +36,52 @@ const POST_TERMINAL_ROUTING_TRACE_ACK_TIMEOUT_MS = 3_000;
 const ledgerSessionIdentity = sql<string>`COALESCE(${usageLedger.sessionIdentity}, ${usageLedger.sessionId})`;
 const messageSessionIdentity = sql<string>`COALESCE(${messageRequest.sessionIdentity}, ${messageRequest.sessionId})`;
 
-function ledgerSessionLookup(identityOrPhysicalId: string) {
-  return or(
-    eq(ledgerSessionIdentity, identityOrPhysicalId),
-    eq(usageLedger.sessionId, identityOrPhysicalId)
+function ledgerSessionLookupForOwner(identityOrPhysicalId: string, ownerUserId?: number) {
+  const canonicalCondition = isReservedSessionIdentity(identityOrPhysicalId)
+    ? eq(usageLedger.sessionIdentity, identityOrPhysicalId)
+    : eq(ledgerSessionIdentity, identityOrPhysicalId);
+  const lookupCondition =
+    ownerUserId !== undefined || !isReservedSessionIdentity(identityOrPhysicalId)
+      ? or(canonicalCondition, eq(usageLedger.sessionId, identityOrPhysicalId))
+      : canonicalCondition;
+
+  return and(
+    lookupCondition,
+    ownerUserId !== undefined ? eq(usageLedger.userId, ownerUserId) : undefined
   );
 }
 
-function messageSessionLookup(identityOrPhysicalId: string) {
-  return or(
-    eq(messageSessionIdentity, identityOrPhysicalId),
-    eq(messageRequest.sessionId, identityOrPhysicalId)
+function ledgerCanonicalSessionLookup(identity: string, ownerUserId: number) {
+  const canonicalCondition = isReservedSessionIdentity(identity)
+    ? eq(usageLedger.sessionIdentity, identity)
+    : eq(ledgerSessionIdentity, identity);
+
+  return and(canonicalCondition, eq(usageLedger.userId, ownerUserId));
+}
+
+function messageSessionLookup(identityOrPhysicalId: string, ownerUserId?: number) {
+  const canonicalCondition = isReservedSessionIdentity(identityOrPhysicalId)
+    ? eq(messageRequest.sessionIdentity, identityOrPhysicalId)
+    : eq(messageSessionIdentity, identityOrPhysicalId);
+  const lookupCondition =
+    ownerUserId !== undefined || !isReservedSessionIdentity(identityOrPhysicalId)
+      ? or(canonicalCondition, eq(messageRequest.sessionId, identityOrPhysicalId))
+      : canonicalCondition;
+
+  return and(
+    lookupCondition,
+    ownerUserId !== undefined ? eq(messageRequest.userId, ownerUserId) : undefined
+  );
+}
+
+function messageCanonicalSessionLookup(identity: string, ownerUserId?: number) {
+  const canonicalCondition = isReservedSessionIdentity(identity)
+    ? eq(messageRequest.sessionIdentity, identity)
+    : eq(messageSessionIdentity, identity);
+
+  return and(
+    canonicalCondition,
+    ownerUserId !== undefined ? eq(messageRequest.userId, ownerUserId) : undefined
   );
 }
 
@@ -1175,7 +1211,8 @@ export async function findMessageRequestBySessionId(
  * 用于展示会话来源链（原始选择决策）
  */
 export async function findSessionOriginChain(
-  sessionId: string
+  sessionId: string,
+  ownerUserId?: number
 ): Promise<ProviderChainItem[] | null> {
   const [row] = await db
     .select({
@@ -1185,6 +1222,7 @@ export async function findSessionOriginChain(
     .where(
       and(
         eq(messageRequest.sessionId, sessionId),
+        ownerUserId !== undefined ? eq(messageRequest.userId, ownerUserId) : undefined,
         isNull(messageRequest.deletedAt),
         EXCLUDE_WARMUP_CONDITION,
         sql`${messageRequest.providerChain} IS NOT NULL`,
@@ -1201,9 +1239,9 @@ export async function findSessionOriginChain(
 /**
  * 按 (sessionId, requestSequence) 获取请求的审计字段（用于 Session 详情页补齐特殊设置展示）
  */
-export async function findMessageRequestAuditBySessionIdAndSequence(
-  sessionId: string,
-  requestSequence: number
+export async function findMessageRequestAuditById(
+  requestId: number,
+  ownerUserId?: number
 ): Promise<{
   statusCode: number | null;
   blockedBy: string | null;
@@ -1226,8 +1264,8 @@ export async function findMessageRequestAuditBySessionIdAndSequence(
     .from(messageRequest)
     .where(
       and(
-        eq(messageRequest.sessionId, sessionId),
-        eq(messageRequest.requestSequence, requestSequence),
+        eq(messageRequest.id, requestId),
+        ownerUserId !== undefined ? eq(messageRequest.userId, ownerUserId) : undefined,
         isNull(messageRequest.deletedAt)
       )
     )
@@ -1254,7 +1292,10 @@ export async function findMessageRequestAuditBySessionIdAndSequence(
  * @param sessionId - Session ID
  * @returns 聚合统计数据，如果 session 不存在返回 null
  */
-export async function aggregateSessionStats(sessionId: string): Promise<{
+export async function aggregateSessionStats(
+  sessionId: string,
+  ownerUserId?: number
+): Promise<{
   sessionId: string;
   requestCount: number;
   totalCostUsd: string;
@@ -1289,7 +1330,7 @@ export async function aggregateSessionStats(sessionId: string): Promise<{
       lastRequestAt: sql<Date>`max(${usageLedger.createdAt})`,
     })
     .from(usageLedger)
-    .where(and(ledgerSessionLookup(sessionId), LEDGER_BILLING_CONDITION));
+    .where(and(ledgerSessionLookupForOwner(sessionId, ownerUserId), LEDGER_BILLING_CONDITION));
 
   const billingStats = stats ?? {
     requestCount: 0,
@@ -1313,7 +1354,7 @@ export async function aggregateSessionStats(sessionId: string): Promise<{
     .leftJoin(providers, eq(usageLedger.finalProviderId, providers.id))
     .where(
       and(
-        ledgerSessionLookup(sessionId),
+        ledgerSessionLookupForOwner(sessionId, ownerUserId),
         LEDGER_BILLING_CONDITION,
         sql`${usageLedger.finalProviderId} IS NOT NULL`
       )
@@ -1325,7 +1366,7 @@ export async function aggregateSessionStats(sessionId: string): Promise<{
     .from(usageLedger)
     .where(
       and(
-        ledgerSessionLookup(sessionId),
+        ledgerSessionLookupForOwner(sessionId, ownerUserId),
         LEDGER_BILLING_CONDITION,
         sql`${usageLedger.model} IS NOT NULL`
       )
@@ -1337,7 +1378,7 @@ export async function aggregateSessionStats(sessionId: string): Promise<{
     .from(usageLedger)
     .where(
       and(
-        ledgerSessionLookup(sessionId),
+        ledgerSessionLookupForOwner(sessionId, ownerUserId),
         LEDGER_BILLING_CONDITION,
         sql`${usageLedger.cacheTtlApplied} IS NOT NULL`
       )
@@ -1365,7 +1406,7 @@ export async function aggregateSessionStats(sessionId: string): Promise<{
     .from(messageRequest)
     .innerJoin(users, eq(messageRequest.userId, users.id))
     .innerJoin(keysTable, eq(messageRequest.key, keysTable.key))
-    .where(and(messageSessionLookup(sessionId), isNull(messageRequest.deletedAt)))
+    .where(and(messageSessionLookup(sessionId, ownerUserId), isNull(messageRequest.deletedAt)))
     .orderBy(messageRequest.createdAt)
     .limit(1);
 
@@ -1400,7 +1441,10 @@ export async function aggregateSessionStats(sessionId: string): Promise<{
 }
 
 /** 解析活跃 Session identity 到可查看的物理 Session/前缀绑定信息。 */
-export async function resolveSessionIdentity(identity: string): Promise<{
+export async function resolveSessionIdentity(
+  identity: string,
+  ownerUserId?: number
+): Promise<{
   identity: string;
   sourceSessionId: string | null;
   identityKind: "session_id" | "prefix_affinity" | null;
@@ -1418,7 +1462,9 @@ export async function resolveSessionIdentity(identity: string): Promise<{
       fingerprintChain: messageRequest.affinityFingerprintChain,
     })
     .from(messageRequest)
-    .where(and(messageSessionLookup(identity), isNull(messageRequest.deletedAt)))
+    .where(
+      and(messageCanonicalSessionLookup(identity, ownerUserId), isNull(messageRequest.deletedAt))
+    )
     .orderBy(desc(messageRequest.createdAt));
 
   if (rows.length === 0) return null;
@@ -1456,7 +1502,8 @@ export type PhysicalSessionSource = {
 
 /** Enumerate the physical Session and Provider memberships owned by a public identity. */
 export async function listPhysicalSessionSourcesForIdentity(
-  identity: string
+  identity: string,
+  ownerUserId?: number
 ): Promise<PhysicalSessionSource[]> {
   const rows = await db
     .select({
@@ -1482,7 +1529,7 @@ export async function listPhysicalSessionSourcesForIdentity(
     .innerJoin(keysTable, eq(messageRequest.key, keysTable.key))
     .where(
       and(
-        eq(messageSessionIdentity, identity),
+        messageCanonicalSessionLookup(identity, ownerUserId),
         isNotNull(messageRequest.sessionId),
         eq(messageRequest.isReplay, false),
         isNull(messageRequest.deletedAt),
@@ -1490,6 +1537,8 @@ export async function listPhysicalSessionSourcesForIdentity(
           SELECT COALESCE(latest.session_identity, latest.session_id)
           FROM message_request latest
           WHERE latest.session_id = ${messageRequest.sessionId}
+            AND latest.user_id = ${messageRequest.userId}
+            AND latest.key = ${messageRequest.key}
             AND latest.deleted_at IS NULL
             AND latest.is_replay = false
           ORDER BY latest.created_at DESC, latest.id DESC
@@ -1540,14 +1589,15 @@ export async function listPhysicalSessionSourcesForIdentity(
 /** 验证物理 Session 是否属于指定的聚合 identity。 */
 export async function isSessionSourceForIdentity(
   identity: string,
-  sourceSessionId: string
+  sourceSessionId: string,
+  ownerUserId?: number
 ): Promise<boolean> {
   const [row] = await db
     .select({ id: messageRequest.id })
     .from(messageRequest)
     .where(
       and(
-        messageSessionLookup(identity),
+        messageCanonicalSessionLookup(identity, ownerUserId),
         eq(messageRequest.sessionId, sourceSessionId),
         isNull(messageRequest.deletedAt)
       )
@@ -1559,11 +1609,13 @@ export async function isSessionSourceForIdentity(
 
 export async function findSessionRequestLocator(
   identity: string,
-  selector: { requestId?: number; sourceSessionId?: string; requestSequence?: number } = {}
+  selector: { requestId?: number; sourceSessionId?: string; requestSequence?: number } = {},
+  ownerUserId?: number
 ): Promise<{
   requestId: number;
   sourceSessionId: string;
   requestSequence: number;
+  keyId: number;
   identityKind: "session_id" | "prefix_affinity";
   scopeTag: string | null;
   fingerprint: string | null;
@@ -1573,14 +1625,16 @@ export async function findSessionRequestLocator(
       requestId: messageRequest.id,
       sourceSessionId: messageRequest.sessionId,
       requestSequence: messageRequest.requestSequence,
+      keyId: keysTable.id,
       identityKind: messageRequest.sessionIdentityKind,
       scopeTag: messageRequest.affinityScopeTag,
       fingerprint: messageRequest.affinityFingerprint,
     })
     .from(messageRequest)
+    .innerJoin(keysTable, eq(messageRequest.key, keysTable.key))
     .where(
       and(
-        messageSessionLookup(identity),
+        messageCanonicalSessionLookup(identity, ownerUserId),
         isNotNull(messageRequest.sessionId),
         isNotNull(messageRequest.requestSequence),
         selector.requestId !== undefined ? eq(messageRequest.id, selector.requestId) : undefined,
@@ -1596,12 +1650,15 @@ export async function findSessionRequestLocator(
     .orderBy(desc(messageRequest.createdAt), desc(messageRequest.id))
     .limit(1);
 
-  if (!row?.requestId || !row.sourceSessionId || row.requestSequence == null) return null;
+  if (!row?.requestId || !row.sourceSessionId || row.requestSequence == null || !row.keyId) {
+    return null;
+  }
 
   return {
     requestId: row.requestId,
     sourceSessionId: row.sourceSessionId,
     requestSequence: row.requestSequence,
+    keyId: row.keyId,
     identityKind: row.identityKind === "prefix_affinity" ? "prefix_affinity" : "session_id",
     scopeTag: row.scopeTag,
     fingerprint: row.fingerprint,
@@ -1616,7 +1673,10 @@ export async function findSessionRequestLocator(
  * @param sessionIds - Session ID 列表
  * @returns 聚合统计数据数组
  */
-export async function aggregateMultipleSessionStats(sessionIds: string[]): Promise<
+export async function aggregateMultipleSessionStats(
+  sessionIds: string[],
+  ownerUserId?: number
+): Promise<
   Array<{
     sessionId: string;
     requestedSessionIds?: string[];
@@ -1651,6 +1711,7 @@ export async function aggregateMultipleSessionStats(sessionIds: string[]): Promi
     sessionIds.map((id) => sql`${id}`),
     sql.raw(", ")
   );
+  const ownerCondition = ownerUserId !== undefined ? sql`AND user_id = ${ownerUserId}` : sql``;
   const userInfoRows = await db.execute(sql`
     SELECT
       sid AS requested_session_id,
@@ -1680,10 +1741,14 @@ export async function aggregateMultipleSessionStats(sessionIds: string[]): Promi
         api_type
       FROM message_request
       WHERE
-        (COALESCE(session_identity, session_id) = sid OR session_id = sid)
+        (
+          session_identity = sid
+          OR session_id = sid
+        )
         AND deleted_at IS NULL
+        ${ownerCondition}
       ORDER BY
-        CASE WHEN COALESCE(session_identity, session_id) = sid THEN 0 ELSE 1 END,
+        CASE WHEN session_identity = sid THEN 0 ELSE 1 END,
         created_at DESC,
         id DESC
       LIMIT 1
@@ -1754,6 +1819,15 @@ export async function aggregateMultipleSessionStats(sessionIds: string[]): Promi
     return [];
   }
 
+  const canonicalOwnerCondition = or(
+    ...canonicalSessionIds.map((canonicalSessionId) => {
+      const owner = userInfoMap.get(canonicalSessionId)?.userId;
+      return owner === undefined
+        ? undefined
+        : ledgerCanonicalSessionLookup(canonicalSessionId, owner);
+    })
+  );
+
   // 2. 批量聚合统计（从 usageLedger，单次查询）
   const statsResults = await db
     .select({
@@ -1769,7 +1843,7 @@ export async function aggregateMultipleSessionStats(sessionIds: string[]): Promi
       lastRequestAt: sql<Date>`max(${usageLedger.createdAt})`,
     })
     .from(usageLedger)
-    .where(and(inArray(ledgerSessionIdentity, canonicalSessionIds), LEDGER_BILLING_CONDITION))
+    .where(and(canonicalOwnerCondition, LEDGER_BILLING_CONDITION))
     .groupBy(ledgerSessionIdentity);
 
   // 创建 sessionId → stats 的 Map
@@ -1786,7 +1860,7 @@ export async function aggregateMultipleSessionStats(sessionIds: string[]): Promi
     .leftJoin(providers, eq(usageLedger.finalProviderId, providers.id))
     .where(
       and(
-        inArray(ledgerSessionIdentity, canonicalSessionIds),
+        canonicalOwnerCondition,
         LEDGER_BILLING_CONDITION,
         sql`${usageLedger.finalProviderId} IS NOT NULL`
       )
@@ -1815,11 +1889,7 @@ export async function aggregateMultipleSessionStats(sessionIds: string[]): Promi
     })
     .from(usageLedger)
     .where(
-      and(
-        inArray(ledgerSessionIdentity, canonicalSessionIds),
-        LEDGER_BILLING_CONDITION,
-        sql`${usageLedger.model} IS NOT NULL`
-      )
+      and(canonicalOwnerCondition, LEDGER_BILLING_CONDITION, sql`${usageLedger.model} IS NOT NULL`)
     );
 
   // 创建 sessionId → models 的 Map
@@ -1843,7 +1913,7 @@ export async function aggregateMultipleSessionStats(sessionIds: string[]): Promi
     .from(usageLedger)
     .where(
       and(
-        inArray(ledgerSessionIdentity, canonicalSessionIds),
+        canonicalOwnerCondition,
         LEDGER_BILLING_CONDITION,
         sql`${usageLedger.cacheTtlApplied} IS NOT NULL`
       )
@@ -2118,7 +2188,13 @@ export async function findRequestsBySessionId(
   const [countResult] = await db
     .select({ count: sql<number>`count(*)::int` })
     .from(messageRequest)
-    .where(and(eq(messageRequest.sessionId, sessionId), isNull(messageRequest.deletedAt)));
+    .where(
+      and(
+        eq(messageRequest.sessionId, sessionId),
+        isNotNull(messageRequest.requestSequence),
+        isNull(messageRequest.deletedAt)
+      )
+    );
 
   const total = countResult?.count ?? 0;
 
@@ -2141,7 +2217,13 @@ export async function findRequestsBySessionId(
       errorMessage: messageRequest.errorMessage,
     })
     .from(messageRequest)
-    .where(and(eq(messageRequest.sessionId, sessionId), isNull(messageRequest.deletedAt)))
+    .where(
+      and(
+        eq(messageRequest.sessionId, sessionId),
+        isNotNull(messageRequest.requestSequence),
+        isNull(messageRequest.deletedAt)
+      )
+    )
     .orderBy(
       order === "asc" ? asc(messageRequest.requestSequence) : desc(messageRequest.requestSequence)
     )
@@ -2168,12 +2250,18 @@ export async function findRequestsBySessionId(
 
 export async function findRequestsBySessionIdentity(
   identity: string,
-  options?: { limit?: number; offset?: number; order?: "asc" | "desc" }
+  options?: {
+    limit?: number;
+    offset?: number;
+    order?: "asc" | "desc";
+    ownerUserId?: number;
+  }
 ): Promise<Awaited<ReturnType<typeof findRequestsBySessionId>>> {
-  const { limit = 20, offset = 0, order = "desc" } = options || {};
+  const { limit = 20, offset = 0, order = "desc", ownerUserId } = options || {};
   const where = and(
-    messageSessionLookup(identity),
+    messageCanonicalSessionLookup(identity, ownerUserId),
     isNotNull(messageRequest.sessionId),
+    isNotNull(messageRequest.requestSequence),
     eq(messageRequest.isReplay, false),
     isNull(messageRequest.deletedAt)
   );
@@ -2188,14 +2276,11 @@ export async function findRequestsBySessionIdentity(
       sequence: messageRequest.requestSequence,
       displaySequence: sql<number>`CASE
         WHEN ${messageRequest.sessionIdentityKind} = 'prefix_affinity'
-          AND NOT bool_or(COALESCE(${messageRequest.requestSequence}, 1) <> 1) OVER ()
-        THEN COALESCE(
-          NULLIF(jsonb_array_length(${messageRequest.affinityFingerprintChain}), 0),
-          row_number() OVER (ORDER BY ${messageRequest.createdAt} ASC, ${messageRequest.id} ASC)::int
-        )
+        THEN row_number() OVER (
+          ORDER BY ${messageRequest.createdAt} ASC, ${messageRequest.id} ASC
+        )::int
         ELSE COALESCE(
           ${messageRequest.requestSequence},
-          NULLIF(jsonb_array_length(${messageRequest.affinityFingerprintChain}), 0),
           row_number() OVER (ORDER BY ${messageRequest.createdAt} ASC, ${messageRequest.id} ASC)::int
         )
       END`,
@@ -2285,7 +2370,8 @@ export type SessionRequestNavigationTarget = {
 /** Resolve adjacent requests on the public Session timeline, including cross-source boundaries. */
 export async function findAdjacentSessionRequests(
   identity: string,
-  requestId: number
+  requestId: number,
+  ownerUserId?: number
 ): Promise<{
   prevRequest: SessionRequestNavigationTarget | null;
   nextRequest: SessionRequestNavigationTarget | null;
@@ -2298,7 +2384,7 @@ export async function findAdjacentSessionRequests(
     .from(messageRequest)
     .where(
       and(
-        messageSessionLookup(identity),
+        messageCanonicalSessionLookup(identity, ownerUserId),
         eq(messageRequest.id, requestId),
         eq(messageRequest.isReplay, false),
         isNull(messageRequest.deletedAt)
@@ -2316,7 +2402,7 @@ export async function findAdjacentSessionRequests(
     requestSequence: messageRequest.requestSequence,
   };
   const timelineFilter = and(
-    messageSessionLookup(identity),
+    messageCanonicalSessionLookup(identity, ownerUserId),
     isNotNull(messageRequest.sessionId),
     isNotNull(messageRequest.requestSequence),
     eq(messageRequest.isReplay, false),

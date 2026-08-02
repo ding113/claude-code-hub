@@ -64,7 +64,7 @@ describe("message repository session request queries", () => {
       {
         id: 31,
         sessionId: "session-requests",
-        sequence: null,
+        sequence: 1,
         displaySequence: 1,
         model: "model-a",
         statusCode: 200,
@@ -215,14 +215,57 @@ describe("message repository session request queries", () => {
     expect(sqlText(rows.trace.where)).toContain("false");
     expect(sqlText(rows.trace.orderBy)).toContain("created_at desc");
     expect(sqlText(rows.trace.orderBy)).toContain("id desc");
+    const selection = sqlText(boundary.select.mock.calls.at(1)?.at(0)).toLowerCase();
+    expect(selection).toContain("then row_number()");
+    expect(selection).not.toContain("jsonb_array_length");
+    expect(sqlText(count.trace.where)).toContain("request_sequence is not null");
+    expect(sqlText(rows.trace.where)).toContain("request_sequence is not null");
   });
 
-  test("accepts a physical Session id when resolving a request locator", async () => {
+  test("scopes canonical request timelines to the resolved owner without a physical alias union", async () => {
+    const count = createDrizzleQuery([{ count: 1 }]);
+    const rows = createDrizzleQuery<readonly RequestRow[]>([]);
+    boundary.select.mockReturnValueOnce(count).mockReturnValueOnce(rows);
+
+    await findRequestsBySessionIdentity("shared-session", { ownerUserId: 17 } as never);
+
+    const countWhere = sqlText(count.trace.where);
+    const rowsWhere = sqlText(rows.trace.where);
+    expect(countWhere).toContain("user_id");
+    expect(rowsWhere).toContain("user_id");
+    expect(countWhere.match(/shared-session/g)).toHaveLength(1);
+    expect(rowsWhere.match(/shared-session/g)).toHaveLength(1);
+  });
+
+  test("does not treat a reserved canonical identity as a physical Session alias", async () => {
+    const locator = createDrizzleQuery([
+      {
+        requestId: 205,
+        sourceSessionId: "physical-a",
+        requestSequence: 2,
+        keyId: 17,
+        identityKind: "prefix_affinity",
+        scopeTag: "scope",
+        fingerprint: "fingerprint",
+      },
+    ]);
+    boundary.select.mockReturnValueOnce(locator);
+
+    await expect(
+      findSessionRequestLocator("pfx:scope:fingerprint", { requestId: 205 })
+    ).resolves.toEqual(expect.objectContaining({ requestId: 205, keyId: 17 }));
+
+    const where = sqlText(locator.trace.where);
+    expect(where.match(/pfx:scope:fingerprint/g)).toHaveLength(1);
+  });
+
+  test("uses an exact canonical identity after a physical Session id is resolved", async () => {
     const locator = createDrizzleQuery([
       {
         requestId: 204,
         sourceSessionId: "physical-a",
         requestSequence: 1,
+        keyId: 17,
         identityKind: "prefix_affinity",
         scopeTag: "scope",
         fingerprint: "fingerprint",
@@ -234,6 +277,7 @@ describe("message repository session request queries", () => {
       requestId: 204,
       sourceSessionId: "physical-a",
       requestSequence: 1,
+      keyId: 17,
       identityKind: "prefix_affinity",
       scopeTag: "scope",
       fingerprint: "fingerprint",
@@ -243,6 +287,32 @@ describe("message repository session request queries", () => {
     expect(where).toContain("physical-a");
     expect(where).toContain("session_identity");
     expect(where).toContain("session_id");
+    expect(where.match(/physical-a/g)).toHaveLength(1);
+  });
+
+  test("filters requests without a stable selector from navigable request lists", async () => {
+    const count = createDrizzleQuery([{ count: 1 }]);
+    const rows = createDrizzleQuery<readonly RequestRow[]>([
+      {
+        id: 33,
+        sessionId: "session-stable",
+        sequence: 3,
+        displaySequence: 3,
+        model: "model-stable",
+        statusCode: 200,
+        costUsd: "0",
+        createdAt: secondCreatedAt,
+        inputTokens: 1,
+        outputTokens: 1,
+        errorMessage: null,
+      },
+    ]);
+    boundary.select.mockReturnValueOnce(count).mockReturnValueOnce(rows);
+
+    await findRequestsBySessionId("session-stable");
+
+    expect(sqlText(count.trace.where)).toContain("request_sequence is not null");
+    expect(sqlText(rows.trace.where)).toContain("request_sequence is not null");
   });
 
   test("resolves an exact request locator inside a prefix identity", async () => {
@@ -251,6 +321,7 @@ describe("message repository session request queries", () => {
         requestId: 203,
         sourceSessionId: "physical-a",
         requestSequence: 3,
+        keyId: 17,
         identityKind: "prefix_affinity",
         scopeTag: "scope",
         fingerprint: "fingerprint",
@@ -268,6 +339,7 @@ describe("message repository session request queries", () => {
       requestId: 203,
       sourceSessionId: "physical-a",
       requestSequence: 3,
+      keyId: 17,
       identityKind: "prefix_affinity",
       scopeTag: "scope",
       fingerprint: "fingerprint",

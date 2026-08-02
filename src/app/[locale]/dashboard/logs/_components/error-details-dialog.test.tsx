@@ -422,6 +422,15 @@ function renderClientWithIntl(node: ReactNode) {
 
   return {
     container,
+    rerender: (nextNode: ReactNode) => {
+      act(() => {
+        root.render(
+          <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
+            {nextNode}
+          </NextIntlClientProvider>
+        );
+      });
+    },
     unmount: () => {
       act(() => root.unmount());
       container.remove();
@@ -612,6 +621,52 @@ describe("error-details-dialog layout", () => {
       )
     ).toBeTruthy();
     unmount();
+  });
+
+  test("clears stale Session detail availability while checking a new request", async () => {
+    hasSessionMessagesMock.mockResolvedValueOnce({ ok: true, data: true });
+    const pendingCheck = Promise.withResolvers<{ ok: false; error: string }>();
+    const rendered = renderClientWithIntl(
+      <ErrorDetailsDialog
+        externalOpen
+        statusCode={200}
+        errorMessage={null}
+        providerChain={null}
+        sessionId="pfx:scope:root"
+        sourceSessionId="physical-a"
+        requestSequence={3}
+        requestId={203}
+      />
+    );
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(rendered.container.querySelector('a[href*="requestId=203"]')).toBeTruthy();
+
+    hasSessionMessagesMock.mockReturnValueOnce(pendingCheck.promise);
+    rendered.rerender(
+      <ErrorDetailsDialog
+        externalOpen
+        statusCode={200}
+        errorMessage={null}
+        providerChain={null}
+        sessionId="pfx:scope:root"
+        sourceSessionId="physical-b"
+        requestSequence={4}
+        requestId={204}
+      />
+    );
+
+    expect(rendered.container.querySelector('a[href*="requestId=203"]')).toBeNull();
+
+    await act(async () => {
+      pendingCheck.resolve({ ok: false, error: "not found" });
+      await pendingCheck.promise;
+    });
+    expect(rendered.container.querySelector('a[href*="requestId=204"]')).toBeNull();
+    rendered.unmount();
   });
 
   test("marks Replay requests and shows their source request", () => {

@@ -5,11 +5,17 @@
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, test, vi } from "vitest";
-import { RequestListSidebar } from "./request-list-sidebar";
+import { RequestListSidebar } from "@/app/[locale]/dashboard/sessions/[sessionId]/messages/_components/request-list-sidebar";
 
 const getSessionRequestsMock = vi.fn();
 const { translateMock } = vi.hoisted(() => ({
-  translateMock: (key: string) => key,
+  translateMock: (key: string, values?: Record<string, string | number>) => {
+    if (key === "requestList.itemTitle") {
+      return `Request #${values?.sequence} - ${values?.model}`;
+    }
+    if (key === "requestList.unknownModel") return "Unknown model";
+    return key;
+  },
 }));
 
 vi.mock("@/lib/api-client/v1/actions/active-sessions", () => ({
@@ -98,6 +104,51 @@ describe("RequestListSidebar", () => {
     );
     act(() => newest?.click());
     expect(onSelect).toHaveBeenCalledWith("physical-new", 1, 42);
+
+    act(() => root.unmount());
+  });
+
+  test("localizes the collapsed request title and unknown model fallback", async () => {
+    getSessionRequestsMock.mockResolvedValue({
+      ok: true,
+      data: {
+        requests: [
+          {
+            id: 42,
+            sourceSessionId: "physical-new",
+            sequence: 1,
+            displaySequence: 4,
+            model: null,
+            statusCode: 200,
+            costUsd: "0",
+            createdAt: new Date("2026-08-02T00:04:00.000Z"),
+            inputTokens: 4,
+            outputTokens: 4,
+            errorMessage: null,
+          },
+        ],
+        total: 1,
+        hasMore: false,
+      },
+    });
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    act(() => {
+      root.render(
+        <RequestListSidebar
+          sessionId="pfx:scope:root"
+          selectedSeq={null}
+          selectedSourceSessionId={null}
+          onSelect={vi.fn()}
+          collapsed
+        />
+      );
+    });
+    await flushEffects();
+
+    expect(container.querySelector("button")?.title).toBe("Request #4 - Unknown model");
 
     act(() => root.unmount());
   });

@@ -363,7 +363,7 @@ export class SessionManager {
    * @param sessionId - Session ID
    * @returns 请求序号（从 1 开始），Redis 不可用时返回基于时间戳的唯一序号
    */
-  static async getNextRequestSequence(sessionId: string): Promise<number> {
+  static async getNextRequestSequence(sessionId: string, keyId: number): Promise<number> {
     const redis = getRedisClient();
     if (redis?.status !== "ready") {
       // 改进的 fallback：使用时间戳 + 随机数生成伪唯一序号
@@ -379,11 +379,11 @@ export class SessionManager {
     try {
       const key = `session:${sessionId}:seq`;
       const sequence = await redis.incr(key);
-
-      // 首次创建时设置过期时间
-      if (sequence === 1) {
-        await redis.expire(key, SessionManager.SESSION_TTL);
-      }
+      const ownerKey = `session:${sessionId}:req:${sequence}:owner`;
+      const pipeline = redis.pipeline();
+      pipeline.expire(key, SessionManager.SESSION_TTL);
+      pipeline.setex(ownerKey, SessionManager.SESSION_TTL, String(keyId));
+      await pipeline.exec();
 
       logger.trace("SessionManager: Got next request sequence", {
         sessionId,
@@ -399,6 +399,28 @@ export class SessionManager {
         fallbackSeq,
       });
       return fallbackSeq;
+    }
+  }
+
+  static async isSessionRequestOwnedByKey(
+    sessionId: string,
+    requestSequence: number,
+    expectedKeyId: number
+  ): Promise<boolean> {
+    const redis = getRedisClient();
+    if (redis?.status !== "ready") return false;
+
+    try {
+      const ownerKey = `session:${sessionId}:req:${requestSequence}:owner`;
+      return (await redis.get(ownerKey)) === String(expectedKeyId);
+    } catch (error) {
+      logger.error("SessionManager: Failed to validate request artifact owner", {
+        error,
+        sessionId,
+        requestSequence,
+        expectedKeyId,
+      });
+      return false;
     }
   }
 

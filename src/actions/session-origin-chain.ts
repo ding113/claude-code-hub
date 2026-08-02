@@ -3,7 +3,7 @@
 import { getSession } from "@/lib/auth";
 import { logger } from "@/lib/logger";
 import { resolveSessionRequestLocator } from "@/lib/session-request-locator";
-import { aggregateSessionStats, findSessionOriginChain } from "@/repository/message";
+import { aggregateMultipleSessionStats, findSessionOriginChain } from "@/repository/message";
 import type { ProviderChainItem } from "@/types/message";
 import type { ActionResult } from "./types";
 
@@ -18,7 +18,10 @@ export async function getSessionOriginChain(
       return { ok: false, error: "未登录" };
     }
 
-    const sessionStats = await aggregateSessionStats(sessionId);
+    const [sessionStats] = await aggregateMultipleSessionStats(
+      [sessionId],
+      session.user.role === "admin" ? undefined : session.user.id
+    );
     if (!sessionStats) {
       return { ok: false, error: "Session 不存在" };
     }
@@ -28,13 +31,18 @@ export async function getSessionOriginChain(
     }
 
     const locatorResult = await resolveSessionRequestLocator(
-      sessionId,
+      sessionStats.sessionId,
       requestSequence,
-      requestedSourceSessionId
+      requestedSourceSessionId,
+      undefined,
+      sessionStats.userId
     );
     if (!locatorResult.ok) return locatorResult;
 
-    const chain = await findSessionOriginChain(locatorResult.locator.sourceSessionId);
+    const chain = await findSessionOriginChain(
+      locatorResult.locator.sourceSessionId,
+      sessionStats.userId
+    );
     return { ok: true, data: chain ?? null };
   } catch (error) {
     logger.error("获取会话来源链失败:", error);

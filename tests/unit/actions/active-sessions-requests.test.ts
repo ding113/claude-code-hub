@@ -61,6 +61,7 @@ describe("getSessionRequests public identity contract", () => {
       limit: 5,
       offset: 5,
       order: "desc",
+      ownerUserId: 1,
     });
     expect(findRequestsBySessionIdMock).not.toHaveBeenCalled();
   });
@@ -76,6 +77,28 @@ describe("getSessionRequests public identity contract", () => {
       limit: 20,
       offset: 0,
       order: "desc",
+      ownerUserId: 1,
+    });
+  });
+
+  test("resolves a physical alias inside the authenticated user scope", async () => {
+    getSessionMock.mockResolvedValue({ user: { id: 7, role: "user" } });
+    aggregateMultipleSessionStatsMock.mockResolvedValue([
+      {
+        sessionId: "pfx:scope:fingerprint",
+        userId: 7,
+      },
+    ]);
+    const { getSessionRequests } = await import("@/actions/active-sessions");
+
+    await expect(getSessionRequests("client-session-id")).resolves.toMatchObject({ ok: true });
+
+    expect(aggregateMultipleSessionStatsMock).toHaveBeenCalledWith(["client-session-id"], 7);
+    expect(findRequestsBySessionIdentityMock).toHaveBeenCalledWith("pfx:scope:fingerprint", {
+      limit: 20,
+      offset: 0,
+      order: "desc",
+      ownerUserId: 7,
     });
   });
 });

@@ -109,6 +109,8 @@ describe("v1 API error i18n mapping", () => {
       expect(dashboard.sessions.status.error).toBeTruthy();
       expect(dashboard.sessions.details.canonicalSessionId).toBeTruthy();
       expect(dashboard.sessions.details.clientSessionId).toBeTruthy();
+      expect(dashboard.sessions.requestList.itemTitle).toBeTruthy();
+      expect(dashboard.sessions.requestList.unknownModel).toBeTruthy();
       expect(dashboard.logs.details.metadata.canonicalSessionId).toBeTruthy();
       expect(dashboard.logs.details.metadata.clientSessionId).toBeTruthy();
     }

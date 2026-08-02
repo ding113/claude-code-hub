@@ -194,7 +194,7 @@ describe("message public readback", () => {
     expect(boundary.select).toHaveBeenCalledTimes(1);
   });
 
-  it("returns the public audit projection for a session sequence", async () => {
+  it("returns the public audit projection for a request id scoped to its owner", async () => {
     vi.resetModules();
     const auditRow = {
       statusCode: 403,
@@ -216,11 +216,17 @@ describe("message public readback", () => {
       ],
     };
     const boundary = installReadBoundaries([[auditRow]]);
-    const { findMessageRequestAuditBySessionIdAndSequence } = await import("@/repository/message");
+    const { findMessageRequestAuditById } = await import("@/repository/message");
 
-    const result = await findMessageRequestAuditBySessionIdAndSequence("audit-session", 4);
+    const result = await findMessageRequestAuditById(1_099, 17);
 
     expect(result).toEqual(auditRow);
     expect(boundary.events).toEqual(["from", "where", "limit"]);
+    const where = sqlText(boundary.whereConditions[0]);
+    expect(where).toContain("id");
+    expect(where).toContain("1099");
+    expect(where).toContain("user_id");
+    expect(where).toContain("17");
+    expect(where).toContain("deleted_at");
   });
 });

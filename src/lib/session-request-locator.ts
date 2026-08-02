@@ -14,10 +14,11 @@ export async function resolveSessionRequestLocator(
   identity: string,
   requestSequence?: number,
   sourceSessionId?: string,
-  requestId?: number
+  requestId?: number,
+  ownerUserId?: number
 ): Promise<SessionRequestLocatorResult> {
   const normalizedSequence = normalizeRequestSequence(requestSequence);
-  const identityLocator = await findSessionRequestLocator(identity);
+  const identityLocator = await findSessionRequestLocator(identity, {}, ownerUserId);
 
   if (!identityLocator) {
     return {
@@ -42,11 +43,15 @@ export async function resolveSessionRequestLocator(
 
   const locator =
     normalizedSequence !== null || sourceSessionId || requestId !== undefined
-      ? await findSessionRequestLocator(identity, {
-          requestId,
-          requestSequence: normalizedSequence ?? undefined,
-          sourceSessionId,
-        })
+      ? await findSessionRequestLocator(
+          identity,
+          {
+            requestId,
+            requestSequence: normalizedSequence ?? undefined,
+            sourceSessionId,
+          },
+          ownerUserId
+        )
       : identityLocator;
 
   return locator

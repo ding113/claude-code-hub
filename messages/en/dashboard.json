@@ -939,7 +939,9 @@
       "prev": "Prev",
       "next": "Next",
       "orderAsc": "Switch to ascending order (oldest first)",
-      "orderDesc": "Switch to descending order (newest first)"
+      "orderDesc": "Switch to descending order (newest first)",
+      "itemTitle": "Request #{sequence} - {model}",
+      "unknownModel": "Unknown model"
     },
     "back": "Back",
     "loadingError": "Loading failed"

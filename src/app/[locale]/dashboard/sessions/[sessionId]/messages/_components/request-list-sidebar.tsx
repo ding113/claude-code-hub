@@ -129,7 +129,10 @@ export function RequestListSidebar({
                       ? "bg-primary text-primary-foreground shadow-sm"
                       : "hover:bg-muted"
                   )}
-                  title={`#${req.displaySequence} - ${req.model || "Unknown"}`}
+                  title={t("requestList.itemTitle", {
+                    sequence: req.displaySequence,
+                    model: req.model ?? t("requestList.unknownModel"),
+                  })}
                 >
                   <span className="text-xs font-mono">{req.displaySequence}</span>
                   <span className="absolute -top-1 -right-1">
@@ -256,7 +259,7 @@ export function RequestListSidebar({
                         !request.model && "text-muted-foreground italic"
                       )}
                     >
-                      {request.model || "Unknown Model"}
+                      {request.model || t("requestList.unknownModel")}
                     </span>
                   </div>
                   <span className="text-[10px] text-muted-foreground font-mono">

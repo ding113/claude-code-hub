@@ -26,6 +26,18 @@ vi.mock("@/app/v1/_lib/proxy/errors", () => ({
 }));
 
 const redisStore = new Map<string, string>();
+const pipelineSetexMock = vi.fn().mockReturnThis();
+const pipelineHsetMock = vi.fn().mockReturnThis();
+const pipelineExpireMock = vi.fn().mockReturnThis();
+const pipelineDelMock = vi.fn().mockReturnThis();
+const pipelineExecMock = vi.fn().mockResolvedValue([]);
+const redisPipeline = {
+  setex: pipelineSetexMock,
+  hset: pipelineHsetMock,
+  expire: pipelineExpireMock,
+  del: pipelineDelMock,
+  exec: pipelineExecMock,
+};
 const redisMock = {
   status: "ready",
   setex: vi.fn((key: string, _ttl: number, value: string) => {
@@ -36,13 +48,7 @@ const redisMock = {
   set: vi.fn().mockResolvedValue("OK"),
   expire: vi.fn().mockResolvedValue(1),
   incr: vi.fn().mockResolvedValue(1),
-  pipeline: vi.fn(() => ({
-    setex: vi.fn().mockReturnThis(),
-    hset: vi.fn().mockReturnThis(),
-    expire: vi.fn().mockReturnThis(),
-    del: vi.fn().mockReturnThis(),
-    exec: vi.fn().mockResolvedValue([]),
-  })),
+  pipeline: vi.fn(() => redisPipeline),
 };
 
 vi.mock("@/lib/redis", () => ({
@@ -66,8 +72,43 @@ describe("SessionManager detail snapshots", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     redisStore.clear();
+    redisMock.status = "ready";
     mockStoreMessages = false;
     mockStoreSessionResponseBody = true;
+  });
+
+  it("refreshes the sequence TTL and records the immutable request owner", async () => {
+    redisMock.incr.mockResolvedValueOnce(1);
+
+    await expect(SessionManager.getNextRequestSequence("sess_owner", 42)).resolves.toBe(1);
+
+    expect(redisMock.incr).toHaveBeenCalledWith("session:sess_owner:seq");
+    expect(pipelineExpireMock).toHaveBeenCalledWith("session:sess_owner:seq", 300);
+    expect(pipelineSetexMock).toHaveBeenCalledWith("session:sess_owner:req:1:owner", 300, "42");
+    expect(pipelineExecMock).toHaveBeenCalledOnce();
+  });
+
+  it("validates request artifacts against their immutable key owner", async () => {
+    redisStore.set("session:sess_owner:req:1:owner", "42");
+
+    await expect(SessionManager.isSessionRequestOwnedByKey("sess_owner", 1, 42)).resolves.toBe(
+      true
+    );
+    await expect(SessionManager.isSessionRequestOwnedByKey("sess_owner", 1, 43)).resolves.toBe(
+      false
+    );
+    await expect(SessionManager.isSessionRequestOwnedByKey("sess_owner", 2, 42)).resolves.toBe(
+      false
+    );
+  });
+
+  it("fails request artifact ownership checks closed when Redis is unavailable", async () => {
+    redisMock.status = "end";
+
+    await expect(SessionManager.isSessionRequestOwnedByKey("sess_owner", 1, 42)).resolves.toBe(
+      false
+    );
+    expect(redisMock.get).not.toHaveBeenCalled();
   });
 
   it("stores and retrieves request/response before-after snapshots with TTL and redaction", async () => {

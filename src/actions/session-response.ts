@@ -33,8 +33,11 @@ export async function getSessionResponse(
     const currentUserId = authSession.user.id;
 
     // 1. 获取 session 统计数据以验证所有权
-    const { aggregateSessionStats } = await import("@/repository/message");
-    const sessionStats = await aggregateSessionStats(sessionId);
+    const { aggregateMultipleSessionStats } = await import("@/repository/message");
+    const [sessionStats] = await aggregateMultipleSessionStats(
+      [sessionId],
+      isAdmin ? undefined : currentUserId
+    );
 
     if (!sessionStats) {
       return {
@@ -55,11 +58,26 @@ export async function getSessionResponse(
     }
 
     const locatorResult = await resolveSessionRequestLocator(
-      sessionId,
+      sessionStats.sessionId,
       requestSequence,
-      requestedSourceSessionId
+      requestedSourceSessionId,
+      undefined,
+      sessionStats.userId
     );
     if (!locatorResult.ok) return locatorResult;
+
+    if (
+      !(await SessionManager.isSessionRequestOwnedByKey(
+        locatorResult.locator.sourceSessionId,
+        locatorResult.locator.requestSequence,
+        locatorResult.locator.keyId
+      ))
+    ) {
+      return {
+        ok: false,
+        error: "响应体已过期（5分钟 TTL）或尚未记录",
+      };
+    }
 
     // 3. 只读取 locator 已授权的物理请求响应体
     const response = await SessionManager.getSessionResponse(
