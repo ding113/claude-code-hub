@@ -36,7 +36,7 @@ export function CachePerformance({
   compact = false,
 }: CachePerformanceProps) {
   const t = useTranslations("dashboard.logs.details.cachePerformance");
-  const availability = requestCacheMetricAvailability ?? "legacy_unrecorded";
+  const availability = requestCacheMetricAvailability ?? "not_recorded";
   const availabilityLabel = t(`availability.${availability}`);
   const values = [
     {

@@ -291,7 +291,7 @@ async function startCacheEffectivenessScheduler(): Promise<void> {
   }
 }
 
-function describeSchedulerError(error: unknown): {
+export function describeSchedulerError(error: unknown): {
   error: string;
   errorName?: string;
   errorCause?: string;
@@ -306,7 +306,11 @@ function describeSchedulerError(error: unknown): {
     error: outerError?.message ?? String(error),
     errorName: outerError?.name,
     errorCause:
-      cause instanceof Error ? cause.message : cause ? String(cause).slice(0, 500) : undefined,
+      cause instanceof Error
+        ? cause.message.slice(0, 500)
+        : cause
+          ? String(cause).slice(0, 500)
+          : undefined,
     errorCauseName: cause instanceof Error ? cause.name : undefined,
     errorCauseCode:
       typeof causeCode === "string" || typeof causeCode === "number" ? causeCode : undefined,

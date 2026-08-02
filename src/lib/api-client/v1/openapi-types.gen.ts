@@ -38025,7 +38025,7 @@ export interface operations {
                 startTime?: number | null;
                 /** @description End timestamp in milliseconds. */
                 endTime?: number | null;
-                /** @description Session id filter. */
+                /** @description Exact Session ID or Prefix ID filter. */
                 sessionId?: string;
                 /** @description Model filter. */
                 model?: string;
@@ -38228,7 +38228,7 @@ export interface operations {
                 startTime?: number | null;
                 /** @description End timestamp in milliseconds. */
                 endTime?: number | null;
-                /** @description Session id filter. */
+                /** @description Exact Session ID or Prefix ID filter. */
                 sessionId?: string;
                 /** @description Model filter. */
                 model?: string;

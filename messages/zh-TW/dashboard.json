@@ -235,7 +235,7 @@
           "attempt_failed": "請求嘗試失敗，快取係數已排除。",
           "not_observable": "無法觀測上游快取用量，快取係數已排除。",
           "stream_truncated": "回應串流被截斷，快取係數已排除。",
-          "legacy_unrecorded": "此請求早於單次前綴快取指標記錄。"
+          "not_recorded": "此請求未記錄單次前綴快取指標。"
         }
       },
       "specialSettings": {

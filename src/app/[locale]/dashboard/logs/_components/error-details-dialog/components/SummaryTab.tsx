@@ -40,6 +40,7 @@ import { getFake200ReasonKey } from "../../fake200-reason";
 import { Fake200RetryTooltip } from "../../fake200-retry-tooltip";
 import { isInProgressStatus, isSuccessStatus, type SummaryTabProps } from "../types";
 import { CachePerformance } from "./CachePerformance";
+import { buildLogsFilterHref } from "./logs-filter-href";
 
 export function SummaryTab({
   statusCode,
@@ -107,11 +108,6 @@ export function SummaryTab({
   const sessionMessagesHref = sessionId
     ? `/dashboard/sessions/${encodeURIComponent(sessionId)}/messages${sessionRequestParams.size > 0 ? `?${sessionRequestParams.toString()}` : ""}`
     : "";
-  const buildLogsFilterHref = (identity: string) => {
-    const query = new URLSearchParams();
-    query.set("sessionId", identity);
-    return `/dashboard/logs?${query.toString()}`;
-  };
   const identityRows = [
     sessionId
       ? {

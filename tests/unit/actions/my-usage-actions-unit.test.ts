@@ -171,6 +171,14 @@ function buildSlimRow(overrides: Record<string, unknown> = {}) {
     cacheCreation5mInputTokens: 5,
     cacheCreation1hInputTokens: 5,
     cacheTtlApplied: "5m",
+    theoreticalCacheTokens: 40,
+    cacheScoreEligible: true,
+    cacheScoreExcludedReason: null,
+    cacheInputTotal: 130,
+    actualCacheRate: 20 / 130,
+    theoreticalCacheRate: 40 / 130,
+    requestCacheCoefficientBp: 5000,
+    requestCacheMetricAvailability: "available",
     anthropicEffort: "high",
     ...overrides,
   };
@@ -343,6 +351,14 @@ describe("getMyUsageLogs", () => {
           cacheCreation5mInputTokens: null,
           cacheCreation1hInputTokens: null,
           cacheTtlApplied: null,
+          theoreticalCacheTokens: null,
+          cacheScoreEligible: null,
+          cacheScoreExcludedReason: null,
+          cacheInputTotal: 0,
+          actualCacheRate: null,
+          theoreticalCacheRate: null,
+          requestCacheCoefficientBp: null,
+          requestCacheMetricAvailability: "not_recorded",
           anthropicEffort: null,
         }),
       ],
@@ -376,6 +392,13 @@ describe("getMyUsageLogs", () => {
       cacheCreation5mInputTokens: 5,
       cacheCreation1hInputTokens: 5,
       cacheTtlApplied: "5m",
+      theoreticalCacheTokens: 40,
+      cacheScoreEligible: true,
+      cacheInputTotal: 130,
+      actualCacheRate: 20 / 130,
+      theoreticalCacheRate: 40 / 130,
+      requestCacheCoefficientBp: 5000,
+      requestCacheMetricAvailability: "available",
     });
     expect(result.data.logs[1]).toMatchObject({
       id: 2,
@@ -502,7 +525,16 @@ describe("getMyUsageLogsBatch", () => {
     if (!result.ok) return;
     expect(result.data.hasMore).toBe(true);
     expect(result.data.nextCursor).toEqual({ createdAt: "2024-06-01T10:00:00.000Z", id: 1 });
-    expect(result.data.logs[0]?.id).toBe(1);
+    expect(result.data.logs[0]).toMatchObject({
+      id: 1,
+      theoreticalCacheTokens: 40,
+      cacheScoreEligible: true,
+      cacheInputTotal: 130,
+      actualCacheRate: 20 / 130,
+      theoreticalCacheRate: 40 / 130,
+      requestCacheCoefficientBp: 5000,
+      requestCacheMetricAvailability: "available",
+    });
   });
 
   test("limit<=0：应回退默认 20", async () => {

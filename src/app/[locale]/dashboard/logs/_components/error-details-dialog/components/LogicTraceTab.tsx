@@ -35,6 +35,7 @@ import { normalizeRoutingTrace } from "@/types/routing-trace";
 import { type LogicTraceTabProps, parseBlockedReason } from "../types";
 import { CachePerformance } from "./CachePerformance";
 import { DiscoveryTraceView, RoutingModeBanner } from "./DiscoveryTraceView";
+import { buildLogsFilterHref } from "./logs-filter-href";
 import { StepCard, type StepStatus } from "./StepCard";
 
 function getRequestStatus(item: ProviderChainItem): StepStatus {
@@ -98,11 +99,6 @@ export function LogicTraceTab({
 }: LogicTraceTabProps) {
   const t = useTranslations("dashboard.logs.details");
   const tChain = useTranslations("provider-chain");
-  const buildLogsFilterHref = (identity: string) => {
-    const query = new URLSearchParams();
-    query.set("sessionId", identity);
-    return `/dashboard/logs?${query.toString()}`;
-  };
   // Winner cost is the request total minus every billed loser; only present
   // when this request actually billed hedge losers.
   const hedgeSummary = summarizeHedgeBilling(costUsd, hedgeLosers);
@@ -1063,6 +1059,39 @@ export function LogicTraceTab({
                           <DatabaseZap className="h-3 w-3" />
                           <span className="font-medium">{tChain("reasons.affinity_hit")}</span>
                         </div>
+                        {(sessionId || sourceSessionId) && (
+                          <div className="mb-2 grid grid-cols-1 gap-1.5 min-w-0">
+                            {sessionId && (
+                              <div className="flex items-center gap-2 min-w-0 flex-wrap">
+                                <span className="text-muted-foreground shrink-0">
+                                  {sessionIdentityKind === "prefix_affinity"
+                                    ? t("metadata.prefixId")
+                                    : t("metadata.sessionId")}
+                                  :
+                                </span>
+                                <Link
+                                  href={buildLogsFilterHref(sessionId)}
+                                  className="text-[10px] px-1.5 py-0.5 bg-teal-100 dark:bg-teal-900/30 rounded font-mono break-all underline-offset-2 hover:underline"
+                                >
+                                  {sessionId}
+                                </Link>
+                              </div>
+                            )}
+                            {sourceSessionId && sourceSessionId !== sessionId && (
+                              <div className="flex items-center gap-2 min-w-0 flex-wrap">
+                                <span className="text-muted-foreground shrink-0">
+                                  {t("metadata.sessionId")}:
+                                </span>
+                                <Link
+                                  href={buildLogsFilterHref(sourceSessionId)}
+                                  className="text-[10px] px-1.5 py-0.5 bg-teal-100 dark:bg-teal-900/30 rounded font-mono break-all underline-offset-2 hover:underline"
+                                >
+                                  {sourceSessionId}
+                                </Link>
+                              </div>
+                            )}
+                          </div>
+                        )}
                         <div className="grid grid-cols-2 gap-x-3 gap-y-1 min-w-0 text-[11px]">
                           {item.affinity?.matchedDepth != null && (
                             <div className="min-w-0">
@@ -1090,6 +1119,18 @@ export function LogicTraceTab({
                               </code>
                             </div>
                           )}
+                        </div>
+                        <div className="pt-2 mt-2 border-t border-muted/50">
+                          <CachePerformance
+                            actualCacheRate={actualCacheRate ?? null}
+                            theoreticalCacheRate={theoreticalCacheRate ?? null}
+                            requestCacheCoefficientBp={requestCacheCoefficientBp ?? null}
+                            requestCacheMetricAvailability={requestCacheMetricAvailability}
+                            cacheInputTotal={cacheInputTotal ?? null}
+                            cacheReadInputTokens={cacheReadInputTokens ?? null}
+                            theoreticalCacheTokens={theoreticalCacheTokens ?? null}
+                            compact
+                          />
                         </div>
                       </div>
                     )}

@@ -168,7 +168,7 @@ function makeLog(overrides: Partial<UsageLogRow>): UsageLogRow {
     actualCacheRate: 0,
     theoreticalCacheRate: null,
     requestCacheCoefficientBp: null,
-    requestCacheMetricAvailability: "legacy_unrecorded",
+    requestCacheMetricAvailability: "not_recorded",
     totalTokens: 2,
     costUsd: "0.01",
     costMultiplier: null,

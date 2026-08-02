@@ -6,6 +6,7 @@ import { getTranslations } from "next-intl/server";
 import { db } from "@/drizzle/db";
 import { messageRequest, usageLedger } from "@/drizzle/schema";
 import { getSession } from "@/lib/auth";
+import type { RequestCacheMetricAvailability } from "@/lib/cache-effectiveness/request-metrics";
 import { lookupIp } from "@/lib/ip-geo/client";
 import { logger } from "@/lib/logger";
 import { resolveKeyConcurrentSessionLimit } from "@/lib/rate-limit/concurrent-session-limit";
@@ -251,6 +252,14 @@ export interface MyUsageLogEntry {
   cacheCreation5mInputTokens: number | null;
   cacheCreation1hInputTokens: number | null;
   cacheTtlApplied: string | null;
+  theoreticalCacheTokens: number | null;
+  cacheScoreEligible: boolean | null;
+  cacheScoreExcludedReason: string | null;
+  cacheInputTotal: number;
+  actualCacheRate: number | null;
+  theoreticalCacheRate: number | null;
+  requestCacheCoefficientBp: number | null;
+  requestCacheMetricAvailability: RequestCacheMetricAvailability;
 }
 
 export interface MyUsageLogsBatchResult {
@@ -656,6 +665,14 @@ function mapMyUsageLogEntries(
       cacheCreation5mInputTokens: log.cacheCreation5mInputTokens ?? null,
       cacheCreation1hInputTokens: log.cacheCreation1hInputTokens ?? null,
       cacheTtlApplied: log.cacheTtlApplied ?? null,
+      theoreticalCacheTokens: log.theoreticalCacheTokens ?? null,
+      cacheScoreEligible: log.cacheScoreEligible ?? null,
+      cacheScoreExcludedReason: log.cacheScoreExcludedReason ?? null,
+      cacheInputTotal: log.cacheInputTotal,
+      actualCacheRate: log.actualCacheRate,
+      theoreticalCacheRate: log.theoreticalCacheRate,
+      requestCacheCoefficientBp: log.requestCacheCoefficientBp,
+      requestCacheMetricAvailability: log.requestCacheMetricAvailability,
     };
   });
 }

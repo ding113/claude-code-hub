@@ -235,7 +235,7 @@
           "attempt_failed": "The request attempt failed; the coefficient is excluded.",
           "not_observable": "Upstream cache usage was not observable; the coefficient is excluded.",
           "stream_truncated": "The stream was truncated; the coefficient is excluded.",
-          "legacy_unrecorded": "This request predates per-request prefix cache metrics."
+          "not_recorded": "Prefix cache metrics were not recorded for this request."
         }
       },
       "specialSettings": {

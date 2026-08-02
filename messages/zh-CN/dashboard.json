@@ -235,7 +235,7 @@
           "attempt_failed": "请求尝试失败，缓存系数已排除。",
           "not_observable": "无法观测上游缓存用量，缓存系数已排除。",
           "stream_truncated": "响应流被截断，缓存系数已排除。",
-          "legacy_unrecorded": "该请求产生于单请求前缀缓存指标上线之前。"
+          "not_recorded": "该请求未记录单请求前缀缓存指标。"
         }
       },
       "specialSettings": {

@@ -82,6 +82,14 @@ function makeLog(overrides: Partial<MyUsageLogEntry> = {}): MyUsageLogEntry {
     cacheCreation5mInputTokens: 0,
     cacheCreation1hInputTokens: 0,
     cacheTtlApplied: null,
+    theoreticalCacheTokens: null,
+    cacheScoreEligible: null,
+    cacheScoreExcludedReason: null,
+    cacheInputTotal: 30,
+    actualCacheRate: 0,
+    theoreticalCacheRate: null,
+    requestCacheCoefficientBp: null,
+    requestCacheMetricAvailability: "not_recorded",
     ...overrides,
   };
 }

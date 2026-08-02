@@ -28,7 +28,7 @@ const messages = {
             attempt_failed: "Attempt failed",
             not_observable: "Not observable",
             stream_truncated: "Stream truncated",
-            legacy_unrecorded: "Legacy",
+            not_recorded: "Not recorded",
           },
         },
       },

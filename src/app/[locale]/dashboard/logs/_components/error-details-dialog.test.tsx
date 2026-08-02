@@ -527,6 +527,57 @@ describe("error-details-dialog layout", () => {
     unmount();
   });
 
+  test("shows cache metrics and encoded identity links in the Prefix Affinity step", async () => {
+    const { container, unmount } = renderClientWithIntl(
+      <ErrorDetailsDialog
+        externalOpen
+        initialTab="logic-trace"
+        statusCode={200}
+        errorMessage={null}
+        providerChain={
+          [
+            {
+              id: 1,
+              name: "affinity-provider",
+              reason: "affinity_hit",
+              selectionMethod: "prefix_affinity",
+              affinity: { matchedDepth: 2, matchedPrefixBytes: 240 },
+            },
+          ] as any
+        }
+        sessionId="pfx:scope/root?branch#frag"
+        sourceSessionId="physical-session"
+        sessionIdentityKind="prefix_affinity"
+        cacheInputTotal={150}
+        cacheReadInputTokens={30}
+        theoreticalCacheTokens={60}
+        actualCacheRate={0.2}
+        theoreticalCacheRate={0.4}
+        requestCacheCoefficientBp={5000}
+        requestCacheMetricAvailability="available"
+      />
+    );
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const affinityStep = Array.from(container.querySelectorAll('[data-slot="step-card"]')).find(
+      (element) => element.textContent?.includes("affinity-provider")
+    );
+    expect(affinityStep).toBeTruthy();
+    expect(
+      affinityStep?.querySelector('a[href*="sessionId=pfx%3Ascope%2Froot%3Fbranch%23frag"]')
+    ).toBeTruthy();
+    expect(affinityStep?.querySelector('a[href*="sessionId=physical-session"]')).toBeTruthy();
+    expect(affinityStep?.textContent).toContain("Cache Performance");
+    expect(affinityStep?.textContent).toContain("20.0%");
+    expect(affinityStep?.textContent).toContain("40.0%");
+    expect(affinityStep?.textContent).toContain("0.50");
+    unmount();
+  });
+
   test("encodes prefix identities in the Session detail path", async () => {
     hasSessionMessagesMock.mockResolvedValue({ ok: true, data: true });
     const { container, unmount } = renderClientWithIntl(

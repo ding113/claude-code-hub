@@ -98,6 +98,27 @@ describe("deriveRequestCacheMetrics", () => {
     }
   );
 
+  test.each(["attempt_failed", "not_observable", "stream_truncated"] as const)(
+    "preserves %s when the request has no input tokens",
+    (reason) => {
+      expect(
+        deriveRequestCacheMetrics({
+          ...eligible,
+          inputTokens: 0,
+          cacheCreationInputTokens: 0,
+          cacheReadInputTokens: 0,
+          cacheScoreEligible: false,
+          cacheScoreExcludedReason: reason,
+        })
+      ).toMatchObject({
+        actualCacheRate: null,
+        theoreticalCacheRate: null,
+        requestCacheCoefficientBp: null,
+        requestCacheMetricAvailability: reason,
+      });
+    }
+  );
+
   test("clamps rates and coefficient to their display bounds", () => {
     expect(
       deriveRequestCacheMetrics({
@@ -112,7 +133,7 @@ describe("deriveRequestCacheMetrics", () => {
     });
   });
 
-  test("identifies old rows with no F3b fields", () => {
+  test("marks requests with no recorded F3b fields without inferring their age", () => {
     expect(
       deriveRequestCacheMetrics({
         inputTokens: 100,
@@ -127,11 +148,11 @@ describe("deriveRequestCacheMetrics", () => {
       actualCacheRate: 1 / 6,
       theoreticalCacheRate: null,
       requestCacheCoefficientBp: null,
-      requestCacheMetricAvailability: "legacy_unrecorded",
+      requestCacheMetricAvailability: "not_recorded",
     });
   });
 
-  test("does not treat a historical Session identity as recorded F3b provenance", () => {
+  test("does not treat a Session identity as recorded F3b provenance", () => {
     expect(
       deriveRequestCacheMetrics({
         inputTokens: 100,
@@ -143,7 +164,7 @@ describe("deriveRequestCacheMetrics", () => {
         sessionIdentityKind: "session_id",
       })
     ).toMatchObject({
-      requestCacheMetricAvailability: "legacy_unrecorded",
+      requestCacheMetricAvailability: "not_recorded",
       theoreticalCacheRate: null,
       requestCacheCoefficientBp: null,
     });

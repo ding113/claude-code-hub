@@ -5,7 +5,7 @@ export type RequestCacheMetricAvailability =
   | "attempt_failed"
   | "not_observable"
   | "stream_truncated"
-  | "legacy_unrecorded";
+  | "not_recorded";
 
 export interface RequestCacheMetricsInput {
   inputTokens: number | null | undefined;
@@ -79,7 +79,29 @@ export function deriveRequestCacheMetrics(input: RequestCacheMetricsInput): Requ
       actualCacheRate,
       theoreticalCacheRate: null,
       requestCacheCoefficientBp: null,
-      requestCacheMetricAvailability: "legacy_unrecorded",
+      requestCacheMetricAvailability: "not_recorded",
+    };
+  }
+
+  if (normalizedReason) {
+    if (cacheInputTotal <= 0) {
+      return {
+        cacheInputTotal,
+        actualCacheRate: null,
+        theoreticalCacheRate: null,
+        requestCacheCoefficientBp: null,
+        requestCacheMetricAvailability: normalizedReason,
+      };
+    }
+
+    const theoreticalCacheRate =
+      theoreticalTokens != null ? clamp01(theoreticalTokens / cacheInputTotal) : null;
+    return {
+      cacheInputTotal,
+      actualCacheRate,
+      theoreticalCacheRate,
+      requestCacheCoefficientBp: null,
+      requestCacheMetricAvailability: normalizedReason,
     };
   }
 
@@ -93,8 +115,7 @@ export function deriveRequestCacheMetrics(input: RequestCacheMetricsInput): Requ
     };
   }
 
-  const availability =
-    normalizedReason ?? (theoreticalTokens == null ? "no_affinity_key" : "available");
+  const availability = theoreticalTokens == null ? "no_affinity_key" : "available";
   const theoreticalCacheRate =
     theoreticalTokens != null ? clamp01(theoreticalTokens / cacheInputTotal) : null;
   const coefficientAvailable =
