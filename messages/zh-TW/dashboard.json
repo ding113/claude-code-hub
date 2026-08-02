@@ -928,7 +928,11 @@
       "storageNotEnabledHint": "提示：請檢查 REDIS_URL 與 ENABLE_RATE_LIMIT=true（用於 Session 詳情快取）；如需儲存未脫敏的 messages，請設定 STORE_SESSION_MESSAGES=true。"
     },
     "errors": {
-      "copyFailed": "複製失敗"
+      "copyFailed": "複製失敗",
+      "fetchSessionsFailed": "取得 Session 清單失敗",
+      "fetchSessionsTimeout": "取得 Session 清單逾時",
+      "fetchSettingsFailed": "取得系統設定失敗",
+      "retry": "重試"
     },
     "requestList": {
       "title": "請求列表",
@@ -1881,6 +1885,10 @@
         "confirmDescription": "這將永久刪除該使用者的所有請求日誌和使用統計。此操作無法撤銷。",
         "confirm": "是的，重設全部",
         "loading": "重設中...",
+        "queued": "重設工作已排入佇列",
+        "running": "正在重設統計",
+        "completed": "重設已完成",
+        "failed": "重設失敗，可以重試",
         "success": "所有統計已重置"
       }
     },

@@ -928,7 +928,11 @@
       "storageNotEnabledHint": "Tip: Check REDIS_URL and ENABLE_RATE_LIMIT=true (session details cache). To store unredacted messages, set STORE_SESSION_MESSAGES=true."
     },
     "errors": {
-      "copyFailed": "Copy Failed"
+      "copyFailed": "Copy Failed",
+      "fetchSessionsFailed": "Failed to load sessions",
+      "fetchSessionsTimeout": "The sessions request timed out",
+      "fetchSettingsFailed": "Failed to load system settings",
+      "retry": "Retry"
     },
     "requestList": {
       "title": "Requests",
@@ -1895,6 +1899,10 @@
         "confirmDescription": "This will permanently delete all request logs and usage statistics for this user. This action cannot be undone.",
         "confirm": "Yes, Reset All",
         "loading": "Resetting...",
+        "queued": "Reset queued",
+        "running": "Reset in progress",
+        "completed": "Reset completed",
+        "failed": "Reset failed. You can retry.",
         "success": "All statistics have been reset"
       }
     },
