@@ -15,6 +15,8 @@ import {
   UserListQuerySchema,
   UserListResponseSchema,
   UserRenewSchema,
+  UserStatisticsResetParamsSchema,
+  UserStatisticsResetResponseSchema,
   UsersBatchUpdateSchema,
   UsersUsageBatchSchema,
   UserUpdateSchema,
@@ -29,6 +31,7 @@ import {
   getUserAllLimitUsage,
   getUserKeyGroups,
   getUserLimitUsage,
+  getUserStatisticsReset,
   getUsersUsage,
   getUserTags,
   listCurrentUser,
@@ -462,7 +465,41 @@ usersRouter.openapi(
     "x-required-access": "admin",
     security,
     request: { params: UserIdParamSchema },
-    responses: { 204: { description: "User statistics reset." }, ...problemResponses },
+    responses: {
+      202: {
+        description: "User statistics reset queued.",
+        headers: {
+          Location: {
+            description: "Status resource for the queued statistics reset.",
+            schema: { type: "string" },
+          },
+        },
+        content: { "application/json": { schema: UserStatisticsResetResponseSchema } },
+      },
+      ...problemResponses,
+    },
   }),
   resetUserStatistics as never
+);
+
+usersRouter.openapi(
+  createRoute({
+    method: "get",
+    path: "/users/{id}/statistics-resets/{resetId}",
+    middleware: requireAuth("admin"),
+    tags: ["Users"],
+    summary: "Get user statistics reset status",
+    description: "Returns the durable status of an asynchronous statistics reset.",
+    "x-required-access": "admin",
+    security,
+    request: { params: UserStatisticsResetParamsSchema },
+    responses: {
+      200: {
+        description: "User statistics reset status.",
+        content: { "application/json": { schema: UserStatisticsResetResponseSchema } },
+      },
+      ...problemResponses,
+    },
+  }),
+  getUserStatisticsReset as never
 );

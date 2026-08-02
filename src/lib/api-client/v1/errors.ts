@@ -38,6 +38,7 @@ const API_ERROR_MESSAGE_KEYS: Record<string, string> = {
   "auth.api_key_admin_disabled": "PERMISSION_DENIED",
   "auth.csrf_invalid": "PERMISSION_DENIED",
   "request.validation_failed": "INVALID_FORMAT",
+  "dependency.unavailable": "CONNECTION_FAILED",
   "resource.not_found": "NOT_FOUND",
   "provider.not_found": "NOT_FOUND",
   "provider.action_failed": "OPERATION_FAILED",

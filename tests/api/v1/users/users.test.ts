@@ -17,6 +17,7 @@ const getUserLimitUsageMock = vi.hoisted(() => vi.fn());
 const getUserAllLimitUsageMock = vi.hoisted(() => vi.fn());
 const resetUserLimitsOnlyMock = vi.hoisted(() => vi.fn());
 const resetUserAllStatisticsMock = vi.hoisted(() => vi.fn());
+const findUserStatisticsResetMock = vi.hoisted(() => vi.fn());
 const getAllUserTagsMock = vi.hoisted(() => vi.fn());
 const getAllUserKeyGroupsMock = vi.hoisted(() => vi.fn());
 const searchUsersForFilterMock = vi.hoisted(() => vi.fn());
@@ -49,6 +50,10 @@ vi.mock("@/actions/users", () => ({
   searchUsersForFilter: searchUsersForFilterMock,
   searchUsers: searchUsersMock,
   batchUpdateUsers: batchUpdateUsersMock,
+}));
+
+vi.mock("@/lib/user-statistics-reset/reset-queue", () => ({
+  findUserStatisticsReset: findUserStatisticsResetMock,
 }));
 
 const { callV1Route } = await import("../test-utils");
@@ -115,7 +120,31 @@ describe("v1 users endpoints", () => {
       data: { limitDaily: { usage: 1, limit: 10 } },
     });
     resetUserLimitsOnlyMock.mockResolvedValue({ ok: true });
-    resetUserAllStatisticsMock.mockResolvedValue({ ok: true });
+    resetUserAllStatisticsMock.mockResolvedValue({
+      ok: true,
+      data: {
+        resetId: "00000000-0000-4000-8000-000000000001",
+        userId: 1,
+        status: "queued",
+        requestedAt: "2026-08-02T12:00:00.000Z",
+        startedAt: null,
+        completedAt: null,
+        deletedMessageRequests: 0,
+        deletedUsageLedger: 0,
+        errorCode: null,
+      },
+    });
+    findUserStatisticsResetMock.mockResolvedValue({
+      resetId: "00000000-0000-4000-8000-000000000001",
+      userId: 1,
+      status: "running",
+      requestedAt: "2026-08-02T12:00:00.000Z",
+      startedAt: "2026-08-02T12:00:01.000Z",
+      completedAt: null,
+      deletedMessageRequests: 1000,
+      deletedUsageLedger: 0,
+      errorCode: null,
+    });
     getAllUserTagsMock.mockResolvedValue({ ok: true, data: ["team-a"] });
     getAllUserKeyGroupsMock.mockResolvedValue({ ok: true, data: ["default"] });
     searchUsersForFilterMock.mockResolvedValue({ ok: true, data: [{ id: 1, name: "user-1" }] });
@@ -346,7 +375,19 @@ describe("v1 users endpoints", () => {
       pathname: "/api/v1/users/1/statistics:reset",
       headers,
     });
-    expect(resetStats.response.status).toBe(204);
+    expect(resetStats.response.status).toBe(202);
+    expect(resetStats.response.headers.get("location")).toBe(
+      "/api/v1/users/1/statistics-resets/00000000-0000-4000-8000-000000000001"
+    );
+    expect(resetStats.json).toMatchObject({ status: "queued" });
+
+    const resetStatus = await callV1Route({
+      method: "GET",
+      pathname: "/api/v1/users/1/statistics-resets/00000000-0000-4000-8000-000000000001",
+      headers,
+    });
+    expect(resetStatus.response.status).toBe(200);
+    expect(resetStatus.json).toMatchObject({ status: "running", deletedMessageRequests: 1000 });
   });
 
   test("maps structured authorization action errors to HTTP status codes", async () => {
@@ -500,6 +541,7 @@ describe("v1 users endpoints", () => {
     expect(doc.paths).toHaveProperty("/api/v1/users/{id}/limit-usage:all");
     expect(doc.paths).toHaveProperty("/api/v1/users/{id}/limits:reset");
     expect(doc.paths).toHaveProperty("/api/v1/users/{id}/statistics:reset");
+    expect(doc.paths).toHaveProperty("/api/v1/users/{id}/statistics-resets/{resetId}");
     expect(doc.paths).toHaveProperty("/api/v1/users:batchUpdate");
     expect(doc.paths).toHaveProperty("/api/v1/users:usageBatch");
     expect(doc.paths).toHaveProperty("/api/v1/users:filter-search");
@@ -509,5 +551,9 @@ describe("v1 users endpoints", () => {
     expect(JSON.stringify(userDetail.get?.responses?.["200"])).toContain("createdAt");
     expect(userDetail.get?.responses).toHaveProperty("500");
     expect(userDetail.get?.responses).toHaveProperty("503");
+    const resetStatistics = doc.paths["/api/v1/users/{id}/statistics:reset"] as {
+      post?: { responses?: Record<string, { headers?: Record<string, unknown> }> };
+    };
+    expect(resetStatistics.post?.responses?.["202"]?.headers).toHaveProperty("Location");
   });
 });
