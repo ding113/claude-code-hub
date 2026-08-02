@@ -390,6 +390,22 @@ describe("v1 users endpoints", () => {
     expect(resetStatus.json).toMatchObject({ status: "running", deletedMessageRequests: 1000 });
   });
 
+  test("uses the standard public detail when a statistics reset is not found", async () => {
+    findUserStatisticsResetMock.mockResolvedValueOnce(null);
+
+    const result = await callV1Route({
+      method: "GET",
+      pathname: "/api/v1/users/1/statistics-resets/00000000-0000-4000-8000-000000000001",
+      headers,
+    });
+
+    expect(result.response.status).toBe(404);
+    expect(result.json).toMatchObject({
+      errorCode: "user.statistics_reset_not_found",
+      detail: "Not found",
+    });
+  });
+
   test("maps structured authorization action errors to HTTP status codes", async () => {
     getUserLimitUsageMock.mockResolvedValueOnce({
       ok: false,
