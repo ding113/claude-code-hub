@@ -1,4 +1,5 @@
 import { getTableName } from "drizzle-orm";
+import { PgDialect } from "drizzle-orm/pg-core";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { beforeEach, describe, expect, test, vi } from "vitest";
@@ -85,6 +86,24 @@ describe("Usage logs sessionId suggestions", () => {
     const source = readFileSync(resolve(process.cwd(), "src/repository/usage-logs.ts"), "utf8");
     expect(source).toContain("NOT LIKE 'pfx:%'");
     expect(source).toContain("NOT LIKE 'sid:%'");
+  });
+
+  test.each([false, true])("filters reserved physical IDs in %s storage", async (ledgerOnly) => {
+    vi.resetModules();
+    isLedgerOnlyModeMock.mockResolvedValue(ledgerOnly);
+    const whereArgs: unknown[] = [];
+    const selectMock = vi.fn(() => createThenableQuery([], { whereArgs }));
+    vi.doMock("@/drizzle/db", () => ({ db: { select: selectMock } }));
+
+    const { findUsageLogSessionIdSuggestions } = await import("@/repository/usage-logs");
+    await findUsageLogSessionIdSuggestions({ term: "s" });
+
+    const whereSql = whereArgs.map((condition) =>
+      new PgDialect().sqlToQuery(condition as never).sql.toLowerCase()
+    );
+    const physicalSql = whereSql.find((sql) => sql.includes('"session_id" not like'));
+    expect(physicalSql).toContain("\"session_id\" not like 'pfx:%'");
+    expect(physicalSql).toContain("\"session_id\" not like 'sid:%'");
   });
   beforeEach(() => {
     isLedgerOnlyModeMock.mockReset();

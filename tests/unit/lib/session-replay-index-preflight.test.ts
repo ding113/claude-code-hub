@@ -48,6 +48,23 @@ function createFakeExecutor(initial: Record<string, MigrationIndexState> = {}) {
 
 describe("0116 concurrent index preflight", () => {
   const spec = SESSION_REPLAY_INDEX_SPECS[0];
+  const hydrationSpec = SESSION_REPLAY_INDEX_SPECS.find(
+    (candidate) => candidate.canonicalName === "idx_usage_ledger_session_identity"
+  );
+
+  test("builds the unfiltered ledger identity index concurrently", async () => {
+    if (!hydrationSpec) throw new Error("missing 0117 identity index spec");
+    const { executor, execute } = createFakeExecutor();
+
+    await runSessionReplayIndexPreflight(executor, [hydrationSpec]);
+
+    const createStatement = execute.mock.calls
+      .map(([statement]) => statement)
+      .find((statement) => statement.startsWith("CREATE INDEX CONCURRENTLY"));
+    expect(createStatement).toContain(`"${hydrationSpec.temporaryName}"`);
+    expect(createStatement).toContain(hydrationSpec.definition);
+    expect(createStatement).not.toContain("WHERE");
+  });
 
   test("builds and validates a temporary index before replacing the canonical index", async () => {
     const { executor, execute, states } = createFakeExecutor({
