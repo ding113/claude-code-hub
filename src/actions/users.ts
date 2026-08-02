@@ -2366,23 +2366,6 @@ export async function resetUserAllStatistics(
     }
 
     const keys = await findKeyList(userId);
-    const requiresRedisForFixed5h =
-      ((user.limit5hUsd ?? 0) > 0 && (user.limit5hResetMode ?? "rolling") === "fixed") ||
-      keys.some(
-        (key) => (key.limit5hUsd ?? 0) > 0 && (key.limit5hResetMode ?? "rolling") === "fixed"
-      );
-
-    if (requiresRedisForFixed5h) {
-      const redis = getRedisClient({ allowWhenRateLimitDisabled: true });
-      if (redis?.status !== "ready") {
-        return {
-          ok: false,
-          error: tError("CONNECTION_FAILED"),
-          errorCode: ERROR_CODES.CONNECTION_FAILED,
-        };
-      }
-    }
-
     const { enqueueUserStatisticsReset } = await import("@/lib/user-statistics-reset/reset-queue");
     enqueueStarted = true;
     const reset = await enqueueUserStatisticsReset(userId, {
