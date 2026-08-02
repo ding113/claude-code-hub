@@ -329,7 +329,7 @@ describe("full reset compatibility with user 5h marker", () => {
     expect(invalidateCachedUserMock).not.toHaveBeenCalled();
   });
 
-  test("full statistics reset fails when fixed 5h state exists but Redis is unavailable", async () => {
+  test("full statistics reset delegates fixed user 5h readiness to the background queue", async () => {
     findUserByIdMock.mockResolvedValue({
       id: 123,
       name: "Test User",
@@ -342,12 +342,15 @@ describe("full reset compatibility with user 5h marker", () => {
     const { resetUserAllStatistics } = await import("@/actions/users");
     const result = await resetUserAllStatistics(123);
 
-    expect(result.ok).toBe(false);
-    expect(result.errorCode).toBe(ERROR_CODES.CONNECTION_FAILED);
+    expect(result.ok).toBe(true);
+    expect(getRedisClientMock).not.toHaveBeenCalled();
+    expect(enqueueUserStatisticsResetMock).toHaveBeenCalledWith(123, {
+      fixed5hKeyIds: [],
+    });
     expect(txUpdateSetMock).not.toHaveBeenCalled();
   });
 
-  test("full statistics reset fails when a child key has fixed 5h state and Redis is unavailable", async () => {
+  test("full statistics reset delegates fixed child-key 5h readiness to the background queue", async () => {
     findUserByIdMock.mockResolvedValue({
       id: 123,
       name: "Test User",
@@ -367,8 +370,11 @@ describe("full reset compatibility with user 5h marker", () => {
     const { resetUserAllStatistics } = await import("@/actions/users");
     const result = await resetUserAllStatistics(123);
 
-    expect(result.ok).toBe(false);
-    expect(result.errorCode).toBe(ERROR_CODES.CONNECTION_FAILED);
+    expect(result.ok).toBe(true);
+    expect(getRedisClientMock).not.toHaveBeenCalled();
+    expect(enqueueUserStatisticsResetMock).toHaveBeenCalledWith(123, {
+      fixed5hKeyIds: [11],
+    });
     expect(txUpdateSetMock).not.toHaveBeenCalled();
   });
 });
