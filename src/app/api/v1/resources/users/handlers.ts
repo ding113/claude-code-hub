@@ -20,6 +20,7 @@ import {
   UserIdParamSchema,
   UserListQuerySchema,
   UserRenewSchema,
+  UserStatisticsResetParamsSchema,
   UsersBatchUpdateSchema,
   UsersUsageBatchSchema,
   UserUpdateSchema,
@@ -225,7 +226,39 @@ export async function resetUserStatistics(c: Context): Promise<Response> {
     c.get("auth")
   );
   if (!result.ok) return actionError(c, result);
-  return noContentResponse();
+  const reset = result.data as { resetId: string };
+  const location = `/api/v1/users/${params.id}/statistics-resets/${reset.resetId}`;
+  return jsonResponse(result.data, { status: 202, headers: { Location: location } });
+}
+
+export async function getUserStatisticsReset(c: Context): Promise<Response> {
+  const params = UserStatisticsResetParamsSchema.safeParse({
+    id: c.req.param("id"),
+    resetId: c.req.param("resetId"),
+  });
+  if (!params.success) return fromZodError(params.error, new URL(c.req.url).pathname);
+
+  const { findUserStatisticsReset } = await import("@/lib/user-statistics-reset/reset-queue");
+  let reset;
+  try {
+    reset = await findUserStatisticsReset(params.data.id, params.data.resetId);
+  } catch {
+    return createProblemResponse({
+      status: 503,
+      instance: new URL(c.req.url).pathname,
+      errorCode: "dependency.unavailable",
+      detail: publicActionErrorDetail(503),
+    });
+  }
+  if (!reset) {
+    return createProblemResponse({
+      status: 404,
+      instance: new URL(c.req.url).pathname,
+      errorCode: "user.statistics_reset_not_found",
+      detail: "Statistics reset not found.",
+    });
+  }
+  return jsonResponse(reset);
 }
 
 export async function getUserTags(c: Context): Promise<Response> {

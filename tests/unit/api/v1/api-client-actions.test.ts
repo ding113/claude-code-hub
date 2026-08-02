@@ -68,6 +68,27 @@ describe("v1 action compatibility client", () => {
     );
   });
 
+  test("passes an AbortSignal to the all-sessions request", async () => {
+    getMock.mockResolvedValue({ active: [], inactive: [] });
+    const controller = new AbortController();
+
+    await activeSessions.getAllSessions(2, 3, 20, { signal: controller.signal });
+
+    expect(getMock).toHaveBeenCalledWith(
+      "/api/v1/sessions?state=all&activePage=2&inactivePage=3&pageSize=20",
+      { signal: controller.signal }
+    );
+  });
+
+  test("marks statistics reset polling transport failures as retryable network errors", async () => {
+    getMock.mockRejectedValue(new TypeError("Failed to fetch"));
+
+    await expect(users.getUserStatisticsReset(42, "reset-id")).resolves.toMatchObject({
+      ok: false,
+      errorCode: "NETWORK_ERROR",
+    });
+  });
+
   test("preserves the physical request locator for every Session payload endpoint", async () => {
     getMock.mockResolvedValue({ exists: true, response: "ok" });
 

@@ -66,6 +66,22 @@ export const UserIdParamSchema = z.object({
   id: z.coerce.number().int().positive().describe("User id."),
 });
 
+export const UserStatisticsResetParamsSchema = UserIdParamSchema.extend({
+  resetId: z.string().uuid().describe("Statistics reset id."),
+});
+
+export const UserStatisticsResetResponseSchema = z.object({
+  resetId: z.string().uuid(),
+  userId: z.number().int().positive(),
+  status: z.enum(["queued", "running", "completed", "failed"]),
+  requestedAt: z.string().datetime(),
+  startedAt: z.string().datetime().nullable(),
+  completedAt: z.string().datetime().nullable(),
+  deletedMessageRequests: z.number().int().nonnegative(),
+  deletedUsageLedger: z.number().int().nonnegative(),
+  errorCode: z.string().nullable(),
+});
+
 export const UserListQuerySchema = z.object({
   cursor: z.string().optional().describe("Cursor for admin batch listing."),
   limit: z.coerce.number().int().min(1).max(100).default(50).describe("Page size."),

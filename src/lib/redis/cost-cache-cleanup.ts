@@ -9,6 +9,7 @@ export interface ClearUserCostCacheOptions {
   keyIds: number[];
   keyHashes: string[];
   includeActiveSessions?: boolean;
+  allowWhenRateLimitDisabled?: boolean;
 }
 
 export interface ClearUserCostCacheResult {
@@ -52,29 +53,39 @@ export interface ClearUser5hCostCacheResult {
 export async function clearUserCostCache(
   options: ClearUserCostCacheOptions
 ): Promise<ClearUserCostCacheResult | null> {
-  const { userId, keyIds, keyHashes, includeActiveSessions = false } = options;
+  const {
+    userId,
+    keyIds,
+    keyHashes,
+    includeActiveSessions = false,
+    allowWhenRateLimitDisabled = false,
+  } = options;
 
-  const redis = getRedisClient();
+  const redis = getRedisClient({ allowWhenRateLimitDisabled });
   if (redis?.status !== "ready") {
     return null;
   }
 
   const startTime = Date.now();
+  let scanErrorCount = 0;
 
   // Scan all cost patterns in parallel
   const scanResults = await Promise.all([
     ...keyIds.map((keyId) =>
       scanPattern(redis, `key:${keyId}:cost_*`).catch((err) => {
+        scanErrorCount += 1;
         logger.warn("Failed to scan key cost pattern", { keyId, error: err });
         return [];
       })
     ),
     scanPattern(redis, `user:${userId}:cost_*`).catch((err) => {
+      scanErrorCount += 1;
       logger.warn("Failed to scan user cost pattern", { userId, error: err });
       return [];
     }),
     // Total cost cache keys (with optional resetAt suffix)
     scanPattern(redis, `total_cost:user:${userId}`).catch((err) => {
+      scanErrorCount += 1;
       logger.warn("Failed to scan total cost pattern", {
         userId,
         pattern: `total_cost:user:${userId}`,
@@ -83,6 +94,7 @@ export async function clearUserCostCache(
       return [];
     }),
     scanPattern(redis, `total_cost:user:${userId}:*`).catch((err) => {
+      scanErrorCount += 1;
       logger.warn("Failed to scan total cost pattern", {
         userId,
         pattern: `total_cost:user:${userId}:*`,
@@ -92,6 +104,7 @@ export async function clearUserCostCache(
     }),
     ...keyHashes.map((keyHash) =>
       scanPattern(redis, `total_cost:key:${keyHash}`).catch((err) => {
+        scanErrorCount += 1;
         logger.warn("Failed to scan total cost key pattern", {
           keyHash,
           error: err instanceof Error ? err.message : String(err),
@@ -101,6 +114,7 @@ export async function clearUserCostCache(
     ),
     ...keyHashes.map((keyHash) =>
       scanPattern(redis, `total_cost:key:${keyHash}:*`).catch((err) => {
+        scanErrorCount += 1;
         logger.warn("Failed to scan total cost key pattern", {
           keyHash,
           error: err instanceof Error ? err.message : String(err),
@@ -111,6 +125,7 @@ export async function clearUserCostCache(
     // Lease cache keys (budget slices cached by LeaseService)
     ...keyIds.map((keyId) =>
       scanPattern(redis, `lease:key:${keyId}:*`).catch((err) => {
+        scanErrorCount += 1;
         logger.warn("Failed to scan lease key pattern", {
           keyId,
           error: err instanceof Error ? err.message : String(err),
@@ -119,6 +134,7 @@ export async function clearUserCostCache(
       })
     ),
     scanPattern(redis, `lease:user:${userId}:*`).catch((err) => {
+      scanErrorCount += 1;
       logger.warn("Failed to scan lease user pattern", {
         userId,
         error: err instanceof Error ? err.message : String(err),
@@ -136,6 +152,8 @@ export async function clearUserCostCache(
       costKeysDeleted: 0,
       activeSessionsDeleted: 0,
       durationMs: Date.now() - startTime,
+      cleanupFailed: scanErrorCount > 0,
+      errorCount: scanErrorCount,
     };
   }
 
@@ -170,9 +188,10 @@ export async function clearUserCostCache(
 
   // Check for pipeline errors
   const errors = results?.filter(([err]) => err);
-  if (errors && errors.length > 0) {
+  const errorCount = scanErrorCount + (errors?.length ?? 0);
+  if (errorCount > 0) {
     logger.warn("Some Redis deletes failed during cost cache cleanup", {
-      errorCount: errors.length,
+      errorCount,
       userId,
     });
   }
@@ -181,8 +200,8 @@ export async function clearUserCostCache(
     costKeysDeleted: allCostKeys.length,
     activeSessionsDeleted,
     durationMs: Date.now() - startTime,
-    cleanupFailed: !!errors && errors.length > 0,
-    errorCount: errors?.length || 0,
+    cleanupFailed: errorCount > 0,
+    errorCount,
   };
 }
 

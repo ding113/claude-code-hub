@@ -159,6 +159,22 @@ describe("clearUserCostCache", () => {
     expect(result).toBeNull();
   });
 
+  test("uses maintenance Redis and reports scan failures", async () => {
+    scanPatternMock.mockRejectedValue(new Error("scan failed"));
+
+    const { clearUserCostCache } = await import("@/lib/redis/cost-cache-cleanup");
+    const result = await clearUserCostCache({
+      userId: 10,
+      keyIds: [],
+      keyHashes: [],
+      allowWhenRateLimitDisabled: true,
+    });
+
+    expect(getRedisClientMock).toHaveBeenCalledWith({ allowWhenRateLimitDisabled: true });
+    expect(result).toMatchObject({ cleanupFailed: true, errorCount: 4 });
+    expect(redisMock.pipeline).not.toHaveBeenCalled();
+  });
+
   test("includeActiveSessions=true adds session key DELs", async () => {
     scanPatternMock.mockResolvedValue([]);
 

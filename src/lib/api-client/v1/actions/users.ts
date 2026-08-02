@@ -164,7 +164,14 @@ export function resetUserLimitsOnly(userId: number) {
 }
 
 export function resetUserAllStatistics(userId: number) {
-  return toVoidActionResult(apiPost(`/api/v1/users/${userId}/statistics:reset`));
+  return toActionResult(apiPost(`/api/v1/users/${userId}/statistics:reset`));
+}
+
+export async function getUserStatisticsReset(userId: number, resetId: string) {
+  const result = await toActionResult(
+    apiGet(`/api/v1/users/${userId}/statistics-resets/${encodeURIComponent(resetId)}`)
+  );
+  return !result.ok && !result.errorCode ? { ...result, errorCode: "NETWORK_ERROR" } : result;
 }
 
 export function batchUpdateUsers(data: BatchUpdateUsersParams) {
