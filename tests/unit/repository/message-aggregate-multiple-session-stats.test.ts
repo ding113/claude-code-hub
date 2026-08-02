@@ -385,4 +385,44 @@ describe("message repository aggregateMultipleSessionStats", () => {
     expect(ownerQuery).not.toContain("session_identity = sid or session_id = sid");
     expect(ownerQuery).toContain("created_at desc nulls last, id desc");
   });
+
+  test.each(["pfx:scope:root", "sid:owner-root"])(
+    "aggregates reserved canonical identity from explicit ledger identity only: %s",
+    async (canonicalId) => {
+      const stats = createDrizzleQuery([statsRow(canonicalId, 1)]);
+      const providerList = createDrizzleQuery([]);
+      const modelList = createDrizzleQuery([]);
+      const cacheTtlList = createDrizzleQuery([]);
+      boundary.select.mockReturnValueOnce(stats);
+      boundary.selectDistinct
+        .mockReturnValueOnce(providerList)
+        .mockReturnValueOnce(modelList)
+        .mockReturnValueOnce(cacheTtlList);
+      boundary.execute.mockResolvedValueOnce([
+        {
+          requested_session_id: canonicalId,
+          session_id: canonicalId,
+          session_identity_kind: "prefix_affinity",
+          session_fingerprint: "root",
+          user_name: "Alice",
+          user_id: 1,
+          key_name: "Key A",
+          key_id: 101,
+          user_agent: null,
+          api_type: "claude",
+        },
+      ]);
+
+      await aggregateMultipleSessionStats([canonicalId]);
+
+      for (const query of [stats, providerList, modelList, cacheTtlList]) {
+        const whereSql = sqlText(query.trace.where).toLowerCase();
+        expect(whereSql).toContain("coalesce");
+        expect(whereSql).toContain("session_identity");
+        expect(whereSql.match(new RegExp(canonicalId, "g"))).toHaveLength(2);
+        expect(whereSql).not.toContain(`session_id = ${canonicalId}`);
+        expect(whereSql).toContain("user_id");
+      }
+    }
+  );
 });
