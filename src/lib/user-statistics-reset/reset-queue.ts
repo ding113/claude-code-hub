@@ -139,14 +139,21 @@ function getResetQueue(): Queue.Queue<UserStatisticsResetJobData> {
   });
   resetQueue.process(RESET_JOB_NAME, processUserStatisticsReset);
   resetQueue.on("failed", async (job, error) => {
+    if (!job?.data?.resetId || !Number.isInteger(job.data.userId)) {
+      logger.error("[UserStatisticsResetQueue] job failed without recoverable data", {
+        error: error.message,
+      });
+      return;
+    }
     logger.error("[UserStatisticsResetQueue] job failed", {
       resetId: job.data.resetId,
       userId: job.data.userId,
       attemptsMade: job.attemptsMade,
       error: error.message,
     });
-    const attempts = job.opts.attempts ?? 1;
-    const isTerminal = job.attemptsMade >= attempts || error.message === STALLED_FAILURE_REASON;
+    const attempts = job.opts?.attempts ?? 1;
+    const isTerminal =
+      (job.attemptsMade ?? 0) >= attempts || error.message === STALLED_FAILURE_REASON;
     if (isTerminal) {
       try {
         await recordFinalFailure(job.data, error);
@@ -259,15 +266,24 @@ async function processUserStatisticsReset(job: Job<UserStatisticsResetJobData>) 
         errorProgress.deletedUsageLedger
       ),
     };
-    await setUserStatisticsResetStatus({
-      ...current,
-      deletedMessageRequests: baseProgress.deletedMessageRequests + progress.deletedMessageRequests,
-      deletedUsageLedger: baseProgress.deletedUsageLedger + progress.deletedUsageLedger,
-      status: isFinalAttempt ? "failed" : "queued",
-      startedAt,
-      completedAt: isFinalAttempt ? new Date().toISOString() : null,
-      errorCode: isFinalAttempt ? errorCode(error) : null,
-    });
+    try {
+      await setUserStatisticsResetStatus({
+        ...current,
+        deletedMessageRequests:
+          baseProgress.deletedMessageRequests + progress.deletedMessageRequests,
+        deletedUsageLedger: baseProgress.deletedUsageLedger + progress.deletedUsageLedger,
+        status: isFinalAttempt ? "failed" : "queued",
+        startedAt,
+        completedAt: isFinalAttempt ? new Date().toISOString() : null,
+        errorCode: isFinalAttempt ? errorCode(error) : null,
+      });
+    } catch (statusError) {
+      logger.error("[UserStatisticsResetQueue] failed to persist attempt status", {
+        resetId: job.data.resetId,
+        userId: job.data.userId,
+        error: statusError instanceof Error ? statusError.message : String(statusError),
+      });
+    }
     if (isFinalAttempt) {
       try {
         await releaseActiveUserStatisticsReset(job.data.userId, job.data.resetId);

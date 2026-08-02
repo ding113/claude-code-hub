@@ -474,6 +474,45 @@ describe("user statistics reset queue", () => {
     );
   });
 
+  it("preserves the final business error and releases the claim when status persistence fails", async () => {
+    boundary.claim.mockImplementation(async (_userId: number, resetId: string) => ({
+      acquired: true,
+      resetId,
+    }));
+    const queued = await enqueueUserStatisticsReset(42);
+    boundary.getStatus.mockResolvedValue({
+      ...queued,
+      fixed5hKeyIds: [],
+      fixed5hPreparationVersion: 1,
+    });
+    const resetError = new UserStatisticsResetError("USER_STATISTICS_RESET_CACHE_CLEANUP_FAILED", {
+      deletedMessageRequests: 5,
+      deletedUsageLedger: 7,
+    });
+    boundary.execute.mockRejectedValue(resetError);
+    boundary.setStatus
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error("status store unavailable"));
+
+    await expect(
+      boundary.processHandler?.({ data: queued, attemptsMade: 4, opts: { attempts: 5 } })
+    ).rejects.toBe(resetError);
+
+    expect(boundary.release).toHaveBeenCalledWith(42, queued.resetId);
+  });
+
+  it("ignores failed events that do not include recoverable job data", async () => {
+    startUserStatisticsResetQueue();
+
+    await expect(
+      boundary.failedHandler?.(undefined, new Error("job stalled more than allowable limit"))
+    ).resolves.toBeUndefined();
+
+    expect(boundary.getStatus).not.toHaveBeenCalled();
+    expect(boundary.setStatus).not.toHaveBeenCalled();
+    expect(boundary.release).not.toHaveBeenCalled();
+  });
+
   it("marks max-stalled jobs failed even when attemptsMade did not advance", async () => {
     startUserStatisticsResetQueue();
     boundary.getStatus.mockResolvedValue(existing);
