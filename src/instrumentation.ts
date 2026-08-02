@@ -317,32 +317,26 @@ export function describeSchedulerError(error: unknown): {
   };
 }
 
-/**
- * F2：Replay PG 持久层过期行清理（每 10 分钟，ENABLE_REQUEST_REPLAY 开启时）。
- * 写入路径已有机会式扫尾，此任务兜底低流量期无写入的场景。
- */
-async function startReplayCleanupScheduler(): Promise<void> {
+/** Replay PG 持久层过期行清理：数据库就绪后立即执行，之后每 10 分钟执行。 */
+export async function startReplayCleanupScheduler(): Promise<void> {
   if (instrumentationState.__CCH_REPLAY_CLEANUP_STARTED__) {
     return;
   }
 
   try {
-    const { getEnvConfig } = await import("@/lib/config/env.schema");
-    if (!getEnvConfig().ENABLE_REQUEST_REPLAY) {
-      return;
-    }
-    const { getReplayStore } = await import("@/app/v1/_lib/proxy/replay/replay-store");
+    const { runReplayCleanupTick } = await import("@/lib/replay-cleanup");
     const intervalMs = 10 * 60 * 1000;
 
-    instrumentationState.__CCH_REPLAY_CLEANUP_INTERVAL_ID__ = setInterval(() => {
-      void getReplayStore()
-        .cleanupExpired()
-        .catch((error) => {
-          logger.warn("[Instrumentation] Replay cleanup tick failed", {
-            error: error instanceof Error ? error.message : String(error),
-          });
+    const runTick = () => {
+      void runReplayCleanupTick().catch((error) => {
+        logger.warn("[Instrumentation] Replay cleanup tick failed", {
+          error: error instanceof Error ? error.message : String(error),
         });
-    }, intervalMs);
+      });
+    };
+
+    runTick();
+    instrumentationState.__CCH_REPLAY_CLEANUP_INTERVAL_ID__ = setInterval(runTick, intervalMs);
 
     instrumentationState.__CCH_REPLAY_CLEANUP_STARTED__ = true;
     logger.info("[Instrumentation] Replay cleanup scheduler started", {
@@ -573,16 +567,27 @@ export async function register() {
       // 初始化通知任务队列（如果启用）
       const { scheduleNotifications } = await import("@/lib/notification/notification-queue");
       await scheduleNotifications();
+
+      const { startUserStatisticsResetQueue } = await import(
+        "@/lib/user-statistics-reset/reset-queue"
+      );
+      startUserStatisticsResetQueue();
       (
         globalThis as typeof globalThis & {
           __CCH_STOP_BACKGROUND_QUEUES__?: () => Promise<void>;
         }
       ).__CCH_STOP_BACKGROUND_QUEUES__ = async () => {
-        const [{ stopCleanupQueue }, { stopNotificationQueue }] = await Promise.all([
-          import("@/lib/log-cleanup/cleanup-queue"),
-          import("@/lib/notification/notification-queue"),
+        const [{ stopCleanupQueue }, { stopNotificationQueue }, { stopUserStatisticsResetQueue }] =
+          await Promise.all([
+            import("@/lib/log-cleanup/cleanup-queue"),
+            import("@/lib/notification/notification-queue"),
+            import("@/lib/user-statistics-reset/reset-queue"),
+          ]);
+        const results = await Promise.allSettled([
+          stopCleanupQueue(),
+          stopNotificationQueue(),
+          stopUserStatisticsResetQueue(),
         ]);
-        const results = await Promise.allSettled([stopCleanupQueue(), stopNotificationQueue()]);
         const failures = results.flatMap((result) =>
           result.status === "rejected" ? [result.reason] : []
         );

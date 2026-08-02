@@ -1,6 +1,6 @@
 import "server-only";
 
-import { and, eq, gt, lt } from "drizzle-orm";
+import { and, eq, gt, lte, sql } from "drizzle-orm";
 import type Redis from "ioredis";
 import { db } from "@/drizzle/db";
 import { replayPayloads } from "@/drizzle/schema";
@@ -106,6 +106,40 @@ export interface ReplayPersistedRow {
   payload: string;
   byteSize: number;
   sourceMessageRequestId: number | null;
+}
+
+export const REPLAY_CLEANUP_BATCH_SIZE = 100;
+
+function hasMatchingHeaders(
+  expected: Record<string, string>,
+  actual: Record<string, string> | null
+): boolean {
+  if (!actual) return false;
+  const expectedKeys = Object.keys(expected);
+  const actualKeys = Object.keys(actual);
+  return (
+    expectedKeys.length === actualKeys.length &&
+    expectedKeys.every((key) => actual[key] === expected[key])
+  );
+}
+
+function isMatchingPersistedReplay(
+  expected: ReplayPersistedRow,
+  actual: typeof replayPayloads.$inferSelect
+): boolean {
+  return (
+    actual.verifier === expected.verifier &&
+    actual.scopeTag === expected.scopeTag &&
+    actual.keyId === expected.keyId &&
+    actual.userId === expected.userId &&
+    actual.format === expected.format &&
+    actual.model === expected.model &&
+    actual.statusCode === expected.statusCode &&
+    hasMatchingHeaders(expected.headers, actual.headersJson) &&
+    actual.payload === expected.payload &&
+    actual.byteSize === expected.byteSize &&
+    actual.sourceMessageRequestId === expected.sourceMessageRequestId
+  );
 }
 
 export class ReplayStore {
@@ -302,26 +336,50 @@ export class ReplayStore {
    */
   async persistCompleted(row: ReplayPersistedRow): Promise<void> {
     const env = getEnvConfig();
-    const expiresAt = new Date(Date.now() + env.REPLAY_COMPLETED_TTL_SECONDS * 1000);
+    const now = new Date();
+    const expiresAt = new Date(now.getTime() + env.REPLAY_COMPLETED_TTL_SECONDS * 1000);
+    const persistedValues = {
+      verifier: row.verifier,
+      scopeTag: row.scopeTag,
+      keyId: row.keyId,
+      userId: row.userId,
+      format: row.format,
+      model: row.model,
+      statusCode: row.statusCode,
+      headersJson: row.headers,
+      payload: row.payload,
+      byteSize: row.byteSize,
+      sourceMessageRequestId: row.sourceMessageRequestId,
+      expiresAt,
+    };
     try {
-      await db
+      const upserted = await db
         .insert(replayPayloads)
         .values({
           replayId: row.replayId,
-          verifier: row.verifier,
-          scopeTag: row.scopeTag,
-          keyId: row.keyId,
-          userId: row.userId,
-          format: row.format,
-          model: row.model,
-          statusCode: row.statusCode,
-          headersJson: row.headers,
-          payload: row.payload,
-          byteSize: row.byteSize,
-          sourceMessageRequestId: row.sourceMessageRequestId,
-          expiresAt,
+          ...persistedValues,
         })
-        .onConflictDoNothing();
+        .onConflictDoUpdate({
+          target: replayPayloads.replayId,
+          set: {
+            ...persistedValues,
+            createdAt: now,
+          },
+          setWhere: lte(replayPayloads.expiresAt, now),
+        })
+        .returning({ replayId: replayPayloads.replayId });
+
+      if (upserted.length > 0) return;
+
+      const existingRows = await db
+        .select()
+        .from(replayPayloads)
+        .where(and(eq(replayPayloads.replayId, row.replayId), gt(replayPayloads.expiresAt, now)))
+        .limit(1);
+      const existing = existingRows[0];
+      if (!existing || !isMatchingPersistedReplay(row, existing)) {
+        throw new Error(`durable replay conflict for ${row.replayId.slice(0, 12)}`);
+      }
     } catch (error) {
       logger.warn("[ReplayStore] persistCompleted failed", {
         error: error instanceof Error ? error.message : String(error),
@@ -331,13 +389,24 @@ export class ReplayStore {
     }
   }
 
-  /** 删除 PG 持久层已过期行；返回删除数（错误由调用方处理）。 */
-  async cleanupExpired(): Promise<number> {
-    const deleted = await db
-      .delete(replayPayloads)
-      .where(lt(replayPayloads.expiresAt, new Date()))
-      .returning({ replayId: replayPayloads.replayId });
-    return deleted.length;
+  /** 删除单批 PG 持久层过期行；返回删除数（错误由调用方处理）。 */
+  async cleanupExpired(cutoff = new Date()): Promise<number> {
+    const deleted = await db.execute(sql`
+      WITH doomed AS (
+        SELECT replay_id
+        FROM replay_payloads
+        WHERE expires_at < ${cutoff}
+        ORDER BY expires_at, replay_id
+        LIMIT ${REPLAY_CLEANUP_BATCH_SIZE}
+        FOR UPDATE SKIP LOCKED
+      )
+      DELETE FROM replay_payloads AS rp
+      USING doomed
+      WHERE rp.replay_id = doomed.replay_id
+      RETURNING 1
+    `);
+
+    return Array.isArray(deleted) ? deleted.length : 0;
   }
 
   async findCompleted(replayId: string): Promise<typeof replayPayloads.$inferSelect | null> {
