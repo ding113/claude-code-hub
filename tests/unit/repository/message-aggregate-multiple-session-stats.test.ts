@@ -199,8 +199,11 @@ describe("message repository aggregateMultipleSessionStats", () => {
     const ownerQuery = sqlText(boundary.execute.mock.calls.at(0)?.at(0));
     expect(ownerQuery).toContain("unnest");
     expect(ownerQuery).toContain("session-without-owner");
-    expect(ownerQuery).toContain("order by case when session_identity");
-    expect(ownerQuery).toContain("created_at desc, id desc");
+    expect(ownerQuery).toContain("union all");
+    expect(ownerQuery).toContain("coalesce(session_identity, session_id) = sid");
+    expect(ownerQuery).toContain("sid not like 'pfx:%'");
+    expect(ownerQuery).toContain("sid not like 'sid:%'");
+    expect(ownerQuery).toContain("created_at desc nulls last, id desc");
   });
 
   test("returns Replay-only owners with zero billing aggregates", async () => {
@@ -271,11 +274,13 @@ describe("message repository aggregateMultipleSessionStats", () => {
     const ownerQuery = sqlText(boundary.execute.mock.calls.at(0)?.at(0)).toLowerCase();
     expect(ownerQuery).toContain("session_id = sid");
     expect(ownerQuery).toContain("requested_session_id");
+    expect(ownerQuery).toContain("union all");
   });
 
   test("resolves a physical Session id inside the authenticated owner scope", async () => {
     const canonicalId = "pfx:scope:root";
-    boundary.select.mockReturnValueOnce(createDrizzleQuery([statsRow(canonicalId, 1)]));
+    const stats = createDrizzleQuery([statsRow(canonicalId, 1)]);
+    boundary.select.mockReturnValueOnce(stats);
     boundary.selectDistinct
       .mockReturnValueOnce(createDrizzleQuery([]))
       .mockReturnValueOnce(createDrizzleQuery([]))
@@ -301,6 +306,7 @@ describe("message repository aggregateMultipleSessionStats", () => {
     expect(ownerQuery).toContain("session_id = sid");
     expect(ownerQuery).toContain("and user_id =");
     expect(ownerQuery).toContain(" 7");
+    expect(sqlText(stats.trace.where)).toContain("coalesce");
   });
 
   test("deduplicates current public and physical aliases using the latest identity", async () => {
@@ -344,8 +350,8 @@ describe("message repository aggregateMultipleSessionStats", () => {
       }),
     ]);
     const ownerQuery = sqlText(boundary.execute.mock.calls.at(0)?.at(0)).toLowerCase();
-    expect(ownerQuery).toContain("order by case when session_identity");
-    expect(ownerQuery).toContain("created_at desc, id desc");
+    expect(ownerQuery).toContain("union all");
+    expect(ownerQuery).toContain("created_at desc nulls last, id desc");
   });
 
   test("prefers an exact public identity over a newer same-named physical Session", async () => {
@@ -373,9 +379,10 @@ describe("message repository aggregateMultipleSessionStats", () => {
     await aggregateMultipleSessionStats([canonicalId]);
 
     const ownerQuery = sqlText(boundary.execute.mock.calls.at(0)?.at(0)).toLowerCase();
-    expect(ownerQuery).toContain("or session_id = sid");
-    expect(ownerQuery).toContain("case when session_identity");
-    expect(ownerQuery).toContain("= sid then 0 else 1 end");
-    expect(ownerQuery).toContain("created_at desc, id desc");
+    expect(ownerQuery).toContain("union all");
+    expect(ownerQuery).toContain("coalesce(session_identity, session_id) = sid");
+    expect(ownerQuery).toContain("sid not like 'pfx:%'");
+    expect(ownerQuery).not.toContain("session_identity = sid or session_id = sid");
+    expect(ownerQuery).toContain("created_at desc nulls last, id desc");
   });
 });

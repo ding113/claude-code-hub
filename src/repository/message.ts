@@ -53,11 +53,7 @@ function ledgerSessionLookupForOwner(identityOrPhysicalId: string, ownerUserId?:
 }
 
 function ledgerCanonicalSessionLookup(identity: string, ownerUserId: number) {
-  const canonicalCondition = isReservedSessionIdentity(identity)
-    ? eq(usageLedger.sessionIdentity, identity)
-    : eq(ledgerSessionIdentity, identity);
-
-  return and(canonicalCondition, eq(usageLedger.userId, ownerUserId));
+  return and(eq(ledgerSessionIdentity, identity), eq(usageLedger.userId, ownerUserId));
 }
 
 function messageSessionLookup(identityOrPhysicalId: string, ownerUserId?: number) {
@@ -1692,7 +1688,7 @@ export async function findSessionRequestLocator(
         isNull(messageRequest.deletedAt)
       )
     )
-    .orderBy(desc(messageRequest.createdAt), desc(messageRequest.id))
+    .orderBy(sql`${messageRequest.createdAt} DESC NULLS LAST`, desc(messageRequest.id))
     .limit(1);
 
   if (
@@ -1793,17 +1789,50 @@ export async function aggregateMultipleSessionStats(
         affinity_fingerprint,
         user_agent,
         api_type
-      FROM message_request
-      WHERE
-        (
-          session_identity = sid
-          OR session_id = sid
-        )
-        AND deleted_at IS NULL
-        ${ownerCondition}
+      FROM (
+        SELECT
+          id,
+          session_id,
+          session_identity,
+          user_id,
+          key,
+          session_identity_kind,
+          affinity_fingerprint,
+          user_agent,
+          api_type,
+          created_at,
+          CASE WHEN session_identity = sid THEN 0 ELSE 1 END AS identity_priority
+        FROM message_request
+        WHERE COALESCE(session_identity, session_id) = sid
+          AND deleted_at IS NULL
+          ${ownerCondition}
+
+        UNION ALL
+
+        SELECT
+          id,
+          session_id,
+          session_identity,
+          user_id,
+          key,
+          session_identity_kind,
+          affinity_fingerprint,
+          user_agent,
+          api_type,
+          created_at,
+          1 AS identity_priority
+        FROM message_request
+        WHERE sid NOT LIKE 'pfx:%'
+          AND sid NOT LIKE 'sid:%'
+          AND session_identity IS NOT NULL
+          AND session_identity <> sid
+          AND session_id = sid
+          AND deleted_at IS NULL
+          ${ownerCondition}
+      ) candidates
       ORDER BY
-        CASE WHEN session_identity = sid THEN 0 ELSE 1 END,
-        created_at DESC,
+        identity_priority,
+        created_at DESC NULLS LAST,
         id DESC
       LIMIT 1
     ) mr
@@ -2349,7 +2378,9 @@ export async function findRequestsBySessionIdentity(
     .from(messageRequest)
     .where(where)
     .orderBy(
-      order === "asc" ? asc(messageRequest.createdAt) : desc(messageRequest.createdAt),
+      order === "asc"
+        ? asc(messageRequest.createdAt)
+        : sql`${messageRequest.createdAt} DESC NULLS LAST`,
       order === "asc" ? asc(messageRequest.id) : desc(messageRequest.id)
     )
     .limit(limit)
@@ -2478,7 +2509,7 @@ export async function findAdjacentSessionRequests(
         )
       )
     )
-    .orderBy(desc(messageRequest.createdAt), desc(messageRequest.id))
+    .orderBy(sql`${messageRequest.createdAt} DESC NULLS LAST`, desc(messageRequest.id))
     .limit(1);
   const [next] = await db
     .select(selection)
