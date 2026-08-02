@@ -1877,6 +1877,9 @@ export async function findUsageLogSessionIdSuggestions(
             ...sharedConditions,
             sql`${candidate} IS NOT NULL`,
             sql`length(${candidate}) > 0`,
+            candidate === usageLedger.sessionId
+              ? sql`${candidate} NOT LIKE 'pfx:%' AND ${candidate} NOT LIKE 'sid:%'`
+              : sql`true`,
             sql`${candidate} LIKE ${pattern} ESCAPE '\\'`
           )
         )
@@ -1924,6 +1927,9 @@ export async function findUsageLogSessionIdSuggestions(
             ...sharedConditions,
             sql`${candidate} IS NOT NULL`,
             sql`length(${candidate}) > 0`,
+            candidate === messageRequest.sessionId
+              ? sql`${candidate} NOT LIKE 'pfx:%' AND ${candidate} NOT LIKE 'sid:%'`
+              : sql`true`,
             sql`${candidate} LIKE ${pattern} ESCAPE '\\'`
           )
         )

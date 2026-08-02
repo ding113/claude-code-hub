@@ -143,19 +143,23 @@ describe("Usage logs sessionId filter", () => {
     const { findUsageLogsBatch } = await import("@/repository/usage-logs");
     await findUsageLogsBatch({ sessionId: "client-session" });
 
-    const primaryWhereSql = sqlToString(whereArgs[0]).toLowerCase();
-    expect(primaryWhereSql).toContain("session_identity");
-    expect(primaryWhereSql).toContain("session_id");
-    expect(primaryWhereSql).toContain(" or ");
+    const primaryWhereSql = new PgDialect().sqlToQuery(whereArgs[0] as never).sql.toLowerCase();
+    expect(primaryWhereSql).toContain(
+      'coalesce("message_request"."session_identity", "message_request"."session_id") ='
+    );
+    expect(primaryWhereSql).toContain('or "message_request"."session_id" =');
   });
 
-  test("reserved session identities do not alias raw physical session IDs", () => {
-    const [condition] = buildUsageLogConditions({ sessionId: "pfx:scope:fingerprint" });
-    const sql = new PgDialect().sqlToQuery(condition).sql.toLowerCase();
+  test.each(["pfx:scope:fingerprint", "sid:physical-id"])(
+    "reserved session identities do not alias raw physical session IDs: %s",
+    (sessionId) => {
+      const [condition] = buildUsageLogConditions({ sessionId });
+      const sql = new PgDialect().sqlToQuery(condition).sql.toLowerCase();
 
-    expect(sql).toContain("coalesce");
-    expect(sql).not.toContain('"message_request"."session_id" =');
-  });
+      expect(sql).toContain("coalesce");
+      expect(sql).not.toContain('"message_request"."session_id" =');
+    }
+  );
 
   test("findUsageLogsBatch: hasMore 为 true 时缺失 createdAtRaw 应直接报错，避免静默截断", async () => {
     vi.resetModules();
@@ -711,32 +715,37 @@ describe("Usage logs sessionId filter", () => {
     await findUsageLogsForKeyBatch({ keyString: "key", sessionId: "client-session" });
     await findUsageLogsStats({ sessionId: "client-session" });
 
-    const ledgerSql = whereArgs.map((arg) => sqlToString(arg).toLowerCase()).join("\n");
-    expect(ledgerSql).toContain("session_identity");
-    expect(ledgerSql.match(/ or /g)?.length ?? 0).toBeGreaterThanOrEqual(2);
+    const ledgerSql = new PgDialect().sqlToQuery(whereArgs[1] as never).sql.toLowerCase();
+    expect(ledgerSql).toContain(
+      '(coalesce("usage_ledger"."session_identity", "usage_ledger"."session_id") ='
+    );
+    expect(ledgerSql).toContain('or "usage_ledger"."session_id" =');
   });
 
-  test("ledger reserved session identities do not alias raw physical session IDs", async () => {
-    vi.resetModules();
+  test.each(["pfx:scope:fingerprint", "sid:physical-id"])(
+    "ledger reserved session identities do not alias raw physical session IDs: %s",
+    async (sessionId) => {
+      vi.resetModules();
 
-    const whereArgs: unknown[] = [];
-    const selectMock = vi.fn(() => createThenableQuery([], whereArgs));
+      const whereArgs: unknown[] = [];
+      const selectMock = vi.fn(() => createThenableQuery([], whereArgs));
 
-    vi.doMock("@/drizzle/db", () => ({
-      db: {
-        select: selectMock,
-        execute: vi.fn(async () => ({ count: 0 })),
-      },
-    }));
-    vi.doMock("@/lib/ledger-fallback", () => ({
-      isLedgerOnlyMode: vi.fn(async () => true),
-    }));
+      vi.doMock("@/drizzle/db", () => ({
+        db: {
+          select: selectMock,
+          execute: vi.fn(async () => ({ count: 0 })),
+        },
+      }));
+      vi.doMock("@/lib/ledger-fallback", () => ({
+        isLedgerOnlyMode: vi.fn(async () => true),
+      }));
 
-    const { findUsageLogsBatch } = await import("@/repository/usage-logs");
-    await findUsageLogsBatch({ sessionId: "pfx:scope:fingerprint" });
+      const { findUsageLogsBatch } = await import("@/repository/usage-logs");
+      await findUsageLogsBatch({ sessionId });
 
-    const ledgerWhereSql = new PgDialect().sqlToQuery(whereArgs[1] as never).sql.toLowerCase();
-    expect(ledgerWhereSql).toContain("coalesce");
-    expect(ledgerWhereSql).not.toContain('"usage_ledger"."session_id" =');
-  });
+      const ledgerWhereSql = new PgDialect().sqlToQuery(whereArgs[1] as never).sql.toLowerCase();
+      expect(ledgerWhereSql).toContain("coalesce");
+      expect(ledgerWhereSql).not.toContain('"usage_ledger"."session_id" =');
+    }
+  );
 });

@@ -158,6 +158,17 @@ describe("0116 concurrent index preflight", () => {
 });
 
 describe("0116 migration orchestration", () => {
+  test("preflights the unfiltered ledger identity index before migration 0117", async () => {
+    const events: string[] = [];
+    await runSessionReplayMigrationPlan({
+      baseTablesReady: true,
+      latestMigrationCreatedAt: 1785563419224,
+      migrate: async () => events.push("migrate"),
+      runIndexPreflight: async () => events.push("preflight"),
+    });
+
+    expect(events).toEqual(["preflight", "migrate", "preflight"]);
+  });
   test("migrates a fresh database before installing concurrent indexes", async () => {
     const calls: string[] = [];
 
@@ -192,7 +203,7 @@ describe("0116 migration orchestration", () => {
     expect(calls).toEqual(["indexes", "migrate", "indexes"]);
   });
 
-  test("repairs indexes in postflight after migration 0116 was recorded", async () => {
+  test("preflights the new identity index after migration 0116 was recorded", async () => {
     const calls: string[] = [];
 
     await runSessionReplayMigrationPlan({
@@ -206,7 +217,7 @@ describe("0116 migration orchestration", () => {
       },
     });
 
-    expect(calls).toEqual(["migrate", "indexes"]);
+    expect(calls).toEqual(["indexes", "migrate", "indexes"]);
   });
 
   test("fails the migration flow when concurrent index postflight fails", async () => {

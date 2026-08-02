@@ -1,4 +1,6 @@
 import { getTableName } from "drizzle-orm";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
 const isLedgerOnlyModeMock = vi.hoisted(() => vi.fn<() => Promise<boolean>>());
@@ -79,6 +81,11 @@ function createThenableQuery<T>(
 }
 
 describe("Usage logs sessionId suggestions", () => {
+  test("reserved physical IDs are excluded from suggestions", () => {
+    const source = readFileSync(resolve(process.cwd(), "src/repository/usage-logs.ts"), "utf8");
+    expect(source).toContain("NOT LIKE 'pfx:%'");
+    expect(source).toContain("NOT LIKE 'sid:%'");
+  });
   beforeEach(() => {
     isLedgerOnlyModeMock.mockReset();
     isLedgerOnlyModeMock.mockResolvedValue(false);

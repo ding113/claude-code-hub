@@ -1,4 +1,5 @@
 export const SESSION_REPLAY_MIGRATION_CREATED_AT = 1785563419224;
+export const SESSION_IDENTITY_INDEX_MIGRATION_CREATED_AT = 1785635169798;
 export const SESSION_REPLAY_INDEX_MARKER = "cch:migration:0116:session-replay-index:v1";
 
 export type MigrationIndexState = {
@@ -30,6 +31,11 @@ export const SESSION_REPLAY_INDEX_SPECS: readonly SessionReplayIndexSpec[] = [
     temporaryName: "cch_0116_tmp_02",
     definition:
       'ON "usage_ledger" USING btree (COALESCE("session_identity", "session_id"),"created_at" DESC NULLS LAST) WHERE "usage_ledger"."blocked_by" IS NULL AND "usage_ledger"."is_replay" = false',
+  },
+  {
+    canonicalName: "idx_usage_ledger_session_identity",
+    temporaryName: "cch_0117_tmp_01",
+    definition: 'ON "usage_ledger" USING btree (COALESCE("session_identity", "session_id"))',
   },
   {
     canonicalName: "idx_usage_ledger_user_created_at",
@@ -153,7 +159,7 @@ export async function runSessionReplayMigrationPlan(input: {
     baseTablesReady &&
     (latestMigrationCreatedAt == null ||
       !Number.isFinite(latestMigrationCreatedAt) ||
-      latestMigrationCreatedAt < SESSION_REPLAY_MIGRATION_CREATED_AT)
+      latestMigrationCreatedAt < SESSION_IDENTITY_INDEX_MIGRATION_CREATED_AT)
   ) {
     await runIndexPreflight({ ensureColumns: true });
   }
