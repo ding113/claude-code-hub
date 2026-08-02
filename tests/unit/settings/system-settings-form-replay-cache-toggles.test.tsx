@@ -155,7 +155,11 @@ describe("SystemSettingsForm replay/cache-effectiveness null 三态", () => {
   });
 
   test("未触碰开关时保存保持 null（跟随环境变量），不写死布尔覆写", async () => {
-    const { unmount } = render(<SystemSettingsForm initialSettings={baseSettings} />);
+    const { unmount } = render(
+      <SystemSettingsForm initialSettings={baseSettings} replayDefaultEnabled={true} />
+    );
+
+    expect(document.getElementById("replay-enabled")?.getAttribute("aria-checked")).toBe("true");
 
     await submitForm();
 
@@ -170,7 +174,9 @@ describe("SystemSettingsForm replay/cache-effectiveness null 三态", () => {
   });
 
   test("用户切换开关后保存为显式覆写，未动的另一开关仍为 null", async () => {
-    const { unmount } = render(<SystemSettingsForm initialSettings={baseSettings} />);
+    const { unmount } = render(
+      <SystemSettingsForm initialSettings={baseSettings} replayDefaultEnabled={true} />
+    );
 
     const switchEl = document.getElementById("replay-enabled");
     if (!switchEl) throw new Error("未找到 replay-enabled 开关");
@@ -183,10 +189,20 @@ describe("SystemSettingsForm replay/cache-effectiveness null 三态", () => {
 
     expect(systemConfigActionMocks.saveSystemSettings).toHaveBeenCalledWith(
       expect.objectContaining({
-        replayEnabled: true,
+        replayEnabled: false,
         cacheEffectivenessEnabled: null,
       })
     );
+
+    unmount();
+  });
+
+  test("环境变量显式关闭时，null 覆写显示为关闭", () => {
+    const { unmount } = render(
+      <SystemSettingsForm initialSettings={baseSettings} replayDefaultEnabled={false} />
+    );
+
+    expect(document.getElementById("replay-enabled")?.getAttribute("aria-checked")).toBe("false");
 
     unmount();
   });

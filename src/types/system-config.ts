@@ -159,7 +159,7 @@ export interface SystemSettings {
   affinityIgnoreClientSessionId: boolean;
 
   // F2 Replay（响应缓存与上游连接复用）开关覆写
-  // null = 跟随环境变量 ENABLE_REQUEST_REPLAY（默认 false）
+  // null = 跟随环境变量 ENABLE_REQUEST_REPLAY（默认 true）
   replayEnabled: boolean | null;
 
   // F3b 最长前缀匹配缓存模拟（理论 vs 实际缓存命中率，仅观测不影响路由）开关覆写
