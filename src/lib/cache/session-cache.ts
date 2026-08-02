@@ -96,6 +96,12 @@ const sessionDetailsCache = new SessionCache<{
   apiType: string | null;
   cacheTtlApplied: string | null;
 }>(1, 10_000);
+const sessionDetailsAliasesCache = new SessionCache<Set<string>>(1, 10_000);
+const sessionDetailsOwnersCache = new SessionCache<Set<string>>(1, 10_000);
+
+function sessionDetailsCacheKey(sessionId: string, userId: number): string {
+  return `${userId}:${sessionId}`;
+}
 
 // Store interval ID on globalThis for HMR support
 const cacheCleanupState = globalThis as unknown as {
@@ -113,15 +119,28 @@ export function setActiveSessionsCache(
   activeSessionsCache.set(key, data);
 }
 
-export function getSessionDetailsCache(sessionId: string) {
-  return sessionDetailsCache.get(sessionId);
+export function getSessionDetailsCache(sessionId: string, userId: number) {
+  return sessionDetailsCache.get(sessionDetailsCacheKey(sessionId, userId));
 }
 
 export function setSessionDetailsCache(
   sessionId: string,
   data: Parameters<typeof sessionDetailsCache.set>[1]
 ) {
-  sessionDetailsCache.set(sessionId, data);
+  const canonicalKey = sessionDetailsCacheKey(data.sessionId, data.userId);
+  const cacheKey = sessionDetailsCacheKey(sessionId, data.userId);
+  sessionDetailsCache.set(cacheKey, data);
+
+  const aliases = sessionDetailsAliasesCache.get(canonicalKey) ?? new Set<string>();
+  aliases.add(canonicalKey);
+  aliases.add(cacheKey);
+  sessionDetailsAliasesCache.set(canonicalKey, aliases);
+
+  for (const identity of [data.sessionId, sessionId]) {
+    const owners = sessionDetailsOwnersCache.get(identity) ?? new Set<string>();
+    owners.add(canonicalKey);
+    sessionDetailsOwnersCache.set(identity, owners);
+  }
 }
 
 export function clearActiveSessionsCache() {
@@ -136,7 +155,27 @@ export function clearAllSessionsQueryCache() {
 }
 
 export function clearSessionDetailsCache(sessionId: string) {
-  sessionDetailsCache.delete(sessionId);
+  const canonicalKeys = sessionDetailsOwnersCache.get(sessionId) ?? new Set<string>();
+  for (const canonicalKey of canonicalKeys) {
+    const aliases = sessionDetailsAliasesCache.get(canonicalKey) ?? new Set([canonicalKey]);
+    for (const alias of aliases) {
+      sessionDetailsCache.delete(alias);
+      const separatorIndex = alias.indexOf(":");
+      if (separatorIndex >= 0) {
+        const identity = alias.slice(separatorIndex + 1);
+        const owners = sessionDetailsOwnersCache.get(identity);
+        if (owners) {
+          owners.delete(canonicalKey);
+          if (owners.size === 0) {
+            sessionDetailsOwnersCache.delete(identity);
+          } else {
+            sessionDetailsOwnersCache.set(identity, owners);
+          }
+        }
+      }
+    }
+    sessionDetailsAliasesCache.delete(canonicalKey);
+  }
 }
 
 /**
@@ -145,6 +184,8 @@ export function clearSessionDetailsCache(sessionId: string) {
 export function clearAllCaches() {
   activeSessionsCache.clear();
   sessionDetailsCache.clear();
+  sessionDetailsAliasesCache.clear();
+  sessionDetailsOwnersCache.clear();
 }
 
 export function startCacheCleanup(intervalSeconds: number = 60) {
@@ -155,6 +196,8 @@ export function startCacheCleanup(intervalSeconds: number = 60) {
   cacheCleanupState.__CCH_CACHE_CLEANUP_INTERVAL_ID__ = setInterval(() => {
     activeSessionsCache.cleanup();
     sessionDetailsCache.cleanup();
+    sessionDetailsAliasesCache.cleanup();
+    sessionDetailsOwnersCache.cleanup();
   }, intervalSeconds * 1000);
 }
 

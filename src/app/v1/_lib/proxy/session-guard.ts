@@ -223,7 +223,7 @@ export class ProxySessionGuard {
       }
 
       // 4.1 获取并设置请求序号（Session 内唯一标识每个请求）
-      const requestSequence = await SessionManager.getNextRequestSequence(sessionId);
+      const requestSequence = await SessionManager.getNextRequestSequence(sessionId, keyId);
       session.setRequestSequence(requestSequence);
 
       // 4.2 存储完整请求体与客户端端点（用于 Session 详情调试）

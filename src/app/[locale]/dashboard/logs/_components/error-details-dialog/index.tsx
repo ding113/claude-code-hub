@@ -157,6 +157,7 @@ export function ErrorDetailsDialog({
     if (open && sessionId) {
       const checkId = ++messageCheckRequestIdRef.current;
       setCheckingMessages(true);
+      setHasMessages(false);
       hasSessionMessages(
         sessionId,
         requestSequence ?? undefined,
@@ -167,6 +168,8 @@ export function ErrorDetailsDialog({
           if (checkId !== messageCheckRequestIdRef.current) return;
           if (result.ok) {
             setHasMessages(result.data);
+          } else {
+            setHasMessages(false);
           }
         })
         .catch((err) => {
@@ -179,6 +182,7 @@ export function ErrorDetailsDialog({
           }
         });
     } else {
+      ++messageCheckRequestIdRef.current;
       setHasMessages(false);
       setCheckingMessages(false);
     }

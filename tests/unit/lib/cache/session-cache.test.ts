@@ -187,7 +187,7 @@ describe("SessionCache（Session 数据缓存层）", () => {
     expect(getActiveSessionsCache("all_sessions")).toBeNull();
 
     clearSessionDetailsCache("s_1");
-    expect(getSessionDetailsCache("s_1")).toBeNull();
+    expect(getSessionDetailsCache("s_1", 1)).toBeNull();
 
     // 再次写入后，clearAllCaches 应清空两类缓存
     setActiveSessionsCache([], "active_sessions");
@@ -215,7 +215,73 @@ describe("SessionCache（Session 数据缓存层）", () => {
 
     clearAllCaches();
     expect(getActiveSessionsCache()).toBeNull();
-    expect(getSessionDetailsCache("s_2")).toBeNull();
+    expect(getSessionDetailsCache("s_2", 1)).toBeNull();
+  });
+
+  test("clearing a canonical Session detail cache also clears every cached physical alias", async () => {
+    const { getSessionDetailsCache, setSessionDetailsCache, clearSessionDetailsCache } =
+      await loadSessionCache();
+    const details = {
+      sessionId: "pfx:scope:tip",
+      requestCount: 1,
+      totalCostUsd: "0",
+      totalInputTokens: 0,
+      totalOutputTokens: 0,
+      totalCacheCreationTokens: 0,
+      totalCacheReadTokens: 0,
+      totalDurationMs: 0,
+      firstRequestAt: null,
+      lastRequestAt: null,
+      providers: [],
+      models: [],
+      userName: "u",
+      userId: 1,
+      keyName: "k",
+      keyId: 1,
+      userAgent: null,
+      apiType: null,
+      cacheTtlApplied: null,
+    };
+
+    setSessionDetailsCache("pfx:scope:tip", details);
+    setSessionDetailsCache("physical-a", details);
+    setSessionDetailsCache("physical-b", details);
+
+    clearSessionDetailsCache("pfx:scope:tip");
+
+    expect(getSessionDetailsCache("pfx:scope:tip", 1)).toBeNull();
+    expect(getSessionDetailsCache("physical-a", 1)).toBeNull();
+    expect(getSessionDetailsCache("physical-b", 1)).toBeNull();
+  });
+
+  test("does not share a same-named Session detail cache across owners", async () => {
+    const { getSessionDetailsCache, setSessionDetailsCache } = await loadSessionCache();
+    const details = {
+      sessionId: "shared-session",
+      requestCount: 1,
+      totalCostUsd: "0",
+      totalInputTokens: 0,
+      totalOutputTokens: 0,
+      totalCacheCreationTokens: 0,
+      totalCacheReadTokens: 0,
+      totalDurationMs: 0,
+      firstRequestAt: null,
+      lastRequestAt: null,
+      providers: [],
+      models: [],
+      userName: "owner-one",
+      userId: 1,
+      keyName: "key-one",
+      keyId: 1,
+      userAgent: null,
+      apiType: null,
+      cacheTtlApplied: null,
+    };
+
+    setSessionDetailsCache("shared-session", details);
+
+    expect(getSessionDetailsCache("shared-session", 1)).toEqual(details);
+    expect(getSessionDetailsCache("shared-session", 2)).toBeNull();
   });
 
   test("startCacheCleanup/stopCacheCleanup：应幂等且能清理过期条目", async () => {

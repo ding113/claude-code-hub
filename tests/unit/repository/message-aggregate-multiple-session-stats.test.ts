@@ -199,7 +199,7 @@ describe("message repository aggregateMultipleSessionStats", () => {
     const ownerQuery = sqlText(boundary.execute.mock.calls.at(0)?.at(0));
     expect(ownerQuery).toContain("unnest");
     expect(ownerQuery).toContain("session-without-owner");
-    expect(ownerQuery).toContain("order by case when coalesce");
+    expect(ownerQuery).toContain("order by case when session_identity");
     expect(ownerQuery).toContain("created_at desc, id desc");
   });
 
@@ -273,6 +273,36 @@ describe("message repository aggregateMultipleSessionStats", () => {
     expect(ownerQuery).toContain("requested_session_id");
   });
 
+  test("resolves a physical Session id inside the authenticated owner scope", async () => {
+    const canonicalId = "pfx:scope:root";
+    boundary.select.mockReturnValueOnce(createDrizzleQuery([statsRow(canonicalId, 1)]));
+    boundary.selectDistinct
+      .mockReturnValueOnce(createDrizzleQuery([]))
+      .mockReturnValueOnce(createDrizzleQuery([]))
+      .mockReturnValueOnce(createDrizzleQuery([]));
+    boundary.execute.mockResolvedValueOnce([
+      {
+        requested_session_id: "physical-a",
+        session_id: canonicalId,
+        session_identity_kind: "prefix_affinity",
+        session_fingerprint: "root",
+        user_name: "Alice",
+        user_id: 7,
+        key_name: "Key A",
+        key_id: 101,
+        user_agent: null,
+        api_type: "claude",
+      },
+    ]);
+
+    await aggregateMultipleSessionStats(["physical-a"], 7);
+
+    const ownerQuery = sqlText(boundary.execute.mock.calls.at(0)?.at(0)).toLowerCase();
+    expect(ownerQuery).toContain("session_id = sid");
+    expect(ownerQuery).toContain("and user_id =");
+    expect(ownerQuery).toContain(" 7");
+  });
+
   test("deduplicates current public and physical aliases using the latest identity", async () => {
     const canonicalId = "pfx:scope:new";
     boundary.select.mockReturnValueOnce(createDrizzleQuery([statsRow(canonicalId, 1)]));
@@ -314,7 +344,7 @@ describe("message repository aggregateMultipleSessionStats", () => {
       }),
     ]);
     const ownerQuery = sqlText(boundary.execute.mock.calls.at(0)?.at(0)).toLowerCase();
-    expect(ownerQuery).toContain("order by case when coalesce");
+    expect(ownerQuery).toContain("order by case when session_identity");
     expect(ownerQuery).toContain("created_at desc, id desc");
   });
 
@@ -343,7 +373,8 @@ describe("message repository aggregateMultipleSessionStats", () => {
     await aggregateMultipleSessionStats([canonicalId]);
 
     const ownerQuery = sqlText(boundary.execute.mock.calls.at(0)?.at(0)).toLowerCase();
-    expect(ownerQuery).toContain("case when coalesce");
+    expect(ownerQuery).toContain("or session_id = sid");
+    expect(ownerQuery).toContain("case when session_identity");
     expect(ownerQuery).toContain("= sid then 0 else 1 end");
     expect(ownerQuery).toContain("created_at desc, id desc");
   });

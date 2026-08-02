@@ -12,6 +12,7 @@ import { extractAfterRequestMessages, isSessionMessages } from "@/lib/session-de
 import { resolveSessionRequestLocator } from "@/lib/session-request-locator";
 import { normalizeRequestSequence } from "@/lib/utils/request-sequence";
 import { buildUnifiedSpecialSettings } from "@/lib/utils/special-settings";
+import { isReservedSessionIdentity } from "@/repository/_shared/usage-log-filters";
 import {
   type ActiveSessionInfo,
   DEFAULT_SESSION_DETAIL_VIEW_MODE,
@@ -31,9 +32,12 @@ type CanonicalSessionStats = Awaited<
   ReturnType<typeof import("@/repository/message").aggregateMultipleSessionStats>
 >[number];
 
-async function loadCanonicalSessionStats(sessionId: string): Promise<CanonicalSessionStats | null> {
+async function loadCanonicalSessionStats(
+  sessionId: string,
+  ownerUserId?: number
+): Promise<CanonicalSessionStats | null> {
   const { aggregateMultipleSessionStats } = await import("@/repository/message");
-  const [sessionStats] = await aggregateMultipleSessionStats([sessionId]);
+  const [sessionStats] = await aggregateMultipleSessionStats([sessionId], ownerUserId);
   return sessionStats ?? null;
 }
 
@@ -64,6 +68,7 @@ async function loadSessionTerminationDependencies(): Promise<SessionTerminationD
 async function terminateResolvedSessionIdentity(
   identity: string,
   resolution: ResolvedSessionIdentity | null,
+  ownerUserId: number,
   dependencies?: SessionTerminationDependencies
 ): Promise<boolean> {
   const {
@@ -78,10 +83,18 @@ async function terminateResolvedSessionIdentity(
     !resolution.scopeTag ||
     !resolution.fingerprint
   ) {
-    const terminated = await SessionManager.terminateSession(
-      resolution?.sourceSessionId ?? identity
+    const physicalSources = await listPhysicalSessionSourcesForIdentity(identity, ownerUserId);
+    const outcomes = await Promise.all(
+      physicalSources.map((source) =>
+        SessionManager.terminateSession(
+          source.sessionId,
+          source.providerIds.length > 0 ? source.providerIds : undefined,
+          source.keyId
+        )
+      )
     );
-    if (terminated) {
+    const terminated = outcomes.some(Boolean);
+    if (terminated && isReservedSessionIdentity(identity)) {
       await SessionTracker.terminateObservedSession(identity);
     }
     return terminated;
@@ -94,7 +107,7 @@ async function terminateResolvedSessionIdentity(
   );
   if (!invalidated) return false;
 
-  const physicalSources = await listPhysicalSessionSourcesForIdentity(identity);
+  const physicalSources = await listPhysicalSessionSourcesForIdentity(identity, ownerUserId);
 
   for (const source of physicalSources) {
     if (
@@ -657,7 +670,10 @@ export async function getSessionMessages(
     const currentUserId = authSession.user.id;
 
     // 1. 获取 session 统计数据以验证所有权
-    const sessionStats = await loadCanonicalSessionStats(sessionId);
+    const sessionStats = await loadCanonicalSessionStats(
+      sessionId,
+      isAdmin ? undefined : currentUserId
+    );
 
     if (!sessionStats) {
       return {
@@ -681,11 +697,22 @@ export async function getSessionMessages(
     const locatorResult = await resolveSessionRequestLocator(
       sessionStats.sessionId,
       requestSequence,
-      requestedSourceSessionId
+      requestedSourceSessionId,
+      undefined,
+      sessionStats.userId
     );
     if (!locatorResult.ok) return locatorResult;
 
     const { SessionManager } = await import("@/lib/session-manager");
+    if (
+      !(await SessionManager.isSessionRequestOwnedByKey(
+        locatorResult.locator.sourceSessionId,
+        locatorResult.locator.requestSequence,
+        locatorResult.locator.keyId
+      ))
+    ) {
+      return { ok: false, error: "Messages 未存储或已过期" };
+    }
     const messages = await SessionManager.getSessionMessages(
       locatorResult.locator.sourceSessionId,
       locatorResult.locator.requestSequence
@@ -738,7 +765,10 @@ export async function hasSessionMessages(
     const currentUserId = authSession.user.id;
 
     // 检查 Session 所有权（需要从数据库获取 userId）
-    const sessionStats = await loadCanonicalSessionStats(sessionId);
+    const sessionStats = await loadCanonicalSessionStats(
+      sessionId,
+      isAdmin ? undefined : currentUserId
+    );
 
     if (!sessionStats) {
       return {
@@ -762,12 +792,22 @@ export async function hasSessionMessages(
       sessionStats.sessionId,
       requestSequence,
       requestedSourceSessionId,
-      requestId
+      requestId,
+      sessionStats.userId
     );
     if (!locatorResult.ok) return locatorResult;
 
     const { SessionManager } = await import("@/lib/session-manager");
     const sourceSessionId = locatorResult.locator.sourceSessionId;
+    if (
+      !(await SessionManager.isSessionRequestOwnedByKey(
+        sourceSessionId,
+        locatorResult.locator.requestSequence,
+        locatorResult.locator.keyId
+      ))
+    ) {
+      return { ok: true, data: false };
+    }
 
     // 只有有效的显式序号才检查特定请求；非法值按未指定序号处理。
     if (requestId !== undefined || normalizeRequestSequence(requestSequence) !== null) {
@@ -848,7 +888,7 @@ export async function getSessionDetails(
     const currentUserId = authSession.user.id;
 
     // 1. 尝试从缓存获取统计数据
-    const cachedStats = getSessionDetailsCache(sessionId);
+    const cachedStats = isAdmin ? null : getSessionDetailsCache(sessionId, currentUserId);
 
     let sessionStats: CanonicalSessionStats | null;
 
@@ -857,7 +897,10 @@ export async function getSessionDetails(
       sessionStats = cachedStats;
     } else {
       // 2. 从数据库查询
-      sessionStats = await loadCanonicalSessionStats(sessionId);
+      sessionStats = await loadCanonicalSessionStats(
+        sessionId,
+        isAdmin ? undefined : currentUserId
+      );
 
       // 3. 写入缓存
       if (sessionStats) {
@@ -893,7 +936,8 @@ export async function getSessionDetails(
       canonicalSessionId,
       requestSequence,
       requestedSourceSessionId,
-      requestId
+      requestId,
+      sessionStats.userId
     );
     if (!locatorResult.ok) return locatorResult;
 
@@ -904,12 +948,17 @@ export async function getSessionDetails(
     // 5. 请求 locator 已同时验证 identity、物理 Session 和序号，后续所有读取必须复用它。
     const { SessionManager } = await import("@/lib/session-manager");
 
-    const { findAdjacentSessionRequests, findMessageRequestAuditBySessionIdAndSequence } =
-      await import("@/repository/message");
+    const { findAdjacentSessionRequests, findMessageRequestAuditById } = await import(
+      "@/repository/message"
+    );
     const adjacent =
       effectiveSequence == null
         ? { prevRequest: null, nextRequest: null }
-        : await findAdjacentSessionRequests(canonicalSessionId, effectiveRequestId);
+        : await findAdjacentSessionRequests(
+            canonicalSessionId,
+            effectiveRequestId,
+            sessionStats.userId
+          );
 
     const parseJsonStringOrNull = (value: unknown): unknown => {
       if (typeof value !== "string") return value;
@@ -932,6 +981,19 @@ export async function getSessionDetails(
         return value;
       }
     };
+
+    if (
+      !(await SessionManager.isSessionRequestOwnedByKey(
+        sourceSessionId,
+        effectiveSequence,
+        locatorResult.locator.keyId
+      ))
+    ) {
+      return {
+        ok: false,
+        error: "Session 请求详情已过期",
+      };
+    }
 
     // 6. 并行获取 messages、requestBody 和 response（不缓存，因为这些数据较大）
     const [
@@ -959,9 +1021,7 @@ export async function getSessionDetails(
       SessionManager.getSessionUpstreamRequestMeta(sourceSessionId, effectiveSequence),
       SessionManager.getSessionUpstreamResponseMeta(sourceSessionId, effectiveSequence),
       SessionManager.getSessionSpecialSettings(sourceSessionId, effectiveSequence),
-      effectiveSequence
-        ? findMessageRequestAuditBySessionIdAndSequence(sourceSessionId, effectiveSequence)
-        : Promise.resolve(null),
+      findMessageRequestAuditById(effectiveRequestId, sessionStats.userId),
       SessionManager.getSessionRequestPhaseSnapshot(sourceSessionId, "before", effectiveSequence),
       SessionManager.getSessionRequestPhaseSnapshot(sourceSessionId, "after", effectiveSequence),
       SessionManager.getSessionResponsePhaseSnapshot(sourceSessionId, "before", effectiveSequence),
@@ -1126,7 +1186,10 @@ export async function getSessionRequests(
     const currentUserId = authSession.user.id;
 
     // 1. 验证 Session 所有权
-    const sessionStats = await loadCanonicalSessionStats(sessionId);
+    const sessionStats = await loadCanonicalSessionStats(
+      sessionId,
+      isAdmin ? undefined : currentUserId
+    );
 
     if (!sessionStats) {
       return {
@@ -1152,6 +1215,7 @@ export async function getSessionRequests(
       limit: pageSize,
       offset,
       order,
+      ownerUserId: sessionStats.userId,
     });
 
     return {
@@ -1197,7 +1261,10 @@ export async function terminateActiveSession(sessionId: string): Promise<ActionR
     const { aggregateMultipleSessionStats, resolveSessionIdentity } = await import(
       "@/repository/message"
     );
-    const [sessionStats] = await aggregateMultipleSessionStats([sessionId]);
+    const [sessionStats] = await aggregateMultipleSessionStats(
+      [sessionId],
+      isAdmin ? undefined : currentUserId
+    );
 
     if (!sessionStats) {
       return {
@@ -1219,8 +1286,15 @@ export async function terminateActiveSession(sessionId: string): Promise<ActionR
 
     // 3. 按 identity 类型终止对应的绑定与观测状态
     const canonicalSessionId = sessionStats.sessionId;
-    const identityResolution = await resolveSessionIdentity(canonicalSessionId);
-    const success = await terminateResolvedSessionIdentity(canonicalSessionId, identityResolution);
+    const identityResolution = await resolveSessionIdentity(
+      canonicalSessionId,
+      sessionStats.userId
+    );
+    const success = await terminateResolvedSessionIdentity(
+      canonicalSessionId,
+      identityResolution,
+      sessionStats.userId
+    );
 
     if (!success) {
       return {
@@ -1317,7 +1391,10 @@ export async function terminateActiveSessionsBatch(
     const { aggregateMultipleSessionStats, resolveSessionIdentity } = await import(
       "@/repository/message"
     );
-    const sessionsData = await aggregateMultipleSessionStats(uniqueSessionIds);
+    const sessionsData = await aggregateMultipleSessionStats(
+      uniqueSessionIds,
+      isAdmin ? undefined : currentUserId
+    );
 
     const { uniqueRequestedIds, allowedSessionIds, unauthorizedSessionIds, missingSessionIds } =
       summarizeTerminateSessionsBatch(uniqueSessionIds, sessionsData, currentUserId, isAdmin);
@@ -1380,12 +1457,22 @@ export async function terminateActiveSessionsBatch(
     let successCount = 0;
     const terminationChunkSize = 20;
     const terminationDependencies = await loadSessionTerminationDependencies();
+    const ownerByCanonicalId = new Map(
+      sessionsData.map((session) => [session.sessionId, session.userId] as const)
+    );
     for (let offset = 0; offset < allowedSessionIds.length; offset += terminationChunkSize) {
       const chunk = allowedSessionIds.slice(offset, offset + terminationChunkSize);
       const outcomes = await Promise.allSettled(
         chunk.map(async (identity) => {
-          const resolution = await resolveSessionIdentity(identity);
-          return terminateResolvedSessionIdentity(identity, resolution, terminationDependencies);
+          const ownerUserId = ownerByCanonicalId.get(identity);
+          if (ownerUserId === undefined) return false;
+          const resolution = await resolveSessionIdentity(identity, ownerUserId);
+          return terminateResolvedSessionIdentity(
+            identity,
+            resolution,
+            ownerUserId,
+            terminationDependencies
+          );
         })
       );
       for (const [index, outcome] of outcomes.entries()) {

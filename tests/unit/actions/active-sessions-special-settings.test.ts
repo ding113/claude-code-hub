@@ -17,12 +17,13 @@ const getSessionUpstreamResponseMetaMock = vi.fn();
 const getSessionSpecialSettingsMock = vi.fn();
 const getSessionRequestPhaseSnapshotMock = vi.fn();
 const getSessionResponsePhaseSnapshotMock = vi.fn();
+const isSessionRequestOwnedByKeyMock = vi.fn();
 
 const aggregateSessionStatsMock = vi.fn();
 const aggregateMultipleSessionStatsMock = vi.fn();
 const findSessionRequestLocatorMock = vi.fn();
 const findAdjacentSessionRequestsMock = vi.fn();
-const findMessageRequestAuditBySessionIdAndSequenceMock = vi.fn();
+const findMessageRequestAuditByIdMock = vi.fn();
 
 vi.mock("@/lib/auth", () => ({
   getSession: getSessionMock,
@@ -62,6 +63,7 @@ vi.mock("@/lib/session-manager", () => ({
     getSessionSpecialSettings: getSessionSpecialSettingsMock,
     getSessionRequestPhaseSnapshot: getSessionRequestPhaseSnapshotMock,
     getSessionResponsePhaseSnapshot: getSessionResponsePhaseSnapshotMock,
+    isSessionRequestOwnedByKey: isSessionRequestOwnedByKeyMock,
   },
 }));
 
@@ -70,7 +72,7 @@ vi.mock("@/repository/message", () => ({
   aggregateMultipleSessionStats: aggregateMultipleSessionStatsMock,
   findSessionRequestLocator: findSessionRequestLocatorMock,
   findAdjacentSessionRequests: findAdjacentSessionRequestsMock,
-  findMessageRequestAuditBySessionIdAndSequence: findMessageRequestAuditBySessionIdAndSequenceMock,
+  findMessageRequestAuditById: findMessageRequestAuditByIdMock,
 }));
 
 describe("getSessionDetails - unified specialSettings", () => {
@@ -106,14 +108,17 @@ describe("getSessionDetails - unified specialSettings", () => {
       return stats ? [{ ...stats, sessionId: stats.sessionId ?? sessionIds[0] }] : [];
     });
     findSessionRequestLocatorMock.mockResolvedValue({
+      requestId: 101,
       sourceSessionId: "sess_x",
       requestSequence: 1,
+      keyId: 1,
       identityKind: "session_id",
       scopeTag: null,
       fingerprint: null,
     });
 
     findAdjacentSessionRequestsMock.mockResolvedValue({ prevRequest: null, nextRequest: null });
+    isSessionRequestOwnedByKeyMock.mockResolvedValue(true);
 
     getSessionRequestCountMock.mockResolvedValue(1);
     getSessionRequestBodyMock.mockResolvedValue(null);
@@ -130,7 +135,7 @@ describe("getSessionDetails - unified specialSettings", () => {
 
   test("当 Redis specialSettings 为空时，应由 DB 审计字段派生特殊设置", async () => {
     getSessionSpecialSettingsMock.mockResolvedValue(null);
-    findMessageRequestAuditBySessionIdAndSequenceMock.mockResolvedValue({
+    findMessageRequestAuditByIdMock.mockResolvedValue({
       statusCode: 200,
       blockedBy: "warmup",
       blockedReason: JSON.stringify({ reason: "anthropic_warmup_intercepted" }),
@@ -147,6 +152,8 @@ describe("getSessionDetails - unified specialSettings", () => {
 
     const types = (result.data.specialSettings ?? []).map((s) => s.type).sort();
     expect(types).toEqual(["anthropic_cache_ttl_header_override", "guard_intercept"].sort());
+    expect(isSessionRequestOwnedByKeyMock).toHaveBeenCalledWith("sess_x", 1, 1);
+    expect(findMessageRequestAuditByIdMock).toHaveBeenCalledWith(101, 1);
   });
 
   test("当 Redis 与 DB 同时存在 specialSettings 时，应合并并去重", async () => {
@@ -163,7 +170,7 @@ describe("getSessionDetails - unified specialSettings", () => {
       },
     ]);
 
-    findMessageRequestAuditBySessionIdAndSequenceMock.mockResolvedValue({
+    findMessageRequestAuditByIdMock.mockResolvedValue({
       statusCode: 200,
       blockedBy: "warmup",
       blockedReason: JSON.stringify({ reason: "anthropic_warmup_intercepted" }),

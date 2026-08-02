@@ -939,7 +939,9 @@
       "prev": "上一頁",
       "next": "下一頁",
       "orderAsc": "切換為正序（最早的在前）",
-      "orderDesc": "切換為倒序（最新的在前）"
+      "orderDesc": "切換為倒序（最新的在前）",
+      "itemTitle": "請求 #{sequence} - {model}",
+      "unknownModel": "未知模型"
     },
     "back": "返回上一頁",
     "loadingError": "載入失敗"

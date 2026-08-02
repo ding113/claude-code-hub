@@ -126,7 +126,7 @@ describe("message repository aggregateSessionStats", () => {
     expect(sqlText(stats.trace.where)).toContain("blocked_by");
   });
 
-  test("按 session identity 聚合并兼容 migration 前的 sessionId", async () => {
+  test("reserved session identity uses the canonical lookup without a physical alias fallback", async () => {
     const stats = createDrizzleQuery<readonly StatsRow[]>([]);
     boundary.select.mockReturnValueOnce(stats).mockReturnValueOnce(createDrizzleQuery([]));
     boundary.selectDistinct
@@ -139,7 +139,7 @@ describe("message repository aggregateSessionStats", () => {
     const whereSql = sqlText(stats.trace.where);
     expect(whereSql).toContain("session_identity");
     expect(whereSql).toContain("session_id");
-    expect(whereSql.match(/pfx:scope123:fp-deep/g)).toHaveLength(2);
+    expect(whereSql.match(/pfx:scope123:fp-deep/g)).toHaveLength(1);
   });
 
   test("returns populated statistics and preserves a single cache TTL", async () => {

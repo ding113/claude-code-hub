@@ -75,10 +75,14 @@ describe("active Session termination identity contract", () => {
     terminateSessionMock.mockResolvedValue(true);
     terminateSessionsBatchMock.mockResolvedValue(0);
     terminateObservedSessionMock.mockResolvedValue(true);
-    listPhysicalSessionSourcesForIdentityMock.mockResolvedValue([
-      { sessionId: "physical-session", userId: 1, keyId: 11, providerIds: [41, 42] },
-      { sessionId: "physical-session-2", userId: 1, keyId: 12, providerIds: [43] },
-    ]);
+    listPhysicalSessionSourcesForIdentityMock.mockImplementation(async (identity: string) =>
+      identity === "pfx:scope:tip"
+        ? [
+            { sessionId: "physical-session", userId: 1, keyId: 11, providerIds: [41, 42] },
+            { sessionId: "physical-session-2", userId: 1, keyId: 12, providerIds: [43] },
+          ]
+        : [{ sessionId: identity, userId: 1, keyId: 13, providerIds: [] }]
+    );
   });
 
   test("terminating a prefix identity clears only physical bindings still owned by its key and providers", async () => {
@@ -89,7 +93,7 @@ describe("active Session termination identity contract", () => {
       data: undefined,
     });
     expect(invalidateMock).toHaveBeenCalledWith("scope", "tip", ["tip", "parent", "root"]);
-    expect(listPhysicalSessionSourcesForIdentityMock).toHaveBeenCalledWith("pfx:scope:tip");
+    expect(listPhysicalSessionSourcesForIdentityMock).toHaveBeenCalledWith("pfx:scope:tip", 1);
     expect(terminateSessionMock).toHaveBeenCalledTimes(2);
     expect(terminateSessionMock).toHaveBeenCalledWith("physical-session", [41, 42], 11);
     expect(terminateSessionMock).toHaveBeenCalledWith("physical-session-2", [43], 12);
@@ -111,7 +115,7 @@ describe("active Session termination identity contract", () => {
       ok: true,
       data: undefined,
     });
-    expect(resolveSessionIdentityMock).toHaveBeenCalledWith("pfx:scope:tip");
+    expect(resolveSessionIdentityMock).toHaveBeenCalledWith("pfx:scope:tip", 1);
     expect(invalidateMock).toHaveBeenCalledWith("scope", "tip", ["tip", "parent", "root"]);
     expect(clearSessionDetailsCacheMock).toHaveBeenCalledWith("physical-session");
     expect(clearSessionDetailsCacheMock).toHaveBeenCalledWith("pfx:scope:tip");
@@ -174,6 +178,13 @@ describe("active Session termination identity contract", () => {
   });
 
   test("treats a client-controlled pfx-prefixed physical Session as a physical Session", async () => {
+    aggregateMultipleSessionStatsMock.mockResolvedValueOnce([
+      {
+        sessionId: "sid:key-bound-client-session",
+        requestedSessionIds: ["pfx:foreign-scope:foreign-fingerprint"],
+        userId: 1,
+      },
+    ]);
     resolveSessionIdentityMock.mockResolvedValue({
       sourceSessionId: "pfx:foreign-scope:foreign-fingerprint",
       identityKind: "session_id",
@@ -181,13 +192,31 @@ describe("active Session termination identity contract", () => {
       fingerprint: null,
       fingerprints: [],
     });
+    listPhysicalSessionSourcesForIdentityMock.mockResolvedValueOnce([
+      {
+        sessionId: "pfx:foreign-scope:foreign-fingerprint",
+        userId: 1,
+        keyId: 21,
+        providerIds: [],
+      },
+    ]);
 
     const { terminateActiveSession } = await import("@/actions/active-sessions");
     const result = await terminateActiveSession("pfx:foreign-scope:foreign-fingerprint");
 
     expect(result).toEqual({ ok: true, data: undefined });
-    expect(terminateSessionMock).toHaveBeenCalledWith("pfx:foreign-scope:foreign-fingerprint");
+    expect(resolveSessionIdentityMock).toHaveBeenCalledWith("sid:key-bound-client-session", 1);
+    expect(listPhysicalSessionSourcesForIdentityMock).toHaveBeenCalledWith(
+      "sid:key-bound-client-session",
+      1
+    );
+    expect(terminateSessionMock).toHaveBeenCalledWith(
+      "pfx:foreign-scope:foreign-fingerprint",
+      undefined,
+      21
+    );
     expect(invalidateMock).not.toHaveBeenCalled();
+    expect(terminateObservedSessionMock).toHaveBeenCalledWith("sid:key-bound-client-session");
   });
 
   test("batch termination applies prefix and physical Session semantics independently", async () => {
@@ -229,14 +258,14 @@ describe("active Session termination identity contract", () => {
       processedCount: 2,
     });
     expect(invalidateMock).toHaveBeenCalledWith("scope", "tip", ["tip", "parent"]);
-    expect(listPhysicalSessionSourcesForIdentityMock).toHaveBeenCalledWith("pfx:scope:tip");
+    expect(listPhysicalSessionSourcesForIdentityMock).toHaveBeenCalledWith("pfx:scope:tip", 1);
     expect(terminateSessionMock).toHaveBeenCalledTimes(3);
     expect(terminateSessionMock).toHaveBeenCalledWith("physical-session", [41, 42], 11);
     expect(terminateSessionMock).toHaveBeenCalledWith("physical-session-2", [43], 12);
-    expect(terminateSessionMock).toHaveBeenCalledWith("physical-session");
+    expect(terminateSessionMock).toHaveBeenCalledWith("physical-session", undefined, 13);
     expect(terminateSessionsBatchMock).not.toHaveBeenCalled();
     expect(terminateObservedSessionMock).toHaveBeenCalledWith("pfx:scope:tip");
-    expect(terminateObservedSessionMock).toHaveBeenCalledWith("physical-session");
+    expect(terminateObservedSessionMock).not.toHaveBeenCalledWith("physical-session");
   });
 
   test("batch termination clears physical aliases and canonical detail caches", async () => {
@@ -325,6 +354,8 @@ describe("active Session termination identity contract", () => {
       }),
     });
     expect(maxActiveResolutions).toBe(20);
+    expect(listPhysicalSessionSourcesForIdentityMock).toHaveBeenCalledTimes(21);
+    expect(terminateSessionMock).toHaveBeenCalledTimes(21);
   });
 
   test("batch termination isolates a rejected identity and still clears caches", async () => {
@@ -360,7 +391,7 @@ describe("active Session termination identity contract", () => {
         processedCount: 2,
       },
     });
-    expect(terminateSessionMock).toHaveBeenCalledWith("physical-success");
+    expect(terminateSessionMock).toHaveBeenCalledWith("physical-success", undefined, 13);
     expect(clearActiveSessionsCacheMock).toHaveBeenCalledOnce();
     expect(clearAllSessionsQueryCacheMock).toHaveBeenCalledOnce();
     expect(clearSessionDetailsCacheMock).toHaveBeenCalledWith("physical-failed");

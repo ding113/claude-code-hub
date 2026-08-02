@@ -14,16 +14,19 @@ describe("getSessionOriginChain", () => {
       },
     ];
 
-    const aggregateSessionStatsMock = vi.fn().mockResolvedValue({ userId: 1 });
+    const aggregateMultipleSessionStatsMock = vi
+      .fn()
+      .mockResolvedValue([{ sessionId: "test-session", userId: 1 }]);
     const findSessionRequestLocatorMock = vi.fn().mockResolvedValue({
       identityKind: "direct",
       sourceSessionId: "test-session",
       requestSequence: 1,
+      keyId: 1,
     });
     const findSessionOriginChainMock = vi.fn().mockResolvedValue(firstRequestChain);
 
     vi.doMock("@/repository/message", () => ({
-      aggregateSessionStats: aggregateSessionStatsMock,
+      aggregateMultipleSessionStats: aggregateMultipleSessionStatsMock,
       findSessionOriginChain: findSessionOriginChainMock,
       findSessionRequestLocator: findSessionRequestLocatorMock,
     }));
@@ -56,7 +59,7 @@ describe("getSessionOriginChain", () => {
     }
 
     expect(result.data[0]?.reason).toBe("initial_selection");
-    expect(findSessionRequestLocatorMock).toHaveBeenCalledWith("test-session");
-    expect(findSessionOriginChainMock).toHaveBeenCalledWith("test-session");
+    expect(findSessionRequestLocatorMock).toHaveBeenCalledWith("test-session", {}, 1);
+    expect(findSessionOriginChainMock).toHaveBeenCalledWith("test-session", 1);
   });
 });
