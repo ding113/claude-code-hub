@@ -137,10 +137,39 @@ describe("message repository aggregateSessionStats", () => {
     await aggregateSessionStats("pfx:scope123:fp-deep");
 
     const whereSql = sqlText(stats.trace.where);
+    expect(whereSql).toContain("coalesce");
     expect(whereSql).toContain("session_identity");
     expect(whereSql).toContain("session_id");
-    expect(whereSql.match(/pfx:scope123:fp-deep/g)).toHaveLength(1);
+    expect(whereSql.match(/pfx:scope123:fp-deep/g)).toHaveLength(2);
+    expect(whereSql).not.toContain("session_id = pfx:scope123:fp-deep");
   });
+
+  test.each(["pfx:scope123:fp-deep", "sid:owner-session"])(
+    "owner-scoped reserved identity does not alias a physical ledger Session: %s",
+    async (reservedIdentity) => {
+      const stats = createDrizzleQuery<readonly StatsRow[]>([]);
+      const providerList = createDrizzleQuery([]);
+      const modelList = createDrizzleQuery([]);
+      const cacheTtlList = createDrizzleQuery([]);
+      boundary.select.mockReturnValueOnce(stats).mockReturnValueOnce(createDrizzleQuery([]));
+      boundary.selectDistinct
+        .mockReturnValueOnce(providerList)
+        .mockReturnValueOnce(modelList)
+        .mockReturnValueOnce(cacheTtlList);
+
+      await aggregateSessionStats(reservedIdentity, 17);
+
+      for (const query of [stats, providerList, modelList, cacheTtlList]) {
+        const whereSql = sqlText(query.trace.where);
+        expect(whereSql).toContain("coalesce");
+        expect(whereSql).toContain("session_identity");
+        expect(whereSql.match(new RegExp(reservedIdentity, "g"))).toHaveLength(2);
+        expect(whereSql).not.toContain(`session_id = ${reservedIdentity}`);
+        expect(whereSql).toContain("user_id");
+        expect(whereSql).toContain("17");
+      }
+    }
+  );
 
   test("returns populated statistics and preserves a single cache TTL", async () => {
     const queries = queuePopulatedAggregate(["1h"]);

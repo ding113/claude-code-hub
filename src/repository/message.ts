@@ -37,14 +37,18 @@ const POST_TERMINAL_ROUTING_TRACE_ACK_TIMEOUT_MS = 3_000;
 const ledgerSessionIdentity = sql<string>`COALESCE(${usageLedger.sessionIdentity}, ${usageLedger.sessionId})`;
 const messageSessionIdentity = sql<string>`COALESCE(${messageRequest.sessionIdentity}, ${messageRequest.sessionId})`;
 
+function ledgerCanonicalSessionCondition(identity: string) {
+  return isReservedSessionIdentity(identity)
+    ? and(eq(ledgerSessionIdentity, identity), eq(usageLedger.sessionIdentity, identity))
+    : eq(ledgerSessionIdentity, identity);
+}
+
 function ledgerSessionLookupForOwner(identityOrPhysicalId: string, ownerUserId?: number) {
-  const canonicalCondition = isReservedSessionIdentity(identityOrPhysicalId)
-    ? eq(usageLedger.sessionIdentity, identityOrPhysicalId)
-    : eq(ledgerSessionIdentity, identityOrPhysicalId);
-  const lookupCondition =
-    ownerUserId !== undefined || !isReservedSessionIdentity(identityOrPhysicalId)
-      ? or(canonicalCondition, eq(usageLedger.sessionId, identityOrPhysicalId))
-      : canonicalCondition;
+  const reservedIdentity = isReservedSessionIdentity(identityOrPhysicalId);
+  const canonicalCondition = ledgerCanonicalSessionCondition(identityOrPhysicalId);
+  const lookupCondition = reservedIdentity
+    ? canonicalCondition
+    : or(canonicalCondition, eq(usageLedger.sessionId, identityOrPhysicalId));
 
   return and(
     lookupCondition,
@@ -53,7 +57,7 @@ function ledgerSessionLookupForOwner(identityOrPhysicalId: string, ownerUserId?:
 }
 
 function ledgerCanonicalSessionLookup(identity: string, ownerUserId: number) {
-  return and(eq(ledgerSessionIdentity, identity), eq(usageLedger.userId, ownerUserId));
+  return and(ledgerCanonicalSessionCondition(identity), eq(usageLedger.userId, ownerUserId));
 }
 
 function messageSessionLookup(identityOrPhysicalId: string, ownerUserId?: number) {
