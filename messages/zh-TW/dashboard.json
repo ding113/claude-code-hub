@@ -1889,6 +1889,8 @@
         "running": "正在重設統計",
         "completed": "重設已完成",
         "failed": "重設失敗，可以重試",
+        "statusUnavailable": "暫時無法更新重設狀態",
+        "retryStatus": "重試狀態查詢",
         "success": "所有統計已重置"
       }
     },

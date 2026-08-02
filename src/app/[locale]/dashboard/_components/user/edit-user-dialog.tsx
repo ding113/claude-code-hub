@@ -1,7 +1,7 @@
 "use client";
 
 import { useQueryClient } from "@tanstack/react-query";
-import { Loader2, RotateCcw, Trash2, UserCog } from "lucide-react";
+import { Loader2, RefreshCw, RotateCcw, Trash2, UserCog } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useLocale, useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
@@ -67,6 +67,7 @@ const EditUserSchema = UpdateUserSchema.extend({
 type EditUserValues = z.infer<typeof EditUserSchema>;
 
 const STATISTICS_RESET_POLL_INTERVAL_MS = 1_000;
+const STATISTICS_RESET_REQUEST_TIMEOUT_MS = 15_000;
 const STATISTICS_RESET_MAX_RETRIES = 5;
 const STATISTICS_RESET_RETRY_MAX_DELAY_MS = 16_000;
 
@@ -103,6 +104,7 @@ function EditUserDialogInner({ onOpenChange, user, onSuccess }: EditUserDialogPr
   const [isResettingAll, setIsResettingAll] = useState(false);
   const [resetAllDialogOpen, setResetAllDialogOpen] = useState(false);
   const [statisticsReset, setStatisticsReset] = useState<UserStatisticsResetRecord | null>(null);
+  const [statisticsResetPollFailed, setStatisticsResetPollFailed] = useState(false);
   const [isResetting5h, setIsResetting5h] = useState(false);
   const [reset5hDialogOpen, setReset5hDialogOpen] = useState(false);
   const [isResettingLimits, setIsResettingLimits] = useState(false);
@@ -266,6 +268,7 @@ function EditUserDialogInner({ onOpenChange, user, onSuccess }: EditUserDialogPr
 
   const handleResetAllStatistics = async () => {
     setIsResettingAll(true);
+    setStatisticsResetPollFailed(false);
     try {
       const res = await resetUserAllStatistics(user.id);
       if (!res.ok) {
@@ -283,17 +286,34 @@ function EditUserDialogInner({ onOpenChange, user, onSuccess }: EditUserDialogPr
   };
 
   useEffect(() => {
-    if (!statisticsReset || !["queued", "running"].includes(statisticsReset.status)) return;
+    if (
+      !statisticsReset ||
+      statisticsResetPollFailed ||
+      !["queued", "running"].includes(statisticsReset.status)
+    )
+      return;
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
+    let activeRequestController: AbortController | undefined;
     let consecutiveRetryableFailures = 0;
 
     const poll = async () => {
-      const result = await getUserStatisticsReset(user.id, statisticsReset.resetId);
+      const requestController = new AbortController();
+      activeRequestController = requestController;
+      const requestTimeout = window.setTimeout(
+        () => requestController.abort(),
+        STATISTICS_RESET_REQUEST_TIMEOUT_MS
+      );
+      const result = await getUserStatisticsReset(user.id, statisticsReset.resetId, {
+        signal: requestController.signal,
+      });
+      window.clearTimeout(requestTimeout);
+      if (activeRequestController === requestController) activeRequestController = undefined;
       if (cancelled) return;
       if (!result.ok) {
+        const resultErrorCode = requestController.signal.aborted ? "TIMEOUT" : result.errorCode;
         const retryable = ["CONNECTION_FAILED", "NETWORK_ERROR", "TIMEOUT"].includes(
-          result.errorCode ?? ""
+          resultErrorCode ?? ""
         );
         if (retryable && consecutiveRetryableFailures < STATISTICS_RESET_MAX_RETRIES) {
           const delay = Math.min(
@@ -304,16 +324,12 @@ function EditUserDialogInner({ onOpenChange, user, onSuccess }: EditUserDialogPr
           timer = setTimeout(poll, delay);
           return;
         }
-        applyStatisticsResetStatus({
-          ...statisticsReset,
-          status: "failed",
-          completedAt: new Date().toISOString(),
-          errorCode: result.errorCode ?? "NETWORK_ERROR",
-        });
+        setStatisticsResetPollFailed(true);
         return;
       }
 
       consecutiveRetryableFailures = 0;
+      setStatisticsResetPollFailed(false);
       const next = result.data as UserStatisticsResetRecord;
       if (applyStatisticsResetStatus(next)) return;
       timer = setTimeout(poll, STATISTICS_RESET_POLL_INTERVAL_MS);
@@ -323,8 +339,9 @@ function EditUserDialogInner({ onOpenChange, user, onSuccess }: EditUserDialogPr
     return () => {
       cancelled = true;
       if (timer) clearTimeout(timer);
+      activeRequestController?.abort();
     };
-  }, [applyStatisticsResetStatus, statisticsReset, user.id]);
+  }, [applyStatisticsResetStatus, statisticsReset, statisticsResetPollFailed, user.id]);
 
   const handleResetLimitsOnly = async () => {
     setIsResettingLimits(true);
@@ -562,6 +579,25 @@ function EditUserDialogInner({ onOpenChange, user, onSuccess }: EditUserDialogPr
                     <p className="text-xs font-medium" data-testid="statistics-reset-status">
                       {t(`editDialog.resetData.${statisticsReset.status}`)}
                     </p>
+                  ) : null}
+                  {statisticsResetPollFailed ? (
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p
+                        className="text-xs font-medium text-destructive"
+                        data-testid="statistics-reset-poll-error"
+                      >
+                        {t("editDialog.resetData.statusUnavailable")}
+                      </p>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setStatisticsResetPollFailed(false)}
+                      >
+                        <RefreshCw className="h-3.5 w-3.5" />
+                        {t("editDialog.resetData.retryStatus")}
+                      </Button>
+                    </div>
                   ) : null}
                 </div>
 

@@ -167,10 +167,13 @@ export function resetUserAllStatistics(userId: number) {
   return toActionResult(apiPost(`/api/v1/users/${userId}/statistics:reset`));
 }
 
-export async function getUserStatisticsReset(userId: number, resetId: string) {
-  const result = await toActionResult(
-    apiGet(`/api/v1/users/${userId}/statistics-resets/${encodeURIComponent(resetId)}`)
-  );
+export async function getUserStatisticsReset(
+  userId: number,
+  resetId: string,
+  options?: { signal?: AbortSignal }
+) {
+  const path = `/api/v1/users/${userId}/statistics-resets/${encodeURIComponent(resetId)}`;
+  const result = await toActionResult(options ? apiGet(path, options) : apiGet(path));
   return !result.ok && !result.errorCode ? { ...result, errorCode: "NETWORK_ERROR" } : result;
 }
 

@@ -89,6 +89,17 @@ describe("v1 action compatibility client", () => {
     });
   });
 
+  test("passes an AbortSignal to statistics reset polling", async () => {
+    getMock.mockResolvedValue({ status: "running" });
+    const controller = new AbortController();
+
+    await users.getUserStatisticsReset(42, "reset-id", { signal: controller.signal });
+
+    expect(getMock).toHaveBeenCalledWith("/api/v1/users/42/statistics-resets/reset-id", {
+      signal: controller.signal,
+    });
+  });
+
   test("preserves the physical request locator for every Session payload endpoint", async () => {
     getMock.mockResolvedValue({ exists: true, response: "ok" });
 

@@ -158,6 +158,17 @@ describe("clearUserCostCache", () => {
     );
   });
 
+  test("rejects invalid fixed 5h cutoff values returned by Redis", async () => {
+    const { prepareUserStatisticsResetFixed5h } = await import("@/lib/redis/cost-cache-cleanup");
+
+    for (const invalid of [null, undefined, "", 0, "not-a-timestamp", []]) {
+      redisMock.eval.mockResolvedValueOnce(invalid);
+      await expect(
+        prepareUserStatisticsResetFixed5h({ resetId: "reset-1", userId: 10, keyIds: [] })
+      ).resolves.toBeNull();
+    }
+  });
+
   test("returns metrics (costKeysDeleted, activeSessionsDeleted, durationMs)", async () => {
     scanPatternMock.mockImplementation(async (_redis: unknown, pattern: string) => {
       if (pattern === "key:1:cost_*") return ["key:1:cost_daily"];

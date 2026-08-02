@@ -122,6 +122,9 @@ async function ensurePreparedReset(
 }
 
 function getResetQueue(): Queue.Queue<UserStatisticsResetJobData> {
+  if (process.env.NODE_ENV === "development") {
+    throw new Error("USER_STATISTICS_RESET_QUEUE_DISABLED_IN_DEVELOPMENT");
+  }
   if (resetQueue) return resetQueue;
   const redisUrl = process.env.REDIS_URL;
   if (!redisUrl) {
