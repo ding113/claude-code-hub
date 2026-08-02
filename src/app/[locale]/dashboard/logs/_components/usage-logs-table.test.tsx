@@ -189,7 +189,7 @@ describe("usage-logs-table thinking effort", () => {
     expect(cells[6]?.textContent).toContain("gpt-5.4");
     expect(cells[7]?.textContent).toContain("low");
     expect(cells[7]?.textContent).toContain("max");
-    expect(cells[7]?.className).toContain("overflow-hidden");
+    expect(cells[7]?.className).toContain("overflow-visible");
   });
 
   test("显示 Anthropic 请求的思考强度", () => {

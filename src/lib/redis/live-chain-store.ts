@@ -4,10 +4,16 @@ import type { ProviderChainItem } from "@/types/message";
 import { normalizeRoutingTrace, type RoutingTraceV1 } from "@/types/routing-trace";
 import { RedisKVStore } from "./redis-kv-store";
 
+export interface LiveProviderSnapshot {
+  id: number;
+  name: string;
+}
+
 export interface LiveChainSnapshot {
   chain: ProviderChainItem[];
   phase: string;
   updatedAt: number;
+  activeProviders?: LiveProviderSnapshot[];
   routingTrace?: RoutingTraceV1 | null;
 }
 
@@ -78,6 +84,80 @@ function inferDiscoveryPhase(trace: RoutingTraceV1): string {
   return "discovery_racing";
 }
 
+function deriveDiscoveryActiveProviders(trace: RoutingTraceV1): LiveProviderSnapshot[] | undefined {
+  const activeAttempts = new Map<string, LiveProviderSnapshot>();
+  let sawAttemptLifecycle = false;
+
+  for (const event of trace.events) {
+    if (event.type === "attempt_started" && event.attemptId && event.provider) {
+      sawAttemptLifecycle = true;
+      activeAttempts.set(event.attemptId, {
+        id: event.provider.id,
+        name: event.provider.name ?? String(event.provider.id),
+      });
+      continue;
+    }
+
+    if (event.type === "attempt_finished" && event.attemptId) {
+      sawAttemptLifecycle = true;
+      activeAttempts.delete(event.attemptId);
+      continue;
+    }
+
+    if (event.type === "winner_committed" && event.attemptId && event.provider) {
+      sawAttemptLifecycle = true;
+      activeAttempts.clear();
+      activeAttempts.set(event.attemptId, {
+        id: event.provider.id,
+        name: event.provider.name ?? String(event.provider.id),
+      });
+      continue;
+    }
+
+    if (event.type === "request_finished") {
+      sawAttemptLifecycle = true;
+      activeAttempts.clear();
+    }
+  }
+
+  if (!sawAttemptLifecycle) return undefined;
+  return [
+    ...new Map([...activeAttempts.values()].map((provider) => [provider.id, provider])).values(),
+  ];
+}
+
+function deriveLegacyActiveProviders(chain: ProviderChainItem[]): LiveProviderSnapshot[] {
+  const activeProviders = new Map<number, LiveProviderSnapshot>();
+
+  for (const item of chain) {
+    const provider = { id: item.id, name: item.name };
+    switch (item.reason) {
+      case "initial_selection":
+      case "session_reuse":
+      case "affinity_hit":
+      case "hedge_launched":
+        activeProviders.set(item.id, provider);
+        break;
+      case "hedge_winner":
+      case "request_success":
+      case "retry_success":
+        activeProviders.clear();
+        activeProviders.set(item.id, provider);
+        break;
+      case "retry_failed":
+      case "system_error":
+      case "resource_not_found":
+      case "hedge_loser_cancelled":
+      case "hedge_loser_billed":
+      case "client_abort":
+        activeProviders.delete(item.id);
+        break;
+    }
+  }
+
+  return [...activeProviders.values()];
+}
+
 export function inferPhase(
   chain: ProviderChainItem[],
   routingTrace?: RoutingTraceV1 | null
@@ -122,6 +202,8 @@ function mergeSnapshot(
   // snapshot shape. Prefer the independently updated trace when both exist.
   const routingTrace =
     normalizeRoutingTrace(storedRoutingTrace) ?? normalizeRoutingTrace(snapshot?.routingTrace);
+  const activeProviders =
+    routingTrace?.mode === "discovery" ? deriveDiscoveryActiveProviders(routingTrace) : undefined;
 
   // Trace recording starts before provider selection can append to the legacy
   // chain. Keep that earliest Discovery state visible instead of waiting for a
@@ -132,6 +214,7 @@ function mergeSnapshot(
       chain: [],
       phase: inferPhase([], routingTrace),
       updatedAt: routingTrace.updatedAt,
+      ...(activeProviders ? { activeProviders } : {}),
       routingTrace,
     };
   }
@@ -139,6 +222,7 @@ function mergeSnapshot(
   return {
     ...snapshot,
     phase: inferPhase(snapshot.chain, routingTrace),
+    ...(activeProviders ? { activeProviders } : {}),
     routingTrace,
   };
 }
@@ -146,12 +230,14 @@ function mergeSnapshot(
 export async function writeLiveChain(
   sessionId: string,
   requestSequence: number,
-  chain: ProviderChainItem[]
+  chain: ProviderChainItem[],
+  activeProviders: LiveProviderSnapshot[] = deriveLegacyActiveProviders(chain)
 ): Promise<void> {
   const snapshot: LiveChainSnapshot = {
     chain,
     phase: inferPhase(chain),
     updatedAt: Date.now(),
+    activeProviders,
   };
   await store.set(buildKey(sessionId, requestSequence), snapshot);
 }

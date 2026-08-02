@@ -70,6 +70,7 @@ describe("ThinkingEffortDisplay", () => {
     expect(html).toContain("max");
     expect(html).toContain("reasoningEffort.overridden");
     expect(html).toContain("lucide-arrow-right");
+    expect(html).toContain("relative z-20");
   });
 
   test("显示 Anthropic 请求中的思考强度", () => {
