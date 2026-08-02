@@ -41,12 +41,12 @@ export async function fetchAllSessionsPage(input: {
       throw new Error("FETCH_SESSIONS_FAILED");
     }
     return result.data;
-  } catch (cause) {
+  } catch {
     if (timeoutController.signal.aborted && !input.signal.aborted) {
       throw new Error("FETCH_SESSIONS_TIMEOUT");
     }
     if (input.signal.aborted) {
-      throw cause;
+      throw new Error("FETCH_SESSIONS_CANCELLED");
     }
     throw new Error("FETCH_SESSIONS_FAILED");
   } finally {
