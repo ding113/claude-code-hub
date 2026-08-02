@@ -66,6 +66,10 @@ const EditUserSchema = UpdateUserSchema.extend({
 
 type EditUserValues = z.infer<typeof EditUserSchema>;
 
+const STATISTICS_RESET_POLL_INTERVAL_MS = 1_000;
+const STATISTICS_RESET_MAX_RETRIES = 5;
+const STATISTICS_RESET_RETRY_MAX_DELAY_MS = 16_000;
+
 function buildDefaultValues(user: UserDisplay): EditUserValues {
   return {
     name: user.name || "",
@@ -282,31 +286,45 @@ function EditUserDialogInner({ onOpenChange, user, onSuccess }: EditUserDialogPr
     if (!statisticsReset || !["queued", "running"].includes(statisticsReset.status)) return;
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
+    let consecutiveRetryableFailures = 0;
 
     const poll = async () => {
       const result = await getUserStatisticsReset(user.id, statisticsReset.resetId);
       if (cancelled) return;
       if (!result.ok) {
-        if (["CONNECTION_FAILED", "NETWORK_ERROR", "TIMEOUT"].includes(result.errorCode ?? "")) {
-          timer = setTimeout(poll, 2_000);
+        const retryable = ["CONNECTION_FAILED", "NETWORK_ERROR", "TIMEOUT"].includes(
+          result.errorCode ?? ""
+        );
+        if (retryable && consecutiveRetryableFailures < STATISTICS_RESET_MAX_RETRIES) {
+          const delay = Math.min(
+            STATISTICS_RESET_POLL_INTERVAL_MS * 2 ** consecutiveRetryableFailures,
+            STATISTICS_RESET_RETRY_MAX_DELAY_MS
+          );
+          consecutiveRetryableFailures += 1;
+          timer = setTimeout(poll, delay);
           return;
         }
-        setIsResettingAll(false);
-        toast.error(result.error || t("editDialog.resetData.error"));
+        applyStatisticsResetStatus({
+          ...statisticsReset,
+          status: "failed",
+          completedAt: new Date().toISOString(),
+          errorCode: result.errorCode ?? "NETWORK_ERROR",
+        });
         return;
       }
 
+      consecutiveRetryableFailures = 0;
       const next = result.data as UserStatisticsResetRecord;
       if (applyStatisticsResetStatus(next)) return;
-      timer = setTimeout(poll, 1_000);
+      timer = setTimeout(poll, STATISTICS_RESET_POLL_INTERVAL_MS);
     };
 
-    timer = setTimeout(poll, 1_000);
+    timer = setTimeout(poll, STATISTICS_RESET_POLL_INTERVAL_MS);
     return () => {
       cancelled = true;
       if (timer) clearTimeout(timer);
     };
-  }, [applyStatisticsResetStatus, statisticsReset, t, user.id]);
+  }, [applyStatisticsResetStatus, statisticsReset, user.id]);
 
   const handleResetLimitsOnly = async () => {
     setIsResettingLimits(true);
