@@ -1,4 +1,5 @@
 import type { ActiveSessionInfo } from "@/types/session";
+import type { ApiFetchOptions } from "../fetcher";
 import {
   apiDelete,
   apiGet,
@@ -15,7 +16,12 @@ export function getActiveSessions() {
   );
 }
 
-export function getAllSessions(activePage?: number, inactivePage?: number, pageSize?: number) {
+export function getAllSessions(
+  activePage?: number,
+  inactivePage?: number,
+  pageSize?: number,
+  options?: ApiFetchOptions
+) {
   return toActionResult(
     apiGet(
       `/api/v1/sessions${searchParams({
@@ -23,7 +29,8 @@ export function getAllSessions(activePage?: number, inactivePage?: number, pageS
         activePage,
         inactivePage,
         pageSize,
-      })}`
+      })}`,
+      options
     )
   );
 }

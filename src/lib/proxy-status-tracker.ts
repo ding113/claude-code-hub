@@ -51,6 +51,8 @@ function toTimestamp(value: Date | string | number | null | undefined): number |
  */
 export class ProxyStatusTracker {
   private static instance: ProxyStatusTracker | null = null;
+  private cachedStatus: { value: ProxyStatusResponse; expiresAt: number } | null = null;
+  private inFlight: Promise<ProxyStatusResponse> | null = null;
 
   static getInstance(): ProxyStatusTracker {
     if (!ProxyStatusTracker.instance) {
@@ -76,7 +78,27 @@ export class ProxyStatusTracker {
     void requestId;
   }
 
-  async getAllUsersStatus(): Promise<ProxyStatusResponse> {
+  getAllUsersStatus(): Promise<ProxyStatusResponse> {
+    const now = Date.now();
+    if (this.cachedStatus && this.cachedStatus.expiresAt > now) {
+      return Promise.resolve(this.cachedStatus.value);
+    }
+    if (this.inFlight) {
+      return this.inFlight;
+    }
+
+    this.inFlight = this.fetchAllUsersStatus()
+      .then((value) => {
+        this.cachedStatus = { value, expiresAt: Date.now() + 2_000 };
+        return value;
+      })
+      .finally(() => {
+        this.inFlight = null;
+      });
+    return this.inFlight;
+  }
+
+  private async fetchAllUsersStatus(): Promise<ProxyStatusResponse> {
     const now = Date.now();
 
     const [dbUsers, activeRequestRows, lastRequestRows] = await Promise.all([
@@ -163,8 +185,10 @@ export class ProxyStatusTracker {
       .where(
         and(
           isNull(messageRequest.deletedAt),
-          isNull(messageRequest.durationMs),
+          isNull(messageRequest.statusCode),
+          sql`"message_request".created_at >= now() - interval '24 hours'`,
           eq(messageRequest.isReplay, false),
+          sql`("message_request".blocked_by IS NULL OR "message_request".blocked_by <> 'warmup')`,
           isNull(providers.deletedAt)
         )
       );
@@ -188,8 +212,9 @@ export class ProxyStatusTracker {
       LEFT JOIN keys k ON k.key = mr.key AND k.deleted_at IS NULL
       WHERE mr.deleted_at IS NULL
         AND mr.is_replay = false
+        AND mr.status_code IS NOT NULL
         AND (mr.blocked_by IS NULL OR mr.blocked_by <> 'warmup')
-      ORDER BY mr.user_id, mr.updated_at DESC
+      ORDER BY mr.user_id, mr.updated_at DESC NULLS LAST, mr.id DESC
     `;
 
     const result = await db.execute(query);

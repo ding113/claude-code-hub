@@ -928,7 +928,11 @@
       "storageNotEnabledHint": "ヒント: REDIS_URL と ENABLE_RATE_LIMIT=true を確認してください (セッション詳細キャッシュ)。未マスクの messages を保存するには STORE_SESSION_MESSAGES=true を設定してください。"
     },
     "errors": {
-      "copyFailed": "コピー失敗"
+      "copyFailed": "コピー失敗",
+      "fetchSessionsFailed": "Session 一覧の取得に失敗しました",
+      "fetchSessionsTimeout": "Session 一覧の取得がタイムアウトしました",
+      "fetchSettingsFailed": "システム設定の取得に失敗しました",
+      "retry": "再試行"
     },
     "requestList": {
       "title": "リクエスト一覧",
@@ -1873,6 +1877,10 @@
         "confirmDescription": "このユーザーのすべてのリクエストログと使用統計を完全に削除します。この操作は取り消せません。",
         "confirm": "はい、すべてリセット",
         "loading": "リセット中...",
+        "queued": "リセットをキューに追加しました",
+        "running": "統計をリセットしています",
+        "completed": "リセットが完了しました",
+        "failed": "リセットに失敗しました。再試行できます。",
         "success": "すべての統計がリセットされました"
       }
     },

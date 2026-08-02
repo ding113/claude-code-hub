@@ -928,7 +928,11 @@
       "storageNotEnabledHint": "提示：请检查 REDIS_URL 与 ENABLE_RATE_LIMIT=true（用于会话详情缓存）；如需保存未脱敏 messages，请设置 STORE_SESSION_MESSAGES=true。"
     },
     "errors": {
-      "copyFailed": "复制失败"
+      "copyFailed": "复制失败",
+      "fetchSessionsFailed": "获取 Session 列表失败",
+      "fetchSessionsTimeout": "获取 Session 列表超时",
+      "fetchSettingsFailed": "获取系统设置失败",
+      "retry": "重试"
     },
     "requestList": {
       "title": "请求列表",
@@ -1896,6 +1900,10 @@
         "confirmDescription": "这将永久删除该用户的所有请求日志和使用统计。此操作无法撤销。",
         "confirm": "是的，重置全部",
         "loading": "重置中...",
+        "queued": "重置任务已排队",
+        "running": "正在重置统计",
+        "completed": "重置已完成",
+        "failed": "重置失败，可以重试",
         "success": "所有统计已重置"
       }
     },

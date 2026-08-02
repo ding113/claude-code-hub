@@ -42,6 +42,16 @@ describe("v1 API error i18n mapping", () => {
     expect(getApiErrorMessageKey(error)).toBe("INTERNAL_ERROR");
   });
 
+  test("maps dependency outages to a retryable connection failure", () => {
+    const error = new ApiError({
+      status: 503,
+      errorCode: "dependency.unavailable",
+      detail: "Service unavailable",
+    });
+
+    expect(getApiErrorMessageKey(error)).toBe("CONNECTION_FAILED");
+  });
+
   test("maps provider endpoint and vendor REST codes to existing translation keys", () => {
     expect(
       getApiErrorMessageKey(
