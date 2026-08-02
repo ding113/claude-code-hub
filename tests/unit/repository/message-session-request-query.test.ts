@@ -213,7 +213,7 @@ describe("message repository session request queries", () => {
     expect(sqlText(rows.trace.where)).toContain("pfx:scope:fingerprint");
     expect(sqlText(rows.trace.where)).toContain("is_replay");
     expect(sqlText(rows.trace.where)).toContain("false");
-    expect(sqlText(rows.trace.orderBy)).toContain("created_at desc");
+    expect(sqlText(rows.trace.orderBy)).toContain("created_at desc nulls last");
     expect(sqlText(rows.trace.orderBy)).toContain("id desc");
     const selection = sqlText(boundary.select.mock.calls.at(1)?.at(0)).toLowerCase();
     expect(selection).toContain("then row_number()");
@@ -322,6 +322,8 @@ describe("message repository session request queries", () => {
     expect(where).toContain("session_identity");
     expect(where).toContain("session_id");
     expect(where.match(/physical-a/g)).toHaveLength(2);
+    expect(sqlText(locator.trace.orderBy)).toContain("created_at desc nulls last");
+    expect(sqlText(locator.trace.orderBy)).toContain("id desc");
   });
 
   test("filters requests without a stable selector from navigable request lists", async () => {
@@ -471,7 +473,7 @@ describe("message repository session request queries", () => {
     expect(sqlText(previous.trace.where)).toContain("created_at");
     expect(sqlText(previous.trace.where)).toContain("is_replay");
     expect(sqlText(previous.trace.where)).toContain("false");
-    expect(sqlText(previous.trace.orderBy)).toContain("created_at desc");
+    expect(sqlText(previous.trace.orderBy)).toContain("created_at desc nulls last");
     expect(sqlText(previous.trace.orderBy)).toContain("id desc");
     expect(sqlText(next.trace.where)).toContain("created_at");
     expect(sqlText(next.trace.where)).toContain("is_replay");
