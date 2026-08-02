@@ -161,6 +161,9 @@ export function UsageLogsTable({
                     : Number(actualCostMultiplier);
                 const hasCostBadge =
                   multiplier != null && Number.isFinite(multiplier) && multiplier !== 1;
+                const displayedSourceSessionIds = (
+                  log.sourceSessionIds?.length ? log.sourceSessionIds : [log.sourceSessionId]
+                ).filter((id): id is string => Boolean(id));
 
                 return (
                   <TableRow
@@ -186,15 +189,25 @@ export function UsageLogsTable({
                               <button
                                 type="button"
                                 className="w-full text-left truncate cursor-pointer hover:underline"
-                                data-session-id={log.sessionId}
+                                data-session-id={log.sourceSessionId ?? log.sessionId}
                                 onClick={handleCopySessionIdClick}
                               >
-                                {log.sessionId}
+                                {log.sourceSessionId ?? log.sessionId}
                               </button>
                             </TooltipTrigger>
                             <TooltipContent side="bottom" align="start" className="max-w-[500px]">
                               <p className="text-xs whitespace-normal break-words font-mono">
-                                {log.sessionId}
+                                {displayedSourceSessionIds.map((id) => (
+                                  <span className="block" key={id}>
+                                    {id}
+                                  </span>
+                                ))}
+                                {log.sessionId &&
+                                  !displayedSourceSessionIds.includes(log.sessionId) && (
+                                    <span className="mt-1 block text-muted-foreground">
+                                      {log.sessionId}
+                                    </span>
+                                  )}
                               </p>
                             </TooltipContent>
                           </Tooltip>

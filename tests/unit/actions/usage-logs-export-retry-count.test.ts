@@ -265,6 +265,10 @@ describe("Usage logs CSV export retryCount", () => {
     const result = await exportUsageLogs({});
 
     expect(result.ok).toBe(true);
+    expect(findUsageLogsWithDetailsMock).toHaveBeenCalledWith(
+      expect.objectContaining({ page: 1, pageSize: 1 }),
+      { includeSourceSessionIds: false }
+    );
     const csv = result.data;
     const csvNoBom = csv.replace(/^\uFEFF/, "");
     const lines = csvNoBom
@@ -311,6 +315,14 @@ describe("Usage logs CSV export retryCount", () => {
 
     expect(result.ok).toBe(true);
     expect(findUsageLogsBatchMock).toHaveBeenCalledTimes(2);
+    expect(findUsageLogsBatchMock).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ includeSourceSessionIds: false })
+    );
+    expect(findUsageLogsBatchMock).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ includeSourceSessionIds: false })
+    );
 
     const csvNoBom = result.data.replace(/^\uFEFF/, "");
     const lines = csvNoBom

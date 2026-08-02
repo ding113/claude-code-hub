@@ -1,7 +1,10 @@
 # syntax=docker/dockerfile:1
 
-# 构建阶段：使用 Bun（快速包管理和构建）
-FROM --platform=$BUILDPLATFORM oven/bun:debian AS build-base
+# 构建阶段：使用真实 Node.js 执行 Next.js，Bun 仅负责包管理和 script 调度
+FROM --platform=$BUILDPLATFORM oven/bun:1.3.10-debian AS bun-runtime
+
+FROM --platform=$BUILDPLATFORM node:trixie-slim AS build-base
+COPY --from=bun-runtime /usr/local/bin/bun /usr/local/bin/bun
 WORKDIR /app
 
 FROM build-base AS deps
@@ -28,8 +31,7 @@ ENV CI=true
 RUN bun run build
 
 # 运行阶段：使用 Node.js（避免 Bun 流式响应内存泄漏 Issue #18488）
-# 要求 Node >= 22.15（入站请求体 zstd 解压依赖 node:zlib 原生 zstd，见
-# src/app/v1/_lib/proxy/request-body-codec.ts 与 package.json engines）。
+# 要求 Node >= 22.19（undici 8 和入站请求体 zstd 解压依赖，见 package.json engines）。
 # node:trixie-slim 基于 Debian Trixie，提供 Node 24+，满足该要求。
 FROM node:trixie-slim AS runner
 ENV NODE_ENV=production

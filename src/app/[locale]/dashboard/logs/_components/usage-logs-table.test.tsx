@@ -24,7 +24,9 @@ vi.mock("@/components/ui/tooltip", () => ({
   TooltipProvider: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
   Tooltip: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
   TooltipTrigger: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
-  TooltipContent: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
+  TooltipContent: ({ children }: { children?: ReactNode }) => (
+    <div data-slot="tooltip-content">{children}</div>
+  ),
 }));
 
 vi.mock("@/components/ui/relative-time", () => ({
@@ -605,6 +607,57 @@ describe("usage-logs-table multiplier badge", () => {
       root.unmount();
     });
     container.remove();
+  });
+
+  test("shows the client session ID and keeps the canonical prefix identity in the tooltip", () => {
+    const html = renderToStaticMarkup(
+      <UsageLogsTable
+        logs={[
+          makeLog({
+            sessionId: "pfx:scope:fingerprint",
+            sourceSessionId: "client-session-id",
+          }),
+        ]}
+        total={1}
+        page={1}
+        pageSize={50}
+        onPageChange={() => {}}
+        isPending={false}
+      />
+    );
+
+    expect(html).toContain('data-session-id="client-session-id"');
+    expect(html).toContain("client-session-id");
+    expect(html).toContain("pfx:scope:fingerprint");
+  });
+
+  test("does not duplicate the canonical identity when it is the source fallback", () => {
+    const html = renderToStaticMarkup(
+      <UsageLogsTable
+        logs={[
+          makeLog({
+            sessionId: "same-session-id",
+            sourceSessionId: "same-session-id",
+          }),
+        ]}
+        total={1}
+        page={1}
+        pageSize={50}
+        onPageChange={() => {}}
+        isPending={false}
+      />
+    );
+    const container = document.createElement("div");
+    container.innerHTML = html;
+    const tooltip = [...container.querySelectorAll('[data-slot="tooltip-content"]')].find((node) =>
+      node.textContent?.includes("same-session-id")
+    );
+
+    expect(
+      [...(tooltip?.querySelectorAll("span") ?? [])].filter(
+        (node) => node.textContent === "same-session-id"
+      )
+    ).toHaveLength(1);
   });
 });
 

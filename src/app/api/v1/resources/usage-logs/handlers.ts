@@ -209,11 +209,18 @@ function toUsageLogsListResponse(data: unknown, query: UsageLogsActionQueryInput
     total?: number;
     page?: number;
     pageSize?: number;
+    sourceSessionIdsByIdentity?: Record<string, string[]>;
   };
+
+  const sourceSessionIdsByIdentity =
+    body.sourceSessionIdsByIdentity !== undefined
+      ? { sourceSessionIdsByIdentity: body.sourceSessionIdsByIdentity }
+      : {};
 
   if (query.cursor || body.nextCursor !== undefined || body.hasMore !== undefined) {
     return {
       items: body.logs ?? [],
+      ...sourceSessionIdsByIdentity,
       pageInfo: {
         nextCursor: normalizeUsageLogsCursor(body.nextCursor),
         hasMore: Boolean(body.hasMore),
@@ -227,6 +234,7 @@ function toUsageLogsListResponse(data: unknown, query: UsageLogsActionQueryInput
   const total = body.total ?? body.logs?.length ?? 0;
   return {
     items: body.logs ?? [],
+    ...sourceSessionIdsByIdentity,
     pageInfo: {
       page,
       pageSize,

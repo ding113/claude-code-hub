@@ -48,6 +48,23 @@ function createFakeExecutor(initial: Record<string, MigrationIndexState> = {}) {
 
 describe("0116 concurrent index preflight", () => {
   const spec = SESSION_REPLAY_INDEX_SPECS[0];
+  const hydrationSpec = SESSION_REPLAY_INDEX_SPECS.find(
+    (candidate) => candidate.canonicalName === "idx_usage_ledger_session_identity"
+  );
+
+  test("builds the unfiltered ledger identity index concurrently", async () => {
+    if (!hydrationSpec) throw new Error("missing 0117 identity index spec");
+    const { executor, execute } = createFakeExecutor();
+
+    await runSessionReplayIndexPreflight(executor, [hydrationSpec]);
+
+    const createStatement = execute.mock.calls
+      .map(([statement]) => statement)
+      .find((statement) => statement.startsWith("CREATE INDEX CONCURRENTLY"));
+    expect(createStatement).toContain(`"${hydrationSpec.temporaryName}"`);
+    expect(createStatement).toContain(hydrationSpec.definition);
+    expect(createStatement).not.toContain("WHERE");
+  });
 
   test("builds and validates a temporary index before replacing the canonical index", async () => {
     const { executor, execute, states } = createFakeExecutor({
@@ -158,6 +175,17 @@ describe("0116 concurrent index preflight", () => {
 });
 
 describe("0116 migration orchestration", () => {
+  test("preflights the unfiltered ledger identity index before migration 0117", async () => {
+    const events: string[] = [];
+    await runSessionReplayMigrationPlan({
+      baseTablesReady: true,
+      latestMigrationCreatedAt: 1785563419224,
+      migrate: async () => events.push("migrate"),
+      runIndexPreflight: async () => events.push("preflight"),
+    });
+
+    expect(events).toEqual(["preflight", "migrate", "preflight"]);
+  });
   test("migrates a fresh database before installing concurrent indexes", async () => {
     const calls: string[] = [];
 
@@ -192,7 +220,7 @@ describe("0116 migration orchestration", () => {
     expect(calls).toEqual(["indexes", "migrate", "indexes"]);
   });
 
-  test("repairs indexes in postflight after migration 0116 was recorded", async () => {
+  test("preflights the new identity index after migration 0116 was recorded", async () => {
     const calls: string[] = [];
 
     await runSessionReplayMigrationPlan({
@@ -206,7 +234,7 @@ describe("0116 migration orchestration", () => {
       },
     });
 
-    expect(calls).toEqual(["migrate", "indexes"]);
+    expect(calls).toEqual(["indexes", "migrate", "indexes"]);
   });
 
   test("fails the migration flow when concurrent index postflight fails", async () => {

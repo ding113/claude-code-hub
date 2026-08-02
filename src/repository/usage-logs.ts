@@ -1,6 +1,7 @@
 import "server-only";
 
-import { and, desc, eq, gte, isNull, lt, sql } from "drizzle-orm";
+import type { SQL } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNull, lt, sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import { keys as keysTable, messageRequest, providers, usageLedger, users } from "@/drizzle/schema";
 import { TTLMap } from "@/lib/cache/ttl-map";
@@ -19,6 +20,7 @@ import {
   buildDefaultHiddenUsageLogEndpointCondition,
   buildUsageLogConditions,
   buildUsageLogEndpointMatchCondition,
+  isReservedSessionIdentity,
   RETRY_COUNT_EXPR,
   type UsageLogReplayFilter,
 } from "./_shared/usage-log-filters";
@@ -59,6 +61,13 @@ function buildLedgerUsageLogConditions(replayFilter: UsageLogReplayFilter | unde
   return conditions;
 }
 
+function buildLedgerSessionIdCondition(sessionId: string) {
+  const canonicalCondition = sql`${ledgerSessionIdentity} = ${sessionId}`;
+  return isReservedSessionIdentity(sessionId)
+    ? canonicalCondition
+    : sql`(${canonicalCondition} OR ${usageLedger.sessionId} = ${sessionId})`;
+}
+
 const messageSessionIdentity = sql<
   string | null
 >`COALESCE(${messageRequest.sessionIdentity}, ${messageRequest.sessionId})`;
@@ -66,11 +75,146 @@ const ledgerSessionIdentity = sql<
   string | null
 >`COALESCE(${usageLedger.sessionIdentity}, ${usageLedger.sessionId})`;
 
+interface UsageLogSourceSessionScope {
+  userId?: number;
+  keyId?: number;
+  keyString?: string;
+}
+
+async function loadMessageSourceSessionIds(
+  sessionIds: string[],
+  scope: UsageLogSourceSessionScope
+): Promise<Map<string, string[]>> {
+  if (sessionIds.length === 0) return new Map();
+
+  const conditions = [
+    isNull(messageRequest.deletedAt),
+    inArray(messageSessionIdentity, sessionIds),
+  ];
+  if (scope.userId !== undefined) conditions.push(eq(messageRequest.userId, scope.userId));
+  if (scope.keyId !== undefined) conditions.push(eq(keysTable.id, scope.keyId));
+  if (scope.keyString !== undefined) conditions.push(eq(messageRequest.key, scope.keyString));
+
+  const baseQuery = db
+    .select({
+      sessionId: messageSessionIdentity,
+      sourceSessionIds: sql<string[]>`
+        ARRAY_AGG(DISTINCT ${messageRequest.sessionId})
+          FILTER (WHERE ${messageRequest.sessionId} IS NOT NULL)
+      `,
+    })
+    .from(messageRequest);
+  const query =
+    scope.keyId !== undefined
+      ? baseQuery.innerJoin(keysTable, eq(messageRequest.key, keysTable.key))
+      : baseQuery;
+  const rows = await query.where(and(...conditions)).groupBy(messageSessionIdentity);
+
+  return new Map(
+    rows
+      .filter((row): row is { sessionId: string; sourceSessionIds: string[] } =>
+        Boolean(row.sessionId)
+      )
+      .map((row) => [row.sessionId, row.sourceSessionIds ?? []])
+  );
+}
+
+async function loadLedgerSourceSessionIds(
+  sessionIds: string[],
+  scope: UsageLogSourceSessionScope
+): Promise<Map<string, string[]>> {
+  if (sessionIds.length === 0) return new Map();
+
+  const conditions = [inArray(ledgerSessionIdentity, sessionIds)];
+  if (scope.userId !== undefined) conditions.push(eq(usageLedger.userId, scope.userId));
+  if (scope.keyId !== undefined) conditions.push(eq(keysTable.id, scope.keyId));
+  if (scope.keyString !== undefined) conditions.push(eq(usageLedger.key, scope.keyString));
+
+  const baseQuery = db
+    .select({
+      sessionId: ledgerSessionIdentity,
+      sourceSessionIds: sql<string[]>`
+        ARRAY_AGG(DISTINCT ${usageLedger.sessionId})
+          FILTER (WHERE ${usageLedger.sessionId} IS NOT NULL)
+      `,
+    })
+    .from(usageLedger);
+  const query =
+    scope.keyId !== undefined
+      ? baseQuery.innerJoin(keysTable, eq(usageLedger.key, keysTable.key))
+      : baseQuery;
+  const rows = await query.where(and(...conditions)).groupBy(ledgerSessionIdentity);
+
+  return new Map(
+    rows
+      .filter((row): row is { sessionId: string; sourceSessionIds: string[] } =>
+        Boolean(row.sessionId)
+      )
+      .map((row) => [row.sessionId, row.sourceSessionIds ?? []])
+  );
+}
+
+async function hydrateUsageLogSourceSessionIds(
+  logs: UsageLogRow[],
+  scope: UsageLogSourceSessionScope,
+  sources: { message: boolean; ledger: boolean }
+): Promise<UsageLogRow[]> {
+  const sessionIds = [
+    ...new Set(logs.map((log) => log.sessionId).filter((id): id is string => Boolean(id))),
+  ];
+  if (sessionIds.length === 0) return logs;
+
+  const [messageSources, ledgerSources] = await Promise.all([
+    sources.message ? loadMessageSourceSessionIds(sessionIds, scope) : Promise.resolve(new Map()),
+    sources.ledger ? loadLedgerSourceSessionIds(sessionIds, scope) : Promise.resolve(new Map()),
+  ]);
+
+  return logs.map((log) => {
+    if (!log.sessionId) return log;
+    const sourceSessionIds = [
+      ...new Set([
+        ...(messageSources.get(log.sessionId) ?? []),
+        ...(ledgerSources.get(log.sessionId) ?? []),
+      ]),
+    ];
+    return sourceSessionIds.length > 0 ? { ...log, sourceSessionIds } : log;
+  });
+}
+
+async function loadUsageLogSourceSessionIdsByIdentity(
+  logs: UsageLogRow[],
+  scope: UsageLogSourceSessionScope,
+  sources: { message: boolean; ledger: boolean }
+): Promise<Record<string, string[]>> {
+  const sessionIds = [
+    ...new Set(logs.map((log) => log.sessionId).filter((id): id is string => Boolean(id))),
+  ];
+  if (sessionIds.length === 0) return {};
+
+  const [messageSources, ledgerSources] = await Promise.all([
+    sources.message ? loadMessageSourceSessionIds(sessionIds, scope) : Promise.resolve(new Map()),
+    sources.ledger ? loadLedgerSourceSessionIds(sessionIds, scope) : Promise.resolve(new Map()),
+  ]);
+
+  const sourceIdsByIdentity: Array<[string, string[]]> = [];
+  for (const sessionId of sessionIds) {
+    const sourceSessionIds = [
+      ...new Set([
+        ...(messageSources.get(sessionId) ?? []),
+        ...(ledgerSources.get(sessionId) ?? []),
+      ]),
+    ];
+    if (sourceSessionIds.length > 0) sourceIdsByIdentity.push([sessionId, sourceSessionIds]);
+  }
+  return Object.fromEntries(sourceIdsByIdentity);
+}
+
 export interface UsageLogRow {
   id: number;
   createdAt: Date | null;
   sessionId: string | null; // Public Session identity
   sourceSessionId: string | null; // Physical Session source for request-scoped readback
+  sourceSessionIds?: string[]; // All physical client session IDs grouped under the public identity
   requestSequence: number | null; // Request Sequence（Session 内请求序号）
   userName: string;
   keyName: string;
@@ -161,6 +305,7 @@ export interface UsageLogsPaginatedResult {
  */
 export interface UsageLogsBatchResult {
   logs: UsageLogRow[];
+  sourceSessionIdsByIdentity?: Record<string, string[]>;
   nextCursor: { createdAt: string; id: number } | null;
   hasMore: boolean;
 }
@@ -171,6 +316,8 @@ export interface UsageLogsBatchResult {
 export interface UsageLogBatchFilters extends Omit<UsageLogFilters, "page" | "pageSize"> {
   cursor?: { createdAt: string; id: number };
   limit?: number;
+  /** Export callers can skip the UI-only source identity hydration query. */
+  includeSourceSessionIds?: boolean;
 }
 
 /**
@@ -180,7 +327,7 @@ export interface UsageLogBatchFilters extends Omit<UsageLogFilters, "page" | "pa
 export async function findUsageLogsBatch(
   filters: UsageLogBatchFilters
 ): Promise<UsageLogsBatchResult> {
-  const { userId, keyId, providerId, cursor, limit = 50 } = filters;
+  const { userId, keyId, providerId, cursor, limit = 50, includeSourceSessionIds = true } = filters;
   const safeLimit = Math.min(100, Math.max(1, limit));
 
   // Build query conditions
@@ -313,7 +460,19 @@ export async function findUsageLogsBatch(
   });
 
   if (logs.length > 0) {
-    return { logs, nextCursor, hasMore };
+    const sourceSessionIdsByIdentity = includeSourceSessionIds
+      ? await loadUsageLogSourceSessionIdsByIdentity(
+          logs,
+          { userId: filters.userId, keyId: filters.keyId },
+          { message: true, ledger: false }
+        )
+      : undefined;
+    return {
+      logs,
+      sourceSessionIdsByIdentity,
+      nextCursor,
+      hasMore,
+    };
   }
 
   if (!(await isLedgerOnlyMode())) {
@@ -340,7 +499,7 @@ export async function findUsageLogsBatch(
 
   const trimmedSessionId = filters.sessionId?.trim();
   if (trimmedSessionId) {
-    ledgerConditions.push(eq(ledgerSessionIdentity, trimmedSessionId));
+    ledgerConditions.push(buildLedgerSessionIdCondition(trimmedSessionId));
   }
 
   if (filters.startTime !== undefined) {
@@ -503,7 +662,18 @@ export async function findUsageLogsBatch(
     };
   });
 
-  return { logs: fallbackLogs, nextCursor: ledgerNextCursor, hasMore: ledgerHasMore };
+  return {
+    logs: fallbackLogs,
+    sourceSessionIdsByIdentity: includeSourceSessionIds
+      ? await loadUsageLogSourceSessionIdsByIdentity(
+          fallbackLogs,
+          { userId: filters.userId, keyId: filters.keyId },
+          { message: false, ledger: true }
+        )
+      : undefined,
+    nextCursor: ledgerNextCursor,
+    hasMore: ledgerHasMore,
+  };
 }
 
 interface UsageLogSlimFilters {
@@ -776,7 +946,7 @@ function buildKeyLedgerConditions(
 
   const trimmedSessionId = filters.sessionId?.trim();
   if (trimmedSessionId) {
-    conditions.push(eq(ledgerSessionIdentity, trimmedSessionId));
+    conditions.push(buildLedgerSessionIdCondition(trimmedSessionId));
   }
 
   if (filters.startTime) {
@@ -1023,6 +1193,7 @@ function mapUsageLogRowFromMessageResult(row: {
   createdAt: Date | null;
   sessionId: string | null;
   sourceSessionId: string | null;
+  sourceSessionIds?: string[];
   requestSequence: number | null;
   userName: string;
   keyName: string;
@@ -1079,6 +1250,7 @@ function mapUsageLogRowFromMessageResult(row: {
 
   return {
     ...row,
+    sourceSessionIds: row.sourceSessionIds ? [...new Set(row.sourceSessionIds)] : undefined,
     requestSequence: row.requestSequence ?? null,
     totalTokens: totalRowTokens,
     costUsd: row.costUsd?.toString() ?? null,
@@ -1098,6 +1270,7 @@ function mapUsageLogRowFromLedgerResult(row: {
   createdAt: Date | null;
   sessionId: string | null;
   sourceSessionId: string | null;
+  sourceSessionIds?: string[];
   userId: number;
   userName: string | null;
   key: string;
@@ -1138,6 +1311,7 @@ function mapUsageLogRowFromLedgerResult(row: {
     createdAt: row.createdAt,
     sessionId: row.sessionId,
     sourceSessionId: row.sourceSessionId,
+    sourceSessionIds: row.sourceSessionIds ? [...new Set(row.sourceSessionIds)] : undefined,
     requestSequence: null,
     userName: row.userName ?? `User #${row.userId}`,
     keyName: row.keyName ?? row.key,
@@ -1184,7 +1358,7 @@ function mapUsageLogRowFromLedgerResult(row: {
 export async function findReadonlyUsageLogsBatchForKey(
   filters: Omit<UsageLogBatchFilters, "userId" | "keyId" | "providerId"> & { keyString: string }
 ): Promise<UsageLogsBatchResult> {
-  const { keyString, cursor, limit = 50 } = filters;
+  const { keyString, cursor, limit = 50, includeSourceSessionIds = true } = filters;
   const safeLimit = Math.min(100, Math.max(1, limit));
   const fetchLimit = safeLimit + 1;
 
@@ -1310,8 +1484,16 @@ export async function findReadonlyUsageLogsBatchForKey(
     "findReadonlyUsageLogsBatchForKey"
   );
 
+  const logs = pageRows.map(({ createdAtRaw: _createdAtRaw, ...log }) => log);
   return {
-    logs: pageRows.map(({ createdAtRaw: _createdAtRaw, ...log }) => log),
+    logs,
+    sourceSessionIdsByIdentity: includeSourceSessionIds
+      ? await loadUsageLogSourceSessionIdsByIdentity(
+          logs,
+          { keyString },
+          { message: true, ledger: true }
+        )
+      : undefined,
     nextCursor,
     hasMore,
   };
@@ -1391,7 +1573,10 @@ export async function getDistinctEndpointsForKey(keyString: string): Promise<str
  * 查询使用日志（支持多种筛选条件和分页）
  */
 
-export async function findUsageLogsWithDetails(filters: UsageLogFilters): Promise<UsageLogsResult> {
+export async function findUsageLogsWithDetails(
+  filters: UsageLogFilters,
+  options: { includeSourceSessionIds?: boolean } = {}
+): Promise<UsageLogsResult> {
   const { userId, keyId, providerId, page = 1, pageSize = 50 } = filters;
 
   const safePage = page > 0 ? page : 1;
@@ -1559,7 +1744,14 @@ export async function findUsageLogsWithDetails(filters: UsageLogFilters): Promis
   });
 
   return {
-    logs,
+    logs:
+      options.includeSourceSessionIds === false
+        ? logs
+        : await hydrateUsageLogSourceSessionIds(
+            logs,
+            { userId: filters.userId, keyId: filters.keyId },
+            { message: true, ledger: false }
+          ),
     total,
     summary: {
       totalRequests,
@@ -1632,6 +1824,11 @@ export interface UsageLogSessionIdSuggestionFilters {
   limit?: number;
 }
 
+interface UsageLogSessionIdSuggestionRow {
+  sessionId: string | null;
+  firstSeen: Date | null;
+}
+
 export async function findUsageLogSessionIdSuggestions(
   filters: UsageLogSessionIdSuggestionFilters
 ): Promise<string[]> {
@@ -1641,45 +1838,122 @@ export async function findUsageLogSessionIdSuggestions(
   if (!trimmedTerm) return [];
 
   const pattern = `${escapeLike(trimmedTerm)}%`;
-  const conditions = [
-    isNull(messageRequest.deletedAt),
-    EXCLUDE_WARMUP_CONDITION,
-    sql`${messageSessionIdentity} IS NOT NULL`,
-    sql`length(${messageSessionIdentity}) > 0`,
-    sql`${messageSessionIdentity} LIKE ${pattern} ESCAPE '\\'`,
-  ];
+  const ledgerOnly = await isLedgerOnlyMode();
+  let canonicalResults: UsageLogSessionIdSuggestionRow[];
+  let physicalResults: UsageLogSessionIdSuggestionRow[];
 
-  if (userId !== undefined) {
-    conditions.push(eq(messageRequest.userId, userId));
+  if (ledgerOnly) {
+    const sharedConditions = [isNull(usageLedger.blockedBy)];
+
+    if (userId !== undefined) {
+      sharedConditions.push(eq(usageLedger.userId, userId));
+    }
+
+    if (keyId !== undefined) {
+      sharedConditions.push(eq(keysTable.id, keyId));
+    }
+
+    if (providerId !== undefined) {
+      sharedConditions.push(eq(usageLedger.finalProviderId, providerId));
+    }
+
+    const queryCandidates = async (
+      candidate: SQL<string | null> | typeof usageLedger.sessionId
+    ) => {
+      const baseQuery = db
+        .select({
+          sessionId: candidate,
+          firstSeen: sql<Date | null>`max(${usageLedger.createdAt})`,
+        })
+        .from(usageLedger);
+      const query =
+        keyId !== undefined
+          ? baseQuery.innerJoin(keysTable, eq(usageLedger.key, keysTable.key))
+          : baseQuery;
+
+      return query
+        .where(
+          and(
+            ...sharedConditions,
+            sql`${candidate} IS NOT NULL`,
+            sql`length(${candidate}) > 0`,
+            candidate === usageLedger.sessionId
+              ? sql`${candidate} NOT LIKE 'pfx:%' AND ${candidate} NOT LIKE 'sid:%'`
+              : sql`true`,
+            sql`${candidate} LIKE ${pattern} ESCAPE '\\'`
+          )
+        )
+        .groupBy(candidate)
+        .orderBy(desc(sql`max(${usageLedger.createdAt})`))
+        .limit(limit);
+    };
+
+    [canonicalResults, physicalResults] = await Promise.all([
+      queryCandidates(ledgerSessionIdentity),
+      queryCandidates(usageLedger.sessionId),
+    ]);
+  } else {
+    const sharedConditions = [isNull(messageRequest.deletedAt), EXCLUDE_WARMUP_CONDITION];
+
+    if (userId !== undefined) {
+      sharedConditions.push(eq(messageRequest.userId, userId));
+    }
+
+    if (keyId !== undefined) {
+      sharedConditions.push(eq(keysTable.id, keyId));
+    }
+
+    if (providerId !== undefined) {
+      sharedConditions.push(eq(messageRequest.providerId, providerId));
+    }
+
+    const queryCandidates = async (
+      candidate: SQL<string | null> | typeof messageRequest.sessionId
+    ) => {
+      const baseQuery = db
+        .select({
+          sessionId: candidate,
+          firstSeen: sql<Date | null>`max(${messageRequest.createdAt})`,
+        })
+        .from(messageRequest);
+      const query =
+        keyId !== undefined
+          ? baseQuery.innerJoin(keysTable, eq(messageRequest.key, keysTable.key))
+          : baseQuery;
+
+      return query
+        .where(
+          and(
+            ...sharedConditions,
+            sql`${candidate} IS NOT NULL`,
+            sql`length(${candidate}) > 0`,
+            candidate === messageRequest.sessionId
+              ? sql`${candidate} NOT LIKE 'pfx:%' AND ${candidate} NOT LIKE 'sid:%'`
+              : sql`true`,
+            sql`${candidate} LIKE ${pattern} ESCAPE '\\'`
+          )
+        )
+        .groupBy(candidate)
+        .orderBy(desc(sql`max(${messageRequest.createdAt})`))
+        .limit(limit);
+    };
+
+    [canonicalResults, physicalResults] = await Promise.all([
+      queryCandidates(messageSessionIdentity),
+      queryCandidates(messageRequest.sessionId),
+    ]);
   }
 
-  if (keyId !== undefined) {
-    conditions.push(eq(keysTable.id, keyId));
+  const bySessionId = new Map<string, Date>();
+  for (const row of [...canonicalResults, ...physicalResults]) {
+    if (!row.sessionId || !row.firstSeen) continue;
+    const current = bySessionId.get(row.sessionId);
+    if (!current || row.firstSeen > current) bySessionId.set(row.sessionId, row.firstSeen);
   }
-
-  if (providerId !== undefined) {
-    conditions.push(eq(messageRequest.providerId, providerId));
-  }
-
-  const baseQuery = db
-    .select({
-      sessionId: messageSessionIdentity,
-      firstSeen: sql<Date>`min(${messageRequest.createdAt})`,
-    })
-    .from(messageRequest);
-
-  const query =
-    keyId !== undefined
-      ? baseQuery.innerJoin(keysTable, eq(messageRequest.key, keysTable.key))
-      : baseQuery;
-
-  const results = await query
-    .where(and(...conditions))
-    .groupBy(messageSessionIdentity)
-    .orderBy(desc(sql`min(${messageRequest.createdAt})`))
-    .limit(limit);
-
-  return results.map((r) => r.sessionId).filter((id): id is string => Boolean(id));
+  return [...bySessionId.entries()]
+    .sort((a, b) => b[1].getTime() - a[1].getTime())
+    .slice(0, limit)
+    .map(([sessionId]) => sessionId);
 }
 
 /**
@@ -1779,7 +2053,7 @@ export async function findUsageLogsStats(
 
   const trimmedSessionId = filters.sessionId?.trim();
   if (trimmedSessionId) {
-    conditions.push(eq(ledgerSessionIdentity, trimmedSessionId));
+    conditions.push(buildLedgerSessionIdCondition(trimmedSessionId));
   }
 
   if (filters.startTime !== undefined) {

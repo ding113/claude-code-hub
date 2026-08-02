@@ -8,6 +8,7 @@ import type { UsageLogRow } from "@/repository/usage-logs";
 import type { RoutingTraceV1 } from "@/types/routing-trace";
 
 let mockLogs: UsageLogRow[] = [];
+let mockSourceSessionIdsByIdentity: Record<string, string[]> = {};
 let mockIsLoading = false;
 let mockIsError = false;
 let mockError: unknown = null;
@@ -24,7 +25,16 @@ vi.mock("@tanstack/react-query", () => ({
   useInfiniteQuery: (options: unknown) => {
     useInfiniteQuerySpy(options);
     return {
-      data: { pages: [{ logs: mockLogs, nextCursor: null, hasMore: false }] },
+      data: {
+        pages: [
+          {
+            logs: mockLogs,
+            sourceSessionIdsByIdentity: mockSourceSessionIdsByIdentity,
+            nextCursor: null,
+            hasMore: false,
+          },
+        ],
+      },
       fetchNextPage: vi.fn(),
       hasNextPage: mockHasNextPage,
       isFetchingNextPage: mockIsFetchingNextPage,
@@ -192,9 +202,45 @@ function renderTableWithLog(overrides: Partial<UsageLogRow>) {
   mockHasNextPage = false;
   mockIsFetchingNextPage = false;
   mockLogs = [makeLog({ id: 1, ...overrides })];
+  mockSourceSessionIdsByIdentity = {};
 
   return renderToStaticMarkup(<VirtualizedLogsTable filters={{}} autoRefreshEnabled={false} />);
 }
+
+test("shows the client session ID and canonical prefix identity in the virtualized tooltip", () => {
+  renderTableWithLog({
+    sessionId: "pfx:scope:fingerprint",
+    sourceSessionId: "client-session-id",
+  });
+  mockSourceSessionIdsByIdentity = {
+    "pfx:scope:fingerprint": ["client-session-id", "client-session-id-2"],
+  };
+  const html = renderToStaticMarkup(
+    <VirtualizedLogsTable filters={{}} autoRefreshEnabled={false} />
+  );
+
+  expect(html).toContain("client-session-id");
+  expect(html).toContain("client-session-id-2");
+  expect(html).toContain("pfx:scope:fingerprint");
+});
+
+test("does not duplicate the canonical identity when it is the source fallback", () => {
+  const html = renderTableWithLog({
+    sessionId: "same-session-id",
+    sourceSessionId: "same-session-id",
+  });
+  const container = document.createElement("div");
+  container.innerHTML = html;
+  const tooltip = [...container.querySelectorAll('[data-slot="tooltip-content"]')].find((node) =>
+    node.textContent?.includes("same-session-id")
+  );
+
+  expect(
+    [...(tooltip?.querySelectorAll("span") ?? [])].filter(
+      (node) => node.textContent === "same-session-id"
+    )
+  ).toHaveLength(1);
+});
 
 function renderCostTooltipWithLog(overrides: Partial<UsageLogRow>) {
   const html = renderTableWithLog(overrides);

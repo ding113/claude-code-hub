@@ -5,6 +5,10 @@ import { db } from "@/drizzle/db";
 import { keys as keysTable, messageRequest, providers, users } from "@/drizzle/schema";
 import { logger } from "@/lib/logger";
 
+const messageSessionIdentity = sql<
+  string | null
+>`COALESCE(${messageRequest.sessionIdentity}, ${messageRequest.sessionId})`;
+
 /**
  * 活动流条目（单个请求记录）
  */
@@ -63,17 +67,17 @@ export async function findRecentActivityStream(limit = 20): Promise<ActivityStre
   try {
     // 1. 从 Redis 获取活跃 session ID
     const { SessionTracker } = await import("@/lib/session-tracker");
-    const activeSessionIds = await SessionTracker.getActiveSessions();
+    const activeSessionIds = await SessionTracker.getObservedActiveSessions();
 
     let activityItems: ActivityStreamItem[] = [];
 
     // 2. 查询活跃 session 的最新请求（每个 session 取最新1条）
     if (activeSessionIds.length > 0) {
-      // 使用窗口函数获取每个 session 的最新请求
-      const activeSessionRequests = await db
-        .select({
+      // 先在数据库内按 canonical identity 去重，再限制 session 级结果数量。
+      const latestActiveSessionRows = db
+        .selectDistinctOn([messageSessionIdentity], {
           id: messageRequest.id,
-          sessionId: messageRequest.sessionId,
+          sessionId: messageSessionIdentity.as("session_id"),
           userName: users.name,
           userId: messageRequest.userId,
           keyId: keysTable.id,
@@ -90,7 +94,6 @@ export async function findRecentActivityStream(limit = 20): Promise<ActivityStre
           outputTokens: messageRequest.outputTokens,
           cacheCreationInputTokens: messageRequest.cacheCreationInputTokens,
           cacheReadInputTokens: messageRequest.cacheReadInputTokens,
-          rowNum: sql<number>`ROW_NUMBER() OVER (PARTITION BY ${messageRequest.sessionId} ORDER BY ${messageRequest.createdAt} DESC)`,
         })
         .from(messageRequest)
         .leftJoin(users, eq(messageRequest.userId, users.id))
@@ -100,35 +103,38 @@ export async function findRecentActivityStream(limit = 20): Promise<ActivityStre
           and(
             isNull(messageRequest.deletedAt),
             eq(messageRequest.isReplay, false),
-            inArray(messageRequest.sessionId, activeSessionIds)
+            inArray(messageSessionIdentity, activeSessionIds)
           )
         )
-        .orderBy(desc(messageRequest.createdAt))
-        .limit(limit * 2); // 获取足够的数据，后面会过滤
+        .orderBy(messageSessionIdentity, desc(messageRequest.createdAt))
+        .as("latest_active_session_rows");
 
-      // 过滤出每个 session 的最新一条（rowNum = 1）
-      const latestPerSession = activeSessionRequests
-        .filter((row) => row.rowNum === 1)
-        .map((row) => ({
-          id: row.id,
-          sessionId: row.sessionId,
-          userName: row.userName || "Unknown",
-          userId: row.userId,
-          keyId: row.keyId ?? 0,
-          keyName: row.keyName || "Unknown",
-          providerId: row.providerId,
-          providerName: row.providerName,
-          model: row.model,
-          originalModel: row.originalModel,
-          statusCode: row.statusCode,
-          durationMs: row.durationMs,
-          costUsd: row.costUsd,
-          startTime: row.createdAt ? new Date(row.createdAt).getTime() : Date.now(),
-          inputTokens: row.inputTokens,
-          outputTokens: row.outputTokens,
-          cacheCreationInputTokens: row.cacheCreationInputTokens,
-          cacheReadInputTokens: row.cacheReadInputTokens,
-        }));
+      const activeSessionRequests = await db
+        .select()
+        .from(latestActiveSessionRows)
+        .orderBy(desc(latestActiveSessionRows.createdAt))
+        .limit(limit);
+
+      const latestPerSession = activeSessionRequests.map((row) => ({
+        id: row.id,
+        sessionId: row.sessionId,
+        userName: row.userName || "Unknown",
+        userId: row.userId,
+        keyId: row.keyId ?? 0,
+        keyName: row.keyName || "Unknown",
+        providerId: row.providerId,
+        providerName: row.providerName,
+        model: row.model,
+        originalModel: row.originalModel,
+        statusCode: row.statusCode,
+        durationMs: row.durationMs,
+        costUsd: row.costUsd,
+        startTime: row.createdAt ? new Date(row.createdAt).getTime() : Date.now(),
+        inputTokens: row.inputTokens,
+        outputTokens: row.outputTokens,
+        cacheCreationInputTokens: row.cacheCreationInputTokens,
+        cacheReadInputTokens: row.cacheReadInputTokens,
+      }));
 
       activityItems = latestPerSession;
 
@@ -147,13 +153,13 @@ export async function findRecentActivityStream(limit = 20): Promise<ActivityStre
 
       const conditions = [isNull(messageRequest.deletedAt), eq(messageRequest.isReplay, false)];
       if (excludedSessionIds.length > 0) {
-        conditions.push(notInArray(messageRequest.sessionId, excludedSessionIds));
+        conditions.push(notInArray(messageSessionIdentity, excludedSessionIds));
       }
 
       const recentRequests = await db
         .select({
           id: messageRequest.id,
-          sessionId: messageRequest.sessionId,
+          sessionId: messageSessionIdentity,
           userName: users.name,
           userId: messageRequest.userId,
           keyId: keysTable.id,

@@ -20,6 +20,10 @@ export interface UsageLogFilterParams {
 
 export const DEFAULT_HIDDEN_USAGE_LOG_ENDPOINTS = [...NON_BILLING_ENDPOINTS];
 
+export function isReservedSessionIdentity(value: string): boolean {
+  return value.startsWith("pfx:") || value.startsWith("sid:");
+}
+
 function normalizeUsageLogEndpoint(endpoint: string): string {
   const trimmed = endpoint.trim().toLowerCase();
   if (!trimmed) {
@@ -141,8 +145,13 @@ export function buildUsageLogConditions(filters: UsageLogFilterParams): SQL[] {
 
   const trimmedSessionId = filters.sessionId?.trim();
   if (trimmedSessionId) {
+    const canonicalCondition = sql`
+      COALESCE(${messageRequest.sessionIdentity}, ${messageRequest.sessionId}) = ${trimmedSessionId}
+    `;
     conditions.push(
-      sql`COALESCE(${messageRequest.sessionIdentity}, ${messageRequest.sessionId}) = ${trimmedSessionId}`
+      isReservedSessionIdentity(trimmedSessionId)
+        ? canonicalCondition
+        : sql`(${canonicalCondition} OR ${messageRequest.sessionId} = ${trimmedSessionId})`
     );
   }
 

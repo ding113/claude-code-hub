@@ -1,4 +1,8 @@
 import { describe, expect, test, vi } from "vitest";
+import { PgDialect } from "drizzle-orm/pg-core";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { buildUsageLogConditions } from "@/repository/_shared/usage-log-filters";
 
 function sqlToString(sqlObj: unknown): string {
   const visited = new Set<unknown>();
@@ -56,6 +60,11 @@ function createThenableQuery<T>(result: T, whereArgs?: unknown[]) {
 }
 
 describe("Usage logs sessionId filter", () => {
+  test("readonly key hydration queries both backing stores even when one page is empty", () => {
+    const source = readFileSync(resolve(process.cwd(), "src/repository/usage-logs.ts"), "utf8");
+    expect(source).toContain("{ message: true, ledger: true }");
+  });
+
   test("findUsageLogsBatch: sessionId 为空/空白不应追加条件", async () => {
     vi.resetModules();
 
@@ -115,6 +124,43 @@ describe("Usage logs sessionId filter", () => {
     expect(ledgerWhereSql).not.toContain("  abc  ");
   });
 
+  test("findUsageLogsBatch: sessionId should match canonical and physical identities", async () => {
+    vi.resetModules();
+
+    const whereArgs: unknown[] = [];
+    const selectMock = vi.fn(() => createThenableQuery([], whereArgs));
+
+    vi.doMock("@/drizzle/db", () => ({
+      db: {
+        select: selectMock,
+        execute: vi.fn(async () => ({ count: 0 })),
+      },
+    }));
+    vi.doMock("@/lib/ledger-fallback", () => ({
+      isLedgerOnlyMode: vi.fn(async () => false),
+    }));
+
+    const { findUsageLogsBatch } = await import("@/repository/usage-logs");
+    await findUsageLogsBatch({ sessionId: "client-session" });
+
+    const primaryWhereSql = new PgDialect().sqlToQuery(whereArgs[0] as never).sql.toLowerCase();
+    expect(primaryWhereSql).toContain(
+      'coalesce("message_request"."session_identity", "message_request"."session_id") ='
+    );
+    expect(primaryWhereSql).toContain('or "message_request"."session_id" =');
+  });
+
+  test.each(["pfx:scope:fingerprint", "sid:physical-id"])(
+    "reserved session identities do not alias raw physical session IDs: %s",
+    (sessionId) => {
+      const [condition] = buildUsageLogConditions({ sessionId });
+      const sql = new PgDialect().sqlToQuery(condition).sql.toLowerCase();
+
+      expect(sql).toContain("coalesce");
+      expect(sql).not.toContain('"message_request"."session_id" =');
+    }
+  );
+
   test("findUsageLogsBatch: hasMore 为 true 时缺失 createdAtRaw 应直接报错，避免静默截断", async () => {
     vi.resetModules();
 
@@ -125,6 +171,7 @@ describe("Usage logs sessionId filter", () => {
           createdAt: new Date("2026-03-21T00:00:00Z"),
           createdAtRaw: null,
           sessionId: null,
+          sourceSessionIds: [],
           requestSequence: null,
           userName: "u",
           keyName: "k",
@@ -230,6 +277,148 @@ describe("Usage logs sessionId filter", () => {
     await findUsageLogsBatch({ limit: 1000000 });
 
     expect(query?.limit).toHaveBeenCalledWith(101);
+  });
+
+  test("findUsageLogsBatch: returns distinct source IDs once per page identity", async () => {
+    vi.resetModules();
+
+    const projections: unknown[] = [];
+    const selectMock = vi.fn((projection: unknown) => {
+      projections.push(projection);
+      const call = projections.length;
+      if (call === 1) {
+        return createThenableQuery([
+          {
+            id: 101,
+            createdAt: new Date("2026-03-21T00:00:00Z"),
+            createdAtRaw: "2026-03-21T00:00:00.000000Z",
+            sessionId: "pfx:scope:fingerprint",
+            sourceSessionId: "client-old",
+            requestSequence: 1,
+            userName: "u",
+            keyName: "k",
+            providerName: "p",
+            model: "m",
+            originalModel: "m",
+            actualResponseModel: null,
+            endpoint: "/v1/messages",
+            statusCode: 200,
+            inputTokens: 1,
+            outputTokens: 1,
+            cacheCreationInputTokens: 0,
+            cacheReadInputTokens: 0,
+            cacheCreation5mInputTokens: 0,
+            cacheCreation1hInputTokens: 0,
+            cacheTtlApplied: null,
+            costUsd: "0.01",
+            costMultiplier: null,
+            groupCostMultiplier: null,
+            costBreakdown: null,
+            hedgeLosers: null,
+            durationMs: 10,
+            tfftMs: 5,
+            firstByteMs: 5,
+            errorMessage: null,
+            providerChain: null,
+            routingTrace: null,
+            blockedBy: null,
+            blockedReason: null,
+            isReplay: false,
+            replaySourceRequestId: null,
+            userAgent: null,
+            clientIp: null,
+            messagesCount: null,
+            context1mApplied: null,
+            swapCacheTtlApplied: null,
+            specialSettings: null,
+          },
+        ]);
+      }
+      if (call === 2) {
+        return createThenableQuery([
+          {
+            sessionId: "pfx:scope:fingerprint",
+            sourceSessionIds: ["client-new", "client-old"],
+          },
+        ]);
+      }
+      return createThenableQuery([]);
+    });
+
+    vi.doMock("@/drizzle/db", () => ({ db: { select: selectMock } }));
+    vi.doMock("@/lib/ledger-fallback", () => ({
+      isLedgerOnlyMode: vi.fn(async () => false),
+    }));
+
+    const { findUsageLogsBatch } = await import("@/repository/usage-logs");
+    const result = await findUsageLogsBatch({ cursor: { createdAt: "2026-03-22", id: 102 } });
+
+    expect(result.logs[0]?.sourceSessionIds).toBeUndefined();
+    expect(result.sourceSessionIdsByIdentity).toEqual({
+      "pfx:scope:fingerprint": ["client-new", "client-old"],
+    });
+    expect(sqlToString(projections[0]).toLowerCase()).not.toContain("array_agg");
+    expect(selectMock).toHaveBeenCalledTimes(2);
+  });
+
+  test("findUsageLogsBatch: skips source ID hydration for export callers", async () => {
+    vi.resetModules();
+
+    const selectMock = vi.fn(() =>
+      createThenableQuery([
+        {
+          id: 101,
+          createdAt: new Date("2026-03-21T00:00:00Z"),
+          createdAtRaw: "2026-03-21T00:00:00.000000Z",
+          sessionId: "pfx:scope:fingerprint",
+          sourceSessionId: "client-old",
+          requestSequence: 1,
+          userName: "u",
+          keyName: "k",
+          providerName: "p",
+          model: "m",
+          originalModel: "m",
+          actualResponseModel: null,
+          endpoint: "/v1/messages",
+          statusCode: 200,
+          inputTokens: 1,
+          outputTokens: 1,
+          cacheCreationInputTokens: 0,
+          cacheReadInputTokens: 0,
+          cacheCreation5mInputTokens: 0,
+          cacheCreation1hInputTokens: 0,
+          cacheTtlApplied: null,
+          costUsd: "0.01",
+          costMultiplier: null,
+          groupCostMultiplier: null,
+          costBreakdown: null,
+          hedgeLosers: null,
+          durationMs: 10,
+          tfftMs: 5,
+          firstByteMs: 5,
+          errorMessage: null,
+          providerChain: null,
+          routingTrace: null,
+          blockedBy: null,
+          blockedReason: null,
+          isReplay: false,
+          replaySourceRequestId: null,
+          userAgent: null,
+          clientIp: null,
+          messagesCount: null,
+          context1mApplied: null,
+          swapCacheTtlApplied: null,
+          specialSettings: null,
+        },
+      ])
+    );
+    vi.doMock("@/drizzle/db", () => ({ db: { select: selectMock } }));
+
+    const { findUsageLogsBatch } = await import("@/repository/usage-logs");
+    const result = await findUsageLogsBatch({ includeSourceSessionIds: false });
+
+    expect(result.logs[0]?.sourceSessionIds).toBeUndefined();
+    expect(selectMock).toHaveBeenCalledTimes(1);
   });
 
   test("findUsageLogsForKeyBatch: hasMore 为 true 时缺失 createdAtRaw 应直接报错，避免静默截断", async () => {
@@ -503,4 +692,60 @@ describe("Usage logs sessionId filter", () => {
     expect(whereSql).toContain("abc");
     expect(whereSql).not.toContain("  abc  ");
   });
+
+  test("ledger filters match canonical and physical session identities", async () => {
+    vi.resetModules();
+
+    const whereArgs: unknown[] = [];
+    const selectMock = vi.fn(() => createThenableQuery([], whereArgs));
+
+    vi.doMock("@/drizzle/db", () => ({
+      db: {
+        select: selectMock,
+        execute: vi.fn(async () => ({ count: 0 })),
+      },
+    }));
+    vi.doMock("@/lib/ledger-fallback", () => ({
+      isLedgerOnlyMode: vi.fn(async () => true),
+    }));
+
+    const { findUsageLogsForKeyBatch, findUsageLogsStats } = await import(
+      "@/repository/usage-logs"
+    );
+    await findUsageLogsForKeyBatch({ keyString: "key", sessionId: "client-session" });
+    await findUsageLogsStats({ sessionId: "client-session" });
+
+    const ledgerSql = new PgDialect().sqlToQuery(whereArgs[1] as never).sql.toLowerCase();
+    expect(ledgerSql).toContain(
+      '(coalesce("usage_ledger"."session_identity", "usage_ledger"."session_id") ='
+    );
+    expect(ledgerSql).toContain('or "usage_ledger"."session_id" =');
+  });
+
+  test.each(["pfx:scope:fingerprint", "sid:physical-id"])(
+    "ledger reserved session identities do not alias raw physical session IDs: %s",
+    async (sessionId) => {
+      vi.resetModules();
+
+      const whereArgs: unknown[] = [];
+      const selectMock = vi.fn(() => createThenableQuery([], whereArgs));
+
+      vi.doMock("@/drizzle/db", () => ({
+        db: {
+          select: selectMock,
+          execute: vi.fn(async () => ({ count: 0 })),
+        },
+      }));
+      vi.doMock("@/lib/ledger-fallback", () => ({
+        isLedgerOnlyMode: vi.fn(async () => true),
+      }));
+
+      const { findUsageLogsBatch } = await import("@/repository/usage-logs");
+      await findUsageLogsBatch({ sessionId });
+
+      const ledgerWhereSql = new PgDialect().sqlToQuery(whereArgs[1] as never).sql.toLowerCase();
+      expect(ledgerWhereSql).toContain("coalesce");
+      expect(ledgerWhereSql).not.toContain('"usage_ledger"."session_id" =');
+    }
+  );
 });
