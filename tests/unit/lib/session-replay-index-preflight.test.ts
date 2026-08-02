@@ -1,5 +1,7 @@
 import { describe, expect, test, vi } from "vitest";
 import {
+  DATABASE_TIMEOUT_INDEX_MARKER,
+  DATABASE_TIMEOUT_INDEX_MIGRATION_CREATED_AT,
   SESSION_REPLAY_INDEX_MARKER,
   SESSION_REPLAY_INDEX_SPECS,
   SESSION_REPLAY_MIGRATION_CREATED_AT,
@@ -17,21 +19,22 @@ function createFakeExecutor(initial: Record<string, MigrationIndexState> = {}) {
       return;
     }
 
-    const commentName = sql.match(/^COMMENT ON INDEX "([^"]+)"/)?.[1];
-    if (commentName) {
+    const comment = sql.match(/^COMMENT ON INDEX (?:"public"\.)?"([^"]+)" IS '([^']+)'/)?.slice(1);
+    if (comment) {
+      const [commentName, marker] = comment;
       const state = states.get(commentName);
       if (!state) throw new Error(`missing index ${commentName}`);
-      states.set(commentName, { ...state, marker: SESSION_REPLAY_INDEX_MARKER });
+      states.set(commentName, { ...state, marker });
       return;
     }
 
-    const dropName = sql.match(/^DROP INDEX CONCURRENTLY IF EXISTS "([^"]+)"/)?.[1];
+    const dropName = sql.match(/^DROP INDEX CONCURRENTLY IF EXISTS (?:"public"\.)?"([^"]+)"/)?.[1];
     if (dropName) {
       states.delete(dropName);
       return;
     }
 
-    const rename = sql.match(/^ALTER INDEX "([^"]+)" RENAME TO "([^"]+)"/)?.slice(1);
+    const rename = sql.match(/^ALTER INDEX (?:"public"\.)?"([^"]+)" RENAME TO "([^"]+)"/)?.slice(1);
     if (rename) {
       const [from, to] = rename;
       const state = states.get(from);
@@ -46,7 +49,7 @@ function createFakeExecutor(initial: Record<string, MigrationIndexState> = {}) {
   return { executor: { execute, inspectIndex }, execute, inspectIndex, states };
 }
 
-describe("0116 concurrent index preflight", () => {
+describe("database index concurrent preflight", () => {
   const spec = SESSION_REPLAY_INDEX_SPECS[0];
   const hydrationSpec = SESSION_REPLAY_INDEX_SPECS.find(
     (candidate) => candidate.canonicalName === "idx_usage_ledger_session_identity"
@@ -76,7 +79,7 @@ describe("0116 concurrent index preflight", () => {
     expect(states.get(spec.canonicalName)).toEqual({
       exists: true,
       valid: true,
-      marker: SESSION_REPLAY_INDEX_MARKER,
+      marker: spec.marker,
     });
     expect(states.has(spec.temporaryName)).toBe(false);
 
@@ -85,10 +88,10 @@ describe("0116 concurrent index preflight", () => {
       statement.startsWith("CREATE INDEX CONCURRENTLY")
     );
     const dropAt = sql.findIndex((statement) =>
-      statement.includes(`DROP INDEX CONCURRENTLY IF EXISTS "${spec.canonicalName}"`)
+      statement.includes(`DROP INDEX CONCURRENTLY IF EXISTS "public"."${spec.canonicalName}"`)
     );
     const renameAt = sql.findIndex((statement) =>
-      statement.includes(`ALTER INDEX "${spec.temporaryName}" RENAME TO`)
+      statement.includes(`ALTER INDEX "public"."${spec.temporaryName}" RENAME TO`)
     );
     expect(createAt).toBeGreaterThanOrEqual(0);
     expect(dropAt).toBeGreaterThan(createAt);
@@ -100,13 +103,13 @@ describe("0116 concurrent index preflight", () => {
       [spec.temporaryName]: {
         exists: true,
         valid: true,
-        marker: SESSION_REPLAY_INDEX_MARKER,
+        marker: spec.marker,
       },
     });
 
     await runSessionReplayIndexPreflight(executor, [spec]);
 
-    expect(states.get(spec.canonicalName)?.marker).toBe(SESSION_REPLAY_INDEX_MARKER);
+    expect(states.get(spec.canonicalName)?.marker).toBe(spec.marker);
     expect(execute.mock.calls.flat().some((sql) => sql.startsWith("CREATE INDEX"))).toBe(false);
   });
 
@@ -141,14 +144,14 @@ describe("0116 concurrent index preflight", () => {
       [spec.canonicalName]: {
         exists: true,
         valid: true,
-        marker: SESSION_REPLAY_INDEX_MARKER,
+        marker: spec.marker,
       },
       [spec.temporaryName]: { exists: true, valid: false, marker: null },
     });
 
     await runSessionReplayIndexPreflight(executor, [spec]);
 
-    expect(states.get(spec.canonicalName)?.marker).toBe(SESSION_REPLAY_INDEX_MARKER);
+    expect(states.get(spec.canonicalName)?.marker).toBe(spec.marker);
     expect(states.has(spec.temporaryName)).toBe(false);
     expect(
       execute.mock.calls
@@ -162,7 +165,7 @@ describe("0116 concurrent index preflight", () => {
       [spec.canonicalName]: {
         exists: true,
         valid: true,
-        marker: SESSION_REPLAY_INDEX_MARKER,
+        marker: spec.marker,
       },
     });
 
@@ -172,9 +175,71 @@ describe("0116 concurrent index preflight", () => {
     expect(statements.some((statement) => statement.includes("ALTER TABLE"))).toBe(false);
     expect(statements.some((statement) => statement.includes("lock_timeout"))).toBe(false);
   });
+
+  test("adds pre-0116 Replay columns before building timeout indexes", async () => {
+    const { executor, execute } = createFakeExecutor();
+
+    await runSessionReplayIndexPreflight(executor, [spec]);
+
+    const statements = execute.mock.calls.map(([statement]) => statement);
+    const ensureColumns = statements.find((statement) => statement.includes("ALTER TABLE"));
+    const createIndexAt = statements.findIndex((statement) =>
+      statement.startsWith("CREATE INDEX CONCURRENTLY")
+    );
+    const ensureColumnsAt = ensureColumns ? statements.indexOf(ensureColumns) : -1;
+
+    expect(ensureColumns).toContain('ALTER TABLE "message_request"');
+    expect(ensureColumns).toContain(
+      'ADD COLUMN IF NOT EXISTS "is_replay" boolean DEFAULT false NOT NULL'
+    );
+    expect(ensureColumnsAt).toBeGreaterThanOrEqual(0);
+    expect(createIndexAt).toBeGreaterThan(ensureColumnsAt);
+  });
+
+  test("keeps validated v1 indexes while upgrading only the v2 timeout indexes", async () => {
+    const legacySpec = SESSION_REPLAY_INDEX_SPECS.find(
+      (candidate) => candidate.marker === SESSION_REPLAY_INDEX_MARKER
+    );
+    if (!legacySpec) throw new Error("missing v1 index spec");
+    const { executor, execute } = createFakeExecutor({
+      [legacySpec.canonicalName]: {
+        exists: true,
+        valid: true,
+        marker: SESSION_REPLAY_INDEX_MARKER,
+      },
+      [spec.canonicalName]: {
+        exists: true,
+        valid: true,
+        marker: SESSION_REPLAY_INDEX_MARKER,
+      },
+    });
+
+    await runSessionReplayIndexPreflight(executor, [legacySpec, spec]);
+
+    const createStatements = execute.mock.calls
+      .map(([statement]) => statement)
+      .filter((statement) => statement.startsWith("CREATE INDEX CONCURRENTLY"));
+    expect(createStatements).toHaveLength(1);
+    expect(createStatements[0]).toContain(spec.temporaryName);
+    expect(createStatements[0]).not.toContain(legacySpec.temporaryName);
+  });
+
+  test("uses the v2 marker and public-qualified definitions for timeout indexes", () => {
+    const timeoutSpecs = SESSION_REPLAY_INDEX_SPECS.filter(
+      (candidate) => candidate.marker === DATABASE_TIMEOUT_INDEX_MARKER
+    );
+
+    expect(timeoutSpecs).toHaveLength(5);
+    expect(
+      timeoutSpecs.every((candidate) => candidate.temporaryName.startsWith("cch_0118_tmp_"))
+    ).toBe(true);
+    expect(timeoutSpecs.every((candidate) => candidate.definition.includes('ON "public".'))).toBe(
+      true
+    );
+  });
 });
 
-describe("0116 migration orchestration", () => {
+describe("database index migration orchestration", () => {
   test("preflights the unfiltered ledger identity index before migration 0117", async () => {
     const events: string[] = [];
     await runSessionReplayMigrationPlan({
@@ -235,6 +300,32 @@ describe("0116 migration orchestration", () => {
     });
 
     expect(calls).toEqual(["indexes", "migrate", "indexes"]);
+  });
+
+  test("prebuilds timeout indexes before upgrading an existing 0117 database", async () => {
+    const calls: string[] = [];
+
+    await runSessionReplayMigrationPlan({
+      baseTablesReady: true,
+      latestMigrationCreatedAt: DATABASE_TIMEOUT_INDEX_MIGRATION_CREATED_AT - 1,
+      migrate: async () => calls.push("migrate"),
+      runIndexPreflight: async () => calls.push("indexes"),
+    });
+
+    expect(calls).toEqual(["indexes", "migrate", "indexes"]);
+  });
+
+  test("runs only postflight after migration 0118 is already recorded", async () => {
+    const calls: string[] = [];
+
+    await runSessionReplayMigrationPlan({
+      baseTablesReady: true,
+      latestMigrationCreatedAt: DATABASE_TIMEOUT_INDEX_MIGRATION_CREATED_AT,
+      migrate: async () => calls.push("migrate"),
+      runIndexPreflight: async () => calls.push("indexes"),
+    });
+
+    expect(calls).toEqual(["migrate", "indexes"]);
   });
 
   test("fails the migration flow when concurrent index postflight fails", async () => {

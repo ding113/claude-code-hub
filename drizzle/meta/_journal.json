@@ -827,6 +827,13 @@
       "when": 1785635169798,
       "tag": "0117_loving_whiplash",
       "breakpoints": true
+    },
+    {
+      "idx": 118,
+      "version": "7",
+      "when": 1785688550789,
+      "tag": "0118_bright_sunspot",
+      "breakpoints": true
     }
   ]
 }

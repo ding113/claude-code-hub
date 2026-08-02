@@ -661,6 +661,16 @@ export const messageRequest = pgTable('message_request', {
   )
     .on(table.providerId, table.createdAt.desc())
     .where(sql`${table.deletedAt} IS NULL AND ${table.statusCode} IS NOT NULL`),
+  messageRequestProxyStatusActiveIdx: index('idx_message_request_proxy_status_active')
+    .on(sql`${table.createdAt} DESC NULLS LAST`, table.userId)
+    .where(
+      sql`${table.deletedAt} IS NULL AND ${table.isReplay} = false AND ${table.statusCode} IS NULL AND (${table.blockedBy} IS NULL OR ${table.blockedBy} <> 'warmup')`
+    ),
+  messageRequestProxyStatusLatestIdx: index('idx_message_request_proxy_status_latest')
+    .on(table.userId, sql`${table.updatedAt} DESC NULLS LAST`, table.id.desc())
+    .where(
+      sql`${table.deletedAt} IS NULL AND ${table.isReplay} = false AND ${table.statusCode} IS NOT NULL AND (${table.blockedBy} IS NULL OR ${table.blockedBy} <> 'warmup')`
+    ),
   // Session 查询索引（按 session 聚合查看对话）
   messageRequestSessionIdIdx: index('idx_message_request_session_id').on(table.sessionId).where(sql`${table.deletedAt} IS NULL`),
   // Session ID 前缀查询索引（LIKE 'prefix%'，可稳定命中 B-tree）
@@ -670,7 +680,11 @@ export const messageRequest = pgTable('message_request', {
   messageRequestSessionIdentityCreatedAtIdx: index(
     'idx_message_request_session_identity_created_at'
   )
-    .on(sql`COALESCE(${table.sessionIdentity}, ${table.sessionId})`, table.createdAt.desc())
+    .on(
+      sql`COALESCE(${table.sessionIdentity}, ${table.sessionId})`,
+      sql`${table.createdAt} DESC NULLS LAST`,
+      table.id.desc()
+    )
     .where(sql`${table.deletedAt} IS NULL`),
   // Endpoint 过滤查询索引（仅针对未删除数据）
   messageRequestEndpointIdx: index('idx_message_request_endpoint').on(table.endpoint).where(sql`${table.deletedAt} IS NULL`),
@@ -1211,6 +1225,7 @@ export const usageLedger = pgTable('usage_ledger', {
   usageLedgerUserCreatedAtIdx: index('idx_usage_ledger_user_created_at')
     .on(table.userId, table.createdAt)
     .where(sql`${table.blockedBy} IS NULL AND ${table.isReplay} = false`),
+  usageLedgerUserIdResetIdx: index('idx_usage_ledger_user_id_reset').on(table.userId),
   usageLedgerKeyCreatedAtIdx: index('idx_usage_ledger_key_created_at')
     .on(table.key, table.createdAt)
     .where(sql`${table.blockedBy} IS NULL AND ${table.isReplay} = false`),
@@ -1228,7 +1243,11 @@ export const usageLedger = pgTable('usage_ledger', {
   usageLedgerSessionIdentityCreatedAtIdx: index(
     'idx_usage_ledger_session_identity_created_at'
   )
-    .on(sql`COALESCE(${table.sessionIdentity}, ${table.sessionId})`, table.createdAt.desc())
+    .on(
+      sql`COALESCE(${table.sessionIdentity}, ${table.sessionId})`,
+      table.userId,
+      sql`${table.createdAt} DESC NULLS LAST`
+    )
     .where(sql`${table.blockedBy} IS NULL AND ${table.isReplay} = false`),
   usageLedgerSessionIdentityIdx: index('idx_usage_ledger_session_identity')
     .on(sql`COALESCE(${table.sessionIdentity}, ${table.sessionId})`),

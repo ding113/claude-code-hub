@@ -214,6 +214,7 @@ export async function runMigrations() {
     logger.info("Waiting for database migration lock...");
     await migrationClient`SELECT pg_advisory_lock(hashtext(${MIGRATION_ADVISORY_LOCK_NAME}))`;
     logger.info("Database migration lock acquired");
+    await migrationClient`SET search_path TO public`;
 
     // 获取迁移文件路径
     const migrationsFolder = path.join(process.cwd(), "drizzle");
