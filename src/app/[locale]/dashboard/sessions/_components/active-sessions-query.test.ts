@@ -61,6 +61,28 @@ describe("fetchAllSessionsPage", () => {
     expect(requestSignal?.aborted).toBe(true);
   });
 
+  it("normalizes a rejected browser abort to the stable caller cancellation error", async () => {
+    api.getAllSessions.mockImplementation(
+      (_active: number, _inactive: number, _size: number, options: RequestInit) =>
+        new Promise((_resolve, reject) => {
+          options.signal?.addEventListener("abort", () => {
+            reject(new DOMException("Aborted", "AbortError"));
+          });
+        })
+    );
+    const controller = new AbortController();
+    const request = fetchAllSessionsPage({
+      activePage: 1,
+      inactivePage: 1,
+      pageSize: 20,
+      signal: controller.signal,
+    });
+
+    controller.abort();
+
+    await expect(request).rejects.toThrow("FETCH_SESSIONS_CANCELLED");
+  });
+
   it("normalizes transport failures instead of exposing browser error text", async () => {
     api.getAllSessions.mockRejectedValue(new TypeError("Failed to fetch"));
 
