@@ -13,7 +13,7 @@ function installDbBoundary(rows: readonly unknown[] | readonly (readonly unknown
   const whereConditions: unknown[] = [];
   const limits: unknown[] = [];
   let selectIndex = 0;
-  const select = vi.fn(() => {
+  const makeQuery = () => {
     const selectedRows = Array.isArray(rows[0])
       ? ((rows as readonly (readonly unknown[])[])[selectIndex++] ?? [])
       : (rows as readonly unknown[]);
@@ -34,10 +34,12 @@ function installDbBoundary(rows: readonly unknown[] | readonly (readonly unknown
         Promise.resolve(selectedRows).then(resolve),
     };
     return query;
-  });
+  };
+  const select = vi.fn(makeQuery);
+  const selectDistinctOn = vi.fn(makeQuery);
 
-  vi.doMock("@/drizzle/db", () => ({ db: { select } }));
-  return { whereConditions, limits };
+  vi.doMock("@/drizzle/db", () => ({ db: { select, selectDistinctOn } }));
+  return { whereConditions, limits, selectDistinctOn };
 }
 
 function expectReplayExcluded(condition: unknown) {
@@ -126,12 +128,11 @@ describe("activity stream Replay exclusion", () => {
     expect(condition.sql).not.toContain('and "message_request"."session_id" not in');
   });
 
-  it("does not limit raw active requests before canonical-session deduplication", async () => {
+  it("deduplicates canonical sessions in SQL before applying the result limit", async () => {
     activeSessionIdsMock.mockResolvedValueOnce(["session-a", "session-b"]);
     const boundary = installDbBoundary([
       [
         { ...REQUEST_ROW, id: 3, sessionId: "session-a", rowNum: 1 },
-        { ...REQUEST_ROW, id: 2, sessionId: "session-a", rowNum: 2 },
         { ...REQUEST_ROW, id: 1, sessionId: "session-b", rowNum: 1 },
       ],
     ]);
@@ -140,6 +141,8 @@ describe("activity stream Replay exclusion", () => {
     const result = await findRecentActivityStream(1);
 
     expect(result).toHaveLength(1);
-    expect(boundary.limits).toEqual([]);
+    expect(result[0]?.id).toBe(3);
+    expect(boundary.selectDistinctOn).toHaveBeenCalledOnce();
+    expect(boundary.limits).toEqual([1]);
   });
 });

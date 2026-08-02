@@ -73,9 +73,9 @@ export async function findRecentActivityStream(limit = 20): Promise<ActivityStre
 
     // 2. 查询活跃 session 的最新请求（每个 session 取最新1条）
     if (activeSessionIds.length > 0) {
-      // 使用窗口函数获取每个 session 的最新请求
+      // 先在数据库内按 canonical identity 去重，再限制 session 级结果数量。
       const activeSessionRequests = await db
-        .select({
+        .selectDistinctOn([messageSessionIdentity], {
           id: messageRequest.id,
           sessionId: messageSessionIdentity,
           userName: users.name,
@@ -94,7 +94,6 @@ export async function findRecentActivityStream(limit = 20): Promise<ActivityStre
           outputTokens: messageRequest.outputTokens,
           cacheCreationInputTokens: messageRequest.cacheCreationInputTokens,
           cacheReadInputTokens: messageRequest.cacheReadInputTokens,
-          rowNum: sql<number>`ROW_NUMBER() OVER (PARTITION BY ${messageSessionIdentity} ORDER BY ${messageRequest.createdAt} DESC)`,
         })
         .from(messageRequest)
         .leftJoin(users, eq(messageRequest.userId, users.id))
@@ -107,31 +106,29 @@ export async function findRecentActivityStream(limit = 20): Promise<ActivityStre
             inArray(messageSessionIdentity, activeSessionIds)
           )
         )
-        .orderBy(desc(messageRequest.createdAt));
+        .orderBy(messageSessionIdentity, desc(messageRequest.createdAt))
+        .limit(limit);
 
-      // 过滤出每个 session 的最新一条（rowNum = 1）
-      const latestPerSession = activeSessionRequests
-        .filter((row) => row.rowNum === 1)
-        .map((row) => ({
-          id: row.id,
-          sessionId: row.sessionId,
-          userName: row.userName || "Unknown",
-          userId: row.userId,
-          keyId: row.keyId ?? 0,
-          keyName: row.keyName || "Unknown",
-          providerId: row.providerId,
-          providerName: row.providerName,
-          model: row.model,
-          originalModel: row.originalModel,
-          statusCode: row.statusCode,
-          durationMs: row.durationMs,
-          costUsd: row.costUsd,
-          startTime: row.createdAt ? new Date(row.createdAt).getTime() : Date.now(),
-          inputTokens: row.inputTokens,
-          outputTokens: row.outputTokens,
-          cacheCreationInputTokens: row.cacheCreationInputTokens,
-          cacheReadInputTokens: row.cacheReadInputTokens,
-        }));
+      const latestPerSession = activeSessionRequests.map((row) => ({
+        id: row.id,
+        sessionId: row.sessionId,
+        userName: row.userName || "Unknown",
+        userId: row.userId,
+        keyId: row.keyId ?? 0,
+        keyName: row.keyName || "Unknown",
+        providerId: row.providerId,
+        providerName: row.providerName,
+        model: row.model,
+        originalModel: row.originalModel,
+        statusCode: row.statusCode,
+        durationMs: row.durationMs,
+        costUsd: row.costUsd,
+        startTime: row.createdAt ? new Date(row.createdAt).getTime() : Date.now(),
+        inputTokens: row.inputTokens,
+        outputTokens: row.outputTokens,
+        cacheCreationInputTokens: row.cacheCreationInputTokens,
+        cacheReadInputTokens: row.cacheReadInputTokens,
+      }));
 
       activityItems = latestPerSession;
 
