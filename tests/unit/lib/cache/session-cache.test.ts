@@ -159,6 +159,8 @@ describe("SessionCache（Session 数据缓存层）", () => {
     setActiveSessionsCache([], "all_sessions");
     setSessionDetailsCache("s_1", {
       sessionId: "s_1",
+      sessionIdentityKind: "session_id",
+      sessionFingerprint: null,
       requestCount: 1,
       totalCostUsd: "0",
       totalInputTokens: 0,
@@ -193,6 +195,8 @@ describe("SessionCache（Session 数据缓存层）", () => {
     setActiveSessionsCache([], "active_sessions");
     setSessionDetailsCache("s_2", {
       sessionId: "s_2",
+      sessionIdentityKind: "session_id",
+      sessionFingerprint: null,
       requestCount: 1,
       totalCostUsd: "0",
       totalInputTokens: 0,
@@ -223,6 +227,8 @@ describe("SessionCache（Session 数据缓存层）", () => {
       await loadSessionCache();
     const details = {
       sessionId: "pfx:scope:tip",
+      sessionIdentityKind: "prefix_affinity" as const,
+      sessionFingerprint: "tip",
       requestCount: 1,
       totalCostUsd: "0",
       totalInputTokens: 0,
@@ -258,6 +264,8 @@ describe("SessionCache（Session 数据缓存层）", () => {
     const { getSessionDetailsCache, setSessionDetailsCache } = await loadSessionCache();
     const details = {
       sessionId: "shared-session",
+      sessionIdentityKind: "session_id" as const,
+      sessionFingerprint: null,
       requestCount: 1,
       totalCostUsd: "0",
       totalInputTokens: 0,
