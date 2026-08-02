@@ -3,12 +3,12 @@ import "server-only";
 import type Redis from "ioredis";
 import { getRedisClient } from "@/lib/redis/client";
 import { RedisKVStore } from "@/lib/redis/redis-kv-store";
-import type { UserStatisticsResetRecord } from "./types";
+import type { UserStatisticsResetStoredRecord } from "./types";
 
 const RESET_STATUS_TTL_SECONDS = 7 * 24 * 60 * 60;
 const ACTIVE_RESET_PREFIX = "cch:user-statistics-reset:active:";
 const RESET_STATUS_PREFIX = "cch:user-statistics-reset:status:";
-const statusStore = new RedisKVStore<UserStatisticsResetRecord>({
+const statusStore = new RedisKVStore<UserStatisticsResetStoredRecord>({
   prefix: RESET_STATUS_PREFIX,
   defaultTtlSeconds: RESET_STATUS_TTL_SECONDS,
 });
@@ -32,7 +32,7 @@ function getReadyRedis(): ResetRedis {
 }
 
 export async function setUserStatisticsResetStatus(
-  record: UserStatisticsResetRecord
+  record: UserStatisticsResetStoredRecord
 ): Promise<void> {
   if (!(await statusStore.set(record.resetId, record))) {
     throw new Error("USER_STATISTICS_RESET_STATUS_WRITE_FAILED");
@@ -41,11 +41,16 @@ export async function setUserStatisticsResetStatus(
 
 export async function getUserStatisticsResetStatus(
   resetId: string
-): Promise<UserStatisticsResetRecord | null> {
+): Promise<UserStatisticsResetStoredRecord | null> {
   const raw = await getReadyRedis().get(`${RESET_STATUS_PREFIX}${resetId}`);
   if (!raw) return null;
   try {
-    return JSON.parse(raw) as UserStatisticsResetRecord;
+    const record = JSON.parse(raw) as UserStatisticsResetStoredRecord;
+    return {
+      ...record,
+      fixed5hKeyIds: record.fixed5hKeyIds ?? [],
+      fixed5hPreparationVersion: record.fixed5hPreparationVersion === 1 ? 1 : null,
+    };
   } catch {
     throw new Error("USER_STATISTICS_RESET_STATUS_INVALID");
   }

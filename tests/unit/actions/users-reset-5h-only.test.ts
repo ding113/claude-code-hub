@@ -322,7 +322,9 @@ describe("full reset compatibility with user 5h marker", () => {
     const result = await resetUserAllStatistics(123);
 
     expect(result.ok).toBe(true);
-    expect(enqueueUserStatisticsResetMock).toHaveBeenCalledWith(123);
+    expect(enqueueUserStatisticsResetMock).toHaveBeenCalledWith(123, {
+      fixed5hKeyIds: [11],
+    });
     expect(txUpdateSetMock).not.toHaveBeenCalled();
     expect(invalidateCachedUserMock).not.toHaveBeenCalled();
   });

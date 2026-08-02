@@ -10,6 +10,7 @@ export interface ClearUserCostCacheOptions {
   keyHashes: string[];
   includeActiveSessions?: boolean;
   allowWhenRateLimitDisabled?: boolean;
+  preserveFixed5hCostKeys?: boolean;
 }
 
 export interface ClearUserCostCacheResult {
@@ -42,6 +43,47 @@ export interface ClearUser5hCostCacheResult {
   errorCount?: number;
 }
 
+const STATISTICS_RESET_PREPARE_TTL_SECONDS = 7 * 24 * 60 * 60;
+const PREPARE_FIXED_5H_RESET_LUA = `
+if redis.call('EXISTS', KEYS[1]) == 1 then
+  return redis.call('GET', KEYS[1])
+end
+local now = redis.call('TIME')
+local cutoff_ms = (tonumber(now[1]) * 1000) + math.floor(tonumber(now[2]) / 1000)
+for index = 2, #KEYS do
+  redis.call('DEL', KEYS[index])
+end
+redis.call('SETEX', KEYS[1], ARGV[1], tostring(cutoff_ms))
+return tostring(cutoff_ms)`;
+
+export async function prepareUserStatisticsResetFixed5h(input: {
+  resetId: string;
+  userId: number;
+  keyIds: number[];
+}): Promise<string | null> {
+  const redis = getRedisClient({ allowWhenRateLimitDisabled: true });
+  if (redis?.status !== "ready") return null;
+
+  const keys = [
+    `cch:user-statistics-reset:fixed5h:${input.resetId}`,
+    `user:${input.userId}:cost_5h_fixed`,
+    buildLeaseKey("user", input.userId, "5h", "fixed"),
+    ...input.keyIds.flatMap((keyId) => [
+      `key:${keyId}:cost_5h_fixed`,
+      buildLeaseKey("key", keyId, "5h", "fixed"),
+    ]),
+  ];
+
+  const cutoffMilliseconds = await redis.eval(
+    PREPARE_FIXED_5H_RESET_LUA,
+    keys.length,
+    ...keys,
+    STATISTICS_RESET_PREPARE_TTL_SECONDS
+  );
+  const cutoff = new Date(Number(cutoffMilliseconds));
+  return Number.isFinite(cutoff.getTime()) ? cutoff.toISOString() : null;
+}
+
 /**
  * Scan and delete all Redis cost-cache keys for a user and their API keys.
  *
@@ -59,6 +101,7 @@ export async function clearUserCostCache(
     keyHashes,
     includeActiveSessions = false,
     allowWhenRateLimitDisabled = false,
+    preserveFixed5hCostKeys = false,
   } = options;
 
   const redis = getRedisClient({ allowWhenRateLimitDisabled });
@@ -143,7 +186,9 @@ export async function clearUserCostCache(
     }),
   ]);
 
-  const allCostKeys = scanResults.flat();
+  const allCostKeys = scanResults
+    .flat()
+    .filter((key) => !preserveFixed5hCostKeys || !key.endsWith(":cost_5h_fixed"));
   let activeSessionsDeleted = 0;
 
   // Only create pipeline if there is work to do

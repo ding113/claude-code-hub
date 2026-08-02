@@ -8,6 +8,14 @@ import { invalidateCachedUser } from "@/lib/security/api-key-auth-cache";
 
 const RESET_BATCH_SIZE = 1000;
 
+export async function findUserStatisticsResetKeyIds(userId: number): Promise<number[]> {
+  const userKeys = await db
+    .select({ id: keys.id })
+    .from(keys)
+    .where(and(eq(keys.userId, userId), isNull(keys.deletedAt)));
+  return userKeys.map((key) => key.id);
+}
+
 export class UserStatisticsResetError extends Error {
   constructor(
     readonly code: string,
@@ -103,6 +111,7 @@ async function drainTable(input: {
   table: "message_request" | "usage_ledger";
   userId: number;
   cutoff: Date;
+  onProgress?: (deleted: number) => Promise<void>;
 }): Promise<number> {
   let deleted = 0;
   try {
@@ -112,6 +121,9 @@ async function drainTable(input: {
           ? await deleteMessageRequestBatch(input.userId, input.cutoff)
           : await deleteUsageLedgerBatch(input.userId, input.cutoff);
       deleted += batchDeleted;
+      if (batchDeleted > 0) {
+        await input.onProgress?.(deleted);
+      }
       if (batchDeleted < RESET_BATCH_SIZE) break;
     }
 
@@ -135,10 +147,16 @@ async function drainTable(input: {
   }
 }
 
-export async function executeUserStatisticsReset(input: {
-  userId: number;
-  requestedAt: string;
-}): Promise<{ deletedMessageRequests: number; deletedUsageLedger: number }> {
+export async function executeUserStatisticsReset(
+  input: {
+    userId: number;
+    requestedAt: string;
+  },
+  onProgress?: (progress: {
+    deletedMessageRequests: number;
+    deletedUsageLedger: number;
+  }) => Promise<void>
+): Promise<{ deletedMessageRequests: number; deletedUsageLedger: number }> {
   const cutoff = new Date(input.requestedAt);
   if (!Number.isFinite(cutoff.getTime())) {
     throw new UserStatisticsResetError("USER_STATISTICS_RESET_INVALID_CUTOFF");
@@ -151,17 +169,28 @@ export async function executeUserStatisticsReset(input: {
       table: "message_request",
       userId: input.userId,
       cutoff,
+      onProgress: async (deleted) => {
+        deletedMessageRequests = deleted;
+        await onProgress?.({ deletedMessageRequests, deletedUsageLedger });
+      },
     });
     deletedUsageLedger = await drainTable({
       table: "usage_ledger",
       userId: input.userId,
       cutoff,
+      onProgress: async (deleted) => {
+        deletedUsageLedger = deleted;
+        await onProgress?.({ deletedMessageRequests, deletedUsageLedger });
+      },
     });
   } catch (error) {
     if (error instanceof UserStatisticsResetError) {
       throw new UserStatisticsResetError(error.code, {
-        deletedMessageRequests: deletedMessageRequests + error.progress.deletedMessageRequests,
-        deletedUsageLedger: deletedUsageLedger + error.progress.deletedUsageLedger,
+        deletedMessageRequests: Math.max(
+          deletedMessageRequests,
+          error.progress.deletedMessageRequests
+        ),
+        deletedUsageLedger: Math.max(deletedUsageLedger, error.progress.deletedUsageLedger),
       });
     }
     if (deletedMessageRequests > 0 || deletedUsageLedger > 0) {
@@ -195,6 +224,7 @@ export async function executeUserStatisticsReset(input: {
       keyHashes: userKeys.map((key) => key.key),
       includeActiveSessions: false,
       allowWhenRateLimitDisabled: true,
+      preserveFixed5hCostKeys: true,
     });
     if (!cacheResult || cacheResult.cleanupFailed) {
       throw new UserStatisticsResetError("USER_STATISTICS_RESET_CACHE_CLEANUP_FAILED");
