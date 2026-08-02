@@ -64,6 +64,8 @@ import type {
 interface SystemSettingsFormProps {
   /** Read-only runtime value; SESSION_TTL is not a persisted system setting. */
   sessionTtlSeconds?: number;
+  /** Read-only env fallback used while replayEnabled remains null. */
+  replayDefaultEnabled?: boolean;
   initialSettings: Pick<
     SystemSettings,
     | "siteTitle"
@@ -131,6 +133,7 @@ type DiscoveryNumberValue = number | "";
 export function SystemSettingsForm({
   initialSettings,
   sessionTtlSeconds = 300,
+  replayDefaultEnabled = true,
 }: SystemSettingsFormProps) {
   const router = useRouter();
   const t = useTranslations("settings.config.form");
@@ -214,7 +217,7 @@ export function SystemSettingsForm({
   const [affinityIgnoreClientSessionId, setAffinityIgnoreClientSessionId] = useState(
     initialSettings.affinityIgnoreClientSessionId
   );
-  // null = 跟随环境变量（Replay 默认关 / 缓存模拟默认开）：未触碰开关时按 null 原样保存，
+  // null = 跟随环境变量：未触碰开关时按 null 原样保存，
   // 避免无关字段的保存把覆写写死为布尔值；仅用户切换后才落显式值
   const [replayEnabled, setReplayEnabled] = useState<boolean | null>(initialSettings.replayEnabled);
   const [cacheEffectivenessEnabled, setCacheEffectivenessEnabled] = useState<boolean | null>(
@@ -1187,7 +1190,7 @@ export function SystemSettingsForm({
           <Switch
             id="replay-enabled"
             aria-label={t("replayEnabled")}
-            checked={replayEnabled ?? false}
+            checked={replayEnabled ?? replayDefaultEnabled}
             onCheckedChange={(checked) => setReplayEnabled(checked)}
             disabled={isPending}
           />

@@ -35,7 +35,8 @@ export default async function SettingsConfigPage({
 async function SettingsConfigContent({ locale }: { locale: string }) {
   const t = await getTranslations({ locale, namespace: "settings" });
   const settings = await getSystemSettings();
-  const sessionTtlSeconds = Math.max(1, Math.floor(getEnvConfig().SESSION_TTL));
+  const env = getEnvConfig();
+  const sessionTtlSeconds = Math.max(1, Math.floor(env.SESSION_TTL));
 
   return (
     <>
@@ -47,6 +48,7 @@ async function SettingsConfigContent({ locale }: { locale: string }) {
       >
         <SystemSettingsForm
           sessionTtlSeconds={sessionTtlSeconds}
+          replayDefaultEnabled={env.ENABLE_REQUEST_REPLAY}
           initialSettings={{
             siteTitle: settings.siteTitle,
             allowGlobalUsageView: settings.allowGlobalUsageView,

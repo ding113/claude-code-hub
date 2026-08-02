@@ -196,7 +196,7 @@ export const EnvSchema = z.object({
     .max(64 * 1024 * 1024)
     .default(10 * 1024 * 1024),
   // 请求分离 + Replay：客户端断开后上游继续引流缓存，相同请求体重发续传
-  ENABLE_REQUEST_REPLAY: z.string().default("false").transform(booleanTransform),
+  ENABLE_REQUEST_REPLAY: z.string().default("true").transform(booleanTransform),
   // owner 客户端仍在线时的并发相同请求去重（attached-live）；关闭后仅 detached/completed 可命中
   REPLAY_LIVE_DEDUP_ENABLED: z.string().default("true").transform(booleanTransform),
   // 客户端断开后上游继续引流的最长时长（毫秒；替代默认 60s drain 上限）
