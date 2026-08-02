@@ -228,6 +228,7 @@ export async function clearUserCostCache(
       activeSessionsDeleted,
       durationMs: Date.now() - startTime,
       cleanupFailed: true,
+      errorCount: scanErrorCount + 1,
     };
   }
 
