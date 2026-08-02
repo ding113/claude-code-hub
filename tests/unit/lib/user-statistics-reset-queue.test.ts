@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const boundary = vi.hoisted(() => ({
   processHandler: null as null | ((job: any) => Promise<unknown>),
@@ -83,6 +83,8 @@ const existing = {
 };
 
 describe("user statistics reset queue", () => {
+  const originalNodeEnv = process.env.NODE_ENV;
+
   beforeEach(async () => {
     await stopUserStatisticsResetQueue();
     process.env.REDIS_URL = "redis://localhost:6379";
@@ -114,6 +116,10 @@ describe("user statistics reset queue", () => {
     boundary.release.mockResolvedValue(undefined);
     boundary.prepareFixed5h.mockResolvedValue("2026-08-02T12:00:00.000Z");
     boundary.findKeyIds.mockResolvedValue([9]);
+  });
+
+  afterEach(() => {
+    process.env.NODE_ENV = originalNodeEnv;
   });
 
   it("returns the existing active reset instead of enqueueing a competitor", async () => {
@@ -318,6 +324,18 @@ describe("user statistics reset queue", () => {
 
     expect(startUserStatisticsResetQueue()).toBe(false);
     expect(boundary.processHandler).toBeNull();
+  });
+
+  it("does not construct a Bull processor on demand in development", async () => {
+    process.env.NODE_ENV = "development";
+
+    await expect(enqueueUserStatisticsReset(42)).rejects.toThrow(
+      "USER_STATISTICS_RESET_QUEUE_DISABLED_IN_DEVELOPMENT"
+    );
+
+    expect(boundary.processHandler).toBeNull();
+    expect(boundary.add).not.toHaveBeenCalled();
+    expect(boundary.setStatus).not.toHaveBeenCalled();
   });
 
   it("moves a Bull job through running to completed and releases the active claim", async () => {

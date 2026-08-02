@@ -1904,6 +1904,8 @@
         "running": "正在重置统计",
         "completed": "重置已完成",
         "failed": "重置失败，可以重试",
+        "statusUnavailable": "暂时无法更新重置状态",
+        "retryStatus": "重试状态查询",
         "success": "所有统计已重置"
       }
     },

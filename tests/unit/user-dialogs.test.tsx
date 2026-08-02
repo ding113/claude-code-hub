@@ -425,7 +425,7 @@ describe("EditUserDialog", () => {
     unmount();
   });
 
-  test("marks a statistics reset failed after five consecutive polling retries", async () => {
+  test("keeps the authoritative reset state after polling retries are exhausted", async () => {
     vi.useFakeTimers();
     mockGetUserStatisticsReset.mockResolvedValue({
       ok: false,
@@ -452,10 +452,64 @@ describe("EditUserDialog", () => {
 
     expect(mockGetUserStatisticsReset).toHaveBeenCalledTimes(6);
     expect(container.querySelector('[data-testid="statistics-reset-status"]')?.textContent).toBe(
-      messages.dashboard.userManagement.editDialog.resetData.failed
+      messages.dashboard.userManagement.editDialog.resetData.queued
     );
+    expect(
+      container.querySelector('[data-testid="statistics-reset-poll-error"]')?.textContent
+    ).toBe(messages.dashboard.userManagement.editDialog.resetData.statusUnavailable);
+    expect(mockResetUserAllStatistics).toHaveBeenCalledTimes(1);
+
+    const retryStatusButton = Array.from(container.querySelectorAll("button")).find(
+      (button) =>
+        button.textContent?.trim() ===
+        messages.dashboard.userManagement.editDialog.resetData.retryStatus
+    );
+    act(() => retryStatusButton?.click());
+    await act(async () => vi.advanceTimersByTimeAsync(1_000));
+
+    expect(mockGetUserStatisticsReset).toHaveBeenCalledTimes(7);
+    expect(mockResetUserAllStatistics).toHaveBeenCalledTimes(1);
 
     unmount();
+    vi.useRealTimers();
+  });
+
+  test("aborts a hung statistics reset status request and continues polling", async () => {
+    vi.useFakeTimers();
+    const requestSignals: AbortSignal[] = [];
+    mockGetUserStatisticsReset.mockImplementation(
+      (_userId: number, _resetId: string, options: { signal: AbortSignal }) => {
+        requestSignals.push(options.signal);
+        return new Promise((resolve) => {
+          options.signal.addEventListener("abort", () => {
+            resolve({ ok: false, error: "aborted", errorCode: "NETWORK_ERROR" });
+          });
+        });
+      }
+    );
+    const { container, unmount } = renderWithProviders(
+      <EditUserDialog open={true} onOpenChange={vi.fn()} user={mockUser} />
+    );
+    const buttons = Array.from(container.querySelectorAll("button"));
+    const resetButton = buttons.find(
+      (button) =>
+        button.textContent?.trim() === messages.dashboard.userManagement.editDialog.resetData.button
+    );
+    const confirmButton = buttons.find(
+      (button) =>
+        button.textContent?.trim() ===
+        messages.dashboard.userManagement.editDialog.resetData.confirm
+    );
+
+    act(() => resetButton?.click());
+    await act(async () => confirmButton?.click());
+    await act(async () => vi.advanceTimersByTimeAsync(17_000));
+
+    expect(requestSignals[0]?.aborted).toBe(true);
+    expect(mockGetUserStatisticsReset).toHaveBeenCalledTimes(2);
+
+    unmount();
+    expect(requestSignals[1]?.aborted).toBe(true);
     vi.useRealTimers();
   });
 });

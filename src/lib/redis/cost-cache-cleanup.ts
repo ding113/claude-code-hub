@@ -80,7 +80,15 @@ export async function prepareUserStatisticsResetFixed5h(input: {
     ...keys,
     STATISTICS_RESET_PREPARE_TTL_SECONDS
   );
-  const cutoff = new Date(Number(cutoffMilliseconds));
+  if (
+    (typeof cutoffMilliseconds !== "number" && typeof cutoffMilliseconds !== "string") ||
+    cutoffMilliseconds === ""
+  ) {
+    return null;
+  }
+  const cutoffValue = Number(cutoffMilliseconds);
+  if (!Number.isFinite(cutoffValue) || cutoffValue <= 0) return null;
+  const cutoff = new Date(cutoffValue);
   return Number.isFinite(cutoff.getTime()) ? cutoff.toISOString() : null;
 }
 
