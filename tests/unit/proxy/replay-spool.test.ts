@@ -6,7 +6,10 @@ import {
   getActiveReplaySpoolCount,
   ReplaySpool,
 } from "@/app/v1/_lib/proxy/replay/replay-spool";
-import type { ReplayDelivery } from "@/app/v1/_lib/proxy/replay/replay-store";
+import {
+  ReplayDurableConflictError,
+  type ReplayDelivery,
+} from "@/app/v1/_lib/proxy/replay/replay-store";
 import type { ProxySession } from "@/app/v1/_lib/proxy/session";
 import { logger } from "@/lib/logger";
 
@@ -64,6 +67,11 @@ const storeControl = vi.hoisted(() => {
     }),
     persistCompleted: vi.fn(async () => {
       order.push("persist");
+      return "persisted" as const;
+    }),
+    discardOwned: vi.fn(async () => {
+      order.push("discard");
+      return true;
     }),
     deleteEntry: vi.fn(async () => {
       order.push("deleteEntry");
@@ -114,6 +122,7 @@ vi.mock("@/lib/config/env.schema", async (importOriginal) => {
 
 vi.mock("@/app/v1/_lib/proxy/replay/replay-store", () => ({
   getReplayStore: () => storeControl.store,
+  ReplayDurableConflictError: class ReplayDurableConflictError extends Error {},
 }));
 
 const identity: ReplayIdentity = {
@@ -429,6 +438,32 @@ describe("ReplaySpool：completeAfterBilling 终态屏障", () => {
       expect.objectContaining({ pgPersisted: false })
     );
     expect(getActiveReplaySpoolCount()).toBe(0);
+  });
+
+  it("复用已有 durable winner 时丢弃当前热层候选，不写 aborted", async () => {
+    storeControl.store.persistCompleted.mockResolvedValueOnce("existing");
+    const spool = makeSpool();
+    spool.observe(encoder.encode("data: a\n\n"));
+
+    await spool.completeAfterBilling(7);
+
+    expect(storeControl.store.discardOwned).toHaveBeenCalledWith(identity.replayId, "owner-token");
+    expect(storeControl.store.completeOwned).not.toHaveBeenCalled();
+    expect(storeControl.store.abortOwned).not.toHaveBeenCalled();
+  });
+
+  it("durable payload 冲突时丢弃当前候选，不用 aborted 遮蔽 PG winner", async () => {
+    storeControl.store.persistCompleted.mockRejectedValueOnce(
+      new ReplayDurableConflictError(identity.replayId)
+    );
+    const spool = makeSpool();
+    spool.observe(encoder.encode("data: a\n\n"));
+
+    await spool.completeAfterBilling(7);
+
+    expect(storeControl.store.discardOwned).toHaveBeenCalledWith(identity.replayId, "owner-token");
+    expect(storeControl.store.completeOwned).not.toHaveBeenCalled();
+    expect(storeControl.store.abortOwned).not.toHaveBeenCalled();
   });
 
   it("尾批 fenced write 返回 null（Redis 不可用）时终止为 aborted，绝不置 completed 也不写 PG", async () => {

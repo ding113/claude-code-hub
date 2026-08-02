@@ -81,6 +81,15 @@ redis.call('DEL', KEYS[3])
 redis.call('DEL', KEYS[1])
 return 1`;
 
+const LUA_DISCARD_OWNED = `
+if redis.call('GET', KEYS[1]) ~= ARGV[1] then
+  return 0
+end
+redis.call('DEL', KEYS[2])
+redis.call('DEL', KEYS[3])
+redis.call('DEL', KEYS[1])
+return 1`;
+
 const LUA_COMPLETE_OWNED = `
 if redis.call('GET', KEYS[1]) ~= ARGV[1] then
   return 0
@@ -106,6 +115,13 @@ export interface ReplayPersistedRow {
   payload: string;
   byteSize: number;
   sourceMessageRequestId: number | null;
+}
+
+export class ReplayDurableConflictError extends Error {
+  constructor(replayId: string) {
+    super(`durable replay conflict for ${replayId.slice(0, 12)}`);
+    this.name = "ReplayDurableConflictError";
+  }
 }
 
 export const REPLAY_CLEANUP_BATCH_SIZE = 100;
@@ -137,8 +153,7 @@ function isMatchingPersistedReplay(
     actual.statusCode === expected.statusCode &&
     hasMatchingHeaders(expected.headers, actual.headersJson) &&
     actual.payload === expected.payload &&
-    actual.byteSize === expected.byteSize &&
-    actual.sourceMessageRequestId === expected.sourceMessageRequestId
+    actual.byteSize === expected.byteSize
   );
 }
 
@@ -303,6 +318,29 @@ export class ReplayStore {
     }
   }
 
+  /** 当前 owner 放弃热层候选，但不写 aborted，避免遮蔽已存在的 PG winner。 */
+  async discardOwned(replayId: string, ownerToken: string): Promise<boolean> {
+    const redis = this.getRawRedis();
+    if (!redis) return false;
+    try {
+      const result = await redis.eval(
+        LUA_DISCARD_OWNED,
+        3,
+        `cch:replay:owner:${replayId}`,
+        `cch:replay:meta:${replayId}`,
+        `cch:replay:chunks:${replayId}`,
+        ownerToken
+      );
+      return result === 1;
+    } catch (error) {
+      logger.debug("[ReplayStore] fenced discard failed", {
+        replayId: replayId.slice(0, 12),
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return false;
+    }
+  }
+
   /** 仅当前 token 仍持有租约时，原子翻转 completed meta 并释放租约。 */
   async completeOwned(replayId: string, ownerToken: string, meta: ReplayMeta): Promise<boolean> {
     const redis = this.getRawRedis();
@@ -334,7 +372,7 @@ export class ReplayStore {
    * 走 abort——payload 未 durable 时绝不能把 meta 翻成 completed。
    * （过期行清理由 instrumentation 定时调度器负责，不在写路径顺带执行。）
    */
-  async persistCompleted(row: ReplayPersistedRow): Promise<void> {
+  async persistCompleted(row: ReplayPersistedRow): Promise<"persisted" | "existing"> {
     const env = getEnvConfig();
     const now = new Date();
     const expiresAt = new Date(now.getTime() + env.REPLAY_COMPLETED_TTL_SECONDS * 1000);
@@ -369,7 +407,7 @@ export class ReplayStore {
         })
         .returning({ replayId: replayPayloads.replayId });
 
-      if (upserted.length > 0) return;
+      if (upserted.length > 0) return "persisted";
 
       const existingRows = await db
         .select()
@@ -378,8 +416,9 @@ export class ReplayStore {
         .limit(1);
       const existing = existingRows[0];
       if (!existing || !isMatchingPersistedReplay(row, existing)) {
-        throw new Error(`durable replay conflict for ${row.replayId.slice(0, 12)}`);
+        throw new ReplayDurableConflictError(row.replayId);
       }
+      return "existing";
     } catch (error) {
       logger.warn("[ReplayStore] persistCompleted failed", {
         error: error instanceof Error ? error.message : String(error),

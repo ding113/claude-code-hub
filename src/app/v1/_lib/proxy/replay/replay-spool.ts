@@ -3,7 +3,12 @@ import { logger } from "@/lib/logger";
 import type { ProxySession } from "../session";
 import { captureReplayResponseHeaders } from "./replay-headers";
 import { isReplayEnabled, type ReplayIdentity } from "./replay-identity";
-import { getReplayStore, type ReplayDelivery, type ReplayMeta } from "./replay-store";
+import {
+  getReplayStore,
+  type ReplayDelivery,
+  ReplayDurableConflictError,
+  type ReplayMeta,
+} from "./replay-store";
 
 /**
  * F2 owner 侧 spool：把客户端可见字节（pump 处理后流）以 write-behind 方式
@@ -251,7 +256,7 @@ export class ReplaySpool {
         this.chunkCount = appended;
         this.metaWritten = true;
         // 先写 PG（持久 payload），再翻 Redis meta 为 completed（热层可服务）
-        await this.store.persistCompleted({
+        const persistResult = await this.store.persistCompleted({
           replayId: this.identity.replayId,
           verifier: this.identity.verifier,
           scopeTag: this.identity.scopeTag,
@@ -265,6 +270,13 @@ export class ReplaySpool {
           byteSize: this.totalBytes,
           sourceMessageRequestId: messageRequestId,
         });
+        if (persistResult === "existing") {
+          await this.store.discardOwned(this.identity.replayId, this.ownerToken);
+          logger.info("[ReplaySpool] reused existing durable replay winner", {
+            replayId: this.identity.replayId.slice(0, 12),
+          });
+          return;
+        }
         pgPersisted = true;
         const completed = await this.store.completeOwned(
           this.identity.replayId,
@@ -280,6 +292,13 @@ export class ReplaySpool {
           byteSize: this.totalBytes,
         });
       } catch (error) {
+        if (error instanceof ReplayDurableConflictError) {
+          logger.warn("[ReplaySpool] discarded conflicting durable replay candidate", {
+            replayId: this.identity.replayId.slice(0, 12),
+          });
+          await this.store.discardOwned(this.identity.replayId, this.ownerToken).catch(() => false);
+          return;
+        }
         // pgPersisted=true：payload 已 durable，仅 completed 翻转失败——热层封死为
         // aborted 仍正确（meta 过期后可由 PG 持久层继续服务）；false 则未持久化，整体作废
         logger.warn("[ReplaySpool] complete failed, aborting entry", {
