@@ -73,20 +73,20 @@ describe("resetUserAllStatistics", () => {
     expect(result).toMatchObject({ ok: false, errorCode: ERROR_CODES.NOT_FOUND });
   });
 
-  test("keeps the fixed 5h Redis availability guard before enqueue", async () => {
+  test("delegates cold Redis readiness handling to the reset queue", async () => {
     mocks.findUserById.mockResolvedValue({
       id: 123,
       limit5hUsd: 10,
       limit5hResetMode: "fixed",
     });
-    mocks.getRedisClient.mockReturnValue(null);
+    mocks.getRedisClient.mockReturnValue({ status: "connecting" });
     const { resetUserAllStatistics } = await import("@/actions/users");
 
     const result = await resetUserAllStatistics(123);
 
-    expect(result).toMatchObject({ ok: false, errorCode: ERROR_CODES.CONNECTION_FAILED });
-    expect(mocks.getRedisClient).toHaveBeenCalledWith({ allowWhenRateLimitDisabled: true });
-    expect(mocks.enqueue).not.toHaveBeenCalled();
+    expect(result).toEqual({ ok: true, data: queuedReset });
+    expect(mocks.getRedisClient).not.toHaveBeenCalled();
+    expect(mocks.enqueue).toHaveBeenCalledWith(123, { fixed5hKeyIds: [] });
   });
 
   test("queues the reset and returns its durable status", async () => {
