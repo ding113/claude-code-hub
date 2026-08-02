@@ -75,8 +75,8 @@ export function SummaryTab({
   firstByteMs,
   sessionId,
   sourceSessionId,
-  sessionIdentityKind,
   requestSequence,
+  requestId,
   userAgent,
   clientIp,
   endpoint,
@@ -105,21 +105,21 @@ export function SummaryTab({
   if (sourceSessionId) {
     sessionRequestParams.set("sourceSessionId", sourceSessionId);
   }
+  if (requestId != null) {
+    sessionRequestParams.set("requestId", String(requestId));
+  }
   const sessionMessagesHref = sessionId
     ? `/dashboard/sessions/${encodeURIComponent(sessionId)}/messages${sessionRequestParams.size > 0 ? `?${sessionRequestParams.toString()}` : ""}`
     : "";
   const identityRows = [
     sessionId
       ? {
-          label:
-            sessionIdentityKind === "prefix_affinity"
-              ? t("metadata.prefixId")
-              : t("metadata.sessionId"),
+          label: t("metadata.canonicalSessionId"),
           value: sessionId,
         }
       : null,
     sourceSessionId && sourceSessionId !== sessionId
-      ? { label: t("metadata.sessionId"), value: sourceSessionId }
+      ? { label: t("metadata.clientSessionId"), value: sourceSessionId }
       : null,
   ].filter((item): item is { label: string; value: string } => item !== null);
   const modelAudit = resolveModelAuditDisplay({
@@ -345,7 +345,7 @@ export function SummaryTab({
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                       <span className="text-xs text-muted-foreground shrink-0">
-                        {identity.label}:
+                        {identity.label}:{" "}
                       </span>
                       <Link
                         href={buildLogsFilterHref(identity.value)}

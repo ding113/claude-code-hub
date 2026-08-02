@@ -25,6 +25,8 @@ export interface TabSharedProps {
   sessionIdentityKind?: "session_id" | "prefix_affinity" | null;
   /** Request sequence number within session */
   requestSequence?: number | null;
+  /** Database request ID used to select an exact request */
+  requestId?: number | null;
   /** Block type (e.g., "sensitive_word", "warmup") */
   blockedBy?: string | null;
   /** Block reason (JSON string) */

@@ -27,6 +27,16 @@ type ResolvedSessionIdentity = NonNullable<
   Awaited<ReturnType<typeof import("@/repository/message").resolveSessionIdentity>>
 >;
 
+type CanonicalSessionStats = Awaited<
+  ReturnType<typeof import("@/repository/message").aggregateMultipleSessionStats>
+>[number];
+
+async function loadCanonicalSessionStats(sessionId: string): Promise<CanonicalSessionStats | null> {
+  const { aggregateMultipleSessionStats } = await import("@/repository/message");
+  const [sessionStats] = await aggregateMultipleSessionStats([sessionId]);
+  return sessionStats ?? null;
+}
+
 type SessionTerminationDependencies = {
   SessionManager: typeof import("@/lib/session-manager").SessionManager;
   SessionTracker: typeof import("@/lib/session-tracker").SessionTracker;
@@ -647,8 +657,7 @@ export async function getSessionMessages(
     const currentUserId = authSession.user.id;
 
     // 1. 获取 session 统计数据以验证所有权
-    const { aggregateSessionStats } = await import("@/repository/message");
-    const sessionStats = await aggregateSessionStats(sessionId);
+    const sessionStats = await loadCanonicalSessionStats(sessionId);
 
     if (!sessionStats) {
       return {
@@ -670,7 +679,7 @@ export async function getSessionMessages(
 
     // 3. 获取 messages
     const locatorResult = await resolveSessionRequestLocator(
-      sessionId,
+      sessionStats.sessionId,
       requestSequence,
       requestedSourceSessionId
     );
@@ -712,7 +721,8 @@ export async function getSessionMessages(
 export async function hasSessionMessages(
   sessionId: string,
   requestSequence?: number,
-  requestedSourceSessionId?: string
+  requestedSourceSessionId?: string,
+  requestId?: number
 ): Promise<ActionResult<boolean>> {
   try {
     // 验证用户权限
@@ -728,8 +738,7 @@ export async function hasSessionMessages(
     const currentUserId = authSession.user.id;
 
     // 检查 Session 所有权（需要从数据库获取 userId）
-    const { aggregateSessionStats } = await import("@/repository/message");
-    const sessionStats = await aggregateSessionStats(sessionId);
+    const sessionStats = await loadCanonicalSessionStats(sessionId);
 
     if (!sessionStats) {
       return {
@@ -750,9 +759,10 @@ export async function hasSessionMessages(
     }
 
     const locatorResult = await resolveSessionRequestLocator(
-      sessionId,
+      sessionStats.sessionId,
       requestSequence,
-      requestedSourceSessionId
+      requestedSourceSessionId,
+      requestId
     );
     if (!locatorResult.ok) return locatorResult;
 
@@ -760,7 +770,7 @@ export async function hasSessionMessages(
     const sourceSessionId = locatorResult.locator.sourceSessionId;
 
     // 只有有效的显式序号才检查特定请求；非法值按未指定序号处理。
-    if (normalizeRequestSequence(requestSequence) !== null) {
+    if (requestId !== undefined || normalizeRequestSequence(requestSequence) !== null) {
       const messages = await SessionManager.getSessionMessages(
         sourceSessionId,
         locatorResult.locator.requestSequence
@@ -814,9 +824,8 @@ export async function getSessionDetails(
     responseMeta: SessionDetailResponseMeta;
     snapshots: SessionDetailSnapshots;
     specialSettings: SpecialSetting[] | null;
-    sessionStats: Awaited<
-      ReturnType<typeof import("@/repository/message").aggregateSessionStats>
-    > | null;
+    sessionStats: CanonicalSessionStats | null;
+    canonicalSessionId: string;
     currentSourceSessionId: string;
     currentSequence: number | null;
     prevRequest: { requestId: number; sourceSessionId: string; requestSequence: number } | null;
@@ -841,21 +850,21 @@ export async function getSessionDetails(
     // 1. 尝试从缓存获取统计数据
     const cachedStats = getSessionDetailsCache(sessionId);
 
-    let sessionStats: Awaited<
-      ReturnType<typeof import("@/repository/message").aggregateSessionStats>
-    > | null;
+    let sessionStats: CanonicalSessionStats | null;
 
     if (cachedStats) {
       logger.debug(`[SessionCache] Session details cache hit: ${sessionId}`);
       sessionStats = cachedStats;
     } else {
       // 2. 从数据库查询
-      const { aggregateSessionStats } = await import("@/repository/message");
-      sessionStats = await aggregateSessionStats(sessionId);
+      sessionStats = await loadCanonicalSessionStats(sessionId);
 
       // 3. 写入缓存
       if (sessionStats) {
         setSessionDetailsCache(sessionId, sessionStats);
+        if (sessionStats.sessionId !== sessionId) {
+          setSessionDetailsCache(sessionStats.sessionId, sessionStats);
+        }
       }
 
       logger.debug(`[SessionCache] Session details fetched and cached: ${sessionId}`);
@@ -879,8 +888,9 @@ export async function getSessionDetails(
       };
     }
 
+    const canonicalSessionId = sessionStats.sessionId;
     const locatorResult = await resolveSessionRequestLocator(
-      sessionId,
+      canonicalSessionId,
       requestSequence,
       requestedSourceSessionId,
       requestId
@@ -899,7 +909,7 @@ export async function getSessionDetails(
     const adjacent =
       effectiveSequence == null
         ? { prevRequest: null, nextRequest: null }
-        : await findAdjacentSessionRequests(sessionId, effectiveRequestId);
+        : await findAdjacentSessionRequests(canonicalSessionId, effectiveRequestId);
 
     const parseJsonStringOrNull = (value: unknown): unknown => {
       if (typeof value !== "string") return value;
@@ -1049,6 +1059,7 @@ export async function getSessionDetails(
         snapshots: effectiveSnapshots,
         specialSettings: unifiedSpecialSettings,
         sessionStats,
+        canonicalSessionId,
         currentSourceSessionId: sourceSessionId,
         currentSequence: effectiveSequence ?? null,
         prevRequest: adjacent.prevRequest,
@@ -1075,19 +1086,20 @@ export async function getSessionDetails(
  * @param sessionId - Session ID
  * @param page - 页码（从 1 开始）
  * @param pageSize - 每页数量（默认 20）
- * @param order - 排序方式：asc（正序）或 desc（倒序），默认 asc
+ * @param order - 排序方式：asc（正序）或 desc（倒序），默认 desc
  */
 export async function getSessionRequests(
   sessionId: string,
   page: number = 1,
   pageSize: number = 20,
-  order: "asc" | "desc" = "asc"
+  order: "asc" | "desc" = "desc"
 ): Promise<
   ActionResult<{
     requests: Array<{
       id: number;
       sourceSessionId: string;
       sequence: number;
+      displaySequence: number;
       model: string | null;
       statusCode: number | null;
       costUsd: string | null;
@@ -1114,8 +1126,7 @@ export async function getSessionRequests(
     const currentUserId = authSession.user.id;
 
     // 1. 验证 Session 所有权
-    const { aggregateSessionStats } = await import("@/repository/message");
-    const sessionStats = await aggregateSessionStats(sessionId);
+    const sessionStats = await loadCanonicalSessionStats(sessionId);
 
     if (!sessionStats) {
       return {
@@ -1137,7 +1148,7 @@ export async function getSessionRequests(
     // 2. 查询请求列表
     const { findRequestsBySessionIdentity } = await import("@/repository/message");
     const offset = (page - 1) * pageSize;
-    const { requests, total } = await findRequestsBySessionIdentity(sessionId, {
+    const { requests, total } = await findRequestsBySessionIdentity(sessionStats.sessionId, {
       limit: pageSize,
       offset,
       order,
@@ -1399,8 +1410,16 @@ export async function terminateActiveSessionsBatch(
     clearActiveSessionsCache();
     clearAllSessionsQueryCache();
 
-    // 清除每个终止 Session 的详情缓存
-    for (const sid of allowedSessionIds) {
+    // 清除每个终止 Session 的 canonical 和请求 alias 详情缓存
+    const allowedCanonicalIds = new Set(allowedSessionIds);
+    const sessionDetailCacheIds = new Set(allowedSessionIds);
+    for (const session of sessionsData) {
+      if (!allowedCanonicalIds.has(session.sessionId)) continue;
+      for (const requestedId of session.requestedSessionIds ?? []) {
+        sessionDetailCacheIds.add(requestedId);
+      }
+    }
+    for (const sid of sessionDetailCacheIds) {
       clearSessionDetailsCache(sid);
     }
 

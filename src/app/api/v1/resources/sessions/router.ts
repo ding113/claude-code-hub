@@ -7,6 +7,7 @@ import {
   BatchTerminateSessionsSchema,
   SessionBooleanResponseSchema,
   SessionDetailQuerySchema,
+  SessionExistsQuerySchema,
   SessionGenericResponseSchema,
   SessionIdParamSchema,
   SessionListResponseSchema,
@@ -162,7 +163,7 @@ sessionsRouter.openapi(
     description: "Checks whether stored messages exist for a session or request sequence.",
     "x-required-access": "read",
     security,
-    request: { params: SessionIdParamSchema, query: SessionSequenceQuerySchema },
+    request: { params: SessionIdParamSchema, query: SessionExistsQuerySchema },
     responses: {
       200: {
         description: "Session message existence.",

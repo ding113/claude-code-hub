@@ -1318,6 +1318,7 @@ export function VirtualizedLogsTable({
                           sourceSessionId={log.sourceSessionId}
                           sessionIdentityKind={log.sessionIdentityKind}
                           requestSequence={log.requestSequence}
+                          requestId={log.id}
                           blockedBy={log.blockedBy}
                           blockedReason={log.blockedReason}
                           isReplay={log.isReplay}

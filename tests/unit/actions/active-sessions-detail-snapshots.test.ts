@@ -21,6 +21,7 @@ const getSessionRequestPhaseSnapshotMock = vi.fn();
 const getSessionResponsePhaseSnapshotMock = vi.fn();
 
 const aggregateSessionStatsMock = vi.fn();
+const aggregateMultipleSessionStatsMock = vi.fn();
 const resolveSessionIdentityMock = vi.fn();
 const isSessionSourceForIdentityMock = vi.fn();
 const findSessionRequestLocatorMock = vi.fn();
@@ -71,6 +72,7 @@ vi.mock("@/lib/session-manager", () => ({
 
 vi.mock("@/repository/message", () => ({
   aggregateSessionStats: aggregateSessionStatsMock,
+  aggregateMultipleSessionStats: aggregateMultipleSessionStatsMock,
   resolveSessionIdentity: resolveSessionIdentityMock,
   isSessionSourceForIdentity: isSessionSourceForIdentityMock,
   findSessionRequestLocator: findSessionRequestLocatorMock,
@@ -106,6 +108,10 @@ describe("getSessionDetails - additive detail snapshots contract", () => {
       userAgent: null,
       apiType: "chat",
       cacheTtlApplied: null,
+    });
+    aggregateMultipleSessionStatsMock.mockImplementation(async (sessionIds: string[]) => {
+      const stats = await aggregateSessionStatsMock(sessionIds[0]);
+      return stats ? [{ ...stats, sessionId: stats.sessionId ?? sessionIds[0] }] : [];
     });
     resolveSessionIdentityMock.mockResolvedValue(null);
     isSessionSourceForIdentityMock.mockResolvedValue(true);
@@ -514,5 +520,20 @@ describe("getSessionDetails - additive detail snapshots contract", () => {
     expect(result).toEqual({ ok: true, data: true });
     expect(hasAnySessionMessagesMock).toHaveBeenCalledWith("sess_x");
     expect(getSessionMessagesMock).not.toHaveBeenCalled();
+  });
+
+  test("uses request id to check the exact request when sequence is absent", async () => {
+    const { hasSessionMessages } = await import("@/actions/active-sessions");
+
+    const result = await hasSessionMessages("pfx:scope:root", undefined, "physical-a", 203);
+
+    expect(result).toEqual({ ok: true, data: true });
+    expect(findSessionRequestLocatorMock).toHaveBeenLastCalledWith("sess_x", {
+      requestId: 203,
+      requestSequence: undefined,
+      sourceSessionId: "physical-a",
+    });
+    expect(getSessionMessagesMock).toHaveBeenCalledWith("physical-a", 1);
+    expect(hasAnySessionMessagesMock).not.toHaveBeenCalled();
   });
 });

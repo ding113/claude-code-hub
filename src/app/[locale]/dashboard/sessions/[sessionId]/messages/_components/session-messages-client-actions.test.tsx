@@ -181,6 +181,7 @@ function buildDetailsData(
     snapshots: SessionDetailSnapshots | null;
     sessionStats: unknown | null;
     currentSourceSessionId: string | null;
+    canonicalSessionId: string;
     currentSequence: number | null;
     prevRequest: { requestId: number; sourceSessionId: string; requestSequence: number } | null;
     nextRequest: { requestId: number; sourceSessionId: string; requestSequence: number } | null;
@@ -203,6 +204,7 @@ function buildDetailsData(
     snapshots: createSnapshots(),
     specialSettings: null,
     sessionStats: null,
+    canonicalSessionId: "pfx:scope:canonical",
     currentSourceSessionId: "physical-current",
     currentSequence: 7,
     prevRequest: null,

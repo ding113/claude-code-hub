@@ -25,6 +25,7 @@ interface ErrorDetailsDialogProps {
   sourceSessionId?: string | null;
   sessionIdentityKind?: "session_id" | "prefix_affinity" | null;
   requestSequence?: number | null;
+  requestId?: number | null;
   blockedBy?: string | null;
   blockedReason?: string | null;
   isReplay?: boolean;
@@ -83,6 +84,7 @@ export function ErrorDetailsDialog({
   sourceSessionId,
   sessionIdentityKind,
   requestSequence,
+  requestId,
   blockedBy,
   blockedReason,
   isReplay = false,
@@ -153,21 +155,26 @@ export function ErrorDetailsDialog({
   // Check if session has messages data
   useEffect(() => {
     if (open && sessionId) {
-      const requestId = ++messageCheckRequestIdRef.current;
+      const checkId = ++messageCheckRequestIdRef.current;
       setCheckingMessages(true);
-      hasSessionMessages(sessionId, requestSequence ?? undefined, sourceSessionId ?? undefined)
+      hasSessionMessages(
+        sessionId,
+        requestSequence ?? undefined,
+        sourceSessionId ?? undefined,
+        requestId ?? undefined
+      )
         .then((result) => {
-          if (requestId !== messageCheckRequestIdRef.current) return;
+          if (checkId !== messageCheckRequestIdRef.current) return;
           if (result.ok) {
             setHasMessages(result.data);
           }
         })
         .catch((err) => {
-          if (requestId !== messageCheckRequestIdRef.current) return;
+          if (checkId !== messageCheckRequestIdRef.current) return;
           console.error("Failed to check session messages:", err);
         })
         .finally(() => {
-          if (requestId === messageCheckRequestIdRef.current) {
+          if (checkId === messageCheckRequestIdRef.current) {
             setCheckingMessages(false);
           }
         });
@@ -175,7 +182,7 @@ export function ErrorDetailsDialog({
       setHasMessages(false);
       setCheckingMessages(false);
     }
-  }, [open, sessionId, requestSequence, sourceSessionId]);
+  }, [open, sessionId, requestSequence, sourceSessionId, requestId]);
 
   // Handle scrollToRedirect - switch to metadata tab when redirect info needs focus
   useEffect(() => {
@@ -246,6 +253,7 @@ export function ErrorDetailsDialog({
     sourceSessionId,
     sessionIdentityKind,
     requestSequence,
+    requestId,
     blockedBy,
     blockedReason,
     isReplay,

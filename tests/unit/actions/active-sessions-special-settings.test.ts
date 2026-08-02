@@ -19,6 +19,7 @@ const getSessionRequestPhaseSnapshotMock = vi.fn();
 const getSessionResponsePhaseSnapshotMock = vi.fn();
 
 const aggregateSessionStatsMock = vi.fn();
+const aggregateMultipleSessionStatsMock = vi.fn();
 const findSessionRequestLocatorMock = vi.fn();
 const findAdjacentSessionRequestsMock = vi.fn();
 const findMessageRequestAuditBySessionIdAndSequenceMock = vi.fn();
@@ -66,6 +67,7 @@ vi.mock("@/lib/session-manager", () => ({
 
 vi.mock("@/repository/message", () => ({
   aggregateSessionStats: aggregateSessionStatsMock,
+  aggregateMultipleSessionStats: aggregateMultipleSessionStatsMock,
   findSessionRequestLocator: findSessionRequestLocatorMock,
   findAdjacentSessionRequests: findAdjacentSessionRequestsMock,
   findMessageRequestAuditBySessionIdAndSequence: findMessageRequestAuditBySessionIdAndSequenceMock,
@@ -98,6 +100,10 @@ describe("getSessionDetails - unified specialSettings", () => {
       userAgent: null,
       apiType: "chat",
       cacheTtlApplied: null,
+    });
+    aggregateMultipleSessionStatsMock.mockImplementation(async (sessionIds: string[]) => {
+      const stats = await aggregateSessionStatsMock(sessionIds[0]);
+      return stats ? [{ ...stats, sessionId: stats.sessionId ?? sessionIds[0] }] : [];
     });
     findSessionRequestLocatorMock.mockResolvedValue({
       sourceSessionId: "sess_x",

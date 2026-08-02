@@ -400,6 +400,8 @@
         "sessionInfo": "工作階段資訊",
         "sessionId": "Session ID",
         "prefixId": "Prefix ID",
+        "canonicalSessionId": "Canonical Session ID",
+        "clientSessionId": "用戶端 Session ID",
         "clientInfo": "用戶端資訊",
         "billingInfo": "計費資訊",
         "technicalTimeline": "技術時間軸",
@@ -807,6 +809,8 @@
     },
     "details": {
       "title": "會話訊息",
+      "canonicalSessionId": "Canonical Session ID",
+      "clientSessionId": "用戶端 Session ID",
       "messages": "訊息列表",
       "info": "會話資訊",
       "timeline": "時間線",
@@ -919,6 +923,7 @@
       "loadError": "載入失敗",
       "fetchFailed": "取得失敗",
       "unknownError": "未知錯誤",
+      "error": "Session 詳情載入失敗",
       "storageNotEnabled": "未儲存",
       "storageNotEnabledHint": "提示：請檢查 REDIS_URL 與 ENABLE_RATE_LIMIT=true（用於 Session 詳情快取）；如需儲存未脫敏的 messages，請設定 STORE_SESSION_MESSAGES=true。"
     },

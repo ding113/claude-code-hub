@@ -95,6 +95,21 @@ describe("v1 action compatibility client", () => {
     );
   });
 
+  test("preserves the stable request id for message existence checks", async () => {
+    getMock.mockResolvedValue({ exists: true });
+
+    await activeSessions.hasSessionMessages(
+      "pfx:scope:fingerprint",
+      undefined,
+      "physical-session",
+      203
+    );
+
+    expect(getMock).toHaveBeenCalledWith(
+      "/api/v1/sessions/pfx%3Ascope%3Afingerprint/messages/exists?sourceSessionId=physical-session&requestId=203"
+    );
+  });
+
   test("preserves provider edit undo metadata from response headers", async () => {
     patchMock.mockImplementation(
       async (

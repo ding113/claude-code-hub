@@ -23624,6 +23624,8 @@ export interface operations {
                 requestSequence?: number;
                 /** @description Physical source session id. */
                 sourceSessionId?: string;
+                /** @description Stable request id. */
+                requestId?: number;
             };
             header?: never;
             path: {

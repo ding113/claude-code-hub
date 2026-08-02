@@ -43,7 +43,10 @@ type RequestRow = Pick<
   | "outputTokens"
   | "errorMessage"
   | "sessionId"
-> & { readonly sequence: MessageRow["requestSequence"] };
+> & {
+  readonly sequence: MessageRow["requestSequence"];
+  readonly displaySequence: number;
+};
 
 const firstCreatedAt = new Date("2026-05-04T10:00:00.000Z");
 const secondCreatedAt = new Date("2026-05-04T10:01:00.000Z");
@@ -62,6 +65,7 @@ describe("message repository session request queries", () => {
         id: 31,
         sessionId: "session-requests",
         sequence: null,
+        displaySequence: 1,
         model: "model-a",
         statusCode: 200,
         costUsd: "0.100000000000000",
@@ -74,6 +78,7 @@ describe("message repository session request queries", () => {
         id: 32,
         sessionId: "session-requests",
         sequence: 3,
+        displaySequence: 3,
         model: "model-b",
         statusCode: 429,
         costUsd: "0.200000000000000",
@@ -94,6 +99,7 @@ describe("message repository session request queries", () => {
           id: 31,
           sourceSessionId: "session-requests",
           sequence: 1,
+          displaySequence: 1,
           model: "model-a",
           statusCode: 200,
           costUsd: "0.100000000000000",
@@ -106,6 +112,7 @@ describe("message repository session request queries", () => {
           id: 32,
           sourceSessionId: "session-requests",
           sequence: 3,
+          displaySequence: 3,
           model: "model-b",
           statusCode: 429,
           costUsd: "0.200000000000000",
@@ -132,6 +139,7 @@ describe("message repository session request queries", () => {
         id: 35,
         sessionId: "session-desc",
         sequence: 5,
+        displaySequence: 5,
         model: null,
         statusCode: null,
         costUsd: null,
@@ -163,6 +171,7 @@ describe("message repository session request queries", () => {
         id: 41,
         sessionId: "physical-a",
         sequence: 1,
+        displaySequence: 2,
         model: "model-a",
         statusCode: 200,
         costUsd: "0",
@@ -175,6 +184,7 @@ describe("message repository session request queries", () => {
         id: 42,
         sessionId: "physical-b",
         sequence: 1,
+        displaySequence: 4,
         model: "model-b",
         statusCode: 200,
         costUsd: "0",
@@ -189,16 +199,50 @@ describe("message repository session request queries", () => {
     const result = await findRequestsBySessionIdentity("pfx:scope:fingerprint");
 
     expect(
-      result.requests.map(({ sourceSessionId, sequence }) => ({ sourceSessionId, sequence }))
+      result.requests.map(({ sourceSessionId, sequence, displaySequence }) => ({
+        sourceSessionId,
+        sequence,
+        displaySequence,
+      }))
     ).toEqual([
-      { sourceSessionId: "physical-a", sequence: 1 },
-      { sourceSessionId: "physical-b", sequence: 1 },
+      { sourceSessionId: "physical-a", sequence: 1, displaySequence: 2 },
+      { sourceSessionId: "physical-b", sequence: 1, displaySequence: 4 },
     ]);
     expect(sqlText(count.trace.where)).toContain("is_replay");
     expect(sqlText(count.trace.where)).toContain("false");
     expect(sqlText(rows.trace.where)).toContain("pfx:scope:fingerprint");
     expect(sqlText(rows.trace.where)).toContain("is_replay");
     expect(sqlText(rows.trace.where)).toContain("false");
+    expect(sqlText(rows.trace.orderBy)).toContain("created_at desc");
+    expect(sqlText(rows.trace.orderBy)).toContain("id desc");
+  });
+
+  test("accepts a physical Session id when resolving a request locator", async () => {
+    const locator = createDrizzleQuery([
+      {
+        requestId: 204,
+        sourceSessionId: "physical-a",
+        requestSequence: 1,
+        identityKind: "prefix_affinity",
+        scopeTag: "scope",
+        fingerprint: "fingerprint",
+      },
+    ]);
+    boundary.select.mockReturnValueOnce(locator);
+
+    await expect(findSessionRequestLocator("physical-a", { requestId: 204 })).resolves.toEqual({
+      requestId: 204,
+      sourceSessionId: "physical-a",
+      requestSequence: 1,
+      identityKind: "prefix_affinity",
+      scopeTag: "scope",
+      fingerprint: "fingerprint",
+    });
+
+    const where = sqlText(locator.trace.where);
+    expect(where).toContain("physical-a");
+    expect(where).toContain("session_identity");
+    expect(where).toContain("session_id");
   });
 
   test("resolves an exact request locator inside a prefix identity", async () => {
