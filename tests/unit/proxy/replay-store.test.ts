@@ -31,7 +31,11 @@ const redisControl = vi.hoisted(() => ({
 const dbState = vi.hoisted(() => ({
   insertValues: [] as Record<string, unknown>[],
   onConflictCalls: 0,
+  upsertConfigs: [] as Record<string, unknown>[],
+  upsertRows: [] as Record<string, unknown>[],
   deleteWheres: [] as unknown[],
+  executeQueries: [] as unknown[],
+  executeRows: [] as Record<string, unknown>[],
   selectWheres: [] as unknown[],
   selectRows: [] as Record<string, unknown>[],
   insertError: null as Error | null,
@@ -71,6 +75,10 @@ vi.mock("@/lib/redis/client", () => ({
 
 vi.mock("@/drizzle/db", () => ({
   db: {
+    execute: async (query: unknown) => {
+      dbState.executeQueries.push(query);
+      return dbState.executeRows;
+    },
     insert: () => ({
       values: (values: Record<string, unknown>) => {
         if (dbState.insertError) throw dbState.insertError;
@@ -78,6 +86,11 @@ vi.mock("@/drizzle/db", () => ({
         return {
           onConflictDoNothing: async () => {
             dbState.onConflictCalls += 1;
+          },
+          onConflictDoUpdate: (config: Record<string, unknown>) => {
+            dbState.onConflictCalls += 1;
+            dbState.upsertConfigs.push(config);
+            return { returning: async () => dbState.upsertRows };
           },
         };
       },
@@ -242,7 +255,11 @@ beforeEach(() => {
   redisControl.client = createFakeRedis();
   dbState.insertValues = [];
   dbState.onConflictCalls = 0;
+  dbState.upsertConfigs = [];
+  dbState.upsertRows = [{ replayId: "persisted" }];
   dbState.deleteWheres = [];
+  dbState.executeQueries = [];
+  dbState.executeRows = [];
   dbState.selectWheres = [];
   dbState.selectRows = [];
   dbState.insertError = null;
@@ -551,6 +568,63 @@ describe("ReplayStore：PG 完成持久层", () => {
     expect(dbState.deleteWheres).toHaveLength(0);
   });
 
+  it("persistCompleted 条件替换已过期的确定性主键行", async () => {
+    const store = new ReplayStore();
+    const row = makePersistedRow({ payload: "data: replacement\n\n" });
+
+    await expect(store.persistCompleted(row)).resolves.toBeUndefined();
+
+    expect(dbState.upsertConfigs).toHaveLength(1);
+    const config = dbState.upsertConfigs[0] as {
+      set: Record<string, unknown>;
+      setWhere: unknown;
+    };
+    expect(config.set).toMatchObject({
+      verifier: row.verifier,
+      scopeTag: row.scopeTag,
+      keyId: row.keyId,
+      userId: row.userId,
+      format: row.format,
+      payload: row.payload,
+      byteSize: row.byteSize,
+      sourceMessageRequestId: row.sourceMessageRequestId,
+    });
+    expect(toSqlText(config.setWhere).toLowerCase()).toContain('"expires_at" <=');
+    expect(dbState.selectWheres).toHaveLength(0);
+  });
+
+  it("persistCompleted 接受内容完全一致的未过期 durable 行", async () => {
+    dbState.upsertRows = [];
+    const row = makePersistedRow();
+    dbState.selectRows = [
+      {
+        ...row,
+        headersJson: row.headers,
+        expiresAt: new Date(Date.now() + 60_000),
+      },
+    ];
+    const store = new ReplayStore();
+
+    await expect(store.persistCompleted(row)).resolves.toBeUndefined();
+    expect(dbState.selectWheres).toHaveLength(1);
+  });
+
+  it("persistCompleted 拒绝内容冲突的未过期 durable 行", async () => {
+    dbState.upsertRows = [];
+    const row = makePersistedRow();
+    dbState.selectRows = [
+      {
+        ...row,
+        headersJson: row.headers,
+        payload: "data: conflicting\n\n",
+        expiresAt: new Date(Date.now() + 60_000),
+      },
+    ];
+    const store = new ReplayStore();
+
+    await expect(store.persistCompleted(row)).rejects.toThrow("durable replay conflict");
+  });
+
   it("persistCompleted 遇 PG 异常必须抛出（complete 屏障依赖异常走 abort）", async () => {
     dbState.insertError = new Error("pg down");
     const store = new ReplayStore();
@@ -558,13 +632,22 @@ describe("ReplayStore：PG 完成持久层", () => {
     await expect(store.persistCompleted(makePersistedRow())).rejects.toThrow("pg down");
   });
 
-  it("cleanupExpired 删除过期行（供定时调度器调用）", async () => {
+  it("cleanupExpired 单批锁定并删除最多 100 条过期行", async () => {
+    dbState.executeRows = [{ deleted: 1 }, { deleted: 1 }];
     const store = new ReplayStore();
-    await expect(store.cleanupExpired()).resolves.toBe(0);
+    const cutoff = new Date("2026-08-02T12:00:00.000Z");
 
-    expect(dbState.deleteWheres).toHaveLength(1);
-    const deleteSql = toSqlText(dbState.deleteWheres[0]);
-    expect(deleteSql).toContain('"expires_at" <');
+    await expect(store.cleanupExpired(cutoff)).resolves.toBe(2);
+
+    expect(dbState.executeQueries).toHaveLength(1);
+    const deleteSql = toSqlText(dbState.executeQueries[0]).toLowerCase();
+    expect(deleteSql).toContain("with doomed as");
+    expect(deleteSql).toContain("expires_at < $1");
+    expect(deleteSql).toContain("order by expires_at, replay_id");
+    expect(deleteSql).toContain("limit $2");
+    expect(deleteSql).toContain("for update skip locked");
+    expect(deleteSql).toContain("delete from replay_payloads");
+    expect(deleteSql).toContain("returning 1");
   });
 
   it("findCompleted 只按 replayId + 未过期条件查询并返回首行", async () => {
