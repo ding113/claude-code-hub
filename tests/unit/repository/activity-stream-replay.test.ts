@@ -13,6 +13,7 @@ function installDbBoundary(rows: readonly unknown[] | readonly (readonly unknown
   const whereConditions: unknown[] = [];
   const limits: unknown[] = [];
   let selectIndex = 0;
+  let distinctQuery: any = null;
   const makeQuery = () => {
     const selectedRows = Array.isArray(rows[0])
       ? ((rows as readonly (readonly unknown[])[])[selectIndex++] ?? [])
@@ -32,11 +33,22 @@ function installDbBoundary(rows: readonly unknown[] | readonly (readonly unknown
       // biome-ignore lint/suspicious/noThenProperty: 模拟 Drizzle 可直接 await 的 query builder。
       then: (resolve: (value: readonly unknown[]) => unknown) =>
         Promise.resolve(selectedRows).then(resolve),
+      as: vi.fn(() => query),
     };
     return query;
   };
-  const select = vi.fn(makeQuery);
-  const selectDistinctOn = vi.fn(makeQuery);
+  const select = vi.fn(() => {
+    if (distinctQuery) {
+      const query = distinctQuery;
+      distinctQuery = null;
+      return query;
+    }
+    return makeQuery();
+  });
+  const selectDistinctOn = vi.fn(() => {
+    distinctQuery = makeQuery();
+    return distinctQuery;
+  });
 
   vi.doMock("@/drizzle/db", () => ({ db: { select, selectDistinctOn } }));
   return { whereConditions, limits, selectDistinctOn };

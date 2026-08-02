@@ -74,10 +74,10 @@ export async function findRecentActivityStream(limit = 20): Promise<ActivityStre
     // 2. 查询活跃 session 的最新请求（每个 session 取最新1条）
     if (activeSessionIds.length > 0) {
       // 先在数据库内按 canonical identity 去重，再限制 session 级结果数量。
-      const activeSessionRequests = await db
+      const latestActiveSessionRows = db
         .selectDistinctOn([messageSessionIdentity], {
           id: messageRequest.id,
-          sessionId: messageSessionIdentity,
+          sessionId: messageSessionIdentity.as("session_id"),
           userName: users.name,
           userId: messageRequest.userId,
           keyId: keysTable.id,
@@ -107,6 +107,12 @@ export async function findRecentActivityStream(limit = 20): Promise<ActivityStre
           )
         )
         .orderBy(messageSessionIdentity, desc(messageRequest.createdAt))
+        .as("latest_active_session_rows");
+
+      const activeSessionRequests = await db
+        .select()
+        .from(latestActiveSessionRows)
+        .orderBy(desc(latestActiveSessionRows.createdAt))
         .limit(limit);
 
       const latestPerSession = activeSessionRequests.map((row) => ({
