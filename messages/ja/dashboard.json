@@ -61,13 +61,13 @@
     "filters": {
       "user": "ユーザー",
       "provider": "プロバイダー",
-      "sessionId": "セッションID",
+      "sessionId": "Session / Prefix ID",
       "searchUser": "ユーザーを検索...",
       "searchProvider": "プロバイダーを検索...",
-      "searchSessionId": "セッションIDを検索...",
+      "searchSessionId": "Session または Prefix ID を検索...",
       "noUserFound": "一致するユーザーが見つかりません",
       "noProviderFound": "一致するプロバイダーが見つかりません",
-      "noSessionFound": "一致するセッションIDが見つかりません",
+      "noSessionFound": "一致する Session または Prefix ID が見つかりません",
       "model": "モデル",
       "actualResponseModelMismatch": "課金/実応答モデル不一致",
       "endpoint": "エンドポイント",
@@ -220,6 +220,23 @@
         "outputRate": "出力速度",
         "viewFullError": "完全なエラーを表示",
         "viewSession": "セッションを表示"
+      },
+      "cachePerformance": {
+        "title": "キャッシュ性能",
+        "actualRate": "実測キャッシュ率",
+        "theoreticalRate": "理論キャッシュ率",
+        "coefficient": "リクエストキャッシュ係数",
+        "rawCoefficient": "単一リクエストの生係数。プロバイダーの信頼度補正は適用しません。",
+        "estimateNote": "理論キャッシュ率は最長の正規化プレフィックス (バイト数 / 4) から推定されます。",
+        "availability": {
+          "available": "測定可能なプレフィックスキャッシュ推定値を持つ対象リクエストです。",
+          "no_input": "入力トークンが記録されていません。",
+          "no_affinity_key": "Prefix ID が記録されていないため、理論率と係数は利用できません。",
+          "attempt_failed": "リクエスト試行が失敗したため、係数は除外されています。",
+          "not_observable": "上流のキャッシュ使用量を観測できないため、係数は除外されています。",
+          "stream_truncated": "ストリームが途中で切断されたため、係数は除外されています。",
+          "legacy_unrecorded": "このリクエストはリクエスト単位のプレフィックス指標記録前のものです。"
+        }
       },
       "specialSettings": {
         "title": "特殊設定"
@@ -381,6 +398,8 @@
       "metadata": {
         "noMetadata": "メタデータがありません",
         "sessionInfo": "セッション情報",
+        "sessionId": "Session ID",
+        "prefixId": "Prefix ID",
         "clientInfo": "クライアント情報",
         "billingInfo": "課金情報",
         "technicalTimeline": "技術タイムライン",
@@ -695,7 +714,7 @@
       "avgCostPerMillionTokens": "100万トークンあたりコスト",
       "unknownModel": "不明",
       "successRateUnavailable": "利用不可",
-      "successRateBasisDisclosure": "redirected 課金モデルでは 1 行に複数の元モデルが混在しうるため、誤解を避けるためここでは成功率を表示しません。"
+      "successRateBasisDisclosure": "選択した期間にこのモデルの集計可能な成功/失敗結果がないため、成功率を計算できません。"
     },
     "expandModelStats": "モデル詳細を展開",
     "collapseModelStats": "モデル詳細を折りたたむ",

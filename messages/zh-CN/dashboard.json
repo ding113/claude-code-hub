@@ -61,13 +61,13 @@
     "filters": {
       "user": "用户",
       "provider": "供应商",
-      "sessionId": "Session ID",
+      "sessionId": "Session / Prefix ID",
       "searchUser": "搜索用户...",
       "searchProvider": "搜索供应商...",
-      "searchSessionId": "搜索 Session ID...",
+      "searchSessionId": "搜索 Session 或 Prefix ID...",
       "noUserFound": "未找到匹配的用户",
       "noProviderFound": "未找到匹配的供应商",
-      "noSessionFound": "未找到匹配的 Session ID",
+      "noSessionFound": "未找到匹配的 Session 或 Prefix ID",
       "model": "模型",
       "actualResponseModelMismatch": "计费/实际模型不一致",
       "endpoint": "端点",
@@ -220,6 +220,23 @@
         "outputRate": "输出速率",
         "viewFullError": "查看完整错误",
         "viewSession": "查看会话"
+      },
+      "cachePerformance": {
+        "title": "缓存表现",
+        "actualRate": "实际缓存率",
+        "theoreticalRate": "理论缓存率",
+        "coefficient": "本请求缓存系数",
+        "rawCoefficient": "单请求原始系数，不应用供应商窗口置信度折扣。",
+        "estimateNote": "理论缓存率根据最长规范化前缀估算（字节数 / 4）。",
+        "availability": {
+          "available": "请求符合条件，前缀缓存估算可测量。",
+          "no_input": "该请求没有记录输入令牌。",
+          "no_affinity_key": "未记录 Prefix ID，因此理论缓存率和缓存系数不可用。",
+          "attempt_failed": "请求尝试失败，缓存系数已排除。",
+          "not_observable": "无法观测上游缓存用量，缓存系数已排除。",
+          "stream_truncated": "响应流被截断，缓存系数已排除。",
+          "legacy_unrecorded": "该请求产生于单请求前缀缓存指标上线之前。"
+        }
       },
       "specialSettings": {
         "title": "特殊设置"
@@ -381,6 +398,8 @@
       "metadata": {
         "noMetadata": "暂无元数据",
         "sessionInfo": "会话信息",
+        "sessionId": "Session ID",
+        "prefixId": "Prefix ID",
         "clientInfo": "客户端信息",
         "billingInfo": "计费信息",
         "technicalTimeline": "技术时间线",
@@ -695,7 +714,7 @@
       "avgCostPerMillionTokens": "平均百万 Token 成本",
       "unknownModel": "未知",
       "successRateUnavailable": "不适用",
-      "successRateBasisDisclosure": "在 redirected 计费模型模式下，一行可能合并多个原始模型，因此这里不展示成功率以避免口径误导。"
+      "successRateBasisDisclosure": "所选时间段内该模型没有可计数的成功或失败结果，因此无法计算成功率。"
     },
     "expandModelStats": "展开模型详情",
     "collapseModelStats": "收起模型详情",

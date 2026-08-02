@@ -24,6 +24,7 @@ import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Link } from "@/i18n/routing";
 import { getSessionOriginChain } from "@/lib/api-client/v1/actions/session-origin-chain";
 import { cn, formatTokenAmount } from "@/lib/utils";
 import { formatCurrency } from "@/lib/utils/currency";
@@ -32,6 +33,7 @@ import { formatProbability, formatProviderTimeline } from "@/lib/utils/provider-
 import type { ProviderChainItem } from "@/types/message";
 import { normalizeRoutingTrace } from "@/types/routing-trace";
 import { type LogicTraceTabProps, parseBlockedReason } from "../types";
+import { CachePerformance } from "./CachePerformance";
 import { DiscoveryTraceView, RoutingModeBanner } from "./DiscoveryTraceView";
 import { StepCard, type StepStatus } from "./StepCard";
 
@@ -74,6 +76,7 @@ export function LogicTraceTab({
   routingTrace,
   sessionId,
   sourceSessionId,
+  sessionIdentityKind,
   blockedBy,
   blockedReason,
   isReplay,
@@ -85,10 +88,21 @@ export function LogicTraceTab({
   outputTokens,
   cacheCreationInputTokens,
   cacheReadInputTokens,
+  cacheInputTotal,
+  actualCacheRate,
+  theoreticalCacheRate,
+  theoreticalCacheTokens,
+  requestCacheCoefficientBp,
+  requestCacheMetricAvailability,
   initialExpandedChainIndex,
 }: LogicTraceTabProps) {
   const t = useTranslations("dashboard.logs.details");
   const tChain = useTranslations("provider-chain");
+  const buildLogsFilterHref = (identity: string) => {
+    const query = new URLSearchParams();
+    query.set("sessionId", identity);
+    return `/dashboard/logs?${query.toString()}`;
+  };
   // Winner cost is the request total minus every billed loser; only present
   // when this request actually billed hedge losers.
   const hedgeSummary = summarizeHedgeBilling(costUsd, hedgeLosers);
@@ -402,11 +416,28 @@ export function LogicTraceTab({
                       {sessionReuseContext?.sessionId && (
                         <div className="flex items-center gap-2">
                           <span className="text-muted-foreground">
-                            {t("logicTrace.sessionIdLabel")}:
+                            {sessionIdentityKind === "prefix_affinity"
+                              ? t("metadata.prefixId")
+                              : t("logicTrace.sessionIdLabel")}
+                            :
                           </span>
-                          <code className="text-[10px] px-1.5 py-0.5 bg-violet-100 dark:bg-violet-900/30 rounded font-mono truncate max-w-[120px]">
-                            {sessionReuseContext.sessionId.slice(0, 8)}...
-                          </code>
+                          <Link
+                            href={buildLogsFilterHref(sessionReuseContext.sessionId)}
+                            className="text-[10px] px-1.5 py-0.5 bg-violet-100 dark:bg-violet-900/30 rounded font-mono break-all underline-offset-2 hover:underline"
+                          >
+                            {sessionReuseContext.sessionId}
+                          </Link>
+                        </div>
+                      )}
+                      {sourceSessionId && sourceSessionId !== sessionReuseContext?.sessionId && (
+                        <div className="flex items-center gap-2">
+                          <span className="text-muted-foreground">{t("metadata.sessionId")}:</span>
+                          <Link
+                            href={buildLogsFilterHref(sourceSessionId)}
+                            className="text-[10px] px-1.5 py-0.5 bg-violet-100 dark:bg-violet-900/30 rounded font-mono break-all underline-offset-2 hover:underline"
+                          >
+                            {sourceSessionId}
+                          </Link>
                         </div>
                       )}
                       {requestSequence !== undefined && requestSequence !== null && (
@@ -462,12 +493,17 @@ export function LogicTraceTab({
                     </div>
                   </div>
 
-                  {/* Cache Optimization Hint */}
                   <div className="pt-2 border-t border-muted/50">
-                    <div className="flex items-start gap-2 text-muted-foreground">
-                      <Zap className="h-3 w-3 mt-0.5 shrink-0 text-violet-500" />
-                      <span className="text-[10px]">{t("logicTrace.cacheOptimizationHint")}</span>
-                    </div>
+                    <CachePerformance
+                      actualCacheRate={actualCacheRate ?? null}
+                      theoreticalCacheRate={theoreticalCacheRate ?? null}
+                      requestCacheCoefficientBp={requestCacheCoefficientBp ?? null}
+                      requestCacheMetricAvailability={requestCacheMetricAvailability}
+                      cacheInputTotal={cacheInputTotal ?? null}
+                      cacheReadInputTokens={cacheReadInputTokens ?? null}
+                      theoreticalCacheTokens={theoreticalCacheTokens ?? null}
+                      compact
+                    />
                   </div>
                 </div>
               }

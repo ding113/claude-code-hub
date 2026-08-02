@@ -177,12 +177,11 @@ describe("GET /api/leaderboard", () => {
           totalRequests: 12,
           totalCost: 3.5,
           totalTokens: 12345,
-          successRate: null,
+          successRate: 0.9,
           rowIdentityBasis: "redirected",
-          successRateBasis: "unavailable",
+          successRateBasis: "redirected",
           costTokensBasis: "redirected",
           basisDisclosureRequired: true,
-          successRateUnavailableReason: "redirected_billing_model",
         },
       ]);
 
@@ -194,12 +193,11 @@ describe("GET /api/leaderboard", () => {
       expect(response.status).toBe(200);
       expect(body[0]).toMatchObject({
         model: "glm-4.6",
-        successRate: null,
+        successRate: 0.9,
         rowIdentityBasis: "redirected",
-        successRateBasis: "unavailable",
+        successRateBasis: "redirected",
         costTokensBasis: "redirected",
         basisDisclosureRequired: true,
-        successRateUnavailableReason: "redirected_billing_model",
       });
     });
 

@@ -1,3 +1,4 @@
+import type { RequestCacheMetricAvailability } from "@/lib/cache-effectiveness/request-metrics";
 import type { HedgeLoserBilling, StoredCostBreakdown } from "@/types/cost-breakdown";
 import type { ProviderChainItem } from "@/types/message";
 import type { RoutingTraceV1 } from "@/types/routing-trace";
@@ -20,6 +21,8 @@ export interface TabSharedProps {
   sessionId: string | null;
   /** Physical Session source for request-scoped readback */
   sourceSessionId?: string | null;
+  /** Canonical identity kind used to distinguish Prefix ID from Session ID */
+  sessionIdentityKind?: "session_id" | "prefix_affinity" | null;
   /** Request sequence number within session */
   requestSequence?: number | null;
   /** Block type (e.g., "sensitive_word", "warmup") */
@@ -62,6 +65,18 @@ export interface TabSharedProps {
   cacheReadInputTokens?: number | null;
   /** Cache TTL applied */
   cacheTtlApplied?: string | null;
+  /** Theoretical longest-prefix cache token estimate */
+  theoreticalCacheTokens?: number | null;
+  /** Whether the request is eligible for the cache-effectiveness window */
+  cacheScoreEligible?: boolean | null;
+  /** Exclusion reason when the request is not eligible */
+  cacheScoreExcludedReason?: string | null;
+  /** Input-side cache denominator */
+  cacheInputTotal?: number | null;
+  actualCacheRate?: number | null;
+  theoreticalCacheRate?: number | null;
+  requestCacheCoefficientBp?: number | null;
+  requestCacheMetricAvailability?: RequestCacheMetricAvailability;
   /** Whether swap cache TTL billing was applied */
   swapCacheTtlApplied?: boolean | null;
   /** Total cost in USD */

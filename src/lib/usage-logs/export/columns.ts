@@ -31,6 +31,16 @@ function retryCountOf(log: UsageLogRow): number {
   return log.providerChain ? getRetryCount(log.providerChain) : 0;
 }
 
+function prefixIdOf(log: UsageLogRow): string {
+  return log.sessionIdentityKind === "prefix_affinity" ? (log.sessionId ?? "") : "";
+}
+
+function physicalSessionIdOf(log: UsageLogRow): string {
+  return log.sessionIdentityKind === "prefix_affinity"
+    ? (log.sourceSessionId ?? "")
+    : (log.sessionId ?? "");
+}
+
 export const DETAIL_COLUMNS: DetailColumn[] = [
   { header: "Time", kind: "datetime", numFmt: DATETIME_NUM_FMT, get: (log) => log.createdAt },
   { header: "User", kind: "text", get: (log) => log.userName },
@@ -90,7 +100,8 @@ export const DETAIL_COLUMNS: DetailColumn[] = [
     get: (log) => log.costUsd,
   },
   { header: "Duration (ms)", kind: "number", numFmt: INT_NUM_FMT, get: (log) => log.durationMs },
-  { header: "Session ID", kind: "text", get: (log) => log.sessionId ?? "" },
+  { header: "Prefix ID", kind: "text", get: prefixIdOf },
+  { header: "Session ID", kind: "text", get: physicalSessionIdOf },
   {
     header: "Retry Count",
     kind: "number",

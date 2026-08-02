@@ -80,6 +80,8 @@ export async function aggregateCacheEffectiveness(
     }
 
     signal?.throwIfAborted();
+    const windowStartIso = windowStart.toISOString();
+    const windowEndIso = windowEnd.toISOString();
     // 单条 SQL 完成分组聚合 + 定点数学 + 写入（全整数运算）
     const inserted = await tx.execute(sql`
       WITH grouped AS (
@@ -95,8 +97,8 @@ export async function aggregateCacheEffectiveness(
         WHERE mr.cache_compatibility_key IS NOT NULL
           AND mr.deleted_at IS NULL
           AND mr.provider_id > 0
-          AND mr.created_at >= ${windowStart}
-          AND mr.created_at < ${windowEnd}
+          AND mr.created_at >= ${windowStartIso}::timestamptz
+          AND mr.created_at < ${windowEndIso}::timestamptz
         GROUP BY mr.provider_id, COALESCE(mr.model, ''), COALESCE(mr.cache_ttl_bucket, '5m')
       ),
       scored AS (
@@ -104,7 +106,7 @@ export async function aggregateCacheEffectiveness(
           g.*,
           CASE
             WHEN g.theoretical_tokens > 0
-            THEN LEAST((g.observed_tokens * 10000) / g.theoretical_tokens, 10000)::int
+            THEN GREATEST(LEAST((g.observed_tokens * 10000) / g.theoretical_tokens, 10000), 0)::int
             ELSE 0
           END AS raw_bp,
           CASE
@@ -129,8 +131,8 @@ export async function aggregateCacheEffectiveness(
         s.provider_id,
         s.model,
         s.cache_ttl_bucket,
-        ${windowStart},
-        ${windowEnd},
+        ${windowStartIso}::timestamptz,
+        ${windowEndIso}::timestamptz,
         s.sample_count,
         s.eligible_count,
         s.theoretical_tokens,

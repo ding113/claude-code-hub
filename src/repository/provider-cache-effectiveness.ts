@@ -44,6 +44,15 @@ export interface ProviderCacheCoefficient {
   sampleCount: number;
 }
 
+export interface ProviderModelCacheCoefficient extends ProviderCacheCoefficient {
+  model: string;
+}
+
+export type ProviderModelCacheCoefficientMap = Map<
+  number,
+  Map<string, ProviderModelCacheCoefficient>
+>;
+
 // tsconfig target ES2017 禁 BigInt 字面量，统一用 BigInt() 构造
 const BIG_ZERO = BigInt(0);
 const BP_SCALE = BigInt(10000);
@@ -57,6 +66,7 @@ function computeCoefficientBp(
 ): number {
   let rawBp = theoretical > BIG_ZERO ? (observed * BP_SCALE) / theoretical : BIG_ZERO;
   if (rawBp > BP_SCALE) rawBp = BP_SCALE;
+  if (rawBp < BIG_ZERO) rawBp = BIG_ZERO;
   const sampleFactorBp =
     eligible >= BigInt(100)
       ? BigInt(10000)
@@ -161,6 +171,59 @@ export async function getProviderCacheCoefficients({
       ),
       sampleCount: Number(sample),
     });
+  }
+  return coefficients;
+}
+
+/**
+ * 聚合排行榜周期内的 provider + model 缓存系数。
+ *
+ * message_request.model 保存重定向后的实际请求模型，因此本结果只用于
+ * billingModelSource=redirected 的模型子行；original 口径无法可靠映射时保持无数据。
+ */
+export async function getProviderModelCacheCoefficients({
+  start,
+  end,
+}: {
+  start: Date;
+  end: Date;
+}): Promise<ProviderModelCacheCoefficientMap> {
+  const normalizedModel = sql<string>`TRIM(${providerCacheEffectiveness.model})`;
+  const rows = await db
+    .select({
+      providerId: providerCacheEffectiveness.providerId,
+      model: normalizedModel,
+      sampleCount: sql<string>`COALESCE(sum(${providerCacheEffectiveness.sampleCount}), 0)::bigint`,
+      eligibleCount: sql<string>`COALESCE(sum(${providerCacheEffectiveness.eligibleCount}), 0)::bigint`,
+      theoreticalCacheTokens: sql<string>`COALESCE(sum(${providerCacheEffectiveness.theoreticalCacheTokens}), 0)::bigint`,
+      observedCacheReadTokens: sql<string>`COALESCE(sum(${providerCacheEffectiveness.observedCacheReadTokens}), 0)::bigint`,
+    })
+    .from(providerCacheEffectiveness)
+    .where(
+      and(
+        gt(providerCacheEffectiveness.windowEnd, start),
+        lte(providerCacheEffectiveness.windowEnd, end),
+        sql`${normalizedModel} <> ''`
+      )
+    )
+    .groupBy(providerCacheEffectiveness.providerId, normalizedModel);
+
+  const coefficients: ProviderModelCacheCoefficientMap = new Map();
+  for (const row of rows) {
+    const sample = BigInt(row.sampleCount);
+    const providerModels = coefficients.get(row.providerId) ?? new Map();
+    providerModels.set(row.model, {
+      providerId: row.providerId,
+      model: row.model,
+      coefficientBp: computeCoefficientBp(
+        sample,
+        BigInt(row.eligibleCount),
+        BigInt(row.theoreticalCacheTokens),
+        BigInt(row.observedCacheReadTokens)
+      ),
+      sampleCount: Number(sample),
+    });
+    coefficients.set(row.providerId, providerModels);
   }
   return coefficients;
 }

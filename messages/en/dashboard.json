@@ -61,13 +61,13 @@
     "filters": {
       "user": "User",
       "provider": "Provider",
-      "sessionId": "Session ID",
+      "sessionId": "Session / Prefix ID",
       "searchUser": "Search users...",
       "searchProvider": "Search providers...",
-      "searchSessionId": "Search session IDs...",
+      "searchSessionId": "Search Session or Prefix IDs...",
       "noUserFound": "No matching users found",
       "noProviderFound": "No matching providers found",
-      "noSessionFound": "No matching session IDs found",
+      "noSessionFound": "No matching Session or Prefix IDs found",
       "model": "Model",
       "actualResponseModelMismatch": "Billing/actual model mismatch",
       "endpoint": "Endpoint",
@@ -220,6 +220,23 @@
         "outputRate": "Output Rate",
         "viewFullError": "View full error",
         "viewSession": "View Session"
+      },
+      "cachePerformance": {
+        "title": "Cache Performance",
+        "actualRate": "Actual Cache Rate",
+        "theoreticalRate": "Theoretical Cache Rate",
+        "coefficient": "Request Cache Coefficient",
+        "rawCoefficient": "Raw single-request coefficient; provider confidence is not applied.",
+        "estimateNote": "The theoretical rate is estimated from the longest normalized prefix (bytes / 4).",
+        "availability": {
+          "available": "Eligible request with a measurable prefix cache estimate.",
+          "no_input": "No input tokens were recorded for this request.",
+          "no_affinity_key": "No Prefix ID was recorded, so the theoretical rate and coefficient are unavailable.",
+          "attempt_failed": "The request attempt failed; the coefficient is excluded.",
+          "not_observable": "Upstream cache usage was not observable; the coefficient is excluded.",
+          "stream_truncated": "The stream was truncated; the coefficient is excluded.",
+          "legacy_unrecorded": "This request predates per-request prefix cache metrics."
+        }
       },
       "specialSettings": {
         "title": "Special settings"
@@ -381,6 +398,8 @@
       "metadata": {
         "noMetadata": "No metadata available",
         "sessionInfo": "Session Info",
+        "sessionId": "Session ID",
+        "prefixId": "Prefix ID",
         "clientInfo": "Client Info",
         "billingInfo": "Billing Info",
         "technicalTimeline": "Technical Timeline",
@@ -695,7 +714,7 @@
       "avgCostPerMillionTokens": "Avg Cost/1M Tokens",
       "unknownModel": "Unknown",
       "successRateUnavailable": "N/A",
-      "successRateBasisDisclosure": "Success rate is unavailable here because redirected billing mode can merge multiple original models into one row."
+      "successRateBasisDisclosure": "No countable success/failure outcomes were recorded for this model in the selected period."
     },
     "expandModelStats": "Expand model details",
     "collapseModelStats": "Collapse model details",

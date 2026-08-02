@@ -35657,7 +35657,7 @@ export interface operations {
                 page?: number;
                 /** @description Offset page size. */
                 pageSize?: number;
-                /** @description Session id filter. */
+                /** @description Exact Session ID or Prefix ID filter. */
                 sessionId?: string;
                 /** @description User id filter. */
                 userId?: number | null;
@@ -35864,7 +35864,7 @@ export interface operations {
                 page?: number;
                 /** @description Offset page size. */
                 pageSize?: number;
-                /** @description Session id filter. */
+                /** @description Exact Session ID or Prefix ID filter. */
                 sessionId?: string;
                 /** @description User id filter. */
                 userId?: number | null;
@@ -36936,7 +36936,7 @@ export interface operations {
         requestBody?: {
             content: {
                 "application/json": {
-                    /** @description Session id filter. */
+                    /** @description Exact Session ID or Prefix ID filter. */
                     sessionId?: string;
                     /** @description User id filter. */
                     userId?: number | null;

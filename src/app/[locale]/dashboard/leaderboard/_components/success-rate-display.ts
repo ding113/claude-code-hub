@@ -1,6 +1,7 @@
 export interface SuccessRateDisplayRow {
   successRate: number | null;
   basisDisclosureRequired?: boolean;
+  successRateUnavailableReason?: "no_countable_outcomes";
 }
 
 export interface SuccessRateDisplayValue {
@@ -21,6 +22,9 @@ export function getSuccessRateCellDisplay(
 
   return {
     label: t("columns.successRateUnavailable"),
-    title: row.basisDisclosureRequired ? t("columns.successRateBasisDisclosure") : undefined,
+    title:
+      row.successRateUnavailableReason === "no_countable_outcomes"
+        ? t("columns.successRateBasisDisclosure")
+        : undefined,
   };
 }

@@ -1,3 +1,4 @@
+export { CachePerformance } from "./CachePerformance";
 export { DiscoveryTraceView, RoutingModeBanner } from "./DiscoveryTraceView";
 export { LatencyBreakdownBar } from "./LatencyBreakdownBar";
 export { LogicTraceTab } from "./LogicTraceTab";

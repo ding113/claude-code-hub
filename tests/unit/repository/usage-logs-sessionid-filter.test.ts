@@ -294,6 +294,7 @@ describe("Usage logs sessionId filter", () => {
             createdAtRaw: "2026-03-21T00:00:00.000000Z",
             sessionId: "pfx:scope:fingerprint",
             sourceSessionId: "client-old",
+            sessionIdentityKind: "prefix_affinity",
             requestSequence: 1,
             userName: "u",
             keyName: "k",
@@ -303,13 +304,16 @@ describe("Usage logs sessionId filter", () => {
             actualResponseModel: null,
             endpoint: "/v1/messages",
             statusCode: 200,
-            inputTokens: 1,
+            inputTokens: 50,
             outputTokens: 1,
             cacheCreationInputTokens: 0,
-            cacheReadInputTokens: 0,
+            cacheReadInputTokens: 25,
             cacheCreation5mInputTokens: 0,
             cacheCreation1hInputTokens: 0,
             cacheTtlApplied: null,
+            theoreticalCacheTokens: 50,
+            cacheScoreEligible: true,
+            cacheScoreExcludedReason: null,
             costUsd: "0.01",
             costMultiplier: null,
             groupCostMultiplier: null,
@@ -354,6 +358,15 @@ describe("Usage logs sessionId filter", () => {
     const result = await findUsageLogsBatch({ cursor: { createdAt: "2026-03-22", id: 102 } });
 
     expect(result.logs[0]?.sourceSessionIds).toBeUndefined();
+    expect(result.logs[0]).toMatchObject({
+      sessionIdentityKind: "prefix_affinity",
+      theoreticalCacheTokens: 50,
+      cacheScoreEligible: true,
+      actualCacheRate: 1 / 3,
+      theoreticalCacheRate: 2 / 3,
+      requestCacheCoefficientBp: 5000,
+      requestCacheMetricAvailability: "available",
+    });
     expect(result.sourceSessionIdsByIdentity).toEqual({
       "pfx:scope:fingerprint": ["client-new", "client-old"],
     });

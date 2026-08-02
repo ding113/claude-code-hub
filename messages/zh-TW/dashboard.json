@@ -61,13 +61,13 @@
     "filters": {
       "user": "使用者",
       "provider": "供應商",
-      "sessionId": "Session ID",
+      "sessionId": "Session / Prefix ID",
       "searchUser": "搜尋使用者...",
       "searchProvider": "搜尋供應商...",
-      "searchSessionId": "搜尋 Session ID...",
+      "searchSessionId": "搜尋 Session 或 Prefix ID...",
       "noUserFound": "未找到匹配的使用者",
       "noProviderFound": "未找到匹配的供應商",
-      "noSessionFound": "未找到符合的 Session ID",
+      "noSessionFound": "未找到符合的 Session 或 Prefix ID",
       "model": "Model",
       "actualResponseModelMismatch": "計費/實際模型不一致",
       "endpoint": "端點",
@@ -220,6 +220,23 @@
         "outputRate": "輸出速率",
         "viewFullError": "查看完整錯誤",
         "viewSession": "查看工作階段"
+      },
+      "cachePerformance": {
+        "title": "快取表現",
+        "actualRate": "實際快取率",
+        "theoreticalRate": "理論快取率",
+        "coefficient": "本次請求快取係數",
+        "rawCoefficient": "單次請求原始係數，不套用供應商視窗信心折扣。",
+        "estimateNote": "理論快取率根據最長正規化前綴估算（位元組數 / 4）。",
+        "availability": {
+          "available": "請求符合條件，可測量前綴快取估算。",
+          "no_input": "此請求沒有記錄輸入 token。",
+          "no_affinity_key": "未記錄 Prefix ID，因此理論快取率和快取係數不可用。",
+          "attempt_failed": "請求嘗試失敗，快取係數已排除。",
+          "not_observable": "無法觀測上游快取用量，快取係數已排除。",
+          "stream_truncated": "回應串流被截斷，快取係數已排除。",
+          "legacy_unrecorded": "此請求早於單次前綴快取指標記錄。"
+        }
       },
       "specialSettings": {
         "title": "特殊設定"
@@ -381,6 +398,8 @@
       "metadata": {
         "noMetadata": "暫無中繼資料",
         "sessionInfo": "工作階段資訊",
+        "sessionId": "Session ID",
+        "prefixId": "Prefix ID",
         "clientInfo": "用戶端資訊",
         "billingInfo": "計費資訊",
         "technicalTimeline": "技術時間軸",
@@ -695,7 +714,7 @@
       "avgCostPerMillionTokens": "平均每百萬 Token 成本",
       "unknownModel": "未知",
       "successRateUnavailable": "不適用",
-      "successRateBasisDisclosure": "在 redirected 計費模型模式下，一列可能合併多個原始模型，因此這裡不顯示成功率以避免口徑誤導。"
+      "successRateBasisDisclosure": "所選時間範圍內該模型沒有可計數的成功或失敗結果，因此無法計算成功率。"
     },
     "expandModelStats": "展開模型詳情",
     "collapseModelStats": "收起模型詳情",

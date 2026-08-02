@@ -275,7 +275,7 @@ async function startCacheEffectivenessScheduler(): Promise<void> {
         await aggregateCacheEffectiveness();
       })().catch((error) => {
         logger.warn("[Instrumentation] Cache effectiveness aggregation tick failed", {
-          error: error instanceof Error ? error.message : String(error),
+          ...describeSchedulerError(error),
         });
       });
     }, intervalMs);
@@ -286,9 +286,31 @@ async function startCacheEffectivenessScheduler(): Promise<void> {
     });
   } catch (error) {
     logger.warn("[Instrumentation] Cache effectiveness scheduler init failed", {
-      error: error instanceof Error ? error.message : String(error),
+      ...describeSchedulerError(error),
     });
   }
+}
+
+function describeSchedulerError(error: unknown): {
+  error: string;
+  errorName?: string;
+  errorCause?: string;
+  errorCauseName?: string;
+  errorCauseCode?: string | number;
+} {
+  const outerError = error instanceof Error ? error : undefined;
+  const cause = outerError?.cause;
+  const causeObject = cause && typeof cause === "object" ? cause : undefined;
+  const causeCode = causeObject && "code" in causeObject ? causeObject.code : undefined;
+  return {
+    error: outerError?.message ?? String(error),
+    errorName: outerError?.name,
+    errorCause:
+      cause instanceof Error ? cause.message : cause ? String(cause).slice(0, 500) : undefined,
+    errorCauseName: cause instanceof Error ? cause.name : undefined,
+    errorCauseCode:
+      typeof causeCode === "string" || typeof causeCode === "number" ? causeCode : undefined,
+  };
 }
 
 /**
