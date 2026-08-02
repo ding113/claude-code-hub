@@ -30,6 +30,7 @@ export function MetadataTab({
   sessionId,
   sourceSessionId,
   requestSequence,
+  requestId,
   userAgent,
   endpoint,
   specialSettings,
@@ -55,6 +56,9 @@ export function MetadataTab({
   }
   if (sourceSessionId) {
     sessionRequestParams.set("sourceSessionId", sourceSessionId);
+  }
+  if (requestId != null) {
+    sessionRequestParams.set("requestId", String(requestId));
   }
   const sessionMessagesHref = sessionId
     ? `/dashboard/sessions/${sessionId}/messages${sessionRequestParams.size > 0 ? `?${sessionRequestParams.toString()}` : ""}`

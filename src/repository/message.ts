@@ -1401,6 +1401,7 @@ export async function aggregateSessionStats(sessionId: string): Promise<{
 
 /** 解析活跃 Session identity 到可查看的物理 Session/前缀绑定信息。 */
 export async function resolveSessionIdentity(identity: string): Promise<{
+  identity: string;
   sourceSessionId: string | null;
   identityKind: "session_id" | "prefix_affinity" | null;
   scopeTag: string | null;
@@ -1409,6 +1410,7 @@ export async function resolveSessionIdentity(identity: string): Promise<{
 } | null> {
   const rows = await db
     .select({
+      identity: messageSessionIdentity,
       sessionId: messageRequest.sessionId,
       identityKind: messageRequest.sessionIdentityKind,
       scopeTag: messageRequest.affinityScopeTag,
@@ -1416,7 +1418,7 @@ export async function resolveSessionIdentity(identity: string): Promise<{
       fingerprintChain: messageRequest.affinityFingerprintChain,
     })
     .from(messageRequest)
-    .where(and(eq(messageSessionIdentity, identity), isNull(messageRequest.deletedAt)))
+    .where(and(messageSessionLookup(identity), isNull(messageRequest.deletedAt)))
     .orderBy(desc(messageRequest.createdAt));
 
   if (rows.length === 0) return null;
@@ -1436,6 +1438,7 @@ export async function resolveSessionIdentity(identity: string): Promise<{
   );
 
   return {
+    identity: rows[0]?.identity ?? identity,
     sourceSessionId: rows.find((row) => row.sessionId)?.sessionId ?? null,
     identityKind: identityKinds.size === 1 ? ([...identityKinds][0] ?? null) : null,
     scopeTag: rows.find((row) => row.scopeTag)?.scopeTag ?? null,
@@ -1544,7 +1547,7 @@ export async function isSessionSourceForIdentity(
     .from(messageRequest)
     .where(
       and(
-        eq(messageSessionIdentity, identity),
+        messageSessionLookup(identity),
         eq(messageRequest.sessionId, sourceSessionId),
         isNull(messageRequest.deletedAt)
       )
@@ -1577,7 +1580,7 @@ export async function findSessionRequestLocator(
     .from(messageRequest)
     .where(
       and(
-        eq(messageSessionIdentity, identity),
+        messageSessionLookup(identity),
         isNotNull(messageRequest.sessionId),
         isNotNull(messageRequest.requestSequence),
         selector.requestId !== undefined ? eq(messageRequest.id, selector.requestId) : undefined,
@@ -2098,6 +2101,7 @@ export async function findRequestsBySessionId(
     id: number;
     sourceSessionId: string;
     sequence: number;
+    displaySequence: number;
     model: string | null;
     statusCode: number | null;
     costUsd: string | null;
@@ -2124,6 +2128,10 @@ export async function findRequestsBySessionId(
       id: messageRequest.id,
       sessionId: messageRequest.sessionId,
       sequence: messageRequest.requestSequence,
+      displaySequence: sql<number>`COALESCE(
+        ${messageRequest.requestSequence},
+        row_number() OVER (ORDER BY ${messageRequest.createdAt} ASC, ${messageRequest.id} ASC)::int
+      )`,
       model: messageRequest.model,
       statusCode: messageRequest.statusCode,
       costUsd: messageRequest.costUsd,
@@ -2145,6 +2153,7 @@ export async function findRequestsBySessionId(
       id: r.id,
       sourceSessionId: r.sessionId ?? sessionId,
       sequence: r.sequence ?? 1,
+      displaySequence: r.displaySequence,
       model: r.model,
       statusCode: r.statusCode,
       costUsd: r.costUsd,
@@ -2161,9 +2170,9 @@ export async function findRequestsBySessionIdentity(
   identity: string,
   options?: { limit?: number; offset?: number; order?: "asc" | "desc" }
 ): Promise<Awaited<ReturnType<typeof findRequestsBySessionId>>> {
-  const { limit = 20, offset = 0, order = "asc" } = options || {};
+  const { limit = 20, offset = 0, order = "desc" } = options || {};
   const where = and(
-    eq(messageSessionIdentity, identity),
+    messageSessionLookup(identity),
     isNotNull(messageRequest.sessionId),
     eq(messageRequest.isReplay, false),
     isNull(messageRequest.deletedAt)
@@ -2177,6 +2186,19 @@ export async function findRequestsBySessionIdentity(
       id: messageRequest.id,
       sessionId: messageRequest.sessionId,
       sequence: messageRequest.requestSequence,
+      displaySequence: sql<number>`CASE
+        WHEN ${messageRequest.sessionIdentityKind} = 'prefix_affinity'
+          AND NOT bool_or(COALESCE(${messageRequest.requestSequence}, 1) <> 1) OVER ()
+        THEN COALESCE(
+          NULLIF(jsonb_array_length(${messageRequest.affinityFingerprintChain}), 0),
+          row_number() OVER (ORDER BY ${messageRequest.createdAt} ASC, ${messageRequest.id} ASC)::int
+        )
+        ELSE COALESCE(
+          ${messageRequest.requestSequence},
+          NULLIF(jsonb_array_length(${messageRequest.affinityFingerprintChain}), 0),
+          row_number() OVER (ORDER BY ${messageRequest.createdAt} ASC, ${messageRequest.id} ASC)::int
+        )
+      END`,
       model: messageRequest.model,
       statusCode: messageRequest.statusCode,
       costUsd: messageRequest.costUsd,
@@ -2202,6 +2224,7 @@ export async function findRequestsBySessionIdentity(
               id: row.id,
               sourceSessionId: row.sessionId,
               sequence: row.sequence ?? 1,
+              displaySequence: row.displaySequence,
               model: row.model,
               statusCode: row.statusCode,
               costUsd: row.costUsd,
@@ -2275,7 +2298,7 @@ export async function findAdjacentSessionRequests(
     .from(messageRequest)
     .where(
       and(
-        eq(messageSessionIdentity, identity),
+        messageSessionLookup(identity),
         eq(messageRequest.id, requestId),
         eq(messageRequest.isReplay, false),
         isNull(messageRequest.deletedAt)
@@ -2293,7 +2316,7 @@ export async function findAdjacentSessionRequests(
     requestSequence: messageRequest.requestSequence,
   };
   const timelineFilter = and(
-    eq(messageSessionIdentity, identity),
+    messageSessionLookup(identity),
     isNotNull(messageRequest.sessionId),
     isNotNull(messageRequest.requestSequence),
     eq(messageRequest.isReplay, false),

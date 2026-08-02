@@ -2,12 +2,14 @@ import { beforeEach, describe, expect, test, vi } from "vitest";
 
 const getSessionMock = vi.fn();
 const aggregateSessionStatsMock = vi.fn();
+const aggregateMultipleSessionStatsMock = vi.fn();
 const findRequestsBySessionIdMock = vi.fn();
 const findRequestsBySessionIdentityMock = vi.fn();
 
 vi.mock("@/lib/auth", () => ({ getSession: getSessionMock }));
 vi.mock("@/repository/message", () => ({
   aggregateSessionStats: aggregateSessionStatsMock,
+  aggregateMultipleSessionStats: aggregateMultipleSessionStatsMock,
   findRequestsBySessionId: findRequestsBySessionIdMock,
   findRequestsBySessionIdentity: findRequestsBySessionIdentityMock,
 }));
@@ -38,6 +40,12 @@ describe("getSessionRequests public identity contract", () => {
       sessionId: "public-session-identity",
       userId: 1,
     });
+    aggregateMultipleSessionStatsMock.mockResolvedValue([
+      {
+        sessionId: "public-session-identity",
+        userId: 1,
+      },
+    ]);
     findRequestsBySessionIdMock.mockResolvedValue({ requests: [], total: 0 });
     findRequestsBySessionIdentityMock.mockResolvedValue({ requests: [], total: 0 });
   });
@@ -55,5 +63,19 @@ describe("getSessionRequests public identity contract", () => {
       order: "desc",
     });
     expect(findRequestsBySessionIdMock).not.toHaveBeenCalled();
+  });
+
+  test("defaults request lists to newest first", async () => {
+    const { getSessionRequests } = await import("@/actions/active-sessions");
+
+    await expect(getSessionRequests("public-session-identity")).resolves.toEqual({
+      ok: true,
+      data: { requests: [], total: 0, hasMore: false },
+    });
+    expect(findRequestsBySessionIdentityMock).toHaveBeenCalledWith("public-session-identity", {
+      limit: 20,
+      offset: 0,
+      order: "desc",
+    });
   });
 });

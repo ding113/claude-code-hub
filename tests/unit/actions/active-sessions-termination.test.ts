@@ -239,6 +239,25 @@ describe("active Session termination identity contract", () => {
     expect(terminateObservedSessionMock).toHaveBeenCalledWith("physical-session");
   });
 
+  test("batch termination clears physical aliases and canonical detail caches", async () => {
+    aggregateMultipleSessionStatsMock.mockResolvedValue([
+      {
+        sessionId: "pfx:scope:tip",
+        requestedSessionIds: ["physical-session"],
+        userId: 1,
+      },
+    ]);
+
+    const { terminateActiveSessionsBatch } = await import("@/actions/active-sessions");
+    await expect(terminateActiveSessionsBatch(["physical-session"])).resolves.toMatchObject({
+      ok: true,
+      data: { successCount: 1 },
+    });
+
+    expect(clearSessionDetailsCacheMock).toHaveBeenCalledWith("physical-session");
+    expect(clearSessionDetailsCacheMock).toHaveBeenCalledWith("pfx:scope:tip");
+  });
+
   test("batch counts affinity invalidation failures instead of observed cleanup results", async () => {
     aggregateMultipleSessionStatsMock.mockResolvedValue([
       { sessionId: "pfx:scope:tip", userId: 1 },

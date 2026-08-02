@@ -93,6 +93,8 @@ export function SessionMessagesClient() {
     useState<
       Extract<Awaited<ReturnType<typeof getSessionDetails>>, { ok: true }>["data"]["sessionStats"]
     >(null);
+  const [canonicalSessionId, setCanonicalSessionId] = useState<string | null>(null);
+  const [currentSourceSessionId, setCurrentSourceSessionId] = useState<string | null>(null);
   const [currentSequence, setCurrentSequence] = useState<number | null>(null);
   const [prevRequest, setPrevRequest] = useState<{
     requestId: number;
@@ -121,6 +123,8 @@ export function SessionMessagesClient() {
     setSnapshots(null);
     setSpecialSettings(null);
     setSessionStats(null);
+    setCanonicalSessionId(null);
+    setCurrentSourceSessionId(null);
     setCurrentSequence(null);
     setPrevRequest(null);
     setNextRequest(null);
@@ -173,6 +177,8 @@ export function SessionMessagesClient() {
           setSnapshots(result.data.snapshots);
           setSpecialSettings(result.data.specialSettings);
           setSessionStats(result.data.sessionStats);
+          setCanonicalSessionId(result.data.canonicalSessionId);
+          setCurrentSourceSessionId(result.data.currentSourceSessionId);
           setCurrentSequence(result.data.currentSequence);
           setPrevRequest(result.data.prevRequest);
           setNextRequest(result.data.nextRequest);
@@ -383,8 +389,17 @@ export function SessionMessagesClient() {
                   variant="outline"
                   className="font-mono font-normal text-xs bg-muted/50 truncate max-w-[100px] sm:max-w-none"
                 >
-                  {sessionId}
+                  {t("details.canonicalSessionId")}: {canonicalSessionId ?? sessionId}
                 </Badge>
+                {currentSourceSessionId &&
+                  currentSourceSessionId !== (canonicalSessionId ?? sessionId) && (
+                    <Badge
+                      variant="outline"
+                      className="font-mono font-normal text-xs bg-muted/50 truncate max-w-[100px] sm:max-w-none"
+                    >
+                      {t("details.clientSessionId")}: {currentSourceSessionId}
+                    </Badge>
+                  )}
               </div>
             </div>
           </div>

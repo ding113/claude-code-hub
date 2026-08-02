@@ -46,13 +46,15 @@ export function getSessionMessages(
 export function hasSessionMessages(
   sessionId: string,
   requestSequence?: number,
-  sourceSessionId?: string
+  sourceSessionId?: string,
+  requestId?: number
 ) {
   return toActionResult(
     apiGet<{ exists: boolean }>(
       `/api/v1/sessions/${encodeURIComponent(sessionId)}/messages/exists${searchParams({
         requestSequence,
         sourceSessionId,
+        requestId,
       })}`
     ).then((body) => body.exists)
   );

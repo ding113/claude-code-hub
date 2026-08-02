@@ -74,6 +74,9 @@ const activeSessionsCache = new SessionCache<
 // Session details cache (1s TTL, max 10000 entries)
 const sessionDetailsCache = new SessionCache<{
   sessionId: string;
+  requestedSessionIds?: string[];
+  sessionIdentityKind: "session_id" | "prefix_affinity";
+  sessionFingerprint: string | null;
   requestCount: number;
   totalCostUsd: string;
   totalInputTokens: number;

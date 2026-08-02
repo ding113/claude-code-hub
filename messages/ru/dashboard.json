@@ -400,6 +400,8 @@
         "sessionInfo": "Информация о сеансе",
         "sessionId": "Session ID",
         "prefixId": "Prefix ID",
+        "canonicalSessionId": "Canonical Session ID",
+        "clientSessionId": "Идентификатор Session клиента",
         "clientInfo": "Информация о клиенте",
         "billingInfo": "Информация о биллинге",
         "technicalTimeline": "Техническая хронология",
@@ -807,6 +809,8 @@
     },
     "details": {
       "title": "Сообщения сеанса",
+      "canonicalSessionId": "Canonical Session ID",
+      "clientSessionId": "Идентификатор Session клиента",
       "messages": "Список сообщений",
       "info": "Информация сеанса",
       "timeline": "Хронология",
@@ -919,6 +923,7 @@
       "loadError": "Ошибка загрузки",
       "fetchFailed": "Не удалось получить",
       "unknownError": "Неизвестная ошибка",
+      "error": "Не удалось загрузить сведения о Session",
       "storageNotEnabled": "Не сохранено",
       "storageNotEnabledHint": "Подсказка: проверьте REDIS_URL и ENABLE_RATE_LIMIT=true (кэш деталей сессии). Чтобы сохранять сообщения без маскировки, установите STORE_SESSION_MESSAGES=true."
     },

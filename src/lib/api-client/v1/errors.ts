@@ -49,6 +49,8 @@ const API_ERROR_MESSAGE_KEYS: Record<string, string> = {
   "key.action_failed": "OPERATION_FAILED",
   "user.not_found": "USER_NOT_FOUND",
   "user.action_failed": "OPERATION_FAILED",
+  "session.not_found": "NOT_FOUND",
+  "session.action_failed": "OPERATION_FAILED",
 };
 
 export function getApiErrorMessageKey(error: ApiError): string {

@@ -120,7 +120,14 @@ describe("v1 session endpoints", () => {
       headers,
     });
     expect(exists.json).toEqual({ exists: true });
-    expect(hasSessionMessagesMock).toHaveBeenCalledWith("s1", 2, "physical-1");
+    expect(hasSessionMessagesMock).toHaveBeenCalledWith("s1", 2, "physical-1", undefined);
+
+    await callV1Route({
+      method: "GET",
+      pathname: "/api/v1/sessions/s1/messages/exists?sourceSessionId=physical-1&requestId=203",
+      headers,
+    });
+    expect(hasSessionMessagesMock).toHaveBeenLastCalledWith("s1", undefined, "physical-1", 203);
 
     const requests = await callV1Route({
       method: "GET",
@@ -129,6 +136,13 @@ describe("v1 session endpoints", () => {
     });
     expect(requests.response.status).toBe(200);
     expect(getSessionRequestsMock).toHaveBeenCalledWith("s1", 2, 5, "desc");
+
+    await callV1Route({
+      method: "GET",
+      pathname: "/api/v1/sessions/s1/requests",
+      headers,
+    });
+    expect(getSessionRequestsMock).toHaveBeenLastCalledWith("s1", 1, 20, "desc");
 
     const origin = await callV1Route({
       method: "GET",
@@ -215,7 +229,7 @@ describe("v1 session endpoints", () => {
 
     expect(queryParameterNames("/api/v1/sessions/{sessionId}")).toContain("requestId");
     expect(queryParameterNames("/api/v1/sessions/{sessionId}/messages")).not.toContain("requestId");
-    expect(queryParameterNames("/api/v1/sessions/{sessionId}/messages/exists")).not.toContain(
+    expect(queryParameterNames("/api/v1/sessions/{sessionId}/messages/exists")).toContain(
       "requestId"
     );
     expect(queryParameterNames("/api/v1/sessions/{sessionId}/origin-chain")).not.toContain(

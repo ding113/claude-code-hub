@@ -22,6 +22,7 @@ interface RequestItem {
   id: number;
   sourceSessionId: string;
   sequence: number;
+  displaySequence: number;
   model: string | null;
   statusCode: number | null;
   costUsd: string | null;
@@ -56,7 +57,7 @@ export function RequestListSidebar({
   const [hasMore, setHasMore] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [order, setOrder] = useState<"asc" | "desc">("asc");
+  const [order, setOrder] = useState<"asc" | "desc">("desc");
 
   const pageSize = 20;
 
@@ -128,9 +129,9 @@ export function RequestListSidebar({
                       ? "bg-primary text-primary-foreground shadow-sm"
                       : "hover:bg-muted"
                   )}
-                  title={`#${req.sequence} - ${req.model || "Unknown"}`}
+                  title={`#${req.displaySequence} - ${req.model || "Unknown"}`}
                 >
-                  <span className="text-xs font-mono">{req.sequence}</span>
+                  <span className="text-xs font-mono">{req.displaySequence}</span>
                   <span className="absolute -top-1 -right-1">
                     {/* Tiny status dot */}
                     <span
@@ -247,7 +248,7 @@ export function RequestListSidebar({
                           : ""
                       )}
                     >
-                      #{request.sequence}
+                      #{request.displaySequence}
                     </span>
                     <span
                       className={cn(

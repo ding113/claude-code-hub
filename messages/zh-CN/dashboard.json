@@ -400,6 +400,8 @@
         "sessionInfo": "会话信息",
         "sessionId": "Session ID",
         "prefixId": "Prefix ID",
+        "canonicalSessionId": "Canonical Session ID",
+        "clientSessionId": "客户端 Session ID",
         "clientInfo": "客户端信息",
         "billingInfo": "计费信息",
         "technicalTimeline": "技术时间线",
@@ -807,6 +809,8 @@
     },
     "details": {
       "title": "Session Messages",
+      "canonicalSessionId": "Canonical Session ID",
+      "clientSessionId": "客户端 Session ID",
       "messages": "消息列表",
       "info": "会话信息",
       "timeline": "时间线",
@@ -919,6 +923,7 @@
       "loadError": "加载失败",
       "fetchFailed": "获取失败",
       "unknownError": "未知错误",
+      "error": "Session 详情加载失败",
       "storageNotEnabled": "未存储",
       "storageNotEnabledHint": "提示：请检查 REDIS_URL 与 ENABLE_RATE_LIMIT=true（用于会话详情缓存）；如需保存未脱敏 messages，请设置 STORE_SESSION_MESSAGES=true。"
     },

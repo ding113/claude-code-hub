@@ -4,6 +4,11 @@ import {
   getApiErrorMessageKey,
   getApiErrorMessageParams,
 } from "@/lib/api-client/v1/errors";
+import enDashboard from "../../../messages/en/dashboard.json";
+import jaDashboard from "../../../messages/ja/dashboard.json";
+import ruDashboard from "../../../messages/ru/dashboard.json";
+import zhCNDashboard from "../../../messages/zh-CN/dashboard.json";
+import zhTWDashboard from "../../../messages/zh-TW/dashboard.json";
 
 describe("v1 API error i18n mapping", () => {
   test("maps problem error codes to existing translation keys instead of raw details", () => {
@@ -83,5 +88,29 @@ describe("v1 API error i18n mapping", () => {
         new ApiError({ status: 400, errorCode: "user.action_failed", detail: "Bad request" })
       )
     ).toBe("OPERATION_FAILED");
+  });
+
+  test("maps Session REST codes to existing translation keys", () => {
+    expect(
+      getApiErrorMessageKey(
+        new ApiError({ status: 404, errorCode: "session.not_found", detail: "Not found" })
+      )
+    ).toBe("NOT_FOUND");
+
+    expect(
+      getApiErrorMessageKey(
+        new ApiError({ status: 400, errorCode: "session.action_failed", detail: "Bad request" })
+      )
+    ).toBe("OPERATION_FAILED");
+  });
+
+  test("defines Session detail identity and error labels in every locale", () => {
+    for (const dashboard of [enDashboard, zhCNDashboard, zhTWDashboard, jaDashboard, ruDashboard]) {
+      expect(dashboard.sessions.status.error).toBeTruthy();
+      expect(dashboard.sessions.details.canonicalSessionId).toBeTruthy();
+      expect(dashboard.sessions.details.clientSessionId).toBeTruthy();
+      expect(dashboard.logs.details.metadata.canonicalSessionId).toBeTruthy();
+      expect(dashboard.logs.details.metadata.clientSessionId).toBeTruthy();
+    }
   });
 });

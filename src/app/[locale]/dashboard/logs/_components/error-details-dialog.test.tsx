@@ -13,8 +13,9 @@ import type { RoutingTraceV1 } from "@/types/routing-trace";
 const hasSessionMessagesMock = vi.fn();
 
 vi.mock("@/lib/api-client/v1/actions/active-sessions", () => ({
-  hasSessionMessages: (...args: [string, number | undefined, string | undefined]) =>
-    hasSessionMessagesMock(...args),
+  hasSessionMessages: (
+    ...args: [string, number | undefined, string | undefined, number | undefined]
+  ) => hasSessionMessagesMock(...args),
 }));
 
 const getSessionOriginChainMock = vi.fn();
@@ -292,6 +293,8 @@ const messages = {
           sessionInfo: "Session Info",
           sessionId: "Session ID",
           prefixId: "Prefix ID",
+          canonicalSessionId: "Canonical Session ID",
+          clientSessionId: "Client Session ID",
           clientInfo: "Client Info",
           billingInfo: "Billing Info",
           technicalTimeline: "Technical Timeline",
@@ -447,6 +450,7 @@ describe("error-details-dialog layout", () => {
         sourceSessionId="physical-a"
         sessionIdentityKind="prefix_affinity"
         requestSequence={3}
+        requestId={203}
       />
     );
 
@@ -454,7 +458,7 @@ describe("error-details-dialog layout", () => {
       await Promise.resolve();
     });
 
-    expect(hasSessionMessagesMock).toHaveBeenCalledWith("pfx:scope:root", 3, "physical-a");
+    expect(hasSessionMessagesMock).toHaveBeenCalledWith("pfx:scope:root", 3, "physical-a", 203);
     unmount();
   });
 
@@ -470,6 +474,7 @@ describe("error-details-dialog layout", () => {
         sourceSessionId="physical-a"
         sessionIdentityKind="prefix_affinity"
         requestSequence={3}
+        requestId={203}
       />
     );
 
@@ -482,6 +487,9 @@ describe("error-details-dialog layout", () => {
     expect(container.querySelector('a[href*="seq=3"]')).toBeTruthy();
     expect(container.querySelector('a[href*="sessionId=pfx%3Ascope%3Aroot"]')).toBeTruthy();
     expect(container.querySelector('a[href*="sessionId=physical-a"]')).toBeTruthy();
+    expect(container.querySelector('a[href*="requestId=203"]')).toBeTruthy();
+    expect(container.textContent).toContain("Canonical Session ID: pfx:scope:root");
+    expect(container.textContent).toContain("Client Session ID: physical-a");
     unmount();
   });
 

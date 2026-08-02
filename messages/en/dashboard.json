@@ -400,6 +400,8 @@
         "sessionInfo": "Session Info",
         "sessionId": "Session ID",
         "prefixId": "Prefix ID",
+        "canonicalSessionId": "Canonical Session ID",
+        "clientSessionId": "Client Session ID",
         "clientInfo": "Client Info",
         "billingInfo": "Billing Info",
         "technicalTimeline": "Technical Timeline",
@@ -807,6 +809,8 @@
     },
     "details": {
       "title": "Session Messages",
+      "canonicalSessionId": "Canonical Session ID",
+      "clientSessionId": "Client Session ID",
       "messages": "Messages",
       "info": "Session Info",
       "timeline": "Timeline",
@@ -919,6 +923,7 @@
       "loadError": "Load failed",
       "fetchFailed": "Fetch Failed",
       "unknownError": "Unknown Error",
+      "error": "Session details could not be loaded",
       "storageNotEnabled": "Not Stored",
       "storageNotEnabledHint": "Tip: Check REDIS_URL and ENABLE_RATE_LIMIT=true (session details cache). To store unredacted messages, set STORE_SESSION_MESSAGES=true."
     },

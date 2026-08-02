@@ -16,6 +16,10 @@ export const SessionSequenceQuerySchema = z.object({
   sourceSessionId: z.string().min(1).optional().describe("Physical source session id."),
 });
 
+export const SessionExistsQuerySchema = SessionSequenceQuerySchema.extend({
+  requestId: z.coerce.number().int().positive().optional().describe("Stable request id."),
+});
+
 export const SessionDetailQuerySchema = SessionSequenceQuerySchema.extend({
   requestId: z.coerce.number().int().positive().optional().describe("Stable request id."),
 });
@@ -23,7 +27,7 @@ export const SessionDetailQuerySchema = SessionSequenceQuerySchema.extend({
 export const SessionRequestsQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1).describe("One-based page number."),
   pageSize: z.coerce.number().int().min(1).max(200).default(20).describe("Page size."),
-  order: z.enum(["asc", "desc"]).default("asc").describe("Sort order."),
+  order: z.enum(["asc", "desc"]).default("desc").describe("Sort order."),
 });
 
 export const BatchTerminateSessionsSchema = z

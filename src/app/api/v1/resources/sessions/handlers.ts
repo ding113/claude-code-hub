@@ -11,6 +11,7 @@ import { jsonResponse, noContentResponse } from "@/lib/api/v1/_shared/response-h
 import {
   BatchTerminateSessionsSchema,
   SessionDetailQuerySchema,
+  SessionExistsQuerySchema,
   SessionIdParamSchema,
   SessionRequestsQuerySchema,
   SessionSequenceQuerySchema,
@@ -91,9 +92,10 @@ export async function getSessionMessages(c: Context): Promise<Response> {
 export async function hasSessionMessages(c: Context): Promise<Response> {
   const params = parseSessionParams(c);
   if (params instanceof Response) return params;
-  const query = SessionSequenceQuerySchema.safeParse({
+  const query = SessionExistsQuerySchema.safeParse({
     requestSequence: c.req.query("requestSequence"),
     sourceSessionId: c.req.query("sourceSessionId"),
+    requestId: c.req.query("requestId"),
   });
   if (!query.success) return fromZodError(query.error, new URL(c.req.url).pathname);
 
@@ -101,7 +103,12 @@ export async function hasSessionMessages(c: Context): Promise<Response> {
   const result = await callAction(
     c,
     actions.hasSessionMessages,
-    [params.sessionId, query.data.requestSequence, query.data.sourceSessionId] as never[],
+    [
+      params.sessionId,
+      query.data.requestSequence,
+      query.data.sourceSessionId,
+      query.data.requestId,
+    ] as never[],
     c.get("auth")
   );
   if (!result.ok) return actionError(c, result);
