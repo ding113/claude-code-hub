@@ -2385,7 +2385,9 @@ export async function resetUserAllStatistics(
 
     const { enqueueUserStatisticsReset } = await import("@/lib/user-statistics-reset/reset-queue");
     enqueueStarted = true;
-    const reset = await enqueueUserStatisticsReset(userId);
+    const reset = await enqueueUserStatisticsReset(userId, {
+      fixed5hKeyIds: keys.map((key) => key.id),
+    });
     logger.info("Queued user statistics reset", {
       userId,
       resetId: reset.resetId,

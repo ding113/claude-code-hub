@@ -95,7 +95,9 @@ describe("resetUserAllStatistics", () => {
     const result = await resetUserAllStatistics(123);
 
     expect(result).toEqual({ ok: true, data: queuedReset });
-    expect(mocks.enqueue).toHaveBeenCalledWith(123);
+    expect(mocks.enqueue).toHaveBeenCalledWith(123, {
+      fixed5hKeyIds: [],
+    });
   });
 
   test("maps queue failures to a retryable dependency error", async () => {

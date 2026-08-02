@@ -16,4 +16,11 @@ export interface UserStatisticsResetJobData {
   resetId: string;
   userId: number;
   requestedAt: string;
+  fixed5hKeyIds?: number[];
+  fixed5hPreparationVersion?: 1;
+}
+
+export interface UserStatisticsResetStoredRecord extends UserStatisticsResetRecord {
+  fixed5hKeyIds: number[];
+  fixed5hPreparationVersion: 1 | null;
 }

@@ -96,9 +96,27 @@ describe("executeUserStatisticsReset", () => {
       keyHashes: ["key-hash"],
       includeActiveSessions: false,
       allowWhenRateLimitDisabled: true,
+      preserveFixed5hCostKeys: true,
     });
     expect(sqlText(boundary.updateSet?.costResetAt)).toContain("case when");
     expect(sqlText(boundary.updateSet?.limit5hCostResetAt)).toContain("case when");
+  });
+
+  it("reports progress after every committed batch", async () => {
+    boundary.transactionResults = [{ count: 1000 }, { count: 2 }, { count: 3 }];
+    boundary.executeResults = [[{ exists: false }], [{ exists: false }]];
+    const progress = vi.fn().mockResolvedValue(undefined);
+
+    await executeUserStatisticsReset(
+      { userId: 42, requestedAt: "2026-08-02T12:00:00.000Z" },
+      progress
+    );
+
+    expect(progress.mock.calls).toEqual([
+      [{ deletedMessageRequests: 1000, deletedUsageLedger: 0 }],
+      [{ deletedMessageRequests: 1002, deletedUsageLedger: 0 }],
+      [{ deletedMessageRequests: 1002, deletedUsageLedger: 3 }],
+    ]);
   });
 
   it("reports deleted rows when cache cleanup fails so retries preserve progress", async () => {

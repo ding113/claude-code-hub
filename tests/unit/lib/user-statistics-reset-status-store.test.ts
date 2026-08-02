@@ -39,6 +39,8 @@ const record = {
   deletedMessageRequests: 0,
   deletedUsageLedger: 0,
   errorCode: null,
+  fixed5hKeyIds: [9],
+  fixed5hPreparationVersion: null,
 };
 
 describe("user statistics reset status store", () => {
@@ -81,6 +83,21 @@ describe("user statistics reset status store", () => {
     await expect(getUserStatisticsResetStatus(record.resetId)).rejects.toThrow(
       "USER_STATISTICS_RESET_REDIS_UNAVAILABLE"
     );
+  });
+
+  it("normalizes legacy records without fixed 5h key ids", async () => {
+    const {
+      fixed5hKeyIds: _fixed5hKeyIds,
+      fixed5hPreparationVersion: _fixed5hPreparationVersion,
+      ...legacyRecord
+    } = record;
+    boundary.redis.get.mockResolvedValue(JSON.stringify(legacyRecord));
+
+    await expect(getUserStatisticsResetStatus(record.resetId)).resolves.toEqual({
+      ...legacyRecord,
+      fixed5hKeyIds: [],
+      fixed5hPreparationVersion: null,
+    });
   });
 
   it("claims one active reset and returns the existing owner on contention", async () => {
