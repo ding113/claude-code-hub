@@ -34,6 +34,33 @@ describe("Session identity query indexes", () => {
     expect(compileSql(index?.config.where as SQL)).toContain(predicate);
   });
 
+  test("message_request identity index supports deterministic latest-row lookup", () => {
+    const index = getTableConfig(messageRequest).indexes.find(
+      (entry) => entry.config.name === "idx_message_request_session_identity_created_at"
+    );
+    expect(index).toBeDefined();
+    expect(index?.config.columns).toHaveLength(3);
+    const createdAt = compileSql(index?.config.columns[1] as SQL);
+    expect(createdAt).toContain("created_at");
+    expect(createdAt).toContain("desc nulls last");
+    expect(index?.config.columns[2]).toMatchObject({
+      name: "id",
+      indexConfig: { order: "desc" },
+    });
+  });
+
+  test("usage_ledger identity index includes owner before creation time", () => {
+    const index = getTableConfig(usageLedger).indexes.find(
+      (entry) => entry.config.name === "idx_usage_ledger_session_identity_created_at"
+    );
+    expect(index).toBeDefined();
+    expect(index?.config.columns).toHaveLength(3);
+    expect(index?.config.columns[1]).toMatchObject({ name: "user_id" });
+    const createdAt = compileSql(index?.config.columns[2] as SQL);
+    expect(createdAt).toContain("created_at");
+    expect(createdAt).toContain("desc nulls last");
+  });
+
   test("usage_ledger has an unfiltered identity index for grouped source-ID hydration", () => {
     const index = getTableConfig(usageLedger).indexes.find(
       (entry) => entry.config.name === "idx_usage_ledger_session_identity"
