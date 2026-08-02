@@ -186,6 +186,14 @@ function createFakeRedis() {
           kv.delete(key);
           return Number(ttl) > 0 ? 1 : 0;
         }
+        if (script.includes("KEYS[3]") && script.includes("DEL") && _numkeys === 3) {
+          const [metaKey, chunksKey, token] = args;
+          if (kv.get(key) !== token) return 0;
+          kv.delete(String(metaKey));
+          lists.delete(String(chunksKey));
+          kv.delete(key);
+          return 1;
+        }
         const token = args[0] as string;
         if (script.includes("EXPIRE")) {
           return kv.get(key) === token ? 1 : 0;
@@ -518,6 +526,22 @@ describe("ReplayStore：owner 租约", () => {
     expect(currentRedis().kv.get("cch:replay:owner:r1")).toBe("tok-new");
   });
 
+  it("discardOwned 仅在 token 匹配时删除当前热层候选且不写终态", async () => {
+    const store = new ReplayStore();
+    await store.tryClaimOwner("r1", "tok-a");
+    await store.setMeta("r1", makeMeta());
+    await store.appendChunks("r1", ["partial"]);
+
+    await expect(store.discardOwned("r1", "tok-other")).resolves.toBe(false);
+    await expect(store.getMeta("r1")).resolves.not.toBeNull();
+    await expect(store.readChunks("r1", 0)).resolves.toEqual(["partial"]);
+
+    await expect(store.discardOwned("r1", "tok-a")).resolves.toBe(true);
+    await expect(store.getMeta("r1")).resolves.toBeNull();
+    await expect(store.readChunks("r1", 0)).resolves.toEqual([]);
+    expect(currentRedis().kv.has("cch:replay:owner:r1")).toBe(false);
+  });
+
   it("completeOwned 仅在 token 匹配时原子写 completed meta 并释放租约", async () => {
     const store = new ReplayStore();
     const completedMeta = makeMeta({ status: "completed", chunkCount: 2 });
@@ -540,7 +564,7 @@ describe("ReplayStore：PG 完成持久层", () => {
     const row = makePersistedRow();
 
     const before = Date.now();
-    await store.persistCompleted(row);
+    await expect(store.persistCompleted(row)).resolves.toBe("persisted");
     const after = Date.now();
 
     expect(dbState.insertValues).toHaveLength(1);
@@ -572,7 +596,7 @@ describe("ReplayStore：PG 完成持久层", () => {
     const store = new ReplayStore();
     const row = makePersistedRow({ payload: "data: replacement\n\n" });
 
-    await expect(store.persistCompleted(row)).resolves.toBeUndefined();
+    await expect(store.persistCompleted(row)).resolves.toBe("persisted");
 
     expect(dbState.upsertConfigs).toHaveLength(1);
     const config = dbState.upsertConfigs[0] as {
@@ -593,19 +617,20 @@ describe("ReplayStore：PG 完成持久层", () => {
     expect(dbState.selectWheres).toHaveLength(0);
   });
 
-  it("persistCompleted 接受内容完全一致的未过期 durable 行", async () => {
+  it("persistCompleted 接受内容一致但 source request 不同的未过期 durable 行", async () => {
     dbState.upsertRows = [];
     const row = makePersistedRow();
     dbState.selectRows = [
       {
         ...row,
         headersJson: row.headers,
+        sourceMessageRequestId: 999,
         expiresAt: new Date(Date.now() + 60_000),
       },
     ];
     const store = new ReplayStore();
 
-    await expect(store.persistCompleted(row)).resolves.toBeUndefined();
+    await expect(store.persistCompleted(row)).resolves.toBe("existing");
     expect(dbState.selectWheres).toHaveLength(1);
   });
 
