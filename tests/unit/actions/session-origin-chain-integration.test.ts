@@ -18,6 +18,7 @@ describe("getSessionOriginChain", () => {
       .fn()
       .mockResolvedValue([{ sessionId: "test-session", userId: 1 }]);
     const findSessionRequestLocatorMock = vi.fn().mockResolvedValue({
+      requestId: 101,
       identityKind: "direct",
       sourceSessionId: "test-session",
       requestSequence: 1,
@@ -60,6 +61,6 @@ describe("getSessionOriginChain", () => {
 
     expect(result.data[0]?.reason).toBe("initial_selection");
     expect(findSessionRequestLocatorMock).toHaveBeenCalledWith("test-session", {}, 1);
-    expect(findSessionOriginChainMock).toHaveBeenCalledWith("test-session", 1);
+    expect(findSessionOriginChainMock).toHaveBeenCalledWith(101, 1, 1);
   });
 });

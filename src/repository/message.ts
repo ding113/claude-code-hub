@@ -1,6 +1,7 @@
 "use server";
 
-import { and, asc, desc, eq, gt, isNotNull, isNull, lt, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, isNotNull, isNull, lt, lte, or, sql } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import { db, getMessageWriterDb } from "@/drizzle/db";
 import { keys as keysTable, messageRequest, providers, usageLedger, users } from "@/drizzle/schema";
 import { getEnvConfig } from "@/lib/config/env.schema";
@@ -1207,29 +1208,62 @@ export async function findMessageRequestBySessionId(
 }
 
 /**
- * 根据 sessionId 查询该 session 首条非 warmup 请求的 providerChain
- * 用于展示会话来源链（原始选择决策）
+ * 查询选中请求所属 key epoch 内最近且不晚于该请求的初始 providerChain。
  */
 export async function findSessionOriginChain(
-  sessionId: string,
-  ownerUserId?: number
+  requestId: number,
+  keyId: number,
+  ownerUserId: number
 ): Promise<ProviderChainItem[] | null> {
+  const selectedRequest = alias(messageRequest, "selected_message_request");
+  const requestBoundary = or(
+    and(
+      isNotNull(selectedRequest.createdAt),
+      or(
+        lt(messageRequest.createdAt, selectedRequest.createdAt),
+        and(
+          eq(messageRequest.createdAt, selectedRequest.createdAt),
+          lte(messageRequest.id, selectedRequest.id)
+        )
+      )
+    ),
+    and(isNull(selectedRequest.createdAt), lte(messageRequest.id, selectedRequest.id))
+  );
+
   const [row] = await db
     .select({
       providerChain: messageRequest.providerChain,
     })
     .from(messageRequest)
+    .innerJoin(keysTable, eq(messageRequest.key, keysTable.key))
+    .innerJoin(
+      selectedRequest,
+      and(
+        eq(selectedRequest.id, requestId),
+        eq(selectedRequest.key, keysTable.key),
+        eq(selectedRequest.userId, ownerUserId),
+        isNotNull(selectedRequest.sessionId),
+        isNull(selectedRequest.deletedAt),
+        eq(messageRequest.sessionId, selectedRequest.sessionId),
+        eq(messageRequest.userId, selectedRequest.userId),
+        requestBoundary
+      )
+    )
     .where(
       and(
-        eq(messageRequest.sessionId, sessionId),
-        ownerUserId !== undefined ? eq(messageRequest.userId, ownerUserId) : undefined,
+        eq(keysTable.id, keyId),
+        eq(messageRequest.userId, ownerUserId),
         isNull(messageRequest.deletedAt),
         EXCLUDE_WARMUP_CONDITION,
         sql`${messageRequest.providerChain} IS NOT NULL`,
         sql`${messageRequest.providerChain} @> '[{"reason": "initial_selection"}]'::jsonb`
       )
     )
-    .orderBy(asc(messageRequest.requestSequence))
+    .orderBy(
+      sql`CASE WHEN ${selectedRequest.createdAt} IS NULL THEN ${messageRequest.id} END DESC`,
+      desc(messageRequest.createdAt),
+      desc(messageRequest.id)
+    )
     .limit(1);
 
   if (!row?.providerChain) return null;
@@ -1613,9 +1647,11 @@ export async function findSessionRequestLocator(
   ownerUserId?: number
 ): Promise<{
   requestId: number;
+  canonicalSessionId: string;
   sourceSessionId: string;
   requestSequence: number;
   keyId: number;
+  userId: number;
   identityKind: "session_id" | "prefix_affinity";
   scopeTag: string | null;
   fingerprint: string | null;
@@ -1623,9 +1659,11 @@ export async function findSessionRequestLocator(
   const [row] = await db
     .select({
       requestId: messageRequest.id,
+      canonicalSessionId: messageSessionIdentity,
       sourceSessionId: messageRequest.sessionId,
       requestSequence: messageRequest.requestSequence,
       keyId: keysTable.id,
+      userId: messageRequest.userId,
       identityKind: messageRequest.sessionIdentityKind,
       scopeTag: messageRequest.affinityScopeTag,
       fingerprint: messageRequest.affinityFingerprint,
@@ -1634,7 +1672,9 @@ export async function findSessionRequestLocator(
     .innerJoin(keysTable, eq(messageRequest.key, keysTable.key))
     .where(
       and(
-        messageCanonicalSessionLookup(identity, ownerUserId),
+        selector.requestId !== undefined
+          ? messageSessionLookup(identity, ownerUserId)
+          : messageCanonicalSessionLookup(identity, ownerUserId),
         isNotNull(messageRequest.sessionId),
         isNotNull(messageRequest.requestSequence),
         selector.requestId !== undefined ? eq(messageRequest.id, selector.requestId) : undefined,
@@ -1650,15 +1690,24 @@ export async function findSessionRequestLocator(
     .orderBy(desc(messageRequest.createdAt), desc(messageRequest.id))
     .limit(1);
 
-  if (!row?.requestId || !row.sourceSessionId || row.requestSequence == null || !row.keyId) {
+  if (
+    !row?.requestId ||
+    !row.canonicalSessionId ||
+    !row.sourceSessionId ||
+    row.requestSequence == null ||
+    !row.keyId ||
+    !row.userId
+  ) {
     return null;
   }
 
   return {
     requestId: row.requestId,
+    canonicalSessionId: row.canonicalSessionId,
     sourceSessionId: row.sourceSessionId,
     requestSequence: row.requestSequence,
     keyId: row.keyId,
+    userId: row.userId,
     identityKind: row.identityKind === "prefix_affinity" ? "prefix_affinity" : "session_id",
     scopeTag: row.scopeTag,
     fingerprint: row.fingerprint,

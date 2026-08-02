@@ -648,7 +648,8 @@ describe("Lease Budget Decrement after trackCostToRedis", () => {
         body: expect.stringContaining('"type":"message"'),
         meta: expect.objectContaining({ statusCode: 200 }),
       }),
-      session.requestSequence
+      session.requestSequence,
+      456
     );
     expect(updateMessageRequestDetailsDurably).toHaveBeenCalledWith(
       messageId,

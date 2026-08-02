@@ -111,6 +111,40 @@ describe("SessionManager.terminateSession", () => {
     expect(pipelineRef.zrem).not.toHaveBeenCalledWith(getUserActiveSessionsKey(123), sessionId);
   });
 
+  it("fails closed when the owner key lookup rejects during scoped termination", async () => {
+    const sessionId = "sess_owner_lookup_failure";
+    redisClientRef.get.mockImplementation(async (key: string) => {
+      if (key === `session:${sessionId}:provider`) return "42";
+      if (key === `session:${sessionId}:key`) throw new Error("owner lookup failed");
+      return null;
+    });
+    redisClientRef.hget.mockResolvedValue("123");
+
+    const { SessionManager } = await import("@/lib/session-manager");
+
+    await expect(SessionManager.terminateSession(sessionId, undefined, 7)).resolves.toBe(false);
+    expect(redisClientRef.pipeline).not.toHaveBeenCalled();
+    expect(bindingMocks.readOrReconcileSessionBinding).not.toHaveBeenCalled();
+    expect(bindingMocks.mutateLegacySessionBindingSafely).not.toHaveBeenCalled();
+  });
+
+  it("fails closed when an ancillary owner lookup rejects during scoped termination", async () => {
+    const sessionId = "sess_owner_metadata_lookup_failure";
+    redisClientRef.get.mockImplementation(async (key: string) => {
+      if (key === `session:${sessionId}:provider`) return "42";
+      if (key === `session:${sessionId}:key`) return "7";
+      return null;
+    });
+    redisClientRef.hget.mockRejectedValue(new Error("user lookup failed"));
+
+    const { SessionManager } = await import("@/lib/session-manager");
+
+    await expect(SessionManager.terminateSession(sessionId, undefined, 7)).resolves.toBe(false);
+    expect(redisClientRef.pipeline).not.toHaveBeenCalled();
+    expect(bindingMocks.readOrReconcileSessionBinding).not.toHaveBeenCalled();
+    expect(bindingMocks.mutateLegacySessionBindingSafely).not.toHaveBeenCalled();
+  });
+
   it("迟到 cleanup 仅删除仍绑定到预期 provider 的 session", async () => {
     const { SessionManager } = await import("@/lib/session-manager");
 

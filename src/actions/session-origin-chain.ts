@@ -40,7 +40,8 @@ export async function getSessionOriginChain(
     if (!locatorResult.ok) return locatorResult;
 
     const chain = await findSessionOriginChain(
-      locatorResult.locator.sourceSessionId,
+      locatorResult.locator.requestId,
+      locatorResult.locator.keyId,
       sessionStats.userId
     );
     return { ok: true, data: chain ?? null };

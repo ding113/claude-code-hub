@@ -241,9 +241,11 @@ describe("message repository session request queries", () => {
     const locator = createDrizzleQuery([
       {
         requestId: 205,
+        canonicalSessionId: "pfx:scope:fingerprint",
         sourceSessionId: "physical-a",
         requestSequence: 2,
         keyId: 17,
+        userId: 9,
         identityKind: "prefix_affinity",
         scopeTag: "scope",
         fingerprint: "fingerprint",
@@ -259,13 +261,15 @@ describe("message repository session request queries", () => {
     expect(where.match(/pfx:scope:fingerprint/g)).toHaveLength(1);
   });
 
-  test("uses an exact canonical identity after a physical Session id is resolved", async () => {
+  test("accepts a physical Session id for an exact request locator", async () => {
     const locator = createDrizzleQuery([
       {
         requestId: 204,
+        canonicalSessionId: "pfx:scope:fingerprint",
         sourceSessionId: "physical-a",
         requestSequence: 1,
         keyId: 17,
+        userId: 9,
         identityKind: "prefix_affinity",
         scopeTag: "scope",
         fingerprint: "fingerprint",
@@ -275,9 +279,11 @@ describe("message repository session request queries", () => {
 
     await expect(findSessionRequestLocator("physical-a", { requestId: 204 })).resolves.toEqual({
       requestId: 204,
+      canonicalSessionId: "pfx:scope:fingerprint",
       sourceSessionId: "physical-a",
       requestSequence: 1,
       keyId: 17,
+      userId: 9,
       identityKind: "prefix_affinity",
       scopeTag: "scope",
       fingerprint: "fingerprint",
@@ -287,7 +293,7 @@ describe("message repository session request queries", () => {
     expect(where).toContain("physical-a");
     expect(where).toContain("session_identity");
     expect(where).toContain("session_id");
-    expect(where.match(/physical-a/g)).toHaveLength(1);
+    expect(where.match(/physical-a/g)).toHaveLength(2);
   });
 
   test("filters requests without a stable selector from navigable request lists", async () => {
@@ -319,9 +325,11 @@ describe("message repository session request queries", () => {
     const locator = createDrizzleQuery([
       {
         requestId: 203,
+        canonicalSessionId: "pfx:scope:fingerprint",
         sourceSessionId: "physical-a",
         requestSequence: 3,
         keyId: 17,
+        userId: 9,
         identityKind: "prefix_affinity",
         scopeTag: "scope",
         fingerprint: "fingerprint",
@@ -337,9 +345,11 @@ describe("message repository session request queries", () => {
       })
     ).resolves.toEqual({
       requestId: 203,
+      canonicalSessionId: "pfx:scope:fingerprint",
       sourceSessionId: "physical-a",
       requestSequence: 3,
       keyId: 17,
+      userId: 9,
       identityKind: "prefix_affinity",
       scopeTag: "scope",
       fingerprint: "fingerprint",

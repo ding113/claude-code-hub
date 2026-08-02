@@ -89,6 +89,10 @@ const STREAM_STATS_TAIL_CHUNKS = 8192;
 const STREAM_STATS_TRUNCATED_MARKER = "\n\n: [cch_truncated]\n\n";
 const RESPONSE_TEXT_ENCODER = new TextEncoder();
 
+function getSessionRequestOwnerKeyId(session: ProxySession): number | undefined {
+  return session.authState?.key?.id ?? session.messageContext?.key?.id ?? undefined;
+}
+
 type BoundedStreamTextSnapshot = {
   text: string;
   truncated: boolean;
@@ -2503,7 +2507,8 @@ export class ProxyResponseHandler {
             statusCode: targetResponse.status,
           },
         },
-        session.requestSequence
+        session.requestSequence,
+        getSessionRequestOwnerKeyId(session)
       );
       responseAfterSnapshotTask?.catch((err) => {
         logger.error("[ResponseHandler] Failed to store response after snapshot:", err);
@@ -2558,7 +2563,8 @@ export class ProxyResponseHandler {
               void SessionManager.storeSessionResponse(
                 session.sessionId,
                 responseText,
-                session.requestSequence
+                session.requestSequence,
+                getSessionRequestOwnerKeyId(session)
               ).catch((err) => {
                 logger.error("[ResponseHandler] Failed to store response:", err);
               });
@@ -2567,7 +2573,8 @@ export class ProxyResponseHandler {
                 session.sessionId,
                 "before",
                 { body: beforeBody },
-                session.requestSequence
+                session.requestSequence,
+                getSessionRequestOwnerKeyId(session)
               );
               responseBeforeSnapshotTask?.catch((err) => {
                 logger.error("[ResponseHandler] Failed to store response before snapshot:", err);
@@ -2577,7 +2584,8 @@ export class ProxyResponseHandler {
                 session.sessionId,
                 "after",
                 { body: responseText },
-                session.requestSequence
+                session.requestSequence,
+                getSessionRequestOwnerKeyId(session)
               );
               responseAfterSnapshotTask?.catch((err) => {
                 logger.error("[ResponseHandler] Failed to store response after snapshot:", err);
@@ -2832,7 +2840,8 @@ export class ProxyResponseHandler {
                 statusCode: response.status,
               },
             },
-            session.requestSequence
+            session.requestSequence,
+            getSessionRequestOwnerKeyId(session)
           );
           responseAfterMetaTask?.catch((err) => {
             logger.error("[ResponseHandler] Failed to store non-stream response after meta:", err);
@@ -3131,7 +3140,8 @@ export class ProxyResponseHandler {
           void SessionManager.storeSessionResponse(
             session.sessionId,
             responseText,
-            session.requestSequence
+            session.requestSequence,
+            getSessionRequestOwnerKeyId(session)
           ).catch((err) => {
             logger.error("[ResponseHandler] Failed to store response:", err);
           });
@@ -3140,7 +3150,8 @@ export class ProxyResponseHandler {
             session.sessionId,
             "before",
             { body: beforeBody },
-            session.requestSequence
+            session.requestSequence,
+            getSessionRequestOwnerKeyId(session)
           );
           responseBeforeSnapshotTask?.catch((err) => {
             logger.error("[ResponseHandler] Failed to store response before snapshot:", err);
@@ -3839,7 +3850,8 @@ export class ProxyResponseHandler {
               void SessionManager.storeSessionResponse(
                 session.sessionId,
                 allContent,
-                session.requestSequence
+                session.requestSequence,
+                getSessionRequestOwnerKeyId(session)
               ).catch((err) => {
                 logger.error("[ResponseHandler] Failed to store stream passthrough response:", err);
               });
@@ -3848,7 +3860,8 @@ export class ProxyResponseHandler {
                 session.sessionId,
                 "before",
                 { body: allContent },
-                session.requestSequence
+                session.requestSequence,
+                getSessionRequestOwnerKeyId(session)
               );
               responseBeforeSnapshotTask?.catch((err) => {
                 logger.error("[ResponseHandler] Failed to store response before snapshot:", err);
@@ -3858,7 +3871,8 @@ export class ProxyResponseHandler {
                 session.sessionId,
                 "after",
                 { body: allContent },
-                session.requestSequence
+                session.requestSequence,
+                getSessionRequestOwnerKeyId(session)
               );
               responseAfterSnapshotTask?.catch((err) => {
                 logger.error("[ResponseHandler] Failed to store response after snapshot:", err);
@@ -4044,7 +4058,8 @@ export class ProxyResponseHandler {
                 statusCode: response.status,
               },
             },
-            session.requestSequence
+            session.requestSequence,
+            getSessionRequestOwnerKeyId(session)
           );
           responseAfterMetaTask?.catch((err) => {
             logger.error("[ResponseHandler] Failed to store stream response after meta:", err);
@@ -4394,7 +4409,8 @@ export class ProxyResponseHandler {
           void SessionManager.storeSessionResponse(
             session.sessionId,
             allContent,
-            session.requestSequence
+            session.requestSequence,
+            getSessionRequestOwnerKeyId(session)
           ).catch((err) => {
             logger.error("[ResponseHandler] Failed to store response:", err);
           });
@@ -4403,7 +4419,8 @@ export class ProxyResponseHandler {
             session.sessionId,
             "after",
             { body: allContent },
-            session.requestSequence
+            session.requestSequence,
+            getSessionRequestOwnerKeyId(session)
           );
           responseAfterSnapshotTask?.catch((err) => {
             logger.error("[ResponseHandler] Failed to store response after snapshot:", err);
@@ -4413,7 +4430,8 @@ export class ProxyResponseHandler {
             session.sessionId,
             "before",
             { body: beforeBody },
-            session.requestSequence
+            session.requestSequence,
+            getSessionRequestOwnerKeyId(session)
           );
           responseBeforeSnapshotTask?.catch((err) => {
             logger.error("[ResponseHandler] Failed to store response before snapshot:", err);
@@ -5242,7 +5260,8 @@ export class ProxyResponseHandler {
             statusCode: response.status,
           },
         },
-        session.requestSequence
+        session.requestSequence,
+        getSessionRequestOwnerKeyId(session)
       );
       responseAfterMetaTask?.catch((err) => {
         logger.error("[ResponseHandler] Failed to store stream response after meta:", err);

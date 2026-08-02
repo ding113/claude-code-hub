@@ -109,9 +109,11 @@ describe("getSessionDetails - unified specialSettings", () => {
     });
     findSessionRequestLocatorMock.mockResolvedValue({
       requestId: 101,
+      canonicalSessionId: "sess_x",
       sourceSessionId: "sess_x",
       requestSequence: 1,
       keyId: 1,
+      userId: 1,
       identityKind: "session_id",
       scopeTag: null,
       fingerprint: null,

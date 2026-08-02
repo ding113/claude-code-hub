@@ -12,7 +12,6 @@ import { extractAfterRequestMessages, isSessionMessages } from "@/lib/session-de
 import { resolveSessionRequestLocator } from "@/lib/session-request-locator";
 import { normalizeRequestSequence } from "@/lib/utils/request-sequence";
 import { buildUnifiedSpecialSettings } from "@/lib/utils/special-settings";
-import { isReservedSessionIdentity } from "@/repository/_shared/usage-log-filters";
 import {
   type ActiveSessionInfo,
   DEFAULT_SESSION_DETAIL_VIEW_MODE,
@@ -70,7 +69,7 @@ async function terminateResolvedSessionIdentity(
   resolution: ResolvedSessionIdentity | null,
   ownerUserId: number,
   dependencies?: SessionTerminationDependencies
-): Promise<boolean> {
+): Promise<{ terminated: boolean; sourceSessionIds: string[] }> {
   const {
     SessionManager,
     SessionTracker,
@@ -94,10 +93,13 @@ async function terminateResolvedSessionIdentity(
       )
     );
     const terminated = outcomes.some(Boolean);
-    if (terminated && isReservedSessionIdentity(identity)) {
+    if (terminated) {
       await SessionTracker.terminateObservedSession(identity);
     }
-    return terminated;
+    return {
+      terminated,
+      sourceSessionIds: physicalSources.map((source) => source.sessionId),
+    };
   }
 
   const invalidated = await getAffinityStore().invalidate(
@@ -105,7 +107,7 @@ async function terminateResolvedSessionIdentity(
     resolution.fingerprint,
     [...new Set([resolution.fingerprint, ...resolution.fingerprints])]
   );
-  if (!invalidated) return false;
+  if (!invalidated) return { terminated: false, sourceSessionIds: [] };
 
   const physicalSources = await listPhysicalSessionSourcesForIdentity(identity, ownerUserId);
 
@@ -125,7 +127,10 @@ async function terminateResolvedSessionIdentity(
   }
 
   await SessionTracker.terminateObservedSession(identity);
-  return true;
+  return {
+    terminated: true,
+    sourceSessionIds: physicalSources.map((source) => source.sessionId),
+  };
 }
 
 function normalizeRequestSnapshot(
@@ -764,11 +769,29 @@ export async function hasSessionMessages(
     const isAdmin = authSession.user.role === "admin";
     const currentUserId = authSession.user.id;
 
-    // 检查 Session 所有权（需要从数据库获取 userId）
-    const sessionStats = await loadCanonicalSessionStats(
-      sessionId,
-      isAdmin ? undefined : currentUserId
-    );
+    let locatorResult: Awaited<ReturnType<typeof resolveSessionRequestLocator>> | null = null;
+    let sessionStats: CanonicalSessionStats | null;
+
+    if (requestId !== undefined) {
+      locatorResult = await resolveSessionRequestLocator(
+        sessionId,
+        requestSequence,
+        requestedSourceSessionId,
+        requestId,
+        isAdmin ? undefined : currentUserId
+      );
+      if (!locatorResult.ok) return locatorResult;
+      sessionStats = await loadCanonicalSessionStats(
+        locatorResult.locator.canonicalSessionId,
+        locatorResult.locator.userId
+      );
+    } else {
+      // 检查 Session 所有权（需要从数据库获取 userId）
+      sessionStats = await loadCanonicalSessionStats(
+        sessionId,
+        isAdmin ? undefined : currentUserId
+      );
+    }
 
     if (!sessionStats) {
       return {
@@ -788,11 +811,11 @@ export async function hasSessionMessages(
       };
     }
 
-    const locatorResult = await resolveSessionRequestLocator(
+    locatorResult ??= await resolveSessionRequestLocator(
       sessionStats.sessionId,
       requestSequence,
       requestedSourceSessionId,
-      requestId,
+      undefined,
       sessionStats.userId
     );
     if (!locatorResult.ok) return locatorResult;
@@ -887,30 +910,47 @@ export async function getSessionDetails(
     const isAdmin = authSession.user.role === "admin";
     const currentUserId = authSession.user.id;
 
-    // 1. 尝试从缓存获取统计数据
-    const cachedStats = isAdmin ? null : getSessionDetailsCache(sessionId, currentUserId);
-
+    let locatorResult: Awaited<ReturnType<typeof resolveSessionRequestLocator>> | null = null;
     let sessionStats: CanonicalSessionStats | null;
 
-    if (cachedStats) {
-      logger.debug(`[SessionCache] Session details cache hit: ${sessionId}`);
-      sessionStats = cachedStats;
-    } else {
-      // 2. 从数据库查询
-      sessionStats = await loadCanonicalSessionStats(
+    if (requestId !== undefined) {
+      locatorResult = await resolveSessionRequestLocator(
         sessionId,
+        requestSequence,
+        requestedSourceSessionId,
+        requestId,
         isAdmin ? undefined : currentUserId
       );
+      if (!locatorResult.ok) return locatorResult;
 
-      // 3. 写入缓存
-      if (sessionStats) {
-        setSessionDetailsCache(sessionId, sessionStats);
-        if (sessionStats.sessionId !== sessionId) {
-          setSessionDetailsCache(sessionStats.sessionId, sessionStats);
+      sessionStats = await loadCanonicalSessionStats(
+        locatorResult.locator.canonicalSessionId,
+        locatorResult.locator.userId
+      );
+    } else {
+      // 1. 尝试从缓存获取统计数据
+      const cachedStats = isAdmin ? null : getSessionDetailsCache(sessionId, currentUserId);
+
+      if (cachedStats) {
+        logger.debug(`[SessionCache] Session details cache hit: ${sessionId}`);
+        sessionStats = cachedStats;
+      } else {
+        // 2. 从数据库查询
+        sessionStats = await loadCanonicalSessionStats(
+          sessionId,
+          isAdmin ? undefined : currentUserId
+        );
+
+        // 3. 写入缓存
+        if (sessionStats) {
+          setSessionDetailsCache(sessionId, sessionStats);
+          if (sessionStats.sessionId !== sessionId) {
+            setSessionDetailsCache(sessionStats.sessionId, sessionStats);
+          }
         }
-      }
 
-      logger.debug(`[SessionCache] Session details fetched and cached: ${sessionId}`);
+        logger.debug(`[SessionCache] Session details fetched and cached: ${sessionId}`);
+      }
     }
 
     // 4. 权限检查：管理员可查看所有，普通用户只能查看自己的
@@ -932,11 +972,11 @@ export async function getSessionDetails(
     }
 
     const canonicalSessionId = sessionStats.sessionId;
-    const locatorResult = await resolveSessionRequestLocator(
+    locatorResult ??= await resolveSessionRequestLocator(
       canonicalSessionId,
       requestSequence,
       requestedSourceSessionId,
-      requestId,
+      undefined,
       sessionStats.userId
     );
     if (!locatorResult.ok) return locatorResult;
@@ -944,6 +984,7 @@ export async function getSessionDetails(
     const sourceSessionId = locatorResult.locator.sourceSessionId;
     const effectiveSequence = locatorResult.locator.requestSequence;
     const effectiveRequestId = locatorResult.locator.requestId;
+    const requestOwnerUserId = locatorResult.locator.userId;
 
     // 5. 请求 locator 已同时验证 identity、物理 Session 和序号，后续所有读取必须复用它。
     const { SessionManager } = await import("@/lib/session-manager");
@@ -957,7 +998,7 @@ export async function getSessionDetails(
         : await findAdjacentSessionRequests(
             canonicalSessionId,
             effectiveRequestId,
-            sessionStats.userId
+            requestOwnerUserId
           );
 
     const parseJsonStringOrNull = (value: unknown): unknown => {
@@ -982,18 +1023,11 @@ export async function getSessionDetails(
       }
     };
 
-    if (
-      !(await SessionManager.isSessionRequestOwnedByKey(
-        sourceSessionId,
-        effectiveSequence,
-        locatorResult.locator.keyId
-      ))
-    ) {
-      return {
-        ok: false,
-        error: "Session 请求详情已过期",
-      };
-    }
+    const redisArtifactsOwned = await SessionManager.isSessionRequestOwnedByKey(
+      sourceSessionId,
+      effectiveSequence,
+      locatorResult.locator.keyId
+    );
 
     // 6. 并行获取 messages、requestBody 和 response（不缓存，因为这些数据较大）
     const [
@@ -1012,20 +1046,58 @@ export async function getSessionDetails(
       responseSnapshotBefore,
       responseSnapshotAfter,
     ] = await Promise.all([
-      SessionManager.getSessionRequestBody(sourceSessionId, effectiveSequence),
-      SessionManager.getSessionMessages(sourceSessionId, effectiveSequence),
-      SessionManager.getSessionResponse(sourceSessionId, effectiveSequence),
-      SessionManager.getSessionRequestHeaders(sourceSessionId, effectiveSequence),
-      SessionManager.getSessionResponseHeaders(sourceSessionId, effectiveSequence),
-      SessionManager.getSessionClientRequestMeta(sourceSessionId, effectiveSequence),
-      SessionManager.getSessionUpstreamRequestMeta(sourceSessionId, effectiveSequence),
-      SessionManager.getSessionUpstreamResponseMeta(sourceSessionId, effectiveSequence),
-      SessionManager.getSessionSpecialSettings(sourceSessionId, effectiveSequence),
-      findMessageRequestAuditById(effectiveRequestId, sessionStats.userId),
-      SessionManager.getSessionRequestPhaseSnapshot(sourceSessionId, "before", effectiveSequence),
-      SessionManager.getSessionRequestPhaseSnapshot(sourceSessionId, "after", effectiveSequence),
-      SessionManager.getSessionResponsePhaseSnapshot(sourceSessionId, "before", effectiveSequence),
-      SessionManager.getSessionResponsePhaseSnapshot(sourceSessionId, "after", effectiveSequence),
+      redisArtifactsOwned
+        ? SessionManager.getSessionRequestBody(sourceSessionId, effectiveSequence)
+        : null,
+      redisArtifactsOwned
+        ? SessionManager.getSessionMessages(sourceSessionId, effectiveSequence)
+        : null,
+      redisArtifactsOwned
+        ? SessionManager.getSessionResponse(sourceSessionId, effectiveSequence)
+        : null,
+      redisArtifactsOwned
+        ? SessionManager.getSessionRequestHeaders(sourceSessionId, effectiveSequence)
+        : null,
+      redisArtifactsOwned
+        ? SessionManager.getSessionResponseHeaders(sourceSessionId, effectiveSequence)
+        : null,
+      redisArtifactsOwned
+        ? SessionManager.getSessionClientRequestMeta(sourceSessionId, effectiveSequence)
+        : null,
+      redisArtifactsOwned
+        ? SessionManager.getSessionUpstreamRequestMeta(sourceSessionId, effectiveSequence)
+        : null,
+      redisArtifactsOwned
+        ? SessionManager.getSessionUpstreamResponseMeta(sourceSessionId, effectiveSequence)
+        : null,
+      redisArtifactsOwned
+        ? SessionManager.getSessionSpecialSettings(sourceSessionId, effectiveSequence)
+        : null,
+      findMessageRequestAuditById(effectiveRequestId, requestOwnerUserId),
+      redisArtifactsOwned
+        ? SessionManager.getSessionRequestPhaseSnapshot(
+            sourceSessionId,
+            "before",
+            effectiveSequence
+          )
+        : null,
+      redisArtifactsOwned
+        ? SessionManager.getSessionRequestPhaseSnapshot(sourceSessionId, "after", effectiveSequence)
+        : null,
+      redisArtifactsOwned
+        ? SessionManager.getSessionResponsePhaseSnapshot(
+            sourceSessionId,
+            "before",
+            effectiveSequence
+          )
+        : null,
+      redisArtifactsOwned
+        ? SessionManager.getSessionResponsePhaseSnapshot(
+            sourceSessionId,
+            "after",
+            effectiveSequence
+          )
+        : null,
     ]);
 
     // 兼容：历史/异常数据可能是 JSON 字符串（前端需要根级对象/数组）
@@ -1290,13 +1362,13 @@ export async function terminateActiveSession(sessionId: string): Promise<ActionR
       canonicalSessionId,
       sessionStats.userId
     );
-    const success = await terminateResolvedSessionIdentity(
+    const termination = await terminateResolvedSessionIdentity(
       canonicalSessionId,
       identityResolution,
       sessionStats.userId
     );
 
-    if (!success) {
+    if (!termination.terminated) {
       return {
         ok: false,
         error: "终止 Session 失败（Redis 不可用或 Session 已过期）",
@@ -1311,6 +1383,9 @@ export async function terminateActiveSession(sessionId: string): Promise<ActionR
     clearSessionDetailsCache(sessionId);
     if (canonicalSessionId !== sessionId) {
       clearSessionDetailsCache(canonicalSessionId);
+    }
+    for (const sourceSessionId of termination.sourceSessionIds) {
+      clearSessionDetailsCache(sourceSessionId);
     }
     clearAllSessionsQueryCache();
 
@@ -1455,6 +1530,7 @@ export async function terminateActiveSessionsBatch(
 
     // 3. 批量终止
     let successCount = 0;
+    const terminatedSourceSessionIds = new Set<string>();
     const terminationChunkSize = 20;
     const terminationDependencies = await loadSessionTerminationDependencies();
     const ownerByCanonicalId = new Map(
@@ -1465,7 +1541,9 @@ export async function terminateActiveSessionsBatch(
       const outcomes = await Promise.allSettled(
         chunk.map(async (identity) => {
           const ownerUserId = ownerByCanonicalId.get(identity);
-          if (ownerUserId === undefined) return false;
+          if (ownerUserId === undefined) {
+            return { terminated: false, sourceSessionIds: [] };
+          }
           const resolution = await resolveSessionIdentity(identity, ownerUserId);
           return terminateResolvedSessionIdentity(
             identity,
@@ -1476,8 +1554,11 @@ export async function terminateActiveSessionsBatch(
         })
       );
       for (const [index, outcome] of outcomes.entries()) {
-        if (outcome.status === "fulfilled" && outcome.value) {
+        if (outcome.status === "fulfilled" && outcome.value.terminated) {
           successCount += 1;
+          for (const sourceSessionId of outcome.value.sourceSessionIds) {
+            terminatedSourceSessionIds.add(sourceSessionId);
+          }
         } else if (outcome.status === "rejected") {
           logger.warn("Batch Session termination item failed", {
             identity: chunk[index],
@@ -1500,6 +1581,9 @@ export async function terminateActiveSessionsBatch(
     // 清除每个终止 Session 的 canonical 和请求 alias 详情缓存
     const allowedCanonicalIds = new Set(allowedSessionIds);
     const sessionDetailCacheIds = new Set(allowedSessionIds);
+    for (const sourceSessionId of terminatedSourceSessionIds) {
+      sessionDetailCacheIds.add(sourceSessionId);
+    }
     for (const session of sessionsData) {
       if (!allowedCanonicalIds.has(session.sessionId)) continue;
       for (const requestedId of session.requestedSessionIds ?? []) {

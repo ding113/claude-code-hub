@@ -18,6 +18,26 @@ export async function resolveSessionRequestLocator(
   ownerUserId?: number
 ): Promise<SessionRequestLocatorResult> {
   const normalizedSequence = normalizeRequestSequence(requestSequence);
+
+  if (requestId !== undefined) {
+    const locator = await findSessionRequestLocator(
+      identity,
+      {
+        requestId,
+        requestSequence: normalizedSequence ?? undefined,
+        sourceSessionId,
+      },
+      ownerUserId
+    );
+    return locator
+      ? { ok: true, locator }
+      : {
+          ok: false,
+          error: BUSINESS_ERRORS.SESSION_REQUEST_SOURCE_MISMATCH,
+          errorCode: BUSINESS_ERRORS.SESSION_REQUEST_SOURCE_MISMATCH,
+        };
+  }
+
   const identityLocator = await findSessionRequestLocator(identity, {}, ownerUserId);
 
   if (!identityLocator) {
@@ -42,11 +62,10 @@ export async function resolveSessionRequestLocator(
   }
 
   const locator =
-    normalizedSequence !== null || sourceSessionId || requestId !== undefined
+    normalizedSequence !== null || sourceSessionId
       ? await findSessionRequestLocator(
           identity,
           {
-            requestId,
             requestSequence: normalizedSequence ?? undefined,
             sourceSessionId,
           },
