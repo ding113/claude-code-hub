@@ -53,15 +53,24 @@ import { SessionMessagesDetailsTabs } from "./session-details-tabs";
 import { hasSnapshotData } from "./session-messages-guards";
 import { SessionStats } from "./session-stats";
 
+function normalizeCanonicalSessionRouteParam(sessionId: string): string {
+  try {
+    const decoded = decodeURIComponent(sessionId);
+    return decoded.startsWith("pfx:") || decoded.startsWith("sid:") ? decoded : sessionId;
+  } catch {
+    return sessionId;
+  }
+}
+
 export function SessionMessagesClient() {
   const t = useTranslations("dashboard.sessions");
   const tErrors = useTranslations("errors");
 
-  const params = useParams();
+  const params = useParams<{ sessionId: string }>();
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
-  const sessionId = params.sessionId as string;
+  const sessionId = normalizeCanonicalSessionRouteParam(params.sessionId);
 
   // URL state
   const seqParam = searchParams.get("seq");
