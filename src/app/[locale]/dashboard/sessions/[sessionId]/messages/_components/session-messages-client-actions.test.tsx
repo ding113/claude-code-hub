@@ -28,9 +28,10 @@ vi.mock("next-intl", () => {
 });
 
 let seqParamValue: string | null = null;
+let sessionIdParamValue = "0123456789abcdef";
 vi.mock("next/navigation", () => {
   return {
-    useParams: () => ({ sessionId: "0123456789abcdef" }),
+    useParams: () => ({ sessionId: sessionIdParamValue }),
     useSearchParams: () => ({
       get: (key: string) => {
         if (key !== "seq") return null;
@@ -57,7 +58,7 @@ vi.mock("@/i18n/routing", () => {
 
 const getSessionDetailsMock = vi.fn();
 const terminateActiveSessionMock = vi.fn();
-vi.mock("@/actions/active-sessions", () => {
+vi.mock("@/lib/api-client/v1/actions/active-sessions", () => {
   return {
     getSessionDetails: (...args: unknown[]) => getSessionDetailsMock(...args),
     terminateActiveSession: (...args: unknown[]) => terminateActiveSessionMock(...args),
@@ -267,9 +268,30 @@ afterEach(() => {
   routerBackMock.mockReset();
   vi.useRealTimers();
   seqParamValue = null;
+  sessionIdParamValue = "0123456789abcdef";
 });
 
 describe("SessionMessagesClient (request export actions)", () => {
+  test("decodes an URL-encoded canonical Session ID before loading details", async () => {
+    sessionIdParamValue = "pfx%3A9d403aeabe1f236d%3A1ee9a5d1bd4d98ce4bed39daca4b943e";
+    getSessionDetailsMock.mockResolvedValue({
+      ok: true,
+      data: buildDetailsData(),
+    });
+
+    const { unmount } = renderClient(<SessionMessagesClient />);
+    await flushEffects();
+
+    expect(getSessionDetailsMock).toHaveBeenCalledWith(
+      "pfx:9d403aeabe1f236d:1ee9a5d1bd4d98ce4bed39daca4b943e",
+      undefined,
+      undefined,
+      undefined
+    );
+
+    unmount();
+  });
+
   test("selected seq in URL overrides currentSequence for request export", async () => {
     seqParamValue = "3";
     getSessionDetailsMock.mockResolvedValue({
