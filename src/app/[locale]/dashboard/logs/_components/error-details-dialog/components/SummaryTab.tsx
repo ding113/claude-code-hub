@@ -349,7 +349,7 @@ export function SummaryTab({
                       </span>
                       <Link
                         href={buildLogsFilterHref(identity.value)}
-                        className="text-xs font-mono break-all underline-offset-2 hover:underline"
+                        className="text-xs font-mono truncate min-w-0 underline-offset-2 hover:underline"
                       >
                         {identity.value}
                       </Link>

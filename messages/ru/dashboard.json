@@ -704,6 +704,7 @@
       "cacheHitRequests": "Запросы (учтены в hit rate)",
       "cacheHitRate": "Попадания в кэш",
       "cacheCoefficient": "Коэффициент кэша",
+      "cacheCoefficientTooltip": "Чем выше коэффициент кэша, тем реже переключаются аккаунты поставщика и тем менее заметна деградация кэша. 0.9 и выше — отлично, 0.8 и выше — хорошо.",
       "cacheReadTokens": "Токены чтения из кэша",
       "totalTokens": "Всего токенов",
       "cacheCreationConsumedAmount": "Расход на создание кэша",
