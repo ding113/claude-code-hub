@@ -140,8 +140,46 @@ describe("LeaderboardView cache coefficient column", () => {
       root!.render(<LeaderboardView isAdmin />);
     });
 
-    const trigger = container!.querySelector('[data-slot="tooltip-trigger"]');
+    const coefficientHeader = Array.from(container!.querySelectorAll("th")).find((th) =>
+      th.textContent?.includes("columns.cacheCoefficient")
+    );
+    expect(coefficientHeader).toBeDefined();
+    const trigger = coefficientHeader!.querySelector('[data-slot="tooltip-trigger"]');
     expect(trigger).not.toBeNull();
+  });
+
+  it("does not trigger column sorting when the help icon is clicked", async () => {
+    fetchMock.mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes("scope=providerCacheHitRate")) {
+        return {
+          ok: true,
+          json: async () => [
+            cacheHitEntry({ providerId: 1, providerName: "high-first", cacheCoefficientBp: 9500 }),
+            cacheHitEntry({ providerId: 2, providerName: "low-second", cacheCoefficientBp: 5000 }),
+          ],
+        } as Response;
+      }
+      return { ok: true, json: async () => [] } as Response;
+    });
+
+    await act(async () => {
+      root!.render(<LeaderboardView isAdmin />);
+    });
+
+    const coefficientHeader = Array.from(container!.querySelectorAll("th")).find((th) =>
+      th.textContent?.includes("columns.cacheCoefficient")
+    );
+    const trigger = coefficientHeader!.querySelector('[data-slot="tooltip-trigger"]');
+    expect(trigger).not.toBeNull();
+
+    await act(async () => {
+      trigger!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    // 行顺序保持默认（未触发升序排序，否则 low-second 会排到第一行）
+    const bodyText = container!.querySelector("tbody")?.textContent ?? "";
+    expect(bodyText.indexOf("high-first")).toBeLessThan(bodyText.indexOf("low-second"));
   });
 
   it("colors the coefficient by tier: >=0.9 green, >=0.8 yellow, else orange", async () => {
@@ -152,8 +190,15 @@ describe("LeaderboardView cache coefficient column", () => {
           ok: true,
           json: async () => [
             cacheHitEntry({ providerId: 1, providerName: "excellent", cacheCoefficientBp: 9500 }),
-            cacheHitEntry({ providerId: 2, providerName: "good", cacheCoefficientBp: 8600 }),
-            cacheHitEntry({ providerId: 3, providerName: "poor", cacheCoefficientBp: 5000 }),
+            cacheHitEntry({
+              providerId: 2,
+              providerName: "edge-excellent",
+              cacheCoefficientBp: 9000,
+            }),
+            cacheHitEntry({ providerId: 3, providerName: "good", cacheCoefficientBp: 8600 }),
+            cacheHitEntry({ providerId: 4, providerName: "edge-good", cacheCoefficientBp: 8000 }),
+            cacheHitEntry({ providerId: 5, providerName: "poor", cacheCoefficientBp: 5000 }),
+            cacheHitEntry({ providerId: 6, providerName: "missing", cacheCoefficientBp: null }),
           ],
         } as Response;
       }
@@ -167,8 +212,14 @@ describe("LeaderboardView cache coefficient column", () => {
     const hasColoredValue = (selector: string, text: string) =>
       Array.from(container!.querySelectorAll(selector)).some((el) => el.textContent === text);
     expect(hasColoredValue("span.text-green-600", "0.95")).toBe(true);
+    // 边界值：0.90 仍属优秀档
+    expect(hasColoredValue("span.text-green-600", "0.90")).toBe(true);
     expect(hasColoredValue("span.text-yellow-600", "0.86")).toBe(true);
+    // 边界值：0.80 仍属良好档
+    expect(hasColoredValue("span.text-yellow-600", "0.80")).toBe(true);
     expect(hasColoredValue("span.text-orange-600", "0.50")).toBe(true);
+    // 缺失值：muted 样式展示占位符
+    expect(hasColoredValue("span.text-muted-foreground", "–")).toBe(true);
   });
 
   it("renders the coefficient column on the provider usage board too", async () => {

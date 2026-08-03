@@ -252,12 +252,14 @@ export function LeaderboardTable<TParent, TSub = TParent>({
                         {col.headerTooltip && (
                           <Tooltip>
                             <TooltipTrigger asChild>
-                              <span
+                              <button
+                                type="button"
+                                aria-label={col.headerTooltip}
                                 className="ml-1 inline-flex cursor-help items-center text-muted-foreground/70 hover:text-muted-foreground"
                                 onClick={(e) => e.stopPropagation()}
                               >
                                 <CircleHelp className="h-3.5 w-3.5" />
-                              </span>
+                              </button>
                             </TooltipTrigger>
                             <TooltipContent className="max-w-64">
                               {col.headerTooltip}
