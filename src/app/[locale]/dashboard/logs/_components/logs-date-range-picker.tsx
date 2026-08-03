@@ -106,10 +106,15 @@ export function LogsDateRangePicker({
 
   const handleQuickPeriodClick = useCallback(
     (period: QuickPeriod) => {
+      // Toggle: clicking the active period again clears the date range
+      if (activeQuickPeriod === period) {
+        onDateRangeChange({ startDate: undefined, endDate: undefined });
+        return;
+      }
       const range = getDateRangeForPeriod(period, serverTimeZone);
       onDateRangeChange(range);
     },
-    [onDateRangeChange, serverTimeZone]
+    [activeQuickPeriod, onDateRangeChange, serverTimeZone]
   );
 
   const handleNavigate = useCallback(
