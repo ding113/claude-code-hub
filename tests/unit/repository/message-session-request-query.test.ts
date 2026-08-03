@@ -252,7 +252,7 @@ describe("message repository session request queries", () => {
     }
   });
 
-  test("does not add the legacy physical fallback for unscoped reserved identities", async () => {
+  test("uses the canonical expression index without adding an unscoped physical fallback", async () => {
     const count = createDrizzleQuery([{ count: 1 }]);
     const rows = createDrizzleQuery<readonly RequestRow[]>([]);
     boundary.select.mockReturnValueOnce(count).mockReturnValueOnce(rows);
@@ -260,8 +260,10 @@ describe("message repository session request queries", () => {
     await findRequestsBySessionIdentity("pfx:canonical", {} as never);
 
     for (const where of [sqlText(count.trace.where), sqlText(rows.trace.where)]) {
+      expect(where).toContain("coalesce");
+      expect(where).toContain("session_identity");
       expect(where).not.toContain("session_identity is null");
-      expect(where.match(/pfx:canonical/g)).toHaveLength(1);
+      expect(where.match(/pfx:canonical/g)).toHaveLength(2);
     }
   });
 

@@ -77,12 +77,13 @@ function messageSessionLookup(identityOrPhysicalId: string, ownerUserId?: number
 
 function messageCanonicalSessionLookup(identity: string, ownerUserId?: number) {
   const canonicalCondition = isReservedSessionIdentity(identity)
-    ? ownerUserId !== undefined
-      ? or(
-          eq(messageRequest.sessionIdentity, identity),
-          and(isNull(messageRequest.sessionIdentity), eq(messageRequest.sessionId, identity))
-        )
-      : eq(messageRequest.sessionIdentity, identity)
+    ? and(
+        // 保留 expression index 入口，同时避免 reserved identity 混入同名物理 Session。
+        eq(messageSessionIdentity, identity),
+        ownerUserId !== undefined
+          ? or(eq(messageRequest.sessionIdentity, identity), isNull(messageRequest.sessionIdentity))
+          : eq(messageRequest.sessionIdentity, identity)
+      )
     : eq(messageSessionIdentity, identity);
 
   return and(
