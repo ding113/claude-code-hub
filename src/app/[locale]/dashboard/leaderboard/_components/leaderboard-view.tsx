@@ -101,6 +101,21 @@ function renderSuccessRateCell(
 
 const VALID_PERIODS: LeaderboardPeriod[] = ["daily", "weekly", "monthly", "allTime", "custom"];
 
+// 缓存系数分层配色（与缓存命中率同档）：>=0.9 优秀（绿），>=0.8 良好（黄），其余橙色
+function renderCacheCoefficientCell(bp: number | null) {
+  if (bp == null) {
+    return <span className="text-muted-foreground">–</span>;
+  }
+  const value = bp / 10000;
+  const colorClass =
+    value >= 0.9
+      ? "text-green-600 dark:text-green-400"
+      : value >= 0.8
+        ? "text-yellow-600 dark:text-yellow-400"
+        : "text-orange-600 dark:text-orange-400";
+  return <span className={colorClass}>{value.toFixed(2)}</span>;
+}
+
 export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
   const t = useTranslations("dashboard.leaderboard");
   const searchParams = useSearchParams();
@@ -385,11 +400,10 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
     },
     {
       header: t("columns.cacheCoefficient"),
+      headerTooltip: t("columns.cacheCoefficientTooltip"),
       className: "text-right",
-      cell: (row) => {
-        const bp = "cacheCoefficientBp" in row ? row.cacheCoefficientBp : null;
-        return bp == null ? "–" : (bp / 10000).toFixed(2);
-      },
+      cell: (row) =>
+        renderCacheCoefficientCell("cacheCoefficientBp" in row ? row.cacheCoefficientBp : null),
       sortKey: "cacheCoefficientBp",
       getValue: (row) => ("cacheCoefficientBp" in row ? row.cacheCoefficientBp : null),
     },
@@ -430,11 +444,10 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
     },
     {
       header: t("columns.cacheCoefficient"),
+      headerTooltip: t("columns.cacheCoefficientTooltip"),
       className: "text-right",
-      cell: (row) => {
-        const bp = "cacheCoefficientBp" in row ? row.cacheCoefficientBp : null;
-        return bp == null ? "–" : (bp / 10000).toFixed(2);
-      },
+      cell: (row) =>
+        renderCacheCoefficientCell("cacheCoefficientBp" in row ? row.cacheCoefficientBp : null),
       sortKey: "cacheCoefficientBp",
       getValue: (row) => ("cacheCoefficientBp" in row ? row.cacheCoefficientBp : null),
     },

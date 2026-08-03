@@ -137,6 +137,16 @@ describe("v1 session endpoints", () => {
     expect(requests.response.status).toBe(200);
     expect(getSessionRequestsMock).toHaveBeenCalledWith("s1", 2, 5, "desc");
 
+    for (const identity of ["pfx:scope:fingerprint", "sid:canonical-session"]) {
+      const encodedRequests = await callV1Route({
+        method: "GET",
+        pathname: `/api/v1/sessions/${encodeURIComponent(identity)}/requests?page=1&pageSize=20&order=desc`,
+        headers,
+      });
+      expect(encodedRequests.response.status).toBe(200);
+      expect(getSessionRequestsMock).toHaveBeenLastCalledWith(identity, 1, 20, "desc");
+    }
+
     await callV1Route({
       method: "GET",
       pathname: "/api/v1/sessions/s1/requests",
