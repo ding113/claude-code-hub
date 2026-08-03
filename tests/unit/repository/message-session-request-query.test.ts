@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, test, vi } from "vitest";
+import { PgDialect } from "drizzle-orm/pg-core";
 import { messageRequest } from "@/drizzle/schema";
 import { keys as keysTable } from "@/drizzle/schema";
 import {
@@ -50,6 +51,12 @@ type RequestRow = Pick<
 
 const firstCreatedAt = new Date("2026-05-04T10:00:00.000Z");
 const secondCreatedAt = new Date("2026-05-04T10:01:00.000Z");
+const dialect = new PgDialect();
+
+function compileWhere(values: readonly unknown[]) {
+  const query = dialect.sqlToQuery(values.at(0) as never);
+  return { sql: query.sql.toLowerCase(), params: query.params };
+}
 
 describe("message repository session request queries", () => {
   beforeEach(() => {
@@ -237,33 +244,50 @@ describe("message repository session request queries", () => {
     expect(rowsWhere.match(/shared-session/g)).toHaveLength(1);
   });
 
-  test("includes a legacy null-identity physical fallback for owner-scoped reserved identities", async () => {
-    const count = createDrizzleQuery([{ count: 1 }]);
-    const rows = createDrizzleQuery<readonly RequestRow[]>([]);
-    boundary.select.mockReturnValueOnce(count).mockReturnValueOnce(rows);
+  test.each(["pfx:legacy-client", "sid:legacy-client"])(
+    "includes an owner-scoped legacy fallback without aliasing a non-null identity: %s",
+    async (identity) => {
+      const count = createDrizzleQuery([{ count: 1 }]);
+      const rows = createDrizzleQuery<readonly RequestRow[]>([]);
+      boundary.select.mockReturnValueOnce(count).mockReturnValueOnce(rows);
 
-    await findRequestsBySessionIdentity("pfx:legacy-client", { ownerUserId: 17 } as never);
+      await findRequestsBySessionIdentity(identity, { ownerUserId: 17 } as never);
 
-    for (const where of [sqlText(count.trace.where), sqlText(rows.trace.where)]) {
-      expect(where).toContain("user_id");
-      expect(where).toContain("is null");
-      expect(where).toContain("session_id");
-      expect(where.match(/pfx:legacy-client/g)).toHaveLength(2);
+      for (const where of [count.trace.where, rows.trace.where]) {
+        const compiled = compileWhere(where);
+        expect(compiled.sql).toContain(
+          'coalesce("message_request"."session_identity", "message_request"."session_id") ='
+        );
+        expect(compiled.sql).toContain(
+          '("message_request"."session_identity" = $2 or "message_request"."session_identity" is null)'
+        );
+        expect(compiled.sql).not.toContain('or "message_request"."session_id" =');
+        expect(compiled.sql).toContain('"message_request"."user_id" = $3');
+        expect(compiled.params.slice(0, 3)).toEqual([identity, identity, 17]);
+      }
     }
-  });
+  );
 
-  test("does not add the legacy physical fallback for unscoped reserved identities", async () => {
-    const count = createDrizzleQuery([{ count: 1 }]);
-    const rows = createDrizzleQuery<readonly RequestRow[]>([]);
-    boundary.select.mockReturnValueOnce(count).mockReturnValueOnce(rows);
+  test.each(["pfx:canonical", "sid:canonical"])(
+    "uses the canonical expression index with an explicit unscoped identity guard: %s",
+    async (identity) => {
+      const count = createDrizzleQuery([{ count: 1 }]);
+      const rows = createDrizzleQuery<readonly RequestRow[]>([]);
+      boundary.select.mockReturnValueOnce(count).mockReturnValueOnce(rows);
 
-    await findRequestsBySessionIdentity("pfx:canonical", {} as never);
+      await findRequestsBySessionIdentity(identity, {} as never);
 
-    for (const where of [sqlText(count.trace.where), sqlText(rows.trace.where)]) {
-      expect(where).not.toContain("session_identity is null");
-      expect(where.match(/pfx:canonical/g)).toHaveLength(1);
+      for (const where of [count.trace.where, rows.trace.where]) {
+        const compiled = compileWhere(where);
+        expect(compiled.sql).toContain(
+          'coalesce("message_request"."session_identity", "message_request"."session_id") = $1 and "message_request"."session_identity" = $2'
+        );
+        expect(compiled.sql).not.toContain('"message_request"."session_identity" is null');
+        expect(compiled.sql).not.toContain('or "message_request"."session_id" =');
+        expect(compiled.params.slice(0, 2)).toEqual([identity, identity]);
+      }
     }
-  });
+  );
 
   test("does not treat a reserved canonical identity as a physical Session alias", async () => {
     const locator = createDrizzleQuery([
