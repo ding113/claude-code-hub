@@ -245,6 +245,7 @@ describe("message repository session request queries", () => {
     await findRequestsBySessionIdentity("pfx:legacy-client", { ownerUserId: 17 } as never);
 
     for (const where of [sqlText(count.trace.where), sqlText(rows.trace.where)]) {
+      expect(where).toContain("coalesce");
       expect(where).toContain("user_id");
       expect(where).toContain("is null");
       expect(where).toContain("session_id");
