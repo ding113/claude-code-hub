@@ -124,6 +124,53 @@ describe("LeaderboardView cache coefficient column", () => {
     expect(text).toContain("–");
   });
 
+  it("shows a tooltip trigger on the cache coefficient column header", async () => {
+    fetchMock.mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes("scope=providerCacheHitRate")) {
+        return {
+          ok: true,
+          json: async () => [cacheHitEntry({ providerId: 1, cacheCoefficientBp: 9000 })],
+        } as Response;
+      }
+      return { ok: true, json: async () => [] } as Response;
+    });
+
+    await act(async () => {
+      root!.render(<LeaderboardView isAdmin />);
+    });
+
+    const trigger = container!.querySelector('[data-slot="tooltip-trigger"]');
+    expect(trigger).not.toBeNull();
+  });
+
+  it("colors the coefficient by tier: >=0.9 green, >=0.8 yellow, else orange", async () => {
+    fetchMock.mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes("scope=providerCacheHitRate")) {
+        return {
+          ok: true,
+          json: async () => [
+            cacheHitEntry({ providerId: 1, providerName: "excellent", cacheCoefficientBp: 9500 }),
+            cacheHitEntry({ providerId: 2, providerName: "good", cacheCoefficientBp: 8600 }),
+            cacheHitEntry({ providerId: 3, providerName: "poor", cacheCoefficientBp: 5000 }),
+          ],
+        } as Response;
+      }
+      return { ok: true, json: async () => [] } as Response;
+    });
+
+    await act(async () => {
+      root!.render(<LeaderboardView isAdmin />);
+    });
+
+    const hasColoredValue = (selector: string, text: string) =>
+      Array.from(container!.querySelectorAll(selector)).some((el) => el.textContent === text);
+    expect(hasColoredValue("span.text-green-600", "0.95")).toBe(true);
+    expect(hasColoredValue("span.text-yellow-600", "0.86")).toBe(true);
+    expect(hasColoredValue("span.text-orange-600", "0.50")).toBe(true);
+  });
+
   it("renders the coefficient column on the provider usage board too", async () => {
     searchParamsState.value = new URLSearchParams("scope=provider");
     fetchMock.mockImplementation(async (input) => {

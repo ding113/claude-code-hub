@@ -704,6 +704,7 @@
       "cacheHitRequests": "Cache-eligible Requests",
       "cacheHitRate": "Cache Hit Rate",
       "cacheCoefficient": "Cache Coefficient",
+      "cacheCoefficientTooltip": "A higher cache coefficient means fewer provider account switches and less noticeable cache degradation. 0.9+ is excellent, 0.8+ is good.",
       "cacheReadTokens": "Cache Read Tokens",
       "totalTokens": "Total Tokens",
       "cacheCreationConsumedAmount": "Cache Creation Spend",

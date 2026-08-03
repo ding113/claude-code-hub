@@ -704,6 +704,7 @@
       "cacheHitRequests": "缓存触发请求数",
       "cacheHitRate": "缓存命中率",
       "cacheCoefficient": "缓存系数",
+      "cacheCoefficientTooltip": "缓存系数越大，供应商切号越少，失缓现象越不明显。0.9 以上为优秀，0.8 以上为良好。",
       "cacheReadTokens": "缓存读取 Token 数",
       "totalTokens": "总 Token 数",
       "cacheCreationConsumedAmount": "缓存创建消耗金额",
