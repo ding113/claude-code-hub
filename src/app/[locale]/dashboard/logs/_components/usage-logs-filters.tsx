@@ -1,6 +1,6 @@
 "use client";
 
-import { format, startOfDay, startOfWeek } from "date-fns";
+import { format } from "date-fns";
 import { ChevronDown, Clock, Download, Network, Server, User } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -22,6 +22,7 @@ import {
 import { getErrorMessage } from "@/lib/utils/error-messages";
 import type { Key } from "@/types/key";
 import type { ProviderDisplay } from "@/types/provider";
+import { detectQuickTimePreset, getQuickTimeRange } from "../_utils/time-range";
 import { ActiveFiltersDisplay } from "./filters/active-filters-display";
 import { FilterSection } from "./filters/filter-section";
 import { IdentityFilters } from "./filters/identity-filters";
@@ -87,7 +88,6 @@ export function UsageLogsFilters({
   const [localFilters, setLocalFilters] = useState<UsageLogFilters>(filters);
   const [isExporting, setIsExporting] = useState(false);
   const [exportStatus, setExportStatus] = useState<UsageLogsExportStatus | null>(null);
-  const [activePreset, setActivePreset] = useState<FilterPreset | null>(null);
   const exportRunIdRef = useRef(0);
 
   // Track users and keys for display name resolution
@@ -159,6 +159,30 @@ export function UsageLogsFilters({
     localFilters.replayFilter,
   ]);
 
+  // Quick filter highlight states are derived from the actual filter values, so the quick
+  // filters bar, date range picker and time inputs always stay in sync no matter which
+  // control changed the underlying range.
+  const activePresets = useMemo<ReadonlySet<FilterPreset>>(() => {
+    const presets = new Set<FilterPreset>();
+    const timePreset = detectQuickTimePreset(
+      localFilters.startTime,
+      localFilters.endTime,
+      serverTimeZone
+    );
+    if (timePreset) presets.add(timePreset);
+    if (localFilters.excludeStatusCode200) presets.add("errors-only");
+    if (localFilters.minRetryCount !== undefined && localFilters.minRetryCount > 0) {
+      presets.add("show-retries");
+    }
+    return presets;
+  }, [
+    localFilters.startTime,
+    localFilters.endTime,
+    localFilters.excludeStatusCode200,
+    localFilters.minRetryCount,
+    serverTimeZone,
+  ]);
+
   useEffect(() => {
     setLocalFilters(filters);
   }, [filters]);
@@ -177,7 +201,6 @@ export function UsageLogsFilters({
     exportRunIdRef.current += 1;
     setLocalFilters({});
     setKeys([]);
-    setActivePreset(null);
     setIsExporting(false);
     setExportStatus(null);
     onReset();
@@ -291,58 +314,40 @@ export function UsageLogsFilters({
 
   const handlePresetToggle = useCallback(
     (preset: FilterPreset) => {
-      const now = new Date();
+      const isActive = activePresets.has(preset);
 
-      if (preset === activePreset) {
-        // Toggle off - clear the preset-related filters
-        setActivePreset(null);
-        setLocalFilters((prev) => {
-          const next = { ...prev };
-          if (preset === "today" || preset === "this-week") {
+      setLocalFilters((prev) => {
+        const next = { ...prev };
+
+        if (preset === "today" || preset === "this-week") {
+          if (isActive) {
             delete next.startTime;
             delete next.endTime;
-          } else if (preset === "errors-only") {
-            delete next.excludeStatusCode200;
-          } else if (preset === "show-retries") {
-            delete next.minRetryCount;
+          } else {
+            const range = getQuickTimeRange(preset, serverTimeZone);
+            if (!range) return prev;
+            next.startTime = range.startTime;
+            next.endTime = range.endTime;
           }
-          return next;
-        });
-        return;
-      }
+        } else if (preset === "errors-only") {
+          if (isActive) {
+            delete next.excludeStatusCode200;
+          } else {
+            next.excludeStatusCode200 = true;
+            next.statusCode = undefined;
+          }
+        } else if (preset === "show-retries") {
+          if (isActive) {
+            delete next.minRetryCount;
+          } else {
+            next.minRetryCount = 1;
+          }
+        }
 
-      setActivePreset(preset);
-
-      if (preset === "today") {
-        const todayStart = startOfDay(now).getTime();
-        const todayEnd = todayStart + 24 * 60 * 60 * 1000;
-        setLocalFilters((prev) => ({
-          ...prev,
-          startTime: todayStart,
-          endTime: todayEnd,
-        }));
-      } else if (preset === "this-week") {
-        const weekStart = startOfWeek(now, { weekStartsOn: 1 }).getTime();
-        const weekEnd = weekStart + 7 * 24 * 60 * 60 * 1000;
-        setLocalFilters((prev) => ({
-          ...prev,
-          startTime: weekStart,
-          endTime: weekEnd,
-        }));
-      } else if (preset === "errors-only") {
-        setLocalFilters((prev) => ({
-          ...prev,
-          excludeStatusCode200: true,
-          statusCode: undefined,
-        }));
-      } else if (preset === "show-retries") {
-        setLocalFilters((prev) => ({
-          ...prev,
-          minRetryCount: 1,
-        }));
-      }
+        return next;
+      });
     },
-    [activePreset]
+    [activePresets, serverTimeZone]
   );
 
   const handleRemoveFilter = useCallback((key: keyof UsageLogFilters) => {
@@ -351,13 +356,12 @@ export function UsageLogsFilters({
       delete next[key];
       return next;
     });
-    setActivePreset(null);
   }, []);
 
   return (
     <div className="space-y-4">
       {/* Quick Filters Bar */}
-      <QuickFiltersBar activePreset={activePreset} onPresetToggle={handlePresetToggle} />
+      <QuickFiltersBar activePresets={activePresets} onPresetToggle={handlePresetToggle} />
 
       {/* Active Filters Display */}
       <ActiveFiltersDisplay

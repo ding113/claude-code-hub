@@ -2,8 +2,10 @@ import { format } from "date-fns";
 import { describe, expect, test } from "vitest";
 import {
   dateStringWithClockToTimestamp,
+  detectQuickTimePreset,
   formatClockFromTimestamp,
   getQuickDateRange,
+  getQuickTimeRange,
   inclusiveEndTimestampFromExclusive,
   parseClockString,
   type QuickPeriod,
@@ -114,5 +116,58 @@ describe("dashboard logs time range utils", () => {
 
     expect([before, after]).toContain(range.startDate);
     expect(range.endDate).toBe(range.startDate);
+  });
+
+  test("getQuickTimeRange returns today's full-day range with exclusive end", () => {
+    const now = new Date("2024-01-15T12:00:00Z");
+
+    expect(getQuickTimeRange("today", "UTC", now)).toEqual({
+      startTime: Date.UTC(2024, 0, 15, 0, 0, 0),
+      endTime: Date.UTC(2024, 0, 16, 0, 0, 0),
+    });
+  });
+
+  test("getQuickTimeRange resolves today in the given timezone", () => {
+    const now = new Date("2024-01-02T02:00:00Z");
+    const tz = "America/Los_Angeles"; // still 2024-01-01 (PST, UTC-8) there
+
+    const range = getQuickTimeRange("today", tz, now);
+    expect(range).toEqual({
+      startTime: Date.UTC(2024, 0, 1, 8, 0, 0),
+      endTime: Date.UTC(2024, 0, 2, 8, 0, 0),
+    });
+  });
+
+  test("getQuickTimeRange returns this-week as Monday through next Monday (exclusive)", () => {
+    const now = new Date("2024-01-17T12:00:00Z"); // Wednesday
+
+    expect(getQuickTimeRange("this-week", "UTC", now)).toEqual({
+      startTime: Date.UTC(2024, 0, 15, 0, 0, 0), // Monday 00:00:00
+      endTime: Date.UTC(2024, 0, 22, 0, 0, 0), // next Monday 00:00:00
+    });
+  });
+
+  test("detectQuickTimePreset round-trips getQuickTimeRange", () => {
+    const now = new Date("2024-01-17T12:00:00Z");
+
+    for (const preset of ["today", "this-week"] as const) {
+      const range = getQuickTimeRange(preset, "UTC", now);
+      expect(range).not.toBeNull();
+      expect(detectQuickTimePreset(range?.startTime, range?.endTime, "UTC", now)).toBe(preset);
+    }
+  });
+
+  test("detectQuickTimePreset returns null for custom or incomplete ranges", () => {
+    const now = new Date("2024-01-17T12:00:00Z");
+    const today = getQuickTimeRange("today", "UTC", now);
+    expect(today).not.toBeNull();
+    if (!today) return;
+
+    // A shifted start clock breaks the exact full-day preset
+    expect(
+      detectQuickTimePreset(today.startTime + 3_600_000, today.endTime, "UTC", now)
+    ).toBeNull();
+    expect(detectQuickTimePreset(undefined, today.endTime, "UTC", now)).toBeNull();
+    expect(detectQuickTimePreset(today.startTime, undefined, "UTC", now)).toBeNull();
   });
 });

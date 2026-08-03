@@ -8,12 +8,16 @@ import { cn } from "@/lib/utils";
 export type FilterPreset = "today" | "this-week" | "errors-only" | "show-retries";
 
 interface QuickFiltersBarProps {
-  activePreset: FilterPreset | null;
+  activePresets: ReadonlySet<FilterPreset>;
   onPresetToggle: (preset: FilterPreset) => void;
   className?: string;
 }
 
-export function QuickFiltersBar({ activePreset, onPresetToggle, className }: QuickFiltersBarProps) {
+export function QuickFiltersBar({
+  activePresets,
+  onPresetToggle,
+  className,
+}: QuickFiltersBarProps) {
   const t = useTranslations("dashboard.logs.filters");
 
   const timePresets: Array<{ id: FilterPreset; label: string; icon: typeof Calendar }> = [
@@ -40,10 +44,11 @@ export function QuickFiltersBar({ activePreset, onPresetToggle, className }: Qui
         <Button
           key={id}
           type="button"
-          variant={activePreset === id ? "default" : "outline"}
+          variant={activePresets.has(id) ? "default" : "outline"}
           size="sm"
           onClick={() => onPresetToggle(id)}
           className="shrink-0"
+          aria-pressed={activePresets.has(id)}
         >
           <Icon className="h-4 w-4 mr-1.5" />
           {label}
@@ -58,10 +63,11 @@ export function QuickFiltersBar({ activePreset, onPresetToggle, className }: Qui
         <Button
           key={id}
           type="button"
-          variant={activePreset === id ? "default" : "outline"}
+          variant={activePresets.has(id) ? "default" : "outline"}
           size="sm"
           onClick={() => onPresetToggle(id)}
           className="shrink-0"
+          aria-pressed={activePresets.has(id)}
         >
           <Icon className="h-4 w-4 mr-1.5" />
           {label}
