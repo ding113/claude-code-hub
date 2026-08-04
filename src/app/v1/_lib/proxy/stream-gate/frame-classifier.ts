@@ -97,9 +97,10 @@ const STREAM_SIGNALS: Record<ProtocolFamily, StreamSignal> = {
   "openai-chat": {
     contentRules: [
       {
-        // chunk 无事件名；delta 携带 content/tool_calls/refusal/audio 即内容
+        // chunk 无事件名；delta 携带 content/reasoning/tool_calls/refusal/audio 即内容
         anyPaths: [
           "choices.#.delta.content",
+          "choices.#.delta.reasoning_content",
           "choices.#.delta.tool_calls.#.function.arguments",
           "choices.#.delta.function_call.arguments",
           "choices.#.delta.refusal",

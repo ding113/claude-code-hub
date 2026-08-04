@@ -159,10 +159,17 @@ describe("classifyFrame: anthropic", () => {
 });
 
 describe("classifyFrame: openai-chat", () => {
-  it("content: delta content / tool arguments / refusal / audio", () => {
+  it("content: delta content / reasoning / tool arguments / refusal / audio", () => {
     expect(classifyFrame("openai-chat", null, '{"choices":[{"delta":{"content":"hi"}}]}')).toBe(
       "content"
     );
+    expect(
+      classifyFrame(
+        "openai-chat",
+        null,
+        '{"choices":[{"delta":{"reasoning_content":"reasoning step"}}]}'
+      )
+    ).toBe("content");
     expect(
       classifyFrame(
         "openai-chat",
@@ -197,10 +204,13 @@ describe("classifyFrame: openai-chat", () => {
     ).toBe("neutral");
   });
 
-  it("neutral: empty string content delta", () => {
+  it("neutral: empty string content or reasoning delta", () => {
     expect(classifyFrame("openai-chat", null, '{"choices":[{"delta":{"content":""}}]}')).toBe(
       "neutral"
     );
+    expect(
+      classifyFrame("openai-chat", null, '{"choices":[{"delta":{"reasoning_content":""}}]}')
+    ).toBe("neutral");
   });
 
   it("error: in-stream error payload", () => {
