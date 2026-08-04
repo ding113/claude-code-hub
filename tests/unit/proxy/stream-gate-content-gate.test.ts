@@ -216,6 +216,24 @@ describe("runStreamContentGate", () => {
     }
   });
 
+  it("openai-chat: DeepSeek reasoning_content commits before the default event cap", async () => {
+    const reasoningFrames = Array.from(
+      { length: 65 },
+      (_, index) =>
+        `data: {"choices":[{"delta":{"reasoning_content":"reasoning step ${index}"}}]}\n\n`
+    );
+    const reader = readerFromChunks(reasoningFrames);
+    const result = await runStreamContentGate(reader, {
+      ...GATE_OPTIONS,
+      family: "openai-chat",
+    });
+
+    expect(result.committed).toBe(true);
+    if (!result.committed) return;
+    expect(await drainPrefix(result.prefixChunks)).toBe(reasoningFrames[0]);
+    expect(result.readerDone).toBe(false);
+  });
+
   it("gemini: usage-only chunks buffer until content commits", async () => {
     const reader = readerFromChunks([
       'data: {"usageMetadata":{"totalTokenCount":1}}\n\n',

@@ -606,6 +606,31 @@ describe("F1 stream content gate x ProxyForwarder sequential path", () => {
       }
     );
 
+    test("Replay owner 将 OpenAI-compatible DeepSeek reasoning_content 视为首个有效内容", async () => {
+      const provider = createProvider({
+        id: 1,
+        name: "deepseek-reasoning",
+        providerType: "openai-compatible",
+      });
+      const session = createSession();
+      session.setProvider(provider);
+      attachReplayOwner(session, REPLAY_GATE_CASES[1]);
+
+      const reasoningFrames = Array.from({ length: 65 }, (_, index) =>
+        sseFrame(null, { choices: [{ delta: { reasoning_content: `reasoning step ${index}` } }] })
+      );
+      const doForward = spyOnDoForward();
+      doForward.mockImplementationOnce(async () => createSseResponse(reasoningFrames));
+
+      const response = await ProxyForwarder.send(session);
+      const text = await response.text();
+
+      expect(doForward).toHaveBeenCalledTimes(1);
+      expect(text).toBe(reasoningFrames.join(""));
+      expect(mocks.pickRandomProviderWithExclusion).not.toHaveBeenCalled();
+      expect(mocks.recordFailure).not.toHaveBeenCalled();
+    });
+
     test("Replay owner 在所有 precommit attempt 失败后立即释放所有权", async () => {
       const provider = createProvider({ id: 1, name: "replay-only", providerType: "codex" });
       const session = createSession();
