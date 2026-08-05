@@ -31,10 +31,9 @@ Prices are in USD per one million tokens.
 - Context window: `1,000,000` tokens
 - Input modalities: text, image, and video
 - Thinking: adaptive or disabled
-- Standard tier, up to `512,000` input tokens: input `$0.30`, output `$1.20`, cache read `$0.06`
-- Standard tier, above `512,000` input tokens: input `$0.60`, output `$2.40`, cache read `$0.12`
-- Priority tier, up to `512,000` input tokens: input `$0.45`, output `$1.80`, cache read `$0.09`
-- Priority tier, above `512,000` input tokens: input `$0.90`, output `$3.60`, cache read `$0.18`
+- Input: `$0.60`
+- Output: `$2.40`
+- Cache read: `$0.12`
 - Cache write pricing: not specified
 
 ### MiniMax-M2.7
