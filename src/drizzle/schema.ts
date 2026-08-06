@@ -1056,6 +1056,8 @@ export const systemSettings = pgTable('system_settings', {
 
   // F2 Replay 开关覆写（null = 跟随环境变量 ENABLE_REQUEST_REPLAY）
   replayEnabled: boolean('replay_enabled'),
+  // F2 Replay 完成 payload 的可重放窗口(分钟,默认 30)
+  replayCacheTtlMinutes: integer('replay_cache_ttl_minutes').notNull().default(30),
 
   // F3b 最长前缀匹配缓存模拟开关覆写（null = 跟随环境变量 ENABLE_CACHE_EFFECTIVENESS）
   cacheEffectivenessEnabled: boolean('cache_effectiveness_enabled'),

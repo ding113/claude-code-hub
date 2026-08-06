@@ -291,8 +291,13 @@ describe("src/repository/_shared/transformers.ts", () => {
       expect(result.enableHttp2).toBe(false);
       expect(result.enableOpenaiResponsesWebsocket).toBe(true);
       expect(result.interceptAnthropicWarmupRequests).toBe(false);
+      expect(result.replayCacheTtlMinutes).toBe(30);
       expect(result.createdAt).toEqual(now);
       expect(result.updatedAt).toEqual(now);
+    });
+
+    it("应映射 Replay 缓存时间", () => {
+      expect(toSystemSettings({ replayCacheTtlMinutes: 45 }).replayCacheTtlMinutes).toBe(45);
     });
 
     it("应映射 interceptAnthropicWarmupRequests 字段", () => {

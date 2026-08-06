@@ -2,6 +2,7 @@ import { PROVIDER_TIMEOUT_DEFAULTS } from "@/lib/constants/provider.constants";
 import { normalizeProviderModelRedirectRules } from "@/lib/provider-model-redirects";
 import { DEFAULT_SITE_TITLE } from "@/lib/site-title";
 import { formatCostForStorage } from "@/lib/utils/currency";
+import { REPLAY_CACHE_TTL_MINUTES_DEFAULT } from "@/lib/validation/replay-settings";
 import type { Key } from "@/types/key";
 import type { MessageRequest } from "@/types/message";
 import type { ModelPrice } from "@/types/model-price";
@@ -320,6 +321,7 @@ export function toSystemSettings(dbSettings: any): SystemSettings {
         : "enforce",
     affinityIgnoreClientSessionId: dbSettings?.affinityIgnoreClientSessionId ?? true,
     replayEnabled: dbSettings?.replayEnabled ?? null,
+    replayCacheTtlMinutes: dbSettings?.replayCacheTtlMinutes ?? REPLAY_CACHE_TTL_MINUTES_DEFAULT,
     cacheEffectivenessEnabled: dbSettings?.cacheEffectivenessEnabled ?? null,
     createdAt: dbSettings?.createdAt ? new Date(dbSettings.createdAt) : new Date(),
     updatedAt: dbSettings?.updatedAt ? new Date(dbSettings.updatedAt) : new Date(),

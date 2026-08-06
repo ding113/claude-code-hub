@@ -328,11 +328,17 @@ export async function startReplayCleanupScheduler(): Promise<void> {
     const intervalMs = 10 * 60 * 1000;
 
     const runTick = () => {
-      void runReplayCleanupTick().catch((error) => {
-        logger.warn("[Instrumentation] Replay cleanup tick failed", {
-          error: error instanceof Error ? error.message : String(error),
+      void runReplayCleanupTick()
+        .then((result) => {
+          if (result.deleted > 0) {
+            logger.info("[Instrumentation] Replay cleanup tick completed", result);
+          }
+        })
+        .catch((error) => {
+          logger.warn("[Instrumentation] Replay cleanup tick failed", {
+            ...describeSchedulerError(error),
+          });
         });
-      });
     };
 
     runTick();
@@ -344,7 +350,7 @@ export async function startReplayCleanupScheduler(): Promise<void> {
     });
   } catch (error) {
     logger.warn("[Instrumentation] Replay cleanup scheduler init failed", {
-      error: error instanceof Error ? error.message : String(error),
+      ...describeSchedulerError(error),
     });
   }
 }
