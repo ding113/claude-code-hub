@@ -71,6 +71,8 @@
   "balance": "余额",
   "upstreamBalance": "上游余额",
   "todayCost": "今日消费",
+  "todayCostTotalTitle": "所有中转今日总花费",
+  "todayCostTotalHelp": "汇总已同步的各中转单位今日上游花费。",
   "fieldUsername": "登录账号",
   "fieldUsernamePlaceholder": "邮箱或用户名",
   "fieldPassword": "登录密码",

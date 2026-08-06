@@ -12,8 +12,10 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useVirtualizedInfiniteList } from "@/hooks/use-virtualized-infinite-list";
 import type { MyUsageLogEntry } from "@/lib/api-client/v1/actions/my-usage";
-import { CURRENCY_CONFIG, type CurrencyCode } from "@/lib/utils";
+import type { CurrencyCode } from "@/lib/utils";
 import { copyTextToClipboard } from "@/lib/utils/clipboard";
+import { formatCurrency } from "@/lib/utils/currency";
+import { BillingDetailsTooltipContent } from "./billing-details-tooltip";
 
 const ROW_HEIGHT = 80;
 
@@ -295,8 +297,19 @@ export function UsageLogsTable({
                       {formatTokenAmount(log.cacheReadInputTokens)}
                     </div>
                     <div className="flex-[0.8] min-w-[90px] px-2 text-right text-sm font-mono">
-                      {CURRENCY_CONFIG[currencyCode]?.symbol ?? currencyCode}
-                      {Number(log.cost ?? 0).toFixed(4)}
+                      <TooltipProvider>
+                        <Tooltip delayDuration={200}>
+                          <TooltipTrigger asChild>
+                            <button
+                              type="button"
+                              className="cursor-help border-0 bg-transparent p-0 font-mono text-sm tabular-nums underline-offset-2 hover:underline"
+                            >
+                              {formatCurrency(log.cost ?? 0, currencyCode, 6)}
+                            </button>
+                          </TooltipTrigger>
+                          <BillingDetailsTooltipContent log={log} currencyCode={currencyCode} />
+                        </Tooltip>
+                      </TooltipProvider>
                     </div>
                     <div className="flex-[0.7] min-w-[80px] px-3">
                       <Badge

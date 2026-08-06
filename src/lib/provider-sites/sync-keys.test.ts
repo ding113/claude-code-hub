@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  findUnboundUpstreamApiKeys,
   findStaleSiteProviderIds,
   isSiteProviderGroupStale,
   resolveSiteProviderBalanceEnabled,
@@ -61,6 +62,24 @@ describe("findStaleSiteProviderIds", () => {
 
   it("normalizes duplicate upstream names without changing the keep decision", () => {
     expect(findStaleSiteProviderIds(rows, [" GPT  PLUS ", "gpt plus"])).toEqual([12]);
+  });
+});
+
+describe("findUnboundUpstreamApiKeys", () => {
+  it("returns unassigned/orphaned keys but preserves unknown group IDs", () => {
+    expect(
+      findUnboundUpstreamApiKeys([
+        { ...upstreamKey("orphan-secret"), id: "orphan", groupName: "", groupBinding: "unbound" },
+        {
+          ...upstreamKey("orphaned-secret"),
+          id: "orphaned",
+          groupName: "",
+          groupBinding: "orphaned",
+        },
+        { ...upstreamKey("bound-secret"), id: "bound", groupName: "GPT Plus", groupBinding: "bound" },
+        { ...upstreamKey("unknown-secret"), id: "unknown", groupName: "", groupBinding: "unknown" },
+      ]).map((key) => key.id)
+    ).toEqual(["orphan", "orphaned"]);
   });
 });
 

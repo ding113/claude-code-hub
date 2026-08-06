@@ -20,8 +20,9 @@ export interface CircuitBreakerConfig {
 }
 
 // 默认配置（向后兼容）
+// failureThreshold <= 0 表示禁用熔断器（全局默认禁用）
 export const DEFAULT_CIRCUIT_BREAKER_CONFIG: CircuitBreakerConfig = {
-  failureThreshold: 5,
+  failureThreshold: 0,
   openDuration: 1800000, // 30 分钟
   halfOpenSuccessThreshold: 2,
 };

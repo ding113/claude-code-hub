@@ -138,7 +138,7 @@ export const PRESETS: Record<string, PresetConfig> = {
     description: "Gemini generateContent flash",
     providerTypes: ["gemini", "gemini-cli"],
     payload: gmFlashBasic,
-    defaultSuccessContains: "pong",
+    defaultSuccessContains: "",
     defaultModel: "gemini-2.5-flash",
     path: "/v1beta/models/{model}:generateContent",
     userAgent: "GeminiCLI/v24.11.0 (linux; x64)",

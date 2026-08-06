@@ -32,7 +32,7 @@ export const CLAUDE_TEST_BODY: ClaudeTestBody = {
   messages: [
     {
       role: "user",
-      content: [{ type: "text", text: "ping" }],
+      content: [{ type: "text", text: "hi" }],
     },
   ],
 };
@@ -45,7 +45,7 @@ export const CODEX_TEST_BODY: CodexTestBody = {
     {
       type: "message",
       role: "user",
-      content: [{ type: "input_text", text: "ping" }],
+      content: [{ type: "input_text", text: "hi" }],
     },
   ],
   tools: [],
@@ -59,7 +59,7 @@ export const CODEX_TEST_BODY: CodexTestBody = {
 
 export const OPENAI_TEST_BODY: OpenAITestBody = {
   model: "gpt-4.1-mini",
-  messages: [{ role: "user", content: "ping" }],
+  messages: [{ role: "user", content: "hi" }],
   max_tokens: 8,
   stream: true,
 };
@@ -68,7 +68,7 @@ export const GEMINI_TEST_BODY: GeminiTestBody = {
   contents: [
     {
       role: "user",
-      parts: [{ text: "ping" }],
+      parts: [{ text: "hi" }],
     },
   ],
   generationConfig: {
@@ -109,12 +109,12 @@ export const DEFAULT_MODELS: Record<ProviderType, string> = {
 };
 
 export const DEFAULT_SUCCESS_CONTAINS: Record<ProviderType, string> = {
-  claude: "pong",
-  "claude-auth": "pong",
-  codex: "pong",
-  "openai-compatible": "pong",
-  gemini: "pong",
-  "gemini-cli": "pong",
+  claude: "",
+  "claude-auth": "",
+  codex: "",
+  "openai-compatible": "",
+  gemini: "",
+  "gemini-cli": "",
 };
 
 export const API_ENDPOINTS: Record<ProviderType, string> = {

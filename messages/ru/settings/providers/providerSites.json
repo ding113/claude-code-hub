@@ -71,6 +71,8 @@
   "balance": "Баланс",
   "upstreamBalance": "Баланс upstream",
   "todayCost": "Расход сегодня",
+  "todayCostTotalTitle": "Расходы всех ретрансляторов за сегодня",
+  "todayCostTotalHelp": "Сумма сегодняшних расходов upstream по всем синхронизированным сайтам.",
   "fieldUsername": "Логин",
   "fieldUsernamePlaceholder": "Email или имя",
   "fieldPassword": "Пароль",

@@ -150,5 +150,7 @@ export interface ProviderSiteSyncResult {
     keysSeen: number;
     /** Upstream keys auto-created for empty eligible groups. */
     keysAutoCreated?: number;
+    /** Upstream API keys deleted because they were explicitly unassigned. */
+    unboundUpstreamKeysDeleted?: number;
   };
 }

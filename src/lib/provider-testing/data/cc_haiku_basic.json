@@ -5,7 +5,7 @@
   "messages": [
     {
       "role": "user",
-      "content": "ping"
+      "content": "hi"
     }
   ]
 }

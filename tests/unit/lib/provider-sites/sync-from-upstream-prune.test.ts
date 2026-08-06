@@ -4,6 +4,7 @@ const mocks = vi.hoisted(() => ({
   findProviderSiteAuthRow: vi.fn(),
   updateProviderSite: vi.fn(),
   upsertProviderSiteGroupRate: vi.fn(),
+  deleteUnboundUpstreamApiKeys: vi.fn(),
   deleteProviderSiteGroupRatesNotIn: vi.fn(),
   findUnkeyedOtherSiteGroupNames: vi.fn(),
   pruneStaleSiteProvidersForUpstreamGroups: vi.fn(),
@@ -37,6 +38,7 @@ vi.mock("@/lib/provider-sites/secret-box", () => ({
   encryptSecret: mocks.encryptSecret,
 }));
 vi.mock("@/lib/provider-sites/sync-keys", () => ({
+  deleteUnboundUpstreamApiKeys: mocks.deleteUnboundUpstreamApiKeys,
   findUnkeyedOtherSiteGroupNames: mocks.findUnkeyedOtherSiteGroupNames,
   pruneStaleSiteProvidersForUpstreamGroups: mocks.pruneStaleSiteProvidersForUpstreamGroups,
   syncSiteKeysForGroups: mocks.syncSiteKeysForGroups,
@@ -96,6 +98,7 @@ describe("syncProviderSiteFromUpstream pruning order", () => {
     mocks.resolveSystemTimezone.mockResolvedValue("UTC");
     mocks.fetchUpstreamBalance.mockResolvedValue({ balance: 1, todayCost: 0, totalCost: 0 });
     mocks.upsertProviderSiteGroupRate.mockResolvedValue({});
+    mocks.deleteUnboundUpstreamApiKeys.mockResolvedValue(0);
     mocks.deleteProviderSiteGroupRatesNotIn.mockResolvedValue([]);
     mocks.findAllProviderGroups.mockResolvedValue([]);
     mocks.findUnkeyedOtherSiteGroupNames.mockReturnValue([]);
@@ -171,5 +174,50 @@ describe("syncProviderSiteFromUpstream pruning order", () => {
       "Current Group",
     ]);
     expect(result.keysSynced?.deleted).toBe(1);
+  });
+
+  it("cleans explicitly unbound upstream keys during a trusted group refresh", async () => {
+    const upstreamKeys = [
+      {
+        id: "orphan-key",
+        key: "sk-orphan-123456",
+        name: "orphan",
+        groupName: "",
+        groupBinding: "unbound",
+        status: "enabled",
+      },
+    ];
+    mocks.fetchUpstreamApiKeys.mockResolvedValue(upstreamKeys);
+    mocks.deleteUnboundUpstreamApiKeys.mockResolvedValue(1);
+
+    const result = await syncProviderSiteFromUpstream(7);
+
+    expect(mocks.deleteUnboundUpstreamApiKeys).toHaveBeenCalledWith({
+      siteId: 7,
+      siteName: "site-a",
+      upstreamKeys,
+      creds: expect.objectContaining({ siteUrl: "https://site.example" }),
+      session: expect.objectContaining({ accessToken: "token" }),
+    });
+    expect(result.keysSynced?.unboundUpstreamKeysDeleted).toBe(1);
+  });
+
+  it("does not clean unbound keys when the group list is empty", async () => {
+    mocks.fetchUpstreamGroupRates.mockResolvedValue([]);
+    mocks.fetchUpstreamApiKeys.mockResolvedValue([
+      {
+        id: "orphan-key",
+        key: "sk-orphan-123456",
+        name: "orphan",
+        groupName: "",
+        groupBinding: "unbound",
+        status: "enabled",
+      },
+    ]);
+
+    const result = await syncProviderSiteFromUpstream(7);
+
+    expect(result.ok).toBe(true);
+    expect(mocks.deleteUnboundUpstreamApiKeys).not.toHaveBeenCalled();
   });
 });

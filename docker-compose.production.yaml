@@ -1,0 +1,49 @@
+name: cch-site-config-production
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: claude-code-hub-local:site-based-provider-config
+    container_name: claude-code-hub-app-1
+    env_file:
+      - ./.env
+    environment:
+      NODE_ENV: production
+      HOSTNAME: "0.0.0.0"
+      PORT: "3000"
+      DSN: postgresql://${DB_USER}:${DB_PASSWORD}@claude-code-hub-postgres-1:5432/${DB_NAME:-claude_code_hub}
+      REDIS_URL: redis://claude-code-hub-redis-1:6379
+      AUTO_MIGRATE: ${AUTO_MIGRATE:-true}
+      ENABLE_RATE_LIMIT: ${ENABLE_RATE_LIMIT:-true}
+      SESSION_TTL: ${SESSION_TTL:-300}
+      DB_POOL_IDLE_TIMEOUT: ${DB_POOL_IDLE_TIMEOUT:-20}
+      DB_POOL_CONNECT_TIMEOUT: ${DB_POOL_CONNECT_TIMEOUT:-10}
+      MAX_RETRY_ATTEMPTS_DEFAULT: ${MAX_RETRY_ATTEMPTS_DEFAULT:-1}
+      LANGFUSE_SAMPLE_RATE: ${LANGFUSE_SAMPLE_RATE:-1.0}
+      TZ: Asia/Shanghai
+    ports:
+      - "${APP_PORT:-23000}:3000"
+    volumes:
+      - ./data/reports:/app/reports
+    restart: unless-stopped
+    networks:
+      - cch_live
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000/api/actions/health').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+
+networks:
+  cch_live:
+    external: true
+    name: claude-code-hub_default

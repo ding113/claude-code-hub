@@ -131,5 +131,37 @@
     "lastStatus": "最近：{code}（{time}）",
     "successRate": "{rate}%",
     "noData": "無資料"
+  },
+  "balance": {
+    "title": "帳戶餘額",
+    "unlimited": "不限制",
+    "description": "可用預付餘額",
+    "depleted": "餘額已用盡"
+  },
+  "groupRates": {
+    "title": "當前分組倍率",
+    "subtitle": "每個分組當前最優先呼叫供應商的有效計費倍率，即時跟隨調度變化",
+    "autoRefresh": "即時更新",
+    "live": "即時",
+    "loadFailed": "倍率載入失敗",
+    "empty": "暫無可用分組供應商",
+    "free": "免費",
+    "multiplierHint": "有效計費倍率 = 供應商倍率 × 分組倍率",
+    "modeHealth": "健康優選",
+    "modePriority": "優先級優選",
+    "online": "在線率",
+    "firstByte": "首字",
+    "requestFormat": "請求格式",
+    "formatClaude": "Claude Messages",
+    "formatClaudeAuth": "Claude Auth",
+    "formatCodex": "Codex Responses",
+    "formatGemini": "Gemini",
+    "formatGeminiCli": "Gemini CLI",
+    "formatOpenaiCompatible": "OpenAI Compatible",
+    "formatUnknown": "未知格式",
+    "providerMult": "供應商",
+    "groupMult": "分組",
+    "effectiveMult": "有效",
+    "totalLatency": "總耗時"
   }
 }

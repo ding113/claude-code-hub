@@ -131,5 +131,37 @@
     "lastStatus": "最終: {code} ({time})",
     "successRate": "{rate}%",
     "noData": "データなし"
+  },
+  "balance": {
+    "title": "アカウント残高",
+    "unlimited": "無制限",
+    "description": "利用可能な前払い残高",
+    "depleted": "残高を使い切りました"
+  },
+  "groupRates": {
+    "title": "グループ倍率（ライブ）",
+    "subtitle": "各グループで現在優先されるプロバイダーの実効課金倍率（リアルタイム）",
+    "autoRefresh": "リアルタイム更新",
+    "live": "ライブ",
+    "loadFailed": "倍率の取得に失敗",
+    "empty": "利用可能なグループがありません",
+    "free": "無料",
+    "multiplierHint": "実効倍率 = プロバイダー倍率 × グループ倍率",
+    "modeHealth": "ヘルス優先",
+    "modePriority": "優先度優先",
+    "online": "オンライン",
+    "firstByte": "初字",
+    "requestFormat": "リクエスト形式",
+    "formatClaude": "Claude Messages",
+    "formatClaudeAuth": "Claude Auth",
+    "formatCodex": "Codex Responses",
+    "formatGemini": "Gemini",
+    "formatGeminiCli": "Gemini CLI",
+    "formatOpenaiCompatible": "OpenAI Compatible",
+    "formatUnknown": "不明な形式",
+    "providerMult": "プロバイダー",
+    "groupMult": "グループ",
+    "effectiveMult": "実効",
+    "totalLatency": "総時間"
   }
 }

@@ -11,6 +11,7 @@ import {
   StringListResponseSchema,
 } from "@/lib/api/v1/schemas/me";
 import {
+  getMeGroupRates,
   getMeIpGeo,
   getMeMetadata,
   getMeQuota,
@@ -93,6 +94,28 @@ meRouter.openapi(
     },
   }),
   getMeQuota as never
+);
+
+meRouter.openapi(
+  createRoute({
+    method: "get",
+    path: "/me/group-rates",
+    middleware: requireAuth("read"),
+    tags: ["Me"],
+    summary: "Get preferred provider rates by group",
+    description:
+      "Returns the current preferred provider, request format, and effective multiplier for each visible group.",
+    "x-required-access": "read",
+    security,
+    responses: {
+      200: {
+        description: "Preferred group rates.",
+        content: { "application/json": { schema: GenericMeResponseSchema } },
+      },
+      ...problemResponses,
+    },
+  }),
+  getMeGroupRates as never
 );
 
 meRouter.openapi(

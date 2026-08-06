@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createUpstreamApiKey,
+  deleteUpstreamApiKey,
+  fetchUpstreamApiKeys,
   fetchUpstreamBalance,
   fetchUpstreamGroupRates,
   isUpstreamUnauthorizedError,
@@ -19,6 +21,21 @@ const baseCreds = (): UpstreamSiteCredentials => ({
   captchaApiKey: null,
   captchaEndpoint: null,
 });
+
+// happy-dom's Headers drops "set-cookie" (forbidden header name), so
+// headers.get("set-cookie") returns null there. Patch the getter so tests
+// can exercise cookie-refresh flows that rely on the upstream Set-Cookie.
+function withSetCookie(res: Response, value: string): Response {
+  const originalGet = res.headers.get.bind(res.headers);
+  Object.defineProperty(res.headers, "get", {
+    configurable: true,
+    value(name: string) {
+      if (name.toLowerCase() === "set-cookie") return value;
+      return originalGet(name);
+    },
+  });
+  return res;
+}
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -134,6 +151,69 @@ describe("upstream-connector sub2api", () => {
     ]);
   });
 
+  it("marks missing group objects as orphaned only with a trusted group map", async () => {
+    const session: UpstreamAuthSession = {
+      accessToken: "tok",
+      expiresAt: new Date(Date.now() + 60_000),
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.endsWith("/api/v1/groups/available")) {
+          return new Response(JSON.stringify({ code: 0, data: [{ id: 7, name: "plus-1" }] }), {
+            status: 200,
+          });
+        }
+        if (url.includes("/api/v1/keys?")) {
+          return new Response(
+            JSON.stringify({
+              code: 0,
+              data: {
+                items: [
+                  {
+                    id: 1,
+                    key: "bound-secret",
+                    name: "bound",
+                    group_id: 7,
+                    group: { id: 7, name: "plus-1" },
+                    status: "enabled",
+                  },
+                  {
+                    id: 2,
+                    key: "orphaned-secret",
+                    name: "orphaned",
+                    group_id: 99,
+                    status: "enabled",
+                  },
+                  {
+                    id: 3,
+                    key: "unbound-secret",
+                    name: "unbound",
+                    group_id: null,
+                    status: "enabled",
+                  },
+                ],
+                pages: 1,
+              },
+            }),
+            { status: 200 }
+          );
+        }
+        throw new Error(`unexpected url ${url}`);
+      })
+    );
+
+    const keys = await fetchUpstreamApiKeys(baseCreds(), session);
+    expect(
+      keys.map(({ name, groupBinding, groupName }) => ({ name, groupBinding, groupName }))
+    ).toEqual([
+      { name: "bound", groupBinding: "bound", groupName: "plus-1" },
+      { name: "orphaned", groupBinding: "orphaned", groupName: "" },
+      { name: "unbound", groupBinding: "unbound", groupName: "" },
+    ]);
+  });
+
   it("auto-creates a key for an empty group then re-lists the secret", async () => {
     const session: UpstreamAuthSession = {
       accessToken: "tok",
@@ -197,6 +277,21 @@ describe("upstream-connector sub2api", () => {
     expect(created).toBe(true);
   });
 
+  it("deletes a sub2api key by upstream id", async () => {
+    const session: UpstreamAuthSession = {
+      accessToken: "tok",
+      expiresAt: new Date(Date.now() + 60_000),
+    };
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      expect(String(input)).toBe("https://example-upstream.test/api/v1/keys/42");
+      expect(init?.method).toBe("DELETE");
+      return new Response("", { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(deleteUpstreamApiKey(baseCreds(), session, 42)).resolves.toBeUndefined();
+  });
+
   it("returns null when create is rejected so next tick can retry", async () => {
     const session: UpstreamAuthSession = {
       accessToken: "tok",
@@ -226,6 +321,45 @@ describe("upstream-connector sub2api", () => {
 });
 
 describe("upstream-connector newapi", () => {
+  it("refreshes an expired dashboard session before password login", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      expect(String(input)).toBe("https://example-upstream.test/api/user/auth/refresh");
+      expect(init?.method).toBe("POST");
+      expect(new Headers(init?.headers).get("cookie")).toBe("new_api_refresh=old");
+      return withSetCookie(
+        new Response(
+          JSON.stringify({
+            success: true,
+            data: {
+              access_token: "refreshed-token",
+              access_expires_at: Math.floor(Date.now() / 1000) + 900,
+              user: { id: 9 },
+            },
+          }),
+          { status: 200 }
+        ),
+        "new_api_refresh=new; Path=/; HttpOnly"
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const session = await loginUpstreamSite({
+      ...baseCreds(),
+      siteType: "newapi",
+      session: {
+        cookie: "new_api_refresh=old",
+        userId: "9",
+        expiresAt: new Date(Date.now() - 60_000),
+      },
+    });
+
+    expect(session.accessToken).toBe("refreshed-token");
+    expect(session.cookie).toContain("new_api_refresh=new");
+    expect(session.userId).toBe("9");
+    expect(session.expiresAt.getTime()).toBeGreaterThan(Date.now());
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it("marks a 401 response as an expired upstream session", async () => {
     const session: UpstreamAuthSession = {
       cookie: "session=stale",
@@ -357,6 +491,54 @@ describe("upstream-connector newapi", () => {
     });
   });
 
+  it("stops revealing newapi keys after a 429 instead of hammering the batch", async () => {
+    const creds = { ...baseCreds(), siteType: "newapi", username: "admin" };
+    const session: UpstreamAuthSession = {
+      cookie: "session=abc",
+      userId: "9",
+      expiresAt: new Date(Date.now() + 60_000),
+    };
+    const revealCalls: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        if (url.includes("/api/token/?")) {
+          return new Response(
+            JSON.stringify({
+              success: true,
+              data: {
+                items: [
+                  { id: 42, key: "skab****xyz9", name: "a", group: "plus-1", status: 1 },
+                  { id: 43, key: "skcd****xyz0", name: "b", group: "plus-1", status: 1 },
+                ],
+                pages: 1,
+              },
+            }),
+            { status: 200 }
+          );
+        }
+        if (url.endsWith("/api/token/42/key")) {
+          revealCalls.push("42");
+          return new Response("", { status: 429 });
+        }
+        if (url.endsWith("/api/token/43/key")) {
+          revealCalls.push("43");
+          return new Response(JSON.stringify({ success: true, data: { key: "sk-full-43" } }), {
+            status: 200,
+          });
+        }
+        throw new Error(`unexpected url ${url} method=${init?.method}`);
+      })
+    );
+
+    const keys = await fetchUpstreamApiKeys(creds, session);
+    expect(revealCalls).toEqual(["42"]);
+    expect(keys.map((k) => k.id)).toEqual(["42", "43"]);
+    expect(keys[0].key).toBe("skab****xyz9");
+    expect(keys[1].key).toBe("skcd****xyz0");
+  });
+
   it("creates a token then reveals the full secret from re-list", async () => {
     const creds = { ...baseCreds(), siteType: "newapi", username: "admin" };
     const session: UpstreamAuthSession = {
@@ -418,5 +600,22 @@ describe("upstream-connector newapi", () => {
     const key = await createUpstreamApiKey(creds, session, { groupName: "plus-1" });
     expect(key?.key).toBe("sk-newapi-full-secret-abcdef");
     expect(key?.groupName).toBe("plus-1");
+  });
+
+  it("deletes a newapi token by upstream id", async () => {
+    const creds = { ...baseCreds(), siteType: "newapi", username: "admin" };
+    const session: UpstreamAuthSession = {
+      cookie: "session=abc",
+      userId: "9",
+      expiresAt: new Date(Date.now() + 60_000),
+    };
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      expect(String(input)).toBe("https://example-upstream.test/api/token/42");
+      expect(init?.method).toBe("DELETE");
+      return new Response("", { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(deleteUpstreamApiKey(creds, session, "42")).resolves.toBeUndefined();
   });
 });

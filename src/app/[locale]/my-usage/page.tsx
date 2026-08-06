@@ -5,7 +5,9 @@ import { useRouter } from "@/i18n/routing";
 import { getMyQuota, type MyUsageQuota } from "@/lib/api-client/v1/actions/my-usage";
 import { getServerTimeZone } from "@/lib/api-client/v1/actions/system-config";
 import { CollapsibleQuotaCard } from "./_components/collapsible-quota-card";
+import { BalanceCard } from "./_components/balance-card";
 import { ExpirationInfo } from "./_components/expiration-info";
+import { GroupRatesCard } from "./_components/group-rates-card";
 import { MyUsageHeader } from "./_components/my-usage-header";
 import { ProviderGroupInfo } from "./_components/provider-group-info";
 import { StatisticsSummaryCard } from "./_components/statistics-summary-card";
@@ -58,20 +60,30 @@ export default function MyUsagePage() {
             userAllowedModels={quota.userAllowedModels}
             userAllowedClients={quota.userAllowedClients}
           />
+          <GroupRatesCard pollSeconds={3} />
           <ExpirationInfo
             keyExpiresAt={keyExpiresAt}
             userExpiresAt={userExpiresAt}
             userRpmLimit={quota.userRpmLimit}
             timezone={serverTimeZone}
           />
+          <BalanceCard balanceUsd={quota.balanceUsd} currencyCode={quota.currencyCode} />
         </div>
       ) : null}
 
-      <CollapsibleQuotaCard quota={quota} loading={isQuotaLoading} />
+      <CollapsibleQuotaCard
+        quota={quota}
+        loading={isQuotaLoading}
+        currencyCode={quota?.currencyCode}
+      />
 
       <StatisticsSummaryCard serverTimeZone={serverTimeZone} />
 
-      <UsageLogsSection autoRefreshSeconds={30} serverTimeZone={serverTimeZone} />
+      <UsageLogsSection
+        autoRefreshSeconds={5}
+        defaultOpen
+        serverTimeZone={serverTimeZone}
+      />
     </div>
   );
 }

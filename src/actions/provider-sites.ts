@@ -113,6 +113,7 @@ export type ProviderSiteSyncResultDto = {
     skippedGroups: string[];
     keysSeen: number;
     keysAutoCreated?: number;
+    unboundUpstreamKeysDeleted?: number;
   };
 };
 

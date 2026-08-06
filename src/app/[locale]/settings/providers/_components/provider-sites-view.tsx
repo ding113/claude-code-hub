@@ -37,6 +37,7 @@ import {
   X,
 } from "lucide-react";
 import { useTranslations } from "next-intl";
+import { createPortal } from "react-dom";
 import {
   type ChangeEvent,
   type CSSProperties,
@@ -103,6 +104,7 @@ import {
   resolveProviderSiteGroupHealthState,
 } from "@/lib/provider-sites/group-health";
 import { cn } from "@/lib/utils";
+import { sumCosts } from "@/lib/utils/currency";
 import type { ProviderDisplay } from "@/types/provider";
 import { invalidateProviderQueries } from "./invalidate-provider-queries";
 import { getProviderHealthTestStatus, ProviderHealthTestCard } from "./provider-health-test-card";
@@ -229,71 +231,11 @@ function SortableSiteShell({
   );
 }
 
-function SiteDragPreview({ site }: { site: ProviderSiteListItem }) {
-  const rates = [...site.groupRates].sort((a, b) => a.ratio - b.ratio);
-  const minRatio = rates[0]?.ratio;
-  const maxRatio = rates[rates.length - 1]?.ratio;
-
-  return (
-    <div
-      aria-hidden="true"
-      className="pointer-events-none flex w-[min(340px,calc(100vw-2rem))] items-center gap-2.5 rounded-xl border border-primary/30 bg-card/95 px-3 py-2.5 shadow-xl ring-1 ring-primary/10 backdrop-blur-sm"
-    >
-      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
-        <GripVertical className="h-4 w-4" />
-      </span>
-      <div className="min-w-0 flex-1">
-        <div className="flex min-w-0 items-center gap-1.5">
-          <p className="min-w-0 truncate text-sm font-semibold tracking-tight">{site.name}</p>
-          <Badge variant="outline" className="h-5 shrink-0 px-1.5 text-[10px] font-normal">
-            {site.siteType}
-          </Badge>
-        </div>
-        <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
-          {hostnameOf(site.siteUrl)}
-        </p>
-      </div>
-      {minRatio != null && maxRatio != null ? (
-        <span className="hidden shrink-0 items-center gap-1 sm:inline-flex">
-          <span
-            className={cn(
-              "rounded-full border px-1.5 py-0.5 font-mono text-[10px]",
-              ratioTone(minRatio)
-            )}
-          >
-            {formatRatio(minRatio)}
-          </span>
-          {minRatio !== maxRatio ? (
-            <>
-              <span className="text-[10px] text-muted-foreground">~</span>
-              <span
-                className={cn(
-                  "rounded-full border px-1.5 py-0.5 font-mono text-[10px]",
-                  ratioTone(maxRatio)
-                )}
-              >
-                {formatRatio(maxRatio)}
-              </span>
-            </>
-          ) : null}
-        </span>
-      ) : null}
-    </div>
-  );
-}
-
-function SiteDragPlaceholder() {
-  return (
-    <div
-      aria-hidden="true"
-      className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-xl border-2 border-dashed border-primary/40 bg-primary/[0.04]"
-    >
-      <span className="flex h-9 w-9 items-center justify-center rounded-lg border border-primary/20 bg-background/85 text-primary/70 shadow-sm">
-        <GripVertical className="h-4 w-4" />
-      </span>
-    </div>
-  );
-}
+// Preserve rectSortingStrategy's grid reordering, but never scale variable-height cards.
+const noScaleRectSortingStrategy = (args: Parameters<typeof rectSortingStrategy>[0]) => {
+  const transform = rectSortingStrategy(args);
+  return transform ? { ...transform, scaleX: 1, scaleY: 1 } : null;
+};
 
 /** Match providers under a website group rate row. */
 function matchSiteGroupMembers(
@@ -416,6 +358,8 @@ export function ProviderSitesView({
   });
   const [isReordering, startReorder] = useTransition();
   const [activeSiteId, setActiveSiteId] = useState<number | null>(null);
+  const [activeSiteSize, setActiveSiteSize] = useState<{ width: number } | null>(null);
+  const [isMounted, setIsMounted] = useState(false);
   const [manualTestingProviderIds, setManualTestingProviderIds] = useState<Record<number, boolean>>(
     {}
   );
@@ -502,6 +446,10 @@ export function ProviderSitesView({
   }, [loadSites, queryClient]);
 
   useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
+  useEffect(() => {
     fetchSites();
   }, [fetchSites]);
 
@@ -545,6 +493,15 @@ export function ProviderSitesView({
     () => (activeSiteId == null ? null : (sites.find((site) => site.id === activeSiteId) ?? null)),
     [activeSiteId, sites]
   );
+  const siteTodayCostValues = useMemo(
+    () => sites.flatMap((site) => (site.todayCost == null ? [] : [site.todayCost])),
+    [sites]
+  );
+  const siteTodayCost = useMemo(() => sumCosts(siteTodayCostValues), [siteTodayCostValues]);
+  const siteTodayCostText = useMemo(() => {
+    if (siteTodayCostValues.length === 0) return "—";
+    return siteTodayCost.toFixed(4);
+  }, [siteTodayCost, siteTodayCostValues.length]);
 
   const openCreateSite = useCallback(() => {
     setEditingSite(null);
@@ -654,6 +611,7 @@ export function ProviderSitesView({
   const handleDragEnd = useCallback(
     (event: DragEndEvent) => {
       setActiveSiteId(null);
+      setActiveSiteSize(null);
       if (!isAdmin) return;
       const { active, over } = event;
       if (!over || active.id === over.id) return;
@@ -678,10 +636,13 @@ export function ProviderSitesView({
 
   const handleDragStart = useCallback((event: DragStartEvent) => {
     setActiveSiteId(Number(event.active.id));
+    const rect = event.active.rect.current.initial;
+    setActiveSiteSize(rect ? { width: rect.width } : null);
   }, []);
 
   const handleDragCancel = useCallback(() => {
     setActiveSiteId(null);
+    setActiveSiteSize(null);
   }, []);
 
   const handleSaveGlobalCaptcha = useCallback(() => {
@@ -826,6 +787,260 @@ export function ProviderSitesView({
     [queryClient, t]
   );
 
+  const renderSiteCard = (
+    site: ProviderSiteListItem,
+    isDragging: boolean,
+    dragAttributes?: Record<string, unknown>,
+    dragListeners?: Record<string, unknown>
+  ) => {
+    const siteProviders = providersBySite.get(site.id) ?? [];
+    const rates = [...site.groupRates].sort((a, b) => a.ratio - b.ratio);
+    const minRatio = rates[0]?.ratio;
+    const maxRatio = rates[rates.length - 1]?.ratio;
+
+    return (
+      <Card
+        className={cn(
+          "group/site flex flex-col gap-0 overflow-hidden border-border/70 bg-card/95 p-0 transition-[box-shadow,opacity,ring-color] duration-200",
+          "shadow-sm ring-1 ring-border/70",
+          isDragging &&
+            "pointer-events-none border-dashed border-primary/40 bg-primary/[0.04] opacity-35 shadow-none ring-2 ring-primary/15"
+        )}
+      >
+        <CardHeader className="space-y-2 border-b bg-gradient-to-br from-muted/45 via-card to-card p-3 sm:p-3.5">
+          <div className="flex items-start gap-3">
+            {isAdmin ? (
+              <button
+                type="button"
+                className="mt-0.5 flex h-7 w-7 shrink-0 cursor-grab touch-none select-none items-center justify-center rounded-md border border-transparent text-muted-foreground/75 transition-colors hover:bg-background/80 hover:text-foreground focus-visible:border-primary/40 focus-visible:bg-background active:cursor-grabbing"
+                onClick={(e) => e.stopPropagation()}
+                aria-label={t("dragHint")}
+                {...(dragAttributes ?? {})}
+                {...(dragListeners ?? {})}
+              >
+                <GripVertical className="h-4 w-4" />
+              </button>
+            ) : null}
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="truncate text-[15px] font-semibold tracking-tight">{site.name}</span>
+                <Badge variant="outline" className="h-5 px-1.5 text-[10px] font-normal">
+                  {site.siteType}
+                </Badge>
+                <Badge
+                  variant={site.isEnabled ? "default" : "secondary"}
+                  className={cn(
+                    "h-5 px-1.5 text-[10px] font-medium",
+                    site.isEnabled &&
+                      "border-transparent bg-amber-500 text-white hover:bg-amber-500"
+                  )}
+                >
+                  {site.isEnabled ? t("enabled") : t("disabled")}
+                </Badge>
+                {minRatio != null && maxRatio != null ? (
+                  <span className="inline-flex items-center gap-1">
+                    <span
+                      className={cn(
+                        "rounded-full border px-2 py-0.5 font-mono text-[11px]",
+                        ratioTone(minRatio)
+                      )}
+                    >
+                      {formatRatio(minRatio)}
+                    </span>
+                    {minRatio !== maxRatio ? (
+                      <>
+                        <span className="text-[11px] text-muted-foreground">~</span>
+                        <span
+                          className={cn(
+                            "rounded-full border px-2 py-0.5 font-mono text-[11px]",
+                            ratioTone(maxRatio)
+                          )}
+                        >
+                          {formatRatio(maxRatio)}
+                        </span>
+                      </>
+                    ) : null}
+                  </span>
+                ) : null}
+              </div>
+              <div className="mt-2 flex min-w-0 items-center gap-1 text-xs text-muted-foreground">
+                <span className="truncate font-medium text-foreground/75">
+                  {hostnameOf(site.siteUrl)}
+                </span>
+                <a
+                  href={site.siteUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="shrink-0 hover:text-foreground"
+                  onClick={(e) => e.stopPropagation()}
+                  aria-label={site.siteUrl}
+                >
+                  <ExternalLink className="h-3 w-3" />
+                </a>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-1.5">
+            <div className="min-w-0 rounded-md border border-border/50 bg-background/65 px-2 py-1.5">
+              <p className="truncate text-[11px] text-muted-foreground">
+                {t("rateCount", { count: site.groupRates.length })}
+              </p>
+            </div>
+            <div className="min-w-0 rounded-lg border border-border/50 bg-background/65 px-2.5 py-2">
+              <p className="truncate text-[11px] text-muted-foreground">
+                {t("providerCount", {
+                  enabled: site.enabledProviderCount,
+                  total: site.providerCount,
+                })}
+              </p>
+            </div>
+            {site.lastBalance != null ? (
+              <div className="min-w-0 rounded-md border border-border/50 bg-background/65 px-2 py-1.5">
+                <p className="truncate text-[11px] text-muted-foreground">
+                  {t("upstreamBalance")} {" "}
+                  <span className="font-mono text-foreground/80">
+                    {Number(site.lastBalance).toFixed(4)}
+                  </span>
+                </p>
+              </div>
+            ) : null}
+            {site.todayCost != null ? (
+              <div className="min-w-0 rounded-md border border-border/50 bg-background/65 px-2 py-1.5">
+                <p className="truncate text-[11px] text-muted-foreground">
+                  {t("todayCost")} {" "}
+                  <span className="font-mono text-foreground/80">
+                    {Number(site.todayCost).toFixed(4)}
+                  </span>
+                </p>
+              </div>
+            ) : null}
+          </div>
+
+          <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-muted-foreground">
+            {site.lastRateSyncedAt ? (
+              <span className="truncate">
+                {t("lastSync")} {new Date(site.lastRateSyncedAt).toLocaleString()}
+              </span>
+            ) : !site.hasPassword ? (
+              <span className="truncate text-amber-600 dark:text-amber-400">
+                {t("noCredentials")}
+              </span>
+            ) : null}
+            {site.lastSyncError ? (
+              <span className="truncate text-destructive" title={site.lastSyncError}>
+                {t("syncError")}
+              </span>
+            ) : null}
+          </div>
+        </CardHeader>
+
+        <CardContent className="space-y-2.5 bg-muted/10 p-3 sm:p-3.5">
+          {isAdmin ? (
+            <div className="flex flex-wrap items-center gap-1">
+              <Button
+                size="sm"
+                variant="secondary"
+                className="h-7 px-2.5 text-xs"
+                onClick={() => handleSyncSite(site)}
+                disabled={isSaving}
+              >
+                <RefreshCw className="mr-1 h-3.5 w-3.5" />
+                {t("syncRates")}
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 px-2.5 text-xs"
+                onClick={() => openEditSite(site)}
+              >
+                {t("editSite")}
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 px-2.5 text-xs"
+                onClick={() => handleToggleEnabled(site)}
+              >
+                {site.isEnabled ? t("disableSite") : t("enableSite")}
+              </Button>
+            </div>
+          ) : null}
+
+          {rates.length === 0 ? (
+            <div className="rounded-xl border border-dashed bg-background/60 px-4 py-8 text-center text-sm text-muted-foreground">
+              {t("noRates")}
+            </div>
+          ) : (
+            <div className="grid gap-1.5 sm:grid-cols-2">
+              {rates.map((rate) => {
+                const tag = rate.dispatchGroupTag || "";
+                const members = matchSiteGroupMembers(siteProviders, rate);
+                const healthState = resolveProviderSiteGroupHealthState(
+                  members,
+                  healthSloThresholds,
+                  healthWindowSize
+                );
+                const healthLabel = groupHealthLabel(healthState, tHealth);
+                return (
+                  <button
+                    key={rate.id}
+                    type="button"
+                    className={cn(
+                      "group/rate flex min-w-0 items-center gap-1.5 overflow-hidden rounded-lg border px-2 py-2 text-left transition-colors hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
+                      groupHealthClass(healthState)
+                    )}
+                    onClick={() => setSelectedGroup({ siteId: site.id, rateId: rate.id })}
+                    aria-label={`${rate.groupName} · ${healthLabel}`}
+                  >
+                    <span
+                      className={cn(
+                        "flex h-6 w-6 shrink-0 items-center justify-center rounded-full border",
+                        groupHealthIconClass(healthState)
+                      )}
+                      aria-hidden="true"
+                    >
+                      {groupHealthIcon(healthState)}
+                    </span>
+                    <span className="min-w-0 flex-1 overflow-hidden">
+                      <span className="block truncate text-xs font-medium leading-4">
+                        {rate.groupName}
+                      </span>
+                      <span className="mt-0.5 flex min-w-0 items-center gap-1.5 overflow-hidden">
+                        <span
+                          className={cn(
+                            "inline-flex shrink-0 rounded-full border px-1.5 py-0.5 font-mono text-[10px]",
+                            ratioTone(rate.ratio)
+                          )}
+                        >
+                          {formatRatio(rate.ratio)}
+                        </span>
+                        {tag ? (
+                          <span
+                            className={cn(
+                              "min-w-0 flex-1 truncate rounded-full border px-1.5 py-0.5 text-[10px]",
+                              tagBadgeClass(tag)
+                            )}
+                          >
+                            {tag}
+                          </span>
+                        ) : null}
+                      </span>
+                    </span>
+                    <ChevronRight
+                      className="h-4 w-4 shrink-0 text-muted-foreground/60 transition-transform group-hover/rate:translate-x-0.5"
+                      aria-hidden="true"
+                    />
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    );
+  };
+
   if (isLoading && sites.length === 0) {
     return (
       <div className="flex justify-center p-10">
@@ -863,6 +1078,16 @@ export function ProviderSitesView({
           </div>
         ) : null}
       </div>
+
+      <Card className="border-border/70">
+        <CardHeader className="py-3">
+          <CardTitle className="text-sm font-medium">{t("todayCostTotalTitle")}</CardTitle>
+          <CardDescription className="text-xs">{t("todayCostTotalHelp")}</CardDescription>
+        </CardHeader>
+        <CardContent className="pb-4">
+          <div className="font-mono text-2xl font-semibold tabular-nums">{siteTodayCostText}</div>
+        </CardContent>
+      </Card>
 
       {isAdmin ? (
         <Card className="border-border/70">
@@ -959,283 +1184,42 @@ export function ProviderSitesView({
           onDragCancel={handleDragCancel}
           onDragEnd={handleDragEnd}
         >
-          <SortableContext items={sites.map((s) => s.id)} strategy={rectSortingStrategy}>
+          <SortableContext
+            items={sites.map((s) => s.id)}
+            strategy={noScaleRectSortingStrategy}
+          >
             <div className="grid grid-cols-1 items-start gap-4 md:grid-cols-2 2xl:grid-cols-3">
-              {sites.map((site) => {
-                const siteProviders = providersBySite.get(site.id) ?? [];
-                const rates = [...site.groupRates].sort((a, b) => a.ratio - b.ratio);
-                const minRatio = rates[0]?.ratio;
-                const maxRatio = rates[rates.length - 1]?.ratio;
-
-                return (
-                  <SortableSiteShell key={site.id} id={site.id} disabled={!isAdmin || isReordering}>
-                    {({ setNodeRef, style, attributes, listeners, isDragging }) => (
-                      <div
-                        ref={setNodeRef}
-                        style={style}
-                        className="relative min-w-0 will-change-transform"
-                      >
-                        <Card
-                          className={cn(
-                            "group/site flex flex-col gap-0 overflow-hidden border-border/70 bg-card/95 p-0 transition-[box-shadow,opacity,ring-color] duration-200",
-                            "shadow-sm ring-1 ring-border/70",
-                            isDragging && "invisible"
-                          )}
-                        >
-                          <CardHeader className="space-y-2 border-b bg-gradient-to-br from-muted/45 via-card to-card p-3 sm:p-3.5">
-                            <div className="flex items-start gap-3">
-                              {isAdmin ? (
-                                <button
-                                  type="button"
-                                  className="mt-0.5 flex h-7 w-7 shrink-0 cursor-grab touch-none select-none items-center justify-center rounded-md border border-transparent text-muted-foreground/75 transition-colors hover:bg-background/80 hover:text-foreground focus-visible:border-primary/40 focus-visible:bg-background active:cursor-grabbing"
-                                  onClick={(e) => e.stopPropagation()}
-                                  aria-label={t("dragHint")}
-                                  {...attributes}
-                                  {...listeners}
-                                >
-                                  <GripVertical className="h-4 w-4" />
-                                </button>
-                              ) : null}
-                              <div className="min-w-0 flex-1">
-                                <div className="flex flex-wrap items-center gap-2">
-                                  <span className="truncate text-[15px] font-semibold tracking-tight">
-                                    {site.name}
-                                  </span>
-                                  <Badge
-                                    variant="outline"
-                                    className="h-5 px-1.5 text-[10px] font-normal"
-                                  >
-                                    {site.siteType}
-                                  </Badge>
-                                  <Badge
-                                    variant={site.isEnabled ? "default" : "secondary"}
-                                    className={cn(
-                                      "h-5 px-1.5 text-[10px] font-medium",
-                                      site.isEnabled &&
-                                        "border-transparent bg-amber-500 text-white hover:bg-amber-500"
-                                    )}
-                                  >
-                                    {site.isEnabled ? t("enabled") : t("disabled")}
-                                  </Badge>
-                                  {minRatio != null && maxRatio != null ? (
-                                    <span className="inline-flex items-center gap-1">
-                                      <span
-                                        className={cn(
-                                          "rounded-full border px-2 py-0.5 font-mono text-[11px]",
-                                          ratioTone(minRatio)
-                                        )}
-                                      >
-                                        {formatRatio(minRatio)}
-                                      </span>
-                                      {minRatio !== maxRatio ? (
-                                        <>
-                                          <span className="text-[11px] text-muted-foreground">
-                                            ~
-                                          </span>
-                                          <span
-                                            className={cn(
-                                              "rounded-full border px-2 py-0.5 font-mono text-[11px]",
-                                              ratioTone(maxRatio)
-                                            )}
-                                          >
-                                            {formatRatio(maxRatio)}
-                                          </span>
-                                        </>
-                                      ) : null}
-                                    </span>
-                                  ) : null}
-                                </div>
-                                <div className="mt-2 flex min-w-0 items-center gap-1 text-xs text-muted-foreground">
-                                  <span className="truncate font-medium text-foreground/75">
-                                    {hostnameOf(site.siteUrl)}
-                                  </span>
-                                  <a
-                                    href={site.siteUrl}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    className="shrink-0 hover:text-foreground"
-                                    onClick={(e) => e.stopPropagation()}
-                                    aria-label={site.siteUrl}
-                                  >
-                                    <ExternalLink className="h-3 w-3" />
-                                  </a>
-                                </div>
-                              </div>
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-1.5">
-                              <div className="min-w-0 rounded-md border border-border/50 bg-background/65 px-2 py-1.5">
-                                <p className="truncate text-[11px] text-muted-foreground">
-                                  {t("rateCount", { count: site.groupRates.length })}
-                                </p>
-                              </div>
-                              <div className="min-w-0 rounded-lg border border-border/50 bg-background/65 px-2.5 py-2">
-                                <p className="truncate text-[11px] text-muted-foreground">
-                                  {t("providerCount", {
-                                    enabled: site.enabledProviderCount,
-                                    total: site.providerCount,
-                                  })}
-                                </p>
-                              </div>
-                              {site.lastBalance != null ? (
-                                <div className="min-w-0 rounded-md border border-border/50 bg-background/65 px-2 py-1.5">
-                                  <p className="truncate text-[11px] text-muted-foreground">
-                                    {t("upstreamBalance")} {" "}
-                                    <span className="font-mono text-foreground/80">
-                                      {Number(site.lastBalance).toFixed(4)}
-                                    </span>
-                                  </p>
-                                </div>
-                              ) : null}
-                              {site.todayCost != null ? (
-                                <div className="min-w-0 rounded-md border border-border/50 bg-background/65 px-2 py-1.5">
-                                  <p className="truncate text-[11px] text-muted-foreground">
-                                    {t("todayCost")} {" "}
-                                    <span className="font-mono text-foreground/80">
-                                      {Number(site.todayCost).toFixed(4)}
-                                    </span>
-                                  </p>
-                                </div>
-                              ) : null}
-                            </div>
-
-                            <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-muted-foreground">
-                              {site.lastRateSyncedAt ? (
-                                <span className="truncate">
-                                  {t("lastSync")} {new Date(site.lastRateSyncedAt).toLocaleString()}
-                                </span>
-                              ) : !site.hasPassword ? (
-                                <span className="truncate text-amber-600 dark:text-amber-400">
-                                  {t("noCredentials")}
-                                </span>
-                              ) : null}
-                              {site.lastSyncError ? (
-                                <span
-                                  className="truncate text-destructive"
-                                  title={site.lastSyncError}
-                                >
-                                  {t("syncError")}
-                                </span>
-                              ) : null}
-                            </div>
-                          </CardHeader>
-
-                          <CardContent className="space-y-2.5 bg-muted/10 p-3 sm:p-3.5">
-                            {isAdmin ? (
-                              <div className="flex flex-wrap items-center gap-1">
-                                <Button
-                                  size="sm"
-                                  variant="secondary"
-                                  className="h-7 px-2.5 text-xs"
-                                  onClick={() => handleSyncSite(site)}
-                                  disabled={isSaving}
-                                >
-                                  <RefreshCw className="mr-1 h-3.5 w-3.5" />
-                                  {t("syncRates")}
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  className="h-7 px-2.5 text-xs"
-                                  onClick={() => openEditSite(site)}
-                                >
-                                  {t("editSite")}
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  className="h-7 px-2.5 text-xs"
-                                  onClick={() => handleToggleEnabled(site)}
-                                >
-                                  {site.isEnabled ? t("disableSite") : t("enableSite")}
-                                </Button>
-                              </div>
-                            ) : null}
-
-                            {rates.length === 0 ? (
-                              <div className="rounded-xl border border-dashed bg-background/60 px-4 py-8 text-center text-sm text-muted-foreground">
-                                {t("noRates")}
-                              </div>
-                            ) : (
-                              <div className="grid gap-1.5 sm:grid-cols-2">
-                                {rates.map((rate) => {
-                                  const tag = rate.dispatchGroupTag || "";
-                                  const members = matchSiteGroupMembers(siteProviders, rate);
-                                  const healthState = resolveProviderSiteGroupHealthState(
-                                    members,
-                                    healthSloThresholds,
-                                    healthWindowSize
-                                  );
-                                  const healthLabel = groupHealthLabel(healthState, tHealth);
-                                  return (
-                                    <button
-                                      key={rate.id}
-                                      type="button"
-                                      className={cn(
-                                        "group/rate flex min-w-0 items-center gap-1.5 overflow-hidden rounded-lg border px-2 py-2 text-left transition-colors hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
-                                        groupHealthClass(healthState)
-                                      )}
-                                      onClick={() =>
-                                        setSelectedGroup({ siteId: site.id, rateId: rate.id })
-                                      }
-                                      aria-label={`${rate.groupName} · ${healthLabel}`}
-                                    >
-                                      <span
-                                        className={cn(
-                                          "flex h-6 w-6 shrink-0 items-center justify-center rounded-full border",
-                                          groupHealthIconClass(healthState)
-                                        )}
-                                        aria-hidden="true"
-                                      >
-                                        {groupHealthIcon(healthState)}
-                                      </span>
-                                      <span className="min-w-0 flex-1 overflow-hidden">
-                                        <span className="block truncate text-xs font-medium leading-4">
-                                          {rate.groupName}
-                                        </span>
-                                        <span className="mt-0.5 flex min-w-0 items-center gap-1.5 overflow-hidden">
-                                          <span
-                                            className={cn(
-                                              "inline-flex shrink-0 rounded-full border px-1.5 py-0.5 font-mono text-[10px]",
-                                              ratioTone(rate.ratio)
-                                            )}
-                                          >
-                                            {formatRatio(rate.ratio)}
-                                          </span>
-                                          {tag ? (
-                                            <span
-                                              className={cn(
-                                                "min-w-0 flex-1 truncate rounded-full border px-1.5 py-0.5 text-[10px]",
-                                                tagBadgeClass(tag)
-                                              )}
-                                            >
-                                              {tag}
-                                            </span>
-                                          ) : null}
-                                        </span>
-                                      </span>
-                                      <ChevronRight
-                                        className="h-4 w-4 shrink-0 text-muted-foreground/60 transition-transform group-hover/rate:translate-x-0.5"
-                                        aria-hidden="true"
-                                      />
-                                    </button>
-                                  );
-                                })}
-                              </div>
-                            )}
-                          </CardContent>
-                        </Card>
-                        {isDragging ? <SiteDragPlaceholder /> : null}
-                      </div>
-                    )}
-                  </SortableSiteShell>
-                );
-              })}
+              {sites.map((site) => (
+                <SortableSiteShell key={site.id} id={site.id} disabled={!isAdmin || isReordering}>
+                  {({ setNodeRef, style, attributes, listeners, isDragging }) => (
+                    <div
+                      ref={setNodeRef}
+                      style={style}
+                      className="relative min-w-0 will-change-transform"
+                    >
+                      {renderSiteCard(site, isDragging, attributes, listeners)}
+                    </div>
+                  )}
+                </SortableSiteShell>
+              ))}
             </div>
           </SortableContext>
-          <DragOverlay dropAnimation={null}>
-            {activeSite ? <SiteDragPreview site={activeSite} /> : null}
-          </DragOverlay>
+          {isMounted
+            ? createPortal(
+                <DragOverlay adjustScale={false} dropAnimation={null}>
+                  {activeSite ? (
+                    <div
+                      aria-hidden="true"
+                      className="pointer-events-none"
+                      style={activeSiteSize ? { width: activeSiteSize.width } : undefined}
+                    >
+                      {renderSiteCard(activeSite, false)}
+                    </div>
+                  ) : null}
+                </DragOverlay>,
+                document.body
+              )
+            : null}
         </DndContext>
       )}
 

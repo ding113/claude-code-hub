@@ -131,5 +131,37 @@
     "lastStatus": "Last: {code} ({time})",
     "successRate": "{rate}%",
     "noData": "No data"
+  },
+  "balance": {
+    "title": "Account balance",
+    "unlimited": "Unlimited",
+    "description": "Available prepaid balance",
+    "depleted": "Balance exhausted"
+  },
+  "groupRates": {
+    "title": "Live group rates",
+    "subtitle": "Effective bill rate of the currently preferred provider per group — updates live",
+    "autoRefresh": "Live updates",
+    "live": "Live",
+    "loadFailed": "Failed to load rates",
+    "empty": "No providers available for your groups",
+    "free": "Free",
+    "multiplierHint": "Effective rate = provider × group multiplier",
+    "modeHealth": "Health pick",
+    "modePriority": "Priority pick",
+    "online": "Online",
+    "firstByte": "TTFB",
+    "requestFormat": "Request format",
+    "formatClaude": "Claude Messages",
+    "formatClaudeAuth": "Claude Auth",
+    "formatCodex": "Codex Responses",
+    "formatGemini": "Gemini",
+    "formatGeminiCli": "Gemini CLI",
+    "formatOpenaiCompatible": "OpenAI Compatible",
+    "formatUnknown": "Unknown format",
+    "providerMult": "Provider",
+    "groupMult": "Group",
+    "effectiveMult": "Effective",
+    "totalLatency": "Total"
   }
 }

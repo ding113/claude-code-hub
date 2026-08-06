@@ -4866,6 +4866,7 @@ export async function testProviderById(
         proxyUrl: provider.proxyUrl,
         proxyFallbackToDirect: provider.proxyFallbackToDirect,
         customHeaders: provider.customHeaders,
+        costMultiplier: provider.costMultiplier,
       },
       source: "manual",
       model: args?.model?.trim() || getDefaultHealthTestModel(provider.providerType),

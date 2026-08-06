@@ -34,6 +34,7 @@ describe("provider-testing presets", () => {
     expect(preset?.id).toBe("cc_haiku_basic");
     expect(preset?.extraHeaders).toBeUndefined();
     expect(payload.max_tokens).toBe(8);
+    expect(JSON.stringify(payload.messages)).toContain("hi");
     assertMinimalProbePayload(payload);
   });
 
@@ -43,6 +44,7 @@ describe("provider-testing presets", () => {
     expect(preset?.id).toBe("cx_codex_basic");
     expect(payload.max_output_tokens).toBe(16);
     expect(payload.instructions).toBe("Reply with exactly pong.");
+    expect(JSON.stringify(payload.input)).toContain("hi");
     expect(payload.tools).toEqual([]);
     expect(payload.tool_choice).toBe("none");
     expect((payload.reasoning as { effort?: string } | undefined)?.effort).toBe("none");
@@ -52,12 +54,12 @@ describe("provider-testing presets", () => {
     expect(payload.stream).toBe(true);
   });
 
-  test("openai-compatible 最小模板只有 user ping", () => {
+  test("openai-compatible 最小模板只有 user hi", () => {
     const preset = getDefaultPreset("openai-compatible");
     const payload = preset?.payload as Record<string, unknown>;
     expect(preset?.id).toBe("oa_chat_stream");
     expect(payload.max_tokens).toBe(8);
-    expect(JSON.stringify(payload.messages)).toContain("ping");
+    expect(JSON.stringify(payload.messages)).toContain("hi");
     assertMinimalProbePayload(payload);
   });
 

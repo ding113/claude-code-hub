@@ -71,6 +71,8 @@
   "balance": "残高",
   "upstreamBalance": "上流残高",
   "todayCost": "本日消費",
+  "todayCostTotalTitle": "全リレーの今日の合計費用",
+  "todayCostTotalHelp": "同期済みの全リレーサイトが報告した今日の上流費用の合計です。",
   "fieldUsername": "ログインID",
   "fieldUsernamePlaceholder": "メールまたはユーザー名",
   "fieldPassword": "パスワード",

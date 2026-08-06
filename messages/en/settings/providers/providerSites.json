@@ -71,6 +71,8 @@
   "balance": "Balance",
   "upstreamBalance": "Upstream balance",
   "todayCost": "Today cost",
+  "todayCostTotalTitle": "All relay spend today",
+  "todayCostTotalHelp": "Sum of today's upstream spend reported by all synced relay sites.",
   "fieldUsername": "Login username",
   "fieldUsernamePlaceholder": "Email or username",
   "fieldPassword": "Login password",

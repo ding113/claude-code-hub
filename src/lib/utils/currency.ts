@@ -144,4 +144,67 @@ export function getCurrencySymbol(currencyCode?: CurrencyCode | string): string 
   return CURRENCY_CONFIG[currencyCode as CurrencyCode].symbol;
 }
 
+/**
+ * Format unit price for billing tooltip (@ price / 1M).
+ * Small post-multiplier rates must keep significant digits (e.g. 0.0025), not 2dp → 0.00.
+ */
+export function formatUnitPrice(
+  value: DecimalInput,
+  currencyCode: CurrencyCode = "USD",
+  options?: { maxDecimals?: number; minDecimals?: number }
+): string {
+  const decimal = toDecimal(value);
+  if (!decimal || decimal.isZero()) {
+    const config = CURRENCY_CONFIG[currencyCode];
+    return `${config.symbol}0`;
+  }
+  const maxDecimals = options?.maxDecimals ?? 8;
+  const minDecimals = options?.minDecimals ?? 0;
+  const abs = decimal.abs();
+  let decimals = maxDecimals;
+  if (abs.gte(1)) {
+    decimals = Math.max(minDecimals, 2);
+  } else if (abs.gte(0.01)) {
+    decimals = Math.max(minDecimals, 4);
+  } else if (abs.gte(0.0001)) {
+    decimals = Math.max(minDecimals, 6);
+  }
+  decimals = Math.min(maxDecimals, decimals);
+  const config = CURRENCY_CONFIG[currencyCode];
+  let num = decimal.toDecimalPlaces(decimals, Decimal.ROUND_HALF_UP).toFixed(decimals);
+  if (num.includes(".")) {
+    num = num.replace(/(\.\d*?[1-9])0+$/u, "$1").replace(/\.0+$/u, "");
+    if (minDecimals > 0) {
+      const [intPart, frac = ""] = num.split(".");
+      num = `${intPart}.${frac.padEnd(minDecimals, "0")}`;
+    }
+  }
+  return `${config.symbol}${num}`;
+}
+
+/** Format provider/group multipliers while preserving small significant values. */
+export function formatCostMultiplier(
+  value: number | string | null | undefined,
+  options?: { maxDecimals?: number; minDecimals?: number }
+): string {
+  if (value === "" || value == null) return "-";
+  const decimal = toDecimal(value);
+  if (!decimal || !Number.isFinite(decimal.toNumber())) return "-";
+  const maxDecimals = options?.maxDecimals ?? 8;
+  const minDecimals = options?.minDecimals ?? 0;
+  if (decimal.isZero()) return minDecimals > 0 ? (0).toFixed(minDecimals) : "0";
+  const rounded = decimal.toDecimalPlaces(maxDecimals, Decimal.ROUND_HALF_UP);
+  let formatted = rounded.toFixed();
+  if (formatted.includes(".")) {
+    formatted = formatted.replace(/(\.\d*?[1-9])0+$/u, "$1").replace(/\.0+$/u, "");
+    if (minDecimals > 0) {
+      const [intPart, frac = ""] = formatted.split(".");
+      formatted = `${intPart}.${frac.padEnd(minDecimals, "0")}`;
+    }
+  } else if (minDecimals > 0) {
+    formatted = `${formatted}.${"0".repeat(minDecimals)}`;
+  }
+  return formatted;
+}
+
 export { Decimal };

@@ -18,6 +18,7 @@ import { logger } from "@/lib/logger";
 import { classifySiteGroupTag } from "@/lib/provider-sites/billing";
 import {
   createUpstreamApiKey,
+  deleteUpstreamApiKey,
   type UpstreamApiKey,
   type UpstreamAuthSession,
   type UpstreamSiteCredentials,
@@ -166,6 +167,53 @@ export function findUnkeyedOtherSiteGroupNames(input: {
       classifySiteGroupTag(groupName, classifiable) === "other"
     );
   });
+}
+
+/**
+ * Return keys with no currently resolvable upstream group.
+ * Unknown group IDs are deliberately excluded: a failed/stale group lookup must
+ * never turn into a destructive cleanup decision. Orphaned IDs are safe to clean
+ * only after the connector has loaded a non-empty authoritative group map.
+ */
+export function findUnboundUpstreamApiKeys(upstreamKeys: UpstreamApiKey[]): UpstreamApiKey[] {
+  return upstreamKeys.filter(
+    (key) =>
+      (key.groupBinding === "unbound" || key.groupBinding === "orphaned") &&
+      key.groupName.trim().length === 0
+  );
+}
+
+/** Delete unassigned/orphaned upstream keys after a trusted non-empty group refresh. */
+export async function deleteUnboundUpstreamApiKeys(input: {
+  siteId: number;
+  siteName: string;
+  upstreamKeys: UpstreamApiKey[];
+  creds: UpstreamSiteCredentials;
+  session: UpstreamAuthSession;
+}): Promise<number> {
+  let deleted = 0;
+  for (const key of findUnboundUpstreamApiKeys(input.upstreamKeys)) {
+    try {
+      await deleteUpstreamApiKey(input.creds, input.session, key.id);
+      deleted += 1;
+      logger.info("[provider-sites] deleted upstream key with no resolvable group", {
+        siteId: input.siteId,
+        siteName: input.siteName,
+        keyId: key.id,
+        keyName: key.name,
+        groupBinding: key.groupBinding,
+      });
+    } catch (error) {
+      logger.warn("[provider-sites] unbound upstream key delete failed", {
+        siteId: input.siteId,
+        siteName: input.siteName,
+        keyId: key.id,
+        keyName: key.name,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+  return deleted;
 }
 
 async function deleteStaleSiteProvidersForRows(

@@ -131,5 +131,37 @@
     "lastStatus": "最近: {code} ({time})",
     "successRate": "{rate}%",
     "noData": "无数据"
+  },
+  "balance": {
+    "title": "账户余额",
+    "unlimited": "不限额",
+    "description": "可用预付余额",
+    "depleted": "余额已用尽"
+  },
+  "groupRates": {
+    "title": "当前分组倍率",
+    "subtitle": "每个分组当前最优先调用供应商的有效计费倍率，实时跟随调度变化",
+    "autoRefresh": "实时更新",
+    "live": "实时",
+    "loadFailed": "倍率加载失败",
+    "empty": "暂无可用分组供应商",
+    "free": "免费",
+    "multiplierHint": "有效计费倍率 = 供应商倍率 × 分组倍率",
+    "modeHealth": "健康优选",
+    "modePriority": "优先级优选",
+    "online": "在线率",
+    "firstByte": "首字",
+    "requestFormat": "请求格式",
+    "formatClaude": "Claude Messages",
+    "formatClaudeAuth": "Claude Auth",
+    "formatCodex": "Codex Responses",
+    "formatGemini": "Gemini",
+    "formatGeminiCli": "Gemini CLI",
+    "formatOpenaiCompatible": "OpenAI Compatible",
+    "formatUnknown": "未知格式",
+    "providerMult": "供应商",
+    "groupMult": "分组",
+    "effectiveMult": "有效",
+    "totalLatency": "总耗时"
   }
 }

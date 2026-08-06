@@ -25,8 +25,10 @@ export type UpstreamApiKey = {
   id: string;
   key: string;
   name: string;
-  /** Upstream group name this key belongs to ("" = unknown/unassigned). */
+  /** Upstream group name this key belongs to ("" = no resolvable binding). */
   groupName: string;
+  /** How confidently the upstream reports this key's group binding. */
+  groupBinding?: "bound" | "unbound" | "orphaned" | "unknown";
   status: string;
 };
 
@@ -303,11 +305,92 @@ function sessionStillValid(session?: UpstreamAuthSession | null): boolean {
   return Boolean(session.accessToken || session.cookie);
 }
 
+function parseAccessTokenExpiry(value: unknown, fallbackMs: number): Date {
+  if (typeof value === "number" || typeof value === "string") {
+    const numeric = Number(value);
+    if (Number.isFinite(numeric) && numeric > 1_000_000_000) {
+      const millis = numeric > 1_000_000_000_000 ? numeric : numeric * 1000;
+      if (millis > Date.now()) return new Date(millis);
+    }
+    const parsed = new Date(String(value));
+    if (!Number.isNaN(parsed.getTime()) && parsed.getTime() > Date.now()) return parsed;
+  }
+  return new Date(fallbackMs);
+}
+
+async function refreshNewApiSession(
+  creds: UpstreamSiteCredentials
+): Promise<UpstreamAuthSession | null> {
+  const previous = creds.session;
+  if (creds.siteType !== "newapi" || !previous?.cookie) return null;
+
+  const site = trimSite(creds.siteUrl);
+  const path = "/api/user/auth/refresh";
+  const res = await fetch(`${site}${path}`, {
+    method: "POST",
+    headers: {
+      Accept: "application/json",
+      Cookie: previous.cookie,
+      Origin: site,
+      Referer: `${site}/`,
+      "User-Agent": UPSTREAM_USER_AGENT,
+    },
+    signal: AbortSignal.timeout(30_000),
+  });
+  const body = await readJson(res);
+
+  // Older NewAPI releases do not expose the dashboard refresh endpoint. In
+  // that case, fall back to the password login path. A 429 is different: do
+  // not immediately turn it into another login attempt and extend the limit.
+  if (!res.ok) {
+    const detail =
+      body && typeof body === "object" && "message" in body
+        ? String((body as { message?: unknown }).message || "")
+        : typeof body === "string"
+          ? body
+          : "";
+    if ([401, 403, 404, 405].includes(res.status)) return null;
+    throw new UpstreamRequestError("POST", path, res.status, detail || "empty response");
+  }
+
+  if (!body || typeof body !== "object" || (body as { success?: unknown }).success !== true) {
+    return null;
+  }
+
+  const data = (
+    body as {
+      data?: {
+        access_token?: string;
+        access_expires_at?: number | string;
+        id?: number | string;
+        user?: { id?: number | string };
+      };
+    }
+  ).data;
+  const accessToken =
+    typeof data?.access_token === "string" ? data.access_token.trim() || undefined : undefined;
+  const cookie = joinCookies(res.headers.get("set-cookie"), previous.cookie);
+  const rawUserId = data?.id ?? data?.user?.id ?? previous.userId;
+  const userId = rawUserId != null ? String(rawUserId) : undefined;
+  if (!accessToken && !cookie) return null;
+
+  return {
+    accessToken,
+    cookie: cookie || undefined,
+    userId,
+    expiresAt: parseAccessTokenExpiry(data?.access_expires_at, Date.now() + 15 * 60_000),
+  };
+}
+
 export async function loginUpstreamSite(
   creds: UpstreamSiteCredentials
 ): Promise<UpstreamAuthSession> {
   if (sessionStillValid(creds.session)) {
     return creds.session as UpstreamAuthSession;
+  }
+  if (creds.siteType === "newapi" && creds.session?.cookie) {
+    const refreshed = await refreshNewApiSession(creds);
+    if (refreshed) return refreshed;
   }
   if (!creds.username || !creds.password) {
     throw new Error("site username/password required for upstream login");
@@ -332,22 +415,38 @@ export async function loginUpstreamSite(
     const body = (await readJson(res)) as {
       success?: boolean;
       message?: string;
-      data?: { require_2fa?: boolean; id?: number };
-    };
-    if (!res.ok || body.success === false) {
-      throw new Error(`newapi login failed: ${body.message || res.status}`);
+      data?: {
+        require_2fa?: boolean;
+        access_token?: string;
+        access_expires_at?: number | string;
+        id?: number | string;
+        user?: { id?: number | string };
+      };
+    } | null;
+    if (!res.ok || !body || body.success === false) {
+      const detail = body?.message || `HTTP ${res.status}${body ? "" : " (empty response)"}`;
+      throw new Error(`newapi login failed: ${detail}`);
     }
     if (body.data?.require_2fa) {
       throw new Error("newapi account requires 2FA; disable 2FA on monitoring accounts");
     }
+    const accessToken =
+      typeof body.data?.access_token === "string"
+        ? body.data.access_token.trim() || undefined
+        : undefined;
     const cookie = joinCookies(res.headers.get("set-cookie"));
-    if (!cookie) throw new Error("newapi login: no session cookie");
-    const userId = body.data?.id != null ? String(body.data.id) : undefined;
-    if (!userId) throw new Error("newapi login: missing user id");
+    if (!accessToken && !cookie) throw new Error("newapi login: no access token or session cookie");
+    const rawUserId = body.data?.id ?? body.data?.user?.id;
+    const userId = rawUserId != null ? String(rawUserId) : "";
+    if (!userId || userId === "0") throw new Error("newapi login: missing user id");
     return {
-      cookie,
+      accessToken,
+      cookie: cookie || undefined,
       userId,
-      expiresAt: new Date(Date.now() + 7 * 24 * 3600_000),
+      expiresAt: parseAccessTokenExpiry(
+        body.data?.access_expires_at,
+        Date.now() + 7 * 24 * 3600_000
+      ),
     };
   }
 
@@ -385,6 +484,17 @@ export async function loginUpstreamSite(
   };
 }
 
+function applyNewApiAuth(headers: Record<string, string>, session: UpstreamAuthSession): void {
+  if (!session.accessToken && !session.cookie) {
+    throw new Error("missing newapi access token or session cookie");
+  }
+  // Current NewAPI uses the short-lived dashboard access token. Keep the
+  // cookie + user header for older deployments that still use that contract.
+  if (session.accessToken) headers.Authorization = `Bearer ${session.accessToken}`;
+  if (session.cookie) headers.Cookie = session.cookie;
+  if (session.userId) headers["New-Api-User"] = session.userId;
+}
+
 async function upstreamGetJson(
   creds: UpstreamSiteCredentials,
   session: UpstreamAuthSession,
@@ -396,9 +506,7 @@ async function upstreamGetJson(
     "User-Agent": UPSTREAM_USER_AGENT,
   };
   if (creds.siteType === "newapi") {
-    if (!session.cookie) throw new Error("missing newapi cookie");
-    headers.Cookie = session.cookie;
-    if (session.userId) headers["New-Api-User"] = session.userId;
+    applyNewApiAuth(headers, session);
   } else {
     if (!session.accessToken) throw new Error("missing sub2api access_token");
     headers.Authorization = `Bearer ${session.accessToken}`;
@@ -582,9 +690,7 @@ async function upstreamPostJson(
     headers["Content-Type"] = "application/json";
   }
   if (creds.siteType === "newapi") {
-    if (!session.cookie) throw new Error("missing newapi cookie");
-    headers.Cookie = session.cookie;
-    if (session.userId) headers["New-Api-User"] = session.userId;
+    applyNewApiAuth(headers, session);
   } else {
     if (!session.accessToken) throw new Error("missing sub2api access_token");
     headers.Authorization = `Bearer ${session.accessToken}`;
@@ -618,6 +724,70 @@ async function upstreamPostJson(
     if ("data" in wrapped) return wrapped.data;
   }
   return body;
+}
+
+async function upstreamDeleteJson(
+  creds: UpstreamSiteCredentials,
+  session: UpstreamAuthSession,
+  path: string
+): Promise<unknown> {
+  const site = trimSite(creds.siteUrl);
+  const headers: Record<string, string> = {
+    Accept: "application/json",
+    "User-Agent": UPSTREAM_USER_AGENT,
+  };
+  if (creds.siteType === "newapi") {
+    applyNewApiAuth(headers, session);
+  } else {
+    if (!session.accessToken) throw new Error("missing sub2api access_token");
+    headers.Authorization = `Bearer ${session.accessToken}`;
+  }
+  const res = await fetch(`${site}${path}`, {
+    method: "DELETE",
+    headers,
+    signal: AbortSignal.timeout(30_000),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new UpstreamRequestError("DELETE", path, res.status, text);
+  }
+  const body = await readJson(res);
+  if (creds.siteType === "newapi") {
+    const wrapped = body as { success?: boolean; message?: string; data?: unknown };
+    if (wrapped && typeof wrapped === "object" && "success" in wrapped) {
+      if (wrapped.success === false) {
+        throw new Error(`newapi ${path}: ${wrapped.message || "failed"}`);
+      }
+      return wrapped.data;
+    }
+  } else if (body && typeof body === "object" && "code" in body) {
+    const wrapped = body as { code?: number; message?: string; data?: unknown };
+    if (wrapped.code != null && wrapped.code !== 0) {
+      throw new Error(`sub2api ${path}: ${wrapped.message || `code ${wrapped.code}`}`);
+    }
+    return "data" in wrapped ? wrapped.data : body;
+  }
+  return body;
+}
+
+/** Delete one active API key from the upstream site by its upstream ID. */
+export async function deleteUpstreamApiKey(
+  creds: UpstreamSiteCredentials,
+  session: UpstreamAuthSession,
+  keyId: string | number
+): Promise<void> {
+  const id = String(keyId).trim();
+  if (!id) throw new Error("upstream api key id is empty");
+
+  if (creds.siteType === "newapi") {
+    await upstreamDeleteJson(creds, session, `/api/token/${encodeURIComponent(id)}`);
+    return;
+  }
+  if (creds.siteType === "sub2api") {
+    await upstreamDeleteJson(creds, session, `/api/v1/keys/${encodeURIComponent(id)}`);
+    return;
+  }
+  throw new Error(`unsupported upstream site type for key deletion: ${creds.siteType}`);
 }
 
 function isUsableUpstreamKey(key: string | null | undefined): boolean {
@@ -790,6 +960,7 @@ export async function fetchUpstreamApiKeys(
           key,
           name: (item.name ?? "").trim(),
           groupName: (item.group ?? "").trim(),
+          groupBinding: (item.group ?? "").trim() ? "bound" : "unbound",
           status: "enabled",
         });
       }
@@ -798,6 +969,10 @@ export async function fetchUpstreamApiKeys(
     }
 
     // newapi masks keys in list responses ("abcd****wxyz"); reveal them one by one.
+    // A 429 means the upstream rate limit is engaged: stop the batch instead of
+    // hammering the remaining tokens (each tick would otherwise re-extend the
+    // window). The masked keys stay masked; isUsableKey() keeps them from
+    // overwriting full keys already in CCH.
     for (const k of out) {
       if (!k.key.includes("*") || !/^\d+$/.test(k.id)) continue;
       try {
@@ -807,6 +982,12 @@ export async function fetchUpstreamApiKeys(
         const full = (revealed?.key ?? "").trim();
         if (full && !full.includes("*")) k.key = full;
       } catch (error) {
+        if (error instanceof UpstreamRequestError && error.status === 429) {
+          logger.warn("[provider-sites] newapi reveal key rate-limited; skipping rest of batch", {
+            id: k.id,
+          });
+          break;
+        }
         logger.warn("[provider-sites] newapi reveal key failed", {
           id: k.id,
           error: error instanceof Error ? error.message : String(error),
@@ -818,6 +999,7 @@ export async function fetchUpstreamApiKeys(
 
   // sub2api: group name needs the groups/available map (group_id -> name)
   const groupNameById = new Map<string, string>();
+  let groupMapTrusted = false;
   try {
     const groups = (await upstreamGetJson(creds, session, "/api/v1/groups/available")) as Array<{
       id?: number | string;
@@ -826,6 +1008,9 @@ export async function fetchUpstreamApiKeys(
     for (const g of groups ?? []) {
       if (g.id != null && g.name) groupNameById.set(String(g.id), g.name.trim());
     }
+    // An empty map may be a transient/incomplete upstream response. Only use
+    // missing IDs as evidence of an orphaned group when the map is non-empty.
+    groupMapTrusted = groupNameById.size > 0;
   } catch (error) {
     logger.warn("[provider-sites] key sync: group map fetch failed", {
       error: error instanceof Error ? error.message : String(error),
@@ -857,11 +1042,20 @@ export async function fetchUpstreamApiKeys(
       const groupName =
         (item.group?.name ?? "").trim() ||
         (item.group_id != null ? (groupNameById.get(String(item.group_id)) ?? "") : "");
+      const hasGroupId = item.group_id != null && String(item.group_id).trim() !== "";
+      const groupBinding = groupName
+        ? "bound"
+        : hasGroupId
+          ? groupMapTrusted && !groupNameById.has(String(item.group_id))
+            ? "orphaned"
+            : "unknown"
+          : "unbound";
       out.push({
         id: String(item.id ?? key.slice(-8)),
         key,
         name: (item.name ?? "").trim(),
         groupName,
+        groupBinding,
         status: "enabled",
       });
     }

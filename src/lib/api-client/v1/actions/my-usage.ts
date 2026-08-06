@@ -1,4 +1,5 @@
 import type {
+  MyGroupRateItem,
   MyStatsSummary,
   MyTodayStats,
   MyUsageLogsBatchResult,
@@ -16,6 +17,7 @@ import {
 } from "./_compat";
 
 export type {
+  MyGroupRateItem,
   MyStatsSummary,
   MyTodayStats,
   MyUsageLogEntry,
@@ -30,6 +32,13 @@ export function getMyUsageMetadata() {
 
 export function getMyQuota() {
   return toActionResult(apiGet<MyUsageQuota>("/api/v1/me/quota"));
+}
+
+export function getMyGroupRates() {
+  // Live group rates deliberately bypass the provider cache on the server.
+  return toActionResult(
+    apiGet<{ items: MyGroupRateItem[]; updatedAt: string }>("/api/v1/me/group-rates")
+  );
 }
 
 export function getMyTodayStats() {

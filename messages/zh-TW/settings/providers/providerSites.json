@@ -71,6 +71,8 @@
   "balance": "餘額",
   "upstreamBalance": "上游餘額",
   "todayCost": "今日消費",
+  "todayCostTotalTitle": "所有中轉今日總花費",
+  "todayCostTotalHelp": "彙總已同步的各中轉單位今日上游花費。",
   "fieldUsername": "登入帳號",
   "fieldUsernamePlaceholder": "信箱或使用者名稱",
   "fieldPassword": "登入密碼",

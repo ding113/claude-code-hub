@@ -25,6 +25,11 @@ export async function getMeQuota(c: Context): Promise<Response> {
   return actionJson(c, await callAction(c, actions.getMyQuota, [], c.get("auth")));
 }
 
+export async function getMeGroupRates(c: Context): Promise<Response> {
+  const actions = await import("@/actions/my-usage");
+  return actionJson(c, await callAction(c, actions.getMyGroupRates, [], c.get("auth")));
+}
+
 export async function getMeToday(c: Context): Promise<Response> {
   const actions = await import("@/actions/my-usage");
   return actionJson(c, await callAction(c, actions.getMyTodayStats, [], c.get("auth")));

@@ -131,5 +131,37 @@
     "lastStatus": "Посл.: {code} ({time})",
     "successRate": "{rate}%",
     "noData": "Нет данных"
+  },
+  "balance": {
+    "title": "Баланс аккаунта",
+    "unlimited": "Без лимита",
+    "description": "Доступный предоплаченный баланс",
+    "depleted": "Баланс исчерпан"
+  },
+  "groupRates": {
+    "title": "Курсы групп (live)",
+    "subtitle": "Эффективный тариф предпочитаемого провайдера в группе — обновляется в реальном времени",
+    "autoRefresh": "Онлайн",
+    "live": "Live",
+    "loadFailed": "Не удалось загрузить",
+    "empty": "Нет доступных провайдеров для ваших групп",
+    "free": "Бесплатно",
+    "multiplierHint": "Итоговый множитель = поставщик × группа",
+    "modeHealth": "Health",
+    "modePriority": "Priority",
+    "online": "Online",
+    "firstByte": "TTFB",
+    "requestFormat": "Формат запроса",
+    "formatClaude": "Claude Messages",
+    "formatClaudeAuth": "Claude Auth",
+    "formatCodex": "Codex Responses",
+    "formatGemini": "Gemini",
+    "formatGeminiCli": "Gemini CLI",
+    "formatOpenaiCompatible": "OpenAI Compatible",
+    "formatUnknown": "Неизвестный формат",
+    "providerMult": "Поставщик",
+    "groupMult": "Группа",
+    "effectiveMult": "Итого",
+    "totalLatency": "Всего"
   }
 }

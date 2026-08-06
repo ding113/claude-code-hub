@@ -100,9 +100,10 @@ function scrubUsageLogsBatchForReadonly(result: UsageLogsBatchResult): UsageLogs
       messagesCount: null,
       _liveChain: null,
       providerChain: scrubProviderChainRequestForReadonly(log.providerChain),
-      costMultiplier: null,
-      groupCostMultiplier: null,
-      costBreakdown: null,
+      // 保留用户自己的计费明细，让用户后台与管理后台使用同一套 tooltip 展示。
+      costMultiplier: log.costMultiplier ?? null,
+      groupCostMultiplier: log.groupCostMultiplier ?? null,
+      costBreakdown: log.costBreakdown ?? null,
       specialSettings: scrubSpecialSettingsForReadonly(log.specialSettings),
     })),
   };
@@ -172,6 +173,8 @@ export interface MyUsageMetadata {
 }
 
 export interface MyUsageQuota {
+  balanceUsd: number | null;
+  currencyCode: CurrencyCode;
   keyLimit5hUsd: number | null;
   keyLimitDailyUsd: number | null;
   keyLimitWeeklyUsd: number | null;
@@ -251,6 +254,11 @@ export interface MyUsageLogEntry {
   cacheCreation5mInputTokens: number | null;
   cacheCreation1hInputTokens: number | null;
   cacheTtlApplied: string | null;
+  /** Self-service billing details from the persisted request breakdown. */
+  costBreakdown?: import("@/types/cost-breakdown").StoredCostBreakdown | null;
+  costMultiplier?: string | null;
+  groupCostMultiplier?: string | null;
+  context1mApplied?: boolean | null;
 }
 
 export interface MyUsageLogsBatchResult {
@@ -327,6 +335,7 @@ export async function getMyQuota(): Promise<ActionResult<MyUsageQuota>> {
 
     const key = session.key;
     const user = session.user;
+    const settings = await getSystemSettings();
 
     // 导入时间工具函数和统计函数
     const { getTimeRangeForPeriodWithMode, getTimeRangeForPeriod } = await import(
@@ -478,6 +487,8 @@ export async function getMyQuota(): Promise<ActionResult<MyUsageQuota>> {
     const resolvedUserCurrent5hUsd = userFixed5hUsd ?? userCurrent5hUsd;
 
     const quota: MyUsageQuota = {
+      balanceUsd: user.balanceUsd ?? null,
+      currencyCode: settings.currencyDisplay,
       keyLimit5hUsd: key.limit5hUsd ?? null,
       keyLimitDailyUsd: key.limitDailyUsd ?? null,
       keyLimitWeeklyUsd: key.limitWeeklyUsd ?? null,
@@ -1110,5 +1121,94 @@ export async function getMyStatsSummary(
   } catch (error) {
     logger.error("[my-usage] getMyStatsSummary failed", error);
     return { ok: false, error: "Failed to get statistics summary" };
+  }
+}
+
+export interface MyGroupRateItem {
+  group: string;
+  providerId: number;
+  providerName: string;
+  /** Preferred provider's upstream request format / protocol. */
+  providerType: string;
+  /** Effective rate = provider multiplier × group multiplier. */
+  costMultiplier: number;
+  providerCostMultiplier: number;
+  groupCostMultiplier: number;
+  priority: number;
+  mode: "health_slo" | "legacy_priority";
+  onlineRate: number | null;
+  avgFirstByteMs: number | null;
+}
+
+/**
+ * Return the current preferred provider and effective rate for each group visible
+ * to the authenticated key/user. This intentionally reads fresh rows rather than
+ * the proxy provider cache so the UI reflects multiplier/health changes promptly.
+ */
+export async function getMyGroupRates(): Promise<
+  ActionResult<{ items: MyGroupRateItem[]; updatedAt: string }>
+> {
+  try {
+    const session = await getSession({ allowReadOnlyAccess: true });
+    if (!session) return { ok: false, error: "Unauthorized" };
+
+    const key = session.key;
+    const user = session.user;
+    const { findAllProvidersFresh } = await import("@/repository/provider");
+    const { findAllProviderGroups } = await import("@/repository/provider-groups");
+    const { expandUserVisibleGroups, pickPreferredProvidersForGroups } = await import(
+      "@/lib/provider-dispatch/group-preferred"
+    );
+
+    const [providerRows, providerGroupRows, settings] = await Promise.all([
+      findAllProvidersFresh(),
+      findAllProviderGroups(),
+      getSystemSettings(),
+    ]);
+    const groupTableMultipliers = new Map<string, number>();
+    for (const row of providerGroupRows) {
+      const multiplier = Number(row.costMultiplier);
+      groupTableMultipliers.set(
+        row.name,
+        Number.isFinite(multiplier) && multiplier >= 0 ? multiplier : 1
+      );
+    }
+
+    const groupCsv = key.providerGroup || user.providerGroup || null;
+    const groups = expandUserVisibleGroups(groupCsv, providerRows);
+    const healthSloThresholds = {
+      minOnlineRate: settings.healthTestMinOnlineRatePercent / 100,
+      maxAvgFirstByteMs: settings.healthTestMaxAvgLatencySeconds * 1000,
+      minSampleCount: settings.healthTestWindowSize,
+    };
+    const picks = pickPreferredProvidersForGroups(
+      providerRows,
+      groups,
+      groupTableMultipliers,
+      healthSloThresholds
+    );
+
+    return {
+      ok: true,
+      data: {
+        items: picks.map((pick) => ({
+          group: pick.group,
+          providerId: pick.providerId,
+          providerName: pick.providerName,
+          providerType: pick.providerType,
+          costMultiplier: pick.costMultiplier,
+          providerCostMultiplier: pick.providerCostMultiplier,
+          groupCostMultiplier: pick.groupCostMultiplier,
+          priority: pick.priority,
+          mode: pick.mode,
+          onlineRate: pick.onlineRate,
+          avgFirstByteMs: pick.avgFirstByteMs,
+        })),
+        updatedAt: new Date().toISOString(),
+      },
+    };
+  } catch (error) {
+    logger.error("[my-usage] getMyGroupRates failed", error);
+    return { ok: false, error: "Failed to get group rates" };
   }
 }

@@ -5,6 +5,7 @@ import { publishProviderCacheInvalidation } from "@/lib/cache/provider-cache";
 import { logger } from "@/lib/logger";
 import { decryptSecret, encryptSecret } from "@/lib/provider-sites/secret-box";
 import {
+  deleteUnboundUpstreamApiKeys,
   findUnkeyedOtherSiteGroupNames,
   pruneStaleSiteProvidersForUpstreamGroups,
   syncSiteKeysForGroups,
@@ -107,6 +108,15 @@ async function persistSession(siteId: number, session: UpstreamAuthSession): Pro
   });
 }
 
+async function clearPersistedSession(siteId: number): Promise<void> {
+  await updateProviderSite(siteId, {
+    sessionAccessTokenCipher: null,
+    sessionCookieCipher: null,
+    sessionUserId: null,
+    sessionExpiresAt: null,
+  });
+}
+
 async function fetchRatesAndBalance(
   siteId: number,
   creds: UpstreamSiteCredentials,
@@ -180,6 +190,7 @@ export async function syncProviderSiteFromUpstream(
         siteId,
         siteName,
       });
+      await clearPersistedSession(siteId);
       creds = { ...creds, session: null };
       session = await loginUpstreamSite(creds);
       await persistSession(siteId, session);
@@ -247,6 +258,7 @@ export async function syncProviderSiteFromUpstream(
           siteId,
           siteName,
         });
+        await clearPersistedSession(siteId);
         creds = { ...creds, session: null };
         session = await loginUpstreamSite(creds);
         await persistSession(siteId, session);
@@ -258,6 +270,16 @@ export async function syncProviderSiteFromUpstream(
         count: upstreamKeys.length,
         grouped: new Set(upstreamKeys.map((k) => k.groupName)).size,
       });
+      let unboundUpstreamKeysDeleted = 0;
+      if (upstreamGroupNames.length > 0) {
+        unboundUpstreamKeysDeleted = await deleteUnboundUpstreamApiKeys({
+          siteId,
+          siteName,
+          upstreamKeys,
+          creds,
+          session,
+        });
+      }
       const allGroups = await findAllProviderGroups();
       const unkeyedOtherGroups = findUnkeyedOtherSiteGroupNames({
         groupNames: upstreamGroupNames,
@@ -323,6 +345,7 @@ export async function syncProviderSiteFromUpstream(
         skippedGroups: keySummary.skippedGroupNames,
         keysSeen: keySummary.keysSeen,
         keysAutoCreated: keySummary.keysAutoCreated,
+        unboundUpstreamKeysDeleted,
       };
     } catch (error) {
       logger.warn("[provider-sites] key sync failed (rates still saved)", {
