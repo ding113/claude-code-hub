@@ -172,6 +172,10 @@
     },
     "replayEnabled": "Request Replay",
     "replayEnabledDesc": "Caches upstream responses and reuses upstream connections: identical concurrent or reconnecting requests attach to the in-flight stream instead of re-hitting the provider. Follows the ENABLE_REQUEST_REPLAY environment variable until saved here. Default on.",
+    "replayCacheTtlMinutes": "Replay cache duration",
+    "replayCacheTtlMinutesDesc": "How long completed Replay payloads remain reusable. Applies only to payloads written afterward. Range: 5-120 minutes.",
+    "replayCacheTtlInvalid": "Replay cache duration must be a whole number from 5 to 120 minutes.",
+    "replayCacheTtlMinutesUnit": "min",
     "cacheEffectivenessEnabled": "Prefix Cache Simulation",
     "cacheEffectivenessEnabledDesc": "Simulates longest-prefix cache hit rates (theoretical vs actual) for observability only; never affects routing. Follows the ENABLE_CACHE_EFFECTIVENESS environment variable until saved here. Default on."
   },

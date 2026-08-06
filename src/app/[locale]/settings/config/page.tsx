@@ -83,6 +83,7 @@ async function SettingsConfigContent({ locale }: { locale: string }) {
             streamGateMode: settings.streamGateMode,
             affinityIgnoreClientSessionId: settings.affinityIgnoreClientSessionId,
             replayEnabled: settings.replayEnabled,
+            replayCacheTtlMinutes: settings.replayCacheTtlMinutes,
             cacheEffectivenessEnabled: settings.cacheEffectivenessEnabled,
             enableCodexSessionIdCompletion: settings.enableCodexSessionIdCompletion,
             enableClaudeMetadataUserIdInjection: settings.enableClaudeMetadataUserIdInjection,
