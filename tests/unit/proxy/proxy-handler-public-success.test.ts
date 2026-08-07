@@ -19,6 +19,8 @@ const boundary = vi.hoisted(() => ({
   send: vi.fn<(session: ProxySession) => Promise<Response>>(),
 }));
 
+let observedSession: ProxySession | null = null;
+
 vi.mock("@/lib/config", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/config")>()),
   getCachedSystemSettings: boundary.loadSettings,
@@ -84,13 +86,17 @@ function createContext(pathname: string, body: Record<string, unknown>): Context
 
 describe("handleProxyRequest public success behavior", () => {
   beforeEach(() => {
+    observedSession = null;
     boundary.runGuards.mockReset();
     boundary.send.mockReset();
     boundary.incrementConcurrentCount.mockReset();
     boundary.decrementConcurrentCount.mockReset();
     boundary.loadSettings.mockReset();
     boundary.loadSettings.mockResolvedValue(defaultSettings);
-    boundary.runGuards.mockResolvedValue(null);
+    boundary.runGuards.mockImplementation(async (session) => {
+      observedSession = session;
+      return null;
+    });
     boundary.incrementConcurrentCount.mockResolvedValue(undefined);
     boundary.decrementConcurrentCount.mockResolvedValue(undefined);
   });
@@ -173,5 +179,31 @@ describe("handleProxyRequest public success behavior", () => {
       output: [{ type: "message", content: [] }],
       tools: [],
     });
+  });
+
+  it("routes remote compaction v2 through the v1 compact management policy", async () => {
+    boundary.send.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          output: [{ type: "compaction", encrypted_content: "opaque-state" }],
+        }),
+        { status: 200, headers: { "content-type": "application/json" } }
+      )
+    );
+
+    const response = await handleProxyRequest(
+      createContext("/v1/responses", {
+        model: "gpt-5-codex",
+        input: [{ role: "user", content: "keep" }, { type: "compaction_trigger" }],
+      })
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      output: [{ type: "compaction", encrypted_content: "opaque-state" }],
+    });
+    expect(observedSession?.getEndpoint()).toBe("/v1/responses");
+    expect(observedSession?.getManagedEndpoint()).toBe("/v1/responses/compact");
+    expect(observedSession?.getEndpointPolicy().kind).toBe("raw_passthrough");
   });
 });

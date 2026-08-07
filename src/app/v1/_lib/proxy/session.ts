@@ -35,7 +35,7 @@ import type { BillingModelSource, CodexPriorityBillingSource } from "@/types/sys
 import type { User } from "@/types/user";
 import type { AffinityLookupResult } from "./affinity/affinity-store";
 import type { FingerprintChain } from "./affinity/fingerprint";
-import { isCountTokensEndpointPath } from "./endpoint-paths";
+import { isCountTokensEndpointPath, V1_ENDPOINT_PATHS } from "./endpoint-paths";
 import { type EndpointPolicy, resolveEndpointPolicy } from "./endpoint-policy";
 import { ProxyError } from "./errors";
 import type { ClientFormat } from "./format-mapper";
@@ -48,6 +48,7 @@ import {
   type OpenAIImageRequestMetadata,
   parseOpenAIImageMultipartMetadata,
 } from "./openai-image-compat";
+import { isRemoteCompactionV2Request } from "./remote-compaction";
 import type { ReplayIdentity } from "./replay/replay-identity";
 import { decodeRequestBody } from "./request-body-codec";
 
@@ -190,6 +191,7 @@ export class ProxySession {
   // Replay 角色状态（F2 guard 阶段 claim owner 成功后填充，spool 由 handleStream 建立）
   replayState: SessionReplayState | null = null;
 
+  private readonly managedEndpoint: string;
   private readonly endpointPolicy: EndpointPolicy;
 
   // 模型重定向追踪：保存原始模型名（重定向前）
@@ -312,7 +314,8 @@ export class ProxySession {
     this.messageContext = null;
     this.sessionId = null;
     this.providerChain = [];
-    this.endpointPolicy = resolveSessionEndpointPolicy(init.requestUrl);
+    this.managedEndpoint = resolveSessionManagedEndpoint(init.requestUrl, init.request.message);
+    this.endpointPolicy = resolveEndpointPolicy(this.managedEndpoint);
   }
 
   static async fromContext(c: Context): Promise<ProxySession> {
@@ -1194,6 +1197,14 @@ export class ProxySession {
   }
 
   /**
+   * 获取管理语义的 endpoint。
+   * Remote Compaction v2 保留真实 /v1/responses wire path，但复用 v1 compact 的策略、日志和计费分类。
+   */
+  getManagedEndpoint(): string {
+    return this.managedEndpoint ?? this.getEndpoint() ?? "/";
+  }
+
+  /**
    * 获取请求的 API endpoint（来自 URL.pathname）
    * 处理边界：若 URL 不存在则返回 null
    */
@@ -1554,15 +1565,20 @@ function optimizeRequestMessage(message: Record<string, unknown>): Record<string
   return optimized;
 }
 
-function resolveSessionEndpointPolicy(requestUrl: URL): EndpointPolicy {
+function resolveSessionManagedEndpoint(
+  requestUrl: URL,
+  requestMessage: Record<string, unknown>
+): string {
   try {
     const pathname = requestUrl.pathname;
     if (typeof pathname === "string" && pathname.length > 0) {
-      return resolveEndpointPolicy(pathname);
+      return isRemoteCompactionV2Request(pathname, requestMessage)
+        ? V1_ENDPOINT_PATHS.RESPONSES_COMPACT
+        : pathname;
     }
   } catch {}
 
-  return resolveEndpointPolicy("/");
+  return "/";
 }
 
 export function extractModelFromPath(pathname: string): string | null {

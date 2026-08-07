@@ -234,6 +234,26 @@ describe("runStreamContentGate", () => {
     expect(result.readerDone).toBe(false);
   });
 
+  it("openai-responses: commits a compaction item before response.completed", async () => {
+    const compaction =
+      'event: response.output_item.done\ndata: {"type":"response.output_item.done","item":{"type":"compaction","encrypted_content":"opaque-state"}}\n\n';
+    const completed =
+      'event: response.completed\ndata: {"type":"response.completed","response":{"status":"completed"}}\n\n';
+    const reader = readerFromChunks([compaction, completed]);
+
+    const result = await runStreamContentGate(reader, {
+      ...GATE_OPTIONS,
+      family: "openai-responses",
+    });
+
+    expect(result.committed).toBe(true);
+    if (!result.committed) return;
+    expect(await drainPrefix(result.prefixChunks)).toBe(compaction);
+    expect(result.readerDone).toBe(false);
+    const rest = await reader.read();
+    expect(new TextDecoder().decode(rest.value)).toBe(completed);
+  });
+
   it("gemini: usage-only chunks buffer until content commits", async () => {
     const reader = readerFromChunks([
       'data: {"usageMetadata":{"totalTokenCount":1}}\n\n',

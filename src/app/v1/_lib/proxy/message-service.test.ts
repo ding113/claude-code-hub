@@ -29,6 +29,7 @@ function createSession(providerType: string, message: Record<string, unknown>) {
     userAgent: "codex_cli_rs/1.0.0",
     clientIp: "127.0.0.1",
     getEndpoint: () => "/v1/responses",
+    getManagedEndpoint: () => "/v1/responses",
     getOriginalModel: () => "gpt-5",
     setOriginalModel: vi.fn(),
     getSpecialSettings: () => (specialSettings.length > 0 ? specialSettings : null),
@@ -124,6 +125,18 @@ describe("ProxyMessageService Codex reasoning effort audit", () => {
         affinity_fingerprint: "fp-deep",
         affinity_fingerprint_chain: ["fp-deep", "fp-mid"],
       })
+    );
+  });
+
+  test("remote compaction v2 uses the compact management endpoint", async () => {
+    const { session } = createSession("codex", { input: [{ type: "compaction_trigger" }] });
+    (session as unknown as { getManagedEndpoint: () => string }).getManagedEndpoint = () =>
+      "/v1/responses/compact";
+
+    await ProxyMessageService.ensureContext(session);
+
+    expect(createMessageRequestMock).toHaveBeenCalledWith(
+      expect.objectContaining({ endpoint: "/v1/responses/compact" })
     );
   });
 });

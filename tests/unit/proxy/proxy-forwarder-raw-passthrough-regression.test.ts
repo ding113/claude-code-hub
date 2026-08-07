@@ -149,6 +149,45 @@ describe("ProxyForwarder raw passthrough regression", () => {
     expect(readBodyText(capturedInit?.body)).toBe(originalBody);
   });
 
+  it("remote compaction v2 保留 /v1/responses wire path 与原始请求体", async () => {
+    const originalBody =
+      '{\n  "model": "gpt-5.5",\n  "stream": true,\n  "input": [{"type":"compaction_trigger"}]\n}\n';
+    const upstreamSse =
+      'event: response.output_item.done\ndata: {"type":"response.output_item.done","output_index":0,"item":{"type":"compaction","encrypted_content":"opaque-state"}}\n\n' +
+      'event: response.completed\ndata: {"type":"response.completed","response":{"id":"resp_compact","status":"completed","output":[{"type":"compaction","encrypted_content":"opaque-state"}]}}\n\n';
+    const session = createRawPassthroughSession(originalBody, {
+      "x-codex-beta-features": "remote_compaction_v2",
+    });
+    session.requestUrl = new URL("https://proxy.example.com/v1/responses?transport=http");
+    const provider = createProvider();
+
+    let capturedUrl: string | null = null;
+    let capturedBody: BodyInit | undefined;
+    let capturedHeaders: Headers | null = null;
+    const fetchWithoutAutoDecode = vi.spyOn(ProxyForwarder as any, "fetchWithoutAutoDecode");
+    fetchWithoutAutoDecode.mockImplementationOnce(async (url: string, init: RequestInit) => {
+      capturedUrl = url;
+      capturedBody = init.body ?? undefined;
+      capturedHeaders = new Headers(init.headers);
+      return new Response(upstreamSse, {
+        status: 200,
+        headers: { "content-type": "text/event-stream" },
+      });
+    });
+
+    const { doForward } = ProxyForwarder as unknown as {
+      doForward: (session: ProxySession, provider: Provider, baseUrl: string) => Promise<Response>;
+    };
+
+    const response = await doForward(session, provider, provider.url);
+
+    expect(new URL(capturedUrl as string).pathname).toBe("/v1/responses");
+    expect(new URL(capturedUrl as string).searchParams.get("transport")).toBe("http");
+    expect(readBodyText(capturedBody)).toBe(originalBody);
+    expect(capturedHeaders?.get("x-codex-beta-features")).toBe("remote_compaction_v2");
+    expect(await response.text()).toBe(upstreamSse);
+  });
+
   it("raw passthrough 出站请求不得继续携带 transfer-encoding 这类 hop-by-hop 头", async () => {
     const body = '{"model":"gpt-5.5","input":[]}';
     const session = createRawPassthroughSession(body, {
