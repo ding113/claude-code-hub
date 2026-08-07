@@ -199,7 +199,7 @@ describe("ProxyForwarder raw passthrough regression", () => {
 
     const result = rectifyResponseInput(session.request.message);
     expect(result.applied).toBe(true);
-    session.syncRequestBodyFromMessage();
+    await session.syncRequestBodyFromMessage();
 
     let capturedUrl: string | null = null;
     let capturedBody: BodyInit | undefined;

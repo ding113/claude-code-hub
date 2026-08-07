@@ -10,6 +10,7 @@ import {
 } from "@/lib/redis/live-chain-store";
 import type { SessionBindingSnapshot } from "@/lib/redis/session-binding";
 import { clientRequestsContext1m as clientRequestsContext1mHelper } from "@/lib/special-attributes";
+import { ERROR_CODES, getErrorMessageServer } from "@/lib/utils/error-messages";
 import {
   type ResolvedPricing,
   resolvePricingForModelRecords,
@@ -1200,10 +1201,15 @@ export class ProxySession {
    * 在请求 message 被原地规范化后，同步 raw wire body 与审计日志。
    * 标准数组请求不会调用此方法，因此原始请求字节仍保持不变。
    */
-  syncRequestBodyFromMessage(): void {
+  async syncRequestBodyFromMessage(): Promise<void> {
     const serialized = JSON.stringify(this.request.message);
     if (serialized === undefined) {
-      throw new ProxyError("Invalid request: normalized body could not be serialized.", 400);
+      const { getLocale } = await import("next-intl/server");
+      const message = await getErrorMessageServer(
+        await getLocale(),
+        ERROR_CODES.INVALID_NORMALIZED_BODY
+      );
+      throw new ProxyError(message, 400);
     }
 
     this.request.buffer = new TextEncoder().encode(serialized).buffer;
