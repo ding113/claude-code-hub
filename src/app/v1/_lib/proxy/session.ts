@@ -1,4 +1,6 @@
 import type { Context } from "hono";
+import { isCountTokensEndpointPath, V1_ENDPOINT_PATHS } from "@/app/v1/_lib/proxy/endpoint-paths";
+import { isRemoteCompactionV2Request } from "@/app/v1/_lib/proxy/remote-compaction";
 import { logger } from "@/lib/logger";
 import {
   deleteLiveChain,
@@ -35,7 +37,6 @@ import type { BillingModelSource, CodexPriorityBillingSource } from "@/types/sys
 import type { User } from "@/types/user";
 import type { AffinityLookupResult } from "./affinity/affinity-store";
 import type { FingerprintChain } from "./affinity/fingerprint";
-import { isCountTokensEndpointPath, V1_ENDPOINT_PATHS } from "./endpoint-paths";
 import { type EndpointPolicy, resolveEndpointPolicy } from "./endpoint-policy";
 import { ProxyError } from "./errors";
 import type { ClientFormat } from "./format-mapper";
@@ -48,7 +49,6 @@ import {
   type OpenAIImageRequestMetadata,
   parseOpenAIImageMultipartMetadata,
 } from "./openai-image-compat";
-import { isRemoteCompactionV2Request } from "./remote-compaction";
 import type { ReplayIdentity } from "./replay/replay-identity";
 import { decodeRequestBody } from "./request-body-codec";
 
@@ -1194,6 +1194,20 @@ export class ProxySession {
 
   getEndpointPolicy(): EndpointPolicy {
     return this.endpointPolicy;
+  }
+
+  /**
+   * 在请求 message 被原地规范化后，同步 raw wire body 与审计日志。
+   * 标准数组请求不会调用此方法，因此原始请求字节仍保持不变。
+   */
+  syncRequestBodyFromMessage(): void {
+    const serialized = JSON.stringify(this.request.message);
+    if (serialized === undefined) {
+      throw new ProxyError("Invalid request: normalized body could not be serialized.", 400);
+    }
+
+    this.request.buffer = new TextEncoder().encode(serialized).buffer;
+    this.request.log = JSON.stringify(optimizeRequestMessage(this.request.message), null, 2);
   }
 
   /**

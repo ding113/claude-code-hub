@@ -19,14 +19,17 @@ const getCachedMock = vi.mocked(getCachedSystemSettings);
 function createMockSession(input: unknown): {
   session: ProxySession;
   specialSettings: SpecialSetting[];
+  syncRequestBodyFromMessage: ReturnType<typeof vi.fn>;
 } {
   const specialSettings: SpecialSetting[] = [];
+  const syncRequestBodyFromMessage = vi.fn();
   const session = {
     request: { message: { model: "gpt-4o", input } },
     sessionId: "sess_test",
     addSpecialSetting: (s: SpecialSetting) => specialSettings.push(s),
+    syncRequestBodyFromMessage,
   } as unknown as ProxySession;
-  return { session, specialSettings };
+  return { session, specialSettings, syncRequestBodyFromMessage };
 }
 
 describe("rectifyResponseInput", () => {
@@ -184,7 +187,7 @@ describe("normalizeResponseInput", () => {
   it("normalizes string input and records audit when enabled", async () => {
     getCachedMock.mockResolvedValue({ enableResponseInputRectifier: true } as any);
 
-    const { session, specialSettings } = createMockSession("hello");
+    const { session, specialSettings, syncRequestBodyFromMessage } = createMockSession("hello");
     await normalizeResponseInput(session);
 
     const message = session.request.message as Record<string, unknown>;
@@ -198,29 +201,32 @@ describe("normalizeResponseInput", () => {
       action: "string_to_array",
       originalType: "string",
     });
+    expect(syncRequestBodyFromMessage).toHaveBeenCalledOnce();
   });
 
   it("skips normalization when feature is disabled", async () => {
     getCachedMock.mockResolvedValue({ enableResponseInputRectifier: false } as any);
 
-    const { session, specialSettings } = createMockSession("hello");
+    const { session, specialSettings, syncRequestBodyFromMessage } = createMockSession("hello");
     await normalizeResponseInput(session);
 
     const message = session.request.message as Record<string, unknown>;
     expect(message.input).toBe("hello");
     expect(specialSettings).toHaveLength(0);
+    expect(syncRequestBodyFromMessage).not.toHaveBeenCalled();
   });
 
   it("does not record audit for passthrough (array input)", async () => {
     getCachedMock.mockResolvedValue({ enableResponseInputRectifier: true } as any);
 
     const arrayInput = [{ role: "user", content: [{ type: "input_text", text: "hi" }] }];
-    const { session, specialSettings } = createMockSession(arrayInput);
+    const { session, specialSettings, syncRequestBodyFromMessage } = createMockSession(arrayInput);
     await normalizeResponseInput(session);
 
     const message = session.request.message as Record<string, unknown>;
     expect(message.input).toBe(arrayInput);
     expect(specialSettings).toHaveLength(0);
+    expect(syncRequestBodyFromMessage).not.toHaveBeenCalled();
   });
 
   it("wraps single object input and records audit when enabled", async () => {

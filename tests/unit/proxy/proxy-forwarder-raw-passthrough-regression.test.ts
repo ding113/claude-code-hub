@@ -29,6 +29,7 @@ vi.mock("@/lib/proxy-agent", () => ({
 
 import { resolveEndpointPolicy } from "@/app/v1/_lib/proxy/endpoint-policy";
 import { ProxyForwarder } from "@/app/v1/_lib/proxy/forwarder";
+import { rectifyResponseInput } from "@/app/v1/_lib/proxy/response-input-rectifier";
 import { ProxySession } from "@/app/v1/_lib/proxy/session";
 import type { Provider } from "@/types/provider";
 
@@ -186,6 +187,47 @@ describe("ProxyForwarder raw passthrough regression", () => {
     expect(readBodyText(capturedBody)).toBe(originalBody);
     expect(capturedHeaders?.get("x-codex-beta-features")).toBe("remote_compaction_v2");
     expect(await response.text()).toBe(upstreamSse);
+  });
+
+  it("remote compaction v2 将单对象 input 规范化后再透传", async () => {
+    const originalBody = '{"model":"gpt-5.5","stream":true,"input":{"type":"compaction_trigger"}}';
+    const session = createRawPassthroughSession(originalBody, {
+      "x-codex-beta-features": "remote_compaction_v2",
+    });
+    session.requestUrl = new URL("https://proxy.example.com/v1/responses?transport=http");
+    const provider = createProvider();
+
+    const result = rectifyResponseInput(session.request.message);
+    expect(result.applied).toBe(true);
+    session.syncRequestBodyFromMessage();
+
+    let capturedUrl: string | null = null;
+    let capturedBody: BodyInit | undefined;
+    let capturedHeaders: Headers | null = null;
+    const fetchWithoutAutoDecode = vi.spyOn(ProxyForwarder as any, "fetchWithoutAutoDecode");
+    fetchWithoutAutoDecode.mockImplementationOnce(async (url: string, init: RequestInit) => {
+      capturedUrl = url;
+      capturedBody = init.body ?? undefined;
+      capturedHeaders = new Headers(init.headers);
+      return new Response("{}", {
+        status: 200,
+        headers: { "content-type": "application/json", "content-length": "2" },
+      });
+    });
+
+    const { doForward } = ProxyForwarder as unknown as {
+      doForward: (session: ProxySession, provider: Provider, baseUrl: string) => Promise<Response>;
+    };
+
+    await doForward(session, provider, provider.url);
+
+    expect(new URL(capturedUrl as string).pathname).toBe("/v1/responses");
+    expect(new URL(capturedUrl as string).searchParams.get("transport")).toBe("http");
+    expect(JSON.parse(readBodyText(capturedBody) ?? "{}").input).toEqual([
+      { type: "compaction_trigger" },
+    ]);
+    expect(capturedHeaders?.get("content-length")).toBeNull();
+    expect(capturedHeaders?.get("x-codex-beta-features")).toBe("remote_compaction_v2");
   });
 
   it("raw passthrough 出站请求不得继续携带 transfer-encoding 这类 hop-by-hop 头", async () => {

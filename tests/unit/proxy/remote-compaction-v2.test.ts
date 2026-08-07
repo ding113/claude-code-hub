@@ -9,9 +9,14 @@ vi.mock("@/repository/system-config", () => ({
   getSystemSettings: vi.fn(),
 }));
 
+vi.mock("@/lib/config/system-settings-cache", () => ({
+  getCachedSystemSettings: vi.fn(async () => ({ enableResponseInputRectifier: true })),
+}));
+
 import { V1_ENDPOINT_PATHS } from "@/app/v1/_lib/proxy/endpoint-paths";
 import { resolveEndpointPolicy } from "@/app/v1/_lib/proxy/endpoint-policy";
 import { isRemoteCompactionV2Request } from "@/app/v1/_lib/proxy/remote-compaction";
+import { normalizeResponseInput } from "@/app/v1/_lib/proxy/response-input-rectifier";
 import { ProxySession } from "@/app/v1/_lib/proxy/session";
 import { isNonBillingEndpoint } from "@/lib/utils/performance-formatter";
 
@@ -46,12 +51,20 @@ describe("remote compaction v2 request classification", () => {
     ).toBe(true);
   });
 
+  it("recognizes a single compaction_trigger input object", () => {
+    expect(
+      isRemoteCompactionV2Request(V1_ENDPOINT_PATHS.RESPONSES, {
+        input: { type: "compaction_trigger" },
+      })
+    ).toBe(true);
+  });
+
   it.each([
     ["different endpoint", V1_ENDPOINT_PATHS.CHAT_COMPLETIONS, [{ type: "compaction_trigger" }]],
     ["future item type", V1_ENDPOINT_PATHS.RESPONSES, [{ type: "compaction_trigger_v2" }]],
     ["nested marker", V1_ENDPOINT_PATHS.RESPONSES, [{ content: { type: "compaction_trigger" } }]],
     ["string marker", V1_ENDPOINT_PATHS.RESPONSES, ["compaction_trigger"]],
-    ["non-array input", V1_ENDPOINT_PATHS.RESPONSES, { type: "compaction_trigger" }],
+    ["unrelated input object", V1_ENDPOINT_PATHS.RESPONSES, { type: "message" }],
     [
       "compaction replay item",
       V1_ENDPOINT_PATHS.RESPONSES,
@@ -89,5 +102,30 @@ describe("remote compaction v2 request classification", () => {
 
     expect(session.getManagedEndpoint()).toBe(V1_ENDPOINT_PATHS.RESPONSES);
     expect(session.getEndpointPolicy().kind).toBe("default");
+  });
+
+  it("normalizes a single compaction trigger across message, buffer, and log", async () => {
+    const session = await ProxySession.fromContext(
+      makeContext(
+        "https://hub.test/v1/responses",
+        JSON.stringify({
+          model: "gpt-5-codex",
+          stream: true,
+          input: { type: "compaction_trigger" },
+        })
+      )
+    );
+
+    await normalizeResponseInput(session);
+
+    expect(session.getManagedEndpoint()).toBe(V1_ENDPOINT_PATHS.RESPONSES_COMPACT);
+    expect(session.getEndpointPolicy().kind).toBe("raw_passthrough");
+    expect(session.request.message.input).toEqual([{ type: "compaction_trigger" }]);
+    expect(JSON.parse(new TextDecoder().decode(session.request.buffer))).toMatchObject({
+      input: [{ type: "compaction_trigger" }],
+    });
+    expect(JSON.parse(session.request.log)).toMatchObject({
+      input: [{ type: "compaction_trigger" }],
+    });
   });
 });

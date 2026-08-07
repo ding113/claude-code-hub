@@ -17,6 +17,7 @@ const boundary = vi.hoisted(() => ({
   loadSettings: vi.fn<() => Promise<ProxySettingsFixture>>(),
   runGuards: vi.fn<(session: ProxySession) => Promise<Response | null>>(),
   send: vi.fn<(session: ProxySession) => Promise<Response>>(),
+  fakeStreamingCalls: 0,
 }));
 
 let observedSession: ProxySession | null = null;
@@ -40,6 +41,21 @@ vi.mock("@/app/v1/_lib/proxy/guard-pipeline", () => ({
 vi.mock("@/app/v1/_lib/proxy/forwarder", () => ({
   ProxyForwarder: { send: boundary.send },
 }));
+
+vi.mock("@/app/v1/_lib/proxy/fake-streaming/proxy-integration", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("@/app/v1/_lib/proxy/fake-streaming/proxy-integration")>();
+
+  return {
+    ...actual,
+    tryFakeStreamingPath: async (
+      ...args: Parameters<typeof actual.tryFakeStreamingPath>
+    ): Promise<Response | null> => {
+      boundary.fakeStreamingCalls += 1;
+      return await actual.tryFakeStreamingPath(...args);
+    },
+  };
+});
 
 vi.mock("@/lib/session-tracker", () => ({
   SessionTracker: {
@@ -87,6 +103,7 @@ function createContext(pathname: string, body: Record<string, unknown>): Context
 describe("handleProxyRequest public success behavior", () => {
   beforeEach(() => {
     observedSession = null;
+    boundary.fakeStreamingCalls = 0;
     boundary.runGuards.mockReset();
     boundary.send.mockReset();
     boundary.incrementConcurrentCount.mockReset();
@@ -150,6 +167,7 @@ describe("handleProxyRequest public success behavior", () => {
     expect(body).toContain('"text":"generated"');
     expect(body).toContain("event: message_stop");
     expect(boundary.send).toHaveBeenCalledOnce();
+    expect(boundary.fakeStreamingCalls).toBe(1);
   });
 
   it("normalizes Responses input and output at the public boundary", async () => {
@@ -205,5 +223,39 @@ describe("handleProxyRequest public success behavior", () => {
     expect(observedSession?.getEndpoint()).toBe("/v1/responses");
     expect(observedSession?.getManagedEndpoint()).toBe("/v1/responses/compact");
     expect(observedSession?.getEndpointPolicy().kind).toBe("raw_passthrough");
+    expect(boundary.fakeStreamingCalls).toBe(0);
+  });
+
+  it("normalizes object-form remote compaction before raw passthrough", async () => {
+    boundary.loadSettings.mockResolvedValue({
+      ...defaultSettings,
+      fakeStreamingWhitelist: [{ model: "gpt-5-codex", groupTags: [] }],
+    });
+    boundary.send.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          output: [{ type: "compaction", encrypted_content: "opaque-state" }],
+        }),
+        { status: 200, headers: { "content-type": "application/json" } }
+      )
+    );
+
+    const response = await handleProxyRequest(
+      createContext("/v1/responses", {
+        model: "gpt-5-codex",
+        stream: true,
+        input: { type: "compaction_trigger" },
+      })
+    );
+
+    expect(response.status).toBe(200);
+    expect(observedSession?.getManagedEndpoint()).toBe("/v1/responses/compact");
+    expect(observedSession?.getEndpointPolicy().kind).toBe("raw_passthrough");
+    expect(observedSession?.request.message.input).toEqual([{ type: "compaction_trigger" }]);
+    expect(JSON.parse(new TextDecoder().decode(observedSession?.request.buffer)).input).toEqual([
+      { type: "compaction_trigger" },
+    ]);
+    expect(boundary.fakeStreamingCalls).toBe(0);
+    expect(boundary.send).toHaveBeenCalledOnce();
   });
 });

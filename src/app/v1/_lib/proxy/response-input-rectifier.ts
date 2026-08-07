@@ -89,6 +89,7 @@ export async function normalizeResponseInput(session: ProxySession): Promise<voi
   const result = rectifyResponseInput(message);
 
   if (result.applied) {
+    session.syncRequestBodyFromMessage();
     session.addSpecialSetting({
       type: "response_input_rectifier",
       scope: "request",
