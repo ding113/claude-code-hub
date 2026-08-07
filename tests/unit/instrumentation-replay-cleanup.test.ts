@@ -73,14 +73,14 @@ describe("startReplayCleanupScheduler", () => {
     await vi.runOnlyPendingTimersAsync();
 
     expect(loggerControl.warn).toHaveBeenCalledWith(
-      "[Instrumentation] Replay cleanup tick failed",
       expect.objectContaining({
         error: "Failed query",
         errorName: "Error",
         errorCause: "canceling statement due to lock timeout",
         errorCauseName: "Error",
         errorCauseCode: "55P03",
-      })
+      }),
+      "[Instrumentation] Replay cleanup tick failed"
     );
   });
 
@@ -95,8 +95,8 @@ describe("startReplayCleanupScheduler", () => {
     await vi.runOnlyPendingTimersAsync();
 
     expect(loggerControl.info).toHaveBeenCalledWith(
-      "[Instrumentation] Replay cleanup tick completed",
-      { status: "completed", batches: 2, deleted: 150 }
+      { status: "completed", batches: 2, deleted: 150 },
+      "[Instrumentation] Replay cleanup tick completed"
     );
   });
 });

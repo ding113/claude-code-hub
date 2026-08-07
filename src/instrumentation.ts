@@ -331,13 +331,14 @@ export async function startReplayCleanupScheduler(): Promise<void> {
       void runReplayCleanupTick()
         .then((result) => {
           if (result.deleted > 0) {
-            logger.info("[Instrumentation] Replay cleanup tick completed", result);
+            logger.info(result, "[Instrumentation] Replay cleanup tick completed");
           }
         })
         .catch((error) => {
-          logger.warn("[Instrumentation] Replay cleanup tick failed", {
-            ...describeSchedulerError(error),
-          });
+          logger.warn(
+            { ...describeSchedulerError(error) },
+            "[Instrumentation] Replay cleanup tick failed"
+          );
         });
     };
 
@@ -345,13 +346,15 @@ export async function startReplayCleanupScheduler(): Promise<void> {
     instrumentationState.__CCH_REPLAY_CLEANUP_INTERVAL_ID__ = setInterval(runTick, intervalMs);
 
     instrumentationState.__CCH_REPLAY_CLEANUP_STARTED__ = true;
-    logger.info("[Instrumentation] Replay cleanup scheduler started", {
-      intervalSeconds: intervalMs / 1000,
-    });
+    logger.info(
+      { intervalSeconds: intervalMs / 1000 },
+      "[Instrumentation] Replay cleanup scheduler started"
+    );
   } catch (error) {
-    logger.warn("[Instrumentation] Replay cleanup scheduler init failed", {
-      ...describeSchedulerError(error),
-    });
+    logger.warn(
+      { ...describeSchedulerError(error) },
+      "[Instrumentation] Replay cleanup scheduler init failed"
+    );
   }
 }
 
