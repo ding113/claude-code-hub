@@ -598,6 +598,26 @@ describe("v1 action compatibility client", () => {
     });
   });
 
+  test("preserves the last-enabled-key business code through toggleKeyEnabled", async () => {
+    postMock.mockRejectedValueOnce(
+      new ApiError({
+        status: 400,
+        errorCode: "CANNOT_DISABLE_LAST_KEY",
+        detail: "Bad request",
+      })
+    );
+
+    const result = await keys.toggleKeyEnabled(7, false);
+
+    expect(postMock).toHaveBeenCalledWith("/api/v1/keys/7:enable", { enabled: false }, undefined);
+    expect(result).toEqual({
+      ok: false,
+      error: "Bad request",
+      errorCode: "CANNOT_DISABLE_LAST_KEY",
+      errorParams: undefined,
+    });
+  });
+
   test("maps key.action_failed through toVoidActionResult to OPERATION_FAILED", async () => {
     deleteMock.mockRejectedValueOnce(
       new ApiError({ status: 400, errorCode: "key.action_failed", detail: "Bad request" })
