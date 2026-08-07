@@ -13,6 +13,16 @@ vi.mock("@/lib/config/system-settings-cache", () => ({
   getCachedSystemSettings: vi.fn(async () => ({ enableResponseInputRectifier: true })),
 }));
 
+vi.mock("next-intl/server", () => ({
+  getLocale: vi.fn(async () => "en"),
+  getTranslations: vi.fn(async () => (key: string) => {
+    if (key === "INVALID_NORMALIZED_BODY") {
+      return "The normalized request body could not be serialized";
+    }
+    return key;
+  }),
+}));
+
 import { V1_ENDPOINT_PATHS } from "@/app/v1/_lib/proxy/endpoint-paths";
 import { resolveEndpointPolicy } from "@/app/v1/_lib/proxy/endpoint-policy";
 import { isRemoteCompactionV2Request } from "@/app/v1/_lib/proxy/remote-compaction";
@@ -126,6 +136,21 @@ describe("remote compaction v2 request classification", () => {
     });
     expect(JSON.parse(session.request.log)).toMatchObject({
       input: [{ type: "compaction_trigger" }],
+    });
+  });
+
+  it("returns a localized 400 error when the normalized body cannot be serialized", async () => {
+    const session = await ProxySession.fromContext(
+      makeContext(
+        "https://hub.test/v1/responses",
+        JSON.stringify({ model: "gpt-5-codex", input: [] })
+      )
+    );
+    session.request.message = undefined as unknown as Record<string, unknown>;
+
+    await expect(session.syncRequestBodyFromMessage()).rejects.toMatchObject({
+      message: "The normalized request body could not be serialized",
+      statusCode: 400,
     });
   });
 });
