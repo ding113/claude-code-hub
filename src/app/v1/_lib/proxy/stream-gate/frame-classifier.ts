@@ -168,6 +168,12 @@ const STREAM_SIGNALS: Record<ProtocolFamily, StreamSignal> = {
         anyPaths: ["code"],
       },
       {
+        // Remote/server-side compaction 的 opaque state 是完整协议 payload，只有非空且类型精确匹配才提交。
+        eventTypes: ["response.output_item.done"],
+        anyPaths: ["item.encrypted_content"],
+        valueMatches: [{ path: "item.type", values: ["compaction"] }],
+      },
+      {
         // output_item.added 的 name/id/status 只是结构元数据；真实 payload 到达前不能提交，
         // 否则紧随其后的 response.failed / 断流将失去透明 fallback 机会。
         // fake-streaming 的完整 item 会在 added/done 中携带 arguments/input/action，仍可提交。

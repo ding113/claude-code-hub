@@ -26,8 +26,8 @@ export class ProxyMessageService {
       return;
     }
 
-    // Extract endpoint from URL pathname (nullable)
-    const endpoint = session.getEndpoint() ?? undefined;
+    // v2 compaction 记录为 compact 管理端点，以复用非对话日志和计费语义。
+    const endpoint = session.getManagedEndpoint?.() ?? session.getEndpoint() ?? undefined;
     const sessionIdentity = session.getSessionIdentityMetadata();
 
     // 修复模型重定向记录问题：
