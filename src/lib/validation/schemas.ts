@@ -20,17 +20,17 @@ import {
   DISCOVERY_FIELD_LIMITS,
   DISCOVERY_SETTINGS_INVALID_ERROR_CODE,
   DISCOVERY_WINDOW_INVALID_ERROR_CODE,
-} from "./discovery-settings";
+} from "@/lib/validation/discovery-settings";
 import {
   REPLAY_CACHE_TTL_INVALID_ERROR_CODE,
   REPLAY_CACHE_TTL_MINUTES_MAX,
   REPLAY_CACHE_TTL_MINUTES_MIN,
-} from "./replay-settings";
+} from "@/lib/validation/replay-settings";
 
 export {
   DISCOVERY_SETTINGS_INVALID_ERROR_CODE,
   DISCOVERY_WINDOW_INVALID_ERROR_CODE,
-} from "./discovery-settings";
+} from "@/lib/validation/discovery-settings";
 
 const CACHE_TTL_PREFERENCE = z.enum(["inherit", "5m", "1h"]);
 const CONTEXT_1M_PREFERENCE = z.enum(["inherit", "force_enable", "disabled"]);

@@ -292,6 +292,7 @@ describe("SystemSettings：列降级阶梯的尝试序列锁定", () => {
 
     const payload: UpdateSystemSettingsInput = {
       siteTitle: "Ladder Pin",
+      replayCacheTtlMinutes: 45,
       codexPriorityBillingSource: "actual",
       billNonSuccessfulRequests: true,
       billHedgeLosers: false,
@@ -314,8 +315,6 @@ describe("SystemSettings：列降级阶梯的尝试序列锁定", () => {
       "system_settings 表列缺失，请执行数据库迁移以升级数据库结构。"
     );
 
-    expect(updateMock).toHaveBeenCalledTimes(23);
-
     const expectedReturningSequence = [
       [...FULL_COLUMNS],
       ...RECENT_COLUMNS.map((_, index) => omit(FULL_COLUMNS, RECENT_COLUMNS.slice(0, index + 1))),
@@ -323,11 +322,13 @@ describe("SystemSettings：列降级阶梯的尝试序列锁定", () => {
       omit(FULL_COLUMNS, HIGH_CONCURRENCY_ERA_OMIT),
       omit(FULL_COLUMNS, CODEX_ERA_RETURNING_OMIT),
     ].map(sorted);
+    expect(updateMock).toHaveBeenCalledTimes(expectedReturningSequence.length);
     expect(returningKeySequence).toEqual(expectedReturningSequence);
 
     const fullSetKeys = [
       "updatedAt",
       "siteTitle",
+      "replayCacheTtlMinutes",
       "codexPriorityBillingSource",
       "billNonSuccessfulRequests",
       "billHedgeLosers",

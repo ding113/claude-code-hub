@@ -247,7 +247,7 @@ describe("SystemSettingsForm replay/cache-effectiveness null 三态", () => {
     await submitForm();
 
     expect(sonnerMocks.toast.error).toHaveBeenCalledWith(
-      "Replay cache duration must be a whole number from 5 to 120 minutes."
+      loadMessages("en").settings.config.form.replayCacheTtlInvalid
     );
 
     unmount();

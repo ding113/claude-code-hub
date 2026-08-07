@@ -300,6 +300,17 @@ describe("src/repository/_shared/transformers.ts", () => {
       expect(toSystemSettings({ replayCacheTtlMinutes: 45 }).replayCacheTtlMinutes).toBe(45);
     });
 
+    it.each([5, 120])("应保留 Replay 缓存时间的有效边界 %s", (value) => {
+      expect(toSystemSettings({ replayCacheTtlMinutes: value }).replayCacheTtlMinutes).toBe(value);
+    });
+
+    it.each([0, 4, 121, -1, 5.5, Number.NaN, "45"])(
+      "应将无效 Replay 缓存时间 %s 回退为默认值",
+      (value) => {
+        expect(toSystemSettings({ replayCacheTtlMinutes: value }).replayCacheTtlMinutes).toBe(30);
+      }
+    );
+
     it("应映射 interceptAnthropicWarmupRequests 字段", () => {
       const result = toSystemSettings({
         id: 1,

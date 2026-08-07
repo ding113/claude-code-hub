@@ -161,6 +161,15 @@ describe("saveSystemSettings", () => {
     );
   });
 
+  it.each([5, 120])("accepts Replay cache TTL boundary %s", async (value) => {
+    const result = await saveSystemSettings({ replayCacheTtlMinutes: value });
+
+    expect(result.ok).toBe(true);
+    expect(updateSystemSettingsMock).toHaveBeenCalledWith(
+      expect.objectContaining({ replayCacheTtlMinutes: value })
+    );
+  });
+
   it.each([4, 121, 30.5])("rejects invalid Replay cache TTL %s", async (value) => {
     const result = await saveSystemSettings({ replayCacheTtlMinutes: value });
 
