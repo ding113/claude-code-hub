@@ -6,6 +6,7 @@ import { db } from "@/drizzle/db";
 import { systemSettings } from "@/drizzle/schema";
 import { logger } from "@/lib/logger";
 import { DEFAULT_SITE_TITLE } from "@/lib/site-title";
+import { REPLAY_CACHE_TTL_MINUTES_DEFAULT } from "@/lib/validation/replay-settings";
 import {
   DEFAULT_FAKE_STREAMING_WHITELIST,
   type SystemSettings,
@@ -203,6 +204,7 @@ function createFallbackSettings(): SystemSettings {
     streamGateMode: "enforce",
     affinityIgnoreClientSessionId: true,
     replayEnabled: null,
+    replayCacheTtlMinutes: REPLAY_CACHE_TTL_MINUTES_DEFAULT,
     cacheEffectivenessEnabled: null,
     createdAt: now,
     updatedAt: now,
@@ -282,6 +284,12 @@ const RECENT_COLUMN_LADDER: ReadonlyArray<{
   // 本层更新失败（仍有列缺失）时记录的告警
   updateWarn: string;
 }> = [
+  {
+    key: "replayCacheTtlMinutes",
+    column: systemSettings.replayCacheTtlMinutes,
+    selectWarn: "system_settings 缺少 replayCacheTtlMinutes,回退到上一代字段集.",
+    updateWarn: "system_settings 缺少 replayCacheTtlMinutes,继续降级更新.",
+  },
   {
     key: "cacheEffectivenessEnabled",
     column: systemSettings.cacheEffectivenessEnabled,
@@ -554,6 +562,7 @@ export async function getSystemSettings(): Promise<SystemSettings> {
           enableHighConcurrencyMode: false,
           publicStatusWindowHours: 24,
           publicStatusAggregationIntervalMinutes: 5,
+          replayCacheTtlMinutes: REPLAY_CACHE_TTL_MINUTES_DEFAULT,
         })
         .onConflictDoNothing();
     } catch (error) {
@@ -894,6 +903,11 @@ export async function updateSystemSettings(
     // F2 Replay 开关覆写（如果提供；null = 清除覆写跟随环境变量）
     if (payload.replayEnabled !== undefined) {
       updates.replayEnabled = payload.replayEnabled;
+    }
+
+    // F2 Replay 完成 payload 可重放窗口(分钟)
+    if (payload.replayCacheTtlMinutes !== undefined) {
+      updates.replayCacheTtlMinutes = payload.replayCacheTtlMinutes;
     }
 
     // F3b 缓存模拟开关覆写（如果提供；null = 清除覆写跟随环境变量）

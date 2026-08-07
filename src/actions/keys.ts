@@ -505,7 +505,7 @@ export async function editKey(
         return {
           ok: false,
           error: tError("CANNOT_DISABLE_LAST_KEY"),
-          errorCode: ERROR_CODES.OPERATION_FAILED,
+          errorCode: ERROR_CODES.CANNOT_DISABLE_LAST_KEY,
         };
       }
     }
@@ -1263,7 +1263,7 @@ export async function toggleKeyEnabled(keyId: number, enabled: boolean): Promise
         return {
           ok: false,
           error: tError("CANNOT_DISABLE_LAST_KEY"),
-          errorCode: ERROR_CODES.OPERATION_FAILED,
+          errorCode: ERROR_CODES.CANNOT_DISABLE_LAST_KEY,
         };
       }
     }
@@ -1418,7 +1418,7 @@ export async function batchUpdateKeys(
             if (currentEnabledCount - disableCount < 1) {
               throw new BatchUpdateError(
                 tError("CANNOT_DISABLE_LAST_KEY"),
-                ERROR_CODES.OPERATION_FAILED
+                ERROR_CODES.CANNOT_DISABLE_LAST_KEY
               );
             }
           }
@@ -1478,7 +1478,7 @@ export async function batchUpdateKeys(
           if (Number(remainingEnabled?.count ?? 0) < 1) {
             throw new BatchUpdateError(
               tError("CANNOT_DISABLE_LAST_KEY"),
-              ERROR_CODES.OPERATION_FAILED
+              ERROR_CODES.CANNOT_DISABLE_LAST_KEY
             );
           }
         }

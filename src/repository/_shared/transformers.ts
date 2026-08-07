@@ -2,6 +2,11 @@ import { PROVIDER_TIMEOUT_DEFAULTS } from "@/lib/constants/provider.constants";
 import { normalizeProviderModelRedirectRules } from "@/lib/provider-model-redirects";
 import { DEFAULT_SITE_TITLE } from "@/lib/site-title";
 import { formatCostForStorage } from "@/lib/utils/currency";
+import {
+  REPLAY_CACHE_TTL_MINUTES_DEFAULT,
+  REPLAY_CACHE_TTL_MINUTES_MAX,
+  REPLAY_CACHE_TTL_MINUTES_MIN,
+} from "@/lib/validation/replay-settings";
 import type { Key } from "@/types/key";
 import type { MessageRequest } from "@/types/message";
 import type { ModelPrice } from "@/types/model-price";
@@ -244,6 +249,14 @@ export function toSystemSettings(dbSettings: any): SystemSettings {
     maxJsonDepth: 200,
     maxFixSize: 1024 * 1024,
   };
+  const replayCacheTtlMinutes = dbSettings?.replayCacheTtlMinutes;
+  const normalizedReplayCacheTtlMinutes =
+    typeof replayCacheTtlMinutes === "number" &&
+    Number.isInteger(replayCacheTtlMinutes) &&
+    replayCacheTtlMinutes >= REPLAY_CACHE_TTL_MINUTES_MIN &&
+    replayCacheTtlMinutes <= REPLAY_CACHE_TTL_MINUTES_MAX
+      ? replayCacheTtlMinutes
+      : REPLAY_CACHE_TTL_MINUTES_DEFAULT;
 
   return {
     id: dbSettings?.id ?? 0,
@@ -320,6 +333,7 @@ export function toSystemSettings(dbSettings: any): SystemSettings {
         : "enforce",
     affinityIgnoreClientSessionId: dbSettings?.affinityIgnoreClientSessionId ?? true,
     replayEnabled: dbSettings?.replayEnabled ?? null,
+    replayCacheTtlMinutes: normalizedReplayCacheTtlMinutes,
     cacheEffectivenessEnabled: dbSettings?.cacheEffectivenessEnabled ?? null,
     createdAt: dbSettings?.createdAt ? new Date(dbSettings.createdAt) : new Date(),
     updatedAt: dbSettings?.updatedAt ? new Date(dbSettings.updatedAt) : new Date(),

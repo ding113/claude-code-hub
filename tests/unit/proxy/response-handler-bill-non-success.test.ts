@@ -54,6 +54,7 @@ import { detectUpstreamErrorFromSseOrJsonText } from "@/lib/utils/upstream-error
 const mockGetCachedSystemSettings = getCachedSystemSettings as unknown as ReturnType<typeof vi.fn>;
 
 type MinimalSession = {
+  getManagedEndpoint: () => string;
   getEndpoint: () => string | null;
   getOriginalModel: () => string | null;
   getCurrentModel: () => string | null;
@@ -62,6 +63,7 @@ type MinimalSession = {
 
 function makeSession(): MinimalSession {
   return {
+    getManagedEndpoint: () => "/v1/messages",
     getEndpoint: () => "/v1/messages",
     getOriginalModel: () => "claude-3-5-sonnet",
     getCurrentModel: () => "claude-3-5-sonnet",

@@ -205,8 +205,6 @@ export const EnvSchema = z.object({
   REPLAY_MAX_CONCURRENT_SPOOLS: z.coerce.number().int().min(1).max(1024).default(64),
   // Redis 热层 TTL（活跃/刚完成的响应块与元数据）
   REPLAY_TTL_SECONDS: z.coerce.number().int().min(60).max(7200).default(600),
-  // PG 完成持久层 TTL（跨小时级重放窗口）
-  REPLAY_COMPLETED_TTL_SECONDS: z.coerce.number().int().min(300).max(86400).default(3600),
   // 单响应缓存上限（超限即放弃 spool，fail-open 回现状）
   REPLAY_MAX_PAYLOAD_BYTES: z.coerce
     .number()

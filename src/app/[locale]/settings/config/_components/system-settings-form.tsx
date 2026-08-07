@@ -52,6 +52,11 @@ import {
   shouldWarnQuotaLeasePercentZero,
 } from "@/lib/utils/validation/quota-lease-warnings";
 import { DISCOVERY_FIELD_LIMITS } from "@/lib/validation/discovery-settings";
+import {
+  REPLAY_CACHE_TTL_INVALID_ERROR_CODE,
+  REPLAY_CACHE_TTL_MINUTES_MAX,
+  REPLAY_CACHE_TTL_MINUTES_MIN,
+} from "@/lib/validation/replay-settings";
 import { DEFAULT_IP_EXTRACTION_CONFIG, type IpExtractionConfig } from "@/types/ip-extraction";
 import type {
   BillingModelSource,
@@ -100,6 +105,7 @@ interface SystemSettingsFormProps {
     | "streamGateMode"
     | "affinityIgnoreClientSessionId"
     | "replayEnabled"
+    | "replayCacheTtlMinutes"
     | "cacheEffectivenessEnabled"
     | "enableCodexSessionIdCompletion"
     | "enableClaudeMetadataUserIdInjection"
@@ -220,6 +226,9 @@ export function SystemSettingsForm({
   // null = 跟随环境变量：未触碰开关时按 null 原样保存，
   // 避免无关字段的保存把覆写写死为布尔值；仅用户切换后才落显式值
   const [replayEnabled, setReplayEnabled] = useState<boolean | null>(initialSettings.replayEnabled);
+  const [replayCacheTtlMinutes, setReplayCacheTtlMinutes] = useState(
+    String(initialSettings.replayCacheTtlMinutes)
+  );
   const [cacheEffectivenessEnabled, setCacheEffectivenessEnabled] = useState<boolean | null>(
     initialSettings.cacheEffectivenessEnabled
   );
@@ -409,6 +418,7 @@ export function SystemSettingsForm({
         streamGateMode,
         affinityIgnoreClientSessionId,
         replayEnabled,
+        replayCacheTtlMinutes: Number(replayCacheTtlMinutes),
         cacheEffectivenessEnabled,
         enableThinkingBudgetRectifier,
         enableThinkingEffortConflictRectifier,
@@ -433,7 +443,9 @@ export function SystemSettingsForm({
             ? t("discoveryWindowInvalid")
             : result.errorCode === "DISCOVERY_SETTINGS_INVALID"
               ? t("discoverySettingsInvalid")
-              : result.error || t("saveFailed");
+              : result.errorCode === REPLAY_CACHE_TTL_INVALID_ERROR_CODE
+                ? t("replayCacheTtlInvalid")
+                : result.error || t("saveFailed");
         toast.error(errorMessage);
         return;
       }
@@ -475,6 +487,7 @@ export function SystemSettingsForm({
         setStreamGateMode(result.data.streamGateMode);
         setAffinityIgnoreClientSessionId(result.data.affinityIgnoreClientSessionId);
         setReplayEnabled(result.data.replayEnabled ?? null);
+        setReplayCacheTtlMinutes(String(result.data.replayCacheTtlMinutes));
         setCacheEffectivenessEnabled(result.data.cacheEffectivenessEnabled ?? null);
         setEnableThinkingBudgetRectifier(result.data.enableThinkingBudgetRectifier);
         setEnableThinkingEffortConflictRectifier(result.data.enableThinkingEffortConflictRectifier);
@@ -743,11 +756,11 @@ export function SystemSettingsForm({
         {/* Bounded Streaming Discovery */}
         <div className="p-4 rounded-xl bg-white/[0.02] border border-white/5 space-y-4">
           <div className="flex items-start justify-between gap-4">
-            <div className="flex items-start gap-3">
+            <div className="flex min-w-0 items-start gap-3">
               <div className="w-8 h-8 flex items-center justify-center rounded-lg bg-cyan-500/10 text-cyan-400 shrink-0">
                 <Zap className="h-4 w-4" />
               </div>
-              <div>
+              <div className="min-w-0">
                 <p className="text-sm font-medium text-foreground">{t("discoveryEnabled")}</p>
                 <p className="text-xs text-muted-foreground mt-0.5">{t("discoveryEnabledDesc")}</p>
               </div>
@@ -1177,23 +1190,51 @@ export function SystemSettingsForm({
         </div>
 
         {/* F2 Request Replay */}
-        <div className="p-4 rounded-xl bg-white/[0.02] border border-white/5 flex items-center justify-between hover:bg-white/[0.04] transition-colors">
-          <div className="flex items-start gap-3">
-            <div className="w-8 h-8 flex items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-400 shrink-0">
-              <Repeat className="h-4 w-4" />
+        <div className="p-4 rounded-xl bg-white/[0.02] border border-white/5 space-y-4 hover:bg-white/[0.04] transition-colors">
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex items-start gap-3">
+              <div className="w-8 h-8 flex items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-400 shrink-0">
+                <Repeat className="h-4 w-4" />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-foreground">{t("replayEnabled")}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">{t("replayEnabledDesc")}</p>
+              </div>
             </div>
+            <Switch
+              id="replay-enabled"
+              aria-label={t("replayEnabled")}
+              checked={replayEnabled ?? replayDefaultEnabled}
+              onCheckedChange={(checked) => setReplayEnabled(checked)}
+              disabled={isPending}
+            />
+          </div>
+          <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_10rem] sm:items-end">
             <div>
-              <p className="text-sm font-medium text-foreground">{t("replayEnabled")}</p>
-              <p className="text-xs text-muted-foreground mt-0.5">{t("replayEnabledDesc")}</p>
+              <Label htmlFor="replay-cache-ttl-minutes">{t("replayCacheTtlMinutes")}</Label>
+              <p className="mt-1 text-base/6 text-muted-foreground sm:text-xs">
+                {t("replayCacheTtlMinutesDesc")}
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Input
+                id="replay-cache-ttl-minutes"
+                name="replayCacheTtlMinutes"
+                type="number"
+                min={REPLAY_CACHE_TTL_MINUTES_MIN}
+                max={REPLAY_CACHE_TTL_MINUTES_MAX}
+                step={1}
+                required
+                value={replayCacheTtlMinutes}
+                onChange={(event) => setReplayCacheTtlMinutes(event.target.value)}
+                disabled={isPending}
+                className={`${inputClassName} max-sm:text-base`}
+              />
+              <p className="text-base text-muted-foreground shrink-0 sm:text-xs">
+                {t("replayCacheTtlMinutesUnit")}
+              </p>
             </div>
           </div>
-          <Switch
-            id="replay-enabled"
-            aria-label={t("replayEnabled")}
-            checked={replayEnabled ?? replayDefaultEnabled}
-            onCheckedChange={(checked) => setReplayEnabled(checked)}
-            disabled={isPending}
-          />
         </div>
 
         {/* F3b Cache Effectiveness Simulation */}

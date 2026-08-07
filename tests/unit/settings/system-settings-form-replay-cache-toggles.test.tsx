@@ -67,6 +67,7 @@ const baseSettings = {
   ipExtractionConfig: null,
   // null = 跟随环境变量：本组用例的核心前置
   replayEnabled: null,
+  replayCacheTtlMinutes: 30,
   cacheEffectivenessEnabled: null,
 } satisfies Pick<
   SystemSettings,
@@ -100,6 +101,7 @@ const baseSettings = {
   | "ipGeoLookupEnabled"
   | "ipExtractionConfig"
   | "replayEnabled"
+  | "replayCacheTtlMinutes"
   | "cacheEffectivenessEnabled"
 >;
 
@@ -203,6 +205,50 @@ describe("SystemSettingsForm replay/cache-effectiveness null 三态", () => {
     );
 
     expect(document.getElementById("replay-enabled")?.getAttribute("aria-checked")).toBe("false");
+
+    unmount();
+  });
+
+  test("显示默认 Replay 缓存时间并随系统设置提交", async () => {
+    const { unmount } = render(
+      <SystemSettingsForm initialSettings={baseSettings} replayDefaultEnabled={true} />
+    );
+
+    const ttlInput = document.getElementById("replay-cache-ttl-minutes") as HTMLInputElement | null;
+    expect(ttlInput?.value).toBe("30");
+
+    await act(async () => {
+      if (!ttlInput) throw new Error("未找到 Replay 缓存时间输入框");
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+      setter?.call(ttlInput, "45");
+      ttlInput.dispatchEvent(new Event("input", { bubbles: true }));
+      ttlInput.dispatchEvent(new Event("change", { bubbles: true }));
+      await Promise.resolve();
+    });
+    await submitForm();
+
+    expect(systemConfigActionMocks.saveSystemSettings).toHaveBeenCalledWith(
+      expect.objectContaining({ replayCacheTtlMinutes: 45 })
+    );
+
+    unmount();
+  });
+
+  test("Replay 缓存时间错误码显示本地化消息", async () => {
+    systemConfigActionMocks.saveSystemSettings.mockResolvedValueOnce({
+      ok: false,
+      error: "One or more fields are invalid.",
+      errorCode: "REPLAY_CACHE_TTL_INVALID",
+    });
+    const { unmount } = render(
+      <SystemSettingsForm initialSettings={baseSettings} replayDefaultEnabled={true} />
+    );
+
+    await submitForm();
+
+    expect(sonnerMocks.toast.error).toHaveBeenCalledWith(
+      loadMessages("en").settings.config.form.replayCacheTtlInvalid
+    );
 
     unmount();
   });

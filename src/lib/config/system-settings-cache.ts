@@ -14,6 +14,7 @@
 
 import { logger } from "@/lib/logger";
 import { DEFAULT_SITE_TITLE } from "@/lib/site-title";
+import { REPLAY_CACHE_TTL_MINUTES_DEFAULT } from "@/lib/validation/replay-settings";
 import { getSystemSettings } from "@/repository/system-config";
 import type { SystemSettings } from "@/types/system-config";
 import { getEnvConfig } from "./env.schema";
@@ -108,6 +109,7 @@ export const DEFAULT_SETTINGS: Pick<
   | "publicStatusAggregationIntervalMinutes"
   | "streamGateMode"
   | "affinityIgnoreClientSessionId"
+  | "replayCacheTtlMinutes"
   | "discoveryEnabled"
   | "discoveryConcurrency"
   | "maxDiscoveryRounds"
@@ -147,6 +149,7 @@ export const DEFAULT_SETTINGS: Pick<
   publicStatusAggregationIntervalMinutes: 5,
   streamGateMode: "enforce",
   affinityIgnoreClientSessionId: true,
+  replayCacheTtlMinutes: REPLAY_CACHE_TTL_MINUTES_DEFAULT,
   discoveryEnabled: false,
   discoveryConcurrency: 2,
   maxDiscoveryRounds: 2,
@@ -239,6 +242,7 @@ export async function getCachedSystemSettings(): Promise<SystemSettings> {
       streamGateMode: getFallbackStreamGateMode(),
       affinityIgnoreClientSessionId: DEFAULT_SETTINGS.affinityIgnoreClientSessionId,
       replayEnabled: null,
+      replayCacheTtlMinutes: DEFAULT_SETTINGS.replayCacheTtlMinutes,
       cacheEffectivenessEnabled: null,
       discoveryEnabled: DEFAULT_SETTINGS.discoveryEnabled,
       discoveryConcurrency: DEFAULT_SETTINGS.discoveryConcurrency,

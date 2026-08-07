@@ -20,12 +20,17 @@ import {
   DISCOVERY_FIELD_LIMITS,
   DISCOVERY_SETTINGS_INVALID_ERROR_CODE,
   DISCOVERY_WINDOW_INVALID_ERROR_CODE,
-} from "./discovery-settings";
+} from "@/lib/validation/discovery-settings";
+import {
+  REPLAY_CACHE_TTL_INVALID_ERROR_CODE,
+  REPLAY_CACHE_TTL_MINUTES_MAX,
+  REPLAY_CACHE_TTL_MINUTES_MIN,
+} from "@/lib/validation/replay-settings";
 
 export {
   DISCOVERY_SETTINGS_INVALID_ERROR_CODE,
   DISCOVERY_WINDOW_INVALID_ERROR_CODE,
-} from "./discovery-settings";
+} from "@/lib/validation/discovery-settings";
 
 const CACHE_TTL_PREFERENCE = z.enum(["inherit", "5m", "1h"]);
 const CONTEXT_1M_PREFERENCE = z.enum(["inherit", "force_enable", "disabled"]);
@@ -1120,6 +1125,13 @@ export const UpdateSystemSettingsSchema = z
     affinityIgnoreClientSessionId: z.boolean().optional(),
     // F2 Replay 响应缓存与复用（可选；null = 跟随环境变量）
     replayEnabled: z.boolean().nullable().optional(),
+    // F2 Replay 完成 payload 可重放窗口(分钟)
+    replayCacheTtlMinutes: z.coerce
+      .number()
+      .int(REPLAY_CACHE_TTL_INVALID_ERROR_CODE)
+      .min(REPLAY_CACHE_TTL_MINUTES_MIN, REPLAY_CACHE_TTL_INVALID_ERROR_CODE)
+      .max(REPLAY_CACHE_TTL_MINUTES_MAX, REPLAY_CACHE_TTL_INVALID_ERROR_CODE)
+      .optional(),
     // F3b 最长前缀匹配缓存模拟（可选；null = 跟随环境变量）
     cacheEffectivenessEnabled: z.boolean().nullable().optional(),
     // Codex Session ID 补全（可选）

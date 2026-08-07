@@ -1266,7 +1266,7 @@ function buildCostCalculationOptions(
 }
 
 function isNonBillingUsageEndpoint(session: ProxySession): boolean {
-  return isNonBillingEndpoint(session.getEndpoint());
+  return isNonBillingEndpoint(session.getManagedEndpoint());
 }
 
 function hasBillableInputCostPerRequest(priceData: { input_cost_per_request?: unknown }): boolean {

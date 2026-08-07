@@ -12262,6 +12262,8 @@ export interface operations {
                         affinityIgnoreClientSessionId: boolean;
                         /** @description Request replay (response caching and upstream connection reuse) override. Null follows the ENABLE_REQUEST_REPLAY environment variable. */
                         replayEnabled: boolean | null;
+                        /** @description Replay completed payload reuse window in minutes. */
+                        replayCacheTtlMinutes: number;
                         /** @description Longest-prefix cache-effectiveness simulation override (observability only). Null follows the ENABLE_CACHE_EFFECTIVENESS environment variable. */
                         cacheEffectivenessEnabled: boolean | null;
                         /**
@@ -12548,6 +12550,8 @@ export interface operations {
                     affinityIgnoreClientSessionId?: boolean;
                     /** @description Request replay (response caching and upstream connection reuse) override. Null follows the ENABLE_REQUEST_REPLAY environment variable. */
                     replayEnabled?: boolean | null;
+                    /** @description Replay completed payload reuse window in minutes. */
+                    replayCacheTtlMinutes?: number;
                     /** @description Longest-prefix cache-effectiveness simulation override (observability only). Null follows the ENABLE_CACHE_EFFECTIVENESS environment variable. */
                     cacheEffectivenessEnabled?: boolean | null;
                 };
@@ -12709,6 +12713,8 @@ export interface operations {
                         affinityIgnoreClientSessionId: boolean;
                         /** @description Request replay (response caching and upstream connection reuse) override. Null follows the ENABLE_REQUEST_REPLAY environment variable. */
                         replayEnabled: boolean | null;
+                        /** @description Replay completed payload reuse window in minutes. */
+                        replayCacheTtlMinutes: number;
                         /** @description Longest-prefix cache-effectiveness simulation override (observability only). Null follows the ENABLE_CACHE_EFFECTIVENESS environment variable. */
                         cacheEffectivenessEnabled: boolean | null;
                         /**

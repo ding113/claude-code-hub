@@ -290,6 +290,40 @@ describe("classifyFrame: openai-responses", () => {
     ).toBe("content");
   });
 
+  it("content: compaction output item with opaque encrypted content", () => {
+    expect(
+      classifyFrame(
+        "openai-responses",
+        "response.output_item.done",
+        '{"type":"response.output_item.done","item":{"type":"compaction","encrypted_content":"opaque-state"}}'
+      )
+    ).toBe("content");
+  });
+
+  it("neutral: empty or non-compaction encrypted output item", () => {
+    expect(
+      classifyFrame(
+        "openai-responses",
+        "response.output_item.done",
+        '{"type":"response.output_item.done","item":{"type":"compaction","encrypted_content":""}}'
+      )
+    ).toBe("neutral");
+    expect(
+      classifyFrame(
+        "openai-responses",
+        "response.output_item.done",
+        '{"type":"response.output_item.done","item":{"type":"reasoning","encrypted_content":"opaque-state"}}'
+      )
+    ).toBe("neutral");
+    expect(
+      classifyFrame(
+        "openai-responses",
+        "response.output_item.added",
+        '{"type":"response.output_item.added","item":{"type":"compaction","encrypted_content":"opaque-state"}}'
+      )
+    ).toBe("neutral");
+  });
+
   it("neutral: output_item.added without item.name (message item)", () => {
     expect(
       classifyFrame(

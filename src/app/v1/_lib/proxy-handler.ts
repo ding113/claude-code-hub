@@ -1,4 +1,5 @@
 import type { Context } from "hono";
+import { isRawPassthroughEndpointPolicy } from "@/app/v1/_lib/proxy/endpoint-policy";
 import { findSafeDatabaseError } from "@/drizzle/admitted-client";
 import { getCachedSystemSettings } from "@/lib/config";
 import { logger } from "@/lib/logger";
@@ -169,7 +170,7 @@ export async function handleProxyRequest(c: Context): Promise<Response> {
     // Reuse the system settings already loaded above (with its fallback path)
     // instead of re-reading the cache. A transient cache miss must not turn an
     // otherwise-routable request into an error response.
-    if (cachedSystemSettings) {
+    if (cachedSystemSettings && !isRawPassthroughEndpointPolicy(session.getEndpointPolicy())) {
       const fakeStreamingResponse = await tryFakeStreamingPath(session, cachedSystemSettings);
       if (fakeStreamingResponse) {
         return await attachSessionIdToErrorResponse(session.sessionId, fakeStreamingResponse);

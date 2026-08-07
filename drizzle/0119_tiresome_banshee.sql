@@ -1,0 +1,1 @@
+ALTER TABLE "system_settings" ADD COLUMN "replay_cache_ttl_minutes" integer DEFAULT 30 NOT NULL;

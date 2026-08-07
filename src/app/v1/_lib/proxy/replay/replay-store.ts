@@ -9,6 +9,12 @@ import { logger } from "@/lib/logger";
 import { getRedisClient } from "@/lib/redis/client";
 import { RedisKVStore } from "@/lib/redis/redis-kv-store";
 import { RedisListStore } from "@/lib/redis/redis-list-store";
+import { getCachedProxyRuntimeSettings } from "@/lib/system-settings/proxy-runtime";
+import {
+  REPLAY_CACHE_TTL_MINUTES_DEFAULT,
+  REPLAY_CACHE_TTL_MINUTES_MAX,
+  REPLAY_CACHE_TTL_MINUTES_MIN,
+} from "@/lib/validation/replay-settings";
 
 /**
  * F2 Replay 双层存储：
@@ -373,9 +379,8 @@ export class ReplayStore {
    * （过期行清理由 instrumentation 定时调度器负责，不在写路径顺带执行。）
    */
   async persistCompleted(row: ReplayPersistedRow): Promise<"persisted" | "existing"> {
-    const env = getEnvConfig();
     const now = new Date();
-    const expiresAt = new Date(now.getTime() + env.REPLAY_COMPLETED_TTL_SECONDS * 1000);
+    const expiresAt = new Date(now.getTime() + resolveReplayCompletedTtlSeconds() * 1000);
     const persistedValues = {
       verifier: row.verifier,
       scopeTag: row.scopeTag,
@@ -434,7 +439,7 @@ export class ReplayStore {
       WITH doomed AS (
         SELECT replay_id
         FROM replay_payloads
-        WHERE expires_at < ${cutoff}
+        WHERE expires_at < ${sql.param(cutoff, replayPayloads.expiresAt)}
         ORDER BY expires_at, replay_id
         LIMIT ${REPLAY_CLEANUP_BATCH_SIZE}
         FOR UPDATE SKIP LOCKED
@@ -466,11 +471,23 @@ export class ReplayStore {
 }
 
 export function resolveReplayTtlSeconds(): number {
+  const completedTtlSeconds = resolveReplayCompletedTtlSeconds();
   try {
-    return getEnvConfig().REPLAY_TTL_SECONDS;
+    return Math.min(getEnvConfig().REPLAY_TTL_SECONDS, completedTtlSeconds);
   } catch {
-    return 600;
+    return Math.min(600, completedTtlSeconds);
   }
+}
+
+export function resolveReplayCompletedTtlSeconds(): number {
+  const minutes =
+    getCachedProxyRuntimeSettings()?.replayCacheTtlMinutes ?? REPLAY_CACHE_TTL_MINUTES_DEFAULT;
+  return (
+    Math.max(
+      REPLAY_CACHE_TTL_MINUTES_MIN,
+      Math.min(REPLAY_CACHE_TTL_MINUTES_MAX, Math.trunc(minutes))
+    ) * 60
+  );
 }
 
 let sharedReplayStore: ReplayStore | null = null;
