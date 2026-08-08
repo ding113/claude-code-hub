@@ -156,6 +156,13 @@ async function drainWriteChain(spool: ReplaySpool): Promise<void> {
   await (spool as unknown as { writeChain: Promise<void> }).writeChain;
 }
 
+function retainedAsciiPartBytes(spool: ReplaySpool): number {
+  return (spool as unknown as { parts: string[] }).parts.reduce(
+    (total, part) => total + part.length,
+    0
+  );
+}
+
 function makeOwnerSession(): ProxySession {
   return {
     replayState: { identity, ownerToken: "owner-token", role: "owner" },
@@ -365,9 +372,11 @@ describe("ReplaySpool：超尺寸自失效", () => {
 
     spool.observe(encoder.encode("x".repeat(32)));
 
-    // 计数同步归还；存储清理顺着 writeChain 串行执行（避免与 in-flight append 竞态）
-    expect(getActiveReplaySpoolCount()).toBe(0);
+    // 存储清理顺着 writeChain 串行执行；清理完成前继续占用 quota，
+    // 避免慢 Redis 下不断创建新 spool 绕过并发内存上限。
+    expect(getActiveReplaySpoolCount()).toBe(1);
     await drainWriteChain(spool);
+    expect(getActiveReplaySpoolCount()).toBe(0);
     expect(storeControl.store.abortOwned).toHaveBeenCalledWith(
       identity.replayId,
       "owner-token",
@@ -531,6 +540,76 @@ describe("ReplaySpool：completeAfterBilling 终态屏障", () => {
     expect(storeControl.store.completeOwned).toHaveBeenCalledTimes(1);
   });
 
+  it("Redis 阻塞期间不提前复制 payload，PG 阻塞期间释放 parts", async () => {
+    const payloadBytes = 4 * 1024 * 1024;
+    const chunk = "x".repeat(64 * 1024);
+    let resolveRedis!: (value: number) => void;
+    let resolvePersist!: (value: "persisted") => void;
+    storeControl.store.writeOwned.mockImplementationOnce(
+      () =>
+        new Promise<number>((resolve) => {
+          resolveRedis = resolve;
+        })
+    );
+    storeControl.store.persistCompleted.mockImplementationOnce(
+      () =>
+        new Promise<"persisted">((resolve) => {
+          resolvePersist = resolve;
+        })
+    );
+    const spool = makeSpool();
+    for (let index = 0; index < 64; index += 1) {
+      spool.observe(encoder.encode(chunk));
+    }
+    expect(retainedAsciiPartBytes(spool)).toBe(payloadBytes);
+
+    const completion = spool.completeAfterBilling(10);
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(storeControl.store.writeOwned).toHaveBeenCalledTimes(1);
+    expect(storeControl.store.persistCompleted).not.toHaveBeenCalled();
+    expect(retainedAsciiPartBytes(spool)).toBe(payloadBytes);
+
+    resolveRedis(1);
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(storeControl.store.persistCompleted).toHaveBeenCalledTimes(1);
+    expect(storeControl.store.persistCompleted).toHaveBeenCalledWith(
+      expect.objectContaining({
+        payload: "x".repeat(payloadBytes),
+        byteSize: payloadBytes,
+      })
+    );
+    expect(retainedAsciiPartBytes(spool)).toBe(0);
+
+    resolvePersist("persisted");
+    await completion;
+  });
+
+  it("payload 组装失败时封死热层并释放 heartbeat 与并发配额", async () => {
+    const spool = makeSpool();
+    spool.observe(encoder.encode("data: partial\n\n"));
+    const parts = (spool as unknown as { parts: unknown[] }).parts;
+    parts[0] = {
+      toString: () => {
+        throw new Error("payload assembly failed");
+      },
+    };
+
+    await spool.completeAfterBilling(10);
+
+    expect(storeControl.store.persistCompleted).not.toHaveBeenCalled();
+    expect(storeControl.store.abortOwned).toHaveBeenCalledWith(
+      identity.replayId,
+      "owner-token",
+      expect.objectContaining({ status: "aborted", abortReason: "complete_failed" })
+    );
+    expect(getActiveReplaySpoolCount()).toBe(0);
+
+    await vi.advanceTimersByTimeAsync(15_000);
+    expect(storeControl.store.renewOwnerLease).not.toHaveBeenCalled();
+  });
+
   it("跨 chunk 截断的 UTF-8 序列在 complete 时冲刷解码尾部", async () => {
     const spool = makeSpool();
     // "中" (0xE4 0xB8 0xAD) 只送前两字节：observe 阶段解码挂起，complete 时 flush 出替换字符
@@ -575,6 +654,125 @@ describe("ReplaySpool：abort 终态", () => {
     );
     expect(storeControl.order).toEqual(["meta:aborted", "deleteChunks", "release"]);
     expect(getActiveReplaySpoolCount()).toBe(0);
+  });
+
+  it("abort 立即释放已累积的 payload", async () => {
+    const spool = makeSpool();
+    spool.observe(encoder.encode("data: partial\n\n"));
+
+    await spool.abort("upstream_error");
+
+    expect((spool as unknown as { parts: string[] }).parts).toEqual([]);
+  });
+
+  it("Redis flush 阻塞时 abort 立即释放 batch，并在 fenced cleanup 后释放并发配额", async () => {
+    let resolveRedis!: (value: number) => void;
+    storeControl.store.writeOwned.mockImplementationOnce(
+      (...args: unknown[]) =>
+        new Promise<number>((resolve) => {
+          resolveRedis = resolve;
+          void args;
+        })
+    );
+    const spool = makeSpool();
+    spool.observe(encoder.encode("x".repeat(64 * 1024)));
+    await vi.advanceTimersByTimeAsync(0);
+    spool.observe(encoder.encode("y".repeat(64 * 1024)));
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(storeControl.store.writeOwned).toHaveBeenCalledTimes(1);
+    const batch = storeControl.store.writeOwned.mock.calls[0][3] as string[];
+    expect(batch.length).toBeGreaterThan(0);
+    const queuedBatches = (spool as unknown as { queuedBatches: Set<string[]> }).queuedBatches;
+    expect(queuedBatches.size).toBe(2);
+
+    let abortSettled = false;
+    const abortPromise = spool.abort("client_disconnect").then(() => {
+      abortSettled = true;
+    });
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(batch).toEqual([]);
+    expect([...queuedBatches].every((queuedBatch) => queuedBatch.length === 0)).toBe(true);
+    expect(abortSettled).toBe(false);
+    expect(getActiveReplaySpoolCount()).toBe(1);
+    expect(storeControl.store.abortOwned).not.toHaveBeenCalled();
+
+    resolveRedis(1);
+    await abortPromise;
+    expect(abortSettled).toBe(true);
+    expect(getActiveReplaySpoolCount()).toBe(0);
+    expect(storeControl.store.abortOwned).toHaveBeenCalledWith(
+      identity.replayId,
+      "owner-token",
+      expect.objectContaining({ status: "aborted", abortReason: "client_disconnect" })
+    );
+  });
+
+  it("bootstrap 阻塞时 abort 等待真正的 fenced cleanup 后再释放并发配额", async () => {
+    let resolveBootstrap!: (value: null) => void;
+    let resolveCleanup!: (value: boolean) => void;
+    storeControl.store.writeOwned.mockImplementationOnce(
+      () =>
+        new Promise<null>((resolve) => {
+          resolveBootstrap = resolve;
+        })
+    );
+    storeControl.store.abortOwned.mockImplementationOnce(
+      () =>
+        new Promise<boolean>((resolve) => {
+          resolveCleanup = resolve;
+        })
+    );
+    const spool = makeSpool();
+    spool.bootstrap();
+    await vi.advanceTimersByTimeAsync(0);
+
+    let abortSettled = false;
+    const abortPromise = spool.abort("client_disconnect").then(() => {
+      abortSettled = true;
+    });
+    await vi.advanceTimersByTimeAsync(0);
+
+    resolveBootstrap(null);
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(storeControl.store.abortOwned).toHaveBeenCalledTimes(1);
+    expect(abortSettled).toBe(false);
+    expect(getActiveReplaySpoolCount()).toBe(1);
+
+    resolveCleanup(true);
+    await abortPromise;
+    expect(abortSettled).toBe(true);
+    expect(getActiveReplaySpoolCount()).toBe(0);
+  });
+
+  it("并发重复 abort 都等待同一个 fenced cleanup barrier", async () => {
+    let resolveRedis!: (value: number) => void;
+    storeControl.store.writeOwned.mockImplementationOnce(
+      () =>
+        new Promise<number>((resolve) => {
+          resolveRedis = resolve;
+        })
+    );
+    const spool = makeSpool();
+    spool.observe(encoder.encode("x".repeat(64 * 1024)));
+    await vi.advanceTimersByTimeAsync(0);
+
+    const firstAbort = spool.abort("client_disconnect");
+    let secondAbortSettled = false;
+    const secondAbort = spool.abort("client_disconnect").then(() => {
+      secondAbortSettled = true;
+    });
+    await vi.advanceTimersByTimeAsync(0);
+
+    const secondSettledBeforeCleanup = secondAbortSettled;
+    resolveRedis(1);
+    await Promise.all([firstAbort, secondAbort]);
+
+    expect(secondSettledBeforeCleanup).toBe(false);
+    expect(getActiveReplaySpoolCount()).toBe(0);
+    expect(storeControl.store.abortOwned).toHaveBeenCalledTimes(1);
   });
 
   it("abort 后 observe 与 complete 均无副作用", async () => {

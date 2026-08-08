@@ -28,7 +28,7 @@ const CodexPriorityBillingSourceSchema = z
 const TimeZoneSchema = z
   .string()
   .refine(
-    (value) => {
+    (value: string) => {
       try {
         new Intl.DateTimeFormat("en-US", { timeZone: value });
         return true;

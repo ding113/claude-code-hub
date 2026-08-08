@@ -3,10 +3,6 @@ import { createProblemResponse, normalizeZodPath } from "./error-envelope";
 
 export type ParsedBodyResult<T> = { ok: true; data: T } | { ok: false; response: Response };
 
-type JsonBodySchema<T> = {
-  safeParse: (value: unknown) => { success: true; data: T } | { success: false; error: z.ZodError };
-};
-
 type ParseJsonBodyOptions = {
   validationErrorCode?: (error: z.ZodError) => string | undefined;
 };
@@ -20,10 +16,10 @@ type HonoJsonRequest = {
   };
 };
 
-export async function parseJsonBody<T>(
+export async function parseJsonBody<S extends z.ZodType>(
   request: Request,
-  schema: JsonBodySchema<T>
-): Promise<ParsedBodyResult<T>> {
+  schema: S
+): Promise<ParsedBodyResult<z.output<S>>> {
   const contentType = request.headers.get("content-type") ?? "";
   if (!contentType.toLowerCase().includes("application/json")) {
     return {
@@ -73,11 +69,11 @@ export async function parseJsonBody<T>(
   return { ok: true, data: parsed.data };
 }
 
-export async function parseHonoJsonBody<T>(
+export async function parseHonoJsonBody<S extends z.ZodType>(
   c: HonoJsonRequest,
-  schema: JsonBodySchema<T>,
+  schema: S,
   options?: ParseJsonBodyOptions
-): Promise<ParsedBodyResult<T>> {
+): Promise<ParsedBodyResult<z.output<S>>> {
   const contentType =
     c.req.header("content-type") ??
     c.req.header("Content-Type") ??
