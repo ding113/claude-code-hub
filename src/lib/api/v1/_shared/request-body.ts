@@ -3,9 +3,16 @@ import { createProblemResponse, normalizeZodPath } from "./error-envelope";
 
 export type ParsedBodyResult<T> = { ok: true; data: T } | { ok: false; response: Response };
 
-type JsonBodySchema<T> = {
-  safeParse: (value: unknown) => { success: true; data: T } | { success: false; error: z.ZodError };
+type JsonBodySchema = {
+  safeParse: (
+    value: unknown
+  ) => { success: true; data: unknown } | { success: false; error: z.ZodError };
 };
+
+// zod 4 marks the schema output type parameter as `out` (covariant), so the
+// compiler cannot infer it from a value parameter. Extract it from the
+// `_output` phantom property instead.
+export type SchemaOutput<S> = S extends { _output: infer O } ? O : unknown;
 
 type ParseJsonBodyOptions = {
   validationErrorCode?: (error: z.ZodError) => string | undefined;
@@ -20,10 +27,10 @@ type HonoJsonRequest = {
   };
 };
 
-export async function parseJsonBody<T>(
+export async function parseJsonBody<S extends JsonBodySchema>(
   request: Request,
-  schema: JsonBodySchema<T>
-): Promise<ParsedBodyResult<T>> {
+  schema: S
+): Promise<ParsedBodyResult<SchemaOutput<S>>> {
   const contentType = request.headers.get("content-type") ?? "";
   if (!contentType.toLowerCase().includes("application/json")) {
     return {
@@ -70,14 +77,14 @@ export async function parseJsonBody<T>(
     };
   }
 
-  return { ok: true, data: parsed.data };
+  return { ok: true, data: parsed.data as SchemaOutput<S> };
 }
 
-export async function parseHonoJsonBody<T>(
+export async function parseHonoJsonBody<S extends JsonBodySchema>(
   c: HonoJsonRequest,
-  schema: JsonBodySchema<T>,
+  schema: S,
   options?: ParseJsonBodyOptions
-): Promise<ParsedBodyResult<T>> {
+): Promise<ParsedBodyResult<SchemaOutput<S>>> {
   const contentType =
     c.req.header("content-type") ??
     c.req.header("Content-Type") ??
@@ -128,5 +135,5 @@ export async function parseHonoJsonBody<T>(
     };
   }
 
-  return { ok: true, data: parsed.data };
+  return { ok: true, data: parsed.data as SchemaOutput<S> };
 }

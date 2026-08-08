@@ -16,7 +16,7 @@ import {
   publicActionErrorDetail,
 } from "@/lib/api/v1/_shared/error-envelope";
 import { redactHeaderRecord, redactUrlCredentials } from "@/lib/api/v1/_shared/redaction";
-import { parseHonoJsonBody } from "@/lib/api/v1/_shared/request-body";
+import { parseHonoJsonBody, type SchemaOutput } from "@/lib/api/v1/_shared/request-body";
 import {
   createdResponse,
   jsonResponse,
@@ -773,11 +773,16 @@ function providerNotFound(c: Context): Response {
   });
 }
 
-type JsonBodySchema<T> = {
-  safeParse: (value: unknown) => { success: true; data: T } | { success: false; error: ZodError };
+type JsonBodySchema = {
+  safeParse: (
+    value: unknown
+  ) => { success: true; data: unknown } | { success: false; error: ZodError };
 };
 
-async function parseJson<T>(c: Context, schema: JsonBodySchema<T>): Promise<T | Response> {
+async function parseJson<S extends JsonBodySchema>(
+  c: Context,
+  schema: S
+): Promise<SchemaOutput<S> | Response> {
   const body = await parseHonoJsonBody(c, schema);
   if (!body.ok) return body.response;
   return body.data;
