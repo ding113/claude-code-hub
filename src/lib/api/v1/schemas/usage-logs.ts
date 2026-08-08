@@ -3,7 +3,7 @@ import { z } from "@hono/zod-openapi";
 const NumberQuerySchema = z.coerce.number().optional();
 const BooleanQuerySchema = z
   .union([z.literal("true"), z.literal("false"), z.boolean()])
-  .transform((value) => value === true || value === "true")
+  .transform((value: boolean | "true" | "false") => value === true || value === "true")
   .optional();
 
 export const UsageLogsQuerySchema = z.object({
