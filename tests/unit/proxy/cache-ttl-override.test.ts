@@ -42,20 +42,19 @@ describe("applyCacheTtlOverrideToMessage", () => {
   });
 
   it("rewrites ttl on messages[].content[] ephemeral blocks (existing behavior)", () => {
-    const message: Record<string, unknown> = {
-      messages: [
-        {
-          role: "user",
-          content: [
-            {
-              type: "text",
-              text: "hello",
-              cache_control: { type: "ephemeral" },
-            },
-          ],
-        },
-      ],
-    };
+    const originalMessages = [
+      {
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text: "hello",
+            cache_control: { type: "ephemeral" },
+          },
+        ],
+      },
+    ];
+    const message: Record<string, unknown> = { messages: originalMessages };
 
     const applied = applyCacheTtlOverrideToMessage(message, "1h");
 
@@ -67,6 +66,8 @@ describe("applyCacheTtlOverrideToMessage", () => {
       type: "ephemeral",
       ttl: "1h",
     });
+    expect(message.messages).not.toBe(originalMessages);
+    expect(originalMessages[0].content[0].cache_control).toEqual({ type: "ephemeral" });
   });
 
   it("rewrites both system and messages breakpoints in a single pass", () => {
