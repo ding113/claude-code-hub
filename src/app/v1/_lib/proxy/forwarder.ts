@@ -4479,6 +4479,24 @@ export class ProxyForwarder {
       if (settled || winnerCommitted || attempt.settled || !attempt.response || !attempt.reader)
         return;
 
+      // 已超时触发竞速的 attempt 不得胜出：超时即出局（打破"超时方靠时间优势反复
+      // 获胜并粘住绑定"的死循环），其迟到首块不作为赢家结果返回，交给 loser 分流。
+      // 兜底：若它是唯一仍在途的 attempt（其余均已结算/失败），仍接受，避免请求悬挂。
+      const hasOtherInFlight = Array.from(attempts).some((a) => !a.settled && a !== attempt);
+      if (attempt.thresholdTriggered && hasOtherInFlight) {
+        attempt.settled = true;
+        attempts.delete(attempt);
+        if (attempt.billAsLoser) {
+          // 开启输家计费：后台 drain 该响应以获取 usage，不返回给客户端。
+          startLoserBilling(attempt);
+        } else {
+          const readerCancel = attempt.reader.cancel("hedge_loser_timed_out");
+          readerCancel?.catch(() => undefined);
+          releaseAttemptAgent(attempt);
+        }
+        return;
+      }
+
       winnerCommitted = true;
       winnerAttempt = attempt;
 
