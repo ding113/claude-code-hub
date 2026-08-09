@@ -5,11 +5,13 @@ import {
   fetchUpstreamApiKeys,
   fetchUpstreamBalance,
   fetchUpstreamGroupRates,
+  isUpstreamRateLimitedError,
   isUpstreamUnauthorizedError,
   loginUpstreamSite,
   type UpstreamAuthSession,
   type UpstreamSiteCredentials,
 } from "./upstream-connector";
+import { resetProviderSiteRateLimitCooldownsForTests } from "./rate-limit-cooldown";
 
 const baseCreds = (): UpstreamSiteCredentials => ({
   siteUrl: "https://example-upstream.test",
@@ -38,6 +40,7 @@ function withSetCookie(res: Response, value: string): Response {
 }
 
 afterEach(() => {
+  resetProviderSiteRateLimitCooldownsForTests();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
@@ -357,6 +360,34 @@ describe("upstream-connector newapi", () => {
     expect(session.cookie).toContain("new_api_refresh=new");
     expect(session.userId).toBe("9");
     expect(session.expiresAt.getTime()).toBeGreaterThan(Date.now());
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("preserves refresh 429 and records Retry-After without falling back to login", async () => {
+    const fetchMock = vi.fn(
+      async () =>
+        new Response("", {
+          status: 429,
+          headers: { "Retry-After": "120" },
+        })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    try {
+      await loginUpstreamSite({
+        ...baseCreds(),
+        siteType: "newapi",
+        session: {
+          cookie: "new_api_refresh=old",
+          userId: "9",
+          expiresAt: new Date(Date.now() - 60_000),
+        },
+      });
+      throw new Error("expected refresh to fail with 429");
+    } catch (error) {
+      expect(isUpstreamRateLimitedError(error)).toBe(true);
+      expect(error).toMatchObject({ status: 429, retryAfterMs: 120_000 });
+    }
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 

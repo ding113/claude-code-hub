@@ -41,7 +41,6 @@ import { createPortal } from "react-dom";
 import {
   type ChangeEvent,
   type CSSProperties,
-  type KeyboardEvent,
   type ReactElement,
   useCallback,
   useEffect,
@@ -72,6 +71,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { TagInput } from "@/components/ui/tag-input";
 import {
   Select,
   SelectContent,
@@ -96,11 +97,18 @@ import {
 import { testProviderById } from "@/lib/api-client/v1/actions/providers";
 import { fetchSystemSettings, saveSystemSettings } from "@/lib/api-client/v1/actions/system-config";
 import {
+  normalizeProviderGroupHealthTestModels,
+  PROVIDER_GROUP_HEALTH_TEST_MODEL_MAX_COUNT,
+  PROVIDER_GROUP_HEALTH_TEST_MODEL_MAX_LENGTH,
+  resolveProviderGroupHealthTestModelFallback,
+} from "@/lib/provider-health-test/model-config";
+import {
   DEFAULT_HEALTH_TEST_SLO_THRESHOLDS,
   type HealthTestSloThresholds,
 } from "@/lib/provider-health-test/slo-thresholds";
 import {
   type ProviderSiteGroupHealthState as GroupHealthState,
+  projectProviderHealthForModel,
   resolveProviderSiteGroupHealthState,
 } from "@/lib/provider-sites/group-health";
 import { cn } from "@/lib/utils";
@@ -119,6 +127,7 @@ type SiteFormState = {
   name: string;
   siteUrl: string;
   siteType: "sub2api" | "newapi" | "custom";
+  rechargeMultiplier: string;
   notes: string;
   username: string;
   password: string;
@@ -130,6 +139,7 @@ const INITIAL_SITE_FORM: SiteFormState = {
   name: "",
   siteUrl: "https://",
   siteType: "sub2api",
+  rechargeMultiplier: "1",
   notes: "",
   username: "",
   password: "",
@@ -337,9 +347,11 @@ export function ProviderSitesView({
   const [selectedGroup, setSelectedGroup] = useState<{ siteId: number; rateId: number } | null>(
     null
   );
-  const [dispatchHealthModels, setDispatchHealthModels] = useState<Record<string, string | null>>(
-    {}
-  );
+  const [dispatchHealthModels, setDispatchHealthModels] = useState<Record<string, string[]>>({});
+  const [dispatchHealthModelFallbacks, setDispatchHealthModelFallbacks] = useState<
+    Record<string, string | null>
+  >({});
+  const [dispatchHealthModelsLoaded, setDispatchHealthModelsLoaded] = useState(false);
   const [isLoading, startLoad] = useTransition();
   const [isSaving, startSave] = useTransition();
   const [siteDialogOpen, setSiteDialogOpen] = useState(false);
@@ -378,11 +390,23 @@ export function ProviderSitesView({
     try {
       const groupsRes = await getProviderGroups();
       if (groupsRes.ok && Array.isArray(groupsRes.data)) {
-        const map: Record<string, string | null> = {};
+        const map: Record<string, string[]> = {};
+        const fallbackMap: Record<string, string | null> = {};
         for (const g of groupsRes.data) {
-          map[g.name] = g.healthTestModel ?? null;
+          const models = normalizeProviderGroupHealthTestModels(
+            g.healthTestModels,
+            g.healthTestModel
+          );
+          map[g.name] = models;
+          fallbackMap[g.name] = resolveProviderGroupHealthTestModelFallback(
+            g.healthTestModelFallback,
+            models,
+            g.healthTestModel
+          );
         }
         setDispatchHealthModels(map);
+        setDispatchHealthModelFallbacks(fallbackMap);
+        setDispatchHealthModelsLoaded(true);
       }
     } catch {
       // optional overlay
@@ -403,20 +427,17 @@ export function ProviderSitesView({
           setHealthWindowSize(Math.min(50, Math.max(1, Math.trunc(win))));
         }
         const minOnlineRatePercent = Number(data.healthTestMinOnlineRatePercent);
-        const maxAvgFirstByteSeconds = Number(data.healthTestMaxAvgLatencySeconds);
+        const maxAvgLatencySeconds = Number(data.healthTestMaxAvgLatencySeconds);
         setHealthSloThresholds((current) => ({
           minOnlineRate:
             Number.isFinite(minOnlineRatePercent) && minOnlineRatePercent >= 0
               ? Math.min(1, minOnlineRatePercent / 100)
               : current.minOnlineRate,
-          maxAvgFirstByteMs:
-            Number.isFinite(maxAvgFirstByteSeconds) && maxAvgFirstByteSeconds >= 0
-              ? maxAvgFirstByteSeconds * 1000
-              : current.maxAvgFirstByteMs,
-          minSampleCount:
-            Number.isFinite(win) && win > 0
-              ? Math.min(50, Math.max(1, Math.trunc(win)))
-              : current.minSampleCount,
+          maxAvgLatencyMs:
+            Number.isFinite(maxAvgLatencySeconds) && maxAvgLatencySeconds >= 0
+              ? maxAvgLatencySeconds * 1000
+              : current.maxAvgLatencyMs,
+          minSampleCount: 1,
         }));
         const provider = String(data.siteCaptchaProvider || "none").toLowerCase();
         setGlobalCaptcha((prev) => ({
@@ -478,23 +499,29 @@ export function ProviderSitesView({
       members: matchSiteGroupMembers(providersBySite.get(site.id) ?? [], rate),
     };
   }, [providersBySite, selectedGroup, sites]);
+  const selectedGroupTag = selectedGroupData?.rate.dispatchGroupTag?.trim() ?? "";
+  const selectedGroupHealthModels = selectedGroupTag
+    ? (dispatchHealthModels[selectedGroupTag] ?? [])
+    : [];
+  const selectedGroupHealthModelFallback = selectedGroupTag
+    ? (dispatchHealthModelFallbacks[selectedGroupTag] ?? selectedGroupHealthModels[0] ?? null)
+    : null;
   const selectedGroupHealthState = selectedGroupData
-    ? resolveProviderSiteGroupHealthState(
+    ? !dispatchHealthModelsLoaded
+      ? "pending"
+      : resolveProviderSiteGroupHealthState(
         selectedGroupData.members,
         healthSloThresholds,
-        healthWindowSize
+        1,
+        selectedGroupHealthModelFallback
       )
-    : null;
-  const selectedGroupTag = selectedGroupData?.rate.dispatchGroupTag?.trim() ?? "";
-  const selectedGroupHealthModel = selectedGroupTag
-    ? (dispatchHealthModels[selectedGroupTag] ?? null)
     : null;
   const activeSite = useMemo(
     () => (activeSiteId == null ? null : (sites.find((site) => site.id === activeSiteId) ?? null)),
     [activeSiteId, sites]
   );
   const siteTodayCostValues = useMemo(
-    () => sites.flatMap((site) => (site.todayCost == null ? [] : [site.todayCost])),
+    () => sites.flatMap((site) => (site.realTodayCost == null ? [] : [site.realTodayCost])),
     [sites]
   );
   const siteTodayCost = useMemo(() => sumCosts(siteTodayCostValues), [siteTodayCostValues]);
@@ -517,6 +544,7 @@ export function ProviderSitesView({
       siteType: (["sub2api", "newapi", "custom"].includes(site.siteType)
         ? site.siteType
         : "custom") as SiteFormState["siteType"],
+      rechargeMultiplier: String(site.rechargeMultiplier ?? 1),
       notes: site.notes ?? "",
       username: site.username ?? "",
       password: "",
@@ -542,6 +570,11 @@ export function ProviderSitesView({
       toast.error(t("nameRequired"));
       return;
     }
+    const rechargeMultiplier = Number(siteForm.rechargeMultiplier.trim());
+    if (!Number.isFinite(rechargeMultiplier) || rechargeMultiplier <= 0) {
+      toast.error(t("invalidRechargeMultiplier"));
+      return;
+    }
     startSave(async () => {
       const credentialPayload = {
         username: siteForm.username.trim() || null,
@@ -557,6 +590,7 @@ export function ProviderSitesView({
           name,
           siteUrl,
           siteType: siteForm.siteType,
+          rechargeMultiplier,
           notes: siteForm.notes.trim() || null,
           ...credentialPayload,
         })
@@ -564,6 +598,7 @@ export function ProviderSitesView({
             name,
             siteUrl,
             siteType: siteForm.siteType,
+            rechargeMultiplier,
             notes: siteForm.notes.trim() || null,
             ...credentialPayload,
           });
@@ -731,9 +766,33 @@ export function ProviderSitesView({
       if (manualTestingProviderIds[provider.id]) return;
       setManualTestingProviderIds((prev) => ({ ...prev, [provider.id]: true }));
       try {
-        const model = selectedGroupHealthModel?.trim();
-        const result = await testProviderById(provider.id, model ? { model } : undefined);
-        if (!result.ok) {
+        const configuredModels = Array.from(
+          new Set(selectedGroupHealthModels.map((model) => model.trim()).filter(Boolean))
+        );
+        const modelsToTest =
+          configuredModels.length > 0
+            ? configuredModels
+            : selectedGroupHealthModelFallback?.trim()
+              ? [selectedGroupHealthModelFallback.trim()]
+              : [];
+        let allOk = true;
+
+        if (modelsToTest.length === 0) {
+          const result = await testProviderById(provider.id);
+          allOk = result.ok;
+        } else {
+          // Run every model shown in the group card; one failure must not skip the rest.
+          for (const model of modelsToTest) {
+            try {
+              const result = await testProviderById(provider.id, { model });
+              if (!result.ok) allOk = false;
+            } catch {
+              allOk = false;
+            }
+          }
+        }
+
+        if (!allOk) {
           toast.error(t("groupHealthManualTestFailed"));
           return;
         }
@@ -749,11 +808,21 @@ export function ProviderSitesView({
         });
       }
     },
-    [manualTestingProviderIds, queryClient, selectedGroupHealthModel, t]
+    [
+      manualTestingProviderIds,
+      queryClient,
+      selectedGroupHealthModelFallback,
+      selectedGroupHealthModels,
+      t,
+    ]
   );
 
-  const saveDispatchHealthModel = useCallback(
-    async (dispatchTag: string, model: string) => {
+  const saveDispatchHealthModels = useCallback(
+    async (
+      dispatchTag: string,
+      rawModels: readonly string[],
+      rawFallback: string | null | undefined
+    ) => {
       const tag = dispatchTag.trim();
       if (!tag || tag === "other") {
         toast.error(t("healthModelTagRequired"));
@@ -770,14 +839,22 @@ export function ProviderSitesView({
           toast.error(t("healthModelGroupMissing", { tag }));
           return;
         }
+        const models = normalizeProviderGroupHealthTestModels(rawModels);
+        const healthTestModelFallback = resolveProviderGroupHealthTestModelFallback(
+          rawFallback,
+          models,
+          group.healthTestModel
+        );
         const res = await updateProviderGroup(group.id, {
-          healthTestModel: model.trim() || null,
+          healthTestModels: models,
+          healthTestModelFallback,
         });
         if (!res.ok) {
           toast.error(res.error || t("healthModelSaveFailed"));
           return;
         }
-        setDispatchHealthModels((prev) => ({ ...prev, [tag]: model.trim() || null }));
+        setDispatchHealthModels((prev) => ({ ...prev, [tag]: models }));
+        setDispatchHealthModelFallbacks((prev) => ({ ...prev, [tag]: healthTestModelFallback }));
         toast.success(t("healthModelSaved"));
         await invalidateProviderQueries(queryClient);
       } catch (error) {
@@ -794,9 +871,9 @@ export function ProviderSitesView({
     dragListeners?: Record<string, unknown>
   ) => {
     const siteProviders = providersBySite.get(site.id) ?? [];
-    const rates = [...site.groupRates].sort((a, b) => a.ratio - b.ratio);
-    const minRatio = rates[0]?.ratio;
-    const maxRatio = rates[rates.length - 1]?.ratio;
+    const rates = [...site.groupRates].sort((a, b) => a.effectiveRatio - b.effectiveRatio);
+    const minRatio = rates[0]?.effectiveRatio;
+    const maxRatio = rates[rates.length - 1]?.effectiveRatio;
 
     return (
       <Card
@@ -895,13 +972,24 @@ export function ProviderSitesView({
                 })}
               </p>
             </div>
+            <div className="min-w-0 rounded-md border border-border/50 bg-background/65 px-2 py-1.5">
+              <p className="truncate text-[11px] text-muted-foreground">
+                {t("rechargeMultiplier")} {" "}
+                <span className="font-mono text-foreground/80">
+                  {formatRatio(site.rechargeMultiplier)}
+                </span>
+              </p>
+            </div>
             {site.lastBalance != null ? (
               <div className="min-w-0 rounded-md border border-border/50 bg-background/65 px-2 py-1.5">
                 <p className="truncate text-[11px] text-muted-foreground">
-                  {t("upstreamBalance")} {" "}
+                  {t("realBalance")} {" "}
                   <span className="font-mono text-foreground/80">
-                    {Number(site.lastBalance).toFixed(4)}
+                    {site.realBalance == null ? "-" : Number(site.realBalance).toFixed(4)}
                   </span>
+                </p>
+                <p className="truncate text-[10px] text-muted-foreground/70">
+                  {t("upstreamBalance")} {Number(site.lastBalance).toFixed(4)}
                 </p>
               </div>
             ) : null}
@@ -910,9 +998,14 @@ export function ProviderSitesView({
                 <p className="truncate text-[11px] text-muted-foreground">
                   {t("todayCost")} {" "}
                   <span className="font-mono text-foreground/80">
-                    {Number(site.todayCost).toFixed(4)}
+                    {Number(site.realTodayCost ?? site.todayCost).toFixed(4)}
                   </span>
                 </p>
+                {site.realTodayCost != null && Math.abs(site.realTodayCost - site.todayCost) > 1e-9 ? (
+                  <p className="truncate text-[10px] text-muted-foreground/70">
+                    {t("upstreamTodayCost")} {Number(site.todayCost).toFixed(4)}
+                  </p>
+                ) : null}
               </div>
             ) : null}
           </div>
@@ -976,10 +1069,14 @@ export function ProviderSitesView({
               {rates.map((rate) => {
                 const tag = rate.dispatchGroupTag || "";
                 const members = matchSiteGroupMembers(siteProviders, rate);
+                const fallbackModel = tag
+                  ? (dispatchHealthModelFallbacks[tag] ?? dispatchHealthModels[tag]?.[0] ?? null)
+                  : null;
                 const healthState = resolveProviderSiteGroupHealthState(
                   members,
                   healthSloThresholds,
-                  healthWindowSize
+                  1,
+                  fallbackModel
                 );
                 const healthLabel = groupHealthLabel(healthState, tHealth);
                 return (
@@ -1010,10 +1107,11 @@ export function ProviderSitesView({
                         <span
                           className={cn(
                             "inline-flex shrink-0 rounded-full border px-1.5 py-0.5 font-mono text-[10px]",
-                            ratioTone(rate.ratio)
+                            ratioTone(rate.effectiveRatio)
                           )}
+                          title={t("effectiveRatioHint")}
                         >
-                          {formatRatio(rate.ratio)}
+                          {formatRatio(rate.effectiveRatio)}
                         </span>
                         {tag ? (
                           <span
@@ -1279,15 +1377,16 @@ export function ProviderSitesView({
               <div className="flex flex-wrap items-center gap-x-5 gap-y-2 border-y border-border/50 py-2.5">
                 <div className="flex items-center gap-2">
                   <p className="text-[10px] uppercase tracking-wider text-muted-foreground/75">
-                    {t("fieldRatio")}
+                    {t("effectiveRatio")}
                   </p>
                   <span
                     className={cn(
                       "inline-flex min-w-14 items-center justify-center rounded-md border px-2 py-1 font-mono text-sm font-semibold",
-                      ratioTone(selectedGroupData.rate.ratio)
+                      ratioTone(selectedGroupData.rate.effectiveRatio)
                     )}
+                    title={t("effectiveRatioHint")}
                   >
-                    {formatRatio(selectedGroupData.rate.ratio)}
+                    {formatRatio(selectedGroupData.rate.effectiveRatio)}
                   </span>
                 </div>
                 <div className="flex items-center gap-2">
@@ -1295,7 +1394,7 @@ export function ProviderSitesView({
                     {t("fieldCompletion")}
                   </p>
                   <span className="font-mono text-sm font-semibold">
-                    {formatCompletionRatio(selectedGroupData.rate.completionRatio) ??
+                    {formatCompletionRatio(selectedGroupData.rate.effectiveCompletionRatio) ??
                       t("completionHidden")}
                   </span>
                 </div>
@@ -1314,7 +1413,7 @@ export function ProviderSitesView({
                 </div>
               </div>
 
-              <div className="border-y border-border/50 py-3">
+              <div className="space-y-3 border-y border-border/50 py-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <p className="text-sm font-medium">{t("colHealthModel")}</p>
                   {selectedGroupTag ? (
@@ -1324,25 +1423,80 @@ export function ProviderSitesView({
                   ) : null}
                 </div>
                 {isAdmin && selectedGroupTag && selectedGroupTag !== "other" ? (
-                  <Input
-                    key={`${selectedGroupTag}-${selectedGroupHealthModel ?? ""}`}
-                    defaultValue={selectedGroupHealthModel ?? ""}
-                    className="mt-2 h-8 rounded-none border-x-0 border-t-0 border-b border-primary/40 bg-transparent px-0 font-mono text-xs shadow-none focus-visible:border-primary focus-visible:ring-0"
-                    placeholder={t("healthModelPlaceholder")}
-                    onBlur={(e: ChangeEvent<HTMLInputElement>) => {
-                      const next = e.target.value.trim();
-                      if (next !== (selectedGroupHealthModel ?? "")) {
-                        void saveDispatchHealthModel(selectedGroupTag, next);
-                      }
-                    }}
-                    onKeyDown={(e: KeyboardEvent<HTMLInputElement>) => {
-                      if (e.key === "Enter") (e.target as HTMLInputElement).blur();
-                    }}
-                  />
+                  <>
+                    <TagInput
+                      key={`${selectedGroupTag}-${selectedGroupHealthModels.join("|")}`}
+                      value={selectedGroupHealthModels}
+                      className="font-mono text-xs"
+                      maxTags={PROVIDER_GROUP_HEALTH_TEST_MODEL_MAX_COUNT}
+                      maxTagLength={PROVIDER_GROUP_HEALTH_TEST_MODEL_MAX_LENGTH}
+                      placeholder={t("healthModelPlaceholder")}
+                      validateTag={(model) => model.trim().length > 0}
+                      onChange={(models) => {
+                        void saveDispatchHealthModels(
+                          selectedGroupTag,
+                          models,
+                          selectedGroupHealthModelFallback
+                        );
+                      }}
+                    />
+                    <div className="space-y-1.5">
+                      <Label htmlFor="group-health-fallback-site" className="text-xs">
+                        {t("healthModelFallback")}
+                      </Label>
+                      <Select
+                        value={
+                          selectedGroupHealthModelFallback ?? "__health_test_model_none__"
+                        }
+                        onValueChange={(value) => {
+                          void saveDispatchHealthModels(
+                            selectedGroupTag,
+                            selectedGroupHealthModels,
+                            value === "__health_test_model_none__" ? null : value
+                          );
+                        }}
+                        disabled={selectedGroupHealthModels.length === 0}
+                      >
+                        <SelectTrigger id="group-health-fallback-site" className="h-8 text-xs">
+                          <SelectValue placeholder={t("healthModelFallbackPlaceholder")} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {selectedGroupHealthModels.length === 0 ? (
+                            <SelectItem value="__health_test_model_none__">
+                              {t("healthModelFallbackEmpty")}
+                            </SelectItem>
+                          ) : (
+                            selectedGroupHealthModels.map((model) => (
+                              <SelectItem key={model} value={model}>
+                                {model}
+                              </SelectItem>
+                            ))
+                          )}
+                        </SelectContent>
+                      </Select>
+                      <p className="text-[11px] text-muted-foreground">
+                        {t("healthModelFallbackHelp")}
+                      </p>
+                    </div>
+                  </>
                 ) : (
-                  <p className="mt-2 font-mono text-xs text-muted-foreground">
-                    {selectedGroupHealthModel || t("healthModelEmpty")}
-                  </p>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {selectedGroupHealthModels.length > 0 ? (
+                      selectedGroupHealthModels.map((model) => (
+                        <Badge key={model} variant="outline" className="font-mono text-[11px]">
+                          {model}
+                          {model === selectedGroupHealthModelFallback ? " · " : ""}
+                          {model === selectedGroupHealthModelFallback
+                            ? t("healthModelFallbackShort")
+                            : ""}
+                        </Badge>
+                      ))
+                    ) : (
+                      <p className="font-mono text-xs text-muted-foreground">
+                        {t("healthModelEmpty")}
+                      </p>
+                    )}
+                  </div>
                 )}
               </div>
 
@@ -1368,13 +1522,16 @@ export function ProviderSitesView({
                     {t("groupHealthNoMembers")}
                   </div>
                 ) : (
-                  <div className="grid gap-2 md:grid-cols-2">
+                  <div className="grid grid-cols-1 gap-2">
                     {selectedGroupData.members.map((provider) => {
-                      const status = getProviderHealthTestStatus(
+                      const healthStatusProvider = projectProviderHealthForModel(
                         provider,
+                        selectedGroupHealthModelFallback
+                      );
+                      const status = getProviderHealthTestStatus(
+                        healthStatusProvider,
                         tHealth,
-                        healthSloThresholds,
-                        healthWindowSize
+                        healthSloThresholds
                       );
                       return (
                         <div
@@ -1428,6 +1585,8 @@ export function ProviderSitesView({
                             hideStatusBadge
                             windowSize={healthWindowSize}
                             sloThresholds={healthSloThresholds}
+                            testModels={selectedGroupHealthModels}
+                            healthTestModelConfigLoaded={dispatchHealthModelsLoaded}
                             className="border-0 bg-transparent p-0"
                           />
                         </div>
@@ -1511,6 +1670,23 @@ export function ProviderSitesView({
                         <SelectItem value="custom">custom</SelectItem>
                       </SelectContent>
                     </Select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium text-muted-foreground">
+                      {t("fieldRechargeMultiplier")}
+                    </label>
+                    <Input
+                      className="h-11 rounded-lg bg-background font-mono"
+                      inputMode="decimal"
+                      value={siteForm.rechargeMultiplier}
+                      onChange={(e: ChangeEvent<HTMLInputElement>) =>
+                        setSiteForm((p) => ({ ...p, rechargeMultiplier: e.target.value }))
+                      }
+                      placeholder="1"
+                    />
+                    <p className="text-[11px] leading-4 text-muted-foreground">
+                      {t("fieldRechargeMultiplierHelp")}
+                    </p>
                   </div>
                 </div>
               </div>

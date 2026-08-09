@@ -249,6 +249,9 @@
     "session_reuse": "会话复用",
     "weighted_random": "加权随机",
     "group_filtered": "分组过滤",
-    "fail_open_fallback": "故障开放回退"
+    "fail_open_fallback": "故障开放回退",
+    "health_slo": "健康 SLO",
+    "latency_fallback": "平均耗时最短兜底",
+    "cost_fallback": "最低成本兜底"
   }
 }

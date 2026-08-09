@@ -1,4 +1,5 @@
 import { z } from "@hono/zod-openapi";
+import { PROVIDER_GROUP_HEALTH_TEST_MODEL_MAX_COUNT } from "@/lib/provider-health-test/model-config";
 import { PUBLIC_PROVIDER_TYPE_VALUES } from "@/lib/api/v1/_shared/constants";
 import { IsoDateTimeStringSchema } from "./_common";
 
@@ -19,6 +20,10 @@ const ProviderGroupModelMatchRuleSchema = z
 const ProviderGroupSharedSettingsSchema = z
   .object({
     providerType: z.enum(PUBLIC_PROVIDER_TYPE_VALUES).nullable().optional(),
+    healthTestFormat: z
+      .enum(["response", "openai", "claude", "gemini"])
+      .nullable()
+      .optional(),
     priority: z.number().int().nullable().optional(),
     weight: z.number().nullable().optional(),
     costMultiplier: z.number().min(0).nullable().optional(),
@@ -51,7 +56,17 @@ export const ProviderGroupSchema = z.object({
     .string()
     .nullable()
     .optional()
-    .describe("Default scheduled health-test model; null/empty = skip scheduled tests."),
+    .describe("Legacy/default scheduled health-test model; null/empty = skip scheduled tests."),
+  healthTestModels: z
+    .array(z.string().trim().min(1).max(200))
+    .nullable()
+    .describe("Scheduled health-test models tested independently for this group."),
+  healthTestModelFallback: z
+    .string()
+    .trim()
+    .max(200)
+    .nullable()
+    .describe("Configured test model used as the health baseline for non-test models/displays."),
   sharedSettings: ProviderGroupSharedSettingsSchema,
   sortOrder: z.number().int().optional().describe("Keyword match priority; lower runs first."),
   matchRules: z
@@ -78,6 +93,13 @@ export const ProviderGroupListResponseSchema = z.object({
   items: z.array(ProviderGroupSchema).describe("Provider groups."),
 });
 
+export const ProviderGroupUpstreamModelsResponseSchema = z.object({
+  models: z.array(z.string()).describe("Aggregated model ids from the group's enabled providers."),
+  failed: z
+    .array(z.string())
+    .describe("Error messages from providers that could not be reached."),
+});
+
 export const ProviderGroupCreateSchema = z
   .object({
     name: z.string().trim().min(1).max(100).describe("Provider group name."),
@@ -88,7 +110,20 @@ export const ProviderGroupCreateSchema = z
       .max(200)
       .nullable()
       .optional()
-      .describe("Default scheduled health-test model; empty = skip scheduled tests."),
+      .describe("Legacy/default scheduled health-test model; empty = skip scheduled tests."),
+    healthTestModels: z
+      .array(z.string().trim().min(1).max(200))
+      .max(PROVIDER_GROUP_HEALTH_TEST_MODEL_MAX_COUNT)
+      .nullable()
+      .optional()
+      .describe("Scheduled health-test models tested independently for this group."),
+    healthTestModelFallback: z
+      .string()
+      .trim()
+      .max(200)
+      .nullable()
+      .optional()
+      .describe("Test model used as the health baseline for non-test models/displays."),
     sharedSettings: ProviderGroupSharedSettingsSchema,
     applySharedSettingsToMembers: z
       .boolean()
@@ -123,7 +158,20 @@ export const ProviderGroupUpdateSchema = z
       .max(200)
       .nullable()
       .optional()
-      .describe("Default scheduled health-test model; empty = skip scheduled tests."),
+      .describe("Legacy/default scheduled health-test model; empty = skip scheduled tests."),
+    healthTestModels: z
+      .array(z.string().trim().min(1).max(200))
+      .max(PROVIDER_GROUP_HEALTH_TEST_MODEL_MAX_COUNT)
+      .nullable()
+      .optional()
+      .describe("Scheduled health-test models tested independently for this group."),
+    healthTestModelFallback: z
+      .string()
+      .trim()
+      .max(200)
+      .nullable()
+      .optional()
+      .describe("Test model used as the health baseline for non-test models/displays."),
     sharedSettings: ProviderGroupSharedSettingsSchema,
     applySharedSettingsToMembers: z
       .boolean()

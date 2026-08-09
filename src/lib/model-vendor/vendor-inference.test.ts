@@ -102,6 +102,13 @@ describe("inferVendorFromModelName", () => {
     expect(inferVendorFromModelName("DEEPSEEK-CHAT")).toBe("deepseek");
   });
 
+  it("maps codex models to openai", () => {
+    expect(inferVendorFromModelName("codex-auto-review")).toBe("openai");
+    expect(inferVendorFromModelName("codex-1")).toBe("openai");
+    expect(inferVendorFromModelName("codex-mini")).toBe("openai");
+    expect(inferVendorFromModelName("gpt-5.6-codex")).toBe("openai");
+  });
+
   it("returns 'other' for unknown models", () => {
     expect(inferVendorFromModelName("custom-model-v2")).toBe(UNKNOWN_VENDOR);
     expect(inferVendorFromModelName("some-random-thing")).toBe(UNKNOWN_VENDOR);

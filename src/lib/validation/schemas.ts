@@ -1040,7 +1040,7 @@ export const UpdateSystemSettingsSchema = z.object({
   healthTestScheduleMode: z.enum(["dynamic", "always_on"]).optional(),
   // Rolling sample window for online-rate / sparkline / SLO (default 10). Min 1: no full-window gate.
   healthTestWindowSize: z.coerce.number().int().min(1).max(50).optional(),
-  // Scheduled probe interval seconds (default 60).
+  // Scheduled probe interval seconds (default 1800 / 30 minutes).
   healthTestIntervalSeconds: z.coerce.number().int().min(10).max(3600).optional(),
   // Scheduled probe total timeout seconds (default 30).
   healthTestTimeoutSeconds: z.coerce.number().int().min(5).max(300).optional(),

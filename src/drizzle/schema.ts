@@ -192,6 +192,10 @@ export const providerSites = pgTable(
     isEnabled: boolean("is_enabled").notNull().default(true),
     /** Manual display order for site cards (lower first). */
     sortOrder: integer("sort_order").notNull().default(0),
+    /** CCH-facing recharge multiplier; effective ratio/balance = upstream value / this. */
+    rechargeMultiplier: numeric("recharge_multiplier", { precision: 12, scale: 6 })
+      .notNull()
+      .default("1"),
     /** Optional Upstream Hub channel id (legacy bridge; direct login preferred) */
     upstreamHubChannelId: integer("upstream_hub_channel_id"),
     /** Upstream website login username/email */
@@ -301,6 +305,10 @@ export const providerGroups = pgTable(
     description: text("description"),
     /** Scheduled health-test model for this group; null/empty = skip scheduled tests */
     healthTestModel: varchar("health_test_model", { length: 200 }),
+    /** Multiple scheduled health-test models; legacy healthTestModel is retained for compatibility. */
+    healthTestModels: jsonb("health_test_models").$type<string[] | null>(),
+    /** Independent test model used as the health baseline for non-test models/displays. */
+    healthTestModelFallback: varchar("health_test_model_fallback", { length: 200 }),
     /**
      * Optional shared defaults for providers in this group (routing/network/circuit/limits).
      * Applied to members when admin saves with applyToMembers=true.
@@ -554,6 +562,10 @@ export const providers = pgTable('providers', {
   // Last up to N probe samples (oldest→newest) for sparkline + hover details
   healthTestRecentResults: jsonb('health_test_recent_results')
     .$type<import("@/lib/provider-health-test/stats").ProviderHealthTestSample[] | boolean[] | null>()
+    .default(null),
+  /** Per-model rolling health SLO snapshots used by request-model-aware dispatch. */
+  healthTestModelStats: jsonb('health_test_model_stats')
+    .$type<import("@/lib/provider-health-test/stats").ProviderHealthTestModelStatsMap | null>()
     .default(null),
   // Estimated upstream health-test spend for current local day (not user billing)
   healthTestTodayCostUsd: numeric('health_test_today_cost_usd', { precision: 21, scale: 15 }),
@@ -1018,7 +1030,7 @@ export const systemSettings = pgTable('system_settings', {
   // - always_on: no SLO auto-disable; keep fleet probing
   healthTestScheduleMode: varchar('health_test_schedule_mode', { length: 20 }).notNull().default('dynamic'),
   healthTestWindowSize: integer('health_test_window_size').notNull().default(10),
-  healthTestIntervalSeconds: integer('health_test_interval_seconds').notNull().default(60),
+  healthTestIntervalSeconds: integer('health_test_interval_seconds').notNull().default(1800),
   healthTestTimeoutSeconds: integer('health_test_timeout_seconds').notNull().default(30),
   // Single health SLO gate (no multi-tier): min online rate percent (default 90).
   healthTestMinOnlineRatePercent: integer('health_test_min_online_rate_percent').notNull().default(90),

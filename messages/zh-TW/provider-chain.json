@@ -249,6 +249,9 @@
     "session_reuse": "會話複用",
     "weighted_random": "加權隨機",
     "group_filtered": "分組過濾",
-    "fail_open_fallback": "故障開放回退"
+    "fail_open_fallback": "故障開放回退",
+    "health_slo": "健康度 SLO",
+    "latency_fallback": "平均耗時最短備援",
+    "cost_fallback": "最低成本備援"
   }
 }

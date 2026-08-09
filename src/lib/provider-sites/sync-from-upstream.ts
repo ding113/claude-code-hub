@@ -3,10 +3,17 @@
  */
 import { publishProviderCacheInvalidation } from "@/lib/cache/provider-cache";
 import { logger } from "@/lib/logger";
+import { normalizeUpstreamRate } from "@/lib/provider-sites/billing";
+import {
+  clearProviderSiteRateLimit,
+  formatProviderSiteRateLimitCooldown,
+  getProviderSiteRateLimitCooldown,
+  noteProviderSiteRateLimit,
+} from "@/lib/provider-sites/rate-limit-cooldown";
 import { decryptSecret, encryptSecret } from "@/lib/provider-sites/secret-box";
 import {
+  deleteDuplicateUpstreamApiKeys,
   deleteUnboundUpstreamApiKeys,
-  findUnkeyedOtherSiteGroupNames,
   pruneStaleSiteProvidersForUpstreamGroups,
   syncSiteKeysForGroups,
   syncSiteProviderBalanceState,
@@ -15,6 +22,7 @@ import {
   fetchUpstreamApiKeys,
   fetchUpstreamBalance,
   fetchUpstreamGroupRates,
+  isUpstreamRateLimitedError,
   isUpstreamUnauthorizedError,
   loginUpstreamSite,
   type UpstreamAuthSession,
@@ -135,7 +143,9 @@ async function fetchRatesAndBalance(
   return { groups, balance };
 }
 
-export async function syncProviderSiteFromUpstream(
+const activeSiteSyncs = new Map<number, Promise<ProviderSiteSyncResult>>();
+
+async function syncProviderSiteFromUpstreamUnlocked(
   siteId: number
 ): Promise<ProviderSiteSyncResult> {
   const started = Date.now();
@@ -156,6 +166,31 @@ export async function syncProviderSiteFromUpstream(
   }
 
   const { creds: rawCreds, siteName } = rowToCreds(row);
+  const existingCooldown = getProviderSiteRateLimitCooldown(rawCreds.siteUrl, {
+    lastSyncAt: row.lastSyncAt,
+    lastSyncError: row.lastSyncError,
+  });
+  if (existingCooldown) {
+    const error = formatProviderSiteRateLimitCooldown(existingCooldown);
+    logger.info("[provider-sites] sync skipped during rate-limit cooldown", {
+      siteId,
+      siteName,
+      retryInMs: existingCooldown.remainingMs,
+      source: existingCooldown.source,
+    });
+    return {
+      siteId,
+      siteName,
+      ok: false,
+      groupsUpserted: 0,
+      groupsSeen: 0,
+      balance: null,
+      todayCost: null,
+      totalCost: null,
+      error,
+      durationMs: Date.now() - started,
+    };
+  }
   if (!rawCreds.username || !rawCreds.password) {
     const error = "missing username/password";
     await updateProviderSite(siteId, {
@@ -270,6 +305,15 @@ export async function syncProviderSiteFromUpstream(
         count: upstreamKeys.length,
         grouped: new Set(upstreamKeys.map((k) => k.groupName)).size,
       });
+      const deduplicated = await deleteDuplicateUpstreamApiKeys({
+        siteId,
+        siteName,
+        upstreamKeys,
+        creds,
+        session,
+      });
+      upstreamKeys = deduplicated.keys;
+      const upstreamDuplicateKeysDeleted = deduplicated.deleted;
       let unboundUpstreamKeysDeleted = 0;
       if (upstreamGroupNames.length > 0) {
         unboundUpstreamKeysDeleted = await deleteUnboundUpstreamApiKeys({
@@ -281,47 +325,6 @@ export async function syncProviderSiteFromUpstream(
         });
       }
       const allGroups = await findAllProviderGroups();
-      const unkeyedOtherGroups = findUnkeyedOtherSiteGroupNames({
-        groupNames: upstreamGroupNames,
-        upstreamKeys,
-        groups: allGroups,
-      });
-      if (unkeyedOtherGroups.length > 0) {
-        const retainedGroupNames = upstreamGroupNames.filter(
-          (groupName) => !unkeyedOtherGroups.includes(groupName)
-        );
-        try {
-          const removed = await deleteProviderSiteGroupRatesNotIn(siteId, retainedGroupNames);
-          if (removed.length > 0) {
-            logger.info("[provider-sites] pruned unkeyed non-routable site groups", {
-              siteId,
-              siteName,
-              removed,
-              keyGroups: upstreamKeys.map((key) => key.groupName),
-            });
-          }
-        } catch (error) {
-          logger.warn("[provider-sites] unkeyed non-routable group-rate pruning failed", {
-            siteId,
-            siteName,
-            groups: unkeyedOtherGroups,
-            error: error instanceof Error ? error.message : String(error),
-          });
-        }
-        try {
-          staleProvidersDeleted += await pruneStaleSiteProvidersForUpstreamGroups(
-            siteId,
-            retainedGroupNames
-          );
-        } catch (error) {
-          logger.warn("[provider-sites] unkeyed non-routable provider pruning failed", {
-            siteId,
-            siteName,
-            groups: unkeyedOtherGroups,
-            error: error instanceof Error ? error.message : String(error),
-          });
-        }
-      }
       const keySummary = await syncSiteKeysForGroups({
         siteId,
         siteName,
@@ -331,8 +334,10 @@ export async function syncProviderSiteFromUpstream(
         upstreamKeys,
         groupNames: upstreamGroupNames,
         groups: allGroups,
-        // Keep providers.cost_multiplier = upstream group ratio for cheapest-first dispatch.
-        groupRatios: Object.fromEntries(groups.map((g) => [g.groupName, g.ratio])),
+        // Keep providers.cost_multiplier = effective CCH ratio for cheapest-first dispatch.
+        groupRatios: Object.fromEntries(
+          groups.map((g) => [g.groupName, normalizeUpstreamRate(g.ratio, row.rechargeMultiplier)])
+        ),
         balance: balance.balance,
         // Auto-create missing upstream keys for eligible groups (fail → next tick).
         creds,
@@ -346,6 +351,7 @@ export async function syncProviderSiteFromUpstream(
         keysSeen: keySummary.keysSeen,
         keysAutoCreated: keySummary.keysAutoCreated,
         unboundUpstreamKeysDeleted,
+        upstreamDuplicateKeysDeleted,
       };
     } catch (error) {
       logger.warn("[provider-sites] key sync failed (rates still saved)", {
@@ -368,6 +374,8 @@ export async function syncProviderSiteFromUpstream(
     }
 
     const now = new Date();
+    const cooldown = getProviderSiteRateLimitCooldown(creds.siteUrl);
+    const cooldownError = cooldown ? formatProviderSiteRateLimitCooldown(cooldown) : null;
     await updateProviderSite(siteId, {
       lastRateSyncedAt: now,
       lastCostSyncedAt: balance.todayCost != null || balance.totalCost != null ? now : undefined,
@@ -375,11 +383,33 @@ export async function syncProviderSiteFromUpstream(
       lastBalanceAt: balance.balance != null ? now : null,
       todayCost: balance.todayCost,
       totalCost: balance.totalCost,
-      lastSyncError: null,
+      lastSyncError: cooldownError,
       lastSyncAt: now,
     });
     await publishProviderCacheInvalidation();
 
+    if (cooldownError) {
+      logger.warn("[provider-sites] sync partially saved before rate-limit cooldown", {
+        siteId,
+        siteName,
+        retryInMs: cooldown?.remainingMs,
+      });
+      return {
+        siteId,
+        siteName,
+        ok: false,
+        groupsUpserted: upserted,
+        groupsSeen: groups.length,
+        balance: balance.balance,
+        todayCost: balance.todayCost,
+        totalCost: balance.totalCost,
+        durationMs: Date.now() - started,
+        error: cooldownError,
+        keysSynced,
+      };
+    }
+
+    clearProviderSiteRateLimit(creds.siteUrl);
     return {
       siteId,
       siteName,
@@ -393,7 +423,14 @@ export async function syncProviderSiteFromUpstream(
       keysSynced,
     };
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
+    if (isUpstreamRateLimitedError(error) && !getProviderSiteRateLimitCooldown(rawCreds.siteUrl)) {
+      noteProviderSiteRateLimit(rawCreds.siteUrl, error.retryAfterMs);
+    }
+    const rawMessage = error instanceof Error ? error.message : String(error);
+    const cooldown = getProviderSiteRateLimitCooldown(rawCreds.siteUrl);
+    const message = cooldown
+      ? `${rawMessage}; ${formatProviderSiteRateLimitCooldown(cooldown)}`
+      : rawMessage;
     logger.error("[provider-sites] sync failed", { siteId, siteName, error: message });
     await updateProviderSite(siteId, {
       lastSyncError: message.slice(0, 2000),
@@ -411,6 +448,25 @@ export async function syncProviderSiteFromUpstream(
       error: message,
       durationMs: Date.now() - started,
     };
+  }
+}
+
+/** Serialize manual and scheduled syncs for the same site in this app process. */
+export async function syncProviderSiteFromUpstream(
+  siteId: number
+): Promise<ProviderSiteSyncResult> {
+  const active = activeSiteSyncs.get(siteId);
+  if (active) {
+    logger.info("[provider-sites] sync coalesced; site sync already running", { siteId });
+    return active;
+  }
+
+  const current = syncProviderSiteFromUpstreamUnlocked(siteId);
+  activeSiteSyncs.set(siteId, current);
+  try {
+    return await current;
+  } finally {
+    if (activeSiteSyncs.get(siteId) === current) activeSiteSyncs.delete(siteId);
   }
 }
 

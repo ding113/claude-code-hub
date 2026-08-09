@@ -869,6 +869,34 @@
       "when": 1785670533047,
       "tag": "0129_user_balance_and_site_balance_cleanup",
       "breakpoints": true
+    },
+    {
+      "idx": 124,
+      "version": "7",
+      "when": 1786083320952,
+      "tag": "0130_provider_health_test_models",
+      "breakpoints": true
+    },
+    {
+      "idx": 125,
+      "version": "7",
+      "when": 1786099224414,
+      "tag": "0131_provider_group_health_test_model_fallback",
+      "breakpoints": true
+    },
+    {
+      "idx": 126,
+      "version": "7",
+      "when": 1786108009208,
+      "tag": "0132_health_test_interval_30_minutes",
+      "breakpoints": true
+    },
+    {
+      "idx": 127,
+      "version": "7",
+      "when": 1786198565991,
+      "tag": "0133_provider_site_recharge_multiplier",
+      "breakpoints": true
     }
   ]
 }

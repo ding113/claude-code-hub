@@ -37,4 +37,45 @@ data: {"type":"message_delta","usage":{"input_tokens":12,"output_tokens":3}}
       cacheReadInputTokens: undefined,
     });
   });
+
+  test("preserves Anthropic cache usage from message_start through message_delta", () => {
+    const body = `event: message_start
+data: {"type":"message_start","message":{"usage":{"input_tokens":12,"cache_creation_input_tokens":7,"cache_read_input_tokens":5}}}
+
+ event: message_delta
+data: {"type":"message_delta","usage":{"output_tokens":3}}
+`;
+    const parsed = parseSSEStream(body);
+    expect(parsed.usage).toEqual({
+      inputTokens: 12,
+      outputTokens: 3,
+      cacheCreationInputTokens: 7,
+      cacheReadInputTokens: 5,
+    });
+  });
+
+  test("extracts cached input tokens from OpenAI and Responses usage frames", () => {
+    const openAi = parseSSEStream(
+      `data: {"choices":[{"delta":{"content":"pong"}}]}
+
+data: {"usage":{"prompt_tokens":20,"completion_tokens":4,"prompt_tokens_details":{"cached_tokens":6}}}
+`
+    );
+    expect(openAi.usage).toEqual({
+      inputTokens: 20,
+      outputTokens: 4,
+      cacheReadInputTokens: 6,
+    });
+
+    const responses = parseSSEStream(
+      `event: response.completed
+data: {"type":"response.completed","response":{"usage":{"input_tokens":20,"output_tokens":4,"input_tokens_details":{"cached_tokens":6}}}}
+`
+    );
+    expect(responses.usage).toEqual({
+      inputTokens: 20,
+      outputTokens: 4,
+      cacheReadInputTokens: 6,
+    });
+  });
 });

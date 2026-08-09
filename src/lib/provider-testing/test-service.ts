@@ -8,6 +8,7 @@ import { createProxyAgentForProvider, type ProviderProxyConfig } from "@/lib/pro
 import { parseResponse } from "./parsers";
 import {
   getExecutionPresetCandidates,
+  getFormatPresetCandidates,
   getPreset,
   getPresetPayload,
   type PresetConfig,
@@ -122,6 +123,21 @@ async function readBodyWithFirstTokenMs(
       );
     };
 
+    // True once the completed/message_stop event's data line has fully arrived.
+    // A completed event's data line can be huge (long instructions, usage at
+    // the tail); a chunk boundary may cut it right after the event type, so we
+    // must not stop at the marker string itself. SSE events are terminated by
+    // a blank line (\n\n) — only then is the data line (and its usage) complete.
+    const bufferHasCompletedEventEnded = (text: string): boolean => {
+      let idx = -1;
+      for (const marker of ["response.completed", "message_stop"]) {
+        const i = text.indexOf(marker);
+        if (i >= 0 && (idx < 0 || i < idx)) idx = i;
+      }
+      if (idx < 0) return false;
+      return /(?:\r?\n){2}/.test(text.slice(idx));
+    };
+
     try {
       armFirstTokenTimeout();
       while (true) {
@@ -154,15 +170,20 @@ async function readBodyWithFirstTokenMs(
           }
 
           // SSE: once completed is in the buffer we have usage; stop draining.
-          // Non-SSE: keep reading until stream end (JSON body is atomic enough).
+          // But a completed event's data line can be huge — usage lives at the
+          // tail (after long instructions), and a chunk boundary may cut the
+          // line right after the event type. Only stop once the event's data
+          // line has fully arrived (blank-line terminator) or the stream ends.
           if (
             (looksLikeSse || buffer.includes("data:")) &&
             !sawResponseCompleted &&
             bufferHasResponseCompleted(buffer)
           ) {
             sawResponseCompleted = true;
-            // Soft stop: cancel reader after completed so we don't hang on idle keep-alive.
-            // Body already contains completed+usage for parsing.
+          }
+
+          if (sawResponseCompleted && bufferHasCompletedEventEnded(buffer)) {
+            // Soft stop: cancel reader after completed+usage so we don't hang on idle keep-alive.
             try {
               void reader.cancel("response_completed");
             } catch {
@@ -273,11 +294,14 @@ function buildAttemptPlans(config: ProviderTestConfig): AttemptPlan[] {
       throw new Error(`Preset not found: ${config.preset}`);
     }
     presets = [preset];
+  } else if (config.testFormat) {
+    // 分组显式"测试请求格式"：跨 providerType 按格式选 preset
+    presets = getFormatPresetCandidates(config.testFormat);
   } else {
     presets = getExecutionPresetCandidates({
       providerType: config.providerType,
-      providerUrl: config.providerUrl,
       model: config.model,
+      providerUrl: config.providerUrl,
     });
   }
 

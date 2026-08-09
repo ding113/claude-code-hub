@@ -1,6 +1,7 @@
 import { getHealthTestSampleCount } from "@/lib/provider-dispatch/health-aware-select";
 import type { HealthTestSloThresholds } from "@/lib/provider-health-test/slo-thresholds";
 import { normalizeHealthTestSloThresholds } from "@/lib/provider-health-test/slo-thresholds";
+import { resolveHealthTestAvgLatencyMs } from "@/lib/provider-health-test/stats";
 import type { ProviderType } from "@/types/provider";
 
 /** How many SLO-qualified providers to keep probing per type pool (primary + backup). */
@@ -21,8 +22,9 @@ export interface HealthRebalanceProvider {
   /** Owned by rebalance — may be re-enabled when exploring again. */
   healthTestSloAutoDisabled: boolean;
   healthTestOnlineRate: number | null;
-  healthTestAvgFirstByteMs: number | null;
-  /** Recent window samples (oldest→newest); used to require full window before qualify. */
+  /** Legacy/display-only TTFB aggregate; SLO uses recent total latency instead. */
+  healthTestAvgFirstByteMs?: number | null;
+  /** Recent rolling samples (oldest→newest); one sample is enough to qualify. */
   healthTestRecentResults?: unknown;
 }
 
@@ -73,15 +75,15 @@ export function getHealthRebalancePool(
 
 /**
  * Metrics SLO for rebalance champions:
- * - full configured recent window — re-opened providers must re-accumulate
+ * - at least the configured minimum sample count (default 1)
  * - onlineRate meets the configured minimum
- * - avg first-byte meets the configured ceiling
+ * - average successful total wall time meets the configured ceiling
  * Does NOT require scheduled tests to be on (caller still requires isEnabled).
  */
 export function meetsHealthMetricsSlo(
   provider: {
     healthTestOnlineRate: number | null | undefined;
-    healthTestAvgFirstByteMs: number | null | undefined;
+    healthTestAvgFirstByteMs?: number | null;
     healthTestRecentResults?: unknown;
   },
   thresholds?: Partial<HealthTestSloThresholds> | null
@@ -91,19 +93,19 @@ export function meetsHealthMetricsSlo(
     return false;
   }
   const onlineRate = provider.healthTestOnlineRate;
-  const avgFirstByteMs = provider.healthTestAvgFirstByteMs;
+  const avgLatencyMs = resolveHealthTestAvgLatencyMs(provider);
   if (onlineRate == null || !Number.isFinite(onlineRate)) return false;
-  if (avgFirstByteMs == null || !Number.isFinite(avgFirstByteMs)) return false;
+  if (avgLatencyMs == null || !Number.isFinite(avgLatencyMs)) return false;
   return (
     onlineRate >= normalizedThresholds.minOnlineRate &&
-    avgFirstByteMs <= normalizedThresholds.maxAvgFirstByteMs
+    avgLatencyMs <= normalizedThresholds.maxAvgLatencyMs
   );
 }
 
 function sortChampions(a: HealthRebalanceProvider, b: HealthRebalanceProvider): number {
   if (a.priority !== b.priority) return a.priority - b.priority;
-  const af = a.healthTestAvgFirstByteMs ?? Number.POSITIVE_INFINITY;
-  const bf = b.healthTestAvgFirstByteMs ?? Number.POSITIVE_INFINITY;
+  const af = resolveHealthTestAvgLatencyMs(a) ?? Number.POSITIVE_INFINITY;
+  const bf = resolveHealthTestAvgLatencyMs(b) ?? Number.POSITIVE_INFINITY;
   if (af !== bf) return af - bf;
   return a.id - b.id;
 }
@@ -155,13 +157,13 @@ function pushDisable(
 /**
  * Pure rebalance for one type pool.
  *
- * When ≥2 SLO-qualified champions exist (enabled + full configured window + configured SLO):
- *   top1 / top2 = sort by priority ASC, then avg first-byte ASC, then id
+ * When ≥2 SLO-qualified champions exist (enabled + configured SLO):
+ *   top1 / top2 = sort by priority ASC, then avg total latency ASC, then id
  *   KEEP above top1 priority + top1 + top2; DISABLE everything else below top1.
  *
  * When <2 qualify → explore: re-open auto-disabled among enabled providers.
  * Never force-on: budget suspended or manual off. Disabled providers never top1/top2.
- * SLO = full configured window + configured online rate + configured avg first-byte ceiling.
+ * SLO = minimum samples + configured online rate + configured avg total-latency ceiling.
  */
 export function planHealthTestSloRebalanceForPool(
   providers: HealthRebalanceProvider[],

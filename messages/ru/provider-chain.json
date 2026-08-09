@@ -249,6 +249,9 @@
     "session_reuse": "Повторное использование сессии",
     "weighted_random": "Взвешенный случайный",
     "group_filtered": "Фильтрация по группе",
-    "fail_open_fallback": "Резервный вариант при сбое"
+    "fail_open_fallback": "Резервный вариант при сбое",
+    "health_slo": "Health SLO",
+    "latency_fallback": "Резерв с минимальной средней задержкой",
+    "cost_fallback": "Самый дешёвый fallback"
   }
 }

@@ -148,7 +148,7 @@
     "free": "Free",
     "multiplierHint": "Effective rate = provider × group multiplier",
     "modeHealth": "Health pick",
-    "modePriority": "Priority pick",
+    "modePriority": "Cheapest fallback",
     "online": "Online",
     "firstByte": "TTFB",
     "requestFormat": "Request format",
@@ -162,6 +162,7 @@
     "providerMult": "Provider",
     "groupMult": "Group",
     "effectiveMult": "Effective",
-    "totalLatency": "Total"
+    "totalLatency": "Avg latency",
+    "healthBaseline": "Health baseline"
   }
 }

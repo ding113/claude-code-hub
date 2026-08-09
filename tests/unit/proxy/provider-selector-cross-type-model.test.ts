@@ -41,6 +41,94 @@ const rateLimitMocks = vi.hoisted(() => ({
 
 vi.mock("@/lib/rate-limit", () => rateLimitMocks);
 
+const providerGroupsMocks = vi.hoisted(() => ({
+  getProviderGroupSharedSettingsMap: vi.fn(async () => new Map()),
+  getProviderGroupModelMatchRules: vi.fn(async () => new Map()),
+  getProviderGroupHealthTestModelsMap: vi.fn(async () => new Map()),
+  getProviderGroupHealthTestModelFallbackMap: vi.fn(async () => new Map()),
+  getProviderGroupHealthTestModelStatsMap: vi.fn(async () => new Map()),
+  getHealthSloThresholds: vi.fn(async () => ({
+    minOnlineRate: 0.5,
+    maxAvgLatencyMs: 20000,
+    minSampleCount: 1,
+    windowSize: 10,
+  })),
+  resolveSystemTimezone: vi.fn(async () => "UTC"),
+  getProviderGroupHealthTestModelFallback: vi.fn(() => null),
+  getProviderGroupSloConfig: vi.fn(async () => null),
+}));
+
+vi.mock("@/repository/provider-groups", () => providerGroupsMocks);
+vi.mock("@/lib/provider-health-test/slo-thresholds", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/provider-health-test/slo-thresholds")>();
+  return {
+    ...actual,
+    getHealthSloThresholds: providerGroupsMocks.getHealthSloThresholds,
+  };
+});
+vi.mock("@/lib/provider-groups/shared-settings", () => ({
+  getProviderGroupSharedSettingsMap: providerGroupsMocks.getProviderGroupSharedSettingsMap,
+}));
+vi.mock("@/lib/provider-health-test/model-config", () => ({
+  getProviderGroupHealthTestModelsMap: providerGroupsMocks.getProviderGroupHealthTestModelsMap,
+  getProviderGroupHealthTestModelFallbackMap:
+    providerGroupsMocks.getProviderGroupHealthTestModelFallbackMap,
+  getProviderGroupHealthTestModelStatsMap:
+    providerGroupsMocks.getProviderGroupHealthTestModelStatsMap,
+  getProviderGroupHealthTestModelFallback: providerGroupsMocks.getProviderGroupHealthTestModelFallback,
+  resolveProviderHealthTestModelForRequest: vi.fn(
+    (
+      scope: string | null,
+      requestedModel: string,
+      modelsByGroup: ReadonlyMap<string, string[] | null | undefined>
+    ) => {
+      const models = scope ? (modelsByGroup.get(scope) ?? []) : [];
+      return models.length > 0 ? (models[0] ?? null) : null;
+    }
+  ),
+  PROVIDER_GROUP_HEALTH_TEST_MODEL_MAX_COUNT: 20,
+  PROVIDER_GROUP_HEALTH_TEST_MODEL_MAX_LENGTH: 128,
+}));
+vi.mock("@/lib/provider-groups/match-rules", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/provider-groups/match-rules")>();
+  return {
+    ...actual,
+    getProviderGroupModelMatchRules: providerGroupsMocks.getProviderGroupModelMatchRules,
+  };
+});
+vi.mock("@/lib/system-time", () => ({
+  resolveSystemTimezone: providerGroupsMocks.resolveSystemTimezone,
+}));
+vi.mock("@/lib/utils/timezone", () => ({
+  resolveSystemTimezone: providerGroupsMocks.resolveSystemTimezone,
+}));
+vi.mock("@/lib/config/system-settings-cache", () => ({
+  getCachedSystemSettings: vi.fn(async () => ({
+    timezone: "UTC",
+    healthTestMaxAvgLatencySeconds: 20,
+    healthTestMinOnlineRatePercent: 50,
+    healthTestWindowSize: 10,
+    healthTestTimeoutSeconds: 30,
+    healthTestIntervalSeconds: 1800,
+    healthTestScheduleMode: "interval",
+  })),
+}));
+vi.mock("@/repository/system-config", () => ({
+  getSystemSettings: vi.fn(async () => ({
+    timezone: "UTC",
+    healthTestMaxAvgLatencySeconds: 20,
+    healthTestMinOnlineRatePercent: 50,
+    healthTestWindowSize: 10,
+    healthTestTimeoutSeconds: 30,
+    healthTestIntervalSeconds: 1800,
+    healthTestScheduleMode: "interval",
+  })),
+  getSystemSettingsByKey: vi.fn(async () => null),
+}));
+vi.mock("@/lib/provider-groups/slo-config", () => ({
+  getProviderGroupSloConfig: providerGroupsMocks.getProviderGroupSloConfig,
+}));
+
 beforeEach(() => {
   vi.resetAllMocks();
 });
@@ -526,7 +614,8 @@ describe("pickRandomProvider - cross-type model routing (#832)", () => {
     );
 
     expect(picked?.id).toBe(41);
-    expect(context.selectedPriority).toBe(1);
+    // Both providers share costMultiplier 1, so the selected priority tier is 0.
+    expect(context.selectedPriority).toBe(0);
     const mismatch = context.filteredProviders.find(
       (fp: any) => fp.id === 40 && fp.reason === "model_not_allowed"
     );

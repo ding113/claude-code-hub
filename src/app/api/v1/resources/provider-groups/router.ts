@@ -9,10 +9,12 @@ import {
   ProviderGroupReorderSchema,
   ProviderGroupSchema,
   ProviderGroupUpdateSchema,
+  ProviderGroupUpstreamModelsResponseSchema,
 } from "@/lib/api/v1/schemas/provider-groups";
 import {
   createProviderGroup,
   deleteProviderGroup,
+  fetchProviderGroupUpstreamModels,
   listProviderGroups,
   reorderProviderGroups,
   updateProviderGroup,
@@ -169,4 +171,27 @@ providerGroupsRouter.openapi(
     },
   }),
   deleteProviderGroup as never
+);
+
+providerGroupsRouter.openapi(
+  createRoute({
+    method: "post",
+    path: "/provider-groups/{id}/upstream-models:fetch",
+    middleware: requireAuth("admin"),
+    tags: ["Provider Groups"],
+    summary: "Fetch aggregated upstream models for a provider group",
+    description:
+      "Fetches model ids from every enabled provider that belongs to the group and merges them.",
+    "x-required-access": "admin",
+    security,
+    request: { params: ProviderGroupIdParamSchema },
+    responses: {
+      200: {
+        description: "Aggregated upstream models.",
+        content: { "application/json": { schema: ProviderGroupUpstreamModelsResponseSchema } },
+      },
+      ...problemResponses,
+    },
+  }),
+  fetchProviderGroupUpstreamModels as never
 );

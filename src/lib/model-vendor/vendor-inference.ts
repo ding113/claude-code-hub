@@ -168,7 +168,7 @@ export const KEYWORD_VENDOR_RULES: ReadonlyArray<readonly [RegExp, string]> = [
   [/gemini|gemma|\bpalm-2|imagen|nano-banana|\bbison\b|\bgecko\b/, "google"],
   [/codellama|llama/, "meta"],
   [
-    /\bgpt-|\bo1-|\bo3-|\bo4-|davinci|\bwhisper\b|dall-e|\bchatgpt|text-embedding-(ada|3)/,
+    /\bgpt-|\bo1-|\bo3-|\bo4-|davinci|\bwhisper\b|dall-e|\bchatgpt|text-embedding-(ada|3)|\bcodex/,
     "openai",
   ],
   [/claude/, "anthropic"],

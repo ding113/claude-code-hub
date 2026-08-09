@@ -10,6 +10,26 @@ export const HIDDEN_PROVIDER_TYPES = new Set(HIDDEN_PROVIDER_TYPE_VALUES);
 
 const NullableStringSchema = z.string().nullable();
 const CodexImageGenerationPreferenceSchema = z.enum(CODEX_IMAGE_GENERATION_PREFERENCE_VALUES);
+const HealthTestSampleSchema = z.union([
+  z.boolean(),
+  z.object({
+    ok: z.boolean(),
+    firstByteMs: z.number().int().nullable().optional(),
+    latencyMs: z.number().int().nullable().optional(),
+    status: z.string().nullable().optional(),
+    model: z.string().nullable().optional(),
+    source: z.string().nullable().optional(),
+    errorType: z.string().nullable().optional(),
+    errorMessage: z.string().nullable().optional(),
+    httpStatusCode: z.number().int().nullable().optional(),
+    inputTokens: z.number().int().nullable().optional(),
+    outputTokens: z.number().int().nullable().optional(),
+    cacheCreationInputTokens: z.number().int().nullable().optional(),
+    cacheReadInputTokens: z.number().int().nullable().optional(),
+    costUsd: z.number().nullable().optional(),
+    testedAt: z.string().optional(),
+  }),
+]);
 
 export const ProviderListQuerySchema = z.object({
   q: z.string().trim().optional().describe("Case-insensitive provider search text."),
@@ -169,30 +189,22 @@ export const ProviderSummarySchema = z
       .nullable()
       .describe("Average first-byte latency over successful health tests in the window."),
     healthTestRecentResults: z
-      .array(
-        z.union([
-          z.boolean(),
-          z.object({
-            ok: z.boolean(),
-            firstByteMs: z.number().int().nullable().optional(),
-            latencyMs: z.number().int().nullable().optional(),
-            status: z.string().nullable().optional(),
-            model: z.string().nullable().optional(),
-            source: z.string().nullable().optional(),
-            errorType: z.string().nullable().optional(),
-            errorMessage: z.string().nullable().optional(),
-            httpStatusCode: z.number().int().nullable().optional(),
-            inputTokens: z.number().int().nullable().optional(),
-            outputTokens: z.number().int().nullable().optional(),
-            costUsd: z.number().nullable().optional(),
-            testedAt: z.string().optional(),
-          }),
-        ])
-      )
+      .array(HealthTestSampleSchema)
       .nullable()
       .describe(
         "Recent health test samples oldest→newest for sparkline/tooltips (legacy boolean[] still accepted)."
       ),
+    healthTestModelStats: z
+      .record(
+        z.string(),
+        z.object({
+          onlineRate: z.number().nullable(),
+          avgFirstByteMs: z.number().int().nullable(),
+          recentResults: z.array(HealthTestSampleSchema),
+        })
+      )
+      .nullable()
+      .describe("Independent rolling health SLO statistics keyed by tested model."),
     healthTestTodayCostUsd: z
       .number()
       .nullable()

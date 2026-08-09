@@ -76,6 +76,15 @@ export function TagInput({
   const inputRef = React.useRef<HTMLInputElement>(null);
   const containerRef = React.useRef<HTMLDivElement>(null);
   const dropdownRef = React.useRef<HTMLDivElement>(null);
+  const blurTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  React.useEffect(() => {
+    return () => {
+      if (blurTimerRef.current !== null) {
+        clearTimeout(blurTimerRef.current);
+      }
+    };
+  }, []);
 
   const normalizedMaxVisible = React.useMemo(() => {
     if (maxVisibleTags === undefined) return undefined;
@@ -378,19 +387,22 @@ export function TagInput({
     [separator, addTagsBatch]
   );
 
-  // Commit pending input value on blur (e.g., when clicking save button)
+  // Commit pending input synchronously so a following Save/Cancel click cannot race the blur delay.
   const handleBlur = React.useCallback(
     (_e: React.FocusEvent<HTMLInputElement>) => {
-      // 延迟关闭，允许点击建议项
-      setTimeout(() => {
-        // 检查焦点是否还在容器内
+      if (inputValue.trim()) {
+        addTag(inputValue);
+      }
+
+      if (blurTimerRef.current !== null) {
+        clearTimeout(blurTimerRef.current);
+      }
+      blurTimerRef.current = setTimeout(() => {
         if (!containerRef.current?.contains(document.activeElement)) {
-          if (inputValue.trim()) {
-            addTag(inputValue);
-          }
           setShowSuggestions(false);
           setHighlightedIndex(-1);
         }
+        blurTimerRef.current = null;
       }, 150);
     },
     [inputValue, addTag]

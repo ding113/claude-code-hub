@@ -143,7 +143,7 @@ export async function getCachedSystemSettings(): Promise<SystemSettings> {
       billHedgeLosers: true,
       healthTestScheduleMode: "dynamic",
       healthTestWindowSize: 10,
-      healthTestIntervalSeconds: 60,
+      healthTestIntervalSeconds: 1800,
       healthTestTimeoutSeconds: 30,
       healthTestMinOnlineRatePercent: 90,
       healthTestMaxAvgLatencySeconds: 20,

@@ -85,6 +85,21 @@ export async function deleteProviderGroup(c: Context): Promise<Response> {
   return noContentResponse();
 }
 
+export async function fetchProviderGroupUpstreamModels(c: Context): Promise<Response> {
+  const params = ProviderGroupIdParamSchema.safeParse({ id: c.req.param("id") });
+  if (!params.success) return fromZodError(params.error, new URL(c.req.url).pathname);
+
+  const actions = await import("@/actions/provider-groups");
+  const result = await callAction(
+    c,
+    actions.fetchProviderGroupUpstreamModels,
+    [params.data.id] as never[],
+    c.get("auth")
+  );
+  if (!result.ok) return actionError(c, result);
+  return jsonResponse(result.data);
+}
+
 function actionError(c: Context, result: Extract<ActionResult<unknown>, { ok: false }>): Response {
   const detail = result.error || "Request failed.";
   const notFound = result.errorCode === "NOT_FOUND" || detail.toLowerCase().includes("not found");

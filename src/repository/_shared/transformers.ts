@@ -1,6 +1,9 @@
 import { PROVIDER_TIMEOUT_DEFAULTS } from "@/lib/constants/provider.constants";
+import {
+  normalizeHealthTestModelStats,
+  normalizeHealthTestRecentResults,
+} from "@/lib/provider-health-test/stats";
 import { normalizeProviderModelRedirectRules } from "@/lib/provider-model-redirects";
-import { normalizeHealthTestRecentResults } from "@/lib/provider-health-test/stats";
 import { formatCostForStorage } from "@/lib/utils/currency";
 import type { Key } from "@/types/key";
 import type { MessageRequest } from "@/types/message";
@@ -178,6 +181,7 @@ export function toProvider(dbProvider: any): Provider {
         : null,
     healthTestAvgFirstByteMs: dbProvider?.healthTestAvgFirstByteMs ?? null,
     healthTestRecentResults: normalizeHealthTestRecentResults(dbProvider?.healthTestRecentResults),
+    healthTestModelStats: normalizeHealthTestModelStats(dbProvider?.healthTestModelStats),
     healthTestTodayCostUsd:
       dbProvider?.healthTestTodayCostUsd !== null && dbProvider?.healthTestTodayCostUsd !== undefined
         ? parseFloat(String(dbProvider.healthTestTodayCostUsd))
@@ -300,7 +304,7 @@ export function toSystemSettings(dbSettings: any): SystemSettings {
     })(),
     healthTestIntervalSeconds: (() => {
       const n = Number(dbSettings?.healthTestIntervalSeconds);
-      if (!Number.isFinite(n)) return 60;
+      if (!Number.isFinite(n)) return 1800;
       return Math.min(3600, Math.max(10, Math.trunc(n)));
     })(),
     healthTestTimeoutSeconds: (() => {

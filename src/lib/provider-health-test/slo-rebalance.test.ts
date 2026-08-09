@@ -9,7 +9,7 @@ import {
 } from "@/lib/provider-health-test/slo-rebalance";
 
 function fullWindow(ok = true) {
-  return Array.from({ length: 10 }, () => ({ ok }));
+  return Array.from({ length: 10 }, () => ({ ok, firstByteMs: 1_000, latencyMs: 1_000 }));
 }
 
 function p(
@@ -40,11 +40,11 @@ describe("getHealthRebalancePool", () => {
 });
 
 describe("meetsHealthMetricsSlo", () => {
-  it("requires full 10-sample window + 90% + ≤20s average first byte", () => {
+  it("requires 90% + ≤20s average total latency, but only one sample", () => {
     expect(
       meetsHealthMetricsSlo({
         healthTestOnlineRate: 0.9,
-        healthTestAvgFirstByteMs: 20_000,
+        healthTestAvgFirstByteMs: 100,
         healthTestRecentResults: fullWindow(true),
       })
     ).toBe(true);
@@ -52,14 +52,21 @@ describe("meetsHealthMetricsSlo", () => {
       meetsHealthMetricsSlo({
         healthTestOnlineRate: 1,
         healthTestAvgFirstByteMs: 100,
-        healthTestRecentResults: [{ ok: true }], // only 1 sample
+        healthTestRecentResults: [{ ok: true, firstByteMs: 100, latencyMs: 100 }],
+      })
+    ).toBe(true);
+    expect(
+      meetsHealthMetricsSlo({
+        healthTestOnlineRate: 0.89,
+        healthTestAvgFirstByteMs: 100,
+        healthTestRecentResults: fullWindow(true),
       })
     ).toBe(false);
     expect(
       meetsHealthMetricsSlo({
-        healthTestOnlineRate: 0.89,
-        healthTestAvgFirstByteMs: 20_000,
-        healthTestRecentResults: fullWindow(true),
+        healthTestOnlineRate: 1,
+        healthTestAvgFirstByteMs: 100,
+        healthTestRecentResults: [{ ok: true, firstByteMs: 100, latencyMs: 20_001 }],
       })
     ).toBe(false);
   });
@@ -88,14 +95,17 @@ describe("planHealthTestSloRebalanceForPool", () => {
     expect(d2?.reason).toBe("explore_all_on");
   });
 
-  it("does not qualify short windows after clear — needs full window samples first", () => {
+  it("qualifies short windows after clear when their total-latency sample meets SLO", () => {
     const list = [
       p({
         id: 1,
         priority: 1,
         healthTestOnlineRate: 1,
         healthTestAvgFirstByteMs: 100,
-        healthTestRecentResults: [{ ok: true }, { ok: true }], // only 2
+        healthTestRecentResults: [
+          { ok: true, firstByteMs: 100, latencyMs: 100 },
+          { ok: true, firstByteMs: 100, latencyMs: 100 },
+        ],
       }),
       p({
         id: 2,
@@ -113,9 +123,8 @@ describe("planHealthTestSloRebalanceForPool", () => {
       }),
     ];
     const plan = planHealthTestSloRebalanceForPool(list, 2);
-    // id1 is highest priority but short window → not top; top = 2,3
-    expect(plan.keepIds).toEqual([2, 3]);
-    expect(plan.keepIds).not.toContain(1);
+    expect(plan.keepIds).toEqual([1, 2]);
+    expect(plan.keepIds).toContain(1);
   });
 
   it("never picks disabled providers as top1/top2 even with perfect metrics", () => {

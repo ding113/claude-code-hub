@@ -1328,6 +1328,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/provider-groups/{id}/upstream-models:fetch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Fetch aggregated upstream models for a provider group
+         * @description Fetches model ids from every enabled provider that belongs to the group and merges them.
+         */
+        post: operations["postProviderGroupsByIdUpstreamModelsFetch"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/provider-sites": {
         parameters: {
             query?: never;
@@ -3188,6 +3208,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/me/group-rates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get preferred provider rates by group
+         * @description Returns the current preferred provider, request format, and effective multiplier for each visible group.
+         */
+        get: operations["getMeGroupRates"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/me/today": {
         parameters: {
             query?: never;
@@ -4739,9 +4779,35 @@ export interface operations {
                                 httpStatusCode?: number | null;
                                 inputTokens?: number | null;
                                 outputTokens?: number | null;
+                                cacheCreationInputTokens?: number | null;
+                                cacheReadInputTokens?: number | null;
                                 costUsd?: number | null;
                                 testedAt?: string;
                             })[] | null;
+                            /** @description Independent rolling health SLO statistics keyed by tested model. */
+                            healthTestModelStats: {
+                                [key: string]: {
+                                    onlineRate: number | null;
+                                    avgFirstByteMs: number | null;
+                                    recentResults: (boolean | {
+                                        ok: boolean;
+                                        firstByteMs?: number | null;
+                                        latencyMs?: number | null;
+                                        status?: string | null;
+                                        model?: string | null;
+                                        source?: string | null;
+                                        errorType?: string | null;
+                                        errorMessage?: string | null;
+                                        httpStatusCode?: number | null;
+                                        inputTokens?: number | null;
+                                        outputTokens?: number | null;
+                                        cacheCreationInputTokens?: number | null;
+                                        cacheReadInputTokens?: number | null;
+                                        costUsd?: number | null;
+                                        testedAt?: string;
+                                    })[];
+                                };
+                            } | null;
                             /** @description Estimated upstream health-test spend for the current local day (not user billing). */
                             healthTestTodayCostUsd?: number | null;
                             /** @description Number of health tests run today for this provider. */
@@ -5259,9 +5325,35 @@ export interface operations {
                             httpStatusCode?: number | null;
                             inputTokens?: number | null;
                             outputTokens?: number | null;
+                            cacheCreationInputTokens?: number | null;
+                            cacheReadInputTokens?: number | null;
                             costUsd?: number | null;
                             testedAt?: string;
                         })[] | null;
+                        /** @description Independent rolling health SLO statistics keyed by tested model. */
+                        healthTestModelStats: {
+                            [key: string]: {
+                                onlineRate: number | null;
+                                avgFirstByteMs: number | null;
+                                recentResults: (boolean | {
+                                    ok: boolean;
+                                    firstByteMs?: number | null;
+                                    latencyMs?: number | null;
+                                    status?: string | null;
+                                    model?: string | null;
+                                    source?: string | null;
+                                    errorType?: string | null;
+                                    errorMessage?: string | null;
+                                    httpStatusCode?: number | null;
+                                    inputTokens?: number | null;
+                                    outputTokens?: number | null;
+                                    cacheCreationInputTokens?: number | null;
+                                    cacheReadInputTokens?: number | null;
+                                    costUsd?: number | null;
+                                    testedAt?: string;
+                                })[];
+                            };
+                        } | null;
                         /** @description Estimated upstream health-test spend for the current local day (not user billing). */
                         healthTestTodayCostUsd?: number | null;
                         /** @description Number of health tests run today for this provider. */
@@ -5636,9 +5728,35 @@ export interface operations {
                             httpStatusCode?: number | null;
                             inputTokens?: number | null;
                             outputTokens?: number | null;
+                            cacheCreationInputTokens?: number | null;
+                            cacheReadInputTokens?: number | null;
                             costUsd?: number | null;
                             testedAt?: string;
                         })[] | null;
+                        /** @description Independent rolling health SLO statistics keyed by tested model. */
+                        healthTestModelStats: {
+                            [key: string]: {
+                                onlineRate: number | null;
+                                avgFirstByteMs: number | null;
+                                recentResults: (boolean | {
+                                    ok: boolean;
+                                    firstByteMs?: number | null;
+                                    latencyMs?: number | null;
+                                    status?: string | null;
+                                    model?: string | null;
+                                    source?: string | null;
+                                    errorType?: string | null;
+                                    errorMessage?: string | null;
+                                    httpStatusCode?: number | null;
+                                    inputTokens?: number | null;
+                                    outputTokens?: number | null;
+                                    cacheCreationInputTokens?: number | null;
+                                    cacheReadInputTokens?: number | null;
+                                    costUsd?: number | null;
+                                    testedAt?: string;
+                                })[];
+                            };
+                        } | null;
                         /** @description Estimated upstream health-test spend for the current local day (not user billing). */
                         healthTestTodayCostUsd?: number | null;
                         /** @description Number of health tests run today for this provider. */
@@ -6337,9 +6455,35 @@ export interface operations {
                             httpStatusCode?: number | null;
                             inputTokens?: number | null;
                             outputTokens?: number | null;
+                            cacheCreationInputTokens?: number | null;
+                            cacheReadInputTokens?: number | null;
                             costUsd?: number | null;
                             testedAt?: string;
                         })[] | null;
+                        /** @description Independent rolling health SLO statistics keyed by tested model. */
+                        healthTestModelStats: {
+                            [key: string]: {
+                                onlineRate: number | null;
+                                avgFirstByteMs: number | null;
+                                recentResults: (boolean | {
+                                    ok: boolean;
+                                    firstByteMs?: number | null;
+                                    latencyMs?: number | null;
+                                    status?: string | null;
+                                    model?: string | null;
+                                    source?: string | null;
+                                    errorType?: string | null;
+                                    errorMessage?: string | null;
+                                    httpStatusCode?: number | null;
+                                    inputTokens?: number | null;
+                                    outputTokens?: number | null;
+                                    cacheCreationInputTokens?: number | null;
+                                    cacheReadInputTokens?: number | null;
+                                    costUsd?: number | null;
+                                    testedAt?: string;
+                                })[];
+                            };
+                        } | null;
                         /** @description Estimated upstream health-test spend for the current local day (not user billing). */
                         healthTestTodayCostUsd?: number | null;
                         /** @description Number of health tests run today for this provider. */
@@ -18673,12 +18817,18 @@ export interface operations {
                             costMultiplier: number;
                             /** @description Optional group description. */
                             description: string | null;
-                            /** @description Default scheduled health-test model; null/empty = skip scheduled tests. */
+                            /** @description Legacy/default scheduled health-test model; null/empty = skip scheduled tests. */
                             healthTestModel?: string | null;
+                            /** @description Scheduled health-test models tested independently for this group. */
+                            healthTestModels: string[] | null;
+                            /** @description Configured test model used as the health baseline for non-test models/displays. */
+                            healthTestModelFallback: string | null;
                             /** @description Shared provider defaults for this group (no website/endpoint/timeouts). */
                             sharedSettings?: {
                                 /** @enum {string|null} */
                                 providerType?: "claude" | "codex" | "gemini" | "openai-compatible" | null;
+                                /** @enum {string|null} */
+                                healthTestFormat?: "response" | "openai" | "claude" | "gemini" | null;
                                 priority?: number | null;
                                 weight?: number | null;
                                 costMultiplier?: number | null;
@@ -18896,12 +19046,18 @@ export interface operations {
                     costMultiplier?: number;
                     /** @description Optional group description. */
                     description?: string;
-                    /** @description Default scheduled health-test model; empty = skip scheduled tests. */
+                    /** @description Legacy/default scheduled health-test model; empty = skip scheduled tests. */
                     healthTestModel?: string | null;
+                    /** @description Up to two scheduled health-test models tested independently. */
+                    healthTestModels?: string[] | null;
+                    /** @description Test model used as the health baseline for non-test models/displays. */
+                    healthTestModelFallback?: string | null;
                     /** @description Shared provider defaults for this group (no website/endpoint/timeouts). */
                     sharedSettings?: {
                         /** @enum {string|null} */
                         providerType?: "claude" | "codex" | "gemini" | "openai-compatible" | null;
+                        /** @enum {string|null} */
+                        healthTestFormat?: "response" | "openai" | "claude" | "gemini" | null;
                         priority?: number | null;
                         weight?: number | null;
                         costMultiplier?: number | null;
@@ -18955,12 +19111,18 @@ export interface operations {
                         costMultiplier: number;
                         /** @description Optional group description. */
                         description: string | null;
-                        /** @description Default scheduled health-test model; null/empty = skip scheduled tests. */
+                        /** @description Legacy/default scheduled health-test model; null/empty = skip scheduled tests. */
                         healthTestModel?: string | null;
+                        /** @description Scheduled health-test models tested independently for this group. */
+                        healthTestModels: string[] | null;
+                        /** @description Configured test model used as the health baseline for non-test models/displays. */
+                        healthTestModelFallback: string | null;
                         /** @description Shared provider defaults for this group (no website/endpoint/timeouts). */
                         sharedSettings?: {
                             /** @enum {string|null} */
                             providerType?: "claude" | "codex" | "gemini" | "openai-compatible" | null;
+                            /** @enum {string|null} */
+                            healthTestFormat?: "response" | "openai" | "claude" | "gemini" | null;
                             priority?: number | null;
                             weight?: number | null;
                             costMultiplier?: number | null;
@@ -19352,12 +19514,18 @@ export interface operations {
                     description?: string | null;
                     /** @description Optional plain description note. */
                     descriptionNote?: string | null;
-                    /** @description Default scheduled health-test model; empty = skip scheduled tests. */
+                    /** @description Legacy/default scheduled health-test model; empty = skip scheduled tests. */
                     healthTestModel?: string | null;
+                    /** @description Up to two scheduled health-test models tested independently. */
+                    healthTestModels?: string[] | null;
+                    /** @description Test model used as the health baseline for non-test models/displays. */
+                    healthTestModelFallback?: string | null;
                     /** @description Shared provider defaults for this group (no website/endpoint/timeouts). */
                     sharedSettings?: {
                         /** @enum {string|null} */
                         providerType?: "claude" | "codex" | "gemini" | "openai-compatible" | null;
+                        /** @enum {string|null} */
+                        healthTestFormat?: "response" | "openai" | "claude" | "gemini" | null;
                         priority?: number | null;
                         weight?: number | null;
                         costMultiplier?: number | null;
@@ -19411,12 +19579,18 @@ export interface operations {
                         costMultiplier: number;
                         /** @description Optional group description. */
                         description: string | null;
-                        /** @description Default scheduled health-test model; null/empty = skip scheduled tests. */
+                        /** @description Legacy/default scheduled health-test model; null/empty = skip scheduled tests. */
                         healthTestModel?: string | null;
+                        /** @description Scheduled health-test models tested independently for this group. */
+                        healthTestModels: string[] | null;
+                        /** @description Configured test model used as the health baseline for non-test models/displays. */
+                        healthTestModelFallback: string | null;
                         /** @description Shared provider defaults for this group (no website/endpoint/timeouts). */
                         sharedSettings?: {
                             /** @enum {string|null} */
                             providerType?: "claude" | "codex" | "gemini" | "openai-compatible" | null;
+                            /** @enum {string|null} */
+                            healthTestFormat?: "response" | "openai" | "claude" | "gemini" | null;
                             priority?: number | null;
                             weight?: number | null;
                             costMultiplier?: number | null;
@@ -19650,12 +19824,18 @@ export interface operations {
                             costMultiplier: number;
                             /** @description Optional group description. */
                             description: string | null;
-                            /** @description Default scheduled health-test model; null/empty = skip scheduled tests. */
+                            /** @description Legacy/default scheduled health-test model; null/empty = skip scheduled tests. */
                             healthTestModel?: string | null;
+                            /** @description Scheduled health-test models tested independently for this group. */
+                            healthTestModels: string[] | null;
+                            /** @description Configured test model used as the health baseline for non-test models/displays. */
+                            healthTestModelFallback: string | null;
                             /** @description Shared provider defaults for this group (no website/endpoint/timeouts). */
                             sharedSettings?: {
                                 /** @enum {string|null} */
                                 providerType?: "claude" | "codex" | "gemini" | "openai-compatible" | null;
+                                /** @enum {string|null} */
+                                healthTestFormat?: "response" | "openai" | "claude" | "gemini" | null;
                                 priority?: number | null;
                                 weight?: number | null;
                                 costMultiplier?: number | null;
@@ -19854,6 +20034,185 @@ export interface operations {
             };
         };
     };
+    postProviderGroupsByIdUpstreamModelsFetch: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Required only when authenticating with the auth-token cookie on mutation requests. */
+                "X-CCH-CSRF"?: string;
+            };
+            path: {
+                /** @description Provider group id. */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Aggregated upstream models. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @description Aggregated model ids from the group's enabled providers. */
+                        models: string[];
+                        /** @description Error messages from providers that could not be reached. */
+                        failed: string[];
+                    };
+                };
+            };
+            /** @description Invalid request. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        /** @description Stable problem type URI or URN. */
+                        type: string;
+                        /** @description Short problem title. */
+                        title: string;
+                        /** @description HTTP status code. */
+                        status: number;
+                        /** @description Human-readable error detail. */
+                        detail: string;
+                        /** @description Request path that produced the problem. */
+                        instance: string;
+                        /** @description Application error code for frontend i18n. */
+                        errorCode: string;
+                        /** @description Optional i18n parameters. */
+                        errorParams?: {
+                            [key: string]: unknown;
+                        };
+                        /** @description Optional request trace identifier. */
+                        traceId?: string;
+                        /** @description Validation failure details. */
+                        invalidParams?: {
+                            /** @description Path to the invalid input field. */
+                            path: (string | number)[];
+                            /** @description Machine-readable validation error code. */
+                            code: string;
+                            /** @description Validation error message. */
+                            message: string;
+                        }[];
+                    };
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        /** @description Stable problem type URI or URN. */
+                        type: string;
+                        /** @description Short problem title. */
+                        title: string;
+                        /** @description HTTP status code. */
+                        status: number;
+                        /** @description Human-readable error detail. */
+                        detail: string;
+                        /** @description Request path that produced the problem. */
+                        instance: string;
+                        /** @description Application error code for frontend i18n. */
+                        errorCode: string;
+                        /** @description Optional i18n parameters. */
+                        errorParams?: {
+                            [key: string]: unknown;
+                        };
+                        /** @description Optional request trace identifier. */
+                        traceId?: string;
+                        /** @description Validation failure details. */
+                        invalidParams?: {
+                            /** @description Path to the invalid input field. */
+                            path: (string | number)[];
+                            /** @description Machine-readable validation error code. */
+                            code: string;
+                            /** @description Validation error message. */
+                            message: string;
+                        }[];
+                    };
+                };
+            };
+            /** @description Admin access required. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        /** @description Stable problem type URI or URN. */
+                        type: string;
+                        /** @description Short problem title. */
+                        title: string;
+                        /** @description HTTP status code. */
+                        status: number;
+                        /** @description Human-readable error detail. */
+                        detail: string;
+                        /** @description Request path that produced the problem. */
+                        instance: string;
+                        /** @description Application error code for frontend i18n. */
+                        errorCode: string;
+                        /** @description Optional i18n parameters. */
+                        errorParams?: {
+                            [key: string]: unknown;
+                        };
+                        /** @description Optional request trace identifier. */
+                        traceId?: string;
+                        /** @description Validation failure details. */
+                        invalidParams?: {
+                            /** @description Path to the invalid input field. */
+                            path: (string | number)[];
+                            /** @description Machine-readable validation error code. */
+                            code: string;
+                            /** @description Validation error message. */
+                            message: string;
+                        }[];
+                    };
+                };
+            };
+            /** @description Provider group not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        /** @description Stable problem type URI or URN. */
+                        type: string;
+                        /** @description Short problem title. */
+                        title: string;
+                        /** @description HTTP status code. */
+                        status: number;
+                        /** @description Human-readable error detail. */
+                        detail: string;
+                        /** @description Request path that produced the problem. */
+                        instance: string;
+                        /** @description Application error code for frontend i18n. */
+                        errorCode: string;
+                        /** @description Optional i18n parameters. */
+                        errorParams?: {
+                            [key: string]: unknown;
+                        };
+                        /** @description Optional request trace identifier. */
+                        traceId?: string;
+                        /** @description Validation failure details. */
+                        invalidParams?: {
+                            /** @description Path to the invalid input field. */
+                            path: (string | number)[];
+                            /** @description Machine-readable validation error code. */
+                            code: string;
+                            /** @description Validation error message. */
+                            message: string;
+                        }[];
+                    };
+                };
+            };
+        };
+    };
     getProviderSites: {
         parameters: {
             query?: never;
@@ -19891,6 +20250,8 @@ export interface operations {
                             isEnabled: boolean;
                             /** @description Manual display order (lower first). */
                             sortOrder?: number;
+                            /** @description Divide upstream group ratios and balance by this value for CCH-facing amounts. */
+                            rechargeMultiplier: number;
                             /** @description Optional Upstream Hub channel id. */
                             upstreamHubChannelId: number | null;
                             /** @description Upstream login username/email. */
@@ -19907,6 +20268,8 @@ export interface operations {
                             captchaEndpoint?: string | null;
                             /** @description Last known upstream balance. */
                             lastBalance?: number | null;
+                            /** @description CCH-facing balance: upstream balance divided by recharge multiplier. */
+                            realBalance?: number | null;
                             /**
                              * Format: date-time
                              * @description Last balance sample time.
@@ -19955,8 +20318,12 @@ export interface operations {
                                 description: string | null;
                                 /** @description Upstream group ratio / rate multiplier. */
                                 ratio: number;
+                                /** @description CCH-facing group ratio after dividing by the site's recharge multiplier. */
+                                effectiveRatio: number;
                                 /** @description Optional completion/output ratio; 0 or null means unused. */
                                 completionRatio: number | null;
+                                /** @description CCH-facing completion ratio after dividing by the site's recharge multiplier. */
+                                effectiveCompletionRatio: number | null;
                                 /** @description CCH dispatch pool tag after classification. */
                                 dispatchGroupTag: string | null;
                                 /**
@@ -20162,6 +20529,7 @@ export interface operations {
                     notes?: string | null;
                     isEnabled?: boolean;
                     sortOrder?: number;
+                    rechargeMultiplier?: number;
                     upstreamHubChannelId?: number | null;
                     username?: string | null;
                     password?: string | null;
@@ -20200,6 +20568,8 @@ export interface operations {
                         isEnabled: boolean;
                         /** @description Manual display order (lower first). */
                         sortOrder?: number;
+                        /** @description Divide upstream group ratios and balance by this value for CCH-facing amounts. */
+                        rechargeMultiplier: number;
                         /** @description Optional Upstream Hub channel id. */
                         upstreamHubChannelId: number | null;
                         /** @description Upstream login username/email. */
@@ -20216,6 +20586,8 @@ export interface operations {
                         captchaEndpoint?: string | null;
                         /** @description Last known upstream balance. */
                         lastBalance?: number | null;
+                        /** @description CCH-facing balance: upstream balance divided by recharge multiplier. */
+                        realBalance?: number | null;
                         /**
                          * Format: date-time
                          * @description Last balance sample time.
@@ -20264,8 +20636,12 @@ export interface operations {
                             description: string | null;
                             /** @description Upstream group ratio / rate multiplier. */
                             ratio: number;
+                            /** @description CCH-facing group ratio after dividing by the site's recharge multiplier. */
+                            effectiveRatio: number;
                             /** @description Optional completion/output ratio; 0 or null means unused. */
                             completionRatio: number | null;
+                            /** @description CCH-facing completion ratio after dividing by the site's recharge multiplier. */
+                            effectiveCompletionRatio: number | null;
                             /** @description CCH dispatch pool tag after classification. */
                             dispatchGroupTag: string | null;
                             /**
@@ -20638,6 +21014,7 @@ export interface operations {
                     notes?: string | null;
                     isEnabled?: boolean;
                     sortOrder?: number;
+                    rechargeMultiplier?: number;
                     upstreamHubChannelId?: number | null;
                     username?: string | null;
                     password?: string | null;
@@ -20676,6 +21053,8 @@ export interface operations {
                         isEnabled: boolean;
                         /** @description Manual display order (lower first). */
                         sortOrder?: number;
+                        /** @description Divide upstream group ratios and balance by this value for CCH-facing amounts. */
+                        rechargeMultiplier: number;
                         /** @description Optional Upstream Hub channel id. */
                         upstreamHubChannelId: number | null;
                         /** @description Upstream login username/email. */
@@ -20692,6 +21071,8 @@ export interface operations {
                         captchaEndpoint?: string | null;
                         /** @description Last known upstream balance. */
                         lastBalance?: number | null;
+                        /** @description CCH-facing balance: upstream balance divided by recharge multiplier. */
+                        realBalance?: number | null;
                         /**
                          * Format: date-time
                          * @description Last balance sample time.
@@ -20740,8 +21121,12 @@ export interface operations {
                             description: string | null;
                             /** @description Upstream group ratio / rate multiplier. */
                             ratio: number;
+                            /** @description CCH-facing group ratio after dividing by the site's recharge multiplier. */
+                            effectiveRatio: number;
                             /** @description Optional completion/output ratio; 0 or null means unused. */
                             completionRatio: number | null;
+                            /** @description CCH-facing completion ratio after dividing by the site's recharge multiplier. */
+                            effectiveCompletionRatio: number | null;
                             /** @description CCH dispatch pool tag after classification. */
                             dispatchGroupTag: string | null;
                             /**
@@ -20964,6 +21349,8 @@ export interface operations {
                             isEnabled: boolean;
                             /** @description Manual display order (lower first). */
                             sortOrder?: number;
+                            /** @description Divide upstream group ratios and balance by this value for CCH-facing amounts. */
+                            rechargeMultiplier: number;
                             /** @description Optional Upstream Hub channel id. */
                             upstreamHubChannelId: number | null;
                             /** @description Upstream login username/email. */
@@ -20980,6 +21367,8 @@ export interface operations {
                             captchaEndpoint?: string | null;
                             /** @description Last known upstream balance. */
                             lastBalance?: number | null;
+                            /** @description CCH-facing balance: upstream balance divided by recharge multiplier. */
+                            realBalance?: number | null;
                             /**
                              * Format: date-time
                              * @description Last balance sample time.
@@ -21028,8 +21417,12 @@ export interface operations {
                                 description: string | null;
                                 /** @description Upstream group ratio / rate multiplier. */
                                 ratio: number;
+                                /** @description CCH-facing group ratio after dividing by the site's recharge multiplier. */
+                                effectiveRatio: number;
                                 /** @description Optional completion/output ratio; 0 or null means unused. */
                                 completionRatio: number | null;
+                                /** @description CCH-facing completion ratio after dividing by the site's recharge multiplier. */
+                                effectiveCompletionRatio: number | null;
                                 /** @description CCH dispatch pool tag after classification. */
                                 dispatchGroupTag: string | null;
                                 /**
@@ -21250,8 +21643,12 @@ export interface operations {
                         description: string | null;
                         /** @description Upstream group ratio / rate multiplier. */
                         ratio: number;
+                        /** @description CCH-facing group ratio after dividing by the site's recharge multiplier. */
+                        effectiveRatio: number;
                         /** @description Optional completion/output ratio; 0 or null means unused. */
                         completionRatio: number | null;
+                        /** @description CCH-facing completion ratio after dividing by the site's recharge multiplier. */
+                        effectiveCompletionRatio: number | null;
                         /** @description CCH dispatch pool tag after classification. */
                         dispatchGroupTag: string | null;
                         /**
@@ -21636,8 +22033,12 @@ export interface operations {
                         description: string | null;
                         /** @description Upstream group ratio / rate multiplier. */
                         ratio: number;
+                        /** @description CCH-facing group ratio after dividing by the site's recharge multiplier. */
+                        effectiveRatio: number;
                         /** @description Optional completion/output ratio; 0 or null means unused. */
                         completionRatio: number | null;
+                        /** @description CCH-facing completion ratio after dividing by the site's recharge multiplier. */
+                        effectiveCompletionRatio: number | null;
                         /** @description CCH dispatch pool tag after classification. */
                         dispatchGroupTag: string | null;
                         /**
@@ -41396,6 +41797,176 @@ export interface operations {
         requestBody?: never;
         responses: {
             /** @description Quota. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Invalid request. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        /** @description Stable problem type URI or URN. */
+                        type: string;
+                        /** @description Short problem title. */
+                        title: string;
+                        /** @description HTTP status code. */
+                        status: number;
+                        /** @description Human-readable error detail. */
+                        detail: string;
+                        /** @description Request path that produced the problem. */
+                        instance: string;
+                        /** @description Application error code for frontend i18n. */
+                        errorCode: string;
+                        /** @description Optional i18n parameters. */
+                        errorParams?: {
+                            [key: string]: unknown;
+                        };
+                        /** @description Optional request trace identifier. */
+                        traceId?: string;
+                        /** @description Validation failure details. */
+                        invalidParams?: {
+                            /** @description Path to the invalid input field. */
+                            path: (string | number)[];
+                            /** @description Machine-readable validation error code. */
+                            code: string;
+                            /** @description Validation error message. */
+                            message: string;
+                        }[];
+                    };
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        /** @description Stable problem type URI or URN. */
+                        type: string;
+                        /** @description Short problem title. */
+                        title: string;
+                        /** @description HTTP status code. */
+                        status: number;
+                        /** @description Human-readable error detail. */
+                        detail: string;
+                        /** @description Request path that produced the problem. */
+                        instance: string;
+                        /** @description Application error code for frontend i18n. */
+                        errorCode: string;
+                        /** @description Optional i18n parameters. */
+                        errorParams?: {
+                            [key: string]: unknown;
+                        };
+                        /** @description Optional request trace identifier. */
+                        traceId?: string;
+                        /** @description Validation failure details. */
+                        invalidParams?: {
+                            /** @description Path to the invalid input field. */
+                            path: (string | number)[];
+                            /** @description Machine-readable validation error code. */
+                            code: string;
+                            /** @description Validation error message. */
+                            message: string;
+                        }[];
+                    };
+                };
+            };
+            /** @description Access denied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        /** @description Stable problem type URI or URN. */
+                        type: string;
+                        /** @description Short problem title. */
+                        title: string;
+                        /** @description HTTP status code. */
+                        status: number;
+                        /** @description Human-readable error detail. */
+                        detail: string;
+                        /** @description Request path that produced the problem. */
+                        instance: string;
+                        /** @description Application error code for frontend i18n. */
+                        errorCode: string;
+                        /** @description Optional i18n parameters. */
+                        errorParams?: {
+                            [key: string]: unknown;
+                        };
+                        /** @description Optional request trace identifier. */
+                        traceId?: string;
+                        /** @description Validation failure details. */
+                        invalidParams?: {
+                            /** @description Path to the invalid input field. */
+                            path: (string | number)[];
+                            /** @description Machine-readable validation error code. */
+                            code: string;
+                            /** @description Validation error message. */
+                            message: string;
+                        }[];
+                    };
+                };
+            };
+            /** @description Current caller resource not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        /** @description Stable problem type URI or URN. */
+                        type: string;
+                        /** @description Short problem title. */
+                        title: string;
+                        /** @description HTTP status code. */
+                        status: number;
+                        /** @description Human-readable error detail. */
+                        detail: string;
+                        /** @description Request path that produced the problem. */
+                        instance: string;
+                        /** @description Application error code for frontend i18n. */
+                        errorCode: string;
+                        /** @description Optional i18n parameters. */
+                        errorParams?: {
+                            [key: string]: unknown;
+                        };
+                        /** @description Optional request trace identifier. */
+                        traceId?: string;
+                        /** @description Validation failure details. */
+                        invalidParams?: {
+                            /** @description Path to the invalid input field. */
+                            path: (string | number)[];
+                            /** @description Machine-readable validation error code. */
+                            code: string;
+                            /** @description Validation error message. */
+                            message: string;
+                        }[];
+                    };
+                };
+            };
+        };
+    };
+    getMeGroupRates: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Preferred group rates. */
             200: {
                 headers: {
                     [name: string]: unknown;

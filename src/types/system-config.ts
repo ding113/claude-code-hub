@@ -59,7 +59,7 @@ export interface SystemSettings {
   healthTestScheduleMode: HealthTestScheduleMode;
   /** Rolling health-test sample window (1–50, default 10). */
   healthTestWindowSize: number;
-  /** Scheduled probe interval in seconds (10–3600, default 60). */
+  /** Scheduled probe interval in seconds (10–3600, default 1800 / 30 minutes). */
   healthTestIntervalSeconds: number;
   /** Scheduled probe total timeout in seconds (5–300, default 30). */
   healthTestTimeoutSeconds: number;

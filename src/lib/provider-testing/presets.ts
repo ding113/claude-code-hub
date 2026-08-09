@@ -264,3 +264,26 @@ export function getExecutionPresetCandidates(context: PresetSelectionContext): P
   const candidates = streamOnly.length > 0 ? streamOnly : getPresetsForProvider(context.providerType);
   return candidates.sort((left, right) => scorePreset(right, context) - scorePreset(left, context));
 }
+
+/**
+ * 健康测试请求格式（分组"测试请求格式"配置）。
+ * 与 ClientFormat 对齐：response = Responses API（Codex）、openai = Chat Completions。
+ */
+export type TestFormat = "response" | "openai" | "claude" | "gemini";
+
+const FORMAT_PRESET_MAPPING: Record<TestFormat, string> = {
+  response: "cx_codex_basic",
+  openai: "oa_chat_stream",
+  claude: "cc_haiku_basic",
+  gemini: "gm_flash_basic",
+};
+
+/**
+ * 按显式请求格式返回健康测试 preset（跨 providerType 映射）。
+ * 用于分组"请求格式=不覆盖"时：provider 可能承载多种格式，测试格式由分组配置决定。
+ */
+export function getFormatPresetCandidates(format: TestFormat): PresetConfig[] {
+  const id = FORMAT_PRESET_MAPPING[format];
+  const preset = id ? PRESETS[id] : undefined;
+  return preset ? [preset] : [];
+}

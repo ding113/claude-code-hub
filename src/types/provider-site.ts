@@ -19,7 +19,11 @@ export interface ProviderSiteGroupRate {
   description: string | null;
   /** Upstream group ratio / rate_multiplier */
   ratio: number;
+  /** CCH-facing ratio: upstream ratio / parent site's recharge multiplier. */
+  effectiveRatio: number;
   completionRatio: number | null;
+  /** CCH-facing completion ratio after the same conversion. */
+  effectiveCompletionRatio: number | null;
   /**
    * CCH dispatch pool after classification:
    * image | grok | claude | codex | other
@@ -40,6 +44,8 @@ export interface ProviderSite {
   isEnabled: boolean;
   /** Manual display order for site cards (lower first). */
   sortOrder: number;
+  /** Upstream recharge multiplier used for CCH-facing rates and balances. */
+  rechargeMultiplier: number;
   upstreamHubChannelId: number | null;
   username: string | null;
   /** Whether a password is stored (never return ciphertext to clients). */
@@ -49,8 +55,12 @@ export interface ProviderSite {
   hasCaptchaApiKey: boolean;
   captchaEndpoint: string | null;
   lastBalance: number | null;
+  /** CCH-facing balance: upstream balance / rechargeMultiplier. */
+  realBalance: number | null;
   lastBalanceAt: Date | null;
   todayCost: number | null;
+  /** CCH-facing today cost: upstream todayCost / rechargeMultiplier. */
+  realTodayCost: number | null;
   totalCost: number | null;
   lastSyncError: string | null;
   lastSyncAt: Date | null;
@@ -74,6 +84,7 @@ export interface CreateProviderSiteInput {
   notes?: string | null;
   isEnabled?: boolean;
   sortOrder?: number;
+  rechargeMultiplier?: number;
   upstreamHubChannelId?: number | null;
   username?: string | null;
   /** Plain password; encrypted before storage. */
@@ -92,6 +103,7 @@ export interface UpdateProviderSiteInput {
   notes?: string | null;
   isEnabled?: boolean;
   sortOrder?: number;
+  rechargeMultiplier?: number;
   upstreamHubChannelId?: number | null;
   username?: string | null;
   /** Plain password; omit/empty keeps existing. */
@@ -152,5 +164,7 @@ export interface ProviderSiteSyncResult {
     keysAutoCreated?: number;
     /** Upstream API keys deleted because they were explicitly unassigned. */
     unboundUpstreamKeysDeleted?: number;
+    /** Duplicate upstream keys removed while keeping one key per group. */
+    upstreamDuplicateKeysDeleted?: number;
   };
 }

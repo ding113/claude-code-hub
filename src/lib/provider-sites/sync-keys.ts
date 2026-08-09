@@ -3,10 +3,10 @@
  *
  * Product rules:
  * - Key source: the site's own upstream key list (sub2api /api/v1/keys, newapi /api/token/).
- * - Upstream groups that fail keyword classification ("other") are skipped — never bound
- *   to a random pool.
+ * - Upstream groups that fail keyword classification ("other") still receive an upstream
+ *   key, but are never bound to a random CCH dispatch pool.
  * - Missing key: create an upstream key for that group (auto-provision), then create a
- *   CCH provider from it. Failures are skipped and retried on the next 5-minute tick.
+ *   CCH provider when the group has a dispatch-pool match. Failures are retried next tick.
  * - Duplicate keys under the same site+group: keep exactly one (prefer enabled, then the
  *   one already linked to this site+group, then most recently updated); soft-delete the rest.
  */
@@ -134,9 +134,8 @@ export function findStaleSiteProviderIds(
 /**
  * Return non-routable upstream groups that have no key in a complete key-list response.
  *
- * The group-rate endpoint can retain/display groups for which the management account has
- * no active key. Those groups are not eligible for auto-provisioning when they classify as
- * "other"; keeping their rate rows would make retired/unusable groups look live forever.
+ * This is retained as a diagnostic helper. The live sync no longer prunes these groups;
+ * key provisioning handles them first so an unclassified group can receive a key.
  * A key list with missing group names is treated as incomplete and never authorizes pruning.
  */
 export function findUnkeyedOtherSiteGroupNames(input: {
@@ -214,6 +213,74 @@ export async function deleteUnboundUpstreamApiKeys(input: {
     }
   }
   return deleted;
+}
+
+/**
+ * Keep one upstream key per normalized group and return the surviving view.
+ *
+ * The CCH side already keeps one provider per site+group, but that does not
+ * remove duplicate tokens from the upstream account. Prefer a full secret so
+ * the local mirror can continue using it, then prefer the newest numeric id.
+ */
+export async function deleteDuplicateUpstreamApiKeys(input: {
+  siteId: number;
+  siteName: string;
+  upstreamKeys: UpstreamApiKey[];
+  creds: UpstreamSiteCredentials;
+  session: UpstreamAuthSession;
+}): Promise<{ keys: UpstreamApiKey[]; deleted: number }> {
+  const byGroup = new Map<string, UpstreamApiKey[]>();
+  for (const key of input.upstreamKeys) {
+    const groupName = key.groupName.trim();
+    if (!groupName) continue;
+    const normalized = normalizeGroupKey(groupName);
+    const list = byGroup.get(normalized) ?? [];
+    list.push(key);
+    byGroup.set(normalized, list);
+  }
+
+  const deletedIds = new Set<string>();
+  let deleted = 0;
+  for (const [normalizedGroup, keys] of byGroup) {
+    if (keys.length < 2) continue;
+    const sorted = [...keys].sort((a, b) => {
+      const usable = Number(isUsableKey(b.key)) - Number(isUsableKey(a.key));
+      if (usable !== 0) return usable;
+      const aId = Number(a.id);
+      const bId = Number(b.id);
+      if (Number.isFinite(aId) && Number.isFinite(bId) && aId !== bId) return bId - aId;
+      return b.id.localeCompare(a.id);
+    });
+    const keeper = sorted[0];
+    for (const duplicate of sorted.slice(1)) {
+      try {
+        await deleteUpstreamApiKey(input.creds, input.session, duplicate.id);
+        deletedIds.add(duplicate.id);
+        deleted += 1;
+        logger.info("[provider-sites] deleted duplicate upstream group key", {
+          siteId: input.siteId,
+          siteName: input.siteName,
+          groupName: keeper.groupName,
+          normalizedGroup,
+          keeperId: keeper.id,
+          deletedKeyId: duplicate.id,
+        });
+      } catch (error) {
+        logger.warn("[provider-sites] duplicate upstream group key delete failed", {
+          siteId: input.siteId,
+          siteName: input.siteName,
+          groupName: keeper.groupName,
+          duplicateKeyId: duplicate.id,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+  }
+
+  return {
+    keys: input.upstreamKeys.filter((key) => !deletedIds.has(key.id)),
+    deleted,
+  };
 }
 
 async function deleteStaleSiteProvidersForRows(
@@ -356,7 +423,7 @@ export async function syncSiteKeysForGroups(input: {
   groupRatios?: Record<string, number> | Map<string, number> | null;
   /** Upstream site balance used to gate automatic provider activation. */
   balance?: number | null;
-  /** When set, missing upstream keys are auto-created for eligible groups. */
+  /** When set, missing upstream keys are auto-created for all upstream groups. */
   creds?: UpstreamSiteCredentials | null;
   session?: UpstreamAuthSession | null;
 }): Promise<SiteKeySyncSummary> {
@@ -417,11 +484,15 @@ export async function syncSiteKeysForGroups(input: {
     );
   }
 
-  // One row per upstream group name -> dispatch tag; "other" = invalid, skip.
+  // Every upstream group gets key provisioning, including groups that are not
+  // mapped to a CCH dispatch pool yet. "other" groups receive an upstream key
+  // but are not bound to a random local pool.
+  const tagByGroup = new Map<string, string>();
   const eligibleGroups: Array<{ groupName: string; tag: string }> = [];
   for (const groupName of trustedGroupNames) {
-    const tag = classifySiteGroupTag(groupName, classifiable);
-    if (!tag || tag === "other") {
+    const tag = classifySiteGroupTag(groupName, classifiable) || "other";
+    tagByGroup.set(normalizeGroupKey(groupName), tag);
+    if (tag === "other") {
       summary.groupsSkipped += 1;
       summary.skippedGroupNames.push(groupName);
       continue;
@@ -429,7 +500,7 @@ export async function syncSiteKeysForGroups(input: {
     eligibleGroups.push({ groupName, tag });
   }
   summary.groupsEligible = eligibleGroups.length;
-  if (eligibleGroups.length === 0) return summary;
+  if (trustedGroupNames.length === 0) return summary;
 
   const byGroup = new Map<string, ProviderRow[]>();
   for (const row of siteRows) {
@@ -463,10 +534,60 @@ export async function syncSiteKeysForGroups(input: {
     return typeof v === "number" && Number.isFinite(v) && v >= 0 ? v : 1;
   };
 
-  for (const { groupName, tag } of eligibleGroups) {
+  for (const groupName of trustedGroupNames) {
     const norm = normalizeGroupKey(groupName);
-    const existing = byGroup.get(norm) ?? [];
+    const tag = tagByGroup.get(norm) ?? "other";
     let upstreamGroupKeys = keysByGroup.get(norm) ?? [];
+    let upstreamKey = upstreamGroupKeys.find((k) => isUsableKey(k.key));
+
+    // Provision the upstream side before looking at local CCH providers. This
+    // also repairs a group whose local provider survived after its upstream
+    // token was removed.
+    if (!upstreamKey && canAutoCreate && input.creds && input.session) {
+      // If any masked key is present, do not create a second one: the key-list
+      // is authoritative even when a reveal request was rate-limited.
+      const hasAnyUpstream = upstreamGroupKeys.length > 0;
+      if (!hasAnyUpstream) {
+        logger.info("[provider-sites] key sync: auto-creating upstream key for empty group", {
+          siteId: input.siteId,
+          groupName,
+          tag,
+        });
+        const created = await createUpstreamApiKey(input.creds, input.session, { groupName });
+        if (created && isUsableKey(created.key)) {
+          summary.keysAutoCreated += 1;
+          upstreamKey = created;
+          const list = keysByGroup.get(norm) ?? [];
+          list.push(created);
+          keysByGroup.set(norm, list);
+          upstreamGroupKeys = list;
+        }
+      } else {
+        logger.warn("[provider-sites] key sync: group has keys but none usable (masked?)", {
+          siteId: input.siteId,
+          groupName,
+          upstreamKeyCount: upstreamGroupKeys.length,
+        });
+      }
+    }
+
+    // An unclassified group (for example 国模) is intentionally not attached
+    // to a random CCH dispatch pool. Its upstream key is still provisioned so
+    // the account remains one-key-per-group and can be mapped later by adding a
+    // provider-group match rule.
+    if (tag === "other") {
+      if (!upstreamKey) {
+        logger.warn("[provider-sites] key sync: no usable upstream key for non-routable group", {
+          siteId: input.siteId,
+          groupName,
+          upstreamKeyCount: upstreamGroupKeys.length,
+          autoCreateAttempted: canAutoCreate,
+        });
+      }
+      continue;
+    }
+
+    const existing = byGroup.get(norm) ?? [];
     const shared = sharedByName.get(tag) ?? null;
     const providerType =
       (shared?.providerType as ProviderType | null | undefined) ??
@@ -520,36 +641,6 @@ export async function syncSiteKeysForGroups(input: {
         }
       }
       continue;
-    }
-
-    // No local provider for this group: prefer existing upstream key, else auto-create.
-    let upstreamKey = upstreamGroupKeys.find((k) => isUsableKey(k.key));
-
-    if (!upstreamKey && canAutoCreate && input.creds && input.session) {
-      // Only create when THIS group currently has zero usable upstream keys.
-      // If the group already has any key (even masked), do not open another.
-      const hasAnyUpstream = upstreamGroupKeys.length > 0;
-      if (!hasAnyUpstream) {
-        logger.info("[provider-sites] key sync: auto-creating upstream key for empty group", {
-          siteId: input.siteId,
-          groupName,
-        });
-        const created = await createUpstreamApiKey(input.creds, input.session, { groupName });
-        if (created && isUsableKey(created.key)) {
-          summary.keysAutoCreated += 1;
-          upstreamKey = created;
-          const list = keysByGroup.get(norm) ?? [];
-          list.push(created);
-          keysByGroup.set(norm, list);
-          upstreamGroupKeys = list;
-        }
-      } else {
-        logger.warn("[provider-sites] key sync: group has keys but none usable (masked?)", {
-          siteId: input.siteId,
-          groupName,
-          upstreamKeyCount: upstreamGroupKeys.length,
-        });
-      }
     }
 
     if (!upstreamKey) {

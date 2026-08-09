@@ -27,6 +27,7 @@ import {
   Loader2,
   Pencil,
   Plus,
+  RefreshCw,
   Trash2,
 } from "lucide-react";
 import { useTranslations } from "next-intl";
@@ -58,6 +59,7 @@ import {
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from "@/components/ui/drawer";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { TagInput } from "@/components/ui/tag-input";
 import {
   Select,
   SelectContent,
@@ -74,20 +76,27 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { editProvider } from "@/lib/api-client/v1/actions/providers";
 import type { ProviderGroupWithCount } from "@/lib/api-client/v1/actions/provider-groups";
 import {
   createProviderGroup,
   deleteProviderGroup,
+  fetchProviderGroupUpstreamModels,
   getProviderGroups,
   reorderProviderGroups,
   updateProviderGroup,
 } from "@/lib/api-client/v1/actions/provider-groups";
+import { PROVIDER_GROUP } from "@/lib/constants/provider.constants";
+import { useMediaQuery } from "@/lib/hooks/use-media-query";
 import type { ProviderGroupMatchRule } from "@/lib/provider-groups/match-rules";
 import type { ProviderGroupModelMatchRule } from "@/lib/provider-groups/model-match-rules";
 import type { ProviderGroupSharedSettings } from "@/lib/provider-groups/shared-settings";
-import { editProvider } from "@/lib/api-client/v1/actions/providers";
-import { PROVIDER_GROUP } from "@/lib/constants/provider.constants";
-import { useMediaQuery } from "@/lib/hooks/use-media-query";
+import {
+  normalizeProviderGroupHealthTestModels,
+  PROVIDER_GROUP_HEALTH_TEST_MODEL_MAX_COUNT,
+  PROVIDER_GROUP_HEALTH_TEST_MODEL_MAX_LENGTH,
+  resolveProviderGroupHealthTestModelFallback,
+} from "@/lib/provider-health-test/model-config";
 import { getProviderTypeConfig, getProviderTypeTranslationKey } from "@/lib/provider-type-utils";
 import { parsePublicStatusDescription } from "@/lib/public-status/config";
 import { exceedsProviderGroupDescriptionLimit } from "@/lib/public-status/description-limit";
@@ -103,10 +112,12 @@ interface GroupFormState {
   name: string;
   costMultiplier: string;
   description: string;
-  healthTestModel: string;
+  healthTestModels: string[];
+  healthTestModelFallback: string;
   matchRules: ProviderGroupMatchRule[];
   modelMatchRules: ProviderGroupModelMatchRule[];
   sharedProviderType: string; // "" | ProviderType
+  sharedHealthTestFormat: string; // "" | TestFormat
   sharedPriority: string;
   sharedWeight: string;
   sharedProxyUrl: string;
@@ -136,10 +147,12 @@ const INITIAL_FORM: GroupFormState = {
   name: "",
   costMultiplier: "1.0",
   description: "",
-  healthTestModel: "",
+  healthTestModels: [],
+  healthTestModelFallback: "",
   matchRules: [],
   modelMatchRules: [],
   sharedProviderType: "",
+  sharedHealthTestFormat: "",
   sharedPriority: "",
   sharedWeight: "",
   sharedProxyUrl: "",
@@ -166,6 +179,8 @@ const PROVIDER_TYPE_OPTIONS: ProviderType[] = [
   "openai-compatible",
 ];
 
+const TEST_FORMAT_OPTIONS = ["response", "openai", "claude", "gemini"] as const;
+
 function formToOptionalNumber(raw: string): number | null | undefined {
   const trimmed = raw.trim();
   if (!trimmed) return undefined;
@@ -178,10 +193,25 @@ function numToForm(value: number | null | undefined): string {
   return value == null || !Number.isFinite(Number(value)) ? "" : String(value);
 }
 
+function healthTestModelsFromForm(models: readonly string[]): string[] {
+  return normalizeProviderGroupHealthTestModels(models);
+}
+
 function sharedSettingsFromForm(form: GroupFormState): ProviderGroupSharedSettings | null {
   const out: ProviderGroupSharedSettings = {};
   if (form.sharedProviderType && form.sharedProviderType !== "inherit") {
     out.providerType = form.sharedProviderType as ProviderType;
+  } else if (form.sharedProviderType === "inherit") {
+    // 显式"不覆盖"：标记分组接受所有请求格式（providerType: null）
+    // 路由层对显式 null 的分组放行全部格式（checkFormatProviderTypeCompatibility 的
+    // 硬编码映射之外的开关）；与"从未设置"（键缺失）在数据上区分。
+    out.providerType = null;
+  }
+  if (form.sharedHealthTestFormat && form.sharedHealthTestFormat !== "inherit") {
+    out.healthTestFormat = form.sharedHealthTestFormat as ProviderGroupSharedSettings["healthTestFormat"];
+  } else if (form.sharedHealthTestFormat === "inherit") {
+    // 显式"不覆盖"：测试格式跟随 providerType 默认（null = 未覆盖）
+    out.healthTestFormat = null;
   }
   const priority = formToOptionalNumber(form.sharedPriority);
   const weight = formToOptionalNumber(form.sharedWeight);
@@ -219,7 +249,8 @@ function formFromSharedSettings(
 ): Partial<GroupFormState> {
   if (!shared) return {};
   return {
-    sharedProviderType: shared.providerType ?? "",
+    sharedProviderType: shared.providerType ?? "inherit",
+    sharedHealthTestFormat: shared.healthTestFormat ?? "inherit",
     sharedPriority: numToForm(shared.priority),
     sharedWeight: numToForm(shared.weight),
     sharedProxyUrl: shared.proxyUrl ?? "",
@@ -271,6 +302,11 @@ export function ProviderGroupTab({
   const [form, setForm] = useState<GroupFormState>(INITIAL_FORM);
   const [isSaving, startSaveTransition] = useTransition();
   const [isReordering, startReorderTransition] = useTransition();
+  const [groupModelsOpen, setGroupModelsOpen] = useState(false);
+  const [groupModels, setGroupModels] = useState<string[]>([]);
+  const [groupModelsLoading, startGroupModelsTransition] = useTransition();
+  const [groupModelsFailed, setGroupModelsFailed] = useState<string[]>([]);
+  const [modelMatchModelsOpen, setModelMatchModelsOpen] = useState(false);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -317,6 +353,7 @@ export function ProviderGroupTab({
         const result = await reorderProviderGroups(reordered.map((g) => g.id));
         if (result.ok) {
           setGroups(result.data);
+          await invalidateProviderQueries(queryClient);
           toast.success(t("reorderSuccess"));
         } else {
           toast.error(result.error ?? t("reorderFailed"));
@@ -324,7 +361,7 @@ export function ProviderGroupTab({
         }
       });
     },
-    [fetchGroups, groups, isAdmin, t]
+    [fetchGroups, groups, isAdmin, queryClient, t]
   );
 
   const toggleExpand = useCallback((groupId: number) => {
@@ -342,17 +379,32 @@ export function ProviderGroupTab({
   const openCreateDialog = useCallback(() => {
     setEditingGroup(null);
     setForm(INITIAL_FORM);
+    setGroupModelsOpen(false);
+    setGroupModels([]);
+    setGroupModelsFailed([]);
     setDialogOpen(true);
   }, []);
 
   const openEditDialog = useCallback((group: ProviderGroupWithCount) => {
     setEditingGroup(group);
+    setGroupModelsOpen(false);
+    setGroupModels([]);
+    setGroupModelsFailed([]);
     setForm({
       ...INITIAL_FORM,
       name: group.name,
       costMultiplier: String(group.costMultiplier),
       description: getProviderGroupDescriptionNote(group.description),
-      healthTestModel: group.healthTestModel ?? "",
+      healthTestModels: normalizeProviderGroupHealthTestModels(
+        group.healthTestModels,
+        group.healthTestModel
+      ),
+      healthTestModelFallback:
+        resolveProviderGroupHealthTestModelFallback(
+          group.healthTestModelFallback,
+          normalizeProviderGroupHealthTestModels(group.healthTestModels, group.healthTestModel),
+          group.healthTestModel
+        ) ?? "",
       matchRules: group.matchRules ?? [],
       modelMatchRules: group.modelMatchRules ?? [],
       ...formFromSharedSettings(group.sharedSettings),
@@ -392,7 +444,8 @@ export function ProviderGroupTab({
         costMultiplier?: number;
         description?: string | null;
         descriptionNote?: string | null;
-        healthTestModel?: string | null;
+        healthTestModels?: string[] | null;
+        healthTestModelFallback?: string | null;
         matchRules?: ProviderGroupMatchRule[] | null;
         modelMatchRules?: ProviderGroupModelMatchRule[] | null;
         sharedSettings?: ProviderGroupSharedSettings | null;
@@ -403,12 +456,13 @@ export function ProviderGroupTab({
       if (result.ok) {
         toast.success(t("updateSuccess"));
         fetchGroups();
+        await invalidateProviderQueries(queryClient);
         return true;
       }
       toast.error(mapSaveError(result.errorCode, result.error ?? t("updateFailed")));
       return false;
     },
-    [fetchGroups, mapSaveError, t]
+    [fetchGroups, mapSaveError, queryClient, t]
   );
 
   const handleDeleteGroup = useCallback(() => {
@@ -422,8 +476,9 @@ export function ProviderGroupTab({
       toast.success(t("deleteSuccess"));
       setDeletingGroup(null);
       fetchGroups();
+      await invalidateProviderQueries(queryClient);
     });
-  }, [deletingGroup, fetchGroups, t]);
+  }, [deletingGroup, fetchGroups, queryClient, t]);
 
   const handleSave = useCallback(() => {
     const costMultiplier = Number.parseFloat(form.costMultiplier);
@@ -449,7 +504,8 @@ export function ProviderGroupTab({
         const ok = await saveGroupPatch(editingGroup.id, {
           costMultiplier,
           descriptionNote: trimmedDescription || null,
-          healthTestModel: form.healthTestModel.trim() || null,
+          healthTestModels: healthTestModelsFromForm(form.healthTestModels),
+          healthTestModelFallback: form.healthTestModelFallback || null,
           matchRules: form.matchRules,
           modelMatchRules: form.modelMatchRules,
           sharedSettings,
@@ -458,7 +514,6 @@ export function ProviderGroupTab({
         if (ok) {
           if (form.applySharedToMembers && sharedSettings) {
             toast.success(t("sharedAppliedHint"));
-            await invalidateProviderQueries(queryClient);
           }
           closeDialog();
         }
@@ -468,7 +523,8 @@ export function ProviderGroupTab({
       const result = await createProviderGroup({
         name: trimmedName,
         costMultiplier,
-        healthTestModel: form.healthTestModel.trim() || null,
+        healthTestModels: healthTestModelsFromForm(form.healthTestModels),
+        healthTestModelFallback: form.healthTestModelFallback || null,
         description: trimmedDescription || undefined,
         matchRules: form.matchRules,
         modelMatchRules: form.modelMatchRules,
@@ -483,9 +539,7 @@ export function ProviderGroupTab({
         );
         closeDialog();
         fetchGroups();
-        if (form.applySharedToMembers && sharedSettings) {
-          await invalidateProviderQueries(queryClient);
-        }
+        await invalidateProviderQueries(queryClient);
       } else {
         toast.error(mapSaveError(result.errorCode, result.error ?? t("createFailed")));
       }
@@ -633,14 +687,177 @@ export function ProviderGroupTab({
                     onChange={(e) => setForm((prev) => ({ ...prev, costMultiplier: e.target.value }))}
                   />
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="group-health-model">{t("healthTestModel")}</Label>
-                  <Input
+                <div className="space-y-2 sm:col-span-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <Label htmlFor="group-health-model">{t("healthTestModel")}</Label>
+                    {editingGroup ? (
+                      <Popover
+                        open={groupModelsOpen}
+                        onOpenChange={(open) => {
+                          setGroupModelsOpen(open);
+                          if (open && groupModels.length === 0 && !groupModelsLoading) {
+                            startGroupModelsTransition(async () => {
+                              const res = await fetchProviderGroupUpstreamModels(editingGroup.id);
+                              if (res.ok) {
+                                setGroupModels(res.data.models);
+                                setGroupModelsFailed(res.data.failed);
+                              } else {
+                                toast.error(res.error ?? t("fetchGroupModelsFailed"));
+                                setGroupModels([]);
+                                setGroupModelsFailed([]);
+                              }
+                            });
+                          }
+                        }}
+                      >
+                        <PopoverTrigger asChild>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="h-7 px-2.5 text-xs"
+                            disabled={groupModelsLoading}
+                          >
+                            {groupModelsLoading ? (
+                              <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <RefreshCw className="mr-1 h-3.5 w-3.5" />
+                            )}
+                            {t("fetchGroupModels")}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent align="end" className="w-80">
+                          <div className="space-y-2">
+                            <p className="text-xs font-medium text-muted-foreground">
+                              {t("fetchGroupModelsHelp")}
+                            </p>
+                            {groupModelsFailed.length > 0 ? (
+                              <p className="text-[11px] text-amber-600 dark:text-amber-400">
+                                {t("fetchGroupModelsFailedCount", { count: groupModelsFailed.length })}
+                              </p>
+                            ) : null}
+                            {groupModels.length === 0 ? (
+                              <p className="text-xs text-muted-foreground">
+                                {t("fetchGroupModelsEmpty")}
+                              </p>
+                            ) : (
+                              <div className="flex max-h-64 flex-wrap gap-1 overflow-y-auto">
+                                {groupModels.map((model) => {
+                                  const selected = form.healthTestModels.includes(model);
+                                  return (
+                                    <Button
+                                      key={model}
+                                      type="button"
+                                      variant={selected ? "default" : "outline"}
+                                      size="sm"
+                                      className="h-6 px-2 font-mono text-[11px]"
+                                      onClick={() => {
+                                        const next = selected
+                                          ? form.healthTestModels.filter((m) => m !== model)
+                                          : [...form.healthTestModels, model];
+                                        const healthTestModels =
+                                          normalizeProviderGroupHealthTestModels(next);
+                                        setForm((prev) => ({
+                                          ...prev,
+                                          healthTestModels,
+                                          healthTestModelFallback:
+                                            healthTestModels.includes(prev.healthTestModelFallback)
+                                              ? prev.healthTestModelFallback
+                                              : (healthTestModels[0] ?? ""),
+                                        }));
+                                      }}
+                                    >
+                                      {model}
+                                    </Button>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        </PopoverContent>
+                      </Popover>
+                    ) : null}
+                  </div>
+                  <TagInput
                     id="group-health-model"
-                    value={form.healthTestModel}
-                    onChange={(e) => setForm((prev) => ({ ...prev, healthTestModel: e.target.value }))}
+                    value={form.healthTestModels}
+                    onChange={(models) => {
+                      const healthTestModels = normalizeProviderGroupHealthTestModels(models);
+                      setForm((prev) => ({
+                        ...prev,
+                        healthTestModels,
+                        healthTestModelFallback: healthTestModels.includes(
+                          prev.healthTestModelFallback
+                        )
+                          ? prev.healthTestModelFallback
+                          : (healthTestModels[0] ?? ""),
+                      }));
+                    }}
+                    maxTags={PROVIDER_GROUP_HEALTH_TEST_MODEL_MAX_COUNT}
+                    maxTagLength={PROVIDER_GROUP_HEALTH_TEST_MODEL_MAX_LENGTH}
                     placeholder={t("healthTestModelPlaceholder")}
+                    validateTag={(model) => model.trim().length > 0}
                   />
+                  <p className="text-xs text-muted-foreground">
+                    {t("healthTestModelsHelp")}
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="group-health-fallback">{t("healthTestModelFallback")}</Label>
+                  {form.healthTestModels.length === 0 ? (
+                    <div
+                      id="group-health-fallback"
+                      className="flex min-h-9 items-center rounded-md border border-input bg-muted/30 px-3 text-sm text-muted-foreground"
+                    >
+                      {t("healthTestModelFallbackEmpty")}
+                    </div>
+                  ) : (
+                    <Select
+                      value={form.healthTestModelFallback || form.healthTestModels[0]}
+                      onValueChange={(value) =>
+                        setForm((prev) => ({ ...prev, healthTestModelFallback: value }))
+                      }
+                    >
+                      <SelectTrigger id="group-health-fallback">
+                        <SelectValue placeholder={t("healthTestModelFallbackPlaceholder")} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {form.healthTestModels.map((model) => (
+                          <SelectItem key={model} value={model}>
+                            {model}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                  <p className="text-xs text-muted-foreground">
+                    {t("healthTestModelFallbackHelp")}
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="group-health-format">{t("sharedHealthTestFormat")}</Label>
+                  <Select
+                    value={form.sharedHealthTestFormat || "inherit"}
+                    onValueChange={(value) =>
+                      setForm((prev) => ({
+                        ...prev,
+                        sharedHealthTestFormat: value === "inherit" ? "" : value,
+                      }))
+                    }
+                  >
+                    <SelectTrigger id="group-health-format">
+                      <SelectValue placeholder={t("sharedHealthTestFormatInherit")} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="inherit">{t("sharedHealthTestFormatInherit")}</SelectItem>
+                      {TEST_FORMAT_OPTIONS.map((fmt) => (
+                        <SelectItem key={fmt} value={fmt}>
+                          {fmt}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">{t("sharedHealthTestFormatHelp")}</p>
                 </div>
                 <div className="space-y-2 sm:col-span-2">
                   <Label htmlFor="group-description">{t("descriptionLabel")}</Label>
@@ -650,7 +867,6 @@ export function ProviderGroupTab({
                     onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))}
                     placeholder={t("descriptionPlaceholder")}
                   />
-                  <p className="text-xs text-muted-foreground">{t("healthTestModelHelp")}</p>
                 </div>
               </div>
             </section>
@@ -665,7 +881,171 @@ export function ProviderGroupTab({
             </section>
 
             <section className="space-y-3 rounded-xl border bg-muted/10 p-4">
-              <div className="text-sm font-medium">{t("sectionModelMatch")}</div>
+              <div className="flex items-center justify-between gap-2">
+                <div className="text-sm font-medium">{t("sectionModelMatch")}</div>
+                {editingGroup ? (
+                  <Popover
+                    open={modelMatchModelsOpen}
+                    onOpenChange={(open) => {
+                      setModelMatchModelsOpen(open);
+                      if (open && groupModels.length === 0 && !groupModelsLoading) {
+                        startGroupModelsTransition(async () => {
+                          const res = await fetchProviderGroupUpstreamModels(editingGroup.id);
+                          if (res.ok) {
+                            setGroupModels(res.data.models);
+                            setGroupModelsFailed(res.data.failed);
+                          } else {
+                            toast.error(res.error ?? t("fetchGroupModelsFailed"));
+                            setGroupModels([]);
+                            setGroupModelsFailed([]);
+                          }
+                        });
+                      }
+                    }}
+                  >
+                    <PopoverTrigger asChild>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-7 px-2.5 text-xs"
+                        disabled={groupModelsLoading}
+                      >
+                        {groupModelsLoading ? (
+                          <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <RefreshCw className="mr-1 h-3.5 w-3.5" />
+                        )}
+                        {t("fetchGroupModels")}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent align="end" className="w-80">
+                      <div className="space-y-2">
+                        <p className="text-xs font-medium text-muted-foreground">
+                          {t("fetchGroupModelsMatchRulesHelp")}
+                        </p>
+                        {groupModelsFailed.length > 0 ? (
+                          <p className="text-[11px] text-amber-600 dark:text-amber-400">
+                            {t("fetchGroupModelsFailedCount", {
+                              count: groupModelsFailed.length,
+                            })}
+                          </p>
+                        ) : null}
+                        {groupModels.length === 0 ? (
+                          <p className="text-xs text-muted-foreground">
+                            {t("fetchGroupModelsEmpty")}
+                          </p>
+                        ) : (
+                          <>
+                            <div className="flex items-center justify-between gap-2">
+                              <p className="text-[11px] text-muted-foreground">
+                                {t("fetchGroupModelsSelectedCount", {
+                                  selected: groupModels.filter((model) =>
+                                    form.modelMatchRules.some(
+                                      (rule) =>
+                                        rule.matchType === "exact" && rule.pattern === model
+                                    )
+                                  ).length,
+                                  total: groupModels.length,
+                                })}
+                              </p>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="h-6 px-2 text-[11px]"
+                                onClick={() => {
+                                  setForm((prev) => {
+                                    const allSelected = groupModels.every((model) =>
+                                      prev.modelMatchRules.some(
+                                        (rule) =>
+                                          rule.matchType === "exact" && rule.pattern === model
+                                      )
+                                    );
+                                    if (allSelected) {
+                                      const modelMatchRules = prev.modelMatchRules.filter(
+                                        (rule) =>
+                                          !(
+                                            rule.matchType === "exact" &&
+                                            groupModels.includes(rule.pattern)
+                                          )
+                                      );
+                                      return { ...prev, modelMatchRules };
+                                    }
+                                    const existing = new Set(
+                                      prev.modelMatchRules
+                                        .filter((rule) => rule.matchType === "exact")
+                                        .map((rule) => rule.pattern)
+                                    );
+                                    const modelMatchRules = [
+                                      ...prev.modelMatchRules,
+                                      ...groupModels
+                                        .filter((model) => !existing.has(model))
+                                        .map(
+                                          (model) =>
+                                            ({ matchType: "exact", pattern: model }) as const
+                                        ),
+                                    ];
+                                    return { ...prev, modelMatchRules };
+                                  });
+                                }}
+                              >
+                                {groupModels.every((model) =>
+                                  form.modelMatchRules.some(
+                                    (rule) =>
+                                      rule.matchType === "exact" && rule.pattern === model
+                                  )
+                                )
+                                  ? t("fetchGroupModelsClearAll")
+                                  : t("fetchGroupModelsSelectAll")}
+                              </Button>
+                            </div>
+                            <div className="flex max-h-64 flex-wrap gap-1 overflow-y-auto">
+                              {groupModels.map((model) => {
+                                const selected = form.modelMatchRules.some(
+                                  (rule) => rule.matchType === "exact" && rule.pattern === model
+                                );
+                                return (
+                                  <Button
+                                    key={model}
+                                    type="button"
+                                    variant={selected ? "default" : "outline"}
+                                    size="sm"
+                                    className="h-6 px-2 font-mono text-[11px]"
+                                    onClick={() => {
+                                      setForm((prev) => {
+                                        const exists = prev.modelMatchRules.some(
+                                          (rule) =>
+                                            rule.matchType === "exact" && rule.pattern === model
+                                        );
+                                        const modelMatchRules = exists
+                                          ? prev.modelMatchRules.filter(
+                                              (rule) =>
+                                                !(
+                                                  rule.matchType === "exact" &&
+                                                  rule.pattern === model
+                                                )
+                                            )
+                                          : [
+                                              ...prev.modelMatchRules,
+                                              { matchType: "exact", pattern: model } as const,
+                                            ];
+                                        return { ...prev, modelMatchRules };
+                                      });
+                                    }}
+                                  >
+                                    {model}
+                                  </Button>
+                                );
+                              })}
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+                ) : null}
+              </div>
               <GroupMatchRulesEditor
                 value={form.modelMatchRules}
                 onChange={(modelMatchRules) => setForm((prev) => ({ ...prev, modelMatchRules }))}
@@ -945,7 +1325,6 @@ interface SortableGroupRowProps {
       costMultiplier?: number;
       description?: string | null;
       descriptionNote?: string | null;
-      healthTestModel?: string | null;
       matchRules?: ProviderGroupMatchRule[] | null;
     }
   ) => Promise<boolean>;
@@ -1101,26 +1480,27 @@ function SortableGroupRow({
           )}
         </TableCell>
         <TableCell className="min-w-0 overflow-hidden">
-          {isAdmin ? (
-            <InlineTextEditPopover
-              value={group.healthTestModel ?? ""}
-              emptyLabel={t("healthTestModelEmpty")}
-              label={t("groupHealthTestModelLabel")}
-              placeholder={t("healthTestModelPlaceholder")}
-              validator={(raw) => {
-                if (raw.length > 200) return t("descriptionTooLong");
-                return null;
-              }}
-              onSave={(value) =>
-                saveGroupPatch(group.id, {
-                  healthTestModel: value.trim() || null,
-                })
-              }
-            />
-          ) : group.healthTestModel ? (
-            <span className="font-mono text-sm">{group.healthTestModel}</span>
+          {group.healthTestModels.length > 0 ? (
+            <button
+              type="button"
+              className="block w-full min-w-0 text-left font-mono text-xs hover:text-foreground"
+              onClick={isAdmin ? onEdit : undefined}
+              title={group.healthTestModels.join("\n")}
+            >
+              {group.healthTestModels.map((model) => (
+                <span key={model} className="block truncate">
+                  {model}
+                </span>
+              ))}
+            </button>
           ) : (
-            <span className="text-xs text-muted-foreground">{t("healthTestModelEmpty")}</span>
+            <button
+              type="button"
+              className="block w-full min-w-0 text-left text-xs text-muted-foreground hover:text-foreground"
+              onClick={isAdmin ? onEdit : undefined}
+            >
+              {t("healthTestModelEmpty")}
+            </button>
           )}
         </TableCell>
         <TableCell className="text-center">
@@ -1188,7 +1568,6 @@ function GroupMembersPanel({
   onRequestEditProvider,
 }: GroupMembersPanelProps) {
   const t = useTranslations("settings.providers.providerGroups");
-  const queryClient = useQueryClient();
   const [isMultiSelectMode, setIsMultiSelectMode] = useState(false);
   const [selectedProviderIds, setSelectedProviderIds] = useState<Set<number>>(new Set());
   const [batchDialogOpen, setBatchDialogOpen] = useState(false);

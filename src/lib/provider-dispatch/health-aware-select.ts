@@ -1,30 +1,35 @@
-import { HEALTH_TEST_WINDOW_SIZE } from "@/lib/provider-health-test/defaults";
 import {
   DEFAULT_HEALTH_TEST_SLO_THRESHOLDS,
   type HealthTestSloThresholds,
   normalizeHealthTestSloThresholds,
 } from "@/lib/provider-health-test/slo-thresholds";
+import { resolveHealthTestAvgLatencyMs } from "@/lib/provider-health-test/stats";
 import type { Provider } from "@/types/provider";
 
 /** Online-rate floor for health-preferred dispatch (inclusive). */
 export const HEALTH_DISPATCH_MIN_ONLINE_RATE = DEFAULT_HEALTH_TEST_SLO_THRESHOLDS.minOnlineRate;
 
-/** Average first-byte ceiling for health-preferred dispatch (inclusive, ms). */
-export const HEALTH_DISPATCH_MAX_AVG_FIRST_BYTE_MS =
-  DEFAULT_HEALTH_TEST_SLO_THRESHOLDS.maxAvgFirstByteMs;
+/** Average total wall-time ceiling for health-preferred dispatch (inclusive, ms). */
+export const HEALTH_DISPATCH_MAX_AVG_LATENCY_MS =
+  DEFAULT_HEALTH_TEST_SLO_THRESHOLDS.maxAvgLatencyMs;
+
+/** @deprecated Compatibility alias. Dispatch SLOs use total wall time. */
+export const HEALTH_DISPATCH_MAX_AVG_FIRST_BYTE_MS = HEALTH_DISPATCH_MAX_AVG_LATENCY_MS;
 
 /**
- * Minimum recent probe samples before metrics can qualify for SLO.
- * Matches the rolling window size so a freshly re-opened (cleared) provider
- * cannot become top1/top2 after 1–2 lucky successes.
+ * Minimum recent probe samples before metrics can qualify for SLO. The rolling
+ * window only caps averages and sparklines; it is not a qualification gate.
  */
-export const HEALTH_DISPATCH_MIN_SAMPLE_COUNT = HEALTH_TEST_WINDOW_SIZE;
+export const HEALTH_DISPATCH_MIN_SAMPLE_COUNT = 1;
 
-export type HealthDispatchMode = "health_slo" | "legacy_cost";
+export type HealthDispatchMode = "health_slo" | "latency_fallback" | "legacy_cost";
 
 export interface HealthDispatchCandidate {
   provider: Provider;
   onlineRate: number;
+  /** Average successful total wall time used for SLO/ranking. */
+  avgLatencyMs: number;
+  /** @deprecated Compatibility log/UI alias; equals avgLatencyMs. */
   avgFirstByteMs: number;
   /** Effective dispatch cost (lower is better). */
   costMultiplier: number;
@@ -63,11 +68,10 @@ export function resolveDispatchCost(
  * A provider qualifies for health-preferred dispatch when:
  * - provider is enabled (isEnabled)
  * - scheduled health tests are still active (not budget-paused / manually off)
- * - recent window has the configured full sample set (default 10)
- * - both metrics exist and meet the configured online-rate / average first-byte SLO
+ * - at least the configured sample count (default 1) is present
+ * - online rate and average successful total wall time meet the SLO
  *
- * Disabled / budget-paused / short-window providers must NOT be treated as
- * "meets SLO" (clear-on-disable wipes history, so re-open must re-accumulate).
+ * Disabled / budget-paused providers must NOT be treated as "meets SLO".
  */
 export function meetsHealthDispatchSlo(
   provider: Provider,
@@ -82,25 +86,24 @@ export function meetsHealthDispatchSlo(
   if (provider.healthTestBudgetSuspendedDay) return false;
 
   const normalizedThresholds = normalizeHealthTestSloThresholds(thresholds);
-  // Full configured window required — avoids 1/1=100% false champions after rebalance re-open.
   if (getHealthTestSampleCount(provider) < normalizedThresholds.minSampleCount) {
     return false;
   }
 
   const onlineRate = provider.healthTestOnlineRate;
-  const avgFirstByteMs = provider.healthTestAvgFirstByteMs;
+  const avgLatencyMs = resolveHealthTestAvgLatencyMs(provider);
   if (onlineRate == null || !Number.isFinite(onlineRate)) return false;
-  if (avgFirstByteMs == null || !Number.isFinite(avgFirstByteMs)) return false;
+  if (avgLatencyMs == null || !Number.isFinite(avgLatencyMs)) return false;
   return (
     onlineRate >= normalizedThresholds.minOnlineRate &&
-    avgFirstByteMs <= normalizedThresholds.maxAvgFirstByteMs
+    avgLatencyMs <= normalizedThresholds.maxAvgLatencyMs
   );
 }
 
 /**
  * Among SLO-qualified providers, pick:
  * 1) lowest cost multiplier (cheaper first)
- * 2) then lowest average first-byte latency
+ * 2) then lowest average total wall time
  * 3) then stable id as tie-breaker
  *
  * Returns null when nobody meets the SLO — caller falls back to cheapest cost.
@@ -146,10 +149,13 @@ export function listHealthDispatchCandidates(
     if (provider.isEnabled === false) continue;
     if (!meetsHealthDispatchSlo(provider, thresholds)) continue;
     const costMultiplier = resolveDispatchCost(provider, resolveCost);
+    const avgLatencyMs = resolveHealthTestAvgLatencyMs(provider);
+    if (avgLatencyMs == null) continue;
     candidates.push({
       provider,
       onlineRate: provider.healthTestOnlineRate as number,
-      avgFirstByteMs: provider.healthTestAvgFirstByteMs as number,
+      avgLatencyMs,
+      avgFirstByteMs: avgLatencyMs,
       costMultiplier,
       // Log field reuse: selectedPriority / priorityLevels now mirror cost.
       priority: costMultiplier,
@@ -158,7 +164,7 @@ export function listHealthDispatchCandidates(
 
   candidates.sort((a, b) => {
     if (a.costMultiplier !== b.costMultiplier) return a.costMultiplier - b.costMultiplier;
-    if (a.avgFirstByteMs !== b.avgFirstByteMs) return a.avgFirstByteMs - b.avgFirstByteMs;
+    if (a.avgLatencyMs !== b.avgLatencyMs) return a.avgLatencyMs - b.avgLatencyMs;
     return a.provider.id - b.provider.id;
   });
 
@@ -185,8 +191,39 @@ export function selectNextHealthDispatchAlternate(
 }
 
 /**
+ * Deterministic average-latency pick among any enabled candidates (no SLO gate).
+ * Used as the fallback when nobody meets health SLO.
+ * Providers without a usable latency average sort after measured providers;
+ * when latency is unavailable for every provider, cost then id remain stable
+ * tie-breakers.
+ */
+export function selectFastestProvider(
+  providers: Provider[],
+  resolveCost?: (provider: Provider) => number
+): Provider | null {
+  const enabled = providers.filter((p) => p.isEnabled !== false);
+  if (enabled.length === 0) return null;
+  const ranked = [...enabled].sort((a, b) => {
+    const latencyA = resolveHealthTestAvgLatencyMs(a);
+    const latencyB = resolveHealthTestAvgLatencyMs(b);
+    const hasLatencyA = latencyA != null && Number.isFinite(latencyA);
+    const hasLatencyB = latencyB != null && Number.isFinite(latencyB);
+    if (hasLatencyA !== hasLatencyB) return hasLatencyA ? -1 : 1;
+    if (hasLatencyA && hasLatencyB && latencyA !== latencyB) {
+      return (latencyA as number) - (latencyB as number);
+    }
+
+    const ca = resolveDispatchCost(a, resolveCost);
+    const cb = resolveDispatchCost(b, resolveCost);
+    if (ca !== cb) return ca - cb;
+    return a.id - b.id;
+  });
+  return ranked[0] ?? null;
+}
+
+/**
  * Deterministic cheapest pick among any enabled candidates (no SLO gate).
- * Used as the only fallback when nobody meets health SLO.
+ * Kept for non-proxy preference displays that still intentionally use cost.
  * Same cost → lower id wins (no weight random).
  */
 export function selectCheapestProvider(

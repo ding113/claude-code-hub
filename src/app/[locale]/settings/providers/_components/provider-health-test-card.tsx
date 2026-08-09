@@ -15,6 +15,7 @@ import {
 import {
   formatOnlineRatePercent,
   normalizeHealthTestRecentResults,
+  resolveHealthTestAvgLatencyMs,
   type ProviderHealthTestSample,
 } from "@/lib/provider-health-test/stats";
 import { cn } from "@/lib/utils";
@@ -27,26 +28,26 @@ function formatLatencyMs(ms: number | null | undefined): string {
   return `${(ms / 1000).toFixed(2)}s`;
 }
 
-function firstByteTone(
+function latencyTone(
   ms: number | null | undefined,
   ok?: boolean | null,
-  maxAvgFirstByteMs = DEFAULT_HEALTH_TEST_SLO_THRESHOLDS.maxAvgFirstByteMs
+  maxAvgLatencyMs = DEFAULT_HEALTH_TEST_SLO_THRESHOLDS.maxAvgLatencyMs
 ): "ok" | "warn" | "bad" | "neutral" {
   if (ok === false) return "bad";
   if (ms == null || !Number.isFinite(ms)) return "neutral";
-  if (ms > maxAvgFirstByteMs) return "bad";
-  if (ms > maxAvgFirstByteMs / 2) return "warn";
+  if (ms > maxAvgLatencyMs) return "bad";
+  if (ms > maxAvgLatencyMs / 2) return "warn";
   return "ok";
 }
 
-function firstByteValueClass(tone: "ok" | "warn" | "bad" | "neutral"): string {
+function healthValueClass(tone: "ok" | "warn" | "bad" | "neutral"): string {
   switch (tone) {
     case "ok":
       return "text-emerald-600 dark:text-emerald-400";
     case "warn":
       return "text-amber-600 dark:text-amber-400";
     case "bad":
-      // Successful but past the configured first-byte SLO: orange, not failure-red.
+      // Successful but past the configured latency SLO: orange, not failure-red.
       return "text-orange-600 dark:text-orange-400";
     default:
       return "";
@@ -55,11 +56,11 @@ function firstByteValueClass(tone: "ok" | "warn" | "bad" | "neutral"): string {
 
 function sampleBarClass(
   sample: ProviderHealthTestSample,
-  maxAvgFirstByteMs = DEFAULT_HEALTH_TEST_SLO_THRESHOLDS.maxAvgFirstByteMs
+  maxAvgLatencyMs = DEFAULT_HEALTH_TEST_SLO_THRESHOLDS.maxAvgLatencyMs
 ): string {
   // Failure: true red (rose reads as pink on light backgrounds).
   if (!sample.ok) return "bg-red-600 dark:bg-red-500";
-  const tone = firstByteTone(sample.firstByteMs, true, maxAvgFirstByteMs);
+  const tone = latencyTone(sample.latencyMs, true, maxAvgLatencyMs);
   if (tone === "bad") return "bg-orange-500 dark:bg-orange-500";
   if (tone === "warn") return "bg-amber-400 dark:bg-amber-500";
   return "bg-emerald-500 dark:bg-emerald-500";
@@ -100,11 +101,59 @@ function formatProbeCost(value: number | null | undefined, currencyCode: Currenc
   return formatCurrency(decimal, currencyCode, digits);
 }
 
+function HealthTestTodayTotals({
+  provider,
+  currencyCode,
+  t,
+}: {
+  provider: ProviderDisplay;
+  currencyCode: CurrencyCode;
+  t: (key: string, values?: Record<string, string | number | Date>) => string;
+}) {
+  const todayCalls = provider.healthTestTodayCalls ?? 0;
+  const todayCost = formatProbeCost(provider.healthTestTodayCostUsd ?? 0, currencyCode);
+
+  return (
+    <div className="flex items-stretch gap-1.5">
+      <div className="min-w-0 flex-1 rounded-md bg-background/70 dark:bg-background/30 px-2 py-1.5 border border-border/40">
+        <div className="flex items-center gap-1 text-[10px] uppercase tracking-wider text-muted-foreground/70 leading-none">
+          <span className="truncate">{t("healthTestTodayCost")}</span>
+          <Tooltip delayDuration={150}>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                className="inline-flex h-3.5 w-3.5 items-center justify-center rounded-sm text-muted-foreground/70 hover:text-foreground"
+                aria-label={t("healthTestCostHint")}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <Info className="h-3 w-3" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="top" className="text-xs max-w-xs">
+              {t("healthTestCostHint")}
+            </TooltipContent>
+          </Tooltip>
+        </div>
+        <div className="mt-1 text-sm font-semibold tabular-nums tracking-tight font-mono whitespace-nowrap">
+          {todayCost}
+        </div>
+      </div>
+      <div className="min-w-[4.5rem] rounded-md bg-background/70 dark:bg-background/30 px-2 py-1.5 border border-border/40 text-right">
+        <div className="text-[10px] uppercase tracking-wider text-muted-foreground/70 leading-none">
+          {t("healthTestTodayCalls")}
+        </div>
+        <div className="mt-1 text-sm font-semibold tabular-nums tracking-tight whitespace-nowrap">
+          {todayCalls}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function getProviderHealthTestStatus(
   provider: ProviderDisplay,
   t: (key: string) => string,
-  thresholds?: Partial<HealthTestSloThresholds> | null,
-  windowSize = 10
+  thresholds?: Partial<HealthTestSloThresholds> | null
 ): {
   text: string;
   className: string;
@@ -142,10 +191,9 @@ export function getProviderHealthTestStatus(
       state: "disabled",
     };
   }
-  const requiredWindow = Math.min(50, Math.max(1, Math.trunc(windowSize) || 10));
+  const requiredSampleCount = normalizeHealthTestSloThresholds(thresholds).minSampleCount;
   const recent = normalizeHealthTestRecentResults(provider.healthTestRecentResults);
-  // A partial rolling window is not enough to qualify a provider.
-  if (!recent || recent.length < requiredWindow) {
+  if (!recent || recent.length < requiredSampleCount) {
     return {
       text: t("healthTestPending"),
       className:
@@ -190,13 +238,13 @@ function HealthBars({
   currencyCode,
   t,
   windowSize = 10,
-  maxAvgFirstByteMs = DEFAULT_HEALTH_TEST_SLO_THRESHOLDS.maxAvgFirstByteMs,
+  maxAvgLatencyMs = DEFAULT_HEALTH_TEST_SLO_THRESHOLDS.maxAvgLatencyMs,
 }: {
   results: ProviderHealthTestSample[] | boolean[] | null | undefined;
   currencyCode: CurrencyCode;
   t: (key: string, values?: Record<string, string | number | Date>) => string;
   windowSize?: number;
-  maxAvgFirstByteMs?: number;
+  maxAvgLatencyMs?: number;
 }) {
   const WINDOW = Math.min(50, Math.max(1, Math.trunc(windowSize) || 10));
   const samples = normalizeHealthTestRecentResults(results) ?? [];
@@ -234,8 +282,22 @@ function HealthBars({
             ? `${sample.errorType ? `${sample.errorType}: ` : ""}${sample.errorMessage || ""}`.trim()
             : null;
         const tokens =
-          sample.inputTokens != null || sample.outputTokens != null
-            ? `↓${formatTokens(sample.inputTokens ?? 0)} ↑${formatTokens(sample.outputTokens ?? 0)}`
+          sample.inputTokens != null ||
+          sample.outputTokens != null ||
+          sample.cacheCreationInputTokens != null ||
+          sample.cacheReadInputTokens != null
+            ? [
+                `↓${formatTokens(sample.inputTokens ?? 0)}`,
+                `↑${formatTokens(sample.outputTokens ?? 0)}`,
+                sample.cacheCreationInputTokens != null
+                  ? `${t("healthTestSampleCacheCreation")}:${formatTokens(sample.cacheCreationInputTokens)}`
+                  : null,
+                sample.cacheReadInputTokens != null
+                  ? `${t("healthTestSampleCacheRead")}:${formatTokens(sample.cacheReadInputTokens)}`
+                  : null,
+              ]
+                .filter(Boolean)
+                .join(" ")
             : null;
         const cost =
           sample.costUsd != null && Number.isFinite(sample.costUsd)
@@ -248,18 +310,18 @@ function HealthBars({
               <span
                 className={cn(
                   "flex-1 min-w-0 rounded-sm cursor-default transition-opacity hover:opacity-90",
-                  sampleBarClass(sample, maxAvgFirstByteMs)
+                  sampleBarClass(sample, maxAvgLatencyMs)
                 )}
-                aria-label={`${outcome}, ${firstByte}`}
+                aria-label={`${outcome}, ${latency}`}
               />
             </TooltipTrigger>
             <TooltipContent side="top" className="max-w-xs text-xs space-y-0.5">
               <div className="font-medium">
                 {outcome}
-                {sample.ok && firstByteTone(sample.firstByteMs, true, maxAvgFirstByteMs) === "warn"
+                {sample.ok && latencyTone(sample.latencyMs, true, maxAvgLatencyMs) === "warn"
                   ? ` · ${t("healthTestSlow")}`
                   : ""}
-                {sample.ok && firstByteTone(sample.firstByteMs, true, maxAvgFirstByteMs) === "bad"
+                {sample.ok && latencyTone(sample.latencyMs, true, maxAvgLatencyMs) === "bad"
                   ? ` · ${t("healthTestVerySlow")}`
                   : ""}
                 {sample.httpStatusCode != null ? ` · HTTP ${sample.httpStatusCode}` : ""}
@@ -314,8 +376,16 @@ interface ProviderHealthTestCardProps {
   currencyCode?: CurrencyCode;
   /** Rolling window size for sparkline / label (from system settings). */
   windowSize?: number;
-  /** Runtime SLO thresholds used for status and first-byte tones. */
+  /** Runtime SLO thresholds used for status and latency tones. */
   sloThresholds?: Partial<HealthTestSloThresholds> | null;
+  /** Group-configured models; each model is rendered from its own rolling stats. */
+  testModels?: readonly string[];
+  /** Whether the provider-group policy query has completed. */
+  healthTestModelConfigLoaded?: boolean;
+  /** Internal single-model view used by the multi-model renderer above. */
+  testModel?: string;
+  /** Keep provider-level daily totals visible once below a multi-model view. */
+  showTodayTotals?: boolean;
 }
 
 export function ProviderHealthTestCard({
@@ -327,61 +397,136 @@ export function ProviderHealthTestCard({
   currencyCode = "USD",
   windowSize = 10,
   sloThresholds,
+  testModels,
+  healthTestModelConfigLoaded = true,
+  testModel,
+  showTodayTotals = true,
 }: ProviderHealthTestCardProps) {
   const t = useTranslations("settings.providers.list");
   const normalizedSloThresholds = useMemo(
     () => normalizeHealthTestSloThresholds(sloThresholds),
     [sloThresholds]
   );
-  const status = useMemo(
-    () => getProviderHealthTestStatus(provider, t, normalizedSloThresholds, windowSize),
-    [normalizedSloThresholds, provider, t, windowSize]
+
+  const configuredTestModels = Array.from(
+    new Set((testModels ?? []).map((model) => model.trim()).filter(Boolean))
   );
+  const modelStats = testModel ? (provider.healthTestModelStats?.[testModel] ?? null) : null;
+  const modelRecentResults = normalizeHealthTestRecentResults(modelStats?.recentResults) ?? [];
+  const lastModelSample = modelRecentResults.at(-1) ?? null;
+  const healthProvider: ProviderDisplay = testModel
+    ? {
+        ...provider,
+        lastHealthTestOk: lastModelSample?.ok ?? null,
+        lastHealthTestStatus: lastModelSample?.status ?? null,
+        lastHealthTestFirstByteMs: lastModelSample?.firstByteMs ?? null,
+        lastHealthTestLatencyMs: lastModelSample?.latencyMs ?? null,
+        lastHealthTestModel: testModel,
+        lastHealthTestErrorType: lastModelSample?.errorType ?? null,
+        lastHealthTestErrorMessage: lastModelSample?.errorMessage ?? null,
+        healthTestOnlineRate: modelStats?.onlineRate ?? null,
+        healthTestAvgFirstByteMs: modelStats?.avgFirstByteMs ?? null,
+        healthTestRecentResults: modelRecentResults,
+      }
+    : provider;
+
+  const status = useMemo(
+    () => getProviderHealthTestStatus(healthProvider, t, normalizedSloThresholds),
+    [healthProvider, normalizedSloThresholds, t]
+  );
+
+  if (!testModel && !healthTestModelConfigLoaded) {
+    return (
+      <div
+        className={cn(
+          "flex min-h-[4.5rem] min-w-0 items-center gap-2 rounded-md border border-border/70 bg-muted/20 px-2.5 py-2 text-xs text-muted-foreground",
+          className
+        )}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <Activity className="h-3.5 w-3.5 shrink-0 animate-pulse" />
+        <span>{t("healthTestPending")}</span>
+      </div>
+    );
+  }
+
+  if (!testModel && configuredTestModels.length > 0) {
+    return (
+      <div className={cn("min-w-0 space-y-2", className)} onClick={(e) => e.stopPropagation()}>
+        <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">
+          {configuredTestModels.map((model) => (
+            <ProviderHealthTestCard
+              key={model}
+              provider={provider}
+              canEdit={_canEdit}
+              compact={compact}
+              hideStatusBadge={false}
+              currencyCode={currencyCode}
+              windowSize={windowSize}
+              sloThresholds={sloThresholds}
+              healthTestModelConfigLoaded
+              testModel={model}
+              showTodayTotals={false}
+            />
+          ))}
+        </div>
+        {showTodayTotals ? (
+          <HealthTestTodayTotals provider={provider} currencyCode={currencyCode} t={t} />
+        ) : null}
+      </div>
+    );
+  }
 
   // Persisted aggregates remain visible while scheduled tests are enabled;
   // recent samples are used only for the trend bars and sample count.
   const probesEnabled =
-    provider.isEnabled !== false &&
-    provider.scheduledHealthTestEnabled !== false &&
-    provider.healthTestSloAutoDisabled !== true;
+    healthProvider.isEnabled !== false &&
+    healthProvider.scheduledHealthTestEnabled !== false &&
+    healthProvider.healthTestSloAutoDisabled !== true;
   const probesActive = probesEnabled;
 
   const onlineRateText = probesActive
-    ? formatOnlineRatePercent(provider.healthTestOnlineRate)
+    ? formatOnlineRatePercent(healthProvider.healthTestOnlineRate)
     : "-";
-  const avgFb = probesActive ? formatLatencyMs(provider.healthTestAvgFirstByteMs) : "-";
-  const lastFb =
-    probesActive && provider.lastHealthTestOk
-      ? formatLatencyMs(provider.lastHealthTestFirstByteMs)
-      : "-";
-  const avgFbTone = probesActive
-    ? firstByteTone(
-        provider.healthTestAvgFirstByteMs,
-        true,
-        normalizedSloThresholds.maxAvgFirstByteMs
-      )
+  const avgFb = probesActive ? formatLatencyMs(healthProvider.healthTestAvgFirstByteMs) : "-";
+  const avgLatencyMs = probesActive ? resolveHealthTestAvgLatencyMs(healthProvider) : null;
+  const avgLatency = probesActive ? formatLatencyMs(avgLatencyMs) : "-";
+  // TTFB is informational only; the dispatch/UI SLO uses total latency.
+  const avgFbTone = "neutral";
+  const avgLatencyTone = probesActive
+    ? latencyTone(avgLatencyMs, true, normalizedSloThresholds.maxAvgLatencyMs)
     : "neutral";
-  const lastFbTone = probesActive
-    ? firstByteTone(
-        provider.lastHealthTestFirstByteMs,
-        provider.lastHealthTestOk,
-        normalizedSloThresholds.maxAvgFirstByteMs
-      )
-    : "neutral";
-  const model = probesActive ? provider.lastHealthTestModel : null;
-  const todayCalls = provider.healthTestTodayCalls ?? 0;
-  const todayCost = formatProbeCost(provider.healthTestTodayCostUsd ?? 0, currencyCode);
-  const recentResults = probesActive ? provider.healthTestRecentResults : null;
+  const model = probesActive ? healthProvider.lastHealthTestModel : null;
+  const recentResults = probesActive ? healthProvider.healthTestRecentResults : null;
   const effectiveWindowSize = Math.min(50, Math.max(1, Math.trunc(windowSize) || 10));
   const recentSampleCount = Math.min(
     effectiveWindowSize,
     normalizeHealthTestRecentResults(recentResults)?.length ?? 0
   );
 
+  // Latest sample token usage for the card-level usage readout (tooltips keep history).
+  const lastSampleForUsage = normalizeHealthTestRecentResults(recentResults)?.at(-1) ?? null;
+  const lastUsageTokens =
+    lastSampleForUsage != null &&
+    (lastSampleForUsage.inputTokens != null || lastSampleForUsage.outputTokens != null)
+      ? {
+          input: lastSampleForUsage.inputTokens ?? 0,
+          output: lastSampleForUsage.outputTokens ?? 0,
+          cacheRead: lastSampleForUsage.cacheReadInputTokens ?? 0,
+          cacheCreation: lastSampleForUsage.cacheCreationInputTokens ?? 0,
+        }
+      : null;
+  const hasUsage = lastUsageTokens != null;
+  const usageText = hasUsage
+    ? `${t("healthTestUsageIn")}${formatTokens(lastUsageTokens.input)} · ${t(
+        "healthTestUsageOut"
+      )}${formatTokens(lastUsageTokens.output)}`
+    : "-";
+
   return (
     <div
       className={cn(
-        "rounded-md border border-border/70 bg-muted/20 px-2.5 py-2 space-y-2",
+        "min-w-0 rounded-md border border-border/70 bg-muted/20 px-2.5 py-2 space-y-2",
         className
       )}
       onClick={(e) => e.stopPropagation()}
@@ -421,7 +566,7 @@ export function ProviderHealthTestCard({
         ) : null}
       </div>
 
-      <div className={cn("grid gap-1.5", compact ? "grid-cols-2" : "grid-cols-3")}>
+      <div className={cn("grid gap-1.5", compact ? "grid-cols-2" : "grid-cols-2 sm:grid-cols-4")}>
         <div className="min-w-0 rounded-md bg-background/70 dark:bg-background/30 px-2 py-1.5 border border-border/40">
           <div className="text-[10px] uppercase tracking-wider text-muted-foreground/70 leading-none">
             {t("healthTestAvgFirstByte")}
@@ -429,7 +574,7 @@ export function ProviderHealthTestCard({
           <div
             className={cn(
               "mt-1 text-sm font-semibold tabular-nums tracking-tight whitespace-nowrap",
-              firstByteValueClass(avgFbTone)
+              healthValueClass(avgFbTone)
             )}
           >
             {avgFb}
@@ -437,15 +582,35 @@ export function ProviderHealthTestCard({
         </div>
         <div className="min-w-0 rounded-md bg-background/70 dark:bg-background/30 px-2 py-1.5 border border-border/40">
           <div className="text-[10px] uppercase tracking-wider text-muted-foreground/70 leading-none">
-            {t("healthTestLastFirstByte")}
+            {t("healthTestAvgLatency")}
           </div>
           <div
             className={cn(
               "mt-1 text-sm font-semibold tabular-nums tracking-tight whitespace-nowrap",
-              firstByteValueClass(lastFbTone)
+              healthValueClass(avgLatencyTone)
             )}
           >
-            {lastFb}
+            {avgLatency}
+          </div>
+        </div>
+        <div className="min-w-0 rounded-md bg-background/70 dark:bg-background/30 px-2 py-1.5 border border-border/40">
+          <div className="text-[10px] uppercase tracking-wider text-muted-foreground/70 leading-none">
+            {t("healthTestUsage")}
+          </div>
+          <div
+            className={cn(
+              "mt-1 text-sm font-semibold tabular-nums tracking-tight whitespace-nowrap",
+              hasUsage ? "text-foreground/80" : "text-muted-foreground/50"
+            )}
+            title={
+              lastUsageTokens != null && (lastUsageTokens.cacheRead > 0 || lastUsageTokens.cacheCreation > 0)
+                ? `${t("healthTestSampleCacheRead")}:${formatTokens(lastUsageTokens.cacheRead)} · ${t(
+                    "healthTestSampleCacheCreation"
+                  )}:${formatTokens(lastUsageTokens.cacheCreation)}`
+                : undefined
+            }
+          >
+            {usageText}
           </div>
         </div>
         <div className="min-w-0 rounded-md bg-background/70 dark:bg-background/30 px-2 py-1.5 border border-border/40">
@@ -455,11 +620,11 @@ export function ProviderHealthTestCard({
           <div
             className={cn(
               "mt-1 text-sm font-semibold tabular-nums tracking-tight whitespace-nowrap",
-              provider.healthTestOnlineRate != null &&
-                provider.healthTestOnlineRate >= normalizedSloThresholds.minOnlineRate &&
+              healthProvider.healthTestOnlineRate != null &&
+                healthProvider.healthTestOnlineRate >= normalizedSloThresholds.minOnlineRate &&
                 "text-emerald-600 dark:text-emerald-400",
-              provider.healthTestOnlineRate != null &&
-                provider.healthTestOnlineRate < normalizedSloThresholds.minOnlineRate &&
+              healthProvider.healthTestOnlineRate != null &&
+                healthProvider.healthTestOnlineRate < normalizedSloThresholds.minOnlineRate &&
                 "text-rose-600 dark:text-rose-400"
             )}
           >
@@ -468,39 +633,9 @@ export function ProviderHealthTestCard({
         </div>
       </div>
 
-      <div className="flex items-stretch gap-1.5">
-        <div className="min-w-0 flex-1 rounded-md bg-background/70 dark:bg-background/30 px-2 py-1.5 border border-border/40">
-          <div className="flex items-center gap-1 text-[10px] uppercase tracking-wider text-muted-foreground/70 leading-none">
-            <span className="truncate">{t("healthTestTodayCost")}</span>
-            <Tooltip delayDuration={150}>
-              <TooltipTrigger asChild>
-                <button
-                  type="button"
-                  className="inline-flex h-3.5 w-3.5 items-center justify-center rounded-sm text-muted-foreground/70 hover:text-foreground"
-                  aria-label={t("healthTestCostHint")}
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <Info className="h-3 w-3" />
-                </button>
-              </TooltipTrigger>
-              <TooltipContent side="top" className="text-xs max-w-xs">
-                {t("healthTestCostHint")}
-              </TooltipContent>
-            </Tooltip>
-          </div>
-          <div className="mt-1 text-sm font-semibold tabular-nums tracking-tight font-mono whitespace-nowrap">
-            {todayCost}
-          </div>
-        </div>
-        <div className="min-w-[4.5rem] rounded-md bg-background/70 dark:bg-background/30 px-2 py-1.5 border border-border/40 text-right">
-          <div className="text-[10px] uppercase tracking-wider text-muted-foreground/70 leading-none">
-            {t("healthTestTodayCalls")}
-          </div>
-          <div className="mt-1 text-sm font-semibold tabular-nums tracking-tight whitespace-nowrap">
-            {todayCalls}
-          </div>
-        </div>
-      </div>
+      {showTodayTotals ? (
+        <HealthTestTodayTotals provider={provider} currencyCode={currencyCode} t={t} />
+      ) : null}
 
       <div className="space-y-1">
         <div className="flex items-center justify-between gap-2 text-[10px] text-muted-foreground">
@@ -516,7 +651,7 @@ export function ProviderHealthTestCard({
           currencyCode={currencyCode}
           t={t}
           windowSize={windowSize}
-          maxAvgFirstByteMs={normalizedSloThresholds.maxAvgFirstByteMs}
+          maxAvgLatencyMs={normalizedSloThresholds.maxAvgLatencyMs}
         />
       </div>
     </div>

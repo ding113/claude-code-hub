@@ -1,10 +1,10 @@
 /**
- * Wall-clock aligned 5-minute refresher for provider site group rates + balance.
+ * Wall-clock aligned half-hour refresher for provider site group rates + balance.
  */
 import { logger } from "@/lib/logger";
 import { syncAllEnabledProviderSitesFromUpstream } from "@/lib/provider-sites/sync-from-upstream";
 
-const INTERVAL_MS = 5 * 60 * 1000;
+const INTERVAL_MS = 30 * 60 * 1000;
 const ENABLED = process.env.PROVIDER_SITE_RATE_SYNC_DISABLED !== "1";
 
 type SchedulerState = {
@@ -58,12 +58,12 @@ export function startProviderSiteRateSyncScheduler(): void {
   schedulerState.__CCH_PROVIDER_SITE_RATE_SYNC_STARTED__ = true;
 
   const delayMs = msUntilNextBoundary(Date.now(), INTERVAL_MS);
-  logger.info("[ProviderSiteRateSync] Started (wall-clock 5m)", {
+  logger.info("[ProviderSiteRateSync] Started (wall-clock 30m)", {
     intervalMs: INTERVAL_MS,
     firstFireInMs: delayMs,
   });
 
-  // First run shortly after boot so empty sites get rates without waiting full 5m.
+  // First run shortly after boot so empty sites get rates without waiting full 30m.
   setTimeout(() => {
     if (schedulerState.__CCH_PROVIDER_SITE_RATE_SYNC_STOP__) return;
     void runCycle();

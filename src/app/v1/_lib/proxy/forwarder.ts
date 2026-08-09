@@ -1198,8 +1198,9 @@ export class ProxyForwarder {
       throw new Error("代理上下文缺少供应商或鉴权信息");
     }
 
-    if (ProxyForwarder.shouldUseStreamingHedge(session)) {
-      const hedgePromise = ProxyForwarder.sendStreamingWithHedge(session);
+    const raceSettings = await getCachedSystemSettings();
+    if (ProxyForwarder.shouldUseStreamingHedge(session, raceSettings)) {
+      const hedgePromise = ProxyForwarder.sendStreamingWithHedge(session, raceSettings);
       void hedgePromise.catch(() => undefined);
       return await hedgePromise;
     }
@@ -2943,10 +2944,17 @@ export class ProxyForwarder {
     let responseTimeoutMs: number;
     let responseTimeoutType: string;
 
+    const streamingRaceMode = (await getCachedSystemSettings()).streamingRaceMode;
     if (isStreaming) {
-      // 流式请求：使用首字节超时（快速失败）
+      // single mode is a true single-provider path: ignore any stale
+      // provider-level first-byte timeout and keep only the streaming-idle
+      // timeout below. timeout_race/dual_fast retain provider-level guards.
       responseTimeoutMs =
-        provider.firstByteTimeoutStreamingMs > 0 ? provider.firstByteTimeoutStreamingMs : 0;
+        streamingRaceMode === "single"
+          ? 0
+          : provider.firstByteTimeoutStreamingMs > 0
+            ? provider.firstByteTimeoutStreamingMs
+            : 0;
       responseTimeoutType = "streaming_first_byte";
     } else {
       // 非流式请求：使用总超时（防止无限挂起）
@@ -3743,14 +3751,33 @@ export class ProxyForwarder {
     return alternativeProvider;
   }
 
-  private static shouldUseStreamingHedge(session: ProxySession): boolean {
-    // First-byte timeout hedge: keep primary alive on threshold, launch next
-    // health-SLO alternate; respond with whichever produces first-byte first.
-    // No alternate qualified → no race (shouldUse still true but launch returns null).
-    const provider = session.provider;
-    if (!provider) return false;
-    const fb = provider.firstByteTimeoutStreamingMs ?? 0;
-    return Number.isFinite(fb) && fb > 0;
+  private static isStreamingRequest(session: ProxySession): boolean {
+    const message = session.request?.message;
+    const messageStream =
+      message && typeof message === "object" && !Array.isArray(message)
+        ? (message as Record<string, unknown>).stream === true
+        : false;
+    const requestUrl = session.requestUrl;
+    return (
+      messageStream ||
+      requestUrl?.pathname.includes("streamGenerateContent") === true ||
+      requestUrl?.searchParams.get("alt") === "sse"
+    );
+  }
+
+  private static shouldUseStreamingHedge(
+    session: ProxySession,
+    settings: Pick<SystemSettings, "streamingRaceMode" | "streamingRaceFirstByteMs">
+  ): boolean {
+    if (!session.provider || !ProxyForwarder.isStreamingRequest(session)) {
+      return false;
+    }
+
+    if (settings.streamingRaceMode === "dual_fast") {
+      return true;
+    }
+
+    return settings.streamingRaceMode === "timeout_race" && settings.streamingRaceFirstByteMs > 0;
   }
 
   private static getEndpointPolicy(session: ProxySession) {
@@ -3774,7 +3801,10 @@ export class ProxyForwarder {
     return resolveEndpointPolicy(policySession.requestUrl?.pathname ?? "/");
   }
 
-  private static async sendStreamingWithHedge(session: ProxySession): Promise<Response> {
+  private static async sendStreamingWithHedge(
+    session: ProxySession,
+    raceSettings: Pick<SystemSettings, "streamingRaceMode" | "streamingRaceFirstByteMs">
+  ): Promise<Response> {
     const initialProvider = session.provider;
     if (!initialProvider) {
       throw new Error("代理上下文缺少供应商");
@@ -3800,6 +3830,10 @@ export class ProxyForwarder {
     let lastErrorCategory: ErrorCategory | null = null;
     const attempts = new Set<StreamingHedgeAttempt>();
     const failedProviderIds: number[] = [];
+    const raceMode = raceSettings.streamingRaceMode;
+    const raceFirstByteMs = Number.isFinite(raceSettings.streamingRaceFirstByteMs)
+      ? Math.max(1, raceSettings.streamingRaceFirstByteMs)
+      : 0;
 
     let resolveResult: ((result: { response?: Response; error?: Error }) => void) | null = null;
     const resultPromise = new Promise<{ response?: Response; error?: Error }>((resolve) => {
@@ -4631,8 +4665,7 @@ export class ProxyForwarder {
         },
         responseController: null,
         clearResponseTimeout: null,
-        firstByteTimeoutMs:
-          provider.firstByteTimeoutStreamingMs > 0 ? provider.firstByteTimeoutStreamingMs : 0,
+        firstByteTimeoutMs: raceMode === "timeout_race" ? raceFirstByteMs : 0,
         sequence: launchedProviderCount,
         requestAttemptCount: 1,
         reactiveRectifierRetryState: {
@@ -4699,6 +4732,10 @@ export class ProxyForwarder {
       const initialLaunched = await startAttempt(initialProvider, true);
       if (!initialLaunched) {
         await launchAlternative({ allowNonSloFallback: true });
+      } else if (raceMode === "dual_fast") {
+        // dual_fast launches one SLO-qualified peer immediately; its attempts
+        // have no delayed threshold, so this remains a true two-way race.
+        await launchAlternative({ allowNonSloFallback: false });
       }
       await finishIfExhausted();
       const result = await resultPromise;

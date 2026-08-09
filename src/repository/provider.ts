@@ -2,13 +2,19 @@ import "server-only";
 
 import { and, desc, eq, inArray, isNotNull, isNull, ne, sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
-import { providerEndpoints, providers } from "@/drizzle/schema";
+import {
+  providerEndpoints,
+  providerSiteGroupRates,
+  providerSites,
+  providers,
+} from "@/drizzle/schema";
 import { normalizeAllowedModelRules } from "@/lib/allowed-model-rules";
 import { getCachedProviders } from "@/lib/cache/provider-cache";
 import { PROVIDER_TIMEOUT_DEFAULTS } from "@/lib/constants/provider.constants";
 import { resetEndpointCircuit } from "@/lib/endpoint-circuit-breaker";
 import { logger } from "@/lib/logger";
 import { normalizeProviderModelRedirectRules } from "@/lib/provider-model-redirects";
+import { normalizeUpstreamRate, resolveRechargeMultiplier } from "@/lib/provider-sites/billing";
 import { parseProviderGroups } from "@/lib/utils/provider-group";
 import { resolveSystemTimezone } from "@/lib/utils/timezone";
 import type {
@@ -228,7 +234,7 @@ export async function createProvider(providerData: CreateProviderData): Promise<
       providerData.limit_total_usd != null ? providerData.limit_total_usd.toString() : null,
     limitConcurrentSessions: providerData.limit_concurrent_sessions,
     maxRetryAttempts: providerData.max_retry_attempts ?? null,
-    circuitBreakerFailureThreshold: providerData.circuit_breaker_failure_threshold ?? 5,
+    circuitBreakerFailureThreshold: providerData.circuit_breaker_failure_threshold ?? 0,
     circuitBreakerOpenDuration: providerData.circuit_breaker_open_duration ?? 1800000,
     circuitBreakerHalfOpenSuccessThreshold:
       providerData.circuit_breaker_half_open_success_threshold ?? 2,
@@ -353,6 +359,7 @@ export async function createProvider(providerData: CreateProviderData): Promise<
         healthTestOnlineRate: providers.healthTestOnlineRate,
         healthTestAvgFirstByteMs: providers.healthTestAvgFirstByteMs,
         healthTestRecentResults: providers.healthTestRecentResults,
+        healthTestModelStats: providers.healthTestModelStats,
         healthTestTodayCostUsd: providers.healthTestTodayCostUsd,
         healthTestTodayCalls: providers.healthTestTodayCalls,
         healthTestBudgetSuspendedDay: providers.healthTestBudgetSuspendedDay,
@@ -461,6 +468,7 @@ export async function findProviderList(
       healthTestOnlineRate: providers.healthTestOnlineRate,
       healthTestAvgFirstByteMs: providers.healthTestAvgFirstByteMs,
       healthTestRecentResults: providers.healthTestRecentResults,
+      healthTestModelStats: providers.healthTestModelStats,
       healthTestTodayCostUsd: providers.healthTestTodayCostUsd,
       healthTestTodayCalls: providers.healthTestTodayCalls,
       healthTestBudgetSuspendedDay: providers.healthTestBudgetSuspendedDay,
@@ -485,6 +493,69 @@ export async function findProviderList(
   });
 
   return result.map((provider) => normalizeProviderRuntimeFields(toProvider(provider)));
+}
+
+function normalizeSiteGroupKey(value: string | null | undefined): string {
+  return (value ?? "").trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+/**
+ * Project the processed site-group ratio into the cached provider snapshot.
+ *
+ * Site-linked rows may still contain the upstream ratio in providers.cost_multiplier
+ * until the next site sync. Dispatch must compare the CCH-facing ratio immediately,
+ * without mutating the persisted provider row here.
+ */
+async function applyEffectiveSiteDispatchCosts(providerList: Provider[]): Promise<Provider[]> {
+  const siteIds = Array.from(
+    new Set(
+      providerList
+        .filter(
+          (provider) =>
+            provider.billingMode === "site_group_ratio" &&
+            provider.siteId != null &&
+            normalizeSiteGroupKey(provider.siteGroupName).length > 0
+        )
+        .map((provider) => provider.siteId as number)
+    )
+  );
+  if (siteIds.length === 0) return providerList;
+
+  const [sites, rates] = await Promise.all([
+    db
+      .select({ id: providerSites.id, rechargeMultiplier: providerSites.rechargeMultiplier })
+      .from(providerSites)
+      .where(inArray(providerSites.id, siteIds)),
+    db
+      .select({
+        siteId: providerSiteGroupRates.siteId,
+        groupName: providerSiteGroupRates.groupName,
+        ratio: providerSiteGroupRates.ratio,
+      })
+      .from(providerSiteGroupRates)
+      .where(inArray(providerSiteGroupRates.siteId, siteIds)),
+  ]);
+
+  const rechargeBySite = new Map(
+    sites.map((site) => [site.id, resolveRechargeMultiplier(site.rechargeMultiplier)])
+  );
+  const effectiveBySiteGroup = new Map<string, number>();
+  for (const rate of rates) {
+    effectiveBySiteGroup.set(
+      `${rate.siteId}:${normalizeSiteGroupKey(rate.groupName)}`,
+      normalizeUpstreamRate(rate.ratio, rechargeBySite.get(rate.siteId))
+    );
+  }
+
+  return providerList.map((provider) => {
+    if (provider.billingMode !== "site_group_ratio" || provider.siteId == null) {
+      return provider;
+    }
+    const effective = effectiveBySiteGroup.get(
+      `${provider.siteId}:${normalizeSiteGroupKey(provider.siteGroupName)}`
+    );
+    return effective === undefined ? provider : { ...provider, costMultiplier: effective };
+  });
 }
 
 /**
@@ -569,6 +640,7 @@ export async function findAllProvidersFresh(): Promise<Provider[]> {
       healthTestOnlineRate: providers.healthTestOnlineRate,
       healthTestAvgFirstByteMs: providers.healthTestAvgFirstByteMs,
       healthTestRecentResults: providers.healthTestRecentResults,
+      healthTestModelStats: providers.healthTestModelStats,
       healthTestTodayCostUsd: providers.healthTestTodayCostUsd,
       healthTestTodayCalls: providers.healthTestTodayCalls,
       healthTestBudgetSuspendedDay: providers.healthTestBudgetSuspendedDay,
@@ -590,7 +662,7 @@ export async function findAllProvidersFresh(): Promise<Provider[]> {
     ids: result.map((r) => r.id),
   });
 
-  return result.map(toProvider);
+  return applyEffectiveSiteDispatchCosts(result.map(toProvider));
 }
 
 /**
@@ -681,6 +753,7 @@ export async function findProviderById(id: number): Promise<Provider | null> {
       healthTestOnlineRate: providers.healthTestOnlineRate,
       healthTestAvgFirstByteMs: providers.healthTestAvgFirstByteMs,
       healthTestRecentResults: providers.healthTestRecentResults,
+      healthTestModelStats: providers.healthTestModelStats,
       healthTestTodayCostUsd: providers.healthTestTodayCostUsd,
       healthTestTodayCalls: providers.healthTestTodayCalls,
       healthTestBudgetSuspendedDay: providers.healthTestBudgetSuspendedDay,
@@ -955,6 +1028,7 @@ export async function updateProvider(
         healthTestOnlineRate: providers.healthTestOnlineRate,
         healthTestAvgFirstByteMs: providers.healthTestAvgFirstByteMs,
         healthTestRecentResults: providers.healthTestRecentResults,
+        healthTestModelStats: providers.healthTestModelStats,
         healthTestTodayCostUsd: providers.healthTestTodayCostUsd,
         healthTestTodayCalls: providers.healthTestTodayCalls,
         healthTestBudgetSuspendedDay: providers.healthTestBudgetSuspendedDay,
@@ -1042,6 +1116,7 @@ export async function updateProvider(
         healthTestOnlineRate: null,
         healthTestAvgFirstByteMs: null,
         healthTestRecentResults: null,
+        healthTestModelStats: null,
       } as typeof updateResult.provider;
     } catch (error) {
       logger.warn("updateProvider:clear_health_test_history_failed", {

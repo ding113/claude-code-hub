@@ -4,6 +4,10 @@
  */
 import { fromZonedTime } from "date-fns-tz";
 import { logger } from "@/lib/logger";
+import {
+  getProviderSiteRateLimitCooldown,
+  noteProviderSiteRateLimit,
+} from "@/lib/provider-sites/rate-limit-cooldown";
 
 export type SiteCaptchaProvider = "none" | "yescaptcha" | "capsolver" | "2captcha" | "anticaptcha";
 
@@ -56,18 +60,30 @@ export class UpstreamRequestError extends Error {
   readonly method: string;
   readonly path: string;
   readonly status: number;
+  readonly retryAfterMs: number | null;
 
-  constructor(method: string, path: string, status: number, body: string) {
+  constructor(
+    method: string,
+    path: string,
+    status: number,
+    body: string,
+    retryAfterMs?: number | null
+  ) {
     super(`upstream ${method} ${path} failed: ${status} ${body.slice(0, 200)}`);
     this.name = "UpstreamRequestError";
     this.method = method;
     this.path = path;
     this.status = status;
+    this.retryAfterMs = retryAfterMs ?? null;
   }
 }
 
 export function isUpstreamUnauthorizedError(error: unknown): boolean {
   return error instanceof UpstreamRequestError && error.status === 401;
+}
+
+export function isUpstreamRateLimitedError(error: unknown): error is UpstreamRequestError {
+  return error instanceof UpstreamRequestError && error.status === 429;
 }
 
 function trimSite(url: string): string {
@@ -131,6 +147,31 @@ async function readJson(res: Response): Promise<unknown> {
   } catch {
     throw new Error(`invalid json from upstream (${res.status}): ${text.slice(0, 200)}`);
   }
+}
+
+function parseRetryAfterMs(value: string | null): number | null {
+  if (!value) return null;
+  const seconds = Number(value.trim());
+  if (Number.isFinite(seconds) && seconds >= 0) return Math.ceil(seconds * 1000);
+  const dateMs = Date.parse(value);
+  if (!Number.isFinite(dateMs)) return null;
+  return Math.max(0, dateMs - Date.now());
+}
+
+function getRetryAfterMs(res: Response): number | null {
+  return parseRetryAfterMs(res.headers.get("retry-after"));
+}
+
+function assertProviderSiteRateLimitAllowed(siteUrl: string, method: string, path: string): void {
+  const cooldown = getProviderSiteRateLimitCooldown(siteUrl);
+  if (!cooldown) return;
+  throw new UpstreamRequestError(
+    method,
+    path,
+    429,
+    `rate limit cooldown active; retry in ${Math.ceil(cooldown.remainingMs / 1000)}s`,
+    cooldown.remainingMs
+  );
 }
 
 function joinCookies(setCookie: string | null, existing?: string): string {
@@ -326,6 +367,7 @@ async function refreshNewApiSession(
 
   const site = trimSite(creds.siteUrl);
   const path = "/api/user/auth/refresh";
+  assertProviderSiteRateLimitAllowed(site, "POST", path);
   const res = await fetch(`${site}${path}`, {
     method: "POST",
     headers: {
@@ -350,7 +392,15 @@ async function refreshNewApiSession(
           ? body
           : "";
     if ([401, 403, 404, 405].includes(res.status)) return null;
-    throw new UpstreamRequestError("POST", path, res.status, detail || "empty response");
+    const retryAfterMs = getRetryAfterMs(res);
+    if (res.status === 429) noteProviderSiteRateLimit(site, retryAfterMs);
+    throw new UpstreamRequestError(
+      "POST",
+      path,
+      res.status,
+      detail || "empty response",
+      retryAfterMs
+    );
   }
 
   if (!body || typeof body !== "object" || (body as { success?: unknown }).success !== true) {
@@ -385,6 +435,7 @@ async function refreshNewApiSession(
 export async function loginUpstreamSite(
   creds: UpstreamSiteCredentials
 ): Promise<UpstreamAuthSession> {
+  assertProviderSiteRateLimitAllowed(trimSite(creds.siteUrl), "POST", "/api/user/login");
   if (sessionStillValid(creds.session)) {
     return creds.session as UpstreamAuthSession;
   }
@@ -423,6 +474,17 @@ export async function loginUpstreamSite(
         user?: { id?: number | string };
       };
     } | null;
+    if (res.status === 429) {
+      const retryAfterMs = getRetryAfterMs(res);
+      noteProviderSiteRateLimit(site, retryAfterMs);
+      throw new UpstreamRequestError(
+        "POST",
+        "/api/user/login",
+        res.status,
+        body?.message || (body ? "" : "empty response"),
+        retryAfterMs
+      );
+    }
     if (!res.ok || !body || body.success === false) {
       const detail = body?.message || `HTTP ${res.status}${body ? "" : " (empty response)"}`;
       throw new Error(`newapi login failed: ${detail}`);
@@ -469,6 +531,17 @@ export async function loginUpstreamSite(
     message?: string;
     data?: { requires_2fa?: boolean; access_token?: string; expires_in?: number };
   };
+  if (res.status === 429) {
+    const retryAfterMs = getRetryAfterMs(res);
+    noteProviderSiteRateLimit(site, retryAfterMs);
+    throw new UpstreamRequestError(
+      "POST",
+      "/api/v1/auth/login",
+      res.status,
+      body?.message || "empty response",
+      retryAfterMs
+    );
+  }
   if (!res.ok || (body.code != null && body.code !== 0)) {
     throw new Error(`sub2api login failed: ${body.message || res.status}`);
   }
@@ -501,6 +574,7 @@ async function upstreamGetJson(
   path: string
 ): Promise<unknown> {
   const site = trimSite(creds.siteUrl);
+  assertProviderSiteRateLimitAllowed(site, "GET", path);
   const headers: Record<string, string> = {
     Accept: "application/json",
     "User-Agent": UPSTREAM_USER_AGENT,
@@ -517,7 +591,9 @@ async function upstreamGetJson(
   });
   if (!res.ok) {
     const text = await res.text();
-    throw new UpstreamRequestError("GET", path, res.status, text);
+    const retryAfterMs = getRetryAfterMs(res);
+    if (res.status === 429) noteProviderSiteRateLimit(site, retryAfterMs);
+    throw new UpstreamRequestError("GET", path, res.status, text, retryAfterMs);
   }
   const body = await readJson(res);
   if (creds.siteType === "newapi") {
@@ -682,6 +758,7 @@ async function upstreamPostJson(
   payload?: unknown
 ): Promise<unknown> {
   const site = trimSite(creds.siteUrl);
+  assertProviderSiteRateLimitAllowed(site, "POST", path);
   const headers: Record<string, string> = {
     Accept: "application/json",
     "User-Agent": UPSTREAM_USER_AGENT,
@@ -703,7 +780,9 @@ async function upstreamPostJson(
   });
   if (!res.ok) {
     const text = await res.text();
-    throw new UpstreamRequestError("POST", path, res.status, text);
+    const retryAfterMs = getRetryAfterMs(res);
+    if (res.status === 429) noteProviderSiteRateLimit(site, retryAfterMs);
+    throw new UpstreamRequestError("POST", path, res.status, text, retryAfterMs);
   }
   const body = await readJson(res);
   if (creds.siteType === "newapi") {
@@ -732,6 +811,7 @@ async function upstreamDeleteJson(
   path: string
 ): Promise<unknown> {
   const site = trimSite(creds.siteUrl);
+  assertProviderSiteRateLimitAllowed(site, "DELETE", path);
   const headers: Record<string, string> = {
     Accept: "application/json",
     "User-Agent": UPSTREAM_USER_AGENT,
@@ -749,7 +829,9 @@ async function upstreamDeleteJson(
   });
   if (!res.ok) {
     const text = await res.text();
-    throw new UpstreamRequestError("DELETE", path, res.status, text);
+    const retryAfterMs = getRetryAfterMs(res);
+    if (res.status === 429) noteProviderSiteRateLimit(site, retryAfterMs);
+    throw new UpstreamRequestError("DELETE", path, res.status, text, retryAfterMs);
   }
   const body = await readJson(res);
   if (creds.siteType === "newapi") {
@@ -817,7 +899,7 @@ function sleep(ms: number): Promise<void> {
  * - sub2api: POST /api/v1/keys with group_id resolved from groups/available
  *
  * Returns null on unsupported type / permission failure so caller can skip and
- * retry on the next 5-minute tick without aborting the whole site sync.
+ * retry on the next 30-minute tick without aborting the whole site sync.
  */
 export async function createUpstreamApiKey(
   creds: UpstreamSiteCredentials,

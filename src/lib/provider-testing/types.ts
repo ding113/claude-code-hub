@@ -4,6 +4,7 @@
  */
 
 import type { ProviderType } from "@/types/provider";
+import type { TestFormat } from "./presets";
 
 // ============================================================================
 // Test Status Types (3-level system from relay-pulse)
@@ -81,6 +82,12 @@ export interface ProviderTestConfig {
   apiKey: string;
   /** Provider type determines request format */
   providerType: ProviderType;
+  /**
+   * Explicit request-format override for the probe (group-configured
+   * "测试请求格式"). When set, preset selection follows this format instead
+   * of providerType — used when a group accepts all request formats.
+   */
+  testFormat?: TestFormat;
   /** Model to test (uses type-specific default if not provided) */
   model?: string;
   /** Proxy URL (optional) */

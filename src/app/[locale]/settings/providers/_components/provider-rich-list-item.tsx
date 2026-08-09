@@ -104,6 +104,8 @@ interface ProviderRichListItemProps {
   currencyCode?: CurrencyCode;
   healthWindowSize?: number;
   healthSloThresholds?: Partial<HealthTestSloThresholds> | null;
+  healthTestModels?: readonly string[];
+  healthTestModelConfigLoaded?: boolean;
   enableMultiProviderTypes: boolean;
   isMultiSelectMode?: boolean;
   isSelected?: boolean;
@@ -128,6 +130,8 @@ function ProviderRichListItemInner({
   currencyCode = "USD",
   healthWindowSize = 10,
   healthSloThresholds,
+  healthTestModels,
+  healthTestModelConfigLoaded = true,
   enableMultiProviderTypes,
   isMultiSelectMode = false,
   isSelected = false,
@@ -671,6 +675,8 @@ function ProviderRichListItemInner({
             currencyCode={currencyCode}
             windowSize={healthWindowSize}
             sloThresholds={healthSloThresholds}
+            testModels={healthTestModels}
+            healthTestModelConfigLoaded={healthTestModelConfigLoaded}
           />
         </div>
 
@@ -989,6 +995,8 @@ function ProviderRichListItemInner({
             currencyCode={currencyCode}
             windowSize={healthWindowSize}
             sloThresholds={healthSloThresholds}
+            testModels={healthTestModels}
+            healthTestModelConfigLoaded={healthTestModelConfigLoaded}
           />
         </div>
 
@@ -1188,6 +1196,8 @@ export const ProviderRichListItem = memo(ProviderRichListItemInner, (prev, next)
     prev.currencyCode === next.currencyCode &&
     prev.healthWindowSize === next.healthWindowSize &&
     prev.healthSloThresholds === next.healthSloThresholds &&
+    prev.healthTestModels === next.healthTestModels &&
+    prev.healthTestModelConfigLoaded === next.healthTestModelConfigLoaded &&
     prev.enableMultiProviderTypes === next.enableMultiProviderTypes &&
     prev.isMultiSelectMode === next.isMultiSelectMode &&
     prev.isSelected === next.isSelected &&

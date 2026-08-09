@@ -1,6 +1,9 @@
 import type { Context } from "hono";
 import { request as undiciRequest } from "undici";
-import { normalizeAllowedModelRules } from "@/lib/allowed-model-rules";
+import {
+  matchesAllowedModelRules,
+  normalizeAllowedModelRules,
+} from "@/lib/allowed-model-rules";
 import { logger } from "@/lib/logger";
 import { createProxyAgentForProvider } from "@/lib/proxy-agent";
 import { ERROR_CODES, getErrorMessageServer } from "@/lib/utils/error-messages";
@@ -24,16 +27,36 @@ export interface FetchedModel {
   id: string;
   displayName?: string;
   createdAt?: string;
+  /** CCH 调度分组；OpenAI 模型列表通过 owned_by 暴露给客户端。 */
+  groupTag?: string | null;
 }
 
 /** 模型列表请求的默认超时（毫秒） */
-const DEFAULT_MODELS_TIMEOUT_MS = 10000;
+const DEFAULT_MODELS_TIMEOUT_MS = 3000;
+const MAX_MODELS_TIMEOUT_MS = 3000;
+
+/**
+ * 模型目录短缓存：客户端通常会在启动/切换模型时重复请求，
+ * 不应每次都重新 fan-out 到所有上游。缓存按用户和 provider 分组隔离，
+ * 避免不同权限的模型目录互相复用；过期后下一次请求重新拉取。
+ */
+const MODELS_LIST_CACHE_TTL_MS = 30_000;
+
+type AvailableModelsResult = { models: FetchedModel[]; providerName?: string };
+type AvailableModelsCacheEntry = { data: AvailableModelsResult; timestamp: number };
+
+const availableModelsCache = new Map<string, AvailableModelsCacheEntry>();
+const inFlightAvailableModels = new Map<string, Promise<AvailableModelsResult>>();
 
 /**
  * 获取 provider 的请求超时配置
  */
 function getProviderTimeout(provider: Provider): number {
-  return provider.requestTimeoutNonStreamingMs || DEFAULT_MODELS_TIMEOUT_MS;
+  const configured = Number(provider.requestTimeoutNonStreamingMs);
+  if (!Number.isFinite(configured) || configured <= 0) {
+    return DEFAULT_MODELS_TIMEOUT_MS;
+  }
+  return Math.min(configured, MAX_MODELS_TIMEOUT_MS);
 }
 
 /**
@@ -197,10 +220,21 @@ interface UpstreamFetchConfig {
   parseResponse: (body: unknown) => FetchedModel[];
 }
 
+/**
+ * 拼接上游模型列表路径，避免 provider.url 已经包含 /v1 时生成 /v1/v1/models。
+ */
+function joinModelsPath(baseUrl: string, path: "/v1/models" | "/models"): string {
+  const base = baseUrl.replace(/\/+$/, "");
+  if (path === "/v1/models" && /\/v1$/i.test(base)) {
+    return `${base}/models`;
+  }
+  return `${base}${path}`;
+}
+
 /** 各 Provider 类型的请求配置 */
 const UPSTREAM_CONFIGS: Record<string, UpstreamFetchConfig> = {
   claude: {
-    buildUrl: (baseUrl) => `${baseUrl}/v1/models`,
+    buildUrl: (baseUrl) => joinModelsPath(baseUrl, "/v1/models"),
     buildHeaders: (p) => ({ "x-api-key": p.key, "anthropic-version": "2023-06-01" }),
     parseResponse: (body) => {
       const data =
@@ -210,7 +244,7 @@ const UPSTREAM_CONFIGS: Record<string, UpstreamFetchConfig> = {
     },
   },
   openai: {
-    buildUrl: (baseUrl) => `${baseUrl}/v1/models`,
+    buildUrl: (baseUrl) => joinModelsPath(baseUrl, "/v1/models"),
     buildHeaders: (p) => ({ Authorization: `Bearer ${p.key}` }),
     parseResponse: (body) => {
       const data = (body as { data?: Array<{ id: string }> }).data || [];
@@ -219,8 +253,8 @@ const UPSTREAM_CONFIGS: Record<string, UpstreamFetchConfig> = {
   },
   gemini: {
     buildUrl: (baseUrl) => {
-      const prefix = baseUrl.endsWith("/v1beta") ? baseUrl : `${baseUrl}/v1beta`;
-      return `${prefix}/models`;
+      const prefix = /\/v1beta$/i.test(baseUrl) ? baseUrl : `${baseUrl}/v1beta`;
+      return joinModelsPath(prefix, "/models");
     },
     buildHeaders: (p) => ({ "x-goog-api-key": p.key }),
     parseResponse: (body) => {
@@ -273,22 +307,32 @@ async function fetchModelsWithConfig(
   return models;
 }
 
+function attachProviderGroup(provider: Provider, models: FetchedModel[]): FetchedModel[] {
+  const groupTag = provider.groupTag?.trim() || null;
+  return models.map((model) => ({ ...model, groupTag }));
+}
+
+function getConfiguredExactModels(
+  provider: Provider,
+  rules: ReturnType<typeof normalizeAllowedModelRules>
+): FetchedModel[] {
+  return (rules ?? [])
+    .filter((rule) => rule.matchType === "exact")
+    .map((rule) => ({ id: rule.pattern }))
+    .map((model) => ({ ...model, groupTag: provider.groupTag?.trim() || null }));
+}
+
 /**
  * 根据 Provider 类型获取模型列表
  *
- * 优先级：
- * 1. 如果 provider 配置了 allowedModels，直接使用（无需查上游）
- * 2. 否则根据 providerType 查询上游
+ * 优先从上游获取，再按 provider.allowedModels 过滤；纯 exact allowlist
+ * 可以直接作为上游失败时的兜底，避免单个上游短暂异常导致模型目录消失。
+ *
+ * Exported for admin aggregation (provider-group model picker).
  */
-async function fetchModelsFromProvider(provider: Provider): Promise<FetchedModel[]> {
-  if (provider.allowedModels && provider.allowedModels.length > 0) {
-    logger.debug(`[AvailableModels] Using configured allowedModels for ${provider.name}`, {
-      modelCount: provider.allowedModels.length,
-    });
-    return (normalizeAllowedModelRules(provider.allowedModels) ?? [])
-      .filter((rule) => rule.matchType === "exact")
-      .map((rule) => ({ id: rule.pattern }));
-  }
+export async function fetchModelsFromProvider(provider: Provider): Promise<FetchedModel[]> {
+  const rules = normalizeAllowedModelRules(provider.allowedModels);
+  const exactModels = getConfiguredExactModels(provider, rules);
 
   const configMap: Record<Provider["providerType"], UpstreamFetchConfig> = {
     claude: UPSTREAM_CONFIGS.claude,
@@ -306,10 +350,16 @@ async function fetchModelsFromProvider(provider: Provider): Promise<FetchedModel
   }
 
   try {
-    return await fetchModelsWithConfig(provider, config);
+    const upstreamModels = await fetchModelsWithConfig(provider, config);
+    const filteredModels = rules?.length
+      ? upstreamModels.filter((model) => matchesAllowedModelRules(model.id, rules))
+      : upstreamModels;
+    const presentIds = new Set(filteredModels.map((model) => model.id));
+    const exactFallbackModels = exactModels.filter((model) => !presentIds.has(model.id));
+    return attachProviderGroup(provider, [...filteredModels, ...exactFallbackModels]);
   } catch (error) {
     logger.warn(`[AvailableModels] Failed to fetch from ${provider.name}:`, error);
-    return [];
+    return exactModels;
   }
 }
 
@@ -321,8 +371,8 @@ export function getProviderTypesForFormat(clientFormat: ClientFormat): Provider[
     case "claude":
       return ["claude", "claude-auth"];
     case "openai":
-      // openai 格式需要对 codex 和 openai-compatible 分别决策
-      return ["codex", "openai-compatible"];
+      // 统一模型目录聚合所有可通过 CCH 路由的 provider 类型。
+      return ["claude", "claude-auth", "codex", "openai-compatible", "gemini", "gemini-cli"];
     case "gemini":
     case "gemini-cli":
       return ["gemini", "gemini-cli"];
@@ -339,10 +389,10 @@ export function getProviderTypesForFormat(clientFormat: ClientFormat): Provider[
  * 获取用户可用的模型列表
  *
  * 决策流程：
- * 1. 根据 clientFormat 确定需要决策的 providerType 列表
- * 2. 对每种 providerType 独立进行完整决策（分组过滤 → 健康检查 → 优先级 → 加权随机）
- * 3. 每种类型选出 1 个最优 provider
- * 4. 聚合这些 provider 的模型列表（去重）
+ * 1. 根据 clientFormat 确定需要扫描的 providerType 列表
+ * 2. 过滤用户可访问且当前启用的 provider
+ * 3. 并发从每个匹配 provider 的上游模型接口获取列表
+ * 4. 合并去重，并保留 provider 的 CCH 分组
  */
 async function getAvailableModels(
   authState: {
@@ -364,7 +414,7 @@ export function formatOpenAIResponse(models: FetchedModel[]): OpenAIModelsRespon
     id: m.id,
     object: "model" as const,
     created: now,
-    owned_by: inferOwner(m.id),
+    owned_by: m.groupTag?.trim() || inferOwner(m.id),
   }));
 
   return { object: "list" as const, data };
@@ -413,6 +463,20 @@ export function formatGeminiResponse(models: FetchedModel[]): GeminiModelsRespon
   return { models: geminiModels };
 }
 
+const MODEL_GROUP_PRIORITY = ["claude", "codex", "grok", "image"];
+
+function modelGroupRank(groupTag: string | null | undefined): number {
+  const normalized = groupTag?.trim().toLowerCase() || "";
+  const managedIndex = MODEL_GROUP_PRIORITY.indexOf(normalized);
+  if (managedIndex >= 0) return managedIndex;
+  if (!normalized || normalized === "other" || normalized === "default") return 100;
+  return 50;
+}
+
+function shouldPreferModel(candidate: FetchedModel, current: FetchedModel): boolean {
+  return modelGroupRank(candidate.groupTag) < modelGroupRank(current.groupTag);
+}
+
 /**
  * 根据指定的 providerTypes 获取模型列表
  *
@@ -421,13 +485,13 @@ export function formatGeminiResponse(models: FetchedModel[]): GeminiModelsRespon
  *
  * Fix: #956 — 之前复用 selectProviderByType() 导致每种类型只选 1 个 provider
  */
-async function getAvailableModelsByProviderTypes(
+async function fetchAvailableModelsByProviderTypes(
   authState: {
     user: { id: number; providerGroup: string | null };
     key: { providerGroup: string | null };
   },
   providerTypes: Provider["providerType"][]
-): Promise<{ models: FetchedModel[]; providerName?: string }> {
+): Promise<AvailableModelsResult> {
   const allProviders = await findAllProviders();
 
   // 过滤出所有匹配的供应商
@@ -457,8 +521,7 @@ async function getAvailableModelsByProviderTypes(
     providers: matchedProviders.map((p) => ({ id: p.id, name: p.name, type: p.providerType })),
   });
 
-  const allModels: FetchedModel[] = [];
-  const seenIds = new Set<string>();
+  const modelsById = new Map<string, FetchedModel>();
 
   const fetchResults = await Promise.all(
     matchedProviders.map((provider) => fetchModelsFromProvider(provider))
@@ -466,12 +529,14 @@ async function getAvailableModelsByProviderTypes(
 
   for (const models of fetchResults) {
     for (const model of models) {
-      if (!seenIds.has(model.id)) {
-        seenIds.add(model.id);
-        allModels.push(model);
+      const current = modelsById.get(model.id);
+      if (!current || shouldPreferModel(model, current)) {
+        modelsById.set(model.id, model);
       }
     }
   }
+
+  const allModels = Array.from(modelsById.values());
 
   logger.info("[AvailableModels] Aggregated models", {
     userId: authState.user.id,
@@ -483,6 +548,57 @@ async function getAvailableModelsByProviderTypes(
     models: allModels.sort((a, b) => a.id.localeCompare(b.id)),
     providerName: matchedProviders.map((p) => p.name).join(", "),
   };
+}
+
+function getAvailableModelsCacheKey(
+  authState: {
+    user: { id: number; providerGroup: string | null };
+    key: { providerGroup: string | null };
+  },
+  providerTypes: Provider["providerType"][]
+): string {
+  const effectiveGroup = authState.key.providerGroup || authState.user.providerGroup || null;
+  return JSON.stringify({
+    userId: authState.user.id,
+    providerGroup: effectiveGroup,
+    providerTypes: Array.from(new Set(providerTypes)).sort(),
+  });
+}
+
+/**
+ * 带短 TTL 和并发合并的模型目录读取。
+ * 同一个权限范围在缓存有效期内不重复请求上游；缓存未命中时，
+ * 同时到达的请求共享同一个 fan-out Promise。
+ */
+async function getAvailableModelsByProviderTypes(
+  authState: {
+    user: { id: number; providerGroup: string | null };
+    key: { providerGroup: string | null };
+  },
+  providerTypes: Provider["providerType"][]
+): Promise<AvailableModelsResult> {
+  const cacheKey = getAvailableModelsCacheKey(authState, providerTypes);
+  const cached = availableModelsCache.get(cacheKey);
+  if (cached && Date.now() - cached.timestamp < MODELS_LIST_CACHE_TTL_MS) {
+    return cached.data;
+  }
+
+  const inFlight = inFlightAvailableModels.get(cacheKey);
+  if (inFlight) {
+    return inFlight;
+  }
+
+  const request = fetchAvailableModelsByProviderTypes(authState, providerTypes)
+    .then((data) => {
+      availableModelsCache.set(cacheKey, { data, timestamp: Date.now() });
+      return data;
+    })
+    .finally(() => {
+      inFlightAvailableModels.delete(cacheKey);
+    });
+
+  inFlightAvailableModels.set(cacheKey, request);
+  return request;
 }
 
 /**

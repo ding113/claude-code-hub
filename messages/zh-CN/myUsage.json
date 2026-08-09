@@ -148,7 +148,7 @@
     "free": "免费",
     "multiplierHint": "有效计费倍率 = 供应商倍率 × 分组倍率",
     "modeHealth": "健康优选",
-    "modePriority": "优先级优选",
+    "modePriority": "最低成本兜底",
     "online": "在线率",
     "firstByte": "首字",
     "requestFormat": "请求格式",
@@ -162,6 +162,7 @@
     "providerMult": "供应商",
     "groupMult": "分组",
     "effectiveMult": "有效",
-    "totalLatency": "总耗时"
+    "totalLatency": "平均总耗时",
+    "healthBaseline": "健康基准"
   }
 }

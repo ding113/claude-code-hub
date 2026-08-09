@@ -7,10 +7,13 @@
  */
 
 import type { ProviderType } from "@/types/provider";
+import type { TestFormat } from "@/lib/provider-testing/presets";
 
 export type ProviderGroupSharedSettings = {
   /** API / request format type applied to member providers. */
   providerType?: ProviderType | null;
+  /** Health-test request format override. Null/absent = follow providerType default. */
+  healthTestFormat?: TestFormat | null;
   // routing / options
   priority?: number | null;
   weight?: number | null;
@@ -85,6 +88,17 @@ function cleanProviderType(value: unknown): ProviderType | null | undefined {
   return undefined;
 }
 
+const TEST_FORMATS = new Set<TestFormat>(["response", "openai", "claude", "gemini"]);
+
+function cleanHealthTestFormat(value: unknown): TestFormat | null | undefined {
+  if (value === undefined) return undefined;
+  if (value === null || value === "") return null;
+  if (typeof value === "string" && TEST_FORMATS.has(value as TestFormat)) {
+    return value as TestFormat;
+  }
+  return undefined;
+}
+
 /** Normalize arbitrary JSON into a sparse shared-settings object. */
 export function normalizeProviderGroupSharedSettings(
   raw: unknown
@@ -96,6 +110,8 @@ export function normalizeProviderGroupSharedSettings(
 
   const providerType = cleanProviderType(input.providerType);
   if (providerType !== undefined) out.providerType = providerType;
+  const healthTestFormat = cleanHealthTestFormat(input.healthTestFormat);
+  if (healthTestFormat !== undefined) out.healthTestFormat = healthTestFormat;
 
   for (const key of NUMBER_KEYS) {
     const cleaned = cleanNumber(input[key]);

@@ -3,6 +3,7 @@
 import { getTranslations } from "next-intl/server";
 import { emitActionAudit } from "@/lib/audit/emit";
 import { getSession } from "@/lib/auth";
+import { publishProviderCacheInvalidation } from "@/lib/cache/provider-cache";
 import { logger } from "@/lib/logger";
 import { ERROR_CODES } from "@/lib/utils/error-messages";
 import {
@@ -45,7 +46,9 @@ function toIsoRate(rate: ProviderSiteGroupRate) {
     groupName: rate.groupName,
     description: rate.description,
     ratio: rate.ratio,
+    effectiveRatio: rate.effectiveRatio,
     completionRatio: rate.completionRatio,
+    effectiveCompletionRatio: rate.effectiveCompletionRatio,
     dispatchGroupTag: rate.dispatchGroupTag,
     lastSeenAt: rate.lastSeenAt.toISOString(),
     createdAt: rate.createdAt.toISOString(),
@@ -63,6 +66,7 @@ function toIsoSiteBase(site: ProviderSite) {
     notes: site.notes,
     isEnabled: site.isEnabled,
     sortOrder: site.sortOrder,
+    rechargeMultiplier: site.rechargeMultiplier,
     upstreamHubChannelId: site.upstreamHubChannelId,
     username: site.username,
     hasPassword: site.hasPassword,
@@ -71,8 +75,10 @@ function toIsoSiteBase(site: ProviderSite) {
     hasCaptchaApiKey: site.hasCaptchaApiKey,
     captchaEndpoint: site.captchaEndpoint,
     lastBalance: site.lastBalance,
+    realBalance: site.realBalance,
     lastBalanceAt: site.lastBalanceAt?.toISOString() ?? null,
     todayCost: site.todayCost,
+    realTodayCost: site.realTodayCost,
     totalCost: site.totalCost,
     lastSyncError: site.lastSyncError,
     lastSyncAt: site.lastSyncAt?.toISOString() ?? null,
@@ -114,6 +120,7 @@ export type ProviderSiteSyncResultDto = {
     keysSeen: number;
     keysAutoCreated?: number;
     unboundUpstreamKeysDeleted?: number;
+    upstreamDuplicateKeysDeleted?: number;
   };
 };
 
@@ -163,6 +170,16 @@ export async function createProviderSite(
     if (!siteUrl || !isValidUrl(siteUrl)) {
       return { ok: false, error: t("invalidUrl"), errorCode: "INVALID_URL" };
     }
+    if (
+      input.rechargeMultiplier !== undefined &&
+      (!Number.isFinite(input.rechargeMultiplier) || input.rechargeMultiplier <= 0)
+    ) {
+      return {
+        ok: false,
+        error: t("invalidRechargeMultiplier"),
+        errorCode: "INVALID_RECHARGE_MULTIPLIER",
+      };
+    }
     const existing = await findProviderSiteByName(name);
     if (existing) {
       return { ok: false, error: t("duplicateName"), errorCode: "DUPLICATE_NAME" };
@@ -175,6 +192,7 @@ export async function createProviderSite(
       providerVendorId: input.providerVendorId,
       notes: input.notes,
       isEnabled: input.isEnabled,
+      rechargeMultiplier: input.rechargeMultiplier,
       upstreamHubChannelId: input.upstreamHubChannelId,
       username: input.username,
       password: input.password,
@@ -244,9 +262,29 @@ export async function updateProviderSite(
         return { ok: false, error: t("invalidUrl"), errorCode: "INVALID_URL" };
       }
     }
+    if (
+      input.rechargeMultiplier !== undefined &&
+      (!Number.isFinite(input.rechargeMultiplier) || input.rechargeMultiplier <= 0)
+    ) {
+      return {
+        ok: false,
+        error: t("invalidRechargeMultiplier"),
+        errorCode: "INVALID_RECHARGE_MULTIPLIER",
+      };
+    }
     const site = await repoUpdateProviderSite(id, input);
     if (!site) {
       return { ok: false, error: t("notFound"), errorCode: "NOT_FOUND" };
+    }
+    if (input.rechargeMultiplier !== undefined) {
+      try {
+        await publishProviderCacheInvalidation();
+      } catch (error) {
+        logger.warn("Failed to invalidate provider cache after recharge multiplier update", {
+          siteId: id,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
     }
 
     emitActionAudit({
@@ -405,6 +443,14 @@ export async function upsertProviderSiteGroupRate(
       ...input,
       groupName,
     });
+    try {
+      await publishProviderCacheInvalidation();
+    } catch (error) {
+      logger.warn("Failed to invalidate provider cache after group rate update", {
+        siteId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
 
     emitActionAudit({
       category: "provider",
@@ -473,6 +519,14 @@ export async function updateProviderSiteGroupRate(
     if (!rate) {
       return { ok: false, error: t("rateNotFound"), errorCode: "NOT_FOUND" };
     }
+    try {
+      await publishProviderCacheInvalidation();
+    } catch (error) {
+      logger.warn("Failed to invalidate provider cache after group rate update", {
+        rateId: id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
 
     emitActionAudit({
       category: "provider",
@@ -523,6 +577,14 @@ export async function deleteProviderSiteGroupRate(id: number): Promise<ActionRes
     const ok = await repoDeleteProviderSiteGroupRate(id);
     if (!ok) {
       return { ok: false, error: t("rateNotFound"), errorCode: "NOT_FOUND" };
+    }
+    try {
+      await publishProviderCacheInvalidation();
+    } catch (error) {
+      logger.warn("Failed to invalidate provider cache after group rate deletion", {
+        rateId: id,
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
 
     emitActionAudit({

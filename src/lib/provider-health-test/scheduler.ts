@@ -83,7 +83,7 @@ async function ensureLeaderLock(): Promise<boolean> {
 
 /**
  * Poll/cadence tick: start any due providers that are not already in-flight.
- * Must NOT wait for slow providers — that used to skip the next minute globally.
+ * Must NOT wait for slow providers — that used to skip the next cron tick globally.
  */
 async function runCycle(): Promise<void> {
   if (schedulerState.__CCH_PROVIDER_HEALTH_TEST_DISPATCHING__) return;
@@ -183,10 +183,10 @@ export function startProviderHealthTestScheduler(): void {
   schedulerState.__CCH_PROVIDER_HEALTH_TEST_STOP__ = false;
   schedulerState.__CCH_PROVIDER_HEALTH_TEST_STARTED__ = true;
 
-  // Align first fire to the next wall-clock boundary (e.g. next :00 second),
-  // then keep a steady interval so cycles land on whole minutes.
+  // Align first fire to the next wall-clock cron boundary (e.g. next :00/:30),
+  // then keep a steady half-hour cadence so poll cycles land on cron slots.
   const delayMs = msUntilNextHealthTestBoundary(Date.now(), INTERVAL_MS);
-  logger.info("[ProviderHealthTestScheduler] Started (poll wall-clock aligned)", {
+  logger.info("[ProviderHealthTestScheduler] Started (wall-clock cron aligned)", {
     intervalMs: INTERVAL_MS,
     firstFireInMs: delayMs,
     mode: "per_provider_independent",

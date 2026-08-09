@@ -37,3 +37,12 @@ export function reorderProviderGroups(orderedIds: number[]) {
     }).then((body) => body.items ?? [])
   );
 }
+
+export function fetchProviderGroupUpstreamModels(groupId: number) {
+  return toActionResult(
+    apiPost<{ models: string[]; failed: string[] }>(
+      `/api/v1/provider-groups/${groupId}/upstream-models:fetch`,
+      {}
+    )
+  );
+}

@@ -148,7 +148,7 @@
     "free": "無料",
     "multiplierHint": "実効倍率 = プロバイダー倍率 × グループ倍率",
     "modeHealth": "ヘルス優先",
-    "modePriority": "優先度優先",
+    "modePriority": "最安コストのフォールバック",
     "online": "オンライン",
     "firstByte": "初字",
     "requestFormat": "リクエスト形式",
@@ -162,6 +162,7 @@
     "providerMult": "プロバイダー",
     "groupMult": "グループ",
     "effectiveMult": "実効",
-    "totalLatency": "総時間"
+    "totalLatency": "平均総時間",
+    "healthBaseline": "ヘルス基準"
   }
 }

@@ -249,6 +249,9 @@
     "session_reuse": "Session Reuse",
     "weighted_random": "Weighted Random",
     "group_filtered": "Group Filtered",
-    "fail_open_fallback": "Fail-Open Fallback"
+    "fail_open_fallback": "Fail-Open Fallback",
+    "health_slo": "Health SLO",
+    "latency_fallback": "Shortest Average Latency Fallback",
+    "cost_fallback": "Cheapest Cost Fallback"
   }
 }

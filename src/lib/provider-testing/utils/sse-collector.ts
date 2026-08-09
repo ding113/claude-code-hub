@@ -444,12 +444,23 @@ export function parseSSEStream(body: string): ParsedResponse {
             total_tokens?: number;
             input_tokens?: number;
             output_tokens?: number;
+            cache_creation_input_tokens?: number;
+            cache_read_input_tokens?: number;
+            prompt_tokens_details?: { cached_tokens?: number };
+            input_tokens_details?: { cached_tokens?: number };
           }
         | undefined;
       if (objUsage && (objUsage.prompt_tokens != null || objUsage.completion_tokens != null)) {
         usage = {
           inputTokens: objUsage.prompt_tokens || 0,
           outputTokens: objUsage.completion_tokens || 0,
+          cacheCreationInputTokens:
+            objUsage.cache_creation_input_tokens ?? usage?.cacheCreationInputTokens,
+          cacheReadInputTokens:
+            objUsage.prompt_tokens_details?.cached_tokens ??
+            objUsage.cache_read_input_tokens ??
+            objUsage.input_tokens_details?.cached_tokens ??
+            usage?.cacheReadInputTokens,
         };
       } else if (
         objUsage &&
@@ -461,6 +472,12 @@ export function parseSSEStream(body: string): ParsedResponse {
         usage = {
           inputTokens: objUsage.input_tokens || 0,
           outputTokens: objUsage.output_tokens || 0,
+          cacheCreationInputTokens:
+            objUsage.cache_creation_input_tokens ?? usage?.cacheCreationInputTokens,
+          cacheReadInputTokens:
+            objUsage.cache_read_input_tokens ??
+            objUsage.input_tokens_details?.cached_tokens ??
+            usage?.cacheReadInputTokens,
         };
       }
 
@@ -468,12 +485,21 @@ export function parseSSEStream(body: string): ParsedResponse {
         | {
             input_tokens?: number;
             output_tokens?: number;
+            cache_creation_input_tokens?: number;
+            cache_read_input_tokens?: number;
+            input_tokens_details?: { cached_tokens?: number };
           }
         | undefined;
       if (responseUsage && (responseUsage.input_tokens != null || responseUsage.output_tokens != null)) {
         usage = {
           inputTokens: responseUsage.input_tokens || 0,
           outputTokens: responseUsage.output_tokens || 0,
+          cacheCreationInputTokens:
+            responseUsage.cache_creation_input_tokens ?? usage?.cacheCreationInputTokens,
+          cacheReadInputTokens:
+            responseUsage.cache_read_input_tokens ??
+            responseUsage.input_tokens_details?.cached_tokens ??
+            usage?.cacheReadInputTokens,
         };
       }
     } catch {
@@ -638,6 +664,10 @@ export function parseNDJSONStream(body: string): ParsedResponse {
             completion_tokens?: number;
             input_tokens?: number;
             output_tokens?: number;
+            cache_creation_input_tokens?: number;
+            cache_read_input_tokens?: number;
+            prompt_tokens_details?: { cached_tokens?: number };
+            input_tokens_details?: { cached_tokens?: number };
           }
         | undefined;
       if (objUsage) {
@@ -657,13 +687,29 @@ export function parseNDJSONStream(body: string): ParsedResponse {
           usage = {
             inputTokens: input || 0,
             outputTokens: output || 0,
+            cacheCreationInputTokens:
+              objUsage.cache_creation_input_tokens ?? usage?.cacheCreationInputTokens,
+            cacheReadInputTokens:
+              objUsage.prompt_tokens_details?.cached_tokens ??
+              objUsage.cache_read_input_tokens ??
+              objUsage.input_tokens_details?.cached_tokens ??
+              usage?.cacheReadInputTokens,
           };
         }
       }
 
       // Nested response.usage (Responses API NDJSON)
       const response = obj.response as
-        | { usage?: { input_tokens?: number; output_tokens?: number }; model?: string }
+        | {
+            usage?: {
+              input_tokens?: number;
+              output_tokens?: number;
+              cache_creation_input_tokens?: number;
+              cache_read_input_tokens?: number;
+              input_tokens_details?: { cached_tokens?: number };
+            };
+            model?: string;
+          }
         | undefined;
       if (!model && response?.model && typeof response.model === "string") {
         model = response.model;
@@ -672,6 +718,12 @@ export function parseNDJSONStream(body: string): ParsedResponse {
         usage = {
           inputTokens: response.usage.input_tokens || 0,
           outputTokens: response.usage.output_tokens || 0,
+          cacheCreationInputTokens:
+            response.usage.cache_creation_input_tokens ?? usage?.cacheCreationInputTokens,
+          cacheReadInputTokens:
+            response.usage.cache_read_input_tokens ??
+            response.usage.input_tokens_details?.cached_tokens ??
+            usage?.cacheReadInputTokens,
         };
       }
     } catch {

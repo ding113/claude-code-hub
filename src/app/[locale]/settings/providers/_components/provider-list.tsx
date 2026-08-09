@@ -5,9 +5,12 @@ import { useTranslations } from "next-intl";
 import { useMemo } from "react";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { getProviderVendors } from "@/lib/api-client/v1/actions/provider-endpoints";
+import { getProviderGroups } from "@/lib/api-client/v1/actions/provider-groups";
 import { getSystemSettings } from "@/lib/api-client/v1/actions/system-config";
+import { normalizeProviderGroupHealthTestModels } from "@/lib/provider-health-test/model-config";
 import { normalizeHealthTestSloThresholds } from "@/lib/provider-health-test/slo-thresholds";
 import type { CurrencyCode } from "@/lib/utils/currency";
+import { resolveProviderGroupsWithDefault } from "@/lib/utils/provider-group";
 import type { ProviderDisplay, ProviderStatisticsMap } from "@/types/provider";
 import type { User } from "@/types/user";
 import type { EndpointCircuitInfoMap } from "./provider-manager";
@@ -81,15 +84,51 @@ export function ProviderList({
     refetchOnWindowFocus: false,
   });
 
+  const { data: providerGroupsResult } = useQuery({
+    queryKey: ["provider-groups"],
+    queryFn: getProviderGroups,
+    staleTime: 30_000,
+    refetchOnWindowFocus: false,
+  });
+
   const healthSloThresholds = useMemo(
     () =>
       normalizeHealthTestSloThresholds({
         minOnlineRate: Number(systemSettings?.healthTestMinOnlineRatePercent) / 100,
-        maxAvgFirstByteMs: Number(systemSettings?.healthTestMaxAvgLatencySeconds) * 1000,
-        minSampleCount: Number(systemSettings?.healthTestWindowSize),
+        maxAvgLatencyMs: Number(systemSettings?.healthTestMaxAvgLatencySeconds) * 1000,
+        minSampleCount: 1,
       }),
     [systemSettings]
   );
+  const healthWindowSize = useMemo(() => {
+    const raw = Number(systemSettings?.healthTestWindowSize);
+    return Number.isFinite(raw) && raw > 0 ? Math.min(50, Math.max(1, Math.trunc(raw))) : 10;
+  }, [systemSettings]);
+
+  const healthTestModelsByProviderId = useMemo(() => {
+    const groups = providerGroupsResult?.ok ? providerGroupsResult.data : [];
+    const modelsByGroup = new Map(
+      groups.map((group) => [
+        group.name,
+        normalizeProviderGroupHealthTestModels(group.healthTestModels, group.healthTestModel),
+      ])
+    );
+    const result = new Map<number, string[]>();
+    for (const provider of providers) {
+      const models: string[] = [];
+      const seen = new Set<string>();
+      for (const group of resolveProviderGroupsWithDefault(provider.groupTag)) {
+        for (const model of modelsByGroup.get(group) ?? []) {
+          if (!seen.has(model)) {
+            seen.add(model);
+            models.push(model);
+          }
+        }
+      }
+      result.set(provider.id, models);
+    }
+    return result;
+  }, [providerGroupsResult, providers]);
 
   const vendorById = useMemo(() => {
     return new Map(vendors.map((vendor) => [vendor.id, vendor]));
@@ -123,8 +162,10 @@ export function ProviderList({
             statistics={statistics[provider.id]}
             statisticsLoading={statisticsLoading}
             currencyCode={currencyCode}
-            healthWindowSize={healthSloThresholds.minSampleCount}
+            healthWindowSize={healthWindowSize}
             healthSloThresholds={healthSloThresholds}
+            healthTestModels={healthTestModelsByProviderId.get(provider.id) ?? EMPTY_STRING_ARRAY}
+            healthTestModelConfigLoaded={providerGroupsResult?.ok === true}
             enableMultiProviderTypes={enableMultiProviderTypes}
             activeGroupFilter={activeGroupFilter}
             isMultiSelectMode={isMultiSelectMode}

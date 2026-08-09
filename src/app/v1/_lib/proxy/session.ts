@@ -616,7 +616,10 @@ export class ProxySession {
         | "session_reuse"
         | "weighted_random"
         | "group_filtered"
-        | "fail_open_fallback";
+        | "fail_open_fallback"
+        | "health_slo"
+        | "latency_fallback"
+        | "cost_fallback";
       circuitState?: "closed" | "open" | "half-open";
       attemptNumber?: number;
       errorMessage?: string; // 错误信息（失败时记录）

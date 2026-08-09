@@ -4,6 +4,7 @@ const mocks = vi.hoisted(() => ({
   executeProviderTest: vi.fn(),
   findProvidersForScheduledHealthTest: vi.fn(),
   findLatestPriceByModel: vi.fn(),
+  getProviderGroupSharedSettingsMap: vi.fn(),
   recordProviderHealthTestResult: vi.fn(),
 }));
 
@@ -23,6 +24,9 @@ vi.mock("@/lib/cache/provider-cache", () => ({
 vi.mock("@/repository/model-price", () => ({
   findLatestPriceByModel: mocks.findLatestPriceByModel,
 }));
+vi.mock("@/repository/provider-groups", () => ({
+  getProviderGroupSharedSettingsMap: mocks.getProviderGroupSharedSettingsMap,
+}));
 vi.mock("@/repository/provider-health-test", () => ({
   findProvidersForScheduledHealthTest: mocks.findProvidersForScheduledHealthTest,
   recordProviderHealthTestResult: mocks.recordProviderHealthTestResult,
@@ -35,6 +39,7 @@ describe("runProviderHealthTest runtime settings", () => {
     vi.clearAllMocks();
     mocks.findProvidersForScheduledHealthTest.mockResolvedValue([]);
     mocks.findLatestPriceByModel.mockResolvedValue(null);
+    mocks.getProviderGroupSharedSettingsMap.mockResolvedValue(new Map());
     mocks.recordProviderHealthTestResult.mockResolvedValue({
       onlineRate: 1,
       avgFirstByteMs: 10,
@@ -106,5 +111,44 @@ describe("runProviderHealthTest runtime settings", () => {
 
     expect(dispatch.started).toBe(1);
     await vi.waitFor(() => expect(onProviderFinished).toHaveBeenCalledTimes(1));
+  });
+
+  it("runs every configured scheduled model and records each result", async () => {
+    mocks.findProvidersForScheduledHealthTest.mockResolvedValue([
+      {
+        id: 43,
+        name: "multi-model-provider",
+        url: "https://api.example.com",
+        key: "sk-test-key",
+        providerType: "openai-compatible",
+        proxyUrl: null,
+        proxyFallbackToDirect: false,
+        customHeaders: null,
+        lastHealthTestAt: new Date(Date.now() - 2_000),
+        scheduledHealthTestEnabled: true,
+        isEnabled: true,
+        costMultiplier: 1,
+        groupTag: "grok",
+        healthTestModel: "grok-4.5",
+        healthTestModels: ["grok-4.5", "grok-4.1"],
+      },
+    ]);
+
+    const dispatch = await runDueScheduledHealthTests({ intervalMs: 1_000 });
+
+    expect(dispatch.started).toBe(1);
+    await vi.waitFor(() => expect(mocks.executeProviderTest).toHaveBeenCalledTimes(2));
+    expect(mocks.executeProviderTest.mock.calls.map(([config]) => config.model)).toEqual([
+      "grok-4.5",
+      "grok-4.1",
+    ]);
+    expect(mocks.recordProviderHealthTestResult.mock.calls.map(([input]) => input.model)).toEqual([
+      "grok-4.5",
+      "grok-4.1",
+    ]);
+    expect(mocks.recordProviderHealthTestResult.mock.calls[1]?.[0].healthTestModels).toEqual([
+      "grok-4.5",
+      "grok-4.1",
+    ]);
   });
 });

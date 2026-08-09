@@ -26,6 +26,9 @@ interface OpenAIResponse {
     prompt_tokens?: number;
     completion_tokens?: number;
     total_tokens?: number;
+    prompt_tokens_details?: {
+      cached_tokens?: number;
+    };
   };
   error?: {
     message?: string;
@@ -70,6 +73,9 @@ export function parseOpenAIResponse(body: string, contentType?: string): ParsedR
       usage = {
         inputTokens: data.usage.prompt_tokens || 0,
         outputTokens: data.usage.completion_tokens || 0,
+        ...(data.usage.prompt_tokens_details?.cached_tokens != null
+          ? { cacheReadInputTokens: data.usage.prompt_tokens_details.cached_tokens }
+          : {}),
       };
     }
 

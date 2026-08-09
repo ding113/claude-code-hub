@@ -4,6 +4,7 @@ const mocks = vi.hoisted(() => ({
   findProviderSiteAuthRow: vi.fn(),
   updateProviderSite: vi.fn(),
   upsertProviderSiteGroupRate: vi.fn(),
+  deleteDuplicateUpstreamApiKeys: vi.fn(),
   deleteUnboundUpstreamApiKeys: vi.fn(),
   deleteProviderSiteGroupRatesNotIn: vi.fn(),
   findUnkeyedOtherSiteGroupNames: vi.fn(),
@@ -15,6 +16,7 @@ const mocks = vi.hoisted(() => ({
   fetchUpstreamGroupRates: vi.fn(),
   fetchUpstreamBalance: vi.fn(),
   fetchUpstreamApiKeys: vi.fn(),
+  isUpstreamRateLimitedError: vi.fn(),
   isUpstreamUnauthorizedError: vi.fn(),
   findAllProviderGroups: vi.fn(),
   publishProviderCacheInvalidation: vi.fn(),
@@ -38,6 +40,7 @@ vi.mock("@/lib/provider-sites/secret-box", () => ({
   encryptSecret: mocks.encryptSecret,
 }));
 vi.mock("@/lib/provider-sites/sync-keys", () => ({
+  deleteDuplicateUpstreamApiKeys: mocks.deleteDuplicateUpstreamApiKeys,
   deleteUnboundUpstreamApiKeys: mocks.deleteUnboundUpstreamApiKeys,
   findUnkeyedOtherSiteGroupNames: mocks.findUnkeyedOtherSiteGroupNames,
   pruneStaleSiteProvidersForUpstreamGroups: mocks.pruneStaleSiteProvidersForUpstreamGroups,
@@ -48,6 +51,7 @@ vi.mock("@/lib/provider-sites/upstream-connector", () => ({
   fetchUpstreamApiKeys: mocks.fetchUpstreamApiKeys,
   fetchUpstreamBalance: mocks.fetchUpstreamBalance,
   fetchUpstreamGroupRates: mocks.fetchUpstreamGroupRates,
+  isUpstreamRateLimitedError: mocks.isUpstreamRateLimitedError,
   isUpstreamUnauthorizedError: mocks.isUpstreamUnauthorizedError,
   loginUpstreamSite: mocks.loginUpstreamSite,
 }));
@@ -66,6 +70,10 @@ vi.mock("@/repository/provider-sites", () => ({
 }));
 
 import { syncProviderSiteFromUpstream } from "@/lib/provider-sites/sync-from-upstream";
+import {
+  noteProviderSiteRateLimit,
+  resetProviderSiteRateLimitCooldownsForTests,
+} from "@/lib/provider-sites/rate-limit-cooldown";
 
 const siteRow = {
   id: 7,
@@ -87,6 +95,7 @@ const siteRow = {
 
 describe("syncProviderSiteFromUpstream pruning order", () => {
   beforeEach(() => {
+    resetProviderSiteRateLimitCooldownsForTests();
     vi.clearAllMocks();
     mocks.findProviderSiteAuthRow.mockResolvedValue(siteRow);
     mocks.decryptSecret.mockReturnValue("secret");
@@ -98,6 +107,10 @@ describe("syncProviderSiteFromUpstream pruning order", () => {
     mocks.resolveSystemTimezone.mockResolvedValue("UTC");
     mocks.fetchUpstreamBalance.mockResolvedValue({ balance: 1, todayCost: 0, totalCost: 0 });
     mocks.upsertProviderSiteGroupRate.mockResolvedValue({});
+    mocks.deleteDuplicateUpstreamApiKeys.mockImplementation(async (input: { upstreamKeys: unknown[] }) => ({
+      keys: input.upstreamKeys,
+      deleted: 0,
+    }));
     mocks.deleteUnboundUpstreamApiKeys.mockResolvedValue(0);
     mocks.deleteProviderSiteGroupRatesNotIn.mockResolvedValue([]);
     mocks.findAllProviderGroups.mockResolvedValue([]);
@@ -115,6 +128,7 @@ describe("syncProviderSiteFromUpstream pruning order", () => {
       keysAutoCreated: 0,
     });
     mocks.fetchUpstreamApiKeys.mockRejectedValue(new Error("keys endpoint unavailable"));
+    mocks.isUpstreamRateLimitedError.mockReturnValue(false);
     mocks.isUpstreamUnauthorizedError.mockReturnValue(false);
     mocks.syncSiteProviderBalanceState.mockResolvedValue({ enabled: true, changed: 0 });
     mocks.updateProviderSite.mockResolvedValue({});
@@ -135,7 +149,7 @@ describe("syncProviderSiteFromUpstream pruning order", () => {
     expect(mocks.updateProviderSite).toHaveBeenCalled();
   });
 
-  it("prunes unkeyed other groups after a complete key-list response", async () => {
+  it("keeps unclassified groups until upstream key provisioning handles them", async () => {
     mocks.fetchUpstreamGroupRates.mockResolvedValue([
       { groupName: "Current Group", description: null, ratio: 1, completionRatio: 0 },
       { groupName: "test", description: null, ratio: 1, completionRatio: 0 },
@@ -156,24 +170,21 @@ describe("syncProviderSiteFromUpstream pruning order", () => {
         matchRules: [{ matchType: "contains", pattern: "current" }],
       },
     ]);
-    mocks.findUnkeyedOtherSiteGroupNames.mockReturnValue(["test"]);
-    mocks.deleteProviderSiteGroupRatesNotIn
-      .mockResolvedValueOnce([])
-      .mockResolvedValueOnce(["test"]);
-    mocks.pruneStaleSiteProvidersForUpstreamGroups
-      .mockResolvedValueOnce(0)
-      .mockResolvedValueOnce(1);
 
     const result = await syncProviderSiteFromUpstream(7);
 
     expect(result.ok).toBe(true);
-    expect(mocks.deleteProviderSiteGroupRatesNotIn).toHaveBeenNthCalledWith(2, 7, [
+    expect(mocks.deleteProviderSiteGroupRatesNotIn).toHaveBeenCalledOnce();
+    expect(mocks.deleteProviderSiteGroupRatesNotIn).toHaveBeenCalledWith(7, [
       "Current Group",
+      "test",
     ]);
-    expect(mocks.pruneStaleSiteProvidersForUpstreamGroups).toHaveBeenNthCalledWith(2, 7, [
+    expect(mocks.pruneStaleSiteProvidersForUpstreamGroups).toHaveBeenCalledOnce();
+    expect(mocks.pruneStaleSiteProvidersForUpstreamGroups).toHaveBeenCalledWith(7, [
       "Current Group",
+      "test",
     ]);
-    expect(result.keysSynced?.deleted).toBe(1);
+    expect(result.keysSynced?.deleted).toBe(0);
   });
 
   it("cleans explicitly unbound upstream keys during a trusted group refresh", async () => {
@@ -219,5 +230,17 @@ describe("syncProviderSiteFromUpstream pruning order", () => {
 
     expect(result.ok).toBe(true);
     expect(mocks.deleteUnboundUpstreamApiKeys).not.toHaveBeenCalled();
+  });
+
+  it("skips the site while its upstream rate-limit cooldown is active", async () => {
+    noteProviderSiteRateLimit("https://site.example", 120_000);
+
+    const result = await syncProviderSiteFromUpstream(7);
+
+    expect(result.ok).toBe(false);
+    expect(result.error).toMatch(/cooling down/);
+    expect(mocks.loginUpstreamSite).not.toHaveBeenCalled();
+    expect(mocks.fetchUpstreamGroupRates).not.toHaveBeenCalled();
+    expect(mocks.updateProviderSite).not.toHaveBeenCalled();
   });
 });

@@ -3,9 +3,15 @@ import "server-only";
 import { and, asc, count, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import { providerSiteGroupRates, providerSites, providers } from "@/drizzle/schema";
-import { classifySiteGroupTag } from "@/lib/provider-sites/billing";
-import { findAllProviderGroups } from "@/repository/provider-groups";
+import {
+  classifySiteGroupTag,
+  normalizeUpstreamRate,
+  resolveRechargeMultiplier,
+  resolveSiteBalance,
+  resolveSiteCost,
+} from "@/lib/provider-sites/billing";
 import { encryptSecret, hasSecret } from "@/lib/provider-sites/secret-box";
+import { findAllProviderGroups } from "@/repository/provider-groups";
 import type {
   CreateProviderSiteInput,
   ProviderSite,
@@ -39,6 +45,7 @@ function toNullableNumber(value: unknown): number | null {
 }
 
 function toSite(row: SiteRow): ProviderSite {
+  const rechargeMultiplier = resolveRechargeMultiplier(row.rechargeMultiplier);
   return {
     id: row.id,
     name: row.name,
@@ -48,6 +55,7 @@ function toSite(row: SiteRow): ProviderSite {
     notes: row.notes ?? null,
     isEnabled: row.isEnabled ?? true,
     sortOrder: Number.isFinite(Number(row.sortOrder)) ? Number(row.sortOrder) : 0,
+    rechargeMultiplier,
     upstreamHubChannelId: row.upstreamHubChannelId ?? null,
     username: row.username ?? null,
     hasPassword: hasSecret(row.passwordCipher),
@@ -56,8 +64,10 @@ function toSite(row: SiteRow): ProviderSite {
     hasCaptchaApiKey: hasSecret(row.captchaApiKeyCipher),
     captchaEndpoint: row.captchaEndpoint ?? null,
     lastBalance: toNullableNumber(row.lastBalance),
+    realBalance: resolveSiteBalance(row.lastBalance, rechargeMultiplier),
     lastBalanceAt: row.lastBalanceAt ? new Date(row.lastBalanceAt) : null,
     todayCost: toNullableNumber(row.todayCost),
+    realTodayCost: resolveSiteCost(row.todayCost, rechargeMultiplier),
     totalCost: toNullableNumber(row.totalCost),
     lastSyncError: row.lastSyncError ?? null,
     lastSyncAt: row.lastSyncAt ? new Date(row.lastSyncAt) : null,
@@ -68,14 +78,20 @@ function toSite(row: SiteRow): ProviderSite {
   };
 }
 
-function toRate(row: RateRow): ProviderSiteGroupRate {
+function toRate(row: RateRow, rechargeMultiplier: unknown = 1): ProviderSiteGroupRate {
+  const ratio = toFiniteNumber(row.ratio, 1);
+  const completionRatio =
+    row.completionRatio == null ? null : toFiniteNumber(row.completionRatio, 0);
   return {
     id: row.id,
     siteId: row.siteId,
     groupName: row.groupName,
     description: row.description ?? null,
-    ratio: toFiniteNumber(row.ratio, 1),
-    completionRatio: row.completionRatio == null ? null : toFiniteNumber(row.completionRatio, 0),
+    ratio,
+    effectiveRatio: normalizeUpstreamRate(ratio, rechargeMultiplier),
+    completionRatio,
+    effectiveCompletionRatio:
+      completionRatio == null ? null : normalizeUpstreamRate(completionRatio, rechargeMultiplier),
     dispatchGroupTag: row.dispatchGroupTag ?? null,
     lastSeenAt: row.lastSeenAt ? new Date(row.lastSeenAt) : new Date(),
     createdAt: row.createdAt ? new Date(row.createdAt) : new Date(),
@@ -148,24 +164,36 @@ export async function findProviderSiteByName(name: string): Promise<ProviderSite
 export async function findProviderSiteGroupRatesBySiteId(
   siteId: number
 ): Promise<ProviderSiteGroupRate[]> {
+  const [site] = await db
+    .select({ rechargeMultiplier: providerSites.rechargeMultiplier })
+    .from(providerSites)
+    .where(eq(providerSites.id, siteId))
+    .limit(1);
   const rows = await db
     .select()
     .from(providerSiteGroupRates)
     .where(eq(providerSiteGroupRates.siteId, siteId))
     .orderBy(asc(providerSiteGroupRates.ratio), asc(providerSiteGroupRates.groupName));
-  return rows.map(toRate);
+  return rows.map((row) => toRate(row, site?.rechargeMultiplier));
 }
 
 export async function findProviderSiteGroupRatesBySiteIds(
   siteIds: number[]
 ): Promise<ProviderSiteGroupRate[]> {
   if (siteIds.length === 0) return [];
+  const sites = await db
+    .select({ id: providerSites.id, rechargeMultiplier: providerSites.rechargeMultiplier })
+    .from(providerSites)
+    .where(inArray(providerSites.id, siteIds));
+  const rechargeBySite = new Map(
+    sites.map((site) => [site.id, resolveRechargeMultiplier(site.rechargeMultiplier)])
+  );
   const rows = await db
     .select()
     .from(providerSiteGroupRates)
     .where(inArray(providerSiteGroupRates.siteId, siteIds))
     .orderBy(asc(providerSiteGroupRates.ratio), asc(providerSiteGroupRates.groupName));
-  return rows.map(toRate);
+  return rows.map((row) => toRate(row, rechargeBySite.get(row.siteId)));
 }
 
 async function countProvidersBySiteIds(
@@ -213,6 +241,34 @@ export async function findAllProviderSitesWithRates(): Promise<ProviderSiteWithR
   });
 }
 
+/** Keep site-linked provider billing/routing costs in sync with effective rates. */
+async function syncLinkedProviderCostMultipliers(
+  siteId: number,
+  rechargeMultiplier: unknown
+): Promise<void> {
+  const rates = await db
+    .select({ groupName: providerSiteGroupRates.groupName, ratio: providerSiteGroupRates.ratio })
+    .from(providerSiteGroupRates)
+    .where(eq(providerSiteGroupRates.siteId, siteId));
+
+  for (const rate of rates) {
+    await db
+      .update(providers)
+      .set({
+        costMultiplier: normalizeUpstreamRate(rate.ratio, rechargeMultiplier).toString(),
+        billingMode: "site_group_ratio",
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(providers.siteId, siteId),
+          eq(providers.siteGroupName, rate.groupName),
+          isNull(providers.deletedAt)
+        )
+      );
+  }
+}
+
 export async function createProviderSite(input: CreateProviderSiteInput): Promise<ProviderSite> {
   const maxSort = await db
     .select({ value: sql<number>`coalesce(max(${providerSites.sortOrder}), -1)` })
@@ -232,6 +288,7 @@ export async function createProviderSite(input: CreateProviderSiteInput): Promis
       notes: input.notes?.trim() || null,
       isEnabled: input.isEnabled ?? true,
       sortOrder: nextSort,
+      rechargeMultiplier: resolveRechargeMultiplier(input.rechargeMultiplier).toString(),
       upstreamHubChannelId: input.upstreamHubChannelId ?? null,
       username: input.username?.trim() || null,
       passwordCipher: encryptSecret(input.password),
@@ -258,6 +315,9 @@ export async function updateProviderSite(
   if (input.isEnabled !== undefined) patch.isEnabled = input.isEnabled;
   if (input.sortOrder !== undefined && Number.isFinite(input.sortOrder)) {
     patch.sortOrder = Math.trunc(input.sortOrder);
+  }
+  if (input.rechargeMultiplier !== undefined) {
+    patch.rechargeMultiplier = resolveRechargeMultiplier(input.rechargeMultiplier).toString();
   }
   if (input.upstreamHubChannelId !== undefined) {
     patch.upstreamHubChannelId = input.upstreamHubChannelId;
@@ -309,6 +369,9 @@ export async function updateProviderSite(
     .set(patch)
     .where(eq(providerSites.id, id))
     .returning();
+  if (row && input.rechargeMultiplier !== undefined) {
+    await syncLinkedProviderCostMultipliers(id, row.rechargeMultiplier);
+  }
   return row ? toSite(row) : null;
 }
 
@@ -386,7 +449,13 @@ export async function upsertProviderSiteGroupRate(
     })
     .returning();
 
-  return toRate(row);
+  const [site] = await db
+    .select({ rechargeMultiplier: providerSites.rechargeMultiplier })
+    .from(providerSites)
+    .where(eq(providerSites.id, siteId))
+    .limit(1);
+  await syncLinkedProviderCostMultipliers(siteId, site?.rechargeMultiplier);
+  return toRate(row, site?.rechargeMultiplier);
 }
 
 export async function updateProviderSiteGroupRate(
@@ -430,7 +499,14 @@ export async function updateProviderSiteGroupRate(
     .set(patch)
     .where(eq(providerSiteGroupRates.id, id))
     .returning();
-  return row ? toRate(row) : null;
+  if (!row) return null;
+  const [site] = await db
+    .select({ rechargeMultiplier: providerSites.rechargeMultiplier })
+    .from(providerSites)
+    .where(eq(providerSites.id, row.siteId))
+    .limit(1);
+  await syncLinkedProviderCostMultipliers(row.siteId, site?.rechargeMultiplier);
+  return toRate(row, site?.rechargeMultiplier);
 }
 
 export async function deleteProviderSiteGroupRate(id: number): Promise<boolean> {
@@ -478,5 +554,11 @@ export async function findProviderSiteGroupRateById(
     .from(providerSiteGroupRates)
     .where(eq(providerSiteGroupRates.id, id))
     .limit(1);
-  return row ? toRate(row) : null;
+  if (!row) return null;
+  const [site] = await db
+    .select({ rechargeMultiplier: providerSites.rechargeMultiplier })
+    .from(providerSites)
+    .where(eq(providerSites.id, row.siteId))
+    .limit(1);
+  return toRate(row, site?.rechargeMultiplier);
 }

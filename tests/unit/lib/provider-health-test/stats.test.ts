@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  computeHealthTestModelStats,
   computeHealthTestStats,
   formatOnlineRatePercent,
+  normalizeHealthTestModelStats,
   normalizeHealthTestRecentResults,
 } from "@/lib/provider-health-test/stats";
 
@@ -30,15 +32,61 @@ describe("computeHealthTestStats", () => {
     expect(stats.recentResults[2]?.ok).toBe(false);
   });
 
-  it("caps window size", () => {
-    const logs = Array.from({ length: 30 }, (_, i) => ({
-      ok: i % 2 === 0,
-      firstByteMs: i % 2 === 0 ? 50 : null,
-      createdAt: new Date(Date.UTC(2026, 6, 20, 12, 0, i)),
-    }));
-    const stats = computeHealthTestStats(logs, 10);
-    expect(stats.recentResults).toHaveLength(10);
-    expect(stats.onlineRate).toBeCloseTo(0.5);
+  it("keeps independent rolling windows for interleaved models", () => {
+    const logs = [
+      {
+        ok: true,
+        firstByteMs: 100,
+        model: "model-a",
+        createdAt: new Date("2026-07-20T12:04:00Z"),
+      },
+      {
+        ok: false,
+        firstByteMs: null,
+        model: "model-b",
+        createdAt: new Date("2026-07-20T12:03:00Z"),
+      },
+      {
+        ok: false,
+        firstByteMs: null,
+        model: "model-a",
+        createdAt: new Date("2026-07-20T12:02:00Z"),
+      },
+      {
+        ok: true,
+        firstByteMs: 300,
+        model: "model-b",
+        createdAt: new Date("2026-07-20T12:01:00Z"),
+      },
+    ];
+    const stats = computeHealthTestModelStats(logs, 2);
+
+    expect(stats["model-a"]?.onlineRate).toBe(0.5);
+    expect(stats["model-b"]?.onlineRate).toBe(0.5);
+    expect(stats["model-a"]?.recentResults.map((sample) => sample.model)).toEqual([
+      "model-a",
+      "model-a",
+    ]);
+    expect(stats["model-b"]?.avgFirstByteMs).toBe(300);
+  });
+});
+
+describe("normalizeHealthTestModelStats", () => {
+  it("normalizes per-model snapshots and legacy sample values", () => {
+    const stats = normalizeHealthTestModelStats({
+      " model-a ": {
+        onlineRate: "0.75",
+        avgFirstByteMs: 101.6,
+        recentResults: [true, false],
+      },
+      "": { onlineRate: 1, recentResults: [] },
+      invalid: null,
+    });
+
+    expect(stats?.["model-a"]?.onlineRate).toBe(0.75);
+    expect(stats?.["model-a"]?.avgFirstByteMs).toBe(102);
+    expect(stats?.["model-a"]?.recentResults.map((sample) => sample.ok)).toEqual([true, false]);
+    expect(stats?.invalid).toBeUndefined();
   });
 });
 

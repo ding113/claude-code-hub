@@ -8,7 +8,9 @@ export async function invalidateProviderQueries(queryClient: QueryClient): Promi
       key === "providers" ||
       key === "providers-health" ||
       key === "providers-statistics" ||
-      key === "provider-vendors"
+      key === "provider-vendors" ||
+      key === "provider-groups" ||
+      key === "my-group-rates"
     );
   };
 

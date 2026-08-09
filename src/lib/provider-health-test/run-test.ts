@@ -4,6 +4,7 @@ import { GeminiAuth } from "@/app/v1/_lib/gemini/auth";
 import { logger } from "@/lib/logger";
 import {
   getDefaultHealthTestModel,
+  HEALTH_TEST_INTERVAL_MS,
   isHealthTestDue,
   MANUAL_HEALTH_TEST_GEMINI_TIMEOUT_MS,
   MANUAL_HEALTH_TEST_TIMEOUT_MS,
@@ -18,7 +19,11 @@ import type {
 } from "@/lib/provider-testing/types";
 import { calculateRequestCost } from "@/lib/utils/cost-calculation";
 import { formatCostForStorage } from "@/lib/utils/currency";
+import { resolveProviderGroupsWithDefault } from "@/lib/utils/provider-group";
 import { findLatestPriceByModel } from "@/repository/model-price";
+import { getProviderGroupSharedSettingsMap } from "@/repository/provider-groups";
+import type { ProviderGroupSharedSettings } from "@/lib/provider-groups/shared-settings";
+import type { TestFormat } from "@/lib/provider-testing/presets";
 import {
   findProvidersForScheduledHealthTest,
   type ProviderHealthTestSource,
@@ -36,6 +41,7 @@ export interface RunProviderHealthTestInput {
         url: string;
         key: string;
         providerType: ProviderType;
+        groupTag?: string | null;
         proxyUrl?: string | null;
         proxyFallbackToDirect?: boolean | null;
         customHeaders?: Record<string, string> | null;
@@ -50,7 +56,7 @@ export interface RunProviderHealthTestInput {
 /**
  * Per-provider in-flight guard for scheduled tests.
  * Slow providers only block themselves — they must not hold a global cycle lock
- * that would skip the next minute for fast providers.
+ * that would skip the next cron tick for fast providers.
  */
 const scheduledInFlight = new Set<number>();
 
@@ -171,6 +177,21 @@ async function estimateHealthTestCostUsd(input: {
   };
 }
 
+/**
+ * 解析 provider 所在分组的"测试请求格式"（healthTestFormat）。
+ * 任一所在组显式配置了格式时返回该格式；全部未配置时返回 undefined（跟随 providerType 默认）。
+ */
+function resolveGroupHealthTestFormat(
+  groupTag: string | null,
+  map: ReadonlyMap<string, ProviderGroupSharedSettings | null>
+): TestFormat | undefined {
+  for (const tag of resolveProviderGroupsWithDefault(groupTag)) {
+    const fmt = map.get(tag)?.healthTestFormat;
+    if (fmt) return fmt;
+  }
+  return undefined;
+}
+
 export async function runProviderHealthTest(
   input: RunProviderHealthTestInput
 ): Promise<ProviderTestResult> {
@@ -189,11 +210,16 @@ export async function runProviderHealthTest(
     throw new Error("health_test_model_not_configured");
   }
 
+  // 分组"测试请求格式"：显式配置时按该格式探测（用于"请求格式=不覆盖"的分组）
+  const groupSharedByTag = await getProviderGroupSharedSettingsMap();
+  const testFormat = resolveGroupHealthTestFormat(provider.groupTag ?? null, groupSharedByTag);
+
   const config: ProviderTestConfig = {
     providerId: String(provider.id),
     providerUrl: provider.url,
     apiKey,
     providerType: provider.providerType,
+    ...(testFormat ? { testFormat } : {}),
     model,
     proxyUrl: provider.proxyUrl ?? undefined,
     proxyFallbackToDirect: provider.proxyFallbackToDirect ?? undefined,
@@ -211,19 +237,26 @@ export async function runProviderHealthTest(
   };
 
   const result = await executeProviderTest(config);
-  const resolvedModel = result.model ?? model;
+  const resolvedModel = result.model?.trim() || model;
   const cost = await estimateHealthTestCostUsd({
     model: resolvedModel,
     usage: result.usage,
     costMultiplier: "costMultiplier" in provider ? provider.costMultiplier : null,
   });
+  const configuredHealthTestModels =
+    "healthTestModels" in provider && Array.isArray(provider.healthTestModels)
+      ? provider.healthTestModels
+      : [model];
 
   await recordProviderHealthTestResult({
     providerId: provider.id,
     source: input.source,
     ok: result.success,
     status: result.status,
-    model: resolvedModel,
+    // Key health statistics by the model we requested, not an upstream response
+    // alias/canonical name, so request-model dispatch can find the snapshot.
+    model,
+    healthTestModels: configuredHealthTestModels,
     firstByteMs: result.firstByteMs ?? null,
     latencyMs: result.latencyMs ?? null,
     httpStatusCode: result.httpStatusCode ?? null,
@@ -245,27 +278,44 @@ async function runOneScheduledProvider(
   onProviderFinished?: () => void
 ): Promise<boolean> {
   try {
-    await runProviderHealthTest({ provider: current, source: "scheduled", timeoutMs });
-    return true;
-  } catch (error) {
-    logger.warn("[ProviderHealthTest] scheduled run failed", {
-      providerId: current.id,
-      error: error instanceof Error ? error.message : String(error),
-    });
-    try {
-      await recordProviderHealthTestResult({
-        providerId: current.id,
-        source: "scheduled",
-        ok: false,
-        status: "red",
-        model: current.healthTestModel || getDefaultHealthTestModel(current.providerType),
-        errorType: "scheduler_error",
-        errorMessage: error instanceof Error ? error.message : String(error),
-      });
-    } catch {
-      // ignore secondary write failure
+    const models =
+      current.healthTestModels?.filter(Boolean) ??
+      (current.healthTestModel ? [current.healthTestModel] : []);
+    if (models.length === 0) return false;
+
+    let allOk = true;
+    for (const model of models) {
+      try {
+        await runProviderHealthTest({
+          provider: current,
+          source: "scheduled",
+          model,
+          timeoutMs,
+        });
+      } catch (error) {
+        allOk = false;
+        logger.warn("[ProviderHealthTest] scheduled model run failed", {
+          providerId: current.id,
+          model,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        try {
+          await recordProviderHealthTestResult({
+            providerId: current.id,
+            source: "scheduled",
+            ok: false,
+            status: "red",
+            model,
+            healthTestModels: current.healthTestModels ?? [model],
+            errorType: "scheduler_error",
+            errorMessage: error instanceof Error ? error.message : String(error),
+          });
+        } catch {
+          // ignore secondary write failure
+        }
+      }
     }
-    return false;
+    return allOk;
   } finally {
     scheduledInFlight.delete(current.id);
     // Each provider finishes on its own clock — refresh dispatch SLO promptly.
@@ -294,7 +344,7 @@ async function runOneScheduledProvider(
  *
  * - Does NOT await all providers (no global wait on the slowest).
  * - Skips providers already in-flight so a long run cannot be double-started.
- * - Each provider gets a precise completion-based cadence wake; the minute poll remains a fallback.
+ * - Each provider gets a precise completion-based cadence wake; the wall-clock cron poll remains a fallback.
  */
 export async function runDueScheduledHealthTests(options?: {
   intervalMs?: number;
@@ -302,13 +352,13 @@ export async function runDueScheduledHealthTests(options?: {
   now?: Date;
   onProviderFinished?: () => void;
 }): Promise<{ due: number; started: number; skippedInFlight: number; inFlight: number }> {
-  const intervalMs = options?.intervalMs ?? 60_000;
+  const intervalMs = options?.intervalMs ?? HEALTH_TEST_INTERVAL_MS;
   const timeoutMs = options?.timeoutMs;
   const onProviderFinished = options?.onProviderFinished;
   const now = options?.now ?? new Date();
   const targets = await findProvidersForScheduledHealthTest();
 
-  // Elapsed interval: the poller may wake every minute, but a provider only runs
+  // Elapsed interval: the wall-clock cron poll may wake every 30 minutes, but a provider only runs
   // after its configured interval has elapsed since the previous result.
   const dueCandidates = targets.filter((p) => isHealthTestDue(p.lastHealthTestAt, now, intervalMs));
 

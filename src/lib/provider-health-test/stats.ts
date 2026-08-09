@@ -13,6 +13,8 @@ export interface ProviderHealthTestSample {
   httpStatusCode: number | null;
   inputTokens: number | null;
   outputTokens: number | null;
+  cacheCreationInputTokens: number | null;
+  cacheReadInputTokens: number | null;
   costUsd: number | null;
   /** ISO-8601 timestamp */
   testedAt: string;
@@ -30,6 +32,8 @@ export interface HealthTestLogLike {
   httpStatusCode?: number | null;
   inputTokens?: number | null;
   outputTokens?: number | null;
+  cacheCreationInputTokens?: number | null;
+  cacheReadInputTokens?: number | null;
   costUsd?: number | string | null;
   createdAt?: Date | string | null;
 }
@@ -40,6 +44,16 @@ export interface HealthTestStats {
   /** Oldest → newest, rich samples for UI tooltips. */
   recentResults: ProviderHealthTestSample[];
 }
+
+/** Denormalized rolling SLO metrics for one configured test model. */
+export interface ProviderHealthTestModelStats {
+  onlineRate: number | null;
+  avgFirstByteMs: number | null;
+  /** Oldest → newest samples for this model only. */
+  recentResults: ProviderHealthTestSample[];
+}
+
+export type ProviderHealthTestModelStatsMap = Record<string, ProviderHealthTestModelStats>;
 
 function toIso(value: Date | string | null | undefined): string {
   if (!value) return new Date().toISOString();
@@ -75,6 +89,8 @@ export function toHealthTestSample(log: HealthTestLogLike): ProviderHealthTestSa
     httpStatusCode: toFiniteInt(log.httpStatusCode),
     inputTokens: toFiniteInt(log.inputTokens),
     outputTokens: toFiniteInt(log.outputTokens),
+    cacheCreationInputTokens: toFiniteInt(log.cacheCreationInputTokens),
+    cacheReadInputTokens: toFiniteInt(log.cacheReadInputTokens),
     costUsd: toFiniteNumber(log.costUsd),
     testedAt: toIso(log.createdAt),
   };
@@ -105,6 +121,8 @@ export function normalizeHealthTestRecentResults(
       httpStatusCode: null,
       inputTokens: null,
       outputTokens: null,
+      cacheCreationInputTokens: null,
+      cacheReadInputTokens: null,
       costUsd: null,
       testedAt: new Date(0).toISOString(),
     }));
@@ -122,9 +140,53 @@ export function normalizeHealthTestRecentResults(
     httpStatusCode: toFiniteInt(item?.httpStatusCode),
     inputTokens: toFiniteInt(item?.inputTokens),
     outputTokens: toFiniteInt(item?.outputTokens),
+    cacheCreationInputTokens: toFiniteInt(item?.cacheCreationInputTokens),
+    cacheReadInputTokens: toFiniteInt(item?.cacheReadInputTokens),
     costUsd: toFiniteNumber(item?.costUsd),
     testedAt: typeof item?.testedAt === "string" ? item.testedAt : new Date(0).toISOString(),
   }));
+}
+
+/**
+ * Average successful probe total wall time from a provider's current rolling
+ * samples. This is the SLO/ranking metric; first-byte time is display-only.
+ */
+export function resolveHealthTestAvgLatencyMs(provider: {
+  healthTestRecentResults?: unknown;
+}): number | null {
+  const samples = normalizeHealthTestRecentResults(provider.healthTestRecentResults) ?? [];
+  const successfulLatencies = samples
+    .filter(
+      (sample) =>
+        sample.ok && typeof sample.latencyMs === "number" && Number.isFinite(sample.latencyMs)
+    )
+    .map((sample) => sample.latencyMs as number);
+
+  if (successfulLatencies.length === 0) return null;
+  return Math.round(
+    successfulLatencies.reduce((total, latency) => total + latency, 0) /
+      successfulLatencies.length
+  );
+}
+
+/** Normalize the per-model JSON snapshot stored on providers. */
+export function normalizeHealthTestModelStats(
+  raw: unknown
+): ProviderHealthTestModelStatsMap | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const out: ProviderHealthTestModelStatsMap = {};
+  for (const [model, value] of Object.entries(raw as Record<string, unknown>)) {
+    const normalizedModel = model.trim();
+    if (!normalizedModel || !value || typeof value !== "object" || Array.isArray(value)) continue;
+    const item = value as Record<string, unknown>;
+    const onlineRate = toFiniteNumber(item.onlineRate);
+    const avgFirstByteMs = toFiniteInt(item.avgFirstByteMs);
+    const recentResults = normalizeHealthTestRecentResults(item.recentResults) ?? [];
+    if (!out[normalizedModel]) {
+      out[normalizedModel] = { onlineRate, avgFirstByteMs, recentResults };
+    }
+  }
+  return Object.keys(out).length > 0 ? out : null;
 }
 
 /**
@@ -157,6 +219,37 @@ export function computeHealthTestStats(
   const recentResults = window.map(toHealthTestSample).reverse();
 
   return { onlineRate, avgFirstByteMs, recentResults };
+}
+
+/**
+ * Compute independent rolling SLO snapshots for each non-empty model key.
+ * Input logs must be newest-first; each model keeps its own window.
+ */
+export function computeHealthTestModelStats(
+  logsNewestFirst: HealthTestLogLike[],
+  windowSize: number = HEALTH_TEST_WINDOW_SIZE
+): ProviderHealthTestModelStatsMap {
+  const logsByModel = new Map<string, HealthTestLogLike[]>();
+  for (const log of logsNewestFirst) {
+    const model = log.model?.trim();
+    if (!model) continue;
+    const bucket = logsByModel.get(model) ?? [];
+    if (bucket.length < windowSize) {
+      bucket.push({ ...log, model });
+    }
+    logsByModel.set(model, bucket);
+  }
+
+  const result: ProviderHealthTestModelStatsMap = {};
+  for (const [model, logs] of logsByModel) {
+    const stats = computeHealthTestStats(logs, windowSize);
+    result[model] = {
+      onlineRate: stats.onlineRate,
+      avgFirstByteMs: stats.avgFirstByteMs,
+      recentResults: stats.recentResults,
+    };
+  }
+  return result;
 }
 
 export function formatOnlineRatePercent(rate: number | null | undefined): string {

@@ -29,6 +29,9 @@ interface CodexResponse {
     input_tokens?: number;
     output_tokens?: number;
     total_tokens?: number;
+    input_tokens_details?: {
+      cached_tokens?: number;
+    };
   };
   error?: {
     message?: string;
@@ -114,6 +117,9 @@ export function parseCodexResponse(body: string, contentType?: string): ParsedRe
       usage = {
         inputTokens: data.usage.input_tokens || 0,
         outputTokens: data.usage.output_tokens || 0,
+        ...(data.usage.input_tokens_details?.cached_tokens != null
+          ? { cacheReadInputTokens: data.usage.input_tokens_details.cached_tokens }
+          : {}),
       };
     }
 

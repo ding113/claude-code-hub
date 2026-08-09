@@ -1,9 +1,9 @@
 "use server";
 
-import { asc, eq } from "drizzle-orm";
+import { asc, eq, isNull } from "drizzle-orm";
 import type { AnyPgColumn } from "drizzle-orm/pg-core";
 import { db } from "@/drizzle/db";
-import { systemSettings } from "@/drizzle/schema";
+import { providers, systemSettings } from "@/drizzle/schema";
 import { logger } from "@/lib/logger";
 import { DEFAULT_SITE_TITLE } from "@/lib/site-title";
 import {
@@ -151,7 +151,7 @@ function createFallbackSettings(): SystemSettings {
     healthTestGlobalBudgetSuspendedDay: null,
     healthTestScheduleMode: "dynamic",
     healthTestWindowSize: 10,
-    healthTestIntervalSeconds: 60,
+    healthTestIntervalSeconds: 1800,
     healthTestTimeoutSeconds: 30,
     healthTestMinOnlineRatePercent: 90,
     healthTestMaxAvgLatencySeconds: 20,
@@ -775,12 +775,22 @@ export async function updateSystemSettings(
       updates.codexPriorityBillingSource = payload.codexPriorityBillingSource;
     }
 
-    // Streaming race policy
+    // Streaming race policy. Switching modes also synchronizes the provider-level
+    // first-byte timeout so the persisted fleet state cannot disagree with the
+    // site-wide control. single/dual_fast do not use a provider first-byte kill;
+    // timeout_race uses the site threshold for every non-deleted provider.
+    const racePolicyChanged =
+      payload.streamingRaceMode !== undefined || payload.streamingRaceFirstByteMs !== undefined;
+    const nextStreamingRaceMode = payload.streamingRaceMode ?? current.streamingRaceMode;
+    const nextStreamingRaceFirstByteMs =
+      nextStreamingRaceMode === "single"
+        ? 0
+        : (payload.streamingRaceFirstByteMs ?? current.streamingRaceFirstByteMs);
     if (payload.streamingRaceMode !== undefined) {
       updates.streamingRaceMode = payload.streamingRaceMode;
     }
-    if (payload.streamingRaceFirstByteMs !== undefined) {
-      updates.streamingRaceFirstByteMs = payload.streamingRaceFirstByteMs;
+    if (racePolicyChanged) {
+      updates.streamingRaceFirstByteMs = nextStreamingRaceFirstByteMs;
     }
 
     // 非成功请求按 token 用量计费开关（如果提供）
@@ -997,6 +1007,34 @@ export async function updateSystemSettings(
 
     if (!updated) {
       throw new Error("更新系统设置失败");
+    }
+
+    if (racePolicyChanged) {
+      const providerFirstByteTimeoutMs =
+        nextStreamingRaceMode === "timeout_race" ? nextStreamingRaceFirstByteMs : 0;
+      const syncedProviders = await executor
+        .update(providers)
+        .set({
+          firstByteTimeoutStreamingMs: providerFirstByteTimeoutMs,
+          updatedAt: new Date(),
+        })
+        .where(isNull(providers.deletedAt))
+        .returning({ id: providers.id });
+
+      logger.info("[SystemSettings] Synchronized provider streaming first-byte timeout", {
+        mode: nextStreamingRaceMode,
+        providerFirstByteTimeoutMs,
+        providerCount: syncedProviders.length,
+      });
+
+      try {
+        const { publishProviderCacheInvalidation } = await import("@/lib/cache/provider-cache");
+        await publishProviderCacheInvalidation();
+      } catch (error) {
+        // The local cache is cleared before pub/sub publication; Redis failure
+        // must not turn a successful settings write into a reported failure.
+        logger.warn("[SystemSettings] Provider cache invalidation publish failed", { error });
+      }
     }
 
     return toSystemSettings(updated);

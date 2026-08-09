@@ -54,7 +54,10 @@ export interface ProviderChainItem {
     | "session_reuse" // 会话复用
     | "weighted_random" // 加权随机
     | "group_filtered" // 分组筛选后随机
-    | "fail_open_fallback"; // Fail Open 降级
+    | "fail_open_fallback" // Fail Open 降级
+    | "health_slo" // Health SLO selection
+    | "latency_fallback" // Shortest average-latency fallback
+    | "cost_fallback"; // Deterministic cheapest-cost fallback
 
   // 供应商配置（决策依据）
   priority?: number;
@@ -204,6 +207,7 @@ export interface ProviderChainItem {
     // --- 优先级分层 ---
     priorityLevels: number[]; // 所有优先级值（降序）
     selectedPriority: number; // 选定的最高优先级
+    selectionMode?: "health_slo" | "latency_fallback" | "cost_fallback";
     candidatesAtPriority: Array<{
       // 该优先级的候选列表
       id: number;

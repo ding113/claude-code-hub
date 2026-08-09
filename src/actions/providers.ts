@@ -394,6 +394,7 @@ export async function getProviders(): Promise<ProviderDisplay[]> {
         healthTestOnlineRate: provider.healthTestOnlineRate ?? null,
         healthTestAvgFirstByteMs: provider.healthTestAvgFirstByteMs ?? null,
         healthTestRecentResults: provider.healthTestRecentResults ?? null,
+        healthTestModelStats: provider.healthTestModelStats ?? null,
         healthTestTodayCostUsd: provider.healthTestTodayCostUsd ?? null,
         healthTestTodayCalls: provider.healthTestTodayCalls ?? null,
         healthTestBudgetSuspendedDay: provider.healthTestBudgetSuspendedDay ?? null,

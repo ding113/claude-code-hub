@@ -148,7 +148,7 @@
     "free": "Бесплатно",
     "multiplierHint": "Итоговый множитель = поставщик × группа",
     "modeHealth": "Health",
-    "modePriority": "Priority",
+    "modePriority": "Самый дешёвый fallback",
     "online": "Online",
     "firstByte": "TTFB",
     "requestFormat": "Формат запроса",
@@ -162,6 +162,7 @@
     "providerMult": "Поставщик",
     "groupMult": "Группа",
     "effectiveMult": "Итого",
-    "totalLatency": "Всего"
+    "totalLatency": "Ср. задержка",
+    "healthBaseline": "Базовая модель здоровья"
   }
 }

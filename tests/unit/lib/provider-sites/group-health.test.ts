@@ -14,14 +14,15 @@ function member(overrides: Partial<ProviderDisplay> = {}): ProviderDisplay {
     healthTestAvgFirstByteMs: null,
     healthTestRecentResults: null,
     ...overrides,
-  } as unknown as ProviderDisplay;
+  } as ProviderDisplay;
 }
 
-function sample(ok: boolean): ProviderDisplay["healthTestRecentResults"] {
-  return Array.from({ length: 10 }, () => ({
+function samples(ok = true, latencyMs = 1_000, count = 1): ProviderDisplay["healthTestRecentResults"] {
+  return Array.from({ length: count }, () => ({
     ok,
-    firstByteMs: ok ? 1000 : null,
-  })) as unknown as ProviderDisplay["healthTestRecentResults"];
+    firstByteMs: 10,
+    latencyMs,
+  })) as ProviderDisplay["healthTestRecentResults"];
 }
 
 describe("resolveProviderSiteGroupHealthState", () => {
@@ -33,7 +34,7 @@ describe("resolveProviderSiteGroupHealthState", () => {
     ["SLO auto-disabled", [member({ healthTestSloAutoDisabled: true })], "disabled"],
     [
       "all sampled keys failed",
-      [member({ lastHealthTestOk: false, healthTestRecentResults: sample(false) })],
+      [member({ lastHealthTestOk: false, healthTestRecentResults: samples(false) })],
       "failed",
     ],
     [
@@ -42,14 +43,14 @@ describe("resolveProviderSiteGroupHealthState", () => {
         member({
           lastHealthTestOk: true,
           healthTestOnlineRate: 1,
-          healthTestAvgFirstByteMs: 1000,
-          healthTestRecentResults: sample(true),
+          healthTestAvgFirstByteMs: 10,
+          healthTestRecentResults: samples(true),
         }),
       ],
       "ok",
     ],
   ])("returns %s -> %s", (_caseName, members, expected) => {
-    expect(resolveProviderSiteGroupHealthState(members)).toBe(
+    expect(resolveProviderSiteGroupHealthState(members as ProviderDisplay[])).toBe(
       expected as ProviderSiteGroupHealthState
     );
   });
@@ -60,45 +61,63 @@ describe("resolveProviderSiteGroupHealthState", () => {
         member({
           lastHealthTestOk: false,
           healthTestOnlineRate: 0,
-          healthTestAvgFirstByteMs: null,
-          healthTestRecentResults: sample(false),
+          healthTestRecentResults: samples(false),
         }),
         member({
           lastHealthTestOk: true,
           healthTestOnlineRate: 1,
-          healthTestAvgFirstByteMs: 1000,
-          healthTestRecentResults: sample(true),
+          healthTestRecentResults: samples(true),
         }),
       ])
     ).toBe("ok");
   });
 
-  it("uses the configured online-rate floor and average first-byte ceiling", () => {
+  it("uses the configured online-rate floor and total-latency ceiling", () => {
     const provider = member({
       lastHealthTestOk: true,
       healthTestOnlineRate: 0.89,
-      healthTestAvgFirstByteMs: 1000,
-      healthTestRecentResults: sample(true),
+      healthTestRecentResults: samples(true, 1_000),
     });
     expect(resolveProviderSiteGroupHealthState([provider])).toBe("failed");
     expect(
       resolveProviderSiteGroupHealthState([provider], {
         minOnlineRate: 0.89,
-        maxAvgFirstByteMs: 1000,
+        maxAvgLatencyMs: 1_000,
       })
     ).toBe("ok");
     expect(
       resolveProviderSiteGroupHealthState(
-        [
-          member({
-            lastHealthTestOk: true,
-            healthTestOnlineRate: 1,
-            healthTestAvgFirstByteMs: 20_001,
-            healthTestRecentResults: sample(true),
-          }),
-        ],
-        { minOnlineRate: 0.9, maxAvgFirstByteMs: 20_000 }
+        [member({ healthTestOnlineRate: 1, healthTestRecentResults: samples(true, 20_001) })],
+        { minOnlineRate: 0.9, maxAvgLatencyMs: 20_000 }
       )
     ).toBe("failed");
+  });
+
+  it("uses fallback-model stats instead of aggregate health", () => {
+    const fallbackBad = member({
+      lastHealthTestOk: true,
+      healthTestOnlineRate: 1,
+      healthTestRecentResults: samples(true, 100),
+      healthTestModelStats: {
+        "grok-5": {
+          onlineRate: 0,
+          avgFirstByteMs: null,
+          recentResults: samples(false),
+        },
+      },
+    });
+    expect(resolveProviderSiteGroupHealthState([fallbackBad], undefined, undefined, "grok-5")).toBe(
+      "failed"
+    );
+
+    const missingFallbackStats = member({
+      lastHealthTestOk: true,
+      healthTestOnlineRate: 1,
+      healthTestRecentResults: samples(true, 100),
+      healthTestModelStats: null,
+    });
+    expect(
+      resolveProviderSiteGroupHealthState([missingFallbackStats], undefined, undefined, "grok-5")
+    ).toBe("pending");
   });
 });

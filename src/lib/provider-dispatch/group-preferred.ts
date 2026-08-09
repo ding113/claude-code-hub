@@ -4,6 +4,7 @@ import {
   selectBestHealthDispatchProvider,
   selectCheapestProvider,
 } from "@/lib/provider-dispatch/health-aware-select";
+import { resolveProviderHealthTestModelForRequest } from "@/lib/provider-health-test/model-config";
 import { parseProviderGroups, resolveProviderGroupsWithDefault } from "@/lib/utils/provider-group";
 import type { Provider } from "@/types/provider";
 
@@ -29,6 +30,8 @@ export interface GroupPreferredProvider {
   costMultiplier: number;
   priority: number;
   mode: GroupPreferredPickMode;
+  /** Model whose independent health result is used for this pick, if any. */
+  healthTestModel: string | null;
   onlineRate: number | null;
   avgFirstByteMs: number | null;
   sampleCount: number;
@@ -43,6 +46,37 @@ function resolvePriorityForGroup(provider: Provider, group: string): number {
   const override = provider.groupPriorities?.[group];
   if (override != null && Number.isFinite(override)) return override;
   return provider.priority ?? 0;
+}
+
+function projectProviderHealthForGroupModel(
+  provider: Provider,
+  group: string,
+  requestedModel: string | undefined,
+  healthTestModelsByGroup: ReadonlyMap<string, string[] | null | undefined> | undefined,
+  healthTestModelFallbacksByGroup: ReadonlyMap<string, string | null | undefined> | undefined
+): Provider {
+  const model = resolveProviderHealthTestModelForRequest(
+    group,
+    requestedModel,
+    healthTestModelsByGroup ?? new Map(),
+    healthTestModelFallbacksByGroup
+  );
+  if (!model) return provider;
+
+  const stats = provider.healthTestModelStats?.[model];
+  const recentResults = stats?.recentResults ?? [];
+  const lastSample = recentResults.at(-1) ?? null;
+  return {
+    ...provider,
+    healthTestOnlineRate: stats?.onlineRate ?? null,
+    healthTestAvgFirstByteMs: stats?.avgFirstByteMs ?? null,
+    healthTestRecentResults: recentResults,
+    lastHealthTestModel: model,
+    lastHealthTestOk: lastSample?.ok ?? null,
+    lastHealthTestStatus: lastSample?.status ?? null,
+    lastHealthTestFirstByteMs: lastSample?.firstByteMs ?? null,
+    lastHealthTestLatencyMs: lastSample?.latencyMs ?? null,
+  };
 }
 
 function sanitizeMult(value: number | null | undefined, fallback = 1): number {
@@ -67,6 +101,7 @@ function buildPick(
   provider: Provider,
   mode: GroupPreferredPickMode,
   extras: {
+    healthTestModel: string | null;
     onlineRate: number | null;
     avgFirstByteMs: number | null;
     sampleCount: number;
@@ -86,6 +121,7 @@ function buildPick(
     costMultiplier: providerCostMultiplier * groupCostMultiplier,
     priority: extras.priority,
     mode,
+    healthTestModel: extras.healthTestModel,
     onlineRate: extras.onlineRate,
     avgFirstByteMs: extras.avgFirstByteMs,
     sampleCount: extras.sampleCount,
@@ -110,7 +146,10 @@ export function pickPreferredProviderForGroup(
   providers: Provider[],
   group: string,
   groupTableMultipliers?: Map<string, number> | Record<string, number> | null,
-  healthSloThresholds?: HealthSloThresholds | null
+  healthSloThresholds?: HealthSloThresholds | null,
+  requestedModel?: string,
+  healthTestModelsByGroup?: ReadonlyMap<string, string[] | null | undefined>,
+  healthTestModelFallbacksByGroup?: ReadonlyMap<string, string | null | undefined>
 ): GroupPreferredProvider | null {
   const g = (group || "").trim();
   if (!g) return null;
@@ -118,11 +157,35 @@ export function pickPreferredProviderForGroup(
   const peers = providers.filter((p) => p.isEnabled !== false && providerBelongsToGroup(p, g));
   if (peers.length === 0) return null;
 
+  const healthPeers = peers.map((provider) =>
+    projectProviderHealthForGroupModel(
+      provider,
+      g,
+      requestedModel,
+      healthTestModelsByGroup,
+      healthTestModelFallbacksByGroup
+    )
+  );
+  const healthTestModel = resolveProviderHealthTestModelForRequest(
+    g,
+    requestedModel,
+    healthTestModelsByGroup ?? new Map(),
+    healthTestModelFallbacksByGroup
+  );
   const resolvePriority = (p: Provider) => resolvePriorityForGroup(p, g);
-  const slo = selectBestHealthDispatchProvider(peers, resolveDispatchCost, healthSloThresholds);
+  const slo = selectBestHealthDispatchProvider(
+    healthPeers,
+    resolveDispatchCost,
+    healthSloThresholds
+  );
   if (slo) {
-    const cand = listHealthDispatchCandidates(peers, resolveDispatchCost, healthSloThresholds)[0];
+    const cand = listHealthDispatchCandidates(
+      healthPeers,
+      resolveDispatchCost,
+      healthSloThresholds
+    )[0];
     return buildPick(g, slo.provider, "health_slo", {
+      healthTestModel,
       priority: resolvePriority(slo.provider),
       onlineRate: cand?.onlineRate ?? slo.provider.healthTestOnlineRate ?? null,
       avgFirstByteMs: cand?.avgFirstByteMs ?? slo.provider.healthTestAvgFirstByteMs ?? null,
@@ -135,12 +198,14 @@ export function pickPreferredProviderForGroup(
 
   const top = selectCheapestProvider(peers, resolveDispatchCost);
   if (!top) return null;
-  return buildPick(g, top, "legacy_priority", {
+  const displayedTop = healthPeers.find((provider) => provider.id === top.id) ?? top;
+  return buildPick(g, displayedTop, "legacy_priority", {
+    healthTestModel,
     priority: resolvePriority(top),
-    onlineRate: top.healthTestOnlineRate ?? null,
-    avgFirstByteMs: top.healthTestAvgFirstByteMs ?? null,
-    sampleCount: Array.isArray(top.healthTestRecentResults)
-      ? top.healthTestRecentResults.length
+    onlineRate: displayedTop.healthTestOnlineRate ?? null,
+    avgFirstByteMs: displayedTop.healthTestAvgFirstByteMs ?? null,
+    sampleCount: Array.isArray(displayedTop.healthTestRecentResults)
+      ? displayedTop.healthTestRecentResults.length
       : 0,
     groupTableMultipliers,
   });
@@ -154,7 +219,10 @@ export function pickPreferredProvidersForGroups(
   providers: Provider[],
   groups: string[],
   groupTableMultipliers?: Map<string, number> | Record<string, number> | null,
-  healthSloThresholds?: HealthSloThresholds | null
+  healthSloThresholds?: HealthSloThresholds | null,
+  requestedModel?: string,
+  healthTestModelsByGroup?: ReadonlyMap<string, string[] | null | undefined>,
+  healthTestModelFallbacksByGroup?: ReadonlyMap<string, string | null | undefined>
 ): GroupPreferredProvider[] {
   const out: GroupPreferredProvider[] = [];
   const seen = new Set<string>();
@@ -166,7 +234,10 @@ export function pickPreferredProvidersForGroups(
       providers,
       g,
       groupTableMultipliers,
-      healthSloThresholds
+      healthSloThresholds,
+      requestedModel,
+      healthTestModelsByGroup,
+      healthTestModelFallbacksByGroup
     );
     if (pick) out.push(pick);
   }

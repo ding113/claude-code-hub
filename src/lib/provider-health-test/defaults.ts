@@ -1,14 +1,14 @@
 import type { ProviderType } from "@/types/provider";
 
 /**
- * Rolling window size for online rate + sparkline + dispatch SLO.
+ * Rolling window size for online-rate averages and sparklines.
+ * It does not set the minimum SLO sample count (that is one).
  * Default matches system_settings.health_test_window_size (10).
- * Runtime path reads live settings when available.
  */
 export const HEALTH_TEST_WINDOW_SIZE = 10;
 
-/** Default scheduler poll interval: 1 minute. */
-export const HEALTH_TEST_INTERVAL_MS = 60_000;
+/** Default scheduler poll interval: 30 minutes, wall-clock aligned. */
+export const HEALTH_TEST_INTERVAL_MS = 30 * 60 * 1000;
 
 const HEALTH_TEST_INTERVAL_MIN_SECONDS = 10;
 const HEALTH_TEST_INTERVAL_MAX_SECONDS = 3600;

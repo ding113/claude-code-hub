@@ -1,7 +1,10 @@
 // 供应商类型枚举
 
+import type {
+  ProviderHealthTestModelStatsMap,
+  ProviderHealthTestSample,
+} from "@/lib/provider-health-test/stats";
 import type { CacheTtlPreference } from "./cache";
-import type { ProviderHealthTestSample } from "@/lib/provider-health-test/stats";
 
 export type ProviderType =
   | "claude"
@@ -444,6 +447,8 @@ export interface Provider {
   healthTestOnlineRate: number | null;
   healthTestAvgFirstByteMs: number | null;
   healthTestRecentResults: ProviderHealthTestSample[] | null;
+  /** Per-model rolling health SLO snapshots used for request-model-aware dispatch. */
+  healthTestModelStats: ProviderHealthTestModelStatsMap | null;
   /** Estimated upstream health-test spend for current local day (not user billing). */
   healthTestTodayCostUsd: number | null;
   healthTestTodayCalls: number | null;
@@ -557,6 +562,8 @@ export interface ProviderDisplay {
   healthTestOnlineRate: number | null;
   healthTestAvgFirstByteMs: number | null;
   healthTestRecentResults: ProviderHealthTestSample[] | null;
+  /** Per-model rolling health SLO snapshots used for request-model-aware dispatch. */
+  healthTestModelStats: ProviderHealthTestModelStatsMap | null;
   healthTestTodayCostUsd: number | null;
   healthTestTodayCalls: number | null;
   healthTestBudgetSuspendedDay: string | null;

@@ -7,11 +7,20 @@ export const ProviderSiteGroupRateSchema = z.object({
   groupName: z.string().describe("Upstream website group name."),
   description: z.string().nullable().describe("Optional group description."),
   ratio: z.number().min(0).describe("Upstream group ratio / rate multiplier."),
+  effectiveRatio: z
+    .number()
+    .min(0)
+    .describe("CCH-facing group ratio after dividing by the site's recharge multiplier."),
   completionRatio: z
     .number()
     .min(0)
     .nullable()
     .describe("Optional completion/output ratio; 0 or null means unused."),
+  effectiveCompletionRatio: z
+    .number()
+    .min(0)
+    .nullable()
+    .describe("CCH-facing completion ratio after dividing by the site's recharge multiplier."),
   dispatchGroupTag: z.string().nullable().describe("CCH dispatch pool tag after classification."),
   lastSeenAt: IsoDateTimeStringSchema.describe("Last seen / synced time."),
   createdAt: IsoDateTimeStringSchema.describe("Creation time."),
@@ -27,6 +36,11 @@ export const ProviderSiteSchema = z.object({
   notes: z.string().nullable().describe("Optional notes."),
   isEnabled: z.boolean().describe("Whether the site is enabled."),
   sortOrder: z.number().int().optional().describe("Manual display order (lower first)."),
+  rechargeMultiplier: z
+    .number()
+    .finite()
+    .positive()
+    .describe("Divide upstream group ratios and balance by this value for CCH-facing amounts."),
   upstreamHubChannelId: z
     .number()
     .int()
@@ -47,6 +61,11 @@ export const ProviderSiteSchema = z.object({
     .optional()
     .describe("Optional captcha API endpoint override."),
   lastBalance: z.number().nullable().optional().describe("Last known upstream balance."),
+  realBalance: z
+    .number()
+    .nullable()
+    .optional()
+    .describe("CCH-facing balance: upstream balance divided by recharge multiplier."),
   lastBalanceAt: IsoDateTimeStringSchema.nullable()
     .optional()
     .describe("Last balance sample time."),
@@ -89,6 +108,7 @@ export const ProviderSiteCreateSchema = z
     notes: z.string().max(5000).nullable().optional(),
     isEnabled: z.boolean().optional(),
     sortOrder: z.number().int().min(0).optional(),
+    rechargeMultiplier: z.number().finite().positive().optional(),
     upstreamHubChannelId: z.number().int().positive().nullable().optional(),
     username: z.string().trim().max(256).nullable().optional(),
     password: z.string().max(512).nullable().optional(),
@@ -110,6 +130,7 @@ export const ProviderSiteUpdateSchema = z
     notes: z.string().max(5000).nullable().optional(),
     isEnabled: z.boolean().optional(),
     sortOrder: z.number().int().min(0).optional(),
+    rechargeMultiplier: z.number().finite().positive().optional(),
     upstreamHubChannelId: z.number().int().positive().nullable().optional(),
     username: z.string().trim().max(256).nullable().optional(),
     password: z.string().max(512).nullable().optional(),

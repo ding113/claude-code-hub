@@ -120,7 +120,7 @@ export function HealthTestRuntimeConfigControl({ className }: { className?: stri
     if (!data || dirty) return;
     setDraft({
       windowSize: clamp(Number(data.healthTestWindowSize ?? 10), 1, 50),
-      intervalSeconds: clamp(Number(data.healthTestIntervalSeconds ?? 60), 10, 3600),
+      intervalSeconds: clamp(Number(data.healthTestIntervalSeconds ?? 1800), 10, 3600),
       timeoutSeconds: clamp(Number(data.healthTestTimeoutSeconds ?? 30), 5, 300),
       minOnlineRatePercent: clamp(Number(data.healthTestMinOnlineRatePercent ?? 90), 1, 100),
       maxAvgFirstByteSeconds: clamp(Number(data.healthTestMaxAvgLatencySeconds ?? 20), 1, 300),

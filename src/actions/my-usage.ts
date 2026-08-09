@@ -1136,6 +1136,7 @@ export interface MyGroupRateItem {
   groupCostMultiplier: number;
   priority: number;
   mode: "health_slo" | "legacy_priority";
+  healthTestModel: string | null;
   onlineRate: number | null;
   avgFirstByteMs: number | null;
 }
@@ -1156,9 +1157,11 @@ export async function getMyGroupRates(): Promise<
     const user = session.user;
     const { findAllProvidersFresh } = await import("@/repository/provider");
     const { findAllProviderGroups } = await import("@/repository/provider-groups");
-    const { expandUserVisibleGroups, pickPreferredProvidersForGroups } = await import(
-      "@/lib/provider-dispatch/group-preferred"
-    );
+    const {
+      expandUserVisibleGroups,
+      pickPreferredProviderForGroup,
+    } = await import("@/lib/provider-dispatch/group-preferred");
+    type GroupPreferredProvider = import("@/lib/provider-dispatch/group-preferred").GroupPreferredProvider;
 
     const [providerRows, providerGroupRows, settings] = await Promise.all([
       findAllProvidersFresh(),
@@ -1178,15 +1181,50 @@ export async function getMyGroupRates(): Promise<
     const groups = expandUserVisibleGroups(groupCsv, providerRows);
     const healthSloThresholds = {
       minOnlineRate: settings.healthTestMinOnlineRatePercent / 100,
-      maxAvgFirstByteMs: settings.healthTestMaxAvgLatencySeconds * 1000,
-      minSampleCount: settings.healthTestWindowSize,
+      maxAvgLatencyMs: settings.healthTestMaxAvgLatencySeconds * 1000,
+      minSampleCount: 1,
     };
-    const picks = pickPreferredProvidersForGroups(
-      providerRows,
-      groups,
-      groupTableMultipliers,
-      healthSloThresholds
+    const healthTestModelsByGroup = new Map(
+      providerGroupRows.map((row) => [row.name, row.healthTestModels] as const)
     );
+    const healthTestModelFallbacksByGroup = new Map(
+      providerGroupRows.map((row) => [row.name, row.healthTestModelFallback] as const)
+    );
+
+    // Pick per configured test model: each model has its own health result, so the
+    // preferred provider (and effective rate) can differ per model. Groups without
+    // configured test models keep the legacy single pick (requestedModel undefined
+    // resolves to the group fallback or plain priority).
+    const picks: GroupPreferredProvider[] = [];
+    for (const group of groups) {
+      const configuredModels = healthTestModelsByGroup.get(group) ?? [];
+      const requestedModels = configuredModels.length > 0 ? configuredModels : [undefined];
+      for (const requestedModel of requestedModels) {
+        const pick = pickPreferredProviderForGroup(
+          providerRows,
+          group,
+          groupTableMultipliers,
+          healthSloThresholds,
+          requestedModel,
+          healthTestModelsByGroup,
+          healthTestModelFallbacksByGroup
+        );
+        if (pick) picks.push(pick);
+      }
+    }
+    // Stable display: group order, then configured test-model order (null last).
+    const modelRankByGroup = new Map(
+      providerGroupRows.map((row) => [row.name, row.healthTestModels] as const)
+    );
+    picks.sort((a, b) => {
+      if (a.group !== b.group) return a.group.localeCompare(b.group);
+      const rankA = (modelRankByGroup.get(a.group) ?? []).indexOf(a.healthTestModel ?? "");
+      const rankB = (modelRankByGroup.get(b.group) ?? []).indexOf(b.healthTestModel ?? "");
+      const ra = rankA === -1 ? Number.MAX_SAFE_INTEGER : rankA;
+      const rb = rankB === -1 ? Number.MAX_SAFE_INTEGER : rankB;
+      if (ra !== rb) return ra - rb;
+      return (a.healthTestModel ?? "").localeCompare(b.healthTestModel ?? "");
+    });
 
     return {
       ok: true,
@@ -1201,6 +1239,7 @@ export async function getMyGroupRates(): Promise<
           groupCostMultiplier: pick.groupCostMultiplier,
           priority: pick.priority,
           mode: pick.mode,
+          healthTestModel: pick.healthTestModel,
           onlineRate: pick.onlineRate,
           avgFirstByteMs: pick.avgFirstByteMs,
         })),

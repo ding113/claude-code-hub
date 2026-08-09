@@ -941,4 +941,70 @@ data: {"type":"response.completed","response":{"model":"gpt-5.6-terra","usage":{
       outputTokens: 5,
     });
   });
+
+  test("SSE completed 事件 data 行被 chunk 边界切开时仍能读到 usage", async () => {
+    // 模拟 otokapi 类上游：response.completed 的 data 行超长
+    // （instructions 在中间，usage 在 data 行尾部），且 chunk 边界
+    // 恰好把 data 行切开 —— usage 在第二个 chunk 才到达。
+    const longInstructions = "i".repeat(20000);
+    const control = `event: response.created
+data: {"type":"response.created","response":{"id":"resp_1","model":"gpt-5.6-terra","usage":null}}
+
+`;
+    const delta = `event: response.output_text.delta
+data: {"type":"response.output_text.delta","delta":"pong"}
+
+`;
+    // 完整 completed 事件：data 行内含超长 instructions，usage 在尾部
+    const completedFull = `event: response.completed
+data: {"type":"response.completed","response":{"model":"gpt-5.6-terra","instructions":"${longInstructions}","usage":{"input_tokens":312,"output_tokens":5,"total_tokens":317}}}
+
+`;
+    // 切开点：正好在 "response.completed" 类型之后、usage 之前
+    const cutPoint =
+      completedFull.indexOf('"usage"') > 0
+        ? completedFull.indexOf('"usage"') - 200
+        : completedFull.length - 100;
+    const chunk1 = completedFull.slice(0, cutPoint);
+    const chunk2 = completedFull.slice(cutPoint);
+
+    const encoder = new TextEncoder();
+    const bodyStream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(encoder.encode(control + delta));
+        // 第一个 chunk 只到 data 行中部（含 response.completed 类型标记但无 usage）
+        controller.enqueue(encoder.encode(chunk1));
+        // 第二个 chunk 携带 data 行尾部（usage）与空行终止符
+        setTimeout(() => {
+          controller.enqueue(encoder.encode(chunk2));
+          controller.close();
+        }, 30);
+      },
+    });
+
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      headers: new Headers({ "content-type": "text/event-stream" }),
+      body: bodyStream,
+      text: async () => control + delta + completedFull,
+    } as Response);
+
+    const result = await executeProviderTest({
+      providerUrl: "https://otokapi.com/v1",
+      apiKey: "sk-test",
+      providerType: "codex",
+      model: "gpt-5.6-terra",
+      timeoutMs: 5000,
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.content).toBe("pong");
+    // 关键：即使 completed 行被 chunk 切开，usage 也必须被解析到
+    expect(result.usage).toEqual({
+      inputTokens: 312,
+      outputTokens: 5,
+    });
+  });
 });

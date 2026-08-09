@@ -11,8 +11,8 @@
  */
 
 import {
-  classifySiteGroupTagWithGroups,
   type ClassifiableProviderGroup,
+  classifySiteGroupTagWithGroups,
 } from "@/lib/provider-groups/match-rules";
 
 export type ProviderBillingMode = "catalog_estimate" | "site_group_ratio";
@@ -20,7 +20,9 @@ export type ProviderBillingMode = "catalog_estimate" | "site_group_ratio";
 export type SiteGroupRateLike = {
   groupName: string;
   ratio: number | string;
+  effectiveRatio?: number | string;
   completionRatio?: number | string | null;
+  effectiveCompletionRatio?: number | string | null;
   dispatchGroupTag?: string | null;
   description?: string | null;
 };
@@ -45,6 +47,34 @@ function toFiniteNumber(value: unknown, fallback = 0): number {
     if (Number.isFinite(n)) return n;
   }
   return fallback;
+}
+
+/**
+ * Resolve the site's recharge multiplier used to convert upstream prices and
+ * balances into CCH-facing values. Zero/invalid values are fail-safe to 1.
+ */
+export function resolveRechargeMultiplier(value: unknown): number {
+  const multiplier = toFiniteNumber(value, 1);
+  return multiplier > 0 ? multiplier : 1;
+}
+
+/** Upstream group ratio after applying the site's recharge multiplier. */
+export function normalizeUpstreamRate(value: unknown, rechargeMultiplier?: unknown): number {
+  return Math.max(0, toFiniteNumber(value, 0)) / resolveRechargeMultiplier(rechargeMultiplier);
+}
+
+/** Upstream balance after applying the site's recharge multiplier. */
+export function resolveSiteBalance(value: unknown, rechargeMultiplier?: unknown): number | null {
+  if (value == null) return null;
+  const balance = toFiniteNumber(value, Number.NaN);
+  return Number.isFinite(balance) ? balance / resolveRechargeMultiplier(rechargeMultiplier) : null;
+}
+
+/** Upstream cost after applying the site's recharge multiplier (real money spent). */
+export function resolveSiteCost(value: unknown, rechargeMultiplier?: unknown): number | null {
+  if (value == null) return null;
+  const cost = toFiniteNumber(value, Number.NaN);
+  return Number.isFinite(cost) ? cost / resolveRechargeMultiplier(rechargeMultiplier) : null;
 }
 
 /**
@@ -83,6 +113,7 @@ export function findSiteGroupRate(
 export function resolveSiteBillingMultipliers(input: {
   billingMode?: string | null;
   providerCostMultiplier?: number | string | null;
+  siteRechargeMultiplier?: number | string | null;
   siteGroupName?: string | null;
   siteGroupRates?: SiteGroupRateLike[] | null;
 }): ResolvedSiteBillingMultipliers {
@@ -111,8 +142,14 @@ export function resolveSiteBillingMultipliers(input: {
     };
   }
 
-  const ratio = Math.max(0, toFiniteNumber(rate.ratio, providerMultiplier));
-  const completionRatio = Math.max(0, toFiniteNumber(rate.completionRatio, 0));
+  const ratio =
+    rate.effectiveRatio !== undefined
+      ? normalizeUpstreamRate(rate.effectiveRatio)
+      : normalizeUpstreamRate(rate.ratio, input.siteRechargeMultiplier);
+  const completionRatio =
+    rate.effectiveCompletionRatio !== undefined
+      ? normalizeUpstreamRate(rate.effectiveCompletionRatio)
+      : normalizeUpstreamRate(rate.completionRatio, input.siteRechargeMultiplier);
 
   return {
     mode,

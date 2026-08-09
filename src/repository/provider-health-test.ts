@@ -14,7 +14,11 @@ import {
 } from "@/lib/provider-health-test/defaults";
 import type { HealthRebalanceProvider } from "@/lib/provider-health-test/slo-rebalance";
 import type { HealthTestSloThresholds } from "@/lib/provider-health-test/slo-thresholds";
-import { computeHealthTestStats, type HealthTestLogLike } from "@/lib/provider-health-test/stats";
+import {
+  computeHealthTestModelStats,
+  computeHealthTestStats,
+  type HealthTestLogLike,
+} from "@/lib/provider-health-test/stats";
 import type { Provider, ProviderType } from "@/types/provider";
 
 export type ProviderHealthTestSource = "scheduled" | "manual";
@@ -57,6 +61,8 @@ export type ProviderHealthTestTarget = Pick<
 > & {
   /** Resolved scheduled health-test model from provider group config; null = skip. */
   healthTestModel?: string | null;
+  /** All models configured by the provider's group(s), tested independently. */
+  healthTestModels?: string[];
 };
 
 function toNumberOrNull(value: unknown): number | null {
@@ -297,20 +303,22 @@ export async function findProvidersForScheduledHealthTest(): Promise<ProviderHea
       )
     );
 
-  // Resolve per-group health-test models; providers whose group has no model are skipped later.
-  const { getProviderGroupHealthTestModelMap } = await import("@/repository/provider-groups");
-  const { parseProviderGroups } = await import("@/lib/utils/provider-group");
-  const modelMap = await getProviderGroupHealthTestModelMap();
+  // Resolve all configured per-group health-test models; providers without any
+  // configured model are skipped. Preserve tag order for the legacy first model.
+  const { getProviderGroupHealthTestModelsMap } = await import("@/repository/provider-groups");
+  const { resolveProviderGroupsWithDefault } = await import("@/lib/utils/provider-group");
+  const modelsByGroup = await getProviderGroupHealthTestModelsMap();
 
   return rows
     .map((row) => {
-      const tags = parseProviderGroups(row.groupTag);
-      let healthTestModel: string | null = null;
+      const tags = resolveProviderGroupsWithDefault(row.groupTag);
+      const healthTestModels: string[] = [];
+      const seenModels = new Set<string>();
       for (const tag of tags) {
-        const m = modelMap.get(tag);
-        if (m) {
-          healthTestModel = m;
-          break;
+        for (const model of modelsByGroup.get(tag) ?? []) {
+          if (seenModels.has(model)) continue;
+          seenModels.add(model);
+          healthTestModels.push(model);
         }
       }
       return {
@@ -327,10 +335,11 @@ export async function findProvidersForScheduledHealthTest(): Promise<ProviderHea
         isEnabled: row.isEnabled,
         costMultiplier: row.costMultiplier ? Number.parseFloat(String(row.costMultiplier)) : 1,
         groupTag: row.groupTag ?? null,
-        healthTestModel,
+        healthTestModel: healthTestModels[0] ?? null,
+        healthTestModels,
       };
     })
-    .filter((row) => Boolean(row.healthTestModel));
+    .filter((row) => row.healthTestModels.length > 0);
 }
 
 export async function findProviderHealthTestLogs(
@@ -381,12 +390,16 @@ export async function recordProviderHealthTestResult(input: {
   cacheCreationInputTokens?: number | null;
   cacheReadInputTokens?: number | null;
   costUsd?: string | number | null;
+  /** Configured models for this provider, used to retain enough interleaved history. */
+  healthTestModels?: readonly string[] | null;
 }): Promise<{
   onlineRate: number | null;
   avgFirstByteMs: number | null;
   recentResults: import("@/lib/provider-health-test/stats").ProviderHealthTestSample[];
 }> {
   const testedAt = new Date();
+  const recordedModel =
+    typeof input.model === "string" && input.model.trim() ? input.model.trim() : null;
   const costUsdStr =
     input.costUsd == null
       ? null
@@ -399,7 +412,7 @@ export async function recordProviderHealthTestResult(input: {
     source: input.source,
     ok: input.ok,
     status: input.status ?? null,
-    model: input.model ?? null,
+    model: recordedModel,
     firstByteMs: input.firstByteMs ?? null,
     latencyMs: input.latencyMs ?? null,
     httpStatusCode: input.httpStatusCode ?? null,
@@ -423,9 +436,20 @@ export async function recordProviderHealthTestResult(input: {
   } catch {
     // keep default
   }
-  const recent = await findProviderHealthTestLogs(input.providerId, windowSize);
+  // Fetch enough rows for the aggregate legacy window and each configured model's
+  // independent rolling window. Scheduled multi-model probes interleave logs;
+  // keep one extra window for legacy/manual rows that may be mixed in.
+  const configuredModelCount = new Set(
+    (input.healthTestModels ?? [])
+      .filter((model): model is string => typeof model === "string")
+      .map((model) => model.trim())
+      .filter(Boolean)
+  ).size;
+  const historyWindowMultiplier = Math.max(2, configuredModelCount + 1);
+  const historyWindowLimit = windowSize * historyWindowMultiplier;
+  const recent = await findProviderHealthTestLogs(input.providerId, historyWindowLimit);
   const stats = computeHealthTestStats(
-    recent.map(
+    recent.slice(0, windowSize).map(
       (log): HealthTestLogLike => ({
         ok: log.ok,
         firstByteMs: log.firstByteMs,
@@ -438,12 +462,16 @@ export async function recordProviderHealthTestResult(input: {
         httpStatusCode: log.httpStatusCode,
         inputTokens: log.inputTokens,
         outputTokens: log.outputTokens,
+        cacheCreationInputTokens: log.cacheCreationInputTokens,
+        cacheReadInputTokens: log.cacheReadInputTokens,
         costUsd: log.costUsd,
         createdAt: log.createdAt,
       })
     ),
     windowSize
   );
+
+  const modelStats = computeHealthTestModelStats(recent, windowSize);
 
   // Rolling day counters for health-test spend (local day boundary).
   const today = localDayKey(testedAt);
@@ -475,12 +503,13 @@ export async function recordProviderHealthTestResult(input: {
       lastHealthTestStatus: input.status ?? null,
       lastHealthTestFirstByteMs: input.firstByteMs ?? null,
       lastHealthTestLatencyMs: input.latencyMs ?? null,
-      lastHealthTestModel: input.model ?? null,
+      lastHealthTestModel: recordedModel,
       lastHealthTestErrorType: input.ok ? null : (input.errorType ?? null),
       lastHealthTestErrorMessage: input.ok ? null : (input.errorMessage ?? null),
       healthTestOnlineRate: stats.onlineRate == null ? null : stats.onlineRate.toFixed(4),
       healthTestAvgFirstByteMs: stats.avgFirstByteMs,
       healthTestRecentResults: stats.recentResults,
+      healthTestModelStats: modelStats,
       healthTestTodayCostUsd: nextCost.toFixed(15),
       healthTestTodayCalls: nextCalls,
       healthTestTodayDate: today,
@@ -530,7 +559,7 @@ export async function recordProviderHealthTestResult(input: {
         SELECT id FROM provider_health_test_logs
         WHERE provider_id = ${input.providerId}
         ORDER BY created_at DESC NULLS LAST, id DESC
-        OFFSET ${HEALTH_TEST_WINDOW_SIZE + 40}
+        OFFSET ${historyWindowLimit + 40}
       )
     `);
   } catch (error) {
@@ -566,6 +595,7 @@ export async function clearProviderHealthTestHistory(providerId: number): Promis
       healthTestOnlineRate: null,
       healthTestAvgFirstByteMs: null,
       healthTestRecentResults: null,
+      healthTestModelStats: null,
       updatedAt: new Date(),
     })
     .where(and(eq(providers.id, providerId), isNull(providers.deletedAt)));
@@ -702,8 +732,8 @@ export async function rebalanceScheduledHealthTestsBySlo(): Promise<{
   const settings = await getCachedSystemSettings();
   const thresholds: HealthTestSloThresholds = {
     minOnlineRate: settings.healthTestMinOnlineRatePercent / 100,
-    maxAvgFirstByteMs: settings.healthTestMaxAvgLatencySeconds * 1000,
-    minSampleCount: settings.healthTestWindowSize,
+    maxAvgLatencyMs: settings.healthTestMaxAvgLatencySeconds * 1000,
+    minSampleCount: 1,
   };
   const plans = planHealthTestSloRebalanceAll(list, undefined, thresholds);
   const poolSummaries: Array<{ pool: string; mode: string; keepIds: number[]; changed: number }> =

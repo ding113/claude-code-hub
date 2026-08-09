@@ -7,7 +7,8 @@ import { useEffect, useRef, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { getMyGroupRates } from "@/lib/api-client/v1/actions/my-usage";
-import { getProviderTypeConfig, getProviderTypeTranslationKey } from "@/lib/provider-type-utils";
+import type { MyGroupRateItem } from "@/lib/api-client/v1/actions/my-usage";
+import { getProviderTypeConfig } from "@/lib/provider-type-utils";
 import { cn } from "@/lib/utils";
 import { formatCostMultiplier } from "@/lib/utils/currency";
 import type { ProviderType } from "@/types/provider";
@@ -65,6 +66,23 @@ function shortenProviderName(name: string): string {
   return name;
 }
 
+/** Group items by group label while preserving configured test-model order. */
+function groupItemsByGroup(items: MyGroupRateItem[]): Array<{
+  group: string;
+  items: MyGroupRateItem[];
+}> {
+  const order: string[] = [];
+  const byGroup = new Map<string, MyGroupRateItem[]>();
+  for (const item of items) {
+    if (!byGroup.has(item.group)) {
+      byGroup.set(item.group, []);
+      order.push(item.group);
+    }
+    byGroup.get(item.group)!.push(item);
+  }
+  return order.map((g) => ({ group: g, items: byGroup.get(g)! }));
+}
+
 function asProviderType(value: string | null | undefined): ProviderType {
   const v = (value || "claude").trim();
   if (
@@ -100,6 +118,7 @@ export function groupRatesContentFingerprint(
           priority?: number | null;
           onlineRate?: number | null;
           avgFirstByteMs?: number | null;
+          healthTestModel?: string | null;
         }>;
       }
     | null
@@ -119,6 +138,7 @@ export function groupRatesContentFingerprint(
         item.priority ?? "",
         item.onlineRate ?? "",
         item.avgFirstByteMs ?? "",
+        item.healthTestModel ?? "",
       ].join(":")
     )
     .sort()
@@ -230,21 +250,14 @@ export function GroupRatesCard({
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-          {items.map((item) => {
-            const gk = groupKey(item.group);
+          {groupItemsByGroup(items).map(({ group, items: groupItems }) => {
+            const gk = groupKey(group);
             const accent = GROUP_ACCENT[gk] ?? GROUP_ACCENT.codex;
             const chip = GROUP_CHIP[gk] ?? GROUP_CHIP.codex;
-            const mult = formatCostMultiplier(item.costMultiplier);
-            const cheap = item.costMultiplier > 0 && item.costMultiplier < 0.1;
-            const free = item.costMultiplier === 0;
-            const pType = asProviderType(item.providerType);
-            const TypeIcon = getProviderTypeConfig(pType).icon;
-            const formatKey = FORMAT_I18N_KEY[pType] ?? "formatUnknown";
-            const formatLabel = t(formatKey as "formatClaude");
 
             return (
               <div
-                key={`${item.group}-${item.providerId}`}
+                key={group}
                 className={cn(
                   "relative overflow-hidden rounded-xl border bg-gradient-to-br p-3 transition-shadow hover:shadow-md",
                   accent
@@ -255,85 +268,105 @@ export function GroupRatesCard({
                     variant="outline"
                     className={cn("border-0 font-semibold tracking-wide", chip)}
                   >
-                    {item.group}
+                    {group}
                   </Badge>
-                  <Tooltip delayDuration={150}>
-                    <TooltipTrigger asChild>
-                      <Badge
-                        variant="outline"
-                        className={cn(
-                          "font-mono text-[11px] tabular-nums",
-                          free
-                            ? "border-emerald-300 bg-emerald-50 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200"
-                            : cheap
-                              ? "border-teal-300 bg-teal-50 text-teal-800 dark:border-teal-800 dark:bg-teal-950/40 dark:text-teal-200"
-                              : item.costMultiplier > 1
-                                ? "border-orange-300 bg-orange-50 text-orange-800 dark:border-orange-800 dark:bg-orange-950/40 dark:text-orange-200"
-                                : "border-border/70 bg-background/70"
-                        )}
-                      >
-                        {free ? t("free") : `×${mult}`}
-                      </Badge>
-                    </TooltipTrigger>
-                    <TooltipContent side="top" className="text-xs">
-                      <div className="space-y-0.5">
-                        <div>{t("multiplierHint")}</div>
-                        <div className="text-muted-foreground">
-                          {t("providerMult")} ×
-                          {formatCostMultiplier(item.providerCostMultiplier ?? item.costMultiplier)}
-                          {" · "}
-                          {t("groupMult")} ×{formatCostMultiplier(item.groupCostMultiplier ?? 1)}
-                        </div>
-                      </div>
-                    </TooltipContent>
-                  </Tooltip>
+                  {groupItems.length > 1 ? (
+                    <span className="shrink-0 text-[10px] text-muted-foreground tabular-nums">
+                      ×{groupItems.length}
+                    </span>
+                  ) : null}
                 </div>
 
-                <div className="mt-2 min-w-0">
-                  <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                    {item.mode === "health_slo" ? (
-                      <Activity className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
-                    ) : (
-                      <Sparkles className="h-3 w-3 text-muted-foreground" />
-                    )}
-                    <span>{item.mode === "health_slo" ? t("modeHealth") : t("modePriority")}</span>
-                    <span className="text-muted-foreground/70">· P{item.priority}</span>
-                  </div>
+                <div className="mt-2 space-y-1.5">
+                  {groupItems.map((item) => {
+                    const mult = formatCostMultiplier(item.costMultiplier);
+                    const cheap = item.costMultiplier > 0 && item.costMultiplier < 0.1;
+                    const free = item.costMultiplier === 0;
+                    const pType = asProviderType(item.providerType);
+                    const TypeIcon = getProviderTypeConfig(pType).icon;
+                    const formatKey = FORMAT_I18N_KEY[pType] ?? "formatUnknown";
+                    const formatLabel = t(formatKey as "formatClaude");
+                    const rowLabel =
+                      item.healthTestModel ?? shortenProviderName(item.providerName);
 
-                  <Tooltip delayDuration={200}>
-                    <TooltipTrigger asChild>
-                      <div className="mt-1.5 inline-flex max-w-full items-center gap-1.5 rounded-full border border-border/70 bg-background/80 px-2 py-0.5 text-[11px] text-foreground/80 shadow-sm dark:bg-background/60">
-                        <TypeIcon className="h-3 w-3 shrink-0 text-muted-foreground" />
-                        <span className="truncate font-medium leading-none">{formatLabel}</span>
-                      </div>
-                    </TooltipTrigger>
-                    <TooltipContent side="bottom" className="text-xs">
-                      {t("requestFormat")}: {formatLabel}
-                      <span className="ml-1 text-muted-foreground">
-                        ({getProviderTypeTranslationKey(pType)})
-                      </span>
-                    </TooltipContent>
-                  </Tooltip>
+                    return (
+                      <div
+                        key={`${item.providerId}-${item.healthTestModel ?? "legacy"}`}
+                        className="rounded-lg border border-border/50 bg-background/50 p-2"
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-1.5">
+                              {item.mode === "health_slo" ? (
+                                <Activity className="h-3 w-3 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                              ) : (
+                                <Sparkles className="h-3 w-3 shrink-0 text-muted-foreground" />
+                              )}
+                              <span className="truncate font-mono text-[11px] font-medium text-foreground/90">
+                                {rowLabel}
+                              </span>
+                            </div>
+                            <div className="mt-0.5 flex items-center gap-1 text-[10px] text-muted-foreground">
+                              <TypeIcon className="h-3 w-3 shrink-0" />
+                              <span className="truncate">{formatLabel}</span>
+                            </div>
+                          </div>
+                          <Tooltip delayDuration={150}>
+                            <TooltipTrigger asChild>
+                              <Badge
+                                variant="outline"
+                                className={cn(
+                                  "shrink-0 font-mono text-[11px] tabular-nums",
+                                  free
+                                    ? "border-emerald-300 bg-emerald-50 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200"
+                                    : cheap
+                                      ? "border-teal-300 bg-teal-50 text-teal-800 dark:border-teal-800 dark:bg-teal-950/40 dark:text-teal-200"
+                                      : item.costMultiplier > 1
+                                        ? "border-orange-300 bg-orange-50 text-orange-800 dark:border-orange-800 dark:bg-orange-950/40 dark:text-orange-200"
+                                        : "border-border/70 bg-background/70"
+                                )}
+                              >
+                                {free ? t("free") : `×${mult}`}
+                              </Badge>
+                            </TooltipTrigger>
+                            <TooltipContent side="top" className="text-xs">
+                              <div className="space-y-0.5">
+                                <div>{t("multiplierHint")}</div>
+                                <div className="text-muted-foreground">
+                                  {t("providerMult")} ×
+                                  {formatCostMultiplier(item.providerCostMultiplier ?? item.costMultiplier)}
+                                  {" · "}
+                                  {t("groupMult")} ×{formatCostMultiplier(item.groupCostMultiplier ?? 1)}
+                                </div>
+                              </div>
+                            </TooltipContent>
+                          </Tooltip>
+                        </div>
 
-                  <Tooltip delayDuration={200}>
-                    <TooltipTrigger asChild>
-                      <p className="mt-1 truncate text-sm font-medium text-foreground/90">
-                        {shortenProviderName(item.providerName)}
-                      </p>
-                    </TooltipTrigger>
-                    <TooltipContent side="bottom" className="max-w-xs text-xs">
-                      <div className="space-y-0.5">
-                        <div>{item.providerName}</div>
-                        <div className="text-muted-foreground">
-                          {t("requestFormat")}: {formatLabel}
-                        </div>
-                        <div className="text-muted-foreground">
-                          {t("online")}: {formatOnline(item.onlineRate)} · {t("totalLatency")}:{" "}
-                          {formatLatency(item.avgFirstByteMs)}
-                        </div>
+                        <Tooltip delayDuration={200}>
+                          <TooltipTrigger asChild>
+                            <p className="mt-1 truncate text-xs text-foreground/80">
+                              {t("online")}: {formatOnline(item.onlineRate)} · {t("totalLatency")}:{" "}
+                              {formatLatency(item.avgFirstByteMs)}
+                            </p>
+                          </TooltipTrigger>
+                          <TooltipContent side="bottom" className="max-w-xs text-xs">
+                            <div className="space-y-0.5">
+                              <div>{item.providerName}</div>
+                              <div className="text-muted-foreground">
+                                {t("requestFormat")}: {formatLabel}
+                              </div>
+                              {item.healthTestModel ? (
+                                <div className="text-muted-foreground">
+                                  {t("healthBaseline")}: {item.healthTestModel}
+                                </div>
+                              ) : null}
+                            </div>
+                          </TooltipContent>
+                        </Tooltip>
                       </div>
-                    </TooltipContent>
-                  </Tooltip>
+                    );
+                  })}
                 </div>
               </div>
             );

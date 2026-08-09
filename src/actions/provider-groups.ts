@@ -10,6 +10,10 @@ import { normalizeProviderGroupMatchRules } from "@/lib/provider-groups/match-ru
 import { normalizeProviderGroupModelMatchRules } from "@/lib/provider-groups/model-match-rules";
 import { normalizeProviderGroupSharedSettings } from "@/lib/provider-groups/shared-settings";
 import {
+  normalizeProviderGroupHealthTestModels,
+  resolveProviderGroupHealthTestModelFallback,
+} from "@/lib/provider-health-test/model-config";
+import {
   parsePublicStatusDescription,
   serializePublicStatusDescription,
 } from "@/lib/public-status/config";
@@ -18,10 +22,10 @@ import { ERROR_CODES } from "@/lib/utils/error-messages";
 import {
   applyProviderGroupSharedSettingsToMembers,
   countProvidersUsingGroup,
-  createProviderGroup as repoCreateProviderGroup,
-  deleteProviderGroup as repoDeleteProviderGroup,
   findProviderGroupById,
   findProviderGroupByName,
+  createProviderGroup as repoCreateProviderGroup,
+  deleteProviderGroup as repoDeleteProviderGroup,
   reorderProviderGroups as repoReorderProviderGroups,
   updateProviderGroup as repoUpdateProviderGroup,
 } from "@/repository/provider-groups";
@@ -91,6 +95,8 @@ export async function createProviderGroup(input: {
   costMultiplier?: number;
   description?: string;
   healthTestModel?: string | null;
+  healthTestModels?: string[] | null;
+  healthTestModelFallback?: string | null;
   sharedSettings?: ProviderGroupSharedSettings | null;
   applySharedSettingsToMembers?: boolean;
   sortOrder?: number;
@@ -139,10 +145,15 @@ export async function createProviderGroup(input: {
       };
     }
 
-    const healthTestModel =
-      input.healthTestModel != null && String(input.healthTestModel).trim()
-        ? String(input.healthTestModel).trim()
-        : null;
+    const healthTestModels = normalizeProviderGroupHealthTestModels(
+      input.healthTestModels,
+      input.healthTestModel
+    );
+    const healthTestModelFallback = resolveProviderGroupHealthTestModelFallback(
+      input.healthTestModelFallback,
+      healthTestModels,
+      input.healthTestModel
+    );
     const sharedSettings = normalizeProviderGroupSharedSettings(input.sharedSettings);
     const matchRules = normalizeProviderGroupMatchRules(input.matchRules);
     const modelMatchRules = normalizeProviderGroupModelMatchRules(input.modelMatchRules);
@@ -151,7 +162,8 @@ export async function createProviderGroup(input: {
       name,
       costMultiplier: input.costMultiplier,
       description: input.description ?? null,
-      healthTestModel,
+      healthTestModels,
+      healthTestModelFallback,
       sharedSettings,
       sortOrder: input.sortOrder,
       matchRules,
@@ -181,6 +193,8 @@ export async function createProviderGroup(input: {
         costMultiplier: group.costMultiplier,
         description: group.description,
         healthTestModel: group.healthTestModel,
+        healthTestModels: group.healthTestModels,
+        healthTestModelFallback: group.healthTestModelFallback,
         sharedSettings: group.sharedSettings,
         sortOrder: group.sortOrder,
         matchRules: group.matchRules,
@@ -215,6 +229,8 @@ export async function updateProviderGroup(
     description?: string | null;
     descriptionNote?: string | null;
     healthTestModel?: string | null;
+    healthTestModels?: string[] | null;
+    healthTestModelFallback?: string | null;
     sharedSettings?: ProviderGroupSharedSettings | null;
     applySharedSettingsToMembers?: boolean;
     sortOrder?: number;
@@ -257,12 +273,25 @@ export async function updateProviderGroup(
       };
     }
 
-    const healthTestModelPatch =
-      input.healthTestModel === undefined
-        ? undefined
-        : input.healthTestModel != null && String(input.healthTestModel).trim()
-          ? String(input.healthTestModel).trim()
-          : null;
+    const healthTestModelsPatch =
+      input.healthTestModels !== undefined || input.healthTestModel !== undefined
+        ? normalizeProviderGroupHealthTestModels(input.healthTestModels, input.healthTestModel)
+        : undefined;
+    const fallbackModels = healthTestModelsPatch ?? beforeGroup?.healthTestModels ?? [];
+    const healthTestModelFallbackInput =
+      input.healthTestModelFallback !== undefined
+        ? input.healthTestModelFallback
+        : healthTestModelsPatch !== undefined
+          ? beforeGroup?.healthTestModelFallback
+          : undefined;
+    const healthTestModelFallbackPatch =
+      healthTestModelFallbackInput !== undefined || healthTestModelsPatch !== undefined
+        ? resolveProviderGroupHealthTestModelFallback(
+            healthTestModelFallbackInput,
+            fallbackModels,
+            beforeGroup?.healthTestModel
+          )
+        : undefined;
 
     const sharedSettingsPatch =
       input.sharedSettings === undefined
@@ -280,7 +309,12 @@ export async function updateProviderGroup(
     const updated = await repoUpdateProviderGroup(id, {
       costMultiplier: input.costMultiplier,
       description: nextDescription,
-      ...(healthTestModelPatch !== undefined ? { healthTestModel: healthTestModelPatch } : {}),
+      ...(healthTestModelsPatch !== undefined
+        ? { healthTestModels: healthTestModelsPatch }
+        : {}),
+      ...(healthTestModelFallbackPatch !== undefined
+        ? { healthTestModelFallback: healthTestModelFallbackPatch }
+        : {}),
       ...(sharedSettingsPatch !== undefined ? { sharedSettings: sharedSettingsPatch } : {}),
       ...(input.sortOrder !== undefined ? { sortOrder: input.sortOrder } : {}),
       ...(matchRulesPatch !== undefined ? { matchRules: matchRulesPatch } : {}),
@@ -320,6 +354,8 @@ export async function updateProviderGroup(
         costMultiplier: updated.costMultiplier,
         description: updated.description,
         healthTestModel: updated.healthTestModel,
+        healthTestModels: updated.healthTestModels,
+        healthTestModelFallback: updated.healthTestModelFallback,
         sharedSettings: updated.sharedSettings,
         sortOrder: updated.sortOrder,
         matchRules: updated.matchRules,
@@ -356,7 +392,7 @@ export async function deleteProviderGroup(id: number): Promise<ActionResult<void
       return { ok: false, error: tError("UNAUTHORIZED"), errorCode: ERROR_CODES.UNAUTHORIZED };
     }
 
-    // Pre-check: verify group exists and is not referenced by any provider.
+    // Pre-check: verify group exists (except default).
     const existing = await findProviderGroupById(id);
     if (!existing) {
       return { ok: false, error: tError("NOT_FOUND"), errorCode: ERROR_CODES.NOT_FOUND };
@@ -370,15 +406,8 @@ export async function deleteProviderGroup(id: number): Promise<ActionResult<void
       };
     }
 
-    const referenceCount = await countProvidersUsingGroup(existing.name);
-    if (referenceCount > 0) {
-      return {
-        ok: false,
-        error: t("groupInUse"),
-        errorCode: "GROUP_IN_USE",
-      };
-    }
-
+    // 产品行为：删除分组时自动解除引用——repository 会从所有引用该分组的
+    // provider.groupTag 中移除该组名（为空则归入 default），不再拒绝删除。
     await repoDeleteProviderGroup(id);
     emitActionAudit({
       category: "provider_group",
@@ -450,5 +479,72 @@ export async function reorderProviderGroups(
       errorMessage: "UPDATE_FAILED",
     });
     return { ok: false, error: t("reorderFailed"), errorCode: ERROR_CODES.UPDATE_FAILED };
+  }
+}
+
+/**
+ * Fetch the aggregated model list returned by every enabled provider that
+ * belongs to the given provider group (all relay groups of this group).
+ * Admin-only. Providers that fail to respond are skipped individually.
+ */
+export async function fetchProviderGroupUpstreamModels(
+  groupId: number
+): Promise<ActionResult<{ models: string[]; failed: string[] }>> {
+  const tError = await getTranslations("errors");
+  try {
+    const session = await getSession();
+    if (!session || session.user.role !== "admin") {
+      return { ok: false, error: tError("UNAUTHORIZED"), errorCode: ERROR_CODES.UNAUTHORIZED };
+    }
+
+    const group = await findProviderGroupById(groupId);
+    if (!group) {
+      return { ok: false, error: "group_not_found", errorCode: "NOT_FOUND" };
+    }
+
+    const { findAllProviders } = await import("@/repository/provider");
+    const { resolveProviderGroupsWithDefault } = await import("@/lib/utils/provider-group");
+    const { fetchModelsFromProvider } = await import("@/app/v1/_lib/models/available-models");
+
+    const groupNames = new Set(resolveProviderGroupsWithDefault(group.name));
+    const all = await findAllProviders();
+    const members = all.filter(
+      (provider) =>
+        provider.isEnabled &&
+        provider.deletedAt == null &&
+        resolveProviderGroupsWithDefault(provider.groupTag).some((tag) => groupNames.has(tag))
+    );
+
+    const modelIds = new Set<string>();
+    const failed: string[] = [];
+    const settled = await Promise.allSettled(
+      members.map(async (provider) => {
+        const models = await fetchModelsFromProvider(provider);
+        return { provider, models };
+      })
+    );
+    for (const result of settled) {
+      if (result.status === "fulfilled") {
+        for (const model of result.value.models) {
+          if (model.id && model.id.trim()) modelIds.add(model.id.trim());
+        }
+      } else {
+        failed.push(
+          result.reason instanceof Error ? result.reason.message : String(result.reason)
+        );
+      }
+    }
+
+    return {
+      ok: true,
+      data: { models: [...modelIds].sort((a, b) => a.localeCompare(b)), failed },
+    };
+  } catch (error) {
+    logger.error("Failed to fetch provider group upstream models:", error);
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : "OPERATION_FAILED",
+      errorCode: ERROR_CODES.OPERATION_FAILED,
+    };
   }
 }

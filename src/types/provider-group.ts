@@ -17,8 +17,13 @@ export interface ProviderGroup {
   /**
    * Default model for scheduled health tests of providers in this group.
    * null / empty string = do not run scheduled health tests for this group.
+   * @deprecated Use healthTestModels for new configuration.
    */
   healthTestModel: string | null;
+  /** Multiple models tested independently for this group. */
+  healthTestModels: string[];
+  /** Test model used for non-test request models and aggregate health displays. */
+  healthTestModelFallback: string | null;
   /** Shared fleet defaults (routing/network/circuit/limits). */
   sharedSettings: ProviderGroupSharedSettings | null;
   /** Lower first when classifying upstream site group names. */
@@ -39,6 +44,8 @@ export interface CreateProviderGroupInput {
   costMultiplier?: number;
   description?: string | null;
   healthTestModel?: string | null;
+  healthTestModels?: string[] | null;
+  healthTestModelFallback?: string | null;
   sharedSettings?: ProviderGroupSharedSettings | null;
   sortOrder?: number;
   matchRules?: ProviderGroupMatchRule[] | null;
@@ -52,6 +59,8 @@ export interface UpdateProviderGroupInput {
   costMultiplier?: number;
   description?: string | null;
   healthTestModel?: string | null;
+  healthTestModels?: string[] | null;
+  healthTestModelFallback?: string | null;
   sharedSettings?: ProviderGroupSharedSettings | null;
   sortOrder?: number;
   matchRules?: ProviderGroupMatchRule[] | null;
