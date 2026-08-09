@@ -4479,23 +4479,11 @@ export class ProxyForwarder {
       if (settled || winnerCommitted || attempt.settled || !attempt.response || !attempt.reader)
         return;
 
-      // 已超时触发竞速的 attempt 不得胜出：超时即出局（打破"超时方靠时间优势反复
-      // 获胜并粘住绑定"的死循环），其迟到首块不作为赢家结果返回，交给 loser 分流。
-      // 兜底：若它是唯一仍在途的 attempt（其余均已结算/失败），仍接受，避免请求悬挂。
-      const hasOtherInFlight = Array.from(attempts).some((a) => !a.settled && a !== attempt);
-      if (attempt.thresholdTriggered && hasOtherInFlight) {
-        attempt.settled = true;
-        attempts.delete(attempt);
-        if (attempt.billAsLoser) {
-          // 开启输家计费：后台 drain 该响应以获取 usage，不返回给客户端。
-          startLoserBilling(attempt);
-        } else {
-          const readerCancel = attempt.reader.cancel("hedge_loser_timed_out");
-          readerCancel?.catch(() => undefined);
-          releaseAttemptAgent(attempt);
-        }
-        return;
-      }
+      // 上游 #1348 语义（sticky timeout → late success can rescue only the current
+      // request and cannot recreate Sticky）：超时方若真返回了首块，允许它救当前
+      // 请求——继续用它的流完成本次响应（恢复速度优先），但绑定环节不再把它粘回
+      // 会话（见下方 timedOutWinner 分支），下次请求重新竞速发现健康方。
+      const timedOutWinner = attempt.thresholdTriggered;
 
       winnerCommitted = true;
       winnerAttempt = attempt;
@@ -4556,25 +4544,38 @@ export class ProxyForwarder {
 
       if (session.sessionId) {
         void (async () => {
-          const bindingResult = await SessionManager.updateSessionBindingSmart(
-            session.sessionId!,
-            attempt.provider.id,
-            attempt.provider.priority || 0,
-            launchedProviderCount === 1 && attempt.provider.id === initialProvider.id,
-            attempt.provider.id !== initialProvider.id,
-            session.authState?.key?.id ?? null,
-            // 产生了真实竞速赢家时，无条件把 Session 复用绑定改绑到赢家。
-            isActualHedgeWin
-          );
-
-          if (bindingResult.updated) {
-            logger.info("ProxyForwarder: Hedge winner binding updated", {
+          if (timedOutWinner) {
+            // 上游 #1348：late success 只救当前请求，不重建 sticky。
+            // 超时赢家不粘回会话绑定：清除绑定，下次请求重新竞速发现健康方，
+            // 避免"慢源靠时间优势反复获胜并粘住"的死循环。
+            await SessionManager.clearSessionProvider(session.sessionId!);
+            logger.info("ProxyForwarder: Timed-out winner rescued request; binding cleared", {
               sessionId: session.sessionId,
               providerId: attempt.provider.id,
               providerName: attempt.provider.name,
-              reason: bindingResult.reason,
-              details: bindingResult.details,
+              reason: "hedge_timed_out_rescue",
             });
+          } else {
+            const bindingResult = await SessionManager.updateSessionBindingSmart(
+              session.sessionId!,
+              attempt.provider.id,
+              attempt.provider.priority || 0,
+              launchedProviderCount === 1 && attempt.provider.id === initialProvider.id,
+              attempt.provider.id !== initialProvider.id,
+              session.authState?.key?.id ?? null,
+              // 产生了真实竞速赢家时，无条件把 Session 复用绑定改绑到赢家。
+              isActualHedgeWin
+            );
+
+            if (bindingResult.updated) {
+              logger.info("ProxyForwarder: Hedge winner binding updated", {
+                sessionId: session.sessionId,
+                providerId: attempt.provider.id,
+                providerName: attempt.provider.name,
+                reason: bindingResult.reason,
+                details: bindingResult.details,
+              });
+            }
           }
 
           if (session.shouldTrackSessionObservability()) {
