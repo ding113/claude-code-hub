@@ -356,7 +356,7 @@ function classifyFrameInner(
     return "malformed";
   }
 
-  const outerVerdict = classifyParsedFrame(signal, eventName, parsed);
+  const outerVerdict = classifyParsedFrame(family, signal, eventName, parsed);
   if (outerVerdict !== "neutral" || family !== "gemini" || Array.isArray(parsed)) {
     return outerVerdict;
   }
@@ -365,11 +365,12 @@ function classifyFrameInner(
   // 只有外层中性时才解包，供所有门控与 observer 共用同一分类结果。
   const response = (parsed as Record<string, unknown>).response;
   return response && typeof response === "object" && !Array.isArray(response)
-    ? classifyParsedFrame(signal, eventName, response)
+    ? classifyParsedFrame(family, signal, eventName, response)
     : outerVerdict;
 }
 
 function classifyParsedFrame(
+  family: ProtocolFamily,
   signal: StreamSignal,
   eventName: string | null,
   parsed: object
@@ -385,6 +386,9 @@ function classifyParsedFrame(
   for (const rule of signal.errorRules) {
     if (frameRuleMatches(rule, effective, parsed)) return "error";
   }
+  if (family === "openai-responses" && isCompletedResponsesCompaction(effective, parsed)) {
+    return "content";
+  }
   for (const rule of signal.contentRules) {
     if (frameRuleMatches(rule, effective, parsed)) return "content";
   }
@@ -395,6 +399,27 @@ function classifyParsedFrame(
     return "terminal";
   }
   return "neutral";
+}
+
+/**
+ * 部分 Responses 上游只在 response.completed 中返回 compaction output，
+ * 不会先发送 response.output_item.done。逐项关联 type 与 opaque state，
+ * 避免不同 output item 的字段组合造成误提交。
+ */
+function isCompletedResponsesCompaction(eventType: string, parsed: object): boolean {
+  if (eventType !== "response.completed" || Array.isArray(parsed)) return false;
+
+  const response = (parsed as Record<string, unknown>).response;
+  if (response === null || typeof response !== "object" || Array.isArray(response)) return false;
+
+  const output = (response as Record<string, unknown>).output;
+  if (!Array.isArray(output)) return false;
+
+  return output.some((item) => {
+    if (item === null || typeof item !== "object" || Array.isArray(item)) return false;
+    const record = item as Record<string, unknown>;
+    return record.type === "compaction" && isNonEmptyValue(record.encrypted_content);
+  });
 }
 
 /** 单条帧规则 AND 语义；空规则永不命中（防目录笔误把所有帧判成内容/错误）。 */

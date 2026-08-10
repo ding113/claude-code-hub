@@ -270,6 +270,40 @@ describe("classifyFrame: openai-responses", () => {
     ).toBe("content");
   });
 
+  it("content: custom tool-call input delta and done payloads", () => {
+    expect(
+      classifyFrame(
+        "openai-responses",
+        "response.custom_tool_call_input.delta",
+        '{"type":"response.custom_tool_call_input.delta","delta":"{\\"path\\":\\"README.md\\"}"}'
+      )
+    ).toBe("content");
+    expect(
+      classifyFrame(
+        "openai-responses",
+        "response.custom_tool_call_input.done",
+        '{"type":"response.custom_tool_call_input.done","input":"{\\"path\\":\\"README.md\\"}"}'
+      )
+    ).toBe("content");
+  });
+
+  it("neutral: empty custom tool-call input delta and done payloads", () => {
+    expect(
+      classifyFrame(
+        "openai-responses",
+        "response.custom_tool_call_input.delta",
+        '{"type":"response.custom_tool_call_input.delta","delta":""}'
+      )
+    ).toBe("neutral");
+    expect(
+      classifyFrame(
+        "openai-responses",
+        "response.custom_tool_call_input.done",
+        '{"type":"response.custom_tool_call_input.done","input":""}'
+      )
+    ).toBe("neutral");
+  });
+
   it("neutral: output_item.added carrying only tool metadata", () => {
     expect(
       classifyFrame(
@@ -298,6 +332,40 @@ describe("classifyFrame: openai-responses", () => {
         '{"type":"response.output_item.done","item":{"type":"compaction","encrypted_content":"opaque-state"}}'
       )
     ).toBe("content");
+  });
+
+  it("content: response.completed carrying compaction output with opaque state", () => {
+    expect(
+      classifyFrame(
+        "openai-responses",
+        "response.completed",
+        '{"type":"response.completed","response":{"status":"completed","output":[{"type":"compaction","encrypted_content":"opaque-state"}]}}'
+      )
+    ).toBe("content");
+  });
+
+  it("terminal: response.completed without a non-empty compaction output", () => {
+    expect(
+      classifyFrame(
+        "openai-responses",
+        "response.completed",
+        '{"type":"response.completed","response":{"status":"completed","output":[{"type":"compaction","encrypted_content":""}]}}'
+      )
+    ).toBe("terminal");
+    expect(
+      classifyFrame(
+        "openai-responses",
+        "response.completed",
+        '{"type":"response.completed","response":{"status":"completed","output":[{"type":"reasoning","encrypted_content":"opaque-state"}]}}'
+      )
+    ).toBe("terminal");
+    expect(
+      classifyFrame(
+        "openai-responses",
+        "response.completed",
+        '{"type":"response.completed","response":{"status":"completed","output":[{"type":"compaction","encrypted_content":""},{"type":"reasoning","encrypted_content":"opaque-state"}]}}'
+      )
+    ).toBe("terminal");
   });
 
   it("neutral: empty or non-compaction encrypted output item", () => {
