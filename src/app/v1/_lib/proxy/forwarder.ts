@@ -4637,6 +4637,25 @@ export class ProxyForwarder {
         return;
       }
 
+      // 已超时触发竞速的 attempt 不得在仍有其他在途时胜出：超时即出局（打破
+      // “慢源靠时间优势反复获胜并粘住绑定”的死循环），其迟到首块不作为赢家
+      // 结果返回，交给 loser 分流（billAsLoser 则后台 drain 计费，否则 cancel）。
+      // 兜底：仅当它是唯一仍在途的 attempt（其余均已结算/失败）时接受，避免
+      // 请求悬挂——此时走下方 timedOutWinner 分支救当前请求但不重建 sticky。
+      const hasOtherInFlight = Array.from(attempts).some((a) => !a.settled && a !== attempt);
+      if (attempt.thresholdTriggered && hasOtherInFlight) {
+        attempt.settled = true;
+        attempts.delete(attempt);
+        if (attempt.billAsLoser) {
+          startLoserBilling(attempt);
+        } else {
+          const readerCancel = attempt.reader?.cancel("hedge_loser_timed_out");
+          readerCancel?.catch(() => undefined);
+          releaseAttemptAgent(attempt);
+        }
+        return;
+      }
+
       // 上游 #1348 语义（sticky timeout → late success can rescue only the current
       // request and cannot recreate Sticky）：超时方若真返回了首块，允许它救当前
       // 请求——继续用它的流完成本次响应（恢复速度优先），但绑定环节不再把它粘回
