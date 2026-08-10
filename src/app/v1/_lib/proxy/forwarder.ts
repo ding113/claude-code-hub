@@ -4073,6 +4073,23 @@ export class ProxyForwarder {
           attemptNumber: attempt.sequence,
           circuitState: getCircuitState(attempt.provider.id),
         });
+        // 备胎超时且更早的主路仍在途 → 判输移出（取消/计费 drain），继续往下拉下一个备胎；
+        // 主路/唯一在途超时 → 保留等待兜底（commitWinner 按 thresholdTriggered 判负，
+        // 无其他在途时接受其完整结果），同时拉下一个备胎。
+        const hasEarlierInFlight = Array.from(attempts).some(
+          (a) => !a.settled && a !== attempt && a.sequence < attempt.sequence
+        );
+        if (hasEarlierInFlight) {
+          attempt.settled = true;
+          attempts.delete(attempt);
+          if (attempt.billAsLoser) {
+            startLoserBilling(attempt);
+          } else {
+            const readerCancel = attempt.reader?.cancel("hedge_loser_timed_out");
+            readerCancel?.catch(() => undefined);
+            releaseAttemptAgent(attempt);
+          }
+        }
         void launchAlternative({ allowNonSloFallback: false });
       }, attempt.firstByteTimeoutMs);
     };
@@ -4110,15 +4127,9 @@ export class ProxyForwarder {
       }
 
       launchingAlternative = (async () => {
-        // 并发上限 2（上游 discoveryConcurrency=2 语义）：最多 1 主路 + 1 备胎在途。
-        // 失败的 attempt 会从 attempts 移除（size 回落），后续仍可补位到 2，
-        // 但不会同时并发 3 个以上，避免同一请求多路开销无限增长。
-        while (
-          !settled &&
-          !winnerCommitted &&
-          !noMoreProviders &&
-          attempts.size < 2
-        ) {
+        // 一次只拉一个备选（launchAlternative 每次启动一个备胎即 return），
+        // 备胎超时/失败后继续往下拉下一个——链式推进，不限制在途总数。
+        while (!settled && !winnerCommitted && !noMoreProviders) {
           const alternativeSelection = await selectHedgeAlternative({
             allowNonSloFallback,
             launchedProviderIds,
