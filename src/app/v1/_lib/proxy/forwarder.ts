@@ -28,6 +28,7 @@ import {
   getPreferredProviderEndpoints,
 } from "@/lib/provider-endpoints/endpoint-selector";
 import { getGlobalAgentPool, getProxyAgentForProvider } from "@/lib/proxy-agent";
+import { resolveDispatchCost } from "@/lib/provider-dispatch/health-aware-select";
 import { RateLimitService } from "@/lib/rate-limit/service";
 import { SessionManager } from "@/lib/session-manager";
 import {
@@ -4607,6 +4608,9 @@ export class ProxyForwarder {
       // 备胎不得抢赢——挂起等待主路结果：
       //   - 主路在窗口内返回首块 → 主路赢，备胎走 loser 分支；
       //   - 主路 20s 超时/失败 → promote 本备胎（首块已在手，立即可用）。
+      // 是否等待只比较双方倍率（处理后倍率，cheap-first）：备胎倍率 ≤ 主路倍率
+      // （备胎不比主路贵）时不挂起——先返回者直接赢，避免同倍率下白等 20s；
+      // 仅当备胎更贵时才保主路窗口，防止贵备胎抢赢便宜主路。
       // 有绑定（非冷启动）时备胎只在主路超时后才拉起，主路必已超时，此守卫不生效。
       if (
         isColdStart &&
@@ -4614,7 +4618,8 @@ export class ProxyForwarder {
         initialAttemptRef &&
         !initialAttemptRef.settled &&
         !initialAttemptRef.thresholdTriggered &&
-        !initialAttemptRef.response
+        !initialAttemptRef.response &&
+        resolveDispatchCost(attempt.provider) > resolveDispatchCost(initialAttemptRef.provider)
       ) {
         pendingWinnerAttempt = attempt;
         // 首块已在手，取消备胎自身的首字节定时器——否则 20s 后触发会把它
