@@ -3846,6 +3846,11 @@ export class ProxyForwarder {
     // 到点直接选当前在途里优先级最高的 attempt 作为兜底，不再拉新备胎。
     const TOTAL_RACE_TIMEOUT_MS = 60_000;
     let totalRaceTimer: NodeJS.Timeout | null = null;
+    // 冷启动并发备胎的 SLA 窗口守卫：备胎（非主路）先返回首块时，若主路还在
+    // 20s 首字节窗口内（未超时、未失败、未返回），备胎不得抢赢——挂起等待，
+    // 等主路超时/失败后 promote（此时备胎已就绪，立即出结果，不损失恢复速度）。
+    let initialAttemptRef: StreamingHedgeAttempt | null = null;
+    let pendingWinnerAttempt: StreamingHedgeAttempt | null = null;
 
     let resolveResult: ((result: { response?: Response; error?: Error }) => void) | null = null;
     const resultPromise = new Promise<{ response?: Response; error?: Error }>((resolve) => {
@@ -4028,6 +4033,12 @@ export class ProxyForwarder {
           modelRedirect: getAttemptModelRedirect(attempt),
         });
         ProxyForwarder.markProviderFailed(session, failedProviderIds, attempt.provider.id);
+        // 冷启动 pending 备胎的特例：它已在 commitWinner 挂起分支读过首块且
+        // .then 流程已结束（当时 settled=false 未触发 drain），这里补发后台 drain，
+        // 否则 reader/agent 泄漏且 usage 丢失。正常备胎的 loserBillingStarted 已 true。
+        if (attempt.response && attempt.reader && !attempt.loserBillingStarted) {
+          startLoserBilling(attempt);
+        }
         return;
       }
 
@@ -4101,6 +4112,19 @@ export class ProxyForwarder {
             readerCancel?.catch(() => undefined);
             releaseAttemptAgent(attempt);
           }
+        }
+        // 主路 20s 首字节超时，且冷启动并发备胎已挂起（首块在手）→ 直接 promote
+        // 备胎赢（SLA 窗口已过，低优先级候选此刻被允许接管），不再拉下一个备胎。
+        if (
+          attempt === initialAttemptRef &&
+          pendingWinnerAttempt &&
+          !pendingWinnerAttempt.settled &&
+          pendingWinnerAttempt.firstChunk
+        ) {
+          const pending = pendingWinnerAttempt;
+          pendingWinnerAttempt = null;
+          void commitWinner(pending, pending.firstChunk as Uint8Array);
+          return;
         }
         void launchAlternative({ allowNonSloFallback: false });
       }, attempt.firstByteTimeoutMs);
@@ -4556,6 +4580,20 @@ export class ProxyForwarder {
         return;
       }
 
+      // 主路（initial）失败且冷启动并发备胎已挂起（首块在手）→ promote 备胎接管，
+      // 不启动新备胎；否则走 launchAlternative 链式拉下一个。
+      if (
+        attempt === initialAttemptRef &&
+        pendingWinnerAttempt &&
+        !pendingWinnerAttempt.settled &&
+        pendingWinnerAttempt.firstChunk
+      ) {
+        const pending = pendingWinnerAttempt;
+        pendingWinnerAttempt = null;
+        await commitWinner(pending, pending.firstChunk as Uint8Array);
+        return;
+      }
+
       await launchAlternative({ allowNonSloFallback: attempts.size === 0 });
       await finishIfExhausted();
     };
@@ -4563,6 +4601,41 @@ export class ProxyForwarder {
     const commitWinner = async (attempt: StreamingHedgeAttempt, firstChunk: Uint8Array) => {
       if (settled || winnerCommitted || attempt.settled || !attempt.response || !attempt.reader)
         return;
+
+      // 冷启动并发备胎的 SLA 窗口守卫（上游 discovery "低优先级候选 pending" 语义）：
+      // 备胎先返回首块时，若主路还在 20s 首字节窗口内（未超时、未失败、未返回首块），
+      // 备胎不得抢赢——挂起等待主路结果：
+      //   - 主路在窗口内返回首块 → 主路赢，备胎走 loser 分支；
+      //   - 主路 20s 超时/失败 → promote 本备胎（首块已在手，立即可用）。
+      // 有绑定（非冷启动）时备胎只在主路超时后才拉起，主路必已超时，此守卫不生效。
+      if (
+        isColdStart &&
+        attempt !== initialAttemptRef &&
+        initialAttemptRef &&
+        !initialAttemptRef.settled &&
+        !initialAttemptRef.thresholdTriggered &&
+        !initialAttemptRef.response
+      ) {
+        pendingWinnerAttempt = attempt;
+        // 首块已在手，取消备胎自身的首字节定时器——否则 20s 后触发会把它
+        // 当"备胎超时且主路在途"判输移出，pending 引用就悬空了。
+        if (attempt.thresholdTimer) {
+          clearTimeout(attempt.thresholdTimer);
+          attempt.thresholdTimer = null;
+        }
+        logger.info(
+          "ProxyForwarder: cold-start hedge spare first byte arrived; primary still within SLA window, holding pending",
+          {
+            sessionId: session.sessionId ?? null,
+            spareProviderId: attempt.provider.id,
+            spareProviderName: attempt.provider.name,
+            primaryProviderId: initialAttemptRef.provider.id,
+            primaryProviderName: initialAttemptRef.provider.name,
+            spareSequence: attempt.sequence,
+          }
+        );
+        return;
+      }
 
       // 上游 #1348 语义（sticky timeout → late success can rescue only the current
       // request and cannot recreate Sticky）：超时方若真返回了首块，允许它救当前
@@ -4799,6 +4872,12 @@ export class ProxyForwarder {
       };
 
       attempts.add(attempt);
+
+      // 记录主路（首启 attempt）引用：冷启动并发备胎的 SLA 窗口守卫用它判断
+      // "主路是否还在 20s 窗口内"，避免低优先级备胎抢赢高优先级主路。
+      if (launchedProviderCount === 1 && provider.id === initialProvider.id) {
+        initialAttemptRef = attempt;
+      }
 
       // Record hedge participant launch in decision chain
       // (first provider is already recorded via initial_selection or session_reuse)
