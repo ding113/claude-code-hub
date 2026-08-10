@@ -3810,6 +3810,14 @@ export class ProxyForwarder {
       throw new Error("代理上下文缺少供应商");
     }
 
+    // 上游 v0.9.x bounded discovery 的分层语义：
+    // - 冷启动（无 session_reuse 绑定）：立即并发一个 SLO 备胎（并发=2）做发现，
+    //   不等首字节超时，用健康竞速探测谁更快；
+    // - 有绑定（session_reuse）：只发绑定方，超时才拉备胎（下方原 timeout_race 行为）。
+    const isColdStart = !session
+      .getProviderChain()
+      .some((item) => item.reason === "session_reuse");
+
     // Capture immutable request ownership before winner synchronization can mutate a
     // shared/shadow session. Loser billing must always settle against the original
     // message request and authenticated CCH user, not whichever attempt wins.
@@ -4102,7 +4110,15 @@ export class ProxyForwarder {
       }
 
       launchingAlternative = (async () => {
-        while (!settled && !winnerCommitted && !noMoreProviders) {
+        // 并发上限 2（上游 discoveryConcurrency=2 语义）：最多 1 主路 + 1 备胎在途。
+        // 失败的 attempt 会从 attempts 移除（size 回落），后续仍可补位到 2，
+        // 但不会同时并发 3 个以上，避免同一请求多路开销无限增长。
+        while (
+          !settled &&
+          !winnerCommitted &&
+          !noMoreProviders &&
+          attempts.size < 2
+        ) {
           const alternativeSelection = await selectHedgeAlternative({
             allowNonSloFallback,
             launchedProviderIds,
@@ -4751,9 +4767,10 @@ export class ProxyForwarder {
       const initialLaunched = await startAttempt(initialProvider, true);
       if (!initialLaunched) {
         await launchAlternative({ allowNonSloFallback: true });
-      } else if (raceMode === "dual_fast") {
-        // dual_fast launches one SLO-qualified peer immediately; its attempts
-        // have no delayed threshold, so this remains a true two-way race.
+      } else if (raceMode === "dual_fast" || (raceMode === "timeout_race" && isColdStart)) {
+        // dual_fast: 立即并发一个 SLO 备胎（真双向竞速，备胎无延迟阈值）。
+        // timeout_race + 冷启动（无绑定）：同样立即并发备胎做发现（并发=2），
+        // 有绑定时保持原逻辑——只发绑定方，等首字节超时才拉备胎。
         await launchAlternative({ allowNonSloFallback: false });
       }
       await finishIfExhausted();
