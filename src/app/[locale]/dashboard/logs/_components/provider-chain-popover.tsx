@@ -532,6 +532,24 @@ export function ProviderChainPopover({
                 <div className={cn("flex-1 pb-3", isLast && "pb-0")}>
                   <div className="flex items-center gap-2">
                     <span className="text-xs font-medium">{item.name}</span>
+                    {item.costMultiplier !== undefined &&
+                      item.costMultiplier !== null &&
+                      Number.isFinite(item.costMultiplier) && (
+                        <Badge
+                          variant="outline"
+                          className={cn(
+                            "text-[10px] px-1 py-0 shrink-0",
+                            item.costMultiplier > 1
+                              ? "bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-950/30 dark:text-orange-300 dark:border-orange-800"
+                              : item.costMultiplier < 1
+                                ? "bg-green-50 text-green-700 border-green-200 dark:bg-green-950/30 dark:text-green-300 dark:border-green-800"
+                                : "bg-slate-50 text-slate-500 border-slate-200 dark:bg-slate-900/30 dark:text-slate-400 dark:border-slate-700"
+                          )}
+                          title={tChain("details.costMultiplier")}
+                        >
+                          x{item.costMultiplier.toFixed(2)}
+                        </Badge>
+                      )}
                     {item.statusCode && (
                       <Badge
                         variant="outline"
