@@ -40,6 +40,7 @@ export class ReplaySpool {
   private readonly store = getReplayStore();
   private readonly decoder = new TextDecoder("utf-8");
   private readonly parts: string[] = [];
+  private readonly queuedBatches = new Set<string[]>();
   private pending: string[] = [];
   private pendingBytes = 0;
   private totalBytes = 0;
@@ -120,11 +121,12 @@ export class ReplaySpool {
     if (batch.length === 0) return;
     this.pending = [];
     this.pendingBytes = 0;
+    this.queuedBatches.add(batch);
     // 续接体自带 try/catch：链永不 rejected；每个 await 之后复查 disabled，
     // 防止与 disable/halt 竞态时在清理之后又写回 owning meta
     this.writeChain = this.writeChain.then(async () => {
       try {
-        if (this.disabled) return;
+        if (this.disabled || this.aborting) return;
         const expectedChunkCount = this.chunkCount + batch.length;
         const appended = await this.store.writeOwned(
           this.identity.replayId,
@@ -132,7 +134,7 @@ export class ReplaySpool {
           this.buildMeta("owning", { chunkCount: expectedChunkCount }),
           batch
         );
-        if (this.disabled) return;
+        if (this.disabled || this.aborting) return;
         if (appended === null) {
           // Redis 不可用：本次 replay 放弃（热层写是原子的，不会留下半批数据）
           this.disable("redis_unavailable");
@@ -145,10 +147,13 @@ export class ReplaySpool {
         this.chunkCount = appended;
         this.metaWritten = true;
       } catch (error) {
+        if (this.aborting) return;
         logger.debug("[ReplaySpool] flush failed, disabling spool", {
           error: error instanceof Error ? error.message : String(error),
         });
         this.disable("flush_error");
+      } finally {
+        this.queuedBatches.delete(batch);
       }
     });
   }
@@ -172,15 +177,15 @@ export class ReplaySpool {
 
   private startOwnerHeartbeat(): void {
     this.ownerHeartbeatTimer = setInterval(() => {
-      if (this.disabled || this.released || this.ownerHeartbeatInFlight) return;
+      if (this.disabled || this.aborting || this.released || this.ownerHeartbeatInFlight) return;
       this.ownerHeartbeatInFlight = true;
       void this.store
         .renewOwnerLease(this.identity.replayId, this.ownerToken)
         .then((leaseHeld) => {
-          if (!leaseHeld && !this.released) this.halt("owner_lease_lost");
+          if (!leaseHeld && !this.aborting && !this.released) this.halt("owner_lease_lost");
         })
         .catch(() => {
-          if (!this.released) this.halt("owner_lease_lost");
+          if (!this.aborting && !this.released) this.halt("owner_lease_lost");
         })
         .finally(() => {
           this.ownerHeartbeatInFlight = false;
@@ -193,12 +198,13 @@ export class ReplaySpool {
   bootstrap(): void {
     this.writeChain = this.writeChain.then(async () => {
       try {
-        if (this.disabled || this.metaWritten) return;
+        if (this.disabled || this.aborting || this.metaWritten) return;
         const chunkCount = await this.store.writeOwned(
           this.identity.replayId,
           this.ownerToken,
           this.buildMeta("owning")
         );
+        if (this.disabled || this.aborting) return;
         if (chunkCount === null) {
           this.disable("redis_unavailable");
           return;
@@ -210,6 +216,7 @@ export class ReplaySpool {
         this.chunkCount = chunkCount;
         this.metaWritten = true;
       } catch (error) {
+        if (this.aborting) return;
         logger.debug("[ReplaySpool] bootstrap failed, disabling spool", {
           error: error instanceof Error ? error.message : String(error),
         });
@@ -234,11 +241,12 @@ export class ReplaySpool {
     const batch = this.pending;
     this.pending = [];
     this.pendingBytes = 0;
+    this.queuedBatches.add(batch);
 
     this.writeChain = this.writeChain.then(async () => {
       let pgPersisted = false;
       try {
-        if (this.disabled) return;
+        if (this.disabled || this.aborting) return;
         const expectedChunkCount = this.chunkCount + batch.length;
         const appended = await this.store.writeOwned(
           this.identity.replayId,
@@ -255,6 +263,7 @@ export class ReplaySpool {
         }
         this.chunkCount = appended;
         this.metaWritten = true;
+        const payload = this.takePayload();
         // 先写 PG（持久 payload），再翻 Redis meta 为 completed（热层可服务）
         const persistResult = await this.store.persistCompleted({
           replayId: this.identity.replayId,
@@ -266,7 +275,7 @@ export class ReplaySpool {
           model: this.identity.model,
           statusCode: this.statusCode,
           headers: this.headers,
-          payload: this.parts.join(""),
+          payload,
           byteSize: this.totalBytes,
           sourceMessageRequestId: messageRequestId,
         });
@@ -312,6 +321,8 @@ export class ReplaySpool {
           )
           .catch(() => false);
       } finally {
+        this.queuedBatches.delete(batch);
+        this.clearPayload();
         this.release();
       }
     });
@@ -320,12 +331,19 @@ export class ReplaySpool {
 
   /** 终态失败：meta 置 aborted + 删块；已 aborted 的条目绝不被重放命中。 */
   async abort(reason: string): Promise<void> {
+    if (this.abortPromise) {
+      await this.abortPromise;
+      return;
+    }
     if (this.terminal) return;
     this.terminal = true;
+    this.aborting = true;
     this.clearTimer();
     this.pending = [];
     this.pendingBytes = 0;
-    this.writeChain = this.writeChain.then(async () => {
+    this.clearPayload();
+    this.clearQueuedBatches();
+    this.abortPromise = this.writeChain.then(async () => {
       try {
         // 已失效（disable 已清理 / halt 已让渡所有权）：不得再写 meta 覆盖新 owner
         if (this.disabled) return;
@@ -340,7 +358,8 @@ export class ReplaySpool {
         this.release();
       }
     });
-    await this.writeChain;
+    this.writeChain = this.abortPromise;
+    await this.abortPromise;
   }
 
   /** 失效并删除条目（payload 超限 / Redis 不可用 / 冲刷异常等本 spool 自身的失败）。 */
@@ -360,31 +379,37 @@ export class ReplaySpool {
     this.pending = [];
     this.parts.length = 0;
     this.pendingBytes = 0;
+    this.clearQueuedBatches();
     // 清理顺着 writeChain 串行：与 in-flight append 竞态时绝不出现「删除后又写回」
     this.writeChain = this.writeChain.then(async () => {
-      if (deleteEntry) {
-        await this.store
-          .abortOwned(
-            this.identity.replayId,
-            this.ownerToken,
-            this.buildMeta("aborted", { abortReason: reason })
-          )
-          .catch(() => false);
-      } else {
-        // compare-delete 只删自己的 token：所有权已失时为安全 no-op
-        await this.store
-          .releaseOwner(this.identity.replayId, this.ownerToken)
-          .catch(() => undefined);
+      try {
+        if (deleteEntry) {
+          await this.store
+            .abortOwned(
+              this.identity.replayId,
+              this.ownerToken,
+              this.buildMeta("aborted", { abortReason: reason })
+            )
+            .catch(() => false);
+        } else {
+          // compare-delete 只删自己的 token：所有权已失时为安全 no-op
+          await this.store
+            .releaseOwner(this.identity.replayId, this.ownerToken)
+            .catch(() => undefined);
+        }
+      } finally {
+        this.release();
       }
     });
     logger.debug("[ReplaySpool] spool disabled", {
       replayId: this.identity.replayId.slice(0, 12),
       reason,
     });
-    this.release();
   }
 
   private released = false;
+  private aborting = false;
+  private abortPromise: Promise<void> | null = null;
 
   private release(): void {
     if (this.released) return;
@@ -408,6 +433,21 @@ export class ReplaySpool {
   private clearTimer(): void {
     this.clearFlushTimer();
     this.clearOwnerHeartbeat();
+  }
+
+  private takePayload(): string {
+    const payload = this.parts.join("");
+    this.clearPayload();
+    return payload;
+  }
+
+  private clearPayload(): void {
+    this.parts.length = 0;
+  }
+
+  private clearQueuedBatches(): void {
+    for (const batch of this.queuedBatches) batch.length = 0;
+    this.queuedBatches.clear();
   }
 }
 
