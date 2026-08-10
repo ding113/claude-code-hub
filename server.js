@@ -210,7 +210,13 @@ async function handleWebSocketConnection(ws, req) {
     }
   };
 
-  ws.on("close", finalize);
+  ws.on("close", (code, reason) => {
+    log("info", "ws_client_closed", {
+      code: typeof code === "number" ? code : "unknown",
+      reason: reason ? String(reason) : "",
+    });
+    finalize();
+  });
   ws.on("error", (err) => {
     log("warn", "ws_client_error", {
       error: String(err && err.message ? err.message : err),
@@ -414,6 +420,18 @@ async function forwardToInternalHttp(
   const payload = Buffer.from(JSON.stringify(bodyForHttp), "utf8");
   internalHeaders["content-length"] = String(payload.length);
 
+  // Dedicated agent for the in-process tunnel. Node's default http.globalAgent
+  // keeps keep-alive sockets pooled; a pooled socket that the local server has
+  // since closed (idle keep-alive timeout) can be reused as a half-open
+  // connection, making the request hang silently or die with ECONNRESET. The
+  // tunnel targets the same process, so per-request sockets are cheap and
+  // always fresh.
+  const tunnelAgent = new http.Agent({ keepAlive: false, maxSockets: 32 });
+  // Hard ceiling so a wedged internal handler cannot hold the client WS open
+  // forever without a single frame. Generous: covers upstream first-byte
+  // timeouts plus hedge fallback windows.
+  const INTERNAL_TUNNEL_TIMEOUT_MS = 90 * 1000;
+
   await new Promise((resolve) => {
     const req = http.request(
       {
@@ -422,6 +440,8 @@ async function forwardToInternalHttp(
         port,
         path: "/v1/responses",
         headers: internalHeaders,
+        agent: tunnelAgent,
+        timeout: INTERNAL_TUNNEL_TIMEOUT_MS,
       },
       (res) => {
         const contentType = (res.headers["content-type"] || "").toLowerCase();
@@ -605,15 +625,34 @@ async function forwardToInternalHttp(
       // expected; downgrade to debug to avoid noisy logs in normal traffic.
       const errCode = err && (err.code || err.name);
       const isAbort = errCode === "ECONNRESET" || errCode === "ERR_STREAM_PREMATURE_CLOSE";
-      if (!isAbort) {
-        emitErrorEvent(
-          ws,
-          "internal_request_error",
-          String(err && err.message ? err.message : err)
-        );
-        initiateClose(1011, "internal_request_error");
+      // `closed` is scoped to handleWebSocketConnection and not visible here;
+      // use the client socket state instead to detect that the WS is gone.
+      const clientGone = !ws || ws.readyState >= 2 /* CLOSING / CLOSED */;
+      if (isAbort && req.destroyed && clientGone) {
+        // Client WS already gone; nothing to signal. Silence is correct.
+        resolve();
+        return;
       }
+      log("warn", "ws_internal_tunnel_error", {
+        code: errCode || "UNKNOWN",
+        message: String(err && err.message ? err.message : err),
+        clientGone,
+      });
+      emitErrorEvent(
+        ws,
+        "internal_request_error",
+        String(err && err.message ? err.message : err)
+      );
+      initiateClose(1011, "internal_request_error");
       resolve();
+    });
+
+    req.on("timeout", () => {
+      log("warn", "ws_internal_tunnel_timeout", {
+        timeoutMs: INTERNAL_TUNNEL_TIMEOUT_MS,
+      });
+      // Destroy the request so the error handler above fires and resolves.
+      req.destroy(new Error("internal tunnel timeout"));
     });
 
     if (typeof registerInternalReq === "function") {
@@ -674,7 +713,17 @@ async function main() {
     process.env[INTERNAL_SECRET_ENV] = randomUUID();
   }
 
-  const app = nextFactory({ dev, hostname, port });
+  // Decoy http.Server for Next.js's WebSocket upgrade handler. Next's
+  // getRequestHandler() lazily calls setupWebSocketHandler(), which attaches
+  // its own 'upgrade' listener to `options.httpServer` (falling back to
+  // req.socket.server = OUR server). That listener runs resolveRoutes() on
+  // every WS upgrade and calls socket.end() for matched paths — killing our
+  // /v1/responses WebSocket tunnel 2ms after the first frame. Pointing Next at
+  // a decoy server that never listens keeps its upgrade listener inert while
+  // our wss handles the real connections. Decoy must exist before
+  // getRequestHandler() is first invoked (first HTTP request).
+  const nextUpgradeSink = new http.Server();
+  const app = nextFactory({ dev, hostname, port, httpServer: nextUpgradeSink });
   const handler = app.getRequestHandler();
   await app.prepare();
 
