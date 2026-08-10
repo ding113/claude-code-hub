@@ -168,12 +168,6 @@ const STREAM_SIGNALS: Record<ProtocolFamily, StreamSignal> = {
         anyPaths: ["code"],
       },
       {
-        // Remote/server-side compaction 的 opaque state 是完整协议 payload，只有非空且类型精确匹配才提交。
-        eventTypes: ["response.output_item.done"],
-        anyPaths: ["item.encrypted_content"],
-        valueMatches: [{ path: "item.type", values: ["compaction"] }],
-      },
-      {
         // output_item.added 的 name/id/status 只是结构元数据；真实 payload 到达前不能提交，
         // 否则紧随其后的 response.failed / 断流将失去透明 fallback 机会。
         // fake-streaming 的完整 item 会在 added/done 中携带 arguments/input/action，仍可提交。
@@ -386,7 +380,7 @@ function classifyParsedFrame(
   for (const rule of signal.errorRules) {
     if (frameRuleMatches(rule, effective, parsed)) return "error";
   }
-  if (family === "openai-responses" && isCompletedResponsesCompaction(effective, parsed)) {
+  if (family === "openai-responses" && isResponsesCompactionContent(effective, parsed)) {
     return "content";
   }
   for (const rule of signal.contentRules) {
@@ -402,24 +396,36 @@ function classifyParsedFrame(
 }
 
 /**
- * 部分 Responses 上游只在 response.completed 中返回 compaction output，
- * 不会先发送 response.output_item.done。逐项关联 type 与 opaque state，
- * 避免不同 output item 的字段组合造成误提交。
+ * Remote/server-side compaction 的 opaque state 是完整协议 payload。部分上游只在
+ * response.completed 中返回 output, 不会先发送 response.output_item.done。
  */
-function isCompletedResponsesCompaction(eventType: string, parsed: object): boolean {
-  if (eventType !== "response.completed" || Array.isArray(parsed)) return false;
+function isResponsesCompactionContent(eventType: string, parsed: object): boolean {
+  if (Array.isArray(parsed)) return false;
 
-  const response = (parsed as Record<string, unknown>).response;
+  const record = parsed as Record<string, unknown>;
+  if (eventType === "response.output_item.done") {
+    return isNonEmptyCompactionItem(record.item);
+  }
+  if (eventType !== "response.completed") return false;
+
+  const response = record.response;
   if (response === null || typeof response !== "object" || Array.isArray(response)) return false;
 
   const output = (response as Record<string, unknown>).output;
   if (!Array.isArray(output)) return false;
 
-  return output.some((item) => {
-    if (item === null || typeof item !== "object" || Array.isArray(item)) return false;
-    const record = item as Record<string, unknown>;
-    return record.type === "compaction" && isNonEmptyValue(record.encrypted_content);
-  });
+  return output.some(isNonEmptyCompactionItem);
+}
+
+/** 同一 output item 内的 type 与 opaque state 必须同时满足协议类型约束。 */
+function isNonEmptyCompactionItem(item: unknown): boolean {
+  if (item === null || typeof item !== "object" || Array.isArray(item)) return false;
+  const record = item as Record<string, unknown>;
+  return (
+    record.type === "compaction" &&
+    typeof record.encrypted_content === "string" &&
+    record.encrypted_content !== ""
+  );
 }
 
 /** 单条帧规则 AND 语义；空规则永不命中（防目录笔误把所有帧判成内容/错误）。 */

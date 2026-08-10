@@ -368,6 +368,34 @@ describe("classifyFrame: openai-responses", () => {
     ).toBe("terminal");
   });
 
+  it("rejects non-string compaction encrypted content", () => {
+    for (const encryptedContent of [true, 42, { opaque: "state" }]) {
+      expect(
+        classifyFrame(
+          "openai-responses",
+          "response.output_item.done",
+          JSON.stringify({
+            type: "response.output_item.done",
+            item: { type: "compaction", encrypted_content: encryptedContent },
+          })
+        )
+      ).toBe("neutral");
+      expect(
+        classifyFrame(
+          "openai-responses",
+          "response.completed",
+          JSON.stringify({
+            type: "response.completed",
+            response: {
+              status: "completed",
+              output: [{ type: "compaction", encrypted_content: encryptedContent }],
+            },
+          })
+        )
+      ).toBe("terminal");
+    }
+  });
+
   it("neutral: empty or non-compaction encrypted output item", () => {
     expect(
       classifyFrame(
