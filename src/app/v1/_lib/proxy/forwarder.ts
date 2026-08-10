@@ -3842,6 +3842,10 @@ export class ProxyForwarder {
     const raceFirstByteMs = Number.isFinite(raceSettings.streamingRaceFirstByteMs)
       ? Math.max(1, raceSettings.streamingRaceFirstByteMs)
       : 0;
+    // 总竞速上限（对齐上游 racingTotalTimeoutMs）：首字节接力一直拉不到未超时赢家时，
+    // 到点直接选当前在途里优先级最高的 attempt 作为兜底，不再拉新备胎。
+    const TOTAL_RACE_TIMEOUT_MS = 60_000;
+    let totalRaceTimer: NodeJS.Timeout | null = null;
 
     let resolveResult: ((result: { response?: Response; error?: Error }) => void) | null = null;
     const resultPromise = new Promise<{ response?: Response; error?: Error }>((resolve) => {
@@ -3851,12 +3855,20 @@ export class ProxyForwarder {
     const settleSuccess = (response: Response) => {
       if (settled) return;
       settled = true;
+      if (totalRaceTimer) {
+        clearTimeout(totalRaceTimer);
+        totalRaceTimer = null;
+      }
       resolveResult?.({ response });
     };
 
     const settleFailure = async (error: Error) => {
       if (settled) return;
       settled = true;
+      if (totalRaceTimer) {
+        clearTimeout(totalRaceTimer);
+        totalRaceTimer = null;
+      }
       await ProxyForwarder.clearSessionProviderBinding(session);
       resolveResult?.({ error });
     };
@@ -4092,6 +4104,52 @@ export class ProxyForwarder {
         }
         void launchAlternative({ allowNonSloFallback: false });
       }, attempt.firstByteTimeoutMs);
+    };
+
+    // 总竞速上限兜底：到点还没有未超时赢家时，选优先级最高的在途 attempt 作为
+    // 唯一兜底（优先级数字越小越高），放弃其余 attempt，等它返回首块走
+    // commitWinner 的 timedOutWinner 分支——即使它已超时也救当前请求（不重建 sticky）。
+    const armTotalRaceDeadline = () => {
+      if (totalRaceTimer || TOTAL_RACE_TIMEOUT_MS <= 0) return;
+      totalRaceTimer = setTimeout(() => {
+        totalRaceTimer = null;
+        if (settled || winnerCommitted || attempts.size === 0) return;
+
+        const inFlight = Array.from(attempts).filter((a) => !a.settled);
+        if (inFlight.length === 0) return;
+
+        inFlight.sort(
+          (a, b) => (a.provider.priority || 0) - (b.provider.priority || 0)
+        );
+        const fallback = inFlight[0];
+
+        logger.warn(
+          "ProxyForwarder: total race deadline reached, using highest-priority in-flight attempt as fallback",
+          {
+            sessionId: session.sessionId ?? null,
+            fallbackProviderId: fallback.provider.id,
+            fallbackProviderName: fallback.provider.name,
+            fallbackPriority: fallback.provider.priority || 0,
+            inFlightCount: inFlight.length,
+            launchedProviderCount,
+          }
+        );
+
+        noMoreProviders = true;
+
+        for (const other of attempts) {
+          if (other === fallback || other.settled) continue;
+          other.settled = true;
+          attempts.delete(other);
+          if (other.billAsLoser) {
+            startLoserBilling(other);
+          } else {
+            const readerCancel = other.reader?.cancel("hedge_loser_total_deadline");
+            readerCancel?.catch(() => undefined);
+            releaseAttemptAgent(other);
+          }
+        }
+      }, TOTAL_RACE_TIMEOUT_MS);
     };
 
     const abortAllAttempts = (winner?: StreamingHedgeAttempt, reason: string = "hedge_loser") => {
@@ -4515,6 +4573,11 @@ export class ProxyForwarder {
       winnerCommitted = true;
       winnerAttempt = attempt;
 
+      if (totalRaceTimer) {
+        clearTimeout(totalRaceTimer);
+        totalRaceTimer = null;
+      }
+
       if (attempt.thresholdTimer) {
         clearTimeout(attempt.thresholdTimer);
         attempt.thresholdTimer = null;
@@ -4776,6 +4839,7 @@ export class ProxyForwarder {
 
     try {
       const initialLaunched = await startAttempt(initialProvider, true);
+      armTotalRaceDeadline();
       if (!initialLaunched) {
         await launchAlternative({ allowNonSloFallback: true });
       } else if (raceMode === "dual_fast" || (raceMode === "timeout_race" && isColdStart)) {
@@ -4792,6 +4856,10 @@ export class ProxyForwarder {
       return result.response as Response;
     } finally {
       cleanupClientAbortListener();
+      if (totalRaceTimer) {
+        clearTimeout(totalRaceTimer);
+        totalRaceTimer = null;
+      }
     }
   }
 
