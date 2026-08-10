@@ -636,10 +636,19 @@ export class ProxyProviderResolver {
    * First-byte hedge alternate: next health-SLO qualified peer after excludes.
    * Returns null when no remaining SLO-qualified candidate exists → do not race.
    * Does not fall back to non-SLO peers. Ranking is cheapest cost first.
+   *
+   * When `sameCostAsProvider` is given (cold-start concurrent discovery), only
+   * candidates whose dispatch cost equals the primary's are eligible: racing a
+   * more expensive spare buys nothing (cheap primary is already optimal, spare
+   * would only wait out the SLA window), and racing a cheaper spare is just a
+   * wrong primary pick. Same-cost candidates race with zero wait — fastest
+   * first byte wins, no window guard needed. Returns null when no same-cost
+   * SLO candidate exists → primary runs single-path until first-byte timeout.
    */
   static async pickHealthSloAlternate(
     session: ProxySession,
-    excludeIds: number[]
+    excludeIds: number[],
+    sameCostAsProvider?: Provider | null
   ): Promise<Provider | null> {
     const { selectNextHealthDispatchAlternate, resolveDispatchCost } = await import(
       "@/lib/provider-dispatch/health-aware-select"
@@ -691,9 +700,18 @@ export class ProxyProviderResolver {
       return true;
     });
 
+    // 冷启动并发发现：只允许与主路相同处理后倍率的候选参与竞速（见上方注释）。
+    // 没有同倍率 SLO 候选 → 返回 null，主路单路运行，首字超时才拉备胎。
+    const sameCostPool = sameCostAsProvider
+      ? pool.filter(
+          (provider) =>
+            resolveDispatchCost(provider) === resolveDispatchCost(sameCostAsProvider)
+        )
+      : pool;
+
     const healthSloThresholds = await getHealthSloThresholds();
     const projectedPool = projectProvidersHealthForRequestedModel(
-      pool,
+      sameCostPool,
       requestedModel,
       healthTestModelsByGroup,
       healthTestModelFallbacksByGroup,

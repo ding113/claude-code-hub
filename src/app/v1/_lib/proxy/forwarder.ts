@@ -4190,8 +4190,11 @@ export class ProxyForwarder {
       }
     };
 
-    const launchAlternative = async (options: { allowNonSloFallback: boolean }) => {
-      const { allowNonSloFallback } = options;
+    const launchAlternative = async (options: {
+      allowNonSloFallback: boolean;
+      sameCostAsProvider?: Provider | null;
+    }) => {
+      const { allowNonSloFallback, sameCostAsProvider = null } = options;
       if (settled || winnerCommitted || noMoreProviders) return;
       if (launchingAlternative) {
         await launchingAlternative;
@@ -4218,7 +4221,11 @@ export class ProxyForwarder {
             launchedProviderIds,
             failedProviderIds,
             selectHealthSlo: (excludeProviderIds) =>
-              ProxyProviderResolver.pickHealthSloAlternate(session, excludeProviderIds),
+              ProxyProviderResolver.pickHealthSloAlternate(
+                session,
+                excludeProviderIds,
+                sameCostAsProvider
+              ),
             selectOrdinary: (excludeProviderIds) =>
               ProxyProviderResolver.pickRandomProviderWithExclusion(session, excludeProviderIds),
           });
@@ -4611,7 +4618,10 @@ export class ProxyForwarder {
       // 是否等待只比较双方倍率（处理后倍率，cheap-first）：备胎倍率 ≤ 主路倍率
       // （备胎不比主路贵）时不挂起——先返回者直接赢，避免同倍率下白等 20s；
       // 仅当备胎更贵时才保主路窗口，防止贵备胎抢赢便宜主路。
-      // 有绑定（非冷启动）时备胎只在主路超时后才拉起，主路必已超时，此守卫不生效。
+      // 自冷启动并发改为"仅同倍率候选"后（pickHealthSloAlternate 的
+      // sameCostAsProvider 约束），此守卫条件恒不成立——同倍率竞速零等待，
+      // 谁先返回谁赢。保留代码仅为防御性兜底（超时后拉起的非同倍率备胎在
+      // 主路已 thresholdTriggered 时同样不挂起）。
       if (
         isColdStart &&
         attempt !== initialAttemptRef &&
@@ -4946,10 +4956,20 @@ export class ProxyForwarder {
       if (!initialLaunched) {
         await launchAlternative({ allowNonSloFallback: true });
       } else if (raceMode === "dual_fast" || (raceMode === "timeout_race" && isColdStart)) {
-        // dual_fast: 立即并发一个 SLO 备胎（真双向竞速，备胎无延迟阈值）。
-        // timeout_race + 冷启动（无绑定）：同样立即并发备胎做发现（并发=2），
+        // 冷启动（无绑定）并发发现：
+        // - dual_fast: 立即并发一个 SLO 备胎（真双向竞速，备胎无延迟阈值），
+        //   这是用户显式选择的双路竞速模式，不做同倍率约束。
+        // - timeout_race + 冷启动：仅当存在与主路**相同处理后倍率**的健康 SLO
+        //   候选时才立即并发（sameCostAsProvider 约束）——同倍率竞速零等待，
+        //   谁先返回首块谁赢并绑定，白赚最快供应商；不同倍率的候选不并发
+        //   （更贵的备胎赢了要多花钱且需等主路 SLA 窗口，更便宜的说明主路
+        //   选错了），主路直接单路，首字超时后再走下方备胎链。
         // 有绑定时保持原逻辑——只发绑定方，等首字节超时才拉备胎。
-        await launchAlternative({ allowNonSloFallback: false });
+        await launchAlternative({
+          allowNonSloFallback: false,
+          sameCostAsProvider:
+            raceMode === "timeout_race" && isColdStart ? initialProvider : null,
+        });
       }
       await finishIfExhausted();
       const result = await resultPromise;
