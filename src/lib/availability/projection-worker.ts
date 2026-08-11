@@ -176,35 +176,49 @@ async function bootstrapBackfill(): Promise<void> {
 async function recomputeAvailCurrent(tx: typeof db, providerIds: number[]): Promise<void> {
   if (providerIds.length === 0) return;
 
+  // Stable ascending lock order across concurrent worker instances (avoids deadlocks).
+  const sortedProviderIds = [...new Set(providerIds)].sort((a, b) => a - b);
+  const providerIdList = sql.join(
+    sortedProviderIds.map((id) => sql`${id}`),
+    sql`, `
+  );
+
   await tx.execute(sql`
     INSERT INTO avail_current AS c (
       provider_id, state, availability, request_count, last_request_at, updated_at
     )
     SELECT
-      b.provider_id,
-      CASE
-        WHEN COALESCE(SUM(b.success_cnt), 0) + COALESCE(SUM(b.failure_cnt), 0) <= 0 THEN 'unknown'
-        WHEN (COALESCE(SUM(b.success_cnt), 0)::float
-          / (COALESCE(SUM(b.success_cnt), 0) + COALESCE(SUM(b.failure_cnt), 0))) >= 0.8 THEN 'green'
-        WHEN (COALESCE(SUM(b.success_cnt), 0)::float
-          / (COALESCE(SUM(b.success_cnt), 0) + COALESCE(SUM(b.failure_cnt), 0))) >= 0.5 THEN 'yellow'
-        ELSE 'red'
-      END,
-      CASE
-        WHEN COALESCE(SUM(b.success_cnt), 0) + COALESCE(SUM(b.failure_cnt), 0) <= 0 THEN 0
-        ELSE COALESCE(SUM(b.success_cnt), 0)::float
-          / (COALESCE(SUM(b.success_cnt), 0) + COALESCE(SUM(b.failure_cnt), 0))
-      END,
-      (COALESCE(SUM(b.success_cnt), 0) + COALESCE(SUM(b.failure_cnt), 0))::int,
-      MAX(b.last_request_at),
-      now()
-    FROM avail_bucket_1m b
-    WHERE b.provider_id IN (${sql.join(
-      providerIds.map((id) => sql`${id}`),
-      sql`, `
-    )})
-      AND b.bucket_start >= now() - (${sql.raw(String(CURRENT_PROVIDER_STATUS_WINDOW_MINUTES))} * INTERVAL '1 minute')
-    GROUP BY b.provider_id
+      s.provider_id,
+      s.state,
+      s.availability,
+      s.request_count,
+      s.last_request_at,
+      s.updated_at
+    FROM (
+      SELECT
+        b.provider_id,
+        CASE
+          WHEN COALESCE(SUM(b.success_cnt), 0) + COALESCE(SUM(b.failure_cnt), 0) <= 0 THEN 'unknown'
+          WHEN (COALESCE(SUM(b.success_cnt), 0)::float
+            / (COALESCE(SUM(b.success_cnt), 0) + COALESCE(SUM(b.failure_cnt), 0))) >= 0.8 THEN 'green'
+          WHEN (COALESCE(SUM(b.success_cnt), 0)::float
+            / (COALESCE(SUM(b.success_cnt), 0) + COALESCE(SUM(b.failure_cnt), 0))) >= 0.5 THEN 'yellow'
+          ELSE 'red'
+        END AS state,
+        CASE
+          WHEN COALESCE(SUM(b.success_cnt), 0) + COALESCE(SUM(b.failure_cnt), 0) <= 0 THEN 0
+          ELSE COALESCE(SUM(b.success_cnt), 0)::float
+            / (COALESCE(SUM(b.success_cnt), 0) + COALESCE(SUM(b.failure_cnt), 0))
+        END AS availability,
+        (COALESCE(SUM(b.success_cnt), 0) + COALESCE(SUM(b.failure_cnt), 0))::int AS request_count,
+        MAX(b.last_request_at) AS last_request_at,
+        now() AS updated_at
+      FROM avail_bucket_1m b
+      WHERE b.provider_id IN (${providerIdList})
+        AND b.bucket_start >= now() - (${sql.raw(String(CURRENT_PROVIDER_STATUS_WINDOW_MINUTES))} * INTERVAL '1 minute')
+      GROUP BY b.provider_id
+      ORDER BY b.provider_id ASC
+    ) s
     ON CONFLICT (provider_id) DO UPDATE SET
       state = EXCLUDED.state,
       availability = EXCLUDED.availability,
@@ -214,24 +228,30 @@ async function recomputeAvailCurrent(tx: typeof db, providerIds: number[]): Prom
   `);
 
   // Providers with no traffic in the window become unknown (honest empty state).
+  // Lock target rows in provider_id order before updating.
   await tx.execute(sql`
+    WITH targets AS (
+      SELECT c.provider_id
+      FROM avail_current c
+      WHERE c.provider_id IN (${providerIdList})
+        AND NOT EXISTS (
+          SELECT 1
+          FROM avail_bucket_1m b
+          WHERE b.provider_id = c.provider_id
+            AND b.bucket_start >= now() - (${sql.raw(String(CURRENT_PROVIDER_STATUS_WINDOW_MINUTES))} * INTERVAL '1 minute')
+            AND (b.success_cnt + b.failure_cnt) > 0
+        )
+      ORDER BY c.provider_id ASC
+      FOR UPDATE OF c
+    )
     UPDATE avail_current c
     SET
       state = 'unknown',
       availability = 0,
       request_count = 0,
       updated_at = now()
-    WHERE c.provider_id IN (${sql.join(
-      providerIds.map((id) => sql`${id}`),
-      sql`, `
-    )})
-      AND NOT EXISTS (
-        SELECT 1
-        FROM avail_bucket_1m b
-        WHERE b.provider_id = c.provider_id
-          AND b.bucket_start >= now() - (${sql.raw(String(CURRENT_PROVIDER_STATUS_WINDOW_MINUTES))} * INTERVAL '1 minute')
-          AND (b.success_cnt + b.failure_cnt) > 0
-      )
+    FROM targets t
+    WHERE c.provider_id = t.provider_id
   `);
 }
 
@@ -353,7 +373,12 @@ export async function processBatch(): Promise<number> {
       publishedIds.push(row.id);
     }
 
-    for (const delta of bucketDeltas.values()) {
+    // Upsert buckets in (provider_id, bucket_start) order so concurrent workers take locks consistently.
+    const sortedDeltas = Array.from(bucketDeltas.values()).sort((a, b) => {
+      if (a.providerId !== b.providerId) return a.providerId - b.providerId;
+      return a.bucketStartIso < b.bucketStartIso ? -1 : a.bucketStartIso > b.bucketStartIso ? 1 : 0;
+    });
+    for (const delta of sortedDeltas) {
       await tx.execute(sql`
         INSERT INTO avail_bucket_1m AS b (
           provider_id,
@@ -388,26 +413,28 @@ export async function processBatch(): Promise<number> {
     }
 
     if (publishedIds.length > 0) {
+      const sortedPublishedIds = [...publishedIds].sort((a, b) => a - b);
       await tx.execute(sql`
         UPDATE outbox_events
         SET published_at = now(),
             attempts = attempts + 1,
             last_error = NULL
         WHERE id IN (${sql.join(
-          publishedIds.map((id) => sql`${id}`),
+          sortedPublishedIds.map((id) => sql`${id}`),
           sql`, `
         )})
       `);
     }
 
     if (invalidIds.length > 0) {
+      const sortedInvalidIds = [...invalidIds].sort((a, b) => a - b);
       await tx.execute(sql`
         UPDATE outbox_events
         SET published_at = now(),
             attempts = attempts + 1,
             last_error = 'invalid payload'
         WHERE id IN (${sql.join(
-          invalidIds.map((id) => sql`${id}`),
+          sortedInvalidIds.map((id) => sql`${id}`),
           sql`, `
         )})
       `);
