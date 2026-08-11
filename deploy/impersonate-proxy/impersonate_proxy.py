@@ -91,12 +91,26 @@ class WorkerPool:
     """固定 worker 线程池,每 worker 绑定一个 Session(连接池复用)。
 
     接收线程只把任务放入队列;worker 用自己的 Session 执行并直接写客户端。
+    任务按目标域名 hash 分配到固定 worker —— 同一上游总走同一 worker,
+    其 Session 连接必然复用(避免轮转导致 keep-alive 超时)。
     """
 
     def __init__(self, size: int):
         self._size = size
-        self._queue: queue.Queue[Optional[ProxyTask]] = queue.Queue()
+        self._queues: list[queue.Queue[Optional[ProxyTask]]] = [
+            queue.Queue() for _ in range(size)
+        ]
         self._threads: list[threading.Thread] = []
+
+    def _pick_worker(self, target: str) -> int:
+        try:
+            from urllib.parse import urlparse
+
+            host = urlparse(target).hostname or target
+        except Exception:  # noqa: BLE001
+            host = target
+        # 同一 host 固定 hash 到同一 worker
+        return hash(host) % self._size
 
     def start(self) -> None:
         for i in range(self._size):
@@ -111,11 +125,11 @@ class WorkerPool:
         LOG.info("worker pool started: %d workers, each with its own curl Session", self._size)
 
     def submit(self, task: ProxyTask) -> None:
-        self._queue.put(task)
+        self._queues[self._pick_worker(task.target)].put(task)
 
     def shutdown(self) -> None:
-        for _ in range(self._size):
-            self._queue.put(None)
+        for q in self._queues:
+            q.put(None)
         for t in self._threads:
             t.join(timeout=5)
 
@@ -130,8 +144,9 @@ class WorkerPool:
             },
         )
         LOG.info("worker %d ready (curl Session with connection pool)", idx)
+        q = self._queues[idx]
         while True:
-            task = self._queue.get()
+            task = q.get()
             if task is None:
                 session.close()
                 return
