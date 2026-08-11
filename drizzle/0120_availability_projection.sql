@@ -92,6 +92,8 @@ BEGIN
       NEW.provider_chain
     );
   EXCEPTION WHEN OTHERS THEN
+    RAISE WARNING 'trg_message_request_outbox: outcome compute failed for request %: %',
+      NEW.id, SQLERRM;
     v_outcome := NULL;
   END;
 

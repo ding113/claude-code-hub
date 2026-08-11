@@ -6,17 +6,24 @@ import "server-only";
 
 import { sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
+import { CURRENT_PROVIDER_STATUS_WINDOW_MINUTES } from "@/lib/availability/availability-service";
 import { logger } from "@/lib/logger";
+import { withAdvisoryLock } from "@/lib/migrate";
 
 const BATCH = 300;
 const BUSY_MS = 10;
 const TICK_MS = 200;
+const BACKFILL_LOCK = "claude-code-hub:availability-projection-backfill";
+/** Match MAX_AVAILABILITY_QUERY_RANGE_DAYS so historical ranges are not silently empty after upgrade. */
+const BACKFILL_RANGE_DAYS = 100;
+const BACKFILL_CHUNK_HOURS = 6;
 
 type SchedulerState = {
   started?: boolean;
   stopRequested?: boolean;
   intervalId?: ReturnType<typeof setInterval>;
   currentPromise?: Promise<void>;
+  bootstrapPromise?: Promise<void>;
 };
 
 const schedulerState = globalThis as typeof globalThis & {
@@ -42,62 +49,7 @@ type ClaimedEvent = {
   };
 };
 
-async function bootstrapBackfill(): Promise<void> {
-  const existing = await db.execute(sql`
-    SELECT key FROM projection_meta WHERE key = 'backfill_done' LIMIT 1
-  `);
-  if (Array.from(existing as Iterable<unknown>).length > 0) {
-    return;
-  }
-
-  logger.info("[AvailProjection] starting backfill (last 48h) into outbox");
-  await db.execute(sql`
-    INSERT INTO outbox_events (event_type, aggregate_type, aggregate_id, occurred_at, payload)
-    SELECT
-      'request_finalized',
-      'message_request',
-      mr.id,
-      mr.created_at,
-      jsonb_build_object(
-        'request_id', mr.id,
-        'provider_id', mr.provider_id,
-        'model', mr.model,
-        'occurred_at', mr.created_at,
-        'status_code', mr.status_code,
-        'duration_ms', mr.duration_ms,
-        'ttfb_ms', mr.ttfb_ms,
-        'blocked_by', mr.blocked_by,
-        'outcome', fn_compute_message_request_success_rate_outcome(
-          mr.blocked_by, mr.status_code, mr.error_message, mr.provider_chain
-        ),
-        'group_tag', p.group_tag,
-        'is_replay', COALESCE(mr.is_replay, false)
-      )
-    FROM message_request mr
-    LEFT JOIN providers p ON p.id = mr.provider_id
-    WHERE mr.status_code IS NOT NULL
-      AND mr.created_at >= now() - interval '48 hours'
-      AND COALESCE(mr.is_replay, false) = false
-      AND NOT EXISTS (SELECT 1 FROM proj_applied_requests a WHERE a.request_id = mr.id)
-      AND fn_compute_message_request_success_rate_outcome(
-            mr.blocked_by, mr.status_code, mr.error_message, mr.provider_chain
-          ) IS NOT NULL
-  `);
-
-  await db.execute(sql`
-    INSERT INTO projection_meta (key, value, updated_at)
-    VALUES (
-      'backfill_done',
-      jsonb_build_object('at', now(), 'note', 'availability backfill'),
-      now()
-    )
-    ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()
-  `);
-
-  logger.info("[AvailProjection] backfill enqueue finished");
-}
-
-function asPayload(raw: unknown): ClaimedEvent["payload"] {
+export function asPayload(raw: unknown): ClaimedEvent["payload"] {
   if (!raw) return {};
   if (typeof raw === "string") {
     try {
@@ -112,7 +64,178 @@ function asPayload(raw: unknown): ClaimedEvent["payload"] {
   return {};
 }
 
-async function processBatch(): Promise<number> {
+async function enqueueBackfillChunk(fromIso: string, toIso: string): Promise<number> {
+  const result = await db.execute(sql`
+    WITH inserted AS (
+      INSERT INTO outbox_events (event_type, aggregate_type, aggregate_id, occurred_at, payload)
+      SELECT
+        'request_finalized',
+        'message_request',
+        mr.id,
+        mr.created_at,
+        jsonb_build_object(
+          'request_id', mr.id,
+          'provider_id', mr.provider_id,
+          'model', mr.model,
+          'occurred_at', mr.created_at,
+          'status_code', mr.status_code,
+          'duration_ms', mr.duration_ms,
+          'ttfb_ms', mr.ttfb_ms,
+          'blocked_by', mr.blocked_by,
+          'outcome', fn_compute_message_request_success_rate_outcome(
+            mr.blocked_by, mr.status_code, mr.error_message, mr.provider_chain
+          ),
+          'group_tag', p.group_tag,
+          'is_replay', COALESCE(mr.is_replay, false)
+        )
+      FROM message_request mr
+      LEFT JOIN providers p ON p.id = mr.provider_id
+      WHERE mr.status_code IS NOT NULL
+        AND mr.created_at >= ${fromIso}::timestamptz
+        AND mr.created_at < ${toIso}::timestamptz
+        AND COALESCE(mr.is_replay, false) = false
+        AND NOT EXISTS (SELECT 1 FROM proj_applied_requests a WHERE a.request_id = mr.id)
+        AND fn_compute_message_request_success_rate_outcome(
+              mr.blocked_by, mr.status_code, mr.error_message, mr.provider_chain
+            ) IS NOT NULL
+      RETURNING 1
+    )
+    SELECT count(*)::int AS n FROM inserted
+  `);
+  const row = Array.from(result as Iterable<{ n?: number }>)[0];
+  return Number(row?.n ?? 0);
+}
+
+async function bootstrapBackfill(): Promise<void> {
+  const existing = await db.execute(sql`
+    SELECT key FROM projection_meta WHERE key = 'backfill_done' LIMIT 1
+  `);
+  if (Array.from(existing as Iterable<unknown>).length > 0) {
+    return;
+  }
+
+  const lockResult = await withAdvisoryLock(
+    BACKFILL_LOCK,
+    async () => {
+      // Re-check under lock so concurrent instances do not double-enqueue.
+      const again = await db.execute(sql`
+        SELECT key FROM projection_meta WHERE key = 'backfill_done' LIMIT 1
+      `);
+      if (Array.from(again as Iterable<unknown>).length > 0) {
+        return { skipped: true as const, inserted: 0 };
+      }
+
+      logger.info("[AvailProjection] starting backfill into outbox", {
+        rangeDays: BACKFILL_RANGE_DAYS,
+        chunkHours: BACKFILL_CHUNK_HOURS,
+      });
+
+      const endMs = Date.now();
+      const startMs = endMs - BACKFILL_RANGE_DAYS * 24 * 60 * 60 * 1000;
+      const chunkMs = BACKFILL_CHUNK_HOURS * 60 * 60 * 1000;
+      let inserted = 0;
+
+      for (let cursor = startMs; cursor < endMs; cursor += chunkMs) {
+        if (state().stopRequested) {
+          logger.warn("[AvailProjection] backfill interrupted by stop");
+          break;
+        }
+        const fromIso = new Date(cursor).toISOString();
+        const toIso = new Date(Math.min(cursor + chunkMs, endMs)).toISOString();
+        inserted += await enqueueBackfillChunk(fromIso, toIso);
+      }
+
+      if (!state().stopRequested) {
+        await db.execute(sql`
+          INSERT INTO projection_meta (key, value, updated_at)
+          VALUES (
+            'backfill_done',
+            jsonb_build_object(
+              'at', now(),
+              'note', 'availability backfill',
+              'rangeDays', ${BACKFILL_RANGE_DAYS},
+              'inserted', ${inserted}
+            ),
+            now()
+          )
+          ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()
+        `);
+        logger.info("[AvailProjection] backfill enqueue finished", { inserted });
+      }
+
+      return { skipped: false as const, inserted };
+    },
+    { skipIfLocked: true }
+  );
+
+  if (!lockResult.ran) {
+    logger.info("[AvailProjection] backfill skipped; another instance holds the lock");
+  }
+}
+
+async function recomputeAvailCurrent(tx: typeof db, providerIds: number[]): Promise<void> {
+  if (providerIds.length === 0) return;
+
+  await tx.execute(sql`
+    INSERT INTO avail_current AS c (
+      provider_id, state, availability, request_count, last_request_at, updated_at
+    )
+    SELECT
+      b.provider_id,
+      CASE
+        WHEN COALESCE(SUM(b.success_cnt), 0) + COALESCE(SUM(b.failure_cnt), 0) <= 0 THEN 'unknown'
+        WHEN (COALESCE(SUM(b.success_cnt), 0)::float
+          / (COALESCE(SUM(b.success_cnt), 0) + COALESCE(SUM(b.failure_cnt), 0))) >= 0.8 THEN 'green'
+        WHEN (COALESCE(SUM(b.success_cnt), 0)::float
+          / (COALESCE(SUM(b.success_cnt), 0) + COALESCE(SUM(b.failure_cnt), 0))) >= 0.5 THEN 'yellow'
+        ELSE 'red'
+      END,
+      CASE
+        WHEN COALESCE(SUM(b.success_cnt), 0) + COALESCE(SUM(b.failure_cnt), 0) <= 0 THEN 0
+        ELSE COALESCE(SUM(b.success_cnt), 0)::float
+          / (COALESCE(SUM(b.success_cnt), 0) + COALESCE(SUM(b.failure_cnt), 0))
+      END,
+      (COALESCE(SUM(b.success_cnt), 0) + COALESCE(SUM(b.failure_cnt), 0))::int,
+      MAX(b.last_request_at),
+      now()
+    FROM avail_bucket_1m b
+    WHERE b.provider_id IN (${sql.join(
+      providerIds.map((id) => sql`${id}`),
+      sql`, `
+    )})
+      AND b.bucket_start >= now() - (${sql.raw(String(CURRENT_PROVIDER_STATUS_WINDOW_MINUTES))} * INTERVAL '1 minute')
+    GROUP BY b.provider_id
+    ON CONFLICT (provider_id) DO UPDATE SET
+      state = EXCLUDED.state,
+      availability = EXCLUDED.availability,
+      request_count = EXCLUDED.request_count,
+      last_request_at = EXCLUDED.last_request_at,
+      updated_at = now()
+  `);
+
+  // Providers with no traffic in the window become unknown (honest empty state).
+  await tx.execute(sql`
+    UPDATE avail_current c
+    SET
+      state = 'unknown',
+      availability = 0,
+      request_count = 0,
+      updated_at = now()
+    WHERE c.provider_id IN (${sql.join(
+      providerIds.map((id) => sql`${id}`),
+      sql`, `
+    )})
+      AND NOT EXISTS (
+        SELECT 1
+        FROM avail_bucket_1m b
+        WHERE b.provider_id = c.provider_id
+          AND b.bucket_start >= now() - (${sql.raw(String(CURRENT_PROVIDER_STATUS_WINDOW_MINUTES))} * INTERVAL '1 minute')
+          AND (b.success_cnt + b.failure_cnt) > 0
+      )
+  `);
+}
+
+export async function processBatch(): Promise<number> {
   return await db.transaction(async (tx) => {
     const claimedRows = await tx.execute(sql`
       SELECT id, event_id, payload
@@ -130,6 +253,24 @@ async function processBatch(): Promise<number> {
 
     let applied = 0;
     const touchedProviders = new Set<number>();
+    const publishedIds: number[] = [];
+    const invalidIds: number[] = [];
+
+    // Bucket deltas aggregated in JS, then one upsert per distinct (provider, minute).
+    type BucketKey = string;
+    const bucketDeltas = new Map<
+      BucketKey,
+      {
+        providerId: number;
+        bucketStartIso: string;
+        successCnt: number;
+        failureCnt: number;
+        excludedCnt: number;
+        latencyCnt: number;
+        latencySum: number;
+        lastRequestAtIso: string;
+      }
+    >();
 
     for (const row of claimed) {
       const payload = asPayload(row.payload);
@@ -138,13 +279,7 @@ async function processBatch(): Promise<number> {
       const outcome = String(payload.outcome || "excluded");
       const occurredAt = payload.occurred_at;
       if (!Number.isFinite(requestId) || !Number.isFinite(providerId) || !occurredAt) {
-        await tx.execute(sql`
-          UPDATE outbox_events
-          SET published_at = now(),
-              attempts = attempts + 1,
-              last_error = 'invalid payload'
-          WHERE id = ${row.id}
-        `);
+        invalidIds.push(row.id);
         continue;
       }
 
@@ -175,84 +310,110 @@ async function processBatch(): Promise<number> {
             ? Math.trunc(durationMs)
             : 0;
 
-        await tx.execute(sql`
-          INSERT INTO avail_bucket_1m AS b (
-            provider_id,
-            bucket_start,
-            success_cnt,
-            failure_cnt,
-            excluded_cnt,
-            latency_cnt,
-            latency_sum_ms,
-            last_request_at
-          ) VALUES (
-            ${providerId},
-            date_trunc('minute', ${occurredAt}::timestamptz),
-            ${successCnt},
-            ${failureCnt},
-            ${excludedCnt},
-            ${latencyCnt},
-            ${latencySum},
-            ${occurredAt}::timestamptz
+        const occurred = new Date(occurredAt);
+        const bucketStart = new Date(
+          Date.UTC(
+            occurred.getUTCFullYear(),
+            occurred.getUTCMonth(),
+            occurred.getUTCDate(),
+            occurred.getUTCHours(),
+            occurred.getUTCMinutes(),
+            0,
+            0
           )
-          ON CONFLICT (provider_id, bucket_start) DO UPDATE SET
-            success_cnt = b.success_cnt + EXCLUDED.success_cnt,
-            failure_cnt = b.failure_cnt + EXCLUDED.failure_cnt,
-            excluded_cnt = b.excluded_cnt + EXCLUDED.excluded_cnt,
-            latency_cnt = b.latency_cnt + EXCLUDED.latency_cnt,
-            latency_sum_ms = b.latency_sum_ms + EXCLUDED.latency_sum_ms,
-            last_request_at = GREATEST(
-              COALESCE(b.last_request_at, EXCLUDED.last_request_at),
-              EXCLUDED.last_request_at
-            )
-        `);
+        );
+        const bucketStartIso = bucketStart.toISOString();
+        const key = `${providerId}|${bucketStartIso}`;
+        const prev = bucketDeltas.get(key);
+        if (prev) {
+          prev.successCnt += successCnt;
+          prev.failureCnt += failureCnt;
+          prev.excludedCnt += excludedCnt;
+          prev.latencyCnt += latencyCnt;
+          prev.latencySum += latencySum;
+          if (occurredAt > prev.lastRequestAtIso) {
+            prev.lastRequestAtIso = occurredAt;
+          }
+        } else {
+          bucketDeltas.set(key, {
+            providerId,
+            bucketStartIso,
+            successCnt,
+            failureCnt,
+            excludedCnt,
+            latencyCnt,
+            latencySum,
+            lastRequestAtIso: occurredAt,
+          });
+        }
         touchedProviders.add(providerId);
         applied += 1;
       }
 
+      publishedIds.push(row.id);
+    }
+
+    for (const delta of bucketDeltas.values()) {
+      await tx.execute(sql`
+        INSERT INTO avail_bucket_1m AS b (
+          provider_id,
+          bucket_start,
+          success_cnt,
+          failure_cnt,
+          excluded_cnt,
+          latency_cnt,
+          latency_sum_ms,
+          last_request_at
+        ) VALUES (
+          ${delta.providerId},
+          ${delta.bucketStartIso}::timestamptz,
+          ${delta.successCnt},
+          ${delta.failureCnt},
+          ${delta.excludedCnt},
+          ${delta.latencyCnt},
+          ${delta.latencySum},
+          ${delta.lastRequestAtIso}::timestamptz
+        )
+        ON CONFLICT (provider_id, bucket_start) DO UPDATE SET
+          success_cnt = b.success_cnt + EXCLUDED.success_cnt,
+          failure_cnt = b.failure_cnt + EXCLUDED.failure_cnt,
+          excluded_cnt = b.excluded_cnt + EXCLUDED.excluded_cnt,
+          latency_cnt = b.latency_cnt + EXCLUDED.latency_cnt,
+          latency_sum_ms = b.latency_sum_ms + EXCLUDED.latency_sum_ms,
+          last_request_at = GREATEST(
+            COALESCE(b.last_request_at, EXCLUDED.last_request_at),
+            EXCLUDED.last_request_at
+          )
+      `);
+    }
+
+    if (publishedIds.length > 0) {
       await tx.execute(sql`
         UPDATE outbox_events
         SET published_at = now(),
             attempts = attempts + 1,
             last_error = NULL
-        WHERE id = ${row.id}
+        WHERE id IN (${sql.join(
+          publishedIds.map((id) => sql`${id}`),
+          sql`, `
+        )})
       `);
     }
 
-    for (const providerId of touchedProviders) {
+    if (invalidIds.length > 0) {
       await tx.execute(sql`
-        INSERT INTO avail_current AS c (
-          provider_id, state, availability, request_count, last_request_at, updated_at
-        )
-        SELECT
-          ${providerId},
-          CASE
-            WHEN COALESCE(SUM(b.success_cnt), 0) + COALESCE(SUM(b.failure_cnt), 0) <= 0 THEN 'unknown'
-            WHEN (COALESCE(SUM(b.success_cnt), 0)::float
-              / (COALESCE(SUM(b.success_cnt), 0) + COALESCE(SUM(b.failure_cnt), 0))) >= 0.8 THEN 'green'
-            WHEN (COALESCE(SUM(b.success_cnt), 0)::float
-              / (COALESCE(SUM(b.success_cnt), 0) + COALESCE(SUM(b.failure_cnt), 0))) >= 0.5 THEN 'yellow'
-            ELSE 'red'
-          END,
-          CASE
-            WHEN COALESCE(SUM(b.success_cnt), 0) + COALESCE(SUM(b.failure_cnt), 0) <= 0 THEN 0
-            ELSE COALESCE(SUM(b.success_cnt), 0)::float
-              / (COALESCE(SUM(b.success_cnt), 0) + COALESCE(SUM(b.failure_cnt), 0))
-          END,
-          (COALESCE(SUM(b.success_cnt), 0) + COALESCE(SUM(b.failure_cnt), 0))::int,
-          MAX(b.last_request_at),
-          now()
-        FROM avail_bucket_1m b
-        WHERE b.provider_id = ${providerId}
-          AND b.bucket_start >= now() - interval '5 minutes'
-        ON CONFLICT (provider_id) DO UPDATE SET
-          state = EXCLUDED.state,
-          availability = EXCLUDED.availability,
-          request_count = EXCLUDED.request_count,
-          last_request_at = EXCLUDED.last_request_at,
-          updated_at = now()
+        UPDATE outbox_events
+        SET published_at = now(),
+            attempts = attempts + 1,
+            last_error = 'invalid payload'
+        WHERE id IN (${sql.join(
+          invalidIds.map((id) => sql`${id}`),
+          sql`, `
+        )})
       `);
     }
+
+    await recomputeAvailCurrent(tx as unknown as typeof db, Array.from(touchedProviders));
 
     return applied;
   });
@@ -300,7 +461,7 @@ export function startAvailabilityProjectionWorker(): void {
   s.stopRequested = false;
   s.started = true;
 
-  void (async () => {
+  s.bootstrapPromise = (async () => {
     try {
       await bootstrapBackfill();
     } catch (error) {
@@ -326,8 +487,10 @@ export async function stopAvailabilityProjectionWorker(): Promise<void> {
     clearInterval(s.intervalId);
     s.intervalId = undefined;
   }
+  await s.bootstrapPromise;
   await s.currentPromise;
   s.started = false;
+  s.bootstrapPromise = undefined;
   logger.info("[AvailProjection] worker stopped");
 }
 
@@ -336,6 +499,15 @@ export function getAvailabilityProjectionWorkerStatus() {
   return {
     started: s.started === true,
     running: Boolean(s.currentPromise),
+    bootstrapping: Boolean(s.bootstrapPromise),
     tickMs: TICK_MS,
   };
 }
+
+/** Test-only helpers */
+export const __test__ = {
+  bootstrapBackfill,
+  recomputeAvailCurrent,
+  BACKFILL_RANGE_DAYS,
+  BATCH,
+};

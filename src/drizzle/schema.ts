@@ -1425,3 +1425,13 @@ export const messageRequestRelations = relations(messageRequest, ({ one }) => ({
     references: [providers.id],
   }),
 }));
+
+// Availability projection tables (outbox + 1m buckets). Source of truth for drizzle-kit.
+export {
+  availBucket1m,
+  availCurrent,
+  outboxEvents,
+  outboxProcessed,
+  projAppliedRequests,
+  projectionMeta,
+} from "@/lib/availability/projection-tables";

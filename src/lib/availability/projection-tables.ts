@@ -1,31 +1,48 @@
 /**
  * Availability projection table definitions (outbox + 1m buckets).
- * Kept separate so availability-service can import without pulling unrelated schema noise.
+ * Kept in sync with drizzle/0120_availability_projection.sql and re-exported from schema.ts
+ * so drizzle-kit generate sees the same shape.
  */
+import { sql } from "drizzle-orm";
 import {
   bigint,
+  bigserial,
   doublePrecision,
+  index,
   integer,
   jsonb,
   pgTable,
   primaryKey,
   text,
   timestamp,
+  unique,
   uuid,
 } from "drizzle-orm/pg-core";
 
-export const outboxEvents = pgTable("outbox_events", {
-  id: bigint("id", { mode: "number" }).primaryKey().generatedByDefaultAsIdentity(),
-  eventId: uuid("event_id").notNull(),
-  eventType: text("event_type").notNull(),
-  aggregateType: text("aggregate_type").notNull(),
-  aggregateId: bigint("aggregate_id", { mode: "number" }).notNull(),
-  occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
-  payload: jsonb("payload").notNull(),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-  publishedAt: timestamp("published_at", { withTimezone: true }),
-  attempts: integer("attempts").notNull().default(0),
-  lastError: text("last_error"),
+export const outboxEvents = pgTable(
+  "outbox_events",
+  {
+    id: bigserial("id", { mode: "number" }).primaryKey(),
+    eventId: uuid("event_id").notNull().defaultRandom(),
+    eventType: text("event_type").notNull(),
+    aggregateType: text("aggregate_type").notNull(),
+    aggregateId: bigint("aggregate_id", { mode: "number" }).notNull(),
+    occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
+    payload: jsonb("payload").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    publishedAt: timestamp("published_at", { withTimezone: true }),
+    attempts: integer("attempts").notNull().default(0),
+    lastError: text("last_error"),
+  },
+  (t) => [
+    unique("outbox_events_event_id_key").on(t.eventId),
+    index("idx_outbox_events_unpublished").on(t.id.asc()).where(sql`${t.publishedAt} IS NULL`),
+  ]
+);
+
+export const outboxProcessed = pgTable("outbox_processed", {
+  eventId: uuid("event_id").primaryKey(),
+  processedAt: timestamp("processed_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
 export const projAppliedRequests = pgTable("proj_applied_requests", {
@@ -46,7 +63,10 @@ export const availBucket1m = pgTable(
     latencySumMs: bigint("latency_sum_ms", { mode: "number" }).notNull().default(0),
     lastRequestAt: timestamp("last_request_at", { withTimezone: true }),
   },
-  (t) => [primaryKey({ columns: [t.providerId, t.bucketStart] })]
+  (t) => [
+    primaryKey({ columns: [t.providerId, t.bucketStart], name: "avail_bucket_1m_pkey" }),
+    index("idx_avail_bucket_1m_time").on(t.bucketStart.desc()),
+  ]
 );
 
 export const availCurrent = pgTable("avail_current", {

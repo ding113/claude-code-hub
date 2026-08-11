@@ -42,11 +42,24 @@ const AVAILABILITY_SUCCESS_STATUS_CODE_MAX_EXCLUSIVE = 400;
 // Keep the hard cap independent from the UI/API default so future default tuning does not silently relax/tighten the guardrail.
 // It intentionally equals the default today; the separation preserves distinct semantic roles for future tuning.
 export const MAX_BUCKETS_HARD_LIMIT = 100;
-const CURRENT_PROVIDER_STATUS_WINDOW_MINUTES = 15;
+/** Shared window for avail_current freshness and getCurrentProviderStatus fallback. */
+export const CURRENT_PROVIDER_STATUS_WINDOW_MINUTES = 15;
 export const MAX_AVAILABILITY_QUERY_RANGE_DAYS =
   (MAX_BUCKETS_HARD_LIMIT * MAX_BUCKET_SIZE_MINUTES) / (24 * 60);
 const MAX_AVAILABILITY_QUERY_RANGE_MS =
   MAX_BUCKETS_HARD_LIMIT * MAX_BUCKET_SIZE_MINUTES * 60 * 1000;
+
+function floorToUtcMinute(date: Date): Date {
+  return new Date(Date.UTC(
+    date.getUTCFullYear(),
+    date.getUTCMonth(),
+    date.getUTCDate(),
+    date.getUTCHours(),
+    date.getUTCMinutes(),
+    0,
+    0
+  ));
+}
 
 export class AvailabilityQueryValidationError extends Error {
   constructor(message: string) {
@@ -274,8 +287,13 @@ export async function queryProviderAvailability(
 
   const providerIdList = providerList.map((provider) => provider.id);
 
+  // Include every 1m bucket that overlaps [startDate, endDate]: floor start, keep end exclusive upper via end.
+  const rangeStartBucket = floorToUtcMinute(startDate);
+  const rangeEndBucket = floorToUtcMinute(endDate);
+
   // Aggregate pre-projected 1-minute buckets into the requested display bucket size.
-  // Percentile fields reuse avg until sketch-based p95 is added.
+  // p50/p95/p99 currently equal avg (sum/count) until sketch-based percentiles land —
+  // field names stay for API compatibility; treat them as mean approximations.
   const bucketQuery = sql<AggregatedAvailabilityBucketRow>`
     WITH provider_bucket_stats AS (
       SELECT
@@ -311,8 +329,8 @@ export async function queryProviderAvailability(
         providerIdList.map((id) => sql`${id}`),
         sql`, `
       )})
-        AND bucket_start >= CAST(${startDate.toISOString()} AS timestamptz)
-        AND bucket_start <= CAST(${endDate.toISOString()} AS timestamptz)
+        AND bucket_start >= CAST(${rangeStartBucket.toISOString()} AS timestamptz)
+        AND bucket_start <= CAST(${rangeEndBucket.toISOString()} AS timestamptz)
       GROUP BY provider_id, 2
     ),
     limited_provider_bucket_stats AS (
@@ -482,7 +500,11 @@ export async function getCurrentProviderStatus(): Promise<
     availability: number;
     requestCount: number;
     lastRequestAt: Date | string | null;
+    updatedAt: Date | string | null;
   };
+
+  const windowMs = CURRENT_PROVIDER_STATUS_WINDOW_MINUTES * 60 * 1000;
+  const nowMs = Date.now();
 
   const currentRows = await db.execute(sql`
     SELECT
@@ -490,7 +512,8 @@ export async function getCurrentProviderStatus(): Promise<
       c.state AS "state",
       c.availability AS "availability",
       c.request_count AS "requestCount",
-      c.last_request_at AS "lastRequestAt"
+      c.last_request_at AS "lastRequestAt",
+      c.updated_at AS "updatedAt"
     FROM avail_current c
     WHERE c.provider_id IN (${sql.join(
       providerList.map((p) => sql`${p.id}`),
@@ -500,6 +523,13 @@ export async function getCurrentProviderStatus(): Promise<
 
   const byId = new Map<number, CurrentRow>();
   for (const row of Array.from(currentRows as Iterable<CurrentRow>)) {
+    const updatedAtMs = getTimeValue(row.updatedAt);
+    const lastRequestAtMs = getTimeValue(row.lastRequestAt);
+    const freshAt = Math.max(updatedAtMs, lastRequestAtMs);
+    // Idle providers must not keep a frozen green/red forever.
+    if (freshAt <= 0 || nowMs - freshAt > windowMs) {
+      continue;
+    }
     byId.set(Number(row.providerId), row);
   }
 
@@ -531,13 +561,15 @@ export async function getCurrentProviderStatus(): Promise<
       const g = toFiniteNumber(row.greenCount);
       const r = toFiniteNumber(row.redCount);
       const total = g + r;
+      if (total <= 0) continue;
       const availability = calculateAvailabilityScore(g, r);
       byId.set(Number(row.providerId), {
         providerId: Number(row.providerId),
-        state: total === 0 ? "unknown" : availability >= 0.5 ? "green" : "red",
+        state: availability >= 0.5 ? "green" : "red",
         availability,
         requestCount: total,
         lastRequestAt: row.lastRequestAt,
+        updatedAt: row.lastRequestAt,
       });
     }
   }

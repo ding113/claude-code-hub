@@ -18,6 +18,7 @@ export {
   AvailabilityQueryValidationError,
   calculateAvailabilityScore,
   classifyRequestStatus,
+  CURRENT_PROVIDER_STATUS_WINDOW_MINUTES,
   determineOptimalBucketSize,
   getCurrentProviderStatus,
   MAX_AVAILABILITY_QUERY_RANGE_DAYS,
