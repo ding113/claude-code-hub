@@ -476,9 +476,6 @@ async function runSingleAttempt(
                 method: "POST",
                 headers: plan.headers,
                 body: JSON.stringify(plan.body),
-                // 健康测试是短请求,直接 spawn curl,不占本地伪装代理的 worker 池
-                // (代理池被测试风暴占满会导致真实请求排队数十秒)
-                bypassProxy: true,
               })
             : await fetch(requestUrl, fetchOptions);
         } catch (error) {

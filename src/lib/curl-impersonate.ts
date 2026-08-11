@@ -10,90 +10,9 @@ import { logger } from "@/lib/logger";
 const execFileAsync = promisify(execFile);
 
 /**
- * 本地伪装代理地址(curl_cffi 常驻转发网关,连接池复用 TLS)。
- * 由 deploy/impersonate-proxy/impersonate_proxy.py 提供。
- */
-const IMPERSONATE_PROXY_HOST = process.env.IMPERSONATE_PROXY_HOST ?? "127.0.0.1";
-const IMPERSONATE_PROXY_PORT = process.env.IMPERSONATE_PROXY_PORT ?? "18686";
-const IMPERSONATE_PROXY_URL = `http://${IMPERSONATE_PROXY_HOST}:${IMPERSONATE_PROXY_PORT}`;
-
-/** 本地代理是否可用(health 探测,短超时)。 */
-async function isImpersonateProxyAlive(): Promise<boolean> {
-  try {
-    const res = await fetch(`${IMPERSONATE_PROXY_URL}/health`, {
-      signal: AbortSignal.timeout(1_500),
-    });
-    return res.ok;
-  } catch {
-    return false;
-  }
-}
-
-/**
- * 通过本地伪装代理转发请求。返回 ImpersonateRequestResult 形状。
- * 仅在代理不可达或转发失败时 reject,由调用方回退 spawn curl。
- */
-async function proxyForward(
-  url: string,
-  init: {
-    method?: string;
-    headers?: Record<string, string>;
-    body?: string | Uint8Array | null;
-    signal?: AbortSignal;
-    bodyTimeoutMs?: number;
-    proxyUrl?: string | null;
-  }
-): Promise<ImpersonateRequestResult> {
-  const method = init.method ?? "GET";
-  const bodyTimeoutMs = init.bodyTimeoutMs ?? 120_000;
-
-  const proxyHeaders: Record<string, string> = {
-    "X-CCH-Method": method,
-    "X-CCH-Target": url,
-    "X-CCH-Timeout": String(bodyTimeoutMs),
-  };
-  for (const [k, v] of Object.entries(init.headers ?? {})) {
-    if (k.toLowerCase() === "user-agent") continue; // 代理端 curl_cffi 自带 Chrome UA
-    proxyHeaders[k] = v;
-  }
-
-  let body: BodyInit | null = null;
-  if (init.body != null) {
-    body =
-      typeof init.body === "string"
-        ? init.body
-        : (new Uint8Array(init.body.buffer, init.body.byteOffset, init.body.byteLength) as unknown as BodyInit);
-  }
-
-  const res = await fetch(`${IMPERSONATE_PROXY_URL}/impersonate`, {
-    method: "POST",
-    headers: proxyHeaders,
-    body,
-    signal: init.signal,
-    // 本地代理是常驻进程,连接本身走 keep-alive;请求超时由 X-CCH-Timeout 与调用方共同管理
-  });
-
-  const headers: Record<string, string | string[]> = {};
-  res.headers.forEach((value, key) => {
-    headers[key.toLowerCase()] = value;
-  });
-
-  const bodyStream = Readable.fromWeb(
-    res.body as unknown as import("node:stream/web").ReadableStream
-  );
-  return {
-    statusCode: res.status,
-    statusText: res.statusText,
-    headers,
-    body: bodyStream,
-  };
-}
-
-/**
  * 直接调用 curl-impersonate-chrome 二进制,跳过 bash wrapper(curl_chrome116)。
  * wrapper 每请求多一次 bash 进程启动(~1.3ms);TLS/HTTP2 指纹参数内联如下,
  * 与 deploy/curl-impersonate/curl_chrome116 wrapper 保持一致。
- * 仅在本地伪装代理不可用时作为 fallback。
  */
 const CURL_IMPERSONATE_BIN = "curl-impersonate-chrome";
 
@@ -180,8 +99,6 @@ export function shouldImpersonateProviderUrl(url: string): boolean {
  * 通过 curl_chrome116 子进程发请求,模拟 Chrome 的 TLS/HTTP2 指纹(JA3/JA4)。
  * 部分上游(sub2api 站点)的 Cloudflare WAF 会按 TLS 指纹拦截非浏览器客户端,
  * 有效 token + Node undici = 403 HTML,Chrome 指纹 = 200。
- * 优先走本地伪装代理(连接池复用);代理不可用或失败时回退 spawn curl,
- * 二进制也缺失时回退原生 fetch。
  */
 export async function impersonateFetch(
   url: string,
@@ -189,17 +106,9 @@ export async function impersonateFetch(
     headers?: Record<string, string>;
     method?: string;
     body?: string;
-    /** true 时跳过本地伪装代理,直接 spawn curl(健康测试等短请求用,避免占代理 worker 池) */
-    bypassProxy?: boolean;
   } = {}
 ): Promise<Response> {
-  // 实测 curl_cffi 常驻代理(chrome116 指纹)对部分 Cloudflare 上游被识别为
-  // 伪浏览器,转发慢 10~18 倍(nikoapi 0.9s -> 17s)。统一直接 spawn
-  // curl-impersonate-chrome(完整 Chrome 指纹);代理代码保留可回退。
-  // bypassProxy 参数保留兼容调用方,不再生效。
-  void init.bypassProxy;
-
-  // 2) spawn curl fallback
+  // spawn curl fallback
   const args = [
     ...FINGERPRINT_ARGS,
     "-sS",
@@ -255,8 +164,8 @@ export interface ImpersonateRequestResult {
 }
 
 /**
- * 伪装请求的流式版本。优先走本地伪装代理(连接池复用 TLS,省每次握手);
- * 代理不可达/转发失败时回退 curl_chrome116 子进程。
+ * 伪装请求的流式版本。直接 spawn curl-impersonate-chrome 子进程
+ * (完整 Chrome 指纹,~1.5ms 进程启动开销;无跨请求连接复用)。
  * 返回 ImpersonateRequestResult(与 undici.request 响应同形状),
  * forwarder 可直接复用现有 gzip 处理 / node 流转 web 流 / 错误处理逻辑。
  */
@@ -271,10 +180,6 @@ export async function impersonateRequest(
     proxyUrl?: string | null;
   } = {}
 ): Promise<ImpersonateRequestResult> {
-  // 实测 curl_cffi 常驻代理(chrome116 指纹)对部分 Cloudflare 上游被识别为
-  // 伪浏览器,转发慢 10~18 倍(nikoapi 0.9s -> 17s,瑞科 3s -> 15s)。
-  // 直接 spawn curl-impersonate-chrome(完整 Chrome 指纹),仅损失 ~1.5ms
-  // 进程启动与跨请求连接复用;代理代码保留可回退,但不再用于真实请求。
   return impersonateRequestSpawn(url, init);
 }
 
