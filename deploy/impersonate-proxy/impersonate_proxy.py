@@ -57,7 +57,9 @@ LISTEN_HOST = os.environ.get("IMPERSONATE_PROXY_HOST", "127.0.0.1")
 LISTEN_PORT = int(os.environ.get("IMPERSONATE_PROXY_PORT", "18686"))
 DEFAULT_TIMEOUT_MS = int(os.environ.get("IMPERSONATE_PROXY_TIMEOUT_MS", "120000"))
 MAX_BODY_BYTES = int(os.environ.get("IMPERSONATE_PROXY_MAX_BODY", str(64 * 1024 * 1024)))
-POOL_SIZE = int(os.environ.get("IMPERSONATE_PROXY_POOL_SIZE", "4"))
+POOL_SIZE = int(os.environ.get("IMPERSONATE_PROXY_POOL_SIZE", "16"))
+# 同一上游 host 最多同时占用多少个 worker(轮询分散,降低单 worker 串行排队)
+HOST_WORKER_SPREAD = int(os.environ.get("IMPERSONATE_PROXY_HOST_SPREAD", "4"))
 
 _STRIP_HEADERS = {
     "host",
@@ -101,6 +103,10 @@ class WorkerPool:
             queue.Queue() for _ in range(size)
         ]
         self._threads: list[threading.Thread] = []
+        # 每 host 轮询游标:同一 host 顺序落到 spread 个 worker 之一,
+        # 避免单 worker 被一个慢请求占住导致同 host 全部排队。
+        self._host_cursor: dict[str, int] = {}
+        self._host_lock = threading.Lock()
 
     def _pick_worker(self, target: str) -> int:
         try:
@@ -109,8 +115,15 @@ class WorkerPool:
             host = urlparse(target).hostname or target
         except Exception:  # noqa: BLE001
             host = target
-        # 同一 host 固定 hash 到同一 worker
-        return hash(host) % self._size
+        # 同一 host 轮询分散到 HOST_WORKER_SPREAD 个 worker(取模后从 base 顺延),
+        # 保持连接复用窗口(每个 worker 的 Session 都会记住该 host),同时
+        # 并发请求不再被单个慢任务堵死。
+        spread = min(max(HOST_WORKER_SPREAD, 1), self._size)
+        with self._host_lock:
+            cursor = self._host_cursor.get(host, 0)
+            self._host_cursor[host] = cursor + 1
+        base = hash(host) % self._size
+        return (base + (cursor % spread)) % self._size
 
     def start(self) -> None:
         for i in range(self._size):

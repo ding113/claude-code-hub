@@ -25,7 +25,8 @@ services:
       ENABLE_CURL_IMPERSONATE: "true"
       # CURL_IMPERSONATE_HOSTS 留空 = 全站开启 TLS 指纹伪装
       IMPERSONATE_PROXY_PORT: "18686"
-      IMPERSONATE_PROXY_POOL_SIZE: "4"
+      IMPERSONATE_PROXY_POOL_SIZE: "16"
+      IMPERSONATE_PROXY_HOST_SPREAD: "4"
       TZ: Asia/Shanghai
     network_mode: host
     volumes:
