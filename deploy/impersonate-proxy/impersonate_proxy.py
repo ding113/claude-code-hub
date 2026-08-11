@@ -15,11 +15,17 @@ CCH impersonate proxy — 本地常驻伪装转发网关。
   - 流式响应边收边转;客户端断开时取消上游请求(abort 传播)。
   - 所有上游 key/token 仅出现在 Node→本代理的本地请求中,不落日志。
 
-实现说明:
-  - curl_cffi 0.16 的 async API 存在池清理 bug(remove_handle NoneType)且 timeout
-    会误触 slow-speed 杀流式,故用同步 Session + 线程池(ThreadingHTTPServer),
-    同步 API 稳定且支持连接复用。多 Session 池提供并发,acquire/release 复用连接。
-  - 零额外依赖:http.server + curl_cffi。
+关键设计(curl_cffi 约束):
+  - curl_cffi 的 Session 连接池绑定线程(use_thread_local_curl=True,
+    每线程一个 curl handle,handle 的连接缓存不跨线程)。
+    因此 ThreadingHTTPServer 的"每请求新线程"会让连接池完全失效。
+  - 本实现改为:固定 N 个 worker 线程,每 worker 绑定一个 Session。
+    HTTP 接收线程只负责解析请求并放入队列,worker 用自己的 Session 处理并
+    直接写客户端 socket → 同一 worker 连续处理多个请求时复用连接。
+  - 不用 stream=True(curl_cffi 会 duphandle 克隆 handle 丢连接池);
+    用非stream + content_callback + Session 级 HEADERFUNCTION,
+    libcurl 保证 header 回调先于 body 回调 → 响应头先写出,边收边转。
+  - 不传 timeout 避免 LOW_SPEED_LIMIT 误杀长思考流式(超时由 CCH 侧管理)。
 
 协议(与 src/lib/curl-impersonate.ts 的 proxyForward 配合):
   POST http://127.0.0.1:18686/impersonate
@@ -27,7 +33,6 @@ CCH impersonate proxy — 本地常驻伪装转发网关。
     X-CCH-Method:  上游 HTTP 方法(默认 GET)
     X-CCH-Target:  上游绝对 URL(必填)
     X-CCH-Timeout:  超时毫秒(默认 120000;仅作总超时,不启用 slow-speed 限速)
-    X-CCH-No-Compress: 1 时强制 Accept-Encoding: identity(透传原始字节)
     (其余 header 原样转发;host/content-length/x-cch-* 剔除)
   body: 上游请求体(原始字节,可选)
   响应: 上游状态行 + 上游 headers + 上游 body(流式)
@@ -41,6 +46,7 @@ import socket
 import socketserver
 import threading
 import time
+from dataclasses import dataclass, field
 from typing import Optional
 
 from curl_cffi import requests as cffi_requests
@@ -52,7 +58,6 @@ LISTEN_PORT = int(os.environ.get("IMPERSONATE_PROXY_PORT", "18686"))
 DEFAULT_TIMEOUT_MS = int(os.environ.get("IMPERSONATE_PROXY_TIMEOUT_MS", "120000"))
 MAX_BODY_BYTES = int(os.environ.get("IMPERSONATE_PROXY_MAX_BODY", str(64 * 1024 * 1024)))
 POOL_SIZE = int(os.environ.get("IMPERSONATE_PROXY_POOL_SIZE", "4"))
-IDLE_KEEP_MS = int(os.environ.get("IMPERSONATE_PROXY_IDLE_KEEP_MS", "300000"))
 
 _STRIP_HEADERS = {
     "host",
@@ -69,73 +74,156 @@ _STRIP_HEADERS = {
 }
 
 
-class SessionPool:
-    """多 Session 连接池:并发 + 连接复用。每个 Session 自带 keep-alive 连接池。
+@dataclass
+class ProxyTask:
+    """一个待转发的请求。由接收线程创建,worker 线程处理。"""
 
-    关键: 每个 Session 注入 HEADERFUNCTION 回调(curl_options),使响应头在
-    perform 期间即时可得,从而在 content_callback 之前写出客户端响应头 ——
-    既复用连接(非 stream 模式)又保持真流式(边收边转)。
+    handler: "ImpersonateHandler"
+    method: str
+    target: str
+    headers: dict
+    body: bytes
+    timeout_ms: int
+    done: threading.Event = field(default_factory=threading.Event)
 
-    并发: 回调按"当前线程"定位 handler(threading.local),同一时刻一个
-    Session 只被一个线程 perform,因此线程→handler 映射是准确的。
+
+class WorkerPool:
+    """固定 worker 线程池,每 worker 绑定一个 Session(连接池复用)。
+
+    接收线程只把任务放入队列;worker 用自己的 Session 执行并直接写客户端。
     """
 
-    def __init__(self, size: int, idle_keep_ms: int):
+    def __init__(self, size: int):
         self._size = size
-        self._idle_keep_ms = idle_keep_ms
-        self._sessions: list[cffi_requests.Session] = []
-        self._lock = threading.Lock()
-        self._avail: queue.Queue[cffi_requests.Session] = queue.Queue()
-        self._last_used: dict[int, float] = {}
-        self._local = threading.local()
-        for _ in range(size):
-            s = cffi_requests.Session(
-                impersonate="chrome116",
-                timeout=None,
-                curl_options={CurlOpt.HEADERFUNCTION: self._header_cb},
+        self._queue: queue.Queue[Optional[ProxyTask]] = queue.Queue()
+        self._threads: list[threading.Thread] = []
+
+    def start(self) -> None:
+        for i in range(self._size):
+            t = threading.Thread(
+                target=self._worker_loop,
+                args=(i,),
+                name=f"impersonate-worker-{i}",
+                daemon=True,
             )
-            self._sessions.append(s)
-            self._avail.put(s)
+            t.start()
+            self._threads.append(t)
+        LOG.info("worker pool started: %d workers, each with its own curl Session", self._size)
 
-    def _header_cb(self, data: bytes) -> int:
-        """HEADERFUNCTION: 响应头回调。按当前线程取 handler。"""
-        handler = getattr(self._local, "header_handler", None)
-        if handler is not None:
+    def submit(self, task: ProxyTask) -> None:
+        self._queue.put(task)
+
+    def shutdown(self) -> None:
+        for _ in range(self._size):
+            self._queue.put(None)
+        for t in self._threads:
+            t.join(timeout=5)
+
+    def _worker_loop(self, idx: int) -> None:
+        # 每 worker 一个 Session,连接池跨请求复用(线程绑定)
+        local = threading.local()
+        session = cffi_requests.Session(
+            impersonate="chrome116",
+            timeout=None,
+            curl_options={
+                CurlOpt.HEADERFUNCTION: self._make_header_cb(local),
+            },
+        )
+        LOG.info("worker %d ready (curl Session with connection pool)", idx)
+        while True:
+            task = self._queue.get()
+            if task is None:
+                session.close()
+                return
             try:
-                handler(data)
-            except Exception:  # noqa: BLE001
-                pass
-        return len(data)
+                self._handle_task(task, session, local)
+            except Exception as exc:  # noqa: BLE001 — worker 永不因单个任务退出
+                LOG.error("worker %d task error: %s", idx, exc)
+                try:
+                    if not task.handler._client_gone:
+                        task.handler._send_upstream_error(
+                            500, f"internal_error: {type(exc).__name__}"
+                        )
+                except Exception:  # noqa: BLE001
+                    pass
+            finally:
+                task.done.set()
 
-    def set_header_handler(self, handler) -> None:
-        """在请求开始前设置当前线程的响应头处理函数。"""
-        self._local.header_handler = handler
+    def _make_header_cb(self, local):
+        # 每 worker 线程维护"当前 handler",回调按线程读取。
+        # worker 固定线程串行处理,threading.local 隔离准确。
+        def header_cb(data: bytes) -> int:
+            handler = getattr(local, "handler", None)
+            if handler is not None:
+                try:
+                    handler._on_upstream_header(data)
+                except Exception:  # noqa: BLE001
+                    pass
+            return len(data)
 
-    def clear_header_handler(self) -> None:
-        self._local.header_handler = None
+        return header_cb
 
-    def acquire(self) -> cffi_requests.Session:
-        s = self._avail.get()
-        # 清理超时空闲会话的连接(可选,保持池干净)
-        return s
+    def _handle_task(
+        self,
+        task: ProxyTask,
+        session: cffi_requests.Session,
+        local: threading.local,
+    ) -> None:
+        handler = task.handler
+        handler._client_gone = False
+        handler._headers_written = False
 
-    def release(self, s: cffi_requests.Session) -> None:
-        self._last_used[id(s)] = time.time()
-        self._avail.put(s)
+        # 构造转发 headers
+        headers = strip_headers(task.headers)
+        if "accept-encoding" not in {k.lower() for k in headers}:
+            headers["Accept-Encoding"] = "gzip, deflate, br"
 
-    def close(self) -> None:
-        for s in self._sessions:
+        # 设置当前 handler 到线程本地(header 回调读取)
+        local.handler = handler
+
+        try:
+            upstream = session.request(
+                task.method,
+                task.target,
+                headers=headers,
+                content=task.body if task.body else None,
+                content_callback=handler._on_upstream_body,
+                timeout=None,
+            )
+        except Exception as exc:  # noqa: BLE001
+            LOG.warning("upstream request error: %s %s: %s", task.method, task.target, exc)
+            if not handler._client_gone and not handler._headers_written:
+                handler._send_upstream_error(502, f"upstream_request_error: {type(exc).__name__}")
+            return
+        finally:
+            local.handler = None
+
+        # perform 完成;若 header 回调没写出头(异常/空响应),补写
+        if not handler._headers_written and not handler._client_gone:
             try:
-                s.close()
-            except Exception:  # noqa: BLE001
-                pass
-        self._sessions.clear()
+                handler.send_response(upstream.status_code)
+                for k, v in upstream.headers.items():
+                    lk = k.lower()
+                    if lk in {
+                        "connection",
+                        "keep-alive",
+                        "transfer-encoding",
+                        "content-length",
+                        "upgrade",
+                    }:
+                        continue
+                    handler.send_header(k, v)
+                handler.send_header("Connection", "close")
+                handler.end_headers()
+            except (BrokenPipeError, ConnectionResetError):
+                return
+        try:
+            handler.wfile.flush()
+        except (BrokenPipeError, ConnectionResetError, socket.error):
+            pass
 
-    def healthy(self) -> bool:
-        return len(self._sessions) == self._size
 
-
-POOL = SessionPool(POOL_SIZE, IDLE_KEEP_MS)
+WORKERS = WorkerPool(POOL_SIZE)
 
 
 def strip_headers(headers) -> dict:
@@ -165,15 +253,56 @@ class ImpersonateHandler(http.server.BaseHTTPRequestHandler):
 
     def _send_upstream_error(self, status: int, message: str) -> None:
         body = f'{{"error": "{message}"}}'.encode()
-        self.send_response(status)
-        self.send_header("Content-Type", "application/json")
-        self.send_header("Content-Length", str(len(body)))
-        self.send_header("Connection", "close")
-        self.end_headers()
         try:
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Connection", "close")
+            self.end_headers()
             self.wfile.write(body)
         except (BrokenPipeError, ConnectionResetError):
             pass
+
+    def _on_upstream_header(self, data: bytes) -> int:
+        if self._client_gone or self._headers_written:
+            return len(data)
+        line = data.decode("utf-8", "replace").rstrip("\r\n")
+        if line.startswith("HTTP/"):
+            m = line.split(" ", 2)
+            if len(m) >= 2:
+                try:
+                    status = int(m[1])
+                except ValueError:
+                    return len(data)
+                self.send_response(status, m[2] if len(m) > 2 else "")
+                return len(data)
+        if ":" in line:
+            k, _, v = line.partition(":")
+            lk = k.strip().lower()
+            if lk in {
+                "connection",
+                "keep-alive",
+                "transfer-encoding",
+                "content-length",
+                "upgrade",
+            }:
+                return len(data)
+            self.send_header(k.strip(), v.strip())
+            return len(data)
+        self.send_header("Connection", "close")
+        self.end_headers()
+        self._headers_written = True
+        return len(data)
+
+    def _on_upstream_body(self, data: bytes) -> int:
+        if self._client_gone:
+            return len(data)
+        try:
+            self.wfile.write(data)
+        except (BrokenPipeError, ConnectionResetError, socket.error):
+            self._client_gone = True
+            LOG.debug("client disconnected, upstream cancelled")
+        return len(data)
 
     def do_POST(self):  # noqa: N802 — http.server 命名约定
         if self.path != "/impersonate":
@@ -196,110 +325,21 @@ class ImpersonateHandler(http.server.BaseHTTPRequestHandler):
             self._send_upstream_error(400, "body_read_failed")
             return
 
-        headers = strip_headers(self.headers)
-        # 调用方显式传了 accept-encoding 则透传(forwarder 用 identity 禁用压缩);
-        # 否则默认请求 gzip/deflate/br(与 Chrome 一致)。
-        if "accept-encoding" not in {k.lower() for k in headers}:
-            headers["Accept-Encoding"] = "gzip, deflate, br"
+        headers = dict(self.headers.items())
+        self._client_gone = False
+        self._headers_written = False
 
-        session = POOL.acquire()
-        # 用 header 回调 + content_callback 边收边转,同时复用连接:
-        # - Session 级注入 HEADERFUNCTION(curl_options)→ 响应头在 perform 期间即时到达
-        # - 非 stream + content_callback → 连接复用(stream=True 会 duphandle 丢连接池)
-        # - libcurl 保证 HEADERFUNCTION 先于 WRITEFUNCTION,顺序正确
-        # 不传 timeout 避免 LOW_SPEED_LIMIT 误杀长思考流式(超时由 CCH 侧管理)。
-        upstream = None
-        client_gone = False
-        headers_written = False
-
-        def on_header(data: bytes) -> int:
-            nonlocal headers_written
-            if client_gone or headers_written:
-                return len(data)
-            line = data.decode("utf-8", "replace").rstrip("\r\n")
-            # 状态行(可能有多段,如重定向链;只取第一段真实状态)
-            if line.startswith("HTTP/"):
-                m = line.split(" ", 2)
-                if len(m) >= 2:
-                    try:
-                        status = int(m[1])
-                    except ValueError:
-                        return len(data)
-                    self.send_response(status, m[2] if len(m) > 2 else "")
-                    return len(data)
-            # 普通 header 行
-            if ":" in line:
-                k, _, v = line.partition(":")
-                lk = k.strip().lower()
-                if lk in {
-                    "connection",
-                    "keep-alive",
-                    "transfer-encoding",
-                    "content-length",
-                    "upgrade",
-                }:
-                    return len(data)
-                self.send_header(k.strip(), v.strip())
-                return len(data)
-            # 空行 = header 结束
-            self.send_header("Connection", "close")
-            self.end_headers()
-            headers_written = True
-            return len(data)
-
-        def on_chunk(data: bytes) -> int:
-            nonlocal client_gone
-            if client_gone:
-                return len(data)  # 丢弃即可,不再写
-            try:
-                self.wfile.write(data)
-            except (BrokenPipeError, ConnectionResetError, socket.error):
-                client_gone = True
-                LOG.debug("client disconnected, upstream %s %s", method, target)
-            return len(data)
-
-        POOL.set_header_handler(on_header)
-        try:
-            upstream = session.request(
-                method,
-                target,
-                headers=headers,
-                content=body if body else None,
-                content_callback=on_chunk,
-                timeout=None,
-            )
-        except Exception as exc:  # noqa: BLE001 — 统一转 502,不泄漏细节
-            LOG.warning("upstream request error: %s %s: %s", method, target, exc)
-            if not client_gone and not headers_written:
-                self._send_upstream_error(502, f"upstream_request_error: {type(exc).__name__}")
-            return
-        finally:
-            POOL.clear_header_handler()
-            POOL.release(session)
-
-        # perform 已完成;若 header 回调因异常路径没写出头,补写(空响应场景)
-        if not headers_written and not client_gone:
-            try:
-                self.send_response(upstream.status_code)
-                for k, v in upstream.headers.items():
-                    lk = k.lower()
-                    if lk in {
-                        "connection",
-                        "keep-alive",
-                        "transfer-encoding",
-                        "content-length",
-                        "upgrade",
-                    }:
-                        continue
-                    self.send_header(k, v)
-                self.send_header("Connection", "close")
-                self.end_headers()
-            except (BrokenPipeError, ConnectionResetError):
-                return
-        try:
-            self.wfile.flush()
-        except (BrokenPipeError, ConnectionResetError, socket.error):
-            pass
+        task = ProxyTask(
+            handler=self,
+            method=method,
+            target=target,
+            headers=headers,
+            body=body,
+            timeout_ms=timeout_ms,
+        )
+        WORKERS.submit(task)
+        # 阻塞等待 worker 完成(worker 会写响应并关闭连接)
+        task.done.wait()
 
     def do_GET(self):  # noqa: N802
         if self.path in ("/health", "/"):
@@ -324,13 +364,14 @@ def main() -> None:
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
     server = ThreadingHTTPServer((LISTEN_HOST, LISTEN_PORT), ImpersonateHandler)
-    LOG.info("impersonate proxy listening on %s:%s (pool=%d)", LISTEN_HOST, LISTEN_PORT, POOL_SIZE)
+    WORKERS.start()
+    LOG.info("impersonate proxy listening on %s:%s (workers=%d)", LISTEN_HOST, LISTEN_PORT, POOL_SIZE)
     try:
         server.serve_forever()
     except KeyboardInterrupt:
         pass
     finally:
-        POOL.close()
+        WORKERS.shutdown()
         server.server_close()
 
 
