@@ -44,6 +44,7 @@ import time
 from typing import Optional
 
 from curl_cffi import requests as cffi_requests
+from curl_cffi import CurlOpt
 
 LOG = logging.getLogger("impersonate-proxy")
 LISTEN_HOST = os.environ.get("IMPERSONATE_PROXY_HOST", "127.0.0.1")
@@ -69,7 +70,15 @@ _STRIP_HEADERS = {
 
 
 class SessionPool:
-    """多 Session 连接池:并发 + 连接复用。每个 Session 自带 keep-alive 连接池。"""
+    """多 Session 连接池:并发 + 连接复用。每个 Session 自带 keep-alive 连接池。
+
+    关键: 每个 Session 注入 HEADERFUNCTION 回调(curl_options),使响应头在
+    perform 期间即时可得,从而在 content_callback 之前写出客户端响应头 ——
+    既复用连接(非 stream 模式)又保持真流式(边收边转)。
+
+    并发: 回调按"当前线程"定位 handler(threading.local),同一时刻一个
+    Session 只被一个线程 perform,因此线程→handler 映射是准确的。
+    """
 
     def __init__(self, size: int, idle_keep_ms: int):
         self._size = size
@@ -78,10 +87,32 @@ class SessionPool:
         self._lock = threading.Lock()
         self._avail: queue.Queue[cffi_requests.Session] = queue.Queue()
         self._last_used: dict[int, float] = {}
+        self._local = threading.local()
         for _ in range(size):
-            s = cffi_requests.Session(impersonate="chrome116", timeout=None)
+            s = cffi_requests.Session(
+                impersonate="chrome116",
+                timeout=None,
+                curl_options={CurlOpt.HEADERFUNCTION: self._header_cb},
+            )
             self._sessions.append(s)
             self._avail.put(s)
+
+    def _header_cb(self, data: bytes) -> int:
+        """HEADERFUNCTION: 响应头回调。按当前线程取 handler。"""
+        handler = getattr(self._local, "header_handler", None)
+        if handler is not None:
+            try:
+                handler(data)
+            except Exception:  # noqa: BLE001
+                pass
+        return len(data)
+
+    def set_header_handler(self, handler) -> None:
+        """在请求开始前设置当前线程的响应头处理函数。"""
+        self._local.header_handler = handler
+
+    def clear_header_handler(self) -> None:
+        self._local.header_handler = None
 
     def acquire(self) -> cffi_requests.Session:
         s = self._avail.get()
@@ -172,29 +203,34 @@ class ImpersonateHandler(http.server.BaseHTTPRequestHandler):
             headers["Accept-Encoding"] = "gzip, deflate, br"
 
         session = POOL.acquire()
-        try:
-            # 总超时由 CCH 侧管理(首字节/idle 超时);这里不传 timeout,
-            # 避免 curl_cffi 的 stream trick 设置 LOW_SPEED_LIMIT=1,
-            # 模型思考期 >30s 无字节会被误杀。连接超时用 curl 默认 + 外层 join 兜底。
-            upstream = session.request(
-                method,
-                target,
-                headers=headers,
-                content=body if body else None,
-                stream=True,
-                timeout=None,
-            )
-        except Exception as exc:  # noqa: BLE001 — 统一转 502,不泄漏细节
-            LOG.warning("upstream request error: %s %s: %s", method, target, exc)
-            POOL.release(session)
-            self._send_upstream_error(502, f"upstream_request_error: {type(exc).__name__}")
-            return
+        # 用 header 回调 + content_callback 边收边转,同时复用连接:
+        # - Session 级注入 HEADERFUNCTION(curl_options)→ 响应头在 perform 期间即时到达
+        # - 非 stream + content_callback → 连接复用(stream=True 会 duphandle 丢连接池)
+        # - libcurl 保证 HEADERFUNCTION 先于 WRITEFUNCTION,顺序正确
+        # 不传 timeout 避免 LOW_SPEED_LIMIT 误杀长思考流式(超时由 CCH 侧管理)。
+        upstream = None
+        client_gone = False
+        headers_written = False
 
-        # 写上游响应头
-        try:
-            self.send_response(upstream.status_code)
-            for k, v in upstream.headers.items():
-                lk = k.lower()
+        def on_header(data: bytes) -> int:
+            nonlocal headers_written
+            if client_gone or headers_written:
+                return len(data)
+            line = data.decode("utf-8", "replace").rstrip("\r\n")
+            # 状态行(可能有多段,如重定向链;只取第一段真实状态)
+            if line.startswith("HTTP/"):
+                m = line.split(" ", 2)
+                if len(m) >= 2:
+                    try:
+                        status = int(m[1])
+                    except ValueError:
+                        return len(data)
+                    self.send_response(status, m[2] if len(m) > 2 else "")
+                    return len(data)
+            # 普通 header 行
+            if ":" in line:
+                k, _, v = line.partition(":")
+                lk = k.strip().lower()
                 if lk in {
                     "connection",
                     "keep-alive",
@@ -202,40 +238,68 @@ class ImpersonateHandler(http.server.BaseHTTPRequestHandler):
                     "content-length",
                     "upgrade",
                 }:
-                    continue
-                self.send_header(k, v)
+                    return len(data)
+                self.send_header(k.strip(), v.strip())
+                return len(data)
+            # 空行 = header 结束
             self.send_header("Connection", "close")
             self.end_headers()
-        except (BrokenPipeError, ConnectionResetError):
-            try:
-                upstream.close()
-            except Exception:  # noqa: BLE001
-                pass
-            POOL.release(session)
-            return
+            headers_written = True
+            return len(data)
 
-        # 流式转发 body;客户端断开则取消上游
-        try:
-            for chunk in upstream.iter_content(chunk_size=64 * 1024):
-                if not chunk:
-                    continue
-                try:
-                    self.wfile.write(chunk)
-                except (BrokenPipeError, ConnectionResetError, socket.error):
-                    LOG.debug("client disconnected, cancelling upstream %s %s", method, target)
-                    break
+        def on_chunk(data: bytes) -> int:
+            nonlocal client_gone
+            if client_gone:
+                return len(data)  # 丢弃即可,不再写
             try:
-                self.wfile.flush()
+                self.wfile.write(data)
             except (BrokenPipeError, ConnectionResetError, socket.error):
-                pass
-        except Exception as exc:  # noqa: BLE001
-            LOG.warning("upstream stream error: %s %s: %s", method, target, exc)
+                client_gone = True
+                LOG.debug("client disconnected, upstream %s %s", method, target)
+            return len(data)
+
+        POOL.set_header_handler(on_header)
+        try:
+            upstream = session.request(
+                method,
+                target,
+                headers=headers,
+                content=body if body else None,
+                content_callback=on_chunk,
+                timeout=None,
+            )
+        except Exception as exc:  # noqa: BLE001 — 统一转 502,不泄漏细节
+            LOG.warning("upstream request error: %s %s: %s", method, target, exc)
+            if not client_gone and not headers_written:
+                self._send_upstream_error(502, f"upstream_request_error: {type(exc).__name__}")
+            return
         finally:
-            try:
-                upstream.close()
-            except Exception:  # noqa: BLE001
-                pass
+            POOL.clear_header_handler()
             POOL.release(session)
+
+        # perform 已完成;若 header 回调因异常路径没写出头,补写(空响应场景)
+        if not headers_written and not client_gone:
+            try:
+                self.send_response(upstream.status_code)
+                for k, v in upstream.headers.items():
+                    lk = k.lower()
+                    if lk in {
+                        "connection",
+                        "keep-alive",
+                        "transfer-encoding",
+                        "content-length",
+                        "upgrade",
+                    }:
+                        continue
+                    self.send_header(k, v)
+                self.send_header("Connection", "close")
+                self.end_headers()
+            except (BrokenPipeError, ConnectionResetError):
+                return
+        try:
+            self.wfile.flush()
+        except (BrokenPipeError, ConnectionResetError, socket.error):
+            pass
 
     def do_GET(self):  # noqa: N802
         if self.path in ("/health", "/"):

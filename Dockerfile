@@ -18,8 +18,9 @@ ENV PORT=3000
 EXPOSE 3000
 
 # Python + curl_cffi:本地伪装代理(连接池复用 TLS,替代每次 spawn curl 子进程)
+# --break-system-packages: Debian 12+ PEP 668 默认拒绝 pip 装系统包
 RUN apt-get update && apt-get install -y --no-install-recommends python3 python3-pip \
-  && pip3 install --no-cache-dir curl_cffi \
+  && pip3 install --break-system-packages --no-cache-dir curl_cffi \
   && rm -rf /var/lib/apt/lists/*
 
 # 关键：确保复制了所有必要的文件，特别是 drizzle 文件夹
