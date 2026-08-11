@@ -193,31 +193,11 @@ export async function impersonateFetch(
     bypassProxy?: boolean;
   } = {}
 ): Promise<Response> {
-  // 1) 本地伪装代理优先
-  if (!init.bypassProxy && (await isImpersonateProxyAlive())) {
-    try {
-      const result = await proxyForward(url, {
-        method: init.method,
-        headers: init.headers,
-        body: init.body,
-        bodyTimeoutMs: 30_000,
-      });
-      return new Response(result.body as unknown as BodyInit, {
-        status: result.statusCode,
-        statusText: result.statusText,
-        headers: new Headers(
-          Object.fromEntries(
-            Object.entries(result.headers).map(([k, v]) => [k, Array.isArray(v) ? v.join(", ") : v])
-          )
-        ),
-      });
-    } catch (error) {
-      logger.warn("[curl-impersonate] proxy forward failed, falling back to spawn curl", {
-        url,
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
-  }
+  // 实测 curl_cffi 常驻代理(chrome116 指纹)对部分 Cloudflare 上游被识别为
+  // 伪浏览器,转发慢 10~18 倍(nikoapi 0.9s -> 17s)。统一直接 spawn
+  // curl-impersonate-chrome(完整 Chrome 指纹);代理代码保留可回退。
+  // bypassProxy 参数保留兼容调用方,不再生效。
+  void init.bypassProxy;
 
   // 2) spawn curl fallback
   const args = [
@@ -291,19 +271,10 @@ export async function impersonateRequest(
     proxyUrl?: string | null;
   } = {}
 ): Promise<ImpersonateRequestResult> {
-  // 1) 本地伪装代理优先;显式指定 proxyUrl(上游 SOCKS 等)时跳过(代理不支持)
-  if (!init.proxyUrl && (await isImpersonateProxyAlive())) {
-    try {
-      return await proxyForward(url, init);
-    } catch (error) {
-      logger.warn("[curl-impersonate] proxy forward failed, falling back to spawn curl", {
-        url,
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
-  }
-
-  // 2) spawn curl fallback
+  // 实测 curl_cffi 常驻代理(chrome116 指纹)对部分 Cloudflare 上游被识别为
+  // 伪浏览器,转发慢 10~18 倍(nikoapi 0.9s -> 17s,瑞科 3s -> 15s)。
+  // 直接 spawn curl-impersonate-chrome(完整 Chrome 指纹),仅损失 ~1.5ms
+  // 进程启动与跨请求连接复用;代理代码保留可回退,但不再用于真实请求。
   return impersonateRequestSpawn(url, init);
 }
 
