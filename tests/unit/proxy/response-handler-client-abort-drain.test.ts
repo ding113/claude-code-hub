@@ -28,6 +28,54 @@ const asyncTasks: Promise<void>[] = [];
 const registeredTasks: Array<{ taskType: string; promise: Promise<void> }> = [];
 const STREAM_STATS_HEAD_BYTES_FOR_TEST = 1024 * 1024;
 
+const replayControl = vi.hoisted(() => {
+  const listeners = new Set<() => void>();
+  const state = { enabled: false, terminal: false, detachedMs: 300_000 };
+  const notifyTerminal = () => {
+    state.terminal = true;
+    for (const listener of [...listeners]) listener();
+  };
+  return {
+    state,
+    notifyTerminal,
+    reset() {
+      state.enabled = false;
+      state.terminal = false;
+      state.detachedMs = 300_000;
+      listeners.clear();
+    },
+    spool: {
+      get isTerminal() {
+        return state.terminal;
+      },
+      observe: vi.fn(),
+      abort: vi.fn(async () => notifyTerminal()),
+      completeAfterBilling: vi.fn(async () => notifyTerminal()),
+      onTerminal(listener: () => void) {
+        listeners.add(listener);
+        return () => listeners.delete(listener);
+      },
+    },
+  };
+});
+
+vi.mock("@/app/v1/_lib/proxy/replay/replay-spool", () => ({
+  abortReplayOwnership: vi.fn(async () => undefined),
+  createReplaySpoolIfOwner: vi.fn(() => (replayControl.state.enabled ? replayControl.spool : null)),
+  releaseReplayOwnership: vi.fn(async () => undefined),
+}));
+
+vi.mock("@/lib/config/env.schema", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/config/env.schema")>();
+  return {
+    ...actual,
+    getEnvConfig: () => ({
+      ...actual.getEnvConfig(),
+      REPLAY_MAX_DETACHED_MS: replayControl.state.detachedMs,
+    }),
+  };
+});
+
 vi.mock("@/app/v1/_lib/proxy/response-fixer", () => ({
   ResponseFixer: {
     process: async (_session: unknown, response: Response) => response,
@@ -492,11 +540,19 @@ function createControllableIdleTimeoutResponsesSse(): {
 function createAbortInsensitiveHangingResponsesSse(): {
   response: Response;
   close: () => void;
+  cancelled: Promise<unknown>;
 } {
   let controller: ReadableStreamDefaultController<Uint8Array> | null = null;
+  let resolveCancelled!: (reason: unknown) => void;
+  const cancelled = new Promise<unknown>((resolve) => {
+    resolveCancelled = resolve;
+  });
   const stream = new ReadableStream<Uint8Array>({
     start(streamController) {
       controller = streamController;
+    },
+    cancel(reason) {
+      resolveCancelled(reason);
     },
   });
 
@@ -505,6 +561,7 @@ function createAbortInsensitiveHangingResponsesSse(): {
       status: 200,
       headers: { "content-type": "text/event-stream" },
     }),
+    cancelled,
     close() {
       try {
         controller?.close();
@@ -1041,6 +1098,7 @@ describe("ProxyResponseHandler stream client abort finalization", () => {
     asyncTasks.splice(0, asyncTasks.length);
     registeredTasks.splice(0, registeredTasks.length);
     vi.clearAllMocks();
+    replayControl.reset();
     vi.mocked(updateMessageRequestDetailsDurably).mockImplementation(
       async (_id, details, options) => {
         try {
@@ -2799,6 +2857,102 @@ describe("ProxyResponseHandler stream client abort finalization", () => {
       ]);
       expect(outcome).toBe("settled");
       expect(responseController.signal.aborted).toBe(true);
+    } finally {
+      upstream.close();
+      const tasks = asyncTasks.splice(0, asyncTasks.length);
+      await expectAllFulfilled(tasks);
+      vi.useRealTimers();
+    }
+  });
+
+  it("spool 失效后按断线起点把 detached drain 降级到 60 秒", async () => {
+    vi.useFakeTimers();
+    replayControl.state.enabled = true;
+    const upstream = createAbortInsensitiveHangingResponsesSse();
+    try {
+      const clientController = new AbortController();
+      const responseController = new AbortController();
+      const session = createSession(clientController.signal);
+      session.provider.streamingIdleTimeoutMs = 120_000;
+      Object.assign(session, { responseController });
+      setDeferredStreamingFinalization(session, {
+        providerId: 1,
+        providerName: "avemujica-responses",
+        providerPriority: 1,
+        attemptNumber: 1,
+        totalProvidersAttempted: 1,
+        isFirstAttempt: true,
+        isFailoverSuccess: false,
+        endpointId: 42,
+        endpointUrl: "https://api.test.invalid/v1",
+        upstreamStatusCode: 200,
+      });
+
+      const downstream = await ProxyResponseHandler.dispatch(session, upstream.response);
+      await downstream.body?.cancel("body_cancel_only");
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(responseController.signal.aborted).toBe(false);
+
+      replayControl.notifyTerminal();
+      await vi.advanceTimersByTimeAsync(29_999);
+      expect(responseController.signal.aborted).toBe(false);
+
+      await vi.advanceTimersByTimeAsync(1);
+      expect(responseController.signal.aborted).toBe(true);
+
+      const cancelOutcome = await Promise.race([
+        upstream.cancelled.then(() => "cancelled" as const),
+        new Promise<"pending">((resolve) => setImmediate(() => resolve("pending"))),
+      ]);
+      expect(cancelOutcome).toBe("cancelled");
+
+      const tasks = asyncTasks.splice(0, asyncTasks.length);
+      await expectAllFulfilled(tasks);
+    } finally {
+      upstream.close();
+      const tasks = asyncTasks.splice(0, asyncTasks.length);
+      await expectAllFulfilled(tasks);
+      vi.useRealTimers();
+    }
+  });
+
+  it("spool 失效不会延长已配置为 10 秒的 detached drain", async () => {
+    vi.useFakeTimers();
+    replayControl.state.enabled = true;
+    replayControl.state.detachedMs = 10_000;
+    const upstream = createAbortInsensitiveHangingResponsesSse();
+    try {
+      const clientController = new AbortController();
+      const responseController = new AbortController();
+      const session = createSession(clientController.signal);
+      session.provider.streamingIdleTimeoutMs = 120_000;
+      Object.assign(session, { responseController });
+      setDeferredStreamingFinalization(session, {
+        providerId: 1,
+        providerName: "avemujica-responses",
+        providerPriority: 1,
+        attemptNumber: 1,
+        totalProvidersAttempted: 1,
+        isFirstAttempt: true,
+        isFailoverSuccess: false,
+        endpointId: 42,
+        endpointUrl: "https://api.test.invalid/v1",
+        upstreamStatusCode: 200,
+      });
+
+      const downstream = await ProxyResponseHandler.dispatch(session, upstream.response);
+      await downstream.body?.cancel("body_cancel_only");
+      await vi.advanceTimersByTimeAsync(5_000);
+      replayControl.notifyTerminal();
+      await vi.advanceTimersByTimeAsync(4_999);
+      expect(responseController.signal.aborted).toBe(false);
+
+      await vi.advanceTimersByTimeAsync(1);
+      expect(responseController.signal.aborted).toBe(true);
+      await upstream.cancelled;
+
+      const tasks = asyncTasks.splice(0, asyncTasks.length);
+      await expectAllFulfilled(tasks);
     } finally {
       upstream.close();
       const tasks = asyncTasks.splice(0, asyncTasks.length);

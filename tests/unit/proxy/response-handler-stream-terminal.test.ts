@@ -66,6 +66,7 @@ vi.mock("@/app/v1/_lib/proxy/replay/replay-spool", () => ({
           abort: mocks.replayAbort,
           completeAfterBilling: mocks.replayComplete,
           isTerminal: false,
+          onTerminal: () => () => {},
           observe: mocks.replayObserve,
         }
       : null,

@@ -29,7 +29,29 @@ const envControl = vi.hoisted(() => ({
 
 const storeControl = vi.hoisted(() => {
   const order: string[] = [];
+  const ownedChunks: string[] = [];
   let ownedChunkCount = 0;
+  const readOwnedChunks = async (
+    _replayId: string,
+    _ownerToken: string,
+    expectedChunkCount: number
+  ) => {
+    order.push("readOwned");
+    return ownedChunks.length === expectedChunkCount ? [...ownedChunks] : false;
+  };
+  const writeOwned = async (
+    _replayId: string,
+    _ownerToken: string,
+    _meta: { status: string },
+    expectedChunkCount: number,
+    values: string[] = []
+  ) => {
+    order.push(`write:${values.join("|")}`);
+    if (ownedChunkCount !== expectedChunkCount) return "chunk_count_mismatch" as const;
+    ownedChunks.push(...values);
+    ownedChunkCount += values.length;
+    return ownedChunkCount;
+  };
   const store = {
     appendChunks: vi.fn(async (_replayId: string, values: string[]) => {
       order.push(`append:${values.join("|")}`);
@@ -39,18 +61,8 @@ const storeControl = vi.hoisted(() => {
       order.push(`meta:${meta.status}`);
       return true;
     }),
-    writeOwned: vi.fn(
-      async (
-        _replayId: string,
-        _ownerToken: string,
-        _meta: { status: string },
-        values: string[] = []
-      ) => {
-        order.push(`write:${values.join("|")}`);
-        ownedChunkCount += values.length;
-        return ownedChunkCount;
-      }
-    ),
+    writeOwned: vi.fn(writeOwned),
+    readOwnedChunks: vi.fn(readOwnedChunks),
     completeOwned: vi.fn(
       async (_replayId: string, _ownerToken: string, meta: { status: string }) => {
         order.push(`meta:${meta.status}`);
@@ -91,6 +103,9 @@ const storeControl = vi.hoisted(() => {
     store,
     resetOwnedChunkCount: () => {
       ownedChunkCount = 0;
+      ownedChunks.length = 0;
+      store.writeOwned.mockImplementation(writeOwned);
+      store.readOwnedChunks.mockImplementation(readOwnedChunks);
     },
   };
 });
@@ -154,13 +169,6 @@ function makeSpool(
 
 async function drainWriteChain(spool: ReplaySpool): Promise<void> {
   await (spool as unknown as { writeChain: Promise<void> }).writeChain;
-}
-
-function retainedAsciiPartBytes(spool: ReplaySpool): number {
-  return (spool as unknown as { parts: string[] }).parts.reduce(
-    (total, part) => total + part.length,
-    0
-  );
 }
 
 function makeOwnerSession(): ProxySession {
@@ -228,6 +236,7 @@ describe("ReplaySpool：write-behind 批量冲刷", () => {
         byteSize: 18,
         heartbeatAt: expect.any(Number),
       }),
+      0,
       ["data: a\n\n", "data: b\n\n"]
     );
 
@@ -243,6 +252,97 @@ describe("ReplaySpool：write-behind 批量冲刷", () => {
     expect(storeControl.store.writeOwned).toHaveBeenCalledTimes(1);
 
     await spool.abort("test_cleanup");
+  });
+
+  it("单个大 chunk 作为当前 Redis write 时不被误判为 backlog", async () => {
+    const spool = makeSpool();
+    const chunk = encoder.encode("x".repeat(513 * 1024));
+
+    spool.observe(chunk);
+    await drainWriteChain(spool);
+
+    expect(spool.isTerminal).toBe(false);
+    expect(storeControl.store.writeOwned).toHaveBeenCalledTimes(1);
+    expect(storeControl.store.writeOwned.mock.calls[0][4]).toEqual(["x".repeat(513 * 1024)]);
+
+    await spool.abort("test_cleanup");
+  });
+
+  it("跨 chunk UTF-8 序列按实际保留文本字节计入 pending", async () => {
+    const spool = makeSpool();
+
+    spool.observe(new Uint8Array([0xf0, 0x9f, 0x98]));
+    spool.observe(new Uint8Array([0x80]));
+
+    expect((spool as unknown as { pendingBytes: number }).pendingBytes).toBe(4);
+
+    await spool.abort("test_cleanup");
+  });
+
+  it("Redis 写入阻塞且 backlog 超过独立上限时 fail-open 关闭 spool", async () => {
+    let resolveRedis!: (value: number) => void;
+    storeControl.store.writeOwned.mockImplementationOnce(
+      () =>
+        new Promise<number>((resolve) => {
+          resolveRedis = resolve;
+        })
+    );
+    const spool = makeSpool();
+    const chunk = encoder.encode("x".repeat(128 * 1024));
+
+    spool.observe(chunk);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(storeControl.store.writeOwned).toHaveBeenCalledTimes(1);
+
+    for (let index = 0; index < 5; index += 1) spool.observe(chunk);
+
+    expect(spool.isTerminal).toBe(true);
+    expect(storeControl.store.abortOwned).not.toHaveBeenCalled();
+
+    resolveRedis(1);
+    await drainWriteChain(spool);
+
+    expect(storeControl.store.writeOwned).toHaveBeenCalledTimes(1);
+    expect(storeControl.store.abortOwned).toHaveBeenCalledWith(
+      identity.replayId,
+      "owner-token",
+      expect.objectContaining({ status: "aborted", abortReason: "write_behind_limit" })
+    );
+    expect(getActiveReplaySpoolCount()).toBe(0);
+  });
+
+  it("40 个 7.5 MiB 活跃 spool 不保留完整本地正文", async () => {
+    storeControl.store.writeOwned.mockImplementation(
+      async (
+        _replayId: string,
+        _ownerToken: string,
+        meta: { status: string; chunkCount: number },
+        _expectedChunkCount: number,
+        _values: string[] = []
+      ) => meta.chunkCount
+    );
+    const spools = Array.from({ length: 40 }, () => makeSpool());
+    const chunk = encoder.encode("x".repeat(128 * 1024));
+
+    for (let wave = 0; wave < 60; wave += 1) {
+      for (const spool of spools) spool.observe(chunk);
+      await vi.advanceTimersByTimeAsync(0);
+    }
+    await Promise.all(spools.map(drainWriteChain));
+
+    for (const spool of spools) {
+      const memoryState = spool as unknown as {
+        parts?: string[];
+        pendingBytes: number;
+        queuedBytes: number;
+      };
+      expect(memoryState.parts).toBeUndefined();
+      expect(memoryState.pendingBytes).toBe(0);
+      expect(memoryState.queuedBytes).toBe(0);
+      expect(spool.isTerminal).toBe(false);
+    }
+
+    await Promise.all(spools.map((spool) => spool.abort("test_cleanup")));
   });
 
   it("空 chunk 不触发任何调度", async () => {
@@ -394,6 +494,53 @@ describe("ReplaySpool：超尺寸自失效", () => {
 });
 
 describe("ReplaySpool：completeAfterBilling 终态屏障", () => {
+  it("从当前 owner 的完整 Redis chunks 重建 durable payload", async () => {
+    const spool = makeSpool();
+    spool.observe(encoder.encode("data: first\n\n"));
+    spool.observe(encoder.encode("data: second\n\n"));
+
+    await spool.completeAfterBilling(42);
+
+    expect(storeControl.store.readOwnedChunks).toHaveBeenCalledWith(
+      identity.replayId,
+      "owner-token",
+      2
+    );
+    expect(storeControl.store.persistCompleted).toHaveBeenCalledWith(
+      expect.objectContaining({ payload: "data: first\n\ndata: second\n\n" })
+    );
+  });
+
+  it("同一时间最多重建并持久化两个大 payload", async () => {
+    const payload = "x".repeat(300 * 1024);
+    const pendingReads: Array<(chunks: string[]) => void> = [];
+    storeControl.store.writeOwned.mockImplementation(
+      async (_replayId: string, _ownerToken: string, meta: { chunkCount: number }) =>
+        meta.chunkCount
+    );
+    storeControl.store.readOwnedChunks.mockImplementation(
+      () =>
+        new Promise<string[]>((resolve) => {
+          pendingReads.push(resolve);
+        })
+    );
+    const spools = [makeSpool(), makeSpool(), makeSpool()];
+    for (const spool of spools) spool.observe(encoder.encode(payload));
+
+    const completions = spools.map((spool, index) => spool.completeAfterBilling(index + 1));
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(storeControl.store.readOwnedChunks).toHaveBeenCalledTimes(2);
+
+    pendingReads[0]([payload]);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(storeControl.store.readOwnedChunks).toHaveBeenCalledTimes(3);
+
+    pendingReads[1]([payload]);
+    pendingReads[2]([payload]);
+    await Promise.all(completions);
+  });
+
   it("按 fenced 尾批冲刷 -> PG 持久化 -> completed meta 顺序执行", async () => {
     const spool = makeSpool(200, "text/event-stream; charset=utf-8");
     spool.observe(encoder.encode("data: hello \n\n"));
@@ -403,6 +550,7 @@ describe("ReplaySpool：completeAfterBilling 终态屏障", () => {
 
     expect(storeControl.order).toEqual([
       "write:data: hello \n\n|data: world\n\n",
+      "readOwned",
       "persist",
       "meta:completed",
       "release",
@@ -540,61 +688,10 @@ describe("ReplaySpool：completeAfterBilling 终态屏障", () => {
     expect(storeControl.store.completeOwned).toHaveBeenCalledTimes(1);
   });
 
-  it("Redis 阻塞期间不提前复制 payload，PG 阻塞期间释放 parts", async () => {
-    const payloadBytes = 4 * 1024 * 1024;
-    const chunk = "x".repeat(64 * 1024);
-    let resolveRedis!: (value: number) => void;
-    let resolvePersist!: (value: "persisted") => void;
-    storeControl.store.writeOwned.mockImplementationOnce(
-      () =>
-        new Promise<number>((resolve) => {
-          resolveRedis = resolve;
-        })
-    );
-    storeControl.store.persistCompleted.mockImplementationOnce(
-      () =>
-        new Promise<"persisted">((resolve) => {
-          resolvePersist = resolve;
-        })
-    );
-    const spool = makeSpool();
-    for (let index = 0; index < 64; index += 1) {
-      spool.observe(encoder.encode(chunk));
-    }
-    expect(retainedAsciiPartBytes(spool)).toBe(payloadBytes);
-
-    const completion = spool.completeAfterBilling(10);
-    await vi.advanceTimersByTimeAsync(0);
-
-    expect(storeControl.store.writeOwned).toHaveBeenCalledTimes(1);
-    expect(storeControl.store.persistCompleted).not.toHaveBeenCalled();
-    expect(retainedAsciiPartBytes(spool)).toBe(payloadBytes);
-
-    resolveRedis(1);
-    await vi.advanceTimersByTimeAsync(0);
-
-    expect(storeControl.store.persistCompleted).toHaveBeenCalledTimes(1);
-    expect(storeControl.store.persistCompleted).toHaveBeenCalledWith(
-      expect.objectContaining({
-        payload: "x".repeat(payloadBytes),
-        byteSize: payloadBytes,
-      })
-    );
-    expect(retainedAsciiPartBytes(spool)).toBe(0);
-
-    resolvePersist("persisted");
-    await completion;
-  });
-
-  it("payload 组装失败时封死热层并释放 heartbeat 与并发配额", async () => {
+  it("fenced payload 读取失败时封死热层并释放 heartbeat 与并发配额", async () => {
+    storeControl.store.readOwnedChunks.mockRejectedValueOnce(new Error("payload read failed"));
     const spool = makeSpool();
     spool.observe(encoder.encode("data: partial\n\n"));
-    const parts = (spool as unknown as { parts: unknown[] }).parts;
-    parts[0] = {
-      toString: () => {
-        throw new Error("payload assembly failed");
-      },
-    };
 
     await spool.completeAfterBilling(10);
 
@@ -610,6 +707,31 @@ describe("ReplaySpool：completeAfterBilling 终态屏障", () => {
     expect(storeControl.store.renewOwnerLease).not.toHaveBeenCalled();
   });
 
+  it("尾批写入 Redis 后在等待 PG 时立即释放本地 batch", async () => {
+    let resolvePersist!: () => void;
+    storeControl.store.persistCompleted.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          resolvePersist = resolve;
+        })
+    );
+    const spool = makeSpool();
+    spool.observe(encoder.encode("data: final\n\n"));
+
+    const completion = spool.completeAfterBilling(11);
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(storeControl.store.persistCompleted).toHaveBeenCalledTimes(1);
+    const finalBatch = storeControl.store.writeOwned.mock.calls.at(-1)?.[4] as string[];
+    expect(finalBatch).toEqual([]);
+    expect(
+      (spool as unknown as { queuedBatches: Set<{ chunks: string[] }> }).queuedBatches.size
+    ).toBe(0);
+
+    resolvePersist();
+    await completion;
+  });
+
   it("跨 chunk 截断的 UTF-8 序列在 complete 时冲刷解码尾部", async () => {
     const spool = makeSpool();
     // "中" (0xE4 0xB8 0xAD) 只送前两字节：observe 阶段解码挂起，complete 时 flush 出替换字符
@@ -622,7 +744,8 @@ describe("ReplaySpool：completeAfterBilling 终态屏障", () => {
       identity.replayId,
       "owner-token",
       expect.objectContaining({ status: "owning", chunkCount: 1 }),
-      ["\uFFFD"]
+      0,
+      []
     );
     expect(storeControl.store.persistCompleted).toHaveBeenCalledWith(
       expect.objectContaining({ payload: "\uFFFD", byteSize: 2 })
@@ -656,13 +779,14 @@ describe("ReplaySpool：abort 终态", () => {
     expect(getActiveReplaySpoolCount()).toBe(0);
   });
 
-  it("abort 立即释放已累积的 payload", async () => {
+  it("abort 后不再读取或持久化 payload", async () => {
     const spool = makeSpool();
     spool.observe(encoder.encode("data: partial\n\n"));
 
     await spool.abort("upstream_error");
 
-    expect((spool as unknown as { parts: string[] }).parts).toEqual([]);
+    expect(storeControl.store.readOwnedChunks).not.toHaveBeenCalled();
+    expect(storeControl.store.persistCompleted).not.toHaveBeenCalled();
   });
 
   it("Redis flush 阻塞时 abort 立即释放 batch，并在 fenced cleanup 后释放并发配额", async () => {
@@ -681,9 +805,13 @@ describe("ReplaySpool：abort 终态", () => {
     await vi.advanceTimersByTimeAsync(0);
 
     expect(storeControl.store.writeOwned).toHaveBeenCalledTimes(1);
-    const batch = storeControl.store.writeOwned.mock.calls[0][3] as string[];
+    const batch = storeControl.store.writeOwned.mock.calls[0][4] as string[];
     expect(batch.length).toBeGreaterThan(0);
-    const queuedBatches = (spool as unknown as { queuedBatches: Set<string[]> }).queuedBatches;
+    const queuedBatches = (
+      spool as unknown as {
+        queuedBatches: Set<{ chunks: string[]; byteSize: number }>;
+      }
+    ).queuedBatches;
     expect(queuedBatches.size).toBe(2);
 
     let abortSettled = false;
@@ -693,7 +821,7 @@ describe("ReplaySpool：abort 终态", () => {
     await vi.advanceTimersByTimeAsync(0);
 
     expect(batch).toEqual([]);
-    expect([...queuedBatches].every((queuedBatch) => queuedBatch.length === 0)).toBe(true);
+    expect([...queuedBatches].every((queuedBatch) => queuedBatch.chunks.length === 0)).toBe(true);
     expect(abortSettled).toBe(false);
     expect(getActiveReplaySpoolCount()).toBe(1);
     expect(storeControl.store.abortOwned).not.toHaveBeenCalled();
@@ -791,6 +919,26 @@ describe("ReplaySpool：abort 终态", () => {
 });
 
 describe("ReplaySpool：isTerminal", () => {
+  it("disable 与 abort 会同步通知 detached drain listener", async () => {
+    envControl.maxPayloadBytes = 16;
+    const disabledListener = vi.fn();
+    const disabledSpool = makeSpool();
+    disabledSpool.onTerminal(disabledListener);
+
+    disabledSpool.observe(encoder.encode("x".repeat(32)));
+    expect(disabledListener).toHaveBeenCalledTimes(1);
+    await drainWriteChain(disabledSpool);
+
+    envControl.maxPayloadBytes = 8 * 1024 * 1024;
+    const abortedListener = vi.fn();
+    const abortedSpool = makeSpool();
+    abortedSpool.onTerminal(abortedListener);
+
+    const abortion = abortedSpool.abort("upstream_error");
+    expect(abortedListener).toHaveBeenCalledTimes(1);
+    await abortion;
+  });
+
   it("abort 置 terminal，disable（超限）置 disabled，两者均视为终态", async () => {
     const aborted = makeSpool();
     expect(aborted.isTerminal).toBe(false);
@@ -857,7 +1005,8 @@ describe("createReplaySpoolIfOwner", () => {
           "content-type": "application/json; charset=utf-8",
           "x-provider-request-id": "req-1",
         },
-      })
+      }),
+      0
     );
 
     spool?.observe(encoder.encode('{"ok":true}'));
@@ -903,7 +1052,8 @@ describe("createReplaySpoolIfOwner", () => {
         delivery: "stream",
         chunkCount: 0,
         byteSize: 0,
-      })
+      }),
+      0
     );
 
     await spool?.abort("test_cleanup");
@@ -917,7 +1067,8 @@ describe("createReplaySpoolIfOwner", () => {
     expect(storeControl.store.writeOwned).toHaveBeenCalledWith(
       identity.replayId,
       "owner-token",
-      expect.objectContaining({ headers: { "content-type": "text/event-stream" } })
+      expect.objectContaining({ headers: { "content-type": "text/event-stream" } }),
+      0
     );
 
     await spool?.abort("test_cleanup");

@@ -68,15 +68,33 @@ if redis.call('GET', KEYS[1]) ~= ARGV[1] then
   return -1
 end
 local len = redis.call('LLEN', KEYS[3])
-if #ARGV > 4 then
-  len = redis.call('RPUSH', KEYS[3], unpack(ARGV, 5))
+if len ~= tonumber(ARGV[4]) then
+  return -2
+end
+if #ARGV > 5 then
+  len = redis.call('RPUSH', KEYS[3], unpack(ARGV, 6))
   if tonumber(ARGV[2]) > 0 then
     redis.call('EXPIRE', KEYS[3], ARGV[2])
   end
 end
-redis.call('SETEX', KEYS[2], ARGV[2], ARGV[4])
+redis.call('SETEX', KEYS[2], ARGV[2], ARGV[5])
 redis.call('EXPIRE', KEYS[1], ARGV[3])
 return len`;
+
+const LUA_READ_OWNED_CHUNKS = `
+if redis.call('GET', KEYS[1]) ~= ARGV[1] then
+  return {-1}
+end
+local len = redis.call('LLEN', KEYS[2])
+if len ~= tonumber(ARGV[2]) then
+  return {-2}
+end
+local chunks = redis.call('LRANGE', KEYS[2], 0, -1)
+local result = {1}
+for i = 1, #chunks do
+  result[#result + 1] = chunks[i]
+end
+return result`;
 
 const LUA_ABORT_OWNED = `
 if redis.call('GET', KEYS[1]) ~= ARGV[1] then
@@ -196,15 +214,18 @@ export class ReplayStore {
 
   /**
    * owner 热层写入：token 校验、chunk 追加、owning meta 更新和租约续期在同一 Lua
-   * 内完成，避免旧 owner 在租约交接窗口污染新 owner 的 chunks/meta。
-   * null 表示 Redis 不可用，false 表示 token 已失效，number 为当前 chunk 总数。
+   * 内完成，避免旧 owner 在租约交接窗口污染新 owner 的 chunks/meta。追加前
+   * 同时校验 LIST 长度，防止 eviction 或旧 generation 残留产生截断 payload。
+   * null 表示 Redis 不可用，false 表示 token 已失效，chunk_count_mismatch 表示
+   * LIST 已不再匹配当前 owner 的本地进度，number 为追加后的 chunk 总数。
    */
   async writeOwned(
     replayId: string,
     ownerToken: string,
     meta: ReplayMeta,
+    expectedChunkCount: number,
     values: string[] = []
-  ): Promise<number | null | false> {
+  ): Promise<number | null | false | "chunk_count_mismatch"> {
     const redis = this.getRawRedis();
     if (!redis) return null;
     try {
@@ -217,13 +238,48 @@ export class ReplayStore {
         ownerToken,
         resolveReplayTtlSeconds(),
         OWNER_LEASE_TTL_SECONDS,
+        expectedChunkCount,
         JSON.stringify(meta),
         ...values
       );
       const length = typeof result === "number" ? result : Number(result);
-      return length === -1 ? false : length;
+      if (length === -1) return false;
+      if (length === -2) return "chunk_count_mismatch";
+      return length;
     } catch (error) {
       logger.debug("[ReplayStore] fenced owner write failed", {
+        replayId: replayId.slice(0, 12),
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return null;
+    }
+  }
+
+  /**
+   * 仅当前 owner 可读取完整 chunks 快照. owner token 校验, LIST 长度校验和
+   * LRANGE 在同一 Lua 中执行, 避免租约交接或尾批缺失时持久化错误 payload.
+   * null 表示 Redis 不可用, false 表示 token 已失效或 chunk 数量不完整.
+   */
+  async readOwnedChunks(
+    replayId: string,
+    ownerToken: string,
+    expectedChunkCount: number
+  ): Promise<string[] | null | false> {
+    const redis = this.getRawRedis();
+    if (!redis) return null;
+    try {
+      const result = await redis.eval(
+        LUA_READ_OWNED_CHUNKS,
+        2,
+        `cch:replay:owner:${replayId}`,
+        `cch:replay:chunks:${replayId}`,
+        ownerToken,
+        expectedChunkCount
+      );
+      if (!Array.isArray(result) || Number(result[0]) !== 1) return false;
+      return result.slice(1).map(String);
+    } catch (error) {
+      logger.debug("[ReplayStore] fenced owner read failed", {
         replayId: replayId.slice(0, 12),
         error: error instanceof Error ? error.message : String(error),
       });

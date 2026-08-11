@@ -160,11 +160,28 @@ function createFakeRedis() {
     // 按脚本内容分发：fenced owner write / RPUSH+EXPIRE / terminal fencing / lease fencing
     eval: vi.fn(
       async (script: string, _numkeys: number, key: string, ...args: (string | number)[]) => {
+        if (script.includes("LRANGE") && _numkeys === 2) {
+          const [chunksKey, token, expectedChunkCount] = args;
+          if (kv.get(key) !== token) return [-1];
+          const chunks = lists.get(String(chunksKey)) ?? [];
+          if (chunks.length !== Number(expectedChunkCount)) return [-2];
+          return [1, ...chunks];
+        }
         if (script.includes("LLEN") && _numkeys === 3) {
-          const [metaKey, chunksKey, token, replayTtl, _ownerTtl, serializedMeta, ...values] = args;
+          const [
+            metaKey,
+            chunksKey,
+            token,
+            replayTtl,
+            _ownerTtl,
+            expectedChunkCount,
+            serializedMeta,
+            ...values
+          ] = args;
           if (kv.get(key) !== token) return -1;
           const listKey = String(chunksKey);
           const list = lists.get(listKey) ?? [];
+          if (list.length !== Number(expectedChunkCount)) return -2;
           list.push(...values.map(String));
           lists.set(listKey, list);
           if (values.length > 0 && Number(replayTtl) > 0) {
@@ -447,9 +464,9 @@ describe("ReplayStore：owner 租约", () => {
     const owningMeta = makeMeta({ chunkCount: 2, byteSize: 8 });
     await store.tryClaimOwner("r1", "tok-a");
 
-    await expect(store.writeOwned("r1", "tok-a", owningMeta, ["part-a", "part-b"])).resolves.toBe(
-      2
-    );
+    await expect(
+      store.writeOwned("r1", "tok-a", owningMeta, 0, ["part-a", "part-b"])
+    ).resolves.toBe(2);
 
     expect(currentRedis().eval).toHaveBeenLastCalledWith(
       expect.stringContaining("LLEN"),
@@ -460,6 +477,7 @@ describe("ReplayStore：owner 租约", () => {
       "tok-a",
       600,
       45,
+      0,
       JSON.stringify(owningMeta),
       "part-a",
       "part-b"
@@ -473,15 +491,38 @@ describe("ReplayStore：owner 租约", () => {
     const store = new ReplayStore();
     const currentMeta = makeMeta({ verifier: "new-owner" });
     await store.tryClaimOwner("r1", "tok-new");
-    await store.writeOwned("r1", "tok-new", currentMeta, ["new-data"]);
+    await store.writeOwned("r1", "tok-new", currentMeta, 0, ["new-data"]);
 
     await expect(
-      store.writeOwned("r1", "tok-old", makeMeta({ verifier: "stale-owner" }), ["stale-data"])
+      store.writeOwned("r1", "tok-old", makeMeta({ verifier: "stale-owner" }), 1, ["stale-data"])
     ).resolves.toBe(false);
 
     await expect(store.getMeta("r1")).resolves.toEqual(currentMeta);
     await expect(store.readChunks("r1", 0)).resolves.toEqual(["new-data"]);
     expect(currentRedis().kv.get("cch:replay:owner:r1")).toBe("tok-new");
+  });
+
+  it("readOwnedChunks 只为当前 owner 返回数量完整的原子 chunks 快照", async () => {
+    const store = new ReplayStore();
+    await store.tryClaimOwner("r1", "tok-a");
+    await store.writeOwned("r1", "tok-a", makeMeta({ chunkCount: 2 }), 0, ["first", "second"]);
+
+    await expect(store.readOwnedChunks("r1", "tok-a", 2)).resolves.toEqual(["first", "second"]);
+    await expect(store.readOwnedChunks("r1", "tok-stale", 2)).resolves.toBe(false);
+    await expect(store.readOwnedChunks("r1", "tok-a", 3)).resolves.toBe(false);
+  });
+
+  it("writeOwned 在追加前原子拒绝不匹配的 LIST generation", async () => {
+    const store = new ReplayStore();
+    await store.appendChunks("r1", ["stale-prefix"]);
+    await store.tryClaimOwner("r1", "tok-a");
+
+    await expect(
+      store.writeOwned("r1", "tok-a", makeMeta({ chunkCount: 1 }), 0, ["new-data"])
+    ).resolves.toBe("chunk_count_mismatch");
+
+    await expect(store.getMeta("r1")).resolves.toBeNull();
+    await expect(store.readChunks("r1", 0)).resolves.toEqual(["stale-prefix"]);
   });
 
   it("releaseOwner 是 compare-delete：token 不匹配不删，匹配才删", async () => {

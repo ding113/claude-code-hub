@@ -27,10 +27,44 @@ import {
 
 const FLUSH_INTERVAL_MS = 100;
 const FLUSH_BYTES_THRESHOLD = 64 * 1024;
+const MAX_WRITE_BEHIND_BYTES = 512 * 1024;
+const LARGE_PAYLOAD_REBUILD_BYTES = 256 * 1024;
+const MAX_CONCURRENT_LARGE_PAYLOAD_REBUILDS = 2;
 const OWNER_HEARTBEAT_INTERVAL_MS = 15_000;
 const PRE_SPOOL_ABORT_WAIT_MS = 100;
 
 let activeSpoolCount = 0;
+let activeLargePayloadRebuilds = 0;
+const largePayloadRebuildWaiters: Array<() => void> = [];
+
+type QueuedReplayBatch = {
+  chunks: string[];
+  byteSize: number;
+};
+
+async function withPayloadRebuildSlot<T>(
+  byteSize: number,
+  operation: () => Promise<T>
+): Promise<T> {
+  if (byteSize < LARGE_PAYLOAD_REBUILD_BYTES) return operation();
+
+  if (activeLargePayloadRebuilds < MAX_CONCURRENT_LARGE_PAYLOAD_REBUILDS) {
+    activeLargePayloadRebuilds += 1;
+  } else {
+    await new Promise<void>((resolve) => largePayloadRebuildWaiters.push(resolve));
+  }
+
+  try {
+    return await operation();
+  } finally {
+    const next = largePayloadRebuildWaiters.shift();
+    if (next) {
+      next();
+    } else {
+      activeLargePayloadRebuilds = Math.max(0, activeLargePayloadRebuilds - 1);
+    }
+  }
+}
 
 export function getActiveReplaySpoolCount(): number {
   return activeSpoolCount;
@@ -39,10 +73,13 @@ export function getActiveReplaySpoolCount(): number {
 export class ReplaySpool {
   private readonly store = getReplayStore();
   private readonly decoder = new TextDecoder("utf-8");
-  private readonly parts: string[] = [];
-  private readonly queuedBatches = new Set<string[]>();
+  private readonly encoder = new TextEncoder();
+  private readonly queuedBatches = new Set<QueuedReplayBatch>();
+  private readonly terminalListeners = new Set<() => void>();
   private pending: string[] = [];
   private pendingBytes = 0;
+  private activeWriteBatch: QueuedReplayBatch | null = null;
+  private queuedBytes = 0;
   private totalBytes = 0;
   private chunkCount = 0;
   private disabled = false;
@@ -69,6 +106,16 @@ export class ReplaySpool {
     return this.terminal || this.disabled;
   }
 
+  /** 订阅 spool 终态或失效, 供 detached drain 动态收紧资源窗口. */
+  onTerminal(listener: () => void): () => void {
+    if (this.isTerminal) {
+      listener();
+      return () => {};
+    }
+    this.terminalListeners.add(listener);
+    return () => this.terminalListeners.delete(listener);
+  }
+
   /** 流热路径同步观察：累积并调度冲刷。 */
   observe(chunk: Uint8Array): void {
     if (this.disabled || this.terminal || chunk.byteLength === 0) return;
@@ -82,8 +129,12 @@ export class ReplaySpool {
       const text = this.decoder.decode(chunk, { stream: true });
       if (text.length === 0) return;
       this.pending.push(text);
-      this.parts.push(text);
-      this.pendingBytes += chunk.byteLength;
+      this.pendingBytes += this.encoder.encode(text).byteLength;
+
+      if (this.exceedsWriteBehindLimit(this.pendingBytes)) {
+        this.disable("write_behind_limit");
+        return;
+      }
 
       if (this.pendingBytes >= FLUSH_BYTES_THRESHOLD) {
         this.scheduleFlush(0);
@@ -117,22 +168,24 @@ export class ReplaySpool {
   }
 
   private enqueueFlush(): void {
-    const batch = this.pending;
-    if (batch.length === 0) return;
+    const chunks = this.pending;
+    if (chunks.length === 0) return;
+    const batch: QueuedReplayBatch = { chunks, byteSize: this.pendingBytes };
     this.pending = [];
     this.pendingBytes = 0;
-    this.queuedBatches.add(batch);
+    this.trackQueuedBatch(batch);
     // 续接体自带 try/catch：链永不 rejected；每个 await 之后复查 disabled，
     // 防止与 disable/halt 竞态时在清理之后又写回 owning meta
     this.writeChain = this.writeChain.then(async () => {
       try {
         if (this.disabled || this.aborting) return;
-        const expectedChunkCount = this.chunkCount + batch.length;
+        const expectedChunkCount = this.chunkCount + batch.chunks.length;
         const appended = await this.store.writeOwned(
           this.identity.replayId,
           this.ownerToken,
           this.buildMeta("owning", { chunkCount: expectedChunkCount }),
-          batch
+          this.chunkCount,
+          batch.chunks
         );
         if (this.disabled || this.aborting) return;
         if (appended === null) {
@@ -144,6 +197,10 @@ export class ReplaySpool {
           this.halt("owner_lease_lost");
           return;
         }
+        if (appended === "chunk_count_mismatch" || appended !== expectedChunkCount) {
+          this.disable("chunk_count_mismatch");
+          return;
+        }
         this.chunkCount = appended;
         this.metaWritten = true;
       } catch (error) {
@@ -153,7 +210,7 @@ export class ReplaySpool {
         });
         this.disable("flush_error");
       } finally {
-        this.queuedBatches.delete(batch);
+        this.releaseQueuedBatch(batch);
       }
     });
   }
@@ -202,7 +259,8 @@ export class ReplaySpool {
         const chunkCount = await this.store.writeOwned(
           this.identity.replayId,
           this.ownerToken,
-          this.buildMeta("owning")
+          this.buildMeta("owning"),
+          0
         );
         if (this.disabled || this.aborting) return;
         if (chunkCount === null) {
@@ -211,6 +269,10 @@ export class ReplaySpool {
         }
         if (chunkCount === false) {
           this.halt("owner_lease_lost");
+          return;
+        }
+        if (chunkCount === "chunk_count_mismatch" || chunkCount !== 0) {
+          this.disable("chunk_count_mismatch");
           return;
         }
         this.chunkCount = chunkCount;
@@ -232,27 +294,37 @@ export class ReplaySpool {
   async completeAfterBilling(messageRequestId: number | null): Promise<void> {
     if (this.disabled || this.terminal) return;
     this.terminal = true;
+    this.notifyTerminal();
     this.clearFlushTimer();
     const tail = this.decoder.decode();
     if (tail.length > 0) {
       this.pending.push(tail);
-      this.parts.push(tail);
+      this.pendingBytes += this.encoder.encode(tail).byteLength;
     }
-    const batch = this.pending;
+    if (this.exceedsWriteBehindLimit(this.pendingBytes)) {
+      this.disable("write_behind_limit");
+      await this.writeChain;
+      return;
+    }
+    const batch: QueuedReplayBatch = {
+      chunks: this.pending,
+      byteSize: this.pendingBytes,
+    };
     this.pending = [];
     this.pendingBytes = 0;
-    this.queuedBatches.add(batch);
+    this.trackQueuedBatch(batch);
 
     this.writeChain = this.writeChain.then(async () => {
       let pgPersisted = false;
       try {
         if (this.disabled || this.aborting) return;
-        const expectedChunkCount = this.chunkCount + batch.length;
+        const expectedChunkCount = this.chunkCount + batch.chunks.length;
         const appended = await this.store.writeOwned(
           this.identity.replayId,
           this.ownerToken,
           this.buildMeta("owning", { chunkCount: expectedChunkCount }),
-          batch
+          this.chunkCount,
+          batch.chunks
         );
         if (appended === false) {
           throw new Error("replay owner lease lost before completion");
@@ -261,23 +333,47 @@ export class ReplaySpool {
           // 尾批或 owning meta 丢失时热层条目不完整，绝不能置 completed
           throw new Error("final replay flush failed");
         }
+        if (appended === "chunk_count_mismatch" || appended !== expectedChunkCount) {
+          throw new Error("replay chunks changed before completion");
+        }
         this.chunkCount = appended;
         this.metaWritten = true;
-        const payload = this.takePayload();
-        // 先写 PG（持久 payload），再翻 Redis meta 为 completed（热层可服务）
-        const persistResult = await this.store.persistCompleted({
-          replayId: this.identity.replayId,
-          verifier: this.identity.verifier,
-          scopeTag: this.identity.scopeTag,
-          keyId: this.identity.keyId,
-          userId: this.identity.userId,
-          format: this.identity.format,
-          model: this.identity.model,
-          statusCode: this.statusCode,
-          headers: this.headers,
-          payload,
-          byteSize: this.totalBytes,
-          sourceMessageRequestId: messageRequestId,
+        // 尾批已经进入 Redis，后续 limiter 等待与 PG await 不应继续保留其副本。
+        this.releaseQueuedBatch(batch, true);
+        // Redis 是活跃 spool 的唯一长期正文副本. 大 payload 的 fenced 读取,
+        // 组装和 PG await 共用同一并发槽, 避免终态同秒到达形成 heap 峰值.
+        const persistResult = await withPayloadRebuildSlot(this.totalBytes, async () => {
+          if (this.disabled || this.aborting) {
+            throw new Error("replay spool stopped before payload rebuild");
+          }
+          const chunks = await this.store.readOwnedChunks(
+            this.identity.replayId,
+            this.ownerToken,
+            this.chunkCount
+          );
+          if (chunks === false) {
+            throw new Error("replay owner lease lost or chunks incomplete before completion");
+          }
+          if (chunks === null) {
+            throw new Error("final replay payload read failed");
+          }
+          const payload = chunks.join("");
+          chunks.length = 0;
+          // 先写 PG（持久 payload），再翻 Redis meta 为 completed（热层可服务）
+          return this.store.persistCompleted({
+            replayId: this.identity.replayId,
+            verifier: this.identity.verifier,
+            scopeTag: this.identity.scopeTag,
+            keyId: this.identity.keyId,
+            userId: this.identity.userId,
+            format: this.identity.format,
+            model: this.identity.model,
+            statusCode: this.statusCode,
+            headers: this.headers,
+            payload,
+            byteSize: this.totalBytes,
+            sourceMessageRequestId: messageRequestId,
+          });
         });
         pgPersisted = true;
         const completed = await this.store.completeOwned(
@@ -321,8 +417,7 @@ export class ReplaySpool {
           )
           .catch(() => false);
       } finally {
-        this.queuedBatches.delete(batch);
-        this.clearPayload();
+        this.releaseQueuedBatch(batch);
         this.release();
       }
     });
@@ -337,11 +432,11 @@ export class ReplaySpool {
     }
     if (this.terminal) return;
     this.terminal = true;
+    this.notifyTerminal();
     this.aborting = true;
     this.clearTimer();
     this.pending = [];
     this.pendingBytes = 0;
-    this.clearPayload();
     this.clearQueuedBatches();
     this.abortPromise = this.writeChain.then(async () => {
       try {
@@ -375,9 +470,9 @@ export class ReplaySpool {
   private teardown(reason: string, deleteEntry: boolean): void {
     if (this.disabled) return;
     this.disabled = true;
+    this.notifyTerminal();
     this.clearTimer();
     this.pending = [];
-    this.parts.length = 0;
     this.pendingBytes = 0;
     this.clearQueuedBatches();
     // 清理顺着 writeChain 串行：与 in-flight append 竞态时绝不出现「删除后又写回」
@@ -435,19 +530,54 @@ export class ReplaySpool {
     this.clearOwnerHeartbeat();
   }
 
-  private takePayload(): string {
-    const payload = this.parts.join("");
-    this.clearPayload();
-    return payload;
+  private notifyTerminal(): void {
+    const listeners = [...this.terminalListeners];
+    this.terminalListeners.clear();
+    for (const listener of listeners) {
+      try {
+        listener();
+      } catch (error) {
+        logger.debug("[ReplaySpool] terminal listener failed", {
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
   }
 
-  private clearPayload(): void {
-    this.parts.length = 0;
+  private trackQueuedBatch(batch: QueuedReplayBatch): void {
+    this.queuedBatches.add(batch);
+    if (this.activeWriteBatch) {
+      this.queuedBytes += batch.byteSize;
+    } else {
+      this.activeWriteBatch = batch;
+    }
+  }
+
+  private releaseQueuedBatch(batch: QueuedReplayBatch, clearChunks = false): void {
+    if (!this.queuedBatches.delete(batch)) return;
+    if (clearChunks) batch.chunks.length = 0;
+    if (this.activeWriteBatch === batch) {
+      this.activeWriteBatch = null;
+      const next = this.queuedBatches.values().next().value as QueuedReplayBatch | undefined;
+      if (next) {
+        this.activeWriteBatch = next;
+        this.queuedBytes = Math.max(0, this.queuedBytes - next.byteSize);
+      }
+      return;
+    }
+    this.queuedBytes = Math.max(0, this.queuedBytes - batch.byteSize);
+  }
+
+  private exceedsWriteBehindLimit(additionalBytes: number): boolean {
+    if (!this.activeWriteBatch) return false;
+    return this.queuedBytes + additionalBytes > MAX_WRITE_BEHIND_BYTES;
   }
 
   private clearQueuedBatches(): void {
-    for (const batch of this.queuedBatches) batch.length = 0;
+    for (const batch of this.queuedBatches) batch.chunks.length = 0;
     this.queuedBatches.clear();
+    this.activeWriteBatch = null;
+    this.queuedBytes = 0;
   }
 }
 

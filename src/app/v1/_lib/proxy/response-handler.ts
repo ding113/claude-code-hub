@@ -4219,12 +4219,49 @@ export class ProxyResponseHandler {
       }, idleTimeoutMs);
     };
     let cleanupClientAbortListener = () => {};
+    let cleanupReplaySpoolTerminalListener = () => {};
     let clientDetachHandled = false;
+    let clientDetachStartedAt: number | null = null;
+    const expireClientAbortDrain = () => {
+      logger.info("ResponseHandler: Client abort drain window exceeded", {
+        taskId,
+        providerId: provider.id,
+        messageId: messageContext.id,
+        clientAbortDrainTimeoutMs,
+      });
+
+      try {
+        const sessionWithController = session as typeof session & {
+          responseController?: AbortController;
+        };
+        sessionWithController.responseController?.abort(new Error("client_abort_drain_timeout"));
+      } catch (e) {
+        logger.warn("ResponseHandler: Failed to abort upstream after client drain timeout", {
+          taskId,
+          providerId: provider.id,
+          error: e,
+        });
+      }
+
+      const drainTimeoutError = new Error("client_abort_drain_timeout");
+      abortController.abort(drainTimeoutError);
+      responsePump?.cancelSource(drainTimeoutError);
+    };
+    const armClientAbortDrainTimer = () => {
+      clearClientAbortDrainTimer();
+      if (responsePump?.getState() === "closed") return;
+      const detachedAt = clientDetachStartedAt ?? Date.now();
+      const elapsedMs = Math.max(0, Date.now() - detachedAt);
+      const remainingMs = Math.max(0, clientAbortDrainTimeoutMs - elapsedMs);
+      clientAbortDrainTimeoutId = setTimeout(expireClientAbortDrain, remainingMs);
+      clientAbortDrainTimeoutId.unref?.();
+    };
     const handleClientAbort = (reason?: unknown) => {
       if (responsePump?.getState() === "closed") return;
       responsePump?.startDrain(reason ?? "client_detached");
       if (clientDetachHandled) return;
       clientDetachHandled = true;
+      clientDetachStartedAt = Date.now();
       logger.debug("ResponseHandler: Client disconnected, cleaning up", {
         taskId,
         providerId: provider.id,
@@ -4237,31 +4274,7 @@ export class ProxyResponseHandler {
       if (!idleTimeoutId) {
         startIdleTimer();
       }
-      clientAbortDrainTimeoutId = setTimeout(() => {
-        logger.info("ResponseHandler: Client abort drain window exceeded", {
-          taskId,
-          providerId: provider.id,
-          messageId: messageContext.id,
-          clientAbortDrainTimeoutMs,
-        });
-
-        try {
-          const sessionWithController = session as typeof session & {
-            responseController?: AbortController;
-          };
-          sessionWithController.responseController?.abort(new Error("client_abort_drain_timeout"));
-        } catch (e) {
-          logger.warn("ResponseHandler: Failed to abort upstream after client drain timeout", {
-            taskId,
-            providerId: provider.id,
-            error: e,
-          });
-        }
-
-        const drainTimeoutError = new Error("client_abort_drain_timeout");
-        abortController.abort(drainTimeoutError);
-        responsePump?.cancelSource(drainTimeoutError);
-      }, clientAbortDrainTimeoutMs);
+      armClientAbortDrainTimer();
     };
 
     // 统计/结算只保留有界的“头 + 尾”文本快照，避免长流式响应把进程堆撑满。
@@ -4830,6 +4843,10 @@ export class ProxyResponseHandler {
       } catch {
         // env 解析失败保持 60s 现状
       }
+      cleanupReplaySpoolTerminalListener = replaySpool.onTerminal(() => {
+        clientAbortDrainTimeoutMs = Math.min(clientAbortDrainTimeoutMs, CLIENT_ABORT_DRAIN_MAX_MS);
+        if (clientDetachHandled) armClientAbortDrainTimer();
+      });
     }
 
     const observeChunk = (value: Uint8Array) => {
@@ -4910,6 +4927,8 @@ export class ProxyResponseHandler {
         cleanupResponseControllerAbortListener();
         cleanupClientAbortListener();
         cleanupClientAbortListener = () => {};
+        cleanupReplaySpoolTerminalListener();
+        cleanupReplaySpoolTerminalListener = () => {};
         clearClientAbortDrainTimer();
         clearIdleTimer();
         clearResponseTimeoutOnce();
