@@ -23,7 +23,9 @@ services:
       MAX_RETRY_ATTEMPTS_DEFAULT: ${MAX_RETRY_ATTEMPTS_DEFAULT:-1}
       LANGFUSE_SAMPLE_RATE: ${LANGFUSE_SAMPLE_RATE:-1.0}
       ENABLE_CURL_IMPERSONATE: "true"
-      # CURL_IMPERSONATE_HOSTS 留空 = 全站开启 TLS 指纹伪装(所有 provider 请求都走 curl_chrome116)
+      # CURL_IMPERSONATE_HOSTS 留空 = 全站开启 TLS 指纹伪装
+      IMPERSONATE_PROXY_PORT: "18686"
+      IMPERSONATE_PROXY_POOL_SIZE: "4"
       TZ: Asia/Shanghai
     network_mode: host
     volumes:
