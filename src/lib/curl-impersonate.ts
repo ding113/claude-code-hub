@@ -1,5 +1,7 @@
 import "server-only";
 
+import { spawn } from "node:child_process";
+import type { Readable } from "node:stream";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { logger } from "@/lib/logger";
@@ -12,19 +14,32 @@ export const CURL_IMPERSONATE_ENABLED = !!process.env.ENABLE_CURL_IMPERSONATE;
 
 /**
  * 需要 TLS 指纹模拟的上游域名(逗号分隔,支持子域)。
- * 只有被 Cloudflare 按指纹风控的站点需要;白名单外保持原生 fetch,
- * 避免影响其他 provider 的行为。
+ * 为空 = 全站开启伪装(不限定域名)。
  */
 const CURL_IMPERSONATE_HOSTS = (process.env.CURL_IMPERSONATE_HOSTS ?? "")
   .split(",")
   .map((h) => h.trim().toLowerCase())
   .filter(Boolean);
 
-/** URL 的 hostname 是否命中指纹模拟白名单。 */
+/** 是否全站开启伪装(未配置白名单域名)。 */
+export const CURL_IMPERSONATE_ALL = CURL_IMPERSONATE_ENABLED && CURL_IMPERSONATE_HOSTS.length === 0;
+
+/**
+ * URL 是否命中指纹模拟范围:
+ * - 全站模式(未配置 CURL_IMPERSONATE_HOSTS)→ 所有 http(s) URL 都伪装;
+ * - 白名单模式 → 仅命中域名的 URL 伪装。
+ */
 export function shouldImpersonateProviderUrl(url: string): boolean {
-  if (!CURL_IMPERSONATE_ENABLED || CURL_IMPERSONATE_HOSTS.length === 0) {
-    return false;
+  if (!CURL_IMPERSONATE_ENABLED) return false;
+  if (CURL_IMPERSONATE_ALL) {
+    try {
+      const proto = new URL(url).protocol;
+      return proto === "http:" || proto === "https:";
+    } catch {
+      return false;
+    }
   }
+  if (CURL_IMPERSONATE_HOSTS.length === 0) return false;
   try {
     const hostname = new URL(url).hostname.toLowerCase();
     return CURL_IMPERSONATE_HOSTS.some(
@@ -87,4 +102,225 @@ export async function impersonateFetch(
       signal: AbortSignal.timeout(30_000),
     });
   }
+}
+
+/** curl 子进程请求结果,形状对齐 undici.request 的响应(forwarder 复用)。 */
+export interface ImpersonateRequestResult {
+  statusCode: number;
+  statusText: string;
+  headers: Record<string, string | string[]>;
+  /** 响应体 Node 流(含错误处理器),与 undiciRes.body 同形状。 */
+  body: Readable;
+}
+
+/**
+ * 流式版本:用 curl_chrome116 子进程发请求,`-D -` 把响应头 dump 到 stdout
+ * 头部,解析出状态码/headers 后,剩余字节作为 body 流返回。
+ * 保持与 undici.request 的响应形状一致,forwarder 可直接复用现有
+ * gzip 处理 / node 流转 web 流 / 错误处理逻辑。
+ * 子进程失败(非 HTTP 响应)时 reject,由调用方决定 fallback。
+ */
+export function impersonateRequest(
+  url: string,
+  init: {
+    method?: string;
+    headers?: Record<string, string>;
+    body?: string | Uint8Array | null;
+    signal?: AbortSignal;
+    bodyTimeoutMs?: number;
+    proxyUrl?: string | null;
+  } = {}
+): Promise<ImpersonateRequestResult> {
+  return new Promise((resolve, reject) => {
+    const method = init.method ?? "GET";
+    const bodyTimeoutMs = init.bodyTimeoutMs ?? 120_000;
+    const connectTimeoutMs = Math.min(bodyTimeoutMs, 30_000);
+
+    const args = [
+      "-sS",
+      "-N", // 无缓冲输出:SSE 等流式响应边到边转
+      "-D",
+      "-", // 响应头 dump 到 stdout(位于 body 之前)
+      "-o",
+      "-", // body 写 stdout
+      "-X",
+      method,
+      "--connect-timeout",
+      String(Math.max(1, Math.floor(connectTimeoutMs / 1000))),
+      "--max-time",
+      String(Math.max(5, Math.floor(bodyTimeoutMs / 1000))),
+    ];
+
+    for (const [k, v] of Object.entries(init.headers ?? {})) {
+      if (k.toLowerCase() === "user-agent") continue; // wrapper 自带 Chrome UA
+      args.push("-H", `${k}: ${v}`);
+    }
+    if (init.proxyUrl) args.push("-x", init.proxyUrl);
+    let bodyRaw: string | null = null;
+    if (init.body != null) {
+      bodyRaw =
+        typeof init.body === "string"
+          ? init.body
+          : Buffer.from(init.body.buffer, init.body.byteOffset, init.body.byteLength).toString("utf8");
+      // body 走 stdin(@-) 而非 argv:argv 单参数上限 128KB(MAX_ARG_STRLEN),
+      // 大请求体(如 300KB+ 的 /v1/responses)会 spawn E2BIG
+      args.push("--data-binary", "@-");
+    }
+    args.push(url);
+
+    let child;
+    try {
+      child = spawn(CURL_IMPERSONATE_BIN, args, {
+        stdio: ["pipe", "pipe", "pipe"],
+      });
+    } catch (error) {
+      reject(error instanceof Error ? error : new Error(String(error)));
+      return;
+    }
+    if (bodyRaw != null) {
+      child.stdin.on("error", () => {
+        // 管道写失败(子进程已退出)忽略,exit 事件会兜底
+      });
+      child.stdin.end(bodyRaw);
+    }
+
+    const abortHandler = () => {
+      if (!child.killed) child.kill("SIGKILL");
+    };
+    if (init.signal) {
+      if (init.signal.aborted) {
+        abortHandler();
+      } else {
+        init.signal.addEventListener("abort", abortHandler, { once: true });
+      }
+    }
+
+    // 解析 stdout:先累积到 \r\n\r\n(header 结束),然后切出 body 流
+    let headerBuffer = Buffer.alloc(0);
+    let bodyStream: import("node:stream").PassThrough | null = null;
+    let settled = false;
+
+    const fail = (err: Error) => {
+      if (settled) return;
+      settled = true;
+      if (init.signal) init.signal.removeEventListener("abort", abortHandler);
+      if (!child.killed) child.kill("SIGKILL");
+      reject(err);
+    };
+
+    const succeed = (result: ImpersonateRequestResult) => {
+      if (settled) return;
+      settled = true;
+      if (init.signal) init.signal.removeEventListener("abort", abortHandler);
+      resolve(result);
+    };
+
+    const parseHeaderBlock = (block: string): ImpersonateRequestResult => {
+      const lines = block.split(/\r?\n/);
+      let statusCode = 0;
+      let statusText = "";
+      const headers: Record<string, string | string[]> = {};
+      for (const line of lines) {
+        if (line.startsWith("HTTP/")) {
+          const m = line.match(/^HTTP\/\S+\s+(\d{3})(?:\s+(.*))?$/);
+          if (m) {
+            statusCode = Number.parseInt(m[1], 10);
+            statusText = m[2]?.trim() ?? "";
+          }
+          continue;
+        }
+        const idx = line.indexOf(":");
+        if (idx <= 0) continue;
+        const key = line.slice(0, idx).trim().toLowerCase();
+        const value = line.slice(idx + 1).trim();
+        const existing = headers[key];
+        if (existing === undefined) {
+          headers[key] = value;
+        } else if (Array.isArray(existing)) {
+          existing.push(value);
+        } else {
+          headers[key] = [existing, value];
+        }
+      }
+      if (!bodyStream) {
+        throw new Error("[curl-impersonate] body stream not ready");
+      }
+      return { statusCode, statusText, headers, body: bodyStream };
+    };
+
+    child.stdout.on("data", (chunk: Buffer) => {
+      if (bodyStream) {
+        bodyStream.push(chunk);
+        return;
+      }
+      headerBuffer = Buffer.concat([headerBuffer, chunk]);
+      const idx = headerBuffer.indexOf(Buffer.from("\r\n\r\n"));
+      if (idx === -1) {
+        if (headerBuffer.length > 64 * 1024) {
+          fail(new Error(`[curl-impersonate] oversized header block for ${url}`));
+        }
+        return;
+      }
+      const headerBlock = headerBuffer.subarray(0, idx).toString("utf8");
+      const bodyStart = idx + 4;
+      const rest = headerBuffer.subarray(bodyStart);
+      const passthrough = new (require("node:stream").PassThrough)() as import("node:stream").PassThrough;
+      bodyStream = passthrough;
+      if (rest.length > 0) passthrough.push(rest);
+      try {
+        succeed(parseHeaderBlock(headerBlock));
+      } catch (error) {
+        fail(error instanceof Error ? error : new Error(String(error)));
+      }
+    });
+
+    child.stdout.on("error", (err) => {
+      // 流错误(如过早关闭):若已 resolve 则交给 body 的错误处理器
+      if (!settled) fail(err instanceof Error ? err : new Error(String(err)));
+    });
+
+    child.stderr.on("data", () => {
+      // 忽略 stderr;错误码由 exit 事件处理
+    });
+
+    child.on("error", (err) => {
+      fail(err instanceof Error ? err : new Error(String(err)));
+    });
+
+    child.on("exit", (code, signal) => {
+      // 正常 exit:若从未发出 body(如 HEAD/204)且 header 已解析,补一个空流
+      if (!settled && bodyStream === null) {
+        const passthrough = new (require("node:stream").PassThrough)() as import("node:stream").PassThrough;
+        bodyStream = passthrough;
+        if (headerBuffer.length > 0) {
+          const idx = headerBuffer.indexOf(Buffer.from("\r\n\r\n"));
+          if (idx !== -1) {
+            try {
+              succeed(parseHeaderBlock(headerBuffer.subarray(0, idx).toString("utf8")));
+              passthrough.end();
+              return;
+            } catch (error) {
+              fail(error instanceof Error ? error : new Error(String(error)));
+              return;
+            }
+          }
+        }
+        fail(
+          new Error(
+            `[curl-impersonate] exited ${code ?? "null"} signal=${signal ?? "null"} before headers for ${url}`
+          )
+        );
+        return;
+      }
+      if (!settled) {
+        fail(
+          new Error(
+            `[curl-impersonate] exited ${code ?? "null"} signal=${signal ?? "null"} before headers for ${url}`
+          )
+        );
+      }
+      // 已 resolve:正常结束 body 流
+      if (bodyStream) bodyStream.end();
+    });
+  });
 }
