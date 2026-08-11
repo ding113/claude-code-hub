@@ -48,10 +48,10 @@ describe("EnvSchema - STORE_SESSION_RESPONSE_BODY", () => {
     expect(result.STORE_SESSION_RESPONSE_BODY).toBe(true);
   });
 
-  it("defaults the response body limit to 1 MiB", () => {
+  it("defaults the response body limit to 5 MiB", () => {
     delete process.env.SESSION_RESPONSE_BODY_MAX_BYTES;
     const result = EnvSchema.parse(process.env);
-    expect(result.SESSION_RESPONSE_BODY_MAX_BYTES).toBe(1024 * 1024);
+    expect(result.SESSION_RESPONSE_BODY_MAX_BYTES).toBe(5 * 1024 * 1024);
   });
 
   it("accepts the inclusive 64 KiB and 64 MiB response body limit boundaries", () => {

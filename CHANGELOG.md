@@ -10,8 +10,8 @@
 
 - 修复 Replay owner 在客户端断线后保留完整流正文和 300 秒传输资源导致的内存失控：限制 Redis
   write-behind backlog，Replay 失效后按断线起点恢复 60 秒 drain，并为 Redis session response body
-  增加默认 1 MiB 的可配置存储上限，避免大 SSE 正文及 before/after 快照放大内存和持久化压力
-  (#1408)
+  增加默认 5 MiB 的可配置存储上限，避免大 SSE 正文及 before/after 快照放大内存和持久化压力；
+  三份 response body 的物理存储去重由 #1415 跟踪 (#1408)
 
 ---
 

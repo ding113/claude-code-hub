@@ -163,7 +163,7 @@ export const EnvSchema = z.object({
     .int()
     .min(64 * 1024)
     .max(64 * 1024 * 1024)
-    .default(1024 * 1024),
+    .default(5 * 1024 * 1024),
   DEBUG_MODE: z.string().default("false").transform(booleanTransform),
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace"]).default("info"),
   TZ: z.string().default("Asia/Shanghai"),

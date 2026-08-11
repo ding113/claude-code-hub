@@ -211,9 +211,9 @@ ArrayBuffer 到 300 秒的现象。
    `write_backlog_too_large` fail-open 关闭当前 spool，并立即清空 pending/queued batch。
 4. spool disable、halt 或 abort 通过一次性 `onInactive` 通知 response handler；若客户端已断开，
    drain 从 Replay 300 秒降回普通 60 秒，并从实际断线时刻计算剩余时间。
-5. 新增 `SESSION_RESPONSE_BODY_MAX_BYTES`，默认 1 MiB、范围 64 KiB 到 64 MiB。legacy response
+5. 新增 `SESSION_RESPONSE_BODY_MAX_BYTES`，默认 5 MiB、范围 64 KiB 到 64 MiB。legacy response
    和 before/after snapshot 都按 UTF-8 字节限制；超限时删除同 key 的旧正文，但继续保存
-   headers/meta。
+   headers/meta。三份 response body 的物理存储去重由 #1415 跟踪。
 6. 保留 Replay fenced owner、终态计费屏障、live attach、PG durable winner 和冲突处理语义。
 
 ## 修复负载回归
@@ -255,8 +255,9 @@ rdb_last_cow_size       1138688
 container               running, oom=false, exit=0
 ```
 
-这证明默认 1 MiB session body 边界消除了原先约 1.50 GiB 的三份正文驻留，并已跨过
-`save 300 100` 的 RDB fork 点。
+上述负载回归显式使用 1 MiB session body 边界，证明它消除了原先约 1.50 GiB 的三份正文驻留，
+并已跨过 `save 300 100` 的 RDB fork 点。当前产品默认值为 5 MiB；1 MiB 到 5 MiB 正文仍可能
+形成三份 Redis value，该放大边界及 5 MiB 负载/RDB 验证由 #1415 跟踪，不属于上述实验已证明的范围。
 
 ## 测试与证据边界
 

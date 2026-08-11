@@ -59,7 +59,7 @@ import { SessionTracker } from "./session-tracker";
 const RESERVED_INTERNAL_HEADER_SET = new Set(
   RESERVED_INTERNAL_HEADERS.map((header) => header.toLowerCase())
 );
-const DEFAULT_SESSION_RESPONSE_BODY_MAX_BYTES = 1024 * 1024;
+const DEFAULT_SESSION_RESPONSE_BODY_MAX_BYTES = 5 * 1024 * 1024;
 
 function canStoreSessionResponseBody(value: string, context: string): boolean {
   const configuredMaxBytes = getEnvConfig().SESSION_RESPONSE_BODY_MAX_BYTES;
