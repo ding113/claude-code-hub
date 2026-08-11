@@ -48,7 +48,12 @@ export class ProxyWarmupGuard {
     if (session.sessionId && session.shouldPersistSessionDebugArtifacts()) {
       const seq = session.getRequestSequence();
       await Promise.allSettled([
-        SessionManager.storeSessionResponse(session.sessionId, responseText, seq, authState.key.id),
+        SessionManager.storeSessionResponseBodySet(
+          session.sessionId,
+          { legacy: responseText },
+          seq,
+          authState.key.id
+        ),
         SessionManager.storeSessionResponseHeaders(
           session.sessionId,
           responseHeaders,

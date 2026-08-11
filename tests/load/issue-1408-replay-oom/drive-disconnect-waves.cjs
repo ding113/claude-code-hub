@@ -26,6 +26,16 @@ const abortDelayMs = parseBoundedInteger(
   0,
   60000
 );
+const requestMode = parseEnum(process.env.CCH_REQUEST_MODE || "disconnect", "CCH_REQUEST_MODE", [
+  "disconnect",
+  "complete",
+]);
+const completionTimeoutMs = parseBoundedInteger(
+  process.env.CCH_COMPLETION_TIMEOUT_MS || "60000",
+  "CCH_COMPLETION_TIMEOUT_MS",
+  1,
+  3600000
+);
 const mockReceiptTimeoutMs = parseBoundedInteger(
   process.env.CCH_MOCK_RECEIPT_TIMEOUT_MS || "30000",
   "CCH_MOCK_RECEIPT_TIMEOUT_MS",
@@ -37,6 +47,8 @@ if (!model || model.length > 256) {
   throw new Error("CCH_REQUEST_MODEL must contain between 1 and 256 characters");
 }
 const key = readApiKey();
+const sessionManifestPath = process.env.CCH_SESSION_MANIFEST?.trim() || null;
+const manifestSessionIds = [];
 
 function parseHttpUrl(raw, name) {
   const url = new URL(raw);
@@ -59,6 +71,13 @@ function parseBoundedInteger(raw, name, minimum, maximum) {
     throw new Error(`${name} must be an integer between ${minimum} and ${maximum}`);
   }
   return value;
+}
+
+function parseEnum(raw, name, values) {
+  if (!values.includes(raw)) {
+    throw new Error(`${name} must be one of: ${values.join(", ")}`);
+  }
+  return raw;
 }
 
 function readApiKey() {
@@ -119,6 +138,28 @@ function hashScenario(value) {
   return [...value].reduce((hash, char) => (hash * 33 + char.charCodeAt(0)) & 0xff, 0);
 }
 
+function writeSessionManifest(completedWaves) {
+  if (!sessionManifestPath) return;
+  const temporaryPath = `${sessionManifestPath}.tmp`;
+  fs.writeFileSync(
+    temporaryPath,
+    `${JSON.stringify(
+      {
+        scenarioPrefix: normalizedScenarioPrefix,
+        waves,
+        requestsPerWave: perWave,
+        completedWaves,
+        requestSequence: 1,
+        sessionIds: manifestSessionIds,
+      },
+      null,
+      2
+    )}\n`,
+    { mode: 0o600 }
+  );
+  fs.renameSync(temporaryPath, sessionManifestPath);
+}
+
 function startRequest(scenario, scenarioHash, wave, index) {
   const body = JSON.stringify({
     model,
@@ -140,7 +181,15 @@ function startRequest(scenario, scenarioHash, wave, index) {
   const suffix = `${scenarioHash.toString(16).padStart(2, "0")}${(wave + 1)
     .toString(16)
     .padStart(2, "0")}${index.toString(16).padStart(2, "0")}000000`;
-  const handle = { request: null, response: null };
+  const sessionId = `019c1408-0000-7000-8000-${suffix}`;
+  let settleCompletion;
+  let rejectCompletion;
+  const completion = new Promise((resolve, reject) => {
+    settleCompletion = resolve;
+    rejectCompletion = reject;
+  });
+  if (requestMode === "disconnect") completion.catch(() => {});
+  const handle = { request: null, response: null, sessionId, completion };
   const request = transportFor(url).request(
     url,
     {
@@ -149,17 +198,22 @@ function startRequest(scenario, scenarioHash, wave, index) {
         authorization: `Bearer ${key}`,
         "content-type": "application/json",
         "content-length": Buffer.byteLength(body),
-        session_id: `019c1408-0000-7000-8000-${suffix}`,
+        session_id: sessionId,
       },
     },
     (response) => {
       handle.response = response;
+      if ((response.statusCode || 500) >= 400) {
+        rejectCompletion(new Error(`POST ${url} returned ${response.statusCode}`));
+      }
       response.on("data", () => {});
-      response.on("error", () => {});
+      response.once("end", settleCompletion);
+      response.once("error", rejectCompletion);
+      response.once("aborted", () => rejectCompletion(new Error(`POST ${url} response aborted`)));
     }
   );
   handle.request = request;
-  request.on("error", () => {});
+  request.once("error", rejectCompletion);
   request.end(body);
   return handle;
 }
@@ -168,6 +222,23 @@ function abortRequests(handles) {
   for (const handle of handles) {
     handle.response?.destroy();
     handle.request?.destroy();
+  }
+}
+
+async function waitForCompletions(handles) {
+  let timeout;
+  try {
+    await Promise.race([
+      Promise.all(handles.map((handle) => handle.completion)),
+      new Promise((_, reject) => {
+        timeout = setTimeout(
+          () => reject(new Error(`response completion timeout after ${completionTimeoutMs}ms`)),
+          completionTimeoutMs
+        );
+      }),
+    ]);
+  } finally {
+    clearTimeout(timeout);
   }
 }
 
@@ -184,25 +255,42 @@ async function main() {
     let received;
     let confirmedAt;
     let abortedAt;
+    let completedAt;
+    let shouldAbort = requestMode === "disconnect";
     try {
       received = await waitForMock(scenario, before + perWave);
       confirmedAt = Date.now();
-      await sleep(abortDelayMs);
-      abortedAt = Date.now();
+      if (requestMode === "complete") {
+        await waitForCompletions(handles);
+        completedAt = Date.now();
+      } else {
+        await sleep(abortDelayMs);
+        abortedAt = Date.now();
+      }
+    } catch (error) {
+      shouldAbort = true;
+      throw error;
     } finally {
-      abortRequests(handles);
+      if (shouldAbort) abortRequests(handles);
     }
+
+    const sessionIds = handles.map((handle) => handle.sessionId);
+    manifestSessionIds.push(...sessionIds);
+    writeSessionManifest(wave + 1);
 
     process.stdout.write(
       `${JSON.stringify({
         wave,
         scenario,
+        sessionIds,
         perWave,
         mockBefore: before,
         mockReceived: received,
+        requestMode,
         confirmedAt,
+        completedAt,
         abortedAt,
-        abortDelayMs: abortedAt - confirmedAt,
+        abortDelayMs: abortedAt === undefined ? null : abortedAt - confirmedAt,
       })}\n`
     );
 

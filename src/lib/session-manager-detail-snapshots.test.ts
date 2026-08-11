@@ -49,7 +49,9 @@ const redisMock = {
   set: vi.fn().mockResolvedValue("OK"),
   expire: vi.fn().mockResolvedValue(1),
   incr: vi.fn().mockResolvedValue(1),
-  eval: vi.fn().mockResolvedValue(1),
+  eval: vi.fn((script: string) =>
+    Promise.resolve(script.includes("cch:session-response-bundle:read:v1") ? [0, 0, null] : 1)
+  ),
   pipeline: vi.fn(() => redisPipeline),
 };
 

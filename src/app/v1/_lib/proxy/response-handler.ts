@@ -2491,7 +2491,7 @@ export class ProxyResponseHandler {
     let finalResponse = response;
     let finalResponseBodyForSnapshot: string | null = null;
     let responseTransformFailed = false;
-    const persistNonStreamAfterSnapshot = (targetResponse: Response, body: string) => {
+    const persistNonStreamAfterSnapshot = (targetResponse: Response) => {
       if (!session.sessionId || !session.shouldPersistSessionDebugArtifacts()) {
         return;
       }
@@ -2500,7 +2500,6 @@ export class ProxyResponseHandler {
         session.sessionId,
         "after",
         {
-          body,
           headers: targetResponse.headers,
           meta: {
             upstreamUrl: null,
@@ -2560,35 +2559,13 @@ export class ProxyResponseHandler {
             // 存储响应体到 Redis（5分钟过期）
             if (session.sessionId && session.shouldPersistSessionDebugArtifacts()) {
               const beforeBody = (await consumeBeforeResponseBodySnapshot(session)) ?? responseText;
-              void SessionManager.storeSessionResponse(
+              void SessionManager.storeSessionResponseBodySet(
                 session.sessionId,
-                responseText,
+                { legacy: responseText, before: beforeBody, after: responseText },
                 session.requestSequence,
                 getSessionRequestOwnerKeyId(session)
               ).catch((err) => {
-                logger.error("[ResponseHandler] Failed to store response:", err);
-              });
-
-              const responseBeforeSnapshotTask = SessionManager.storeSessionResponsePhaseSnapshot?.(
-                session.sessionId,
-                "before",
-                { body: beforeBody },
-                session.requestSequence,
-                getSessionRequestOwnerKeyId(session)
-              );
-              responseBeforeSnapshotTask?.catch((err) => {
-                logger.error("[ResponseHandler] Failed to store response before snapshot:", err);
-              });
-
-              const responseAfterSnapshotTask = SessionManager.storeSessionResponsePhaseSnapshot?.(
-                session.sessionId,
-                "after",
-                { body: responseText },
-                session.requestSequence,
-                getSessionRequestOwnerKeyId(session)
-              );
-              responseAfterSnapshotTask?.catch((err) => {
-                logger.error("[ResponseHandler] Failed to store response after snapshot:", err);
+                logger.error("[ResponseHandler] Failed to store response body set:", err);
               });
             }
 
@@ -3137,29 +3114,22 @@ export class ProxyResponseHandler {
         // 存储响应体到 Redis（5分钟过期）
         if (session.sessionId && session.shouldPersistSessionDebugArtifacts()) {
           const beforeBody = (await consumeBeforeResponseBodySnapshot(session)) ?? responseText;
-          void SessionManager.storeSessionResponse(
+          void SessionManager.storeSessionResponseBodySet(
             session.sessionId,
-            responseText,
+            {
+              legacy: responseText,
+              before: beforeBody,
+              after: clientVisibleResponseText,
+            },
             session.requestSequence,
             getSessionRequestOwnerKeyId(session)
           ).catch((err) => {
-            logger.error("[ResponseHandler] Failed to store response:", err);
-          });
-
-          const responseBeforeSnapshotTask = SessionManager.storeSessionResponsePhaseSnapshot?.(
-            session.sessionId,
-            "before",
-            { body: beforeBody },
-            session.requestSequence,
-            getSessionRequestOwnerKeyId(session)
-          );
-          responseBeforeSnapshotTask?.catch((err) => {
-            logger.error("[ResponseHandler] Failed to store response before snapshot:", err);
+            logger.error("[ResponseHandler] Failed to store response body set:", err);
           });
 
           // after 快照复用本任务已经读取到的响应文本，避免再启动一个未受
           // AsyncTaskManager 管理的 clone().text() 读取分支。
-          persistNonStreamAfterSnapshot(finalResponse, clientVisibleResponseText);
+          persistNonStreamAfterSnapshot(finalResponse);
         }
 
         if (billableUsageMetrics && messageContext) {
@@ -3847,35 +3817,13 @@ export class ProxyResponseHandler {
               !streamSnapshot?.truncated &&
               session.shouldPersistSessionDebugArtifacts()
             ) {
-              void SessionManager.storeSessionResponse(
+              void SessionManager.storeSessionResponseBodySet(
                 session.sessionId,
-                allContent,
+                { legacy: allContent, before: allContent, after: allContent },
                 session.requestSequence,
                 getSessionRequestOwnerKeyId(session)
               ).catch((err) => {
-                logger.error("[ResponseHandler] Failed to store stream passthrough response:", err);
-              });
-
-              const responseBeforeSnapshotTask = SessionManager.storeSessionResponsePhaseSnapshot?.(
-                session.sessionId,
-                "before",
-                { body: allContent },
-                session.requestSequence,
-                getSessionRequestOwnerKeyId(session)
-              );
-              responseBeforeSnapshotTask?.catch((err) => {
-                logger.error("[ResponseHandler] Failed to store response before snapshot:", err);
-              });
-
-              const responseAfterSnapshotTask = SessionManager.storeSessionResponsePhaseSnapshot?.(
-                session.sessionId,
-                "after",
-                { body: allContent },
-                session.requestSequence,
-                getSessionRequestOwnerKeyId(session)
-              );
-              responseAfterSnapshotTask?.catch((err) => {
-                logger.error("[ResponseHandler] Failed to store response after snapshot:", err);
+                logger.error("[ResponseHandler] Failed to store response body set:", err);
               });
             } else if (session.sessionId && streamSnapshot?.truncated) {
               logger.warn("[ResponseHandler] Skip storing passthrough response: body too large", {
@@ -4423,35 +4371,13 @@ export class ProxyResponseHandler {
           !streamSnapshot?.truncated
         ) {
           const beforeBody = allContent;
-          void SessionManager.storeSessionResponse(
+          void SessionManager.storeSessionResponseBodySet(
             session.sessionId,
-            allContent,
+            { legacy: allContent, before: beforeBody, after: allContent },
             session.requestSequence,
             getSessionRequestOwnerKeyId(session)
           ).catch((err) => {
-            logger.error("[ResponseHandler] Failed to store response:", err);
-          });
-
-          const responseAfterSnapshotTask = SessionManager.storeSessionResponsePhaseSnapshot?.(
-            session.sessionId,
-            "after",
-            { body: allContent },
-            session.requestSequence,
-            getSessionRequestOwnerKeyId(session)
-          );
-          responseAfterSnapshotTask?.catch((err) => {
-            logger.error("[ResponseHandler] Failed to store response after snapshot:", err);
-          });
-
-          const responseBeforeSnapshotTask = SessionManager.storeSessionResponsePhaseSnapshot?.(
-            session.sessionId,
-            "before",
-            { body: beforeBody },
-            session.requestSequence,
-            getSessionRequestOwnerKeyId(session)
-          );
-          responseBeforeSnapshotTask?.catch((err) => {
-            logger.error("[ResponseHandler] Failed to store response before snapshot:", err);
+            logger.error("[ResponseHandler] Failed to store response body set:", err);
           });
         } else if (session.sessionId && streamSnapshot?.truncated) {
           discardBeforeResponseBodySnapshot(session);

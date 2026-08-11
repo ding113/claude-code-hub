@@ -45,6 +45,7 @@ vi.mock("@/lib/session-manager", () => ({
   SessionManager: {
     updateSessionUsage: vi.fn(async () => {}),
     storeSessionResponse: vi.fn(async () => {}),
+    storeSessionResponseBodySet: vi.fn(async () => {}),
     extractCodexPromptCacheKey: vi.fn(),
     updateSessionWithCodexCacheKey: vi.fn(async () => {}),
   },

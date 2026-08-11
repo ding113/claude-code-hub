@@ -4,16 +4,38 @@ const http = require("node:http");
 
 const host = process.env.CCH_MOCK_HOST || "0.0.0.0";
 const port = parseBoundedInteger(process.env.CCH_MOCK_PORT || "3001", "CCH_MOCK_PORT", 0, 65535);
-const totalMiB = parseBoundedNumber(process.env.CCH_MOCK_MIB || "8", "CCH_MOCK_MIB", 0.0625, 64);
+const responseBytes = process.env.CCH_MOCK_RESPONSE_BYTES
+  ? parseBoundedInteger(
+      process.env.CCH_MOCK_RESPONSE_BYTES,
+      "CCH_MOCK_RESPONSE_BYTES",
+      64 * 1024,
+      64 * 1024 * 1024
+    )
+  : Math.round(
+      parseBoundedNumber(process.env.CCH_MOCK_MIB || "5", "CCH_MOCK_MIB", 0.0625, 64) * 1024 * 1024
+    );
+const totalMiB = responseBytes / (1024 * 1024);
+const responseMode = parseEnum(
+  process.env.CCH_MOCK_RESPONSE_MODE || "disconnect",
+  "CCH_MOCK_RESPONSE_MODE",
+  ["disconnect", "complete"]
+);
 const maxRequestBytes = parseBoundedInteger(
   process.env.CCH_MOCK_MAX_REQUEST_BYTES || String(1024 * 1024),
   "CCH_MOCK_MAX_REQUEST_BYTES",
   1,
   16 * 1024 * 1024
 );
-const chunkText = "x".repeat(64 * 1024);
-const framesPerMiB = 16;
+const maxDeltaBytes = 64 * 1024;
 const counts = new Map();
+const completedCounts = new Map();
+const emittedBytesByScenario = new Map();
+
+const sseFramePrefix = 'data: {"type":"response.output_text.delta","delta":"';
+const sseFrameSuffix = '"}\n\n';
+const sseFrameOverheadBytes = Buffer.byteLength(sseFramePrefix + sseFrameSuffix, "utf8");
+const sseCompletedFrame =
+  'event: response.completed\ndata: {"type":"response.completed","response":{"status":"completed","usage":{"input_tokens":1,"output_tokens":1}}}\n\n';
 
 function parseBoundedNumber(raw, name, minimum, maximum) {
   const value = Number(raw);
@@ -29,6 +51,42 @@ function parseBoundedInteger(raw, name, minimum, maximum) {
     throw new Error(`${name} must be an integer between ${minimum} and ${maximum}`);
   }
   return value;
+}
+
+function parseEnum(raw, name, values) {
+  if (!values.includes(raw)) {
+    throw new Error(`${name} must be one of: ${values.join(", ")}`);
+  }
+  return raw;
+}
+
+function buildSseFrames(targetBytes, mode = responseMode) {
+  const terminalFrame = mode === "complete" ? sseCompletedFrame : "";
+  const terminalBytes = Buffer.byteLength(terminalFrame, "utf8");
+  const deltaBytes = targetBytes - terminalBytes;
+  if (!Number.isSafeInteger(targetBytes) || deltaBytes < sseFrameOverheadBytes) {
+    throw new Error(
+      `targetBytes must be an integer of at least ${sseFrameOverheadBytes + terminalBytes}`
+    );
+  }
+
+  const frames = [];
+  const maxFrameBytes = sseFrameOverheadBytes + maxDeltaBytes;
+  let remainingBytes = deltaBytes;
+  while (remainingBytes > 0) {
+    const frameBytes =
+      remainingBytes <= maxFrameBytes
+        ? remainingBytes
+        : Math.min(maxFrameBytes, remainingBytes - sseFrameOverheadBytes);
+    const frame = `${sseFramePrefix}${"x".repeat(frameBytes - sseFrameOverheadBytes)}${sseFrameSuffix}`;
+    if (Buffer.byteLength(frame, "utf8") !== frameBytes) {
+      throw new Error("failed to construct an exact-size SSE frame");
+    }
+    frames.push(frame);
+    remainingBytes -= frameBytes;
+  }
+  if (terminalFrame) frames.push(terminalFrame);
+  return frames;
 }
 
 function readBody(req) {
@@ -70,6 +128,10 @@ const server = http.createServer(async (req, res) => {
   if (req.method === "GET" && (req.url === "/health" || req.url === "/stats")) {
     writeJson(res, 200, {
       counts: Object.fromEntries(counts),
+      completedCounts: Object.fromEntries(completedCounts),
+      emittedBytesByScenario: Object.fromEntries(emittedBytesByScenario),
+      responseBytes,
+      responseMode,
       totalMiB,
     });
     return;
@@ -77,6 +139,8 @@ const server = http.createServer(async (req, res) => {
 
   if (req.method === "POST" && req.url === "/reset") {
     counts.clear();
+    completedCounts.clear();
+    emittedBytesByScenario.clear();
     writeJson(res, 200, { reset: true });
     return;
   }
@@ -106,6 +170,8 @@ const server = http.createServer(async (req, res) => {
       requestBytes: Buffer.byteLength(raw),
       scenario,
       ordinal: counts.get(scenario),
+      responseBytes,
+      responseMode,
       totalMiB,
     })}\n`
   );
@@ -117,20 +183,39 @@ const server = http.createServer(async (req, res) => {
     connection: "keep-alive",
   });
 
-  const totalFrames = Math.max(1, Math.ceil(totalMiB * framesPerMiB));
+  const frames = buildSseFrames(responseBytes, responseMode);
   let sent = 0;
+  let emittedBytes = 0;
   const writeNext = () => {
-    if (res.destroyed || sent >= totalFrames) return;
+    if (res.destroyed || sent >= frames.length) return;
+    const event = frames[sent];
     sent += 1;
-    const event = `data: ${JSON.stringify({
-      type: "response.output_text.delta",
-      delta: chunkText,
-    })}\n\n`;
-    if (!res.write(event)) {
-      res.once("drain", writeNext);
-    } else {
-      setImmediate(writeNext);
+    emittedBytes += Buffer.byteLength(event, "utf8");
+    if (sent === frames.length) {
+      completedCounts.set(scenario, (completedCounts.get(scenario) || 0) + 1);
+      emittedBytesByScenario.set(
+        scenario,
+        (emittedBytesByScenario.get(scenario) || 0) + emittedBytes
+      );
+      process.stdout.write(
+        `${JSON.stringify({
+          event: "response_emitted",
+          scenario,
+          emittedBytes,
+          frames: frames.length,
+        })}\n`
+      );
     }
+    const responseFullyEmitted = sent === frames.length;
+    const continueResponse = () => {
+      if (responseFullyEmitted && responseMode === "complete") {
+        res.end();
+        return;
+      }
+      writeNext();
+    };
+    if (!res.write(event)) res.once("drain", continueResponse);
+    else setImmediate(continueResponse);
   };
   writeNext();
 });
@@ -146,13 +231,30 @@ function shutdown() {
   for (const socket of sockets) socket.destroy();
 }
 
-process.on("SIGINT", shutdown);
-process.on("SIGTERM", shutdown);
+if (require.main === module) {
+  process.on("SIGINT", shutdown);
+  process.on("SIGTERM", shutdown);
 
-server.listen(port, host, () => {
-  const address = server.address();
-  const listeningPort = typeof address === "object" && address ? address.port : port;
-  process.stdout.write(
-    `${JSON.stringify({ event: "listening", host, port: listeningPort, totalMiB })}\n`
-  );
-});
+  server.listen(port, host, () => {
+    const address = server.address();
+    const listeningPort = typeof address === "object" && address ? address.port : port;
+    process.stdout.write(
+      `${JSON.stringify({
+        event: "listening",
+        host,
+        port: listeningPort,
+        responseBytes,
+        responseMode,
+        totalMiB,
+      })}\n`
+    );
+  });
+}
+
+module.exports = {
+  buildSseFrames,
+  responseBytes,
+  responseMode,
+  sseCompletedFrame,
+  sseFrameOverheadBytes,
+};

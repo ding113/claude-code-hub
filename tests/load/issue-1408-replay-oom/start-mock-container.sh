@@ -1,18 +1,37 @@
 #!/bin/sh
 set -eu
 
-if [ "$#" -lt 3 ] || [ "$#" -gt 5 ]; then
+if [ "$#" -lt 3 ] || [ "$#" -gt 6 ]; then
   printf '%s\n' \
-    "usage: start-mock-container.sh CONTAINER NETWORK HOST_PORT [PAYLOAD_MIB] [NODE_IMAGE]" >&2
+    "usage: start-mock-container.sh CONTAINER NETWORK HOST_PORT [RESPONSE_BYTES] [RESPONSE_MODE] [NODE_IMAGE]" >&2
   exit 2
 fi
 
 container="$1"
 network="$2"
 host_port="$3"
-payload_mib="${4:-8}"
-node_image="${5:-node:22-alpine}"
+response_bytes="${4:-5242880}"
+response_mode="${5:-disconnect}"
+node_image="${6:-node:22-alpine}"
 script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+
+case "$response_bytes" in
+  *[!0-9]* | "")
+    printf '%s\n' "RESPONSE_BYTES must be an integer between 65536 and 67108864" >&2
+    exit 2
+    ;;
+esac
+if [ "$response_bytes" -lt 65536 ] || [ "$response_bytes" -gt 67108864 ]; then
+  printf '%s\n' "RESPONSE_BYTES must be an integer between 65536 and 67108864" >&2
+  exit 2
+fi
+case "$response_mode" in
+  disconnect | complete) ;;
+  *)
+    printf '%s\n' "RESPONSE_MODE must be disconnect or complete" >&2
+    exit 2
+    ;;
+esac
 
 if docker container inspect "$container" >/dev/null 2>&1; then
   printf '%s\n' "container already exists: $container" >&2
@@ -23,7 +42,8 @@ docker run -d \
   --name "$container" \
   --network "$network" \
   -e CCH_MOCK_PORT=3001 \
-  -e CCH_MOCK_MIB="$payload_mib" \
+  -e CCH_MOCK_RESPONSE_BYTES="$response_bytes" \
+  -e CCH_MOCK_RESPONSE_MODE="$response_mode" \
   -p "127.0.0.1:$host_port:3001" \
   -v "$script_dir/mock-upstream.cjs:/fixture/mock-upstream.cjs:ro" \
   "$node_image" \

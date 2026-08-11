@@ -81,6 +81,7 @@ vi.mock("@/lib/session-manager", () => ({
   SessionManager: {
     updateSessionUsage: vi.fn(async () => undefined),
     storeSessionResponse: vi.fn(),
+    storeSessionResponseBodySet: vi.fn(async () => undefined),
     storeSessionResponsePhaseSnapshot: vi.fn(async () => undefined),
     extractCodexPromptCacheKey: vi.fn(),
     updateSessionWithCodexCacheKey: vi.fn(),
@@ -641,12 +642,10 @@ describe("Lease Budget Decrement after trackCostToRedis", () => {
       .mock.calls.filter(([calledTaskId]) => calledTaskId === taskId);
     expect(touchCalls.length).toBeGreaterThanOrEqual(2);
     expect(cloneSpy).toHaveBeenCalledTimes(1);
-    expect(SessionManager.storeSessionResponsePhaseSnapshot).toHaveBeenCalledWith(
+    expect(SessionManager.storeSessionResponseBodySet).toHaveBeenCalledWith(
       session.sessionId,
-      "after",
       expect.objectContaining({
-        body: expect.stringContaining('"type":"message"'),
-        meta: expect.objectContaining({ statusCode: 200 }),
+        after: expect.stringContaining('"type":"message"'),
       }),
       session.requestSequence,
       456

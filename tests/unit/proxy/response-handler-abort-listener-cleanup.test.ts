@@ -81,6 +81,7 @@ vi.mock("@/lib/session-manager", () => ({
   SessionManager: {
     clearSessionProvider: vi.fn(),
     storeSessionResponse: vi.fn(),
+    storeSessionResponseBodySet: vi.fn(async () => undefined),
     updateSessionUsage: vi.fn(),
     storeSessionRequestPhaseSnapshot: vi.fn(),
     storeSessionResponsePhaseSnapshot: vi.fn(),
