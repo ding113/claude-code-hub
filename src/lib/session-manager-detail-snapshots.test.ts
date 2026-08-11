@@ -45,6 +45,7 @@ const redisMock = {
     return Promise.resolve("OK");
   }),
   get: vi.fn((key: string) => Promise.resolve(redisStore.get(key) ?? null)),
+  del: vi.fn((key: string) => Promise.resolve(redisStore.delete(key) ? 1 : 0)),
   set: vi.fn().mockResolvedValue("OK"),
   expire: vi.fn().mockResolvedValue(1),
   incr: vi.fn().mockResolvedValue(1),
@@ -58,11 +59,13 @@ vi.mock("@/lib/redis", () => ({
 
 let mockStoreMessages = false;
 let mockStoreSessionResponseBody = true;
+let mockSessionResponseBodyMaxBytes = 1024 * 1024;
 
 vi.mock("@/lib/config/env.schema", () => ({
   getEnvConfig: () => ({
     STORE_SESSION_MESSAGES: mockStoreMessages,
     STORE_SESSION_RESPONSE_BODY: mockStoreSessionResponseBody,
+    SESSION_RESPONSE_BODY_MAX_BYTES: mockSessionResponseBodyMaxBytes,
     SESSION_TTL: 300,
   }),
 }));
@@ -76,6 +79,7 @@ describe("SessionManager detail snapshots", () => {
     redisMock.status = "ready";
     mockStoreMessages = false;
     mockStoreSessionResponseBody = true;
+    mockSessionResponseBodyMaxBytes = 1024 * 1024;
   });
 
   it("atomically persists the request sequence while expiring its owner marker", async () => {
@@ -390,6 +394,65 @@ describe("SessionManager detail snapshots", () => {
       headers: { "content-type": "application/json" },
       meta: { upstreamUrl: null, statusCode: 200 },
     });
+  });
+
+  it("skips only an oversized response body while preserving snapshot headers and meta", async () => {
+    mockSessionResponseBodyMaxBytes = 4;
+
+    await SessionManager.storeSessionResponsePhaseSnapshot(
+      "sess_oversized_response",
+      "after",
+      {
+        body: "12345",
+        headers: new Headers({ "content-type": "text/event-stream" }),
+        meta: { upstreamUrl: null, statusCode: 200 },
+      },
+      1
+    );
+
+    expect(
+      await SessionManager.getSessionResponsePhaseSnapshot("sess_oversized_response", "after", 1)
+    ).toEqual({
+      body: null,
+      headers: { "content-type": "text/event-stream" },
+      meta: { upstreamUrl: null, statusCode: 200 },
+    });
+    expect(loggerMock.warn).toHaveBeenCalledWith(
+      "SessionManager: Skipped oversized session response body",
+      { context: "snapshot:after", byteSize: 5, maxBytes: 4 }
+    );
+  });
+
+  it("removes a previous snapshot body when its replacement exceeds the limit", async () => {
+    mockSessionResponseBodyMaxBytes = 4;
+
+    await SessionManager.storeSessionResponsePhaseSnapshot(
+      "sess_replaced_response",
+      "after",
+      { body: "1234" },
+      1
+    );
+    await SessionManager.storeSessionResponsePhaseSnapshot(
+      "sess_replaced_response",
+      "after",
+      {
+        body: "12345",
+        headers: new Headers({ "content-type": "text/event-stream" }),
+        meta: { upstreamUrl: null, statusCode: 200 },
+      },
+      1
+    );
+
+    expect(
+      await SessionManager.getSessionResponsePhaseSnapshot("sess_replaced_response", "after", 1)
+    ).toEqual({
+      body: null,
+      headers: { "content-type": "text/event-stream" },
+      meta: { upstreamUrl: null, statusCode: 200 },
+    });
+    expect(redisMock.del).toHaveBeenCalledWith(
+      "session:sess_replaced_response:req:1:snapshot:response:after:body"
+    );
   });
 
   it("treats empty headers as missing instead of an empty record", async () => {

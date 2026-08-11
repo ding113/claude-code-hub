@@ -157,6 +157,13 @@ export const EnvSchema = z.object({
   // - 该开关只影响“写入 Redis 的响应体内容”，不影响内部统计逻辑读取响应体（例如 tokens/费用统计、SSE 结束后的假 200 检测）。
   // - message 内容是否脱敏仍由 STORE_SESSION_MESSAGES 控制。
   STORE_SESSION_RESPONSE_BODY: z.string().default("true").transform(booleanTransform),
+  // 单份会话响应正文写入 Redis 的字节上限；旧 response 与 before/after snapshot 都受此边界约束。
+  SESSION_RESPONSE_BODY_MAX_BYTES: z.coerce
+    .number()
+    .int()
+    .min(64 * 1024)
+    .max(64 * 1024 * 1024)
+    .default(1024 * 1024),
   DEBUG_MODE: z.string().default("false").transform(booleanTransform),
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace"]).default("info"),
   TZ: z.string().default("Asia/Shanghai"),

@@ -27,10 +27,25 @@ import {
 
 const FLUSH_INTERVAL_MS = 100;
 const FLUSH_BYTES_THRESHOLD = 64 * 1024;
+const MAX_QUEUED_WRITE_BYTES = 1024 * 1024;
 const OWNER_HEARTBEAT_INTERVAL_MS = 15_000;
 const PRE_SPOOL_ABORT_WAIT_MS = 100;
 
 let activeSpoolCount = 0;
+let durablePersistenceChain: Promise<void> = Promise.resolve();
+
+function serializeDurablePersistence<T>(operation: () => Promise<T>): Promise<T> {
+  const result = durablePersistenceChain.then(operation);
+  durablePersistenceChain = result.then(
+    () => undefined,
+    () => undefined
+  );
+  return result;
+}
+
+export interface ReplaySpoolOptions {
+  onInactive?: () => void;
+}
 
 export function getActiveReplaySpoolCount(): number {
   return activeSpoolCount;
@@ -39,10 +54,10 @@ export function getActiveReplaySpoolCount(): number {
 export class ReplaySpool {
   private readonly store = getReplayStore();
   private readonly decoder = new TextDecoder("utf-8");
-  private readonly parts: string[] = [];
   private readonly queuedBatches = new Set<string[]>();
   private pending: string[] = [];
   private pendingBytes = 0;
+  private queuedWriteBytes = 0;
   private totalBytes = 0;
   private chunkCount = 0;
   private disabled = false;
@@ -58,7 +73,8 @@ export class ReplaySpool {
     private readonly ownerToken: string,
     private readonly statusCode: number,
     private readonly headers: Record<string, string>,
-    private readonly delivery: ReplayDelivery = "stream"
+    private readonly delivery: ReplayDelivery = "stream",
+    private readonly options: ReplaySpoolOptions = {}
   ) {
     activeSpoolCount++;
     this.startOwnerHeartbeat();
@@ -79,11 +95,10 @@ export class ReplaySpool {
         this.disable("payload_too_large");
         return;
       }
+      this.pendingBytes += chunk.byteLength;
       const text = this.decoder.decode(chunk, { stream: true });
       if (text.length === 0) return;
       this.pending.push(text);
-      this.parts.push(text);
-      this.pendingBytes += chunk.byteLength;
 
       if (this.pendingBytes >= FLUSH_BYTES_THRESHOLD) {
         this.scheduleFlush(0);
@@ -119,9 +134,10 @@ export class ReplaySpool {
   private enqueueFlush(): void {
     const batch = this.pending;
     if (batch.length === 0) return;
+    const batchBytes = this.pendingBytes;
     this.pending = [];
     this.pendingBytes = 0;
-    this.queuedBatches.add(batch);
+    if (!this.reserveQueuedBatch(batch, batchBytes)) return;
     // 续接体自带 try/catch：链永不 rejected；每个 await 之后复查 disabled，
     // 防止与 disable/halt 竞态时在清理之后又写回 owning meta
     this.writeChain = this.writeChain.then(async () => {
@@ -154,8 +170,20 @@ export class ReplaySpool {
         this.disable("flush_error");
       } finally {
         this.queuedBatches.delete(batch);
+        this.queuedWriteBytes = Math.max(0, this.queuedWriteBytes - batchBytes);
       }
     });
+  }
+
+  private reserveQueuedBatch(batch: string[], batchBytes: number): boolean {
+    if (this.queuedWriteBytes + batchBytes > MAX_QUEUED_WRITE_BYTES) {
+      batch.length = 0;
+      this.disable("write_backlog_too_large");
+      return false;
+    }
+    this.queuedWriteBytes += batchBytes;
+    this.queuedBatches.add(batch);
+    return true;
   }
 
   private buildMeta(status: ReplayMeta["status"], extra?: Partial<ReplayMeta>): ReplayMeta {
@@ -236,12 +264,15 @@ export class ReplaySpool {
     const tail = this.decoder.decode();
     if (tail.length > 0) {
       this.pending.push(tail);
-      this.parts.push(tail);
     }
     const batch = this.pending;
+    const batchBytes = this.pendingBytes;
     this.pending = [];
     this.pendingBytes = 0;
-    this.queuedBatches.add(batch);
+    if (!this.reserveQueuedBatch(batch, batchBytes)) {
+      await this.writeChain;
+      return;
+    }
 
     this.writeChain = this.writeChain.then(async () => {
       let pgPersisted = false;
@@ -263,21 +294,27 @@ export class ReplaySpool {
         }
         this.chunkCount = appended;
         this.metaWritten = true;
-        const payload = this.takePayload();
-        // 先写 PG（持久 payload），再翻 Redis meta 为 completed（热层可服务）
-        const persistResult = await this.store.persistCompleted({
-          replayId: this.identity.replayId,
-          verifier: this.identity.verifier,
-          scopeTag: this.identity.scopeTag,
-          keyId: this.identity.keyId,
-          userId: this.identity.userId,
-          format: this.identity.format,
-          model: this.identity.model,
-          statusCode: this.statusCode,
-          headers: this.headers,
-          payload,
-          byteSize: this.totalBytes,
-          sourceMessageRequestId: messageRequestId,
+        // Redis 是活跃正文的唯一长期副本。大 payload 的读取、拼接和 PG 写入串行执行，
+        // 避免多个流同秒终态时在 V8 heap 中并发重建完整响应。
+        const persistResult = await serializeDurablePersistence(async () => {
+          const chunks = await this.store.readChunks(this.identity.replayId, 0);
+          if (!chunks || chunks.length !== this.chunkCount) {
+            throw new Error("replay chunks unavailable before durable persistence");
+          }
+          return this.store.persistCompleted({
+            replayId: this.identity.replayId,
+            verifier: this.identity.verifier,
+            scopeTag: this.identity.scopeTag,
+            keyId: this.identity.keyId,
+            userId: this.identity.userId,
+            format: this.identity.format,
+            model: this.identity.model,
+            statusCode: this.statusCode,
+            headers: this.headers,
+            payload: chunks.join(""),
+            byteSize: this.totalBytes,
+            sourceMessageRequestId: messageRequestId,
+          });
         });
         pgPersisted = true;
         const completed = await this.store.completeOwned(
@@ -322,7 +359,7 @@ export class ReplaySpool {
           .catch(() => false);
       } finally {
         this.queuedBatches.delete(batch);
-        this.clearPayload();
+        this.queuedWriteBytes = Math.max(0, this.queuedWriteBytes - batchBytes);
         this.release();
       }
     });
@@ -338,10 +375,10 @@ export class ReplaySpool {
     if (this.terminal) return;
     this.terminal = true;
     this.aborting = true;
+    this.notifyInactive();
     this.clearTimer();
     this.pending = [];
     this.pendingBytes = 0;
-    this.clearPayload();
     this.clearQueuedBatches();
     this.abortPromise = this.writeChain.then(async () => {
       try {
@@ -375,9 +412,9 @@ export class ReplaySpool {
   private teardown(reason: string, deleteEntry: boolean): void {
     if (this.disabled) return;
     this.disabled = true;
+    this.notifyInactive();
     this.clearTimer();
     this.pending = [];
-    this.parts.length = 0;
     this.pendingBytes = 0;
     this.clearQueuedBatches();
     // 清理顺着 writeChain 串行：与 in-flight append 竞态时绝不出现「删除后又写回」
@@ -435,19 +472,24 @@ export class ReplaySpool {
     this.clearOwnerHeartbeat();
   }
 
-  private takePayload(): string {
-    const payload = this.parts.join("");
-    this.clearPayload();
-    return payload;
-  }
-
-  private clearPayload(): void {
-    this.parts.length = 0;
-  }
-
   private clearQueuedBatches(): void {
     for (const batch of this.queuedBatches) batch.length = 0;
     this.queuedBatches.clear();
+    this.queuedWriteBytes = 0;
+  }
+
+  private inactiveNotified = false;
+
+  private notifyInactive(): void {
+    if (this.inactiveNotified) return;
+    this.inactiveNotified = true;
+    try {
+      this.options.onInactive?.();
+    } catch (error) {
+      logger.debug("[ReplaySpool] inactive callback failed", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 }
 
@@ -515,7 +557,8 @@ export function releaseReplayOwnership(session: ProxySession): void {
 export function createReplaySpoolIfOwner(
   session: ProxySession,
   response: Response,
-  delivery: ReplayDelivery = "stream"
+  delivery: ReplayDelivery = "stream",
+  options: ReplaySpoolOptions = {}
 ): ReplaySpool | null {
   const replayState = session.replayState;
   if (replayState?.role !== "owner") return null;
@@ -550,7 +593,8 @@ export function createReplaySpoolIfOwner(
       replayState.ownerToken,
       response.status,
       headers,
-      delivery
+      delivery,
+      options
     );
     spool.bootstrap();
     return spool;

@@ -4147,6 +4147,7 @@ export class ProxyResponseHandler {
     // 提升 idleTimeoutId 到外部作用域，以便客户端断开时能清除
     let idleTimeoutId: NodeJS.Timeout | null = null;
     let clientAbortDrainTimeoutId: NodeJS.Timeout | null = null;
+    let clientAbortDrainStartedAt: number | null = null;
     const streamTextAccumulator = new BoundedStreamTextAccumulator();
     let lastStreamTextSnapshot: BoundedStreamTextSnapshot | null = null;
     const getCollectedChunkCount = () =>
@@ -4156,6 +4157,45 @@ export class ProxyResponseHandler {
         clearTimeout(clientAbortDrainTimeoutId);
         clientAbortDrainTimeoutId = null;
       }
+    };
+    const expireClientAbortDrain = () => {
+      clientAbortDrainTimeoutId = null;
+      clientAbortDrainStartedAt = null;
+      logger.info("ResponseHandler: Client abort drain window exceeded", {
+        taskId,
+        providerId: provider.id,
+        messageId: messageContext.id,
+        clientAbortDrainTimeoutMs,
+      });
+
+      try {
+        const sessionWithController = session as typeof session & {
+          responseController?: AbortController;
+        };
+        sessionWithController.responseController?.abort(new Error("client_abort_drain_timeout"));
+      } catch (e) {
+        logger.warn("ResponseHandler: Failed to abort upstream after client drain timeout", {
+          taskId,
+          providerId: provider.id,
+          error: e,
+        });
+      }
+
+      const drainTimeoutError = new Error("client_abort_drain_timeout");
+      abortController.abort(drainTimeoutError);
+      responsePump?.cancelSource(drainTimeoutError);
+    };
+    const scheduleClientAbortDrainTimeout = (delayMs: number) => {
+      clearClientAbortDrainTimer();
+      clientAbortDrainTimeoutId = setTimeout(expireClientAbortDrain, Math.max(0, delayMs));
+      clientAbortDrainTimeoutId.unref?.();
+    };
+    const capInactiveReplayDrainWindow = () => {
+      if (clientAbortDrainTimeoutMs <= CLIENT_ABORT_DRAIN_MAX_MS) return;
+      clientAbortDrainTimeoutMs = CLIENT_ABORT_DRAIN_MAX_MS;
+      if (clientAbortDrainStartedAt === null) return;
+      const elapsedMs = Date.now() - clientAbortDrainStartedAt;
+      scheduleClientAbortDrainTimeout(CLIENT_ABORT_DRAIN_MAX_MS - elapsedMs);
     };
     const clearIdleTimer = () => {
       if (idleTimeoutId) {
@@ -4237,31 +4277,8 @@ export class ProxyResponseHandler {
       if (!idleTimeoutId) {
         startIdleTimer();
       }
-      clientAbortDrainTimeoutId = setTimeout(() => {
-        logger.info("ResponseHandler: Client abort drain window exceeded", {
-          taskId,
-          providerId: provider.id,
-          messageId: messageContext.id,
-          clientAbortDrainTimeoutMs,
-        });
-
-        try {
-          const sessionWithController = session as typeof session & {
-            responseController?: AbortController;
-          };
-          sessionWithController.responseController?.abort(new Error("client_abort_drain_timeout"));
-        } catch (e) {
-          logger.warn("ResponseHandler: Failed to abort upstream after client drain timeout", {
-            taskId,
-            providerId: provider.id,
-            error: e,
-          });
-        }
-
-        const drainTimeoutError = new Error("client_abort_drain_timeout");
-        abortController.abort(drainTimeoutError);
-        responsePump?.cancelSource(drainTimeoutError);
-      }, clientAbortDrainTimeoutMs);
+      clientAbortDrainStartedAt = Date.now();
+      scheduleClientAbortDrainTimeout(clientAbortDrainTimeoutMs);
     };
 
     // 统计/结算只保留有界的“头 + 尾”文本快照，避免长流式响应把进程堆撑满。
@@ -4823,7 +4840,9 @@ export class ProxyResponseHandler {
 
     // F2 owner spool：guard 阶段已抢到 owner 租约的请求，把客户端可见字节
     // write-behind 喂入 Redis 热层，供并发/断线的相同请求 attach 跟尾。
-    const replaySpool = createReplaySpoolIfOwner(session, response);
+    const replaySpool = createReplaySpoolIfOwner(session, response, "stream", {
+      onInactive: capInactiveReplayDrainWindow,
+    });
     if (replaySpool) {
       try {
         clientAbortDrainTimeoutMs = getEnvConfig().REPLAY_MAX_DETACHED_MS;
