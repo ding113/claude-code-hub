@@ -1,5 +1,6 @@
 import "server-only";
 
+import { Buffer } from "node:buffer";
 import crypto from "node:crypto";
 import { extractCodexSessionId } from "@/app/v1/_lib/codex/session-extractor";
 import { sanitizeHeaders, sanitizeUrl } from "@/app/v1/_lib/proxy/errors";
@@ -58,6 +59,24 @@ import { SessionTracker } from "./session-tracker";
 const RESERVED_INTERNAL_HEADER_SET = new Set(
   RESERVED_INTERNAL_HEADERS.map((header) => header.toLowerCase())
 );
+const DEFAULT_SESSION_RESPONSE_BODY_MAX_BYTES = 5 * 1024 * 1024;
+
+function canStoreSessionResponseBody(value: string, context: string): boolean {
+  const configuredMaxBytes = getEnvConfig().SESSION_RESPONSE_BODY_MAX_BYTES;
+  const maxBytes =
+    Number.isSafeInteger(configuredMaxBytes) && configuredMaxBytes > 0
+      ? configuredMaxBytes
+      : DEFAULT_SESSION_RESPONSE_BODY_MAX_BYTES;
+  const byteSize = Buffer.byteLength(value, "utf8");
+  if (byteSize <= maxBytes) return true;
+
+  logger.warn("SessionManager: Skipped oversized session response body", {
+    context,
+    byteSize,
+    maxBytes,
+  });
+  return false;
+}
 
 function isReservedInternalHeader(name: string): boolean {
   const lowerName = name.toLowerCase();
@@ -2036,7 +2055,7 @@ export class SessionManager {
    * 存储 session 响应体（临时存储，5分钟过期）
    *
    * 存储行为受 STORE_SESSION_RESPONSE_BODY 控制：
-   * - true (默认)：存储响应体到 Redis 临时缓存
+   * - true (默认)：在 SESSION_RESPONSE_BODY_MAX_BYTES 上限内存储响应体到 Redis 临时缓存
    * - false：不存储（注意：不影响本次请求处理与统计，仅影响后续查看 response body）
    *
    * 存储策略（脱敏/原样）受 STORE_SESSION_MESSAGES 控制：
@@ -2061,6 +2080,17 @@ export class SessionManager {
     if (redis?.status !== "ready") return;
 
     try {
+      // 新格式：session:{sessionId}:req:{sequence}:response（独立存储每个请求）
+      // 旧格式：session:{sessionId}:response（向后兼容）
+      const sequence = normalizeRequestSequence(requestSequence);
+      const key = sequence
+        ? `session:${sessionId}:req:${sequence}:response`
+        : `session:${sessionId}:response`;
+      if (typeof response === "string" && !canStoreSessionResponseBody(response, "response")) {
+        await redis.del(key);
+        return;
+      }
+
       let responseString: string;
 
       if (SessionManager.STORE_MESSAGES) {
@@ -2082,12 +2112,11 @@ export class SessionManager {
         }
       }
 
-      // 新格式：session:{sessionId}:req:{sequence}:response（独立存储每个请求）
-      // 旧格式：session:{sessionId}:response（向后兼容）
-      const sequence = normalizeRequestSequence(requestSequence);
-      const key = sequence
-        ? `session:${sessionId}:req:${sequence}:response`
-        : `session:${sessionId}:response`;
+      if (!canStoreSessionResponseBody(responseString, "response")) {
+        await redis.del(key);
+        return;
+      }
+
       if (sequence) {
         await SessionManager.refreshSessionRequestOwner(redis, sessionId, sequence, keyId);
       }
@@ -2670,8 +2699,24 @@ export class SessionManager {
           // 与旧平铺 response 字段保持同一隐私/存储契约：关闭时跳过任何 response body phase 落盘。
         } else {
           let bodyToStore = snapshot.body ?? null;
+          let bodyExceededLimit = false;
+          const bodyKey = buildSessionDetailSnapshotKey(
+            sessionId,
+            sequence,
+            "response",
+            phase,
+            "body"
+          );
 
-          if (!SessionManager.STORE_MESSAGES) {
+          if (
+            typeof bodyToStore === "string" &&
+            !canStoreSessionResponseBody(bodyToStore, `snapshot:${phase}`)
+          ) {
+            bodyToStore = null;
+            bodyExceededLimit = true;
+          }
+
+          if (bodyToStore !== null && !SessionManager.STORE_MESSAGES) {
             if (typeof bodyToStore === "string") {
               try {
                 bodyToStore = JSON.stringify(
@@ -2687,14 +2732,18 @@ export class SessionManager {
             bodyToStore = JSON.stringify(bodyToStore);
           }
 
-          if (bodyToStore !== null) {
-            writes.push(
-              redis.setex(
-                buildSessionDetailSnapshotKey(sessionId, sequence, "response", phase, "body"),
-                SessionManager.SESSION_TTL,
-                bodyToStore
-              )
-            );
+          if (
+            bodyToStore !== null &&
+            canStoreSessionResponseBody(bodyToStore, `snapshot:${phase}`)
+          ) {
+            writes.push(redis.setex(bodyKey, SessionManager.SESSION_TTL, bodyToStore));
+          } else if (bodyToStore !== null) {
+            bodyExceededLimit = true;
+          }
+
+          if (bodyExceededLimit) {
+            // 同一 request/phase 可能被重写；超限时删除旧正文，避免读取到上一版小响应。
+            writes.push(redis.del(bodyKey));
           }
         }
       }
