@@ -39,7 +39,8 @@ trap 'exit 143' 15
 
 attempt=0
 while [ "$attempt" -lt 60 ]; do
-  if curl -fsS "http://127.0.0.1:$host_port/health" >/dev/null 2>&1; then
+  if curl --connect-timeout 2 --max-time 5 -fsS \
+    "http://127.0.0.1:$host_port/health" >/dev/null 2>&1; then
     trap - 0 2 15
     printf '%s\n' \
       "ready container=$container stats=http://127.0.0.1:$host_port/stats provider=http://$container:3001"

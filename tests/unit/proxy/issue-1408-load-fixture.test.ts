@@ -203,6 +203,7 @@ esac
   writeFileSync(
     path.join(directory, "curl"),
     `#!/bin/sh
+printf '%s\\n' "$*" >> "$CCH_FAKE_CURL_LOG"
 exit "\${CCH_FAKE_CURL_STATUS:-1}"
 `,
     { mode: 0o755 }
@@ -244,6 +245,7 @@ function runStartMockWithFakeCommands(
         ...process.env,
         PATH: `${directory}:${process.env.PATH ?? ""}`,
         CCH_FAKE_CONTAINER_STATE: path.join(directory, "container-state"),
+        CCH_FAKE_CURL_LOG: path.join(directory, "curl.log"),
         CCH_FAKE_DOCKER_LOG: path.join(directory, "docker.log"),
         ...overrides,
       },
@@ -329,6 +331,26 @@ describe("issue #1408 load fixture", () => {
       }
     }
   );
+
+  posixIt("bounds stalled health probes and cleans up after the retry budget", () => {
+    const directory = mkdtempSync(path.join(tmpdir(), "cch1408-container-fixture-"));
+    try {
+      installFakeContainerCommands(directory);
+      const result = runStartMockWithFakeCommands(directory, {
+        CCH_FAKE_CURL_STATUS: "28",
+      });
+
+      expect(result.status).not.toBe(0);
+      expect(existsSync(path.join(directory, "container-state"))).toBe(false);
+      const probes = readFileSync(path.join(directory, "curl.log"), "utf8").trim().split("\n");
+      expect(probes).toHaveLength(60);
+      expect(new Set(probes)).toEqual(
+        new Set(["--connect-timeout 2 --max-time 5 -fsS http://127.0.0.1:31409/health"])
+      );
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
 
   it("emits a valid hanging Responses SSE stream and records the scenario count", async () => {
     const { baseUrl } = await startMock();
