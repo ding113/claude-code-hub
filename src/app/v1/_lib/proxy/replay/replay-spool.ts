@@ -30,12 +30,16 @@ const FLUSH_BYTES_THRESHOLD = 64 * 1024;
 const MAX_WRITE_BEHIND_BYTES = 512 * 1024;
 const LARGE_PAYLOAD_REBUILD_BYTES = 256 * 1024;
 const MAX_CONCURRENT_LARGE_PAYLOAD_REBUILDS = 2;
+const PAYLOAD_REBUILD_SLOT_WAIT_MS = 30_000;
 const OWNER_HEARTBEAT_INTERVAL_MS = 15_000;
 const PRE_SPOOL_ABORT_WAIT_MS = 100;
 
 let activeSpoolCount = 0;
 let activeLargePayloadRebuilds = 0;
-const largePayloadRebuildWaiters: Array<() => void> = [];
+const largePayloadRebuildWaiters: Array<{
+  resolve: () => void;
+  timer: ReturnType<typeof setTimeout>;
+}> = [];
 
 type QueuedReplayBatch = {
   chunks: string[];
@@ -51,7 +55,22 @@ async function withPayloadRebuildSlot<T>(
   if (activeLargePayloadRebuilds < MAX_CONCURRENT_LARGE_PAYLOAD_REBUILDS) {
     activeLargePayloadRebuilds += 1;
   } else {
-    await new Promise<void>((resolve) => largePayloadRebuildWaiters.push(resolve));
+    await new Promise<void>((resolve, reject) => {
+      const waiter = {
+        resolve: () => {
+          clearTimeout(waiter.timer);
+          resolve();
+        },
+        timer: setTimeout(() => {
+          const index = largePayloadRebuildWaiters.indexOf(waiter);
+          if (index < 0) return;
+          largePayloadRebuildWaiters.splice(index, 1);
+          reject(new Error("replay payload rebuild slot wait timed out"));
+        }, PAYLOAD_REBUILD_SLOT_WAIT_MS),
+      };
+      waiter.timer.unref?.();
+      largePayloadRebuildWaiters.push(waiter);
+    });
   }
 
   try {
@@ -59,7 +78,7 @@ async function withPayloadRebuildSlot<T>(
   } finally {
     const next = largePayloadRebuildWaiters.shift();
     if (next) {
-      next();
+      next.resolve();
     } else {
       activeLargePayloadRebuilds = Math.max(0, activeLargePayloadRebuilds - 1);
     }
@@ -73,7 +92,6 @@ export function getActiveReplaySpoolCount(): number {
 export class ReplaySpool {
   private readonly store = getReplayStore();
   private readonly decoder = new TextDecoder("utf-8");
-  private readonly encoder = new TextEncoder();
   private readonly queuedBatches = new Set<QueuedReplayBatch>();
   private readonly terminalListeners = new Set<() => void>();
   private pending: string[] = [];
@@ -88,6 +106,7 @@ export class ReplaySpool {
   private ownerHeartbeatTimer: ReturnType<typeof setInterval> | null = null;
   private ownerHeartbeatInFlight = false;
   private writeChain: Promise<void> = Promise.resolve();
+  private pendingWriteOperations = 0;
   private metaWritten = false;
 
   constructor(
@@ -129,7 +148,7 @@ export class ReplaySpool {
       const text = this.decoder.decode(chunk, { stream: true });
       if (text.length === 0) return;
       this.pending.push(text);
-      this.pendingBytes += this.encoder.encode(text).byteLength;
+      this.pendingBytes += Buffer.byteLength(text, "utf8");
 
       if (this.exceedsWriteBehindLimit(this.pendingBytes)) {
         this.disable("write_behind_limit");
@@ -174,9 +193,11 @@ export class ReplaySpool {
     this.pending = [];
     this.pendingBytes = 0;
     this.trackQueuedBatch(batch);
+    this.pendingWriteOperations += 1;
     // 续接体自带 try/catch：链永不 rejected；每个 await 之后复查 disabled，
     // 防止与 disable/halt 竞态时在清理之后又写回 owning meta
     this.writeChain = this.writeChain.then(async () => {
+      this.activateQueuedBatch(batch);
       try {
         if (this.disabled || this.aborting) return;
         const expectedChunkCount = this.chunkCount + batch.chunks.length;
@@ -211,6 +232,7 @@ export class ReplaySpool {
         this.disable("flush_error");
       } finally {
         this.releaseQueuedBatch(batch);
+        this.pendingWriteOperations = Math.max(0, this.pendingWriteOperations - 1);
       }
     });
   }
@@ -253,6 +275,7 @@ export class ReplaySpool {
 
   /** 立即建立 owning meta（handleStream 创建 spool 时调用，供 attach 读者尽早看到状态）。 */
   bootstrap(): void {
+    this.pendingWriteOperations += 1;
     this.writeChain = this.writeChain.then(async () => {
       try {
         if (this.disabled || this.aborting || this.metaWritten) return;
@@ -283,6 +306,8 @@ export class ReplaySpool {
           error: error instanceof Error ? error.message : String(error),
         });
         this.disable("flush_error");
+      } finally {
+        this.pendingWriteOperations = Math.max(0, this.pendingWriteOperations - 1);
       }
     });
   }
@@ -299,7 +324,7 @@ export class ReplaySpool {
     const tail = this.decoder.decode();
     if (tail.length > 0) {
       this.pending.push(tail);
-      this.pendingBytes += this.encoder.encode(tail).byteLength;
+      this.pendingBytes += Buffer.byteLength(tail, "utf8");
     }
     if (this.exceedsWriteBehindLimit(this.pendingBytes)) {
       this.disable("write_behind_limit");
@@ -313,8 +338,10 @@ export class ReplaySpool {
     this.pending = [];
     this.pendingBytes = 0;
     this.trackQueuedBatch(batch);
+    this.pendingWriteOperations += 1;
 
     this.writeChain = this.writeChain.then(async () => {
+      this.activateQueuedBatch(batch);
       let pgPersisted = false;
       try {
         if (this.disabled || this.aborting) return;
@@ -418,6 +445,7 @@ export class ReplaySpool {
           .catch(() => false);
       } finally {
         this.releaseQueuedBatch(batch);
+        this.pendingWriteOperations = Math.max(0, this.pendingWriteOperations - 1);
         this.release();
       }
     });
@@ -546,11 +574,17 @@ export class ReplaySpool {
 
   private trackQueuedBatch(batch: QueuedReplayBatch): void {
     this.queuedBatches.add(batch);
-    if (this.activeWriteBatch) {
+    if (this.pendingWriteOperations > 0 || this.activeWriteBatch) {
       this.queuedBytes += batch.byteSize;
     } else {
       this.activeWriteBatch = batch;
     }
+  }
+
+  private activateQueuedBatch(batch: QueuedReplayBatch): void {
+    if (!this.queuedBatches.has(batch) || this.activeWriteBatch === batch) return;
+    this.activeWriteBatch = batch;
+    this.queuedBytes = Math.max(0, this.queuedBytes - batch.byteSize);
   }
 
   private releaseQueuedBatch(batch: QueuedReplayBatch, clearChunks = false): void {
@@ -569,7 +603,7 @@ export class ReplaySpool {
   }
 
   private exceedsWriteBehindLimit(additionalBytes: number): boolean {
-    if (!this.activeWriteBatch) return false;
+    if (this.pendingWriteOperations === 0) return false;
     return this.queuedBytes + additionalBytes > MAX_WRITE_BEHIND_BYTES;
   }
 

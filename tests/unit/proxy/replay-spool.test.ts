@@ -268,6 +268,32 @@ describe("ReplaySpool：write-behind 批量冲刷", () => {
     await spool.abort("test_cleanup");
   });
 
+  it("bootstrap 写入阻塞时首个响应 batch 仍受 backlog 上限约束", async () => {
+    let resolveBootstrap!: (value: number) => void;
+    storeControl.store.writeOwned.mockImplementationOnce(
+      () =>
+        new Promise<number>((resolve) => {
+          resolveBootstrap = resolve;
+        })
+    );
+    const spool = makeSpool();
+    spool.bootstrap();
+    await vi.advanceTimersByTimeAsync(0);
+
+    spool.observe(encoder.encode("x".repeat(513 * 1024)));
+
+    expect(spool.isTerminal).toBe(true);
+    expect(storeControl.store.writeOwned).toHaveBeenCalledTimes(1);
+
+    resolveBootstrap(0);
+    await drainWriteChain(spool);
+    expect(storeControl.store.abortOwned).toHaveBeenCalledWith(
+      identity.replayId,
+      "owner-token",
+      expect.objectContaining({ status: "aborted", abortReason: "write_behind_limit" })
+    );
+  });
+
   it("跨 chunk UTF-8 序列按实际保留文本字节计入 pending", async () => {
     const spool = makeSpool();
 
@@ -541,6 +567,52 @@ describe("ReplaySpool：completeAfterBilling 终态屏障", () => {
     await Promise.all(completions);
   });
 
+  it("大 payload 等待 rebuild slot 超时后移出队列且不吞掉后续 permit", async () => {
+    const payload = "x".repeat(300 * 1024);
+    const pendingReads: Array<(chunks: string[]) => void> = [];
+    storeControl.store.writeOwned.mockImplementation(
+      async (_replayId: string, _ownerToken: string, meta: { chunkCount: number }) =>
+        meta.chunkCount
+    );
+    storeControl.store.readOwnedChunks.mockImplementation(
+      () =>
+        new Promise<string[]>((resolve) => {
+          pendingReads.push(resolve);
+        })
+    );
+    const [first, second, timedOut] = [makeSpool(), makeSpool(), makeSpool()];
+    for (const spool of [first, second, timedOut]) spool.observe(encoder.encode(payload));
+
+    const firstCompletion = first.completeAfterBilling(1);
+    const secondCompletion = second.completeAfterBilling(2);
+    const timedOutCompletion = timedOut.completeAfterBilling(3);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(storeControl.store.readOwnedChunks).toHaveBeenCalledTimes(2);
+
+    await vi.advanceTimersByTimeAsync(30_000);
+    await timedOutCompletion;
+    expect(storeControl.store.readOwnedChunks).toHaveBeenCalledTimes(2);
+    expect(storeControl.store.abortOwned).toHaveBeenCalledWith(
+      identity.replayId,
+      "owner-token",
+      expect.objectContaining({ status: "aborted", abortReason: "complete_failed" })
+    );
+
+    const fourth = makeSpool();
+    fourth.observe(encoder.encode(payload));
+    const fourthCompletion = fourth.completeAfterBilling(4);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(storeControl.store.readOwnedChunks).toHaveBeenCalledTimes(2);
+
+    pendingReads[0]([payload]);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(storeControl.store.readOwnedChunks).toHaveBeenCalledTimes(3);
+
+    pendingReads[1]([payload]);
+    pendingReads[2]([payload]);
+    await Promise.all([firstCompletion, secondCompletion, fourthCompletion]);
+  });
+
   it("按 fenced 尾批冲刷 -> PG 持久化 -> completed meta 顺序执行", async () => {
     const spool = makeSpool(200, "text/event-stream; charset=utf-8");
     spool.observe(encoder.encode("data: hello \n\n"));
@@ -705,6 +777,23 @@ describe("ReplaySpool：completeAfterBilling 终态屏障", () => {
 
     await vi.advanceTimersByTimeAsync(15_000);
     expect(storeControl.store.renewOwnerLease).not.toHaveBeenCalled();
+  });
+
+  it("fenced payload 读取返回 null 时不写 PG 并封死热层", async () => {
+    storeControl.store.readOwnedChunks.mockResolvedValueOnce(null);
+    const spool = makeSpool();
+    spool.observe(encoder.encode("data: partial\n\n"));
+
+    await spool.completeAfterBilling(10);
+
+    expect(storeControl.store.persistCompleted).not.toHaveBeenCalled();
+    expect(storeControl.store.completeOwned).not.toHaveBeenCalled();
+    expect(storeControl.store.abortOwned).toHaveBeenCalledWith(
+      identity.replayId,
+      "owner-token",
+      expect.objectContaining({ status: "aborted", abortReason: "complete_failed" })
+    );
+    expect(getActiveReplaySpoolCount()).toBe(0);
   });
 
   it("尾批写入 Redis 后在等待 PG 时立即释放本地 batch", async () => {

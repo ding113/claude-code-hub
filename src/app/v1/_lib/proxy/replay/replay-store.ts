@@ -90,11 +90,8 @@ if len ~= tonumber(ARGV[2]) then
   return {-2}
 end
 local chunks = redis.call('LRANGE', KEYS[2], 0, -1)
-local result = {1}
-for i = 1, #chunks do
-  result[#result + 1] = chunks[i]
-end
-return result`;
+table.insert(chunks, 1, 1)
+return chunks`;
 
 const LUA_ABORT_OWNED = `
 if redis.call('GET', KEYS[1]) ~= ARGV[1] then

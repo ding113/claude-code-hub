@@ -30,10 +30,17 @@ const STREAM_STATS_HEAD_BYTES_FOR_TEST = 1024 * 1024;
 
 const replayControl = vi.hoisted(() => {
   const listeners = new Set<() => void>();
-  const state = { enabled: false, terminal: false, detachedMs: 300_000 };
+  const state = {
+    enabled: false,
+    terminal: false,
+    detachedMs: 300_000,
+    unsubscribeCalls: 0,
+  };
   const notifyTerminal = () => {
     state.terminal = true;
-    for (const listener of [...listeners]) listener();
+    const currentListeners = [...listeners];
+    listeners.clear();
+    for (const listener of currentListeners) listener();
   };
   return {
     state,
@@ -42,6 +49,7 @@ const replayControl = vi.hoisted(() => {
       state.enabled = false;
       state.terminal = false;
       state.detachedMs = 300_000;
+      state.unsubscribeCalls = 0;
       listeners.clear();
     },
     spool: {
@@ -53,7 +61,10 @@ const replayControl = vi.hoisted(() => {
       completeAfterBilling: vi.fn(async () => notifyTerminal()),
       onTerminal(listener: () => void) {
         listeners.add(listener);
-        return () => listeners.delete(listener);
+        return () => {
+          state.unsubscribeCalls += 1;
+          listeners.delete(listener);
+        };
       },
     },
   };
@@ -1234,6 +1245,23 @@ describe("ProxyResponseHandler stream client abort finalization", () => {
       await downstreamRead?.catch(() => {});
       await drainAsyncTasks();
     }
+  });
+
+  it("cleans the replay terminal listener when the session agent release hook throws", async () => {
+    replayControl.state.enabled = true;
+    const session = createSession(new AbortController().signal);
+    vi.mocked(session.releaseAgent).mockImplementationOnce(() => {
+      throw new Error("release agent failed");
+    });
+
+    const downstream = await ProxyResponseHandler.dispatch(session, createResponsesSse());
+    await downstream.text();
+    const processingTask = getRegisteredTask("stream-processing");
+    expect(processingTask).toBeDefined();
+    await expect(processingTask).resolves.toBeUndefined();
+    await Promise.allSettled(asyncTasks.splice(0, asyncTasks.length));
+
+    expect(replayControl.state.unsubscribeCalls).toBe(1);
   });
 
   it("copies Buffer-backed stream windows before retaining stats snapshots", () => {

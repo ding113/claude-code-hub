@@ -4927,8 +4927,6 @@ export class ProxyResponseHandler {
         cleanupResponseControllerAbortListener();
         cleanupClientAbortListener();
         cleanupClientAbortListener = () => {};
-        cleanupReplaySpoolTerminalListener();
-        cleanupReplaySpoolTerminalListener = () => {};
         clearClientAbortDrainTimer();
         clearIdleTimer();
         clearResponseTimeoutOnce();
@@ -5222,6 +5220,8 @@ export class ProxyResponseHandler {
         cleanupTaskAbortBinding();
         cleanupResponseControllerAbortListener();
         cleanupClientAbortListener();
+        cleanupReplaySpoolTerminalListener();
+        cleanupReplaySpoolTerminalListener = () => {};
         clearClientAbortDrainTimer();
         clearIdleTimer(); // 清除静默期计时器（防止泄漏）
         releaseSessionAgent(session);
