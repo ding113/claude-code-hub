@@ -49,9 +49,12 @@ const redisMock = {
   set: vi.fn().mockResolvedValue("OK"),
   expire: vi.fn().mockResolvedValue(1),
   incr: vi.fn().mockResolvedValue(1),
-  eval: vi.fn((script: string) =>
-    Promise.resolve(script.includes("cch:session-response-bundle:read:v1") ? [0, 0, null] : 1)
-  ),
+  eval: vi.fn((script: string, keyCount: number, ...rawArgs: Array<string | number>) => {
+    if (!script.includes("cch:session-response-bundle:read:v1")) return Promise.resolve(1);
+    const keys = rawArgs.slice(0, keyCount).map(String);
+    const body = redisStore.get(keys[1]);
+    return Promise.resolve([0, body === undefined ? 0 : 1, body ?? null]);
+  }),
   pipeline: vi.fn(() => redisPipeline),
 };
 

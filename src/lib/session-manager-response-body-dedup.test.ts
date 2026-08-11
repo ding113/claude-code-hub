@@ -20,6 +20,7 @@ vi.mock("@/app/v1/_lib/proxy/errors", () => ({
 const stringStore = new Map<string, string>();
 const hashStore = new Map<string, Map<string, string>>();
 const ttlStore = new Map<string, number>();
+let afterBundleRead: (() => void) | null = null;
 
 function responseBundle(key: string): Map<string, string> | undefined {
   return hashStore.get(key);
@@ -128,11 +129,27 @@ const redisMock = {
 
     if (script.includes("cch:session-response-bundle:read:v1")) {
       const value = hashStore.get(key);
-      if (!value) return [0, 0, null, 0];
-      const present = value.get(`present:${String(args[0])}`) === "1";
-      if (value.get("layout") === "legacy") return [1, present ? 1 : 0, null, 1];
-      const ref = value.get(`ref:${String(args[0])}`);
-      return [1, present ? 1 : 0, ref === undefined ? null : (value.get(`body:${ref}`) ?? null), 0];
+      const legacyBody = stringStore.get(keys[1]);
+      let result: [number, number, string | null];
+      if (!value) {
+        result = [0, legacyBody === undefined ? 0 : 1, legacyBody ?? null];
+      } else {
+        const present = value.get(`present:${String(args[0])}`) === "1";
+        if (value.get("layout") === "legacy") {
+          result = [1, present ? 1 : 0, legacyBody ?? null];
+        } else {
+          const ref = value.get(`ref:${String(args[0])}`);
+          result = [
+            1,
+            present ? 1 : 0,
+            ref === undefined ? null : (value.get(`body:${ref}`) ?? null),
+          ];
+        }
+      }
+      const callback = afterBundleRead;
+      afterBundleRead = null;
+      callback?.();
+      return result;
     }
 
     throw new Error("unexpected Redis script");
@@ -169,6 +186,7 @@ describe("SessionManager response body deduplication", () => {
     mockStoreSessionResponseBody = true;
     mockResponseBodyDedupEnabled = true;
     mockSessionResponseBodyMaxBytes = 1024;
+    afterBundleRead = null;
   });
 
   it.each([
@@ -407,6 +425,34 @@ describe("SessionManager response body deduplication", () => {
     await expect(SessionManager.getSessionResponse("sess_mixed_rollout", 1)).resolves.toBe(
       "dedup-third"
     );
+  });
+
+  it("returns one atomic legacy generation when a writer switches after the read", async () => {
+    mockResponseBodyDedupEnabled = false;
+    await SessionManager.storeSessionResponseBodySet(
+      "sess_atomic_read",
+      { legacy: "legacy generation", before: "legacy before", after: "legacy generation" },
+      1
+    );
+
+    afterBundleRead = () => {
+      stringStore.clear();
+      hashStore.set(
+        "session:sess_atomic_read:req:1:response-bodies:v1",
+        new Map([
+          ["schema", "1"],
+          ["layout", "dedup"],
+          ["present:legacy", "1"],
+          ["ref:legacy", "0"],
+          ["body:0", "dedup generation"],
+        ])
+      );
+    };
+
+    await expect(SessionManager.getSessionResponse("sess_atomic_read", 1)).resolves.toBe(
+      "legacy generation"
+    );
+    expect(stringStore.size).toBe(0);
   });
 
   it("does not create legacy or bundled bodies when response storage is disabled", async () => {

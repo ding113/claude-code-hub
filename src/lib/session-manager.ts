@@ -113,20 +113,21 @@ return 1
 const READ_SESSION_RESPONSE_BODY_BUNDLE_LUA = `
 -- cch:session-response-bundle:read:v1
 if redis.call("EXISTS", KEYS[1]) == 0 then
-  return { 0, 0, false, 0 }
+  local legacy = redis.call("GET", KEYS[2])
+  return { 0, legacy and 1 or 0, legacy or false }
 end
 
 local view = ARGV[1]
 local present = redis.call("HGET", KEYS[1], "present:" .. view)
 if redis.call("HGET", KEYS[1], "layout") == "legacy" then
-  return { 1, present and 1 or 0, false, 1 }
+  return { 1, present and 1 or 0, redis.call("GET", KEYS[2]) or false }
 end
 
 local ref = redis.call("HGET", KEYS[1], "ref:" .. view)
 if not ref then
-  return { 1, present and 1 or 0, false, 0 }
+  return { 1, present and 1 or 0, false }
 end
-return { 1, present and 1 or 0, redis.call("HGET", KEYS[1], "body:" .. ref) or false, 0 }
+return { 1, present and 1 or 0, redis.call("HGET", KEYS[1], "body:" .. ref) or false }
 `;
 
 type SessionResponseBodyView = (typeof SESSION_RESPONSE_BODY_VIEWS)[number];
@@ -143,7 +144,6 @@ type PreparedSessionResponseBodyBundle = {
 type SessionResponseBodyBundleRead = {
   body: string | null;
   exists: boolean;
-  legacyFallback: boolean;
   present: boolean;
 };
 
@@ -263,8 +263,9 @@ async function readSessionResponseBodyBundleView(
 ): Promise<SessionResponseBodyBundleRead> {
   const result = (await redis.eval(
     READ_SESSION_RESPONSE_BODY_BUNDLE_LUA,
-    1,
+    2,
     buildSessionResponseBodyBundleKey(sessionId, sequence),
+    buildLegacySessionResponseBodyViewKey(sessionId, sequence, view),
     view
   )) as unknown;
   if (!Array.isArray(result) || result.length < 3) {
@@ -273,7 +274,6 @@ async function readSessionResponseBodyBundleView(
 
   return {
     exists: Number(result[0]) === 1,
-    legacyFallback: Number(result[3]) === 1,
     present: Number(result[1]) === 1,
     body: typeof result[2] === "string" ? result[2] : null,
   };
@@ -2840,11 +2840,7 @@ export class SessionManager {
           sequence,
           "legacy"
         );
-        if (bundled.exists && !bundled.legacyFallback) return bundled.body;
-
-        const newKey = `session:${sessionId}:req:${sequence}:response`;
-        const response = await redis.get(newKey);
-        return response;
+        return bundled.body;
       }
 
       // 向后兼容：尝试旧格式
@@ -3115,16 +3111,11 @@ export class SessionManager {
       if (!sequence) return null;
 
       const bundled = await readSessionResponseBodyBundleView(redis, sessionId, sequence, phase);
-      const shouldReadLegacyBody = !bundled.exists || bundled.legacyFallback;
-
-      const [legacyBodyValue, headersValue, metaValue] = await Promise.all([
-        shouldReadLegacyBody
-          ? redis.get(buildSessionDetailSnapshotKey(sessionId, sequence, "response", phase, "body"))
-          : Promise.resolve(null),
+      const [headersValue, metaValue] = await Promise.all([
         redis.get(buildSessionDetailSnapshotKey(sessionId, sequence, "response", phase, "headers")),
         redis.get(buildSessionDetailSnapshotKey(sessionId, sequence, "response", phase, "meta")),
       ]);
-      const bodyValue = shouldReadLegacyBody ? legacyBodyValue : bundled.body;
+      const bodyValue = bundled.body;
 
       if (
         bodyValue === null &&

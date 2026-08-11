@@ -111,9 +111,11 @@ flag 关闭时, writer 在同一脚本内写三个旧正文 key, 并将 Hash 写
 Hash 的旧 reader 仍直接读取旧 key. flag 开启和关闭的 writer 使用同一组 `KEYS`, 因此 retry,
 回滚和异构 writer 并发时, Redis 只会暴露最后一个完整执行的 generation.
 
-读 Lua 只声明 Hash key, 原子读取目标 view 的 layout/present/ref/body. dedup Hash 与内部引用同时
-过期, 不会产生独立 blob/ref 的悬空或 orphan 状态. 旧正文清理不再是 best-effort 后置命令,
-因此 dedup generation 成功时不会同时残留三份旧正文.
+读 Lua 同时声明 Hash 和目标 view 的 legacy key, 在同一 Redis 命令中读取
+layout/present/ref/body 或旧正文. 因此 writer 切换 generation 时, reader 不会在看到 legacy marker
+后再读到已被下一 generation 删除的旧 key. dedup Hash 与内部引用同时过期, 不会产生独立
+blob/ref 的悬空或 orphan 状态. 旧正文清理不再是 best-effort 后置命令, 因此 dedup generation
+成功时不会同时残留三份旧正文.
 
 当前 Redis client 使用 standalone `ioredis`, 不是 Redis Cluster. 跨四个旧 key 的原子脚本依赖
 这一现有部署契约; 若未来引入 Redis Cluster, 需要先统一 key hash tag 再迁移.
