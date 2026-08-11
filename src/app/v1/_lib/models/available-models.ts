@@ -308,7 +308,13 @@ async function fetchModelsWithConfig(
   logger.debug(`[AvailableModels] Fetching models from ${provider.name}: ${safeUrl}`);
 
   const response = CURL_IMPERSONATE_ENABLED && shouldImpersonateProviderUrl(url)
-    ? await impersonateFetch(url, { method: "GET", headers })
+    ? await impersonateFetch(url, {
+        method: "GET",
+        headers,
+        // 模型列表是并发 fan-out 的短请求,直接 spawn curl,
+        // 避免一次拉取占满本地伪装代理 worker 池导致真实请求排队
+        bypassProxy: true,
+      })
     : await undiciResponseToFetchResponse(
         await undiciRequest(url, {
           method: "GET",

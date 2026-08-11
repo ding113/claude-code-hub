@@ -185,10 +185,16 @@ export function shouldImpersonateProviderUrl(url: string): boolean {
  */
 export async function impersonateFetch(
   url: string,
-  init: { headers?: Record<string, string>; method?: string; body?: string } = {}
+  init: {
+    headers?: Record<string, string>;
+    method?: string;
+    body?: string;
+    /** true 时跳过本地伪装代理,直接 spawn curl(健康测试等短请求用,避免占代理 worker 池) */
+    bypassProxy?: boolean;
+  } = {}
 ): Promise<Response> {
   // 1) 本地伪装代理优先
-  if (await isImpersonateProxyAlive()) {
+  if (!init.bypassProxy && (await isImpersonateProxyAlive())) {
     try {
       const result = await proxyForward(url, {
         method: init.method,
