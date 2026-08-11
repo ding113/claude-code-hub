@@ -10,9 +10,94 @@ import { logger } from "@/lib/logger";
 const execFileAsync = promisify(execFile);
 
 /**
+ * 本地伪装代理地址(常驻 curl_multi 转发网关,连接复用 + keep-alive)。
+ * 由 deploy/impersonate-proxy/impersonate_proxy.py 提供,带完整 Chrome TLS/HTTP2 指纹
+ * (curl_easy_impersonate API + gcc9 官方构建的 .so)。代理优先,不可用时回退 spawn。
+ */
+const IMPERSONATE_PROXY_HOST = process.env.IMPERSONATE_PROXY_HOST ?? "127.0.0.1";
+const IMPERSONATE_PROXY_PORT = process.env.IMPERSONATE_PROXY_PORT ?? "18686";
+const IMPERSONATE_PROXY_URL = `http://${IMPERSONATE_PROXY_HOST}:${IMPERSONATE_PROXY_PORT}`;
+
+/** 本地代理是否可用(health 探测,短超时;代理挂掉时快速回退 spawn)。 */
+async function isImpersonateProxyAlive(): Promise<boolean> {
+  try {
+    const res = await fetch(`${IMPERSONATE_PROXY_URL}/health`, {
+      signal: AbortSignal.timeout(1_500),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * 通过本地伪装代理转发请求(流式)。返回 ImpersonateRequestResult 形状,
+ * forwarder 可直接复用现有 gzip 处理 / 流转 / 错误处理逻辑。
+ * 仅在代理不可达或转发失败时 reject,由调用方回退 spawn curl。
+ */
+async function proxyForward(
+  url: string,
+  init: {
+    method?: string;
+    headers?: Record<string, string>;
+    body?: string | Uint8Array | null;
+    signal?: AbortSignal;
+    bodyTimeoutMs?: number;
+  }
+): Promise<ImpersonateRequestResult> {
+  const method = init.method ?? "GET";
+  const bodyTimeoutMs = init.bodyTimeoutMs ?? 120_000;
+
+  const proxyHeaders: Record<string, string> = {
+    "X-CCH-Method": method,
+    "X-CCH-Target": url,
+    "X-CCH-Timeout": String(bodyTimeoutMs),
+  };
+  for (const [k, v] of Object.entries(init.headers ?? {})) {
+    if (k.toLowerCase() === "user-agent") continue; // 代理端 curl impersonate 自带 Chrome UA
+    proxyHeaders[k] = v;
+  }
+
+  let body: BodyInit | null = null;
+  if (init.body != null) {
+    body =
+      typeof init.body === "string"
+        ? init.body
+        : (new Uint8Array(
+            init.body.buffer,
+            init.body.byteOffset,
+            init.body.byteLength
+          ) as unknown as BodyInit);
+  }
+
+  const res = await fetch(`${IMPERSONATE_PROXY_URL}/impersonate`, {
+    method: "POST",
+    headers: proxyHeaders,
+    body,
+    signal: init.signal,
+  });
+
+  const headers: Record<string, string | string[]> = {};
+  res.headers.forEach((value, key) => {
+    headers[key.toLowerCase()] = value;
+  });
+
+  const bodyStream = Readable.fromWeb(
+    res.body as unknown as import("node:stream/web").ReadableStream
+  );
+  return {
+    statusCode: res.status,
+    statusText: res.statusText,
+    headers,
+    body: bodyStream,
+  };
+}
+
+/**
  * 直接调用 curl-impersonate-chrome 二进制,跳过 bash wrapper(curl_chrome116)。
  * wrapper 每请求多一次 bash 进程启动(~1.3ms);TLS/HTTP2 指纹参数内联如下,
  * 与 deploy/curl-impersonate/curl_chrome116 wrapper 保持一致。
+ * 仅在本地伪装代理不可用时作为 fallback。
  */
 const CURL_IMPERSONATE_BIN = "curl-impersonate-chrome";
 
@@ -164,7 +249,8 @@ export interface ImpersonateRequestResult {
 }
 
 /**
- * 伪装请求的流式版本。直接 spawn curl-impersonate-chrome 子进程
+ * 伪装请求的流式版本。优先走本地常驻代理(curl_multi + 连接复用, keep-alive),
+ * 代理不可达/转发失败时回退 spawn curl-impersonate-chrome 子进程
  * (完整 Chrome 指纹,~1.5ms 进程启动开销;无跨请求连接复用)。
  * 返回 ImpersonateRequestResult(与 undici.request 响应同形状),
  * forwarder 可直接复用现有 gzip 处理 / node 流转 web 流 / 错误处理逻辑。
@@ -180,6 +266,23 @@ export async function impersonateRequest(
     proxyUrl?: string | null;
   } = {}
 ): Promise<ImpersonateRequestResult> {
+  // 1) 本地伪装代理优先(显式指定外部代理时不走本地代理)
+  const proxyAlive = await isImpersonateProxyAlive();
+  if (!init.proxyUrl && proxyAlive) {
+    try {
+      return await proxyForward(url, init);
+    } catch (error) {
+      logger.warn("[curl-impersonate] proxy forward failed, falling back to spawn curl", {
+        url,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+  if (!proxyAlive) {
+    logger.warn("[curl-impersonate] proxy not alive, using spawn curl", { url });
+  }
+
+  // 2) spawn curl fallback
   return impersonateRequestSpawn(url, init);
 }
 
@@ -348,8 +451,10 @@ function impersonateRequestSpawn(
       if (!settled) fail(err instanceof Error ? err : new Error(String(err)));
     });
 
-    child.stderr.on("data", () => {
-      // 忽略 stderr;错误码由 exit 事件处理
+    let stderrBuffer = Buffer.alloc(0);
+    child.stderr.on("data", (chunk: Buffer) => {
+      stderrBuffer = Buffer.concat([stderrBuffer, chunk]);
+      if (stderrBuffer.length > 8 * 1024) stderrBuffer = stderrBuffer.subarray(stderrBuffer.length - 8192);
     });
 
     child.on("error", (err) => {
@@ -376,7 +481,8 @@ function impersonateRequestSpawn(
         }
         fail(
           new Error(
-            `[curl-impersonate] exited ${code ?? "null"} signal=${signal ?? "null"} before headers for ${url}`
+            `[curl-impersonate] exited ${code ?? "null"} signal=${signal ?? "null"} before headers for ${url}` +
+              (stderrBuffer.length > 0 ? `; stderr=${stderrBuffer.toString("utf8").slice(0, 500)}` : "")
           )
         );
         return;
@@ -384,7 +490,8 @@ function impersonateRequestSpawn(
       if (!settled) {
         fail(
           new Error(
-            `[curl-impersonate] exited ${code ?? "null"} signal=${signal ?? "null"} before headers for ${url}`
+            `[curl-impersonate] exited ${code ?? "null"} signal=${signal ?? "null"} before headers for ${url}` +
+              (stderrBuffer.length > 0 ? `; stderr=${stderrBuffer.toString("utf8").slice(0, 500)}` : "")
           )
         );
       }

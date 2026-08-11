@@ -24,6 +24,7 @@ services:
       LANGFUSE_SAMPLE_RATE: ${LANGFUSE_SAMPLE_RATE:-1.0}
       ENABLE_CURL_IMPERSONATE: "true"
       # CURL_IMPERSONATE_HOSTS 留空 = 全站开启 TLS 指纹伪装
+      IMPERSONATE_PROXY_DEBUG: ${IMPERSONATE_PROXY_DEBUG:-}
       TZ: Asia/Shanghai
     network_mode: host
     volumes:
