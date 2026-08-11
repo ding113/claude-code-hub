@@ -603,7 +603,7 @@ async function upstreamGetJson(
     if (!session.accessToken) throw new Error("missing sub2api access_token");
     headers.Authorization = `Bearer ${session.accessToken}`;
   }
-  const res = await (CURL_IMPERSONATE_ENABLED && creds.siteType === "sub2api"
+  const res = await (CURL_IMPERSONATE_ENABLED
     ? impersonateFetch(`${site}${path}`, { headers })
     : fetch(`${site}${path}`, {
         headers,
@@ -792,7 +792,7 @@ async function upstreamPostJson(
     if (!session.accessToken) throw new Error("missing sub2api access_token");
     headers.Authorization = `Bearer ${session.accessToken}`;
   }
-  const res = await (CURL_IMPERSONATE_ENABLED && creds.siteType === "sub2api"
+  const res = await (CURL_IMPERSONATE_ENABLED
     ? impersonateFetch(`${site}${path}`, {
         method: "POST",
         headers,
@@ -848,7 +848,7 @@ async function upstreamDeleteJson(
     if (!session.accessToken) throw new Error("missing sub2api access_token");
     headers.Authorization = `Bearer ${session.accessToken}`;
   }
-  const res = await (CURL_IMPERSONATE_ENABLED && creds.siteType === "sub2api"
+  const res = await (CURL_IMPERSONATE_ENABLED
     ? impersonateFetch(`${site}${path}`, { method: "DELETE", headers })
     : fetch(`${site}${path}`, {
         method: "DELETE",

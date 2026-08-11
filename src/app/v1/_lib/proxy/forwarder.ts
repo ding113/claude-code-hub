@@ -16,6 +16,11 @@ import {
   injectClaudeMetadataUserIdWithContext,
 } from "@/lib/claude-code/metadata-user-id";
 import { applyCodexProviderOverridesWithAudit } from "@/lib/codex/provider-overrides";
+import {
+  CURL_IMPERSONATE_ENABLED,
+  impersonateRequest,
+  shouldImpersonateProviderUrl,
+} from "@/lib/curl-impersonate";
 import { getCachedSystemSettings, isHttp2Enabled } from "@/lib/config";
 import { getEnvConfig } from "@/lib/config/env.schema";
 import { PROVIDER_DEFAULTS, PROVIDER_LIMITS } from "@/lib/constants/provider.constants";
@@ -5544,15 +5549,40 @@ export class ProxyForwarder {
       return undefined;
     };
 
-    const undiciRes = await undiciRequest(url, {
-      method: init.method as string,
-      headers: headersObj,
-      body: toUndiciBody(init.body),
-      signal: init.signal,
-      dispatcher: init.dispatcher,
-      bodyTimeout,
-      headersTimeout,
-    });
+    // ⭐ 伪装开启且命中范围时，改用 curl-impersonate 子进程：
+    // Cloudflare 按 TLS 指纹拦截非浏览器客户端，Node undici 直连会被 403，
+    // curl_chrome116 模拟 Chrome 指纹可正常访问。
+    const useImpersonation =
+      CURL_IMPERSONATE_ENABLED &&
+      shouldImpersonateProviderUrl(url) &&
+      !init.dispatcher; // 代理场景暂不接入（子进程不走 dispatcher）
+
+    let undiciRes;
+    if (useImpersonation) {
+      undiciRes = await impersonateRequest(url, {
+        method: init.method as string,
+        headers: headersObj,
+        body: toUndiciBody(init.body),
+        signal: init.signal ?? undefined,
+        bodyTimeoutMs: bodyTimeout,
+      });
+      // 转成与 undiciRes 一致的对象形状，后续代码共用
+      undiciRes = {
+        statusCode: undiciRes.statusCode,
+        headers: undiciRes.headers as Record<string, string | string[]>,
+        body: undiciRes.body,
+      };
+    } else {
+      undiciRes = await undiciRequest(url, {
+        method: init.method as string,
+        headers: headersObj,
+        body: toUndiciBody(init.body),
+        signal: init.signal,
+        dispatcher: init.dispatcher,
+        bodyTimeout,
+        headersTimeout,
+      });
+    }
 
     // ⭐ 立即为 undici body 添加错误处理，防止 uncaughtException
     // 必须在任何其他操作之前设置，否则 ECONNRESET 等错误会导致 uncaughtException
