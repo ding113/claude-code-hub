@@ -22,6 +22,7 @@ services:
       DB_POOL_CONNECT_TIMEOUT: ${DB_POOL_CONNECT_TIMEOUT:-10}
       MAX_RETRY_ATTEMPTS_DEFAULT: ${MAX_RETRY_ATTEMPTS_DEFAULT:-1}
       LANGFUSE_SAMPLE_RATE: ${LANGFUSE_SAMPLE_RATE:-1.0}
+      ENABLE_CURL_IMPERSONATE: "true"
       TZ: Asia/Shanghai
     network_mode: host
     volumes:

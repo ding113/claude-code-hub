@@ -3,6 +3,8 @@
  * Supports sub2api + newapi login, group rates, balance, and optional Turnstile solve.
  */
 import { fromZonedTime } from "date-fns-tz";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import { logger } from "@/lib/logger";
 import {
   getProviderSiteRateLimitCooldown,
@@ -54,7 +56,61 @@ export type UpstreamSiteCredentials = {
   session?: UpstreamAuthSession | null;
 };
 
-const UPSTREAM_USER_AGENT = "Claude-Code-Hub/provider-site-sync";
+const UPSTREAM_USER_AGENT =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
+
+const execFileAsync = promisify(execFile);
+const CURL_IMPERSONATE_BIN = "curl_chrome116";
+const CURL_IMPERSONATE_ENABLED = !!process.env.ENABLE_CURL_IMPERSONATE;
+
+/**
+ * Minimal fetch-compatible response built from a curl-impersonate child process.
+ * curl-impersonate mimics Chrome's TLS/HTTP2 fingerprint, which is required by
+ * upstream sites whose Cloudflare WAF blocks non-browser clients (403 HTML on
+ * valid tokens). Fall back to plain fetch when the binary is unavailable.
+ */
+async function impersonateFetch(
+  url: string,
+  init: { headers?: Record<string, string>; method?: string; body?: string } = {}
+): Promise<Response> {
+  const args = [
+    "-sS",
+    "--max-time",
+    "30",
+    "-w",
+    "\n%{http_code}\n%{content_type}",
+  ];
+  const method = init.method ?? "GET";
+  if (method !== "GET") args.push("-X", method);
+  for (const [k, v] of Object.entries(init.headers ?? {})) {
+    if (k.toLowerCase() === "user-agent") continue; // wrapper 自带 Chrome UA
+    args.push("-H", `${k}: ${v}`);
+  }
+  if (init.body != null) args.push("--data-raw", init.body);
+  args.push(url);
+
+  try {
+    const { stdout } = await execFileAsync(CURL_IMPERSONATE_BIN, args, {
+      timeout: 35_000,
+      maxBuffer: 10 * 1024 * 1024,
+    });
+    const lines = stdout.split("\n");
+    const statusLine = lines[lines.length - 2]?.trim() ?? "0";
+    const contentType = lines[lines.length - 1]?.trim() ?? "";
+    const body = lines.slice(0, -2).join("\n");
+    const status = Number.parseInt(statusLine, 10) || 0;
+    return new Response(body, {
+      status,
+      headers: { "content-type": contentType },
+    });
+  } catch (error) {
+    logger.warn("[provider-sites] curl-impersonate failed, falling back to fetch", {
+      url,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return fetch(url, { method, headers: init.headers, body: init.body, signal: AbortSignal.timeout(30_000) });
+  }
+}
 
 export class UpstreamRequestError extends Error {
   readonly method: string;
@@ -79,7 +135,12 @@ export class UpstreamRequestError extends Error {
 }
 
 export function isUpstreamUnauthorizedError(error: unknown): boolean {
-  return error instanceof UpstreamRequestError && error.status === 401;
+  // 401 = token rejected; 403 = account/session blocked by upstream WAF. Both
+  // mean the persisted session is unusable, so trigger re-authentication.
+  return (
+    error instanceof UpstreamRequestError &&
+    (error.status === 401 || error.status === 403)
+  );
 }
 
 export function isUpstreamRateLimitedError(error: unknown): error is UpstreamRequestError {
@@ -585,10 +646,12 @@ async function upstreamGetJson(
     if (!session.accessToken) throw new Error("missing sub2api access_token");
     headers.Authorization = `Bearer ${session.accessToken}`;
   }
-  const res = await fetch(`${site}${path}`, {
-    headers,
-    signal: AbortSignal.timeout(30_000),
-  });
+  const res = await (CURL_IMPERSONATE_ENABLED && creds.siteType === "sub2api"
+    ? impersonateFetch(`${site}${path}`, { headers })
+    : fetch(`${site}${path}`, {
+        headers,
+        signal: AbortSignal.timeout(30_000),
+      }));
   if (!res.ok) {
     const text = await res.text();
     const retryAfterMs = getRetryAfterMs(res);
@@ -772,12 +835,18 @@ async function upstreamPostJson(
     if (!session.accessToken) throw new Error("missing sub2api access_token");
     headers.Authorization = `Bearer ${session.accessToken}`;
   }
-  const res = await fetch(`${site}${path}`, {
-    method: "POST",
-    headers,
-    body: payload === undefined ? undefined : JSON.stringify(payload),
-    signal: AbortSignal.timeout(30_000),
-  });
+  const res = await (CURL_IMPERSONATE_ENABLED && creds.siteType === "sub2api"
+    ? impersonateFetch(`${site}${path}`, {
+        method: "POST",
+        headers,
+        body: payload === undefined ? undefined : JSON.stringify(payload),
+      })
+    : fetch(`${site}${path}`, {
+        method: "POST",
+        headers,
+        body: payload === undefined ? undefined : JSON.stringify(payload),
+        signal: AbortSignal.timeout(30_000),
+      }));
   if (!res.ok) {
     const text = await res.text();
     const retryAfterMs = getRetryAfterMs(res);
@@ -822,11 +891,13 @@ async function upstreamDeleteJson(
     if (!session.accessToken) throw new Error("missing sub2api access_token");
     headers.Authorization = `Bearer ${session.accessToken}`;
   }
-  const res = await fetch(`${site}${path}`, {
-    method: "DELETE",
-    headers,
-    signal: AbortSignal.timeout(30_000),
-  });
+  const res = await (CURL_IMPERSONATE_ENABLED && creds.siteType === "sub2api"
+    ? impersonateFetch(`${site}${path}`, { method: "DELETE", headers })
+    : fetch(`${site}${path}`, {
+        method: "DELETE",
+        headers,
+        signal: AbortSignal.timeout(30_000),
+      }));
   if (!res.ok) {
     const text = await res.text();
     const retryAfterMs = getRetryAfterMs(res);

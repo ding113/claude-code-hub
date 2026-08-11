@@ -213,8 +213,16 @@ async function syncProviderSiteFromUpstreamUnlocked(
 
   try {
     let creds = await resolveGlobalCaptcha(rawCreds);
-    let session = await loginUpstreamSite(creds);
-    await persistSession(siteId, session);
+    // Reuse the persisted session when it is still valid: re-login on every sync
+    // can get the account flagged by upstream WAF, poisoning the fresh token.
+    let session = creds.session ?? null;
+    if (
+      !session?.accessToken ||
+      (session.expiresAt && session.expiresAt.getTime() <= Date.now())
+    ) {
+      session = await loginUpstreamSite(creds);
+      await persistSession(siteId, session);
+    }
 
     let groupsAndBalance;
     try {

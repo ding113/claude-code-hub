@@ -92,3 +92,6 @@ tmp/
 .omx/
 .opencode/
 bunx-*/
+
+# curl-impersonate 二进制(构建时从 release 下载或本地放置,不入库)
+deploy/curl-impersonate/
