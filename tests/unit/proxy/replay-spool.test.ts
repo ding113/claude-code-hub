@@ -95,7 +95,7 @@ const storeControl = vi.hoisted(() => {
   return {
     order,
     store,
-    resetOwnedChunkCount: () => {
+    resetOwnedChunks: () => {
       ownedChunksByReplayId.clear();
     },
   };
@@ -180,7 +180,7 @@ beforeEach(() => {
   envControl.maxPayloadBytes = 8 * 1024 * 1024;
   envControl.maxConcurrentSpools = 64;
   storeControl.order.length = 0;
-  storeControl.resetOwnedChunkCount();
+  storeControl.resetOwnedChunks();
   storeControl.store.abortOwned.mockImplementation(
     async (_replayId: string, _ownerToken: string, meta: { status: string }) => {
       storeControl.order.push(`meta:${meta.status}`);
@@ -190,6 +190,11 @@ beforeEach(() => {
     }
   );
   storeControl.store.completeOwned.mockClear();
+  storeControl.store.persistCompleted.mockReset();
+  storeControl.store.persistCompleted.mockImplementation(async () => {
+    storeControl.order.push("persist");
+    return "persisted" as const;
+  });
   storeControl.store.releaseOwner.mockImplementation(async () => {
     storeControl.order.push("release");
   });

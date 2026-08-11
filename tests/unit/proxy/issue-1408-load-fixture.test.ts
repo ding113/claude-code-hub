@@ -4,8 +4,9 @@ import {
   spawnSync,
   type ChildProcessWithoutNullStreams,
 } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import http from "node:http";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -13,6 +14,25 @@ const fixtureDir = path.join(process.cwd(), "tests/load/issue-1408-replay-oom");
 const nodeScripts = ["mock-upstream.cjs", "drive-disconnect-waves.cjs", "memory-probe.cjs"];
 const shellScripts = ["sample-container.sh", "run-wave.sh", "start-mock-container.sh"];
 const children = new Set<ChildProcessWithoutNullStreams>();
+const posixIt = it.skipIf(process.platform === "win32");
+const mockEnvironmentKeys = [
+  "CCH_MOCK_HOST",
+  "CCH_MOCK_PORT",
+  "CCH_MOCK_MIB",
+  "CCH_MOCK_MAX_REQUEST_BYTES",
+] as const;
+
+function createMockEnvironment(overrides: Record<string, string> = {}): NodeJS.ProcessEnv {
+  const environment = { ...process.env };
+  for (const key of mockEnvironmentKeys) delete environment[key];
+  return {
+    ...environment,
+    CCH_MOCK_HOST: "127.0.0.1",
+    CCH_MOCK_PORT: "0",
+    CCH_MOCK_MIB: "0.0625",
+    ...overrides,
+  };
+}
 
 function getJson(url: URL): Promise<Record<string, unknown>> {
   return new Promise((resolve, reject) => {
@@ -72,13 +92,7 @@ async function startMock(
   overrides: Record<string, string> = {}
 ): Promise<{ child: ChildProcessWithoutNullStreams; baseUrl: URL }> {
   const child = spawn(process.execPath, [path.join(fixtureDir, "mock-upstream.cjs")], {
-    env: {
-      ...process.env,
-      CCH_MOCK_HOST: "127.0.0.1",
-      CCH_MOCK_PORT: "0",
-      CCH_MOCK_MIB: "0.0625",
-      ...overrides,
-    },
+    env: createMockEnvironment(overrides),
     stdio: ["ignore", "pipe", "pipe"],
   });
   children.add(child);
@@ -157,6 +171,86 @@ function waitForExit(
   });
 }
 
+function installFakeContainerCommands(directory: string): void {
+  writeFileSync(
+    path.join(directory, "docker"),
+    `#!/bin/sh
+set -eu
+printf '%s\\n' "$*" >> "$CCH_FAKE_DOCKER_LOG"
+case "$1" in
+  container)
+    [ "$2" = "inspect" ] || exit 2
+    exit "\${CCH_FAKE_CONTAINER_INSPECT_STATUS:-1}"
+    ;;
+  inspect)
+    exit "\${CCH_FAKE_IMAGE_INSPECT_STATUS:-0}"
+    ;;
+  run)
+    : > "$CCH_FAKE_CONTAINER_STATE"
+    ;;
+  logs)
+    ;;
+  rm)
+    rm -f "$CCH_FAKE_CONTAINER_STATE"
+    ;;
+  *)
+    exit 2
+    ;;
+esac
+`,
+    { mode: 0o755 }
+  );
+  writeFileSync(
+    path.join(directory, "curl"),
+    `#!/bin/sh
+exit "\${CCH_FAKE_CURL_STATUS:-1}"
+`,
+    { mode: 0o755 }
+  );
+  writeFileSync(
+    path.join(directory, "sleep"),
+    `#!/bin/sh
+case "\${CCH_FAKE_SLEEP_MODE:-success}" in
+  signal-int)
+    kill -INT "$PPID"
+    ;;
+  signal-term)
+    kill -TERM "$PPID"
+    ;;
+  fail)
+    exit 7
+    ;;
+esac
+`,
+    { mode: 0o755 }
+  );
+}
+
+function runStartMockWithFakeCommands(
+  directory: string,
+  overrides: Record<string, string>
+): ReturnType<typeof spawnSync> {
+  return spawnSync(
+    "sh",
+    [
+      path.join(fixtureDir, "start-mock-container.sh"),
+      "fixture-container",
+      "fixture-network",
+      "31409",
+    ],
+    {
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        PATH: `${directory}:${process.env.PATH ?? ""}`,
+        CCH_FAKE_CONTAINER_STATE: path.join(directory, "container-state"),
+        CCH_FAKE_DOCKER_LOG: path.join(directory, "docker.log"),
+        ...overrides,
+      },
+    }
+  );
+}
+
 afterEach(async () => {
   const exits = [...children].map(
     (child) =>
@@ -194,10 +288,47 @@ describe("issue #1408 load fixture", () => {
     }
 
     const startMock = readFileSync(path.join(fixtureDir, "start-mock-container.sh"), "utf8");
-    expect(startMock.indexOf('docker rm -f "$container"')).toBeGreaterThan(
-      startMock.indexOf('docker logs --tail 100 "$container"')
-    );
+    expect(startMock).toContain('docker container inspect "$container"');
   });
+
+  posixIt("checks container existence without treating a same-named image as a collision", () => {
+    const directory = mkdtempSync(path.join(tmpdir(), "cch1408-container-fixture-"));
+    try {
+      installFakeContainerCommands(directory);
+      const result = runStartMockWithFakeCommands(directory, { CCH_FAKE_CURL_STATUS: "0" });
+
+      expect(result.status).toBe(0);
+      expect(result.stdout).toContain("ready container=fixture-container");
+      expect(existsSync(path.join(directory, "container-state"))).toBe(true);
+      expect(readFileSync(path.join(directory, "docker.log"), "utf8")).toMatch(
+        /^container inspect fixture-container$/m
+      );
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  posixIt.each(["signal-int", "signal-term", "fail"])(
+    "removes the new container when readiness exits via %s",
+    (sleepMode) => {
+      const directory = mkdtempSync(path.join(tmpdir(), "cch1408-container-fixture-"));
+      try {
+        installFakeContainerCommands(directory);
+        const result = runStartMockWithFakeCommands(directory, {
+          CCH_FAKE_CURL_STATUS: "1",
+          CCH_FAKE_SLEEP_MODE: sleepMode,
+        });
+
+        expect(result.status).not.toBe(0);
+        expect(existsSync(path.join(directory, "container-state"))).toBe(false);
+        expect(readFileSync(path.join(directory, "docker.log"), "utf8")).toMatch(
+          /^rm -f fixture-container$/m
+        );
+      } finally {
+        rmSync(directory, { recursive: true, force: true });
+      }
+    }
+  );
 
   it("emits a valid hanging Responses SSE stream and records the scenario count", async () => {
     const { baseUrl } = await startMock();
@@ -211,6 +342,18 @@ describe("issue #1408 load fixture", () => {
       counts: { "contract-fixture": 1 },
       totalMiB: 0.0625,
     });
+  });
+
+  it("ignores inherited mock configuration when starting the fixture", async () => {
+    const previous = process.env.CCH_MOCK_MAX_REQUEST_BYTES;
+    process.env.CCH_MOCK_MAX_REQUEST_BYTES = "1.5";
+    try {
+      const { baseUrl } = await startMock();
+      await expect(getJson(new URL("/stats", baseUrl))).resolves.toMatchObject({ counts: {} });
+    } finally {
+      if (previous === undefined) delete process.env.CCH_MOCK_MAX_REQUEST_BYTES;
+      else process.env.CCH_MOCK_MAX_REQUEST_BYTES = previous;
+    }
   });
 
   it("resets counters, rejects unknown routes, and bounds request bodies", async () => {
@@ -249,12 +392,7 @@ describe("issue #1408 load fixture", () => {
   ])("rejects invalid mock configuration: %s", (_name, overrides, expected) => {
     const result = spawnSync(process.execPath, [path.join(fixtureDir, "mock-upstream.cjs")], {
       encoding: "utf8",
-      env: {
-        ...process.env,
-        CCH_MOCK_HOST: "127.0.0.1",
-        CCH_MOCK_PORT: "0",
-        ...overrides,
-      },
+      env: createMockEnvironment(overrides),
     });
 
     expect(result.status).not.toBe(0);
