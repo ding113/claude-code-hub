@@ -578,15 +578,23 @@ export async function loginUpstreamSite(
     password: creds.password,
   };
   if (turnstileToken) loginBody.turnstile_token = turnstileToken;
-  const res = await fetch(`${site}/api/v1/auth/login`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "User-Agent": UPSTREAM_USER_AGENT,
-    },
-    body: JSON.stringify(loginBody),
-    signal: AbortSignal.timeout(30_000),
-  });
+  const res = await (CURL_IMPERSONATE_ENABLED
+    ? impersonateFetch(`${site}/api/v1/auth/login`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(loginBody),
+      })
+    : fetch(`${site}/api/v1/auth/login`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "User-Agent": UPSTREAM_USER_AGENT,
+        },
+        body: JSON.stringify(loginBody),
+        signal: AbortSignal.timeout(30_000),
+      }));
   const body = (await readJson(res)) as {
     code?: number;
     message?: string;
