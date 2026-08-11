@@ -39,26 +39,14 @@ function normalizeSql(sqlObject: unknown): string {
   return sqlToString(sqlObject).replace(/\s+/g, " ").trim().toLowerCase();
 }
 
-function extractFinalizedRequestsSql(queryText: string): string {
-  const start = queryText.indexOf("finalized_requests as");
-  const end = queryText.indexOf("provider_bucket_stats as");
-
-  if (start === -1 || end === -1 || end <= start) {
-    throw new Error("Could not locate finalized_requests CTE in query text");
-  }
-
-  return queryText.slice(start, end);
-}
-
-// 终态边界必须仅由 status_code 收敛：不能回退到包含 blocked_by /
-// error_message / provider_chain 任一非空的旧语义，否则会重新把"请求中"
-// 记录纳入可用性统计。每一处断言都重复这套规则，防止个别用例漏检导致回归。
-function expectStatusCodeOnlyFinalizedBoundary(sqlText: string) {
+function expectProjectionBucketReadPath(sqlText: string) {
+  expect(sqlText).toContain("from avail_bucket_1m");
+  expect(sqlText).toContain("date_bin");
+  expect(sqlText).toContain("row_number() over");
+  expect(sqlText).not.toContain("from message_request");
+  expect(sqlText).not.toContain("fn_compute_message_request_success_rate_outcome");
+  expect(sqlText).not.toContain("percentile_cont");
   expect(sqlText).not.toContain("fn_is_message_request_finalized");
-  expect(sqlText).toContain(`"status_code" is not null`);
-  expect(sqlText).not.toContain(`"blocked_by" is not null`);
-  expect(sqlText).not.toContain(`"error_message" is not null`);
-  expect(sqlText).not.toContain(`"provider_chain" -> -1 ->> 'reason'`);
 }
 
 describe("availability-service", () => {
@@ -253,7 +241,7 @@ describe("availability-service", () => {
     expect(executeMock).not.toHaveBeenCalled();
   });
 
-  it("queryProviderAvailability 改为数据库聚合后仍只统计终态请求", async () => {
+  it("queryProviderAvailability 从 avail_bucket_1m 投影表聚合，不再扫描 message_request", async () => {
     const selectMock = vi.fn(() =>
       createThenableQuery([
         {
@@ -319,21 +307,9 @@ describe("availability-service", () => {
     });
 
     const queryText = normalizeSql(executeMock.mock.calls[0]?.[0]);
-    const finalizedRequestsSql = extractFinalizedRequestsSql(queryText);
-    // 可用性监控的终态边界收敛为 status_code IS NOT NULL，
-    // 这样才能命中部分索引 idx_message_request_provider_created_at_finalized_active；
-    // 同时不会把 providerChain / errorMessage 已写入但 statusCode 仍为空的"请求中"
-    // 记录纳入聚合 —— 它们会在分类阶段被误判成 failure。
-    expectStatusCodeOnlyFinalizedBoundary(finalizedRequestsSql);
-    expect(queryText).toContain("group by");
-    expect(queryText).toContain("percentile_cont(0.95)");
-    expect(queryText).toContain("row_number() over");
-    expect(queryText).toContain(`"successrateoutcome" in ('success', 'failure')`);
-    // 终态记录的 success/failure/excluded 分类仍由 outcome 函数完成。
-    expect(queryText).toContain("fn_compute_message_request_success_rate_outcome");
-    expect(queryText).toContain('avg("durationms") filter');
-    expect(queryText).toContain('"message_request"."is_replay" =');
-    expect(sqlToQuery(executeMock.mock.calls[0]?.[0]).params).toContain(false);
+    expectProjectionBucketReadPath(queryText);
+    expect(queryText).toContain("where rn <=");
+    expect(sqlToQuery(executeMock.mock.calls[0]?.[0]).params).toContain(60);
   });
 
   it("queryProviderAvailability 计算 currentStatus 时会按最近 buckets 的请求量加权", async () => {
@@ -431,8 +407,9 @@ describe("availability-service", () => {
     expect(selectMock).toHaveBeenCalledTimes(1);
     expect(executeMock).toHaveBeenCalledTimes(1);
     expect(result.bucketSizeMinutes).toBe(5);
-    expect(query.params).toContain(300);
+    expect(query.params).toContain(5);
     expect(query.params).not.toContain(Number.POSITIVE_INFINITY);
+    expectProjectionBucketReadPath(normalizeSql(executeMock.mock.calls[0]?.[0]));
   });
 
   it("queryProviderAvailability 在 bucketSizeMinutes 为超大有限值时钳制到 1440 分钟", async () => {
@@ -467,117 +444,8 @@ describe("availability-service", () => {
     expect(selectMock).toHaveBeenCalledTimes(1);
     expect(executeMock).toHaveBeenCalledTimes(1);
     expect(result.bucketSizeMinutes).toBe(1440);
-    expect(query.params).toContain(86400);
-    expect(query.params).not.toContain(Number.MAX_SAFE_INTEGER * 60);
-  });
-
-  it("queryProviderAvailability 会排除进行中请求(statusCode=null 且 durationMs=null)", async () => {
-    const selectMock = vi.fn(() =>
-      createThenableQuery([
-        {
-          id: 1,
-          name: "Provider A",
-          providerType: "claude",
-          enabled: true,
-        },
-      ])
-    );
-    const executeMock = vi.fn(async () => []);
-
-    vi.doMock("@/drizzle/db", () => ({
-      db: {
-        select: selectMock,
-        execute: executeMock,
-      },
-    }));
-
-    const { queryProviderAvailability } = await import("@/lib/availability/availability-service");
-    await queryProviderAvailability({
-      startTime: new Date("2026-04-13T07:00:00.000Z"),
-      endTime: new Date("2026-04-13T09:00:00.000Z"),
-      bucketSizeMinutes: 60,
-    });
-
-    const finalizedRequestsSql = extractFinalizedRequestsSql(
-      normalizeSql(executeMock.mock.calls[0]?.[0])
-    );
-    // 终态判定只看 status_code IS NOT NULL：要么命中部分索引，要么直接排除"请求中"
-    // 的记录，不再依据 providerChain / errorMessage 片段把它们判为终态。
-    expectStatusCodeOnlyFinalizedBoundary(finalizedRequestsSql);
-  });
-
-  it("queryProviderAvailability 会保留 Gemini passthrough 终态(statusCode!=null 且 durationMs=null)", async () => {
-    const selectMock = vi.fn(() =>
-      createThenableQuery([
-        {
-          id: 1,
-          name: "Provider A",
-          providerType: "claude",
-          enabled: true,
-        },
-      ])
-    );
-    const executeMock = vi.fn(async () => []);
-
-    vi.doMock("@/drizzle/db", () => ({
-      db: {
-        select: selectMock,
-        execute: executeMock,
-      },
-    }));
-
-    const { queryProviderAvailability } = await import("@/lib/availability/availability-service");
-    await queryProviderAvailability({
-      startTime: new Date("2026-04-13T07:00:00.000Z"),
-      endTime: new Date("2026-04-13T09:00:00.000Z"),
-      bucketSizeMinutes: 60,
-    });
-
-    const finalizedRequestsSql = extractFinalizedRequestsSql(
-      normalizeSql(executeMock.mock.calls[0]?.[0])
-    );
-    expect(finalizedRequestsSql).not.toMatch(/where .*duration_?ms.*is not null/);
-    // Gemini passthrough 写入了 statusCode（即使 durationMs 仍为 null），
-    // 因此会被 status_code IS NOT NULL 的终态过滤保留下来；同时保持终态边界
-    // 不被其他字段放宽。
-    expectStatusCodeOnlyFinalizedBoundary(finalizedRequestsSql);
-  });
-
-  it("queryProviderAvailability 当前不会把中间持久化状态(statusCode=null 且 durationMs!=null)误算为 red", async () => {
-    const selectMock = vi.fn(() =>
-      createThenableQuery([
-        {
-          id: 1,
-          name: "Provider A",
-          providerType: "claude",
-          enabled: true,
-        },
-      ])
-    );
-    const executeMock = vi.fn(async () => []);
-
-    vi.doMock("@/drizzle/db", () => ({
-      db: {
-        select: selectMock,
-        execute: executeMock,
-      },
-    }));
-
-    const { queryProviderAvailability } = await import("@/lib/availability/availability-service");
-    await queryProviderAvailability({
-      startTime: new Date("2026-04-13T07:00:00.000Z"),
-      endTime: new Date("2026-04-13T09:00:00.000Z"),
-      bucketSizeMinutes: 60,
-    });
-
-    const queryText = normalizeSql(executeMock.mock.calls[0]?.[0]);
-    const finalizedRequestsSql = extractFinalizedRequestsSql(queryText);
-
-    // status_code IS NOT NULL 把 statusCode=null 的中间持久化记录直接排除在聚合外，
-    // 它们根本不会进入 outcome 分类阶段，所以不会被算成 failure。
-    expectStatusCodeOnlyFinalizedBoundary(finalizedRequestsSql);
-    expect(queryText).toContain("fn_compute_message_request_success_rate_outcome");
-    expect(queryText).toContain(`"successrateoutcome" = 'failure'`);
+    expect(query.params).toContain(1440);
+    expect(query.params).not.toContain(Number.MAX_SAFE_INTEGER);
   });
 
   it("queryProviderAvailability 在 maxBuckets 为 Infinity 时仍使用默认桶上限", async () => {
@@ -702,7 +570,7 @@ describe("availability-service", () => {
     ]);
   });
 
-  it("getCurrentProviderStatus 改为数据库聚合后仍只统计终态请求", async () => {
+  it("getCurrentProviderStatus 优先读取 avail_current 投影表", async () => {
     const selectMock = vi.fn(() =>
       createThenableQuery([
         {
@@ -714,8 +582,9 @@ describe("availability-service", () => {
     const executeMock = vi.fn(async () => [
       {
         providerId: 1,
-        greenCount: 1,
-        redCount: 1,
+        state: "green",
+        availability: 0.5,
+        requestCount: 2,
         lastRequestAt: new Date("2026-04-13T08:02:00.000Z"),
       },
     ]);
@@ -744,16 +613,59 @@ describe("availability-service", () => {
     ]);
 
     const queryText = normalizeSql(executeMock.mock.calls[0]?.[0]);
-    // getCurrentProviderStatus 同样使用 status_code IS NOT NULL 终态边界，
-    // 让短窗口查询也能直接命中部分索引并避免误判"请求中"。
-    expectStatusCodeOnlyFinalizedBoundary(queryText);
-    expect(queryText).toContain("fn_compute_message_request_success_rate_outcome");
-    expect(queryText).toContain(">= now() - (15 * interval '1 minute')");
-    expect(queryText).toContain("<= now()");
-    expect(queryText).toContain("count(*) filter");
-    expect(queryText).toContain("max(");
-    expect(queryText).toContain('"message_request"."is_replay" =');
-    expect(sqlToQuery(executeMock.mock.calls[0]?.[0]).params).toContain(false);
+    expect(queryText).toContain("from avail_current");
+    expect(queryText).not.toContain("from message_request");
+    expect(queryText).not.toContain("fn_compute_message_request_success_rate_outcome");
+  });
+
+  it("getCurrentProviderStatus 在 avail_current 缺失时回退到 avail_bucket_1m", async () => {
+    const selectMock = vi.fn(() =>
+      createThenableQuery([
+        {
+          id: 1,
+          name: "Provider A",
+        },
+      ])
+    );
+    const executeMock = vi
+      .fn()
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        {
+          providerId: 1,
+          greenCount: 3,
+          redCount: 1,
+          lastRequestAt: new Date("2026-04-13T08:05:00.000Z"),
+        },
+      ]);
+
+    vi.doMock("@/drizzle/db", () => ({
+      db: {
+        select: selectMock,
+        execute: executeMock,
+      },
+    }));
+
+    const { getCurrentProviderStatus } = await import("@/lib/availability/availability-service");
+    const result = await getCurrentProviderStatus();
+
+    expect(executeMock).toHaveBeenCalledTimes(2);
+    expect(result).toEqual([
+      {
+        providerId: 1,
+        providerName: "Provider A",
+        status: "green",
+        availability: 0.75,
+        requestCount: 4,
+        lastRequestAt: "2026-04-13T08:05:00.000Z",
+      },
+    ]);
+
+    expect(normalizeSql(executeMock.mock.calls[0]?.[0])).toContain("from avail_current");
+    expect(normalizeSql(executeMock.mock.calls[1]?.[0])).toContain("from avail_bucket_1m");
+    expect(normalizeSql(executeMock.mock.calls[1]?.[0])).toContain(
+      ">= now() - (15 * interval '1 minute')"
+    );
   });
 
   it("getCurrentProviderStatus 在提供商无聚合数据时返回 unknown", async () => {
@@ -765,7 +677,8 @@ describe("availability-service", () => {
         },
       ])
     );
-    const executeMock = vi.fn(async () => []);
+    // first avail_current empty, then fallback empty
+    const executeMock = vi.fn().mockResolvedValueOnce([]).mockResolvedValueOnce([]);
 
     vi.doMock("@/drizzle/db", () => ({
       db: {
@@ -778,7 +691,7 @@ describe("availability-service", () => {
     const result = await getCurrentProviderStatus();
 
     expect(selectMock).toHaveBeenCalledTimes(1);
-    expect(executeMock).toHaveBeenCalledTimes(1);
+    expect(executeMock).toHaveBeenCalledTimes(2);
     expect(result).toEqual([
       {
         providerId: 1,

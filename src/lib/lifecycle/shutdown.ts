@@ -138,6 +138,18 @@ export async function runApplicationCleanup(
       "stopPublicStatusRebuildScheduler"
     );
 
+    // 3b. 可用性投影 outbox worker
+    await awaitQuiescenceBestEffort(
+      (async () => {
+        const { stopAvailabilityProjectionWorker } = await import(
+          "@/lib/availability/projection-worker"
+        );
+        await stopAvailabilityProjectionWorker();
+      })(),
+      stepMs,
+      "stopAvailabilityProjectionWorker"
+    );
+
     // 4. 端点探测日志清理
     await awaitQuiescenceBestEffort(
       (async () => {

@@ -66,6 +66,7 @@ describe.sequential("lifecycle/shutdown", () => {
       throw new Error("simulated probe scheduler shutdown failure");
     });
     const stopPublicStatus = vi.fn(async () => {});
+    const stopAvailProj = vi.fn(async () => {});
     const stopProbeLog = vi.fn();
     const shutdownTasks = vi.fn(async () => {});
     const stopWriteBuffer = vi.fn(async () => {});
@@ -78,6 +79,9 @@ describe.sequential("lifecycle/shutdown", () => {
     }));
     vi.doMock("@/lib/public-status/scheduler", () => ({
       stopPublicStatusRebuildScheduler: stopPublicStatus,
+    }));
+    vi.doMock("@/lib/availability/projection-worker", () => ({
+      stopAvailabilityProjectionWorker: stopAvailProj,
     }));
     vi.doMock("@/lib/provider-endpoints/probe-log-cleanup", () => ({
       stopEndpointProbeLogCleanup: stopProbeLog,
@@ -109,6 +113,7 @@ describe.sequential("lifecycle/shutdown", () => {
     expect(stopCache).toHaveBeenCalled();
     expect(stopProbe).toHaveBeenCalled();
     expect(stopPublicStatus).toHaveBeenCalled();
+    expect(stopAvailProj).toHaveBeenCalled();
     expect(stopProbeLog).toHaveBeenCalled();
     expect(shutdownTasks).toHaveBeenCalled();
     expect(stopWriteBuffer).toHaveBeenCalled();
@@ -132,6 +137,9 @@ describe.sequential("lifecycle/shutdown", () => {
     }));
     vi.doMock("@/lib/public-status/scheduler", () => ({
       stopPublicStatusRebuildScheduler: async () => {},
+    }));
+    vi.doMock("@/lib/availability/projection-worker", () => ({
+      stopAvailabilityProjectionWorker: async () => {},
     }));
     vi.doMock("@/lib/provider-endpoints/probe-log-cleanup", () => ({
       stopEndpointProbeLogCleanup: async () => {},
@@ -174,6 +182,9 @@ describe.sequential("lifecycle/shutdown", () => {
     vi.doMock("@/lib/public-status/scheduler", () => ({
       stopPublicStatusRebuildScheduler: async () => {},
     }));
+    vi.doMock("@/lib/availability/projection-worker", () => ({
+      stopAvailabilityProjectionWorker: async () => {},
+    }));
     vi.doMock("@/lib/provider-endpoints/probe-log-cleanup", () => ({
       stopEndpointProbeLogCleanup: () => {},
     }));
@@ -205,6 +216,9 @@ describe.sequential("lifecycle/shutdown", () => {
     }));
     vi.doMock("@/lib/public-status/scheduler", () => ({
       stopPublicStatusRebuildScheduler: async () => {},
+    }));
+    vi.doMock("@/lib/availability/projection-worker", () => ({
+      stopAvailabilityProjectionWorker: async () => {},
     }));
     vi.doMock("@/lib/provider-endpoints/probe-log-cleanup", () => ({
       stopEndpointProbeLogCleanup: () => {},
@@ -289,6 +303,9 @@ describe.sequential("lifecycle/shutdown", () => {
     vi.doMock("@/lib/public-status/scheduler", () => ({
       stopPublicStatusRebuildScheduler: async () => {},
     }));
+    vi.doMock("@/lib/availability/projection-worker", () => ({
+      stopAvailabilityProjectionWorker: async () => {},
+    }));
     vi.doMock("@/lib/provider-endpoints/probe-log-cleanup", () => ({
       stopEndpointProbeLogCleanup: async () => {},
     }));
@@ -330,6 +347,9 @@ describe.sequential("lifecycle/shutdown", () => {
     }));
     vi.doMock("@/lib/public-status/scheduler", () => ({
       stopPublicStatusRebuildScheduler: async () => {},
+    }));
+    vi.doMock("@/lib/availability/projection-worker", () => ({
+      stopAvailabilityProjectionWorker: async () => {},
     }));
     vi.doMock("@/lib/provider-endpoints/probe-log-cleanup", () => ({
       stopEndpointProbeLogCleanup: () => {},

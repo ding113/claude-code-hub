@@ -258,6 +258,9 @@ describe.sequential("registerOrchestratedShutdown", () => {
     vi.doMock("@/lib/public-status/scheduler", () => ({
       stopPublicStatusRebuildScheduler: async () => {},
     }));
+    vi.doMock("@/lib/availability/projection-worker", () => ({
+      stopAvailabilityProjectionWorker: async () => {},
+    }));
     vi.doMock("@/lib/provider-endpoints/probe-log-cleanup", () => ({
       stopEndpointProbeLogCleanup: () => {},
     }));
