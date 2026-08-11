@@ -3,9 +3,11 @@
  * Supports sub2api + newapi login, group rates, balance, and optional Turnstile solve.
  */
 import { fromZonedTime } from "date-fns-tz";
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
 import { logger } from "@/lib/logger";
+import {
+  CURL_IMPERSONATE_ENABLED,
+  impersonateFetch,
+} from "@/lib/curl-impersonate";
 import {
   getProviderSiteRateLimitCooldown,
   noteProviderSiteRateLimit,
@@ -58,59 +60,6 @@ export type UpstreamSiteCredentials = {
 
 const UPSTREAM_USER_AGENT =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
-
-const execFileAsync = promisify(execFile);
-const CURL_IMPERSONATE_BIN = "curl_chrome116";
-const CURL_IMPERSONATE_ENABLED = !!process.env.ENABLE_CURL_IMPERSONATE;
-
-/**
- * Minimal fetch-compatible response built from a curl-impersonate child process.
- * curl-impersonate mimics Chrome's TLS/HTTP2 fingerprint, which is required by
- * upstream sites whose Cloudflare WAF blocks non-browser clients (403 HTML on
- * valid tokens). Fall back to plain fetch when the binary is unavailable.
- */
-async function impersonateFetch(
-  url: string,
-  init: { headers?: Record<string, string>; method?: string; body?: string } = {}
-): Promise<Response> {
-  const args = [
-    "-sS",
-    "--max-time",
-    "30",
-    "-w",
-    "\n%{http_code}\n%{content_type}",
-  ];
-  const method = init.method ?? "GET";
-  if (method !== "GET") args.push("-X", method);
-  for (const [k, v] of Object.entries(init.headers ?? {})) {
-    if (k.toLowerCase() === "user-agent") continue; // wrapper 自带 Chrome UA
-    args.push("-H", `${k}: ${v}`);
-  }
-  if (init.body != null) args.push("--data-raw", init.body);
-  args.push(url);
-
-  try {
-    const { stdout } = await execFileAsync(CURL_IMPERSONATE_BIN, args, {
-      timeout: 35_000,
-      maxBuffer: 10 * 1024 * 1024,
-    });
-    const lines = stdout.split("\n");
-    const statusLine = lines[lines.length - 2]?.trim() ?? "0";
-    const contentType = lines[lines.length - 1]?.trim() ?? "";
-    const body = lines.slice(0, -2).join("\n");
-    const status = Number.parseInt(statusLine, 10) || 0;
-    return new Response(body, {
-      status,
-      headers: { "content-type": contentType },
-    });
-  } catch (error) {
-    logger.warn("[provider-sites] curl-impersonate failed, falling back to fetch", {
-      url,
-      error: error instanceof Error ? error.message : String(error),
-    });
-    return fetch(url, { method, headers: init.headers, body: init.body, signal: AbortSignal.timeout(30_000) });
-  }
-}
 
 export class UpstreamRequestError extends Error {
   readonly method: string;

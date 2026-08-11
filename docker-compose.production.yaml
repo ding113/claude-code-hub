@@ -23,6 +23,7 @@ services:
       MAX_RETRY_ATTEMPTS_DEFAULT: ${MAX_RETRY_ATTEMPTS_DEFAULT:-1}
       LANGFUSE_SAMPLE_RATE: ${LANGFUSE_SAMPLE_RATE:-1.0}
       ENABLE_CURL_IMPERSONATE: "true"
+      CURL_IMPERSONATE_HOSTS: "mdkj.lol,sub.sixoner.com"
       TZ: Asia/Shanghai
     network_mode: host
     volumes:

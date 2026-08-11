@@ -4,6 +4,11 @@ import {
   matchesAllowedModelRules,
   normalizeAllowedModelRules,
 } from "@/lib/allowed-model-rules";
+import {
+  CURL_IMPERSONATE_ENABLED,
+  impersonateFetch,
+  shouldImpersonateProviderUrl,
+} from "@/lib/curl-impersonate";
 import { logger } from "@/lib/logger";
 import { createProxyAgentForProvider } from "@/lib/proxy-agent";
 import { ERROR_CODES, getErrorMessageServer } from "@/lib/utils/error-messages";
@@ -269,6 +274,24 @@ const UPSTREAM_CONFIGS: Record<string, UpstreamFetchConfig> = {
 };
 
 /**
+ * 把 undici 的响应对象转成标准 fetch Response,让两种请求路径共用同一套
+ * 后续处理(status/text/json)。
+ */
+async function undiciResponseToFetchResponse(
+  res: Awaited<ReturnType<typeof undiciRequest>>
+): Promise<Response> {
+  const body = await res.body.text();
+  const headers: Record<string, string> = {};
+  for (const [k, v] of Object.entries(res.headers)) {
+    if (typeof v === "string") headers[k] = v;
+  }
+  return new Response(body, {
+    status: res.statusCode,
+    headers,
+  });
+}
+
+/**
  * 通用模型列表获取函数
  */
 async function fetchModelsWithConfig(
@@ -284,23 +307,27 @@ async function fetchModelsWithConfig(
   const safeUrl = url.replace(/[?&]key=[^&]+/, "[key=REDACTED]");
   logger.debug(`[AvailableModels] Fetching models from ${provider.name}: ${safeUrl}`);
 
-  const response = await undiciRequest(url, {
-    method: "GET",
-    headers,
-    dispatcher: proxyConfig?.agent,
-    headersTimeout: timeout,
-    bodyTimeout: timeout,
-  });
+  const response = CURL_IMPERSONATE_ENABLED && shouldImpersonateProviderUrl(url)
+    ? await impersonateFetch(url, { method: "GET", headers })
+    : await undiciResponseToFetchResponse(
+        await undiciRequest(url, {
+          method: "GET",
+          headers,
+          dispatcher: proxyConfig?.agent,
+          headersTimeout: timeout,
+          bodyTimeout: timeout,
+        })
+      );
 
-  if (response.statusCode !== 200) {
-    const errorBody = await response.body.text();
+  if (response.status !== 200) {
+    const errorBody = await response.text();
     logger.debug(
-      `[AvailableModels] ${provider.name} returned ${response.statusCode}: ${errorBody}`
+      `[AvailableModels] ${provider.name} returned ${response.status}: ${errorBody}`
     );
-    throw new Error(`${provider.name} API returned ${response.statusCode}`);
+    throw new Error(`${provider.name} API returned ${response.status}`);
   }
 
-  const body = await response.body.json();
+  const body = await response.json();
   const models = config.parseResponse(body);
 
   logger.debug(`[AvailableModels] ${provider.name} returned ${models.length} models`);

@@ -5,6 +5,11 @@
  */
 
 import { createProxyAgentForProvider, type ProviderProxyConfig } from "@/lib/proxy-agent";
+import {
+  CURL_IMPERSONATE_ENABLED,
+  impersonateFetch,
+  shouldImpersonateProviderUrl,
+} from "@/lib/curl-impersonate";
 import { parseResponse } from "./parsers";
 import {
   getExecutionPresetCandidates,
@@ -466,7 +471,13 @@ async function runSingleAttempt(
 
         let response: Response;
         try {
-          response = await fetch(requestUrl, fetchOptions);
+          response = CURL_IMPERSONATE_ENABLED && shouldImpersonateProviderUrl(requestUrl)
+            ? await impersonateFetch(requestUrl, {
+                method: "POST",
+                headers: plan.headers,
+                body: JSON.stringify(plan.body),
+              })
+            : await fetch(requestUrl, fetchOptions);
         } catch (error) {
           // Header-stage abort is still a total failure; message kept generic.
           throw error;
