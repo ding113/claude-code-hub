@@ -361,7 +361,7 @@ export function SummaryTab({
                     </div>
                   </div>
                   {identity.value === sessionId && hasMessages && !checkingMessages && (
-                    <Link href={sessionMessagesHref}>
+                    <Link href={sessionMessagesHref} prefetch={false}>
                       <Button variant="outline" size="sm">
                         <ExternalLink className="h-4 w-4 mr-2" />
                         {t("viewDetails")}
