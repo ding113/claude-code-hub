@@ -60,6 +60,7 @@
     "concurrent_limit_failed": "并发限制",
     "http2_fallback": "HTTP/2 回退",
     "session_reuse": "会话复用",
+    "global_reuse": "全局会话复用",
     "initial_selection": "首次选择",
     "endpoint_pool_exhausted": "端点池耗尽",
     "vendor_type_all_timeout": "供应商类型全端点超时",
@@ -247,6 +248,7 @@
   },
   "selectionMethods": {
     "session_reuse": "会话复用",
+    "global_reuse": "全局会话复用",
     "weighted_random": "加权随机",
     "group_filtered": "分组过滤",
     "fail_open_fallback": "故障开放回退",

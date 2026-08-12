@@ -60,6 +60,7 @@
     "concurrent_limit_failed": "Concurrent Limit",
     "http2_fallback": "HTTP/2 Fallback",
     "session_reuse": "Session Reuse",
+    "global_reuse": "Global Session Reuse",
     "initial_selection": "Initial Selection",
     "endpoint_pool_exhausted": "Endpoint Pool Exhausted",
     "vendor_type_all_timeout": "Vendor-Type All Endpoints Timeout",
@@ -247,6 +248,7 @@
   },
   "selectionMethods": {
     "session_reuse": "Session Reuse",
+    "global_reuse": "Global Session Reuse",
     "weighted_random": "Weighted Random",
     "group_filtered": "Group Filtered",
     "fail_open_fallback": "Fail-Open Fallback",

@@ -516,29 +516,38 @@ export class ProxyProviderResolver {
         });
 
         // 只在首次选择时记录到决策链（重试时的记录由 forwarder.ts 在请求完成后统一记录）
+        // 复用路径（session_reuse/global_reuse）已记录选择来源，不再追加 initial_selection，
+        // 否则 summary 格式化器会优先命中空 decisionContext 的 initial_selection 而非复用标记
         if (attemptCount === 1) {
-          const successContext = session.getLastSelectionContext();
-          session.addProviderToChain(session.provider, {
-            reason: "initial_selection",
-            selectionMethod:
-              successContext?.selectionMode ??
-              (successContext?.groupFilterApplied ? "group_filtered" : "cost_fallback"),
-            circuitState: getCircuitState(session.provider.id),
-            decisionContext: successContext || {
-              totalProviders: 0,
-              enabledProviders: 0,
-              targetType: session.provider.providerType as NonNullable<
-                ProviderChainItem["decisionContext"]
-              >["targetType"],
-              requestedModel: session.getOriginalModel() || "",
-              groupFilterApplied: false,
-              beforeHealthCheck: 0,
-              afterHealthCheck: 0,
-              priorityLevels: [],
-              selectedPriority: 0,
-              candidatesAtPriority: [],
-            },
-          });
+          const chainHasReuse = session
+            .getProviderChain()
+            .some(
+              (item) => item.reason === "session_reuse" || item.reason === "global_reuse"
+            );
+          if (!chainHasReuse) {
+            const successContext = session.getLastSelectionContext();
+            session.addProviderToChain(session.provider, {
+              reason: "initial_selection",
+              selectionMethod:
+                successContext?.selectionMode ??
+                (successContext?.groupFilterApplied ? "group_filtered" : "cost_fallback"),
+              circuitState: getCircuitState(session.provider.id),
+              decisionContext: successContext || {
+                totalProviders: 0,
+                enabledProviders: 0,
+                targetType: session.provider.providerType as NonNullable<
+                  ProviderChainItem["decisionContext"]
+                >["targetType"],
+                requestedModel: session.getOriginalModel() || "",
+                groupFilterApplied: false,
+                beforeHealthCheck: 0,
+                afterHealthCheck: 0,
+                priorityLevels: [],
+                selectedPriority: 0,
+                candidatesAtPriority: [],
+              },
+            });
+          }
         }
 
         // ⭐ 延迟绑定策略：移除立即绑定，改为请求成功后绑定

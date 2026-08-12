@@ -33,7 +33,7 @@ import { StepCard, type StepStatus } from "./StepCard";
 
 function getRequestStatus(item: ProviderChainItem): StepStatus {
   // Check for session reuse first
-  if (item.reason === "session_reuse" || item.selectionMethod === "session_reuse") {
+  if (item.reason === "session_reuse" || item.reason === "global_reuse" || item.selectionMethod === "session_reuse" || item.selectionMethod === "global_reuse") {
     return "session_reuse";
   }
   if (
@@ -164,7 +164,9 @@ export function LogicTraceTab({
   // Check if this is a session reuse flow (provider reused from session cache)
   const isSessionReuseFlow =
     providerChain?.[0]?.reason === "session_reuse" ||
-    providerChain?.[0]?.selectionMethod === "session_reuse";
+    providerChain?.[0]?.reason === "global_reuse" ||
+    providerChain?.[0]?.selectionMethod === "session_reuse" ||
+    providerChain?.[0]?.selectionMethod === "global_reuse";
 
   // Extract session reuse context from first chain item
   const sessionReuseContext = isSessionReuseFlow ? providerChain?.[0]?.decisionContext : undefined;
@@ -785,7 +787,7 @@ export function LogicTraceTab({
             const status = getRequestStatus(item);
             const isRetry = item.attemptNumber && item.attemptNumber > 1;
             const isSessionReuse =
-              item.reason === "session_reuse" || item.selectionMethod === "session_reuse";
+              item.reason === "session_reuse" || item.reason === "global_reuse" || item.selectionMethod === "session_reuse" || item.selectionMethod === "global_reuse";
 
             // Determine icon based on type
             const isHedgeTriggered = item.reason === "hedge_triggered";

@@ -156,7 +156,8 @@ export function ProviderChainPopover({
 
   // Check if this is a session reuse
   const isSessionReuse =
-    chain[0]?.reason === "session_reuse" || chain[0]?.selectionMethod === "session_reuse";
+    chain[0]?.reason === "session_reuse" || chain[0]?.reason === "global_reuse" ||
+    chain[0]?.selectionMethod === "session_reuse" || chain[0]?.selectionMethod === "global_reuse";
 
   // Get initial selection context for tooltip
   const initialSelection = chain.find((item) => item.reason === "initial_selection");
@@ -166,7 +167,7 @@ export function ProviderChainPopover({
   if (retryCount === 0 && !isHedge) {
     // Get session reuse context for detailed tooltip
     const sessionReuseItem = chain.find(
-      (item) => item.reason === "session_reuse" || item.selectionMethod === "session_reuse"
+      (item) => item.reason === "session_reuse" || item.reason === "global_reuse" || item.selectionMethod === "session_reuse" || item.selectionMethod === "global_reuse"
     );
     const sessionReuseContext = sessionReuseItem?.decisionContext;
     const singleRequestItem = chain.find(isActualRequest);

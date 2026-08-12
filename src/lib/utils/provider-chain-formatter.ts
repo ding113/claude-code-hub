@@ -374,7 +374,7 @@ export function formatProviderSummary(
     }
 
     // 查找是否是会话复用
-    const sessionReuse = chain.find((item) => item.reason === "session_reuse");
+    const sessionReuse = chain.find((item) => item.reason === "session_reuse" || item.reason === "global_reuse");
     if (sessionReuse) {
       return t("summary.sessionReuse", { provider: request.name });
     }
@@ -409,7 +409,7 @@ export function formatProviderDescription(
   const ctx = first.decisionContext;
 
   // === 部分1: 首次选择逻辑 ===
-  if (first.reason === "session_reuse" && ctx) {
+  if ((first.reason === "session_reuse" || first.reason === "global_reuse") && ctx) {
     desc += `${t("description.sessionReuse")}\n\n`;
     desc += `${t("description.sessionId", {
       id: ctx.sessionId?.slice(-6) || t("description.unknown"),
@@ -519,8 +519,8 @@ export function formatProviderTimeline(
     // === 时间戳 ===
     timeline += `[${elapsed.toString().padStart(4, "0")}ms] `;
 
-    // === 会话复用选择 ===
-    if (item.reason === "session_reuse" && ctx) {
+    // === 会话复用 ===
+    if ((item.reason === "session_reuse" || item.reason === "global_reuse") && ctx) {
       timeline += `${t("timeline.sessionReuseTitle")}\n\n`;
       timeline += `${t("timeline.sessionId", { id: ctx.sessionId || t("timeline.unknown") })}\n`;
       timeline += `${t("timeline.reuseProvider", { provider: item.name })}\n`;

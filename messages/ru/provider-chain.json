@@ -60,6 +60,7 @@
     "concurrent_limit_failed": "Лимит параллельных запросов",
     "http2_fallback": "Откат HTTP/2",
     "session_reuse": "Повторное использование сессии",
+    "global_reuse": "Глобальное повторное использование сеанса",
     "initial_selection": "Первоначальный выбор",
     "endpoint_pool_exhausted": "Пул конечных точек исчерпан",
     "vendor_type_all_timeout": "Тайм-аут всех конечных точек типа поставщика",
@@ -247,6 +248,7 @@
   },
   "selectionMethods": {
     "session_reuse": "Повторное использование сессии",
+    "global_reuse": "Глобальное повторное использование сеанса",
     "weighted_random": "Взвешенный случайный",
     "group_filtered": "Фильтрация по группе",
     "fail_open_fallback": "Резервный вариант при сбое",
