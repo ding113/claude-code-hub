@@ -1,8 +1,9 @@
 import "server-only";
 
-import { and, desc, eq, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
-import { providerHealthTestLogs, providers } from "@/drizzle/schema";
+import { providerHealthTestLogs, providerSites, providerSiteGroupRates, providers } from "@/drizzle/schema";
+import { normalizeUpstreamRate, resolveRechargeMultiplier } from "@/lib/provider-sites/billing";
 import { getCachedSystemSettings } from "@/lib/config/system-settings-cache";
 import { logger } from "@/lib/logger";
 import {
@@ -293,6 +294,9 @@ export async function findProvidersForScheduledHealthTest(): Promise<ProviderHea
       isEnabled: providers.isEnabled,
       costMultiplier: providers.costMultiplier,
       groupTag: providers.groupTag,
+      siteId: providers.siteId,
+      siteGroupName: providers.siteGroupName,
+      billingMode: providers.billingMode,
     })
     .from(providers)
     .where(
@@ -309,6 +313,50 @@ export async function findProvidersForScheduledHealthTest(): Promise<ProviderHea
   const { resolveProviderGroupsWithDefault } = await import("@/lib/utils/provider-group");
   const modelsByGroup = await getProviderGroupHealthTestModelsMap();
 
+  // Project site-linked providers' cost multiplier to the CCH-facing (processed)
+  // value = upstream ratio ÷ rechargeMultiplier, mirroring dispatch scheduling.
+  // providers.cost_multiplier still holds the raw upstream ratio until the next
+  // site sync, so health-test cost estimates must apply the same in-memory
+  // projection as applyEffectiveSiteDispatchCosts.
+  const siteLinkedIds = Array.from(
+    new Set(
+      rows
+        .filter(
+          (row) =>
+            row.billingMode === "site_group_ratio" &&
+            row.siteId != null &&
+            String(row.siteGroupName ?? "").trim().length > 0
+        )
+        .map((row) => row.siteId as number)
+    )
+  );
+  const effectiveBySiteGroup = new Map<string, number>();
+  if (siteLinkedIds.length > 0) {
+    const [sites, rates] = await Promise.all([
+      db
+        .select({ id: providerSites.id, rechargeMultiplier: providerSites.rechargeMultiplier })
+        .from(providerSites)
+        .where(inArray(providerSites.id, siteLinkedIds)),
+      db
+        .select({
+          siteId: providerSiteGroupRates.siteId,
+          groupName: providerSiteGroupRates.groupName,
+          ratio: providerSiteGroupRates.ratio,
+        })
+        .from(providerSiteGroupRates)
+        .where(inArray(providerSiteGroupRates.siteId, siteLinkedIds)),
+    ]);
+    const rechargeBySite = new Map(
+      sites.map((site) => [site.id, resolveRechargeMultiplier(site.rechargeMultiplier)])
+    );
+    for (const rate of rates) {
+      effectiveBySiteGroup.set(
+        `${rate.siteId}:${String(rate.groupName ?? "").trim().toLowerCase()}`,
+        normalizeUpstreamRate(rate.ratio, rechargeBySite.get(rate.siteId))
+      );
+    }
+  }
+
   return rows
     .map((row) => {
       const tags = resolveProviderGroupsWithDefault(row.groupTag);
@@ -319,6 +367,15 @@ export async function findProvidersForScheduledHealthTest(): Promise<ProviderHea
           if (seenModels.has(model)) continue;
           seenModels.add(model);
           healthTestModels.push(model);
+        }
+      }
+      let costMultiplier = row.costMultiplier ? Number.parseFloat(String(row.costMultiplier)) : 1;
+      if (row.billingMode === "site_group_ratio" && row.siteId != null) {
+        const effective = effectiveBySiteGroup.get(
+          `${row.siteId}:${String(row.siteGroupName ?? "").trim().toLowerCase()}`
+        );
+        if (effective !== undefined) {
+          costMultiplier = effective;
         }
       }
       return {
@@ -333,7 +390,7 @@ export async function findProvidersForScheduledHealthTest(): Promise<ProviderHea
         lastHealthTestAt: row.lastHealthTestAt ? new Date(row.lastHealthTestAt) : null,
         scheduledHealthTestEnabled: row.scheduledHealthTestEnabled ?? true,
         isEnabled: row.isEnabled,
-        costMultiplier: row.costMultiplier ? Number.parseFloat(String(row.costMultiplier)) : 1,
+        costMultiplier,
         groupTag: row.groupTag ?? null,
         healthTestModel: healthTestModels[0] ?? null,
         healthTestModels,
