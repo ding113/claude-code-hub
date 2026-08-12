@@ -27,7 +27,7 @@ export function inferPhase(chain: ProviderChainItem[]): string {
     case "initial_selection":
       return "provider_selected";
     case "session_reuse":
-    case "global_race_winner":
+    case "global_reuse":
       return "session_reused";
     case "retry_failed":
     case "system_error":

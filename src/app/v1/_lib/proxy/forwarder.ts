@@ -1714,18 +1714,18 @@ export class ProxyForwarder {
               });
             }
 
-            // ⭐ 竞速切换后写全局赢家键（组+模型+请求格式维度）
-            // 竞速发现的最优 provider 共享给所有同组+同模型+同格式的请求，
-            // 后续会话选路时优先使用，避免各自重复等待 15s。
-            // ⚠️ 必须用与 findRaceWinner 相同的键构造逻辑（buildRaceWinnerKeyForSession），
-            //    否则键维度漂移会导致读不到赢家。
-            if (totalProvidersAttempted > 1) {
-              const key = await ProxyProviderResolver.buildRaceWinnerKeyForSession(session);
+            // ⭐ 每次请求成功后写全局复用键（组+模型+请求格式维度）
+            // 所有同组+同模型+同格式的后续会话选路时优先粘滞该 provider（跨会话会话复用），
+            // 超时/失败由竞速兜底切换。键由新成功覆盖旧值；TTL 防止不活跃 provider 长期占位。
+            // ⚠️ 必须用与 findGlobalReuse 相同的键构造逻辑（buildGlobalReuseKey），
+            //    否则键维度漂移会导致读不到首选。
+            {
+              const key = await ProxyProviderResolver.buildGlobalReuseKey(session);
               if (key) {
                 const redis = getRedisClient();
                 if (redis && redis.status === "ready") {
                   redis.set(key, String(currentProvider.id), "EX", 300).catch((error) => {
-                    logger.error("ProxyForwarder: Failed to set global race winner", { error });
+                    logger.error("ProxyForwarder: Failed to set global reuse", { error });
                   });
                 }
               }

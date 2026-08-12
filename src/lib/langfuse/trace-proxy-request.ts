@@ -62,7 +62,7 @@ const SUCCESS_REASONS = new Set([
   "retry_success",
   "initial_selection",
   "session_reuse",
-  "global_race_winner",
+  "global_reuse",
   "hedge_winner",
 ]);
 

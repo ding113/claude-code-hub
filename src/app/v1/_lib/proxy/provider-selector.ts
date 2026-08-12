@@ -368,31 +368,31 @@ export class ProxyProviderResolver {
       });
     }
 
-    // === 全局竞速赢家（组+模型+请求格式维度）===
+    // === 全局复用（组+模型+请求格式维度）===
     if (!session.provider) {
-      const raceWinner = await ProxyProviderResolver.findRaceWinner(session);
-      if (raceWinner) {
-        session.setProvider(raceWinner);
-        session.addProviderToChain(raceWinner, {
-          reason: "global_race_winner",
-          selectionMethod: "global_race_winner",
-          circuitState: getCircuitState(raceWinner.id),
+      const reusedProvider = await ProxyProviderResolver.findGlobalReuse(session);
+      if (reusedProvider) {
+        session.setProvider(reusedProvider);
+        session.addProviderToChain(reusedProvider, {
+          reason: "global_reuse",
+          selectionMethod: "global_reuse",
+          circuitState: getCircuitState(reusedProvider.id),
           decisionContext: {
             totalProviders: 0,
             enabledProviders: 0,
-            targetType: raceWinner.providerType as NonNullable<ProviderChainItem["decisionContext"]>["targetType"],
+            targetType: reusedProvider.providerType as NonNullable<ProviderChainItem["decisionContext"]>["targetType"],
             requestedModel: session.getOriginalModel() || "",
             groupFilterApplied: false,
             beforeHealthCheck: 0,
             afterHealthCheck: 0,
-            priorityLevels: [raceWinner.priority || 0],
-            selectedPriority: raceWinner.priority || 0,
+            priorityLevels: [reusedProvider.priority || 0],
+            selectedPriority: reusedProvider.priority || 0,
             candidatesAtPriority: [
               {
-                id: raceWinner.id,
-                name: raceWinner.name,
-                weight: raceWinner.weight,
-                costMultiplier: raceWinner.costMultiplier,
+                id: reusedProvider.id,
+                name: reusedProvider.name,
+                weight: reusedProvider.weight,
+                costMultiplier: reusedProvider.costMultiplier,
               },
             ],
             sessionId: session.sessionId || undefined,
@@ -1017,15 +1017,15 @@ export class ProxyProviderResolver {
   }
 
   /**
-   * 构建全局竞速赢家 Redis 键（组+模型+请求格式维度）。
+   * 构建全局复用 Redis 键（组+模型+请求格式维度）。
    *
-   * ⚠️ 读写**必须**共用此函数，否则键维度漂移会导致读不到赢家。
+   * ⚠️ 读写**必须**共用此函数，否则键维度漂移会导致读不到首选。
    * groupTag 分支逻辑与 resolveEffectiveProviderGroup 一致，但**忽略 session.provider**：
    *   读取侧此时 provider 为 null（仅在 !session.provider 时调用）；
    *   写入侧 provider 已设为 currentProvider——若依赖 groupTag 会得到 provider 自身标签，
    *   与读取侧的 session key/user 组对不上。
    */
-  static async buildRaceWinnerKeyForSession(session: ProxySession): Promise<string | null> {
+  static async buildGlobalReuseKey(session: ProxySession): Promise<string | null> {
     const model = session.getOriginalModel();
     if (!model) return null;
 
@@ -1050,18 +1050,18 @@ export class ProxyProviderResolver {
       }
     })();
 
-    return `cch:race:winner:${groupTag}:${model}:${providerType}`;
+    return `cch:global:reuse:${groupTag}:${model}:${providerType}`;
   }
 
   /**
-   * 查找全局竞速赢家（组+模型+请求格式维度）
+   * 查找全局复用首选（组+模型+请求格式维度）
    *
-   * 竞速发现的最优 provider 会写入全局 Redis 键，其他会话选路时优先使用。
-   * 写入时由竞速赢家覆盖旧值，实现故障自动切换；TTL 防止平庸 provider 长期占位。
+   * 每次请求成功后都会把 provider 写入全局 Redis 键，同一组+同模型+同格式的其他会话
+   * 选路时优先使用（跨会话粘滞）。键由新成功覆盖旧值；TTL 防止长期不活跃的 provider 占位。
    * 选路时复用资格检查（模型支持/格式/熔断/限额等），不匹配则跳过回退正常调度。
    */
-  private static async findRaceWinner(session: ProxySession): Promise<Provider | null> {
-    const key = await this.buildRaceWinnerKeyForSession(session);
+  private static async findGlobalReuse(session: ProxySession): Promise<Provider | null> {
+    const key = await this.buildGlobalReuseKey(session);
     if (!key) return null;
 
     const model = session.getOriginalModel();
@@ -1116,7 +1116,7 @@ export class ProxyProviderResolver {
       const totalCheck = await RateLimitService.checkTotalCostLimit(provider.id, "provider", provider.limitTotalUsd, { resetAt: provider.totalCostResetAt });
       if (!totalCheck.allowed) return null;
 
-      logger.info("ProviderSelector: Using global race winner", {
+      logger.info("ProviderSelector: Using global reuse", {
         providerName: provider.name,
         providerId: provider.id,
         model,
@@ -1125,7 +1125,7 @@ export class ProxyProviderResolver {
 
       return provider;
     } catch (error) {
-      logger.error("ProviderSelector: Failed to read race winner", { error });
+      logger.error("ProviderSelector: Failed to read global reuse", { error });
       return null;
     }
   }
