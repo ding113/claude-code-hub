@@ -67,6 +67,7 @@ vi.mock("@/repository/message", () => ({
   updateMessageRequestCostWithBreakdown: vi.fn(),
   updateMessageRequestDetails: vi.fn(),
   updateMessageRequestDetailsDurably: vi.fn(),
+  updateMessageRequestDetailsIfUnfinalized: vi.fn(async () => ({ updated: true })),
   updateMessageRequestDuration: vi.fn(),
 }));
 
@@ -75,6 +76,7 @@ vi.mock("@/lib/session-manager", () => ({
     updateSessionUsage: vi.fn(),
     updateSessionProvider: vi.fn(),
     storeSessionResponse: vi.fn(),
+    storeSessionResponseBodySet: vi.fn(async () => undefined),
     extractCodexPromptCacheKey: vi.fn(),
     updateSessionWithCodexCacheKey: vi.fn(),
   },

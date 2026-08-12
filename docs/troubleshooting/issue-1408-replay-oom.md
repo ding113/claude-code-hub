@@ -259,6 +259,40 @@ container               running, oom=false, exit=0
 并已跨过 `save 300 100` 的 RDB fork 点。当前产品默认值为 5 MiB；1 MiB 到 5 MiB 正文仍可能
 形成三份 Redis value，该放大边界及 5 MiB 负载/RDB 验证由 #1415 跟踪，不属于上述实验已证明的范围。
 
+## Issue #1415 5 MiB 去重后续验收
+
+Issue #1415 已将同一 `(sessionId, requestSequence)` 的 legacy, before 和 after response body
+改为一个 request-scoped Redis Hash 中的 `body:*` 字段和 view refs. 这项后续验收使用同一仓库的
+fixture, 但选择 complete-response 模式而非本报告用于复现 Replay 生命周期的 disconnect 模式:
+
+```text
+CCH_MOCK_RESPONSE_BYTES=5242880
+CCH_MOCK_RESPONSE_MODE=complete
+CCH_REQUEST_MODE=complete
+CCH_WAVES=8
+CCH_REQUESTS_PER_WAVE=8
+SESSION_RESPONSE_BODY_DEDUP_ENABLED=true
+SESSION_RESPONSE_BODY_MAX_BYTES=5242880
+SESSION_TTL=300
+```
+
+mock 将 terminal `response.completed` 也计入每个精确 5 MiB SSE body, driver 等待所有 64 个
+response 完成. 运行在隔离 Redis 7.4.10 上通过 BGSAVE 和 TTL cleanup 验证:
+
+| 项目 | 结果 |
+| --- | --- |
+| 64 request response body 原始总量 | 335,544,320 bytes, 等于 `64 x 5,242,880` |
+| session body bundles / `body:*` fields / identical refs | 64 / 64 / 64 |
+| stale legacy response body keys / dangling refs | 0 / 0 |
+| Redis `used_memory_peak` | 437,018,776 bytes |
+| RDB / Redis process | `rdb_last_bgsave_status=ok`; running; `OOMKilled=false`; `ExitCode=0` |
+| TTL cleanup | manifest 的 64 个 bundle 和所有 legacy response body key 均为 0 |
+
+运行前后宿主观测均为 `d_state=0`, IO PSI `avg10 some=0.00` 和 `full=0.00`. 该结果证明 5 MiB
+完整 response 的 session body Redis 原始值预算不再随三个视图线性放大. 它不替代本报告关于
+client-disconnect Replay drain 的机制结论, 因为该验收刻意让 response 正常终止以覆盖 session
+response body 持久化路径。
+
 ## 测试与证据边界
 
 focused 回归共 5 个文件、104 个测试，覆盖：

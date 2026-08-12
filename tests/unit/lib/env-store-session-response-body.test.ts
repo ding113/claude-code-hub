@@ -3,6 +3,7 @@ import { EnvSchema } from "@/lib/config/env.schema";
 
 describe("EnvSchema - STORE_SESSION_RESPONSE_BODY", () => {
   const originalEnv = process.env.STORE_SESSION_RESPONSE_BODY;
+  const originalDedupEnabled = process.env.SESSION_RESPONSE_BODY_DEDUP_ENABLED;
   const originalMaxBytes = process.env.SESSION_RESPONSE_BODY_MAX_BYTES;
 
   afterEach(() => {
@@ -15,6 +16,11 @@ describe("EnvSchema - STORE_SESSION_RESPONSE_BODY", () => {
       delete process.env.SESSION_RESPONSE_BODY_MAX_BYTES;
     } else {
       process.env.SESSION_RESPONSE_BODY_MAX_BYTES = originalMaxBytes;
+    }
+    if (originalDedupEnabled === undefined) {
+      delete process.env.SESSION_RESPONSE_BODY_DEDUP_ENABLED;
+    } else {
+      process.env.SESSION_RESPONSE_BODY_DEDUP_ENABLED = originalDedupEnabled;
     }
   });
 
@@ -46,6 +52,21 @@ describe("EnvSchema - STORE_SESSION_RESPONSE_BODY", () => {
     process.env.STORE_SESSION_RESPONSE_BODY = "1";
     const result = EnvSchema.parse(process.env);
     expect(result.STORE_SESSION_RESPONSE_BODY).toBe(true);
+  });
+
+  it("defaults response body deduplication to the rollout-safe reader-only mode", () => {
+    delete process.env.SESSION_RESPONSE_BODY_DEDUP_ENABLED;
+    expect(EnvSchema.parse(process.env).SESSION_RESPONSE_BODY_DEDUP_ENABLED).toBe(false);
+  });
+
+  it.each([
+    ["true", true],
+    ["1", true],
+    ["false", false],
+    ["0", false],
+  ])("parses SESSION_RESPONSE_BODY_DEDUP_ENABLED=%s", (value, expected) => {
+    process.env.SESSION_RESPONSE_BODY_DEDUP_ENABLED = value;
+    expect(EnvSchema.parse(process.env).SESSION_RESPONSE_BODY_DEDUP_ENABLED).toBe(expected);
   });
 
   it("defaults the response body limit to 5 MiB", () => {

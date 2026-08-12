@@ -60,13 +60,176 @@ const RESERVED_INTERNAL_HEADER_SET = new Set(
   RESERVED_INTERNAL_HEADERS.map((header) => header.toLowerCase())
 );
 const DEFAULT_SESSION_RESPONSE_BODY_MAX_BYTES = 5 * 1024 * 1024;
+const SESSION_RESPONSE_BODY_VIEWS = ["legacy", "before", "after"] as const;
+const WRITE_SESSION_RESPONSE_BODY_BUNDLE_LUA = `
+-- cch:session-response-bundle:write:v1
+local expected_key_id = ARGV[2]
+if expected_key_id ~= "" then
+  if redis.call("GET", KEYS[8]) ~= expected_key_id then
+    return 0
+  end
+  local current_generation = redis.call("GET", KEYS[6])
+  local request_generation = redis.call("GET", KEYS[7])
+  if not current_generation or not request_generation or current_generation ~= request_generation then
+    return 0
+  end
+end
+
+redis.call("DEL", KEYS[1], KEYS[2], KEYS[3], KEYS[4])
+redis.call(
+  "HSET",
+  KEYS[1],
+  "schema", "1",
+  "layout", "dedup",
+  "total_bytes", ARGV[3],
+  "over_budget", ARGV[4]
+)
+
+local views = { "legacy", "before", "after" }
+for index, view in ipairs(views) do
+  if ARGV[index + 4] == "1" then
+    redis.call("HSET", KEYS[1], "present:" .. view, "1")
+  end
+  local ref = ARGV[index + 7]
+  if ref ~= "" then
+    redis.call("HSET", KEYS[1], "ref:" .. view, ref)
+  end
+end
+
+for index = 11, #ARGV do
+  redis.call("HSET", KEYS[1], "body:" .. (index - 11), ARGV[index])
+end
+
+redis.call("EXPIRE", KEYS[1], ARGV[1])
+if expected_key_id ~= "" then
+  redis.call("EXPIRE", KEYS[6], ARGV[1])
+  redis.call("EXPIRE", KEYS[7], ARGV[1])
+end
+local redis_time = redis.call("TIME")
+local now_ms = (tonumber(redis_time[1]) * 1000) + math.floor(tonumber(redis_time[2]) / 1000)
+local expires_at_ms = now_ms + (tonumber(ARGV[1]) * 1000)
+redis.call("ZREMRANGEBYSCORE", KEYS[5], "-inf", now_ms)
+redis.call("ZADD", KEYS[5], expires_at_ms, KEYS[1])
+redis.call("EXPIRE", KEYS[5], ARGV[1])
+return 1
+`;
+const WRITE_LEGACY_SESSION_RESPONSE_BODY_SET_LUA = `
+-- cch:session-response-bundle:write-legacy:v1
+local expected_key_id = ARGV[2]
+if expected_key_id ~= "" then
+  if redis.call("GET", KEYS[8]) ~= expected_key_id then
+    return 0
+  end
+  local current_generation = redis.call("GET", KEYS[6])
+  local request_generation = redis.call("GET", KEYS[7])
+  if not current_generation or not request_generation or current_generation ~= request_generation then
+    return 0
+  end
+end
+
+redis.call("DEL", KEYS[1], KEYS[2], KEYS[3], KEYS[4])
+redis.call("HSET", KEYS[1], "schema", "1", "layout", "legacy")
+
+local views = { "legacy", "before", "after" }
+for index, view in ipairs(views) do
+  local offset = 3 + ((index - 1) * 3)
+  if ARGV[offset] == "1" then
+    redis.call("HSET", KEYS[1], "present:" .. view, "1")
+  end
+  if ARGV[offset + 1] == "1" then
+    redis.call("SETEX", KEYS[index + 1], ARGV[1], ARGV[offset + 2])
+  end
+end
+
+redis.call("EXPIRE", KEYS[1], ARGV[1])
+if expected_key_id ~= "" then
+  redis.call("EXPIRE", KEYS[6], ARGV[1])
+  redis.call("EXPIRE", KEYS[7], ARGV[1])
+end
+local redis_time = redis.call("TIME")
+local now_ms = (tonumber(redis_time[1]) * 1000) + math.floor(tonumber(redis_time[2]) / 1000)
+local expires_at_ms = now_ms + (tonumber(ARGV[1]) * 1000)
+redis.call("ZREMRANGEBYSCORE", KEYS[5], "-inf", now_ms)
+redis.call("ZADD", KEYS[5], expires_at_ms, KEYS[1])
+redis.call("EXPIRE", KEYS[5], ARGV[1])
+return 1
+`;
+const DELETE_SESSION_RESPONSE_BODY_BUNDLES_LUA = `
+-- cch:session-response-bundle:delete-session:v1
+local bundle_keys = redis.call("ZRANGE", KEYS[1], 0, -1)
+local deleted = redis.call("DEL", KEYS[1])
+redis.call("SETEX", KEYS[2], ARGV[1], ARGV[2])
+deleted = deleted + redis.call("DEL", KEYS[3], KEYS[4], KEYS[5])
+
+local bundle_suffix = "response-bodies:v1"
+for _, bundle_key in ipairs(bundle_keys) do
+  if string.sub(bundle_key, -string.len(bundle_suffix)) == bundle_suffix then
+    local request_prefix = string.sub(bundle_key, 1, string.len(bundle_key) - string.len(bundle_suffix))
+    deleted = deleted + redis.call(
+      "DEL",
+      bundle_key,
+      request_prefix .. "response",
+      request_prefix .. "snapshot:response:before:body",
+      request_prefix .. "snapshot:response:after:body",
+      request_prefix .. "response-body-generation:v1"
+    )
+  else
+    deleted = deleted + redis.call("DEL", bundle_key)
+  end
+end
+return deleted
+`;
+const READ_SESSION_RESPONSE_BODY_BUNDLE_LUA = `
+-- cch:session-response-bundle:read:v1
+if redis.call("EXISTS", KEYS[1]) == 0 then
+  local legacy = redis.call("GET", KEYS[2])
+  return { 0, legacy and 1 or 0, legacy or false }
+end
+
+local view = ARGV[1]
+local present = redis.call("HGET", KEYS[1], "present:" .. view)
+if redis.call("HGET", KEYS[1], "layout") == "legacy" then
+  return { 1, present and 1 or 0, redis.call("GET", KEYS[2]) or false }
+end
+
+local ref = redis.call("HGET", KEYS[1], "ref:" .. view)
+if not ref then
+  return { 1, present and 1 or 0, false }
+end
+return { 1, present and 1 or 0, redis.call("HGET", KEYS[1], "body:" .. ref) or false }
+`;
+
+type SessionResponseBodyView = (typeof SESSION_RESPONSE_BODY_VIEWS)[number];
+export type SessionResponseBodySetInput = Partial<Record<SessionResponseBodyView, string | null>>;
+
+type PreparedSessionResponseBodyBundle = {
+  bodies: string[];
+  byteSize: number;
+  overBudget: boolean;
+  present: Record<SessionResponseBodyView, boolean>;
+  refs: Record<SessionResponseBodyView, string>;
+};
+
+type SessionResponseBodyBundleRead = {
+  body: string | null;
+  exists: boolean;
+  present: boolean;
+};
+
+type PreparedLegacySessionResponseBodySet = {
+  bodies: Record<SessionResponseBodyView, string | null>;
+  present: Record<SessionResponseBodyView, boolean>;
+};
+
+function getSessionResponseBodyMaxBytes(): number {
+  const configuredMaxBytes = getEnvConfig().SESSION_RESPONSE_BODY_MAX_BYTES;
+  return Number.isSafeInteger(configuredMaxBytes) && configuredMaxBytes > 0
+    ? configuredMaxBytes
+    : DEFAULT_SESSION_RESPONSE_BODY_MAX_BYTES;
+}
 
 function canStoreSessionResponseBody(value: string, context: string): boolean {
-  const configuredMaxBytes = getEnvConfig().SESSION_RESPONSE_BODY_MAX_BYTES;
-  const maxBytes =
-    Number.isSafeInteger(configuredMaxBytes) && configuredMaxBytes > 0
-      ? configuredMaxBytes
-      : DEFAULT_SESSION_RESPONSE_BODY_MAX_BYTES;
+  const maxBytes = getSessionResponseBodyMaxBytes();
   const byteSize = Buffer.byteLength(value, "utf8");
   if (byteSize <= maxBytes) return true;
 
@@ -76,6 +239,125 @@ function canStoreSessionResponseBody(value: string, context: string): boolean {
     maxBytes,
   });
   return false;
+}
+
+function normalizeSessionResponseBody(value: string | object, storeMessages: boolean): string {
+  if (storeMessages) return typeof value === "string" ? value : JSON.stringify(value);
+  if (typeof value === "object") return JSON.stringify(redactResponseBody(value));
+
+  try {
+    return JSON.stringify(redactResponseBody(JSON.parse(value) as unknown));
+  } catch {
+    return value;
+  }
+}
+
+function buildSessionResponseBodyBundleKey(sessionId: string, sequence: number): string {
+  return `session:${sessionId}:req:${sequence}:response-bodies:v1`;
+}
+
+function buildSessionResponseBodyBundleIndexKey(sessionId: string): string {
+  return `session:${sessionId}:response-body-bundles:v1`;
+}
+
+function buildSessionResponseBodyGenerationKey(sessionId: string): string {
+  return `session:${sessionId}:response-body-generation:v1`;
+}
+
+function buildSessionRequestResponseBodyGenerationKey(sessionId: string, sequence: number): string {
+  return `session:${sessionId}:req:${sequence}:response-body-generation:v1`;
+}
+
+function buildLegacySessionResponseBodyViewKey(
+  sessionId: string,
+  sequence: number,
+  view: SessionResponseBodyView
+): string {
+  if (view === "legacy") return `session:${sessionId}:req:${sequence}:response`;
+  return buildSessionDetailSnapshotKey(sessionId, sequence, "response", view, "body");
+}
+
+function prepareSessionResponseBodyBundle(
+  input: SessionResponseBodySetInput,
+  storeMessages: boolean
+): PreparedSessionResponseBodyBundle {
+  const bodies: string[] = [];
+  const bodyIndexes = new Map<string, string>();
+  const refs = { legacy: "", before: "", after: "" };
+  const present = { legacy: false, before: false, after: false };
+  let byteSize = 0;
+
+  for (const view of SESSION_RESPONSE_BODY_VIEWS) {
+    const value = input[view];
+    if (value === undefined || value === null) continue;
+    present[view] = true;
+    const normalized = normalizeSessionResponseBody(value, storeMessages);
+    let ref = bodyIndexes.get(normalized);
+    if (ref === undefined) {
+      ref = String(bodies.length);
+      bodyIndexes.set(normalized, ref);
+      bodies.push(normalized);
+      byteSize += Buffer.byteLength(normalized, "utf8");
+    }
+    refs[view] = ref;
+  }
+
+  const overBudget = byteSize > getSessionResponseBodyMaxBytes();
+  return {
+    bodies: overBudget ? [] : bodies,
+    byteSize,
+    overBudget,
+    present,
+    refs: overBudget ? { legacy: "", before: "", after: "" } : refs,
+  };
+}
+
+function prepareLegacySessionResponseBodySet(
+  input: SessionResponseBodySetInput,
+  storeMessages: boolean
+): PreparedLegacySessionResponseBodySet {
+  const bodies: Record<SessionResponseBodyView, string | null> = {
+    legacy: null,
+    before: null,
+    after: null,
+  };
+  const present = { legacy: false, before: false, after: false };
+
+  for (const view of SESSION_RESPONSE_BODY_VIEWS) {
+    const value = input[view];
+    if (value === undefined || value === null) continue;
+    present[view] = true;
+    const normalized = normalizeSessionResponseBody(value, storeMessages);
+    if (canStoreSessionResponseBody(normalized, `response:${view}`)) {
+      bodies[view] = normalized;
+    }
+  }
+
+  return { bodies, present };
+}
+
+async function readSessionResponseBodyBundleView(
+  redis: NonNullable<ReturnType<typeof getRedisClient>>,
+  sessionId: string,
+  sequence: number,
+  view: SessionResponseBodyView
+): Promise<SessionResponseBodyBundleRead> {
+  const result = (await redis.eval(
+    READ_SESSION_RESPONSE_BODY_BUNDLE_LUA,
+    2,
+    buildSessionResponseBodyBundleKey(sessionId, sequence),
+    buildLegacySessionResponseBodyViewKey(sessionId, sequence, view),
+    view
+  )) as unknown;
+  if (!Array.isArray(result) || result.length < 3) {
+    throw new Error("invalid session response body bundle read result");
+  }
+
+  return {
+    exists: Number(result[0]) === 1,
+    present: Number(result[1]) === 1,
+    body: typeof result[2] === "string" ? result[2] : null,
+  };
 }
 
 function isReservedInternalHeader(name: string): boolean {
@@ -401,12 +683,22 @@ export class SessionManager {
         `
           local sequence = redis.call('INCR', KEYS[1])
           redis.call('PERSIST', KEYS[1])
+          local generation = redis.call('GET', KEYS[2])
+          if not generation then
+            generation = '0'
+            redis.call('SETEX', KEYS[2], ARGV[2], generation)
+          else
+            redis.call('EXPIRE', KEYS[2], ARGV[2])
+          end
           local ownerKey = ARGV[1] .. sequence .. ':owner'
+          local requestGenerationKey = ARGV[1] .. sequence .. ':response-body-generation:v1'
           redis.call('SETEX', ownerKey, ARGV[2], ARGV[3])
+          redis.call('SETEX', requestGenerationKey, ARGV[2], generation)
           return sequence
         `,
-        1,
+        2,
         key,
+        buildSessionResponseBodyGenerationKey(sessionId),
         `session:${sessionId}:req:`,
         String(SessionManager.SESSION_TTL),
         String(keyId)
@@ -2134,6 +2426,140 @@ export class SessionManager {
     }
   }
 
+  static async storeSessionResponseBodySet(
+    sessionId: string,
+    input: SessionResponseBodySetInput,
+    requestSequence?: number,
+    keyId?: number
+  ): Promise<void> {
+    if (!getEnvConfig().STORE_SESSION_RESPONSE_BODY) return;
+
+    const redis = getRedisClient();
+    if (redis?.status !== "ready") return;
+
+    const sequence = normalizeRequestSequence(requestSequence);
+    if (sequence === null) {
+      if (keyId !== undefined) {
+        logger.warn("SessionManager: Skipped response body set with invalid request sequence", {
+          sessionId,
+          requestSequence,
+          keyId,
+        });
+        return;
+      }
+      const writes: Array<Promise<void>> = [];
+      if (input.legacy !== undefined && input.legacy !== null) {
+        writes.push(
+          SessionManager.storeSessionResponse(sessionId, input.legacy, requestSequence, keyId)
+        );
+      }
+      if (input.before !== undefined && input.before !== null) {
+        writes.push(
+          SessionManager.storeSessionResponsePhaseSnapshot(
+            sessionId,
+            "before",
+            { body: input.before },
+            requestSequence,
+            keyId
+          )
+        );
+      }
+      if (input.after !== undefined && input.after !== null) {
+        writes.push(
+          SessionManager.storeSessionResponsePhaseSnapshot(
+            sessionId,
+            "after",
+            { body: input.after },
+            requestSequence,
+            keyId
+          )
+        );
+      }
+      await Promise.all(writes);
+      return;
+    }
+
+    try {
+      const bundleKey = buildSessionResponseBodyBundleKey(sessionId, sequence);
+      const bundleIndexKey = buildSessionResponseBodyBundleIndexKey(sessionId);
+      const generationKey = buildSessionResponseBodyGenerationKey(sessionId);
+      const requestGenerationKey = buildSessionRequestResponseBodyGenerationKey(
+        sessionId,
+        sequence
+      );
+      const requestOwnerKey = `session:${sessionId}:req:${sequence}:owner`;
+      const legacyKeys = SESSION_RESPONSE_BODY_VIEWS.map((view) =>
+        buildLegacySessionResponseBodyViewKey(sessionId, sequence, view)
+      );
+      if (!getEnvConfig().SESSION_RESPONSE_BODY_DEDUP_ENABLED) {
+        const legacy = prepareLegacySessionResponseBodySet(input, SessionManager.STORE_MESSAGES);
+        await SessionManager.refreshSessionRequestOwner(redis, sessionId, sequence, keyId);
+        await redis.eval(
+          WRITE_LEGACY_SESSION_RESPONSE_BODY_SET_LUA,
+          8,
+          bundleKey,
+          ...legacyKeys,
+          bundleIndexKey,
+          generationKey,
+          requestGenerationKey,
+          requestOwnerKey,
+          SessionManager.SESSION_TTL,
+          keyId ?? "",
+          legacy.present.legacy ? 1 : 0,
+          legacy.bodies.legacy === null ? 0 : 1,
+          legacy.bodies.legacy ?? "",
+          legacy.present.before ? 1 : 0,
+          legacy.bodies.before === null ? 0 : 1,
+          legacy.bodies.before ?? "",
+          legacy.present.after ? 1 : 0,
+          legacy.bodies.after === null ? 0 : 1,
+          legacy.bodies.after ?? ""
+        );
+        return;
+      }
+
+      const bundle = prepareSessionResponseBodyBundle(input, SessionManager.STORE_MESSAGES);
+      const maxBytes = getSessionResponseBodyMaxBytes();
+      if (bundle.overBudget) {
+        logger.warn("SessionManager: Skipped response body bundle over aggregate limit", {
+          sessionId,
+          requestSequence: sequence,
+          byteSize: bundle.byteSize,
+          maxBytes,
+        });
+      }
+
+      await SessionManager.refreshSessionRequestOwner(redis, sessionId, sequence, keyId);
+      await redis.eval(
+        WRITE_SESSION_RESPONSE_BODY_BUNDLE_LUA,
+        8,
+        bundleKey,
+        ...legacyKeys,
+        bundleIndexKey,
+        generationKey,
+        requestGenerationKey,
+        requestOwnerKey,
+        SessionManager.SESSION_TTL,
+        keyId ?? "",
+        bundle.byteSize,
+        bundle.overBudget ? 1 : 0,
+        bundle.present.legacy ? 1 : 0,
+        bundle.present.before ? 1 : 0,
+        bundle.present.after ? 1 : 0,
+        bundle.refs.legacy,
+        bundle.refs.before,
+        bundle.refs.after,
+        ...bundle.bodies
+      );
+    } catch (error) {
+      logger.error("SessionManager: Failed to store response body bundle", {
+        error,
+        sessionId,
+        requestSequence,
+      });
+    }
+  }
+
   /**
    * 存储 session 完整请求体（客户端原始请求体，临时存储，5分钟过期）
    *
@@ -2524,9 +2950,13 @@ export class SessionManager {
         const sequence = normalizeRequestSequence(requestSequence);
         if (sequence === null) return null;
 
-        const newKey = `session:${sessionId}:req:${sequence}:response`;
-        const response = await redis.get(newKey);
-        return response;
+        const bundled = await readSessionResponseBodyBundleView(
+          redis,
+          sessionId,
+          sequence,
+          "legacy"
+        );
+        return bundled.body;
       }
 
       // 向后兼容：尝试旧格式
@@ -2796,13 +3226,19 @@ export class SessionManager {
       const sequence = normalizeRequestSequence(requestSequence);
       if (!sequence) return null;
 
-      const [bodyValue, headersValue, metaValue] = await Promise.all([
-        redis.get(buildSessionDetailSnapshotKey(sessionId, sequence, "response", phase, "body")),
+      const bundled = await readSessionResponseBodyBundleView(redis, sessionId, sequence, phase);
+      const [headersValue, metaValue] = await Promise.all([
         redis.get(buildSessionDetailSnapshotKey(sessionId, sequence, "response", phase, "headers")),
         redis.get(buildSessionDetailSnapshotKey(sessionId, sequence, "response", phase, "meta")),
       ]);
+      const bodyValue = bundled.body;
 
-      if (bodyValue === null && headersValue === null && metaValue === null) {
+      if (
+        bodyValue === null &&
+        headersValue === null &&
+        metaValue === null &&
+        (!bundled.exists || !bundled.present)
+      ) {
         return null;
       }
 
@@ -3220,13 +3656,23 @@ export class SessionManager {
       const pipeline = redis.pipeline();
 
       // Binding mirrors are mutated only by the tenant-authorized helpers above.
+      pipeline.eval(
+        DELETE_SESSION_RESPONSE_BODY_BUNDLES_LUA,
+        5,
+        buildSessionResponseBodyBundleIndexKey(sessionId),
+        buildSessionResponseBodyGenerationKey(sessionId),
+        `session:${sessionId}:response`,
+        buildLegacySessionResponseBodyViewKey(sessionId, 1, "before"),
+        buildLegacySessionResponseBodyViewKey(sessionId, 1, "after"),
+        SessionManager.SESSION_TTL,
+        crypto.randomUUID()
+      );
       pipeline.del(`session:${sessionId}:info`);
       pipeline.del(`session:${sessionId}:last_seen`);
       pipeline.del(`session:${sessionId}:concurrent_count`);
 
       // 可选：messages 和 response（如果启用了存储）
       pipeline.del(`session:${sessionId}:messages`);
-      pipeline.del(`session:${sessionId}:response`);
 
       // 3. 从 ZSET 中移除（始终尝试，即使查询失败）
       pipeline.zrem(getGlobalActiveSessionsKey(), sessionId);

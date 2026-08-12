@@ -49,7 +49,12 @@ const redisMock = {
   set: vi.fn().mockResolvedValue("OK"),
   expire: vi.fn().mockResolvedValue(1),
   incr: vi.fn().mockResolvedValue(1),
-  eval: vi.fn().mockResolvedValue(1),
+  eval: vi.fn((script: string, keyCount: number, ...rawArgs: Array<string | number>) => {
+    if (!script.includes("cch:session-response-bundle:read:v1")) return Promise.resolve(1);
+    const keys = rawArgs.slice(0, keyCount).map(String);
+    const body = redisStore.get(keys[1]);
+    return Promise.resolve([0, body === undefined ? 0 : 1, body ?? null]);
+  }),
   pipeline: vi.fn(() => redisPipeline),
 };
 
@@ -89,8 +94,9 @@ describe("SessionManager detail snapshots", () => {
 
     expect(redisMock.eval).toHaveBeenCalledWith(
       expect.stringContaining("redis.call('PERSIST', KEYS[1])"),
-      1,
+      2,
       "session:sess_owner:seq",
+      "session:sess_owner:response-body-generation:v1",
       "session:sess_owner:req:",
       "300",
       "42"
