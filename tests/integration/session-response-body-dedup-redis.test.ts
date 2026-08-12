@@ -29,13 +29,29 @@ const runWithRedis = describe.skipIf(!HAS_REDIS);
 const TEST_PREFIX = `it-session-response-body-${Date.now()}-${randomUUID()}`;
 const touchedKeys = new Set<string>();
 
-function bundleKey(sessionId: string): string {
-  return `session:${sessionId}:req:1:response-bodies:v1`;
+function bundleKey(sessionId: string, sequence = 1): string {
+  return `session:${sessionId}:req:${sequence}:response-bodies:v1`;
 }
 
-function legacyBodyKey(sessionId: string, view: "legacy" | "before" | "after"): string {
-  if (view === "legacy") return `session:${sessionId}:req:1:response`;
-  return `session:${sessionId}:req:1:snapshot:response:${view}:body`;
+function bundleIndexKey(sessionId: string): string {
+  return `session:${sessionId}:response-body-bundles:v1`;
+}
+
+function legacyBodyKey(
+  sessionId: string,
+  view: "legacy" | "before" | "after",
+  sequence = 1
+): string {
+  if (view === "legacy") return `session:${sessionId}:req:${sequence}:response`;
+  return `session:${sessionId}:req:${sequence}:snapshot:response:${view}:body`;
+}
+
+function generationKey(sessionId: string): string {
+  return `session:${sessionId}:response-body-generation:v1`;
+}
+
+function requestGenerationKey(sessionId: string, sequence = 1): string {
+  return `session:${sessionId}:req:${sequence}:response-body-generation:v1`;
 }
 
 async function waitForRedisReady() {
@@ -60,7 +76,9 @@ runWithRedis("session response body deduplication Redis integration", () => {
 
   function nextSessionId(label: string): string {
     sequence += 1;
-    return `${TEST_PREFIX}:${label}:${sequence}`;
+    const sessionId = `${TEST_PREFIX}:${label}:${sequence}`;
+    touchedKeys.add(bundleIndexKey(sessionId));
+    return sessionId;
   }
 
   async function cleanupTouchedKeys(): Promise<void> {
@@ -100,7 +118,10 @@ runWithRedis("session response body deduplication Redis integration", () => {
   test("stores duplicate views once in a Redis Hash and resolves all three logical views", async () => {
     const sessionId = nextSessionId("same");
     const key = bundleKey(sessionId);
+    const indexKey = bundleIndexKey(sessionId);
     touchedKeys.add(key);
+    touchedKeys.add(indexKey);
+    await redis.zadd(indexKey, Date.now() - 1_000, "expired-bundle-entry");
 
     await SessionManager.storeSessionResponseBodySet(
       sessionId,
@@ -124,6 +145,8 @@ runWithRedis("session response body deduplication Redis integration", () => {
     });
     expect(Object.keys(stored).filter((field) => field.startsWith("body:"))).toEqual(["body:0"]);
     expect(await redis.ttl(key)).toBeGreaterThan(0);
+    expect(await redis.zrange(indexKey, 0, -1)).toEqual([key]);
+    expect(await redis.ttl(indexKey)).toBeGreaterThan(0);
     for (const view of ["legacy", "before", "after"] as const) {
       const legacyKey = legacyBodyKey(sessionId, view);
       touchedKeys.add(legacyKey);
@@ -284,7 +307,9 @@ runWithRedis("session response body deduplication Redis integration", () => {
   test("expires refs and body values together with the request-scoped bundle", async () => {
     const sessionId = nextSessionId("ttl");
     const key = bundleKey(sessionId);
+    const indexKey = bundleIndexKey(sessionId);
     touchedKeys.add(key);
+    touchedKeys.add(indexKey);
 
     await SessionManager.storeSessionResponseBodySet(
       sessionId,
@@ -295,9 +320,104 @@ runWithRedis("session response body deduplication Redis integration", () => {
     expect(await redis.pttl(key)).toBeGreaterThan(0);
     await new Promise((resolve) => setTimeout(resolve, 2_200));
     expect(await redis.exists(key)).toBe(0);
+    expect(await redis.exists(indexKey)).toBe(0);
     await expect(SessionManager.getSessionResponse(sessionId, 1)).resolves.toBeNull();
     await expect(
       SessionManager.getSessionResponsePhaseSnapshot(sessionId, "after", 1)
     ).resolves.toBeNull();
+  });
+
+  test("full session termination removes every indexed response body bundle", async () => {
+    const sessionId = nextSessionId("terminate");
+    const firstKey = bundleKey(sessionId, 1);
+    const secondKey = bundleKey(sessionId, 2);
+    const indexKey = bundleIndexKey(sessionId);
+    touchedKeys.add(firstKey);
+    touchedKeys.add(secondKey);
+    touchedKeys.add(indexKey);
+
+    await SessionManager.storeSessionResponseBodySet(sessionId, { legacy: "first" }, 1);
+    await SessionManager.storeSessionResponseBodySet(sessionId, { legacy: "second" }, 2);
+    expect(await redis.zrange(indexKey, 0, -1)).toEqual([firstKey, secondKey]);
+
+    await expect(SessionManager.terminateSession(sessionId)).resolves.toBe(true);
+
+    expect(await redis.exists(firstKey, secondKey, indexKey)).toBe(0);
+  });
+
+  test("full termination removes legacy-layout and sequence-fallback response bodies", async () => {
+    const sessionId = nextSessionId("terminate-legacy");
+    const indexKey = bundleIndexKey(sessionId);
+    configState.dedupEnabled = false;
+
+    for (const sequence of [1, 2]) {
+      touchedKeys.add(bundleKey(sessionId, sequence));
+      for (const view of ["legacy", "before", "after"] as const) {
+        touchedKeys.add(legacyBodyKey(sessionId, view, sequence));
+      }
+      await SessionManager.storeSessionResponseBodySet(
+        sessionId,
+        { legacy: `legacy-${sequence}`, before: `before-${sequence}`, after: `after-${sequence}` },
+        sequence
+      );
+    }
+
+    const fallbackKeys = [
+      `session:${sessionId}:response`,
+      legacyBodyKey(sessionId, "before"),
+      legacyBodyKey(sessionId, "after"),
+    ];
+    fallbackKeys.forEach((key) => touchedKeys.add(key));
+    await SessionManager.storeSessionResponseBodySet(sessionId, {
+      legacy: "fallback",
+      before: "fallback-before",
+      after: "fallback-after",
+    });
+
+    expect(await redis.zcard(indexKey)).toBe(2);
+    expect(await redis.exists(...fallbackKeys)).toBe(3);
+    await expect(SessionManager.terminateSession(sessionId)).resolves.toBe(true);
+
+    const indexedPhysicalKeys = [1, 2].flatMap((sequence) => [
+      bundleKey(sessionId, sequence),
+      ...(["legacy", "before", "after"] as const).map((view) =>
+        legacyBodyKey(sessionId, view, sequence)
+      ),
+    ]);
+    expect(await redis.exists(indexKey, ...indexedPhysicalKeys, ...fallbackKeys)).toBe(0);
+    await expect(SessionManager.getSessionResponse(sessionId, 1)).resolves.toBeNull();
+    await expect(
+      SessionManager.getSessionResponsePhaseSnapshot(sessionId, "after", 2)
+    ).resolves.toBeNull();
+  });
+
+  test("full termination fences late writers while allowing a newly sequenced request", async () => {
+    const sessionId = nextSessionId("terminate-fence");
+    const indexKey = bundleIndexKey(sessionId);
+    const responseGenerationKey = generationKey(sessionId);
+    const firstRequestGenerationKey = requestGenerationKey(sessionId);
+    const requestOwnerKey = `session:${sessionId}:req:1:owner`;
+    const sequenceKey = `session:${sessionId}:seq`;
+    [responseGenerationKey, firstRequestGenerationKey, requestOwnerKey, sequenceKey].forEach(
+      (key) => touchedKeys.add(key)
+    );
+
+    await redis.setex(responseGenerationKey, 2, "generation-before-termination");
+    await redis.setex(firstRequestGenerationKey, 2, "generation-before-termination");
+    await redis.setex(requestOwnerKey, 2, "42");
+    await SessionManager.storeSessionResponseBodySet(sessionId, { legacy: "first" }, 1, 42);
+    expect(await redis.exists(bundleKey(sessionId))).toBe(1);
+
+    await expect(SessionManager.terminateSession(sessionId)).resolves.toBe(true);
+    expect(await redis.exists(bundleKey(sessionId), firstRequestGenerationKey)).toBe(0);
+
+    await SessionManager.storeSessionResponseBodySet(sessionId, { legacy: "late" }, 1, 42);
+    expect(await redis.exists(bundleKey(sessionId))).toBe(0);
+
+    await expect(SessionManager.getNextRequestSequence(sessionId, 42)).resolves.toBe(1);
+    await SessionManager.storeSessionResponseBodySet(sessionId, { legacy: "new" }, 1, 42);
+    expect(await redis.hget(bundleKey(sessionId), "body:0")).toBe("new");
+    expect(await redis.get(firstRequestGenerationKey)).toBe(await redis.get(responseGenerationKey));
+    expect(await redis.zrange(indexKey, 0, -1)).toEqual([bundleKey(sessionId)]);
   });
 });

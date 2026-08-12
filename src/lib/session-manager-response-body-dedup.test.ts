@@ -19,6 +19,7 @@ vi.mock("@/app/v1/_lib/proxy/errors", () => ({
 
 const stringStore = new Map<string, string>();
 const hashStore = new Map<string, Map<string, string>>();
+const sortedSetStore = new Map<string, Set<string>>();
 const ttlStore = new Map<string, number>();
 let afterBundleRead: (() => void) | null = null;
 
@@ -45,6 +46,7 @@ const redisMock = {
     for (const key of keys) {
       removed += Number(stringStore.delete(key));
       removed += Number(hashStore.delete(key));
+      removed += Number(sortedSetStore.delete(key));
       ttlStore.delete(key);
     }
     return Promise.resolve(removed);
@@ -66,6 +68,7 @@ const redisMock = {
     if (script.includes("cch:session-response-bundle:write:v1")) {
       const [
         ttl,
+        expectedKeyId,
         totalBytes,
         overBudget,
         legacyPresent,
@@ -76,7 +79,18 @@ const redisMock = {
         afterRef,
         ...bodies
       ] = args.map(String);
-      for (const currentKey of keys) {
+      const currentGeneration = stringStore.get(keys[5]);
+      const requestGeneration = stringStore.get(keys[6]);
+      if (
+        expectedKeyId &&
+        (stringStore.get(keys[7]) !== expectedKeyId ||
+          currentGeneration === undefined ||
+          requestGeneration === undefined ||
+          currentGeneration !== requestGeneration)
+      ) {
+        return 0;
+      }
+      for (const currentKey of keys.slice(0, 4)) {
         stringStore.delete(currentKey);
         hashStore.delete(currentKey);
         ttlStore.delete(currentKey);
@@ -98,12 +112,27 @@ const redisMock = {
       bodies.forEach((body, index) => value.set(`body:${index}`, body));
       hashStore.set(key, value);
       ttlStore.set(key, Number(ttl));
+      const bundleIndex = sortedSetStore.get(keys[4]) ?? new Set<string>();
+      bundleIndex.add(key);
+      sortedSetStore.set(keys[4], bundleIndex);
+      ttlStore.set(keys[4], Number(ttl));
       return 1;
     }
 
     if (script.includes("cch:session-response-bundle:write-legacy:v1")) {
-      const [ttl, ...viewArgs] = args.map(String);
-      for (const currentKey of keys) {
+      const [ttl, expectedKeyId, ...viewArgs] = args.map(String);
+      const currentGeneration = stringStore.get(keys[5]);
+      const requestGeneration = stringStore.get(keys[6]);
+      if (
+        expectedKeyId &&
+        (stringStore.get(keys[7]) !== expectedKeyId ||
+          currentGeneration === undefined ||
+          requestGeneration === undefined ||
+          currentGeneration !== requestGeneration)
+      ) {
+        return 0;
+      }
+      for (const currentKey of keys.slice(0, 4)) {
         stringStore.delete(currentKey);
         hashStore.delete(currentKey);
         ttlStore.delete(currentKey);
@@ -124,6 +153,10 @@ const redisMock = {
       }
       hashStore.set(key, value);
       ttlStore.set(key, Number(ttl));
+      const bundleIndex = sortedSetStore.get(keys[4]) ?? new Set<string>();
+      bundleIndex.add(key);
+      sortedSetStore.set(keys[4], bundleIndex);
+      ttlStore.set(keys[4], Number(ttl));
       return 1;
     }
 
@@ -180,6 +213,7 @@ describe("SessionManager response body deduplication", () => {
     vi.clearAllMocks();
     stringStore.clear();
     hashStore.clear();
+    sortedSetStore.clear();
     ttlStore.clear();
     redisMock.status = "ready";
     mockStoreMessages = true;
@@ -200,6 +234,9 @@ describe("SessionManager response body deduplication", () => {
 
     const key = "session:sess_views:req:1:response-bodies:v1";
     expect(hashStore.size).toBe(1);
+    expect(sortedSetStore.get("session:sess_views:response-body-bundles:v1")).toEqual(
+      new Set([key])
+    );
     expect(bodyFields(key)).toHaveLength(expectedUniqueBodies);
     expect(stringStore.size).toBe(0);
     await expect(SessionManager.getSessionResponse("sess_views", 1)).resolves.toBe(bodies.legacy);
@@ -341,7 +378,7 @@ describe("SessionManager response body deduplication", () => {
     });
   });
 
-  it("atomically replaces a prior generation without stale bodies and refreshes one TTL", async () => {
+  it("atomically replaces a prior generation and refreshes bundle/index TTLs", async () => {
     await SessionManager.storeSessionResponseBodySet(
       "sess_retry",
       { legacy: "first", before: "first", after: "first" },
@@ -356,7 +393,12 @@ describe("SessionManager response body deduplication", () => {
     const key = "session:sess_retry:req:1:response-bodies:v1";
     expect(bodyFields(key).sort()).toEqual(["before", "second"]);
     expect(bodyFields(key)).not.toContain("first");
-    expect(ttlStore).toEqual(new Map([[key, 300]]));
+    expect(ttlStore).toEqual(
+      new Map([
+        [key, 300],
+        ["session:sess_retry:response-body-bundles:v1", 300],
+      ])
+    );
     await expect(SessionManager.getSessionResponse("sess_retry", 1)).resolves.toBe("second");
     await expect(
       SessionManager.getSessionResponsePhaseSnapshot("sess_retry", "before", 1)
@@ -467,6 +509,21 @@ describe("SessionManager response body deduplication", () => {
     expect(hashStore.size).toBe(0);
     expect(stringStore.size).toBe(0);
     expect(redisMock.eval).not.toHaveBeenCalled();
+  });
+
+  it("rejects a late response writer from a terminated request generation", async () => {
+    stringStore.set("session:sess_fenced:response-body-generation:v1", "generation-new");
+    stringStore.set("session:sess_fenced:req:1:response-body-generation:v1", "generation-old");
+
+    await SessionManager.storeSessionResponseBodySet(
+      "sess_fenced",
+      { legacy: "late", before: "late", after: "late" },
+      1,
+      42
+    );
+
+    expect(responseBundle("session:sess_fenced:req:1:response-bodies:v1")).toBeUndefined();
+    expect(stringStore.get("session:sess_fenced:req:1:owner")).toBe("42");
   });
 
   it("counts only unique body bytes against the aggregate budget", async () => {

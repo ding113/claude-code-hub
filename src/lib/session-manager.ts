@@ -63,42 +63,76 @@ const DEFAULT_SESSION_RESPONSE_BODY_MAX_BYTES = 5 * 1024 * 1024;
 const SESSION_RESPONSE_BODY_VIEWS = ["legacy", "before", "after"] as const;
 const WRITE_SESSION_RESPONSE_BODY_BUNDLE_LUA = `
 -- cch:session-response-bundle:write:v1
+local expected_key_id = ARGV[2]
+if expected_key_id ~= "" then
+  if redis.call("GET", KEYS[8]) ~= expected_key_id then
+    return 0
+  end
+  local current_generation = redis.call("GET", KEYS[6])
+  local request_generation = redis.call("GET", KEYS[7])
+  if not current_generation or not request_generation or current_generation ~= request_generation then
+    return 0
+  end
+end
+
 redis.call("DEL", KEYS[1], KEYS[2], KEYS[3], KEYS[4])
 redis.call(
   "HSET",
   KEYS[1],
   "schema", "1",
   "layout", "dedup",
-  "total_bytes", ARGV[2],
-  "over_budget", ARGV[3]
+  "total_bytes", ARGV[3],
+  "over_budget", ARGV[4]
 )
 
 local views = { "legacy", "before", "after" }
 for index, view in ipairs(views) do
-  if ARGV[index + 3] == "1" then
+  if ARGV[index + 4] == "1" then
     redis.call("HSET", KEYS[1], "present:" .. view, "1")
   end
-  local ref = ARGV[index + 6]
+  local ref = ARGV[index + 7]
   if ref ~= "" then
     redis.call("HSET", KEYS[1], "ref:" .. view, ref)
   end
 end
 
-for index = 10, #ARGV do
-  redis.call("HSET", KEYS[1], "body:" .. (index - 10), ARGV[index])
+for index = 11, #ARGV do
+  redis.call("HSET", KEYS[1], "body:" .. (index - 11), ARGV[index])
 end
 
 redis.call("EXPIRE", KEYS[1], ARGV[1])
+if expected_key_id ~= "" then
+  redis.call("EXPIRE", KEYS[6], ARGV[1])
+  redis.call("EXPIRE", KEYS[7], ARGV[1])
+end
+local redis_time = redis.call("TIME")
+local now_ms = (tonumber(redis_time[1]) * 1000) + math.floor(tonumber(redis_time[2]) / 1000)
+local expires_at_ms = now_ms + (tonumber(ARGV[1]) * 1000)
+redis.call("ZREMRANGEBYSCORE", KEYS[5], "-inf", now_ms)
+redis.call("ZADD", KEYS[5], expires_at_ms, KEYS[1])
+redis.call("EXPIRE", KEYS[5], ARGV[1])
 return 1
 `;
 const WRITE_LEGACY_SESSION_RESPONSE_BODY_SET_LUA = `
 -- cch:session-response-bundle:write-legacy:v1
+local expected_key_id = ARGV[2]
+if expected_key_id ~= "" then
+  if redis.call("GET", KEYS[8]) ~= expected_key_id then
+    return 0
+  end
+  local current_generation = redis.call("GET", KEYS[6])
+  local request_generation = redis.call("GET", KEYS[7])
+  if not current_generation or not request_generation or current_generation ~= request_generation then
+    return 0
+  end
+end
+
 redis.call("DEL", KEYS[1], KEYS[2], KEYS[3], KEYS[4])
 redis.call("HSET", KEYS[1], "schema", "1", "layout", "legacy")
 
 local views = { "legacy", "before", "after" }
 for index, view in ipairs(views) do
-  local offset = 2 + ((index - 1) * 3)
+  local offset = 3 + ((index - 1) * 3)
   if ARGV[offset] == "1" then
     redis.call("HSET", KEYS[1], "present:" .. view, "1")
   end
@@ -108,7 +142,42 @@ for index, view in ipairs(views) do
 end
 
 redis.call("EXPIRE", KEYS[1], ARGV[1])
+if expected_key_id ~= "" then
+  redis.call("EXPIRE", KEYS[6], ARGV[1])
+  redis.call("EXPIRE", KEYS[7], ARGV[1])
+end
+local redis_time = redis.call("TIME")
+local now_ms = (tonumber(redis_time[1]) * 1000) + math.floor(tonumber(redis_time[2]) / 1000)
+local expires_at_ms = now_ms + (tonumber(ARGV[1]) * 1000)
+redis.call("ZREMRANGEBYSCORE", KEYS[5], "-inf", now_ms)
+redis.call("ZADD", KEYS[5], expires_at_ms, KEYS[1])
+redis.call("EXPIRE", KEYS[5], ARGV[1])
 return 1
+`;
+const DELETE_SESSION_RESPONSE_BODY_BUNDLES_LUA = `
+-- cch:session-response-bundle:delete-session:v1
+local bundle_keys = redis.call("ZRANGE", KEYS[1], 0, -1)
+local deleted = redis.call("DEL", KEYS[1])
+redis.call("SETEX", KEYS[2], ARGV[1], ARGV[2])
+deleted = deleted + redis.call("DEL", KEYS[3], KEYS[4], KEYS[5])
+
+local bundle_suffix = "response-bodies:v1"
+for _, bundle_key in ipairs(bundle_keys) do
+  if string.sub(bundle_key, -string.len(bundle_suffix)) == bundle_suffix then
+    local request_prefix = string.sub(bundle_key, 1, string.len(bundle_key) - string.len(bundle_suffix))
+    deleted = deleted + redis.call(
+      "DEL",
+      bundle_key,
+      request_prefix .. "response",
+      request_prefix .. "snapshot:response:before:body",
+      request_prefix .. "snapshot:response:after:body",
+      request_prefix .. "response-body-generation:v1"
+    )
+  else
+    deleted = deleted + redis.call("DEL", bundle_key)
+  end
+end
+return deleted
 `;
 const READ_SESSION_RESPONSE_BODY_BUNDLE_LUA = `
 -- cch:session-response-bundle:read:v1
@@ -185,6 +254,18 @@ function normalizeSessionResponseBody(value: string | object, storeMessages: boo
 
 function buildSessionResponseBodyBundleKey(sessionId: string, sequence: number): string {
   return `session:${sessionId}:req:${sequence}:response-bodies:v1`;
+}
+
+function buildSessionResponseBodyBundleIndexKey(sessionId: string): string {
+  return `session:${sessionId}:response-body-bundles:v1`;
+}
+
+function buildSessionResponseBodyGenerationKey(sessionId: string): string {
+  return `session:${sessionId}:response-body-generation:v1`;
+}
+
+function buildSessionRequestResponseBodyGenerationKey(sessionId: string, sequence: number): string {
+  return `session:${sessionId}:req:${sequence}:response-body-generation:v1`;
 }
 
 function buildLegacySessionResponseBodyViewKey(
@@ -602,12 +683,22 @@ export class SessionManager {
         `
           local sequence = redis.call('INCR', KEYS[1])
           redis.call('PERSIST', KEYS[1])
+          local generation = redis.call('GET', KEYS[2])
+          if not generation then
+            generation = '0'
+            redis.call('SETEX', KEYS[2], ARGV[2], generation)
+          else
+            redis.call('EXPIRE', KEYS[2], ARGV[2])
+          end
           local ownerKey = ARGV[1] .. sequence .. ':owner'
+          local requestGenerationKey = ARGV[1] .. sequence .. ':response-body-generation:v1'
           redis.call('SETEX', ownerKey, ARGV[2], ARGV[3])
+          redis.call('SETEX', requestGenerationKey, ARGV[2], generation)
           return sequence
         `,
-        1,
+        2,
         key,
+        buildSessionResponseBodyGenerationKey(sessionId),
         `session:${sessionId}:req:`,
         String(SessionManager.SESSION_TTL),
         String(keyId)
@@ -2348,6 +2439,14 @@ export class SessionManager {
 
     const sequence = normalizeRequestSequence(requestSequence);
     if (sequence === null) {
+      if (keyId !== undefined) {
+        logger.warn("SessionManager: Skipped response body set with invalid request sequence", {
+          sessionId,
+          requestSequence,
+          keyId,
+        });
+        return;
+      }
       const writes: Array<Promise<void>> = [];
       if (input.legacy !== undefined && input.legacy !== null) {
         writes.push(
@@ -2382,6 +2481,13 @@ export class SessionManager {
 
     try {
       const bundleKey = buildSessionResponseBodyBundleKey(sessionId, sequence);
+      const bundleIndexKey = buildSessionResponseBodyBundleIndexKey(sessionId);
+      const generationKey = buildSessionResponseBodyGenerationKey(sessionId);
+      const requestGenerationKey = buildSessionRequestResponseBodyGenerationKey(
+        sessionId,
+        sequence
+      );
+      const requestOwnerKey = `session:${sessionId}:req:${sequence}:owner`;
       const legacyKeys = SESSION_RESPONSE_BODY_VIEWS.map((view) =>
         buildLegacySessionResponseBodyViewKey(sessionId, sequence, view)
       );
@@ -2390,10 +2496,15 @@ export class SessionManager {
         await SessionManager.refreshSessionRequestOwner(redis, sessionId, sequence, keyId);
         await redis.eval(
           WRITE_LEGACY_SESSION_RESPONSE_BODY_SET_LUA,
-          4,
+          8,
           bundleKey,
           ...legacyKeys,
+          bundleIndexKey,
+          generationKey,
+          requestGenerationKey,
+          requestOwnerKey,
           SessionManager.SESSION_TTL,
+          keyId ?? "",
           legacy.present.legacy ? 1 : 0,
           legacy.bodies.legacy === null ? 0 : 1,
           legacy.bodies.legacy ?? "",
@@ -2421,10 +2532,15 @@ export class SessionManager {
       await SessionManager.refreshSessionRequestOwner(redis, sessionId, sequence, keyId);
       await redis.eval(
         WRITE_SESSION_RESPONSE_BODY_BUNDLE_LUA,
-        4,
+        8,
         bundleKey,
         ...legacyKeys,
+        bundleIndexKey,
+        generationKey,
+        requestGenerationKey,
+        requestOwnerKey,
         SessionManager.SESSION_TTL,
+        keyId ?? "",
         bundle.byteSize,
         bundle.overBudget ? 1 : 0,
         bundle.present.legacy ? 1 : 0,
@@ -3540,13 +3656,23 @@ export class SessionManager {
       const pipeline = redis.pipeline();
 
       // Binding mirrors are mutated only by the tenant-authorized helpers above.
+      pipeline.eval(
+        DELETE_SESSION_RESPONSE_BODY_BUNDLES_LUA,
+        5,
+        buildSessionResponseBodyBundleIndexKey(sessionId),
+        buildSessionResponseBodyGenerationKey(sessionId),
+        `session:${sessionId}:response`,
+        buildLegacySessionResponseBodyViewKey(sessionId, 1, "before"),
+        buildLegacySessionResponseBodyViewKey(sessionId, 1, "after"),
+        SessionManager.SESSION_TTL,
+        crypto.randomUUID()
+      );
       pipeline.del(`session:${sessionId}:info`);
       pipeline.del(`session:${sessionId}:last_seen`);
       pipeline.del(`session:${sessionId}:concurrent_count`);
 
       // 可选：messages 和 response（如果启用了存储）
       pipeline.del(`session:${sessionId}:messages`);
-      pipeline.del(`session:${sessionId}:response`);
 
       // 3. 从 ZSET 中移除（始终尝试，即使查询失败）
       pipeline.zrem(getGlobalActiveSessionsKey(), sessionId);

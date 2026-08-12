@@ -34,7 +34,7 @@ Dashboard action 会同时读取这 3 个视图. headers 和 meta 使用独立 k
 - `src/actions/session-response.ts`
 - `src/lib/session-manager.ts`
 
-#1408 的机制复现记录了 64 个约 7.5 MiB SSE response 在旧布局下形成约 1.4 GiB 原始正文,
+Issue #1408 的机制复现记录了 64 个约 7.5 MiB SSE response 在旧布局下形成约 1.4 GiB 原始正文,
 并在 RDB 窗口把 Redis peak 推到约 1.5 GiB. 原始调查见
 `docs/troubleshooting/issue-1408-replay-oom.md`.
 
@@ -43,7 +43,7 @@ Dashboard action 会同时读取这 3 个视图. headers 和 meta 使用独立 k
 ### 当前旧 reader 无法直接读取引用
 
 当前旧 reader 对三个 key 执行普通 `GET`. Redis 不会让多个 key 自动共享一个任意字符串 value.
-如果新 writer 把旧 key 改写为引用描述符, 旧 reader 会把描述符当正文; 如果新 writer省略重复
+如果新 writer 把旧 key 改写为引用描述符, 旧 reader 会把描述符当正文; 如果新 writer 省略重复
 key, 旧 reader 会返回 `null`.
 
 因此, 以下三个目标不能在单阶段滚动中同时成立:
@@ -74,6 +74,18 @@ authoritative marker 防止更新或重试超限后错误回退到上一 generat
 session:{sessionId}:req:{sequence}:response-bodies:v1
 ```
 
+每次 writer 还会把 bundle key 登记到按正文 TTL 剪枝的 session-level ZSET:
+
+```text
+session:{sessionId}:response-body-bundles:v1
+```
+
+请求取得 sequence 时, 还会把当前 session-level response body generation 复制到 request-scoped
+generation key. full `terminateSession()` 通过一个 Lua 命令推进 generation, 删除索引中登记的
+bundle 及其可能对应的三份 legacy value, 并清理无 sequence 兼容路径固定使用的正文 key. 因此旧
+request 的迟到 writer 无法在 termination 后重建正文. provider-scoped termination 不推进该
+generation, 也不删除共享 Session artifact.
+
 字段如下:
 
 ```text
@@ -100,11 +112,13 @@ body:1=<另一份不同正文>
 `SessionManager.storeSessionResponseBodySet()` 接收完整的 legacy/before/after 集合. 生产终态路径
 不再发起三个独立 body writer, 从而避免异步到达顺序把不同 retry generation 混在一起.
 
-dedup 写入 Lua 同时声明 Hash 和三个旧正文 key:
+dedup 写入 Lua 同时声明 Hash, 三个旧正文 key 和 session-level bundle index:
 
-1. 原子删除上一 generation 的 Hash 和旧正文 key.
-2. 写入固定字段, present/ref 和唯一 body.
-3. 对整个 Hash 执行一次 `EXPIRE`.
+1. 校验 request owner 和 request/session response body generation 一致.
+2. 原子删除上一 generation 的 Hash 和旧正文 key.
+3. 写入固定字段, present/ref 和唯一 body.
+4. 对整个 Hash 和 generation marker 执行 `EXPIRE`.
+5. 按 Redis `TIME` 的毫秒过期分数剪枝 ZSET, 登记当前 bundle, 并刷新 index TTL.
 
 flag 关闭时, writer 在同一脚本内写三个旧正文 key, 并将 Hash 写为小型
 `schema=1, layout=legacy` generation marker. 新 reader 看到该 marker 后读取旧 key; 完全不理解
@@ -117,8 +131,13 @@ layout/present/ref/body 或旧正文. 因此 writer 切换 generation 时, reade
 blob/ref 的悬空或 orphan 状态. 旧正文清理不再是 best-effort 后置命令, 因此 dedup generation
 成功时不会同时残留三份旧正文.
 
-当前 Redis client 使用 standalone `ioredis`, 不是 Redis Cluster. 跨四个旧 key 的原子脚本依赖
-这一现有部署契约; 若未来引入 Redis Cluster, 需要先统一 key hash tag 再迁移.
+实际代理路径始终携带 `keyId` 和有效 request sequence, 因而启用 owner/generation fence. 缺失
+sequence 的无 owner 兼容调用仍按旧 key 语义写入; full termination 会原子删除其 legacy response
+和 sequence 1 的 before/after body. 携带 `keyId` 却缺失有效 sequence 的调用 fail closed, 避免
+绕过 termination fence.
+
+当前 Redis client 使用 standalone `ioredis`, 不是 Redis Cluster. 跨 bundle, index 和三个旧 key 的
+原子脚本依赖这一现有部署契约; 若未来引入 Redis Cluster, 需要先统一 key hash tag 再迁移.
 
 ## 隐私与预算顺序
 
@@ -137,7 +156,7 @@ blob/ref 的悬空或 orphan 状态. 旧正文清理不再是 best-effort 后置
 `STORE_SESSION_RESPONSE_BODY=false` 在任何 Redis body 写入前直接返回.
 
 脱敏能力范围保持既有契约: 可解析 JSON 通过 `redactResponseBody()`, 非 JSON/SSE 仍按原样存储.
-#1415 不改变该诊断语义; request-scoped Hash 不跨 session, sequence 或租户共享物理 value, 因而不会
+Issue #1415 不改变该诊断语义; request-scoped Hash 不跨 session, sequence 或租户共享物理 value, 因而不会
 把原样 SSE 扩散到新的共享域.
 
 ## 发布流程

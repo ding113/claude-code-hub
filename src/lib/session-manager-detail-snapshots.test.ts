@@ -94,8 +94,9 @@ describe("SessionManager detail snapshots", () => {
 
     expect(redisMock.eval).toHaveBeenCalledWith(
       expect.stringContaining("redis.call('PERSIST', KEYS[1])"),
-      1,
+      2,
       "session:sess_owner:seq",
+      "session:sess_owner:response-body-generation:v1",
       "session:sess_owner:req:",
       "300",
       "42"

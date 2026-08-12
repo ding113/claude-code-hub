@@ -40,6 +40,7 @@ describe("SessionManager.terminateSession", () => {
 
     pipelineRef = {
       del: vi.fn(() => pipelineRef),
+      eval: vi.fn(() => pipelineRef),
       zrem: vi.fn(() => pipelineRef),
       hdel: vi.fn(() => pipelineRef),
       exec: vi.fn(async () => [[null, 1]]),
@@ -109,6 +110,25 @@ describe("SessionManager.terminateSession", () => {
     expect(ok).toBe(true);
 
     expect(pipelineRef.zrem).not.toHaveBeenCalledWith(getUserActiveSessionsKey(123), sessionId);
+  });
+
+  it("full termination atomically deletes all indexed response body bundles", async () => {
+    const sessionId = "sess_response_body_cleanup";
+    const { SessionManager } = await import("@/lib/session-manager");
+
+    await expect(SessionManager.terminateSession(sessionId)).resolves.toBe(true);
+
+    expect(pipelineRef.eval).toHaveBeenCalledWith(
+      expect.stringContaining("cch:session-response-bundle:delete-session:v1"),
+      5,
+      `session:${sessionId}:response-body-bundles:v1`,
+      `session:${sessionId}:response-body-generation:v1`,
+      `session:${sessionId}:response`,
+      `session:${sessionId}:req:1:snapshot:response:before:body`,
+      `session:${sessionId}:req:1:snapshot:response:after:body`,
+      300,
+      expect.any(String)
+    );
   });
 
   it("fails closed when the owner key lookup rejects during scoped termination", async () => {
@@ -260,6 +280,7 @@ describe("SessionManager.terminateSession", () => {
     expect(pipelineRef.zrem).toHaveBeenCalledWith("provider:42:active_sessions", sessionId);
     expect(pipelineRef.hdel).toHaveBeenCalledWith("provider:42:active_session_refs", sessionId);
     expect(pipelineRef.del).not.toHaveBeenCalled();
+    expect(pipelineRef.eval).not.toHaveBeenCalled();
     expect(pipelineRef.zrem).not.toHaveBeenCalledWith(getGlobalActiveSessionsKey(), sessionId);
     expect(pipelineRef.zrem).not.toHaveBeenCalledWith(getKeyActiveSessionsKey(7), sessionId);
     expect(pipelineRef.zrem).not.toHaveBeenCalledWith(getUserActiveSessionsKey(123), sessionId);
@@ -293,6 +314,7 @@ describe("SessionManager.terminateSession", () => {
     await expect(SessionManager.terminateSession(sessionId)).resolves.toBe(false);
     expect(pipelineRef.exec).not.toHaveBeenCalled();
     expect(pipelineRef.del).not.toHaveBeenCalled();
+    expect(pipelineRef.eval).not.toHaveBeenCalled();
   });
 
   it("preserves shared Session state after scoped legacy termination linearizes on the old Provider", async () => {
@@ -325,6 +347,7 @@ describe("SessionManager.terminateSession", () => {
     expect(pipelineRef.zrem).toHaveBeenCalledWith("provider:42:active_sessions", sessionId);
     expect(pipelineRef.hdel).toHaveBeenCalledWith("provider:42:active_session_refs", sessionId);
     expect(pipelineRef.del).not.toHaveBeenCalled();
+    expect(pipelineRef.eval).not.toHaveBeenCalled();
     expect(pipelineRef.zrem).not.toHaveBeenCalledWith(getGlobalActiveSessionsKey(), sessionId);
     expect(pipelineRef.zrem).not.toHaveBeenCalledWith(getKeyActiveSessionsKey(7), sessionId);
     expect(pipelineRef.zrem).not.toHaveBeenCalledWith(getUserActiveSessionsKey(123), sessionId);
