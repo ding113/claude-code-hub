@@ -36,6 +36,7 @@ import { getGlobalAgentPool, getProxyAgentForProvider } from "@/lib/proxy-agent"
 import { resolveDispatchCost } from "@/lib/provider-dispatch/health-aware-select";
 import { RateLimitService } from "@/lib/rate-limit/service";
 import { SessionManager } from "@/lib/session-manager";
+import { getRedisClient } from "@/lib/redis";
 import {
   detectUpstreamErrorFromSseOrJsonText,
   inferUpstreamErrorStatusCodeFromText,
@@ -1711,6 +1712,24 @@ export class ProxyForwarder {
               }).catch((error) => {
                 logger.error("ProxyForwarder: Failed to update session provider info", { error });
               });
+            }
+
+            // ⭐ 竞速切换后写全局赢家键（组+模型+请求格式维度）
+            // 竞速发现的最优 provider 共享给所有同组+同模型+同格式的请求，
+            // 后续会话选路时优先使用，避免各自重复等待 15s。
+            if (totalProvidersAttempted > 1) {
+              const model = session.getOriginalModel();
+              const groupTag = currentProvider.groupTag;
+              const providerType = currentProvider.providerType;
+              if (model && groupTag && providerType) {
+                const key = `cch:race:winner:${groupTag}:${model}:${providerType}`;
+                const redis = getRedisClient();
+                if (redis && redis.status === "ready") {
+                  redis.set(key, String(currentProvider.id), "EX", 300).catch((error) => {
+                    logger.error("ProxyForwarder: Failed to set global race winner", { error });
+                  });
+                }
+              }
             }
           }
 

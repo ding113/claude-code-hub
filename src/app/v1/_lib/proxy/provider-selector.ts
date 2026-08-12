@@ -18,6 +18,7 @@ import {
 } from "@/lib/provider-health-test/model-config";
 import type { HealthTestSloThresholds } from "@/lib/provider-health-test/slo-thresholds";
 import { RateLimitService } from "@/lib/rate-limit";
+import { getRedisClient } from "@/lib/redis";
 import { SessionManager } from "@/lib/session-manager";
 import { parseProviderGroups, resolveProviderGroupsWithDefault } from "@/lib/utils/provider-group";
 import { isProviderActiveNow } from "@/lib/utils/provider-schedule";
@@ -365,6 +366,39 @@ export class ProxyProviderResolver {
           sessionId: session.sessionId || undefined,
         },
       });
+    }
+
+    // === 全局竞速赢家（组+模型+请求格式维度）===
+    if (!session.provider) {
+      const raceWinner = await ProxyProviderResolver.findRaceWinner(session);
+      if (raceWinner) {
+        session.setProvider(raceWinner);
+        session.addProviderToChain(raceWinner, {
+          reason: "session_reuse",
+          selectionMethod: "session_reuse",
+          circuitState: getCircuitState(raceWinner.id),
+          decisionContext: {
+            totalProviders: 0,
+            enabledProviders: 0,
+            targetType: raceWinner.providerType as NonNullable<ProviderChainItem["decisionContext"]>["targetType"],
+            requestedModel: session.getOriginalModel() || "",
+            groupFilterApplied: false,
+            beforeHealthCheck: 0,
+            afterHealthCheck: 0,
+            priorityLevels: [raceWinner.priority || 0],
+            selectedPriority: raceWinner.priority || 0,
+            candidatesAtPriority: [
+              {
+                id: raceWinner.id,
+                name: raceWinner.name,
+                weight: raceWinner.weight,
+                costMultiplier: raceWinner.costMultiplier,
+              },
+            ],
+            sessionId: session.sessionId || undefined,
+          },
+        });
+      }
     }
 
     // === 首次选择或重试 ===
@@ -982,6 +1016,96 @@ export class ProxyProviderResolver {
     return provider;
   }
 
+  /**
+   * 查找全局竞速赢家（组+模型+请求格式维度）
+   *
+   * 竞速发现的最优 provider 会写入全局 Redis 键，其他会话选路时优先使用。
+   * 写入时由竞速赢家覆盖旧值，实现故障自动切换；TTL 防止平庸 provider 长期占位。
+   * 选路时复用资格检查（模型支持/格式/熔断/限额等），不匹配则跳过回退正常调度。
+   */
+  private static async findRaceWinner(session: ProxySession): Promise<Provider | null> {
+    const model = session.getOriginalModel();
+    if (!model) return null;
+
+    const groupTag = getEffectiveProviderGroup(session);
+    if (!groupTag) return null;
+
+    // 请求格式 → providerType 映射（与 pickRandomProvider 一致）
+    const targetType = (() => {
+      switch (session.originalFormat) {
+        case "claude": return "claude";
+        case "response": return "codex";
+        case "openai": return "openai-compatible";
+        case "gemini": return "gemini";
+        default: return "claude";
+      }
+    })();
+
+    const redis = getRedisClient();
+    if (!redis || redis.status !== "ready") return null;
+
+    try {
+      const key = `cch:race:winner:${groupTag}:${model}:${targetType}`;
+      const value = await redis.get(key);
+      if (!value) return null;
+
+      const providerId = parseInt(value, 10);
+      if (Number.isNaN(providerId)) return null;
+
+      const provider = await findProviderById(providerId);
+      if (!provider?.isEnabled) return null;
+
+      // 资格检查（与 findReusable 一致，但不写 session 绑定）
+      if (provider.disableSessionReuse) return null;
+
+      const systemTimezone = await resolveSystemTimezone();
+      if (!isProviderActiveNow(provider.activeTimeStart, provider.activeTimeEnd, systemTimezone)) return null;
+
+      if (provider.providerVendorId && provider.providerVendorId > 0 && (await isVendorTypeCircuitOpen(provider.providerVendorId, provider.providerType))) return null;
+
+      if (await isCircuitOpen(provider.id)) return null;
+
+      if (session.originalFormat && !checkFormatProviderTypeCompatibility(session.originalFormat, provider.providerType)) return null;
+
+      if (model && !providerSupportsModel(provider, model)) return null;
+
+      const providerAllowed = provider.allowedClients ?? [];
+      const providerBlocked = provider.blockedClients ?? [];
+      const clientResult = isClientAllowedDetailed(session, providerAllowed, providerBlocked);
+      if (!clientResult.allowed) return null;
+
+      const effectiveGroup = getEffectiveProviderGroup(session);
+      if (effectiveGroup && !checkProviderGroupMatch(provider.groupTag, effectiveGroup)) return null;
+
+      // 限额检查
+      const costCheck = await RateLimitService.checkCostLimitsWithLease(provider.id, "provider", {
+        limit_5h_usd: provider.limit5hUsd,
+        limit_5h_reset_mode: provider.limit5hResetMode,
+        limit_daily_usd: provider.limitDailyUsd,
+        daily_reset_mode: provider.dailyResetMode,
+        daily_reset_time: provider.dailyResetTime,
+        limit_weekly_usd: provider.limitWeeklyUsd,
+        limit_monthly_usd: provider.limitMonthlyUsd,
+      });
+      if (!costCheck.allowed) return null;
+
+      const totalCheck = await RateLimitService.checkTotalCostLimit(provider.id, "provider", provider.limitTotalUsd, { resetAt: provider.totalCostResetAt });
+      if (!totalCheck.allowed) return null;
+
+      logger.info("ProviderSelector: Using global race winner", {
+        providerName: provider.name,
+        providerId: provider.id,
+        model,
+        groupTag,
+        key,
+      });
+
+      return provider;
+    } catch (error) {
+      logger.error("ProviderSelector: Failed to read race winner", { error });
+      return null;
+    }
+  }
 
   private static async pickRandomProvider(
     session?: ProxySession,
