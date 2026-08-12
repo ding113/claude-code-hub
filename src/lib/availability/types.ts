@@ -63,11 +63,15 @@ export interface TimeBucketMetrics {
   availabilityScore: number;
   /** Average latency in ms */
   avgLatencyMs: number;
-  /** P50 latency in ms */
+  /**
+   * Latency percentile fields kept for API compatibility.
+   * With 1m sum/count projection buckets these currently equal avgLatencyMs
+   * (mean approximation) until sketch/histogram-based percentiles land.
+   */
   p50LatencyMs: number;
-  /** P95 latency in ms */
+  /** @see p50LatencyMs */
   p95LatencyMs: number;
-  /** P99 latency in ms */
+  /** @see p50LatencyMs */
   p99LatencyMs: number;
 }
 

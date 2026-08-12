@@ -191,7 +191,26 @@ export async function runApplicationCleanup(
       clearTimeout(asyncTasksWarningTimer);
     }
 
-    // 7. 刷写 message_request 异步写缓冲。这里不能用可脱离的单步 timeout：
+    // 7a. 可用性投影 worker 在 closeDbPools 前必须真正停住（含 backfill / 在飞 batch）。
+    //     超时只告警，不能 detach；否则会在投影事务进行中关掉 DB。
+    const availProjWarningTimer = setTimeout(() => {
+      logger.warn("[Shutdown] stopAvailabilityProjectionWorker still pending", { ms: stepMs });
+    }, stepMs);
+    try {
+      const { stopAvailabilityProjectionWorker } = await import(
+        "@/lib/availability/projection-worker"
+      );
+      await stopAvailabilityProjectionWorker();
+    } catch (error) {
+      logger.error("[Shutdown] availability projection worker failed to stop", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
+    } finally {
+      clearTimeout(availProjWarningTimer);
+    }
+
+    // 7b. 刷写 message_request 异步写缓冲。这里不能用可脱离的单步 timeout：
     //    closeDbPools 必须等 writer 真正 settled，否则会关闭仍在执行终态 SQL 的连接。
     writerQuiescencePending = true;
     const writerWarningTimer = setTimeout(() => {
