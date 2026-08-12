@@ -318,6 +318,19 @@ function isFormatAllowedForProvider(
   return checkFormatProviderTypeCompatibility(format, provider.providerType);
 }
 
+/**
+ * 请求是否为流式。非流式请求不做会话复用（session_reuse / global_reuse）：
+ * 每次都按健康调度重新选路，避免一次性工具调用等非流式请求粘滞到旧 provider。
+ * 与 error-handler 的 isRequestStreaming 判定一致（body.stream / Gemini SSE / alt=sse）。
+ */
+export function isStreamingRequest(session: ProxySession): boolean {
+  return (
+    session.request?.message?.stream === true ||
+    session.requestUrl?.pathname.includes("streamGenerateContent") ||
+    session.requestUrl?.searchParams.get("alt") === "sse"
+  );
+}
+
 export class ProxyProviderResolver {
   static async ensure(
     session: ProxySession,
@@ -333,8 +346,13 @@ export class ProxyProviderResolver {
     // 动态尝试所有可用供应商（避免无限循环通过 excludedProviders 和 null 返回）
     const excludedProviders: number[] = [];
 
-    // === 会话复用 ===
-    const reusedProvider = await ProxyProviderResolver.findReusable(session);
+    // === 会话复用（仅流式请求）===
+    // 非流式请求不做会话复用：一次性工具调用等无粘滞价值，每次按健康调度重新选路。
+    const reusableRequest = isStreamingRequest(session);
+    let reusedProvider: Provider | null = null;
+    if (reusableRequest) {
+      reusedProvider = await ProxyProviderResolver.findReusable(session);
+    }
     if (reusedProvider) {
       session.setProvider(reusedProvider);
 
@@ -369,7 +387,8 @@ export class ProxyProviderResolver {
     }
 
     // === 全局复用（组+模型+请求格式维度）===
-    if (!session.provider) {
+    // 非流式请求同样不读全局复用：每次按健康调度重新选路。
+    if (!session.provider && reusableRequest) {
       const reusedProvider = await ProxyProviderResolver.findGlobalReuse(session);
       if (reusedProvider) {
         session.setProvider(reusedProvider);

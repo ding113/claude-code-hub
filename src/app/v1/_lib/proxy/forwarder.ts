@@ -103,7 +103,7 @@ import {
   validateOpenAIImageRequest,
 } from "./openai-image-compat";
 import { selectHedgeAlternative } from "./provider-fallback";
-import { ProxyProviderResolver } from "./provider-selector";
+import { isStreamingRequest, ProxyProviderResolver } from "./provider-selector";
 import { finalizeHedgeLoserBilling } from "./response-handler";
 import type { ProxySession } from "./session";
 import { setDeferredStreamingFinalization } from "./stream-finalization";
@@ -1668,38 +1668,43 @@ export class ProxyForwarder {
           }
 
           // ⭐ 成功后绑定 session 到供应商（智能绑定策略）
+          // 非流式请求不做会话复用：不写绑定、不写全局复用键，每次按健康调度重新选路；
+          // observability 监控信息对所有请求保留。
           if (session.sessionId) {
-            // 使用智能绑定策略（故障转移优先 + 稳定性优化）
-            const result = await SessionManager.updateSessionBindingSmart(
-              session.sessionId,
-              currentProvider.id,
-              currentProvider.priority || 0,
-              totalProvidersAttempted === 1 && attemptCount === 1, // isFirstAttempt
-              totalProvidersAttempted > 1, // isFailoverSuccess: 切换过供应商
-              session.authState?.key?.id ?? null
-            );
+            // 非流式请求不写绑定：每次按健康调度重新选路。
+            if (isStreamingRequest(session)) {
+              // 使用智能绑定策略（故障转移优先 + 稳定性优化）
+              const result = await SessionManager.updateSessionBindingSmart(
+                session.sessionId,
+                currentProvider.id,
+                currentProvider.priority || 0,
+                totalProvidersAttempted === 1 && attemptCount === 1, // isFirstAttempt
+                totalProvidersAttempted > 1, // isFailoverSuccess: 切换过供应商
+                session.authState?.key?.id ?? null
+              );
 
-            if (result.updated) {
-              logger.info("ProxyForwarder: Session binding updated", {
-                sessionId: session.sessionId,
-                providerId: currentProvider.id,
-                providerName: currentProvider.name,
-                priority: currentProvider.priority,
-                groupTag: currentProvider.groupTag,
-                reason: result.reason,
-                details: result.details,
-                attemptNumber: attemptCount,
-                totalProvidersAttempted,
-              });
-            } else {
-              logger.debug("ProxyForwarder: Session binding not updated", {
-                sessionId: session.sessionId,
-                providerId: currentProvider.id,
-                providerName: currentProvider.name,
-                priority: currentProvider.priority,
-                reason: result.reason,
-                details: result.details,
-              });
+              if (result.updated) {
+                logger.info("ProxyForwarder: Session binding updated", {
+                  sessionId: session.sessionId,
+                  providerId: currentProvider.id,
+                  providerName: currentProvider.name,
+                  priority: currentProvider.priority,
+                  groupTag: currentProvider.groupTag,
+                  reason: result.reason,
+                  details: result.details,
+                  attemptNumber: attemptCount,
+                  totalProvidersAttempted,
+                });
+              } else {
+                logger.debug("ProxyForwarder: Session binding not updated", {
+                  sessionId: session.sessionId,
+                  providerId: currentProvider.id,
+                  providerName: currentProvider.name,
+                  priority: currentProvider.priority,
+                  reason: result.reason,
+                  details: result.details,
+                });
+              }
             }
 
             // ⭐ 统一更新两个数据源（确保监控数据一致）
@@ -1719,7 +1724,8 @@ export class ProxyForwarder {
             // 超时/失败由竞速兜底切换。键由新成功覆盖旧值；TTL 防止不活跃 provider 长期占位。
             // ⚠️ 必须用与 findGlobalReuse 相同的键构造逻辑（buildGlobalReuseKey），
             //    否则键维度漂移会导致读不到首选。
-            {
+            // 非流式请求不写：避免一次性工具调用选出的 provider 成为全局首选。
+            if (isStreamingRequest(session)) {
               const key = await ProxyProviderResolver.buildGlobalReuseKey(session);
               if (key) {
                 const redis = getRedisClient();
@@ -4783,7 +4789,9 @@ export class ProxyForwarder {
 
       if (session.sessionId) {
         void (async () => {
-          if (timedOutWinner) {
+          // 非流式请求不做会话复用：不写绑定、不写全局复用键；observability 保留。
+          const reusableWinner = isStreamingRequest(session);
+          if (reusableWinner && timedOutWinner) {
             // 上游 #1348：late success 只救当前请求，不重建 sticky。
             // 超时赢家不粘回会话绑定：清除绑定，下次请求重新竞速发现健康方，
             // 避免"慢源靠时间优势反复获胜并粘住"的死循环。
@@ -4794,7 +4802,7 @@ export class ProxyForwarder {
               providerName: attempt.provider.name,
               reason: "hedge_timed_out_rescue",
             });
-          } else {
+          } else if (reusableWinner) {
             const bindingResult = await SessionManager.updateSessionBindingSmart(
               session.sessionId!,
               attempt.provider.id,
@@ -4828,7 +4836,8 @@ export class ProxyForwarder {
           // 竞速/hedge 赢家也必须是全局首选，否则竞速路径的请求永远不会写键，
           // 后续会话读不到复用（键维度由 buildGlobalReuseKey 统一构造）。
           // 超时救场赢家不写：慢源靠时间优势救场不应成为全局首选，下次重新竞速发现健康方。
-          if (!timedOutWinner) {
+          // 非流式请求不写：避免一次性工具调用选出的 provider 成为全局首选。
+          if (reusableWinner && !timedOutWinner) {
             const reuseKey = await ProxyProviderResolver.buildGlobalReuseKey(
               session,
               raceWinnerOriginalModel
