@@ -141,6 +141,7 @@ import {
   type ThinkingSignatureRectifierResult,
   type ThinkingSignatureRectifierTrigger,
 } from "./thinking-signature-rectifier";
+import { validateVideoGenerationV2TextRequest } from "./video-generation-v2";
 
 /** Default User-Agent for Codex CLI requests when none is provided */
 export const DEFAULT_CODEX_USER_AGENT =
@@ -3330,6 +3331,15 @@ export class ProxyForwarder {
           });
           if (!validation.ok) {
             throw new ProxyError(validation.message ?? "Invalid request.", 400);
+          }
+
+          const videoValidation = validateVideoGenerationV2TextRequest({
+            pathname: requestPath,
+            method: session.method,
+            body: messageToSend,
+          });
+          if (!videoValidation.ok) {
+            throw new ProxyError(videoValidation.message, 400);
           }
 
           const bodyString = JSON.stringify(messageToSend);

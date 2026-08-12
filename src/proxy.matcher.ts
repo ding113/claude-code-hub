@@ -2,7 +2,7 @@
 //
 // Match all request paths except for the ones starting with:
 // - api          (API routes - own auth via cookie session, no proxy needed)
-// - v1 / v1beta  (API proxy routes - own auth via Bearer token; matching
+// - v1 / v1beta / v2 (API proxy routes - own auth via Bearer token; matching
 //   them here also forces Next.js to clone the request body via
 //   getCloneableBody → cloneBodyStream, which clamps proxied bodies to
 //   experimental.proxyClientMaxBodySize for no benefit since we no-op
@@ -18,4 +18,4 @@
 // literals so its build-time static analyzer can collect them. The unit
 // test in `tests/unit/proxy-matcher.test.ts` enforces drift between the two.
 export const proxyMatcherPattern =
-  "/((?!api|v1(?:/|$)|v1beta(?:/|$)|_next/static|_next/image|favicon.ico).*)";
+  "/((?!api|v1(?:/|$)|v1beta(?:/|$)|v2(?:/|$)|_next/static|_next/image|favicon.ico).*)";
