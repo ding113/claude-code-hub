@@ -72,8 +72,9 @@ describe("availability projection-worker", () => {
       }
       return [];
     });
-    const transactionMock = vi.fn(async (fn: (tx: { execute: typeof executeMock }) => Promise<number>) =>
-      fn({ execute: executeMock })
+    const transactionMock = vi.fn(
+      async (fn: (tx: { execute: typeof executeMock }) => Promise<number>) =>
+        fn({ execute: executeMock })
     );
 
     vi.doMock("@/drizzle/db", () => ({
@@ -97,9 +98,9 @@ describe("availability projection-worker", () => {
     expect(texts.some((t) => t.includes("insert into avail_bucket_1m"))).toBe(true);
     expect(texts.some((t) => t.includes("insert into avail_current"))).toBe(true);
     expect(texts.some((t) => t.includes("15 * interval '1 minute'"))).toBe(true);
-    expect(texts.some((t) => t.includes("update outbox_events") && t.includes("published_at"))).toBe(
-      true
-    );
+    expect(
+      texts.some((t) => t.includes("update outbox_events") && t.includes("published_at"))
+    ).toBe(true);
   });
 
   it("processBatch 对重复 request 不重复计数", async () => {
@@ -125,8 +126,9 @@ describe("availability projection-worker", () => {
       }
       return [];
     });
-    const transactionMock = vi.fn(async (fn: (tx: { execute: typeof executeMock }) => Promise<number>) =>
-      fn({ execute: executeMock })
+    const transactionMock = vi.fn(
+      async (fn: (tx: { execute: typeof executeMock }) => Promise<number>) =>
+        fn({ execute: executeMock })
     );
 
     vi.doMock("@/drizzle/db", () => ({
@@ -165,8 +167,9 @@ describe("availability projection-worker", () => {
       }
       return [];
     });
-    const transactionMock = vi.fn(async (fn: (tx: { execute: typeof executeMock }) => Promise<number>) =>
-      fn({ execute: executeMock })
+    const transactionMock = vi.fn(
+      async (fn: (tx: { execute: typeof executeMock }) => Promise<number>) =>
+        fn({ execute: executeMock })
     );
 
     vi.doMock("@/drizzle/db", () => ({
