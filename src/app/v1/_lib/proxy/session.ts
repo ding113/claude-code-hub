@@ -592,6 +592,7 @@ export class ProxySession {
     metadata?: {
       reason?:
         | "session_reuse"
+        | "global_race_winner"
         | "initial_selection"
         | "concurrent_limit_failed"
         | "request_success" // 修复：添加 request_success
@@ -616,6 +617,7 @@ export class ProxySession {
         | "client_abort"; // 客户端在响应完成前断开连接
       selectionMethod?:
         | "session_reuse"
+        | "global_race_winner"
         | "weighted_random"
         | "group_filtered"
         | "fail_open_fallback"

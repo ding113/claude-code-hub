@@ -25,6 +25,7 @@ export interface RequestOutcomeTaxonomy {
 
 const NEUTRAL_REASONS = new Set<NonNullable<ProviderChainItem["reason"]>>([
   "session_reuse",
+  "global_race_winner",
   "initial_selection",
   "hedge_triggered",
   "hedge_launched",

@@ -374,8 +374,8 @@ export class ProxyProviderResolver {
       if (raceWinner) {
         session.setProvider(raceWinner);
         session.addProviderToChain(raceWinner, {
-          reason: "session_reuse",
-          selectionMethod: "session_reuse",
+          reason: "global_race_winner",
+          selectionMethod: "global_race_winner",
           circuitState: getCircuitState(raceWinner.id),
           decisionContext: {
             totalProviders: 0,

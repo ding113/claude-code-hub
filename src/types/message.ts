@@ -26,6 +26,7 @@ export interface ProviderChainItem {
   // === 选择原因（细化） ===
   reason?:
     | "session_reuse" // 会话复用
+    | "global_race_winner" // 全局竞速赢家（Redis 键，跨会话共享）
     | "initial_selection" // 首次选择（成功）
     | "concurrent_limit_failed" // 并发限制失败
     | "request_success" // 修复：请求成功（首次）
@@ -52,6 +53,7 @@ export interface ProviderChainItem {
   // === 选择方法（细化） ===
   selectionMethod?:
     | "session_reuse" // 会话复用
+    | "global_race_winner" // 全局竞速赢家（跨会话共享）
     | "weighted_random" // 加权随机
     | "group_filtered" // 分组筛选后随机
     | "fail_open_fallback" // Fail Open 降级
