@@ -6,7 +6,8 @@ services:
     restart: unless-stopped
     # 不对外暴露数据库端口，仅允许容器内部网络访问
     # 如需调试，可取消注释下行（仅绑定本机）：
-    # ports:
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
     #   - "127.0.0.1:35432:5432"
     env_file:
       - ./.env
@@ -20,9 +21,9 @@ services:
       TZ: Asia/Shanghai
       PGTZ: Asia/Shanghai
     volumes:
-      # 持久化数据库数据到本地 ./data/postgres 目录
+      # 持久化数据库数据到 ../cch-data/postgres 目录
       # 挂载到 /data 而不是 /var/lib/postgresql/data 避免权限冲突
-      - ./data/postgres:/data
+      - ../cch-data/postgres:/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-claude_code_hub}"]
       interval: 5s
@@ -33,10 +34,12 @@ services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
+    ports:
+      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
     volumes:
-      # 持久化 Redis 数据到本地 ./data/redis 目录
+      # 持久化 Redis 数据到 ../cch-data/redis 目录
       # 使用 AOF 持久化模式,确保数据不丢失
-      - ./data/redis:/data
+      - ../cch-data/redis:/data
     command: redis-server --appendonly yes
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
@@ -49,7 +52,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: claude-code-hub-local:provider-scheduled-health-test
+    image: claude-code-hub-local:${APP_VERSION:-dev}
     depends_on:
       postgres:
         condition: service_healthy
@@ -62,6 +65,7 @@ services:
       # 容器内使用 Dockerfile 默认端口 3000，对外通过 APP_PORT 暴露（默认 23000）
       DSN: postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@postgres:5432/${DB_NAME:-claude_code_hub}
       REDIS_URL: redis://redis:6379
+      ADMIN_TOKEN: ${ADMIN_TOKEN:-cch-dev-admin}
       AUTO_MIGRATE: ${AUTO_MIGRATE:-true}
       ENABLE_RATE_LIMIT: ${ENABLE_RATE_LIMIT:-true}
       SESSION_TTL: ${SESSION_TTL:-300}
