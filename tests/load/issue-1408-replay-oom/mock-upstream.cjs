@@ -89,6 +89,8 @@ function buildSseFrames(targetBytes, mode = responseMode) {
   return frames;
 }
 
+const responseFrames = buildSseFrames(responseBytes, responseMode);
+
 function readBody(req) {
   return new Promise((resolve, reject) => {
     const chunks = [];
@@ -183,15 +185,14 @@ const server = http.createServer(async (req, res) => {
     connection: "keep-alive",
   });
 
-  const frames = buildSseFrames(responseBytes, responseMode);
   let sent = 0;
   let emittedBytes = 0;
   const writeNext = () => {
-    if (res.destroyed || sent >= frames.length) return;
-    const event = frames[sent];
+    if (res.destroyed || sent >= responseFrames.length) return;
+    const event = responseFrames[sent];
     sent += 1;
     emittedBytes += Buffer.byteLength(event, "utf8");
-    if (sent === frames.length) {
+    if (sent === responseFrames.length) {
       completedCounts.set(scenario, (completedCounts.get(scenario) || 0) + 1);
       emittedBytesByScenario.set(
         scenario,
@@ -202,11 +203,11 @@ const server = http.createServer(async (req, res) => {
           event: "response_emitted",
           scenario,
           emittedBytes,
-          frames: frames.length,
+          frames: responseFrames.length,
         })}\n`
       );
     }
-    const responseFullyEmitted = sent === frames.length;
+    const responseFullyEmitted = sent === responseFrames.length;
     const continueResponse = () => {
       if (responseFullyEmitted && responseMode === "complete") {
         res.end();

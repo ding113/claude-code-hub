@@ -32,12 +32,35 @@ verify_ttl_cleanup="${CCH_VERIFY_TTL_CLEANUP:-false}"
 ttl_cleanup_timeout_seconds="${CCH_TTL_CLEANUP_TIMEOUT_SECONDS:-360}"
 
 sampler_pid=""
+ttl_stdout_tmp=""
+ttl_stderr_tmp=""
 cleanup() {
   if [ -n "$sampler_pid" ]; then
     kill "$sampler_pid" 2>/dev/null || true
   fi
+  if [ -n "$ttl_stdout_tmp" ]; then
+    rm -f -- "$ttl_stdout_tmp"
+  fi
+  if [ -n "$ttl_stderr_tmp" ]; then
+    rm -f -- "$ttl_stderr_tmp"
+  fi
 }
-trap cleanup EXIT INT TERM
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+case "$rdb_delay_seconds" in
+  *[!0-9]*)
+    printf '%s\n' "CCH_RDB_DELAY_SECONDS must be a non-negative integer" >&2
+    exit 2
+    ;;
+esac
+case "$ttl_cleanup_timeout_seconds" in
+  *[!0-9]*)
+    printf '%s\n' "CCH_TTL_CLEANUP_TIMEOUT_SECONDS must be a non-negative integer" >&2
+    exit 2
+    ;;
+esac
 
 "$script_dir/sample-container.sh" \
   "$app_container" \
@@ -104,19 +127,25 @@ case "$verify_ttl_cleanup" in
       exit 2
     fi
     ttl_wait_started=$(date +%s)
+    ttl_stdout_tmp=$(mktemp "${redis_expired_output}.tmp.XXXXXX")
+    ttl_stderr_tmp=$(mktemp "${redis_expired_output}.stderr.tmp.XXXXXX")
     while ! "$node_bin" "$script_dir/inspect-redis.cjs" \
       "$redis_container" \
       "$session_manifest" \
       "$response_bytes" \
-      expired >"${redis_expired_output}.tmp" 2>/dev/null; do
+      expired >"$ttl_stdout_tmp" 2>"$ttl_stderr_tmp"; do
       if [ $(( $(date +%s) - ttl_wait_started )) -ge "$ttl_cleanup_timeout_seconds" ]; then
         printf '%s\n' "timed out waiting for session response body TTL cleanup" >&2
-        cat "${redis_expired_output}.tmp" >&2
+        cat "$ttl_stdout_tmp" >&2
+        cat "$ttl_stderr_tmp" >&2
         exit 1
       fi
       sleep 5
     done
-    mv "${redis_expired_output}.tmp" "$redis_expired_output"
+    mv "$ttl_stdout_tmp" "$redis_expired_output"
+    ttl_stdout_tmp=""
+    rm -f -- "$ttl_stderr_tmp"
+    ttl_stderr_tmp=""
     cat "$redis_expired_output"
     ;;
   false | 0) ;;

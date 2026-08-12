@@ -188,7 +188,7 @@ function startRequest(scenario, scenarioHash, wave, index) {
     settleCompletion = resolve;
     rejectCompletion = reject;
   });
-  if (requestMode === "disconnect") completion.catch(() => {});
+  completion.catch(() => {});
   const handle = { request: null, response: null, sessionId, completion };
   const request = transportFor(url).request(
     url,
