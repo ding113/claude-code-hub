@@ -4615,7 +4615,9 @@ export class ProxyForwarder {
         return;
       }
 
-      await launchAlternative({ allowNonSloFallback: attempts.size === 0 });
+      // 失败后继续拉下一个备胎：优先健康 SLO 合格候选；合格候选不足时
+      // 按普通调度顺序继续拉取（不退化单路），与超时接力（L4143）语义一致。
+      await launchAlternative({ allowNonSloFallback: true });
       await finishIfExhausted();
     };
 
