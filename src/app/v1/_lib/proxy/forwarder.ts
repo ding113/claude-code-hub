@@ -3887,6 +3887,11 @@ export class ProxyForwarder {
     // 等主路超时/失败后 promote（此时备胎已就绪，立即出结果，不损失恢复速度）。
     let initialAttemptRef: StreamingHedgeAttempt | null = null;
     let pendingWinnerAttempt: StreamingHedgeAttempt | null = null;
+    // 超时兜底候选：超时 attempt 返回响应但仍有其他候选在途时，不销毁（保留
+    // response/reader/firstChunk），挂起等待。其他候选全部失败/耗尽后由
+    // finishIfExhausted 或 totalRaceTimer 提升它救当前请求（timedOutWinner 语义：
+    // 救场但不重建 sticky）；若其他候选成功，则被 abortAllAttempts 作为 loser 清理。
+    let pendingTimedOutRescue: StreamingHedgeAttempt | null = null;
 
     let resolveResult: ((result: { response?: Response; error?: Error }) => void) | null = null;
     const resultPromise = new Promise<{ response?: Response; error?: Error }>((resolve) => {
@@ -4180,10 +4185,15 @@ export class ProxyForwarder {
         const inFlight = Array.from(attempts).filter((a) => !a.settled);
         if (inFlight.length === 0) return;
 
-        inFlight.sort(
+        // 兜底优先选已返回首块的 attempt（最先返回响应的），其次按优先级选在途最高的。
+        const ready = inFlight.filter(
+          (a) => a.firstChunk && a.response && a.reader
+        );
+        const pool = ready.length > 0 ? ready : inFlight;
+        pool.sort(
           (a, b) => (a.provider.priority || 0) - (b.provider.priority || 0)
         );
-        const fallback = inFlight[0];
+        const fallback = pool[0];
 
         logger.warn(
           "ProxyForwarder: total race deadline reached, using highest-priority in-flight attempt as fallback",
@@ -4193,6 +4203,7 @@ export class ProxyForwarder {
             fallbackProviderName: fallback.provider.name,
             fallbackPriority: fallback.provider.priority || 0,
             inFlightCount: inFlight.length,
+            readyCount: ready.length,
             launchedProviderCount,
           }
         );
@@ -4211,6 +4222,14 @@ export class ProxyForwarder {
             releaseAttemptAgent(other);
           }
         }
+
+        // 兜底候选若已返回首块（挂起的超时救场候选），其 runAttempt 的 .then 流程
+        // 已结束（commitWinner 早退），不会再次触发 commitWinner——这里直接提交，
+        // 走 timedOutWinner 分支救当前请求。
+        if (fallback.firstChunk && fallback.response && fallback.reader) {
+          pendingTimedOutRescue = null;
+          void commitWinner(fallback, fallback.firstChunk as Uint8Array);
+        }
       }, TOTAL_RACE_TIMEOUT_MS);
     };
 
@@ -4222,8 +4241,24 @@ export class ProxyForwarder {
     };
 
     const finishIfExhausted = async () => {
-      if (!settled && noMoreProviders && attempts.size === 0) {
-        await settleFailure(ProxyForwarder.resolveHedgeTerminalError(lastError, lastErrorCategory));
+      if (!settled && noMoreProviders) {
+        // 候选耗尽时若还有挂起的超时兜底候选（已返回完整响应），提升它救当前请求：
+        // 它已在途且响应在手，直接 commitWinner（timedOutWinner 分支：不重建 sticky）。
+        if (pendingTimedOutRescue && !pendingTimedOutRescue.settled) {
+          const rescue = pendingTimedOutRescue;
+          // 其他在途候选是否仍在竞争（若有，还不能提升——等它们的结果）
+          const otherInFlight = Array.from(attempts).some(
+            (a) => !a.settled && a !== rescue
+          );
+          if (!otherInFlight && rescue.response && rescue.reader && rescue.firstChunk) {
+            pendingTimedOutRescue = null;
+            await commitWinner(rescue, rescue.firstChunk as Uint8Array);
+            return;
+          }
+        }
+        if (attempts.size === 0) {
+          await settleFailure(ProxyForwarder.resolveHedgeTerminalError(lastError, lastErrorCategory));
+        }
       }
     };
 
@@ -4704,6 +4739,15 @@ export class ProxyForwarder {
       // 请求悬挂——此时走下方 timedOutWinner 分支救当前请求但不重建 sticky。
       const hasOtherInFlight = Array.from(attempts).some((a) => !a.settled && a !== attempt);
       if (attempt.thresholdTriggered && hasOtherInFlight) {
+        // 超时 attempt 返回了完整响应，但其他在途候选仍在竞争：
+        // 不销毁（不 startLoserBilling / 不 cancel），挂起为兜底候选——
+        // 其他候选最终全部失败/耗尽时用它救当前请求（见 finishIfExhausted），
+        // 其他候选成功时由 abortAllAttempts 清理（走 loser billing / cancel）。
+        if (!pendingTimedOutRescue) {
+          pendingTimedOutRescue = attempt;
+          return;
+        }
+        // 已有更早的兜底候选（先返回的先保留），本 attempt 按 loser 分流。
         attempt.settled = true;
         attempts.delete(attempt);
         if (attempt.billAsLoser) {
