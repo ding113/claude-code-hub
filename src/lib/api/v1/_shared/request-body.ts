@@ -4,7 +4,7 @@ import { createProblemResponse, normalizeZodPath } from "./error-envelope";
 export type ParsedBodyResult<T> = { ok: true; data: T } | { ok: false; response: Response };
 
 type JsonBodySchema<T> = {
-  safeParse: (value: unknown) => { success: true; data: T } | { success: false; error: z.ZodError };
+  safeParse: (value: unknown) => { success: true; data: T } | { success: false; error: unknown };
 };
 
 type HonoJsonRequest = {
@@ -57,7 +57,7 @@ export async function parseJsonBody<T>(
         title: "Validation failed",
         detail: "One or more fields are invalid.",
         errorCode: "request.validation_failed",
-        invalidParams: parsed.error.issues.map((issue) => ({
+        invalidParams: (parsed.error as z.ZodError).issues.map((issue) => ({
           path: normalizeZodPath(issue.path),
           code: issue.code,
           message: issue.message,
@@ -69,10 +69,10 @@ export async function parseJsonBody<T>(
   return { ok: true, data: parsed.data };
 }
 
-export async function parseHonoJsonBody<T>(
+export async function parseHonoJsonBody<S extends z.ZodType<object>>(
   c: HonoJsonRequest,
-  schema: JsonBodySchema<T>
-): Promise<ParsedBodyResult<T>> {
+  schema: S
+): Promise<ParsedBodyResult<z.output<S>>> {
   const contentType =
     c.req.header("content-type") ??
     c.req.header("Content-Type") ??
@@ -114,7 +114,7 @@ export async function parseHonoJsonBody<T>(
         title: "Validation failed",
         detail: "One or more fields are invalid.",
         errorCode: "request.validation_failed",
-        invalidParams: parsed.error.issues.map((issue) => ({
+        invalidParams: (parsed.error as z.ZodError).issues.map((issue) => ({
           path: normalizeZodPath(issue.path),
           code: issue.code,
           message: issue.message,
@@ -123,5 +123,5 @@ export async function parseHonoJsonBody<T>(
     };
   }
 
-  return { ok: true, data: parsed.data };
+  return { ok: true, data: parsed.data as z.output<S> };
 }

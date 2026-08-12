@@ -846,11 +846,7 @@ function providerNotFound(c: Context): Response {
   });
 }
 
-type JsonBodySchema<T> = {
-  safeParse: (value: unknown) => { success: true; data: T } | { success: false; error: ZodError };
-};
-
-async function parseJson<T>(c: Context, schema: JsonBodySchema<T>): Promise<T | Response> {
+async function parseJson<S extends z.ZodType<object>>(c: Context, schema: S): Promise<z.output<S> | Response> {
   const body = await parseHonoJsonBody(c, schema);
   if (!body.ok) return body.response;
   return body.data;
