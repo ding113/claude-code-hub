@@ -38,6 +38,7 @@
 
   "INTERNAL_ERROR": "内部サーバーエラー、後でもう一度お試しください",
   "DATABASE_ERROR": "データベースエラー",
+  "INVALID_NORMALIZED_BODY": "正規化されたリクエスト本文をシリアル化できません",
   "NOT_FOUND": "リソースが見つかりません",
   "OPERATION_FAILED": "操作に失敗しました",
   "USER_5H_FIXED_RESET_REQUIRES_REDIS": "固定 5H 制限のリセットには Redis が必要です",

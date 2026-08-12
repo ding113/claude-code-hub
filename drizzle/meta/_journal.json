@@ -834,6 +834,20 @@
       "when": 1785688550789,
       "tag": "0118_bright_sunspot",
       "breakpoints": true
+    },
+    {
+      "idx": 119,
+      "version": "7",
+      "when": 1786038550610,
+      "tag": "0119_tiresome_banshee",
+      "breakpoints": true
+    },
+    {
+      "idx": 120,
+      "version": "7",
+      "when": 1786500000000,
+      "tag": "0120_availability_projection",
+      "breakpoints": true
     }
   ]
 }

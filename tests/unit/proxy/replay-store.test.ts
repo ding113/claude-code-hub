@@ -6,6 +6,7 @@ import {
   type ReplayMeta,
   type ReplayPersistedRow,
   ReplayStore,
+  resolveReplayCompletedTtlSeconds,
   resolveReplayTtlSeconds,
 } from "@/app/v1/_lib/proxy/replay/replay-store";
 
@@ -21,7 +22,10 @@ import {
 const envControl = vi.hoisted(() => ({
   shouldThrow: false,
   replayTtlSeconds: 600,
-  completedTtlSeconds: 3600,
+}));
+
+const runtimeSettingsControl = vi.hoisted(() => ({
+  replayCacheTtlMinutes: 30 as number | null,
 }));
 
 const redisControl = vi.hoisted(() => ({
@@ -63,7 +67,6 @@ vi.mock("@/lib/config/env.schema", async (importOriginal) => {
       return {
         ...baseEnv,
         REPLAY_TTL_SECONDS: envControl.replayTtlSeconds,
-        REPLAY_COMPLETED_TTL_SECONDS: envControl.completedTtlSeconds,
       };
     },
   };
@@ -71,6 +74,13 @@ vi.mock("@/lib/config/env.schema", async (importOriginal) => {
 
 vi.mock("@/lib/redis/client", () => ({
   getRedisClient: () => redisControl.client,
+}));
+
+vi.mock("@/lib/system-settings/proxy-runtime", () => ({
+  getCachedProxyRuntimeSettings: () =>
+    runtimeSettingsControl.replayCacheTtlMinutes === null
+      ? null
+      : { replayCacheTtlMinutes: runtimeSettingsControl.replayCacheTtlMinutes },
 }));
 
 vi.mock("@/drizzle/db", () => ({
@@ -259,7 +269,7 @@ function toSqlText(condition: unknown): string {
 beforeEach(() => {
   envControl.shouldThrow = false;
   envControl.replayTtlSeconds = 600;
-  envControl.completedTtlSeconds = 3600;
+  runtimeSettingsControl.replayCacheTtlMinutes = 30;
   redisControl.client = createFakeRedis();
   dbState.insertValues = [];
   dbState.onConflictCalls = 0;
@@ -561,8 +571,8 @@ describe("ReplayStore：owner 租约", () => {
 });
 
 describe("ReplayStore：PG 完成持久层", () => {
-  it("persistCompleted 写入行（expiresAt = now + REPLAY_COMPLETED_TTL_SECONDS），写路径不顺带清理", async () => {
-    envControl.completedTtlSeconds = 1000;
+  it("persistCompleted 按系统设置写入 30 分钟有效期,写路径不顺带清理", async () => {
+    runtimeSettingsControl.replayCacheTtlMinutes = 30;
     const store = new ReplayStore();
     const row = makePersistedRow();
 
@@ -587,8 +597,8 @@ describe("ReplayStore：PG 完成持久层", () => {
       sourceMessageRequestId: 77,
     });
     const expiresAt = (inserted.expiresAt as Date).getTime();
-    expect(expiresAt).toBeGreaterThanOrEqual(before + 1000 * 1000);
-    expect(expiresAt).toBeLessThanOrEqual(after + 1000 * 1000);
+    expect(expiresAt).toBeGreaterThanOrEqual(before + 30 * 60 * 1000);
+    expect(expiresAt).toBeLessThanOrEqual(after + 30 * 60 * 1000);
     expect(dbState.onConflictCalls).toBe(1);
 
     // 过期行清理只归定时调度器：写路径不做机会式扫尾
@@ -676,6 +686,9 @@ describe("ReplayStore：PG 完成持久层", () => {
     expect(deleteSql).toContain("for update skip locked");
     expect(deleteSql).toContain("delete from replay_payloads");
     expect(deleteSql).toContain("returning 1");
+    expect(dialect.sqlToQuery(dbState.executeQueries[0] as SQL).params[0]).toBe(
+      cutoff.toISOString()
+    );
   });
 
   it("findCompleted 只按 replayId + 未过期条件查询并返回首行", async () => {
@@ -699,7 +712,7 @@ describe("ReplayStore：PG 完成持久层", () => {
   });
 });
 
-describe("resolveReplayTtlSeconds / getReplayStore", () => {
+describe("Replay TTL resolver / getReplayStore", () => {
   it("读 env 的 REPLAY_TTL_SECONDS", () => {
     envControl.replayTtlSeconds = 1234;
     expect(resolveReplayTtlSeconds()).toBe(1234);
@@ -708,6 +721,21 @@ describe("resolveReplayTtlSeconds / getReplayStore", () => {
   it("env 不可用时回退 600", () => {
     envControl.shouldThrow = true;
     expect(resolveReplayTtlSeconds()).toBe(600);
+  });
+
+  it("Redis 热层 TTL 不超过系统设置的 Replay 窗口", () => {
+    runtimeSettingsControl.replayCacheTtlMinutes = 5;
+    expect(resolveReplayTtlSeconds()).toBe(300);
+  });
+
+  it.each([
+    { minutes: null, expected: 1800 },
+    { minutes: 4, expected: 300 },
+    { minutes: 121, expected: 7200 },
+    { minutes: 30.9, expected: 1800 },
+  ])("PG Replay TTL 规范化 $minutes 分钟为 $expected 秒", ({ minutes, expected }) => {
+    runtimeSettingsControl.replayCacheTtlMinutes = minutes;
+    expect(resolveReplayCompletedTtlSeconds()).toBe(expected);
   });
 
   it("getReplayStore 返回共享单例", () => {

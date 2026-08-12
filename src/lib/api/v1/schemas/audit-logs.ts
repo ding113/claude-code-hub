@@ -23,7 +23,9 @@ export const AuditLogListQuerySchema = z.object({
   success: z
     .enum(["true", "false"])
     .optional()
-    .transform((val) => (val === undefined ? undefined : val === "true"))
+    .transform((val: "true" | "false" | undefined) =>
+      val === undefined ? undefined : val === "true"
+    )
     .describe("Optional success filter."),
   from: IsoDateTimeStringSchema.optional().describe("Optional inclusive start time."),
   to: IsoDateTimeStringSchema.optional().describe("Optional inclusive end time."),

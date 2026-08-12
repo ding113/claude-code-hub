@@ -1266,7 +1266,7 @@ function buildCostCalculationOptions(
 }
 
 function isNonBillingUsageEndpoint(session: ProxySession): boolean {
-  return isNonBillingEndpoint(session.getEndpoint());
+  return isNonBillingEndpoint(session.getManagedEndpoint());
 }
 
 function hasBillableInputCostPerRequest(priceData: { input_cost_per_request?: unknown }): boolean {
@@ -2491,7 +2491,7 @@ export class ProxyResponseHandler {
     let finalResponse = response;
     let finalResponseBodyForSnapshot: string | null = null;
     let responseTransformFailed = false;
-    const persistNonStreamAfterSnapshot = (targetResponse: Response, body: string) => {
+    const persistNonStreamAfterSnapshot = (targetResponse: Response) => {
       if (!session.sessionId || !session.shouldPersistSessionDebugArtifacts()) {
         return;
       }
@@ -2500,7 +2500,6 @@ export class ProxyResponseHandler {
         session.sessionId,
         "after",
         {
-          body,
           headers: targetResponse.headers,
           meta: {
             upstreamUrl: null,
@@ -2560,35 +2559,13 @@ export class ProxyResponseHandler {
             // 存储响应体到 Redis（5分钟过期）
             if (session.sessionId && session.shouldPersistSessionDebugArtifacts()) {
               const beforeBody = (await consumeBeforeResponseBodySnapshot(session)) ?? responseText;
-              void SessionManager.storeSessionResponse(
+              void SessionManager.storeSessionResponseBodySet(
                 session.sessionId,
-                responseText,
+                { legacy: responseText, before: beforeBody, after: responseText },
                 session.requestSequence,
                 getSessionRequestOwnerKeyId(session)
               ).catch((err) => {
-                logger.error("[ResponseHandler] Failed to store response:", err);
-              });
-
-              const responseBeforeSnapshotTask = SessionManager.storeSessionResponsePhaseSnapshot?.(
-                session.sessionId,
-                "before",
-                { body: beforeBody },
-                session.requestSequence,
-                getSessionRequestOwnerKeyId(session)
-              );
-              responseBeforeSnapshotTask?.catch((err) => {
-                logger.error("[ResponseHandler] Failed to store response before snapshot:", err);
-              });
-
-              const responseAfterSnapshotTask = SessionManager.storeSessionResponsePhaseSnapshot?.(
-                session.sessionId,
-                "after",
-                { body: responseText },
-                session.requestSequence,
-                getSessionRequestOwnerKeyId(session)
-              );
-              responseAfterSnapshotTask?.catch((err) => {
-                logger.error("[ResponseHandler] Failed to store response after snapshot:", err);
+                logger.error("[ResponseHandler] Failed to store response body set:", err);
               });
             }
 
@@ -3137,29 +3114,22 @@ export class ProxyResponseHandler {
         // 存储响应体到 Redis（5分钟过期）
         if (session.sessionId && session.shouldPersistSessionDebugArtifacts()) {
           const beforeBody = (await consumeBeforeResponseBodySnapshot(session)) ?? responseText;
-          void SessionManager.storeSessionResponse(
+          void SessionManager.storeSessionResponseBodySet(
             session.sessionId,
-            responseText,
+            {
+              legacy: responseText,
+              before: beforeBody,
+              after: clientVisibleResponseText,
+            },
             session.requestSequence,
             getSessionRequestOwnerKeyId(session)
           ).catch((err) => {
-            logger.error("[ResponseHandler] Failed to store response:", err);
-          });
-
-          const responseBeforeSnapshotTask = SessionManager.storeSessionResponsePhaseSnapshot?.(
-            session.sessionId,
-            "before",
-            { body: beforeBody },
-            session.requestSequence,
-            getSessionRequestOwnerKeyId(session)
-          );
-          responseBeforeSnapshotTask?.catch((err) => {
-            logger.error("[ResponseHandler] Failed to store response before snapshot:", err);
+            logger.error("[ResponseHandler] Failed to store response body set:", err);
           });
 
           // after 快照复用本任务已经读取到的响应文本，避免再启动一个未受
           // AsyncTaskManager 管理的 clone().text() 读取分支。
-          persistNonStreamAfterSnapshot(finalResponse, clientVisibleResponseText);
+          persistNonStreamAfterSnapshot(finalResponse);
         }
 
         if (billableUsageMetrics && messageContext) {
@@ -3847,35 +3817,13 @@ export class ProxyResponseHandler {
               !streamSnapshot?.truncated &&
               session.shouldPersistSessionDebugArtifacts()
             ) {
-              void SessionManager.storeSessionResponse(
+              void SessionManager.storeSessionResponseBodySet(
                 session.sessionId,
-                allContent,
+                { legacy: allContent, before: allContent, after: allContent },
                 session.requestSequence,
                 getSessionRequestOwnerKeyId(session)
               ).catch((err) => {
-                logger.error("[ResponseHandler] Failed to store stream passthrough response:", err);
-              });
-
-              const responseBeforeSnapshotTask = SessionManager.storeSessionResponsePhaseSnapshot?.(
-                session.sessionId,
-                "before",
-                { body: allContent },
-                session.requestSequence,
-                getSessionRequestOwnerKeyId(session)
-              );
-              responseBeforeSnapshotTask?.catch((err) => {
-                logger.error("[ResponseHandler] Failed to store response before snapshot:", err);
-              });
-
-              const responseAfterSnapshotTask = SessionManager.storeSessionResponsePhaseSnapshot?.(
-                session.sessionId,
-                "after",
-                { body: allContent },
-                session.requestSequence,
-                getSessionRequestOwnerKeyId(session)
-              );
-              responseAfterSnapshotTask?.catch((err) => {
-                logger.error("[ResponseHandler] Failed to store response after snapshot:", err);
+                logger.error("[ResponseHandler] Failed to store response body set:", err);
               });
             } else if (session.sessionId && streamSnapshot?.truncated) {
               logger.warn("[ResponseHandler] Skip storing passthrough response: body too large", {
@@ -4147,6 +4095,7 @@ export class ProxyResponseHandler {
     // 提升 idleTimeoutId 到外部作用域，以便客户端断开时能清除
     let idleTimeoutId: NodeJS.Timeout | null = null;
     let clientAbortDrainTimeoutId: NodeJS.Timeout | null = null;
+    let clientAbortDrainStartedAt: number | null = null;
     const streamTextAccumulator = new BoundedStreamTextAccumulator();
     let lastStreamTextSnapshot: BoundedStreamTextSnapshot | null = null;
     const getCollectedChunkCount = () =>
@@ -4156,6 +4105,45 @@ export class ProxyResponseHandler {
         clearTimeout(clientAbortDrainTimeoutId);
         clientAbortDrainTimeoutId = null;
       }
+    };
+    const expireClientAbortDrain = () => {
+      clientAbortDrainTimeoutId = null;
+      clientAbortDrainStartedAt = null;
+      logger.info("ResponseHandler: Client abort drain window exceeded", {
+        taskId,
+        providerId: provider.id,
+        messageId: messageContext.id,
+        clientAbortDrainTimeoutMs,
+      });
+
+      try {
+        const sessionWithController = session as typeof session & {
+          responseController?: AbortController;
+        };
+        sessionWithController.responseController?.abort(new Error("client_abort_drain_timeout"));
+      } catch (e) {
+        logger.warn("ResponseHandler: Failed to abort upstream after client drain timeout", {
+          taskId,
+          providerId: provider.id,
+          error: e,
+        });
+      }
+
+      const drainTimeoutError = new Error("client_abort_drain_timeout");
+      abortController.abort(drainTimeoutError);
+      responsePump?.cancelSource(drainTimeoutError);
+    };
+    const scheduleClientAbortDrainTimeout = (delayMs: number) => {
+      clearClientAbortDrainTimer();
+      clientAbortDrainTimeoutId = setTimeout(expireClientAbortDrain, Math.max(0, delayMs));
+      clientAbortDrainTimeoutId.unref?.();
+    };
+    const capInactiveReplayDrainWindow = () => {
+      if (clientAbortDrainTimeoutMs <= CLIENT_ABORT_DRAIN_MAX_MS) return;
+      clientAbortDrainTimeoutMs = CLIENT_ABORT_DRAIN_MAX_MS;
+      if (clientAbortDrainStartedAt === null) return;
+      const elapsedMs = Date.now() - clientAbortDrainStartedAt;
+      scheduleClientAbortDrainTimeout(CLIENT_ABORT_DRAIN_MAX_MS - elapsedMs);
     };
     const clearIdleTimer = () => {
       if (idleTimeoutId) {
@@ -4237,31 +4225,8 @@ export class ProxyResponseHandler {
       if (!idleTimeoutId) {
         startIdleTimer();
       }
-      clientAbortDrainTimeoutId = setTimeout(() => {
-        logger.info("ResponseHandler: Client abort drain window exceeded", {
-          taskId,
-          providerId: provider.id,
-          messageId: messageContext.id,
-          clientAbortDrainTimeoutMs,
-        });
-
-        try {
-          const sessionWithController = session as typeof session & {
-            responseController?: AbortController;
-          };
-          sessionWithController.responseController?.abort(new Error("client_abort_drain_timeout"));
-        } catch (e) {
-          logger.warn("ResponseHandler: Failed to abort upstream after client drain timeout", {
-            taskId,
-            providerId: provider.id,
-            error: e,
-          });
-        }
-
-        const drainTimeoutError = new Error("client_abort_drain_timeout");
-        abortController.abort(drainTimeoutError);
-        responsePump?.cancelSource(drainTimeoutError);
-      }, clientAbortDrainTimeoutMs);
+      clientAbortDrainStartedAt = Date.now();
+      scheduleClientAbortDrainTimeout(clientAbortDrainTimeoutMs);
     };
 
     // 统计/结算只保留有界的“头 + 尾”文本快照，避免长流式响应把进程堆撑满。
@@ -4406,35 +4371,13 @@ export class ProxyResponseHandler {
           !streamSnapshot?.truncated
         ) {
           const beforeBody = allContent;
-          void SessionManager.storeSessionResponse(
+          void SessionManager.storeSessionResponseBodySet(
             session.sessionId,
-            allContent,
+            { legacy: allContent, before: beforeBody, after: allContent },
             session.requestSequence,
             getSessionRequestOwnerKeyId(session)
           ).catch((err) => {
-            logger.error("[ResponseHandler] Failed to store response:", err);
-          });
-
-          const responseAfterSnapshotTask = SessionManager.storeSessionResponsePhaseSnapshot?.(
-            session.sessionId,
-            "after",
-            { body: allContent },
-            session.requestSequence,
-            getSessionRequestOwnerKeyId(session)
-          );
-          responseAfterSnapshotTask?.catch((err) => {
-            logger.error("[ResponseHandler] Failed to store response after snapshot:", err);
-          });
-
-          const responseBeforeSnapshotTask = SessionManager.storeSessionResponsePhaseSnapshot?.(
-            session.sessionId,
-            "before",
-            { body: beforeBody },
-            session.requestSequence,
-            getSessionRequestOwnerKeyId(session)
-          );
-          responseBeforeSnapshotTask?.catch((err) => {
-            logger.error("[ResponseHandler] Failed to store response before snapshot:", err);
+            logger.error("[ResponseHandler] Failed to store response body set:", err);
           });
         } else if (session.sessionId && streamSnapshot?.truncated) {
           discardBeforeResponseBodySnapshot(session);
@@ -4823,7 +4766,9 @@ export class ProxyResponseHandler {
 
     // F2 owner spool：guard 阶段已抢到 owner 租约的请求，把客户端可见字节
     // write-behind 喂入 Redis 热层，供并发/断线的相同请求 attach 跟尾。
-    const replaySpool = createReplaySpoolIfOwner(session, response);
+    const replaySpool = createReplaySpoolIfOwner(session, response, "stream", {
+      onInactive: capInactiveReplayDrainWindow,
+    });
     if (replaySpool) {
       try {
         clientAbortDrainTimeoutMs = getEnvConfig().REPLAY_MAX_DETACHED_MS;

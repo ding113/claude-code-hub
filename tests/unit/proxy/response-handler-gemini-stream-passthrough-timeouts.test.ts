@@ -130,6 +130,7 @@ vi.mock("@/repository/model-price", () => ({
 vi.mock("@/lib/session-manager", () => ({
   SessionManager: {
     storeSessionResponse: vi.fn(),
+    storeSessionResponseBodySet: vi.fn(async () => undefined),
     updateSessionUsage: vi.fn(async () => undefined),
     clearSessionProvider: vi.fn(),
     updateSessionBindingSmart: vi.fn(async () => ({ updated: false, reason: "test" })),

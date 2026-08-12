@@ -36,8 +36,18 @@ beforeEach(() => {
 });
 
 vi.mock("@/i18n/routing", () => ({
-  Link: ({ href, children }: { href: string; children: ReactNode }) => (
-    <a href={href}>{children}</a>
+  Link: ({
+    href,
+    children,
+    prefetch,
+  }: {
+    href: string;
+    children: ReactNode;
+    prefetch?: boolean;
+  }) => (
+    <a href={href} data-prefetch={String(prefetch)}>
+      {children}
+    </a>
   ),
 }));
 
@@ -497,6 +507,11 @@ describe("error-details-dialog layout", () => {
     expect(container.querySelector('a[href*="sessionId=pfx%3Ascope%3Aroot"]')).toBeTruthy();
     expect(container.querySelector('a[href*="sessionId=physical-a"]')).toBeTruthy();
     expect(container.querySelector('a[href*="requestId=203"]')).toBeTruthy();
+    expect(
+      container
+        .querySelector('a[href*="/dashboard/sessions/pfx%3Ascope%3Aroot/messages"]')
+        ?.getAttribute("data-prefetch")
+    ).toBe("false");
     expect(container.textContent).toContain("Canonical Session ID: pfx:scope:root");
     expect(container.textContent).toContain("Client Session ID: physical-a");
     unmount();

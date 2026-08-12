@@ -142,6 +142,7 @@ vi.mock("@/lib/session-manager", () => ({
     })),
     extractCodexPromptCacheKey: vi.fn(),
     storeSessionResponse: vi.fn(async () => undefined),
+    storeSessionResponseBodySet: vi.fn(async () => undefined),
     storeSessionRequestPhaseSnapshot: vi.fn(),
     storeSessionResponsePhaseSnapshot: vi.fn(),
     storeSessionRequestHeaders: vi.fn(),

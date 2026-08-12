@@ -22,6 +22,7 @@ import type { FilterOperation } from "@/lib/request-filter-types";
 import type { IpExtractionConfig } from "@/types/ip-extraction";
 import type { AuditCategory } from "@/types/audit-log";
 import type { RoutingTraceV1 } from "@/types/routing-trace";
+import { REPLAY_CACHE_TTL_MINUTES_DEFAULT } from "@/lib/validation/replay-settings";
 
 // Enums
 export const dailyResetModeEnum = pgEnum('daily_reset_mode', ['fixed', 'rolling']);
@@ -1056,6 +1057,10 @@ export const systemSettings = pgTable('system_settings', {
 
   // F2 Replay 开关覆写（null = 跟随环境变量 ENABLE_REQUEST_REPLAY）
   replayEnabled: boolean('replay_enabled'),
+  // F2 Replay 完成 payload 的可重放窗口(分钟,默认 30)
+  replayCacheTtlMinutes: integer('replay_cache_ttl_minutes')
+    .notNull()
+    .default(REPLAY_CACHE_TTL_MINUTES_DEFAULT),
 
   // F3b 最长前缀匹配缓存模拟开关覆写（null = 跟随环境变量 ENABLE_CACHE_EFFECTIVENESS）
   cacheEffectivenessEnabled: boolean('cache_effectiveness_enabled'),
@@ -1420,3 +1425,13 @@ export const messageRequestRelations = relations(messageRequest, ({ one }) => ({
     references: [providers.id],
   }),
 }));
+
+// Availability projection tables (outbox + 1m buckets). Source of truth for drizzle-kit.
+export {
+  availBucket1m,
+  availCurrent,
+  outboxEvents,
+  outboxProcessed,
+  projAppliedRequests,
+  projectionMeta,
+} from "@/lib/availability/projection-tables";

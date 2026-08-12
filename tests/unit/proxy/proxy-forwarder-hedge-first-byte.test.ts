@@ -674,6 +674,34 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
     expect(sessionState.currentModelRedirect.redirect.redirectedModel).toBe(fireworksRedirect);
   });
 
+  test("shadow sessions share readonly request data while isolating top-level attempt state", () => {
+    const session = createSession();
+    const requestBuffer = new ArrayBuffer(4 * 1024 * 1024);
+    session.request.buffer = requestBuffer;
+
+    const createShadow = (
+      ProxyForwarder as unknown as {
+        createStreamingShadowSession: (session: ProxySession, provider: Provider) => ProxySession;
+      }
+    ).createStreamingShadowSession;
+    const shadows = Array.from({ length: 4 }, (_, index) =>
+      createShadow(session, createProvider({ id: index + 10, name: `p${index + 10}` }))
+    );
+
+    expect(shadows.every((shadow) => shadow.request.buffer === requestBuffer)).toBe(true);
+    expect(new Set(shadows.map((shadow) => shadow.request.buffer)).size).toBe(1);
+
+    shadows[0].request.message.model = "shadow-only";
+
+    expect(session.request.message.model).not.toBe("shadow-only");
+    expect(shadows[1].request.message.model).not.toBe("shadow-only");
+    expect(shadows[0].request.message.messages).toBe(session.request.message.messages);
+
+    shadows[0].request.buffer = new ArrayBuffer(16);
+    expect(session.request.buffer).toBe(requestBuffer);
+    expect(shadows[1].request.buffer).toBe(requestBuffer);
+  });
+
   test("switching to provider without redirect should clear stale redirect snapshot", () => {
     const requestedModel = "claude-haiku-4-5-20251001";
     const fireworksRedirect = "accounts/fireworks/routers/kimi-k2p5-turbo";

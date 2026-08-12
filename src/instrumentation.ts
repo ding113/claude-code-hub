@@ -328,24 +328,33 @@ export async function startReplayCleanupScheduler(): Promise<void> {
     const intervalMs = 10 * 60 * 1000;
 
     const runTick = () => {
-      void runReplayCleanupTick().catch((error) => {
-        logger.warn("[Instrumentation] Replay cleanup tick failed", {
-          error: error instanceof Error ? error.message : String(error),
+      void runReplayCleanupTick()
+        .then((result) => {
+          if (result.deleted > 0) {
+            logger.info(result, "[Instrumentation] Replay cleanup tick completed");
+          }
+        })
+        .catch((error) => {
+          logger.warn(
+            { ...describeSchedulerError(error) },
+            "[Instrumentation] Replay cleanup tick failed"
+          );
         });
-      });
     };
 
     runTick();
     instrumentationState.__CCH_REPLAY_CLEANUP_INTERVAL_ID__ = setInterval(runTick, intervalMs);
 
     instrumentationState.__CCH_REPLAY_CLEANUP_STARTED__ = true;
-    logger.info("[Instrumentation] Replay cleanup scheduler started", {
-      intervalSeconds: intervalMs / 1000,
-    });
+    logger.info(
+      { intervalSeconds: intervalMs / 1000 },
+      "[Instrumentation] Replay cleanup scheduler started"
+    );
   } catch (error) {
-    logger.warn("[Instrumentation] Replay cleanup scheduler init failed", {
-      error: error instanceof Error ? error.message : String(error),
-    });
+    logger.warn(
+      { ...describeSchedulerError(error) },
+      "[Instrumentation] Replay cleanup scheduler init failed"
+    );
   }
 }
 
@@ -630,6 +639,17 @@ export async function register() {
         });
       }
 
+      try {
+        const { startAvailabilityProjectionWorker } = await import(
+          "@/lib/availability/projection-worker"
+        );
+        startAvailabilityProjectionWorker();
+      } catch (error) {
+        logger.warn("[Instrumentation] Failed to start availability projection worker", {
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+
       // 初始化端点熔断器（禁用时清理残留状态）
       try {
         const { initEndpointCircuitBreaker } = await import("@/lib/endpoint-circuit-breaker");
@@ -795,6 +815,17 @@ export async function register() {
           startPublicStatusRebuildScheduler();
         } catch (error) {
           logger.warn("[Instrumentation] Failed to start public status rebuild scheduler", {
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+
+        try {
+          const { startAvailabilityProjectionWorker } = await import(
+            "@/lib/availability/projection-worker"
+          );
+          startAvailabilityProjectionWorker();
+        } catch (error) {
+          logger.warn("[Instrumentation] Failed to start availability projection worker", {
             error: error instanceof Error ? error.message : String(error),
           });
         }

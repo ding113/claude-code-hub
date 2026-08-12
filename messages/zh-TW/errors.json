@@ -38,6 +38,7 @@
 
   "INTERNAL_ERROR": "系統內部錯誤，請稍後重試",
   "DATABASE_ERROR": "資料庫錯誤",
+  "INVALID_NORMALIZED_BODY": "規範化後的請求體無法序列化",
   "NOT_FOUND": "資源不存在",
   "OPERATION_FAILED": "操作失敗",
   "USER_5H_FIXED_RESET_REQUIRES_REDIS": "重設固定 5H 限額需要 Redis 可用",

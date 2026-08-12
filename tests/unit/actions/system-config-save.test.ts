@@ -152,6 +152,35 @@ describe("saveSystemSettings", () => {
     );
   });
 
+  it("accepts and forwards the Replay cache TTL", async () => {
+    const result = await saveSystemSettings({ replayCacheTtlMinutes: 30 });
+
+    expect(result.ok).toBe(true);
+    expect(updateSystemSettingsMock).toHaveBeenCalledWith(
+      expect.objectContaining({ replayCacheTtlMinutes: 30 })
+    );
+  });
+
+  it.each([5, 120])("accepts Replay cache TTL boundary %s", async (value) => {
+    const result = await saveSystemSettings({ replayCacheTtlMinutes: value });
+
+    expect(result.ok).toBe(true);
+    expect(updateSystemSettingsMock).toHaveBeenCalledWith(
+      expect.objectContaining({ replayCacheTtlMinutes: value })
+    );
+  });
+
+  it.each([4, 121, 30.5])("rejects invalid Replay cache TTL %s", async (value) => {
+    const result = await saveSystemSettings({ replayCacheTtlMinutes: value });
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: "Replay cache TTL validation failed.",
+      errorCode: "REPLAY_CACHE_TTL_INVALID",
+    });
+    expect(updateSystemSettingsMock).not.toHaveBeenCalled();
+  });
+
   it("returns a structured error code for invalid Discovery field ranges", async () => {
     const result = await saveSystemSettings({ discoveryConcurrency: 33 });
 

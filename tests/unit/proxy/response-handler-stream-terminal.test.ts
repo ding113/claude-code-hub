@@ -19,6 +19,7 @@ const mocks = vi.hoisted(() => ({
   replayObserve: vi.fn(),
   replayComplete: vi.fn(async () => {}),
   replayAbort: vi.fn(async () => {}),
+  replayInactive: null as (() => void) | null,
 }));
 
 vi.mock("@/app/v1/_lib/proxy/response-fixer", () => ({
@@ -60,15 +61,21 @@ vi.mock("@/lib/proxy-status-tracker", () => ({
 }));
 vi.mock("@/app/v1/_lib/proxy/replay/replay-spool", () => ({
   abortReplayOwnership: vi.fn(async () => undefined),
-  createReplaySpoolIfOwner: (session: ProxySession) =>
-    session.replayState?.role === "owner"
-      ? {
-          abort: mocks.replayAbort,
-          completeAfterBilling: mocks.replayComplete,
-          isTerminal: false,
-          observe: mocks.replayObserve,
-        }
-      : null,
+  createReplaySpoolIfOwner: (
+    session: ProxySession,
+    _response: Response,
+    _delivery: string,
+    options: { onInactive?: () => void } = {}
+  ) => {
+    if (session.replayState?.role !== "owner") return null;
+    mocks.replayInactive = options.onInactive ?? null;
+    return {
+      abort: mocks.replayAbort,
+      completeAfterBilling: mocks.replayComplete,
+      isTerminal: false,
+      observe: mocks.replayObserve,
+    };
+  },
   releaseReplayOwnership: vi.fn(),
 }));
 vi.mock("@/repository/message", () => ({
@@ -222,9 +229,27 @@ function sseResponse(body: BodyInit, status = 200): Response {
   return new Response(body, { status, headers: { "content-type": "text/event-stream" } });
 }
 
+function setReplayOwner(session: ProxySession, suffix: string): void {
+  session.replayState = {
+    role: "owner",
+    ownerToken: `owner-token-${suffix}`,
+    identity: {
+      replayId: `replay-${suffix}`,
+      verifier: "verifier",
+      scopeTag: "scope-tag",
+      keyId: KEY.id,
+      userId: USER.id,
+      format: "claude",
+      model: "claude-test",
+      endpoint: "/v1/messages",
+    },
+  };
+}
+
 describe("ProxyResponseHandler.dispatch stream terminal behavior", () => {
   beforeEach(() => {
     mocks.tasks.length = 0;
+    mocks.replayInactive = null;
     vi.clearAllMocks();
     mocks.durable.mockImplementation(async (_id, _details, options) => {
       await options?.onCommitted?.();
@@ -275,6 +300,131 @@ describe("ProxyResponseHandler.dispatch stream terminal behavior", () => {
       expect.objectContaining({ onCommitted: expect.any(Function) })
     );
     expect(releaseAgent).toHaveBeenCalledOnce();
+  });
+
+  it("caps a detached Replay drain at 60 seconds after the spool becomes inactive", async () => {
+    vi.useFakeTimers();
+    const previousReplayDetachedMs = process.env.REPLAY_MAX_DETACHED_MS;
+    process.env.REPLAY_MAX_DETACHED_MS = "300000";
+    try {
+      const cancelSource = vi.fn();
+      const responseController = new AbortController();
+      const source = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode('data: {"partial":true}\n\n'));
+        },
+        cancel: cancelSource,
+      });
+      const { session } = await createSession({ responseController });
+      setReplayOwner(session, "detached");
+
+      const returned = await ProxyResponseHandler.dispatch(session, sseResponse(source));
+      const reader = returned.body?.getReader();
+      await reader?.read();
+      await reader?.cancel(new Error("client disconnected"));
+
+      expect(mocks.replayInactive).toEqual(expect.any(Function));
+      await vi.advanceTimersByTimeAsync(59_999);
+      expect(responseController.signal.aborted).toBe(false);
+
+      mocks.replayInactive?.();
+      await vi.advanceTimersByTimeAsync(1);
+
+      expect(responseController.signal.aborted).toBe(true);
+      expect(responseController.signal.reason).toEqual(
+        expect.objectContaining({ message: "client_abort_drain_timeout" })
+      );
+      expect(cancelSource).toHaveBeenCalledOnce();
+      await settleTasks();
+    } finally {
+      if (previousReplayDetachedMs === undefined) {
+        delete process.env.REPLAY_MAX_DETACHED_MS;
+      } else {
+        process.env.REPLAY_MAX_DETACHED_MS = previousReplayDetachedMs;
+      }
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps the configured 300-second drain while the Replay spool remains active", async () => {
+    vi.useFakeTimers();
+    const previousReplayDetachedMs = process.env.REPLAY_MAX_DETACHED_MS;
+    process.env.REPLAY_MAX_DETACHED_MS = "300000";
+    try {
+      const cancelSource = vi.fn();
+      const responseController = new AbortController();
+      const source = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode('data: {"partial":true}\n\n'));
+        },
+        cancel: cancelSource,
+      });
+      const { session } = await createSession({ responseController });
+      setReplayOwner(session, "active");
+
+      const returned = await ProxyResponseHandler.dispatch(session, sseResponse(source));
+      const reader = returned.body?.getReader();
+      await reader?.read();
+      await reader?.cancel(new Error("client disconnected"));
+
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(responseController.signal.aborted).toBe(false);
+      await vi.advanceTimersByTimeAsync(239_999);
+      expect(responseController.signal.aborted).toBe(false);
+
+      await vi.advanceTimersByTimeAsync(1);
+
+      expect(responseController.signal.aborted).toBe(true);
+      expect(cancelSource).toHaveBeenCalledOnce();
+      await settleTasks();
+    } finally {
+      if (previousReplayDetachedMs === undefined) {
+        delete process.env.REPLAY_MAX_DETACHED_MS;
+      } else {
+        process.env.REPLAY_MAX_DETACHED_MS = previousReplayDetachedMs;
+      }
+      vi.useRealTimers();
+    }
+  });
+
+  it("uses the 60-second drain when Replay becomes inactive before client detach", async () => {
+    vi.useFakeTimers();
+    const previousReplayDetachedMs = process.env.REPLAY_MAX_DETACHED_MS;
+    process.env.REPLAY_MAX_DETACHED_MS = "300000";
+    try {
+      const cancelSource = vi.fn();
+      const responseController = new AbortController();
+      const source = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode('data: {"partial":true}\n\n'));
+        },
+        cancel: cancelSource,
+      });
+      const { session } = await createSession({ responseController });
+      setReplayOwner(session, "inactive-before-detach");
+
+      const returned = await ProxyResponseHandler.dispatch(session, sseResponse(source));
+      const reader = returned.body?.getReader();
+      await reader?.read();
+      expect(mocks.replayInactive).toEqual(expect.any(Function));
+      mocks.replayInactive?.();
+      await reader?.cancel(new Error("client disconnected"));
+
+      await vi.advanceTimersByTimeAsync(59_999);
+      expect(responseController.signal.aborted).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+
+      expect(responseController.signal.aborted).toBe(true);
+      expect(cancelSource).toHaveBeenCalledOnce();
+      await settleTasks();
+    } finally {
+      if (previousReplayDetachedMs === undefined) {
+        delete process.env.REPLAY_MAX_DETACHED_MS;
+      } else {
+        process.env.REPLAY_MAX_DETACHED_MS = previousReplayDetachedMs;
+      }
+      vi.useRealTimers();
+    }
   });
 
   it("persists a response-controller timeout as 502 and cancels the source", async () => {

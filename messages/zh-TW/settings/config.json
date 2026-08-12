@@ -172,6 +172,10 @@
     },
     "replayEnabled": "請求 Replay",
     "replayEnabledDesc": "快取上游回應並重用上游連線:並發或斷線重連的相同請求直接跟尾在途串流,不再重複請求供應商。儲存前跟隨環境變數 ENABLE_REQUEST_REPLAY,預設開啟。",
+    "replayCacheTtlMinutes": "Replay 快取時間",
+    "replayCacheTtlMinutesDesc": "已完成 Replay payload 的可重播時間,僅影響之後寫入的資料。範圍 5-120 分鐘。",
+    "replayCacheTtlInvalid": "Replay 快取時間必須是 5-120 分鐘內的整數。",
+    "replayCacheTtlMinutesUnit": "分鐘",
     "cacheEffectivenessEnabled": "前綴快取模擬",
     "cacheEffectivenessEnabledDesc": "模擬最長前綴匹配的快取命中率(理論 vs 實際),僅用於觀測,不影響路由。儲存前跟隨環境變數 ENABLE_CACHE_EFFECTIVENESS,預設開啟。"
   },

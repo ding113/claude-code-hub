@@ -224,6 +224,35 @@ const OPENAI_RESPONSES_WINNER_FRAMES = [
   }),
 ];
 
+const VALID_OPENAI_RESPONSES_STREAMS = [
+  {
+    name: "terminal compaction output",
+    frames: [
+      sseFrame("response.completed", {
+        type: "response.completed",
+        response: {
+          id: "resp_compaction",
+          status: "completed",
+          output: [{ id: "cmp_1", type: "compaction", encrypted_content: "opaque-state" }],
+        },
+      }),
+    ],
+  },
+  {
+    name: "custom tool-call input deltas",
+    frames: [
+      sseFrame("response.custom_tool_call_input.delta", {
+        type: "response.custom_tool_call_input.delta",
+        delta: '{"path":"README.md"}',
+      }),
+      sseFrame("response.completed", {
+        type: "response.completed",
+        response: { id: "resp_tool", status: "completed" },
+      }),
+    ],
+  },
+] as const;
+
 type ReplayGateCase = {
   name: string;
   providerType: Provider["providerType"];
@@ -516,6 +545,30 @@ describe("F1 stream content gate x ProxyForwarder sequential path", () => {
       expect(mocks.recordFailure).not.toHaveBeenCalled();
     });
 
+    test("Responses terminal compaction 在 enforce 模式下直接提交且不计入熔断", async () => {
+      const provider = createProvider({ id: 1, name: "compaction", providerType: "codex" });
+      const session = createSession();
+      session.setProvider(provider);
+      Object.assign(session, {
+        requestUrl: new URL("https://example.com/v1/responses"),
+        originalFormat: "response",
+        endpointPolicy: resolveEndpointPolicy("/v1/responses"),
+      });
+
+      const frames = VALID_OPENAI_RESPONSES_STREAMS[0].frames.slice();
+      const doForward = spyOnDoForward();
+      doForward.mockImplementationOnce(async () => createSseResponse(frames));
+
+      const response = await ProxyForwarder.send(session);
+      const text = await response.text();
+
+      expect(response.status).toBe(200);
+      expect(text).toBe(frames.join(""));
+      expect(doForward).toHaveBeenCalledTimes(1);
+      expect(mocks.pickRandomProviderWithExclusion).not.toHaveBeenCalled();
+      expect(mocks.recordFailure).not.toHaveBeenCalled();
+    });
+
     test("terminal-only 流（message_stop 即终止）按 empty_stream 失败并切换供应商", async () => {
       const provider1 = createProvider({ id: 1, name: "gate-p1" });
       const provider2 = createProvider({ id: 2, name: "gate-p2" });
@@ -630,6 +683,29 @@ describe("F1 stream content gate x ProxyForwarder sequential path", () => {
       expect(mocks.pickRandomProviderWithExclusion).not.toHaveBeenCalled();
       expect(mocks.recordFailure).not.toHaveBeenCalled();
     });
+
+    test.each(VALID_OPENAI_RESPONSES_STREAMS)(
+      "Replay owner 将 $name 视为有效内容，不触发 502/failover/熔断",
+      async ({ frames }) => {
+        const provider = createProvider({ id: 1, name: "responses-valid", providerType: "codex" });
+        const session = createSession();
+        session.setProvider(provider);
+        attachReplayOwner(session, REPLAY_GATE_CASES[0]);
+
+        const streamFrames = frames.slice();
+        const doForward = spyOnDoForward();
+        doForward.mockImplementationOnce(async () => createSseResponse(streamFrames));
+
+        const response = await ProxyForwarder.send(session);
+        const text = await response.text();
+
+        expect(response.status).toBe(200);
+        expect(text).toBe(streamFrames.join(""));
+        expect(doForward).toHaveBeenCalledTimes(1);
+        expect(mocks.pickRandomProviderWithExclusion).not.toHaveBeenCalled();
+        expect(mocks.recordFailure).not.toHaveBeenCalled();
+      }
+    );
 
     test("Replay owner 在所有 precommit attempt 失败后立即释放所有权", async () => {
       const provider = createProvider({ id: 1, name: "replay-only", providerType: "codex" });
