@@ -1717,12 +1717,11 @@ export class ProxyForwarder {
             // ⭐ 竞速切换后写全局赢家键（组+模型+请求格式维度）
             // 竞速发现的最优 provider 共享给所有同组+同模型+同格式的请求，
             // 后续会话选路时优先使用，避免各自重复等待 15s。
+            // ⚠️ 必须用与 findRaceWinner 相同的键构造逻辑（buildRaceWinnerKeyForSession），
+            //    否则键维度漂移会导致读不到赢家。
             if (totalProvidersAttempted > 1) {
-              const model = session.getOriginalModel();
-              const groupTag = currentProvider.groupTag;
-              const providerType = currentProvider.providerType;
-              if (model && groupTag && providerType) {
-                const key = `cch:race:winner:${groupTag}:${model}:${providerType}`;
+              const key = await ProxyProviderResolver.buildRaceWinnerKeyForSession(session);
+              if (key) {
                 const redis = getRedisClient();
                 if (redis && redis.status === "ready") {
                   redis.set(key, String(currentProvider.id), "EX", 300).catch((error) => {

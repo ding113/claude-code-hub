@@ -1017,21 +1017,30 @@ export class ProxyProviderResolver {
   }
 
   /**
-   * 查找全局竞速赢家（组+模型+请求格式维度）
+   * 构建全局竞速赢家 Redis 键（组+模型+请求格式维度）。
    *
-   * 竞速发现的最优 provider 会写入全局 Redis 键，其他会话选路时优先使用。
-   * 写入时由竞速赢家覆盖旧值，实现故障自动切换；TTL 防止平庸 provider 长期占位。
-   * 选路时复用资格检查（模型支持/格式/熔断/限额等），不匹配则跳过回退正常调度。
+   * ⚠️ 读写**必须**共用此函数，否则键维度漂移会导致读不到赢家。
+   * groupTag 分支逻辑与 resolveEffectiveProviderGroup 一致，但**忽略 session.provider**：
+   *   读取侧此时 provider 为 null（仅在 !session.provider 时调用）；
+   *   写入侧 provider 已设为 currentProvider——若依赖 groupTag 会得到 provider 自身标签，
+   *   与读取侧的 session key/user 组对不上。
    */
-  private static async findRaceWinner(session: ProxySession): Promise<Provider | null> {
+  static async buildRaceWinnerKeyForSession(session: ProxySession): Promise<string | null> {
     const model = session.getOriginalModel();
     if (!model) return null;
 
-    const groupTag = getEffectiveProviderGroup(session);
+    // 与 resolveEffectiveProviderGroup 的 key→user→null 优先级一致
+    const key = session.authState?.key;
+    const user = session.authState?.user;
+    const groupTag = key
+      ? key.providerGroup || PROVIDER_GROUP.DEFAULT
+      : user
+        ? user.providerGroup || PROVIDER_GROUP.DEFAULT
+        : null;
     if (!groupTag) return null;
 
-    // 请求格式 → providerType 映射（与 pickRandomProvider 一致）
-    const targetType = (() => {
+    // 请求格式 → 目标 provider 类型（与 pickRandomProvider 一致）
+    const providerType = (() => {
       switch (session.originalFormat) {
         case "claude": return "claude";
         case "response": return "codex";
@@ -1041,11 +1050,26 @@ export class ProxyProviderResolver {
       }
     })();
 
+    return `cch:race:winner:${groupTag}:${model}:${providerType}`;
+  }
+
+  /**
+   * 查找全局竞速赢家（组+模型+请求格式维度）
+   *
+   * 竞速发现的最优 provider 会写入全局 Redis 键，其他会话选路时优先使用。
+   * 写入时由竞速赢家覆盖旧值，实现故障自动切换；TTL 防止平庸 provider 长期占位。
+   * 选路时复用资格检查（模型支持/格式/熔断/限额等），不匹配则跳过回退正常调度。
+   */
+  private static async findRaceWinner(session: ProxySession): Promise<Provider | null> {
+    const key = await this.buildRaceWinnerKeyForSession(session);
+    if (!key) return null;
+
+    const model = session.getOriginalModel();
+
     const redis = getRedisClient();
     if (!redis || redis.status !== "ready") return null;
 
     try {
-      const key = `cch:race:winner:${groupTag}:${model}:${targetType}`;
       const value = await redis.get(key);
       if (!value) return null;
 
@@ -1096,7 +1120,6 @@ export class ProxyProviderResolver {
         providerName: provider.name,
         providerId: provider.id,
         model,
-        groupTag,
         key,
       });
 
