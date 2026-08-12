@@ -1034,8 +1034,13 @@ export class ProxyProviderResolver {
    *   写入侧 provider 已设为 currentProvider——若依赖 groupTag 会得到 provider 自身标签，
    *   与读取侧的 session key/user 组对不上。
    */
-  static async buildGlobalReuseKey(session: ProxySession): Promise<string | null> {
-    const model = session.getOriginalModel();
+  static async buildGlobalReuseKey(
+    session: ProxySession,
+    modelOverride?: string | null
+  ): Promise<string | null> {
+    // modelOverride 用于竞速赢家结算：winner 为备胎时 sync 已把 session 模型覆盖成
+    // 备胎的，但全局复用键必须以原请求模型为准，否则后续同模型请求匹配不到。
+    const model = modelOverride ?? session.getOriginalModel();
     if (!model) return null;
 
     // 与 resolveEffectiveProviderGroup 的 key→user→null 优先级一致

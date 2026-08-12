@@ -4643,6 +4643,9 @@ export class ProxyForwarder {
       if (settled || winnerCommitted || attempt.settled || !attempt.response || !attempt.reader)
         return;
 
+      // 竞速赢家结算时的原请求模型快照（winner 为备胎且 sync 覆盖 session 模型时使用）
+      let raceWinnerOriginalModel: string | null = null;
+
       // 冷启动并发备胎的 SLA 窗口守卫（上游 discovery "低优先级候选 pending" 语义）：
       // 备胎先返回首块时，若主路还在 20s 首字节窗口内（未超时、未失败、未返回首块），
       // 备胎不得抢赢——挂起等待主路结果：
@@ -4750,6 +4753,9 @@ export class ProxyForwarder {
             };
           }
         }
+        // 快照原请求模型：sync 会把 session 模型覆盖为备胎的，但全局复用键必须以原请求
+        // 组+模型+格式为准，否则后续同模型请求匹配不到。
+        raceWinnerOriginalModel = session.getOriginalModel();
         ProxyForwarder.syncWinningAttemptSession(session, attempt.session);
       }
       const detailSnapshotSession = attempt.session as ProxySessionWithDetailSnapshotRuntime;
@@ -4816,6 +4822,30 @@ export class ProxyForwarder {
               providerId: attempt.provider.id,
               providerName: attempt.provider.name,
             });
+          }
+
+          // ⭐ 每次请求成功后写全局复用键（组+模型+请求格式维度）——与普通成功路径保持一致
+          // 竞速/hedge 赢家也必须是全局首选，否则竞速路径的请求永远不会写键，
+          // 后续会话读不到复用（键维度由 buildGlobalReuseKey 统一构造）。
+          // 超时救场赢家不写：慢源靠时间优势救场不应成为全局首选，下次重新竞速发现健康方。
+          if (!timedOutWinner) {
+            const reuseKey = await ProxyProviderResolver.buildGlobalReuseKey(
+              session,
+              raceWinnerOriginalModel
+            );
+            if (reuseKey) {
+              const reuseRedis = getRedisClient();
+              if (reuseRedis && reuseRedis.status === "ready") {
+                reuseRedis
+                  .set(reuseKey, String(attempt.provider.id), "EX", 300)
+                  .catch((reuseError) => {
+                    logger.error(
+                      "ProxyForwarder: Failed to set global reuse (hedge winner)",
+                      { error: reuseError }
+                    );
+                  });
+              }
+            }
           }
         })().catch((bindingError) => {
           logger.error("ProxyForwarder: Failed to update session provider info for hedge winner", {
