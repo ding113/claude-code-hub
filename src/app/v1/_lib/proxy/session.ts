@@ -572,14 +572,16 @@ export class ProxySession {
   }
 
   /**
-   * 是否应该复用 provider（基于 messages 长度）
+   * 是否应该复用 provider
+   *
+   * 不按消息数隔离：Codex 等客户端每次只携带最新一条 input（消息数恒为 1），
+   * 旧的 >1 门槛会把持续会话挡在复用之外，导致每次请求都重新全量健康调度。
+   * 绑定健康性由 findReusable 的后续检查保障（provider 启用/disableSessionReuse/
+   * 时间窗/熔断/格式/模型/客户端限制），慢 provider 由竞速超时兜底切换，
+   * 无需用消息数做门槛。
    */
   shouldReuseProvider(): boolean {
-    if (this.isRawCrossProviderFallbackEnabled()) {
-      return true;
-    }
-
-    return this.getMessagesLength() > 1;
+    return true;
   }
 
   /**
