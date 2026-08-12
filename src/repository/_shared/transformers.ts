@@ -135,7 +135,7 @@ export function toProvider(dbProvider: any): Provider {
       dbProvider?.maxRetryAttempts !== undefined && dbProvider?.maxRetryAttempts !== null
         ? Number(dbProvider.maxRetryAttempts)
         : null,
-    circuitBreakerFailureThreshold: dbProvider?.circuitBreakerFailureThreshold ?? 5,
+    circuitBreakerFailureThreshold: dbProvider?.circuitBreakerFailureThreshold ?? 0,
     circuitBreakerOpenDuration: dbProvider?.circuitBreakerOpenDuration ?? 1800000,
     circuitBreakerHalfOpenSuccessThreshold: dbProvider?.circuitBreakerHalfOpenSuccessThreshold ?? 2,
     proxyUrl: dbProvider?.proxyUrl ?? null,

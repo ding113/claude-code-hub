@@ -103,6 +103,17 @@ MULTI_LOCK = threading.Lock()
 STATES = {}
 STATES_LOCK = threading.Lock()
 
+# ---------- 连接复用池 (per-host idle easy) ----------
+# libcurl 的连接复用只在"同一 easy handle 连续 transfer"时发生,跨 easy 需要 CURLSH
+# (本 fork 无 curl_easy_share 符号)。因此用 per-host 空闲 easy 池:
+# 请求结束后 easy 不销毁,放回池;同 host 的下个请求取出复用,keep-alive 连接自然复用。
+# 仅正常完成的请求归还(异常中止的 easy 直接 cleanup,避免脏连接进池)。
+IDLE_POOL = {}  # host_key(str) -> list[tuple[easy, last_used_monotonic]]
+POOL_LOCK = threading.Lock()
+POOL_MAX_PER_HOST = 16   # 每 host 最多保留的空闲 easy(≈空闲连接数)
+POOL_MAX_TOTAL = 256     # 总空闲 easy 上限,防连接无限膨胀
+POOL_IDLE_TTL = 90.0     # 空闲超过 TTL 的 easy 被淘汰(对齐上游 keep-alive 空闲超时,及时清死连接)
+
 
 class State:
     """一个在途请求的状态。驱动线程写,请求线程读。"""
@@ -164,31 +175,34 @@ def header_cb(ptr, size, nmemb, userdata):
 
 
 def _drive_once():
-    running = ctypes.c_int()
-    lib.curl_multi_perform(MULTI, ctypes.byref(running))
-    q = ctypes.c_int()
-    while True:
-        msg = lib.curl_multi_info_read(MULTI, ctypes.byref(q))
-        if not msg:
-            break
-        if msg.contents.msg == CURLMSG_DONE:
-            easy_ptr = ctypes.cast(msg.contents.easy_handle, ctypes.c_void_p).value
-            with STATES_LOCK:
-                st = STATES.pop(easy_ptr, None)
-            if st is not None:
-                err = None
-                if msg.contents.data.result != 0:
-                    err = f"curl rc={msg.contents.data.result}"
-                if st.first_body_at is not None:
-                    st.ttfb_ms = int((st.first_body_at - st.started) * 1000)
-                    if os.environ.get("IMPERSONATE_PROXY_DEBUG"):
-                        print(f"[impersonate-proxy] done: ttfb={st.ttfb_ms}ms status={st.status}", flush=True)
-                st.chunks.put(("done", err))
-                st.done.set()
-    n = ctypes.c_int()
-    # poll 超时短: curl_multi_wakeup 是 8.2+ API,此 8.1.1 fork 中可能无效,
-    # 靠短超时保证 add_handle 后 ≤50ms 被驱动;fd 活动时 poll 立即返回不受影响
-    lib.curl_multi_poll(MULTI, None, 0, 50, ctypes.byref(n))
+    # libcurl 要求同一 multi handle 的 API(add/remove/perform/poll)调用方同步,
+    # 所以整个驱动回合都持有 MULTI_LOCK;锁顺序统一为 MULTI → STATES。
+    with MULTI_LOCK:
+        running = ctypes.c_int()
+        lib.curl_multi_perform(MULTI, ctypes.byref(running))
+        q = ctypes.c_int()
+        while True:
+            msg = lib.curl_multi_info_read(MULTI, ctypes.byref(q))
+            if not msg:
+                break
+            if msg.contents.msg == CURLMSG_DONE:
+                easy_ptr = ctypes.cast(msg.contents.easy_handle, ctypes.c_void_p).value
+                with STATES_LOCK:
+                    st = STATES.pop(easy_ptr, None)
+                if st is not None:
+                    err = None
+                    if msg.contents.data.result != 0:
+                        err = f"curl rc={msg.contents.data.result}"
+                    if st.first_body_at is not None:
+                        st.ttfb_ms = int((st.first_body_at - st.started) * 1000)
+                        if os.environ.get("IMPERSONATE_PROXY_DEBUG"):
+                            print(f"[impersonate-proxy] done: ttfb={st.ttfb_ms}ms status={st.status}", flush=True)
+                    st.chunks.put(("done", err))
+                    st.done.set()
+        n = ctypes.c_int()
+        # poll 超时短: curl_multi_wakeup 是 8.2+ API,此 8.1.1 fork 中可能无效,
+        # 靠短超时保证 add_handle 后 ≤50ms 被驱动;fd 活动时 poll 立即返回不受影响
+        lib.curl_multi_poll(MULTI, None, 0, 50, ctypes.byref(n))
 
 
 def _drive_loop():
@@ -203,7 +217,15 @@ def _drive_loop():
 threading.Thread(target=_drive_loop, daemon=True).start()
 
 
-def _build_easy(url, method, headers, body, timeout_ms):
+def _host_key(url):
+    """按 (scheme, host:port) 分组;连接复用只对同一上游端点有效。"""
+    from urllib.parse import urlsplit
+    parts = urlsplit(url)
+    return f"{parts.scheme}|{parts.netloc}"
+
+
+def _create_easy():
+    """新建 easy handle + 一次性指纹配置(curl_easy_impersonate 只做一次)。"""
     easy = lib.curl_easy_init()
     if not easy:
         raise RuntimeError("curl_easy_init failed")
@@ -214,6 +236,25 @@ def _build_easy(url, method, headers, body, timeout_ms):
     if rc != 0:
         lib.curl_easy_cleanup(easy)
         raise RuntimeError(f"curl_easy_impersonate rc={rc}")
+    easy._slist = None
+    easy._body_ref = None
+    easy._host_key = None
+    return easy
+
+
+def _configure_easy(easy, url, method, headers, body, timeout_ms):
+    """每次 transfer 前的 per-request 配置(复用池里的 easy 也要重跑本函数)。
+
+    顺序敏感:
+    1) 先清掉旧 HTTPHEADER 引用,再 free 旧 slist(libcurl 只引用不复制);
+    2) CUSTOMREQUEST/POSTFIELDS 等覆盖式 setopt,新值覆盖旧值;
+    3) body 挂到 easy 属性上防 GC(驱动线程异步读)。
+    """
+    # 清旧 header 引用 → free 旧 slist → 建新 slist
+    lib.curl_easy_setopt(easy, CURLOPT_HTTPHEADER, None)
+    if easy._slist is not None:
+        lib.curl_slist_free_all(easy._slist)
+        easy._slist = None
     lib.curl_easy_setopt(easy, CURLOPT_URL, url.encode())
     lib.curl_easy_setopt(easy, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_2_0)
     lib.curl_easy_setopt(easy, CURLOPT_TIMEOUT_MS, timeout_ms)
@@ -226,17 +267,100 @@ def _build_easy(url, method, headers, body, timeout_ms):
     lib.curl_easy_setopt(easy, CURLOPT_ACCEPT_ENCODING, b"")
     if method:
         lib.curl_easy_setopt(easy, CURLOPT_CUSTOMREQUEST, method.encode())
+    else:
+        lib.curl_easy_setopt(easy, CURLOPT_CUSTOMREQUEST, None)
     if body is not None:
         lib.curl_easy_setopt(easy, CURLOPT_POSTFIELDS, ctypes.cast(body, ctypes.c_void_p))
         lib.curl_easy_setopt(easy, CURLOPT_POSTFIELDSIZE, len(body))
-        easy._body_ref = body  # 保持引用防 GC
+    else:
+        lib.curl_easy_setopt(easy, CURLOPT_POSTFIELDS, None)
+        lib.curl_easy_setopt(easy, CURLOPT_POSTFIELDSIZE, 0)
+    easy._body_ref = body  # 保持引用防 GC
     slist = None
     # impersonate API 已设 Chrome 默认头;这里只追加转发头(Authorization/Content-Type 等)
     for h in headers or []:
         slist = lib.curl_slist_append(slist, h.encode())
     if slist:
         lib.curl_easy_setopt(easy, CURLOPT_HTTPHEADER, ctypes.cast(slist, ctypes.c_void_p))
-    return easy, slist
+    easy._slist = slist
+    easy._host_key = _host_key(url)
+    return easy
+
+
+def _destroy_easy(easy):
+    """销毁 easy 并释放其挂着的 slist(libcurl 只引用不复制,cleanup 不代 free)。"""
+    slist = getattr(easy, "_slist", None)
+    if slist is not None:
+        lib.curl_slist_free_all(slist)
+        easy._slist = None
+    lib.curl_easy_cleanup(easy)
+
+
+def _pool_evict_locked(now):
+    """池满了/TTL 过期时淘汰最旧的 idle easy。调用方须持有 POOL_LOCK。"""
+    total = sum(len(v) for v in IDLE_POOL.values())
+    if total >= POOL_MAX_TOTAL:
+        # 先淘汰最久未用的一个(任意 host)
+        oldest_key, oldest_item = None, None
+        for k, items in IDLE_POOL.items():
+            for item in items:
+                if oldest_item is None or item[1] < oldest_item[1]:
+                    oldest_key, oldest_item = k, item
+        if oldest_key is not None:
+            IDLE_POOL[oldest_key].remove(oldest_item)
+            if not IDLE_POOL[oldest_key]:
+                del IDLE_POOL[oldest_key]
+            _destroy_easy(oldest_item[0])
+    # 淘汰超 TTL 的空闲 easy
+    stale_keys = []
+    for k, items in list(IDLE_POOL.items()):
+        kept = []
+        for easy, last in items:
+            if now - last > POOL_IDLE_TTL:
+                _destroy_easy(easy)
+            else:
+                kept.append((easy, last))
+        if kept:
+            IDLE_POOL[k] = kept
+        else:
+            stale_keys.append(k)
+    for k in stale_keys:
+        del IDLE_POOL[k]
+
+
+def _acquire_easy(url, method, headers, body, timeout_ms):
+    """取 easy:优先复用同 host 的空闲 easy,否则新建。返回已配置好的 easy。"""
+    key = _host_key(url)
+    easy = None
+    with POOL_LOCK:
+        items = IDLE_POOL.get(key)
+        if items:
+            easy, _ = items.pop()
+            if not items:
+                del IDLE_POOL[key]
+    if easy is None:
+        easy = _create_easy()
+        if os.environ.get("IMPERSONATE_PROXY_DEBUG"):
+            print(f"[impersonate-proxy] new easy for {key}", flush=True)
+    else:
+        if os.environ.get("IMPERSONATE_PROXY_DEBUG"):
+            print(f"[impersonate-proxy] REUSE easy for {key}", flush=True)
+    return _configure_easy(easy, url, method, headers, body, timeout_ms)
+
+
+def _release_easy(easy, host_key, healthy):
+    """归还 easy 到池(仅正常完成)。失败/异常的 easy 直接销毁,防脏连接进池。"""
+    if not healthy:
+        _destroy_easy(easy)
+        return
+    now = time.monotonic()
+    with POOL_LOCK:
+        items = IDLE_POOL.setdefault(host_key, [])
+        if len(items) >= POOL_MAX_PER_HOST:
+            _destroy_easy(easy)
+            return
+        items.append((easy, now))
+        _pool_evict_locked(now)
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -313,20 +437,22 @@ class Handler(BaseHTTPRequestHandler):
 
         body = self._read_body()
         st = State()
-        easy, slist = _build_easy(target, method, fwd, body, timeout_ms)
+        easy = _acquire_easy(target, method, fwd, body, timeout_ms)
+        host_key = easy._host_key or _host_key(target)
         easy_ptr = ctypes.cast(easy, ctypes.c_void_p).value
-        with STATES_LOCK:
-            STATES[easy_ptr] = st
         lib.curl_easy_setopt(easy, CURLOPT_WRITEFUNCTION, write_cb)
         lib.curl_easy_setopt(easy, CURLOPT_WRITEDATA, ctypes.cast(easy, ctypes.c_void_p))
         lib.curl_easy_setopt(easy, CURLOPT_HEADERFUNCTION, header_cb)
         lib.curl_easy_setopt(easy, CURLOPT_HEADERDATA, ctypes.cast(easy, ctypes.c_void_p))
 
+        # 锁顺序统一 MULTI → STATES(与驱动线程一致,防死锁)
         with MULTI_LOCK:
+            with STATES_LOCK:
+                STATES[easy_ptr] = st
             mrc = lib.curl_multi_add_handle(MULTI, easy)
         if mrc != 0:
-            lib.curl_slist_free_all(slist)
-            lib.curl_easy_cleanup(easy)
+            print(f"[impersonate-proxy] add_handle rc={mrc}, destroying easy", flush=True)
+            _release_easy(easy, host_key, healthy=False)
             self.send_response(502)
             self.send_header("Content-Length", "0")
             self.end_headers()
@@ -381,10 +507,10 @@ class Handler(BaseHTTPRequestHandler):
         finally:
             with MULTI_LOCK:
                 lib.curl_multi_remove_handle(MULTI, easy)
-            lib.curl_slist_free_all(slist)
-            lib.curl_easy_cleanup(easy)
-            with STATES_LOCK:
-                STATES.pop(ctypes.cast(easy, ctypes.c_void_p).value, None)
+                with STATES_LOCK:
+                    STATES.pop(ctypes.cast(easy, ctypes.c_void_p).value, None)
+            # 正常完成 → 归还池复用连接;超时/失败/中断 → 销毁防脏连接
+            _release_easy(easy, host_key, healthy=(err is None))
 
         if not wrote_headers:
             code = 504 if err == "timeout" else 502

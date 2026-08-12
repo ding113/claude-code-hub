@@ -3845,9 +3845,15 @@ export class ProxyForwarder {
     const attempts = new Set<StreamingHedgeAttempt>();
     const failedProviderIds: number[] = [];
     const raceMode = raceSettings.streamingRaceMode;
-    const raceFirstByteMs = Number.isFinite(raceSettings.streamingRaceFirstByteMs)
-      ? Math.max(1, raceSettings.streamingRaceFirstByteMs)
-      : 0;
+    // 非 single 模式下若阈值未配置/为 0（例如从 single 切回时 UI 曾显式写 0），
+    // 兜底用默认 20s，避免 firstByteTimeoutMs=1ms 导致瞬间连环拉备胎。
+    const raceFirstByteMs =
+      raceMode !== "single"
+        ? Number.isFinite(raceSettings.streamingRaceFirstByteMs) &&
+          raceSettings.streamingRaceFirstByteMs > 0
+          ? raceSettings.streamingRaceFirstByteMs
+          : 20000
+        : 0;
     // 总竞速上限（对齐上游 racingTotalTimeoutMs）：首字节接力一直拉不到未超时赢家时，
     // 到点直接选当前在途里优先级最高的 attempt 作为兜底，不再拉新备胎。
     const TOTAL_RACE_TIMEOUT_MS = 60_000;
@@ -4132,7 +4138,9 @@ export class ProxyForwarder {
           void commitWinner(pending, pending.firstChunk as Uint8Array);
           return;
         }
-        void launchAlternative({ allowNonSloFallback: false });
+        // 超时后继续拉下一个备胎：优先健康 SLO 合格候选；合格候选不足时
+        // 按普通调度顺序继续拉取（不退化单路），直到候选耗尽。
+        void launchAlternative({ allowNonSloFallback: true });
       }, attempt.firstByteTimeoutMs);
     };
 
@@ -4623,12 +4631,15 @@ export class ProxyForwarder {
       // 是否等待只比较双方倍率（处理后倍率，cheap-first）：备胎倍率 ≤ 主路倍率
       // （备胎不比主路贵）时不挂起——先返回者直接赢，避免同倍率下白等 20s；
       // 仅当备胎更贵时才保主路窗口，防止贵备胎抢赢便宜主路。
+      // dual_fast 例外：用户显式选择"双发极速"= 冷启动无条件双向竞速，不等待
+      // 窗口，谁先返回首块谁赢（直接用快的那个）；窗口守卫只约束 timeout_race 冷启动。
       // 自冷启动并发改为"仅同倍率候选"后（pickHealthSloAlternate 的
-      // sameCostAsProvider 约束），此守卫条件恒不成立——同倍率竞速零等待，
-      // 谁先返回谁赢。保留代码仅为防御性兜底（超时后拉起的非同倍率备胎在
+      // sameCostAsProvider 约束），timeout_race 冷启动守卫条件恒不成立——同倍率竞速
+      // 零等待，谁先返回谁赢。保留代码仅为防御性兜底（超时后拉起的非同倍率备胎在
       // 主路已 thresholdTriggered 时同样不挂起）。
       if (
         isColdStart &&
+        raceMode !== "dual_fast" &&
         attempt !== initialAttemptRef &&
         initialAttemptRef &&
         !initialAttemptRef.settled &&
@@ -4886,7 +4897,10 @@ export class ProxyForwarder {
         },
         responseController: null,
         clearResponseTimeout: null,
-        firstByteTimeoutMs: raceMode === "timeout_race" ? raceFirstByteMs : 0,
+        // dual_fast 也 arm 首字超时定时器：双发都慢时超时即接力拉下一个备胎
+        // （超时竞速机制），与 timeout_race 共用同一阈值。
+        firstByteTimeoutMs:
+          raceMode === "timeout_race" || raceMode === "dual_fast" ? raceFirstByteMs : 0,
         sequence: launchedProviderCount,
         requestAttemptCount: 1,
         reactiveRectifierRetryState: {
@@ -4960,10 +4974,11 @@ export class ProxyForwarder {
       armTotalRaceDeadline();
       if (!initialLaunched) {
         await launchAlternative({ allowNonSloFallback: true });
-      } else if (raceMode === "dual_fast" || (raceMode === "timeout_race" && isColdStart)) {
+      } else if ((raceMode === "dual_fast" || raceMode === "timeout_race") && isColdStart) {
         // 冷启动（无绑定）并发发现：
         // - dual_fast: 立即并发一个 SLO 备胎（真双向竞速，备胎无延迟阈值），
-        //   这是用户显式选择的双路竞速模式，不做同倍率约束。
+        //   这是用户显式选择的双路竞速模式，不做同倍率约束。合格候选不足时
+        //   不退化单路——按普通调度顺序继续拉取备胎。
         // - timeout_race + 冷启动：仅当存在与主路**相同处理后倍率**的健康 SLO
         //   候选时才立即并发（sameCostAsProvider 约束）——同倍率竞速零等待，
         //   谁先返回首块谁赢并绑定，白赚最快供应商；不同倍率的候选不并发
@@ -4971,7 +4986,7 @@ export class ProxyForwarder {
         //   选错了），主路直接单路，首字超时后再走下方备胎链。
         // 有绑定时保持原逻辑——只发绑定方，等首字节超时才拉备胎。
         await launchAlternative({
-          allowNonSloFallback: false,
+          allowNonSloFallback: raceMode === "dual_fast",
           sameCostAsProvider:
             raceMode === "timeout_race" && isColdStart ? initialProvider : null,
         });

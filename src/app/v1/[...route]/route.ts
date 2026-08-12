@@ -44,6 +44,14 @@ app.get("/responses/models", handleCodexModels); // 只返回 codex 类型（用
 app.get("/chat/completions/models", handleOpenAICompatibleModels); // 只返回 openai-compatible 类型
 app.get("/chat/models", handleOpenAICompatibleModels); // 简写路径
 
+// 本地推理服务器探测端点——快速短路，不转发上游。
+// Hermes Agent 等客户端用这些端点探测目标是不是本地推理服务器
+// （LM Studio / Ollama / llama.cpp / vLLM）。CCH 是 API 网关，不是本地
+// 推理服务，直接返回 404 让客户端快速判定"非本地服务器"，避免 catch-all
+// 把探测请求转发到上游 sub2api 后白白等 2~3 秒超时。
+app.all("/props", (c) => c.json({ error: "not_a_local_server" }, 404));
+app.all("/models/:model", (c) => c.json({ error: "model_not_found" }, 404));
+
 // OpenAI Compatible API 路由
 app.post("/chat/completions", handleProxyRequest);
 

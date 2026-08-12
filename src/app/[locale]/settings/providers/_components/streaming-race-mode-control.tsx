@@ -173,7 +173,7 @@ export function StreamingRaceModeControl({ className }: { className?: string }) 
     }
   };
 
-  const showThreshold = mode === "timeout_race";
+  const showThreshold = mode !== "single";
   const secValue = Math.round(firstByteMs / 1000);
 
   const commitSeconds = () => {
@@ -198,7 +198,13 @@ export function StreamingRaceModeControl({ className }: { className?: string }) 
     if (m === "single") {
       mutation.mutate({ streamingRaceMode: m, streamingRaceFirstByteMs: 0, _gen: gen });
     } else {
-      mutation.mutate({ streamingRaceMode: m, _gen: gen });
+      // 从 single 切回时阈值可能仍是 0，带上默认 20s 一起提交，避免 0 秒立即超时。
+      const ms = firstByteMs > 0 ? firstByteMs : 20000;
+      mutation.mutate({
+        streamingRaceMode: m,
+        streamingRaceFirstByteMs: ms,
+        _gen: gen,
+      });
     }
   };
 
@@ -278,7 +284,7 @@ export function StreamingRaceModeControl({ className }: { className?: string }) 
           </>
         ) : (
           <span className="truncate text-[11px] text-muted-foreground/80">
-            {mode === "dual_fast" ? t("raceThresholdNotUsedDual") : t("raceThresholdNotUsedSingle")}
+            {t("raceThresholdNotUsedSingle")}
           </span>
         )}
       </div>
