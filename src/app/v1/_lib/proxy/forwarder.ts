@@ -3841,12 +3841,14 @@ export class ProxyForwarder {
     }
 
     // 上游 v0.9.x bounded discovery 的分层语义：
-    // - 冷启动（无 session_reuse 绑定）：立即并发一个 SLO 备胎（并发=2）做发现，
+    // - 冷启动（无 session/global reuse）：立即并发一个 SLO 备胎（并发=2）做发现，
     //   不等首字节超时，用健康竞速探测谁更快；
-    // - 有绑定（session_reuse）：只发绑定方，超时才拉备胎（下方原 timeout_race 行为）。
+    // - 已复用（session/global reuse）：只发复用方，超时才拉备胎（下方原 timeout_race 行为）。
+    // 全局复用也属于 warm start；否则命中全局键后会被误判为冷启动，
+    // 在首字节阈值之前立刻拉起第二个供应商，直接破坏跨会话粘滞。
     const isColdStart = !session
       .getProviderChain()
-      .some((item) => item.reason === "session_reuse");
+      .some((item) => item.reason === "session_reuse" || item.reason === "global_reuse");
 
     // Capture immutable request ownership before winner synchronization can mutate a
     // shared/shadow session. Loser billing must always settle against the original
