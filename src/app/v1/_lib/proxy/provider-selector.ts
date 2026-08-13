@@ -24,7 +24,6 @@ import {
 import type { HealthTestSloThresholds } from "@/lib/provider-health-test/slo-thresholds";
 import { RateLimitService } from "@/lib/rate-limit";
 import { getRedisClient } from "@/lib/redis";
-import { SessionManager } from "@/lib/session-manager";
 import { parseProviderGroups, resolveProviderGroupsWithDefault } from "@/lib/utils/provider-group";
 import { isProviderActiveNow } from "@/lib/utils/provider-schedule";
 import { resolveSystemTimezone } from "@/lib/utils/timezone";
@@ -376,48 +375,9 @@ export class ProxyProviderResolver {
     // 动态尝试所有可用供应商（避免无限循环通过 excludedProviders 和 null 返回）
     const excludedProviders: number[] = [];
 
-    // === 会话复用（仅流式请求）===
-    // 非流式请求不做会话复用：一次性工具调用等无粘滞价值，每次按健康调度重新选路。
+    // === 全局复用（组+模型维度，跨会话复用）===
+    // 非流式请求不做全局复用：一次性工具调用等无粘滞价值，每次按健康调度重新选路。
     const reusableRequest = isStreamingRequest(session);
-    let reusedProvider: Provider | null = null;
-    if (reusableRequest) {
-      reusedProvider = await ProxyProviderResolver.findReusable(session);
-    }
-    if (reusedProvider) {
-      session.setProvider(reusedProvider);
-
-      // 记录会话复用上下文
-      session.addProviderToChain(reusedProvider, {
-        reason: "session_reuse",
-        selectionMethod: "session_reuse",
-        circuitState: getCircuitState(reusedProvider.id),
-        decisionContext: {
-          totalProviders: 0, // 复用不需要筛选
-          enabledProviders: 0,
-          targetType: reusedProvider.providerType as NonNullable<
-            ProviderChainItem["decisionContext"]
-          >["targetType"],
-          requestedModel: session.getOriginalModel() || "",
-          groupFilterApplied: false,
-          beforeHealthCheck: 0,
-          afterHealthCheck: 0,
-          priorityLevels: [reusedProvider.priority || 0],
-          selectedPriority: reusedProvider.priority || 0,
-          candidatesAtPriority: [
-            {
-              id: reusedProvider.id,
-              name: reusedProvider.name,
-              weight: reusedProvider.weight,
-              costMultiplier: reusedProvider.costMultiplier,
-            },
-          ],
-          sessionId: session.sessionId || undefined,
-        },
-      });
-    }
-
-    // === 全局复用（组+模型+请求格式维度）===
-    // 非流式请求同样不读全局复用：每次按健康调度重新选路。
     if (!session.provider && reusableRequest) {
       const reusedProvider = await ProxyProviderResolver.findGlobalReuse(session);
       if (reusedProvider) {
@@ -837,281 +797,15 @@ export class ProxyProviderResolver {
   }
 
   /**
-   * 查找可复用的供应商（基于 session）
-   */
-  private static async findReusable(session: ProxySession): Promise<Provider | null> {
-    if (!session.shouldReuseProvider() || !session.sessionId) {
-      return null;
-    }
-
-    // 从 Redis 读取该 session 绑定的 provider
-    const providerId = await SessionManager.getSessionProvider(
-      session.sessionId,
-      session.authState?.key?.id ?? null
-    );
-    if (!providerId) {
-      logger.debug("ProviderSelector: Session has no bound provider", {
-        sessionId: session.sessionId,
-      });
-      return null;
-    }
-
-    // 验证 provider 可用性
-    const provider = await findProviderById(providerId);
-    if (!provider?.isEnabled) {
-      logger.debug("ProviderSelector: Session provider unavailable", {
-        sessionId: session.sessionId,
-        providerId,
-      });
-      await SessionManager.clearSessionProvider(session.sessionId);
-      return null;
-    }
-
-    if (provider.disableSessionReuse) {
-      logger.debug("ProviderSelector: Session provider opted out of session reuse", {
-        sessionId: session.sessionId,
-        providerId: provider.id,
-        providerName: provider.name,
-      });
-      await SessionManager.clearSessionProvider(session.sessionId);
-      return null;
-    }
-
-    // 调度时间窗口检查：防止会话复用绕过时间调度
-    const systemTimezone = await resolveSystemTimezone();
-    if (!isProviderActiveNow(provider.activeTimeStart, provider.activeTimeEnd, systemTimezone)) {
-      logger.debug("ProviderSelector: Session provider outside active schedule", {
-        sessionId: session.sessionId,
-        providerId: provider.id,
-        activeTimeStart: provider.activeTimeStart,
-        activeTimeEnd: provider.activeTimeEnd,
-        timezone: systemTimezone,
-      });
-      await SessionManager.clearSessionProvider(session.sessionId);
-      return null;
-    }
-
-    // 临时熔断（vendor+type）：防止会话复用绕过故障隔离
-    if (
-      provider.providerVendorId &&
-      provider.providerVendorId > 0 &&
-      (await isVendorTypeCircuitOpen(provider.providerVendorId, provider.providerType))
-    ) {
-      logger.debug("ProviderSelector: Session provider vendor-type circuit is open", {
-        sessionId: session.sessionId,
-        providerId: provider.id,
-        vendorId: provider.providerVendorId,
-        providerType: provider.providerType,
-      });
-      return null;
-    }
-
-    // 检查熔断器状态（TC-055 修复）
-    if (await isCircuitOpen(provider.id)) {
-      logger.debug("ProviderSelector: Session provider circuit is open", {
-        sessionId: session.sessionId,
-        providerId: provider.id,
-        providerName: provider.name,
-        circuitState: getCircuitState(provider.id),
-      });
-      return null;
-    }
-
-    if (
-      session.originalFormat &&
-      !checkFormatProviderTypeCompatibility(session.originalFormat, provider.providerType)
-    ) {
-      logger.debug("ProviderSelector: Session provider incompatible with request format", {
-        sessionId: session.sessionId,
-        providerId: provider.id,
-        providerName: provider.name,
-        providerType: provider.providerType,
-        originalFormat: session.originalFormat,
-      });
-      await SessionManager.clearSessionProvider(session.sessionId);
-      return null;
-    }
-
-    // 检查模型支持
-    const requestedModel = session.getOriginalModel();
-    if (requestedModel && !providerSupportsModel(provider, requestedModel)) {
-      logger.debug("ProviderSelector: Session provider does not support requested model", {
-        sessionId: session.sessionId,
-        providerId: provider.id,
-        providerName: provider.name,
-        providerType: provider.providerType,
-        requestedModel,
-        allowedModels: provider.allowedModels,
-      });
-
-      // 清除过时绑定，避免 SET NX 死锁
-      // 当 session 内请求模型发生变化时，旧绑定已无意义，
-      // 清除后新的成功请求可通过 SET NX 重新绑定匹配的 provider
-      await SessionManager.clearSessionProvider(session.sessionId);
-      logger.info("ProviderSelector: Cleared stale provider binding (model mismatch)", {
-        sessionId: session.sessionId,
-        staleProviderId: provider.id,
-        staleProviderName: provider.name,
-        requestedModel,
-      });
-
-      return null;
-    }
-
-    // Check provider-level client restrictions on session reuse
-    const providerAllowed = provider.allowedClients ?? [];
-    const providerBlocked = provider.blockedClients ?? [];
-    const clientResult = isClientAllowedDetailed(session, providerAllowed, providerBlocked);
-    if (!clientResult.allowed) {
-      logger.debug("ProviderSelector: Session provider blocked by client restrictions", {
-        sessionId: session.sessionId,
-        providerId: provider.id,
-        matchType: clientResult.matchType,
-        matchedPattern: clientResult.matchedPattern,
-        detectedClient: clientResult.detectedClient,
-      });
-      session.addProviderToChain(provider, {
-        reason: "client_restriction_filtered",
-        decisionContext: {
-          totalProviders: 0,
-          enabledProviders: 0,
-          targetType: provider.providerType as NonNullable<
-            ProviderChainItem["decisionContext"]
-          >["targetType"],
-          requestedModel: session.getOriginalModel() || "",
-          groupFilterApplied: false,
-          beforeHealthCheck: 0,
-          afterHealthCheck: 0,
-          priorityLevels: [],
-          selectedPriority: 0,
-          candidatesAtPriority: [],
-          filteredProviders: [
-            {
-              id: provider.id,
-              name: provider.name,
-              reason: "client_restriction",
-              details:
-                clientResult.matchType === "blocklist_hit" ? "blocklist_hit" : "allowlist_miss",
-              clientRestrictionContext: {
-                matchType: clientResult.matchType as "blocklist_hit" | "allowlist_miss",
-                matchedPattern: clientResult.matchedPattern,
-                detectedClient: clientResult.detectedClient,
-                providerAllowlist: clientResult.checkedAllowlist,
-                providerBlocklist: clientResult.checkedBlocklist,
-              },
-            },
-          ],
-        },
-      });
-      await SessionManager.clearSessionProvider(session.sessionId);
-      return null;
-    }
-
-    // 修复：检查用户分组权限（严格分组隔离 + 支持多分组）
-    // Check if session provider matches user's group
-    // Priority: key.providerGroup > user.providerGroup
-    const effectiveGroup = getEffectiveProviderGroup(session);
-    const keyGroup = session?.authState?.key?.providerGroup;
-    if (effectiveGroup) {
-      // Use helper function for core group matching logic
-      // Fix #190: Support provider multi-tags (e.g. "cli,chat") matching user single-tag (e.g. "cli")
-      // Fix #281: Reject providers without groupTag when user/key has group restrictions
-      if (!checkProviderGroupMatch(provider.groupTag, effectiveGroup)) {
-        // Detailed logging based on specific failure reason
-        if (!provider.groupTag) {
-          logger.warn(
-            "ProviderSelector: Session provider has no group tag but user/key requires group",
-            {
-              sessionId: session.sessionId,
-              providerId: provider.id,
-              providerName: provider.name,
-              effectiveGroups: effectiveGroup,
-              keyGroupOverride: !!keyGroup,
-              message:
-                "Strict group isolation: rejecting untagged provider for group-scoped user/key",
-            }
-          );
-        } else {
-          logger.warn("ProviderSelector: Session provider not in user groups", {
-            sessionId: session.sessionId,
-            providerId: provider.id,
-            providerName: provider.name,
-            providerTags: provider.groupTag,
-            effectiveGroups: effectiveGroup,
-            keyGroupOverride: !!keyGroup,
-            message: "Strict group isolation: rejecting cross-group session reuse",
-          });
-        }
-        return null; // Reject reuse, re-select
-      }
-    }
-    // No auth group info (effectiveGroup is null) can reuse any provider
-
-    // 分组白/黑名单：会话复用也不能绕过（否则黑名单会被复用绕开）
-    if (!(await checkProviderGroupAllowBlock(provider, effectiveGroup))) {
-      logger.warn("ProviderSelector: Session provider blocked by group allow/block lists", {
-        sessionId: session.sessionId,
-        providerId: provider.id,
-        providerName: provider.name,
-        effectiveGroup,
-      });
-      await SessionManager.clearSessionProvider(session.sessionId);
-      return null;
-    }
-
-    // 会话复用也必须遵守限额（否则会绕过"达到限额即禁用"的语义）
-    const costCheck = await RateLimitService.checkCostLimitsWithLease(provider.id, "provider", {
-      limit_5h_usd: provider.limit5hUsd,
-      limit_5h_reset_mode: provider.limit5hResetMode,
-      limit_daily_usd: provider.limitDailyUsd,
-      daily_reset_mode: provider.dailyResetMode,
-      daily_reset_time: provider.dailyResetTime,
-      limit_weekly_usd: provider.limitWeeklyUsd,
-      limit_monthly_usd: provider.limitMonthlyUsd,
-    });
-
-    if (!costCheck.allowed) {
-      logger.debug("ProviderSelector: Session provider cost limit exceeded, reject reuse", {
-        sessionId: session.sessionId,
-        providerId: provider.id,
-      });
-      return null;
-    }
-
-    const totalCheck = await RateLimitService.checkTotalCostLimit(
-      provider.id,
-      "provider",
-      provider.limitTotalUsd,
-      {
-        resetAt: provider.totalCostResetAt,
-      }
-    );
-
-    if (!totalCheck.allowed) {
-      logger.debug("ProviderSelector: Session provider total cost limit exceeded, reject reuse", {
-        sessionId: session.sessionId,
-        providerId: provider.id,
-        reason: totalCheck.reason,
-      });
-      return null;
-    }
-
-    logger.info("ProviderSelector: Reusing provider", {
-      providerName: provider.name,
-      providerId: provider.id,
-      sessionId: session.sessionId,
-    });
-    return provider;
-  }
-
-  /**
-   * 构建全局复用 Redis 键（组+模型+请求格式维度）。
+   * 构建全局复用 Redis 键（组+模型维度）。
    *
    * ⚠️ 读写**必须**共用此函数，否则键维度漂移会导致读不到首选。
    * groupTag 分支逻辑与 resolveEffectiveProviderGroup 一致，但**忽略 session.provider**：
    *   读取侧此时 provider 为 null（仅在 !session.provider 时调用）；
    *   写入侧 provider 已设为 currentProvider——若依赖 groupTag 会得到 provider 自身标签，
    *   与读取侧的 session key/user 组对不上。
+   *
+   * 键不含请求格式/providerType 维度：跨格式同模型也要复用（用户 2026-08-13 拍板）。
    */
   static async buildGlobalReuseKey(
     session: ProxySession,
@@ -1132,26 +826,15 @@ export class ProxyProviderResolver {
         : null;
     if (!groupTag) return null;
 
-    // 请求格式 → 目标 provider 类型（与 pickRandomProvider 一致）
-    const providerType = (() => {
-      switch (session.originalFormat) {
-        case "claude": return "claude";
-        case "response": return "codex";
-        case "openai": return "openai-compatible";
-        case "gemini": return "gemini";
-        default: return "claude";
-      }
-    })();
-
-    return `cch:global:reuse:${groupTag}:${model}:${providerType}`;
+    return `cch:global:reuse:${groupTag}:${model}`;
   }
 
   /**
-   * 查找全局复用首选（组+模型+请求格式维度）
+   * 查找全局复用首选（组+模型维度）
    *
-   * 每次请求成功后都会把 provider 写入全局 Redis 键，同一组+同模型+同格式的其他会话
+   * 每次请求成功后都会把 provider 写入全局 Redis 键，同一组+同模型的其他会话
    * 选路时优先使用（跨会话粘滞）。键由新成功覆盖旧值；TTL 防止长期不活跃的 provider 占位。
-   * 选路时复用资格检查（模型支持/格式/熔断/限额等），不匹配则跳过回退正常调度。
+   * 选路时复用资格检查（模型支持/熔断/限额等），不匹配则跳过回退正常调度。
    */
   private static async findGlobalReuse(session: ProxySession): Promise<Provider | null> {
     const key = await this.buildGlobalReuseKey(session);
@@ -1172,7 +855,7 @@ export class ProxyProviderResolver {
       const provider = await findProviderById(providerId);
       if (!provider?.isEnabled) return null;
 
-      // 资格检查（与 findReusable 一致，但不写 session 绑定）
+      // 资格检查（不写 session 绑定；全局复用同样不可绕过熔断/限额/分组）
       if (provider.disableSessionReuse) return null;
 
       const systemTimezone = await resolveSystemTimezone();
@@ -1182,7 +865,7 @@ export class ProxyProviderResolver {
 
       if (await isCircuitOpen(provider.id)) return null;
 
-      if (session.originalFormat && !checkFormatProviderTypeCompatibility(session.originalFormat, provider.providerType)) return null;
+      // 不再检查请求格式：跨格式同模型也复用（用户 2026-08-13 拍板）
 
       if (model && !providerSupportsModel(provider, model)) return null;
 
@@ -1194,7 +877,7 @@ export class ProxyProviderResolver {
       const effectiveGroup = getEffectiveProviderGroup(session);
       if (effectiveGroup && !checkProviderGroupMatch(provider.groupTag, effectiveGroup)) return null;
 
-      // 分组白/黑名单：全局复用也不能绕过（与 findReusable 一致）
+      // 分组白/黑名单：全局复用也不能绕过
       if (!(await checkProviderGroupAllowBlock(provider, effectiveGroup))) return null;
 
       // 限额检查

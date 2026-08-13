@@ -337,40 +337,6 @@ describe("non-chat endpoint session context", () => {
     }
   });
 
-  test("reuses session-bound provider for target raw endpoints", () => {
-    const rawCountTokensSession = createProxySession(V1_ENDPOINT_PATHS.MESSAGES_COUNT_TOKENS);
-    rawCountTokensSession.request.message = {
-      model: "claude-sonnet-4-5",
-      messages: [{ role: "user", content: "count me" }],
-    };
-    rawCountTokensSession.sessionId = "sess_raw";
-
-    const rawCompactSession = createProxySession(V1_ENDPOINT_PATHS.RESPONSES_COMPACT);
-    rawCompactSession.originalFormat = "response";
-    rawCompactSession.request.message = {
-      model: "gpt-5.5",
-      input: [{ role: "user", content: "compact me" }],
-    };
-    rawCompactSession.sessionId = "sess_compact";
-
-    const regularMessagesSession = createProxySession(V1_ENDPOINT_PATHS.MESSAGES);
-    regularMessagesSession.request.message = {
-      model: "claude-sonnet-4-5",
-      messages: [{ role: "user", content: "hello" }],
-    };
-    regularMessagesSession.sessionId = "sess_chat";
-
-    expect(rawCountTokensSession.shouldReuseProvider()).toBe(true);
-    expect(rawCompactSession.shouldReuseProvider()).toBe(true);
-    expect(regularMessagesSession.shouldReuseProvider()).toBe(false);
-
-    rawCountTokensSession.setRawCrossProviderFallbackEnabled(false);
-    rawCompactSession.setRawCrossProviderFallbackEnabled(false);
-
-    expect(rawCountTokensSession.shouldReuseProvider()).toBe(false);
-    expect(rawCompactSession.shouldReuseProvider()).toBe(false);
-  });
-
   test("disabled runtime flag falls back to raw passthrough pipeline", async () => {
     const { GuardPipelineBuilder } = await import("@/app/v1/_lib/proxy/guard-pipeline");
 
