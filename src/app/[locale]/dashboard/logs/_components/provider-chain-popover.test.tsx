@@ -429,7 +429,7 @@ describe("provider-chain-popover layout", () => {
 });
 
 describe("provider-chain-popover hedge/abort reason handling", () => {
-  test("hedge_triggered is not counted as actual request", () => {
+  test("hedge_triggered is not counted as actual request but main path is shown", () => {
     const html = renderWithIntl(
       <ProviderChainPopover
         chain={[
@@ -443,10 +443,10 @@ describe("provider-chain-popover hedge/abort reason handling", () => {
     );
 
     // hedge_triggered is informational, not an actual request
-    // so the request count should be 2 (winner + loser), not 3
+    // visual chain shows main path + race participants = 3 rows (initial_selection + winner + loser)
     const document = parseHtml(html);
     const requestRows = document.querySelectorAll("#root .relative.flex.gap-2");
-    expect(requestRows).toHaveLength(2);
+    expect(requestRows).toHaveLength(3);
   });
 
   test("hedge_winner is treated as successful provider", () => {
@@ -527,6 +527,44 @@ describe("provider-chain-popover race type / outcome display", () => {
     expect(html).toContain("Rebound from p2 to cheaper p1");
     // Candidate stage badge rendered
     expect(html).toContain("winner");
+  });
+
+  test("race shows main path provider alongside hedge participants", () => {
+    // Regression: cold-start dual race must show the MAIN path provider (e.g. 247kan)
+    // even though the hedge spare won. Previously only hedge_* rows were rendered.
+    const html = renderWithIntl(
+      <ProviderChainPopover
+        chain={[
+          { id: 1, name: "247kan-main", reason: "initial_selection" },
+          {
+            id: 2,
+            name: "haoyue-spare",
+            reason: "hedge_launched",
+            attemptNumber: 2,
+            raceInfo: { type: "cold_start", stage: "winner", firstByteTimeoutMs: 20000 },
+          },
+          {
+            id: 2,
+            name: "haoyue-spare",
+            reason: "hedge_winner",
+            statusCode: 200,
+            attemptNumber: 2,
+            raceInfo: { type: "cold_start", stage: "winner" },
+            raceOutcome: {
+              type: "rebind",
+              fromProviderId: 2,
+              fromProviderName: "haoyue-spare",
+              toProviderId: 1,
+              toProviderName: "247kan-main",
+            },
+          },
+        ]}
+        finalProvider="haoyue-spare"
+      />
+    );
+
+    expect(html).toContain("247kan-main");
+    expect(html).toContain("haoyue-spare");
   });
 
   test("timeout race with no rebind shows noRebind outcome", () => {

@@ -399,16 +399,16 @@ export function ProviderChainPopover({
   }
 
   // Multiple requests: show popover with visual chain
-  // 竞速时展示完整参与者（hedge_launched 候选进度 / winner / loser），
+  // 竞速时展示完整链路：主路径条目（initial_selection/reuse/request_* 等非 hedge 条目）
+  // + 竞速参与者（hedge_launched 候选进度 / winner / loser），仅排除 hedge_triggered；
   // 非竞速走 actualRequests（实际请求序列）。
+  const isHedgeParticipant = (item: ProviderChainItem) =>
+    item.reason === "hedge_launched" ||
+    item.reason === "hedge_winner" ||
+    item.reason === "hedge_loser_cancelled" ||
+    item.reason === "hedge_loser_billed";
   const visualChain = isHedge
-    ? chain.filter(
-        (item) =>
-          item.reason === "hedge_launched" ||
-          item.reason === "hedge_winner" ||
-          item.reason === "hedge_loser_cancelled" ||
-          item.reason === "hedge_loser_billed"
-      )
+    ? chain.filter((item) => !(item.reason ?? "").startsWith("hedge_") || isHedgeParticipant(item))
     : chain.filter(isActualRequest);
   const actualRequests = visualChain;
 
