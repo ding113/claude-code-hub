@@ -4159,8 +4159,23 @@ export class ProxyForwarder {
       if (attempt.firstByteTimeoutMs <= 0) return;
 
       attempt.thresholdTimer = setTimeout(() => {
-        if (settled || attempt.settled || attempt.thresholdTriggered) return;
+        if (attempt.thresholdTriggered) return;
         attempt.thresholdTriggered = true;
+        // 请求已结束（winner 落定、备胎在后台等改绑）：首字超时也要回写决策链，
+        // 否则备胎 UI 永远停留在"已启动"转圈；同时给 winner 补 no_rebind 结论。
+        if (settled || attempt.settled) {
+          session.updateProviderChainRaceStage(attempt.provider.id, attempt.sequence, "timed_out");
+          if (coldStartTemporaryRebind && winnerAttempt && attempt !== winnerAttempt) {
+            coldStartTemporaryRebind = false;
+            session.updateProviderChainRaceOutcome(winnerAttempt.provider.id, winnerAttempt.sequence, {
+              type: "no_rebind",
+              fromProviderId: winnerAttempt.provider.id,
+              fromProviderName: winnerAttempt.provider.name,
+              detail: "cheaper_candidate_timed_out",
+            });
+          }
+          return;
+        }
         // 后台候选进度：首字超时（决策链条目 stage 更新，主路 initial_selection 也会被追踪）。
         session.updateProviderChainRaceStage(attempt.provider.id, attempt.sequence, "timed_out");
         session.addProviderToChain(attempt.provider, {
@@ -4634,7 +4649,23 @@ export class ProxyForwarder {
         releaseAttemptAgent(attempt);
         return;
       }
-      if (settled || winnerCommitted || attempt.settled) return;
+      if (settled || winnerCommitted || attempt.settled) {
+        // 请求已结束（winner 落定、备胎在后台等改绑）：失败也要回写决策链，
+        // 否则备胎 UI 永远停留在"已启动"转圈；同时给 winner 补 no_rebind 结论。
+        if (attempt !== winnerAttempt && !attempt.settled && attempt.sequence > 1) {
+          session.updateProviderChainRaceStage(attempt.provider.id, attempt.sequence, "failed");
+          if (coldStartTemporaryRebind && winnerAttempt) {
+            coldStartTemporaryRebind = false;
+            session.updateProviderChainRaceOutcome(winnerAttempt.provider.id, winnerAttempt.sequence, {
+              type: "no_rebind",
+              fromProviderId: winnerAttempt.provider.id,
+              fromProviderName: winnerAttempt.provider.name,
+              detail: "cheaper_candidate_failed",
+            });
+          }
+        }
+        return;
+      }
 
       lastError = error;
 
