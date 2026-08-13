@@ -4080,6 +4080,9 @@ export class ProxyForwarder {
       }
       attempts.delete(attempt);
 
+      // 备胎最终状态回写：原 hedge_launched 条目 stage 推进 + 补 no_rebind 结论。
+      finalizeRaceCandidateStage(attempt);
+
       // 竞速输家计费开启：仅标记 + 记录决策链，不取消连接、不释放 agent。
       // 实际的后台 drain 由 runAttempt 的 .then 流程发起（它独占 reader，避免并发读）。
       if (reason === "hedge_loser" && attempt.billAsLoser) {
@@ -4245,6 +4248,7 @@ export class ProxyForwarder {
           if (other === fallback || other.settled) continue;
           other.settled = true;
           attempts.delete(other);
+          finalizeRaceCandidateStage(other);
           if (other.billAsLoser) {
             startLoserBilling(other);
           } else {
@@ -4268,6 +4272,32 @@ export class ProxyForwarder {
       for (const attempt of Array.from(attempts)) {
         if (winner && attempt === winner) continue;
         abortAttempt(attempt, reason);
+      }
+    };
+
+    /**
+     * 备胎最终状态回写（决策链展示）：
+     * - 原 hedge_launched 条目 stage 从 launched 推进到 timed_out / loser，
+     *   避免备胎被 abort/超时后 UI 一直显示"已启动"；
+     * - 若该备胎是冷启动改绑保留的便宜候选且最终未返回（被取消/耗尽），
+     *   给 winner 条目补上 no_rebind 结论。
+     */
+    const finalizeRaceCandidateStage = (attempt: StreamingHedgeAttempt) => {
+      if (attempt.sequence > 1) {
+        session.updateProviderChainRaceStage(
+          attempt.provider.id,
+          attempt.sequence,
+          attempt.thresholdTriggered ? "timed_out" : "loser"
+        );
+      }
+      if (coldStartTemporaryRebind && winnerAttempt && attempt !== winnerAttempt) {
+        coldStartTemporaryRebind = false;
+        session.updateProviderChainRaceOutcome(winnerAttempt.provider.id, winnerAttempt.sequence, {
+          type: "no_rebind",
+          fromProviderId: winnerAttempt.provider.id,
+          fromProviderName: winnerAttempt.provider.name,
+          detail: "cheaper_candidate_cancelled",
+        });
       }
     };
 
@@ -4735,6 +4765,11 @@ export class ProxyForwarder {
       }
       attempts.delete(attempt);
       ProxyForwarder.markProviderFailed(session, failedProviderIds, attempt.provider.id);
+
+      // 备胎失败：原 hedge_launched 条目 stage 推进为 failed（UI 显示失败而非一直"已启动"）。
+      if (attempt.sequence > 1) {
+        session.updateProviderChainRaceStage(attempt.provider.id, attempt.sequence, "failed");
+      }
 
       if (errorCategory === ErrorCategory.PROVIDER_ERROR && statusCode !== 404) {
         await recordFailure(attempt.provider.id, error);
