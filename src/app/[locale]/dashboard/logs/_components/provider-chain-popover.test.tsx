@@ -480,3 +480,88 @@ describe("provider-chain-popover hedge/abort reason handling", () => {
     expect(html).toContain("p1");
   });
 });
+
+describe("provider-chain-popover race type / outcome display", () => {
+  test("cold-start dual race shows race type badge and rebind outcome", () => {
+    const html = renderWithIntl(
+      <ProviderChainPopover
+        chain={[
+          { id: 1, name: "p1", reason: "initial_selection" },
+          {
+            id: 2,
+            name: "p2",
+            reason: "hedge_launched",
+            attemptNumber: 2,
+            raceInfo: { type: "cold_start", stage: "winner", firstByteTimeoutMs: 20000 },
+          },
+          {
+            id: 2,
+            name: "p2",
+            reason: "hedge_winner",
+            statusCode: 200,
+            attemptNumber: 2,
+            raceInfo: { type: "cold_start", stage: "winner" },
+            raceOutcome: {
+              type: "rebind",
+              fromProviderId: 2,
+              fromProviderName: "p2",
+              toProviderId: 1,
+              toProviderName: "p1",
+            },
+          },
+          {
+            id: 1,
+            name: "p1",
+            reason: "hedge_loser_billed",
+            attemptNumber: 1,
+            raceInfo: { type: "cold_start", stage: "loser" },
+          },
+        ]}
+        finalProvider="p2"
+      />
+    );
+
+    // Race type badge (cold start) rendered
+    expect(html).toContain("Cold-Start Dual Race");
+    // Rebind outcome rendered (from p2 to p1)
+    expect(html).toContain("Rebound from p2 to cheaper p1");
+    // Candidate stage badge rendered
+    expect(html).toContain("winner");
+  });
+
+  test("timeout race with no rebind shows noRebind outcome", () => {
+    const html = renderWithIntl(
+      <ProviderChainPopover
+        chain={[
+          { id: 1, name: "p1", reason: "global_reuse", selectionMethod: "global_reuse" },
+          {
+            id: 1,
+            name: "p1",
+            reason: "hedge_winner",
+            statusCode: 200,
+            attemptNumber: 1,
+            raceInfo: { type: "timeout_race", stage: "winner" },
+            raceOutcome: {
+              type: "no_rebind",
+              fromProviderId: 1,
+              fromProviderName: "p1",
+              detail: "cheaper_candidate_timed_out",
+            },
+          },
+          {
+            id: 2,
+            name: "p2",
+            reason: "hedge_launched",
+            attemptNumber: 2,
+            raceInfo: { type: "timeout_race", stage: "timed_out", firstByteTimeoutMs: 20000 },
+          },
+        ]}
+        finalProvider="p1"
+      />
+    );
+
+    expect(html).toContain("Timeout Race");
+    expect(html).toContain("No rebind - keep p1");
+    expect(html).toContain("timed out");
+  });
+});

@@ -255,5 +255,24 @@
     "health_slo": "健康 SLO",
     "latency_fallback": "平均耗时最短兜底",
     "cost_fallback": "最低成本兜底"
+  },
+  "raceTypes": {
+    "cold_start": "冷启动双发",
+    "timeout_race": "超时竞速",
+    "dual_fast": "双发极速"
+  },
+  "raceStages": {
+    "launched": "已启动",
+    "first_byte": "已回首字",
+    "timed_out": "首字超时",
+    "failed": "失败",
+    "winner": "赢家",
+    "loser": "输家",
+    "firstByteTimeout": "首字超时阈值 {ms}ms"
+  },
+  "raceOutcomes": {
+    "rebind": "已改绑：{from} → 更便宜的 {to}",
+    "noRebind": "未改绑，保持 {provider}",
+    "keep": "保持 {provider}（已是最便宜）"
   }
 }

@@ -255,5 +255,24 @@
     "health_slo": "ヘルス SLO",
     "latency_fallback": "平均レイテンシ最短フォールバック",
     "cost_fallback": "最低コストのフォールバック"
+  },
+  "raceTypes": {
+    "cold_start": "コールドスタート双発",
+    "timeout_race": "タイムアウトレース",
+    "dual_fast": "デュアル高速"
+  },
+  "raceStages": {
+    "launched": "起動済み",
+    "first_byte": "先頭バイト到達",
+    "timed_out": "先頭バイトタイムアウト",
+    "failed": "失敗",
+    "winner": "勝者",
+    "loser": "敗者",
+    "firstByteTimeout": "先頭バイト閾値 {ms}ms"
+  },
+  "raceOutcomes": {
+    "rebind": "再バインド：{from} → より安い {to}",
+    "noRebind": "再バインドせず {provider} を維持",
+    "keep": "{provider} を維持（最安）"
   }
 }

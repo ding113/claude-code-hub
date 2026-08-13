@@ -50,6 +50,29 @@ export interface ProviderChainItem {
     | "hedge_loser_billed" // 该供应商输掉 Hedge 竞速，但其上游响应被后台拿回并计费
     | "client_abort"; // 客户端在响应完成前断开连接
 
+  // === 竞速参与者信息（hedge_launched / hedge_winner / hedge_loser_* 条目携带） ===
+  raceInfo?: {
+    // 竞速类型：冷启动双发（无绑定并发 cheapest+fastest）/ 超时竞速（有绑定，超时后拉备胎）/ 双发极速
+    type: "cold_start" | "timeout_race" | "dual_fast";
+    // 候选后台进度
+    stage: "launched" | "first_byte" | "timed_out" | "failed" | "winner" | "loser";
+    // 备胎在途的首字超时阈值（ms），0 = 无阈值
+    firstByteTimeoutMs?: number;
+  };
+
+  // === 竞速结束结果（挂在 hedge_winner 条目上） ===
+  raceOutcome?: {
+    // rebind = 改绑（临时绑定贵方后，便宜候选窗口内返回 → 改绑到便宜方）
+    // no_rebind = 未改绑（便宜候选超时/失败，保持赢家绑定）
+    // keep = 赢家即最便宜，无需改绑（正常绑定）
+    type: "rebind" | "no_rebind" | "keep";
+    fromProviderId?: number;
+    fromProviderName?: string;
+    toProviderId?: number;
+    toProviderName?: string;
+    detail?: string;
+  };
+
   // === 选择方法（细化） ===
   selectionMethod?:
     | "session_reuse" // 会话复用

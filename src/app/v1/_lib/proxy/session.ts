@@ -627,6 +627,8 @@ export class ProxySession {
       endpointFilterStats?: ProviderChainItem["endpointFilterStats"]; // endpoint filter statistics
       modelRedirect?: ProviderChainItem["modelRedirect"];
       rawCrossProviderFallbackEnabled?: boolean;
+      raceInfo?: ProviderChainItem["raceInfo"];
+      raceOutcome?: ProviderChainItem["raceOutcome"];
     }
   ): void {
     const item: ProviderChainItem = {
@@ -658,6 +660,8 @@ export class ProxySession {
       endpointFilterStats: metadata?.endpointFilterStats,
       modelRedirect: metadata?.modelRedirect ?? this.getCurrentModelRedirect(provider.id),
       rawCrossProviderFallbackEnabled: metadata?.rawCrossProviderFallbackEnabled,
+      raceInfo: metadata?.raceInfo,
+      raceOutcome: metadata?.raceOutcome,
     };
 
     // 避免重复添加同一个供应商
@@ -673,6 +677,45 @@ export class ProxySession {
       this.providerChain.push(item);
       this.persistLiveChain();
     }
+  }
+
+  /**
+   * 原地更新链中某条目的竞速进度（hedge_launched 条目由 launched → first_byte/timed_out/...）。
+   * 按 providerId + attemptNumber 匹配；未找到时返回 false 不报错。
+   */
+  updateProviderChainRaceStage(
+    providerId: number,
+    attemptNumber: number | undefined,
+    stage: NonNullable<ProviderChainItem["raceInfo"]>["stage"]
+  ): boolean {
+    const item = this.providerChain.find(
+      (i) =>
+        i.id === providerId &&
+        (attemptNumber === undefined || i.attemptNumber === attemptNumber) &&
+        i.raceInfo
+    );
+    if (!item || !item.raceInfo) return false;
+    item.raceInfo = { ...item.raceInfo, stage };
+    this.persistLiveChain();
+    return true;
+  }
+
+  /**
+   * 原地写入竞速结束结果（挂在 hedge_winner 条目上）。
+   * 按 providerId + attemptNumber 匹配；未找到时返回 false 不报错。
+   */
+  updateProviderChainRaceOutcome(
+    providerId: number,
+    attemptNumber: number | undefined,
+    outcome: ProviderChainItem["raceOutcome"]
+  ): boolean {
+    const item = this.providerChain.find(
+      (i) => i.id === providerId && (attemptNumber === undefined || i.attemptNumber === attemptNumber)
+    );
+    if (!item) return false;
+    item.raceOutcome = outcome;
+    this.persistLiveChain();
+    return true;
   }
 
   private persistLiveChain(): void {

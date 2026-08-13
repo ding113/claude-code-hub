@@ -3904,6 +3904,9 @@ export class ProxyForwarder {
     // 与主路（cheapest）构成双发。此时备胎先回首字直接赢（服务当前请求用最快的），
     // 不再受 SLA 窗口守卫挂起——赢家临时写全局键，在途便宜候选返回后改绑到便宜方。
     let coldStartFastestMode = false;
+    // 竞速类型（决策链 raceInfo 用）：冷启动双发 / 超时竞速 / 双发极速
+    const raceTypeForChain: NonNullable<ProviderChainItem["raceInfo"]>["type"] =
+      raceMode === "dual_fast" ? "dual_fast" : isColdStart ? "cold_start" : "timeout_race";
     // 竞速赢家结算时的原请求模型快照（winner 为备胎且 sync 覆盖 session 模型时使用）
     let raceWinnerOriginalModel: string | null = null;
 
@@ -4086,6 +4089,11 @@ export class ProxyForwarder {
           attemptNumber: attempt.sequence,
           statusCode: attempt.response?.status,
           modelRedirect: getAttemptModelRedirect(attempt),
+          raceInfo: {
+            type: raceTypeForChain,
+            stage: "loser",
+            firstByteTimeoutMs: attempt.firstByteTimeoutMs,
+          },
         });
         ProxyForwarder.markProviderFailed(session, failedProviderIds, attempt.provider.id);
         // 冷启动 pending 备胎的特例：它已在 commitWinner 挂起分支读过首块且
@@ -4106,6 +4114,11 @@ export class ProxyForwarder {
           reason: "hedge_loser_cancelled",
           attemptNumber: attempt.sequence,
           modelRedirect: getAttemptModelRedirect(attempt),
+          raceInfo: {
+            type: raceTypeForChain,
+            stage: "loser",
+            firstByteTimeoutMs: attempt.firstByteTimeoutMs,
+          },
         });
         ProxyForwarder.markProviderFailed(session, failedProviderIds, attempt.provider.id);
       }
@@ -4145,6 +4158,10 @@ export class ProxyForwarder {
       attempt.thresholdTimer = setTimeout(() => {
         if (settled || attempt.settled || attempt.thresholdTriggered) return;
         attempt.thresholdTriggered = true;
+        // 后台候选进度：首字超时（决策链 hedge_launched 条目 stage 更新）。
+        if (attempt.sequence > 1) {
+          session.updateProviderChainRaceStage(attempt.provider.id, attempt.sequence, "timed_out");
+        }
         session.addProviderToChain(attempt.provider, {
           ...attempt.endpointAudit,
           reason: "hedge_triggered",
@@ -4444,9 +4461,28 @@ export class ProxyForwarder {
                     winnerProviderId: winnerAttempt?.provider.id ?? null,
                   }
                 );
+                // 竞速结果：改绑成功 → 写 winner 条目的 raceOutcome。
+                if (winnerAttempt) {
+                  session.updateProviderChainRaceOutcome(winnerAttempt.provider.id, winnerAttempt.sequence, {
+                    type: "rebind",
+                    fromProviderId: winnerAttempt.provider.id,
+                    fromProviderName: winnerAttempt.provider.name,
+                    toProviderId: attempt.provider.id,
+                    toProviderName: attempt.provider.name,
+                  });
+                }
               } else {
                 // 备胎超时了才返回，保持主路绑定不变
                 coldStartTemporaryRebind = false;
+                // 竞速结果：未改绑（便宜候选超时/失败，保持赢家绑定）。
+                if (winnerAttempt) {
+                  session.updateProviderChainRaceOutcome(winnerAttempt.provider.id, winnerAttempt.sequence, {
+                    type: "no_rebind",
+                    fromProviderId: winnerAttempt.provider.id,
+                    fromProviderName: winnerAttempt.provider.name,
+                    detail: "cheaper_candidate_timed_out",
+                  });
+                }
               }
             }
 
@@ -4511,6 +4547,11 @@ export class ProxyForwarder {
                 new EmptyResponseError(attempt.provider.id, attempt.provider.name, "empty_body")
               );
               return;
+            }
+
+            // 后台候选进度：首字已到达（决策链 hedge_launched 条目 stage 更新）。
+            if (attempt.sequence > 1) {
+              session.updateProviderChainRaceStage(attempt.provider.id, attempt.sequence, "first_byte");
             }
 
             // 保留首块：若本 attempt 落败且需要计费，drain 时需要补回首块的 usage。
@@ -4749,6 +4790,17 @@ export class ProxyForwarder {
         return;
       }
 
+      // 冷启动临时改绑：保留的在途便宜候选失败（非超时）→ 最终未改绑，保持赢家绑定。
+      if (coldStartTemporaryRebind && winnerAttempt && attempt !== winnerAttempt) {
+        coldStartTemporaryRebind = false;
+        session.updateProviderChainRaceOutcome(winnerAttempt.provider.id, winnerAttempt.sequence, {
+          type: "no_rebind",
+          fromProviderId: winnerAttempt.provider.id,
+          fromProviderName: winnerAttempt.provider.name,
+          detail: "cheaper_candidate_failed",
+        });
+      }
+
       // 失败后继续拉下一个备胎：优先健康 SLO 合格候选；合格候选不足时
       // 按普通调度顺序继续拉取（不退化单路），与超时接力（L4143）语义一致。
       await launchAlternative({ allowNonSloFallback: true });
@@ -4919,6 +4971,26 @@ export class ProxyForwarder {
         attemptNumber: attempt.sequence,
         statusCode: attempt.response.status,
         modelRedirect: getAttemptModelRedirect(attempt),
+        raceInfo:
+          isActualHedgeWin || coldStartTemporaryRebind
+            ? {
+                type: raceTypeForChain,
+                stage: "winner",
+                firstByteTimeoutMs: attempt.firstByteTimeoutMs,
+              }
+            : undefined,
+        // 竞速结果：冷启动双发赢家是贵方且保留更便宜候选在途时，最终改绑/未改绑
+        // 由 runAttempt 的 .then 分支决定（elapsed <= 窗口 → rebind；超时 → no_rebind），
+        // 这里先不写 outcome；其余情况直接给出结论。
+        raceOutcome:
+          isActualHedgeWin && coldStartTemporaryRebind
+            ? undefined
+            : isActualHedgeWin
+              ? {
+                  type: "keep",
+                  detail: raceTypeForChain,
+                }
+              : undefined,
       });
 
       if (!coldStartTemporaryRebind) {
@@ -5138,6 +5210,11 @@ export class ProxyForwarder {
           reason: "hedge_launched",
           attemptNumber: attempt.sequence,
           circuitState: getCircuitState(provider.id),
+          raceInfo: {
+            type: raceTypeForChain,
+            stage: "launched",
+            firstByteTimeoutMs: attempt.firstByteTimeoutMs,
+          },
         });
       }
 

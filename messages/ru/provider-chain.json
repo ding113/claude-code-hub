@@ -255,5 +255,24 @@
     "health_slo": "Health SLO",
     "latency_fallback": "Резерв с минимальной средней задержкой",
     "cost_fallback": "Самый дешёвый fallback"
+  },
+  "raceTypes": {
+    "cold_start": "Холодный старт (двойной)",
+    "timeout_race": "Гонка по таймауту",
+    "dual_fast": "Двойной быстрый"
+  },
+  "raceStages": {
+    "launched": "запущен",
+    "first_byte": "первый байт",
+    "timed_out": "таймаут первого байта",
+    "failed": "ошибка",
+    "winner": "победитель",
+    "loser": "проигравший",
+    "firstByteTimeout": "порог первого байта {ms}мс"
+  },
+  "raceOutcomes": {
+    "rebind": "Перепривязка: {from} → дешевле {to}",
+    "noRebind": "Без перепривязки, оставлен {provider}",
+    "keep": "Оставлен {provider} (самый дешёвый)"
   }
 }

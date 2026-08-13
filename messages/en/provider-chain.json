@@ -255,5 +255,24 @@
     "health_slo": "Health SLO",
     "latency_fallback": "Shortest Average Latency Fallback",
     "cost_fallback": "Cheapest Cost Fallback"
+  },
+  "raceTypes": {
+    "cold_start": "Cold-Start Dual Race",
+    "timeout_race": "Timeout Race",
+    "dual_fast": "Dual-Fast Race"
+  },
+  "raceStages": {
+    "launched": "launched",
+    "first_byte": "first byte",
+    "timed_out": "timed out",
+    "failed": "failed",
+    "winner": "winner",
+    "loser": "loser",
+    "firstByteTimeout": "first-byte timeout {ms}ms"
+  },
+  "raceOutcomes": {
+    "rebind": "Rebound from {from} to cheaper {to}",
+    "noRebind": "No rebind - keep {provider}",
+    "keep": "Kept {provider} (already cheapest)"
   }
 }

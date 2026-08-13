@@ -20,6 +20,8 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { cn } from "@/lib/utils";
 import {
   formatProbabilityCompact,
+  getRaceOutcome,
+  getRaceType,
   getRetryCount,
   isActualRequest,
   isHedgeRace,
@@ -147,6 +149,14 @@ export function ProviderChainPopover({
   const requestCount = chain.filter(isActualRequest).length;
   const retryCount = getRetryCount(chain);
   const isHedge = isHedgeRace(chain);
+  // 竞速类型与结果（用于区分冷启动双发 / 超时竞速显示 + 改绑结果）
+  const raceType = getRaceType(chain);
+  const raceOutcome = getRaceOutcome(chain);
+
+  // 竞速类型徽章文案（优先于泛化 "Hedge 竞速"）
+  const raceTypeBadge = raceType
+    ? tChain(`raceTypes.${raceType}` as "raceTypes.cold_start")
+    : null;
 
   // Fallback for empty string
   const displayName = finalProvider || "-";
@@ -389,7 +399,18 @@ export function ProviderChainPopover({
   }
 
   // Multiple requests: show popover with visual chain
-  const actualRequests = chain.filter(isActualRequest);
+  // 竞速时展示完整参与者（hedge_launched 候选进度 / winner / loser），
+  // 非竞速走 actualRequests（实际请求序列）。
+  const visualChain = isHedge
+    ? chain.filter(
+        (item) =>
+          item.reason === "hedge_launched" ||
+          item.reason === "hedge_winner" ||
+          item.reason === "hedge_loser_cancelled" ||
+          item.reason === "hedge_loser_billed"
+      )
+    : chain.filter(isActualRequest);
+  const actualRequests = visualChain;
 
   // Get the successful provider's costMultiplier and groupTag
   const successfulProvider = [...chain]
@@ -419,9 +440,25 @@ export function ProviderChainPopover({
           aria-label={`${displayName} - ${isHedge ? tChain("timeline.hedgeRace") : `${requestCount}${t("logs.table.times")}`}`}
         >
           <span className="flex w-full items-center gap-1 min-w-0">
-            {/* Request count badge */}
+            {/* Request count badge / race type badge */}
             {isHedge ? (
-              <GitBranch className="h-3 w-3 shrink-0 text-indigo-500" />
+              raceTypeBadge ? (
+                <Badge
+                  variant="outline"
+                  className={cn(
+                    "shrink-0 text-[10px] px-1.5 py-0",
+                    raceType === "cold_start"
+                      ? "border-sky-400 text-sky-600 dark:border-sky-700 dark:text-sky-400"
+                      : raceType === "dual_fast"
+                        ? "border-fuchsia-400 text-fuchsia-600 dark:border-fuchsia-700 dark:text-fuchsia-400"
+                        : "border-indigo-400 text-indigo-600 dark:border-indigo-700 dark:text-indigo-400"
+                  )}
+                >
+                  {raceTypeBadge}
+                </Badge>
+              ) : (
+                <GitBranch className="h-3 w-3 shrink-0 text-indigo-500" />
+              )
             ) : (
               <Badge variant="secondary" className="shrink-0">
                 {requestCount}
@@ -472,10 +509,58 @@ export function ProviderChainPopover({
         <div className="p-3 border-b">
           <div className="flex items-center justify-between">
             <h4 className="font-semibold text-sm">{t("logs.providerChain.decisionChain")}</h4>
-            <Badge variant="outline" className="text-[10px]">
-              {isHedge ? tChain("timeline.hedgeRace") : `${requestCount} ${t("logs.table.times")}`}
+            <Badge
+              variant="outline"
+              className={cn(
+                "text-[10px]",
+                raceType === "cold_start"
+                  ? "border-sky-400 text-sky-600 dark:border-sky-700 dark:text-sky-400"
+                  : raceType === "dual_fast"
+                    ? "border-fuchsia-400 text-fuchsia-600 dark:border-fuchsia-700 dark:text-fuchsia-400"
+                    : isHedge
+                      ? "border-indigo-400 text-indigo-600 dark:border-indigo-700 dark:text-indigo-400"
+                      : ""
+              )}
+            >
+              {isHedge
+                ? raceTypeBadge ?? tChain("timeline.hedgeRace")
+                : `${requestCount} ${t("logs.table.times")}`}
             </Badge>
           </div>
+          {/* 竞速结果（改绑 / 未改绑 / 无需改绑） */}
+          {isHedge && raceOutcome && (
+            <div className="flex items-center gap-1.5 mt-1.5 text-[10px]">
+              {raceOutcome.type === "rebind" ? (
+                <>
+                  <RefreshCw className="h-3 w-3 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                  <span className="text-emerald-700 dark:text-emerald-300">
+                    {tChain("raceOutcomes.rebind", {
+                      from: raceOutcome.fromProviderName ?? "",
+                      to: raceOutcome.toProviderName ?? "",
+                    })}
+                  </span>
+                </>
+              ) : raceOutcome.type === "no_rebind" ? (
+                <>
+                  <MinusCircle className="h-3 w-3 shrink-0 text-amber-600 dark:text-amber-400" />
+                  <span className="text-amber-700 dark:text-amber-300">
+                    {tChain("raceOutcomes.noRebind", {
+                      provider: raceOutcome.fromProviderName ?? "",
+                    })}
+                  </span>
+                </>
+              ) : (
+                <>
+                  <CheckCircle className="h-3 w-3 shrink-0 text-slate-500 dark:text-slate-400" />
+                  <span className="text-slate-600 dark:text-slate-400">
+                    {tChain("raceOutcomes.keep", {
+                      provider: raceOutcome.fromProviderName ?? "",
+                    })}
+                  </span>
+                </>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Visual chain */}
@@ -578,6 +663,32 @@ export function ProviderChainPopover({
                         {tChain(`reasons.${item.reason}`)}
                       </span>
                     )}
+                    {/* 竞速后台候选进度徽章（hedge 参与者条目） */}
+                    {item.raceInfo &&
+                      (item.reason === "hedge_launched" || item.reason === "hedge_winner") && (
+                        <Badge
+                          variant="outline"
+                          className={cn(
+                            "text-[10px] px-1 py-0 shrink-0",
+                            item.raceInfo.stage === "first_byte"
+                              ? "border-emerald-400 text-emerald-600 dark:border-emerald-700 dark:text-emerald-400"
+                              : item.raceInfo.stage === "timed_out"
+                                ? "border-amber-400 text-amber-600 dark:border-amber-700 dark:text-amber-400"
+                                : item.raceInfo.stage === "winner"
+                                  ? "border-sky-400 text-sky-600 dark:border-sky-700 dark:text-sky-400"
+                                  : "border-slate-400 text-slate-500 dark:border-slate-600 dark:text-slate-400"
+                          )}
+                          title={
+                            item.raceInfo.firstByteTimeoutMs
+                              ? tChain("raceStages.firstByteTimeout", {
+                                  ms: String(item.raceInfo.firstByteTimeoutMs),
+                                })
+                              : undefined
+                          }
+                        >
+                          {tChain(`raceStages.${item.raceInfo.stage}` as "raceStages.launched")}
+                        </Badge>
+                      )}
                   </div>
                   {item.errorMessage && (
                     <>

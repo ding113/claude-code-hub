@@ -195,6 +195,31 @@ export function isHedgeRace(chain: ProviderChainItem[]): boolean {
 }
 
 /**
+ * 竞速类型（决策链中首个携带 raceInfo 的条目）：
+ * cold_start（冷启动双发，无绑定并发 cheapest+fastest）/ timeout_race（超时竞速，有绑定超时后拉备胎）/
+ * dual_fast（双发极速）。无竞速返回 null。
+ */
+export function getRaceType(chain: ProviderChainItem[]): "cold_start" | "timeout_race" | "dual_fast" | null {
+  for (const item of chain) {
+    if (item.raceInfo?.type) return item.raceInfo.type;
+  }
+  return null;
+}
+
+/**
+ * 竞速结束结果（winner 条目上的 raceOutcome）：
+ * rebind = 改绑到便宜方；no_rebind = 未改绑（便宜候选超时/失败）；keep = 无需改绑。
+ */
+export function getRaceOutcome(
+  chain: ProviderChainItem[]
+): ProviderChainItem["raceOutcome"] | null {
+  for (const item of chain) {
+    if (item.reason === "hedge_winner" && item.raceOutcome) return item.raceOutcome;
+  }
+  return null;
+}
+
+/**
  * Determine the final (winning) provider from a decision chain.
  *
  * Priority order:
