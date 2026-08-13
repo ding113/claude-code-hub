@@ -81,6 +81,7 @@ import {
   Zhipu,
 } from "@lobehub/icons";
 import { resolveByDashPrefix } from "@/lib/model-vendor/dash-prefix-lookup";
+import { OrcaRouter } from "@/lib/model-vendor/orcarouter-icon";
 import { iconFileForVendor, type VendorIconFileEntry } from "@/lib/model-vendor/vendor-icon-files";
 import {
   inferVendorFromModelName,
@@ -173,6 +174,7 @@ const VENDOR_ICON_COMPONENTS: Record<string, VendorIconComponent> = {
   yandex: Yandex,
   // 常见 provider 渠道(供应商价格对比等场景)
   openrouter: OpenRouter,
+  orcarouter: OrcaRouter,
   groq: Groq,
   azure: Azure.Color,
   together: Together.Color,
