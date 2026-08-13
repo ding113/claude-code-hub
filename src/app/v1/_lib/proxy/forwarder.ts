@@ -1721,20 +1721,28 @@ export class ProxyForwarder {
               });
             }
 
-            // ⭐ 每次请求成功后写全局复用键（组+模型+请求格式维度）
+            // ⭐ 请求成功后写全局复用键（组+模型+请求格式维度）
             // 所有同组+同模型+同格式的后续会话选路时优先粘滞该 provider（跨会话会话复用），
             // 超时/失败由竞速兜底切换。键由新成功覆盖旧值；TTL 防止不活跃 provider 长期占位。
             // ⚠️ 必须用与 findGlobalReuse 相同的键构造逻辑（buildGlobalReuseKey），
             //    否则键维度漂移会导致读不到首选。
             // 非流式请求不写：避免一次性工具调用选出的 provider 成为全局首选。
+            // 复用命中不刷新：键值仍等于当前 provider（本次请求由 global_reuse 选出）时不重写，
+            //   让绑定有效时间自然归零——否则贵的 provider 只要一直成功就永不超时，
+            //   便宜的永远没有机会进来。只有绑定切换（不同 provider 成功）才重写并刷新有效时间。
             if (isStreamingRequest(session)) {
               const key = await ProxyProviderResolver.buildGlobalReuseKey(session);
               if (key) {
                 const redis = getRedisClient();
                 if (redis && redis.status === "ready") {
-                  redis.set(key, String(currentProvider.id), "EX", 300).catch((error) => {
-                    logger.error("ProxyForwarder: Failed to set global reuse", { error });
-                  });
+                  const existing = await redis.get(key);
+                  if (existing === String(currentProvider.id)) {
+                    // 复用命中同一 provider：不刷新 TTL，让有效时间自然归零。
+                  } else {
+                    redis.set(key, String(currentProvider.id), "EX", 300).catch((error) => {
+                      logger.error("ProxyForwarder: Failed to set global reuse", { error });
+                    });
+                  }
                 }
               }
             }
