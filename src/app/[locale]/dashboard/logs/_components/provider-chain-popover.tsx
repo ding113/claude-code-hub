@@ -9,6 +9,8 @@ import {
   Link2,
   MinusCircle,
   RefreshCw,
+  Rocket,
+  Timer,
   XCircle,
   Zap,
 } from "lucide-react";
@@ -157,6 +159,22 @@ export function ProviderChainPopover({
   const raceTypeBadge = raceType
     ? tChain(`raceTypes.${raceType}` as "raceTypes.cold_start")
     : null;
+
+  // 竞速类型图标（行内展示，不占文字宽度）
+  const RaceTypeIcon =
+    raceType === "cold_start"
+      ? Rocket
+      : raceType === "dual_fast"
+        ? Zap
+        : raceType === "timeout_race"
+          ? Timer
+          : null;
+  const raceTypeIconClass =
+    raceType === "cold_start"
+      ? "text-sky-500"
+      : raceType === "dual_fast"
+        ? "text-fuchsia-500"
+        : "text-indigo-500";
 
   // Fallback for empty string
   const displayName = finalProvider || "-";
@@ -442,20 +460,20 @@ export function ProviderChainPopover({
           <span className="flex w-full items-center gap-1 min-w-0">
             {/* Request count badge / race type badge */}
             {isHedge ? (
-              raceTypeBadge ? (
-                <Badge
-                  variant="outline"
-                  className={cn(
-                    "shrink-0 text-[10px] px-1.5 py-0",
-                    raceType === "cold_start"
-                      ? "border-sky-400 text-sky-600 dark:border-sky-700 dark:text-sky-400"
-                      : raceType === "dual_fast"
-                        ? "border-fuchsia-400 text-fuchsia-600 dark:border-fuchsia-700 dark:text-fuchsia-400"
-                        : "border-indigo-400 text-indigo-600 dark:border-indigo-700 dark:text-indigo-400"
-                  )}
-                >
-                  {raceTypeBadge}
-                </Badge>
+              RaceTypeIcon ? (
+                <TooltipProvider>
+                  <Tooltip delayDuration={200}>
+                    <TooltipTrigger asChild>
+                      <span className="shrink-0">
+                        <RaceTypeIcon
+                          className={cn("h-3.5 w-3.5", raceTypeIconClass)}
+                          aria-hidden="true"
+                        />
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent>{raceTypeBadge}</TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
               ) : (
                 <GitBranch className="h-3 w-3 shrink-0 text-indigo-500" />
               )
@@ -509,23 +527,25 @@ export function ProviderChainPopover({
         <div className="p-3 border-b">
           <div className="flex items-center justify-between">
             <h4 className="font-semibold text-sm">{t("logs.providerChain.decisionChain")}</h4>
-            <Badge
-              variant="outline"
-              className={cn(
-                "text-[10px]",
-                raceType === "cold_start"
-                  ? "border-sky-400 text-sky-600 dark:border-sky-700 dark:text-sky-400"
-                  : raceType === "dual_fast"
-                    ? "border-fuchsia-400 text-fuchsia-600 dark:border-fuchsia-700 dark:text-fuchsia-400"
-                    : isHedge
-                      ? "border-indigo-400 text-indigo-600 dark:border-indigo-700 dark:text-indigo-400"
-                      : ""
-              )}
-            >
-              {isHedge
-                ? raceTypeBadge ?? tChain("timeline.hedgeRace")
-                : `${requestCount} ${t("logs.table.times")}`}
-            </Badge>
+            {isHedge ? (
+              <span className="flex items-center gap-1 text-[10px] shrink-0">
+                {RaceTypeIcon ? (
+                  <RaceTypeIcon
+                    className={cn("h-3.5 w-3.5", raceTypeIconClass)}
+                    aria-hidden="true"
+                  />
+                ) : (
+                  <GitBranch className="h-3 w-3 text-indigo-500" aria-hidden="true" />
+                )}
+                <span className={cn("font-medium", raceTypeIconClass)}>
+                  {raceTypeBadge ?? tChain("timeline.hedgeRace")}
+                </span>
+              </span>
+            ) : (
+              <Badge variant="outline" className="text-[10px]">
+                {requestCount} {t("logs.table.times")}
+              </Badge>
+            )}
           </div>
           {/* 竞速结果（改绑 / 未改绑 / 无需改绑） */}
           {isHedge && raceOutcome && (
