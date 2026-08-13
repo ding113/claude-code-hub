@@ -1732,7 +1732,7 @@ export class ProxyForwarder {
               if (key) {
                 const redis = getRedisClient();
                 if (redis && redis.status === "ready") {
-                  redis.set(key, String(currentProvider.id), "EX", 120).catch((error) => {
+                  redis.set(key, String(currentProvider.id), "EX", 300).catch((error) => {
                     logger.error("ProxyForwarder: Failed to set global reuse", { error });
                   });
                 }
@@ -4472,7 +4472,7 @@ export class ProxyForwarder {
                   const reuseRedis = getRedisClient();
                   if (reuseRedis && reuseRedis.status === "ready") {
                     reuseRedis
-                      .set(reuseKey, String(attempt.provider.id), "EX", 120)
+                      .set(reuseKey, String(attempt.provider.id), "EX", 300)
                       .catch((reuseError) => {
                         logger.error(
                           "ProxyForwarder: Failed to rebind global reuse (cold start spare)",
@@ -5124,7 +5124,7 @@ export class ProxyForwarder {
               const reuseRedis = getRedisClient();
               if (reuseRedis && reuseRedis.status === "ready") {
                 reuseRedis
-                  .set(reuseKey, String(attempt.provider.id), "EX", 120)
+                  .set(reuseKey, String(attempt.provider.id), "EX", 300)
                   .catch((reuseError) => {
                     logger.error(
                       "ProxyForwarder: Failed to set global reuse (hedge winner)",
