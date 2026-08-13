@@ -5121,12 +5121,13 @@ export class ProxyForwarder {
           // ⭐ 请求成功后写全局复用键（组+模型+请求格式维度）——与普通成功路径保持一致
           // 竞速/hedge 赢家也必须是全局首选，否则竞速路径的请求永远不会写键，
           // 后续会话读不到复用（键维度由 buildGlobalReuseKey 统一构造）。
+          // 触发竞速即刷新：isActualHedgeWin（launchedProviderCount > 1）表示本次真的发生过
+          //   竞争验证——无论结果改绑还是未改绑，胜出方都是当前最优选择，值得续期。
+          //   只有纯复用命中单路成功（无竞速）不写键，让绑定有效时间自然归零，
+          //   避免贵的 provider 仅靠复用续命永不超时、便宜的没有机会进来。
           // 超时救场赢家不写：慢源靠时间优势救场不应成为全局首选，下次重新竞速发现健康方。
           // 非流式请求不写：避免一次性工具调用选出的 provider 成为全局首选。
-          // 绑定未切换不刷新：键值仍等于赢家 provider（冷启动竞速重复选出同一 provider 等）
-          //   时跳过重写，让绑定有效时间自然归零——否则贵的 provider 只要一直成功就永不超时，
-          //   便宜的永远没有机会进来。只有绑定切换（不同 provider 胜出）才重写并刷新有效时间。
-          if (reusableWinner && !timedOutWinner) {
+          if (reusableWinner && !timedOutWinner && isActualHedgeWin) {
             const reuseKey = await ProxyProviderResolver.buildGlobalReuseKey(
               session,
               raceWinnerOriginalModel
@@ -5134,19 +5135,14 @@ export class ProxyForwarder {
             if (reuseKey) {
               const reuseRedis = getRedisClient();
               if (reuseRedis && reuseRedis.status === "ready") {
-                const existingWinner = await reuseRedis.get(reuseKey);
-                if (existingWinner === String(attempt.provider.id)) {
-                  // 绑定未切换：不刷新 TTL，让有效时间自然归零。
-                } else {
-                  reuseRedis
-                    .set(reuseKey, String(attempt.provider.id), "EX", 300)
-                    .catch((reuseError) => {
-                      logger.error(
-                        "ProxyForwarder: Failed to set global reuse (hedge winner)",
-                        { error: reuseError }
-                      );
-                    });
-                }
+                reuseRedis
+                  .set(reuseKey, String(attempt.provider.id), "EX", 300)
+                  .catch((reuseError) => {
+                    logger.error(
+                      "ProxyForwarder: Failed to set global reuse (hedge winner)",
+                      { error: reuseError }
+                    );
+                  });
               }
             }
           }
