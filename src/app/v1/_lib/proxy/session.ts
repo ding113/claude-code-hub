@@ -7,6 +7,7 @@ import {
   resolvePricingForModelRecords,
 } from "@/lib/utils/pricing-resolution";
 import { findLatestPriceByModel } from "@/repository/model-price";
+import { updateMessageRequestProviderChainBySession } from "@/repository/message";
 import { findAllProviders } from "@/repository/provider";
 import type { CacheTtlResolved } from "@/types/cache";
 import type { Key } from "@/types/key";
@@ -694,9 +695,24 @@ export class ProxySession {
         (attemptNumber === undefined || i.attemptNumber === attemptNumber) &&
         i.raceInfo
     );
-    if (!item || !item.raceInfo) return false;
-    item.raceInfo = { ...item.raceInfo, stage };
+    // 主路（initial_selection）没有 raceInfo：给它补上再更新，使主路也能显示
+    // 回首字/超时/失败进度（否则决策链里主路永远是"首次选择"，后台状态不可见）。
+    const fallbackItem = item
+      ? null
+      : this.providerChain.find(
+          (i) => i.id === providerId && i.reason === "initial_selection" && !i.raceInfo
+        );
+    const target = item ?? fallbackItem;
+    if (!target) return false;
+    if (!target.raceInfo) {
+      target.raceInfo = { type: "cold_start", stage: "launched", firstByteTimeoutMs: 20000 };
+    }
+    target.raceInfo = { ...target.raceInfo, stage };
     this.persistLiveChain();
+    // 结局回写 DB：后台候选 stage 变化（回首字/超时/失败）晚于请求落库，UI 读 DB 需看到。
+    if (stage === "first_byte" || stage === "timed_out" || stage === "failed" || stage === "loser") {
+      this.persistChainToDb();
+    }
     return true;
   }
 
@@ -715,6 +731,8 @@ export class ProxySession {
     if (!item) return false;
     item.raceOutcome = outcome;
     this.persistLiveChain();
+    // 改绑结论（rebind/no_rebind/keep）回写 DB，确保 UI 读 DB 可见。
+    this.persistChainToDb();
     return true;
   }
 
@@ -722,6 +740,22 @@ export class ProxySession {
     if (!this.sessionId || this.requestSequence == null) return;
     if (!this.shouldTrackSessionObservability()) return;
     void writeLiveChain(this.sessionId, this.requestSequence, this.providerChain);
+  }
+
+  /**
+   * 竞速结局回写 DB（fire-and-forget）：请求落库时后台候选可能仍在改绑窗口内，
+   * 其结局（回首字/超时/失败/改绑结论）只写 live chain，UI 读 DB 永远看不到。
+   * 每次 stage/outcome 原地更新后调用，按 session_id + request_sequence 精确定位
+   * 已落库的行；行不存在（结局早于落库）时更新 0 行，无害。
+   */
+  private persistChainToDb(): void {
+    if (!this.sessionId || this.requestSequence == null) return;
+    if (!this.shouldTrackSessionObservability()) return;
+    void updateMessageRequestProviderChainBySession(
+      this.sessionId,
+      this.requestSequence,
+      this.providerChain
+    );
   }
 
   /**

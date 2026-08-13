@@ -7,6 +7,7 @@ import {
   GitBranch,
   InfoIcon,
   Link2,
+  Loader2,
   MinusCircle,
   RefreshCw,
   Rocket,
@@ -683,32 +684,41 @@ export function ProviderChainPopover({
                         {tChain(`reasons.${item.reason}`)}
                       </span>
                     )}
-                    {/* 竞速后台候选进度徽章（hedge 参与者条目） */}
-                    {item.raceInfo &&
-                      (item.reason === "hedge_launched" || item.reason === "hedge_winner") && (
-                        <Badge
-                          variant="outline"
-                          className={cn(
-                            "text-[10px] px-1 py-0 shrink-0",
-                            item.raceInfo.stage === "first_byte"
-                              ? "border-emerald-400 text-emerald-600 dark:border-emerald-700 dark:text-emerald-400"
-                              : item.raceInfo.stage === "timed_out"
-                                ? "border-amber-400 text-amber-600 dark:border-amber-700 dark:text-amber-400"
-                                : item.raceInfo.stage === "winner"
-                                  ? "border-sky-400 text-sky-600 dark:border-sky-700 dark:text-sky-400"
+                    {/* 竞速后台候选进度徽章（hedge 参与者 + 主路 initial_selection）：
+                        launched = 后台运行中（转圈），first_byte/timed_out/failed/loser = 结局 */}
+                    {item.raceInfo && (
+                      <Badge
+                        variant="outline"
+                        className={cn(
+                          "text-[10px] px-1 py-0 shrink-0",
+                          item.raceInfo.stage === "first_byte"
+                            ? "border-emerald-400 text-emerald-600 dark:border-emerald-700 dark:text-emerald-400"
+                            : item.raceInfo.stage === "timed_out"
+                              ? "border-amber-400 text-amber-600 dark:border-amber-700 dark:text-amber-400"
+                              : item.raceInfo.stage === "winner"
+                                ? "border-sky-400 text-sky-600 dark:border-sky-700 dark:text-sky-400"
+                                : item.raceInfo.stage === "failed" || item.raceInfo.stage === "loser"
+                                  ? "border-rose-400 text-rose-600 dark:border-rose-700 dark:text-rose-400"
                                   : "border-slate-400 text-slate-500 dark:border-slate-600 dark:text-slate-400"
-                          )}
-                          title={
-                            item.raceInfo.firstByteTimeoutMs
-                              ? tChain("raceStages.firstByteTimeout", {
-                                  ms: String(item.raceInfo.firstByteTimeoutMs),
-                                })
-                              : undefined
-                          }
-                        >
-                          {tChain(`raceStages.${item.raceInfo.stage}` as "raceStages.launched")}
-                        </Badge>
-                      )}
+                        )}
+                        title={
+                          item.raceInfo.firstByteTimeoutMs
+                            ? tChain("raceStages.firstByteTimeout", {
+                                ms: String(item.raceInfo.firstByteTimeoutMs),
+                              })
+                            : undefined
+                        }
+                      >
+                        {item.raceInfo.stage === "launched" ? (
+                          <span className="inline-flex items-center gap-1">
+                            <Loader2 className="h-2.5 w-2.5 animate-spin" />
+                            {tChain("raceStages.launched")}
+                          </span>
+                        ) : (
+                          tChain(`raceStages.${item.raceInfo.stage}` as "raceStages.launched")
+                        )}
+                      </Badge>
+                    )}
                   </div>
                   {item.errorMessage && (
                     <>

@@ -931,9 +931,11 @@ export function VirtualizedLogsTable({
                                   <>
                                     <div className="flex-1 min-w-0 overflow-hidden">
                                       <ProviderChainPopover
-                                        chain={log.providerChain ?? []}
+                                        chain={log._liveChain?.chain ?? log.providerChain ?? []}
                                         finalProvider={
-                                          getFinalProviderName(log.providerChain ?? []) ||
+                                          getFinalProviderName(
+                                            log._liveChain?.chain ?? log.providerChain ?? []
+                                          ) ||
                                           log.providerName ||
                                           tChain("circuit.unknown")
                                         }

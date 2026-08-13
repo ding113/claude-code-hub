@@ -683,20 +683,24 @@ export async function getUsageLogsBatch(
 
     const result = await findUsageLogsBatch(finalFilters);
 
-    // Merge Redis live chain data for unfinalised rows
-    const unfinalisedRows = result.logs.filter(
-      (row) => !isProviderFinalized(row) && row.sessionId && row.requestSequence != null
+    // Merge Redis live chain data for unfinalised rows AND recently-finalized rows:
+    // 竞速后台结局（备胎回首字/超时/失败/改绑）可能晚于请求落库发生，live chain
+    // 保留至 TTL（300s）自然过期；finalized 行若 live chain 仍存在，说明后台候选
+    // 还在跑或刚出结局，合并它让 UI 显示"后台运行中"圈与最终改绑结论，
+    // 避免只显示落库瞬间的 provider_chain 快照（主路永远停在"首次选择"）。
+    const liveChainRows = result.logs.filter(
+      (row) => row.sessionId && row.requestSequence != null
     );
 
-    if (unfinalisedRows.length > 0) {
+    if (liveChainRows.length > 0) {
       const liveData = await readLiveChainBatch(
-        unfinalisedRows.map((r) => ({
+        liveChainRows.map((r) => ({
           sessionId: r.sessionId!,
           requestSequence: r.requestSequence!,
         }))
       );
 
-      for (const row of unfinalisedRows) {
+      for (const row of liveChainRows) {
         const key = `${row.sessionId}:${row.requestSequence}`;
         const snapshot = liveData.get(key);
         if (snapshot) {

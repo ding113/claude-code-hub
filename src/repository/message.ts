@@ -565,6 +565,36 @@ export async function updateMessageRequestDetails(
 }
 
 /**
+ * 按 session_id + request_sequence 原地更新 provider_chain。
+ * 用于竞速后台结局（改绑/超时/失败）发生晚于请求落库时的决策链补写：
+ * 落库瞬间 zhanglin 等后台候选可能还在 20s 改绑窗口内，结局只写 live chain
+ * 不回 DB，导致 UI（读 DB）永远看不到备胎结局与改绑结论。这里按
+ * session+sequence 精确回写，不经过 async 队列（结局晚于落库，行已存在）。
+ */
+export async function updateMessageRequestProviderChainBySession(
+  sessionId: string,
+  requestSequence: number,
+  providerChain: CreateMessageRequestData["provider_chain"]
+): Promise<void> {
+  try {
+    await db
+      .update(messageRequest)
+      .set({
+        providerChain,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(messageRequest.sessionId, sessionId),
+          eq(messageRequest.requestSequence, requestSequence)
+        )
+      );
+  } catch (error) {
+    logger.error("更新消息请求 provider_chain（按 session）失败:", error);
+  }
+}
+
+/**
  * 根据用户ID查询消息请求记录（分页）
  */
 export async function findLatestMessageRequestByKey(key: string): Promise<MessageRequest | null> {

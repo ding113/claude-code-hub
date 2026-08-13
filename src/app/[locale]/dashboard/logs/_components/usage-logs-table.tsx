@@ -217,9 +217,11 @@ export function UsageLogsTable({
                           <div className="flex flex-col items-start gap-0.5 min-w-0 flex-1">
                             <div className="w-full">
                               <ProviderChainPopover
-                                chain={log.providerChain ?? []}
+                                chain={log._liveChain?.chain ?? log.providerChain ?? []}
                                 finalProvider={
-                                  getFinalProviderName(log.providerChain ?? []) ||
+                                  getFinalProviderName(
+                                    log._liveChain?.chain ?? log.providerChain ?? []
+                                  ) ||
                                   log.providerName ||
                                   tChain("circuit.unknown")
                                 }

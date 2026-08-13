@@ -4161,10 +4161,8 @@ export class ProxyForwarder {
       attempt.thresholdTimer = setTimeout(() => {
         if (settled || attempt.settled || attempt.thresholdTriggered) return;
         attempt.thresholdTriggered = true;
-        // 后台候选进度：首字超时（决策链 hedge_launched 条目 stage 更新）。
-        if (attempt.sequence > 1) {
-          session.updateProviderChainRaceStage(attempt.provider.id, attempt.sequence, "timed_out");
-        }
+        // 后台候选进度：首字超时（决策链条目 stage 更新，主路 initial_selection 也会被追踪）。
+        session.updateProviderChainRaceStage(attempt.provider.id, attempt.sequence, "timed_out");
         session.addProviderToChain(attempt.provider, {
           ...attempt.endpointAudit,
           reason: "hedge_triggered",
@@ -4579,10 +4577,8 @@ export class ProxyForwarder {
               return;
             }
 
-            // 后台候选进度：首字已到达（决策链 hedge_launched 条目 stage 更新）。
-            if (attempt.sequence > 1) {
-              session.updateProviderChainRaceStage(attempt.provider.id, attempt.sequence, "first_byte");
-            }
+            // 后台候选进度：首字已到达（决策链条目 stage 更新，主路 initial_selection 也会被追踪）。
+            session.updateProviderChainRaceStage(attempt.provider.id, attempt.sequence, "first_byte");
 
             // 保留首块：若本 attempt 落败且需要计费，drain 时需要补回首块的 usage。
             attempt.firstChunk = firstChunk.value;

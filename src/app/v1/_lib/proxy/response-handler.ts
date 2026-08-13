@@ -4593,9 +4593,9 @@ export async function finalizeRequestStats(
   });
 
   if (session.sessionId && session.requestSequence != null) {
-    if (session.shouldTrackSessionObservability()) {
-      void deleteLiveChain(session.sessionId, session.requestSequence);
-    }
+    // 注意：不在落库后立即删除 live chain——竞速后台结局（改绑/超时/失败）可能晚于
+    // 请求落库发生，live chain 保留到 TTL（300s）自然过期，UI 才能在"后台还在跑"
+    // 期间合并显示最新状态；结局一旦落定会通过 persistChainToDb 回写 DB。
   }
 
   return normalizedUsage;
@@ -4834,9 +4834,7 @@ async function persistRequestFailure(options: {
     });
 
     if (session.sessionId && session.requestSequence != null) {
-      if (session.shouldTrackSessionObservability()) {
-        void deleteLiveChain(session.sessionId, session.requestSequence);
-      }
+      // 同前：保留 live chain 至 TTL 过期，供 UI 合并显示竞速后台结局。
     }
 
     const isAsyncWrite = getEnvConfig().MESSAGE_REQUEST_WRITE_MODE !== "sync";
