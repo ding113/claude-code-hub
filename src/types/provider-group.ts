@@ -32,6 +32,10 @@ export interface ProviderGroup {
   matchRules: ProviderGroupMatchRule[] | null;
   /** Request-model rules applied to providers in this dispatch group. */
   modelMatchRules: ProviderGroupModelMatchRule[] | null;
+  /** Dispatch whitelist: provider ids allowed in this group (null/empty = disabled). */
+  whitelistProviderIds: number[] | null;
+  /** Dispatch blacklist: provider ids excluded from this group (null/empty = disabled). */
+  blacklistProviderIds: number[] | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -50,6 +54,8 @@ export interface CreateProviderGroupInput {
   sortOrder?: number;
   matchRules?: ProviderGroupMatchRule[] | null;
   modelMatchRules?: ProviderGroupModelMatchRule[] | null;
+  whitelistProviderIds?: number[] | null;
+  blacklistProviderIds?: number[] | null;
 }
 
 /**
@@ -65,4 +71,6 @@ export interface UpdateProviderGroupInput {
   sortOrder?: number;
   matchRules?: ProviderGroupMatchRule[] | null;
   modelMatchRules?: ProviderGroupModelMatchRule[] | null;
+  whitelistProviderIds?: number[] | null;
+  blacklistProviderIds?: number[] | null;
 }

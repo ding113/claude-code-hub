@@ -5,6 +5,7 @@ import { type MouseEvent, useCallback, useState } from "react";
 import { toast } from "sonner";
 import { IpDetailsDialog } from "@/app/[locale]/dashboard/_components/ip-details-dialog";
 import { IpDisplayTrigger } from "@/app/[locale]/dashboard/_components/ip-display-trigger";
+import { AnthropicEffortBadge } from "@/components/customs/anthropic-effort-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { RelativeTime } from "@/components/ui/relative-time";
@@ -289,6 +290,14 @@ export function UsageLogsTable({
                                   setDialogState({ logId: log.id, scrollToRedirect: true })
                                 }
                               />
+                              {log.anthropicEffort ? (
+                                <div className="mt-1 w-fit">
+                                  <AnthropicEffortBadge
+                                    effort={log.anthropicEffort}
+                                    label={log.anthropicEffort}
+                                  />
+                                </div>
+                              ) : null}
                             </div>
                           </TooltipTrigger>
                           <TooltipContent>

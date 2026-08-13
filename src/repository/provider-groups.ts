@@ -52,6 +52,8 @@ function toProviderGroup(row: ProviderGroupRow): ProviderGroup {
     sortOrder: Number.isFinite(Number(row.sortOrder)) ? Number(row.sortOrder) : 0,
     matchRules: normalizeProviderGroupMatchRules(row.matchRules),
     modelMatchRules: normalizeProviderGroupModelMatchRules(row.modelMatchRules),
+    whitelistProviderIds: row.whitelistProviderIds ?? null,
+    blacklistProviderIds: row.blacklistProviderIds ?? null,
     createdAt: row.createdAt!,
     updatedAt: row.updatedAt!,
   };
@@ -86,6 +88,11 @@ let healthTestModelFallbackCache: {
   expiresAt: number;
 } | null = null;
 
+let allowBlockListsCache: {
+  value: ReadonlyMap<string, { whitelist: number[] | null; blacklist: number[] | null }>;
+  expiresAt: number;
+} | null = null;
+
 /**
  * Invalidate the in-memory cost multiplier cache.
  * Call this after any mutation (create / update / delete) to provider groups.
@@ -96,6 +103,7 @@ export function invalidateGroupMultiplierCache(): void {
   groupSharedSettingsCache = null;
   healthTestModelsCache = null;
   healthTestModelFallbackCache = null;
+  allowBlockListsCache = null;
 }
 
 /** Return cached request-model rules for all provider groups. */
@@ -140,6 +148,38 @@ export async function getProviderGroupSharedSettingsMap(): Promise<
     rows.map((row) => [row.name, normalizeProviderGroupSharedSettings(row.sharedSettings)])
   );
   groupSharedSettingsCache = { value, expiresAt: now + CACHE_TTL_MS };
+  return value;
+}
+
+/**
+ * Cached map of group name → { whitelist, blacklist } provider id arrays.
+ * Used by the dispatch layer to apply per-group allow/block filters.
+ */
+export async function getProviderGroupAllowBlockListsMap(): Promise<
+  ReadonlyMap<string, { whitelist: number[] | null; blacklist: number[] | null }>
+> {
+  const now = Date.now();
+  if (allowBlockListsCache && allowBlockListsCache.expiresAt > now) {
+    return allowBlockListsCache.value;
+  }
+
+  const rows = await db
+    .select({
+      name: providerGroups.name,
+      whitelist: providerGroups.whitelistProviderIds,
+      blacklist: providerGroups.blacklistProviderIds,
+    })
+    .from(providerGroups);
+  const value = new Map(
+    rows.map((row) => [
+      row.name,
+      {
+        whitelist: row.whitelist ?? null,
+        blacklist: row.blacklist ?? null,
+      },
+    ])
+  );
+  allowBlockListsCache = { value, expiresAt: now + CACHE_TTL_MS };
   return value;
 }
 
@@ -231,6 +271,10 @@ export async function createProviderGroup(input: CreateProviderGroupInput): Prom
       sortOrder: nextSort,
       matchRules: normalizeProviderGroupMatchRules(input.matchRules),
       modelMatchRules: normalizeProviderGroupModelMatchRules(input.modelMatchRules),
+      whitelistProviderIds:
+        input.whitelistProviderIds !== undefined ? input.whitelistProviderIds : null,
+      blacklistProviderIds:
+        input.blacklistProviderIds !== undefined ? input.blacklistProviderIds : null,
     })
     .returning();
 
@@ -289,6 +333,12 @@ export async function updateProviderGroup(
   }
   if (input.modelMatchRules !== undefined) {
     setData.modelMatchRules = normalizeProviderGroupModelMatchRules(input.modelMatchRules);
+  }
+  if (input.whitelistProviderIds !== undefined) {
+    setData.whitelistProviderIds = input.whitelistProviderIds;
+  }
+  if (input.blacklistProviderIds !== undefined) {
+    setData.blacklistProviderIds = input.blacklistProviderIds;
   }
 
   const [row] = await executor

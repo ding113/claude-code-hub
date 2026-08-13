@@ -79,6 +79,16 @@ export const ProviderGroupSchema = z.object({
     .nullable()
     .optional()
     .describe("Request-model rules for providers in this pool."),
+  whitelistProviderIds: z
+    .array(z.number().int().positive())
+    .nullable()
+    .optional()
+    .describe("Provider ids to whitelist (null/empty = whitelist disabled)."),
+  blacklistProviderIds: z
+    .array(z.number().int().positive())
+    .nullable()
+    .optional()
+    .describe("Provider ids to blacklist (null/empty = blacklist disabled)."),
   providerCount: z
     .number()
     .int()
@@ -140,6 +150,16 @@ export const ProviderGroupCreateSchema = z
       .nullable()
       .optional()
       .describe("Request-model rules for providers in this pool."),
+    whitelistProviderIds: z
+      .array(z.number().int().positive())
+      .nullable()
+      .optional()
+      .describe("Provider ids to whitelist (null/empty = whitelist disabled)."),
+    blacklistProviderIds: z
+      .array(z.number().int().positive())
+      .nullable()
+      .optional()
+      .describe("Provider ids to blacklist (null/empty = blacklist disabled)."),
   })
   .strict();
 
@@ -188,6 +208,16 @@ export const ProviderGroupUpdateSchema = z
       .nullable()
       .optional()
       .describe("Request-model rules for providers in this pool."),
+    whitelistProviderIds: z
+      .array(z.number().int().positive())
+      .nullable()
+      .optional()
+      .describe("Provider ids to whitelist (null/empty = whitelist disabled)."),
+    blacklistProviderIds: z
+      .array(z.number().int().positive())
+      .nullable()
+      .optional()
+      .describe("Provider ids to blacklist (null/empty = blacklist disabled)."),
   })
   .strict();
 

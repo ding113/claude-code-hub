@@ -102,6 +102,8 @@ export async function createProviderGroup(input: {
   sortOrder?: number;
   matchRules?: ProviderGroupMatchRule[] | null;
   modelMatchRules?: ProviderGroupModelMatchRule[] | null;
+  whitelistProviderIds?: number[] | null;
+  blacklistProviderIds?: number[] | null;
 }): Promise<ActionResult<ProviderGroup & { appliedMembers?: number }>> {
   const t = await getTranslations("settings.providers.providerGroups");
   const tError = await getTranslations("errors");
@@ -168,6 +170,8 @@ export async function createProviderGroup(input: {
       sortOrder: input.sortOrder,
       matchRules,
       modelMatchRules,
+      whitelistProviderIds: input.whitelistProviderIds,
+      blacklistProviderIds: input.blacklistProviderIds,
     });
 
     let appliedMembers = 0;
@@ -236,6 +240,8 @@ export async function updateProviderGroup(
     sortOrder?: number;
     matchRules?: ProviderGroupMatchRule[] | null;
     modelMatchRules?: ProviderGroupModelMatchRule[] | null;
+    whitelistProviderIds?: number[] | null;
+    blacklistProviderIds?: number[] | null;
   }
 ): Promise<ActionResult<ProviderGroup & { appliedMembers?: number }>> {
   const t = await getTranslations("settings.providers.providerGroups");
@@ -319,6 +325,12 @@ export async function updateProviderGroup(
       ...(input.sortOrder !== undefined ? { sortOrder: input.sortOrder } : {}),
       ...(matchRulesPatch !== undefined ? { matchRules: matchRulesPatch } : {}),
       ...(modelMatchRulesPatch !== undefined ? { modelMatchRules: modelMatchRulesPatch } : {}),
+      ...(input.whitelistProviderIds !== undefined
+        ? { whitelistProviderIds: input.whitelistProviderIds }
+        : {}),
+      ...(input.blacklistProviderIds !== undefined
+        ? { blacklistProviderIds: input.blacklistProviderIds }
+        : {}),
     });
 
     if (!updated) {

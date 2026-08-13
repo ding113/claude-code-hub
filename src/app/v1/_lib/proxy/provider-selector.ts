@@ -14,6 +14,11 @@ import {
 } from "@/lib/provider-groups/model-match-rules";
 import type { ProviderGroupSharedSettings } from "@/lib/provider-groups/shared-settings";
 import {
+  resolveProviderGroupListsForProvider,
+  isProviderAllowedByAllLists,
+  type GroupAllowBlockLists,
+} from "@/lib/provider-dispatch/group-allow-block";
+import {
   resolveProviderHealthTestModelForRequest,
 } from "@/lib/provider-health-test/model-config";
 import type { HealthTestSloThresholds } from "@/lib/provider-health-test/slo-thresholds";
@@ -27,6 +32,7 @@ import { isVendorTypeCircuitOpen } from "@/lib/vendor-type-circuit-breaker";
 import { findAllProviders, findProviderById } from "@/repository/provider";
 import {
   getGroupCostMultiplier,
+  getProviderGroupAllowBlockListsMap,
   getProviderGroupHealthTestModelFallbackMap,
   getProviderGroupHealthTestModelsMap,
   getProviderGroupModelMatchRules,
@@ -136,6 +142,30 @@ function resolveHealthGroupScope(
   const providerGroups = new Set(resolveProviderGroupsWithDefault(provider.groupTag));
   const matchingGroups = requestedGroups.filter((group) => providerGroups.has(group));
   return { explicit: true, scope: matchingGroups.length > 0 ? matchingGroups.join(",") : null };
+}
+
+/**
+ * Check whether a provider passes the group-level allow/block lists for the
+ * session's effective dispatch group. Fail-open on lookup errors.
+ */
+async function checkProviderGroupAllowBlock(
+  provider: Provider,
+  effectiveGroup: string | null | undefined
+): Promise<boolean> {
+  if (!effectiveGroup) return true;
+  try {
+    const listsMap = await getProviderGroupAllowBlockListsMap();
+    const lists = resolveProviderGroupListsForProvider(listsMap, effectiveGroup, provider.groupTag);
+    return isProviderAllowedByAllLists(provider.id, lists);
+  } catch (error) {
+    logger.warn("[ProviderSelector] Failed to check group allow/block lists, allowing provider", {
+      providerId: provider.id,
+      providerName: provider.name,
+      effectiveGroup,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return true;
+  }
 }
 
 async function getHealthSloThresholds(): Promise<HealthTestSloThresholds> {
@@ -737,6 +767,14 @@ export class ProxyProviderResolver {
     const groupSharedByTag = await getProviderGroupSharedSettingsMap();
     const healthTestModelsByGroup = await getProviderGroupHealthTestModelsMap();
     const healthTestModelFallbacksByGroup = await getProviderGroupHealthTestModelFallbackMap();
+    let groupAllowBlockLists: ReadonlyMap<string, GroupAllowBlockLists> | null = null;
+    try {
+      groupAllowBlockLists = await getProviderGroupAllowBlockListsMap();
+    } catch (error) {
+      logger.warn("ProviderSelector: Failed to load group allow/block lists, skipping filter", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
 
     const pool = allProviders.filter((provider) => {
       if (!provider.isEnabled || excludeSet.has(provider.id)) return false;
@@ -745,6 +783,16 @@ export class ProxyProviderResolver {
       }
       if (effectiveGroupPick && !checkProviderGroupMatch(provider.groupTag, effectiveGroupPick)) {
         return false;
+      }
+      if (effectiveGroupPick) {
+        const lists = resolveProviderGroupListsForProvider(
+          groupAllowBlockLists,
+          effectiveGroupPick,
+          provider.groupTag
+        );
+        if (!isProviderAllowedByAllLists(provider.id, lists)) {
+          return false;
+        }
       }
       if (session.originalFormat) {
         if (
@@ -999,6 +1047,18 @@ export class ProxyProviderResolver {
     }
     // No auth group info (effectiveGroup is null) can reuse any provider
 
+    // 分组白/黑名单：会话复用也不能绕过（否则黑名单会被复用绕开）
+    if (!(await checkProviderGroupAllowBlock(provider, effectiveGroup))) {
+      logger.warn("ProviderSelector: Session provider blocked by group allow/block lists", {
+        sessionId: session.sessionId,
+        providerId: provider.id,
+        providerName: provider.name,
+        effectiveGroup,
+      });
+      await SessionManager.clearSessionProvider(session.sessionId);
+      return null;
+    }
+
     // 会话复用也必须遵守限额（否则会绕过"达到限额即禁用"的语义）
     const costCheck = await RateLimitService.checkCostLimitsWithLease(provider.id, "provider", {
       limit_5h_usd: provider.limit5hUsd,
@@ -1134,6 +1194,9 @@ export class ProxyProviderResolver {
       const effectiveGroup = getEffectiveProviderGroup(session);
       if (effectiveGroup && !checkProviderGroupMatch(provider.groupTag, effectiveGroup)) return null;
 
+      // 分组白/黑名单：全局复用也不能绕过（与 findReusable 一致）
+      if (!(await checkProviderGroupAllowBlock(provider, effectiveGroup))) return null;
+
       // 限额检查
       const costCheck = await RateLimitService.checkCostLimitsWithLease(provider.id, "provider", {
         limit_5h_usd: provider.limit5hUsd,
@@ -1246,6 +1309,22 @@ export class ProxyProviderResolver {
           },
         };
       }
+    }
+
+    // === Step 1.5: 分组白/黑名单过滤（先白后黑）===
+    if (effectiveGroupPick && visibleProviders.length > 0) {
+      const allowBlockFiltered: typeof visibleProviders = [];
+      for (const p of visibleProviders) {
+        if (await checkProviderGroupAllowBlock(p, effectiveGroupPick)) {
+          allowBlockFiltered.push(p);
+        }
+      }
+      logger.debug("ProviderSelector: Group allow/block filter applied (silent)", {
+        effectiveGroup: effectiveGroupPick,
+        beforeCount: visibleProviders.length,
+        filteredCount: allowBlockFiltered.length,
+      });
+      visibleProviders = allowBlockFiltered;
     }
 
     // === 初始化决策上下文（使用 visibleProviders）===
@@ -1709,6 +1788,13 @@ export class ProxyProviderResolver {
       visibleProviders = allProviders.filter((p) =>
         checkProviderGroupMatch(p.groupTag, effectiveGroupPick)
       );
+      const allowBlockFiltered: typeof visibleProviders = [];
+      for (const p of visibleProviders) {
+        if (await checkProviderGroupAllowBlock(p, effectiveGroupPick)) {
+          allowBlockFiltered.push(p);
+        }
+      }
+      visibleProviders = allowBlockFiltered;
     }
 
     // 按 providerType 精确过滤 + 调度时间窗口

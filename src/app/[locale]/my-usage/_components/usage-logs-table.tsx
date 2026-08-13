@@ -6,6 +6,7 @@ import { useTimeZone, useTranslations } from "next-intl";
 import { useCallback, useEffect, useEffectEvent, useMemo, useRef } from "react";
 import { toast } from "sonner";
 import { ModelVendorIcon } from "@/components/customs/model-vendor-icon";
+import { AnthropicEffortBadge } from "@/components/customs/anthropic-effort-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -248,6 +249,12 @@ export function UsageLogsTable({
                           ) : (
                             <span>{t("unknownModel")}</span>
                           )}
+                          {log.anthropicEffort ? (
+                            <AnthropicEffortBadge
+                              effort={log.anthropicEffort}
+                              label={log.anthropicEffort}
+                            />
+                          ) : null}
                         </div>
                         {log.modelRedirect ? (
                           <div className="text-xs text-muted-foreground truncate">

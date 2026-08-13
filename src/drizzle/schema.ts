@@ -335,6 +335,18 @@ export const providerGroups = pgTable(
     modelMatchRules: jsonb("model_match_rules").$type<
       import("@/lib/provider-groups/model-match-rules").ProviderGroupModelMatchRule[] | null
     >(),
+    /**
+     * Dispatch whitelist: provider ids allowed in this group.
+     * null/empty = whitelist disabled (all providers in the group may serve).
+     * Non-empty = ONLY these provider ids may serve (blacklist still applies after).
+     */
+    whitelistProviderIds: jsonb("whitelist_provider_ids").$type<number[] | null>(),
+    /**
+     * Dispatch blacklist: provider ids excluded from this group.
+     * null/empty = blacklist disabled.
+     * Always applied AFTER the whitelist (whitelist hit does not rescue a blacklisted id).
+     */
+    blacklistProviderIds: jsonb("blacklist_provider_ids").$type<number[] | null>(),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },

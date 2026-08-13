@@ -1,0 +1,92 @@
+name: ${COMPOSE_PROJECT_NAME:-claude-code-hub}
+
+services:
+  postgres:
+    image: postgres:18
+    restart: unless-stopped
+    # 不对外暴露数据库端口，仅允许容器内部网络访问
+    # 如需调试，可取消注释下行（仅绑定本机）：
+    # ports:
+    #   - "127.0.0.1:35432:5432"
+    env_file:
+      - ./.env
+    environment:
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+      POSTGRES_DB: ${DB_NAME:-claude_code_hub}
+      # 使用自定义数据目录
+      PGDATA: /data/pgdata
+      # 设置时区为上海
+      TZ: Asia/Shanghai
+      PGTZ: Asia/Shanghai
+    volumes:
+      # 持久化数据库数据到本地 ./data/postgres 目录
+      # 挂载到 /data 而不是 /var/lib/postgresql/data 避免权限冲突
+      - ./data/postgres:/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-claude_code_hub}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    volumes:
+      # 持久化 Redis 数据到本地 ./data/redis 目录
+      # 使用 AOF 持久化模式,确保数据不丢失
+      - ./data/redis:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: claude-code-hub-local:provider-scheduled-health-test
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    env_file:
+      - ./.env
+    environment:
+      NODE_ENV: production
+      # 容器内使用 Dockerfile 默认端口 3000，对外通过 APP_PORT 暴露（默认 23000）
+      DSN: postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@postgres:5432/${DB_NAME:-claude_code_hub}
+      REDIS_URL: redis://redis:6379
+      AUTO_MIGRATE: ${AUTO_MIGRATE:-true}
+      ENABLE_RATE_LIMIT: ${ENABLE_RATE_LIMIT:-true}
+      SESSION_TTL: ${SESSION_TTL:-300}
+      DB_POOL_IDLE_TIMEOUT: ${DB_POOL_IDLE_TIMEOUT:-20}
+      DB_POOL_CONNECT_TIMEOUT: ${DB_POOL_CONNECT_TIMEOUT:-10}
+      MAX_RETRY_ATTEMPTS_DEFAULT: ${MAX_RETRY_ATTEMPTS_DEFAULT:-1}
+      LANGFUSE_SAMPLE_RATE: ${LANGFUSE_SAMPLE_RATE:-1.0}
+      # 设置时区为上海
+      TZ: Asia/Shanghai
+    ports:
+      - "${APP_PORT:-23000}:3000"
+    volumes:
+      # Node 诊断报告（report.*.json）持久化到宿主机，便于事后排查 SIGSEGV 等
+      # native 崩溃。配合 Dockerfile 中 --report-* 启动参数生效（issue #1147）
+      - ./data/reports:/app/reports
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://' + (process.env.HOSTNAME || '127.0.0.1') + ':3000/api/actions/health').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s

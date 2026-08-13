@@ -14,12 +14,33 @@ export function extractAnthropicEffortFromRequestBody(requestBody: unknown): str
     return null;
   }
 
-  const outputConfig = (requestBody as Record<string, unknown>).output_config;
-  if (!outputConfig || typeof outputConfig !== "object" || Array.isArray(outputConfig)) {
-    return null;
+  const body = requestBody as Record<string, unknown>;
+
+  // Anthropic 格式：output_config.effort
+  const outputConfig = body.output_config;
+  if (outputConfig && typeof outputConfig === "object" && !Array.isArray(outputConfig)) {
+    const effort = normalizeAnthropicEffort((outputConfig as Record<string, unknown>).effort);
+    if (effort) {
+      return effort;
+    }
   }
 
-  return normalizeAnthropicEffort((outputConfig as Record<string, unknown>).effort);
+  // OpenAI Chat Completions / DeepSeek 兼容格式：顶层 reasoning_effort
+  const topLevelReasoningEffort = normalizeAnthropicEffort(body.reasoning_effort);
+  if (topLevelReasoningEffort) {
+    return topLevelReasoningEffort;
+  }
+
+  // OpenAI Responses API / Codex 格式：reasoning.effort
+  const reasoning = body.reasoning;
+  if (reasoning && typeof reasoning === "object" && !Array.isArray(reasoning)) {
+    const effort = normalizeAnthropicEffort((reasoning as Record<string, unknown>).effort);
+    if (effort) {
+      return effort;
+    }
+  }
+
+  return null;
 }
 
 export function extractAnthropicEffortFromSpecialSettings(

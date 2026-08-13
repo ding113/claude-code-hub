@@ -31,13 +31,16 @@ export class ProxyMessageService {
       session.setOriginalModel(currentModel);
     }
 
-    const isAnthropicProvider =
-      provider.providerType === "claude" || provider.providerType === "claude-auth";
     const hasAnthropicEffortAudit = session
       .getSpecialSettings()
       ?.some((setting) => setting.type === "anthropic_effort");
 
-    if (isAnthropicProvider && !hasAnthropicEffortAudit) {
+    // 对所有 provider 类型统一提取“思考强度”（reasoning effort）：
+    // Anthropic 格式 (output_config.effort)、OpenAI/DeepSeek 兼容格式 (reasoning_effort)、
+    // OpenAI Responses API / Codex 格式 (reasoning.effort)。
+    // 尽管理论上仅被 Anthropic 格式使用，这里不做 provider 类型限制，
+    // 以便 Codex/OpenAI 请求的 reasoning effort 也能在使用记录中展示。
+    if (!hasAnthropicEffortAudit) {
       const anthropicEffort = extractAnthropicEffortFromRequestBody(session.request.message);
       if (anthropicEffort) {
         session.addSpecialSetting({

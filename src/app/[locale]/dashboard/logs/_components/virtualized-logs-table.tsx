@@ -17,6 +17,7 @@ import { toast } from "sonner";
 import { IpDetailsDialog } from "@/app/[locale]/dashboard/_components/ip-details-dialog";
 import { IpDisplayTrigger } from "@/app/[locale]/dashboard/_components/ip-display-trigger";
 import { Badge } from "@/components/ui/badge";
+import { AnthropicEffortBadge } from "@/components/customs/anthropic-effort-badge";
 import { Button } from "@/components/ui/button";
 import { RelativeTime } from "@/components/ui/relative-time";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -974,7 +975,7 @@ export function VirtualizedLogsTable({
                       <TooltipProvider>
                         <Tooltip>
                           <TooltipTrigger asChild>
-                            <div className="flex items-center gap-1 min-w-0 cursor-help truncate">
+                            <div className="flex items-center gap-1 min-w-0 cursor-help">
                               <ModelDisplayWithRedirect
                                 originalModel={log.originalModel}
                                 currentModel={log.model}
@@ -987,6 +988,13 @@ export function VirtualizedLogsTable({
                                         setDialogState({ logId: log.id, scrollToRedirect: true })
                                 }
                               />
+                              {log.anthropicEffort ? (
+                                <AnthropicEffortBadge
+                                  effort={log.anthropicEffort}
+                                  label={log.anthropicEffort}
+                                  className="shrink-0"
+                                />
+                              ) : null}
                             </div>
                           </TooltipTrigger>
                           <TooltipContent>
