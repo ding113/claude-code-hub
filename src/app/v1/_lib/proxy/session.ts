@@ -725,9 +725,21 @@ export class ProxySession {
     attemptNumber: number | undefined,
     outcome: ProviderChainItem["raceOutcome"]
   ): boolean {
-    const item = this.providerChain.find(
-      (i) => i.id === providerId && (attemptNumber === undefined || i.attemptNumber === attemptNumber)
-    );
+    // 优先挂到 hedge_winner 条目（UI 的 getRaceOutcome 从 winner 取）；同 provider 可能有
+    // hedge_launched + hedge_winner 两条同 attemptNumber 记录，find 会命中第一条（launched），
+    // 导致改绑/保持结论写错条目、UI 显示不出来。
+    const item =
+      this.providerChain.find(
+        (i) =>
+          i.id === providerId &&
+          (attemptNumber === undefined || i.attemptNumber === attemptNumber) &&
+          i.reason === "hedge_winner"
+      ) ??
+      this.providerChain.find(
+        (i) =>
+          i.id === providerId &&
+          (attemptNumber === undefined || i.attemptNumber === attemptNumber)
+      );
     if (!item) return false;
     item.raceOutcome = outcome;
     this.persistLiveChain();

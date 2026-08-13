@@ -4281,13 +4281,13 @@ export class ProxyForwarder {
      *   给 winner 条目补上 no_rebind 结论。
      */
     const finalizeRaceCandidateStage = (attempt: StreamingHedgeAttempt) => {
-      if (attempt.sequence > 1) {
-        session.updateProviderChainRaceStage(
-          attempt.provider.id,
-          attempt.sequence,
-          attempt.thresholdTriggered ? "timed_out" : "loser"
-        );
-      }
+      // 不区分主路/备胎：主路 initial_selection 条目无 raceInfo 时 session.ts 会 fallback 补上，
+      // 使主路被取消/耗尽时也有终态（timed_out / loser），不再停留在"首次选择"。
+      session.updateProviderChainRaceStage(
+        attempt.provider.id,
+        attempt.sequence,
+        attempt.thresholdTriggered ? "timed_out" : "loser"
+      );
       if (coldStartTemporaryRebind && winnerAttempt && attempt !== winnerAttempt) {
         coldStartTemporaryRebind = false;
         session.updateProviderChainRaceOutcome(winnerAttempt.provider.id, winnerAttempt.sequence, {
@@ -4440,6 +4440,13 @@ export class ProxyForwarder {
             // 若在自身首字窗口内返回（未超时），把全局复用键改绑到便宜候选。
             if (coldStartTemporaryRebind && attempt !== winnerAttempt && response) {
               const elapsed = Date.now() - attempt.launchedAtMs;
+              // 该候选（可能为主路）回首字了：先更新进度，再决定改绑与否。
+              // 主路 initial_selection 条目无 raceInfo，session.ts 的 fallback 会补上。
+              session.updateProviderChainRaceStage(
+                attempt.provider.id,
+                attempt.sequence,
+                "first_byte"
+              );
               if (elapsed <= attempt.firstByteTimeoutMs) {
                 coldStartTemporaryRebind = false;
                 const reuseKey = await ProxyProviderResolver.buildGlobalReuseKey(
@@ -4763,9 +4770,8 @@ export class ProxyForwarder {
       ProxyForwarder.markProviderFailed(session, failedProviderIds, attempt.provider.id);
 
       // 备胎失败：原 hedge_launched 条目 stage 推进为 failed（UI 显示失败而非一直"已启动"）。
-      if (attempt.sequence > 1) {
-        session.updateProviderChainRaceStage(attempt.provider.id, attempt.sequence, "failed");
-      }
+      // 主路同样更新（fallback 补 raceInfo），使主路失败也有终态。
+      session.updateProviderChainRaceStage(attempt.provider.id, attempt.sequence, "failed");
 
       if (errorCategory === ErrorCategory.PROVIDER_ERROR && statusCode !== 404) {
         await recordFailure(attempt.provider.id, error);
