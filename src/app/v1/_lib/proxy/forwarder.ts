@@ -246,6 +246,8 @@ type StreamingHedgeAttempt = {
     context1mApplied: boolean;
     groupCostMultiplier: number;
   } | null;
+  /** 该 attempt 发起时刻（Date.now()），用于冷启动临时改绑判定是否超时。 */
+  launchedAtMs: number;
 };
 
 type ReactiveRectifierRetryState = {
@@ -3894,6 +3896,10 @@ export class ProxyForwarder {
     // finishIfExhausted 或 totalRaceTimer 提升它救当前请求（timedOutWinner 语义：
     // 救场但不重建 sticky）；若其他候选成功，则被 abortAllAttempts 作为 loser 清理。
     let pendingTimedOutRescue: StreamingHedgeAttempt | null = null;
+    // 冷启动临时改绑：主路（初始方）先返回首块（非超时）时，保留在途的同倍率/更便宜
+    // 备胎不 abort，继续在后台跑；备胎若在自身首字窗口内也返回，则改绑全局复用键到
+    // 备胎（更便宜则换）。若备胎超时/失败，保持主路绑定不变。
+    let coldStartTemporaryRebind = false;
 
     let resolveResult: ((result: { response?: Response; error?: Error }) => void) | null = null;
     const resultPromise = new Promise<{ response?: Response; error?: Error }>((resolve) => {
@@ -4377,6 +4383,41 @@ export class ProxyForwarder {
             const attemptRuntime = attempt.session as ProxySessionWithAttemptRuntime;
             attempt.releaseAgent = attemptRuntime.releaseAgent ?? attempt.releaseAgent;
 
+            // 冷启动临时改绑：主路先回且绑定了它之后，保留的备胎若在自身首字窗口内
+            // 返回（未超时），把全局复用键改绑到备胎（更便宜则换）。
+            if (coldStartTemporaryRebind && attempt !== winnerAttempt && response) {
+              const elapsed = Date.now() - attempt.launchedAtMs;
+              if (elapsed <= attempt.firstByteTimeoutMs) {
+                coldStartTemporaryRebind = false;
+                const reuseKey = await ProxyProviderResolver.buildGlobalReuseKey(session, null);
+                if (reuseKey) {
+                  const reuseRedis = getRedisClient();
+                  if (reuseRedis && reuseRedis.status === "ready") {
+                    reuseRedis
+                      .set(reuseKey, String(attempt.provider.id), "EX", 120)
+                      .catch((reuseError) => {
+                        logger.error(
+                          "ProxyForwarder: Failed to rebind global reuse (cold start spare)",
+                          { error: reuseError }
+                        );
+                      });
+                  }
+                }
+                logger.info(
+                  "ProxyForwarder: Cold start temporary bind rebind to spare",
+                  {
+                    sessionId: session.sessionId ?? null,
+                    spareProviderId: attempt.provider.id,
+                    spareProviderName: attempt.provider.name,
+                    winnerProviderId: winnerAttempt?.provider.id ?? null,
+                  }
+                );
+              } else {
+                // 备胎超时了才返回，保持主路绑定不变
+                coldStartTemporaryRebind = false;
+              }
+            }
+
             // 竞速输家计费：保活该响应并后台 drain 计费，而非取消。
             if (attempt.billAsLoser && !attempt.loserBillingStarted && response.body) {
               attempt.responseController =
@@ -4771,6 +4812,24 @@ export class ProxyForwarder {
       winnerCommitted = true;
       winnerAttempt = attempt;
 
+      // 冷启动临时改绑：主路（初始方）先回且非超时 → 保留在途的与主路同倍率/更便宜
+      // 备胎（不 abort），等它首字窗口内返回后改绑全局键到备胎。
+      if (isColdStart && !timedOutWinner && attempt === initialAttemptRef) {
+        coldStartTemporaryRebind = Array.from(attempts).some(
+          (a) =>
+            !a.settled &&
+            a !== attempt &&
+            resolveDispatchCost(a.provider) <= resolveDispatchCost(attempt.provider)
+        );
+        if (coldStartTemporaryRebind) {
+          logger.info("ProxyForwarder: Cold start temporary bind, keeping spare alive for rebind", {
+            sessionId: session.sessionId ?? null,
+            winnerProviderId: attempt.provider.id,
+            winnerProviderName: attempt.provider.name,
+          });
+        }
+      }
+
       if (totalRaceTimer) {
         clearTimeout(totalRaceTimer);
         totalRaceTimer = null;
@@ -4831,7 +4890,9 @@ export class ProxyForwarder {
         modelRedirect: getAttemptModelRedirect(attempt),
       });
 
-      abortAllAttempts(attempt, "hedge_loser");
+      if (!coldStartTemporaryRebind) {
+        abortAllAttempts(attempt, "hedge_loser");
+      }
 
       if (session.sessionId) {
         void (async () => {
@@ -5027,6 +5088,7 @@ export class ProxyForwarder {
         loserBillingStarted: false,
         firstChunk: null,
         billingSnapshot: null,
+        launchedAtMs: Date.now(),
       };
 
       attempts.add(attempt);
