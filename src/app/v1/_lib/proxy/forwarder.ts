@@ -3900,6 +3900,12 @@ export class ProxyForwarder {
     // 备胎不 abort，继续在后台跑；备胎若在自身首字窗口内也返回，则改绑全局复用键到
     // 备胎（更便宜则换）。若备胎超时/失败，保持主路绑定不变。
     let coldStartTemporaryRebind = false;
+    // 冷启动 fastestMode（timeout_race + 无绑定）：备胎=最快 SLO 候选（跨倍率），
+    // 与主路（cheapest）构成双发。此时备胎先回首字直接赢（服务当前请求用最快的），
+    // 不再受 SLA 窗口守卫挂起——赢家临时写全局键，在途便宜候选返回后改绑到便宜方。
+    let coldStartFastestMode = false;
+    // 竞速赢家结算时的原请求模型快照（winner 为备胎且 sync 覆盖 session 模型时使用）
+    let raceWinnerOriginalModel: string | null = null;
 
     let resolveResult: ((result: { response?: Response; error?: Error }) => void) | null = null;
     const resultPromise = new Promise<{ response?: Response; error?: Error }>((resolve) => {
@@ -4273,8 +4279,9 @@ export class ProxyForwarder {
     const launchAlternative = async (options: {
       allowNonSloFallback: boolean;
       sameCostAsProvider?: Provider | null;
+      fastestMode?: boolean;
     }) => {
-      const { allowNonSloFallback, sameCostAsProvider = null } = options;
+      const { allowNonSloFallback, sameCostAsProvider = null, fastestMode = false } = options;
       if (settled || winnerCommitted || noMoreProviders) return;
       if (launchingAlternative) {
         await launchingAlternative;
@@ -4304,7 +4311,8 @@ export class ProxyForwarder {
               ProxyProviderResolver.pickHealthSloAlternate(
                 session,
                 excludeProviderIds,
-                sameCostAsProvider
+                sameCostAsProvider,
+                fastestMode
               ),
             selectOrdinary: (excludeProviderIds) =>
               ProxyProviderResolver.pickRandomProviderWithExclusion(session, excludeProviderIds),
@@ -4383,13 +4391,16 @@ export class ProxyForwarder {
             const attemptRuntime = attempt.session as ProxySessionWithAttemptRuntime;
             attempt.releaseAgent = attemptRuntime.releaseAgent ?? attempt.releaseAgent;
 
-            // 冷启动临时改绑：主路先回且绑定了它之后，保留的备胎若在自身首字窗口内
-            // 返回（未超时），把全局复用键改绑到备胎（更便宜则换）。
+            // 冷启动临时改绑：贵方（fastest）先回且绑定了它之后，保留的在途便宜候选
+            // 若在自身首字窗口内返回（未超时），把全局复用键改绑到便宜候选。
             if (coldStartTemporaryRebind && attempt !== winnerAttempt && response) {
               const elapsed = Date.now() - attempt.launchedAtMs;
               if (elapsed <= attempt.firstByteTimeoutMs) {
                 coldStartTemporaryRebind = false;
-                const reuseKey = await ProxyProviderResolver.buildGlobalReuseKey(session, null);
+                const reuseKey = await ProxyProviderResolver.buildGlobalReuseKey(
+                  session,
+                  raceWinnerOriginalModel
+                );
                 if (reuseKey) {
                   const reuseRedis = getRedisClient();
                   if (reuseRedis && reuseRedis.status === "ready") {
@@ -4401,6 +4412,27 @@ export class ProxyForwarder {
                           { error: reuseError }
                         );
                       });
+                  }
+                }
+                // 同步更新 session 绑定到便宜候选：同 session 后续请求走便宜方，
+                // 而不是留在临时赢家（贵方）上。
+                if (session.sessionId) {
+                  const rebindResult = await SessionManager.updateSessionBindingSmart(
+                    session.sessionId,
+                    attempt.provider.id,
+                    attempt.provider.priority || 0,
+                    false,
+                    true,
+                    session.authState?.key?.id ?? null,
+                    true
+                  );
+                  if (rebindResult.updated) {
+                    logger.info("ProxyForwarder: Cold start session rebind to cheaper", {
+                      sessionId: session.sessionId,
+                      providerId: attempt.provider.id,
+                      providerName: attempt.provider.name,
+                      reason: rebindResult.reason,
+                    });
                   }
                 }
                 logger.info(
@@ -4727,9 +4759,6 @@ export class ProxyForwarder {
       if (settled || winnerCommitted || attempt.settled || !attempt.response || !attempt.reader)
         return;
 
-      // 竞速赢家结算时的原请求模型快照（winner 为备胎且 sync 覆盖 session 模型时使用）
-      let raceWinnerOriginalModel: string | null = null;
-
       // 冷启动并发备胎的 SLA 窗口守卫（上游 discovery "低优先级候选 pending" 语义）：
       // 备胎先返回首块时，若主路还在 20s 首字节窗口内（未超时、未失败、未返回首块），
       // 备胎不得抢赢——挂起等待主路结果：
@@ -4740,13 +4769,13 @@ export class ProxyForwarder {
       // 仅当备胎更贵时才保主路窗口，防止贵备胎抢赢便宜主路。
       // dual_fast 例外：用户显式选择"双发极速"= 冷启动无条件双向竞速，不等待
       // 窗口，谁先返回首块谁赢（直接用快的那个）；窗口守卫只约束 timeout_race 冷启动。
-      // 自冷启动并发改为"仅同倍率候选"后（pickHealthSloAlternate 的
-      // sameCostAsProvider 约束），timeout_race 冷启动守卫条件恒不成立——同倍率竞速
-      // 零等待，谁先返回谁赢。保留代码仅为防御性兜底（超时后拉起的非同倍率备胎在
-      // 主路已 thresholdTriggered 时同样不挂起）。
+      // coldStartFastestMode 例外：冷启动双发（cheapest 主路 + fastest 备胎）中
+      // 贵方先回首字直接赢（服务当前请求用最快的），不挂起等便宜主路；便宜方
+      // 若在自身窗口内返回，由 coldStartTemporaryRebind 机制改绑全局键到便宜方。
       if (
         isColdStart &&
         raceMode !== "dual_fast" &&
+        !coldStartFastestMode &&
         attempt !== initialAttemptRef &&
         initialAttemptRef &&
         !initialAttemptRef.settled &&
@@ -4812,17 +4841,19 @@ export class ProxyForwarder {
       winnerCommitted = true;
       winnerAttempt = attempt;
 
-      // 冷启动临时改绑：主路（初始方）先回且非超时 → 保留在途的与主路同倍率/更便宜
-      // 备胎（不 abort），等它首字窗口内返回后改绑全局键到备胎。
-      if (isColdStart && !timedOutWinner && attempt === initialAttemptRef) {
+      // 冷启动临时改绑：双发（cheapest 主路 + fastest 备胎）中，若赢家是**贵方**
+      // （fastest 先回），在途的**更便宜**候选不 abort，等它在自身首字窗口内返回
+      // 后改绑全局复用键到便宜方（先临时写贵方，再改绑便宜方）。
+      // 若赢家已是便宜方（主路先回），在途只有更贵的备胎 → 无需改绑，正常 abort。
+      if (isColdStart && !timedOutWinner) {
         coldStartTemporaryRebind = Array.from(attempts).some(
           (a) =>
             !a.settled &&
             a !== attempt &&
-            resolveDispatchCost(a.provider) <= resolveDispatchCost(attempt.provider)
+            resolveDispatchCost(a.provider) < resolveDispatchCost(attempt.provider)
         );
         if (coldStartTemporaryRebind) {
-          logger.info("ProxyForwarder: Cold start temporary bind, keeping spare alive for rebind", {
+          logger.info("ProxyForwarder: Cold start temporary bind, keeping cheaper in-flight for rebind", {
             sessionId: session.sessionId ?? null,
             winnerProviderId: attempt.provider.id,
             winnerProviderName: attempt.provider.name,
@@ -5146,16 +5177,17 @@ export class ProxyForwarder {
         // - dual_fast: 立即并发一个 SLO 备胎（真双向竞速，备胎无延迟阈值），
         //   这是用户显式选择的双路竞速模式，不做同倍率约束。合格候选不足时
         //   不退化单路——按普通调度顺序继续拉取备胎。
-        // - timeout_race + 冷启动：仅当存在与主路**相同处理后倍率**的健康 SLO
-        //   候选时才立即并发（sameCostAsProvider 约束）——同倍率竞速零等待，
-        //   谁先返回首块谁赢并绑定，白赚最快供应商；不同倍率的候选不并发
-        //   （更贵的备胎赢了要多花钱且需等主路 SLA 窗口，更便宜的说明主路
-        //   选错了），主路直接单路，首字超时后再走下方备胎链。
+        // - timeout_race + 冷启动：并发一个**最快的健康 SLO 候选**（跨倍率，
+        //   fastestMode），与主路（cheapest）构成"贵方最快 + 便宜"双发：
+        //   谁先返回首块谁赢并临时绑定；若便宜方也在自身首字窗口内返回，
+        //   则改绑全局复用键到便宜方（更便宜则换）。没有 SLO 合格候选时
+        //   主路单路运行，首字超时后再走下方备胎链。
         // 有绑定时保持原逻辑——只发绑定方，等首字节超时才拉备胎。
+        coldStartFastestMode = raceMode === "timeout_race" && isColdStart;
         await launchAlternative({
           allowNonSloFallback: raceMode === "dual_fast",
-          sameCostAsProvider:
-            raceMode === "timeout_race" && isColdStart ? initialProvider : null,
+          fastestMode: coldStartFastestMode,
+          sameCostAsProvider: null,
         });
       }
       await finishIfExhausted();

@@ -700,7 +700,8 @@ export class ProxyProviderResolver {
   static async pickHealthSloAlternate(
     session: ProxySession,
     excludeIds: number[],
-    sameCostAsProvider?: Provider | null
+    sameCostAsProvider?: Provider | null,
+    fastestMode?: boolean
   ): Promise<Provider | null> {
     const { selectNextHealthDispatchAlternate, resolveDispatchCost } = await import(
       "@/lib/provider-dispatch/health-aware-select"
@@ -770,30 +771,50 @@ export class ProxyProviderResolver {
       return true;
     });
 
-    // 冷启动并发发现：只允许与主路相同处理后倍率的候选参与竞速（见上方注释）。
-    // 没有同倍率 SLO 候选 → 返回 null，主路单路运行，首字超时才拉备胎。
-    const sameCostPool = sameCostAsProvider
-      ? pool.filter(
-          (provider) =>
-            resolveDispatchCost(provider) === resolveDispatchCost(sameCostAsProvider)
-        )
-      : pool;
-
+    // 冷启动并发发现：fastestMode（跨倍率）时从 SLO 合格池里选平均首字最快的候选
+    // 作为备胎（贵方），与主路（cheapest）构成双发；非 fastestMode 且带
+    // sameCostAsProvider 时保持"仅同倍率候选"约束（超时接力场景）。
     const healthSloThresholds = await getHealthSloThresholds();
-    const projectedPool = projectProvidersHealthForRequestedModel(
-      sameCostPool,
-      requestedModel,
-      healthTestModelsByGroup,
-      healthTestModelFallbacksByGroup,
-      effectiveGroupPick
-    );
-    const selected = selectNextHealthDispatchAlternate(
-      projectedPool,
-      resolveDispatchCost,
-      excludeIds,
-      healthSloThresholds
-    );
-    return selected ? (pool.find((provider) => provider.id === selected.id) ?? selected) : null;
+    let selected: Provider | null = null;
+    if (fastestMode) {
+      const { listHealthDispatchCandidates } = await import(
+        "@/lib/provider-dispatch/health-aware-select"
+      );
+      const sloCandidates = listHealthDispatchCandidates(
+        pool,
+        resolveDispatchCost,
+        healthSloThresholds
+      )
+        .filter((c) => !excludeSet.has(c.provider.id))
+        .sort((a, b) => a.avgLatencyMs - b.avgLatencyMs);
+      selected = sloCandidates[0]?.provider ?? null;
+    } else {
+      const sameCostPool = sameCostAsProvider
+        ? pool.filter(
+            (provider) =>
+              resolveDispatchCost(provider) === resolveDispatchCost(sameCostAsProvider)
+          )
+        : pool;
+
+      const projectedPool = projectProvidersHealthForRequestedModel(
+        sameCostPool,
+        requestedModel,
+        healthTestModelsByGroup,
+        healthTestModelFallbacksByGroup,
+        effectiveGroupPick
+      );
+      const selectedCandidate = selectNextHealthDispatchAlternate(
+        projectedPool,
+        resolveDispatchCost,
+        excludeIds,
+        healthSloThresholds
+      );
+      selected = selectedCandidate
+        ? (pool.find((provider) => provider.id === selectedCandidate.id) ??
+          selectedCandidate)
+        : null;
+    }
+    return selected;
   }
 
   /**
