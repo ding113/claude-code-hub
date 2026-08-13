@@ -128,6 +128,12 @@
   "modelMatchRulesEmpty": "暂无模型匹配规则（不限制模型）",
   "modelPatternLabel": "模型规则",
   "modelPatternPlaceholder": "例如 gpt-4o / claude-3- / ^o[134]-",
+  "whitelistTitle": "白名单（可选）",
+  "whitelistHelp": "仅勾选的供应商可被调度到本分组；不选则不限（黑名单仍生效）。",
+  "whitelistPlaceholder": "选择白名单供应商…",
+  "blacklistTitle": "黑名单（可选）",
+  "blacklistHelp": "被勾选的供应商将从本分组排除（即使其在白名单内也会被排除）。",
+  "blacklistPlaceholder": "选择黑名单供应商…",
   "sectionShared": "供应商配置",
   "deleteGroupConfirm": "确定删除调度分组「{name}」？引用该分组的供应商会自动解除分组（归入 default），默认分组不可删除。",
   "deleteConfirm": "删除"

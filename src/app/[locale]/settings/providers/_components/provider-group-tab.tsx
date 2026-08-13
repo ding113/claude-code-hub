@@ -19,8 +19,10 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import {
+  Check,
   ChevronDown,
   ChevronRight,
+  ChevronsUpDown,
   Edit,
   GripVertical,
   Layers,
@@ -69,6 +71,14 @@ import {
 } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import {
   Table,
   TableBody,
   TableCell,
@@ -116,6 +126,8 @@ interface GroupFormState {
   healthTestModelFallback: string;
   matchRules: ProviderGroupMatchRule[];
   modelMatchRules: ProviderGroupModelMatchRule[];
+  whitelistProviderIds: number[];
+  blacklistProviderIds: number[];
   sharedProviderType: string; // "" | ProviderType
   sharedHealthTestFormat: string; // "" | TestFormat
   sharedPriority: string;
@@ -151,6 +163,8 @@ const INITIAL_FORM: GroupFormState = {
   healthTestModelFallback: "",
   matchRules: [],
   modelMatchRules: [],
+  whitelistProviderIds: [],
+  blacklistProviderIds: [],
   sharedProviderType: "",
   sharedHealthTestFormat: "",
   sharedPriority: "",
@@ -407,6 +421,8 @@ export function ProviderGroupTab({
         ) ?? "",
       matchRules: group.matchRules ?? [],
       modelMatchRules: group.modelMatchRules ?? [],
+      whitelistProviderIds: group.whitelistProviderIds ?? [],
+      blacklistProviderIds: group.blacklistProviderIds ?? [],
       ...formFromSharedSettings(group.sharedSettings),
       applySharedToMembers: true,
     });
@@ -448,6 +464,8 @@ export function ProviderGroupTab({
         healthTestModelFallback?: string | null;
         matchRules?: ProviderGroupMatchRule[] | null;
         modelMatchRules?: ProviderGroupModelMatchRule[] | null;
+        whitelistProviderIds?: number[] | null;
+        blacklistProviderIds?: number[] | null;
         sharedSettings?: ProviderGroupSharedSettings | null;
         applySharedSettingsToMembers?: boolean;
       }
@@ -508,6 +526,10 @@ export function ProviderGroupTab({
           healthTestModelFallback: form.healthTestModelFallback || null,
           matchRules: form.matchRules,
           modelMatchRules: form.modelMatchRules,
+          whitelistProviderIds:
+            form.whitelistProviderIds.length > 0 ? form.whitelistProviderIds : null,
+          blacklistProviderIds:
+            form.blacklistProviderIds.length > 0 ? form.blacklistProviderIds : null,
           sharedSettings,
           applySharedSettingsToMembers: form.applySharedToMembers,
         });
@@ -528,6 +550,8 @@ export function ProviderGroupTab({
         description: trimmedDescription || undefined,
         matchRules: form.matchRules,
         modelMatchRules: form.modelMatchRules,
+        whitelistProviderIds: form.whitelistProviderIds.length > 0 ? form.whitelistProviderIds : null,
+        blacklistProviderIds: form.blacklistProviderIds.length > 0 ? form.blacklistProviderIds : null,
         sharedSettings,
         applySharedSettingsToMembers: form.applySharedToMembers,
       });
@@ -1056,6 +1080,36 @@ export function ProviderGroupTab({
                 patternLabel={t("modelPatternLabel")}
                 patternPlaceholder={t("modelPatternPlaceholder")}
                 idPrefix="group-model-match"
+              />
+            </section>
+
+            {/* 分组白名单/黑名单：供应商多选 */}
+            <section className="space-y-3 rounded-xl border bg-muted/10 p-4">
+              <div>
+                <div className="text-sm font-medium">{t("whitelistTitle") ?? "Whitelist"}</div>
+                <p className="text-xs text-muted-foreground">
+                  {t("whitelistHelp") ?? "Only selected providers may serve this group."}
+                </p>
+              </div>
+              <ProviderMultiSelect
+                providers={providers}
+                selectedIds={form.whitelistProviderIds}
+                onChange={(ids) => setForm((prev) => ({ ...prev, whitelistProviderIds: ids }))}
+                disabled={isSaving}
+                placeholder={t("whitelistPlaceholder") ?? "Select whitelist providers..."}
+              />
+              <div className="pt-1">
+                <div className="text-sm font-medium">{t("blacklistTitle") ?? "Blacklist"}</div>
+                <p className="text-xs text-muted-foreground">
+                  {t("blacklistHelp") ?? "Selected providers are excluded from this group."}
+                </p>
+              </div>
+              <ProviderMultiSelect
+                providers={providers}
+                selectedIds={form.blacklistProviderIds}
+                onChange={(ids) => setForm((prev) => ({ ...prev, blacklistProviderIds: ids }))}
+                disabled={isSaving}
+                placeholder={t("blacklistPlaceholder") ?? "Select blacklist providers..."}
               />
             </section>
 
@@ -2055,6 +2109,101 @@ function InlineTextEditPopover({
         onClick={stopPropagation}
       >
         {content}
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+interface ProviderMultiSelectProps {
+  providers: ProviderDisplay[];
+  selectedIds: number[];
+  onChange: (ids: number[]) => void;
+  disabled?: boolean;
+  placeholder?: string;
+}
+
+/**
+ * 分组白名单/黑名单供应商多选（Popover + Command 搜索 + Checkbox）。
+ * 空 selection 视为未启用该列表；已禁用供应商仍可勾选（方便预配），以 Badge 区分。
+ */
+function ProviderMultiSelect({
+  providers,
+  selectedIds,
+  onChange,
+  disabled,
+  placeholder,
+}: ProviderMultiSelectProps) {
+  const [open, setOpen] = useState(false);
+  const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
+
+  const toggleId = useCallback(
+    (id: number) => {
+      const next = selectedSet.has(id)
+        ? selectedIds.filter((v) => v !== id)
+        : [...selectedIds, id];
+      onChange(next);
+    },
+    [onChange, selectedIds, selectedSet]
+  );
+
+  const selectedBadges = providers.filter((p) => selectedSet.has(p.id));
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          disabled={disabled}
+          className="h-auto min-h-9 w-full justify-start"
+        >
+          {selectedBadges.length > 0 ? (
+            <div className="flex flex-wrap gap-1 py-1">
+              {selectedBadges.map((p) => (
+                <Badge key={p.id} variant="secondary" className="max-w-[180px] truncate text-xs">
+                  {p.name}
+                </Badge>
+              ))}
+            </div>
+          ) : (
+            <span className="text-sm text-muted-foreground">
+              {placeholder ?? "Select providers..."}
+            </span>
+          )}
+          <ChevronsUpDown className="ml-auto h-4 w-4 shrink-0 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-80 p-0">
+        <Command>
+          <CommandInput placeholder={placeholder ?? "Search providers..."} />
+          <CommandList>
+            <CommandEmpty>No providers found.</CommandEmpty>
+            <CommandGroup>
+              {providers.map((p) => {
+                const checked = selectedSet.has(p.id);
+                return (
+                  <CommandItem
+                    key={p.id}
+                    value={p.name}
+                    onSelect={() => toggleId(p.id)}
+                    className="flex items-center gap-2"
+                  >
+                    <Checkbox checked={checked} onCheckedChange={() => toggleId(p.id)} />
+                    <span className="flex-1 truncate">{p.name}</span>
+                    {!p.isEnabled ? (
+                      <Badge variant="outline" className="shrink-0 text-[10px]">
+                        disabled
+                      </Badge>
+                    ) : null}
+                    {checked ? <Check className="ml-auto h-4 w-4 shrink-0" /> : null}
+                  </CommandItem>
+                );
+              })}
+            </CommandGroup>
+          </CommandList>
+        </Command>
       </PopoverContent>
     </Popover>
   );

@@ -128,6 +128,12 @@
   "modelMatchRulesEmpty": "No model match rules (no model restriction)",
   "modelPatternLabel": "Model pattern",
   "modelPatternPlaceholder": "e.g. gpt-4o / claude-3- / ^o[134]-",
+  "whitelistTitle": "Whitelist (optional)",
+  "whitelistHelp": "Only selected providers may serve this group. Empty = no whitelist (blacklist still applies).",
+  "whitelistPlaceholder": "Select whitelist providers...",
+  "blacklistTitle": "Blacklist (optional)",
+  "blacklistHelp": "Selected providers are excluded from this group (even if whitelisted).",
+  "blacklistPlaceholder": "Select blacklist providers...",
   "sectionShared": "Provider defaults",
   "deleteGroupConfirm": "Delete dispatch group \"{name}\"? Providers referencing it will be detached automatically (fall back to default); the default group cannot be deleted.",
   "deleteConfirm": "Delete"
