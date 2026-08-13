@@ -3908,9 +3908,9 @@ export class ProxyForwarder {
     // 备胎不 abort，继续在后台跑；备胎若在自身首字窗口内也返回，则改绑全局复用键到
     // 备胎（更便宜则换）。若备胎超时/失败，保持主路绑定不变。
     let coldStartTemporaryRebind = false;
-    // 冷启动 fastestMode（timeout_race + 无绑定）：备胎=最快 SLO 候选（跨倍率），
-    // 与主路（cheapest）构成双发。此时备胎先回首字直接赢（服务当前请求用最快的），
-    // 不再受 SLA 窗口守卫挂起——赢家临时写全局键，在途便宜候选返回后改绑到便宜方。
+    // 冷启动 fastestMode（timeout_race + 无绑定）：备胎=最便宜合格 SLO 候选（跨倍率），
+    // 与主路（cheapest）构成双发。竞争取快——谁先回首字谁赢（服务当前请求用最快的），
+    // 赢家临时写全局键，在途便宜候选返回后改绑到便宜方。候选拉取不按延迟排序。
     let coldStartFastestMode = false;
     // 竞速类型（决策链 raceInfo 用）：冷启动双发 / 超时竞速 / 双发极速
     const raceTypeForChain: NonNullable<ProviderChainItem["raceInfo"]>["type"] =
@@ -5334,11 +5334,11 @@ export class ProxyForwarder {
         // - dual_fast: 立即并发一个 SLO 备胎（真双向竞速，备胎无延迟阈值），
         //   这是用户显式选择的双路竞速模式，不做同倍率约束。合格候选不足时
         //   不退化单路——按普通调度顺序继续拉取备胎。
-        // - timeout_race + 冷启动：并发一个**最快的健康 SLO 候选**（跨倍率，
-        //   fastestMode），与主路（cheapest）构成"贵方最快 + 便宜"双发：
-        //   谁先返回首块谁赢并临时绑定；若便宜方也在自身首字窗口内返回，
-        //   则改绑全局复用键到便宜方（更便宜则换）。没有 SLO 合格候选时
-        //   主路单路运行，首字超时后再走下方备胎链。
+        // - timeout_race + 冷启动：并发一个**最便宜的合格 SLO 候选**（跨倍率，
+        //   fastestMode），与主路（cheapest）构成"便宜 + 便宜"双发：
+        //   谁先返回首块谁赢并临时绑定（竞争取快，候选拉取不按延迟）；若便宜方
+        //   也在自身首字窗口内返回，则改绑全局复用键到更便宜的候选。没有 SLO 合格
+        //   候选时主路单路运行，首字超时后再走下方备胎链。
         // 有绑定时保持原逻辑——只发绑定方，等首字节超时才拉备胎。
         coldStartFastestMode = raceMode === "timeout_race" && isColdStart;
         await launchAlternative({

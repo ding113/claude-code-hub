@@ -5,7 +5,7 @@ import { PROVIDER_GROUP } from "@/lib/constants/provider.constants";
 import { logger } from "@/lib/logger";
 import {
   selectBestHealthDispatchProvider,
-  selectFastestProvider,
+  selectCheapestProvider,
 } from "@/lib/provider-dispatch/health-aware-select";
 import {
   matchesProviderGroupModelMatchRules,
@@ -685,9 +685,10 @@ export class ProxyProviderResolver {
   }
 
   /**
-   * First-byte hedge alternate: next health-SLO qualified peer after excludes.
+   * First-byte hedge alternate: next health-SLO qualified peer after excludes,
+   * ranked cheapest cost first (候选拉取永远"合格优先 + 倍率便宜优先"）。
    * Returns null when no remaining SLO-qualified candidate exists → do not race.
-   * Does not fall back to non-SLO peers. Ranking is cheapest cost first.
+   * Does not fall back to non-SLO peers.
    *
    * When `sameCostAsProvider` is given (cold-start concurrent discovery), only
    * candidates whose dispatch cost equals the primary's are eligible: racing a
@@ -696,6 +697,9 @@ export class ProxyProviderResolver {
    * wrong primary pick. Same-cost candidates race with zero wait — fastest
    * first byte wins, no window guard needed. Returns null when no same-cost
    * SLO candidate exists → primary runs single-path until first-byte timeout.
+   *
+   * `fastestMode`（冷启动双发跨倍率）同样按倍率升序取最便宜的合格备胎——
+   * 竞速的"快"由 forwarder 的双发竞争决定（谁先回首字谁赢），不由候选选择承担。
    */
   static async pickHealthSloAlternate(
     session: ProxySession,
@@ -771,22 +775,22 @@ export class ProxyProviderResolver {
       return true;
     });
 
-    // 冷启动并发发现：fastestMode（跨倍率）时从 SLO 合格池里选平均首字最快的候选
-    // 作为备胎（贵方），与主路（cheapest）构成双发；非 fastestMode 且带
-    // sameCostAsProvider 时保持"仅同倍率候选"约束（超时接力场景）。
+    // 冷启动并发发现：fastestMode（跨倍率）时备胎从 SLO 合格池里选**倍率最低**的候选
+    // （与主路 cheapest 构成双发，竞争由 forwarder 决定谁先回首字谁赢）——不是选延迟
+    // 最快的：竞速机制保证"两个竞争选最快"，但候选拉取始终按"合格优先 + 倍率便宜优先"。
+    // 非 fastestMode 且带 sameCostAsProvider 时保持"仅同倍率候选"约束（超时接力场景）。
     const healthSloThresholds = await getHealthSloThresholds();
     let selected: Provider | null = null;
     if (fastestMode) {
       const { listHealthDispatchCandidates } = await import(
         "@/lib/provider-dispatch/health-aware-select"
       );
+      // listHealthDispatchCandidates 默认排序即倍率升序 → 取第一个 = 最便宜的合格备胎。
       const sloCandidates = listHealthDispatchCandidates(
         pool,
         resolveDispatchCost,
         healthSloThresholds
-      )
-        .filter((c) => !excludeSet.has(c.provider.id))
-        .sort((a, b) => a.avgLatencyMs - b.avgLatencyMs);
+      ).filter((c) => !excludeSet.has(c.provider.id));
       selected = sloCandidates[0]?.provider ?? null;
     } else {
       const sameCostPool = sameCostAsProvider
@@ -1280,13 +1284,15 @@ export class ProxyProviderResolver {
         probability: sameCost.length > 0 ? 1 / sameCost.length : 0,
       }));
     } else {
-      const fastest = selectFastestProvider(healthSelectionProviders, resolveDispatchCost);
-      if (!fastest) {
+      // 无 SLO 合格候选：不合格的也按倍率便宜优先（用户拍板：候选拉取始终
+      // "合格优先 + 倍率便宜优先"，合格拉完拉不合格，不合格同样倍率低者先）。
+      const cheapest = selectCheapestProvider(healthSelectionProviders, resolveDispatchCost);
+      if (!cheapest) {
         logger.warn("ProviderSelector: No providers after latency ranking");
         return { provider: null, context };
       }
-      selected = healthyProviders.find((provider) => provider.id === fastest.id) ?? fastest;
-      selectedHealthView = fastest;
+      selected = healthyProviders.find((provider) => provider.id === cheapest.id) ?? cheapest;
+      selectedHealthView = cheapest;
       selectionMode = "latency_fallback";
       const bestCost = resolveDispatchCost(selected);
       const bestCostIndex = costLevels.indexOf(bestCost);
@@ -1609,8 +1615,9 @@ export class ProxyProviderResolver {
         probability: sameCost.length > 0 ? 1 / sameCost.length : 0,
       }));
     } else {
-      const fastest = selectFastestProvider(healthSelectionProviders, resolveDispatchCost);
-      if (!fastest) {
+      // 无 SLO 合格候选：不合格的也按倍率便宜优先（与 pickRandomProvider 主路一致）。
+      const cheapest = selectCheapestProvider(healthSelectionProviders, resolveDispatchCost);
+      if (!cheapest) {
         return {
           provider: null,
           context: {
@@ -1629,7 +1636,7 @@ export class ProxyProviderResolver {
           },
         };
       }
-      selected = healthyProviders.find((provider) => provider.id === fastest.id) ?? fastest;
+      selected = healthyProviders.find((provider) => provider.id === cheapest.id) ?? cheapest;
       const bestCost = resolveDispatchCost(selected);
       const sameCost = healthyProviders.filter((p) => resolveDispatchCost(p) === bestCost);
       candidates = sameCost.map((p) => ({
