@@ -104,7 +104,6 @@ export interface NetworkState {
   proxyUrl: string;
   proxyFallbackToDirect: boolean;
   firstByteTimeoutStreamingSeconds: number | undefined;
-  streamingIdleTimeoutSeconds: number | undefined;
   requestTimeoutNonStreamingSeconds: number | undefined;
 }
 
@@ -195,7 +194,6 @@ export type ProviderFormAction =
   | { type: "SET_PROXY_URL"; payload: string }
   | { type: "SET_PROXY_FALLBACK_TO_DIRECT"; payload: boolean }
   | { type: "SET_FIRST_BYTE_TIMEOUT_STREAMING"; payload: number | undefined }
-  | { type: "SET_STREAMING_IDLE_TIMEOUT"; payload: number | undefined }
   | { type: "SET_REQUEST_TIMEOUT_NON_STREAMING"; payload: number | undefined }
   // MCP actions
   | { type: "SET_MCP_PASSTHROUGH_TYPE"; payload: McpPassthroughType }

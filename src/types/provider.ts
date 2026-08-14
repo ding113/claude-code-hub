@@ -131,7 +131,6 @@ export type ProviderBatchPatchField =
   | "proxy_url"
   | "proxy_fallback_to_direct"
   | "first_byte_timeout_streaming_ms"
-  | "streaming_idle_timeout_ms"
   | "request_timeout_non_streaming_ms"
   // MCP
   | "mcp_passthrough_type"
@@ -186,7 +185,6 @@ export interface ProviderBatchPatchDraft {
   proxy_url?: ProviderPatchDraftInput<string>;
   proxy_fallback_to_direct?: ProviderPatchDraftInput<boolean>;
   first_byte_timeout_streaming_ms?: ProviderPatchDraftInput<number>;
-  streaming_idle_timeout_ms?: ProviderPatchDraftInput<number>;
   request_timeout_non_streaming_ms?: ProviderPatchDraftInput<number>;
   // MCP
   mcp_passthrough_type?: ProviderPatchDraftInput<McpPassthroughType>;
@@ -242,7 +240,6 @@ export interface ProviderBatchPatch {
   proxy_url: ProviderPatchOperation<string>;
   proxy_fallback_to_direct: ProviderPatchOperation<boolean>;
   first_byte_timeout_streaming_ms: ProviderPatchOperation<number>;
-  streaming_idle_timeout_ms: ProviderPatchOperation<number>;
   request_timeout_non_streaming_ms: ProviderPatchOperation<number>;
   // MCP
   mcp_passthrough_type: ProviderPatchOperation<McpPassthroughType>;
@@ -298,7 +295,6 @@ export interface ProviderBatchApplyUpdates {
   proxy_url?: string | null;
   proxy_fallback_to_direct?: boolean;
   first_byte_timeout_streaming_ms?: number;
-  streaming_idle_timeout_ms?: number;
   request_timeout_non_streaming_ms?: number;
   // MCP
   mcp_passthrough_type?: McpPassthroughType;
@@ -402,7 +398,6 @@ export interface Provider {
 
   // 超时配置（毫秒）
   firstByteTimeoutStreamingMs: number;
-  streamingIdleTimeoutMs: number;
   requestTimeoutNonStreamingMs: number;
 
   // 供应商官网地址（用于快速跳转管理）
@@ -531,7 +526,6 @@ export interface ProviderDisplay {
   customHeaders: ProviderCustomHeaders | null;
   // 超时配置（毫秒）
   firstByteTimeoutStreamingMs: number;
-  streamingIdleTimeoutMs: number;
   requestTimeoutNonStreamingMs: number;
   // 供应商官网地址
   websiteUrl: string | null;
@@ -669,7 +663,6 @@ export interface CreateProviderData {
 
   // 超时配置（毫秒）
   first_byte_timeout_streaming_ms?: number;
-  streaming_idle_timeout_ms?: number;
   request_timeout_non_streaming_ms?: number;
 
   // 供应商官网地址
@@ -754,7 +747,6 @@ export interface UpdateProviderData {
 
   // 超时配置（毫秒）
   first_byte_timeout_streaming_ms?: number;
-  streaming_idle_timeout_ms?: number;
   request_timeout_non_streaming_ms?: number;
 
   // 供应商官网地址

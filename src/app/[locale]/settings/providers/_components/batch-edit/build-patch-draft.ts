@@ -301,11 +301,6 @@ export function buildPatchDraftFromFormState(
       };
     }
   }
-  if (dirtyFields.has("network.streamingIdleTimeoutSeconds")) {
-    if (state.network.streamingIdleTimeoutSeconds !== undefined) {
-      draft.streaming_idle_timeout_ms = { set: state.network.streamingIdleTimeoutSeconds * 1000 };
-    }
-  }
   if (dirtyFields.has("network.requestTimeoutNonStreamingSeconds")) {
     if (state.network.requestTimeoutNonStreamingSeconds !== undefined) {
       draft.request_timeout_non_streaming_ms = {

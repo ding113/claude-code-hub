@@ -462,13 +462,7 @@
       "label": "串流首字節超時（秒）",
       "placeholder": "0"
     },
-    "streamingIdle": {
-      "core": "true",
-      "desc": "串流請求靜默期超時，範圍 60-600 秒，填 0 禁用（預設不限制）",
-      "label": "串流靜默期超時（秒）",
-      "placeholder": "0"
-    },
-    "summary": "首字: {streaming}s | 串流間隔: {idle}s | 非串流: {nonStreaming}s",
+    "summary": "首字: {streaming}s | 非串流: {nonStreaming}s",
     "title": "超時配置"
   }
 }

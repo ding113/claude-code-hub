@@ -382,10 +382,6 @@ export function ProviderListItem({
                 (item.firstByteTimeoutStreamingMs ??
                   PROVIDER_TIMEOUT_DEFAULTS.FIRST_BYTE_TIMEOUT_STREAMING_MS) / 1000
               ).toString(),
-              idle: (
-                (item.streamingIdleTimeoutMs ??
-                  PROVIDER_TIMEOUT_DEFAULTS.STREAMING_IDLE_TIMEOUT_MS) / 1000
-              ).toString(),
               nonStreaming: (
                 (item.requestTimeoutNonStreamingMs ??
                   PROVIDER_TIMEOUT_DEFAULTS.REQUEST_TIMEOUT_NON_STREAMING_MS) / 1000

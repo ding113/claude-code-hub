@@ -911,6 +911,13 @@
       "when": 1786690000000,
       "tag": "0135_streaming_idle_timeout",
       "breakpoints": true
+    },
+    {
+      "idx": 130,
+      "version": "7",
+      "when": 1786780000000,
+      "tag": "0136_drop_provider_streaming_idle_timeout",
+      "breakpoints": true
     }
   ]
 }

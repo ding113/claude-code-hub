@@ -646,19 +646,6 @@ export const CreateProviderSchema = z
           ),
       ])
       .optional(),
-    streaming_idle_timeout_ms: z
-      .union([
-        z.literal(0), // 0 = 禁用超时
-        z.coerce
-          .number()
-          .int("流式静默期超时必须是整数")
-          .min(PROVIDER_TIMEOUT_LIMITS.STREAMING_IDLE_TIMEOUT_MS.MIN, "流式静默期超时不能少于60秒")
-          .max(
-            PROVIDER_TIMEOUT_LIMITS.STREAMING_IDLE_TIMEOUT_MS.MAX,
-            "流式静默期超时不能超过600秒"
-          ),
-      ])
-      .optional(),
     request_timeout_non_streaming_ms: z
       .union([
         z.literal(0), // 0 = 禁用超时
@@ -882,19 +869,6 @@ export const UpdateProviderSchema = z
           .max(
             PROVIDER_TIMEOUT_LIMITS.FIRST_BYTE_TIMEOUT_STREAMING_MS.MAX,
             "流式首字节超时不能超过180秒"
-          ),
-      ])
-      .optional(),
-    streaming_idle_timeout_ms: z
-      .union([
-        z.literal(0), // 0 = 禁用超时
-        z.coerce
-          .number()
-          .int("流式静默期超时必须是整数")
-          .min(PROVIDER_TIMEOUT_LIMITS.STREAMING_IDLE_TIMEOUT_MS.MIN, "流式静默期超时不能少于60秒")
-          .max(
-            PROVIDER_TIMEOUT_LIMITS.STREAMING_IDLE_TIMEOUT_MS.MAX,
-            "流式静默期超时不能超过600秒"
           ),
       ])
       .optional(),

@@ -117,7 +117,6 @@ const ACTION_TO_FIELD_PATH: Partial<Record<ProviderFormActionWith5hResetMode["ty
   SET_PROXY_URL: "network.proxyUrl",
   SET_PROXY_FALLBACK_TO_DIRECT: "network.proxyFallbackToDirect",
   SET_FIRST_BYTE_TIMEOUT_STREAMING: "network.firstByteTimeoutStreamingSeconds",
-  SET_STREAMING_IDLE_TIMEOUT: "network.streamingIdleTimeoutSeconds",
   SET_REQUEST_TIMEOUT_NON_STREAMING: "network.requestTimeoutNonStreamingSeconds",
   SET_MCP_PASSTHROUGH_TYPE: "mcp.mcpPassthroughType",
   SET_MCP_PASSTHROUGH_URL: "mcp.mcpPassthroughUrl",
@@ -313,10 +312,6 @@ export function createInitialState(
           analysis.network.firstByteTimeoutStreamingSeconds.status === "uniform"
             ? analysis.network.firstByteTimeoutStreamingSeconds.value
             : undefined,
-        streamingIdleTimeoutSeconds:
-          analysis.network.streamingIdleTimeoutSeconds.status === "uniform"
-            ? analysis.network.streamingIdleTimeoutSeconds.value
-            : undefined,
         requestTimeoutNonStreamingSeconds:
           analysis.network.requestTimeoutNonStreamingSeconds.status === "uniform"
             ? analysis.network.requestTimeoutNonStreamingSeconds.value
@@ -396,7 +391,6 @@ export function createInitialState(
         proxyUrl: "",
         proxyFallbackToDirect: false,
         firstByteTimeoutStreamingSeconds: undefined,
-        streamingIdleTimeoutSeconds: undefined,
         requestTimeoutNonStreamingSeconds: undefined,
       },
       mcp: {
@@ -481,10 +475,6 @@ export function createInitialState(
       proxyFallbackToDirect: sourceProvider?.proxyFallbackToDirect ?? false,
       firstByteTimeoutStreamingSeconds: (() => {
         const ms = sourceProvider?.firstByteTimeoutStreamingMs;
-        return ms != null && typeof ms === "number" && !Number.isNaN(ms) ? ms / 1000 : undefined;
-      })(),
-      streamingIdleTimeoutSeconds: (() => {
-        const ms = sourceProvider?.streamingIdleTimeoutMs;
         return ms != null && typeof ms === "number" && !Number.isNaN(ms) ? ms / 1000 : undefined;
       })(),
       requestTimeoutNonStreamingSeconds: (() => {
@@ -733,11 +723,6 @@ export function providerFormReducer(
       return {
         ...state,
         network: { ...state.network, firstByteTimeoutStreamingSeconds: action.payload },
-      };
-    case "SET_STREAMING_IDLE_TIMEOUT":
-      return {
-        ...state,
-        network: { ...state.network, streamingIdleTimeoutSeconds: action.payload },
       };
     case "SET_REQUEST_TIMEOUT_NON_STREAMING":
       return {

@@ -74,7 +74,6 @@ const PATCH_FIELDS: ProviderBatchPatchField[] = [
   "proxy_url",
   "proxy_fallback_to_direct",
   "first_byte_timeout_streaming_ms",
-  "streaming_idle_timeout_ms",
   "request_timeout_non_streaming_ms",
   // MCP
   "mcp_passthrough_type",
@@ -130,7 +129,6 @@ const CLEARABLE_FIELDS: Record<ProviderBatchPatchField, boolean> = {
   proxy_url: true,
   proxy_fallback_to_direct: false,
   first_byte_timeout_streaming_ms: false,
-  streaming_idle_timeout_ms: false,
   request_timeout_non_streaming_ms: false,
   // MCP
   mcp_passthrough_type: false,
@@ -230,7 +228,6 @@ function isValidSetValue(field: ProviderBatchPatchField, value: unknown): boolea
     case "circuit_breaker_half_open_success_threshold":
     case "max_retry_attempts":
     case "first_byte_timeout_streaming_ms":
-    case "streaming_idle_timeout_ms":
     case "request_timeout_non_streaming_ms":
       return typeof value === "number" && Number.isFinite(value);
     case "group_tag":
@@ -610,12 +607,6 @@ export function normalizeProviderBatchPatchDraft(
   );
   if (!firstByteTimeout.ok) return firstByteTimeout;
 
-  const streamingIdleTimeout = normalizePatchField(
-    "streaming_idle_timeout_ms",
-    typedDraft.streaming_idle_timeout_ms
-  );
-  if (!streamingIdleTimeout.ok) return streamingIdleTimeout;
-
   const requestTimeoutNonStreaming = normalizePatchField(
     "request_timeout_non_streaming_ms",
     typedDraft.request_timeout_non_streaming_ms
@@ -685,7 +676,6 @@ export function normalizeProviderBatchPatchDraft(
       proxy_url: proxyUrl.data,
       proxy_fallback_to_direct: proxyFallbackToDirect.data,
       first_byte_timeout_streaming_ms: firstByteTimeout.data,
-      streaming_idle_timeout_ms: streamingIdleTimeout.data,
       request_timeout_non_streaming_ms: requestTimeoutNonStreaming.data,
       // MCP
       mcp_passthrough_type: mcpPassthroughType.data,
@@ -863,10 +853,6 @@ function applyPatchField<T>(
         updates.first_byte_timeout_streaming_ms =
           patch.value as ProviderBatchApplyUpdates["first_byte_timeout_streaming_ms"];
         return { ok: true, data: undefined };
-      case "streaming_idle_timeout_ms":
-        updates.streaming_idle_timeout_ms =
-          patch.value as ProviderBatchApplyUpdates["streaming_idle_timeout_ms"];
-        return { ok: true, data: undefined };
       case "request_timeout_non_streaming_ms":
         updates.request_timeout_non_streaming_ms =
           patch.value as ProviderBatchApplyUpdates["request_timeout_non_streaming_ms"];
@@ -1039,7 +1025,6 @@ export function buildProviderBatchApplyUpdates(
     ["proxy_url", patch.proxy_url],
     ["proxy_fallback_to_direct", patch.proxy_fallback_to_direct],
     ["first_byte_timeout_streaming_ms", patch.first_byte_timeout_streaming_ms],
-    ["streaming_idle_timeout_ms", patch.streaming_idle_timeout_ms],
     ["request_timeout_non_streaming_ms", patch.request_timeout_non_streaming_ms],
     // MCP
     ["mcp_passthrough_type", patch.mcp_passthrough_type],
@@ -1105,7 +1090,6 @@ export function hasProviderBatchPatchChanges(patch: ProviderBatchPatch): boolean
     patch.proxy_url.mode !== "no_change" ||
     patch.proxy_fallback_to_direct.mode !== "no_change" ||
     patch.first_byte_timeout_streaming_ms.mode !== "no_change" ||
-    patch.streaming_idle_timeout_ms.mode !== "no_change" ||
     patch.request_timeout_non_streaming_ms.mode !== "no_change" ||
     // MCP
     patch.mcp_passthrough_type.mode !== "no_change" ||

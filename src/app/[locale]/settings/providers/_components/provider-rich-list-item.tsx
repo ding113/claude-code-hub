@@ -887,10 +887,6 @@ function ProviderRichListItemInner({
                   (provider.firstByteTimeoutStreamingMs ??
                     PROVIDER_TIMEOUT_DEFAULTS.FIRST_BYTE_TIMEOUT_STREAMING_MS) / 1000
                 ).toString(),
-                idle: (
-                  (provider.streamingIdleTimeoutMs ??
-                    PROVIDER_TIMEOUT_DEFAULTS.STREAMING_IDLE_TIMEOUT_MS) / 1000
-                ).toString(),
                 nonStreaming: (
                   (provider.requestTimeoutNonStreamingMs ??
                     PROVIDER_TIMEOUT_DEFAULTS.REQUEST_TIMEOUT_NON_STREAMING_MS) / 1000

@@ -3333,14 +3333,11 @@ export class ProxyForwarder {
       if (err.message?.includes("streaming_idle") && !session.clientAbortSignal?.aborted) {
         // 流式静默期超时：首字节之后的连续静默窗口超时
         // 修复：静默期超时也是供应商问题，应计入熔断器
-        let effectiveIdleTimeoutMs = provider.streamingIdleTimeoutMs;
+        let effectiveIdleTimeoutMs = 0;
         try {
-          const globalIdleTimeoutMs = (await getCachedSystemSettings()).streamingIdleTimeoutMs ?? 0;
-          if (globalIdleTimeoutMs > 0) {
-            effectiveIdleTimeoutMs = globalIdleTimeoutMs;
-          }
+          effectiveIdleTimeoutMs = (await getCachedSystemSettings()).streamingIdleTimeoutMs ?? 0;
         } catch {
-          // fall through to provider value
+          // fall through to 0 (disabled)
         }
         logger.error(
           "ProxyForwarder: Streaming idle timeout (provider quality issue, will switch)",

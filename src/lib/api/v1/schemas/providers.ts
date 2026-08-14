@@ -117,11 +117,6 @@ export const ProviderSummarySchema = z
       .int()
       .nullable()
       .describe("Streaming first byte timeout in milliseconds."),
-    streamingIdleTimeoutMs: z
-      .number()
-      .int()
-      .nullable()
-      .describe("Streaming idle timeout in milliseconds."),
     requestTimeoutNonStreamingMs: z
       .number()
       .int()
@@ -553,13 +548,6 @@ export const ProviderCreateSchema = z
       .nullable()
       .optional()
       .describe("Streaming first byte timeout in milliseconds."),
-    streaming_idle_timeout_ms: z
-      .number()
-      .int()
-      .min(0)
-      .nullable()
-      .optional()
-      .describe("Streaming idle timeout in milliseconds."),
     request_timeout_non_streaming_ms: z
       .number()
       .int()

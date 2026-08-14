@@ -144,8 +144,6 @@ export function toProvider(dbProvider: any): Provider {
     firstByteTimeoutStreamingMs:
       dbProvider?.firstByteTimeoutStreamingMs ??
       PROVIDER_TIMEOUT_DEFAULTS.FIRST_BYTE_TIMEOUT_STREAMING_MS,
-    streamingIdleTimeoutMs:
-      dbProvider?.streamingIdleTimeoutMs ?? PROVIDER_TIMEOUT_DEFAULTS.STREAMING_IDLE_TIMEOUT_MS,
     requestTimeoutNonStreamingMs:
       dbProvider?.requestTimeoutNonStreamingMs ??
       PROVIDER_TIMEOUT_DEFAULTS.REQUEST_TIMEOUT_NON_STREAMING_MS,

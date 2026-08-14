@@ -363,7 +363,6 @@ export async function getProviders(): Promise<ProviderDisplay[]> {
         proxyFallbackToDirect: provider.proxyFallbackToDirect,
         customHeaders: provider.customHeaders,
         firstByteTimeoutStreamingMs: provider.firstByteTimeoutStreamingMs,
-        streamingIdleTimeoutMs: provider.streamingIdleTimeoutMs,
         requestTimeoutNonStreamingMs: provider.requestTimeoutNonStreamingMs,
         websiteUrl: provider.websiteUrl,
         faviconUrl: provider.faviconUrl,
@@ -591,7 +590,6 @@ export async function addProvider(data: {
   proxy_fallback_to_direct?: boolean;
   custom_headers?: Record<string, string> | null;
   first_byte_timeout_streaming_ms?: number;
-  streaming_idle_timeout_ms?: number;
   request_timeout_non_streaming_ms?: number;
   website_url?: string | null;
   mcp_passthrough_type?: "none" | "minimax" | "glm" | "custom";
@@ -664,8 +662,6 @@ export async function addProvider(data: {
       first_byte_timeout_streaming_ms:
         validated.first_byte_timeout_streaming_ms ??
         PROVIDER_TIMEOUT_DEFAULTS.FIRST_BYTE_TIMEOUT_STREAMING_MS,
-      streaming_idle_timeout_ms:
-        validated.streaming_idle_timeout_ms ?? PROVIDER_TIMEOUT_DEFAULTS.STREAMING_IDLE_TIMEOUT_MS,
       request_timeout_non_streaming_ms:
         validated.request_timeout_non_streaming_ms ??
         PROVIDER_TIMEOUT_DEFAULTS.REQUEST_TIMEOUT_NON_STREAMING_MS,
@@ -808,7 +804,6 @@ export async function editProvider(
     proxy_fallback_to_direct?: boolean;
     custom_headers?: Record<string, string> | null;
     first_byte_timeout_streaming_ms?: number;
-    streaming_idle_timeout_ms?: number;
     request_timeout_non_streaming_ms?: number;
     website_url?: string | null;
     mcp_passthrough_type?: "none" | "minimax" | "glm" | "custom";
@@ -1521,7 +1516,6 @@ const SINGLE_EDIT_PREIMAGE_FIELD_TO_PROVIDER_KEY: Record<string, keyof Provider>
   proxy_fallback_to_direct: "proxyFallbackToDirect",
   custom_headers: "customHeaders",
   first_byte_timeout_streaming_ms: "firstByteTimeoutStreamingMs",
-  streaming_idle_timeout_ms: "streamingIdleTimeoutMs",
   request_timeout_non_streaming_ms: "requestTimeoutNonStreamingMs",
   website_url: "websiteUrl",
   favicon_url: "faviconUrl",
@@ -1753,9 +1747,6 @@ function mapApplyUpdatesToRepositoryFormat(
   if (applyUpdates.first_byte_timeout_streaming_ms !== undefined) {
     result.firstByteTimeoutStreamingMs = applyUpdates.first_byte_timeout_streaming_ms;
   }
-  if (applyUpdates.streaming_idle_timeout_ms !== undefined) {
-    result.streamingIdleTimeoutMs = applyUpdates.streaming_idle_timeout_ms;
-  }
   if (applyUpdates.request_timeout_non_streaming_ms !== undefined) {
     result.requestTimeoutNonStreamingMs = applyUpdates.request_timeout_non_streaming_ms;
   }
@@ -1812,7 +1803,6 @@ const PATCH_FIELD_TO_PROVIDER_KEY: Record<ProviderBatchPatchField, keyof Provide
   proxy_url: "proxyUrl",
   proxy_fallback_to_direct: "proxyFallbackToDirect",
   first_byte_timeout_streaming_ms: "firstByteTimeoutStreamingMs",
-  streaming_idle_timeout_ms: "streamingIdleTimeoutMs",
   request_timeout_non_streaming_ms: "requestTimeoutNonStreamingMs",
   mcp_passthrough_type: "mcpPassthroughType",
   mcp_passthrough_url: "mcpPassthroughUrl",

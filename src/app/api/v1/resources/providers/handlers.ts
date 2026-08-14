@@ -721,7 +721,6 @@ function sanitizeProvider(
     proxyFallbackToDirect: provider.proxyFallbackToDirect,
     customHeaders: redactHeaderRecord(provider.customHeaders),
     firstByteTimeoutStreamingMs: provider.firstByteTimeoutStreamingMs,
-    streamingIdleTimeoutMs: provider.streamingIdleTimeoutMs,
     requestTimeoutNonStreamingMs: provider.requestTimeoutNonStreamingMs,
     websiteUrl: redactUrlCredentials(provider.websiteUrl) ?? provider.websiteUrl,
     faviconUrl: provider.faviconUrl,

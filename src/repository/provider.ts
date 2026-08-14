@@ -244,8 +244,6 @@ export async function createProvider(providerData: CreateProviderData): Promise<
     firstByteTimeoutStreamingMs:
       providerData.first_byte_timeout_streaming_ms ??
       PROVIDER_TIMEOUT_DEFAULTS.FIRST_BYTE_TIMEOUT_STREAMING_MS,
-    streamingIdleTimeoutMs:
-      providerData.streaming_idle_timeout_ms ?? PROVIDER_TIMEOUT_DEFAULTS.STREAMING_IDLE_TIMEOUT_MS,
     requestTimeoutNonStreamingMs:
       providerData.request_timeout_non_streaming_ms ??
       PROVIDER_TIMEOUT_DEFAULTS.REQUEST_TIMEOUT_NON_STREAMING_MS,
@@ -330,7 +328,6 @@ export async function createProvider(providerData: CreateProviderData): Promise<
         proxyFallbackToDirect: providers.proxyFallbackToDirect,
         customHeaders: providers.customHeaders,
         firstByteTimeoutStreamingMs: providers.firstByteTimeoutStreamingMs,
-        streamingIdleTimeoutMs: providers.streamingIdleTimeoutMs,
         requestTimeoutNonStreamingMs: providers.requestTimeoutNonStreamingMs,
         websiteUrl: providers.websiteUrl,
         faviconUrl: providers.faviconUrl,
@@ -439,7 +436,6 @@ export async function findProviderList(
       proxyFallbackToDirect: providers.proxyFallbackToDirect,
       customHeaders: providers.customHeaders,
       firstByteTimeoutStreamingMs: providers.firstByteTimeoutStreamingMs,
-      streamingIdleTimeoutMs: providers.streamingIdleTimeoutMs,
       requestTimeoutNonStreamingMs: providers.requestTimeoutNonStreamingMs,
       websiteUrl: providers.websiteUrl,
       faviconUrl: providers.faviconUrl,
@@ -611,7 +607,6 @@ export async function findAllProvidersFresh(): Promise<Provider[]> {
       proxyFallbackToDirect: providers.proxyFallbackToDirect,
       customHeaders: providers.customHeaders,
       firstByteTimeoutStreamingMs: providers.firstByteTimeoutStreamingMs,
-      streamingIdleTimeoutMs: providers.streamingIdleTimeoutMs,
       requestTimeoutNonStreamingMs: providers.requestTimeoutNonStreamingMs,
       websiteUrl: providers.websiteUrl,
       faviconUrl: providers.faviconUrl,
@@ -724,7 +719,6 @@ export async function findProviderById(id: number): Promise<Provider | null> {
       proxyFallbackToDirect: providers.proxyFallbackToDirect,
       customHeaders: providers.customHeaders,
       firstByteTimeoutStreamingMs: providers.firstByteTimeoutStreamingMs,
-      streamingIdleTimeoutMs: providers.streamingIdleTimeoutMs,
       requestTimeoutNonStreamingMs: providers.requestTimeoutNonStreamingMs,
       websiteUrl: providers.websiteUrl,
       faviconUrl: providers.faviconUrl,
@@ -861,8 +855,6 @@ export async function updateProvider(
     dbData.customHeaders = providerData.custom_headers ?? null;
   if (providerData.first_byte_timeout_streaming_ms !== undefined)
     dbData.firstByteTimeoutStreamingMs = providerData.first_byte_timeout_streaming_ms;
-  if (providerData.streaming_idle_timeout_ms !== undefined)
-    dbData.streamingIdleTimeoutMs = providerData.streaming_idle_timeout_ms;
   if (providerData.request_timeout_non_streaming_ms !== undefined)
     dbData.requestTimeoutNonStreamingMs = providerData.request_timeout_non_streaming_ms;
   if (providerData.website_url !== undefined) dbData.websiteUrl = providerData.website_url;
@@ -999,7 +991,6 @@ export async function updateProvider(
         proxyFallbackToDirect: providers.proxyFallbackToDirect,
         customHeaders: providers.customHeaders,
         firstByteTimeoutStreamingMs: providers.firstByteTimeoutStreamingMs,
-        streamingIdleTimeoutMs: providers.streamingIdleTimeoutMs,
         requestTimeoutNonStreamingMs: providers.requestTimeoutNonStreamingMs,
         websiteUrl: providers.websiteUrl,
         faviconUrl: providers.faviconUrl,
@@ -1318,7 +1309,6 @@ export interface BatchProviderUpdates {
   proxyUrl?: string | null;
   proxyFallbackToDirect?: boolean;
   firstByteTimeoutStreamingMs?: number;
-  streamingIdleTimeoutMs?: number;
   requestTimeoutNonStreamingMs?: number;
   // MCP
   mcpPassthroughType?: string;
@@ -1472,9 +1462,6 @@ export async function updateProvidersBatch(
   }
   if (updates.firstByteTimeoutStreamingMs !== undefined) {
     setClauses.firstByteTimeoutStreamingMs = updates.firstByteTimeoutStreamingMs;
-  }
-  if (updates.streamingIdleTimeoutMs !== undefined) {
-    setClauses.streamingIdleTimeoutMs = updates.streamingIdleTimeoutMs;
   }
   if (updates.requestTimeoutNonStreamingMs !== undefined) {
     setClauses.requestTimeoutNonStreamingMs = updates.requestTimeoutNonStreamingMs;

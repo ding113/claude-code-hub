@@ -303,10 +303,6 @@ function ProviderFormContent({
           state.network.firstByteTimeoutStreamingSeconds !== undefined
             ? state.network.firstByteTimeoutStreamingSeconds * 1000
             : undefined;
-        const idleTimeoutMs =
-          state.network.streamingIdleTimeoutSeconds !== undefined
-            ? state.network.streamingIdleTimeoutSeconds * 1000
-            : undefined;
         const nonStreamingTimeoutMs =
           state.network.requestTimeoutNonStreamingSeconds !== undefined
             ? state.network.requestTimeoutNonStreamingSeconds * 1000
@@ -382,7 +378,6 @@ function ProviderFormContent({
           proxy_fallback_to_direct: state.network.proxyFallbackToDirect,
           custom_headers: parsedCustomHeaders,
           first_byte_timeout_streaming_ms: firstByteTimeoutMs,
-          streaming_idle_timeout_ms: idleTimeoutMs,
           request_timeout_non_streaming_ms: nonStreamingTimeoutMs,
           mcp_passthrough_type: state.mcp.mcpPassthroughType,
           mcp_passthrough_url: state.mcp.mcpPassthroughUrl?.trim() || null,

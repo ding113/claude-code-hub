@@ -462,13 +462,7 @@
       "label": "Streaming First Byte Timeout (seconds)",
       "placeholder": "0"
     },
-    "streamingIdle": {
-      "core": "true",
-      "desc": "Streaming request idle timeout, range 60-600 seconds, enter 0 to disable (default: no limit)",
-      "label": "Streaming Idle Timeout (seconds)",
-      "placeholder": "0"
-    },
-    "summary": "First byte: {streaming}s | Stream interval: {idle}s | Non-streaming: {nonStreaming}s",
+    "summary": "First byte: {streaming}s | Non-streaming: {nonStreaming}s",
     "title": "Timeout Configuration"
   }
 }

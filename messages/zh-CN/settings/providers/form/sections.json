@@ -408,18 +408,12 @@
   },
   "timeout": {
     "title": "超时配置",
-    "summary": "首字: {streaming}s | 流式间隔: {idle}s | 非流式: {nonStreaming}s",
+    "summary": "首字: {streaming}s | 非流式: {nonStreaming}s",
     "desc": "配置请求超时时间，0 表示禁用超时",
     "streamingFirstByte": {
       "label": "流式首字节超时（秒）",
       "placeholder": "0",
       "desc": "流式请求首字节超时，范围 1-180 秒，填 0 禁用（默认不限制）",
-      "core": "true"
-    },
-    "streamingIdle": {
-      "label": "流式静默期超时（秒）",
-      "placeholder": "0",
-      "desc": "流式请求静默期超时，范围 60-600 秒，填 0 禁用（默认不限制）",
       "core": "true"
     },
     "nonStreamingTotal": {

@@ -462,13 +462,7 @@
       "label": "ストリーミング初バイトタイムアウト（秒）",
       "placeholder": "0"
     },
-    "streamingIdle": {
-      "core": "true",
-      "desc": "ストリーミングリクエストのアイドルタイムアウト、範囲60～600秒、0で無効化（デフォルト: 無制限）",
-      "label": "ストリーミングアイドルタイムアウト（秒）",
-      "placeholder": "0"
-    },
-    "summary": "初回バイト: {streaming}s | ストリーム間隔: {idle}s | 非ストリーミング: {nonStreaming}s",
+    "summary": "初回バイト: {streaming}s | 非ストリーミング: {nonStreaming}s",
     "title": "タイムアウト設定"
   }
 }

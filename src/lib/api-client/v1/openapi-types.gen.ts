@@ -4707,8 +4707,6 @@ export interface operations {
                             } | null;
                             /** @description Streaming first byte timeout in milliseconds. */
                             firstByteTimeoutStreamingMs: number | null;
-                            /** @description Streaming idle timeout in milliseconds. */
-                            streamingIdleTimeoutMs: number | null;
                             /** @description Non-streaming request timeout in milliseconds. */
                             requestTimeoutNonStreamingMs: number | null;
                             /** @description Provider website URL. */
@@ -5103,8 +5101,6 @@ export interface operations {
                     } | null;
                     /** @description Streaming first byte timeout in milliseconds. */
                     first_byte_timeout_streaming_ms?: number | null;
-                    /** @description Streaming idle timeout in milliseconds. */
-                    streaming_idle_timeout_ms?: number | null;
                     /** @description Non-streaming request timeout in milliseconds. */
                     request_timeout_non_streaming_ms?: number | null;
                     /**
@@ -5253,8 +5249,6 @@ export interface operations {
                         } | null;
                         /** @description Streaming first byte timeout in milliseconds. */
                         firstByteTimeoutStreamingMs: number | null;
-                        /** @description Streaming idle timeout in milliseconds. */
-                        streamingIdleTimeoutMs: number | null;
                         /** @description Non-streaming request timeout in milliseconds. */
                         requestTimeoutNonStreamingMs: number | null;
                         /** @description Provider website URL. */
@@ -5656,8 +5650,6 @@ export interface operations {
                         } | null;
                         /** @description Streaming first byte timeout in milliseconds. */
                         firstByteTimeoutStreamingMs: number | null;
-                        /** @description Streaming idle timeout in milliseconds. */
-                        streamingIdleTimeoutMs: number | null;
                         /** @description Non-streaming request timeout in milliseconds. */
                         requestTimeoutNonStreamingMs: number | null;
                         /** @description Provider website URL. */
@@ -6227,8 +6219,6 @@ export interface operations {
                     } | null;
                     /** @description Streaming first byte timeout in milliseconds. */
                     first_byte_timeout_streaming_ms?: number | null;
-                    /** @description Streaming idle timeout in milliseconds. */
-                    streaming_idle_timeout_ms?: number | null;
                     /** @description Non-streaming request timeout in milliseconds. */
                     request_timeout_non_streaming_ms?: number | null;
                     /**
@@ -6383,8 +6373,6 @@ export interface operations {
                         } | null;
                         /** @description Streaming first byte timeout in milliseconds. */
                         firstByteTimeoutStreamingMs: number | null;
-                        /** @description Streaming idle timeout in milliseconds. */
-                        streamingIdleTimeoutMs: number | null;
                         /** @description Non-streaming request timeout in milliseconds. */
                         requestTimeoutNonStreamingMs: number | null;
                         /** @description Provider website URL. */

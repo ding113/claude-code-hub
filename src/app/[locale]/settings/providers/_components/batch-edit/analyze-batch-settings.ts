@@ -75,7 +75,6 @@ export interface BatchSettingsAnalysis {
     proxyUrl: FieldAnalysisResult<string>;
     proxyFallbackToDirect: FieldAnalysisResult<boolean>;
     firstByteTimeoutStreamingSeconds: FieldAnalysisResult<number | undefined>;
-    streamingIdleTimeoutSeconds: FieldAnalysisResult<number | undefined>;
     requestTimeoutNonStreamingSeconds: FieldAnalysisResult<number | undefined>;
   };
   mcp: {
@@ -207,10 +206,6 @@ export function analyzeBatchProviderSettings(providers: ProviderDisplay[]): Batc
       proxyFallbackToDirect: analyzeField(providers, (p) => p.proxyFallbackToDirect ?? false),
       firstByteTimeoutStreamingSeconds: analyzeField(providers, (p) => {
         const ms = p.firstByteTimeoutStreamingMs;
-        return ms != null && typeof ms === "number" && !Number.isNaN(ms) ? ms / 1000 : undefined;
-      }),
-      streamingIdleTimeoutSeconds: analyzeField(providers, (p) => {
-        const ms = p.streamingIdleTimeoutMs;
         return ms != null && typeof ms === "number" && !Number.isNaN(ms) ? ms / 1000 : undefined;
       }),
       requestTimeoutNonStreamingSeconds: analyzeField(providers, (p) => {

@@ -82,13 +82,13 @@ function resolveNonStreamTaskStaleTimeoutMs(provider: Provider): number {
     : Number.POSITIVE_INFINITY;
 }
 
-function resolveStreamTaskStaleTimeoutMs(provider: Provider): number {
-  if (provider.streamingIdleTimeoutMs <= 0) {
+function resolveStreamTaskStaleTimeoutMs(provider: Provider, globalStreamingIdleTimeoutMs: number): number {
+  if (globalStreamingIdleTimeoutMs <= 0) {
     return Number.POSITIVE_INFINITY;
   }
 
   if (provider.firstByteTimeoutStreamingMs > 0) {
-    return Math.max(provider.firstByteTimeoutStreamingMs, provider.streamingIdleTimeoutMs);
+    return Math.max(provider.firstByteTimeoutStreamingMs, globalStreamingIdleTimeoutMs);
   }
 
   return Number.POSITIVE_INFINITY;
@@ -2136,13 +2136,13 @@ export class ProxyResponseHandler {
     }
 
     // Global streaming idle timeout: site-wide watchdog window after first byte.
-    // 0 = disabled; when >0 it overrides any per-provider streamingIdleTimeoutMs.
+    // 0 = disabled; the per-provider streamingIdleTimeoutMs field has been removed.
     let globalStreamingIdleTimeoutMs = 0;
     try {
       globalStreamingIdleTimeoutMs =
         (await getCachedSystemSettings()).streamingIdleTimeoutMs ?? 0;
     } catch {
-      // fall through to per-provider value
+      // fall through to 0 (disabled)
     }
 
     let processedStream: ReadableStream<Uint8Array> = response.body;
@@ -2176,7 +2176,10 @@ export class ProxyResponseHandler {
         const statusCode = response.status;
 
         const taskId = `stream-passthrough-${messageContext.id}`;
-        const streamTaskStaleTimeoutMs = resolveStreamTaskStaleTimeoutMs(provider);
+        const streamTaskStaleTimeoutMs = resolveStreamTaskStaleTimeoutMs(
+          provider,
+          globalStreamingIdleTimeoutMs
+        );
         const statsAbortController = new AbortController();
         const cleanupTaskAbortBinding = bindTaskAbortToUpstreamResponse(
           session,
@@ -2205,9 +2208,7 @@ export class ProxyResponseHandler {
           const idleTimeoutMs =
             globalStreamingIdleTimeoutMs > 0
               ? globalStreamingIdleTimeoutMs
-              : provider.streamingIdleTimeoutMs > 0
-                ? provider.streamingIdleTimeoutMs
-                : Number.POSITIVE_INFINITY;
+              : Number.POSITIVE_INFINITY;
           let idleTimeoutId: NodeJS.Timeout | null = null;
           const clearIdleTimer = () => {
             if (idleTimeoutId) {
@@ -2636,10 +2637,11 @@ export class ProxyResponseHandler {
     const idleTimeoutMs =
       globalStreamingIdleTimeoutMs > 0
         ? globalStreamingIdleTimeoutMs
-        : provider.streamingIdleTimeoutMs > 0
-          ? provider.streamingIdleTimeoutMs
-          : Number.POSITIVE_INFINITY;
-    const streamTaskStaleTimeoutMs = resolveStreamTaskStaleTimeoutMs(provider);
+        : Number.POSITIVE_INFINITY;
+    const streamTaskStaleTimeoutMs = resolveStreamTaskStaleTimeoutMs(
+      provider,
+      globalStreamingIdleTimeoutMs
+    );
     const clientAbortDrainTimeoutMs = CLIENT_ABORT_DRAIN_MAX_MS;
 
     // 提升 idleTimeoutId 到外部作用域，以便客户端断开时能清除

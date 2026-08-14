@@ -231,23 +231,6 @@ export function NetworkSection({ subSectionRefs }: NetworkSectionProps) {
                 />
 
                 <TimeoutInput
-                  id={isEdit ? "edit-streaming-idle" : "streaming-idle"}
-                  label={t("sections.timeout.streamingIdle.label")}
-                  description={t("sections.timeout.streamingIdle.desc")}
-                  value={state.network.streamingIdleTimeoutSeconds}
-                  defaultValue={PROVIDER_TIMEOUT_DEFAULTS.STREAMING_IDLE_TIMEOUT_MS / 1000}
-                  placeholder={t("sections.timeout.streamingIdle.placeholder")}
-                  onChange={(value) =>
-                    dispatch({ type: "SET_STREAMING_IDLE_TIMEOUT", payload: value })
-                  }
-                  disabled={state.ui.isPending}
-                  min="0"
-                  max="600"
-                  icon={Timer}
-                  isCore={true}
-                />
-
-                <TimeoutInput
                   id={isEdit ? "edit-non-streaming-timeout" : "non-streaming-timeout"}
                   label={t("sections.timeout.nonStreamingTotal.label")}
                   description={t("sections.timeout.nonStreamingTotal.desc")}
@@ -274,9 +257,6 @@ export function NetworkSection({ subSectionRefs }: NetworkSectionProps) {
                   streaming:
                     state.network.firstByteTimeoutStreamingSeconds ??
                     PROVIDER_TIMEOUT_DEFAULTS.FIRST_BYTE_TIMEOUT_STREAMING_MS / 1000,
-                  idle:
-                    state.network.streamingIdleTimeoutSeconds ??
-                    PROVIDER_TIMEOUT_DEFAULTS.STREAMING_IDLE_TIMEOUT_MS / 1000,
                   nonStreaming:
                     state.network.requestTimeoutNonStreamingSeconds ??
                     PROVIDER_TIMEOUT_DEFAULTS.REQUEST_TIMEOUT_NON_STREAMING_MS / 1000,
