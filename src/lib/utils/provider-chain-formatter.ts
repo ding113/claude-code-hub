@@ -197,13 +197,39 @@ export function isHedgeRace(chain: ProviderChainItem[]): boolean {
 /**
  * 竞速类型（决策链中首个携带 raceInfo 的条目）：
  * cold_start（冷启动双发，无绑定并发 cheapest+fastest）/ timeout_race（超时竞速，有绑定超时后拉备胎）/
- * dual_fast（双发极速）。无竞速返回 null。
+ * dual_fast（双发极速）/ failover（故障转移，有绑定但主路直接失败后拉备胎，无首字超时）。无竞速返回 null。
+ *
+ * failover 判定：raceInfo.type 为 timeout_race（有复用绑定），但链中没有任何条目
+ * 进入 timed_out stage（未发生首字超时），且存在失败 reason（retry_failed/system_error/
+ * resource_not_found/client_error_non_retryable/endpoint_pool_exhausted/vendor_type_all_timeout）——
+ * 说明主路是直接失败触发切换，不是超时触发竞速，应显示为故障转移。
  */
-export function getRaceType(chain: ProviderChainItem[]): "cold_start" | "timeout_race" | "dual_fast" | null {
+export function getRaceType(
+  chain: ProviderChainItem[]
+): "cold_start" | "timeout_race" | "dual_fast" | "failover" | null {
+  let raceType: "cold_start" | "timeout_race" | "dual_fast" | null = null;
   for (const item of chain) {
-    if (item.raceInfo?.type) return item.raceInfo.type;
+    if (item.raceInfo?.type) {
+      raceType = item.raceInfo.type;
+      break;
+    }
   }
-  return null;
+  if (raceType !== "timeout_race") return raceType;
+
+  const timedOut = chain.some((item) => item.raceInfo?.stage === "timed_out");
+  if (timedOut) return raceType;
+
+  const failed = chain.some((item) =>
+    [
+      "retry_failed",
+      "system_error",
+      "resource_not_found",
+      "client_error_non_retryable",
+      "endpoint_pool_exhausted",
+      "vendor_type_all_timeout",
+    ].includes(item.reason ?? "")
+  );
+  return failed ? "failover" : raceType;
 }
 
 /**

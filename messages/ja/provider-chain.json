@@ -259,7 +259,8 @@
   "raceTypes": {
     "cold_start": "コールドスタート双発",
     "timeout_race": "タイムアウトレース",
-    "dual_fast": "デュアル高速"
+    "dual_fast": "デュアル高速",
+    "failover": "フェイルオーバー"
   },
   "raceStages": {
     "launched": "起動済み",

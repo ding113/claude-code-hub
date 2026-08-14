@@ -259,7 +259,8 @@
   "raceTypes": {
     "cold_start": "Холодный старт (двойной)",
     "timeout_race": "Гонка по таймауту",
-    "dual_fast": "Двойной быстрый"
+    "dual_fast": "Двойной быстрый",
+    "failover": "Переключение при сбое"
   },
   "raceStages": {
     "launched": "запущен",

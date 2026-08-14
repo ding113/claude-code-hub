@@ -169,13 +169,17 @@ export function ProviderChainPopover({
         ? Zap
         : raceType === "timeout_race"
           ? Timer
-          : null;
+          : raceType === "failover"
+            ? GitBranch
+            : null;
   const raceTypeIconClass =
     raceType === "cold_start"
       ? "text-sky-500"
       : raceType === "dual_fast"
         ? "text-fuchsia-500"
-        : "text-indigo-500";
+        : raceType === "failover"
+          ? "text-rose-500"
+          : "text-indigo-500";
 
   // Fallback for empty string
   const displayName = finalProvider || "-";

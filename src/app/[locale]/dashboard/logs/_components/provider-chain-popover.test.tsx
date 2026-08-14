@@ -602,4 +602,43 @@ describe("provider-chain-popover race type / outcome display", () => {
     expect(html).toContain("No rebind - keep p1");
     expect(html).toContain("timed out");
   });
+
+  test("failover (provider failure without timeout) shows Failover badge", () => {
+    // Regression: a reused provider that FAILS (retry_failed, no timed_out stage)
+    // must display as Failover instead of Timeout Race.
+    const html = renderWithIntl(
+      <ProviderChainPopover
+        chain={[
+          { id: 1, name: "p1", reason: "global_reuse", selectionMethod: "global_reuse" },
+          {
+            id: 1,
+            name: "p1",
+            reason: "retry_failed",
+            attemptNumber: 1,
+            statusCode: 503,
+            raceInfo: { type: "timeout_race", stage: "failed", firstByteTimeoutMs: 20000 },
+          },
+          {
+            id: 2,
+            name: "p2",
+            reason: "hedge_launched",
+            attemptNumber: 2,
+            raceInfo: { type: "timeout_race", stage: "first_byte", firstByteTimeoutMs: 20000 },
+          },
+          {
+            id: 2,
+            name: "p2",
+            reason: "hedge_winner",
+            statusCode: 200,
+            attemptNumber: 2,
+            raceInfo: { type: "timeout_race", stage: "winner" },
+          },
+        ]}
+        finalProvider="p2"
+      />
+    );
+
+    expect(html).toContain("Failover");
+    expect(html).not.toContain("Timeout Race");
+  });
 });

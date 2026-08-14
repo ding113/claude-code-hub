@@ -259,7 +259,8 @@
   "raceTypes": {
     "cold_start": "Cold-Start Dual Race",
     "timeout_race": "Timeout Race",
-    "dual_fast": "Dual-Fast Race"
+    "dual_fast": "Dual-Fast Race",
+    "failover": "Failover"
   },
   "raceStages": {
     "launched": "launched",

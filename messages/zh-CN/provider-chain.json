@@ -259,7 +259,8 @@
   "raceTypes": {
     "cold_start": "冷启动双发",
     "timeout_race": "超时竞速",
-    "dual_fast": "双发极速"
+    "dual_fast": "双发极速",
+    "failover": "故障转移"
   },
   "raceStages": {
     "launched": "已启动",
