@@ -26,6 +26,7 @@ function makeRequest(pathname: string, method = "GET") {
   const url = new URL(`http://localhost:13500${pathname}`);
   return {
     method,
+    url: url.href,
     nextUrl: { pathname, clone: () => url },
     cookies: {
       get: () => undefined,

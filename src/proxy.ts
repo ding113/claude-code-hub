@@ -69,16 +69,13 @@ function proxyHandler(request: NextRequest) {
     pathname === GEMINI_V1BETA_NESTED_PREFIX ||
     pathname.startsWith(`${GEMINI_V1BETA_NESTED_PREFIX}/`)
   ) {
-    const url = request.nextUrl.clone();
-    url.pathname = pathname.slice(API_PROXY_PATH.length); // 去掉 /v1 前缀
-    return NextResponse.rewrite(url);
+    const target = pathname.slice(API_PROXY_PATH.length); // 去掉 /v1 前缀
+    return NextResponse.rewrite(new URL(target, request.url));
   }
 
   // 裸 OpenAI API 路径（base_url 不带 /v1 的客户端）→ rewrite 到 /v1 前缀
   if (matchesBareOpenaiApiPath(pathname)) {
-    const url = request.nextUrl.clone();
-    url.pathname = `${API_PROXY_PATH}${pathname}`;
-    return NextResponse.rewrite(url);
+    return NextResponse.rewrite(new URL(`${API_PROXY_PATH}${pathname}`, request.url));
   }
 
   // API 代理路由不需要 locale 处理和 Web 鉴权（使用自己的 Bearer token）
