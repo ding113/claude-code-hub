@@ -37,9 +37,13 @@ const nextConfig: NextConfig = {
       //    根入口，未被 Next 编译，必须手工列出。
       //  - next/dist：自定义 server 通过 require("next") 进入；保留 dist
       //    子树确保 programmatic API 可用。
+      //  - server-compat.js：server.js 的顶层 require("./server-compat")，
+      //    同样不会被 Next 的依赖追踪收录；缺了它容器启动即
+      //    MODULE_NOT_FOUND 崩溃循环（2026-08-14 事故）。
       "./node_modules/ws/**/*",
       "./node_modules/next/dist/**/*",
       "./node_modules/next/package.json",
+      "./server-compat.js",
     ],
   },
 
