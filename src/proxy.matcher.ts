@@ -9,10 +9,15 @@
 //   immediately for these paths). Anchored to a path-segment boundary
 //   (`/` or end of string) so future routes like `/v10/...` are NOT
 //   accidentally excluded.
-//   Exception: `/v1/v1beta/...` (a Gemini SDK client whose base_url was set
-//   to `.../v1`) MUST reach the proxy so it can be rewritten to `/v1beta/...`.
-//   The negative lookahead `(?!v1beta(?:/|$))` keeps that prefix inside the
-//   proxy's scope while everything else under `/v1` stays excluded.
+// - models / chat/completions / responses / completions / embeddings /
+//   props / _ping   (bare OpenAI API paths; a client whose base_url lacks
+//   the `/v1` prefix hits these. next.config `rewrites()` in
+//   `src/proxy.rewrites.ts` transparently rewrites them to `/v1/...`, so the
+//   middleware must NOT see them — otherwise the body-clone clamp applies
+//   and the rewrite below is bypassed).
+// - /v1/v1beta      (Gemini SDK client whose base_url was set to `.../v1`
+//   produces `/v1/v1beta/...`; `rewrites()` maps it to `/v1beta/...`, so it
+//   is excluded from the middleware just like the rest of `/v1`.)
 // - _next/static (static files)
 // - _next/image  (image optimization files)
 // - favicon.ico  (favicon file)
@@ -22,4 +27,4 @@
 // literals so its build-time static analyzer can collect them. The unit
 // test in `tests/unit/proxy-matcher.test.ts` enforces drift between the two.
 export const proxyMatcherPattern =
-  "/((?!api|v1(?:/(?!v1beta(?:/|$))|$)|v1beta(?:/|$)|_next/static|_next/image|favicon.ico).*)";
+  "/((?!api|v1(?:/|$)|v1beta(?:/|$)|models(?:/|$)|chat/completions(?:/|$)|responses(?:/|$)|completions(?:/|$)|embeddings(?:/|$)|props(?:/|$)|_ping(?:/|$)|_next/static|_next/image|favicon.ico).*)";

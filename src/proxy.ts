@@ -18,28 +18,6 @@ const PUBLIC_PATH_PATTERNS = [
 ];
 
 const API_PROXY_PATH = "/v1";
-const GEMINI_PROXY_PATH = "/v1beta";
-
-// 裸 OpenAI API 路径 → rewrite 到 /v1 前缀（兼容 base_url 不带 /v1 的客户端）
-// 例如 /models → /v1/models、/chat/completions → /v1/chat/completions
-const BARE_OPENAI_API_PATH_PREFIXES = [
-  "/models",
-  "/chat/completions",
-  "/responses",
-  "/completions",
-  "/embeddings",
-  "/props",
-  "/_ping",
-];
-
-// Gemini SDK 客户端将 base_url 设为 .../v1 时会请求 /v1/v1beta/...，剥掉多余的 /v1
-const GEMINI_V1BETA_NESTED_PREFIX = "/v1/v1beta";
-
-function matchesBareOpenaiApiPath(pathname: string) {
-  return BARE_OPENAI_API_PATH_PREFIXES.some(
-    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`)
-  );
-}
 
 function matchesPublicPath(pathname: string, pattern: string) {
   return pathname === pattern || pathname.startsWith(`${pattern}/`);
@@ -63,23 +41,8 @@ function proxyHandler(request: NextRequest) {
     logger.info("Request received", { method: method.toUpperCase(), pathname });
   }
 
-  // Gemini SDK 客户端 base_url 配成 .../v1 时，SDK 自带 /v1beta 前缀 → /v1/v1beta/...
-  // 剥掉多余的 /v1，redirect 到 /v1beta/...（Gemini 原生路由）
-  // 注意：不用 NextResponse.rewrite —— Next.js 16.3 对 rewrite 到被 proxy
-  // matcher 排除的路径（/v1、/v1beta）不会重新路由，会返回 404；redirect 则正常。
-  if (
-    pathname === GEMINI_V1BETA_NESTED_PREFIX ||
-    pathname.startsWith(`${GEMINI_V1BETA_NESTED_PREFIX}/`)
-  ) {
-    const target = pathname.slice(API_PROXY_PATH.length); // 去掉 /v1 前缀
-    return NextResponse.redirect(new URL(target, request.url));
-  }
-
-  // 裸 OpenAI API 路径（base_url 不带 /v1 的客户端）→ redirect 到 /v1 前缀
-  // 同上：rewrite 对 matcher 排除的目标不生效，用 307 redirect（SDK 会跟随）
-  if (matchesBareOpenaiApiPath(pathname)) {
-    return NextResponse.redirect(new URL(`${API_PROXY_PATH}${pathname}`, request.url));
-  }
+  // 裸 OpenAI 路径与 /v1/v1beta 兼容重写已移到 next.config rewrites
+  // （src/proxy.rewrites.ts），middleware 不再处理这些路径（matcher 已排除）。
 
   // API 代理路由不需要 locale 处理和 Web 鉴权（使用自己的 Bearer token）
   if (pathname.startsWith(API_PROXY_PATH)) {
@@ -166,5 +129,5 @@ export const config = {
   // so Next.js's build-time static analyzer can collect it. The unit test
   // `tests/unit/proxy-matcher.test.ts` asserts the two stay in sync. See the
   // matcher module for the full per-segment rationale.
-  matcher: ["/((?!api|v1(?:/(?!v1beta(?:/|$))|$)|v1beta(?:/|$)|_next/static|_next/image|favicon.ico).*)"],
+  matcher: ["/((?!api|v1(?:/|$)|v1beta(?:/|$)|models(?:/|$)|chat/completions(?:/|$)|responses(?:/|$)|completions(?:/|$)|embeddings(?:/|$)|props(?:/|$)|_ping(?:/|$)|_next/static|_next/image|favicon.ico).*)"],
 };
