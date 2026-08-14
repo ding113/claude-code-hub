@@ -331,6 +331,7 @@ async function syncProviderSiteFromUpstreamUnlocked(
           siteId,
           siteName,
           upstreamKeys,
+          upstreamGroupNames,
           creds,
           session,
         });

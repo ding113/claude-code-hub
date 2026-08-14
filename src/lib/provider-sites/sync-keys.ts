@@ -169,17 +169,29 @@ export function findUnkeyedOtherSiteGroupNames(input: {
 }
 
 /**
- * Return keys with no currently resolvable upstream group.
+ * Return keys with no currently resolvable upstream group, or whose group has
+ * been removed from the upstream account.
  * Unknown group IDs are deliberately excluded: a failed/stale group lookup must
  * never turn into a destructive cleanup decision. Orphaned IDs are safe to clean
- * only after the connector has loaded a non-empty authoritative group map.
+ * only after the connector has loaded a non-empty authoritative group map, and
+ * a key bound to a group absent from that trusted map is treated as stale the
+ * same way local providers are pruned (see isSiteProviderGroupStale).
  */
-export function findUnboundUpstreamApiKeys(upstreamKeys: UpstreamApiKey[]): UpstreamApiKey[] {
-  return upstreamKeys.filter(
-    (key) =>
-      (key.groupBinding === "unbound" || key.groupBinding === "orphaned") &&
-      key.groupName.trim().length === 0
-  );
+export function findUnboundUpstreamApiKeys(
+  upstreamKeys: UpstreamApiKey[],
+  upstreamGroupNames: string[]
+): UpstreamApiKey[] {
+  const trusted = upstreamGroupNames.some((name) => name.trim().length > 0);
+  const knownGroups = trusted ? new Set(upstreamGroupNames.map(normalizeGroupKey)) : null;
+  return upstreamKeys.filter((key) => {
+    const groupName = key.groupName.trim();
+    if (groupName.length > 0) {
+      // Bound to a group that no longer exists upstream -> stale, safe to clean
+      // only when the group refresh was non-empty.
+      return knownGroups !== null && !knownGroups.has(normalizeGroupKey(groupName));
+    }
+    return key.groupBinding === "unbound" || key.groupBinding === "orphaned";
+  });
 }
 
 /** Delete unassigned/orphaned upstream keys after a trusted non-empty group refresh. */
@@ -187,21 +199,28 @@ export async function deleteUnboundUpstreamApiKeys(input: {
   siteId: number;
   siteName: string;
   upstreamKeys: UpstreamApiKey[];
+  upstreamGroupNames: string[];
   creds: UpstreamSiteCredentials;
   session: UpstreamAuthSession;
 }): Promise<number> {
   let deleted = 0;
-  for (const key of findUnboundUpstreamApiKeys(input.upstreamKeys)) {
+  for (const key of findUnboundUpstreamApiKeys(input.upstreamKeys, input.upstreamGroupNames)) {
     try {
       await deleteUpstreamApiKey(input.creds, input.session, key.id);
       deleted += 1;
-      logger.info("[provider-sites] deleted upstream key with no resolvable group", {
-        siteId: input.siteId,
-        siteName: input.siteName,
-        keyId: key.id,
-        keyName: key.name,
-        groupBinding: key.groupBinding,
-      });
+      logger.info(
+        key.groupName.trim().length > 0
+          ? "[provider-sites] deleted upstream key bound to removed group"
+          : "[provider-sites] deleted upstream key with no resolvable group",
+        {
+          siteId: input.siteId,
+          siteName: input.siteName,
+          keyId: key.id,
+          keyName: key.name,
+          groupBinding: key.groupBinding,
+          groupName: key.groupName.trim(),
+        }
+      );
     } catch (error) {
       logger.warn("[provider-sites] unbound upstream key delete failed", {
         siteId: input.siteId,

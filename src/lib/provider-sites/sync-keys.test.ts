@@ -68,18 +68,56 @@ describe("findStaleSiteProviderIds", () => {
 describe("findUnboundUpstreamApiKeys", () => {
   it("returns unassigned/orphaned keys but preserves unknown group IDs", () => {
     expect(
-      findUnboundUpstreamApiKeys([
-        { ...upstreamKey("orphan-secret"), id: "orphan", groupName: "", groupBinding: "unbound" },
-        {
-          ...upstreamKey("orphaned-secret"),
-          id: "orphaned",
-          groupName: "",
-          groupBinding: "orphaned",
-        },
-        { ...upstreamKey("bound-secret"), id: "bound", groupName: "GPT Plus", groupBinding: "bound" },
-        { ...upstreamKey("unknown-secret"), id: "unknown", groupName: "", groupBinding: "unknown" },
-      ]).map((key) => key.id)
+      findUnboundUpstreamApiKeys(
+        [
+          { ...upstreamKey("orphan-secret"), id: "orphan", groupName: "", groupBinding: "unbound" },
+          {
+            ...upstreamKey("orphaned-secret"),
+            id: "orphaned",
+            groupName: "",
+            groupBinding: "orphaned",
+          },
+          { ...upstreamKey("bound-secret"), id: "bound", groupName: "GPT Plus", groupBinding: "bound" },
+          { ...upstreamKey("unknown-secret"), id: "unknown", groupName: "", groupBinding: "unknown" },
+        ],
+        ["GPT Plus"]
+      ).map((key) => key.id)
     ).toEqual(["orphan", "orphaned"]);
+  });
+
+  it("cleans a key bound to a group removed from the upstream account", () => {
+    expect(
+      findUnboundUpstreamApiKeys(
+        [
+          { ...upstreamKey("stale-secret"), id: "stale", groupName: "Removed Group", groupBinding: "bound" },
+          { ...upstreamKey("live-secret"), id: "live", groupName: "GPT Plus", groupBinding: "bound" },
+        ],
+        ["GPT Plus"]
+      ).map((key) => key.id)
+    ).toEqual(["stale"]);
+  });
+
+  it("never cleans group-bound keys when the group refresh is empty or blank", () => {
+    for (const names of [[], [""], ["  "]]) {
+      expect(
+        findUnboundUpstreamApiKeys(
+          [{ ...upstreamKey("stale-secret"), id: "stale", groupName: "Removed Group", groupBinding: "bound" }],
+          names
+        ).map((key) => key.id)
+      ).toEqual([]);
+    }
+  });
+
+  it("normalizes whitespace and case in upstream group names", () => {
+    expect(
+      findUnboundUpstreamApiKeys(
+        [
+          { ...upstreamKey("stale-secret"), id: "stale", groupName: "Removed Group", groupBinding: "bound" },
+          { ...upstreamKey("live-secret"), id: "live", groupName: "  GPT  Plus ", groupBinding: "bound" },
+        ],
+        ["gpt plus"]
+      ).map((key) => key.id)
+    ).toEqual(["stale"]);
   });
 });
 
