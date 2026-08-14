@@ -785,13 +785,28 @@ export class ProxyProviderResolver {
       const { listHealthDispatchCandidates } = await import(
         "@/lib/provider-dispatch/health-aware-select"
       );
+      // 冷启动双发备胎与主路一致：先按请求模型投影模型级健康（healthTestModelStats），
+      // 避免用 provider 级混合聚合（terra/sol/luna 混算）把对当前模型全红的供应商
+      // 误判为合格——例如 luna 全红的 1433 靠 sol/terra 绿样本撑到 0.8 被拉为备胎。
+      const projectedPool = projectProvidersHealthForRequestedModel(
+        pool,
+        requestedModel,
+        healthTestModelsByGroup,
+        healthTestModelFallbacksByGroup,
+        effectiveGroupPick
+      );
       // listHealthDispatchCandidates 默认排序即倍率升序 → 取第一个 = 最便宜的合格备胎。
       const sloCandidates = listHealthDispatchCandidates(
-        pool,
+        projectedPool,
         resolveDispatchCost,
         healthSloThresholds
       ).filter((c) => !excludeSet.has(c.provider.id));
-      selected = sloCandidates[0]?.provider ?? null;
+      // 回查原始 pool 取未投影的原对象，避免副本上的投影健康字段被后续链路误用。
+      const firstCandidate = sloCandidates[0];
+      selected = firstCandidate
+        ? (pool.find((provider) => provider.id === firstCandidate.provider.id) ??
+          firstCandidate.provider)
+        : null;
     } else {
       const sameCostPool = sameCostAsProvider
         ? pool.filter(
