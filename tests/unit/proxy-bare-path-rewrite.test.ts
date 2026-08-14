@@ -35,45 +35,45 @@ function makeRequest(pathname: string, method = "GET") {
   } as unknown as import("next/server").NextRequest;
 }
 
-// NextResponse.rewrite encodes the target into x-middleware-rewrite
-function rewriteTarget(response: Response): string | null {
-  return response.headers.get("x-middleware-rewrite");
+// NextResponse.redirect encodes the target into the Location header
+function redirectLocation(response: Response): string | null {
+  return response.headers.get("location");
 }
 
-describe("proxy bare-path / nested-v1beta rewrites", () => {
-  it("rewrites bare /models to /v1/models", async () => {
+describe("proxy bare-path / nested-v1beta redirects", () => {
+  it("redirects bare /models to /v1/models", async () => {
     const { default: proxyHandler } = await import("@/proxy");
     const response = proxyHandler(makeRequest("/models"));
-    expect(response.status).toBe(200);
-    expect(rewriteTarget(response)).toBe("http://localhost:13500/v1/models");
+    expect(response.status).toBe(307);
+    expect(redirectLocation(response)).toBe("http://localhost:13500/v1/models");
   });
 
-  it("rewrites bare /chat/completions to /v1/chat/completions preserving the path", async () => {
+  it("redirects bare /chat/completions to /v1/chat/completions preserving the path", async () => {
     const { default: proxyHandler } = await import("@/proxy");
     const response = proxyHandler(makeRequest("/chat/completions", "POST"));
-    expect(response.status).toBe(200);
-    expect(rewriteTarget(response)).toBe(
+    expect(response.status).toBe(307);
+    expect(redirectLocation(response)).toBe(
       "http://localhost:13500/v1/chat/completions"
     );
   });
 
-  it("rewrites bare /responses to /v1/responses", async () => {
+  it("redirects bare /responses to /v1/responses", async () => {
     const { default: proxyHandler } = await import("@/proxy");
     const response = proxyHandler(makeRequest("/responses", "POST"));
-    expect(response.status).toBe(200);
-    expect(rewriteTarget(response)).toBe("http://localhost:13500/v1/responses");
+    expect(response.status).toBe(307);
+    expect(redirectLocation(response)).toBe("http://localhost:13500/v1/responses");
   });
 
-  it("rewrites bare /models/<id> to /v1/models/<id>", async () => {
+  it("redirects bare /models/<id> to /v1/models/<id>", async () => {
     const { default: proxyHandler } = await import("@/proxy");
     const response = proxyHandler(makeRequest("/models/gpt-5.6-luna"));
-    expect(response.status).toBe(200);
-    expect(rewriteTarget(response)).toBe(
+    expect(response.status).toBe(307);
+    expect(redirectLocation(response)).toBe(
       "http://localhost:13500/v1/models/gpt-5.6-luna"
     );
   });
 
-  it("rewrites nested /v1/v1beta/... to /v1beta/... stripping the extra /v1", async () => {
+  it("redirects nested /v1/v1beta/... to /v1beta/... stripping the extra /v1", async () => {
     const { default: proxyHandler } = await import("@/proxy");
     const response = proxyHandler(
       makeRequest(
@@ -81,17 +81,17 @@ describe("proxy bare-path / nested-v1beta rewrites", () => {
         "POST"
       )
     );
-    expect(response.status).toBe(200);
-    expect(rewriteTarget(response)).toBe(
+    expect(response.status).toBe(307);
+    expect(redirectLocation(response)).toBe(
       "http://localhost:13500/v1beta/models/gemini-3.7-flash-high:generateContent"
     );
   });
 
-  it("rewrites bare /v1/v1beta root to /v1beta", async () => {
+  it("redirects bare /v1/v1beta root to /v1beta", async () => {
     const { default: proxyHandler } = await import("@/proxy");
     const response = proxyHandler(makeRequest("/v1/v1beta"));
-    expect(response.status).toBe(200);
-    expect(rewriteTarget(response)).toBe("http://localhost:13500/v1beta");
+    expect(response.status).toBe(307);
+    expect(redirectLocation(response)).toBe("http://localhost:13500/v1beta");
   });
 
   it("does NOT rewrite dashboard/web paths (no v1 prefix added)", async () => {

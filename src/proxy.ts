@@ -64,17 +64,19 @@ function proxyHandler(request: NextRequest) {
   }
 
   // Gemini SDK 客户端 base_url 配成 .../v1 时，SDK 自带 /v1beta 前缀 → /v1/v1beta/...
-  // 剥掉多余的 /v1，rewrite 到 /v1beta/...（Gemini 原生路由）
+  // 剥掉多余的 /v1，redirect 到 /v1beta/...（Gemini 原生路由）
+  // 注意：不用 NextResponse.rewrite —— Next.js 16.3 对 rewrite 到被 proxy
+  // matcher 排除的路径（/v1、/v1beta）不会重新路由，会返回 404；redirect 则正常。
   if (
     pathname === GEMINI_V1BETA_NESTED_PREFIX ||
     pathname.startsWith(`${GEMINI_V1BETA_NESTED_PREFIX}/`)
   ) {
     const target = pathname.slice(API_PROXY_PATH.length); // 去掉 /v1 前缀
-    return NextResponse.rewrite(new URL(target, request.url));
+    return NextResponse.redirect(new URL(target, request.url));
   }
 
-  // 裸 OpenAI API 路径（base_url 不带 /v1 的客户端）→ rewrite 到 /v1 前缀
-  // DEBUG: 临时改成 redirect 验证 rewrite 是否被 Next.js 16 正确处理
+  // 裸 OpenAI API 路径（base_url 不带 /v1 的客户端）→ redirect 到 /v1 前缀
+  // 同上：rewrite 对 matcher 排除的目标不生效，用 307 redirect（SDK 会跟随）
   if (matchesBareOpenaiApiPath(pathname)) {
     return NextResponse.redirect(new URL(`${API_PROXY_PATH}${pathname}`, request.url));
   }
