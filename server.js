@@ -25,6 +25,7 @@
 const http = require("node:http");
 const { randomUUID } = require("node:crypto");
 const { parse } = require("node:url");
+const { rewriteCompatPath } = require("./server-compat");
 
 function isNextDevMode(nodeEnv) {
   return nodeEnv !== "production";
@@ -730,6 +731,14 @@ async function main() {
   const server = http.createServer(async (req, res) => {
     try {
       const parsedUrl = parse(req.url, true);
+      // base_url 路径兼容改写（裸 OpenAI 路径 → /v1/...，/v1/v1beta/... → /v1beta/...）
+      // 必须在交给 Next handler 之前完成 —— Next.js 16.3 的 middleware rewrite 和
+      // next.config rewrites 在此环境（programmatic server + standalone）都不可靠。
+      const rewritten = rewriteCompatPath(parsedUrl.pathname || "/");
+      if (rewritten !== parsedUrl.pathname) {
+        parsedUrl.pathname = rewritten;
+        req.url = rewritten + (parsedUrl.search || "");
+      }
       await handler(req, res, parsedUrl);
     } catch (err) {
       log("error", "http_handler_error", {

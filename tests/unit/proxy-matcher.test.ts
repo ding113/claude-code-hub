@@ -8,12 +8,8 @@ import { proxyMatcherPattern } from "@/proxy.matcher";
 const matcher = new RegExp(`^${proxyMatcherPattern}$`);
 
 describe("proxy matcher", () => {
-  describe("paths the proxy MUST handle (API proxy routes, bare OpenAI compat paths)", () => {
+  describe("paths the proxy MUST skip (regression: matching them forces Next to clone the request body, clamping it to proxyClientMaxBodySize)", () => {
     it.each([
-      // /v1 + /v1beta must stay IN the matcher: middleware rewrite targets
-      // (bare paths → /v1/..., /v1/v1beta/... → /v1beta/...) resolve inside
-      // the matcher scope. Next.js 16.3 does not re-route middleware rewrites
-      // to matcher-excluded paths (404).
       "/v1/messages",
       "/v1/chat/completions",
       "/v1/responses",
@@ -22,10 +18,16 @@ describe("proxy matcher", () => {
       "/v1beta/messages",
       "/v1beta",
       "/v1beta/v1/foo",
+    ])("does not match %s", (pathname) => {
+      expect(matcher.test(pathname)).toBe(false);
+    });
+  });
+
+  describe("bare OpenAI paths and /v1/v1beta the proxy MUST skip (rewritten by server.js at the Node http layer, see server-compat.js)", () => {
+    it.each([
       "/v1/v1beta",
       "/v1/v1beta/models",
       "/v1/v1beta/models/gemini-3.7-flash-high:generateContent",
-      // bare OpenAI API paths (base_url without /v1) — rewritten by middleware
       "/models",
       "/models/gpt-5.6-luna",
       "/chat/completions",
@@ -34,21 +36,18 @@ describe("proxy matcher", () => {
       "/embeddings",
       "/props",
       "/_ping",
-    ])("matches %s", (pathname) => {
+    ])("does not match %s", (pathname) => {
+      expect(matcher.test(pathname)).toBe(false);
+    });
+  });
+
+  describe("look-alike paths that must NOT be excluded (regression: a bare `v1` prefix would over-match, e.g. `/v10`)", () => {
+    it.each(["/v10/foo", "/v1foo", "/v1beta-extra", "/version"])( "matches %s", (pathname) => {
       expect(matcher.test(pathname)).toBe(true);
     });
   });
 
-  describe("look-alike paths that must be handled by middleware (no accidental exclusion)", () => {
-    it.each(["/v10/foo", "/v1foo", "/v1beta-extra", "/version"])( 
-      "matches %s",
-      (pathname) => {
-        expect(matcher.test(pathname)).toBe(true);
-      }
-    );
-  });
-
-  describe("paths the proxy MUST skip", () => {
+  describe("paths the proxy already skipped", () => {
     it.each([
       "/api/health",
       "/api/admin/database/import",
