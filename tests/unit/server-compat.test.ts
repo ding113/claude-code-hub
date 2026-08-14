@@ -8,6 +8,7 @@ describe("server-compat rewriteCompatPath (Node http layer, before Next handler)
   it("rewrites bare OpenAI paths to /v1/...", () => {
     for (const prefix of [
       "/models",
+      "/messages",
       "/chat/completions",
       "/responses",
       "/completions",

@@ -16,6 +16,7 @@
 
 const BARE_OPENAI_API_PATH_PREFIXES = [
   "/models",
+  "/messages",
   "/chat/completions",
   "/responses",
   "/completions",

@@ -30,6 +30,8 @@ describe("proxy matcher", () => {
       "/v1/v1beta/models/gemini-3.7-flash-high:generateContent",
       "/models",
       "/models/gpt-5.6-luna",
+      "/messages",
+      "/messages/gpt-5.6-claude",
       "/chat/completions",
       "/responses",
       "/completions",

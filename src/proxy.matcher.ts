@@ -25,4 +25,4 @@
 // literals so its build-time static analyzer can collect them. The unit
 // test in `tests/unit/proxy-matcher.test.ts` enforces drift between the two.
 export const proxyMatcherPattern =
-  "/((?!api|v1(?:/|$)|v1beta(?:/|$)|models(?:/|$)|chat/completions(?:/|$)|responses(?:/|$)|completions(?:/|$)|embeddings(?:/|$)|props(?:/|$)|_ping(?:/|$)|_next/static|_next/image|favicon.ico).*)";
+  "/((?!api|v1(?:/|$)|v1beta(?:/|$)|models(?:/|$)|messages(?:/|$)|chat/completions(?:/|$)|responses(?:/|$)|completions(?:/|$)|embeddings(?:/|$)|props(?:/|$)|_ping(?:/|$)|_next/static|_next/image|favicon.ico).*)";
