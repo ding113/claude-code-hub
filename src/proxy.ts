@@ -74,8 +74,9 @@ function proxyHandler(request: NextRequest) {
   }
 
   // 裸 OpenAI API 路径（base_url 不带 /v1 的客户端）→ rewrite 到 /v1 前缀
+  // DEBUG: 临时改成 redirect 验证 rewrite 是否被 Next.js 16 正确处理
   if (matchesBareOpenaiApiPath(pathname)) {
-    return NextResponse.rewrite(new URL(`${API_PROXY_PATH}${pathname}`, request.url));
+    return NextResponse.redirect(new URL(`${API_PROXY_PATH}${pathname}`, request.url));
   }
 
   // API 代理路由不需要 locale 处理和 Web 鉴权（使用自己的 Bearer token）
