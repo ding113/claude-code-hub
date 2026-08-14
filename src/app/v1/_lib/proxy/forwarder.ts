@@ -3881,6 +3881,9 @@ export class ProxyForwarder {
     let winnerCommitted = false;
     let winnerAttempt: StreamingHedgeAttempt | null = null;
     let noMoreProviders = false;
+    // 候选池为空（除主路外无其他候选）时禁用竞速：冷启动双发/超时竞速都无
+    // 备胎可拉，超时后不再写 hedge_triggered/raceInfo 误导标签，单路等主路返回。
+    let raceDisabled = false;
     let launchingAlternative: Promise<void> | null = null;
     let lastError: Error | null = null;
     let lastErrorCategory: ErrorCategory | null = null;
@@ -4175,6 +4178,9 @@ export class ProxyForwarder {
       attempt.thresholdTimer = setTimeout(() => {
         if (attempt.thresholdTriggered) return;
         attempt.thresholdTriggered = true;
+        // 候选池为空（raceDisabled）：无备胎可拉，竞速机制空转无意义——
+        // 不写 hedge_triggered/raceInfo 误导标签，单路等主路返回即可。
+        if (raceDisabled) return;
         // 请求已结束（winner 落定、备胎在后台等改绑）：首字超时也要回写决策链，
         // 否则备胎 UI 永远停留在"已启动"转圈；同时给 winner 补 no_rebind 结论。
         if (settled || attempt.settled) {
@@ -4310,6 +4316,8 @@ export class ProxyForwarder {
      *   给 winner 条目补上 no_rebind 结论。
      */
     const finalizeRaceCandidateStage = (attempt: StreamingHedgeAttempt) => {
+      // 候选池为空（raceDisabled）：无竞速语义可写，跳过 raceInfo 终态回写。
+      if (raceDisabled) return;
       // 不区分主路/备胎：主路 initial_selection 条目无 raceInfo 时 session.ts 会 fallback 补上，
       // 使主路被取消/耗尽时也有终态（timed_out / loser），不再停留在"首次选择"。
       session.updateProviderChainRaceStage(
@@ -4410,6 +4418,8 @@ export class ProxyForwarder {
             // ordinary fallback path above.
             if (allowNonSloFallback) {
               noMoreProviders = true;
+              // 候选池为空：无备胎可拉，禁用竞速标签与超时接力。
+              raceDisabled = true;
               // No alternative providers available — let in-flight attempt(s) continue.
               // If all attempts already completed, settle with last error.
               if (attempts.size === 0) {
@@ -4614,7 +4624,10 @@ export class ProxyForwarder {
             }
 
             // 后台候选进度：首字已到达（决策链条目 stage 更新，主路 initial_selection 也会被追踪）。
-            session.updateProviderChainRaceStage(attempt.provider.id, attempt.sequence, "first_byte");
+            // 候选池为空（raceDisabled）时跳过：不写 raceInfo，避免单路请求被误标竞速标签。
+            if (!raceDisabled) {
+              session.updateProviderChainRaceStage(attempt.provider.id, attempt.sequence, "first_byte");
+            }
 
             // 保留首块：若本 attempt 落败且需要计费，drain 时需要补回首块的 usage。
             attempt.firstChunk = firstChunk.value;
@@ -4816,7 +4829,10 @@ export class ProxyForwarder {
 
       // 备胎失败：原 hedge_launched 条目 stage 推进为 failed（UI 显示失败而非一直"已启动"）。
       // 主路同样更新（fallback 补 raceInfo），使主路失败也有终态。
-      session.updateProviderChainRaceStage(attempt.provider.id, attempt.sequence, "failed");
+      // 候选池为空（raceDisabled）时跳过：单路请求失败直接由 request_failed/retry 链体现，不标竞速。
+      if (!raceDisabled) {
+        session.updateProviderChainRaceStage(attempt.provider.id, attempt.sequence, "failed");
+      }
 
       if (errorCategory === ErrorCategory.PROVIDER_ERROR && statusCode !== 404) {
         await recordFailure(attempt.provider.id, error);
