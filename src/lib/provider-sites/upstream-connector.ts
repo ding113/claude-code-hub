@@ -495,6 +495,22 @@ export async function loginUpstreamSite(
         retryAfterMs
       );
     }
+    if (res.status === 409) {
+      // AUTH_SESSION_LIMIT: account-level upstream login-session cap. The cap
+      // only clears when old upstream sessions age out or the operator clears
+      // them, so retrying every sync cycle is pointless and keeps piling up
+      // rejected logins. Back off for one hour like a rate limit; the persisted
+      // "cooling down until" marker survives restarts.
+      const cooldownMs = 60 * 60 * 1000;
+      noteProviderSiteRateLimit(site, cooldownMs);
+      throw new UpstreamRequestError(
+        "POST",
+        "/api/user/login",
+        res.status,
+        body?.message || (body ? "" : "empty response"),
+        cooldownMs
+      );
+    }
     if (!res.ok || !body || body.success === false) {
       const detail = body?.message || `HTTP ${res.status}${body ? "" : " (empty response)"}`;
       throw new Error(`newapi login failed: ${detail}`);
