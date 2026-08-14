@@ -1,6 +1,5 @@
 import type { NextConfig } from "next";
 import createNextIntlPlugin from "next-intl/plugin";
-import { compatRewrites } from "./src/proxy.rewrites";
 
 // Create next-intl plugin with i18n request configuration
 const withNextIntl = createNextIntlPlugin("./src/i18n/request.ts");
@@ -51,15 +50,6 @@ const nextConfig: NextConfig = {
       bodySizeLimit: "500mb",
     },
     proxyClientMaxBodySize: "100mb",
-  },
-
-  // 兼容性路由重写（见 src/proxy.rewrites.ts）：
-  // 裸 OpenAI 路径 → /v1/...；/v1/v1beta/... → /v1beta/...
-  // 服务端透明，客户端无感（无需跟随 redirect）。
-  async rewrites() {
-    return {
-      beforeFiles: compatRewrites(),
-    };
   },
 };
 
