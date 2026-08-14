@@ -164,6 +164,7 @@ function createFallbackSettings(): SystemSettings {
     billHedgeLosers: true,
     streamingRaceMode: "single",
     streamingRaceFirstByteMs: 20000,
+    streamingIdleTimeoutMs: 0,
     timezone: null,
     enableAutoCleanup: false,
     cleanupRetentionDays: 30,
@@ -345,6 +346,13 @@ const RECENT_COLUMN_LADDER: ReadonlyArray<{
     selectWarn:
       "system_settings 表除 streamingRaceFirstByteMs 外仍有列缺失，继续回退到上一代字段集。",
     updateWarn: "system_settings 表除 streamingRaceFirstByteMs 外仍有列缺失，继续降级更新。",
+  },
+  {
+    key: "streamingIdleTimeoutMs",
+    column: systemSettings.streamingIdleTimeoutMs,
+    selectWarn:
+      "system_settings 表除 streamingIdleTimeoutMs 外仍有列缺失，继续回退到上一代字段集。",
+    updateWarn: "system_settings 表除 streamingIdleTimeoutMs 外仍有列缺失，继续降级更新。",
   },
   {
     key: "streamingRaceMode",
@@ -791,6 +799,11 @@ export async function updateSystemSettings(
     }
     if (racePolicyChanged) {
       updates.streamingRaceFirstByteMs = nextStreamingRaceFirstByteMs;
+    }
+
+    // Global streaming idle timeout (ms) for stuck-stream watchdog.
+    if (payload.streamingIdleTimeoutMs !== undefined) {
+      updates.streamingIdleTimeoutMs = Math.trunc(payload.streamingIdleTimeoutMs);
     }
 
     // 非成功请求按 token 用量计费开关（如果提供）

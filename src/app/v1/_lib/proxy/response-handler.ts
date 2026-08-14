@@ -2135,6 +2135,16 @@ export class ProxyResponseHandler {
       return response;
     }
 
+    // Global streaming idle timeout: site-wide watchdog window after first byte.
+    // 0 = disabled; when >0 it overrides any per-provider streamingIdleTimeoutMs.
+    let globalStreamingIdleTimeoutMs = 0;
+    try {
+      globalStreamingIdleTimeoutMs =
+        (await getCachedSystemSettings()).streamingIdleTimeoutMs ?? 0;
+    } catch {
+      // fall through to per-provider value
+    }
+
     let processedStream: ReadableStream<Uint8Array> = response.body;
 
     // --- GEMINI STREAM HANDLING ---
@@ -2193,9 +2203,11 @@ export class ProxyResponseHandler {
 
           // 静默期 Watchdog：透传也需要支持中途卡住（无新数据推送）
           const idleTimeoutMs =
-            provider.streamingIdleTimeoutMs > 0
-              ? provider.streamingIdleTimeoutMs
-              : Number.POSITIVE_INFINITY;
+            globalStreamingIdleTimeoutMs > 0
+              ? globalStreamingIdleTimeoutMs
+              : provider.streamingIdleTimeoutMs > 0
+                ? provider.streamingIdleTimeoutMs
+                : Number.POSITIVE_INFINITY;
           let idleTimeoutId: NodeJS.Timeout | null = null;
           const clearIdleTimer = () => {
             if (idleTimeoutId) {
@@ -2622,9 +2634,11 @@ export class ProxyResponseHandler {
       taskId
     );
     const idleTimeoutMs =
-      provider.streamingIdleTimeoutMs > 0
-        ? provider.streamingIdleTimeoutMs
-        : Number.POSITIVE_INFINITY;
+      globalStreamingIdleTimeoutMs > 0
+        ? globalStreamingIdleTimeoutMs
+        : provider.streamingIdleTimeoutMs > 0
+          ? provider.streamingIdleTimeoutMs
+          : Number.POSITIVE_INFINITY;
     const streamTaskStaleTimeoutMs = resolveStreamTaskStaleTimeoutMs(provider);
     const clientAbortDrainTimeoutMs = CLIENT_ABORT_DRAIN_MAX_MS;
 

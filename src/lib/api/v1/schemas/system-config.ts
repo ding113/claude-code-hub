@@ -181,6 +181,14 @@ export const SystemSettingsSchema = z
       .describe(
         "Global first-byte threshold in ms for timeout_race. 0 disables (used with single mode)."
       ),
+    streamingIdleTimeoutMs: z
+      .number()
+      .int()
+      .min(0)
+      .max(600000)
+      .describe(
+        "Global streaming idle timeout in ms: silence window after first byte before aborting a stuck stream. 0 disables the idle watchdog."
+      ),
     timezone: TimeZoneSchema.nullable().describe(
       "Configured system timezone, or null for default."
     ),

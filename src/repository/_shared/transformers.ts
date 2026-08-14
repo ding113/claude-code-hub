@@ -355,6 +355,12 @@ export function toSystemSettings(dbSettings: any): SystemSettings {
       Number.isFinite(Number(dbSettings.streamingRaceFirstByteMs))
         ? Math.trunc(Number(dbSettings.streamingRaceFirstByteMs))
         : 20000,
+    streamingIdleTimeoutMs:
+      dbSettings?.streamingIdleTimeoutMs != null &&
+      dbSettings?.streamingIdleTimeoutMs !== undefined &&
+      Number.isFinite(Number(dbSettings.streamingIdleTimeoutMs))
+        ? Math.trunc(Number(dbSettings.streamingIdleTimeoutMs))
+        : 0,
     timezone: dbSettings?.timezone ?? null,
     enableAutoCleanup: dbSettings?.enableAutoCleanup ?? false,
     cleanupRetentionDays: dbSettings?.cleanupRetentionDays ?? 30,

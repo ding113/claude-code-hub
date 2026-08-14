@@ -69,6 +69,7 @@ export async function POST(req: Request) {
       codexPriorityBillingSource: validated.codexPriorityBillingSource,
       streamingRaceMode: validated.streamingRaceMode,
       streamingRaceFirstByteMs: validated.streamingRaceFirstByteMs,
+      streamingIdleTimeoutMs: validated.streamingIdleTimeoutMs,
       timezone: validated.timezone,
       enableAutoCleanup: validated.enableAutoCleanup,
       cleanupRetentionDays: validated.cleanupRetentionDays,

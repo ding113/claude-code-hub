@@ -102,6 +102,11 @@ export interface SystemSettings {
   streamingRaceMode: StreamingRaceMode;
   /** Global first-byte threshold (ms) for timeout_race / dual_fast. */
   streamingRaceFirstByteMs: number;
+  /**
+   * Global streaming idle timeout (ms): silence window after first byte before
+   * aborting a stuck stream. 0 = disabled (no idle watchdog).
+   */
+  streamingIdleTimeoutMs: number;
 
   // 系统时区配置 (IANA timezone identifier)
   // 用于统一后端时间边界计算和前端日期/时间显示
@@ -245,6 +250,8 @@ export interface UpdateSystemSettingsInput {
 
   streamingRaceMode?: StreamingRaceMode;
   streamingRaceFirstByteMs?: number;
+  /** Global streaming idle timeout (ms); 0 = disabled. */
+  streamingIdleTimeoutMs?: number;
 
   // 系统时区配置（可选）
   timezone?: string | null;

@@ -1037,6 +1037,9 @@ export const UpdateSystemSettingsSchema = z.object({
   streamingRaceMode: z.enum(["single", "timeout_race", "dual_fast"]).optional(),
   // 0 = disabled (used when race mode is single); timeout_race needs 1–180s
   streamingRaceFirstByteMs: z.coerce.number().int().min(0).max(180000).optional(),
+  // Global streaming idle timeout (ms): silence window after first byte before aborting a stuck stream.
+  // 0 = disabled (no idle watchdog); max 600000 (10 min).
+  streamingIdleTimeoutMs: z.coerce.number().int().min(0).max(600000).optional(),
   healthTestScheduleMode: z.enum(["dynamic", "always_on"]).optional(),
   // Rolling sample window for online-rate / sparkline / SLO (default 10). Min 1: no full-window gate.
   healthTestWindowSize: z.coerce.number().int().min(1).max(50).optional(),

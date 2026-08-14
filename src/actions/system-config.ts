@@ -78,6 +78,7 @@ export async function saveSystemSettings(formData: {
   billHedgeLosers?: boolean;
   streamingRaceMode?: "single" | "timeout_race" | "dual_fast";
   streamingRaceFirstByteMs?: number;
+  streamingIdleTimeoutMs?: number;
   timezone?: string | null;
   enableAutoCleanup?: boolean;
   cleanupRetentionDays?: number;
@@ -146,6 +147,7 @@ export async function saveSystemSettings(formData: {
       billHedgeLosers: validated.billHedgeLosers,
       streamingRaceMode: validated.streamingRaceMode,
       streamingRaceFirstByteMs: validated.streamingRaceFirstByteMs,
+      streamingIdleTimeoutMs: validated.streamingIdleTimeoutMs,
       timezone: validated.timezone,
       enableAutoCleanup: validated.enableAutoCleanup,
       cleanupRetentionDays: validated.cleanupRetentionDays,

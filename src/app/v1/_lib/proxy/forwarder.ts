@@ -3333,12 +3333,21 @@ export class ProxyForwarder {
       if (err.message?.includes("streaming_idle") && !session.clientAbortSignal?.aborted) {
         // 流式静默期超时：首字节之后的连续静默窗口超时
         // 修复：静默期超时也是供应商问题，应计入熔断器
+        let effectiveIdleTimeoutMs = provider.streamingIdleTimeoutMs;
+        try {
+          const globalIdleTimeoutMs = (await getCachedSystemSettings()).streamingIdleTimeoutMs ?? 0;
+          if (globalIdleTimeoutMs > 0) {
+            effectiveIdleTimeoutMs = globalIdleTimeoutMs;
+          }
+        } catch {
+          // fall through to provider value
+        }
         logger.error(
           "ProxyForwarder: Streaming idle timeout (provider quality issue, will switch)",
           {
             providerId: provider.id,
             providerName: provider.name,
-            idleTimeoutMs: provider.streamingIdleTimeoutMs,
+            idleTimeoutMs: effectiveIdleTimeoutMs,
             errorName: err.name,
             errorMessage: err.message || "(empty message)",
             errorCode: err.code || "N/A",
@@ -3350,21 +3359,21 @@ export class ProxyForwarder {
         // 抛出 ProxyError（归类为 PROVIDER_ERROR）
         cleanupCombinedSignal();
         throw new ProxyError(
-          `供应商流式响应静默超时: ${provider.streamingIdleTimeoutMs}ms 内未收到新数据`,
+          `供应商流式响应静默超时: ${effectiveIdleTimeoutMs}ms 内未收到新数据`,
           524, // 524 = A Timeout Occurred
           {
             body: JSON.stringify({
               error: {
                 type: "streaming_idle_timeout",
-                message: `Provider stopped sending data for ${provider.streamingIdleTimeoutMs}ms`,
-                timeout_ms: provider.streamingIdleTimeoutMs,
+                message: `Provider stopped sending data for ${effectiveIdleTimeoutMs}ms`,
+                timeout_ms: effectiveIdleTimeoutMs,
               },
             }),
             parsed: {
               error: {
                 type: "streaming_idle_timeout",
-                message: `Provider stopped sending data for ${provider.streamingIdleTimeoutMs}ms`,
-                timeout_ms: provider.streamingIdleTimeoutMs,
+                message: `Provider stopped sending data for ${effectiveIdleTimeoutMs}ms`,
+                timeout_ms: effectiveIdleTimeoutMs,
               },
             },
             providerId: provider.id,

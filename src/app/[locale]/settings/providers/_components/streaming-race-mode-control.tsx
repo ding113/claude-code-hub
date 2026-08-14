@@ -42,6 +42,8 @@ export function StreamingRaceModeControl({ className }: { className?: string }) 
   const queryClient = useQueryClient();
   const [firstByteMs, setFirstByteMs] = useState(20000);
   const [draftSec, setDraftSec] = useState("20");
+  const [idleMs, setIdleMs] = useState(0);
+  const [draftIdleSec, setDraftIdleSec] = useState("0");
   const saveGenRef = useRef(0);
 
   const { data, isLoading } = useQuery({
@@ -68,12 +70,20 @@ export function StreamingRaceModeControl({ className }: { className?: string }) 
           : 0;
     setFirstByteMs(ms);
     setDraftSec(String(Math.max(0, Math.round(ms / 1000))));
+    const rawIdle = data.streamingIdleTimeoutMs;
+    const idle =
+      typeof rawIdle === "number" && Number.isFinite(rawIdle) && rawIdle >= 0
+        ? Math.trunc(rawIdle)
+        : 0;
+    setIdleMs(idle);
+    setDraftIdleSec(String(Math.max(0, Math.round(idle / 1000))));
   }, [data]);
 
   const mutation = useMutation({
     mutationFn: async (payload: {
       streamingRaceMode?: StreamingRaceMode;
       streamingRaceFirstByteMs?: number;
+      streamingIdleTimeoutMs?: number;
       _gen: number;
     }) => {
       const { _gen, ...body } = payload;
@@ -88,6 +98,10 @@ export function StreamingRaceModeControl({ className }: { className?: string }) 
         setFirstByteMs(payload.streamingRaceFirstByteMs);
         setDraftSec(String(Math.max(0, Math.round(payload.streamingRaceFirstByteMs / 1000))));
       }
+      if (typeof payload.streamingIdleTimeoutMs === "number") {
+        setIdleMs(payload.streamingIdleTimeoutMs);
+        setDraftIdleSec(String(Math.max(0, Math.round(payload.streamingIdleTimeoutMs / 1000))));
+      }
       void queryClient.cancelQueries({ queryKey: RACE_QUERY_KEY });
       const previous = queryClient.getQueryData(RACE_QUERY_KEY);
       queryClient.setQueryData(RACE_QUERY_KEY, (old: Record<string, unknown> | undefined) => {
@@ -97,6 +111,9 @@ export function StreamingRaceModeControl({ className }: { className?: string }) 
           ...(payload.streamingRaceMode ? { streamingRaceMode: payload.streamingRaceMode } : {}),
           ...(typeof payload.streamingRaceFirstByteMs === "number"
             ? { streamingRaceFirstByteMs: payload.streamingRaceFirstByteMs }
+            : {}),
+          ...(typeof payload.streamingIdleTimeoutMs === "number"
+            ? { streamingIdleTimeoutMs: payload.streamingIdleTimeoutMs }
             : {}),
         };
       });
@@ -111,6 +128,10 @@ export function StreamingRaceModeControl({ className }: { className?: string }) 
         setFirstByteMs(next.streamingRaceFirstByteMs);
         setDraftSec(String(Math.max(0, Math.round(next.streamingRaceFirstByteMs / 1000))));
       }
+      if (typeof next.streamingIdleTimeoutMs === "number") {
+        setIdleMs(next.streamingIdleTimeoutMs);
+        setDraftIdleSec(String(Math.max(0, Math.round(next.streamingIdleTimeoutMs / 1000))));
+      }
       queryClient.setQueryData(RACE_QUERY_KEY, (old: Record<string, unknown> | undefined) => ({
         ...(old && typeof old === "object" ? old : {}),
         ...next,
@@ -124,6 +145,10 @@ export function StreamingRaceModeControl({ className }: { className?: string }) 
       if (typeof data?.streamingRaceFirstByteMs === "number") {
         setFirstByteMs(data.streamingRaceFirstByteMs);
         setDraftSec(String(Math.round(data.streamingRaceFirstByteMs / 1000)));
+      }
+      if (typeof data?.streamingIdleTimeoutMs === "number") {
+        setIdleMs(data.streamingIdleTimeoutMs);
+        setDraftIdleSec(String(Math.round(data.streamingIdleTimeoutMs / 1000)));
       }
       toast.error(t("raceModeSaveFailed"), { description: err.message });
     },
@@ -147,6 +172,28 @@ export function StreamingRaceModeControl({ className }: { className?: string }) 
       mutation.mutate({
         streamingRaceMode: clampedSec > 0 ? "timeout_race" : "single",
         streamingRaceFirstByteMs: ms,
+        _gen: gen,
+      });
+    }
+  };
+
+  const idleSecValue = Math.round(idleMs / 1000);
+
+  const commitIdleSeconds = () => {
+    const sec = Number.parseInt(draftIdleSec, 10);
+    if (!Number.isFinite(sec) || sec < 0) {
+      setDraftIdleSec(String(idleSecValue));
+      toast.error(t("raceIdleInvalid"));
+      return;
+    }
+    const clampedSec = Math.min(600, Math.max(0, sec));
+    const ms = clampedSec * 1000;
+    setDraftIdleSec(String(clampedSec));
+    if (ms !== idleMs) {
+      const gen = ++saveGenRef.current;
+      // 0 = 禁用流式静默 watchdog；>0 = 首字节后无新数据超时上限（秒）。
+      mutation.mutate({
+        streamingIdleTimeoutMs: ms,
         _gen: gen,
       });
     }
@@ -195,8 +242,37 @@ export function StreamingRaceModeControl({ className }: { className?: string }) 
         </div>
       </div>
 
+      <div className="flex min-h-[2.5rem] items-center justify-between gap-2 rounded-lg border border-border/50 bg-background/70 px-2.5 py-2">
+        <span className="inline-flex min-w-0 items-center gap-1.5 text-[11px] text-muted-foreground">
+          <span className="truncate">{t("raceIdleLabel")}</span>
+        </span>
+        <div className="inline-flex shrink-0 items-center gap-1.5">
+          <Input
+            id="race-idle-timeout-ms"
+            type="number"
+            min={0}
+            max={600}
+            step={1}
+            className="h-8 w-14 px-2 text-center font-mono text-xs tabular-nums"
+            value={draftIdleSec}
+            onChange={(e) => setDraftIdleSec(e.target.value)}
+            onBlur={commitIdleSeconds}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.currentTarget.blur();
+              }
+            }}
+            aria-label={t("raceIdleLabel")}
+          />
+          <span className="w-3 text-[11px] text-muted-foreground">s</span>
+        </div>
+      </div>
+
       <p className="min-h-[2.25rem] text-[11px] leading-relaxed text-muted-foreground">
         {t("raceModeSingleThresholdHelp")}
+      </p>
+      <p className="min-h-[2.25rem] text-[11px] leading-relaxed text-muted-foreground">
+        {t("raceIdleHelp")}
       </p>
     </div>
   );

@@ -1079,6 +1079,9 @@ export const systemSettings = pgTable('system_settings', {
   streamingRaceMode: varchar('streaming_race_mode', { length: 20 }).notNull().default('single'),
   // Global first-byte threshold used by timeout_race / dual_fast (ms)
   streamingRaceFirstByteMs: integer('streaming_race_first_byte_ms').notNull().default(20000),
+  // Global streaming idle timeout (ms): silence window after first byte before aborting a stuck stream.
+  // 0 = disabled (no idle watchdog); >0 = abort when no new data within this window.
+  streamingIdleTimeoutMs: integer('streaming_idle_timeout_ms').notNull().default(0),
 
   // 系统时区配置 (IANA timezone identifier)
   // 用于统一后端时间边界计算和前端日期/时间显示

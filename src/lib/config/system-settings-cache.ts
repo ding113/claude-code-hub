@@ -152,6 +152,7 @@ export async function getCachedSystemSettings(): Promise<SystemSettings> {
       siteCaptchaEndpoint: null,
       streamingRaceMode: "single",
       streamingRaceFirstByteMs: 20000,
+      streamingIdleTimeoutMs: 0,
       timezone: null,
       verboseProviderError: false,
       passThroughUpstreamErrorMessage: DEFAULT_SETTINGS.passThroughUpstreamErrorMessage,
