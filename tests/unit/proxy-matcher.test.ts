@@ -23,6 +23,15 @@ describe("proxy matcher", () => {
     });
   });
 
+  describe("nested /v1/v1beta paths the proxy MUST handle (Gemini SDK clients whose base_url is .../v1 produce this prefix and need rewriting to /v1beta)", () => {
+    it.each(["/v1/v1beta", "/v1/v1beta/models", "/v1/v1beta/models/gemini-3.7-flash-high:generateContent"])(
+      "matches %s",
+      (pathname) => {
+        expect(matcher.test(pathname)).toBe(true);
+      }
+    );
+  });
+
   describe("look-alike paths that must NOT be excluded (regression: a bare `v1` prefix would over-match, e.g. `/v10`)", () => {
     it.each(["/v10/foo", "/v1foo", "/v1beta-extra", "/version"])("matches %s", (pathname) => {
       expect(matcher.test(pathname)).toBe(true);
