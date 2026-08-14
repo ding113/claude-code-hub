@@ -5338,11 +5338,12 @@ export class ProxyForwarder {
         //   fastestMode），与主路（cheapest）构成"便宜 + 便宜"双发：
         //   谁先返回首块谁赢并临时绑定（竞争取快，候选拉取不按延迟）；若便宜方
         //   也在自身首字窗口内返回，则改绑全局复用键到更便宜的候选。没有 SLO 合格
-        //   候选时主路单路运行，首字超时后再走下方备胎链。
+        //   候选时同样不退化单路——降级按普通调度顺序拉取备胎，仍保持双发；
+        //   完全没有候选时才由主路单路运行，首字超时后再走下方备胎链。
         // 有绑定时保持原逻辑——只发绑定方，等首字节超时才拉备胎。
         coldStartFastestMode = raceMode === "timeout_race" && isColdStart;
         await launchAlternative({
-          allowNonSloFallback: raceMode === "dual_fast",
+          allowNonSloFallback: true,
           fastestMode: coldStartFastestMode,
           sameCostAsProvider: null,
         });
