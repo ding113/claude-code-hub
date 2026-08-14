@@ -3921,6 +3921,9 @@ export class ProxyForwarder {
     // 与主路（cheapest）构成双发。竞争取快——谁先回首字谁赢（服务当前请求用最快的），
     // 赢家临时写全局键，在途便宜候选返回后改绑到便宜方。候选拉取不按延迟排序。
     let coldStartFastestMode = false;
+    // 绑定方失败耗尽（同一请求内累计失败 ≥ 2）后置位：后续候选拉取切换为冷启动式
+    // 双发（一次拉两个竞速），赢家临时绑定、便宜输家后台回首字改绑——与冷启动完全一致。
+    let coldStartLike = false;
     // 竞速类型（决策链 raceInfo 用）：冷启动双发 / 超时竞速 / 双发极速
     const raceTypeForChain: NonNullable<ProviderChainItem["raceInfo"]>["type"] =
       raceMode === "dual_fast" ? "dual_fast" : isColdStart ? "cold_start" : "timeout_race";
@@ -4382,9 +4385,19 @@ export class ProxyForwarder {
       }
 
       launchingAlternative = (async () => {
-        // 一次只拉一个备选（launchAlternative 每次启动一个备胎即 return），
+        // 默认一次只拉一个备选（launchAlternative 每次启动一个备胎即 return），
         // 备胎超时/失败后继续往下拉下一个——链式推进，不限制在途总数。
-        while (!settled && !winnerCommitted && !noMoreProviders) {
+        // 绑定方失败耗尽（coldStartLike）后：一次拉两个（冷启动式双发），
+        // 与冷启动入口的双发行为一致——竞速取快，赢家临时绑定、
+        // 便宜输家后台跑回首字改绑。
+        const batchSize = coldStartLike ? 2 : 1;
+        let launchedInBatch = 0;
+        while (
+          !settled &&
+          !winnerCommitted &&
+          !noMoreProviders &&
+          launchedInBatch < batchSize
+        ) {
           const alternativeSelection = await selectHedgeAlternative({
             allowNonSloFallback,
             launchedProviderIds,
@@ -4430,7 +4443,9 @@ export class ProxyForwarder {
           }
 
           const launched = await startAttempt(alternativeProvider, false);
-          if (launched) return;
+          if (launched) {
+            launchedInBatch += 1;
+          }
         }
       })()
         .catch(async (error) => {
@@ -4827,6 +4842,27 @@ export class ProxyForwarder {
       attempts.delete(attempt);
       ProxyForwarder.markProviderFailed(session, failedProviderIds, attempt.provider.id);
 
+      // 绑定方失败耗尽（同一请求内累计失败 ≥ 2，或绑定方自身重试两次仍失败）：
+      // 置位 coldStartLike，后续候选拉取切换为冷启动式双发（一次拉两个竞速），
+      // 赢家临时绑定、便宜输家后台回首字改绑——与冷启动行为完全一致。
+      if (
+        !coldStartLike &&
+        (failedProviderIds.length >= 2 ||
+          (attempt === initialAttemptRef && attempt.requestAttemptCount >= 2))
+      ) {
+        coldStartLike = true;
+        logger.info(
+          "ProxyForwarder: Binding provider exhausted, switching to cold-start-like dual launch",
+          {
+            sessionId: session.sessionId ?? null,
+            failedProviderCount: failedProviderIds.length,
+            failedProviderIds,
+            initialProviderId: initialProvider.id,
+            initialProviderName: initialProvider.name,
+          }
+        );
+      }
+
       // 备胎失败：原 hedge_launched 条目 stage 推进为 failed（UI 显示失败而非一直"已启动"）。
       // 主路同样更新（fallback 补 raceInfo），使主路失败也有终态。
       // 候选池为空（raceDisabled）时跳过：单路请求失败直接由 request_failed/retry 链体现，不标竞速。
@@ -4995,7 +5031,9 @@ export class ProxyForwarder {
       // （fastest 先回），在途的**更便宜**候选不 abort，等它在自身首字窗口内返回
       // 后改绑全局复用键到便宜方（先临时写贵方，再改绑便宜方）。
       // 若赢家已是便宜方（主路先回），在途只有更贵的备胎 → 无需改绑，正常 abort。
-      if (isColdStart && !timedOutWinner) {
+      // coldStartLike（绑定方失败耗尽后的冷启动式双发）同样适用：赢家临时绑定，
+      // 便宜输家后台跑回首字后改绑——与冷启动完全一致。
+      if ((isColdStart || coldStartLike) && !timedOutWinner) {
         coldStartTemporaryRebind = Array.from(attempts).some(
           (a) =>
             !a.settled &&
