@@ -4738,6 +4738,63 @@ export class ProxyForwarder {
         return;
       }
       if (settled || winnerCommitted || attempt.settled) {
+        // 冷启动竞速：winner 已临时绑定（通常是贵方先回首字）时，便宜候选真实失败
+        // （非超时、非客户端中断、非不可重试）不应直接判死——按全局 maxRetryAttempts
+        // 给同 provider 重试机会，重试成功回首字后走 coldStartTemporaryRebind 改绑回便宜方。
+        if (
+          !settled &&
+          winnerCommitted &&
+          attempt !== winnerAttempt &&
+          !attempt.settled
+        ) {
+          const raceErrorCategory = await categorizeErrorAsync(error);
+          const raceRetryMax = resolveMaxAttemptsForProvider(
+            attempt.provider,
+            clampRetryAttempts(
+              raceSettings.maxRetryAttempts ?? PROVIDER_DEFAULTS.MAX_RETRY_ATTEMPTS
+            )
+          );
+          if (
+            raceErrorCategory !== ErrorCategory.CLIENT_ABORT &&
+            raceErrorCategory !== ErrorCategory.NON_RETRYABLE_CLIENT_ERROR &&
+            attempt.requestAttemptCount < raceRetryMax
+          ) {
+            const retryMessage =
+              error instanceof ProxyError ? error.getDetailedErrorMessage() : error.message;
+            logger.info(
+              "ProxyForwarder: Retrying cheaper candidate after failure while winner committed (cold start)",
+              {
+                providerId: attempt.provider.id,
+                providerName: attempt.provider.name,
+                error: retryMessage,
+                participantSequence: attempt.sequence,
+                attemptNumber: attempt.requestAttemptCount,
+                willRetryAttemptNumber: attempt.requestAttemptCount + 1,
+                maxAttemptsPerProvider: raceRetryMax,
+              }
+            );
+            session.addProviderToChain(attempt.provider, {
+              ...buildRetryFailedChainEntry(
+                attempt.provider,
+                attempt.endpointAudit,
+                attempt.requestAttemptCount,
+                error,
+                retryMessage,
+                undefined,
+                rawCrossProviderFallbackEnabled
+              ),
+              modelRedirect: getAttemptModelRedirect(attempt),
+            });
+            if (attempt.thresholdTimer) {
+              clearTimeout(attempt.thresholdTimer);
+              attempt.thresholdTimer = null;
+            }
+            attempt.requestAttemptCount += 1;
+            armAttemptThreshold(attempt);
+            runAttempt(attempt);
+            return;
+          }
+        }
         // 请求已结束（winner 落定、备胎在后台等改绑）：失败也要回写决策链，
         // 否则备胎 UI 永远停留在"已启动"转圈；同时给 winner 补 no_rebind 结论。
         // 主路（sequence=1）同样处理：超时后挂死的连接在此断开，避免泄漏。
