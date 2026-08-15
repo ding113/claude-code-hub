@@ -4199,6 +4199,17 @@ export class ProxyForwarder {
               detail: "cheaper_candidate_timed_out",
             });
           }
+          // 请求已结束但本 attempt 仍挂起（首字未回、连接未释放）：主动断开
+          // 上游连接并释放 agent，避免 reader/agent 泄漏；stage 推进为 failed
+          // （首字超时的迟到终态）。无回首字 = 无 token 可计费，不走 loser billing。
+          if (!attempt.settled) {
+            attempt.settled = true;
+            attempts.delete(attempt);
+            session.updateProviderChainRaceStage(attempt.provider.id, attempt.sequence, "failed");
+            const readerCancel = attempt.reader?.cancel("hedge_loser_timed_out");
+            readerCancel?.catch(() => undefined);
+            releaseAttemptAgent(attempt);
+          }
           return;
         }
         // 后台候选进度：首字超时（决策链条目 stage 更新，主路 initial_selection 也会被追踪）。
@@ -4236,6 +4247,16 @@ export class ProxyForwarder {
         ) {
           const pending = pendingWinnerAttempt;
           pendingWinnerAttempt = null;
+          // 主路超时出局：promote 备胎前先断开主路挂死连接并释放 agent，
+          // 避免 reader/agent 泄漏（无回首字 = 无 token 可计费）。
+          if (!attempt.settled) {
+            attempt.settled = true;
+            attempts.delete(attempt);
+            session.updateProviderChainRaceStage(attempt.provider.id, attempt.sequence, "failed");
+            const readerCancel = attempt.reader?.cancel("hedge_loser_timed_out");
+            readerCancel?.catch(() => undefined);
+            releaseAttemptAgent(attempt);
+          }
           void commitWinner(pending, pending.firstChunk as Uint8Array);
           return;
         }
@@ -4692,7 +4713,10 @@ export class ProxyForwarder {
       if (settled || winnerCommitted || attempt.settled) {
         // 请求已结束（winner 落定、备胎在后台等改绑）：失败也要回写决策链，
         // 否则备胎 UI 永远停留在"已启动"转圈；同时给 winner 补 no_rebind 结论。
-        if (attempt !== winnerAttempt && !attempt.settled && attempt.sequence > 1) {
+        // 主路（sequence=1）同样处理：超时后挂死的连接在此断开，避免泄漏。
+        if (attempt !== winnerAttempt && !attempt.settled) {
+          attempt.settled = true;
+          attempts.delete(attempt);
           session.updateProviderChainRaceStage(attempt.provider.id, attempt.sequence, "failed");
           if (coldStartTemporaryRebind && winnerAttempt) {
             coldStartTemporaryRebind = false;
@@ -4703,6 +4727,9 @@ export class ProxyForwarder {
               detail: "cheaper_candidate_failed",
             });
           }
+          const readerCancel = attempt.reader?.cancel("hedge_loser_failed");
+          readerCancel?.catch(() => undefined);
+          releaseAttemptAgent(attempt);
         }
         return;
       }
