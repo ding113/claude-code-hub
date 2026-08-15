@@ -4668,6 +4668,20 @@ export class ProxyForwarder {
               return;
             }
 
+            // 检测 [DONE]-only 空流：上游 200 但 SSE 流只有结束标记、没有任何内容事件。
+            // readFirstReadableChunk 只跳过 0 长度块，`data: [DONE]\n\n` 是 8 字节非空块，
+            // 会被当成有效首块 -> 记成 request_success 且 0 token（还可能写进全局复用键）。
+            // 与空 body 一致走 EmptyResponseError -> 分类 PROVIDER_ERROR -> 重试/切换。
+            const firstChunkText = new TextDecoder().decode(firstChunk.value).trim();
+            const compactFirstChunk = firstChunkText.replace(/\s+/g, "");
+            if (compactFirstChunk === "[DONE]" || compactFirstChunk === "data:[DONE]") {
+              await handleAttemptFailure(
+                attempt,
+                new EmptyResponseError(attempt.provider.id, attempt.provider.name, "empty_body")
+              );
+              return;
+            }
+
             // 后台候选进度：首字已到达（决策链条目 stage 更新，主路 initial_selection 也会被追踪）。
             // 候选池为空（raceDisabled）时跳过：不写 raceInfo，避免单路请求被误标竞速标签。
             if (!raceDisabled) {
