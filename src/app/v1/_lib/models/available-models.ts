@@ -38,7 +38,6 @@ export interface FetchedModel {
 
 /** 模型列表请求的默认超时（毫秒） */
 const DEFAULT_MODELS_TIMEOUT_MS = 3000;
-const MAX_MODELS_TIMEOUT_MS = 3000;
 
 /**
  * 模型目录短缓存：客户端通常会在启动/切换模型时重复请求，
@@ -54,14 +53,10 @@ const availableModelsCache = new Map<string, AvailableModelsCacheEntry>();
 const inFlightAvailableModels = new Map<string, Promise<AvailableModelsResult>>();
 
 /**
- * 获取 provider 的请求超时配置
+ * 模型目录请求超时：provider 级超时配置已移除，统一使用默认超时。
  */
-function getProviderTimeout(provider: Provider): number {
-  const configured = Number(provider.requestTimeoutNonStreamingMs);
-  if (!Number.isFinite(configured) || configured <= 0) {
-    return DEFAULT_MODELS_TIMEOUT_MS;
-  }
-  return Math.min(configured, MAX_MODELS_TIMEOUT_MS);
+function getProviderTimeout(): number {
+  return DEFAULT_MODELS_TIMEOUT_MS;
 }
 
 /**
@@ -302,7 +297,7 @@ async function fetchModelsWithConfig(
   const url = config.buildUrl(baseUrl, provider);
   const headers = config.buildHeaders(provider);
   const proxyConfig = createProxyAgentForProvider(provider, url);
-  const timeout = getProviderTimeout(provider);
+  const timeout = getProviderTimeout();
 
   const safeUrl = url.replace(/[?&]key=[^&]+/, "[key=REDACTED]");
   logger.debug(`[AvailableModels] Fetching models from ${provider.name}: ${safeUrl}`);

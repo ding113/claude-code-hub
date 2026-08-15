@@ -60,7 +60,6 @@ import {
 import {
   PROVIDER_GROUP,
   PROVIDER_LIMITS,
-  PROVIDER_TIMEOUT_DEFAULTS,
 } from "@/lib/constants/provider.constants";
 import { PROVIDER_BATCH_PATCH_ERROR_CODES } from "@/lib/provider-batch-patch-error-codes";
 import type { HealthTestSloThresholds } from "@/lib/provider-health-test/slo-thresholds";
@@ -201,7 +200,6 @@ function ProviderRichListItemInner({
   const tTypes = useTranslations("settings.providers.types");
   const tList = useTranslations("settings.providers.list");
   const tBatchEdit = useTranslations("settings.providers.batchEdit");
-  const tTimeout = useTranslations("settings.providers.form.sections.timeout");
   const tInline = useTranslations("settings.providers.inlineEdit");
 
   const validatePriority = (raw: string) => {
@@ -881,18 +879,6 @@ function ProviderRichListItemInner({
                 {provider.maskedKey}
               </button>
             )}
-            <span className="text-xs text-muted-foreground flex-shrink-0">
-              {tTimeout("summary", {
-                streaming: (
-                  (provider.firstByteTimeoutStreamingMs ??
-                    PROVIDER_TIMEOUT_DEFAULTS.FIRST_BYTE_TIMEOUT_STREAMING_MS) / 1000
-                ).toString(),
-                nonStreaming: (
-                  (provider.requestTimeoutNonStreamingMs ??
-                    PROVIDER_TIMEOUT_DEFAULTS.REQUEST_TIMEOUT_NON_STREAMING_MS) / 1000
-                ).toString(),
-              })}
-            </span>
           </div>
         </div>
 

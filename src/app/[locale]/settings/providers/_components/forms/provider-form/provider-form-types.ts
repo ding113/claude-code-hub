@@ -27,7 +27,7 @@ export type FormMode = "create" | "edit" | "batch";
 export type TabId = "basic" | "routing" | "options" | "limits" | "network" | "testing";
 
 // Sub-tab identifiers for sub-navigation within parent sections
-export type SubTabId = "scheduling" | "activeTime" | "circuitBreaker" | "timeout";
+export type SubTabId = "scheduling" | "activeTime" | "circuitBreaker";
 
 // Combined navigation target (parent tab or sub-tab)
 export type NavTargetId = TabId | SubTabId;
@@ -103,8 +103,6 @@ export interface CircuitBreakerState {
 export interface NetworkState {
   proxyUrl: string;
   proxyFallbackToDirect: boolean;
-  firstByteTimeoutStreamingSeconds: number | undefined;
-  requestTimeoutNonStreamingSeconds: number | undefined;
 }
 
 export interface McpState {
@@ -193,8 +191,6 @@ export type ProviderFormAction =
   // Network actions
   | { type: "SET_PROXY_URL"; payload: string }
   | { type: "SET_PROXY_FALLBACK_TO_DIRECT"; payload: boolean }
-  | { type: "SET_FIRST_BYTE_TIMEOUT_STREAMING"; payload: number | undefined }
-  | { type: "SET_REQUEST_TIMEOUT_NON_STREAMING"; payload: number | undefined }
   // MCP actions
   | { type: "SET_MCP_PASSTHROUGH_TYPE"; payload: McpPassthroughType }
   | { type: "SET_MCP_PASSTHROUGH_URL"; payload: string }

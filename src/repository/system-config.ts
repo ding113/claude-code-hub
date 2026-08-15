@@ -783,10 +783,7 @@ export async function updateSystemSettings(
       updates.codexPriorityBillingSource = payload.codexPriorityBillingSource;
     }
 
-    // Streaming race policy. Switching modes also synchronizes the provider-level
-    // first-byte timeout so the persisted fleet state cannot disagree with the
-    // site-wide control. single/dual_fast do not use a provider first-byte kill;
-    // timeout_race uses the site threshold for every non-deleted provider.
+    // Streaming race policy (global only; provider-level first-byte timeout removed).
     const racePolicyChanged =
       payload.streamingRaceMode !== undefined || payload.streamingRaceFirstByteMs !== undefined;
     const nextStreamingRaceMode = payload.streamingRaceMode ?? current.streamingRaceMode;
@@ -1020,34 +1017,6 @@ export async function updateSystemSettings(
 
     if (!updated) {
       throw new Error("更新系统设置失败");
-    }
-
-    if (racePolicyChanged) {
-      const providerFirstByteTimeoutMs =
-        nextStreamingRaceMode === "timeout_race" ? nextStreamingRaceFirstByteMs : 0;
-      const syncedProviders = await executor
-        .update(providers)
-        .set({
-          firstByteTimeoutStreamingMs: providerFirstByteTimeoutMs,
-          updatedAt: new Date(),
-        })
-        .where(isNull(providers.deletedAt))
-        .returning({ id: providers.id });
-
-      logger.info("[SystemSettings] Synchronized provider streaming first-byte timeout", {
-        mode: nextStreamingRaceMode,
-        providerFirstByteTimeoutMs,
-        providerCount: syncedProviders.length,
-      });
-
-      try {
-        const { publishProviderCacheInvalidation } = await import("@/lib/cache/provider-cache");
-        await publishProviderCacheInvalidation();
-      } catch (error) {
-        // The local cache is cleared before pub/sub publication; Redis failure
-        // must not turn a successful settings write into a reported failure.
-        logger.warn("[SystemSettings] Provider cache invalidation publish failed", { error });
-      }
     }
 
     return toSystemSettings(updated);

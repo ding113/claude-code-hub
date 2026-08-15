@@ -298,16 +298,6 @@ function ProviderFormContent({
           ? state.circuitBreaker.openDurationMinutes * 60 * 1000
           : undefined;
 
-        // Convert seconds to milliseconds for timeout fields
-        const firstByteTimeoutMs =
-          state.network.firstByteTimeoutStreamingSeconds !== undefined
-            ? state.network.firstByteTimeoutStreamingSeconds * 1000
-            : undefined;
-        const nonStreamingTimeoutMs =
-          state.network.requestTimeoutNonStreamingSeconds !== undefined
-            ? state.network.requestTimeoutNonStreamingSeconds * 1000
-            : undefined;
-
         // Handle key: in edit mode, only include if user provided a new key
         const trimmedKey = state.basic.key.trim();
 
@@ -377,8 +367,6 @@ function ProviderFormContent({
           proxy_url: state.network.proxyUrl?.trim() || null,
           proxy_fallback_to_direct: state.network.proxyFallbackToDirect,
           custom_headers: parsedCustomHeaders,
-          first_byte_timeout_streaming_ms: firstByteTimeoutMs,
-          request_timeout_non_streaming_ms: nonStreamingTimeoutMs,
           mcp_passthrough_type: state.mcp.mcpPassthroughType,
           mcp_passthrough_url: state.mcp.mcpPassthroughUrl?.trim() || null,
         };
@@ -686,13 +674,7 @@ function ProviderFormContent({
                 sectionRefs.current.network = el;
               }}
             >
-              <NetworkSection
-                subSectionRefs={{
-                  timeout: (el) => {
-                    sectionRefs.current.timeout = el;
-                  },
-                }}
-              />
+              <NetworkSection />
             </div>
 
             {/* Testing Section */}

@@ -116,8 +116,6 @@ const ACTION_TO_FIELD_PATH: Partial<Record<ProviderFormActionWith5hResetMode["ty
   SET_MAX_RETRY_ATTEMPTS: "circuitBreaker.maxRetryAttempts",
   SET_PROXY_URL: "network.proxyUrl",
   SET_PROXY_FALLBACK_TO_DIRECT: "network.proxyFallbackToDirect",
-  SET_FIRST_BYTE_TIMEOUT_STREAMING: "network.firstByteTimeoutStreamingSeconds",
-  SET_REQUEST_TIMEOUT_NON_STREAMING: "network.requestTimeoutNonStreamingSeconds",
   SET_MCP_PASSTHROUGH_TYPE: "mcp.mcpPassthroughType",
   SET_MCP_PASSTHROUGH_URL: "mcp.mcpPassthroughUrl",
 };
@@ -308,14 +306,6 @@ export function createInitialState(
           analysis.network.proxyFallbackToDirect.status === "uniform"
             ? analysis.network.proxyFallbackToDirect.value
             : false,
-        firstByteTimeoutStreamingSeconds:
-          analysis.network.firstByteTimeoutStreamingSeconds.status === "uniform"
-            ? analysis.network.firstByteTimeoutStreamingSeconds.value
-            : undefined,
-        requestTimeoutNonStreamingSeconds:
-          analysis.network.requestTimeoutNonStreamingSeconds.status === "uniform"
-            ? analysis.network.requestTimeoutNonStreamingSeconds.value
-            : undefined,
       },
       mcp: {
         mcpPassthroughType:
@@ -390,8 +380,6 @@ export function createInitialState(
       network: {
         proxyUrl: "",
         proxyFallbackToDirect: false,
-        firstByteTimeoutStreamingSeconds: undefined,
-        requestTimeoutNonStreamingSeconds: undefined,
       },
       mcp: {
         mcpPassthroughType: "none",
@@ -473,14 +461,6 @@ export function createInitialState(
     network: {
       proxyUrl: cloneSafeUrlValue(sourceProvider?.proxyUrl, isClone),
       proxyFallbackToDirect: sourceProvider?.proxyFallbackToDirect ?? false,
-      firstByteTimeoutStreamingSeconds: (() => {
-        const ms = sourceProvider?.firstByteTimeoutStreamingMs;
-        return ms != null && typeof ms === "number" && !Number.isNaN(ms) ? ms / 1000 : undefined;
-      })(),
-      requestTimeoutNonStreamingSeconds: (() => {
-        const ms = sourceProvider?.requestTimeoutNonStreamingMs;
-        return ms != null && typeof ms === "number" && !Number.isNaN(ms) ? ms / 1000 : undefined;
-      })(),
     },
     mcp: {
       mcpPassthroughType: sourceProvider?.mcpPassthroughType ?? "none",
@@ -719,16 +699,6 @@ export function providerFormReducer(
       return { ...state, network: { ...state.network, proxyUrl: action.payload } };
     case "SET_PROXY_FALLBACK_TO_DIRECT":
       return { ...state, network: { ...state.network, proxyFallbackToDirect: action.payload } };
-    case "SET_FIRST_BYTE_TIMEOUT_STREAMING":
-      return {
-        ...state,
-        network: { ...state.network, firstByteTimeoutStreamingSeconds: action.payload },
-      };
-    case "SET_REQUEST_TIMEOUT_NON_STREAMING":
-      return {
-        ...state,
-        network: { ...state.network, requestTimeoutNonStreamingSeconds: action.payload },
-      };
 
     // MCP
     case "SET_MCP_PASSTHROUGH_TYPE":

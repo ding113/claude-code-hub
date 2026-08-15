@@ -720,8 +720,6 @@ function sanitizeProvider(
     proxyUrl: redactUrlCredentials(provider.proxyUrl),
     proxyFallbackToDirect: provider.proxyFallbackToDirect,
     customHeaders: redactHeaderRecord(provider.customHeaders),
-    firstByteTimeoutStreamingMs: provider.firstByteTimeoutStreamingMs,
-    requestTimeoutNonStreamingMs: provider.requestTimeoutNonStreamingMs,
     websiteUrl: redactUrlCredentials(provider.websiteUrl) ?? provider.websiteUrl,
     faviconUrl: provider.faviconUrl,
     cacheTtlPreference: provider.cacheTtlPreference,

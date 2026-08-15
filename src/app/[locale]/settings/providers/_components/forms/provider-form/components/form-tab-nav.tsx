@@ -11,7 +11,6 @@ import {
   Scale,
   Settings,
   Shield,
-  Timer,
 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { cn } from "@/lib/utils";
@@ -52,7 +51,7 @@ const NAV_CONFIG: NavItemConfig[] = [
     id: "network",
     icon: Network,
     labelKey: "tabs.network",
-    children: [{ id: "timeout", icon: Timer, labelKey: "tabs.timeout" }],
+    children: [],
   },
   { id: "testing", icon: FlaskConical, labelKey: "tabs.testing" },
 ];

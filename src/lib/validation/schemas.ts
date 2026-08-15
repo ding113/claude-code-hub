@@ -4,7 +4,6 @@ import {
   PROVIDER_DEFAULTS,
   PROVIDER_KEY_MAX_LENGTH,
   PROVIDER_LIMITS,
-  PROVIDER_TIMEOUT_LIMITS,
 } from "@/lib/constants/provider.constants";
 import { USER_LIMITS } from "@/lib/constants/user.constants";
 import { normalizeCustomHeadersRecord } from "@/lib/custom-headers";
@@ -628,40 +627,6 @@ export const CreateProviderSchema = z
     proxy_fallback_to_direct: z.boolean().optional().default(false),
     // 静态自定义请求头
     custom_headers: PROVIDER_CUSTOM_HEADERS_SCHEMA,
-    // 超时配置（毫秒）
-    // 注意：0 表示禁用超时（Infinity）
-    first_byte_timeout_streaming_ms: z
-      .union([
-        z.literal(0), // 0 = 禁用超时
-        z.coerce
-          .number()
-          .int("流式首字节超时必须是整数")
-          .min(
-            PROVIDER_TIMEOUT_LIMITS.FIRST_BYTE_TIMEOUT_STREAMING_MS.MIN,
-            "流式首字节超时不能少于1秒"
-          )
-          .max(
-            PROVIDER_TIMEOUT_LIMITS.FIRST_BYTE_TIMEOUT_STREAMING_MS.MAX,
-            "流式首字节超时不能超过180秒"
-          ),
-      ])
-      .optional(),
-    request_timeout_non_streaming_ms: z
-      .union([
-        z.literal(0), // 0 = 禁用超时
-        z.coerce
-          .number()
-          .int("非流式总超时必须是整数")
-          .min(
-            PROVIDER_TIMEOUT_LIMITS.REQUEST_TIMEOUT_NON_STREAMING_MS.MIN,
-            "非流式总超时不能少于60秒"
-          )
-          .max(
-            PROVIDER_TIMEOUT_LIMITS.REQUEST_TIMEOUT_NON_STREAMING_MS.MAX,
-            "非流式总超时不能超过1800秒"
-          ),
-      ])
-      .optional(),
     // 供应商官网地址
     website_url: z
       .string()
@@ -854,40 +819,6 @@ export const UpdateProviderSchema = z
     proxy_fallback_to_direct: z.boolean().optional(),
     // 静态自定义请求头
     custom_headers: PROVIDER_CUSTOM_HEADERS_SCHEMA,
-    // 超时配置（毫秒）
-    // 注意：0 表示禁用超时（Infinity）
-    first_byte_timeout_streaming_ms: z
-      .union([
-        z.literal(0), // 0 = 禁用超时
-        z.coerce
-          .number()
-          .int("流式首字节超时必须是整数")
-          .min(
-            PROVIDER_TIMEOUT_LIMITS.FIRST_BYTE_TIMEOUT_STREAMING_MS.MIN,
-            "流式首字节超时不能少于1秒"
-          )
-          .max(
-            PROVIDER_TIMEOUT_LIMITS.FIRST_BYTE_TIMEOUT_STREAMING_MS.MAX,
-            "流式首字节超时不能超过180秒"
-          ),
-      ])
-      .optional(),
-    request_timeout_non_streaming_ms: z
-      .union([
-        z.literal(0), // 0 = 禁用超时
-        z.coerce
-          .number()
-          .int("非流式总超时必须是整数")
-          .min(
-            PROVIDER_TIMEOUT_LIMITS.REQUEST_TIMEOUT_NON_STREAMING_MS.MIN,
-            "非流式总超时不能少于60秒"
-          )
-          .max(
-            PROVIDER_TIMEOUT_LIMITS.REQUEST_TIMEOUT_NON_STREAMING_MS.MAX,
-            "非流式总超时不能超过1800秒"
-          ),
-      ])
-      .optional(),
     // 供应商官网地址
     website_url: z
       .string()

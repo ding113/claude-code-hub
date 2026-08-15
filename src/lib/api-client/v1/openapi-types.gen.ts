@@ -4705,10 +4705,6 @@ export interface operations {
                             customHeaders: {
                                 [key: string]: string;
                             } | null;
-                            /** @description Streaming first byte timeout in milliseconds. */
-                            firstByteTimeoutStreamingMs: number | null;
-                            /** @description Non-streaming request timeout in milliseconds. */
-                            requestTimeoutNonStreamingMs: number | null;
                             /** @description Provider website URL. */
                             websiteUrl: string | null;
                             /** @description Provider favicon URL. */
@@ -5099,10 +5095,6 @@ export interface operations {
                     custom_headers?: {
                         [key: string]: string;
                     } | null;
-                    /** @description Streaming first byte timeout in milliseconds. */
-                    first_byte_timeout_streaming_ms?: number | null;
-                    /** @description Non-streaming request timeout in milliseconds. */
-                    request_timeout_non_streaming_ms?: number | null;
                     /**
                      * Format: uri
                      * @description Provider website URL.
@@ -5247,10 +5239,6 @@ export interface operations {
                         customHeaders: {
                             [key: string]: string;
                         } | null;
-                        /** @description Streaming first byte timeout in milliseconds. */
-                        firstByteTimeoutStreamingMs: number | null;
-                        /** @description Non-streaming request timeout in milliseconds. */
-                        requestTimeoutNonStreamingMs: number | null;
                         /** @description Provider website URL. */
                         websiteUrl: string | null;
                         /** @description Provider favicon URL. */
@@ -5648,10 +5636,6 @@ export interface operations {
                         customHeaders: {
                             [key: string]: string;
                         } | null;
-                        /** @description Streaming first byte timeout in milliseconds. */
-                        firstByteTimeoutStreamingMs: number | null;
-                        /** @description Non-streaming request timeout in milliseconds. */
-                        requestTimeoutNonStreamingMs: number | null;
                         /** @description Provider website URL. */
                         websiteUrl: string | null;
                         /** @description Provider favicon URL. */
@@ -6217,10 +6201,6 @@ export interface operations {
                     custom_headers?: {
                         [key: string]: string;
                     } | null;
-                    /** @description Streaming first byte timeout in milliseconds. */
-                    first_byte_timeout_streaming_ms?: number | null;
-                    /** @description Non-streaming request timeout in milliseconds. */
-                    request_timeout_non_streaming_ms?: number | null;
                     /**
                      * Format: uri
                      * @description Provider website URL.
@@ -6371,10 +6351,6 @@ export interface operations {
                         customHeaders: {
                             [key: string]: string;
                         } | null;
-                        /** @description Streaming first byte timeout in milliseconds. */
-                        firstByteTimeoutStreamingMs: number | null;
-                        /** @description Non-streaming request timeout in milliseconds. */
-                        requestTimeoutNonStreamingMs: number | null;
                         /** @description Provider website URL. */
                         websiteUrl: string | null;
                         /** @description Provider favicon URL. */

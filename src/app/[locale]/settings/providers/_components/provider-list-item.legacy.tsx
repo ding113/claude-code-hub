@@ -34,7 +34,7 @@ import {
   getUnmaskedProviderKey,
   resetProviderCircuit,
 } from "@/lib/api-client/v1/actions/providers";
-import { PROVIDER_LIMITS, PROVIDER_TIMEOUT_DEFAULTS } from "@/lib/constants/provider.constants";
+import { PROVIDER_LIMITS } from "@/lib/constants/provider.constants";
 import { getProviderTypeConfig, getProviderTypeTranslationKey } from "@/lib/provider-type-utils";
 import { copyToClipboard, isClipboardSupported } from "@/lib/utils/clipboard";
 import type { CurrencyCode } from "@/lib/utils/currency";
@@ -77,7 +77,6 @@ export function ProviderListItem({
   const canEdit = currentUser?.role === "admin";
   const t = useTranslations("settings.providers.types");
   const tList = useTranslations("settings.providers.list");
-  const tTimeout = useTranslations("settings.providers.form.sections.timeout");
 
   const {
     enabled,
@@ -373,21 +372,6 @@ export function ProviderListItem({
           ) : (
             <span className="text-green-600">✓ 允许所有模型</span>
           )}
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="font-medium text-foreground/80">超时配置:</span>
-          <span className="tabular-nums">
-            {tTimeout("summary", {
-              streaming: (
-                (item.firstByteTimeoutStreamingMs ??
-                  PROVIDER_TIMEOUT_DEFAULTS.FIRST_BYTE_TIMEOUT_STREAMING_MS) / 1000
-              ).toString(),
-              nonStreaming: (
-                (item.requestTimeoutNonStreamingMs ??
-                  PROVIDER_TIMEOUT_DEFAULTS.REQUEST_TIMEOUT_NON_STREAMING_MS) / 1000
-              ).toString(),
-            })}
-          </span>
         </div>
       </div>
 

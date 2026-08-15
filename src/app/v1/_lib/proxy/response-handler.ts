@@ -76,22 +76,18 @@ function copyUint8Range(value: Uint8Array, start = 0, end = value.byteLength): U
   return new Uint8Array(value.subarray(start, end));
 }
 
-function resolveNonStreamTaskStaleTimeoutMs(provider: Provider): number {
-  return provider.requestTimeoutNonStreamingMs > 0
-    ? provider.requestTimeoutNonStreamingMs
-    : Number.POSITIVE_INFINITY;
+function resolveNonStreamTaskStaleTimeoutMs(): number {
+  // 非流式请求总超时已全局移除（原 provider 级 requestTimeoutNonStreamingMs 删除），
+  // 不再做 stale 超时限制。
+  return Number.POSITIVE_INFINITY;
 }
 
-function resolveStreamTaskStaleTimeoutMs(provider: Provider, globalStreamingIdleTimeoutMs: number): number {
+function resolveStreamTaskStaleTimeoutMs(globalStreamingIdleTimeoutMs: number): number {
   if (globalStreamingIdleTimeoutMs <= 0) {
     return Number.POSITIVE_INFINITY;
   }
 
-  if (provider.firstByteTimeoutStreamingMs > 0) {
-    return Math.max(provider.firstByteTimeoutStreamingMs, globalStreamingIdleTimeoutMs);
-  }
-
-  return Number.POSITIVE_INFINITY;
+  return globalStreamingIdleTimeoutMs;
 }
 
 // 流式统计只需要头部元信息和尾部 usage/final event。按字节保存窗口，避免
@@ -1579,7 +1575,7 @@ export class ProxyResponseHandler {
         AsyncTaskManager.register(taskId, statsPromise, {
           taskType: "non-stream-passthrough-stats",
           abortController: statsAbortController,
-          staleTimeoutMs: resolveNonStreamTaskStaleTimeoutMs(provider),
+          staleTimeoutMs: resolveNonStreamTaskStaleTimeoutMs(),
         });
         statsPromise.catch((error) => {
           if (session.sessionId && session.shouldPersistSessionDebugArtifacts()) {
@@ -2103,7 +2099,7 @@ export class ProxyResponseHandler {
     AsyncTaskManager.register(taskId, processingPromise, {
       taskType: "non-stream-processing",
       abortController,
-      staleTimeoutMs: resolveNonStreamTaskStaleTimeoutMs(provider),
+      staleTimeoutMs: resolveNonStreamTaskStaleTimeoutMs(),
     });
     processingPromise.catch(async (error) => {
       logger.error("ResponseHandler: Uncaught error in non-stream processing", {
@@ -2177,7 +2173,6 @@ export class ProxyResponseHandler {
 
         const taskId = `stream-passthrough-${messageContext.id}`;
         const streamTaskStaleTimeoutMs = resolveStreamTaskStaleTimeoutMs(
-          provider,
           globalStreamingIdleTimeoutMs
         );
         const statsAbortController = new AbortController();
@@ -2639,7 +2634,6 @@ export class ProxyResponseHandler {
         ? globalStreamingIdleTimeoutMs
         : Number.POSITIVE_INFINITY;
     const streamTaskStaleTimeoutMs = resolveStreamTaskStaleTimeoutMs(
-      provider,
       globalStreamingIdleTimeoutMs
     );
     const clientAbortDrainTimeoutMs = CLIENT_ABORT_DRAIN_MAX_MS;

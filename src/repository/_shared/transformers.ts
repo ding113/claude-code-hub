@@ -1,4 +1,3 @@
-import { PROVIDER_TIMEOUT_DEFAULTS } from "@/lib/constants/provider.constants";
 import {
   normalizeHealthTestModelStats,
   normalizeHealthTestRecentResults,
@@ -141,12 +140,6 @@ export function toProvider(dbProvider: any): Provider {
     proxyUrl: dbProvider?.proxyUrl ?? null,
     proxyFallbackToDirect: dbProvider?.proxyFallbackToDirect ?? false,
     customHeaders: dbProvider?.customHeaders ?? null,
-    firstByteTimeoutStreamingMs:
-      dbProvider?.firstByteTimeoutStreamingMs ??
-      PROVIDER_TIMEOUT_DEFAULTS.FIRST_BYTE_TIMEOUT_STREAMING_MS,
-    requestTimeoutNonStreamingMs:
-      dbProvider?.requestTimeoutNonStreamingMs ??
-      PROVIDER_TIMEOUT_DEFAULTS.REQUEST_TIMEOUT_NON_STREAMING_MS,
     websiteUrl: dbProvider?.websiteUrl ?? null,
     faviconUrl: dbProvider?.faviconUrl ?? null,
     cacheTtlPreference: dbProvider?.cacheTtlPreference ?? null,

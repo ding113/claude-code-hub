@@ -446,23 +446,5 @@
       "redirects": "{count} 個重定向"
     },
     "title": "路由設定"
-  },
-  "timeout": {
-    "desc": "設定請求超時時間，0 表示禁用超時",
-    "disableHint": "設為 0 表示禁用該超時（僅用於灰度回退場景，不推薦）",
-    "nonStreamingTotal": {
-      "core": "true",
-      "desc": "非串流請求總超時，範圍 60-1800 秒，填 0 禁用（預設不限制）",
-      "label": "非串流總超時（秒）",
-      "placeholder": "0"
-    },
-    "streamingFirstByte": {
-      "core": "true",
-      "desc": "串流請求首字節超時，範圍 1-180 秒，填 0 禁用（預設不限制）",
-      "label": "串流首字節超時（秒）",
-      "placeholder": "0"
-    },
-    "summary": "首字: {streaming}s | 非串流: {nonStreaming}s",
-    "title": "超時配置"
   }
 }

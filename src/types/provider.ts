@@ -130,8 +130,6 @@ export type ProviderBatchPatchField =
   // Network
   | "proxy_url"
   | "proxy_fallback_to_direct"
-  | "first_byte_timeout_streaming_ms"
-  | "request_timeout_non_streaming_ms"
   // MCP
   | "mcp_passthrough_type"
   | "mcp_passthrough_url";
@@ -184,8 +182,6 @@ export interface ProviderBatchPatchDraft {
   // Network
   proxy_url?: ProviderPatchDraftInput<string>;
   proxy_fallback_to_direct?: ProviderPatchDraftInput<boolean>;
-  first_byte_timeout_streaming_ms?: ProviderPatchDraftInput<number>;
-  request_timeout_non_streaming_ms?: ProviderPatchDraftInput<number>;
   // MCP
   mcp_passthrough_type?: ProviderPatchDraftInput<McpPassthroughType>;
   mcp_passthrough_url?: ProviderPatchDraftInput<string>;
@@ -239,8 +235,6 @@ export interface ProviderBatchPatch {
   // Network
   proxy_url: ProviderPatchOperation<string>;
   proxy_fallback_to_direct: ProviderPatchOperation<boolean>;
-  first_byte_timeout_streaming_ms: ProviderPatchOperation<number>;
-  request_timeout_non_streaming_ms: ProviderPatchOperation<number>;
   // MCP
   mcp_passthrough_type: ProviderPatchOperation<McpPassthroughType>;
   mcp_passthrough_url: ProviderPatchOperation<string>;
@@ -294,8 +288,6 @@ export interface ProviderBatchApplyUpdates {
   // Network
   proxy_url?: string | null;
   proxy_fallback_to_direct?: boolean;
-  first_byte_timeout_streaming_ms?: number;
-  request_timeout_non_streaming_ms?: number;
   // MCP
   mcp_passthrough_type?: McpPassthroughType;
   mcp_passthrough_url?: string | null;
@@ -395,10 +387,6 @@ export interface Provider {
 
   // 静态自定义请求头：会被合并到出站请求，但不能覆盖鉴权头
   customHeaders: ProviderCustomHeaders | null;
-
-  // 超时配置（毫秒）
-  firstByteTimeoutStreamingMs: number;
-  requestTimeoutNonStreamingMs: number;
 
   // 供应商官网地址（用于快速跳转管理）
   websiteUrl: string | null;
@@ -524,9 +512,6 @@ export interface ProviderDisplay {
   proxyFallbackToDirect: boolean;
   // 静态自定义请求头
   customHeaders: ProviderCustomHeaders | null;
-  // 超时配置（毫秒）
-  firstByteTimeoutStreamingMs: number;
-  requestTimeoutNonStreamingMs: number;
   // 供应商官网地址
   websiteUrl: string | null;
   faviconUrl: string | null;
@@ -661,10 +646,6 @@ export interface CreateProviderData {
   // 静态自定义请求头
   custom_headers?: ProviderCustomHeaders | null;
 
-  // 超时配置（毫秒）
-  first_byte_timeout_streaming_ms?: number;
-  request_timeout_non_streaming_ms?: number;
-
   // 供应商官网地址
   website_url?: string | null;
   favicon_url?: string | null;
@@ -744,10 +725,6 @@ export interface UpdateProviderData {
 
   // 静态自定义请求头
   custom_headers?: ProviderCustomHeaders | null;
-
-  // 超时配置（毫秒）
-  first_byte_timeout_streaming_ms?: number;
-  request_timeout_non_streaming_ms?: number;
 
   // 供应商官网地址
   website_url?: string | null;

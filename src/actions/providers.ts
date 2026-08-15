@@ -21,7 +21,7 @@ import {
   publishCircuitBreakerConfigInvalidation,
   resetCircuit,
 } from "@/lib/circuit-breaker";
-import { PROVIDER_GROUP, PROVIDER_TIMEOUT_DEFAULTS } from "@/lib/constants/provider.constants";
+import { PROVIDER_GROUP } from "@/lib/constants/provider.constants";
 import { normalizeCustomHeadersRecord } from "@/lib/custom-headers";
 import { logger } from "@/lib/logger";
 import { PROVIDER_ALLOWED_MODEL_RULE_INPUT_LIST_SCHEMA } from "@/lib/provider-allowed-model-schema";
@@ -362,8 +362,6 @@ export async function getProviders(): Promise<ProviderDisplay[]> {
         proxyUrl: provider.proxyUrl,
         proxyFallbackToDirect: provider.proxyFallbackToDirect,
         customHeaders: provider.customHeaders,
-        firstByteTimeoutStreamingMs: provider.firstByteTimeoutStreamingMs,
-        requestTimeoutNonStreamingMs: provider.requestTimeoutNonStreamingMs,
         websiteUrl: provider.websiteUrl,
         faviconUrl: provider.faviconUrl,
         cacheTtlPreference: provider.cacheTtlPreference,
@@ -589,8 +587,6 @@ export async function addProvider(data: {
   proxy_url?: string | null;
   proxy_fallback_to_direct?: boolean;
   custom_headers?: Record<string, string> | null;
-  first_byte_timeout_streaming_ms?: number;
-  request_timeout_non_streaming_ms?: number;
   website_url?: string | null;
   mcp_passthrough_type?: "none" | "minimax" | "glm" | "custom";
   mcp_passthrough_url?: string | null;
@@ -659,12 +655,6 @@ export async function addProvider(data: {
         validated.circuit_breaker_half_open_success_threshold ?? 2,
       proxy_url: validated.proxy_url ?? null,
       proxy_fallback_to_direct: validated.proxy_fallback_to_direct ?? false,
-      first_byte_timeout_streaming_ms:
-        validated.first_byte_timeout_streaming_ms ??
-        PROVIDER_TIMEOUT_DEFAULTS.FIRST_BYTE_TIMEOUT_STREAMING_MS,
-      request_timeout_non_streaming_ms:
-        validated.request_timeout_non_streaming_ms ??
-        PROVIDER_TIMEOUT_DEFAULTS.REQUEST_TIMEOUT_NON_STREAMING_MS,
       cache_ttl_preference: validated.cache_ttl_preference ?? "inherit",
       context_1m_preference: validated.context_1m_preference ?? "inherit",
       codex_reasoning_effort_preference: validated.codex_reasoning_effort_preference ?? "inherit",
@@ -803,8 +793,6 @@ export async function editProvider(
     proxy_url?: string | null;
     proxy_fallback_to_direct?: boolean;
     custom_headers?: Record<string, string> | null;
-    first_byte_timeout_streaming_ms?: number;
-    request_timeout_non_streaming_ms?: number;
     website_url?: string | null;
     mcp_passthrough_type?: "none" | "minimax" | "glm" | "custom";
     mcp_passthrough_url?: string | null;
@@ -1515,8 +1503,6 @@ const SINGLE_EDIT_PREIMAGE_FIELD_TO_PROVIDER_KEY: Record<string, keyof Provider>
   proxy_url: "proxyUrl",
   proxy_fallback_to_direct: "proxyFallbackToDirect",
   custom_headers: "customHeaders",
-  first_byte_timeout_streaming_ms: "firstByteTimeoutStreamingMs",
-  request_timeout_non_streaming_ms: "requestTimeoutNonStreamingMs",
   website_url: "websiteUrl",
   favicon_url: "faviconUrl",
   mcp_passthrough_type: "mcpPassthroughType",
@@ -1744,12 +1730,6 @@ function mapApplyUpdatesToRepositoryFormat(
   if (applyUpdates.proxy_fallback_to_direct !== undefined) {
     result.proxyFallbackToDirect = applyUpdates.proxy_fallback_to_direct;
   }
-  if (applyUpdates.first_byte_timeout_streaming_ms !== undefined) {
-    result.firstByteTimeoutStreamingMs = applyUpdates.first_byte_timeout_streaming_ms;
-  }
-  if (applyUpdates.request_timeout_non_streaming_ms !== undefined) {
-    result.requestTimeoutNonStreamingMs = applyUpdates.request_timeout_non_streaming_ms;
-  }
   if (applyUpdates.mcp_passthrough_type !== undefined) {
     result.mcpPassthroughType = applyUpdates.mcp_passthrough_type;
   }
@@ -1802,8 +1782,6 @@ const PATCH_FIELD_TO_PROVIDER_KEY: Record<ProviderBatchPatchField, keyof Provide
   max_retry_attempts: "maxRetryAttempts",
   proxy_url: "proxyUrl",
   proxy_fallback_to_direct: "proxyFallbackToDirect",
-  first_byte_timeout_streaming_ms: "firstByteTimeoutStreamingMs",
-  request_timeout_non_streaming_ms: "requestTimeoutNonStreamingMs",
   mcp_passthrough_type: "mcpPassthroughType",
   mcp_passthrough_url: "mcpPassthroughUrl",
 };

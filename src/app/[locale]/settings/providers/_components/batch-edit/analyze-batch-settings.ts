@@ -74,8 +74,6 @@ export interface BatchSettingsAnalysis {
   network: {
     proxyUrl: FieldAnalysisResult<string>;
     proxyFallbackToDirect: FieldAnalysisResult<boolean>;
-    firstByteTimeoutStreamingSeconds: FieldAnalysisResult<number | undefined>;
-    requestTimeoutNonStreamingSeconds: FieldAnalysisResult<number | undefined>;
   };
   mcp: {
     mcpPassthroughType: FieldAnalysisResult<McpPassthroughType>;
@@ -204,14 +202,6 @@ export function analyzeBatchProviderSettings(providers: ProviderDisplay[]): Batc
     network: {
       proxyUrl: analyzeField(providers, (p) => p.proxyUrl ?? ""),
       proxyFallbackToDirect: analyzeField(providers, (p) => p.proxyFallbackToDirect ?? false),
-      firstByteTimeoutStreamingSeconds: analyzeField(providers, (p) => {
-        const ms = p.firstByteTimeoutStreamingMs;
-        return ms != null && typeof ms === "number" && !Number.isNaN(ms) ? ms / 1000 : undefined;
-      }),
-      requestTimeoutNonStreamingSeconds: analyzeField(providers, (p) => {
-        const ms = p.requestTimeoutNonStreamingMs;
-        return ms != null && typeof ms === "number" && !Number.isNaN(ms) ? ms / 1000 : undefined;
-      }),
     },
     mcp: {
       mcpPassthroughType: analyzeField(providers, (p) => p.mcpPassthroughType ?? "none"),

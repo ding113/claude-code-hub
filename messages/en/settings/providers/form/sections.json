@@ -446,23 +446,5 @@
       "redirects": "{count} redirects"
     },
     "title": "Routing"
-  },
-  "timeout": {
-    "desc": "Configure request timeout duration, 0 means disable timeout",
-    "disableHint": "Set to 0 to disable the timeout (for canary rollback scenarios only, not recommended)",
-    "nonStreamingTotal": {
-      "core": "true",
-      "desc": "Non-streaming request total timeout, range 60-1800 seconds, enter 0 to disable (default: no limit)",
-      "label": "Non-streaming Total Timeout (seconds)",
-      "placeholder": "0"
-    },
-    "streamingFirstByte": {
-      "core": "true",
-      "desc": "Streaming request first byte timeout, range 1-180 seconds, enter 0 to disable (default: no limit)",
-      "label": "Streaming First Byte Timeout (seconds)",
-      "placeholder": "0"
-    },
-    "summary": "First byte: {streaming}s | Non-streaming: {nonStreaming}s",
-    "title": "Timeout Configuration"
   }
 }

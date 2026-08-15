@@ -10,7 +10,6 @@ import {
 } from "@/drizzle/schema";
 import { normalizeAllowedModelRules } from "@/lib/allowed-model-rules";
 import { getCachedProviders } from "@/lib/cache/provider-cache";
-import { PROVIDER_TIMEOUT_DEFAULTS } from "@/lib/constants/provider.constants";
 import { resetEndpointCircuit } from "@/lib/endpoint-circuit-breaker";
 import { logger } from "@/lib/logger";
 import { normalizeProviderModelRedirectRules } from "@/lib/provider-model-redirects";
@@ -241,12 +240,6 @@ export async function createProvider(providerData: CreateProviderData): Promise<
     proxyUrl: providerData.proxy_url ?? null,
     proxyFallbackToDirect: providerData.proxy_fallback_to_direct ?? false,
     customHeaders: providerData.custom_headers ?? null,
-    firstByteTimeoutStreamingMs:
-      providerData.first_byte_timeout_streaming_ms ??
-      PROVIDER_TIMEOUT_DEFAULTS.FIRST_BYTE_TIMEOUT_STREAMING_MS,
-    requestTimeoutNonStreamingMs:
-      providerData.request_timeout_non_streaming_ms ??
-      PROVIDER_TIMEOUT_DEFAULTS.REQUEST_TIMEOUT_NON_STREAMING_MS,
     websiteUrl: providerData.website_url ?? null,
     faviconUrl: providerData.favicon_url ?? null,
     cacheTtlPreference: providerData.cache_ttl_preference ?? null,
@@ -327,8 +320,6 @@ export async function createProvider(providerData: CreateProviderData): Promise<
         proxyUrl: providers.proxyUrl,
         proxyFallbackToDirect: providers.proxyFallbackToDirect,
         customHeaders: providers.customHeaders,
-        firstByteTimeoutStreamingMs: providers.firstByteTimeoutStreamingMs,
-        requestTimeoutNonStreamingMs: providers.requestTimeoutNonStreamingMs,
         websiteUrl: providers.websiteUrl,
         faviconUrl: providers.faviconUrl,
         cacheTtlPreference: providers.cacheTtlPreference,
@@ -435,8 +426,6 @@ export async function findProviderList(
       proxyUrl: providers.proxyUrl,
       proxyFallbackToDirect: providers.proxyFallbackToDirect,
       customHeaders: providers.customHeaders,
-      firstByteTimeoutStreamingMs: providers.firstByteTimeoutStreamingMs,
-      requestTimeoutNonStreamingMs: providers.requestTimeoutNonStreamingMs,
       websiteUrl: providers.websiteUrl,
       faviconUrl: providers.faviconUrl,
       cacheTtlPreference: providers.cacheTtlPreference,
@@ -606,8 +595,6 @@ export async function findAllProvidersFresh(): Promise<Provider[]> {
       proxyUrl: providers.proxyUrl,
       proxyFallbackToDirect: providers.proxyFallbackToDirect,
       customHeaders: providers.customHeaders,
-      firstByteTimeoutStreamingMs: providers.firstByteTimeoutStreamingMs,
-      requestTimeoutNonStreamingMs: providers.requestTimeoutNonStreamingMs,
       websiteUrl: providers.websiteUrl,
       faviconUrl: providers.faviconUrl,
       cacheTtlPreference: providers.cacheTtlPreference,
@@ -718,8 +705,6 @@ export async function findProviderById(id: number): Promise<Provider | null> {
       proxyUrl: providers.proxyUrl,
       proxyFallbackToDirect: providers.proxyFallbackToDirect,
       customHeaders: providers.customHeaders,
-      firstByteTimeoutStreamingMs: providers.firstByteTimeoutStreamingMs,
-      requestTimeoutNonStreamingMs: providers.requestTimeoutNonStreamingMs,
       websiteUrl: providers.websiteUrl,
       faviconUrl: providers.faviconUrl,
       cacheTtlPreference: providers.cacheTtlPreference,
@@ -853,10 +838,6 @@ export async function updateProvider(
     dbData.proxyFallbackToDirect = providerData.proxy_fallback_to_direct;
   if (providerData.custom_headers !== undefined)
     dbData.customHeaders = providerData.custom_headers ?? null;
-  if (providerData.first_byte_timeout_streaming_ms !== undefined)
-    dbData.firstByteTimeoutStreamingMs = providerData.first_byte_timeout_streaming_ms;
-  if (providerData.request_timeout_non_streaming_ms !== undefined)
-    dbData.requestTimeoutNonStreamingMs = providerData.request_timeout_non_streaming_ms;
   if (providerData.website_url !== undefined) dbData.websiteUrl = providerData.website_url;
   if (providerData.favicon_url !== undefined) dbData.faviconUrl = providerData.favicon_url;
   if (providerData.cache_ttl_preference !== undefined)
@@ -990,8 +971,6 @@ export async function updateProvider(
         proxyUrl: providers.proxyUrl,
         proxyFallbackToDirect: providers.proxyFallbackToDirect,
         customHeaders: providers.customHeaders,
-        firstByteTimeoutStreamingMs: providers.firstByteTimeoutStreamingMs,
-        requestTimeoutNonStreamingMs: providers.requestTimeoutNonStreamingMs,
         websiteUrl: providers.websiteUrl,
         faviconUrl: providers.faviconUrl,
         cacheTtlPreference: providers.cacheTtlPreference,
@@ -1308,8 +1287,6 @@ export interface BatchProviderUpdates {
   // Network
   proxyUrl?: string | null;
   proxyFallbackToDirect?: boolean;
-  firstByteTimeoutStreamingMs?: number;
-  requestTimeoutNonStreamingMs?: number;
   // MCP
   mcpPassthroughType?: string;
   mcpPassthroughUrl?: string | null;
@@ -1459,12 +1436,6 @@ export async function updateProvidersBatch(
   }
   if (updates.proxyFallbackToDirect !== undefined) {
     setClauses.proxyFallbackToDirect = updates.proxyFallbackToDirect;
-  }
-  if (updates.firstByteTimeoutStreamingMs !== undefined) {
-    setClauses.firstByteTimeoutStreamingMs = updates.firstByteTimeoutStreamingMs;
-  }
-  if (updates.requestTimeoutNonStreamingMs !== undefined) {
-    setClauses.requestTimeoutNonStreamingMs = updates.requestTimeoutNonStreamingMs;
   }
   // MCP
   if (updates.mcpPassthroughType !== undefined) {

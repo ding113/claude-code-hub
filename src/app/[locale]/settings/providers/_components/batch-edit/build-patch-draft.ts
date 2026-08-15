@@ -294,20 +294,6 @@ export function buildPatchDraftFromFormState(
   if (dirtyFields.has("network.proxyFallbackToDirect")) {
     draft.proxy_fallback_to_direct = { set: state.network.proxyFallbackToDirect };
   }
-  if (dirtyFields.has("network.firstByteTimeoutStreamingSeconds")) {
-    if (state.network.firstByteTimeoutStreamingSeconds !== undefined) {
-      draft.first_byte_timeout_streaming_ms = {
-        set: state.network.firstByteTimeoutStreamingSeconds * 1000,
-      };
-    }
-  }
-  if (dirtyFields.has("network.requestTimeoutNonStreamingSeconds")) {
-    if (state.network.requestTimeoutNonStreamingSeconds !== undefined) {
-      draft.request_timeout_non_streaming_ms = {
-        set: state.network.requestTimeoutNonStreamingSeconds * 1000,
-      };
-    }
-  }
 
   // MCP fields
   if (dirtyFields.has("mcp.mcpPassthroughType")) {

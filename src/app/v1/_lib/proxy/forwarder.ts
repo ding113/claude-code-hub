@@ -2393,7 +2393,8 @@ export class ProxyForwarder {
     baseUrl: string,
     endpointAudit?: { endpointId: number | null; endpointUrl: string },
     attemptNumber?: number,
-    deferDetailSnapshotPersistence: boolean = false
+    deferDetailSnapshotPersistence: boolean = false,
+    suppressResponseTimeout: boolean = false
   ): Promise<Response> {
     if (!provider) {
       throw new Error("Provider is required");
@@ -2985,21 +2986,22 @@ export class ProxyForwarder {
     let responseTimeoutType: string;
 
     const streamingRaceMode = (await getCachedSystemSettings()).streamingRaceMode;
+    const streamingRaceFirstByteMs = (await getCachedSystemSettings()).streamingRaceFirstByteMs;
     if (isStreaming) {
-      // single mode is a true single-provider path: ignore any stale
-      // provider-level first-byte timeout and keep only the streaming-idle
-      // timeout below. timeout_race/dual_fast retain provider-level guards.
+      // 单供应商超时入口已全部移除，只保留全局配置：
+      // 流式首字节超时统一由全局 streamingRaceFirstByteMs 控制（>0 时生效），
+      // 0 = 不限制（由 streaming-idle watchdog 兜底）。
+      // 竞速路径（suppressResponseTimeout=true）由 armAttemptThreshold 自管超时，这里跳过。
       responseTimeoutMs =
-        streamingRaceMode === "single"
+        suppressResponseTimeout || streamingRaceMode === "single"
           ? 0
-          : provider.firstByteTimeoutStreamingMs > 0
-            ? provider.firstByteTimeoutStreamingMs
+          : streamingRaceFirstByteMs > 0
+            ? streamingRaceFirstByteMs
             : 0;
       responseTimeoutType = "streaming_first_byte";
     } else {
-      // 非流式请求：使用总超时（防止无限挂起）
-      responseTimeoutMs =
-        provider.requestTimeoutNonStreamingMs > 0 ? provider.requestTimeoutNonStreamingMs : 0;
+      // 非流式请求：provider 级总超时已删除，不再做总超时限制（0 = 不限制）。
+      responseTimeoutMs = 0;
       responseTimeoutType = "non_streaming_total";
     }
 
@@ -4472,17 +4474,13 @@ export class ProxyForwarder {
     };
 
     const runAttempt = (attempt: StreamingHedgeAttempt) => {
-      const providerForRequest =
-        attempt.firstByteTimeoutMs > 0
-          ? { ...attempt.provider, firstByteTimeoutStreamingMs: 0 }
-          : attempt.provider;
-
       void ProxyForwarder.doForward(
         attempt.session,
-        providerForRequest,
+        attempt.provider,
         attempt.baseUrl,
         attempt.endpointAudit,
         attempt.requestAttemptCount,
+        true,
         true
       )
         .then(async (response) => {

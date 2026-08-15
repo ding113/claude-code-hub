@@ -112,16 +112,6 @@ export const ProviderSummarySchema = z
       .record(z.string(), z.string())
       .nullable()
       .describe("Custom upstream headers with sensitive values redacted."),
-    firstByteTimeoutStreamingMs: z
-      .number()
-      .int()
-      .nullable()
-      .describe("Streaming first byte timeout in milliseconds."),
-    requestTimeoutNonStreamingMs: z
-      .number()
-      .int()
-      .nullable()
-      .describe("Non-streaming request timeout in milliseconds."),
     websiteUrl: NullableStringSchema.describe("Provider website URL."),
     faviconUrl: NullableStringSchema.describe("Provider favicon URL."),
     cacheTtlPreference: z.string().nullable().describe("Cache TTL preference."),
@@ -541,20 +531,6 @@ export const ProviderCreateSchema = z
       .nullable()
       .optional()
       .describe("Custom upstream headers."),
-    first_byte_timeout_streaming_ms: z
-      .number()
-      .int()
-      .min(0)
-      .nullable()
-      .optional()
-      .describe("Streaming first byte timeout in milliseconds."),
-    request_timeout_non_streaming_ms: z
-      .number()
-      .int()
-      .min(0)
-      .nullable()
-      .optional()
-      .describe("Non-streaming request timeout in milliseconds."),
     website_url: z.string().url().max(512).nullable().optional().describe("Provider website URL."),
     favicon_url: z.string().max(512).nullable().optional().describe("Provider favicon URL."),
     cache_ttl_preference: z.string().optional().describe("Cache TTL preference."),
