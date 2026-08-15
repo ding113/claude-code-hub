@@ -404,10 +404,10 @@ export function ProviderManager({
           {addDialogSlot ? <div>{addDialogSlot}</div> : null}
         </div>
 
-        <div className="grid w-full grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+        <div className="grid w-full grid-cols-1 gap-3 md:grid-cols-2">
           <HealthTestBudgetBar currencyCode={currencyCode} className="w-full min-w-0" />
           <StreamingRaceModeControl className="w-full min-w-0" />
-          <HealthTestRuntimeConfigControl className="w-full min-w-0 md:col-span-2 xl:col-span-3" />
+          <HealthTestRuntimeConfigControl className="w-full min-w-0 md:col-span-2" />
         </div>
       </div>
       {/* Filter section */}

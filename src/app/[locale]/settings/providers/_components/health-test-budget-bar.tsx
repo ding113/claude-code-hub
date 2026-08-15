@@ -202,7 +202,7 @@ export function HealthTestBudgetBar({
         </Tooltip>
       </div>
 
-      <p className="text-[10px] text-muted-foreground leading-snug">{t("healthTestBudgetHelp")}</p>
+      <p className="mt-auto text-[10px] text-muted-foreground leading-snug">{t("healthTestBudgetHelp")}</p>
 
       <Dialog open={editGlobalOpen} onOpenChange={setEditGlobalOpen}>
         <DialogContent className="sm:max-w-sm">
