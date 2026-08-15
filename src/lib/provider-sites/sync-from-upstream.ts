@@ -2,6 +2,9 @@
  * Refresh one provider site's upstream group rates + balance by logging into the site directly.
  */
 import { publishProviderCacheInvalidation } from "@/lib/cache/provider-cache";
+import { and, eq, isNull } from "drizzle-orm";
+import { db } from "@/drizzle/db";
+import { providers } from "@/drizzle/schema";
 import { logger } from "@/lib/logger";
 import { normalizeUpstreamRate } from "@/lib/provider-sites/billing";
 import {
@@ -25,6 +28,7 @@ import {
   isUpstreamRateLimitedError,
   isUpstreamUnauthorizedError,
   loginUpstreamSite,
+  type UpstreamApiKey,
   type UpstreamAuthSession,
   type UpstreamSiteCredentials,
 } from "@/lib/provider-sites/upstream-connector";
@@ -38,6 +42,37 @@ import {
   upsertProviderSiteGroupRate,
 } from "@/repository/provider-sites";
 import type { ProviderSiteSyncResult } from "@/types/provider-site";
+
+/**
+ * Build a predicate telling the key-fetch connector to skip reveal requests for
+ * upstream keys whose full secret already exists locally and still matches the
+ * masked prefix/suffix the upstream returned. This keeps the periodic sync from
+ * re-hammering the reveal endpoint for unchanged keys (429 death spiral).
+ */
+async function buildSkipRevealPredicate(
+  siteId: number
+): Promise<(k: UpstreamApiKey) => boolean> {
+  const rows = await db
+    .select({ siteGroupName: providers.siteGroupName, key: providers.key })
+    .from(providers)
+    .where(and(eq(providers.siteId, siteId), isNull(providers.deletedAt)));
+  const fullByGroup = new Map<string, string>();
+  for (const r of rows) {
+    if (!r.siteGroupName || !r.key) continue;
+    const usable =
+      !r.key.includes("*") &&
+      !r.key.includes("...") &&
+      !r.key.includes("…") &&
+      r.key.length > 12;
+    if (!usable) continue;
+    fullByGroup.set(r.siteGroupName.trim(), r.key);
+  }
+  return (k: UpstreamApiKey) => {
+    const local = fullByGroup.get(k.groupName.trim());
+    if (!local || !k.key.includes("*")) return false;
+    return local.startsWith(k.key.slice(0, 4)) && local.endsWith(k.key.slice(-4));
+  };
+}
 
 function rowToCreds(row: NonNullable<Awaited<ReturnType<typeof findProviderSiteAuthRow>>>): {
   creds: UpstreamSiteCredentials;
@@ -297,7 +332,9 @@ async function syncProviderSiteFromUpstreamUnlocked(
     try {
       let upstreamKeys;
       try {
-        upstreamKeys = await fetchUpstreamApiKeys(creds, session);
+        upstreamKeys = await fetchUpstreamApiKeys(creds, session, {
+          skipRevealFor: await buildSkipRevealPredicate(row.id),
+        });
       } catch (error) {
         if (!isUpstreamUnauthorizedError(error)) throw error;
         logger.warn("[provider-sites] upstream key session rejected; re-authenticating", {
@@ -308,7 +345,9 @@ async function syncProviderSiteFromUpstreamUnlocked(
         creds = { ...creds, session: null };
         session = await loginUpstreamSite(creds);
         await persistSession(siteId, session);
-        upstreamKeys = await fetchUpstreamApiKeys(creds, session);
+        upstreamKeys = await fetchUpstreamApiKeys(creds, session, {
+          skipRevealFor: await buildSkipRevealPredicate(row.id),
+        });
       }
       logger.info("[provider-sites] upstream keys fetched", {
         siteId,

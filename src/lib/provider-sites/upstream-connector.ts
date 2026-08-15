@@ -1052,7 +1052,8 @@ export async function createUpstreamApiKey(
  */
 export async function fetchUpstreamApiKeys(
   creds: UpstreamSiteCredentials,
-  session: UpstreamAuthSession
+  session: UpstreamAuthSession,
+  opts: { skipRevealFor?: (k: UpstreamApiKey) => boolean } = {}
 ): Promise<UpstreamApiKey[]> {
   const MAX_PAGES = 10;
   const PAGE_SIZE = 100;
@@ -1099,8 +1100,16 @@ export async function fetchUpstreamApiKeys(
     // hammering the remaining tokens (each tick would otherwise re-extend the
     // window). The masked keys stay masked; isUsableKey() keeps them from
     // overwriting full keys already in CCH.
+    let revealRequestCount = 0;
     for (const k of out) {
       if (!k.key.includes("*") || !/^\d+$/.test(k.id)) continue;
+      // Local full key already matches the masked prefix/suffix → skip the reveal
+      // request entirely. Periodic syncs then only reveal keys that actually
+      // changed, instead of re-hammering the whole batch every tick.
+      if (opts.skipRevealFor?.(k)) continue;
+      // Spread reveal requests over time rather than bursting the whole batch.
+      if (revealRequestCount > 0) await sleep(250);
+      revealRequestCount += 1;
       try {
         const revealed = (await upstreamPostJson(creds, session, `/api/token/${k.id}/key`)) as {
           key?: string;
