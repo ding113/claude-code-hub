@@ -6,12 +6,6 @@ export type BillingModelSource = "original" | "redirected";
 
 /** Streaming multi-provider race policy (site-wide). */
 export type StreamingRaceMode = "single" | "timeout_race" | "dual_fast";
-/**
- * Site-wide scheduled health-test policy:
- * - dynamic: SLO rebalance (top1/top2 per group_tag)
- * - always_on: no SLO auto-disable; keep fleet probing
- */
-export type HealthTestScheduleMode = "dynamic" | "always_on";
 export type CodexPriorityBillingSource = "requested" | "actual";
 
 export interface ResponseFixerConfig {
@@ -51,12 +45,6 @@ export interface SystemSettings {
   /** Local day when ALL scheduled health tests were auto-disabled for global budget. */
   healthTestGlobalBudgetSuspendedDay: string | null;
 
-  /**
-   * Scheduled health-test policy:
-   * - dynamic: SLO rebalance keeps top1/top2
-   * - always_on: skip SLO rebalance auto-disable; reopen auto-disabled peers
-   */
-  healthTestScheduleMode: HealthTestScheduleMode;
   /** Rolling health-test sample window (1–50, default 10). */
   healthTestWindowSize: number;
   /** Scheduled probe interval in seconds (10–3600, default 1800 / 30 minutes). */
@@ -225,7 +213,6 @@ export interface UpdateSystemSettingsInput {
   healthTestPerProviderDailyBudget?: number;
   healthTestGlobalBudgetSuspendedDay?: string | null;
 
-  healthTestScheduleMode?: HealthTestScheduleMode;
   healthTestWindowSize?: number;
   healthTestIntervalSeconds?: number;
   healthTestTimeoutSeconds?: number;

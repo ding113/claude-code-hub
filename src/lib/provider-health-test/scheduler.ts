@@ -17,7 +17,6 @@ import {
   getScheduledHealthTestInFlightCount,
   runDueScheduledHealthTests,
 } from "@/lib/provider-health-test/run-test";
-import { shouldRunSloRebalance } from "@/lib/provider-health-test/schedule-mode";
 
 // rebalance imported dynamically inside cycle to keep startup light
 
@@ -113,9 +112,8 @@ async function runCycle(): Promise<void> {
 
     if (leadershipLost || schedulerState.__CCH_PROVIDER_HEALTH_TEST_STOP__) return;
 
-    // Respect the site-wide schedule policy before dispatching probes. Dynamic
-    // mode rebalances to the best SLO peers; always_on skips that auto-disable
-    // step and reopens peers previously closed by the dynamic policy.
+    // Scheduled health-test policy is fixed to always-on: skip SLO rebalance
+    // auto-disable and reopen peers previously closed by the old dynamic policy.
     try {
       const [{ getSystemSettings }, healthTestRepository] = await Promise.all([
         import("@/repository/system-config"),
@@ -126,19 +124,12 @@ async function runCycle(): Promise<void> {
       scheduledTimeoutMs =
         normalizeHealthTestTimeoutSeconds(settings.healthTestTimeoutSeconds) * 1000;
 
-      if (shouldRunSloRebalance(settings.healthTestScheduleMode)) {
-        const rebalance = await healthTestRepository.rebalanceScheduledHealthTestsBySlo();
-        if (rebalance.changed > 0) {
-          logger.info("[ProviderHealthTestScheduler] SLO rebalance", rebalance);
-        }
-      } else {
-        const reopened = await healthTestRepository.reopenSloAutoDisabledScheduledHealthTests();
-        if (reopened.reopened > 0) {
-          logger.info("[ProviderHealthTestScheduler] always_on reopened SLO auto-disabled", {
-            count: reopened.reopened,
-            providerIds: reopened.providerIds,
-          });
-        }
+      const reopened = await healthTestRepository.reopenSloAutoDisabledScheduledHealthTests();
+      if (reopened.reopened > 0) {
+        logger.info("[ProviderHealthTestScheduler] reopened SLO auto-disabled", {
+          count: reopened.reopened,
+          providerIds: reopened.providerIds,
+        });
       }
     } catch (error) {
       logger.warn("[ProviderHealthTestScheduler] SLO rebalance failed", {

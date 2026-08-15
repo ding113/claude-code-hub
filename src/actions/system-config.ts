@@ -63,7 +63,6 @@ export async function saveSystemSettings(formData: {
   healthTestDailyBudgetCny?: number;
   healthTestPerProviderDailyBudget?: number;
   healthTestGlobalBudgetSuspendedDay?: string | null;
-  healthTestScheduleMode?: "dynamic" | "always_on";
   healthTestWindowSize?: number;
   healthTestIntervalSeconds?: number;
   healthTestTimeoutSeconds?: number;
@@ -132,7 +131,6 @@ export async function saveSystemSettings(formData: {
       healthTestDailyBudgetCny: validated.healthTestDailyBudgetCny,
       healthTestPerProviderDailyBudget: validated.healthTestPerProviderDailyBudget,
       healthTestGlobalBudgetSuspendedDay: validated.healthTestGlobalBudgetSuspendedDay,
-      healthTestScheduleMode: validated.healthTestScheduleMode,
       healthTestWindowSize: validated.healthTestWindowSize,
       healthTestIntervalSeconds: validated.healthTestIntervalSeconds,
       healthTestTimeoutSeconds: validated.healthTestTimeoutSeconds,
@@ -192,23 +190,6 @@ export async function saveSystemSettings(formData: {
       "@/app/v1/_lib/proxy/provider-selector-settings-cache"
     );
     invalidateProviderSelectorSystemSettingsCache();
-
-    // Switching to always_on should reopen SLO-auto-disabled peers.
-    // Fire-and-forget: awaiting multi-row updates + cache publish freezes the UI toggle.
-    if (
-      validated.healthTestScheduleMode === "always_on" &&
-      before?.healthTestScheduleMode !== "always_on"
-    ) {
-      void import("@/repository/provider-health-test")
-        .then(({ reopenSloAutoDisabledScheduledHealthTests }) =>
-          reopenSloAutoDisabledScheduledHealthTests()
-        )
-        .catch((error) => {
-          logger.warn("[SystemSettings] always_on reopen failed", {
-            error: error instanceof Error ? error.message : String(error),
-          });
-        });
-    }
 
     if (validated.timezone !== undefined) {
       await Promise.all([
@@ -272,7 +253,6 @@ export async function saveSystemSettings(formData: {
     const hotToggleKeys = new Set([
       "streamingRaceMode",
       "streamingRaceFirstByteMs",
-      "healthTestScheduleMode",
       "healthTestWindowSize",
       "healthTestIntervalSeconds",
       "healthTestTimeoutSeconds",
@@ -324,5 +304,47 @@ export async function saveSystemSettings(formData: {
       errorMessage: "UPDATE_FAILED",
     });
     return { ok: false, error: message };
+  }
+}
+
+/**
+ * Manually clear all global-reuse bindings (cch:global:reuse:<group>:<model>).
+ * The next request for each model re-runs cold-start/race selection instead of
+ * sticking to the previously bound provider.
+ */
+export async function refreshGlobalReuseBindings(): Promise<ActionResult<{ cleared: number }>> {
+  try {
+    const session = await getSession();
+    if (!session || session.user.role !== "admin") {
+      return { ok: false, error: "无权限执行此操作" };
+    }
+    const [{ getRedisClient }, { scanPattern }] = await Promise.all([
+      import("@/lib/redis"),
+      import("@/lib/redis/scan-helper"),
+    ]);
+    const redis = getRedisClient();
+    if (!redis) {
+      return { ok: false, error: "Redis 不可用" };
+    }
+    const keys = await scanPattern(redis, "cch:global:reuse:*");
+    let cleared = 0;
+    if (keys.length > 0) {
+      cleared = await redis.del(...keys);
+    }
+    logger.info("[SystemSettings] Manual global-reuse binding refresh", {
+      found: keys.length,
+      cleared,
+    });
+    emitActionAudit({
+      category: "system_settings",
+      action: "global_reuse.refresh",
+      targetType: "system_settings",
+      targetName: "global",
+      success: true,
+    });
+    return { ok: true, data: { cleared } };
+  } catch (error) {
+    logger.error("[SystemSettings] Manual global-reuse binding refresh failed:", error);
+    return { ok: false, error: error instanceof Error ? error.message : "手动刷新绑定失败" };
   }
 }

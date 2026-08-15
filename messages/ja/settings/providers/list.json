@@ -112,13 +112,6 @@
   "raceModeSingleThresholdHelp": "首字タイムアウト：0 = 無効（単路）；>0 = 有効。冷起動時は二重送信（最速+最安）し、先着首字が勝ち。安い方が閾値内に返れば安い方へ再バインド。",
   "raceThresholdNotUsedSingle": "単路: 首字タイムアウト無効（0）。",
   "raceThresholdNotUsedDual": "デュアル高速は即時並行、閾値は使いません。",
-  "healthScheduleModeTitle": "定時テスト方針",
-  "healthScheduleModeDynamic": "動的",
-  "healthScheduleModeAlwaysOn": "常時ON",
-  "healthScheduleModeDynamicHelp": "group_tag ごとに SLO 裁剪：合格 top1/top2 を維持し他を自動OFF。2社未満なら探索再開。",
-  "healthScheduleModeAlwaysOnHelp": "SLO 自動OFFなし。有効かつ予算停止でないプロバイダは定時テスト継続（日次予算とグループ検査モデルは有効）。",
-  "healthScheduleModeSaved": "定時テスト方針を更新しました",
-  "healthScheduleModeSaveFailed": "保存に失敗",
   "healthRuntimeTitle": "プローブと合格閾値",
   "healthRuntimeSubtitle": "サンプル · Cron · タイムアウト · 合格",
   "healthRuntimeWindow": "サンプル窓",
@@ -159,5 +152,9 @@
   "healthTestSloOff": "SLOオフ",
   "healthTestProviderOff": "キー停止",
   "raceRetryLabel": "プロバイダーあたりの再試行回数",
-  "raceRetryInvalid": "1〜10 を入力"
+  "raceRetryInvalid": "1〜10 を入力",
+  "raceRefreshBindingsLabel": "バインドを手動更新",
+  "raceRefreshBindingsAction": "更新",
+  "raceRefreshBindingsDone": "{count} 件のバインドを削除しました。次のリクエストは再び競速します",
+  "raceRefreshBindingsFailed": "バインドの更新に失敗しました"
 }

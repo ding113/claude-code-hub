@@ -1,13 +1,15 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Gauge, Loader2 } from "lucide-react";
+import { Gauge, Loader2, RefreshCw } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   fetchSystemSettings,
+  refreshGlobalReuseBindings,
   saveSystemSettings,
 } from "@/lib/api-client/v1/actions/system-config";
 import { cn } from "@/lib/utils";
@@ -242,6 +244,23 @@ export function StreamingRaceModeControl({ className }: { className?: string }) 
     }
   };
 
+  const [refreshingBindings, setRefreshingBindings] = useState(false);
+  const refreshBindings = async () => {
+    setRefreshingBindings(true);
+    try {
+      const res = await refreshGlobalReuseBindings();
+      if (res.ok) {
+        toast.success(t("raceRefreshBindingsDone", { count: res.data.cleared }));
+      } else {
+        toast.error(t("raceRefreshBindingsFailed"), {
+          description: typeof res.error === "string" ? res.error : undefined,
+        });
+      }
+    } finally {
+      setRefreshingBindings(false);
+    }
+  };
+
   return (
     <div
       className={cn(
@@ -335,6 +354,27 @@ export function StreamingRaceModeControl({ className }: { className?: string }) 
           />
           <span className="w-3 text-[11px] text-muted-foreground">x</span>
         </div>
+      </div>
+
+      <div className="flex min-h-[2.5rem] items-center justify-between gap-2 rounded-lg border border-border/50 bg-background/70 px-2.5 py-2">
+        <span className="inline-flex min-w-0 items-center gap-1.5 text-[11px] text-muted-foreground">
+          <span className="truncate">{t("raceRefreshBindingsLabel")}</span>
+        </span>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-8 shrink-0 text-xs"
+          onClick={refreshBindings}
+          disabled={refreshingBindings}
+        >
+          {refreshingBindings ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+          ) : (
+            <RefreshCw className="h-3.5 w-3.5" aria-hidden />
+          )}
+          {t("raceRefreshBindingsAction")}
+        </Button>
       </div>
 
       <p className="min-h-[2.25rem] text-[11px] leading-relaxed text-muted-foreground">

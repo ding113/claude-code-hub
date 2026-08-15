@@ -51,7 +51,6 @@ import { ProviderSortDropdown, type SortKey } from "./provider-sort-dropdown";
 import { ProviderTypeFilter } from "./provider-type-filter";
 import { HealthTestBudgetBar } from "./health-test-budget-bar";
 import { HealthTestRuntimeConfigControl } from "./health-test-runtime-config-control";
-import { HealthTestScheduleModeControl } from "./health-test-schedule-mode-control";
 import { StreamingRaceModeControl } from "./streaming-race-mode-control";
 import { ProviderSitesView } from "./provider-sites-view";
 import { ProviderVendorView } from "./provider-vendor-view";
@@ -407,7 +406,6 @@ export function ProviderManager({
 
         <div className="grid w-full grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
           <HealthTestBudgetBar currencyCode={currencyCode} className="w-full min-w-0" />
-          <HealthTestScheduleModeControl className="w-full min-w-0" />
           <StreamingRaceModeControl className="w-full min-w-0" />
           <HealthTestRuntimeConfigControl className="w-full min-w-0 md:col-span-2 xl:col-span-3" />
         </div>

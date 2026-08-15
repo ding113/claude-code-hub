@@ -112,13 +112,6 @@
   "raceModeSingleThresholdHelp": "Порог first-byte: 0 = выкл (single); >0 = вкл, на холодном старте dual-send (самый быстрый + самый дешёвый), побеждает первый first-byte, перепривязка к более дешёвому, если он вернулся в пределах порога.",
   "raceThresholdNotUsedSingle": "Single: first-byte timeout выкл (0).",
   "raceThresholdNotUsedDual": "Dual fast сразу гоняет; порог не нужен.",
-  "healthScheduleModeTitle": "Политика health-probe",
-  "healthScheduleModeDynamic": "Динамика",
-  "healthScheduleModeAlwaysOn": "Всегда вкл",
-  "healthScheduleModeDynamicHelp": "SLO rebalance по group_tag: top1/top2, остальные auto-off; <2 — explore.",
-  "healthScheduleModeAlwaysOnHelp": "Без SLO auto-off; включённые (не budget-suspend) провайдеры продолжают probe (бюджет и model группы всё ещё действуют).",
-  "healthScheduleModeSaved": "Политика probe обновлена",
-  "healthScheduleModeSaveFailed": "Не удалось сохранить",
   "healthRuntimeTitle": "Пробы и порог SLO",
   "healthRuntimeSubtitle": "Окно · cron · таймаут · допуск",
   "healthRuntimeWindow": "Окно",
@@ -159,5 +152,9 @@
   "healthTestSloOff": "SLO off",
   "healthTestProviderOff": "Ключ off",
   "raceRetryLabel": "Повторов на провайдера",
-  "raceRetryInvalid": "Введите 1–10"
+  "raceRetryInvalid": "Введите 1–10",
+  "raceRefreshBindingsLabel": "Обновить привязки вручную",
+  "raceRefreshBindingsAction": "Обновить",
+  "raceRefreshBindingsDone": "Удалено привязок: {count}; следующий запрос снова будет гонкой",
+  "raceRefreshBindingsFailed": "Не удалось обновить привязки"
 }

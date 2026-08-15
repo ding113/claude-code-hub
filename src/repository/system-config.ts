@@ -149,7 +149,6 @@ function createFallbackSettings(): SystemSettings {
     healthTestDailyBudgetCny: 1,
     healthTestPerProviderDailyBudget: 0.1,
     healthTestGlobalBudgetSuspendedDay: null,
-    healthTestScheduleMode: "dynamic",
     healthTestWindowSize: 10,
     healthTestIntervalSeconds: 1800,
     healthTestTimeoutSeconds: 30,
@@ -333,13 +332,6 @@ const RECENT_COLUMN_LADDER: ReadonlyArray<{
     selectWarn:
       "system_settings 表除 healthTestWindowSize 外仍有列缺失，继续回退到上一代字段集。",
     updateWarn: "system_settings 表除 healthTestWindowSize 外仍有列缺失，继续降级更新。",
-  },
-  {
-    key: "healthTestScheduleMode",
-    column: systemSettings.healthTestScheduleMode,
-    selectWarn:
-      "system_settings 表除 healthTestScheduleMode 外仍有列缺失，继续回退到上一代字段集。",
-    updateWarn: "system_settings 表除 healthTestScheduleMode 外仍有列缺失，继续降级更新。",
   },
   {
     key: "streamingRaceFirstByteMs",
@@ -737,9 +729,6 @@ export async function updateSystemSettings(
     }
     if (payload.healthTestGlobalBudgetSuspendedDay !== undefined) {
       updates.healthTestGlobalBudgetSuspendedDay = payload.healthTestGlobalBudgetSuspendedDay;
-    }
-    if (payload.healthTestScheduleMode !== undefined) {
-      updates.healthTestScheduleMode = payload.healthTestScheduleMode;
     }
     if (payload.healthTestWindowSize !== undefined) {
       updates.healthTestWindowSize = payload.healthTestWindowSize;

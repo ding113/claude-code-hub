@@ -110,7 +110,6 @@ vi.mock("@/lib/config/system-settings-cache", () => ({
     healthTestWindowSize: 10,
     healthTestTimeoutSeconds: 30,
     healthTestIntervalSeconds: 1800,
-    healthTestScheduleMode: "interval",
   })),
 }));
 vi.mock("@/repository/system-config", () => ({
@@ -121,7 +120,6 @@ vi.mock("@/repository/system-config", () => ({
     healthTestWindowSize: 10,
     healthTestTimeoutSeconds: 30,
     healthTestIntervalSeconds: 1800,
-    healthTestScheduleMode: "interval",
   })),
   getSystemSettingsByKey: vi.fn(async () => null),
 }));

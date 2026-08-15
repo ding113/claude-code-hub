@@ -40,6 +40,13 @@ export async function updateSystemSettings(c: Context): Promise<Response> {
   return jsonResponse(result.data);
 }
 
+export async function refreshGlobalReuseBindings(c: Context): Promise<Response> {
+  const actions = await import("@/actions/system-config");
+  const result = await callAction(c, actions.refreshGlobalReuseBindings, [], c.get("auth"));
+  if (!result.ok) return actionError(c, result);
+  return jsonResponse(result.data);
+}
+
 export async function getSystemTimezone(c: Context): Promise<Response> {
   const actions = await import("@/actions/system-config");
   const result = await callAction(c, actions.getServerTimeZone, [], c.get("auth"));

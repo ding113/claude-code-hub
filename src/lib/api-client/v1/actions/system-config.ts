@@ -1,6 +1,6 @@
 import { ApiError } from "@/lib/api-client/v1/errors";
 import type { SystemSettings } from "@/types/system-config";
-import { apiGet, apiPut, toActionResult } from "./_compat";
+import { apiGet, apiPost, apiPut, toActionResult } from "./_compat";
 
 export function getSystemSettings() {
   return apiGet<SystemSettings>("/api/v1/system/settings").catch((error: unknown) => {
@@ -21,6 +21,12 @@ export function saveSystemSettings(data: unknown) {
       "/api/v1/system/settings",
       data
     )
+  );
+}
+
+export function refreshGlobalReuseBindings() {
+  return toActionResult(
+    apiPost<{ cleared: number }>("/api/v1/system/refresh-bindings")
   );
 }
 

@@ -141,7 +141,6 @@ export async function getCachedSystemSettings(): Promise<SystemSettings> {
       codexPriorityBillingSource: DEFAULT_SETTINGS.codexPriorityBillingSource,
       billNonSuccessfulRequests: false,
       billHedgeLosers: true,
-      healthTestScheduleMode: "dynamic",
       healthTestWindowSize: 10,
       healthTestIntervalSeconds: 1800,
       healthTestTimeoutSeconds: 30,

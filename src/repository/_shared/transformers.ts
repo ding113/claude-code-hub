@@ -279,11 +279,6 @@ export function toSystemSettings(dbSettings: any): SystemSettings {
     healthTestGlobalBudgetSuspendedDay: dbSettings?.healthTestGlobalBudgetSuspendedDay
       ? String(dbSettings.healthTestGlobalBudgetSuspendedDay)
       : null,
-    healthTestScheduleMode:
-      dbSettings?.healthTestScheduleMode === "always_on" ||
-      dbSettings?.healthTestScheduleMode === "dynamic"
-        ? dbSettings.healthTestScheduleMode
-        : "dynamic",
     healthTestWindowSize: (() => {
       const n = Number(dbSettings?.healthTestWindowSize);
       if (!Number.isFinite(n)) return 10;

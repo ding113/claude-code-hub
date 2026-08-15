@@ -1018,10 +1018,6 @@ export const systemSettings = pgTable('system_settings', {
   healthTestGlobalBudgetSuspendedDay: date('health_test_global_budget_suspended_day'),
   // Site-wide per-provider health-test daily spend cap (display units, default 0.1).
   healthTestPerProviderDailyBudget: numeric('health_test_per_provider_daily_budget', { precision: 12, scale: 4 }).notNull().default('0.1'),
-  // Scheduled health-test policy:
-  // - dynamic: SLO rebalance (top1/top2 per group_tag)
-  // - always_on: no SLO auto-disable; keep fleet probing
-  healthTestScheduleMode: varchar('health_test_schedule_mode', { length: 20 }).notNull().default('dynamic'),
   healthTestWindowSize: integer('health_test_window_size').notNull().default(10),
   healthTestIntervalSeconds: integer('health_test_interval_seconds').notNull().default(1800),
   healthTestTimeoutSeconds: integer('health_test_timeout_seconds').notNull().default(30),

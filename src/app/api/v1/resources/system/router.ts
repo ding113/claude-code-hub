@@ -3,6 +3,7 @@ import { requireAuth } from "@/lib/api/v1/_shared/auth-middleware";
 import { fromZodError } from "@/lib/api/v1/_shared/error-envelope";
 import { ProblemJsonSchema } from "@/lib/api/v1/schemas/_common";
 import {
+  RefreshGlobalReuseBindingsResponseSchema,
   SystemDisplaySettingsSchema,
   SystemSettingsSchema,
   SystemSettingsUpdateResponseSchema,
@@ -13,6 +14,7 @@ import {
   getSystemDisplaySettings,
   getSystemSettings,
   getSystemTimezone,
+  refreshGlobalReuseBindings,
   updateSystemSettings,
 } from "./handlers";
 
@@ -135,4 +137,26 @@ systemRouter.openapi(
     },
   }),
   getSystemTimezone as never
+);
+
+systemRouter.openapi(
+  createRoute({
+    method: "post",
+    path: "/system/refresh-bindings",
+    middleware: requireAuth("admin"),
+    tags: ["System"],
+    summary: "Manually refresh global-reuse bindings",
+    description:
+      "Clears all cch:global:reuse:* binding keys so the next request for each model re-runs cold-start/race selection.",
+    "x-required-access": "admin",
+    security,
+    responses: {
+      200: {
+        description: "Number of cleared binding keys.",
+        content: { "application/json": { schema: RefreshGlobalReuseBindingsResponseSchema } },
+      },
+      ...problemResponses,
+    },
+  }),
+  refreshGlobalReuseBindings as never
 );

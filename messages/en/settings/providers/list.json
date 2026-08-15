@@ -112,13 +112,6 @@
   "raceModeSingleThresholdHelp": "First-byte threshold: 0 = disabled (single); >0 = enabled, cold start dual-sends (fastest + cheapest), first first-byte wins, rebind to the cheaper one when it returns within the threshold.",
   "raceThresholdNotUsedSingle": "Single mode: first-byte timeout off (0).",
   "raceThresholdNotUsedDual": "Dual fast races immediately; threshold not used.",
-  "healthScheduleModeTitle": "Scheduled probe policy",
-  "healthScheduleModeDynamic": "Dynamic",
-  "healthScheduleModeAlwaysOn": "Always on",
-  "healthScheduleModeDynamicHelp": "SLO rebalance per group_tag: keep qualified top1/top2, auto-disable the rest; explore when fewer than 2 qualify.",
-  "healthScheduleModeAlwaysOnHelp": "No SLO auto-disable; enabled providers keep scheduled probes (still limited by daily budget and group health-test model).",
-  "healthScheduleModeSaved": "Probe policy updated",
-  "healthScheduleModeSaveFailed": "Failed to save",
   "healthRuntimeTitle": "Probe & SLO gate",
   "healthRuntimeSubtitle": "Sample · cron · timeout · qualify",
   "healthRuntimeWindow": "Window",
@@ -159,5 +152,9 @@
   "healthTestSloOff": "SLO off",
   "healthTestProviderOff": "Key off",
   "raceRetryLabel": "Retries per provider",
-  "raceRetryInvalid": "Enter 1-10"
+  "raceRetryInvalid": "Enter 1-10",
+  "raceRefreshBindingsLabel": "Refresh bindings",
+  "raceRefreshBindingsAction": "Refresh",
+  "raceRefreshBindingsDone": "Cleared {count} binding(s); next request will race again",
+  "raceRefreshBindingsFailed": "Failed to refresh bindings"
 }

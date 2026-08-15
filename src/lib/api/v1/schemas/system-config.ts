@@ -95,13 +95,7 @@ export const SystemSettingsSchema = z
       .nullable()
       .optional()
       .describe("Local day when scheduled health tests were globally suspended for budget."),
-    healthTestScheduleMode: z
-      .enum(["dynamic", "always_on"])
-      .optional()
-      .describe(
-        "Scheduled health-test policy: dynamic (SLO rebalance top1/top2) or always_on (keep fleet probing without SLO auto-disable)."
-      ),
-    healthTestWindowSize: z
+    healthTestWindowSize: z.coerce
       .number()
       .int()
       .min(1)
@@ -312,7 +306,16 @@ export const SystemTimezoneResponseSchema = z.object({
   timeZone: z.string().describe("Resolved server timezone."),
 });
 
+export const RefreshGlobalReuseBindingsResponseSchema = z
+  .object({
+    cleared: z.number().int().min(0).describe("Number of global-reuse binding keys removed."),
+  })
+  .describe("Result of manually refreshing global-reuse bindings.");
+
 export type SystemSettingsResponse = z.infer<typeof SystemSettingsSchema>;
 export type SystemSettingsUpdateInput = z.infer<typeof SystemSettingsUpdateSchema>;
 export type SystemDisplaySettingsResponse = z.infer<typeof SystemDisplaySettingsSchema>;
 export type SystemTimezoneResponse = z.infer<typeof SystemTimezoneResponseSchema>;
+export type RefreshGlobalReuseBindingsResponse = z.infer<
+  typeof RefreshGlobalReuseBindingsResponseSchema
+>;

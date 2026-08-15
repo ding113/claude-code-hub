@@ -112,13 +112,6 @@
   "raceModeSingleThresholdHelp": "首字逾時閾值：0 = 停用（單路）；>0 = 啟用，冷啟動時雙發（最快 + 最便宜），誰先回首字誰贏，便宜方在閾值內返回則改綁到便宜方。",
   "raceThresholdNotUsedSingle": "單路不啟用首字節逾時（0）。",
   "raceThresholdNotUsedDual": "雙發極速立即併發，不依賴首字逾時。",
-  "healthScheduleModeTitle": "定時測試策略",
-  "healthScheduleModeDynamic": "動態",
-  "healthScheduleModeAlwaysOn": "常開",
-  "healthScheduleModeDynamicHelp": "依 group_tag 做 SLO 裁剪：保留合格 top1/top2，其餘自動關定時測；不足 2 家合格則探索重開。",
-  "healthScheduleModeAlwaysOnHelp": "不做 SLO 自動關閉；已啟用且非預算暫停的供應商保持定時測（仍受日預算與分組測試模型約束）。",
-  "healthScheduleModeSaved": "定時測試策略已更新",
-  "healthScheduleModeSaveFailed": "儲存失敗",
   "healthRuntimeTitle": "測試與合格門檻",
   "healthRuntimeSubtitle": "採樣 · 定時 · 超時 · 調度合格",
   "healthRuntimeWindow": "取樣窗口",
@@ -159,5 +152,9 @@
   "healthTestSloOff": "動態關測",
   "healthTestProviderOff": "密鑰停用",
   "raceRetryLabel": "單供應商重試次數",
-  "raceRetryInvalid": "請輸入 1–10"
+  "raceRetryInvalid": "請輸入 1–10",
+  "raceRefreshBindingsLabel": "手動刷新綁定",
+  "raceRefreshBindingsAction": "刷新",
+  "raceRefreshBindingsDone": "已清除 {count} 個綁定，下次請求將重新競速",
+  "raceRefreshBindingsFailed": "刷新綁定失敗"
 }

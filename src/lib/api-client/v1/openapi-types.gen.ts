@@ -13163,7 +13163,6 @@ export interface operations {
                          * @description Scheduled health-test policy: dynamic (SLO rebalance top1/top2) or always_on (keep fleet probing without SLO auto-disable).
                          * @enum {string}
                          */
-                        healthTestScheduleMode?: "dynamic" | "always_on";
                         /** @description Rolling health-test sample window size for online-rate / sparkline / SLO averages. */
                         healthTestWindowSize?: number;
                         /** @description Scheduled health-test interval in seconds (wall-clock aligned). */
@@ -13462,7 +13461,6 @@ export interface operations {
                      * @description Scheduled health-test policy: dynamic (SLO rebalance top1/top2) or always_on (keep fleet probing without SLO auto-disable).
                      * @enum {string}
                      */
-                    healthTestScheduleMode?: "dynamic" | "always_on";
                     /** @description Rolling health-test sample window size for online-rate / sparkline / SLO averages. */
                     healthTestWindowSize?: number;
                     /** @description Scheduled health-test interval in seconds (wall-clock aligned). */
@@ -13636,7 +13634,6 @@ export interface operations {
                          * @description Scheduled health-test policy: dynamic (SLO rebalance top1/top2) or always_on (keep fleet probing without SLO auto-disable).
                          * @enum {string}
                          */
-                        healthTestScheduleMode?: "dynamic" | "always_on";
                         /** @description Rolling health-test sample window size for online-rate / sparkline / SLO averages. */
                         healthTestWindowSize?: number;
                         /** @description Scheduled health-test interval in seconds (wall-clock aligned). */

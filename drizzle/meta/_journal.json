@@ -920,18 +920,25 @@
       "breakpoints": true
     },
     {
-     "idx": 131,
-     "version": "7",
-     "when": 1786860000000,
-     "tag": "0137_drop_provider_first_byte_and_non_streaming_timeouts",
-     "breakpoints": true
+      "idx": 131,
+      "version": "7",
+      "when": 1786860000000,
+      "tag": "0137_drop_provider_first_byte_and_non_streaming_timeouts",
+      "breakpoints": true
     },
     {
-     "idx": 132,
-     "version": "7",
-     "when": 1786940000000,
-     "tag": "0138_drop_provider_max_retry_and_global_max_retry",
-     "breakpoints": true
+      "idx": 132,
+      "version": "7",
+      "when": 1786940000000,
+      "tag": "0138_drop_provider_max_retry_and_global_max_retry",
+      "breakpoints": true
+    },
+    {
+      "idx": 133,
+      "version": "7",
+      "when": 1787000000000,
+      "tag": "0139_drop_health_test_schedule_mode",
+      "breakpoints": true
     }
   ]
 }
