@@ -148,6 +148,7 @@ export async function saveSystemSettings(formData: {
       streamingRaceMode: validated.streamingRaceMode,
       streamingRaceFirstByteMs: validated.streamingRaceFirstByteMs,
       streamingIdleTimeoutMs: validated.streamingIdleTimeoutMs,
+      maxRetryAttempts: validated.maxRetryAttempts,
       timezone: validated.timezone,
       enableAutoCleanup: validated.enableAutoCleanup,
       cleanupRetentionDays: validated.cleanupRetentionDays,

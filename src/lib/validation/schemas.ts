@@ -931,6 +931,8 @@ export const UpdateSystemSettingsSchema = z.object({
   // Global streaming idle timeout (ms): silence window after first byte before aborting a stuck stream.
   // 0 = disabled (no idle watchdog); max 600000 (10 min).
   streamingIdleTimeoutMs: z.coerce.number().int().min(0).max(600000).optional(),
+  // Global same-provider retry attempts (1-10); 1 = fail fast, switch provider immediately.
+  maxRetryAttempts: z.coerce.number().int().min(1).max(10).optional(),
   healthTestScheduleMode: z.enum(["dynamic", "always_on"]).optional(),
   // Rolling sample window for online-rate / sparkline / SLO (default 10). Min 1: no full-window gate.
   healthTestWindowSize: z.coerce.number().int().min(1).max(50).optional(),
