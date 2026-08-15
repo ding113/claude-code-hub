@@ -744,7 +744,7 @@ function buildRetryFailedChainEntry(
   attemptNumber: number,
   error: Error,
   errorMessage: string,
-  requestDetailsBeforeRectify: ReturnType<typeof buildRequestDetails>,
+  requestDetailsBeforeRectify: ReturnType<typeof buildRequestDetails> | undefined,
   rawCrossProviderFallbackEnabled: boolean
 ): NonNullable<Parameters<ProxySession["addProviderToChain"]>[1]> {
   if (error instanceof ProxyError) {
@@ -4855,6 +4855,58 @@ export class ProxyForwarder {
           runAttempt(attempt);
           return;
         }
+      }
+
+      // ========== 通用同 provider 重试（对齐普通路径 maxRetryAttempts 语义）==========
+      // hedge 路径此前只有 reactive rectifier 一种重试途径（错误类型匹配才重试），
+      // 不匹配时直接切换供应商，享受不到普通路径的 maxRetryAttempts 重试机会。
+      // 这里按 provider 配置补通用重试：
+      // - 默认 1（maxRetryAttempts=1）：行为不变，失败即切
+      // - 配 2：失败 1 次 -> 同 provider 重试 1 次 -> 再失败才切换/双发
+      // 重试计数与 coldStartLike 联动：requestAttemptCount >= 2 仍失败 -> 触发双发。
+      const maxAttemptsPerProvider = resolveMaxAttemptsForProvider(
+        attempt.provider,
+        getEnvConfig().MAX_RETRY_ATTEMPTS_DEFAULT
+      );
+      if (
+        errorCategory !== ErrorCategory.NON_RETRYABLE_CLIENT_ERROR &&
+        attempt.requestAttemptCount < maxAttemptsPerProvider
+      ) {
+        logger.info(
+          "ProxyForwarder: Retrying same provider after failure in hedge",
+          {
+            providerId: attempt.provider.id,
+            providerName: attempt.provider.name,
+            statusCode,
+            error: errorMessage,
+            participantSequence: attempt.sequence,
+            attemptNumber: attempt.requestAttemptCount,
+            willRetryAttemptNumber: attempt.requestAttemptCount + 1,
+            maxAttemptsPerProvider,
+          }
+        );
+
+        session.addProviderToChain(attempt.provider, {
+          ...buildRetryFailedChainEntry(
+            attempt.provider,
+            attempt.endpointAudit,
+            attempt.requestAttemptCount,
+            error,
+            errorMessage,
+            undefined,
+            rawCrossProviderFallbackEnabled
+          ),
+          modelRedirect: getAttemptModelRedirect(attempt),
+        });
+
+        if (attempt.thresholdTimer) {
+          clearTimeout(attempt.thresholdTimer);
+          attempt.thresholdTimer = null;
+        }
+        attempt.requestAttemptCount += 1;
+        armAttemptThreshold(attempt);
+        runAttempt(attempt);
+        return;
       }
 
       if (errorCategory === ErrorCategory.NON_RETRYABLE_CLIENT_ERROR) {
