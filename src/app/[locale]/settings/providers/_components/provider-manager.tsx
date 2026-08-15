@@ -405,9 +405,9 @@ export function ProviderManager({
         </div>
 
         <div className="grid w-full grid-cols-1 gap-3 md:grid-cols-2">
-          <HealthTestBudgetBar currencyCode={currencyCode} className="w-full min-w-0" />
+          <HealthTestBudgetBar currencyCode={currencyCode} className="w-full min-w-0 md:col-span-2" />
           <StreamingRaceModeControl className="w-full min-w-0" />
-          <HealthTestRuntimeConfigControl className="w-full min-w-0 md:col-span-2" />
+          <HealthTestRuntimeConfigControl className="w-full min-w-0" />
         </div>
       </div>
       {/* Filter section */}

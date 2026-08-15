@@ -127,10 +127,9 @@ export function HealthTestBudgetBar({
         ) : null}
       </div>
 
-      <div className="flex flex-1 flex-col justify-center gap-2.5 min-h-0">
-        <div className="flex items-baseline justify-between gap-2 min-w-0">
-          <div className="flex items-baseline gap-1 min-w-0 text-sm font-semibold tabular-nums font-mono tracking-tight">
-            <span className="truncate">{isLoading ? "…" : formatAmount(todayCost, currencyCode)}</span>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 min-w-0">
+        <div className="flex items-baseline gap-1 min-w-0 text-sm font-semibold tabular-nums font-mono tracking-tight">
+          <span className="truncate">{isLoading ? "…" : formatAmount(todayCost, currencyCode)}</span>
           <span className="text-muted-foreground font-normal shrink-0">/</span>
           <Tooltip delayDuration={200}>
             <TooltipTrigger asChild>
@@ -164,47 +163,46 @@ export function HealthTestBudgetBar({
         >
           {isLoading ? "" : `${(ratio * 100).toFixed(0)}%`}
         </span>
+
+        <div className="h-1.5 w-full min-w-[8rem] flex-1 basis-40 rounded-full bg-muted overflow-hidden">
+          <div
+            className={cn(
+              "h-full rounded-full transition-all",
+              over ? "bg-rose-500" : ratio >= 0.8 ? "bg-amber-500" : "bg-emerald-500"
+            )}
+            style={{ width: `${Math.min(100, ratio * 100)}%` }}
+          />
+        </div>
+
+        <div className="flex items-center gap-2 text-[11px] shrink-0">
+          <span className="text-muted-foreground">{t("healthTestPerProviderBudgetLabel")}</span>
+          <Tooltip delayDuration={200}>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                onClick={() => {
+                  setDraftPer(String(perProviderBudget));
+                  setEditPerOpen(true);
+                }}
+                className={cn(
+                  "inline-flex items-center gap-1 rounded-sm px-1 py-0.5 font-mono tabular-nums font-medium",
+                  "text-foreground hover:bg-muted/80 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+                  "transition-colors"
+                )}
+                aria-label={t("healthTestPerProviderBudgetEditHint")}
+              >
+                <span>{isLoading ? "…" : perText}</span>
+                <Pencil className="h-3 w-3 text-muted-foreground" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="top" className="text-xs">
+              {t("healthTestPerProviderBudgetEditHint")}
+            </TooltipContent>
+          </Tooltip>
+        </div>
       </div>
 
-      <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
-        <div
-          className={cn(
-            "h-full rounded-full transition-all",
-            over ? "bg-rose-500" : ratio >= 0.8 ? "bg-amber-500" : "bg-emerald-500"
-          )}
-          style={{ width: `${Math.min(100, ratio * 100)}%` }}
-        />
-      </div>
-
-      <div className="flex items-center justify-between gap-2 text-[11px]">
-        <span className="text-muted-foreground shrink-0">{t("healthTestPerProviderBudgetLabel")}</span>
-        <Tooltip delayDuration={200}>
-          <TooltipTrigger asChild>
-            <button
-              type="button"
-              onClick={() => {
-                setDraftPer(String(perProviderBudget));
-                setEditPerOpen(true);
-              }}
-              className={cn(
-                "inline-flex items-center gap-1 rounded-sm px-1 py-0.5 font-mono tabular-nums font-medium",
-                "text-foreground hover:bg-muted/80 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
-                "transition-colors"
-              )}
-              aria-label={t("healthTestPerProviderBudgetEditHint")}
-            >
-              <span>{isLoading ? "…" : perText}</span>
-              <Pencil className="h-3 w-3 text-muted-foreground" />
-            </button>
-          </TooltipTrigger>
-          <TooltipContent side="top" className="text-xs">
-            {t("healthTestPerProviderBudgetEditHint")}
-          </TooltipContent>
-        </Tooltip>
-      </div>
-      </div>
-
-      <p className="mt-auto text-[10px] text-muted-foreground leading-snug">{t("healthTestBudgetHelp")}</p>
+      <p className="text-[10px] text-muted-foreground leading-snug">{t("healthTestBudgetHelp")}</p>
 
       <Dialog open={editGlobalOpen} onOpenChange={setEditGlobalOpen}>
         <DialogContent className="sm:max-w-sm">

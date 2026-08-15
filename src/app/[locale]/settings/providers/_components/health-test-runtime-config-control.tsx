@@ -182,7 +182,7 @@ export function HealthTestRuntimeConfigControl({ className }: { className?: stri
   return (
     <div
       className={cn(
-        "flex h-full min-w-0 flex-col gap-3 rounded-2xl border border-border/60 bg-gradient-to-b from-card/90 to-muted/15 px-4 py-3.5 shadow-[0_1px_0_rgba(0,0,0,0.03)]",
+        "flex h-full min-w-0 flex-col gap-2.5 rounded-xl border border-border/60 bg-card/40 px-3.5 py-3 shadow-[0_1px_0_rgba(0,0,0,0.02)]",
         className
       )}
     >
@@ -204,7 +204,7 @@ export function HealthTestRuntimeConfigControl({ className }: { className?: stri
         )}
       </div>
 
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
         <Field
           label={t("healthRuntimeWindow")}
           unit={t("healthRuntimeWindowUnit")}
