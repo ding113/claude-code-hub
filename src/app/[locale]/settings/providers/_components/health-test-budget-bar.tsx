@@ -127,9 +127,10 @@ export function HealthTestBudgetBar({
         ) : null}
       </div>
 
-      <div className="flex items-baseline justify-between gap-2 min-w-0">
-        <div className="flex items-baseline gap-1 min-w-0 text-sm font-semibold tabular-nums font-mono tracking-tight">
-          <span className="truncate">{isLoading ? "…" : formatAmount(todayCost, currencyCode)}</span>
+      <div className="flex flex-1 flex-col justify-center gap-2.5 min-h-0">
+        <div className="flex items-baseline justify-between gap-2 min-w-0">
+          <div className="flex items-baseline gap-1 min-w-0 text-sm font-semibold tabular-nums font-mono tracking-tight">
+            <span className="truncate">{isLoading ? "…" : formatAmount(todayCost, currencyCode)}</span>
           <span className="text-muted-foreground font-normal shrink-0">/</span>
           <Tooltip delayDuration={200}>
             <TooltipTrigger asChild>
@@ -200,6 +201,7 @@ export function HealthTestBudgetBar({
             {t("healthTestPerProviderBudgetEditHint")}
           </TooltipContent>
         </Tooltip>
+      </div>
       </div>
 
       <p className="mt-auto text-[10px] text-muted-foreground leading-snug">{t("healthTestBudgetHelp")}</p>
