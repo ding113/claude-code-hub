@@ -157,5 +157,7 @@
   "healthRuntimeMaxFirstByteUnit": "с",
   "healthRuntimeSloHint": "Допуск: онлайн ≥ {online}% и средний первый байт ≤ {firstByte}s (нужны оба условия).",
   "healthTestSloOff": "SLO off",
-  "healthTestProviderOff": "Ключ off"
+  "healthTestProviderOff": "Ключ off",
+  "raceRetryLabel": "Повторов на провайдера",
+  "raceRetryInvalid": "Введите 1–10"
 }

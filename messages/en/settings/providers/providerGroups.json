@@ -71,7 +71,6 @@
   "sharedFirstByteTimeout": "Streaming first-byte timeout (s)",
   "sharedStreamingIdleTimeout": "Streaming idle timeout (s)",
   "sharedRequestTimeout": "Non-streaming request timeout (s)",
-  "sharedMaxRetry": "Max retries",
   "sharedCbFailure": "Circuit failure threshold",
   "sharedCbOpen": "Circuit open duration (s)",
   "sharedLimitDaily": "Daily limit (USD)",

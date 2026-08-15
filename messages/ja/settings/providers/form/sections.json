@@ -31,11 +31,6 @@
       "placeholder": "5",
       "warning": "0に設定するとサーキットブレーカーが無効になります - 慎重に使用してください"
     },
-    "maxRetryAttempts": {
-      "desc": "初回呼び出しを含め、同一プロバイダーで試行する上限。超えると他のプロバイダーへ切り替えます。未入力の場合はデフォルト値を使用。",
-      "label": "プロバイダーごとの最大試行回数",
-      "placeholder": "2"
-    },
     "openDuration": {
       "desc": "ブレーク後、半開に移行するまでの時間",
       "label": "ブレーク時間（分）",
@@ -46,7 +41,7 @@
       "label": "回復しきい値（回）",
       "placeholder": "2"
     },
-    "summary": "{failureThreshold} 回失敗 / {openDuration} 分間ブレーク / {successThreshold} 回成功で回復 / 各プロバイダー最大 {maxRetryAttempts} 回試行",
+    "summary": "{failureThreshold} 回失敗 / {openDuration} 分間ブレーク / {successThreshold} 回成功で回復",
     "title": "サーキットブレーカー設定"
   },
   "mcpPassthrough": {

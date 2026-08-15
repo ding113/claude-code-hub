@@ -69,7 +69,6 @@ export interface BatchSettingsAnalysis {
     failureThreshold: FieldAnalysisResult<number | undefined>;
     openDurationMinutes: FieldAnalysisResult<number | undefined>;
     halfOpenSuccessThreshold: FieldAnalysisResult<number | undefined>;
-    maxRetryAttempts: FieldAnalysisResult<number | null>;
   };
   network: {
     proxyUrl: FieldAnalysisResult<string>;
@@ -197,7 +196,6 @@ export function analyzeBatchProviderSettings(providers: ProviderDisplay[]): Batc
         providers,
         (p) => p.circuitBreakerHalfOpenSuccessThreshold
       ),
-      maxRetryAttempts: analyzeField(providers, (p) => p.maxRetryAttempts ?? null),
     },
     network: {
       proxyUrl: analyzeField(providers, (p) => p.proxyUrl ?? ""),

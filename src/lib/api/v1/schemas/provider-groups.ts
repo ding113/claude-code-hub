@@ -31,7 +31,6 @@ const ProviderGroupSharedSettingsSchema = z
     disableSessionReuse: z.boolean().nullable().optional(),
     proxyUrl: z.string().nullable().optional(),
     proxyFallbackToDirect: z.boolean().nullable().optional(),
-    maxRetryAttempts: z.number().int().nullable().optional(),
     circuitBreakerFailureThreshold: z.number().int().nullable().optional(),
     circuitBreakerOpenDuration: z.number().int().nullable().optional(),
     circuitBreakerHalfOpenSuccessThreshold: z.number().int().nullable().optional(),

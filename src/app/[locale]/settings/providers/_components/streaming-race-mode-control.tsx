@@ -44,6 +44,8 @@ export function StreamingRaceModeControl({ className }: { className?: string }) 
   const [draftSec, setDraftSec] = useState("20");
   const [idleMs, setIdleMs] = useState(0);
   const [draftIdleSec, setDraftIdleSec] = useState("0");
+  const [retryAttempts, setRetryAttempts] = useState(1);
+  const [draftRetry, setDraftRetry] = useState("1");
   const saveGenRef = useRef(0);
 
   const { data, isLoading } = useQuery({
@@ -77,6 +79,13 @@ export function StreamingRaceModeControl({ className }: { className?: string }) 
         : 0;
     setIdleMs(idle);
     setDraftIdleSec(String(Math.max(0, Math.round(idle / 1000))));
+    const rawRetry = data.maxRetryAttempts;
+    const retry =
+      typeof rawRetry === "number" && Number.isFinite(rawRetry) && rawRetry >= 1
+        ? Math.trunc(rawRetry)
+        : 1;
+    setRetryAttempts(retry);
+    setDraftRetry(String(retry));
   }, [data]);
 
   const mutation = useMutation({
@@ -84,6 +93,7 @@ export function StreamingRaceModeControl({ className }: { className?: string }) 
       streamingRaceMode?: StreamingRaceMode;
       streamingRaceFirstByteMs?: number;
       streamingIdleTimeoutMs?: number;
+      maxRetryAttempts?: number;
       _gen: number;
     }) => {
       const { _gen, ...body } = payload;
@@ -102,6 +112,10 @@ export function StreamingRaceModeControl({ className }: { className?: string }) 
         setIdleMs(payload.streamingIdleTimeoutMs);
         setDraftIdleSec(String(Math.max(0, Math.round(payload.streamingIdleTimeoutMs / 1000))));
       }
+      if (typeof payload.maxRetryAttempts === "number") {
+        setRetryAttempts(payload.maxRetryAttempts);
+        setDraftRetry(String(payload.maxRetryAttempts));
+      }
       void queryClient.cancelQueries({ queryKey: RACE_QUERY_KEY });
       const previous = queryClient.getQueryData(RACE_QUERY_KEY);
       queryClient.setQueryData(RACE_QUERY_KEY, (old: Record<string, unknown> | undefined) => {
@@ -114,6 +128,9 @@ export function StreamingRaceModeControl({ className }: { className?: string }) 
             : {}),
           ...(typeof payload.streamingIdleTimeoutMs === "number"
             ? { streamingIdleTimeoutMs: payload.streamingIdleTimeoutMs }
+            : {}),
+          ...(typeof payload.maxRetryAttempts === "number"
+            ? { maxRetryAttempts: payload.maxRetryAttempts }
             : {}),
         };
       });
@@ -132,6 +149,10 @@ export function StreamingRaceModeControl({ className }: { className?: string }) 
         setIdleMs(next.streamingIdleTimeoutMs);
         setDraftIdleSec(String(Math.max(0, Math.round(next.streamingIdleTimeoutMs / 1000))));
       }
+      if (typeof next.maxRetryAttempts === "number") {
+        setRetryAttempts(next.maxRetryAttempts);
+        setDraftRetry(String(next.maxRetryAttempts));
+      }
       queryClient.setQueryData(RACE_QUERY_KEY, (old: Record<string, unknown> | undefined) => ({
         ...(old && typeof old === "object" ? old : {}),
         ...next,
@@ -149,6 +170,10 @@ export function StreamingRaceModeControl({ className }: { className?: string }) 
       if (typeof data?.streamingIdleTimeoutMs === "number") {
         setIdleMs(data.streamingIdleTimeoutMs);
         setDraftIdleSec(String(Math.round(data.streamingIdleTimeoutMs / 1000)));
+      }
+      if (typeof data?.maxRetryAttempts === "number") {
+        setRetryAttempts(data.maxRetryAttempts);
+        setDraftRetry(String(data.maxRetryAttempts));
       }
       toast.error(t("raceModeSaveFailed"), { description: err.message });
     },
@@ -194,6 +219,24 @@ export function StreamingRaceModeControl({ className }: { className?: string }) 
       // 0 = 禁用流式静默 watchdog；>0 = 首字节后无新数据超时上限（秒）。
       mutation.mutate({
         streamingIdleTimeoutMs: ms,
+        _gen: gen,
+      });
+    }
+  };
+
+  const commitRetryAttempts = () => {
+    const val = Number.parseInt(draftRetry, 10);
+    if (!Number.isFinite(val) || val < 1 || val > 10) {
+      setDraftRetry(String(retryAttempts));
+      toast.error(t("raceRetryInvalid"));
+      return;
+    }
+    setDraftRetry(String(val));
+    if (val !== retryAttempts) {
+      const gen = ++saveGenRef.current;
+      // 1 = 失败即切（默认）；>1 = 同一供应商最多尝试 N 次（普通路径与 hedge 失败路径通用）。
+      mutation.mutate({
+        maxRetryAttempts: val,
         _gen: gen,
       });
     }
@@ -265,6 +308,32 @@ export function StreamingRaceModeControl({ className }: { className?: string }) 
             aria-label={t("raceIdleLabel")}
           />
           <span className="w-3 text-[11px] text-muted-foreground">s</span>
+        </div>
+      </div>
+
+      <div className="flex min-h-[2.5rem] items-center justify-between gap-2 rounded-lg border border-border/50 bg-background/70 px-2.5 py-2">
+        <span className="inline-flex min-w-0 items-center gap-1.5 text-[11px] text-muted-foreground">
+          <span className="truncate">{t("raceRetryLabel")}</span>
+        </span>
+        <div className="inline-flex shrink-0 items-center gap-1.5">
+          <Input
+            id="global-max-retry-attempts"
+            type="number"
+            min={1}
+            max={10}
+            step={1}
+            className="h-8 w-14 px-2 text-center font-mono text-xs tabular-nums"
+            value={draftRetry}
+            onChange={(e) => setDraftRetry(e.target.value)}
+            onBlur={commitRetryAttempts}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.currentTarget.blur();
+              }
+            }}
+            aria-label={t("raceRetryLabel")}
+          />
+          <span className="w-3 text-[11px] text-muted-foreground">x</span>
         </div>
       </div>
 

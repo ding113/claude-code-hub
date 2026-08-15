@@ -474,14 +474,12 @@ function clampRetryAttempts(value: number): number {
 }
 
 function resolveMaxAttemptsForProvider(
-  provider: ProxySession["provider"],
+  _provider: ProxySession["provider"],
   envDefault: number
 ): number {
-  const baseDefault = clampRetryAttempts(envDefault ?? PROVIDER_DEFAULTS.MAX_RETRY_ATTEMPTS);
-  if (!provider || provider.maxRetryAttempts === null || provider.maxRetryAttempts === undefined) {
-    return baseDefault;
-  }
-  return clampRetryAttempts(provider.maxRetryAttempts);
+  // 全局重试次数来自 system_settings.max_retry_attempts（默认 1）。
+  // provider 级 max_retry_attempts 已移除（migration 0138）。
+  return clampRetryAttempts(envDefault ?? PROVIDER_DEFAULTS.MAX_RETRY_ATTEMPTS);
 }
 
 function buildEndpointAttemptKey(endpointId: number | null, endpointUrl: string): string {
@@ -1215,7 +1213,10 @@ export class ProxyForwarder {
     }
 
     const env = getEnvConfig();
-    const envDefaultMaxAttempts = clampRetryAttempts(env.MAX_RETRY_ATTEMPTS_DEFAULT);
+    // Global same-provider retry attempts (system_settings.max_retry_attempts, default 1).
+    const globalMaxRetryAttempts = clampRetryAttempts(
+      raceSettings.maxRetryAttempts ?? PROVIDER_DEFAULTS.MAX_RETRY_ATTEMPTS
+    );
     const rawCrossProviderFallbackEnabled = session.isRawCrossProviderFallbackEnabled();
     const endpointPolicy = ProxyForwarder.getEndpointPolicy(session);
     const shouldSkipRawRetryAndProviderSwitch =
@@ -1233,7 +1234,7 @@ export class ProxyForwarder {
 
       let maxAttemptsPerProvider = resolveMaxAttemptsForProvider(
         currentProvider,
-        envDefaultMaxAttempts
+        globalMaxRetryAttempts
       );
       if (rawCrossProviderFallbackEnabled) {
         maxAttemptsPerProvider = 1;
@@ -3851,7 +3852,10 @@ export class ProxyForwarder {
 
   private static async sendStreamingWithHedge(
     session: ProxySession,
-    raceSettings: Pick<SystemSettings, "streamingRaceMode" | "streamingRaceFirstByteMs">
+    raceSettings: Pick<
+      SystemSettings,
+      "streamingRaceMode" | "streamingRaceFirstByteMs" | "maxRetryAttempts"
+    >
   ): Promise<Response> {
     const initialProvider = session.provider;
     if (!initialProvider) {
@@ -4866,7 +4870,7 @@ export class ProxyForwarder {
       // 重试计数与 coldStartLike 联动：requestAttemptCount >= 2 仍失败 -> 触发双发。
       const maxAttemptsPerProvider = resolveMaxAttemptsForProvider(
         attempt.provider,
-        getEnvConfig().MAX_RETRY_ATTEMPTS_DEFAULT
+        clampRetryAttempts(raceSettings.maxRetryAttempts ?? PROVIDER_DEFAULTS.MAX_RETRY_ATTEMPTS)
       );
       if (
         errorCategory !== ErrorCategory.NON_RETRYABLE_CLIENT_ERROR &&

@@ -31,11 +31,6 @@
       "placeholder": "5",
       "warning": "設為 0 將停用斷路器 - 請謹慎使用"
     },
-    "maxRetryAttempts": {
-      "desc": "包含首次呼叫在內，單一供應商最多嘗試次數，超過即切換。留空使用系統預設值。",
-      "label": "單供應商最大嘗試次數",
-      "placeholder": "2"
-    },
     "openDuration": {
       "desc": "熔斷後多久自動進入半開狀態",
       "label": "熔斷時長（分鐘）",
@@ -46,7 +41,7 @@
       "label": "恢復閾值（次）",
       "placeholder": "2"
     },
-    "summary": "{failureThreshold} 次失敗 / {openDuration} 分鐘熔斷 / {successThreshold} 次成功恢復 / 每個供應商最多 {maxRetryAttempts} 次嘗試",
+    "summary": "{failureThreshold} 次失敗 / {openDuration} 分鐘熔斷 / {successThreshold} 次成功恢復",
     "title": "斷路器設定"
   },
   "mcpPassthrough": {

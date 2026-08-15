@@ -484,39 +484,6 @@ export function LimitsSection({ subSectionRefs }: LimitsSectionProps) {
                     )}
                 </div>
               </SmartInputWrapper>
-
-              <SmartInputWrapper
-                label={t("sections.circuitBreaker.maxRetryAttempts.label")}
-                description={t("sections.circuitBreaker.maxRetryAttempts.desc")}
-              >
-                <div className="space-y-2">
-                  <div className="relative">
-                    <Input
-                      id={isEdit ? "edit-max-retry-attempts" : "max-retry-attempts"}
-                      type="number"
-                      value={state.circuitBreaker.maxRetryAttempts ?? ""}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        dispatch({
-                          type: "SET_MAX_RETRY_ATTEMPTS",
-                          payload: val === "" ? null : parseInt(val, 10),
-                        });
-                      }}
-                      placeholder={t("sections.circuitBreaker.maxRetryAttempts.placeholder")}
-                      disabled={state.ui.isPending}
-                      min="1"
-                      max="10"
-                      step="1"
-                    />
-                    <RefreshCw className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/30" />
-                  </div>
-                  {isBatch && batchAnalysis?.circuitBreaker.maxRetryAttempts.status === "mixed" && (
-                    <MixedValueIndicator
-                      values={batchAnalysis.circuitBreaker.maxRetryAttempts.values}
-                    />
-                  )}
-                </div>
-              </SmartInputWrapper>
             </div>
 
             {/* Circuit Breaker Status Indicator */}
@@ -527,8 +494,6 @@ export function LimitsSection({ subSectionRefs }: LimitsSectionProps) {
                   failureThreshold: state.circuitBreaker.failureThreshold ?? 5,
                   openDuration: state.circuitBreaker.openDurationMinutes ?? 30,
                   successThreshold: state.circuitBreaker.halfOpenSuccessThreshold ?? 2,
-                  maxRetryAttempts:
-                    state.circuitBreaker.maxRetryAttempts ?? PROVIDER_DEFAULTS.MAX_RETRY_ATTEMPTS,
                 })}
               </div>
             </div>

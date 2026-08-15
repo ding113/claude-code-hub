@@ -157,5 +157,7 @@
   "healthRuntimeMaxFirstByteUnit": "秒",
   "healthRuntimeSloHint": "合格: 稼働率 ≥ {online}% かつ 平均初回バイト ≤ {firstByte}s（両方の条件が必要）。",
   "healthTestSloOff": "SLOオフ",
-  "healthTestProviderOff": "キー停止"
+  "healthTestProviderOff": "キー停止",
+  "raceRetryLabel": "プロバイダーあたりの再試行回数",
+  "raceRetryInvalid": "1〜10 を入力"
 }

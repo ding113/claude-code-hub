@@ -130,10 +130,6 @@ export function toProvider(dbProvider: any): Provider {
         : null,
     totalCostResetAt: dbProvider?.totalCostResetAt ? new Date(dbProvider.totalCostResetAt) : null,
     limitConcurrentSessions: dbProvider?.limitConcurrentSessions ?? 0,
-    maxRetryAttempts:
-      dbProvider?.maxRetryAttempts !== undefined && dbProvider?.maxRetryAttempts !== null
-        ? Number(dbProvider.maxRetryAttempts)
-        : null,
     circuitBreakerFailureThreshold: dbProvider?.circuitBreakerFailureThreshold ?? 0,
     circuitBreakerOpenDuration: dbProvider?.circuitBreakerOpenDuration ?? 1800000,
     circuitBreakerHalfOpenSuccessThreshold: dbProvider?.circuitBreakerHalfOpenSuccessThreshold ?? 2,
@@ -352,6 +348,12 @@ export function toSystemSettings(dbSettings: any): SystemSettings {
       Number.isFinite(Number(dbSettings.streamingIdleTimeoutMs))
         ? Math.trunc(Number(dbSettings.streamingIdleTimeoutMs))
         : 0,
+    maxRetryAttempts:
+      dbSettings?.maxRetryAttempts != null &&
+      dbSettings?.maxRetryAttempts !== undefined &&
+      Number.isFinite(Number(dbSettings.maxRetryAttempts))
+        ? Math.trunc(Number(dbSettings.maxRetryAttempts))
+        : 1,
     timezone: dbSettings?.timezone ?? null,
     enableAutoCleanup: dbSettings?.enableAutoCleanup ?? false,
     cleanupRetentionDays: dbSettings?.cleanupRetentionDays ?? 30,

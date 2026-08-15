@@ -15,7 +15,7 @@
   "baseUrlPlaceholder": "e.g. https://open.bigmodel.cn/api/anthropic",
   "baseUrlRequired": "Please fill in provider URL first",
   "circuitBreakerConfig": "Circuit Breaker Configuration",
-  "circuitBreakerConfigSummary": "{failureThreshold} failures / {openDuration} min circuit break / {successThreshold} successes to recover / {maxRetryAttempts} attempts per provider",
+  "circuitBreakerConfigSummary": "{failureThreshold} failures / {openDuration} min circuit break / {successThreshold} successes to recover",
   "circuitBreakerDesc": "Auto circuit break on consecutive failures to avoid overall service quality impact",
   "clearSearch": "Clear search",
   "codexInstructions": "Codex Instructions Policy",

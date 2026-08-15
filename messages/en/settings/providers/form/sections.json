@@ -31,11 +31,6 @@
       "placeholder": "5",
       "warning": "Setting to 0 disables the circuit breaker - use with caution"
     },
-    "maxRetryAttempts": {
-      "desc": "Total tries (including the first call) before switching providers. Leave empty to use the system default.",
-      "label": "Max Attempts Per Provider",
-      "placeholder": "2"
-    },
     "openDuration": {
       "desc": "Time before switching to half-open",
       "label": "Break Duration (minutes)",
@@ -46,7 +41,7 @@
       "label": "Recovery Threshold",
       "placeholder": "2"
     },
-    "summary": "{failureThreshold} failures / {openDuration} min break / {successThreshold} successes to recover / {maxRetryAttempts} attempts per provider",
+    "summary": "{failureThreshold} failures / {openDuration} min break / {successThreshold} successes to recover",
     "title": "Circuit Breaker"
   },
   "mcpPassthrough": {

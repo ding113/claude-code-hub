@@ -474,8 +474,6 @@ export const providers = pgTable('providers', {
   limitConcurrentSessions: integer('limit_concurrent_sessions').default(0),
 
   // 熔断器配置（每个供应商独立配置）
-  // null = 使用全局默认值 (env.MAX_RETRY_ATTEMPTS_DEFAULT 或 1)
-  maxRetryAttempts: integer('max_retry_attempts'),
   circuitBreakerFailureThreshold: integer('circuit_breaker_failure_threshold').default(0), // 0 = 禁用熔断器
   circuitBreakerOpenDuration: integer('circuit_breaker_open_duration').default(1800000), // 30分钟（毫秒）
   circuitBreakerHalfOpenSuccessThreshold: integer('circuit_breaker_half_open_success_threshold').default(2),
@@ -1065,6 +1063,9 @@ export const systemSettings = pgTable('system_settings', {
   // Global streaming idle timeout (ms): silence window after first byte before aborting a stuck stream.
   // 0 = disabled (no idle watchdog); >0 = abort when no new data within this window.
   streamingIdleTimeoutMs: integer('streaming_idle_timeout_ms').notNull().default(0),
+  // Global same-provider retry attempts (1-10): max attempts per provider on the normal path
+  // and on the hedge failure path. 1 = fail fast, switch provider immediately (default).
+  maxRetryAttempts: integer('max_retry_attempts').notNull().default(1),
 
   // 系统时区配置 (IANA timezone identifier)
   // 用于统一后端时间边界计算和前端日期/时间显示

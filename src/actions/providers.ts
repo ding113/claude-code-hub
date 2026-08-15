@@ -355,7 +355,6 @@ export async function getProviders(): Promise<ProviderDisplay[]> {
         limitTotalUsd: provider.limitTotalUsd,
         totalCostResetAt: provider.totalCostResetAt,
         limitConcurrentSessions: provider.limitConcurrentSessions,
-        maxRetryAttempts: provider.maxRetryAttempts,
         circuitBreakerFailureThreshold: provider.circuitBreakerFailureThreshold,
         circuitBreakerOpenDuration: provider.circuitBreakerOpenDuration,
         circuitBreakerHalfOpenSuccessThreshold: provider.circuitBreakerHalfOpenSuccessThreshold,
@@ -580,7 +579,6 @@ export async function addProvider(data: {
   anthropic_max_tokens_preference?: AnthropicMaxTokensPreference | null;
   anthropic_thinking_budget_preference?: AnthropicThinkingBudgetPreference | null;
   anthropic_adaptive_thinking?: AnthropicAdaptiveThinkingConfig | null;
-  max_retry_attempts?: number | null;
   circuit_breaker_failure_threshold?: number;
   circuit_breaker_open_duration?: number;
   circuit_breaker_half_open_success_threshold?: number;
@@ -648,7 +646,6 @@ export async function addProvider(data: {
       limit_monthly_usd: validated.limit_monthly_usd ?? null,
       limit_total_usd: validated.limit_total_usd ?? null,
       limit_concurrent_sessions: validated.limit_concurrent_sessions ?? 0,
-      max_retry_attempts: validated.max_retry_attempts ?? null,
       circuit_breaker_failure_threshold: validated.circuit_breaker_failure_threshold ?? 0,
       circuit_breaker_open_duration: validated.circuit_breaker_open_duration ?? 1800000,
       circuit_breaker_half_open_success_threshold:
@@ -786,8 +783,7 @@ export async function editProvider(
     anthropic_max_tokens_preference?: AnthropicMaxTokensPreference | null;
     anthropic_thinking_budget_preference?: AnthropicThinkingBudgetPreference | null;
     anthropic_adaptive_thinking?: AnthropicAdaptiveThinkingConfig | null;
-    max_retry_attempts?: number | null;
-    circuit_breaker_failure_threshold?: number;
+      circuit_breaker_failure_threshold?: number;
     circuit_breaker_open_duration?: number;
     circuit_breaker_half_open_success_threshold?: number;
     proxy_url?: string | null;
@@ -1496,7 +1492,6 @@ const SINGLE_EDIT_PREIMAGE_FIELD_TO_PROVIDER_KEY: Record<string, keyof Provider>
   anthropic_thinking_budget_preference: "anthropicThinkingBudgetPreference",
   anthropic_adaptive_thinking: "anthropicAdaptiveThinking",
   gemini_google_search_preference: "geminiGoogleSearchPreference",
-  max_retry_attempts: "maxRetryAttempts",
   circuit_breaker_failure_threshold: "circuitBreakerFailureThreshold",
   circuit_breaker_open_duration: "circuitBreakerOpenDuration",
   circuit_breaker_half_open_success_threshold: "circuitBreakerHalfOpenSuccessThreshold",
@@ -1721,9 +1716,6 @@ function mapApplyUpdatesToRepositoryFormat(
     result.circuitBreakerHalfOpenSuccessThreshold =
       applyUpdates.circuit_breaker_half_open_success_threshold;
   }
-  if (applyUpdates.max_retry_attempts !== undefined) {
-    result.maxRetryAttempts = applyUpdates.max_retry_attempts;
-  }
   if (applyUpdates.proxy_url !== undefined) {
     result.proxyUrl = applyUpdates.proxy_url;
   }
@@ -1779,7 +1771,6 @@ const PATCH_FIELD_TO_PROVIDER_KEY: Record<ProviderBatchPatchField, keyof Provide
   circuit_breaker_failure_threshold: "circuitBreakerFailureThreshold",
   circuit_breaker_open_duration: "circuitBreakerOpenDuration",
   circuit_breaker_half_open_success_threshold: "circuitBreakerHalfOpenSuccessThreshold",
-  max_retry_attempts: "maxRetryAttempts",
   proxy_url: "proxyUrl",
   proxy_fallback_to_direct: "proxyFallbackToDirect",
   mcp_passthrough_type: "mcpPassthroughType",

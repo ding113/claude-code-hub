@@ -187,7 +187,6 @@ describe("src/repository/_shared/transformers.ts", () => {
         priority: undefined,
         costMultiplier: "1.25",
         preserveClientIp: undefined,
-        maxRetryAttempts: "3",
         createdAt: undefined,
         updatedAt: undefined,
       });
@@ -199,7 +198,6 @@ describe("src/repository/_shared/transformers.ts", () => {
       expect(result.providerType).toBe("claude");
       expect(result.preserveClientIp).toBe(false);
       expect(result.groupTag).toBeNull();
-      expect(result.maxRetryAttempts).toBe(3);
       expect(result.circuitBreakerFailureThreshold).toBe(0);
       expect(result.circuitBreakerOpenDuration).toBe(1800000);
       expect(result.createdAt).toEqual(now);

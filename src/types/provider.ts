@@ -126,7 +126,6 @@ export type ProviderBatchPatchField =
   | "circuit_breaker_failure_threshold"
   | "circuit_breaker_open_duration"
   | "circuit_breaker_half_open_success_threshold"
-  | "max_retry_attempts"
   // Network
   | "proxy_url"
   | "proxy_fallback_to_direct"
@@ -178,7 +177,6 @@ export interface ProviderBatchPatchDraft {
   circuit_breaker_failure_threshold?: ProviderPatchDraftInput<number>;
   circuit_breaker_open_duration?: ProviderPatchDraftInput<number>;
   circuit_breaker_half_open_success_threshold?: ProviderPatchDraftInput<number>;
-  max_retry_attempts?: ProviderPatchDraftInput<number>;
   // Network
   proxy_url?: ProviderPatchDraftInput<string>;
   proxy_fallback_to_direct?: ProviderPatchDraftInput<boolean>;
@@ -231,7 +229,6 @@ export interface ProviderBatchPatch {
   circuit_breaker_failure_threshold: ProviderPatchOperation<number>;
   circuit_breaker_open_duration: ProviderPatchOperation<number>;
   circuit_breaker_half_open_success_threshold: ProviderPatchOperation<number>;
-  max_retry_attempts: ProviderPatchOperation<number>;
   // Network
   proxy_url: ProviderPatchOperation<string>;
   proxy_fallback_to_direct: ProviderPatchOperation<boolean>;
@@ -284,7 +281,6 @@ export interface ProviderBatchApplyUpdates {
   circuit_breaker_failure_threshold?: number;
   circuit_breaker_open_duration?: number;
   circuit_breaker_half_open_success_threshold?: number;
-  max_retry_attempts?: number | null;
   // Network
   proxy_url?: string | null;
   proxy_fallback_to_direct?: boolean;
@@ -376,7 +372,6 @@ export interface Provider {
   limitConcurrentSessions: number;
 
   // 熔断器配置（每个供应商独立配置）
-  maxRetryAttempts: number | null;
   circuitBreakerFailureThreshold: number;
   circuitBreakerOpenDuration: number; // 毫秒
   circuitBreakerHalfOpenSuccessThreshold: number;
@@ -503,7 +498,6 @@ export interface ProviderDisplay {
   totalCostResetAt?: Date | null;
   limitConcurrentSessions: number;
   // 熔断器配置
-  maxRetryAttempts: number | null;
   circuitBreakerFailureThreshold: number;
   circuitBreakerOpenDuration: number; // 毫秒
   circuitBreakerHalfOpenSuccessThreshold: number;
@@ -634,7 +628,6 @@ export interface CreateProviderData {
   limit_concurrent_sessions?: number;
 
   // 熔断器配置
-  max_retry_attempts?: number | null;
   circuit_breaker_failure_threshold?: number;
   circuit_breaker_open_duration?: number; // 毫秒
   circuit_breaker_half_open_success_threshold?: number;
@@ -714,7 +707,6 @@ export interface UpdateProviderData {
   limit_concurrent_sessions?: number;
 
   // 熔断器配置
-  max_retry_attempts?: number | null;
   circuit_breaker_failure_threshold?: number;
   circuit_breaker_open_duration?: number; // 毫秒
   circuit_breaker_half_open_success_threshold?: number;

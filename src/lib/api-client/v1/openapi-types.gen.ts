@@ -4690,7 +4690,6 @@ export interface operations {
                             /** @description Concurrent session limit. */
                             limitConcurrentSessions: number;
                             /** @description Max retry attempts. */
-                            maxRetryAttempts: number | null;
                             /** @description Circuit breaker failure threshold. */
                             circuitBreakerFailureThreshold: number | null;
                             /** @description Circuit breaker open duration in milliseconds. */
@@ -5080,7 +5079,6 @@ export interface operations {
                     /** @description Concurrent session limit. */
                     limit_concurrent_sessions?: number;
                     /** @description Max retry attempts. */
-                    max_retry_attempts?: number | null;
                     /** @description Circuit breaker failure threshold. */
                     circuit_breaker_failure_threshold?: number;
                     /** @description Circuit breaker open duration in milliseconds. */
@@ -5224,7 +5222,6 @@ export interface operations {
                         /** @description Concurrent session limit. */
                         limitConcurrentSessions: number;
                         /** @description Max retry attempts. */
-                        maxRetryAttempts: number | null;
                         /** @description Circuit breaker failure threshold. */
                         circuitBreakerFailureThreshold: number | null;
                         /** @description Circuit breaker open duration in milliseconds. */
@@ -5621,7 +5618,6 @@ export interface operations {
                         /** @description Concurrent session limit. */
                         limitConcurrentSessions: number;
                         /** @description Max retry attempts. */
-                        maxRetryAttempts: number | null;
                         /** @description Circuit breaker failure threshold. */
                         circuitBreakerFailureThreshold: number | null;
                         /** @description Circuit breaker open duration in milliseconds. */
@@ -6186,7 +6182,6 @@ export interface operations {
                     /** @description Concurrent session limit. */
                     limit_concurrent_sessions?: number;
                     /** @description Max retry attempts. */
-                    max_retry_attempts?: number | null;
                     /** @description Circuit breaker failure threshold. */
                     circuit_breaker_failure_threshold?: number;
                     /** @description Circuit breaker open duration in milliseconds. */
@@ -6336,7 +6331,6 @@ export interface operations {
                         /** @description Concurrent session limit. */
                         limitConcurrentSessions: number;
                         /** @description Max retry attempts. */
-                        maxRetryAttempts: number | null;
                         /** @description Circuit breaker failure threshold. */
                         circuitBreakerFailureThreshold: number | null;
                         /** @description Circuit breaker open duration in milliseconds. */
@@ -18800,7 +18794,6 @@ export interface operations {
                                 disableSessionReuse?: boolean | null;
                                 proxyUrl?: string | null;
                                 proxyFallbackToDirect?: boolean | null;
-                                maxRetryAttempts?: number | null;
                                 circuitBreakerFailureThreshold?: number | null;
                                 circuitBreakerOpenDuration?: number | null;
                                 circuitBreakerHalfOpenSuccessThreshold?: number | null;
@@ -19029,7 +19022,6 @@ export interface operations {
                         disableSessionReuse?: boolean | null;
                         proxyUrl?: string | null;
                         proxyFallbackToDirect?: boolean | null;
-                        maxRetryAttempts?: number | null;
                         circuitBreakerFailureThreshold?: number | null;
                         circuitBreakerOpenDuration?: number | null;
                         circuitBreakerHalfOpenSuccessThreshold?: number | null;
@@ -19094,7 +19086,6 @@ export interface operations {
                             disableSessionReuse?: boolean | null;
                             proxyUrl?: string | null;
                             proxyFallbackToDirect?: boolean | null;
-                            maxRetryAttempts?: number | null;
                             circuitBreakerFailureThreshold?: number | null;
                             circuitBreakerOpenDuration?: number | null;
                             circuitBreakerHalfOpenSuccessThreshold?: number | null;
@@ -19497,7 +19488,6 @@ export interface operations {
                         disableSessionReuse?: boolean | null;
                         proxyUrl?: string | null;
                         proxyFallbackToDirect?: boolean | null;
-                        maxRetryAttempts?: number | null;
                         circuitBreakerFailureThreshold?: number | null;
                         circuitBreakerOpenDuration?: number | null;
                         circuitBreakerHalfOpenSuccessThreshold?: number | null;
@@ -19562,7 +19552,6 @@ export interface operations {
                             disableSessionReuse?: boolean | null;
                             proxyUrl?: string | null;
                             proxyFallbackToDirect?: boolean | null;
-                            maxRetryAttempts?: number | null;
                             circuitBreakerFailureThreshold?: number | null;
                             circuitBreakerOpenDuration?: number | null;
                             circuitBreakerHalfOpenSuccessThreshold?: number | null;
@@ -19807,7 +19796,6 @@ export interface operations {
                                 disableSessionReuse?: boolean | null;
                                 proxyUrl?: string | null;
                                 proxyFallbackToDirect?: boolean | null;
-                                maxRetryAttempts?: number | null;
                                 circuitBreakerFailureThreshold?: number | null;
                                 circuitBreakerOpenDuration?: number | null;
                                 circuitBreakerHalfOpenSuccessThreshold?: number | null;

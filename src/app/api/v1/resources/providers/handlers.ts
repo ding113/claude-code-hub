@@ -713,7 +713,6 @@ function sanitizeProvider(
     limitTotalUsd: provider.limitTotalUsd,
     totalCostResetAt: provider.totalCostResetAt?.toISOString() ?? null,
     limitConcurrentSessions: provider.limitConcurrentSessions,
-    maxRetryAttempts: provider.maxRetryAttempts,
     circuitBreakerFailureThreshold: provider.circuitBreakerFailureThreshold,
     circuitBreakerOpenDuration: provider.circuitBreakerOpenDuration,
     circuitBreakerHalfOpenSuccessThreshold: provider.circuitBreakerHalfOpenSuccessThreshold,

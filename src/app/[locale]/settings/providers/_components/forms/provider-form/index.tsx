@@ -363,7 +363,6 @@ function ProviderFormContent({
           circuit_breaker_open_duration: openDurationMs,
           circuit_breaker_half_open_success_threshold:
             state.circuitBreaker.halfOpenSuccessThreshold,
-          max_retry_attempts: state.circuitBreaker.maxRetryAttempts,
           proxy_url: state.network.proxyUrl?.trim() || null,
           proxy_fallback_to_direct: state.network.proxyFallbackToDirect,
           custom_headers: parsedCustomHeaders,

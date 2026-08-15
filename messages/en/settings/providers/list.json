@@ -157,5 +157,7 @@
   "healthRuntimeMaxFirstByteUnit": "s",
   "healthRuntimeSloHint": "Qualify: online ≥ {online}% and average first byte ≤ {firstByte}s (both conditions required).",
   "healthTestSloOff": "SLO off",
-  "healthTestProviderOff": "Key off"
+  "healthTestProviderOff": "Key off",
+  "raceRetryLabel": "Retries per provider",
+  "raceRetryInvalid": "Enter 1-10"
 }

@@ -165,6 +165,7 @@ function createFallbackSettings(): SystemSettings {
     streamingRaceMode: "single",
     streamingRaceFirstByteMs: 20000,
     streamingIdleTimeoutMs: 0,
+    maxRetryAttempts: 1,
     timezone: null,
     enableAutoCleanup: false,
     cleanupRetentionDays: 30,
@@ -353,6 +354,13 @@ const RECENT_COLUMN_LADDER: ReadonlyArray<{
     selectWarn:
       "system_settings 表除 streamingIdleTimeoutMs 外仍有列缺失，继续回退到上一代字段集。",
     updateWarn: "system_settings 表除 streamingIdleTimeoutMs 外仍有列缺失，继续降级更新。",
+  },
+  {
+    key: "maxRetryAttempts",
+    column: systemSettings.maxRetryAttempts,
+    selectWarn:
+      "system_settings 表除 maxRetryAttempts 外仍有列缺失，继续回退到上一代字段集。",
+    updateWarn: "system_settings 表除 maxRetryAttempts 外仍有列缺失，继续降级更新。",
   },
   {
     key: "streamingRaceMode",
@@ -801,6 +809,11 @@ export async function updateSystemSettings(
     // Global streaming idle timeout (ms) for stuck-stream watchdog.
     if (payload.streamingIdleTimeoutMs !== undefined) {
       updates.streamingIdleTimeoutMs = Math.trunc(payload.streamingIdleTimeoutMs);
+    }
+
+    // Global same-provider retry attempts (1-10).
+    if (payload.maxRetryAttempts !== undefined) {
+      updates.maxRetryAttempts = Math.trunc(payload.maxRetryAttempts);
     }
 
     // 非成功请求按 token 用量计费开关（如果提供）

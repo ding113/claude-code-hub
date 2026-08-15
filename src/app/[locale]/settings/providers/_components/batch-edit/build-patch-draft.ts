@@ -275,14 +275,6 @@ export function buildPatchDraftFromFormState(
       };
     }
   }
-  if (dirtyFields.has("circuitBreaker.maxRetryAttempts")) {
-    if (state.circuitBreaker.maxRetryAttempts === null) {
-      draft.max_retry_attempts = { clear: true };
-    } else {
-      draft.max_retry_attempts = { set: state.circuitBreaker.maxRetryAttempts };
-    }
-  }
-
   // Network fields (seconds -> ms conversion)
   if (dirtyFields.has("network.proxyUrl")) {
     if (state.network.proxyUrl === "") {

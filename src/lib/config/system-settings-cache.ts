@@ -153,6 +153,7 @@ export async function getCachedSystemSettings(): Promise<SystemSettings> {
       streamingRaceMode: "single",
       streamingRaceFirstByteMs: 20000,
       streamingIdleTimeoutMs: 0,
+      maxRetryAttempts: 1,
       timezone: null,
       verboseProviderError: false,
       passThroughUpstreamErrorMessage: DEFAULT_SETTINGS.passThroughUpstreamErrorMessage,

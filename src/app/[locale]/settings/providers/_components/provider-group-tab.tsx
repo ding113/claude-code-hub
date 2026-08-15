@@ -136,7 +136,6 @@ interface GroupFormState {
   sharedProxyFallback: boolean;
   sharedPreserveClientIp: boolean;
   sharedDisableSessionReuse: boolean;
-  sharedMaxRetryAttempts: string;
   sharedCbFailureThreshold: string;
   sharedCbOpenDurationSec: string;
   sharedCbHalfOpenSuccess: string;
@@ -173,7 +172,6 @@ const INITIAL_FORM: GroupFormState = {
   sharedProxyFallback: false,
   sharedPreserveClientIp: false,
   sharedDisableSessionReuse: false,
-  sharedMaxRetryAttempts: "",
   sharedCbFailureThreshold: "",
   sharedCbOpenDurationSec: "",
   sharedCbHalfOpenSuccess: "",
@@ -235,8 +233,6 @@ function sharedSettingsFromForm(form: GroupFormState): ProviderGroupSharedSettin
   if (form.sharedProxyFallback) out.proxyFallbackToDirect = true;
   if (form.sharedPreserveClientIp) out.preserveClientIp = true;
   if (form.sharedDisableSessionReuse) out.disableSessionReuse = true;
-  const retry = formToOptionalNumber(form.sharedMaxRetryAttempts);
-  if (retry !== undefined) out.maxRetryAttempts = retry;
   const fail = formToOptionalNumber(form.sharedCbFailureThreshold);
   if (fail !== undefined) out.circuitBreakerFailureThreshold = fail;
   const open = formToOptionalNumber(form.sharedCbOpenDurationSec);
@@ -271,7 +267,6 @@ function formFromSharedSettings(
     sharedProxyFallback: Boolean(shared.proxyFallbackToDirect),
     sharedPreserveClientIp: Boolean(shared.preserveClientIp),
     sharedDisableSessionReuse: Boolean(shared.disableSessionReuse),
-    sharedMaxRetryAttempts: numToForm(shared.maxRetryAttempts),
     sharedCbFailureThreshold: numToForm(shared.circuitBreakerFailureThreshold),
     sharedCbOpenDurationSec:
       shared.circuitBreakerOpenDuration == null
@@ -1199,17 +1194,6 @@ export function ProviderGroupTab({
                   />
                   {t("sharedDisableSessionReuse")}
                 </label>
-                <div className="space-y-1.5">
-                  <Label className="text-xs">{t("sharedMaxRetry")}</Label>
-                  <Input
-                    type="number"
-                    value={form.sharedMaxRetryAttempts}
-                    onChange={(e) =>
-                      setForm((prev) => ({ ...prev, sharedMaxRetryAttempts: e.target.value }))
-                    }
-                    placeholder={t("sharedLeaveEmpty")}
-                  />
-                </div>
                 <div className="space-y-1.5">
                   <Label className="text-xs">{t("sharedCbFailure")}</Label>
                   <Input

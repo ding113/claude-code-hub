@@ -15,7 +15,7 @@
   "baseUrlPlaceholder": "例如：https://open.bigmodel.cn/api/anthropic",
   "baseUrlRequired": "請先填寫供應商 URL",
   "circuitBreakerConfig": "斷路器設定",
-  "circuitBreakerConfigSummary": "{failureThreshold} 次失敗 / {openDuration} 分鐘熔斷 / {successThreshold} 次成功恢復 / 每個供應商最多 {maxRetryAttempts} 次嘗試",
+  "circuitBreakerConfigSummary": "{failureThreshold} 次失敗 / {openDuration} 分鐘熔斷 / {successThreshold} 次成功恢復",
   "circuitBreakerDesc": "連續失敗時自動熔斷，避免影響整體服務品質",
   "clearSearch": "清除搜尋",
   "codexInstructions": "Codex Instructions 策略",

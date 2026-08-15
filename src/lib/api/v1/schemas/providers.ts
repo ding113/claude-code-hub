@@ -86,7 +86,6 @@ export const ProviderSummarySchema = z
     limitTotalUsd: z.number().nullable().describe("Total cost limit in USD."),
     totalCostResetAt: NullableStringSchema.describe("Total cost reset timestamp."),
     limitConcurrentSessions: z.number().int().describe("Concurrent session limit."),
-    maxRetryAttempts: z.number().int().nullable().describe("Max retry attempts."),
     circuitBreakerFailureThreshold: z
       .number()
       .int()
@@ -493,14 +492,6 @@ export const ProviderCreateSchema = z
       .min(0)
       .optional()
       .describe("Concurrent session limit."),
-    max_retry_attempts: z
-      .number()
-      .int()
-      .min(1)
-      .max(10)
-      .nullable()
-      .optional()
-      .describe("Max retry attempts."),
     circuit_breaker_failure_threshold: z
       .number()
       .int()

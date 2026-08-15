@@ -189,6 +189,12 @@ export const SystemSettingsSchema = z
       .describe(
         "Global streaming idle timeout in ms: silence window after first byte before aborting a stuck stream. 0 disables the idle watchdog."
       ),
+    maxRetryAttempts: z
+      .number()
+      .int()
+      .min(1)
+      .max(10)
+      .describe("Global same-provider retry attempts (1-10). 1 = fail fast, switch provider immediately."),
     timezone: TimeZoneSchema.nullable().describe(
       "Configured system timezone, or null for default."
     ),

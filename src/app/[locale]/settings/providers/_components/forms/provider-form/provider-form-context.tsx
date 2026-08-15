@@ -113,7 +113,6 @@ const ACTION_TO_FIELD_PATH: Partial<Record<ProviderFormActionWith5hResetMode["ty
   SET_FAILURE_THRESHOLD: "circuitBreaker.failureThreshold",
   SET_OPEN_DURATION_MINUTES: "circuitBreaker.openDurationMinutes",
   SET_HALF_OPEN_SUCCESS_THRESHOLD: "circuitBreaker.halfOpenSuccessThreshold",
-  SET_MAX_RETRY_ATTEMPTS: "circuitBreaker.maxRetryAttempts",
   SET_PROXY_URL: "network.proxyUrl",
   SET_PROXY_FALLBACK_TO_DIRECT: "network.proxyFallbackToDirect",
   SET_MCP_PASSTHROUGH_TYPE: "mcp.mcpPassthroughType",
@@ -294,10 +293,6 @@ export function createInitialState(
           analysis.circuitBreaker.halfOpenSuccessThreshold.status === "uniform"
             ? analysis.circuitBreaker.halfOpenSuccessThreshold.value
             : undefined,
-        maxRetryAttempts:
-          analysis.circuitBreaker.maxRetryAttempts.status === "uniform"
-            ? analysis.circuitBreaker.maxRetryAttempts.value
-            : null,
       },
       network: {
         proxyUrl:
@@ -375,7 +370,6 @@ export function createInitialState(
         failureThreshold: undefined,
         openDurationMinutes: undefined,
         halfOpenSuccessThreshold: undefined,
-        maxRetryAttempts: null,
       },
       network: {
         proxyUrl: "",
@@ -456,7 +450,6 @@ export function createInitialState(
         ? sourceProvider.circuitBreakerOpenDuration / 60000
         : undefined,
       halfOpenSuccessThreshold: sourceProvider?.circuitBreakerHalfOpenSuccessThreshold,
-      maxRetryAttempts: sourceProvider?.maxRetryAttempts ?? null,
     },
     network: {
       proxyUrl: cloneSafeUrlValue(sourceProvider?.proxyUrl, isClone),
@@ -688,12 +681,6 @@ export function providerFormReducer(
         ...state,
         circuitBreaker: { ...state.circuitBreaker, halfOpenSuccessThreshold: action.payload },
       };
-    case "SET_MAX_RETRY_ATTEMPTS":
-      return {
-        ...state,
-        circuitBreaker: { ...state.circuitBreaker, maxRetryAttempts: action.payload },
-      };
-
     // Network
     case "SET_PROXY_URL":
       return { ...state, network: { ...state.network, proxyUrl: action.payload } };

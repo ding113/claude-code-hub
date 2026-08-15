@@ -107,6 +107,8 @@ export interface SystemSettings {
    * aborting a stuck stream. 0 = disabled (no idle watchdog).
    */
   streamingIdleTimeoutMs: number;
+  /** Global same-provider retry attempts (1-10). 1 = fail fast, switch provider immediately. */
+  maxRetryAttempts: number;
 
   // 系统时区配置 (IANA timezone identifier)
   // 用于统一后端时间边界计算和前端日期/时间显示
@@ -252,6 +254,8 @@ export interface UpdateSystemSettingsInput {
   streamingRaceFirstByteMs?: number;
   /** Global streaming idle timeout (ms); 0 = disabled. */
   streamingIdleTimeoutMs?: number;
+  /** Global same-provider retry attempts (1-10). */
+  maxRetryAttempts?: number;
 
   // 系统时区配置（可选）
   timezone?: string | null;

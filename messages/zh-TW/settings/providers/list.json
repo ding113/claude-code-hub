@@ -157,5 +157,7 @@
   "healthRuntimeMaxFirstByteUnit": "秒",
   "healthRuntimeSloHint": "調度合格：在線率 ≥ {online}% 且 平均首字 ≤ {firstByte}s（兩個條件均需滿足）。",
   "healthTestSloOff": "動態關測",
-  "healthTestProviderOff": "密鑰停用"
+  "healthTestProviderOff": "密鑰停用",
+  "raceRetryLabel": "單供應商重試次數",
+  "raceRetryInvalid": "請輸入 1–10"
 }

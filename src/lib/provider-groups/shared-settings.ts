@@ -24,7 +24,6 @@ export type ProviderGroupSharedSettings = {
   proxyUrl?: string | null;
   proxyFallbackToDirect?: boolean | null;
   // circuit breaker
-  maxRetryAttempts?: number | null;
   circuitBreakerFailureThreshold?: number | null;
   circuitBreakerOpenDuration?: number | null;
   circuitBreakerHalfOpenSuccessThreshold?: number | null;
@@ -50,7 +49,6 @@ const NUMBER_KEYS = [
   "priority",
   "weight",
   "costMultiplier",
-  "maxRetryAttempts",
   "circuitBreakerFailureThreshold",
   "circuitBreakerOpenDuration",
   "circuitBreakerHalfOpenSuccessThreshold",
@@ -165,9 +163,6 @@ export function sharedSettingsToProviderPatch(
   }
   if (settings.proxyFallbackToDirect !== undefined && settings.proxyFallbackToDirect !== null) {
     patch.proxyFallbackToDirect = settings.proxyFallbackToDirect;
-  }
-  if (settings.maxRetryAttempts !== undefined) {
-    patch.maxRetryAttempts = settings.maxRetryAttempts;
   }
   if (settings.circuitBreakerFailureThreshold !== undefined) {
     patch.circuitBreakerFailureThreshold = settings.circuitBreakerFailureThreshold;

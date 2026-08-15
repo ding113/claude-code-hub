@@ -97,7 +97,6 @@ export interface CircuitBreakerState {
   failureThreshold: number | undefined;
   openDurationMinutes: number | undefined;
   halfOpenSuccessThreshold: number | undefined;
-  maxRetryAttempts: number | null;
 }
 
 export interface NetworkState {

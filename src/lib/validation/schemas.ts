@@ -597,13 +597,6 @@ export const CreateProviderSchema = z
       ANTHROPIC_THINKING_BUDGET_PREFERENCE.optional().default("inherit"),
     anthropic_adaptive_thinking: ANTHROPIC_ADAPTIVE_THINKING_CONFIG,
     gemini_google_search_preference: GEMINI_GOOGLE_SEARCH_PREFERENCE.optional().default("inherit"),
-    max_retry_attempts: z.coerce
-      .number()
-      .int("重试次数必须是整数")
-      .min(PROVIDER_LIMITS.MAX_RETRY_ATTEMPTS.MIN, "重试次数不能少于1次")
-      .max(PROVIDER_LIMITS.MAX_RETRY_ATTEMPTS.MAX, "重试次数不能超过10次")
-      .nullable()
-      .optional(),
     // 熔断器配置
     circuit_breaker_failure_threshold: z.coerce
       .number()
@@ -789,13 +782,6 @@ export const UpdateProviderSchema = z
     anthropic_thinking_budget_preference: ANTHROPIC_THINKING_BUDGET_PREFERENCE.optional(),
     anthropic_adaptive_thinking: ANTHROPIC_ADAPTIVE_THINKING_CONFIG,
     gemini_google_search_preference: GEMINI_GOOGLE_SEARCH_PREFERENCE.optional(),
-    max_retry_attempts: z.coerce
-      .number()
-      .int("重试次数必须是整数")
-      .min(PROVIDER_LIMITS.MAX_RETRY_ATTEMPTS.MIN, "重试次数不能少于1次")
-      .max(PROVIDER_LIMITS.MAX_RETRY_ATTEMPTS.MAX, "重试次数不能超过10次")
-      .nullable()
-      .optional(),
     // 熔断器配置
     circuit_breaker_failure_threshold: z.coerce
       .number()

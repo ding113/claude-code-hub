@@ -69,7 +69,6 @@ const PATCH_FIELDS: ProviderBatchPatchField[] = [
   "circuit_breaker_failure_threshold",
   "circuit_breaker_open_duration",
   "circuit_breaker_half_open_success_threshold",
-  "max_retry_attempts",
   // Network
   "proxy_url",
   "proxy_fallback_to_direct",
@@ -122,7 +121,6 @@ const CLEARABLE_FIELDS: Record<ProviderBatchPatchField, boolean> = {
   circuit_breaker_failure_threshold: false,
   circuit_breaker_open_duration: false,
   circuit_breaker_half_open_success_threshold: false,
-  max_retry_attempts: true,
   // Network
   proxy_url: true,
   proxy_fallback_to_direct: false,
@@ -222,8 +220,6 @@ function isValidSetValue(field: ProviderBatchPatchField, value: unknown): boolea
     case "circuit_breaker_failure_threshold":
     case "circuit_breaker_open_duration":
     case "circuit_breaker_half_open_success_threshold":
-    case "max_retry_attempts":
-      return typeof value === "number" && Number.isFinite(value);
     case "group_tag":
       return typeof value === "string" && value.length <= 255;
     case "daily_reset_time":
@@ -582,9 +578,6 @@ export function normalizeProviderBatchPatchDraft(
   );
   if (!cbHalfOpenSuccess.ok) return cbHalfOpenSuccess;
 
-  const maxRetryAttempts = normalizePatchField("max_retry_attempts", typedDraft.max_retry_attempts);
-  if (!maxRetryAttempts.ok) return maxRetryAttempts;
-
   // Network
   const proxyUrl = normalizePatchField("proxy_url", typedDraft.proxy_url);
   if (!proxyUrl.ok) return proxyUrl;
@@ -653,7 +646,6 @@ export function normalizeProviderBatchPatchDraft(
       circuit_breaker_failure_threshold: cbFailureThreshold.data,
       circuit_breaker_open_duration: cbOpenDuration.data,
       circuit_breaker_half_open_success_threshold: cbHalfOpenSuccess.data,
-      max_retry_attempts: maxRetryAttempts.data,
       // Network
       proxy_url: proxyUrl.data,
       proxy_fallback_to_direct: proxyFallbackToDirect.data,
@@ -818,9 +810,6 @@ function applyPatchField<T>(
         updates.circuit_breaker_half_open_success_threshold =
           patch.value as ProviderBatchApplyUpdates["circuit_breaker_half_open_success_threshold"];
         return { ok: true, data: undefined };
-      case "max_retry_attempts":
-        updates.max_retry_attempts = patch.value as ProviderBatchApplyUpdates["max_retry_attempts"];
-        return { ok: true, data: undefined };
       // Network
       case "proxy_url":
         updates.proxy_url = patch.value as ProviderBatchApplyUpdates["proxy_url"];
@@ -925,9 +914,6 @@ function applyPatchField<T>(
       updates.limit_total_usd = null;
       return { ok: true, data: undefined };
     // Circuit Breaker
-    case "max_retry_attempts":
-      updates.max_retry_attempts = null;
-      return { ok: true, data: undefined };
     // Network
     case "proxy_url":
       updates.proxy_url = null;
@@ -992,7 +978,6 @@ export function buildProviderBatchApplyUpdates(
       "circuit_breaker_half_open_success_threshold",
       patch.circuit_breaker_half_open_success_threshold,
     ],
-    ["max_retry_attempts", patch.max_retry_attempts],
     // Network
     ["proxy_url", patch.proxy_url],
     ["proxy_fallback_to_direct", patch.proxy_fallback_to_direct],
@@ -1055,7 +1040,6 @@ export function hasProviderBatchPatchChanges(patch: ProviderBatchPatch): boolean
     patch.circuit_breaker_failure_threshold.mode !== "no_change" ||
     patch.circuit_breaker_open_duration.mode !== "no_change" ||
     patch.circuit_breaker_half_open_success_threshold.mode !== "no_change" ||
-    patch.max_retry_attempts.mode !== "no_change" ||
     // Network
     patch.proxy_url.mode !== "no_change" ||
     patch.proxy_fallback_to_direct.mode !== "no_change" ||

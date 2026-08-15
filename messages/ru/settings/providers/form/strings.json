@@ -15,7 +15,7 @@
   "baseUrlPlaceholder": "например: https://open.bigmodel.cn/api/anthropic",
   "baseUrlRequired": "Пожалуйста, сначала заполните URL поставщика",
   "circuitBreakerConfig": "Конфигурация автоматического выключателя",
-  "circuitBreakerConfigSummary": "{failureThreshold} сбоев / {openDuration} мин. размыкания / {successThreshold} успехов для восстановления / максимум {maxRetryAttempts} попыток на провайдера",
+  "circuitBreakerConfigSummary": "{failureThreshold} сбоев / {openDuration} мин. размыкания / {successThreshold} успехов для восстановления",
   "circuitBreakerDesc": "Автоматическое размыкание при последовательных сбоях провайдера для предотвращения влияния на общее качество сервиса",
   "clearSearch": "Очистить поиск",
   "codexInstructions": "Политика инструкций Codex",

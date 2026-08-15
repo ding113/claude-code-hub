@@ -15,7 +15,7 @@
   "baseUrlPlaceholder": "例：https://open.bigmodel.cn/api/anthropic",
   "baseUrlRequired": "プロバイダーURLを入力してください",
   "circuitBreakerConfig": "サーキットブレーカー設定",
-  "circuitBreakerConfigSummary": "{failureThreshold} 回失敗 / {openDuration} 分間ブレーク / {successThreshold} 回成功で回復 / 各プロバイダー最大 {maxRetryAttempts} 回試行",
+  "circuitBreakerConfigSummary": "{failureThreshold} 回失敗 / {openDuration} 分間ブレーク / {successThreshold} 回成功で回復",
   "circuitBreakerDesc": "連続失敗時に自動的にブレークして全体の品質を保護します",
   "clearSearch": "検索をクリア",
   "codexInstructions": "Codexインストラクション方針",

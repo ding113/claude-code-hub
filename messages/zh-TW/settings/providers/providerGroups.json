@@ -71,7 +71,6 @@
   "sharedFirstByteTimeout": "串流首位元組逾時（秒）",
   "sharedStreamingIdleTimeout": "串流空閒逾時（秒）",
   "sharedRequestTimeout": "非串流請求逾時（秒）",
-  "sharedMaxRetry": "最大重试次数",
   "sharedCbFailure": "断路器失败阈值",
   "sharedCbOpen": "断路器打开时长（秒）",
   "sharedLimitDaily": "日限额（USD）",
