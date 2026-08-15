@@ -72,6 +72,11 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { TagInput } from "@/components/ui/tag-input";
 import {
   Select,
@@ -88,6 +93,7 @@ import type { ProviderSiteListItem } from "@/lib/api-client/v1/actions/provider-
 import {
   createProviderSite,
   deleteProviderSite,
+  fetchProviderSiteGroupUpstreamModels,
   getProviderSites,
   reorderProviderSites,
   syncAllProviderSiteRates,
@@ -375,6 +381,10 @@ export function ProviderSitesView({
   const [manualTestingProviderIds, setManualTestingProviderIds] = useState<Record<number, boolean>>(
     {}
   );
+  const [siteGroupModelsOpen, setSiteGroupModelsOpen] = useState(false);
+  const [siteGroupModels, setSiteGroupModels] = useState<string[]>([]);
+  const [siteGroupModelsLoading, startSiteGroupModelsTransition] = useTransition();
+  const [siteGroupModelsFailed, setSiteGroupModelsFailed] = useState<string[]>([]);
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
@@ -1345,7 +1355,17 @@ export function ProviderSitesView({
       ) : null}
 
       {selectedGroupData && selectedGroupHealthState ? (
-        <Dialog open onOpenChange={(open) => !open && setSelectedGroup(null)}>
+        <Dialog
+          open
+          onOpenChange={(open) => {
+            if (!open) {
+              setSelectedGroup(null);
+              setSiteGroupModelsOpen(false);
+              setSiteGroupModels([]);
+              setSiteGroupModelsFailed([]);
+            }
+          }}
+        >
           <DialogContent className="max-h-[88vh] max-w-2xl overflow-y-auto p-0">
             <DialogHeader className="border-b bg-gradient-to-br from-muted/45 via-card to-card px-6 py-5">
               <div className="flex items-start gap-3">
@@ -1416,11 +1436,86 @@ export function ProviderSitesView({
               <div className="space-y-3 border-y border-border/50 py-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <p className="text-sm font-medium">{t("colHealthModel")}</p>
-                  {selectedGroupTag ? (
-                    <span className="text-[11px] text-muted-foreground">
-                      {t("groupHealthSharedHint", { tag: selectedGroupTag })}
-                    </span>
-                  ) : null}
+                  <div className="flex items-center gap-2">
+                    {selectedGroupTag ? (
+                      <span className="text-[11px] text-muted-foreground">
+                        {t("groupHealthSharedHint", { tag: selectedGroupTag })}
+                      </span>
+                    ) : null}
+                    <Popover
+                      open={siteGroupModelsOpen}
+                      onOpenChange={(open) => {
+                        setSiteGroupModelsOpen(open);
+                        if (
+                          open &&
+                          siteGroupModels.length === 0 &&
+                          !siteGroupModelsLoading
+                        ) {
+                          startSiteGroupModelsTransition(async () => {
+                            const res = await fetchProviderSiteGroupUpstreamModels(
+                              selectedGroupData.rate.id
+                            );
+                            if (res.ok) {
+                              setSiteGroupModels(res.data.models);
+                              setSiteGroupModelsFailed(res.data.failed);
+                            } else {
+                              toast.error(res.error ?? t("fetchSiteGroupModelsFailed"));
+                              setSiteGroupModels([]);
+                              setSiteGroupModelsFailed([]);
+                            }
+                          });
+                        }
+                      }}
+                    >
+                      <PopoverTrigger asChild>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-7 px-2.5 text-xs"
+                          disabled={siteGroupModelsLoading}
+                        >
+                          {siteGroupModelsLoading ? (
+                            <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <RefreshCw className="mr-1 h-3.5 w-3.5" />
+                          )}
+                          {t("fetchSiteGroupModels")}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent align="end" className="w-80">
+                        <div className="space-y-2">
+                          <p className="text-xs font-medium text-muted-foreground">
+                            {t("fetchSiteGroupModelsHelp")}
+                          </p>
+                          {siteGroupModelsFailed.length > 0 ? (
+                            <p className="text-[11px] text-amber-600 dark:text-amber-400">
+                              {t("fetchSiteGroupModelsFailedCount", {
+                                count: siteGroupModelsFailed.length,
+                              })}
+                            </p>
+                          ) : null}
+                          {siteGroupModels.length === 0 ? (
+                            <p className="text-xs text-muted-foreground">
+                              {t("fetchSiteGroupModelsEmpty")}
+                            </p>
+                          ) : (
+                            <div className="flex max-h-64 flex-wrap gap-1 overflow-y-auto">
+                              {siteGroupModels.map((model) => (
+                                <Badge
+                                  key={model}
+                                  variant="outline"
+                                  className="h-6 px-2 font-mono text-[11px]"
+                                >
+                                  {model}
+                                </Badge>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </PopoverContent>
+                    </Popover>
+                  </div>
                 </div>
                 {isAdmin && selectedGroupTag && selectedGroupTag !== "other" ? (
                   <>

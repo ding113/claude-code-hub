@@ -127,5 +127,10 @@
   "globalCaptchaDesc": "Shared captcha vendor for all provider sites.",
   "globalCaptchaSaved": "Global captcha saved",
   "globalCaptchaSaveFailed": "Failed to save global captcha",
+  "fetchSiteGroupModels": "Fetch models",
+  "fetchSiteGroupModelsHelp": "Models supported by every enabled key in this group (merged, deduplicated).",
+  "fetchSiteGroupModelsFailed": "Failed to fetch group models",
+  "fetchSiteGroupModelsFailedCount": "{count} keys failed",
+  "fetchSiteGroupModelsEmpty": "No models fetched yet",
   "completionHidden": "—"
 }

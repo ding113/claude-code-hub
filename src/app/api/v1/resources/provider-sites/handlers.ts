@@ -177,3 +177,17 @@ export async function syncAllProviderSiteRatesHandler(c: Context): Promise<Respo
   if (!result.ok) return actionError(c, result);
   return jsonResponse(result.data);
 }
+
+export async function fetchProviderSiteGroupUpstreamModels(c: Context): Promise<Response> {
+  const params = RateIdParamSchema.safeParse({ rateId: c.req.param("rateId") });
+  if (!params.success) return fromZodError(params.error, new URL(c.req.url).pathname);
+  const actions = await import("@/actions/provider-sites");
+  const result = await callAction(
+    c,
+    actions.fetchProviderSiteGroupUpstreamModels,
+    [params.data.rateId] as never[],
+    c.get("auth")
+  );
+  if (!result.ok) return actionError(c, result);
+  return jsonResponse(result.data);
+}

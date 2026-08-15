@@ -194,6 +194,15 @@ export const ProviderSiteGroupRateUpdateSchema = z
   })
   .strict();
 
+export const ProviderSiteGroupUpstreamModelsResponseSchema = z.object({
+  models: z
+    .array(z.string())
+    .describe("Aggregated model ids from the group's enabled providers."),
+  failed: z
+    .array(z.string())
+    .describe("Error messages from providers that could not be reached."),
+});
+
 export type ProviderSiteResponse = z.infer<typeof ProviderSiteSchema>;
 export type ProviderSiteCreateInput = z.infer<typeof ProviderSiteCreateSchema>;
 export type ProviderSiteUpdateInput = z.infer<typeof ProviderSiteUpdateSchema>;

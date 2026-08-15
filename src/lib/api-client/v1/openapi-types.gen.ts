@@ -896,6 +896,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/system/refresh-bindings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Manually refresh global-reuse bindings
+         * @description Clears all cch:global:reuse:* binding keys so the next request for each model re-runs cold-start/race selection.
+         */
+        post: operations["postSystemRefreshBindings"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/sensitive-words": {
         parameters: {
             query?: never;
@@ -1494,6 +1514,26 @@ export interface paths {
          * @description Refreshes group rates and balances for all enabled provider sites with credentials.
          */
         post: operations["postProviderSitesSyncRates"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/provider-sites/group-rates/{rateId}/upstream-models:fetch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Fetch aggregated upstream models for a site group rate
+         * @description Fetches model ids from every enabled provider that belongs to the site group rate row and merges them.
+         */
+        post: operations["postProviderSitesGroupRatesByRateidUpstreamModelsFetch"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4689,7 +4729,6 @@ export interface operations {
                             totalCostResetAt: string | null;
                             /** @description Concurrent session limit. */
                             limitConcurrentSessions: number;
-                            /** @description Max retry attempts. */
                             /** @description Circuit breaker failure threshold. */
                             circuitBreakerFailureThreshold: number | null;
                             /** @description Circuit breaker open duration in milliseconds. */
@@ -5078,7 +5117,6 @@ export interface operations {
                     limit_total_usd?: number | null;
                     /** @description Concurrent session limit. */
                     limit_concurrent_sessions?: number;
-                    /** @description Max retry attempts. */
                     /** @description Circuit breaker failure threshold. */
                     circuit_breaker_failure_threshold?: number;
                     /** @description Circuit breaker open duration in milliseconds. */
@@ -5221,7 +5259,6 @@ export interface operations {
                         totalCostResetAt: string | null;
                         /** @description Concurrent session limit. */
                         limitConcurrentSessions: number;
-                        /** @description Max retry attempts. */
                         /** @description Circuit breaker failure threshold. */
                         circuitBreakerFailureThreshold: number | null;
                         /** @description Circuit breaker open duration in milliseconds. */
@@ -5617,7 +5654,6 @@ export interface operations {
                         totalCostResetAt: string | null;
                         /** @description Concurrent session limit. */
                         limitConcurrentSessions: number;
-                        /** @description Max retry attempts. */
                         /** @description Circuit breaker failure threshold. */
                         circuitBreakerFailureThreshold: number | null;
                         /** @description Circuit breaker open duration in milliseconds. */
@@ -6181,7 +6217,6 @@ export interface operations {
                     limit_total_usd?: number | null;
                     /** @description Concurrent session limit. */
                     limit_concurrent_sessions?: number;
-                    /** @description Max retry attempts. */
                     /** @description Circuit breaker failure threshold. */
                     circuit_breaker_failure_threshold?: number;
                     /** @description Circuit breaker open duration in milliseconds. */
@@ -6330,7 +6365,6 @@ export interface operations {
                         totalCostResetAt: string | null;
                         /** @description Concurrent session limit. */
                         limitConcurrentSessions: number;
-                        /** @description Max retry attempts. */
                         /** @description Circuit breaker failure threshold. */
                         circuitBreakerFailureThreshold: number | null;
                         /** @description Circuit breaker open duration in milliseconds. */
@@ -13159,10 +13193,6 @@ export interface operations {
                         healthTestDailyBudgetCny?: number;
                         /** @description Local day when scheduled health tests were globally suspended for budget. */
                         healthTestGlobalBudgetSuspendedDay?: string | null;
-                        /**
-                         * @description Scheduled health-test policy: dynamic (SLO rebalance top1/top2) or always_on (keep fleet probing without SLO auto-disable).
-                         * @enum {string}
-                         */
                         /** @description Rolling health-test sample window size for online-rate / sparkline / SLO averages. */
                         healthTestWindowSize?: number;
                         /** @description Scheduled health-test interval in seconds (wall-clock aligned). */
@@ -13205,6 +13235,10 @@ export interface operations {
                         streamingRaceMode: "single" | "timeout_race" | "dual_fast";
                         /** @description Global first-byte threshold in ms for timeout_race. 0 disables (used with single mode). */
                         streamingRaceFirstByteMs: number;
+                        /** @description Global streaming idle timeout in ms: silence window after first byte before aborting a stuck stream. 0 disables the idle watchdog. */
+                        streamingIdleTimeoutMs: number;
+                        /** @description Global same-provider retry attempts (1-10). 1 = fail fast, switch provider immediately. */
+                        maxRetryAttempts: number;
                         /** @description Configured system timezone, or null for default. */
                         timezone: string | null;
                         /** @description Whether usage-log cleanup is enabled. */
@@ -13457,10 +13491,6 @@ export interface operations {
                     healthTestDailyBudgetCny?: number;
                     /** @description Local day when scheduled health tests were globally suspended for budget. */
                     healthTestGlobalBudgetSuspendedDay?: string | null;
-                    /**
-                     * @description Scheduled health-test policy: dynamic (SLO rebalance top1/top2) or always_on (keep fleet probing without SLO auto-disable).
-                     * @enum {string}
-                     */
                     /** @description Rolling health-test sample window size for online-rate / sparkline / SLO averages. */
                     healthTestWindowSize?: number;
                     /** @description Scheduled health-test interval in seconds (wall-clock aligned). */
@@ -13503,6 +13533,10 @@ export interface operations {
                     streamingRaceMode?: "single" | "timeout_race" | "dual_fast";
                     /** @description Global first-byte threshold in ms for timeout_race. 0 disables (used with single mode). */
                     streamingRaceFirstByteMs?: number;
+                    /** @description Global streaming idle timeout in ms: silence window after first byte before aborting a stuck stream. 0 disables the idle watchdog. */
+                    streamingIdleTimeoutMs?: number;
+                    /** @description Global same-provider retry attempts (1-10). 1 = fail fast, switch provider immediately. */
+                    maxRetryAttempts?: number;
                     /** @description System timezone, or null to use default. */
                     timezone?: string | null;
                     /** @description Whether usage-log cleanup is enabled. */
@@ -13630,10 +13664,6 @@ export interface operations {
                         healthTestDailyBudgetCny?: number;
                         /** @description Local day when scheduled health tests were globally suspended for budget. */
                         healthTestGlobalBudgetSuspendedDay?: string | null;
-                        /**
-                         * @description Scheduled health-test policy: dynamic (SLO rebalance top1/top2) or always_on (keep fleet probing without SLO auto-disable).
-                         * @enum {string}
-                         */
                         /** @description Rolling health-test sample window size for online-rate / sparkline / SLO averages. */
                         healthTestWindowSize?: number;
                         /** @description Scheduled health-test interval in seconds (wall-clock aligned). */
@@ -13676,6 +13706,10 @@ export interface operations {
                         streamingRaceMode: "single" | "timeout_race" | "dual_fast";
                         /** @description Global first-byte threshold in ms for timeout_race. 0 disables (used with single mode). */
                         streamingRaceFirstByteMs: number;
+                        /** @description Global streaming idle timeout in ms: silence window after first byte before aborting a stuck stream. 0 disables the idle watchdog. */
+                        streamingIdleTimeoutMs: number;
+                        /** @description Global same-provider retry attempts (1-10). 1 = fail fast, switch provider immediately. */
+                        maxRetryAttempts: number;
                         /** @description Configured system timezone, or null for default. */
                         timezone: string | null;
                         /** @description Whether usage-log cleanup is enabled. */
@@ -14103,6 +14137,143 @@ export interface operations {
                     "application/json": {
                         /** @description Resolved server timezone. */
                         timeZone: string;
+                    };
+                };
+            };
+            /** @description Invalid request. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        /** @description Stable problem type URI or URN. */
+                        type: string;
+                        /** @description Short problem title. */
+                        title: string;
+                        /** @description HTTP status code. */
+                        status: number;
+                        /** @description Human-readable error detail. */
+                        detail: string;
+                        /** @description Request path that produced the problem. */
+                        instance: string;
+                        /** @description Application error code for frontend i18n. */
+                        errorCode: string;
+                        /** @description Optional i18n parameters. */
+                        errorParams?: {
+                            [key: string]: unknown;
+                        };
+                        /** @description Optional request trace identifier. */
+                        traceId?: string;
+                        /** @description Validation failure details. */
+                        invalidParams?: {
+                            /** @description Path to the invalid input field. */
+                            path: (string | number)[];
+                            /** @description Machine-readable validation error code. */
+                            code: string;
+                            /** @description Validation error message. */
+                            message: string;
+                        }[];
+                    };
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        /** @description Stable problem type URI or URN. */
+                        type: string;
+                        /** @description Short problem title. */
+                        title: string;
+                        /** @description HTTP status code. */
+                        status: number;
+                        /** @description Human-readable error detail. */
+                        detail: string;
+                        /** @description Request path that produced the problem. */
+                        instance: string;
+                        /** @description Application error code for frontend i18n. */
+                        errorCode: string;
+                        /** @description Optional i18n parameters. */
+                        errorParams?: {
+                            [key: string]: unknown;
+                        };
+                        /** @description Optional request trace identifier. */
+                        traceId?: string;
+                        /** @description Validation failure details. */
+                        invalidParams?: {
+                            /** @description Path to the invalid input field. */
+                            path: (string | number)[];
+                            /** @description Machine-readable validation error code. */
+                            code: string;
+                            /** @description Validation error message. */
+                            message: string;
+                        }[];
+                    };
+                };
+            };
+            /** @description Admin access required. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        /** @description Stable problem type URI or URN. */
+                        type: string;
+                        /** @description Short problem title. */
+                        title: string;
+                        /** @description HTTP status code. */
+                        status: number;
+                        /** @description Human-readable error detail. */
+                        detail: string;
+                        /** @description Request path that produced the problem. */
+                        instance: string;
+                        /** @description Application error code for frontend i18n. */
+                        errorCode: string;
+                        /** @description Optional i18n parameters. */
+                        errorParams?: {
+                            [key: string]: unknown;
+                        };
+                        /** @description Optional request trace identifier. */
+                        traceId?: string;
+                        /** @description Validation failure details. */
+                        invalidParams?: {
+                            /** @description Path to the invalid input field. */
+                            path: (string | number)[];
+                            /** @description Machine-readable validation error code. */
+                            code: string;
+                            /** @description Validation error message. */
+                            message: string;
+                        }[];
+                    };
+                };
+            };
+        };
+    };
+    postSystemRefreshBindings: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Required only when authenticating with the auth-token cookie on mutation requests. */
+                "X-CCH-CSRF"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Number of cleared binding keys. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @description Number of global-reuse binding keys removed. */
+                        cleared: number;
                     };
                 };
             };
@@ -18815,6 +18986,10 @@ export interface operations {
                                 matchType: "exact" | "prefix" | "suffix" | "contains" | "regex";
                                 pattern: string;
                             }[] | null;
+                            /** @description Provider ids to whitelist (null/empty = whitelist disabled). */
+                            whitelistProviderIds?: number[] | null;
+                            /** @description Provider ids to blacklist (null/empty = blacklist disabled). */
+                            blacklistProviderIds?: number[] | null;
                             /** @description Number of providers using the group. */
                             providerCount?: number;
                             /**
@@ -19002,7 +19177,7 @@ export interface operations {
                     description?: string;
                     /** @description Legacy/default scheduled health-test model; empty = skip scheduled tests. */
                     healthTestModel?: string | null;
-                    /** @description Up to two scheduled health-test models tested independently. */
+                    /** @description Scheduled health-test models tested independently for this group. */
                     healthTestModels?: string[] | null;
                     /** @description Test model used as the health baseline for non-test models/displays. */
                     healthTestModelFallback?: string | null;
@@ -19045,6 +19220,10 @@ export interface operations {
                         matchType: "exact" | "prefix" | "suffix" | "contains" | "regex";
                         pattern: string;
                     }[] | null;
+                    /** @description Provider ids to whitelist (null/empty = whitelist disabled). */
+                    whitelistProviderIds?: number[] | null;
+                    /** @description Provider ids to blacklist (null/empty = blacklist disabled). */
+                    blacklistProviderIds?: number[] | null;
                 };
             };
         };
@@ -19107,6 +19286,10 @@ export interface operations {
                             matchType: "exact" | "prefix" | "suffix" | "contains" | "regex";
                             pattern: string;
                         }[] | null;
+                        /** @description Provider ids to whitelist (null/empty = whitelist disabled). */
+                        whitelistProviderIds?: number[] | null;
+                        /** @description Provider ids to blacklist (null/empty = blacklist disabled). */
+                        blacklistProviderIds?: number[] | null;
                         /** @description Number of providers using the group. */
                         providerCount?: number;
                         /**
@@ -19468,7 +19651,7 @@ export interface operations {
                     descriptionNote?: string | null;
                     /** @description Legacy/default scheduled health-test model; empty = skip scheduled tests. */
                     healthTestModel?: string | null;
-                    /** @description Up to two scheduled health-test models tested independently. */
+                    /** @description Scheduled health-test models tested independently for this group. */
                     healthTestModels?: string[] | null;
                     /** @description Test model used as the health baseline for non-test models/displays. */
                     healthTestModelFallback?: string | null;
@@ -19511,6 +19694,10 @@ export interface operations {
                         matchType: "exact" | "prefix" | "suffix" | "contains" | "regex";
                         pattern: string;
                     }[] | null;
+                    /** @description Provider ids to whitelist (null/empty = whitelist disabled). */
+                    whitelistProviderIds?: number[] | null;
+                    /** @description Provider ids to blacklist (null/empty = blacklist disabled). */
+                    blacklistProviderIds?: number[] | null;
                 };
             };
         };
@@ -19573,6 +19760,10 @@ export interface operations {
                             matchType: "exact" | "prefix" | "suffix" | "contains" | "regex";
                             pattern: string;
                         }[] | null;
+                        /** @description Provider ids to whitelist (null/empty = whitelist disabled). */
+                        whitelistProviderIds?: number[] | null;
+                        /** @description Provider ids to blacklist (null/empty = blacklist disabled). */
+                        blacklistProviderIds?: number[] | null;
                         /** @description Number of providers using the group. */
                         providerCount?: number;
                         /**
@@ -19817,6 +20008,10 @@ export interface operations {
                                 matchType: "exact" | "prefix" | "suffix" | "contains" | "regex";
                                 pattern: string;
                             }[] | null;
+                            /** @description Provider ids to whitelist (null/empty = whitelist disabled). */
+                            whitelistProviderIds?: number[] | null;
+                            /** @description Provider ids to blacklist (null/empty = blacklist disabled). */
+                            blacklistProviderIds?: number[] | null;
                             /** @description Number of providers using the group. */
                             providerCount?: number;
                             /**
@@ -22374,6 +22569,185 @@ export interface operations {
                             error?: string;
                             durationMs: number;
                         }[];
+                    };
+                };
+            };
+            /** @description Invalid request. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        /** @description Stable problem type URI or URN. */
+                        type: string;
+                        /** @description Short problem title. */
+                        title: string;
+                        /** @description HTTP status code. */
+                        status: number;
+                        /** @description Human-readable error detail. */
+                        detail: string;
+                        /** @description Request path that produced the problem. */
+                        instance: string;
+                        /** @description Application error code for frontend i18n. */
+                        errorCode: string;
+                        /** @description Optional i18n parameters. */
+                        errorParams?: {
+                            [key: string]: unknown;
+                        };
+                        /** @description Optional request trace identifier. */
+                        traceId?: string;
+                        /** @description Validation failure details. */
+                        invalidParams?: {
+                            /** @description Path to the invalid input field. */
+                            path: (string | number)[];
+                            /** @description Machine-readable validation error code. */
+                            code: string;
+                            /** @description Validation error message. */
+                            message: string;
+                        }[];
+                    };
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        /** @description Stable problem type URI or URN. */
+                        type: string;
+                        /** @description Short problem title. */
+                        title: string;
+                        /** @description HTTP status code. */
+                        status: number;
+                        /** @description Human-readable error detail. */
+                        detail: string;
+                        /** @description Request path that produced the problem. */
+                        instance: string;
+                        /** @description Application error code for frontend i18n. */
+                        errorCode: string;
+                        /** @description Optional i18n parameters. */
+                        errorParams?: {
+                            [key: string]: unknown;
+                        };
+                        /** @description Optional request trace identifier. */
+                        traceId?: string;
+                        /** @description Validation failure details. */
+                        invalidParams?: {
+                            /** @description Path to the invalid input field. */
+                            path: (string | number)[];
+                            /** @description Machine-readable validation error code. */
+                            code: string;
+                            /** @description Validation error message. */
+                            message: string;
+                        }[];
+                    };
+                };
+            };
+            /** @description Admin access required. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        /** @description Stable problem type URI or URN. */
+                        type: string;
+                        /** @description Short problem title. */
+                        title: string;
+                        /** @description HTTP status code. */
+                        status: number;
+                        /** @description Human-readable error detail. */
+                        detail: string;
+                        /** @description Request path that produced the problem. */
+                        instance: string;
+                        /** @description Application error code for frontend i18n. */
+                        errorCode: string;
+                        /** @description Optional i18n parameters. */
+                        errorParams?: {
+                            [key: string]: unknown;
+                        };
+                        /** @description Optional request trace identifier. */
+                        traceId?: string;
+                        /** @description Validation failure details. */
+                        invalidParams?: {
+                            /** @description Path to the invalid input field. */
+                            path: (string | number)[];
+                            /** @description Machine-readable validation error code. */
+                            code: string;
+                            /** @description Validation error message. */
+                            message: string;
+                        }[];
+                    };
+                };
+            };
+            /** @description Provider site not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        /** @description Stable problem type URI or URN. */
+                        type: string;
+                        /** @description Short problem title. */
+                        title: string;
+                        /** @description HTTP status code. */
+                        status: number;
+                        /** @description Human-readable error detail. */
+                        detail: string;
+                        /** @description Request path that produced the problem. */
+                        instance: string;
+                        /** @description Application error code for frontend i18n. */
+                        errorCode: string;
+                        /** @description Optional i18n parameters. */
+                        errorParams?: {
+                            [key: string]: unknown;
+                        };
+                        /** @description Optional request trace identifier. */
+                        traceId?: string;
+                        /** @description Validation failure details. */
+                        invalidParams?: {
+                            /** @description Path to the invalid input field. */
+                            path: (string | number)[];
+                            /** @description Machine-readable validation error code. */
+                            code: string;
+                            /** @description Validation error message. */
+                            message: string;
+                        }[];
+                    };
+                };
+            };
+        };
+    };
+    postProviderSitesGroupRatesByRateidUpstreamModelsFetch: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Required only when authenticating with the auth-token cookie on mutation requests. */
+                "X-CCH-CSRF"?: string;
+            };
+            path: {
+                /** @description Site group rate id. */
+                rateId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Aggregated upstream models. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @description Aggregated model ids from the group's enabled providers. */
+                        models: string[];
+                        /** @description Error messages from providers that could not be reached. */
+                        failed: string[];
                     };
                 };
             };

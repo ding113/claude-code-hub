@@ -127,5 +127,10 @@
   "globalCaptchaDesc": "所有中轉單位可選用同一套打碼配置，無需每個站重複填 Key。",
   "globalCaptchaSaved": "全域打碼已儲存",
   "globalCaptchaSaveFailed": "儲存全域打碼失敗",
+  "fetchSiteGroupModels": "取得模型",
+  "fetchSiteGroupModelsHelp": "該分組下所有啟用金鑰支援的上游模型（去重合併）。",
+  "fetchSiteGroupModelsFailed": "取得分組模型失敗",
+  "fetchSiteGroupModelsFailedCount": "{count} 個金鑰取得失敗",
+  "fetchSiteGroupModelsEmpty": "暫未取得模型",
   "completionHidden": "—"
 }

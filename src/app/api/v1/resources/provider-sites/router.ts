@@ -7,6 +7,7 @@ import {
   ProviderSiteGroupRateSchema,
   ProviderSiteGroupRateUpdateSchema,
   ProviderSiteGroupRateUpsertSchema,
+  ProviderSiteGroupUpstreamModelsResponseSchema,
   ProviderSiteIdParamSchema,
   ProviderSiteListResponseSchema,
   ProviderSiteReorderSchema,
@@ -19,6 +20,7 @@ import {
   createProviderSite,
   deleteProviderSite,
   deleteProviderSiteGroupRate,
+  fetchProviderSiteGroupUpstreamModels,
   listProviderSites,
   reorderProviderSitesHandler,
   syncAllProviderSiteRatesHandler,
@@ -303,4 +305,29 @@ providerSitesRouter.openapi(
     },
   }),
   syncAllProviderSiteRatesHandler as never
+);
+
+providerSitesRouter.openapi(
+  createRoute({
+    method: "post",
+    path: "/provider-sites/group-rates/{rateId}/upstream-models:fetch",
+    middleware: requireAuth("admin"),
+    tags: ["Provider Sites"],
+    summary: "Fetch aggregated upstream models for a site group rate",
+    description:
+      "Fetches model ids from every enabled provider that belongs to the site group rate row and merges them.",
+    "x-required-access": "admin",
+    security,
+    request: { params: RateIdParamSchema },
+    responses: {
+      200: {
+        description: "Aggregated upstream models.",
+        content: {
+          "application/json": { schema: ProviderSiteGroupUpstreamModelsResponseSchema },
+        },
+      },
+      ...problemResponses,
+    },
+  }),
+  fetchProviderSiteGroupUpstreamModels as never
 );

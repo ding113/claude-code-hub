@@ -61,6 +61,15 @@ export function updateProviderSiteGroupRate(rateId: number, data: unknown) {
   );
 }
 
+export function fetchProviderSiteGroupUpstreamModels(rateId: number) {
+  return toActionResult(
+    apiPost<{ models: string[]; failed: string[] }>(
+      `/api/v1/provider-sites/group-rates/${rateId}/upstream-models:fetch`,
+      {}
+    )
+  );
+}
+
 export function deleteProviderSiteGroupRate(rateId: number) {
   return toVoidActionResult(apiDelete(`/api/v1/provider-sites/group-rates/${rateId}`));
 }

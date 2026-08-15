@@ -708,3 +708,99 @@ export async function syncAllProviderSiteRates(): Promise<
     };
   }
 }
+
+/** Normalize a site group name for fuzzy matching (mirrors the frontend helper). */
+function normalizeSiteGroupKeyForMatch(value: string | null | undefined): string {
+  return (value || "").toLowerCase().replace(/[\s\-_/【】[\]()（）]+/g, "");
+}
+
+/**
+ * Fetch the aggregated model list returned by every enabled provider that
+ * belongs to the given website group rate row (site + group name / dispatch tag).
+ * Admin-only. Providers that fail to respond are skipped individually.
+ */
+export async function fetchProviderSiteGroupUpstreamModels(
+  rateId: number
+): Promise<ActionResult<{ models: string[]; failed: string[] }>> {
+  const tError = await getTranslations("errors");
+  try {
+    const session = await getSession();
+    if (!session || session.user.role !== "admin") {
+      return { ok: false, error: tError("UNAUTHORIZED"), errorCode: ERROR_CODES.UNAUTHORIZED };
+    }
+
+    const rate = await findProviderSiteGroupRateById(rateId);
+    if (!rate) {
+      return { ok: false, error: "group_rate_not_found", errorCode: "NOT_FOUND" };
+    }
+
+    const { findAllProviders } = await import("@/repository/provider");
+    const { fetchModelsFromProvider } = await import("@/app/v1/_lib/models/available-models");
+
+    const groupName = rate.groupName || "";
+    const tag = (rate.dispatchGroupTag || "").trim();
+    const normGroup = normalizeSiteGroupKeyForMatch(groupName);
+    const all = await findAllProviders();
+    const siteProviders = all.filter((p) => p.siteId === rate.siteId);
+
+    // Mirror frontend matchSiteGroupMembers: exact siteGroupName first, then fuzzy / name / tag.
+    const exact = siteProviders.filter((p) => {
+      const sgn = p.siteGroupName || "";
+      if (!sgn) return false;
+      if (sgn === groupName) return true;
+      return normalizeSiteGroupKeyForMatch(sgn) === normGroup;
+    });
+    const members = exact.length > 0 ? exact : siteProviders.filter((p) => {
+      const sgn = p.siteGroupName || "";
+      if (sgn) {
+        const ns = normalizeSiteGroupKeyForMatch(sgn);
+        if (normGroup && (ns.includes(normGroup) || normGroup.includes(ns))) return true;
+        if (groupName && p.name.includes(groupName)) return true;
+        return false;
+      }
+      if (groupName && p.name.includes(groupName)) return true;
+      if (!tag) return false;
+      const tags = (p.groupTag || "")
+        .split(/[,，\n]/)
+        .map((s) => s.trim())
+        .filter(Boolean);
+      return tags.includes(tag);
+    });
+
+    const enabledMembers = members.filter(
+      (p) => p.isEnabled && p.deletedAt == null
+    );
+
+    const modelIds = new Set<string>();
+    const failed: string[] = [];
+    const settled = await Promise.allSettled(
+      enabledMembers.map(async (provider) => {
+        const models = await fetchModelsFromProvider(provider);
+        return { provider, models };
+      })
+    );
+    for (const result of settled) {
+      if (result.status === "fulfilled") {
+        for (const model of result.value.models) {
+          if (model.id && model.id.trim()) modelIds.add(model.id.trim());
+        }
+      } else {
+        failed.push(
+          result.reason instanceof Error ? result.reason.message : String(result.reason)
+        );
+      }
+    }
+
+    return {
+      ok: true,
+      data: { models: [...modelIds].sort((a, b) => a.localeCompare(b)), failed },
+    };
+  } catch (error) {
+    logger.error("Failed to fetch provider site group upstream models:", error);
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : "OPERATION_FAILED",
+      errorCode: ERROR_CODES.OPERATION_FAILED,
+    };
+  }
+}
