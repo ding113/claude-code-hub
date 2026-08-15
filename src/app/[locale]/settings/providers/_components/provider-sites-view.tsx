@@ -100,7 +100,6 @@ import {
   syncProviderSiteRates,
   updateProviderSite,
 } from "@/lib/api-client/v1/actions/provider-sites";
-import { testProviderById } from "@/lib/api-client/v1/actions/providers";
 import { fetchSystemSettings, saveSystemSettings } from "@/lib/api-client/v1/actions/system-config";
 import {
   normalizeProviderGroupHealthTestModels,
@@ -122,6 +121,7 @@ import { sumCosts } from "@/lib/utils/currency";
 import type { ProviderDisplay } from "@/types/provider";
 import { invalidateProviderQueries } from "./invalidate-provider-queries";
 import { getProviderHealthTestStatus, ProviderHealthTestCard } from "./provider-health-test-card";
+import { SiteGroupTestDialog } from "./site-group-test-dialog";
 
 interface ProviderSitesViewProps {
   providers: ProviderDisplay[];
@@ -378,9 +378,7 @@ export function ProviderSitesView({
   const [activeSiteId, setActiveSiteId] = useState<number | null>(null);
   const [activeSiteSize, setActiveSiteSize] = useState<{ width: number } | null>(null);
   const [isMounted, setIsMounted] = useState(false);
-  const [manualTestingProviderIds, setManualTestingProviderIds] = useState<Record<number, boolean>>(
-    {}
-  );
+  const [testDialogProvider, setTestDialogProvider] = useState<ProviderDisplay | null>(null);
   const [siteGroupModelsOpen, setSiteGroupModelsOpen] = useState(false);
   const [siteGroupModels, setSiteGroupModels] = useState<string[]>([]);
   const [siteGroupModelsLoading, startSiteGroupModelsTransition] = useTransition();
@@ -770,62 +768,6 @@ export function ProviderSitesView({
       await refreshProviderData();
     });
   }, [fetchSites, refreshProviderData, t]);
-
-  const handleManualHealthTest = useCallback(
-    async (provider: ProviderDisplay) => {
-      if (manualTestingProviderIds[provider.id]) return;
-      setManualTestingProviderIds((prev) => ({ ...prev, [provider.id]: true }));
-      try {
-        const configuredModels = Array.from(
-          new Set(selectedGroupHealthModels.map((model) => model.trim()).filter(Boolean))
-        );
-        const modelsToTest =
-          configuredModels.length > 0
-            ? configuredModels
-            : selectedGroupHealthModelFallback?.trim()
-              ? [selectedGroupHealthModelFallback.trim()]
-              : [];
-        let allOk = true;
-
-        if (modelsToTest.length === 0) {
-          const result = await testProviderById(provider.id);
-          allOk = result.ok;
-        } else {
-          // Run every model shown in the group card; one failure must not skip the rest.
-          for (const model of modelsToTest) {
-            try {
-              const result = await testProviderById(provider.id, { model });
-              if (!result.ok) allOk = false;
-            } catch {
-              allOk = false;
-            }
-          }
-        }
-
-        if (!allOk) {
-          toast.error(t("groupHealthManualTestFailed"));
-          return;
-        }
-        toast.success(t("groupHealthManualTestSuccess"));
-        await invalidateProviderQueries(queryClient);
-      } catch {
-        toast.error(t("groupHealthManualTestFailed"));
-      } finally {
-        setManualTestingProviderIds((prev) => {
-          const next = { ...prev };
-          delete next[provider.id];
-          return next;
-        });
-      }
-    },
-    [
-      manualTestingProviderIds,
-      queryClient,
-      selectedGroupHealthModelFallback,
-      selectedGroupHealthModels,
-      t,
-    ]
-  );
 
   const saveDispatchHealthModels = useCallback(
     async (
@@ -1657,18 +1599,13 @@ export function ProviderSitesView({
                                 variant="ghost"
                                 size="sm"
                                 className="h-7 gap-1 px-2 text-[11px]"
-                                disabled={Boolean(manualTestingProviderIds[provider.id])}
                                 onClick={(event) => {
                                   event.stopPropagation();
-                                  void handleManualHealthTest(provider);
+                                  setTestDialogProvider(provider);
                                 }}
                                 aria-label={t("groupHealthManualTest")}
                               >
-                                {manualTestingProviderIds[provider.id] ? (
-                                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                ) : (
-                                  <Play className="h-3.5 w-3.5" />
-                                )}
+                                <Play className="h-3.5 w-3.5" />
                                 {t("groupHealthManualTest")}
                               </Button>
                             </div>
@@ -1694,6 +1631,21 @@ export function ProviderSitesView({
           </DialogContent>
         </Dialog>
       ) : null}
+
+      <SiteGroupTestDialog
+        open={testDialogProvider !== null}
+        onOpenChange={(open) => {
+          if (!open) setTestDialogProvider(null);
+        }}
+        provider={testDialogProvider}
+        rateId={selectedGroupData?.rate.id ?? 0}
+        siteName={selectedGroupData?.site.name ?? ""}
+        groupName={selectedGroupData?.rate.groupName ?? ""}
+        initialModels={selectedGroupHealthModels}
+        onTested={() => {
+          void invalidateProviderQueries(queryClient);
+        }}
+      />
 
       <Dialog open={siteDialogOpen} onOpenChange={(open) => !open && setSiteDialogOpen(false)}>
         <DialogContent className="grid-rows-[auto_minmax(0,1fr)_auto] gap-0 overflow-hidden p-0 max-h-[calc(100vh-2rem)] sm:max-h-[calc(100vh-3rem)] sm:max-w-2xl sm:rounded-2xl">
