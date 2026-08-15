@@ -627,16 +627,24 @@ export async function syncSiteKeysForGroups(input: {
       );
       // Keep dispatch cost in sync with live upstream group ratio.
       try {
+        const set: Record<string, unknown> = {
+          ...(shouldReactivate ? { isEnabled: true, balanceAutoDisabled: false } : {}),
+          costMultiplier: costMultiplier.toString(),
+          billingMode: "site_group_ratio",
+          siteGroupName: groupName,
+          groupTag: tag,
+          updatedAt: new Date(),
+        };
+        // Repair a stale/masked local key: the upstream reveal (when it
+        // succeeded) holds the full secret. Without this write-back a provider
+        // whose key was stored masked or rotated upstream would 401 forever
+        // while every sync tick re-reveals the same full key in vain.
+        if (upstreamKey && isUsableKey(upstreamKey.key) && upstreamKey.key !== keeper.key) {
+          set.key = upstreamKey.key;
+        }
         await db
           .update(providers)
-          .set({
-            ...(shouldReactivate ? { isEnabled: true, balanceAutoDisabled: false } : {}),
-            costMultiplier: costMultiplier.toString(),
-            billingMode: "site_group_ratio",
-            siteGroupName: groupName,
-            groupTag: tag,
-            updatedAt: new Date(),
-          })
+          .set(set)
           .where(eq(providers.id, keeper.id));
         if (shouldReactivate) summary.providersReactivated += 1;
       } catch (error) {
