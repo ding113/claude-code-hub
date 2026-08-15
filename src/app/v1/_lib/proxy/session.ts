@@ -687,7 +687,8 @@ export class ProxySession {
   updateProviderChainRaceStage(
     providerId: number,
     attemptNumber: number | undefined,
-    stage: NonNullable<ProviderChainItem["raceInfo"]>["stage"]
+    stage: NonNullable<ProviderChainItem["raceInfo"]>["stage"],
+    fallbackFirstByteTimeoutMs?: number
   ): boolean {
     const item = this.providerChain.find(
       (i) =>
@@ -705,7 +706,13 @@ export class ProxySession {
     const target = item ?? fallbackItem;
     if (!target) return false;
     if (!target.raceInfo) {
-      target.raceInfo = { type: "cold_start", stage: "launched", firstByteTimeoutMs: 20000 };
+      target.raceInfo = {
+        type: "cold_start",
+        stage: "launched",
+        // 用调用方传入的真实首字超时阈值（来自全局 streamingRaceFirstByteMs），
+        // 避免主路 raceInfo 显示代码默认 20000 与实际竞速阈值（如 15000）不一致。
+        firstByteTimeoutMs: fallbackFirstByteTimeoutMs ?? 20000,
+      };
     }
     target.raceInfo = { ...target.raceInfo, stage };
     this.persistLiveChain();

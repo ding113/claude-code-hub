@@ -4193,7 +4193,7 @@ export class ProxyForwarder {
         // 请求已结束（winner 落定、备胎在后台等改绑）：首字超时也要回写决策链，
         // 否则备胎 UI 永远停留在"已启动"转圈；同时给 winner 补 no_rebind 结论。
         if (settled || attempt.settled) {
-          session.updateProviderChainRaceStage(attempt.provider.id, attempt.sequence, "timed_out");
+          session.updateProviderChainRaceStage(attempt.provider.id, attempt.sequence, "timed_out", attempt.firstByteTimeoutMs);
           if (coldStartTemporaryRebind && winnerAttempt && attempt !== winnerAttempt) {
             coldStartTemporaryRebind = false;
             session.updateProviderChainRaceOutcome(winnerAttempt.provider.id, winnerAttempt.sequence, {
@@ -4210,7 +4210,7 @@ export class ProxyForwarder {
           if (!attempt.settled) {
             attempt.settled = true;
             attempts.delete(attempt);
-            session.updateProviderChainRaceStage(attempt.provider.id, attempt.sequence, "failed");
+            session.updateProviderChainRaceStage(attempt.provider.id, attempt.sequence, "failed", attempt.firstByteTimeoutMs);
             setTimeout(() => {
               if (attempt.loserBillingStarted || attempt.firstChunk) return;
               const readerCancel = attempt.reader?.cancel("hedge_loser_first_byte_wait_timeout");
@@ -4221,7 +4221,7 @@ export class ProxyForwarder {
           return;
         }
         // 后台候选进度：首字超时（决策链条目 stage 更新，主路 initial_selection 也会被追踪）。
-        session.updateProviderChainRaceStage(attempt.provider.id, attempt.sequence, "timed_out");
+        session.updateProviderChainRaceStage(attempt.provider.id, attempt.sequence, "timed_out", attempt.firstByteTimeoutMs);
         session.addProviderToChain(attempt.provider, {
           ...attempt.endpointAudit,
           reason: "hedge_triggered",
@@ -4260,7 +4260,7 @@ export class ProxyForwarder {
           if (!attempt.settled) {
             attempt.settled = true;
             attempts.delete(attempt);
-            session.updateProviderChainRaceStage(attempt.provider.id, attempt.sequence, "failed");
+            session.updateProviderChainRaceStage(attempt.provider.id, attempt.sequence, "failed", attempt.firstByteTimeoutMs);
             setTimeout(() => {
               if (attempt.loserBillingStarted || attempt.firstChunk) return;
               const readerCancel = attempt.reader?.cancel("hedge_loser_first_byte_wait_timeout");
@@ -4360,7 +4360,8 @@ export class ProxyForwarder {
       session.updateProviderChainRaceStage(
         attempt.provider.id,
         attempt.sequence,
-        attempt.thresholdTriggered ? "timed_out" : "loser"
+        attempt.thresholdTriggered ? "timed_out" : "loser",
+        attempt.firstByteTimeoutMs
       );
       if (coldStartTemporaryRebind && winnerAttempt && attempt !== winnerAttempt) {
         coldStartTemporaryRebind = false;
@@ -4529,7 +4530,8 @@ export class ProxyForwarder {
               session.updateProviderChainRaceStage(
                 attempt.provider.id,
                 attempt.sequence,
-                "first_byte"
+                "first_byte",
+                attempt.firstByteTimeoutMs
               );
               if (elapsed <= attempt.firstByteTimeoutMs) {
                 coldStartTemporaryRebind = false;
@@ -4685,7 +4687,7 @@ export class ProxyForwarder {
             // 后台候选进度：首字已到达（决策链条目 stage 更新，主路 initial_selection 也会被追踪）。
             // 候选池为空（raceDisabled）时跳过：不写 raceInfo，避免单路请求被误标竞速标签。
             if (!raceDisabled) {
-              session.updateProviderChainRaceStage(attempt.provider.id, attempt.sequence, "first_byte");
+              session.updateProviderChainRaceStage(attempt.provider.id, attempt.sequence, "first_byte", attempt.firstByteTimeoutMs);
             }
 
             // 保留首块：若本 attempt 落败且需要计费，drain 时需要补回首块的 usage。
@@ -4742,7 +4744,7 @@ export class ProxyForwarder {
         if (attempt !== winnerAttempt && !attempt.settled) {
           attempt.settled = true;
           attempts.delete(attempt);
-          session.updateProviderChainRaceStage(attempt.provider.id, attempt.sequence, "failed");
+          session.updateProviderChainRaceStage(attempt.provider.id, attempt.sequence, "failed", attempt.firstByteTimeoutMs);
           if (coldStartTemporaryRebind && winnerAttempt) {
             coldStartTemporaryRebind = false;
             session.updateProviderChainRaceOutcome(winnerAttempt.provider.id, winnerAttempt.sequence, {
@@ -4975,7 +4977,7 @@ export class ProxyForwarder {
       // 主路同样更新（fallback 补 raceInfo），使主路失败也有终态。
       // 候选池为空（raceDisabled）时跳过：单路请求失败直接由 request_failed/retry 链体现，不标竞速。
       if (!raceDisabled) {
-        session.updateProviderChainRaceStage(attempt.provider.id, attempt.sequence, "failed");
+        session.updateProviderChainRaceStage(attempt.provider.id, attempt.sequence, "failed", attempt.firstByteTimeoutMs);
       }
 
       if (errorCategory === ErrorCategory.PROVIDER_ERROR && statusCode !== 404) {
