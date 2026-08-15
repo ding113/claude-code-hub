@@ -4199,16 +4199,20 @@ export class ProxyForwarder {
               detail: "cheaper_candidate_timed_out",
             });
           }
-          // 请求已结束但本 attempt 仍挂起（首字未回、连接未释放）：主动断开
-          // 上游连接并释放 agent，避免 reader/agent 泄漏；stage 推进为 failed
-          // （首字超时的迟到终态）。无回首字 = 无 token 可计费，不走 loser billing。
+          // 请求已结束但本 attempt 仍挂起（首字未回）：stage 推进为 failed 标记出局，
+          // 但不断开连接——runAttempt 的 .then 独占 reader 等首块，回首字后自行走
+          // startLoserBilling（drain 上限 HEDGE_LOSER_DRAIN_TIMEOUT_MS）拿回 token 计费，
+          // 避免上游已扣费而 CCH 无 usage 记录的账差。仅设等回首字上限，到点仍未回才断开。
           if (!attempt.settled) {
             attempt.settled = true;
             attempts.delete(attempt);
             session.updateProviderChainRaceStage(attempt.provider.id, attempt.sequence, "failed");
-            const readerCancel = attempt.reader?.cancel("hedge_loser_timed_out");
-            readerCancel?.catch(() => undefined);
-            releaseAttemptAgent(attempt);
+            setTimeout(() => {
+              if (attempt.loserBillingStarted || attempt.firstChunk) return;
+              const readerCancel = attempt.reader?.cancel("hedge_loser_first_byte_wait_timeout");
+              readerCancel?.catch(() => undefined);
+              releaseAttemptAgent(attempt);
+            }, getEnvConfig().HEDGE_LOSER_DRAIN_TIMEOUT_MS);
           }
           return;
         }
@@ -4247,15 +4251,18 @@ export class ProxyForwarder {
         ) {
           const pending = pendingWinnerAttempt;
           pendingWinnerAttempt = null;
-          // 主路超时出局：promote 备胎前先断开主路挂死连接并释放 agent，
-          // 避免 reader/agent 泄漏（无回首字 = 无 token 可计费）。
+          // 主路超时出局：stage 推进为 failed 标记出局，但不断开连接——.then 流程
+          // 仍在等首块，回首字后自行走 drain 拿回计费；等回首字上限到点仍未回才断开。
           if (!attempt.settled) {
             attempt.settled = true;
             attempts.delete(attempt);
             session.updateProviderChainRaceStage(attempt.provider.id, attempt.sequence, "failed");
-            const readerCancel = attempt.reader?.cancel("hedge_loser_timed_out");
-            readerCancel?.catch(() => undefined);
-            releaseAttemptAgent(attempt);
+            setTimeout(() => {
+              if (attempt.loserBillingStarted || attempt.firstChunk) return;
+              const readerCancel = attempt.reader?.cancel("hedge_loser_first_byte_wait_timeout");
+              readerCancel?.catch(() => undefined);
+              releaseAttemptAgent(attempt);
+            }, getEnvConfig().HEDGE_LOSER_DRAIN_TIMEOUT_MS);
           }
           void commitWinner(pending, pending.firstChunk as Uint8Array);
           return;
@@ -4727,9 +4734,15 @@ export class ProxyForwarder {
               detail: "cheaper_candidate_failed",
             });
           }
-          const readerCancel = attempt.reader?.cancel("hedge_loser_failed");
-          readerCancel?.catch(() => undefined);
-          releaseAttemptAgent(attempt);
+          // 连接已失败：回首字过则补发 drain 拿回已产生的 usage；未回首字 = 0 token，
+          // 直接断开释放（无计费可拿）。
+          if (attempt.firstChunk && attempt.billAsLoser && attempt.response && attempt.reader) {
+            startLoserBilling(attempt);
+          } else {
+            const readerCancel = attempt.reader?.cancel("hedge_loser_failed");
+            readerCancel?.catch(() => undefined);
+            releaseAttemptAgent(attempt);
+          }
         }
         return;
       }
