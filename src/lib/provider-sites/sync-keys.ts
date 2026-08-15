@@ -590,20 +590,17 @@ export async function syncSiteKeysForGroups(input: {
       }
     }
 
-    // An unclassified group (for example 国模) is intentionally not attached
-    // to a random CCH dispatch pool. Its upstream key is still provisioned so
-    // the account remains one-key-per-group and can be mapped later by adding a
-    // provider-group match rule.
-    if (tag === "other") {
-      if (!upstreamKey) {
-        logger.warn("[provider-sites] key sync: no usable upstream key for non-routable group", {
-          siteId: input.siteId,
-          groupName,
-          upstreamKeyCount: upstreamGroupKeys.length,
-          autoCreateAttempted: canAutoCreate,
-        });
-      }
-      continue;
+    // An unclassified group (for example 国模) is not attached to a random
+    // CCH dispatch pool: its groupTag stays "other", which no client group
+    // matches, so it never routes traffic. It still gets a linked local
+    // provider so the site-group "fetch models" feature can resolve it.
+    if (tag === "other" && !upstreamKey) {
+      logger.warn("[provider-sites] key sync: no usable upstream key for non-routable group", {
+        siteId: input.siteId,
+        groupName,
+        upstreamKeyCount: upstreamGroupKeys.length,
+        autoCreateAttempted: canAutoCreate,
+      });
     }
 
     const existing = byGroup.get(norm) ?? [];
