@@ -387,7 +387,7 @@ This project builds on [zsio/claude-code-hub](https://github.com/zsio/claude-cod
 
 ## ⭐ Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=ding113/claude-code-hub&type=Date)](https://star-history.com/#ding113/claude-code-hub&Date)
+[![Star History Chart](https://star-history.dera.page/svg?repos=ding113/claude-code-hub&type=Date)](https://star-history.dera.page/#ding113/claude-code-hub&Date)
 
 ## 📜 License
 

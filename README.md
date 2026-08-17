@@ -400,7 +400,7 @@ cch doctor            # 诊断集群与部署状态
 
 ## ⭐ Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=ding113/claude-code-hub&type=Date)](https://star-history.com/#ding113/claude-code-hub&Date)
+[![Star History Chart](https://star-history.dera.page/svg?repos=ding113/claude-code-hub&type=Date)](https://star-history.dera.page/#ding113/claude-code-hub&Date)
 
 ## 📜 许可证 License
 
