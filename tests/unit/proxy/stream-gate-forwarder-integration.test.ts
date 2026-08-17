@@ -1,5 +1,9 @@
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { resolveEndpointPolicy } from "@/app/v1/_lib/proxy/endpoint-policy";
+import {
+  getStreamGateResponsePolicy,
+  setStreamGateResponsePolicy,
+} from "@/app/v1/_lib/proxy/stream-gate/response-policy";
 
 /**
  * F1 流式内容门控（stream content gate）在 ProxyForwarder 顺序路径中的接线集成测试。
@@ -223,6 +227,11 @@ const OPENAI_RESPONSES_WINNER_FRAMES = [
     response: { id: "resp_winner", status: "completed" },
   }),
 ];
+
+const OPENAI_RESPONSES_TERMINAL_ONLY_FRAME = sseFrame("response.completed", {
+  type: "response.completed",
+  response: { id: "resp_prewarm", status: "completed" },
+});
 
 const VALID_OPENAI_RESPONSES_STREAMS = [
   {
@@ -566,6 +575,29 @@ describe("F1 stream content gate x ProxyForwarder sequential path", () => {
       expect(text).toBe(frames.join(""));
       expect(doForward).toHaveBeenCalledTimes(1);
       expect(mocks.pickRandomProviderWithExclusion).not.toHaveBeenCalled();
+      expect(mocks.recordFailure).not.toHaveBeenCalled();
+    });
+
+    test("标记的 Responses WebSocket 预热终止帧提交，并在顺序包装后保留策略", async () => {
+      const provider = createProvider({ id: 1, name: "ws-prewarm", providerType: "codex" });
+      const session = createSession();
+      session.setProvider(provider);
+      Object.assign(session, {
+        requestUrl: new URL("https://example.com/v1/responses"),
+        originalFormat: "response",
+        endpointPolicy: resolveEndpointPolicy("/v1/responses"),
+      });
+
+      const upstreamResponse = createSseResponse([OPENAI_RESPONSES_TERMINAL_ONLY_FRAME]);
+      setStreamGateResponsePolicy(upstreamResponse, { allowTerminalOnlyCommit: true });
+      const doForward = spyOnDoForward();
+      doForward.mockResolvedValueOnce(upstreamResponse);
+
+      const response = await ProxyForwarder.send(session);
+
+      expect(await response.text()).toBe(OPENAI_RESPONSES_TERMINAL_ONLY_FRAME);
+      expect(getStreamGateResponsePolicy(response)).toEqual({ allowTerminalOnlyCommit: true });
+      expect(doForward).toHaveBeenCalledTimes(1);
       expect(mocks.recordFailure).not.toHaveBeenCalled();
     });
 

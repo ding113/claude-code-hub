@@ -125,6 +125,8 @@ export interface StreamGateOptions extends StreamGateCaps {
   family: ProtocolFamily;
   providerId: number;
   providerName: string;
+  /** 允许已显式标记的请求以干净终止帧作为有效的 precommit 提交点 */
+  allowTerminalOnlyCommit?: boolean;
   /** 首个非空上游 chunk 到达时回调一次（调用方用于清除首字节计时器，恢复其原始语义） */
   onFirstByte?: () => void;
   /** 门控等待期的读间隔静默上限（毫秒；<=0 或未设不启用），对齐提交后 response-handler 的静默超时 */
@@ -225,6 +227,9 @@ export async function runStreamContentGate(
         }
         if (verdict === "error") return failure("gate_error", frame.data);
         if (verdict === "malformed") return failure("decode_error", frame.data);
+        if (verdict === "terminal" && options.allowTerminalOnlyCommit) {
+          return commit(frame.eventName, true);
+        }
       }
       return failure("empty_stream");
     }
@@ -255,6 +260,9 @@ export async function runStreamContentGate(
         return failure("decode_error", frame.data);
       }
       if (verdict === "terminal") {
+        if (options.allowTerminalOnlyCommit) {
+          return commit(frame.eventName, false);
+        }
         // 干净终止先于任何内容 = 空流
         return failure("empty_stream", frame.data);
       }
@@ -332,6 +340,7 @@ export function createShadowGateObserver(context: {
   family: ProtocolFamily;
   providerId: number;
   providerName: string;
+  allowTerminalOnlyCommit?: boolean;
 }): ShadowGateObserver {
   const parser = new SseFrameParser();
   const verdictCounts: Record<FrameVerdict, number> = {
@@ -354,17 +363,27 @@ export function createShadowGateObserver(context: {
         for (const frame of parser.push(chunk)) {
           const verdict = classifyFrame(context.family, frame.eventName, frame.data);
           verdictCounts[verdict]++;
-          if (verdict === "content" || verdict === "error" || verdict === "malformed") {
+          if (
+            verdict === "content" ||
+            verdict === "error" ||
+            verdict === "malformed" ||
+            verdict === "terminal"
+          ) {
             reported = true;
+            const enforcementDecision =
+              verdict === "content" ||
+              (verdict === "terminal" && context.allowTerminalOnlyCommit === true)
+                ? "wouldCommit"
+                : "wouldReject";
             logger.info("StreamGate[shadow]: first decisive frame observed", {
               providerId: context.providerId,
               providerName: context.providerName,
               family: context.family,
               decisiveVerdict: verdict,
+              enforcementDecision,
               // 现状「首非空字节即提交」与门控「首有效内容才提交」的判定分歧：
-              // divergent=true 表示门控会推迟提交（中性前缀）或触发 failover（error/malformed）
-              divergent:
-                verdict !== "content" || verdictCounts.neutral + verdictCounts.terminal > 0,
+              // divergent=true 表示门控会推迟提交（中性前缀），或按当前策略拒绝该终态
+              divergent: enforcementDecision === "wouldReject" || verdictCounts.neutral > 0,
               firstContentLagMs: firstByteAt === null ? null : Date.now() - firstByteAt,
               verdictCounts: { ...verdictCounts },
             });

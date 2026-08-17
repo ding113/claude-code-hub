@@ -75,6 +75,7 @@ import {
   peekDeferredStreamingFinalization,
 } from "./stream-finalization";
 import { mapProviderTypeToFamily } from "./stream-gate/frame-classifier";
+import { getStreamGateResponsePolicy } from "./stream-gate/response-policy";
 import { createShadowGateObserver, resolveStreamGateMode } from "./stream-gate/stream-content-gate";
 import {
   createStreamProtocolObserver,
@@ -3567,6 +3568,7 @@ export class ProxyResponseHandler {
             family,
             providerId: provider.id,
             providerName: provider.name,
+            allowTerminalOnlyCommit: getStreamGateResponsePolicy(response)?.allowTerminalOnlyCommit,
           });
         })();
 
@@ -4761,6 +4763,7 @@ export class ProxyResponseHandler {
         family,
         providerId: provider.id,
         providerName: provider.name,
+        allowTerminalOnlyCommit: getStreamGateResponsePolicy(response)?.allowTerminalOnlyCommit,
       });
     })();
 

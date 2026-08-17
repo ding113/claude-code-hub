@@ -117,6 +117,11 @@ import {
 } from "./stream-finalization";
 import { mapProviderTypeToFamily } from "./stream-gate/frame-classifier";
 import {
+  getStreamGateResponsePolicy,
+  inheritStreamGateResponsePolicy,
+  setStreamGateResponsePolicy,
+} from "./stream-gate/response-policy";
+import {
   concatChunks,
   resolveStreamGateCaps,
   resolveStreamGateMode,
@@ -1734,6 +1739,8 @@ export class ProxyForwarder {
                   family: gateFamily,
                   providerId: currentProvider.id,
                   providerName: currentProvider.name,
+                  allowTerminalOnlyCommit:
+                    getStreamGateResponsePolicy(response)?.allowTerminalOnlyCommit,
                   ...resolveStreamGateCaps(),
                   // 首字节到达即清除首字节计时器，保持「首字节超时」的原始语义——
                   // 思考型模型可在首个内容帧前长时间输出中性帧，不应触发该计时器
@@ -1811,7 +1818,7 @@ export class ProxyForwarder {
                     : {}),
                 });
 
-                streamingResponse = new Response(
+                const gatedResponse = new Response(
                   ProxyForwarder.buildBufferedPrefixStream(gate.prefixChunks, gateReader),
                   {
                     status: response.status,
@@ -1819,6 +1826,8 @@ export class ProxyForwarder {
                     headers: response.headers,
                   }
                 );
+                inheritStreamGateResponsePolicy(response, gatedResponse);
+                streamingResponse = gatedResponse;
               }
             }
 
@@ -3545,6 +3554,11 @@ export class ProxyForwarder {
 
             if ("response" in wsResult) {
               responsesWsResponse = wsResult.response;
+              if (requestBodyJson.generate === false) {
+                setStreamGateResponsePolicy(responsesWsResponse, {
+                  allowTerminalOnlyCommit: true,
+                });
+              }
               logger.info("ProxyForwarder: Upstream Responses WebSocket connected", {
                 providerId: provider.id,
                 providerName: provider.name,
@@ -4788,6 +4802,8 @@ export class ProxyForwarder {
                 family: hedgeGateFamily,
                 providerId: attempt.provider.id,
                 providerName: attempt.provider.name,
+                allowTerminalOnlyCommit:
+                  getStreamGateResponsePolicy(response)?.allowTerminalOnlyCommit,
                 ...resolveStreamGateCaps(),
                 // 首字节时刻先挂在 attempt 上，由 commitWinner 决定是否记为 session TTFB
                 onFirstByte: () => {
@@ -5255,6 +5271,7 @@ export class ProxyForwarder {
           headers: attempt.response.headers,
         }
       );
+      inheritStreamGateResponsePolicy(attempt.response, response);
 
       settleSuccess(response);
     };
@@ -6183,16 +6200,16 @@ export class ProxyForwarder {
         providerSessionRefRetainOnSuccess: attempt.providerSessionRefRetainOnSuccess,
       });
       leaseTransferred = true;
-      resolveResult?.({
-        response: new Response(
-          ProxyForwarder.buildBufferedPrefixStream(attempt.chunks, attempt.reader),
-          {
-            status: attempt.response.status,
-            statusText: attempt.response.statusText,
-            headers: attempt.response.headers,
-          }
-        ),
-      });
+      const response = new Response(
+        ProxyForwarder.buildBufferedPrefixStream(attempt.chunks, attempt.reader),
+        {
+          status: attempt.response.status,
+          statusText: attempt.response.statusText,
+          headers: attempt.response.headers,
+        }
+      );
+      inheritStreamGateResponsePolicy(attempt.response, response);
+      resolveResult?.({ response });
     };
 
     const clearCapturedStickyBinding = async (cooldownTtlSeconds: number): Promise<void> => {

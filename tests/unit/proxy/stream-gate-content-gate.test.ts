@@ -1,10 +1,17 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { EmptyResponseError, ProxyError } from "@/app/v1/_lib/proxy/errors";
 import {
+  getStreamGateResponsePolicy,
+  inheritStreamGateResponsePolicy,
+  setStreamGateResponsePolicy,
+} from "@/app/v1/_lib/proxy/stream-gate/response-policy";
+import {
   concatChunks,
+  createShadowGateObserver,
   runStreamContentGate,
   StreamPrecommitError,
 } from "@/app/v1/_lib/proxy/stream-gate/stream-content-gate";
+import { logger } from "@/lib/logger";
 
 const encoder = new TextEncoder();
 
@@ -254,6 +261,72 @@ describe("runStreamContentGate", () => {
     expect(new TextDecoder().decode(rest.value)).toBe(completed);
   });
 
+  it("openai-responses: an unmarked terminal-only response remains an empty stream", async () => {
+    const completed =
+      'event: response.completed\ndata: {"type":"response.completed","response":{"status":"completed"}}\n\n';
+    const result = await runStreamContentGate(readerFromChunks([completed]), {
+      ...GATE_OPTIONS,
+      family: "openai-responses",
+    });
+
+    expect(result.committed).toBe(false);
+    if (result.committed) return;
+    expect((result.error as StreamPrecommitError).gateReason).toBe("empty_stream");
+  });
+
+  it.each([
+    { suffix: "with a frame delimiter", terminalSuffix: "\n\n", readerDone: false },
+    { suffix: "when flushed at EOF", terminalSuffix: "", readerDone: true },
+  ])("openai-responses: allowed terminal-only response commits $suffix", async (testCase) => {
+    const completed = `event: response.completed\ndata: {"type":"response.completed","response":{"status":"completed"}}${testCase.terminalSuffix}`;
+    const result = await runStreamContentGate(readerFromChunks([completed]), {
+      ...GATE_OPTIONS,
+      family: "openai-responses",
+      allowTerminalOnlyCommit: true,
+    });
+
+    expect(result.committed).toBe(true);
+    if (!result.committed) return;
+    expect(await drainPrefix(result.prefixChunks)).toBe(completed);
+    expect(result.readerDone).toBe(testCase.readerDone);
+  });
+
+  it("openai-responses: allowed policy still rejects an error frame", async () => {
+    const error =
+      'event: error\ndata: {"type":"error","code":"server_error","message":"failed"}\n\n';
+    const result = await runStreamContentGate(readerFromChunks([error]), {
+      ...GATE_OPTIONS,
+      family: "openai-responses",
+      allowTerminalOnlyCommit: true,
+    });
+
+    expect(result.committed).toBe(false);
+    if (result.committed) return;
+    expect((result.error as StreamPrecommitError).gateReason).toBe("gate_error");
+  });
+
+  it("openai-responses: allowed policy still rejects malformed frames and bare EOF", async () => {
+    const malformed = await runStreamContentGate(readerFromChunks(["data: {broken\n\n"]), {
+      ...GATE_OPTIONS,
+      family: "openai-responses",
+      allowTerminalOnlyCommit: true,
+    });
+    expect(malformed.committed).toBe(false);
+    if (!malformed.committed) {
+      expect((malformed.error as StreamPrecommitError).gateReason).toBe("decode_error");
+    }
+
+    const bareEof = await runStreamContentGate(readerFromChunks([]), {
+      ...GATE_OPTIONS,
+      family: "openai-responses",
+      allowTerminalOnlyCommit: true,
+    });
+    expect(bareEof.committed).toBe(false);
+    if (!bareEof.committed) {
+      expect((bareEof.error as StreamPrecommitError).gateReason).toBe("empty_stream");
+    }
+  });
+
   it("openai-responses: commits compaction carried only by response.completed", async () => {
     const completed =
       'event: response.completed\ndata: {"type":"response.completed","response":{"status":"completed","output":[{"type":"compaction","encrypted_content":"opaque-state"}]}}\n\n';
@@ -297,6 +370,59 @@ describe("runStreamContentGate", () => {
     ]);
     const result = await runStreamContentGate(reader, { ...GATE_OPTIONS, family: "gemini" });
     expect(result.committed).toBe(true);
+  });
+});
+
+describe("stream gate response policy", () => {
+  it("stores policy internally and inherits it without exposing response headers", () => {
+    const source = new Response(null, { headers: { "x-source": "1" } });
+    const target = new Response(null, { headers: { "x-target": "1" } });
+    const sourceHeadersBefore = [...source.headers];
+    const targetHeadersBefore = [...target.headers];
+
+    setStreamGateResponsePolicy(source, { allowTerminalOnlyCommit: true });
+    inheritStreamGateResponsePolicy(source, target);
+
+    expect(getStreamGateResponsePolicy(source)).toEqual({ allowTerminalOnlyCommit: true });
+    expect(getStreamGateResponsePolicy(target)).toEqual({ allowTerminalOnlyCommit: true });
+    expect([...source.headers]).toEqual(sourceHeadersBefore);
+    expect([...target.headers]).toEqual(targetHeadersBefore);
+  });
+
+  it("does not add a policy when the source is unmarked", () => {
+    const target = new Response();
+    inheritStreamGateResponsePolicy(new Response(), target);
+    expect(getStreamGateResponsePolicy(target)).toBeUndefined();
+  });
+});
+
+describe("shadow gate terminal telemetry", () => {
+  it.each([
+    { allowTerminalOnlyCommit: true, enforcementDecision: "wouldCommit" },
+    { allowTerminalOnlyCommit: false, enforcementDecision: "wouldReject" },
+  ])("reports $enforcementDecision for a terminal frame", (testCase) => {
+    const info = vi.spyOn(logger, "info").mockImplementation(() => undefined);
+    const observer = createShadowGateObserver({
+      family: "openai-responses",
+      providerId: 7,
+      providerName: "test-provider",
+      allowTerminalOnlyCommit: testCase.allowTerminalOnlyCommit,
+    });
+
+    observer.observe(
+      encoder.encode(
+        'event: response.completed\ndata: {"type":"response.completed","response":{"status":"completed"}}\n\n'
+      )
+    );
+
+    expect(info).toHaveBeenCalledWith(
+      "StreamGate[shadow]: first decisive frame observed",
+      expect.objectContaining({
+        decisiveVerdict: "terminal",
+        enforcementDecision: testCase.enforcementDecision,
+      })
+    );
+    info.mockRestore();
   });
 });
 

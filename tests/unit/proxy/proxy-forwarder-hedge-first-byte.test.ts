@@ -175,6 +175,10 @@ import { ProxyForwarder } from "@/app/v1/_lib/proxy/forwarder";
 import { ModelRedirector } from "@/app/v1/_lib/proxy/model-redirector";
 import { ProxySession } from "@/app/v1/_lib/proxy/session";
 import { peekDeferredStreamingFinalization } from "@/app/v1/_lib/proxy/stream-finalization";
+import {
+  getStreamGateResponsePolicy,
+  setStreamGateResponsePolicy,
+} from "@/app/v1/_lib/proxy/stream-gate/response-policy";
 import { DbPoolAdmissionError } from "@/drizzle/admitted-client";
 import { logger } from "@/lib/logger";
 import type { Provider } from "@/types/provider";
@@ -1284,6 +1288,29 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  test("hedge winner response wrapper preserves the stream gate response policy", async () => {
+    const provider = createProvider({ id: 1, name: "ws-prewarm" });
+    const session = createSession();
+    setProviderWithSessionRef(session, provider);
+
+    const upstreamResponse = new Response(
+      'data: {"type":"content_block_delta","delta":{"text":"winner"}}\n\n',
+      { headers: { "content-type": "text/event-stream" } }
+    );
+    setStreamGateResponsePolicy(upstreamResponse, { allowTerminalOnlyCommit: true });
+    vi.spyOn(
+      ProxyForwarder as unknown as {
+        doForward: (...args: unknown[]) => Promise<Response>;
+      },
+      "doForward"
+    ).mockResolvedValueOnce(upstreamResponse);
+
+    const response = await ProxyForwarder.send(session);
+
+    expect(await response.text()).toContain('"text":"winner"');
+    expect(getStreamGateResponsePolicy(response)).toEqual({ allowTerminalOnlyCommit: true });
   });
 
   test("hedge skips provider when concurrent session acquire is rejected", async () => {
