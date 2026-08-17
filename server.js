@@ -45,6 +45,7 @@ const INTERNAL_TUNNEL_HOST =
 
 const WS_PATH = "/v1/responses";
 const CLIENT_TRANSPORT_HEADER = "x-cch-client-transport";
+const UPSTREAM_TRANSPORT_HEADER = "x-cch-upstream-transport";
 const WS_FORWARD_FLAG_HEADER = "x-cch-responses-ws-forward";
 const WS_SESSION_HEADER = "x-cch-responses-ws-session";
 const INTERNAL_SECRET_HEADER = "x-cch-internal-secret";
@@ -624,6 +625,12 @@ async function forwardToInternalHttp(
       (res) => {
         const contentType = (res.headers["content-type"] || "").toLowerCase();
         const isSse = contentType.includes("text/event-stream");
+        const upstreamTransportValue = res.headers[UPSTREAM_TRANSPORT_HEADER];
+        const upstreamTransport = (
+          Array.isArray(upstreamTransportValue)
+            ? upstreamTransportValue[0]
+            : upstreamTransportValue || ""
+        ).toLowerCase();
         let responseSettled = false;
         let responseBodyEnded = false;
         let terminalSendAcknowledged = false;
@@ -635,10 +642,6 @@ async function forwardToInternalHttp(
           cleanupRequestBody();
           resolve();
           return true;
-        };
-        const acknowledgeTerminalSend = () => {
-          terminalSendAcknowledged = true;
-          settleResponse();
         };
         const forceSettleResponse = () => {
           if (responseSettled) return false;
@@ -655,6 +658,24 @@ async function forwardToInternalHttp(
         const settleAndClose = (reason) => {
           initiateClose(1011, reason);
           forceSettleResponse();
+        };
+        const settleAndResetTransport = () => {
+          initiateClose(1000, "upstream_transport_reset");
+          forceSettleResponse();
+        };
+        const canReuseClientWebSocket = (terminalEvent) => {
+          if (upstreamTransport !== "websocket") return false;
+          if (!terminalEvent || terminalEvent.type !== "response.completed") return false;
+          const errorCode = terminalEvent.error?.code || terminalEvent.response?.error?.code;
+          return errorCode !== "websocket_connection_limit_reached";
+        };
+        const acknowledgeTerminalSend = (terminalEvent) => {
+          terminalSendAcknowledged = true;
+          if (canReuseClientWebSocket(terminalEvent)) {
+            settleResponse();
+            return;
+          }
+          settleAndResetTransport();
         };
         const sendFatalError = (code, message, closeReason) => {
           const sent = safeSend(
@@ -686,17 +707,22 @@ async function forwardToInternalHttp(
             }
             const isHttpError = !!(res.statusCode && res.statusCode >= 400);
             if (isHttpError) {
+              const terminalEvent = {
+                type: "error",
+                status: res.statusCode,
+                error:
+                  typeof parsed === "object" && parsed && parsed.error
+                    ? parsed.error
+                    : { code: `http_${res.statusCode}`, message: text.slice(0, 512) },
+              };
               safeSend(
                 ws,
+                terminalEvent,
                 {
-                  type: "error",
-                  status: res.statusCode,
-                  error:
-                    typeof parsed === "object" && parsed && parsed.error
-                      ? parsed.error
-                      : { code: `http_${res.statusCode}`, message: text.slice(0, 512) },
-                },
-                { response: res, onSuccess: acknowledgeTerminalSend, onFailure: settleAndClose }
+                  response: res,
+                  onSuccess: () => acknowledgeTerminalSend(terminalEvent),
+                  onFailure: settleAndClose,
+                }
               );
               log("info", "ws_terminal_event_sent", {
                 type: "error",
@@ -704,10 +730,15 @@ async function forwardToInternalHttp(
                 status: res.statusCode,
               });
             } else {
+              const terminalEvent = { type: "response.completed", response: parsed };
               safeSend(
                 ws,
-                { type: "response.completed", response: parsed },
-                { response: res, onSuccess: acknowledgeTerminalSend, onFailure: settleAndClose }
+                terminalEvent,
+                {
+                  response: res,
+                  onSuccess: () => acknowledgeTerminalSend(terminalEvent),
+                  onFailure: settleAndClose,
+                }
               );
               log("info", "ws_terminal_event_sent", { type: "response.completed", source: "json" });
             }
@@ -778,9 +809,10 @@ async function forwardToInternalHttp(
                 // Some upstreams close SSE with [DONE] without a preceding
                 // response.completed. Synthesize one so the client sees a
                 // clean terminal event.
-                safeSend(ws, { type: "response.completed", response: null }, {
+                const terminalEvent = { type: "response.completed", response: null };
+                safeSend(ws, terminalEvent, {
                   response: res,
-                  onSuccess: acknowledgeTerminalSend,
+                  onSuccess: () => acknowledgeTerminalSend(terminalEvent),
                   onFailure: settleAndClose,
                 });
                 sawTerminal = true;
@@ -802,7 +834,7 @@ async function forwardToInternalHttp(
               event && typeof event.type === "string" && TERMINAL_EVENT_TYPES.has(event.type);
             safeSend(ws, event, {
               response: res,
-              onSuccess: isTerminalEvent ? acknowledgeTerminalSend : undefined,
+              onSuccess: isTerminalEvent ? () => acknowledgeTerminalSend(event) : undefined,
               onFailure: settleAndClose,
             });
             if (isTerminalEvent) {
@@ -834,10 +866,9 @@ async function forwardToInternalHttp(
               "stream_ended_without_terminal"
             );
           } else {
-            // OpenAI Responses WebSocket mode is persistent: after a terminal
-            // event, the same client connection can send the next
-            // response.create. Do not close here; only fatal transport/protocol
-            // errors initiate a close handshake.
+            // Only a successful upstream WebSocket turn is reusable. HTTP
+            // fallback and terminal error paths reset the client transport in
+            // acknowledgeTerminalSend after the terminal frame is delivered.
             log("info", "ws_turn_completed", { terminalEventType });
             settleResponse();
           }

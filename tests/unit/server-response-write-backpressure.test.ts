@@ -393,6 +393,7 @@ describe("server response write backpressure", () => {
     const events: string[] = [];
     const request = createClientRequest(true, events);
     const response = createIncomingResponse();
+    response.headers["x-cch-upstream-transport"] = "websocket";
     response.complete = false;
     let respond: ((response: http.IncomingMessage) => void) | undefined;
     vi.spyOn(http, "request").mockImplementation((_options, callback) => {
@@ -420,7 +421,44 @@ describe("server response write backpressure", () => {
     expect(close).not.toHaveBeenCalled();
   });
 
-  it("waits for the JSON terminal send acknowledgement across end and close", async () => {
+  it("waits for an HTTP SSE terminal acknowledgement before resetting the client", async () => {
+    const events: string[] = [];
+    const request = createClientRequest(true, events);
+    const response = createIncomingResponse();
+    let respond: ((response: http.IncomingMessage) => void) | undefined;
+    vi.spyOn(http, "request").mockImplementation((_options, callback) => {
+      if (callback) respond = callback;
+      return request;
+    });
+    let sendCallback: ((error?: Error) => void) | undefined;
+    const close = vi.fn();
+    const input = requestInput();
+    input.ws.send = (_payload, callback) => {
+      sendCallback = callback;
+    };
+
+    const forwarding = serverModule.forwardToInternalHttp(
+      input.ws,
+      input.request,
+      input.body,
+      "http-sse-session",
+      undefined,
+      close
+    );
+    respond?.(response);
+    response.emit(
+      "data",
+      `data: ${JSON.stringify({ type: "response.completed", response: { id: "r1" } })}\n\n`
+    );
+    response.emit("end");
+
+    expect(close).not.toHaveBeenCalled();
+    sendCallback?.();
+    await forwarding;
+    expect(close).toHaveBeenCalledWith(1000, "upstream_transport_reset");
+  });
+
+  it("waits for the JSON terminal send acknowledgement before resetting the client", async () => {
     const events: string[] = [];
     const request = createClientRequest(true, events);
     const response = new http.IncomingMessage(new Socket());
@@ -463,7 +501,7 @@ describe("server response write backpressure", () => {
 
     sendCallback?.();
     await forwarding;
-    expect(close).not.toHaveBeenCalled();
+    expect(close).toHaveBeenCalledWith(1000, "upstream_transport_reset");
   });
 
   it("does not start a request while a fatal protocol frame awaits acknowledgement", async () => {

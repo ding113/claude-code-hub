@@ -273,6 +273,7 @@ describe("server.js WebSocket close-handshake (issue #1150)", () => {
     harness.setSseHandler((_req, res) => {
       res.statusCode = 200;
       res.setHeader("content-type", "text/event-stream");
+      res.setHeader("x-cch-upstream-transport", "websocket");
       res.write(
         `data: ${JSON.stringify({ type: "response.created", response: { id: "r_1" } })}\n\n`
       );
@@ -304,6 +305,36 @@ describe("server.js WebSocket close-handshake (issue #1150)", () => {
       .map((m) => m.type);
     expect(types).toContain("response.created");
     expect(types).toContain("response.completed");
+  });
+
+  it("resets the client socket after an HTTP fallback and drops queued turns", async () => {
+    if (!harness) throw new Error("harness not initialized");
+    let upstreamCalls = 0;
+    harness.setSseHandler((_req, res) => {
+      upstreamCalls += 1;
+      res.statusCode = 200;
+      res.setHeader("content-type", "text/event-stream");
+      res.write(
+        `data: ${JSON.stringify({
+          type: "response.completed",
+          response: { id: `r_http_${upstreamCalls}` },
+        })}\n\n`
+      );
+      res.end();
+    });
+
+    const client = connectClient(harness.port);
+    await client.opened;
+    client.ws.send(JSON.stringify({ type: "response.create", model: "gpt-5.5", input: "first" }));
+    client.ws.send(JSON.stringify({ type: "response.create", model: "gpt-5.5", input: "queued" }));
+
+    const close = await client.closeEvent;
+    expect(close).toEqual({ code: 1000, reason: "upstream_transport_reset" });
+    expect(client.messages).toContainEqual({
+      type: "response.completed",
+      response: { id: "r_http_1" },
+    });
+    expect(upstreamCalls).toBe(1);
   });
 
   it("sends close(1011) when the upstream stream ends without a terminal event", async () => {
@@ -363,7 +394,7 @@ describe("server.js WebSocket close-handshake (issue #1150)", () => {
     );
   });
 
-  it("forwards a non-stream HTTP error without closing the persistent client socket", async () => {
+  it("forwards a non-stream HTTP error before resetting the client socket", async () => {
     if (!harness) throw new Error("harness not initialized");
     harness.setSseHandler((_req, res) => {
       res.statusCode = 502;
@@ -376,46 +407,49 @@ describe("server.js WebSocket close-handshake (issue #1150)", () => {
     client.ws.send(JSON.stringify({ type: "response.create", model: "gpt-5.5", input: "hi" }));
 
     await waitForMessageCount(client.messages, 1, 3000, "HTTP error was not forwarded");
-    expect(client.ws.readyState).toBe(WebSocket.OPEN);
     const errorEvent = client.messages.find(
       (m): m is { type: string; status: number; error: { code: string } } =>
         typeof m === "object" && m !== null && (m as { type?: unknown }).type === "error"
     );
     expect(errorEvent?.status).toBe(502);
     expect(errorEvent?.error.code).toBe("bad_gateway");
-    client.ws.close(1000, "test_done");
-    await client.closeEvent;
+    const close = await client.closeEvent;
+    expect(close).toEqual({ code: 1000, reason: "upstream_transport_reset" });
   });
 
-  it("forwards terminal type 'error' without closing the persistent client socket", async () => {
-    if (!harness) throw new Error("harness not initialized");
-    harness.setSseHandler((_req, res) => {
-      res.statusCode = 200;
-      res.setHeader("content-type", "text/event-stream");
-      res.write(
-        `data: ${JSON.stringify({
-          type: "error",
-          error: { code: "upstream_failure", message: "boom" },
-        })}\n\n`
-      );
-      res.end();
-    });
+  it.each(["upstream_failure", "websocket_connection_limit_reached"])(
+    "resets the client socket after upstream WebSocket terminal error %s",
+    async (errorCode) => {
+      if (!harness) throw new Error("harness not initialized");
+      harness.setSseHandler((_req, res) => {
+        res.statusCode = 200;
+        res.setHeader("content-type", "text/event-stream");
+        res.setHeader("x-cch-upstream-transport", "websocket");
+        res.write(
+          `data: ${JSON.stringify({
+            type: "error",
+            error: { code: errorCode, message: "upstream WebSocket error" },
+          })}\n\n`
+        );
+        res.end();
+      });
 
-    const client = connectClient(harness.port);
-    await client.opened;
-    client.ws.send(JSON.stringify({ type: "response.create", model: "gpt-5.5", input: "hi" }));
+      const client = connectClient(harness.port);
+      await client.opened;
+      client.ws.send(JSON.stringify({ type: "response.create", model: "gpt-5.5", input: "hi" }));
 
-    await waitForMessageCount(client.messages, 1, 3000, "terminal error was not forwarded");
-    expect(client.ws.readyState).toBe(WebSocket.OPEN);
-    client.ws.close(1000, "test_done");
-    await client.closeEvent;
-  });
+      await waitForMessageCount(client.messages, 1, 3000, "terminal error was not forwarded");
+      const close = await client.closeEvent;
+      expect(close).toEqual({ code: 1000, reason: "upstream_transport_reset" });
+    }
+  );
 
   it("accepts response.create bodies up to 4 MiB without a maxPayload teardown", async () => {
     if (!harness) throw new Error("harness not initialized");
     harness.setSseHandler((_req, res) => {
       res.statusCode = 200;
       res.setHeader("content-type", "text/event-stream");
+      res.setHeader("x-cch-upstream-transport", "websocket");
       res.write(
         `data: ${JSON.stringify({
           type: "response.completed",
@@ -448,6 +482,7 @@ describe("server.js WebSocket close-handshake (issue #1150)", () => {
       const callNo = upstreamCalls;
       res.statusCode = 200;
       res.setHeader("content-type", "text/event-stream");
+      res.setHeader("x-cch-upstream-transport", "websocket");
       // Stagger the response so the second frame remains queued until the
       // first turn's terminal event has been fully forwarded.
       setTimeout(() => {
