@@ -551,6 +551,11 @@
         "overridden": "Overridden by provider",
         "tooltip": "Thinking effort in the Codex request (reasoning.effort), shown verbatim."
       },
+      "reasoningEffortOpenai": {
+        "label": "Reasoning effort",
+        "overridden": "Overridden by provider",
+        "tooltip": "Thinking effort in the OpenAI chat/completions request (reasoning_effort / reasoning.effort), shown verbatim."
+      },
       "logicTrace": {
         "title": "Decision Chain",
         "singleRouteSelectionTitle": "Provider selection under single-route protection",

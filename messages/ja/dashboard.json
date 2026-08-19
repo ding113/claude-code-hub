@@ -551,6 +551,11 @@
         "overridden": "プロバイダーにより上書き",
         "tooltip": "Codex リクエストの推論強度 (reasoning.effort) をそのまま表示します。"
       },
+      "reasoningEffortOpenai": {
+        "label": "推論強度",
+        "overridden": "プロバイダーにより上書き",
+        "tooltip": "OpenAI chat/completions リクエストの推論強度 (reasoning_effort / reasoning.effort) をそのまま表示します。"
+      },
       "logicTrace": {
         "title": "決定チェーン",
         "singleRouteSelectionTitle": "単一経路保護での Provider 選択",
