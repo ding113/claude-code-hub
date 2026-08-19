@@ -1,3 +1,4 @@
+import { normalizeEndpointPath, V1_ENDPOINT_PATHS } from "@/app/v1/_lib/proxy/endpoint-paths";
 import { extractAnthropicEffortFromRequestBody } from "@/lib/utils/anthropic-effort";
 import { extractCodexReasoningEffortFromRequestBody } from "@/lib/utils/codex-reasoning-effort";
 import { extractOpenAIReasoningEffortFromRequestBody } from "@/lib/utils/openai-reasoning-effort";
@@ -85,7 +86,7 @@ export class ProxyMessageService {
 
     if (
       provider.providerType === "openai-compatible" &&
-      endpoint === "/v1/chat/completions" &&
+      normalizeEndpointPath(endpoint ?? "") === V1_ENDPOINT_PATHS.CHAT_COMPLETIONS &&
       !hasOpenAIReasoningEffortAudit
     ) {
       const extraction = extractOpenAIReasoningEffortFromRequestBody(session.request.message);

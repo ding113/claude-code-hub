@@ -6,14 +6,16 @@ export interface OpenAIReasoningEffortExtraction {
   source: OpenAIReasoningEffortFieldSource;
 }
 
-/** 过滤非字符串及空白值，避免把无效参数写入审计记录。 */
+/**
+ * 过滤非字符串及空白值，避免把无效参数写入审计记录。
+ * 校验用裁剪后值，但返回原始字符串，保证审计记录如实反映客户端发送的字段值。
+ */
 function normalizeOpenAIReasoningEffort(value: unknown): string | null {
   if (typeof value !== "string") {
     return null;
   }
 
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : null;
+  return value.trim().length > 0 ? value : null;
 }
 
 /**

@@ -53,6 +53,14 @@ describe("extractOpenAIReasoningEffortFromRequestBody", () => {
     expect(result).toEqual({ effort: "xhigh", source: "reasoning.effort" });
   });
 
+  test("保留非空值的前后空白（原样记录审计值）", () => {
+    const result = extractOpenAIReasoningEffortFromRequestBody({
+      reasoning_effort: "  high  ",
+    });
+
+    expect(result).toEqual({ effort: "  high  ", source: "reasoning_effort" });
+  });
+
   test("顶层为非法类型时回退嵌套值", () => {
     const result = extractOpenAIReasoningEffortFromRequestBody({
       reasoning_effort: 42,

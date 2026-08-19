@@ -214,6 +214,24 @@ describe("ProxyMessageService Codex reasoning effort audit", () => {
     expect(specialSettings).toEqual([]);
   });
 
+  test("openai-compatible chat/completions 尾斜杠变体仍保存审计", async () => {
+    const { session, specialSettings } = createSession(
+      "openai-compatible",
+      { model: "gpt-5.5", messages: [], reasoning_effort: "high" },
+      "/v1/chat/completions/"
+    );
+
+    await ProxyMessageService.ensureContext(session);
+
+    expect(specialSettings).toContainEqual({
+      type: "openai_reasoning_effort",
+      scope: "request",
+      hit: true,
+      effort: "high",
+      source: "reasoning_effort",
+    });
+  });
+
   test("openai-compatible 请求缺少 effort 时不写入空审计", async () => {
     const { session, specialSettings } = createSession(
       "openai-compatible",
