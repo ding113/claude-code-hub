@@ -180,4 +180,51 @@ describe("ThinkingEffortDisplay", () => {
     expect(html).toContain("reasoningEffort.tooltip");
     expect(html).not.toContain(">medium<");
   });
+
+  test("显示 OpenAI chat/completions 请求中的思考强度", () => {
+    const html = renderToStaticMarkup(
+      <ThinkingEffortDisplay
+        specialSettings={[
+          {
+            type: "openai_reasoning_effort",
+            scope: "request",
+            hit: true,
+            effort: "max",
+            source: "reasoning_effort",
+          },
+        ]}
+      />
+    );
+
+    expect(html).toContain('data-slot="thinking-effort"');
+    expect(html).toContain("max");
+    expect(html).toContain("reasoningEffortOpenai.tooltip");
+    expect(html).not.toContain("overridden");
+  });
+
+  test("OpenAI 与 Codex 审计并存时优先展示 Codex 强度", () => {
+    const html = renderToStaticMarkup(
+      <ThinkingEffortDisplay
+        specialSettings={[
+          {
+            type: "openai_reasoning_effort",
+            scope: "request",
+            hit: true,
+            effort: "max",
+            source: "reasoning_effort",
+          },
+          {
+            type: "codex_reasoning_effort",
+            scope: "request",
+            hit: true,
+            effort: "high",
+          },
+        ]}
+      />
+    );
+
+    expect(html).toContain("high");
+    expect(html).toContain("reasoningEffort.tooltip");
+    expect(html).not.toContain(">max<");
+  });
 });

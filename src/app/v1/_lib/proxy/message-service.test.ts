@@ -9,7 +9,11 @@ vi.mock("@/repository/message", () => ({
 
 import { ProxyMessageService } from "./message-service";
 
-function createSession(providerType: string, message: Record<string, unknown>) {
+function createSession(
+  providerType: string,
+  message: Record<string, unknown>,
+  endpoint: string = "/v1/responses"
+) {
   const specialSettings: NonNullable<ReturnType<ProxySession["getSpecialSettings"]>> = [];
   const setMessageContext = vi.fn();
   const session = {
@@ -28,8 +32,8 @@ function createSession(providerType: string, message: Record<string, unknown>) {
     sessionId: "session-1",
     userAgent: "codex_cli_rs/1.0.0",
     clientIp: "127.0.0.1",
-    getEndpoint: () => "/v1/responses",
-    getManagedEndpoint: () => "/v1/responses",
+    getEndpoint: () => endpoint,
+    getManagedEndpoint: () => endpoint,
     getOriginalModel: () => "gpt-5",
     setOriginalModel: vi.fn(),
     getSpecialSettings: () => (specialSettings.length > 0 ? specialSettings : null),
@@ -138,5 +142,124 @@ describe("ProxyMessageService Codex reasoning effort audit", () => {
     expect(createMessageRequestMock).toHaveBeenCalledWith(
       expect.objectContaining({ endpoint: "/v1/responses/compact" })
     );
+  });
+
+  test("openai-compatible chat/completions 顶层 reasoning_effort 保存审计", async () => {
+    const { session, specialSettings } = createSession(
+      "openai-compatible",
+      { model: "gpt-5.5", messages: [], reasoning_effort: "high" },
+      "/v1/chat/completions"
+    );
+
+    await ProxyMessageService.ensureContext(session);
+
+    expect(specialSettings).toContainEqual({
+      type: "openai_reasoning_effort",
+      scope: "request",
+      hit: true,
+      effort: "high",
+      source: "reasoning_effort",
+    });
+    expect(createMessageRequestMock).toHaveBeenCalledWith(
+      expect.objectContaining({ special_settings: specialSettings })
+    );
+  });
+
+  test("openai-compatible chat/completions 嵌套 reasoning.effort 保存审计", async () => {
+    const { session, specialSettings } = createSession(
+      "openai-compatible",
+      { model: "gpt-5.5", messages: [], reasoning: { effort: "low" } },
+      "/v1/chat/completions"
+    );
+
+    await ProxyMessageService.ensureContext(session);
+
+    expect(specialSettings).toContainEqual({
+      type: "openai_reasoning_effort",
+      scope: "request",
+      hit: true,
+      effort: "low",
+      source: "reasoning.effort",
+    });
+  });
+
+  test("openai-compatible 顶层与嵌套不一致时以顶层为准", async () => {
+    const { session, specialSettings } = createSession(
+      "openai-compatible",
+      {
+        model: "gpt-5.5",
+        messages: [],
+        reasoning_effort: "high",
+        reasoning: { effort: "low" },
+      },
+      "/v1/chat/completions"
+    );
+
+    await ProxyMessageService.ensureContext(session);
+
+    expect(specialSettings).toContainEqual(
+      expect.objectContaining({ effort: "high", source: "reasoning_effort" })
+    );
+  });
+
+  test("openai-compatible 非 chat/completions 端点不写入思考强度审计", async () => {
+    const { session, specialSettings } = createSession("openai-compatible", {
+      model: "gpt-5.5",
+      messages: [],
+      reasoning_effort: "high",
+    });
+
+    await ProxyMessageService.ensureContext(session);
+
+    expect(specialSettings).toEqual([]);
+  });
+
+  test("openai-compatible chat/completions 尾斜杠变体仍保存审计", async () => {
+    const { session, specialSettings } = createSession(
+      "openai-compatible",
+      { model: "gpt-5.5", messages: [], reasoning_effort: "high" },
+      "/v1/chat/completions/"
+    );
+
+    await ProxyMessageService.ensureContext(session);
+
+    expect(specialSettings).toContainEqual({
+      type: "openai_reasoning_effort",
+      scope: "request",
+      hit: true,
+      effort: "high",
+      source: "reasoning_effort",
+    });
+  });
+
+  test("openai-compatible 请求缺少 effort 时不写入空审计", async () => {
+    const { session, specialSettings } = createSession(
+      "openai-compatible",
+      { model: "gpt-5.5", messages: [] },
+      "/v1/chat/completions"
+    );
+
+    await ProxyMessageService.ensureContext(session);
+
+    expect(specialSettings).toEqual([]);
+  });
+
+  test("复用已有 openai 思考强度审计，避免重复记录", async () => {
+    const { session, specialSettings } = createSession(
+      "openai-compatible",
+      { model: "gpt-5.5", messages: [], reasoning_effort: "high" },
+      "/v1/chat/completions"
+    );
+    specialSettings.push({
+      type: "openai_reasoning_effort",
+      scope: "request",
+      hit: true,
+      effort: "high",
+      source: "reasoning_effort",
+    });
+
+    await ProxyMessageService.ensureContext(session);
+
+    expect(specialSettings).toHaveLength(1);
   });
 });

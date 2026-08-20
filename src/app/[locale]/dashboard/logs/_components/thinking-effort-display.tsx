@@ -14,7 +14,8 @@ interface ThinkingEffortDisplayProps {
 }
 
 /**
- * 在使用记录中展示任意模型的思考强度（Codex reasoning.effort 或 Anthropic effort）。
+ * 在使用记录中展示任意模型的思考强度（Codex / OpenAI chat/completions 的
+ * reasoning.effort，或 Anthropic 的 output_config.effort）。
  *
  * 供应商改变强度时同时展示请求值和实际转发值，避免只看到客户端参数而误判上游行为。
  */
@@ -26,7 +27,12 @@ export function ThinkingEffortDisplay({ specialSettings }: ThinkingEffortDisplay
     return <span className="text-muted-foreground">-</span>;
   }
 
-  const messageNamespace = effortInfo.source === "codex" ? "reasoningEffort" : "effort";
+  const messageNamespace =
+    effortInfo.source === "anthropic"
+      ? "effort"
+      : effortInfo.source === "openai"
+        ? "reasoningEffortOpenai"
+        : "reasoningEffort";
   const showEffectiveBadge = effortInfo.isOverridden && effortInfo.effectiveEffort != null;
 
   return (

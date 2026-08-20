@@ -62,6 +62,7 @@
     "@langfuse/otel": "^5.10.0",
     "@langfuse/tracing": "^5.10.0",
     "@lobehub/icons": "^5.15.0",
+    "@lobehub/ui": "^5.0.0",
     "@opentelemetry/sdk-node": "^0.221.0",
     "@radix-ui/react-alert-dialog": "^1.1.23",
     "@radix-ui/react-avatar": "^1.2.6",

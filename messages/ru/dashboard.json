@@ -551,6 +551,11 @@
         "overridden": "Переопределено провайдером",
         "tooltip": "Интенсивность рассуждений в запросе Codex (reasoning.effort), показанная без изменений."
       },
+      "reasoningEffortOpenai": {
+        "label": "Интенсивность рассуждений",
+        "overridden": "Переопределено провайдером",
+        "tooltip": "Интенсивность рассуждений в запросе OpenAI chat/completions (reasoning_effort / reasoning.effort), показанная без изменений."
+      },
       "logicTrace": {
         "title": "Цепочка решений",
         "singleRouteSelectionTitle": "Выбор провайдера в режиме защиты одним маршрутом",
