@@ -104,7 +104,10 @@ export function createDemandDrivenResponsePump(
         // The downstream may have cancelled concurrently.
       }
     }
-    settle(false, normalized);
+    // A rejected source read bypasses the Web stream cancel algorithm. Keep
+    // source ownership explicit so adapters can release the underlying Node
+    // stream, socket, and native backing store on every terminal error.
+    settle(false, normalized, normalized);
   };
 
   const finishNormally = () => {

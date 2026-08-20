@@ -403,4 +403,27 @@ describe("createDemandDrivenResponsePump", () => {
     });
     expect(releaseLock).toHaveBeenCalledTimes(1);
   });
+
+  it("cancels the source when the primed read fails", async () => {
+    const sourceError = new Error("source-read-failed");
+    const cancel = vi.fn(() => Promise.resolve());
+    const releaseLock = vi.fn();
+    const reader = {
+      read: vi.fn(() => Promise.reject(sourceError)),
+      cancel,
+      releaseLock,
+    } as unknown as ReadableStreamDefaultReader<Uint8Array>;
+    const source = {
+      getReader: vi.fn(() => reader),
+    } as unknown as ReadableStream<Uint8Array>;
+
+    const pump = createDemandDrivenResponsePump({ source, onChunk: vi.fn() });
+
+    await expect(pump.completion).resolves.toMatchObject({
+      streamEndedNormally: false,
+      error: sourceError,
+    });
+    expect(cancel).toHaveBeenCalledWith(sourceError);
+    expect(releaseLock).toHaveBeenCalledOnce();
+  });
 });

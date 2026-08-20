@@ -8290,7 +8290,7 @@ export class ProxyForwarder {
     // ⭐ 立即为 undici body 添加错误处理，防止 uncaughtException
     // 必须在任何其他操作之前设置，否则 ECONNRESET 等错误会导致 uncaughtException
     const rawBody = undiciRes.body as Readable;
-    rawBody.on("error", (err) => {
+    rawBody.once("error", (err) => {
       const code = (err as NodeJS.ErrnoException).code;
       // 客户端/上游断连是高频路径事件，降级为 debug 以减少噪音
       // 集合需与下方 streamPipeline 回调中的 isExpectedDisconnect 保持一致
@@ -8307,6 +8307,17 @@ export class ProxyForwarder {
         error: err.message,
         errorCode: code,
       });
+      // Undici normally auto-destroys BodyReadable instances, but custom
+      // dispatchers and HTTP/2 abort races can surface an error before that
+      // teardown reaches the wrapper. Keep this cleanup idempotent so the
+      // raw body cannot remain paused with its socket/backing store retained.
+      if (!rawBody.destroyed) {
+        try {
+          rawBody.destroy(err);
+        } catch {
+          // ignore
+        }
+      }
     });
 
     // 构建响应头
