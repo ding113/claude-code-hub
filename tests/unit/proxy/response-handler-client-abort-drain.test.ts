@@ -7,6 +7,7 @@ import {
 import {
   BoundedStreamTextAccumulator,
   ProxyResponseHandler,
+  resolveReplayDrainReservationBytes,
 } from "@/app/v1/_lib/proxy/response-handler";
 import { ProxySession } from "@/app/v1/_lib/proxy/session";
 import {
@@ -1107,6 +1108,14 @@ describe("ProxyResponseHandler stream client abort finalization", () => {
         return true;
       }
     );
+  });
+
+  it("uses a conservative Replay reservation when environment parsing fails", () => {
+    expect(
+      resolveReplayDrainReservationBytes(() => {
+        throw new Error("invalid environment");
+      })
+    ).toBe(29 * 1024 * 1024);
   });
 
   it("propagates unexpected registered task rejections during drain", async () => {

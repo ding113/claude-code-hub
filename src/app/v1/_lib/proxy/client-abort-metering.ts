@@ -50,10 +50,12 @@ const USAGE_NUMBER_FIELDS = [
   "thoughtsTokenCount",
 ] as const;
 
+/** Narrows unknown JSON values to non-array records. */
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+/** Copies finite numeric accounting fields into a compact evidence record. */
 function copyFiniteNumberFields(
   source: Record<string, unknown>,
   target: Record<string, unknown>,
@@ -65,6 +67,7 @@ function copyFiniteNumberFields(
   }
 }
 
+/** Compacts modality token details while discarding response content. */
 function compactTokenDetails(value: unknown): unknown {
   if (!Array.isArray(value)) return undefined;
   const details = value.slice(0, 16).flatMap((entry) => {
@@ -79,6 +82,7 @@ function compactTokenDetails(value: unknown): unknown {
   return details.length > 0 ? details : undefined;
 }
 
+/** Retains only bounded usage and cache fields needed by billing. */
 function compactUsage(value: unknown): Record<string, unknown> | null {
   if (!isRecord(value)) return null;
   const compact: Record<string, unknown> = {};
@@ -109,6 +113,7 @@ function compactUsage(value: unknown): Record<string, unknown> | null {
   return Object.keys(compact).length > 0 ? compact : null;
 }
 
+/** Retains a bounded protocol-error representation. */
 function compactError(value: unknown): unknown {
   if (typeof value === "string") return value.slice(0, 1024);
   if (!isRecord(value)) return value === true ? true : undefined;
@@ -120,6 +125,7 @@ function compactError(value: unknown): unknown {
   return Object.keys(compact).length > 0 ? compact : true;
 }
 
+/** Builds a bounded frame payload without retaining generated content. */
 function compactPayload(value: Record<string, unknown>): Record<string, unknown> {
   const compact: Record<string, unknown> = {};
   for (const field of [
@@ -185,6 +191,7 @@ function compactPayload(value: Record<string, unknown>): Record<string, unknown>
   return compact;
 }
 
+/** Checks whether compact usage contains any positive billable count. */
 function positiveUsage(value: unknown): boolean {
   const usage = compactUsage(value);
   if (!usage) return false;
@@ -198,6 +205,7 @@ function positiveUsage(value: unknown): boolean {
   return false;
 }
 
+/** Finds usage in supported provider envelopes. */
 function findUsage(value: Record<string, unknown>): boolean {
   if (positiveUsage(value.usage) || positiveUsage(value.usageMetadata)) return true;
   if (isRecord(value.message) && positiveUsage(value.message.usage)) return true;
@@ -205,6 +213,7 @@ function findUsage(value: Record<string, unknown>): boolean {
   return isRecord(value.response) && findUsage(value.response);
 }
 
+/** Detects provider protocol-error markers in a parsed frame. */
 function isProtocolError(value: Record<string, unknown>): boolean {
   return (
     value.error !== undefined ||
@@ -216,6 +225,7 @@ function isProtocolError(value: Record<string, unknown>): boolean {
   );
 }
 
+/** Detects a terminal OpenAI Chat completion choice. */
 function hasOpenAiCompletion(value: Record<string, unknown>): boolean {
   return (
     Array.isArray(value.choices) &&
@@ -228,6 +238,7 @@ function hasOpenAiCompletion(value: Record<string, unknown>): boolean {
   );
 }
 
+/** Detects a terminal Gemini candidate finish reason. */
 function hasGeminiCompletion(value: Record<string, unknown>): boolean {
   const payload = isRecord(value.response) ? value.response : value;
   return (
@@ -241,6 +252,7 @@ function hasGeminiCompletion(value: Record<string, unknown>): boolean {
   );
 }
 
+/** Incrementally frames SSE, data-only SSE, and bounded NDJSON input. */
 class BoundedEventFramer {
   private readonly decoder = new TextDecoder("utf-8");
   private line = "";
@@ -375,28 +387,45 @@ class BoundedEventFramer {
   }
 }
 
+/** Creates the bounded accounting observer used after a client disconnect. */
 export function createClientAbortMeteringObserver(
   format: ClientFormat
 ): ClientAbortMeteringObserver {
   const evidence = new Map<EvidenceSlot, string>();
+  const evidenceBytes = new Map<EvidenceSlot, number>();
+  const evidenceValueCounts = new Map<string, number>();
   const encoder = new TextEncoder();
+  let retainedByteTotal = 0;
   let terminalSeen = false;
   let terminalUsageSeen = false;
   let protocolFailure: ClientAbortMeteringSnapshot["protocolFailure"] = null;
   let finished = false;
 
-  const retainedBytes = () =>
-    [...new Set(evidence.values())].reduce(
-      (total, value) => total + encoder.encode(value).length,
-      0
-    );
-
   const setEvidence = (slot: EvidenceSlot, value: string): void => {
     const previous = evidence.get(slot);
+    if (previous === value) return;
+    const previousBytes = evidenceBytes.get(slot) ?? 0;
+    const nextBytes = encoder.encode(value).length;
+    const previousCount = previous ? (evidenceValueCounts.get(previous) ?? 0) : 0;
+    const nextCount = evidenceValueCounts.get(value) ?? 0;
+    const nextTotal =
+      retainedByteTotal -
+      (previousCount === 1 ? previousBytes : 0) +
+      (nextCount === 0 ? nextBytes : 0);
+    if (nextTotal > CLIENT_ABORT_METER_MAX_RETAINED_BYTES) return;
+
+    if (previous) {
+      if (previousCount <= 1) {
+        evidenceValueCounts.delete(previous);
+        retainedByteTotal -= previousBytes;
+      } else {
+        evidenceValueCounts.set(previous, previousCount - 1);
+      }
+    }
     evidence.set(slot, value);
-    if (retainedBytes() <= CLIENT_ABORT_METER_MAX_RETAINED_BYTES) return;
-    evidence.delete(slot);
-    if (previous !== undefined) evidence.set(slot, previous);
+    evidenceBytes.set(slot, nextBytes);
+    evidenceValueCounts.set(value, nextCount + 1);
+    if (nextCount === 0) retainedByteTotal += nextBytes;
   };
 
   const recordFrame = (frame: ParsedFrame): void => {
@@ -508,7 +537,7 @@ export function createClientAbortMeteringObserver(
       return {
         text,
         billingComplete: isBillingComplete(),
-        retainedBytes: encoder.encode(text).length,
+        retainedBytes: retainedByteTotal,
         skippedOversizedFrames: framer.skippedOversizedFrames,
         protocolFailure: protocolFailure ? { ...protocolFailure } : null,
       };

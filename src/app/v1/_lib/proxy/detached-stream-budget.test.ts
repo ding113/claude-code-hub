@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DetachedStreamBudget } from "./detached-stream-budget";
+import { DetachedStreamBudget, resolveDetachedStreamBudgetLimits } from "./detached-stream-budget";
 
 function createBudget(
   overrides: Partial<ReturnType<DetachedStreamBudget["snapshot"]>["limits"]> = {}
@@ -69,5 +69,17 @@ describe("DetachedStreamBudget", () => {
     const budget = createBudget();
     expect(() => budget.tryAcquire("metering", 0)).toThrow(RangeError);
     expect(budget.snapshot().activeStreams).toBe(0);
+  });
+
+  it("uses conservative defaults when environment parsing fails", () => {
+    expect(
+      resolveDetachedStreamBudgetLimits(() => {
+        throw new Error("invalid environment");
+      })
+    ).toEqual({
+      maxConcurrency: 64,
+      maxReservedBytes: 64 * 1024 * 1024,
+      meteringReserveBytes: 16 * 1024 * 1024,
+    });
   });
 });
