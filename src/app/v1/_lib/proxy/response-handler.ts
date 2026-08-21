@@ -106,8 +106,16 @@ function getSessionRequestOwnerKeyId(session: ProxySession): number | undefined 
   return session.authState?.key?.id ?? session.messageContext?.key?.id ?? undefined;
 }
 
-function resolveReplayDrainReservationBytes(): number {
-  const payloadBytes = getEnvConfig().REPLAY_MAX_PAYLOAD_BYTES;
+/** Resolves a conservative Replay reservation for detached payload reconstruction. */
+export function resolveReplayDrainReservationBytes(
+  readEnv: () => ReturnType<typeof getEnvConfig> = getEnvConfig
+): number {
+  let payloadBytes = 8 * 1024 * 1024;
+  try {
+    payloadBytes = readEnv().REPLAY_MAX_PAYLOAD_BYTES;
+  } catch {
+    // Keep a conservative reservation when environment parsing fails.
+  }
   // ReplaySpool keeps bounded write-back state, then terminal persistence reads
   // the Redis chunks and joins one payload string. Reserve the payload three
   // times for chunk strings, the joined string, and UTF-16 expansion.
@@ -3851,41 +3859,48 @@ export class ProxyResponseHandler {
             AsyncTaskManager.touch(taskId);
           };
 
-          const releaseTransportResources = () => {
-            if (transportReleased) return;
-            transportReleased = true;
-            clearPassthroughDrainTimeout();
-            cleanupPassthroughClientAbortListener();
-            cleanupTaskAbortBinding();
-            clearIdleTimer();
-            try {
-              const wasResponseControllerAborted =
-                sessionWithController.responseController?.signal.aborted ?? false;
-              const clientAborted = session.clientAbortSignal?.aborted ?? false;
-              const shouldClearTimeout =
-                responseTimeoutCleared ||
-                streamEndedNormally ||
-                wasResponseControllerAborted ||
-                clientAborted;
-              if (shouldClearTimeout) {
-                clearResponseTimeoutOnce();
-              }
-            } catch (error) {
-              logger.warn(
-                "[ResponseHandler] Gemini passthrough: Failed to clear response timeout",
-                {
-                  taskId,
-                  providerId: provider.id,
-                  providerName: provider.name,
-                  error: error instanceof Error ? error.message : String(error),
+          let transportReleasePromise: Promise<void> | null = null;
+          const releaseTransportResources = async (): Promise<void> => {
+            if (transportReleasePromise) return transportReleasePromise;
+            transportReleasePromise = (async () => {
+              await passthroughPump.teardown;
+              if (transportReleased) return;
+              transportReleased = true;
+              clearPassthroughDrainTimeout();
+              cleanupPassthroughClientAbortListener();
+              cleanupTaskAbortBinding();
+              clearIdleTimer();
+              try {
+                const wasResponseControllerAborted =
+                  sessionWithController.responseController?.signal.aborted ?? false;
+                const clientAborted = session.clientAbortSignal?.aborted ?? false;
+                const shouldClearTimeout =
+                  responseTimeoutCleared ||
+                  streamEndedNormally ||
+                  wasResponseControllerAborted ||
+                  clientAborted;
+                if (shouldClearTimeout) {
+                  clearResponseTimeoutOnce();
                 }
-              );
-            }
-            releaseSessionAgent(session);
+              } catch (error) {
+                logger.warn(
+                  "[ResponseHandler] Gemini passthrough: Failed to clear response timeout",
+                  {
+                    taskId,
+                    providerId: provider.id,
+                    providerName: provider.name,
+                    error: error instanceof Error ? error.message : String(error),
+                  }
+                );
+              }
+              releaseSessionAgent(session);
+            })();
+            return transportReleasePromise;
           };
 
           try {
             const pumpCompletion = await passthroughPump.completion;
+            await passthroughPump.teardown;
             streamEndedNormally = pumpCompletion.streamEndedNormally;
             pumpClientAborted = pumpCompletion.clientAborted;
             if (pumpCompletion.error) throw pumpCompletion.error;
@@ -3895,7 +3910,7 @@ export class ProxyResponseHandler {
             const allContent = streamSnapshot.text;
             const clientAborted =
               pumpClientAborted || (session.clientAbortSignal?.aborted ?? false);
-            releaseTransportResources();
+            await releaseTransportResources();
 
             // 存储响应体到 Redis（5分钟过期）
             if (
@@ -3925,6 +3940,7 @@ export class ProxyResponseHandler {
             // 使用共享的统计处理方法
             const duration = Date.now() - session.startTime;
             terminalFinalizationStarted = true;
+            const meteringSnapshot = passthroughClientDetached ? clientAbortMeter.finish() : null;
             const finalized = await finalizeDeferredStreamingFinalizationIfNeeded(
               session,
               allContent,
@@ -3933,12 +3949,12 @@ export class ProxyResponseHandler {
               clientAborted,
               discoveryLeaseLifecycle,
               streamProtocolObserver?.finish() ??
-                (passthroughClientDetached
+                (meteringSnapshot
                   ? {
                       sawContent: false,
-                      sawTerminal: clientAbortMeter.finish().billingComplete,
-                      observationIncomplete: clientAbortMeter.finish().skippedOversizedFrames > 0,
-                      failure: clientAbortMeter.finish().protocolFailure,
+                      sawTerminal: meteringSnapshot.billingComplete,
+                      observationIncomplete: meteringSnapshot.skippedOversizedFrames > 0,
+                      failure: meteringSnapshot.protocolFailure,
                     }
                   : null),
               abortReason
@@ -4005,6 +4021,7 @@ export class ProxyResponseHandler {
               clearIdleTimer();
               const allContent = flushAndJoin();
               const duration = Date.now() - session.startTime;
+              const meteringSnapshot = passthroughClientDetached ? clientAbortMeter.finish() : null;
 
               const finalized = await finalizeDeferredStreamingFinalizationIfNeeded(
                 session,
@@ -4013,12 +4030,12 @@ export class ProxyResponseHandler {
                 false,
                 clientAborted,
                 discoveryLeaseLifecycle,
-                passthroughClientDetached
+                meteringSnapshot
                   ? {
                       sawContent: false,
-                      sawTerminal: clientAbortMeter.finish().billingComplete,
-                      observationIncomplete: clientAbortMeter.finish().skippedOversizedFrames > 0,
-                      failure: clientAbortMeter.finish().protocolFailure,
+                      sawTerminal: meteringSnapshot.billingComplete,
+                      observationIncomplete: meteringSnapshot.skippedOversizedFrames > 0,
+                      failure: meteringSnapshot.protocolFailure,
                     }
                   : null,
                 abortReason
@@ -4064,7 +4081,7 @@ export class ProxyResponseHandler {
               });
             }
           } finally {
-            releaseTransportResources();
+            await releaseTransportResources();
             if (!commitSideEffectsScheduled) {
               void (async () => {
                 await latestFinalizeAttemptResources?.();
@@ -4136,14 +4153,14 @@ export class ProxyResponseHandler {
             const decoder = new TextDecoder();
             const text = decoder.decode(chunk, { stream: true });
             buffer += text;
-            if (buffer.length > GEMINI_STREAM_TRANSFORM_MAX_BUFFER_CHARACTERS) {
-              buffer = "";
-              throw new Error("Gemini stream line exceeded transform buffer limit");
-            }
 
             const lines = buffer.split("\n");
             // Keep the last line in buffer as it might be incomplete
             buffer = lines.pop() || "";
+            if (buffer.length > GEMINI_STREAM_TRANSFORM_MAX_BUFFER_CHARACTERS) {
+              buffer = "";
+              throw new Error("Gemini stream line exceeded transform buffer limit");
+            }
 
             for (const line of lines) {
               const trimmedLine = line.trim();
@@ -4879,8 +4896,7 @@ export class ProxyResponseHandler {
         // 任何失败终态（假 200/中断/非 2xx）立即 abort，绝不被已完成重放命中。
         if (replaySpool) {
           const activeReplaySpool = replaySpool;
-          const detachedReplayLease =
-            clientAbortDrainMode === "replay" ? clientAbortReplayLease : null;
+          const detachedReplayLease = clientAbortReplayLease;
           const isReplayableSuccess =
             finalized.commitSideEffects !== undefined &&
             effectiveStatusCode >= 200 &&
@@ -4989,8 +5005,7 @@ export class ProxyResponseHandler {
       streamFinalizationPromise.catch(() => {
         if (replaySpool && !replaySpool.isTerminal) {
           streamReplayCompletionScheduled = true;
-          const detachedReplayLease =
-            clientAbortDrainMode === "replay" ? clientAbortReplayLease : null;
+          const detachedReplayLease = clientAbortReplayLease;
           void replaySpool
             .abort("finalize_error")
             .finally(() => releaseDetachedReplayLease(detachedReplayLease));
@@ -5110,6 +5125,7 @@ export class ProxyResponseHandler {
     const runProcessingTask = async () => {
       try {
         const pumpCompletion = await activeResponsePump.completion;
+        await activeResponsePump.teardown;
         cleanupTaskAbortBinding();
         releaseSessionAgent(session);
         cleanupResponseControllerAbortListener();
@@ -5410,12 +5426,9 @@ export class ProxyResponseHandler {
         cleanupClientAbortListener();
         clearClientAbortDrainTimer();
         clearIdleTimer(); // 清除静默期计时器（防止泄漏）
+        await activeResponsePump.teardown;
         releaseSessionAgent(session);
-        if (
-          clientAbortDrainMode === "replay" &&
-          clientAbortReplayLease &&
-          !streamReplayCompletionScheduled
-        ) {
+        if (clientAbortReplayLease && !streamReplayCompletionScheduled) {
           const detachedReplayLease = clientAbortReplayLease;
           if (replaySpool && !replaySpool.isTerminal) {
             void replaySpool

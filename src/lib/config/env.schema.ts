@@ -29,6 +29,7 @@ const optionalNumber = (schema: z.ZodNumber) =>
 /**
  * 环境变量验证schema
  */
+// biome-ignore format: preserve the established environment schema layout
 export const EnvSchema = z.object({
   NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
   DSN: optionalPreprocessed((val) => {
@@ -197,7 +198,7 @@ export const EnvSchema = z.object({
   DETACHED_STREAM_BUDGET_BYTES: z.coerce
     .number()
     .int()
-    .min(64 * 1024)
+    .min(3 * 1024 * 1024 + 64 * 1024)
     .max(1024 * 1024 * 1024)
     .default(64 * 1024 * 1024),
   DETACHED_STREAM_METERING_RESERVE_BYTES: z.coerce
@@ -260,6 +261,14 @@ export const EnvSchema = z.object({
   IP_GEO_API_TOKEN: z.string().optional(),
   IP_GEO_CACHE_TTL_SECONDS: z.coerce.number().int().min(60).max(86400).default(3600),
   IP_GEO_TIMEOUT_MS: z.coerce.number().int().min(100).max(10000).default(1500),
+}).superRefine((env, context) => {
+  if (env.DETACHED_STREAM_METERING_RESERVE_BYTES > env.DETACHED_STREAM_BUDGET_BYTES) {
+    context.addIssue({
+      code: "custom",
+      path: ["DETACHED_STREAM_METERING_RESERVE_BYTES"],
+      message: "DETACHED_STREAM_METERING_RESERVE_BYTES cannot exceed DETACHED_STREAM_BUDGET_BYTES",
+    });
+  }
 });
 
 /**

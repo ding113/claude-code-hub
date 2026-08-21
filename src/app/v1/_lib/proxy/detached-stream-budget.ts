@@ -1,5 +1,9 @@
 import { getEnvConfig } from "@/lib/config/env.schema";
 
+const DEFAULT_DETACHED_STREAM_MAX_CONCURRENCY = 64;
+const DEFAULT_DETACHED_STREAM_BUDGET_BYTES = 64 * 1024 * 1024;
+const DEFAULT_DETACHED_STREAM_METERING_RESERVE_BYTES = 16 * 1024 * 1024;
+
 export type DetachedStreamLeaseKind = "metering" | "replay";
 
 export interface DetachedStreamBudgetLimits {
@@ -39,8 +43,10 @@ export class DetachedStreamBudget {
   private readonly activeByKind = createKindCounters();
   private readonly reservedByKind = createKindCounters();
 
+  /** Creates a process-local weighted detached-stream budget. */
   constructor(private readonly resolveLimits: () => DetachedStreamBudgetLimits) {}
 
+  /** Attempts to reserve capacity for a metering or Replay detached stream. */
   tryAcquire(kind: DetachedStreamLeaseKind, reservedBytes: number): DetachedStreamAcquireResult {
     if (!Number.isSafeInteger(reservedBytes) || reservedBytes <= 0) {
       throw new RangeError("Detached stream reservation must be a positive safe integer");
@@ -90,6 +96,7 @@ export class DetachedStreamBudget {
     };
   }
 
+  /** Returns current usage and configured limits for diagnostics and tests. */
   snapshot(): DetachedStreamBudgetSnapshot {
     return {
       activeStreams: this.activeStreams,
@@ -103,21 +110,40 @@ export class DetachedStreamBudget {
 
 const DETACHED_STREAM_BUDGET_SYMBOL = Symbol.for("cch.detachedStreamBudget");
 
+/** Resolves configured detached-stream limits, falling back if env parsing fails. */
+export function resolveDetachedStreamBudgetLimits(
+  readEnv: () => ReturnType<typeof getEnvConfig> = getEnvConfig
+): DetachedStreamBudgetLimits {
+  try {
+    const env = readEnv();
+    return {
+      maxConcurrency:
+        env.DETACHED_STREAM_MAX_CONCURRENCY ?? DEFAULT_DETACHED_STREAM_MAX_CONCURRENCY,
+      maxReservedBytes: env.DETACHED_STREAM_BUDGET_BYTES ?? DEFAULT_DETACHED_STREAM_BUDGET_BYTES,
+      meteringReserveBytes:
+        env.DETACHED_STREAM_METERING_RESERVE_BYTES ??
+        DEFAULT_DETACHED_STREAM_METERING_RESERVE_BYTES,
+    };
+  } catch {
+    return {
+      maxConcurrency: DEFAULT_DETACHED_STREAM_MAX_CONCURRENCY,
+      maxReservedBytes: DEFAULT_DETACHED_STREAM_BUDGET_BYTES,
+      meteringReserveBytes: DEFAULT_DETACHED_STREAM_METERING_RESERVE_BYTES,
+    };
+  }
+}
+
 function getDetachedStreamBudget(): DetachedStreamBudget {
   const globalState = globalThis as typeof globalThis & {
     [DETACHED_STREAM_BUDGET_SYMBOL]?: DetachedStreamBudget;
   };
-  globalState[DETACHED_STREAM_BUDGET_SYMBOL] ??= new DetachedStreamBudget(() => {
-    const env = getEnvConfig();
-    return {
-      maxConcurrency: env.DETACHED_STREAM_MAX_CONCURRENCY ?? 64,
-      maxReservedBytes: env.DETACHED_STREAM_BUDGET_BYTES ?? 64 * 1024 * 1024,
-      meteringReserveBytes: env.DETACHED_STREAM_METERING_RESERVE_BYTES ?? 16 * 1024 * 1024,
-    };
-  });
+  globalState[DETACHED_STREAM_BUDGET_SYMBOL] ??= new DetachedStreamBudget(
+    resolveDetachedStreamBudgetLimits
+  );
   return globalState[DETACHED_STREAM_BUDGET_SYMBOL];
 }
 
+/** Acquires a weighted detached-stream lease from the process budget. */
 export function acquireDetachedStreamLease(
   kind: DetachedStreamLeaseKind,
   reservedBytes: number
@@ -125,6 +151,7 @@ export function acquireDetachedStreamLease(
   return getDetachedStreamBudget().tryAcquire(kind, reservedBytes);
 }
 
+/** Returns the singleton detached-stream budget snapshot. */
 export function getDetachedStreamBudgetSnapshot(): DetachedStreamBudgetSnapshot {
   return getDetachedStreamBudget().snapshot();
 }

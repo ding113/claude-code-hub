@@ -615,6 +615,25 @@ describe("ProxyResponseHandler.dispatch stream terminal behavior", () => {
     );
   });
 
+  it("accepts a large Gemini chunk composed of complete short lines", async () => {
+    const { session } = await createSession({});
+    session.setProvider({ ...createProvider(), providerType: "gemini" });
+    session.originalFormat = "claude";
+    const frame = 'data: {"candidates":[{"content":{"parts":[{"text":"ok"}]}}]}\n\n';
+    const body = `${frame.repeat(Math.ceil((1024 * 1024 + 1) / frame.length))}data: {"candidates":[{"finishReason":"STOP"}],"usageMetadata":{"promptTokenCount":10,"candidatesTokenCount":2}}\n\n`;
+
+    const returned = await ProxyResponseHandler.dispatch(session, sseResponse(body));
+    const returnedText = await returned.text();
+    expect(returnedText.length).toBeGreaterThan(1024 * 1024);
+    await settleTasks();
+
+    expect(mocks.durable).toHaveBeenCalledWith(
+      MESSAGE.id,
+      expect.objectContaining({ statusCode: 200 }),
+      expect.objectContaining({ onCommitted: expect.any(Function) })
+    );
+  });
+
   it("treats malformed after wrapped Gemini content as postcommit", async () => {
     const { session } = await createSession({});
     session.setProvider({ ...createProvider(), providerType: "gemini" });

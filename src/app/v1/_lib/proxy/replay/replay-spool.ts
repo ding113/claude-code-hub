@@ -44,7 +44,9 @@ function serializeDurablePersistence<T>(operation: () => Promise<T>): Promise<T>
 }
 
 export interface ReplaySpoolOptions {
+  /** Shortens the detached window when the spool loses its active write role. */
   onInactive?: () => void;
+  /** Runs once after completed, aborted, or disabled cleanup releases the spool. */
   onTerminal?: () => void;
 }
 

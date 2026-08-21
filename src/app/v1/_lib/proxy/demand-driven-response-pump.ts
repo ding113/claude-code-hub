@@ -159,6 +159,7 @@ export function createDemandDrivenResponsePump(
     settle(false, normalized, normalized);
   };
 
+  /** Completes a detached drain after metering without reporting a source error. */
   const finishDrain = (reason?: unknown) => {
     if (settled || state !== "draining") return;
     const normalized = reason == null ? new Error("Background drain complete") : toError(reason);

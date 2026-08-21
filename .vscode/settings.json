@@ -1,8 +1,3 @@
 {
-  "chatgpt.openOnStartup": true,
-  "i18n-ally.localesPaths": [
-    "messages",
-    "src/i18n",
-    "src/app/[locale]/dashboard/sessions/[sessionId]/messages"
-  ]
+  "chatgpt.openOnStartup": true
 }
