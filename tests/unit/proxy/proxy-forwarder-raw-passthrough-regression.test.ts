@@ -11,6 +11,11 @@ const mocks = vi.hoisted(() => ({
     getAgent: vi.fn(),
     markOriginUnhealthy: vi.fn(),
   })),
+  evaluateResponsesWsEligibility: vi.fn(async () => ({
+    isWebsocketClient: false,
+    eligible: false,
+  })),
+  tryResponsesWebsocketUpstream: vi.fn(),
 }));
 
 vi.mock("@/lib/config", async (importOriginal) => {
@@ -26,6 +31,24 @@ vi.mock("@/lib/proxy-agent", () => ({
   getProxyAgentForProvider: mocks.getProxyAgentForProvider,
   getGlobalAgentPool: mocks.getGlobalAgentPool,
 }));
+
+vi.mock("@/app/v1/_lib/responses-ws/eligibility", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/app/v1/_lib/responses-ws/eligibility")>();
+  return {
+    ...actual,
+    evaluateResponsesWsEligibility: mocks.evaluateResponsesWsEligibility,
+    getResponsesWsSessionId: vi.fn(() => "client-ws-session"),
+  };
+});
+
+vi.mock("@/app/v1/_lib/responses-ws/upstream-adapter", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("@/app/v1/_lib/responses-ws/upstream-adapter")>();
+  return {
+    ...actual,
+    tryResponsesWebsocketUpstream: mocks.tryResponsesWebsocketUpstream,
+  };
+});
 
 import { resolveEndpointPolicy } from "@/app/v1/_lib/proxy/endpoint-policy";
 import { ProxyForwarder } from "@/app/v1/_lib/proxy/forwarder";
@@ -124,6 +147,11 @@ function readBodyText(body: BodyInit | undefined): string | null {
 describe("ProxyForwarder raw passthrough regression", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.evaluateResponsesWsEligibility.mockResolvedValue({
+      isWebsocketClient: false,
+      eligible: false,
+    });
+    mocks.tryResponsesWebsocketUpstream.mockReset();
   });
 
   it("raw passthrough 应优先保留原始请求体字节，而不是重新 JSON.stringify", async () => {
@@ -186,6 +214,56 @@ describe("ProxyForwarder raw passthrough regression", () => {
     expect(new URL(capturedUrl as string).searchParams.get("transport")).toBe("http");
     expect(readBodyText(capturedBody)).toBe(originalBody);
     expect(capturedHeaders?.get("x-codex-beta-features")).toBe("remote_compaction_v2");
+    expect(await response.text()).toBe(upstreamSse);
+  });
+
+  it("remote compaction v2 ArrayBuffer 请求体仍通过上游 Responses WebSocket", async () => {
+    const requestBody = {
+      model: "gpt-5.5",
+      stream: true,
+      previous_response_id: "resp_previous",
+      input: [{ type: "compaction_trigger" }],
+    };
+    const originalBody = JSON.stringify(requestBody);
+    const upstreamSse =
+      'event: response.completed\ndata: {"type":"response.completed","response":{"id":"resp_compact","status":"completed"}}\n\n';
+    const session = createRawPassthroughSession(originalBody, {
+      "x-codex-beta-features": "remote_compaction_v2",
+    });
+    session.requestUrl = new URL("https://proxy.example.com/v1/responses");
+    const provider = createProvider();
+
+    mocks.evaluateResponsesWsEligibility.mockResolvedValue({
+      isWebsocketClient: true,
+      eligible: true,
+      endpointId: null,
+    });
+    mocks.tryResponsesWebsocketUpstream.mockResolvedValue({
+      response: new Response(upstreamSse, {
+        status: 200,
+        headers: { "content-type": "text/event-stream" },
+      }),
+      connected: true,
+      reused: true,
+    });
+
+    const fetchWithoutAutoDecode = vi.spyOn(ProxyForwarder as any, "fetchWithoutAutoDecode");
+    fetchWithoutAutoDecode.mockImplementationOnce(
+      async () => new Response("unexpected HTTP fallback", { status: 500 })
+    );
+    const { doForward } = ProxyForwarder as unknown as {
+      doForward: (session: ProxySession, provider: Provider, baseUrl: string) => Promise<Response>;
+    };
+
+    const response = await doForward(session, provider, provider.url);
+
+    expect(mocks.tryResponsesWebsocketUpstream).toHaveBeenCalledWith(
+      expect.objectContaining({
+        body: requestBody,
+        sessionId: "client-ws-session",
+      })
+    );
+    expect(fetchWithoutAutoDecode).not.toHaveBeenCalled();
     expect(await response.text()).toBe(upstreamSse);
   });
 

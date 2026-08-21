@@ -163,6 +163,8 @@ function decodeRequestBodyAsJson(body: BodyInit | undefined): Record<string, unk
     text = body;
   } else if (Buffer.isBuffer(body)) {
     text = body.toString("utf8");
+  } else if (body instanceof ArrayBuffer) {
+    text = Buffer.from(body).toString("utf8");
   } else if (body instanceof Uint8Array) {
     text = Buffer.from(body).toString("utf8");
   }
