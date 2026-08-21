@@ -45,6 +45,7 @@ function serializeDurablePersistence<T>(operation: () => Promise<T>): Promise<T>
 
 export interface ReplaySpoolOptions {
   onInactive?: () => void;
+  onTerminal?: () => void;
 }
 
 export function getActiveReplaySpoolCount(): number {
@@ -453,6 +454,13 @@ export class ReplaySpool {
     this.released = true;
     this.clearOwnerHeartbeat();
     activeSpoolCount = Math.max(0, activeSpoolCount - 1);
+    try {
+      this.options.onTerminal?.();
+    } catch (error) {
+      logger.debug("[ReplaySpool] terminal callback failed", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 
   private clearFlushTimer(): void {

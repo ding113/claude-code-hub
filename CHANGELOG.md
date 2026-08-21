@@ -11,6 +11,9 @@
 - 修复上游响应流发生 error 后 Node/Undici body 未完成销毁的问题：Node-to-Web adapter 和 demand-driven pump
   现在在源流错误终态显式取消、销毁底层流，并为异步 destroy error 保留有界保护；同时将 raw body 的兜底错误监听改为一次性监听，
   避免 HTTP/2 reset、客户端断开和竞速取消路径长期保留 socket 与 ArrayBuffer backing store (#1430)
+- 修复客户端断开后的后台计费 drain 继续累加完整响应正文导致的高并发内存放大：断线后切换到有界计量观察器，
+  仅保留 usage、终止标记、模型与协议错误等结算证据，拿到终态即取消上游；Replay owner 在预算内继续保存完整
+  客户端可见流，Replay 预算不足时降级到 metering，新增共享进程级并发与带权保留容量预算，覆盖通用流与 Gemini 透传路径 (#1430)
 - 修复 Replay owner 在客户端断线后保留完整流正文和 300 秒传输资源导致的内存失控：限制 Redis
   write-behind backlog，Replay 失效后按断线起点恢复 60 秒 drain，并为 Redis session response body
   增加默认 5 MiB 的可配置存储上限，避免大 SSE 正文及 before/after 快照放大内存和持久化压力；

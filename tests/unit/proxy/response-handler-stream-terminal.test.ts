@@ -1,6 +1,10 @@
 import { Context } from "hono";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ProxyResponseHandler } from "@/app/v1/_lib/proxy/response-handler";
+import {
+  acquireDetachedStreamLease,
+  getDetachedStreamBudgetSnapshot,
+} from "@/app/v1/_lib/proxy/detached-stream-budget";
 import { ProxySession, type MessageContext } from "@/app/v1/_lib/proxy/session";
 import { setDeferredStreamingFinalization } from "@/app/v1/_lib/proxy/stream-finalization";
 import type { Key } from "@/types/key";
@@ -20,6 +24,8 @@ const mocks = vi.hoisted(() => ({
   replayComplete: vi.fn(async () => {}),
   replayAbort: vi.fn(async () => {}),
   replayInactive: null as (() => void) | null,
+  replayTerminal: null as (() => void) | null,
+  replayTerminalState: false,
 }));
 
 vi.mock("@/app/v1/_lib/proxy/response-fixer", () => ({
@@ -65,14 +71,17 @@ vi.mock("@/app/v1/_lib/proxy/replay/replay-spool", () => ({
     session: ProxySession,
     _response: Response,
     _delivery: string,
-    options: { onInactive?: () => void } = {}
+    options: { onInactive?: () => void; onTerminal?: () => void } = {}
   ) => {
     if (session.replayState?.role !== "owner") return null;
     mocks.replayInactive = options.onInactive ?? null;
+    mocks.replayTerminal = options.onTerminal ?? null;
     return {
       abort: mocks.replayAbort,
       completeAfterBilling: mocks.replayComplete,
-      isTerminal: false,
+      get isTerminal() {
+        return mocks.replayTerminalState;
+      },
       observe: mocks.replayObserve,
     };
   },
@@ -246,11 +255,38 @@ function setReplayOwner(session: ProxySession, suffix: string): void {
   };
 }
 
+function setReplayFinalization(session: ProxySession): void {
+  setDeferredStreamingFinalization(session, {
+    providerId: session.provider?.id ?? 0,
+    providerName: session.provider?.name ?? "provider",
+    providerPriority: session.provider?.priority ?? 0,
+    attemptNumber: 1,
+    totalProvidersAttempted: 1,
+    isFirstAttempt: true,
+    isFailoverSuccess: false,
+    endpointId: null,
+    endpointUrl: session.provider?.url ?? "",
+    upstreamStatusCode: 200,
+    bindingIntent: "none",
+  });
+}
+
 describe("ProxyResponseHandler.dispatch stream terminal behavior", () => {
   beforeEach(() => {
     mocks.tasks.length = 0;
     mocks.replayInactive = null;
+    mocks.replayTerminal = null;
+    mocks.replayTerminalState = false;
     vi.clearAllMocks();
+    mocks.replayAbort.mockImplementation(async () => {
+      mocks.replayTerminalState = true;
+      mocks.replayInactive?.();
+      mocks.replayTerminal?.();
+    });
+    mocks.replayComplete.mockImplementation(async () => {
+      mocks.replayTerminalState = true;
+      mocks.replayTerminal?.();
+    });
     mocks.durable.mockImplementation(async (_id, _details, options) => {
       await options?.onCommitted?.();
       return true;
@@ -302,6 +338,81 @@ describe("ProxyResponseHandler.dispatch stream terminal behavior", () => {
     expect(releaseAgent).toHaveBeenCalledOnce();
   });
 
+  it("keeps an admitted detached Replay complete and replayable", async () => {
+    const chunks = [
+      'event: message_start\ndata: {"type":"message_start","message":{"usage":{"input_tokens":10,"output_tokens":1}}}\n\n',
+      'event: content_block_delta\ndata: {"type":"content_block_delta","delta":{"type":"text_delta","text":"kept"}}\n\n',
+      'event: message_delta\ndata: {"type":"message_delta","usage":{"output_tokens":4}}\n\n',
+      'event: message_stop\ndata: {"type":"message_stop"}\n\n',
+    ];
+    let index = 0;
+    const source = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        const chunk = chunks[index++];
+        if (chunk) controller.enqueue(new TextEncoder().encode(chunk));
+      },
+    });
+    const { session } = await createSession({});
+    setReplayOwner(session, "admitted-detached");
+    setReplayFinalization(session);
+
+    const returned = await ProxyResponseHandler.dispatch(session, sseResponse(source));
+    const reader = returned.body?.getReader();
+    await reader?.read();
+    await reader?.cancel(new Error("client disconnected"));
+    await settleTasks();
+
+    expect(mocks.replayAbort).not.toHaveBeenCalled();
+    expect(mocks.replayComplete).toHaveBeenCalledWith(MESSAGE.id);
+    const replayedText = mocks.replayObserve.mock.calls
+      .map(([chunk]) => new TextDecoder().decode(chunk as Uint8Array))
+      .join("");
+    expect(replayedText).toContain('"text":"kept"');
+    expect(replayedText).toContain("message_stop");
+    expect(getDetachedStreamBudgetSnapshot().activeStreams).toBe(0);
+  });
+
+  it("downgrades a detached Replay to metering when Replay headroom is exhausted", async () => {
+    const blocker = acquireDetachedStreamLease("replay", 20 * 1024 * 1024);
+    if (!blocker.acquired) throw new Error("expected Replay budget blocker");
+    try {
+      const chunks = [
+        'event: message_start\ndata: {"type":"message_start","message":{"usage":{"input_tokens":10,"output_tokens":1}}}\n\n',
+        'event: content_block_delta\ndata: {"type":"content_block_delta","delta":{"type":"text_delta","text":"not replayed"}}\n\n',
+        'event: message_delta\ndata: {"type":"message_delta","usage":{"output_tokens":4}}\n\n',
+        'event: message_stop\ndata: {"type":"message_stop"}\n\n',
+      ];
+      let index = 0;
+      const source = new ReadableStream<Uint8Array>({
+        pull(controller) {
+          const chunk = chunks[index++];
+          if (chunk) controller.enqueue(new TextEncoder().encode(chunk));
+        },
+      });
+      const { session } = await createSession({});
+      setReplayOwner(session, "metering-fallback");
+      setReplayFinalization(session);
+
+      const returned = await ProxyResponseHandler.dispatch(session, sseResponse(source));
+      const reader = returned.body?.getReader();
+      await reader?.read();
+      const observedBeforeDetach = mocks.replayObserve.mock.calls.length;
+      await reader?.cancel(new Error("client disconnected"));
+      await settleTasks();
+
+      expect(mocks.replayAbort).toHaveBeenCalledWith("detached_replay_metering_reserve");
+      expect(mocks.replayObserve.mock.calls.length).toBe(observedBeforeDetach);
+      expect(mocks.durable).toHaveBeenCalledWith(
+        MESSAGE.id,
+        expect.objectContaining({ statusCode: 200, inputTokens: 10, outputTokens: 4 }),
+        expect.objectContaining({ onCommitted: expect.any(Function) })
+      );
+    } finally {
+      blocker.lease.release();
+    }
+    expect(getDetachedStreamBudgetSnapshot().activeStreams).toBe(0);
+  });
+
   it("caps a detached Replay drain at 60 seconds after the spool becomes inactive", async () => {
     vi.useFakeTimers();
     const previousReplayDetachedMs = process.env.REPLAY_MAX_DETACHED_MS;
@@ -324,10 +435,24 @@ describe("ProxyResponseHandler.dispatch stream terminal behavior", () => {
       await reader?.cancel(new Error("client disconnected"));
 
       expect(mocks.replayInactive).toEqual(expect.any(Function));
+      expect(getDetachedStreamBudgetSnapshot().activeByKind).toEqual({
+        metering: 0,
+        replay: 1,
+      });
       await vi.advanceTimersByTimeAsync(59_999);
       expect(responseController.signal.aborted).toBe(false);
 
+      mocks.replayTerminalState = true;
       mocks.replayInactive?.();
+      expect(getDetachedStreamBudgetSnapshot().activeByKind).toEqual({
+        metering: 1,
+        replay: 1,
+      });
+      mocks.replayTerminal?.();
+      expect(getDetachedStreamBudgetSnapshot().activeByKind).toEqual({
+        metering: 1,
+        replay: 0,
+      });
       await vi.advanceTimersByTimeAsync(1);
 
       expect(responseController.signal.aborted).toBe(true);
@@ -336,6 +461,7 @@ describe("ProxyResponseHandler.dispatch stream terminal behavior", () => {
       );
       expect(cancelSource).toHaveBeenCalledOnce();
       await settleTasks();
+      expect(getDetachedStreamBudgetSnapshot().activeStreams).toBe(0);
     } finally {
       if (previousReplayDetachedMs === undefined) {
         delete process.env.REPLAY_MAX_DETACHED_MS;

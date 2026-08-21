@@ -192,6 +192,21 @@ export const EnvSchema = z.object({
   // 超时后主动断开该输家连接，仅用已收到的内容尝试计费（通常计不出 -> 跳过）。
   HEDGE_LOSER_DRAIN_TIMEOUT_MS: z.coerce.number().int().min(1000).default(120_000),
 
+  // 客户端断线后的 detached stream 使用进程级带权预算。
+  DETACHED_STREAM_MAX_CONCURRENCY: z.coerce.number().int().min(1).max(4096).default(64),
+  DETACHED_STREAM_BUDGET_BYTES: z.coerce
+    .number()
+    .int()
+    .min(64 * 1024)
+    .max(1024 * 1024 * 1024)
+    .default(64 * 1024 * 1024),
+  DETACHED_STREAM_METERING_RESERVE_BYTES: z.coerce
+    .number()
+    .int()
+    .min(64 * 1024)
+    .max(1024 * 1024 * 1024)
+    .default(16 * 1024 * 1024),
+
   // ===== CCHP 网关移植功能开关 =====
   // 流式内容门控：off=关闭；shadow=旁路分类只记录分歧；enforce=首个有效内容帧前缓冲+failover
   STREAM_GATE_MODE: z.enum(["off", "shadow", "enforce"]).default("enforce"),

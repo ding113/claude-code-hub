@@ -56,9 +56,18 @@ import { extractActualResponseModelForProvider, extractJsonChunks } from "./actu
 import { recordAffinityWinner, tombstoneAffinityOnFailure } from "./affinity/affinity-recorder";
 import { bindClientAbortListener } from "./client-abort-listener";
 import {
+  CLIENT_ABORT_METER_MAX_RETAINED_BYTES,
+  createClientAbortMeteringObserver,
+} from "./client-abort-metering";
+import {
   createDemandDrivenResponsePump,
   type DemandDrivenResponsePump,
 } from "./demand-driven-response-pump";
+import {
+  acquireDetachedStreamLease,
+  type DetachedStreamLease,
+  getDetachedStreamBudgetSnapshot,
+} from "./detached-stream-budget";
 import { isDiscoveryProtocolErrorPayload } from "./discovery-validity";
 import { isClientAbortError, isTransportError } from "./errors";
 import {
@@ -82,6 +91,10 @@ import {
 } from "./stream-gate/stream-protocol-observer";
 
 const CLIENT_ABORT_DRAIN_MAX_MS = 60_000;
+const CLIENT_ABORT_DRAIN_RESERVATION_BYTES =
+  3 * 1024 * 1024 + CLIENT_ABORT_METER_MAX_RETAINED_BYTES;
+const REPLAY_DRAIN_FIXED_OVERHEAD_BYTES = 5 * 1024 * 1024;
+const GEMINI_STREAM_TRANSFORM_MAX_BUFFER_CHARACTERS = 1024 * 1024;
 const STREAM_STATS_MAX_BUFFER_BYTES = 10 * 1024 * 1024;
 const STREAM_STATS_HEAD_BYTES = 1024 * 1024;
 const STREAM_STATS_TAIL_BYTES = STREAM_STATS_MAX_BUFFER_BYTES - STREAM_STATS_HEAD_BYTES;
@@ -91,6 +104,14 @@ const RESPONSE_TEXT_ENCODER = new TextEncoder();
 
 function getSessionRequestOwnerKeyId(session: ProxySession): number | undefined {
   return session.authState?.key?.id ?? session.messageContext?.key?.id ?? undefined;
+}
+
+function resolveReplayDrainReservationBytes(): number {
+  const payloadBytes = getEnvConfig().REPLAY_MAX_PAYLOAD_BYTES;
+  // ReplaySpool keeps bounded write-back state, then terminal persistence reads
+  // the Redis chunks and joins one payload string. Reserve the payload three
+  // times for chunk strings, the joined string, and UTF-16 expansion.
+  return REPLAY_DRAIN_FIXED_OVERHEAD_BYTES + payloadBytes * 3;
 }
 
 type BoundedStreamTextSnapshot = {
@@ -732,6 +753,17 @@ export class BoundedStreamTextAccumulator {
     };
 
     return this.finishedSnapshot;
+  }
+
+  discardRetainedBytes(): void {
+    this.headChunks.length = 0;
+    this.tailChunks.length = 0;
+    this.tailChunkBytes.length = 0;
+    this.headBufferedBytes = 0;
+    this.tailBufferedBytes = 0;
+    this.tailHead = 0;
+    this.tailMode = false;
+    this.finishedSnapshot = null;
   }
 
   private createSnapshotText(): string {
@@ -3532,9 +3564,10 @@ export class ProxyResponseHandler {
       session.getEndpointPolicy().kind === "raw_passthrough"
         ? null
         : mapProviderTypeToFamily(provider.providerType);
-    const streamProtocolObserver = nativeStreamProtocolFamily
+    let streamProtocolObserver = nativeStreamProtocolFamily
       ? createStreamProtocolObserver(nativeStreamProtocolFamily)
       : null;
+    const clientAbortMeter = createClientAbortMeteringObserver(session.originalFormat);
     let protocolObservedBeforeProcessing = false;
 
     // --- GEMINI STREAM HANDLING ---
@@ -3558,7 +3591,7 @@ export class ProxyResponseHandler {
         releaseReplayOwnership(session);
 
         // F1 shadow 遥测：enforce 已在 forwarder 作用于该流量，shadow 观察同样不留盲区
-        const passthroughShadowObserver = (() => {
+        let passthroughShadowObserver = (() => {
           if (resolveStreamGateMode() !== "shadow") return null;
           if (session.getEndpointPolicy().kind === "raw_passthrough") return null;
           const family = mapProviderTypeToFamily(provider.providerType);
@@ -3583,6 +3616,8 @@ export class ProxyResponseHandler {
         let abortPassthroughTransport = (_reason: Error) => {};
         let passthroughPump: DemandDrivenResponsePump;
         let passthroughDrainTimeoutId: ReturnType<typeof setTimeout> | null = null;
+        let passthroughClientDetached = false;
+        let passthroughDrainLease: DetachedStreamLease | null = null;
         const clearPassthroughDrainTimeout = () => {
           if (passthroughDrainTimeoutId) {
             clearTimeout(passthroughDrainTimeoutId);
@@ -3590,8 +3625,43 @@ export class ProxyResponseHandler {
           }
         };
         const startPassthroughDrain = (reason?: unknown) => {
+          if (passthroughPump.getState() === "closed") return;
+          if (passthroughClientDetached) {
+            passthroughPump.startDrain(reason);
+            return;
+          }
+          passthroughClientDetached = true;
+          const admission = acquireDetachedStreamLease(
+            "metering",
+            CLIENT_ABORT_DRAIN_RESERVATION_BYTES
+          );
           passthroughPump.startDrain(reason);
+          streamTextAccumulator.discardRetainedBytes();
+          streamProtocolObserver = null;
+          passthroughShadowObserver = null;
+          if (!admission.acquired) {
+            const rejection = new Error(`client_abort_drain_${admission.reason}`);
+            logger.warn("ResponseHandler: Client abort drain rejected by pool", {
+              taskId: `stream-passthrough-${messageContext.id}`,
+              providerId: provider.id,
+              messageId: messageContext.id,
+              reason: admission.reason,
+              budget: getDetachedStreamBudgetSnapshot(),
+            });
+            abortPassthroughTransport(rejection);
+            passthroughPump.cancelSource(rejection);
+            return;
+          }
+          passthroughDrainLease = admission.lease;
+          void passthroughPump.teardown.finally(() => {
+            passthroughDrainLease?.release();
+            passthroughDrainLease = null;
+          });
           observePassthroughDrainStart();
+          if (clientAbortMeter.observe(new Uint8Array()).billingComplete) {
+            passthroughPump.finishDrain(new Error("client_abort_metering_complete"));
+            return;
+          }
           if (passthroughDrainTimeoutId) return;
           passthroughDrainTimeoutId = setTimeout(() => {
             passthroughDrainTimeoutId = null;
@@ -3605,10 +3675,14 @@ export class ProxyResponseHandler {
           source: response.body,
           onReadStart: () => observePassthroughReadStart(),
           onChunk: (value) => {
+            const metering = clientAbortMeter.observe(value);
             passthroughShadowObserver?.observe(value);
             streamProtocolObserver?.observe(value);
-            streamTextAccumulator.pushBytes(value);
+            if (!passthroughClientDetached) streamTextAccumulator.pushBytes(value);
             observePassthroughChunk(value);
+            if (passthroughClientDetached && metering.billingComplete) {
+              passthroughPump.finishDrain(new Error("client_abort_metering_complete"));
+            }
           },
           onClientCancel: (reason) => {
             startPassthroughDrain(reason);
@@ -3746,6 +3820,18 @@ export class ProxyResponseHandler {
           };
 
           const flushAndSnapshot = (): BoundedStreamTextSnapshot => {
+            if (passthroughClientDetached) {
+              const metering = clientAbortMeter.finish();
+              const snapshot: BoundedStreamTextSnapshot = {
+                text: metering.text,
+                truncated: true,
+                totalBytes: streamTextAccumulator.totalByteCount,
+                bufferedBytes: metering.retainedBytes,
+                chunkCount: streamTextAccumulator.chunkCount,
+              };
+              lastStreamTextSnapshot = snapshot;
+              return snapshot;
+            }
             const snapshot = streamTextAccumulator.finish();
             lastStreamTextSnapshot = snapshot;
             return snapshot;
@@ -3846,7 +3932,15 @@ export class ProxyResponseHandler {
               streamEndedNormally,
               clientAborted,
               discoveryLeaseLifecycle,
-              streamProtocolObserver?.finish() ?? null,
+              streamProtocolObserver?.finish() ??
+                (passthroughClientDetached
+                  ? {
+                      sawContent: false,
+                      sawTerminal: clientAbortMeter.finish().billingComplete,
+                      observationIncomplete: clientAbortMeter.finish().skippedOversizedFrames > 0,
+                      failure: clientAbortMeter.finish().protocolFailure,
+                    }
+                  : null),
               abortReason
             );
             latestCommitSideEffects = finalized.commitSideEffects;
@@ -3919,7 +4013,14 @@ export class ProxyResponseHandler {
                 false,
                 clientAborted,
                 discoveryLeaseLifecycle,
-                null,
+                passthroughClientDetached
+                  ? {
+                      sawContent: false,
+                      sawTerminal: clientAbortMeter.finish().billingComplete,
+                      observationIncomplete: clientAbortMeter.finish().skippedOversizedFrames > 0,
+                      failure: clientAbortMeter.finish().protocolFailure,
+                    }
+                  : null,
                 abortReason
               );
               latestCommitSideEffects = finalized.commitSideEffects;
@@ -4035,6 +4136,10 @@ export class ProxyResponseHandler {
             const decoder = new TextDecoder();
             const text = decoder.decode(chunk, { stream: true });
             buffer += text;
+            if (buffer.length > GEMINI_STREAM_TRANSFORM_MAX_BUFFER_CHARACTERS) {
+              buffer = "";
+              throw new Error("Gemini stream line exceeded transform buffer limit");
+            }
 
             const lines = buffer.split("\n");
             // Keep the last line in buffer as it might be incomplete
@@ -4091,6 +4196,14 @@ export class ProxyResponseHandler {
     // 让上游响应在客户端断开后继续被缓存直至完成；非 replay 请求维持 60s 现状。
     let clientAbortDrainTimeoutMs = CLIENT_ABORT_DRAIN_MAX_MS;
     let responsePump: DemandDrivenResponsePump | null = null;
+    let clientAbortDrainLease: DetachedStreamLease | null = null;
+    let clientAbortReplayLease: DetachedStreamLease | null = null;
+    let clientAbortDrainMode: "metering" | "replay" | "rejected" | null = null;
+    let clientAbortFinalizing = false;
+    let streamReplayCompletionScheduled = false;
+    let shadowGateObserver: ReturnType<typeof createShadowGateObserver> | null = null;
+    let replaySpool: ReturnType<typeof createReplaySpoolIfOwner> = null;
+    let downgradeDetachedReplay = () => {};
 
     // 提升 idleTimeoutId 到外部作用域，以便客户端断开时能清除
     let idleTimeoutId: NodeJS.Timeout | null = null;
@@ -4139,11 +4252,14 @@ export class ProxyResponseHandler {
       clientAbortDrainTimeoutId.unref?.();
     };
     const capInactiveReplayDrainWindow = () => {
-      if (clientAbortDrainTimeoutMs <= CLIENT_ABORT_DRAIN_MAX_MS) return;
-      clientAbortDrainTimeoutMs = CLIENT_ABORT_DRAIN_MAX_MS;
-      if (clientAbortDrainStartedAt === null) return;
-      const elapsedMs = Date.now() - clientAbortDrainStartedAt;
-      scheduleClientAbortDrainTimeout(CLIENT_ABORT_DRAIN_MAX_MS - elapsedMs);
+      if (clientAbortDrainTimeoutMs > CLIENT_ABORT_DRAIN_MAX_MS) {
+        clientAbortDrainTimeoutMs = CLIENT_ABORT_DRAIN_MAX_MS;
+        if (clientAbortDrainStartedAt !== null) {
+          const elapsedMs = Date.now() - clientAbortDrainStartedAt;
+          scheduleClientAbortDrainTimeout(CLIENT_ABORT_DRAIN_MAX_MS - elapsedMs);
+        }
+      }
+      downgradeDetachedReplay();
     };
     const clearIdleTimer = () => {
       if (idleTimeoutId) {
@@ -4208,15 +4324,111 @@ export class ProxyResponseHandler {
     };
     let cleanupClientAbortListener = () => {};
     let clientDetachHandled = false;
+    const releaseDetachedLease = (lease = clientAbortDrainLease) => {
+      lease?.release();
+      if (clientAbortDrainLease === lease) clientAbortDrainLease = null;
+    };
+    const releaseDetachedReplayLease = (lease = clientAbortReplayLease) => {
+      lease?.release();
+      if (clientAbortReplayLease === lease) clientAbortReplayLease = null;
+    };
+    const rejectDetachedDrain = (reason: string) => {
+      clientAbortDrainMode = "rejected";
+      releaseDetachedLease();
+      const rejection = new Error(`client_abort_drain_${reason}`);
+      logger.warn("ResponseHandler: Detached stream rejected by budget", {
+        taskId,
+        providerId: provider.id,
+        messageId: messageContext.id,
+        reason,
+        budget: getDetachedStreamBudgetSnapshot(),
+      });
+      responsePump?.startDrain(rejection);
+      try {
+        const sessionWithController = session as typeof session & {
+          responseController?: AbortController;
+        };
+        sessionWithController.responseController?.abort(rejection);
+      } catch {
+        // The pump cancellation below remains authoritative.
+      }
+      responsePump?.cancelSource(rejection);
+    };
+    const acquireMeteringDrain = (replayAbortReason?: string): boolean => {
+      const previousLease = clientAbortDrainLease;
+      clientAbortDrainMode = "metering";
+      releaseDetachedLease(previousLease);
+      if (replayAbortReason && replaySpool && !replaySpool.isTerminal) {
+        void replaySpool.abort(replayAbortReason);
+      }
+
+      const admission = acquireDetachedStreamLease(
+        "metering",
+        CLIENT_ABORT_DRAIN_RESERVATION_BYTES
+      );
+      if (!admission.acquired) {
+        rejectDetachedDrain(admission.reason);
+        return false;
+      }
+
+      const lease = admission.lease;
+      clientAbortDrainLease = lease;
+      const activePump = responsePump;
+      if (activePump) {
+        void activePump.teardown.finally(() => releaseDetachedLease(lease));
+      }
+      return true;
+    };
+    downgradeDetachedReplay = () => {
+      if (!clientDetachHandled || clientAbortDrainMode !== "replay" || clientAbortFinalizing) {
+        return;
+      }
+      logger.info("ResponseHandler: Detached Replay became inactive, using metering drain", {
+        taskId,
+        providerId: provider.id,
+        messageId: messageContext.id,
+      });
+      acquireMeteringDrain();
+    };
     const handleClientAbort = (reason?: unknown) => {
       if (responsePump?.getState() === "closed") return;
-      responsePump?.startDrain(reason ?? "client_detached");
-      if (clientDetachHandled) return;
+      if (clientDetachHandled) {
+        responsePump?.startDrain(reason ?? "client_detached");
+        return;
+      }
       clientDetachHandled = true;
+      const activeReplaySpool = replaySpool && !replaySpool.isTerminal ? replaySpool : null;
+      if (activeReplaySpool) {
+        const replayAdmission = acquireDetachedStreamLease(
+          "replay",
+          resolveReplayDrainReservationBytes()
+        );
+        if (replayAdmission.acquired) {
+          clientAbortDrainMode = "replay";
+          clientAbortReplayLease = replayAdmission.lease;
+        } else {
+          logger.info("ResponseHandler: Detached Replay budget unavailable, using metering drain", {
+            taskId,
+            providerId: provider.id,
+            messageId: messageContext.id,
+            reason: replayAdmission.reason,
+            budget: getDetachedStreamBudgetSnapshot(),
+          });
+          if (!acquireMeteringDrain(`detached_replay_${replayAdmission.reason}`)) return;
+        }
+      } else if (!acquireMeteringDrain()) {
+        return;
+      }
+
+      responsePump?.startDrain(reason ?? "client_detached");
+      streamTextAccumulator.discardRetainedBytes();
+      streamProtocolObserver = null;
+      shadowGateObserver = null;
       logger.debug("ResponseHandler: Client disconnected, cleaning up", {
         taskId,
         providerId: provider.id,
         messageId: messageContext.id,
+        drainMode: clientAbortDrainMode,
       });
       // Do not cancel internal accounting on pure client disconnect. Transfer
       // ownership to the bounded background drain so terminal usage can still
@@ -4227,6 +4439,9 @@ export class ProxyResponseHandler {
       }
       clientAbortDrainStartedAt = Date.now();
       scheduleClientAbortDrainTimeout(clientAbortDrainTimeoutMs);
+      if (clientAbortMeter.observe(new Uint8Array()).billingComplete) {
+        responsePump?.finishDrain(new Error("client_abort_metering_complete"));
+      }
     };
 
     // 统计/结算只保留有界的“头 + 尾”文本快照，避免长流式响应把进程堆撑满。
@@ -4239,6 +4454,17 @@ export class ProxyResponseHandler {
     // 静默一直等到 60s drain 总上限。
 
     const flushAndJoin = (): string => {
+      if (clientDetachHandled) {
+        const metering = clientAbortMeter.finish();
+        lastStreamTextSnapshot = {
+          text: metering.text,
+          truncated: true,
+          totalBytes: streamTextAccumulator.totalByteCount,
+          bufferedBytes: metering.retainedBytes,
+          chunkCount: streamTextAccumulator.chunkCount,
+        };
+        return metering.text;
+      }
       const snapshot = streamTextAccumulator.finish();
       lastStreamTextSnapshot = snapshot;
       return snapshot.text;
@@ -4340,10 +4566,21 @@ export class ProxyResponseHandler {
       abortReason?: string
     ): Promise<void> => {
       if (streamFinalizationPromise) return streamFinalizationPromise;
+      if (clientDetachHandled) clientAbortFinalizing = true;
       streamFinalizationPromise = (async () => {
         const finalizationDeadlineAtMs = Date.now() + STREAM_FINALIZATION_MAX_MS;
         const awaitFinalization = <T>(promise: Promise<T>): Promise<T> =>
           raceWithDeadline(promise, finalizationDeadlineAtMs, "stream_finalization_timeout");
+        const detachedProtocolObservation: StreamProtocolObservation | null = (() => {
+          if (!clientDetachHandled || streamProtocolObserver) return null;
+          const metering = clientAbortMeter.finish();
+          return {
+            sawContent: false,
+            sawTerminal: metering.billingComplete,
+            observationIncomplete: metering.skippedOversizedFrames > 0,
+            failure: metering.protocolFailure,
+          };
+        })();
         const finalized = finalizeDeferredStreamingFinalizationIfNeeded(
           session,
           allContent,
@@ -4351,7 +4588,7 @@ export class ProxyResponseHandler {
           streamEndedNormally,
           clientAborted,
           discoveryLeaseLifecycle,
-          streamProtocolObserver?.finish() ?? null,
+          streamProtocolObserver?.finish() ?? detachedProtocolObservation,
           abortReason
         );
         latestStreamCommitSideEffects = finalized.commitSideEffects
@@ -4641,6 +4878,9 @@ export class ProxyResponseHandler {
         // F2 终态屏障：replay completed 只能出现在计费落库（onCommitted）之后；
         // 任何失败终态（假 200/中断/非 2xx）立即 abort，绝不被已完成重放命中。
         if (replaySpool) {
+          const activeReplaySpool = replaySpool;
+          const detachedReplayLease =
+            clientAbortDrainMode === "replay" ? clientAbortReplayLease : null;
           const isReplayableSuccess =
             finalized.commitSideEffects !== undefined &&
             effectiveStatusCode >= 200 &&
@@ -4648,19 +4888,23 @@ export class ProxyResponseHandler {
             !finalized.replayIneligibleReason &&
             hasStreamCompletionMarker(allContent, session.originalFormat);
           if (isReplayableSuccess) {
+            streamReplayCompletionScheduled = true;
             postTerminalSideEffects.push(async () => {
               try {
-                await replaySpool.completeAfterBilling(messageContext.id);
+                await activeReplaySpool.completeAfterBilling(messageContext.id);
               } catch (err) {
                 logger.warn("[ResponseHandler] Replay spool completion failed:", { error: err });
               }
             });
           } else {
-            void replaySpool.abort(
-              finalized.replayIneligibleReason ??
-                streamErrorMessage ??
-                `status_${effectiveStatusCode}`
-            );
+            streamReplayCompletionScheduled = true;
+            void activeReplaySpool
+              .abort(
+                finalized.replayIneligibleReason ??
+                  streamErrorMessage ??
+                  `status_${effectiveStatusCode}`
+              )
+              .finally(() => releaseDetachedReplayLease(detachedReplayLease));
           }
         }
 
@@ -4744,7 +4988,12 @@ export class ProxyResponseHandler {
       // 调用方原样 reject（既有传播语义不变）。
       streamFinalizationPromise.catch(() => {
         if (replaySpool && !replaySpool.isTerminal) {
-          void replaySpool.abort("finalize_error");
+          streamReplayCompletionScheduled = true;
+          const detachedReplayLease =
+            clientAbortDrainMode === "replay" ? clientAbortReplayLease : null;
+          void replaySpool
+            .abort("finalize_error")
+            .finally(() => releaseDetachedReplayLease(detachedReplayLease));
         }
       });
       return streamFinalizationPromise;
@@ -4752,7 +5001,7 @@ export class ProxyResponseHandler {
 
     // F1 shadow 模式：旁路逐帧分类，记录「首非空字节 vs 首有效内容」的分歧与延迟差，
     // 不缓冲、不 failover，仅用于 enforce 灰度前评估误判率。
-    const shadowGateObserver = (() => {
+    shadowGateObserver = (() => {
       if (resolveStreamGateMode() !== "shadow") return null;
       if (session.getEndpointPolicy().kind === "raw_passthrough") return null;
       const family = mapProviderTypeToFamily(provider.providerType);
@@ -4766,8 +5015,11 @@ export class ProxyResponseHandler {
 
     // F2 owner spool：guard 阶段已抢到 owner 租约的请求，把客户端可见字节
     // write-behind 喂入 Redis 热层，供并发/断线的相同请求 attach 跟尾。
-    const replaySpool = createReplaySpoolIfOwner(session, response, "stream", {
+    replaySpool = createReplaySpoolIfOwner(session, response, "stream", {
       onInactive: capInactiveReplayDrainWindow,
+      onTerminal: () => {
+        releaseDetachedReplayLease();
+      },
     });
     if (replaySpool) {
       try {
@@ -4780,20 +5032,25 @@ export class ProxyResponseHandler {
     const observeChunk = (value: Uint8Array) => {
       const chunkSize = value.length;
       clearIdleTimer();
-      streamTextAccumulator.pushBytes(value);
+      const metering = clientAbortMeter.observe(value);
       AsyncTaskManager.touch(taskId);
-      shadowGateObserver?.observe(value);
-      const protocolFailure = protocolObservedBeforeProcessing
-        ? null
-        : (streamProtocolObserver?.observe(value) ?? null);
-      if (protocolFailure && replaySpool && !replaySpool.isTerminal) {
-        void replaySpool.abort(
-          `stream_protocol_${protocolFailure.verdict}_${
-            protocolFailure.afterContent ? "after" : "before"
-          }_content`
-        );
+      if (!clientDetachHandled) {
+        streamTextAccumulator.pushBytes(value);
+        shadowGateObserver?.observe(value);
+        const protocolFailure = protocolObservedBeforeProcessing
+          ? null
+          : (streamProtocolObserver?.observe(value) ?? null);
+        if (protocolFailure && replaySpool && !replaySpool.isTerminal) {
+          void replaySpool.abort(
+            `stream_protocol_${protocolFailure.verdict}_${
+              protocolFailure.afterContent ? "after" : "before"
+            }_content`
+          );
+        }
+        if (!replaySpool?.isTerminal) replaySpool?.observe(value);
+      } else if (clientAbortDrainMode === "replay" && replaySpool && !replaySpool.isTerminal) {
+        replaySpool.observe(value);
       }
-      if (!replaySpool?.isTerminal) replaySpool?.observe(value);
 
       logger.trace("ResponseHandler: Upstream stream chunk received", {
         taskId,
@@ -4813,6 +5070,9 @@ export class ProxyResponseHandler {
             firstChunkSize: chunkSize,
           });
         }
+      }
+      if (clientDetachHandled && metering.billingComplete) {
+        responsePump?.finishDrain(new Error("client_abort_metering_complete"));
       }
     };
 
@@ -5151,6 +5411,20 @@ export class ProxyResponseHandler {
         clearClientAbortDrainTimer();
         clearIdleTimer(); // 清除静默期计时器（防止泄漏）
         releaseSessionAgent(session);
+        if (
+          clientAbortDrainMode === "replay" &&
+          clientAbortReplayLease &&
+          !streamReplayCompletionScheduled
+        ) {
+          const detachedReplayLease = clientAbortReplayLease;
+          if (replaySpool && !replaySpool.isTerminal) {
+            void replaySpool
+              .abort("stream_task_finalized_without_replay_terminal")
+              .finally(() => releaseDetachedReplayLease(detachedReplayLease));
+          } else {
+            releaseDetachedReplayLease(detachedReplayLease);
+          }
+        }
         if (!streamCommitSideEffectsScheduled) {
           void (async () => {
             await latestStreamFinalizeAttemptResources?.();
