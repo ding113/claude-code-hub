@@ -188,11 +188,35 @@ describe("nodeStreamToWebStreamSafe", () => {
     queueMicrotask(() => node.emit("error", boom));
 
     await expect(reader.read()).rejects.toThrow("boom");
+    await new Promise((resolve) => setImmediate(resolve));
     // After error settles, listeners must be detached
     expect(node.listenerCount("data")).toBe(0);
     expect(node.listenerCount("end")).toBe(0);
     expect(node.listenerCount("close")).toBe(0);
     expect(node.listenerCount("error")).toBe(0);
+  });
+
+  it("destroys the underlying source when it emits an error", async () => {
+    const node = new Readable({
+      read() {
+        // Keep the source open until the explicit error below.
+      },
+    });
+    const web = nodeStreamToWebStreamSafe(node, 1, "test");
+    const reader = web.getReader();
+    const uncaughtSpy = vi.fn();
+    process.once("uncaughtException", uncaughtSpy);
+
+    const boom = new Error("destroy-after-error");
+    const pendingRead = reader.read();
+    node.emit("error", boom);
+
+    await expect(pendingRead).rejects.toBe(boom);
+    await new Promise((resolve) => setImmediate(resolve));
+
+    process.removeListener("uncaughtException", uncaughtSpy);
+    expect(node.destroyed).toBe(true);
+    expect(uncaughtSpy).not.toHaveBeenCalled();
   });
 
   it("rejects when the source closes after conversion without reaching EOF", async () => {

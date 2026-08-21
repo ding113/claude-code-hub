@@ -120,6 +120,17 @@ export function nodeStreamToWebStreamSafe(
             errorName: err.name,
           });
           detach(nodeStream);
+          if (!nodeStream.destroyed) {
+            // A source error settles the Web stream but does not invoke its
+            // cancel algorithm. Destroy the Node/Undici body explicitly so a
+            // paused transport cannot retain its socket and backing store.
+            installPendingDestroyErrorGuard(nodeStream);
+            try {
+              nodeStream.destroy(err);
+            } catch {
+              // ignore
+            }
+          }
           try {
             controller.error(err);
           } catch {

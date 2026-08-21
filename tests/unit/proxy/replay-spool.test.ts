@@ -984,6 +984,55 @@ describe("ReplaySpool：isTerminal", () => {
   });
 });
 
+describe("ReplaySpool：terminal callback", () => {
+  it("runs exactly once after completed cleanup", async () => {
+    const onTerminal = vi.fn();
+    const spool = new ReplaySpool(
+      identity,
+      "owner-token",
+      200,
+      { "content-type": "text/event-stream" },
+      "stream",
+      { onTerminal }
+    );
+    spool.observe(encoder.encode("data: complete\n\n"));
+
+    await spool.completeAfterBilling(1);
+    await spool.completeAfterBilling(1);
+
+    expect(onTerminal).toHaveBeenCalledTimes(1);
+  });
+
+  it("runs exactly once after aborted or disabled cleanup", async () => {
+    const abortedTerminal = vi.fn();
+    const aborted = new ReplaySpool(
+      identity,
+      "owner-token",
+      200,
+      { "content-type": "text/event-stream" },
+      "stream",
+      { onTerminal: abortedTerminal }
+    );
+    await aborted.abort("test_abort");
+    await aborted.abort("test_abort_again");
+    expect(abortedTerminal).toHaveBeenCalledTimes(1);
+
+    envControl.maxPayloadBytes = 4;
+    const disabledTerminal = vi.fn();
+    const disabled = new ReplaySpool(
+      identity,
+      "owner-token-disabled",
+      200,
+      { "content-type": "text/event-stream" },
+      "stream",
+      { onTerminal: disabledTerminal }
+    );
+    disabled.observe(encoder.encode("12345678"));
+    await drainWriteChain(disabled);
+    expect(disabledTerminal).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe("createReplaySpoolIfOwner", () => {
   it("非 owner 会话返回 null（无租约可释放）", () => {
     const session = { replayState: null } as unknown as ProxySession;

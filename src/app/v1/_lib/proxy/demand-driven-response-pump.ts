@@ -16,7 +16,9 @@ export interface DemandDrivenResponsePumpOptions {
 export interface DemandDrivenResponsePump {
   stream: ReadableStream<Uint8Array>;
   completion: Promise<DemandDrivenResponsePumpCompletion>;
+  teardown: Promise<void>;
   startDrain: (reason?: unknown) => void;
+  finishDrain: (reason?: unknown) => void;
   cancelSource: (reason?: unknown) => void;
   errorClient: (error: Error) => void;
   getState: () => DemandDrivenResponsePumpState;
@@ -43,8 +45,12 @@ export function createDemandDrivenResponsePump(
   let readerReleased = false;
   let pendingChunkDeadlineId: ReturnType<typeof setTimeout> | null = null;
   let resolveCompletion: (completion: DemandDrivenResponsePumpCompletion) => void = () => {};
+  let resolveTeardown = () => {};
   const completion = new Promise<DemandDrivenResponsePumpCompletion>((resolve) => {
     resolveCompletion = resolve;
+  });
+  const teardown = new Promise<void>((resolve) => {
+    resolveTeardown = resolve;
   });
 
   const releaseReader = () => {
@@ -91,7 +97,11 @@ export function createDemandDrivenResponsePump(
     clientController = null;
     state = "closed";
     resolveCompletion({ streamEndedNormally, clientAborted, error });
-    void cancelPromise?.then(undefined, recordSourceCancelFailure);
+    if (cancelPromise) {
+      void cancelPromise.then(undefined, recordSourceCancelFailure).finally(resolveTeardown);
+    } else {
+      resolveTeardown();
+    }
   };
 
   const finishWithError = (error: unknown) => {
@@ -104,7 +114,10 @@ export function createDemandDrivenResponsePump(
         // The downstream may have cancelled concurrently.
       }
     }
-    settle(false, normalized);
+    // A rejected source read bypasses the Web stream cancel algorithm. Keep
+    // source ownership explicit so adapters can release the underlying Node
+    // stream, socket, and native backing store on every terminal error.
+    settle(false, normalized, normalized);
   };
 
   const finishNormally = () => {
@@ -144,6 +157,12 @@ export function createDemandDrivenResponsePump(
     if (settled) return;
     const normalized = reason == null ? new Error("Source cancelled") : toError(reason);
     settle(false, normalized, normalized);
+  };
+
+  const finishDrain = (reason?: unknown) => {
+    if (settled || state !== "draining") return;
+    const normalized = reason == null ? new Error("Background drain complete") : toError(reason);
+    settle(false, null, normalized);
   };
 
   const armPendingChunkDeadline = () => {
@@ -264,7 +283,9 @@ export function createDemandDrivenResponsePump(
   return {
     stream,
     completion,
+    teardown,
     startDrain,
+    finishDrain,
     cancelSource,
     errorClient(error) {
       if (settled || state !== "client-active") return;
