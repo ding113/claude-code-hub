@@ -172,7 +172,6 @@ describe("ProxySession high-concurrency policy", () => {
     expect(session.shouldRetainClientAbortBilling()).toBe(true);
     expect(session.shouldBillHedgeLosers()).toBe(true);
     expect(session.shouldParseResponseDiagnostics()).toBe(true);
-    expect(session.shouldApplyContentTransforms()).toBe(true);
 
     session.setHighConcurrencyModeEnabled(true);
 
@@ -181,7 +180,6 @@ describe("ProxySession high-concurrency policy", () => {
     expect(session.shouldRetainClientAbortBilling()).toBe(false);
     expect(session.shouldBillHedgeLosers()).toBe(false);
     expect(session.shouldParseResponseDiagnostics()).toBe(false);
-    expect(session.shouldApplyContentTransforms()).toBe(false);
     expect(session.shouldPersistSessionDebugArtifacts()).toBe(false);
     expect(session.shouldTrackSessionObservability()).toBe(false);
   });

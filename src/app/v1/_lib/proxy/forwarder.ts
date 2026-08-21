@@ -2931,11 +2931,7 @@ export class ProxyForwarder {
 
         // Final-phase request filter for Gemini: after headers built, before body serialization
         // Clone body to prevent in-place mutation of session.request.message on retries
-        if (
-          !ProxyForwarder.getEndpointPolicy(session).bypassRequestFilters &&
-          (typeof session.shouldApplyContentTransforms !== "function" ||
-            session.shouldApplyContentTransforms())
-        ) {
+        if (!ProxyForwarder.getEndpointPolicy(session).bypassRequestFilters) {
           const { requestFilterEngine } = await import("@/lib/request-filter-engine");
           const bodyForFinal = structuredClone(bodyToSerialize);
           await requestFilterEngine.applyFinal(session, bodyForFinal, processedHeaders);
@@ -2974,11 +2970,7 @@ export class ProxyForwarder {
         );
 
         // Final-phase request filter for no-body requests (header-only operations)
-        if (
-          !ProxyForwarder.getEndpointPolicy(session).bypassRequestFilters &&
-          (typeof session.shouldApplyContentTransforms !== "function" ||
-            session.shouldApplyContentTransforms())
-        ) {
+        if (!ProxyForwarder.getEndpointPolicy(session).bypassRequestFilters) {
           const { requestFilterEngine } = await import("@/lib/request-filter-engine");
           await requestFilterEngine.applyFinal(
             session,
@@ -3262,11 +3254,7 @@ export class ProxyForwarder {
             structuredClone(session.request.message)
           ) as Record<string, unknown>;
 
-          if (
-            !ProxyForwarder.getEndpointPolicy(session).bypassRequestFilters &&
-            (typeof session.shouldApplyContentTransforms !== "function" ||
-              session.shouldApplyContentTransforms())
-          ) {
+          if (!ProxyForwarder.getEndpointPolicy(session).bypassRequestFilters) {
             const { requestFilterEngine } = await import("@/lib/request-filter-engine");
             await requestFilterEngine.applyFinal(session, logicalBody, processedHeaders);
           }
@@ -3330,11 +3318,7 @@ export class ProxyForwarder {
           }
 
           // Final-phase request filter: after all provider overrides, before serialization
-          if (
-            !ProxyForwarder.getEndpointPolicy(session).bypassRequestFilters &&
-            (typeof session.shouldApplyContentTransforms !== "function" ||
-              session.shouldApplyContentTransforms())
-          ) {
+          if (!ProxyForwarder.getEndpointPolicy(session).bypassRequestFilters) {
             const { requestFilterEngine } = await import("@/lib/request-filter-engine");
             await requestFilterEngine.applyFinal(session, messageToSend, processedHeaders);
           }
@@ -3374,11 +3358,7 @@ export class ProxyForwarder {
         }
       } else {
         // No body (GET/HEAD): still run final-phase for header-only filter operations
-        if (
-          !ProxyForwarder.getEndpointPolicy(session).bypassRequestFilters &&
-          (typeof session.shouldApplyContentTransforms !== "function" ||
-            session.shouldApplyContentTransforms())
-        ) {
+        if (!ProxyForwarder.getEndpointPolicy(session).bypassRequestFilters) {
           const { requestFilterEngine } = await import("@/lib/request-filter-engine");
           await requestFilterEngine.applyFinal(
             session,

@@ -603,10 +603,6 @@ export class ProxySession {
     return !this.highConcurrencyModeEnabled;
   }
 
-  shouldApplyContentTransforms(): boolean {
-    return !this.highConcurrencyModeEnabled;
-  }
-
   addSpecialSetting(setting: SpecialSetting): void {
     this.specialSettings.push(setting);
   }
