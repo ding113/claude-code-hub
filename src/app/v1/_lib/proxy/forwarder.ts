@@ -1893,10 +1893,9 @@ export class ProxyForwarder {
             isJson &&
             hasValidContentLength &&
             contentLengthBytes <= NON_STREAM_BODY_INSPECTION_MAX_BYTES;
-          const shouldInspectBody =
-            (typeof session.shouldParseResponseDiagnostics !== "function" ||
-              session.shouldParseResponseDiagnostics()) &&
-            (isHtml || !hasValidContentLength || shouldInspectJson);
+          // Fake-200 detection is a core failover guard, so it remains active in
+          // high-concurrency mode even though optional diagnostics are disabled.
+          const shouldInspectBody = isHtml || !hasValidContentLength || shouldInspectJson;
           if (shouldStrictValidateReplayJson) {
             const validationLimit = getEnvConfig().REPLAY_MAX_PAYLOAD_BYTES;
             if (contentLengthBytes !== null && contentLengthBytes > validationLimit) {

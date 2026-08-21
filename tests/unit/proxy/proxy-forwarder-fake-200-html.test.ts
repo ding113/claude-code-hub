@@ -392,6 +392,46 @@ describe("ProxyForwarder - fake 200 HTML body", () => {
     expect(mocks.recordSuccess).not.toHaveBeenCalledWith(1);
   });
 
+  test("高并发模式仍保留非流式 fake-200 核心故障切换", async () => {
+    const provider1 = createProvider({ id: 1, name: "p1", key: "k1", maxRetryAttempts: 1 });
+    const provider2 = createProvider({ id: 2, name: "p2", key: "k2", maxRetryAttempts: 1 });
+    const session = createSession();
+    session.setHighConcurrencyModeEnabled(true);
+    session.setProvider(provider1);
+
+    mocks.pickRandomProviderWithExclusion.mockResolvedValueOnce(provider2);
+    const doForward = vi.spyOn(ProxyForwarder as any, "doForward");
+    const htmlBody = "<!doctype html><html><body>blocked</body></html>";
+    const okJson = JSON.stringify({ type: "message", content: [{ type: "text", text: "ok" }] });
+
+    doForward
+      .mockResolvedValueOnce(
+        new Response(htmlBody, {
+          status: 200,
+          headers: {
+            "content-type": "text/html; charset=utf-8",
+            "content-length": String(htmlBody.length),
+          },
+        })
+      )
+      .mockResolvedValueOnce(
+        new Response(okJson, {
+          status: 200,
+          headers: { "content-type": "application/json", "content-length": String(okJson.length) },
+        })
+      );
+
+    const response = await ProxyForwarder.send(session);
+
+    await expect(response.text()).resolves.toBe(okJson);
+    expect(doForward).toHaveBeenCalledTimes(2);
+    expect(mocks.recordFailure).toHaveBeenCalledWith(
+      provider1.id,
+      expect.objectContaining({ message: "FAKE_200_HTML_BODY" })
+    );
+    expect(mocks.recordSuccess).toHaveBeenCalledWith(provider2.id);
+  });
+
   test("200 + text/html 但 body 是 JSON error 也应视为失败并切换供应商", async () => {
     const provider1 = createProvider({ id: 1, name: "p1", key: "k1", maxRetryAttempts: 1 });
     const provider2 = createProvider({ id: 2, name: "p2", key: "k2", maxRetryAttempts: 1 });
