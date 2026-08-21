@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { DetachedStreamBudget, resolveDetachedStreamBudgetLimits } from "./detached-stream-budget";
+import {
+  DetachedStreamBudget,
+  resolveDetachedStreamBudgetLimits,
+} from "@/app/v1/_lib/proxy/detached-stream-budget";
 
 function createBudget(
   overrides: Partial<ReturnType<DetachedStreamBudget["snapshot"]>["limits"]> = {}
