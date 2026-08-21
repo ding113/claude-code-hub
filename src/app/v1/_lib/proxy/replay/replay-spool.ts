@@ -570,6 +570,10 @@ export function createReplaySpoolIfOwner(
   delivery: ReplayDelivery = "stream",
   options: ReplaySpoolOptions = {}
 ): ReplaySpool | null {
+  if (typeof session.shouldUseRequestReplay === "function" && !session.shouldUseRequestReplay()) {
+    return null;
+  }
+
   const replayState = session.replayState;
   if (replayState?.role !== "owner") return null;
   const declineOwnership = (): null => {

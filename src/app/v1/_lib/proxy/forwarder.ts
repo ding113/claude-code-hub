@@ -1714,7 +1714,9 @@ export class ProxyForwarder {
             let gateChainAudit: ProviderChainItem["streamGate"];
             const gateMode = resolveStreamGateMode();
             const shouldRunPrecommitGate =
-              gateMode === "enforce" || session.replayState?.role === "owner";
+              (typeof session.shouldRunStreamContentGate !== "function" ||
+                session.shouldRunStreamContentGate()) &&
+              (gateMode === "enforce" || session.replayState?.role === "owner");
             if (
               shouldRunPrecommitGate &&
               response.body &&
@@ -1891,6 +1893,8 @@ export class ProxyForwarder {
             isJson &&
             hasValidContentLength &&
             contentLengthBytes <= NON_STREAM_BODY_INSPECTION_MAX_BYTES;
+          // Fake-200 detection is a core failover guard, so it remains active in
+          // high-concurrency mode even though optional diagnostics are disabled.
           const shouldInspectBody = isHtml || !hasValidContentLength || shouldInspectJson;
           if (shouldStrictValidateReplayJson) {
             const validationLimit = getEnvConfig().REPLAY_MAX_PAYLOAD_BYTES;
@@ -4388,7 +4392,9 @@ export class ProxyForwarder {
 
     const rawCrossProviderFallbackEnabled = session.isRawCrossProviderFallbackEnabled();
     // 竞速输家计费开关：开启时落败供应商不被直接掐断，而是后台 drain 并计费。
-    const billHedgeLosers = (await getCachedSystemSettings()).billHedgeLosers === true;
+    const billHedgeLosers =
+      (typeof session.shouldBillHedgeLosers !== "function" || session.shouldBillHedgeLosers()) &&
+      (await getCachedSystemSettings()).billHedgeLosers === true;
     const launchedProviderIds = new Set<number>();
     let launchedProviderCount = 0;
     let settled = false;
@@ -4455,6 +4461,13 @@ export class ProxyForwarder {
     // 不取消连接：读到流自然结束（或超时/容量上限）后，复用赢家相同的计费链，
     // 把费用异步累加回原请求行。幂等（loserBillingStarted 守卫），失败静默。
     const startLoserBilling = (attempt: StreamingHedgeAttempt) => {
+      if (typeof session.shouldBillHedgeLosers === "function" && !session.shouldBillHedgeLosers()) {
+        const cancel = attempt.reader?.cancel("high_concurrency_loser_billing_disabled");
+        cancel?.catch(() => undefined);
+        releaseAttemptAgent(attempt);
+        return;
+      }
+
       if (attempt.loserBillingStarted) return;
       attempt.loserBillingStarted = true;
 
@@ -4779,6 +4792,8 @@ export class ProxyForwarder {
             // 「首个有效内容帧」。
             // 级联阈值计时器保持不动——内容慢的 attempt 不提交，自动触发下一候选竞速。
             const hedgeGateFamily =
+              (typeof session.shouldRunStreamContentGate !== "function" ||
+                session.shouldRunStreamContentGate()) &&
               (resolveStreamGateMode() === "enforce" || session.replayState?.role === "owner") &&
               session.getEndpointPolicy().kind !== "raw_passthrough"
                 ? mapProviderTypeToFamily(attempt.provider.providerType)
@@ -5436,7 +5451,10 @@ export class ProxyForwarder {
     // Discovery uses the same opt-in loser billing switch as legacy Hedge. The
     // attempt is only kept alive after a winner commits when it already has a
     // protocol-valid prefix and a readable response body (see cancelLosers).
-    const billHedgeLosers = settings.billHedgeLosers === true && session.messageContext?.id != null;
+    const billHedgeLosers =
+      (typeof session.shouldBillHedgeLosers !== "function" || session.shouldBillHedgeLosers()) &&
+      settings.billHedgeLosers === true &&
+      session.messageContext?.id != null;
     const coordinator = new DiscoveryCoordinator({ concurrency, maxRounds });
     const discoveryMetrics = new DiscoveryRequestMetrics(
       {

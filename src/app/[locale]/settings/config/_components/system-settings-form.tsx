@@ -947,7 +947,10 @@ export function SystemSettingsForm({
           <Switch
             id="enable-high-concurrency-mode"
             checked={enableHighConcurrencyMode}
-            onCheckedChange={(checked) => setEnableHighConcurrencyMode(checked)}
+            onCheckedChange={(checked) => {
+              setEnableHighConcurrencyMode(checked);
+              if (checked) toast.warning(t("highConcurrencyModeWarning"));
+            }}
             disabled={isPending}
           />
         </div>
