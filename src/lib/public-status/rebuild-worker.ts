@@ -1,4 +1,8 @@
 import { getRedisClient } from "@/lib/redis";
+import {
+  getProxyRuntimeSettings,
+  resolveRedisRetentionTtlSeconds,
+} from "@/lib/system-settings/proxy-runtime";
 import { publishCurrentPublicStatusConfigProjection } from "./config-publisher";
 import { readCurrentInternalPublicStatusConfigSnapshot } from "./config-snapshot";
 import {
@@ -120,6 +124,7 @@ async function publishPublicStatusProjection(input: {
   rollupSampleCount: number;
   groups: unknown;
 }): Promise<void> {
+  await getProxyRuntimeSettings();
   const snapshotKey = buildPublicStatusCurrentSnapshotKey({
     intervalMinutes: input.intervalMinutes,
     rangeHours: input.rangeHours,
@@ -195,19 +200,19 @@ async function publishPublicStatusProjection(input: {
     input.redis,
     snapshotKey,
     JSON.stringify(snapshotRecord),
-    GENERATION_PROJECTION_TTL_SECONDS
+    resolveRedisRetentionTtlSeconds(GENERATION_PROJECTION_TTL_SECONDS)
   );
   await setWithTtl(
     input.redis,
     seriesKey,
     JSON.stringify(seriesRecord),
-    GENERATION_PROJECTION_TTL_SECONDS
+    resolveRedisRetentionTtlSeconds(GENERATION_PROJECTION_TTL_SECONDS)
   );
   await setWithTtl(
     input.redis,
     versionedManifestKey,
     JSON.stringify(manifestRecord),
-    GENERATION_PROJECTION_TTL_SECONDS
+    resolveRedisRetentionTtlSeconds(GENERATION_PROJECTION_TTL_SECONDS)
   );
   if (typeof input.redis.get === "function") {
     let existingCurrentManifest: { configVersion?: string; coveredTo?: string } | null = null;
@@ -221,10 +226,20 @@ async function publishPublicStatusProjection(input: {
     }
 
     if (shouldPromoteCurrentManifest(existingCurrentManifest, manifestRecord)) {
-      await input.redis.set(currentManifestKey, JSON.stringify(manifestRecord));
+      await setWithTtl(
+        input.redis,
+        currentManifestKey,
+        JSON.stringify(manifestRecord),
+        resolveRedisRetentionTtlSeconds(GENERATION_PROJECTION_TTL_SECONDS)
+      );
     }
   } else {
-    await input.redis.set(currentManifestKey, JSON.stringify(manifestRecord));
+    await setWithTtl(
+      input.redis,
+      currentManifestKey,
+      JSON.stringify(manifestRecord),
+      resolveRedisRetentionTtlSeconds(GENERATION_PROJECTION_TTL_SECONDS)
+    );
   }
   if (input.redis.del) {
     await input.redis.del(snapshotTempKey, seriesTempKey);

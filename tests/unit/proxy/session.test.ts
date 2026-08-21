@@ -163,6 +163,30 @@ describe("ProxySession endpoint policy", () => {
   });
 });
 
+describe("ProxySession high-concurrency policy", () => {
+  it("closes optional body-heavy features while preserving the base session", () => {
+    const session = createSession({ redirectedModel: null });
+
+    expect(session.shouldUseRequestReplay()).toBe(true);
+    expect(session.shouldRunStreamContentGate()).toBe(true);
+    expect(session.shouldRetainClientAbortBilling()).toBe(true);
+    expect(session.shouldBillHedgeLosers()).toBe(true);
+    expect(session.shouldParseResponseDiagnostics()).toBe(true);
+    expect(session.shouldApplyContentTransforms()).toBe(true);
+
+    session.setHighConcurrencyModeEnabled(true);
+
+    expect(session.shouldUseRequestReplay()).toBe(false);
+    expect(session.shouldRunStreamContentGate()).toBe(false);
+    expect(session.shouldRetainClientAbortBilling()).toBe(false);
+    expect(session.shouldBillHedgeLosers()).toBe(false);
+    expect(session.shouldParseResponseDiagnostics()).toBe(false);
+    expect(session.shouldApplyContentTransforms()).toBe(false);
+    expect(session.shouldPersistSessionDebugArtifacts()).toBe(false);
+    expect(session.shouldTrackSessionObservability()).toBe(false);
+  });
+});
+
 describe("ProxySession.getCachedPriceDataByBillingSource", () => {
   it("配置 = original 时应优先使用原始模型", async () => {
     const originalPriceData: ModelPriceData = { input_cost_per_token: 1, output_cost_per_token: 2 };

@@ -12,7 +12,11 @@ import type { ProxySession } from "./session";
  */
 export class ProxyRequestFilter {
   static async ensure(session: ProxySession): Promise<void> {
-    if (session.getEndpointPolicy().bypassRequestFilters) {
+    if (
+      session.getEndpointPolicy().bypassRequestFilters ||
+      (typeof session.shouldApplyContentTransforms === "function" &&
+        session.shouldApplyContentTransforms() === false)
+    ) {
       return;
     }
 

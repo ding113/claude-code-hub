@@ -57,6 +57,7 @@ import { recordAffinityWinner, tombstoneAffinityOnFailure } from "./affinity/aff
 import { bindClientAbortListener } from "./client-abort-listener";
 import {
   CLIENT_ABORT_METER_MAX_RETAINED_BYTES,
+  type ClientAbortMeteringObserver,
   createClientAbortMeteringObserver,
 } from "./client-abort-metering";
 import {
@@ -1871,7 +1872,12 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
   const billHedgeLosers = meta?.billHedgeLosers === true;
   const hasDiscoveryBindingIntent =
     meta?.bindingIntent === "create" || meta?.bindingIntent === "renew";
-  const completionInspection = inspectStreamCompletion(allContent, session.originalFormat);
+  const parseResponseDiagnostics =
+    typeof session.shouldParseResponseDiagnostics !== "function" ||
+    session.shouldParseResponseDiagnostics();
+  const completionInspection = parseResponseDiagnostics
+    ? inspectStreamCompletion(allContent, session.originalFormat)
+    : { hasMarker: false, hasProtocolError: false };
   const completionMarkerMissingForBinding =
     meta?.requiresCompletionMarkerForBinding === true &&
     hasDiscoveryBindingIntent &&
@@ -1954,6 +1960,11 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
       : bodyDetected;
   let clientAbortGateUsage: FinalizeDeferredStreamingResult["clientAbortGateUsage"];
   const clientAbortCompleteSuccess = (() => {
+    if (
+      typeof session.shouldRetainClientAbortBilling === "function" &&
+      !session.shouldRetainClientAbortBilling()
+    )
+      return false;
     if (!clientAborted || upstreamStatusCode < 200 || upstreamStatusCode >= 300) {
       return false;
     }
@@ -1991,7 +2002,9 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
   let statusCodeInferred = false;
   let statusCodeInferenceMatcherId: string | undefined;
   if (detected.isError) {
-    const inferred = inferUpstreamErrorStatusCodeFromText(allContent);
+    const inferred = parseResponseDiagnostics
+      ? inferUpstreamErrorStatusCodeFromText(allContent)
+      : null;
     if (inferred) {
       effectiveStatusCode = inferred.statusCode;
       statusCodeInferred = true;
@@ -2005,8 +2018,12 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
     errorMessage = null;
   } else if (streamEndedNormally && upstreamStatusCode >= 400) {
     effectiveStatusCode = upstreamStatusCode;
-    const upstreamError = detectUpstreamErrorFromSseOrJsonText(allContent);
-    errorMessage = upstreamError.isError ? upstreamError.code : `HTTP ${upstreamStatusCode}`;
+    if (parseResponseDiagnostics) {
+      const upstreamError = detectUpstreamErrorFromSseOrJsonText(allContent);
+      errorMessage = upstreamError.isError ? upstreamError.code : `HTTP ${upstreamStatusCode}`;
+    } else {
+      errorMessage = `HTTP ${upstreamStatusCode}`;
+    }
   } else if (clientAborted) {
     effectiveStatusCode = 499;
     errorMessage = "CLIENT_ABORTED";
@@ -2018,9 +2035,12 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
     effectiveStatusCode = upstreamStatusCode;
 
     if (upstreamStatusCode >= 400) {
-      // 非200错误状态码：解析JSON错误响应
-      const detected = detectUpstreamErrorFromSseOrJsonText(allContent);
-      errorMessage = detected.isError ? detected.code : `HTTP ${upstreamStatusCode}`;
+      if (parseResponseDiagnostics) {
+        const detected = detectUpstreamErrorFromSseOrJsonText(allContent);
+        errorMessage = detected.isError ? detected.code : `HTTP ${upstreamStatusCode}`;
+      } else {
+        errorMessage = `HTTP ${upstreamStatusCode}`;
+      }
     } else {
       // 2xx 成功状态码
       errorMessage = null;
@@ -2470,7 +2490,11 @@ export class ProxyResponseHandler {
     }
 
     let fixedResponse = response;
-    if (!session.getEndpointPolicy().bypassResponseRectifier) {
+    if (
+      !session.getEndpointPolicy().bypassResponseRectifier &&
+      (typeof session.shouldApplyContentTransforms !== "function" ||
+        session.shouldApplyContentTransforms())
+    ) {
       try {
         // raw passthrough 端点跳过 ResponseFixer，也跳过其中的 Responses 输出归一化。
         fixedResponse = await ResponseFixer.process(session, response);
@@ -3572,10 +3596,26 @@ export class ProxyResponseHandler {
       session.getEndpointPolicy().kind === "raw_passthrough"
         ? null
         : mapProviderTypeToFamily(provider.providerType);
-    let streamProtocolObserver = nativeStreamProtocolFamily
-      ? createStreamProtocolObserver(nativeStreamProtocolFamily)
-      : null;
-    const clientAbortMeter = createClientAbortMeteringObserver(session.originalFormat);
+    let streamProtocolObserver =
+      nativeStreamProtocolFamily &&
+      (typeof session.shouldParseResponseDiagnostics !== "function" ||
+        session.shouldParseResponseDiagnostics())
+        ? createStreamProtocolObserver(nativeStreamProtocolFamily)
+        : null;
+    const clientAbortMeter: ClientAbortMeteringObserver =
+      typeof session.shouldRetainClientAbortBilling !== "function" ||
+      session.shouldRetainClientAbortBilling()
+        ? createClientAbortMeteringObserver(session.originalFormat)
+        : {
+            observe: () => ({ billingComplete: false }),
+            finish: () => ({
+              text: "",
+              billingComplete: false,
+              retainedBytes: 0,
+              skippedOversizedFrames: 0,
+              protocolFailure: null,
+            }),
+          };
     let protocolObservedBeforeProcessing = false;
 
     // --- GEMINI STREAM HANDLING ---
@@ -3600,6 +3640,11 @@ export class ProxyResponseHandler {
 
         // F1 shadow 遥测：enforce 已在 forwarder 作用于该流量，shadow 观察同样不留盲区
         let passthroughShadowObserver = (() => {
+          if (
+            typeof session.shouldParseResponseDiagnostics === "function" &&
+            !session.shouldParseResponseDiagnostics()
+          )
+            return null;
           if (resolveStreamGateMode() !== "shadow") return null;
           if (session.getEndpointPolicy().kind === "raw_passthrough") return null;
           const family = mapProviderTypeToFamily(provider.providerType);
@@ -3634,6 +3679,21 @@ export class ProxyResponseHandler {
         };
         const startPassthroughDrain = (reason?: unknown) => {
           if (passthroughPump.getState() === "closed") return;
+          if (
+            typeof session.shouldRetainClientAbortBilling === "function" &&
+            !session.shouldRetainClientAbortBilling()
+          ) {
+            passthroughClientDetached = true;
+            const abortError =
+              reason instanceof Error ? reason : new Error("client_detached_high_concurrency");
+            streamTextAccumulator.discardRetainedBytes();
+            streamProtocolObserver = null;
+            passthroughShadowObserver = null;
+            abortPassthroughTransport(abortError);
+            passthroughPump.startDrain(abortError);
+            passthroughPump.cancelSource(abortError);
+            return;
+          }
           if (passthroughClientDetached) {
             passthroughPump.startDrain(reason);
             return;
@@ -4409,6 +4469,15 @@ export class ProxyResponseHandler {
     };
     const handleClientAbort = (reason?: unknown) => {
       if (responsePump?.getState() === "closed") return;
+      if (
+        typeof session.shouldRetainClientAbortBilling === "function" &&
+        !session.shouldRetainClientAbortBilling()
+      ) {
+        clientDetachHandled = true;
+        responsePump?.startDrain(reason ?? "client_detached_high_concurrency");
+        responsePump?.cancelSource(reason ?? "client_detached_high_concurrency");
+        return;
+      }
       if (clientDetachHandled) {
         responsePump?.startDrain(reason ?? "client_detached");
         return;
@@ -4589,6 +4658,11 @@ export class ProxyResponseHandler {
         const awaitFinalization = <T>(promise: Promise<T>): Promise<T> =>
           raceWithDeadline(promise, finalizationDeadlineAtMs, "stream_finalization_timeout");
         const detachedProtocolObservation: StreamProtocolObservation | null = (() => {
+          if (
+            typeof session.shouldParseResponseDiagnostics === "function" &&
+            !session.shouldParseResponseDiagnostics()
+          )
+            return null;
           if (!clientDetachHandled || streamProtocolObserver) return null;
           const metering = clientAbortMeter.finish();
           return {
@@ -4686,6 +4760,8 @@ export class ProxyResponseHandler {
           | undefined;
         if (
           provider.providerType === "codex" &&
+          (typeof session.shouldParseResponseDiagnostics !== "function" ||
+            session.shouldParseResponseDiagnostics()) &&
           effectiveStatusCode >= 200 &&
           effectiveStatusCode < 300 &&
           session.sessionId &&
@@ -5017,6 +5093,11 @@ export class ProxyResponseHandler {
     // F1 shadow 模式：旁路逐帧分类，记录「首非空字节 vs 首有效内容」的分歧与延迟差，
     // 不缓冲、不 failover，仅用于 enforce 灰度前评估误判率。
     shadowGateObserver = (() => {
+      if (
+        typeof session.shouldParseResponseDiagnostics === "function" &&
+        !session.shouldParseResponseDiagnostics()
+      )
+        return null;
       if (resolveStreamGateMode() !== "shadow") return null;
       if (session.getEndpointPolicy().kind === "raw_passthrough") return null;
       const family = mapProviderTypeToFamily(provider.providerType);
@@ -6383,6 +6464,12 @@ export async function finalizeHedgeLoserBilling(params: {
     requireUsage = false,
     billingContext,
   } = params;
+
+  if (
+    typeof loserSession.shouldBillHedgeLosers === "function" &&
+    !loserSession.shouldBillHedgeLosers()
+  )
+    return null;
 
   try {
     if (isNonBillingUsageEndpoint(loserSession)) {

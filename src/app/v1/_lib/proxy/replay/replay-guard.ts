@@ -39,6 +39,10 @@ const ATTACH_MAX_WAIT_MS = 10 * 60 * 1000;
 
 export class ProxyReplayGuard {
   static async ensure(session: ProxySession): Promise<Response | null> {
+    if (typeof session.shouldUseRequestReplay === "function" && !session.shouldUseRequestReplay()) {
+      return null;
+    }
+
     try {
       // guard 位于 provider 步骤之前：先刷新运行时覆写快照，管理端刚保存的
       // replayEnabled 首个请求即生效（底层系统设置缓存有 TTL，常态为缓存命中）
