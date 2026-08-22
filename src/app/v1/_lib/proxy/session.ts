@@ -582,6 +582,27 @@ export class ProxySession {
     return !this.highConcurrencyModeEnabled;
   }
 
+  /** High-concurrency mode disables optional body-heavy coordination features. */
+  shouldUseRequestReplay(): boolean {
+    return !this.highConcurrencyModeEnabled;
+  }
+
+  shouldRunStreamContentGate(): boolean {
+    return !this.highConcurrencyModeEnabled;
+  }
+
+  shouldRetainClientAbortBilling(): boolean {
+    return !this.highConcurrencyModeEnabled;
+  }
+
+  shouldBillHedgeLosers(): boolean {
+    return !this.highConcurrencyModeEnabled;
+  }
+
+  shouldParseResponseDiagnostics(): boolean {
+    return !this.highConcurrencyModeEnabled;
+  }
+
   addSpecialSetting(setting: SpecialSetting): void {
     this.specialSettings.push(setting);
   }

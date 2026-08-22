@@ -11,6 +11,14 @@ function nextTurn(): Promise<void> {
   return new Promise((resolve) => setImmediate(resolve));
 }
 
+function createDeferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  const promise = new Promise<T>((promiseResolve) => {
+    resolve = promiseResolve;
+  });
+  return { promise, resolve };
+}
+
 function trackReaderRelease(source: ReadableStream<Uint8Array>) {
   const reader = source.getReader();
   const releaseLock = vi.spyOn(reader, "releaseLock");
@@ -402,5 +410,63 @@ describe("createDemandDrivenResponsePump", () => {
       error: upstreamError,
     });
     expect(releaseLock).toHaveBeenCalledTimes(1);
+  });
+
+  it("cancels the source when the primed read fails", async () => {
+    const sourceError = new Error("source-read-failed");
+    const cancel = vi.fn(() => Promise.resolve());
+    const releaseLock = vi.fn();
+    const reader = {
+      read: vi.fn(() => Promise.reject(sourceError)),
+      cancel,
+      releaseLock,
+    } as unknown as ReadableStreamDefaultReader<Uint8Array>;
+    const source = {
+      getReader: vi.fn(() => reader),
+    } as unknown as ReadableStream<Uint8Array>;
+
+    const pump = createDemandDrivenResponsePump({ source, onChunk: vi.fn() });
+
+    await expect(pump.completion).resolves.toMatchObject({
+      streamEndedNormally: false,
+      error: sourceError,
+    });
+    expect(cancel).toHaveBeenCalledWith(sourceError);
+    expect(releaseLock).toHaveBeenCalledOnce();
+  });
+
+  it("finishes a metering drain without reporting a source error", async () => {
+    const cancelGate = createDeferred<void>();
+    const cancel = vi.fn(() => cancelGate.promise);
+    const releaseLock = vi.fn();
+    const reader = {
+      read: vi.fn(() => new Promise<ReadableStreamReadResult<Uint8Array>>(() => {})),
+      cancel,
+      releaseLock,
+    } as unknown as ReadableStreamDefaultReader<Uint8Array>;
+    const source = {
+      getReader: vi.fn(() => reader),
+    } as unknown as ReadableStream<Uint8Array>;
+    const pump = createDemandDrivenResponsePump({ source, onChunk: vi.fn() });
+    let teardownSettled = false;
+    void pump.teardown.then(() => {
+      teardownSettled = true;
+    });
+
+    pump.startDrain("client detached");
+    pump.finishDrain("terminal usage captured");
+
+    await expect(pump.completion).resolves.toEqual({
+      streamEndedNormally: false,
+      clientAborted: true,
+      error: null,
+    });
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(teardownSettled).toBe(false);
+
+    cancelGate.resolve();
+    await pump.teardown;
+    expect(teardownSettled).toBe(true);
+    expect(releaseLock).toHaveBeenCalledOnce();
   });
 });

@@ -551,6 +551,11 @@
         "overridden": "已被供應商覆寫",
         "tooltip": "Codex 請求中的思考強度（reasoning.effort），按原值顯示。"
       },
+      "reasoningEffortOpenai": {
+        "label": "思考強度",
+        "overridden": "已被供應商覆寫",
+        "tooltip": "OpenAI chat/completions 請求中的思考強度（reasoning_effort / reasoning.effort），按原值顯示。"
+      },
       "logicTrace": {
         "title": "決策鏈",
         "singleRouteSelectionTitle": "單路保護下的供應商選擇",

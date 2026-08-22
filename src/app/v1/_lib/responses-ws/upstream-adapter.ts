@@ -776,12 +776,21 @@ export async function tryResponsesWebsocketUpstream(options: {
     async start(controller) {
       let sawTerminalEvent = false;
 
-      const writeLine = (obj: string) => {
-        controller.enqueue(encoder.encode(`data: ${obj}\n\n`));
+      const writeEvent = (payload: string) => {
+        // SSE requires every physical payload line to carry its own `data:`
+        // prefix. Upstream WebSocket implementations may pretty-print JSON;
+        // wrapping that text in a single `data:` line would dispatch only the
+        // opening `{` and make downstream parsers report malformed JSON.
+        const normalizedPayload = payload.replace(/\r\n?/g, "\n");
+        const dataLines = normalizedPayload
+          .split("\n")
+          .map((line) => `data: ${line}`)
+          .join("\n");
+        controller.enqueue(encoder.encode(`${dataLines}\n\n`));
       };
 
       const processText = (text: string): boolean => {
-        writeLine(text);
+        writeEvent(text);
         try {
           const parsed = JSON.parse(text);
           if (parsed && typeof parsed.type === "string" && TERMINAL_EVENT_TYPES.has(parsed.type)) {

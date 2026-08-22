@@ -1,6 +1,7 @@
 import type { AddressInfo } from "node:net";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { WebSocket, WebSocketServer } from "ws";
+import { parseSseBody } from "@/app/v1/_lib/proxy/stream-gate/sse-frames";
 import type { Provider } from "@/types/provider";
 import {
   clearResponsesWsSessionsForTests,
@@ -195,6 +196,39 @@ describe("tryResponsesWebsocketUpstream", () => {
     expect(body).toContain('"type":"response.created"');
     expect(body).toContain('"type":"response.output_text.delta"');
     expect(body).toContain('"type":"response.completed"');
+  });
+
+  it("preserves pretty-printed multiline JSON as complete SSE events", async () => {
+    const events = [
+      { type: "response.created", response: { id: "resp_pretty" } },
+      { type: "response.output_text.delta", delta: "hello" },
+      {
+        type: "response.completed",
+        response: { id: "resp_pretty", usage: { input_tokens: 2, output_tokens: 1 } },
+      },
+    ];
+    server = await startMockServer((socket) => {
+      socket.on("message", () => {
+        for (const event of events) {
+          socket.send(JSON.stringify(event, null, 2).replace(/\n/g, "\r\n"));
+        }
+      });
+    });
+
+    const result = await tryResponsesWebsocketUpstream({
+      provider: codexProvider(),
+      upstreamUrl: `http://127.0.0.1:${server.port}/v1/responses`,
+      upstreamHeaders: new Headers({ authorization: "Bearer sk-mock" }),
+      body: { model: "gpt-5.5", input: "hi" },
+    });
+
+    expect("response" in result).toBe(true);
+    if (!("response" in result)) return;
+
+    const body = await collectSseBody(result.response);
+    const frames = parseSseBody(body);
+    expect(frames.map((frame) => JSON.parse(frame.data))).toEqual(events);
+    expect(body.match(/^data:/gm)?.length).toBeGreaterThan(events.length);
   });
 
   it("returns failure when upstream rejects the WS upgrade", async () => {

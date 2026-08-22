@@ -142,7 +142,12 @@ export function SummaryTab({
   const showNoSignatureBadge =
     thinkingSignatureDetection?.source === "fallback_no_signature_with_thinking";
   const thinkingEffortInfo = extractThinkingEffortInfo(specialSettings);
-  const effortMessageKey = thinkingEffortInfo?.source === "codex" ? "reasoningEffort" : "effort";
+  const effortMessageKey =
+    thinkingEffortInfo?.source === "codex"
+      ? "reasoningEffort"
+      : thinkingEffortInfo?.source === "openai"
+        ? "reasoningEffortOpenai"
+        : "effort";
   const effortDisplay = thinkingEffortInfo
     ? {
         requestedEffort: thinkingEffortInfo.requestedEffort,

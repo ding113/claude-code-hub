@@ -44,7 +44,10 @@ function serializeDurablePersistence<T>(operation: () => Promise<T>): Promise<T>
 }
 
 export interface ReplaySpoolOptions {
+  /** Shortens the detached window when the spool loses its active write role. */
   onInactive?: () => void;
+  /** Runs once after completed, aborted, or disabled cleanup releases the spool. */
+  onTerminal?: () => void;
 }
 
 export function getActiveReplaySpoolCount(): number {
@@ -453,6 +456,13 @@ export class ReplaySpool {
     this.released = true;
     this.clearOwnerHeartbeat();
     activeSpoolCount = Math.max(0, activeSpoolCount - 1);
+    try {
+      this.options.onTerminal?.();
+    } catch (error) {
+      logger.debug("[ReplaySpool] terminal callback failed", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 
   private clearFlushTimer(): void {
@@ -560,6 +570,10 @@ export function createReplaySpoolIfOwner(
   delivery: ReplayDelivery = "stream",
   options: ReplaySpoolOptions = {}
 ): ReplaySpool | null {
+  if (typeof session.shouldUseRequestReplay === "function" && !session.shouldUseRequestReplay()) {
+    return null;
+  }
+
   const replayState = session.replayState;
   if (replayState?.role !== "owner") return null;
   const declineOwnership = (): null => {

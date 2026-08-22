@@ -98,6 +98,7 @@ vi.mock("@/repository/message", () => ({
 interface GuardSessionOverrides {
   message?: Record<string, unknown>;
   headers?: Record<string, string>;
+  highConcurrency?: boolean;
   apiKey?: string | null;
   sessionIdentity?: {
     identity: string;
@@ -133,6 +134,7 @@ function makeSession(overrides: GuardSessionOverrides = {}): ProxySession {
     getOriginalModel: () => "claude-sonnet-4",
     getEndpoint: () => "/v1/messages",
     getMessagesLength: () => 1,
+    shouldUseRequestReplay: () => !overrides.highConcurrency,
     getSessionIdentityMetadata: () =>
       overrides.sessionIdentity ?? {
         identity: "sess-1",
@@ -185,6 +187,15 @@ describe("ProxyReplayGuard：放行路径", () => {
     expect(storeControl.getMeta).not.toHaveBeenCalled();
     expect(storeControl.tryClaimOwner).not.toHaveBeenCalled();
     expect(session.replayState).toBeNull();
+  });
+
+  it("高并发模式直接放行，不计算 identity 或触碰 Replay 存储", async () => {
+    const session = makeSession({ highConcurrency: true });
+
+    await expect(ProxyReplayGuard.ensure(session)).resolves.toBeNull();
+    expect(storeControl.getMeta).not.toHaveBeenCalled();
+    expect(storeControl.findCompleted).not.toHaveBeenCalled();
+    expect(storeControl.tryClaimOwner).not.toHaveBeenCalled();
   });
 
   it("非流式请求不参与 replay", async () => {

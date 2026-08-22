@@ -18,10 +18,10 @@ container_cgroup_metric() {
   metric="$2"
   pid=$(docker inspect -f '{{.State.Pid}}' "$container" 2>/dev/null || true)
   case "$pid" in
-    *[!0-9]* | "" | 0) return ;;
+    *[!0-9]* | "" | 0) return 0 ;;
   esac
   cgroup_path=$(awk -F: '$1 == "0" { print $3 }' "/proc/$pid/cgroup" 2>/dev/null || true)
-  [ -n "$cgroup_path" ] || return
+  [ -n "$cgroup_path" ] || return 0
   metric_path="/sys/fs/cgroup${cgroup_path}/${metric}"
   [ -r "$metric_path" ] && tr -d '\n' <"$metric_path"
 }
