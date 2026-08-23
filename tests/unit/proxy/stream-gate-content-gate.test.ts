@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { EmptyResponseError, ProxyError } from "@/app/v1/_lib/proxy/errors";
+import type { ProtocolFamily } from "@/app/v1/_lib/proxy/stream-gate/frame-classifier";
 import {
   concatChunks,
+  isRequestScopedGateFailure,
   runStreamContentGate,
   StreamPrecommitError,
+  type StreamGateFailureReason,
 } from "@/app/v1/_lib/proxy/stream-gate/stream-content-gate";
 
 const encoder = new TextEncoder();
@@ -437,5 +440,45 @@ describe("commit marker and first-byte callback", () => {
     });
     expect(result.committed).toBe(true);
     expect(calls).toBe(1);
+  });
+});
+
+describe("isRequestScopedGateFailure (circuit-breaker accounting scope)", () => {
+  const detail = { providerId: 7, providerName: "p7" } as const;
+
+  const families: ProtocolFamily[] = ["anthropic", "openai-chat", "openai-responses", "gemini"];
+  const reasons: StreamGateFailureReason[] = [
+    "gate_error",
+    "decode_error",
+    "empty_stream",
+    "prebuffer_overflow",
+    "idle_timeout",
+  ];
+
+  it("exempts only openai-responses empty_stream", () => {
+    for (const family of families) {
+      for (const reason of reasons) {
+        const error = new StreamPrecommitError(reason, { ...detail, family });
+        const expected = family === "openai-responses" && reason === "empty_stream";
+        expect(isRequestScopedGateFailure(error), `${family}/${reason}`).toBe(expected);
+      }
+    }
+  });
+
+  it("carries family and reason on the error for the three accounting call sites", () => {
+    // 串行 / hedge / discovery 三处记账都只依赖这两个字段，无需重放整条转发路径
+    const error = new StreamPrecommitError("empty_stream", {
+      ...detail,
+      family: "openai-responses",
+    });
+    expect(error.gateReason).toBe("empty_stream");
+    expect(error.gateFamily).toBe("openai-responses");
+    expect(error.statusCode).toBe(502);
+  });
+
+  it("rejects non-gate errors", () => {
+    expect(isRequestScopedGateFailure(new ProxyError("boom", 502))).toBe(false);
+    expect(isRequestScopedGateFailure(new Error("boom"))).toBe(false);
+    expect(isRequestScopedGateFailure(null)).toBe(false);
   });
 });

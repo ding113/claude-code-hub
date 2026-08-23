@@ -33,12 +33,15 @@ export type StreamGateFailureReason =
 
 /**
  * 门控 precommit 错误。继承 ProxyError（statusCode 502）——
- * categorizeErrorAsync 将其归为 PROVIDER_ERROR：计入熔断器并切换供应商，
+ * categorizeErrorAsync 将其归为 PROVIDER_ERROR：切换供应商，
  * 无需改动现有错误分类逻辑。gate_error 时把上游错误帧原文带入
  * upstreamError.body，供错误规则匹配（如不可重试的客户端输入错误）与审计。
+ *
+ * 熔断计入与否由 isRequestScopedGateFailure() 区分，见其文档。
  */
 export class StreamPrecommitError extends ProxyError {
   readonly gateReason: StreamGateFailureReason;
+  readonly gateFamily: ProtocolFamily;
 
   constructor(
     reason: StreamGateFailureReason,
@@ -60,7 +63,33 @@ export class StreamPrecommitError extends ProxyError {
     });
     this.name = "StreamPrecommitError";
     this.gateReason = reason;
+    this.gateFamily = detail.family;
   }
+}
+
+/**
+ * 请求作用域的门控失败：不是供应商健康信号，不应计入熔断器。
+ *
+ * 仅限 `openai-responses` 家族的 `empty_stream`。该家族下上游会返回语法完整、语义为空
+ * 的响应：`response.output_text.done` 带 `text: ""`、`response.output_item.done` 带
+ * `content[0].text: ""`、`response.completed` 带 `output: []`。所有帧按 isNonEmptyValue
+ * 判定均非内容，terminal 先于 content 到达即空流。这种空是请求内容决定的（同一 body 在
+ * 任何供应商、任何账号上都复现），记成供应商失败会让一个「毒性请求」在客户端重试放大下
+ * 打开健康供应商的熔断器。仍然 failover（客户端确实拿不到可见内容），只是不计健康度。
+ *
+ * 其余家族的 `empty_stream` 保持计入：anthropic / openai-chat / gemini 在正常空回复下
+ * 仍会发出内容帧（如 `text_delta` 的空串所在的 content_block 系列），只吐终止帧属于畸形
+ * 流，是真实的供应商侧异常。
+ *
+ * 其余 reason 一律计入：`gate_error` / `decode_error` 是真实上游错误帧或损坏载荷，
+ * `idle_timeout` 是真实上游静默，`prebuffer_overflow` 是异常中性帧洪泛。
+ */
+export function isRequestScopedGateFailure(error: unknown): boolean {
+  return (
+    error instanceof StreamPrecommitError &&
+    error.gateReason === "empty_stream" &&
+    error.gateFamily === "openai-responses"
+  );
 }
 
 function buildGateErrorBody(

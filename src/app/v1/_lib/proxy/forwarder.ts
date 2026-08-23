@@ -118,6 +118,7 @@ import {
 import { mapProviderTypeToFamily } from "./stream-gate/frame-classifier";
 import {
   concatChunks,
+  isRequestScopedGateFailure,
   resolveStreamGateCaps,
   resolveStreamGateMode,
   runStreamContentGate,
@@ -2745,7 +2746,8 @@ export class ProxyForwarder {
                 messagesCount: session.getMessagesLength(),
               });
             } else {
-              if (shouldAccountCircuitBreaker) {
+              // 门控的 empty_stream 由请求内容决定，不计入供应商健康度（仍 failover）
+              if (shouldAccountCircuitBreaker && !isRequestScopedGateFailure(lastError)) {
                 await recordFailure(currentProvider.id, lastError);
               }
             }
@@ -5074,7 +5076,11 @@ export class ProxyForwarder {
       attempts.delete(attempt);
       ProxyForwarder.markProviderFailed(session, failedProviderIds, attempt.provider.id);
 
-      if (errorCategory === ErrorCategory.PROVIDER_ERROR && statusCode !== 404) {
+      if (
+        errorCategory === ErrorCategory.PROVIDER_ERROR &&
+        statusCode !== 404 &&
+        !isRequestScopedGateFailure(error)
+      ) {
         await recordFailure(attempt.provider.id, error);
       }
 
@@ -6938,7 +6944,8 @@ export class ProxyForwarder {
           if (
             !(lastError instanceof DiscoveryValidityLimitError) &&
             lastErrorCategory === ErrorCategory.PROVIDER_ERROR &&
-            !(lastError instanceof ProxyError && lastError.statusCode === 404)
+            !(lastError instanceof ProxyError && lastError.statusCode === 404) &&
+            !isRequestScopedGateFailure(lastError)
           ) {
             await recordFailure(provider.id, lastError).catch(() => undefined);
           }

@@ -224,6 +224,74 @@ const OPENAI_RESPONSES_WINNER_FRAMES = [
   }),
 ];
 
+/**
+ * 上游返回语法完整、语义为空的 Responses 流（实测形态）：
+ * output_text.done 的 text 为 ""，output_item.done 的 content[0].text 为 ""，
+ * completed 的 output 为 []。所有帧按 isNonEmptyValue 判定均非内容 -> empty_stream。
+ */
+const OPENAI_RESPONSES_EMPTY_TEXT_FRAMES = [
+  sseFrame("response.created", {
+    type: "response.created",
+    response: { id: "resp_empty", status: "in_progress", output: [] },
+  }),
+  sseFrame("response.output_item.added", {
+    type: "response.output_item.added",
+    item: {
+      id: "msg_empty",
+      type: "message",
+      status: "in_progress",
+      content: [],
+      role: "assistant",
+    },
+    output_index: 0,
+  }),
+  sseFrame("response.content_part.added", {
+    type: "response.content_part.added",
+    content_index: 0,
+    item_id: "msg_empty",
+    output_index: 0,
+    part: { type: "output_text", annotations: [], logprobs: [], text: "" },
+  }),
+  sseFrame("response.output_text.done", {
+    type: "response.output_text.done",
+    content_index: 0,
+    item_id: "msg_empty",
+    output_index: 0,
+    text: "",
+  }),
+  sseFrame("response.content_part.done", {
+    type: "response.content_part.done",
+    content_index: 0,
+    item_id: "msg_empty",
+    output_index: 0,
+    part: { type: "output_text", annotations: [], logprobs: [], text: "" },
+  }),
+  sseFrame("response.output_item.done", {
+    type: "response.output_item.done",
+    item: {
+      id: "msg_empty",
+      type: "message",
+      status: "completed",
+      content: [{ type: "output_text", annotations: [], logprobs: [], text: "" }],
+      role: "assistant",
+    },
+    output_index: 0,
+  }),
+  sseFrame("response.completed", {
+    type: "response.completed",
+    response: {
+      id: "resp_empty",
+      status: "completed",
+      output: [],
+      usage: {
+        input_tokens: 32,
+        output_tokens: 4,
+        output_tokens_details: { reasoning_tokens: 0 },
+      },
+    },
+  }),
+];
+
 const VALID_OPENAI_RESPONSES_STREAMS = [
   {
     name: "terminal compaction output",
@@ -587,7 +655,45 @@ describe("F1 stream content gate x ProxyForwarder sequential path", () => {
       expect(doForward).toHaveBeenCalledTimes(2);
       expect(text).toBe(WINNER_FRAMES.join(""));
       expect(text).toContain('"text":"Hello"');
+      // anthropic 家族只吐终止帧属畸形流，仍按供应商故障计入熔断
       expect(mocks.recordFailure).toHaveBeenCalledWith(provider1.id, expect.any(Error));
+      expect(session.provider?.id).toBe(provider2.id);
+
+      const emptyStreamEntry = session
+        .getProviderChain()
+        .find((item) => item.id === provider1.id && item.reason === "retry_failed");
+      expect(emptyStreamEntry?.statusCode).toBe(502);
+      expect(emptyStreamEntry?.errorMessage).toContain("empty_stream");
+    });
+
+    test('Responses 空文本响应（output_text.done text=""）按 empty_stream 切换供应商但不计入熔断', async () => {
+      const provider1 = createProvider({ id: 1, name: "empty-p1", providerType: "codex" });
+      const provider2 = createProvider({ id: 2, name: "empty-p2", providerType: "codex" });
+      const session = createSession();
+      session.setProvider(provider1);
+      Object.assign(session, {
+        requestUrl: new URL("https://example.com/v1/responses"),
+        originalFormat: "response",
+        endpointPolicy: resolveEndpointPolicy("/v1/responses"),
+      });
+
+      mocks.pickRandomProviderWithExclusion.mockResolvedValueOnce(provider2);
+
+      const doForward = spyOnDoForward();
+      doForward.mockImplementationOnce(async () =>
+        createSseResponse(OPENAI_RESPONSES_EMPTY_TEXT_FRAMES)
+      );
+      doForward.mockImplementationOnce(async () =>
+        createSseResponse(OPENAI_RESPONSES_WINNER_FRAMES)
+      );
+
+      const response = await ProxyForwarder.send(session);
+      const text = await response.text();
+
+      // 空文本流被门控拦下，客户端拿到下一个供应商的内容
+      expect(doForward).toHaveBeenCalledTimes(2);
+      expect(text).toBe(OPENAI_RESPONSES_WINNER_FRAMES.join(""));
+      expect(mocks.recordFailure).not.toHaveBeenCalled();
       expect(session.provider?.id).toBe(provider2.id);
 
       const emptyStreamEntry = session
