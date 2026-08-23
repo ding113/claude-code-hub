@@ -2149,9 +2149,11 @@ export class ProxyForwarder {
           }
 
           // F3a：亲和提名的供应商发生供应商侧失败 -> 定向写墓碑（短 TTL 自愈防羊群）
+          // request-scoped 的空完成不算供应商侧失败：写墓碑会让后续请求绕开健康的粘性供应商
           if (
-            errorCategory === ErrorCategory.PROVIDER_ERROR ||
-            errorCategory === ErrorCategory.RESOURCE_NOT_FOUND
+            (errorCategory === ErrorCategory.PROVIDER_ERROR ||
+              errorCategory === ErrorCategory.RESOURCE_NOT_FOUND) &&
+            !isRequestScopedGateFailure(lastError)
           ) {
             void tombstoneAffinityOnFailure(session, currentProvider.id);
           }
@@ -4903,9 +4905,11 @@ export class ProxyForwarder {
       let errorCategory = await categorizeErrorAsync(error);
       lastErrorCategory = errorCategory;
       // F3a：hedge attempt 供应商侧失败且正是亲和提名者 -> 定向墓碑
+      // 与顺序路径同一判定：request-scoped 空完成不写墓碑
       if (
-        errorCategory === ErrorCategory.PROVIDER_ERROR ||
-        errorCategory === ErrorCategory.RESOURCE_NOT_FOUND
+        (errorCategory === ErrorCategory.PROVIDER_ERROR ||
+          errorCategory === ErrorCategory.RESOURCE_NOT_FOUND) &&
+        !isRequestScopedGateFailure(error)
       ) {
         void tombstoneAffinityOnFailure(session, attempt.provider.id);
       }

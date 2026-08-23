@@ -49,6 +49,8 @@ const mocks = vi.hoisted(() => ({
   releaseProviderSession: vi.fn(async (_providerId: number, _sessionId: string) => {}),
   categorizeErrorAsync: vi.fn(async () => 0),
   getErrorDetectionResultAsync: vi.fn(async () => ({ matched: false })),
+  tombstoneAffinityOnFailure: vi.fn(async () => {}),
+  recordAffinityWinner: vi.fn(async () => {}),
   getCachedSystemSettings: vi.fn(async () => ({
     enableThinkingSignatureRectifier: true,
     enableThinkingBudgetRectifier: true,
@@ -126,6 +128,11 @@ vi.mock("@/lib/session-manager", () => ({
     storeSessionRequestPhaseSnapshot: mocks.storeSessionRequestPhaseSnapshot,
     storeSessionResponsePhaseSnapshot: mocks.storeSessionResponsePhaseSnapshot,
   },
+}));
+
+vi.mock("@/app/v1/_lib/proxy/affinity/affinity-recorder", () => ({
+  tombstoneAffinityOnFailure: mocks.tombstoneAffinityOnFailure,
+  recordAffinityWinner: mocks.recordAffinityWinner,
 }));
 
 vi.mock("@/app/v1/_lib/proxy/provider-selector", () => ({
@@ -655,8 +662,9 @@ describe("F1 stream content gate x ProxyForwarder sequential path", () => {
       expect(doForward).toHaveBeenCalledTimes(2);
       expect(text).toBe(WINNER_FRAMES.join(""));
       expect(text).toContain('"text":"Hello"');
-      // anthropic 家族只吐终止帧属畸形流，仍按供应商故障计入熔断
+      // anthropic 家族只吐终止帧属畸形流，仍按供应商故障计入熔断并写亲和墓碑
       expect(mocks.recordFailure).toHaveBeenCalledWith(provider1.id, expect.any(Error));
+      expect(mocks.tombstoneAffinityOnFailure).toHaveBeenCalledWith(session, provider1.id);
       expect(session.provider?.id).toBe(provider2.id);
 
       const emptyStreamEntry = session
@@ -694,6 +702,8 @@ describe("F1 stream content gate x ProxyForwarder sequential path", () => {
       expect(doForward).toHaveBeenCalledTimes(2);
       expect(text).toBe(OPENAI_RESPONSES_WINNER_FRAMES.join(""));
       expect(mocks.recordFailure).not.toHaveBeenCalled();
+      // request-scoped：也不能给健康的粘性供应商写墓碑
+      expect(mocks.tombstoneAffinityOnFailure).not.toHaveBeenCalled();
       expect(session.provider?.id).toBe(provider2.id);
 
       const emptyStreamEntry = session
@@ -736,6 +746,7 @@ describe("F1 stream content gate x ProxyForwarder sequential path", () => {
       expect(doForward).toHaveBeenCalledTimes(2);
       expect(text).toBe(OPENAI_RESPONSES_WINNER_FRAMES.join(""));
       expect(mocks.recordFailure).toHaveBeenCalledWith(provider1.id, expect.any(Error));
+      expect(mocks.tombstoneAffinityOnFailure).toHaveBeenCalledWith(session, provider1.id);
       expect(session.provider?.id).toBe(provider2.id);
     });
   });
