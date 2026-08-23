@@ -6941,11 +6941,13 @@ export class ProxyForwarder {
             statusCode: lastError instanceof ProxyError ? lastError.statusCode : undefined,
             errorMessage,
           });
+          // 注意：discovery 路径不经过 stream content gate（validity 判定在
+          // DiscoveryValidityParser，见 6644 附近抛的通用 ProxyError），所以这里没有
+          // isRequestScopedGateFailure 判定 —— 同类的空流误记账需要单独修 discovery 侧。
           if (
             !(lastError instanceof DiscoveryValidityLimitError) &&
             lastErrorCategory === ErrorCategory.PROVIDER_ERROR &&
-            !(lastError instanceof ProxyError && lastError.statusCode === 404) &&
-            !isRequestScopedGateFailure(lastError)
+            !(lastError instanceof ProxyError && lastError.statusCode === 404)
           ) {
             await recordFailure(provider.id, lastError).catch(() => undefined);
           }

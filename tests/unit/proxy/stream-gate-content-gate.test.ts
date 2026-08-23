@@ -490,7 +490,8 @@ describe("isRequestScopedGateFailure (circuit-breaker accounting scope)", () => 
   });
 
   it("carries the three fields the accounting call sites depend on", () => {
-    // 串行 / hedge / discovery 三处记账只依赖这三个字段，无需重放整条转发路径
+    // 串行与 hedge 两处记账只依赖这三个字段，无需重放整条转发路径
+    // （discovery 路径不经过门控，不产生 StreamPrecommitError）
     const error = new StreamPrecommitError("empty_stream", {
       ...detail,
       family: "openai-responses",
