@@ -5,6 +5,7 @@ import { ProxyError } from "../errors";
 import {
   classifyFrame,
   type FrameVerdict,
+  isCleanResponsesCompletion,
   isRequestEchoFrame,
   type ProtocolFamily,
 } from "./frame-classifier";
@@ -15,7 +16,9 @@ import { SseFrameParser } from "./sse-frames";
  *
  * - content 帧到达 -> 提交：返回已缓冲的前缀字节 + 原 reader，调用方拼接透传
  * - error / malformed 帧 -> precommit 失败：调用方抛错走现有供应商切换循环
- * - terminal 先于 content / 流提前结束 -> 空流失败
+ * - terminal 先于 content -> 空流失败；但 openai-responses 的干净完成（status=completed）
+ *   视为成功响应直接提交，空回复是合法结果（见 isCleanResponsesCompletion）
+ * - 流提前结束（无终止帧的 EOF）-> 空流失败
  * - neutral 帧入缓冲；超过 event/byte 上限 -> prebuffer_overflow 失败
  *   （请求回显帧不计入字节上限，见 isRequestEchoFrame）
  * - 读间隔超过 idleTimeoutMs -> idle_timeout 失败（调用方按静默超时归类）
@@ -272,7 +275,16 @@ export async function runStreamContentGate(
         }
         if (verdict === "error") return failure("gate_error", frame.data);
         if (verdict === "malformed") return failure("decode_error", frame.data);
-        if (verdict === "terminal") sawTerminal = true;
+        if (verdict === "terminal") {
+          // 干净完成即成功响应：连同缓冲前缀一起透传（尾帧已读完，readerDone=true）
+          if (
+            options.family === "openai-responses" &&
+            isCleanResponsesCompletion(frame.eventName, frame.data)
+          ) {
+            return commit(frame.eventName, true);
+          }
+          sawTerminal = true;
+        }
       }
       // sawTerminal=false 即上游断流 / 空 body：真实供应商侧异常，与「干净终止但无内容」区分
       return failure("empty_stream", undefined, sawTerminal);
@@ -304,7 +316,16 @@ export async function runStreamContentGate(
         return failure("decode_error", frame.data);
       }
       if (verdict === "terminal") {
-        // 干净终止先于任何内容 = 空流
+        // openai-responses 的干净完成（status=completed 且无 error）是协议层面的成功响应：
+        // 空回复合法（审阅 / watchdog 类 prompt 的契约就是无问题时沉默），直接提交透传，
+        // 不能放大成同供应商重试 + 跨供应商 failover
+        if (
+          options.family === "openai-responses" &&
+          isCleanResponsesCompletion(frame.eventName, frame.data)
+        ) {
+          return commit(frame.eventName, false);
+        }
+        // 其余干净终止先于任何内容 = 空流
         return failure("empty_stream", frame.data, true);
       }
       // neutral: 继续缓冲；请求回显帧的载荷不计入字节上限（豁免额度另有上限，见下方判定）

@@ -536,3 +536,31 @@ function isNonEmptyValue(value: unknown): boolean {
   }
   return false;
 }
+
+/**
+ * 干净完成帧判定：`response.completed` 且 `response.status === "completed"`。
+ *
+ * 这类帧在 classifyFrame 中仍是 `terminal`（StreamProtocolObserver 依赖该判定来确认流
+ * 正常收尾），但对门控而言它是协议层面的成功响应：即使可见内容为空也应当透传，而不是
+ * 当成空流触发 failover。空回复是合法结果 —— 例如审阅 / watchdog 类 prompt 的契约就是
+ * 「无问题时保持沉默」，把沉默重试到「开口」反而扭曲了上游语义。
+ *
+ * 非成功终止（`response.incomplete`、`status=failed` 等）与携带非空 error 的帧不在此列。
+ */
+export function isCleanResponsesCompletion(eventName: string | null, data: string): boolean {
+  const effective = (eventName ?? "").trim();
+  if (effective !== "" && effective !== "response.completed") return false;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(data);
+  } catch {
+    return false;
+  }
+  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) return false;
+  const record = parsed as Record<string, unknown>;
+  if (record.type !== "response.completed") return false;
+  const response = record.response;
+  if (response === null || typeof response !== "object" || Array.isArray(response)) return false;
+  const inner = response as Record<string, unknown>;
+  return inner.status === "completed" && !isNonEmptyValue(inner.error);
+}

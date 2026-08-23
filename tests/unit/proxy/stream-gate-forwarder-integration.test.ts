@@ -674,9 +674,8 @@ describe("F1 stream content gate x ProxyForwarder sequential path", () => {
       expect(emptyStreamEntry?.errorMessage).toContain("empty_stream");
     });
 
-    test('Responses 空文本响应（output_text.done text=""）按 empty_stream 切换供应商但不计入熔断', async () => {
+    test('Responses 空文本响应（output_text.done text=""）直接透传，不 failover', async () => {
       const provider1 = createProvider({ id: 1, name: "empty-p1", providerType: "codex" });
-      const provider2 = createProvider({ id: 2, name: "empty-p2", providerType: "codex" });
       const session = createSession();
       session.setProvider(provider1);
       Object.assign(session, {
@@ -685,32 +684,23 @@ describe("F1 stream content gate x ProxyForwarder sequential path", () => {
         endpointPolicy: resolveEndpointPolicy("/v1/responses"),
       });
 
-      mocks.pickRandomProviderWithExclusion.mockResolvedValueOnce(provider2);
-
       const doForward = spyOnDoForward();
       doForward.mockImplementationOnce(async () =>
         createSseResponse(OPENAI_RESPONSES_EMPTY_TEXT_FRAMES)
-      );
-      doForward.mockImplementationOnce(async () =>
-        createSseResponse(OPENAI_RESPONSES_WINNER_FRAMES)
       );
 
       const response = await ProxyForwarder.send(session);
       const text = await response.text();
 
-      // 空文本流被门控拦下，客户端拿到下一个供应商的内容
-      expect(doForward).toHaveBeenCalledTimes(2);
-      expect(text).toBe(OPENAI_RESPONSES_WINNER_FRAMES.join(""));
+      // 干净完成（status=completed）即成功响应：空回复是合法结果（如 watchdog 的预期沉默），
+      // 一次即回，不得放大成同供应商重试 + 跨供应商 failover
+      expect(response.status).toBe(200);
+      expect(doForward).toHaveBeenCalledTimes(1);
+      expect(text).toBe(OPENAI_RESPONSES_EMPTY_TEXT_FRAMES.join(""));
+      expect(mocks.pickRandomProviderWithExclusion).not.toHaveBeenCalled();
       expect(mocks.recordFailure).not.toHaveBeenCalled();
-      // request-scoped：也不能给健康的粘性供应商写墓碑
       expect(mocks.tombstoneAffinityOnFailure).not.toHaveBeenCalled();
-      expect(session.provider?.id).toBe(provider2.id);
-
-      const emptyStreamEntry = session
-        .getProviderChain()
-        .find((item) => item.id === provider1.id && item.reason === "retry_failed");
-      expect(emptyStreamEntry?.statusCode).toBe(502);
-      expect(emptyStreamEntry?.errorMessage).toContain("empty_stream");
+      expect(session.provider?.id).toBe(provider1.id);
     });
 
     test("Responses 断流（无终止帧的 EOF）仍按供应商故障计入熔断", async () => {
