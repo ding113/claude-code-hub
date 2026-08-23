@@ -42,6 +42,8 @@ export type StreamGateFailureReason =
 export class StreamPrecommitError extends ProxyError {
   readonly gateReason: StreamGateFailureReason;
   readonly gateFamily: ProtocolFamily;
+  /** 干净终止帧先于任何内容到达（区别于上游断流 / 空 body 的 EOF） */
+  readonly terminalBeforeContent: boolean;
 
   constructor(
     reason: StreamGateFailureReason,
@@ -53,6 +55,7 @@ export class StreamPrecommitError extends ProxyError {
       framesSeen?: number;
       bufferedBytes?: number;
       echoExcludedBytes?: number;
+      terminalBeforeContent?: boolean;
     }
   ) {
     const message = `Stream content gate rejected upstream before first valid content (${reason})`;
@@ -64,6 +67,7 @@ export class StreamPrecommitError extends ProxyError {
     this.name = "StreamPrecommitError";
     this.gateReason = reason;
     this.gateFamily = detail.family;
+    this.terminalBeforeContent = detail.terminalBeforeContent === true;
   }
 }
 
@@ -77,6 +81,9 @@ export class StreamPrecommitError extends ProxyError {
  * 任何供应商、任何账号上都复现），记成供应商失败会让一个「毒性请求」在客户端重试放大下
  * 打开健康供应商的熔断器。仍然 failover（客户端确实拿不到可见内容），只是不计健康度。
  *
+ * 必须同时满足 `terminalBeforeContent`：`empty_stream` 也覆盖「上游断流 / 空 body」的
+ * EOF 分支，那是真实的供应商侧异常，必须继续计入熔断。
+ *
  * 其余家族的 `empty_stream` 保持计入：anthropic / openai-chat / gemini 在正常空回复下
  * 仍会发出内容帧（如 `text_delta` 的空串所在的 content_block 系列），只吐终止帧属于畸形
  * 流，是真实的供应商侧异常。
@@ -88,7 +95,8 @@ export function isRequestScopedGateFailure(error: unknown): boolean {
   return (
     error instanceof StreamPrecommitError &&
     error.gateReason === "empty_stream" &&
-    error.gateFamily === "openai-responses"
+    error.gateFamily === "openai-responses" &&
+    error.terminalBeforeContent
   );
 }
 
@@ -100,6 +108,7 @@ function buildGateErrorBody(
     framesSeen?: number;
     bufferedBytes?: number;
     echoExcludedBytes?: number;
+    terminalBeforeContent?: boolean;
   }
 ): string {
   if (reason === "gate_error" && detail.frameData) {
@@ -114,6 +123,9 @@ function buildGateErrorBody(
       frames_seen: detail.framesSeen,
       buffered_bytes: detail.bufferedBytes,
       ...(detail.echoExcludedBytes ? { echo_excluded_bytes: detail.echoExcludedBytes } : {}),
+      ...(reason === "empty_stream"
+        ? { terminal_before_content: detail.terminalBeforeContent === true }
+        : {}),
       ...(detail.frameData ? { frame_preview: detail.frameData.slice(0, 500) } : {}),
     },
   });
@@ -205,7 +217,11 @@ export async function runStreamContentGate(
   let chunkIndex = 0;
   let firstByteSeen = false;
 
-  const failure = (reason: StreamGateFailureReason, frameData?: string): StreamGateResult => ({
+  const failure = (
+    reason: StreamGateFailureReason,
+    frameData?: string,
+    terminalBeforeContent = false
+  ): StreamGateResult => ({
     committed: false,
     error: new StreamPrecommitError(reason, {
       family: options.family,
@@ -215,6 +231,7 @@ export async function runStreamContentGate(
       framesSeen,
       bufferedBytes,
       echoExcludedBytes,
+      terminalBeforeContent,
     }),
   });
 
@@ -246,6 +263,7 @@ export async function runStreamContentGate(
 
     if (readResult.done) {
       // 冲刷尾部未终止帧（无结尾空行的流）
+      let sawTerminal = false;
       for (const frame of parser.finish()) {
         framesSeen++;
         const verdict = classifyFrame(options.family, frame.eventName, frame.data);
@@ -254,8 +272,10 @@ export async function runStreamContentGate(
         }
         if (verdict === "error") return failure("gate_error", frame.data);
         if (verdict === "malformed") return failure("decode_error", frame.data);
+        if (verdict === "terminal") sawTerminal = true;
       }
-      return failure("empty_stream");
+      // sawTerminal=false 即上游断流 / 空 body：真实供应商侧异常，与「干净终止但无内容」区分
+      return failure("empty_stream", undefined, sawTerminal);
     }
 
     const chunk = readResult.value;
@@ -285,7 +305,7 @@ export async function runStreamContentGate(
       }
       if (verdict === "terminal") {
         // 干净终止先于任何内容 = 空流
-        return failure("empty_stream", frame.data);
+        return failure("empty_stream", frame.data, true);
       }
       // neutral: 继续缓冲；请求回显帧的载荷不计入字节上限（豁免额度另有上限，见下方判定）
       if (isRequestEchoFrame(options.family, frame.eventName, frame.data)) {

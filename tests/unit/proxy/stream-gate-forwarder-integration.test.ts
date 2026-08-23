@@ -702,6 +702,42 @@ describe("F1 stream content gate x ProxyForwarder sequential path", () => {
       expect(emptyStreamEntry?.statusCode).toBe(502);
       expect(emptyStreamEntry?.errorMessage).toContain("empty_stream");
     });
+
+    test("Responses 断流（无终止帧的 EOF）仍按供应商故障计入熔断", async () => {
+      const provider1 = createProvider({ id: 1, name: "eof-p1", providerType: "codex" });
+      const provider2 = createProvider({ id: 2, name: "eof-p2", providerType: "codex" });
+      const session = createSession();
+      session.setProvider(provider1);
+      Object.assign(session, {
+        requestUrl: new URL("https://example.com/v1/responses"),
+        originalFormat: "response",
+        endpointPolicy: resolveEndpointPolicy("/v1/responses"),
+      });
+
+      mocks.pickRandomProviderWithExclusion.mockResolvedValueOnce(provider2);
+
+      const doForward = spyOnDoForward();
+      // 只发生命周期帧就断开：没有 response.completed，属真实上游异常
+      doForward.mockImplementationOnce(async () =>
+        createSseResponse([
+          sseFrame("response.created", {
+            type: "response.created",
+            response: { id: "resp_eof", status: "in_progress", output: [] },
+          }),
+        ])
+      );
+      doForward.mockImplementationOnce(async () =>
+        createSseResponse(OPENAI_RESPONSES_WINNER_FRAMES)
+      );
+
+      const response = await ProxyForwarder.send(session);
+      const text = await response.text();
+
+      expect(doForward).toHaveBeenCalledTimes(2);
+      expect(text).toBe(OPENAI_RESPONSES_WINNER_FRAMES.join(""));
+      expect(mocks.recordFailure).toHaveBeenCalledWith(provider1.id, expect.any(Error));
+      expect(session.provider?.id).toBe(provider2.id);
+    });
   });
 
   describe("STREAM_GATE_MODE=off", () => {

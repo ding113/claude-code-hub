@@ -96,6 +96,7 @@ describe("runStreamContentGate", () => {
     expect(result.committed).toBe(false);
     if (result.committed) return;
     expect((result.error as StreamPrecommitError).gateReason).toBe("empty_stream");
+    expect((result.error as StreamPrecommitError).terminalBeforeContent).toBe(true);
   });
 
   it("treats EOF without any content as empty stream", async () => {
@@ -104,6 +105,8 @@ describe("runStreamContentGate", () => {
     expect(result.committed).toBe(false);
     if (result.committed) return;
     expect((result.error as StreamPrecommitError).gateReason).toBe("empty_stream");
+    // 上游断流：没有任何终止帧，属真实供应商侧异常
+    expect((result.error as StreamPrecommitError).terminalBeforeContent).toBe(false);
   });
 
   it("treats fully empty stream as empty stream", async () => {
@@ -112,6 +115,7 @@ describe("runStreamContentGate", () => {
     expect(result.committed).toBe(false);
     if (result.committed) return;
     expect((result.error as StreamPrecommitError).gateReason).toBe("empty_stream");
+    expect((result.error as StreamPrecommitError).terminalBeforeContent).toBe(false);
   });
 
   it("commits on trailing content frame without terminating blank line", async () => {
@@ -455,24 +459,46 @@ describe("isRequestScopedGateFailure (circuit-breaker accounting scope)", () => 
     "idle_timeout",
   ];
 
-  it("exempts only openai-responses empty_stream", () => {
+  it("exempts only openai-responses empty_stream that ended on a terminal frame", () => {
     for (const family of families) {
       for (const reason of reasons) {
-        const error = new StreamPrecommitError(reason, { ...detail, family });
-        const expected = family === "openai-responses" && reason === "empty_stream";
-        expect(isRequestScopedGateFailure(error), `${family}/${reason}`).toBe(expected);
+        for (const terminalBeforeContent of [true, false]) {
+          const error = new StreamPrecommitError(reason, {
+            ...detail,
+            family,
+            terminalBeforeContent,
+          });
+          const expected =
+            family === "openai-responses" && reason === "empty_stream" && terminalBeforeContent;
+          expect(
+            isRequestScopedGateFailure(error),
+            `${family}/${reason}/terminal=${terminalBeforeContent}`
+          ).toBe(expected);
+        }
       }
     }
   });
 
-  it("carries family and reason on the error for the three accounting call sites", () => {
-    // 串行 / hedge / discovery 三处记账都只依赖这两个字段，无需重放整条转发路径
+  it("keeps upstream disconnects (EOF, no terminal frame) accountable", () => {
+    // 默认 terminalBeforeContent=false：断流 / 空 body 仍要计入熔断
     const error = new StreamPrecommitError("empty_stream", {
       ...detail,
       family: "openai-responses",
     });
+    expect(error.terminalBeforeContent).toBe(false);
+    expect(isRequestScopedGateFailure(error)).toBe(false);
+  });
+
+  it("carries the three fields the accounting call sites depend on", () => {
+    // 串行 / hedge / discovery 三处记账只依赖这三个字段，无需重放整条转发路径
+    const error = new StreamPrecommitError("empty_stream", {
+      ...detail,
+      family: "openai-responses",
+      terminalBeforeContent: true,
+    });
     expect(error.gateReason).toBe("empty_stream");
     expect(error.gateFamily).toBe("openai-responses");
+    expect(error.terminalBeforeContent).toBe(true);
     expect(error.statusCode).toBe(502);
   });
 
