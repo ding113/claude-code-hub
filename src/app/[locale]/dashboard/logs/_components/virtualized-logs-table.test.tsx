@@ -460,6 +460,29 @@ describe("virtualized-logs-table multiplier badge", () => {
     expect(html).toContain("x0.20");
   });
 
+  test("combines fast and 1M into one compact cost badge", () => {
+    const html = renderTableWithLog({
+      context1mApplied: true,
+      specialSettings: [
+        {
+          type: "codex_service_tier_result",
+          scope: "response",
+          hit: true,
+          requestedServiceTier: "priority",
+          actualServiceTier: "priority",
+          billingSourcePreference: "actual",
+          resolvedFrom: "actual",
+          effectivePriority: true,
+        },
+      ],
+    });
+
+    expect(html).toContain("logs.billingDetails.fast");
+    expect(html).toContain(">·<");
+    expect(html).toContain(">1M<");
+    expect(html).toContain("gap-0 px-0.5 text-[9px] leading-3");
+  });
+
   test("keeps the winner multiplier visible after multiple Discovery attempts", () => {
     const html = renderTableWithLog({
       costMultiplier: "0.01",
