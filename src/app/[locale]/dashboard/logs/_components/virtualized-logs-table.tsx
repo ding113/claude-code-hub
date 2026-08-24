@@ -1216,7 +1216,10 @@ export function VirtualizedLogsTable({
                                         <Badge
                                           variant="outline"
                                           className="gap-0 px-0.5 text-[9px] leading-3"
-                                          title={`${t("logs.billingDetails.fastPriority")} + ${t("logs.billingDetails.context1m")}`}
+                                          title={t("logs.billingDetails.combinedFastContext", {
+                                            fast: t("logs.billingDetails.fast"),
+                                            context: "1M",
+                                          })}
                                         >
                                           <span className="text-orange-700 dark:text-orange-300">
                                             {t("logs.billingDetails.fast")}

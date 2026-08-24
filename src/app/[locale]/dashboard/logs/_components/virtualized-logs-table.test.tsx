@@ -483,6 +483,30 @@ describe("virtualized-logs-table multiplier badge", () => {
     expect(html).toContain("gap-0 px-0.5 text-[9px] leading-3");
   });
 
+  test("keeps fast-only and 1M-only badges independent", () => {
+    for (const overrides of [
+      {
+        specialSettings: [
+          {
+            type: "codex_service_tier_result" as const,
+            scope: "response" as const,
+            hit: true,
+            requestedServiceTier: "priority",
+            actualServiceTier: "priority",
+            billingSourcePreference: "actual" as const,
+            resolvedFrom: "actual" as const,
+            effectivePriority: true,
+          },
+        ],
+        context1mApplied: false,
+      },
+      { specialSettings: null, context1mApplied: true },
+    ]) {
+      const html = renderTableWithLog(overrides);
+      expect(html).not.toContain("gap-0 px-0.5 text-[9px] leading-3");
+    }
+  });
+
   test("keeps the winner multiplier visible after multiple Discovery attempts", () => {
     const html = renderTableWithLog({
       costMultiplier: "0.01",
