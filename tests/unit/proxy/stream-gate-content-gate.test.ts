@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { EmptyResponseError, ProxyError } from "@/app/v1/_lib/proxy/errors";
+import type { ProtocolFamily } from "@/app/v1/_lib/proxy/stream-gate/frame-classifier";
 import {
   concatChunks,
+  isRequestScopedGateFailure,
   runStreamContentGate,
   StreamPrecommitError,
+  type StreamGateFailureReason,
 } from "@/app/v1/_lib/proxy/stream-gate/stream-content-gate";
 
 const encoder = new TextEncoder();
@@ -93,6 +96,7 @@ describe("runStreamContentGate", () => {
     expect(result.committed).toBe(false);
     if (result.committed) return;
     expect((result.error as StreamPrecommitError).gateReason).toBe("empty_stream");
+    expect((result.error as StreamPrecommitError).terminalBeforeContent).toBe(true);
   });
 
   it("treats EOF without any content as empty stream", async () => {
@@ -101,6 +105,8 @@ describe("runStreamContentGate", () => {
     expect(result.committed).toBe(false);
     if (result.committed) return;
     expect((result.error as StreamPrecommitError).gateReason).toBe("empty_stream");
+    // 上游断流：没有任何终止帧，属真实供应商侧异常
+    expect((result.error as StreamPrecommitError).terminalBeforeContent).toBe(false);
   });
 
   it("treats fully empty stream as empty stream", async () => {
@@ -109,6 +115,7 @@ describe("runStreamContentGate", () => {
     expect(result.committed).toBe(false);
     if (result.committed) return;
     expect((result.error as StreamPrecommitError).gateReason).toBe("empty_stream");
+    expect((result.error as StreamPrecommitError).terminalBeforeContent).toBe(false);
   });
 
   it("commits on trailing content frame without terminating blank line", async () => {
@@ -486,5 +493,130 @@ describe("commit marker and first-byte callback", () => {
     });
     expect(result.committed).toBe(true);
     expect(calls).toBe(1);
+  });
+});
+
+describe("isRequestScopedGateFailure (circuit-breaker accounting scope)", () => {
+  const detail = { providerId: 7, providerName: "p7" } as const;
+
+  const families: ProtocolFamily[] = ["anthropic", "openai-chat", "openai-responses", "gemini"];
+  const reasons: StreamGateFailureReason[] = [
+    "gate_error",
+    "decode_error",
+    "empty_stream",
+    "prebuffer_overflow",
+    "idle_timeout",
+  ];
+
+  it("exempts only openai-responses empty_stream that ended on a terminal frame", () => {
+    for (const family of families) {
+      for (const reason of reasons) {
+        for (const terminalBeforeContent of [true, false]) {
+          const error = new StreamPrecommitError(reason, {
+            ...detail,
+            family,
+            terminalBeforeContent,
+          });
+          const expected =
+            family === "openai-responses" && reason === "empty_stream" && terminalBeforeContent;
+          expect(
+            isRequestScopedGateFailure(error),
+            `${family}/${reason}/terminal=${terminalBeforeContent}`
+          ).toBe(expected);
+        }
+      }
+    }
+  });
+
+  it("keeps upstream disconnects (EOF, no terminal frame) accountable", () => {
+    // 默认 terminalBeforeContent=false：断流 / 空 body 仍要计入熔断
+    const error = new StreamPrecommitError("empty_stream", {
+      ...detail,
+      family: "openai-responses",
+    });
+    expect(error.terminalBeforeContent).toBe(false);
+    expect(isRequestScopedGateFailure(error)).toBe(false);
+  });
+
+  it("carries the three fields the accounting call sites depend on", () => {
+    // 串行与 hedge 两处记账只依赖这三个字段，无需重放整条转发路径
+    // （discovery 路径不经过门控，不产生 StreamPrecommitError）
+    const error = new StreamPrecommitError("empty_stream", {
+      ...detail,
+      family: "openai-responses",
+      terminalBeforeContent: true,
+    });
+    expect(error.gateReason).toBe("empty_stream");
+    expect(error.gateFamily).toBe("openai-responses");
+    expect(error.terminalBeforeContent).toBe(true);
+    expect(error.statusCode).toBe(502);
+  });
+
+  it("rejects non-gate errors", () => {
+    expect(isRequestScopedGateFailure(new ProxyError("boom", 502))).toBe(false);
+    expect(isRequestScopedGateFailure(new Error("boom"))).toBe(false);
+    expect(isRequestScopedGateFailure(null)).toBe(false);
+  });
+});
+
+describe("openai-responses clean completion", () => {
+  const RESPONSES_OPTIONS = { ...GATE_OPTIONS, family: "openai-responses" as const };
+
+  function completedFrame(status: string, extra = ""): string {
+    return `event: response.completed\ndata: {"type":"response.completed","response":{"id":"r1","status":"${status}","output":[]${extra}}}\n\n`;
+  }
+
+  const emptyTextFrames = [
+    'event: response.created\ndata: {"type":"response.created","response":{"id":"r1","status":"in_progress","output":[]}}\n\n',
+    'event: response.output_text.done\ndata: {"type":"response.output_text.done","content_index":0,"item_id":"m1","output_index":0,"text":""}\n\n',
+    completedFrame("completed"),
+  ];
+
+  it("commits an empty-text response instead of failing it as empty stream", async () => {
+    const reader = readerFromChunks(emptyTextFrames);
+    const result = await runStreamContentGate(reader, RESPONSES_OPTIONS);
+    expect(result.committed).toBe(true);
+    if (!result.committed) return;
+    // 前缀含全部三帧：客户端拿到完整的空回复，而不是 502
+    expect(concatChunks(result.prefixChunks).byteLength).toBe(
+      Buffer.byteLength(emptyTextFrames.join(""), "utf8")
+    );
+  });
+
+  it("commits a clean completion that arrives without a trailing blank line", async () => {
+    const reader = readerFromChunks([completedFrame("completed").trimEnd()]);
+    const result = await runStreamContentGate(reader, RESPONSES_OPTIONS);
+    expect(result.committed).toBe(true);
+  });
+
+  it("still fails a completion whose status is not completed", async () => {
+    for (const status of ["failed", "cancelled"]) {
+      const result = await runStreamContentGate(
+        readerFromChunks([completedFrame(status)]),
+        RESPONSES_OPTIONS
+      );
+      expect(result.committed, status).toBe(false);
+      if (result.committed) return;
+      expect((result.error as StreamPrecommitError).gateReason).toBe("empty_stream");
+    }
+  });
+
+  it("still fails a completion carrying a non-empty error", async () => {
+    const result = await runStreamContentGate(
+      readerFromChunks([completedFrame("completed", ',"error":{"code":"server_error"}')]),
+      RESPONSES_OPTIONS
+    );
+    expect(result.committed).toBe(false);
+    if (result.committed) return;
+    // 非空 error 由 errorRules 先行拦截
+    expect((result.error as StreamPrecommitError).gateReason).toBe("gate_error");
+  });
+
+  it("keeps other families failing on terminal-before-content", async () => {
+    const reader = readerFromChunks(['event: message_stop\ndata: {"type":"message_stop"}\n\n']);
+    const result = await runStreamContentGate(reader, GATE_OPTIONS);
+    expect(result.committed).toBe(false);
+    if (result.committed) return;
+    expect((result.error as StreamPrecommitError).gateReason).toBe("empty_stream");
   });
 });

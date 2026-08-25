@@ -118,6 +118,7 @@ import {
 import { mapProviderTypeToFamily } from "./stream-gate/frame-classifier";
 import {
   concatChunks,
+  isRequestScopedGateFailure,
   resolveStreamGateCaps,
   resolveStreamGateMode,
   runStreamContentGate,
@@ -2148,9 +2149,11 @@ export class ProxyForwarder {
           }
 
           // F3a：亲和提名的供应商发生供应商侧失败 -> 定向写墓碑（短 TTL 自愈防羊群）
+          // request-scoped 的空完成不算供应商侧失败：写墓碑会让后续请求绕开健康的粘性供应商
           if (
-            errorCategory === ErrorCategory.PROVIDER_ERROR ||
-            errorCategory === ErrorCategory.RESOURCE_NOT_FOUND
+            (errorCategory === ErrorCategory.PROVIDER_ERROR ||
+              errorCategory === ErrorCategory.RESOURCE_NOT_FOUND) &&
+            !isRequestScopedGateFailure(lastError)
           ) {
             void tombstoneAffinityOnFailure(session, currentProvider.id);
           }
@@ -2745,7 +2748,8 @@ export class ProxyForwarder {
                 messagesCount: session.getMessagesLength(),
               });
             } else {
-              if (shouldAccountCircuitBreaker) {
+              // 门控的 empty_stream 由请求内容决定，不计入供应商健康度（仍 failover）
+              if (shouldAccountCircuitBreaker && !isRequestScopedGateFailure(lastError)) {
                 await recordFailure(currentProvider.id, lastError);
               }
             }
@@ -4901,9 +4905,11 @@ export class ProxyForwarder {
       let errorCategory = await categorizeErrorAsync(error);
       lastErrorCategory = errorCategory;
       // F3a：hedge attempt 供应商侧失败且正是亲和提名者 -> 定向墓碑
+      // 与顺序路径同一判定：request-scoped 空完成不写墓碑
       if (
-        errorCategory === ErrorCategory.PROVIDER_ERROR ||
-        errorCategory === ErrorCategory.RESOURCE_NOT_FOUND
+        (errorCategory === ErrorCategory.PROVIDER_ERROR ||
+          errorCategory === ErrorCategory.RESOURCE_NOT_FOUND) &&
+        !isRequestScopedGateFailure(error)
       ) {
         void tombstoneAffinityOnFailure(session, attempt.provider.id);
       }
@@ -5074,7 +5080,11 @@ export class ProxyForwarder {
       attempts.delete(attempt);
       ProxyForwarder.markProviderFailed(session, failedProviderIds, attempt.provider.id);
 
-      if (errorCategory === ErrorCategory.PROVIDER_ERROR && statusCode !== 404) {
+      if (
+        errorCategory === ErrorCategory.PROVIDER_ERROR &&
+        statusCode !== 404 &&
+        !isRequestScopedGateFailure(error)
+      ) {
         await recordFailure(attempt.provider.id, error);
       }
 
@@ -6935,6 +6945,9 @@ export class ProxyForwarder {
             statusCode: lastError instanceof ProxyError ? lastError.statusCode : undefined,
             errorMessage,
           });
+          // 注意：discovery 路径不经过 stream content gate（validity 判定在
+          // DiscoveryValidityParser，见 6644 附近抛的通用 ProxyError），所以这里没有
+          // isRequestScopedGateFailure 判定 —— 同类的空流误记账需要单独修 discovery 侧。
           if (
             !(lastError instanceof DiscoveryValidityLimitError) &&
             lastErrorCategory === ErrorCategory.PROVIDER_ERROR &&

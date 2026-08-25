@@ -50,6 +50,8 @@ const mocks = vi.hoisted(() => ({
   releaseProviderSession: vi.fn(async (_providerId: number, _sessionId: string) => {}),
   categorizeErrorAsync: vi.fn(async () => 0),
   getErrorDetectionResultAsync: vi.fn(async () => ({ matched: false })),
+  tombstoneAffinityOnFailure: vi.fn(async () => {}),
+  recordAffinityWinner: vi.fn(async () => {}),
   getCachedSystemSettings: vi.fn(async () => ({
     enableThinkingSignatureRectifier: true,
     enableThinkingBudgetRectifier: true,
@@ -127,6 +129,11 @@ vi.mock("@/lib/session-manager", () => ({
     storeSessionRequestPhaseSnapshot: mocks.storeSessionRequestPhaseSnapshot,
     storeSessionResponsePhaseSnapshot: mocks.storeSessionResponsePhaseSnapshot,
   },
+}));
+
+vi.mock("@/app/v1/_lib/proxy/affinity/affinity-recorder", () => ({
+  tombstoneAffinityOnFailure: mocks.tombstoneAffinityOnFailure,
+  recordAffinityWinner: mocks.recordAffinityWinner,
 }));
 
 vi.mock("@/app/v1/_lib/proxy/provider-selector", () => ({
@@ -222,6 +229,74 @@ const OPENAI_RESPONSES_WINNER_FRAMES = [
   sseFrame("response.completed", {
     type: "response.completed",
     response: { id: "resp_winner", status: "completed" },
+  }),
+];
+
+/**
+ * 上游返回语法完整、语义为空的 Responses 流（实测形态）：
+ * output_text.done 的 text 为 ""，output_item.done 的 content[0].text 为 ""，
+ * completed 的 output 为 []。所有帧按 isNonEmptyValue 判定均非内容 -> empty_stream。
+ */
+const OPENAI_RESPONSES_EMPTY_TEXT_FRAMES = [
+  sseFrame("response.created", {
+    type: "response.created",
+    response: { id: "resp_empty", status: "in_progress", output: [] },
+  }),
+  sseFrame("response.output_item.added", {
+    type: "response.output_item.added",
+    item: {
+      id: "msg_empty",
+      type: "message",
+      status: "in_progress",
+      content: [],
+      role: "assistant",
+    },
+    output_index: 0,
+  }),
+  sseFrame("response.content_part.added", {
+    type: "response.content_part.added",
+    content_index: 0,
+    item_id: "msg_empty",
+    output_index: 0,
+    part: { type: "output_text", annotations: [], logprobs: [], text: "" },
+  }),
+  sseFrame("response.output_text.done", {
+    type: "response.output_text.done",
+    content_index: 0,
+    item_id: "msg_empty",
+    output_index: 0,
+    text: "",
+  }),
+  sseFrame("response.content_part.done", {
+    type: "response.content_part.done",
+    content_index: 0,
+    item_id: "msg_empty",
+    output_index: 0,
+    part: { type: "output_text", annotations: [], logprobs: [], text: "" },
+  }),
+  sseFrame("response.output_item.done", {
+    type: "response.output_item.done",
+    item: {
+      id: "msg_empty",
+      type: "message",
+      status: "completed",
+      content: [{ type: "output_text", annotations: [], logprobs: [], text: "" }],
+      role: "assistant",
+    },
+    output_index: 0,
+  }),
+  sseFrame("response.completed", {
+    type: "response.completed",
+    response: {
+      id: "resp_empty",
+      status: "completed",
+      output: [],
+      usage: {
+        input_tokens: 32,
+        output_tokens: 4,
+        output_tokens_details: { reasoning_tokens: 0 },
+      },
+    },
   }),
 ];
 
@@ -588,7 +663,9 @@ describe("F1 stream content gate x ProxyForwarder sequential path", () => {
       expect(doForward).toHaveBeenCalledTimes(2);
       expect(text).toBe(WINNER_FRAMES.join(""));
       expect(text).toContain('"text":"Hello"');
+      // anthropic 家族只吐终止帧属畸形流，仍按供应商故障计入熔断并写亲和墓碑
       expect(mocks.recordFailure).toHaveBeenCalledWith(provider1.id, expect.any(Error));
+      expect(mocks.tombstoneAffinityOnFailure).toHaveBeenCalledWith(session, provider1.id);
       expect(session.provider?.id).toBe(provider2.id);
 
       const emptyStreamEntry = session
@@ -596,6 +673,72 @@ describe("F1 stream content gate x ProxyForwarder sequential path", () => {
         .find((item) => item.id === provider1.id && item.reason === "retry_failed");
       expect(emptyStreamEntry?.statusCode).toBe(502);
       expect(emptyStreamEntry?.errorMessage).toContain("empty_stream");
+    });
+
+    test('Responses 空文本响应（output_text.done text=""）直接透传，不 failover', async () => {
+      const provider1 = createProvider({ id: 1, name: "empty-p1", providerType: "codex" });
+      const session = createSession();
+      session.setProvider(provider1);
+      Object.assign(session, {
+        requestUrl: new URL("https://example.com/v1/responses"),
+        originalFormat: "response",
+        endpointPolicy: resolveEndpointPolicy("/v1/responses"),
+      });
+
+      const doForward = spyOnDoForward();
+      doForward.mockImplementationOnce(async () =>
+        createSseResponse(OPENAI_RESPONSES_EMPTY_TEXT_FRAMES)
+      );
+
+      const response = await ProxyForwarder.send(session);
+      const text = await response.text();
+
+      // 干净完成（status=completed）即成功响应：空回复是合法结果（如 watchdog 的预期沉默），
+      // 一次即回，不得放大成同供应商重试 + 跨供应商 failover
+      expect(response.status).toBe(200);
+      expect(doForward).toHaveBeenCalledTimes(1);
+      expect(text).toBe(OPENAI_RESPONSES_EMPTY_TEXT_FRAMES.join(""));
+      expect(mocks.pickRandomProviderWithExclusion).not.toHaveBeenCalled();
+      expect(mocks.recordFailure).not.toHaveBeenCalled();
+      expect(mocks.tombstoneAffinityOnFailure).not.toHaveBeenCalled();
+      expect(session.provider?.id).toBe(provider1.id);
+    });
+
+    test("Responses 断流（无终止帧的 EOF）仍按供应商故障计入熔断", async () => {
+      const provider1 = createProvider({ id: 1, name: "eof-p1", providerType: "codex" });
+      const provider2 = createProvider({ id: 2, name: "eof-p2", providerType: "codex" });
+      const session = createSession();
+      session.setProvider(provider1);
+      Object.assign(session, {
+        requestUrl: new URL("https://example.com/v1/responses"),
+        originalFormat: "response",
+        endpointPolicy: resolveEndpointPolicy("/v1/responses"),
+      });
+
+      mocks.pickRandomProviderWithExclusion.mockResolvedValueOnce(provider2);
+
+      const doForward = spyOnDoForward();
+      // 只发生命周期帧就断开：没有 response.completed，属真实上游异常
+      doForward.mockImplementationOnce(async () =>
+        createSseResponse([
+          sseFrame("response.created", {
+            type: "response.created",
+            response: { id: "resp_eof", status: "in_progress", output: [] },
+          }),
+        ])
+      );
+      doForward.mockImplementationOnce(async () =>
+        createSseResponse(OPENAI_RESPONSES_WINNER_FRAMES)
+      );
+
+      const response = await ProxyForwarder.send(session);
+      const text = await response.text();
+
+      expect(doForward).toHaveBeenCalledTimes(2);
+      expect(text).toBe(OPENAI_RESPONSES_WINNER_FRAMES.join(""));
+      expect(mocks.recordFailure).toHaveBeenCalledWith(provider1.id, expect.any(Error));
+      expect(mocks.tombstoneAffinityOnFailure).toHaveBeenCalledWith(session, provider1.id);
+      expect(session.provider?.id).toBe(provider2.id);
     });
 
     test("上游返回 4xx / cyber_policy 错误帧时不触发切商重试，按不可重试客户端错误退出", async () => {
