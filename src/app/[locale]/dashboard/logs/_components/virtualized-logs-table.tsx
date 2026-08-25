@@ -1225,7 +1225,9 @@ export function VirtualizedLogsTable({
                                             {t("logs.billingDetails.fast")}
                                           </span>
                                           <span className="text-muted-foreground">·</span>
-                                          <span className="text-purple-700 dark:text-purple-300">1M</span>
+                                          <span className="text-purple-700 dark:text-purple-300">
+                                            1M
+                                          </span>
                                         </Badge>
                                       );
                                     }
