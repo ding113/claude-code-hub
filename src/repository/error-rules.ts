@@ -436,6 +436,22 @@ const DEFAULT_ERROR_RULES = [
       },
     },
   },
+  {
+    pattern: "cyber_policy|flagged for possible cybersecurity risk",
+    category: "content_filter",
+    description: "OpenAI cyber policy violation (non-retryable)",
+    matchType: "regex" as const,
+    isDefault: true,
+    isEnabled: true,
+    priority: 90,
+    overrideResponse: {
+      type: "error",
+      error: {
+        type: "invalid_request_error",
+        message: "内容触发了安全策略拦截 (cyber_policy)，请调整输入后重试",
+      },
+    },
+  },
   // Tool use validation errors (non-retryable)
   {
     pattern: "`tool_use` ids must be unique|tool_use.*ids must be unique",
