@@ -131,16 +131,13 @@ describe("LanguageSwitcher", () => {
   });
 
   test("keeps the pending refresh after remount when sessionStorage is blocked", () => {
-    const originalDescriptor = Object.getOwnPropertyDescriptor(window, "sessionStorage") || {
-      value: window.sessionStorage,
+    const originalSetItem = window.sessionStorage.setItem;
+    Object.defineProperty(window.sessionStorage, "setItem", {
+      value: vi.fn(() => {
+        throw new Error("blocked storage");
+      }),
       configurable: true,
       writable: true,
-    };
-    Object.defineProperty(window, "sessionStorage", {
-      get() {
-        throw new Error("blocked storage");
-      },
-      configurable: true,
     });
     const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
@@ -162,7 +159,11 @@ describe("LanguageSwitcher", () => {
 
     view.unmount();
     view = null;
-    Object.defineProperty(window, "sessionStorage", originalDescriptor);
+    Object.defineProperty(window.sessionStorage, "setItem", {
+      value: originalSetItem,
+      configurable: true,
+      writable: true,
+    });
 
     testState.currentLocale = "en";
     view = render(<LanguageSwitcher />);

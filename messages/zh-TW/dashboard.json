@@ -621,6 +621,7 @@
       "totalCost": "總費用",
       "unitPricePer1M": "@ {price} / 1M",
       "fast": "fast",
+      "combinedFastContext": "{fast} + {context} 上下文",
       "fastPriority": "優先服務層級（fast 模式）",
       "context1m": "1M 上下文長度",
       "context1mEnabled": "1M 上下文視窗已啟用",

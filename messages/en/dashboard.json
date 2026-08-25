@@ -621,6 +621,7 @@
       "totalCost": "Total Cost",
       "unitPricePer1M": "@ {price} / 1M",
       "fast": "fast",
+      "combinedFastContext": "{fast} + {context} context",
       "fastPriority": "Priority service tier (fast mode)",
       "context1m": "1M Context",
       "context1mEnabled": "1M context window enabled",

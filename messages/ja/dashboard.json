@@ -621,6 +621,7 @@
       "totalCost": "合計費用",
       "unitPricePer1M": "@ {price} / 1M",
       "fast": "fast",
+      "combinedFastContext": "{fast} + {context} コンテキスト",
       "fastPriority": "Priority service tier (fast モード)",
       "context1m": "1M コンテキスト",
       "context1mEnabled": "1Mコンテキストウィンドウ有効",

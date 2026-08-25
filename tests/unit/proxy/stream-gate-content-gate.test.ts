@@ -321,6 +321,55 @@ describe("StreamPrecommitError classification", () => {
     expect(error.statusCode).toBe(502);
     expect(error).not.toBeInstanceOf(EmptyResponseError);
   });
+
+  it("extracts 400 status code for cyber_policy error frames", () => {
+    const error = new StreamPrecommitError("gate_error", {
+      family: "openai-responses",
+      providerId: 1,
+      providerName: "p",
+      frameData: JSON.stringify({
+        type: "error",
+        error: {
+          type: "invalid_request_error",
+          code: "cyber_policy",
+          message: "This content was flagged for possible cybersecurity risk.",
+        },
+      }),
+    });
+    expect(error.statusCode).toBe(400);
+    expect(error.gateReason).toBe("gate_error");
+  });
+
+  it("extracts explicit 4xx status code when provided in the error frame", () => {
+    const error = new StreamPrecommitError("gate_error", {
+      family: "openai-responses",
+      providerId: 1,
+      providerName: "p",
+      frameData: JSON.stringify({
+        status: 422,
+        error: {
+          message: "Unprocessable entity",
+        },
+      }),
+    });
+    expect(error.statusCode).toBe(422);
+  });
+
+  it("extracts 400 status code for invalid_request_error and invalid_prompt", () => {
+    const error = new StreamPrecommitError("gate_error", {
+      family: "anthropic",
+      providerId: 1,
+      providerName: "p",
+      frameData: JSON.stringify({
+        type: "error",
+        error: {
+          type: "invalid_request_error",
+          message: "Invalid request body",
+        },
+      }),
+    });
+    expect(error.statusCode).toBe(400);
+  });
 });
 
 describe("request echo frame byte-cap exclusion", () => {

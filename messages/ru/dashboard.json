@@ -621,6 +621,7 @@
       "totalCost": "Общая стоимость",
       "unitPricePer1M": "@ {price} / 1M",
       "fast": "fast",
+      "combinedFastContext": "{fast} + контекст {context}",
       "fastPriority": "Приоритетный уровень обслуживания (режим fast)",
       "context1m": "1M Контекст",
       "context1mEnabled": "Окно контекста 1M включено",
