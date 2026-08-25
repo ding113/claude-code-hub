@@ -52,8 +52,14 @@ vi.mock("@/lib/session-manager", () => ({
     clearVersionedSessionProvider: vi.fn(async () => ({ status: "ok" })),
     compareAndSetSessionProvider: vi.fn(async () => ({ status: "ok", reason: "gen" })),
     getVersionedSessionBindingRefreshIntervalMs: vi.fn(() => 100_000),
-    renewSessionDiscoveryLease: vi.fn(async () => ({ status: "renewed", legacyFallbackAllowed: false })),
-    releaseSessionDiscoveryLease: vi.fn(async () => ({ status: "released", legacyFallbackAllowed: false })),
+    renewSessionDiscoveryLease: vi.fn(async () => ({
+      status: "renewed",
+      legacyFallbackAllowed: false,
+    })),
+    releaseSessionDiscoveryLease: vi.fn(async () => ({
+      status: "released",
+      legacyFallbackAllowed: false,
+    })),
     touchVersionedSessionBinding: vi.fn(async (snapshot: any) => ({
       status: "ok",
       source: "touched",
@@ -72,12 +78,25 @@ vi.mock("@/lib/session-manager", () => ({
 }));
 
 vi.mock("@/lib/rate-limit", () => ({
-  RateLimitService: { trackCost: vi.fn(), trackUserDailyCost: vi.fn(), decrementLeaseBudget: vi.fn(), settleLeaseBudgets: vi.fn(), releaseProviderSession: vi.fn() },
+  RateLimitService: {
+    trackCost: vi.fn(),
+    trackUserDailyCost: vi.fn(),
+    decrementLeaseBudget: vi.fn(),
+    settleLeaseBudgets: vi.fn(),
+    releaseProviderSession: vi.fn(),
+  },
 }));
 
 vi.mock("@/lib/circuit-breaker", () => ({ recordFailure: vi.fn(), recordSuccess: vi.fn() }));
-vi.mock("@/lib/endpoint-circuit-breaker", () => ({ recordEndpointSuccess: vi.fn(), recordEndpointFailure: vi.fn() }));
-vi.mock("@/lib/redis/live-chain-store", () => ({ writeLiveChain: vi.fn(), writeLiveRoutingTrace: vi.fn(), deleteLiveChain: vi.fn() }));
+vi.mock("@/lib/endpoint-circuit-breaker", () => ({
+  recordEndpointSuccess: vi.fn(),
+  recordEndpointFailure: vi.fn(),
+}));
+vi.mock("@/lib/redis/live-chain-store", () => ({
+  writeLiveChain: vi.fn(),
+  writeLiveRoutingTrace: vi.fn(),
+  deleteLiveChain: vi.fn(),
+}));
 vi.mock("@/repository/message", () => ({
   updateMessageRequestCostWithBreakdown: vi.fn(),
   updateMessageRequestDetails: vi.fn(),
@@ -210,7 +229,13 @@ function makeSession(signal: AbortSignal): ProxySession {
     getOriginalModel: () => "gpt-5.4-mini",
     getResolvedPricingByBillingSource: async () => null,
     getSpecialSettings: () => [],
-    getSessionIdentityMetadata: () => ({ identity: "sess-codex-1", kind: "session_id", scopeTag: null, fingerprint: null, fingerprints: [] }),
+    getSessionIdentityMetadata: () => ({
+      identity: "sess-codex-1",
+      kind: "session_id",
+      scopeTag: null,
+      fingerprint: null,
+      fingerprints: [],
+    }),
     isHeaderModified: () => false,
     recordTtft: vi.fn(),
     releaseAgent: vi.fn(),
@@ -253,10 +278,10 @@ function truncatedResponsesSse(): Response {
 }
 
 async function drainHcTasks() {
-  const tasks: Promise<void>[] = ((globalThis as any).__hcTasks.splice(0) ?? []);
+  const tasks: Promise<void>[] = (globalThis as any).__hcTasks.splice(0) ?? [];
   await Promise.allSettled(tasks);
   await new Promise((r) => setTimeout(r, 10));
-  const more: Promise<void>[] = ((globalThis as any).__hcTasks.splice(0) ?? []);
+  const more: Promise<void>[] = (globalThis as any).__hcTasks.splice(0) ?? [];
   await Promise.allSettled(more);
 }
 
@@ -264,14 +289,18 @@ describe("high concurrency client-abort retention (fix for 499 + affinity churn)
   beforeEach(() => {
     vi.clearAllMocks();
     (globalThis as any).__hcTasks = [];
-    vi.mocked(updateMessageRequestDetailsDurably).mockImplementation(async (_id: any, _d: any, opts: any) => {
-      await opts?.onCommitted?.();
-      return true;
-    });
-    vi.mocked(updateMessageRequestDetailsIfUnfinalized).mockImplementation(async (_id: any, _d: any, opts: any) => {
-      await opts?.onCommitted?.();
-      return true;
-    });
+    vi.mocked(updateMessageRequestDetailsDurably).mockImplementation(
+      async (_id: any, _d: any, opts: any) => {
+        await opts?.onCommitted?.();
+        return true;
+      }
+    );
+    vi.mocked(updateMessageRequestDetailsIfUnfinalized).mockImplementation(
+      async (_id: any, _d: any, opts: any) => {
+        await opts?.onCommitted?.();
+        return true;
+      }
+    );
   });
 
   it("ProxySession high-concurrency still retains client-abort billing", () => {
@@ -305,7 +334,12 @@ describe("high concurrency client-abort retention (fix for 499 + affinity churn)
       bindingIntent: "renew",
       bindingSnapshot: { sessionId: "sess-codex-1", keyId: 2, providerId: 1, generation: "gen1" },
       requiresCompletionMarkerForBinding: true,
-      discoveryLease: { sessionId: "sess-codex-1", keyId: 2, ownerToken: "owner-1", ttlSeconds: 30 },
+      discoveryLease: {
+        sessionId: "sess-codex-1",
+        keyId: 2,
+        ownerToken: "owner-1",
+        ttlSeconds: 30,
+      },
     });
 
     const downstream = await ProxyResponseHandler.dispatch(session, completedResponsesSse());
@@ -342,7 +376,12 @@ describe("high concurrency client-abort retention (fix for 499 + affinity churn)
       bindingIntent: "renew",
       bindingSnapshot: { sessionId: "sess-codex-1", keyId: 2, providerId: 1, generation: "gen1" },
       requiresCompletionMarkerForBinding: true,
-      discoveryLease: { sessionId: "sess-codex-1", keyId: 2, ownerToken: "owner-1", ttlSeconds: 30 },
+      discoveryLease: {
+        sessionId: "sess-codex-1",
+        keyId: 2,
+        ownerToken: "owner-1",
+        ttlSeconds: 30,
+      },
     });
 
     const downstream = await ProxyResponseHandler.dispatch(session, truncatedResponsesSse());
