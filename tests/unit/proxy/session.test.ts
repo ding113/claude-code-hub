@@ -164,7 +164,7 @@ describe("ProxySession endpoint policy", () => {
 });
 
 describe("ProxySession high-concurrency policy", () => {
-  it("closes optional body-heavy features while preserving the base session", () => {
+  it("closes optional body-heavy features while preserving the base session (client-abort retention stays on)", () => {
     const session = createSession({ redirectedModel: null });
 
     expect(session.shouldUseRequestReplay()).toBe(true);
@@ -177,7 +177,11 @@ describe("ProxySession high-concurrency policy", () => {
 
     expect(session.shouldUseRequestReplay()).toBe(false);
     expect(session.shouldRunStreamContentGate()).toBe(false);
-    expect(session.shouldRetainClientAbortBilling()).toBe(false);
+    // client-abort retention is kept in high-concurrency mode (bounded metering)
+    // so completed streams that the client already closed are still billed as
+    // success and keep the sticky/affinity binding (see high-concurrency
+    // client-abort fix).
+    expect(session.shouldRetainClientAbortBilling()).toBe(true);
     expect(session.shouldBillHedgeLosers()).toBe(false);
     expect(session.shouldParseResponseDiagnostics()).toBe(false);
     expect(session.shouldPersistSessionDebugArtifacts()).toBe(false);
