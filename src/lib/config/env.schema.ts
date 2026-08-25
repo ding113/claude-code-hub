@@ -220,6 +220,13 @@ export const EnvSchema = z.object({
     .min(1024)
     .max(64 * 1024 * 1024)
     .default(10 * 1024 * 1024),
+  // 所有正在门禁 precommit 阶段及等待下游消费的前缀共享该进程级预算。
+  STREAM_GATE_GLOBAL_PREBUFFER_BYTE_CAP: z.coerce
+    .number()
+    .int()
+    .min(2 * 1024)
+    .max(2 * 1024 * 1024 * 1024)
+    .default(256 * 1024 * 1024),
   // 请求分离 + Replay：客户端断开后上游继续引流缓存，相同请求体重发续传
   ENABLE_REQUEST_REPLAY: z.string().default("true").transform(booleanTransform),
   // owner 客户端仍在线时的并发相同请求去重（attached-live）；关闭后仅 detached/completed 可命中
@@ -267,6 +274,14 @@ export const EnvSchema = z.object({
       code: "custom",
       path: ["DETACHED_STREAM_METERING_RESERVE_BYTES"],
       message: "DETACHED_STREAM_METERING_RESERVE_BYTES cannot exceed DETACHED_STREAM_BUDGET_BYTES",
+    });
+  }
+  if (env.STREAM_GATE_GLOBAL_PREBUFFER_BYTE_CAP < env.STREAM_GATE_PREBUFFER_BYTE_CAP * 2) {
+    context.addIssue({
+      code: "custom",
+      path: ["STREAM_GATE_GLOBAL_PREBUFFER_BYTE_CAP"],
+      message:
+        "STREAM_GATE_GLOBAL_PREBUFFER_BYTE_CAP must be at least twice STREAM_GATE_PREBUFFER_BYTE_CAP",
     });
   }
 });

@@ -1,4 +1,10 @@
-import { classifyFrame, isRequestEchoFrame, type ProtocolFamily } from "./frame-classifier";
+import {
+  classifyFrame,
+  classifyStructuredTerminalKind,
+  classifyTerminalKind,
+  isRequestEchoFrame,
+  type ProtocolFamily,
+} from "./frame-classifier";
 import { type SseFrame, SseFrameParser } from "./sse-frames";
 import { resolveStreamGateCaps } from "./stream-content-gate";
 
@@ -15,6 +21,7 @@ export interface StreamProtocolFailure {
 export interface StreamProtocolObservation {
   sawContent: boolean;
   sawTerminal: boolean;
+  sawIncomplete: boolean;
   observationIncomplete: boolean;
   failure: StreamProtocolFailure | null;
 }
@@ -45,6 +52,7 @@ export function createStreamProtocolObserver(family: ProtocolFamily): StreamProt
   const observation: StreamProtocolObservation = {
     sawContent: false,
     sawTerminal: false,
+    sawIncomplete: false,
     observationIncomplete: false,
     failure: null,
   };
@@ -59,7 +67,27 @@ export function createStreamProtocolObserver(family: ProtocolFamily): StreamProt
   const record = (frame: SseFrame): void => {
     const verdict = classifyFrame(family, frame.eventName, frame.data);
     if (verdict === "content") observation.sawContent = true;
-    if (verdict === "terminal") observation.sawTerminal = true;
+
+    // Responses 的 response.completed 可能同时携带完整 compaction output，
+    // 分类器会把它标成 content 以便门禁提交；终态观察不能因此丢失。
+    let terminalKind =
+      verdict === "terminal" ? classifyTerminalKind(family, frame.eventName) : null;
+    try {
+      const value = JSON.parse(frame.data) as unknown;
+      if (value !== null && typeof value === "object") {
+        terminalKind =
+          classifyStructuredTerminalKind(family, frame.eventName, value) ?? terminalKind;
+      }
+    } catch {
+      // classifyFrame 已负责 malformed；这里只补充可能与 content 重叠的终态。
+    }
+    if (terminalKind !== null) {
+      if (terminalKind === "incomplete") {
+        observation.sawIncomplete = true;
+      } else {
+        observation.sawTerminal = true;
+      }
+    }
     if (verdict !== "error" && verdict !== "malformed") return;
 
     if (!observation.failure) {
@@ -110,6 +138,7 @@ export function createStreamProtocolObserver(family: ProtocolFamily): StreamProt
       return {
         sawContent: observation.sawContent,
         sawTerminal: observation.sawTerminal,
+        sawIncomplete: observation.sawIncomplete,
         observationIncomplete: observation.observationIncomplete,
         failure: observation.failure ? { ...observation.failure } : null,
       };

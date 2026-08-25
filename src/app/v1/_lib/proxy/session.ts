@@ -169,6 +169,9 @@ export class ProxySession {
 
   // Session ID（用于会话粘性和并发限流）
   sessionId: string | null;
+  // 客户端或补全器已建立连续身份时，单条增量请求也应参与供应商复用。
+  // 内容哈希/随机降级身份仍依赖上下文长度，避免相同短提示串到同一供应商会话。
+  private allowSingleTurnProviderReuse = false;
 
   // Discovery lease conflicts must stay on a single upstream and must not
   // mutate a binding owned by the in-flight discovery request.
@@ -582,35 +585,6 @@ export class ProxySession {
     return !this.highConcurrencyModeEnabled;
   }
 
-  /** High-concurrency mode disables optional body-heavy coordination features. */
-  shouldUseRequestReplay(): boolean {
-    return !this.highConcurrencyModeEnabled;
-  }
-
-  shouldRunStreamContentGate(): boolean {
-    return !this.highConcurrencyModeEnabled;
-  }
-
-  shouldRetainClientAbortBilling(): boolean {
-    // High-concurrency mode keeps bounded client-abort retention (64 KiB metering +
-    // 3 MiB reservation, capped by DetachedStreamBudget) so a completed upstream
-    // stream that the client already closed (Codex: reads response.completed then
-    // hangs up) is still billed as 200 and the sticky/affinity binding is kept.
-    // Immediate cancel + discard in this mode previously discarded the completion
-    // marker, turning a successful request into 499 and clearing the binding,
-    // which broke prefix-cache affinity (40% hit loss) and caused per-request
-    // provider churn.
-    return true;
-  }
-
-  shouldBillHedgeLosers(): boolean {
-    return !this.highConcurrencyModeEnabled;
-  }
-
-  shouldParseResponseDiagnostics(): boolean {
-    return !this.highConcurrencyModeEnabled;
-  }
-
   addSpecialSetting(setting: SpecialSetting): void {
     this.specialSettings.push(setting);
   }
@@ -693,8 +667,9 @@ export class ProxySession {
   /**
    * 设置 session ID
    */
-  setSessionId(sessionId: string): void {
+  setSessionId(sessionId: string, options: { allowSingleTurnProviderReuse?: boolean } = {}): void {
     this.sessionId = sessionId;
+    this.allowSingleTurnProviderReuse = options.allowSingleTurnProviderReuse === true;
   }
 
   setSessionIdentityMetadata(metadata: SessionIdentityMetadata): void {
@@ -794,15 +769,13 @@ export class ProxySession {
     return undefined;
   }
 
-  /**
-   * 是否应该复用 provider（基于 messages 长度）
-   */
+  /** 是否应该复用 provider。稳定 Session ID 支持只发送本轮增量的客户端。 */
   shouldReuseProvider(): boolean {
     if (this.isRawCrossProviderFallbackEnabled()) {
       return true;
     }
 
-    return this.getMessagesLength() > 1;
+    return this.allowSingleTurnProviderReuse || this.getMessagesLength() > 1;
   }
 
   /**

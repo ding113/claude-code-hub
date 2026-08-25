@@ -1,6 +1,8 @@
 import {
   classifyFrame,
   type FrameVerdict,
+  isCleanResponsesCompletion,
+  isResponsesIncompleteCompletion,
   type ProtocolFamily,
 } from "./stream-gate/frame-classifier";
 
@@ -81,6 +83,14 @@ function classifyProtocolFrame(
     }
   } catch {
     parsed = undefined;
+  }
+
+  if (family === "openai-responses" && isCleanResponsesCompletion(eventName, data)) {
+    return { ready: true, terminal: true, error: false };
+  }
+  if (family === "openai-responses" && isResponsesIncompleteCompletion(eventName, data)) {
+    // incomplete 是上游明确返回的协议结果。Discovery 不应把它伪装成 502 后切商。
+    return { ready: true, terminal: true, error: false };
   }
 
   let verdict = classifyFrame(family, eventName, data);

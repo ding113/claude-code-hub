@@ -250,6 +250,7 @@ describe("createDemandDrivenResponsePump", () => {
       clientAborted: true,
       error: timeoutError,
     });
+    await expect(pump.teardown).resolves.toBeUndefined();
     expect(cancel).toHaveBeenCalledWith(timeoutError);
     expect(releaseLock).toHaveBeenCalledTimes(1);
   });
@@ -414,7 +415,8 @@ describe("createDemandDrivenResponsePump", () => {
 
   it("cancels the source when the primed read fails", async () => {
     const sourceError = new Error("source-read-failed");
-    const cancel = vi.fn(() => Promise.resolve());
+    // Web Stream 已 errored 时，cancel() 会以原始 sourceError 拒绝。
+    const cancel = vi.fn(() => Promise.reject(sourceError));
     const releaseLock = vi.fn();
     const reader = {
       read: vi.fn(() => Promise.reject(sourceError)),
@@ -433,6 +435,9 @@ describe("createDemandDrivenResponsePump", () => {
     });
     expect(cancel).toHaveBeenCalledWith(sourceError);
     expect(releaseLock).toHaveBeenCalledOnce();
+    await nextTurn();
+    expect(sourceError.cause).toBeUndefined();
+    expect(() => JSON.stringify(sourceError)).not.toThrow();
   });
 
   it("finishes a metering drain without reporting a source error", async () => {
@@ -462,11 +467,10 @@ describe("createDemandDrivenResponsePump", () => {
       error: null,
     });
     expect(cancel).toHaveBeenCalledOnce();
-    expect(teardownSettled).toBe(false);
-
-    cancelGate.resolve();
     await pump.teardown;
     expect(teardownSettled).toBe(true);
+
+    cancelGate.resolve();
     expect(releaseLock).toHaveBeenCalledOnce();
   });
 });

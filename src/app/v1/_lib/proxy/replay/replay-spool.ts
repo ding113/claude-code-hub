@@ -27,6 +27,7 @@ import {
 
 const FLUSH_INTERVAL_MS = 100;
 const FLUSH_BYTES_THRESHOLD = 64 * 1024;
+const MAX_REDIS_CHUNK_CHARACTERS = 64 * 1024;
 const MAX_QUEUED_WRITE_BYTES = 1024 * 1024;
 const OWNER_HEARTBEAT_INTERVAL_MS = 15_000;
 const PRE_SPOOL_ABORT_WAIT_MS = 100;
@@ -101,7 +102,7 @@ export class ReplaySpool {
       this.pendingBytes += chunk.byteLength;
       const text = this.decoder.decode(chunk, { stream: true });
       if (text.length === 0) return;
-      this.pending.push(text);
+      this.appendDecodedText(text);
 
       if (this.pendingBytes >= FLUSH_BYTES_THRESHOLD) {
         this.scheduleFlush(0);
@@ -113,6 +114,20 @@ export class ReplaySpool {
         error: error instanceof Error ? error.message : String(error),
       });
       this.disable("observe_error");
+    }
+  }
+
+  /** Redis LIST 元素保持小块，避免读取端被单个超大网络 chunk 迫使整包分配。 */
+  private appendDecodedText(text: string): void {
+    let offset = 0;
+    while (offset < text.length) {
+      let end = Math.min(offset + MAX_REDIS_CHUNK_CHARACTERS, text.length);
+      if (end < text.length) {
+        const lastCodeUnit = text.charCodeAt(end - 1);
+        if (lastCodeUnit >= 0xd800 && lastCodeUnit <= 0xdbff) end -= 1;
+      }
+      this.pending.push(text.slice(offset, end));
+      offset = end;
     }
   }
 
@@ -266,7 +281,7 @@ export class ReplaySpool {
     this.clearFlushTimer();
     const tail = this.decoder.decode();
     if (tail.length > 0) {
-      this.pending.push(tail);
+      this.appendDecodedText(tail);
     }
     const batch = this.pending;
     const batchBytes = this.pendingBytes;
@@ -570,10 +585,6 @@ export function createReplaySpoolIfOwner(
   delivery: ReplayDelivery = "stream",
   options: ReplaySpoolOptions = {}
 ): ReplaySpool | null {
-  if (typeof session.shouldUseRequestReplay === "function" && !session.shouldUseRequestReplay()) {
-    return null;
-  }
-
   const replayState = session.replayState;
   if (replayState?.role !== "owner") return null;
   const declineOwnership = (): null => {

@@ -411,7 +411,7 @@ function createPullTrackedResponsesSse(): {
   };
 }
 
-function createMeteringTerminalResponsesSse(): {
+function createMeteringTerminalResponsesSse(options: { includeUsage?: boolean } = {}): {
   response: Response;
   cancel: ReturnType<typeof vi.fn>;
 } {
@@ -426,9 +426,40 @@ function createMeteringTerminalResponsesSse(): {
       response: {
         id: "resp_metered",
         model: "gpt-5.4-mini-2026-03-17",
-        usage: { input_tokens: 463, output_tokens: 11 },
+        ...(options.includeUsage === false
+          ? {}
+          : { usage: { input_tokens: 463, output_tokens: 11 } }),
       },
     })}\n\n`,
+  ];
+  let index = 0;
+  const cancel = vi.fn();
+  return {
+    response: new Response(
+      new ReadableStream<Uint8Array>({
+        pull(controller) {
+          const chunk = chunks[index++];
+          if (chunk) controller.enqueue(encoder.encode(chunk));
+        },
+        cancel,
+      }),
+      {
+        status: 200,
+        headers: { "content-type": "text/event-stream" },
+      }
+    ),
+    cancel,
+  };
+}
+
+function createMeteringErrorResponsesSse(): {
+  response: Response;
+  cancel: ReturnType<typeof vi.fn>;
+} {
+  const encoder = new TextEncoder();
+  const chunks = [
+    'event: response.output_text.delta\ndata: {"type":"response.output_text.delta","delta":"partial"}\n\n',
+    'event: response.failed\ndata: {"type":"response.failed","response":{"status":"failed"}}\n\n',
   ];
   let index = 0;
   const cancel = vi.fn();
@@ -1973,6 +2004,7 @@ describe("ProxyResponseHandler stream client abort finalization", () => {
     const controller = new AbortController();
     controller.abort();
     const session = createSession(controller.signal);
+    session.setHighConcurrencyModeEnabled(true);
     setDeferredStreamingFinalization(session, {
       providerId: 1,
       providerName: "avemujica-responses",
@@ -2197,6 +2229,73 @@ describe("ProxyResponseHandler stream client abort finalization", () => {
         statusCode: 200,
         inputTokens: 463,
         outputTokens: 11,
+      }),
+      expect.objectContaining({ onCommitted: expect.any(Function) })
+    );
+    expect(getDetachedStreamBudgetSnapshot().activeStreams).toBe(0);
+  });
+
+  it("stops a detached source at a valid terminal even when usage is absent", async () => {
+    const clientController = new AbortController();
+    const session = createSession(clientController.signal);
+    setDeferredStreamingFinalization(session, {
+      providerId: 1,
+      providerName: "avemujica-responses",
+      providerPriority: 1,
+      attemptNumber: 1,
+      totalProvidersAttempted: 1,
+      isFirstAttempt: true,
+      isFailoverSuccess: false,
+      endpointId: 42,
+      endpointUrl: "https://api.test.invalid/v1",
+      upstreamStatusCode: 200,
+    });
+    const metered = createMeteringTerminalResponsesSse({ includeUsage: false });
+
+    await ProxyResponseHandler.dispatch(session, metered.response);
+    clientController.abort(new Error("client detached"));
+    await drainAsyncTasks();
+
+    expect(metered.cancel).toHaveBeenCalledWith(
+      expect.objectContaining({ message: "client_abort_metering_complete" })
+    );
+    expect(updateMessageRequestDetailsDurably).toHaveBeenCalledWith(
+      123,
+      expect.objectContaining({ statusCode: 200 }),
+      expect.objectContaining({ onCommitted: expect.any(Function) })
+    );
+    expect(getDetachedStreamBudgetSnapshot().activeStreams).toBe(0);
+  });
+
+  it("stops a detached source on an explicit protocol error and records upstream failure", async () => {
+    const clientController = new AbortController();
+    const session = createSession(clientController.signal);
+    setDeferredStreamingFinalization(session, {
+      providerId: 1,
+      providerName: "avemujica-responses",
+      providerPriority: 1,
+      attemptNumber: 1,
+      totalProvidersAttempted: 1,
+      isFirstAttempt: true,
+      isFailoverSuccess: false,
+      endpointId: 42,
+      endpointUrl: "https://api.test.invalid/v1",
+      upstreamStatusCode: 200,
+    });
+    const metered = createMeteringErrorResponsesSse();
+
+    await ProxyResponseHandler.dispatch(session, metered.response);
+    clientController.abort(new Error("client detached"));
+    await drainAsyncTasks();
+
+    expect(metered.cancel).toHaveBeenCalledWith(
+      expect.objectContaining({ message: "client_abort_metering_complete" })
+    );
+    expect(updateMessageRequestDetailsDurably).toHaveBeenCalledWith(
+      123,
+      expect.objectContaining({
+        statusCode: 502,
+        errorMessage: expect.stringContaining("UPSTREAM_PROTOCOL_ERROR"),
       }),
       expect.objectContaining({ onCommitted: expect.any(Function) })
     );

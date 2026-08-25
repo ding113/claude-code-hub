@@ -1090,6 +1090,51 @@ describe("CCH Responses WebSocket edge E2E", () => {
     }
   });
 
+  test("rejects internal bodies that cannot fit in one outbound WebSocket event", async () => {
+    const { harness, close } = await startIsolatedCchEdgeHarness();
+    try {
+      harness.setResponseHandler(({ res, body }) => {
+        if (body.input === "oversized-json") {
+          res.statusCode = 200;
+          res.setHeader("content-type", "application/json");
+          res.end("x".repeat(1024 * 1024 + 1));
+          return;
+        }
+        res.statusCode = 200;
+        res.setHeader("content-type", "text/event-stream");
+        res.end(`data: ${"x".repeat(1024 * 1024 + 1)}`);
+      });
+
+      const jsonClient = connectRawWsClient(harness.port);
+      await jsonClient.opened;
+      sendResponseCreate(jsonClient, { model, input: "oversized-json" });
+      await jsonClient.nextMessage(
+        errorEvent("internal_response_too_large"),
+        3000,
+        "oversized JSON response was not rejected"
+      );
+      expect(await jsonClient.closeEvent).toEqual({
+        code: 1011,
+        reason: "internal_response_too_large",
+      });
+
+      const sseClient = connectRawWsClient(harness.port);
+      await sseClient.opened;
+      sendResponseCreate(sseClient, { model, input: "oversized-sse" });
+      await sseClient.nextMessage(
+        errorEvent("internal_sse_event_too_large"),
+        3000,
+        "oversized unterminated SSE event was not rejected"
+      );
+      expect(await sseClient.closeEvent).toEqual({
+        code: 1011,
+        reason: "internal_sse_event_too_large",
+      });
+    } finally {
+      await close();
+    }
+  });
+
   test("handles CRLF fragmented SSE and [DONE] without poisoning the connection", async () => {
     const { harness, close } = await startIsolatedCchEdgeHarness();
     try {

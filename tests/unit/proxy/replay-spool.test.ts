@@ -249,6 +249,22 @@ describe("ReplaySpool：write-behind 批量冲刷", () => {
     await spool.abort("test_cleanup");
   });
 
+  it("单个超大网络 chunk 会拆成有界 Redis 元素且不切断代理对", async () => {
+    const spool = makeSpool();
+    const payload = `${"x".repeat(64 * 1024 - 1)}😀${"y".repeat(64 * 1024 + 3)}`;
+
+    spool.observe(encoder.encode(payload));
+    await drainWriteChain(spool);
+
+    const batch = storeControl.store.writeOwned.mock.calls[0]?.[3] as string[] | undefined;
+    expect(batch).toBeDefined();
+    expect(batch?.length).toBeGreaterThan(1);
+    expect(batch?.every((part) => part.length <= 64 * 1024)).toBe(true);
+    expect(batch?.join("")).toBe(payload);
+
+    await spool.abort("test_cleanup");
+  });
+
   it("空 chunk 不触发任何调度", async () => {
     const spool = makeSpool();
     spool.observe(new Uint8Array(0));

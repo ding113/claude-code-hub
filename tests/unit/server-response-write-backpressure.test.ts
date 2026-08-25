@@ -322,12 +322,11 @@ describe("server response write backpressure", () => {
   it("destroys upstream and closes once when outbound pending bytes overflow", async () => {
     const bridge = await startSseBridge(vi.fn());
     const destroyResponse = vi.spyOn(bridge.response, "destroy");
-    const delta = "x".repeat(1024 * 1024 + 1);
+    const delta = "x".repeat(600 * 1024);
+    const event = `data: ${JSON.stringify({ type: "response.output_text.delta", delta })}\n\n`;
 
-    bridge.response.emit(
-      "data",
-      `data: ${JSON.stringify({ type: "response.output_text.delta", delta })}\n\n`
-    );
+    // 每个事件都低于单事件上限，但未确认发送的累计字节超过连接预算。
+    bridge.response.emit("data", event + event);
 
     expect(bridge.events).toContain("destroy");
     expect(destroyResponse).toHaveBeenCalledOnce();

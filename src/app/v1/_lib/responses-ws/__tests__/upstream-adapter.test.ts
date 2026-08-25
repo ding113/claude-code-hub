@@ -229,6 +229,80 @@ describe("tryResponsesWebsocketUpstream", () => {
     const frames = parseSseBody(body);
     expect(frames.map((frame) => JSON.parse(frame.data))).toEqual(events);
     expect(body.match(/^data:/gm)?.length).toBeGreaterThan(events.length);
+    expect(body).not.toContain("\0");
+  });
+
+  it("rejects multiline messages whose SSE framing would exceed the message limit", async () => {
+    server = await startMockServer((socket) => {
+      socket.on("message", () => {
+        // 原消息约 1.2 MiB，但每行补 `data: ` 后会超过 8 MiB。
+        socket.send("\n".repeat(1_200_000));
+      });
+    });
+
+    const result = await tryResponsesWebsocketUpstream({
+      provider: codexProvider(),
+      upstreamUrl: `http://127.0.0.1:${server.port}/v1/responses`,
+      upstreamHeaders: new Headers({ authorization: "Bearer sk-mock" }),
+      body: { model: "gpt-5.5", input: "hi" },
+    });
+
+    expect("response" in result).toBe(true);
+    if (!("response" in result)) return;
+
+    const body = await withTimeout(
+      collectSseBody(result.response),
+      3_000,
+      "oversized encoded SSE event did not terminate"
+    );
+    expect(body).toContain("upstream_ws_sse_event_too_large");
+    expect(body.length).toBeLessThan(1024);
+  });
+
+  it("pauses and resumes the upstream when tiny messages outrun the downstream", async () => {
+    const pauseSpy = vi.spyOn(WebSocket.prototype, "pause");
+    const resumeSpy = vi.spyOn(WebSocket.prototype, "resume");
+    server = await startMockServer((socket) => {
+      socket.on("message", () => {
+        socket.send(JSON.stringify({ type: "response.created", response: { id: "resp_flood" } }));
+        let index = 0;
+        const sendNext = () => {
+          if (socket.readyState !== WebSocket.OPEN) return;
+          if (index < 5000) {
+            index += 1;
+            socket.send("");
+            setImmediate(sendNext);
+            return;
+          }
+          socket.send(
+            JSON.stringify({
+              type: "response.completed",
+              response: { id: "resp_flood", status: "completed" },
+            })
+          );
+        };
+        setImmediate(sendNext);
+      });
+    });
+
+    const result = await tryResponsesWebsocketUpstream({
+      provider: codexProvider(),
+      upstreamUrl: `http://127.0.0.1:${server.port}/v1/responses`,
+      upstreamHeaders: new Headers({ authorization: "Bearer sk-mock" }),
+      body: { model: "gpt-5.5", input: "hi" },
+    });
+
+    expect("response" in result).toBe(true);
+    if (!("response" in result)) return;
+    await vi.waitFor(() => expect(pauseSpy).toHaveBeenCalled(), { timeout: 3000 });
+    const body = await withTimeout(
+      collectSseBody(result.response),
+      3000,
+      "backpressured message flood did not complete"
+    );
+    expect(resumeSpy).toHaveBeenCalled();
+    expect(body).toContain("response.completed");
+    expect(body).not.toContain("upstream_ws_queue_overflow");
   });
 
   it("returns failure when upstream rejects the WS upgrade", async () => {

@@ -13,7 +13,7 @@ describe("v1 generated OpenAPI types", () => {
 
   test("generated type file is in sync with the current OpenAPI document", () => {
     expect(() =>
-      execFileSync("bun", ["scripts/generate-v1-types.ts", "--check"], {
+      execFileSync(process.env.npm_execpath ?? "bun", ["scripts/generate-v1-types.ts", "--check"], {
         cwd: process.cwd(),
         stdio: "pipe",
       })

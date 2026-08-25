@@ -47,11 +47,13 @@ describe("RedisListStore", () => {
     expect(client.eval).not.toHaveBeenCalled();
   });
 
-  it("lrangeFrom reads from offset to end", async () => {
+  it("lrangeFrom reads from offset to end or a bounded page", async () => {
     const client = createMockClient();
     const store = new RedisListStore({ prefix: "p:", redisClient: client as never });
     expect(await store.lrangeFrom("k", 5)).toEqual(["a", "b"]);
     expect(client.lrange).toHaveBeenCalledWith("p:k", 5, -1);
+    expect(await store.lrangeFrom("k", 5, 8)).toEqual(["a", "b"]);
+    expect(client.lrange).toHaveBeenLastCalledWith("p:k", 5, 12);
   });
 
   it("fails open (null/false) when redis is unavailable", async () => {

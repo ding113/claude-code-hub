@@ -303,18 +303,6 @@ describe("high concurrency client-abort retention (fix for 499 + affinity churn)
     );
   });
 
-  it("ProxySession high-concurrency still retains client-abort billing", () => {
-    const session = makeSession(new AbortController().signal);
-    expect(session.shouldRetainClientAbortBilling()).toBe(true);
-    session.setHighConcurrencyModeEnabled(true);
-    // regression: must stay true (bounded metering) so completed streams are billed as 200
-    expect(session.shouldRetainClientAbortBilling()).toBe(true);
-    // other heavy features remain disabled in high concurrency
-    expect(session.shouldUseRequestReplay()).toBe(false);
-    expect(session.shouldRunStreamContentGate()).toBe(false);
-    expect(session.shouldBillHedgeLosers()).toBe(false);
-  });
-
   it("completed Codex stream with client abort is still billed 200 and keeps binding under high concurrency", async () => {
     const controller = new AbortController();
     const session = makeSession(controller.signal);

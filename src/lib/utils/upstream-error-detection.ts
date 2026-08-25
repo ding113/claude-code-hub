@@ -168,9 +168,85 @@ const ERROR_STATUS_MATCHERS: Array<{ statusCode: number; matcherId: string; re: 
   {
     statusCode: 400,
     matcherId: "bad_request",
-    re: /(?:\bHTTP\/\d(?:\.\d)?\s+400(?![\p{L}\p{N}_]|\.\d)|\bbad\s+request\b|\bINVALID_ARGUMENT\b|\bjson\s+parse\b|\binvalid\s+json\b|\bunexpected\s+token\b|无效请求|格式错误|JSON\s*解析失败)/iu,
+    re: /(?:\bHTTP\/\d(?:\.\d)?\s+400(?![\p{L}\p{N}_]|\.\d)|\bbad\s+request\b|\bINVALID_ARGUMENT\b|\bcyber_policy\b|\bflagged\s+for\s+possible\s+cybersecurity\s+risk\b|\bjson\s+parse\b|\binvalid\s+json\b|\bunexpected\s+token\b|无效请求|格式错误|JSON\s*解析失败)/iu,
   },
 ];
+
+function toHttpErrorStatus(value: unknown): number | null {
+  const numeric =
+    typeof value === "number"
+      ? value
+      : typeof value === "string" && /^\d{3}$/.test(value.trim())
+        ? Number(value.trim())
+        : Number.NaN;
+  return Number.isInteger(numeric) && numeric >= 400 && numeric <= 599 ? numeric : null;
+}
+
+const STRUCTURED_BAD_REQUEST_TYPES = new Set([
+  "bad_request_error",
+  "invalid_request",
+  "invalid_request_error",
+]);
+
+const STRUCTURED_BAD_REQUEST_CODES = new Set([
+  "context_length_exceeded",
+  "cyber_policy",
+  "invalid_prompt",
+  "invalid_value",
+  "message_too_big",
+  "string_above_max_length",
+  "unsupported_value",
+]);
+
+function normalizeStructuredErrorMarker(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value.trim().toLowerCase() : null;
+}
+
+/** 优先读取错误 JSON 中明确携带的 HTTP 状态，避免再靠错误文案猜测。 */
+function inferStructuredErrorStatusCode(text: string): UpstreamErrorStatusInferenceResult | null {
+  if (!text.startsWith("{")) return null;
+
+  try {
+    const parsed = JSON.parse(text) as unknown;
+    if (!isPlainRecord(parsed)) return null;
+
+    const response = isPlainRecord(parsed.response) ? parsed.response : null;
+    const containers = [
+      parsed,
+      isPlainRecord(parsed.error) ? parsed.error : null,
+      response,
+      response && isPlainRecord(response.error) ? response.error : null,
+    ];
+
+    for (const container of containers) {
+      if (!container) continue;
+      for (const field of ["status", "status_code", "statusCode", "code"] as const) {
+        const statusCode = toHttpErrorStatus(container[field]);
+        if (statusCode !== null) {
+          return { statusCode, matcherId: "structured_status" };
+        }
+      }
+    }
+
+    for (const container of containers) {
+      if (!container) continue;
+      const type = normalizeStructuredErrorMarker(container.type);
+      const code = normalizeStructuredErrorMarker(container.code);
+      const status = normalizeStructuredErrorMarker(container.status);
+      if (
+        (type !== null && STRUCTURED_BAD_REQUEST_TYPES.has(type)) ||
+        (code !== null && STRUCTURED_BAD_REQUEST_CODES.has(code)) ||
+        status === "invalid_argument"
+      ) {
+        return { statusCode: 400, matcherId: "structured_bad_request" };
+      }
+    }
+  } catch {
+    // 非 JSON 错误继续走现有文本规则。
+  }
+
+  return null;
+}
 
 /**
  * 从上游响应体文本中推断一个“更贴近错误语义”的 HTTP 状态码（用于假200修正）。
@@ -194,6 +270,9 @@ export function inferUpstreamErrorStatusCodeFromText(
     trimmed.length > STATUS_INFERENCE_MAX_CHARS
       ? trimmed.slice(0, STATUS_INFERENCE_MAX_CHARS)
       : trimmed;
+
+  const structured = inferStructuredErrorStatusCode(limited);
+  if (structured) return structured;
 
   for (const matcher of ERROR_STATUS_MATCHERS) {
     if (matcher.re.test(limited)) {

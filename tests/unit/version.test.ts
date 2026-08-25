@@ -1,7 +1,24 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, test } from "vitest";
 import { compareVersions, isVersionEqual, isVersionGreater, isVersionLess } from "@/lib/version";
 
 describe("版本比较", () => {
+  test("未注入构建版本时应读取 release VERSION", async () => {
+    const original = process.env.NEXT_PUBLIC_APP_VERSION;
+    delete process.env.NEXT_PUBLIC_APP_VERSION;
+    vi.resetModules();
+
+    try {
+      const { APP_VERSION } = await import("@/lib/version");
+      const releaseVersion = readFileSync(join(process.cwd(), "VERSION"), "utf8").trim();
+      expect(APP_VERSION).toBe(`v${releaseVersion}`);
+    } finally {
+      if (original === undefined) delete process.env.NEXT_PUBLIC_APP_VERSION;
+      else process.env.NEXT_PUBLIC_APP_VERSION = original;
+    }
+  });
+
   test("应正确判断是否存在可升级版本（latest > current）", () => {
     expect(compareVersions("v0.3.0", "v0.3.33")).toBe(1);
     expect(compareVersions("v0.3.33", "v0.3.0")).toBe(-1);

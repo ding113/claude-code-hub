@@ -28,6 +28,37 @@ const cloudflareErrorCases = [
 ] as const;
 
 describe("inferUpstreamErrorStatusCodeFromText numeric boundaries", () => {
+  it("prefers explicit numeric and numeric-string status fields in error JSON", () => {
+    expect(inferUpstreamErrorStatusCodeFromText('{"error":{"status_code":"422"}}')).toEqual({
+      statusCode: 422,
+      matcherId: "structured_status",
+    });
+    expect(inferUpstreamErrorStatusCodeFromText('{"status":429}')).toEqual({
+      statusCode: 429,
+      matcherId: "structured_status",
+    });
+  });
+
+  it("recognizes a cyber policy stream error as a bad request", () => {
+    expect(
+      inferUpstreamErrorStatusCodeFromText(
+        '{"type":"error","code":"cyber_policy","message":"flagged for possible cybersecurity risk"}'
+      )
+    ).toEqual({ statusCode: 400, matcherId: "structured_bad_request" });
+  });
+
+  it.each([
+    '{"type":"error","error":{"type":"invalid_request_error"}}',
+    '{"type":"error","error":{"code":"invalid_prompt"}}',
+    '{"type":"error","code":"context_length_exceeded"}',
+    '{"response":{"error":{"status":"INVALID_ARGUMENT"}}}',
+  ])("recognizes structured client error semantics without an HTTP status: %s", (body) => {
+    expect(inferUpstreamErrorStatusCodeFromText(body)).toEqual({
+      statusCode: 400,
+      matcherId: "structured_bad_request",
+    });
+  });
+
   it.each(httpStatusCases)(
     "keeps matching a standalone HTTP $statusCode status token",
     ({ statusCode, matcherId }) => {

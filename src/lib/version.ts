@@ -1,10 +1,22 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import packageJson from "../../package.json";
+
+function readReleaseVersion(): string | null {
+  try {
+    const version = readFileSync(join(process.cwd(), "VERSION"), "utf8").trim();
+    return version ? `v${version.replace(/^v/i, "")}` : null;
+  } catch {
+    return null;
+  }
+}
 
 /**
  * 应用版本配置
- * 优先级: NEXT_PUBLIC_APP_VERSION > package.json version
+ * 优先级: NEXT_PUBLIC_APP_VERSION > VERSION > package.json version
  */
-export const APP_VERSION = process.env.NEXT_PUBLIC_APP_VERSION || `v${packageJson.version}`;
+export const APP_VERSION =
+  process.env.NEXT_PUBLIC_APP_VERSION?.trim() || readReleaseVersion() || `v${packageJson.version}`;
 
 /**
  * GitHub 仓库信息

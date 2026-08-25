@@ -418,6 +418,55 @@ describe("message_request 异步批量写入", () => {
     expect(ordinarySql.sql).toContain('"status_code" IS NULL');
   });
 
+  it("counts deferred ordinary patches against the shared pending limit", async () => {
+    process.env.MESSAGE_REQUEST_WRITE_MODE = "async";
+    process.env.MESSAGE_REQUEST_ASYNC_MAX_PENDING = "100";
+    const releaseMetadata = createDeferred<unknown[]>();
+    executeMock.mockImplementationOnce(async () => releaseMetadata.promise);
+
+    const {
+      enqueueMessageRequestUpdate,
+      enqueueMessageRequestPostTerminalRoutingTraceDurably,
+      flushMessageRequestWriteBuffer,
+      stopMessageRequestWriteBuffer,
+    } = await import("@/repository/message-write-buffer");
+    const metadataWrites = Array.from({ length: 100 }, (_, index) =>
+      enqueueMessageRequestPostTerminalRoutingTraceDurably(
+        60_000 + index,
+        createRoutingTrace(index)
+      )
+    );
+    const metadataFlush = flushMessageRequestWriteBuffer();
+
+    for (let index = 0; index < 100; index++) {
+      enqueueMessageRequestUpdate(60_000 + index, { durationMs: index });
+    }
+    enqueueMessageRequestUpdate(70_000, { statusCode: 200 });
+
+    releaseMetadata.resolve(Array.from({ length: 100 }, (_, index) => ({ id: 60_000 + index })));
+    await metadataFlush;
+    await Promise.all(metadataWrites);
+    await flushMessageRequestWriteBuffer();
+    await stopMessageRequestWriteBuffer();
+
+    expect(executeMock).toHaveBeenCalledTimes(2);
+    const ordinarySql = toSqlText(executeMock.mock.calls[1]?.[0]);
+    const retainedDeferredIds = new Set(
+      ordinarySql.params.filter(
+        (value): value is number => typeof value === "number" && value >= 60_000 && value < 60_100
+      )
+    );
+    expect(retainedDeferredIds).toHaveLength(99);
+    expect(ordinarySql.params).toContain(70_000);
+    expect(loggerWarnMock).toHaveBeenCalledWith(
+      "[MessageRequestWriteBuffer] Pending queue overflow, dropping updates",
+      expect.objectContaining({
+        maxPending: 100,
+        droppedCount: 1,
+      })
+    );
+  });
+
   it("keeps deferred ordinary updates fenced when the metadata ACK misses the row", async () => {
     process.env.MESSAGE_REQUEST_WRITE_MODE = "async";
     const releaseMetadata = createDeferred<unknown[]>();

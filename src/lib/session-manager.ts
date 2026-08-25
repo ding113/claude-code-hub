@@ -539,13 +539,6 @@ function buildTenantContentHashSessionKey(keyId: number, contentHash: string): s
  */
 export class SessionManager {
   private static readonly SESSION_TTL = parseInt(process.env.SESSION_TTL || "300", 10); // 5 分钟
-  private static readonly SHORT_CONTEXT_THRESHOLD = parseInt(
-    process.env.SHORT_CONTEXT_THRESHOLD || "2",
-    10
-  ); // 短上下文阈值
-  private static readonly ENABLE_SHORT_CONTEXT_DETECTION =
-    process.env.ENABLE_SHORT_CONTEXT_DETECTION !== "false"; // 默认启用
-
   /**
    * 获取 STORE_SESSION_MESSAGES 配置
    * - true：原样存储 message 内容
@@ -874,44 +867,14 @@ export class SessionManager {
   ): Promise<string> {
     const redis = getRedisClient();
 
-    const messagesLength = Array.isArray(messages) ? messages.length : 0;
-
     logger.trace("SessionManager: getOrCreateSessionId called", {
       keyId,
       hasClientSession: !!clientSessionId,
-      messagesLength,
+      messagesLength: Array.isArray(messages) ? messages.length : 0,
     });
 
     // 1. 优先使用客户端传递的 session_id (来自 metadata.user_id 或 metadata.session_id)
     if (clientSessionId) {
-      // 2. 短上下文并发检测（方案E）
-      if (
-        SessionManager.ENABLE_SHORT_CONTEXT_DETECTION &&
-        messagesLength <= SessionManager.SHORT_CONTEXT_THRESHOLD
-      ) {
-        // 检查该 session 是否有其他请求正在运行
-        const concurrentCount = await SessionTracker.getConcurrentCount(clientSessionId);
-
-        if (concurrentCount > 0) {
-          // 场景B：有并发请求 → 这是并发短任务 → 强制新建 session
-          const newId = SessionManager.generateSessionId();
-          logger.info("SessionManager: 检测到并发短任务，强制新建 session", {
-            originalSessionId: clientSessionId,
-            newSessionId: newId,
-            messagesLength,
-            existingConcurrentCount: concurrentCount,
-          });
-          return newId;
-        }
-
-        // 场景A：无并发 → 这可能是长对话的开始 → 允许复用
-        logger.debug("SessionManager: 短上下文但 session 空闲，允许复用（长对话开始）", {
-          sessionId: clientSessionId,
-          messagesLength,
-        });
-      }
-
-      // 3. 长上下文 or 无并发 → 正常复用
       logger.debug("SessionManager: Using client-provided session", {
         sessionId: clientSessionId,
       });

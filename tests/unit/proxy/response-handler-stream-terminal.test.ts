@@ -211,8 +211,9 @@ function createProvider(): Provider {
 
 async function createSession(options: {
   readonly responseController?: AbortController;
+  readonly pathname?: string;
 }): Promise<{ readonly releaseAgent: ReturnType<typeof vi.fn>; readonly session: ProxySession }> {
-  const request = new Request("https://hub.test/v1/messages", {
+  const request = new Request(`https://hub.test${options.pathname ?? "/v1/messages"}`, {
     body: JSON.stringify({ messages: [], stream: true }),
     headers: { "content-type": "application/json" },
     method: "POST",
@@ -312,6 +313,78 @@ describe("ProxyResponseHandler.dispatch stream terminal behavior", () => {
     expect(releaseAgent).toHaveBeenCalledOnce();
   });
 
+  it("透传并计量 Responses incomplete，但不发布 Replay 成功", async () => {
+    const { session } = await createSession({});
+    session.setProvider({ ...createProvider(), providerType: "codex" });
+    session.originalFormat = "response";
+    setReplayOwner(session, "responses-incomplete");
+    setReplayFinalization(session);
+    const body = [
+      'event: response.output_text.delta\ndata: {"type":"response.output_text.delta","delta":"partial"}\n\n',
+      'event: response.incomplete\ndata: {"type":"response.incomplete","response":{"status":"incomplete","incomplete_details":{"reason":"max_output_tokens"},"usage":{"input_tokens":8,"output_tokens":4}}}\n\n',
+    ].join("");
+
+    const returned = await ProxyResponseHandler.dispatch(session, sseResponse(body));
+    expect(await returned.text()).toBe(body);
+    await settleTasks();
+
+    expect(mocks.durable).toHaveBeenCalledWith(
+      MESSAGE.id,
+      expect.objectContaining({
+        statusCode: 200,
+        errorMessage: "RESPONSE_INCOMPLETE",
+        inputTokens: 8,
+        outputTokens: 4,
+      }),
+      expect.objectContaining({ onCommitted: expect.any(Function) })
+    );
+    expect(mocks.replayAbort).toHaveBeenCalledWith("response_incomplete");
+    expect(mocks.replayComplete).not.toHaveBeenCalled();
+  });
+
+  it("客户端在 Responses incomplete 后断开时不改写为 499", async () => {
+    const body =
+      'event: response.incomplete\ndata: {"type":"response.incomplete","response":{"status":"incomplete","usage":{"input_tokens":3,"output_tokens":2}}}\n\n';
+    const source = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode(body));
+      },
+    });
+    const { session } = await createSession({});
+    session.setProvider({ ...createProvider(), providerType: "codex" });
+    session.originalFormat = "response";
+    setReplayFinalization(session);
+
+    const returned = await ProxyResponseHandler.dispatch(session, sseResponse(source));
+    const reader = returned.body?.getReader();
+    expect(new TextDecoder().decode((await reader?.read())?.value)).toBe(body);
+    await reader?.cancel(new Error("client disconnected after incomplete"));
+    await settleTasks();
+
+    expect(mocks.durable).toHaveBeenCalledWith(
+      MESSAGE.id,
+      expect.objectContaining({ statusCode: 200, errorMessage: "RESPONSE_INCOMPLETE" }),
+      expect.objectContaining({ onCommitted: expect.any(Function) })
+    );
+  });
+
+  it("does not interpret an opaque raw-passthrough stream as a provider protocol", async () => {
+    const { session } = await createSession({ pathname: "/v1/responses/compact" });
+    const returned = await ProxyResponseHandler.dispatch(
+      session,
+      sseResponse("data: opaque upstream bytes\n\n")
+    );
+
+    expect(await returned.text()).toBe("data: opaque upstream bytes\n\n");
+    await settleTasks();
+
+    expect(mocks.durable).toHaveBeenCalledWith(
+      51,
+      expect.objectContaining({ statusCode: 200 }),
+      expect.objectContaining({ onCommitted: expect.any(Function) })
+    );
+  });
+
   it("persists a partial client-aborted stream as 499", async () => {
     let abortSource = () => {};
     const source = new ReadableStream<Uint8Array>({
@@ -370,6 +443,41 @@ describe("ProxyResponseHandler.dispatch stream terminal behavior", () => {
     expect(replayedText).toContain('"text":"kept"');
     expect(replayedText).toContain("message_stop");
     expect(getDetachedStreamBudgetSnapshot().activeStreams).toBe(0);
+  });
+
+  it("persists OpenAI Chat Replay through the wire [DONE] marker", async () => {
+    const chunks = [
+      'data: {"choices":[{"delta":{"content":"kept"},"finish_reason":null}]}\n\n',
+      'data: {"choices":[{"delta":{},"finish_reason":"stop"}],"usage":null}\n\n',
+      'data: {"choices":[],"usage":{"prompt_tokens":10,"completion_tokens":4}}\n\n',
+      "data: [DONE]\n\n",
+    ];
+    let index = 0;
+    const source = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        const chunk = chunks[index++];
+        if (chunk) controller.enqueue(new TextEncoder().encode(chunk));
+      },
+    });
+    const { session } = await createSession({});
+    session.setProvider({ ...createProvider(), providerType: "openai" });
+    session.originalFormat = "openai";
+    setReplayOwner(session, "openai-done");
+    setReplayFinalization(session);
+
+    const returned = await ProxyResponseHandler.dispatch(session, sseResponse(source));
+    const reader = returned.body?.getReader();
+    await reader?.read();
+    await reader?.cancel(new Error("client disconnected"));
+    await settleTasks();
+
+    const replayedText = mocks.replayObserve.mock.calls
+      .map(([chunk]) => new TextDecoder().decode(chunk as Uint8Array))
+      .join("");
+    expect(replayedText).toContain('"completion_tokens":4');
+    expect(replayedText).toContain("data: [DONE]");
+    expect(mocks.replayAbort).not.toHaveBeenCalled();
+    expect(mocks.replayComplete).toHaveBeenCalledWith(MESSAGE.id);
   });
 
   it("downgrades a detached Replay to metering when Replay headroom is exhausted", async () => {
@@ -436,6 +544,7 @@ describe("ProxyResponseHandler.dispatch stream terminal behavior", () => {
 
       expect(mocks.replayInactive).toEqual(expect.any(Function));
       expect(getDetachedStreamBudgetSnapshot().activeByKind).toEqual({
+        loser: 0,
         metering: 0,
         replay: 1,
       });
@@ -445,11 +554,13 @@ describe("ProxyResponseHandler.dispatch stream terminal behavior", () => {
       mocks.replayTerminalState = true;
       mocks.replayInactive?.();
       expect(getDetachedStreamBudgetSnapshot().activeByKind).toEqual({
+        loser: 0,
         metering: 1,
         replay: 1,
       });
       mocks.replayTerminal?.();
       expect(getDetachedStreamBudgetSnapshot().activeByKind).toEqual({
+        loser: 0,
         metering: 1,
         replay: 0,
       });
@@ -611,6 +722,35 @@ describe("ProxyResponseHandler.dispatch stream terminal behavior", () => {
     expect(mocks.durable).toHaveBeenCalledWith(
       MESSAGE.id,
       expect.objectContaining({ statusCode: 502 }),
+      expect.objectContaining({ onCommitted: expect.any(Function) })
+    );
+  });
+
+  it("preserves Gemini UTF-8 characters split across network chunks during conversion", async () => {
+    const { session } = await createSession({});
+    session.setProvider({ ...createProvider(), providerType: "gemini" });
+    session.originalFormat = "claude";
+    const prefix = 'data: {"candidates":[{"content":{"parts":[{"text":"';
+    const suffix =
+      '"}]}}]}\n\ndata: {"candidates":[{"finishReason":"STOP"}],"usageMetadata":{"promptTokenCount":10,"candidatesTokenCount":2}}\n\n';
+    const encoder = new TextEncoder();
+    const bytes = encoder.encode(`${prefix}你好😀${suffix}`);
+    const splitAt = encoder.encode(`${prefix}你好`).byteLength + 2;
+    const source = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(bytes.subarray(0, splitAt));
+        controller.enqueue(bytes.subarray(splitAt));
+        controller.close();
+      },
+    });
+
+    const returned = await ProxyResponseHandler.dispatch(session, sseResponse(source));
+    expect(await returned.text()).toContain("你好😀");
+    await settleTasks();
+
+    expect(mocks.durable).toHaveBeenCalledWith(
+      MESSAGE.id,
+      expect.objectContaining({ statusCode: 200 }),
       expect.objectContaining({ onCommitted: expect.any(Function) })
     );
   });

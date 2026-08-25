@@ -150,7 +150,9 @@ export class ProxySessionGuard {
       const sessionId = await SessionManager.getOrCreateSessionId(keyId, messages, clientSessionId);
 
       // 4. 设置到 session 对象
-      session.setSessionId(sessionId);
+      session.setSessionId(sessionId, {
+        allowSingleTurnProviderReuse: clientSessionId !== null,
+      });
       session.setSessionIdentityMetadata({
         identity: buildPublicSessionIdentity(sessionId, keyId),
         kind: "session_id",

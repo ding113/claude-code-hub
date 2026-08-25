@@ -61,6 +61,11 @@ const RESERVED_INTERNAL_HEADER_PREFIX = "x-cch-";
 const MAX_PENDING_FRAMES = 64;
 const MAX_PENDING_BYTES = 64 * 1024 * 1024; // 64 MiB across all queued frames
 const MAX_PENDING_OUTBOUND_BYTES = 1024 * 1024; // 1 MiB per client WebSocket
+// Internal HTTP responses ultimately become one outbound WS frame per event.
+// Bound aggregation at the same layer instead of first materializing a body
+// that safeSend can never accept.
+const MAX_INTERNAL_RESPONSE_BODY_BYTES = MAX_PENDING_OUTBOUND_BYTES;
+const MAX_INTERNAL_SSE_EVENT_CHARACTERS = MAX_PENDING_OUTBOUND_BYTES;
 const REQUEST_BODY_DRAIN_TIMEOUT_MS = 30_000;
 const OUTBOUND_SEND_TIMEOUT_MS = 30_000;
 
@@ -366,8 +371,12 @@ async function handleWebSocketConnection(ws, req) {
     finalize();
   });
 
-  const processFrame = async (raw) => {
+  const processFrame = async (queuedFrame) => {
     if (closed || closing) return;
+    // drain() 会在整个上游生成期间等待本 Promise。立即清空队列项里的大字符串，
+    // 避免同一请求同时被 drain 局部变量和解析后的请求对象重复保留。
+    let raw = queuedFrame.text;
+    queuedFrame.text = "";
     const turnId = ++turnSequence;
     let turnActive = true;
     let turnReq = null;
@@ -431,8 +440,8 @@ async function handleWebSocketConnection(ws, req) {
       return;
     }
 
-    const { type: _type, ...rawBody } = frame;
-    const body = { ...rawBody };
+    delete frame.type;
+    let body = frame;
     // body.model wins over query; only fill from query when body lacks a model
     // (LiteLLM/other compat). Drop transport-only fields.
     if (queryModel && (body.model === undefined || body.model === null || body.model === "")) {
@@ -441,19 +450,26 @@ async function handleWebSocketConnection(ws, req) {
 
     log("info", "ws_request_started", {
       model: typeof body.model === "string" ? body.model : null,
-      payloadBytes: Buffer.byteLength(raw, "utf8"),
+      payloadBytes: queuedFrame.bytes,
       hasPreviousResponseId: typeof body.previous_response_id === "string",
     });
 
+    // forwardToInternalHttp 会在返回 Promise 前同步完成 JSON 序列化。随后便可
+    // 释放原始 WS 文本和解析对象，不能让几十 MiB 的请求跟随整段响应存活。
+    const forwarding = forwardToInternalHttp(
+      ws,
+      req,
+      body,
+      responsesWsSessionId,
+      registerTurnResource,
+      requestClose
+    );
+    raw = "";
+    frame = null;
+    body = null;
+
     try {
-      await forwardToInternalHttp(
-        ws,
-        req,
-        body,
-        responsesWsSessionId,
-        registerTurnResource,
-        requestClose
-      );
+      await forwarding;
     } finally {
       turnActive = false;
       if (currentInternalReq === turnReq) currentInternalReq = null;
@@ -467,7 +483,7 @@ async function handleWebSocketConnection(ws, req) {
     if (inFlight) return;
     const next = pending.shift();
     if (next === undefined) return;
-    pendingBytes -= Buffer.byteLength(next, "utf8");
+    pendingBytes -= next.bytes;
     if (pendingBytes < 0) pendingBytes = 0;
     inFlight = true;
     try {
@@ -511,7 +527,7 @@ async function handleWebSocketConnection(ws, req) {
       );
       return;
     }
-    pending.push(text);
+    pending.push({ text, bytes: size });
     pendingBytes += size;
     void drain().catch((err) => {
       log("error", "ws_drain_failed", {
@@ -597,10 +613,12 @@ async function forwardToInternalHttp(
   // Force streaming so we can translate SSE events to WS frames incrementally.
   // The upstream pipeline will strip transport-only fields (stream, background)
   // before forwarding to upstream WebSocket.
-  const bodyForHttp = { ...body, stream: true };
+  let bodyForHttp = { ...body, stream: true };
+  body = null;
   delete bodyForHttp.background;
 
-  const payload = Buffer.from(JSON.stringify(bodyForHttp), "utf8");
+  let payload = Buffer.from(JSON.stringify(bodyForHttp), "utf8");
+  bodyForHttp = null;
   internalHeaders["content-length"] = String(payload.length);
 
   await new Promise((resolve) => {
@@ -627,6 +645,7 @@ async function forwardToInternalHttp(
         let responseSettled = false;
         let responseBodyEnded = false;
         let terminalSendAcknowledged = false;
+        let terminalFailureQueued = false;
         const settleResponse = () => {
           if (responseSettled) return false;
           if (!responseBodyEnded || !terminalSendAcknowledged) return false;
@@ -657,6 +676,8 @@ async function forwardToInternalHttp(
           forceSettleResponse();
         };
         const sendFatalError = (code, message, closeReason) => {
+          if (responseSettled || terminalFailureQueued) return false;
+          terminalFailureQueued = true;
           const sent = safeSend(
             ws,
             { type: "error", error: { code, message } },
@@ -667,15 +688,32 @@ async function forwardToInternalHttp(
             }
           );
           if (!sent) settleAndClose(closeReason);
+          return sent;
         };
 
         if (!isSse) {
           // Upstream returned non-stream JSON (e.g. error response). Collect
           // and emit as a single terminal event.
           const chunks = [];
-          res.on("data", (c) => chunks.push(c));
+          let responseBytes = 0;
+          res.on("data", (chunk) => {
+            if (responseSettled || terminalFailureQueued) return;
+            const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+            if (responseBytes + bytes.byteLength > MAX_INTERNAL_RESPONSE_BODY_BYTES) {
+              chunks.length = 0;
+              sendFatalError(
+                "internal_response_too_large",
+                "Internal JSON response exceeded the WebSocket response limit",
+                "internal_response_too_large"
+              );
+              if (!res.destroyed) res.destroy();
+              return;
+            }
+            responseBytes += bytes.byteLength;
+            chunks.push(bytes);
+          });
           res.on("end", () => {
-            if (responseSettled) return;
+            if (responseSettled || terminalFailureQueued) return;
             responseBodyEnded = true;
             const text = Buffer.concat(chunks).toString("utf8");
             let parsed;
@@ -713,7 +751,7 @@ async function forwardToInternalHttp(
             }
           });
           res.on("error", (err) => {
-            if (responseSettled) return;
+            if (responseSettled || terminalFailureQueued) return;
             sendFatalError(
               "internal_response_error",
               String(err && err.message ? err.message : err),
@@ -721,7 +759,7 @@ async function forwardToInternalHttp(
             );
           });
           res.on("close", () => {
-            if (responseSettled) return;
+            if (responseSettled || terminalFailureQueued) return;
             if (responseBodyEnded || res.complete) {
               responseBodyEnded = true;
               settleResponse();
@@ -742,7 +780,7 @@ async function forwardToInternalHttp(
         let buffer = "";
         let sawTerminal = false;
         let terminalEventType = null;
-        const EVENT_DELIMITER = /\r?\n\r?\n/;
+        const EVENT_DELIMITER = /\r?\n\r?\n/g;
         const failIfUnsettled = (code, message, closeReason) => {
           if (responseSettled) return;
           if (sawTerminal) {
@@ -757,21 +795,27 @@ async function forwardToInternalHttp(
           sendFatalError(code, message, closeReason);
         };
 
-        const flushEvents = () => {
-          const parts = buffer.split(EVENT_DELIMITER);
-          // Last part may be a partial event still arriving — keep it buffered.
-          buffer = parts.pop() ?? "";
-          for (const chunk of parts) {
-            const lines = chunk.split(/\r?\n/);
+        const failOversizedSseEvent = () => {
+          buffer = "";
+          sendFatalError(
+            "internal_sse_event_too_large",
+            "Internal SSE event exceeded the WebSocket response limit",
+            "internal_sse_event_too_large"
+          );
+          if (!res.destroyed) res.destroy();
+        };
+        const processEvent = (eventChunk) => {
+            const lines = eventChunk.split(/\r?\n/);
             const dataLines = [];
             for (const line of lines) {
               if (line.startsWith("data:")) {
-                // Trim CR / leading whitespace so trailing \r from CRLF lines
-                // doesn't end up inside the payload.
-                dataLines.push(line.slice(5).trim());
+                // SSE removes at most one optional space after the colon.
+                // Payload whitespace is data and must otherwise remain intact.
+                const data = line.slice(5);
+                dataLines.push(data.startsWith(" ") ? data.slice(1) : data);
               }
             }
-            if (dataLines.length === 0) continue;
+            if (dataLines.length === 0) return;
             const dataText = dataLines.join("\n");
             if (dataText.trim() === "[DONE]") {
               if (!sawTerminal) {
@@ -785,7 +829,7 @@ async function forwardToInternalHttp(
                 });
                 sawTerminal = true;
               }
-              continue;
+              return;
             }
             let event;
             try {
@@ -796,7 +840,7 @@ async function forwardToInternalHttp(
                 response: res,
                 onFailure: settleAndClose,
               });
-              continue;
+              return;
             }
             const isTerminalEvent =
               event && typeof event.type === "string" && TERMINAL_EVENT_TYPES.has(event.type);
@@ -810,22 +854,43 @@ async function forwardToInternalHttp(
               terminalEventType = event.type;
               log("info", "ws_terminal_event_sent", { type: event.type, source: "sse" });
             }
+        };
+
+        const flushEvents = () => {
+          EVENT_DELIMITER.lastIndex = 0;
+          let eventStart = 0;
+          let delimiter;
+          while ((delimiter = EVENT_DELIMITER.exec(buffer)) !== null) {
+            if (delimiter.index - eventStart > MAX_INTERNAL_SSE_EVENT_CHARACTERS) {
+              failOversizedSseEvent();
+              return false;
+            }
+            processEvent(buffer.slice(eventStart, delimiter.index));
+            eventStart = EVENT_DELIMITER.lastIndex;
+            if (responseSettled || terminalFailureQueued) break;
           }
+          if (eventStart > 0) buffer = buffer.slice(eventStart);
+          EVENT_DELIMITER.lastIndex = 0;
+          if (buffer.length > MAX_INTERNAL_SSE_EVENT_CHARACTERS) {
+            failOversizedSseEvent();
+            return false;
+          }
+          return true;
         };
 
         res.setEncoding("utf8");
         res.on("data", (chunk) => {
-          if (responseSettled) return;
+          if (responseSettled || terminalFailureQueued) return;
           buffer += chunk;
           flushEvents();
         });
         res.on("end", () => {
-          if (responseSettled) return;
+          if (responseSettled || terminalFailureQueued) return;
           responseBodyEnded = true;
           // Flush any remaining buffered event
-          if (buffer.trim().length > 0) {
+          if (buffer.length > 0) {
             buffer += "\n\n";
-            flushEvents();
+            if (!flushEvents()) return;
           }
           if (!sawTerminal) {
             sendFatalError(
@@ -980,7 +1045,11 @@ async function forwardToInternalHttp(
       clearRequestBodyListeners();
       if (!requestEnded && !req.destroyed) req.destroy();
     };
-    if (req.write(payload)) {
+    const requestBodyAccepted = req.write(payload);
+    // ClientRequest 已同步取得 Buffer 所有权；本地不应在等待整段响应期间
+    // 再保留一份大请求体。即使 write() 返回 false，Node 的写队列也持有它。
+    payload = null;
+    if (requestBodyAccepted) {
       finishRequestBody();
     } else {
       req.once("drain", finishRequestBody);

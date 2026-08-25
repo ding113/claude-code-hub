@@ -106,6 +106,14 @@ beforeEach(() => {
 });
 
 describe("SessionManager content-hash mapping tenant isolation", () => {
+  it("并发短请求也保留客户端明确提供的 Session ID", async () => {
+    const clientSessionId = "client-stable-session-id";
+
+    await expect(
+      SessionManager.getOrCreateSessionId(101, [{ role: "user", content: "next" }], clientSessionId)
+    ).resolves.toBe(clientSessionId);
+  });
+
   it("does not share a generated Session between API keys with identical content", async () => {
     const first = await SessionManager.getOrCreateSessionId(101, MESSAGES, null);
     await vi.waitFor(() => expect(values.get(tenantHashKey(101))).toBe(first));

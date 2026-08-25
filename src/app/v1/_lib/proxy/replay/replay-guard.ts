@@ -36,13 +36,13 @@ const ATTACH_POLL_MAX_MS = 200;
 const ATTACH_STALL_MS = 30_000;
 /** attach 等待 meta / 尾部数据的总预算（防御性上限，正常流远短于此） */
 const ATTACH_MAX_WAIT_MS = 10 * 60 * 1000;
+/** 每次只从 Redis 拉取一页，避免慢客户端把完整 Replay 同时搬进 Node 堆。 */
+const REPLAY_SERVE_BATCH_CHUNKS = 64;
+/** 单次编码片段上限；同时避免大字符串再生成一份同等大小的 Uint8Array。 */
+const REPLAY_ENCODE_SLICE_CHARACTERS = 64 * 1024;
 
 export class ProxyReplayGuard {
   static async ensure(session: ProxySession): Promise<Response | null> {
-    if (typeof session.shouldUseRequestReplay === "function" && !session.shouldUseRequestReplay()) {
-      return null;
-    }
-
     try {
       // guard 位于 provider 步骤之前：先刷新运行时覆写快照，管理端刚保存的
       // replayEnabled 首个请求即生效（底层系统设置缓存有 TTL，常态为缓存命中）
@@ -101,7 +101,16 @@ export class ProxyReplayGuard {
         return null;
       }
       if (meta.status === "completed") {
-        const chunks = await store.readChunks(identity.replayId, 0);
+        const expectedChunkCount =
+          Number.isSafeInteger(meta.chunkCount) && meta.chunkCount > 0 ? meta.chunkCount : 0;
+        const chunks =
+          expectedChunkCount > 0
+            ? await store.readChunks(
+                identity.replayId,
+                0,
+                Math.min(REPLAY_SERVE_BATCH_CHUNKS, expectedChunkCount)
+              )
+            : null;
         if (chunks && chunks.length > 0) {
           await ProxyReplayGuard.writeAuditRow(
             session,
@@ -110,7 +119,13 @@ export class ProxyReplayGuard {
             "redis_completed",
             meta.messageRequestId
           );
-          return ProxyReplayGuard.buildStaticResponse(meta, chunks.join(""));
+          return ProxyReplayGuard.buildRedisCompletedResponse(
+            meta,
+            identity.replayId,
+            store,
+            chunks,
+            expectedChunkCount
+          );
         }
         // 热层块已过期：落 PG
       } else if (meta.status === "owning") {
@@ -154,10 +169,71 @@ export class ProxyReplayGuard {
   ): Response {
     const headers = ProxyReplayGuard.buildServeHeaders(meta.headers, "completed");
     const encoder = new TextEncoder();
+    const cursor = createTextCursor([payload]);
     const body = new ReadableStream<Uint8Array>({
-      start(controller) {
-        controller.enqueue(encoder.encode(payload));
-        controller.close();
+      pull(controller) {
+        if (!enqueueNextTextSlice(controller, cursor, encoder)) controller.close();
+      },
+      cancel() {
+        clearTextCursor(cursor);
+      },
+    });
+    return new Response(body, { status: meta.statusCode || 200, headers });
+  }
+
+  /** Redis completed 条目按页、按下游 pull 读取，避免完整 chunks + join + encode 三份峰值。 */
+  private static buildRedisCompletedResponse(
+    meta: Pick<ReplayMeta, "statusCode" | "headers">,
+    replayId: string,
+    store: ReplayStore,
+    initialChunks: string[],
+    expectedChunkCount: number
+  ): Response {
+    const headers = ProxyReplayGuard.buildServeHeaders(meta.headers, "completed");
+    const encoder = new TextEncoder();
+    const cursor = createTextCursor(initialChunks);
+    let offset = initialChunks.length;
+    let reachedEnd = offset >= expectedChunkCount;
+    let cancelled = false;
+
+    const body = new ReadableStream<Uint8Array>({
+      async pull(controller) {
+        while (!cancelled) {
+          if (enqueueNextTextSlice(controller, cursor, encoder)) return;
+          if (reachedEnd) {
+            controller.close();
+            return;
+          }
+
+          const chunks = await store.readChunks(
+            replayId,
+            offset,
+            Math.min(REPLAY_SERVE_BATCH_CHUNKS, expectedChunkCount - offset)
+          );
+          if (cancelled) return;
+          if (chunks === null) {
+            clearTextCursor(cursor);
+            controller.error(new Error("replay completed payload became unavailable"));
+            return;
+          }
+          if (chunks.length === 0) {
+            clearTextCursor(cursor);
+            controller.error(new Error("replay completed payload was truncated"));
+            return;
+          }
+          offset += chunks.length;
+          if (offset > expectedChunkCount) {
+            clearTextCursor(cursor);
+            controller.error(new Error("replay completed payload exceeded metadata"));
+            return;
+          }
+          reachedEnd = offset >= expectedChunkCount;
+          replaceTextCursorChunks(cursor, chunks);
+        }
+      },
+      cancel() {
+        cancelled = true;
+        clearTextCursor(cursor);
       },
     });
     return new Response(body, { status: meta.statusCode || 200, headers });
@@ -176,24 +252,57 @@ export class ProxyReplayGuard {
     const headers = ProxyReplayGuard.buildServeHeaders(initialMeta.headers, "live");
     const encoder = new TextEncoder();
     let offset = 0;
-    let cancelled = false;
+    const cancellation = new AbortController();
+    const cursor = createTextCursor([]);
     let pollDelay = ATTACH_POLL_INITIAL_MS;
     const startedAt = Date.now();
     let lastProgressAt = Date.now();
-
-    void ProxyReplayGuard.observeLiveAuditCompletion(session, identity, store).catch((error) => {
-      logger.warn("[ReplayGuard] live audit observer failed", {
-        replayId: identity.replayId.slice(0, 12),
-        error: error instanceof Error ? error.message : String(error),
-      });
-    });
+    let completedMeta: ReplayMeta | null = null;
+    // cancel 时主动断开对完整 ProxySession 的引用；只在本订阅者真正读完整条目后写审计。
+    let auditSession: ProxySession | null = session;
 
     const body = new ReadableStream<Uint8Array>({
       async pull(controller) {
-        while (!cancelled) {
-          const chunks = await store.readChunks(identity.replayId, offset);
+        while (!cancellation.signal.aborted) {
+          if (enqueueNextTextSlice(controller, cursor, encoder)) return;
+
+          let maxChunks = REPLAY_SERVE_BATCH_CHUNKS;
+          if (completedMeta) {
+            const expectedChunkCount = completedMeta.chunkCount;
+            if (!Number.isSafeInteger(expectedChunkCount) || expectedChunkCount < 0) {
+              auditSession = null;
+              controller.error(new Error("replay completed metadata is invalid"));
+              return;
+            }
+            if (offset > expectedChunkCount) {
+              auditSession = null;
+              controller.error(new Error("replay live payload exceeded metadata"));
+              return;
+            }
+            if (offset === expectedChunkCount) {
+              const completedSession = auditSession;
+              auditSession = null;
+              controller.close();
+              if (completedSession && completedMeta.messageRequestId) {
+                void ProxyReplayGuard.writeAuditRow(
+                  completedSession,
+                  identity,
+                  completedMeta.statusCode,
+                  "attached_live",
+                  completedMeta.messageRequestId
+                );
+              }
+              return;
+            }
+            maxChunks = Math.min(REPLAY_SERVE_BATCH_CHUNKS, expectedChunkCount - offset);
+          }
+
+          const chunks = await store.readChunks(identity.replayId, offset, maxChunks);
+          if (cancellation.signal.aborted) return;
           if (chunks === null) {
             // Redis 失联：无法继续跟尾，按传输错误终止
+            auditSession = null;
+            clearTextCursor(cursor);
             controller.error(new Error("replay attach lost redis connection"));
             return;
           }
@@ -201,78 +310,55 @@ export class ProxyReplayGuard {
             offset += chunks.length;
             lastProgressAt = Date.now();
             pollDelay = ATTACH_POLL_INITIAL_MS;
-            controller.enqueue(encoder.encode(chunks.join("")));
+            replaceTextCursorChunks(cursor, chunks);
+            continue;
+          }
+
+          if (completedMeta) {
+            auditSession = null;
+            controller.error(new Error("replay live payload was truncated"));
             return;
           }
 
           const meta = await store.getMeta(identity.replayId);
+          if (cancellation.signal.aborted) return;
           if (!meta || meta.status === "aborted") {
+            auditSession = null;
+            clearTextCursor(cursor);
             controller.error(new Error("replay source aborted"));
             return;
           }
           if (meta.status === "completed") {
-            // 终态后补读一次尾部，防 completed 与最后一批块之间的竞态
-            const tail = await store.readChunks(identity.replayId, offset);
-            if (tail && tail.length > 0) {
-              offset += tail.length;
-              controller.enqueue(encoder.encode(tail.join("")));
-              return;
-            }
-            controller.close();
-            return;
+            // completed 与最后一批块可能先后可见；下一轮仍从当前 offset 补读到空。
+            completedMeta = meta;
+            continue;
           }
           // owning：stall 检测（owner 心跳 + 本地进度双重判定）
           const now = Date.now();
           if (now - lastProgressAt > ATTACH_STALL_MS && now - meta.heartbeatAt > ATTACH_STALL_MS) {
+            auditSession = null;
+            clearTextCursor(cursor);
             controller.error(new Error("replay owner stalled"));
             return;
           }
           if (now - startedAt > ATTACH_MAX_WAIT_MS) {
+            auditSession = null;
+            clearTextCursor(cursor);
             controller.error(new Error("replay attach exceeded max wait"));
             return;
           }
-          await sleep(pollDelay);
+          const elapsed = await sleep(pollDelay, cancellation.signal);
+          if (!elapsed) return;
           pollDelay = Math.min(pollDelay * 2, ATTACH_POLL_MAX_MS);
         }
       },
       cancel() {
-        cancelled = true;
+        auditSession = null;
+        clearTextCursor(cursor);
+        cancellation.abort();
       },
     });
     return new Response(body, { status: initialMeta.statusCode || 200, headers });
-  }
-
-  /**
-   * live attach 的审计生命周期独立于客户端 reader。只有 source 已完成且携带
-   * durable messageRequestId 时才创建 Replay 审计；失败、超时或取消不留下伪成功行。
-   */
-  private static async observeLiveAuditCompletion(
-    session: ProxySession,
-    identity: ReplayIdentity,
-    store: ReplayStore
-  ): Promise<void> {
-    const startedAt = Date.now();
-    let pollDelay = ATTACH_POLL_INITIAL_MS;
-
-    while (Date.now() - startedAt <= ATTACH_MAX_WAIT_MS) {
-      const meta = await store.getMeta(identity.replayId);
-      if (!meta || meta.verifier !== identity.verifier || meta.status === "aborted") return;
-      if (meta.status === "completed") {
-        if (meta.messageRequestId) {
-          await ProxyReplayGuard.writeAuditRow(
-            session,
-            identity,
-            meta.statusCode,
-            "attached_live",
-            meta.messageRequestId
-          );
-        }
-        return;
-      }
-      if (Date.now() - meta.heartbeatAt > ATTACH_STALL_MS) return;
-      await sleep(pollDelay);
-      pollDelay = Math.min(pollDelay * 2, ATTACH_POLL_MAX_MS);
-    }
   }
 
   private static buildServeHeaders(
@@ -360,6 +446,69 @@ export class ProxyReplayGuard {
   }
 }
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+interface TextCursor {
+  chunks: string[];
+  chunkIndex: number;
+  characterOffset: number;
+}
+
+function createTextCursor(chunks: string[]): TextCursor {
+  return { chunks, chunkIndex: 0, characterOffset: 0 };
+}
+
+function replaceTextCursorChunks(cursor: TextCursor, chunks: string[]): void {
+  cursor.chunks = chunks;
+  cursor.chunkIndex = 0;
+  cursor.characterOffset = 0;
+}
+
+function clearTextCursor(cursor: TextCursor): void {
+  replaceTextCursorChunks(cursor, []);
+}
+
+/** 每个 pull 最多编码一个有界片段，并保持 UTF-16 代理对完整。 */
+function enqueueNextTextSlice(
+  controller: ReadableStreamDefaultController<Uint8Array>,
+  cursor: TextCursor,
+  encoder: TextEncoder
+): boolean {
+  while (cursor.chunkIndex < cursor.chunks.length) {
+    const chunk = cursor.chunks[cursor.chunkIndex];
+    if (cursor.characterOffset >= chunk.length) {
+      cursor.chunkIndex += 1;
+      cursor.characterOffset = 0;
+      continue;
+    }
+
+    let end = Math.min(chunk.length, cursor.characterOffset + REPLAY_ENCODE_SLICE_CHARACTERS);
+    if (end < chunk.length) {
+      const previous = chunk.charCodeAt(end - 1);
+      const next = chunk.charCodeAt(end);
+      if (previous >= 0xd800 && previous <= 0xdbff && next >= 0xdc00 && next <= 0xdfff) {
+        end -= 1;
+      }
+    }
+
+    controller.enqueue(encoder.encode(chunk.slice(cursor.characterOffset, end)));
+    cursor.characterOffset = end;
+    return true;
+  }
+
+  clearTextCursor(cursor);
+  return false;
+}
+
+function sleep(ms: number, signal: AbortSignal): Promise<boolean> {
+  if (signal.aborted) return Promise.resolve(false);
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => {
+      signal.removeEventListener("abort", onAbort);
+      resolve(true);
+    }, ms);
+    const onAbort = () => {
+      clearTimeout(timer);
+      resolve(false);
+    };
+    signal.addEventListener("abort", onAbort, { once: true });
+  });
 }

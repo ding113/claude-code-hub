@@ -231,9 +231,13 @@ export class ReplayStore {
     }
   }
 
-  /** 从 offset（0-based）读到当前末尾；Redis 不可用返回 null。 */
-  async readChunks(replayId: string, fromIndex: number): Promise<string[] | null> {
-    return this.chunks.lrangeFrom(replayId, fromIndex);
+  /** 从 offset（0-based）读取；maxCount 省略时读到当前末尾。Redis 不可用返回 null。 */
+  async readChunks(
+    replayId: string,
+    fromIndex: number,
+    maxCount?: number
+  ): Promise<string[] | null> {
+    return this.chunks.lrangeFrom(replayId, fromIndex, maxCount);
   }
 
   async deleteEntry(replayId: string): Promise<void> {

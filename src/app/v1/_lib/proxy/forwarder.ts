@@ -69,7 +69,13 @@ import { buildProxyUrl } from "../url";
 import { recordAffinityWinner, tombstoneAffinityOnFailure } from "./affinity/affinity-recorder";
 import { rectifyBillingHeader } from "./billing-header-rectifier";
 import { bindClientAbortListener } from "./client-abort-listener";
+import {
+  CLIENT_ABORT_METER_MAX_RETAINED_BYTES,
+  createClientAbortMeteringObserver,
+} from "./client-abort-metering";
 import { deriveClientSafeUpstreamErrorMessage } from "./client-error-message";
+import { combineAbortSignals } from "./combine-abort-signals";
+import { acquireDetachedStreamLease } from "./detached-stream-budget";
 import { type DiscoveryAction, DiscoveryCoordinator } from "./discovery-coordinator";
 import { type DiscoveryProtocol, DiscoveryValidityParser } from "./discovery-validity";
 import { isStandardProxyEndpointPath } from "./endpoint-family-catalog";
@@ -90,6 +96,7 @@ import {
   ProxyError,
   sanitizeUrl,
 } from "./errors";
+import type { ClientFormat } from "./format-mapper";
 import {
   detectGeminiFunctionIdRectifierTrigger,
   type GeminiFunctionIdRectifierResult,
@@ -109,7 +116,7 @@ import {
 import { ProxyProviderResolver } from "./provider-selector";
 import { abortReplayOwnership, releaseReplayOwnership } from "./replay/replay-spool";
 import { isJsonResponseContentType, isMalformedJsonResponseBody } from "./response-content-type";
-import { finalizeHedgeLoserBilling, hasStreamCompletionMarker } from "./response-handler";
+import { finalizeHedgeLoserBilling } from "./response-handler";
 import type { ProxySession } from "./session";
 import {
   type DeferredStreamingHedgeBindingAuthority,
@@ -117,11 +124,17 @@ import {
 } from "./stream-finalization";
 import { mapProviderTypeToFamily } from "./stream-gate/frame-classifier";
 import {
+  getStreamGatePrebufferBudget,
+  type StreamGatePrebufferLease,
+} from "./stream-gate/prebuffer-budget";
+import {
   concatChunks,
   isRequestScopedGateFailure,
   resolveStreamGateCaps,
   resolveStreamGateMode,
   runStreamContentGate,
+  type StreamGateOptions,
+  type StreamGateResult,
   StreamPrecommitError,
 } from "./stream-gate/stream-content-gate";
 import {
@@ -146,6 +159,23 @@ import {
 /** Default User-Agent for Codex CLI requests when none is provided */
 export const DEFAULT_CODEX_USER_AGENT =
   "codex_cli_rs/0.93.0 (Windows 10.0.26200; x86_64) vscode/1.108.1";
+const EMPTY_PREFIX_CHUNK = new Uint8Array(0);
+
+async function runStreamContentGateWithAbortSignals(
+  reader: ReadableStreamDefaultReader<Uint8Array>,
+  options: Omit<StreamGateOptions, "abortSignal">,
+  signals: Array<AbortSignal | null | undefined>
+): Promise<StreamGateResult> {
+  const activeSignals = signals.filter((signal): signal is AbortSignal => signal != null);
+  if (activeSignals.length === 0) return runStreamContentGate(reader, options);
+
+  const combined = combineAbortSignals(activeSignals);
+  try {
+    return await runStreamContentGate(reader, { ...options, abortSignal: combined.signal });
+  } finally {
+    combined.cleanup();
+  }
+}
 
 /**
  * Best-effort decode of the *final* outgoing request body into a JSON object.
@@ -217,6 +247,210 @@ const RETRY_LIMITS = PROVIDER_LIMITS.MAX_RETRY_ATTEMPTS;
 const MAX_PROVIDER_SWITCHES = 20; // 保险栓：最多切换 20 次供应商（防止无限循环）
 const DISCOVERY_LEASE_HANDOFF_GRACE_SECONDS = 5;
 const DISCOVERY_TERMINAL_CLEANUP_MAX_MS = 1_000;
+const LOSER_BILLING_DRAIN_FIXED_OVERHEAD_BYTES = 3 * 1024 * 1024;
+const LOSER_BILLING_MAX_FRAME_BYTES = 1024 * 1024;
+
+type LoserBillingDrainResult =
+  | { admitted: false; reason: string }
+  | {
+      admitted: true;
+      evidenceText: string;
+      endedNaturally: boolean;
+      terminalSeen: boolean;
+    };
+
+/**
+ * 等待一次 reader.read()，但让本地 deadline/上游取消可以先结束所有权。
+ * Abort 赢得竞态后，迟到的 read rejection 仍由已安装的回调消费，不会形成
+ * unhandled rejection；调用方也不必等待可能永不 settle 的 cancel Promise。
+ */
+function readLoserChunkUntilAbort(
+  reader: ReadableStreamDefaultReader<Uint8Array>,
+  signal: AbortSignal
+): Promise<ReadableStreamReadResult<Uint8Array> | null> {
+  if (signal.aborted) return Promise.resolve(null);
+
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const cleanup = () => signal.removeEventListener("abort", onAbort);
+    const finish = (result: ReadableStreamReadResult<Uint8Array> | null) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolve(result);
+    };
+    const fail = (error: unknown) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(error);
+    };
+    const onAbort = () => finish(null);
+
+    signal.addEventListener("abort", onAbort, { once: true });
+    if (signal.aborted) {
+      onAbort();
+      return;
+    }
+    try {
+      void reader.read().then(finish, fail);
+    } catch (error) {
+      fail(error);
+    }
+  });
+}
+
+function mapProviderTypeToClientFormat(providerType: Provider["providerType"]): ClientFormat {
+  switch (providerType) {
+    case "claude":
+    case "claude-auth":
+      return "claude";
+    case "codex":
+      return "response";
+    case "openai-compatible":
+      return "openai";
+    case "gemini":
+    case "gemini-cli":
+      return providerType;
+  }
+}
+
+/**
+ * 竞速输家只需要终态与 usage 证据，不能把完整生成文本留在后台。
+ * 每个 drain 使用同一套有界协议计量器，并进入进程级加权预算；输入再长，
+ * retained heap 都只由固定额度决定。
+ */
+async function drainLoserBillingEvidence(options: {
+  reader: ReadableStreamDefaultReader<Uint8Array>;
+  initialChunks: Uint8Array[];
+  providerType: Provider["providerType"];
+  responseController?: AbortController | null;
+  stopReason: string;
+  timeoutMs: number;
+  onInitialChunksConsumed?: () => void;
+}): Promise<LoserBillingDrainResult> {
+  const observer = createClientAbortMeteringObserver(
+    mapProviderTypeToClientFormat(options.providerType),
+    { attachedMaxFrameBytes: LOSER_BILLING_MAX_FRAME_BYTES }
+  );
+  const initialBytes = options.initialChunks.reduce((sum, chunk) => sum + chunk.byteLength, 0);
+  const admission = acquireDetachedStreamLease(
+    "loser",
+    LOSER_BILLING_DRAIN_FIXED_OVERHEAD_BYTES +
+      CLIENT_ABORT_METER_MAX_RETAINED_BYTES +
+      observer.maxInFlightFrameBytes +
+      initialBytes
+  );
+  if (!admission.acquired) {
+    options.initialChunks.length = 0;
+    options.onInitialChunksConsumed?.();
+    const reason = new Error(`${options.stopReason}_${admission.reason}`);
+    options.responseController?.abort(reason);
+    void options.reader.cancel(reason).catch(() => undefined);
+    try {
+      options.reader.releaseLock();
+    } catch {
+      // cancel 已接管 reader；部分 adapter 会暂时拒绝 releaseLock。
+    }
+    return { admitted: false, reason: admission.reason };
+  }
+
+  let endedNaturally = false;
+  let stopAfterEvidence = false;
+  let cancelReason: Error | null = null;
+  const drainController = new AbortController();
+  const upstreamSignal = options.responseController?.signal;
+  const forwardUpstreamAbort = () => {
+    const reason =
+      upstreamSignal?.reason instanceof Error
+        ? upstreamSignal.reason
+        : new Error(`${options.stopReason}_aborted`);
+    if (!drainController.signal.aborted) drainController.abort(reason);
+  };
+  if (upstreamSignal?.aborted) {
+    forwardUpstreamAbort();
+  } else {
+    upstreamSignal?.addEventListener("abort", forwardUpstreamAbort, { once: true });
+  }
+  const drainTimer = setTimeout(
+    () => {
+      const reason = new Error(`${options.stopReason}_timeout`);
+      if (!drainController.signal.aborted) drainController.abort(reason);
+      try {
+        options.responseController?.abort(reason);
+      } catch {
+        // 上游 transport 取消是 best effort，本地 deadline 仍然生效。
+      }
+    },
+    Math.max(1, options.timeoutMs)
+  );
+  drainTimer.unref?.();
+
+  const observe = (chunk: Uint8Array): void => {
+    if (stopAfterEvidence || chunk.byteLength === 0) return;
+    const observation = observer.observe(chunk);
+    stopAfterEvidence = observation.errorSeen || observation.drainComplete;
+  };
+
+  try {
+    try {
+      for (const chunk of options.initialChunks) observe(chunk);
+    } finally {
+      // 计量器只保留有界文本证据；首段字节在观察后立即交还给 GC。
+      options.initialChunks.length = 0;
+      options.onInitialChunksConsumed?.();
+    }
+
+    while (!stopAfterEvidence) {
+      const readResult = await readLoserChunkUntilAbort(options.reader, drainController.signal);
+      if (!readResult) {
+        cancelReason =
+          drainController.signal.reason instanceof Error
+            ? drainController.signal.reason
+            : new Error(`${options.stopReason}_aborted`);
+        break;
+      }
+      const { value, done } = readResult;
+      if (done) {
+        endedNaturally = true;
+        break;
+      }
+      if (value) observe(value);
+    }
+
+    if (stopAfterEvidence) {
+      cancelReason = new Error(`${options.stopReason}_protocol_complete`);
+    }
+  } catch {
+    // 超时、赢家收尾或上游错误都只会让本次输家计费缺少完整终态；
+    // 已观察到的显式 usage 仍交由既有计费策略决定是否可计。
+  } finally {
+    clearTimeout(drainTimer);
+    upstreamSignal?.removeEventListener("abort", forwardUpstreamAbort);
+    if (cancelReason) {
+      try {
+        options.responseController?.abort(cancelReason);
+      } catch {
+        // abort is best effort
+      }
+      void options.reader.cancel(cancelReason).catch(() => undefined);
+    }
+    admission.lease.release();
+    try {
+      options.reader.releaseLock();
+    } catch {
+      // 读取或 cancel 仍在 adapter 内收尾，不阻塞本地预算和 agent 释放。
+    }
+  }
+
+  const snapshot = observer.finish();
+  return {
+    admitted: true,
+    evidenceText: snapshot.text,
+    endedNaturally,
+    terminalSeen: snapshot.terminalSeen && snapshot.protocolFailure?.verdict !== "error",
+  };
+}
 
 type CacheTtlOption = CacheTtlPreference | null | undefined;
 
@@ -331,11 +565,13 @@ type StreamingHedgeAttempt = {
   /** Idempotency guard: ensures loser drain/billing runs at most once per attempt. */
   loserBillingStarted: boolean;
   /**
-   * First chunk already pulled from this attempt's reader before it lost the race.
-   * Preserved so loser billing can prepend it when draining (Claude's message_start
-   * usage lives in the first chunk).
+   * Prefix already pulled from this attempt's reader before it lost the race.
+   * Preserved without concatenating so loser billing can observe message_start usage
+   * without creating another gate-sized allocation.
    */
-  firstChunk: Uint8Array | null;
+  billingPrefixChunks: Uint8Array[] | null;
+  /** 门禁前缀的进程级预算所有权；随赢家流或输家计量器转移。 */
+  gatePrebufferLease: StreamGatePrebufferLease | null;
   /** F1 门控提交标记（该 attempt 门控提交时记录，随 hedge_winner 链条目落库）。 */
   gateAudit?: ProviderChainItem["streamGate"];
   /** 该 attempt 首字节到达时刻（epoch ms）；只有赢家的值会被记为 session TTFB。 */
@@ -1715,9 +1951,7 @@ export class ProxyForwarder {
             let gateChainAudit: ProviderChainItem["streamGate"];
             const gateMode = resolveStreamGateMode();
             const shouldRunPrecommitGate =
-              (typeof session.shouldRunStreamContentGate !== "function" ||
-                session.shouldRunStreamContentGate()) &&
-              (gateMode === "enforce" || session.replayState?.role === "owner");
+              gateMode === "enforce" || session.replayState?.role === "owner";
             if (
               shouldRunPrecommitGate &&
               response.body &&
@@ -1735,21 +1969,26 @@ export class ProxyForwarder {
                 // TTFB 只在门控提交后写入 session：提交前失败的尝试不会被服务，
                 // 记下它的首字节会低估 TTFB 并放大 TPS 的分母。
                 let gateFirstByteAt: number | null = null;
-                const gate = await runStreamContentGate(gateReader, {
-                  family: gateFamily,
-                  providerId: currentProvider.id,
-                  providerName: currentProvider.name,
-                  ...resolveStreamGateCaps(),
-                  // 首字节到达即清除首字节计时器，保持「首字节超时」的原始语义——
-                  // 思考型模型可在首个内容帧前长时间输出中性帧，不应触发该计时器
-                  onFirstByte: () => {
-                    gateFirstByteAt ??= Date.now();
-                    runtime.clearResponseTimeout?.();
+                const gate = await runStreamContentGateWithAbortSignals(
+                  gateReader,
+                  {
+                    family: gateFamily,
+                    providerId: currentProvider.id,
+                    providerName: currentProvider.name,
+                    ...resolveStreamGateCaps(),
+                    // 首字节到达即清除首字节计时器，保持「首字节超时」的原始语义——
+                    // 思考型模型可在首个内容帧前长时间输出中性帧，不应触发该计时器
+                    onFirstByte: () => {
+                      gateFirstByteAt ??= Date.now();
+                      runtime.clearResponseTimeout?.();
+                    },
+                    // 门控等待期沿用供应商静默超时（与提交后 response-handler 的行为对齐）
+                    idleTimeoutMs: currentProvider.streamingIdleTimeoutMs,
+                    captureCommitMarker: !session.isHighConcurrencyModeEnabled(),
+                    prebufferBudget: getStreamGatePrebufferBudget(),
                   },
-                  // 门控等待期沿用供应商静默超时（与提交后 response-handler 的行为对齐）
-                  idleTimeoutMs: currentProvider.streamingIdleTimeoutMs,
-                  captureCommitMarker: !session.isHighConcurrencyModeEnabled(),
-                });
+                  [runtime.responseController?.signal, session.clientAbortSignal]
+                );
 
                 if (!gate.committed) {
                   // 先于清理读取超时来源：区分首字节/首内容超时与客户端断开
@@ -1817,7 +2056,11 @@ export class ProxyForwarder {
                 });
 
                 streamingResponse = new Response(
-                  ProxyForwarder.buildBufferedPrefixStream(gate.prefixChunks, gateReader),
+                  ProxyForwarder.buildBufferedPrefixStream(
+                    gate.prefixChunks,
+                    gateReader,
+                    gate.prebufferLease
+                  ),
                   {
                     status: response.status,
                     statusText: response.statusText,
@@ -4396,9 +4639,7 @@ export class ProxyForwarder {
 
     const rawCrossProviderFallbackEnabled = session.isRawCrossProviderFallbackEnabled();
     // 竞速输家计费开关：开启时落败供应商不被直接掐断，而是后台 drain 并计费。
-    const billHedgeLosers =
-      (typeof session.shouldBillHedgeLosers !== "function" || session.shouldBillHedgeLosers()) &&
-      (await getCachedSystemSettings()).billHedgeLosers === true;
+    const billHedgeLosers = (await getCachedSystemSettings()).billHedgeLosers === true;
     const launchedProviderIds = new Set<number>();
     let launchedProviderCount = 0;
     let settled = false;
@@ -4465,13 +4706,6 @@ export class ProxyForwarder {
     // 不取消连接：读到流自然结束（或超时/容量上限）后，复用赢家相同的计费链，
     // 把费用异步累加回原请求行。幂等（loserBillingStarted 守卫），失败静默。
     const startLoserBilling = (attempt: StreamingHedgeAttempt) => {
-      if (typeof session.shouldBillHedgeLosers === "function" && !session.shouldBillHedgeLosers()) {
-        const cancel = attempt.reader?.cancel("high_concurrency_loser_billing_disabled");
-        cancel?.catch(() => undefined);
-        releaseAttemptAgent(attempt);
-        return;
-      }
-
       if (attempt.loserBillingStarted) return;
       attempt.loserBillingStarted = true;
 
@@ -4479,74 +4713,42 @@ export class ProxyForwarder {
       const response = attempt.response;
       const messageRequestId = session.messageContext?.id;
       const messageRequestCreatedAtMs = session.messageContext?.createdAt.getTime();
+      const gatePrebufferLease = attempt.gatePrebufferLease;
+      attempt.gatePrebufferLease = null;
       if (!reader || !response || messageRequestId == null) {
         // 无可读响应或无请求行可归属 -> 无法计费，直接释放资源。
         const cancel = reader?.cancel("hedge_loser_no_billing");
         cancel?.catch(() => undefined);
+        gatePrebufferLease?.release();
         releaseAttemptAgent(attempt);
         return;
       }
 
       const controller = attempt.responseController;
       const drainTimeoutMs = getEnvConfig().HEDGE_LOSER_DRAIN_TIMEOUT_MS;
-      const drainTimer = setTimeout(() => {
-        try {
-          controller?.abort(new Error("hedge_loser_drain_timeout"));
-        } catch {
-          /* ignore */
-        }
-      }, drainTimeoutMs);
+      const initialChunks = attempt.billingPrefixChunks ?? [];
+      attempt.billingPrefixChunks = null;
 
       void (async () => {
-        const decoder = new TextDecoder();
-        const chunks: string[] = [];
-        let totalBytes = 0;
-        let drainComplete = false;
-        const MAX_DRAIN_BYTES = 32 * 1024 * 1024;
-        // 若落败前已读走首块（赢家先提交导致），先补回，避免丢失 message_start 的 usage。
-        if (attempt.firstChunk) {
-          chunks.push(decoder.decode(attempt.firstChunk, { stream: true }));
-          totalBytes += attempt.firstChunk.byteLength;
-          attempt.firstChunk = null;
-        }
-        try {
-          while (true) {
-            const { value, done } = await reader.read();
-            if (done) {
-              drainComplete = true;
-              break;
-            }
-            if (value) {
-              chunks.push(decoder.decode(value, { stream: true }));
-              totalBytes += value.byteLength;
-              if (totalBytes > MAX_DRAIN_BYTES) {
-                logger.warn("ProxyForwarder: hedge loser drain exceeded cap, skipping bill", {
-                  sessionId: attempt.session.sessionId ?? null,
-                  providerId: attempt.provider.id,
-                  providerName: attempt.provider.name,
-                  totalBytes,
-                });
-                try {
-                  controller?.abort(new Error("hedge_loser_drain_cap"));
-                } catch {
-                  /* ignore */
-                }
-                break;
-              }
-            }
-          }
-        } catch (drainError) {
-          // 中止 / 网络错误：drain 未自然结束，drainComplete 保持 false（避免按 per-request fee 多计）。
-          logger.debug("ProxyForwarder: hedge loser drain ended early", {
-            error: drainError instanceof Error ? drainError.message : String(drainError),
+        // 若落败前已读走前缀，补入有界计量器，避免丢失 message_start usage。
+        const drain = await drainLoserBillingEvidence({
+          reader,
+          initialChunks,
+          providerType: attempt.provider.providerType,
+          responseController: controller,
+          stopReason: "hedge_loser_drain",
+          timeoutMs: drainTimeoutMs,
+          onInitialChunksConsumed: () => gatePrebufferLease?.release(),
+        });
+        if (!drain.admitted) {
+          logger.warn("ProxyForwarder: hedge loser drain rejected by shared budget", {
             sessionId: attempt.session.sessionId ?? null,
             providerId: attempt.provider.id,
             providerName: attempt.provider.name,
+            reason: drain.reason,
           });
+          return;
         }
-        const flushed = decoder.decode();
-        if (flushed) chunks.push(flushed);
-        const allContent = chunks.join("");
 
         await finalizeHedgeLoserBilling({
           messageRequestId,
@@ -4555,8 +4757,8 @@ export class ProxyForwarder {
           provider: attempt.provider,
           attemptNumber: attempt.sequence,
           upstreamStatusCode: response.status,
-          allContent,
-          drainComplete,
+          allContent: drain.evidenceText,
+          drainComplete: drain.endedNaturally || drain.terminalSeen,
           billingContext: attempt.billingSnapshot ?? undefined,
         });
       })()
@@ -4569,7 +4771,7 @@ export class ProxyForwarder {
           });
         })
         .finally(() => {
-          clearTimeout(drainTimer);
+          gatePrebufferLease?.release();
           releaseAttemptAgent(attempt);
         });
     };
@@ -4600,6 +4802,8 @@ export class ProxyForwarder {
 
       // 因非竞速原因（client_abort / launch_failed 等）被取消：禁止后台计费，正常取消连接。
       attempt.billAsLoser = false;
+      attempt.gatePrebufferLease?.release();
+      attempt.gatePrebufferLease = null;
 
       if (reason === "hedge_loser") {
         session.addProviderToChain(attempt.provider, {
@@ -4796,8 +5000,6 @@ export class ProxyForwarder {
             // 「首个有效内容帧」。
             // 级联阈值计时器保持不动——内容慢的 attempt 不提交，自动触发下一候选竞速。
             const hedgeGateFamily =
-              (typeof session.shouldRunStreamContentGate !== "function" ||
-                session.shouldRunStreamContentGate()) &&
               (resolveStreamGateMode() === "enforce" || session.replayState?.role === "owner") &&
               session.getEndpointPolicy().kind !== "raw_passthrough"
                 ? mapProviderTypeToFamily(attempt.provider.providerType)
@@ -4805,19 +5007,27 @@ export class ProxyForwarder {
 
             if (hedgeGateFamily) {
               const gateStartedAt = Date.now();
-              const gate = await runStreamContentGate(attempt.reader, {
-                family: hedgeGateFamily,
-                providerId: attempt.provider.id,
-                providerName: attempt.provider.name,
-                ...resolveStreamGateCaps(),
-                // 首字节时刻先挂在 attempt 上，由 commitWinner 决定是否记为 session TTFB
-                onFirstByte: () => {
-                  attempt.firstByteAt ??= Date.now();
+              const gate = await runStreamContentGateWithAbortSignals(
+                attempt.reader,
+                {
+                  family: hedgeGateFamily,
+                  providerId: attempt.provider.id,
+                  providerName: attempt.provider.name,
+                  ...resolveStreamGateCaps(),
+                  // 首字节时刻先挂在 attempt 上，由 commitWinner 决定是否记为 session TTFB
+                  onFirstByte: () => {
+                    attempt.firstByteAt ??= Date.now();
+                  },
+                  // 竞速路径首字节计时器已在响应头到达时清除；门控等待期沿用供应商静默超时
+                  idleTimeoutMs: attempt.provider.streamingIdleTimeoutMs,
+                  captureCommitMarker: !session.isHighConcurrencyModeEnabled(),
+                  prebufferBudget: getStreamGatePrebufferBudget(),
                 },
-                // 竞速路径首字节计时器已在响应头到达时清除；门控等待期沿用供应商静默超时
-                idleTimeoutMs: attempt.provider.streamingIdleTimeoutMs,
-                captureCommitMarker: !session.isHighConcurrencyModeEnabled(),
-              });
+                // Legacy Hedge 已在请求级监听 clientAbortSignal，并会同步 abort
+                // 每个 attempt 的 responseController。这里只监听 attempt 自身即可，
+                // 避免为同一客户端断线重复注册一条门控 listener。
+                [attempt.responseController?.signal]
+              );
               if (!gate.committed) {
                 if (
                   gate.error instanceof StreamPrecommitError &&
@@ -4834,8 +5044,9 @@ export class ProxyForwarder {
                   gateWaitMs: Date.now() - gateStartedAt,
                 };
               }
-              // 保留完整门控前缀：若本 attempt 落败且需要计费，drain 时补回前缀里的 usage。
-              attempt.firstChunk = concatChunks(gate.prefixChunks);
+              // 直接保留原门控 chunks；若本 attempt 落败，drain 时补回前缀里的 usage。
+              attempt.billingPrefixChunks = gate.prefixChunks;
+              attempt.gatePrebufferLease = gate.prebufferLease;
               await commitWinner(attempt, gate.prefixChunks, true);
             } else {
               const firstChunk = await ProxyForwarder.readFirstReadableChunk(attempt.reader);
@@ -4848,7 +5059,7 @@ export class ProxyForwarder {
               }
 
               // 保留首块：若本 attempt 落败且需要计费，drain 时需要补回首块的 usage。
-              attempt.firstChunk = firstChunk.value;
+              attempt.billingPrefixChunks = [firstChunk.value];
               await commitWinner(attempt, [firstChunk.value], false);
             }
 
@@ -4895,6 +5106,8 @@ export class ProxyForwarder {
       ) {
         const readerCancel = attempt.reader?.cancel("hedge_loser_failed");
         readerCancel?.catch(() => undefined);
+        attempt.gatePrebufferLease?.release();
+        attempt.gatePrebufferLease = null;
         releaseAttemptAgent(attempt);
         return;
       }
@@ -5275,13 +5488,20 @@ export class ProxyForwarder {
       });
 
       const response = new Response(
-        ProxyForwarder.buildBufferedPrefixStream(prefixChunks, attempt.reader),
+        ProxyForwarder.buildBufferedPrefixStream(
+          prefixChunks,
+          attempt.reader,
+          attempt.gatePrebufferLease
+        ),
         {
           status: attempt.response.status,
           statusText: attempt.response.statusText,
           headers: attempt.response.headers,
         }
       );
+      // 前缀流已取得这些 chunks 的所有权；赢家不再需要输家计量引用。
+      attempt.billingPrefixChunks = null;
+      attempt.gatePrebufferLease = null;
 
       settleSuccess(response);
     };
@@ -5375,7 +5595,8 @@ export class ProxyForwarder {
         // otherwise cancel it normally (no point holding the connection).
         billAsLoser: billHedgeLosers && session.messageContext?.id != null,
         loserBillingStarted: false,
-        firstChunk: null,
+        billingPrefixChunks: null,
+        gatePrebufferLease: null,
         billingSnapshot: null,
       };
 
@@ -5461,10 +5682,7 @@ export class ProxyForwarder {
     // Discovery uses the same opt-in loser billing switch as legacy Hedge. The
     // attempt is only kept alive after a winner commits when it already has a
     // protocol-valid prefix and a readable response body (see cancelLosers).
-    const billHedgeLosers =
-      (typeof session.shouldBillHedgeLosers !== "function" || session.shouldBillHedgeLosers()) &&
-      settings.billHedgeLosers === true &&
-      session.messageContext?.id != null;
+    const billHedgeLosers = settings.billHedgeLosers === true && session.messageContext?.id != null;
     const coordinator = new DiscoveryCoordinator({ concurrency, maxRounds });
     const discoveryMetrics = new DiscoveryRequestMetrics(
       {
@@ -5749,76 +5967,35 @@ export class ProxyForwarder {
       attempt.clearResponseTimeout?.();
       const controller = attempt.responseController;
       const drainTimeoutMs = getEnvConfig().HEDGE_LOSER_DRAIN_TIMEOUT_MS;
-      const drainTimer = setTimeout(() => {
-        try {
-          controller?.abort(new Error("discovery_loser_drain_timeout"));
-        } catch {
-          /* abort is best effort */
-        }
-      }, drainTimeoutMs);
 
       void (async () => {
-        const decoder = new TextDecoder();
-        const chunks: string[] = [];
-        let totalBytes = 0;
-        let drainComplete = false;
-        const MAX_DRAIN_BYTES = 32 * 1024 * 1024;
-
         // The validity parser may have consumed one or more chunks before the
         // loser was held. Replay those bytes so usage markers in the prefix
         // (for example Anthropic message_start) are available to billing.
         const bufferedChunks = attempt.chunks.splice(0);
-        for (const chunk of bufferedChunks) {
-          chunks.push(decoder.decode(chunk, { stream: true }));
-          totalBytes += chunk.byteLength;
-        }
-
-        try {
-          while (true) {
-            const { value, done } = await reader.read();
-            if (done) {
-              drainComplete = true;
-              break;
-            }
-            if (!value) continue;
-            chunks.push(decoder.decode(value, { stream: true }));
-            totalBytes += value.byteLength;
-            if (totalBytes > MAX_DRAIN_BYTES) {
-              logger.warn("[Discovery] Loser drain exceeded cap; skipping billing", {
-                sessionId: attempt.session.sessionId ?? null,
-                providerId: attempt.provider.id,
-                providerName: attempt.provider.name,
-                totalBytes,
-              });
-              try {
-                controller?.abort(new Error("discovery_loser_drain_cap"));
-              } catch {
-                /* abort is best effort */
-              }
-              break;
-            }
-          }
-        } catch (drainError) {
-          logger.debug("[Discovery] Loser drain ended before natural completion", {
+        const drain = await drainLoserBillingEvidence({
+          reader,
+          initialChunks: bufferedChunks,
+          providerType: attempt.provider.providerType,
+          responseController: controller,
+          stopReason: "discovery_loser_drain",
+          timeoutMs: drainTimeoutMs,
+        });
+        if (!drain.admitted) {
+          logger.warn("[Discovery] Loser drain rejected by shared budget", {
             sessionId: attempt.session.sessionId ?? null,
             providerId: attempt.provider.id,
             providerName: attempt.provider.name,
-            error: drainError instanceof Error ? drainError.message : String(drainError),
+            reason: drain.reason,
           });
+          return;
         }
-
-        const flushed = decoder.decode();
-        if (flushed) chunks.push(flushed);
-        const allContent = chunks.join("");
 
         // Discovery billing is intentionally stricter than the legacy helper's
         // partial-usage safety net: a cancelled/failed drain is not a billable
         // loser. This avoids charging a provider whose response was cut off by
         // winner handoff or the drain cap.
-        if (
-          drainComplete &&
-          hasStreamCompletionMarker(allContent, attempt.session.originalFormat)
-        ) {
+        if (drain.terminalSeen) {
           await finalizeHedgeLoserBilling({
             messageRequestId,
             messageRequestCreatedAtMs: messageRequestCreatedAtMs ?? Date.now(),
@@ -5826,7 +6003,7 @@ export class ProxyForwarder {
             provider: attempt.provider,
             attemptNumber: attempt.sequence,
             upstreamStatusCode: response.status,
-            allContent,
+            allContent: drain.evidenceText,
             drainComplete: true,
             requireUsage: true,
             billingContext: attempt.billingSnapshot ?? undefined,
@@ -5842,7 +6019,6 @@ export class ProxyForwarder {
           });
         })
         .finally(() => {
-          clearTimeout(drainTimer);
           releaseProviderRef(attempt);
           if (attempt.releaseAgent && !attempt.agentReleased) {
             attempt.agentReleased = true;
@@ -6532,7 +6708,8 @@ export class ProxyForwarder {
         agentReleased: false,
         billAsLoser: false,
         loserBillingStarted: false,
-        firstChunk: null,
+        billingPrefixChunks: null,
+        gatePrebufferLease: null,
         billingSnapshot: null,
       } as typeof winner & {
         id: string;
@@ -8065,35 +8242,52 @@ export class ProxyForwarder {
 
   private static buildBufferedPrefixStream(
     prefixChunks: Uint8Array[],
-    reader: ReadableStreamDefaultReader<Uint8Array>
+    reader: ReadableStreamDefaultReader<Uint8Array>,
+    prebufferLease: StreamGatePrebufferLease | null = null
   ): ReadableStream<Uint8Array> {
     let prefixIndex = 0;
+    let leaseReleased = false;
+    const releasePrefix = () => {
+      if (leaseReleased) return;
+      leaseReleased = true;
+      prefixChunks.length = 0;
+      prebufferLease?.release();
+    };
 
-    return new ReadableStream<Uint8Array>({
-      async pull(controller) {
-        if (prefixIndex < prefixChunks.length) {
-          controller.enqueue(prefixChunks[prefixIndex]);
-          prefixIndex++;
-          return;
-        }
+    return new ReadableStream<Uint8Array>(
+      {
+        async pull(controller) {
+          if (prefixIndex < prefixChunks.length) {
+            const chunk = prefixChunks[prefixIndex];
+            prefixChunks[prefixIndex] = EMPTY_PREFIX_CHUNK;
+            prefixIndex++;
+            controller.enqueue(chunk);
+            return;
+          }
 
-        const { done, value } = await reader.read();
-        if (done) {
-          controller.close();
-          return;
-        }
-        if (value && value.byteLength > 0) {
-          controller.enqueue(value);
-        }
+          // 下一次 pull 说明最后一个门禁前缀已经离开 response pump 的 pending slot；
+          // 此时才释放共享预算，避免慢客户端把已“提交”的前缀重新变成未计量保留。
+          releasePrefix();
+          const { done, value } = await reader.read();
+          if (done) {
+            controller.close();
+            return;
+          }
+          if (value && value.byteLength > 0) {
+            controller.enqueue(value);
+          }
+        },
+        async cancel(reason) {
+          releasePrefix();
+          try {
+            await reader.cancel(reason);
+          } catch {
+            // ignore
+          }
+        },
       },
-      async cancel(reason) {
-        try {
-          await reader.cancel(reason);
-        } catch {
-          // ignore
-        }
-      },
-    });
+      { highWaterMark: 0 }
+    );
   }
 
   private static buildHeaders(

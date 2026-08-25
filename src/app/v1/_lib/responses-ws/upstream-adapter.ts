@@ -71,11 +71,20 @@ const HANDSHAKE_TIMEOUT_MS = 10_000;
 // `await openPromise` below would hang forever and tie up the request slot.
 const FIRST_EVENT_TIMEOUT_MS = 20_000;
 
-// Hard limit on bytes we will buffer between the upstream WebSocket and the
-// downstream SSE consumer. If the consumer stalls (or upstream sends faster
-// than the SSE reader drains) we cap memory growth and abort the WS rather
-// than spilling into the heap unboundedly.
+// Hard limit on one upstream message and on queued bytes between the upstream
+// WebSocket and downstream SSE consumer. A message already handed to a waiting
+// pull still counts against the single-message bound.
 const MAX_BUFFERED_QUEUE_BYTES = 8 * 1024 * 1024; // 8 MiB
+// SSE 要为每个物理行补 `data: `。大量换行可让编码后帧远大于原 WS
+// 消息，因此实际交给下游的单帧也必须在分配前受同一硬上限约束。
+const MAX_ENCODED_SSE_EVENT_BYTES = MAX_BUFFERED_QUEUE_BYTES;
+// Tiny or empty WS frames still carry array/string bookkeeping. Bound their
+// count independently so the byte cap cannot be bypassed with fragmentation.
+const MAX_BUFFERED_QUEUE_MESSAGES = 4096;
+const PAUSE_QUEUE_BYTES = 2 * 1024 * 1024;
+const RESUME_QUEUE_BYTES = 1024 * 1024;
+const PAUSE_QUEUE_MESSAGES = 1024;
+const RESUME_QUEUE_MESSAGES = 512;
 
 // Keep idle upstream sessions long enough for normal Codex interactive use.
 // server.js calls cleanup immediately on client WS close; this timer is only a
@@ -88,6 +97,47 @@ const DEFAULT_PERSISTENT_SESSION_MAX_ENTRIES = 512;
 // 401 / 403 are NOT in this list because they reflect auth state, not
 // protocol support.
 const PROTOCOL_UNSUPPORTED_HTTP_STATUSES = new Set([400, 404, 405, 426, 501]);
+const SSE_DATA_PREFIX = new TextEncoder().encode("data: ");
+const SSE_LINE_BREAK = new TextEncoder().encode("\n");
+const SSE_EVENT_END = new TextEncoder().encode("\n\n");
+
+/**
+ * Encodes one WS text message as one SSE data event without split/map/join
+ * copies. The exact UTF-8 size is known before allocation.
+ */
+function encodeSseData(payload: string, encoder: TextEncoder): Uint8Array | null {
+  const normalized = payload.includes("\r") ? payload.replace(/\r\n?/g, "\n") : payload;
+  let lineCount = 1;
+  for (let index = 0; index < normalized.length; index += 1) {
+    if (normalized.charCodeAt(index) === 10) lineCount += 1;
+  }
+
+  const payloadBytes = Buffer.byteLength(normalized, "utf8");
+  const encodedBytes =
+    payloadBytes + lineCount * SSE_DATA_PREFIX.byteLength + SSE_EVENT_END.byteLength;
+  if (encodedBytes > MAX_ENCODED_SSE_EVENT_BYTES) return null;
+
+  const output = new Uint8Array(encodedBytes);
+  let outputOffset = 0;
+  let lineStart = 0;
+  while (lineStart <= normalized.length) {
+    output.set(SSE_DATA_PREFIX, outputOffset);
+    outputOffset += SSE_DATA_PREFIX.byteLength;
+    const lineEnd = normalized.indexOf("\n", lineStart);
+    const end = lineEnd === -1 ? normalized.length : lineEnd;
+    const encoded = encoder.encodeInto(
+      normalized.slice(lineStart, end),
+      output.subarray(outputOffset)
+    );
+    outputOffset += encoded.written;
+    if (lineEnd === -1) break;
+    output.set(SSE_LINE_BREAK, outputOffset);
+    outputOffset += SSE_LINE_BREAK.byteLength;
+    lineStart = lineEnd + 1;
+  }
+  output.set(SSE_EVENT_END, outputOffset);
+  return output;
+}
 
 // Hop-by-hop and request-shape headers that must NOT be forwarded into the
 // outbound WebSocket upgrade. The `ws` package handles Connection /
@@ -148,6 +198,13 @@ function stripTransportOnlyFields<T extends Record<string, unknown>>(body: T): T
   delete copy.stream;
   delete copy.background;
   return copy as T;
+}
+
+function serializeResponseCreateFrame(body: Record<string, unknown>): string {
+  return JSON.stringify({
+    type: "response.create",
+    ...stripTransportOnlyFields(body),
+  });
 }
 
 function buildUpstreamWsHeaders(source: Headers | Record<string, string>): Record<string, string> {
@@ -377,6 +434,7 @@ export async function tryResponsesWebsocketUpstream(options: {
   const wssUrl = toWsUrl(options.upstreamUrl);
   const headers = buildUpstreamWsHeaders(options.upstreamHeaders);
   const sessionId = options.sessionId ?? null;
+  const abortSignal = options.abortSignal;
   const fingerprint = buildConnectionFingerprint({
     provider: options.provider,
     endpointId: options.endpointId,
@@ -384,10 +442,9 @@ export async function tryResponsesWebsocketUpstream(options: {
     headers,
   });
 
-  const frame = {
-    type: "response.create",
-    ...stripTransportOnlyFields(options.body),
-  };
+  // 握手期间只保留发送所需字符串；send() 接管后立即断开本地引用。后续流事件
+  // 监听器不得闭包捕获完整 options，否则整份请求 body 会滞留到生成结束。
+  let serializedFrame = serializeResponseCreateFrame(options.body);
 
   let persistentEntry: PersistentWsEntry | null = null;
   let reused = false;
@@ -429,6 +486,7 @@ export async function tryResponsesWebsocketUpstream(options: {
       ws = new (WsCtor as unknown as new (url: string, opts?: unknown) => WebSocketType)(wssUrl, {
         headers,
         handshakeTimeout: HANDSHAKE_TIMEOUT_MS,
+        maxPayload: MAX_BUFFERED_QUEUE_BYTES,
       });
     } catch (err) {
       return {
@@ -472,9 +530,32 @@ export async function tryResponsesWebsocketUpstream(options: {
   };
 
   const messageQueue: string[] = [];
+  let messageQueueHead = 0;
   let queueResolver: ((value: string | null) => void) | null = null;
   let socketClosed = isWsClosingOrClosed(ws);
   let queuedBytes = 0;
+  let upstreamPaused = false;
+
+  const queuedMessageCount = () => messageQueue.length - messageQueueHead;
+  const pauseUpstreamIfNeeded = () => {
+    if (upstreamPaused || socketClosed || requestFinished) return;
+    if (queuedBytes < PAUSE_QUEUE_BYTES && queuedMessageCount() < PAUSE_QUEUE_MESSAGES) {
+      return;
+    }
+    ws.pause();
+    upstreamPaused = true;
+  };
+  const resumeUpstreamIfNeeded = (force = false) => {
+    if (!upstreamPaused) return;
+    if (
+      !force &&
+      (queuedBytes > RESUME_QUEUE_BYTES || queuedMessageCount() > RESUME_QUEUE_MESSAGES)
+    ) {
+      return;
+    }
+    upstreamPaused = false;
+    if (!socketClosed && !requestFinished) ws.resume();
+  };
   // Marks an upstream failure observed AFTER the first event was emitted.
   // The downstream pipeline must see this as an error rather than a clean
   // end-of-stream so it doesn't treat a half-streamed response as success.
@@ -502,7 +583,9 @@ export async function tryResponsesWebsocketUpstream(options: {
     }
 
     try {
-      ws.send(JSON.stringify(frame), (err?: Error) => {
+      const payload = serializedFrame;
+      serializedFrame = "";
+      ws.send(payload, (err?: Error) => {
         if (!err) return;
         finishOpen({
           ok: false,
@@ -546,8 +629,33 @@ export async function tryResponsesWebsocketUpstream(options: {
   };
 
   const onMessage = (data: Buffer | string) => {
+    if (socketClosed || requestFinished) return;
+    const size = typeof data === "string" ? Buffer.byteLength(data, "utf8") : data.byteLength;
+    if (size > MAX_BUFFERED_QUEUE_BYTES) {
+      logger.warn("[ResponsesWsAdapter] oversized upstream message, terminating WS", {
+        attemptedSize: size,
+      });
+      const failure = {
+        code: "upstream_ws_message_too_large",
+        message: `upstream payload exceeded ${MAX_BUFFERED_QUEUE_BYTES} bytes`,
+      };
+      if (!firstEventSeen) {
+        finishOpen({
+          ok: false,
+          reason: "ws_error_pre_first_event",
+          message: failure.message,
+          cacheableAsUnsupported: false,
+        });
+      } else {
+        midStreamError = failure;
+      }
+      socketClosed = true;
+      resolveMessageWaiter();
+      closeAndForget(1009);
+      return;
+    }
+
     const text = typeof data === "string" ? data : data.toString("utf8");
-    const size = Buffer.byteLength(text, "utf8");
     if (!firstEventSeen) {
       firstEventSeen = true;
       if (firstEventTimer) {
@@ -564,14 +672,19 @@ export async function tryResponsesWebsocketUpstream(options: {
     }
     // Hard cap on buffered bytes so a stalled SSE consumer cannot let us
     // accumulate unbounded heap growth.
-    if (queuedBytes + size > MAX_BUFFERED_QUEUE_BYTES) {
+    const queuedMessages = queuedMessageCount();
+    if (
+      queuedMessages >= MAX_BUFFERED_QUEUE_MESSAGES ||
+      queuedBytes + size > MAX_BUFFERED_QUEUE_BYTES
+    ) {
       logger.warn("[ResponsesWsAdapter] upstream queue overflow, terminating WS", {
         queuedBytes,
+        queuedMessages,
         attemptedSize: size,
       });
       midStreamError = {
         code: "upstream_ws_queue_overflow",
-        message: `buffered upstream payload exceeded ${MAX_BUFFERED_QUEUE_BYTES} bytes`,
+        message: "buffered upstream message queue exceeded its memory limit",
       };
       socketClosed = true;
       closeAndForget(1011);
@@ -579,6 +692,7 @@ export async function tryResponsesWebsocketUpstream(options: {
     }
     messageQueue.push(text);
     queuedBytes += size;
+    pauseUpstreamIfNeeded();
   };
 
   const onError = (err: Error) => {
@@ -661,8 +775,8 @@ export async function tryResponsesWebsocketUpstream(options: {
     ws.off("close", onClose);
     ws.off("open", onOpen);
     ws.off("unexpected-response", onUnexpectedResponse);
-    if (options.abortSignal) {
-      options.abortSignal.removeEventListener("abort", onAbort);
+    if (abortSignal) {
+      abortSignal.removeEventListener("abort", onAbort);
     }
     if (firstEventTimer) {
       clearTimeout(firstEventTimer);
@@ -720,9 +834,9 @@ export async function tryResponsesWebsocketUpstream(options: {
     ws.on("unexpected-response", onUnexpectedResponse);
   }
 
-  if (options.abortSignal) {
-    options.abortSignal.addEventListener("abort", onAbort, { once: true });
-    if (options.abortSignal.aborted) {
+  if (abortSignal) {
+    abortSignal.addEventListener("abort", onAbort, { once: true });
+    if (abortSignal.aborted) {
       onAbort();
     }
   }
@@ -768,121 +882,133 @@ export async function tryResponsesWebsocketUpstream(options: {
     persistentEntry = registerPersistentSession(sessionId, fingerprint, ws);
   }
 
-  // Upstream WS is open and at least one event was received. Build an SSE
-  // ReadableStream that replays queued messages and streams future ones until
-  // a terminal event arrives or the connection closes.
+  // Upstream WS is open and at least one event was received. Each downstream
+  // pull consumes at most one WS message. This preserves Web Stream
+  // backpressure; the explicit messageQueue remains the only upstream-ahead
+  // buffer and is capped above.
   const encoder = new TextEncoder();
+  let streamFinished = false;
+
+  const popMessage = (): string | undefined => {
+    if (messageQueueHead >= messageQueue.length) return undefined;
+    const msg = messageQueue[messageQueueHead];
+    messageQueue[messageQueueHead] = "";
+    messageQueueHead += 1;
+    if (msg !== undefined) {
+      queuedBytes -= Buffer.byteLength(msg, "utf8");
+      if (queuedBytes < 0) queuedBytes = 0;
+    }
+    if (messageQueueHead === messageQueue.length) {
+      messageQueue.length = 0;
+      messageQueueHead = 0;
+    } else if (messageQueueHead >= 1024 && messageQueueHead * 2 >= messageQueue.length) {
+      messageQueue.splice(0, messageQueueHead);
+      messageQueueHead = 0;
+    }
+    resumeUpstreamIfNeeded();
+    return msg;
+  };
+
+  const clearMessageQueue = () => {
+    messageQueue.length = 0;
+    messageQueueHead = 0;
+    queuedBytes = 0;
+    resumeUpstreamIfNeeded(true);
+  };
+
+  const processText = (text: string): { bytes: Uint8Array; terminal: boolean } => {
+    const bytes = encodeSseData(text, encoder);
+    if (!bytes) {
+      const failure = {
+        code: "upstream_ws_sse_event_too_large",
+        message: `encoded upstream SSE event exceeded ${MAX_ENCODED_SSE_EVENT_BYTES} bytes`,
+      };
+      logger.warn("[ResponsesWsAdapter] encoded SSE event too large, terminating WS", {
+        sourceBytes: Buffer.byteLength(text, "utf8"),
+      });
+      terminalEventSeen = true;
+      terminalEventShouldClosePersistent = true;
+      return {
+        bytes: encodeSseData(JSON.stringify({ type: "error", error: failure }), encoder)!,
+        terminal: true,
+      };
+    }
+
+    let terminal = false;
+    try {
+      const parsed = JSON.parse(text);
+      if (parsed && typeof parsed.type === "string" && TERMINAL_EVENT_TYPES.has(parsed.type)) {
+        terminal = true;
+        terminalEventSeen = true;
+        terminalEventShouldClosePersistent =
+          parsed.type === "error" || parsed.error?.code === "websocket_connection_limit_reached";
+      }
+    } catch {
+      // Non-JSON upstream text is forwarded and remains non-terminal.
+    }
+    return { bytes, terminal };
+  };
+
+  const completeTerminal = (controller: ReadableStreamDefaultController<Uint8Array>) => {
+    streamFinished = true;
+    clearMessageQueue();
+    controller.close();
+    if (sessionId && persistentEntry && !terminalEventShouldClosePersistent) {
+      finishRequest();
+    } else {
+      finishRequest({ closeCode: 1000, forgetSession: true });
+    }
+  };
+
   const stream = new ReadableStream<Uint8Array>({
-    async start(controller) {
-      let sawTerminalEvent = false;
+    async pull(controller) {
+      if (streamFinished) return;
 
-      const writeEvent = (payload: string) => {
-        // SSE requires every physical payload line to carry its own `data:`
-        // prefix. Upstream WebSocket implementations may pretty-print JSON;
-        // wrapping that text in a single `data:` line would dispatch only the
-        // opening `{` and make downstream parsers report malformed JSON.
-        const normalizedPayload = payload.replace(/\r\n?/g, "\n");
-        const dataLines = normalizedPayload
-          .split("\n")
-          .map((line) => `data: ${line}`)
-          .join("\n");
-        controller.enqueue(encoder.encode(`${dataLines}\n\n`));
-      };
-
-      const processText = (text: string): boolean => {
-        writeEvent(text);
-        try {
-          const parsed = JSON.parse(text);
-          if (parsed && typeof parsed.type === "string" && TERMINAL_EVENT_TYPES.has(parsed.type)) {
-            sawTerminalEvent = true;
-            // Hoisted twin so the outer `ws.on("close")` handler can tell
-            // a clean post-terminal close apart from a real mid-stream drop.
-            terminalEventSeen = true;
-            terminalEventShouldClosePersistent =
-              parsed.type === "error" ||
-              parsed.error?.code === "websocket_connection_limit_reached";
-            return true;
-          }
-        } catch {
-          // Non-JSON upstream text: still forwarded, not terminal.
-        }
-        return false;
-      };
-
-      const popMessage = (): string | undefined => {
-        const msg = messageQueue.shift();
-        if (msg !== undefined) {
-          queuedBytes -= Buffer.byteLength(msg, "utf8");
-          if (queuedBytes < 0) queuedBytes = 0;
-        }
-        return msg;
-      };
-
-      const completeTerminal = () => {
-        controller.close();
-        if (sessionId && persistentEntry && !terminalEventShouldClosePersistent) {
-          finishRequest();
-        } else {
-          finishRequest({ closeCode: 1000, forgetSession: true });
-        }
-      };
-
-      // Drain queued first-event(s)
-      while (messageQueue.length > 0) {
-        const msg = popMessage();
-        if (msg === undefined) break;
-        if (processText(msg)) {
-          completeTerminal();
-          return;
-        }
+      let next = popMessage();
+      if (next === undefined && !socketClosed) {
+        next =
+          (await new Promise<string | null>((resolve) => {
+            const queued = popMessage();
+            if (queued !== undefined) {
+              resolve(queued);
+              return;
+            }
+            queueResolver = resolve;
+          })) ?? undefined;
       }
 
-      while (!socketClosed) {
-        const next = await new Promise<string | null>((resolve) => {
-          if (messageQueue.length > 0) {
-            resolve(popMessage() ?? null);
-            return;
-          }
-          queueResolver = resolve;
-        });
-        if (next === null) break;
-        if (processText(next)) {
-          completeTerminal();
-          return;
-        }
+      if (streamFinished) return;
+      if (next !== undefined) {
+        const processed = processText(next);
+        controller.enqueue(processed.bytes);
+        if (processed.terminal) completeTerminal(controller);
+        return;
       }
 
-      // Drain any messages enqueued after the loop's last `await` resolved
-      // with `null` (race between shift() and `socketClosed` becoming true).
-      while (messageQueue.length > 0) {
-        const msg = popMessage();
-        if (msg === undefined) break;
-        if (processText(msg)) {
-          completeTerminal();
-          return;
-        }
+      // A close/error wakes the pending pull with null. Consume any frame that
+      // raced with the wake-up before declaring the upstream truncated.
+      next = popMessage();
+      if (next !== undefined) {
+        const processed = processText(next);
+        controller.enqueue(processed.bytes);
+        if (processed.terminal) completeTerminal(controller);
+        return;
       }
 
-      // If the upstream WS hung up before sending a terminal event, the
-      // downstream pipeline must see this as an error rather than a clean
-      // end-of-stream — otherwise a truncated body would be billed as a
-      // successful response.
-      if (!sawTerminalEvent) {
-        const failure = midStreamError ?? {
-          code: "upstream_ws_mid_stream_error",
-          message: "upstream WebSocket closed before emitting a terminal response event",
-        };
-        const errorFrame = JSON.stringify({
-          type: "error",
-          error: failure,
-        });
-        controller.enqueue(encoder.encode(`data: ${errorFrame}\n\n`));
-      }
-
+      const failure = midStreamError ?? {
+        code: "upstream_ws_mid_stream_error",
+        message: "upstream WebSocket closed before emitting a terminal response event",
+      };
+      const errorFrame = JSON.stringify({ type: "error", error: failure });
+      controller.enqueue(encodeSseData(errorFrame, encoder)!);
+      streamFinished = true;
       controller.close();
-      finishRequest({ closeCode: sawTerminalEvent ? 1000 : 1011, forgetSession: true });
+      finishRequest({ closeCode: 1011, forgetSession: true });
     },
     cancel() {
+      streamFinished = true;
+      clearMessageQueue();
+      resolveMessageWaiter();
       finishRequest({ closeCode: 1000, forgetSession: true });
     },
   });

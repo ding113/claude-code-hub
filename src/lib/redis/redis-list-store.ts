@@ -82,12 +82,14 @@ export class RedisListStore {
     }
   }
 
-  /** 从 start（0-based，含）读到末尾；失败返回 null（与空列表 [] 区分）。 */
-  async lrangeFrom(key: string, start: number): Promise<string[] | null> {
+  /** 从 start（0-based，含）读取；maxCount 省略时读到末尾。失败返回 null。 */
+  async lrangeFrom(key: string, start: number, maxCount?: number): Promise<string[] | null> {
     const redis = this.getReadyRedis();
     if (!redis) return null;
     try {
-      return await redis.lrange(this.buildKey(key), start, -1);
+      if (maxCount !== undefined && maxCount <= 0) return [];
+      const end = maxCount === undefined ? -1 : start + Math.max(0, maxCount) - 1;
+      return await redis.lrange(this.buildKey(key), start, end);
     } catch (error) {
       logger.error("[RedisListStore] Failed to lrange", {
         error: toLogError(error),

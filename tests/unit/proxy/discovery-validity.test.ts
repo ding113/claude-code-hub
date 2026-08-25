@@ -143,6 +143,15 @@ describe("discovery validity", () => {
     });
   });
 
+  it("accepts a clean empty Responses completion as a complete candidate", () => {
+    expect(
+      classifyDiscoveryChunk(
+        'event: response.completed\ndata: {"type":"response.completed","response":{"status":"completed","output":[],"error":null}}\n\n',
+        "openai-responses"
+      )
+    ).toEqual({ ready: true, terminal: true, error: false });
+  });
+
   it("does not let Responses output-item metadata mask a later error", () => {
     const parser = new DiscoveryValidityParser("openai-responses");
 
