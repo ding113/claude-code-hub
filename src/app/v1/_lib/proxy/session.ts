@@ -592,7 +592,15 @@ export class ProxySession {
   }
 
   shouldRetainClientAbortBilling(): boolean {
-    return !this.highConcurrencyModeEnabled;
+    // High-concurrency mode keeps bounded client-abort retention (64 KiB metering +
+    // 3 MiB reservation, capped by DetachedStreamBudget) so a completed upstream
+    // stream that the client already closed (Codex: reads response.completed then
+    // hangs up) is still billed as 200 and the sticky/affinity binding is kept.
+    // Immediate cancel + discard in this mode previously discarded the completion
+    // marker, turning a successful request into 499 and clearing the binding,
+    // which broke prefix-cache affinity (40% hit loss) and caused per-request
+    // provider churn.
+    return true;
   }
 
   shouldBillHedgeLosers(): boolean {

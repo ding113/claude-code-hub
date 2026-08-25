@@ -35,12 +35,12 @@ export type StreamGateFailureReason =
   | "idle_timeout";
 
 /**
- * 门控 precommit 错误。继承 ProxyError（statusCode 502）——
- * categorizeErrorAsync 将其归为 PROVIDER_ERROR：切换供应商，
- * 无需改动现有错误分类逻辑。gate_error 时把上游错误帧原文带入
- * upstreamError.body，供错误规则匹配（如不可重试的客户端输入错误）与审计。
- *
- * 熔断计入与否由 isRequestScopedGateFailure() 区分，见其文档。
+ * 门控 precommit 错误。继承 ProxyError——
+ * gate_error 时如果上游错误帧携带明确的 4xx 客户端错误特征（例如 cyber_policy、
+ * invalid_request、400 状态码等），则使用真实的 4xx 状态码，使下游错误分类器能正确
+ * 判定为不可重试的客户端错误（NON_RETRYABLE_CLIENT_ERROR），避免无意义的切商重试并
+ * 正常触发 error_rules 覆写；其余情况默认使用 502（PROVIDER_ERROR）触发切商。
+ * 熔断计入与否再由 isRequestScopedGateFailure() 区分，见其文档。
  */
 export class StreamPrecommitError extends ProxyError {
   readonly gateReason: StreamGateFailureReason;
@@ -62,7 +62,8 @@ export class StreamPrecommitError extends ProxyError {
     }
   ) {
     const message = `Stream content gate rejected upstream before first valid content (${reason})`;
-    super(message, 502, {
+    const statusCode = resolveGateErrorStatusCode(reason, detail.frameData);
+    super(message, statusCode, {
       body: buildGateErrorBody(reason, detail),
       providerId: detail.providerId,
       providerName: detail.providerName,
@@ -101,6 +102,80 @@ export function isRequestScopedGateFailure(error: unknown): boolean {
     error.gateFamily === "openai-responses" &&
     error.terminalBeforeContent
   );
+}
+
+function resolveGateErrorStatusCode(reason: StreamGateFailureReason, frameData?: string): number {
+  if (reason !== "gate_error" || !frameData) {
+    return 502;
+  }
+
+  try {
+    const trimmed = frameData.trim();
+    if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) {
+      return 502;
+    }
+    const json = JSON.parse(trimmed) as Record<string, unknown>;
+    if (!json || typeof json !== "object") {
+      return 502;
+    }
+
+    // 1. 尝试从常见 status 字段直接提取 4xx 状态码
+    const candidates = [
+      json.status,
+      json.status_code,
+      json.statusCode,
+      (json.error as Record<string, unknown> | undefined)?.status,
+      (json.error as Record<string, unknown> | undefined)?.status_code,
+      (json.error as Record<string, unknown> | undefined)?.statusCode,
+      (json.response as { error?: Record<string, unknown> } | undefined)?.error?.status,
+      (json.response as { error?: Record<string, unknown> } | undefined)?.error?.status_code,
+      (json.response as { error?: Record<string, unknown> } | undefined)?.error?.statusCode,
+    ];
+    for (const code of candidates) {
+      if (typeof code === "number" && code >= 400 && code < 500) {
+        return code;
+      }
+    }
+
+    // 2. 检查常见客户端错误类型及错误码
+    const errType = String(
+      (json.error as Record<string, unknown> | undefined)?.type ||
+        (json.response as { error?: Record<string, unknown> } | undefined)?.error?.type ||
+        json.type ||
+        ""
+    ).toLowerCase();
+
+    const errCode = String(
+      (json.error as Record<string, unknown> | undefined)?.code ||
+        (json.response as { error?: Record<string, unknown> } | undefined)?.error?.code ||
+        json.code ||
+        ""
+    ).toLowerCase();
+
+    const errStatus = String(
+      (json.error as Record<string, unknown> | undefined)?.status || json.status || ""
+    ).toUpperCase();
+
+    if (
+      errType === "invalid_request_error" ||
+      errType === "invalid_request" ||
+      errType === "bad_request_error" ||
+      errCode === "cyber_policy" ||
+      errCode === "invalid_prompt" ||
+      errCode === "invalid_value" ||
+      errCode === "unsupported_value" ||
+      errCode === "context_length_exceeded" ||
+      errCode === "message_too_big" ||
+      errCode === "string_above_max_length" ||
+      errStatus === "INVALID_ARGUMENT"
+    ) {
+      return 400;
+    }
+  } catch {
+    // 忽略非 JSON 解析异常
+  }
+
+  return 502;
 }
 
 function buildGateErrorBody(

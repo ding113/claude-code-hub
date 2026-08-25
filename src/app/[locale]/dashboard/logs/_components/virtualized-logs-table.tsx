@@ -1206,23 +1206,53 @@ export function VirtualizedLogsTable({
                               <TooltipTrigger asChild>
                                 <span className="cursor-help inline-flex items-center gap-1">
                                   {formatCurrency(log.costUsd, currencyCode, 6)}
-                                  {hasPriorityServiceTierSpecialSetting(log.specialSettings) && (
-                                    <Badge
-                                      variant="outline"
-                                      className="text-[10px] leading-tight px-1 bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-950/30 dark:text-orange-300 dark:border-orange-800"
-                                      title={t("logs.billingDetails.fastPriority")}
-                                    >
-                                      {t("logs.billingDetails.fast")}
-                                    </Badge>
-                                  )}
-                                  {log.context1mApplied && (
-                                    <Badge
-                                      variant="outline"
-                                      className="text-[10px] leading-tight px-1 bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/30 dark:text-purple-300 dark:border-purple-800"
-                                    >
-                                      1M
-                                    </Badge>
-                                  )}
+                                  {(() => {
+                                    const hasFast = hasPriorityServiceTierSpecialSetting(
+                                      log.specialSettings
+                                    );
+                                    const hasContext1m = Boolean(log.context1mApplied);
+                                    if (hasFast && hasContext1m) {
+                                      return (
+                                        <Badge
+                                          variant="outline"
+                                          className="gap-0 px-0.5 text-[9px] leading-3"
+                                          title={t("logs.billingDetails.combinedFastContext", {
+                                            fast: t("logs.billingDetails.fast"),
+                                            context: "1M",
+                                          })}
+                                        >
+                                          <span className="text-orange-700 dark:text-orange-300">
+                                            {t("logs.billingDetails.fast")}
+                                          </span>
+                                          <span className="text-muted-foreground">·</span>
+                                          <span className="text-purple-700 dark:text-purple-300">
+                                            1M
+                                          </span>
+                                        </Badge>
+                                      );
+                                    }
+                                    return (
+                                      <>
+                                        {hasFast && (
+                                          <Badge
+                                            variant="outline"
+                                            className="text-[10px] leading-tight px-1 bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-950/30 dark:text-orange-300 dark:border-orange-800"
+                                            title={t("logs.billingDetails.fastPriority")}
+                                          >
+                                            {t("logs.billingDetails.fast")}
+                                          </Badge>
+                                        )}
+                                        {hasContext1m && (
+                                          <Badge
+                                            variant="outline"
+                                            className="text-[10px] leading-tight px-1 bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/30 dark:text-purple-300 dark:border-purple-800"
+                                          >
+                                            1M
+                                          </Badge>
+                                        )}
+                                      </>
+                                    );
+                                  })()}
                                 </span>
                               </TooltipTrigger>
                               {renderCostTooltip(log)}

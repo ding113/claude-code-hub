@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { resolveEndpointPolicy } from "@/app/v1/_lib/proxy/endpoint-policy";
+import { ProxyError } from "@/app/v1/_lib/proxy/errors";
 
 /**
  * F1 流式内容门控（stream content gate）在 ProxyForwarder 顺序路径中的接线集成测试。
@@ -738,6 +739,48 @@ describe("F1 stream content gate x ProxyForwarder sequential path", () => {
       expect(mocks.recordFailure).toHaveBeenCalledWith(provider1.id, expect.any(Error));
       expect(mocks.tombstoneAffinityOnFailure).toHaveBeenCalledWith(session, provider1.id);
       expect(session.provider?.id).toBe(provider2.id);
+    });
+
+    test("上游返回 4xx / cyber_policy 错误帧时不触发切商重试，按不可重试客户端错误退出", async () => {
+      const provider1 = createProvider({ id: 1, name: "gate-p1", providerType: "codex" });
+      const session = createSession();
+      session.setProvider(provider1);
+      Object.assign(session, {
+        requestUrl: new URL("https://example.com/v1/responses"),
+        originalFormat: "response",
+        endpointPolicy: resolveEndpointPolicy("/v1/responses"),
+      });
+
+      mocks.categorizeErrorAsync.mockImplementationOnce(async (err: Error) => {
+        if (err instanceof ProxyError && err.statusCode === 400) {
+          return 3; // NON_RETRYABLE_CLIENT_ERROR
+        }
+        return 0;
+      });
+
+      const cyberPolicyFrame = `event: error\ndata: ${JSON.stringify({
+        type: "error",
+        error: {
+          type: "invalid_request_error",
+          code: "cyber_policy",
+          message: "This content was flagged for possible cybersecurity risk.",
+        },
+      })}\n\n`;
+
+      const doForward = spyOnDoForward();
+      doForward.mockImplementationOnce(async () => createSseResponse([cyberPolicyFrame]));
+
+      await expect(ProxyForwarder.send(session)).rejects.toThrow(
+        /Stream content gate rejected upstream before first valid content/
+      );
+
+      expect(doForward).toHaveBeenCalledTimes(1);
+      expect(mocks.pickRandomProviderWithExclusion).not.toHaveBeenCalled();
+
+      const chainEntries = session.getProviderChain();
+      const failureEntry = chainEntries.find((item) => item.id === provider1.id);
+      expect(failureEntry?.statusCode).toBe(400);
+      expect(failureEntry?.reason).toBe("client_error_non_retryable");
     });
   });
 

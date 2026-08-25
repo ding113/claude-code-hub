@@ -211,7 +211,7 @@ describe("SystemSettingsForm upstream error message toggles", () => {
     clickSwitch("enable-high-concurrency-mode");
 
     expect(sonnerMocks.toast.warning).toHaveBeenCalledWith(
-      "High-concurrency mode disables Replay, stream gating, racing-loser billing, client-abort retention, and session diagnostics."
+      "High-concurrency mode disables Replay, stream gating, racing-loser billing, and session diagnostics. Bounded client-abort retention stays on."
     );
     expect(getSwitch("enable-high-concurrency-mode").getAttribute("aria-checked")).toBe("true");
 

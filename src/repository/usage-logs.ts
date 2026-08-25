@@ -1969,31 +1969,45 @@ export async function findUsageLogSessionIdSuggestions(
     const queryCandidates = async (
       candidate: SQL<string | null> | typeof usageLedger.sessionId
     ) => {
-      const baseQuery = db
+      const candidateConditions = [
+        ...sharedConditions,
+        sql`${candidate} IS NOT NULL`,
+        sql`length(${candidate}) > 0`,
+        candidate === usageLedger.sessionId
+          ? sql`${candidate} NOT LIKE 'pfx:%' AND ${candidate} NOT LIKE 'sid:%'`
+          : sql`true`,
+        sql`${candidate} LIKE ${pattern} ESCAPE '\\'`,
+      ];
+
+      const subqueryLimit = Math.max(500, limit * 25);
+
+      const baseInnerQuery = db
         .select({
           sessionId: candidate,
-          firstSeen: sql<Date | null>`max(${usageLedger.createdAt})`,
+          createdAt: usageLedger.createdAt,
+          id: usageLedger.id,
         })
         .from(usageLedger);
-      const query =
-        keyId !== undefined
-          ? baseQuery.innerJoin(keysTable, eq(usageLedger.key, keysTable.key))
-          : baseQuery;
 
-      return query
-        .where(
-          and(
-            ...sharedConditions,
-            sql`${candidate} IS NOT NULL`,
-            sql`length(${candidate}) > 0`,
-            candidate === usageLedger.sessionId
-              ? sql`${candidate} NOT LIKE 'pfx:%' AND ${candidate} NOT LIKE 'sid:%'`
-              : sql`true`,
-            sql`${candidate} LIKE ${pattern} ESCAPE '\\'`
-          )
-        )
-        .groupBy(candidate)
-        .orderBy(desc(sql`max(${usageLedger.createdAt})`))
+      const innerQuery =
+        keyId !== undefined
+          ? baseInnerQuery.innerJoin(keysTable, eq(usageLedger.key, keysTable.key))
+          : baseInnerQuery;
+
+      const subquery = innerQuery
+        .where(and(...candidateConditions))
+        .orderBy(desc(usageLedger.id))
+        .limit(subqueryLimit)
+        .as("sub");
+
+      return db
+        .select({
+          sessionId: subquery.sessionId,
+          firstSeen: sql<Date | null>`max(${subquery.createdAt})`,
+        })
+        .from(subquery)
+        .groupBy(subquery.sessionId)
+        .orderBy(desc(sql`max(${subquery.createdAt})`))
         .limit(limit);
     };
 
@@ -2019,31 +2033,45 @@ export async function findUsageLogSessionIdSuggestions(
     const queryCandidates = async (
       candidate: SQL<string | null> | typeof messageRequest.sessionId
     ) => {
-      const baseQuery = db
+      const candidateConditions = [
+        ...sharedConditions,
+        sql`${candidate} IS NOT NULL`,
+        sql`length(${candidate}) > 0`,
+        candidate === messageRequest.sessionId
+          ? sql`${candidate} NOT LIKE 'pfx:%' AND ${candidate} NOT LIKE 'sid:%'`
+          : sql`true`,
+        sql`${candidate} LIKE ${pattern} ESCAPE '\\'`,
+      ];
+
+      const subqueryLimit = Math.max(500, limit * 25);
+
+      const baseInnerQuery = db
         .select({
           sessionId: candidate,
-          firstSeen: sql<Date | null>`max(${messageRequest.createdAt})`,
+          createdAt: messageRequest.createdAt,
+          id: messageRequest.id,
         })
         .from(messageRequest);
-      const query =
-        keyId !== undefined
-          ? baseQuery.innerJoin(keysTable, eq(messageRequest.key, keysTable.key))
-          : baseQuery;
 
-      return query
-        .where(
-          and(
-            ...sharedConditions,
-            sql`${candidate} IS NOT NULL`,
-            sql`length(${candidate}) > 0`,
-            candidate === messageRequest.sessionId
-              ? sql`${candidate} NOT LIKE 'pfx:%' AND ${candidate} NOT LIKE 'sid:%'`
-              : sql`true`,
-            sql`${candidate} LIKE ${pattern} ESCAPE '\\'`
-          )
-        )
-        .groupBy(candidate)
-        .orderBy(desc(sql`max(${messageRequest.createdAt})`))
+      const innerQuery =
+        keyId !== undefined
+          ? baseInnerQuery.innerJoin(keysTable, eq(messageRequest.key, keysTable.key))
+          : baseInnerQuery;
+
+      const subquery = innerQuery
+        .where(and(...candidateConditions))
+        .orderBy(desc(messageRequest.id))
+        .limit(subqueryLimit)
+        .as("sub");
+
+      return db
+        .select({
+          sessionId: subquery.sessionId,
+          firstSeen: sql<Date | null>`max(${subquery.createdAt})`,
+        })
+        .from(subquery)
+        .groupBy(subquery.sessionId)
+        .orderBy(desc(sql`max(${subquery.createdAt})`))
         .limit(limit);
     };
 
