@@ -536,6 +536,25 @@ describe("ProxyReplayGuard：completed 全量重放", () => {
     expect(storeControl.readChunks).toHaveBeenNthCalledWith(2, identity.replayId, 64, 1, 60);
   });
 
+  it("Redis 尾页缺失但 durable 正文已完整发送时正常结束", async () => {
+    const identity = expectedIdentity();
+    const firstPage = Array.from({ length: 64 }, (_, index) => `part-${index}|`);
+    const durablePayload = firstPage.join("");
+    storeControl.getMeta.mockResolvedValueOnce(
+      makeMeta(identity, { status: "completed", chunkCount: 65 })
+    );
+    storeControl.readChunks.mockResolvedValueOnce(firstPage).mockResolvedValueOnce([]);
+    storeControl.findCompleted.mockResolvedValueOnce({
+      verifier: identity.verifier,
+      sourceMessageRequestId: 202,
+      payload: durablePayload,
+    });
+
+    const response = await ProxyReplayGuard.ensure(makeSession());
+
+    await expect(response?.text()).resolves.toBe(durablePayload);
+  });
+
   it("Redis 中途过期时拒绝使用 verifier 不匹配的 durable payload", async () => {
     const identity = expectedIdentity();
     storeControl.getMeta.mockResolvedValueOnce(
@@ -672,6 +691,32 @@ describe("ProxyReplayGuard：owning attach-live 跟尾", () => {
     expect(storeControl.findCompleted).toHaveBeenCalledWith(identity.replayId);
     expect(dbControl.rows).toHaveLength(1);
     expect(String(dbControl.rows[0].blockedReason)).toContain("attached_live");
+  });
+
+  it("live attach 的 durable 正文已完整发送时忽略缺失的 Redis 尾页", async () => {
+    const identity = expectedIdentity();
+    const completed = makeMeta(identity, {
+      status: "completed",
+      messageRequestId: 203,
+      chunkCount: 2,
+    });
+    const metaSequence: ReplayMeta[] = [
+      makeMeta(identity, { status: "owning", messageRequestId: 203 }),
+    ];
+    storeControl.getMeta.mockImplementation(async () => metaSequence.shift() ?? completed);
+    const durablePayload = "data: a\n\n";
+    const chunkSequence: string[][] = [[durablePayload], [], []];
+    storeControl.readChunks.mockImplementation(async () => chunkSequence.shift() ?? []);
+    storeControl.findCompleted.mockResolvedValueOnce({
+      verifier: identity.verifier,
+      sourceMessageRequestId: 203,
+      payload: durablePayload,
+    });
+
+    const response = await ProxyReplayGuard.ensure(makeSession());
+
+    await expect(response?.text()).resolves.toBe(durablePayload);
+    expect(dbControl.rows).toHaveLength(1);
   });
 
   it("live attach 未观察到 completed meta 时仍从 durable payload 精确续传", async () => {

@@ -298,13 +298,15 @@ export class ProxyReplayGuard {
             if (
               durable?.verifier === verifier &&
               durable.sourceMessageRequestId === completedMessageRequestId &&
-              cursor.totalCharactersEmitted < durable.payload.length
+              cursor.totalCharactersEmitted <= durable.payload.length
             ) {
-              replaceTextCursorChunkAtOffset(
-                cursor,
-                durable.payload,
-                cursor.totalCharactersEmitted
-              );
+              if (cursor.totalCharactersEmitted < durable.payload.length) {
+                replaceTextCursorChunkAtOffset(
+                  cursor,
+                  durable.payload,
+                  cursor.totalCharactersEmitted
+                );
+              }
               reachedEnd = true;
               continue;
             }
@@ -466,13 +468,15 @@ export class ProxyReplayGuard {
             if (
               durable?.verifier === identity.verifier &&
               durable.sourceMessageRequestId === ownerMessageRequestId &&
-              cursor.totalCharactersEmitted < durable.payload.length
+              cursor.totalCharactersEmitted <= durable.payload.length
             ) {
-              replaceTextCursorChunkAtOffset(
-                cursor,
-                durable.payload,
-                cursor.totalCharactersEmitted
-              );
+              if (cursor.totalCharactersEmitted < durable.payload.length) {
+                replaceTextCursorChunkAtOffset(
+                  cursor,
+                  durable.payload,
+                  cursor.totalCharactersEmitted
+                );
+              }
               offset = completedMeta.chunkCount;
               continue;
             }
