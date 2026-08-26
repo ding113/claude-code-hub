@@ -340,6 +340,13 @@ describe("ProxyResponseHandler.dispatch stream terminal behavior", () => {
     );
     expect(mocks.replayAbort).toHaveBeenCalledWith("response_incomplete");
     expect(mocks.replayComplete).not.toHaveBeenCalled();
+    expect(session.getProviderChain()).toContainEqual(
+      expect.objectContaining({
+        reason: "response_incomplete",
+        statusCode: 200,
+        errorMessage: "RESPONSE_INCOMPLETE",
+      })
+    );
   });
 
   it("客户端在 Responses incomplete 后断开时不改写为 499", async () => {
@@ -734,7 +741,7 @@ describe("ProxyResponseHandler.dispatch stream terminal behavior", () => {
     const suffix =
       '"}]}}]}\n\ndata: {"candidates":[{"finishReason":"STOP"}],"usageMetadata":{"promptTokenCount":10,"candidatesTokenCount":2}}\n\n';
     const encoder = new TextEncoder();
-    const bytes = encoder.encode(`${prefix}你好😀${suffix}`);
+    const bytes = encoder.encode(`${prefix}你好\u{1F600}${suffix}`);
     const splitAt = encoder.encode(`${prefix}你好`).byteLength + 2;
     const source = new ReadableStream<Uint8Array>({
       start(controller) {
@@ -745,7 +752,7 @@ describe("ProxyResponseHandler.dispatch stream terminal behavior", () => {
     });
 
     const returned = await ProxyResponseHandler.dispatch(session, sseResponse(source));
-    expect(await returned.text()).toContain("你好😀");
+    expect(await returned.text()).toContain("你好\u{1F600}");
     await settleTasks();
 
     expect(mocks.durable).toHaveBeenCalledWith(

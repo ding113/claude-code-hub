@@ -115,12 +115,54 @@ describe("SseFrameParser", () => {
     );
   });
 
+  it("rejects a completed oversized unknown line instead of joining and ignoring it", () => {
+    const parser = new SseFrameParser({ maxBufferedCharacters: 16 });
+
+    expect(() => parser.push(new TextEncoder().encode(`unknown: ${"x".repeat(20)}\n`))).toThrow(
+      SseFrameBufferLimitError
+    );
+  });
+
   it("counts accumulated data lines before an event is dispatched", () => {
     const parser = new SseFrameParser({ maxBufferedCharacters: 10 });
 
     expect(() => parser.push(new TextEncoder().encode("data: 12345\ndata: 67890\n"))).toThrow(
       SseFrameBufferLimitError
     );
+  });
+
+  it("does not count an event name after a later event field replaces it", () => {
+    const parser = new SseFrameParser({ maxBufferedCharacters: 11 });
+
+    expect(parser.pushText("event: 1234567890\nevent: abcdefghij\ndata: x\n\n")).toEqual([
+      { eventName: "abcdefghij", data: "x" },
+    ]);
+  });
+
+  it("keeps heavily fragmented empty data lines semantically intact", () => {
+    const parser = new SseFrameParser({ maxBufferedCharacters: 20_000 });
+    const encoder = new TextEncoder();
+    let frames = [] as ReturnType<SseFrameParser["push"]>;
+    for (let index = 0; index < 10_000; index += 1) {
+      frames = frames.concat(parser.push(encoder.encode("data:\n")));
+    }
+    frames = frames.concat(parser.push(encoder.encode("\n")));
+
+    expect(frames).toEqual([{ eventName: null, data: "\n".repeat(9_999) }]);
+  });
+
+  it("visitor can stop inside one chunk without materializing the remaining frames", () => {
+    const parser = new SseFrameParser();
+    const body = Array.from({ length: 10_000 }, (_, index) => `data: ${index}\n\n`).join("");
+    const visited: string[] = [];
+
+    const consumed = parser.visit(new TextEncoder().encode(body), (_eventName, data) => {
+      visited.push(data);
+      return visited.length < 3;
+    });
+
+    expect(consumed).toBe(false);
+    expect(visited).toEqual(["0", "1", "2"]);
   });
 
   it("supports a separately bounded buffer exemption for recognized frames", () => {

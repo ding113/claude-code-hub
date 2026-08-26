@@ -600,7 +600,7 @@ function resolveSegments(node: unknown, segments: string[], index: number): unkn
  * - 数组：任一元素非空（覆盖 # 收集结果）
  * - 对象：至少一个键（空对象不算内容）
  */
-function isNonEmptyValue(value: unknown): boolean {
+export function isNonEmptyValue(value: unknown): boolean {
   if (value === undefined || value === null || value === false) return false;
   if (typeof value === "string") return value !== "";
   if (typeof value === "number" || value === true) return true;

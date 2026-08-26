@@ -206,6 +206,42 @@ describe("discovery validity", () => {
     });
   });
 
+  it("accepts fragmented raw JSON after a long valid whitespace prefix", () => {
+    const parser = new DiscoveryValidityParser("openai-chat");
+
+    expect(parser.push(" ".repeat(32))).toMatchObject({ ready: false, error: false });
+    expect(parser.push('{"choices":[{"delta":{"content":"ready"}}]}')).toMatchObject({
+      ready: true,
+      error: false,
+    });
+  });
+
+  it("scans fragmented raw JSON once instead of reparsing braces inside strings", () => {
+    const parser = new DiscoveryValidityParser("openai-chat");
+    const parseSpy = vi.spyOn(JSON, "parse");
+
+    try {
+      expect(parser.push('{"padding":"')).toMatchObject({ ready: false, error: false });
+      for (let index = 0; index < 128; index += 1) {
+        expect(parser.push(`fragment-${index}}`)).toMatchObject({
+          ready: false,
+          error: false,
+        });
+      }
+      expect(parseSpy).not.toHaveBeenCalled();
+
+      expect(parser.push('","choices":[{"delta":{"content":"ready"}}]}')).toMatchObject({
+        ready: true,
+        error: false,
+      });
+      // 一次是原始 JSON 探测，另外两次来自现有协议错误检查与帧分类；
+      // 关键约束是碎片尚未闭合时没有任何 parse。
+      expect(parseSpy).toHaveBeenCalledTimes(3);
+    } finally {
+      parseSpy.mockRestore();
+    }
+  });
+
   it("joins all data lines in one SSE event before parsing", () => {
     const parser = new DiscoveryValidityParser("openai-chat");
 

@@ -1546,7 +1546,10 @@ function hasReplayCompletionMarker(text: string, format: ProxySession["originalF
 
   // finish_reason 证明语义完成，但 OpenAI Chat 仍可能在随后发送 usage 与 [DONE]。
   // Replay 只有读到客户端可见的 wire 终止标记后才允许发布 completed。
-  return parseSSEData(text).some((event) => event.event === "message" && event.data === "[DONE]");
+  return parseSSEData(text).some(
+    (event) =>
+      event.event === "message" && typeof event.data === "string" && event.data.trim() === "[DONE]"
+  );
 }
 
 function hasTerminalStreamUsageEvidence(
@@ -2257,6 +2260,14 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
 
   if (isIncompleteCompletion) {
     meta.hedgeBindingHeartbeat?.stop();
+    session.addProviderToChain(providerForChain, {
+      endpointId: meta.endpointId,
+      endpointUrl: meta.endpointUrl,
+      reason: "response_incomplete",
+      attemptNumber: meta.attemptNumber,
+      statusCode: effectiveStatusCode,
+      errorMessage: errorMessage ?? undefined,
+    });
     const commitSideEffects = async () => {
       try {
         // 普通/Discovery 路径尚未创建绑定，原绑定应保留；只有 Hedge 已在首字节

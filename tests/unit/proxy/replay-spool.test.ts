@@ -53,9 +53,21 @@ const storeControl = vi.hoisted(() => {
         return ownedChunks.length;
       }
     ),
-    readChunks: vi.fn(async (replayId: string, fromIndex: number) => {
+    readOwnedChunks: vi.fn(
+      async (replayId: string, _ownerToken: string, fromIndex: number, maxCount: number) => {
+        order.push("read");
+        const chunks = ownedChunksByReplayId.get(replayId) ?? [];
+        return chunks.slice(fromIndex, fromIndex + maxCount);
+      }
+    ),
+    heartbeatOwned: vi.fn(async () => {
+      order.push("renew");
+      return true;
+    }),
+    readChunks: vi.fn(async (replayId: string, fromIndex: number, maxCount?: number) => {
       order.push("read");
-      return (ownedChunksByReplayId.get(replayId) ?? []).slice(fromIndex);
+      const chunks = ownedChunksByReplayId.get(replayId) ?? [];
+      return chunks.slice(fromIndex, maxCount === undefined ? undefined : fromIndex + maxCount);
     }),
     completeOwned: vi.fn(
       async (_replayId: string, _ownerToken: string, meta: { status: string }) => {
@@ -162,9 +174,10 @@ async function drainWriteChain(spool: ReplaySpool): Promise<void> {
   await (spool as unknown as { writeChain: Promise<void> }).writeChain;
 }
 
-function makeOwnerSession(): ProxySession {
+function makeOwnerSession(messageRequestId = 42): ProxySession {
   return {
     replayState: { identity, ownerToken: "owner-token", role: "owner" },
+    messageContext: { id: messageRequestId },
   } as unknown as ProxySession;
 }
 
@@ -251,7 +264,7 @@ describe("ReplaySpool：write-behind 批量冲刷", () => {
 
   it("单个超大网络 chunk 会拆成有界 Redis 元素且不切断代理对", async () => {
     const spool = makeSpool();
-    const payload = `${"x".repeat(64 * 1024 - 1)}😀${"y".repeat(64 * 1024 + 3)}`;
+    const payload = `${"x".repeat(64 * 1024 - 1)}\u{1f600}${"y".repeat(64 * 1024 + 3)}`;
 
     spool.observe(encoder.encode(payload));
     await drainWriteChain(spool);
@@ -304,7 +317,7 @@ describe("ReplaySpool：write-behind 批量冲刷", () => {
     await vi.advanceTimersByTimeAsync(15_000);
     await drainWriteChain(spool);
 
-    expect(storeControl.store.renewOwnerLease).toHaveBeenCalledWith(
+    expect(storeControl.store.heartbeatOwned).toHaveBeenCalledWith(
       identity.replayId,
       "owner-token"
     );
@@ -653,7 +666,7 @@ describe("ReplaySpool：completeAfterBilling 终态屏障", () => {
     expect(storeControl.store.persistCompleted).toHaveBeenCalledTimes(1);
 
     await vi.advanceTimersByTimeAsync(30_000);
-    expect(storeControl.store.renewOwnerLease).toHaveBeenCalledTimes(2);
+    expect(storeControl.store.heartbeatOwned).toHaveBeenCalledTimes(2);
     expect(storeControl.store.completeOwned).not.toHaveBeenCalled();
 
     resolvePersist();
@@ -683,7 +696,12 @@ describe("ReplaySpool：completeAfterBilling 终态屏障", () => {
     await vi.advanceTimersByTimeAsync(0);
 
     expect(storeControl.store.persistCompleted).toHaveBeenCalledTimes(1);
-    expect(storeControl.store.readChunks).toHaveBeenCalledWith(identity.replayId, 0);
+    expect(storeControl.store.readOwnedChunks).toHaveBeenCalledWith(
+      identity.replayId,
+      "owner-token",
+      0,
+      64
+    );
     expect(storeControl.store.persistCompleted).toHaveBeenCalledWith(
       expect.objectContaining({
         payload: "x".repeat(payloadBytes),
@@ -746,7 +764,7 @@ describe("ReplaySpool：completeAfterBilling 终态屏障", () => {
   it("Redis chunks 缺失时封死热层并释放 heartbeat 与并发配额", async () => {
     const spool = makeSpool();
     spool.observe(encoder.encode("data: partial\n\n"));
-    storeControl.store.readChunks.mockResolvedValueOnce(null);
+    storeControl.store.readOwnedChunks.mockResolvedValueOnce(null);
 
     await spool.completeAfterBilling(10);
 
@@ -759,7 +777,7 @@ describe("ReplaySpool：completeAfterBilling 终态屏障", () => {
     expect(getActiveReplaySpoolCount()).toBe(0);
 
     await vi.advanceTimersByTimeAsync(15_000);
-    expect(storeControl.store.renewOwnerLease).not.toHaveBeenCalled();
+    expect(storeControl.store.heartbeatOwned).not.toHaveBeenCalled();
   });
 
   it("inactive 回调异常时仍完成 spool 清理并释放并发配额", async () => {
@@ -1097,6 +1115,7 @@ describe("createReplaySpoolIfOwner", () => {
       "owner-token",
       expect.objectContaining({
         delivery: "buffered",
+        messageRequestId: 42,
         headers: {
           "content-type": "application/json; charset=utf-8",
           "x-provider-request-id": "req-1",

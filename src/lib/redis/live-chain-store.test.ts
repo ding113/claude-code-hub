@@ -100,6 +100,10 @@ describe("inferPhase", () => {
     expect(inferPhase([makeChainItem({ reason: "client_abort" })])).toBe("aborted");
   });
 
+  it('returns "failed" for response_incomplete', () => {
+    expect(inferPhase([makeChainItem({ reason: "response_incomplete" })])).toBe("failed");
+  });
+
   it('returns "forwarding" for unknown reasons', () => {
     expect(inferPhase([makeChainItem({ reason: undefined })])).toBe("forwarding");
   });

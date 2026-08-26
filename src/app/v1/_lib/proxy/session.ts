@@ -790,6 +790,7 @@ export class ProxySession {
         | "concurrent_limit_failed"
         | "request_success" // 修复：添加 request_success
         | "retry_success"
+        | "response_incomplete" // 协议完整抵达，但结果明确未完成
         | "retry_failed" // 供应商错误（已计入熔断器）
         | "system_error" // 系统/网络错误（不计入熔断器）
         | "resource_not_found" // 上游 404 错误（不计入熔断器，仅切换供应商）

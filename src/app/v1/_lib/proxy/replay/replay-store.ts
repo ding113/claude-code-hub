@@ -41,7 +41,7 @@ export interface ReplayMeta {
   model: string | null;
   chunkCount: number;
   byteSize: number;
-  /** owner 心跳（epoch ms）：spool 每次冲刷时更新，attach 读者据此做 stall 检测 */
+  /** owner 心跳（epoch ms）；completed 时冻结为完成时间，供 stall 与固定到期边界判定。 */
   heartbeatAt: number;
   messageRequestId?: number | null;
   abortReason?: string;
@@ -62,6 +62,35 @@ if redis.call('GET', KEYS[1]) == ARGV[1] then
   return 1
 end
 return 0`;
+
+const LUA_HEARTBEAT_OWNED = `
+if redis.call('GET', KEYS[1]) ~= ARGV[1] then
+  return 0
+end
+local rawMeta = redis.call('GET', KEYS[2])
+if not rawMeta then
+  return 0
+end
+local ok, meta = pcall(cjson.decode, rawMeta)
+if not ok then
+  return 0
+end
+meta.heartbeatAt = tonumber(ARGV[4])
+redis.call('SETEX', KEYS[2], ARGV[2], cjson.encode(meta))
+if redis.call('EXISTS', KEYS[3]) == 1 then
+  redis.call('EXPIRE', KEYS[3], ARGV[2])
+end
+redis.call('EXPIRE', KEYS[1], ARGV[3])
+return 1`;
+
+const LUA_PREPARE_OWNED = `
+if redis.call('GET', KEYS[1]) ~= ARGV[1] then
+  return 0
+end
+redis.call('DEL', KEYS[2])
+redis.call('DEL', KEYS[3])
+redis.call('EXPIRE', KEYS[1], ARGV[2])
+return 1`;
 
 const LUA_WRITE_OWNED = `
 if redis.call('GET', KEYS[1]) ~= ARGV[1] then
@@ -103,6 +132,27 @@ end
 redis.call('SETEX', KEYS[2], ARGV[2], ARGV[3])
 redis.call('DEL', KEYS[1])
 return 1`;
+
+const LUA_READ_GENERATION = `
+local rawMeta = redis.call('GET', KEYS[1])
+if not rawMeta then
+  return {0}
+end
+local ok, meta = pcall(cjson.decode, rawMeta)
+if not ok or tostring(meta.messageRequestId or '') ~= ARGV[1] then
+  return {-1}
+end
+local values = redis.call('LRANGE', KEYS[2], ARGV[2], ARGV[3])
+if tonumber(ARGV[4]) > 0 then
+  redis.call('EXPIRE', KEYS[2], ARGV[4])
+end
+return {1, values}`;
+
+const LUA_READ_OWNED = `
+if redis.call('GET', KEYS[1]) ~= ARGV[1] then
+  return {0}
+end
+return {1, redis.call('LRANGE', KEYS[2], ARGV[2], ARGV[3])}`;
 
 type RedisRawClient = Pick<Redis, "status" | "set" | "del"> & {
   eval(...args: [script: string, numkeys: number, ...rest: (string | number)[]]): Promise<unknown>;
@@ -235,9 +285,84 @@ export class ReplayStore {
   async readChunks(
     replayId: string,
     fromIndex: number,
-    maxCount?: number
+    maxCount?: number,
+    refreshTtlSeconds?: number
   ): Promise<string[] | null> {
-    return this.chunks.lrangeFrom(replayId, fromIndex, maxCount);
+    return this.chunks.lrangeFrom(replayId, fromIndex, maxCount, refreshTtlSeconds);
+  }
+
+  /**
+   * live attach 按 owner 请求 ID 原子校验 meta 并读取 LIST。false 表示条目已换代或消失，
+   * null 表示 Redis 不可用；两者都不能把返回块接到当前订阅者的既有前缀后。
+   */
+  async readChunksForGeneration(
+    replayId: string,
+    messageRequestId: number,
+    fromIndex: number,
+    maxCount: number,
+    refreshTtlSeconds?: number
+  ): Promise<string[] | null | false> {
+    if (maxCount <= 0) return [];
+    const redis = this.getRawRedis();
+    if (!redis) return null;
+    const end = fromIndex + maxCount - 1;
+    try {
+      const result = await redis.eval(
+        LUA_READ_GENERATION,
+        2,
+        `cch:replay:meta:${replayId}`,
+        `cch:replay:chunks:${replayId}`,
+        messageRequestId,
+        fromIndex,
+        end,
+        refreshTtlSeconds ?? 0
+      );
+      if (!Array.isArray(result)) return null;
+      const state = Number(result[0]);
+      if (state < 0) return false;
+      if (state === 0) return [];
+      if (state !== 1) return null;
+      const values = result[1];
+      return Array.isArray(values) ? values.map((value) => String(value)) : [];
+    } catch (error) {
+      logger.error("[ReplayStore] generation-fenced chunk read failed", {
+        replayId: replayId.slice(0, 12),
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return null;
+    }
+  }
+
+  /** owner 完成前按 token fencing 分页读取自身 LIST，租约换代后立即停止。 */
+  async readOwnedChunks(
+    replayId: string,
+    ownerToken: string,
+    fromIndex: number,
+    maxCount: number
+  ): Promise<string[] | null | false> {
+    if (maxCount <= 0) return [];
+    const redis = this.getRawRedis();
+    if (!redis) return null;
+    try {
+      const result = await redis.eval(
+        LUA_READ_OWNED,
+        2,
+        `cch:replay:owner:${replayId}`,
+        `cch:replay:chunks:${replayId}`,
+        ownerToken,
+        fromIndex,
+        fromIndex + maxCount - 1
+      );
+      if (!Array.isArray(result) || Number(result[0]) !== 1) return false;
+      const values = result[1];
+      return Array.isArray(values) ? values.map((value) => String(value)) : [];
+    } catch (error) {
+      logger.error("[ReplayStore] owner-fenced chunk read failed", {
+        replayId: replayId.slice(0, 12),
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return null;
+    }
   }
 
   async deleteEntry(replayId: string): Promise<void> {
@@ -288,6 +413,59 @@ export class ReplayStore {
       );
       return result === 1;
     } catch {
+      return false;
+    }
+  }
+
+  /** 原子刷新 token、owning meta 心跳与现存 LIST TTL，不覆写并发 flush 的字段。 */
+  async heartbeatOwned(
+    replayId: string,
+    ownerToken: string,
+    heartbeatAt = Date.now()
+  ): Promise<boolean> {
+    const redis = this.getRawRedis();
+    if (!redis) return true;
+    try {
+      const result = await redis.eval(
+        LUA_HEARTBEAT_OWNED,
+        3,
+        `cch:replay:owner:${replayId}`,
+        `cch:replay:meta:${replayId}`,
+        `cch:replay:chunks:${replayId}`,
+        ownerToken,
+        resolveReplayTtlSeconds(),
+        OWNER_LEASE_TTL_SECONDS,
+        heartbeatAt
+      );
+      return result === 1;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * PG miss 后原子确认租约仍归当前请求、清理旧热层并续租。PG 查询可能超过
+   * 原租约，不能用未 fencing 的 DEL 误删已经接管的新 owner 数据。
+   */
+  async prepareOwned(replayId: string, ownerToken: string): Promise<boolean> {
+    const redis = this.getRawRedis();
+    if (!redis) return false;
+    try {
+      const result = await redis.eval(
+        LUA_PREPARE_OWNED,
+        3,
+        `cch:replay:owner:${replayId}`,
+        `cch:replay:meta:${replayId}`,
+        `cch:replay:chunks:${replayId}`,
+        ownerToken,
+        OWNER_LEASE_TTL_SECONDS
+      );
+      return result === 1;
+    } catch (error) {
+      logger.debug("[ReplayStore] fenced owner preparation failed", {
+        replayId: replayId.slice(0, 12),
+        error: error instanceof Error ? error.message : String(error),
+      });
       return false;
     }
   }
@@ -469,7 +647,9 @@ export class ReplayStore {
       logger.warn("[ReplayStore] findCompleted failed", {
         error: error instanceof Error ? error.message : String(error),
       });
-      return null;
+      // miss 与存储不可用不能混为一谈：调用方只有在确定 miss 后才能创建新
+      // owner，否则可能让新热层正文与一个仍有效的 durable winner 发生冲突。
+      throw error;
     }
   }
 }

@@ -234,6 +234,7 @@ function getItemStatus(item: ProviderChainItem): {
   }
   if (
     item.reason === "retry_failed" ||
+    item.reason === "response_incomplete" ||
     item.reason === "system_error" ||
     item.reason === "resource_not_found" ||
     item.reason === "endpoint_pool_exhausted" ||

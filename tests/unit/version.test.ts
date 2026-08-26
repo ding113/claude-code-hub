@@ -19,6 +19,21 @@ describe("版本比较", () => {
     }
   });
 
+  test("构建版本环境变量没有 v 前缀时仍统一展示格式", async () => {
+    const original = process.env.NEXT_PUBLIC_APP_VERSION;
+    process.env.NEXT_PUBLIC_APP_VERSION = "0.9.4";
+    vi.resetModules();
+
+    try {
+      const { APP_VERSION } = await import("@/lib/version");
+      expect(APP_VERSION).toBe("v0.9.4");
+    } finally {
+      if (original === undefined) delete process.env.NEXT_PUBLIC_APP_VERSION;
+      else process.env.NEXT_PUBLIC_APP_VERSION = original;
+      vi.resetModules();
+    }
+  });
+
   test("应正确判断是否存在可升级版本（latest > current）", () => {
     expect(compareVersions("v0.3.0", "v0.3.33")).toBe(1);
     expect(compareVersions("v0.3.33", "v0.3.0")).toBe(-1);

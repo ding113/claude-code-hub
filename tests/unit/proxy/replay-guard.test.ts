@@ -23,13 +23,19 @@ const envControl = vi.hoisted(() => ({
   liveDedup: true,
 }));
 
-const storeControl = vi.hoisted(() => ({
-  getMeta: vi.fn(async (): Promise<unknown> => null),
-  readChunks: vi.fn(async (): Promise<string[] | null> => null),
-  findCompleted: vi.fn(async (): Promise<unknown> => null),
-  tryClaimOwner: vi.fn(async (): Promise<boolean> => false),
-  deleteChunks: vi.fn(async (): Promise<void> => undefined),
-}));
+const storeControl = vi.hoisted(() => {
+  const readChunks = vi.fn(async (): Promise<string[] | null> => null);
+  return {
+    getMeta: vi.fn(async (): Promise<unknown> => null),
+    readChunks,
+    readChunksForGeneration: vi.fn(),
+    findCompleted: vi.fn(async (): Promise<unknown> => null),
+    tryClaimOwner: vi.fn(async (): Promise<boolean> => false),
+    prepareOwned: vi.fn(async (): Promise<boolean> => true),
+    releaseOwner: vi.fn(async (): Promise<void> => undefined),
+    deleteChunks: vi.fn(async (): Promise<void> => undefined),
+  };
+});
 
 const dbControl = vi.hoisted(() => ({
   rows: [] as Record<string, unknown>[],
@@ -75,6 +81,7 @@ vi.mock("@/lib/system-settings/proxy-runtime", () => ({
 
 vi.mock("@/app/v1/_lib/proxy/replay/replay-store", () => ({
   getReplayStore: () => storeControl,
+  resolveReplayTtlSeconds: () => 60,
 }));
 
 vi.mock("@/drizzle/db", () => ({
@@ -162,6 +169,7 @@ function makeMeta(identity: ReplayIdentity, overrides: Partial<ReplayMeta> = {})
     chunkCount: 1,
     byteSize: 9,
     heartbeatAt: Date.now(),
+    messageRequestId: 202,
     ...overrides,
   };
 }
@@ -174,6 +182,16 @@ beforeEach(() => {
   dbControl.nextId = 501;
   materializeReplayAuditFromSourceMock.mockReset();
   materializeReplayAuditFromSourceMock.mockResolvedValue(true);
+  storeControl.readChunksForGeneration.mockImplementation(
+    (
+      replayId: string,
+      _messageRequestId: number,
+      fromIndex: number,
+      maxCount: number,
+      refreshTtlSeconds?: number
+    ): Promise<string[] | null | false> =>
+      storeControl.readChunks(replayId, fromIndex, maxCount, refreshTtlSeconds)
+  );
 });
 
 describe("ProxyReplayGuard：放行路径", () => {
@@ -209,8 +227,8 @@ describe("ProxyReplayGuard：放行路径", () => {
     const ownerToken = session.replayState?.ownerToken;
     expect(typeof ownerToken).toBe("string");
     expect(storeControl.tryClaimOwner).toHaveBeenCalledWith(identity.replayId, ownerToken);
-    // 上一 owner 异常退出遗留的旧 LIST 残块在挂角色前清除
-    expect(storeControl.deleteChunks).toHaveBeenCalledWith(identity.replayId);
+    // PG miss 后以当前 token 原子清旧热层并续租，成功才挂 owner 角色。
+    expect(storeControl.prepareOwned).toHaveBeenCalledWith(identity.replayId, ownerToken);
     expect(dbControl.rows).toHaveLength(0);
   });
 
@@ -218,7 +236,7 @@ describe("ProxyReplayGuard：放行路径", () => {
     storeControl.tryClaimOwner.mockResolvedValueOnce(false);
 
     await expect(ProxyReplayGuard.ensure(makeSession())).resolves.toBeNull();
-    expect(storeControl.deleteChunks).not.toHaveBeenCalled();
+    expect(storeControl.prepareOwned).not.toHaveBeenCalled();
   });
 
   it("buffered owner 不提供 attached_live，竞争请求按 miss 路径 fail-open", async () => {
@@ -316,7 +334,7 @@ describe("ProxyReplayGuard：放行路径", () => {
 
     await expect(ProxyReplayGuard.ensure(session)).resolves.toBeNull();
     expect(storeControl.tryClaimOwner).not.toHaveBeenCalled();
-    expect(storeControl.deleteChunks).not.toHaveBeenCalled();
+    expect(storeControl.prepareOwned).not.toHaveBeenCalled();
     expect(session.replayState).toBeNull();
     // 也不重放：照常执行（有意重复采样语义）
     expect(storeControl.readChunks).not.toHaveBeenCalled();
@@ -336,6 +354,36 @@ describe("ProxyReplayGuard：放行路径", () => {
     expect(session.replayState?.role).toBe("owner");
   });
 
+  it("x-cch-no-replay: 1 在 Redis miss 时保护已有 durable winner", async () => {
+    const identity = expectedIdentity();
+    storeControl.tryClaimOwner.mockResolvedValueOnce(true);
+    storeControl.findCompleted.mockResolvedValueOnce({
+      verifier: identity.verifier,
+      payload: "data: old\n\n",
+    });
+    const session = makeSession({ headers: { [REPLAY_BYPASS_HEADER]: "1" } });
+
+    await expect(ProxyReplayGuard.ensure(session)).resolves.toBeNull();
+
+    expect(storeControl.tryClaimOwner).toHaveBeenCalledWith(identity.replayId, expect.any(String));
+    expect(storeControl.releaseOwner).toHaveBeenCalledWith(identity.replayId, expect.any(String));
+    expect(storeControl.prepareOwned).not.toHaveBeenCalled();
+    expect(session.replayState).toBeNull();
+  });
+
+  it("PG 查询失败时释放刚取得的 owner，不把 unavailable 当成 miss", async () => {
+    const identity = expectedIdentity();
+    storeControl.tryClaimOwner.mockResolvedValueOnce(true);
+    storeControl.findCompleted.mockRejectedValueOnce(new Error("pg down"));
+    const session = makeSession();
+
+    await expect(ProxyReplayGuard.ensure(session)).resolves.toBeNull();
+
+    expect(storeControl.releaseOwner).toHaveBeenCalledWith(identity.replayId, expect.any(String));
+    expect(storeControl.deleteChunks).not.toHaveBeenCalled();
+    expect(session.replayState).toBeNull();
+  });
+
   it("存储异常 fail-open：照常放行", async () => {
     storeControl.getMeta.mockRejectedValueOnce(new Error("redis exploded"));
 
@@ -344,19 +392,26 @@ describe("ProxyReplayGuard：放行路径", () => {
 });
 
 describe("ProxyReplayGuard：completed 全量重放", () => {
-  it("Redis 热层 completed：全量重放响应头与 body，并写审计行", async () => {
+  it("Redis 热层 completed：按固定到期点分页重放，并写审计行", async () => {
     const identity = expectedIdentity();
+    let now = Date.now();
+    const completedAt = now - 10_000;
+    const dateNowSpy = vi.spyOn(Date, "now").mockImplementation(() => now);
     storeControl.getMeta.mockResolvedValueOnce(
       makeMeta(identity, {
         status: "completed",
         statusCode: 200,
         messageRequestId: 101,
         chunkCount: 65,
+        heartbeatAt: completedAt,
       })
     );
     const firstPage = Array.from({ length: 64 }, (_, index) => `data: ${index}\n\n`);
     storeControl.readChunks
-      .mockResolvedValueOnce(firstPage)
+      .mockImplementationOnce(async () => {
+        now += 30_000;
+        return firstPage;
+      })
       .mockResolvedValueOnce(["data: tail\n\n"]);
     const session = makeSession({
       sessionIdentity: {
@@ -368,43 +423,47 @@ describe("ProxyReplayGuard：completed 全量重放", () => {
       },
     });
 
-    const response = await ProxyReplayGuard.ensure(session);
+    try {
+      const response = await ProxyReplayGuard.ensure(session);
 
-    expect(response).not.toBeNull();
-    expect(response?.status).toBe(200);
-    expect(response?.headers.get("content-type")).toBe("text/event-stream; charset=utf-8");
-    expect(response?.headers.get("cache-control")).toBe("no-cache");
-    expect(response?.headers.get("x-cch-replay")).toBe("completed");
-    await expect(response?.text()).resolves.toBe(`${firstPage.join("")}data: tail\n\n`);
+      expect(response).not.toBeNull();
+      expect(response?.status).toBe(200);
+      expect(response?.headers.get("content-type")).toBe("text/event-stream; charset=utf-8");
+      expect(response?.headers.get("cache-control")).toBe("no-cache");
+      expect(response?.headers.get("x-cch-replay")).toBe("completed");
+      await expect(response?.text()).resolves.toBe(`${firstPage.join("")}data: tail\n\n`);
 
-    expect(storeControl.readChunks).toHaveBeenNthCalledWith(1, identity.replayId, 0, 64);
-    expect(storeControl.readChunks).toHaveBeenNthCalledWith(2, identity.replayId, 64, 1);
-    expect(storeControl.tryClaimOwner).not.toHaveBeenCalled();
+      expect(storeControl.readChunks).toHaveBeenNthCalledWith(1, identity.replayId, 0, 64, 50);
+      expect(storeControl.readChunks).toHaveBeenNthCalledWith(2, identity.replayId, 64, 1, 20);
+      expect(storeControl.tryClaimOwner).not.toHaveBeenCalled();
 
-    expect(dbControl.rows).toHaveLength(1);
-    expect(dbControl.rows[0]).toMatchObject({
-      providerId: 0,
-      userId: 22,
-      key: "sk-test",
-      model: "claude-sonnet-4",
-      sessionId: "sess-1",
-      sessionIdentity: "pfx:scope:current",
-      sessionIdentityKind: "prefix_affinity",
-      affinityScopeTag: "scope",
-      affinityFingerprint: "current",
-      affinityFingerprintChain: ["current", "parent"],
-      statusCode: 200,
-      costUsd: "0",
-      blockedBy: null,
-      isReplay: true,
-      replaySourceRequestId: 101,
-      endpoint: "/v1/messages",
-      messagesCount: 1,
-      userAgent: "vitest-agent",
-    });
-    expect(String(dbControl.rows[0].blockedReason)).toContain("redis_completed");
-    expect(String(dbControl.rows[0].blockedReason)).toContain(identity.replayId.slice(0, 12));
-    expect(materializeReplayAuditFromSourceMock).toHaveBeenCalledWith(501, 101);
+      expect(dbControl.rows).toHaveLength(1);
+      expect(dbControl.rows[0]).toMatchObject({
+        providerId: 0,
+        userId: 22,
+        key: "sk-test",
+        model: "claude-sonnet-4",
+        sessionId: "sess-1",
+        sessionIdentity: "pfx:scope:current",
+        sessionIdentityKind: "prefix_affinity",
+        affinityScopeTag: "scope",
+        affinityFingerprint: "current",
+        affinityFingerprintChain: ["current", "parent"],
+        statusCode: 200,
+        costUsd: "0",
+        blockedBy: null,
+        isReplay: true,
+        replaySourceRequestId: 101,
+        endpoint: "/v1/messages",
+        messagesCount: 1,
+        userAgent: "vitest-agent",
+      });
+      expect(String(dbControl.rows[0].blockedReason)).toContain("redis_completed");
+      expect(String(dbControl.rows[0].blockedReason)).toContain(identity.replayId.slice(0, 12));
+      expect(materializeReplayAuditFromSourceMock).toHaveBeenCalledWith(501, 101);
+    } finally {
+      dateNowSpy.mockRestore();
+    }
   });
 
   it("completed JSON 恢复语义 headers 和原始 body，不注入 SSE headers", async () => {
@@ -454,6 +513,43 @@ describe("ProxyReplayGuard：completed 全量重放", () => {
     expect(response?.headers.get("x-cch-replay")).toBe("completed");
     await expect(response?.text()).resolves.toBe("data: pg\n\n");
     expect(String(dbControl.rows[0].blockedReason)).toContain("pg_completed");
+  });
+
+  it("慢客户端读取下一页时 Redis 过期，从同一 durable payload 精确续传", async () => {
+    const identity = expectedIdentity();
+    const firstPage = Array.from({ length: 64 }, (_, index) => `part-${index}|`);
+    const durablePayload = `${firstPage.join("")}tail`;
+    storeControl.getMeta.mockResolvedValueOnce(
+      makeMeta(identity, { status: "completed", chunkCount: 65 })
+    );
+    storeControl.readChunks.mockResolvedValueOnce(firstPage).mockResolvedValueOnce([]);
+    storeControl.findCompleted.mockResolvedValueOnce({
+      verifier: identity.verifier,
+      sourceMessageRequestId: 202,
+      payload: durablePayload,
+    });
+
+    const response = await ProxyReplayGuard.ensure(makeSession());
+
+    await expect(response?.text()).resolves.toBe(durablePayload);
+    expect(storeControl.findCompleted).toHaveBeenCalledWith(identity.replayId);
+    expect(storeControl.readChunks).toHaveBeenNthCalledWith(2, identity.replayId, 64, 1, 60);
+  });
+
+  it("Redis 中途过期时拒绝使用 verifier 不匹配的 durable payload", async () => {
+    const identity = expectedIdentity();
+    storeControl.getMeta.mockResolvedValueOnce(
+      makeMeta(identity, { status: "completed", chunkCount: 2 })
+    );
+    storeControl.readChunks.mockResolvedValueOnce(["prefix"]).mockResolvedValueOnce([]);
+    storeControl.findCompleted.mockResolvedValueOnce({
+      verifier: "f".repeat(32),
+      payload: "prefixforeign",
+    });
+
+    const response = await ProxyReplayGuard.ensure(makeSession());
+
+    await expect(response?.text()).rejects.toThrow("replay completed payload was truncated");
   });
 
   it("Redis 全 miss 时 PG 持久层直接命中；headersJson 缺失回退 SSE 头", async () => {
@@ -551,6 +647,135 @@ describe("ProxyReplayGuard：owning attach-live 跟尾", () => {
     expect(dbControl.rows).toHaveLength(0);
   });
 
+  it("live attach 转为 completed 后热层过期时从 durable payload 精确续传", async () => {
+    const identity = expectedIdentity();
+    const completed = makeMeta(identity, {
+      status: "completed",
+      messageRequestId: 203,
+      chunkCount: 2,
+    });
+    const metaSequence: ReplayMeta[] = [
+      makeMeta(identity, { status: "owning", messageRequestId: 203 }),
+    ];
+    storeControl.getMeta.mockImplementation(async () => metaSequence.shift() ?? completed);
+    const chunkSequence: string[][] = [["data: a\n\n"], [], []];
+    storeControl.readChunks.mockImplementation(async () => chunkSequence.shift() ?? []);
+    storeControl.findCompleted.mockResolvedValueOnce({
+      verifier: identity.verifier,
+      sourceMessageRequestId: 203,
+      payload: "data: a\n\ndata: b\n\n",
+    });
+
+    const response = await ProxyReplayGuard.ensure(makeSession());
+
+    await expect(response?.text()).resolves.toBe("data: a\n\ndata: b\n\n");
+    expect(storeControl.findCompleted).toHaveBeenCalledWith(identity.replayId);
+    expect(dbControl.rows).toHaveLength(1);
+    expect(String(dbControl.rows[0].blockedReason)).toContain("attached_live");
+  });
+
+  it("live attach 未观察到 completed meta 时仍从 durable payload 精确续传", async () => {
+    const identity = expectedIdentity();
+    storeControl.getMeta
+      .mockResolvedValueOnce(makeMeta(identity, { status: "owning", messageRequestId: 204 }))
+      .mockResolvedValueOnce(null);
+    const chunkSequence: string[][] = [["data: a\n\n"], []];
+    storeControl.readChunks.mockImplementation(async () => chunkSequence.shift() ?? []);
+    storeControl.findCompleted.mockResolvedValueOnce({
+      verifier: identity.verifier,
+      statusCode: 200,
+      sourceMessageRequestId: 204,
+      payload: "data: a\n\ndata: b\n\n",
+    });
+
+    const response = await ProxyReplayGuard.ensure(makeSession());
+
+    await expect(response?.text()).resolves.toBe("data: a\n\ndata: b\n\n");
+    expect(storeControl.findCompleted).toHaveBeenCalledWith(identity.replayId);
+    expect(materializeReplayAuditFromSourceMock).toHaveBeenCalledWith(501, 204);
+    expect(dbControl.rows).toHaveLength(1);
+    expect(String(dbControl.rows[0].blockedReason)).toContain("attached_live");
+  });
+
+  it("live attach 未观察到 completed meta 时拒绝拼接旧 owner 的 durable payload", async () => {
+    const identity = expectedIdentity();
+    storeControl.getMeta
+      .mockResolvedValueOnce(makeMeta(identity, { status: "owning", messageRequestId: 205 }))
+      .mockResolvedValueOnce(null);
+    const chunkSequence: string[][] = [["data: new-prefix\n\n"], []];
+    storeControl.readChunks.mockImplementation(async () => chunkSequence.shift() ?? []);
+    storeControl.findCompleted.mockResolvedValueOnce({
+      verifier: identity.verifier,
+      statusCode: 200,
+      sourceMessageRequestId: 199,
+      payload: "data: old-prefix\n\ndata: old-tail\n\n",
+    });
+
+    const response = await ProxyReplayGuard.ensure(makeSession());
+
+    await expect(response?.text()).rejects.toThrow("replay source aborted");
+    expect(dbControl.rows).toHaveLength(0);
+  });
+
+  it("live attach 已观察 completed meta 后仍拒绝拼接另一代 durable payload", async () => {
+    const identity = expectedIdentity();
+    const completed = makeMeta(identity, {
+      status: "completed",
+      messageRequestId: 206,
+      chunkCount: 2,
+    });
+    const metaSequence: ReplayMeta[] = [
+      makeMeta(identity, { status: "owning", messageRequestId: 206 }),
+    ];
+    storeControl.getMeta.mockImplementation(async () => metaSequence.shift() ?? completed);
+    const chunkSequence: string[][] = [["data: new-prefix\n\n"], [], []];
+    storeControl.readChunks.mockImplementation(async () => chunkSequence.shift() ?? []);
+    storeControl.findCompleted.mockResolvedValueOnce({
+      verifier: identity.verifier,
+      sourceMessageRequestId: 199,
+      payload: "data: old-prefix\n\ndata: old-tail\n\n",
+    });
+
+    const response = await ProxyReplayGuard.ensure(makeSession());
+
+    await expect(response?.text()).rejects.toThrow("replay live payload was truncated");
+    expect(dbControl.rows).toHaveLength(0);
+  });
+
+  it("live attach 原子读取发现 owner 已换代时立即终止", async () => {
+    const identity = expectedIdentity();
+    storeControl.getMeta.mockResolvedValueOnce(
+      makeMeta(identity, { status: "owning", messageRequestId: 207 })
+    );
+    storeControl.readChunksForGeneration.mockResolvedValueOnce(false);
+
+    const response = await ProxyReplayGuard.ensure(makeSession());
+
+    await expect(response?.text()).rejects.toThrow("replay owner generation changed");
+    expect(storeControl.findCompleted).not.toHaveBeenCalled();
+    expect(dbControl.rows).toHaveLength(0);
+  });
+
+  it("live attach 原子读取发现 meta 已过期时仍可从同代 durable 续传", async () => {
+    const identity = expectedIdentity();
+    storeControl.getMeta.mockResolvedValueOnce(
+      makeMeta(identity, { status: "owning", messageRequestId: 208 })
+    );
+    storeControl.readChunksForGeneration.mockResolvedValueOnce([]);
+    storeControl.getMeta.mockResolvedValueOnce(null);
+    storeControl.findCompleted.mockResolvedValueOnce({
+      verifier: identity.verifier,
+      statusCode: 200,
+      sourceMessageRequestId: 208,
+      payload: "data: durable\n\n",
+    });
+
+    const response = await ProxyReplayGuard.ensure(makeSession());
+
+    await expect(response?.text()).resolves.toBe("data: durable\n\n");
+    expect(dbControl.rows).toHaveLength(1);
+  });
+
   it("attach 中 Redis 失联按传输错误终止流", async () => {
     const identity = expectedIdentity();
     storeControl.getMeta.mockResolvedValueOnce(makeMeta(identity, { status: "owning" }));
@@ -595,10 +820,13 @@ describe("ProxyReplayGuard：owning attach-live 跟尾", () => {
     storeControl.readChunks.mockResolvedValue([]);
 
     const response = await ProxyReplayGuard.ensure(makeSession());
-    const cancelPromise = response?.body?.cancel();
+    const reader = response?.body?.getReader();
+    const pendingRead = reader?.read();
     await vi.waitFor(() => expect(resolveTerminal).not.toBeNull());
+    const cancelPromise = reader?.cancel();
     resolveTerminal?.(completed);
     await cancelPromise;
+    await pendingRead;
     await Promise.resolve();
 
     expect(materializeReplayAuditFromSourceMock).not.toHaveBeenCalled();

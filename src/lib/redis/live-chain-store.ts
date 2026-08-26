@@ -145,6 +145,7 @@ function deriveLegacyActiveProviders(chain: ProviderChainItem[]): LiveProviderSn
         activeProviders.set(item.id, provider);
         break;
       case "retry_failed":
+      case "response_incomplete":
       case "system_error":
       case "resource_not_found":
       case "hedge_loser_cancelled":
@@ -177,6 +178,8 @@ export function inferPhase(
     case "system_error":
     case "resource_not_found":
       return "retrying";
+    case "response_incomplete":
+      return "failed";
     case "hedge_triggered":
     case "hedge_launched":
       return "hedge_racing";

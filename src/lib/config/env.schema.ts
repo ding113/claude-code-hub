@@ -276,12 +276,12 @@ export const EnvSchema = z.object({
       message: "DETACHED_STREAM_METERING_RESERVE_BYTES cannot exceed DETACHED_STREAM_BUDGET_BYTES",
     });
   }
-  if (env.STREAM_GATE_GLOBAL_PREBUFFER_BYTE_CAP < env.STREAM_GATE_PREBUFFER_BYTE_CAP * 2) {
+  if (env.STREAM_GATE_GLOBAL_PREBUFFER_BYTE_CAP < env.STREAM_GATE_PREBUFFER_BYTE_CAP * 4) {
     context.addIssue({
       code: "custom",
       path: ["STREAM_GATE_GLOBAL_PREBUFFER_BYTE_CAP"],
       message:
-        "STREAM_GATE_GLOBAL_PREBUFFER_BYTE_CAP must be at least twice STREAM_GATE_PREBUFFER_BYTE_CAP",
+        "STREAM_GATE_GLOBAL_PREBUFFER_BYTE_CAP must be at least four times STREAM_GATE_PREBUFFER_BYTE_CAP",
     });
   }
 });

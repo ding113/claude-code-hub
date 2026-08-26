@@ -2,6 +2,7 @@ import { getEnvConfig } from "@/lib/config/env.schema";
 import { logger } from "@/lib/logger";
 import { getCachedProxyRuntimeSettings } from "@/lib/system-settings/proxy-runtime";
 import { inferUpstreamErrorStatusCodeFromText } from "@/lib/utils/upstream-error-detection";
+import { BufferedByteChunks } from "../buffered-byte-chunks";
 import { ProxyError } from "../errors";
 import {
   classifyFrame,
@@ -12,7 +13,7 @@ import {
   type ProtocolFamily,
 } from "./frame-classifier";
 import type { StreamGatePrebufferBudget, StreamGatePrebufferLease } from "./prebuffer-budget";
-import { SseFrameParser } from "./sse-frames";
+import { SseFrameBufferLimitError, SseFrameParser } from "./sse-frames";
 
 /**
  * 流式内容门控（F1）：在向客户端透传前，按帧分类等待「首个有效内容 chunk」。
@@ -196,6 +197,10 @@ export interface StreamGateOptions extends StreamGateCaps {
   prebufferBudget?: StreamGatePrebufferBudget;
   /** 等待共享预算时使用与上游请求相同的取消信号。 */
   abortSignal?: AbortSignal;
+  /** 开始等待本地预算；竞速路径用它暂停本地 hedge 阈值。 */
+  onBudgetWaitStart?: () => void;
+  /** 本地预算获得或等待失败；恢复本地 hedge 阈值。 */
+  onBudgetWaitEnd?: () => void;
 }
 
 /** 触发门控提交的帧/chunk 标记（用于 Message 详情可观测性）。 */
@@ -224,6 +229,8 @@ export type StreamGateResult =
     }
   | { committed: false; error: Error };
 
+const PREBUFFER_MEMORY_RESERVATION_MULTIPLIER = 4;
+
 /**
  * 对上游 SSE body reader 执行首个有效内容门控。
  *
@@ -237,22 +244,14 @@ export async function runStreamContentGate(
 ): Promise<StreamGateResult> {
   let prebufferLease: StreamGatePrebufferLease | null = null;
   let leaseTransferred = false;
-  if (options.prebufferBudget) {
-    try {
-      prebufferLease = await options.prebufferBudget.acquire(
-        options.prebufferByteCap * 2,
-        options.abortSignal
-      );
-    } catch (error) {
-      return {
-        committed: false,
-        error: error instanceof Error ? error : new Error(String(error)),
-      };
-    }
-  }
-
-  const parser = new SseFrameParser();
-  const buffered: Uint8Array[] = [];
+  const parser = new SseFrameParser({
+    maxBufferedCharacters: options.prebufferByteCap,
+    bufferLimitExemption: {
+      maxBufferedCharacters: options.prebufferByteCap * 2,
+      matches: (eventName, dataHead) => isRequestEchoFrame(options.family, eventName, dataHead),
+    },
+  });
+  const buffered = new BufferedByteChunks();
   let bufferedBytes = 0;
   let echoExcludedBytes = 0;
   let framesSeen = 0;
@@ -281,10 +280,15 @@ export async function runStreamContentGate(
     options.prebufferByteCap;
 
   const commit = (eventName: string | null, readerDone: boolean): StreamGateResult => {
+    const retainedPrefixBytes = buffered.retainedByteLength;
+    const prefixChunks = buffered.take();
+    // 读取期间需要覆盖 parser、输入副本和前缀的最坏峰值；提交后 parser
+    // 已停止，租约只需覆盖仍挂在下游 pending slot 中的实际 backing bytes。
+    prebufferLease?.shrinkTo(retainedPrefixBytes);
     leaseTransferred = true;
     return {
       committed: true,
-      prefixChunks: buffered,
+      prefixChunks,
       framesSeen,
       readerDone,
       commitMarker: options.captureCommitMarker
@@ -295,6 +299,34 @@ export async function runStreamContentGate(
   };
 
   try {
+    if (options.prebufferBudget) {
+      if (options.abortSignal?.aborted) {
+        return { committed: false, error: abortSignalError(options.abortSignal) };
+      }
+      const reservationBytes = options.prebufferByteCap * PREBUFFER_MEMORY_RESERVATION_MULTIPLIER;
+      const budgetSnapshot = options.prebufferBudget.snapshot();
+      // snapshot 与 acquire 之间没有异步边界；只在本次调用确实会进入 FIFO
+      // 队列时暂停供应商计时，避免正常热路径反复清除并重建 timer。
+      const waitsForBudget =
+        reservationBytes <= budgetSnapshot.limit &&
+        (budgetSnapshot.waiting > 0 ||
+          budgetSnapshot.reservedBytes + reservationBytes > budgetSnapshot.limit);
+      if (waitsForBudget) options.onBudgetWaitStart?.();
+      try {
+        prebufferLease = await options.prebufferBudget.acquire(
+          reservationBytes,
+          options.abortSignal
+        );
+      } catch (error) {
+        return {
+          committed: false,
+          error: error instanceof Error ? error : new Error(String(error)),
+        };
+      } finally {
+        if (waitsForBudget) options.onBudgetWaitEnd?.();
+      }
+    }
+
     while (true) {
       let readResult: ReadableStreamReadResult<Uint8Array>;
       try {
@@ -314,24 +346,46 @@ export async function runStreamContentGate(
       if (readResult.done) {
         // 冲刷尾部未终止帧（无结尾空行的流）
         let sawTerminal = false;
-        for (const frame of parser.finish()) {
-          framesSeen++;
-          const verdict = classifyFrame(options.family, frame.eventName, frame.data);
-          if (verdict === "content") {
-            return commit(frame.eventName, true);
+        let trailingResult: StreamGateResult | null = null;
+        try {
+          parser.finishVisit((eventName, data) => {
+            framesSeen++;
+            const verdict = classifyFrame(options.family, eventName, data);
+            if (verdict === "content") {
+              trailingResult = commit(eventName, true);
+              return false;
+            }
+            if (verdict === "error") {
+              trailingResult = failure("gate_error", data);
+              return false;
+            }
+            if (verdict === "malformed") {
+              trailingResult = failure("decode_error", data);
+              return false;
+            }
+            if (
+              verdict === "terminal" &&
+              options.family === "openai-responses" &&
+              (isCleanResponsesCompletion(eventName, data) ||
+                isResponsesIncompleteCompletion(eventName, data))
+            ) {
+              trailingResult = commit(eventName, true);
+              return false;
+            }
+            if (verdict === "terminal") sawTerminal = true;
+            if (verdict === "neutral" && framesSeen > options.prebufferEventCap) {
+              trailingResult = failure("prebuffer_overflow");
+              return false;
+            }
+            return true;
+          });
+        } catch (error) {
+          if (error instanceof SseFrameBufferLimitError) {
+            return failure("prebuffer_overflow");
           }
-          if (verdict === "error") return failure("gate_error", frame.data);
-          if (verdict === "malformed") return failure("decode_error", frame.data);
-          if (
-            verdict === "terminal" &&
-            options.family === "openai-responses" &&
-            (isCleanResponsesCompletion(frame.eventName, frame.data) ||
-              isResponsesIncompleteCompletion(frame.eventName, frame.data))
-          ) {
-            return commit(frame.eventName, true);
-          }
-          if (verdict === "terminal") sawTerminal = true;
+          throw error;
         }
+        if (trailingResult) return trailingResult;
         // 无终止帧的 EOF 是供应商断流；终止帧先于内容则是请求作用域空结果。
         return failure("empty_stream", undefined, sawTerminal);
       }
@@ -351,43 +405,59 @@ export async function runStreamContentGate(
       if (chunk.byteLength > options.prebufferByteCap * 2 - bufferedBytes) {
         return failure("prebuffer_overflow");
       }
-      buffered.push(chunk);
+      buffered.append(chunk);
       bufferedBytes += chunk.byteLength;
 
-      for (const frame of parser.push(chunk)) {
-        framesSeen++;
-        const verdict: FrameVerdict = classifyFrame(options.family, frame.eventName, frame.data);
-        if (verdict === "content") {
-          if (exceedsByteCap()) return failure("prebuffer_overflow");
-          return commit(frame.eventName, false);
-        }
-        if (verdict === "error") {
-          return failure("gate_error", frame.data);
-        }
-        if (verdict === "malformed") {
-          return failure("decode_error", frame.data);
-        }
-        if (verdict === "terminal") {
-          if (
-            options.family === "openai-responses" &&
-            (isCleanResponsesCompletion(frame.eventName, frame.data) ||
-              isResponsesIncompleteCompletion(frame.eventName, frame.data))
-          ) {
-            if (exceedsByteCap()) return failure("prebuffer_overflow");
-            return commit(frame.eventName, false);
+      let frameResult: StreamGateResult | null = null;
+      try {
+        parser.visit(chunk, (eventName, data) => {
+          framesSeen++;
+          const verdict: FrameVerdict = classifyFrame(options.family, eventName, data);
+          if (verdict === "content") {
+            frameResult = exceedsByteCap()
+              ? failure("prebuffer_overflow")
+              : commit(eventName, false);
+            return false;
           }
-          // 干净终止先于任何内容 = 空流
-          return failure("empty_stream", frame.data, true);
-        }
-        // neutral: 继续缓冲；请求回显帧的载荷不计入字节上限（豁免额度另有上限，见下方判定）
-        if (isRequestEchoFrame(options.family, frame.eventName, frame.data)) {
-          echoExcludedBytes += Buffer.byteLength(frame.data, "utf8");
-        }
-        // event 上限为逐帧硬上限（单 chunk 大量小帧也会触发）
-        if (framesSeen > options.prebufferEventCap) {
+          if (verdict === "error") {
+            frameResult = failure("gate_error", data);
+            return false;
+          }
+          if (verdict === "malformed") {
+            frameResult = failure("decode_error", data);
+            return false;
+          }
+          if (verdict === "terminal") {
+            if (
+              options.family === "openai-responses" &&
+              (isCleanResponsesCompletion(eventName, data) ||
+                isResponsesIncompleteCompletion(eventName, data))
+            ) {
+              frameResult = exceedsByteCap()
+                ? failure("prebuffer_overflow")
+                : commit(eventName, false);
+            } else {
+              frameResult = failure("empty_stream", data, true);
+            }
+            return false;
+          }
+          // neutral: 继续缓冲；请求回显帧的载荷不计入字节上限。
+          if (isRequestEchoFrame(options.family, eventName, data)) {
+            echoExcludedBytes += Buffer.byteLength(data, "utf8");
+          }
+          if (framesSeen > options.prebufferEventCap) {
+            frameResult = failure("prebuffer_overflow");
+            return false;
+          }
+          return true;
+        });
+      } catch (error) {
+        if (error instanceof SseFrameBufferLimitError) {
           return failure("prebuffer_overflow");
         }
+        throw error;
       }
+      if (frameResult) return frameResult;
 
       // 豁免额度以 cap 为自身上限：伪装成回显的中性帧最多把缓冲总量抬到 2×cap，不会无界占用内存
       if (exceedsByteCap()) {
@@ -395,7 +465,10 @@ export async function runStreamContentGate(
       }
     }
   } finally {
-    if (!leaseTransferred) prebufferLease?.release();
+    if (!leaseTransferred) {
+      buffered.clear();
+      prebufferLease?.release();
+    }
   }
 }
 
@@ -428,9 +501,17 @@ async function readWithIdleTimeout(
 }
 
 /** 拼接门控前缀字节（供竞速败者计费 drain 恢复 usage 时复用现有单块逻辑）。 */
-export function concatChunks(chunks: Uint8Array[]): Uint8Array | null {
+export function concatChunks(chunks: Uint8Array[]): Uint8Array<ArrayBuffer> | null {
   if (chunks.length === 0) return null;
-  if (chunks.length === 1) return chunks[0];
+  if (chunks.length === 1) {
+    const only = chunks[0];
+    // Web Streams 允许 SharedArrayBuffer-backed view；Response BodyInit 的
+    // DOM 类型则要求 ArrayBuffer-backed view。正常路径零拷贝，只有确实
+    // 不是 ArrayBuffer 时才复制一次，避免把类型问题扩散到调用方。
+    return only.buffer instanceof ArrayBuffer
+      ? (only as Uint8Array<ArrayBuffer>)
+      : new Uint8Array(only);
+  }
   let total = 0;
   for (const chunk of chunks) total += chunk.byteLength;
   const out = new Uint8Array(total);
@@ -440,6 +521,10 @@ export function concatChunks(chunks: Uint8Array[]): Uint8Array | null {
     offset += chunk.byteLength;
   }
   return out;
+}
+
+function abortSignalError(signal: AbortSignal): Error {
+  return signal.reason instanceof Error ? signal.reason : new DOMException("Aborted", "AbortError");
 }
 
 /**
@@ -476,8 +561,8 @@ export function createShadowGateObserver(context: {
         if (firstByteAt === null && chunk.byteLength > 0) {
           firstByteAt = Date.now();
         }
-        for (const frame of parser.push(chunk)) {
-          const verdict = classifyFrame(context.family, frame.eventName, frame.data);
+        parser.visit(chunk, (eventName, data) => {
+          const verdict = classifyFrame(context.family, eventName, data);
           verdictCounts[verdict]++;
           if (verdict === "content" || verdict === "error" || verdict === "malformed") {
             reported = true;
@@ -493,9 +578,10 @@ export function createShadowGateObserver(context: {
               firstContentLagMs: firstByteAt === null ? null : Date.now() - firstByteAt,
               verdictCounts: { ...verdictCounts },
             });
-            return;
+            return false;
           }
-        }
+          return true;
+        });
       } catch {
         // shadow 观察绝不影响热路径
         reported = true;

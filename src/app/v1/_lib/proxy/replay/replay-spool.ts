@@ -9,6 +9,7 @@ import {
   ReplayDurableConflictError,
   type ReplayMeta,
 } from "./replay-store";
+import { splitAtSafeTextBoundary } from "./replay-text";
 
 /**
  * F2 owner 侧 spool：把客户端可见字节（pump 处理后流）以 write-behind 方式
@@ -28,6 +29,7 @@ import {
 const FLUSH_INTERVAL_MS = 100;
 const FLUSH_BYTES_THRESHOLD = 64 * 1024;
 const MAX_REDIS_CHUNK_CHARACTERS = 64 * 1024;
+const DURABLE_PERSIST_READ_BATCH_CHUNKS = 64;
 const MAX_QUEUED_WRITE_BYTES = 1024 * 1024;
 const OWNER_HEARTBEAT_INTERVAL_MS = 15_000;
 const PRE_SPOOL_ABORT_WAIT_MS = 100;
@@ -45,6 +47,8 @@ function serializeDurablePersistence<T>(operation: () => Promise<T>): Promise<T>
 }
 
 export interface ReplaySpoolOptions {
+  /** 当前 owner 的请求记录 ID；live attach 用它区分同一 Replay ID 的不同代。 */
+  sourceMessageRequestId?: number | null;
   /** Shortens the detached window when the spool loses its active write role. */
   onInactive?: () => void;
   /** Runs once after completed, aborted, or disabled cleanup releases the spool. */
@@ -121,11 +125,7 @@ export class ReplaySpool {
   private appendDecodedText(text: string): void {
     let offset = 0;
     while (offset < text.length) {
-      let end = Math.min(offset + MAX_REDIS_CHUNK_CHARACTERS, text.length);
-      if (end < text.length) {
-        const lastCodeUnit = text.charCodeAt(end - 1);
-        if (lastCodeUnit >= 0xd800 && lastCodeUnit <= 0xdbff) end -= 1;
-      }
+      const end = splitAtSafeTextBoundary(text, offset, MAX_REDIS_CHUNK_CHARACTERS);
       this.pending.push(text.slice(offset, end));
       offset = end;
     }
@@ -217,6 +217,7 @@ export class ReplaySpool {
       chunkCount: this.chunkCount,
       byteSize: this.totalBytes,
       heartbeatAt: Date.now(),
+      messageRequestId: this.options.sourceMessageRequestId ?? null,
       ...extra,
     };
   }
@@ -226,7 +227,7 @@ export class ReplaySpool {
       if (this.disabled || this.aborting || this.released || this.ownerHeartbeatInFlight) return;
       this.ownerHeartbeatInFlight = true;
       void this.store
-        .renewOwnerLease(this.identity.replayId, this.ownerToken)
+        .heartbeatOwned(this.identity.replayId, this.ownerToken)
         .then((leaseHeld) => {
           if (!leaseHeld && !this.aborting && !this.released) this.halt("owner_lease_lost");
         })
@@ -312,13 +313,10 @@ export class ReplaySpool {
         }
         this.chunkCount = appended;
         this.metaWritten = true;
-        // Redis 是活跃正文的唯一长期副本。大 payload 的读取、拼接和 PG 写入串行执行，
-        // 避免多个流同秒终态时在 V8 heap 中并发重建完整响应。
+        // Redis 是活跃正文的唯一长期副本。大 payload 的分页读取、拼接和 PG 写入
+        // 串行执行，避免单次 LRANGE 的完整回复与多个终态重建同时放大 V8 heap。
         const persistResult = await serializeDurablePersistence(async () => {
-          const chunks = await this.store.readChunks(this.identity.replayId, 0);
-          if (!chunks || chunks.length !== this.chunkCount) {
-            throw new Error("replay chunks unavailable before durable persistence");
-          }
+          const payload = await this.readDurablePayload();
           return this.store.persistCompleted({
             replayId: this.identity.replayId,
             verifier: this.identity.verifier,
@@ -329,7 +327,7 @@ export class ReplaySpool {
             model: this.identity.model,
             statusCode: this.statusCode,
             headers: this.headers,
-            payload: chunks.join(""),
+            payload,
             byteSize: this.totalBytes,
             sourceMessageRequestId: messageRequestId,
           });
@@ -382,6 +380,26 @@ export class ReplaySpool {
       }
     });
     await this.writeChain;
+  }
+
+  /** 分页重建最终正文，限制 Redis 客户端单次回复及其临时对象峰值。 */
+  private async readDurablePayload(): Promise<string> {
+    const pages: string[] = [];
+    let offset = 0;
+    while (offset < this.chunkCount) {
+      const chunks = await this.store.readOwnedChunks(
+        this.identity.replayId,
+        this.ownerToken,
+        offset,
+        Math.min(DURABLE_PERSIST_READ_BATCH_CHUNKS, this.chunkCount - offset)
+      );
+      if (!chunks || chunks.length === 0 || offset + chunks.length > this.chunkCount) {
+        throw new Error("replay chunks unavailable before durable persistence");
+      }
+      pages.push(chunks.length === 1 ? (chunks[0] ?? "") : chunks.join(""));
+      offset += chunks.length;
+    }
+    return pages.length === 1 ? (pages[0] ?? "") : pages.join("");
   }
 
   /** 终态失败：meta 置 aborted + 删块；已 aborted 的条目绝不被重放命中。 */
@@ -619,7 +637,7 @@ export function createReplaySpoolIfOwner(
       response.status,
       headers,
       delivery,
-      options
+      { ...options, sourceMessageRequestId: session.messageContext?.id ?? null }
     );
     spool.bootstrap();
     return spool;

@@ -778,6 +778,7 @@ async function forwardToInternalHttp(
         // Accept both LF (`\n\n`) and CRLF (`\r\n\r\n`) event separators since
         // upstreams in the wild emit either form.
         let buffer = "";
+        let delimiterScanOffset = 0;
         let sawTerminal = false;
         let terminalEventType = null;
         const EVENT_DELIMITER = /\r?\n\r?\n/g;
@@ -797,6 +798,7 @@ async function forwardToInternalHttp(
 
         const failOversizedSseEvent = () => {
           buffer = "";
+          delimiterScanOffset = 0;
           sendFatalError(
             "internal_sse_event_too_large",
             "Internal SSE event exceeded the WebSocket response limit",
@@ -857,7 +859,9 @@ async function forwardToInternalHttp(
         };
 
         const flushEvents = () => {
-          EVENT_DELIMITER.lastIndex = 0;
+          // buffer 通常只保留一个未完成事件。从上次尾部附近继续扫描，避免一字节
+          // HTTP chunk 每次都重扫持续增长的事件；保留三个字符以覆盖跨块 CRLF 分隔符。
+          EVENT_DELIMITER.lastIndex = delimiterScanOffset;
           let eventStart = 0;
           let delimiter;
           while ((delimiter = EVENT_DELIMITER.exec(buffer)) !== null) {
@@ -871,6 +875,7 @@ async function forwardToInternalHttp(
           }
           if (eventStart > 0) buffer = buffer.slice(eventStart);
           EVENT_DELIMITER.lastIndex = 0;
+          delimiterScanOffset = Math.max(0, buffer.length - 3);
           if (buffer.length > MAX_INTERNAL_SSE_EVENT_CHARACTERS) {
             failOversizedSseEvent();
             return false;

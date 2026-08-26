@@ -561,11 +561,13 @@ function watchNeutralResponsesPrefixConsumption() {
     observed += typeof chunk === "string" ? chunk : decoder.decode(chunk, { stream: true });
     if (observed.includes('"sequence_number":3')) consumed.resolve();
   };
-  const originalGatePush = SseFrameParser.prototype.push;
-  const gateSpy = vi.spyOn(SseFrameParser.prototype, "push").mockImplementation(function (chunk) {
-    observe(chunk);
-    return originalGatePush.call(this, chunk);
-  });
+  const originalGateVisit = SseFrameParser.prototype.visit;
+  const gateSpy = vi
+    .spyOn(SseFrameParser.prototype, "visit")
+    .mockImplementation(function (chunk, visitor) {
+      observe(chunk);
+      return originalGateVisit.call(this, chunk, visitor);
+    });
   const originalDiscoveryPush = DiscoveryValidityParser.prototype.push;
   const discoverySpy = vi
     .spyOn(DiscoveryValidityParser.prototype, "push")

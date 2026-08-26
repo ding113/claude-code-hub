@@ -4,6 +4,8 @@ const DEFAULT_STREAM_GATE_GLOBAL_PREBUFFER_BYTE_CAP = 256 * 1024 * 1024;
 
 export interface StreamGatePrebufferLease {
   readonly reservedBytes: number;
+  /** 提交后只保留实际仍被前缀占用的预算；不能扩大原始租约。 */
+  shrinkTo(reservedBytes: number): void;
   release(): void;
 }
 
@@ -13,6 +15,9 @@ type PendingAcquire = {
   onAbort?: () => void;
   resolve: (lease: StreamGatePrebufferLease) => void;
   reject: (error: unknown) => void;
+  previous: PendingAcquire | null;
+  next: PendingAcquire | null;
+  queued: boolean;
 };
 
 /**
@@ -23,7 +28,9 @@ type PendingAcquire = {
  */
 export class StreamGatePrebufferBudget {
   private reservedBytes = 0;
-  private readonly waiters: PendingAcquire[] = [];
+  private waiterHead: PendingAcquire | null = null;
+  private waiterTail: PendingAcquire | null = null;
+  private waitingCount = 0;
 
   constructor(private readonly resolveLimit: () => number) {}
 
@@ -43,22 +50,29 @@ export class StreamGatePrebufferBudget {
     if (signal?.aborted) {
       return Promise.reject(signal.reason ?? new DOMException("Aborted", "AbortError"));
     }
-    if (this.waiters.length === 0 && this.reservedBytes + reservedBytes <= limit) {
+    if (this.waitingCount === 0 && this.reservedBytes + reservedBytes <= limit) {
       return Promise.resolve(this.createLease(reservedBytes));
     }
 
     return new Promise<StreamGatePrebufferLease>((resolve, reject) => {
-      const waiter: PendingAcquire = { reservedBytes, signal, resolve, reject };
+      const waiter: PendingAcquire = {
+        reservedBytes,
+        signal,
+        resolve,
+        reject,
+        previous: null,
+        next: null,
+        queued: false,
+      };
       if (signal) {
         waiter.onAbort = () => {
-          const index = this.waiters.indexOf(waiter);
-          if (index >= 0) this.waiters.splice(index, 1);
+          if (!this.removeWaiter(waiter)) return;
           reject(signal.reason ?? new DOMException("Aborted", "AbortError"));
           this.drainWaiters();
         };
         signal.addEventListener("abort", waiter.onAbort, { once: true });
       }
-      this.waiters.push(waiter);
+      this.enqueueWaiter(waiter);
       this.drainWaiters();
     });
   }
@@ -66,31 +80,65 @@ export class StreamGatePrebufferBudget {
   snapshot(): { reservedBytes: number; waiting: number; limit: number } {
     return {
       reservedBytes: this.reservedBytes,
-      waiting: this.waiters.length,
+      waiting: this.waitingCount,
       limit: this.resolveLimit(),
     };
   }
 
+  private enqueueWaiter(waiter: PendingAcquire): void {
+    waiter.queued = true;
+    waiter.previous = this.waiterTail;
+    if (this.waiterTail) this.waiterTail.next = waiter;
+    else this.waiterHead = waiter;
+    this.waiterTail = waiter;
+    this.waitingCount += 1;
+  }
+
+  private removeWaiter(waiter: PendingAcquire): boolean {
+    if (!waiter.queued) return false;
+    if (waiter.previous) waiter.previous.next = waiter.next;
+    else this.waiterHead = waiter.next;
+    if (waiter.next) waiter.next.previous = waiter.previous;
+    else this.waiterTail = waiter.previous;
+    waiter.previous = null;
+    waiter.next = null;
+    waiter.queued = false;
+    this.waitingCount -= 1;
+    return true;
+  }
+
   private createLease(reservedBytes: number): StreamGatePrebufferLease {
     this.reservedBytes += reservedBytes;
+    let currentReservedBytes = reservedBytes;
     let released = false;
     return {
-      reservedBytes,
+      get reservedBytes() {
+        return currentReservedBytes;
+      },
+      shrinkTo: (nextReservedBytes: number) => {
+        if (!Number.isSafeInteger(nextReservedBytes) || nextReservedBytes < 0) {
+          throw new RangeError("Stream gate lease size must be a non-negative safe integer");
+        }
+        if (released || nextReservedBytes >= currentReservedBytes) return;
+        this.reservedBytes -= currentReservedBytes - nextReservedBytes;
+        currentReservedBytes = nextReservedBytes;
+        this.drainWaiters();
+      },
       release: () => {
         if (released) return;
         released = true;
-        this.reservedBytes -= reservedBytes;
+        this.reservedBytes -= currentReservedBytes;
+        currentReservedBytes = 0;
         this.drainWaiters();
       },
     };
   }
 
   private drainWaiters(): void {
-    while (this.waiters.length > 0) {
-      const waiter = this.waiters[0];
-      if (!waiter) return;
+    while (this.waiterHead) {
+      const waiter = this.waiterHead;
       if (waiter.signal?.aborted) {
-        this.waiters.shift();
+        this.removeWaiter(waiter);
         if (waiter.onAbort) waiter.signal.removeEventListener("abort", waiter.onAbort);
         waiter.reject(waiter.signal.reason ?? new DOMException("Aborted", "AbortError"));
         continue;
@@ -98,7 +146,7 @@ export class StreamGatePrebufferBudget {
 
       const limit = this.resolveLimit();
       if (this.reservedBytes + waiter.reservedBytes > limit) return;
-      this.waiters.shift();
+      this.removeWaiter(waiter);
       if (waiter.onAbort && waiter.signal) {
         waiter.signal.removeEventListener("abort", waiter.onAbort);
       }

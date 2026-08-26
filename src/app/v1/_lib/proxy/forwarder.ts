@@ -68,6 +68,7 @@ import { tryResponsesWebsocketUpstream } from "../responses-ws/upstream-adapter"
 import { buildProxyUrl } from "../url";
 import { recordAffinityWinner, tombstoneAffinityOnFailure } from "./affinity/affinity-recorder";
 import { rectifyBillingHeader } from "./billing-header-rectifier";
+import { BufferedByteChunks } from "./buffered-byte-chunks";
 import { bindClientAbortListener } from "./client-abort-listener";
 import {
   CLIENT_ABORT_METER_MAX_RETAINED_BYTES,
@@ -456,6 +457,8 @@ type CacheTtlOption = CacheTtlPreference | null | undefined;
 
 type ProxySessionWithAttemptRuntime = ProxySession & {
   clearResponseTimeout?: () => void;
+  pauseResponseTimeout?: () => void;
+  resumeResponseTimeout?: () => void;
   responseController?: AbortController;
   releaseAgent?: () => void;
 };
@@ -556,6 +559,9 @@ type StreamingHedgeAttempt = {
   settled: boolean;
   thresholdTriggered: boolean;
   thresholdTimer: NodeJS.Timeout | null;
+  thresholdDeadlineAt: number | null;
+  thresholdRemainingMs: number;
+  thresholdPaused: boolean;
   reader: ReadableStreamDefaultReader<Uint8Array> | null;
   response: Response | null;
   releaseAgent: (() => void) | null;
@@ -1962,6 +1968,8 @@ export class ProxyForwarder {
                 const runtime = session as ProxySession & {
                   responseController?: AbortController;
                   clearResponseTimeout?: () => void;
+                  pauseResponseTimeout?: () => void;
+                  resumeResponseTimeout?: () => void;
                   releaseAgent?: () => void;
                 };
                 const gateReader = response.body.getReader();
@@ -1986,6 +1994,8 @@ export class ProxyForwarder {
                     idleTimeoutMs: currentProvider.streamingIdleTimeoutMs,
                     captureCommitMarker: !session.isHighConcurrencyModeEnabled(),
                     prebufferBudget: getStreamGatePrebufferBudget(),
+                    onBudgetWaitStart: runtime.pauseResponseTimeout,
+                    onBudgetWaitEnd: runtime.resumeResponseTimeout,
                   },
                   [runtime.responseController?.signal, session.clientAbortSignal]
                 );
@@ -3659,17 +3669,84 @@ export class ProxyForwarder {
     }
 
     let responseTimeoutId: NodeJS.Timeout | null = null;
-    if (responseTimeoutMs > 0) {
+    let responseTimeoutDeadlineAt: number | null = null;
+    let responseTimeoutRemainingMs = responseTimeoutMs;
+    let responseTimeoutPaused = false;
+    let responseTimeoutPhase = "initial";
+    const scheduleResponseTimeout = (phase: string, delayMs = responseTimeoutMs) => {
+      if (responseTimeoutMs <= 0 || responseController.signal.aborted) return;
+      if (responseTimeoutId) clearTimeout(responseTimeoutId);
+      const effectiveDelayMs = Math.max(1, delayMs);
+      responseTimeoutPhase = phase;
+      responseTimeoutRemainingMs = effectiveDelayMs;
+      responseTimeoutDeadlineAt = Date.now() + effectiveDelayMs;
+      responseTimeoutPaused = false;
       responseTimeoutId = setTimeout(() => {
+        responseTimeoutId = null;
+        responseTimeoutDeadlineAt = null;
+        responseTimeoutRemainingMs = 0;
         responseController.abort();
         logger.warn("ProxyForwarder: Response timeout", {
           providerId: provider.id,
           providerName: provider.name,
           responseTimeoutMs,
           responseTimeoutType,
+          timeoutPhase: responseTimeoutPhase,
           isStreaming,
         });
-      }, responseTimeoutMs);
+      }, effectiveDelayMs);
+    };
+    const clearScheduledResponseTimeout = () => {
+      if (responseTimeoutId) {
+        clearTimeout(responseTimeoutId);
+        responseTimeoutId = null;
+      }
+      responseTimeoutDeadlineAt = null;
+      responseTimeoutRemainingMs = 0;
+      responseTimeoutPaused = false;
+    };
+    const pauseScheduledResponseTimeout = () => {
+      if (responseTimeoutPaused || !responseTimeoutId || responseTimeoutDeadlineAt === null) return;
+      responseTimeoutRemainingMs = Math.max(1, responseTimeoutDeadlineAt - Date.now());
+      clearTimeout(responseTimeoutId);
+      responseTimeoutId = null;
+      responseTimeoutDeadlineAt = null;
+      responseTimeoutPaused = true;
+    };
+    const resumeScheduledResponseTimeout = () => {
+      if (!responseTimeoutPaused) return;
+      responseTimeoutPaused = false;
+      if (responseController.signal.aborted || session.clientAbortSignal?.aborted) return;
+      scheduleResponseTimeout("stream_gate_budget_resume", responseTimeoutRemainingMs);
+    };
+    const buildResponseTimeoutError = () =>
+      new ProxyError(
+        `${responseTimeoutType === "streaming_first_byte" ? "供应商首字节响应超时" : "供应商响应超时"}: ${responseTimeoutMs}ms 内未收到数据`,
+        524,
+        {
+          body: JSON.stringify({
+            error: {
+              type: "timeout_error",
+              message: `Provider failed to respond within ${responseTimeoutMs}ms`,
+              timeout_type: responseTimeoutType,
+              timeout_ms: responseTimeoutMs,
+            },
+          }),
+          parsed: {
+            error: {
+              type: "timeout_error",
+              message: `Provider failed to respond within ${responseTimeoutMs}ms`,
+              timeout_type: responseTimeoutType,
+              timeout_ms: responseTimeoutMs,
+            },
+          },
+          providerId: provider.id,
+          providerName: provider.name,
+        }
+      );
+
+    if (responseTimeoutMs > 0) {
+      scheduleResponseTimeout("initial");
     } else {
       logger.debug("ProxyForwarder: Response timeout disabled", {
         providerId: provider.id,
@@ -3696,6 +3773,7 @@ export class ProxyForwarder {
       if (externalAbortSignal) abortTransportFrom(externalAbortSignal);
     });
     const cleanupCombinedSignal = () => {
+      clearScheduledResponseTimeout();
       cleanupResponseTransportSignal();
       cleanupClientTransportSignal();
       cleanupExternalTransportSignal();
@@ -3888,13 +3966,9 @@ export class ProxyForwarder {
       });
       // ⚠️ 不要清除 responseTimeoutId！让它继续监控响应体读取
     } catch (fetchError) {
-      // ⭐ fetch 失败：清除所有超时定时器
-      if (responseTimeoutId) {
-        clearTimeout(responseTimeoutId);
-      }
-
       // fetch 失败后可能继续尝试 HTTP/1.1 / 直连 fallback。
-      // 这些 fallback 请求仍需响应客户端中断和响应超时，所以 cleanup 只能在最终失败时执行。
+      // fallback 与原请求共享同一固定超时边界；不能在回退时重置完整时长。
+      // cleanup 只在最终失败时执行，成功则把剩余时长继续交给 response-handler。
 
       // Release agent ref count on fetch failure (request never started streaming)
       const releaseKey = proxyConfig?.cacheKey ?? directConnectionCacheKey;
@@ -3979,30 +4053,7 @@ export class ProxyForwarder {
         // 抛出 ProxyError 并设置特殊状态码 524（Cloudflare: A Timeout Occurred）
         // 这样会被归类为 PROVIDER_ERROR，计入熔断器并直接切换供应商
         cleanupCombinedSignal();
-        throw new ProxyError(
-          `${responseTimeoutType === "streaming_first_byte" ? "供应商首字节响应超时" : "供应商响应超时"}: ${responseTimeoutMs}ms 内未收到数据`,
-          524, // 524 = A Timeout Occurred (Cloudflare standard)
-          {
-            body: JSON.stringify({
-              error: {
-                type: "timeout_error",
-                message: `Provider failed to respond within ${responseTimeoutMs}ms`,
-                timeout_type: responseTimeoutType,
-                timeout_ms: responseTimeoutMs,
-              },
-            }),
-            parsed: {
-              error: {
-                type: "timeout_error",
-                message: `Provider failed to respond within ${responseTimeoutMs}ms`,
-                timeout_type: responseTimeoutType,
-                timeout_ms: responseTimeoutMs,
-              },
-            },
-            providerId: provider.id,
-            providerName: provider.name,
-          }
-        );
+        throw buildResponseTimeoutError();
       }
 
       // ⭐ 检测流式静默期超时（streaming_idle）
@@ -4153,6 +4204,7 @@ export class ProxyForwarder {
         }
 
         try {
+          responseTimeoutPhase = "http1_fallback";
           // 使用 HTTP/1.1 重试
           response = useErrorTolerantFetch
             ? await ProxyForwarder.fetchWithoutAutoDecode(
@@ -4175,19 +4227,6 @@ export class ProxyForwarder {
           directConnectionCacheKey = null;
           directConnectionDispatcherId = null;
 
-          // 重新启动响应超时计时器（如果之前有配置超时时间）
-          // 注意：responseTimeoutId 在 catch 块开头已被清除，这里只需检查 responseTimeoutMs
-          if (responseTimeoutMs > 0) {
-            responseTimeoutId = setTimeout(() => {
-              responseController.abort();
-              logger.warn("ProxyForwarder: Response timeout after HTTP/1.1 fallback", {
-                providerId: provider.id,
-                providerName: provider.name,
-                responseTimeoutMs,
-              });
-            }, responseTimeoutMs);
-          }
-
           // 成功后跳过 throw，继续执行后续逻辑（不计入熔断器）
         } catch (http1Error) {
           // Release H1 fallback agent ref count before re-throwing
@@ -4196,6 +4235,11 @@ export class ProxyForwarder {
               http1ProxyConfig.cacheKey,
               http1ProxyConfig.dispatcherId
             );
+          }
+
+          if (responseController.signal.aborted && !session.clientAbortSignal?.aborted) {
+            cleanupCombinedSignal();
+            throw buildResponseTimeoutError();
           }
 
           // HTTP/1.1 也失败，记录并抛出原始错误
@@ -4238,6 +4282,7 @@ export class ProxyForwarder {
             const fallbackInit = { ...init };
             delete fallbackInit.dispatcher;
             try {
+              responseTimeoutPhase = "direct_fallback";
               response = useErrorTolerantFetch
                 ? await ProxyForwarder.fetchWithoutAutoDecode(
                     proxyUrl,
@@ -4262,20 +4307,12 @@ export class ProxyForwarder {
               directConnectionCacheKey = null;
               directConnectionDispatcherId = null;
 
-              // 重新启动响应超时计时器（如果之前有配置超时时间）
-              // 注意：responseTimeoutId 在 catch 块开头已被清除，这里只需检查 responseTimeoutMs
-              if (responseTimeoutMs > 0) {
-                responseTimeoutId = setTimeout(() => {
-                  responseController.abort();
-                  logger.warn("ProxyForwarder: Response timeout after direct fallback", {
-                    providerId: provider.id,
-                    providerName: provider.name,
-                    responseTimeoutMs,
-                  });
-                }, responseTimeoutMs);
-              }
               // 成功后跳过 throw，继续执行后续逻辑
             } catch (directError) {
+              if (responseController.signal.aborted && !session.clientAbortSignal?.aborted) {
+                cleanupCombinedSignal();
+                throw buildResponseTimeoutError();
+              }
               // 直连也失败，抛出原始错误
               logger.error("ProxyForwarder: Direct connection also failed", {
                 providerId: provider.id,
@@ -4383,9 +4420,7 @@ export class ProxyForwarder {
           name: provider.name,
         });
       } finally {
-        if (responseTimeoutId) {
-          clearTimeout(responseTimeoutId);
-        }
+        clearScheduledResponseTimeout();
         // Release agent ref count (response-handler will never run for error responses)
         const errorReleaseKey = proxyConfig?.cacheKey ?? directConnectionCacheKey;
         const errorReleaseDispatcherId = proxyConfig?.dispatcherId ?? directConnectionDispatcherId;
@@ -4406,20 +4441,22 @@ export class ProxyForwarder {
     // response-handler 会在读到首字节（流式）或完整响应（非流式）后调用此函数
     const sessionWithTimeout = session as ProxySession & {
       clearResponseTimeout?: () => void;
+      pauseResponseTimeout?: () => void;
+      resumeResponseTimeout?: () => void;
       responseController?: AbortController;
       releaseAgent?: () => void;
     };
 
     sessionWithTimeout.clearResponseTimeout = () => {
-      if (responseTimeoutId) {
-        clearTimeout(responseTimeoutId);
-      }
+      clearScheduledResponseTimeout();
       logger.debug("ProxyForwarder: Response timeout cleared by response-handler", {
         providerId: provider.id,
         responseTimeoutMs,
         responseTimeoutType,
       });
     };
+    sessionWithTimeout.pauseResponseTimeout = pauseScheduledResponseTimeout;
+    sessionWithTimeout.resumeResponseTimeout = resumeScheduledResponseTimeout;
 
     // 传递 responseController 引用，让 response-handler 能区分超时和客户端中断
     sessionWithTimeout.responseController = responseController;
@@ -4838,26 +4875,71 @@ export class ProxyForwarder {
       releaseAttemptAgent(attempt);
     };
 
+    const triggerAttemptThreshold = (attempt: StreamingHedgeAttempt) => {
+      attempt.thresholdTimer = null;
+      attempt.thresholdDeadlineAt = null;
+      attempt.thresholdRemainingMs = 0;
+      if (settled || attempt.settled || attempt.thresholdTriggered) return;
+      attempt.thresholdTriggered = true;
+      session.addProviderToChain(attempt.provider, {
+        ...attempt.endpointAudit,
+        reason: "hedge_triggered",
+        attemptNumber: attempt.sequence,
+        circuitState: getCircuitState(attempt.provider.id),
+      });
+      void launchAlternative();
+    };
+
+    const scheduleAttemptThreshold = (attempt: StreamingHedgeAttempt) => {
+      if (
+        attempt.thresholdRemainingMs <= 0 ||
+        attempt.thresholdTriggered ||
+        attempt.settled ||
+        settled
+      ) {
+        return;
+      }
+      attempt.thresholdDeadlineAt = Date.now() + attempt.thresholdRemainingMs;
+      attempt.thresholdTimer = setTimeout(
+        () => triggerAttemptThreshold(attempt),
+        attempt.thresholdRemainingMs
+      );
+    };
+
     const armAttemptThreshold = (attempt: StreamingHedgeAttempt) => {
       if (attempt.thresholdTimer) {
         clearTimeout(attempt.thresholdTimer);
         attempt.thresholdTimer = null;
       }
       attempt.thresholdTriggered = false;
+      attempt.thresholdPaused = false;
+      attempt.thresholdDeadlineAt = null;
+      attempt.thresholdRemainingMs = attempt.firstByteTimeoutMs;
+      scheduleAttemptThreshold(attempt);
+    };
 
-      if (attempt.firstByteTimeoutMs <= 0) return;
+    const pauseAttemptThreshold = (attempt: StreamingHedgeAttempt) => {
+      if (
+        attempt.thresholdPaused ||
+        attempt.thresholdTriggered ||
+        attempt.settled ||
+        !attempt.thresholdTimer
+      ) {
+        return;
+      }
+      if (attempt.thresholdDeadlineAt !== null) {
+        attempt.thresholdRemainingMs = Math.max(1, attempt.thresholdDeadlineAt - Date.now());
+      }
+      clearTimeout(attempt.thresholdTimer);
+      attempt.thresholdTimer = null;
+      attempt.thresholdDeadlineAt = null;
+      attempt.thresholdPaused = true;
+    };
 
-      attempt.thresholdTimer = setTimeout(() => {
-        if (settled || attempt.settled || attempt.thresholdTriggered) return;
-        attempt.thresholdTriggered = true;
-        session.addProviderToChain(attempt.provider, {
-          ...attempt.endpointAudit,
-          reason: "hedge_triggered",
-          attemptNumber: attempt.sequence,
-          circuitState: getCircuitState(attempt.provider.id),
-        });
-        void launchAlternative();
-      }, attempt.firstByteTimeoutMs);
+    const resumeAttemptThreshold = (attempt: StreamingHedgeAttempt) => {
+      if (!attempt.thresholdPaused) return;
+      attempt.thresholdPaused = false;
+      scheduleAttemptThreshold(attempt);
     };
 
     const abortAllAttempts = (winner?: StreamingHedgeAttempt, reason: string = "hedge_loser") => {
@@ -5005,6 +5087,7 @@ export class ProxyForwarder {
                 ? mapProviderTypeToFamily(attempt.provider.providerType)
                 : null;
 
+            let acceptedAsWinner = false;
             if (hedgeGateFamily) {
               const gateStartedAt = Date.now();
               const gate = await runStreamContentGateWithAbortSignals(
@@ -5022,6 +5105,12 @@ export class ProxyForwarder {
                   idleTimeoutMs: attempt.provider.streamingIdleTimeoutMs,
                   captureCommitMarker: !session.isHighConcurrencyModeEnabled(),
                   prebufferBudget: getStreamGatePrebufferBudget(),
+                  onBudgetWaitStart: () => {
+                    pauseAttemptThreshold(attempt);
+                  },
+                  onBudgetWaitEnd: () => {
+                    resumeAttemptThreshold(attempt);
+                  },
                 },
                 // Legacy Hedge 已在请求级监听 clientAbortSignal，并会同步 abort
                 // 每个 attempt 的 responseController。这里只监听 attempt 自身即可，
@@ -5047,7 +5136,7 @@ export class ProxyForwarder {
               // 直接保留原门控 chunks；若本 attempt 落败，drain 时补回前缀里的 usage。
               attempt.billingPrefixChunks = gate.prefixChunks;
               attempt.gatePrebufferLease = gate.prebufferLease;
-              await commitWinner(attempt, gate.prefixChunks, true);
+              acceptedAsWinner = await commitWinner(attempt, gate.prefixChunks, true);
             } else {
               const firstChunk = await ProxyForwarder.readFirstReadableChunk(attempt.reader);
               if (firstChunk.done) {
@@ -5060,20 +5149,30 @@ export class ProxyForwarder {
 
               // 保留首块：若本 attempt 落败且需要计费，drain 时需要补回首块的 usage。
               attempt.billingPrefixChunks = [firstChunk.value];
-              await commitWinner(attempt, [firstChunk.value], false);
+              acceptedAsWinner = await commitWinner(attempt, [firstChunk.value], false);
             }
 
             // 本 attempt 读到首块却落败（winner 已先提交，commitWinner 早退）：
-            // 若开启输家计费且本 attempt 不是赢家，在此发起后台 drain（此时已无并发读）。
-            if (
-              attempt !== winnerAttempt &&
-              attempt.billAsLoser &&
-              attempt.settled &&
-              !attempt.loserBillingStarted &&
-              attempt.response &&
-              attempt.reader
-            ) {
-              startLoserBilling(attempt);
+            // gate 的租约可能刚随 await 结果转出，而 abortAllAttempts 已在更早的
+            // 微任务里检查过 attempt 上的旧值。必须在本地明确收回所有权，不能把
+            // 非计费输家的前缀预算永久留在共享池中。
+            if (!acceptedAsWinner) {
+              if (
+                attempt.billAsLoser &&
+                attempt.settled &&
+                !attempt.loserBillingStarted &&
+                attempt.response &&
+                attempt.reader
+              ) {
+                startLoserBilling(attempt);
+              } else {
+                attempt.billingPrefixChunks = null;
+                attempt.gatePrebufferLease?.release();
+                attempt.gatePrebufferLease = null;
+                const readerCancel = attempt.reader?.cancel("hedge_loser");
+                readerCancel?.catch(() => undefined);
+                releaseAttemptAgent(attempt);
+              }
             }
           } catch (firstChunkError) {
             const normalizedError =
@@ -5345,9 +5444,9 @@ export class ProxyForwarder {
       attempt: StreamingHedgeAttempt,
       prefixChunks: Uint8Array[],
       contentGateCommitted: boolean
-    ) => {
+    ): Promise<boolean> => {
       if (settled || winnerCommitted || attempt.settled || !attempt.response || !attempt.reader)
-        return;
+        return false;
 
       winnerCommitted = true;
       winnerAttempt = attempt;
@@ -5504,6 +5603,7 @@ export class ProxyForwarder {
       attempt.gatePrebufferLease = null;
 
       settleSuccess(response);
+      return true;
     };
 
     const startAttempt = async (
@@ -5587,6 +5687,10 @@ export class ProxyForwarder {
         settled: false,
         thresholdTriggered: false,
         thresholdTimer: null,
+        thresholdDeadlineAt: null,
+        thresholdRemainingMs:
+          provider.firstByteTimeoutStreamingMs > 0 ? provider.firstByteTimeoutStreamingMs : 0,
+        thresholdPaused: false,
         reader: null,
         response: null,
         releaseAgent: null,
@@ -5704,7 +5808,7 @@ export class ProxyForwarder {
         finalRescue: boolean;
         controller: AbortController;
         parser: DiscoveryValidityParser;
-        chunks: Uint8Array[];
+        chunks: BufferedByteChunks;
         pending: boolean;
         ready: boolean;
         round: number;
@@ -5882,15 +5986,12 @@ export class ProxyForwarder {
       releaseSetupProviderRef(reservation);
     };
 
-    const cancelSetupReservations = (
-      cancellationKind: DiscoveryCancellationKind,
-      predicate: (reservation: DiscoverySetupReservation) => boolean = () => true
-    ) => {
+    const cancelSetupReservations = (cancellationKind: DiscoveryCancellationKind) => {
       for (const reservation of retrySetupReservations.values()) {
-        if (predicate(reservation)) cancelSetupReservation(reservation, cancellationKind);
+        cancelSetupReservation(reservation, cancellationKind);
       }
       for (const reservation of candidateSetupReservations.values()) {
-        if (predicate(reservation)) cancelSetupReservation(reservation, cancellationKind);
+        cancelSetupReservation(reservation, cancellationKind);
       }
     };
 
@@ -5972,7 +6073,7 @@ export class ProxyForwarder {
         // The validity parser may have consumed one or more chunks before the
         // loser was held. Replay those bytes so usage markers in the prefix
         // (for example Anthropic message_start) are available to billing.
-        const bufferedChunks = attempt.chunks.splice(0);
+        const bufferedChunks = attempt.chunks.take();
         const drain = await drainLoserBillingEvidence({
           reader,
           initialChunks: bufferedChunks,
@@ -6090,7 +6191,7 @@ export class ProxyForwarder {
       }
       if (!preserveForLoserBilling) {
         releaseProviderRef(attempt);
-        attempt.chunks.length = 0;
+        attempt.chunks.clear();
       }
       discoveryMetrics.attemptFinished(attempt.id, {
         providerId: attempt.provider.id,
@@ -6391,7 +6492,7 @@ export class ProxyForwarder {
       leaseTransferred = true;
       resolveResult?.({
         response: new Response(
-          ProxyForwarder.buildBufferedPrefixStream(attempt.chunks, attempt.reader),
+          ProxyForwarder.buildBufferedPrefixStream(attempt.chunks.take(), attempt.reader),
           {
             status: attempt.response.status,
             statusText: attempt.response.statusText,
@@ -6668,7 +6769,7 @@ export class ProxyForwarder {
         parser: new DiscoveryValidityParser(
           mapProviderTypeToFamily(provider.providerType) ?? protocol
         ),
-        chunks: [],
+        chunks: new BufferedByteChunks(),
         pending: true,
         ready: false,
         round: currentRound,
@@ -6702,6 +6803,9 @@ export class ProxyForwarder {
         settled: false,
         thresholdTriggered: false,
         thresholdTimer: null,
+        thresholdDeadlineAt: null,
+        thresholdRemainingMs: 0,
+        thresholdPaused: false,
         reader: null,
         response: null,
         releaseAgent: null,
@@ -6717,7 +6821,7 @@ export class ProxyForwarder {
         finalRescue: boolean;
         controller: AbortController;
         parser: DiscoveryValidityParser;
-        chunks: Uint8Array[];
+        chunks: BufferedByteChunks;
         pending: boolean;
         ready: boolean;
         round: number;
@@ -6809,7 +6913,6 @@ export class ProxyForwarder {
             // 首字节时刻先挂在 attempt 上；DiscoveryValidityParser 的 ready 判定同样基于内容，
             // 不在此记录会让 discovery 模式的 TTFB 恒等于 TTFT。
             attempt.firstByteAt ??= Date.now();
-            attempt.chunks.push(item.value);
             const validity = attempt.parser.push(item.value);
             // A single read can contain both deliverable content and the
             // protocol terminator. Terminal is only invalid when no content
@@ -6824,6 +6927,7 @@ export class ProxyForwarder {
             }
             if (validity.error || (validity.terminal && !validity.ready))
               throw new ProxyError("Invalid upstream discovery response", 502);
+            attempt.chunks.append(item.value);
             if (!validity.ready) continue;
             attempt.ready = true;
             session.appendRoutingTraceEvent({
@@ -6963,7 +7067,6 @@ export class ProxyForwarder {
             await settleFailure(lastError, { preserveBinding: true });
             return;
           }
-
           // A failure can race the async selection/endpoint setup of the wave
           // that is meant to replace it. Wait until those reserved slots have
           // either registered or rolled back before the coordinator decides
@@ -8048,6 +8151,8 @@ export class ProxyForwarder {
         redirect: NonNullable<ProviderChainItem["modelRedirect"]>;
       } | null;
       clearResponseTimeout?: () => void;
+      pauseResponseTimeout?: () => void;
+      resumeResponseTimeout?: () => void;
       responseController?: AbortController;
       releaseAgent?: () => void;
     };
@@ -8085,6 +8190,8 @@ export class ProxyForwarder {
         }
       : null;
     targetState.clearResponseTimeout = sourceRuntime.clearResponseTimeout;
+    targetState.pauseResponseTimeout = sourceRuntime.pauseResponseTimeout;
+    targetState.resumeResponseTimeout = sourceRuntime.resumeResponseTimeout;
     targetState.responseController = sourceRuntime.responseController;
     targetState.releaseAgent = sourceRuntime.releaseAgent;
   }
@@ -8204,14 +8311,13 @@ export class ProxyForwarder {
       return { response, text: "", exceededLimit: false };
     }
 
-    const chunks: Uint8Array[] = [];
+    const chunks = new BufferedByteChunks();
     let totalBytes = 0;
     while (true) {
       const { done, value } = await reader.read();
       if (done) {
         reader.releaseLock();
-        const combined = chunks.length > 0 ? concatChunks(chunks) : null;
-        const body = combined ? new Uint8Array(combined) : new Uint8Array(0);
+        const body = concatChunks(chunks.take()) ?? new Uint8Array(0);
         return {
           response: new Response(body, {
             status: response.status,
@@ -8224,11 +8330,11 @@ export class ProxyForwarder {
       }
       if (!value || value.byteLength === 0) continue;
 
-      chunks.push(value);
-      totalBytes += value.byteLength;
-      if (totalBytes > maxBytes) {
+      if (totalBytes + value.byteLength > maxBytes) {
+        const prefixChunks = chunks.take();
+        prefixChunks.push(value);
         return {
-          response: new Response(ProxyForwarder.buildBufferedPrefixStream(chunks, reader), {
+          response: new Response(ProxyForwarder.buildBufferedPrefixStream(prefixChunks, reader), {
             status: response.status,
             statusText: response.statusText,
             headers: response.headers,
@@ -8237,6 +8343,8 @@ export class ProxyForwarder {
           exceededLimit: true,
         };
       }
+      chunks.append(value);
+      totalBytes += value.byteLength;
     }
   }
 
@@ -8277,10 +8385,10 @@ export class ProxyForwarder {
             controller.enqueue(value);
           }
         },
-        async cancel(reason) {
+        cancel(reason) {
           releasePrefix();
           try {
-            await reader.cancel(reason);
+            void reader.cancel(reason).catch(() => undefined);
           } catch {
             // ignore
           }

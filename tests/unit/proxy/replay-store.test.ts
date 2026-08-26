@@ -160,6 +160,50 @@ function createFakeRedis() {
     // 按脚本内容分发：fenced owner write / RPUSH+EXPIRE / terminal fencing / lease fencing
     eval: vi.fn(
       async (script: string, _numkeys: number, key: string, ...args: (string | number)[]) => {
+        if (script.includes("local rawMeta") && _numkeys === 2) {
+          const [chunksKey, messageRequestId, start, stop, ttl] = args;
+          const rawMeta = kv.get(key);
+          if (!rawMeta) return [0];
+          const meta = JSON.parse(rawMeta) as { messageRequestId?: number | null };
+          if (String(meta.messageRequestId ?? "") !== String(messageRequestId)) return [-1];
+          const list = lists.get(String(chunksKey)) ?? [];
+          const values =
+            Number(stop) === -1
+              ? list.slice(Number(start))
+              : list.slice(Number(start), Number(stop) + 1);
+          if (Number(ttl) > 0) listTtls.set(String(chunksKey), Number(ttl));
+          return [1, values];
+        }
+        if (script.includes("meta.heartbeatAt") && _numkeys === 3) {
+          const [metaKey, chunksKey, token, replayTtl, _ownerTtl, heartbeatAt] = args;
+          if (kv.get(key) !== token) return 0;
+          const rawMeta = kv.get(String(metaKey));
+          if (!rawMeta) return 0;
+          const meta = JSON.parse(rawMeta) as ReplayMeta;
+          meta.heartbeatAt = Number(heartbeatAt);
+          kv.set(String(metaKey), JSON.stringify(meta));
+          if (lists.has(String(chunksKey))) {
+            listTtls.set(String(chunksKey), Number(replayTtl));
+          }
+          return 1;
+        }
+        if (script.includes("LRANGE") && _numkeys === 2) {
+          const [chunksKey, token, start, stop] = args;
+          if (kv.get(key) !== token) return [0];
+          const list = lists.get(String(chunksKey)) ?? [];
+          const values =
+            Number(stop) === -1
+              ? list.slice(Number(start))
+              : list.slice(Number(start), Number(stop) + 1);
+          return [1, values];
+        }
+        if (script.includes("redis.call('EXPIRE', KEYS[1], ARGV[2])") && _numkeys === 3) {
+          const [metaKey, chunksKey, token] = args;
+          if (kv.get(key) !== token) return 0;
+          kv.delete(String(metaKey));
+          lists.delete(String(chunksKey));
+          return 1;
+        }
         if (script.includes("LLEN") && _numkeys === 3) {
           const [metaKey, chunksKey, token, replayTtl, _ownerTtl, serializedMeta, ...values] = args;
           if (kv.get(key) !== token) return -1;
@@ -484,6 +528,58 @@ describe("ReplayStore：owner 租约", () => {
     expect(currentRedis().kv.get("cch:replay:owner:r1")).toBe("tok-new");
   });
 
+  it("readChunksForGeneration 原子拒绝另一代 owner 的 LIST", async () => {
+    const store = new ReplayStore();
+    await expect(store.tryClaimOwner("r1", "tok-a")).resolves.toBe(true);
+    const meta = makeMeta({ messageRequestId: 77, chunkCount: 2 });
+    await expect(store.writeOwned("r1", "tok-a", meta, ["a", "b"])).resolves.toBe(2);
+
+    await expect(store.readChunksForGeneration("r1", 77, 0, 1, 60)).resolves.toEqual(["a"]);
+    await expect(store.readChunksForGeneration("r1", 78, 0, 1, 60)).resolves.toBe(false);
+  });
+
+  it("readOwnedChunks 分页读取只接受当前 owner token", async () => {
+    const store = new ReplayStore();
+    await store.tryClaimOwner("r1", "tok-a");
+    await store.writeOwned("r1", "tok-a", makeMeta({ messageRequestId: 77 }), ["a", "b", "c"]);
+
+    await expect(store.readOwnedChunks("r1", "tok-a", 1, 2)).resolves.toEqual(["b", "c"]);
+    await expect(store.readOwnedChunks("r1", "tok-old", 0, 3)).resolves.toBe(false);
+  });
+
+  it("heartbeatOwned 原子刷新 owning meta 心跳与现存 chunks TTL", async () => {
+    const store = new ReplayStore();
+    await store.tryClaimOwner("r1", "tok-a");
+    await store.writeOwned("r1", "tok-a", makeMeta({ messageRequestId: 77, heartbeatAt: 1 }), [
+      "a",
+    ]);
+
+    await expect(store.heartbeatOwned("r1", "tok-a", 1234)).resolves.toBe(true);
+    await expect(store.getMeta("r1")).resolves.toEqual(
+      expect.objectContaining({ messageRequestId: 77, heartbeatAt: 1234 })
+    );
+    expect(currentRedis().listTtls.get("cch:replay:chunks:r1")).toBe(600);
+
+    await expect(store.heartbeatOwned("r1", "tok-old", 5678)).resolves.toBe(false);
+    await expect(store.getMeta("r1")).resolves.toEqual(
+      expect.objectContaining({ heartbeatAt: 1234 })
+    );
+  });
+
+  it("prepareOwned 只清理当前 token 的旧热层，失效 token 不碰新 owner", async () => {
+    const store = new ReplayStore();
+    await expect(store.tryClaimOwner("r1", "tok-a")).resolves.toBe(true);
+    await expect(
+      store.writeOwned("r1", "tok-a", makeMeta({ messageRequestId: 77 }), ["old"])
+    ).resolves.toBe(1);
+
+    await expect(store.prepareOwned("r1", "tok-other")).resolves.toBe(false);
+    await expect(store.readChunks("r1", 0)).resolves.toEqual(["old"]);
+    await expect(store.prepareOwned("r1", "tok-a")).resolves.toBe(true);
+    await expect(store.getMeta("r1")).resolves.toBeNull();
+    await expect(store.readChunks("r1", 0)).resolves.toEqual([]);
+  });
+
   it("releaseOwner 是 compare-delete：token 不匹配不删，匹配才删", async () => {
     const store = new ReplayStore();
     await store.tryClaimOwner("r1", "tok-a");
@@ -703,12 +799,12 @@ describe("ReplayStore：PG 完成持久层", () => {
     expect(whereSql).toContain('"expires_at" >');
   });
 
-  it("findCompleted 无行返回 null，PG 异常也返回 null", async () => {
+  it("findCompleted 无行返回 null，但 PG 异常不能伪装成 miss", async () => {
     const store = new ReplayStore();
     await expect(store.findCompleted("r1")).resolves.toBeNull();
 
     dbState.selectError = new Error("pg down");
-    await expect(store.findCompleted("r1")).resolves.toBeNull();
+    await expect(store.findCompleted("r1")).rejects.toThrow("pg down");
   });
 });
 

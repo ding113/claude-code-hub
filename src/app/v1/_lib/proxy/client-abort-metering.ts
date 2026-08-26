@@ -2,6 +2,7 @@ import type { ClientFormat } from "./format-mapper";
 import {
   classifyStructuredFrame,
   classifyTerminalKind,
+  isNonEmptyValue,
   type ProtocolFamily,
 } from "./stream-gate/frame-classifier";
 
@@ -237,24 +238,15 @@ export function mapClientFormatToProtocolFamily(format: ClientFormat): ProtocolF
   }
 }
 
-/** Mirrors the shared classifier's non-empty error-payload semantics. */
-function hasProtocolErrorPayload(value: unknown): boolean {
-  if (value === undefined || value === null || value === false) return false;
-  if (typeof value === "string") return value.length > 0;
-  if (Array.isArray(value)) return value.some(hasProtocolErrorPayload);
-  if (isRecord(value)) return Object.keys(value).length > 0;
-  return true;
-}
-
 /** Detects provider protocol-error markers in a parsed frame. */
 function isProtocolError(value: Record<string, unknown>): boolean {
   return (
-    hasProtocolErrorPayload(value.error) ||
+    isNonEmptyValue(value.error) ||
     value.failed === true ||
     value.type === "error" ||
     value.type === "response.error" ||
     value.type === "response.failed" ||
-    (isRecord(value.response) && hasProtocolErrorPayload(value.response.error))
+    (isRecord(value.response) && isNonEmptyValue(value.response.error))
   );
 }
 

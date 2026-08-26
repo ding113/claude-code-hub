@@ -11,12 +11,21 @@ function readReleaseVersion(): string | null {
   }
 }
 
+export function normalizeVersionForDisplay(version: string): string {
+  const trimmed = version.trim();
+  if (!trimmed) return trimmed;
+  if (/^v/i.test(trimmed)) return `v${trimmed.slice(1)}`;
+  if (/^\d+(?:\.\d+)*(?:[-+].+)?$/.test(trimmed)) return `v${trimmed}`;
+  return trimmed;
+}
+
 /**
  * 应用版本配置
  * 优先级: NEXT_PUBLIC_APP_VERSION > VERSION > package.json version
  */
-export const APP_VERSION =
-  process.env.NEXT_PUBLIC_APP_VERSION?.trim() || readReleaseVersion() || `v${packageJson.version}`;
+export const APP_VERSION = normalizeVersionForDisplay(
+  process.env.NEXT_PUBLIC_APP_VERSION?.trim() || readReleaseVersion() || packageJson.version
+);
 
 /**
  * GitHub 仓库信息

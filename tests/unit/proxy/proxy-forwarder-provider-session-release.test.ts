@@ -146,6 +146,8 @@ describe("ProxyForwarder provider failure session release", () => {
       syncWinningAttemptSession: (target: ProxySession, source: ProxySession) => void;
     };
     const clearResponseTimeout = vi.fn();
+    const pauseResponseTimeout = vi.fn();
+    const resumeResponseTimeout = vi.fn();
     const releaseAgent = vi.fn();
     const responseController = new AbortController();
     const setTargetCacheTtlResolved = vi.fn();
@@ -178,6 +180,8 @@ describe("ProxyForwarder provider failure session release", () => {
       getContext1mApplied: vi.fn(() => true),
       setContext1mApplied: vi.fn(),
       clearResponseTimeout,
+      pauseResponseTimeout,
+      resumeResponseTimeout,
       responseController,
       releaseAgent,
     } as unknown as ProxySession;
@@ -187,6 +191,12 @@ describe("ProxyForwarder provider failure session release", () => {
     expect(
       (target as ProxySession & { clearResponseTimeout?: () => void }).clearResponseTimeout
     ).toBe(clearResponseTimeout);
+    expect(
+      (target as ProxySession & { pauseResponseTimeout?: () => void }).pauseResponseTimeout
+    ).toBe(pauseResponseTimeout);
+    expect(
+      (target as ProxySession & { resumeResponseTimeout?: () => void }).resumeResponseTimeout
+    ).toBe(resumeResponseTimeout);
     expect(
       (target as ProxySession & { responseController?: AbortController }).responseController
     ).toBe(responseController);

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { EmptyResponseError, ProxyError } from "@/app/v1/_lib/proxy/errors";
 import type { ProtocolFamily } from "@/app/v1/_lib/proxy/stream-gate/frame-classifier";
 import {
@@ -60,14 +60,25 @@ async function drainPrefix(chunks: Uint8Array[]): Promise<string> {
 
 describe("runStreamContentGate", () => {
   it("把共享预算所有权交给已提交前缀，并在失败时自动释放", async () => {
-    const budget = new StreamGatePrebufferBudget(() => GATE_OPTIONS.prebufferByteCap * 2);
+    const reservation = GATE_OPTIONS.prebufferByteCap * 4;
+    const budget = new StreamGatePrebufferBudget(() => reservation);
+    const onBudgetWaitStart = vi.fn();
+    const onBudgetWaitEnd = vi.fn();
     const committed = await runStreamContentGate(readerFromChunks([TEXT_DELTA]), {
       ...GATE_OPTIONS,
       prebufferBudget: budget,
+      onBudgetWaitStart,
+      onBudgetWaitEnd,
     });
     expect(committed.committed).toBe(true);
-    expect(budget.snapshot().reservedBytes).toBe(GATE_OPTIONS.prebufferByteCap * 2);
-    if (committed.committed) committed.prebufferLease?.release();
+    if (committed.committed) {
+      expect(committed.prebufferLease?.reservedBytes).toBeGreaterThan(0);
+      expect(committed.prebufferLease?.reservedBytes).toBeLessThan(reservation);
+      expect(budget.snapshot().reservedBytes).toBe(committed.prebufferLease?.reservedBytes);
+      committed.prebufferLease?.release();
+    }
+    expect(onBudgetWaitStart).not.toHaveBeenCalled();
+    expect(onBudgetWaitEnd).not.toHaveBeenCalled();
     expect(budget.snapshot().reservedBytes).toBe(0);
 
     const failed = await runStreamContentGate(readerFromChunks([ERROR_FRAME]), {
@@ -76,6 +87,30 @@ describe("runStreamContentGate", () => {
     });
     expect(failed.committed).toBe(false);
     expect(budget.snapshot().reservedBytes).toBe(0);
+  });
+
+  it("读取上游前先取得本地预算并在排队期间暂停供应商计时", async () => {
+    const reservation = GATE_OPTIONS.prebufferByteCap * 4;
+    const budget = new StreamGatePrebufferBudget(() => reservation);
+    const occupied = await budget.acquire(reservation);
+    const onBudgetWaitStart = vi.fn();
+    const onBudgetWaitEnd = vi.fn();
+
+    const pending = runStreamContentGate(readerFromChunks([TEXT_DELTA]), {
+      ...GATE_OPTIONS,
+      prebufferBudget: budget,
+      onBudgetWaitStart,
+      onBudgetWaitEnd,
+    });
+
+    await vi.waitFor(() => expect(budget.snapshot().waiting).toBe(1));
+    expect(onBudgetWaitStart).toHaveBeenCalledTimes(1);
+
+    occupied.release();
+    const result = await pending;
+    expect(result.committed).toBe(true);
+    expect(onBudgetWaitEnd).toHaveBeenCalledTimes(1);
+    if (result.committed) result.prebufferLease?.release();
   });
 
   it("在持有前拒绝越过 2 倍单请求上限的超大网络 chunk", async () => {
@@ -242,6 +277,17 @@ describe("runStreamContentGate", () => {
       if (!result.committed) continue;
       expect(await drainPrefix(result.prefixChunks)).toBe(body);
     }
+  });
+
+  it("coalesces a byte-fragmented prefix without changing its bytes", async () => {
+    const body = PING + MESSAGE_START + TEXT_DELTA;
+    const chunks = [...encoder.encode(body)].map((byte) => Uint8Array.of(byte));
+    const result = await runStreamContentGate(readerFromChunks(chunks), GATE_OPTIONS);
+
+    expect(result.committed).toBe(true);
+    if (!result.committed) return;
+    expect(await drainPrefix(result.prefixChunks)).toBe(body);
+    expect(result.prefixChunks.length).toBeLessThan(chunks.length);
   });
 
   it("openai-chat: [DONE]-only stream is empty, in-stream error fails over", async () => {
