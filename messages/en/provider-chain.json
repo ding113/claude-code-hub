@@ -53,6 +53,7 @@
   "reasons": {
     "request_success": "Success",
     "retry_success": "Retry Success",
+    "response_incomplete": "Response Incomplete",
     "retry_failed": "Retry Failed",
     "system_error": "System Error",
     "resource_not_found": "Resource Not Found (404)",

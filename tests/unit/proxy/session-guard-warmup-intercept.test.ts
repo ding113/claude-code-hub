@@ -99,10 +99,12 @@ function createMockSession(overrides: Partial<ProxySession> = {}): ProxySession 
     },
 
     sessionId: null,
+    allowSingleTurnProviderReuse: false,
     affinity: null,
     sessionIdentityMetadata: null,
-    setSessionId(id: string) {
+    setSessionId(id: string, options?: { allowSingleTurnProviderReuse?: boolean }) {
       this.sessionId = id;
+      this.allowSingleTurnProviderReuse = options?.allowSingleTurnProviderReuse === true;
     },
     setSessionIdentityMetadata(metadata: unknown) {
       this.sessionIdentityMetadata = metadata;
@@ -328,6 +330,7 @@ describe("ProxySessionGuard：warmup 拦截不应计入并发会话", () => {
       /^user_[a-f0-9]{64}_account__session_session_assigned$/
     );
     expect(getOrCreateSessionIdMock).toHaveBeenCalledWith(1, [], "sess_legacy_seed");
+    expect((session as any).allowSingleTurnProviderReuse).toBe(true);
   });
 
   test("Claude 无客户端 session 时，不应预生成 session 写回请求体，而应回填已分配 session", async () => {
@@ -370,6 +373,7 @@ describe("ProxySessionGuard：warmup 拦截不应计入并发会话", () => {
     });
     expect(getOrCreateSessionIdMock).toHaveBeenCalledWith(1, [], null);
     expect(generateSessionIdMock).not.toHaveBeenCalled();
+    expect((session as any).allowSingleTurnProviderReuse).toBe(false);
   });
 
   test("当 warmup 请求会被拦截时，不应补全 Claude metadata.user_id", async () => {

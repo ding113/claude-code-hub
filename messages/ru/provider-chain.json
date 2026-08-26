@@ -53,6 +53,7 @@
   "reasons": {
     "request_success": "Успешно",
     "retry_success": "Повтор успешен",
+    "response_incomplete": "Ответ не завершён",
     "retry_failed": "Повтор не удался",
     "system_error": "Системная ошибка",
     "resource_not_found": "Ресурс не найден (404)",

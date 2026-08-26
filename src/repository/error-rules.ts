@@ -451,6 +451,7 @@ const DEFAULT_ERROR_RULES = [
         message: "内容触发了安全策略拦截 (cyber_policy)，请调整输入后重试",
       },
     },
+    overrideStatusCode: 400,
   },
   // Tool use validation errors (non-retryable)
   {

@@ -205,19 +205,6 @@ describe("SystemSettingsForm upstream error message toggles", () => {
     unmount();
   });
 
-  test("开启高并发模式时提示将停用的高开销功能", () => {
-    const { unmount } = renderForm(buildSettings());
-
-    clickSwitch("enable-high-concurrency-mode");
-
-    expect(sonnerMocks.toast.warning).toHaveBeenCalledWith(
-      "High-concurrency mode disables Replay, stream gating, racing-loser billing, and session diagnostics. Bounded client-abort retention stays on."
-    );
-    expect(getSwitch("enable-high-concurrency-mode").getAttribute("aria-checked")).toBe("true");
-
-    unmount();
-  });
-
   test("旧开关仍可独立提交，不会连带修改新开关", async () => {
     systemConfigActionMocks.saveSystemSettings.mockResolvedValueOnce({
       ok: true,

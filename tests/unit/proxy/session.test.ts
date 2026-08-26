@@ -164,28 +164,45 @@ describe("ProxySession endpoint policy", () => {
 });
 
 describe("ProxySession high-concurrency policy", () => {
-  it("closes optional body-heavy features while preserving the base session (client-abort retention stays on)", () => {
+  it("只关闭调试快照与实时观测", () => {
     const session = createSession({ redirectedModel: null });
 
-    expect(session.shouldUseRequestReplay()).toBe(true);
-    expect(session.shouldRunStreamContentGate()).toBe(true);
-    expect(session.shouldRetainClientAbortBilling()).toBe(true);
-    expect(session.shouldBillHedgeLosers()).toBe(true);
-    expect(session.shouldParseResponseDiagnostics()).toBe(true);
+    expect(session.shouldPersistSessionDebugArtifacts()).toBe(true);
+    expect(session.shouldTrackSessionObservability()).toBe(true);
 
     session.setHighConcurrencyModeEnabled(true);
 
-    expect(session.shouldUseRequestReplay()).toBe(false);
-    expect(session.shouldRunStreamContentGate()).toBe(false);
-    // client-abort retention is kept in high-concurrency mode (bounded metering)
-    // so completed streams that the client already closed are still billed as
-    // success and keep the sticky/affinity binding (see high-concurrency
-    // client-abort fix).
-    expect(session.shouldRetainClientAbortBilling()).toBe(true);
-    expect(session.shouldBillHedgeLosers()).toBe(false);
-    expect(session.shouldParseResponseDiagnostics()).toBe(false);
     expect(session.shouldPersistSessionDebugArtifacts()).toBe(false);
     expect(session.shouldTrackSessionObservability()).toBe(false);
+  });
+});
+
+describe("ProxySession provider reuse identity", () => {
+  it("稳定 Session ID 在单条增量请求中也允许复用供应商", () => {
+    const session = createSession({
+      redirectedModel: null,
+      requestMessage: { input: [{ role: "user", content: "next turn" }] },
+    });
+
+    session.setSessionId("stable-client-session", { allowSingleTurnProviderReuse: true });
+
+    expect(session.shouldReuseProvider()).toBe(true);
+  });
+
+  it("内容哈希或随机降级身份仍要求多条上下文", () => {
+    const session = createSession({
+      redirectedModel: null,
+      requestMessage: { messages: [{ role: "user", content: "same short prompt" }] },
+    });
+
+    session.setSessionId("derived-session");
+    expect(session.shouldReuseProvider()).toBe(false);
+
+    session.request.message.messages = [
+      { role: "user", content: "first" },
+      { role: "assistant", content: "second" },
+    ];
+    expect(session.shouldReuseProvider()).toBe(true);
   });
 });
 

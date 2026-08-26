@@ -47,11 +47,30 @@ describe("RedisListStore", () => {
     expect(client.eval).not.toHaveBeenCalled();
   });
 
-  it("lrangeFrom reads from offset to end", async () => {
+  it("lrangeFrom reads from offset to end or a bounded page", async () => {
     const client = createMockClient();
     const store = new RedisListStore({ prefix: "p:", redisClient: client as never });
     expect(await store.lrangeFrom("k", 5)).toEqual(["a", "b"]);
     expect(client.lrange).toHaveBeenCalledWith("p:k", 5, -1);
+    expect(await store.lrangeFrom("k", 5, 8)).toEqual(["a", "b"]);
+    expect(client.lrange).toHaveBeenLastCalledWith("p:k", 5, 12);
+  });
+
+  it("lrangeFrom 原子读取分页并续期正在发送的列表", async () => {
+    const client = createMockClient();
+    client.eval.mockResolvedValueOnce(["a", "b"]);
+    const store = new RedisListStore({ prefix: "p:", redisClient: client as never });
+
+    await expect(store.lrangeFrom("k", 5, 8, 60)).resolves.toEqual(["a", "b"]);
+    expect(client.eval).toHaveBeenCalledWith(
+      expect.stringContaining("LRANGE"),
+      1,
+      "p:k",
+      5,
+      12,
+      60
+    );
+    expect(client.lrange).not.toHaveBeenCalled();
   });
 
   it("fails open (null/false) when redis is unavailable", async () => {

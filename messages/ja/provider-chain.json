@@ -53,6 +53,7 @@
   "reasons": {
     "request_success": "成功",
     "retry_success": "リトライ成功",
+    "response_incomplete": "レスポンス未完了",
     "retry_failed": "リトライ失敗",
     "system_error": "システムエラー",
     "resource_not_found": "リソースが見つかりません（404）",

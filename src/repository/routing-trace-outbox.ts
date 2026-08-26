@@ -10,12 +10,16 @@ import { normalizeRoutingTrace, type RoutingTraceV1 } from "@/types/routing-trac
 import { buildMonotonicRoutingTraceAssignments } from "./routing-trace-persistence";
 
 const ROUTING_TRACE_OUTBOX_KEY = "cch:routing-trace-outbox:v1";
+const ROUTING_TRACE_OUTBOX_INDEX_KEY = "cch:routing-trace-outbox:v1:index";
+const ROUTING_TRACE_OUTBOX_MAX_ENTRIES = 10_000;
+const ROUTING_TRACE_OUTBOX_RETENTION_MS = 7 * 24 * 60 * 60_000;
+const ROUTING_TRACE_OUTBOX_TRIM_BATCH = 1_000;
 const DEFAULT_REPLAY_LIMIT = 100;
 const REPLAY_INTERVAL_MS = 30_000;
 const REDIS_READY_WAIT_MS = 500;
 const REDIS_OPERATION_TIMEOUT_MS = 1_000;
 const BACKLOG_WARN_THRESHOLD = 1_000;
-const BACKLOG_ERROR_THRESHOLD = 10_000;
+const BACKLOG_ERROR_THRESHOLD = ROUTING_TRACE_OUTBOX_MAX_ENTRIES;
 const BACKLOG_LOG_INTERVAL_MS = 5 * 60_000;
 
 let lastBacklogLogAt = 0;
@@ -30,21 +34,85 @@ if current then
   end
   local incoming_revision = tonumber(ARGV[2])
   if current_revision and incoming_revision and current_revision > incoming_revision then
-    return 0
+    return {0, 0, 0, redis.call('ZCARD', KEYS[2])}
   end
   if current_revision and incoming_revision and current_revision == incoming_revision and current ~= ARGV[3] then
-    return 0
+    return {0, 0, 0, redis.call('ZCARD', KEYS[2])}
   end
 end
 redis.call('HSET', KEYS[1], ARGV[1], ARGV[3])
-return 1`;
+redis.call('ZADD', KEYS[2], ARGV[4], ARGV[1])
+
+local expired = redis.call(
+  'ZRANGEBYSCORE',
+  KEYS[2],
+  '-inf',
+  ARGV[5],
+  'LIMIT',
+  0,
+  ARGV[7]
+)
+for _, field in ipairs(expired) do
+  redis.call('ZREM', KEYS[2], field)
+  redis.call('HDEL', KEYS[1], field)
+end
+
+local overflow = redis.call('ZCARD', KEYS[2]) - tonumber(ARGV[6])
+local evicted = {}
+if overflow > 0 then
+  local trim_count = math.min(overflow, tonumber(ARGV[7]))
+  evicted = redis.call('ZRANGE', KEYS[2], 0, trim_count - 1)
+  for _, field in ipairs(evicted) do
+    redis.call('ZREM', KEYS[2], field)
+    redis.call('HDEL', KEYS[1], field)
+  end
+end
+
+return {redis.call('HEXISTS', KEYS[1], ARGV[1]), #expired, #evicted, redis.call('ZCARD', KEYS[2])}`;
 
 const DELETE_IF_UNCHANGED_LUA = `
 local current = redis.call('HGET', KEYS[1], ARGV[1])
 if current == ARGV[2] then
-  return redis.call('HDEL', KEYS[1], ARGV[1])
+  local deleted = redis.call('HDEL', KEYS[1], ARGV[1])
+  redis.call('ZREM', KEYS[2], ARGV[1])
+  return deleted
 end
 return 0`;
+
+const INDEX_SCANNED_AND_TRIM_LUA = `
+for index = 5, #ARGV do
+  local field = ARGV[index]
+  if redis.call('HEXISTS', KEYS[1], field) == 1 then
+    redis.call('ZADD', KEYS[2], 'NX', ARGV[1], field)
+  end
+end
+
+local expired = redis.call(
+  'ZRANGEBYSCORE',
+  KEYS[2],
+  '-inf',
+  ARGV[2],
+  'LIMIT',
+  0,
+  ARGV[4]
+)
+for _, field in ipairs(expired) do
+  redis.call('ZREM', KEYS[2], field)
+  redis.call('HDEL', KEYS[1], field)
+end
+
+local overflow = redis.call('ZCARD', KEYS[2]) - tonumber(ARGV[3])
+local evicted = {}
+if overflow > 0 then
+  local trim_count = math.min(overflow, tonumber(ARGV[4]))
+  evicted = redis.call('ZRANGE', KEYS[2], 0, trim_count - 1)
+  for _, field in ipairs(evicted) do
+    redis.call('ZREM', KEYS[2], field)
+    redis.call('HDEL', KEYS[1], field)
+  end
+end
+
+return {#expired, #evicted, redis.call('ZCARD', KEYS[2])}`;
 
 type RoutingTraceOutboxEntry = {
   version: 1;
@@ -131,7 +199,7 @@ async function runRedisOperation<T>(operation: Promise<T>): Promise<T> {
   }
 }
 
-function logBacklogPressure(backlog: number): void {
+function logBacklogPressure(backlog: number, evicted = 0): void {
   if (backlog < BACKLOG_WARN_THRESHOLD) return;
   const now = Date.now();
   if (now - lastBacklogLogAt < BACKLOG_LOG_INTERVAL_MS) return;
@@ -140,7 +208,16 @@ function logBacklogPressure(backlog: number): void {
     backlog,
     warnThreshold: BACKLOG_WARN_THRESHOLD,
     errorThreshold: BACKLOG_ERROR_THRESHOLD,
+    maxEntries: ROUTING_TRACE_OUTBOX_MAX_ENTRIES,
+    evicted,
   };
+  if (evicted > 0) {
+    logger.error(
+      "[RoutingTraceOutbox] Backlog limit reached; oldest recovery entries discarded",
+      context
+    );
+    return;
+  }
   if (backlog >= BACKLOG_ERROR_THRESHOLD) {
     logger.error("[RoutingTraceOutbox] Backlog requires intervention", context);
   } else {
@@ -180,8 +257,9 @@ async function deleteIfUnchanged(
     const deleted = await runRedisOperation(
       redis.eval(
         DELETE_IF_UNCHANGED_LUA,
-        1,
+        2,
         ROUTING_TRACE_OUTBOX_KEY,
+        ROUTING_TRACE_OUTBOX_INDEX_KEY,
         receipt.field,
         receipt.payload
       )
@@ -215,16 +293,24 @@ export async function stageRoutingTraceOutbox(
     routingTrace: normalized,
   } satisfies RoutingTraceOutboxEntry);
   try {
-    const staged = await runRedisOperation(
+    const now = Date.now();
+    const stageResult = (await runRedisOperation(
       redis.eval(
         STAGE_IF_NOT_OLDER_LUA,
-        1,
+        2,
         ROUTING_TRACE_OUTBOX_KEY,
+        ROUTING_TRACE_OUTBOX_INDEX_KEY,
         field,
         String(normalized.updatedAt),
-        payload
+        payload,
+        String(now),
+        String(now - ROUTING_TRACE_OUTBOX_RETENTION_MS),
+        String(ROUTING_TRACE_OUTBOX_MAX_ENTRIES),
+        String(ROUTING_TRACE_OUTBOX_TRIM_BATCH)
       )
-    );
+    )) as [number, number, number, number];
+    const [staged, , evicted, backlog] = stageResult;
+    logBacklogPressure(Number(backlog), Number(evicted));
     return Number(staged) > 0 ? { field, payload } : null;
   } catch (error) {
     logger.warn("[RoutingTraceOutbox] Failed to stage entry", {
@@ -232,6 +318,32 @@ export async function stageRoutingTraceOutbox(
       error: error instanceof Error ? error.message : String(error),
     });
     return null;
+  }
+}
+
+async function indexScannedEntriesAndTrim(redis: Redis, fields: string[]): Promise<void> {
+  if (fields.length === 0) return;
+  const now = Date.now();
+  try {
+    const trimResult = (await runRedisOperation(
+      redis.eval(
+        INDEX_SCANNED_AND_TRIM_LUA,
+        2,
+        ROUTING_TRACE_OUTBOX_KEY,
+        ROUTING_TRACE_OUTBOX_INDEX_KEY,
+        String(now),
+        String(now - ROUTING_TRACE_OUTBOX_RETENTION_MS),
+        String(ROUTING_TRACE_OUTBOX_MAX_ENTRIES),
+        String(ROUTING_TRACE_OUTBOX_TRIM_BATCH),
+        ...fields
+      )
+    )) as [number, number, number];
+    const [, evicted, backlog] = trimResult;
+    logBacklogPressure(Number(backlog), Number(evicted));
+  } catch (error) {
+    logger.warn("[RoutingTraceOutbox] Failed to maintain backlog bounds", {
+      error: error instanceof Error ? error.message : String(error),
+    });
   }
 }
 
@@ -296,12 +408,14 @@ export async function replayRoutingTraceOutbox(
 
   result.cursor = page[0];
   const fieldsAndPayloads = page[1];
+  const scannedFields: string[] = [];
   // Redis COUNT is a hint and a page may be larger than requested. Process the
   // complete returned page before advancing its cursor so no tail is skipped.
   for (let index = 0; index + 1 < fieldsAndPayloads.length; index += 2) {
     const field = fieldsAndPayloads[index];
     const payload = fieldsAndPayloads[index + 1];
     if (field === undefined || payload === undefined) continue;
+    scannedFields.push(field);
     result.scanned++;
     const receipt = { field, payload } satisfies RoutingTraceOutboxReceipt;
     const entry = parseOutboxEntry(payload);
@@ -327,6 +441,10 @@ export async function replayRoutingTraceOutbox(
       });
     }
   }
+
+  // Entries created by versions before the bounded index are enrolled lazily.
+  // This lets upgrades converge without loading the entire legacy hash at once.
+  await indexScannedEntriesAndTrim(redis, scannedFields);
 
   try {
     result.backlog = await runRedisOperation(redis.hlen(ROUTING_TRACE_OUTBOX_KEY));

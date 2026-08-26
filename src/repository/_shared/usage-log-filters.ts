@@ -114,6 +114,7 @@ export const RETRY_COUNT_EXPR: SQL = sql`(
               WHEN (
                 (elem->>'reason') IN (
                   'concurrent_limit_failed',
+                  'response_incomplete',
                   'retry_failed',
                   'system_error',
                   'resource_not_found',

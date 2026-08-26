@@ -58,7 +58,9 @@ import { bindClientAbortListener } from "./client-abort-listener";
 import {
   CLIENT_ABORT_METER_MAX_RETAINED_BYTES,
   type ClientAbortMeteringObserver,
+  type ClientAbortMeteringSnapshot,
   createClientAbortMeteringObserver,
+  mapClientFormatToProtocolFamily,
 } from "./client-abort-metering";
 import {
   createDemandDrivenResponsePump,
@@ -88,20 +90,48 @@ import { mapProviderTypeToFamily } from "./stream-gate/frame-classifier";
 import { createShadowGateObserver, resolveStreamGateMode } from "./stream-gate/stream-content-gate";
 import {
   createStreamProtocolObserver,
+  STREAM_PROTOCOL_OBSERVER_MAX_BUFFER_CHARACTERS,
   type StreamProtocolObservation,
 } from "./stream-gate/stream-protocol-observer";
 
 const CLIENT_ABORT_DRAIN_MAX_MS = 60_000;
-const CLIENT_ABORT_DRAIN_RESERVATION_BYTES =
-  3 * 1024 * 1024 + CLIENT_ABORT_METER_MAX_RETAINED_BYTES;
+const CLIENT_ABORT_DRAIN_FIXED_OVERHEAD_BYTES = 3 * 1024 * 1024;
 const REPLAY_DRAIN_FIXED_OVERHEAD_BYTES = 5 * 1024 * 1024;
 const GEMINI_STREAM_TRANSFORM_MAX_BUFFER_CHARACTERS = 1024 * 1024;
 const STREAM_STATS_MAX_BUFFER_BYTES = 10 * 1024 * 1024;
 const STREAM_STATS_HEAD_BYTES = 1024 * 1024;
 const STREAM_STATS_TAIL_BYTES = STREAM_STATS_MAX_BUFFER_BYTES - STREAM_STATS_HEAD_BYTES;
-const STREAM_STATS_TAIL_CHUNKS = 8192;
+const STREAM_STATS_SLAB_BYTES = 64 * 1024;
 const STREAM_STATS_TRUNCATED_MARKER = "\n\n: [cch_truncated]\n\n";
 const RESPONSE_TEXT_ENCODER = new TextEncoder();
+
+function protocolObservationFromMetering(
+  snapshot: ClientAbortMeteringSnapshot
+): StreamProtocolObservation {
+  return {
+    sawContent: snapshot.sawContent,
+    sawTerminal: snapshot.terminalSeen,
+    sawIncomplete: snapshot.incompleteSeen,
+    observationIncomplete: snapshot.skippedOversizedFrames > 0,
+    failure: snapshot.protocolFailure,
+  };
+}
+
+function resolveMeteringDrainReservationBytes(observer: ClientAbortMeteringObserver): number {
+  return (
+    CLIENT_ABORT_DRAIN_FIXED_OVERHEAD_BYTES +
+    CLIENT_ABORT_METER_MAX_RETAINED_BYTES +
+    observer.maxInFlightFrameBytes
+  );
+}
+
+function resolveReplayMeteringReservationBytes(observer: ClientAbortMeteringObserver): number {
+  return (
+    resolveReplayDrainReservationBytes() +
+    CLIENT_ABORT_METER_MAX_RETAINED_BYTES +
+    observer.maxInFlightFrameBytes
+  );
+}
 
 function getSessionRequestOwnerKeyId(session: ProxySession): number | undefined {
   return session.authState?.key?.id ?? session.messageContext?.key?.id ?? undefined;
@@ -130,10 +160,6 @@ type BoundedStreamTextSnapshot = {
   bufferedBytes: number;
   chunkCount: number;
 };
-
-function copyUint8Range(value: Uint8Array, start = 0, end = value.byteLength): Uint8Array {
-  return new Uint8Array(value.subarray(start, end));
-}
 
 function resolveNonStreamTaskStaleTimeoutMs(provider: Provider): number {
   return provider.requestTimeoutNonStreamingMs > 0
@@ -687,15 +713,140 @@ async function runPostTerminalSideEffects(
   );
 }
 
-// 流式统计只需要头部元信息和尾部 usage/final event。按字节保存窗口，避免
-// string[] 无界增长，也避免 subarray 持有超大原始 ArrayBuffer。
+/**
+ * 固定大小 slab 组成的有界字节窗口。
+ *
+ * 输入 chunk 的切分完全由网络决定，不能拿它作为保留对象的粒度。否则一百万个
+ * 单字节 chunk 即使正文只有 1 MiB，也会制造一百万个 Uint8Array/ArrayBuffer 对象。
+ * 这里把所有输入重新装入 64 KiB slab；tail 模式使用一个额外 scratch slab 完成
+ * 环形淘汰，因此存活对象数只由容量决定，与上游 chunk 数量无关。
+ */
+class BoundedByteSlabWindow {
+  private readonly maxSlabs: number;
+  private readonly slabs: Array<Uint8Array | undefined>;
+  private startSlot = 0;
+  private slabCount = 0;
+  private startOffset = 0;
+  private endOffset = 0;
+  private retainedBytes = 0;
+
+  constructor(
+    private readonly capacity: number,
+    private readonly retainTail: boolean
+  ) {
+    const capacitySlabs = Math.ceil(capacity / STREAM_STATS_SLAB_BYTES);
+    this.maxSlabs = capacitySlabs + (retainTail ? 1 : 0);
+    this.slabs = new Array(this.maxSlabs);
+  }
+
+  get byteLength(): number {
+    return this.retainedBytes;
+  }
+
+  append(value: Uint8Array): number {
+    if (value.byteLength === 0 || this.capacity === 0) return 0;
+
+    let sourceOffset = 0;
+    if (this.retainTail && value.byteLength >= this.capacity) {
+      sourceOffset = value.byteLength - this.capacity;
+      this.clear();
+    }
+
+    const availableForHead = this.retainTail
+      ? value.byteLength
+      : this.capacity - this.retainedBytes;
+    const sourceEnd = Math.min(value.byteLength, sourceOffset + Math.max(0, availableForHead));
+    const appendedBytes = sourceEnd - sourceOffset;
+
+    while (sourceOffset < sourceEnd) {
+      const slab = this.ensureWritableSlab();
+      const writable = Math.min(STREAM_STATS_SLAB_BYTES - this.endOffset, sourceEnd - sourceOffset);
+      slab.set(value.subarray(sourceOffset, sourceOffset + writable), this.endOffset);
+      this.endOffset += writable;
+      this.retainedBytes += writable;
+      sourceOffset += writable;
+
+      if (this.retainTail && this.retainedBytes > this.capacity) {
+        this.discardPrefix(this.retainedBytes - this.capacity);
+      }
+    }
+
+    return appendedBytes;
+  }
+
+  clear(): void {
+    this.slabs.fill(undefined);
+    this.startSlot = 0;
+    this.slabCount = 0;
+    this.startOffset = 0;
+    this.endOffset = 0;
+    this.retainedBytes = 0;
+  }
+
+  forEachSegment(visitor: (segment: Uint8Array) => void): void {
+    if (this.retainedBytes === 0) return;
+    let remaining = this.retainedBytes;
+    for (let index = 0; index < this.slabCount && remaining > 0; index += 1) {
+      const slot = (this.startSlot + index) % this.maxSlabs;
+      const slab = this.slabs[slot];
+      if (!slab) continue;
+      const start = index === 0 ? this.startOffset : 0;
+      const available =
+        index === this.slabCount - 1 ? this.endOffset - start : slab.byteLength - start;
+      const length = Math.min(remaining, Math.max(0, available));
+      if (length > 0) visitor(slab.subarray(start, start + length));
+      remaining -= length;
+    }
+  }
+
+  private ensureWritableSlab(): Uint8Array {
+    if (this.slabCount > 0 && this.endOffset < STREAM_STATS_SLAB_BYTES) {
+      return this.slabs[(this.startSlot + this.slabCount - 1) % this.maxSlabs]!;
+    }
+
+    if (this.slabCount >= this.maxSlabs) {
+      // tail 窗口在每次写入后都会立即淘汰到 capacity；多出来的 scratch
+      // slab 使这里正常情况下不可达。保守地释放最旧 slab，避免异常输入扩容。
+      this.discardPrefix(STREAM_STATS_SLAB_BYTES - this.startOffset);
+    }
+
+    const slot = (this.startSlot + this.slabCount) % this.maxSlabs;
+    this.slabs[slot] ??= new Uint8Array(STREAM_STATS_SLAB_BYTES);
+    this.slabCount += 1;
+    this.endOffset = 0;
+    return this.slabs[slot]!;
+  }
+
+  private discardPrefix(bytes: number): void {
+    let remaining = Math.min(bytes, this.retainedBytes);
+    while (remaining > 0 && this.slabCount > 0) {
+      const firstAvailable =
+        this.slabCount === 1
+          ? this.endOffset - this.startOffset
+          : STREAM_STATS_SLAB_BYTES - this.startOffset;
+      if (remaining < firstAvailable) {
+        this.startOffset += remaining;
+        this.retainedBytes -= remaining;
+        return;
+      }
+
+      remaining -= firstAvailable;
+      this.retainedBytes -= firstAvailable;
+      this.startSlot = (this.startSlot + 1) % this.maxSlabs;
+      this.slabCount -= 1;
+      this.startOffset = 0;
+      if (this.slabCount === 0) this.endOffset = 0;
+    }
+  }
+}
+
+// 流式统计只需要头部元信息和尾部 usage/final event。网络 chunk 被重装进
+// 固定 slab，既避免对象数无界，也避免 subarray 持有超大原始 ArrayBuffer。
 export class BoundedStreamTextAccumulator {
-  private readonly headChunks: Uint8Array[] = [];
-  private readonly tailChunks: Uint8Array[] = [];
-  private readonly tailChunkBytes: number[] = [];
+  private readonly head = new BoundedByteSlabWindow(STREAM_STATS_HEAD_BYTES, false);
+  private readonly tail = new BoundedByteSlabWindow(STREAM_STATS_TAIL_BYTES, true);
   private headBufferedBytes = 0;
   private tailBufferedBytes = 0;
-  private tailHead = 0;
   private tailMode = false;
   private truncated = false;
   private totalBytes = 0;
@@ -730,13 +881,11 @@ export class BoundedStreamTextAccumulator {
     if (!this.tailMode && this.headBufferedBytes < STREAM_STATS_HEAD_BYTES) {
       const remainingHeadBytes = STREAM_STATS_HEAD_BYTES - this.headBufferedBytes;
       if (value.byteLength <= remainingHeadBytes) {
-        this.headChunks.push(copyUint8Range(value));
-        this.headBufferedBytes += value.byteLength;
+        this.headBufferedBytes += this.head.append(value);
         return;
       }
 
-      this.headChunks.push(copyUint8Range(value, 0, remainingHeadBytes));
-      this.headBufferedBytes += remainingHeadBytes;
+      this.headBufferedBytes += this.head.append(value.subarray(0, remainingHeadBytes));
       this.tailMode = true;
       this.pushTailBytes(value.subarray(remainingHeadBytes));
       return;
@@ -765,27 +914,31 @@ export class BoundedStreamTextAccumulator {
   }
 
   discardRetainedBytes(): void {
-    this.headChunks.length = 0;
-    this.tailChunks.length = 0;
-    this.tailChunkBytes.length = 0;
+    this.head.clear();
+    this.tail.clear();
     this.headBufferedBytes = 0;
     this.tailBufferedBytes = 0;
-    this.tailHead = 0;
     this.tailMode = false;
     this.finishedSnapshot = null;
   }
 
+  /** 终态文本已生成后释放底层字节，但保留幂等 snapshot 供错误兜底复用。 */
+  releaseRetainedBytes(): void {
+    this.head.clear();
+    this.tail.clear();
+  }
+
   private createSnapshotText(): string {
     if (!this.tailMode) {
-      return this.decodeChunks(this.headChunks, 0, this.headBufferedBytes);
+      return this.decodeWindows([this.head]);
     }
 
     if (!this.truncated) {
-      return this.decodeContiguousBufferedBytes();
+      return this.decodeWindows([this.head, this.tail]);
     }
 
-    const headText = this.decodeChunks(this.headChunks, 0, this.headBufferedBytes);
-    const tailText = this.decodeChunks(this.tailChunks, this.tailHead, this.tailBufferedBytes);
+    const headText = this.decodeWindows([this.head]);
+    const tailText = this.decodeWindows([this.tail]);
     return `${headText}${STREAM_STATS_TRUNCATED_MARKER}${tailText}`;
   }
 
@@ -794,106 +947,29 @@ export class BoundedStreamTextAccumulator {
       return;
     }
 
-    if (value.byteLength > STREAM_STATS_TAIL_BYTES) {
-      this.tailChunks.length = 0;
-      this.tailChunkBytes.length = 0;
-      this.tailHead = 0;
-      const tail = copyUint8Range(value, value.byteLength - STREAM_STATS_TAIL_BYTES);
-      this.tailChunks.push(tail);
-      this.tailChunkBytes.push(tail.byteLength);
-      this.tailBufferedBytes = tail.byteLength;
-      this.truncated = true;
-      return;
-    }
-
-    const copy = copyUint8Range(value);
-    this.tailChunks.push(copy);
-    this.tailChunkBytes.push(copy.byteLength);
-    this.tailBufferedBytes += copy.byteLength;
-
-    while (
-      this.tailBufferedBytes > STREAM_STATS_TAIL_BYTES &&
-      this.tailHead < this.tailChunkBytes.length
+    const previousBytes = this.tail.byteLength;
+    this.tail.append(value);
+    this.tailBufferedBytes = this.tail.byteLength;
+    if (
+      value.byteLength > STREAM_STATS_TAIL_BYTES ||
+      previousBytes + value.byteLength > this.tailBufferedBytes
     ) {
-      const overflowBytes = this.tailBufferedBytes - STREAM_STATS_TAIL_BYTES;
-      const oldestChunkBytes = this.tailChunkBytes[this.tailHead] ?? 0;
-
-      if (oldestChunkBytes <= 0) {
-        this.tailHead += 1;
-        continue;
-      }
-
-      if (overflowBytes >= oldestChunkBytes) {
-        this.tailBufferedBytes -= oldestChunkBytes;
-        this.tailChunks[this.tailHead] = new Uint8Array();
-        this.tailChunkBytes[this.tailHead] = 0;
-        this.tailHead += 1;
-        this.truncated = true;
-        continue;
-      }
-
-      const oldestChunk = this.tailChunks[this.tailHead]!;
-      this.tailChunks[this.tailHead] = copyUint8Range(oldestChunk, overflowBytes);
-      this.tailChunkBytes[this.tailHead] = oldestChunkBytes - overflowBytes;
-      this.tailBufferedBytes -= overflowBytes;
       this.truncated = true;
     }
-
-    if (this.tailHead > 4096) {
-      this.tailChunks.splice(0, this.tailHead);
-      this.tailChunkBytes.splice(0, this.tailHead);
-      this.tailHead = 0;
-    }
-
-    const keptCount = this.tailChunks.length - this.tailHead;
-    if (keptCount > STREAM_STATS_TAIL_CHUNKS) {
-      const joined = this.concatChunks(this.tailChunks, this.tailHead, this.tailBufferedBytes);
-      this.tailChunks.length = 0;
-      this.tailChunkBytes.length = 0;
-      this.tailHead = 0;
-      this.tailChunks.push(joined);
-      this.tailChunkBytes.push(joined.byteLength);
-      this.tailBufferedBytes = joined.byteLength;
-    }
   }
 
-  private decodeChunks(chunks: Uint8Array[], startIndex: number, totalBytes: number): string {
-    if (totalBytes <= 0) {
-      return "";
+  private decodeWindows(windows: BoundedByteSlabWindow[]): string {
+    const decoder = new TextDecoder();
+    const textParts: string[] = [];
+    for (const window of windows) {
+      window.forEachSegment((segment) => {
+        const text = decoder.decode(segment, { stream: true });
+        if (text) textParts.push(text);
+      });
     }
-    return new TextDecoder().decode(this.concatChunks(chunks, startIndex, totalBytes));
-  }
-
-  private decodeContiguousBufferedBytes(): string {
-    const totalBytes = this.headBufferedBytes + this.tailBufferedBytes;
-    if (totalBytes <= 0) {
-      return "";
-    }
-
-    const headBytes = this.concatChunks(this.headChunks, 0, this.headBufferedBytes);
-    const tailBytes = this.concatChunks(this.tailChunks, this.tailHead, this.tailBufferedBytes);
-    const out = new Uint8Array(headBytes.byteLength + tailBytes.byteLength);
-    out.set(headBytes, 0);
-    out.set(tailBytes, headBytes.byteLength);
-    return new TextDecoder().decode(out);
-  }
-
-  private concatChunks(chunks: Uint8Array[], startIndex: number, totalBytes: number): Uint8Array {
-    if (totalBytes <= 0) {
-      return new Uint8Array();
-    }
-
-    const out = new Uint8Array(totalBytes);
-    let offset = 0;
-    for (let i = startIndex; i < chunks.length; i++) {
-      const chunk = chunks[i];
-      if (!chunk || chunk.byteLength === 0) {
-        continue;
-      }
-      out.set(chunk, offset);
-      offset += chunk.byteLength;
-    }
-    return offset === totalBytes ? out : out.slice(0, offset);
+    const tail = decoder.decode();
+    if (tail) textParts.push(tail);
+    return textParts.join("");
   }
 }
 
@@ -911,6 +987,19 @@ function releaseSessionAgent(session: ProxySession): void {
     }
     s.releaseAgent = undefined;
   }
+}
+
+function normalizeResponseControllerAbort(signal: AbortSignal | undefined): Error | null {
+  if (!signal?.aborted) return null;
+  if (signal.reason instanceof Error && isClientAbortError(signal.reason)) {
+    return signal.reason;
+  }
+
+  const error = new Error(
+    signal.reason instanceof Error ? signal.reason.message : "Response timeout"
+  );
+  error.name = "AbortError";
+  return error;
 }
 
 function bindTaskAbortToUpstreamResponse(
@@ -1374,7 +1463,7 @@ function hasGeminiCompletionMarker(data: unknown): boolean {
 function inspectStreamCompletion(
   text: string,
   format: ProxySession["originalFormat"]
-): { hasMarker: boolean; hasProtocolError: boolean } {
+): { hasMarker: boolean; hasProtocolError: boolean; sawIncomplete: boolean } {
   const events = parseSSEData(text);
   const payloads: unknown[] = events.map((event) => event.data);
 
@@ -1391,7 +1480,9 @@ function inspectStreamCompletion(
   }
 
   const hasProtocolError = payloads.some(isDiscoveryProtocolErrorPayload);
-  if (hasProtocolError) return { hasMarker: false, hasProtocolError: true };
+  if (hasProtocolError) {
+    return { hasMarker: false, hasProtocolError: true, sawIncomplete: false };
+  }
 
   switch (format) {
     case "response":
@@ -1404,6 +1495,12 @@ function inspectStreamCompletion(
           return markerType === "response.done" || isRecord(event.data.response);
         }),
         hasProtocolError: false,
+        sawIncomplete: events.some(
+          (event) =>
+            isRecord(event.data) &&
+            event.data.type === "response.incomplete" &&
+            (event.event === "message" || event.event === "response.incomplete")
+        ),
       };
     case "claude":
       return {
@@ -1414,6 +1511,7 @@ function inspectStreamCompletion(
             event.data.type === "message_stop"
         ),
         hasProtocolError: false,
+        sawIncomplete: false,
       };
     case "openai":
       return {
@@ -1424,12 +1522,14 @@ function inspectStreamCompletion(
               hasOpenAIChatCompletionMarker(event.data))
         ),
         hasProtocolError: false,
+        sawIncomplete: false,
       };
     case "gemini":
     case "gemini-cli":
       return {
         hasMarker: payloads.some(hasGeminiCompletionMarker),
         hasProtocolError: false,
+        sawIncomplete: false,
       };
   }
 }
@@ -1439,6 +1539,17 @@ export function hasStreamCompletionMarker(
   format: ProxySession["originalFormat"]
 ): boolean {
   return inspectStreamCompletion(text, format).hasMarker;
+}
+
+function hasReplayCompletionMarker(text: string, format: ProxySession["originalFormat"]): boolean {
+  if (format !== "openai") return inspectStreamCompletion(text, format).hasMarker;
+
+  // finish_reason 证明语义完成，但 OpenAI Chat 仍可能在随后发送 usage 与 [DONE]。
+  // Replay 只有读到客户端可见的 wire 终止标记后才允许发布 completed。
+  return parseSSEData(text).some(
+    (event) =>
+      event.event === "message" && typeof event.data === "string" && event.data.trim() === "[DONE]"
+  );
 }
 
 function hasTerminalStreamUsageEvidence(
@@ -1633,7 +1744,11 @@ type FinalizeDeferredStreamingResult = {
   /** Discovery auxiliary bindings must wait for, and depend on, the primary generation CAS. */
   confirmAuxiliarySessionBinding: () => Promise<boolean>;
   /** 协议层已确认不可作为 Replay 来源，但不一定改变本次请求的成功/计费终态。 */
-  replayIneligibleReason?: "protocol_malformed";
+  replayIneligibleReason?: "protocol_malformed" | "response_incomplete";
+  /** 是否到达了可执行成功副作用的完整终态。不要用 commitSideEffects 是否存在来推断。 */
+  isSuccessfulCompletion: boolean;
+  /** OpenAI Responses 明确以 incomplete 终止；可计费、不可绑定或 Replay。 */
+  isIncompleteCompletion: boolean;
 };
 
 /**
@@ -1872,12 +1987,26 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
   const billHedgeLosers = meta?.billHedgeLosers === true;
   const hasDiscoveryBindingIntent =
     meta?.bindingIntent === "create" || meta?.bindingIntent === "renew";
-  const parseResponseDiagnostics =
-    typeof session.shouldParseResponseDiagnostics !== "function" ||
-    session.shouldParseResponseDiagnostics();
-  const completionInspection = parseResponseDiagnostics
-    ? inspectStreamCompletion(allContent, session.originalFormat)
-    : { hasMarker: false, hasProtocolError: false };
+  const parseResponseDiagnostics = session.getEndpointPolicy().kind !== "raw_passthrough";
+  const textCompletionInspection =
+    parseResponseDiagnostics && (!protocolObservation || protocolObservation.observationIncomplete)
+      ? inspectStreamCompletion(allContent, session.originalFormat)
+      : null;
+  const completionInspection = (() => {
+    if (protocolObservation) {
+      return {
+        hasMarker: protocolObservation.sawTerminal || textCompletionInspection?.hasMarker === true,
+        hasProtocolError:
+          protocolObservation.failure?.verdict === "error" ||
+          textCompletionInspection?.hasProtocolError === true,
+        sawIncomplete:
+          protocolObservation.sawIncomplete || textCompletionInspection?.sawIncomplete === true,
+      };
+    }
+    return textCompletionInspection
+      ? textCompletionInspection
+      : { hasMarker: false, hasProtocolError: false, sawIncomplete: false };
+  })();
   const completionMarkerMissingForBinding =
     meta?.requiresCompletionMarkerForBinding === true &&
     hasDiscoveryBindingIntent &&
@@ -1885,6 +2014,7 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
     !completionInspection.hasMarker;
   const allowAuxiliarySessionBinding =
     isSessionBindingMutationAllowed(session) &&
+    !completionInspection.sawIncomplete &&
     !completionMarkerMissingForBinding &&
     (meta?.bindingIntent === undefined || (meta.bindingIntent !== "none" && !clientAborted));
   let resolvePrimaryDiscoveryBinding: ((updated: boolean) => void) | null = null;
@@ -1916,15 +2046,18 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
   // - 非自然结束：内容可能是部分流/截断，启发式会显著提高误判风险
   //
   // 此处返回 `{isError:false}` 仅表示“跳过检测”，最终仍会在下面按中断/超时视为失败结算。
-  const shouldDetectFake200 = streamEndedNormally && upstreamStatusCode === 200;
+  const shouldDetectFake200 =
+    parseResponseDiagnostics && streamEndedNormally && upstreamStatusCode === 200;
   const bodyDetected = shouldDetectFake200
     ? detectUpstreamErrorFromSseOrJsonText(allContent)
     : ({ isError: false } as const);
-  const protocolFailure = protocolObservation?.failure ?? null;
+  const protocolFailure = parseResponseDiagnostics ? (protocolObservation?.failure ?? null) : null;
   const replayIneligibleReason =
     protocolFailure?.verdict === "malformed" || protocolFailure?.sawMalformed
       ? ("protocol_malformed" as const)
-      : undefined;
+      : completionInspection.sawIncomplete
+        ? ("response_incomplete" as const)
+        : undefined;
   const postcommitMalformed =
     streamEndedNormally &&
     upstreamStatusCode >= 200 &&
@@ -1938,16 +2071,15 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
       session.originalFormat,
       completionInspection.hasMarker
     );
-  const successfulHttpProtocolFailure =
-    streamEndedNormally &&
+  const fatalHttpProtocolFailure =
     upstreamStatusCode >= 200 &&
     upstreamStatusCode < 300 &&
     protocolFailure &&
-    !successfulPostcommitMalformed;
+    (protocolFailure.verdict === "error" ||
+      (streamEndedNormally && !successfulPostcommitMalformed));
   const detected =
     !bodyDetected.isError &&
-    ((shouldDetectFake200 && completionInspection.hasProtocolError) ||
-      successfulHttpProtocolFailure)
+    ((shouldDetectFake200 && completionInspection.hasProtocolError) || fatalHttpProtocolFailure)
       ? ({
           isError: true,
           code: "UPSTREAM_PROTOCOL_ERROR",
@@ -1960,15 +2092,11 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
       : bodyDetected;
   let clientAbortGateUsage: FinalizeDeferredStreamingResult["clientAbortGateUsage"];
   const clientAbortCompleteSuccess = (() => {
-    if (
-      typeof session.shouldRetainClientAbortBilling === "function" &&
-      !session.shouldRetainClientAbortBilling()
-    )
-      return false;
     if (!clientAborted || upstreamStatusCode < 200 || upstreamStatusCode >= 300) {
       return false;
     }
     if (protocolFailure) return false;
+    if (completionInspection.sawIncomplete) return false;
 
     const abortDetected = detectUpstreamErrorFromSseOrJsonText(allContent);
     if (abortDetected.isError) {
@@ -1982,7 +2110,7 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
     // completion marker is present, proving the upstream finished before the
     // client stopped reading. Otherwise keep the pre-PR safe default (499,
     // unbilled).
-    if (!hasStreamCompletionMarker(allContent, session.originalFormat)) {
+    if (!completionInspection.hasMarker) {
       return false;
     }
 
@@ -1991,7 +2119,7 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
       usageMetrics,
       providerType: provider?.providerType,
     };
-    return hasPositiveBillableTokens(usageMetrics);
+    return true;
   })();
 
   // “内部结算用”的状态码（不会改变客户端实际 HTTP 状态码）。
@@ -2001,6 +2129,11 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
   let errorMessage: string | null;
   let statusCodeInferred = false;
   let statusCodeInferenceMatcherId: string | undefined;
+  const isIncompleteCompletion =
+    completionInspection.sawIncomplete &&
+    !detected.isError &&
+    upstreamStatusCode >= 200 &&
+    upstreamStatusCode < 300;
   if (detected.isError) {
     const inferred = parseResponseDiagnostics
       ? inferUpstreamErrorStatusCodeFromText(allContent)
@@ -2016,6 +2149,11 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
   } else if (clientAbortCompleteSuccess) {
     effectiveStatusCode = upstreamStatusCode;
     errorMessage = null;
+  } else if (isIncompleteCompletion) {
+    // 协议终态已经抵达，客户端随后断开也不能把它改写成 499。HTTP 与计费保持真实，
+    // 但显式标记为非成功，阻止 Replay、亲和和 Session 绑定副作用。
+    effectiveStatusCode = upstreamStatusCode;
+    errorMessage = "RESPONSE_INCOMPLETE";
   } else if (streamEndedNormally && upstreamStatusCode >= 400) {
     effectiveStatusCode = upstreamStatusCode;
     if (parseResponseDiagnostics) {
@@ -2046,11 +2184,18 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
       errorMessage = null;
     }
   }
+  const isSuccessfulCompletion =
+    !isIncompleteCompletion &&
+    !detected.isError &&
+    effectiveStatusCode >= 200 &&
+    effectiveStatusCode < 300 &&
+    (streamEndedNormally || clientAbortCompleteSuccess);
 
   const shouldClearSessionBindingOnFailure =
-    ((clientAborted || !streamEndedNormally) && !clientAbortCompleteSuccess) ||
-    detected.isError ||
-    (upstreamStatusCode >= 400 && errorMessage !== null);
+    !isIncompleteCompletion &&
+    (((clientAborted || !streamEndedNormally) && !clientAbortCompleteSuccess) ||
+      detected.isError ||
+      (upstreamStatusCode >= 400 && errorMessage !== null));
   if (shouldClearSessionBindingOnFailure) {
     meta?.hedgeBindingHeartbeat?.stop();
   }
@@ -2084,6 +2229,8 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
       allowAuxiliarySessionBinding,
       confirmAuxiliarySessionBinding,
       replayIneligibleReason,
+      isSuccessfulCompletion,
+      isIncompleteCompletion,
     };
   }
 
@@ -2108,6 +2255,42 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
       ...provider,
       id: meta.providerId,
       name: meta.providerName,
+    };
+  }
+
+  if (isIncompleteCompletion) {
+    meta.hedgeBindingHeartbeat?.stop();
+    session.addProviderToChain(providerForChain, {
+      endpointId: meta.endpointId,
+      endpointUrl: meta.endpointUrl,
+      reason: "response_incomplete",
+      attemptNumber: meta.attemptNumber,
+      statusCode: effectiveStatusCode,
+      errorMessage: errorMessage ?? undefined,
+    });
+    const commitSideEffects = async () => {
+      try {
+        // 普通/Discovery 路径尚未创建绑定，原绑定应保留；只有 Hedge 已在首字节
+        // 投机写入赢家时，才按其精确 generation 撤销这次新绑定。
+        if (meta.isHedgeWinner) await clearSessionBinding("response_incomplete");
+      } finally {
+        await finalizeFailedDiscoveryBinding();
+      }
+    };
+    return {
+      effectiveStatusCode,
+      errorMessage,
+      providerIdForPersistence,
+      isHedgeWinner,
+      billHedgeLosers,
+      clientAbortGateUsage,
+      commitSideEffects,
+      finalizeAttemptResources: finalizeProviderSessionRef,
+      allowAuxiliarySessionBinding,
+      confirmAuxiliarySessionBinding,
+      replayIneligibleReason,
+      isSuccessfulCompletion,
+      isIncompleteCompletion,
     };
   }
 
@@ -2162,6 +2345,8 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
       allowAuxiliarySessionBinding,
       confirmAuxiliarySessionBinding,
       replayIneligibleReason,
+      isSuccessfulCompletion,
+      isIncompleteCompletion,
     };
   }
 
@@ -2234,6 +2419,8 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
       allowAuxiliarySessionBinding,
       confirmAuxiliarySessionBinding,
       replayIneligibleReason,
+      isSuccessfulCompletion,
+      isIncompleteCompletion,
     };
   }
 
@@ -2299,6 +2486,8 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
       allowAuxiliarySessionBinding,
       confirmAuxiliarySessionBinding,
       replayIneligibleReason,
+      isSuccessfulCompletion,
+      isIncompleteCompletion,
     };
   }
 
@@ -2476,6 +2665,8 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
     allowAuxiliarySessionBinding,
     confirmAuxiliarySessionBinding,
     replayIneligibleReason,
+    isSuccessfulCompletion,
+    isIncompleteCompletion,
   };
 }
 
@@ -3588,30 +3779,30 @@ export class ProxyResponseHandler {
     startHedgeBindingHeartbeat(session);
 
     let processedStream: ReadableStream<Uint8Array> = response.body;
-    const nativeStreamProtocolFamily =
-      session.getEndpointPolicy().kind === "raw_passthrough"
-        ? null
-        : mapProviderTypeToFamily(provider.providerType);
+    const interpretsStreamProtocol = session.getEndpointPolicy().kind !== "raw_passthrough";
+    const nativeStreamProtocolFamily = interpretsStreamProtocol
+      ? mapProviderTypeToFamily(provider.providerType)
+      : null;
+    const clientStreamProtocolFamily = interpretsStreamProtocol
+      ? mapClientFormatToProtocolFamily(session.originalFormat)
+      : null;
+    const clientMeterObservesNativeProtocol =
+      nativeStreamProtocolFamily !== null &&
+      nativeStreamProtocolFamily === clientStreamProtocolFamily;
+    // 同协议转发只做一次分帧和 JSON 解析；跨协议转换仍分别观察原生流与客户端流。
     let streamProtocolObserver =
-      nativeStreamProtocolFamily &&
-      (typeof session.shouldParseResponseDiagnostics !== "function" ||
-        session.shouldParseResponseDiagnostics())
+      nativeStreamProtocolFamily && !clientMeterObservesNativeProtocol
         ? createStreamProtocolObserver(nativeStreamProtocolFamily)
         : null;
-    const clientAbortMeter: ClientAbortMeteringObserver =
-      typeof session.shouldRetainClientAbortBilling !== "function" ||
-      session.shouldRetainClientAbortBilling()
-        ? createClientAbortMeteringObserver(session.originalFormat)
-        : {
-            observe: () => ({ billingComplete: false }),
-            finish: () => ({
-              text: "",
-              billingComplete: false,
-              retainedBytes: 0,
-              skippedOversizedFrames: 0,
-              protocolFailure: null,
-            }),
-          };
+    // 原始透传端点不解释响应协议。普通同协议流由计量器兼任协议观察器，
+    // 客户端断线后再把单帧额度收紧到 64 KiB。
+    const clientAbortMeter: ClientAbortMeteringObserver | null = interpretsStreamProtocol
+      ? createClientAbortMeteringObserver(session.originalFormat, {
+          attachedMaxFrameBytes: clientMeterObservesNativeProtocol
+            ? STREAM_PROTOCOL_OBSERVER_MAX_BUFFER_CHARACTERS
+            : undefined,
+        })
+      : null;
     let protocolObservedBeforeProcessing = false;
 
     // --- GEMINI STREAM HANDLING ---
@@ -3636,11 +3827,6 @@ export class ProxyResponseHandler {
 
         // F1 shadow 遥测：enforce 已在 forwarder 作用于该流量，shadow 观察同样不留盲区
         let passthroughShadowObserver = (() => {
-          if (
-            typeof session.shouldParseResponseDiagnostics === "function" &&
-            !session.shouldParseResponseDiagnostics()
-          )
-            return null;
           if (resolveStreamGateMode() !== "shadow") return null;
           if (session.getEndpointPolicy().kind === "raw_passthrough") return null;
           const family = mapProviderTypeToFamily(provider.providerType);
@@ -3675,29 +3861,22 @@ export class ProxyResponseHandler {
         };
         const startPassthroughDrain = (reason?: unknown) => {
           if (passthroughPump.getState() === "closed") return;
-          if (
-            typeof session.shouldRetainClientAbortBilling === "function" &&
-            !session.shouldRetainClientAbortBilling()
-          ) {
-            passthroughClientDetached = true;
-            const abortError =
-              reason instanceof Error ? reason : new Error("client_detached_high_concurrency");
-            streamTextAccumulator.discardRetainedBytes();
-            streamProtocolObserver = null;
-            passthroughShadowObserver = null;
-            abortPassthroughTransport(abortError);
-            passthroughPump.startDrain(abortError);
-            passthroughPump.cancelSource(abortError);
-            return;
-          }
           if (passthroughClientDetached) {
             passthroughPump.startDrain(reason);
             return;
           }
           passthroughClientDetached = true;
+          clientAbortMeter?.switchToDetachedMode();
+          if (!clientAbortMeter) {
+            const rejection = new Error("client_detached_without_metering");
+            passthroughPump.startDrain(reason);
+            streamTextAccumulator.discardRetainedBytes();
+            passthroughPump.cancelSource(rejection);
+            return;
+          }
           const admission = acquireDetachedStreamLease(
             "metering",
-            CLIENT_ABORT_DRAIN_RESERVATION_BYTES
+            resolveMeteringDrainReservationBytes(clientAbortMeter)
           );
           passthroughPump.startDrain(reason);
           streamTextAccumulator.discardRetainedBytes();
@@ -3722,7 +3901,8 @@ export class ProxyResponseHandler {
             passthroughDrainLease = null;
           });
           observePassthroughDrainStart();
-          if (clientAbortMeter.observe(new Uint8Array()).billingComplete) {
+          const initialMetering = clientAbortMeter?.observe(new Uint8Array());
+          if (initialMetering?.errorSeen || initialMetering?.drainComplete) {
             passthroughPump.finishDrain(new Error("client_abort_metering_complete"));
             return;
           }
@@ -3739,12 +3919,12 @@ export class ProxyResponseHandler {
           source: response.body,
           onReadStart: () => observePassthroughReadStart(),
           onChunk: (value) => {
-            const metering = clientAbortMeter.observe(value);
+            const metering = clientAbortMeter?.observe(value);
             passthroughShadowObserver?.observe(value);
             streamProtocolObserver?.observe(value);
             if (!passthroughClientDetached) streamTextAccumulator.pushBytes(value);
             observePassthroughChunk(value);
-            if (passthroughClientDetached && metering.billingComplete) {
+            if (passthroughClientDetached && (metering?.errorSeen || metering?.drainComplete)) {
               passthroughPump.finishDrain(new Error("client_abort_metering_complete"));
             }
           },
@@ -3752,6 +3932,23 @@ export class ProxyResponseHandler {
             startPassthroughDrain(reason);
           },
         });
+        let winningPassthroughResponseAbortError: Error | null = null;
+        const passthroughSessionWithController = session as typeof session & {
+          responseController?: AbortController;
+        };
+        const cleanupPassthroughResponseAbortListener = bindClientAbortListener(
+          passthroughSessionWithController.responseController?.signal,
+          () => {
+            const error = normalizeResponseControllerAbort(
+              passthroughSessionWithController.responseController?.signal
+            );
+            if (!error) return;
+            passthroughPump.errorClient(error);
+            if (passthroughPump.cancelSource(error)) {
+              winningPassthroughResponseAbortError = error;
+            }
+          }
+        );
         const cleanupPassthroughClientAbortListener = bindClientAbortListener(
           session.clientAbortSignal,
           () => {
@@ -3885,18 +4082,19 @@ export class ProxyResponseHandler {
 
           const flushAndSnapshot = (): BoundedStreamTextSnapshot => {
             if (passthroughClientDetached) {
-              const metering = clientAbortMeter.finish();
+              const metering = clientAbortMeter?.finish();
               const snapshot: BoundedStreamTextSnapshot = {
-                text: metering.text,
+                text: metering?.text ?? "",
                 truncated: true,
                 totalBytes: streamTextAccumulator.totalByteCount,
-                bufferedBytes: metering.retainedBytes,
+                bufferedBytes: metering?.retainedBytes ?? 0,
                 chunkCount: streamTextAccumulator.chunkCount,
               };
               lastStreamTextSnapshot = snapshot;
               return snapshot;
             }
             const snapshot = streamTextAccumulator.finish();
+            streamTextAccumulator.releaseRetainedBytes();
             lastStreamTextSnapshot = snapshot;
             return snapshot;
           };
@@ -3923,6 +4121,7 @@ export class ProxyResponseHandler {
               if (transportReleased) return;
               transportReleased = true;
               clearPassthroughDrainTimeout();
+              cleanupPassthroughResponseAbortListener();
               cleanupPassthroughClientAbortListener();
               cleanupTaskAbortBinding();
               clearIdleTimer();
@@ -3964,8 +4163,7 @@ export class ProxyResponseHandler {
             clearIdleTimer();
             const streamSnapshot = flushAndSnapshot();
             const allContent = streamSnapshot.text;
-            const clientAborted =
-              pumpClientAborted || (session.clientAbortSignal?.aborted ?? false);
+            const clientAborted = pumpClientAborted;
             await releaseTransportResources();
 
             // 存储响应体到 Redis（5分钟过期）
@@ -3996,7 +4194,10 @@ export class ProxyResponseHandler {
             // 使用共享的统计处理方法
             const duration = Date.now() - session.startTime;
             terminalFinalizationStarted = true;
-            const meteringSnapshot = passthroughClientDetached ? clientAbortMeter.finish() : null;
+            const meteringSnapshot =
+              (passthroughClientDetached || !streamProtocolObserver) && clientAbortMeter
+                ? clientAbortMeter.finish()
+                : null;
             const finalized = await finalizeDeferredStreamingFinalizationIfNeeded(
               session,
               allContent,
@@ -4005,14 +4206,7 @@ export class ProxyResponseHandler {
               clientAborted,
               discoveryLeaseLifecycle,
               streamProtocolObserver?.finish() ??
-                (meteringSnapshot
-                  ? {
-                      sawContent: false,
-                      sawTerminal: meteringSnapshot.billingComplete,
-                      observationIncomplete: meteringSnapshot.skippedOversizedFrames > 0,
-                      failure: meteringSnapshot.protocolFailure,
-                    }
-                  : null),
+                (meteringSnapshot ? protocolObservationFromMetering(meteringSnapshot) : null),
               abortReason
             );
             latestCommitSideEffects = finalized.commitSideEffects;
@@ -4039,10 +4233,8 @@ export class ProxyResponseHandler {
             });
           } catch (error) {
             const err = error instanceof Error ? error : new Error(String(error));
-            const clientAborted =
-              passthroughPump.wasClientAborted() || (session.clientAbortSignal?.aborted ?? false);
-            const isResponseControllerAborted =
-              sessionWithController.responseController?.signal.aborted ?? false;
+            const clientAborted = passthroughPump.wasClientAborted();
+            const isResponseControllerAborted = err === winningPassthroughResponseAbortError;
             const isIdleTimeout = !!err.message?.includes("streaming_idle");
 
             abortReason =
@@ -4077,7 +4269,10 @@ export class ProxyResponseHandler {
               clearIdleTimer();
               const allContent = flushAndJoin();
               const duration = Date.now() - session.startTime;
-              const meteringSnapshot = passthroughClientDetached ? clientAbortMeter.finish() : null;
+              const meteringSnapshot =
+                (passthroughClientDetached || !streamProtocolObserver) && clientAbortMeter
+                  ? clientAbortMeter.finish()
+                  : null;
 
               const finalized = await finalizeDeferredStreamingFinalizationIfNeeded(
                 session,
@@ -4086,14 +4281,7 @@ export class ProxyResponseHandler {
                 false,
                 clientAborted,
                 discoveryLeaseLifecycle,
-                meteringSnapshot
-                  ? {
-                      sawContent: false,
-                      sawTerminal: meteringSnapshot.billingComplete,
-                      observationIncomplete: meteringSnapshot.skippedOversizedFrames > 0,
-                      failure: meteringSnapshot.protocolFailure,
-                    }
-                  : null,
+                meteringSnapshot ? protocolObservationFromMetering(meteringSnapshot) : null,
                 abortReason
               );
               latestCommitSideEffects = finalized.commitSideEffects;
@@ -4202,48 +4390,42 @@ export class ProxyResponseHandler {
         });
 
         let buffer = "";
+        const decoder = new TextDecoder();
+        const encoder = new TextEncoder();
+        const emitGeminiLine = (line: string, controller: TransformStreamDefaultController) => {
+          const trimmedLine = line.trim();
+          if (!trimmedLine.startsWith("data:")) return;
+          const jsonStr = trimmedLine.slice(5).trim();
+          if (!jsonStr) return;
+          try {
+            const geminiResponse = JSON.parse(jsonStr) as GeminiResponse;
+            const openAIChunk = GeminiAdapter.transformResponse(geminiResponse, true);
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify(openAIChunk)}\n\n`));
+          } catch {
+            // Ignore malformed provider frames; protocol observer records the failure.
+          }
+        };
+        const flushCompleteGeminiLines = (controller: TransformStreamDefaultController) => {
+          const lines = buffer.split("\n");
+          buffer = lines.pop() || "";
+          if (buffer.length > GEMINI_STREAM_TRANSFORM_MAX_BUFFER_CHARACTERS) {
+            buffer = "";
+            throw new Error("Gemini stream line exceeded transform buffer limit");
+          }
+          for (const line of lines) emitGeminiLine(line, controller);
+        };
         protocolObservedBeforeProcessing = true;
         const transformStream = new TransformStream<Uint8Array, Uint8Array>({
           transform(chunk, controller) {
             streamProtocolObserver?.observe(chunk);
-            const decoder = new TextDecoder();
-            const text = decoder.decode(chunk, { stream: true });
-            buffer += text;
-
-            const lines = buffer.split("\n");
-            // Keep the last line in buffer as it might be incomplete
-            buffer = lines.pop() || "";
-            if (buffer.length > GEMINI_STREAM_TRANSFORM_MAX_BUFFER_CHARACTERS) {
-              buffer = "";
-              throw new Error("Gemini stream line exceeded transform buffer limit");
-            }
-
-            for (const line of lines) {
-              const trimmedLine = line.trim();
-              if (trimmedLine.startsWith("data:")) {
-                const jsonStr = trimmedLine.slice(5).trim();
-                if (!jsonStr) continue;
-                try {
-                  const geminiResponse = JSON.parse(jsonStr) as GeminiResponse;
-                  const openAIChunk = GeminiAdapter.transformResponse(geminiResponse, true);
-                  const output = `data: ${JSON.stringify(openAIChunk)}\n\n`;
-                  controller.enqueue(new TextEncoder().encode(output));
-                } catch {
-                  // Ignore parse errors
-                }
-              }
-            }
+            buffer += decoder.decode(chunk, { stream: true });
+            flushCompleteGeminiLines(controller);
           },
           flush(controller) {
-            if (buffer.trim().startsWith("data:")) {
-              try {
-                const jsonStr = buffer.trim().slice(5).trim();
-                const geminiResponse = JSON.parse(jsonStr) as GeminiResponse;
-                const openAIChunk = GeminiAdapter.transformResponse(geminiResponse, true);
-                const output = `data: ${JSON.stringify(openAIChunk)}\n\n`;
-                controller.enqueue(new TextEncoder().encode(output));
-              } catch {}
-            }
+            buffer += decoder.decode();
+            flushCompleteGeminiLines(controller);
+            if (buffer.length > 0) emitGeminiLine(buffer, controller);
+            buffer = "";
           },
         });
         processedStream = response.body.pipeThrough(transformStream);
@@ -4428,6 +4610,7 @@ export class ProxyResponseHandler {
       responsePump?.cancelSource(rejection);
     };
     const acquireMeteringDrain = (replayAbortReason?: string): boolean => {
+      if (!clientAbortMeter) return false;
       const previousLease = clientAbortDrainLease;
       clientAbortDrainMode = "metering";
       releaseDetachedLease(previousLease);
@@ -4437,7 +4620,7 @@ export class ProxyResponseHandler {
 
       const admission = acquireDetachedStreamLease(
         "metering",
-        CLIENT_ABORT_DRAIN_RESERVATION_BYTES
+        resolveMeteringDrainReservationBytes(clientAbortMeter)
       );
       if (!admission.acquired) {
         rejectDetachedDrain(admission.reason);
@@ -4463,27 +4646,37 @@ export class ProxyResponseHandler {
       });
       acquireMeteringDrain();
     };
+    const meteringEndsDetachedDrain = (
+      metering: ReturnType<ClientAbortMeteringObserver["observe"]> | undefined
+    ): boolean =>
+      !!metering &&
+      (metering.errorSeen ||
+        (clientAbortDrainMode === "replay"
+          ? metering.replayDrainComplete
+          : metering.drainComplete));
     const handleClientAbort = (reason?: unknown) => {
       if (responsePump?.getState() === "closed") return;
-      if (
-        typeof session.shouldRetainClientAbortBilling === "function" &&
-        !session.shouldRetainClientAbortBilling()
-      ) {
-        clientDetachHandled = true;
-        responsePump?.startDrain(reason ?? "client_detached_high_concurrency");
-        responsePump?.cancelSource(reason ?? "client_detached_high_concurrency");
-        return;
-      }
       if (clientDetachHandled) {
         responsePump?.startDrain(reason ?? "client_detached");
         return;
       }
       clientDetachHandled = true;
+      clientAbortMeter?.switchToDetachedMode();
       const activeReplaySpool = replaySpool && !replaySpool.isTerminal ? replaySpool : null;
+      if (!clientAbortMeter) {
+        clientAbortDrainMode = "rejected";
+        streamTextAccumulator.discardRetainedBytes();
+        streamProtocolObserver = null;
+        shadowGateObserver = null;
+        if (activeReplaySpool) void activeReplaySpool.abort("raw_client_detached");
+        responsePump?.startDrain(reason ?? "client_detached_raw");
+        responsePump?.cancelSource(reason ?? "client_detached_raw");
+        return;
+      }
       if (activeReplaySpool) {
         const replayAdmission = acquireDetachedStreamLease(
           "replay",
-          resolveReplayDrainReservationBytes()
+          resolveReplayMeteringReservationBytes(clientAbortMeter)
         );
         if (replayAdmission.acquired) {
           clientAbortDrainMode = "replay";
@@ -4521,7 +4714,8 @@ export class ProxyResponseHandler {
       }
       clientAbortDrainStartedAt = Date.now();
       scheduleClientAbortDrainTimeout(clientAbortDrainTimeoutMs);
-      if (clientAbortMeter.observe(new Uint8Array()).billingComplete) {
+      const initialMetering = clientAbortMeter?.observe(new Uint8Array());
+      if (meteringEndsDetachedDrain(initialMetering)) {
         responsePump?.finishDrain(new Error("client_abort_metering_complete"));
       }
     };
@@ -4537,17 +4731,18 @@ export class ProxyResponseHandler {
 
     const flushAndJoin = (): string => {
       if (clientDetachHandled) {
-        const metering = clientAbortMeter.finish();
+        const metering = clientAbortMeter?.finish();
         lastStreamTextSnapshot = {
-          text: metering.text,
+          text: metering?.text ?? "",
           truncated: true,
           totalBytes: streamTextAccumulator.totalByteCount,
-          bufferedBytes: metering.retainedBytes,
+          bufferedBytes: metering?.retainedBytes ?? 0,
           chunkCount: streamTextAccumulator.chunkCount,
         };
-        return metering.text;
+        return metering?.text ?? "";
       }
       const snapshot = streamTextAccumulator.finish();
+      streamTextAccumulator.releaseRetainedBytes();
       lastStreamTextSnapshot = snapshot;
       return snapshot.text;
     };
@@ -4568,17 +4763,7 @@ export class ProxyResponseHandler {
       const sessionWithController = session as typeof session & {
         responseController?: AbortController;
       };
-      const signal = sessionWithController.responseController?.signal;
-      if (!signal?.aborted) return null;
-      if (signal.reason instanceof Error && isClientAbortError(signal.reason)) {
-        return signal.reason;
-      }
-
-      const error = new Error(
-        signal.reason instanceof Error ? signal.reason.message : "Response timeout"
-      );
-      error.name = "AbortError";
-      return error;
+      return normalizeResponseControllerAbort(sessionWithController.responseController?.signal);
     };
 
     let terminalDetailsPersisted = false;
@@ -4653,20 +4838,9 @@ export class ProxyResponseHandler {
         const finalizationDeadlineAtMs = Date.now() + STREAM_FINALIZATION_MAX_MS;
         const awaitFinalization = <T>(promise: Promise<T>): Promise<T> =>
           raceWithDeadline(promise, finalizationDeadlineAtMs, "stream_finalization_timeout");
-        const detachedProtocolObservation: StreamProtocolObservation | null = (() => {
-          if (
-            typeof session.shouldParseResponseDiagnostics === "function" &&
-            !session.shouldParseResponseDiagnostics()
-          )
-            return null;
-          if (!clientDetachHandled || streamProtocolObserver) return null;
-          const metering = clientAbortMeter.finish();
-          return {
-            sawContent: false,
-            sawTerminal: metering.billingComplete,
-            observationIncomplete: metering.skippedOversizedFrames > 0,
-            failure: metering.protocolFailure,
-          };
+        const compactProtocolObservation: StreamProtocolObservation | null = (() => {
+          if (streamProtocolObserver || !clientAbortMeter) return null;
+          return protocolObservationFromMetering(clientAbortMeter.finish());
         })();
         const finalized = finalizeDeferredStreamingFinalizationIfNeeded(
           session,
@@ -4675,7 +4849,7 @@ export class ProxyResponseHandler {
           streamEndedNormally,
           clientAborted,
           discoveryLeaseLifecycle,
-          streamProtocolObserver?.finish() ?? detachedProtocolObservation,
+          streamProtocolObserver?.finish() ?? compactProtocolObservation,
           abortReason
         );
         latestStreamCommitSideEffects = finalized.commitSideEffects
@@ -4756,10 +4930,7 @@ export class ProxyResponseHandler {
           | undefined;
         if (
           provider.providerType === "codex" &&
-          (typeof session.shouldParseResponseDiagnostics !== "function" ||
-            session.shouldParseResponseDiagnostics()) &&
-          effectiveStatusCode >= 200 &&
-          effectiveStatusCode < 300 &&
+          finalized.isSuccessfulCompletion &&
           session.sessionId &&
           provider.id &&
           finalized.allowAuxiliarySessionBinding
@@ -4897,7 +5068,7 @@ export class ProxyResponseHandler {
         // 更新 session 使用量到 Redis（用于实时监控）
         if (session.sessionId) {
           const payload: SessionUsageUpdate = {
-            status: effectiveStatusCode >= 200 && effectiveStatusCode < 300 ? "completed" : "error",
+            status: finalized.isSuccessfulCompletion ? "completed" : "error",
             statusCode: effectiveStatusCode,
             ...(streamErrorMessage ? { errorMessage: streamErrorMessage } : {}),
           };
@@ -4970,11 +5141,9 @@ export class ProxyResponseHandler {
           const activeReplaySpool = replaySpool;
           const detachedReplayLease = clientAbortReplayLease;
           const isReplayableSuccess =
-            finalized.commitSideEffects !== undefined &&
-            effectiveStatusCode >= 200 &&
-            effectiveStatusCode < 300 &&
+            finalized.isSuccessfulCompletion &&
             !finalized.replayIneligibleReason &&
-            hasStreamCompletionMarker(allContent, session.originalFormat);
+            hasReplayCompletionMarker(allContent, session.originalFormat);
           if (isReplayableSuccess) {
             streamReplayCompletionScheduled = true;
             postTerminalSideEffects.push(async () => {
@@ -4997,18 +5166,17 @@ export class ProxyResponseHandler {
         }
 
         // F3a 亲和写回：owner 成功终态（计费落库后）才绑定 tip/sys -> 胜出供应商
-        if (
-          finalized.commitSideEffects !== undefined &&
-          effectiveStatusCode >= 200 &&
-          effectiveStatusCode < 300 &&
-          session.affinity &&
-          providerIdForPersistence
-        ) {
+        if (finalized.isSuccessfulCompletion && session.affinity && providerIdForPersistence) {
           const winnerProviderId = providerIdForPersistence;
           postTerminalSideEffects.push(async () => {
             await recordAffinityWinner(session, winnerProviderId);
           });
-        } else if (session.affinity && providerIdForPersistence && finalized.errorMessage) {
+        } else if (
+          !finalized.isIncompleteCompletion &&
+          session.affinity &&
+          providerIdForPersistence &&
+          finalized.errorMessage
+        ) {
           // 流终态失败且失败者正是亲和提名的供应商：写墓碑自愈
           void tombstoneAffinityOnFailure(session, providerIdForPersistence);
         }
@@ -5018,7 +5186,7 @@ export class ProxyResponseHandler {
         const cacheScoreFields = isCacheEffectivenessEnabled()
           ? computeCacheScoreFields({
               affinity: session.affinity,
-              succeeded: effectiveStatusCode >= 200 && effectiveStatusCode < 300,
+              succeeded: finalized.isSuccessfulCompletion,
               usageObservable: usageForCost?.input_tokens != null,
               streamTruncated: !streamEndedNormally,
               cacheTtl: usageForCost?.cache_ttl ?? null,
@@ -5042,7 +5210,10 @@ export class ProxyResponseHandler {
               cacheCreation1hInputTokens: usageForCost?.cache_creation_1h_input_tokens,
               cacheTtlApplied: usageForCost?.cache_ttl ?? null,
               providerChain: session.getProviderChain(),
-              routingTrace: session.finalizeRoutingTrace(effectiveStatusCode),
+              routingTrace: session.finalizeRoutingTrace(
+                effectiveStatusCode,
+                finalized.isIncompleteCompletion ? "failed" : undefined
+              ),
               ...(streamErrorMessage ? { errorMessage: streamErrorMessage } : {}),
               model: currentRequestedModel ?? undefined, // 更新重定向后的模型
               actualResponseModel: finalActualResponseModel,
@@ -5089,11 +5260,6 @@ export class ProxyResponseHandler {
     // F1 shadow 模式：旁路逐帧分类，记录「首非空字节 vs 首有效内容」的分歧与延迟差，
     // 不缓冲、不 failover，仅用于 enforce 灰度前评估误判率。
     shadowGateObserver = (() => {
-      if (
-        typeof session.shouldParseResponseDiagnostics === "function" &&
-        !session.shouldParseResponseDiagnostics()
-      )
-        return null;
       if (resolveStreamGateMode() !== "shadow") return null;
       if (session.getEndpointPolicy().kind === "raw_passthrough") return null;
       const family = mapProviderTypeToFamily(provider.providerType);
@@ -5124,14 +5290,15 @@ export class ProxyResponseHandler {
     const observeChunk = (value: Uint8Array) => {
       const chunkSize = value.length;
       clearIdleTimer();
-      const metering = clientAbortMeter.observe(value);
+      const metering = clientAbortMeter?.observe(value);
       AsyncTaskManager.touch(taskId);
       if (!clientDetachHandled) {
         streamTextAccumulator.pushBytes(value);
         shadowGateObserver?.observe(value);
         const protocolFailure = protocolObservedBeforeProcessing
           ? null
-          : (streamProtocolObserver?.observe(value) ?? null);
+          : (streamProtocolObserver?.observe(value) ??
+            (clientMeterObservesNativeProtocol ? (metering?.protocolFailure ?? null) : null));
         if (protocolFailure && replaySpool && !replaySpool.isTerminal) {
           void replaySpool.abort(
             `stream_protocol_${protocolFailure.verdict}_${
@@ -5163,7 +5330,7 @@ export class ProxyResponseHandler {
           });
         }
       }
-      if (clientDetachHandled && metering.billingComplete) {
+      if (clientDetachHandled && meteringEndsDetachedDrain(metering)) {
         responsePump?.finishDrain(new Error("client_abort_metering_complete"));
       }
     };
@@ -5181,6 +5348,7 @@ export class ProxyResponseHandler {
       onClientCancel: handleClientAbort,
     });
     const activeResponsePump = responsePump;
+    let winningResponseControllerAbortError: Error | null = null;
     const cleanupResponseControllerAbortListener = bindClientAbortListener(
       (
         session as typeof session & {
@@ -5191,7 +5359,9 @@ export class ProxyResponseHandler {
         const responseControllerAbortError = getResponseControllerAbortError();
         if (responseControllerAbortError) {
           activeResponsePump.errorClient(responseControllerAbortError);
-          activeResponsePump.cancelSource(responseControllerAbortError);
+          if (activeResponsePump.cancelSource(responseControllerAbortError)) {
+            winningResponseControllerAbortError = responseControllerAbortError;
+          }
         }
       }
     );
@@ -5211,15 +5381,10 @@ export class ProxyResponseHandler {
         clearClientAbortDrainTimer();
         clearIdleTimer();
         clearResponseTimeoutOnce();
-        const responseControllerAbortError = getResponseControllerAbortError();
-        if (responseControllerAbortError) {
-          throw responseControllerAbortError;
-        }
         if (pumpCompletion.error) {
           throw pumpCompletion.error;
         }
-        const streamEndedNormally =
-          pumpCompletion.streamEndedNormally && !abortController.signal.aborted;
+        const streamEndedNormally = pumpCompletion.streamEndedNormally;
 
         // 流式读取完成：清除静默期计时器
         clearIdleTimer();
@@ -5251,15 +5416,11 @@ export class ProxyResponseHandler {
       } catch (error) {
         // 检测 AbortError 的来源：响应超时 vs 静默期超时 vs 客户端/上游中断
         const err = error as Error;
-        const sessionWithController = session as typeof session & {
-          responseController?: AbortController;
-        };
         const pumpClientAborted = activeResponsePump.wasClientAborted();
         // The pump records which terminal cause won. Reading the raw signal here
         // would let a later client disconnect overwrite an earlier Provider timeout/error.
         const clientAborted = pumpClientAborted;
-        const isResponseControllerAborted =
-          sessionWithController.responseController?.signal.aborted ?? false;
+        const isResponseControllerAborted = err === winningResponseControllerAbortError;
 
         if (isClientAbortError(err)) {
           // 区分不同的超时来源
@@ -6460,12 +6621,6 @@ export async function finalizeHedgeLoserBilling(params: {
     requireUsage = false,
     billingContext,
   } = params;
-
-  if (
-    typeof loserSession.shouldBillHedgeLosers === "function" &&
-    !loserSession.shouldBillHedgeLosers()
-  )
-    return null;
 
   try {
     if (isNonBillingUsageEndpoint(loserSession)) {

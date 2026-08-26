@@ -53,6 +53,7 @@
   "reasons": {
     "request_success": "成功",
     "retry_success": "重試成功",
+    "response_incomplete": "回應未完整結束",
     "retry_failed": "重試失敗",
     "system_error": "系統錯誤",
     "resource_not_found": "資源不存在（404）",

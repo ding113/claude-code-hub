@@ -175,6 +175,7 @@ import { ProxyForwarder } from "@/app/v1/_lib/proxy/forwarder";
 import { ModelRedirector } from "@/app/v1/_lib/proxy/model-redirector";
 import { ProxySession } from "@/app/v1/_lib/proxy/session";
 import { peekDeferredStreamingFinalization } from "@/app/v1/_lib/proxy/stream-finalization";
+import { getStreamGatePrebufferBudget } from "@/app/v1/_lib/proxy/stream-gate/prebuffer-budget";
 import { DbPoolAdmissionError } from "@/drizzle/admitted-client";
 import { logger } from "@/lib/logger";
 import type { Provider } from "@/types/provider";
@@ -345,6 +346,45 @@ function createStreamingResponse(params: {
     status: 200,
     headers: { "content-type": "text/event-stream" },
   });
+}
+
+function createManualStreamingResponse(): {
+  response: Response;
+  enqueue(label: string): void;
+  close(): void;
+  cancel: ReturnType<typeof vi.fn>;
+} {
+  const encoder = new TextEncoder();
+  const cancel = vi.fn();
+  let streamController: ReadableStreamDefaultController<Uint8Array>;
+  const response = new Response(
+    new ReadableStream<Uint8Array>({
+      start(controller) {
+        streamController = controller;
+      },
+      cancel,
+    }),
+    { status: 200, headers: { "content-type": "text/event-stream" } }
+  );
+
+  return {
+    response,
+    enqueue(label) {
+      streamController.enqueue(
+        encoder.encode(
+          `data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"${label}"},"provider":"${label}"}\n\n`
+        )
+      );
+    },
+    close() {
+      try {
+        streamController.close();
+      } catch {
+        // 输家已由 reader.cancel() 关闭。
+      }
+    },
+    cancel,
+  };
 }
 
 function createDelayedFailure(params: {
@@ -938,6 +978,79 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
 
       expect(releaseSlowAgent).toHaveBeenCalledTimes(1);
       expect(releaseFastAgent).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("近同时提交的非计费 hedge 输家会归还门禁共享预算", async () => {
+    vi.useFakeTimers();
+
+    try {
+      const initial = createProvider({
+        id: 401,
+        name: "initial",
+        firstByteTimeoutStreamingMs: 100,
+      });
+      const alternative = createProvider({
+        id: 402,
+        name: "alternative",
+        firstByteTimeoutStreamingMs: 100,
+      });
+      const session = createSession();
+      setProviderWithSessionRef(session, initial);
+      mocks.pickRandomProviderWithExclusion.mockResolvedValueOnce(alternative);
+
+      const doForward = vi.spyOn(
+        ProxyForwarder as unknown as {
+          doForward: (...args: unknown[]) => Promise<Response>;
+        },
+        "doForward"
+      );
+      const initialController = new AbortController();
+      const alternativeController = new AbortController();
+      const initialStream = createManualStreamingResponse();
+      const alternativeStream = createManualStreamingResponse();
+      const releaseInitialAgent = vi.fn();
+      const releaseAlternativeAgent = vi.fn();
+
+      doForward.mockImplementationOnce(async (attemptSession) => {
+        const runtime = attemptSession as ProxySession & AttemptRuntime;
+        runtime.responseController = initialController;
+        runtime.clearResponseTimeout = vi.fn();
+        runtime.releaseAgent = releaseInitialAgent;
+        return initialStream.response;
+      });
+      doForward.mockImplementationOnce(async (attemptSession) => {
+        const runtime = attemptSession as ProxySession & AttemptRuntime;
+        runtime.responseController = alternativeController;
+        runtime.clearResponseTimeout = vi.fn();
+        runtime.releaseAgent = releaseAlternativeAgent;
+        return alternativeStream.response;
+      });
+
+      const budget = getStreamGatePrebufferBudget();
+      expect(budget.snapshot().reservedBytes).toBe(0);
+      const responsePromise = ProxyForwarder.send(session);
+
+      await vi.advanceTimersByTimeAsync(100);
+      expect(doForward).toHaveBeenCalledTimes(2);
+      expect(budget.snapshot().reservedBytes).toBeGreaterThan(0);
+
+      // 同一同步栈内唤醒两个 gate：两个租约都会先从 gate 转出，随后首个
+      // continuation 提交赢家并结算另一个 attempt，稳定覆盖租约交接竞态。
+      initialStream.enqueue("initial");
+      alternativeStream.enqueue("alternative");
+
+      const response = await responsePromise;
+      initialStream.close();
+      alternativeStream.close();
+      await expect(response.text()).resolves.toContain('"provider":"initial"');
+      await vi.waitFor(() => expect(budget.snapshot().reservedBytes).toBe(0));
+
+      expect(alternativeStream.cancel).toHaveBeenCalled();
+      expect(releaseAlternativeAgent).toHaveBeenCalledTimes(1);
+      expect(releaseInitialAgent).not.toHaveBeenCalled();
     } finally {
       vi.useRealTimers();
     }

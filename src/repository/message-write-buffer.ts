@@ -92,7 +92,7 @@ type MessageRequestUpdateBatchRecord = MessageRequestUpdateRecord & {
 type PostTerminalMetadataTask = {
   promise: Promise<boolean>;
   routingTraceUpdatedAt: number;
-  routingTracePayload: string;
+  routingTrace: RoutingTraceV1;
 };
 
 type WriterConfig = {
@@ -171,6 +171,10 @@ class EvictablePendingIndex {
       return undefined;
     }
     return this.removeAt(0);
+  }
+
+  peekLowestPriority(): EvictablePendingEntry | undefined {
+    return this.heap[0];
   }
 
   clear(): void {
@@ -492,6 +496,7 @@ class MessageRequestWriteBuffer {
   private readonly deferredOrdinary = new Map<number, MessageRequestUpdatePatch>();
   private readonly postTerminalMetadataTasks = new Map<number, PostTerminalMetadataTask>();
   private readonly evictableIndex = new EvictablePendingIndex();
+  private readonly deferredEvictableIndex = new EvictablePendingIndex();
   private readonly durableAcknowledgements = new Map<number, DurableAcknowledgement>();
   private flushTimer: NodeJS.Timeout | null = null;
   private overflowLogTimer: NodeJS.Timeout | null = null;
@@ -521,7 +526,8 @@ class MessageRequestWriteBuffer {
       // A late ordinary update must never be merged into a trace-only ACK: that
       // would let terminal/billing fields bypass the terminal status fence.
       const deferred = this.deferredOrdinary.get(id);
-      this.deferredOrdinary.set(id, mergePatch(deferred ?? {}, patch));
+      this.setDeferredOrdinary(id, mergePatch(deferred ?? {}, patch));
+      this.enforcePendingLimit();
       return;
     }
     // existing is older, patch is newer -> for replacement fields newer wins.
@@ -591,14 +597,13 @@ class MessageRequestWriteBuffer {
     if (!normalizedTrace) {
       return Promise.reject(new Error("post-terminal routing trace is invalid"));
     }
-    const routingTracePayload = JSON.stringify(normalizedTrace);
     const existingTask = this.postTerminalMetadataTasks.get(id);
     if (existingTask) {
       // Exact duplicates may share the same ACK. A different revision remains
       // in the Redis outbox and must not be acknowledged as if this SQL wrote it.
       if (
         existingTask.routingTraceUpdatedAt === normalizedTrace.updatedAt &&
-        existingTask.routingTracePayload === routingTracePayload
+        JSON.stringify(existingTask.routingTrace) === JSON.stringify(normalizedTrace)
       ) {
         return existingTask.promise;
       }
@@ -617,9 +622,13 @@ class MessageRequestWriteBuffer {
     const task: PostTerminalMetadataTask = {
       promise: Promise.resolve(false),
       routingTraceUpdatedAt: normalizedTrace.updatedAt,
-      routingTracePayload,
+      routingTrace: normalizedTrace,
     };
-    task.promise = this.persistPostTerminalMetadataDurably(id, patch, options).finally(() => {
+    task.promise = this.persistPostTerminalMetadataDurably(
+      id,
+      { routingTrace: normalizedTrace },
+      options
+    ).finally(() => {
       if (this.postTerminalMetadataTasks.get(id) === task) {
         this.postTerminalMetadataTasks.delete(id);
       }
@@ -824,7 +833,7 @@ class MessageRequestWriteBuffer {
     if (!patch) {
       return;
     }
-    this.deferredOrdinary.delete(acknowledgement.id);
+    this.deleteDeferredOrdinary(acknowledgement.id);
     const existing = this.pending.get(acknowledgement.id);
     this.setPending(
       acknowledgement.id,
@@ -864,6 +873,19 @@ class MessageRequestWriteBuffer {
     }
   }
 
+  private setDeferredOrdinary(id: number, patch: MessageRequestUpdatePatch): void {
+    this.deferredOrdinary.set(id, patch);
+    this.deferredEvictableIndex.upsert(id, getPatchRetentionPriority(patch));
+  }
+
+  private deleteDeferredOrdinary(id: number): MessageRequestUpdatePatch | undefined {
+    const patch = this.deferredOrdinary.get(id);
+    if (!patch) return undefined;
+    this.deferredOrdinary.delete(id);
+    this.deferredEvictableIndex.remove(id);
+    return patch;
+  }
+
   private deletePending(id: number): PendingMessageRequestUpdate | undefined {
     const pending = this.pending.get(id);
     if (!pending) {
@@ -875,10 +897,24 @@ class MessageRequestWriteBuffer {
   }
 
   private enforcePendingLimit(): boolean {
-    while (this.pending.size > this.config.maxPending) {
-      const droppedEntry = this.evictableIndex.popLowestPriority();
+    while (this.pending.size + this.deferredOrdinary.size > this.config.maxPending) {
+      const pendingCandidate = this.evictableIndex.peekLowestPriority();
+      const deferredCandidate = this.deferredEvictableIndex.peekLowestPriority();
+      const dropDeferred =
+        deferredCandidate !== undefined &&
+        (pendingCandidate === undefined || deferredCandidate.priority <= pendingCandidate.priority);
+      const droppedEntry = dropDeferred
+        ? this.deferredEvictableIndex.popLowestPriority()
+        : this.evictableIndex.popLowestPriority();
       if (!droppedEntry) {
         return false;
+      }
+      if (dropDeferred) {
+        const dropped = this.deferredOrdinary.get(droppedEntry.id);
+        if (!dropped) continue;
+        this.deferredOrdinary.delete(droppedEntry.id);
+        this.recordOverflowDrop(droppedEntry, dropped);
+        continue;
       }
       const dropped = this.pending.get(droppedEntry.id);
       if (!dropped || (dropped.durableAcknowledgement && !dropped.durableAcknowledgement.settled)) {
@@ -926,7 +962,8 @@ class MessageRequestWriteBuffer {
       droppedWithDurationMs: this.overflowDroppedWithDurationMs,
       droppedWithStatusCode: this.overflowDroppedWithStatusCode,
       lastDroppedId: this.overflowLastDroppedId,
-      currentPending: this.pending.size,
+      currentPending: this.pending.size + this.deferredOrdinary.size,
+      deferredPending: this.deferredOrdinary.size,
     });
     this.overflowDroppedCount = 0;
     this.overflowDroppedWithDurationMs = 0;
@@ -1058,7 +1095,7 @@ class MessageRequestWriteBuffer {
                 !existing.durableAcknowledgement.settled
               ) {
                 const deferred = this.deferredOrdinary.get(item.id);
-                this.deferredOrdinary.set(item.id, mergePatch(item.patch, deferred ?? {}));
+                this.setDeferredOrdinary(item.id, mergePatch(item.patch, deferred ?? {}));
                 continue;
               }
               const durableAcknowledgement =
@@ -1161,6 +1198,7 @@ class MessageRequestWriteBuffer {
     this.deferredOrdinary.clear();
     this.postTerminalMetadataTasks.clear();
     this.evictableIndex.clear();
+    this.deferredEvictableIndex.clear();
     if (shutdownError) throw shutdownError;
   }
 }

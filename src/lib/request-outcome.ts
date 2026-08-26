@@ -155,6 +155,9 @@ export function classifyRequestOutcomeSignal(
   if (matchesQuotaOrRateLimit(signal.errorMessage)) {
     return buildExcludedTaxonomy("quota_or_rate_limit");
   }
+  if (signal.reason === "response_incomplete") {
+    return buildFailureTaxonomy();
+  }
 
   if (
     (signal.reason && SUCCESS_REASONS.has(signal.reason)) ||

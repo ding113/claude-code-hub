@@ -1,15 +1,19 @@
 import { getEnvConfig } from "@/lib/config/env.schema";
 import { logger } from "@/lib/logger";
 import { getCachedProxyRuntimeSettings } from "@/lib/system-settings/proxy-runtime";
+import { inferUpstreamErrorStatusCodeFromText } from "@/lib/utils/upstream-error-detection";
+import { BufferedByteChunks } from "../buffered-byte-chunks";
 import { ProxyError } from "../errors";
 import {
   classifyFrame,
   type FrameVerdict,
   isCleanResponsesCompletion,
   isRequestEchoFrame,
+  isResponsesIncompleteCompletion,
   type ProtocolFamily,
 } from "./frame-classifier";
-import { SseFrameParser } from "./sse-frames";
+import type { StreamGatePrebufferBudget, StreamGatePrebufferLease } from "./prebuffer-budget";
+import { SseFrameBufferLimitError, SseFrameParser } from "./sse-frames";
 
 /**
  * 流式内容门控（F1）：在向客户端透传前，按帧分类等待「首个有效内容 chunk」。
@@ -35,12 +39,9 @@ export type StreamGateFailureReason =
   | "idle_timeout";
 
 /**
- * 门控 precommit 错误。继承 ProxyError——
- * gate_error 时如果上游错误帧携带明确的 4xx 客户端错误特征（例如 cyber_policy、
- * invalid_request、400 状态码等），则使用真实的 4xx 状态码，使下游错误分类器能正确
- * 判定为不可重试的客户端错误（NON_RETRYABLE_CLIENT_ERROR），避免无意义的切商重试并
- * 正常触发 error_rules 覆写；其余情况默认使用 502（PROVIDER_ERROR）触发切商。
- * 熔断计入与否再由 isRequestScopedGateFailure() 区分，见其文档。
+ * 门控 precommit 错误。流内 error 是 HTTP 200 body 合成的错误：明确的 4xx 状态应保留，
+ * 让既有错误规则决定是否重试；无法确认是客户端错误时仍按 502 走供应商故障路径。
+ * 熔断计入与否再由 isRequestScopedGateFailure() 区分。
  */
 export class StreamPrecommitError extends ProxyError {
   readonly gateReason: StreamGateFailureReason;
@@ -62,11 +63,23 @@ export class StreamPrecommitError extends ProxyError {
     }
   ) {
     const message = `Stream content gate rejected upstream before first valid content (${reason})`;
-    const statusCode = resolveGateErrorStatusCode(reason, detail.frameData);
+    const inferred =
+      reason === "gate_error" && detail.frameData
+        ? inferUpstreamErrorStatusCodeFromText(detail.frameData)
+        : null;
+    const inferredClientError =
+      inferred && inferred.statusCode >= 400 && inferred.statusCode < 500 ? inferred : null;
+    const statusCode = inferredClientError?.statusCode ?? 502;
     super(message, statusCode, {
       body: buildGateErrorBody(reason, detail),
       providerId: detail.providerId,
       providerName: detail.providerName,
+      ...(reason === "gate_error"
+        ? {
+            statusCodeInferred: inferredClientError !== null,
+            statusCodeInferenceMatcherId: inferredClientError?.matcherId,
+          }
+        : {}),
     });
     this.name = "StreamPrecommitError";
     this.gateReason = reason;
@@ -104,80 +117,6 @@ export function isRequestScopedGateFailure(error: unknown): boolean {
   );
 }
 
-function resolveGateErrorStatusCode(reason: StreamGateFailureReason, frameData?: string): number {
-  if (reason !== "gate_error" || !frameData) {
-    return 502;
-  }
-
-  try {
-    const trimmed = frameData.trim();
-    if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) {
-      return 502;
-    }
-    const json = JSON.parse(trimmed) as Record<string, unknown>;
-    if (!json || typeof json !== "object") {
-      return 502;
-    }
-
-    // 1. 尝试从常见 status 字段直接提取 4xx 状态码
-    const candidates = [
-      json.status,
-      json.status_code,
-      json.statusCode,
-      (json.error as Record<string, unknown> | undefined)?.status,
-      (json.error as Record<string, unknown> | undefined)?.status_code,
-      (json.error as Record<string, unknown> | undefined)?.statusCode,
-      (json.response as { error?: Record<string, unknown> } | undefined)?.error?.status,
-      (json.response as { error?: Record<string, unknown> } | undefined)?.error?.status_code,
-      (json.response as { error?: Record<string, unknown> } | undefined)?.error?.statusCode,
-    ];
-    for (const code of candidates) {
-      if (typeof code === "number" && code >= 400 && code < 500) {
-        return code;
-      }
-    }
-
-    // 2. 检查常见客户端错误类型及错误码
-    const errType = String(
-      (json.error as Record<string, unknown> | undefined)?.type ||
-        (json.response as { error?: Record<string, unknown> } | undefined)?.error?.type ||
-        json.type ||
-        ""
-    ).toLowerCase();
-
-    const errCode = String(
-      (json.error as Record<string, unknown> | undefined)?.code ||
-        (json.response as { error?: Record<string, unknown> } | undefined)?.error?.code ||
-        json.code ||
-        ""
-    ).toLowerCase();
-
-    const errStatus = String(
-      (json.error as Record<string, unknown> | undefined)?.status || json.status || ""
-    ).toUpperCase();
-
-    if (
-      errType === "invalid_request_error" ||
-      errType === "invalid_request" ||
-      errType === "bad_request_error" ||
-      errCode === "cyber_policy" ||
-      errCode === "invalid_prompt" ||
-      errCode === "invalid_value" ||
-      errCode === "unsupported_value" ||
-      errCode === "context_length_exceeded" ||
-      errCode === "message_too_big" ||
-      errCode === "string_above_max_length" ||
-      errStatus === "INVALID_ARGUMENT"
-    ) {
-      return 400;
-    }
-  } catch {
-    // 忽略非 JSON 解析异常
-  }
-
-  return 502;
-}
-
 function buildGateErrorBody(
   reason: StreamGateFailureReason,
   detail: {
@@ -210,6 +149,10 @@ function buildGateErrorBody(
 }
 
 export type StreamGateMode = "off" | "shadow" | "enforce";
+
+// Shadow 只做旁路诊断，不需要保留完整的大帧；超过该上限时让 parser
+// 进入 observation-incomplete 语义，绝不能因为异常上游输入把 Node 堆撑大。
+export const STREAM_SHADOW_OBSERVER_MAX_BUFFER_CHARACTERS = 1024 * 1024;
 
 /**
  * 门控模式：系统设置快照优先（每请求的 provider-selector 读取与开机预热保鲜），
@@ -250,6 +193,14 @@ export interface StreamGateOptions extends StreamGateCaps {
   idleTimeoutMs?: number;
   /** 记录触发提交的帧信息（高并发模式下关闭以省开销） */
   captureCommitMarker?: boolean;
+  /** 进程级共享前缀预算；生产路径必须传入，单元测试可省略。 */
+  prebufferBudget?: StreamGatePrebufferBudget;
+  /** 等待共享预算时使用与上游请求相同的取消信号。 */
+  abortSignal?: AbortSignal;
+  /** 开始等待本地预算；竞速路径用它暂停本地 hedge 阈值。 */
+  onBudgetWaitStart?: () => void;
+  /** 本地预算获得或等待失败；恢复本地 hedge 阈值。 */
+  onBudgetWaitEnd?: () => void;
 }
 
 /** 触发门控提交的帧/chunk 标记（用于 Message 详情可观测性）。 */
@@ -273,8 +224,12 @@ export type StreamGateResult =
       framesSeen: number;
       readerDone: boolean;
       commitMarker: StreamGateCommitMarker | null;
+      /** 前缀被下游消费或放弃后释放；所有权随 committed 结果转移。 */
+      prebufferLease: StreamGatePrebufferLease | null;
     }
   | { committed: false; error: Error };
+
+const PREBUFFER_MEMORY_RESERVATION_MULTIPLIER = 4;
 
 /**
  * 对上游 SSE body reader 执行首个有效内容门控。
@@ -287,8 +242,16 @@ export async function runStreamContentGate(
   reader: ReadableStreamDefaultReader<Uint8Array>,
   options: StreamGateOptions
 ): Promise<StreamGateResult> {
-  const parser = new SseFrameParser();
-  const buffered: Uint8Array[] = [];
+  let prebufferLease: StreamGatePrebufferLease | null = null;
+  let leaseTransferred = false;
+  const parser = new SseFrameParser({
+    maxBufferedCharacters: options.prebufferByteCap,
+    bufferLimitExemption: {
+      maxBufferedCharacters: options.prebufferByteCap * 2,
+      matches: (eventName, dataHead) => isRequestEchoFrame(options.family, eventName, dataHead),
+    },
+  });
+  const buffered = new BufferedByteChunks();
   let bufferedBytes = 0;
   let echoExcludedBytes = 0;
   let framesSeen = 0;
@@ -312,111 +275,199 @@ export async function runStreamContentGate(
       terminalBeforeContent,
     }),
   });
+  const exceedsByteCap = () =>
+    bufferedBytes - Math.min(echoExcludedBytes, options.prebufferByteCap) >
+    options.prebufferByteCap;
 
-  const commit = (eventName: string | null, readerDone: boolean): StreamGateResult => ({
-    committed: true,
-    prefixChunks: buffered,
-    framesSeen,
-    readerDone,
-    commitMarker: options.captureCommitMarker
-      ? { frameIndex: framesSeen, chunkIndex, eventName, bufferedBytes, echoExcludedBytes }
-      : null,
-  });
+  const commit = (eventName: string | null, readerDone: boolean): StreamGateResult => {
+    const retainedPrefixBytes = buffered.retainedByteLength;
+    const prefixChunks = buffered.take();
+    // 读取期间需要覆盖 parser、输入副本和前缀的最坏峰值；提交后 parser
+    // 已停止，租约只需覆盖仍挂在下游 pending slot 中的实际 backing bytes。
+    prebufferLease?.shrinkTo(retainedPrefixBytes);
+    leaseTransferred = true;
+    return {
+      committed: true,
+      prefixChunks,
+      framesSeen,
+      readerDone,
+      commitMarker: options.captureCommitMarker
+        ? { frameIndex: framesSeen, chunkIndex, eventName, bufferedBytes, echoExcludedBytes }
+        : null,
+      prebufferLease,
+    };
+  };
 
-  while (true) {
-    let readResult: ReadableStreamReadResult<Uint8Array>;
-    try {
-      const raced = await readWithIdleTimeout(reader, options.idleTimeoutMs);
-      if (raced === IDLE_TIMEOUT) {
-        return failure("idle_timeout");
+  try {
+    if (options.prebufferBudget) {
+      if (options.abortSignal?.aborted) {
+        return { committed: false, error: abortSignalError(options.abortSignal) };
       }
-      readResult = raced;
-    } catch (readError) {
-      // 首字节超时 abort / 客户端断开 / 传输错误：原样上抛，调用方按来源归类
-      return {
-        committed: false,
-        error: readError instanceof Error ? readError : new Error(String(readError)),
-      };
+      const reservationBytes = options.prebufferByteCap * PREBUFFER_MEMORY_RESERVATION_MULTIPLIER;
+      const budgetSnapshot = options.prebufferBudget.snapshot();
+      // snapshot 与 acquire 之间没有异步边界；只在本次调用确实会进入 FIFO
+      // 队列时暂停供应商计时，避免正常热路径反复清除并重建 timer。
+      const waitsForBudget =
+        reservationBytes <= budgetSnapshot.limit &&
+        (budgetSnapshot.waiting > 0 ||
+          budgetSnapshot.reservedBytes + reservationBytes > budgetSnapshot.limit);
+      if (waitsForBudget) options.onBudgetWaitStart?.();
+      try {
+        prebufferLease = await options.prebufferBudget.acquire(
+          reservationBytes,
+          options.abortSignal
+        );
+      } catch (error) {
+        return {
+          committed: false,
+          error: error instanceof Error ? error : new Error(String(error)),
+        };
+      } finally {
+        if (waitsForBudget) options.onBudgetWaitEnd?.();
+      }
     }
 
-    if (readResult.done) {
-      // 冲刷尾部未终止帧（无结尾空行的流）
-      let sawTerminal = false;
-      for (const frame of parser.finish()) {
-        framesSeen++;
-        const verdict = classifyFrame(options.family, frame.eventName, frame.data);
-        if (verdict === "content") {
-          return commit(frame.eventName, true);
+    while (true) {
+      let readResult: ReadableStreamReadResult<Uint8Array>;
+      try {
+        const raced = await readWithIdleTimeout(reader, options.idleTimeoutMs);
+        if (raced === IDLE_TIMEOUT) {
+          return failure("idle_timeout");
         }
-        if (verdict === "error") return failure("gate_error", frame.data);
-        if (verdict === "malformed") return failure("decode_error", frame.data);
-        if (verdict === "terminal") {
-          // 干净完成即成功响应：连同缓冲前缀一起透传（尾帧已读完，readerDone=true）
-          if (
-            options.family === "openai-responses" &&
-            isCleanResponsesCompletion(frame.eventName, frame.data)
-          ) {
-            return commit(frame.eventName, true);
+        readResult = raced;
+      } catch (readError) {
+        // 首字节超时 abort / 客户端断开 / 传输错误：原样上抛，调用方按来源归类
+        return {
+          committed: false,
+          error: readError instanceof Error ? readError : new Error(String(readError)),
+        };
+      }
+
+      if (readResult.done) {
+        // 冲刷尾部未终止帧（无结尾空行的流）
+        let sawTerminal = false;
+        let trailingResult: StreamGateResult | null = null;
+        try {
+          parser.finishVisit((eventName, data) => {
+            framesSeen++;
+            const verdict = classifyFrame(options.family, eventName, data);
+            if (verdict === "content") {
+              trailingResult = commit(eventName, true);
+              return false;
+            }
+            if (verdict === "error") {
+              trailingResult = failure("gate_error", data);
+              return false;
+            }
+            if (verdict === "malformed") {
+              trailingResult = failure("decode_error", data);
+              return false;
+            }
+            if (
+              verdict === "terminal" &&
+              options.family === "openai-responses" &&
+              (isCleanResponsesCompletion(eventName, data) ||
+                isResponsesIncompleteCompletion(eventName, data))
+            ) {
+              trailingResult = commit(eventName, true);
+              return false;
+            }
+            if (verdict === "terminal") sawTerminal = true;
+            if (verdict === "neutral" && framesSeen > options.prebufferEventCap) {
+              trailingResult = failure("prebuffer_overflow");
+              return false;
+            }
+            return true;
+          });
+        } catch (error) {
+          if (error instanceof SseFrameBufferLimitError) {
+            return failure("prebuffer_overflow");
           }
-          sawTerminal = true;
+          throw error;
         }
+        if (trailingResult) return trailingResult;
+        // 无终止帧的 EOF 是供应商断流；终止帧先于内容则是请求作用域空结果。
+        return failure("empty_stream", undefined, sawTerminal);
       }
-      // sawTerminal=false 即上游断流 / 空 body：真实供应商侧异常，与「干净终止但无内容」区分
-      return failure("empty_stream", undefined, sawTerminal);
-    }
 
-    const chunk = readResult.value;
-    if (!chunk || chunk.byteLength === 0) {
-      continue;
-    }
-    if (!firstByteSeen) {
-      firstByteSeen = true;
-      // 上游已开始响应：调用方在此清除首字节计时器（保持「首字节」而非「首内容」语义）
-      options.onFirstByte?.();
-    }
-    chunkIndex++;
-    buffered.push(chunk);
-    bufferedBytes += chunk.byteLength;
+      const chunk = readResult.value;
+      if (!chunk || chunk.byteLength === 0) {
+        continue;
+      }
+      if (!firstByteSeen) {
+        firstByteSeen = true;
+        // 上游已开始响应：调用方在此清除首字节计时器（保持「首字节」而非「首内容」语义）
+        options.onFirstByte?.();
+      }
+      chunkIndex++;
+      // 回显豁免最多把门禁前缀抬到 2×cap。先检查再持有引用，避免一个
+      // 超大网络 chunk 在帧分类和事后检查之前直接越过宣称的内存边界。
+      if (chunk.byteLength > options.prebufferByteCap * 2 - bufferedBytes) {
+        return failure("prebuffer_overflow");
+      }
+      buffered.append(chunk);
+      bufferedBytes += chunk.byteLength;
 
-    for (const frame of parser.push(chunk)) {
-      framesSeen++;
-      const verdict: FrameVerdict = classifyFrame(options.family, frame.eventName, frame.data);
-      if (verdict === "content") {
-        return commit(frame.eventName, false);
-      }
-      if (verdict === "error") {
-        return failure("gate_error", frame.data);
-      }
-      if (verdict === "malformed") {
-        return failure("decode_error", frame.data);
-      }
-      if (verdict === "terminal") {
-        // openai-responses 的干净完成（status=completed 且无 error）是协议层面的成功响应：
-        // 空回复合法（审阅 / watchdog 类 prompt 的契约就是无问题时沉默），直接提交透传，
-        // 不能放大成同供应商重试 + 跨供应商 failover
-        if (
-          options.family === "openai-responses" &&
-          isCleanResponsesCompletion(frame.eventName, frame.data)
-        ) {
-          return commit(frame.eventName, false);
+      let frameResult: StreamGateResult | null = null;
+      try {
+        parser.visit(chunk, (eventName, data) => {
+          framesSeen++;
+          const verdict: FrameVerdict = classifyFrame(options.family, eventName, data);
+          if (verdict === "content") {
+            frameResult = exceedsByteCap()
+              ? failure("prebuffer_overflow")
+              : commit(eventName, false);
+            return false;
+          }
+          if (verdict === "error") {
+            frameResult = failure("gate_error", data);
+            return false;
+          }
+          if (verdict === "malformed") {
+            frameResult = failure("decode_error", data);
+            return false;
+          }
+          if (verdict === "terminal") {
+            if (
+              options.family === "openai-responses" &&
+              (isCleanResponsesCompletion(eventName, data) ||
+                isResponsesIncompleteCompletion(eventName, data))
+            ) {
+              frameResult = exceedsByteCap()
+                ? failure("prebuffer_overflow")
+                : commit(eventName, false);
+            } else {
+              frameResult = failure("empty_stream", data, true);
+            }
+            return false;
+          }
+          // neutral: 继续缓冲；请求回显帧的载荷不计入字节上限。
+          if (isRequestEchoFrame(options.family, eventName, data)) {
+            echoExcludedBytes += Buffer.byteLength(data, "utf8");
+          }
+          if (framesSeen > options.prebufferEventCap) {
+            frameResult = failure("prebuffer_overflow");
+            return false;
+          }
+          return true;
+        });
+      } catch (error) {
+        if (error instanceof SseFrameBufferLimitError) {
+          return failure("prebuffer_overflow");
         }
-        // 其余干净终止先于任何内容 = 空流
-        return failure("empty_stream", frame.data, true);
+        throw error;
       }
-      // neutral: 继续缓冲；请求回显帧的载荷不计入字节上限（豁免额度另有上限，见下方判定）
-      if (isRequestEchoFrame(options.family, frame.eventName, frame.data)) {
-        echoExcludedBytes += Buffer.byteLength(frame.data, "utf8");
-      }
-      // event 上限为逐帧硬上限（单 chunk 大量小帧也会触发）
-      if (framesSeen > options.prebufferEventCap) {
+      if (frameResult) return frameResult;
+
+      // 豁免额度以 cap 为自身上限：伪装成回显的中性帧最多把缓冲总量抬到 2×cap，不会无界占用内存
+      if (exceedsByteCap()) {
         return failure("prebuffer_overflow");
       }
     }
-
-    // 豁免额度以 cap 为自身上限：伪装成回显的中性帧最多把缓冲总量抬到 2×cap，不会无界占用内存
-    const cappedEchoExcluded = Math.min(echoExcludedBytes, options.prebufferByteCap);
-    if (bufferedBytes - cappedEchoExcluded > options.prebufferByteCap) {
-      return failure("prebuffer_overflow");
+  } finally {
+    if (!leaseTransferred) {
+      buffered.clear();
+      prebufferLease?.release();
     }
   }
 }
@@ -450,9 +501,17 @@ async function readWithIdleTimeout(
 }
 
 /** 拼接门控前缀字节（供竞速败者计费 drain 恢复 usage 时复用现有单块逻辑）。 */
-export function concatChunks(chunks: Uint8Array[]): Uint8Array | null {
+export function concatChunks(chunks: Uint8Array[]): Uint8Array<ArrayBuffer> | null {
   if (chunks.length === 0) return null;
-  if (chunks.length === 1) return chunks[0];
+  if (chunks.length === 1) {
+    const only = chunks[0];
+    // Web Streams 允许 SharedArrayBuffer-backed view；Response BodyInit 的
+    // DOM 类型则要求 ArrayBuffer-backed view。正常路径零拷贝，只有确实
+    // 不是 ArrayBuffer 时才复制一次，避免把类型问题扩散到调用方。
+    return only.buffer instanceof ArrayBuffer
+      ? (only as Uint8Array<ArrayBuffer>)
+      : new Uint8Array(only);
+  }
   let total = 0;
   for (const chunk of chunks) total += chunk.byteLength;
   const out = new Uint8Array(total);
@@ -462,6 +521,10 @@ export function concatChunks(chunks: Uint8Array[]): Uint8Array | null {
     offset += chunk.byteLength;
   }
   return out;
+}
+
+function abortSignalError(signal: AbortSignal): Error {
+  return signal.reason instanceof Error ? signal.reason : new DOMException("Aborted", "AbortError");
 }
 
 /**
@@ -478,7 +541,9 @@ export function createShadowGateObserver(context: {
   providerId: number;
   providerName: string;
 }): ShadowGateObserver {
-  const parser = new SseFrameParser();
+  const parser = new SseFrameParser({
+    maxBufferedCharacters: STREAM_SHADOW_OBSERVER_MAX_BUFFER_CHARACTERS,
+  });
   const verdictCounts: Record<FrameVerdict, number> = {
     content: 0,
     error: 0,
@@ -496,8 +561,8 @@ export function createShadowGateObserver(context: {
         if (firstByteAt === null && chunk.byteLength > 0) {
           firstByteAt = Date.now();
         }
-        for (const frame of parser.push(chunk)) {
-          const verdict = classifyFrame(context.family, frame.eventName, frame.data);
+        parser.visit(chunk, (eventName, data) => {
+          const verdict = classifyFrame(context.family, eventName, data);
           verdictCounts[verdict]++;
           if (verdict === "content" || verdict === "error" || verdict === "malformed") {
             reported = true;
@@ -513,9 +578,10 @@ export function createShadowGateObserver(context: {
               firstContentLagMs: firstByteAt === null ? null : Date.now() - firstByteAt,
               verdictCounts: { ...verdictCounts },
             });
-            return;
+            return false;
           }
-        }
+          return true;
+        });
       } catch {
         // shadow 观察绝不影响热路径
         reported = true;

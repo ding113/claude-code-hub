@@ -99,5 +99,15 @@ describe("request outcome taxonomy", () => {
     ).toMatchObject({
       outcome: "failure",
     });
+
+    expect(
+      classifyRequestOutcomeSignal({
+        reason: "response_incomplete",
+        statusCode: 200,
+        errorMessage: "RESPONSE_INCOMPLETE",
+      })
+    ).toMatchObject({
+      outcome: "failure",
+    });
   });
 });

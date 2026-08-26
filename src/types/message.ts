@@ -31,6 +31,7 @@ export interface ProviderChainItem {
     | "concurrent_limit_failed" // 并发限制失败
     | "request_success" // 修复：请求成功（首次）
     | "retry_success" // 重试成功
+    | "response_incomplete" // 上游按协议返回 incomplete，可计费但不是成功完成
     | "retry_failed" // 重试失败（供应商错误，已计入熔断器）
     | "system_error" // 系统/网络错误（不计入熔断器）
     | "resource_not_found" // 资源不存在（404），触发故障转移但不计入熔断器

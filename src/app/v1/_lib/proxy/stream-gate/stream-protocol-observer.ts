@@ -1,5 +1,13 @@
-import { classifyFrame, isRequestEchoFrame, type ProtocolFamily } from "./frame-classifier";
-import { type SseFrame, SseFrameParser } from "./sse-frames";
+import {
+  classifyFrame,
+  classifyStructuredFrame,
+  classifyStructuredTerminalKind,
+  classifyTerminalKind,
+  type FrameVerdict,
+  isRequestEchoFrame,
+  type ProtocolFamily,
+} from "./frame-classifier";
+import { SseFrameParser } from "./sse-frames";
 import { resolveStreamGateCaps } from "./stream-content-gate";
 
 export const STREAM_PROTOCOL_OBSERVER_MAX_BUFFER_CHARACTERS = 10 * 1024 * 1024;
@@ -15,6 +23,7 @@ export interface StreamProtocolFailure {
 export interface StreamProtocolObservation {
   sawContent: boolean;
   sawTerminal: boolean;
+  sawIncomplete: boolean;
   observationIncomplete: boolean;
   failure: StreamProtocolFailure | null;
 }
@@ -45,6 +54,7 @@ export function createStreamProtocolObserver(family: ProtocolFamily): StreamProt
   const observation: StreamProtocolObservation = {
     sawContent: false,
     sawTerminal: false,
+    sawIncomplete: false,
     observationIncomplete: false,
     failure: null,
   };
@@ -56,17 +66,52 @@ export function createStreamProtocolObserver(family: ProtocolFamily): StreamProt
     observation.observationIncomplete = true;
   };
 
-  const record = (frame: SseFrame): void => {
-    const verdict = classifyFrame(family, frame.eventName, frame.data);
+  const record = (eventName: string | null, data: string): boolean | undefined => {
+    const trimmed = data.trim();
+    let parsed: object | null = null;
+    let verdict: FrameVerdict;
+    if (trimmed === "[DONE]") {
+      verdict = classifyFrame(family, eventName, data);
+    } else if (trimmed[0] === "{" || trimmed[0] === "[") {
+      try {
+        const value = JSON.parse(trimmed) as unknown;
+        if (value !== null && typeof value === "object") {
+          parsed = value;
+          verdict = classifyStructuredFrame(family, eventName, value);
+        } else {
+          verdict = classifyFrame(family, eventName, data);
+        }
+      } catch {
+        // 以 {/[ 开头但无法解析的载荷，和 classifyFrame 的结果一致；
+        // 直接定为 malformed，避免对大型损坏帧重复 JSON.parse。
+        verdict = "malformed";
+      }
+    } else {
+      // [DONE]、空数据和非 JSON 数据沿用分类器的协议前置判定。
+      verdict = classifyFrame(family, eventName, data);
+    }
     if (verdict === "content") observation.sawContent = true;
-    if (verdict === "terminal") observation.sawTerminal = true;
+
+    // Responses 的 response.completed 可能同时携带完整 compaction output，
+    // 分类器会把它标成 content 以便门禁提交；终态观察不能因此丢失。
+    let terminalKind = verdict === "terminal" ? classifyTerminalKind(family, eventName) : null;
+    if (parsed) {
+      terminalKind = classifyStructuredTerminalKind(family, eventName, parsed) ?? terminalKind;
+    }
+    if (terminalKind !== null) {
+      if (terminalKind === "incomplete") {
+        observation.sawIncomplete = true;
+      } else {
+        observation.sawTerminal = true;
+      }
+    }
     if (verdict !== "error" && verdict !== "malformed") return;
 
     if (!observation.failure) {
       observation.failure = {
         afterContent: observation.sawContent,
         verdict,
-        eventName: frame.eventName,
+        eventName,
       };
       return;
     }
@@ -75,7 +120,7 @@ export function createStreamProtocolObserver(family: ProtocolFamily): StreamProt
       observation.failure = {
         afterContent: observation.sawContent,
         verdict,
-        eventName: frame.eventName,
+        eventName,
         sawMalformed: true,
       };
     } else if (verdict === "malformed" && observation.failure.verdict === "error") {
@@ -87,7 +132,7 @@ export function createStreamProtocolObserver(family: ProtocolFamily): StreamProt
     observe(chunk: Uint8Array): StreamProtocolFailure | null {
       if (finished || disabled || chunk.byteLength === 0) return observation.failure;
       try {
-        for (const frame of parser.push(chunk)) record(frame);
+        parser.visit(chunk, record);
       } catch {
         // parser 容量保护和本地观察异常只能说明观察不完整，不能伪造上游 malformed。
         // 旁路 observer 必须 fail-open，避免本地资源或实现问题改写客户端流与计费终态。
@@ -101,7 +146,7 @@ export function createStreamProtocolObserver(family: ProtocolFamily): StreamProt
         finished = true;
         if (!disabled) {
           try {
-            for (const frame of parser.finish()) record(frame);
+            parser.finishVisit(record);
           } catch {
             disableIncompleteObservation();
           }
@@ -110,6 +155,7 @@ export function createStreamProtocolObserver(family: ProtocolFamily): StreamProt
       return {
         sawContent: observation.sawContent,
         sawTerminal: observation.sawTerminal,
+        sawIncomplete: observation.sawIncomplete,
         observationIncomplete: observation.observationIncomplete,
         failure: observation.failure ? { ...observation.failure } : null,
       };

@@ -4,7 +4,7 @@ const DEFAULT_DETACHED_STREAM_MAX_CONCURRENCY = 64;
 const DEFAULT_DETACHED_STREAM_BUDGET_BYTES = 64 * 1024 * 1024;
 const DEFAULT_DETACHED_STREAM_METERING_RESERVE_BYTES = 16 * 1024 * 1024;
 
-export type DetachedStreamLeaseKind = "metering" | "replay";
+export type DetachedStreamLeaseKind = "loser" | "metering" | "replay";
 
 export interface DetachedStreamBudgetLimits {
   maxConcurrency: number;
@@ -34,7 +34,7 @@ export type DetachedStreamAcquireResult =
     };
 
 function createKindCounters(): Record<DetachedStreamLeaseKind, number> {
-  return { metering: 0, replay: 0 };
+  return { loser: 0, metering: 0, replay: 0 };
 }
 
 export class DetachedStreamBudget {
@@ -67,7 +67,7 @@ export class DetachedStreamBudget {
       Math.max(0, limits.meteringReserveBytes)
     );
     if (
-      kind === "replay" &&
+      kind !== "metering" &&
       nextReservedBytes > limits.maxReservedBytes - effectiveMeteringReserve
     ) {
       return { acquired: false, reason: "metering_reserve" };
