@@ -1,7 +1,6 @@
 import "server-only";
 
-import type { SQL } from "drizzle-orm";
-import { and, desc, eq, gte, inArray, isNull, lt, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, is, isNull, lt, SQL, sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import { keys as keysTable, messageRequest, providers, usageLedger, users } from "@/drizzle/schema";
 import { TTLMap } from "@/lib/cache/ttl-map";
@@ -1981,9 +1980,11 @@ export async function findUsageLogSessionIdSuggestions(
 
       const subqueryLimit = Math.max(500, limit * 25);
 
+      const candidateColumn = is(candidate, SQL) ? candidate.as("session_id") : candidate;
+
       const baseInnerQuery = db
         .select({
-          sessionId: candidate,
+          sessionId: candidateColumn,
           createdAt: usageLedger.createdAt,
           id: usageLedger.id,
         })
@@ -2045,9 +2046,11 @@ export async function findUsageLogSessionIdSuggestions(
 
       const subqueryLimit = Math.max(500, limit * 25);
 
+      const candidateColumn = is(candidate, SQL) ? candidate.as("session_id") : candidate;
+
       const baseInnerQuery = db
         .select({
-          sessionId: candidate,
+          sessionId: candidateColumn,
           createdAt: messageRequest.createdAt,
           id: messageRequest.id,
         })
