@@ -396,4 +396,52 @@ describe("Usage logs sessionId suggestions", () => {
     expect(limitArgs).toContain(500);
     expect(limitArgs).toContain(20);
   });
+
+  test.each([false, true])(
+    "builds valid Drizzle queries without SelectionProxy errors for raw SQL candidate expressions (ledgerOnly=%s)",
+    async (ledgerOnly) => {
+      vi.resetModules();
+      isLedgerOnlyModeMock.mockResolvedValue(ledgerOnly);
+
+      const generatedQueries: string[] = [];
+      const fakeClient: any = Object.assign(() => Promise.resolve([]), {
+        options: { parsers: {}, serializers: {} },
+        unsafe: () => ({ values: () => Promise.resolve([]) }),
+      });
+      const { drizzle } = await import("drizzle-orm/postgres-js");
+      const realDb = drizzle(fakeClient);
+
+      const dummy = realDb
+        .select()
+        .from(
+          realDb._.schema ? (realDb as any) : (await import("@/drizzle/schema")).messageRequest
+        );
+      const proto = Object.getPrototypeOf(dummy);
+      const origThen = proto.then;
+      // biome-ignore lint/suspicious/noThenProperty: test spy intercepts query execution to assert generated SQL
+      proto.then = function (onfulfilled: any, onrejected: any) {
+        generatedQueries.push(this.toSQL().sql);
+        return Promise.resolve([]).then(onfulfilled, onrejected);
+      };
+
+      vi.doMock("@/drizzle/db", () => ({
+        db: realDb,
+      }));
+
+      try {
+        const { findUsageLogSessionIdSuggestions } = await import("@/repository/usage-logs");
+        const result = await findUsageLogSessionIdSuggestions({ term: "b44", limit: 20 });
+
+        expect(result).toEqual([]);
+        expect(generatedQueries.length).toBe(2);
+        for (const sql of generatedQueries) {
+          expect(sql.toLowerCase()).toContain("session_id");
+          expect(sql.toLowerCase()).toContain("max(");
+        }
+      } finally {
+        // biome-ignore lint/suspicious/noThenProperty: restore original then implementation
+        proto.then = origThen;
+      }
+    }
+  );
 });
