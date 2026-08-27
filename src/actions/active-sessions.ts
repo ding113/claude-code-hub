@@ -1029,11 +1029,8 @@ export async function getSessionDetails(
       locatorResult.locator.keyId
     );
 
-    // 6. 并行获取 messages、requestBody 和 response（不缓存，因为这些数据较大）
+    // 6. 先读取 phase 快照和轻量 metadata；大字段仅在现代快照缺失时读取 legacy key。
     const [
-      requestBody,
-      messages,
-      response,
       requestHeaders,
       responseHeaders,
       clientReqMeta,
@@ -1046,15 +1043,6 @@ export async function getSessionDetails(
       responseSnapshotBefore,
       responseSnapshotAfter,
     ] = await Promise.all([
-      redisArtifactsOwned
-        ? SessionManager.getSessionRequestBody(sourceSessionId, effectiveSequence)
-        : null,
-      redisArtifactsOwned
-        ? SessionManager.getSessionMessages(sourceSessionId, effectiveSequence)
-        : null,
-      redisArtifactsOwned
-        ? SessionManager.getSessionResponse(sourceSessionId, effectiveSequence)
-        : null,
       redisArtifactsOwned
         ? SessionManager.getSessionRequestHeaders(sourceSessionId, effectiveSequence)
         : null,
@@ -1100,21 +1088,6 @@ export async function getSessionDetails(
         : null,
     ]);
 
-    // 兼容：历史/异常数据可能是 JSON 字符串（前端需要根级对象/数组）
-    const normalizedMessages = parseJsonStringOrNull(messages);
-    const normalizedRequestBody = parseJsonStringOrNull(requestBody);
-
-    const requestMeta = {
-      clientUrl: clientReqMeta?.url ?? null,
-      upstreamUrl: upstreamReqMeta?.url ?? null,
-      method: clientReqMeta?.method ?? upstreamReqMeta?.method ?? null,
-    };
-
-    const responseMeta = {
-      upstreamUrl: upstreamResMeta?.url ?? upstreamReqMeta?.url ?? null,
-      statusCode: upstreamResMeta?.statusCode ?? null,
-    };
-
     const snapshots: SessionDetailSnapshots = {
       defaultView: DEFAULT_SESSION_DETAIL_VIEW_MODE,
       request: {
@@ -1134,6 +1107,41 @@ export async function getSessionDetails(
         after: normalizeResponseSnapshot(responseSnapshotAfter ?? null),
       },
     };
+
+    const snapshotRequestBody = snapshots.request.after?.body ?? snapshots.request.before?.body;
+    const snapshotMessages =
+      snapshots.request.before?.messages ?? snapshots.request.after?.messages;
+    const snapshotResponse = snapshots.response.after?.body ?? snapshots.response.before?.body;
+
+    const [legacyRequestBody, legacyMessages, legacyResponse] = await Promise.all([
+      redisArtifactsOwned && snapshotRequestBody == null
+        ? SessionManager.getSessionRequestBody(sourceSessionId, effectiveSequence)
+        : null,
+      redisArtifactsOwned && snapshotMessages == null
+        ? SessionManager.getSessionMessages(sourceSessionId, effectiveSequence)
+        : null,
+      redisArtifactsOwned && snapshotResponse == null
+        ? SessionManager.getSessionResponse(sourceSessionId, effectiveSequence)
+        : null,
+    ]);
+
+    // 兼容：历史/异常数据可能是 JSON 字符串（前端需要根级对象/数组）。
+    const normalizedMessages = snapshotMessages ?? parseJsonStringOrNull(legacyMessages ?? null);
+    const normalizedRequestBody =
+      snapshotRequestBody ?? parseJsonStringOrNull(legacyRequestBody ?? null);
+    const response = snapshotResponse ?? legacyResponse;
+
+    const requestMeta = {
+      clientUrl: clientReqMeta?.url ?? null,
+      upstreamUrl: upstreamReqMeta?.url ?? null,
+      method: clientReqMeta?.method ?? upstreamReqMeta?.method ?? null,
+    };
+
+    const responseMeta = {
+      upstreamUrl: upstreamResMeta?.url ?? upstreamReqMeta?.url ?? null,
+      statusCode: upstreamResMeta?.statusCode ?? null,
+    };
+
     const legacyCompatibilitySnapshots = buildLegacyCompatibilitySnapshots({
       requestBody: normalizedRequestBody,
       messages: normalizedMessages,

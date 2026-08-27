@@ -9,6 +9,10 @@ import { parseClaudeMetadataUserId } from "@/lib/claude-code/metadata-user-id";
 import { getEnvConfig } from "@/lib/config/env.schema";
 import { logger } from "@/lib/logger";
 import {
+  getSessionRequestArtifactByteSize,
+  getSessionRequestArtifactMaxBytes,
+} from "@/lib/session-request-artifact-limit";
+import {
   redactMessages,
   redactRequestBody,
   redactResponseBody,
@@ -234,6 +238,19 @@ function canStoreSessionResponseBody(value: string, context: string): boolean {
   if (byteSize <= maxBytes) return true;
 
   logger.warn("SessionManager: Skipped oversized session response body", {
+    context,
+    byteSize,
+    maxBytes,
+  });
+  return false;
+}
+
+function canStoreSessionRequestArtifact(value: unknown, context: string): boolean {
+  const byteSize = getSessionRequestArtifactByteSize(value);
+  const maxBytes = getSessionRequestArtifactMaxBytes();
+  if (byteSize <= maxBytes) return true;
+
+  logger.warn("SessionManager: Skipped oversized session request artifact", {
     context,
     byteSize,
     maxBytes,
@@ -1935,6 +1952,10 @@ export class SessionManager {
       const key = requestSequence
         ? `session:${sessionId}:req:${requestSequence}:messages`
         : `session:${sessionId}:messages`;
+      if (!canStoreSessionRequestArtifact(messagesJson, "messages")) {
+        await redis.del(key);
+        return;
+      }
       await redis.setex(key, SessionManager.SESSION_TTL, messagesJson);
       logger.trace("SessionManager: Stored session messages", {
         sessionId,
@@ -2550,6 +2571,10 @@ export class SessionManager {
         ? requestBody
         : redactRequestBody(requestBody);
       const payload = JSON.stringify(bodyToStore);
+      if (!canStoreSessionRequestArtifact(payload, "requestBody")) {
+        await redis.del(key);
+        return;
+      }
       await redis.setex(key, SessionManager.SESSION_TTL, payload);
       logger.trace("SessionManager: Stored session request body", {
         sessionId,
@@ -2950,31 +2975,53 @@ export class SessionManager {
       const writes: Array<Promise<unknown>> = [];
 
       if ("body" in snapshot) {
-        const normalizedBody = parseJsonStringIfPossible(snapshot.body ?? null);
-        const bodyToStore = SessionManager.STORE_MESSAGES
-          ? normalizedBody
-          : redactRequestBody(normalizedBody);
-        writes.push(
-          redis.setex(
-            buildSessionDetailSnapshotKey(sessionId, sequence, "request", phase, "body"),
-            SessionManager.SESSION_TTL,
-            JSON.stringify(bodyToStore)
-          )
+        const rawBody = snapshot.body ?? null;
+        const bodyKey = buildSessionDetailSnapshotKey(
+          sessionId,
+          sequence,
+          "request",
+          phase,
+          "body"
         );
+        if (canStoreSessionRequestArtifact(rawBody, `snapshot:${phase}:body`)) {
+          const normalizedBody = parseJsonStringIfPossible(rawBody);
+          const bodyToStore = SessionManager.STORE_MESSAGES
+            ? normalizedBody
+            : redactRequestBody(normalizedBody);
+          const bodyJson = JSON.stringify(bodyToStore);
+          if (canStoreSessionRequestArtifact(bodyJson, `snapshot:${phase}:body`)) {
+            writes.push(redis.setex(bodyKey, SessionManager.SESSION_TTL, bodyJson));
+          } else {
+            writes.push(redis.del(bodyKey));
+          }
+        } else {
+          writes.push(redis.del(bodyKey));
+        }
       }
 
       if ("messages" in snapshot) {
-        const normalizedMessages = parseJsonStringIfPossible(snapshot.messages ?? null);
-        const messagesToStore = SessionManager.STORE_MESSAGES
-          ? normalizedMessages
-          : redactMessages(normalizedMessages);
-        writes.push(
-          redis.setex(
-            buildSessionDetailSnapshotKey(sessionId, sequence, "request", phase, "messages"),
-            SessionManager.SESSION_TTL,
-            JSON.stringify(messagesToStore)
-          )
+        const rawMessages = snapshot.messages ?? null;
+        const messagesKey = buildSessionDetailSnapshotKey(
+          sessionId,
+          sequence,
+          "request",
+          phase,
+          "messages"
         );
+        if (canStoreSessionRequestArtifact(rawMessages, `snapshot:${phase}:messages`)) {
+          const normalizedMessages = parseJsonStringIfPossible(rawMessages);
+          const messagesToStore = SessionManager.STORE_MESSAGES
+            ? normalizedMessages
+            : redactMessages(normalizedMessages);
+          const messagesJson = JSON.stringify(messagesToStore);
+          if (canStoreSessionRequestArtifact(messagesJson, `snapshot:${phase}:messages`)) {
+            writes.push(redis.setex(messagesKey, SessionManager.SESSION_TTL, messagesJson));
+          } else {
+            writes.push(redis.del(messagesKey));
+          }
+        } else {
+          writes.push(redis.del(messagesKey));
+        }
       }
 
       if ("headers" in snapshot) {

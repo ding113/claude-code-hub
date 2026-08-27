@@ -150,6 +150,13 @@ export const EnvSchema = z.object({
   // - false (默认)：存储请求/响应体但对 message 内容脱敏 [REDACTED]
   // - true：原样存储 message 内容（注意隐私和存储空间影响）
   STORE_SESSION_MESSAGES: z.string().default("false").transform(booleanTransform),
+  // 单份请求调试 artifact（requestBody/messages/before/after body）的 Redis 存储上限。
+  SESSION_REQUEST_ARTIFACT_MAX_BYTES: z.coerce
+    .number()
+    .int()
+    .min(64 * 1024)
+    .max(64 * 1024 * 1024)
+    .default(5 * 1024 * 1024),
   // 会话响应体存储开关
   // - true (默认)：存储响应体（SSE/JSON），用于调试/回放/问题定位（Redis 临时缓存，默认 5 分钟）
   // - false：不存储响应体（注意：不影响本次请求处理；仅影响后续在 UI/诊断中查看 response body）

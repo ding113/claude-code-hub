@@ -161,6 +161,7 @@ import {
 export const DEFAULT_CODEX_USER_AGENT =
   "codex_cli_rs/0.93.0 (Windows 10.0.26200; x86_64) vscode/1.108.1";
 const EMPTY_PREFIX_CHUNK = new Uint8Array(0);
+const LEGACY_STREAMING_HEDGE_MAX_CONCURRENCY = 2;
 
 async function runStreamContentGateWithAbortSignals(
   reader: ReadableStreamDefaultReader<Uint8Array>,
@@ -4957,6 +4958,7 @@ export class ProxyForwarder {
 
     const launchAlternative = async () => {
       if (settled || winnerCommitted || noMoreProviders) return;
+      if (attempts.size >= LEGACY_STREAMING_HEDGE_MAX_CONCURRENCY) return;
       if (launchingAlternative) {
         await launchingAlternative;
         return;

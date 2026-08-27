@@ -1731,7 +1731,7 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
     }
   });
 
-  test("when multiple providers all exceed threshold, hedge scheduler keeps expanding until a later provider wins", async () => {
+  test("legacy hedge caps in-flight attempts and launches a replacement after one fails", async () => {
     vi.useFakeTimers();
 
     try {
@@ -1772,10 +1772,8 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
         const runtime = attemptSession as ProxySession & AttemptRuntime;
         runtime.responseController = controller1;
         runtime.clearResponseTimeout = vi.fn();
-        return createStreamingResponse({
-          label: "p1",
-          firstChunkDelayMs: 400,
-          controller: controller1,
+        return await new Promise<Response>((_resolve, reject) => {
+          setTimeout(() => reject(new Error("p1 failed after hedge launch")), 250);
         });
       });
 
@@ -1804,15 +1802,17 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
       const responsePromise = ProxyForwarder.send(session);
 
       await vi.advanceTimersByTimeAsync(200);
-      expect(doForward).toHaveBeenCalledTimes(3);
+      expect(doForward).toHaveBeenCalledTimes(2);
+      expect(mocks.pickRandomProviderWithExclusion).toHaveBeenCalledTimes(1);
 
-      await vi.advanceTimersByTimeAsync(25);
+      await vi.advanceTimersByTimeAsync(75);
+      expect(doForward).toHaveBeenCalledTimes(3);
       const response = await responsePromise;
       expect(await response.text()).toContain('"provider":"p3"');
-      expect(controller1.signal.aborted).toBe(true);
+      expect(controller1.signal.aborted).toBe(false);
       expect(controller2.signal.aborted).toBe(true);
       expect(controller3.signal.aborted).toBe(false);
-      expect(mocks.recordFailure).not.toHaveBeenCalled();
+      expect(mocks.recordFailure).toHaveBeenCalledWith(1, expect.any(Error));
       expect(mocks.recordSuccess).not.toHaveBeenCalled();
       expect(session.provider?.id).toBe(3);
       expect(mocks.releaseProviderSession).toHaveBeenCalledWith(1, "sess-hedge");

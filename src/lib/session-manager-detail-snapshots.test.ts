@@ -64,12 +64,14 @@ vi.mock("@/lib/redis", () => ({
 
 let mockStoreMessages = false;
 let mockStoreSessionResponseBody = true;
+let mockSessionRequestArtifactMaxBytes = 1024 * 1024;
 let mockSessionResponseBodyMaxBytes = 1024 * 1024;
 
 vi.mock("@/lib/config/env.schema", () => ({
   getEnvConfig: () => ({
     STORE_SESSION_MESSAGES: mockStoreMessages,
     STORE_SESSION_RESPONSE_BODY: mockStoreSessionResponseBody,
+    SESSION_REQUEST_ARTIFACT_MAX_BYTES: mockSessionRequestArtifactMaxBytes,
     SESSION_RESPONSE_BODY_MAX_BYTES: mockSessionResponseBodyMaxBytes,
     SESSION_TTL: 300,
   }),
@@ -84,6 +86,7 @@ describe("SessionManager detail snapshots", () => {
     redisMock.status = "ready";
     mockStoreMessages = false;
     mockStoreSessionResponseBody = true;
+    mockSessionRequestArtifactMaxBytes = 1024 * 1024;
     mockSessionResponseBodyMaxBytes = 1024 * 1024;
   });
 
@@ -427,6 +430,44 @@ describe("SessionManager detail snapshots", () => {
       "SessionManager: Skipped oversized session response body",
       { context: "snapshot:after", byteSize: 5, maxBytes: 4 }
     );
+  });
+
+  it("skips oversized request artifacts while preserving snapshot headers and meta", async () => {
+    mockStoreMessages = true;
+    mockSessionRequestArtifactMaxBytes = 4;
+
+    await SessionManager.storeSessionRequestBody("sess_oversized_request", "12345", 1);
+    await SessionManager.storeSessionMessages("sess_oversized_request", ["12345"], 1);
+    await SessionManager.storeSessionRequestPhaseSnapshot(
+      "sess_oversized_request",
+      "before",
+      {
+        body: "12345",
+        messages: ["12345"],
+        headers: new Headers({ "content-type": "application/json" }),
+        meta: {
+          clientUrl: "https://client.example/v1/messages",
+          upstreamUrl: null,
+          method: "POST",
+        },
+      },
+      1
+    );
+
+    expect(await SessionManager.getSessionRequestBody("sess_oversized_request", 1)).toBeNull();
+    expect(await SessionManager.getSessionMessages("sess_oversized_request", 1)).toBeNull();
+    expect(
+      await SessionManager.getSessionRequestPhaseSnapshot("sess_oversized_request", "before", 1)
+    ).toEqual({
+      body: null,
+      messages: null,
+      headers: { "content-type": "application/json" },
+      meta: {
+        clientUrl: "https://client.example/v1/messages",
+        upstreamUrl: null,
+        method: "POST",
+      },
+    });
   });
 
   it("removes a previous snapshot body when its replacement exceeds the limit", async () => {
