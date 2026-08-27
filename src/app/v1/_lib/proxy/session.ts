@@ -9,6 +9,10 @@ import {
   writeLiveRoutingTrace,
 } from "@/lib/redis/live-chain-store";
 import type { SessionBindingSnapshot } from "@/lib/redis/session-binding";
+import {
+  getSessionRequestArtifactByteSize,
+  getSessionRequestArtifactMaxBytes,
+} from "@/lib/session-request-artifact-limit";
 import { clientRequestsContext1m as clientRequestsContext1mHelper } from "@/lib/special-attributes";
 import { ERROR_CODES, getErrorMessageServer } from "@/lib/utils/error-messages";
 import {
@@ -579,6 +583,22 @@ export class ProxySession {
 
   shouldPersistSessionDebugArtifacts(): boolean {
     return !this.highConcurrencyModeEnabled;
+  }
+
+  shouldPersistSessionRequestArtifacts(): boolean {
+    const byteSize = getSessionRequestArtifactByteSize(
+      this.request.message,
+      this.isOpenAIImageMultipartRequest() ? undefined : this.request.buffer?.byteLength
+    );
+    const maxBytes = getSessionRequestArtifactMaxBytes();
+    if (byteSize <= maxBytes) return true;
+
+    logger.warn("[ProxySession] Skipped oversized session request artifacts", {
+      byteSize,
+      maxBytes,
+      endpoint: this.getEndpoint(),
+    });
+    return false;
   }
 
   shouldTrackSessionObservability(): boolean {

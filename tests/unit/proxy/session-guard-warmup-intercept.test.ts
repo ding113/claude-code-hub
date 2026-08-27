@@ -94,6 +94,9 @@ function createMockSession(overrides: Partial<ProxySession> = {}): ProxySession 
     shouldPersistSessionDebugArtifacts() {
       return !this.highConcurrencyModeEnabled;
     },
+    shouldPersistSessionRequestArtifacts() {
+      return true;
+    },
     shouldTrackSessionObservability() {
       return !this.highConcurrencyModeEnabled;
     },
@@ -286,6 +289,41 @@ describe("ProxySessionGuard：warmup 拦截不应计入并发会话", () => {
         headers: { "content-type": "application/json" },
         messages: [{ role: "user", content: "hello" }],
       }),
+      1
+    );
+  });
+
+  test("超限请求跳过 request body/messages，但仍保留轻量 before 快照", async () => {
+    const ProxySessionGuard = await loadGuard();
+    const structuredCloneSpy = vi.spyOn(globalThis, "structuredClone");
+    const getMessages = vi.fn(() => [{ role: "user", content: "oversized" }]);
+    const session = createMockSession({
+      headers: new Headers({ "content-type": "application/json" }),
+      request: {
+        message: { model: "claude-sonnet-4-5-20250929", messages: ["oversized"] },
+        model: "claude-sonnet-4-5-20250929",
+      } as ProxySession["request"],
+      getMessages,
+      shouldPersistSessionRequestArtifacts: () => false,
+      isWarmupRequest: () => false,
+    });
+
+    await ProxySessionGuard.ensure(session);
+
+    expect(structuredCloneSpy).not.toHaveBeenCalled();
+    expect(storeSessionRequestBodyMock).not.toHaveBeenCalled();
+    expect(storeSessionMessagesMock).not.toHaveBeenCalled();
+    expect(storeSessionRequestPhaseSnapshotMock).toHaveBeenCalledWith(
+      "session_assigned",
+      "before",
+      {
+        headers: { "content-type": "application/json" },
+        meta: {
+          clientUrl: "http://localhost/v1/messages",
+          upstreamUrl: null,
+          method: "POST",
+        },
+      },
       1
     );
   });
