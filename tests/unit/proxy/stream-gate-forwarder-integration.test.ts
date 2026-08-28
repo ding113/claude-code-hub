@@ -3,11 +3,12 @@ import { resolveEndpointPolicy } from "@/app/v1/_lib/proxy/endpoint-policy";
 import { ProxyError } from "@/app/v1/_lib/proxy/errors";
 
 /**
- * F1 流式内容门控（stream content gate）在 ProxyForwarder 顺序路径中的接线集成测试。
+ * F1 流式内容门控（stream content gate）在 ProxyForwarder 中的接线集成测试。
  *
- * 顺序路径进入条件：provider.firstByteTimeoutStreamingMs = 0（关闭 first-byte hedge），
+ * 默认顺序路径进入条件：provider.firstByteTimeoutStreamingMs = 0（关闭 first-byte hedge），
  * shouldUseStreamingHedge() 返回 false，ProxyForwarder.send() 走顺序重试循环，
  * 在 isSSE 分支对 response.body 执行真实的 runStreamContentGate（本文件不 mock 门控本体）。
+ * 专用回归用例会将该值设为正数，以覆盖 Legacy Hedge 的同一门控接线。
  *
  * STREAM_GATE_MODE 由 getEnvConfig() 读取（模块级缓存 _envConfig，首次调用即固化），
  * 因此这里 mock "@/lib/config/env.schema"，通过 vi.hoisted 的 envControl 注入模式值：
@@ -469,6 +470,17 @@ function createSession(clientAbortSignal: AbortSignal | null = null): ProxySessi
   return session as ProxySession;
 }
 
+function configureCodexResponsesRequest(session: ProxySession): void {
+  session.requestUrl = new URL("https://example.com/v1/responses");
+  session.originalFormat = "response";
+  session.endpointPolicy = resolveEndpointPolicy("/v1/responses");
+  session.request.message = {
+    model: "gpt-5.5",
+    stream: true,
+    input: "hi",
+  };
+}
+
 function attachReplayOwner(session: ProxySession, testCase: ReplayGateCase): void {
   Object.assign(session, {
     requestUrl: new URL(`https://example.com${testCase.endpoint}`),
@@ -533,7 +545,7 @@ function attachAttemptRuntime(
   runtime.releaseAgent = cleanup.releaseAgent;
 }
 
-describe("F1 stream content gate x ProxyForwarder sequential path", () => {
+describe("F1 stream content gate x ProxyForwarder paths", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.categorizeErrorAsync.mockResolvedValue(ProxyErrorCategory.PROVIDER_ERROR);
@@ -788,6 +800,267 @@ describe("F1 stream content gate x ProxyForwarder sequential path", () => {
     beforeEach(() => {
       envControl.streamGateMode = "off";
     });
+
+    test("缺少 Content-Type 的 Codex Responses 流在 EOF 前返回且不被克隆检查", async () => {
+      const provider = createProvider({ id: 1, name: "codex-headerless", providerType: "codex" });
+      const session = createSession();
+      configureCodexResponsesRequest(session);
+      session.setProvider(provider);
+
+      const encoder = new TextEncoder();
+      const firstFrames = [
+        sseFrame("response.created", {
+          type: "response.created",
+          response: { id: "resp_headerless", status: "in_progress" },
+        }),
+        sseFrame("response.output_text.delta", {
+          type: "response.output_text.delta",
+          delta: "hello",
+        }),
+      ].join("");
+      const completedFrame = sseFrame("response.completed", {
+        type: "response.completed",
+        response: { id: "resp_headerless", status: "completed" },
+      });
+      let upstreamController: ReadableStreamDefaultController<Uint8Array> | undefined;
+      const upstreamResponse = new Response(
+        new ReadableStream<Uint8Array>({
+          start(controller) {
+            upstreamController = controller;
+            controller.enqueue(encoder.encode(firstFrames));
+          },
+        })
+      );
+      const cloneSpy = vi.spyOn(upstreamResponse, "clone");
+      const doForward = spyOnDoForward();
+      doForward.mockResolvedValueOnce(upstreamResponse);
+
+      let timeout: ReturnType<typeof setTimeout> | undefined;
+      const response = await Promise.race([
+        ProxyForwarder.send(session),
+        new Promise<never>((_, reject) => {
+          timeout = setTimeout(
+            () => reject(new Error("ProxyForwarder.send waited for headerless stream EOF")),
+            1_000
+          );
+        }),
+      ]).finally(() => {
+        if (timeout) clearTimeout(timeout);
+        upstreamController?.enqueue(encoder.encode(completedFrame));
+        upstreamController?.close();
+      });
+
+      expect(upstreamResponse.headers.get("content-type")).toBeNull();
+      expect(cloneSpy).not.toHaveBeenCalled();
+      expect(await response.text()).toBe(firstFrames + completedFrame);
+      expect(mocks.recordSuccess).not.toHaveBeenCalled();
+    });
+
+    test("raw passthrough 的缺头 Remote Compaction v2 流在 EOF 前提交且完整透传", async () => {
+      const provider = createProvider({ id: 1, name: "codex-compact", providerType: "codex" });
+      const session = createSession();
+      configureCodexResponsesRequest(session);
+      session.request.message.input = [{ type: "compaction_trigger" }];
+      session.endpointPolicy = resolveEndpointPolicy("/v1/responses/compact");
+      session.setProvider(provider);
+
+      const encoder = new TextEncoder();
+      const compactionFrame = sseFrame("response.output_item.done", {
+        type: "response.output_item.done",
+        output_index: 0,
+        item: {
+          type: "compaction",
+          encrypted_content: "opaque-state",
+        },
+      });
+      const completedFrame = sseFrame("response.completed", {
+        type: "response.completed",
+        response: {
+          id: "resp_compact",
+          status: "completed",
+          output: [{ type: "compaction", encrypted_content: "opaque-state" }],
+        },
+      });
+      let upstreamController: ReadableStreamDefaultController<Uint8Array> | undefined;
+      const upstreamResponse = new Response(
+        new ReadableStream<Uint8Array>({
+          start(controller) {
+            upstreamController = controller;
+            controller.enqueue(encoder.encode(compactionFrame));
+          },
+        })
+      );
+      const cloneSpy = vi.spyOn(upstreamResponse, "clone");
+      const doForward = spyOnDoForward();
+      doForward.mockResolvedValueOnce(upstreamResponse);
+
+      let timeout: ReturnType<typeof setTimeout> | undefined;
+      const response = await Promise.race([
+        ProxyForwarder.send(session),
+        new Promise<never>((_, reject) => {
+          timeout = setTimeout(
+            () => reject(new Error("ProxyForwarder.send waited for raw compaction stream EOF")),
+            1_000
+          );
+        }),
+      ]).finally(() => {
+        if (timeout) clearTimeout(timeout);
+        upstreamController?.enqueue(encoder.encode(completedFrame));
+        upstreamController?.close();
+      });
+
+      expect(session.getEndpointPolicy().kind).toBe("raw_passthrough");
+      expect(upstreamResponse.headers.get("content-type")).toBeNull();
+      expect(cloneSpy).not.toHaveBeenCalled();
+      expect(await response.text()).toBe(compactionFrame + completedFrame);
+      expect(mocks.recordSuccess).not.toHaveBeenCalled();
+      expect(mocks.pickRandomProviderWithExclusion).not.toHaveBeenCalled();
+    });
+
+    test("缺少 Content-Type 的 JSON 假 200 在提交前被拦截并切换供应商", async () => {
+      const provider1 = createProvider({ id: 1, name: "codex-json-1", providerType: "codex" });
+      const provider2 = createProvider({ id: 2, name: "codex-json-2", providerType: "codex" });
+      const session = createSession();
+      configureCodexResponsesRequest(session);
+      session.setProvider(provider1);
+
+      mocks.pickRandomProviderWithExclusion.mockResolvedValueOnce(provider2);
+      const doForward = spyOnDoForward();
+      const headerlessJsonError = new Response(
+        new TextEncoder().encode(
+          JSON.stringify({ error: { type: "server_error", message: "upstream failed" } })
+        )
+      );
+      expect(headerlessJsonError.headers.get("content-type")).toBeNull();
+      doForward.mockResolvedValueOnce(headerlessJsonError);
+      doForward.mockImplementationOnce(async () =>
+        createSseResponse(OPENAI_RESPONSES_WINNER_FRAMES)
+      );
+
+      const response = await ProxyForwarder.send(session);
+
+      expect(await response.text()).toBe(OPENAI_RESPONSES_WINNER_FRAMES.join(""));
+      expect(doForward).toHaveBeenCalledTimes(2);
+      expect(mocks.recordFailure).toHaveBeenCalledWith(provider1.id, expect.any(Error));
+      expect(mocks.recordSuccess).not.toHaveBeenCalledWith(provider1.id);
+      expect(session.provider?.id).toBe(provider2.id);
+    });
+
+    test("raw passthrough 的缺头 JSON 在补 SSE 头前仍执行有界嗅探", async () => {
+      const provider = createProvider({ id: 1, name: "codex-compact", providerType: "codex" });
+      const session = createSession();
+      configureCodexResponsesRequest(session);
+      session.endpointPolicy = resolveEndpointPolicy("/v1/responses/compact");
+      session.setProvider(provider);
+
+      const doForward = spyOnDoForward();
+      const headerlessJson = new Response(
+        new TextEncoder().encode(
+          JSON.stringify({ error: { type: "server_error", message: "upstream failed" } })
+        )
+      );
+      expect(headerlessJson.headers.get("content-type")).toBeNull();
+      doForward.mockResolvedValueOnce(headerlessJson);
+
+      await expect(ProxyForwarder.send(session)).rejects.toThrow(
+        /Stream content gate rejected upstream before first valid content/
+      );
+
+      expect(doForward).toHaveBeenCalledTimes(1);
+      expect(mocks.pickRandomProviderWithExclusion).not.toHaveBeenCalled();
+      expect(mocks.recordSuccess).not.toHaveBeenCalled();
+    });
+
+    test("Legacy Hedge 的缺头 JSON 不会抢先成为 Codex Responses 流赢家", async () => {
+      const provider1 = createProvider({
+        id: 1,
+        name: "codex-hedge-json",
+        providerType: "codex",
+        firstByteTimeoutStreamingMs: 100,
+      });
+      const provider2 = createProvider({
+        id: 2,
+        name: "codex-hedge-sse",
+        providerType: "codex",
+        firstByteTimeoutStreamingMs: 100,
+      });
+      const session = createSession();
+      configureCodexResponsesRequest(session);
+      session.setProvider(provider1);
+
+      mocks.pickRandomProviderWithExclusion.mockResolvedValueOnce(provider2);
+      const doForward = spyOnDoForward();
+      doForward.mockImplementationOnce(async (attemptSession) => {
+        attachAttemptRuntime(attemptSession, {
+          clearResponseTimeout: vi.fn(),
+          releaseAgent: vi.fn(),
+        });
+        return new Response(
+          new TextEncoder().encode(
+            JSON.stringify({ error: { type: "server_error", message: "upstream failed" } })
+          )
+        );
+      });
+      doForward.mockImplementationOnce(async (attemptSession) => {
+        attachAttemptRuntime(attemptSession, {
+          clearResponseTimeout: vi.fn(),
+          releaseAgent: vi.fn(),
+        });
+        return createSseResponse(OPENAI_RESPONSES_WINNER_FRAMES);
+      });
+
+      const response = await ProxyForwarder.send(session);
+
+      expect(await response.text()).toBe(OPENAI_RESPONSES_WINNER_FRAMES.join(""));
+      expect(doForward).toHaveBeenCalledTimes(2);
+      expect(mocks.recordFailure).toHaveBeenCalledWith(provider1.id, expect.any(Error));
+      expect(session.provider?.id).toBe(provider2.id);
+    });
+
+    test.each(["text/html", "application/xhtml+xml"])(
+      "Codex Responses 流的 %s 网关页保留 fake-200 检测和供应商切换",
+      async (contentType) => {
+        const provider1 = createProvider({ id: 1, name: "codex-html-1", providerType: "codex" });
+        const provider2 = createProvider({ id: 2, name: "codex-html-2", providerType: "codex" });
+        const session = createSession();
+        configureCodexResponsesRequest(session);
+        session.setProvider(provider1);
+
+        mocks.pickRandomProviderWithExclusion.mockResolvedValueOnce(provider2);
+        const doForward = spyOnDoForward();
+        const htmlBody = "<!doctype html><html><body>blocked</body></html>";
+        const jsonBody = JSON.stringify({ id: "resp_ok", status: "completed", output: [] });
+        doForward.mockResolvedValueOnce(
+          new Response(htmlBody, {
+            status: 200,
+            headers: {
+              "content-type": `${contentType}; charset=utf-8`,
+              "content-length": String(htmlBody.length),
+            },
+          })
+        );
+        doForward.mockResolvedValueOnce(
+          new Response(jsonBody, {
+            status: 200,
+            headers: {
+              "content-type": "application/json",
+              "content-length": String(jsonBody.length),
+            },
+          })
+        );
+
+        const response = await ProxyForwarder.send(session);
+
+        expect(await response.text()).toBe(jsonBody);
+        expect(doForward).toHaveBeenCalledTimes(2);
+        expect(mocks.recordFailure).toHaveBeenCalledWith(
+          provider1.id,
+          expect.objectContaining({ message: "FAKE_200_HTML_BODY" })
+        );
+        expect(mocks.recordSuccess).not.toHaveBeenCalledWith(provider1.id);
+        expect(mocks.recordSuccess).toHaveBeenCalledWith(provider2.id);
+      }
+    );
 
     test("默认 off：含 error 帧的 200 SSE 原样透传，不触发 failover", async () => {
       const provider1 = createProvider({ id: 1, name: "gate-p1" });

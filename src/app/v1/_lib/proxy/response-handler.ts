@@ -78,7 +78,7 @@ import {
   createReplaySpoolIfOwner,
   releaseReplayOwnership,
 } from "./replay/replay-spool";
-import { isMalformedJsonResponseBody } from "./response-content-type";
+import { isJsonResponseContentType, isMalformedJsonResponseBody } from "./response-content-type";
 import type { ProxySession } from "./session";
 import {
   consumeDeferredStreamingFinalization,
@@ -104,6 +104,33 @@ const STREAM_STATS_TAIL_BYTES = STREAM_STATS_MAX_BUFFER_BYTES - STREAM_STATS_HEA
 const STREAM_STATS_SLAB_BYTES = 64 * 1024;
 const STREAM_STATS_TRUNCATED_MARKER = "\n\n: [cch_truncated]\n\n";
 const RESPONSE_TEXT_ENCODER = new TextEncoder();
+
+function isCodexResponsesStreamRequest(session: ProxySession): boolean {
+  return (
+    session.provider?.providerType === "codex" &&
+    (session.originalFormat === "response" || session.getEndpoint() === "/v1/responses") &&
+    session.request.message.stream === true
+  );
+}
+
+export function shouldForceCodexResponsesStreamHandling(
+  session: ProxySession,
+  response: Response
+): boolean {
+  const contentType = response.headers.get("content-type");
+  const mediaType = contentType?.split(";", 1)[0]?.trim().toLowerCase() ?? "";
+
+  return (
+    isCodexResponsesStreamRequest(session) &&
+    !!response.body &&
+    response.status >= 200 &&
+    response.status < 300 &&
+    mediaType !== "text/event-stream" &&
+    mediaType !== "text/html" &&
+    mediaType !== "application/xhtml+xml" &&
+    !isJsonResponseContentType(contentType)
+  );
+}
 
 function protocolObservationFromMetering(
   snapshot: ClientAbortMeteringSnapshot
@@ -2675,13 +2702,16 @@ export class ProxyResponseHandler {
     const snapshotSession = session as ProxySession & {
       detailSnapshotResponseBeforeSource?: Response | null;
     };
-    const isStreamingResponse = response.headers.get("content-type")?.includes("text/event-stream");
+    const forceCodexResponsesStream = shouldForceCodexResponsesStreamHandling(session, response);
+    const isStreamingResponse =
+      forceCodexResponsesStream ||
+      response.headers.get("content-type")?.includes("text/event-stream");
     if (!isStreamingResponse && session.sessionId && session.shouldPersistSessionDebugArtifacts()) {
       snapshotSession.detailSnapshotResponseBeforeSource = response.clone();
     }
 
     let fixedResponse = response;
-    if (!session.getEndpointPolicy().bypassResponseRectifier) {
+    if (!forceCodexResponsesStream && !session.getEndpointPolicy().bypassResponseRectifier) {
       try {
         // raw passthrough 端点跳过 ResponseFixer，也跳过其中的 Responses 输出归一化。
         fixedResponse = await ResponseFixer.process(session, response);
@@ -2702,8 +2732,22 @@ export class ProxyResponseHandler {
     const contentType = fixedResponse.headers.get("content-type") || "";
     const isSSE = contentType.includes("text/event-stream");
 
-    if (!isSSE) {
+    if (!isSSE && !forceCodexResponsesStream) {
       return await ProxyResponseHandler.handleNonStream(session, fixedResponse);
+    }
+
+    if (forceCodexResponsesStream && !isSSE) {
+      logger.debug(
+        "[ResponseHandler] Forcing Codex Responses stream handling without SSE content-type",
+        {
+          sessionId: session.sessionId ?? null,
+          requestSequence: session.requestSequence ?? null,
+          messageId: session.messageContext?.id ?? null,
+          providerId: session.provider?.id ?? null,
+          httpStatusCode: fixedResponse.status,
+          contentType: contentType || null,
+        }
+      );
     }
 
     return await ProxyResponseHandler.handleStream(session, fixedResponse);
@@ -5719,6 +5763,9 @@ export class ProxyResponseHandler {
     // ⭐ 修复 Bun 运行时的 Transfer-Encoding 重复问题
     // 清理上游的传输 headers，让 Response API 自动管理
     const finalStreamHeaders = cleanResponseHeaders(response.headers);
+    if (shouldForceCodexResponsesStreamHandling(session, response)) {
+      finalStreamHeaders.set("content-type", "text/event-stream; charset=utf-8");
+    }
     if (session.sessionId && session.shouldPersistSessionDebugArtifacts()) {
       const responseAfterMetaTask = SessionManager.storeSessionResponsePhaseSnapshot?.(
         session.sessionId,

@@ -117,7 +117,10 @@ import {
 import { ProxyProviderResolver } from "./provider-selector";
 import { abortReplayOwnership, releaseReplayOwnership } from "./replay/replay-spool";
 import { isJsonResponseContentType, isMalformedJsonResponseBody } from "./response-content-type";
-import { finalizeHedgeLoserBilling } from "./response-handler";
+import {
+  finalizeHedgeLoserBilling,
+  shouldForceCodexResponsesStreamHandling,
+} from "./response-handler";
 import type { ProxySession } from "./session";
 import {
   type DeferredStreamingHedgeBindingAuthority,
@@ -1932,7 +1935,12 @@ export class ProxyForwarder {
           // ========== 空响应检测（仅非流式）==========
           const contentType = response.headers.get("content-type") || "";
           const normalizedContentType = contentType.toLowerCase();
-          const isSSE = normalizedContentType.includes("text/event-stream");
+          const forceCodexResponsesStream = shouldForceCodexResponsesStreamHandling(
+            session,
+            response
+          );
+          const isSSE =
+            normalizedContentType.includes("text/event-stream") || forceCodexResponsesStream;
           const isHtml =
             normalizedContentType.includes("text/html") ||
             normalizedContentType.includes("application/xhtml+xml");
@@ -1957,12 +1965,17 @@ export class ProxyForwarder {
             let streamingResponse = response;
             let gateChainAudit: ProviderChainItem["streamGate"];
             const gateMode = resolveStreamGateMode();
+            // Missing or misleading MIME is not enough to distinguish SSE from a headerless
+            // JSON fake-200. Always use the bounded precommit gate for this compatibility path,
+            // even when ordinary stream gating is off or shadow-only.
             const shouldRunPrecommitGate =
-              gateMode === "enforce" || session.replayState?.role === "owner";
+              gateMode === "enforce" ||
+              session.replayState?.role === "owner" ||
+              forceCodexResponsesStream;
             if (
               shouldRunPrecommitGate &&
               response.body &&
-              session.getEndpointPolicy().kind !== "raw_passthrough"
+              (session.getEndpointPolicy().kind !== "raw_passthrough" || forceCodexResponsesStream)
             ) {
               const gateFamily = mapProviderTypeToFamily(currentProvider.providerType);
               if (gateFamily) {
@@ -5083,9 +5096,18 @@ export class ProxyForwarder {
             // F1 门控（enforce 或 Replay owner）：胜者判定从「首个非空字节」升级为
             // 「首个有效内容帧」。
             // 级联阈值计时器保持不动——内容慢的 attempt 不提交，自动触发下一候选竞速。
+            const forceCodexResponsesStream = shouldForceCodexResponsesStreamHandling(
+              attempt.session,
+              response
+            );
+            const shouldRunHedgePrecommitGate =
+              resolveStreamGateMode() === "enforce" ||
+              attempt.session.replayState?.role === "owner" ||
+              forceCodexResponsesStream;
             const hedgeGateFamily =
-              (resolveStreamGateMode() === "enforce" || session.replayState?.role === "owner") &&
-              session.getEndpointPolicy().kind !== "raw_passthrough"
+              shouldRunHedgePrecommitGate &&
+              (attempt.session.getEndpointPolicy().kind !== "raw_passthrough" ||
+                forceCodexResponsesStream)
                 ? mapProviderTypeToFamily(attempt.provider.providerType)
                 : null;
 
