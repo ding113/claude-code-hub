@@ -173,6 +173,26 @@ describe("cluster supervisor", () => {
     expect(logs).toContain("multicore_worker_restart_scheduled");
   });
 
+  it("absorbs asynchronous worker errors and lets exit drive one restart", () => {
+    vi.useFakeTimers();
+    const clusterModule = new FakeCluster();
+    const { supervisor, logs } = makeSupervisor(clusterModule);
+    supervisor.start();
+    const failedWorker = clusterModule.workers[0];
+
+    expect(() => failedWorker.emit("error", new Error("spawn EAGAIN"))).not.toThrow();
+    expect(logs).toContain("multicore_worker_error");
+    expect(supervisor.snapshot().restartSlots).toEqual([]);
+
+    failedWorker.emit("exit", 1, null);
+    expect(supervisor.snapshot().restartSlots).toEqual([0]);
+    vi.advanceTimersByTime(10);
+
+    expect(clusterModule.workers).toHaveLength(2);
+    expect(clusterModule.workers[1].env.CCH_MULTICORE_WORKER_INDEX).toBe("0");
+    expect(logs.filter((event) => event === "multicore_worker_exited")).toHaveLength(1);
+  });
+
   it("restarts an unexpectedly exited worker in the same resource slot", () => {
     vi.useFakeTimers();
     const clusterModule = new FakeCluster();
@@ -207,7 +227,7 @@ describe("cluster supervisor", () => {
     expect(clusterModule.workers[1].env.CCH_MULTICORE_WORKER_INDEX).toBe("0");
   });
 
-  it("force-kills a startup worker that ignores the readiness SIGTERM", () => {
+  it("rejects late readiness and force-kills a startup worker after timeout", () => {
     vi.useFakeTimers();
     const clusterModule = new FakeCluster();
     const { supervisor, logs } = makeSupervisor(clusterModule, {
@@ -223,10 +243,17 @@ describe("cluster supervisor", () => {
       },
     });
     supervisor.start();
+    const stalledOwner = clusterModule.workers[0];
 
-    vi.advanceTimersByTime(120);
-    expect(clusterModule.workers[0].process.kill).toHaveBeenNthCalledWith(1, "SIGTERM");
-    expect(clusterModule.workers[0].process.kill).toHaveBeenNthCalledWith(2, "SIGKILL");
+    vi.advanceTimersByTime(100);
+    ready(stalledOwner);
+    expect(supervisor.snapshot().readySlots).toEqual([]);
+    expect(clusterModule.workers).toHaveLength(1);
+    expect(logs).toContain("multicore_worker_ready_after_timeout");
+
+    vi.advanceTimersByTime(20);
+    expect(stalledOwner.process.kill).toHaveBeenNthCalledWith(1, "SIGTERM");
+    expect(stalledOwner.process.kill).toHaveBeenNthCalledWith(2, "SIGKILL");
     expect(logs).toContain("multicore_worker_ready_force_kill");
   });
 

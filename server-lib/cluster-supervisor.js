@@ -249,6 +249,20 @@ function createClusterSupervisor(options) {
     if (failureCount !== null) scheduleRestart(record.slot, failureCount);
   }
 
+  function handleWorkerError(record, error) {
+    // cluster.Worker 会把异步 spawn/IPC 错误作为 `error` 事件抛出。这里必须
+    // 消费该事件以免 EventEmitter 击穿 primary；崩溃计数与重启仍统一由
+    // `exit` 路径负责，避免同一次故障被重复计数或重复拉起。
+    if (workersBySlot.get(record.slot) !== record) return;
+    emitLog("error", "multicore_worker_error", {
+      workerIndex: record.slot,
+      pid: workerPid(record.worker),
+      ready: record.ready,
+      shuttingDown,
+      error: String(error?.message || error),
+    });
+  }
+
   function handleWorkerReady(record, message) {
     if (
       message?.type !== WORKER_READY_MESSAGE_TYPE ||
@@ -256,6 +270,13 @@ function createClusterSupervisor(options) {
       record.ready ||
       shuttingDown
     ) {
+      return;
+    }
+    if (record.startupTimedOut) {
+      emitLog("warn", "multicore_worker_ready_after_timeout", {
+        workerIndex: record.slot,
+        pid: workerPid(record.worker),
+      });
       return;
     }
     record.ready = true;
@@ -300,12 +321,21 @@ function createClusterSupervisor(options) {
       return null;
     }
 
-    const record = { slot, worker, ready: false, readyTimer: null, readyKillTimer: null };
+    const record = {
+      slot,
+      worker,
+      ready: false,
+      startupTimedOut: false,
+      readyTimer: null,
+      readyKillTimer: null,
+    };
     workersBySlot.set(slot, record);
     worker.on("message", (message) => handleWorkerReady(record, message));
+    worker.on("error", (error) => handleWorkerError(record, error));
     worker.once("exit", (code, signal) => handleWorkerExit(record, code, signal));
     record.readyTimer = setTimer(() => {
       if (workersBySlot.get(slot) !== record || record.ready || shuttingDown) return;
+      record.startupTimedOut = true;
       emitLog("error", "multicore_worker_ready_timeout", {
         workerIndex: slot,
         pid: workerPid(worker),
@@ -313,7 +343,7 @@ function createClusterSupervisor(options) {
       });
       sendWorkerSignal(worker, "SIGTERM");
       record.readyKillTimer = setTimer(() => {
-        if (workersBySlot.get(slot) !== record || record.ready || shuttingDown) return;
+        if (workersBySlot.get(slot) !== record || shuttingDown) return;
         emitLog("error", "multicore_worker_ready_force_kill", {
           workerIndex: slot,
           pid: workerPid(worker),
