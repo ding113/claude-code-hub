@@ -68,4 +68,4 @@ RUN mkdir -p /app/reports && chown node:node /app/reports
 USER node
 EXPOSE 3000
 
-CMD ["node", "--report-on-fatalerror", "--report-uncaught-exception", "--report-exclude-env", "--report-directory=/app/reports", "server.js"]
+CMD ["node", "--report-on-fatalerror", "--report-uncaught-exception", "--report-exclude-env", "--report-directory=/app/reports", "cluster.js"]

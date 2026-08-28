@@ -69,7 +69,10 @@ export function registerCrashDiagnostics(): void {
         // Diagnostic reports are durable artifacts. Exclude the entire
         // environment rather than maintaining an incomplete secret allowlist.
         report.excludeEnv = true;
-        return report.writeReport(`report.${trigger}.${Date.now()}.json`, toSafeCrashError(err));
+        return report.writeReport(
+          `report.${trigger}.${process.pid}.${Date.now()}.json`,
+          toSafeCrashError(err)
+        );
       }
     } catch {
       // 写入诊断报告失败不应再抛出
@@ -183,6 +186,12 @@ function logStartupMarker(): void {
  *
  * 注意: 此函数会传播关键错误,调用者应决定是否需要优雅降级
  */
+async function reloadErrorRuleDetectorCache(): Promise<void> {
+  const { errorRuleDetector } = await import("@/lib/error-rule-detector");
+  await errorRuleDetector.reload();
+  logger.info("Error rule detector cache loaded successfully");
+}
+
 async function syncErrorRulesAndInitializeDetector(): Promise<void> {
   // 同步默认错误规则到数据库 - 每次启动都完整同步
   const { syncDefaultErrorRules } = await import("@/repository/error-rules");
@@ -192,9 +201,7 @@ async function syncErrorRulesAndInitializeDetector(): Promise<void> {
   );
 
   // 加载错误规则缓存 - 让关键错误传播
-  const { errorRuleDetector } = await import("@/lib/error-rule-detector");
-  await errorRuleDetector.reload();
-  logger.info("Error rule detector cache loaded successfully");
+  await reloadErrorRuleDetectorCache();
 }
 
 /**
@@ -409,6 +416,26 @@ function warmupApiKeyVacuumFilter(): void {
   void startApiKeyVacuumFilterSync();
 }
 
+async function warmupProxyRuntimeSettings(): Promise<void> {
+  try {
+    const { getProxyRuntimeSettings } = await import("@/lib/system-settings/proxy-runtime");
+    await getProxyRuntimeSettings();
+  } catch (error) {
+    logger.warn("[Instrumentation] Proxy runtime settings warmup failed", {
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
+/**
+ * 同一进程 cluster 内仅 slot 0 持有单例调度器和队列 consumer。每个网关 worker
+ * 仍需初始化进程本地缓存、生命周期 hook 与可观测性。单进程和外部横向扩容部署
+ * 不携带此标记，因此保持原有行为。
+ */
+export function shouldRunBackgroundTasks(env: NodeJS.ProcessEnv = process.env): boolean {
+  return env.CCH_MULTICORE_BACKGROUND_OWNER !== "0";
+}
+
 export async function register() {
   // 仅在服务器端执行
   if (process.env.NEXT_RUNTIME === "nodejs") {
@@ -454,6 +481,35 @@ export async function register() {
 
     // 生产环境: 执行完整初始化(迁移 + 价格表 + 清理任务 + 通知任务)
     if (process.env.NODE_ENV === "production") {
+      if (!shouldRunBackgroundTasks()) {
+        logger.info("[Multicore] Initializing request-only gateway worker", {
+          workerIndex: process.env.CCH_MULTICORE_WORKER_INDEX ?? null,
+          workerCount: process.env.CCH_MULTICORE_WORKER_COUNT ?? null,
+        });
+
+        // 主进程先启动 slot 0，待其报告 ready 后才 fork 仅处理请求的 worker，
+        // 因此迁移和默认规则同步已完成；这里只验证共享存储并初始化进程本地状态。
+        const { checkDatabaseConnection } = await import("@/lib/migrate");
+        const isConnected = await checkDatabaseConnection();
+        if (!isConnected) {
+          logger.error("Cannot start gateway worker without database connection");
+          process.exit(1);
+        }
+
+        warmupApiKeyVacuumFilter();
+        try {
+          await reloadErrorRuleDetectorCache();
+        } catch (error) {
+          logger.error(
+            "[Instrumentation] Non-critical: Error rule detector initialization failed",
+            error
+          );
+        }
+        await warmupProxyRuntimeSettings();
+        logger.info("[Multicore] Request-only gateway worker ready");
+        return;
+      }
+
       const { checkDatabaseConnection, runMigrations, withAdvisoryLock } = await import(
         "@/lib/migrate"
       );
@@ -675,18 +731,7 @@ export async function register() {
       await startReplayCleanupScheduler();
 
       // F1/F3a：预热代理运行时设置快照（stream gate / affinity 的同步读取路径）
-      try {
-        const { getProxyRuntimeSettings } = await import("@/lib/system-settings/proxy-runtime");
-        void getProxyRuntimeSettings().catch((error) => {
-          logger.warn("[Instrumentation] Proxy runtime settings warmup failed", {
-            error: error instanceof Error ? error.message : String(error),
-          });
-        });
-      } catch (error) {
-        logger.warn("[Instrumentation] Proxy runtime settings warmup init failed", {
-          error: error instanceof Error ? error.message : String(error),
-        });
-      }
+      await warmupProxyRuntimeSettings();
 
       logger.info("Application ready");
     }
@@ -855,18 +900,7 @@ export async function register() {
         await startReplayCleanupScheduler();
 
         // F1/F3a：预热代理运行时设置快照（stream gate / affinity 的同步读取路径）
-        try {
-          const { getProxyRuntimeSettings } = await import("@/lib/system-settings/proxy-runtime");
-          void getProxyRuntimeSettings().catch((error) => {
-            logger.warn("[Instrumentation] Proxy runtime settings warmup failed", {
-              error: error instanceof Error ? error.message : String(error),
-            });
-          });
-        } catch (error) {
-          logger.warn("[Instrumentation] Proxy runtime settings warmup init failed", {
-            error: error instanceof Error ? error.message : String(error),
-          });
-        }
+        await warmupProxyRuntimeSettings();
       } else {
         logger.warn(
           "[Instrumentation] Database unavailable: skipping endpoint probe scheduler and cleanup"

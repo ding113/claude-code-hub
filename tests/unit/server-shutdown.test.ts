@@ -18,7 +18,8 @@ const requireFromHere = createRequire(import.meta.url);
 type ServerJsModule = {
   registerOrchestratedShutdown: (
     server: { close: (cb: (err?: Error) => void) => void; on?: unknown },
-    wss: { close: (cb?: (err?: Error) => void) => void } | null
+    wss: { close: (cb?: (err?: Error) => void) => void } | null,
+    auxiliaryServers?: Array<{ close: (cb: (err?: Error) => void) => void }>
   ) => void;
 };
 
@@ -60,6 +61,9 @@ describe.sequential("registerOrchestratedShutdown", () => {
     const closeServer = vi.fn((cb: (err?: Error) => void) => {
       setTimeout(() => cb(), 5);
     });
+    const closePrivateServer = vi.fn((cb: (err?: Error) => void) => {
+      setTimeout(() => cb(), 5);
+    });
     const closeWss = vi.fn();
     const server = { close: closeServer };
     const wss = { close: closeWss };
@@ -77,7 +81,7 @@ describe.sequential("registerOrchestratedShutdown", () => {
     process.exit = exitSpy;
 
     const { registerOrchestratedShutdown } = loadServerModule();
-    registerOrchestratedShutdown(server, wss);
+    registerOrchestratedShutdown(server, wss, [{ close: closePrivateServer }]);
 
     // Trigger SIGTERM
     process.emit("SIGTERM");
@@ -87,6 +91,7 @@ describe.sequential("registerOrchestratedShutdown", () => {
 
     expect(markShuttingDown).toHaveBeenCalledTimes(1);
     expect(closeServer).toHaveBeenCalledTimes(1);
+    expect(closePrivateServer).toHaveBeenCalledTimes(1);
     expect(closeWss).toHaveBeenCalledTimes(1);
     expect(runApplicationCleanup).toHaveBeenCalledWith(
       "SIGTERM",

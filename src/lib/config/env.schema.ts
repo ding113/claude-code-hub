@@ -40,7 +40,8 @@ export const EnvSchema = z.object({
   }, z.string().url("数据库URL格式无效")),
   // PostgreSQL 连接池配置（postgres.js）
   // - 多副本部署（k8s）需要结合数据库 max_connections 分摊配置
-  // - DB_POOL_MAX 是每个应用进程内 data/control/writer 三类 pool 的连接总预算
+  // - 单进程时 DB_POOL_MAX 是 data/control/writer 三类 pool 的连接总预算
+  // - 内置 cluster launcher 会在启动 worker 前把容器级总预算分摊为这里读取的进程分片
   DB_POOL_MAX: optionalNumber(
     z.number().int().min(1, "DB_POOL_MAX 不能小于 1").max(200, "DB_POOL_MAX 不能大于 200")
   ),
@@ -200,7 +201,7 @@ export const EnvSchema = z.object({
   // 超时后主动断开该输家连接，仅用已收到的内容尝试计费（通常计不出 -> 跳过）。
   HEDGE_LOSER_DRAIN_TIMEOUT_MS: z.coerce.number().int().min(1000).default(120_000),
 
-  // 客户端断线后的 detached stream 使用进程级带权预算。
+  // 客户端断线后的 detached stream 使用进程级带权预算；内置 cluster 会先分摊容器总预算。
   DETACHED_STREAM_MAX_CONCURRENCY: z.coerce.number().int().min(1).max(4096).default(64),
   DETACHED_STREAM_BUDGET_BYTES: z.coerce
     .number()
@@ -228,6 +229,7 @@ export const EnvSchema = z.object({
     .max(64 * 1024 * 1024)
     .default(10 * 1024 * 1024),
   // 所有正在门禁 precommit 阶段及等待下游消费的前缀共享该进程级预算。
+  // 内置 cluster 会先分摊容器总预算，避免每个 worker 各拿一整份。
   STREAM_GATE_GLOBAL_PREBUFFER_BYTE_CAP: z.coerce
     .number()
     .int()

@@ -27,7 +27,8 @@ type ServerModule = {
       response?: http.IncomingMessage | null,
       settleTurn?: () => boolean
     ) => boolean | undefined,
-    close?: (code: number, reason: string) => void
+    close?: (code: number, reason: string) => void,
+    internalHttpTarget?: { hostname: string; port: number }
   ) => Promise<void>;
 };
 
@@ -125,6 +126,30 @@ afterEach(() => {
 });
 
 describe("server response write backpressure", () => {
+  it("uses the explicit per-worker loopback target instead of the shared public port", async () => {
+    const events: string[] = [];
+    const request = createClientRequest(true, events);
+    let capturedOptions: http.RequestOptions | undefined;
+    vi.spyOn(http, "request").mockImplementation((options) => {
+      capturedOptions = options as http.RequestOptions;
+      setImmediate(() => request.emit("error", new Error("test settlement")));
+      return request;
+    });
+    const input = requestInput();
+
+    await serverModule.forwardToInternalHttp(
+      input.ws,
+      input.request,
+      input.body,
+      "test-session",
+      undefined,
+      undefined,
+      { hostname: "127.0.0.1", port: 43123 }
+    );
+
+    expect(capturedOptions).toMatchObject({ hostname: "127.0.0.1", port: 43123 });
+  });
+
   it("waits for request drain before ending a backpressured payload", async () => {
     const events: string[] = [];
     const request = createClientRequest(false, events);
