@@ -11,7 +11,7 @@
 import { getEnvConfig } from "@/lib/config/env.schema";
 import { getCachedSystemSettings } from "@/lib/config/system-settings-cache";
 import { logger } from "@/lib/logger";
-import { isValidIANATimezone } from "./timezone-shared";
+import { isValidIANATimezone } from "@/lib/utils/timezone-shared";
 
 export {
   COMMON_TIMEZONES,
