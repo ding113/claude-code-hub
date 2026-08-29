@@ -38,9 +38,9 @@ min(4, floor(effective_vCPU / 2), memory_capacity, shared_budget_capacity)
 - 内存：`os.totalmem()` 与 cgroup v2/v1 memory limit 的最小值。
 - 默认每个完整网关预留 1024 MiB，并为轻量 primary/运行时开销预留 256 MiB。
 
-自动模式还要求配置 `REDIS_URL`，且 `ENABLE_RATE_LIMIT` 不能关闭。错误规则、请求过滤器、敏感词、Provider cache、系统设置、Provider group 计费倍率和 API Key Vacuum Filter 等进程本地快照使用 Redis Pub/Sub 接收微小的失效通知；没有这条控制通道时自动回退单进程，避免管理写入只刷新命中它的某一个 worker。显式要求多进程但缺少该通道会直接启动失败。Redis 运行期故障仍沿用现有多实例 fail-open 语义，恢复前应避免修改上述动态配置。
+自动模式还要求配置 `REDIS_URL`，且 `ENABLE_RATE_LIMIT` 不能关闭。错误规则、请求过滤器、敏感词、Provider cache、系统设置、Provider group 计费倍率、熔断配置和 API Key Vacuum Filter 等进程本地快照使用 Redis Pub/Sub 接收微小的失效通知；没有这条控制通道时自动回退单进程，避免管理写入只刷新命中它的某一个 worker。显式要求多进程但缺少该通道会直接启动失败。Redis 在启动或运行期间暂时不可用时，订阅登记不会丢失：共享订阅器按 1 秒到 60 秒的指数退避持续重试；首次订阅和每次重连成功后都会向所有登记者合成一次 resync 失效，强制从数据库等权威存储重载，从而覆盖 Pub/Sub 无法补发的断线窗口。恢复前仍沿用现有多实例 fail-open 语义。
 
-Provider group 倍率缓存额外使用版本号阻止“更新通知到达后，较早发出的 DB 查询才返回并重新写入旧值”的竞态；更新广播只在数据库提交后发送。每进程缓存最多保留 10,000 个原始 group 表达式，TTL 为 60 秒，避免高基数字符串在多个 V8 heap 中无界累积。多核心 worker 会在报告 ready 前等待首次订阅；Redis 临时不可用时保留 TTL 降级语义并记录告警。
+Provider group 倍率缓存额外使用版本号阻止“更新通知到达后，较早发出的 DB 查询才返回并重新写入旧值”的竞态；更新广播只在数据库提交后发送。每进程缓存最多保留 10,000 个原始 group 表达式，TTL 为 60 秒，避免高基数字符串在多个 V8 heap 中无界累积。多核心 worker 会在报告 ready 前完成首次订阅尝试；Redis 临时不可用时保留 TTL 降级语义、持续后台恢复且不在请求正文路径排队。
 
 系统设置缓存使用相同的查询版本栅栏，覆盖计费口径、hedge loser、stream gate、replay、限额 lease 和响应策略等热路径开关。保存操作在数据库提交后先清空本进程，再发布不含设置内容的失效消息；其他 worker 收到后只清本地快照。发布失败时仍由 60 秒 TTL 收敛，不会把完整配置对象放进 Redis Pub/Sub。
 

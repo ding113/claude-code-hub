@@ -27,7 +27,11 @@ import {
   loadCircuitState,
   saveCircuitState,
 } from "@/lib/redis/circuit-breaker-state";
-import { publishCacheInvalidation, subscribeCacheInvalidation } from "@/lib/redis/pubsub";
+import {
+  CACHE_INVALIDATION_RESYNC_MESSAGE,
+  publishCacheInvalidation,
+  subscribeCacheInvalidation,
+} from "@/lib/redis/pubsub";
 
 // 修复：导出 ProviderHealth 类型，供其他模块使用
 export interface ProviderHealth {
@@ -122,6 +126,22 @@ function parseConfigInvalidationProviderIds(message: string): number[] | null {
   }
 }
 
+/**
+ * Pub/Sub 重连意味着断线窗口内可能漏掉任意 provider 的定向消息。此时必须清空
+ * 当前进程持有的全部配置快照，并推进版本栅栏，避免在途旧查询重新写回。
+ */
+function clearAllConfigCachesAfterResync(): number {
+  let clearedCount = 0;
+  for (const [providerId, health] of healthMap) {
+    bumpConfigCacheVersion(providerId);
+    health.config = null;
+    health.configLoadedAt = null;
+    clearedCount++;
+  }
+  configLoadInFlight.clear();
+  return clearedCount;
+}
+
 async function ensureConfigInvalidationSubscription(): Promise<void> {
   if (configInvalidationSubscriptionInitialized) return;
   if (configInvalidationSubscriptionPromise) return configInvalidationSubscriptionPromise;
@@ -142,6 +162,14 @@ async function ensureConfigInvalidationSubscription(): Promise<void> {
     const cleanup = await subscribeCacheInvalidation(
       CHANNEL_CIRCUIT_BREAKER_CONFIG_UPDATED,
       (message) => {
+        if (message === CACHE_INVALIDATION_RESYNC_MESSAGE) {
+          const count = clearAllConfigCachesAfterResync();
+          logger.info("[CircuitBreaker] Cleared all config caches after pub/sub resync", {
+            count,
+          });
+          return;
+        }
+
         const ids = parseConfigInvalidationProviderIds(message);
         if (!ids) return;
 

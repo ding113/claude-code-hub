@@ -15,7 +15,7 @@ SSE chunk：多个完整 gateway worker 直接从共享监听端口接收不同�
 
 本分支据此实现了资源感知的 Node cluster：
 
-- auto 仅在 production、有效 vCPU 不少于 4、内存和共享预算足够、Redis 失效通道可用时开启；
+- auto 仅在 production、有效 vCPU 不少于 4、内存和共享预算足够、Redis 失效通道已配置时开启；
 - 4 vCPU 默认 2 个 gateway worker，6 vCPU 默认 3 个，8 vCPU 及以上默认最多 4 个；
 - primary 只转交 socket handle，应用 IPC 只有 type、workerIndex、pid 三个 ready 字段；
 - 请求正文和解析后的普通 JavaScript 对象不经过 IPC，不产生第二份跨 isolate 对象树；
@@ -25,8 +25,9 @@ SSE chunk：多个完整 gateway worker 直接从共享监听端口接收不同�
 - 仅 slot 0 运行 singleton 后台任务，其余 worker 只初始化请求必需的本地状态；
 - 每个 worker 有独占的 IPv4 loopback listener，Responses WebSocket 内部请求不会被另一 worker
   接走；
-- 系统设置与 Provider group 计费倍率缓存使用提交后 Redis 广播和查询版本 fence；倍率缓存
-  另有 60 秒 TTL 与每进程 10,000 项上限，避免跨进程旧值和高基数内存增长；
+- 进程本地安全/路由缓存使用持久登记的 Redis 订阅；首次连接失败会指数退避自愈，首次订阅和重连后
+  合成 resync 强制刷新，覆盖断线期间无法补发的消息；系统设置与 Provider group 计费倍率另使用
+  提交后广播和查询版本 fence，倍率缓存有 60 秒 TTL 与每进程 10,000 项上限；
 - worker error、缺失 exit、启动超时、crash loop 和 shutdown 都有有界监督。
 
 因此，本次没有加入 parse-only worker，也没有把终态 SQL/Redis 写回改成进程内 fire-and-forget。
@@ -101,7 +102,7 @@ worker_threads 能并行 CPU JavaScript，但普通对象使用 structured clone
 | routing trace outbox recovery | 重复扫描/竞争 | slot 0/outbox worker | 已 gate，长期可独立 worker |
 | Bull cleanup、notification、user reset | 多 gateway 注册会放大 Redis 连接 | slot 0/queue-worker | 已 gate，长期可独立扩缩 |
 | session cache cleanup | 每进程自己的 cache | 每个 gateway | 必须每 worker 运行 |
-| provider、filter、sensitive、API key、倍率 cache 订阅 | 每进程自己的只读副本 | 每个 gateway | 必须每 worker 运行并支持失效 |
+| provider、filter、sensitive、API key、倍率 cache 订阅 | 每进程自己的只读副本 | 每个 gateway | 必须每 worker 持久登记、断线重试并在恢复后强制刷新 |
 | lifecycle、Langfuse、crash diagnostics | 进程本地 | 每个 gateway | 必须每 worker 运行 |
 
 ## 为什么完整请求分片优于 parse-only worker
@@ -176,7 +177,7 @@ TerminalAnalysis。它仍是 P2 实验，因为 CCH 的 DB/Redis/provider/retry 
 5. 私有 WS loopback，避免 cluster 跨 worker 错路由和正文 IPC。
 6. worker startup/error/exit/crash-loop/shutdown 的有界监督。
 7. standalone 与 Docker 启动入口、server-lib 产物复制和部署文档。
-8. 系统设置与 Provider group 倍率跨进程提交后失效、查询版本栅栏和有界降级。
+8. 全部本地安全/路由缓存的持久订阅、断线恢复 resync，以及系统设置与 Provider group 倍率的提交后失效、查询版本栅栏和有界降级。
 
 ### 下一阶段 P1：先减少工作和复制
 
