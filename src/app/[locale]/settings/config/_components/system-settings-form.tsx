@@ -23,7 +23,7 @@ import {
   Zap,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -142,6 +142,7 @@ export function SystemSettingsForm({
   replayDefaultEnabled = true,
 }: SystemSettingsFormProps) {
   const router = useRouter();
+  const locale = useLocale();
   const t = useTranslations("settings.config.form");
   const tSettings = useTranslations("settings");
   const tCommon = useTranslations("settings.common");
@@ -648,7 +649,7 @@ export function SystemSettingsForm({
             <SelectItem value="__auto__">{t("timezoneAuto")}</SelectItem>
             {COMMON_TIMEZONES.map((tz) => (
               <SelectItem key={tz} value={tz}>
-                {getTimezoneLabel(tz)}
+                {getTimezoneLabel(tz, locale)}
               </SelectItem>
             ))}
           </SelectContent>

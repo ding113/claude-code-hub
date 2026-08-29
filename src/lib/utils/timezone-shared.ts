@@ -47,7 +47,7 @@ export function isValidIANATimezone(timezone: string): boolean {
 }
 
 /** 生成包含当前 UTC offset 的下拉框标签。 */
-export function getTimezoneLabel(timezone: string, locale = "en"): string {
+export function getTimezoneLabel(timezone: string, locale: string): string {
   if (!isValidIANATimezone(timezone)) return timezone;
 
   try {
