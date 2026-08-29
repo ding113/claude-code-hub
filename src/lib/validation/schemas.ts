@@ -15,7 +15,7 @@ import {
   PUBLIC_STATUS_INTERVAL_OPTIONS,
 } from "@/lib/public-status/constants";
 import { CURRENCY_CONFIG } from "@/lib/utils/currency";
-import { isValidIANATimezone } from "@/lib/utils/timezone";
+import { isValidIANATimezone } from "@/lib/utils/timezone-shared";
 import {
   DISCOVERY_FIELD_LIMITS,
   DISCOVERY_SETTINGS_INVALID_ERROR_CODE,

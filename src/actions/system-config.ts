@@ -225,10 +225,6 @@ export async function saveSystemSettings(formData: {
 
     // Invalidate the system settings cache so proxy requests get fresh settings
     invalidateSystemSettingsCache();
-    const { invalidateProviderSelectorSystemSettingsCache } = await import(
-      "@/app/v1/_lib/proxy/provider-selector-settings-cache"
-    );
-    invalidateProviderSelectorSystemSettingsCache();
 
     if (validated.timezone !== undefined) {
       await Promise.all([

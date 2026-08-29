@@ -29,6 +29,8 @@ class SensitiveWordCache {
   private regex: RegexPattern[] = [];
   private lastReloadTime: number = 0;
   private isLoading: boolean = false;
+  private activeReloadPromise: Promise<void> | null = null;
+  private reloadRequestedWhileLoading = false;
 
   private eventEmitterCleanup: (() => void) | null = null;
   private redisPubSubCleanup: (() => void) | null = null;
@@ -85,62 +87,79 @@ class SensitiveWordCache {
    * 从数据库重新加载敏感词列表
    */
   async reload(): Promise<void> {
-    if (this.isLoading) {
-      logger.warn("[SensitiveWordCache] Reload already in progress, skipping");
-      return;
+    if (this.activeReloadPromise) {
+      // 管理端写入或 pub/sub resync 可能与已有加载重叠。排队补跑而不是丢弃，
+      // 否则断线窗口内的新敏感词可能永久缺失于本地快照。
+      this.reloadRequestedWhileLoading = true;
+      return this.activeReloadPromise;
     }
 
-    this.isLoading = true;
+    const reloadLoop = (async () => {
+      do {
+        this.reloadRequestedWhileLoading = false;
+        this.isLoading = true;
 
-    try {
-      logger.info("[SensitiveWordCache] Reloading sensitive words from database...");
+        try {
+          logger.info("[SensitiveWordCache] Reloading sensitive words from database...");
 
-      const words = await getActiveSensitiveWords();
+          const words = await getActiveSensitiveWords();
+          const nextContains: string[] = [];
+          const nextExact = new Set<string>();
+          const nextRegex: RegexPattern[] = [];
 
-      // 清空旧缓存
-      this.contains = [];
-      this.exact.clear();
-      this.regex = [];
+          // 先构建完整的新快照，再同步替换，避免加载期间暴露部分规则。
+          for (const word of words) {
+            const lowerWord = word.word.toLowerCase();
 
-      // 按类型分组
-      for (const word of words) {
-        const lowerWord = word.word.toLowerCase();
+            switch (word.matchType) {
+              case "contains":
+                nextContains.push(lowerWord);
+                break;
 
-        switch (word.matchType) {
-          case "contains":
-            this.contains.push(lowerWord);
-            break;
+              case "exact":
+                nextExact.add(lowerWord);
+                break;
 
-          case "exact":
-            this.exact.add(lowerWord);
-            break;
+              case "regex":
+                try {
+                  const pattern = new RegExp(word.word, "i");
+                  nextRegex.push({ pattern, word: word.word });
+                } catch (error) {
+                  logger.error(`[SensitiveWordCache] Invalid regex pattern: ${word.word}`, error);
+                }
+                break;
 
-          case "regex":
-            try {
-              const pattern = new RegExp(word.word, "i");
-              this.regex.push({ pattern, word: word.word });
-            } catch (error) {
-              logger.error(`[SensitiveWordCache] Invalid regex pattern: ${word.word}`, error);
+              default:
+                logger.warn(`[SensitiveWordCache] Unknown match type: ${word.matchType}`);
             }
-            break;
+          }
 
-          default:
-            logger.warn(`[SensitiveWordCache] Unknown match type: ${word.matchType}`);
+          this.contains = nextContains;
+          this.exact = nextExact;
+          this.regex = nextRegex;
+          this.lastReloadTime = Date.now();
+
+          logger.info(
+            `[SensitiveWordCache] Loaded ${words.length} sensitive words: ` +
+              `contains=${this.contains.length}, exact=${this.exact.size}, regex=${this.regex.length}`
+          );
+        } catch (error) {
+          logger.error("[SensitiveWordCache] Failed to reload sensitive words:", error);
+          // 失败时不清空现有缓存，保持降级可用
+        } finally {
+          this.isLoading = false;
         }
-      }
+      } while (this.reloadRequestedWhileLoading);
+    })();
 
-      this.lastReloadTime = Date.now();
+    this.activeReloadPromise = reloadLoop.finally(() => {
+      // 覆盖循环条件检查与 Promise settle 之间到达的极窄竞态窗口。
+      const shouldRestart = this.reloadRequestedWhileLoading;
+      this.activeReloadPromise = null;
+      if (shouldRestart) return this.reload();
+    });
 
-      logger.info(
-        `[SensitiveWordCache] Loaded ${words.length} sensitive words: ` +
-          `contains=${this.contains.length}, exact=${this.exact.size}, regex=${this.regex.length}`
-      );
-    } catch (error) {
-      logger.error("[SensitiveWordCache] Failed to reload sensitive words:", error);
-      // 失败时不清空现有缓存，保持降级可用
-    } finally {
-      this.isLoading = false;
-    }
+    return this.activeReloadPromise;
   }
 
   /**

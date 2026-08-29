@@ -213,6 +213,23 @@ bash scripts/deploy-k8s.sh --replicas 3 --hpa-min 3 --hpa-max 10 -y
 默认模板保留 `replicas=2`,但 `AUTO_MIGRATE` 入口 `src/instrumentation.ts` 会先获取 PostgreSQL advisory lock,
 因此首次多副本启动时迁移会串行执行。如果你更关心首启速度,也可以先用 `--replicas 1` 部署,确认健康后再扩容。
 
+### 单 Pod 多核心模式
+
+生产镜像通过 `cluster.js` 启动。默认 `CCH_MULTICORE_MODE=auto` 只在 cgroup 有效
+vCPU 至少为 4 且内存/共享预算足够时启用；当前 app 模板的 `limits.cpu=4`、
+`limits.memory=4Gi` 会自动运行 2 个完整网关 worker。每个请求始终由一个 worker
+从 socket 处理到 usage/计费写回,正文和 JSON 对象不会通过进程 IPC 复制。
+
+`DB_POOL_MAX`、message writer pending、detached stream、stream gate 和 replay 并发等
+配置在同一 Pod 内作为聚合预算分摊。例如模板的 `DB_POOL_MAX=24` 在 2 worker 下为
+12/12,不会因为多进程把单 Pod 的 PostgreSQL 连接预算翻倍；多个 Pod 之间仍需再按
+`replicas`/HPA 最大值计算总连接数。
+
+HPA 看到的是 Pod 内 primary 与所有 worker 的合计 CPU/内存。少量长 keep-alive 或
+WebSocket 连接仍具有单 worker 亲和性,压测时应同时检查每个进程的负载分布。若希望
+完全由 Pod 横向扩展控制,可在 Deployment 中设置 `CCH_MULTICORE_MODE=off`。详细的
+内存模型、覆盖配置和故障语义见[网关多核心运行模式](./multicore-gateway.md)。
+
 ### Codex `/v1/responses` WebSocket 反代
 
 `/v1/responses` 端点对 Codex 客户端会走 **WebSocket 升级**(其余路径仍是 HTTP)。

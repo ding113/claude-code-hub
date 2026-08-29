@@ -36,10 +36,8 @@ const dev = isNextDevMode(process.env.NODE_ENV);
 const hostname = process.env.HOSTNAME || "0.0.0.0";
 const port = parseInt(process.env.PORT || (dev ? "13500" : "3000"), 10);
 
-// Loopback target for the in-process WS->HTTP tunnel. When the public bind
-// hostname is a wildcard (0.0.0.0 / ::), tunnel via 127.0.0.1; otherwise use
-// the configured hostname so we still hit the local listener even when bound
-// to a specific interface.
+// 供导出 helper 独立运行时使用的兼容回退目标。实际服务会为每个进程创建私有
+// loopback listener，确保 cluster 中的 WebSocket 连接不会隧道到其他 worker。
 const INTERNAL_TUNNEL_HOST =
   hostname === "0.0.0.0" || hostname === "::" || hostname === "*" ? "127.0.0.1" : hostname;
 
@@ -253,7 +251,7 @@ function sanitizedRequestPath(rawUrl) {
   }
 }
 
-async function handleWebSocketConnection(ws, req) {
+async function handleWebSocketConnection(ws, req, internalHttpTarget) {
   const url = new URL(req.url, `http://${req.headers.host || "localhost"}`);
   const queryModel = url.searchParams.get("model");
   const responsesWsSessionId = randomUUID();
@@ -462,7 +460,8 @@ async function handleWebSocketConnection(ws, req) {
       body,
       responsesWsSessionId,
       registerTurnResource,
-      requestClose
+      requestClose,
+      internalHttpTarget
     );
     raw = "";
     frame = null;
@@ -547,7 +546,8 @@ async function forwardToInternalHttp(
   body,
   responsesWsSessionId,
   registerInternalReq,
-  requestClose
+  requestClose,
+  internalHttpTarget
 ) {
   // requestClose(code, reason) initiates the WebSocket closing handshake AND
   // synchronously marks the client connection closed so the caller's pending
@@ -631,11 +631,17 @@ async function forwardToInternalHttp(
       resolve();
       return true;
     };
+    const tunnelTarget =
+      internalHttpTarget &&
+      typeof internalHttpTarget.hostname === "string" &&
+      Number.isInteger(internalHttpTarget.port)
+        ? internalHttpTarget
+        : { hostname: INTERNAL_TUNNEL_HOST, port };
     const req = http.request(
       {
         method: "POST",
-        hostname: INTERNAL_TUNNEL_HOST,
-        port,
+        hostname: tunnelTarget.hostname,
+        port: tunnelTarget.port,
         path: "/v1/responses",
         headers: internalHeaders,
       },
@@ -1072,6 +1078,53 @@ function isResponsesWsUpgrade(req) {
   return parsed.pathname === WS_PATH;
 }
 
+function listenServer(server, options) {
+  return new Promise((resolve, reject) => {
+    const handleError = (error) => {
+      server.off("listening", handleListening);
+      reject(error);
+    };
+    const handleListening = () => {
+      server.off("error", handleError);
+      resolve(server.address());
+    };
+    server.once("error", handleError);
+    server.once("listening", handleListening);
+    server.listen(options);
+  });
+}
+
+async function listenOnPrivateLoopback(server) {
+  // node:cluster 下必须设置 `exclusive: true`，否则即使监听 port 0，也可能
+  // 由主进程代理并与其他 worker 共享。
+  const address = await listenServer(server, {
+    host: "127.0.0.1",
+    port: 0,
+    exclusive: true,
+  });
+  if (!address || typeof address === "string" || !Number.isInteger(address.port)) {
+    throw new Error("Private loopback listener returned an invalid address");
+  }
+  return { hostname: "127.0.0.1", port: address.port };
+}
+
+function notifyMulticoreReady() {
+  if (process.env.CCH_MULTICORE_ACTIVE !== "1" || typeof process.send !== "function") return;
+  try {
+    // IPC 消息刻意保持极小；请求字节和解析后的对象绝不跨越主进程/worker 通道。
+    const { WORKER_READY_MESSAGE_TYPE } = require("./server-lib/multicore");
+    process.send({
+      type: WORKER_READY_MESSAGE_TYPE,
+      workerIndex: Number(process.env.CCH_MULTICORE_WORKER_INDEX),
+      pid: process.pid,
+    });
+  } catch (error) {
+    log("error", "multicore_ready_notification_failed", {
+      error: String(error && error.message ? error.message : error),
+    });
+  }
+}
+
 async function main() {
   // Surface the build-time Next config via the env var Next's own standalone
   // template uses. See server-lib/standalone-config.js for the full rationale.
@@ -1120,7 +1173,7 @@ async function main() {
   const handler = app.getRequestHandler();
   await app.prepare();
 
-  const server = http.createServer(async (req, res) => {
+  const requestListener = async (req, res) => {
     try {
       const parsedUrl = parse(req.url, true);
       await handler(req, res, parsedUrl);
@@ -1133,7 +1186,13 @@ async function main() {
         res.end("Internal Server Error");
       }
     }
-  });
+  };
+
+  // WebSocket frame 必须重新进入持有客户端连接和持久上游会话的同一个 worker。
+  // 私有独占 listener 无需经 IPC 复制请求正文即可保证这一不变量。
+  const internalServer = http.createServer(requestListener);
+  const internalHttpTarget = await listenOnPrivateLoopback(internalServer);
+  const server = http.createServer(requestListener);
 
   let wss = null;
   if (WebSocketServer) {
@@ -1146,7 +1205,7 @@ async function main() {
       }
       wss.handleUpgrade(req, socket, head, (ws) => {
         log("info", "ws_client_connected", { path: sanitizedRequestPath(req.url) });
-        handleWebSocketConnection(ws, req).catch((err) => {
+        handleWebSocketConnection(ws, req, internalHttpTarget).catch((err) => {
           log("error", "ws_handler_error", {
             error: String(err && err.message ? err.message : err),
           });
@@ -1164,16 +1223,24 @@ async function main() {
     });
   }
 
-  server.listen(port, hostname, () => {
-    log("info", "server_listening", {
-      hostname,
-      port,
-      internalTunnelHost: INTERNAL_TUNNEL_HOST,
-      wsEnabled: !!WebSocketServer,
-    });
-  });
+  try {
+    await listenServer(server, { port, host: hostname });
+  } catch (error) {
+    internalServer.close();
+    throw error;
+  }
 
-  registerOrchestratedShutdown(server, wss);
+  registerOrchestratedShutdown(server, wss, [internalServer]);
+  log("info", "server_listening", {
+    hostname,
+    port,
+    internalTunnelHost: internalHttpTarget.hostname,
+    internalTunnelPort: internalHttpTarget.port,
+    wsEnabled: !!WebSocketServer,
+    workerIndex: process.env.CCH_MULTICORE_WORKER_INDEX ?? null,
+    workerCount: process.env.CCH_MULTICORE_WORKER_COUNT ?? "1",
+  });
+  notifyMulticoreReady();
 }
 
 // Graceful shutdown orchestration. Lives here (not in instrumentation.ts) because
@@ -1181,14 +1248,14 @@ async function main() {
 //
 // Sequence (bounded by SHUTDOWN_HARD_EXIT_MS as the final safety net):
 //   1. Mark shutdown flag    -> /api/health/ready returns 503 -> Service drains
-//   2. server.close()        -> stop accepting; in-flight HTTP finishes
+//   2. server.close()        -> stop accepting public and private HTTP
 //   3. wss.close()           -> reject new WS upgrades
 //   4. Wait for drain        -> bounded by SHUTDOWN_DRAIN_MS
 //   5. runApplicationCleanup -> abort + join tasks, flush writer, close DB pools,
 //      then release non-critical resources. SHUTDOWN_CLEANUP_MS is a soft warning;
 //      the referenced hard watchdog is the final bound for critical barriers.
 //   6. Success logs shutdown_complete and exits 0; cleanup failure exits 1.
-function registerOrchestratedShutdown(server, wss) {
+function registerOrchestratedShutdown(server, wss, auxiliaryServers = []) {
   let shuttingDown = false;
 
   // Positive integer parser: `Number("0") || default` would silently coerce an
@@ -1229,23 +1296,33 @@ function registerOrchestratedShutdown(server, wss) {
     }
 
     // 2 + 3. Stop accepting new connections.
-    const closeServer = new Promise((resolve) => {
-      try {
-        server.close((err) => {
-          if (err) {
-            log("warn", "shutdown_server_close_error", {
-              error: String(err && err.message ? err.message : err),
-            });
-          }
-          resolve();
-        });
-      } catch (err) {
-        log("warn", "shutdown_server_close_threw", {
-          error: String(err && err.message ? err.message : err),
-        });
-        resolve();
-      }
-    });
+    const servers = Array.from(
+      new Set([server, ...(Array.isArray(auxiliaryServers) ? auxiliaryServers : [])].filter(Boolean))
+    );
+    const closeServers = Promise.all(
+      servers.map(
+        (serverHandle, index) =>
+          new Promise((resolve) => {
+            try {
+              serverHandle.close((err) => {
+                if (err) {
+                  log("warn", "shutdown_server_close_error", {
+                    serverKind: index === 0 ? "public" : "auxiliary",
+                    error: String(err && err.message ? err.message : err),
+                  });
+                }
+                resolve();
+              });
+            } catch (err) {
+              log("warn", "shutdown_server_close_threw", {
+                serverKind: index === 0 ? "public" : "auxiliary",
+                error: String(err && err.message ? err.message : err),
+              });
+              resolve();
+            }
+          })
+      )
+    );
 
     const closeWss = new Promise((resolve) => {
       if (!wss || typeof wss.close !== "function") {
@@ -1267,7 +1344,7 @@ function registerOrchestratedShutdown(server, wss) {
         resolve();
       }
     });
-    const closeTransports = Promise.all([closeServer, closeWss]);
+    const closeTransports = Promise.all([closeServers, closeWss]);
 
     // 4. Bounded drain — HTTP and WebSocket close only settle after every in-flight
     //    connection completes; we cap them so a stuck client can't hold us forever.
@@ -1315,10 +1392,14 @@ function registerOrchestratedShutdown(server, wss) {
 
 // Exposed for tests; not part of the long-lived server entrypoint.
 module.exports = {
+  main,
   sanitizedRequestPath,
   isNextDevMode,
   handleWebSocketConnection,
   forwardToInternalHttp,
+  listenServer,
+  listenOnPrivateLoopback,
+  notifyMulticoreReady,
   registerOrchestratedShutdown,
   WS_MAX_PAYLOAD_BYTES,
   MAX_PENDING_BYTES,
