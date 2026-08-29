@@ -9,6 +9,7 @@ const DEFAULT_RESTART_BASE_DELAY_MS = 250;
 const DEFAULT_RESTART_MAX_DELAY_MS = 10_000;
 const DEFAULT_FORCE_EXIT_GRACE_MS = 1_000;
 const DEFAULT_READY_KILL_GRACE_MS = 5_000;
+const DEFAULT_WORKER_ERROR_EXIT_GRACE_MS = 1_000;
 
 function parsePositiveInteger(raw, fallback, name) {
   if (raw === undefined || raw === null || String(raw).trim() === "") return fallback;
@@ -48,6 +49,7 @@ function resolveSupervisorSettings(env = process.env) {
     restartBaseDelayMs: DEFAULT_RESTART_BASE_DELAY_MS,
     restartMaxDelayMs: DEFAULT_RESTART_MAX_DELAY_MS,
     forceExitGraceMs: DEFAULT_FORCE_EXIT_GRACE_MS,
+    workerErrorExitGraceMs: DEFAULT_WORKER_ERROR_EXIT_GRACE_MS,
   };
 }
 
@@ -86,6 +88,15 @@ function createClusterSupervisor(options) {
 
   function safeClearTimer(timer) {
     if (timer !== null && timer !== undefined) clearTimer(timer);
+  }
+
+  function clearWorkerTimers(record) {
+    safeClearTimer(record.readyTimer);
+    safeClearTimer(record.terminationTimer);
+    safeClearTimer(record.exitFallbackTimer);
+    record.readyTimer = null;
+    record.terminationTimer = null;
+    record.exitFallbackTimer = null;
   }
 
   function emitLog(level, event, payload = {}) {
@@ -148,10 +159,7 @@ function createClusterSupervisor(options) {
     for (const timer of restartTimers.values()) safeClearTimer(timer);
     restartTimers.clear();
     for (const record of workersBySlot.values()) {
-      safeClearTimer(record.readyTimer);
-      safeClearTimer(record.readyKillTimer);
-      record.readyTimer = null;
-      record.readyKillTimer = null;
+      clearWorkerTimers(record);
       sendWorkerSignal(record.worker, signal);
     }
 
@@ -219,12 +227,9 @@ function createClusterSupervisor(options) {
     restartTimers.set(slot, timer);
   }
 
-  function handleWorkerExit(record, code, signal) {
+  function handleWorkerExit(record, code, signal, metadata = {}) {
     if (workersBySlot.get(record.slot) !== record) return;
-    safeClearTimer(record.readyTimer);
-    safeClearTimer(record.readyKillTimer);
-    record.readyTimer = null;
-    record.readyKillTimer = null;
+    clearWorkerTimers(record);
     workersBySlot.delete(record.slot);
 
     if (shuttingDown) {
@@ -235,6 +240,7 @@ function createClusterSupervisor(options) {
         code: code ?? null,
         signal: signal ?? null,
         shutdownSignal,
+        ...metadata,
       });
       maybeFinishShutdown();
       return;
@@ -245,8 +251,37 @@ function createClusterSupervisor(options) {
       code: code ?? null,
       signal: signal ?? null,
       ready: record.ready,
+      terminationReason: record.terminationReason,
+      ...metadata,
     });
     if (failureCount !== null) scheduleRestart(record.slot, failureCount);
+  }
+
+  function forceKillWorkerAndBoundExit(record, reason, event, payload = {}) {
+    if (workersBySlot.get(record.slot) !== record || shuttingDown) return;
+
+    emitLog("error", event, {
+      workerIndex: record.slot,
+      pid: workerPid(record.worker),
+      ...payload,
+    });
+    sendWorkerSignal(record.worker, "SIGKILL");
+    if (workersBySlot.get(record.slot) !== record || shuttingDown) return;
+    record.exitFallbackTimer = setTimer(() => {
+      if (workersBySlot.get(record.slot) !== record || shuttingDown) return;
+      emitLog("error", "multicore_worker_exit_missing", {
+        workerIndex: record.slot,
+        pid: workerPid(record.worker),
+        reason,
+        graceMs: settings.forceExitGraceMs,
+      });
+      // child_process 不保证 error 后仍触发 exit。强杀后若仍缺少 exit，
+      // 合成一次终态释放 slot；迟到的真实 exit 会被 record 身份检查忽略。
+      handleWorkerExit(record, null, "SIGKILL", {
+        synthetic: true,
+        terminationReason: reason,
+      });
+    }, settings.forceExitGraceMs);
   }
 
   function handleWorkerError(record, error) {
@@ -261,6 +296,21 @@ function createClusterSupervisor(options) {
       shuttingDown,
       error: String(error?.message || error),
     });
+    if (shuttingDown || record.terminationReason !== null) return;
+
+    // Node 不保证 error 之后仍会触发 exit。先给自然 exit 一个短窗口，
+    // 再强杀并由统一 exit 路径有界完成 slot 回收。
+    record.terminationReason = "worker_error";
+    safeClearTimer(record.readyTimer);
+    record.readyTimer = null;
+    record.terminationTimer = setTimer(() => {
+      forceKillWorkerAndBoundExit(
+        record,
+        "worker_error",
+        "multicore_worker_error_force_kill",
+        { graceMs: settings.workerErrorExitGraceMs }
+      );
+    }, settings.workerErrorExitGraceMs);
   }
 
   function handleWorkerReady(record, message) {
@@ -279,11 +329,9 @@ function createClusterSupervisor(options) {
       });
       return;
     }
+    if (record.terminationReason !== null) return;
     record.ready = true;
-    safeClearTimer(record.readyTimer);
-    safeClearTimer(record.readyKillTimer);
-    record.readyTimer = null;
-    record.readyKillTimer = null;
+    clearWorkerTimers(record);
     emitLog("info", "multicore_worker_ready", {
       workerIndex: record.slot,
       pid: workerPid(record.worker),
@@ -326,8 +374,10 @@ function createClusterSupervisor(options) {
       worker,
       ready: false,
       startupTimedOut: false,
+      terminationReason: null,
       readyTimer: null,
-      readyKillTimer: null,
+      terminationTimer: null,
+      exitFallbackTimer: null,
     };
     workersBySlot.set(slot, record);
     worker.on("message", (message) => handleWorkerReady(record, message));
@@ -336,20 +386,20 @@ function createClusterSupervisor(options) {
     record.readyTimer = setTimer(() => {
       if (workersBySlot.get(slot) !== record || record.ready || shuttingDown) return;
       record.startupTimedOut = true;
+      record.terminationReason = "ready_timeout";
       emitLog("error", "multicore_worker_ready_timeout", {
         workerIndex: slot,
         pid: workerPid(worker),
         timeoutMs: settings.readyTimeoutMs,
       });
       sendWorkerSignal(worker, "SIGTERM");
-      record.readyKillTimer = setTimer(() => {
-        if (workersBySlot.get(slot) !== record || shuttingDown) return;
-        emitLog("error", "multicore_worker_ready_force_kill", {
-          workerIndex: slot,
-          pid: workerPid(worker),
-          graceMs: settings.readyKillGraceMs,
-        });
-        sendWorkerSignal(worker, "SIGKILL");
+      record.terminationTimer = setTimer(() => {
+        forceKillWorkerAndBoundExit(
+          record,
+          "ready_timeout",
+          "multicore_worker_ready_force_kill",
+          { graceMs: settings.readyKillGraceMs }
+        );
       }, settings.readyKillGraceMs);
     }, settings.readyTimeoutMs);
 
@@ -399,6 +449,7 @@ module.exports = {
   DEFAULT_RESTART_BASE_DELAY_MS,
   DEFAULT_RESTART_MAX_DELAY_MS,
   DEFAULT_RESTART_WINDOW_MS,
+  DEFAULT_WORKER_ERROR_EXIT_GRACE_MS,
   createClusterSupervisor,
   resolveSupervisorSettings,
 };

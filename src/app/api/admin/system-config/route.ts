@@ -126,10 +126,6 @@ export async function POST(req: Request) {
       changes: validated,
     });
     invalidateSystemSettingsCache();
-    const { invalidateProviderSelectorSystemSettingsCache } = await import(
-      "@/app/v1/_lib/proxy/provider-selector-settings-cache"
-    );
-    invalidateProviderSelectorSystemSettingsCache();
     if (validated.timezone !== undefined) {
       await Promise.all([
         invalidateAllOverviewCaches(),

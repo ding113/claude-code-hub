@@ -8,6 +8,8 @@
 
 请求完成后的 usage、计费、replay complete、亲和绑定和 durable message 写入也保留在同一请求 worker 中。这样既不复制响应正文，也不破坏现有事务顺序；由于请求本身已分布到多个进程，这些终态计算会自然并行。
 
+逐阶段热点、所有可并行化候选、parse-only worker 的内存模型和后续实施门槛见[多核心并行化与热点拆分审计](./research/gateway-multicore-parallelization-analysis.md)。
+
 ## 默认行为
 
 | 环境 | `CCH_MULTICORE_MODE=auto` 的行为 |
@@ -36,7 +38,11 @@ min(4, floor(effective_vCPU / 2), memory_capacity, shared_budget_capacity)
 - 内存：`os.totalmem()` 与 cgroup v2/v1 memory limit 的最小值。
 - 默认每个完整网关预留 1024 MiB，并为轻量 primary/运行时开销预留 256 MiB。
 
-自动模式还要求配置 `REDIS_URL`，且 `ENABLE_RATE_LIMIT` 不能关闭。错误规则、请求过滤器、敏感词、Provider cache 和 API Key Vacuum Filter 等进程本地快照使用 Redis Pub/Sub 接收微小的失效通知；没有这条控制通道时自动回退单进程，避免管理写入只刷新命中它的某一个 worker。显式要求多进程但缺少该通道会直接启动失败。Redis 运行期故障仍沿用现有多实例 fail-open 语义，恢复前应避免修改上述动态配置。
+自动模式还要求配置 `REDIS_URL`，且 `ENABLE_RATE_LIMIT` 不能关闭。错误规则、请求过滤器、敏感词、Provider cache、系统设置、Provider group 计费倍率和 API Key Vacuum Filter 等进程本地快照使用 Redis Pub/Sub 接收微小的失效通知；没有这条控制通道时自动回退单进程，避免管理写入只刷新命中它的某一个 worker。显式要求多进程但缺少该通道会直接启动失败。Redis 运行期故障仍沿用现有多实例 fail-open 语义，恢复前应避免修改上述动态配置。
+
+Provider group 倍率缓存额外使用版本号阻止“更新通知到达后，较早发出的 DB 查询才返回并重新写入旧值”的竞态；更新广播只在数据库提交后发送。每进程缓存最多保留 10,000 个原始 group 表达式，TTL 为 60 秒，避免高基数字符串在多个 V8 heap 中无界累积。多核心 worker 会在报告 ready 前等待首次订阅；Redis 临时不可用时保留 TTL 降级语义并记录告警。
+
+系统设置缓存使用相同的查询版本栅栏，覆盖计费口径、hedge loser、stream gate、replay、限额 lease 和响应策略等热路径开关。保存操作在数据库提交后先清空本进程，再发布不含设置内容的失效消息；其他 worker 收到后只清本地快照。发布失败时仍由 60 秒 TTL 收敛，不会把完整配置对象放进 Redis Pub/Sub。
 
 因此，容器看到宿主机有很多核心但 cgroup 只分配 3.5 vCPU 时，有效值为 3，不会自动启用。没有容器 CPU quota 的 Docker 部署会按宿主机可见核心判断；共享宿主机上建议显式设置容器 quota 或 `CCH_MULTICORE_WORKERS`。
 
@@ -135,6 +141,7 @@ CCH_MULTICORE_PRIMARY_MEMORY_RESERVE_MB=256
 ## 故障与关闭语义
 
 - worker 未在 ready deadline 内启动：先发送 `SIGTERM`，5 秒仍未退出则发送 `SIGKILL`，随后按原 slot 重启。
+- worker 发出异步 `error`：先等待短暂的自然 `exit`；若 Node 未再发出 `exit`，则发送 `SIGKILL`，再经过有界宽限期合成且仅合成一次终态。迟到的真实 `exit` 由 worker record 身份检查忽略，不会重复计数或拉起。
 - worker 意外退出：指数退避重启，slot 和资源预算不变。
 - 同一 slot 在 60 秒内连续失败 5 次：primary 判定 crash loop，终止整个容器，让外层 Docker/Kubernetes supervisor 重新创建干净实例。
 - primary 收到 `SIGTERM`/`SIGINT`：转发到所有 worker；worker 继续使用现有的 readiness flip、HTTP/WS drain、durable writer flush、DB/Redis cleanup 顺序。

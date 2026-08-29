@@ -6,6 +6,12 @@ const getSystemSettingsMock = vi.fn();
 const loggerDebugMock = vi.fn();
 const loggerWarnMock = vi.fn();
 const loggerInfoMock = vi.fn();
+const pubsubHarness = vi.hoisted(() => ({
+  callback: null as ((message: string) => void) | null,
+  cleanup: vi.fn(),
+  publish: vi.fn(),
+  subscribe: vi.fn(),
+}));
 
 const originalResponsesWebsocketEnv = process.env.ENABLE_OPENAI_RESPONSES_WEBSOCKET;
 const originalStreamGateMode = process.env.STREAM_GATE_MODE;
@@ -25,6 +31,12 @@ vi.mock("@/lib/logger", () => ({
     trace: vi.fn(),
     error: vi.fn(),
   },
+}));
+
+vi.mock("@/lib/redis/pubsub", () => ({
+  CHANNEL_SYSTEM_SETTINGS_UPDATED: "cch:cache:system_settings:updated",
+  publishCacheInvalidation: pubsubHarness.publish,
+  subscribeCacheInvalidation: pubsubHarness.subscribe,
 }));
 
 function createSettings(overrides: Partial<SystemSettings> = {}): SystemSettings {
@@ -79,6 +91,7 @@ async function loadCache() {
     isHttp2Enabled: mod.isHttp2Enabled,
     isOpenaiResponsesWebsocketEnabled: mod.isOpenaiResponsesWebsocketEnabled,
     invalidateSystemSettingsCache: mod.invalidateSystemSettingsCache,
+    ensureSystemSettingsCacheSubscription: mod.ensureSystemSettingsCacheSubscription,
   };
 }
 
@@ -88,6 +101,14 @@ beforeEach(() => {
   vi.useFakeTimers();
   vi.setSystemTime(new Date("2026-01-03T00:00:00.000Z"));
   delete process.env.ENABLE_OPENAI_RESPONSES_WEBSOCKET;
+  pubsubHarness.callback = null;
+  pubsubHarness.publish.mockResolvedValue(undefined);
+  pubsubHarness.subscribe.mockImplementation(
+    async (_channel: string, callback: (message: string) => void) => {
+      pubsubHarness.callback = callback;
+      return pubsubHarness.cleanup;
+    }
+  );
 });
 
 afterEach(() => {
@@ -225,9 +246,54 @@ describe("SystemSettingsCache", () => {
     expect(await getCachedSystemSettings()).toBe(settingsA);
 
     invalidateSystemSettingsCache();
-    expect(loggerInfoMock).toHaveBeenCalledTimes(1);
+    expect(loggerInfoMock).toHaveBeenCalledWith("[SystemSettingsCache] Cache invalidated");
+    await vi.waitFor(() =>
+      expect(pubsubHarness.publish).toHaveBeenCalledWith("cch:cache:system_settings:updated")
+    );
 
     expect(await getCachedSystemSettings()).toBe(settingsB);
+    expect(getSystemSettingsMock).toHaveBeenCalledTimes(2);
+  });
+
+  test("其他进程广播更新后应清空本地系统设置缓存", async () => {
+    const settingsA = createSettings({ id: 411, billingModelSource: "original" });
+    const settingsB = createSettings({ id: 412, billingModelSource: "redirected" });
+    getSystemSettingsMock.mockResolvedValueOnce(settingsA).mockResolvedValueOnce(settingsB);
+
+    const { getCachedSystemSettings, ensureSystemSettingsCacheSubscription } = await loadCache();
+    await ensureSystemSettingsCacheSubscription();
+
+    expect(await getCachedSystemSettings()).toBe(settingsA);
+    expect(await getCachedSystemSettings()).toBe(settingsA);
+    pubsubHarness.callback?.("updated");
+
+    expect(await getCachedSystemSettings()).toBe(settingsB);
+    expect(getSystemSettingsMock).toHaveBeenCalledTimes(2);
+  });
+
+  test("失效事件后不得让较早发出的查询重新缓存旧设置", async () => {
+    const oldSettings = createSettings({ id: 421, billHedgeLosers: true });
+    const newSettings = createSettings({ id: 422, billHedgeLosers: false });
+    let resolveOldQuery: ((settings: SystemSettings) => void) | undefined;
+    getSystemSettingsMock
+      .mockImplementationOnce(
+        () =>
+          new Promise<SystemSettings>((resolve) => {
+            resolveOldQuery = resolve;
+          })
+      )
+      .mockResolvedValueOnce(newSettings);
+
+    const { getCachedSystemSettings, ensureSystemSettingsCacheSubscription } = await loadCache();
+    await ensureSystemSettingsCacheSubscription();
+
+    const oldResult = getCachedSystemSettings();
+    expect(getSystemSettingsMock).toHaveBeenCalledTimes(1);
+    pubsubHarness.callback?.("updated");
+    resolveOldQuery?.(oldSettings);
+    expect(await oldResult).toBe(oldSettings);
+
+    expect(await getCachedSystemSettings()).toBe(newSettings);
     expect(getSystemSettingsMock).toHaveBeenCalledTimes(2);
   });
 

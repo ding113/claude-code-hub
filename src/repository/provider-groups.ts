@@ -3,6 +3,14 @@ import "server-only";
 import { asc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import { providerGroups, providers } from "@/drizzle/schema";
+import {
+  getGroupMultiplierCacheVersion,
+  invalidateGroupMultiplierCache,
+  publishGroupMultiplierCacheInvalidation,
+  readCachedGroupMultiplier,
+  startGroupMultiplierCacheSubscription,
+  writeCachedGroupMultiplier,
+} from "@/lib/cache/provider-group-multiplier-cache";
 import { PROVIDER_GROUP } from "@/lib/constants/provider.constants";
 import { parseProviderGroups } from "@/lib/utils/provider-group";
 import type {
@@ -31,26 +39,7 @@ function toProviderGroup(row: ProviderGroupRow): ProviderGroup {
   };
 }
 
-// ---------------------------------------------------------------------------
-// In-memory cache for getGroupCostMultiplier (hot-path, called per request)
-// ---------------------------------------------------------------------------
-
-const CACHE_TTL_MS = 60_000; // 60 seconds
-
-interface CacheEntry {
-  value: number;
-  expiresAt: number;
-}
-
-const multiplierCache = new Map<string, CacheEntry>();
-
-/**
- * Invalidate the in-memory cost multiplier cache.
- * Call this after any mutation (create / update / delete) to provider groups.
- */
-export function invalidateGroupMultiplierCache(): void {
-  multiplierCache.clear();
-}
+export { invalidateGroupMultiplierCache };
 
 // ---------------------------------------------------------------------------
 // Query functions
@@ -117,7 +106,6 @@ export async function createProviderGroup(input: CreateProviderGroupInput): Prom
     })
     .returning();
 
-  invalidateGroupMultiplierCache();
   return toProviderGroup(row);
 }
 
@@ -149,7 +137,6 @@ export async function updateProviderGroup(
 
   if (!row) return null;
 
-  invalidateGroupMultiplierCache();
   return toProviderGroup(row);
 }
 
@@ -195,7 +182,7 @@ export async function ensureProviderGroupsExist(names: string[]): Promise<void> 
     .values(unique.map((name) => ({ name })))
     .onConflictDoNothing({ target: providerGroups.name });
 
-  invalidateGroupMultiplierCache();
+  await publishGroupMultiplierCacheInvalidation();
 }
 
 /**
@@ -215,7 +202,6 @@ export async function deleteProviderGroup(id: number): Promise<void> {
   }
 
   await db.delete(providerGroups).where(eq(providerGroups.id, id));
-  invalidateGroupMultiplierCache();
 }
 
 // ---------------------------------------------------------------------------
@@ -234,33 +220,31 @@ export async function deleteProviderGroup(id: number): Promise<void> {
  *
  * Falls back to 1.0 when none of the groups exist.
  *
- * Results are cached in-memory with a 60-second TTL so that the proxy
- * pipeline can call this on every request without extra DB round-trips.
+ * Results are cached in-memory with a 60-second TTL and a 10,000-entry bound
+ * so that the proxy pipeline can call this on every request without unbounded
+ * memory growth or extra DB round-trips.
  * Cache misses (value === 1.0 because no matching row was found) are NOT
  * cached, so newly-created groups propagate on the next request.
  *
- * Note: this cache is per-process. In multi-instance deployments, a mutation
- * on one node will not invalidate other nodes' caches; worst-case staleness
- * is bounded by CACHE_TTL_MS.
+ * 每个进程通过 Redis Pub/Sub 接收失效通知。订阅暂时不可用时自动退化到 TTL；
+ * 版本号可防止失效事件之后才返回的旧查询结果重新污染缓存。
  */
 export async function getGroupCostMultiplier(rawGroupString: string): Promise<number> {
-  const now = Date.now();
+  // 已有缓存的进程必须同时拥有失效订阅。初始化不阻塞热路径；多核心启动器会在
+  // worker ready 前主动等待首次订阅，外部多实例部署则在首次请求时懒启动。
+  startGroupMultiplierCacheSubscription();
 
   // Cache hit fast-path: we key the cache on the raw input string so that
   // repeated lookups for the same user bypass parsing + DB entirely.
-  const cached = multiplierCache.get(rawGroupString);
-  if (cached && cached.expiresAt > now) {
-    return cached.value;
-  }
-  if (cached) {
-    multiplierCache.delete(rawGroupString);
-  }
+  const cached = readCachedGroupMultiplier(rawGroupString);
+  if (cached !== undefined) return cached;
 
   const parsedGroups = parseProviderGroups(rawGroupString);
   if (parsedGroups.length === 0) {
     return 1.0;
   }
 
+  const cacheVersion = getGroupMultiplierCacheVersion();
   const rows = await db
     .select({
       name: providerGroups.name,
@@ -283,10 +267,7 @@ export async function getGroupCostMultiplier(rawGroupString: string): Promise<nu
   // Only cache real hits. Caching misses would defer new-group visibility by
   // up to CACHE_TTL_MS on this process and is rarely worth the win.
   if (resolved !== null) {
-    multiplierCache.set(rawGroupString, {
-      value: resolved,
-      expiresAt: now + CACHE_TTL_MS,
-    });
+    writeCachedGroupMultiplier(rawGroupString, resolved, cacheVersion);
     return resolved;
   }
 

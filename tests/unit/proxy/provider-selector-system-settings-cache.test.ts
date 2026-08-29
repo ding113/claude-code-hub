@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
-const getSystemSettingsMock = vi.hoisted(() => vi.fn());
+const getCachedSystemSettingsMock = vi.hoisted(() => vi.fn());
 
-vi.mock("@/repository/system-config", () => ({
-  getSystemSettings: getSystemSettingsMock,
+vi.mock("@/lib/config/system-settings-cache", () => ({
+  getCachedSystemSettings: getCachedSystemSettingsMock,
 }));
 
 vi.mock("@/lib/logger", () => ({
@@ -23,19 +23,14 @@ describe("provider-selector system settings cache", () => {
     vi.resetModules();
   });
 
-  test("invalidateProviderSelectorSystemSettingsCache clears cached verboseProviderError", async () => {
-    getSystemSettingsMock
+  test("复用统一系统设置缓存并读取最新 verboseProviderError", async () => {
+    getCachedSystemSettingsMock
       .mockResolvedValueOnce({ verboseProviderError: false })
       .mockResolvedValueOnce({ verboseProviderError: true });
 
     const mod = await import("@/app/v1/_lib/proxy/provider-selector-settings-cache");
-    const first = await mod.getVerboseProviderErrorCached();
-    expect(first).toBe(false);
-
-    mod.invalidateProviderSelectorSystemSettingsCache();
-
-    const second = await mod.getVerboseProviderErrorCached();
-    expect(second).toBe(true);
-    expect(getSystemSettingsMock).toHaveBeenCalledTimes(2);
+    expect(await mod.getVerboseProviderErrorCached()).toBe(false);
+    expect(await mod.getVerboseProviderErrorCached()).toBe(true);
+    expect(getCachedSystemSettingsMock).toHaveBeenCalledTimes(2);
   });
 });

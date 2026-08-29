@@ -93,6 +93,7 @@ function makeSupervisor(
       restartBaseDelayMs: 10,
       restartMaxDelayMs: 100,
       forceExitGraceMs: 10,
+      workerErrorExitGraceMs: 10,
     },
     ...override,
   });
@@ -173,7 +174,7 @@ describe("cluster supervisor", () => {
     expect(logs).toContain("multicore_worker_restart_scheduled");
   });
 
-  it("absorbs asynchronous worker errors and lets exit drive one restart", () => {
+  it("lets a natural exit finish an asynchronous worker error exactly once", () => {
     vi.useFakeTimers();
     const clusterModule = new FakeCluster();
     const { supervisor, logs } = makeSupervisor(clusterModule);
@@ -183,6 +184,8 @@ describe("cluster supervisor", () => {
     expect(() => failedWorker.emit("error", new Error("spawn EAGAIN"))).not.toThrow();
     expect(logs).toContain("multicore_worker_error");
     expect(supervisor.snapshot().restartSlots).toEqual([]);
+    vi.advanceTimersByTime(9);
+    expect(failedWorker.process.kill).not.toHaveBeenCalled();
 
     failedWorker.emit("exit", 1, null);
     expect(supervisor.snapshot().restartSlots).toEqual([0]);
@@ -191,6 +194,33 @@ describe("cluster supervisor", () => {
     expect(clusterModule.workers).toHaveLength(2);
     expect(clusterModule.workers[1].env.CCH_MULTICORE_WORKER_INDEX).toBe("0");
     expect(logs.filter((event) => event === "multicore_worker_exited")).toHaveLength(1);
+  });
+
+  it("force-kills and synthesizes one exit when error is not followed by exit", () => {
+    vi.useFakeTimers();
+    const clusterModule = new FakeCluster();
+    const { supervisor, logs } = makeSupervisor(clusterModule);
+    supervisor.start();
+    const failedWorker = clusterModule.workers[0];
+
+    failedWorker.emit("error", new Error("spawn EAGAIN"));
+    failedWorker.emit("error", new Error("duplicate error"));
+    vi.advanceTimersByTime(10);
+    expect(failedWorker.process.kill).toHaveBeenCalledTimes(1);
+    expect(failedWorker.process.kill).toHaveBeenCalledWith("SIGKILL");
+    expect(logs).toContain("multicore_worker_error_force_kill");
+
+    vi.advanceTimersByTime(10);
+    expect(logs).toContain("multicore_worker_exit_missing");
+    expect(supervisor.snapshot().restartSlots).toEqual([0]);
+    expect(logs.filter((event) => event === "multicore_worker_exited")).toHaveLength(1);
+
+    // 合成终态之后迟到的真实 exit 不得重复计数或重复拉起。
+    failedWorker.emit("exit", 1, null);
+    expect(logs.filter((event) => event === "multicore_worker_exited")).toHaveLength(1);
+    vi.advanceTimersByTime(10);
+    expect(clusterModule.workers).toHaveLength(2);
+    expect(clusterModule.workers[1].env.CCH_MULTICORE_WORKER_INDEX).toBe("0");
   });
 
   it("restarts an unexpectedly exited worker in the same resource slot", () => {
@@ -255,6 +285,12 @@ describe("cluster supervisor", () => {
     expect(stalledOwner.process.kill).toHaveBeenNthCalledWith(1, "SIGTERM");
     expect(stalledOwner.process.kill).toHaveBeenNthCalledWith(2, "SIGKILL");
     expect(logs).toContain("multicore_worker_ready_force_kill");
+
+    vi.advanceTimersByTime(10);
+    expect(logs).toContain("multicore_worker_exit_missing");
+    expect(supervisor.snapshot().restartSlots).toEqual([0]);
+    stalledOwner.emit("exit", null, "SIGKILL");
+    expect(logs.filter((event) => event === "multicore_worker_exited")).toHaveLength(1);
   });
 
   it("forwards shutdown, waits for workers, and never restarts them", () => {

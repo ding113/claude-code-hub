@@ -4,6 +4,7 @@ const ENV_KEYS = [
   "NEXT_RUNTIME",
   "NODE_ENV",
   "CI",
+  "CCH_MULTICORE_ACTIVE",
   "CCH_MULTICORE_BACKGROUND_OWNER",
   "CCH_MULTICORE_WORKER_INDEX",
   "CCH_MULTICORE_WORKER_COUNT",
@@ -28,12 +29,13 @@ describe.sequential("request-only multicore instrumentation startup", () => {
     vi.resetModules();
     process.env.NEXT_RUNTIME = "nodejs";
     process.env.NODE_ENV = "production";
+    process.env.CCH_MULTICORE_ACTIVE = "1";
     process.env.CCH_MULTICORE_BACKGROUND_OWNER = "0";
     process.env.CCH_MULTICORE_WORKER_INDEX = "1";
     process.env.CCH_MULTICORE_WORKER_COUNT = "2";
-    process.env.ENABLE_RATE_LIMIT = "false";
+    process.env.ENABLE_RATE_LIMIT = "true";
     delete process.env.CI;
-    delete process.env.REDIS_URL;
+    process.env.REDIS_URL = "redis://redis:6379";
 
     const logger = {
       info: vi.fn(),
@@ -47,6 +49,8 @@ describe.sequential("request-only multicore instrumentation startup", () => {
     const bindLifecycleGlobals = vi.fn();
     const checkDatabaseConnection = vi.fn(async () => true);
     const runMigrations = vi.fn(async () => {});
+    const ensureGroupMultiplierCacheSubscription = vi.fn(async () => true);
+    const ensureSystemSettingsCacheSubscription = vi.fn(async () => true);
     const reloadErrorRules = vi.fn(async () => {});
     const getProxyRuntimeSettings = vi.fn(async () => ({}));
     const backgroundQueueModuleFactory = vi.fn(() => ({ scheduleAutoCleanup: vi.fn() }));
@@ -66,6 +70,12 @@ describe.sequential("request-only multicore instrumentation startup", () => {
     }));
     vi.doMock("@/lib/langfuse", () => ({ initLangfuse }));
     vi.doMock("@/lib/lifecycle/shutdown", () => ({ bindLifecycleGlobals }));
+    vi.doMock("@/lib/cache/provider-group-multiplier-cache", () => ({
+      ensureGroupMultiplierCacheSubscription,
+    }));
+    vi.doMock("@/lib/config/system-settings-cache", () => ({
+      ensureSystemSettingsCacheSubscription,
+    }));
     vi.doMock("@/lib/migrate", () => ({
       checkDatabaseConnection,
       runMigrations,
@@ -90,6 +100,8 @@ describe.sequential("request-only multicore instrumentation startup", () => {
     expect(initLangfuse).toHaveBeenCalledTimes(1);
     expect(startCacheCleanup).toHaveBeenCalledWith(60);
     expect(bindLifecycleGlobals).toHaveBeenCalledTimes(1);
+    expect(ensureGroupMultiplierCacheSubscription).toHaveBeenCalledTimes(1);
+    expect(ensureSystemSettingsCacheSubscription).toHaveBeenCalledTimes(1);
     expect(checkDatabaseConnection).toHaveBeenCalledTimes(1);
     expect(startBackgroundReload).toHaveBeenCalledWith({ reason: "startup" });
     expect(reloadErrorRules).toHaveBeenCalledTimes(1);

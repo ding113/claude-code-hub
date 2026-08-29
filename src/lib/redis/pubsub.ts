@@ -7,6 +7,8 @@ import { getRedisClient } from "./client";
 export const CHANNEL_ERROR_RULES_UPDATED = "cch:cache:error_rules:updated";
 export const CHANNEL_REQUEST_FILTERS_UPDATED = "cch:cache:request_filters:updated";
 export const CHANNEL_SENSITIVE_WORDS_UPDATED = "cch:cache:sensitive_words:updated";
+export const CHANNEL_PROVIDER_GROUPS_UPDATED = "cch:cache:provider_groups:updated";
+export const CHANNEL_SYSTEM_SETTINGS_UPDATED = "cch:cache:system_settings:updated";
 // API Key 集合发生变化（典型：创建新 key）时，通知各实例重建 Vacuum Filter，避免误拒绝
 export const CHANNEL_API_KEYS_UPDATED = "cch:cache:api_keys:updated";
 
@@ -203,10 +205,9 @@ function ensureSubscriber(baseClient: Redis): Promise<Redis> {
  * Publish cache invalidation (silent fail, auto-degrade)
  */
 export async function publishCacheInvalidation(channel: string, message?: string): Promise<void> {
-  const redis = getRedisClient();
-  if (!redis) return;
-
   try {
+    const redis = getRedisClient();
+    if (!redis) return;
     await redis.publish(channel, message ?? Date.now().toString());
   } catch (error) {
     logger.warn("[RedisPubSub] Failed to publish cache invalidation", { channel, error });

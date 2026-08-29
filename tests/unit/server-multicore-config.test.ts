@@ -24,6 +24,11 @@ const multicore = requireFromHere("../../server-lib/multicore.js") as {
   parseMemoryLimit: (raw: string) => number | null;
   hasCrossProcessInvalidation: (env: Record<string, string | undefined>) => boolean;
 };
+const launcher = requireFromHere("../../cluster.js") as {
+  normalizeStandaloneEnvironment: (
+    env: Record<string, string | undefined>
+  ) => Record<string, string | undefined>;
+};
 
 type RuntimeResources = {
   availableCpu: number;
@@ -136,6 +141,28 @@ describe("multicore resource detection", () => {
 });
 
 describe("multicore plan", () => {
+  it("restores the full owner role when multicore mode falls back to one process", () => {
+    const env = {
+      CCH_MULTICORE_ACTIVE: "1",
+      CCH_MULTICORE_WORKER_INDEX: "7",
+      CCH_MULTICORE_WORKER_COUNT: "8",
+      CCH_MULTICORE_BACKGROUND_OWNER: "0",
+      CCH_PROCESS_ROLE: "gateway",
+      CCH_MULTICORE_EFFECTIVE_VCPUS: "8",
+      CCH_MULTICORE_EFFECTIVE_MEMORY_BYTES: String(8192 * MIB),
+    };
+
+    expect(launcher.normalizeStandaloneEnvironment(env)).toMatchObject({
+      CCH_MULTICORE_ACTIVE: "0",
+      CCH_MULTICORE_WORKER_INDEX: "0",
+      CCH_MULTICORE_WORKER_COUNT: "1",
+      CCH_MULTICORE_BACKGROUND_OWNER: "1",
+      CCH_PROCESS_ROLE: "gateway-control",
+    });
+    expect(env.CCH_MULTICORE_EFFECTIVE_VCPUS).toBeUndefined();
+    expect(env.CCH_MULTICORE_EFFECTIVE_MEMORY_BYTES).toBeUndefined();
+  });
+
   it("automatically enables two workers at 4 vCPU and preserves aggregate budgets", () => {
     const plan = multicore.createMulticorePlan({
       env: productionEnv(),

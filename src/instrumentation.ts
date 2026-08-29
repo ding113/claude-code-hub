@@ -402,6 +402,49 @@ async function startApiKeyVacuumFilterSync(): Promise<void> {
   }
 }
 
+/**
+ * 多核心 worker 在 ready 前建立计费倍率缓存订阅，避免首次请求刚写入本地缓存、
+ * 订阅尚未完成时漏过其他进程的更新广播。外部多实例部署仍由热路径懒初始化。
+ */
+async function startGroupMultiplierCacheSync(): Promise<boolean> {
+  const rateLimitRaw = process.env.ENABLE_RATE_LIMIT?.trim();
+  if (rateLimitRaw === "false" || rateLimitRaw === "0" || !process.env.REDIS_URL) {
+    return false;
+  }
+
+  try {
+    const { ensureGroupMultiplierCacheSubscription } = await import(
+      "@/lib/cache/provider-group-multiplier-cache"
+    );
+    return await ensureGroupMultiplierCacheSubscription();
+  } catch (error) {
+    logger.warn("[Instrumentation] Provider group multiplier cache sync init failed", {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return false;
+  }
+}
+
+/** 多核心 worker 在 ready 前订阅系统设置更新，避免计费与路由开关跨进程漂移。 */
+async function startSystemSettingsCacheSync(): Promise<boolean> {
+  const rateLimitRaw = process.env.ENABLE_RATE_LIMIT?.trim();
+  if (rateLimitRaw === "false" || rateLimitRaw === "0" || !process.env.REDIS_URL) {
+    return false;
+  }
+
+  try {
+    const { ensureSystemSettingsCacheSubscription } = await import(
+      "@/lib/config/system-settings-cache"
+    );
+    return await ensureSystemSettingsCacheSubscription();
+  } catch (error) {
+    logger.warn("[Instrumentation] System settings cache sync init failed", {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return false;
+  }
+}
+
 function warmupApiKeyVacuumFilter(): void {
   // 预热 API Key Vacuum Filter（减少无效 key 对 DB 的压力）
   try {
@@ -477,6 +520,21 @@ export async function register() {
       // 挂到 globalThis 让 server.js 桥接调用。
       const { bindLifecycleGlobals } = await import("@/lib/lifecycle/shutdown");
       bindLifecycleGlobals();
+    }
+
+    if (process.env.CCH_MULTICORE_ACTIVE === "1") {
+      const [multiplierSyncEnabled, settingsSyncEnabled] = await Promise.all([
+        startGroupMultiplierCacheSync(),
+        startSystemSettingsCacheSync(),
+      ]);
+      if (!multiplierSyncEnabled) {
+        logger.warn(
+          "[Multicore] Provider group multiplier invalidation unavailable; using TTL fallback"
+        );
+      }
+      if (!settingsSyncEnabled) {
+        logger.warn("[Multicore] System settings invalidation unavailable; using TTL fallback");
+      }
     }
 
     // 生产环境: 执行完整初始化(迁移 + 价格表 + 清理任务 + 通知任务)

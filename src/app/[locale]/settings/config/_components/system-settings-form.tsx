@@ -44,7 +44,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { saveSystemSettings } from "@/lib/api-client/v1/actions/system-config";
 import type { CurrencyCode } from "@/lib/utils";
 import { CURRENCY_CONFIG } from "@/lib/utils";
-import { COMMON_TIMEZONES, getTimezoneLabel } from "@/lib/utils/timezone";
+import { COMMON_TIMEZONES, getTimezoneLabel } from "@/lib/utils/timezone-shared";
 import {
   shouldWarnQuotaDbRefreshIntervalTooHigh,
   shouldWarnQuotaDbRefreshIntervalTooLow,

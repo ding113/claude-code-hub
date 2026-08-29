@@ -36,6 +36,19 @@ function loadLauncherEnvironment() {
   }
 }
 
+function normalizeStandaloneEnvironment(env = process.env) {
+  // `off` 是紧急回滚入口。即使部署残留了内部 worker 标记，单进程也必须恢复
+  // 完整 owner 角色，不能误跳过迁移、队列 consumer 或后台调度器。
+  env.CCH_MULTICORE_ACTIVE = "0";
+  env.CCH_MULTICORE_WORKER_INDEX = "0";
+  env.CCH_MULTICORE_WORKER_COUNT = "1";
+  env.CCH_MULTICORE_BACKGROUND_OWNER = "1";
+  env.CCH_PROCESS_ROLE = "gateway-control";
+  delete env.CCH_MULTICORE_EFFECTIVE_VCPUS;
+  delete env.CCH_MULTICORE_EFFECTIVE_MEMORY_BYTES;
+  return env;
+}
+
 async function main() {
   if (!cluster.isPrimary) {
     throw new Error("cluster.js must only run as the primary process");
@@ -60,6 +73,7 @@ async function main() {
   });
 
   if (!plan.enabled) {
+    normalizeStandaloneEnvironment(process.env);
     const { main: startServer } = require("./server");
     await startServer();
     return;
@@ -82,7 +96,7 @@ async function main() {
   }).start();
 }
 
-module.exports = { loadLauncherEnvironment, main };
+module.exports = { loadLauncherEnvironment, main, normalizeStandaloneEnvironment };
 
 if (require.main === module) {
   main().catch((error) => {

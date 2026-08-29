@@ -3,6 +3,7 @@
 import { getTranslations } from "next-intl/server";
 import { emitActionAudit } from "@/lib/audit/emit";
 import { getSession } from "@/lib/auth";
+import { publishGroupMultiplierCacheInvalidation } from "@/lib/cache/provider-group-multiplier-cache";
 import { PROVIDER_GROUP } from "@/lib/constants/provider.constants";
 import { logger } from "@/lib/logger";
 import { bootstrapProviderGroupsFromProviders } from "@/lib/provider-groups/bootstrap";
@@ -128,6 +129,8 @@ export async function createProviderGroup(input: {
       costMultiplier: input.costMultiplier,
       description: input.description ?? null,
     });
+    // 数据库已提交后再广播，避免其他 worker 在事务可见前重新缓存旧倍率。
+    await publishGroupMultiplierCacheInvalidation();
 
     emitActionAudit({
       category: "provider_group",
@@ -209,6 +212,9 @@ export async function updateProviderGroup(
     if (!updated) {
       return { ok: false, error: tError("NOT_FOUND"), errorCode: ERROR_CODES.NOT_FOUND };
     }
+    if (input.costMultiplier !== undefined) {
+      await publishGroupMultiplierCacheInvalidation();
+    }
 
     emitActionAudit({
       category: "provider_group",
@@ -277,6 +283,7 @@ export async function deleteProviderGroup(id: number): Promise<ActionResult<void
     }
 
     await repoDeleteProviderGroup(id);
+    await publishGroupMultiplierCacheInvalidation();
     emitActionAudit({
       category: "provider_group",
       action: "provider_group.delete",
