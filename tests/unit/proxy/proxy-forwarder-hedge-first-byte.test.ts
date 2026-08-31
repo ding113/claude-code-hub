@@ -1927,9 +1927,8 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
         billingModel: requestedModel,
       });
       expect(
-        chain.find(
-          (item) => item.id === provider2.id && item.reason === "client_abort"
-        )?.modelRedirect
+        chain.find((item) => item.id === provider2.id && item.reason === "client_abort")
+          ?.modelRedirect
       ).toMatchObject({
         originalModel: requestedModel,
         redirectedModel: "MiniMax-M2.7-highspeed",
