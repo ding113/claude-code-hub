@@ -2528,12 +2528,7 @@ export class ProxyForwarder {
                 undefined,
                 true
               );
-              await Promise.all([
-                recordFailure(currentProvider.id, abortFailure),
-                activeEndpoint.endpointId == null
-                  ? Promise.resolve()
-                  : recordEndpointFailure(activeEndpoint.endpointId, abortFailure),
-              ]).catch((healthError) => {
+              await recordFailure(currentProvider.id, abortFailure).catch((healthError) => {
                 logger.warn("ProxyForwarder: Failed to account serial client abort health", {
                   providerId: currentProvider.id,
                   error: healthError instanceof Error ? healthError.message : String(healthError),
@@ -5949,12 +5944,7 @@ export class ProxyForwarder {
 
       // Do not inherit the downstream abort signal: health and trace side effects must finish
       // independently after the client-facing response has become HTTP 499.
-      void Promise.all([
-        recordFailure(attempt.provider.id, failure),
-        attempt.endpointAudit.endpointId == null
-          ? Promise.resolve()
-          : recordEndpointFailure(attempt.endpointAudit.endpointId, failure),
-      ]).catch((healthError) => {
+      void recordFailure(attempt.provider.id, failure).catch((healthError) => {
         logger.warn("ProxyForwarder: Failed to account client abort provider health", {
           error: healthError instanceof Error ? healthError.message : String(healthError),
           attemptId: attempt.attemptId,
