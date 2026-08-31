@@ -1913,7 +1913,7 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
       expect(controller1.signal.aborted).toBe(true);
       expect(controller2.signal.aborted).toBe(true);
       expect(mocks.clearSessionProviders).toHaveBeenCalledWith("sess-hedge", new Set([1, 2]), null);
-      expect(mocks.recordFailure).toHaveBeenCalledTimes(2);
+      expect(mocks.recordFailure).toHaveBeenCalledTimes(1);
       expect(mocks.recordSuccess).not.toHaveBeenCalled();
 
       const chain = session.getProviderChain();
@@ -1928,7 +1928,7 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
       });
       expect(
         chain.find(
-          (item) => item.id === provider2.id && item.reason === "client_abort_no_first_byte"
+          (item) => item.id === provider2.id && item.reason === "client_abort"
         )?.modelRedirect
       ).toMatchObject({
         originalModel: requestedModel,

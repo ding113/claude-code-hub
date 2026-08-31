@@ -165,7 +165,7 @@ export function SystemSettingsForm({
   );
   const [billHedgeLosers, setBillHedgeLosers] = useState(initialSettings.billHedgeLosers);
   const [legacyHedgeMaxInFlight, setLegacyHedgeMaxInFlight] = useState<DiscoveryNumberValue>(
-    initialSettings.legacyHedgeMaxInFlight
+    initialSettings.legacyHedgeMaxInFlight ?? 2
   );
   const [discoveryEnabled, setDiscoveryEnabled] = useState(initialSettings.discoveryEnabled);
   const [discoveryConcurrency, setDiscoveryConcurrency] = useState<DiscoveryNumberValue>(

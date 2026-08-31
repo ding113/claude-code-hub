@@ -98,7 +98,8 @@ BEGIN
   END IF;
 
   IF COALESCE(last_status_code, status_code) = 404
-     OR (COALESCE(last_status_code, status_code) = 499 AND last_reason <> 'client_abort_no_first_byte') THEN
+     OR (COALESCE(last_status_code, status_code) = 499
+         AND last_reason IS DISTINCT FROM 'client_abort_no_first_byte') THEN
     RETURN 'excluded';
   END IF;
 

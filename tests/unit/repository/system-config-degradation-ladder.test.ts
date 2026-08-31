@@ -7,6 +7,7 @@ import type { UpdateSystemSettingsInput } from "@/types/system-config";
 
 // 近代新增列（最新在前），降级链按引入顺序逐层累计剥离。
 const RECENT_COLUMNS = [
+  "legacyHedgeMaxInFlight",
   "replayCacheTtlMinutes",
   "cacheEffectivenessEnabled",
   "replayEnabled",
@@ -21,7 +22,6 @@ const RECENT_COLUMNS = [
   "discoveryEnabled",
   "enableGeminiFunctionIdRectifier",
   "enableThinkingEffortConflictRectifier",
-  "legacyHedgeMaxInFlight",
   "billHedgeLosers",
   "billNonSuccessfulRequests",
   "enableOpenaiResponsesWebsocket",
