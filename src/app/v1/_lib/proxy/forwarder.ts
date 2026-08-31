@@ -164,7 +164,19 @@ import {
 export const DEFAULT_CODEX_USER_AGENT =
   "codex_cli_rs/0.93.0 (Windows 10.0.26200; x86_64) vscode/1.108.1";
 const EMPTY_PREFIX_CHUNK = new Uint8Array(0);
-const LEGACY_STREAMING_HEDGE_MAX_CONCURRENCY = 2;
+const LEGACY_STREAMING_HEDGE_DEFAULT_MAX_IN_FLIGHT = 2;
+const LEGACY_STREAMING_HEDGE_MIN_MAX_IN_FLIGHT = 1;
+const LEGACY_STREAMING_HEDGE_MAX_MAX_IN_FLIGHT = 4;
+const CLIENT_ABORT_HEALTH_FALLBACK_THRESHOLD_MS = 30_000;
+
+function clampLegacyHedgeMaxInFlight(value: unknown): number {
+  const numeric = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(numeric)) return LEGACY_STREAMING_HEDGE_DEFAULT_MAX_IN_FLIGHT;
+  return Math.min(
+    LEGACY_STREAMING_HEDGE_MAX_MAX_IN_FLIGHT,
+    Math.max(LEGACY_STREAMING_HEDGE_MIN_MAX_IN_FLIGHT, Math.floor(numeric))
+  );
+}
 
 async function runStreamContentGateWithAbortSignals(
   reader: ReadableStreamDefaultReader<Uint8Array>,
@@ -586,6 +598,19 @@ type StreamingHedgeAttempt = {
   gateAudit?: ProviderChainItem["streamGate"];
   /** 该 attempt 首字节到达时刻（epoch ms）；只有赢家的值会被记为 session TTFB。 */
   firstByteAt?: number | null;
+  /** Stable identity for routing trace and per-attempt health attribution. */
+  attemptId: string;
+  /** Monotonic dispatch timestamp used for client-abort threshold comparisons. */
+  startedAtMonotonic: number;
+  /** Effective health-attribution threshold; independent from request timeout behavior. */
+  healthAttributionThresholdMs: number;
+  /** Set immediately when the upstream dispatch starts. */
+  dispatched: boolean;
+  /** Exactly-once guard for provider health/circuit settlement. */
+  healthSettlementClaimed: boolean;
+  healthOutcome: "client_abort_no_first_byte" | "provider_failure" | "other_failure" | null;
+  /** Avoid duplicate saturation events for a threshold trigger. */
+  hedgeSaturationRecorded: boolean;
   /**
    * Billing context snapshot for the INITIAL provider's losing attempt, captured BEFORE
    * commitWinner overwrites the shared session's model/context with the winner's. Null for
@@ -1648,6 +1673,9 @@ export class ProxyForwarder {
             1,
             discoverySettings.stickyTimeoutCooldownMs ?? 300_000
           ),
+          legacyHedgeMaxInFlight: clampLegacyHedgeMaxInFlight(
+            discoverySettings.legacyHedgeMaxInFlight
+          ),
           sessionTtlSeconds,
         },
       });
@@ -1660,6 +1688,9 @@ export class ProxyForwarder {
     }
 
     const useStreamingHedge = ProxyForwarder.shouldUseStreamingHedge(session);
+    const legacyHedgeMaxInFlight = clampLegacyHedgeMaxInFlight(
+      discoverySettings.legacyHedgeMaxInFlight
+    );
     const singleUpstream =
       discoveryPreparation.reason === "binding_conflict" ||
       discoveryPreparation.reason === "lease_conflict" ||
@@ -1676,10 +1707,24 @@ export class ProxyForwarder {
       eligible: false,
       bypassReason: discoveryPreparation.reason,
       startedAt: requestStartedAt,
+      config: {
+        discoveryConcurrency: Math.max(2, Math.floor(discoverySettings.discoveryConcurrency ?? 2)),
+        maxDiscoveryRounds: Math.max(1, Math.floor(discoverySettings.maxDiscoveryRounds ?? 2)),
+        discoverySlaMs: Math.max(1, discoverySettings.discoverySlaMs ?? 10_000),
+        stickySlaMs: Math.max(1, discoverySettings.stickySlaMs ?? 20_000),
+        racingTotalTimeoutMs: Math.max(1, discoverySettings.racingTotalTimeoutMs ?? 60_000),
+        stickyTimeoutCooldownMs: Math.max(1, discoverySettings.stickyTimeoutCooldownMs ?? 300_000),
+        legacyHedgeMaxInFlight,
+        sessionTtlSeconds,
+      },
     });
 
     if (useStreamingHedge) {
-      const hedgePromise = ProxyForwarder.sendStreamingWithHedge(session);
+      const hedgePromise = ProxyForwarder.sendStreamingWithHedge(
+        session,
+        discoverySettings,
+        legacyHedgeMaxInFlight
+      );
       void hedgePromise.catch(() => undefined);
       return await hedgePromise;
     }
@@ -1908,6 +1953,8 @@ export class ProxyForwarder {
       // ========== 内层循环：重试当前供应商（根据配置最多尝试 maxAttemptsPerProvider 次）==========
       while (attemptCount < maxAttemptsPerProvider) {
         attemptCount++;
+        const attemptStartedAtMonotonic = performance.now();
+        let attemptFirstByteSeen = false;
 
         // Use currentEndpointIndex for endpoint selection (sticky behavior)
         // - currentEndpointIndex is advanced only on SYSTEM_ERROR (network errors)
@@ -2001,6 +2048,7 @@ export class ProxyForwarder {
                     // 首字节到达即清除首字节计时器，保持「首字节超时」的原始语义——
                     // 思考型模型可在首个内容帧前长时间输出中性帧，不应触发该计时器
                     onFirstByte: () => {
+                      attemptFirstByteSeen = true;
                       gateFirstByteAt ??= Date.now();
                       runtime.clearResponseTimeout?.();
                     },
@@ -2107,6 +2155,14 @@ export class ProxyForwarder {
               endpointUrl: endpointAudit.endpointUrl,
               upstreamStatusCode: response.status,
               bindingIntent: session.isSessionBindingAllowed() ? undefined : "none",
+              healthAttemptId: `legacy-serial-${totalProvidersAttempted}-${attemptCount}`,
+              healthAttemptStartedAtMonotonic: attemptStartedAtMonotonic,
+              healthAttributionThresholdMs:
+                currentProvider.firstByteTimeoutStreamingMs > 0
+                  ? currentProvider.firstByteTimeoutStreamingMs
+                  : CLIENT_ABORT_HEALTH_FALLBACK_THRESHOLD_MS,
+              healthFirstByteSeen: attemptFirstByteSeen,
+              healthOutcomeSettled: false,
             });
 
             logger.info("ProxyForwarder: Streaming response received, deferring finalization", {
@@ -2455,10 +2511,56 @@ export class ProxyForwarder {
 
             await ProxyForwarder.clearSessionProviderBinding(session, currentProvider.id);
 
+            const elapsedMs = Math.max(0, performance.now() - attemptStartedAtMonotonic);
+            const thresholdMs =
+              currentProvider.firstByteTimeoutStreamingMs > 0
+                ? currentProvider.firstByteTimeoutStreamingMs
+                : CLIENT_ABORT_HEALTH_FALLBACK_THRESHOLD_MS;
+            const qualifiesForHealth =
+              !attemptFirstByteSeen &&
+              elapsedMs >= thresholdMs &&
+              endpointPolicy.allowCircuitBreakerAccounting;
+
+            if (qualifiesForHealth) {
+              const abortFailure = new ProxyError(
+                "Client aborted while provider was waiting for the first byte",
+                499,
+                undefined,
+                true
+              );
+              await Promise.all([
+                recordFailure(currentProvider.id, abortFailure),
+                activeEndpoint.endpointId == null
+                  ? Promise.resolve()
+                  : recordEndpointFailure(activeEndpoint.endpointId, abortFailure),
+              ]).catch((healthError) => {
+                logger.warn("ProxyForwarder: Failed to account serial client abort health", {
+                  providerId: currentProvider.id,
+                  error: healthError instanceof Error ? healthError.message : String(healthError),
+                });
+              });
+              session.appendRoutingTraceEvent({
+                type: "client_abort_no_first_byte",
+                attemptId: `legacy-serial-${totalProvidersAttempted}-${attemptCount}`,
+                provider: {
+                  id: currentProvider.id,
+                  name: currentProvider.name,
+                  priority: currentProvider.priority || 0,
+                },
+                outcome: "provider_failure",
+                cancellationKind: "client_abort",
+                reason: "external_client_abort",
+                effectiveThresholdMs: thresholdMs,
+                circuitAccountingApplied: true,
+                availabilityAccountingApplied: true,
+                durationMs: Math.round(elapsedMs),
+              });
+            }
+
             // 记录到决策链（标记为客户端中断）
             session.addProviderToChain(currentProvider, {
               ...endpointAudit,
-              reason: "client_abort",
+              reason: qualifiesForHealth ? "client_abort_no_first_byte" : "client_abort",
               circuitState: getCircuitState(currentProvider.id),
               attemptNumber: attemptCount,
               errorMessage: "Client aborted request",
@@ -4682,7 +4784,11 @@ export class ProxyForwarder {
     return resolveEndpointPolicy(policySession.requestUrl?.pathname ?? "/");
   }
 
-  private static async sendStreamingWithHedge(session: ProxySession): Promise<Response> {
+  private static async sendStreamingWithHedge(
+    session: ProxySession,
+    settings: SystemSettings,
+    maxInFlight: number
+  ): Promise<Response> {
     const initialProvider = session.provider;
     if (!initialProvider) {
       throw new Error("代理上下文缺少供应商");
@@ -4690,7 +4796,7 @@ export class ProxyForwarder {
 
     const rawCrossProviderFallbackEnabled = session.isRawCrossProviderFallbackEnabled();
     // 竞速输家计费开关：开启时落败供应商不被直接掐断，而是后台 drain 并计费。
-    const billHedgeLosers = (await getCachedSystemSettings()).billHedgeLosers === true;
+    const billHedgeLosers = settings.billHedgeLosers === true;
     const launchedProviderIds = new Set<number>();
     let launchedProviderCount = 0;
     let settled = false;
@@ -4895,6 +5001,25 @@ export class ProxyForwarder {
       attempt.thresholdRemainingMs = 0;
       if (settled || attempt.settled || attempt.thresholdTriggered) return;
       attempt.thresholdTriggered = true;
+      if (attempts.size >= maxInFlight && !attempt.hedgeSaturationRecorded) {
+        attempt.hedgeSaturationRecorded = true;
+        const elapsedMs = Math.max(0, Math.round(performance.now() - attempt.startedAtMonotonic));
+        session.appendRoutingTraceEvent({
+          type: "hedge_slot_saturated",
+          attemptId: attempt.attemptId,
+          provider: {
+            id: attempt.provider.id,
+            name: attempt.provider.name,
+            priority: attempt.provider.priority || 0,
+          },
+          outcome: "slot_saturated",
+          reason: "hedge_threshold",
+          activeAttemptCount: attempts.size,
+          configuredCap: maxInFlight,
+          durationMs: elapsedMs,
+          elapsedMs,
+        });
+      }
       session.addProviderToChain(attempt.provider, {
         ...attempt.endpointAudit,
         reason: "hedge_triggered",
@@ -4971,7 +5096,7 @@ export class ProxyForwarder {
 
     const launchAlternative = async () => {
       if (settled || winnerCommitted || noMoreProviders) return;
-      if (attempts.size >= LEGACY_STREAMING_HEDGE_MAX_CONCURRENCY) return;
+      if (attempts.size >= maxInFlight) return;
       if (launchingAlternative) {
         await launchingAlternative;
         return;
@@ -5021,6 +5146,7 @@ export class ProxyForwarder {
     };
 
     const runAttempt = (attempt: StreamingHedgeAttempt) => {
+      attempt.dispatched = true;
       const providerForRequest =
         attempt.firstByteTimeoutMs > 0
           ? { ...attempt.provider, firstByteTimeoutStreamingMs: 0 }
@@ -5171,6 +5297,8 @@ export class ProxyForwarder {
                 return;
               }
 
+              attempt.firstByteAt ??= Date.now();
+
               // 保留首块：若本 attempt 落败且需要计费，drain 时需要补回首块的 usage。
               attempt.billingPrefixChunks = [firstChunk.value];
               acceptedAsWinner = await commitWinner(attempt, [firstChunk.value], false);
@@ -5236,6 +5364,12 @@ export class ProxyForwarder {
       }
       if (settled || winnerCommitted || attempt.settled) return;
 
+      // Claim the attempt's terminal race before awaiting asynchronous error classification. If
+      // the downstream abort arrives while classification is in flight, the upstream error that
+      // reached this handler first remains authoritative. A rectifier retry below reopens this
+      // claim for the same logical attempt.
+      attempt.healthSettlementClaimed = true;
+      attempt.healthOutcome = "other_failure";
       lastError = error;
 
       let errorCategory = await categorizeErrorAsync(error);
@@ -5387,6 +5521,8 @@ export class ProxyForwarder {
             attempt.thresholdTimer = null;
           }
           attempt.requestAttemptCount += 1;
+          attempt.healthSettlementClaimed = false;
+          attempt.healthOutcome = null;
           armAttemptThreshold(attempt);
           runAttempt(attempt);
           return;
@@ -5408,6 +5544,8 @@ export class ProxyForwarder {
         });
       }
 
+      attempt.healthSettlementClaimed = true;
+      attempt.healthOutcome = "other_failure";
       attempt.settled = true;
       if (attempt.thresholdTimer) {
         clearTimeout(attempt.thresholdTimer);
@@ -5421,6 +5559,7 @@ export class ProxyForwarder {
         statusCode !== 404 &&
         !isRequestScopedGateFailure(error)
       ) {
+        attempt.healthOutcome = "provider_failure";
         await recordFailure(attempt.provider.id, error);
       }
 
@@ -5700,6 +5839,16 @@ export class ProxyForwarder {
         clearResponseTimeout: null,
         firstByteTimeoutMs:
           provider.firstByteTimeoutStreamingMs > 0 ? provider.firstByteTimeoutStreamingMs : 0,
+        attemptId: `legacy-hedge-${launchedProviderCount}`,
+        startedAtMonotonic: performance.now(),
+        healthAttributionThresholdMs:
+          provider.firstByteTimeoutStreamingMs > 0
+            ? provider.firstByteTimeoutStreamingMs
+            : CLIENT_ABORT_HEALTH_FALLBACK_THRESHOLD_MS,
+        dispatched: false,
+        healthSettlementClaimed: false,
+        healthOutcome: null,
+        hedgeSaturationRecorded: false,
         sequence: launchedProviderCount,
         requestAttemptCount: 1,
         reactiveRectifierRetryState: {
@@ -5748,6 +5897,73 @@ export class ProxyForwarder {
       return true;
     };
 
+    const settleClientAbortHealth = (attempt: StreamingHedgeAttempt): boolean => {
+      if (
+        !attempt.dispatched ||
+        attempt.settled ||
+        attempt.firstByteAt != null ||
+        winnerCommitted ||
+        attempt.healthSettlementClaimed
+      ) {
+        return false;
+      }
+
+      const elapsedMs = Math.max(0, performance.now() - attempt.startedAtMonotonic);
+      if (elapsedMs < attempt.healthAttributionThresholdMs) return false;
+
+      attempt.healthSettlementClaimed = true;
+      attempt.healthOutcome = "client_abort_no_first_byte";
+      const roundedElapsedMs = Math.round(elapsedMs);
+      const failure = new ProxyError(
+        "Client aborted while provider was waiting for the first byte",
+        499,
+        undefined,
+        true
+      );
+
+      session.addProviderToChain(attempt.provider, {
+        ...attempt.endpointAudit,
+        reason: "client_abort_no_first_byte",
+        attemptNumber: attempt.sequence,
+        errorMessage: "Client aborted before provider first byte threshold",
+        circuitState: getCircuitState(attempt.provider.id),
+        modelRedirect: getAttemptModelRedirect(attempt),
+      });
+      session.appendRoutingTraceEvent({
+        type: "client_abort_no_first_byte",
+        attemptId: attempt.attemptId,
+        provider: {
+          id: attempt.provider.id,
+          name: attempt.provider.name,
+          priority: attempt.provider.priority || 0,
+        },
+        outcome: "provider_failure",
+        cancellationKind: "client_abort",
+        reason: "external_client_abort",
+        effectiveThresholdMs: attempt.healthAttributionThresholdMs,
+        circuitAccountingApplied: true,
+        availabilityAccountingApplied: true,
+        durationMs: roundedElapsedMs,
+        elapsedMs: roundedElapsedMs,
+      });
+
+      // Do not inherit the downstream abort signal: health and trace side effects must finish
+      // independently after the client-facing response has become HTTP 499.
+      void Promise.all([
+        recordFailure(attempt.provider.id, failure),
+        attempt.endpointAudit.endpointId == null
+          ? Promise.resolve()
+          : recordEndpointFailure(attempt.endpointAudit.endpointId, failure),
+      ]).catch((healthError) => {
+        logger.warn("ProxyForwarder: Failed to account client abort provider health", {
+          error: healthError instanceof Error ? healthError.message : String(healthError),
+          attemptId: attempt.attemptId,
+          providerId: attempt.provider.id,
+        });
+      });
+      return true;
+    };
+
     const cleanupClientAbortListener = bindClientAbortListener(session.clientAbortSignal, () => {
       if (settled || winnerCommitted) return;
       noMoreProviders = true;
@@ -5755,13 +5971,16 @@ export class ProxyForwarder {
       lastErrorCategory = ErrorCategory.CLIENT_ABORT;
       for (const attempt of Array.from(attempts)) {
         if (!attempt.settled) {
-          session.addProviderToChain(attempt.provider, {
-            ...attempt.endpointAudit,
-            reason: "client_abort",
-            attemptNumber: attempt.sequence,
-            errorMessage: "Client aborted request",
-            modelRedirect: getAttemptModelRedirect(attempt),
-          });
+          const attributed = settleClientAbortHealth(attempt);
+          if (!attributed) {
+            session.addProviderToChain(attempt.provider, {
+              ...attempt.endpointAudit,
+              reason: "client_abort",
+              attemptNumber: attempt.sequence,
+              errorMessage: "Client aborted request",
+              modelRedirect: getAttemptModelRedirect(attempt),
+            });
+          }
         }
       }
       abortAllAttempts(undefined, "client_abort");

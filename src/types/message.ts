@@ -50,6 +50,7 @@ export interface ProviderChainItem {
     | "hedge_loser_cancelled" // 该供应商输掉 Hedge 竞速，请求被取消（未对输家计费）
     | "hedge_loser_billed" // 该供应商输掉 Hedge 竞速，但其上游响应被后台拿回并计费
     | "client_abort" // 客户端在响应完成前断开连接
+    | "client_abort_no_first_byte" // 客户端在阈值后断开且该供应商未返回首字节
     | "affinity_hit"; // 最长前缀亲和命中（软提名，已通过全套硬校验）
 
   // === 选择方法（细化） ===

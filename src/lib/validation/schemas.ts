@@ -1022,6 +1022,8 @@ export const UpdateSystemSettingsSchema = z
     billNonSuccessfulRequests: z.boolean().optional(),
     // 供应商竞速输家计费（可选；默认开启）
     billHedgeLosers: z.boolean().optional(),
+    // Legacy streaming hedge concurrency cap (inclusive of the primary attempt).
+    legacyHedgeMaxInFlight: z.coerce.number().int().min(1).max(4).optional(),
     // Bounded streaming Discovery（默认关闭；启用前需满足总窗口约束）
     discoveryEnabled: z.boolean().optional(),
     discoveryConcurrency: z.coerce

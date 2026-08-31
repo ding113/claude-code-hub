@@ -281,7 +281,7 @@ function getItemStatus(item: ProviderChainItem): {
       bgColor: "bg-slate-50 dark:bg-slate-800/50",
     };
   }
-  if (item.reason === "client_abort") {
+  if (item.reason === "client_abort" || item.reason === "client_abort_no_first_byte") {
     return {
       icon: MinusCircle,
       color: "text-amber-600",

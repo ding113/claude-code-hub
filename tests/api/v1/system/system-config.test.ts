@@ -42,6 +42,7 @@ const settings: SystemSettings = {
   currencyDisplay: "USD",
   billingModelSource: "original",
   codexPriorityBillingSource: "requested",
+  legacyHedgeMaxInFlight: 2,
   timezone: "Asia/Shanghai",
   enableAutoCleanup: false,
   cleanupRetentionDays: 30,

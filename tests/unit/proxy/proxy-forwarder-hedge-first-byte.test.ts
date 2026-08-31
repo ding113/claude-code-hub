@@ -1913,21 +1913,23 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
       expect(controller1.signal.aborted).toBe(true);
       expect(controller2.signal.aborted).toBe(true);
       expect(mocks.clearSessionProviders).toHaveBeenCalledWith("sess-hedge", new Set([1, 2]), null);
-      expect(mocks.recordFailure).not.toHaveBeenCalled();
+      expect(mocks.recordFailure).toHaveBeenCalledTimes(2);
       expect(mocks.recordSuccess).not.toHaveBeenCalled();
 
       const chain = session.getProviderChain();
       expect(
-        chain.find((item) => item.id === provider1.id && item.reason === "client_abort")
-          ?.modelRedirect
+        chain.find(
+          (item) => item.id === provider1.id && item.reason === "client_abort_no_first_byte"
+        )?.modelRedirect
       ).toMatchObject({
         originalModel: requestedModel,
         redirectedModel: "accounts/fireworks/routers/kimi-k2p5-turbo",
         billingModel: requestedModel,
       });
       expect(
-        chain.find((item) => item.id === provider2.id && item.reason === "client_abort")
-          ?.modelRedirect
+        chain.find(
+          (item) => item.id === provider2.id && item.reason === "client_abort_no_first_byte"
+        )?.modelRedirect
       ).toMatchObject({
         originalModel: requestedModel,
         redirectedModel: "MiniMax-M2.7-highspeed",

@@ -110,7 +110,8 @@ function getProviderStatus(item: ProviderChainItem): "✓" | "✗" | "⚡" | "�
     item.reason === "client_error_non_retryable" ||
     item.reason === "endpoint_pool_exhausted" ||
     item.reason === "vendor_type_all_timeout" ||
-    item.reason === "client_abort"
+    item.reason === "client_abort" ||
+    item.reason === "client_abort_no_first_byte"
   ) {
     return "✗";
   }
@@ -153,7 +154,8 @@ export function isActualRequest(item: ProviderChainItem): boolean {
     item.reason === "client_error_non_retryable" ||
     item.reason === "endpoint_pool_exhausted" ||
     item.reason === "vendor_type_all_timeout" ||
-    item.reason === "client_abort"
+    item.reason === "client_abort" ||
+    item.reason === "client_abort_no_first_byte"
   ) {
     return true;
   }

@@ -47,6 +47,7 @@ function createSettings(overrides: Partial<SystemSettings> = {}): SystemSettings
     currencyDisplay: "USD",
     billingModelSource: "original",
     codexPriorityBillingSource: "requested",
+    legacyHedgeMaxInFlight: 2,
     timezone: null,
     enableAutoCleanup: false,
     cleanupRetentionDays: 30,

@@ -70,6 +70,18 @@ describe("UpdateSystemSettingsSchema Discovery settings", () => {
     });
   });
 
+  it.each([1, 2, 4])("accepts legacy hedge concurrency %s", (value) => {
+    expect(UpdateSystemSettingsSchema.parse({ legacyHedgeMaxInFlight: value })).toEqual({
+      legacyHedgeMaxInFlight: value,
+    });
+  });
+
+  it.each([0, 5, 1.5, null])("rejects invalid legacy hedge concurrency %s", (value) => {
+    expect(UpdateSystemSettingsSchema.safeParse({ legacyHedgeMaxInFlight: value }).success).toBe(
+      false
+    );
+  });
+
   it("rejects inherited Object prototype names as Discovery fields", () => {
     expect(isDiscoverySettingField("toString")).toBe(false);
     expect(isDiscoverySettingField("valueOf")).toBe(false);

@@ -127,6 +127,7 @@ export const DEFAULT_SETTINGS: Pick<
   | "stickySlaMs"
   | "racingTotalTimeoutMs"
   | "stickyTimeoutCooldownMs"
+  | "legacyHedgeMaxInFlight"
 > = {
   enableHttp2: false,
   enableOpenaiResponsesWebsocket: true,
@@ -167,6 +168,7 @@ export const DEFAULT_SETTINGS: Pick<
   stickySlaMs: 20_000,
   racingTotalTimeoutMs: 60_000,
   stickyTimeoutCooldownMs: 300_000,
+  legacyHedgeMaxInFlight: 2,
 };
 
 /**
@@ -227,6 +229,7 @@ export async function getCachedSystemSettings(): Promise<SystemSettings> {
       codexPriorityBillingSource: DEFAULT_SETTINGS.codexPriorityBillingSource,
       billNonSuccessfulRequests: false,
       billHedgeLosers: true,
+      legacyHedgeMaxInFlight: DEFAULT_SETTINGS.legacyHedgeMaxInFlight,
       timezone: null,
       verboseProviderError: false,
       passThroughUpstreamErrorMessage: DEFAULT_SETTINGS.passThroughUpstreamErrorMessage,

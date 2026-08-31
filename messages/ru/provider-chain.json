@@ -71,7 +71,8 @@
     "hedge_winner": "Победитель Hedge-гонки",
     "hedge_loser_cancelled": "Проигравший Hedge-гонки (отменён)",
     "hedge_loser_billed": "Проигравший (тарифицирован)",
-    "client_abort": "Клиент прервал запрос"
+    "client_abort": "Клиент прервал запрос",
+    "client_abort_no_first_byte": "Клиент прервал запрос до первого байта"
   },
   "filterReasons": {
     "rate_limited": "Ограничение скорости",

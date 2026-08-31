@@ -151,6 +151,7 @@ function createFallbackSettings(): SystemSettings {
     codexPriorityBillingSource: "requested",
     billNonSuccessfulRequests: false,
     billHedgeLosers: true,
+    legacyHedgeMaxInFlight: 2,
     timezone: null,
     enableAutoCleanup: false,
     cleanupRetentionDays: 30,
@@ -284,6 +285,12 @@ const RECENT_COLUMN_LADDER: ReadonlyArray<{
   // 本层更新失败（仍有列缺失）时记录的告警
   updateWarn: string;
 }> = [
+  {
+    key: "legacyHedgeMaxInFlight",
+    column: systemSettings.legacyHedgeMaxInFlight,
+    selectWarn: "system_settings 缺少 legacyHedgeMaxInFlight,回退到上一代字段集。",
+    updateWarn: "system_settings 缺少 legacyHedgeMaxInFlight,继续降级更新。",
+  },
   {
     key: "replayCacheTtlMinutes",
     column: systemSettings.replayCacheTtlMinutes,
@@ -713,6 +720,10 @@ export async function updateSystemSettings(
     // 供应商竞速输家计费开关（如果提供）
     if (payload.billHedgeLosers !== undefined) {
       updates.billHedgeLosers = payload.billHedgeLosers;
+    }
+
+    if (payload.legacyHedgeMaxInFlight !== undefined) {
+      updates.legacyHedgeMaxInFlight = payload.legacyHedgeMaxInFlight;
     }
 
     if (payload.discoveryEnabled !== undefined) {

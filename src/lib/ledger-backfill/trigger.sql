@@ -44,7 +44,8 @@ BEGIN
       'hedge_winner',
       'hedge_loser_cancelled',
       'hedge_loser_billed',
-      'client_abort'
+      'client_abort',
+      'client_abort_no_first_byte'
     )
     OR last_status_code IS NOT NULL
     OR COALESCE(last_error_message, '') <> '' THEN
@@ -96,7 +97,8 @@ BEGIN
     RETURN 'excluded';
   END IF;
 
-  IF COALESCE(last_status_code, status_code) IN (404, 499) THEN
+  IF COALESCE(last_status_code, status_code) = 404
+     OR (COALESCE(last_status_code, status_code) = 499 AND last_reason <> 'client_abort_no_first_byte') THEN
     RETURN 'excluded';
   END IF;
 

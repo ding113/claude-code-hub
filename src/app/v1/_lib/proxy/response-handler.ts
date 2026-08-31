@@ -1803,7 +1803,8 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
   clientAborted: boolean,
   discoveryLeaseLifecycle: DiscoveryLeaseLifecycle,
   protocolObservation: StreamProtocolObservation | null,
-  abortReason?: string
+  abortReason?: string,
+  firstByteSeen = false
 ): FinalizeDeferredStreamingResult {
   const meta = consumeDeferredStreamingFinalization(session);
   const provider = session.provider;
@@ -2012,6 +2013,44 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
 
   const isHedgeWinner = meta?.isHedgeWinner === true;
   const billHedgeLosers = meta?.billHedgeLosers === true;
+  const healthAttributionElapsedMs =
+    meta?.healthAttemptStartedAtMonotonic == null
+      ? null
+      : Math.max(
+          0,
+          (meta.healthAbortAtMonotonic ?? performance.now()) - meta.healthAttemptStartedAtMonotonic
+        );
+  const clientAbortNoFirstByte =
+    clientAborted &&
+    meta?.healthAttemptId != null &&
+    meta.healthFirstByteSeen !== true &&
+    !firstByteSeen &&
+    meta.healthAttributionThresholdMs != null &&
+    healthAttributionElapsedMs != null &&
+    healthAttributionElapsedMs >= meta.healthAttributionThresholdMs &&
+    meta.healthOutcomeSettled !== true &&
+    session.getEndpointPolicy().allowCircuitBreakerAccounting;
+  if (clientAbortNoFirstByte && meta) {
+    meta.healthOutcomeSettled = true;
+    const elapsedMs = Math.round(healthAttributionElapsedMs ?? 0);
+    session.appendRoutingTraceEvent({
+      type: "client_abort_no_first_byte",
+      attemptId: meta.healthAttemptId,
+      provider: {
+        id: meta.providerId,
+        name: meta.providerName,
+        priority: meta.providerPriority,
+      },
+      outcome: "provider_failure",
+      cancellationKind: "client_abort",
+      reason: "external_client_abort",
+      effectiveThresholdMs: meta.healthAttributionThresholdMs,
+      circuitAccountingApplied: true,
+      availabilityAccountingApplied: true,
+      durationMs: elapsedMs,
+      elapsedMs,
+    });
+  }
   const hasDiscoveryBindingIntent =
     meta?.bindingIntent === "create" || meta?.bindingIntent === "renew";
   const parseResponseDiagnostics = session.getEndpointPolicy().kind !== "raw_passthrough";
@@ -2324,13 +2363,13 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
   // 未自然结束：不更新 session 绑定（避免把会话粘到不稳定 provider），但要避免把它误记为 200 completed。
   //
   // 同时，为了让故障转移/熔断能正确工作：
-  // - 客户端主动中断：不计入熔断器（这通常不是供应商问题）
+  // - 客户端主动中断：默认不计入熔断器；仅 legacy serial 的静默首字节阈值命中会归因供应商
   // - 非客户端中断：计入 provider/endpoint 熔断失败（与 timeout 路径保持一致）
   if ((clientAborted || !streamEndedNormally) && !clientAbortCompleteSuccess) {
     session.addProviderToChain(providerForChain, {
       endpointId: meta.endpointId,
       endpointUrl: meta.endpointUrl,
-      reason: "system_error",
+      reason: clientAbortNoFirstByte ? "client_abort_no_first_byte" : "system_error",
       attemptNumber: meta.attemptNumber,
       statusCode: effectiveStatusCode,
       errorMessage: errorMessage ?? undefined,
@@ -2340,7 +2379,10 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
       try {
         await clearSessionBinding();
 
-        if (!clientAborted && session.getEndpointPolicy().allowCircuitBreakerAccounting) {
+        if (
+          (!clientAborted || clientAbortNoFirstByte) &&
+          session.getEndpointPolicy().allowCircuitBreakerAccounting
+        ) {
           try {
             const { recordFailure } = await import("@/lib/circuit-breaker");
             await recordFailure(meta.providerId, new Error(errorMessage ?? "STREAM_ABORTED"));
@@ -4704,6 +4746,9 @@ export class ProxyResponseHandler {
         responsePump?.startDrain(reason ?? "client_detached");
         return;
       }
+      upstreamFirstByteSeenAtAbort = upstreamFirstByteSeen;
+      const deferredMeta = peekDeferredStreamingFinalization(session);
+      if (deferredMeta) deferredMeta.healthAbortAtMonotonic = performance.now();
       clientDetachHandled = true;
       clientAbortMeter?.switchToDetachedMode();
       const activeReplaySpool = replaySpool && !replaySpool.isTerminal ? replaySpool : null;
@@ -4767,6 +4812,8 @@ export class ProxyResponseHandler {
     // 统计/结算只保留有界的“头 + 尾”文本快照，避免长流式响应把进程堆撑满。
     let usageForCost: UsageMetrics | null = null;
     let isFirstChunk = true; // 标记是否为第一块数据
+    let upstreamFirstByteSeen = false;
+    let upstreamFirstByteSeenAtAbort: boolean | null = null;
 
     // 不在首次读取前启动 idle timer（避免与首字节超时职责重叠）
     // idle timer 仅在首块数据到达后启动，用于检测流中途静默。
@@ -4894,7 +4941,10 @@ export class ProxyResponseHandler {
           clientAborted,
           discoveryLeaseLifecycle,
           streamProtocolObserver?.finish() ?? compactProtocolObservation,
-          abortReason
+          abortReason,
+          clientAborted && upstreamFirstByteSeenAtAbort !== null
+            ? upstreamFirstByteSeenAtAbort
+            : upstreamFirstByteSeen
         );
         latestStreamCommitSideEffects = finalized.commitSideEffects
           ? [finalized.commitSideEffects]
@@ -5333,6 +5383,7 @@ export class ProxyResponseHandler {
 
     const observeChunk = (value: Uint8Array) => {
       const chunkSize = value.length;
+      if (chunkSize > 0) upstreamFirstByteSeen = true;
       clearIdleTimer();
       const metering = clientAbortMeter?.observe(value);
       AsyncTaskManager.touch(taskId);

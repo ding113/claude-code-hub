@@ -51,6 +51,9 @@ export interface SystemSettings {
   //         其费用异步累加进该请求的总花费（与上游对多个供应商分别计费保持一致）。
   billHedgeLosers: boolean;
 
+  // Legacy streaming hedge concurrency cap (includes the primary attempt).
+  legacyHedgeMaxInFlight: number;
+
   // 系统时区配置 (IANA timezone identifier)
   // 用于统一后端时间边界计算和前端日期/时间显示
   // null 表示使用环境变量 TZ 或默认 UTC
@@ -200,6 +203,9 @@ export interface UpdateSystemSettingsInput {
 
   // 供应商竞速输家计费（可选）
   billHedgeLosers?: boolean;
+
+  // Legacy streaming hedge concurrency cap (includes the primary attempt).
+  legacyHedgeMaxInFlight?: number;
 
   discoveryEnabled?: boolean;
   discoveryConcurrency?: number;
