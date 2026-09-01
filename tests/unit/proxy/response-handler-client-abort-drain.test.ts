@@ -2199,6 +2199,39 @@ describe("ProxyResponseHandler stream client abort finalization", () => {
     );
   });
 
+  it("attributes an old no-first-byte client abort once", async () => {
+    vi.mocked(recordFailure).mockClear();
+    const clientController = new AbortController();
+    const session = createSession(clientController.signal);
+    setDeferredStreamingFinalization(session, {
+      providerId: 1,
+      providerName: "avemujica-responses",
+      providerPriority: 1,
+      attemptNumber: 1,
+      totalProvidersAttempted: 1,
+      isFirstAttempt: true,
+      isFailoverSuccess: false,
+      endpointId: 42,
+      endpointUrl: "https://api.test.invalid/v1",
+      upstreamStatusCode: 200,
+      healthAttemptId: "legacy-serial-1-1",
+      healthAttemptStartedAtMonotonic: performance.now() - 1_000,
+      healthAttributionThresholdMs: 1,
+      healthFirstByteSeen: false,
+    });
+    const upstream = createControllableEmptyResponsesSse();
+
+    await ProxyResponseHandler.dispatch(session, upstream.response);
+    clientController.abort(new Error("client detached"));
+    upstream.close();
+    await drainAsyncTasks();
+
+    expect(recordFailure).toHaveBeenCalledTimes(1);
+    expect(session.getProviderChain()).toEqual(
+      expect.arrayContaining([expect.objectContaining({ reason: "client_abort_no_first_byte" })])
+    );
+  });
+
   it("stops a detached source as soon as compact terminal usage is captured", async () => {
     const clientController = new AbortController();
     const session = createSession(clientController.signal);

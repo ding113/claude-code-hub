@@ -609,6 +609,8 @@ type StreamingHedgeAttempt = {
   /** Exactly-once guard for provider health/circuit settlement. */
   healthSettlementClaimed: boolean;
   healthOutcome: "client_abort_no_first_byte" | "provider_failure" | "other_failure" | null;
+  healthPausedAtMonotonic: number | null;
+  healthPausedDurationMs: number;
   /** Avoid duplicate saturation events for a threshold trigger. */
   hedgeSaturationRecorded: boolean;
   /**
@@ -1953,8 +1955,9 @@ export class ProxyForwarder {
       // ========== 内层循环：重试当前供应商（根据配置最多尝试 maxAttemptsPerProvider 次）==========
       while (attemptCount < maxAttemptsPerProvider) {
         attemptCount++;
-        const attemptStartedAtMonotonic = performance.now();
+        let attemptStartedAtMonotonic = 0;
         let attemptFirstByteSeen = false;
+        let attemptDispatched = false;
 
         // Use currentEndpointIndex for endpoint selection (sticky behavior)
         // - currentEndpointIndex is advanced only on SYSTEM_ERROR (network errors)
@@ -1976,7 +1979,14 @@ export class ProxyForwarder {
             currentProvider,
             activeEndpoint.baseUrl,
             endpointAudit,
-            attemptCount
+            attemptCount,
+            false,
+            undefined,
+            () => {
+              attemptDispatched = true;
+              attemptStartedAtMonotonic = performance.now();
+              attemptFirstByteSeen = false;
+            }
           );
 
           // ========== 空响应检测（仅非流式）==========
@@ -2509,14 +2519,13 @@ export class ProxyForwarder {
               totalProvidersAttempted,
             });
 
-            await ProxyForwarder.clearSessionProviderBinding(session, currentProvider.id);
-
             const elapsedMs = Math.max(0, performance.now() - attemptStartedAtMonotonic);
             const thresholdMs =
               currentProvider.firstByteTimeoutStreamingMs > 0
                 ? currentProvider.firstByteTimeoutStreamingMs
                 : CLIENT_ABORT_HEALTH_FALLBACK_THRESHOLD_MS;
             const qualifiesForHealth =
+              attemptDispatched &&
               !attemptFirstByteSeen &&
               elapsedMs >= thresholdMs &&
               endpointPolicy.allowCircuitBreakerAccounting;
@@ -2551,6 +2560,8 @@ export class ProxyForwarder {
                 durationMs: Math.round(elapsedMs),
               });
             }
+
+            await ProxyForwarder.clearSessionProviderBinding(session, currentProvider.id);
 
             // 记录到决策链（标记为客户端中断）
             session.addProviderToChain(currentProvider, {
@@ -3182,7 +3193,8 @@ export class ProxyForwarder {
     endpointAudit?: { endpointId: number | null; endpointUrl: string },
     attemptNumber?: number,
     deferDetailSnapshotPersistence: boolean = false,
-    externalAbortSignal?: AbortSignal
+    externalAbortSignal?: AbortSignal,
+    onUpstreamDispatch?: () => void
   ): Promise<Response> {
     if (!provider) {
       throw new Error("Provider is required");
@@ -3758,6 +3770,10 @@ export class ProxyForwarder {
     interface UndiciFetchOptions extends RequestInit {
       dispatcher?: Dispatcher;
     }
+    const fetchWithDispatch = async (url: string, requestInit: UndiciFetchOptions) => {
+      onUpstreamDispatch?.();
+      return await fetch(url, requestInit);
+    };
 
     // ⭐ 双路超时控制（first-byte / total）
     // 注意：由于 undici fetch API 的限制，无法精确分离 DNS/TCP/TLS 连接阶段和响应头接收阶段
@@ -3975,6 +3991,7 @@ export class ProxyForwarder {
           const requestBodyJson = decodeRequestBodyAsJson(requestBody);
 
           if (requestBodyJson) {
+            onUpstreamDispatch?.();
             const wsResult = await tryResponsesWebsocketUpstream({
               provider,
               upstreamUrl: proxyUrl,
@@ -4062,9 +4079,10 @@ export class ProxyForwarder {
               provider.id,
               provider.name,
               session,
-              deferDetailSnapshotPersistence
+              deferDetailSnapshotPersistence,
+              onUpstreamDispatch
             )
-          : await fetch(proxyUrl, init);
+          : await fetchWithDispatch(proxyUrl, init);
       // ⭐ fetch 成功：收到 HTTP 响应头，保留响应超时继续监控
       // 注意：undici 的 fetch 在收到 HTTP 响应头后就 resolve，但实际数据（SSE 首字节 / 完整 JSON）
       // 还没到达。responseTimeoutId 需要延续到 response-handler 中才能真正控制"首字节"或"总耗时"
@@ -4324,9 +4342,10 @@ export class ProxyForwarder {
                 provider.id,
                 provider.name,
                 session,
-                deferDetailSnapshotPersistence
+                deferDetailSnapshotPersistence,
+                onUpstreamDispatch
               )
-            : await fetch(proxyUrl, http1FallbackInit);
+            : await fetchWithDispatch(proxyUrl, http1FallbackInit);
 
           logger.info("ProxyForwarder: HTTP/1.1 fallback succeeded", {
             providerId: provider.id,
@@ -4401,9 +4420,10 @@ export class ProxyForwarder {
                     provider.id,
                     provider.name,
                     session,
-                    deferDetailSnapshotPersistence
+                    deferDetailSnapshotPersistence,
+                    onUpstreamDispatch
                   )
-                : await fetch(proxyUrl, fallbackInit);
+                : await fetchWithDispatch(proxyUrl, fallbackInit);
               logger.info("ProxyForwarder: Direct connection succeeded after proxy failure", {
                 providerId: provider.id,
                 providerName: provider.name,
@@ -4998,7 +5018,17 @@ export class ProxyForwarder {
       attempt.thresholdTriggered = true;
       if (attempts.size >= maxInFlight && !attempt.hedgeSaturationRecorded) {
         attempt.hedgeSaturationRecorded = true;
-        const elapsedMs = Math.max(0, Math.round(performance.now() - attempt.startedAtMonotonic));
+        const elapsedMs = Math.max(
+          0,
+          Math.round(
+            performance.now() -
+              attempt.startedAtMonotonic -
+              attempt.healthPausedDurationMs -
+              (attempt.healthPausedAtMonotonic === null
+                ? 0
+                : performance.now() - attempt.healthPausedAtMonotonic)
+          )
+        );
         session.appendRoutingTraceEvent({
           type: "hedge_slot_saturated",
           attemptId: attempt.attemptId,
@@ -5049,6 +5079,8 @@ export class ProxyForwarder {
       attempt.thresholdPaused = false;
       attempt.thresholdDeadlineAt = null;
       attempt.thresholdRemainingMs = attempt.firstByteTimeoutMs;
+      attempt.healthPausedAtMonotonic = null;
+      attempt.healthPausedDurationMs = 0;
       scheduleAttemptThreshold(attempt);
     };
 
@@ -5064,6 +5096,9 @@ export class ProxyForwarder {
       if (attempt.thresholdDeadlineAt !== null) {
         attempt.thresholdRemainingMs = Math.max(1, attempt.thresholdDeadlineAt - Date.now());
       }
+      if (attempt.healthPausedAtMonotonic === null) {
+        attempt.healthPausedAtMonotonic = performance.now();
+      }
       clearTimeout(attempt.thresholdTimer);
       attempt.thresholdTimer = null;
       attempt.thresholdDeadlineAt = null;
@@ -5072,6 +5107,13 @@ export class ProxyForwarder {
 
     const resumeAttemptThreshold = (attempt: StreamingHedgeAttempt) => {
       if (!attempt.thresholdPaused) return;
+      if (attempt.healthPausedAtMonotonic !== null) {
+        attempt.healthPausedDurationMs += Math.max(
+          0,
+          performance.now() - attempt.healthPausedAtMonotonic
+        );
+        attempt.healthPausedAtMonotonic = null;
+      }
       attempt.thresholdPaused = false;
       scheduleAttemptThreshold(attempt);
     };
@@ -5141,19 +5183,32 @@ export class ProxyForwarder {
     };
 
     const runAttempt = (attempt: StreamingHedgeAttempt) => {
-      attempt.dispatched = true;
       const providerForRequest =
-        attempt.firstByteTimeoutMs > 0
+        attempt.firstByteTimeoutMs > 0 && maxInFlight > 1
           ? { ...attempt.provider, firstByteTimeoutStreamingMs: 0 }
           : attempt.provider;
 
+      const markUpstreamDispatch = () => {
+        attempt.dispatched = true;
+        attempt.startedAtMonotonic = performance.now();
+        attempt.healthPausedAtMonotonic = null;
+        attempt.healthPausedDurationMs = 0;
+        armAttemptThreshold(attempt);
+      };
+
+      // Arm the hedge threshold when the attempt enters the transport call. The health clock
+      // remains gated by `attempt.dispatched` and is reset by the transport callback below, so
+      // setup time can trigger a hedge without being eligible for provider-failure attribution.
+      armAttemptThreshold(attempt);
       void ProxyForwarder.doForward(
         attempt.session,
         providerForRequest,
         attempt.baseUrl,
         attempt.endpointAudit,
         attempt.requestAttemptCount,
-        true
+        true,
+        undefined,
+        markUpstreamDispatch
       )
         .then(async (response) => {
           if (settled || winnerCommitted || attempt.settled) {
@@ -5516,9 +5571,12 @@ export class ProxyForwarder {
             attempt.thresholdTimer = null;
           }
           attempt.requestAttemptCount += 1;
+          attempt.dispatched = false;
+          attempt.startedAtMonotonic = 0;
+          attempt.firstByteAt = null;
+          attempt.attemptId = `legacy-hedge-${attempt.sequence}-${attempt.requestAttemptCount}`;
           attempt.healthSettlementClaimed = false;
           attempt.healthOutcome = null;
-          armAttemptThreshold(attempt);
           runAttempt(attempt);
           return;
         }
@@ -5834,8 +5892,8 @@ export class ProxyForwarder {
         clearResponseTimeout: null,
         firstByteTimeoutMs:
           provider.firstByteTimeoutStreamingMs > 0 ? provider.firstByteTimeoutStreamingMs : 0,
-        attemptId: `legacy-hedge-${launchedProviderCount}`,
-        startedAtMonotonic: performance.now(),
+        attemptId: `legacy-hedge-${launchedProviderCount}-1`,
+        startedAtMonotonic: 0,
         healthAttributionThresholdMs:
           provider.firstByteTimeoutStreamingMs > 0
             ? provider.firstByteTimeoutStreamingMs
@@ -5843,6 +5901,8 @@ export class ProxyForwarder {
         dispatched: false,
         healthSettlementClaimed: false,
         healthOutcome: null,
+        healthPausedAtMonotonic: null,
+        healthPausedDurationMs: 0,
         hedgeSaturationRecorded: false,
         sequence: launchedProviderCount,
         requestAttemptCount: 1,
@@ -5886,8 +5946,6 @@ export class ProxyForwarder {
         });
       }
 
-      armAttemptThreshold(attempt);
-
       runAttempt(attempt);
       return true;
     };
@@ -5903,7 +5961,14 @@ export class ProxyForwarder {
         return false;
       }
 
-      const elapsedMs = Math.max(0, performance.now() - attempt.startedAtMonotonic);
+      const now = performance.now();
+      const elapsedMs = Math.max(
+        0,
+        now -
+          attempt.startedAtMonotonic -
+          attempt.healthPausedDurationMs -
+          (attempt.healthPausedAtMonotonic === null ? 0 : now - attempt.healthPausedAtMonotonic)
+      );
       if (elapsedMs < attempt.healthAttributionThresholdMs) return false;
 
       attempt.healthSettlementClaimed = true;
@@ -5916,14 +5981,6 @@ export class ProxyForwarder {
         true
       );
 
-      session.addProviderToChain(attempt.provider, {
-        ...attempt.endpointAudit,
-        reason: "client_abort_no_first_byte",
-        attemptNumber: attempt.sequence,
-        errorMessage: "Client aborted before provider first byte threshold",
-        circuitState: getCircuitState(attempt.provider.id),
-        modelRedirect: getAttemptModelRedirect(attempt),
-      });
       session.appendRoutingTraceEvent({
         type: "client_abort_no_first_byte",
         attemptId: attempt.attemptId,
@@ -5959,6 +6016,7 @@ export class ProxyForwarder {
       noMoreProviders = true;
       lastError = new ProxyError("Request aborted by client", 499, undefined, true);
       lastErrorCategory = ErrorCategory.CLIENT_ABORT;
+      const attributedAttempts: StreamingHedgeAttempt[] = [];
       for (const attempt of Array.from(attempts)) {
         if (!attempt.settled) {
           const attributed = settleClientAbortHealth(attempt);
@@ -5970,8 +6028,20 @@ export class ProxyForwarder {
               errorMessage: "Client aborted request",
               modelRedirect: getAttemptModelRedirect(attempt),
             });
+          } else {
+            attributedAttempts.push(attempt);
           }
         }
+      }
+      for (const attempt of attributedAttempts) {
+        session.addProviderToChain(attempt.provider, {
+          ...attempt.endpointAudit,
+          reason: "client_abort_no_first_byte",
+          attemptNumber: attempt.sequence,
+          errorMessage: "Client aborted before provider first byte threshold",
+          circuitState: getCircuitState(attempt.provider.id),
+          modelRedirect: getAttemptModelRedirect(attempt),
+        });
       }
       abortAllAttempts(undefined, "client_abort");
       void finishIfExhausted();
@@ -8807,7 +8877,8 @@ export class ProxyForwarder {
     providerId: number,
     providerName: string,
     session?: ProxySession,
-    deferDetailSnapshotPersistence: boolean = false
+    deferDetailSnapshotPersistence: boolean = false,
+    onUpstreamDispatch?: () => void
   ): Promise<Response> {
     const { FETCH_HEADERS_TIMEOUT: headersTimeout, FETCH_BODY_TIMEOUT: bodyTimeout } =
       getEnvConfig();
@@ -8845,6 +8916,7 @@ export class ProxyForwarder {
       return undefined;
     };
 
+    onUpstreamDispatch?.();
     const undiciRes = await undiciRequest(url, {
       method: init.method as string,
       headers: headersObj,

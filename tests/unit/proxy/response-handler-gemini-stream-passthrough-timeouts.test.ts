@@ -8,6 +8,7 @@ import { ProxySession } from "@/app/v1/_lib/proxy/session";
 import { setDeferredStreamingFinalization } from "@/app/v1/_lib/proxy/stream-finalization";
 import { AsyncTaskManager } from "@/lib/async-task-manager";
 import { SessionManager } from "@/lib/session-manager";
+import { recordFailure } from "@/lib/circuit-breaker";
 import {
   updateMessageRequestDetails,
   updateMessageRequestDetailsDurably,
@@ -772,6 +773,66 @@ describe("ProxyResponseHandler - Gemini stream passthrough timeouts", () => {
       await close();
       await expectAllFulfilled(asyncTasks);
     }
+  });
+
+  test("Gemini passthrough does not attribute a client abort after the first byte", async () => {
+    asyncTasks.length = 0;
+    vi.mocked(recordFailure).mockClear();
+    const clientAbortController = new AbortController();
+    const provider = createProvider({ firstByteTimeoutStreamingMs: 1 });
+    const session = createSession({
+      clientAbortSignal: clientAbortController.signal,
+      messageId: 5,
+      userId: 1,
+    });
+    session.setProvider(provider);
+    setDeferredStreamingFinalization(session, {
+      providerId: provider.id,
+      providerName: provider.name,
+      providerPriority: provider.priority,
+      attemptNumber: 1,
+      totalProvidersAttempted: 1,
+      isFirstAttempt: true,
+      isFailoverSuccess: false,
+      endpointId: null,
+      endpointUrl: provider.url,
+      upstreamStatusCode: 200,
+      healthAttemptId: "legacy-serial-1-1",
+      healthAttemptStartedAtMonotonic: performance.now() - 1_000,
+      healthAttributionThresholdMs: 1,
+      healthFirstByteSeen: false,
+    });
+    const encoder = new TextEncoder();
+    let upstreamController: ReadableStreamDefaultController<Uint8Array> | null = null;
+    const upstream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        upstreamController = controller;
+        controller.enqueue(
+          encoder.encode('{"candidates":[{"content":{"parts":[{"text":"x"}]}}]}\n')
+        );
+      },
+    });
+
+    const downstream = await (
+      ProxyResponseHandler as unknown as {
+        handleStream: (session: ProxySession, response: Response) => Promise<Response>;
+      }
+    ).handleStream(
+      session,
+      new Response(upstream, { status: 200, headers: { "content-type": "text/event-stream" } })
+    );
+    const reader = downstream.body?.getReader();
+    expect(reader).toBeTruthy();
+    if (!reader) throw new Error("Missing body reader");
+    await reader.read();
+    clientAbortController.abort(new Error("client_cancelled"));
+    upstreamController?.close();
+    await expectAllFulfilled(asyncTasks);
+
+    expect(recordFailure).not.toHaveBeenCalled();
+    expect(session.getProviderChain()).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ reason: "client_abort_no_first_byte" })])
+    );
   });
 
   test("Gemini 流式透传超大单 chunk 应保留尾部 usage 且不把截断快照作为完整正文存储", async () => {

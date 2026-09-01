@@ -1794,6 +1794,8 @@ type FinalizeDeferredStreamingResult = {
  * @param streamEndedNormally - 必须是 reader 读到 done=true 的“自然结束”；超时/中断等异常结束由其它逻辑处理。
  * @param clientAborted - 标记是否为客户端主动中断（用于内部状态码映射，避免把中断记为 200 completed）
  * @param abortReason - 非自然结束时的原因码（用于内部记录/熔断归因；不会影响客户端响应）
+ * @param firstByteSeen - Authoritative body-byte observation. Undefined means the caller cannot
+ * report first-byte state and therefore cannot qualify a no-first-byte attribution.
  */
 function finalizeDeferredStreamingFinalizationIfNeeded(
   session: ProxySession,
@@ -1804,7 +1806,7 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
   discoveryLeaseLifecycle: DiscoveryLeaseLifecycle,
   protocolObservation: StreamProtocolObservation | null,
   abortReason?: string,
-  firstByteSeen = false
+  firstByteSeen?: boolean
 ): FinalizeDeferredStreamingResult {
   const meta = consumeDeferredStreamingFinalization(session);
   const provider = session.provider;
@@ -2013,44 +2015,6 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
 
   const isHedgeWinner = meta?.isHedgeWinner === true;
   const billHedgeLosers = meta?.billHedgeLosers === true;
-  const healthAttributionElapsedMs =
-    meta?.healthAttemptStartedAtMonotonic == null
-      ? null
-      : Math.max(
-          0,
-          (meta.healthAbortAtMonotonic ?? performance.now()) - meta.healthAttemptStartedAtMonotonic
-        );
-  const clientAbortNoFirstByte =
-    clientAborted &&
-    meta?.healthAttemptId != null &&
-    meta.healthFirstByteSeen !== true &&
-    !firstByteSeen &&
-    meta.healthAttributionThresholdMs != null &&
-    healthAttributionElapsedMs != null &&
-    healthAttributionElapsedMs >= meta.healthAttributionThresholdMs &&
-    meta.healthOutcomeSettled !== true &&
-    session.getEndpointPolicy().allowCircuitBreakerAccounting;
-  if (clientAbortNoFirstByte && meta) {
-    meta.healthOutcomeSettled = true;
-    const elapsedMs = Math.round(healthAttributionElapsedMs ?? 0);
-    session.appendRoutingTraceEvent({
-      type: "client_abort_no_first_byte",
-      attemptId: meta.healthAttemptId,
-      provider: {
-        id: meta.providerId,
-        name: meta.providerName,
-        priority: meta.providerPriority,
-      },
-      outcome: "provider_failure",
-      cancellationKind: "client_abort",
-      reason: "external_client_abort",
-      effectiveThresholdMs: meta.healthAttributionThresholdMs,
-      circuitAccountingApplied: true,
-      availabilityAccountingApplied: true,
-      durationMs: elapsedMs,
-      elapsedMs,
-    });
-  }
   const hasDiscoveryBindingIntent =
     meta?.bindingIntent === "create" || meta?.bindingIntent === "renew";
   const parseResponseDiagnostics = session.getEndpointPolicy().kind !== "raw_passthrough";
@@ -2187,6 +2151,46 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
     };
     return true;
   })();
+
+  const healthAttributionElapsedMs =
+    meta?.healthAttemptStartedAtMonotonic == null
+      ? null
+      : Math.max(
+          0,
+          (meta.healthAbortAtMonotonic ?? performance.now()) - meta.healthAttemptStartedAtMonotonic
+        );
+  const clientAbortNoFirstByte =
+    !clientAbortCompleteSuccess &&
+    clientAborted &&
+    meta?.healthAttemptId != null &&
+    meta.healthFirstByteSeen !== true &&
+    firstByteSeen === false &&
+    meta.healthAttributionThresholdMs != null &&
+    healthAttributionElapsedMs != null &&
+    healthAttributionElapsedMs >= meta.healthAttributionThresholdMs &&
+    meta.healthOutcomeSettled !== true &&
+    session.getEndpointPolicy().allowCircuitBreakerAccounting;
+  if (clientAbortNoFirstByte && meta) {
+    meta.healthOutcomeSettled = true;
+    const elapsedMs = Math.round(healthAttributionElapsedMs ?? 0);
+    session.appendRoutingTraceEvent({
+      type: "client_abort_no_first_byte",
+      attemptId: meta.healthAttemptId,
+      provider: {
+        id: meta.providerId,
+        name: meta.providerName,
+        priority: meta.providerPriority,
+      },
+      outcome: "provider_failure",
+      cancellationKind: "client_abort",
+      reason: "external_client_abort",
+      effectiveThresholdMs: meta.healthAttributionThresholdMs,
+      circuitAccountingApplied: true,
+      availabilityAccountingApplied: true,
+      durationMs: elapsedMs,
+      elapsedMs,
+    });
+  }
 
   // “内部结算用”的状态码（不会改变客户端实际 HTTP 状态码）。
   // - 假 200：优先映射为“推断得到的 4xx/5xx”（未命中则回退 502），确保内部统计/熔断/会话绑定把它当作失败。
@@ -3931,6 +3935,7 @@ export class ProxyResponseHandler {
 
         const streamTextAccumulator = new BoundedStreamTextAccumulator();
         let lastStreamTextSnapshot: BoundedStreamTextSnapshot | null = null;
+        let passthroughFirstByteSeen = false;
         let observePassthroughChunk = (_value: Uint8Array) => {};
         let observePassthroughReadStart = () => {};
         let observePassthroughDrainStart = () => {};
@@ -3952,6 +3957,8 @@ export class ProxyResponseHandler {
             return;
           }
           passthroughClientDetached = true;
+          const deferredMeta = peekDeferredStreamingFinalization(session);
+          if (deferredMeta) deferredMeta.healthAbortAtMonotonic = performance.now();
           clientAbortMeter?.switchToDetachedMode();
           if (!clientAbortMeter) {
             const rejection = new Error("client_detached_without_metering");
@@ -4005,6 +4012,7 @@ export class ProxyResponseHandler {
           source: response.body,
           onReadStart: () => observePassthroughReadStart(),
           onChunk: (value) => {
+            if (value.byteLength > 0) passthroughFirstByteSeen = true;
             const metering = clientAbortMeter?.observe(value);
             passthroughShadowObserver?.observe(value);
             streamProtocolObserver?.observe(value);
@@ -4293,7 +4301,8 @@ export class ProxyResponseHandler {
               discoveryLeaseLifecycle,
               streamProtocolObserver?.finish() ??
                 (meteringSnapshot ? protocolObservationFromMetering(meteringSnapshot) : null),
-              abortReason
+              abortReason,
+              passthroughFirstByteSeen
             );
             latestCommitSideEffects = finalized.commitSideEffects;
             latestFinalizeAttemptResources = finalized.finalizeAttemptResources;
@@ -4368,7 +4377,8 @@ export class ProxyResponseHandler {
                 clientAborted,
                 discoveryLeaseLifecycle,
                 meteringSnapshot ? protocolObservationFromMetering(meteringSnapshot) : null,
-                abortReason
+                abortReason,
+                passthroughFirstByteSeen
               );
               latestCommitSideEffects = finalized.commitSideEffects;
               latestFinalizeAttemptResources = finalized.finalizeAttemptResources;
