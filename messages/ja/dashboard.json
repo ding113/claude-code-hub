@@ -522,7 +522,7 @@
         "configTotalTimeout": "全体タイムアウト",
         "configStickyCooldown": "Sticky タイムアウトのクールダウン",
         "configStickyBindingTtl": "Sticky バインドの有効期間 (SESSION_TTL)",
-        "slotSaturation": "Hedge スロット飽和（{count} 件）",
+        "slotSaturation": "Hedge スロット飽和 ({count} 件)",
         "slotSaturationEvent": "{provider} · {active}/{cap} 件がアクティブ · 経過 {elapsed}ms",
         "attemptDetails": {
           "providerId": "Provider ID",

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { createRoot } from "react-dom/client";
 import { act } from "react";
+import "../../framer-motion.mock";
 import LoginPage from "@/app/[locale]/login/page";
 
 const mockPush = vi.hoisted(() => vi.fn());
