@@ -602,6 +602,8 @@ type StreamingHedgeAttempt = {
   attemptId: string;
   /** Monotonic dispatch timestamp used for client-abort threshold comparisons. */
   startedAtMonotonic: number;
+  /** Monotonic timestamp for the current hedge threshold window, including pre-dispatch setup. */
+  thresholdStartedAtMonotonic: number;
   /** Effective health-attribution threshold; independent from request timeout behavior. */
   healthAttributionThresholdMs: number;
   /** Set immediately when the upstream dispatch starts. */
@@ -5018,15 +5020,18 @@ export class ProxyForwarder {
       attempt.thresholdTriggered = true;
       if (attempts.size >= maxInFlight && !attempt.hedgeSaturationRecorded) {
         attempt.hedgeSaturationRecorded = true;
+        const now = performance.now();
+        const thresholdStartedAt =
+          attempt.startedAtMonotonic > 0
+            ? attempt.startedAtMonotonic
+            : attempt.thresholdStartedAtMonotonic;
         const elapsedMs = Math.max(
           0,
           Math.round(
-            performance.now() -
-              attempt.startedAtMonotonic -
+            now -
+              thresholdStartedAt -
               attempt.healthPausedDurationMs -
-              (attempt.healthPausedAtMonotonic === null
-                ? 0
-                : performance.now() - attempt.healthPausedAtMonotonic)
+              (attempt.healthPausedAtMonotonic === null ? 0 : now - attempt.healthPausedAtMonotonic)
           )
         );
         session.appendRoutingTraceEvent({
@@ -5079,6 +5084,7 @@ export class ProxyForwarder {
       attempt.thresholdPaused = false;
       attempt.thresholdDeadlineAt = null;
       attempt.thresholdRemainingMs = attempt.firstByteTimeoutMs;
+      attempt.thresholdStartedAtMonotonic = performance.now();
       attempt.healthPausedAtMonotonic = null;
       attempt.healthPausedDurationMs = 0;
       scheduleAttemptThreshold(attempt);
@@ -5577,6 +5583,7 @@ export class ProxyForwarder {
           attempt.attemptId = `legacy-hedge-${attempt.sequence}-${attempt.requestAttemptCount}`;
           attempt.healthSettlementClaimed = false;
           attempt.healthOutcome = null;
+          attempt.hedgeSaturationRecorded = false;
           runAttempt(attempt);
           return;
         }
@@ -5894,6 +5901,7 @@ export class ProxyForwarder {
           provider.firstByteTimeoutStreamingMs > 0 ? provider.firstByteTimeoutStreamingMs : 0,
         attemptId: `legacy-hedge-${launchedProviderCount}-1`,
         startedAtMonotonic: 0,
+        thresholdStartedAtMonotonic: 0,
         healthAttributionThresholdMs:
           provider.firstByteTimeoutStreamingMs > 0
             ? provider.firstByteTimeoutStreamingMs
