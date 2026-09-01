@@ -8,6 +8,7 @@ import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { NextIntlClientProvider } from "next-intl";
 import { beforeEach, describe, expect, test, vi } from "vitest";
+import "../../../framer-motion.mock";
 import { ProviderForm } from "../../../../src/app/[locale]/settings/providers/_components/forms/provider-form";
 import { Dialog } from "../../../../src/components/ui/dialog";
 import enMessages from "../../../../messages/en";
