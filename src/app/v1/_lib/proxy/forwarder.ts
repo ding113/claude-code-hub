@@ -699,7 +699,8 @@ const NON_STREAM_BODY_INSPECTION_MAX_BYTES = 32 * 1024; // 32 KiB
  */
 async function readResponseTextUpTo(
   response: Response,
-  maxBytes: number
+  maxBytes: number,
+  onChunk?: (value: Uint8Array) => void
 ): Promise<{ text: string; truncated: boolean }> {
   const reader = response.body?.getReader();
   if (!reader) {
@@ -716,6 +717,7 @@ async function readResponseTextUpTo(
       const { done, value } = await reader.read();
       if (done) break;
       if (!value || value.byteLength === 0) continue;
+      onChunk?.(value);
 
       const remaining = maxBytes - bytesRead;
       // 注意：remaining<=0 发生在“已经读到下一块 chunk”之后。
@@ -1960,6 +1962,8 @@ export class ProxyForwarder {
         let attemptStartedAtMonotonic = 0;
         let attemptFirstByteSeen = false;
         let attemptDispatched = false;
+        let healthPausedAtMonotonic: number | null = null;
+        let healthPausedDurationMs = 0;
 
         // Use currentEndpointIndex for endpoint selection (sticky behavior)
         // - currentEndpointIndex is advanced only on SYSTEM_ERROR (network errors)
@@ -2068,8 +2072,20 @@ export class ProxyForwarder {
                     idleTimeoutMs: currentProvider.streamingIdleTimeoutMs,
                     captureCommitMarker: !session.isHighConcurrencyModeEnabled(),
                     prebufferBudget: getStreamGatePrebufferBudget(),
-                    onBudgetWaitStart: runtime.pauseResponseTimeout,
-                    onBudgetWaitEnd: runtime.resumeResponseTimeout,
+                    onBudgetWaitStart: () => {
+                      runtime.pauseResponseTimeout?.();
+                      healthPausedAtMonotonic ??= performance.now();
+                    },
+                    onBudgetWaitEnd: () => {
+                      runtime.resumeResponseTimeout?.();
+                      if (healthPausedAtMonotonic !== null) {
+                        healthPausedDurationMs += Math.max(
+                          0,
+                          performance.now() - healthPausedAtMonotonic
+                        );
+                        healthPausedAtMonotonic = null;
+                      }
+                    },
                   },
                   [runtime.responseController?.signal, session.clientAbortSignal]
                 );
@@ -2174,6 +2190,7 @@ export class ProxyForwarder {
                   ? currentProvider.firstByteTimeoutStreamingMs
                   : CLIENT_ABORT_HEALTH_FALLBACK_THRESHOLD_MS,
               healthFirstByteSeen: attemptFirstByteSeen,
+              healthPausedDurationMs,
               healthOutcomeSettled: false,
             });
 
@@ -2253,7 +2270,10 @@ export class ProxyForwarder {
             const clonedResponse = response.clone();
             const inspected = await readResponseTextUpTo(
               clonedResponse,
-              NON_STREAM_BODY_INSPECTION_MAX_BYTES
+              NON_STREAM_BODY_INSPECTION_MAX_BYTES,
+              (value) => {
+                if (value.byteLength > 0) attemptFirstByteSeen = true;
+              }
             );
             inspectedText = inspected.text;
             inspectedTruncated = inspected.truncated;
@@ -2521,7 +2541,14 @@ export class ProxyForwarder {
               totalProvidersAttempted,
             });
 
-            const elapsedMs = Math.max(0, performance.now() - attemptStartedAtMonotonic);
+            const now = performance.now();
+            const elapsedMs = Math.max(
+              0,
+              now -
+                attemptStartedAtMonotonic -
+                healthPausedDurationMs -
+                (healthPausedAtMonotonic === null ? 0 : now - healthPausedAtMonotonic)
+            );
             const thresholdMs =
               currentProvider.firstByteTimeoutStreamingMs > 0
                 ? currentProvider.firstByteTimeoutStreamingMs
@@ -5193,8 +5220,11 @@ export class ProxyForwarder {
         attempt.firstByteTimeoutMs > 0 && maxInFlight > 1
           ? { ...attempt.provider, firstByteTimeoutStreamingMs: 0 }
           : attempt.provider;
+      let dispatchMarked = false;
 
       const markUpstreamDispatch = () => {
+        if (dispatchMarked) return;
+        dispatchMarked = true;
         attempt.dispatched = true;
         attempt.startedAtMonotonic = performance.now();
         attempt.healthPausedAtMonotonic = null;

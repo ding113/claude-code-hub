@@ -1068,7 +1068,9 @@ export class ProxySession {
     const resolvedOutcome =
       outcome ??
       (statusCode === 499
-        ? "client_abort"
+        ? this.providerChain.at(-1)?.reason === "client_abort_no_first_byte"
+          ? "failed"
+          : "client_abort"
         : this.routingTraceSummaryDraft?.outcome === "deadline" ||
             this.routingTrace.summary?.outcome === "deadline"
           ? "deadline"

@@ -79,6 +79,7 @@ export type DeferredStreamingFinalization = {
   healthAttributionThresholdMs?: number;
   healthFirstByteSeen?: boolean;
   healthAbortAtMonotonic?: number;
+  healthPausedDurationMs?: number;
   healthOutcomeSettled?: boolean;
 };
 

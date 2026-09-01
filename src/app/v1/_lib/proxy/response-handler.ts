@@ -2157,7 +2157,9 @@ function finalizeDeferredStreamingFinalizationIfNeeded(
       ? null
       : Math.max(
           0,
-          (meta.healthAbortAtMonotonic ?? performance.now()) - meta.healthAttemptStartedAtMonotonic
+          (meta.healthAbortAtMonotonic ?? performance.now()) -
+            meta.healthAttemptStartedAtMonotonic -
+            (meta.healthPausedDurationMs ?? 0)
         );
   const clientAbortNoFirstByte =
     !clientAbortCompleteSuccess &&
@@ -3958,7 +3960,10 @@ export class ProxyResponseHandler {
           }
           passthroughClientDetached = true;
           const deferredMeta = peekDeferredStreamingFinalization(session);
-          if (deferredMeta) deferredMeta.healthAbortAtMonotonic = performance.now();
+          if (deferredMeta) {
+            deferredMeta.healthAbortAtMonotonic = performance.now();
+            deferredMeta.healthFirstByteSeen = passthroughFirstByteSeen;
+          }
           clientAbortMeter?.switchToDetachedMode();
           if (!clientAbortMeter) {
             const rejection = new Error("client_detached_without_metering");
