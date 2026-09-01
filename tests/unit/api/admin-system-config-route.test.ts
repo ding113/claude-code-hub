@@ -103,4 +103,24 @@ describe("POST /api/admin/system-config", () => {
     });
     expect(mocks.updateSystemSettings).not.toHaveBeenCalled();
   });
+
+  it.each([[0], [5], [true], [[2]]])(
+    "returns a stable error for invalid legacy hedge concurrency %s",
+    async (value) => {
+      const { POST } = await import("@/app/api/admin/system-config/route");
+      const response = await POST(
+        new Request("http://localhost/api/admin/system-config", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ legacyHedgeMaxInFlight: value }),
+        })
+      );
+
+      expect(response.status).toBe(400);
+      await expect(response.json()).resolves.toEqual({
+        error: "LEGACY_HEDGE_MAX_IN_FLIGHT_INVALID",
+      });
+      expect(mocks.updateSystemSettings).not.toHaveBeenCalled();
+    }
+  );
 });

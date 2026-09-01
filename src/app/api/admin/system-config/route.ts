@@ -83,6 +83,7 @@ export async function POST(req: Request) {
       currencyDisplay: validated.currencyDisplay,
       billingModelSource: validated.billingModelSource,
       codexPriorityBillingSource: validated.codexPriorityBillingSource,
+      legacyHedgeMaxInFlight: validated.legacyHedgeMaxInFlight,
       discoveryEnabled: validated.discoveryEnabled,
       discoveryConcurrency: validated.discoveryConcurrency,
       maxDiscoveryRounds: validated.maxDiscoveryRounds,

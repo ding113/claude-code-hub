@@ -61,6 +61,7 @@ function makeTraceSession(startTime = 1_000): ProxySession {
     liveObservabilityFlushPromise: null,
     liveObservabilityClosePromise: null,
     liveObservabilityClosed: false,
+    liveActiveProviders: new Map(),
     routingTraceTerminalLogged: false,
     providerChain: [],
     ttftMs: null,
@@ -188,6 +189,47 @@ describe("ProxySession routing trace recorder", () => {
       at: 1_000,
     });
     nowSpy.mockRestore();
+  });
+
+  it("marks a thresholded client abort as a failed routing outcome", () => {
+    const session = makeTraceSession();
+    session.initializeRoutingTrace({
+      mode: "legacy_hedge",
+      discoveryEnabled: false,
+      eligible: false,
+      startedAt: 1_000,
+    });
+    session.addProviderToChain(
+      { id: 1, name: "slow", providerType: "openai", priority: 1 } as never,
+      { reason: "client_abort_no_first_byte", attemptNumber: 1 }
+    );
+    session.setRoutingTraceSummary({
+      outcome: "client_abort",
+      statusCode: 499,
+      durationMs: 1_000,
+      ttftMs: null,
+      attemptsPerRequest: 1,
+      maxActiveAttempts: 1,
+      rounds: 0,
+      providerMs: 1_000,
+      fallbackPromotions: 0,
+      cancelFailures: 0,
+      winnerOrigin: "none",
+      winnerProviderId: null,
+      winnerRound: null,
+    });
+
+    session.finalizeRoutingTrace(499);
+
+    expect(session.getRoutingTrace()?.summary).toMatchObject({
+      outcome: "failed",
+      statusCode: 499,
+    });
+    expect(session.getRoutingTrace()?.events.at(-1)).toMatchObject({
+      type: "request_finished",
+      outcome: "failed",
+      statusCode: 499,
+    });
   });
 
   it("caps the trace at 512 events and persists the truncated snapshot independently", async () => {

@@ -257,6 +257,13 @@ export function toSystemSettings(dbSettings: any): SystemSettings {
     replayCacheTtlMinutes <= REPLAY_CACHE_TTL_MINUTES_MAX
       ? replayCacheTtlMinutes
       : REPLAY_CACHE_TTL_MINUTES_DEFAULT;
+  const legacyHedgeMaxInFlight =
+    typeof dbSettings?.legacyHedgeMaxInFlight === "number" &&
+    Number.isInteger(dbSettings.legacyHedgeMaxInFlight) &&
+    dbSettings.legacyHedgeMaxInFlight >= 1 &&
+    dbSettings.legacyHedgeMaxInFlight <= 4
+      ? dbSettings.legacyHedgeMaxInFlight
+      : 2;
 
   return {
     id: dbSettings?.id ?? 0,
@@ -271,6 +278,7 @@ export function toSystemSettings(dbSettings: any): SystemSettings {
         : "requested",
     billNonSuccessfulRequests: dbSettings?.billNonSuccessfulRequests ?? false,
     billHedgeLosers: dbSettings?.billHedgeLosers ?? true,
+    legacyHedgeMaxInFlight,
     timezone: dbSettings?.timezone ?? null,
     enableAutoCleanup: dbSettings?.enableAutoCleanup ?? false,
     cleanupRetentionDays: dbSettings?.cleanupRetentionDays ?? 30,

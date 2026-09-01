@@ -71,7 +71,8 @@
     "hedge_winner": "Hedge 競速贏家",
     "hedge_loser_cancelled": "Hedge 競速輸家（已取消）",
     "hedge_loser_billed": "競速輸家（已計費）",
-    "client_abort": "客戶端中斷"
+    "client_abort": "客戶端中斷",
+    "client_abort_no_first_byte": "首字節前客戶端中斷"
   },
   "filterReasons": {
     "rate_limited": "速率限制",

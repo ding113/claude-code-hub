@@ -12139,6 +12139,8 @@ export interface operations {
                         billNonSuccessfulRequests: boolean;
                         /** @description Whether streaming-hedge (provider racing) losers are kept alive, drained, and billed (their cost accumulates into the request total). */
                         billHedgeLosers: boolean;
+                        /** @description Maximum simultaneously active provider attempts for one legacy streaming hedge request (including the primary attempt). */
+                        legacyHedgeMaxInFlight: number;
                         /** @description Whether bounded streaming Discovery is enabled. */
                         discoveryEnabled: boolean;
                         /** @description Maximum number of normal Discovery attempts in the initial batch. */
@@ -12428,6 +12430,8 @@ export interface operations {
                     billNonSuccessfulRequests?: boolean;
                     /** @description Whether streaming-hedge (provider racing) losers are kept alive, drained, and billed (their cost accumulates into the request total). */
                     billHedgeLosers?: boolean;
+                    /** @description Maximum simultaneously active provider attempts for one legacy streaming hedge request (including the primary attempt). */
+                    legacyHedgeMaxInFlight?: number;
                     /** @description Whether bounded streaming Discovery is enabled. */
                     discoveryEnabled?: boolean;
                     /** @description Maximum number of normal Discovery attempts in the initial batch. */
@@ -12590,6 +12594,8 @@ export interface operations {
                         billNonSuccessfulRequests: boolean;
                         /** @description Whether streaming-hedge (provider racing) losers are kept alive, drained, and billed (their cost accumulates into the request total). */
                         billHedgeLosers: boolean;
+                        /** @description Maximum simultaneously active provider attempts for one legacy streaming hedge request (including the primary attempt). */
+                        legacyHedgeMaxInFlight: number;
                         /** @description Whether bounded streaming Discovery is enabled. */
                         discoveryEnabled: boolean;
                         /** @description Maximum number of normal Discovery attempts in the initial batch. */

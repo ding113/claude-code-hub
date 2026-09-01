@@ -106,6 +106,14 @@ export const SystemSettingsSchema = z
       .describe(
         "Whether streaming-hedge (provider racing) losers are kept alive, drained, and billed (their cost accumulates into the request total)."
       ),
+    legacyHedgeMaxInFlight: z
+      .number()
+      .int()
+      .min(1)
+      .max(4)
+      .describe(
+        "Maximum simultaneously active provider attempts for one legacy streaming hedge request (including the primary attempt)."
+      ),
     discoveryEnabled: z.boolean().describe("Whether bounded streaming Discovery is enabled."),
     discoveryConcurrency: z
       .number()

@@ -135,7 +135,10 @@ export function classifyRequestOutcomeSignal(
     return buildExcludedTaxonomy("matched_rule");
   }
 
-  if (signal.statusCode === 499 || signal.reason === "client_abort") {
+  if (
+    (signal.statusCode === 499 && signal.reason !== "client_abort_no_first_byte") ||
+    signal.reason === "client_abort"
+  ) {
     return buildExcludedTaxonomy("client_abort");
   }
 

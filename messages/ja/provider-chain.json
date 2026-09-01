@@ -71,7 +71,8 @@
     "hedge_winner": "Hedge 競争勝者",
     "hedge_loser_cancelled": "Hedge 競争敗者（キャンセル）",
     "hedge_loser_billed": "競争の敗者（課金済み）",
-    "client_abort": "クライアント中断"
+    "client_abort": "クライアント中断",
+    "client_abort_no_first_byte": "最初のバイト前にクライアント中断"
   },
   "filterReasons": {
     "rate_limited": "レート制限",

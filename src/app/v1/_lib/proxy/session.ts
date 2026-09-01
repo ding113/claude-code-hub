@@ -829,6 +829,7 @@ export class ProxySession {
         | "hedge_loser_cancelled" // 该供应商输掉 Hedge 竞速，请求被取消（未计费）
         | "hedge_loser_billed" // 该供应商输掉 Hedge 竞速，但其响应被后台拿回并计费
         | "client_abort" // 客户端在响应完成前断开连接
+        | "client_abort_no_first_byte" // 客户端阈值后断开且供应商未返回首字节
         | "affinity_hit"; // 最长前缀亲和命中（软提名，已通过全套硬校验）
       selectionMethod?:
         | "session_reuse"
@@ -1067,7 +1068,9 @@ export class ProxySession {
     const resolvedOutcome =
       outcome ??
       (statusCode === 499
-        ? "client_abort"
+        ? this.providerChain.at(-1)?.reason === "client_abort_no_first_byte"
+          ? "failed"
+          : "client_abort"
         : this.routingTraceSummaryDraft?.outcome === "deadline" ||
             this.routingTrace.summary?.outcome === "deadline"
           ? "deadline"

@@ -64,7 +64,8 @@ function getRequestStatus(item: ProviderChainItem): StepStatus {
     item.reason === "concurrent_limit_failed" ||
     item.reason === "hedge_loser_cancelled" ||
     item.reason === "hedge_loser_billed" ||
-    item.reason === "client_abort"
+    item.reason === "client_abort" ||
+    item.reason === "client_abort_no_first_byte"
   ) {
     return "failure";
   }
@@ -222,7 +223,10 @@ export function LogicTraceTab({
   // Calculate step offset for session reuse flow
   const sessionReuseStepOffset = isSessionReuseFlow ? 1 : 0;
 
-  if (normalizedRoutingTrace?.mode === "discovery") {
+  if (
+    normalizedRoutingTrace?.mode === "discovery" ||
+    normalizedRoutingTrace?.mode === "legacy_hedge"
+  ) {
     return (
       <div className="space-y-5">
         <RoutingModeBanner trace={normalizedRoutingTrace} />
@@ -927,7 +931,8 @@ export function LogicTraceTab({
             const isHedgeWinner = item.reason === "hedge_winner";
             const isHedgeLoser = item.reason === "hedge_loser_cancelled";
             const isHedgeLoserBilled = item.reason === "hedge_loser_billed";
-            const isClientAbort = item.reason === "client_abort";
+            const isClientAbort =
+              item.reason === "client_abort" || item.reason === "client_abort_no_first_byte";
             // Resolved hedge losers (cancelled or billed) carry billing detail when
             // their reclaimed upstream response was charged to the request total.
             const hedgeLoserBilling =
@@ -963,7 +968,9 @@ export function LogicTraceTab({
                     : isHedgeLoserBilled
                       ? tChain("timeline.hedgeLoserBilled")
                       : isClientAbort
-                        ? tChain("timeline.clientAbort")
+                        ? item.reason === "client_abort_no_first_byte"
+                          ? tChain("reasons.client_abort_no_first_byte")
+                          : tChain("timeline.clientAbort")
                         : isRetry
                           ? t("logicTrace.retryAttempt", { number: item.attemptNumber ?? 1 })
                           : item.reason === "hedge_winner"

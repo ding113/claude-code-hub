@@ -22,6 +22,20 @@ describe("request outcome taxonomy", () => {
     });
   });
 
+  it("counts thresholded no-first-byte client aborts as provider failures", () => {
+    expect(
+      classifyRequestOutcomeSignal({
+        reason: "client_abort_no_first_byte",
+        statusCode: 499,
+        errorMessage: "Client aborted before provider first byte threshold",
+      })
+    ).toMatchObject({
+      outcome: "failure",
+      locus: "upstream",
+      countability: "countable",
+    });
+  });
+
   it("excludes both cancelled and billed hedge losers from success-rate", () => {
     expect(
       classifyRequestOutcomeSignal({

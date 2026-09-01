@@ -11,6 +11,7 @@ import {
 } from "@/lib/api/v1/schemas/system-config";
 import { getDiscoveryValidationErrorCode } from "@/lib/validation/discovery-settings";
 import { getReplayCacheTtlValidationErrorCode } from "@/lib/validation/replay-settings";
+import { getLegacyHedgeMaxInFlightValidationErrorCode } from "@/lib/validation/schemas";
 import {
   getSystemDisplaySettings,
   getSystemSettings,
@@ -25,7 +26,8 @@ export const systemRouter = new OpenAPIHono({
         result.error,
         new URL(c.req.url).pathname,
         getDiscoveryValidationErrorCode(result.error.issues) ??
-          getReplayCacheTtlValidationErrorCode(result.error.issues)
+          getReplayCacheTtlValidationErrorCode(result.error.issues) ??
+          getLegacyHedgeMaxInFlightValidationErrorCode(result.error.issues)
       );
     }
   },

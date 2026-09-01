@@ -85,6 +85,7 @@ const ERROR_REASONS = new Set([
   "vendor_type_all_timeout",
   "endpoint_pool_exhausted",
   "client_abort",
+  "client_abort_no_first_byte",
 ]);
 
 function isErrorReason(reason: string | undefined): boolean {
