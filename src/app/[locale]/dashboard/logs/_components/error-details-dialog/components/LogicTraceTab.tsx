@@ -223,7 +223,10 @@ export function LogicTraceTab({
   // Calculate step offset for session reuse flow
   const sessionReuseStepOffset = isSessionReuseFlow ? 1 : 0;
 
-  if (normalizedRoutingTrace?.mode === "discovery") {
+  if (
+    normalizedRoutingTrace?.mode === "discovery" ||
+    normalizedRoutingTrace?.mode === "legacy_hedge"
+  ) {
     return (
       <div className="space-y-5">
         <RoutingModeBanner trace={normalizedRoutingTrace} />

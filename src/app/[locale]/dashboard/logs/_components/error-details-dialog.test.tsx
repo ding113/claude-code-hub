@@ -2342,6 +2342,55 @@ describe("error-details-dialog routing trace", () => {
     expect(html).not.toContain("Discovery rounds");
   });
 
+  test("surfaces legacy hedge slot saturation and its configured cap", () => {
+    const legacyHedgeTrace: RoutingTraceV1 = {
+      version: 1,
+      mode: "legacy_hedge",
+      startedAt: 1_000,
+      updatedAt: 2_000,
+      discoveryEnabled: false,
+      eligible: false,
+      bypassReason: "disabled",
+      config: {
+        discoveryConcurrency: 2,
+        maxDiscoveryRounds: 1,
+        discoverySlaMs: 10_000,
+        stickySlaMs: 20_000,
+        racingTotalTimeoutMs: 60_000,
+        stickyTimeoutCooldownMs: 300_000,
+        legacyHedgeMaxInFlight: 3,
+      },
+      events: [
+        {
+          type: "hedge_slot_saturated",
+          at: 2_000,
+          elapsedMs: 1_000,
+          attemptId: "legacy-hedge-1-1",
+          provider: { id: 1, name: "slow-provider" },
+          activeAttemptCount: 3,
+          configuredCap: 3,
+          durationMs: 1_000,
+        },
+      ],
+    };
+    const html = renderWithIntl(
+      <ErrorDetailsDialog
+        externalOpen
+        statusCode={499}
+        errorMessage={null}
+        providerChain={[]}
+        routingTrace={legacyHedgeTrace}
+        sessionId="legacy-hedge-session"
+      />
+    );
+
+    expect(html).toContain("Legacy Hedge");
+    expect(html).toContain("Legacy hedge cap");
+    expect(html).toContain("Hedge slots saturated (1)");
+    expect(html).toContain("slow-provider");
+    expect(html).toContain("3/3 active");
+  });
+
   test("shows late terminal failure and Sticky binding result after a first-byte winner", () => {
     const failedTrace: RoutingTraceV1 = {
       ...discoveryTrace,
