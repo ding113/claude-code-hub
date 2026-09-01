@@ -104,7 +104,7 @@ describe("POST /api/admin/system-config", () => {
     expect(mocks.updateSystemSettings).not.toHaveBeenCalled();
   });
 
-  it.each([0, 5, true, [2]])(
+  it.each([[0], [5], [true], [[2]]])(
     "returns a stable error for invalid legacy hedge concurrency %s",
     async (value) => {
       const { POST } = await import("@/app/api/admin/system-config/route");
