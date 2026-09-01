@@ -34,6 +34,18 @@ export {
 
 export const LEGACY_HEDGE_MAX_IN_FLIGHT_INVALID_ERROR_CODE = "LEGACY_HEDGE_MAX_IN_FLIGHT_INVALID";
 
+export function getLegacyHedgeMaxInFlightValidationErrorCode(
+  issues: ReadonlyArray<{ message: string; path: readonly PropertyKey[] }>
+): string | undefined {
+  return issues.some(
+    (issue) =>
+      issue.path[0] === "legacyHedgeMaxInFlight" ||
+      issue.message === LEGACY_HEDGE_MAX_IN_FLIGHT_INVALID_ERROR_CODE
+  )
+    ? LEGACY_HEDGE_MAX_IN_FLIGHT_INVALID_ERROR_CODE
+    : undefined;
+}
+
 const CACHE_TTL_PREFERENCE = z.enum(["inherit", "5m", "1h"]);
 const CONTEXT_1M_PREFERENCE = z.enum(["inherit", "force_enable", "disabled"]);
 
