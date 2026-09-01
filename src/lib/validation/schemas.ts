@@ -32,6 +32,8 @@ export {
   DISCOVERY_WINDOW_INVALID_ERROR_CODE,
 } from "@/lib/validation/discovery-settings";
 
+export const LEGACY_HEDGE_MAX_IN_FLIGHT_INVALID_ERROR_CODE = "LEGACY_HEDGE_MAX_IN_FLIGHT_INVALID";
+
 const CACHE_TTL_PREFERENCE = z.enum(["inherit", "5m", "1h"]);
 const CONTEXT_1M_PREFERENCE = z.enum(["inherit", "force_enable", "disabled"]);
 
@@ -1023,7 +1025,15 @@ export const UpdateSystemSettingsSchema = z
     // 供应商竞速输家计费（可选；默认开启）
     billHedgeLosers: z.boolean().optional(),
     // Legacy streaming hedge concurrency cap (inclusive of the primary attempt).
-    legacyHedgeMaxInFlight: z.coerce.number().int().min(1).max(4).optional(),
+    legacyHedgeMaxInFlight: z.preprocess(
+      (value) => (typeof value === "string" && value.trim() !== "" ? Number(value.trim()) : value),
+      z
+        .number(LEGACY_HEDGE_MAX_IN_FLIGHT_INVALID_ERROR_CODE)
+        .int(LEGACY_HEDGE_MAX_IN_FLIGHT_INVALID_ERROR_CODE)
+        .min(1, LEGACY_HEDGE_MAX_IN_FLIGHT_INVALID_ERROR_CODE)
+        .max(4, LEGACY_HEDGE_MAX_IN_FLIGHT_INVALID_ERROR_CODE)
+        .optional()
+    ),
     // Bounded streaming Discovery（默认关闭；启用前需满足总窗口约束）
     discoveryEnabled: z.boolean().optional(),
     discoveryConcurrency: z.coerce

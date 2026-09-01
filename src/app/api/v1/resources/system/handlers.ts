@@ -10,6 +10,7 @@ import { jsonResponse } from "@/lib/api/v1/_shared/response-helpers";
 import { SystemSettingsUpdateSchema } from "@/lib/api/v1/schemas/system-config";
 import { getDiscoveryValidationErrorCode } from "@/lib/validation/discovery-settings";
 import { getReplayCacheTtlValidationErrorCode } from "@/lib/validation/replay-settings";
+import { LEGACY_HEDGE_MAX_IN_FLIGHT_INVALID_ERROR_CODE } from "@/lib/validation/schemas";
 
 export async function getSystemSettings(c: Context): Promise<Response> {
   const actions = await import("@/actions/system-config");
@@ -32,7 +33,10 @@ export async function updateSystemSettings(c: Context): Promise<Response> {
   const body = await parseHonoJsonBody(c, SystemSettingsUpdateSchema, {
     validationErrorCode: (error) =>
       getDiscoveryValidationErrorCode(error.issues) ??
-      getReplayCacheTtlValidationErrorCode(error.issues),
+      getReplayCacheTtlValidationErrorCode(error.issues) ??
+      (error.issues.some((issue) => issue.message === LEGACY_HEDGE_MAX_IN_FLIGHT_INVALID_ERROR_CODE)
+        ? LEGACY_HEDGE_MAX_IN_FLIGHT_INVALID_ERROR_CODE
+        : undefined),
   });
   if (!body.ok) return body.response;
   const actions = await import("@/actions/system-config");

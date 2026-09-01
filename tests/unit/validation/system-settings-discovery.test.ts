@@ -76,10 +76,18 @@ describe("UpdateSystemSettingsSchema Discovery settings", () => {
     });
   });
 
-  it.each([0, 5, 1.5, null])("rejects invalid legacy hedge concurrency %s", (value) => {
+  it.each([0, 5, 1.5, null, true, [2]])("rejects invalid legacy hedge concurrency %s", (value) => {
     expect(UpdateSystemSettingsSchema.safeParse({ legacyHedgeMaxInFlight: value }).success).toBe(
       false
     );
+  });
+
+  it("rejects invalid legacy hedge concurrency with a stable error code", () => {
+    const result = UpdateSystemSettingsSchema.safeParse({ legacyHedgeMaxInFlight: true });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues[0]?.message).toBe("LEGACY_HEDGE_MAX_IN_FLIGHT_INVALID");
+    }
   });
 
   it("rejects inherited Object prototype names as Discovery fields", () => {
