@@ -57,6 +57,7 @@ async function SettingsConfigContent({ locale }: { locale: string }) {
             codexPriorityBillingSource: settings.codexPriorityBillingSource,
             billNonSuccessfulRequests: settings.billNonSuccessfulRequests,
             billHedgeLosers: settings.billHedgeLosers,
+            legacyHedgeMaxInFlight: settings.legacyHedgeMaxInFlight,
             discoveryEnabled: settings.discoveryEnabled,
             discoveryConcurrency: settings.discoveryConcurrency,
             maxDiscoveryRounds: settings.maxDiscoveryRounds,

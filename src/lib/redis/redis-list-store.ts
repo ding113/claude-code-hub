@@ -16,6 +16,14 @@ if tonumber(ARGV[1]) > 0 then
 end
 return len`;
 
+/** 读取分页并续期必须在同一脚本内完成，避免 key 在 LRANGE 与 EXPIRE 之间过期。 */
+const LUA_LRANGE_EXPIRE = `
+local values = redis.call('LRANGE', KEYS[1], ARGV[1], ARGV[2])
+if tonumber(ARGV[3]) > 0 then
+  redis.call('EXPIRE', KEYS[1], ARGV[3])
+end
+return values`;
+
 export interface RedisListStoreOptions {
   prefix: string;
   redisClient?: RedisListClient | null;
@@ -82,12 +90,33 @@ export class RedisListStore {
     }
   }
 
-  /** 从 start（0-based，含）读到末尾；失败返回 null（与空列表 [] 区分）。 */
-  async lrangeFrom(key: string, start: number): Promise<string[] | null> {
+  /**
+   * 从 start（0-based，含）读取；maxCount 省略时读到末尾。
+   * refreshTtlSeconds 是 completed replay 距固定到期点的剩余秒数，读取与续期原子完成。
+   */
+  async lrangeFrom(
+    key: string,
+    start: number,
+    maxCount?: number,
+    refreshTtlSeconds?: number
+  ): Promise<string[] | null> {
     const redis = this.getReadyRedis();
     if (!redis) return null;
     try {
-      return await redis.lrange(this.buildKey(key), start, -1);
+      if (maxCount !== undefined && maxCount <= 0) return [];
+      const end = maxCount === undefined ? -1 : start + Math.max(0, maxCount) - 1;
+      if (refreshTtlSeconds !== undefined && refreshTtlSeconds > 0) {
+        const values = await redis.eval(
+          LUA_LRANGE_EXPIRE,
+          1,
+          this.buildKey(key),
+          start,
+          end,
+          refreshTtlSeconds
+        );
+        return Array.isArray(values) ? values.map((value) => String(value)) : [];
+      }
+      return await redis.lrange(this.buildKey(key), start, end);
     } catch (error) {
       logger.error("[RedisListStore] Failed to lrange", {
         error: toLogError(error),

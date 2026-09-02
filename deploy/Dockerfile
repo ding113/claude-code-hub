@@ -34,7 +34,9 @@ RUN bun run build
 # 要求 Node >= 22.19（undici 8 和入站请求体 zstd 解压依赖，见 package.json engines）。
 # node:trixie-slim 基于 Debian Trixie，提供 Node 24+，满足该要求。
 FROM node:trixie-slim AS runner
+ARG APP_VERSION=dev
 ENV NODE_ENV=production
+ENV NEXT_PUBLIC_APP_VERSION=$APP_VERSION
 ENV PORT=3000
 ENV HOST=0.0.0.0
 ENV HOSTNAME=0.0.0.0
@@ -55,6 +57,7 @@ RUN apt-get update && \
 COPY --from=build --chown=node:node /app/public ./public
 COPY --from=build --chown=node:node /app/drizzle ./drizzle
 COPY --from=build --chown=node:node /app/messages ./messages
+COPY --from=build --chown=node:node /app/VERSION ./VERSION
 COPY --from=build --chown=node:node /app/.next/standalone ./
 # Server Actions live inside .next/server; copy it or Next.js cannot resolve action IDs.
 COPY --from=build --chown=node:node /app/.next/server ./.next/server
@@ -65,4 +68,4 @@ RUN mkdir -p /app/reports && chown node:node /app/reports
 USER node
 EXPOSE 3000
 
-CMD ["node", "--report-on-fatalerror", "--report-uncaught-exception", "--report-exclude-env", "--report-directory=/app/reports", "server.js"]
+CMD ["node", "--report-on-fatalerror", "--report-uncaught-exception", "--report-exclude-env", "--report-directory=/app/reports", "cluster.js"]

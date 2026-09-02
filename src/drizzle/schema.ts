@@ -11,6 +11,7 @@ import {
   jsonb,
   index,
   uniqueIndex,
+  check,
   pgEnum,
 } from 'drizzle-orm/pg-core';
 import { relations, sql } from 'drizzle-orm';
@@ -899,6 +900,9 @@ export const systemSettings = pgTable('system_settings', {
   // 关闭：竞速输家直接取消连接，不计费（旧行为）
   billHedgeLosers: boolean('bill_hedge_losers').notNull().default(true),
 
+  // Maximum number of simultaneously active attempts in the legacy streaming hedge.
+  legacyHedgeMaxInFlight: integer('legacy_hedge_max_in_flight').notNull().default(2),
+
   // Bounded streaming Discovery (disabled by default until explicitly enabled).
   discoveryEnabled: boolean('discovery_enabled').notNull().default(false),
   discoveryConcurrency: integer('discovery_concurrency').notNull().default(2),
@@ -1067,7 +1071,12 @@ export const systemSettings = pgTable('system_settings', {
 
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
-});
+}, (table) => ({
+  legacyHedgeMaxInFlightRange: check(
+    'system_settings_legacy_hedge_max_in_flight_range',
+    sql`${table.legacyHedgeMaxInFlight} >= 1 AND ${table.legacyHedgeMaxInFlight} <= 4`
+  ),
+}));
 
 // Notification Settings table - Webhook 通知配置
 export const notificationSettings = pgTable('notification_settings', {

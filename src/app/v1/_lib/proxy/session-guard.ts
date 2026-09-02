@@ -89,8 +89,15 @@ export class ProxySessionGuard {
       session.setRawCrossProviderFallbackEnabled(rawFallbackEnabled);
       const allowRawSessionContext = session.isRawCrossProviderFallbackEnabled();
       session.setHighConcurrencyModeEnabled(systemSettings.enableHighConcurrencyMode ?? false);
+      const persistSessionRequestArtifacts =
+        session.shouldPersistSessionDebugArtifacts() &&
+        session.shouldPersistSessionRequestArtifacts();
       let requestMessageBeforeProxyMutations = session.request.message as Record<string, unknown>;
-      if (session.request.message && typeof session.request.message === "object") {
+      if (
+        persistSessionRequestArtifacts &&
+        session.request.message &&
+        typeof session.request.message === "object"
+      ) {
         try {
           requestMessageBeforeProxyMutations = structuredClone(
             session.request.message as Record<string, unknown>
@@ -99,7 +106,7 @@ export class ProxySessionGuard {
           requestMessageBeforeProxyMutations = session.request.message as Record<string, unknown>;
         }
       }
-      const originalMessages = session.getMessages();
+      const originalMessages = persistSessionRequestArtifacts ? session.getMessages() : undefined;
 
       // Codex Session ID 补全：在提取 clientSessionId 之前触发，避免落入不稳定的降级方案
       const codexCompletionEnabled = systemSettings.enableCodexSessionIdCompletion ?? true;
@@ -150,7 +157,9 @@ export class ProxySessionGuard {
       const sessionId = await SessionManager.getOrCreateSessionId(keyId, messages, clientSessionId);
 
       // 4. 设置到 session 对象
-      session.setSessionId(sessionId);
+      session.setSessionId(sessionId, {
+        allowSingleTurnProviderReuse: clientSessionId !== null,
+      });
       session.setSessionIdentityMetadata({
         identity: buildPublicSessionIdentity(sessionId, keyId),
         kind: "session_id",
@@ -230,23 +239,29 @@ export class ProxySessionGuard {
       // 注意：必须在后续任何格式转换/过滤前触发存储，避免记录被“后处理”污染
       if (session.sessionId && session.shouldPersistSessionDebugArtifacts()) {
         const requestBeforeSnapshot = {
-          body: requestMessageBeforeProxyMutations,
           headers: filterClientRequestSnapshotHeaders(session.headers),
           meta: {
             clientUrl: session.requestUrl.toString(),
             upstreamUrl: null,
             method: session.method,
           },
-          ...(originalMessages !== undefined ? { messages: originalMessages } : {}),
+          ...(persistSessionRequestArtifacts
+            ? {
+                body: requestMessageBeforeProxyMutations,
+                ...(originalMessages !== undefined ? { messages: originalMessages } : {}),
+              }
+            : {}),
         };
 
-        void SessionManager.storeSessionRequestBody(
-          session.sessionId,
-          session.request.message,
-          requestSequence
-        ).catch((err) => {
-          logger.error("[ProxySessionGuard] Failed to store session request body:", err);
-        });
+        if (persistSessionRequestArtifacts) {
+          void SessionManager.storeSessionRequestBody(
+            session.sessionId,
+            session.request.message,
+            requestSequence
+          ).catch((err) => {
+            logger.error("[ProxySessionGuard] Failed to store session request body:", err);
+          });
+        }
 
         void SessionManager.storeSessionClientRequestMeta(
           session.sessionId,
@@ -268,7 +283,7 @@ export class ProxySessionGuard {
         });
 
         // 可选：存储 messages（受环境变量控制，按请求序号独立存储）
-        if (messages !== undefined) {
+        if (persistSessionRequestArtifacts && messages !== undefined) {
           void SessionManager.storeSessionMessages(
             session.sessionId,
             messages,

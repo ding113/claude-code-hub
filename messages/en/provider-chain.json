@@ -53,6 +53,7 @@
   "reasons": {
     "request_success": "Success",
     "retry_success": "Retry Success",
+    "response_incomplete": "Response Incomplete",
     "retry_failed": "Retry Failed",
     "system_error": "System Error",
     "resource_not_found": "Resource Not Found (404)",
@@ -70,7 +71,8 @@
     "hedge_winner": "Hedge Winner",
     "hedge_loser_cancelled": "Hedge Loser (Cancelled)",
     "hedge_loser_billed": "Hedge Loser (Billed)",
-    "client_abort": "Client Aborted"
+    "client_abort": "Client Aborted",
+    "client_abort_no_first_byte": "Client Aborted Before First Byte"
   },
   "filterReasons": {
     "rate_limited": "Rate Limited",

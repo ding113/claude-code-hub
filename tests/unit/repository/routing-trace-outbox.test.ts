@@ -5,6 +5,7 @@ import type { RoutingTraceV1 } from "@/types/routing-trace";
 
 const mocks = vi.hoisted(() => {
   const hash = new Map<string, string>();
+  const index = new Map<string, number>();
   const redis = {
     status: "ready",
     eval: vi.fn(),
@@ -21,6 +22,7 @@ const mocks = vi.hoisted(() => {
   return {
     getMessageWriterDb,
     hash,
+    index,
     redis,
     returning,
     set,
@@ -84,12 +86,43 @@ describe("routing trace outbox", () => {
     vi.useRealTimers();
     vi.clearAllMocks();
     mocks.hash.clear();
+    mocks.index.clear();
     mocks.redis.status = "ready";
     mocks.returning.mockResolvedValue([{ id: 41 }]);
     mocks.redis.eval.mockImplementation(
-      async (script: string, _keyCount: number, _key: string, ...args: string[]) => {
+      async (script: string, keyCount: number, ...keysAndArgs: string[]) => {
+        const args = keysAndArgs.slice(keyCount);
+        const trim = (expireBefore: number, maxEntries: number, trimBatch: number) => {
+          const sorted = () =>
+            Array.from(mocks.index.entries()).sort(
+              ([leftField, leftScore], [rightField, rightScore]) =>
+                leftScore - rightScore || leftField.localeCompare(rightField)
+            );
+          const expired = sorted()
+            .filter(([, score]) => score <= expireBefore)
+            .slice(0, trimBatch);
+          for (const [field] of expired) {
+            mocks.index.delete(field);
+            mocks.hash.delete(field);
+          }
+          const overflow = Math.max(0, mocks.index.size - maxEntries);
+          const evicted = sorted().slice(0, Math.min(overflow, trimBatch));
+          for (const [field] of evicted) {
+            mocks.index.delete(field);
+            mocks.hash.delete(field);
+          }
+          return { evicted: evicted.length, expired: expired.length };
+        };
         if (script.includes("HSET")) {
-          const [field, incomingRevisionRaw, payload] = args;
+          const [
+            field,
+            incomingRevisionRaw,
+            payload,
+            stagedAtRaw,
+            expireBeforeRaw,
+            maxEntriesRaw,
+            trimBatchRaw,
+          ] = args;
           if (!field || !incomingRevisionRaw || !payload) return 0;
           const current = mocks.hash.get(field);
           if (current) {
@@ -97,16 +130,44 @@ describe("routing trace outbox", () => {
               (JSON.parse(current) as { traceUpdatedAt?: unknown }).traceUpdatedAt
             );
             const incomingRevision = Number(incomingRevisionRaw);
-            if (currentRevision > incomingRevision) return 0;
-            if (currentRevision === incomingRevision && current !== payload) return 0;
+            if (currentRevision > incomingRevision) return [0, 0, 0, mocks.index.size];
+            if (currentRevision === incomingRevision && current !== payload) {
+              return [0, 0, 0, mocks.index.size];
+            }
           }
           mocks.hash.set(field, payload);
-          return 1;
+          mocks.index.set(field, Number(stagedAtRaw));
+          const trimmed = trim(
+            Number(expireBeforeRaw),
+            Number(maxEntriesRaw),
+            Number(trimBatchRaw)
+          );
+          return [
+            mocks.hash.has(field) ? 1 : 0,
+            trimmed.expired,
+            trimmed.evicted,
+            mocks.index.size,
+          ];
+        }
+        if (script.includes("for index = 5")) {
+          const [stagedAtRaw, expireBeforeRaw, maxEntriesRaw, trimBatchRaw, ...fields] = args;
+          for (const field of fields) {
+            if (mocks.hash.has(field) && !mocks.index.has(field)) {
+              mocks.index.set(field, Number(stagedAtRaw));
+            }
+          }
+          const trimmed = trim(
+            Number(expireBeforeRaw),
+            Number(maxEntriesRaw),
+            Number(trimBatchRaw)
+          );
+          return [trimmed.expired, trimmed.evicted, mocks.index.size];
         }
         if (script.includes("HDEL")) {
           const [field, payload] = args;
           if (!field || !payload || mocks.hash.get(field) !== payload) return 0;
           mocks.hash.delete(field);
+          mocks.index.delete(field);
           return 1;
         }
         throw new Error("unexpected Lua script");
@@ -130,7 +191,7 @@ describe("routing trace outbox", () => {
     vi.useRealTimers();
   });
 
-  it("stages the normalized trace before persistence without an expiry", async () => {
+  it("stages the normalized trace with bounded per-entry retention", async () => {
     const receipt = await stageRoutingTraceOutbox(41, createTrace(1_100));
 
     expect(receipt).toEqual({ field: "41", payload: mocks.hash.get("41") });
@@ -139,7 +200,42 @@ describe("routing trace outbox", () => {
       requestId: 41,
       traceUpdatedAt: 1_100,
     });
-    expect(String(mocks.redis.eval.mock.calls[0]?.[0])).not.toContain("EXPIRE");
+    const stageCall = mocks.redis.eval.mock.calls[0] as unknown as [
+      string,
+      number,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+    ];
+    expect(stageCall[1]).toBe(2);
+    expect(stageCall[0]).toContain("ZRANGEBYSCORE");
+    expect(Number(stageCall[9])).toBe(10_000);
+    expect(Number(stageCall[7]) - Number(stageCall[8])).toBe(7 * 24 * 60 * 60_000);
+    expect(mocks.index.has("41")).toBe(true);
+  });
+
+  it("evicts the oldest recovery entry when the bounded backlog is full", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-25T12:00:00.000Z"));
+    const now = Date.now();
+    for (let index = 0; index < 10_000; index++) {
+      const field = String(100_000 + index);
+      mocks.hash.set(field, `legacy-${index}`);
+      mocks.index.set(field, now - 10_000 + index);
+    }
+
+    const receipt = await stageRoutingTraceOutbox(41, createTrace(1_100));
+
+    expect(receipt).not.toBeNull();
+    expect(mocks.hash.size).toBe(10_000);
+    expect(mocks.hash.has("100000")).toBe(false);
+    expect(mocks.hash.has("41")).toBe(true);
   });
 
   it("does not let an older stage replace a newer recoverable snapshot", async () => {

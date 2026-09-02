@@ -151,6 +151,7 @@ function createFallbackSettings(): SystemSettings {
     codexPriorityBillingSource: "requested",
     billNonSuccessfulRequests: false,
     billHedgeLosers: true,
+    legacyHedgeMaxInFlight: 2,
     timezone: null,
     enableAutoCleanup: false,
     cleanupRetentionDays: 30,
@@ -285,6 +286,12 @@ const RECENT_COLUMN_LADDER: ReadonlyArray<{
   updateWarn: string;
 }> = [
   {
+    key: "legacyHedgeMaxInFlight",
+    column: systemSettings.legacyHedgeMaxInFlight,
+    selectWarn: "system_settings 缺少 legacyHedgeMaxInFlight,回退到上一代字段集。",
+    updateWarn: "system_settings 缺少 legacyHedgeMaxInFlight,继续降级更新。",
+  },
+  {
     key: "replayCacheTtlMinutes",
     column: systemSettings.replayCacheTtlMinutes,
     selectWarn: "system_settings 缺少 replayCacheTtlMinutes,回退到上一代字段集.",
@@ -414,6 +421,7 @@ const RECENT_COLUMN_LADDER: ReadonlyArray<{
 // 历史世代字段集（冻结）：passThrough 世代之前的 schema 没有以下五列。
 // 注意：世代字段集相对近代阶梯末层会重新选取更晚引入的列（与历史实现一致）。
 const PASS_THROUGH_ERA_OMIT: readonly string[] = [
+  "legacyHedgeMaxInFlight",
   "billHedgeLosers",
   "billNonSuccessfulRequests",
   "passThroughUpstreamErrorMessage",
@@ -713,6 +721,10 @@ export async function updateSystemSettings(
     // 供应商竞速输家计费开关（如果提供）
     if (payload.billHedgeLosers !== undefined) {
       updates.billHedgeLosers = payload.billHedgeLosers;
+    }
+
+    if (payload.legacyHedgeMaxInFlight !== undefined) {
+      updates.legacyHedgeMaxInFlight = payload.legacyHedgeMaxInFlight;
     }
 
     if (payload.discoveryEnabled !== undefined) {

@@ -40,7 +40,8 @@ export const EnvSchema = z.object({
   }, z.string().url("数据库URL格式无效")),
   // PostgreSQL 连接池配置（postgres.js）
   // - 多副本部署（k8s）需要结合数据库 max_connections 分摊配置
-  // - DB_POOL_MAX 是每个应用进程内 data/control/writer 三类 pool 的连接总预算
+  // - 单进程时 DB_POOL_MAX 是 data/control/writer 三类 pool 的连接总预算
+  // - 内置 cluster launcher 会在启动 worker 前把容器级总预算分摊为这里读取的进程分片
   DB_POOL_MAX: optionalNumber(
     z.number().int().min(1, "DB_POOL_MAX 不能小于 1").max(200, "DB_POOL_MAX 不能大于 200")
   ),
@@ -150,6 +151,13 @@ export const EnvSchema = z.object({
   // - false (默认)：存储请求/响应体但对 message 内容脱敏 [REDACTED]
   // - true：原样存储 message 内容（注意隐私和存储空间影响）
   STORE_SESSION_MESSAGES: z.string().default("false").transform(booleanTransform),
+  // 单份请求调试 artifact（requestBody/messages/before/after body）的 Redis 存储上限。
+  SESSION_REQUEST_ARTIFACT_MAX_BYTES: z.coerce
+    .number()
+    .int()
+    .min(64 * 1024)
+    .max(64 * 1024 * 1024)
+    .default(5 * 1024 * 1024),
   // 会话响应体存储开关
   // - true (默认)：存储响应体（SSE/JSON），用于调试/回放/问题定位（Redis 临时缓存，默认 5 分钟）
   // - false：不存储响应体（注意：不影响本次请求处理；仅影响后续在 UI/诊断中查看 response body）
@@ -193,7 +201,7 @@ export const EnvSchema = z.object({
   // 超时后主动断开该输家连接，仅用已收到的内容尝试计费（通常计不出 -> 跳过）。
   HEDGE_LOSER_DRAIN_TIMEOUT_MS: z.coerce.number().int().min(1000).default(120_000),
 
-  // 客户端断线后的 detached stream 使用进程级带权预算。
+  // 客户端断线后的 detached stream 使用进程级带权预算；内置 cluster 会先分摊容器总预算。
   DETACHED_STREAM_MAX_CONCURRENCY: z.coerce.number().int().min(1).max(4096).default(64),
   DETACHED_STREAM_BUDGET_BYTES: z.coerce
     .number()
@@ -220,6 +228,14 @@ export const EnvSchema = z.object({
     .min(1024)
     .max(64 * 1024 * 1024)
     .default(10 * 1024 * 1024),
+  // 所有正在门禁 precommit 阶段及等待下游消费的前缀共享该进程级预算。
+  // 内置 cluster 会先分摊容器总预算，避免每个 worker 各拿一整份。
+  STREAM_GATE_GLOBAL_PREBUFFER_BYTE_CAP: z.coerce
+    .number()
+    .int()
+    .min(2 * 1024)
+    .max(2 * 1024 * 1024 * 1024)
+    .default(256 * 1024 * 1024),
   // 请求分离 + Replay：客户端断开后上游继续引流缓存，相同请求体重发续传
   ENABLE_REQUEST_REPLAY: z.string().default("true").transform(booleanTransform),
   // owner 客户端仍在线时的并发相同请求去重（attached-live）；关闭后仅 detached/completed 可命中
@@ -267,6 +283,14 @@ export const EnvSchema = z.object({
       code: "custom",
       path: ["DETACHED_STREAM_METERING_RESERVE_BYTES"],
       message: "DETACHED_STREAM_METERING_RESERVE_BYTES cannot exceed DETACHED_STREAM_BUDGET_BYTES",
+    });
+  }
+  if (env.STREAM_GATE_GLOBAL_PREBUFFER_BYTE_CAP < env.STREAM_GATE_PREBUFFER_BYTE_CAP * 4) {
+    context.addIssue({
+      code: "custom",
+      path: ["STREAM_GATE_GLOBAL_PREBUFFER_BYTE_CAP"],
+      message:
+        "STREAM_GATE_GLOBAL_PREBUFFER_BYTE_CAP must be at least four times STREAM_GATE_PREBUFFER_BYTE_CAP",
     });
   }
 });

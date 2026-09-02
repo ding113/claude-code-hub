@@ -9,6 +9,10 @@ import {
   writeLiveRoutingTrace,
 } from "@/lib/redis/live-chain-store";
 import type { SessionBindingSnapshot } from "@/lib/redis/session-binding";
+import {
+  getSessionRequestArtifactByteSize,
+  getSessionRequestArtifactMaxBytes,
+} from "@/lib/session-request-artifact-limit";
 import { clientRequestsContext1m as clientRequestsContext1mHelper } from "@/lib/special-attributes";
 import { ERROR_CODES, getErrorMessageServer } from "@/lib/utils/error-messages";
 import {
@@ -169,6 +173,9 @@ export class ProxySession {
 
   // Session ID（用于会话粘性和并发限流）
   sessionId: string | null;
+  // 客户端或补全器已建立连续身份时，单条增量请求也应参与供应商复用。
+  // 内容哈希/随机降级身份仍依赖上下文长度，避免相同短提示串到同一供应商会话。
+  private allowSingleTurnProviderReuse = false;
 
   // Discovery lease conflicts must stay on a single upstream and must not
   // mutate a binding owned by the in-flight discovery request.
@@ -578,28 +585,23 @@ export class ProxySession {
     return !this.highConcurrencyModeEnabled;
   }
 
+  shouldPersistSessionRequestArtifacts(): boolean {
+    const byteSize = getSessionRequestArtifactByteSize(
+      this.request.message,
+      this.isOpenAIImageMultipartRequest() ? undefined : this.request.buffer?.byteLength
+    );
+    const maxBytes = getSessionRequestArtifactMaxBytes();
+    if (byteSize <= maxBytes) return true;
+
+    logger.warn("[ProxySession] Skipped oversized session request artifacts", {
+      byteSize,
+      maxBytes,
+      endpoint: this.getEndpoint(),
+    });
+    return false;
+  }
+
   shouldTrackSessionObservability(): boolean {
-    return !this.highConcurrencyModeEnabled;
-  }
-
-  /** High-concurrency mode disables optional body-heavy coordination features. */
-  shouldUseRequestReplay(): boolean {
-    return !this.highConcurrencyModeEnabled;
-  }
-
-  shouldRunStreamContentGate(): boolean {
-    return !this.highConcurrencyModeEnabled;
-  }
-
-  shouldRetainClientAbortBilling(): boolean {
-    return !this.highConcurrencyModeEnabled;
-  }
-
-  shouldBillHedgeLosers(): boolean {
-    return !this.highConcurrencyModeEnabled;
-  }
-
-  shouldParseResponseDiagnostics(): boolean {
     return !this.highConcurrencyModeEnabled;
   }
 
@@ -685,8 +687,9 @@ export class ProxySession {
   /**
    * 设置 session ID
    */
-  setSessionId(sessionId: string): void {
+  setSessionId(sessionId: string, options: { allowSingleTurnProviderReuse?: boolean } = {}): void {
     this.sessionId = sessionId;
+    this.allowSingleTurnProviderReuse = options.allowSingleTurnProviderReuse === true;
   }
 
   setSessionIdentityMetadata(metadata: SessionIdentityMetadata): void {
@@ -786,15 +789,13 @@ export class ProxySession {
     return undefined;
   }
 
-  /**
-   * 是否应该复用 provider（基于 messages 长度）
-   */
+  /** 是否应该复用 provider。稳定 Session ID 支持只发送本轮增量的客户端。 */
   shouldReuseProvider(): boolean {
     if (this.isRawCrossProviderFallbackEnabled()) {
       return true;
     }
 
-    return this.getMessagesLength() > 1;
+    return this.allowSingleTurnProviderReuse || this.getMessagesLength() > 1;
   }
 
   /**
@@ -809,6 +810,7 @@ export class ProxySession {
         | "concurrent_limit_failed"
         | "request_success" // 修复：添加 request_success
         | "retry_success"
+        | "response_incomplete" // 协议完整抵达，但结果明确未完成
         | "retry_failed" // 供应商错误（已计入熔断器）
         | "system_error" // 系统/网络错误（不计入熔断器）
         | "resource_not_found" // 上游 404 错误（不计入熔断器，仅切换供应商）
@@ -827,6 +829,7 @@ export class ProxySession {
         | "hedge_loser_cancelled" // 该供应商输掉 Hedge 竞速，请求被取消（未计费）
         | "hedge_loser_billed" // 该供应商输掉 Hedge 竞速，但其响应被后台拿回并计费
         | "client_abort" // 客户端在响应完成前断开连接
+        | "client_abort_no_first_byte" // 客户端阈值后断开且供应商未返回首字节
         | "affinity_hit"; // 最长前缀亲和命中（软提名，已通过全套硬校验）
       selectionMethod?:
         | "session_reuse"
@@ -1065,7 +1068,9 @@ export class ProxySession {
     const resolvedOutcome =
       outcome ??
       (statusCode === 499
-        ? "client_abort"
+        ? this.providerChain.at(-1)?.reason === "client_abort_no_first_byte"
+          ? "failed"
+          : "client_abort"
         : this.routingTraceSummaryDraft?.outcome === "deadline" ||
             this.routingTrace.summary?.outcome === "deadline"
           ? "deadline"

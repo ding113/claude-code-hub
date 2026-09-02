@@ -114,6 +114,7 @@ export const RETRY_COUNT_EXPR: SQL = sql`(
               WHEN (
                 (elem->>'reason') IN (
                   'concurrent_limit_failed',
+                  'response_incomplete',
                   'retry_failed',
                   'system_error',
                   'resource_not_found',
@@ -121,6 +122,7 @@ export const RETRY_COUNT_EXPR: SQL = sql`(
                   'endpoint_pool_exhausted',
                   'vendor_type_all_timeout',
                   'client_abort',
+                  'client_abort_no_first_byte',
                   'http2_fallback'
                 )
                 OR (

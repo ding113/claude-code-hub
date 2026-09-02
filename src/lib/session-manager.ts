@@ -9,6 +9,10 @@ import { parseClaudeMetadataUserId } from "@/lib/claude-code/metadata-user-id";
 import { getEnvConfig } from "@/lib/config/env.schema";
 import { logger } from "@/lib/logger";
 import {
+  getSessionRequestArtifactByteSize,
+  getSessionRequestArtifactMaxBytes,
+} from "@/lib/session-request-artifact-limit";
+import {
   redactMessages,
   redactRequestBody,
   redactResponseBody,
@@ -234,6 +238,19 @@ function canStoreSessionResponseBody(value: string, context: string): boolean {
   if (byteSize <= maxBytes) return true;
 
   logger.warn("SessionManager: Skipped oversized session response body", {
+    context,
+    byteSize,
+    maxBytes,
+  });
+  return false;
+}
+
+function canStoreSessionRequestArtifact(value: unknown, context: string): boolean {
+  const byteSize = getSessionRequestArtifactByteSize(value);
+  const maxBytes = getSessionRequestArtifactMaxBytes();
+  if (byteSize <= maxBytes) return true;
+
+  logger.warn("SessionManager: Skipped oversized session request artifact", {
     context,
     byteSize,
     maxBytes,
@@ -539,13 +556,6 @@ function buildTenantContentHashSessionKey(keyId: number, contentHash: string): s
  */
 export class SessionManager {
   private static readonly SESSION_TTL = parseInt(process.env.SESSION_TTL || "300", 10); // 5 分钟
-  private static readonly SHORT_CONTEXT_THRESHOLD = parseInt(
-    process.env.SHORT_CONTEXT_THRESHOLD || "2",
-    10
-  ); // 短上下文阈值
-  private static readonly ENABLE_SHORT_CONTEXT_DETECTION =
-    process.env.ENABLE_SHORT_CONTEXT_DETECTION !== "false"; // 默认启用
-
   /**
    * 获取 STORE_SESSION_MESSAGES 配置
    * - true：原样存储 message 内容
@@ -874,44 +884,14 @@ export class SessionManager {
   ): Promise<string> {
     const redis = getRedisClient();
 
-    const messagesLength = Array.isArray(messages) ? messages.length : 0;
-
     logger.trace("SessionManager: getOrCreateSessionId called", {
       keyId,
       hasClientSession: !!clientSessionId,
-      messagesLength,
+      messagesLength: Array.isArray(messages) ? messages.length : 0,
     });
 
     // 1. 优先使用客户端传递的 session_id (来自 metadata.user_id 或 metadata.session_id)
     if (clientSessionId) {
-      // 2. 短上下文并发检测（方案E）
-      if (
-        SessionManager.ENABLE_SHORT_CONTEXT_DETECTION &&
-        messagesLength <= SessionManager.SHORT_CONTEXT_THRESHOLD
-      ) {
-        // 检查该 session 是否有其他请求正在运行
-        const concurrentCount = await SessionTracker.getConcurrentCount(clientSessionId);
-
-        if (concurrentCount > 0) {
-          // 场景B：有并发请求 → 这是并发短任务 → 强制新建 session
-          const newId = SessionManager.generateSessionId();
-          logger.info("SessionManager: 检测到并发短任务，强制新建 session", {
-            originalSessionId: clientSessionId,
-            newSessionId: newId,
-            messagesLength,
-            existingConcurrentCount: concurrentCount,
-          });
-          return newId;
-        }
-
-        // 场景A：无并发 → 这可能是长对话的开始 → 允许复用
-        logger.debug("SessionManager: 短上下文但 session 空闲，允许复用（长对话开始）", {
-          sessionId: clientSessionId,
-          messagesLength,
-        });
-      }
-
-      // 3. 长上下文 or 无并发 → 正常复用
       logger.debug("SessionManager: Using client-provided session", {
         sessionId: clientSessionId,
       });
@@ -1972,6 +1952,10 @@ export class SessionManager {
       const key = requestSequence
         ? `session:${sessionId}:req:${requestSequence}:messages`
         : `session:${sessionId}:messages`;
+      if (!canStoreSessionRequestArtifact(messagesJson, "messages")) {
+        await redis.del(key);
+        return;
+      }
       await redis.setex(key, SessionManager.SESSION_TTL, messagesJson);
       logger.trace("SessionManager: Stored session messages", {
         sessionId,
@@ -2587,6 +2571,10 @@ export class SessionManager {
         ? requestBody
         : redactRequestBody(requestBody);
       const payload = JSON.stringify(bodyToStore);
+      if (!canStoreSessionRequestArtifact(payload, "requestBody")) {
+        await redis.del(key);
+        return;
+      }
       await redis.setex(key, SessionManager.SESSION_TTL, payload);
       logger.trace("SessionManager: Stored session request body", {
         sessionId,
@@ -2987,31 +2975,53 @@ export class SessionManager {
       const writes: Array<Promise<unknown>> = [];
 
       if ("body" in snapshot) {
-        const normalizedBody = parseJsonStringIfPossible(snapshot.body ?? null);
-        const bodyToStore = SessionManager.STORE_MESSAGES
-          ? normalizedBody
-          : redactRequestBody(normalizedBody);
-        writes.push(
-          redis.setex(
-            buildSessionDetailSnapshotKey(sessionId, sequence, "request", phase, "body"),
-            SessionManager.SESSION_TTL,
-            JSON.stringify(bodyToStore)
-          )
+        const rawBody = snapshot.body ?? null;
+        const bodyKey = buildSessionDetailSnapshotKey(
+          sessionId,
+          sequence,
+          "request",
+          phase,
+          "body"
         );
+        if (canStoreSessionRequestArtifact(rawBody, `snapshot:${phase}:body`)) {
+          const normalizedBody = parseJsonStringIfPossible(rawBody);
+          const bodyToStore = SessionManager.STORE_MESSAGES
+            ? normalizedBody
+            : redactRequestBody(normalizedBody);
+          const bodyJson = JSON.stringify(bodyToStore);
+          if (canStoreSessionRequestArtifact(bodyJson, `snapshot:${phase}:body`)) {
+            writes.push(redis.setex(bodyKey, SessionManager.SESSION_TTL, bodyJson));
+          } else {
+            writes.push(redis.del(bodyKey));
+          }
+        } else {
+          writes.push(redis.del(bodyKey));
+        }
       }
 
       if ("messages" in snapshot) {
-        const normalizedMessages = parseJsonStringIfPossible(snapshot.messages ?? null);
-        const messagesToStore = SessionManager.STORE_MESSAGES
-          ? normalizedMessages
-          : redactMessages(normalizedMessages);
-        writes.push(
-          redis.setex(
-            buildSessionDetailSnapshotKey(sessionId, sequence, "request", phase, "messages"),
-            SessionManager.SESSION_TTL,
-            JSON.stringify(messagesToStore)
-          )
+        const rawMessages = snapshot.messages ?? null;
+        const messagesKey = buildSessionDetailSnapshotKey(
+          sessionId,
+          sequence,
+          "request",
+          phase,
+          "messages"
         );
+        if (canStoreSessionRequestArtifact(rawMessages, `snapshot:${phase}:messages`)) {
+          const normalizedMessages = parseJsonStringIfPossible(rawMessages);
+          const messagesToStore = SessionManager.STORE_MESSAGES
+            ? normalizedMessages
+            : redactMessages(normalizedMessages);
+          const messagesJson = JSON.stringify(messagesToStore);
+          if (canStoreSessionRequestArtifact(messagesJson, `snapshot:${phase}:messages`)) {
+            writes.push(redis.setex(messagesKey, SessionManager.SESSION_TTL, messagesJson));
+          } else {
+            writes.push(redis.del(messagesKey));
+          }
+        } else {
+          writes.push(redis.del(messagesKey));
+        }
       }
 
       if ("headers" in snapshot) {

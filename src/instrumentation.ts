@@ -69,7 +69,10 @@ export function registerCrashDiagnostics(): void {
         // Diagnostic reports are durable artifacts. Exclude the entire
         // environment rather than maintaining an incomplete secret allowlist.
         report.excludeEnv = true;
-        return report.writeReport(`report.${trigger}.${Date.now()}.json`, toSafeCrashError(err));
+        return report.writeReport(
+          `report.${trigger}.${process.pid}.${Date.now()}.json`,
+          toSafeCrashError(err)
+        );
       }
     } catch {
       // 写入诊断报告失败不应再抛出
@@ -183,6 +186,12 @@ function logStartupMarker(): void {
  *
  * 注意: 此函数会传播关键错误,调用者应决定是否需要优雅降级
  */
+async function reloadErrorRuleDetectorCache(): Promise<void> {
+  const { errorRuleDetector } = await import("@/lib/error-rule-detector");
+  await errorRuleDetector.reload();
+  logger.info("Error rule detector cache loaded successfully");
+}
+
 async function syncErrorRulesAndInitializeDetector(): Promise<void> {
   // 同步默认错误规则到数据库 - 每次启动都完整同步
   const { syncDefaultErrorRules } = await import("@/repository/error-rules");
@@ -192,9 +201,7 @@ async function syncErrorRulesAndInitializeDetector(): Promise<void> {
   );
 
   // 加载错误规则缓存 - 让关键错误传播
-  const { errorRuleDetector } = await import("@/lib/error-rule-detector");
-  await errorRuleDetector.reload();
-  logger.info("Error rule detector cache loaded successfully");
+  await reloadErrorRuleDetectorCache();
 }
 
 /**
@@ -395,6 +402,49 @@ async function startApiKeyVacuumFilterSync(): Promise<void> {
   }
 }
 
+/**
+ * 多核心 worker 在 ready 前建立计费倍率缓存订阅，避免首次请求刚写入本地缓存、
+ * 订阅尚未完成时漏过其他进程的更新广播。外部多实例部署仍由热路径懒初始化。
+ */
+async function startGroupMultiplierCacheSync(): Promise<boolean> {
+  const rateLimitRaw = process.env.ENABLE_RATE_LIMIT?.trim();
+  if (rateLimitRaw === "false" || rateLimitRaw === "0" || !process.env.REDIS_URL) {
+    return false;
+  }
+
+  try {
+    const { ensureGroupMultiplierCacheSubscription } = await import(
+      "@/lib/cache/provider-group-multiplier-cache"
+    );
+    return await ensureGroupMultiplierCacheSubscription();
+  } catch (error) {
+    logger.warn("[Instrumentation] Provider group multiplier cache sync init failed", {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return false;
+  }
+}
+
+/** 多核心 worker 在 ready 前订阅系统设置更新，避免计费与路由开关跨进程漂移。 */
+async function startSystemSettingsCacheSync(): Promise<boolean> {
+  const rateLimitRaw = process.env.ENABLE_RATE_LIMIT?.trim();
+  if (rateLimitRaw === "false" || rateLimitRaw === "0" || !process.env.REDIS_URL) {
+    return false;
+  }
+
+  try {
+    const { ensureSystemSettingsCacheSubscription } = await import(
+      "@/lib/config/system-settings-cache"
+    );
+    return await ensureSystemSettingsCacheSubscription();
+  } catch (error) {
+    logger.warn("[Instrumentation] System settings cache sync init failed", {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return false;
+  }
+}
+
 function warmupApiKeyVacuumFilter(): void {
   // 预热 API Key Vacuum Filter（减少无效 key 对 DB 的压力）
   try {
@@ -407,6 +457,26 @@ function warmupApiKeyVacuumFilter(): void {
 
   // 多实例：订阅 key 变更广播以触发本机 filter 重建
   void startApiKeyVacuumFilterSync();
+}
+
+async function warmupProxyRuntimeSettings(): Promise<void> {
+  try {
+    const { getProxyRuntimeSettings } = await import("@/lib/system-settings/proxy-runtime");
+    await getProxyRuntimeSettings();
+  } catch (error) {
+    logger.warn("[Instrumentation] Proxy runtime settings warmup failed", {
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
+/**
+ * 同一进程 cluster 内仅 slot 0 持有单例调度器和队列 consumer。每个网关 worker
+ * 仍需初始化进程本地缓存、生命周期 hook 与可观测性。单进程和外部横向扩容部署
+ * 不携带此标记，因此保持原有行为。
+ */
+export function shouldRunBackgroundTasks(env: NodeJS.ProcessEnv = process.env): boolean {
+  return env.CCH_MULTICORE_BACKGROUND_OWNER !== "0";
 }
 
 export async function register() {
@@ -452,8 +522,52 @@ export async function register() {
       bindLifecycleGlobals();
     }
 
+    if (process.env.CCH_MULTICORE_ACTIVE === "1") {
+      const [multiplierSyncEnabled, settingsSyncEnabled] = await Promise.all([
+        startGroupMultiplierCacheSync(),
+        startSystemSettingsCacheSync(),
+      ]);
+      if (!multiplierSyncEnabled) {
+        logger.warn(
+          "[Multicore] Provider group multiplier invalidation unavailable; using TTL fallback"
+        );
+      }
+      if (!settingsSyncEnabled) {
+        logger.warn("[Multicore] System settings invalidation unavailable; using TTL fallback");
+      }
+    }
+
     // 生产环境: 执行完整初始化(迁移 + 价格表 + 清理任务 + 通知任务)
     if (process.env.NODE_ENV === "production") {
+      if (!shouldRunBackgroundTasks()) {
+        logger.info("[Multicore] Initializing request-only gateway worker", {
+          workerIndex: process.env.CCH_MULTICORE_WORKER_INDEX ?? null,
+          workerCount: process.env.CCH_MULTICORE_WORKER_COUNT ?? null,
+        });
+
+        // 主进程先启动 slot 0，待其报告 ready 后才 fork 仅处理请求的 worker，
+        // 因此迁移和默认规则同步已完成；这里只验证共享存储并初始化进程本地状态。
+        const { checkDatabaseConnection } = await import("@/lib/migrate");
+        const isConnected = await checkDatabaseConnection();
+        if (!isConnected) {
+          logger.error("Cannot start gateway worker without database connection");
+          process.exit(1);
+        }
+
+        warmupApiKeyVacuumFilter();
+        try {
+          await reloadErrorRuleDetectorCache();
+        } catch (error) {
+          logger.error(
+            "[Instrumentation] Non-critical: Error rule detector initialization failed",
+            error
+          );
+        }
+        await warmupProxyRuntimeSettings();
+        logger.info("[Multicore] Request-only gateway worker ready");
+        return;
+      }
+
       const { checkDatabaseConnection, runMigrations, withAdvisoryLock } = await import(
         "@/lib/migrate"
       );
@@ -675,18 +789,7 @@ export async function register() {
       await startReplayCleanupScheduler();
 
       // F1/F3a：预热代理运行时设置快照（stream gate / affinity 的同步读取路径）
-      try {
-        const { getProxyRuntimeSettings } = await import("@/lib/system-settings/proxy-runtime");
-        void getProxyRuntimeSettings().catch((error) => {
-          logger.warn("[Instrumentation] Proxy runtime settings warmup failed", {
-            error: error instanceof Error ? error.message : String(error),
-          });
-        });
-      } catch (error) {
-        logger.warn("[Instrumentation] Proxy runtime settings warmup init failed", {
-          error: error instanceof Error ? error.message : String(error),
-        });
-      }
+      await warmupProxyRuntimeSettings();
 
       logger.info("Application ready");
     }
@@ -855,18 +958,7 @@ export async function register() {
         await startReplayCleanupScheduler();
 
         // F1/F3a：预热代理运行时设置快照（stream gate / affinity 的同步读取路径）
-        try {
-          const { getProxyRuntimeSettings } = await import("@/lib/system-settings/proxy-runtime");
-          void getProxyRuntimeSettings().catch((error) => {
-            logger.warn("[Instrumentation] Proxy runtime settings warmup failed", {
-              error: error instanceof Error ? error.message : String(error),
-            });
-          });
-        } catch (error) {
-          logger.warn("[Instrumentation] Proxy runtime settings warmup init failed", {
-            error: error instanceof Error ? error.message : String(error),
-          });
-        }
+        await warmupProxyRuntimeSettings();
       } else {
         logger.warn(
           "[Instrumentation] Database unavailable: skipping endpoint probe scheduler and cleanup"

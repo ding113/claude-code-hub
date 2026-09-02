@@ -33,6 +33,10 @@ import {
   getPreferredProviderEndpoints,
 } from "@/lib/provider-endpoints/endpoint-selector";
 import { getGlobalAgentPool, getProxyAgentForProvider } from "@/lib/proxy-agent";
+import {
+  isHttp2TransportQuarantined,
+  quarantineHttp2Transport,
+} from "@/lib/proxy-agent/http2-quarantine";
 import { RateLimitService } from "@/lib/rate-limit/service";
 import type { SessionBindingSnapshot } from "@/lib/redis/session-binding";
 import { SessionManager } from "@/lib/session-manager";
@@ -68,8 +72,15 @@ import { tryResponsesWebsocketUpstream } from "../responses-ws/upstream-adapter"
 import { buildProxyUrl } from "../url";
 import { recordAffinityWinner, tombstoneAffinityOnFailure } from "./affinity/affinity-recorder";
 import { rectifyBillingHeader } from "./billing-header-rectifier";
+import { BufferedByteChunks } from "./buffered-byte-chunks";
 import { bindClientAbortListener } from "./client-abort-listener";
+import {
+  CLIENT_ABORT_METER_MAX_RETAINED_BYTES,
+  createClientAbortMeteringObserver,
+} from "./client-abort-metering";
 import { deriveClientSafeUpstreamErrorMessage } from "./client-error-message";
+import { combineAbortSignals } from "./combine-abort-signals";
+import { acquireDetachedStreamLease } from "./detached-stream-budget";
 import { type DiscoveryAction, DiscoveryCoordinator } from "./discovery-coordinator";
 import { type DiscoveryProtocol, DiscoveryValidityParser } from "./discovery-validity";
 import { isStandardProxyEndpointPath } from "./endpoint-family-catalog";
@@ -90,6 +101,7 @@ import {
   ProxyError,
   sanitizeUrl,
 } from "./errors";
+import type { ClientFormat } from "./format-mapper";
 import {
   detectGeminiFunctionIdRectifierTrigger,
   type GeminiFunctionIdRectifierResult,
@@ -109,7 +121,10 @@ import {
 import { ProxyProviderResolver } from "./provider-selector";
 import { abortReplayOwnership, releaseReplayOwnership } from "./replay/replay-spool";
 import { isJsonResponseContentType, isMalformedJsonResponseBody } from "./response-content-type";
-import { finalizeHedgeLoserBilling, hasStreamCompletionMarker } from "./response-handler";
+import {
+  finalizeHedgeLoserBilling,
+  shouldForceCodexResponsesStreamHandling,
+} from "./response-handler";
 import type { ProxySession } from "./session";
 import {
   type DeferredStreamingHedgeBindingAuthority,
@@ -117,10 +132,17 @@ import {
 } from "./stream-finalization";
 import { mapProviderTypeToFamily } from "./stream-gate/frame-classifier";
 import {
+  getStreamGatePrebufferBudget,
+  type StreamGatePrebufferLease,
+} from "./stream-gate/prebuffer-budget";
+import {
   concatChunks,
+  isRequestScopedGateFailure,
   resolveStreamGateCaps,
   resolveStreamGateMode,
   runStreamContentGate,
+  type StreamGateOptions,
+  type StreamGateResult,
   StreamPrecommitError,
 } from "./stream-gate/stream-content-gate";
 import {
@@ -145,6 +167,36 @@ import {
 /** Default User-Agent for Codex CLI requests when none is provided */
 export const DEFAULT_CODEX_USER_AGENT =
   "codex_cli_rs/0.93.0 (Windows 10.0.26200; x86_64) vscode/1.108.1";
+const EMPTY_PREFIX_CHUNK = new Uint8Array(0);
+const LEGACY_STREAMING_HEDGE_DEFAULT_MAX_IN_FLIGHT = 2;
+const LEGACY_STREAMING_HEDGE_MIN_MAX_IN_FLIGHT = 1;
+const LEGACY_STREAMING_HEDGE_MAX_MAX_IN_FLIGHT = 4;
+const CLIENT_ABORT_HEALTH_FALLBACK_THRESHOLD_MS = 30_000;
+
+function clampLegacyHedgeMaxInFlight(value: unknown): number {
+  const numeric = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(numeric)) return LEGACY_STREAMING_HEDGE_DEFAULT_MAX_IN_FLIGHT;
+  return Math.min(
+    LEGACY_STREAMING_HEDGE_MAX_MAX_IN_FLIGHT,
+    Math.max(LEGACY_STREAMING_HEDGE_MIN_MAX_IN_FLIGHT, Math.floor(numeric))
+  );
+}
+
+async function runStreamContentGateWithAbortSignals(
+  reader: ReadableStreamDefaultReader<Uint8Array>,
+  options: Omit<StreamGateOptions, "abortSignal">,
+  signals: Array<AbortSignal | null | undefined>
+): Promise<StreamGateResult> {
+  const activeSignals = signals.filter((signal): signal is AbortSignal => signal != null);
+  if (activeSignals.length === 0) return runStreamContentGate(reader, options);
+
+  const combined = combineAbortSignals(activeSignals);
+  try {
+    return await runStreamContentGate(reader, { ...options, abortSignal: combined.signal });
+  } finally {
+    combined.cleanup();
+  }
+}
 
 /**
  * Best-effort decode of the *final* outgoing request body into a JSON object.
@@ -216,11 +268,217 @@ const RETRY_LIMITS = PROVIDER_LIMITS.MAX_RETRY_ATTEMPTS;
 const MAX_PROVIDER_SWITCHES = 20; // 保险栓：最多切换 20 次供应商（防止无限循环）
 const DISCOVERY_LEASE_HANDOFF_GRACE_SECONDS = 5;
 const DISCOVERY_TERMINAL_CLEANUP_MAX_MS = 1_000;
+const LOSER_BILLING_DRAIN_FIXED_OVERHEAD_BYTES = 3 * 1024 * 1024;
+const LOSER_BILLING_MAX_FRAME_BYTES = 1024 * 1024;
+
+type LoserBillingDrainResult =
+  | { admitted: false; reason: string }
+  | {
+      admitted: true;
+      evidenceText: string;
+      endedNaturally: boolean;
+      terminalSeen: boolean;
+    };
+
+/**
+ * 等待一次 reader.read()，但让本地 deadline/上游取消可以先结束所有权。
+ * Abort 赢得竞态后，迟到的 read rejection 仍由已安装的回调消费，不会形成
+ * unhandled rejection；调用方也不必等待可能永不 settle 的 cancel Promise。
+ */
+function readLoserChunkUntilAbort(
+  reader: ReadableStreamDefaultReader<Uint8Array>,
+  signal: AbortSignal
+): Promise<ReadableStreamReadResult<Uint8Array> | null> {
+  if (signal.aborted) return Promise.resolve(null);
+
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const cleanup = () => signal.removeEventListener("abort", onAbort);
+    const finish = (result: ReadableStreamReadResult<Uint8Array> | null) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolve(result);
+    };
+    const fail = (error: unknown) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(error);
+    };
+    const onAbort = () => finish(null);
+
+    signal.addEventListener("abort", onAbort, { once: true });
+    if (signal.aborted) {
+      onAbort();
+      return;
+    }
+    try {
+      void reader.read().then(finish, fail);
+    } catch (error) {
+      fail(error);
+    }
+  });
+}
+
+function mapProviderTypeToClientFormat(providerType: Provider["providerType"]): ClientFormat {
+  switch (providerType) {
+    case "claude":
+    case "claude-auth":
+      return "claude";
+    case "codex":
+      return "response";
+    case "openai-compatible":
+      return "openai";
+    case "gemini":
+    case "gemini-cli":
+      return providerType;
+  }
+}
+
+/**
+ * 竞速输家只需要终态与 usage 证据，不能把完整生成文本留在后台。
+ * 每个 drain 使用同一套有界协议计量器，并进入进程级加权预算；输入再长，
+ * retained heap 都只由固定额度决定。
+ */
+async function drainLoserBillingEvidence(options: {
+  reader: ReadableStreamDefaultReader<Uint8Array>;
+  initialChunks: Uint8Array[];
+  providerType: Provider["providerType"];
+  responseController?: AbortController | null;
+  stopReason: string;
+  timeoutMs: number;
+  onInitialChunksConsumed?: () => void;
+}): Promise<LoserBillingDrainResult> {
+  const observer = createClientAbortMeteringObserver(
+    mapProviderTypeToClientFormat(options.providerType),
+    { attachedMaxFrameBytes: LOSER_BILLING_MAX_FRAME_BYTES }
+  );
+  const initialBytes = options.initialChunks.reduce((sum, chunk) => sum + chunk.byteLength, 0);
+  const admission = acquireDetachedStreamLease(
+    "loser",
+    LOSER_BILLING_DRAIN_FIXED_OVERHEAD_BYTES +
+      CLIENT_ABORT_METER_MAX_RETAINED_BYTES +
+      observer.maxInFlightFrameBytes +
+      initialBytes
+  );
+  if (!admission.acquired) {
+    options.initialChunks.length = 0;
+    options.onInitialChunksConsumed?.();
+    const reason = new Error(`${options.stopReason}_${admission.reason}`);
+    options.responseController?.abort(reason);
+    void options.reader.cancel(reason).catch(() => undefined);
+    try {
+      options.reader.releaseLock();
+    } catch {
+      // cancel 已接管 reader；部分 adapter 会暂时拒绝 releaseLock。
+    }
+    return { admitted: false, reason: admission.reason };
+  }
+
+  let endedNaturally = false;
+  let stopAfterEvidence = false;
+  let cancelReason: Error | null = null;
+  const drainController = new AbortController();
+  const upstreamSignal = options.responseController?.signal;
+  const forwardUpstreamAbort = () => {
+    const reason =
+      upstreamSignal?.reason instanceof Error
+        ? upstreamSignal.reason
+        : new Error(`${options.stopReason}_aborted`);
+    if (!drainController.signal.aborted) drainController.abort(reason);
+  };
+  if (upstreamSignal?.aborted) {
+    forwardUpstreamAbort();
+  } else {
+    upstreamSignal?.addEventListener("abort", forwardUpstreamAbort, { once: true });
+  }
+  const drainTimer = setTimeout(
+    () => {
+      const reason = new Error(`${options.stopReason}_timeout`);
+      if (!drainController.signal.aborted) drainController.abort(reason);
+      try {
+        options.responseController?.abort(reason);
+      } catch {
+        // 上游 transport 取消是 best effort，本地 deadline 仍然生效。
+      }
+    },
+    Math.max(1, options.timeoutMs)
+  );
+  drainTimer.unref?.();
+
+  const observe = (chunk: Uint8Array): void => {
+    if (stopAfterEvidence || chunk.byteLength === 0) return;
+    const observation = observer.observe(chunk);
+    stopAfterEvidence = observation.errorSeen || observation.drainComplete;
+  };
+
+  try {
+    try {
+      for (const chunk of options.initialChunks) observe(chunk);
+    } finally {
+      // 计量器只保留有界文本证据；首段字节在观察后立即交还给 GC。
+      options.initialChunks.length = 0;
+      options.onInitialChunksConsumed?.();
+    }
+
+    while (!stopAfterEvidence) {
+      const readResult = await readLoserChunkUntilAbort(options.reader, drainController.signal);
+      if (!readResult) {
+        cancelReason =
+          drainController.signal.reason instanceof Error
+            ? drainController.signal.reason
+            : new Error(`${options.stopReason}_aborted`);
+        break;
+      }
+      const { value, done } = readResult;
+      if (done) {
+        endedNaturally = true;
+        break;
+      }
+      if (value) observe(value);
+    }
+
+    if (stopAfterEvidence) {
+      cancelReason = new Error(`${options.stopReason}_protocol_complete`);
+    }
+  } catch {
+    // 超时、赢家收尾或上游错误都只会让本次输家计费缺少完整终态；
+    // 已观察到的显式 usage 仍交由既有计费策略决定是否可计。
+  } finally {
+    clearTimeout(drainTimer);
+    upstreamSignal?.removeEventListener("abort", forwardUpstreamAbort);
+    if (cancelReason) {
+      try {
+        options.responseController?.abort(cancelReason);
+      } catch {
+        // abort is best effort
+      }
+      void options.reader.cancel(cancelReason).catch(() => undefined);
+    }
+    admission.lease.release();
+    try {
+      options.reader.releaseLock();
+    } catch {
+      // 读取或 cancel 仍在 adapter 内收尾，不阻塞本地预算和 agent 释放。
+    }
+  }
+
+  const snapshot = observer.finish();
+  return {
+    admitted: true,
+    evidenceText: snapshot.text,
+    endedNaturally,
+    terminalSeen: snapshot.terminalSeen && snapshot.protocolFailure?.verdict !== "error",
+  };
+}
 
 type CacheTtlOption = CacheTtlPreference | null | undefined;
 
 type ProxySessionWithAttemptRuntime = ProxySession & {
   clearResponseTimeout?: () => void;
+  pauseResponseTimeout?: () => void;
+  resumeResponseTimeout?: () => void;
   responseController?: AbortController;
   releaseAgent?: () => void;
 };
@@ -321,6 +579,9 @@ type StreamingHedgeAttempt = {
   settled: boolean;
   thresholdTriggered: boolean;
   thresholdTimer: NodeJS.Timeout | null;
+  thresholdDeadlineAt: number | null;
+  thresholdRemainingMs: number;
+  thresholdPaused: boolean;
   reader: ReadableStreamDefaultReader<Uint8Array> | null;
   response: Response | null;
   releaseAgent: (() => void) | null;
@@ -330,15 +591,34 @@ type StreamingHedgeAttempt = {
   /** Idempotency guard: ensures loser drain/billing runs at most once per attempt. */
   loserBillingStarted: boolean;
   /**
-   * First chunk already pulled from this attempt's reader before it lost the race.
-   * Preserved so loser billing can prepend it when draining (Claude's message_start
-   * usage lives in the first chunk).
+   * Prefix already pulled from this attempt's reader before it lost the race.
+   * Preserved without concatenating so loser billing can observe message_start usage
+   * without creating another gate-sized allocation.
    */
-  firstChunk: Uint8Array | null;
+  billingPrefixChunks: Uint8Array[] | null;
+  /** 门禁前缀的进程级预算所有权；随赢家流或输家计量器转移。 */
+  gatePrebufferLease: StreamGatePrebufferLease | null;
   /** F1 门控提交标记（该 attempt 门控提交时记录，随 hedge_winner 链条目落库）。 */
   gateAudit?: ProviderChainItem["streamGate"];
   /** 该 attempt 首字节到达时刻（epoch ms）；只有赢家的值会被记为 session TTFB。 */
   firstByteAt?: number | null;
+  /** Stable identity for routing trace and per-attempt health attribution. */
+  attemptId: string;
+  /** Monotonic dispatch timestamp used for client-abort threshold comparisons. */
+  startedAtMonotonic: number;
+  /** Monotonic timestamp for the current hedge threshold window, including pre-dispatch setup. */
+  thresholdStartedAtMonotonic: number;
+  /** Effective health-attribution threshold; independent from request timeout behavior. */
+  healthAttributionThresholdMs: number;
+  /** Set immediately when the upstream dispatch starts. */
+  dispatched: boolean;
+  /** Exactly-once guard for provider health/circuit settlement. */
+  healthSettlementClaimed: boolean;
+  healthOutcome: "client_abort_no_first_byte" | "provider_failure" | "other_failure" | null;
+  healthPausedAtMonotonic: number | null;
+  healthPausedDurationMs: number;
+  /** Avoid duplicate saturation events for a threshold trigger. */
+  hedgeSaturationRecorded: boolean;
   /**
    * Billing context snapshot for the INITIAL provider's losing attempt, captured BEFORE
    * commitWinner overwrites the shared session's model/context with the winner's. Null for
@@ -423,7 +703,8 @@ const NON_STREAM_BODY_INSPECTION_MAX_BYTES = 32 * 1024; // 32 KiB
  */
 async function readResponseTextUpTo(
   response: Response,
-  maxBytes: number
+  maxBytes: number,
+  onChunk?: (value: Uint8Array) => void
 ): Promise<{ text: string; truncated: boolean }> {
   const reader = response.body?.getReader();
   if (!reader) {
@@ -440,6 +721,7 @@ async function readResponseTextUpTo(
       const { done, value } = await reader.read();
       if (done) break;
       if (!value || value.byteLength === 0) continue;
+      onChunk?.(value);
 
       const remaining = maxBytes - bytesRead;
       // 注意：remaining<=0 发生在“已经读到下一块 chunk”之后。
@@ -1401,6 +1683,9 @@ export class ProxyForwarder {
             1,
             discoverySettings.stickyTimeoutCooldownMs ?? 300_000
           ),
+          legacyHedgeMaxInFlight: clampLegacyHedgeMaxInFlight(
+            discoverySettings.legacyHedgeMaxInFlight
+          ),
           sessionTtlSeconds,
         },
       });
@@ -1413,6 +1698,9 @@ export class ProxyForwarder {
     }
 
     const useStreamingHedge = ProxyForwarder.shouldUseStreamingHedge(session);
+    const legacyHedgeMaxInFlight = clampLegacyHedgeMaxInFlight(
+      discoverySettings.legacyHedgeMaxInFlight
+    );
     const singleUpstream =
       discoveryPreparation.reason === "binding_conflict" ||
       discoveryPreparation.reason === "lease_conflict" ||
@@ -1429,10 +1717,24 @@ export class ProxyForwarder {
       eligible: false,
       bypassReason: discoveryPreparation.reason,
       startedAt: requestStartedAt,
+      config: {
+        discoveryConcurrency: Math.max(2, Math.floor(discoverySettings.discoveryConcurrency ?? 2)),
+        maxDiscoveryRounds: Math.max(1, Math.floor(discoverySettings.maxDiscoveryRounds ?? 2)),
+        discoverySlaMs: Math.max(1, discoverySettings.discoverySlaMs ?? 10_000),
+        stickySlaMs: Math.max(1, discoverySettings.stickySlaMs ?? 20_000),
+        racingTotalTimeoutMs: Math.max(1, discoverySettings.racingTotalTimeoutMs ?? 60_000),
+        stickyTimeoutCooldownMs: Math.max(1, discoverySettings.stickyTimeoutCooldownMs ?? 300_000),
+        legacyHedgeMaxInFlight,
+        sessionTtlSeconds,
+      },
     });
 
     if (useStreamingHedge) {
-      const hedgePromise = ProxyForwarder.sendStreamingWithHedge(session);
+      const hedgePromise = ProxyForwarder.sendStreamingWithHedge(
+        session,
+        discoverySettings,
+        legacyHedgeMaxInFlight
+      );
       void hedgePromise.catch(() => undefined);
       return await hedgePromise;
     }
@@ -1661,6 +1963,11 @@ export class ProxyForwarder {
       // ========== 内层循环：重试当前供应商（根据配置最多尝试 maxAttemptsPerProvider 次）==========
       while (attemptCount < maxAttemptsPerProvider) {
         attemptCount++;
+        let attemptStartedAtMonotonic = 0;
+        let attemptFirstByteSeen = false;
+        let attemptDispatched = false;
+        let healthPausedAtMonotonic: number | null = null;
+        let healthPausedDurationMs = 0;
 
         // Use currentEndpointIndex for endpoint selection (sticky behavior)
         // - currentEndpointIndex is advanced only on SYSTEM_ERROR (network errors)
@@ -1682,13 +1989,25 @@ export class ProxyForwarder {
             currentProvider,
             activeEndpoint.baseUrl,
             endpointAudit,
-            attemptCount
+            attemptCount,
+            false,
+            undefined,
+            () => {
+              attemptDispatched = true;
+              attemptStartedAtMonotonic = performance.now();
+              attemptFirstByteSeen = false;
+            }
           );
 
           // ========== 空响应检测（仅非流式）==========
           const contentType = response.headers.get("content-type") || "";
           const normalizedContentType = contentType.toLowerCase();
-          const isSSE = normalizedContentType.includes("text/event-stream");
+          const forceCodexResponsesStream = shouldForceCodexResponsesStreamHandling(
+            session,
+            response
+          );
+          const isSSE =
+            normalizedContentType.includes("text/event-stream") || forceCodexResponsesStream;
           const isHtml =
             normalizedContentType.includes("text/html") ||
             normalizedContentType.includes("application/xhtml+xml");
@@ -1713,20 +2032,25 @@ export class ProxyForwarder {
             let streamingResponse = response;
             let gateChainAudit: ProviderChainItem["streamGate"];
             const gateMode = resolveStreamGateMode();
+            // Missing or misleading MIME is not enough to distinguish SSE from a headerless
+            // JSON fake-200. Always use the bounded precommit gate for this compatibility path,
+            // even when ordinary stream gating is off or shadow-only.
             const shouldRunPrecommitGate =
-              (typeof session.shouldRunStreamContentGate !== "function" ||
-                session.shouldRunStreamContentGate()) &&
-              (gateMode === "enforce" || session.replayState?.role === "owner");
+              gateMode === "enforce" ||
+              session.replayState?.role === "owner" ||
+              forceCodexResponsesStream;
             if (
               shouldRunPrecommitGate &&
               response.body &&
-              session.getEndpointPolicy().kind !== "raw_passthrough"
+              (session.getEndpointPolicy().kind !== "raw_passthrough" || forceCodexResponsesStream)
             ) {
               const gateFamily = mapProviderTypeToFamily(currentProvider.providerType);
               if (gateFamily) {
                 const runtime = session as ProxySession & {
                   responseController?: AbortController;
                   clearResponseTimeout?: () => void;
+                  pauseResponseTimeout?: () => void;
+                  resumeResponseTimeout?: () => void;
                   releaseAgent?: () => void;
                 };
                 const gateReader = response.body.getReader();
@@ -1734,21 +2058,41 @@ export class ProxyForwarder {
                 // TTFB 只在门控提交后写入 session：提交前失败的尝试不会被服务，
                 // 记下它的首字节会低估 TTFB 并放大 TPS 的分母。
                 let gateFirstByteAt: number | null = null;
-                const gate = await runStreamContentGate(gateReader, {
-                  family: gateFamily,
-                  providerId: currentProvider.id,
-                  providerName: currentProvider.name,
-                  ...resolveStreamGateCaps(),
-                  // 首字节到达即清除首字节计时器，保持「首字节超时」的原始语义——
-                  // 思考型模型可在首个内容帧前长时间输出中性帧，不应触发该计时器
-                  onFirstByte: () => {
-                    gateFirstByteAt ??= Date.now();
-                    runtime.clearResponseTimeout?.();
+                const gate = await runStreamContentGateWithAbortSignals(
+                  gateReader,
+                  {
+                    family: gateFamily,
+                    providerId: currentProvider.id,
+                    providerName: currentProvider.name,
+                    ...resolveStreamGateCaps(),
+                    // 首字节到达即清除首字节计时器，保持「首字节超时」的原始语义——
+                    // 思考型模型可在首个内容帧前长时间输出中性帧，不应触发该计时器
+                    onFirstByte: () => {
+                      attemptFirstByteSeen = true;
+                      gateFirstByteAt ??= Date.now();
+                      runtime.clearResponseTimeout?.();
+                    },
+                    // 门控等待期沿用供应商静默超时（与提交后 response-handler 的行为对齐）
+                    idleTimeoutMs: currentProvider.streamingIdleTimeoutMs,
+                    captureCommitMarker: !session.isHighConcurrencyModeEnabled(),
+                    prebufferBudget: getStreamGatePrebufferBudget(),
+                    onBudgetWaitStart: () => {
+                      runtime.pauseResponseTimeout?.();
+                      healthPausedAtMonotonic ??= performance.now();
+                    },
+                    onBudgetWaitEnd: () => {
+                      runtime.resumeResponseTimeout?.();
+                      if (healthPausedAtMonotonic !== null) {
+                        healthPausedDurationMs += Math.max(
+                          0,
+                          performance.now() - healthPausedAtMonotonic
+                        );
+                        healthPausedAtMonotonic = null;
+                      }
+                    },
                   },
-                  // 门控等待期沿用供应商静默超时（与提交后 response-handler 的行为对齐）
-                  idleTimeoutMs: currentProvider.streamingIdleTimeoutMs,
-                  captureCommitMarker: !session.isHighConcurrencyModeEnabled(),
-                });
+                  [runtime.responseController?.signal, session.clientAbortSignal]
+                );
 
                 if (!gate.committed) {
                   // 先于清理读取超时来源：区分首字节/首内容超时与客户端断开
@@ -1816,7 +2160,11 @@ export class ProxyForwarder {
                 });
 
                 streamingResponse = new Response(
-                  ProxyForwarder.buildBufferedPrefixStream(gate.prefixChunks, gateReader),
+                  ProxyForwarder.buildBufferedPrefixStream(
+                    gate.prefixChunks,
+                    gateReader,
+                    gate.prebufferLease
+                  ),
                   {
                     status: response.status,
                     statusText: response.statusText,
@@ -1839,6 +2187,15 @@ export class ProxyForwarder {
               endpointUrl: endpointAudit.endpointUrl,
               upstreamStatusCode: response.status,
               bindingIntent: session.isSessionBindingAllowed() ? undefined : "none",
+              healthAttemptId: `legacy-serial-${totalProvidersAttempted}-${attemptCount}`,
+              healthAttemptStartedAtMonotonic: attemptStartedAtMonotonic,
+              healthAttributionThresholdMs:
+                currentProvider.firstByteTimeoutStreamingMs > 0
+                  ? currentProvider.firstByteTimeoutStreamingMs
+                  : CLIENT_ABORT_HEALTH_FALLBACK_THRESHOLD_MS,
+              healthFirstByteSeen: attemptFirstByteSeen,
+              healthPausedDurationMs,
+              healthOutcomeSettled: false,
             });
 
             logger.info("ProxyForwarder: Streaming response received, deferring finalization", {
@@ -1917,7 +2274,10 @@ export class ProxyForwarder {
             const clonedResponse = response.clone();
             const inspected = await readResponseTextUpTo(
               clonedResponse,
-              NON_STREAM_BODY_INSPECTION_MAX_BYTES
+              NON_STREAM_BODY_INSPECTION_MAX_BYTES,
+              (value) => {
+                if (value.byteLength > 0) attemptFirstByteSeen = true;
+              }
             );
             inspectedText = inspected.text;
             inspectedTruncated = inspected.truncated;
@@ -2148,9 +2508,11 @@ export class ProxyForwarder {
           }
 
           // F3a：亲和提名的供应商发生供应商侧失败 -> 定向写墓碑（短 TTL 自愈防羊群）
+          // request-scoped 的空完成不算供应商侧失败：写墓碑会让后续请求绕开健康的粘性供应商
           if (
-            errorCategory === ErrorCategory.PROVIDER_ERROR ||
-            errorCategory === ErrorCategory.RESOURCE_NOT_FOUND
+            (errorCategory === ErrorCategory.PROVIDER_ERROR ||
+              errorCategory === ErrorCategory.RESOURCE_NOT_FOUND) &&
+            !isRequestScopedGateFailure(lastError)
           ) {
             void tombstoneAffinityOnFailure(session, currentProvider.id);
           }
@@ -2183,12 +2545,61 @@ export class ProxyForwarder {
               totalProvidersAttempted,
             });
 
+            const now = performance.now();
+            const elapsedMs = Math.max(
+              0,
+              now -
+                attemptStartedAtMonotonic -
+                healthPausedDurationMs -
+                (healthPausedAtMonotonic === null ? 0 : now - healthPausedAtMonotonic)
+            );
+            const thresholdMs =
+              currentProvider.firstByteTimeoutStreamingMs > 0
+                ? currentProvider.firstByteTimeoutStreamingMs
+                : CLIENT_ABORT_HEALTH_FALLBACK_THRESHOLD_MS;
+            const qualifiesForHealth =
+              attemptDispatched &&
+              !attemptFirstByteSeen &&
+              elapsedMs >= thresholdMs &&
+              endpointPolicy.allowCircuitBreakerAccounting;
+
+            if (qualifiesForHealth) {
+              const abortFailure = new ProxyError(
+                "Client aborted while provider was waiting for the first byte",
+                499,
+                undefined,
+                true
+              );
+              await recordFailure(currentProvider.id, abortFailure).catch((healthError) => {
+                logger.warn("ProxyForwarder: Failed to account serial client abort health", {
+                  providerId: currentProvider.id,
+                  error: healthError instanceof Error ? healthError.message : String(healthError),
+                });
+              });
+              session.appendRoutingTraceEvent({
+                type: "client_abort_no_first_byte",
+                attemptId: `legacy-serial-${totalProvidersAttempted}-${attemptCount}`,
+                provider: {
+                  id: currentProvider.id,
+                  name: currentProvider.name,
+                  priority: currentProvider.priority || 0,
+                },
+                outcome: "provider_failure",
+                cancellationKind: "client_abort",
+                reason: "external_client_abort",
+                effectiveThresholdMs: thresholdMs,
+                circuitAccountingApplied: true,
+                availabilityAccountingApplied: true,
+                durationMs: Math.round(elapsedMs),
+              });
+            }
+
             await ProxyForwarder.clearSessionProviderBinding(session, currentProvider.id);
 
             // 记录到决策链（标记为客户端中断）
             session.addProviderToChain(currentProvider, {
               ...endpointAudit,
-              reason: "client_abort",
+              reason: qualifiesForHealth ? "client_abort_no_first_byte" : "client_abort",
               circuitState: getCircuitState(currentProvider.id),
               attemptNumber: attemptCount,
               errorMessage: "Client aborted request",
@@ -2745,7 +3156,8 @@ export class ProxyForwarder {
                 messagesCount: session.getMessagesLength(),
               });
             } else {
-              if (shouldAccountCircuitBreaker) {
+              // 门控的 empty_stream 由请求内容决定，不计入供应商健康度（仍 failover）
+              if (shouldAccountCircuitBreaker && !isRequestScopedGateFailure(lastError)) {
                 await recordFailure(currentProvider.id, lastError);
               }
             }
@@ -2814,7 +3226,8 @@ export class ProxyForwarder {
     endpointAudit?: { endpointId: number | null; endpointUrl: string },
     attemptNumber?: number,
     deferDetailSnapshotPersistence: boolean = false,
-    externalAbortSignal?: AbortSignal
+    externalAbortSignal?: AbortSignal,
+    onUpstreamDispatch?: () => void
   ): Promise<Response> {
     if (!provider) {
       throw new Error("Provider is required");
@@ -3390,6 +3803,10 @@ export class ProxyForwarder {
     interface UndiciFetchOptions extends RequestInit {
       dispatcher?: Dispatcher;
     }
+    const fetchWithDispatch = async (url: string, requestInit: UndiciFetchOptions) => {
+      onUpstreamDispatch?.();
+      return await fetch(url, requestInit);
+    };
 
     // ⭐ 双路超时控制（first-byte / total）
     // 注意：由于 undici fetch API 的限制，无法精确分离 DNS/TCP/TLS 连接阶段和响应头接收阶段
@@ -3412,17 +3829,84 @@ export class ProxyForwarder {
     }
 
     let responseTimeoutId: NodeJS.Timeout | null = null;
-    if (responseTimeoutMs > 0) {
+    let responseTimeoutDeadlineAt: number | null = null;
+    let responseTimeoutRemainingMs = responseTimeoutMs;
+    let responseTimeoutPaused = false;
+    let responseTimeoutPhase = "initial";
+    const scheduleResponseTimeout = (phase: string, delayMs = responseTimeoutMs) => {
+      if (responseTimeoutMs <= 0 || responseController.signal.aborted) return;
+      if (responseTimeoutId) clearTimeout(responseTimeoutId);
+      const effectiveDelayMs = Math.max(1, delayMs);
+      responseTimeoutPhase = phase;
+      responseTimeoutRemainingMs = effectiveDelayMs;
+      responseTimeoutDeadlineAt = Date.now() + effectiveDelayMs;
+      responseTimeoutPaused = false;
       responseTimeoutId = setTimeout(() => {
+        responseTimeoutId = null;
+        responseTimeoutDeadlineAt = null;
+        responseTimeoutRemainingMs = 0;
         responseController.abort();
         logger.warn("ProxyForwarder: Response timeout", {
           providerId: provider.id,
           providerName: provider.name,
           responseTimeoutMs,
           responseTimeoutType,
+          timeoutPhase: responseTimeoutPhase,
           isStreaming,
         });
-      }, responseTimeoutMs);
+      }, effectiveDelayMs);
+    };
+    const clearScheduledResponseTimeout = () => {
+      if (responseTimeoutId) {
+        clearTimeout(responseTimeoutId);
+        responseTimeoutId = null;
+      }
+      responseTimeoutDeadlineAt = null;
+      responseTimeoutRemainingMs = 0;
+      responseTimeoutPaused = false;
+    };
+    const pauseScheduledResponseTimeout = () => {
+      if (responseTimeoutPaused || !responseTimeoutId || responseTimeoutDeadlineAt === null) return;
+      responseTimeoutRemainingMs = Math.max(1, responseTimeoutDeadlineAt - Date.now());
+      clearTimeout(responseTimeoutId);
+      responseTimeoutId = null;
+      responseTimeoutDeadlineAt = null;
+      responseTimeoutPaused = true;
+    };
+    const resumeScheduledResponseTimeout = () => {
+      if (!responseTimeoutPaused) return;
+      responseTimeoutPaused = false;
+      if (responseController.signal.aborted || session.clientAbortSignal?.aborted) return;
+      scheduleResponseTimeout("stream_gate_budget_resume", responseTimeoutRemainingMs);
+    };
+    const buildResponseTimeoutError = () =>
+      new ProxyError(
+        `${responseTimeoutType === "streaming_first_byte" ? "供应商首字节响应超时" : "供应商响应超时"}: ${responseTimeoutMs}ms 内未收到数据`,
+        524,
+        {
+          body: JSON.stringify({
+            error: {
+              type: "timeout_error",
+              message: `Provider failed to respond within ${responseTimeoutMs}ms`,
+              timeout_type: responseTimeoutType,
+              timeout_ms: responseTimeoutMs,
+            },
+          }),
+          parsed: {
+            error: {
+              type: "timeout_error",
+              message: `Provider failed to respond within ${responseTimeoutMs}ms`,
+              timeout_type: responseTimeoutType,
+              timeout_ms: responseTimeoutMs,
+            },
+          },
+          providerId: provider.id,
+          providerName: provider.name,
+        }
+      );
+
+    if (responseTimeoutMs > 0) {
+      scheduleResponseTimeout("initial");
     } else {
       logger.debug("ProxyForwarder: Response timeout disabled", {
         providerId: provider.id,
@@ -3449,6 +3933,7 @@ export class ProxyForwarder {
       if (externalAbortSignal) abortTransportFrom(externalAbortSignal);
     });
     const cleanupCombinedSignal = () => {
+      clearScheduledResponseTimeout();
       cleanupResponseTransportSignal();
       cleanupClientTransportSignal();
       cleanupExternalTransportSignal();
@@ -3465,7 +3950,9 @@ export class ProxyForwarder {
     };
 
     // ⭐ 获取 HTTP/2 全局开关设置
-    const enableHttp2 = await isHttp2Enabled();
+    const http2EnabledBySetting = await isHttp2Enabled();
+    let enableHttp2 = http2EnabledBySetting;
+    let http2Attempted = false;
 
     // ⭐ 应用代理配置（如果配置了）- 使用 Agent Pool 缓存连接
     // 注意：proxyConfig 与 directConnectionCacheKey 的声明保持在 try 外部，
@@ -3487,7 +3974,14 @@ export class ProxyForwarder {
     try {
       // ⭐ 把 agent 获取 & 配置日志放进 try 块，确保获取后到 fetch 之前任何异常
       // （例如 URL 解析失败）都会走 catch 的统一释放逻辑，避免泄漏 activeRequests。
+      enableHttp2 =
+        http2EnabledBySetting &&
+        !isHttp2TransportQuarantined({
+          targetUrl: proxyUrl,
+          proxyUrl: provider.proxyUrl,
+        });
       proxyConfig = await getProxyAgentForProvider(provider, proxyUrl, enableHttp2);
+      http2Attempted = enableHttp2 && (proxyConfig?.http2Enabled ?? true);
 
       if (proxyConfig) {
         init.dispatcher = proxyConfig.agent;
@@ -3539,6 +4033,7 @@ export class ProxyForwarder {
           const requestBodyJson = decodeRequestBodyAsJson(requestBody);
 
           if (requestBodyJson) {
+            onUpstreamDispatch?.();
             const wsResult = await tryResponsesWebsocketUpstream({
               provider,
               upstreamUrl: proxyUrl,
@@ -3626,9 +4121,10 @@ export class ProxyForwarder {
               provider.id,
               provider.name,
               session,
-              deferDetailSnapshotPersistence
+              deferDetailSnapshotPersistence,
+              onUpstreamDispatch
             )
-          : await fetch(proxyUrl, init);
+          : await fetchWithDispatch(proxyUrl, init);
       // ⭐ fetch 成功：收到 HTTP 响应头，保留响应超时继续监控
       // 注意：undici 的 fetch 在收到 HTTP 响应头后就 resolve，但实际数据（SSE 首字节 / 完整 JSON）
       // 还没到达。responseTimeoutId 需要延续到 response-handler 中才能真正控制"首字节"或"总耗时"
@@ -3641,13 +4137,9 @@ export class ProxyForwarder {
       });
       // ⚠️ 不要清除 responseTimeoutId！让它继续监控响应体读取
     } catch (fetchError) {
-      // ⭐ fetch 失败：清除所有超时定时器
-      if (responseTimeoutId) {
-        clearTimeout(responseTimeoutId);
-      }
-
       // fetch 失败后可能继续尝试 HTTP/1.1 / 直连 fallback。
-      // 这些 fallback 请求仍需响应客户端中断和响应超时，所以 cleanup 只能在最终失败时执行。
+      // fallback 与原请求共享同一固定超时边界；不能在回退时重置完整时长。
+      // cleanup 只在最终失败时执行，成功则把剩余时长继续交给 response-handler。
 
       // Release agent ref count on fetch failure (request never started streaming)
       const releaseKey = proxyConfig?.cacheKey ?? directConnectionCacheKey;
@@ -3732,30 +4224,7 @@ export class ProxyForwarder {
         // 抛出 ProxyError 并设置特殊状态码 524（Cloudflare: A Timeout Occurred）
         // 这样会被归类为 PROVIDER_ERROR，计入熔断器并直接切换供应商
         cleanupCombinedSignal();
-        throw new ProxyError(
-          `${responseTimeoutType === "streaming_first_byte" ? "供应商首字节响应超时" : "供应商响应超时"}: ${responseTimeoutMs}ms 内未收到数据`,
-          524, // 524 = A Timeout Occurred (Cloudflare standard)
-          {
-            body: JSON.stringify({
-              error: {
-                type: "timeout_error",
-                message: `Provider failed to respond within ${responseTimeoutMs}ms`,
-                timeout_type: responseTimeoutType,
-                timeout_ms: responseTimeoutMs,
-              },
-            }),
-            parsed: {
-              error: {
-                type: "timeout_error",
-                message: `Provider failed to respond within ${responseTimeoutMs}ms`,
-                timeout_type: responseTimeoutType,
-                timeout_ms: responseTimeoutMs,
-              },
-            },
-            providerId: provider.id,
-            providerName: provider.name,
-          }
-        );
+        throw buildResponseTimeoutError();
       }
 
       // ⭐ 检测流式静默期超时（streaming_idle）
@@ -3828,9 +4297,13 @@ export class ProxyForwarder {
       // ⭐ HTTP/2 协议错误检测与透明回退
       // 场景：HTTP/2 连接失败（GOAWAY、RST_STREAM、PROTOCOL_ERROR 等）
       // 策略：透明回退到 HTTP/1.1，不触发供应商切换或熔断器
-      if (enableHttp2 && isHttp2Error(err)) {
+      if (http2Attempted && isHttp2Error(err)) {
         const http2CacheKey = proxyConfig?.cacheKey ?? directConnectionCacheKey;
         const http2DispatcherId = proxyConfig?.dispatcherId ?? directConnectionDispatcherId;
+        quarantineHttp2Transport({
+          targetUrl: proxyUrl,
+          proxyUrl: provider.proxyUrl,
+        });
         logger.warn("ProxyForwarder: HTTP/2 protocol error detected, falling back to HTTP/1.1", {
           providerId: provider.id,
           providerName: provider.name,
@@ -3839,6 +4312,7 @@ export class ProxyForwarder {
           errorName: err.name,
           errorMessage: err.message || "(empty message)",
           errorCode: err.code || "N/A",
+          h1OnlyQuarantine: true,
         });
 
         // 记录到决策链（标记为 HTTP/2 回退）
@@ -3906,6 +4380,7 @@ export class ProxyForwarder {
         }
 
         try {
+          responseTimeoutPhase = "http1_fallback";
           // 使用 HTTP/1.1 重试
           response = useErrorTolerantFetch
             ? await ProxyForwarder.fetchWithoutAutoDecode(
@@ -3914,9 +4389,10 @@ export class ProxyForwarder {
                 provider.id,
                 provider.name,
                 session,
-                deferDetailSnapshotPersistence
+                deferDetailSnapshotPersistence,
+                onUpstreamDispatch
               )
-            : await fetch(proxyUrl, http1FallbackInit);
+            : await fetchWithDispatch(proxyUrl, http1FallbackInit);
 
           logger.info("ProxyForwarder: HTTP/1.1 fallback succeeded", {
             providerId: provider.id,
@@ -3928,19 +4404,6 @@ export class ProxyForwarder {
           directConnectionCacheKey = null;
           directConnectionDispatcherId = null;
 
-          // 重新启动响应超时计时器（如果之前有配置超时时间）
-          // 注意：responseTimeoutId 在 catch 块开头已被清除，这里只需检查 responseTimeoutMs
-          if (responseTimeoutMs > 0) {
-            responseTimeoutId = setTimeout(() => {
-              responseController.abort();
-              logger.warn("ProxyForwarder: Response timeout after HTTP/1.1 fallback", {
-                providerId: provider.id,
-                providerName: provider.name,
-                responseTimeoutMs,
-              });
-            }, responseTimeoutMs);
-          }
-
           // 成功后跳过 throw，继续执行后续逻辑（不计入熔断器）
         } catch (http1Error) {
           // Release H1 fallback agent ref count before re-throwing
@@ -3949,6 +4412,11 @@ export class ProxyForwarder {
               http1ProxyConfig.cacheKey,
               http1ProxyConfig.dispatcherId
             );
+          }
+
+          if (responseController.signal.aborted && !session.clientAbortSignal?.aborted) {
+            cleanupCombinedSignal();
+            throw buildResponseTimeoutError();
           }
 
           // HTTP/1.1 也失败，记录并抛出原始错误
@@ -3991,6 +4459,7 @@ export class ProxyForwarder {
             const fallbackInit = { ...init };
             delete fallbackInit.dispatcher;
             try {
+              responseTimeoutPhase = "direct_fallback";
               response = useErrorTolerantFetch
                 ? await ProxyForwarder.fetchWithoutAutoDecode(
                     proxyUrl,
@@ -3998,9 +4467,10 @@ export class ProxyForwarder {
                     provider.id,
                     provider.name,
                     session,
-                    deferDetailSnapshotPersistence
+                    deferDetailSnapshotPersistence,
+                    onUpstreamDispatch
                   )
-                : await fetch(proxyUrl, fallbackInit);
+                : await fetchWithDispatch(proxyUrl, fallbackInit);
               logger.info("ProxyForwarder: Direct connection succeeded after proxy failure", {
                 providerId: provider.id,
                 providerName: provider.name,
@@ -4015,20 +4485,12 @@ export class ProxyForwarder {
               directConnectionCacheKey = null;
               directConnectionDispatcherId = null;
 
-              // 重新启动响应超时计时器（如果之前有配置超时时间）
-              // 注意：responseTimeoutId 在 catch 块开头已被清除，这里只需检查 responseTimeoutMs
-              if (responseTimeoutMs > 0) {
-                responseTimeoutId = setTimeout(() => {
-                  responseController.abort();
-                  logger.warn("ProxyForwarder: Response timeout after direct fallback", {
-                    providerId: provider.id,
-                    providerName: provider.name,
-                    responseTimeoutMs,
-                  });
-                }, responseTimeoutMs);
-              }
               // 成功后跳过 throw，继续执行后续逻辑
             } catch (directError) {
+              if (responseController.signal.aborted && !session.clientAbortSignal?.aborted) {
+                cleanupCombinedSignal();
+                throw buildResponseTimeoutError();
+              }
               // 直连也失败，抛出原始错误
               logger.error("ProxyForwarder: Direct connection also failed", {
                 providerId: provider.id,
@@ -4136,9 +4598,7 @@ export class ProxyForwarder {
           name: provider.name,
         });
       } finally {
-        if (responseTimeoutId) {
-          clearTimeout(responseTimeoutId);
-        }
+        clearScheduledResponseTimeout();
         // Release agent ref count (response-handler will never run for error responses)
         const errorReleaseKey = proxyConfig?.cacheKey ?? directConnectionCacheKey;
         const errorReleaseDispatcherId = proxyConfig?.dispatcherId ?? directConnectionDispatcherId;
@@ -4159,20 +4619,22 @@ export class ProxyForwarder {
     // response-handler 会在读到首字节（流式）或完整响应（非流式）后调用此函数
     const sessionWithTimeout = session as ProxySession & {
       clearResponseTimeout?: () => void;
+      pauseResponseTimeout?: () => void;
+      resumeResponseTimeout?: () => void;
       responseController?: AbortController;
       releaseAgent?: () => void;
     };
 
     sessionWithTimeout.clearResponseTimeout = () => {
-      if (responseTimeoutId) {
-        clearTimeout(responseTimeoutId);
-      }
+      clearScheduledResponseTimeout();
       logger.debug("ProxyForwarder: Response timeout cleared by response-handler", {
         providerId: provider.id,
         responseTimeoutMs,
         responseTimeoutType,
       });
     };
+    sessionWithTimeout.pauseResponseTimeout = pauseScheduledResponseTimeout;
+    sessionWithTimeout.resumeResponseTimeout = resumeScheduledResponseTimeout;
 
     // 传递 responseController 引用，让 response-handler 能区分超时和客户端中断
     sessionWithTimeout.responseController = responseController;
@@ -4384,7 +4846,11 @@ export class ProxyForwarder {
     return resolveEndpointPolicy(policySession.requestUrl?.pathname ?? "/");
   }
 
-  private static async sendStreamingWithHedge(session: ProxySession): Promise<Response> {
+  private static async sendStreamingWithHedge(
+    session: ProxySession,
+    settings: SystemSettings,
+    maxInFlight: number
+  ): Promise<Response> {
     const initialProvider = session.provider;
     if (!initialProvider) {
       throw new Error("代理上下文缺少供应商");
@@ -4392,9 +4858,7 @@ export class ProxyForwarder {
 
     const rawCrossProviderFallbackEnabled = session.isRawCrossProviderFallbackEnabled();
     // 竞速输家计费开关：开启时落败供应商不被直接掐断，而是后台 drain 并计费。
-    const billHedgeLosers =
-      (typeof session.shouldBillHedgeLosers !== "function" || session.shouldBillHedgeLosers()) &&
-      (await getCachedSystemSettings()).billHedgeLosers === true;
+    const billHedgeLosers = settings.billHedgeLosers === true;
     const launchedProviderIds = new Set<number>();
     let launchedProviderCount = 0;
     let settled = false;
@@ -4461,13 +4925,6 @@ export class ProxyForwarder {
     // 不取消连接：读到流自然结束（或超时/容量上限）后，复用赢家相同的计费链，
     // 把费用异步累加回原请求行。幂等（loserBillingStarted 守卫），失败静默。
     const startLoserBilling = (attempt: StreamingHedgeAttempt) => {
-      if (typeof session.shouldBillHedgeLosers === "function" && !session.shouldBillHedgeLosers()) {
-        const cancel = attempt.reader?.cancel("high_concurrency_loser_billing_disabled");
-        cancel?.catch(() => undefined);
-        releaseAttemptAgent(attempt);
-        return;
-      }
-
       if (attempt.loserBillingStarted) return;
       attempt.loserBillingStarted = true;
 
@@ -4475,74 +4932,42 @@ export class ProxyForwarder {
       const response = attempt.response;
       const messageRequestId = session.messageContext?.id;
       const messageRequestCreatedAtMs = session.messageContext?.createdAt.getTime();
+      const gatePrebufferLease = attempt.gatePrebufferLease;
+      attempt.gatePrebufferLease = null;
       if (!reader || !response || messageRequestId == null) {
         // 无可读响应或无请求行可归属 -> 无法计费，直接释放资源。
         const cancel = reader?.cancel("hedge_loser_no_billing");
         cancel?.catch(() => undefined);
+        gatePrebufferLease?.release();
         releaseAttemptAgent(attempt);
         return;
       }
 
       const controller = attempt.responseController;
       const drainTimeoutMs = getEnvConfig().HEDGE_LOSER_DRAIN_TIMEOUT_MS;
-      const drainTimer = setTimeout(() => {
-        try {
-          controller?.abort(new Error("hedge_loser_drain_timeout"));
-        } catch {
-          /* ignore */
-        }
-      }, drainTimeoutMs);
+      const initialChunks = attempt.billingPrefixChunks ?? [];
+      attempt.billingPrefixChunks = null;
 
       void (async () => {
-        const decoder = new TextDecoder();
-        const chunks: string[] = [];
-        let totalBytes = 0;
-        let drainComplete = false;
-        const MAX_DRAIN_BYTES = 32 * 1024 * 1024;
-        // 若落败前已读走首块（赢家先提交导致），先补回，避免丢失 message_start 的 usage。
-        if (attempt.firstChunk) {
-          chunks.push(decoder.decode(attempt.firstChunk, { stream: true }));
-          totalBytes += attempt.firstChunk.byteLength;
-          attempt.firstChunk = null;
-        }
-        try {
-          while (true) {
-            const { value, done } = await reader.read();
-            if (done) {
-              drainComplete = true;
-              break;
-            }
-            if (value) {
-              chunks.push(decoder.decode(value, { stream: true }));
-              totalBytes += value.byteLength;
-              if (totalBytes > MAX_DRAIN_BYTES) {
-                logger.warn("ProxyForwarder: hedge loser drain exceeded cap, skipping bill", {
-                  sessionId: attempt.session.sessionId ?? null,
-                  providerId: attempt.provider.id,
-                  providerName: attempt.provider.name,
-                  totalBytes,
-                });
-                try {
-                  controller?.abort(new Error("hedge_loser_drain_cap"));
-                } catch {
-                  /* ignore */
-                }
-                break;
-              }
-            }
-          }
-        } catch (drainError) {
-          // 中止 / 网络错误：drain 未自然结束，drainComplete 保持 false（避免按 per-request fee 多计）。
-          logger.debug("ProxyForwarder: hedge loser drain ended early", {
-            error: drainError instanceof Error ? drainError.message : String(drainError),
+        // 若落败前已读走前缀，补入有界计量器，避免丢失 message_start usage。
+        const drain = await drainLoserBillingEvidence({
+          reader,
+          initialChunks,
+          providerType: attempt.provider.providerType,
+          responseController: controller,
+          stopReason: "hedge_loser_drain",
+          timeoutMs: drainTimeoutMs,
+          onInitialChunksConsumed: () => gatePrebufferLease?.release(),
+        });
+        if (!drain.admitted) {
+          logger.warn("ProxyForwarder: hedge loser drain rejected by shared budget", {
             sessionId: attempt.session.sessionId ?? null,
             providerId: attempt.provider.id,
             providerName: attempt.provider.name,
+            reason: drain.reason,
           });
+          return;
         }
-        const flushed = decoder.decode();
-        if (flushed) chunks.push(flushed);
-        const allContent = chunks.join("");
 
         await finalizeHedgeLoserBilling({
           messageRequestId,
@@ -4551,8 +4976,8 @@ export class ProxyForwarder {
           provider: attempt.provider,
           attemptNumber: attempt.sequence,
           upstreamStatusCode: response.status,
-          allContent,
-          drainComplete,
+          allContent: drain.evidenceText,
+          drainComplete: drain.endedNaturally || drain.terminalSeen,
           billingContext: attempt.billingSnapshot ?? undefined,
         });
       })()
@@ -4565,7 +4990,7 @@ export class ProxyForwarder {
           });
         })
         .finally(() => {
-          clearTimeout(drainTimer);
+          gatePrebufferLease?.release();
           releaseAttemptAgent(attempt);
         });
     };
@@ -4596,6 +5021,8 @@ export class ProxyForwarder {
 
       // 因非竞速原因（client_abort / launch_failed 等）被取消：禁止后台计费，正常取消连接。
       attempt.billAsLoser = false;
+      attempt.gatePrebufferLease?.release();
+      attempt.gatePrebufferLease = null;
 
       if (reason === "hedge_loser") {
         session.addProviderToChain(attempt.provider, {
@@ -4630,26 +5057,116 @@ export class ProxyForwarder {
       releaseAttemptAgent(attempt);
     };
 
+    const triggerAttemptThreshold = (attempt: StreamingHedgeAttempt) => {
+      attempt.thresholdTimer = null;
+      attempt.thresholdDeadlineAt = null;
+      attempt.thresholdRemainingMs = 0;
+      if (settled || attempt.settled || attempt.thresholdTriggered) return;
+      attempt.thresholdTriggered = true;
+      if (attempts.size >= maxInFlight && !attempt.hedgeSaturationRecorded) {
+        attempt.hedgeSaturationRecorded = true;
+        const now = performance.now();
+        const thresholdStartedAt =
+          attempt.startedAtMonotonic > 0
+            ? attempt.startedAtMonotonic
+            : attempt.thresholdStartedAtMonotonic;
+        const elapsedMs = Math.max(
+          0,
+          Math.round(
+            now -
+              thresholdStartedAt -
+              attempt.healthPausedDurationMs -
+              (attempt.healthPausedAtMonotonic === null ? 0 : now - attempt.healthPausedAtMonotonic)
+          )
+        );
+        session.appendRoutingTraceEvent({
+          type: "hedge_slot_saturated",
+          attemptId: attempt.attemptId,
+          provider: {
+            id: attempt.provider.id,
+            name: attempt.provider.name,
+            priority: attempt.provider.priority || 0,
+          },
+          outcome: "slot_saturated",
+          reason: "hedge_threshold",
+          activeAttemptCount: attempts.size,
+          configuredCap: maxInFlight,
+          durationMs: elapsedMs,
+          elapsedMs,
+        });
+      }
+      session.addProviderToChain(attempt.provider, {
+        ...attempt.endpointAudit,
+        reason: "hedge_triggered",
+        attemptNumber: attempt.sequence,
+        circuitState: getCircuitState(attempt.provider.id),
+      });
+      void launchAlternative();
+    };
+
+    const scheduleAttemptThreshold = (attempt: StreamingHedgeAttempt) => {
+      if (
+        attempt.thresholdRemainingMs <= 0 ||
+        attempt.thresholdTriggered ||
+        attempt.settled ||
+        settled
+      ) {
+        return;
+      }
+      attempt.thresholdDeadlineAt = Date.now() + attempt.thresholdRemainingMs;
+      attempt.thresholdTimer = setTimeout(
+        () => triggerAttemptThreshold(attempt),
+        attempt.thresholdRemainingMs
+      );
+    };
+
     const armAttemptThreshold = (attempt: StreamingHedgeAttempt) => {
       if (attempt.thresholdTimer) {
         clearTimeout(attempt.thresholdTimer);
         attempt.thresholdTimer = null;
       }
       attempt.thresholdTriggered = false;
+      attempt.thresholdPaused = false;
+      attempt.thresholdDeadlineAt = null;
+      attempt.thresholdRemainingMs = attempt.firstByteTimeoutMs;
+      attempt.thresholdStartedAtMonotonic = performance.now();
+      attempt.healthPausedAtMonotonic = null;
+      attempt.healthPausedDurationMs = 0;
+      scheduleAttemptThreshold(attempt);
+    };
 
-      if (attempt.firstByteTimeoutMs <= 0) return;
+    const pauseAttemptThreshold = (attempt: StreamingHedgeAttempt) => {
+      if (
+        attempt.thresholdPaused ||
+        attempt.thresholdTriggered ||
+        attempt.settled ||
+        !attempt.thresholdTimer
+      ) {
+        return;
+      }
+      if (attempt.thresholdDeadlineAt !== null) {
+        attempt.thresholdRemainingMs = Math.max(1, attempt.thresholdDeadlineAt - Date.now());
+      }
+      if (attempt.healthPausedAtMonotonic === null) {
+        attempt.healthPausedAtMonotonic = performance.now();
+      }
+      clearTimeout(attempt.thresholdTimer);
+      attempt.thresholdTimer = null;
+      attempt.thresholdDeadlineAt = null;
+      attempt.thresholdPaused = true;
+    };
 
-      attempt.thresholdTimer = setTimeout(() => {
-        if (settled || attempt.settled || attempt.thresholdTriggered) return;
-        attempt.thresholdTriggered = true;
-        session.addProviderToChain(attempt.provider, {
-          ...attempt.endpointAudit,
-          reason: "hedge_triggered",
-          attemptNumber: attempt.sequence,
-          circuitState: getCircuitState(attempt.provider.id),
-        });
-        void launchAlternative();
-      }, attempt.firstByteTimeoutMs);
+    const resumeAttemptThreshold = (attempt: StreamingHedgeAttempt) => {
+      if (!attempt.thresholdPaused) return;
+      if (attempt.healthPausedAtMonotonic !== null) {
+        attempt.healthPausedDurationMs += Math.max(
+          0,
+          performance.now() - attempt.healthPausedAtMonotonic
+        );
+        attempt.healthPausedAtMonotonic = null;
+      }
+      attempt.thresholdPaused = false;
+      scheduleAttemptThreshold(attempt);
     };
 
     const abortAllAttempts = (winner?: StreamingHedgeAttempt, reason: string = "hedge_loser") => {
@@ -4667,6 +5184,7 @@ export class ProxyForwarder {
 
     const launchAlternative = async () => {
       if (settled || winnerCommitted || noMoreProviders) return;
+      if (attempts.size >= maxInFlight) return;
       if (launchingAlternative) {
         await launchingAlternative;
         return;
@@ -4717,17 +5235,34 @@ export class ProxyForwarder {
 
     const runAttempt = (attempt: StreamingHedgeAttempt) => {
       const providerForRequest =
-        attempt.firstByteTimeoutMs > 0
+        attempt.firstByteTimeoutMs > 0 && maxInFlight > 1
           ? { ...attempt.provider, firstByteTimeoutStreamingMs: 0 }
           : attempt.provider;
+      let dispatchMarked = false;
 
+      const markUpstreamDispatch = () => {
+        if (dispatchMarked) return;
+        dispatchMarked = true;
+        attempt.dispatched = true;
+        attempt.startedAtMonotonic = performance.now();
+        attempt.healthPausedAtMonotonic = null;
+        attempt.healthPausedDurationMs = 0;
+        armAttemptThreshold(attempt);
+      };
+
+      // Arm the hedge threshold when the attempt enters the transport call. The health clock
+      // remains gated by `attempt.dispatched` and is reset by the transport callback below, so
+      // setup time can trigger a hedge without being eligible for provider-failure attribution.
+      armAttemptThreshold(attempt);
       void ProxyForwarder.doForward(
         attempt.session,
         providerForRequest,
         attempt.baseUrl,
         attempt.endpointAudit,
         attempt.requestAttemptCount,
-        true
+        true,
+        undefined,
+        markUpstreamDispatch
       )
         .then(async (response) => {
           if (settled || winnerCommitted || attempt.settled) {
@@ -4791,29 +5326,51 @@ export class ProxyForwarder {
             // F1 门控（enforce 或 Replay owner）：胜者判定从「首个非空字节」升级为
             // 「首个有效内容帧」。
             // 级联阈值计时器保持不动——内容慢的 attempt 不提交，自动触发下一候选竞速。
+            const forceCodexResponsesStream = shouldForceCodexResponsesStreamHandling(
+              attempt.session,
+              response
+            );
+            const shouldRunHedgePrecommitGate =
+              resolveStreamGateMode() === "enforce" ||
+              attempt.session.replayState?.role === "owner" ||
+              forceCodexResponsesStream;
             const hedgeGateFamily =
-              (typeof session.shouldRunStreamContentGate !== "function" ||
-                session.shouldRunStreamContentGate()) &&
-              (resolveStreamGateMode() === "enforce" || session.replayState?.role === "owner") &&
-              session.getEndpointPolicy().kind !== "raw_passthrough"
+              shouldRunHedgePrecommitGate &&
+              (attempt.session.getEndpointPolicy().kind !== "raw_passthrough" ||
+                forceCodexResponsesStream)
                 ? mapProviderTypeToFamily(attempt.provider.providerType)
                 : null;
 
+            let acceptedAsWinner = false;
             if (hedgeGateFamily) {
               const gateStartedAt = Date.now();
-              const gate = await runStreamContentGate(attempt.reader, {
-                family: hedgeGateFamily,
-                providerId: attempt.provider.id,
-                providerName: attempt.provider.name,
-                ...resolveStreamGateCaps(),
-                // 首字节时刻先挂在 attempt 上，由 commitWinner 决定是否记为 session TTFB
-                onFirstByte: () => {
-                  attempt.firstByteAt ??= Date.now();
+              const gate = await runStreamContentGateWithAbortSignals(
+                attempt.reader,
+                {
+                  family: hedgeGateFamily,
+                  providerId: attempt.provider.id,
+                  providerName: attempt.provider.name,
+                  ...resolveStreamGateCaps(),
+                  // 首字节时刻先挂在 attempt 上，由 commitWinner 决定是否记为 session TTFB
+                  onFirstByte: () => {
+                    attempt.firstByteAt ??= Date.now();
+                  },
+                  // 竞速路径首字节计时器已在响应头到达时清除；门控等待期沿用供应商静默超时
+                  idleTimeoutMs: attempt.provider.streamingIdleTimeoutMs,
+                  captureCommitMarker: !session.isHighConcurrencyModeEnabled(),
+                  prebufferBudget: getStreamGatePrebufferBudget(),
+                  onBudgetWaitStart: () => {
+                    pauseAttemptThreshold(attempt);
+                  },
+                  onBudgetWaitEnd: () => {
+                    resumeAttemptThreshold(attempt);
+                  },
                 },
-                // 竞速路径首字节计时器已在响应头到达时清除；门控等待期沿用供应商静默超时
-                idleTimeoutMs: attempt.provider.streamingIdleTimeoutMs,
-                captureCommitMarker: !session.isHighConcurrencyModeEnabled(),
-              });
+                // Legacy Hedge 已在请求级监听 clientAbortSignal，并会同步 abort
+                // 每个 attempt 的 responseController。这里只监听 attempt 自身即可，
+                // 避免为同一客户端断线重复注册一条门控 listener。
+                [attempt.responseController?.signal]
+              );
               if (!gate.committed) {
                 if (
                   gate.error instanceof StreamPrecommitError &&
@@ -4830,9 +5387,10 @@ export class ProxyForwarder {
                   gateWaitMs: Date.now() - gateStartedAt,
                 };
               }
-              // 保留完整门控前缀：若本 attempt 落败且需要计费，drain 时补回前缀里的 usage。
-              attempt.firstChunk = concatChunks(gate.prefixChunks);
-              await commitWinner(attempt, gate.prefixChunks, true);
+              // 直接保留原门控 chunks；若本 attempt 落败，drain 时补回前缀里的 usage。
+              attempt.billingPrefixChunks = gate.prefixChunks;
+              attempt.gatePrebufferLease = gate.prebufferLease;
+              acceptedAsWinner = await commitWinner(attempt, gate.prefixChunks, true);
             } else {
               const firstChunk = await ProxyForwarder.readFirstReadableChunk(attempt.reader);
               if (firstChunk.done) {
@@ -4843,22 +5401,34 @@ export class ProxyForwarder {
                 return;
               }
 
+              attempt.firstByteAt ??= Date.now();
+
               // 保留首块：若本 attempt 落败且需要计费，drain 时需要补回首块的 usage。
-              attempt.firstChunk = firstChunk.value;
-              await commitWinner(attempt, [firstChunk.value], false);
+              attempt.billingPrefixChunks = [firstChunk.value];
+              acceptedAsWinner = await commitWinner(attempt, [firstChunk.value], false);
             }
 
             // 本 attempt 读到首块却落败（winner 已先提交，commitWinner 早退）：
-            // 若开启输家计费且本 attempt 不是赢家，在此发起后台 drain（此时已无并发读）。
-            if (
-              attempt !== winnerAttempt &&
-              attempt.billAsLoser &&
-              attempt.settled &&
-              !attempt.loserBillingStarted &&
-              attempt.response &&
-              attempt.reader
-            ) {
-              startLoserBilling(attempt);
+            // gate 的租约可能刚随 await 结果转出，而 abortAllAttempts 已在更早的
+            // 微任务里检查过 attempt 上的旧值。必须在本地明确收回所有权，不能把
+            // 非计费输家的前缀预算永久留在共享池中。
+            if (!acceptedAsWinner) {
+              if (
+                attempt.billAsLoser &&
+                attempt.settled &&
+                !attempt.loserBillingStarted &&
+                attempt.response &&
+                attempt.reader
+              ) {
+                startLoserBilling(attempt);
+              } else {
+                attempt.billingPrefixChunks = null;
+                attempt.gatePrebufferLease?.release();
+                attempt.gatePrebufferLease = null;
+                const readerCancel = attempt.reader?.cancel("hedge_loser");
+                readerCancel?.catch(() => undefined);
+                releaseAttemptAgent(attempt);
+              }
             }
           } catch (firstChunkError) {
             const normalizedError =
@@ -4891,19 +5461,29 @@ export class ProxyForwarder {
       ) {
         const readerCancel = attempt.reader?.cancel("hedge_loser_failed");
         readerCancel?.catch(() => undefined);
+        attempt.gatePrebufferLease?.release();
+        attempt.gatePrebufferLease = null;
         releaseAttemptAgent(attempt);
         return;
       }
       if (settled || winnerCommitted || attempt.settled) return;
 
+      // Claim the attempt's terminal race before awaiting asynchronous error classification. If
+      // the downstream abort arrives while classification is in flight, the upstream error that
+      // reached this handler first remains authoritative. A rectifier retry below reopens this
+      // claim for the same logical attempt.
+      attempt.healthSettlementClaimed = true;
+      attempt.healthOutcome = "other_failure";
       lastError = error;
 
       let errorCategory = await categorizeErrorAsync(error);
       lastErrorCategory = errorCategory;
       // F3a：hedge attempt 供应商侧失败且正是亲和提名者 -> 定向墓碑
+      // 与顺序路径同一判定：request-scoped 空完成不写墓碑
       if (
-        errorCategory === ErrorCategory.PROVIDER_ERROR ||
-        errorCategory === ErrorCategory.RESOURCE_NOT_FOUND
+        (errorCategory === ErrorCategory.PROVIDER_ERROR ||
+          errorCategory === ErrorCategory.RESOURCE_NOT_FOUND) &&
+        !isRequestScopedGateFailure(error)
       ) {
         void tombstoneAffinityOnFailure(session, attempt.provider.id);
       }
@@ -5045,7 +5625,13 @@ export class ProxyForwarder {
             attempt.thresholdTimer = null;
           }
           attempt.requestAttemptCount += 1;
-          armAttemptThreshold(attempt);
+          attempt.dispatched = false;
+          attempt.startedAtMonotonic = 0;
+          attempt.firstByteAt = null;
+          attempt.attemptId = `legacy-hedge-${attempt.sequence}-${attempt.requestAttemptCount}`;
+          attempt.healthSettlementClaimed = false;
+          attempt.healthOutcome = null;
+          attempt.hedgeSaturationRecorded = false;
           runAttempt(attempt);
           return;
         }
@@ -5066,6 +5652,8 @@ export class ProxyForwarder {
         });
       }
 
+      attempt.healthSettlementClaimed = true;
+      attempt.healthOutcome = "other_failure";
       attempt.settled = true;
       if (attempt.thresholdTimer) {
         clearTimeout(attempt.thresholdTimer);
@@ -5074,7 +5662,12 @@ export class ProxyForwarder {
       attempts.delete(attempt);
       ProxyForwarder.markProviderFailed(session, failedProviderIds, attempt.provider.id);
 
-      if (errorCategory === ErrorCategory.PROVIDER_ERROR && statusCode !== 404) {
+      if (
+        errorCategory === ErrorCategory.PROVIDER_ERROR &&
+        statusCode !== 404 &&
+        !isRequestScopedGateFailure(error)
+      ) {
+        attempt.healthOutcome = "provider_failure";
         await recordFailure(attempt.provider.id, error);
       }
 
@@ -5122,9 +5715,9 @@ export class ProxyForwarder {
       attempt: StreamingHedgeAttempt,
       prefixChunks: Uint8Array[],
       contentGateCommitted: boolean
-    ) => {
+    ): Promise<boolean> => {
       if (settled || winnerCommitted || attempt.settled || !attempt.response || !attempt.reader)
-        return;
+        return false;
 
       winnerCommitted = true;
       winnerAttempt = attempt;
@@ -5265,15 +5858,23 @@ export class ProxyForwarder {
       });
 
       const response = new Response(
-        ProxyForwarder.buildBufferedPrefixStream(prefixChunks, attempt.reader),
+        ProxyForwarder.buildBufferedPrefixStream(
+          prefixChunks,
+          attempt.reader,
+          attempt.gatePrebufferLease
+        ),
         {
           status: attempt.response.status,
           statusText: attempt.response.statusText,
           headers: attempt.response.headers,
         }
       );
+      // 前缀流已取得这些 chunks 的所有权；赢家不再需要输家计量引用。
+      attempt.billingPrefixChunks = null;
+      attempt.gatePrebufferLease = null;
 
       settleSuccess(response);
+      return true;
     };
 
     const startAttempt = async (
@@ -5346,6 +5947,19 @@ export class ProxyForwarder {
         clearResponseTimeout: null,
         firstByteTimeoutMs:
           provider.firstByteTimeoutStreamingMs > 0 ? provider.firstByteTimeoutStreamingMs : 0,
+        attemptId: `legacy-hedge-${launchedProviderCount}-1`,
+        startedAtMonotonic: 0,
+        thresholdStartedAtMonotonic: 0,
+        healthAttributionThresholdMs:
+          provider.firstByteTimeoutStreamingMs > 0
+            ? provider.firstByteTimeoutStreamingMs
+            : CLIENT_ABORT_HEALTH_FALLBACK_THRESHOLD_MS,
+        dispatched: false,
+        healthSettlementClaimed: false,
+        healthOutcome: null,
+        healthPausedAtMonotonic: null,
+        healthPausedDurationMs: 0,
+        hedgeSaturationRecorded: false,
         sequence: launchedProviderCount,
         requestAttemptCount: 1,
         reactiveRectifierRetryState: {
@@ -5357,6 +5971,10 @@ export class ProxyForwarder {
         settled: false,
         thresholdTriggered: false,
         thresholdTimer: null,
+        thresholdDeadlineAt: null,
+        thresholdRemainingMs:
+          provider.firstByteTimeoutStreamingMs > 0 ? provider.firstByteTimeoutStreamingMs : 0,
+        thresholdPaused: false,
         reader: null,
         response: null,
         releaseAgent: null,
@@ -5365,7 +5983,8 @@ export class ProxyForwarder {
         // otherwise cancel it normally (no point holding the connection).
         billAsLoser: billHedgeLosers && session.messageContext?.id != null,
         loserBillingStarted: false,
-        firstChunk: null,
+        billingPrefixChunks: null,
+        gatePrebufferLease: null,
         billingSnapshot: null,
       };
 
@@ -5383,9 +6002,68 @@ export class ProxyForwarder {
         });
       }
 
-      armAttemptThreshold(attempt);
-
       runAttempt(attempt);
+      return true;
+    };
+
+    const settleClientAbortHealth = (attempt: StreamingHedgeAttempt): boolean => {
+      if (
+        !attempt.dispatched ||
+        attempt.settled ||
+        attempt.firstByteAt != null ||
+        winnerCommitted ||
+        attempt.healthSettlementClaimed
+      ) {
+        return false;
+      }
+
+      const now = performance.now();
+      const elapsedMs = Math.max(
+        0,
+        now -
+          attempt.startedAtMonotonic -
+          attempt.healthPausedDurationMs -
+          (attempt.healthPausedAtMonotonic === null ? 0 : now - attempt.healthPausedAtMonotonic)
+      );
+      if (elapsedMs < attempt.healthAttributionThresholdMs) return false;
+
+      attempt.healthSettlementClaimed = true;
+      attempt.healthOutcome = "client_abort_no_first_byte";
+      const roundedElapsedMs = Math.round(elapsedMs);
+      const failure = new ProxyError(
+        "Client aborted while provider was waiting for the first byte",
+        499,
+        undefined,
+        true
+      );
+
+      session.appendRoutingTraceEvent({
+        type: "client_abort_no_first_byte",
+        attemptId: attempt.attemptId,
+        provider: {
+          id: attempt.provider.id,
+          name: attempt.provider.name,
+          priority: attempt.provider.priority || 0,
+        },
+        outcome: "provider_failure",
+        cancellationKind: "client_abort",
+        reason: "external_client_abort",
+        effectiveThresholdMs: attempt.healthAttributionThresholdMs,
+        circuitAccountingApplied: true,
+        availabilityAccountingApplied: true,
+        durationMs: roundedElapsedMs,
+        elapsedMs: roundedElapsedMs,
+      });
+
+      // Do not inherit the downstream abort signal: health and trace side effects must finish
+      // independently after the client-facing response has become HTTP 499.
+      void recordFailure(attempt.provider.id, failure).catch((healthError) => {
+        logger.warn("ProxyForwarder: Failed to account client abort provider health", {
+          error: healthError instanceof Error ? healthError.message : String(healthError),
+          attemptId: attempt.attemptId,
+          providerId: attempt.provider.id,
+        });
+      });
       return true;
     };
 
@@ -5394,16 +6072,32 @@ export class ProxyForwarder {
       noMoreProviders = true;
       lastError = new ProxyError("Request aborted by client", 499, undefined, true);
       lastErrorCategory = ErrorCategory.CLIENT_ABORT;
+      const attributedAttempts: StreamingHedgeAttempt[] = [];
       for (const attempt of Array.from(attempts)) {
         if (!attempt.settled) {
-          session.addProviderToChain(attempt.provider, {
-            ...attempt.endpointAudit,
-            reason: "client_abort",
-            attemptNumber: attempt.sequence,
-            errorMessage: "Client aborted request",
-            modelRedirect: getAttemptModelRedirect(attempt),
-          });
+          const attributed = settleClientAbortHealth(attempt);
+          if (!attributed) {
+            session.addProviderToChain(attempt.provider, {
+              ...attempt.endpointAudit,
+              reason: "client_abort",
+              attemptNumber: attempt.sequence,
+              errorMessage: "Client aborted request",
+              modelRedirect: getAttemptModelRedirect(attempt),
+            });
+          } else {
+            attributedAttempts.push(attempt);
+          }
         }
+      }
+      for (const attempt of attributedAttempts) {
+        session.addProviderToChain(attempt.provider, {
+          ...attempt.endpointAudit,
+          reason: "client_abort_no_first_byte",
+          attemptNumber: attempt.sequence,
+          errorMessage: "Client aborted before provider first byte threshold",
+          circuitState: getCircuitState(attempt.provider.id),
+          modelRedirect: getAttemptModelRedirect(attempt),
+        });
       }
       abortAllAttempts(undefined, "client_abort");
       void finishIfExhausted();
@@ -5451,10 +6145,7 @@ export class ProxyForwarder {
     // Discovery uses the same opt-in loser billing switch as legacy Hedge. The
     // attempt is only kept alive after a winner commits when it already has a
     // protocol-valid prefix and a readable response body (see cancelLosers).
-    const billHedgeLosers =
-      (typeof session.shouldBillHedgeLosers !== "function" || session.shouldBillHedgeLosers()) &&
-      settings.billHedgeLosers === true &&
-      session.messageContext?.id != null;
+    const billHedgeLosers = settings.billHedgeLosers === true && session.messageContext?.id != null;
     const coordinator = new DiscoveryCoordinator({ concurrency, maxRounds });
     const discoveryMetrics = new DiscoveryRequestMetrics(
       {
@@ -5476,7 +6167,7 @@ export class ProxyForwarder {
         finalRescue: boolean;
         controller: AbortController;
         parser: DiscoveryValidityParser;
-        chunks: Uint8Array[];
+        chunks: BufferedByteChunks;
         pending: boolean;
         ready: boolean;
         round: number;
@@ -5654,15 +6345,12 @@ export class ProxyForwarder {
       releaseSetupProviderRef(reservation);
     };
 
-    const cancelSetupReservations = (
-      cancellationKind: DiscoveryCancellationKind,
-      predicate: (reservation: DiscoverySetupReservation) => boolean = () => true
-    ) => {
+    const cancelSetupReservations = (cancellationKind: DiscoveryCancellationKind) => {
       for (const reservation of retrySetupReservations.values()) {
-        if (predicate(reservation)) cancelSetupReservation(reservation, cancellationKind);
+        cancelSetupReservation(reservation, cancellationKind);
       }
       for (const reservation of candidateSetupReservations.values()) {
-        if (predicate(reservation)) cancelSetupReservation(reservation, cancellationKind);
+        cancelSetupReservation(reservation, cancellationKind);
       }
     };
 
@@ -5739,76 +6427,35 @@ export class ProxyForwarder {
       attempt.clearResponseTimeout?.();
       const controller = attempt.responseController;
       const drainTimeoutMs = getEnvConfig().HEDGE_LOSER_DRAIN_TIMEOUT_MS;
-      const drainTimer = setTimeout(() => {
-        try {
-          controller?.abort(new Error("discovery_loser_drain_timeout"));
-        } catch {
-          /* abort is best effort */
-        }
-      }, drainTimeoutMs);
 
       void (async () => {
-        const decoder = new TextDecoder();
-        const chunks: string[] = [];
-        let totalBytes = 0;
-        let drainComplete = false;
-        const MAX_DRAIN_BYTES = 32 * 1024 * 1024;
-
         // The validity parser may have consumed one or more chunks before the
         // loser was held. Replay those bytes so usage markers in the prefix
         // (for example Anthropic message_start) are available to billing.
-        const bufferedChunks = attempt.chunks.splice(0);
-        for (const chunk of bufferedChunks) {
-          chunks.push(decoder.decode(chunk, { stream: true }));
-          totalBytes += chunk.byteLength;
-        }
-
-        try {
-          while (true) {
-            const { value, done } = await reader.read();
-            if (done) {
-              drainComplete = true;
-              break;
-            }
-            if (!value) continue;
-            chunks.push(decoder.decode(value, { stream: true }));
-            totalBytes += value.byteLength;
-            if (totalBytes > MAX_DRAIN_BYTES) {
-              logger.warn("[Discovery] Loser drain exceeded cap; skipping billing", {
-                sessionId: attempt.session.sessionId ?? null,
-                providerId: attempt.provider.id,
-                providerName: attempt.provider.name,
-                totalBytes,
-              });
-              try {
-                controller?.abort(new Error("discovery_loser_drain_cap"));
-              } catch {
-                /* abort is best effort */
-              }
-              break;
-            }
-          }
-        } catch (drainError) {
-          logger.debug("[Discovery] Loser drain ended before natural completion", {
+        const bufferedChunks = attempt.chunks.take();
+        const drain = await drainLoserBillingEvidence({
+          reader,
+          initialChunks: bufferedChunks,
+          providerType: attempt.provider.providerType,
+          responseController: controller,
+          stopReason: "discovery_loser_drain",
+          timeoutMs: drainTimeoutMs,
+        });
+        if (!drain.admitted) {
+          logger.warn("[Discovery] Loser drain rejected by shared budget", {
             sessionId: attempt.session.sessionId ?? null,
             providerId: attempt.provider.id,
             providerName: attempt.provider.name,
-            error: drainError instanceof Error ? drainError.message : String(drainError),
+            reason: drain.reason,
           });
+          return;
         }
-
-        const flushed = decoder.decode();
-        if (flushed) chunks.push(flushed);
-        const allContent = chunks.join("");
 
         // Discovery billing is intentionally stricter than the legacy helper's
         // partial-usage safety net: a cancelled/failed drain is not a billable
         // loser. This avoids charging a provider whose response was cut off by
         // winner handoff or the drain cap.
-        if (
-          drainComplete &&
-          hasStreamCompletionMarker(allContent, attempt.session.originalFormat)
-        ) {
+        if (drain.terminalSeen) {
           await finalizeHedgeLoserBilling({
             messageRequestId,
             messageRequestCreatedAtMs: messageRequestCreatedAtMs ?? Date.now(),
@@ -5816,7 +6463,7 @@ export class ProxyForwarder {
             provider: attempt.provider,
             attemptNumber: attempt.sequence,
             upstreamStatusCode: response.status,
-            allContent,
+            allContent: drain.evidenceText,
             drainComplete: true,
             requireUsage: true,
             billingContext: attempt.billingSnapshot ?? undefined,
@@ -5832,7 +6479,6 @@ export class ProxyForwarder {
           });
         })
         .finally(() => {
-          clearTimeout(drainTimer);
           releaseProviderRef(attempt);
           if (attempt.releaseAgent && !attempt.agentReleased) {
             attempt.agentReleased = true;
@@ -5904,7 +6550,7 @@ export class ProxyForwarder {
       }
       if (!preserveForLoserBilling) {
         releaseProviderRef(attempt);
-        attempt.chunks.length = 0;
+        attempt.chunks.clear();
       }
       discoveryMetrics.attemptFinished(attempt.id, {
         providerId: attempt.provider.id,
@@ -6205,7 +6851,7 @@ export class ProxyForwarder {
       leaseTransferred = true;
       resolveResult?.({
         response: new Response(
-          ProxyForwarder.buildBufferedPrefixStream(attempt.chunks, attempt.reader),
+          ProxyForwarder.buildBufferedPrefixStream(attempt.chunks.take(), attempt.reader),
           {
             status: attempt.response.status,
             statusText: attempt.response.statusText,
@@ -6482,7 +7128,7 @@ export class ProxyForwarder {
         parser: new DiscoveryValidityParser(
           mapProviderTypeToFamily(provider.providerType) ?? protocol
         ),
-        chunks: [],
+        chunks: new BufferedByteChunks(),
         pending: true,
         ready: false,
         round: currentRound,
@@ -6516,13 +7162,17 @@ export class ProxyForwarder {
         settled: false,
         thresholdTriggered: false,
         thresholdTimer: null,
+        thresholdDeadlineAt: null,
+        thresholdRemainingMs: 0,
+        thresholdPaused: false,
         reader: null,
         response: null,
         releaseAgent: null,
         agentReleased: false,
         billAsLoser: false,
         loserBillingStarted: false,
-        firstChunk: null,
+        billingPrefixChunks: null,
+        gatePrebufferLease: null,
         billingSnapshot: null,
       } as typeof winner & {
         id: string;
@@ -6530,7 +7180,7 @@ export class ProxyForwarder {
         finalRescue: boolean;
         controller: AbortController;
         parser: DiscoveryValidityParser;
-        chunks: Uint8Array[];
+        chunks: BufferedByteChunks;
         pending: boolean;
         ready: boolean;
         round: number;
@@ -6622,7 +7272,6 @@ export class ProxyForwarder {
             // 首字节时刻先挂在 attempt 上；DiscoveryValidityParser 的 ready 判定同样基于内容，
             // 不在此记录会让 discovery 模式的 TTFB 恒等于 TTFT。
             attempt.firstByteAt ??= Date.now();
-            attempt.chunks.push(item.value);
             const validity = attempt.parser.push(item.value);
             // A single read can contain both deliverable content and the
             // protocol terminator. Terminal is only invalid when no content
@@ -6637,6 +7286,7 @@ export class ProxyForwarder {
             }
             if (validity.error || (validity.terminal && !validity.ready))
               throw new ProxyError("Invalid upstream discovery response", 502);
+            attempt.chunks.append(item.value);
             if (!validity.ready) continue;
             attempt.ready = true;
             session.appendRoutingTraceEvent({
@@ -6776,7 +7426,6 @@ export class ProxyForwarder {
             await settleFailure(lastError, { preserveBinding: true });
             return;
           }
-
           // A failure can race the async selection/endpoint setup of the wave
           // that is meant to replace it. Wait until those reserved slots have
           // either registered or rolled back before the coordinator decides
@@ -6935,6 +7584,9 @@ export class ProxyForwarder {
             statusCode: lastError instanceof ProxyError ? lastError.statusCode : undefined,
             errorMessage,
           });
+          // 注意：discovery 路径不经过 stream content gate（validity 判定在
+          // DiscoveryValidityParser，见 6644 附近抛的通用 ProxyError），所以这里没有
+          // isRequestScopedGateFailure 判定 —— 同类的空流误记账需要单独修 discovery 侧。
           if (
             !(lastError instanceof DiscoveryValidityLimitError) &&
             lastErrorCategory === ErrorCategory.PROVIDER_ERROR &&
@@ -7858,6 +8510,8 @@ export class ProxyForwarder {
         redirect: NonNullable<ProviderChainItem["modelRedirect"]>;
       } | null;
       clearResponseTimeout?: () => void;
+      pauseResponseTimeout?: () => void;
+      resumeResponseTimeout?: () => void;
       responseController?: AbortController;
       releaseAgent?: () => void;
     };
@@ -7895,6 +8549,8 @@ export class ProxyForwarder {
         }
       : null;
     targetState.clearResponseTimeout = sourceRuntime.clearResponseTimeout;
+    targetState.pauseResponseTimeout = sourceRuntime.pauseResponseTimeout;
+    targetState.resumeResponseTimeout = sourceRuntime.resumeResponseTimeout;
     targetState.responseController = sourceRuntime.responseController;
     targetState.releaseAgent = sourceRuntime.releaseAgent;
   }
@@ -8014,14 +8670,13 @@ export class ProxyForwarder {
       return { response, text: "", exceededLimit: false };
     }
 
-    const chunks: Uint8Array[] = [];
+    const chunks = new BufferedByteChunks();
     let totalBytes = 0;
     while (true) {
       const { done, value } = await reader.read();
       if (done) {
         reader.releaseLock();
-        const combined = chunks.length > 0 ? concatChunks(chunks) : null;
-        const body = combined ? new Uint8Array(combined) : new Uint8Array(0);
+        const body = concatChunks(chunks.take()) ?? new Uint8Array(0);
         return {
           response: new Response(body, {
             status: response.status,
@@ -8034,11 +8689,11 @@ export class ProxyForwarder {
       }
       if (!value || value.byteLength === 0) continue;
 
-      chunks.push(value);
-      totalBytes += value.byteLength;
-      if (totalBytes > maxBytes) {
+      if (totalBytes + value.byteLength > maxBytes) {
+        const prefixChunks = chunks.take();
+        prefixChunks.push(value);
         return {
-          response: new Response(ProxyForwarder.buildBufferedPrefixStream(chunks, reader), {
+          response: new Response(ProxyForwarder.buildBufferedPrefixStream(prefixChunks, reader), {
             status: response.status,
             statusText: response.statusText,
             headers: response.headers,
@@ -8047,40 +8702,59 @@ export class ProxyForwarder {
           exceededLimit: true,
         };
       }
+      chunks.append(value);
+      totalBytes += value.byteLength;
     }
   }
 
   private static buildBufferedPrefixStream(
     prefixChunks: Uint8Array[],
-    reader: ReadableStreamDefaultReader<Uint8Array>
+    reader: ReadableStreamDefaultReader<Uint8Array>,
+    prebufferLease: StreamGatePrebufferLease | null = null
   ): ReadableStream<Uint8Array> {
     let prefixIndex = 0;
+    let leaseReleased = false;
+    const releasePrefix = () => {
+      if (leaseReleased) return;
+      leaseReleased = true;
+      prefixChunks.length = 0;
+      prebufferLease?.release();
+    };
 
-    return new ReadableStream<Uint8Array>({
-      async pull(controller) {
-        if (prefixIndex < prefixChunks.length) {
-          controller.enqueue(prefixChunks[prefixIndex]);
-          prefixIndex++;
-          return;
-        }
+    return new ReadableStream<Uint8Array>(
+      {
+        async pull(controller) {
+          if (prefixIndex < prefixChunks.length) {
+            const chunk = prefixChunks[prefixIndex];
+            prefixChunks[prefixIndex] = EMPTY_PREFIX_CHUNK;
+            prefixIndex++;
+            controller.enqueue(chunk);
+            return;
+          }
 
-        const { done, value } = await reader.read();
-        if (done) {
-          controller.close();
-          return;
-        }
-        if (value && value.byteLength > 0) {
-          controller.enqueue(value);
-        }
+          // 下一次 pull 说明最后一个门禁前缀已经离开 response pump 的 pending slot；
+          // 此时才释放共享预算，避免慢客户端把已“提交”的前缀重新变成未计量保留。
+          releasePrefix();
+          const { done, value } = await reader.read();
+          if (done) {
+            controller.close();
+            return;
+          }
+          if (value && value.byteLength > 0) {
+            controller.enqueue(value);
+          }
+        },
+        cancel(reason) {
+          releasePrefix();
+          try {
+            void reader.cancel(reason).catch(() => undefined);
+          } catch {
+            // ignore
+          }
+        },
       },
-      async cancel(reason) {
-        try {
-          await reader.cancel(reason);
-        } catch {
-          // ignore
-        }
-      },
-    });
+      { highWaterMark: 0 }
+    );
   }
 
   private static buildHeaders(
@@ -8259,7 +8933,8 @@ export class ProxyForwarder {
     providerId: number,
     providerName: string,
     session?: ProxySession,
-    deferDetailSnapshotPersistence: boolean = false
+    deferDetailSnapshotPersistence: boolean = false,
+    onUpstreamDispatch?: () => void
   ): Promise<Response> {
     const { FETCH_HEADERS_TIMEOUT: headersTimeout, FETCH_BODY_TIMEOUT: bodyTimeout } =
       getEnvConfig();
@@ -8297,6 +8972,7 @@ export class ProxyForwarder {
       return undefined;
     };
 
+    onUpstreamDispatch?.();
     const undiciRes = await undiciRequest(url, {
       method: init.method as string,
       headers: headersObj,

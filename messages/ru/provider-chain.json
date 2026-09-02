@@ -53,6 +53,7 @@
   "reasons": {
     "request_success": "Успешно",
     "retry_success": "Повтор успешен",
+    "response_incomplete": "Ответ не завершён",
     "retry_failed": "Повтор не удался",
     "system_error": "Системная ошибка",
     "resource_not_found": "Ресурс не найден (404)",
@@ -70,7 +71,8 @@
     "hedge_winner": "Победитель Hedge-гонки",
     "hedge_loser_cancelled": "Проигравший Hedge-гонки (отменён)",
     "hedge_loser_billed": "Проигравший (тарифицирован)",
-    "client_abort": "Клиент прервал запрос"
+    "client_abort": "Клиент прервал запрос",
+    "client_abort_no_first_byte": "Клиент прервал запрос до первого байта"
   },
   "filterReasons": {
     "rate_limited": "Ограничение скорости",

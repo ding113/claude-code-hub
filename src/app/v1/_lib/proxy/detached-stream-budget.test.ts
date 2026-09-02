@@ -31,8 +31,8 @@ describe("DetachedStreamBudget", () => {
     expect(budget.snapshot()).toMatchObject({
       activeStreams: 0,
       reservedBytes: 0,
-      activeByKind: { metering: 0, replay: 0 },
-      reservedByKind: { metering: 0, replay: 0 },
+      activeByKind: { loser: 0, metering: 0, replay: 0 },
+      reservedByKind: { loser: 0, metering: 0, replay: 0 },
     });
   });
 
@@ -63,9 +63,19 @@ describe("DetachedStreamBudget", () => {
     expect(budget.snapshot()).toMatchObject({
       activeStreams: 2,
       reservedBytes: 768,
-      activeByKind: { metering: 1, replay: 1 },
-      reservedByKind: { metering: 256, replay: 512 },
+      activeByKind: { loser: 0, metering: 1, replay: 1 },
+      reservedByKind: { loser: 0, metering: 256, replay: 512 },
     });
+  });
+
+  it("竞速输家与 Replay 共享预算并保留计量 headroom", () => {
+    const budget = createBudget();
+    expect(budget.tryAcquire("loser", 768).acquired).toBe(true);
+    expect(budget.tryAcquire("loser", 1)).toEqual({
+      acquired: false,
+      reason: "metering_reserve",
+    });
+    expect(budget.tryAcquire("metering", 256).acquired).toBe(true);
   });
 
   it("rejects invalid reservations without mutating state", () => {

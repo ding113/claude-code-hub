@@ -27,7 +27,8 @@ type ServerModule = {
       response?: http.IncomingMessage | null,
       settleTurn?: () => boolean
     ) => boolean | undefined,
-    close?: (code: number, reason: string) => void
+    close?: (code: number, reason: string) => void,
+    internalHttpTarget?: { hostname: string; port: number }
   ) => Promise<void>;
 };
 
@@ -125,6 +126,30 @@ afterEach(() => {
 });
 
 describe("server response write backpressure", () => {
+  it("uses the explicit per-worker loopback target instead of the shared public port", async () => {
+    const events: string[] = [];
+    const request = createClientRequest(true, events);
+    let capturedOptions: http.RequestOptions | undefined;
+    vi.spyOn(http, "request").mockImplementation((options) => {
+      capturedOptions = options as http.RequestOptions;
+      setImmediate(() => request.emit("error", new Error("test settlement")));
+      return request;
+    });
+    const input = requestInput();
+
+    await serverModule.forwardToInternalHttp(
+      input.ws,
+      input.request,
+      input.body,
+      "test-session",
+      undefined,
+      undefined,
+      { hostname: "127.0.0.1", port: 43123 }
+    );
+
+    expect(capturedOptions).toMatchObject({ hostname: "127.0.0.1", port: 43123 });
+  });
+
   it("waits for request drain before ending a backpressured payload", async () => {
     const events: string[] = [];
     const request = createClientRequest(false, events);
@@ -322,12 +347,11 @@ describe("server response write backpressure", () => {
   it("destroys upstream and closes once when outbound pending bytes overflow", async () => {
     const bridge = await startSseBridge(vi.fn());
     const destroyResponse = vi.spyOn(bridge.response, "destroy");
-    const delta = "x".repeat(1024 * 1024 + 1);
+    const delta = "x".repeat(600 * 1024);
+    const event = `data: ${JSON.stringify({ type: "response.output_text.delta", delta })}\n\n`;
 
-    bridge.response.emit(
-      "data",
-      `data: ${JSON.stringify({ type: "response.output_text.delta", delta })}\n\n`
-    );
+    // 每个事件都低于单事件上限，但未确认发送的累计字节超过连接预算。
+    bridge.response.emit("data", event + event);
 
     expect(bridge.events).toContain("destroy");
     expect(destroyResponse).toHaveBeenCalledOnce();

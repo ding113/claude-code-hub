@@ -175,6 +175,7 @@ import { ProxyForwarder } from "@/app/v1/_lib/proxy/forwarder";
 import { ModelRedirector } from "@/app/v1/_lib/proxy/model-redirector";
 import { ProxySession } from "@/app/v1/_lib/proxy/session";
 import { peekDeferredStreamingFinalization } from "@/app/v1/_lib/proxy/stream-finalization";
+import { getStreamGatePrebufferBudget } from "@/app/v1/_lib/proxy/stream-gate/prebuffer-budget";
 import { DbPoolAdmissionError } from "@/drizzle/admitted-client";
 import { logger } from "@/lib/logger";
 import type { Provider } from "@/types/provider";
@@ -345,6 +346,45 @@ function createStreamingResponse(params: {
     status: 200,
     headers: { "content-type": "text/event-stream" },
   });
+}
+
+function createManualStreamingResponse(): {
+  response: Response;
+  enqueue(label: string): void;
+  close(): void;
+  cancel: ReturnType<typeof vi.fn>;
+} {
+  const encoder = new TextEncoder();
+  const cancel = vi.fn();
+  let streamController: ReadableStreamDefaultController<Uint8Array>;
+  const response = new Response(
+    new ReadableStream<Uint8Array>({
+      start(controller) {
+        streamController = controller;
+      },
+      cancel,
+    }),
+    { status: 200, headers: { "content-type": "text/event-stream" } }
+  );
+
+  return {
+    response,
+    enqueue(label) {
+      streamController.enqueue(
+        encoder.encode(
+          `data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"${label}"},"provider":"${label}"}\n\n`
+        )
+      );
+    },
+    close() {
+      try {
+        streamController.close();
+      } catch {
+        // 输家已由 reader.cancel() 关闭。
+      }
+    },
+    cancel,
+  };
 }
 
 function createDelayedFailure(params: {
@@ -938,6 +978,79 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
 
       expect(releaseSlowAgent).toHaveBeenCalledTimes(1);
       expect(releaseFastAgent).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("近同时提交的非计费 hedge 输家会归还门禁共享预算", async () => {
+    vi.useFakeTimers();
+
+    try {
+      const initial = createProvider({
+        id: 401,
+        name: "initial",
+        firstByteTimeoutStreamingMs: 100,
+      });
+      const alternative = createProvider({
+        id: 402,
+        name: "alternative",
+        firstByteTimeoutStreamingMs: 100,
+      });
+      const session = createSession();
+      setProviderWithSessionRef(session, initial);
+      mocks.pickRandomProviderWithExclusion.mockResolvedValueOnce(alternative);
+
+      const doForward = vi.spyOn(
+        ProxyForwarder as unknown as {
+          doForward: (...args: unknown[]) => Promise<Response>;
+        },
+        "doForward"
+      );
+      const initialController = new AbortController();
+      const alternativeController = new AbortController();
+      const initialStream = createManualStreamingResponse();
+      const alternativeStream = createManualStreamingResponse();
+      const releaseInitialAgent = vi.fn();
+      const releaseAlternativeAgent = vi.fn();
+
+      doForward.mockImplementationOnce(async (attemptSession) => {
+        const runtime = attemptSession as ProxySession & AttemptRuntime;
+        runtime.responseController = initialController;
+        runtime.clearResponseTimeout = vi.fn();
+        runtime.releaseAgent = releaseInitialAgent;
+        return initialStream.response;
+      });
+      doForward.mockImplementationOnce(async (attemptSession) => {
+        const runtime = attemptSession as ProxySession & AttemptRuntime;
+        runtime.responseController = alternativeController;
+        runtime.clearResponseTimeout = vi.fn();
+        runtime.releaseAgent = releaseAlternativeAgent;
+        return alternativeStream.response;
+      });
+
+      const budget = getStreamGatePrebufferBudget();
+      expect(budget.snapshot().reservedBytes).toBe(0);
+      const responsePromise = ProxyForwarder.send(session);
+
+      await vi.advanceTimersByTimeAsync(100);
+      expect(doForward).toHaveBeenCalledTimes(2);
+      expect(budget.snapshot().reservedBytes).toBeGreaterThan(0);
+
+      // 同一同步栈内唤醒两个 gate：两个租约都会先从 gate 转出，随后首个
+      // continuation 提交赢家并结算另一个 attempt，稳定覆盖租约交接竞态。
+      initialStream.enqueue("initial");
+      alternativeStream.enqueue("alternative");
+
+      const response = await responsePromise;
+      initialStream.close();
+      alternativeStream.close();
+      await expect(response.text()).resolves.toContain('"provider":"initial"');
+      await vi.waitFor(() => expect(budget.snapshot().reservedBytes).toBe(0));
+
+      expect(alternativeStream.cancel).toHaveBeenCalled();
+      expect(releaseAlternativeAgent).toHaveBeenCalledTimes(1);
+      expect(releaseInitialAgent).not.toHaveBeenCalled();
     } finally {
       vi.useRealTimers();
     }
@@ -1618,7 +1731,7 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
     }
   });
 
-  test("when multiple providers all exceed threshold, hedge scheduler keeps expanding until a later provider wins", async () => {
+  test("legacy hedge caps in-flight attempts and launches a replacement after one fails", async () => {
     vi.useFakeTimers();
 
     try {
@@ -1659,10 +1772,8 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
         const runtime = attemptSession as ProxySession & AttemptRuntime;
         runtime.responseController = controller1;
         runtime.clearResponseTimeout = vi.fn();
-        return createStreamingResponse({
-          label: "p1",
-          firstChunkDelayMs: 400,
-          controller: controller1,
+        return await new Promise<Response>((_resolve, reject) => {
+          setTimeout(() => reject(new Error("p1 failed after hedge launch")), 250);
         });
       });
 
@@ -1691,20 +1802,218 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
       const responsePromise = ProxyForwarder.send(session);
 
       await vi.advanceTimersByTimeAsync(200);
-      expect(doForward).toHaveBeenCalledTimes(3);
+      expect(doForward).toHaveBeenCalledTimes(2);
+      expect(mocks.pickRandomProviderWithExclusion).toHaveBeenCalledTimes(1);
 
-      await vi.advanceTimersByTimeAsync(25);
+      await vi.advanceTimersByTimeAsync(75);
+      expect(doForward).toHaveBeenCalledTimes(3);
       const response = await responsePromise;
       expect(await response.text()).toContain('"provider":"p3"');
-      expect(controller1.signal.aborted).toBe(true);
+      expect(controller1.signal.aborted).toBe(false);
       expect(controller2.signal.aborted).toBe(true);
       expect(controller3.signal.aborted).toBe(false);
-      expect(mocks.recordFailure).not.toHaveBeenCalled();
+      expect(mocks.recordFailure).toHaveBeenCalledWith(1, expect.any(Error));
       expect(mocks.recordSuccess).not.toHaveBeenCalled();
       expect(session.provider?.id).toBe(3);
       expect(mocks.releaseProviderSession).toHaveBeenCalledWith(1, "sess-hedge");
       expect(mocks.releaseProviderSession).toHaveBeenCalledWith(2, "sess-hedge");
       expect(mocks.releaseProviderSession).not.toHaveBeenCalledWith(3, "sess-hedge");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("legacy serial client abort after the health threshold records one provider failure", async () => {
+    vi.useFakeTimers();
+
+    try {
+      const provider = createProvider({ id: 1, name: "p1", firstByteTimeoutStreamingMs: 0 });
+      const clientAbortController = new AbortController();
+      const session = createSession(clientAbortController.signal);
+      setProviderWithSessionRef(session, provider);
+      mocks.categorizeErrorAsync.mockResolvedValueOnce(ProxyErrorCategory.CLIENT_ABORT);
+
+      const doForward = vi.spyOn(
+        ProxyForwarder as unknown as {
+          doForward: (...args: unknown[]) => Promise<Response>;
+        },
+        "doForward"
+      );
+      doForward.mockImplementationOnce(async (...args) => {
+        const runtime = args[0] as ProxySession & AttemptRuntime;
+        runtime.clearResponseTimeout = vi.fn();
+        (args[7] as () => void)();
+        return await new Promise<Response>((_, reject) => {
+          setTimeout(() => {
+            clientAbortController.abort(new Error("client_cancelled"));
+            reject(new UpstreamProxyError("Request aborted by client", 499, undefined, true));
+          }, 30_000);
+        });
+      });
+
+      const responsePromise = ProxyForwarder.send(session);
+      const rejection = expect(responsePromise).rejects.toMatchObject({ statusCode: 499 });
+      await vi.advanceTimersByTimeAsync(30_000);
+      await rejection;
+      expect(mocks.recordFailure).toHaveBeenCalledTimes(1);
+      expect(mocks.recordFailure).toHaveBeenCalledWith(provider.id, expect.any(Error));
+      expect(
+        session
+          .getRoutingTrace()
+          ?.events.some((event) => event.type === "client_abort_no_first_byte")
+      ).toBe(true);
+      expect(
+        session.getProviderChain().some((item) => item.reason === "client_abort_no_first_byte")
+      ).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("legacy hedge cap one preserves serial timeout fallback and records saturation", async () => {
+    vi.useFakeTimers();
+
+    try {
+      const provider1 = createProvider({ id: 1, name: "p1", firstByteTimeoutStreamingMs: 100 });
+      const provider2 = createProvider({ id: 2, name: "p2", firstByteTimeoutStreamingMs: 100 });
+      const session = createSession();
+      setProviderWithSessionRef(session, provider1);
+      mocks.getCachedSystemSettings.mockResolvedValue({
+        billHedgeLosers: false,
+        legacyHedgeMaxInFlight: 1,
+        enableThinkingSignatureRectifier: true,
+        enableThinkingBudgetRectifier: true,
+      });
+      mocks.pickRandomProviderWithExclusion.mockResolvedValueOnce(provider2);
+
+      const doForward = vi.spyOn(
+        ProxyForwarder as unknown as {
+          doForward: (...args: unknown[]) => Promise<Response>;
+        },
+        "doForward"
+      );
+      const controller1 = new AbortController();
+      const controller2 = new AbortController();
+      doForward.mockImplementationOnce(async (attemptSession, providerForRequest, ...args) => {
+        const runtime = attemptSession as ProxySession & AttemptRuntime;
+        runtime.responseController = controller1;
+        runtime.clearResponseTimeout = vi.fn();
+        (args[5] as (() => void) | undefined)?.();
+        expect((providerForRequest as Provider).firstByteTimeoutStreamingMs).toBe(100);
+        return createDelayedFailure({
+          delayMs: 100,
+          error: new Error("p1 timed out"),
+          controller: controller1,
+        });
+      });
+      doForward.mockImplementationOnce(async (attemptSession) => {
+        const runtime = attemptSession as ProxySession & AttemptRuntime;
+        runtime.responseController = controller2;
+        runtime.clearResponseTimeout = vi.fn();
+        return createStreamingResponse({
+          label: "p2",
+          firstChunkDelayMs: 10,
+          controller: controller2,
+        });
+      });
+
+      const responsePromise = ProxyForwarder.send(session);
+      await vi.advanceTimersByTimeAsync(100);
+      expect(doForward).toHaveBeenCalledTimes(2);
+      await vi.advanceTimersByTimeAsync(10);
+      const response = await responsePromise;
+      expect(await response.text()).toContain('"provider":"p2"');
+      expect(session.getRoutingTrace()?.mode).toBe("legacy_hedge");
+      expect(session.getRoutingTrace()?.config?.legacyHedgeMaxInFlight).toBe(1);
+      expect(
+        session.getRoutingTrace()?.events.filter((event) => event.type === "hedge_slot_saturated")
+      ).toEqual([
+        expect.objectContaining({
+          activeAttemptCount: 1,
+          configuredCap: 1,
+        }),
+      ]);
+      expect(mocks.recordFailure).toHaveBeenCalledWith(1, expect.any(Error));
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("legacy hedge cap three launches a third candidate on the next threshold", async () => {
+    vi.useFakeTimers();
+
+    try {
+      const provider1 = createProvider({ id: 1, name: "p1", firstByteTimeoutStreamingMs: 100 });
+      const provider2 = createProvider({ id: 2, name: "p2", firstByteTimeoutStreamingMs: 100 });
+      const provider3 = createProvider({ id: 3, name: "p3", firstByteTimeoutStreamingMs: 100 });
+      const session = createSession();
+      setProviderWithSessionRef(session, provider1);
+      mocks.getCachedSystemSettings.mockResolvedValue({
+        billHedgeLosers: false,
+        legacyHedgeMaxInFlight: 3,
+        enableThinkingSignatureRectifier: true,
+        enableThinkingBudgetRectifier: true,
+      });
+      mocks.pickRandomProviderWithExclusion
+        .mockResolvedValueOnce(provider2)
+        .mockResolvedValueOnce(provider3);
+
+      const doForward = vi.spyOn(
+        ProxyForwarder as unknown as {
+          doForward: (...args: unknown[]) => Promise<Response>;
+        },
+        "doForward"
+      );
+      const controller1 = new AbortController();
+      const controller2 = new AbortController();
+      const controller3 = new AbortController();
+      doForward
+        .mockImplementationOnce(async (attemptSession) => {
+          const runtime = attemptSession as ProxySession & AttemptRuntime;
+          runtime.responseController = controller1;
+          runtime.clearResponseTimeout = vi.fn();
+          return createStreamingResponse({
+            label: "p1",
+            firstChunkDelayMs: 1000,
+            controller: controller1,
+          });
+        })
+        .mockImplementationOnce(async (attemptSession) => {
+          const runtime = attemptSession as ProxySession & AttemptRuntime;
+          runtime.responseController = controller2;
+          runtime.clearResponseTimeout = vi.fn();
+          return createStreamingResponse({
+            label: "p2",
+            firstChunkDelayMs: 1000,
+            controller: controller2,
+          });
+        })
+        .mockImplementationOnce(async (attemptSession) => {
+          const runtime = attemptSession as ProxySession & AttemptRuntime;
+          runtime.responseController = controller3;
+          runtime.clearResponseTimeout = vi.fn();
+          return createStreamingResponse({
+            label: "p3",
+            firstChunkDelayMs: 10,
+            controller: controller3,
+          });
+        });
+
+      const responsePromise = ProxyForwarder.send(session);
+      await vi.advanceTimersByTimeAsync(100);
+      expect(doForward).toHaveBeenCalledTimes(2);
+      await vi.advanceTimersByTimeAsync(100);
+      expect(doForward).toHaveBeenCalledTimes(3);
+      await vi.advanceTimersByTimeAsync(10);
+      const response = await responsePromise;
+      expect(await response.text()).toContain('"provider":"p3"');
+      expect(controller1.signal.aborted).toBe(true);
+      expect(controller2.signal.aborted).toBe(true);
+      expect(controller3.signal.aborted).toBe(false);
+      expect(session.getRoutingTrace()?.config?.legacyHedgeMaxInFlight).toBe(3);
+      expect(
+        session.getRoutingTrace()?.events.some((event) => event.type === "hedge_slot_saturated")
+      ).toBe(false);
     } finally {
       vi.useRealTimers();
     }
@@ -1757,10 +2066,11 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
       const controller1 = new AbortController();
       const controller2 = new AbortController();
 
-      doForward.mockImplementationOnce(async (attemptSession, providerForRequest) => {
+      doForward.mockImplementationOnce(async (attemptSession, providerForRequest, ...args) => {
         const runtime = attemptSession as ProxySession & AttemptRuntime;
         runtime.responseController = controller1;
         runtime.clearResponseTimeout = vi.fn();
+        (args[5] as (() => void) | undefined)?.();
         expect(
           ModelRedirector.apply(attemptSession as ProxySession, providerForRequest as Provider)
         ).toBe(true);
@@ -1771,10 +2081,11 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
         });
       });
 
-      doForward.mockImplementationOnce(async (attemptSession, providerForRequest) => {
+      doForward.mockImplementationOnce(async (attemptSession, providerForRequest, ...args) => {
         const runtime = attemptSession as ProxySession & AttemptRuntime;
         runtime.responseController = controller2;
         runtime.clearResponseTimeout = vi.fn();
+        (args[5] as (() => void) | undefined)?.();
         expect(
           ModelRedirector.apply(attemptSession as ProxySession, providerForRequest as Provider)
         ).toBe(true);
@@ -1800,13 +2111,14 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
       expect(controller1.signal.aborted).toBe(true);
       expect(controller2.signal.aborted).toBe(true);
       expect(mocks.clearSessionProviders).toHaveBeenCalledWith("sess-hedge", new Set([1, 2]), null);
-      expect(mocks.recordFailure).not.toHaveBeenCalled();
+      expect(mocks.recordFailure).toHaveBeenCalledTimes(1);
       expect(mocks.recordSuccess).not.toHaveBeenCalled();
 
       const chain = session.getProviderChain();
       expect(
-        chain.find((item) => item.id === provider1.id && item.reason === "client_abort")
-          ?.modelRedirect
+        chain.find(
+          (item) => item.id === provider1.id && item.reason === "client_abort_no_first_byte"
+        )?.modelRedirect
       ).toMatchObject({
         originalModel: requestedModel,
         redirectedModel: "accounts/fireworks/routers/kimi-k2p5-turbo",

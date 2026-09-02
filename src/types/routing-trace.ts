@@ -15,6 +15,8 @@ export type RoutingTraceEventType =
   | "fallback_promoted"
   | "winner_committed"
   | "binding_finalized"
+  | "hedge_slot_saturated"
+  | "client_abort_no_first_byte"
   | "request_finished";
 
 export type RoutingTraceAttemptKind = "sticky" | "normal" | "fallback";
@@ -30,6 +32,7 @@ export interface RoutingTraceConfigV1 {
   stickyTimeoutCooldownMs: number;
   /** The binding/session TTL in seconds; optional for traces written before this field existed. */
   sessionTtlSeconds?: number;
+  legacyHedgeMaxInFlight?: number;
 }
 
 export interface RoutingTraceProviderV1 {
@@ -52,6 +55,11 @@ export interface RoutingTraceEventV1 {
   provider?: RoutingTraceProviderV1;
   outcome?: string;
   cancellationKind?: string;
+  effectiveThresholdMs?: number;
+  activeAttemptCount?: number;
+  configuredCap?: number;
+  circuitAccountingApplied?: boolean;
+  availabilityAccountingApplied?: boolean;
   statusCode?: number;
   reason?: string;
   bindingAction?: "create" | "renew" | "clear" | "none";
@@ -106,6 +114,8 @@ const ROUTING_TRACE_EVENT_TYPES = new Set<RoutingTraceEventType>([
   "fallback_promoted",
   "winner_committed",
   "binding_finalized",
+  "hedge_slot_saturated",
+  "client_abort_no_first_byte",
   "request_finished",
 ]);
 
@@ -166,6 +176,21 @@ function normalizeRoutingTraceEvent(value: unknown): RoutingTraceEventV1 | null 
     ...(nonEmptyString(event.cancellationKind)
       ? { cancellationKind: event.cancellationKind as string }
       : {}),
+    ...(finiteNumber(event.effectiveThresholdMs) !== undefined
+      ? { effectiveThresholdMs: event.effectiveThresholdMs as number }
+      : {}),
+    ...(finiteNumber(event.activeAttemptCount) !== undefined
+      ? { activeAttemptCount: event.activeAttemptCount as number }
+      : {}),
+    ...(finiteNumber(event.configuredCap) !== undefined
+      ? { configuredCap: event.configuredCap as number }
+      : {}),
+    ...(typeof event.circuitAccountingApplied === "boolean"
+      ? { circuitAccountingApplied: event.circuitAccountingApplied }
+      : {}),
+    ...(typeof event.availabilityAccountingApplied === "boolean"
+      ? { availabilityAccountingApplied: event.availabilityAccountingApplied }
+      : {}),
     ...(finiteNumber(event.statusCode) !== undefined
       ? { statusCode: event.statusCode as number }
       : {}),
@@ -191,6 +216,7 @@ function normalizeRoutingTraceConfig(value: unknown): RoutingTraceConfigV1 | und
   const racingTotalTimeoutMs = finiteNumber(config.racingTotalTimeoutMs);
   const stickyTimeoutCooldownMs = finiteNumber(config.stickyTimeoutCooldownMs);
   const sessionTtlSeconds = finiteNumber(config.sessionTtlSeconds);
+  const legacyHedgeMaxInFlight = finiteNumber(config.legacyHedgeMaxInFlight);
   if (
     discoveryConcurrency === undefined ||
     maxDiscoveryRounds === undefined ||
@@ -209,6 +235,7 @@ function normalizeRoutingTraceConfig(value: unknown): RoutingTraceConfigV1 | und
     racingTotalTimeoutMs,
     stickyTimeoutCooldownMs,
     ...(sessionTtlSeconds !== undefined ? { sessionTtlSeconds } : {}),
+    ...(legacyHedgeMaxInFlight !== undefined ? { legacyHedgeMaxInFlight } : {}),
   };
 }
 

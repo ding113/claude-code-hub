@@ -42,6 +42,7 @@ const settings: SystemSettings = {
   currencyDisplay: "USD",
   billingModelSource: "original",
   codexPriorityBillingSource: "requested",
+  legacyHedgeMaxInFlight: 2,
   timezone: "Asia/Shanghai",
   enableAutoCleanup: false,
   cleanupRetentionDays: 30,
@@ -222,6 +223,23 @@ describe("v1 system config endpoints", () => {
     expect(invalidDiscovery.json).toMatchObject({
       errorCode: "DISCOVERY_SETTINGS_INVALID",
     });
+    expect(saveSystemSettingsMock).not.toHaveBeenCalled();
+  });
+
+  test("returns a stable error code for invalid legacy hedge concurrency", async () => {
+    for (const value of [0, 5, true, [2]]) {
+      const invalid = await callV1Route({
+        method: "PUT",
+        pathname: "/api/v1/system/settings",
+        headers: { Authorization: "Bearer admin-token" },
+        body: { legacyHedgeMaxInFlight: value },
+      });
+
+      expect(invalid.response.status).toBe(400);
+      expect(invalid.json).toMatchObject({
+        errorCode: "LEGACY_HEDGE_MAX_IN_FLIGHT_INVALID",
+      });
+    }
     expect(saveSystemSettingsMock).not.toHaveBeenCalled();
   });
 

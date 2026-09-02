@@ -614,6 +614,7 @@ export function DiscoveryTraceView({
     numberFrom(summary, "attemptsPerRequest", "attempts", "attemptsStarted") ??
     Math.max(runtimeStats.attemptCount, attempts.length);
   const maxActive = numberFrom(summary, "maxActive", "maxActiveAttempts") ?? runtimeStats.maxActive;
+  const saturationEvents = trace.events.filter((event) => event.type === "hedge_slot_saturated");
   const terminalEvent = trace.events.findLast((event) => event.type === "request_finished");
   const bindingEvent = trace.events.findLast((event) => event.type === "binding_finalized");
   const terminalOutcome = normalizeTerminalOutcome(terminalEvent?.outcome);
@@ -699,6 +700,12 @@ export function DiscoveryTraceView({
                 value={numberFrom(config, "discoveryConcurrency", "concurrency")}
               />
             )}
+            {numberFrom(config, "legacyHedgeMaxInFlight") != null && (
+              <TraceValue
+                label={t("configLegacyHedgeMaxInFlight")}
+                value={numberFrom(config, "legacyHedgeMaxInFlight")}
+              />
+            )}
             {numberFrom(config, "maxDiscoveryRounds", "maxRounds") != null && (
               <TraceValue
                 label={t("configMaxRounds")}
@@ -735,6 +742,34 @@ export function DiscoveryTraceView({
                 value={`${numberFrom(config, "sessionTtlSeconds")}s`}
               />
             )}
+          </div>
+        </div>
+      )}
+
+      {saturationEvents.length > 0 && (
+        <div className="border-y py-3 space-y-2" data-testid="hedge-slot-saturation">
+          <div className="text-xs font-medium">
+            {t("slotSaturation", { count: saturationEvents.length })}
+          </div>
+          <div className="space-y-1 text-xs text-muted-foreground">
+            {saturationEvents.map((event, index) => {
+              const provider = asRecord(event.provider);
+              return (
+                <div
+                  key={`${event.attemptId ?? "saturation"}-${index}`}
+                  className="font-mono break-all"
+                >
+                  {t("slotSaturationEvent", {
+                    provider: asString(provider.name) ?? "-",
+                    active: asNumber(event.activeAttemptCount) ?? 0,
+                    cap: asNumber(event.configuredCap) ?? 0,
+                    elapsed: Math.round(
+                      asNumber(event.elapsedMs) ?? asNumber(event.durationMs) ?? 0
+                    ),
+                  })}
+                </div>
+              );
+            })}
           </div>
         </div>
       )}

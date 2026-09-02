@@ -31,6 +31,7 @@ export interface ProviderChainItem {
     | "concurrent_limit_failed" // 并发限制失败
     | "request_success" // 修复：请求成功（首次）
     | "retry_success" // 重试成功
+    | "response_incomplete" // 上游按协议返回 incomplete，可计费但不是成功完成
     | "retry_failed" // 重试失败（供应商错误，已计入熔断器）
     | "system_error" // 系统/网络错误（不计入熔断器）
     | "resource_not_found" // 资源不存在（404），触发故障转移但不计入熔断器
@@ -49,6 +50,7 @@ export interface ProviderChainItem {
     | "hedge_loser_cancelled" // 该供应商输掉 Hedge 竞速，请求被取消（未对输家计费）
     | "hedge_loser_billed" // 该供应商输掉 Hedge 竞速，但其上游响应被后台拿回并计费
     | "client_abort" // 客户端在响应完成前断开连接
+    | "client_abort_no_first_byte" // 客户端在阈值后断开且该供应商未返回首字节
     | "affinity_hit"; // 最长前缀亲和命中（软提名，已通过全套硬校验）
 
   // === 选择方法（细化） ===

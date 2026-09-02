@@ -300,6 +300,16 @@ describe("src/repository/_shared/transformers.ts", () => {
       expect(toSystemSettings({ replayCacheTtlMinutes: 45 }).replayCacheTtlMinutes).toBe(45);
     });
 
+    it.each([1, 2, 4])("应保留有效 legacy hedge 并发上限 %s", (value) => {
+      expect(toSystemSettings({ legacyHedgeMaxInFlight: value }).legacyHedgeMaxInFlight).toBe(
+        value
+      );
+    });
+
+    it.each([0, 5, 1.5, "3", null])("应将无效 legacy hedge 并发上限 %s 回退为 2", (value) => {
+      expect(toSystemSettings({ legacyHedgeMaxInFlight: value }).legacyHedgeMaxInFlight).toBe(2);
+    });
+
     it.each([5, 120])("应保留 Replay 缓存时间的有效边界 %s", (value) => {
       expect(toSystemSettings({ replayCacheTtlMinutes: value }).replayCacheTtlMinutes).toBe(value);
     });

@@ -146,6 +146,7 @@ function makeSystemSettings(
     currencyDisplay: "USD",
     billingModelSource,
     codexPriorityBillingSource,
+    legacyHedgeMaxInFlight: 2,
     timezone: null,
     enableAutoCleanup: false,
     cleanupRetentionDays: 30,

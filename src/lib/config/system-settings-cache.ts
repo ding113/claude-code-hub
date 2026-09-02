@@ -13,6 +13,11 @@
  */
 
 import { logger } from "@/lib/logger";
+import {
+  CHANNEL_SYSTEM_SETTINGS_UPDATED,
+  publishCacheInvalidation,
+  subscribeCacheInvalidation,
+} from "@/lib/redis/pubsub";
 import { DEFAULT_SITE_TITLE } from "@/lib/site-title";
 import { REPLAY_CACHE_TTL_MINUTES_DEFAULT } from "@/lib/validation/replay-settings";
 import { getSystemSettings } from "@/repository/system-config";
@@ -21,10 +26,15 @@ import { getEnvConfig } from "./env.schema";
 
 /** Cache TTL in milliseconds (1 minute) */
 const CACHE_TTL_MS = 60 * 1000;
+const SUBSCRIPTION_RETRY_MS = 60 * 1000;
 
 /** Cached settings and timestamp */
 let cachedSettings: SystemSettings | null = null;
 let cachedAt: number = 0;
+let cacheVersion = 0;
+let subscriptionInitialized = false;
+let subscriptionInitPromise: Promise<boolean> | null = null;
+let subscriptionNextAttemptAt = 0;
 
 /** Avoid repeating the same invalid environment-variable warning on every request. */
 let hasWarnedInvalidResponsesWebsocketEnv = false;
@@ -117,6 +127,7 @@ export const DEFAULT_SETTINGS: Pick<
   | "stickySlaMs"
   | "racingTotalTimeoutMs"
   | "stickyTimeoutCooldownMs"
+  | "legacyHedgeMaxInFlight"
 > = {
   enableHttp2: false,
   enableOpenaiResponsesWebsocket: true,
@@ -157,6 +168,7 @@ export const DEFAULT_SETTINGS: Pick<
   stickySlaMs: 20_000,
   racingTotalTimeoutMs: 60_000,
   stickyTimeoutCooldownMs: 300_000,
+  legacyHedgeMaxInFlight: 2,
 };
 
 /**
@@ -168,6 +180,8 @@ export const DEFAULT_SETTINGS: Pick<
  * @returns System settings (cached or fresh)
  */
 export async function getCachedSystemSettings(): Promise<SystemSettings> {
+  // 多核心启动会在 ready 前等待首次订阅；外部多实例和兼容入口则在首次读取时懒启动。
+  startSystemSettingsCacheSubscription();
   const now = Date.now();
 
   // Return cached if still valid
@@ -176,17 +190,21 @@ export async function getCachedSystemSettings(): Promise<SystemSettings> {
   }
 
   try {
+    const expectedVersion = cacheVersion;
     // Fetch fresh settings from database
     const settings = await getSystemSettings();
 
-    // Update cache
-    cachedSettings = settings;
-    cachedAt = now;
+    // 更新事件可能发生在查询等待期间。版本已变化时仍允许当前请求使用其查询结果，
+    // 但不能让旧快照重新污染后续请求的进程缓存。
+    if (cacheVersion === expectedVersion) {
+      cachedSettings = settings;
+      cachedAt = now;
 
-    logger.debug("[SystemSettingsCache] Settings cached", {
-      enableHttp2: settings.enableHttp2,
-      ttl: CACHE_TTL_MS,
-    });
+      logger.debug("[SystemSettingsCache] Settings cached", {
+        enableHttp2: settings.enableHttp2,
+        ttl: CACHE_TTL_MS,
+      });
+    }
 
     return settings;
   } catch (error) {
@@ -211,6 +229,7 @@ export async function getCachedSystemSettings(): Promise<SystemSettings> {
       codexPriorityBillingSource: DEFAULT_SETTINGS.codexPriorityBillingSource,
       billNonSuccessfulRequests: false,
       billHedgeLosers: true,
+      legacyHedgeMaxInFlight: DEFAULT_SETTINGS.legacyHedgeMaxInFlight,
       timezone: null,
       verboseProviderError: false,
       passThroughUpstreamErrorMessage: DEFAULT_SETTINGS.passThroughUpstreamErrorMessage,
@@ -297,8 +316,68 @@ export async function isOpenaiResponsesWebsocketEnabled(): Promise<boolean> {
  * Call this when system settings are saved to ensure
  * the next request gets fresh settings.
  */
-export function invalidateSystemSettingsCache(): void {
+function invalidateSystemSettingsCacheLocal(): void {
   cachedSettings = null;
   cachedAt = 0;
+  cacheVersion++;
   logger.info("[SystemSettingsCache] Cache invalidated");
+}
+
+/**
+ * 为当前进程建立系统设置失效订阅。连接暂时不可用时保留 TTL 降级，并以固定
+ * 退避避免请求热路径反复创建连接任务。
+ */
+export async function ensureSystemSettingsCacheSubscription(): Promise<boolean> {
+  if (subscriptionInitialized) return true;
+  if (subscriptionInitPromise) return subscriptionInitPromise;
+  if (Date.now() < subscriptionNextAttemptAt) return false;
+
+  subscriptionInitPromise = (async () => {
+    try {
+      const cleanup = await subscribeCacheInvalidation(CHANNEL_SYSTEM_SETTINGS_UPDATED, () => {
+        invalidateSystemSettingsCacheLocal();
+        logger.debug("[SystemSettingsCache] Cache invalidated via pub/sub");
+      });
+      if (!cleanup) {
+        subscriptionNextAttemptAt = Date.now() + SUBSCRIPTION_RETRY_MS;
+        return false;
+      }
+
+      subscriptionInitialized = true;
+      subscriptionNextAttemptAt = 0;
+      logger.info("[SystemSettingsCache] Cross-process invalidation enabled");
+      return true;
+    } catch (error) {
+      logger.warn("[SystemSettingsCache] Failed to subscribe to invalidation", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      subscriptionNextAttemptAt = Date.now() + SUBSCRIPTION_RETRY_MS;
+      return false;
+    }
+  })().finally(() => {
+    subscriptionInitPromise = null;
+  });
+
+  return subscriptionInitPromise;
+}
+
+/** 热路径的无等待入口；只有首次初始化或退避到期时会创建异步任务。 */
+export function startSystemSettingsCacheSubscription(): void {
+  if (
+    subscriptionInitialized ||
+    subscriptionInitPromise ||
+    Date.now() < subscriptionNextAttemptAt
+  ) {
+    return;
+  }
+  void ensureSystemSettingsCacheSubscription();
+}
+
+/**
+ * 数据库提交后清空本进程缓存，并广播不含设置内容的微小失效消息。发布失败沿用
+ * 现有 fail-open 语义，由每进程 60 秒 TTL 提供最终收敛上界。
+ */
+export function invalidateSystemSettingsCache(): void {
+  invalidateSystemSettingsCacheLocal();
+  void publishCacheInvalidation(CHANNEL_SYSTEM_SETTINGS_UPDATED);
 }

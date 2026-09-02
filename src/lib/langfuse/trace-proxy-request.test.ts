@@ -26,6 +26,7 @@ const ERROR_REASONS = new Set([
   "vendor_type_all_timeout",
   "endpoint_pool_exhausted",
   "client_abort",
+  "client_abort_no_first_byte",
 ]);
 
 function isSuccessReason(reason: string | undefined): boolean {
@@ -69,6 +70,10 @@ describe("isSuccessReason", () => {
 describe("isErrorReason", () => {
   test("client_abort is an error reason", () => {
     expect(isErrorReason("client_abort")).toBe(true);
+  });
+
+  test("client_abort_no_first_byte is an error reason", () => {
+    expect(isErrorReason("client_abort_no_first_byte")).toBe(true);
   });
 
   test("system_error is an error reason", () => {

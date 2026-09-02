@@ -234,6 +234,7 @@ function getItemStatus(item: ProviderChainItem): {
   }
   if (
     item.reason === "retry_failed" ||
+    item.reason === "response_incomplete" ||
     item.reason === "system_error" ||
     item.reason === "resource_not_found" ||
     item.reason === "endpoint_pool_exhausted" ||
@@ -280,7 +281,7 @@ function getItemStatus(item: ProviderChainItem): {
       bgColor: "bg-slate-50 dark:bg-slate-800/50",
     };
   }
-  if (item.reason === "client_abort") {
+  if (item.reason === "client_abort" || item.reason === "client_abort_no_first_byte") {
     return {
       icon: MinusCircle,
       color: "text-amber-600",

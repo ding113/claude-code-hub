@@ -135,7 +135,10 @@ export function classifyRequestOutcomeSignal(
     return buildExcludedTaxonomy("matched_rule");
   }
 
-  if (signal.statusCode === 499 || signal.reason === "client_abort") {
+  if (
+    (signal.statusCode === 499 && signal.reason !== "client_abort_no_first_byte") ||
+    signal.reason === "client_abort"
+  ) {
     return buildExcludedTaxonomy("client_abort");
   }
 
@@ -154,6 +157,9 @@ export function classifyRequestOutcomeSignal(
   }
   if (matchesQuotaOrRateLimit(signal.errorMessage)) {
     return buildExcludedTaxonomy("quota_or_rate_limit");
+  }
+  if (signal.reason === "response_incomplete") {
+    return buildFailureTaxonomy();
   }
 
   if (

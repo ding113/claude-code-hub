@@ -7,6 +7,7 @@ import type { UpdateSystemSettingsInput } from "@/types/system-config";
 
 // 近代新增列（最新在前），降级链按引入顺序逐层累计剥离。
 const RECENT_COLUMNS = [
+  "legacyHedgeMaxInFlight",
   "replayCacheTtlMinutes",
   "cacheEffectivenessEnabled",
   "replayEnabled",
@@ -44,6 +45,7 @@ const FULL_COLUMNS = [
   "stickyTimeoutCooldownMs",
   "enableGeminiFunctionIdRectifier",
   "billHedgeLosers",
+  "legacyHedgeMaxInFlight",
   "billNonSuccessfulRequests",
   "passThroughUpstreamErrorMessage",
   "fakeStreamingWhitelist",
@@ -91,6 +93,7 @@ const FULL_COLUMNS = [
 // 历史世代字段集（冻结）：passThrough 世代之前的 schema 没有以下五列，
 // 但仍包含 enableThinkingEffortConflictRectifier / allowNonConversationEndpointProviderFallback。
 const PASS_THROUGH_ERA_OMIT = [
+  "legacyHedgeMaxInFlight",
   "billHedgeLosers",
   "billNonSuccessfulRequests",
   "passThroughUpstreamErrorMessage",

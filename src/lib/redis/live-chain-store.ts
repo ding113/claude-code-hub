@@ -145,11 +145,13 @@ function deriveLegacyActiveProviders(chain: ProviderChainItem[]): LiveProviderSn
         activeProviders.set(item.id, provider);
         break;
       case "retry_failed":
+      case "response_incomplete":
       case "system_error":
       case "resource_not_found":
       case "hedge_loser_cancelled":
       case "hedge_loser_billed":
       case "client_abort":
+      case "client_abort_no_first_byte":
         activeProviders.delete(item.id);
         break;
     }
@@ -177,6 +179,8 @@ export function inferPhase(
     case "system_error":
     case "resource_not_found":
       return "retrying";
+    case "response_incomplete":
+      return "failed";
     case "hedge_triggered":
     case "hedge_launched":
       return "hedge_racing";
@@ -189,6 +193,8 @@ export function inferPhase(
       return "streaming";
     case "client_abort":
       return "aborted";
+    case "client_abort_no_first_byte":
+      return "failed";
     default:
       return "forwarding";
   }

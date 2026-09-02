@@ -400,6 +400,16 @@ describe("getSessionDetails - additive detail snapshots contract", () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
 
+    expect(getSessionRequestBodyMock).not.toHaveBeenCalled();
+    expect(getSessionMessagesMock).not.toHaveBeenCalled();
+    expect(getSessionResponseMock).not.toHaveBeenCalled();
+    expect(result.data.requestBody).toEqual({
+      model: "gpt-5.5",
+      messages: [{ role: "user", content: "after body messages" }],
+    });
+    expect(result.data.messages).toEqual([{ role: "user", content: "before messages" }]);
+    expect(result.data.response).toBe('{"after":true}');
+
     expect(result.data.snapshots).toEqual({
       defaultView: DEFAULT_SESSION_DETAIL_VIEW_MODE,
       request: {

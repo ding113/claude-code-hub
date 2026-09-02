@@ -19,6 +19,9 @@ export interface SseFrame {
   data: string;
 }
 
+/** 返回 false 时立即停止解析当前输入；调用方随后不应复用该 parser。 */
+export type SseFrameVisitor = (eventName: string | null, data: string) => boolean | undefined;
+
 export interface SseFrameParserOptions {
   maxBufferedCharacters?: number;
   bufferLimitExemption?: {
@@ -31,6 +34,62 @@ export interface SseFrameParserOptions {
 
 const DATA_HEAD_MAX_CHARACTERS = 64;
 const LINE_HEAD_MAX_CHARACTERS = DATA_HEAD_MAX_CHARACTERS + "data: ".length;
+const TEXT_BLOCK_MAX_CHARACTERS = 64 * 1024;
+const TEXT_BLOCK_MAX_PARTS = 4096;
+
+/**
+ * 把任意碎片输入维持在线性开销内，不为每个网络 chunk 或 data 行长期保留数组项。
+ * 已归并的块在帧输出前不会被反复拼接。
+ */
+export class SegmentedTextBuffer {
+  private blocks: string[] = [];
+  private pending: string[] = [];
+  private pendingCharacters = 0;
+  private totalCharacters = 0;
+
+  get length(): number {
+    return this.totalCharacters;
+  }
+
+  append(value: string): void {
+    if (value.length === 0) return;
+    this.pending.push(value);
+    this.pendingCharacters += value.length;
+    this.totalCharacters += value.length;
+    if (
+      this.pendingCharacters >= TEXT_BLOCK_MAX_CHARACTERS ||
+      this.pending.length >= TEXT_BLOCK_MAX_PARTS
+    ) {
+      this.flushPending();
+    }
+  }
+
+  take(): string {
+    this.flushPending();
+    const value =
+      this.blocks.length === 0
+        ? ""
+        : this.blocks.length === 1
+          ? (this.blocks[0] ?? "")
+          : this.blocks.join("");
+    this.clear();
+    return value;
+  }
+
+  clear(): void {
+    this.blocks = [];
+    this.pending = [];
+    this.pendingCharacters = 0;
+    this.totalCharacters = 0;
+  }
+
+  private flushPending(): void {
+    if (this.pending.length === 0) return;
+    this.blocks.push(this.pending.length === 1 ? (this.pending[0] ?? "") : this.pending.join(""));
+    this.pending = [];
+    this.pendingCharacters = 0;
+  }
+}
 
 export class SseFrameBufferLimitError extends Error {
   constructor(maxBufferedCharacters: number) {
@@ -41,46 +100,68 @@ export class SseFrameBufferLimitError extends Error {
 
 export class SseFrameParser {
   private readonly decoder = new TextDecoder("utf-8");
-  private lineParts: string[] = [];
-  private lineCharacters = 0;
+  private readonly lineBuffer = new SegmentedTextBuffer();
   private lineHead = "";
   private skipLeadingLf = false;
   private currentEvent: string | null = null;
-  private dataLines: string[] = [];
-  private dataCharacters = 0;
+  private readonly dataBuffer = new SegmentedTextBuffer();
+  private dataLineCount = 0;
   private dataHead = "";
 
   constructor(private readonly options: SseFrameParserOptions = {}) {}
 
   /** 喂入一个网络 chunk，返回其中完成的帧（可能为空数组）。 */
   push(chunk: Uint8Array): SseFrame[] {
-    return this.consume(this.decoder.decode(chunk, { stream: true }));
+    const frames: SseFrame[] = [];
+    this.visit(chunk, (eventName, data) => {
+      frames.push({ eventName, data });
+    });
+    return frames;
   }
 
   /** 直接喂入已解码文本（供对完整 body 做一次性解析的调用方使用）。 */
   pushText(text: string): SseFrame[] {
-    return this.consume(text);
+    const frames: SseFrame[] = [];
+    this.visitText(text, (eventName, data) => {
+      frames.push({ eventName, data });
+    });
+    return frames;
+  }
+
+  /** 边解析边消费帧，避免热路径为单个大 chunk 构造完整 SseFrame 数组。 */
+  visit(chunk: Uint8Array, visitor: SseFrameVisitor): boolean {
+    return this.consume(this.decoder.decode(chunk, { stream: true }), visitor);
+  }
+
+  /** visit 的已解码文本版本。 */
+  visitText(text: string, visitor: SseFrameVisitor): boolean {
+    return this.consume(text, visitor);
   }
 
   /** 流终止：冲刷尾部未换行的行与未 dispatch 的帧。 */
   finish(): SseFrame[] {
-    const frames = this.consume(this.decoder.decode());
-    this.skipLeadingLf = false;
-    if (this.lineCharacters > 0) {
-      // 尾部残行按一行处理（与既有校验器对无终止空行的流的行为一致）
-      const frame = this.handleLine(this.takeLine());
-      if (frame) frames.push(frame);
-    }
-    const last = this.flush();
-    if (last) frames.push(last);
+    const frames: SseFrame[] = [];
+    this.finishVisit((eventName, data) => {
+      frames.push({ eventName, data });
+    });
     return frames;
   }
 
-  private consume(text: string): SseFrame[] {
-    const frames: SseFrame[] = [];
+  /** finish 的 visitor 版本。 */
+  finishVisit(visitor: SseFrameVisitor): boolean {
+    if (!this.consume(this.decoder.decode(), visitor)) return false;
+    this.skipLeadingLf = false;
+    if (this.lineBuffer.length > 0) {
+      // 尾部残行按一行处理（与既有校验器对无终止空行的流的行为一致）
+      if (!this.handleLine(this.takeLine(), visitor)) return false;
+    }
+    return this.flush(visitor);
+  }
+
+  private consume(text: string, visitor: SseFrameVisitor): boolean {
     let start = 0;
     if (this.skipLeadingLf) {
-      if (text.length === 0) return frames;
+      if (text.length === 0) return true;
       if (text.charCodeAt(0) === 10) start = 1;
       this.skipLeadingLf = false;
     }
@@ -90,8 +171,15 @@ export class SseFrameParser {
       if (code !== 10 && code !== 13) continue;
 
       this.appendLinePart(text.slice(start, index));
-      const frame = this.handleLine(this.takeLine());
-      if (frame) frames.push(frame);
+      // 完整行也必须在合并碎片前执行上限检查；否则带换行的超长未知字段
+      // 会绕过行尾的 retained-state 检查，并在 take() 中制造一次大字符串。
+      this.assertBufferLimit(
+        this.currentEventNameForCompletedLine(),
+        this.currentDataHead(),
+        this.completedLineSyntaxCharacters(),
+        this.lineHead.startsWith("event:")
+      );
+      if (!this.handleLine(this.takeLine(), visitor)) return false;
 
       if (code === 13) {
         if (index + 1 < text.length && text.charCodeAt(index + 1) === 10) {
@@ -105,76 +193,72 @@ export class SseFrameParser {
 
     this.appendLinePart(text.slice(start));
     this.assertBufferLimit();
-    return frames;
+    return true;
   }
 
   private appendLinePart(part: string): void {
     if (part.length === 0) return;
-    this.lineParts.push(part);
-    this.lineCharacters += part.length;
+    this.lineBuffer.append(part);
     if (this.lineHead.length < LINE_HEAD_MAX_CHARACTERS) {
       this.lineHead += part.slice(0, LINE_HEAD_MAX_CHARACTERS - this.lineHead.length);
     }
   }
 
   private takeLine(): string {
-    const line = this.lineParts.length === 1 ? this.lineParts[0] : this.lineParts.join("");
-    this.lineParts = [];
-    this.lineCharacters = 0;
+    const line = this.lineBuffer.take();
     this.lineHead = "";
-    return line ?? "";
+    return line;
   }
 
-  private handleLine(line: string): SseFrame | null {
+  private handleLine(line: string, visitor: SseFrameVisitor): boolean {
     if (line.length === 0) {
-      return this.flush();
+      return this.flush(visitor);
     }
     if (line.startsWith(":")) {
-      return null; // SSE 注释
+      return true; // SSE 注释
     }
     if (line.startsWith("event:")) {
       this.currentEvent = line.slice(6).trim();
       this.assertBufferLimit();
-      return null;
+      return true;
     }
     if (line.startsWith("data:")) {
       const data = line.slice(5).replace(/^\s/, "");
-      if (this.dataLines.length > 0) this.dataCharacters += 1;
-      this.dataCharacters += data.length;
-      this.dataLines.push(data);
+      if (this.dataLineCount > 0) this.dataBuffer.append("\n");
+      this.dataBuffer.append(data);
+      this.dataLineCount += 1;
       this.appendDataHead(data);
       this.assertBufferLimit();
-      return null;
+      return true;
     }
     const candidate = line.trim();
     if (
       this.currentEvent === null &&
-      this.dataLines.length === 0 &&
+      this.dataLineCount === 0 &&
       (candidate.startsWith("{") || candidate.startsWith("["))
     ) {
-      return { eventName: null, data: candidate };
+      return visitor(null, candidate) !== false;
     }
     // id: / retry: / 未知字段：忽略
-    return null;
+    return true;
   }
 
-  private flush(): SseFrame | null {
+  private flush(visitor: SseFrameVisitor): boolean {
     const event = this.currentEvent;
     this.currentEvent = null;
-    if (this.dataLines.length === 0) {
+    if (this.dataLineCount === 0) {
       this.dataHead = "";
-      return null;
+      return true;
     }
-    const data = this.dataLines.join("\n");
-    this.dataLines = [];
-    this.dataCharacters = 0;
+    const data = this.dataBuffer.take();
+    this.dataLineCount = 0;
     this.dataHead = "";
-    return { eventName: event, data };
+    return visitor(event, data) !== false;
   }
 
   private appendDataHead(data: string): void {
     if (this.dataHead.length >= DATA_HEAD_MAX_CHARACTERS) return;
-    if (this.dataLines.length > 1) this.dataHead += "\n";
+    if (this.dataLineCount > 1) this.dataHead += "\n";
     this.dataHead += data.slice(0, DATA_HEAD_MAX_CHARACTERS - this.dataHead.length);
   }
 
@@ -183,34 +267,55 @@ export class SseFrameParser {
     if (!this.lineHead.startsWith("data:")) return this.dataHead;
 
     const tailData = this.lineHead.slice(5).replace(/^\s/, "");
-    const separator = this.dataLines.length > 0 && this.dataHead.length > 0 ? "\n" : "";
+    const separator = this.dataLineCount > 0 && this.dataHead.length > 0 ? "\n" : "";
     return `${this.dataHead}${separator}${tailData}`.slice(0, DATA_HEAD_MAX_CHARACTERS);
   }
 
+  private currentEventNameForCompletedLine(): string | null {
+    if (!this.lineHead.startsWith("event:")) return this.currentEvent;
+    return this.lineHead.slice(6).trim();
+  }
+
+  private completedLineSyntaxCharacters(): number {
+    const fieldCharacters = this.lineHead.startsWith("data:")
+      ? 5
+      : this.lineHead.startsWith("event:")
+        ? 6
+        : 0;
+    if (fieldCharacters === 0) return 0;
+    return fieldCharacters + (this.lineHead[fieldCharacters] === " " ? 1 : 0);
+  }
+
   private resetRetainedState(): void {
-    this.lineParts = [];
-    this.lineCharacters = 0;
+    this.lineBuffer.clear();
     this.lineHead = "";
     this.currentEvent = null;
-    this.dataLines = [];
-    this.dataCharacters = 0;
+    this.dataBuffer.clear();
+    this.dataLineCount = 0;
     this.dataHead = "";
     this.skipLeadingLf = false;
   }
 
-  private assertBufferLimit(): void {
+  private assertBufferLimit(
+    candidateEventName = this.currentEvent,
+    candidateHead = this.currentDataHead(),
+    ignoredLineSyntaxCharacters = 0,
+    replacesCurrentEvent = false
+  ): void {
     const maxBufferedCharacters = this.options.maxBufferedCharacters;
     if (maxBufferedCharacters === undefined) return;
 
     const bufferedCharacters =
-      this.lineCharacters + (this.currentEvent?.length ?? 0) + this.dataCharacters;
+      Math.max(0, this.lineBuffer.length - ignoredLineSyntaxCharacters) +
+      (replacesCurrentEvent ? 0 : (this.currentEvent?.length ?? 0)) +
+      this.dataBuffer.length;
     if (bufferedCharacters <= maxBufferedCharacters) return;
 
     const exemption = this.options.bufferLimitExemption;
     if (
       exemption &&
       bufferedCharacters <= exemption.maxBufferedCharacters &&
-      exemption.matches(this.currentEvent, this.currentDataHead())
+      exemption.matches(candidateEventName, candidateHead)
     ) {
       return;
     }

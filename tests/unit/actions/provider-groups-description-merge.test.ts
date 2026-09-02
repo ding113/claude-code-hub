@@ -5,6 +5,9 @@ const mockFindProviderGroupById = vi.hoisted(() => vi.fn());
 const mockFindProviderGroupByName = vi.hoisted(() => vi.fn());
 const mockRepoCreateProviderGroup = vi.hoisted(() => vi.fn());
 const mockRepoUpdateProviderGroup = vi.hoisted(() => vi.fn());
+const mockRepoDeleteProviderGroup = vi.hoisted(() => vi.fn());
+const mockCountProvidersUsingGroup = vi.hoisted(() => vi.fn());
+const mockPublishGroupMultiplierCacheInvalidation = vi.hoisted(() => vi.fn());
 
 vi.mock("@/lib/auth", () => ({
   getSession: mockGetSession,
@@ -13,6 +16,16 @@ vi.mock("@/lib/auth", () => ({
 vi.mock("next-intl/server", () => ({
   getTranslations: async () => (key: string) => key,
 }));
+
+vi.mock("@/lib/cache/provider-group-multiplier-cache", async () => {
+  const actual = await vi.importActual<
+    typeof import("@/lib/cache/provider-group-multiplier-cache")
+  >("@/lib/cache/provider-group-multiplier-cache");
+  return {
+    ...actual,
+    publishGroupMultiplierCacheInvalidation: mockPublishGroupMultiplierCacheInvalidation,
+  };
+});
 
 vi.mock("@/repository/provider-groups", async () => {
   const actual = await vi.importActual<typeof import("@/repository/provider-groups")>(
@@ -24,6 +37,8 @@ vi.mock("@/repository/provider-groups", async () => {
     findProviderGroupByName: mockFindProviderGroupByName,
     createProviderGroup: mockRepoCreateProviderGroup,
     updateProviderGroup: mockRepoUpdateProviderGroup,
+    deleteProviderGroup: mockRepoDeleteProviderGroup,
+    countProvidersUsingGroup: mockCountProvidersUsingGroup,
   };
 });
 
@@ -61,6 +76,9 @@ describe("provider-groups action description merge", () => {
       }),
     });
     mockFindProviderGroupByName.mockResolvedValue(null);
+    mockCountProvidersUsingGroup.mockResolvedValue(0);
+    mockRepoDeleteProviderGroup.mockResolvedValue(undefined);
+    mockPublishGroupMultiplierCacheInvalidation.mockResolvedValue(undefined);
     mockRepoCreateProviderGroup.mockResolvedValue({
       id: 12,
       name: "new-group",
@@ -103,6 +121,37 @@ describe("provider-groups action description merge", () => {
         },
       }),
     });
+    expect(mockPublishGroupMultiplierCacheInvalidation).not.toHaveBeenCalled();
+  });
+
+  it("publishes multiplier invalidation only after a committed multiplier update", async () => {
+    const { updateProviderGroup } = await import("@/actions/provider-groups");
+
+    const result = await updateProviderGroup(11, { costMultiplier: 2 });
+
+    expect(result.ok).toBe(true);
+    expect(mockPublishGroupMultiplierCacheInvalidation).toHaveBeenCalledTimes(1);
+    expect(mockRepoUpdateProviderGroup.mock.invocationCallOrder[0]).toBeLessThan(
+      mockPublishGroupMultiplierCacheInvalidation.mock.invocationCallOrder[0]
+    );
+  });
+
+  it("publishes invalidation after create and delete commits", async () => {
+    const { createProviderGroup, deleteProviderGroup } = await import("@/actions/provider-groups");
+
+    expect(
+      await createProviderGroup({ name: "new-group", costMultiplier: 1, description: "" })
+    ).toMatchObject({ ok: true });
+    expect(mockRepoCreateProviderGroup.mock.invocationCallOrder[0]).toBeLessThan(
+      mockPublishGroupMultiplierCacheInvalidation.mock.invocationCallOrder[0]
+    );
+
+    mockPublishGroupMultiplierCacheInvalidation.mockClear();
+    expect(await deleteProviderGroup(11)).toMatchObject({ ok: true });
+    expect(mockPublishGroupMultiplierCacheInvalidation).toHaveBeenCalledTimes(1);
+    expect(mockRepoDeleteProviderGroup.mock.invocationCallOrder[0]).toBeLessThan(
+      mockPublishGroupMultiplierCacheInvalidation.mock.invocationCallOrder[0]
+    );
   });
 
   it("rejects descriptionNote when merged payload would exceed the UTF-8 byte limit", async () => {

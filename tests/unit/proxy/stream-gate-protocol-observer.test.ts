@@ -15,6 +15,7 @@ function observeAtEveryBoundary(stream: string): void {
     expect(observer.finish()).toEqual({
       sawContent: true,
       sawTerminal: true,
+      sawIncomplete: false,
       observationIncomplete: false,
       failure: null,
     });
@@ -22,6 +23,38 @@ function observeAtEveryBoundary(stream: string): void {
 }
 
 describe("StreamProtocolObserver", () => {
+  test("同时识别携带 compaction 内容的 Responses 完成终态", () => {
+    const observer = createStreamProtocolObserver("openai-responses");
+    observer.observe(
+      encoder.encode(
+        'event: response.completed\ndata: {"type":"response.completed","response":{"status":"completed","output":[{"type":"compaction","encrypted_content":"opaque"}]}}\n\n'
+      )
+    );
+
+    expect(observer.finish()).toMatchObject({
+      sawContent: true,
+      sawTerminal: true,
+      sawIncomplete: false,
+      failure: null,
+    });
+  });
+
+  test("同时识别携带文本与 finishReason 的 Gemini 完成帧", () => {
+    const observer = createStreamProtocolObserver("gemini");
+    observer.observe(
+      encoder.encode(
+        '{"candidates":[{"content":{"parts":[{"text":"done"}]},"finishReason":"STOP"}]}\n'
+      )
+    );
+
+    expect(observer.finish()).toMatchObject({
+      sawContent: true,
+      sawTerminal: true,
+      sawIncomplete: false,
+      failure: null,
+    });
+  });
+
   test("在任意网络 chunk boundary 下都识别 content 与成功 terminal", () => {
     observeAtEveryBoundary(
       [
@@ -69,6 +102,7 @@ describe("StreamProtocolObserver", () => {
     expect(observer.finish()).toEqual({
       sawContent: true,
       sawTerminal: false,
+      sawIncomplete: false,
       observationIncomplete: false,
       failure: { afterContent: true, verdict: "malformed", eventName: "message_stop" },
     });
@@ -89,6 +123,7 @@ describe("StreamProtocolObserver", () => {
     expect(observer.finish()).toEqual({
       sawContent: true,
       sawTerminal: false,
+      sawIncomplete: false,
       observationIncomplete: false,
       failure: {
         afterContent: true,
@@ -113,6 +148,7 @@ describe("StreamProtocolObserver", () => {
     expect(observer.finish()).toEqual({
       sawContent: false,
       sawTerminal: true,
+      sawIncomplete: false,
       observationIncomplete: false,
       failure: null,
     });
@@ -125,6 +161,7 @@ describe("StreamProtocolObserver", () => {
     expect(observer.finish()).toEqual({
       sawContent: true,
       sawTerminal: false,
+      sawIncomplete: false,
       observationIncomplete: false,
       failure: null,
     });
@@ -141,6 +178,23 @@ describe("StreamProtocolObserver", () => {
     expect(observer.finish()).toEqual({
       sawContent: true,
       sawTerminal: true,
+      sawIncomplete: false,
+      observationIncomplete: false,
+      failure: null,
+    });
+  });
+
+  test.each([
+    'event: response.incomplete\ndata: {"type":"response.incomplete","response":{"status":"incomplete"}}\n\n',
+    'data: {"type":"response.incomplete","response":{"status":"incomplete"}}\n\n',
+  ])("Responses incomplete 结束读取但不构成成功 completion", (frame) => {
+    const observer = createStreamProtocolObserver("openai-responses");
+    observer.observe(encoder.encode(frame));
+
+    expect(observer.finish()).toEqual({
+      sawContent: false,
+      sawTerminal: false,
+      sawIncomplete: true,
       observationIncomplete: false,
       failure: null,
     });
@@ -153,6 +207,7 @@ describe("StreamProtocolObserver", () => {
     expect(observer.finish()).toEqual({
       sawContent: false,
       sawTerminal: false,
+      sawIncomplete: false,
       observationIncomplete: false,
       failure: { afterContent: false, verdict: "malformed", eventName: "response.completed" },
     });
@@ -171,6 +226,7 @@ describe("StreamProtocolObserver", () => {
     expect(observer.finish()).toEqual({
       sawContent: false,
       sawTerminal: false,
+      sawIncomplete: false,
       observationIncomplete: true,
       failure: null,
     });
@@ -201,6 +257,7 @@ describe("StreamProtocolObserver", () => {
     expect(observer.finish()).toEqual({
       sawContent: true,
       sawTerminal: true,
+      sawIncomplete: false,
       observationIncomplete: false,
       failure: null,
     });
@@ -224,6 +281,7 @@ describe("StreamProtocolObserver", () => {
     expect(observer.finish()).toEqual({
       sawContent: false,
       sawTerminal: false,
+      sawIncomplete: false,
       observationIncomplete: true,
       failure: null,
     });
@@ -243,6 +301,7 @@ describe("StreamProtocolObserver", () => {
     expect(observer.finish()).toEqual({
       sawContent: true,
       sawTerminal: false,
+      sawIncomplete: false,
       observationIncomplete: true,
       failure: null,
     });

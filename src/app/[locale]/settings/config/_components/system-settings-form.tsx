@@ -23,7 +23,7 @@ import {
   Zap,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -44,7 +44,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { saveSystemSettings } from "@/lib/api-client/v1/actions/system-config";
 import type { CurrencyCode } from "@/lib/utils";
 import { CURRENCY_CONFIG } from "@/lib/utils";
-import { COMMON_TIMEZONES, getTimezoneLabel } from "@/lib/utils/timezone";
+import { COMMON_TIMEZONES, getTimezoneLabel } from "@/lib/utils/timezone-shared";
 import {
   shouldWarnQuotaDbRefreshIntervalTooHigh,
   shouldWarnQuotaDbRefreshIntervalTooLow,
@@ -80,6 +80,7 @@ interface SystemSettingsFormProps {
     | "codexPriorityBillingSource"
     | "billNonSuccessfulRequests"
     | "billHedgeLosers"
+    | "legacyHedgeMaxInFlight"
     | "discoveryEnabled"
     | "discoveryConcurrency"
     | "maxDiscoveryRounds"
@@ -142,6 +143,7 @@ export function SystemSettingsForm({
   replayDefaultEnabled = true,
 }: SystemSettingsFormProps) {
   const router = useRouter();
+  const locale = useLocale();
   const t = useTranslations("settings.config.form");
   const tSettings = useTranslations("settings");
   const tCommon = useTranslations("settings.common");
@@ -162,6 +164,9 @@ export function SystemSettingsForm({
     initialSettings.billNonSuccessfulRequests
   );
   const [billHedgeLosers, setBillHedgeLosers] = useState(initialSettings.billHedgeLosers);
+  const [legacyHedgeMaxInFlight, setLegacyHedgeMaxInFlight] = useState<DiscoveryNumberValue>(
+    initialSettings.legacyHedgeMaxInFlight ?? 2
+  );
   const [discoveryEnabled, setDiscoveryEnabled] = useState(initialSettings.discoveryEnabled);
   const [discoveryConcurrency, setDiscoveryConcurrency] = useState<DiscoveryNumberValue>(
     initialSettings.discoveryConcurrency
@@ -294,6 +299,16 @@ export function SystemSettingsForm({
       return;
     }
 
+    const legacyHedgeMaxInFlightValue = Number(legacyHedgeMaxInFlight);
+    if (
+      !Number.isSafeInteger(legacyHedgeMaxInFlightValue) ||
+      legacyHedgeMaxInFlightValue < 1 ||
+      legacyHedgeMaxInFlightValue > 4
+    ) {
+      toast.error(t("legacyHedgeMaxInFlightInvalid"));
+      return;
+    }
+
     const discoveryConfig = {
       discoveryConcurrency: Number(discoveryConcurrency),
       maxDiscoveryRounds: Number(maxDiscoveryRounds),
@@ -401,6 +416,7 @@ export function SystemSettingsForm({
         codexPriorityBillingSource,
         billNonSuccessfulRequests,
         billHedgeLosers,
+        legacyHedgeMaxInFlight: legacyHedgeMaxInFlightValue,
         discoveryEnabled,
         ...(discoveryEnabled ? discoveryConfig : {}),
         timezone,
@@ -458,6 +474,7 @@ export function SystemSettingsForm({
         setCodexPriorityBillingSource(result.data.codexPriorityBillingSource);
         setBillNonSuccessfulRequests(result.data.billNonSuccessfulRequests);
         setBillHedgeLosers(result.data.billHedgeLosers);
+        setLegacyHedgeMaxInFlight(result.data.legacyHedgeMaxInFlight);
         setDiscoveryEnabled(result.data.discoveryEnabled);
         setDiscoveryConcurrency(result.data.discoveryConcurrency);
         setMaxDiscoveryRounds(result.data.maxDiscoveryRounds);
@@ -648,7 +665,7 @@ export function SystemSettingsForm({
             <SelectItem value="__auto__">{t("timezoneAuto")}</SelectItem>
             {COMMON_TIMEZONES.map((tz) => (
               <SelectItem key={tz} value={tz}>
-                {getTimezoneLabel(tz)}
+                {getTimezoneLabel(tz, locale)}
               </SelectItem>
             ))}
           </SelectContent>
@@ -753,7 +770,51 @@ export function SystemSettingsForm({
           />
         </div>
 
-        {/* Bounded Streaming Discovery */}
+        {/* Legacy streaming hedge concurrency */}
+        <div className="p-4 rounded-xl bg-white/[0.02] border border-white/5 space-y-2">
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5">
+                <Label htmlFor="legacy-hedge-max-in-flight" className="text-sm font-medium">
+                  {t("legacyHedgeMaxInFlight")}
+                </Label>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      aria-label={t("legacyHedgeMaxInFlightTooltip")}
+                      className={tooltipButtonClassName}
+                    >
+                      <CircleHelp className="size-3.5" aria-hidden="true" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" sideOffset={6} className="max-w-sm leading-relaxed">
+                    {t("legacyHedgeMaxInFlightTooltip")}
+                  </TooltipContent>
+                </Tooltip>
+              </div>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {t("legacyHedgeMaxInFlightDesc")}
+              </p>
+            </div>
+            <Input
+              id="legacy-hedge-max-in-flight"
+              type="number"
+              min={1}
+              max={4}
+              step={1}
+              value={legacyHedgeMaxInFlight}
+              onChange={(event) =>
+                setLegacyHedgeMaxInFlight(
+                  event.target.value === "" ? "" : Number(event.target.value)
+                )
+              }
+              disabled={isPending}
+              className={`${inputClassName} w-24 shrink-0`}
+            />
+          </div>
+        </div>
+
         <div className="p-4 rounded-xl bg-white/[0.02] border border-white/5 space-y-4">
           <div className="flex items-start justify-between gap-4">
             <div className="flex min-w-0 items-start gap-3">
@@ -947,10 +1008,7 @@ export function SystemSettingsForm({
           <Switch
             id="enable-high-concurrency-mode"
             checked={enableHighConcurrencyMode}
-            onCheckedChange={(checked) => {
-              setEnableHighConcurrencyMode(checked);
-              if (checked) toast.warning(t("highConcurrencyModeWarning"));
-            }}
+            onCheckedChange={(checked) => setEnableHighConcurrencyMode(checked)}
             disabled={isPending}
           />
         </div>

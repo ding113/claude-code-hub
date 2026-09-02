@@ -73,6 +73,14 @@ export type DeferredStreamingFinalization = {
   hedgeBindingHeartbeat?: DeferredStreamingBindingHeartbeat;
   /** F1 门控提交标记：随成功链条目落库（高并发模式下为空）。 */
   streamGate?: ProviderChainItem["streamGate"];
+  /** Optional attempt-scoped health attribution metadata for serial streaming requests. */
+  healthAttemptId?: string;
+  healthAttemptStartedAtMonotonic?: number;
+  healthAttributionThresholdMs?: number;
+  healthFirstByteSeen?: boolean;
+  healthAbortAtMonotonic?: number;
+  healthPausedDurationMs?: number;
+  healthOutcomeSettled?: boolean;
 };
 
 const deferredMeta = new WeakMap<ProxySession, DeferredStreamingFinalization>();

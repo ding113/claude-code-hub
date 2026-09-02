@@ -34,4 +34,4 @@ RUN mkdir -p /app/reports
 # --report-exclude-env：诊断报告不得持久化 ADMIN_TOKEN、DSN、Redis、Langfuse
 # 与 Provider credentials 等运行时环境变量
 # --report-directory：指向 /app/reports 以便挂卷持久化
-CMD ["node", "--report-on-fatalerror", "--report-uncaught-exception", "--report-exclude-env", "--report-directory=/app/reports", "server.js"]
+CMD ["node", "--report-on-fatalerror", "--report-uncaught-exception", "--report-exclude-env", "--report-directory=/app/reports", "cluster.js"]
