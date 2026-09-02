@@ -33,6 +33,10 @@ import {
   getPreferredProviderEndpoints,
 } from "@/lib/provider-endpoints/endpoint-selector";
 import { getGlobalAgentPool, getProxyAgentForProvider } from "@/lib/proxy-agent";
+import {
+  isHttp2TransportQuarantined,
+  quarantineHttp2Transport,
+} from "@/lib/proxy-agent/http2-quarantine";
 import { RateLimitService } from "@/lib/rate-limit/service";
 import type { SessionBindingSnapshot } from "@/lib/redis/session-binding";
 import { SessionManager } from "@/lib/session-manager";
@@ -3946,7 +3950,9 @@ export class ProxyForwarder {
     };
 
     // ⭐ 获取 HTTP/2 全局开关设置
-    const enableHttp2 = await isHttp2Enabled();
+    const http2EnabledBySetting = await isHttp2Enabled();
+    let enableHttp2 = http2EnabledBySetting;
+    let http2Attempted = false;
 
     // ⭐ 应用代理配置（如果配置了）- 使用 Agent Pool 缓存连接
     // 注意：proxyConfig 与 directConnectionCacheKey 的声明保持在 try 外部，
@@ -3968,7 +3974,14 @@ export class ProxyForwarder {
     try {
       // ⭐ 把 agent 获取 & 配置日志放进 try 块，确保获取后到 fetch 之前任何异常
       // （例如 URL 解析失败）都会走 catch 的统一释放逻辑，避免泄漏 activeRequests。
+      enableHttp2 =
+        http2EnabledBySetting &&
+        !isHttp2TransportQuarantined({
+          targetUrl: proxyUrl,
+          proxyUrl: provider.proxyUrl,
+        });
       proxyConfig = await getProxyAgentForProvider(provider, proxyUrl, enableHttp2);
+      http2Attempted = enableHttp2 && (proxyConfig?.http2Enabled ?? true);
 
       if (proxyConfig) {
         init.dispatcher = proxyConfig.agent;
@@ -4284,9 +4297,13 @@ export class ProxyForwarder {
       // ⭐ HTTP/2 协议错误检测与透明回退
       // 场景：HTTP/2 连接失败（GOAWAY、RST_STREAM、PROTOCOL_ERROR 等）
       // 策略：透明回退到 HTTP/1.1，不触发供应商切换或熔断器
-      if (enableHttp2 && isHttp2Error(err)) {
+      if (http2Attempted && isHttp2Error(err)) {
         const http2CacheKey = proxyConfig?.cacheKey ?? directConnectionCacheKey;
         const http2DispatcherId = proxyConfig?.dispatcherId ?? directConnectionDispatcherId;
+        quarantineHttp2Transport({
+          targetUrl: proxyUrl,
+          proxyUrl: provider.proxyUrl,
+        });
         logger.warn("ProxyForwarder: HTTP/2 protocol error detected, falling back to HTTP/1.1", {
           providerId: provider.id,
           providerName: provider.name,
@@ -4295,6 +4312,7 @@ export class ProxyForwarder {
           errorName: err.name,
           errorMessage: err.message || "(empty message)",
           errorCode: err.code || "N/A",
+          h1OnlyQuarantine: true,
         });
 
         // 记录到决策链（标记为 HTTP/2 回退）

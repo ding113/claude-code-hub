@@ -1087,6 +1087,8 @@ const HTTP2_ERROR_PATTERNS = [
   "REFUSED_STREAM",
 ];
 
+const HTTP2_ERROR_CAUSE_MAX_DEPTH = 4;
+
 /**
  * 检测是否为 HTTP/2 协议错误
  *
@@ -1114,12 +1116,39 @@ const HTTP2_ERROR_PATTERNS = [
  * isHttp2Error(new Error('Connection refused')) // false
  */
 export function isHttp2Error(error: Error): boolean {
-  // 组合错误信息进行检测
-  const errorString = [error.name, error.message, (error as NodeJS.ErrnoException).code ?? ""]
-    .join(" ")
-    .toUpperCase();
+  const seen = new Set<object>();
+  let current: unknown = error;
 
-  return HTTP2_ERROR_PATTERNS.some((pattern) => errorString.includes(pattern.toUpperCase()));
+  for (let depth = 0; depth <= HTTP2_ERROR_CAUSE_MAX_DEPTH; depth += 1) {
+    if (current === null || (typeof current !== "object" && typeof current !== "function")) {
+      return false;
+    }
+
+    const currentObject = current as object;
+    if (seen.has(currentObject)) return false;
+    seen.add(currentObject);
+
+    const candidate = current as {
+      name?: unknown;
+      message?: unknown;
+      code?: unknown;
+      cause?: unknown;
+    };
+    const errorString = [candidate.name, candidate.message, candidate.code]
+      .filter(
+        (value): value is string | number => typeof value === "string" || typeof value === "number"
+      )
+      .join(" ")
+      .toUpperCase();
+
+    if (HTTP2_ERROR_PATTERNS.some((pattern) => errorString.includes(pattern.toUpperCase()))) {
+      return true;
+    }
+
+    current = candidate.cause;
+  }
+
+  return false;
 }
 
 /**

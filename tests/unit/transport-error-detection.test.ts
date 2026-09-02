@@ -83,6 +83,11 @@ describe("isTransportError", () => {
       expect(isTransportError(err)).toBe(true);
     });
 
+    it("should detect NGHTTP2_ENHANCE_YOUR_CALM in message", () => {
+      const err = new Error("Stream closed with error code NGHTTP2_ENHANCE_YOUR_CALM");
+      expect(isHttp2Error(err)).toBe(true);
+    });
+
     it("should detect GOAWAY errors", () => {
       const err = new Error("GOAWAY session");
       expect(isTransportError(err)).toBe(true);
@@ -113,6 +118,25 @@ describe("isTransportError", () => {
       const err = new Error("request failed");
       (err as Error & { cause: Error }).cause = cause;
       expect(isTransportError(err)).toBe(true);
+    });
+
+    it("should detect HTTP/2 protocol errors through a bounded cause chain", () => {
+      const root = new Error("Stream closed with error code NGHTTP2_ENHANCE_YOUR_CALM");
+      (root as NodeJS.ErrnoException).code = "ERR_HTTP2_STREAM_ERROR";
+      const middle = new Error("fetch failed", { cause: root });
+      const outer = new Error("request failed", { cause: middle });
+
+      expect(isHttp2Error(outer)).toBe(true);
+      expect(isTransportError(outer)).toBe(true);
+    });
+
+    it("should stop traversing cyclic cause chains", () => {
+      const first = new Error("request failed");
+      const second = new Error("retry wrapper");
+      (first as Error & { cause?: unknown }).cause = second;
+      (second as Error & { cause?: unknown }).cause = first;
+
+      expect(isHttp2Error(first)).toBe(false);
     });
   });
 });
