@@ -794,6 +794,347 @@ describe("F1 stream content gate x ProxyForwarder paths", () => {
       expect(failureEntry?.statusCode).toBe(400);
       expect(failureEntry?.reason).toBe("client_error_non_retryable");
     });
+
+    test("缺少 Content-Type 的 JSON 假 200 在 enforce 下被拦截并切换供应商", async () => {
+      const provider1 = createProvider({ id: 1, name: "codex-json-1", providerType: "codex" });
+      const provider2 = createProvider({ id: 2, name: "codex-json-2", providerType: "codex" });
+      const session = createSession();
+      configureCodexResponsesRequest(session);
+      session.setProvider(provider1);
+
+      mocks.pickRandomProviderWithExclusion.mockResolvedValueOnce(provider2);
+      const doForward = spyOnDoForward();
+      const headerlessJsonError = new Response(
+        new TextEncoder().encode(
+          JSON.stringify({ error: { type: "server_error", message: "upstream failed" } })
+        )
+      );
+      expect(headerlessJsonError.headers.get("content-type")).toBeNull();
+      doForward.mockResolvedValueOnce(headerlessJsonError);
+      doForward.mockImplementationOnce(async () =>
+        createSseResponse(OPENAI_RESPONSES_WINNER_FRAMES)
+      );
+
+      const response = await ProxyForwarder.send(session);
+
+      expect(await response.text()).toBe(OPENAI_RESPONSES_WINNER_FRAMES.join(""));
+      expect(doForward).toHaveBeenCalledTimes(2);
+      expect(mocks.recordFailure).toHaveBeenCalledWith(provider1.id, expect.any(Error));
+      expect(mocks.recordSuccess).not.toHaveBeenCalledWith(provider1.id);
+      expect(session.provider?.id).toBe(provider2.id);
+    });
+
+    test("Legacy Hedge 在 enforce 下拒绝缺头 JSON 并选择有效 Codex Responses 流", async () => {
+      const provider1 = createProvider({
+        id: 1,
+        name: "codex-hedge-json",
+        providerType: "codex",
+        firstByteTimeoutStreamingMs: 100,
+      });
+      const provider2 = createProvider({
+        id: 2,
+        name: "codex-hedge-sse",
+        providerType: "codex",
+        firstByteTimeoutStreamingMs: 100,
+      });
+      const session = createSession();
+      configureCodexResponsesRequest(session);
+      session.setProvider(provider1);
+
+      mocks.pickRandomProviderWithExclusion.mockResolvedValueOnce(provider2);
+      const doForward = spyOnDoForward();
+      doForward.mockImplementationOnce(async (attemptSession) => {
+        attachAttemptRuntime(attemptSession, {
+          clearResponseTimeout: vi.fn(),
+          releaseAgent: vi.fn(),
+        });
+        return new Response(
+          new TextEncoder().encode(
+            JSON.stringify({ error: { type: "server_error", message: "upstream failed" } })
+          )
+        );
+      });
+      doForward.mockImplementationOnce(async (attemptSession) => {
+        attachAttemptRuntime(attemptSession, {
+          clearResponseTimeout: vi.fn(),
+          releaseAgent: vi.fn(),
+        });
+        return createSseResponse(OPENAI_RESPONSES_WINNER_FRAMES);
+      });
+
+      const response = await ProxyForwarder.send(session);
+
+      expect(await response.text()).toBe(OPENAI_RESPONSES_WINNER_FRAMES.join(""));
+      expect(doForward).toHaveBeenCalledTimes(2);
+      expect(mocks.recordFailure).toHaveBeenCalledWith(provider1.id, expect.any(Error));
+      expect(session.provider?.id).toBe(provider2.id);
+    });
+
+    test.each(REPLAY_GATE_CASES)(
+      "enforce 下 Replay owner 拦截首内容前的 $name，并切换到成功供应商",
+      async (testCase) => {
+        const provider1 = createProvider({
+          id: 1,
+          name: "replay-p1",
+          providerType: testCase.providerType,
+        });
+        const provider2 = createProvider({
+          id: 2,
+          name: "replay-p2",
+          providerType: testCase.providerType,
+        });
+        const session = createSession();
+        session.setProvider(provider1);
+        attachReplayOwner(session, testCase);
+
+        mocks.pickRandomProviderWithExclusion.mockResolvedValueOnce(provider2);
+        const doForward = spyOnDoForward();
+        doForward.mockImplementationOnce(async () => createSseResponse(testCase.failedFrames()));
+        doForward.mockImplementationOnce(async () => createSseResponse(testCase.winnerFrames));
+
+        const response = await ProxyForwarder.send(session);
+        const text = await response.text();
+
+        expect(doForward).toHaveBeenCalledTimes(2);
+        expect((doForward.mock.calls[1] as unknown[])[1]).toMatchObject({ id: provider2.id });
+        expect(text).toBe(testCase.winnerFrames.join(""));
+        for (const marker of testCase.failedMarkers) {
+          expect(text).not.toContain(marker);
+        }
+        expect(mocks.recordFailure).toHaveBeenCalledWith(provider1.id, expect.any(Error));
+        expect(session.provider?.id).toBe(provider2.id);
+      }
+    );
+
+    test("Replay owner 在所有 precommit attempt 失败后立即释放所有权", async () => {
+      const provider = createProvider({ id: 1, name: "replay-only", providerType: "codex" });
+      const session = createSession();
+      session.setProvider(provider);
+      attachReplayOwner(session, REPLAY_GATE_CASES[0]);
+
+      mocks.pickRandomProviderWithExclusion.mockResolvedValueOnce(null);
+      const doForward = spyOnDoForward();
+      doForward.mockImplementationOnce(async () =>
+        createSseResponse(createOpenAiResponsesOverloadFrames())
+      );
+
+      await expect(ProxyForwarder.send(session)).rejects.toThrow();
+
+      expect(doForward).toHaveBeenCalledTimes(1);
+      expect(session.replayState).toBeNull();
+    });
+    test("Replay owner 将 OpenAI-compatible DeepSeek reasoning_content 视为首个有效内容", async () => {
+      const provider = createProvider({
+        id: 1,
+        name: "deepseek-reasoning",
+        providerType: "openai-compatible",
+      });
+      const session = createSession();
+      session.setProvider(provider);
+      attachReplayOwner(session, REPLAY_GATE_CASES[1]);
+
+      const reasoningFrames = Array.from({ length: 65 }, (_, index) =>
+        sseFrame(null, { choices: [{ delta: { reasoning_content: `reasoning step ${index}` } }] })
+      );
+      const doForward = spyOnDoForward();
+      doForward.mockImplementationOnce(async () => createSseResponse(reasoningFrames));
+
+      const response = await ProxyForwarder.send(session);
+      const text = await response.text();
+
+      expect(doForward).toHaveBeenCalledTimes(1);
+      expect(text).toBe(reasoningFrames.join(""));
+      expect(mocks.pickRandomProviderWithExclusion).not.toHaveBeenCalled();
+      expect(mocks.recordFailure).not.toHaveBeenCalled();
+    });
+
+    test.each(VALID_OPENAI_RESPONSES_STREAMS)(
+      "Replay owner 将 $name 视为有效内容，不触发 502/failover/熔断",
+      async ({ frames }) => {
+        const provider = createProvider({ id: 1, name: "responses-valid", providerType: "codex" });
+        const session = createSession();
+        session.setProvider(provider);
+        attachReplayOwner(session, REPLAY_GATE_CASES[0]);
+
+        const streamFrames = frames.slice();
+        const doForward = spyOnDoForward();
+        doForward.mockImplementationOnce(async () => createSseResponse(streamFrames));
+
+        const response = await ProxyForwarder.send(session);
+        const text = await response.text();
+
+        expect(response.status).toBe(200);
+        expect(text).toBe(streamFrames.join(""));
+        expect(doForward).toHaveBeenCalledTimes(1);
+        expect(mocks.pickRandomProviderWithExclusion).not.toHaveBeenCalled();
+        expect(mocks.recordFailure).not.toHaveBeenCalled();
+      }
+    );
+
+    test("enforce + 高并发模式：门控让位于 TTFB，内容帧到达前即向客户端提交", async () => {
+      const provider = createProvider({ id: 1, name: "high-concurrency" });
+      const session = createSession();
+      session.setProvider(provider);
+      session.setHighConcurrencyModeEnabled(true);
+
+      const encoder = new TextEncoder();
+      let releaseContent: () => void = () => {};
+      const contentHeld = new Promise<void>((resolve) => {
+        releaseContent = resolve;
+      });
+      const upstream = new ReadableStream<Uint8Array>({
+        async start(controller) {
+          controller.enqueue(encoder.encode(MESSAGE_START_FRAME));
+          await contentHeld;
+          controller.enqueue(encoder.encode(CONTENT_DELTA_FRAME));
+          controller.enqueue(encoder.encode(MESSAGE_STOP_FRAME));
+          controller.close();
+        },
+      });
+      const doForward = spyOnDoForward();
+      doForward.mockImplementationOnce(
+        async () =>
+          new Response(upstream, { status: 200, headers: { "content-type": "text/event-stream" } })
+      );
+
+      const sendPromise = ProxyForwarder.send(session);
+      const settledBeforeContent = await Promise.race([
+        sendPromise.then(() => true),
+        new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 100)),
+      ]);
+
+      releaseContent();
+      const response = await sendPromise;
+      const text = await response.text();
+
+      expect(settledBeforeContent).toBe(true);
+      expect(text).toBe([MESSAGE_START_FRAME, CONTENT_DELTA_FRAME, MESSAGE_STOP_FRAME].join(""));
+      expect(doForward).toHaveBeenCalledTimes(1);
+    });
+
+    test("高并发模式下缺少 Content-Type 的 Codex Responses 流也不等待首个内容帧", async () => {
+      const provider = createProvider({
+        id: 1,
+        name: "high-concurrency-codex",
+        providerType: "codex",
+      });
+      const session = createSession();
+      configureCodexResponsesRequest(session);
+      session.setProvider(provider);
+      session.setHighConcurrencyModeEnabled(true);
+
+      const encoder = new TextEncoder();
+      let releaseContent: () => void = () => {};
+      const contentHeld = new Promise<void>((resolve) => {
+        releaseContent = resolve;
+      });
+      const frames = [
+        sseFrame("response.created", {
+          type: "response.created",
+          response: { id: "resp_high_concurrency", status: "in_progress" },
+        }),
+        sseFrame("response.output_text.delta", {
+          type: "response.output_text.delta",
+          delta: "Hello",
+        }),
+        sseFrame("response.completed", {
+          type: "response.completed",
+          response: { id: "resp_high_concurrency", status: "completed" },
+        }),
+      ];
+      const upstream = new ReadableStream<Uint8Array>({
+        async start(controller) {
+          controller.enqueue(encoder.encode(frames[0]));
+          await contentHeld;
+          controller.enqueue(encoder.encode(frames[1]));
+          controller.enqueue(encoder.encode(frames[2]));
+          controller.close();
+        },
+      });
+      const doForward = spyOnDoForward();
+      doForward.mockImplementationOnce(async () => new Response(upstream, { status: 200 }));
+
+      const sendPromise = ProxyForwarder.send(session);
+      const response = await Promise.race([
+        sendPromise,
+        new Promise<never>((_, reject) =>
+          setTimeout(
+            () => reject(new Error("high-concurrency Codex stream waited for content")),
+            1_000
+          )
+        ),
+      ]).finally(() => {
+        releaseContent();
+      });
+
+      expect(await response.text()).toBe(frames.join(""));
+      expect(doForward).toHaveBeenCalledTimes(1);
+      expect(mocks.pickRandomProviderWithExclusion).not.toHaveBeenCalled();
+    });
+
+    test("高并发 Legacy Hedge 下缺少 Content-Type 的 Codex Responses 流也立即提交首字节", async () => {
+      const provider = createProvider({
+        id: 1,
+        name: "high-concurrency-codex-hedge",
+        providerType: "codex",
+        firstByteTimeoutStreamingMs: 50,
+      });
+      const session = createSession();
+      configureCodexResponsesRequest(session);
+      session.setProvider(provider);
+      session.setHighConcurrencyModeEnabled(true);
+
+      const encoder = new TextEncoder();
+      let releaseContent: () => void = () => {};
+      const contentHeld = new Promise<void>((resolve) => {
+        releaseContent = resolve;
+      });
+      const frames = [
+        sseFrame("response.created", {
+          type: "response.created",
+          response: { id: "resp_high_concurrency_hedge", status: "in_progress" },
+        }),
+        sseFrame("response.output_text.delta", {
+          type: "response.output_text.delta",
+          delta: "Hello",
+        }),
+        sseFrame("response.completed", {
+          type: "response.completed",
+          response: { id: "resp_high_concurrency_hedge", status: "completed" },
+        }),
+      ];
+      const upstream = new ReadableStream<Uint8Array>({
+        async start(controller) {
+          controller.enqueue(encoder.encode(frames[0]));
+          await contentHeld;
+          controller.enqueue(encoder.encode(frames[1]));
+          controller.enqueue(encoder.encode(frames[2]));
+          controller.close();
+        },
+      });
+      const doForward = spyOnDoForward();
+      doForward.mockImplementationOnce(async (attemptSession) => {
+        attachAttemptRuntime(attemptSession, {
+          clearResponseTimeout: vi.fn(),
+          releaseAgent: vi.fn(),
+        });
+        return new Response(upstream, { status: 200 });
+      });
+
+      const sendPromise = ProxyForwarder.send(session);
+      const response = await Promise.race([
+        sendPromise,
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error("high-concurrency hedge waited for content")), 1_000)
+        ),
+      ]).finally(() => {
+        releaseContent();
+      });
+
+      expect(await response.text()).toBe(frames.join(""));
+      expect(doForward).toHaveBeenCalledTimes(1);
+      expect(mocks.pickRandomProviderWithExclusion).not.toHaveBeenCalled();
+    });
   });
 
   describe("STREAM_GATE_MODE=off", () => {
@@ -801,23 +1142,21 @@ describe("F1 stream content gate x ProxyForwarder paths", () => {
       envControl.streamGateMode = "off";
     });
 
-    test("缺少 Content-Type 的 Codex Responses 流在 EOF 前返回且不被克隆检查", async () => {
+    test("缺少 Content-Type 的 Codex Responses 流在首个内容帧前返回且不被克隆检查", async () => {
       const provider = createProvider({ id: 1, name: "codex-headerless", providerType: "codex" });
       const session = createSession();
       configureCodexResponsesRequest(session);
       session.setProvider(provider);
 
       const encoder = new TextEncoder();
-      const firstFrames = [
-        sseFrame("response.created", {
-          type: "response.created",
-          response: { id: "resp_headerless", status: "in_progress" },
-        }),
-        sseFrame("response.output_text.delta", {
-          type: "response.output_text.delta",
-          delta: "hello",
-        }),
-      ].join("");
+      const firstFrame = sseFrame("response.created", {
+        type: "response.created",
+        response: { id: "resp_headerless", status: "in_progress" },
+      });
+      const contentFrame = sseFrame("response.output_text.delta", {
+        type: "response.output_text.delta",
+        delta: "hello",
+      });
       const completedFrame = sseFrame("response.completed", {
         type: "response.completed",
         response: { id: "resp_headerless", status: "completed" },
@@ -827,7 +1166,7 @@ describe("F1 stream content gate x ProxyForwarder paths", () => {
         new ReadableStream<Uint8Array>({
           start(controller) {
             upstreamController = controller;
-            controller.enqueue(encoder.encode(firstFrames));
+            controller.enqueue(encoder.encode(firstFrame));
           },
         })
       );
@@ -840,19 +1179,20 @@ describe("F1 stream content gate x ProxyForwarder paths", () => {
         ProxyForwarder.send(session),
         new Promise<never>((_, reject) => {
           timeout = setTimeout(
-            () => reject(new Error("ProxyForwarder.send waited for headerless stream EOF")),
+            () => reject(new Error("ProxyForwarder.send waited for headerless stream content")),
             1_000
           );
         }),
       ]).finally(() => {
         if (timeout) clearTimeout(timeout);
+        upstreamController?.enqueue(encoder.encode(contentFrame));
         upstreamController?.enqueue(encoder.encode(completedFrame));
         upstreamController?.close();
       });
 
       expect(upstreamResponse.headers.get("content-type")).toBeNull();
       expect(cloneSpy).not.toHaveBeenCalled();
-      expect(await response.text()).toBe(firstFrames + completedFrame);
+      expect(await response.text()).toBe(firstFrame + contentFrame + completedFrame);
       expect(mocks.recordSuccess).not.toHaveBeenCalled();
     });
 
@@ -917,36 +1257,28 @@ describe("F1 stream content gate x ProxyForwarder paths", () => {
       expect(mocks.pickRandomProviderWithExclusion).not.toHaveBeenCalled();
     });
 
-    test("缺少 Content-Type 的 JSON 假 200 在提交前被拦截并切换供应商", async () => {
-      const provider1 = createProvider({ id: 1, name: "codex-json-1", providerType: "codex" });
-      const provider2 = createProvider({ id: 2, name: "codex-json-2", providerType: "codex" });
+    test("门控关闭时缺少 Content-Type 的 JSON 假 200 立即透传，不再等待预提交嗅探", async () => {
+      const provider = createProvider({ id: 1, name: "codex-json", providerType: "codex" });
       const session = createSession();
       configureCodexResponsesRequest(session);
-      session.setProvider(provider1);
+      session.setProvider(provider);
 
-      mocks.pickRandomProviderWithExclusion.mockResolvedValueOnce(provider2);
       const doForward = spyOnDoForward();
-      const headerlessJsonError = new Response(
-        new TextEncoder().encode(
-          JSON.stringify({ error: { type: "server_error", message: "upstream failed" } })
-        )
-      );
+      const body = JSON.stringify({ error: { type: "server_error", message: "upstream failed" } });
+      const headerlessJsonError = new Response(new TextEncoder().encode(body));
       expect(headerlessJsonError.headers.get("content-type")).toBeNull();
       doForward.mockResolvedValueOnce(headerlessJsonError);
-      doForward.mockImplementationOnce(async () =>
-        createSseResponse(OPENAI_RESPONSES_WINNER_FRAMES)
-      );
 
       const response = await ProxyForwarder.send(session);
 
-      expect(await response.text()).toBe(OPENAI_RESPONSES_WINNER_FRAMES.join(""));
-      expect(doForward).toHaveBeenCalledTimes(2);
-      expect(mocks.recordFailure).toHaveBeenCalledWith(provider1.id, expect.any(Error));
-      expect(mocks.recordSuccess).not.toHaveBeenCalledWith(provider1.id);
-      expect(session.provider?.id).toBe(provider2.id);
+      expect(await response.text()).toBe(body);
+      expect(doForward).toHaveBeenCalledTimes(1);
+      expect(mocks.recordFailure).not.toHaveBeenCalled();
+      expect(mocks.pickRandomProviderWithExclusion).not.toHaveBeenCalled();
+      expect(session.provider?.id).toBe(provider.id);
     });
 
-    test("raw passthrough 的缺头 JSON 在补 SSE 头前仍执行有界嗅探", async () => {
+    test("raw passthrough 的缺头 JSON 在门控关闭时立即透传", async () => {
       const provider = createProvider({ id: 1, name: "codex-compact", providerType: "codex" });
       const session = createSession();
       configureCodexResponsesRequest(session);
@@ -954,41 +1286,30 @@ describe("F1 stream content gate x ProxyForwarder paths", () => {
       session.setProvider(provider);
 
       const doForward = spyOnDoForward();
-      const headerlessJson = new Response(
-        new TextEncoder().encode(
-          JSON.stringify({ error: { type: "server_error", message: "upstream failed" } })
-        )
-      );
+      const body = JSON.stringify({ error: { type: "server_error", message: "upstream failed" } });
+      const headerlessJson = new Response(new TextEncoder().encode(body));
       expect(headerlessJson.headers.get("content-type")).toBeNull();
       doForward.mockResolvedValueOnce(headerlessJson);
 
-      await expect(ProxyForwarder.send(session)).rejects.toThrow(
-        /Stream content gate rejected upstream before first valid content/
-      );
+      const response = await ProxyForwarder.send(session);
 
+      expect(await response.text()).toBe(body);
       expect(doForward).toHaveBeenCalledTimes(1);
       expect(mocks.pickRandomProviderWithExclusion).not.toHaveBeenCalled();
       expect(mocks.recordSuccess).not.toHaveBeenCalled();
     });
 
-    test("Legacy Hedge 的缺头 JSON 不会抢先成为 Codex Responses 流赢家", async () => {
-      const provider1 = createProvider({
+    test("Legacy Hedge 在门控关闭时让缺头 JSON 以首字节成为赢家", async () => {
+      const provider = createProvider({
         id: 1,
         name: "codex-hedge-json",
         providerType: "codex",
         firstByteTimeoutStreamingMs: 100,
       });
-      const provider2 = createProvider({
-        id: 2,
-        name: "codex-hedge-sse",
-        providerType: "codex",
-        firstByteTimeoutStreamingMs: 100,
-      });
       const session = createSession();
       configureCodexResponsesRequest(session);
-      session.setProvider(provider1);
+      session.setProvider(provider);
 
-      mocks.pickRandomProviderWithExclusion.mockResolvedValueOnce(provider2);
       const doForward = spyOnDoForward();
       doForward.mockImplementationOnce(async (attemptSession) => {
         attachAttemptRuntime(attemptSession, {
@@ -1001,20 +1322,14 @@ describe("F1 stream content gate x ProxyForwarder paths", () => {
           )
         );
       });
-      doForward.mockImplementationOnce(async (attemptSession) => {
-        attachAttemptRuntime(attemptSession, {
-          clearResponseTimeout: vi.fn(),
-          releaseAgent: vi.fn(),
-        });
-        return createSseResponse(OPENAI_RESPONSES_WINNER_FRAMES);
-      });
-
+      const body = JSON.stringify({ error: { type: "server_error", message: "upstream failed" } });
       const response = await ProxyForwarder.send(session);
 
-      expect(await response.text()).toBe(OPENAI_RESPONSES_WINNER_FRAMES.join(""));
-      expect(doForward).toHaveBeenCalledTimes(2);
-      expect(mocks.recordFailure).toHaveBeenCalledWith(provider1.id, expect.any(Error));
-      expect(session.provider?.id).toBe(provider2.id);
+      expect(await response.text()).toBe(body);
+      expect(doForward).toHaveBeenCalledTimes(1);
+      expect(mocks.recordFailure).not.toHaveBeenCalled();
+      expect(mocks.pickRandomProviderWithExclusion).not.toHaveBeenCalled();
+      expect(session.provider?.id).toBe(provider.id);
     });
 
     test.each(["text/html", "application/xhtml+xml"])(
@@ -1083,105 +1398,176 @@ describe("F1 stream content gate x ProxyForwarder paths", () => {
     });
 
     test.each(REPLAY_GATE_CASES)(
-      "Replay owner 仍拦截首内容前的 $name，并切换到成功供应商",
+      "门控关闭时 Replay owner 与普通请求一致：$name 原样透传，不 failover",
       async (testCase) => {
-        const provider1 = createProvider({
+        const provider = createProvider({
           id: 1,
           name: "replay-p1",
           providerType: testCase.providerType,
         });
-        const provider2 = createProvider({
-          id: 2,
-          name: "replay-p2",
-          providerType: testCase.providerType,
-        });
-        const session = createSession();
-        session.setProvider(provider1);
-        attachReplayOwner(session, testCase);
-
-        mocks.pickRandomProviderWithExclusion.mockResolvedValueOnce(provider2);
-        const doForward = spyOnDoForward();
-        doForward.mockImplementationOnce(async () => createSseResponse(testCase.failedFrames()));
-        doForward.mockImplementationOnce(async () => createSseResponse(testCase.winnerFrames));
-
-        const response = await ProxyForwarder.send(session);
-        const text = await response.text();
-
-        expect(doForward).toHaveBeenCalledTimes(2);
-        expect((doForward.mock.calls[1] as unknown[])[1]).toMatchObject({ id: provider2.id });
-        expect(text).toBe(testCase.winnerFrames.join(""));
-        for (const marker of testCase.failedMarkers) {
-          expect(text).not.toContain(marker);
-        }
-        expect(mocks.recordFailure).toHaveBeenCalledWith(provider1.id, expect.any(Error));
-        expect(session.provider?.id).toBe(provider2.id);
-      }
-    );
-
-    test("Replay owner 将 OpenAI-compatible DeepSeek reasoning_content 视为首个有效内容", async () => {
-      const provider = createProvider({
-        id: 1,
-        name: "deepseek-reasoning",
-        providerType: "openai-compatible",
-      });
-      const session = createSession();
-      session.setProvider(provider);
-      attachReplayOwner(session, REPLAY_GATE_CASES[1]);
-
-      const reasoningFrames = Array.from({ length: 65 }, (_, index) =>
-        sseFrame(null, { choices: [{ delta: { reasoning_content: `reasoning step ${index}` } }] })
-      );
-      const doForward = spyOnDoForward();
-      doForward.mockImplementationOnce(async () => createSseResponse(reasoningFrames));
-
-      const response = await ProxyForwarder.send(session);
-      const text = await response.text();
-
-      expect(doForward).toHaveBeenCalledTimes(1);
-      expect(text).toBe(reasoningFrames.join(""));
-      expect(mocks.pickRandomProviderWithExclusion).not.toHaveBeenCalled();
-      expect(mocks.recordFailure).not.toHaveBeenCalled();
-    });
-
-    test.each(VALID_OPENAI_RESPONSES_STREAMS)(
-      "Replay owner 将 $name 视为有效内容，不触发 502/failover/熔断",
-      async ({ frames }) => {
-        const provider = createProvider({ id: 1, name: "responses-valid", providerType: "codex" });
         const session = createSession();
         session.setProvider(provider);
-        attachReplayOwner(session, REPLAY_GATE_CASES[0]);
+        attachReplayOwner(session, testCase);
 
-        const streamFrames = frames.slice();
+        const failedFrames = testCase.failedFrames();
         const doForward = spyOnDoForward();
-        doForward.mockImplementationOnce(async () => createSseResponse(streamFrames));
+        doForward.mockImplementationOnce(async () => createSseResponse(failedFrames));
 
         const response = await ProxyForwarder.send(session);
         const text = await response.text();
 
-        expect(response.status).toBe(200);
-        expect(text).toBe(streamFrames.join(""));
+        // 坏流由 response-handler 的协议观察器事后 abort spool（条目不发布），
+        // 门控关闭时不再用「零字节 failover」换取首字节延迟。
         expect(doForward).toHaveBeenCalledTimes(1);
+        expect(text).toBe(failedFrames.join(""));
         expect(mocks.pickRandomProviderWithExclusion).not.toHaveBeenCalled();
         expect(mocks.recordFailure).not.toHaveBeenCalled();
       }
     );
 
-    test("Replay owner 在所有 precommit attempt 失败后立即释放所有权", async () => {
-      const provider = createProvider({ id: 1, name: "replay-only", providerType: "codex" });
+    test("Legacy Hedge 的 Replay owner 在门控关闭时同样以首字节判定赢家", async () => {
+      const provider = createProvider({
+        id: 1,
+        name: "replay-hedge-ttfb",
+        firstByteTimeoutStreamingMs: 50,
+      });
       const session = createSession();
       session.setProvider(provider);
-      attachReplayOwner(session, REPLAY_GATE_CASES[0]);
+      attachReplayOwner(session, REPLAY_GATE_CASES[1]);
 
-      mocks.pickRandomProviderWithExclusion.mockResolvedValueOnce(null);
+      const encoder = new TextEncoder();
+      let releaseContent: () => void = () => {};
+      const contentHeld = new Promise<void>((resolve) => {
+        releaseContent = resolve;
+      });
       const doForward = spyOnDoForward();
-      doForward.mockImplementationOnce(async () =>
-        createSseResponse(createOpenAiResponsesOverloadFrames())
+      doForward.mockImplementationOnce(async (attemptSession) => {
+        attachAttemptRuntime(attemptSession, {
+          clearResponseTimeout: vi.fn(),
+          releaseAgent: vi.fn(),
+        });
+        return new Response(
+          new ReadableStream<Uint8Array>({
+            async start(controller) {
+              controller.enqueue(encoder.encode(MESSAGE_START_FRAME));
+              await contentHeld;
+              controller.enqueue(encoder.encode(CONTENT_DELTA_FRAME));
+              controller.enqueue(encoder.encode(MESSAGE_STOP_FRAME));
+              controller.close();
+            },
+          }),
+          { status: 200, headers: { "content-type": "text/event-stream" } }
+        );
+      });
+
+      const sendPromise = ProxyForwarder.send(session);
+      const settledBeforeContent = await Promise.race([
+        sendPromise.then(() => true),
+        new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 100)),
+      ]);
+
+      releaseContent();
+      const response = await sendPromise;
+      const text = await response.text();
+
+      expect(settledBeforeContent).toBe(true);
+      expect(text).toBe([MESSAGE_START_FRAME, CONTENT_DELTA_FRAME, MESSAGE_STOP_FRAME].join(""));
+      expect(doForward).toHaveBeenCalledTimes(1);
+    });
+
+    test("Replay owner 在门控关闭时不扣留首字节：内容帧到达前即向客户端提交", async () => {
+      const provider = createProvider({ id: 1, name: "replay-ttfb" });
+      const session = createSession();
+      session.setProvider(provider);
+      attachReplayOwner(session, REPLAY_GATE_CASES[1]);
+
+      const encoder = new TextEncoder();
+      let releaseContent: () => void = () => {};
+      const contentHeld = new Promise<void>((resolve) => {
+        releaseContent = resolve;
+      });
+      const upstream = new ReadableStream<Uint8Array>({
+        async start(controller) {
+          // 上游立刻吐出中性前缀帧，首个内容帧被人为推迟
+          controller.enqueue(encoder.encode(MESSAGE_START_FRAME));
+          await contentHeld;
+          controller.enqueue(encoder.encode(CONTENT_DELTA_FRAME));
+          controller.enqueue(encoder.encode(MESSAGE_STOP_FRAME));
+          controller.close();
+        },
+      });
+      const doForward = spyOnDoForward();
+      doForward.mockImplementationOnce(
+        async () =>
+          new Response(upstream, {
+            status: 200,
+            headers: { "content-type": "text/event-stream" },
+          })
       );
 
-      await expect(ProxyForwarder.send(session)).rejects.toThrow();
+      const sendPromise = ProxyForwarder.send(session);
+      const settledBeforeContent = await Promise.race([
+        sendPromise.then(() => true),
+        new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 100)),
+      ]);
 
+      releaseContent();
+      const response = await sendPromise;
+      const text = await response.text();
+
+      expect(settledBeforeContent).toBe(true);
+      expect(text).toBe([MESSAGE_START_FRAME, CONTENT_DELTA_FRAME, MESSAGE_STOP_FRAME].join(""));
       expect(doForward).toHaveBeenCalledTimes(1);
-      expect(session.replayState).toBeNull();
+    });
+  });
+
+  describe("STREAM_GATE_MODE=shadow", () => {
+    beforeEach(() => {
+      envControl.streamGateMode = "shadow";
+    });
+
+    test("普通 SSE 在 shadow 模式下内容帧到达前即向客户端提交", async () => {
+      const provider = createProvider({ id: 1, name: "shadow-ttfb" });
+      const session = createSession();
+      session.setProvider(provider);
+
+      const encoder = new TextEncoder();
+      let releaseContent: () => void = () => {};
+      const contentHeld = new Promise<void>((resolve) => {
+        releaseContent = resolve;
+      });
+      const frames = [MESSAGE_START_FRAME, CONTENT_DELTA_FRAME, MESSAGE_STOP_FRAME];
+      const upstream = new ReadableStream<Uint8Array>({
+        async start(controller) {
+          controller.enqueue(encoder.encode(frames[0]));
+          await contentHeld;
+          controller.enqueue(encoder.encode(frames[1]));
+          controller.enqueue(encoder.encode(frames[2]));
+          controller.close();
+        },
+      });
+      const doForward = spyOnDoForward();
+      doForward.mockImplementationOnce(
+        async () =>
+          new Response(upstream, {
+            status: 200,
+            headers: { "content-type": "text/event-stream" },
+          })
+      );
+
+      const sendPromise = ProxyForwarder.send(session);
+      const response = await Promise.race([
+        sendPromise,
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error("shadow stream waited for content")), 1_000)
+        ),
+      ]).finally(() => {
+        releaseContent();
+      });
+
+      expect(await response.text()).toBe(frames.join(""));
+      expect(doForward).toHaveBeenCalledTimes(1);
+      expect(mocks.pickRandomProviderWithExclusion).not.toHaveBeenCalled();
     });
   });
 });

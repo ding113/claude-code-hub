@@ -12256,7 +12256,7 @@ export interface operations {
                         /** @description Public status aggregation interval in minutes. */
                         publicStatusAggregationIntervalMinutes: number;
                         /**
-                         * @description Stream content gate mode for ordinary requests: buffer until the first valid content frame and fail over on error or empty streams (enforce), observe divergence only (shadow), or disable (off). Replay owners always retain the pre-content safety gate.
+                         * @description Stream content gate mode for ordinary requests: buffer until the first valid content frame and fail over on error or empty streams (enforce), observe divergence only (shadow), or disable (off). Shadow and off deliver the first upstream byte immediately, including for replay owners; high-concurrency mode is treated as off.
                          * @enum {string}
                          */
                         streamGateMode: "off" | "shadow" | "enforce";
@@ -12546,7 +12546,7 @@ export interface operations {
                     /** @description Public status aggregation interval in minutes. */
                     publicStatusAggregationIntervalMinutes?: number;
                     /**
-                     * @description Stream content gate mode for ordinary requests: buffer until the first valid content frame and fail over on error or empty streams (enforce), observe divergence only (shadow), or disable (off). Replay owners always retain the pre-content safety gate.
+                     * @description Stream content gate mode for ordinary requests: buffer until the first valid content frame and fail over on error or empty streams (enforce), observe divergence only (shadow), or disable (off). Shadow and off deliver the first upstream byte immediately, including for replay owners; high-concurrency mode is treated as off.
                      * @enum {string}
                      */
                     streamGateMode?: "off" | "shadow" | "enforce";
@@ -12711,7 +12711,7 @@ export interface operations {
                         /** @description Public status aggregation interval in minutes. */
                         publicStatusAggregationIntervalMinutes: number;
                         /**
-                         * @description Stream content gate mode for ordinary requests: buffer until the first valid content frame and fail over on error or empty streams (enforce), observe divergence only (shadow), or disable (off). Replay owners always retain the pre-content safety gate.
+                         * @description Stream content gate mode for ordinary requests: buffer until the first valid content frame and fail over on error or empty streams (enforce), observe divergence only (shadow), or disable (off). Shadow and off deliver the first upstream byte immediately, including for replay owners; high-concurrency mode is treated as off.
                          * @enum {string}
                          */
                         streamGateMode: "off" | "shadow" | "enforce";

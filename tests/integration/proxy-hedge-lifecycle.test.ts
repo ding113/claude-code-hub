@@ -721,6 +721,7 @@ describe("proxy hedge transport/lifecycle integration (persistence and control-p
       // Given: Discovery has two Codex attempts and only the alternative emits the real fixture.
       now.mockReturnValue(10_000);
       state.discoveryEnabled = true;
+      state.streamGateMode = "enforce";
       const initialProvider = createProvider(1, loser.baseUrl, 0);
       initialProvider.providerType = "codex";
       const winningProvider = createProvider(2, winner.baseUrl, 0);
@@ -1018,12 +1019,15 @@ describe("proxy hedge transport/lifecycle integration (persistence and control-p
 
       const forwarded = ProxyForwarder.send(session);
       await Promise.all([loser.response, winner.response]);
+      await winner.write(
+        'event: message_start\ndata: {"type":"message_start","message":{"id":"msg_winner"}}\n\n'
+      );
+
+      const downstream = await ProxyResponseHandler.dispatch(session, await forwarded);
       await winner.send(
         'event: content_block_delta\ndata: {"type":"content_block_delta","delta":{"type":"text_delta","text":"winner"}}\n\n' +
           'event: message_stop\ndata: {"type":"message_stop"}\n\n'
       );
-
-      const downstream = await ProxyResponseHandler.dispatch(session, await forwarded);
       await expect(downstream.text()).resolves.toContain("winner");
       await settleTasks();
       await loser.terminated;
