@@ -138,8 +138,8 @@ import {
 import {
   concatChunks,
   isRequestScopedGateFailure,
+  isStreamGatePrecommitActive,
   resolveStreamGateCaps,
-  resolveStreamGateMode,
   runStreamContentGate,
   type StreamGateOptions,
   type StreamGateResult,
@@ -2023,7 +2023,7 @@ export class ProxyForwarder {
           // 解决：Forwarder 只负责尽快把 Response 返回给下游开始透传，
           // 把最终成功/失败结算延迟到 ResponseHandler：等 SSE 正常结束后再基于最终 body 补充检查并更新内部状态。
           if (isSSE) {
-            // ========== F1 流式内容门控（enforce 或 Replay owner）==========
+            // ========== F1 流式内容门控（仅 enforce 且非高并发模式）==========
             // 在向客户端提交响应前等待首个有效内容帧：
             // - 中性前缀（ping/metadata/usage-only）缓冲后随提交一并冲刷；
             // - error/malformed/空流在此抛错 -> 外层 catch 归类 -> 换供应商（客户端零字节）；
@@ -2031,14 +2031,11 @@ export class ProxyForwarder {
             //   在门控期间继续生效，天然升级为「首个有效内容超时」。
             let streamingResponse = response;
             let gateChainAudit: ProviderChainItem["streamGate"];
-            const gateMode = resolveStreamGateMode();
             // Missing or misleading MIME is not enough to distinguish SSE from a headerless
-            // JSON fake-200. Always use the bounded precommit gate for this compatibility path,
-            // even when ordinary stream gating is off or shadow-only.
-            const shouldRunPrecommitGate =
-              gateMode === "enforce" ||
-              session.replayState?.role === "owner" ||
-              forceCodexResponsesStream;
+            // JSON fake-200. The stream gate still follows the configured TTFB policy: off,
+            // shadow, and high-concurrency paths must return the first upstream byte directly.
+            const highConcurrencyMode = session.isHighConcurrencyModeEnabled();
+            const shouldRunPrecommitGate = isStreamGatePrecommitActive(highConcurrencyMode);
             if (
               shouldRunPrecommitGate &&
               response.body &&
@@ -5323,17 +5320,15 @@ export class ProxyForwarder {
           attempt.reader = response.body.getReader();
 
           try {
-            // F1 门控（enforce 或 Replay owner）：胜者判定从「首个非空字节」升级为
+            // F1 门控（仅 enforce 且非高并发模式）：胜者判定从「首个非空字节」升级为
             // 「首个有效内容帧」。
             // 级联阈值计时器保持不动——内容慢的 attempt 不提交，自动触发下一候选竞速。
             const forceCodexResponsesStream = shouldForceCodexResponsesStreamHandling(
               attempt.session,
               response
             );
-            const shouldRunHedgePrecommitGate =
-              resolveStreamGateMode() === "enforce" ||
-              attempt.session.replayState?.role === "owner" ||
-              forceCodexResponsesStream;
+            const highConcurrencyMode = attempt.session.isHighConcurrencyModeEnabled();
+            const shouldRunHedgePrecommitGate = isStreamGatePrecommitActive(highConcurrencyMode);
             const hedgeGateFamily =
               shouldRunHedgePrecommitGate &&
               (attempt.session.getEndpointPolicy().kind !== "raw_passthrough" ||
@@ -5357,7 +5352,7 @@ export class ProxyForwarder {
                   },
                   // 竞速路径首字节计时器已在响应头到达时清除；门控等待期沿用供应商静默超时
                   idleTimeoutMs: attempt.provider.streamingIdleTimeoutMs,
-                  captureCommitMarker: !session.isHighConcurrencyModeEnabled(),
+                  captureCommitMarker: !highConcurrencyMode,
                   prebufferBudget: getStreamGatePrebufferBudget(),
                   onBudgetWaitStart: () => {
                     pauseAttemptThreshold(attempt);
@@ -6142,6 +6137,9 @@ export class ProxyForwarder {
     const racingDeadlineAt = requestStartedAt + totalTimeoutMs;
     const protocol = ProxyForwarder.discoveryProtocol(session);
     const rawCrossProviderFallbackEnabled = session.isRawCrossProviderFallbackEnabled();
+    const discoveryPrecommitActive = isStreamGatePrecommitActive(
+      session.isHighConcurrencyModeEnabled()
+    );
     // Discovery uses the same opt-in loser billing switch as legacy Hedge. The
     // attempt is only kept alive after a winner commits when it already has a
     // protocol-valid prefix and a readable response body (see cancelLosers).
@@ -7272,11 +7270,11 @@ export class ProxyForwarder {
             // 首字节时刻先挂在 attempt 上；DiscoveryValidityParser 的 ready 判定同样基于内容，
             // 不在此记录会让 discovery 模式的 TTFB 恒等于 TTFT。
             attempt.firstByteAt ??= Date.now();
-            const validity = attempt.parser.push(item.value);
+            const validity = discoveryPrecommitActive ? attempt.parser.push(item.value) : null;
             // A single read can contain both deliverable content and the
             // protocol terminator. Terminal is only invalid when no content
             // was observed; otherwise the buffered candidate is complete.
-            if (validity.limitExceeded) {
+            if (validity?.limitExceeded) {
               discoveryMetrics.event("parser_limit", {
                 attemptId: id,
                 providerId: provider.id,
@@ -7284,10 +7282,10 @@ export class ProxyForwarder {
               });
               throw new DiscoveryValidityLimitError();
             }
-            if (validity.error || (validity.terminal && !validity.ready))
+            if (validity && (validity.error || (validity.terminal && !validity.ready)))
               throw new ProxyError("Invalid upstream discovery response", 502);
             attempt.chunks.append(item.value);
-            if (!validity.ready) continue;
+            if (discoveryPrecommitActive && !validity?.ready) continue;
             attempt.ready = true;
             session.appendRoutingTraceEvent({
               type: "attempt_ready",
@@ -7335,7 +7333,7 @@ export class ProxyForwarder {
               await commit(attempt);
             // Do not issue another reader request after a complete candidate;
             // the buffered stream is already sufficient for later promotion.
-            if (validity.terminal) return;
+            if (validity?.terminal) return;
             // The coordinator owns priority gating. A ready lower-priority
             // candidate stays held while a higher tier is still pending. Stop
             // reading so later chunks are not consumed before promotion.

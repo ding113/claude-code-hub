@@ -166,6 +166,18 @@ export function resolveStreamGateMode(): StreamGateMode {
   }
 }
 
+/**
+ * 是否允许在提交前扣留客户端字节。
+ *
+ * 只有 enforce 且未开启高并发模式时才扣留；off / shadow / 高并发一律 TTFB 优先，
+ * 首个非空上游字节直达客户端。Replay owner 也不例外：坏流由 response-handler 的
+ * StreamProtocolObserver 事后 abort（条目不发布），不再用「零字节 failover」换取
+ * 首字节延迟——那会让关闭门控的部署仍然按首个内容帧交付。
+ */
+export function isStreamGatePrecommitActive(highConcurrencyMode: boolean): boolean {
+  return resolveStreamGateMode() === "enforce" && !highConcurrencyMode;
+}
+
 export interface StreamGateCaps {
   prebufferEventCap: number;
   prebufferByteCap: number;
