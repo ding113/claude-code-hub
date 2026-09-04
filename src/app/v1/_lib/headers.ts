@@ -31,7 +31,7 @@ export function looksLikeAnthropicProxyUrl(providerUrl?: string | null): boolean
     }
 
     // 只匹配常见 relay/proxy 标识，避免把普通业务域名误识别成代理层。
-    return /(?:^|[.-])(proxy|relay|gateway|router|worker|openrouter|api2d|oaipro)(?:[.-]|$)/i.test(
+    return /(?:^|[.-])(proxy|relay|gateway|router|worker|openrouter|orcarouter|api2d|oaipro)(?:[.-]|$)/i.test(
       hostname
     );
   } catch {

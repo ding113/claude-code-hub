@@ -73,6 +73,7 @@ const DETAIL_SCORE_OBJECT_FIELDS = ["long_context_pricing"] as const;
 
 const DETAIL_TIE_BREAK_ORDER = [
   "openrouter",
+  "orcarouter",
   "opencode",
   "cloudflare-ai-gateway",
   "github-copilot",
@@ -164,6 +165,9 @@ export function resolvePricingKeyCandidates(
 
   if (name.includes("openrouter") || host.includes("openrouter")) {
     pushUnique(candidates, "openrouter", "exact");
+  }
+  if (name.includes("orcarouter") || host.includes("orcarouter")) {
+    pushUnique(candidates, "orcarouter", "exact");
   }
   if (name.includes("opencode") || host.includes("opencode")) {
     pushUnique(candidates, "opencode", "exact");

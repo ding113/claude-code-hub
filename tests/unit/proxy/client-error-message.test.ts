@@ -36,6 +36,12 @@ describe("deriveClientSafeUpstreamErrorMessage", () => {
     ).toBeNull();
     expect(
       deriveClientSafeUpstreamErrorMessage({
+        candidateMessage: "Provider OrcaRouter returned: overload",
+        providerName: "OrcaRouter",
+      })
+    ).toBeNull();
+    expect(
+      deriveClientSafeUpstreamErrorMessage({
         candidateMessage: "FAKE_200_JSON_ERROR_NON_EMPTY",
       })
     ).toBeNull();
