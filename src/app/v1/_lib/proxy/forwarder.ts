@@ -3779,6 +3779,21 @@ export class ProxyForwarder {
       }
     }
 
+    if (
+      requestBody !== undefined &&
+      !ProxyForwarder.getEndpointPolicy(session).bypassForwarderPreprocessing &&
+      processedHeaders.has("content-encoding")
+    ) {
+      const previousContentEncoding = processedHeaders.get("content-encoding");
+      processedHeaders.delete("content-encoding");
+      logger.debug("ProxyForwarder: Removed stale content-encoding from serialized request body", {
+        providerId: provider.id,
+        providerName: provider.name,
+        contentEncoding: previousContentEncoding,
+        path: session.requestUrl.pathname,
+      });
+    }
+
     if (session.shouldPersistSessionDebugArtifacts()) {
       const detailSnapshotSession = session as ProxySessionWithDetailSnapshotRuntime;
       detailSnapshotSession.detailSnapshotRequestAfter = {
