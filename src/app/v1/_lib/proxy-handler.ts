@@ -3,6 +3,8 @@ import { isRawPassthroughEndpointPolicy } from "@/app/v1/_lib/proxy/endpoint-pol
 import { findSafeDatabaseError } from "@/drizzle/admitted-client";
 import { getCachedSystemSettings } from "@/lib/config";
 import { logger } from "@/lib/logger";
+import { isLocalCapacityError } from "@/lib/memory/governor";
+import { buildLocalCapacityResponse } from "@/lib/memory/http";
 import { ProxyStatusTracker } from "@/lib/proxy-status-tracker";
 import { SessionManager } from "@/lib/session-manager";
 import { SessionTracker } from "@/lib/session-tracker";
@@ -192,6 +194,7 @@ export async function handleProxyRequest(c: Context): Promise<Response> {
     if (session) {
       return await ProxyErrorHandler.handle(session, error);
     }
+    if (isLocalCapacityError(error)) return await buildLocalCapacityResponse();
 
     if (error instanceof ProxyError) {
       return ProxyResponses.buildError(error.statusCode, error.getClientSafeMessage());

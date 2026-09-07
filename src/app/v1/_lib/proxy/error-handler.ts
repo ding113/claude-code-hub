@@ -8,6 +8,8 @@ import {
 } from "@/lib/error-override-validator";
 import { emitProxyLangfuseTrace } from "@/lib/langfuse/emit-proxy-trace";
 import { logger } from "@/lib/logger";
+import { isLocalCapacityError } from "@/lib/memory/governor";
+import { buildLocalCapacityResponse } from "@/lib/memory/http";
 import { ProxyStatusTracker } from "@/lib/proxy-status-tracker";
 import { ERROR_CODES, getErrorMessageServer } from "@/lib/utils/error-messages";
 import { sanitizeErrorTextForDetail } from "@/lib/utils/upstream-error-detection";
@@ -170,6 +172,18 @@ function getRateLimitStatusCode(limitType: string): number {
 
 export class ProxyErrorHandler {
   static async handle(session: ProxySession, error: unknown): Promise<Response> {
+    if (isLocalCapacityError(error)) {
+      const response = await buildLocalCapacityResponse();
+      ProxyErrorHandler.emitErrorTrace(session, {
+        error,
+        errorMessage: error.message,
+        statusCode: 429,
+      });
+      await ProxyErrorHandler.logErrorToDatabase(session, error.message, 429, null).catch(
+        () => undefined
+      );
+      return await attachSessionIdToErrorResponse(session.sessionId, response);
+    }
     // 分离两种消息：
     // - clientErrorMessage: 返回给客户端的安全消息（不含供应商名称）
     // - logErrorMessage: 记录到数据库的详细消息（包含供应商名称，便于排查）

@@ -1172,6 +1172,29 @@ async function main() {
   const app = nextFactory({ dev, hostname, port });
   const handler = app.getRequestHandler();
   await app.prepare();
+  // 基础加载完成后再建立单进程/worker 预算；与 Next bundle 通过 Symbol 共享实例。
+  const { getMemoryGovernor } = require("./server-lib/memory-governor");
+  const memoryGovernor = getMemoryGovernor();
+  const { getSpoolBudget } = require("./server-lib/spool-directory");
+  log("info", "worker_memory_ready", memoryGovernor.snapshot());
+  const memoryStatsTimer = setInterval(() => {
+    log("info", "worker_memory_stats", { ...memoryGovernor.snapshot(), processMemory: process.memoryUsage(), spool: getSpoolBudget() });
+  }, 30000);
+  memoryStatsTimer.unref();
+  if (process.env.CCH_MULTICORE_BACKGROUND_OWNER !== "0") {
+    const { cleanupOrphanSpools } = require("./server-lib/spool-directory");
+    let cleaning = false;
+    const cleanup = async () => {
+      if (cleaning) return;
+      cleaning = true;
+      try { await cleanupOrphanSpools(); }
+      catch (error) { log("warn", "spool_cleanup_failed", { error: String(error) }); }
+      finally { cleaning = false; }
+    };
+    await cleanup();
+    const cleanupTimer = setInterval(cleanup, 60000);
+    cleanupTimer.unref();
+  }
 
   const requestListener = async (req, res) => {
     try {

@@ -1,18 +1,14 @@
+import { ByteStore, STORE_SCRATCH_BYTES } from "@/lib/body-store/byte-store";
 import { getEnvConfig } from "@/lib/config/env.schema";
 import { logger } from "@/lib/logger";
+import { getMemoryGovernor, LocalCapacityError } from "@/lib/memory/governor";
 import { getCachedProxyRuntimeSettings } from "@/lib/system-settings/proxy-runtime";
 import { inferUpstreamErrorStatusCodeFromText } from "@/lib/utils/upstream-error-detection";
 import { BufferedByteChunks } from "../buffered-byte-chunks";
 import { ProxyError } from "../errors";
-import {
-  classifyFrame,
-  type FrameVerdict,
-  isCleanResponsesCompletion,
-  isRequestEchoFrame,
-  isResponsesIncompleteCompletion,
-  type ProtocolFamily,
-} from "./frame-classifier";
+import { classifyFrame, type FrameVerdict, type ProtocolFamily } from "./frame-classifier";
 import type { StreamGatePrebufferBudget, StreamGatePrebufferLease } from "./prebuffer-budget";
+import { ProbedSseFrames } from "./probed-sse-frames";
 import { SseFrameBufferLimitError, SseFrameParser } from "./sse-frames";
 
 /**
@@ -56,6 +52,7 @@ export class StreamPrecommitError extends ProxyError {
       providerId: number;
       providerName: string;
       frameData?: string;
+      inferenceText?: string;
       framesSeen?: number;
       bufferedBytes?: number;
       echoExcludedBytes?: number;
@@ -65,7 +62,7 @@ export class StreamPrecommitError extends ProxyError {
     const message = `Stream content gate rejected upstream before first valid content (${reason})`;
     const inferred =
       reason === "gate_error" && detail.frameData
-        ? inferUpstreamErrorStatusCodeFromText(detail.frameData)
+        ? inferUpstreamErrorStatusCodeFromText(detail.inferenceText ?? detail.frameData)
         : null;
     const inferredClientError =
       inferred && inferred.statusCode >= 400 && inferred.statusCode < 500 ? inferred : null;
@@ -207,6 +204,7 @@ export interface StreamGateOptions extends StreamGateCaps {
   captureCommitMarker?: boolean;
   /** 进程级共享前缀预算；生产路径必须传入，单元测试可省略。 */
   prebufferBudget?: StreamGatePrebufferBudget;
+  prebufferLease?: StreamGatePrebufferLease;
   /** 等待共享预算时使用与上游请求相同的取消信号。 */
   abortSignal?: AbortSignal;
   /** 开始等待本地预算；竞速路径用它暂停本地 hedge 阈值。 */
@@ -241,8 +239,6 @@ export type StreamGateResult =
     }
   | { committed: false; error: Error };
 
-const PREBUFFER_MEMORY_RESERVATION_MULTIPLIER = 4;
-
 /**
  * 对上游 SSE body reader 执行首个有效内容门控。
  *
@@ -254,15 +250,16 @@ export async function runStreamContentGate(
   reader: ReadableStreamDefaultReader<Uint8Array>,
   options: StreamGateOptions
 ): Promise<StreamGateResult> {
+  const gateStarted = performance.now();
   let prebufferLease: StreamGatePrebufferLease | null = null;
   let leaseTransferred = false;
-  const parser = new SseFrameParser({
-    maxBufferedCharacters: options.prebufferByteCap,
-    bufferLimitExemption: {
-      maxBufferedCharacters: options.prebufferByteCap * 2,
-      matches: (eventName, dataHead) => isRequestEchoFrame(options.family, eventName, dataHead),
-    },
+  let parserDepthBytes = 16 * 1024;
+  const parser = new ProbedSseFrames(options.family, options.prebufferByteCap, (bytes) => {
+    if (bytes <= parserDepthBytes) return;
+    if (store && !store.growScratchBy(bytes - parserDepthBytes)) throw new LocalCapacityError();
+    parserDepthBytes = bytes;
   });
+  let store: ByteStore | null = null;
   const buffered = new BufferedByteChunks();
   let bufferedBytes = 0;
   let echoExcludedBytes = 0;
@@ -274,29 +271,61 @@ export async function runStreamContentGate(
     reason: StreamGateFailureReason,
     frameData?: string,
     terminalBeforeContent = false
-  ): StreamGateResult => ({
-    committed: false,
-    error: new StreamPrecommitError(reason, {
-      family: options.family,
-      providerId: options.providerId,
-      providerName: options.providerName,
-      frameData,
-      framesSeen,
-      bufferedBytes,
-      echoExcludedBytes,
-      terminalBeforeContent,
-    }),
-  });
+  ): StreamGateResult => {
+    const inferenceText = reason === "gate_error" ? parser.lastFrame?.inferenceText : undefined;
+    if (
+      inferenceText &&
+      inferenceText.length > 2000 &&
+      prebufferLease &&
+      !prebufferLease.tryGrow(prebufferLease.reservedBytes + inferenceText.length * 16)
+    ) {
+      return { committed: false, error: new LocalCapacityError() };
+    }
+    return {
+      committed: false,
+      error: new StreamPrecommitError(reason, {
+        family: options.family,
+        providerId: options.providerId,
+        providerName: options.providerName,
+        frameData,
+        inferenceText,
+        framesSeen,
+        bufferedBytes,
+        echoExcludedBytes,
+        terminalBeforeContent,
+      }),
+    };
+  };
   const exceedsByteCap = () =>
     bufferedBytes - Math.min(echoExcludedBytes, options.prebufferByteCap) >
     options.prebufferByteCap;
 
   const commit = (eventName: string | null, readerDone: boolean): StreamGateResult => {
-    const retainedPrefixBytes = buffered.retainedByteLength;
-    const prefixChunks = buffered.take();
+    const retainedPrefixBytes = store?.retainedByteLength ?? buffered.retainedByteLength;
+    const prefixChunks = store ? store.takeChunks() : buffered.take();
     // 读取期间需要覆盖 parser、输入副本和前缀的最坏峰值；提交后 parser
     // 已停止，租约只需覆盖仍挂在下游 pending slot 中的实际 backing bytes。
-    prebufferLease?.shrinkTo(retainedPrefixBytes);
+    prebufferLease?.shrinkTo(store?.spilled ? STORE_SCRATCH_BYTES : retainedPrefixBytes);
+    if (store && prebufferLease) {
+      const ownedStore = store;
+      const ownedLease = prebufferLease;
+      prebufferLease = {
+        get reservedBytes() {
+          return ownedLease.reservedBytes;
+        },
+        tryGrow: (bytes) => ownedLease.tryGrow(bytes),
+        shrinkTo: (bytes) => ownedLease.shrinkTo(bytes),
+        ...(ownedStore.spilled ? { readPrefix: () => ownedStore.readPrefix() } : {}),
+        release: () => {
+          if (!ownedStore.spilled) ownedLease.release();
+          void ownedStore
+            .dispose(() => ownedLease.release())
+            .catch((error) =>
+              logger.warn("[StreamGate] Prefix cleanup failed", { error: String(error) })
+            );
+        },
+      };
+    }
     leaseTransferred = true;
     return {
       committed: true,
@@ -311,11 +340,14 @@ export async function runStreamContentGate(
   };
 
   try {
-    if (options.prebufferBudget) {
+    if (options.prebufferLease) {
+      prebufferLease = options.prebufferLease;
+      store = new ByteStore(prebufferLease, { signal: options.abortSignal });
+    } else if (options.prebufferBudget) {
       if (options.abortSignal?.aborted) {
         return { committed: false, error: abortSignalError(options.abortSignal) };
       }
-      const reservationBytes = options.prebufferByteCap * PREBUFFER_MEMORY_RESERVATION_MULTIPLIER;
+      const reservationBytes = STORE_SCRATCH_BYTES;
       const budgetSnapshot = options.prebufferBudget.snapshot();
       // snapshot 与 acquire 之间没有异步边界；只在本次调用确实会进入 FIFO
       // 队列时暂停供应商计时，避免正常热路径反复清除并重建 timer。
@@ -329,6 +361,7 @@ export async function runStreamContentGate(
           reservationBytes,
           options.abortSignal
         );
+        store = new ByteStore(prebufferLease, { signal: options.abortSignal });
       } catch (error) {
         return {
           committed: false,
@@ -362,7 +395,7 @@ export async function runStreamContentGate(
         try {
           parser.finishVisit((eventName, data) => {
             framesSeen++;
-            const verdict = classifyFrame(options.family, eventName, data);
+            const verdict = parser.lastFrame!.verdict;
             if (verdict === "content") {
               trailingResult = commit(eventName, true);
               return false;
@@ -378,8 +411,7 @@ export async function runStreamContentGate(
             if (
               verdict === "terminal" &&
               options.family === "openai-responses" &&
-              (isCleanResponsesCompletion(eventName, data) ||
-                isResponsesIncompleteCompletion(eventName, data))
+              parser.lastFrame!.acceptTerminal
             ) {
               trailingResult = commit(eventName, true);
               return false;
@@ -417,14 +449,21 @@ export async function runStreamContentGate(
       if (chunk.byteLength > options.prebufferByteCap * 2 - bufferedBytes) {
         return failure("prebuffer_overflow");
       }
-      buffered.append(chunk);
+      if (store) await store.append(chunk);
+      else buffered.append(chunk);
       bufferedBytes += chunk.byteLength;
+      await store?.reserveScratch(
+        STORE_SCRATCH_BYTES +
+          Math.max(0, Math.min(bufferedBytes, 64 * 1024) - 8192) * 2 +
+          parserDepthBytes -
+          16 * 1024
+      );
 
       let frameResult: StreamGateResult | null = null;
       try {
         parser.visit(chunk, (eventName, data) => {
           framesSeen++;
-          const verdict: FrameVerdict = classifyFrame(options.family, eventName, data);
+          const verdict: FrameVerdict = parser.lastFrame!.verdict;
           if (verdict === "content") {
             frameResult = exceedsByteCap()
               ? failure("prebuffer_overflow")
@@ -440,11 +479,7 @@ export async function runStreamContentGate(
             return false;
           }
           if (verdict === "terminal") {
-            if (
-              options.family === "openai-responses" &&
-              (isCleanResponsesCompletion(eventName, data) ||
-                isResponsesIncompleteCompletion(eventName, data))
-            ) {
+            if (options.family === "openai-responses" && parser.lastFrame!.acceptTerminal) {
               frameResult = exceedsByteCap()
                 ? failure("prebuffer_overflow")
                 : commit(eventName, false);
@@ -454,8 +489,8 @@ export async function runStreamContentGate(
             return false;
           }
           // neutral: 继续缓冲；请求回显帧的载荷不计入字节上限。
-          if (isRequestEchoFrame(options.family, eventName, data)) {
-            echoExcludedBytes += Buffer.byteLength(data, "utf8");
+          if (parser.lastFrame!.echo) {
+            echoExcludedBytes += parser.lastFrame!.dataBytes;
           }
           if (framesSeen > options.prebufferEventCap) {
             frameResult = failure("prebuffer_overflow");
@@ -476,10 +511,19 @@ export async function runStreamContentGate(
         return failure("prebuffer_overflow");
       }
     }
+  } catch (error) {
+    return { committed: false, error: error instanceof Error ? error : new Error(String(error)) };
   } finally {
+    if (options.prebufferBudget || options.prebufferLease)
+      getMemoryGovernor().observe("gate", performance.now() - gateStarted, bufferedBytes);
     if (!leaseTransferred) {
       buffered.clear();
-      prebufferLease?.release();
+      await store
+        ?.dispose(() => prebufferLease?.release())
+        .catch((error) =>
+          logger.warn("[StreamGate] Prefix cleanup failed", { error: String(error) })
+        );
+      if (!store) prebufferLease?.release();
     }
   }
 }

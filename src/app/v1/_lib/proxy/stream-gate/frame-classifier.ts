@@ -44,7 +44,7 @@ interface StreamSignal {
   doneSentinel?: string;
 }
 
-const STREAM_SIGNALS: Record<ProtocolFamily, StreamSignal> = {
+export const STREAM_SIGNALS: Record<ProtocolFamily, StreamSignal> = {
   anthropic: {
     contentRules: [
       {

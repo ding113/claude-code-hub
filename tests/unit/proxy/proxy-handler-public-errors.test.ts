@@ -2,6 +2,7 @@ import { Context } from "hono";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ProxySession } from "@/app/v1/_lib/proxy/session";
 import type { FakeStreamingWhitelistEntry } from "@/types/system-config";
+import { LocalCapacityError, MemoryGovernor } from "../../../server-lib/memory-governor";
 
 type ProxySettingsFixture = {
   readonly enableHighConcurrencyMode: boolean;
@@ -163,14 +164,15 @@ describe("handleProxyRequest public error behavior", () => {
   });
 
   it("hides an unknown failure that occurs before session creation", async () => {
-    const request = new (class extends Request {
-      override clone(): Request {
-        throw new Error("request clone failed");
-      }
-    })("http://localhost/v1/messages", {
+    const request = new Request("http://localhost/v1/messages", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ model: "claude-test", messages: [] }),
+    });
+    Object.defineProperty(request, "body", {
+      get() {
+        throw new Error("request body read failed");
+      },
     });
 
     const response = await handleProxyRequest(new Context(request));
@@ -185,5 +187,48 @@ describe("handleProxyRequest public error behavior", () => {
     });
     expect(boundary.runGuards).not.toHaveBeenCalled();
     expect(boundary.decrementConcurrentCount).not.toHaveBeenCalled();
+  });
+
+  it("本地过载保留 429 与 Retry-After，不能变成供应商错误", async () => {
+    boundary.send.mockRejectedValue(new LocalCapacityError());
+    const request = new Request("http://localhost/v1/messages", {
+      method: "POST",
+      body: JSON.stringify({ model: "claude-test", messages: [] }),
+    });
+    const response = await handleProxyRequest(new Context(request));
+    expect(response.status).toBe(429);
+    expect(response.headers.get("retry-after")).toBe("1");
+    expect((await response.json()).error.code).toBe("local_capacity_exceeded");
+  });
+
+  it("请求体读取前最多排队 20 秒，拒绝时不调用上游", async () => {
+    vi.useFakeTimers();
+    const key = Symbol.for("cch.memoryGovernor");
+    const state = globalThis as unknown as Record<symbol, unknown>;
+    const previous = state[key];
+    state[key] = new MemoryGovernor({ limit: 0, remote: false, monitor: false });
+    try {
+      const request = new Request("http://localhost/v1/messages", {
+        method: "POST",
+        body: JSON.stringify({ model: "claude-test", messages: [] }),
+      });
+      let completed = false;
+      const pending = handleProxyRequest(new Context(request)).then((response) => {
+        completed = true;
+        return response;
+      });
+      await vi.advanceTimersByTimeAsync(19999);
+      expect(completed).toBe(false);
+      expect(request.bodyUsed).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+      const response = await pending;
+      expect(response.status).toBe(429);
+      expect(response.headers.get("retry-after")).toBe("1");
+      expect(boundary.runGuards).not.toHaveBeenCalled();
+      expect(boundary.send).not.toHaveBeenCalled();
+    } finally {
+      state[key] = previous;
+      vi.useRealTimers();
+    }
   });
 });
