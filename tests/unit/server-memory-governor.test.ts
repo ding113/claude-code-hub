@@ -8,6 +8,56 @@ import {
 
 afterEach(() => vi.useRealTimers());
 describe("内存租约与本地准入", () => {
+  it("所有 worker 建立内存基线前不发放额度，定时采样也不能恢复准入", async () => {
+    vi.useFakeTimers();
+    let ram = 4 * 1024 ** 3;
+    const coordinator = createMemoryCoordinator({
+      env: { CCH_MEMORY_BUDGET_BYTES: String(1024 ** 3) },
+      readSnapshot: () => ({ availableRamBytes: ram, availableSwapBytes: 0, swapIO: 100 }),
+    });
+    const worker = Object.assign(new EventEmitter(), {
+      send: (message: unknown) => child.emit("message", message),
+    });
+    const child = Object.assign(new EventEmitter(), {
+      env: {},
+      connected: true,
+      send: (message: unknown, callback: (error?: Error) => void) => {
+        worker.emit("message", message);
+        callback?.();
+      },
+    });
+    coordinator.attach(worker);
+    const governor = new MemoryGovernor({ processRef: child, remote: true, monitor: false });
+    let admitted = false;
+    const waiting = governor.acquire(128 * 1024).then((lease) => {
+      admitted = true;
+      return lease;
+    });
+    await vi.advanceTimersByTimeAsync(5000);
+    for (let index = 0; index < 120; index++) coordinator.sample();
+    expect(admitted).toBe(false);
+    expect(coordinator.snapshot()).toMatchObject({
+      targetBytes: 0,
+      grantedBytes: 0,
+      admissionReady: false,
+    });
+    expect(governor.snapshot().limitBytes).toBe(0);
+    // worker 的基础堆已经占用内存，按剩余容量建立唯一启动基线。
+    ram = 512 * 1024 ** 2;
+    coordinator.resetBaseline();
+    const target = coordinator.snapshot().targetBytes;
+    expect(target).toBe(Math.floor(ram * 0.9));
+    expect(coordinator.snapshot().admissionReady).toBe(true);
+    // 启动前发生过的换页不是新的压力事件。
+    coordinator.sample();
+    expect(coordinator.snapshot().targetBytes).toBe(target);
+    await vi.advanceTimersByTimeAsync(100);
+    expect(admitted).toBe(true);
+    (await waiting).release();
+    governor.sample();
+    expect(coordinator.snapshot().grantedBytes).toBe(0);
+    worker.emit("exit");
+  });
   it("20 秒拒绝，并移除等待者", async () => {
     vi.useFakeTimers();
     const governor = new MemoryGovernor({ limit: 1024, remote: false, monitor: false });
@@ -47,6 +97,7 @@ describe("内存租约与本地准入", () => {
       readSnapshot: () => ({ availableRamBytes: 2 ** 30, availableSwapBytes: 0 }),
     });
     const worker = () => Object.assign(new EventEmitter(), { send: vi.fn() });
+    coordinator.resetBaseline();
     const a = worker();
     const b = worker();
     coordinator.attach(a);
@@ -79,6 +130,7 @@ describe("内存租约与本地准入", () => {
         callback?.();
       },
     });
+    coordinator.resetBaseline();
     coordinator.attach(worker);
     const governor = new MemoryGovernor({ processRef: child, remote: true, monitor: false });
     const acquiring = governor.acquire(128 * 1024);
@@ -121,6 +173,7 @@ describe("内存租约与本地准入", () => {
       env: { CCH_MEMORY_BUDGET_BYTES: String(capacity) },
       readSnapshot: () => ({ availableRamBytes: 2 ** 30, availableSwapBytes: 0 }),
     });
+    coordinator.resetBaseline();
     let dropReply = true;
     let dropRelease = true;
     const worker = Object.assign(new EventEmitter(), {

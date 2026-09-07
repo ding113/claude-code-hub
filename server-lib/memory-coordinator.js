@@ -7,14 +7,16 @@ const MESSAGE = "cch:memory-credit";
 /** IPC 只传授权数。worker 身份由 cluster 连接确定，退出后才回收旧代授权。 */
 function createMemoryCoordinator({ readSnapshot = readResourceSnapshot, env = process.env, log = () => {} } = {}) {
   let plan = createMemoryPlan({ env, snapshot: readSnapshot() });
-  let target = plan.hotBudgetBytes;
+  // worker 的 Next.js 基础堆尚未加载；所有 worker ready 前禁止发放正文额度。
+  let target = 0;
   let granted = 0;
   let healthy = 0;
   let lastSwapIO = plan.swapIO || 0;
   let baselineReset = false;
   const clients = new Map();
-  const snapshot = () => ({ ...plan, targetBytes: target, grantedBytes: granted, workers: clients.size });
+  const snapshot = () => ({ ...plan, targetBytes: target, grantedBytes: granted, workers: clients.size, admissionReady: baselineReset });
   function sample() {
+    if (!baselineReset) return snapshot();
     const resource = readSnapshot();
     const current = createMemoryPlan({ env, snapshot: resource });
     const pressure = resource.memoryPressure >= 1 || (resource.swapIO || 0) > lastSwapIO;
@@ -65,7 +67,9 @@ function createMemoryCoordinator({ readSnapshot = readResourceSnapshot, env = pr
     // 仅允许启动完成时更新一次基线；有流量时不能重复把空闲容量当成新增预算。
     if (baselineReset) return;
     baselineReset = true;
-    plan = createMemoryPlan({ env, snapshot: readSnapshot() });
+    const resource = readSnapshot();
+    plan = createMemoryPlan({ env, snapshot: resource });
+    lastSwapIO = resource.swapIO || 0;
     target = plan.hotBudgetBytes;
     log("info", "memory_plan_resolved", snapshot());
   }
