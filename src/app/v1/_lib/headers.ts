@@ -1,3 +1,4 @@
+import { createHash, randomUUID } from "node:crypto";
 import { logger } from "@/lib/logger";
 
 /**
@@ -98,6 +99,35 @@ export function resolveAnthropicAuthHeaders(
     Authorization: `Bearer ${apiKey}`,
     "x-api-key": apiKey,
   };
+}
+
+export const OPENCODE_SESSION_HEADER = "x-opencode-session";
+
+// OpenCode Zen 自 2026-09 起要求每个请求都带 x-opencode-session 做路由/prompt cache 亲和，
+// 缺失时上游直接返回 service_unavailable_error。
+export function looksLikeOpencodeUrl(providerUrl?: string | null): boolean {
+  if (!providerUrl) {
+    return false;
+  }
+
+  try {
+    const hostname = new URL(providerUrl).hostname.toLowerCase();
+    return hostname === "opencode.ai" || hostname.endsWith(".opencode.ai");
+  } catch {
+    return false;
+  }
+}
+
+// 外发的是会话标识的哈希而不是标识本身：sessionId 可能来自客户端（Claude Code 的 metadata.user_id），
+// 原样透传等于把客户端身份交给上游。哈希在同一会话内稳定，上游的 prompt cache 照样能命中；
+// 没有会话标识时（探活、供应商连通性测试）退化成一次性随机值。
+export function resolveOpencodeSessionId(seed?: string | null): string {
+  if (!seed) {
+    return randomUUID();
+  }
+
+  const hex = createHash("sha256").update(`opencode-session:${seed}`).digest("hex");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-a${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
 }
 
 /**

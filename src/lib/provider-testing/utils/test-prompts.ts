@@ -4,7 +4,12 @@
  * 这里保留协议级兜底默认值；真正执行时会优先使用 presets.ts 里的模板定义。
  */
 
-import { resolveAnthropicAuthHeaders } from "@/app/v1/_lib/headers";
+import {
+  looksLikeOpencodeUrl,
+  OPENCODE_SESSION_HEADER,
+  resolveAnthropicAuthHeaders,
+  resolveOpencodeSessionId,
+} from "@/app/v1/_lib/headers";
 import { buildProxyUrl } from "@/app/v1/_lib/url";
 import type { ProviderType } from "@/types/provider";
 import type { ClaudeTestBody, CodexTestBody, GeminiTestBody, OpenAITestBody } from "../types";
@@ -211,6 +216,11 @@ export function getTestHeaders(
       break;
     default:
       throw new Error(`Unsupported provider type: ${providerType}`);
+  }
+
+  // OpenCode Zen 缺少 x-opencode-session 会直接 503，连通性测试也要带上。
+  if (looksLikeOpencodeUrl(providerUrl)) {
+    headers[OPENCODE_SESSION_HEADER] = resolveOpencodeSessionId();
   }
 
   return {
