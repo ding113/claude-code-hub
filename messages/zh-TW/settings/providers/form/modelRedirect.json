@@ -28,6 +28,7 @@
   "targetTooLong": "目標模型名稱過長（最多 {max} 個字元）",
   "targetModel": "實際轉發的模型",
   "targetPlaceholder": "例如：glm-5.1",
+  "regexCaptureHint": "正則比對支援在目標中引用擷取群組：來源寫 ^gpt-(.+)$、目標寫 test-$1，gpt-5.5 會被轉發為 test-5.5。",
   "regexInvalid": "正則表達式無效",
   "regexUnsafe": "正則表達式存在 ReDoS 風險"
 }

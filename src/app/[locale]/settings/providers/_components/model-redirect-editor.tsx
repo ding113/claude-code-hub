@@ -508,6 +508,10 @@ export function ModelRedirectEditor({
           </div>
         )}
 
+        {newRule.matchType === "regex" && (
+          <p className="text-xs text-muted-foreground">{t("regexCaptureHint")}</p>
+        )}
+
         <p className="text-xs text-muted-foreground">{t("description")}</p>
       </div>
 

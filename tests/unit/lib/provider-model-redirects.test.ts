@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import type { ProviderModelRedirectRule } from "@/types/provider";
 import {
   findMatchingProviderModelRedirectRule,
+  getProviderModelRedirectTarget,
   normalizeProviderModelRedirectRules,
+  resolveProviderModelRedirectTarget,
 } from "@/lib/provider-model-redirects";
 
 describe("provider model redirect rules", () => {
@@ -77,5 +79,78 @@ describe("provider model redirect rules", () => {
         },
       ])
     );
+  });
+});
+
+describe("regex redirect target capture groups", () => {
+  it("expands capture group references in regex targets", () => {
+    const rules: ProviderModelRedirectRule[] = [
+      { matchType: "regex", source: "^gpt-(.+)$", target: "test-$1" },
+    ];
+
+    expect(getProviderModelRedirectTarget("gpt-5.5", rules)).toBe("test-5.5");
+    expect(getProviderModelRedirectTarget("gpt-5.6", rules)).toBe("test-5.6");
+  });
+
+  it("supports $&, named groups and escaped $$", () => {
+    expect(
+      resolveProviderModelRedirectTarget("gpt-5.5", {
+        matchType: "regex",
+        source: "^gpt-.+$",
+        target: "pre-$&",
+      })
+    ).toBe("pre-gpt-5.5");
+
+    expect(
+      resolveProviderModelRedirectTarget("gpt-5.5", {
+        matchType: "regex",
+        source: "^(?<version>gpt-.+)$",
+        target: "mirror-$<version>",
+      })
+    ).toBe("mirror-gpt-5.5");
+
+    expect(
+      resolveProviderModelRedirectTarget("gpt-5.5", {
+        matchType: "regex",
+        source: "^gpt-(.+)$",
+        target: "cost-$$$1",
+      })
+    ).toBe("cost-$5.5");
+  });
+
+  it("replaces the whole model name even when the regex only matches a substring", () => {
+    expect(
+      resolveProviderModelRedirectTarget("gpt-5", {
+        matchType: "regex",
+        source: "-(\\d+)$",
+        target: "glm-$1",
+      })
+    ).toBe("glm-5");
+
+    expect(
+      resolveProviderModelRedirectTarget("claude-opus-4-5", {
+        matchType: "regex",
+        source: "opus",
+        target: "glm-4.6",
+      })
+    ).toBe("glm-4.6");
+  });
+
+  it("keeps $ literal for non-regex rules and unmatched models", () => {
+    expect(
+      resolveProviderModelRedirectTarget("gpt-5.5", {
+        matchType: "exact",
+        source: "gpt-5.5",
+        target: "test-$1",
+      })
+    ).toBe("test-$1");
+
+    expect(
+      resolveProviderModelRedirectTarget("claude-opus", {
+        matchType: "regex",
+        source: "^gpt-(.+)$",
+        target: "test-$1",
+      })
+    ).toBe("test-$1");
   });
 });

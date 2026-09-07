@@ -3,6 +3,7 @@ import {
   findMatchingProviderModelRedirectRule,
   getProviderModelRedirectTarget,
   hasProviderModelRedirectRules,
+  resolveProviderModelRedirectTarget,
 } from "@/lib/provider-model-redirects";
 import type { Provider } from "@/types/provider";
 import { isOpenAIImageMultipartRequest, setOpenAIImageMultipartModel } from "./openai-image-compat";
@@ -67,7 +68,7 @@ export class ModelRedirector {
       return false;
     }
 
-    const redirectedModel = matchedRule.target;
+    const redirectedModel = resolveProviderModelRedirectTarget(originalModel, matchedRule);
 
     // 执行重定向
     logger.info("[ModelRedirector] Model redirected", {

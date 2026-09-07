@@ -6,7 +6,10 @@ import { useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { findMatchingProviderModelRedirectRule } from "@/lib/provider-model-redirects";
+import {
+  findMatchingProviderModelRedirectRule,
+  resolveProviderModelRedirectTarget,
+} from "@/lib/provider-model-redirects";
 import type { ProviderModelRedirectRule } from "@/types/provider";
 
 interface ModelRedirectTesterProps {
@@ -23,6 +26,11 @@ export function ModelRedirectTester({ rules }: ModelRedirectTesterProps) {
     () => findMatchingProviderModelRedirectRule(testedModel, rules),
     [rules, testedModel]
   );
+
+  // 展示实际转发出去的模型：regex 规则的 target 可能带 `$1` 之类的捕获组引用。
+  const resolvedTarget = matchedRule
+    ? resolveProviderModelRedirectTarget(testedModel, matchedRule)
+    : null;
 
   const matchedIndex = matchedRule
     ? rules.findIndex(
@@ -89,9 +97,7 @@ export function ModelRedirectTester({ rules }: ModelRedirectTesterProps) {
                   </div>
                   <div className="flex items-center justify-between gap-3 rounded-md border border-border/50 px-3 py-2 md:col-span-2">
                     <span>{t("target")}</span>
-                    <code className="text-right font-mono text-foreground">
-                      {matchedRule.target}
-                    </code>
+                    <code className="text-right font-mono text-foreground">{resolvedTarget}</code>
                   </div>
                 </div>
               </div>
