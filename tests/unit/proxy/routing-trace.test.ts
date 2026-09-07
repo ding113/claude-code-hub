@@ -25,6 +25,8 @@ vi.mock("@/lib/logger", () => ({
 import { ProxyForwarder } from "@/app/v1/_lib/proxy/forwarder";
 import { ProxySession } from "@/app/v1/_lib/proxy/session";
 import { logger } from "@/lib/logger";
+import { attachRequestMemory, withRequestMemoryLifetime } from "@/lib/memory/request-lifetime";
+import { MemoryGovernor } from "../../../server-lib/memory-governor";
 
 type PrepareStreamingDiscovery = (
   session: ProxySession,
@@ -321,6 +323,39 @@ describe("ProxySession routing trace recorder", () => {
       })
     );
   });
+
+  it.each([false, true])(
+    "响应 EOF 后保留慢观测刷新和删除的请求额度，删除失败=%s",
+    async (failed) => {
+      const governor = new MemoryGovernor({ limit: 100, remote: false, monitor: false });
+      const write = Promise.withResolvers<void>();
+      const deletion = Promise.withResolvers<void>();
+      liveChainMocks.writeLiveRoutingTrace.mockImplementationOnce(() => write.promise);
+      liveChainMocks.deleteLiveChain.mockImplementationOnce(() => deletion.promise);
+      let close!: Promise<unknown>;
+      const response = await withRequestMemoryLifetime(async () => {
+        attachRequestMemory(governor.tryLease(100)!);
+        const session = makeTraceSession();
+        session.initializeRoutingTrace({
+          mode: "discovery",
+          discoveryEnabled: true,
+          eligible: true,
+          startedAt: 1000,
+        });
+        close = session.closeLiveObservability().catch((error) => error);
+        return new Response("done");
+      });
+      await response.text();
+      expect(governor.snapshot().usedBytes).toBe(100);
+      write.resolve();
+      await vi.waitFor(() => expect(liveChainMocks.deleteLiveChain).toHaveBeenCalledOnce());
+      expect(governor.snapshot().usedBytes).toBe(100);
+      if (failed) deletion.reject(new Error("Redis unavailable"));
+      else deletion.resolve();
+      await close;
+      expect(governor.snapshot().usedBytes).toBe(0);
+    }
+  );
 
   it("keeps winner metrics request-local and logs only the final retried terminal outcome", async () => {
     const session = makeTraceSession();

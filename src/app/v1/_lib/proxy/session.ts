@@ -3,6 +3,7 @@ import { isCountTokensEndpointPath, V1_ENDPOINT_PATHS } from "@/app/v1/_lib/prox
 import { isRemoteCompactionV2Request } from "@/app/v1/_lib/proxy/remote-compaction";
 import { loadRequestBody, retainRequestMemory } from "@/lib/body-store/request-body-store";
 import { logger } from "@/lib/logger";
+import { retainRequestMemoryUntil } from "@/lib/memory/request-lifetime";
 import {
   deleteLiveChain,
   type LiveProviderSnapshot,
@@ -918,12 +919,14 @@ export class ProxySession {
   private scheduleLiveObservabilityFlush(): void {
     if (this.liveObservabilityClosed || this.liveObservabilityFlushPromise) return;
     const flush = Promise.resolve().then(() => this.flushLiveObservability());
-    this.liveObservabilityFlushPromise = flush.finally(() => {
-      this.liveObservabilityFlushPromise = null;
-      if (!this.liveObservabilityClosed && (this.liveChainDirty || this.liveRoutingTraceDirty)) {
-        this.scheduleLiveObservabilityFlush();
-      }
-    });
+    this.liveObservabilityFlushPromise = retainRequestMemoryUntil(
+      flush.finally(() => {
+        this.liveObservabilityFlushPromise = null;
+        if (!this.liveObservabilityClosed && (this.liveChainDirty || this.liveRoutingTraceDirty)) {
+          this.scheduleLiveObservabilityFlush();
+        }
+      })
+    );
   }
 
   private async flushLiveObservability(): Promise<void> {
@@ -1145,13 +1148,16 @@ export class ProxySession {
     if (this.liveObservabilityClosePromise) return this.liveObservabilityClosePromise;
     this.scheduleLiveObservabilityFlush();
     this.liveObservabilityClosed = true;
-    this.liveObservabilityClosePromise = (async () => {
-      await (this.liveObservabilityFlushPromise ?? Promise.resolve());
-      this.logRoutingTraceTerminalSummary();
-      if (!this.sessionId || this.requestSequence == null) return;
-      if (!this.shouldTrackSessionObservability()) return;
-      await deleteLiveChain(this.sessionId, this.requestSequence);
-    })();
+    // 刷新/删除仍持有 this（包含正文）；响应 EOF 不能提前归还这份额度。
+    this.liveObservabilityClosePromise = retainRequestMemoryUntil(
+      (async () => {
+        await (this.liveObservabilityFlushPromise ?? Promise.resolve());
+        this.logRoutingTraceTerminalSummary();
+        if (!this.sessionId || this.requestSequence == null) return;
+        if (!this.shouldTrackSessionObservability()) return;
+        await deleteLiveChain(this.sessionId, this.requestSequence);
+      })()
+    );
     return this.liveObservabilityClosePromise;
   }
 
