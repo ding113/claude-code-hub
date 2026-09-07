@@ -173,6 +173,9 @@ export class ProxySession {
 
   // Session ID（用于会话粘性和并发限流）
   sessionId: string | null;
+  // 派生上游会话头（x-opencode-session）用的种子：hedge/discovery 影子会话会清空 sessionId，
+  // 但上游的缓存亲和仍应跟随父请求，所以单独留一份不会被清空的副本。
+  upstreamSessionSeed: string | null = null;
   // 客户端或补全器已建立连续身份时，单条增量请求也应参与供应商复用。
   // 内容哈希/随机降级身份仍依赖上下文长度，避免相同短提示串到同一供应商会话。
   private allowSingleTurnProviderReuse = false;
@@ -689,6 +692,7 @@ export class ProxySession {
    */
   setSessionId(sessionId: string, options: { allowSingleTurnProviderReuse?: boolean } = {}): void {
     this.sessionId = sessionId;
+    this.upstreamSessionSeed = sessionId;
     this.allowSingleTurnProviderReuse = options.allowSingleTurnProviderReuse === true;
   }
 

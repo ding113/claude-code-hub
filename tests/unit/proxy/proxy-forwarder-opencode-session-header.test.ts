@@ -3,10 +3,15 @@ import { ProxyForwarder } from "@/app/v1/_lib/proxy/forwarder";
 import { ProxySession } from "@/app/v1/_lib/proxy/session";
 import type { Provider } from "@/types/provider";
 
-function createSession(headers: Headers, sessionId: string | null): ProxySession {
+function createSession(
+  headers: Headers,
+  sessionId: string | null,
+  upstreamSessionSeed: string | null = sessionId
+): ProxySession {
   const session = Object.create(ProxySession.prototype);
 
   Object.assign(session, {
+    upstreamSessionSeed,
     startTime: Date.now(),
     method: "POST",
     requestUrl: new URL("https://example.com/v1/chat/completions"),
@@ -60,8 +65,24 @@ describe("ProxyForwarder - x-opencode-session injection", () => {
     );
   });
 
+  it("reuses the parent seed for hedge shadow sessions that cleared sessionId", () => {
+    const parent = createSession(new Headers(), "sess_abc");
+    // createStreamingShadowSession 会清空 sessionId，但 upstreamSessionSeed 随对象复制保留
+    const shadow = createSession(new Headers(), null, "sess_abc");
+
+    expect(
+      buildHeaders(shadow, createProvider(), "https://opencode.ai/zen/go/v1").get(
+        "x-opencode-session"
+      )
+    ).toBe(
+      buildHeaders(parent, createProvider(), "https://opencode.ai/zen/go/v1").get(
+        "x-opencode-session"
+      )
+    );
+  });
+
   it("still injects when the session has no id yet", () => {
-    const session = createSession(new Headers(), null);
+    const session = createSession(new Headers(), null, null);
 
     const headers = buildHeaders(session, createProvider(), "https://opencode.ai/zen/go/v1");
 

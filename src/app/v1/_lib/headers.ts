@@ -130,6 +130,23 @@ export function resolveOpencodeSessionId(seed?: string | null): string {
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-a${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
 }
 
+// 只在最终请求头里没有任何大小写变体时注入：客户端自带或 provider custom_headers 配置的值优先，
+// 否则同一个头会以两种大小写并存，被 Headers 合并成 `a, b` 这种非法值。
+export function applyOpencodeSessionHeader(
+  headers: Record<string, string>,
+  providerUrl: string | null | undefined,
+  seed?: string | null
+): void {
+  if (!looksLikeOpencodeUrl(providerUrl)) {
+    return;
+  }
+  if (Object.keys(headers).some((name) => name.toLowerCase() === OPENCODE_SESSION_HEADER)) {
+    return;
+  }
+
+  headers[OPENCODE_SESSION_HEADER] = resolveOpencodeSessionId(seed);
+}
+
 /**
  * 代理请求 Header 处理器
  */
