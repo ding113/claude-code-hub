@@ -5,6 +5,7 @@ import {
 } from "@/app/v1/_lib/proxy/stream-gate/frame-classifier";
 import { createFrameProbe } from "@/app/v1/_lib/proxy/stream-gate/frame-probe";
 import { ProbedSseFrames } from "@/app/v1/_lib/proxy/stream-gate/probed-sse-frames";
+import { SseFrameParser } from "@/app/v1/_lib/proxy/stream-gate/sse-frames";
 
 const families: ProtocolFamily[] = ["anthropic", "openai-chat", "openai-responses", "gemini"];
 const samples = [
@@ -44,6 +45,50 @@ const samples = [
 ];
 
 describe("增量分类与既有分类器差分", () => {
+  it.each(families)("%s 保留裸 JSON、SSE 混合帧和任意网络分块语义", (family) => {
+    const wires = [
+      samples.map((sample) => `  ${sample} \t`).join("\r\n"),
+      '  {"candidates":[{"content":{"parts":[{"text":"你好"}]}}]}  \n[{}]\n',
+      'event: error\r{"error":"ignored while event pending"}\rdata: {"error":"failed"}\r\r',
+      'data\n{"choices":[{"delta":{"content":"bare after ignored field"}}]}\n',
+      'id: 1\n:comment\ndata:\t{\ndata: "choices": []}\n\ndata: [DONE]\n\n',
+      ' event: error\n data: ignored\n \t\n{"error":true}\n',
+      'data: {}\n{"error":"ignored while data pending"}\n\n',
+      'event: \n\n{"type":"response.output_text.delta","delta":"tail"}\u00a0',
+    ];
+    for (const wire of wires) {
+      const bytes = new TextEncoder().encode(wire);
+      for (const size of [1, 2, 7, bytes.length]) {
+        const old = new SseFrameParser();
+        const parser = new ProbedSseFrames(family, 10 * 1024 * 1024);
+        const expected: unknown[] = [];
+        const actual: unknown[] = [];
+        const before = (event: string | null, data: string) => {
+          expected.push({
+            event,
+            verdict: classifyFrame(family, event, data),
+            dataBytes: Buffer.byteLength(data),
+          });
+        };
+        const after = (event: string | null) => {
+          actual.push({
+            event,
+            verdict: parser.lastFrame?.verdict,
+            dataBytes: parser.lastFrame?.dataBytes,
+          });
+        };
+        for (let i = 0; i < bytes.length; i += size) {
+          const chunk = bytes.subarray(i, i + size);
+          old.visit(chunk, before);
+          parser.visit(chunk, after);
+        }
+        old.finishVisit(before);
+        parser.finishVisit(after);
+        expect(actual, `size=${size}: ${wire}`).toEqual(expected);
+      }
+    }
+  });
+
   it.each(families)("%s 任意分块、重复键与错误优先", (family) => {
     for (const data of samples) {
       for (const event of [null, "error", "response.completed", "unknown"]) {

@@ -113,6 +113,61 @@ describe("内存租约与本地准入", () => {
     child.emit("disconnect");
     await expect(governor.acquire(1, undefined, 0)).rejects.toBeInstanceOf(LocalCapacityError);
   });
+
+  it("授权回复与归还消息丢失后幂等恢复，小预算不被 MiB 批量饿死", async () => {
+    vi.useFakeTimers();
+    const capacity = 128 * 1024;
+    const coordinator = createMemoryCoordinator({
+      env: { CCH_MEMORY_BUDGET_BYTES: String(capacity) },
+      readSnapshot: () => ({ availableRamBytes: 2 ** 30, availableSwapBytes: 0 }),
+    });
+    let dropReply = true;
+    let dropRelease = true;
+    const worker = Object.assign(new EventEmitter(), {
+      send: (message: unknown) => {
+        if (dropReply) {
+          dropReply = false;
+          return;
+        }
+        child.emit("message", message);
+      },
+    });
+    const child = Object.assign(new EventEmitter(), {
+      env: {},
+      connected: true,
+      send: (message: { op: string }, callback: (error?: Error) => void) => {
+        if (message.op === "release" && dropRelease) dropRelease = false;
+        else worker.emit("message", message);
+        callback?.();
+      },
+    });
+    coordinator.attach(worker);
+    const governor = new MemoryGovernor({ processRef: child, remote: true, monitor: false });
+    const acquiring = governor.acquire(capacity);
+    await vi.advanceTimersByTimeAsync(50);
+    expect(coordinator.snapshot().grantedBytes).toBe(capacity);
+    expect(governor.snapshot().limitBytes).toBe(0);
+    await vi.advanceTimersByTimeAsync(1000);
+    const lease = await acquiring;
+    expect(coordinator.snapshot().grantedBytes).toBe(capacity);
+    expect(governor.snapshot().limitBytes).toBe(capacity);
+    lease.release();
+    governor.sample();
+    expect(coordinator.snapshot().grantedBytes).toBe(capacity);
+    governor.sample();
+    governor.sample();
+    expect(coordinator.snapshot().grantedBytes).toBe(0);
+    child.emit("message", { type: MEMORY_CREDIT_MESSAGE, id: 1, bytes: capacity });
+    expect(governor.snapshot().limitBytes).toBe(0);
+    const again = governor.acquire(capacity);
+    await vi.advanceTimersByTimeAsync(50);
+    (await again).release();
+    governor.sample();
+    expect(coordinator.snapshot().grantedBytes).toBe(0);
+    child.connected = false;
+    child.emit("disconnect");
+    worker.emit("exit");
+  });
   it("运行时缩容不会撤销在用租约，恢复不得超过固定启动上限", async () => {
     let ram = 2 ** 30;
     let pressure = 0;

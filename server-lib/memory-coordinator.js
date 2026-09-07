@@ -31,23 +31,28 @@ function createMemoryCoordinator({ readSnapshot = readResourceSnapshot, env = pr
     return snapshot();
   }
   function attach(worker) {
-    const state = { bytes: 0 };
+    const state = { bytes: 0, requestId: 0, replyBytes: 0, releasedTotal: 0 };
     clients.set(worker, state);
     worker.on("message", (message) => {
       if (message?.type !== MESSAGE || !clients.has(worker)) return;
       const bytes = message.bytes;
       if (!Number.isSafeInteger(bytes) || bytes < 0) return;
-      if (message.op === "release") {
-        const released = Math.min(bytes, state.bytes);
-        state.bytes -= released;
-        granted -= released;
-      } else if (message.op === "acquire" && Number.isSafeInteger(message.id)) {
-        const accepted = bytes <= target - granted;
-        if (accepted) { state.bytes += bytes; granted += bytes; }
+      // 累计归还量也随下一次申请携带；归还消息丢失或重复都不会泄漏/重复释放额度。
+      const releasedTotal = message.releasedTotal ?? state.releasedTotal;
+      if (!Number.isSafeInteger(releasedTotal) || releasedTotal < state.releasedTotal || releasedTotal - state.releasedTotal > state.bytes) return;
+      const released = releasedTotal - state.releasedTotal;
+      state.bytes -= released; granted -= released; state.releasedTotal = releasedTotal;
+      if (message.op === "acquire" && Number.isSafeInteger(message.id) && message.id > 0) {
+        if (message.id < state.requestId) return;
+        if (message.id > state.requestId) {
+          state.requestId = message.id;
+          state.replyBytes = Math.min(bytes, Math.max(0, target - granted));
+          state.bytes += state.replyBytes; granted += state.replyBytes;
+        }
         try {
-          worker.send({ type: MESSAGE, id: message.id, bytes: accepted ? bytes : 0 });
+          worker.send({ type: MESSAGE, id: message.id, bytes: state.replyBytes });
         } catch {
-          // 发送失败仍保留授权，等待 exit；不能假定子进程没有收到消息。
+          // 同一申请 ID 重发相同结果；不重复发放，也不提前收回可能已送达的授权。
         }
       }
     });

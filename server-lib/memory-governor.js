@@ -34,6 +34,7 @@ class MemoryGovernor {
     this.stages = {};
     this.credits = 0;
     this.nextId = 0;
+    this.releasedTotal = 0;
     this.pending = null;
     this.healthy = 0;
     this.lastSwapIO = this.plan.swapIO || 0;
@@ -41,13 +42,16 @@ class MemoryGovernor {
     if (this.remote) {
       this.processRef.on("message", (message) => {
         if (message?.type !== MEMORY_CREDIT_MESSAGE || message.id !== this.pending?.id) return;
-        if (Number.isSafeInteger(message.bytes) && message.bytes >= 0) this.credits += message.bytes;
+        if (!Number.isSafeInteger(message.bytes) || message.bytes < 0) return;
+        this.credits += message.bytes;
         const pending = this.pending;
+        clearTimeout(pending.timer);
         this.pending = null;
         pending.resolve();
       });
       this.processRef.on("disconnect", () => {
         const pending = this.pending;
+        clearTimeout(pending?.timer);
         this.pending = null;
         pending?.resolve();
       });
@@ -60,10 +64,13 @@ class MemoryGovernor {
 
   sample() {
     if (this.remote) {
-      const excess = Math.floor((this.credits - this.used) / CREDIT_BYTES) * CREDIT_BYTES;
-      if (excess > 0 && this.processRef.connected) {
-        this.credits -= excess;
-        try { this.processRef.send({ type: MEMORY_CREDIT_MESSAGE, op: "release", bytes: excess }, () => {}); } catch {}
+      const excess = this.used === 0 ? this.credits : Math.floor((this.credits - this.used) / CREDIT_BYTES) * CREDIT_BYTES;
+      if (this.processRef.connected) {
+        if (excess > 0) { this.credits -= excess; this.releasedTotal += excess; }
+        // 幂等心跳也修复空闲 worker 丢失归还消息的情况，不依赖下一次流量。
+        if (this.releasedTotal > 0) {
+          try { this.processRef.send({ type: MEMORY_CREDIT_MESSAGE, op: "release", bytes: excess, releasedTotal: this.releasedTotal }, () => {}); } catch {}
+        }
       }
       return;
     }
@@ -98,13 +105,25 @@ class MemoryGovernor {
     const id = ++this.nextId;
     let resolve;
     const promise = new Promise((done) => { resolve = done; });
-    this.pending = { id, promise, resolve };
+    const pending = { id, promise, resolve, sending: false, timer: null };
+    this.pending = pending;
     const requested = Math.ceil(Math.max(bytes, CREDIT_BYTES) / CREDIT_BYTES) * CREDIT_BYTES;
-    try {
-      this.processRef.send({ type: MEMORY_CREDIT_MESSAGE, op: "acquire", id, bytes: requested }, (error) => {
-        if (error && this.pending?.id === id) { this.pending = null; resolve(); }
-      });
-    } catch { this.pending = null; resolve(); }
+    const send = () => {
+      if (this.pending !== pending) return;
+      if (!this.processRef.connected) { this.pending = null; resolve(); return; }
+      if (!pending.sending) {
+        pending.sending = true;
+        try {
+          this.processRef.send({ type: MEMORY_CREDIT_MESSAGE, op: "acquire", id, bytes: requested, releasedTotal: this.releasedTotal }, (error) => {
+            pending.sending = false;
+            if (error) resolve();
+          });
+        } catch { pending.sending = false; resolve(); }
+      }
+      // 回复丢失时重试相同 ID；IPC 写入尚未完成时不再堆积发送。
+      if (this.pending === pending) { pending.timer = setTimeout(send, 1000); pending.timer.unref?.(); }
+    };
+    send();
     return promise;
   }
 

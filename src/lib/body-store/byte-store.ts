@@ -1,6 +1,7 @@
 import { type FileHandle, mkdir, mkdtemp, open, rm, statfs } from "node:fs/promises";
 import path from "node:path";
 import { BufferedByteChunks } from "@/app/v1/_lib/proxy/buffered-byte-chunks";
+import { logger } from "@/lib/logger";
 import { LocalCapacityError, type MemoryLease } from "@/lib/memory/governor";
 import { getSpoolBudget, getSpoolRoot, spoolPrefix } from "../../../server-lib/spool-directory";
 
@@ -8,6 +9,7 @@ export const STORE_SCRATCH_BYTES = 128 * 1024;
 const BLOCK_BYTES = 64 * 1024;
 const HOT_BYTES = 256 * 1024;
 const diskBudget = getSpoolBudget();
+const warnedSpoolRoots = new Set<string>();
 
 /** 单一字节所有者。每次写入等待落盘完成，异步写队列不会积累正文副本。 */
 export class ByteStore {
@@ -21,6 +23,7 @@ export class ByteStore {
   private pending = new Set<Promise<unknown>>();
   private interrupted = false;
   private cleanup: Promise<void> | null = null;
+  private cleanupRetry: ReturnType<typeof setTimeout> | null = null;
   private scratchBytes = STORE_SCRATCH_BYTES;
   byteLength = 0;
 
@@ -138,24 +141,34 @@ export class ByteStore {
       this.cleanup = (async () => {
         await Promise.allSettled([...this.pending]);
         this.memory.clear();
-        try {
-          await this.file?.close();
-        } finally {
-          if (this.directory) {
-            await rm(this.directory, {
-              recursive: true,
-              force: true,
-              maxRetries: 3,
-              retryDelay: 100,
-            });
-            this.directory = null;
-            diskBudget.files--;
-          }
-          diskBudget.bytes -= this.diskBytes;
-          this.diskBytes = 0;
-          this.file = null;
+        await this.file?.close();
+        this.file = null;
+        if (this.directory) {
+          await rm(this.directory, {
+            recursive: true,
+            force: true,
+            maxRetries: 3,
+            retryDelay: 100,
+          });
+          this.directory = null;
+          diskBudget.files--;
         }
-      })();
+        diskBudget.bytes -= this.diskBytes;
+        this.diskBytes = 0;
+        if (this.cleanupRetry) clearTimeout(this.cleanupRetry);
+        this.cleanupRetry = null;
+      })().catch((error) => {
+        this.cleanup = null;
+        // 删除未确认前仍保留磁盘额度；每个 store 最多一个后台重试。
+        if (!this.cleanupRetry) {
+          this.cleanupRetry = setTimeout(() => {
+            this.cleanupRetry = null;
+            void this.dispose().catch(() => undefined);
+          }, 1000);
+          this.cleanupRetry.unref?.();
+        }
+        throw error;
+      });
     }
     // 超时只结束请求等待；内核 I/O 真正结束前仍保留租约，不能提前超卖内存。
     const cleanup = this.cleanup.finally(onSettled);
@@ -243,13 +256,26 @@ export class ByteStore {
       const stats = await statfs(root);
       this.checkActive();
       // tmpfs / ramfs 仍占用同一物理内存，不能充当溢写层。
-      if (stats.type === 0x01021994 || stats.type === 0x858458f6) throw new LocalCapacityError();
+      if (stats.type === 0x01021994 || stats.type === 0x858458f6) {
+        if (!warnedSpoolRoots.has(root)) {
+          warnedSpoolRoots.add(root);
+          logger.warn("memory_spool_unavailable", {
+            root,
+            reason: "tmpfs_or_ramfs",
+            action: "Set CCH_MEMORY_SPILL_DIR to a real disk directory",
+          });
+        }
+        throw new LocalCapacityError();
+      }
       const workers = Math.max(1, Number(process.env.CCH_MULTICORE_WORKER_COUNT) || 1);
       const configured =
         this.options.maxDiskBytes ??
         Math.floor(Number(process.env.CCH_MEMORY_SPILL_MAX_BYTES || 8 * 1024 ** 3) / workers);
       if (!Number.isSafeInteger(configured) || configured <= 0) throw new LocalCapacityError();
-      this.diskLimit = Math.min(configured, Math.floor(stats.bavail * stats.bsize * 0.1));
+      this.diskLimit = Math.min(
+        configured,
+        Math.floor((stats.bavail * stats.bsize * 0.1) / workers)
+      );
       this.directory = await mkdtemp(path.join(root, spoolPrefix()));
       this.checkActive();
       this.file = await open(path.join(this.directory, "body"), "wx+", 0o600);

@@ -25,7 +25,7 @@
 自动数量为以下容量的最小值：
 
 ```text
-min(4, floor(effective_vCPU / 2), memory_capacity, shared_budget_capacity)
+min(32, floor(effective_vCPU / 2), memory_capacity, shared_budget_capacity)
 ```
 
 每个进程预留两个 vCPU 的原因是主 JavaScript 线程之外仍有 GC、异步 zlib/libuv、TLS 和原生代码工作，避免“4 vCPU 启 4 个主线程”把尾延迟和内存推到不可控区间。需要覆盖默认值时可显式设置 worker 数。

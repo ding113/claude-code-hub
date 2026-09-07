@@ -2,7 +2,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ByteStore, STORE_SCRATCH_BYTES } from "@/lib/body-store/byte-store";
 import { LocalCapacityError } from "@/lib/memory/governor";
+import { logger } from "@/lib/logger";
 import { MemoryGovernor } from "../../../server-lib/memory-governor";
+import { getSpoolBudget } from "../../../server-lib/spool-directory";
 
 const disk = vi.hoisted(() => ({
   mkdir: vi.fn(),
@@ -14,7 +16,11 @@ const disk = vi.hoisted(() => ({
   close: vi.fn(),
 }));
 vi.mock("node:fs/promises", () => disk);
-afterEach(() => vi.useRealTimers());
+vi.mock("@/lib/logger", () => ({ logger: { warn: vi.fn() } }));
+afterEach(() => {
+  vi.useRealTimers();
+  vi.unstubAllEnvs();
+});
 
 describe("磁盘故障与取消", () => {
   function setup() {
@@ -73,5 +79,57 @@ describe("磁盘故障与取消", () => {
     await expect(failed.append(new Uint8Array(1))).rejects.toBeInstanceOf(LocalCapacityError);
     await failed.dispose(() => lease.release());
     expect(disk.rm).toHaveBeenCalledOnce();
+  });
+
+  it("删除失败保留实际磁盘额度，后台重试成功后恰好归还一次", async () => {
+    vi.useFakeTimers();
+    const { lease } = setup();
+    const before = { ...getSpoolBudget() };
+    disk.write.mockResolvedValue({ bytesWritten: 100 });
+    disk.rm.mockRejectedValueOnce(new Error("temporary filesystem error"));
+    const store = new ByteStore(lease);
+    await store.append(new Uint8Array(100));
+    await expect(store.dispose(() => lease.release())).rejects.toThrow(
+      "temporary filesystem error"
+    );
+    expect(getSpoolBudget()).toMatchObject({ bytes: before.bytes + 100, files: before.files + 1 });
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(getSpoolBudget()).toEqual(before);
+    await store.dispose();
+    expect(disk.rm).toHaveBeenCalledTimes(2);
+    expect(disk.close).toHaveBeenCalledOnce();
+  });
+
+  it("32 个 worker 分摊同一可用磁盘的 10%，不能各自占用 10%", async () => {
+    vi.stubEnv("CCH_MULTICORE_WORKER_COUNT", "32");
+    const { lease } = setup();
+    disk.statfs.mockResolvedValue({ type: 0, bavail: 32000, bsize: 1 });
+    disk.write.mockResolvedValue({ bytesWritten: 100 });
+    const store = new ByteStore(lease);
+    try {
+      await store.append(new Uint8Array(100));
+      await expect(store.append(new Uint8Array(1))).rejects.toBeInstanceOf(LocalCapacityError);
+    } finally {
+      await store.dispose(() => lease.release());
+    }
+  });
+
+  it("同一 tmpfs 暂存目录仅警告一次并指出配置修复方式", async () => {
+    const { lease } = setup();
+    disk.statfs.mockResolvedValue({ type: 0x01021994, bavail: 1000, bsize: 4096 });
+    for (let i = 0; i < 2; i++) {
+      const store = new ByteStore(lease, { directory: "C:/cch-test-spool/warn-once" });
+      await expect(store.append(new Uint8Array(1))).rejects.toBeInstanceOf(LocalCapacityError);
+      await store.dispose();
+    }
+    lease.release();
+    expect(logger.warn).toHaveBeenCalledOnce();
+    expect(logger.warn).toHaveBeenCalledWith(
+      "memory_spool_unavailable",
+      expect.objectContaining({
+        reason: "tmpfs_or_ramfs",
+        action: expect.stringContaining("CCH_MEMORY_SPILL_DIR"),
+      })
+    );
   });
 });

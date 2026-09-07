@@ -18,6 +18,7 @@ export default createCoverageConfig({
     "server-lib/spool-directory.js",
     "src/lib/body-store/*.ts",
     "src/lib/memory/json-probe.ts",
+    "src/lib/memory/http.ts",
     "src/app/v1/_lib/proxy/stream-gate/frame-probe.ts",
     "src/app/v1/_lib/proxy/stream-gate/probed-sse-frames.ts",
     "src/app/v1/_lib/proxy/stream-gate/prepared-gate.ts",

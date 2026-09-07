@@ -32,8 +32,8 @@ describe("内存/磁盘共享正文", () => {
         await store.append(bytes.subarray(i, i + 31931));
       expect(store.spilled).toBe(true);
       expect(store.retainedByteLength).toBe(0);
-      expect(new Uint8Array(await store.arrayBuffer())).toEqual(bytes);
-      expect(new Uint8Array(await store.arrayBuffer())).toEqual(bytes);
+      expect(Buffer.compare(Buffer.from(await store.arrayBuffer()), bytes)).toBe(0);
+      expect(Buffer.compare(Buffer.from(await store.arrayBuffer()), bytes)).toBe(0);
       expect(governor.snapshot().usedBytes).toBe(STORE_SCRATCH_BYTES);
       await store.dispose();
       await store.dispose();

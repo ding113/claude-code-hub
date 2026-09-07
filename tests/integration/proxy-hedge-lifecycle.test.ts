@@ -7,7 +7,7 @@ import { DiscoveryValidityParser } from "@/app/v1/_lib/proxy/discovery-validity"
 import { ProxyForwarder } from "@/app/v1/_lib/proxy/forwarder";
 import { ProxyResponseHandler } from "@/app/v1/_lib/proxy/response-handler";
 import { type MessageContext, ProxySession } from "@/app/v1/_lib/proxy/session";
-import { SseFrameParser } from "@/app/v1/_lib/proxy/stream-gate/sse-frames";
+import { ProbedSseFrames } from "@/app/v1/_lib/proxy/stream-gate/probed-sse-frames";
 import { DbPoolAdmissionError } from "@/drizzle/admitted-client";
 import { getGlobalAgentPool, resetGlobalAgentPool } from "@/lib/proxy-agent";
 import type { SessionBindingSnapshot } from "@/lib/redis/session-binding";
@@ -561,9 +561,9 @@ function watchNeutralResponsesPrefixConsumption() {
     observed += typeof chunk === "string" ? chunk : decoder.decode(chunk, { stream: true });
     if (observed.includes('"sequence_number":3')) consumed.resolve();
   };
-  const originalGateVisit = SseFrameParser.prototype.visit;
+  const originalGateVisit = ProbedSseFrames.prototype.visit;
   const gateSpy = vi
-    .spyOn(SseFrameParser.prototype, "visit")
+    .spyOn(ProbedSseFrames.prototype, "visit")
     .mockImplementation(function (chunk, visitor) {
       observe(chunk);
       return originalGateVisit.call(this, chunk, visitor);

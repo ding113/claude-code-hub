@@ -10,6 +10,9 @@ export class ProbedSseFrames {
   private inValue = false;
   private firstValue = false;
   private lineLength = 0;
+  private lineStart = true;
+  private leadingWhitespace = false;
+  private bare = false;
   private eventValue = "";
   private eventOverflow = false;
   private event: string | null = null;
@@ -17,6 +20,8 @@ export class ProbedSseFrames {
   private dataLines = 0;
   private dataLength = 0;
   private dataBytes = 0;
+  private trailingLength = 0;
+  private trailingBytes = 0;
   private preview = "";
   private inferencePreview = "";
   lastFrame: {
@@ -75,6 +80,32 @@ export class ProbedSseFrames {
   }
   private part(part: string): void {
     this.lineLength += part.length;
+    if (this.lineStart && part.length > 0) {
+      const candidate = part.trimStart();
+      if (!candidate) {
+        this.leadingWhitespace = true;
+        this.assertLimit();
+        return;
+      }
+      this.lineStart = false;
+      this.bare =
+        this.event === null &&
+        this.dataLines === 0 &&
+        (candidate[0] === "{" || candidate[0] === "[");
+      if (this.bare) {
+        this.dataLines = 1;
+        this.data(candidate);
+        this.assertLimit();
+        return;
+      }
+      // SSE 字段必须从行首开始；前导空白只允许裸 JSON 兼容路径。
+      if (this.leadingWhitespace || candidate.length !== part.length) this.field = "\u0000ignored";
+    }
+    if (this.bare) {
+      this.data(part);
+      this.assertLimit();
+      return;
+    }
     let offset = 0;
     if (!this.inValue) {
       for (; offset < part.length; offset++) {
@@ -89,7 +120,7 @@ export class ProbedSseFrames {
       }
     }
     if (this.inValue && offset < part.length) {
-      if (this.firstValue && part[offset] === " ") offset++;
+      if (this.firstValue && part[offset].trim() === "") offset++;
       this.firstValue = false;
       const value = part.slice(offset);
       if (this.field === "data") this.data(value);
@@ -104,6 +135,9 @@ export class ProbedSseFrames {
           );
       }
     }
+    this.assertLimit();
+  }
+  private assertLimit(): void {
     const max = isRequestEchoFrame(this.family, this.event, this.preview) ? this.cap * 2 : this.cap;
     if (this.dataLength > max || this.lineLength > max + 8) throw new SseFrameBufferLimitError(max);
   }
@@ -113,6 +147,15 @@ export class ProbedSseFrames {
     }
   }
   private data(value: string): void {
+    if (this.bare) {
+      const trimmedLength = value.trimEnd().length;
+      if (trimmedLength > 0) {
+        this.trailingLength = 0;
+        this.trailingBytes = 0;
+      }
+      this.trailingLength += value.length - trimmedLength;
+      this.trailingBytes += Buffer.byteLength(value.slice(trimmedLength), "utf8");
+    }
     this.dataLength += value.length;
     this.dataBytes += Buffer.byteLength(value, "utf8");
     if (this.preview.length < 2000) this.preview += value.slice(0, 2000 - this.preview.length);
@@ -124,16 +167,25 @@ export class ProbedSseFrames {
   }
   private endLine(visitor: SseFrameVisitor): boolean {
     const empty = this.lineLength === 0;
-    if (!this.inValue && this.field === "data") this.startValue();
+    const bare = this.bare;
+    if (bare) {
+      this.dataLength -= this.trailingLength;
+      this.dataBytes -= this.trailingBytes;
+      this.preview = this.preview.slice(0, this.dataLength);
+      this.inferencePreview = this.inferencePreview.slice(0, this.dataLength);
+    }
     if (this.field === "event")
       this.event = this.eventOverflow ? "\u0000unknown-event" : this.eventValue.trim();
     this.lineLength = 0;
+    this.lineStart = true;
+    this.leadingWhitespace = false;
+    this.bare = false;
     this.field = "";
     this.inValue = false;
     this.firstValue = false;
     this.eventValue = "";
     this.eventOverflow = false;
-    return empty ? this.flush(visitor) : true;
+    return empty || bare ? this.flush(visitor) : true;
   }
   private flush(visitor: SseFrameVisitor): boolean {
     let keepGoing = true;
@@ -151,6 +203,8 @@ export class ProbedSseFrames {
     this.dataLines = 0;
     this.dataLength = 0;
     this.dataBytes = 0;
+    this.trailingLength = 0;
+    this.trailingBytes = 0;
     this.preview = "";
     this.inferencePreview = "";
     this.probe = createFrameProbe(this.family, this.reserveDepth);
