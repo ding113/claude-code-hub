@@ -1733,7 +1733,8 @@ export class ProxyForwarder {
       const hedgePromise = ProxyForwarder.sendStreamingWithHedge(
         session,
         discoverySettings,
-        legacyHedgeMaxInFlight
+        legacyHedgeMaxInFlight,
+        requestStartedAt
       );
       void hedgePromise.catch(() => undefined);
       return await hedgePromise;
@@ -4846,7 +4847,8 @@ export class ProxyForwarder {
   private static async sendStreamingWithHedge(
     session: ProxySession,
     settings: SystemSettings,
-    maxInFlight: number
+    maxInFlight: number,
+    requestStartedAt: number
   ): Promise<Response> {
     const initialProvider = session.provider;
     if (!initialProvider) {
@@ -4867,6 +4869,17 @@ export class ProxyForwarder {
     let lastErrorCategory: ErrorCategory | null = null;
     const attempts = new Set<StreamingHedgeAttempt>();
     const failedProviderIds: number[] = [];
+    // Legacy hedge is a single parallel wave. Round 1 (not 0) keeps the routing
+    // trace view from labelling every attempt as sticky.
+    const HEDGE_TRACE_ROUND = 1;
+    const hedgeMetrics = new DiscoveryRequestMetrics(
+      {
+        requestId: session.messageContext?.id ?? null,
+        sessionId: session.sessionId ?? "",
+        keyId: session.authState?.key?.id ?? 0,
+      },
+      requestStartedAt
+    );
 
     let resolveResult: ((result: { response?: Response; error?: Error }) => void) | null = null;
     const resultPromise = new Promise<{ response?: Response; error?: Error }>((resolve) => {
@@ -4992,6 +5005,57 @@ export class ProxyForwarder {
         });
     };
 
+    const traceProvider = (attempt: StreamingHedgeAttempt) => ({
+      id: attempt.provider.id,
+      name: attempt.provider.name,
+      priority: attempt.provider.priority || 0,
+    });
+
+    const traceAttemptStarted = (attempt: StreamingHedgeAttempt) => {
+      hedgeMetrics.attemptStarted({
+        attemptId: attempt.attemptId,
+        providerId: attempt.provider.id,
+        round: HEDGE_TRACE_ROUND,
+        kind: "normal",
+      });
+      session.appendRoutingTraceEvent({
+        type: "attempt_started",
+        attemptId: attempt.attemptId,
+        attemptKind: "normal",
+        round: HEDGE_TRACE_ROUND,
+        provider: traceProvider(attempt),
+        activeAttemptCount: attempts.size,
+        configuredCap: maxInFlight,
+      });
+    };
+
+    const traceAttemptFinished = (
+      attempt: StreamingHedgeAttempt,
+      context: {
+        outcome: "winner" | "failed" | "cancelled" | "client_abort";
+        cancellationKind?: string;
+        statusCode?: number;
+        reason?: string;
+      }
+    ) => {
+      hedgeMetrics.attemptFinished(attempt.attemptId, {
+        providerId: attempt.provider.id,
+        outcome: context.outcome,
+        cancellationKind: context.cancellationKind ?? null,
+      });
+      session.appendRoutingTraceEvent({
+        type: "attempt_finished",
+        attemptId: attempt.attemptId,
+        attemptKind: "normal",
+        round: HEDGE_TRACE_ROUND,
+        provider: traceProvider(attempt),
+        outcome: context.outcome,
+        ...(context.cancellationKind ? { cancellationKind: context.cancellationKind } : {}),
+        ...(context.statusCode != null ? { statusCode: context.statusCode } : {}),
+        ...(context.reason ? { reason: context.reason } : {}),
+      });
+    };
+
     const abortAttempt = (attempt: StreamingHedgeAttempt, reason: string) => {
       if (attempt.settled) return;
       attempt.settled = true;
@@ -5001,6 +5065,10 @@ export class ProxyForwarder {
       }
       attempts.delete(attempt);
       session.removeLiveActiveProvider(attempt.provider.id);
+      traceAttemptFinished(attempt, {
+        outcome: reason === "client_abort" ? "client_abort" : "cancelled",
+        cancellationKind: reason,
+      });
 
       // 竞速输家计费开启：仅标记 + 记录决策链，不取消连接、不释放 agent。
       // 实际的后台 drain 由 runAttempt 的 .then 流程发起（它独占 reader，避免并发读）。
@@ -5504,6 +5572,10 @@ export class ProxyForwarder {
           attempt.thresholdTimer = null;
         }
         attempts.delete(attempt);
+        traceAttemptFinished(attempt, {
+          outcome: "client_abort",
+          cancellationKind: "client_abort",
+        });
 
         session.addProviderToChain(attempt.provider, {
           ...attempt.endpointAudit,
@@ -5619,6 +5691,11 @@ export class ProxyForwarder {
             clearTimeout(attempt.thresholdTimer);
             attempt.thresholdTimer = null;
           }
+          traceAttemptFinished(attempt, {
+            outcome: "failed",
+            ...(statusCode != null ? { statusCode } : {}),
+            reason: "reactive_rectifier_retry",
+          });
           attempt.requestAttemptCount += 1;
           attempt.dispatched = false;
           attempt.startedAtMonotonic = 0;
@@ -5627,6 +5704,7 @@ export class ProxyForwarder {
           attempt.healthSettlementClaimed = false;
           attempt.healthOutcome = null;
           attempt.hedgeSaturationRecorded = false;
+          traceAttemptStarted(attempt);
           runAttempt(attempt);
           return;
         }
@@ -5655,6 +5733,11 @@ export class ProxyForwarder {
         attempt.thresholdTimer = null;
       }
       attempts.delete(attempt);
+      traceAttemptFinished(attempt, {
+        outcome: "failed",
+        ...(statusCode != null ? { statusCode } : {}),
+        reason: ErrorCategory[errorCategory]?.toLowerCase(),
+      });
       ProxyForwarder.markProviderFailed(session, failedProviderIds, attempt.provider.id);
 
       if (
@@ -5731,6 +5814,27 @@ export class ProxyForwarder {
 
       attempt.settled = true;
       attempts.delete(attempt);
+      traceAttemptFinished(attempt, {
+        outcome: "winner",
+        statusCode: attempt.response.status,
+      });
+      session.appendRoutingTraceEvent({
+        type: "winner_committed",
+        attemptId: attempt.attemptId,
+        attemptKind: "normal",
+        round: HEDGE_TRACE_ROUND,
+        provider: traceProvider(attempt),
+        statusCode: attempt.response.status,
+      });
+      session.setRoutingTraceSummary(
+        hedgeMetrics.snapshot({
+          outcome: "success",
+          statusCode: attempt.response.status,
+          winnerOrigin: "normal",
+          winnerProviderId: attempt.provider.id,
+          winnerRound: HEDGE_TRACE_ROUND,
+        })
+      );
 
       for (const activeAttempt of attempts) {
         getAttemptModelRedirect(activeAttempt);
@@ -5985,6 +6089,7 @@ export class ProxyForwarder {
 
       attempts.add(attempt);
       session.addLiveActiveProvider(provider);
+      traceAttemptStarted(attempt);
 
       // Record hedge participant launch in decision chain
       // (first provider is already recorded via initial_selection or session_reuse)
@@ -6106,6 +6211,12 @@ export class ProxyForwarder {
       await finishIfExhausted();
       const result = await resultPromise;
       if (result.error) {
+        session.setRoutingTraceSummary(
+          hedgeMetrics.snapshot({
+            outcome: lastErrorCategory === ErrorCategory.CLIENT_ABORT ? "client_abort" : "failed",
+            statusCode: result.error instanceof ProxyError ? result.error.statusCode : 500,
+          })
+        );
         throw result.error;
       }
       return result.response as Response;

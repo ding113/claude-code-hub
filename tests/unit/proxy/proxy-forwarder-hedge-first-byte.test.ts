@@ -6440,4 +6440,181 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
     expect(doForward).not.toHaveBeenCalled();
     expect(addSpy.mock.calls.filter(([type]) => type === "abort")).toHaveLength(0);
   });
+
+  test("legacy hedge records the full attempt lifecycle in the routing trace", async () => {
+    vi.useFakeTimers();
+
+    try {
+      const slow = createProvider({ id: 11, name: "slow", firstByteTimeoutStreamingMs: 100 });
+      const fast = createProvider({ id: 22, name: "fast", firstByteTimeoutStreamingMs: 100 });
+      const session = createSession();
+      setProviderWithSessionRef(session, slow);
+
+      mocks.pickRandomProviderWithExclusion.mockResolvedValueOnce(fast);
+
+      const doForward = vi.spyOn(
+        ProxyForwarder as unknown as {
+          doForward: (...args: unknown[]) => Promise<Response>;
+        },
+        "doForward"
+      );
+
+      const controller1 = new AbortController();
+      const controller2 = new AbortController();
+
+      doForward.mockImplementationOnce(async (attemptSession) => {
+        const runtime = attemptSession as ProxySession & AttemptRuntime;
+        runtime.responseController = controller1;
+        runtime.clearResponseTimeout = vi.fn();
+        runtime.releaseAgent = vi.fn();
+        return createStreamingResponse({
+          label: "slow",
+          firstChunkDelayMs: 220,
+          controller: controller1,
+        });
+      });
+
+      doForward.mockImplementationOnce(async (attemptSession) => {
+        const runtime = attemptSession as ProxySession & AttemptRuntime;
+        runtime.responseController = controller2;
+        runtime.clearResponseTimeout = vi.fn();
+        runtime.releaseAgent = vi.fn();
+        return createStreamingResponse({
+          label: "fast",
+          firstChunkDelayMs: 40,
+          controller: controller2,
+        });
+      });
+
+      const responsePromise = ProxyForwarder.send(session);
+
+      await vi.advanceTimersByTimeAsync(100);
+      expect(doForward).toHaveBeenCalledTimes(2);
+
+      await vi.advanceTimersByTimeAsync(50);
+      const response = await responsePromise;
+      expect(await response.text()).toContain('"provider":"fast"');
+
+      const trace = session.finalizeRoutingTrace(200);
+      expect(trace?.mode).toBe("legacy_hedge");
+
+      const started = trace?.events.filter((event) => event.type === "attempt_started") ?? [];
+      expect(started.map((event) => event.attemptId)).toEqual([
+        "legacy-hedge-1-1",
+        "legacy-hedge-2-1",
+      ]);
+      expect(started.map((event) => event.provider?.id)).toEqual([slow.id, fast.id]);
+      for (const event of started) {
+        // round 1 (not 0) keeps the trace view from rendering every attempt as sticky
+        expect(event.round).toBe(1);
+        expect(event.attemptKind).toBe("normal");
+      }
+
+      const finished = trace?.events.filter((event) => event.type === "attempt_finished") ?? [];
+      expect(finished.find((event) => event.attemptId === "legacy-hedge-2-1")).toMatchObject({
+        outcome: "winner",
+        statusCode: 200,
+      });
+      expect(finished.find((event) => event.attemptId === "legacy-hedge-1-1")).toMatchObject({
+        outcome: "cancelled",
+        cancellationKind: "hedge_loser",
+      });
+
+      expect(trace?.events.find((event) => event.type === "winner_committed")).toMatchObject({
+        attemptId: "legacy-hedge-2-1",
+        statusCode: 200,
+      });
+
+      expect(trace?.summary).toMatchObject({
+        outcome: "success",
+        attemptsPerRequest: 2,
+        maxActiveAttempts: 2,
+        rounds: 1,
+        winnerOrigin: "normal",
+        winnerProviderId: fast.id,
+        winnerRound: 1,
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("legacy hedge records every failed attempt and a failure summary", async () => {
+    vi.useFakeTimers();
+
+    try {
+      const provider1 = createProvider({ id: 1, name: "p1", firstByteTimeoutStreamingMs: 100 });
+      const provider2 = createProvider({ id: 2, name: "p2", firstByteTimeoutStreamingMs: 100 });
+      const session = createSession();
+      session.setProvider(provider1);
+
+      mocks.pickRandomProviderWithExclusion
+        .mockResolvedValueOnce(provider2)
+        .mockResolvedValueOnce(null);
+
+      const doForward = vi.spyOn(
+        ProxyForwarder as unknown as {
+          doForward: (...args: unknown[]) => Promise<Response>;
+        },
+        "doForward"
+      );
+
+      const controller1 = new AbortController();
+      const controller2 = new AbortController();
+
+      doForward.mockImplementationOnce(async (attemptSession) => {
+        const runtime = attemptSession as ProxySession & AttemptRuntime;
+        runtime.responseController = controller1;
+        runtime.clearResponseTimeout = vi.fn();
+        return createDelayedFailure({
+          delayMs: 150,
+          error: new UpstreamProxyError("upstream down", 502),
+          controller: controller1,
+        });
+      });
+
+      doForward.mockImplementationOnce(async (attemptSession) => {
+        const runtime = attemptSession as ProxySession & AttemptRuntime;
+        runtime.responseController = controller2;
+        runtime.clearResponseTimeout = vi.fn();
+        return createDelayedFailure({
+          delayMs: 160,
+          error: new UpstreamProxyError("upstream down", 502),
+          controller: controller2,
+        });
+      });
+
+      const responsePromise = ProxyForwarder.send(session);
+      const errorPromise = responsePromise.catch((rejection) => rejection as UpstreamProxyError);
+
+      await vi.advanceTimersByTimeAsync(100);
+      expect(doForward).toHaveBeenCalledTimes(2);
+
+      await vi.runAllTimersAsync();
+      await errorPromise;
+
+      const trace = session.finalizeRoutingTrace(503);
+      const started = trace?.events.filter((event) => event.type === "attempt_started") ?? [];
+      const finished = trace?.events.filter((event) => event.type === "attempt_finished") ?? [];
+      expect(started).toHaveLength(2);
+      expect(finished).toHaveLength(2);
+      for (const event of finished) {
+        expect(event).toMatchObject({
+          outcome: "failed",
+          statusCode: 502,
+          reason: "provider_error",
+        });
+      }
+
+      expect(trace?.summary).toMatchObject({
+        outcome: "failed",
+        attemptsPerRequest: 2,
+        rounds: 1,
+        winnerOrigin: "none",
+        winnerProviderId: null,
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
