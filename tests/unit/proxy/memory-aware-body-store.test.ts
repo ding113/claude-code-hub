@@ -1,6 +1,5 @@
 // @vitest-environment node
-import { mkdtemp, readdir, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdir, mkdtemp, readdir, rm } from "node:fs/promises";
 import path from "node:path";
 import {
   brotliCompressSync,
@@ -9,23 +8,34 @@ import {
   gzipSync,
   zstdCompressSync,
 } from "node:zlib";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ByteStore, STORE_SCRATCH_BYTES } from "@/lib/body-store/byte-store";
 import { loadRequestBody } from "@/lib/body-store/request-body-store";
 import { LocalCapacityError } from "@/lib/memory/governor";
 import { MemoryGovernor } from "../../../server-lib/memory-governor";
 
-afterEach(() => vi.unstubAllEnvs());
+let testDirectory: string;
+beforeEach(async () => {
+  // 使用工作区所在磁盘，避免 Linux 的 /tmp 挂载为 tmpfs。
+  const root = path.join(process.cwd(), "tmp");
+  await mkdir(root, { recursive: true });
+  testDirectory = await mkdtemp(path.join(root, "cch-body-test-"));
+  vi.stubEnv("CCH_MEMORY_SPILL_DIR", testDirectory);
+});
+afterEach(async () => {
+  vi.unstubAllEnvs();
+  await rm(testDirectory, { recursive: true, force: true });
+});
 describe("内存/磁盘共享正文", () => {
   it("容量耗尽时逐块落盘，精确回放，重复释放不泄漏文件", async () => {
-    const directory = await mkdtemp(path.join(tmpdir(), "cch-test-"));
+    const directory = await mkdtemp(path.join(testDirectory, "case-"));
     const governor = new MemoryGovernor({
       limit: STORE_SCRATCH_BYTES,
       monitor: false,
       remote: false,
     });
     const lease = await governor.acquire(STORE_SCRATCH_BYTES);
-    const store = new ByteStore(lease, { directory });
+    const store = new ByteStore(lease, { directory, ioTimeoutMs: 5000 });
     try {
       const bytes = new TextEncoder().encode("大上下文\n".repeat(100000));
       for (let i = 0; i < bytes.length; i += 31931)
@@ -45,7 +55,7 @@ describe("内存/磁盘共享正文", () => {
     }
   });
   it("落盘配额不足返回本地过载并清理已创建文件", async () => {
-    const directory = await mkdtemp(path.join(tmpdir(), "cch-test-"));
+    const directory = await mkdtemp(path.join(testDirectory, "case-"));
     const governor = new MemoryGovernor({
       limit: STORE_SCRATCH_BYTES,
       monitor: false,

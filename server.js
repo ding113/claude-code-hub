@@ -1176,24 +1176,15 @@ async function main() {
   const { getMemoryGovernor } = require("./server-lib/memory-governor");
   const memoryGovernor = getMemoryGovernor();
   const { getSpoolBudget } = require("./server-lib/spool-directory");
-  log("info", "worker_memory_ready", memoryGovernor.snapshot());
+  const memoryIdentity = { pid: process.pid, workerIndex: Number(process.env.CCH_MULTICORE_WORKER_INDEX || 0) };
+  log("info", "worker_memory_ready", { ...memoryIdentity, ...memoryGovernor.snapshot() });
   const memoryStatsTimer = setInterval(() => {
-    log("info", "worker_memory_stats", { ...memoryGovernor.snapshot(), processMemory: process.memoryUsage(), spool: getSpoolBudget() });
+    log("info", "worker_memory_stats", { ...memoryIdentity, ...memoryGovernor.snapshot(), processMemory: process.memoryUsage(), spool: getSpoolBudget() });
   }, 30000);
   memoryStatsTimer.unref();
   if (process.env.CCH_MULTICORE_BACKGROUND_OWNER !== "0") {
-    const { cleanupOrphanSpools } = require("./server-lib/spool-directory");
-    let cleaning = false;
-    const cleanup = async () => {
-      if (cleaning) return;
-      cleaning = true;
-      try { await cleanupOrphanSpools(); }
-      catch (error) { log("warn", "spool_cleanup_failed", { error: String(error) }); }
-      finally { cleaning = false; }
-    };
-    await cleanup();
-    const cleanupTimer = setInterval(cleanup, 60000);
-    cleanupTimer.unref();
+    const { startSpoolCleanup } = require("./server-lib/spool-directory");
+    startSpoolCleanup({ onError: (error) => log("warn", "spool_cleanup_failed", { error: String(error) }) });
   }
 
   const requestListener = async (req, res) => {

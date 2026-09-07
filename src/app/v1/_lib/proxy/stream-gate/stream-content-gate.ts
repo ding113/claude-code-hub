@@ -518,11 +518,14 @@ export async function runStreamContentGate(
       getMemoryGovernor().observe("gate", performance.now() - gateStarted, bufferedBytes);
     if (!leaseTransferred) {
       buffered.clear();
-      await store
+      const spilled = store?.spilled;
+      const cleanup = store
         ?.dispose(() => prebufferLease?.release())
         .catch((error) =>
           logger.warn("[StreamGate] Prefix cleanup failed", { error: String(error) })
         );
+      // 失败结果不等待磁盘关闭/删除；清理回调在 I/O 实际结束后归还额度。
+      if (!spilled) await cleanup;
       if (!store) prebufferLease?.release();
     }
   }

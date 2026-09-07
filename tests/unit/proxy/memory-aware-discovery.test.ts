@@ -10,7 +10,7 @@ import {
 import { MemoryGovernor } from "../../../server-lib/memory-governor";
 
 const encoder = new TextEncoder();
-const frame = (payload: object) => encoder.encode("data: " + JSON.stringify(payload) + "\n\n");
+const frame = (payload: object) => encoder.encode(`data: ${JSON.stringify(payload)}\n\n`);
 
 describe("Discovery 前缀与解析容量", () => {
   it("中性帧实际增长、EOF 不提前归还，赢家回放后释放", async () => {

@@ -17,7 +17,7 @@ const samples = [
   "   ",
   "{broken}",
   " ".repeat(5000),
-  " ".repeat(3000) + "[DONE]  ",
+  `${" ".repeat(3000)}[DONE]  `,
   "\u00a0{}\u00a0",
   '{"candidates":[{"finishReason":["SAFETY"]}]}',
   '{"choices":{"#":{"delta":{"content":"wrong object wildcard"}}}}',

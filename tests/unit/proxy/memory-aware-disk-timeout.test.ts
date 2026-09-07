@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ByteStore, STORE_SCRATCH_BYTES } from "@/lib/body-store/byte-store";
+import { runStreamContentGate } from "@/app/v1/_lib/proxy/stream-gate/stream-content-gate";
 import { LocalCapacityError } from "@/lib/memory/governor";
 import { logger } from "@/lib/logger";
 import { MemoryGovernor } from "../../../server-lib/memory-governor";
@@ -79,6 +80,54 @@ describe("磁盘故障与取消", () => {
     await expect(failed.append(new Uint8Array(1))).rejects.toBeInstanceOf(LocalCapacityError);
     await failed.dispose(() => lease.release());
     expect(disk.rm).toHaveBeenCalledOnce();
+  });
+
+  it("门控失败立即返回，慢磁盘清理完成前保留额度", async () => {
+    vi.useFakeTimers();
+    const { governor, lease } = setup();
+    let finish!: () => void;
+    disk.close.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          finish = resolve;
+        })
+    );
+    disk.write.mockImplementation(async (_bytes, _offset, length) => ({ bytesWritten: length }));
+    const reader = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(
+          new TextEncoder().encode(
+            'event: error\ndata: {"type":"error","error":{"type":"overloaded_error","message":"busy"}}\n\n'
+          )
+        );
+        controller.close();
+      },
+    }).getReader();
+    let result: Awaited<ReturnType<typeof runStreamContentGate>> | undefined;
+    const pending = runStreamContentGate(reader, {
+      family: "anthropic",
+      providerId: 7,
+      providerName: "test-provider",
+      prebufferEventCap: 64,
+      prebufferByteCap: 256 * 1024,
+      prebufferLease: lease,
+    }).then((value) => {
+      result = value;
+    });
+    try {
+      await vi.advanceTimersByTimeAsync(0);
+      expect(result).toMatchObject({ committed: false, error: { gateReason: "gate_error" } });
+      expect(disk.close).toHaveBeenCalledOnce();
+      expect(governor.snapshot().usedBytes).toBe(STORE_SCRATCH_BYTES);
+      expect(disk.rm).not.toHaveBeenCalled();
+    } finally {
+      finish?.();
+      await vi.advanceTimersByTimeAsync(0);
+      await pending;
+      reader.releaseLock();
+    }
+    expect(disk.rm).toHaveBeenCalledOnce();
+    expect(governor.snapshot().usedBytes).toBe(0);
   });
 
   it("删除失败保留实际磁盘额度，后台重试成功后恰好归还一次", async () => {

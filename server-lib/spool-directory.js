@@ -41,4 +41,20 @@ async function cleanupOrphanSpools(root = getSpoolRoot()) {
   }
 }
 
-module.exports = { getSpoolRoot, spoolPrefix, cleanupOrphanSpools, getSpoolBudget };
+/** 启动清理不阻塞就绪；慢磁盘期间不重叠扫描，失败后仍能在下一周期重试。 */
+function startSpoolCleanup({ cleanup = cleanupOrphanSpools, onError = () => {} } = {}) {
+  let cleaning = false;
+  const run = async () => {
+    if (cleaning) return;
+    cleaning = true;
+    try { await cleanup(); }
+    catch (error) { onError(error); }
+    finally { cleaning = false; }
+  };
+  void run();
+  const timer = setInterval(run, 60000);
+  timer.unref();
+  return () => clearInterval(timer);
+}
+
+module.exports = { getSpoolRoot, spoolPrefix, cleanupOrphanSpools, getSpoolBudget, startSpoolCleanup };

@@ -1,8 +1,8 @@
+import { BufferedByteChunks } from "@/app/v1/_lib/proxy/buffered-byte-chunks";
+import type { StreamGatePrebufferLease } from "@/app/v1/_lib/proxy/stream-gate/prebuffer-budget";
 import { AllocationEstimate } from "@/lib/body-store/allocation-estimate";
 import { STORE_SCRATCH_BYTES } from "@/lib/body-store/byte-store";
 import { LocalCapacityError } from "@/lib/memory/governor";
-import { BufferedByteChunks } from "./buffered-byte-chunks";
-import type { StreamGatePrebufferLease } from "./stream-gate/prebuffer-budget";
 
 /** Discovery 仍使用有界的完整帧解析器；解析与自有前缀块必须共同记账。 */
 export class DiscoveryPrebuffer extends BufferedByteChunks {

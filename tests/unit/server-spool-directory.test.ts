@@ -4,9 +4,47 @@ import { mkdtemp, mkdir, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
-import { cleanupOrphanSpools, getSpoolRoot, spoolPrefix } from "../../server-lib/spool-directory";
+import {
+  cleanupOrphanSpools,
+  getSpoolRoot,
+  spoolPrefix,
+  startSpoolCleanup,
+} from "../../server-lib/spool-directory";
 
 describe("遗留暂存文件回收", () => {
+  it("后台清理立即返回，不重叠扫描，失败后仍继续定期清理", async () => {
+    vi.useFakeTimers();
+    let finish!: () => void;
+    const cleanup = vi.fn().mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          finish = resolve;
+        })
+    );
+    const onError = vi.fn();
+    const stop = startSpoolCleanup({ cleanup, onError });
+    try {
+      expect(typeof stop).toBe("function");
+      expect(cleanup).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(120000);
+      expect(cleanup).toHaveBeenCalledTimes(1);
+      finish();
+      await vi.advanceTimersByTimeAsync(0);
+      const failure = new Error("disk unavailable");
+      cleanup.mockRejectedValueOnce(failure);
+      await vi.advanceTimersByTimeAsync(60000);
+      expect(onError).toHaveBeenCalledWith(failure);
+      await vi.advanceTimersByTimeAsync(60000);
+      expect(cleanup).toHaveBeenCalledTimes(3);
+      stop();
+      await vi.advanceTimersByTimeAsync(60000);
+      expect(cleanup).toHaveBeenCalledTimes(3);
+    } finally {
+      stop();
+      vi.useRealTimers();
+    }
+  });
+
   it("只删除确认死亡或 PID 被复用的自有目录", async () => {
     const root = await mkdtemp(path.join(tmpdir(), "cch-orphan-test-"));
     const names = [
@@ -28,7 +66,7 @@ describe("遗留暂存文件回收", () => {
         ...args: unknown[]
       ) => {
         if (String(file).startsWith("/proc/"))
-          return "102 (test with ) name) " + Array(19).fill("0").join(" ") + " 20";
+          return `102 (test with ) name) ${Array(19).fill("0").join(" ")} 20`;
         return (read as (...values: unknown[]) => unknown)(file, ...args);
       }) as typeof fs.readFileSync);
       await cleanupOrphanSpools(root);

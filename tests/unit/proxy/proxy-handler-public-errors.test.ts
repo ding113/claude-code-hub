@@ -1,6 +1,6 @@
 import { Context } from "hono";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { ProxySession } from "@/app/v1/_lib/proxy/session";
+import type { MessageContext, ProxySession } from "@/app/v1/_lib/proxy/session";
 import type { FakeStreamingWhitelistEntry } from "@/types/system-config";
 import { LocalCapacityError, MemoryGovernor } from "../../../server-lib/memory-governor";
 
@@ -16,6 +16,7 @@ const boundary = vi.hoisted(() => ({
   decrementConcurrentCount: vi.fn<(sessionId: string) => Promise<void>>(),
   decrementObservedConcurrentCount: vi.fn<(identity: string) => Promise<void>>(),
   emitProxyLangfuseTrace: vi.fn(),
+  endRequest: vi.fn(),
   getErrorOverride: vi.fn<(error: Error) => Promise<null>>(),
   incrementConcurrentCount: vi.fn<(sessionId: string) => Promise<void>>(),
   incrementObservedConcurrentCount: vi.fn<(identity: string) => Promise<void>>(),
@@ -72,7 +73,7 @@ vi.mock("@/lib/session-tracker", () => ({
 
 vi.mock("@/lib/proxy-status-tracker", () => ({
   ProxyStatusTracker: {
-    getInstance: () => ({ endRequest: vi.fn(), startRequest: vi.fn() }),
+    getInstance: () => ({ endRequest: boundary.endRequest, startRequest: vi.fn() }),
   },
 }));
 
@@ -108,6 +109,8 @@ describe("handleProxyRequest public error behavior", () => {
     boundary.trackObservedSession.mockReset();
     boundary.loadSettings.mockReset();
     boundary.getErrorOverride.mockReset();
+    boundary.endRequest.mockReset();
+    boundary.updateMessageRequestDetailsDurably.mockReset();
     boundary.loadSettings.mockResolvedValue(settings);
     boundary.getErrorOverride.mockResolvedValue(null);
     boundary.incrementConcurrentCount.mockResolvedValue(undefined);
@@ -199,6 +202,34 @@ describe("handleProxyRequest public error behavior", () => {
     expect(response.status).toBe(429);
     expect(response.headers.get("retry-after")).toBe("1");
     expect((await response.json()).error.code).toBe("local_capacity_exceeded");
+  });
+
+  it.each([false, true])("本地过载持久化失败=%s 时都结束追踪及实时观测", async (fails) => {
+    const close = vi.fn().mockResolvedValue(undefined);
+    boundary.runGuards.mockImplementation(async (session) => {
+      session.setMessageContext({ id: 17, user: { id: 9 } } as MessageContext);
+      vi.spyOn(session, "closeLiveObservability").mockImplementation(close);
+      return null;
+    });
+    if (fails)
+      boundary.updateMessageRequestDetailsDurably.mockRejectedValueOnce(
+        new Error("database unavailable")
+      );
+    boundary.send.mockRejectedValue(new LocalCapacityError());
+    const response = await handleProxyRequest(
+      new Context(
+        new Request("http://localhost/v1/messages", {
+          method: "POST",
+          body: JSON.stringify({ model: "claude-test", messages: [] }),
+        })
+      )
+    );
+    expect(response.status).toBe(429);
+    expect(response.headers.get("retry-after")).toBe("1");
+    expect((await response.json()).error.code).toBe("local_capacity_exceeded");
+    expect(boundary.updateMessageRequestDetailsDurably).toHaveBeenCalledOnce();
+    expect(boundary.endRequest).toHaveBeenCalledExactlyOnceWith(9, 17);
+    expect(close).toHaveBeenCalledOnce();
   });
 
   it("请求体读取前最多排队 20 秒，拒绝时不调用上游", async () => {
