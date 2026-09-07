@@ -23,6 +23,7 @@ export default createCoverageConfig({
     "src/app/v1/_lib/proxy/stream-gate/frame-probe.ts",
     "src/app/v1/_lib/proxy/stream-gate/probed-sse-frames.ts",
     "src/app/v1/_lib/proxy/stream-gate/prepared-gate.ts",
+    "src/app/v1/_lib/proxy/discovery-prebuffer.ts",
   ],
   thresholds: { lines: 80, statements: 80, functions: 80, branches: 80 },
 });

@@ -88,6 +88,7 @@ import { deriveClientSafeUpstreamErrorMessage } from "./client-error-message";
 import { combineAbortSignals } from "./combine-abort-signals";
 import { acquireDetachedStreamLease } from "./detached-stream-budget";
 import { type DiscoveryAction, DiscoveryCoordinator } from "./discovery-coordinator";
+import { DiscoveryPrebuffer } from "./discovery-prebuffer";
 import { type DiscoveryProtocol, DiscoveryValidityParser } from "./discovery-validity";
 import { isStandardProxyEndpointPath } from "./endpoint-family-catalog";
 import { resolveEndpointPolicy, shouldEnforceStrictEndpointPoolPolicy } from "./endpoint-policy";
@@ -6396,8 +6397,8 @@ export class ProxyForwarder {
         /** Retained beside the primary fallback in the final round. */
         finalRescue: boolean;
         controller: AbortController;
-        parser: DiscoveryValidityParser;
-        chunks: BufferedByteChunks;
+        parser: DiscoveryValidityParser | null;
+        chunks: DiscoveryPrebuffer;
         pending: boolean;
         ready: boolean;
         round: number;
@@ -6663,42 +6664,47 @@ export class ProxyForwarder {
         // The validity parser may have consumed one or more chunks before the
         // loser was held. Replay those bytes so usage markers in the prefix
         // (for example Anthropic message_start) are available to billing.
-        const bufferedChunks = attempt.chunks.take();
-        const drain = await drainLoserBillingEvidence({
-          reader,
-          initialChunks: bufferedChunks,
-          providerType: attempt.provider.providerType,
-          responseController: controller,
-          stopReason: "discovery_loser_drain",
-          timeoutMs: drainTimeoutMs,
-        });
-        if (!drain.admitted) {
-          logger.warn("[Discovery] Loser drain rejected by shared budget", {
-            sessionId: attempt.session.sessionId ?? null,
-            providerId: attempt.provider.id,
-            providerName: attempt.provider.name,
-            reason: drain.reason,
+        const prefix = attempt.chunks.takeOwned();
+        try {
+          const drain = await drainLoserBillingEvidence({
+            reader,
+            initialChunks: prefix.chunks,
+            onInitialChunksConsumed: () => prefix.lease?.release(),
+            providerType: attempt.provider.providerType,
+            responseController: controller,
+            stopReason: "discovery_loser_drain",
+            timeoutMs: drainTimeoutMs,
           });
-          return;
-        }
+          if (!drain.admitted) {
+            logger.warn("[Discovery] Loser drain rejected by shared budget", {
+              sessionId: attempt.session.sessionId ?? null,
+              providerId: attempt.provider.id,
+              providerName: attempt.provider.name,
+              reason: drain.reason,
+            });
+            return;
+          }
 
-        // Discovery billing is intentionally stricter than the legacy helper's
-        // partial-usage safety net: a cancelled/failed drain is not a billable
-        // loser. This avoids charging a provider whose response was cut off by
-        // winner handoff or the drain cap.
-        if (drain.terminalSeen) {
-          await finalizeHedgeLoserBilling({
-            messageRequestId,
-            messageRequestCreatedAtMs: messageRequestCreatedAtMs ?? Date.now(),
-            loserSession: attempt.session,
-            provider: attempt.provider,
-            attemptNumber: attempt.sequence,
-            upstreamStatusCode: response.status,
-            allContent: drain.evidenceText,
-            drainComplete: true,
-            requireUsage: true,
-            billingContext: attempt.billingSnapshot ?? undefined,
-          });
+          // Discovery billing is intentionally stricter than the legacy helper's
+          // partial-usage safety net: a cancelled/failed drain is not a billable
+          // loser. This avoids charging a provider whose response was cut off by
+          // winner handoff or the drain cap.
+          if (drain.terminalSeen) {
+            await finalizeHedgeLoserBilling({
+              messageRequestId,
+              messageRequestCreatedAtMs: messageRequestCreatedAtMs ?? Date.now(),
+              loserSession: attempt.session,
+              provider: attempt.provider,
+              attemptNumber: attempt.sequence,
+              upstreamStatusCode: response.status,
+              allContent: drain.evidenceText,
+              drainComplete: true,
+              requireUsage: true,
+              billingContext: attempt.billingSnapshot ?? undefined,
+            });
+          }
+        } finally {
+          prefix.lease?.release();
         }
       })()
         .catch((billingError) => {
@@ -6782,6 +6788,7 @@ export class ProxyForwarder {
       }
       if (!preserveForLoserBilling) {
         releaseProviderRef(attempt);
+        attempt.parser = null;
         attempt.chunks.clear();
       }
       discoveryMetrics.attemptFinished(attempt.id, {
@@ -7081,9 +7088,10 @@ export class ProxyForwarder {
         providerSessionRefRetainOnSuccess: attempt.providerSessionRefRetainOnSuccess,
       });
       leaseTransferred = true;
+      const prefix = attempt.chunks.takeOwned();
       resolveResult?.({
         response: new Response(
-          ProxyForwarder.buildBufferedPrefixStream(attempt.chunks.take(), attempt.reader),
+          ProxyForwarder.buildBufferedPrefixStream(prefix.chunks, attempt.reader, prefix.lease),
           {
             status: attempt.response.status,
             statusText: attempt.response.statusText,
@@ -7360,7 +7368,7 @@ export class ProxyForwarder {
         parser: new DiscoveryValidityParser(
           mapProviderTypeToFamily(provider.providerType) ?? protocol
         ),
-        chunks: new BufferedByteChunks(),
+        chunks: new DiscoveryPrebuffer(),
         pending: true,
         ready: false,
         round: currentRound,
@@ -7411,8 +7419,8 @@ export class ProxyForwarder {
         kind: "normal" | "fallback";
         finalRescue: boolean;
         controller: AbortController;
-        parser: DiscoveryValidityParser;
-        chunks: BufferedByteChunks;
+        parser: DiscoveryValidityParser | null;
+        chunks: DiscoveryPrebuffer;
         pending: boolean;
         ready: boolean;
         round: number;
@@ -7483,6 +7491,7 @@ export class ProxyForwarder {
           attempt.releaseAgent = runtime.releaseAgent ?? null;
           attempt.clearResponseTimeout?.();
           attempt.response = response;
+          attempt.chunks.attachLease(takePreparedGateLease(response));
           if (!attempt.pending || committed || settled) {
             if (response.body && !attempt.reader) attempt.reader = response.body.getReader();
             cleanupAttempt(attempt, attempt.cancellationKind);
@@ -7490,6 +7499,16 @@ export class ProxyForwarder {
           }
           if (!response.body)
             throw new EmptyResponseError(provider.id, provider.name, "empty_body");
+          if (discoveryPrecommitActive && !attempt.chunks.hasLease) {
+            // 非 SSE 的协议兼容响应也会进入 Discovery 解析；读取前补齐准入。
+            attempt.chunks.attachLease(
+              await getStreamGatePrebufferBudget().acquire(STORE_SCRATCH_BYTES, controller.signal)
+            );
+          }
+          if (!attempt.pending || committed || settled) {
+            attempt.chunks.clear();
+            return;
+          }
           attempt.reader = response.body.getReader();
           while (!committed && !settled && attempt.pending) {
             const item = await attempt.reader.read();
@@ -7505,7 +7524,8 @@ export class ProxyForwarder {
             // 首字节时刻先挂在 attempt 上；DiscoveryValidityParser 的 ready 判定同样基于内容，
             // 不在此记录会让 discovery 模式的 TTFB 恒等于 TTFT。
             attempt.firstByteAt ??= Date.now();
-            const validity = discoveryPrecommitActive ? attempt.parser.push(item.value) : null;
+            attempt.chunks.reserveForParse(item.value);
+            const validity = discoveryPrecommitActive ? attempt.parser?.push(item.value) : null;
             // A single read can contain both deliverable content and the
             // protocol terminator. Terminal is only invalid when no content
             // was observed; otherwise the buffered candidate is complete.
@@ -7521,6 +7541,8 @@ export class ProxyForwarder {
               throw new ProxyError("Invalid upstream discovery response", 502);
             attempt.chunks.append(item.value);
             if (discoveryPrecommitActive && !validity?.ready) continue;
+            attempt.parser = null;
+            attempt.chunks.finishParsing();
             attempt.ready = true;
             session.appendRoutingTraceEvent({
               type: "attempt_ready",

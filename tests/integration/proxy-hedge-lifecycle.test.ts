@@ -8,6 +8,11 @@ import { ProxyForwarder } from "@/app/v1/_lib/proxy/forwarder";
 import { ProxyResponseHandler } from "@/app/v1/_lib/proxy/response-handler";
 import { type MessageContext, ProxySession } from "@/app/v1/_lib/proxy/session";
 import { ProbedSseFrames } from "@/app/v1/_lib/proxy/stream-gate/probed-sse-frames";
+import {
+  getStreamGatePrebufferBudget,
+  StreamGatePrebufferBudget,
+} from "@/app/v1/_lib/proxy/stream-gate/prebuffer-budget";
+import { MemoryGovernor } from "../../server-lib/memory-governor";
 import { DbPoolAdmissionError } from "@/drizzle/admitted-client";
 import { getGlobalAgentPool, resetGlobalAgentPool } from "@/lib/proxy-agent";
 import type { SessionBindingSnapshot } from "@/lib/redis/session-binding";
@@ -717,6 +722,11 @@ describe("proxy hedge transport/lifecycle integration (persistence and control-p
     const client = new AbortController();
     const now = vi.spyOn(Date, "now");
     const neutralPrefixConsumption = watchNeutralResponsesPrefixConsumption();
+    const governor = new MemoryGovernor({ limit: 8 * 1024 ** 2, remote: false, monitor: false });
+    const budget = new StreamGatePrebufferBudget(() => 8 * 1024 ** 2, governor);
+    const admission = vi
+      .spyOn(getStreamGatePrebufferBudget(), "acquire")
+      .mockImplementation((...args) => budget.acquire(...args));
     try {
       // Given: Discovery has two Codex attempts and only the alternative emits the real fixture.
       now.mockReturnValue(10_000);
@@ -731,7 +741,17 @@ describe("proxy hedge transport/lifecycle integration (persistence and control-p
       const session = await createSession(initialProvider, "/v1/responses", client.signal);
       session.sessionId = "integration-discovery-ttft";
       const agents = watchAgentReleases(2);
-      const stream = responsesStreamFixture("resp_discovery", "msg_discovery");
+      const fixture = responsesStreamFixture("resp_discovery", "msg_discovery");
+      const stream = {
+        ...fixture,
+        neutralPrefix: [
+          responsesFrame("response.created", {
+            type: "response.created",
+            response: { status: "in_progress", instructions: "x".repeat(300000) },
+          }),
+          ...fixture.neutralPrefix,
+        ],
+      };
 
       const forwarded = ProxyForwarder.send(session);
       await Promise.all([loser.response, winner.response]);
@@ -739,6 +759,7 @@ describe("proxy hedge transport/lifecycle integration (persistence and control-p
       await winner.write(stream.neutralPrefix.join(""));
       await neutralPrefixConsumption.consumed;
       expect(session.ttftMs).toBeNull();
+      expect(governor.snapshot().usedBytes).toBeGreaterThan(300000 * 8);
 
       // When: sequence 5 makes the alternative ready and Discovery commits it.
       now.mockReturnValue(10_125);
@@ -746,6 +767,7 @@ describe("proxy hedge transport/lifecycle integration (persistence and control-p
       const forwardedResponse = await forwarded;
 
       // Then: TTFT is fixed at winner commit, before ResponseHandler reads the stream.
+      expect(governor.snapshot().usedBytes).toBeGreaterThanOrEqual(300000);
       expect(session.firstByteMs).toBe(50);
       expect(session.ttftMs).toBe(125);
       const firstByteMsAtCommit = session.firstByteMs;
@@ -765,11 +787,54 @@ describe("proxy hedge transport/lifecycle integration (persistence and control-p
       expect(loser.abortCount()).toBe(1);
       expect(winner.abortCount()).toBe(0);
       expect(agents.pool.getPoolStats().activeRequests).toBe(0);
+      expect(governor.snapshot().usedBytes).toBe(0);
     } finally {
       client.abort(new Error("fixture cleanup"));
       neutralPrefixConsumption.restore();
+      admission.mockRestore();
       now.mockRestore();
       await Promise.all([loser.close(), winner.close()]);
+    }
+  });
+
+  it("Discovery 解析容量不足返回本地 429，取消所有候选且不惩罚供应商", async () => {
+    const [first, second] = await Promise.all([startUpstream(), startUpstream()]);
+    const client = new AbortController();
+    const governor = new MemoryGovernor({ limit: 256 * 1024, remote: false, monitor: false });
+    const budget = new StreamGatePrebufferBudget(() => 256 * 1024, governor);
+    const admission = vi
+      .spyOn(getStreamGatePrebufferBudget(), "acquire")
+      .mockImplementation((...args) => budget.acquire(...args));
+    try {
+      state.discoveryEnabled = true;
+      state.streamGateMode = "enforce";
+      const initial = createProvider(1, first.baseUrl, 0);
+      initial.providerType = "codex";
+      const alternative = createProvider(2, second.baseUrl, 0);
+      alternative.providerType = "codex";
+      alternative.priority = initial.priority;
+      state.providers.push(alternative);
+      const session = await createSession(initial, "/v1/responses", client.signal);
+      session.sessionId = "discovery-local-capacity";
+      const rejected = expect(ProxyForwarder.send(session)).rejects.toMatchObject({
+        statusCode: 429,
+      });
+      await Promise.all([first.response, second.response]);
+      await first.write(
+        responsesFrame("response.created", {
+          type: "response.created",
+          response: { status: "in_progress", instructions: "x".repeat(40000) },
+        })
+      );
+      await rejected;
+      await Promise.all([first.terminated, second.terminated]);
+      expect(governor.snapshot().usedBytes).toBe(0);
+      expect(budget.snapshot().reservedBytes).toBe(0);
+      expect(state.recordFailure).not.toHaveBeenCalled();
+    } finally {
+      client.abort();
+      admission.mockRestore();
+      await Promise.all([first.close(), second.close()]);
     }
   });
 

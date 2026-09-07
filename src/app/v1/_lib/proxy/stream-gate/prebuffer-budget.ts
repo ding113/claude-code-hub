@@ -1,5 +1,10 @@
 import { getEnvConfig } from "@/lib/config/env.schema";
-import { getMemoryGovernor, LocalCapacityError, type MemoryGovernor } from "@/lib/memory/governor";
+import {
+  getMemoryGovernor,
+  LocalCapacityError,
+  type MemoryGovernor,
+  type MemoryLease,
+} from "@/lib/memory/governor";
 
 const DEFAULT_STREAM_GATE_GLOBAL_PREBUFFER_BYTE_CAP = 256 * 1024 * 1024;
 
@@ -43,16 +48,17 @@ export class StreamGatePrebufferBudget {
 
   async acquire(reservedBytes: number, signal?: AbortSignal): Promise<StreamGatePrebufferLease> {
     const started = performance.now();
-    const shared = this.governor ? await this.governor.acquire(reservedBytes, signal) : undefined;
-    let local: StreamGatePrebufferLease;
+    // 先等本地子限额，排队者不占用全局正文额度；两个阶段共用 20 秒期限。
+    const local = await this.acquireLocal(reservedBytes, signal);
+    let shared: MemoryLease | undefined;
     try {
-      local = await this.acquireLocal(
+      shared = await this.governor?.acquire(
         reservedBytes,
         signal,
         Math.max(0, 20000 - (performance.now() - started))
       );
     } catch (error) {
-      shared?.release();
+      local.release();
       throw error;
     }
     if (!shared) return local;
