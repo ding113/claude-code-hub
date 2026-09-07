@@ -33,6 +33,7 @@ function readResourceSnapshot(options = {}) {
   let combinedRemaining = Infinity;
   let hasMemoryController = false;
   let hasSwapAccounting = false;
+  let cgroupPressure = 0;
   for (const line of mounts) {
     const [left, right] = line.split(" - ");
     if (!right) continue;
@@ -54,6 +55,11 @@ function readResourceSnapshot(options = {}) {
     // cgroup namespace 可将 membership 显示为 /，而 mountinfo 保留宿主机 root。
     // 无法映射成员路径时仍检查可见挂载根的限制。
     let directory = inside ? path.join(mount, path.relative(root, member)) : mount;
+    // PSI 只取本进程所属组；宿主机或宽泛祖先的压力可能来自其他服务。
+    if (v2) {
+      const pressure = safeRead(path.join(directory, "memory.pressure")) || "";
+      cgroupPressure = Math.max(cgroupPressure, Number(pressure.match(/^full avg10=([\d.]+)/m)?.[1] || 0));
+    }
     while (directory === mount || directory.startsWith(`${mount}/`)) {
       const number = (file) => finiteBytes(safeRead(path.join(directory, file)));
       const current = number(v2 ? "memory.current" : "memory.usage_in_bytes");
@@ -93,7 +99,7 @@ function readResourceSnapshot(options = {}) {
     const match = vmstat.match(new RegExp(`^${key} (\\d+)$`, "m"));
     return sum + (match ? Number(match[1]) : 0);
   }, 0);
-  return { availableRamBytes: ram, availableSwapBytes: swap, memoryPressure: Number(full?.[1] || 0), swapIO };
+  return { availableRamBytes: ram, availableSwapBytes: swap, memoryPressure: hasMemoryController ? cgroupPressure : Number(full?.[1] || 0), swapIO: hasMemoryController ? 0 : swapIO };
 }
 
 module.exports = { readResourceSnapshot };

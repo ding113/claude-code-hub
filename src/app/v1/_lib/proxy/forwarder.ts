@@ -28,6 +28,10 @@ import { isLangfuseEnabled } from "@/lib/langfuse";
 import { logger } from "@/lib/logger";
 import { isLocalCapacityError } from "@/lib/memory/governor";
 import {
+  retainCurrentRequestMemory,
+  retainRequestMemoryUntil,
+} from "@/lib/memory/request-lifetime";
+import {
   DiscoveryRequestMetrics,
   recordDiscoveryControlEvent,
 } from "@/lib/observability/discovery-metrics";
@@ -125,6 +129,7 @@ import { abortReplayOwnership, releaseReplayOwnership } from "./replay/replay-sp
 import { isJsonResponseContentType, isMalformedJsonResponseBody } from "./response-content-type";
 import {
   finalizeHedgeLoserBilling,
+  isCodexResponsesStreamRequest,
   shouldForceCodexResponsesStreamHandling,
 } from "./response-handler";
 import type { ProxySession } from "./session";
@@ -1025,18 +1030,20 @@ async function persistRequestAfterSnapshot(
     return;
   }
 
-  await SessionManager.storeSessionRequestPhaseSnapshot(
-    session.sessionId,
-    "after",
-    {
-      body: snapshot.body,
-      headers: snapshot.headers,
-      meta: snapshot.meta,
-    },
-    session.requestSequence
-  ).catch((err) => {
-    logger.error("Failed to store request after snapshot:", err);
-  });
+  await retainRequestMemoryUntil(
+    SessionManager.storeSessionRequestPhaseSnapshot(
+      session.sessionId,
+      "after",
+      {
+        body: snapshot.body,
+        headers: snapshot.headers,
+        meta: snapshot.meta,
+      },
+      session.requestSequence
+    ).catch((err) => {
+      logger.error("Failed to store request after snapshot:", err);
+    })
+  );
 }
 
 async function persistResponseBeforeSnapshot(
@@ -1047,18 +1054,20 @@ async function persistResponseBeforeSnapshot(
     return;
   }
 
-  await SessionManager.storeSessionResponsePhaseSnapshot(
-    session.sessionId,
-    "before",
-    {
-      headers: snapshot.headers,
-      meta: snapshot.meta,
-    },
-    session.requestSequence,
-    session.authState?.key?.id ?? session.messageContext?.key?.id ?? undefined
-  ).catch((err) => {
-    logger.error("Failed to store response before snapshot meta:", err);
-  });
+  await retainRequestMemoryUntil(
+    SessionManager.storeSessionResponsePhaseSnapshot(
+      session.sessionId,
+      "before",
+      {
+        headers: snapshot.headers,
+        meta: snapshot.meta,
+      },
+      session.requestSequence,
+      session.authState?.key?.id ?? session.messageContext?.key?.id ?? undefined
+    ).catch((err) => {
+      logger.error("Failed to store response before snapshot meta:", err);
+    })
+  );
 }
 
 type MatchedRuleDetails = NonNullable<
@@ -2488,7 +2497,7 @@ export class ProxyForwarder {
           });
 
           // F3a 亲和写回（非流式成功；流式由 finalizeStream 的终态副作用负责）
-          void recordAffinityWinner(session, currentProvider.id);
+          void retainRequestMemoryUntil(recordAffinityWinner(session, currentProvider.id));
 
           logger.info("ProxyForwarder: Request successful", {
             providerId: currentProvider.id,
@@ -2518,7 +2527,7 @@ export class ProxyForwarder {
               errorCategory === ErrorCategory.RESOURCE_NOT_FOUND) &&
             !isRequestScopedGateFailure(lastError)
           ) {
-            void tombstoneAffinityOnFailure(session, currentProvider.id);
+            void retainRequestMemoryUntil(tombstoneAffinityOnFailure(session, currentProvider.id));
           }
           const errorMessage =
             databaseError?.message ??
@@ -3238,17 +3247,35 @@ export class ProxyForwarder {
       (signal): signal is AbortSignal => Boolean(signal)
     );
     const signal = signals.length ? AbortSignal.any(signals) : undefined;
-    onLocalAdmissionWait?.(true);
-    let lease: StreamGatePrebufferLease;
+    let lease: StreamGatePrebufferLease | null = null;
+    const preparedArgs: Parameters<typeof ProxyForwarder.doForwardPrepared> = [...args];
+    preparedArgs[9] = async (isStreaming) => {
+      if (
+        !isStreaming ||
+        (session.getEndpointPolicy().kind === "raw_passthrough" &&
+          !isCodexResponsesStreamRequest(session))
+      )
+        return;
+      onLocalAdmissionWait?.(true);
+      try {
+        lease = await getStreamGatePrebufferBudget().acquire(STORE_SCRATCH_BYTES, signal);
+      } finally {
+        onLocalAdmissionWait?.(false);
+      }
+    };
     try {
-      lease = await getStreamGatePrebufferBudget().acquire(STORE_SCRATCH_BYTES, signal);
-    } finally {
-      onLocalAdmissionWait?.(false);
-    }
-    try {
-      return prepareGateResponse(await ProxyForwarder.doForwardPrepared(...args), lease);
+      const response = await ProxyForwarder.doForwardPrepared(...preparedArgs);
+      if (
+        !response.body ||
+        (!response.headers.get("content-type")?.toLowerCase().includes("text/event-stream") &&
+          !shouldForceCodexResponsesStreamHandling(session, response))
+      ) {
+        (lease as StreamGatePrebufferLease | null)?.release();
+        lease = null;
+      }
+      return lease ? prepareGateResponse(response, lease) : response;
     } catch (error) {
-      lease.release();
+      (lease as StreamGatePrebufferLease | null)?.release();
       throw error;
     }
   }
@@ -3262,7 +3289,8 @@ export class ProxyForwarder {
     deferDetailSnapshotPersistence: boolean = false,
     externalAbortSignal?: AbortSignal,
     onUpstreamDispatch?: () => void,
-    _onLocalAdmissionWait?: (waiting: boolean) => void
+    _onLocalAdmissionWait?: (waiting: boolean) => void,
+    onRequestPrepared?: (isStreaming: boolean) => Promise<void>
   ): Promise<Response> {
     if (!provider) {
       throw new Error("Provider is required");
@@ -3858,6 +3886,9 @@ export class ProxyForwarder {
       onUpstreamDispatch?.();
       return await fetch(url, requestInit);
     };
+
+    // 最终过滤/序列化后才知道实际是否请求流；准入仍早于超时计时和网络发送。
+    await onRequestPrepared?.(isStreaming);
 
     // ⭐ 双路超时控制（first-byte / total）
     // 注意：由于 undici fetch API 的限制，无法精确分离 DNS/TCP/TLS 连接阶段和响应头接收阶段
@@ -5022,6 +5053,7 @@ export class ProxyForwarder {
           ).getReader()
         : reader;
 
+      const releaseRequestMemory = retainCurrentRequestMemory();
       void (async () => {
         // 若落败前已读走前缀，补入有界计量器，避免丢失 message_start usage。
         const drain = await drainLoserBillingEvidence({
@@ -5064,6 +5096,7 @@ export class ProxyForwarder {
           });
         })
         .finally(() => {
+          releaseRequestMemory();
           gatePrebufferLease?.release();
           releaseAttemptAgent(attempt);
         });
@@ -5386,6 +5419,7 @@ export class ProxyForwarder {
       // remains gated by `attempt.dispatched` and is reset by the transport callback below, so
       // setup time can trigger a hedge without being eligible for provider-failure attribution.
       armAttemptThreshold(attempt);
+      const releaseRequestMemory = retainCurrentRequestMemory();
       void ProxyForwarder.doForward(
         attempt.session,
         providerForRequest,
@@ -5584,7 +5618,8 @@ export class ProxyForwarder {
           const normalizedError =
             attemptError instanceof Error ? attemptError : new Error(String(attemptError));
           await handleAttemptFailure(attempt, normalizedError);
-        });
+        })
+        .finally(releaseRequestMemory);
     };
 
     const handleAttemptFailure = async (attempt: StreamingHedgeAttempt, error: Error) => {
@@ -5625,7 +5660,7 @@ export class ProxyForwarder {
           errorCategory === ErrorCategory.RESOURCE_NOT_FOUND) &&
         !isRequestScopedGateFailure(error)
       ) {
-        void tombstoneAffinityOnFailure(session, attempt.provider.id);
+        void retainRequestMemoryUntil(tombstoneAffinityOnFailure(session, attempt.provider.id));
       }
       const statusCode = error instanceof ProxyError ? error.statusCode : undefined;
       const databaseError = findSafeDatabaseError(error);
@@ -6623,6 +6658,7 @@ export class ProxyForwarder {
       const controller = attempt.responseController;
       const drainTimeoutMs = getEnvConfig().HEDGE_LOSER_DRAIN_TIMEOUT_MS;
 
+      const releaseRequestMemory = retainCurrentRequestMemory();
       void (async () => {
         // The validity parser may have consumed one or more chunks before the
         // loser was held. Replay those bytes so usage markers in the prefix
@@ -6674,6 +6710,7 @@ export class ProxyForwarder {
           });
         })
         .finally(() => {
+          releaseRequestMemory();
           releaseProviderRef(attempt);
           if (attempt.releaseAgent && !attempt.agentReleased) {
             attempt.agentReleased = true;
@@ -7429,6 +7466,7 @@ export class ProxyForwarder {
         },
       });
 
+      const releaseRequestMemory = retainCurrentRequestMemory();
       void ProxyForwarder.doForward(
         attempt.session,
         { ...provider, firstByteTimeoutStreamingMs: 0 },
@@ -7869,7 +7907,8 @@ export class ProxyForwarder {
             providerId: provider.id,
             error,
           });
-        });
+        })
+        .finally(releaseRequestMemory);
       return true;
     };
 
@@ -8465,10 +8504,12 @@ export class ProxyForwarder {
       }
     };
 
-    void orchestrate().catch(async (error) => {
-      const normalized = error instanceof Error ? error : new Error(String(error));
-      await settleFailure(ProxyForwarder.resolveHedgeTerminalError(normalized, null));
-    });
+    void retainRequestMemoryUntil(
+      orchestrate().catch(async (error) => {
+        const normalized = error instanceof Error ? error : new Error(String(error));
+        await settleFailure(ProxyForwarder.resolveHedgeTerminalError(normalized, null));
+      })
+    );
 
     try {
       const result = await resultPromise;

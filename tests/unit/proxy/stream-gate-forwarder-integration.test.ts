@@ -585,12 +585,17 @@ describe("F1 stream content gate x ProxyForwarder paths", () => {
             },
             "doForwardPrepared"
           );
-          dispatch.mockRejectedValue(new Error("must not dispatch upstream"));
+          const upstreamDispatch = vi.fn();
+          dispatch.mockImplementation(async (...args) => {
+            await (args[9] as (streaming: boolean) => Promise<void>)(true);
+            upstreamDispatch();
+            throw new Error("must not dispatch upstream");
+          });
           const response = ProxyForwarder.send(session);
           const rejected = expect(response).rejects.toBeInstanceOf(LocalCapacityError);
           await vi.advanceTimersByTimeAsync(20000);
           await rejected;
-          expect(dispatch).not.toHaveBeenCalled();
+          expect(upstreamDispatch).not.toHaveBeenCalled();
           expect(mocks.pickRandomProviderWithExclusion).not.toHaveBeenCalled();
           expect(mocks.recordFailure).not.toHaveBeenCalled();
           expect(mocks.recordEndpointFailure).not.toHaveBeenCalled();
@@ -621,7 +626,10 @@ describe("F1 stream content gate x ProxyForwarder paths", () => {
           },
           "doForwardPrepared"
         );
-        dispatch.mockImplementationOnce(async (...args) => {
+        const upstreamDispatch = vi.fn();
+        dispatch.mockImplementation(async (...args) => {
+          await (args[9] as (streaming: boolean) => Promise<void>)(true);
+          upstreamDispatch();
           (args[7] as () => void)();
           const body = new ReadableStream<Uint8Array>({
             start(controller) {
@@ -643,12 +651,46 @@ describe("F1 stream content gate x ProxyForwarder paths", () => {
         expect(await response.text()).toBe(CONTENT_DELTA_FRAME + MESSAGE_STOP_FRAME);
         await vi.advanceTimersByTimeAsync(0);
         expect(occupied.snapshot().waiting).toBe(0);
-        expect(dispatch).toHaveBeenCalledOnce();
+        expect(upstreamDispatch).toHaveBeenCalledOnce();
         expect(mocks.recordFailure).not.toHaveBeenCalled();
       } finally {
         vi.useRealTimers();
       }
     });
+
+    test.each(["non-stream", "raw-passthrough"])(
+      "%s 等待上游时不占用流式门控额度",
+      async (kind) => {
+        const provider = createProvider({ id: 1 });
+        const session = createSession();
+        session.setProvider(provider);
+        const streaming = kind === "raw-passthrough";
+        session.request.message.stream = streaming;
+        if (streaming)
+          Object.assign(session, {
+            endpointPolicy: resolveEndpointPolicy("/v1/messages/count_tokens"),
+          });
+        const acquire = vi
+          .spyOn(getStreamGatePrebufferBudget(), "acquire")
+          .mockRejectedValue(new LocalCapacityError());
+        const held = Promise.withResolvers<Response>();
+        const dispatched = Promise.withResolvers<void>();
+        const internals = ProxyForwarder as unknown as {
+          doForward: (session: ProxySession, provider: Provider, url: string) => Promise<Response>;
+          doForwardPrepared: (...args: unknown[]) => Promise<Response>;
+        };
+        vi.spyOn(internals, "doForwardPrepared").mockImplementation(async (...args) => {
+          await (args[9] as (streaming: boolean) => Promise<void>)(streaming);
+          dispatched.resolve();
+          return held.promise;
+        });
+        const response = internals.doForward(session, provider, provider.url);
+        await dispatched.promise;
+        expect(acquire).not.toHaveBeenCalled();
+        held.resolve(new Response("{}", { headers: { "content-type": "application/json" } }));
+        expect(await (await response).text()).toBe("{}");
+      }
+    );
 
     test("复制候选与赢家不提前生成日志，显式日志覆盖只属于当前候选", () => {
       const session = createSession();

@@ -24,6 +24,28 @@ function fixture(extra: Record<string, string> = {}) {
 }
 
 describe("内存与 swap 的实际剩余容量", () => {
+  it("容器只使用成员组 PSI，不被其他服务的换页和祖先压力持续缩容", () => {
+    const files = {
+      "/sys/fs/cgroup/service/worker/memory.current": String(GiB),
+      "/sys/fs/cgroup/service/worker/memory.max": String(8 * GiB),
+      "/sys/fs/cgroup/service/worker/memory.pressure": "full avg10=0.10 avg60=0 total=1",
+      "/sys/fs/cgroup/service/memory.pressure": "full avg10=80.00 avg60=0 total=1",
+      "/proc/pressure/memory": "full avg10=90.00 avg60=0 total=1",
+      "/proc/vmstat": "pswpin 100000\npswpout 200000",
+    };
+    expect(fixture(files)).toMatchObject({ memoryPressure: 0.1, swapIO: 0 });
+    expect(fixture({ ...files, "/proc/vmstat": "pswpin 900000\npswpout 900000" })).toMatchObject({
+      memoryPressure: 0.1,
+      swapIO: 0,
+    });
+    expect(
+      fixture({
+        "/proc/pressure/memory": files["/proc/pressure/memory"],
+        "/proc/vmstat": files["/proc/vmstat"],
+      })
+    ).toMatchObject({ memoryPressure: 90, swapIO: 300000 });
+  });
+
   it("无配额时使用 MemAvailable 和 SwapFree", () => {
     expect(fixture()).toMatchObject({ availableRamBytes: 10 * GiB, availableSwapBytes: 2 * GiB });
   });

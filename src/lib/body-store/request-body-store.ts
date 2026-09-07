@@ -15,15 +15,16 @@ import {
   parseContentEncoding,
 } from "@/app/v1/_lib/proxy/request-body-codec";
 import { getMemoryGovernor, LocalCapacityError, type MemoryLease } from "@/lib/memory/governor";
+import { attachRequestMemory } from "@/lib/memory/request-lifetime";
 import { AllocationEstimate } from "./allocation-estimate";
 import { ByteStore, STORE_SCRATCH_BYTES } from "./byte-store";
 
 const supported = new Set(["gzip", "x-gzip", "br", "deflate", "zstd"]);
 const allocations = new FinalizationRegistry<MemoryLease>((lease) => lease.release());
 
-/** 租约跟随完整会话存活，异步计费/Replay 仍引用会话时不能提前归还。 */
+/** HTTP 租约随响应和后台消费者结束归还；独立调用方保留 GC 兜底。 */
 export function retainRequestMemory(owner: object, lease: MemoryLease): void {
-  allocations.register(owner, lease);
+  if (!attachRequestMemory(lease)) allocations.register(owner, lease);
 }
 
 /** 入站流只有一个消费者；大正文可重读落盘，解压逐块校验输出上限。 */
