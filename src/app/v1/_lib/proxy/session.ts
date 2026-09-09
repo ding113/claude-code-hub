@@ -428,6 +428,13 @@ export class ProxySession {
     return original !== current;
   }
 
+  /**
+   * 客户端原始请求头（会话创建时的副本，不含请求过滤器后续修改）。
+   */
+  getOriginalHeaders(): Headers {
+    return this.originalHeaders;
+  }
+
   setAuthState(state: AuthState): void {
     this.authState = state;
     if (state.user) {
