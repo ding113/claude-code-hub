@@ -200,9 +200,9 @@ describe("Usage logs sessionId suggestions", () => {
 
     expect(limitArgs).toEqual([500, 20, 500, 20]);
     const whereSql = whereArgs.map((arg) => sqlToString(arg).toLowerCase()).join(" ");
-    expect(whereSql).toContain("like");
-    expect(whereSql).toContain("5dea8822-a7ba-4454-9f39-408ff2095999%");
-    expect(whereSql).toContain("escape");
+    expect(whereSql).toContain("=");
+    expect(whereSql).not.toContain("5dea8822-a7ba-4454-9f39-408ff2095999%");
+    expect(whereSql).not.toContain("escape");
   });
 
   test("normalizes uppercase complete UUIDs before equality lookup", async () => {
@@ -219,7 +219,7 @@ describe("Usage logs sessionId suggestions", () => {
     });
 
     const whereSql = whereArgs.map((arg) => sqlToString(arg)).join(" ");
-    expect(whereSql).toContain("5DEA8822-A7BA-4454-9F39-408FF2095999%");
+    expect(whereSql).toContain("5dea8822-a7ba-4454-9f39-408ff2095999");
   });
 
   test("returns only candidate identities that match the searched prefix", async () => {

@@ -1985,7 +1985,7 @@ export async function findUsageLogSessionIdSuggestions(
         candidate === usageLedger.sessionId
           ? sql`${candidate} NOT LIKE 'pfx:%' AND ${candidate} NOT LIKE 'sid:%'`
           : sql`true`,
-        sql`${candidate} LIKE ${pattern} ESCAPE '\\'`,
+        sessionIdMatch(candidate),
       ];
 
       const subqueryLimit = Math.max(500, limit * 25);
@@ -2051,7 +2051,7 @@ export async function findUsageLogSessionIdSuggestions(
         candidate === messageRequest.sessionId
           ? sql`${candidate} NOT LIKE 'pfx:%' AND ${candidate} NOT LIKE 'sid:%'`
           : sql`true`,
-        sql`${candidate} LIKE ${pattern} ESCAPE '\\'`,
+        sessionIdMatch(candidate),
       ];
 
       const subqueryLimit = Math.max(500, limit * 25);
