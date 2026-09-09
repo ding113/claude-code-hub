@@ -270,6 +270,9 @@ export const EnvSchema = z.object({
   LANGFUSE_BASE_URL: z.string().default("https://cloud.langfuse.com"),
   LANGFUSE_SAMPLE_RATE: z.coerce.number().min(0).max(1).default(1.0),
   LANGFUSE_DEBUG: z.string().default("false").transform(booleanTransform),
+  // v5 first-class attributes; consumed by LangfuseSpanProcessor
+  LANGFUSE_TRACING_ENVIRONMENT: z.string().optional(),
+  LANGFUSE_RELEASE: z.string().optional(),
 
   // IP 归属地查询服务
   // 默认使用官方托管服务；可通过 IP_GEO_API_URL 自托管
