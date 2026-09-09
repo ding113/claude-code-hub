@@ -184,6 +184,44 @@ describe("Usage logs sessionId suggestions", () => {
     expect(limitArgs).toContain(20);
   });
 
+  test("uses equality for a complete UUID instead of a bounded prefix scan", async () => {
+    vi.resetModules();
+
+    const limitArgs: unknown[] = [];
+    const whereArgs: unknown[] = [];
+    const selectMock = vi.fn(() => createThenableQuery([], { limitArgs, whereArgs }));
+    vi.doMock("@/drizzle/db", () => ({ db: { select: selectMock } }));
+
+    const { findUsageLogSessionIdSuggestions } = await import("@/repository/usage-logs");
+    await findUsageLogSessionIdSuggestions({
+      term: "5dea8822-a7ba-4454-9f39-408ff2095999",
+      limit: 20,
+    });
+
+    expect(limitArgs).toEqual([20, 20]);
+    const whereSql = whereArgs.map((arg) => sqlToString(arg).toLowerCase()).join(" ");
+    expect(whereSql).toContain("=");
+    expect(whereSql).not.toContain("5dea8822-a7ba-4454-9f39-408ff2095999%");
+    expect(whereSql).not.toContain("escape");
+  });
+
+  test("normalizes uppercase complete UUIDs before equality lookup", async () => {
+    vi.resetModules();
+
+    const whereArgs: unknown[] = [];
+    const selectMock = vi.fn(() => createThenableQuery([], { whereArgs }));
+    vi.doMock("@/drizzle/db", () => ({ db: { select: selectMock } }));
+
+    const { findUsageLogSessionIdSuggestions } = await import("@/repository/usage-logs");
+    await findUsageLogSessionIdSuggestions({
+      term: "5DEA8822-A7BA-4454-9F39-408FF2095999",
+      limit: 20,
+    });
+
+    const whereSql = whereArgs.map((arg) => sqlToString(arg)).join(" ");
+    expect(whereSql).toContain("5dea8822-a7ba-4454-9f39-408ff2095999");
+  });
+
   test("returns only candidate identities that match the searched prefix", async () => {
     vi.resetModules();
 

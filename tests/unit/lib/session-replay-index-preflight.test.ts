@@ -15,7 +15,8 @@ function createFakeExecutor(initial: Record<string, MigrationIndexState> = {}) {
   const execute = vi.fn(async (sql: string) => {
     const createName = sql.match(/^CREATE INDEX CONCURRENTLY "([^"]+)"/)?.[1];
     if (createName) {
-      states.set(createName, { exists: true, valid: true, marker: null });
+      const definition = sql.slice(sql.indexOf(" ON ") + 1);
+      states.set(createName, { exists: true, valid: true, marker: null, definition });
       return;
     }
 
@@ -44,7 +45,8 @@ function createFakeExecutor(initial: Record<string, MigrationIndexState> = {}) {
     }
   });
   const inspectIndex = vi.fn(
-    async (name: string) => states.get(name) ?? { exists: false, valid: false, marker: null }
+    async (name: string) =>
+      states.get(name) ?? { exists: false, valid: false, marker: null, definition: null }
   );
   return { executor: { execute, inspectIndex }, execute, inspectIndex, states };
 }
@@ -80,6 +82,7 @@ describe("database index concurrent preflight", () => {
       exists: true,
       valid: true,
       marker: spec.marker,
+      definition: spec.definition,
     });
     expect(states.has(spec.temporaryName)).toBe(false);
 
@@ -96,6 +99,41 @@ describe("database index concurrent preflight", () => {
     expect(createAt).toBeGreaterThanOrEqual(0);
     expect(dropAt).toBeGreaterThan(createAt);
     expect(renameAt).toBeGreaterThan(dropAt);
+  });
+
+  test("accepts PostgreSQL-normalized definitions with the expected marker", async () => {
+    const { executor, execute } = createFakeExecutor({
+      [spec.canonicalName]: {
+        exists: true,
+        valid: true,
+        marker: spec.marker,
+        definition:
+          "CREATE INDEX idx_message_request_session_identity_prefix ON public.message_request USING btree (COALESCE(session_identity, session_id) varchar_pattern_ops, created_at DESC NULLS LAST, id DESC NULLS LAST) WHERE ((deleted_at IS NULL) AND ((blocked_by IS NULL) OR ((blocked_by)::text <> 'warmup'::text)))",
+      },
+    });
+
+    await runSessionReplayIndexPreflight(executor, [spec]);
+
+    expect(
+      execute.mock.calls.flat().some((sql) => sql.startsWith("CREATE INDEX CONCURRENTLY"))
+    ).toBe(false);
+  });
+
+  test("rebuilds an index when its marker is attached to the wrong definition", async () => {
+    const { executor, execute } = createFakeExecutor({
+      [spec.canonicalName]: {
+        exists: true,
+        valid: true,
+        marker: spec.marker,
+        definition: "ON public.message_request USING btree (wrong_column)",
+      },
+    });
+
+    await runSessionReplayIndexPreflight(executor, [spec]);
+
+    expect(
+      execute.mock.calls.flat().some((sql) => sql.startsWith("CREATE INDEX CONCURRENTLY"))
+    ).toBe(true);
   });
 
   test("resumes by renaming a previously validated temporary index", async () => {
@@ -117,11 +155,10 @@ describe("database index concurrent preflight", () => {
     const { executor, execute, states } = createFakeExecutor({
       [spec.canonicalName]: { exists: true, valid: true, marker: null },
     });
-    execute.mockImplementationOnce(async () => undefined);
-    execute.mockImplementationOnce(async () => undefined);
-    execute.mockImplementationOnce(async () => undefined);
-    execute.mockImplementationOnce(async () => {
-      throw new Error("concurrent build failed");
+    execute.mockImplementation(async (sql: string) => {
+      if (sql.startsWith("CREATE INDEX CONCURRENTLY")) {
+        throw new Error("concurrent build failed");
+      }
     });
 
     await expect(runSessionReplayIndexPreflight(executor, [spec])).rejects.toThrow(
@@ -160,7 +197,7 @@ describe("database index concurrent preflight", () => {
     ).toBe(false);
   });
 
-  test("postflight reconciles indexes without reacquiring table DDL locks", async () => {
+  test("postflight bounds concurrent index operations without table DDL locks", async () => {
     const { executor, execute } = createFakeExecutor({
       [spec.canonicalName]: {
         exists: true,
@@ -173,7 +210,10 @@ describe("database index concurrent preflight", () => {
 
     const statements = execute.mock.calls.map(([statement]) => statement);
     expect(statements.some((statement) => statement.includes("ALTER TABLE"))).toBe(false);
-    expect(statements.some((statement) => statement.includes("lock_timeout"))).toBe(false);
+    expect(statements).toContain("SET lock_timeout = '5s'");
+    expect(statements).toContain("SET statement_timeout = '15min'");
+    expect(statements).toContain("RESET statement_timeout");
+    expect(statements).toContain("RESET lock_timeout");
   });
 
   test("adds pre-0116 Replay columns before building timeout indexes", async () => {
@@ -222,6 +262,31 @@ describe("database index concurrent preflight", () => {
     expect(createStatements).toHaveLength(1);
     expect(createStatements[0]).toContain(spec.temporaryName);
     expect(createStatements[0]).not.toContain(legacySpec.temporaryName);
+  });
+
+  test("defines concurrent prefix indexes for both session identity sources", () => {
+    const prefixSpecs = SESSION_REPLAY_INDEX_SPECS.filter(
+      (candidate) => candidate.marker === SESSION_IDENTITY_PREFIX_INDEX_MARKER
+    );
+
+    expect(prefixSpecs).toHaveLength(4);
+    expect(prefixSpecs.map((candidate) => candidate.canonicalName)).toEqual([
+      "idx_message_request_session_identity_prefix",
+      "idx_message_request_session_id_prefix_cover",
+      "idx_usage_ledger_session_identity_prefix",
+      "idx_usage_ledger_session_id_prefix",
+    ]);
+    expect(
+      prefixSpecs.every((candidate) => candidate.definition.includes("varchar_pattern_ops"))
+    ).toBe(true);
+    expect(
+      prefixSpecs.every((candidate) =>
+        candidate.definition.includes('"created_at" DESC NULLS LAST,"id" DESC NULLS LAST')
+      )
+    ).toBe(true);
+    expect(
+      prefixSpecs.every((candidate) => candidate.temporaryName.startsWith("cch_0121_tmp_"))
+    ).toBe(true);
   });
 
   test("uses the v2 marker and public-qualified definitions for timeout indexes", () => {

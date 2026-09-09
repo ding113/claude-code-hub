@@ -1945,7 +1945,15 @@ export async function findUsageLogSessionIdSuggestions(
   const trimmedTerm = term.trim();
   if (!trimmedTerm) return [];
 
+  const isCompleteUuid = COMPLETE_UUID_SESSION_ID.test(trimmedTerm);
+  const normalizedExactTerm = isCompleteUuid ? trimmedTerm.toLowerCase() : trimmedTerm;
   const pattern = `${escapeLike(trimmedTerm)}%`;
+  // A pasted UUID is an exact lookup, not a prefix search. Equality lets the
+  // session identity indexes answer it without a broad primary-key scan.
+  const sessionIdMatch = (candidate: unknown) =>
+    isCompleteUuid
+      ? sql`${candidate} = ${normalizedExactTerm}`
+      : sql`${candidate} LIKE ${pattern} ESCAPE '\\'`;
   const ledgerOnly = await isLedgerOnlyMode();
   let canonicalResults: UsageLogSessionIdSuggestionRow[];
   let physicalResults: UsageLogSessionIdSuggestionRow[];
