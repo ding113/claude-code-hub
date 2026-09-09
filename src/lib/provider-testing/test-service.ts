@@ -5,7 +5,11 @@
  */
 
 import { applyOpencodeSessionHeader } from "@/app/v1/_lib/headers";
-import { createProxyAgentForProvider, type ProviderProxyConfig } from "@/lib/proxy-agent";
+import {
+  createProxyAgentForProvider,
+  fetchWithDispatcher,
+  type ProviderProxyConfig,
+} from "@/lib/proxy-agent";
 import { parseResponse } from "./parsers";
 import {
   getExecutionPresetCandidates,
@@ -245,7 +249,7 @@ async function runSingleAttempt(
       while (true) {
         attemptStartTime = Date.now();
         firstByteMs = undefined;
-        const response = await fetch(requestUrl, fetchOptions);
+        const response = await fetchWithDispatcher(requestUrl, fetchOptions);
         firstByteMs = Date.now() - attemptStartTime;
 
         const responseBody = await response.text();
