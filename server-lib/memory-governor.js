@@ -18,7 +18,7 @@ function isLocalCapacityError(error) {
   return error instanceof Error && error[Symbol.for("cch.localCapacityError")] === true;
 }
 
-/** 小额本地记账，跨进程按 MiB 授权。增长必须立即成功，不能持有部分内存排队。 */
+/** 小额本地记账，跨进程按 MiB 授权。增长只等待 IPC 协商，不持有部分内存排队等容量。 */
 class MemoryGovernor {
   constructor(options = {}) {
     this.processRef = options.processRef || process;
@@ -47,7 +47,7 @@ class MemoryGovernor {
         const pending = this.pending;
         clearTimeout(pending.timer);
         this.pending = null;
-        pending.resolve();
+        pending.resolve({ requested: pending.requested, bytes: message.bytes });
       });
       this.processRef.on("disconnect", () => {
         const pending = this.pending;
@@ -105,9 +105,9 @@ class MemoryGovernor {
     const id = ++this.nextId;
     let resolve;
     const promise = new Promise((done) => { resolve = done; });
-    const pending = { id, promise, resolve, sending: false, timer: null };
-    this.pending = pending;
     const requested = Math.ceil(Math.max(bytes, CREDIT_BYTES) / CREDIT_BYTES) * CREDIT_BYTES;
+    const pending = { id, promise, resolve, requested, sending: false, timer: null };
+    this.pending = pending;
     const send = () => {
       if (this.pending !== pending) return;
       if (!this.processRef.connected) { this.pending = null; resolve(); return; }
@@ -127,6 +127,27 @@ class MemoryGovernor {
     return promise;
   }
 
+  async waitForCredits(bytes, signal, waitMs) {
+    if (signal?.aborted) throw signal.reason || new DOMException("Aborted", "AbortError");
+    if (waitMs <= 0) throw new LocalCapacityError();
+    let timer;
+    let onAbort;
+    try {
+      return await Promise.race([
+        this.requestCredits(bytes),
+        new Promise((_, reject) => {
+          timer = setTimeout(() => reject(new LocalCapacityError()), waitMs);
+          onAbort = () => reject(signal.reason || new DOMException("Aborted", "AbortError"));
+          signal?.addEventListener("abort", onAbort, { once: true });
+          if (signal?.aborted) onAbort();
+        }),
+      ]);
+    } finally {
+      clearTimeout(timer);
+      if (onAbort) signal?.removeEventListener("abort", onAbort);
+    }
+  }
+
   tryLease(bytes) {
     if (!Number.isSafeInteger(bytes) || bytes < 0) throw new RangeError("Invalid memory lease size");
     const limit = this.remote ? this.credits : this.limit;
@@ -135,21 +156,37 @@ class MemoryGovernor {
     this.peak = Math.max(this.peak, this.used);
     let size = bytes;
     let released = false;
+    const grow = (target, requestCredits) => {
+      if (!Number.isSafeInteger(target) || target < 0) throw new RangeError("Invalid memory lease size");
+      if (released) return false;
+      if (target <= size) return true;
+      const delta = target - size;
+      if (delta > (this.remote ? this.credits : this.limit) - this.used) {
+        if (requestCredits) void this.requestCredits(delta);
+        return false;
+      }
+      this.used += delta;
+      size = target;
+      this.peak = Math.max(this.peak, this.used);
+      return true;
+    };
     return {
       get reservedBytes() { return size; },
-      tryGrow: (target) => {
-        if (!Number.isSafeInteger(target) || target < 0) throw new RangeError("Invalid memory lease size");
-        if (released) return false;
-        if (target <= size) return true;
-        const delta = target - size;
-        if (delta > (this.remote ? this.credits : this.limit) - this.used) {
-          void this.requestCredits(delta);
-          return false;
+      tryGrow: (target) => grow(target, true),
+      tryGrowAsync: async (target, signal, waitMs = ADMISSION_WAIT_MS) => {
+        const deadline = performance.now() + Math.min(ADMISSION_WAIT_MS, Math.max(0, waitMs));
+        while (true) {
+          if (signal?.aborted) throw signal.reason || new DOMException("Aborted", "AbortError");
+          if (grow(target, false)) return true;
+          if (released || !this.remote || !this.processRef.connected) return false;
+          const delta = target - size;
+          const reply = await this.waitForCredits(delta, signal, deadline - performance.now());
+          if (signal?.aborted) throw signal.reason || new DOMException("Aborted", "AbortError");
+          if (grow(target, false)) return true;
+          // A smaller already-pending request may have been shared. Negotiate the
+          // remaining amount once it completes; an actual denial never queues.
+          if (!reply || reply.bytes < reply.requested) return false;
         }
-        this.used += delta;
-        size = target;
-        this.peak = Math.max(this.peak, this.used);
-        return true;
       },
       shrinkTo: (target) => {
         if (!Number.isSafeInteger(target) || target < 0) throw new RangeError("Invalid memory lease size");

@@ -11,11 +11,18 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ByteStore, STORE_SCRATCH_BYTES } from "@/lib/body-store/byte-store";
 import { loadRequestBody } from "@/lib/body-store/request-body-store";
-import { LocalCapacityError } from "@/lib/memory/governor";
+import { getMemoryGovernor, LocalCapacityError } from "@/lib/memory/governor";
 import { MemoryGovernor } from "../../../server-lib/memory-governor";
 
 let testDirectory: string;
 beforeEach(async () => {
+  // Exercise the real admission implementation without depending on the host's
+  // instantaneous free RAM when the parallel test worker first loads it.
+  const governor = new MemoryGovernor({ limit: 64 * 1024 ** 2, remote: false, monitor: false });
+  vi.spyOn(getMemoryGovernor(), "acquire").mockImplementation((...args) =>
+    governor.acquire(...args)
+  );
+  vi.spyOn(getMemoryGovernor(), "tryLease").mockImplementation((bytes) => governor.tryLease(bytes));
   // 使用工作区所在磁盘，避免 Linux 的 /tmp 挂载为 tmpfs。
   const root = path.join(process.cwd(), "tmp");
   await mkdir(root, { recursive: true });

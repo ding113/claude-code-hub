@@ -98,6 +98,7 @@ import { deriveClientSafeUpstreamErrorMessage } from "./client-error-message";
 import { combineAbortSignals } from "./combine-abort-signals";
 import { acquireDetachedStreamLease } from "./detached-stream-budget";
 import { type DiscoveryAction, DiscoveryCoordinator } from "./discovery-coordinator";
+import { startDiscoveryLeaseHeartbeat } from "./discovery-lease-heartbeat";
 import { type DiscoveryProtocol, DiscoveryValidityParser } from "./discovery-validity";
 import { isStandardProxyEndpointPath } from "./endpoint-family-catalog";
 import { resolveEndpointPolicy, shouldEnforceStrictEndpointPoolPolicy } from "./endpoint-policy";
@@ -124,6 +125,7 @@ import {
   type GeminiFunctionIdRectifierTrigger,
   rectifyGeminiFunctionIds,
 } from "./gemini-function-id-rectifier";
+import { LocalAdmissionClock } from "./local-admission-clock";
 import { ModelRedirector } from "./model-redirector";
 import { nodeStreamToWebStreamSafe } from "./node-stream-to-web";
 import { ensureOpenAIChatStreamUsageOption } from "./openai-chat-usage-options";
@@ -6377,6 +6379,7 @@ export class ProxyForwarder {
     const stickySlaMs = Math.max(1, settings.stickySlaMs ?? 20_000);
     const totalTimeoutMs = Math.max(1, settings.racingTotalTimeoutMs ?? 60_000);
     const racingDeadlineAt = requestStartedAt + totalTimeoutMs;
+    const admissionClock = new LocalAdmissionClock();
     const protocol = ProxyForwarder.discoveryProtocol(session);
     const rawCrossProviderFallbackEnabled = session.isRawCrossProviderFallbackEnabled();
     const discoveryPrecommitActive = isStreamGatePrecommitActive(
@@ -6433,9 +6436,9 @@ export class ProxyForwarder {
     let noMoreCandidates = false;
     let lastError: Error | null = null;
     let lastErrorCategory: ErrorCategory | null = null;
-    let totalTimer: NodeJS.Timeout | null = null;
-    let roundTimer: NodeJS.Timeout | null = null;
-    let stickyTimer: NodeJS.Timeout | null = null;
+    let stopLeaseHeartbeat = () => {};
+    let roundTimer: (() => void) | null = null;
+    let stickyTimer: (() => void) | null = null;
     let roundLaunchesInProgress = 0;
     let queuedRoundLaunchesPending = 0;
     let refillQueue: Promise<void> = Promise.resolve();
@@ -6531,7 +6534,7 @@ export class ProxyForwarder {
     };
     const clearRoundTimer = () => {
       if (roundTimer) {
-        clearTimeout(roundTimer);
+        roundTimer();
         roundTimer = null;
       }
     };
@@ -6875,7 +6878,7 @@ export class ProxyForwarder {
             ? DISCOVERY_TERMINAL_CLEANUP_MAX_MS
             : Math.min(
                 DISCOVERY_TERMINAL_CLEANUP_MAX_MS,
-                Math.max(0, racingDeadlineAt - Date.now())
+                Math.max(0, racingDeadlineAt - admissionClock.now())
               );
       if (maxWaitMs <= 0) return;
 
@@ -6908,9 +6911,10 @@ export class ProxyForwarder {
     ) => {
       if (settled) return;
       settled = true;
-      if (totalTimer) clearTimeout(totalTimer);
-      if (roundTimer) clearTimeout(roundTimer);
-      if (stickyTimer) clearTimeout(stickyTimer);
+      admissionClock.dispose();
+      stopLeaseHeartbeat();
+      if (roundTimer) roundTimer();
+      if (stickyTimer) stickyTimer();
       cancelSetupReservations(options.cancellationKind ?? "discovery_loser");
       cancelLosers(null, options.cancellationKind ?? "discovery_loser");
       // Sticky timeout owns its cooldown mutation. A terminal deadline/error or
@@ -6966,6 +6970,8 @@ export class ProxyForwarder {
       )
         return;
       committed = true;
+      admissionClock.dispose();
+      stopLeaseHeartbeat();
       winner = attempt;
       attempt.pending = false;
       // Snapshot the original-session billing context before an alternative
@@ -7000,9 +7006,8 @@ export class ProxyForwarder {
       // From this point ResponseHandler owns the reader and agent release.
       // No coordinator/timer path may cancel or release this attempt again.
       attempt.readerTransferred = true;
-      if (totalTimer) clearTimeout(totalTimer);
-      if (roundTimer) clearTimeout(roundTimer);
-      if (stickyTimer) clearTimeout(stickyTimer);
+      if (roundTimer) roundTimer();
+      if (stickyTimer) stickyTimer();
       cancelSetupReservations("discovery_loser");
       cancelLosers(attempt);
       discoveryMetrics.attemptFinished(attempt.id, {
@@ -7153,10 +7158,10 @@ export class ProxyForwarder {
     const scheduleRoundBoundary = (delayMs: number) => {
       clearRoundTimer();
       const epoch = coordinator.epochs;
-      const remainingMs = Math.max(0, racingDeadlineAt - Date.now());
-      roundTimer = setTimeout(
+      const remainingMs = Math.max(0, racingDeadlineAt - admissionClock.now());
+      roundTimer = admissionClock.schedule(
         () => {
-          if (Date.now() >= racingDeadlineAt) {
+          if (admissionClock.now() >= racingDeadlineAt) {
             void executeCoordinatorAction(coordinator.onDeadline(), "request_deadline").catch(
               (error) => logger.warn("[Discovery] Deadline action failed", { error })
             );
@@ -7483,6 +7488,22 @@ export class ProxyForwarder {
         },
       });
 
+      let resumeLocalAdmission: (() => void) | null = null;
+      const onLocalAdmissionWait = (waiting: boolean) => {
+        if (waiting) resumeLocalAdmission ??= admissionClock.pause();
+        else {
+          resumeLocalAdmission?.();
+          resumeLocalAdmission = null;
+        }
+      };
+      const awaitLocalAdmission = async <T>(operation: () => Promise<T>): Promise<T> => {
+        onLocalAdmissionWait(true);
+        try {
+          return await operation();
+        } finally {
+          onLocalAdmissionWait(false);
+        }
+      };
       const releaseRequestMemory = retainCurrentRequestMemory();
       void ProxyForwarder.doForward(
         attempt.session,
@@ -7491,7 +7512,9 @@ export class ProxyForwarder {
         attempt.endpointAudit,
         attempt.requestAttemptCount,
         true,
-        controller.signal
+        controller.signal,
+        undefined,
+        onLocalAdmissionWait
       )
         .then(async (response) => {
           const runtime = attempt.session as ProxySessionWithAttemptRuntime;
@@ -7511,7 +7534,9 @@ export class ProxyForwarder {
           if (discoveryPrecommitActive && !attempt.chunks.hasLease) {
             // 非 SSE 的协议兼容响应也会进入 Discovery 解析；读取前补齐准入。
             attempt.chunks.attachLease(
-              await getStreamGatePrebufferBudget().acquire(STORE_SCRATCH_BYTES, controller.signal)
+              await awaitLocalAdmission(() =>
+                getStreamGatePrebufferBudget().acquire(STORE_SCRATCH_BYTES, controller.signal)
+              )
             );
           }
           if (!attempt.pending || committed || settled) {
@@ -7533,7 +7558,10 @@ export class ProxyForwarder {
             // 首字节时刻先挂在 attempt 上；DiscoveryValidityParser 的 ready 判定同样基于内容，
             // 不在此记录会让 discovery 模式的 TTFB 恒等于 TTFT。
             attempt.firstByteAt ??= Date.now();
-            attempt.chunks.reserveForParse(item.value);
+            await awaitLocalAdmission(() =>
+              attempt.chunks.reserveForParse(item.value, controller.signal)
+            );
+            if (attempt.readerTransferred || committed || settled || !attempt.pending) return;
             const validity = discoveryPrecommitActive ? attempt.parser?.push(item.value) : null;
             // A single read can contain both deliverable content and the
             // protocol terminator. Terminal is only invalid when no content
@@ -7787,7 +7815,7 @@ export class ProxyForwarder {
               if (stickyProbeActive && provider.id === initialProvider.id) {
                 stickyProbeActive = false;
                 if (stickyTimer) {
-                  clearTimeout(stickyTimer);
+                  stickyTimer();
                   stickyTimer = null;
                 }
                 coordinator.removeAttempt(id);
@@ -7883,7 +7911,7 @@ export class ProxyForwarder {
           if (failedStickyProbe) {
             stickyProbeActive = false;
             if (stickyTimer) {
-              clearTimeout(stickyTimer);
+              stickyTimer();
               stickyTimer = null;
             }
             await clearCapturedStickyBinding(0);
@@ -8416,7 +8444,7 @@ export class ProxyForwarder {
 
     const cleanupAbort = bindClientAbortListener(session.clientAbortSignal, () => {
       if (settled || committed) return;
-      if (stickyTimer) clearTimeout(stickyTimer);
+      if (stickyTimer) stickyTimer();
       coordinator.cancelRequest();
       cancelSetupReservations("client_abort");
       void settleFailure(new ProxyError("Request aborted by client", 499, undefined, true), {
@@ -8425,14 +8453,38 @@ export class ProxyForwarder {
       }).catch((error) => logger.warn("[Discovery] Client abort cleanup failed", { error }));
     });
 
-    totalTimer = setTimeout(
+    stopLeaseHeartbeat = startDiscoveryLeaseHeartbeat({
+      ttlMs: (lease.ttlSeconds + DISCOVERY_LEASE_HANDOFF_GRACE_SECONDS) * 1000,
+      renew: () =>
+        retainRequestMemoryUntil(
+          (async () => {
+            const result = await SessionManager.renewSessionDiscoveryLease(
+              lease.sessionId,
+              lease.keyId,
+              lease.ownerToken,
+              lease.ttlSeconds + DISCOVERY_LEASE_HANDOFF_GRACE_SECONDS
+            );
+            return result.status === "renewed";
+          })()
+        ),
+      onLost: () => {
+        if (settled || committed) return;
+        bindingWriteAllowed = false;
+        coordinator.cancelRequest();
+        void settleFailure(ProxyForwarder.buildAllProvidersUnavailableError(null), {
+          preserveBinding: true,
+        }).catch((error) => logger.warn("[Discovery] Lease ownership lost", { error }));
+      },
+    });
+
+    admissionClock.schedule(
       () => {
         if (settled || committed) return;
         void executeCoordinatorAction(coordinator.onDeadline(), "request_deadline").catch((error) =>
           logger.warn("[Discovery] Deadline action failed", { error })
         );
       },
-      Math.max(0, racingDeadlineAt - Date.now())
+      Math.max(0, racingDeadlineAt - admissionClock.now())
     );
 
     const orchestrate = async () => {
@@ -8453,10 +8505,10 @@ export class ProxyForwarder {
           coordinator.startDiscoveryAfterSticky();
           await launchNextRound(concurrency, true);
         } else {
-          stickyTimer = setTimeout(
+          stickyTimer = admissionClock.schedule(
             () => {
               if (!stickyProbeActive || settled || committed) return;
-              if (Date.now() >= racingDeadlineAt) {
+              if (admissionClock.now() >= racingDeadlineAt) {
                 void executeCoordinatorAction(coordinator.onDeadline(), "request_deadline").catch(
                   (error) => logger.warn("[Discovery] Deadline action failed", { error })
                 );
@@ -8524,7 +8576,7 @@ export class ProxyForwarder {
                 );
               }
             },
-            Math.min(stickySlaMs, Math.max(0, racingDeadlineAt - Date.now()))
+            Math.min(stickySlaMs, Math.max(0, racingDeadlineAt - admissionClock.now()))
           );
         }
       } else {
@@ -8547,10 +8599,9 @@ export class ProxyForwarder {
       if (result.error) throw result.error;
       return result.response as Response;
     } finally {
+      admissionClock.dispose();
+      stopLeaseHeartbeat();
       cleanupAbort();
-      if (totalTimer) clearTimeout(totalTimer);
-      clearRoundTimer();
-      if (stickyTimer) clearTimeout(stickyTimer);
       if (!leaseTransferred) {
         void SessionManager.releaseSessionDiscoveryLease(
           lease.sessionId,

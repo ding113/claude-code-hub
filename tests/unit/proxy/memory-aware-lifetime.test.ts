@@ -19,6 +19,9 @@ describe("请求内存确定性回收", () => {
     vi.spyOn(getMemoryGovernor(), "acquire").mockImplementation((bytes, signal, wait) =>
       governor.acquire(bytes, signal, wait)
     );
+    vi.spyOn(getMemoryGovernor(), "tryLease").mockImplementation((bytes) =>
+      governor.tryLease(bytes)
+    );
     for (let i = 0; i < 20; i++) {
       const response = await withRequestMemoryLifetime(async () => {
         const request = new Request("http://localhost/v1/responses", {

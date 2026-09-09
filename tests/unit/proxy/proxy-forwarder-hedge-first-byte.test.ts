@@ -4991,7 +4991,7 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
         const runtime = attemptSession as ProxySession & AttemptRuntime;
         const providerId = runtime.provider!.id;
         if (providerId === cancelled.id) {
-          cancelledSignal = args.at(-1) as AbortSignal;
+          cancelledSignal = args[5] as AbortSignal;
           runtime.releaseAgent = cancelledAgentRelease;
           return cancelledResponse.promise;
         }
@@ -5479,7 +5479,7 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
       );
       doForward.mockImplementation(async (attemptSession, ...args) => {
         const providerId = (attemptSession as ProxySession).provider!.id;
-        const signal = args.at(-1) as AbortSignal;
+        const signal = args[5] as AbortSignal;
         activeProviders.add(providerId);
         maxActive = Math.max(maxActive, activeProviders.size);
         signal.addEventListener("abort", () => activeProviders.delete(providerId), { once: true });

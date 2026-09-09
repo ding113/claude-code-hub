@@ -39,7 +39,7 @@ describe("Discovery 前缀与解析容量", () => {
     let parser: DiscoveryValidityParser | null = new DiscoveryValidityParser("openai-responses");
     for (let index = 0; index < 2; index++) {
       const chunk = (await reader.read()).value!;
-      buffer.reserveForParse(chunk);
+      await buffer.reserveForParse(chunk);
       expect(governor.snapshot().usedBytes).toBeGreaterThan(chunk.byteLength);
       expect(parser!.push(chunk).ready).toBe(index === 1);
       buffer.append(chunk);
@@ -63,7 +63,7 @@ describe("Discovery 前缀与解析容量", () => {
     const budget = new StreamGatePrebufferBudget(() => 256 * 1024, governor);
     const buffer = new DiscoveryPrebuffer();
     buffer.attachLease(await budget.acquire(128 * 1024));
-    expect(() => buffer.reserveForParse(encoder.encode("x".repeat(40000)))).toThrow(
+    await expect(buffer.reserveForParse(encoder.encode("x".repeat(40000)))).rejects.toThrow(
       expect.objectContaining({ statusCode: 429 })
     );
     expect(buffer.retainedByteLength).toBe(0);
@@ -77,7 +77,7 @@ describe("Discovery 前缀与解析容量", () => {
   it("旁路不产生租约，重复转交被拒绝", async () => {
     const buffer = new DiscoveryPrebuffer();
     buffer.attachLease(undefined);
-    buffer.reserveForParse(encoder.encode("data"));
+    await buffer.reserveForParse(encoder.encode("data"));
     buffer.append(encoder.encode("data"));
     buffer.finishParsing();
     expect(buffer.takeOwned().lease).toBeNull();

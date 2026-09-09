@@ -11,6 +11,7 @@ const DEFAULT_STREAM_GATE_GLOBAL_PREBUFFER_BYTE_CAP = 256 * 1024 * 1024;
 export interface StreamGatePrebufferLease {
   readonly reservedBytes: number;
   tryGrow(reservedBytes: number): boolean;
+  tryGrowAsync?(reservedBytes: number, signal?: AbortSignal, waitMs?: number): Promise<boolean>;
   readPrefix?: () => Promise<Uint8Array | null>;
   /** 提交后只保留实际仍被前缀占用的预算；不能扩大原始租约。 */
   shrinkTo(reservedBytes: number): void;
@@ -72,6 +73,21 @@ export class StreamGatePrebufferBudget {
         if (shared.tryGrow(bytes)) return true;
         local.shrinkTo(before);
         return false;
+      },
+      tryGrowAsync: async (bytes, growSignal, waitMs) => {
+        const before = local.reservedBytes;
+        if (!local.tryGrow(bytes)) return false;
+        try {
+          const grown = shared.tryGrowAsync
+            ? await shared.tryGrowAsync(bytes, growSignal, waitMs)
+            : shared.tryGrow(bytes);
+          if (grown) return true;
+          local.shrinkTo(before);
+          return false;
+        } catch (error) {
+          local.shrinkTo(before);
+          throw error;
+        }
       },
       shrinkTo: (bytes) => {
         local.shrinkTo(bytes);

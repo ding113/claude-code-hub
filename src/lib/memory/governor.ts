@@ -13,6 +13,7 @@ export function isLocalCapacityError(
 export interface MemoryLease {
   readonly reservedBytes: number;
   tryGrow(bytes: number): boolean;
+  tryGrowAsync?(bytes: number, signal?: AbortSignal, waitMs?: number): Promise<boolean>;
   shrinkTo(bytes: number): void;
   release(): void;
 }

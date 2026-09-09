@@ -28,7 +28,7 @@ export class ByteStore {
   byteLength = 0;
 
   constructor(
-    private readonly lease: Pick<MemoryLease, "tryGrow" | "shrinkTo">,
+    private readonly lease: Pick<MemoryLease, "tryGrow" | "tryGrowAsync" | "shrinkTo">,
     private readonly options: {
       directory?: string;
       hotBytes?: number;
@@ -56,11 +56,32 @@ export class ByteStore {
     return this.operation(() => this.reserveScratchInternal(bytes));
   }
 
+  private async tryGrow(bytes: number): Promise<boolean> {
+    return this.lease.tryGrowAsync
+      ? this.lease.tryGrowAsync(bytes, this.options.signal, this.options.ioTimeoutMs)
+      : this.lease.tryGrow(bytes);
+  }
+
+  /** Park the body on disk before queueing another phase; no I/O remains in flight. */
+  async releaseMemoryForAdmission(): Promise<void> {
+    await this.operation(async () => {
+      if (!this.file) await this.spill();
+      this.checkActive();
+      this.lease.shrinkTo(0);
+    });
+  }
+
+  /** Called synchronously after splitting scratch from a complete phase lease. */
+  restoreMemoryAfterAdmission(): void {
+    this.checkActive();
+    if (!this.lease.tryGrow(this.scratchBytes)) throw new LocalCapacityError();
+  }
+
   private async reserveScratchInternal(bytes: number): Promise<void> {
     const target = Math.max(STORE_SCRATCH_BYTES, bytes);
-    if (!this.lease.tryGrow(target + this.memory.retainedByteLength)) {
+    if (!(await this.tryGrow(target + this.memory.retainedByteLength))) {
       if (!this.file) await this.spill();
-      if (!this.lease.tryGrow(target)) throw new LocalCapacityError();
+      if (!(await this.tryGrow(target))) throw new LocalCapacityError();
     }
     this.scratchBytes = target;
   }
@@ -75,7 +96,7 @@ export class ByteStore {
     if (
       !this.file &&
       capacity <= (this.options.hotBytes ?? HOT_BYTES) &&
-      this.lease.tryGrow(this.scratchBytes + capacity)
+      (await this.tryGrow(this.scratchBytes + capacity))
     ) {
       this.memory.append(chunk);
       this.byteLength += chunk.byteLength;

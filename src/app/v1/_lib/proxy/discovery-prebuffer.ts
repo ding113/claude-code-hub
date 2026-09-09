@@ -20,14 +20,17 @@ export class DiscoveryPrebuffer extends BufferedByteChunks {
   }
 
   /** 在解码、JSON.parse 和块复制之前增长；失败不能持有额度继续等待。 */
-  reserveForParse(chunk: Uint8Array): void {
+  async reserveForParse(chunk: Uint8Array, signal?: AbortSignal): Promise<void> {
     if (!this.lease) return;
     this.estimate.feed(chunk);
     const required = Math.max(
       STORE_SCRATCH_BYTES,
       this.estimate.capacityBytes + this.retainedByteLength + chunk.byteLength + 64 * 1024
     );
-    if (!this.lease.tryGrow(required)) throw new LocalCapacityError();
+    const grown = this.lease.tryGrowAsync
+      ? await this.lease.tryGrowAsync(required, signal)
+      : this.lease.tryGrow(required);
+    if (!grown) throw new LocalCapacityError();
   }
 
   /** 调用方已丢弃解析器，候选只保留原字节前缀，直到回放消费者接手。 */

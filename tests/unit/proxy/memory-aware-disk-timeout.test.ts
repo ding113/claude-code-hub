@@ -14,6 +14,7 @@ const disk = vi.hoisted(() => ({
   open: vi.fn(),
   rm: vi.fn(),
   write: vi.fn(),
+  read: vi.fn(),
   close: vi.fn(),
 }));
 vi.mock("node:fs/promises", () => disk);
@@ -27,7 +28,7 @@ describe("磁盘故障与取消", () => {
   function setup() {
     disk.statfs.mockResolvedValue({ type: 0, bavail: 1024 ** 3, bsize: 4096 });
     disk.mkdtemp.mockResolvedValue("C:/cch-test-spool/owned");
-    disk.open.mockResolvedValue({ write: disk.write, close: disk.close });
+    disk.open.mockResolvedValue({ write: disk.write, read: disk.read, close: disk.close });
     const governor = new MemoryGovernor({
       limit: STORE_SCRATCH_BYTES,
       remote: false,
@@ -80,6 +81,39 @@ describe("磁盘故障与取消", () => {
     await expect(failed.append(new Uint8Array(1))).rejects.toBeInstanceOf(LocalCapacityError);
     await failed.dispose(() => lease.release());
     expect(disk.rm).toHaveBeenCalledOnce();
+  });
+
+  it("物化排队归还内存后，重新分配的读缓冲仍跟随实际磁盘 I/O 结束", async () => {
+    vi.useFakeTimers();
+    setup();
+    const governor = new MemoryGovernor({
+      limit: STORE_SCRATCH_BYTES * 2 + 4096,
+      remote: false,
+      monitor: false,
+    });
+    const lease = governor.tryLease(STORE_SCRATCH_BYTES)!;
+    const store = new ByteStore(lease);
+    disk.write.mockResolvedValue({ bytesWritten: 100 });
+    await store.append(new Uint8Array(100));
+    await store.releaseMemoryForAdmission();
+    expect(governor.snapshot().usedBytes).toBe(0);
+    const materialized = governor.tryLease(STORE_SCRATCH_BYTES + 4096)!;
+    materialized.shrinkTo(4096);
+    store.restoreMemoryAfterAdmission();
+    const read = Promise.withResolvers<{ bytesRead: number }>();
+    disk.read.mockReturnValue(read.promise);
+    const buffer = store.arrayBuffer();
+    const rejected = expect(buffer).rejects.toBeInstanceOf(LocalCapacityError);
+    await vi.advanceTimersByTimeAsync(20000);
+    await rejected;
+    materialized.release();
+    await store.dispose(() => lease.release());
+    expect(governor.snapshot().usedBytes).toBe(STORE_SCRATCH_BYTES);
+    expect(disk.close).not.toHaveBeenCalled();
+    read.resolve({ bytesRead: 100 });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(governor.snapshot().usedBytes).toBe(0);
+    expect(disk.close).toHaveBeenCalledOnce();
   });
 
   it("门控失败立即返回，慢磁盘清理完成前保留额度", async () => {
