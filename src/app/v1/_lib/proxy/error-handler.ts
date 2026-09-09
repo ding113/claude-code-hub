@@ -8,6 +8,8 @@ import {
 } from "@/lib/error-override-validator";
 import { emitProxyLangfuseTrace } from "@/lib/langfuse/emit-proxy-trace";
 import { logger } from "@/lib/logger";
+import { isLocalCapacityError } from "@/lib/memory/governor";
+import { buildLocalCapacityResponse } from "@/lib/memory/http";
 import { ProxyStatusTracker } from "@/lib/proxy-status-tracker";
 import { ERROR_CODES, getErrorMessageServer } from "@/lib/utils/error-messages";
 import { sanitizeErrorTextForDetail } from "@/lib/utils/upstream-error-detection";
@@ -170,6 +172,18 @@ function getRateLimitStatusCode(limitType: string): number {
 
 export class ProxyErrorHandler {
   static async handle(session: ProxySession, error: unknown): Promise<Response> {
+    if (isLocalCapacityError(error)) {
+      const response = await buildLocalCapacityResponse();
+      ProxyErrorHandler.emitErrorTrace(session, {
+        error,
+        errorMessage: error.message,
+        statusCode: 429,
+      });
+      await ProxyErrorHandler.logErrorToDatabase(session, error.message, 429, null).catch(
+        () => undefined
+      );
+      return await attachSessionIdToErrorResponse(session.sessionId, response);
+    }
     // 分离两种消息：
     // - clientErrorMessage: 返回给客户端的安全消息（不含供应商名称）
     // - logErrorMessage: 记录到数据库的详细消息（包含供应商名称，便于排查）
@@ -659,26 +673,27 @@ export class ProxyErrorHandler {
       finalErrorMessage = `${errorMessage} | rate_limit_metadata: ${JSON.stringify(rateLimitMetadata)}`;
     }
 
-    // 保存错误信息和决策链
-    await updateMessageRequestDetailsDurably(session.messageContext.id, {
-      durationMs: duration,
-      errorMessage: finalErrorMessage,
-      providerChain: session.getProviderChain(),
-      routingTrace: session.finalizeRoutingTrace(statusCode),
-      statusCode: statusCode,
-      model: session.getCurrentModel() ?? undefined,
-      providerId: session.provider?.id, // ⭐ 更新最终供应商ID（重试切换后）
-      context1mApplied: session.getContext1mApplied(),
-      swapCacheTtlApplied: session.provider?.swapCacheTtlBilling ?? false,
-    });
-
-    // 记录请求结束
-    ProxyErrorHandler.endRequestTracking(session);
-    void session.closeLiveObservability().catch((error) => {
-      logger.warn("ProxyErrorHandler: Failed to close live observability", {
-        error: error instanceof Error ? error.message : String(error),
+    // 持久化失败也必须结束追踪，避免本地过载响应留下活跃请求。
+    try {
+      await updateMessageRequestDetailsDurably(session.messageContext.id, {
+        durationMs: duration,
+        errorMessage: finalErrorMessage,
+        providerChain: session.getProviderChain(),
+        routingTrace: session.finalizeRoutingTrace(statusCode),
+        statusCode: statusCode,
+        model: session.getCurrentModel() ?? undefined,
+        providerId: session.provider?.id, // 更新重试切换后的最终供应商 ID
+        context1mApplied: session.getContext1mApplied(),
+        swapCacheTtlApplied: session.provider?.swapCacheTtlBilling ?? false,
       });
-    });
+    } finally {
+      ProxyErrorHandler.endRequestTracking(session);
+      void session.closeLiveObservability().catch((error) => {
+        logger.warn("ProxyErrorHandler: Failed to close live observability", {
+          error: error instanceof Error ? error.message : String(error),
+        });
+      });
+    }
   }
 
   private static endRequestTracking(session: ProxySession): void {

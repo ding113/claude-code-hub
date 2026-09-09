@@ -18,14 +18,14 @@
 | 有效 vCPU < 4 | 单进程 |
 | 4 vCPU、内存/预算足够 | 2 个完整网关 worker |
 | 6 vCPU、内存/预算足够 | 3 个完整网关 worker |
-| 8+ vCPU、内存/预算足够 | 最多 4 个完整网关 worker |
+| 8+ vCPU、内存/预算足够 | `floor(vCPU/2)`，最多 32 个完整网关 worker |
 | 未配置 Redis 跨进程缓存失效 | 单进程 |
 | 内存或任一共享预算不足以安全容纳 2 个 worker | 单进程 |
 
 自动数量为以下容量的最小值：
 
 ```text
-min(4, floor(effective_vCPU / 2), memory_capacity, shared_budget_capacity)
+min(32, floor(effective_vCPU / 2), memory_capacity, shared_budget_capacity)
 ```
 
 每个进程预留两个 vCPU 的原因是主 JavaScript 线程之外仍有 GC、异步 zlib/libuv、TLS 和原生代码工作，避免“4 vCPU 启 4 个主线程”把尾延迟和内存推到不可控区间。需要覆盖默认值时可显式设置 worker 数。
@@ -35,7 +35,7 @@ min(4, floor(effective_vCPU / 2), memory_capacity, shared_budget_capacity)
 `server-lib/multicore.js` 使用最保守的可见资源值：
 
 - CPU：`os.availableParallelism()`、cgroup v2 `cpu.max`、cgroup v1 CFS quota 和 cpuset 的最小值；小数 quota 向下取整。
-- 内存：`os.totalmem()` 与 cgroup v2/v1 memory limit 的最小值。
+- worker 容量：`os.totalmem()`、cgroup v2/v1 memory limit 和当前实际可用物理内存的最小值。swap 不用于增加 worker 数量。
 - 默认每个完整网关预留 1024 MiB，并为轻量 primary/运行时开销预留 256 MiB。
 
 自动模式还要求配置 `REDIS_URL`，且 `ENABLE_RATE_LIMIT` 不能关闭。错误规则、请求过滤器、敏感词、Provider cache、系统设置、Provider group 计费倍率、熔断配置和 API Key Vacuum Filter 等进程本地快照使用 Redis Pub/Sub 接收微小的失效通知；没有这条控制通道时自动回退单进程，避免管理写入只刷新命中它的某一个 worker。显式要求多进程但缺少该通道会直接启动失败。Redis 在启动或运行期间暂时不可用时，订阅登记不会丢失：共享订阅器按 1 秒到 60 秒的指数退避持续重试；首次订阅和每次重连成功后都会向所有登记者合成一次 resync 失效，强制从数据库等权威存储重载，从而覆盖 Pub/Sub 无法补发的断线窗口。恢复前仍沿用现有多实例 fail-open 语义。
@@ -94,7 +94,7 @@ Provider group 倍率缓存额外使用版本号阻止“更新通知到达后�
 | `DETACHED_STREAM_MAX_CONCURRENCY` | 64 | 1 | 防止 detached stream 数量倍增 |
 | `DETACHED_STREAM_BUDGET_BYTES` | 64 MiB | 3 MiB + 64 KiB | 限制 detached/replay 缓冲 |
 | `DETACHED_STREAM_METERING_RESERVE_BYTES` | 16 MiB | 64 KiB | 保留最小计量空间 |
-| `STREAM_GATE_GLOBAL_PREBUFFER_BYTE_CAP` | 256 MiB | `4 * STREAM_GATE_PREBUFFER_BYTE_CAP` | 限制 stream gate 前缀缓冲 |
+| `STREAM_GATE_GLOBAL_PREBUFFER_BYTE_CAP` | 未显式设置时使用统一自动预算 | 128 KiB | 按实际前缀记账，超出热额度落盘 |
 | `REPLAY_MAX_CONCURRENT_SPOOLS` | 64 | 1 | 防止每进程各自获得完整 spool 并发 |
 
 例如默认 2 worker 时，`DB_POOL_MAX=20` 变成 10/10；3 worker 时是 7/7/6。Kubernetes 的多个 Pod 仍各自拥有一份聚合预算，所以数据库总连接上限需要按 Pod 数继续核算。
@@ -133,7 +133,7 @@ CCH_MULTICORE_PRIMARY_MEMORY_RESERVE_MB=256
 
 - 回滚到旧的单进程拓扑：`CCH_MULTICORE_MODE=off` 或 `CCH_MULTICORE_WORKERS=1`。
 - 4 vCPU 但内存小于默认安全模型：保持单进程，或在压测证明安全后显式下调 `CCH_MULTICORE_MEMORY_PER_WORKER_MB`；最低允许 256 MiB，不代表生产推荐值。
-- 指定更多 worker：同时复核聚合 DB/stream/replay/writer 预算；launcher 最多允许 32，自动模式最多 4。
+- 指定更多 worker：同时复核聚合 DB/stream/replay/writer 预算；显式配置与自动模式上限均为 32。
 - 外部已经为每个容器限制到 1~2 vCPU：维持单进程并通过 Pod/容器副本横向扩展通常更简单。
 
 `CCH_MULTICORE_ACTIVE`、`CCH_MULTICORE_WORKER_INDEX`、`CCH_MULTICORE_WORKER_COUNT` 和 `CCH_MULTICORE_BACKGROUND_OWNER` 由 launcher 写入，不能作为普通部署配置手工拼装。

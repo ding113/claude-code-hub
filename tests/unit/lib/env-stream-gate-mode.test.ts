@@ -12,12 +12,15 @@ describe("EnvSchema - STREAM_GATE_MODE", () => {
     expect(EnvSchema.parse({ STREAM_GATE_MODE: mode }).STREAM_GATE_MODE).toBe(mode);
   });
 
-  test("requires the shared budget to cover raw and decoded echo-exempt prefixes", () => {
+  test("完整前缀上限不再要求固定四倍内存预占", () => {
     expect(() =>
       EnvSchema.parse({
         STREAM_GATE_PREBUFFER_BYTE_CAP: String(1024 * 1024),
         STREAM_GATE_GLOBAL_PREBUFFER_BYTE_CAP: String(4 * 1024 * 1024 - 1),
       })
+    ).not.toThrow();
+    expect(() =>
+      EnvSchema.parse({ STREAM_GATE_GLOBAL_PREBUFFER_BYTE_CAP: 128 * 1024 - 1 })
     ).toThrow();
   });
 });

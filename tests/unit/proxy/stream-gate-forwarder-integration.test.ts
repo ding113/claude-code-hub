@@ -1,6 +1,9 @@
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { resolveEndpointPolicy } from "@/app/v1/_lib/proxy/endpoint-policy";
 import { ProxyError } from "@/app/v1/_lib/proxy/errors";
+import { getStreamGatePrebufferBudget } from "@/app/v1/_lib/proxy/stream-gate/prebuffer-budget";
+import { LocalCapacityError } from "@/lib/memory/governor";
+import { MemoryGovernor } from "../../../server-lib/memory-governor";
 
 /**
  * F1 流式内容门控（stream content gate）在 ProxyForwarder 中的接线集成测试。
@@ -554,6 +557,158 @@ describe("F1 stream content gate x ProxyForwarder paths", () => {
   describe("STREAM_GATE_MODE=enforce", () => {
     beforeEach(() => {
       envControl.streamGateMode = "enforce";
+    });
+
+    test.each([0, 1000])(
+      "首字节竞速阈值 %s：本地等待 20 秒，不发上游、不切换或惩罚供应商",
+      async (threshold) => {
+        vi.useFakeTimers();
+        try {
+          const actual = await vi.importActual<typeof import("@/app/v1/_lib/proxy/errors")>(
+            "@/app/v1/_lib/proxy/errors"
+          );
+          mocks.categorizeErrorAsync.mockImplementation(actual.categorizeErrorAsync);
+          const provider = createProvider({
+            id: 1,
+            name: "local-capacity",
+            firstByteTimeoutStreamingMs: threshold,
+          });
+          const session = createSession();
+          session.setProvider(provider);
+          const governor = new MemoryGovernor({ limit: 0, remote: false, monitor: false });
+          vi.spyOn(getStreamGatePrebufferBudget(), "acquire").mockImplementation((bytes, signal) =>
+            governor.acquire(bytes, signal)
+          );
+          const dispatch = vi.spyOn(
+            ProxyForwarder as unknown as {
+              doForwardPrepared: (...args: unknown[]) => Promise<Response>;
+            },
+            "doForwardPrepared"
+          );
+          const upstreamDispatch = vi.fn();
+          dispatch.mockImplementation(async (...args) => {
+            await (args[9] as (streaming: boolean) => Promise<void>)(true);
+            upstreamDispatch();
+            throw new Error("must not dispatch upstream");
+          });
+          const response = ProxyForwarder.send(session);
+          const rejected = expect(response).rejects.toBeInstanceOf(LocalCapacityError);
+          await vi.advanceTimersByTimeAsync(20000);
+          await rejected;
+          expect(upstreamDispatch).not.toHaveBeenCalled();
+          expect(mocks.pickRandomProviderWithExclusion).not.toHaveBeenCalled();
+          expect(mocks.recordFailure).not.toHaveBeenCalled();
+          expect(mocks.recordEndpointFailure).not.toHaveBeenCalled();
+          expect(mocks.clearSessionProvider).not.toHaveBeenCalled();
+          expect(governor.snapshot().waiting).toBe(0);
+        } finally {
+          vi.useRealTimers();
+        }
+      }
+    );
+
+    test("赢家出现后立即取消仍在等待本地容量的候选", async () => {
+      vi.useFakeTimers();
+      try {
+        const first = createProvider({ id: 1, name: "first", firstByteTimeoutStreamingMs: 1000 });
+        const second = createProvider({ id: 2, name: "queued", firstByteTimeoutStreamingMs: 1000 });
+        const session = createSession();
+        session.setProvider(first);
+        mocks.pickRandomProviderWithExclusion.mockResolvedValueOnce(second);
+        const free = new MemoryGovernor({ limit: 1024 * 1024, remote: false, monitor: false });
+        const occupied = new MemoryGovernor({ limit: 0, remote: false, monitor: false });
+        vi.spyOn(getStreamGatePrebufferBudget(), "acquire")
+          .mockImplementationOnce((bytes, signal) => free.acquire(bytes, signal))
+          .mockImplementation((bytes, signal) => occupied.acquire(bytes, signal));
+        const dispatch = vi.spyOn(
+          ProxyForwarder as unknown as {
+            doForwardPrepared: (...args: unknown[]) => Promise<Response>;
+          },
+          "doForwardPrepared"
+        );
+        const upstreamDispatch = vi.fn();
+        dispatch.mockImplementation(async (...args) => {
+          await (args[9] as (streaming: boolean) => Promise<void>)(true);
+          upstreamDispatch();
+          (args[7] as () => void)();
+          const body = new ReadableStream<Uint8Array>({
+            start(controller) {
+              setTimeout(() => {
+                controller.enqueue(
+                  new TextEncoder().encode(CONTENT_DELTA_FRAME + MESSAGE_STOP_FRAME)
+                );
+                controller.close();
+              }, 2000);
+            },
+          });
+          return new Response(body, { headers: { "content-type": "text/event-stream" } });
+        });
+        const sent = ProxyForwarder.send(session);
+        await vi.advanceTimersByTimeAsync(1500);
+        expect(occupied.snapshot().waiting).toBe(1);
+        await vi.advanceTimersByTimeAsync(500);
+        const response = await sent;
+        expect(await response.text()).toBe(CONTENT_DELTA_FRAME + MESSAGE_STOP_FRAME);
+        await vi.advanceTimersByTimeAsync(0);
+        expect(occupied.snapshot().waiting).toBe(0);
+        expect(upstreamDispatch).toHaveBeenCalledOnce();
+        expect(mocks.recordFailure).not.toHaveBeenCalled();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    test.each(["non-stream", "raw-passthrough"])(
+      "%s 等待上游时不占用流式门控额度",
+      async (kind) => {
+        const provider = createProvider({ id: 1 });
+        const session = createSession();
+        session.setProvider(provider);
+        const streaming = kind === "raw-passthrough";
+        session.request.message.stream = streaming;
+        if (streaming)
+          Object.assign(session, {
+            endpointPolicy: resolveEndpointPolicy("/v1/messages/count_tokens"),
+          });
+        const acquire = vi
+          .spyOn(getStreamGatePrebufferBudget(), "acquire")
+          .mockRejectedValue(new LocalCapacityError());
+        const held = Promise.withResolvers<Response>();
+        const dispatched = Promise.withResolvers<void>();
+        const internals = ProxyForwarder as unknown as {
+          doForward: (session: ProxySession, provider: Provider, url: string) => Promise<Response>;
+          doForwardPrepared: (...args: unknown[]) => Promise<Response>;
+        };
+        vi.spyOn(internals, "doForwardPrepared").mockImplementation(async (...args) => {
+          await (args[9] as (streaming: boolean) => Promise<void>)(streaming);
+          dispatched.resolve();
+          return held.promise;
+        });
+        const response = internals.doForward(session, provider, provider.url);
+        await dispatched.promise;
+        expect(acquire).not.toHaveBeenCalled();
+        held.resolve(new Response("{}", { headers: { "content-type": "application/json" } }));
+        expect(await (await response).text()).toBe("{}");
+      }
+    );
+
+    test("复制候选与赢家不提前生成日志，显式日志覆盖只属于当前候选", () => {
+      const session = createSession();
+      session.syncRequestBodyFromMessage();
+      const log = vi.spyOn(session.request, "log", "get");
+      const internals = ProxyForwarder as unknown as {
+        createStreamingShadowSession: (session: ProxySession, provider: Provider) => ProxySession;
+        syncWinningAttemptSession: (target: ProxySession, source: ProxySession) => void;
+      };
+      const shadow = internals.createStreamingShadowSession(
+        session,
+        createProvider({ id: 2, name: "shadow" })
+      );
+      expect(log).not.toHaveBeenCalled();
+      shadow.request.log = "shadow only";
+      expect(session.request.log).not.toBe("shadow only");
+      internals.syncWinningAttemptSession(session, shadow);
+      expect(session.request.log).toBe("shadow only");
     });
 
     test("上游 error 帧先于内容：precommit 失败触发供应商切换，失败供应商零字节泄漏", async () => {

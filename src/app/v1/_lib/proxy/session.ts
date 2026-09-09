@@ -1,7 +1,9 @@
 import type { Context } from "hono";
 import { isCountTokensEndpointPath, V1_ENDPOINT_PATHS } from "@/app/v1/_lib/proxy/endpoint-paths";
 import { isRemoteCompactionV2Request } from "@/app/v1/_lib/proxy/remote-compaction";
+import { loadRequestBody, retainRequestMemory } from "@/lib/body-store/request-body-store";
 import { logger } from "@/lib/logger";
+import { retainRequestMemoryUntil } from "@/lib/memory/request-lifetime";
 import {
   deleteLiveChain,
   type LiveProviderSnapshot,
@@ -55,7 +57,6 @@ import {
   parseOpenAIImageMultipartMetadata,
 } from "./openai-image-compat";
 import type { ReplayIdentity } from "./replay/replay-identity";
-import { decodeRequestBody } from "./request-body-codec";
 
 /** F2 Replay 的会话内状态：guard 阶段抢到 owner 租约后填充。 */
 export interface SessionReplayState {
@@ -127,6 +128,7 @@ export interface ProxyRequestPayload {
 interface RequestBodyResult {
   requestMessage: Record<string, unknown>;
   requestBodyLog: string;
+  lazyLog?: boolean;
   requestBodyLogNote?: string;
   requestBodyBuffer?: ArrayBuffer;
   contentLength?: number | null;
@@ -397,6 +399,7 @@ export class ProxySession {
       model: resolvedModel,
       imageRequestMetadata: bodyResult.imageRequestMetadata,
     };
+    if (bodyResult.lazyLog) setLazyRequestLog(request);
 
     return new ProxySession({
       startTime,
@@ -927,12 +930,14 @@ export class ProxySession {
   private scheduleLiveObservabilityFlush(): void {
     if (this.liveObservabilityClosed || this.liveObservabilityFlushPromise) return;
     const flush = Promise.resolve().then(() => this.flushLiveObservability());
-    this.liveObservabilityFlushPromise = flush.finally(() => {
-      this.liveObservabilityFlushPromise = null;
-      if (!this.liveObservabilityClosed && (this.liveChainDirty || this.liveRoutingTraceDirty)) {
-        this.scheduleLiveObservabilityFlush();
-      }
-    });
+    this.liveObservabilityFlushPromise = retainRequestMemoryUntil(
+      flush.finally(() => {
+        this.liveObservabilityFlushPromise = null;
+        if (!this.liveObservabilityClosed && (this.liveChainDirty || this.liveRoutingTraceDirty)) {
+          this.scheduleLiveObservabilityFlush();
+        }
+      })
+    );
   }
 
   private async flushLiveObservability(): Promise<void> {
@@ -1154,13 +1159,16 @@ export class ProxySession {
     if (this.liveObservabilityClosePromise) return this.liveObservabilityClosePromise;
     this.scheduleLiveObservabilityFlush();
     this.liveObservabilityClosed = true;
-    this.liveObservabilityClosePromise = (async () => {
-      await (this.liveObservabilityFlushPromise ?? Promise.resolve());
-      this.logRoutingTraceTerminalSummary();
-      if (!this.sessionId || this.requestSequence == null) return;
-      if (!this.shouldTrackSessionObservability()) return;
-      await deleteLiveChain(this.sessionId, this.requestSequence);
-    })();
+    // 刷新/删除仍持有 this（包含正文）；响应 EOF 不能提前归还这份额度。
+    this.liveObservabilityClosePromise = retainRequestMemoryUntil(
+      (async () => {
+        await (this.liveObservabilityFlushPromise ?? Promise.resolve());
+        this.logRoutingTraceTerminalSummary();
+        if (!this.sessionId || this.requestSequence == null) return;
+        if (!this.shouldTrackSessionObservability()) return;
+        await deleteLiveChain(this.sessionId, this.requestSequence);
+      })()
+    );
     return this.liveObservabilityClosePromise;
   }
 
@@ -1250,7 +1258,7 @@ export class ProxySession {
     }
 
     this.request.buffer = new TextEncoder().encode(serialized).buffer;
-    this.request.log = JSON.stringify(optimizeRequestMessage(this.request.message), null, 2);
+    setLazyRequestLog(this.request);
   }
 
   /**
@@ -1685,11 +1693,15 @@ async function parseRequestBody(c: Context): Promise<RequestBodyResult> {
 
   const contentLength = parseContentLengthHeader(c.req.header("content-length"));
   const contentType = c.req.header("content-type") ?? null;
-  const contentEncoding = c.req.header("content-encoding") ?? null;
   const pathname = new URL(c.req.url).pathname;
   // 原始（可能被压缩的）入站字节：用于截断检测与 multipart 透传。
-  const rawBodyBuffer = await c.req.raw.clone().arrayBuffer();
-  const receivedBodyBytes = rawBodyBuffer.byteLength;
+  const multipart = Boolean(
+    getOpenAIImageEndpoint(pathname) && isOpenAIImageMultipartContentType(contentType)
+  );
+  const loaded = await loadRequestBody(c.req.raw, !multipart);
+  retainRequestMemory(c.req.raw, loaded.lease);
+  const rawBodyBuffer = loaded.buffer;
+  const receivedBodyBytes = loaded.originalByteLength;
 
   // Truncation detection: warn only when both conditions are met
   // 1. Absolute difference > 1MB (avoid false positives from minor discrepancies)
@@ -1720,9 +1732,20 @@ async function parseRequestBody(c: Context): Promise<RequestBodyResult> {
     // 图片 multipart 请求保留 sidecar metadata，并为过滤/敏感词提供文本字段视图。
     // multipart 请求体不会被 content-encoding 压缩，按原始字节透传。
     imageRequestMetadata = await parseOpenAIImageMultipartMetadata(
-      c.req.raw,
+      new Request(c.req.url, {
+        method,
+        headers: c.req.raw.headers,
+        body: new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(new Uint8Array(rawBodyBuffer));
+            controller.close();
+          },
+        }),
+        duplex: "half",
+      } as RequestInit),
       pathname,
-      contentType
+      contentType,
+      true
     );
     requestMessage = buildOpenAIImageLogicalBody(imageRequestMetadata);
     requestBodyLog = imageRequestMetadata
@@ -1743,30 +1766,50 @@ async function parseRequestBody(c: Context): Promise<RequestBodyResult> {
 
   // 非 multipart：按 content-encoding（zstd/gzip/deflate/br）解压请求体，
   // 使下游模型解析、过滤、计费、日志与转发都基于明文。
-  const decodedBody = decodeRequestBody(rawBodyBuffer, contentEncoding);
-  const requestBodyBuffer = decodedBody.buffer;
+  const requestBodyBuffer = loaded.buffer;
   const requestBodyText = new TextDecoder().decode(requestBodyBuffer);
 
   try {
     const parsedMessage = JSON.parse(requestBodyText) as Record<string, unknown>;
     requestMessage = parsedMessage; // 保留原始数据用于业务逻辑
-    requestBodyLog = JSON.stringify(optimizeRequestMessage(parsedMessage), null, 2); // 仅在日志中优化
+    requestBodyLog = ""; // 有消费者读取 request.log 时才生成日志视图。
   } catch {
     requestMessage = { raw: requestBodyText };
     requestBodyLog = requestBodyText;
     requestBodyLogNote = "请求体不是合法 JSON，已记录原始文本。";
   }
+  // 保留按正文结构估算的工作集，覆盖后续过滤、重试和异步消费者；
+  // 不能只按字节数缩至固定倍数，密集小对象的 V8 开销可能更大。
 
   return {
     requestMessage,
     requestBodyLog,
     requestBodyLogNote,
     requestBodyBuffer,
+    lazyLog: requestBodyLogNote === undefined,
     contentLength,
     // 维持原语义：actualBodyBytes 表示「接收到的原始（线上）字节」，供
     // isLargeRequestBody 的截断提示判断使用，不受解压后体积影响。
     actualBodyBytes: receivedBodyBytes,
     imageRequestMetadata,
-    decodedContentEncoding: decodedBody.encoding ?? undefined,
+    decodedContentEncoding: loaded.encoding ?? undefined,
   };
+}
+
+function setLazyRequestLog(request: ProxyRequestPayload): void {
+  Object.defineProperty(request, "log", {
+    configurable: true,
+    enumerable: true,
+    get(this: ProxyRequestPayload) {
+      return JSON.stringify(optimizeRequestMessage(this.message), null, 2);
+    },
+    set(this: ProxyRequestPayload, value: string) {
+      Object.defineProperty(this, "log", {
+        value,
+        writable: true,
+        configurable: true,
+        enumerable: true,
+      });
+    },
+  });
 }

@@ -1,3 +1,4 @@
+import { retainCurrentRequestMemory } from "@/lib/memory/request-lifetime";
 import { emitFinalNonStream, emitFinalStream, emitStreamError } from "./emitters";
 import { type AttemptPerformer, orchestrateFakeStreamingAttempts } from "./orchestrator";
 import type { ProtocolFamily } from "./response-validator";
@@ -94,6 +95,7 @@ function buildStreamResponse(input: FakeStreamingRunInput): Response {
       }, input.heartbeatIntervalMs);
       heartbeatTimer.unref?.();
 
+      const releaseRequestMemory = retainCurrentRequestMemory();
       void orchestrateFakeStreamingAttempts({
         family: input.family,
         performAttempt: input.performAttempt,
@@ -147,7 +149,8 @@ function buildStreamResponse(input: FakeStreamingRunInput): Response {
             );
           }
           safeClose();
-        });
+        })
+        .finally(releaseRequestMemory);
     },
     cancel(reason) {
       cleanupRun();

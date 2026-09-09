@@ -1,5 +1,6 @@
 import { isClientAbortError } from "@/app/v1/_lib/proxy/errors";
 import { logger } from "./logger";
+import { retainCurrentRequestMemory } from "./memory/request-lifetime";
 
 /**
  * 异步任务管理器
@@ -156,7 +157,8 @@ class AsyncTaskManagerClass {
       });
     }
 
-    // 任务完成后自动清理
+    const releaseRequestMemory = retainCurrentRequestMemory();
+    // 任务完成后自动清理；cancel/cleanup 不提前释放仍执行中的消费者。
     promise
       .then(() => {
         logger.debug("[AsyncTaskManager] Task completed successfully", {
@@ -185,6 +187,7 @@ class AsyncTaskManagerClass {
         }
       })
       .finally(() => {
+        releaseRequestMemory();
         this.cleanup(taskId, taskInfo);
       });
 

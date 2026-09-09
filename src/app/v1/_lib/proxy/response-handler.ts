@@ -105,7 +105,7 @@ const STREAM_STATS_SLAB_BYTES = 64 * 1024;
 const STREAM_STATS_TRUNCATED_MARKER = "\n\n: [cch_truncated]\n\n";
 const RESPONSE_TEXT_ENCODER = new TextEncoder();
 
-function isCodexResponsesStreamRequest(session: ProxySession): boolean {
+export function isCodexResponsesStreamRequest(session: ProxySession): boolean {
   return (
     session.provider?.providerType === "codex" &&
     (session.originalFormat === "response" || session.getEndpoint() === "/v1/responses") &&

@@ -1,4 +1,5 @@
 {
+  "LOCAL_CAPACITY_EXCEEDED": "Local request capacity exhausted; retry later.",
   "_comment": "Error messages for English",
 
   "REQUIRED_FIELD": "{field} is required",
