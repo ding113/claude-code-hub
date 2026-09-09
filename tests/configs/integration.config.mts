@@ -7,6 +7,7 @@ export default createTestRunnerConfig({
   fileParallelism: false,
   testFiles: [
     "tests/integration/usage-ledger.test.ts",
+    "tests/integration/session-identity-postgres.test.ts",
     "tests/integration/my-usage-imported-ledger.test.ts",
     "tests/integration/rolling-cost-redis.test.ts",
     "tests/integration/lease-settlement-redis.test.ts",

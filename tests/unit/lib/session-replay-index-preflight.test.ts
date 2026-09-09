@@ -120,6 +120,25 @@ describe("database index concurrent preflight", () => {
     ).toBe(false);
   });
 
+  test("reuses the legacy hydration index with its PostgreSQL public-qualified definition", async () => {
+    if (!hydrationSpec) throw new Error("missing 0117 identity index spec");
+    const { executor, execute } = createFakeExecutor({
+      [hydrationSpec.canonicalName]: {
+        exists: true,
+        valid: true,
+        marker: hydrationSpec.marker,
+        definition:
+          "CREATE INDEX idx_usage_ledger_session_identity ON public.usage_ledger USING btree (COALESCE(session_identity, session_id))",
+      },
+    });
+
+    await runSessionReplayIndexPreflight(executor, [hydrationSpec]);
+
+    expect(
+      execute.mock.calls.flat().some((sql) => sql.startsWith("CREATE INDEX CONCURRENTLY"))
+    ).toBe(false);
+  });
+
   test("rebuilds an index when its marker is attached to the wrong definition", async () => {
     const { executor, execute } = createFakeExecutor({
       [spec.canonicalName]: {

@@ -92,56 +92,57 @@ export const SESSION_REPLAY_INDEX_SPECS: readonly SessionReplayIndexSpec[] = [
     canonicalName: "idx_usage_ledger_session_identity",
     temporaryName: "cch_0117_tmp_01",
     marker: SESSION_REPLAY_INDEX_MARKER,
-    definition: 'ON "usage_ledger" USING btree (COALESCE("session_identity", "session_id"))',
+    definition:
+      'ON "public"."usage_ledger" USING btree (COALESCE("session_identity", "session_id"))',
   },
   {
     canonicalName: "idx_usage_ledger_user_created_at",
     temporaryName: "cch_0116_tmp_03",
     marker: SESSION_REPLAY_INDEX_MARKER,
     definition:
-      'ON "usage_ledger" USING btree ("user_id","created_at") WHERE "usage_ledger"."blocked_by" IS NULL AND "usage_ledger"."is_replay" = false',
+      'ON "public"."usage_ledger" USING btree ("user_id","created_at") WHERE "usage_ledger"."blocked_by" IS NULL AND "usage_ledger"."is_replay" = false',
   },
   {
     canonicalName: "idx_usage_ledger_key_created_at",
     temporaryName: "cch_0116_tmp_04",
     marker: SESSION_REPLAY_INDEX_MARKER,
     definition:
-      'ON "usage_ledger" USING btree ("key","created_at") WHERE "usage_ledger"."blocked_by" IS NULL AND "usage_ledger"."is_replay" = false',
+      'ON "public"."usage_ledger" USING btree ("key","created_at") WHERE "usage_ledger"."blocked_by" IS NULL AND "usage_ledger"."is_replay" = false',
   },
   {
     canonicalName: "idx_usage_ledger_provider_created_at",
     temporaryName: "cch_0116_tmp_05",
     marker: SESSION_REPLAY_INDEX_MARKER,
     definition:
-      'ON "usage_ledger" USING btree ("final_provider_id","created_at") WHERE "usage_ledger"."blocked_by" IS NULL AND "usage_ledger"."is_replay" = false',
+      'ON "public"."usage_ledger" USING btree ("final_provider_id","created_at") WHERE "usage_ledger"."blocked_by" IS NULL AND "usage_ledger"."is_replay" = false',
   },
   {
     canonicalName: "idx_usage_ledger_key_cost",
     temporaryName: "cch_0116_tmp_06",
     marker: SESSION_REPLAY_INDEX_MARKER,
     definition:
-      'ON "usage_ledger" USING btree ("key","created_at","cost_usd","endpoint") WHERE "usage_ledger"."blocked_by" IS NULL AND "usage_ledger"."is_replay" = false',
+      'ON "public"."usage_ledger" USING btree ("key","created_at","cost_usd","endpoint") WHERE "usage_ledger"."blocked_by" IS NULL AND "usage_ledger"."is_replay" = false',
   },
   {
     canonicalName: "idx_usage_ledger_user_cost_cover",
     temporaryName: "cch_0116_tmp_07",
     marker: SESSION_REPLAY_INDEX_MARKER,
     definition:
-      'ON "usage_ledger" USING btree ("user_id","created_at","cost_usd","endpoint") WHERE "usage_ledger"."blocked_by" IS NULL AND "usage_ledger"."is_replay" = false',
+      'ON "public"."usage_ledger" USING btree ("user_id","created_at","cost_usd","endpoint") WHERE "usage_ledger"."blocked_by" IS NULL AND "usage_ledger"."is_replay" = false',
   },
   {
     canonicalName: "idx_usage_ledger_provider_cost_cover",
     temporaryName: "cch_0116_tmp_08",
     marker: SESSION_REPLAY_INDEX_MARKER,
     definition:
-      'ON "usage_ledger" USING btree ("final_provider_id","created_at","cost_usd","endpoint") WHERE "usage_ledger"."blocked_by" IS NULL AND "usage_ledger"."is_replay" = false',
+      'ON "public"."usage_ledger" USING btree ("final_provider_id","created_at","cost_usd","endpoint") WHERE "usage_ledger"."blocked_by" IS NULL AND "usage_ledger"."is_replay" = false',
   },
   {
     canonicalName: "idx_usage_ledger_key_created_at_desc_cover",
     temporaryName: "cch_0116_tmp_09",
     marker: SESSION_REPLAY_INDEX_MARKER,
     definition:
-      'ON "usage_ledger" USING btree ("key","created_at" DESC NULLS LAST,"final_provider_id") WHERE "usage_ledger"."blocked_by" IS NULL AND "usage_ledger"."is_replay" = false',
+      'ON "public"."usage_ledger" USING btree ("key","created_at" DESC NULLS LAST,"final_provider_id") WHERE "usage_ledger"."blocked_by" IS NULL AND "usage_ledger"."is_replay" = false',
   },
 ];
 
