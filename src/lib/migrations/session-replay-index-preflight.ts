@@ -1,6 +1,8 @@
 export const SESSION_REPLAY_MIGRATION_CREATED_AT = 1785563419224;
 export const SESSION_IDENTITY_INDEX_MIGRATION_CREATED_AT = 1785635169798;
 export const DATABASE_TIMEOUT_INDEX_MIGRATION_CREATED_AT = 1785688550789;
+export const SESSION_IDENTITY_PREFIX_INDEX_MARKER =
+  "cch:migration:0121:session-identity-prefix-index:v1";
 export const SESSION_REPLAY_INDEX_MARKER = "cch:migration:0116:session-replay-index:v1";
 export const DATABASE_TIMEOUT_INDEX_MARKER = "cch:migration:0118:database-timeout-index:v2";
 

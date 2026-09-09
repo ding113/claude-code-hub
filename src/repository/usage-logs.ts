@@ -1932,6 +1932,8 @@ export interface UsageLogSessionIdSuggestionFilters {
   limit?: number;
 }
 
+const COMPLETE_UUID_SESSION_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 interface UsageLogSessionIdSuggestionRow {
   sessionId: string | null;
   firstSeen: Date | null;
