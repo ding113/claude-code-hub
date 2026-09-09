@@ -1,6 +1,8 @@
 export const SESSION_REPLAY_MIGRATION_CREATED_AT = 1785563419224;
 export const SESSION_IDENTITY_INDEX_MIGRATION_CREATED_AT = 1785635169798;
 export const DATABASE_TIMEOUT_INDEX_MIGRATION_CREATED_AT = 1785688550789;
+export const SESSION_IDENTITY_PREFIX_INDEX_MARKER =
+  "cch:migration:0121:session-identity-prefix-index:v1";
 export const SESSION_REPLAY_INDEX_MARKER = "cch:migration:0116:session-replay-index:v1";
 export const DATABASE_TIMEOUT_INDEX_MARKER = "cch:migration:0118:database-timeout-index:v2";
 
@@ -8,6 +10,7 @@ export type MigrationIndexState = {
   exists: boolean;
   valid: boolean;
   marker: string | null;
+  definition?: string | null;
 };
 
 export type MigrationIndexPreflightExecutor = {
@@ -23,6 +26,34 @@ export type SessionReplayIndexSpec = {
 };
 
 export const SESSION_REPLAY_INDEX_SPECS: readonly SessionReplayIndexSpec[] = [
+  {
+    canonicalName: "idx_message_request_session_identity_prefix",
+    temporaryName: "cch_0121_tmp_01",
+    marker: SESSION_IDENTITY_PREFIX_INDEX_MARKER,
+    definition:
+      'ON "public"."message_request" USING btree ((COALESCE("session_identity", "session_id")) varchar_pattern_ops,"created_at" DESC NULLS LAST,"id" DESC NULLS LAST) WHERE "message_request"."deleted_at" IS NULL AND ("message_request"."blocked_by" IS NULL OR "message_request"."blocked_by" <> \'warmup\')',
+  },
+  {
+    canonicalName: "idx_message_request_session_id_prefix_cover",
+    temporaryName: "cch_0121_tmp_02",
+    marker: SESSION_IDENTITY_PREFIX_INDEX_MARKER,
+    definition:
+      'ON "public"."message_request" USING btree ("session_id" varchar_pattern_ops,"created_at" DESC NULLS LAST,"id" DESC NULLS LAST) WHERE "message_request"."deleted_at" IS NULL AND ("message_request"."blocked_by" IS NULL OR "message_request"."blocked_by" <> \'warmup\')',
+  },
+  {
+    canonicalName: "idx_usage_ledger_session_identity_prefix",
+    temporaryName: "cch_0121_tmp_03",
+    marker: SESSION_IDENTITY_PREFIX_INDEX_MARKER,
+    definition:
+      'ON "public"."usage_ledger" USING btree ((COALESCE("session_identity", "session_id")) varchar_pattern_ops,"created_at" DESC NULLS LAST,"id" DESC NULLS LAST) WHERE "usage_ledger"."blocked_by" IS NULL',
+  },
+  {
+    canonicalName: "idx_usage_ledger_session_id_prefix",
+    temporaryName: "cch_0121_tmp_04",
+    marker: SESSION_IDENTITY_PREFIX_INDEX_MARKER,
+    definition:
+      'ON "public"."usage_ledger" USING btree ("session_id" varchar_pattern_ops,"created_at" DESC NULLS LAST,"id" DESC NULLS LAST) WHERE "usage_ledger"."blocked_by" IS NULL',
+  },
   {
     canonicalName: "idx_message_request_session_identity_created_at",
     temporaryName: "cch_0118_tmp_01",
@@ -114,8 +145,34 @@ export const SESSION_REPLAY_INDEX_SPECS: readonly SessionReplayIndexSpec[] = [
   },
 ];
 
-function isValidatedIndex(state: MigrationIndexState, marker: string): boolean {
-  return state.exists && state.valid && state.marker === marker;
+function normalizeIndexDefinition(definition: string): string {
+  const normalized = definition
+    .replace(/^CREATE\s+(?:UNIQUE\s+)?INDEX\s+[^\s]+\s+/i, "")
+    .replace(/::[a-z_][a-z0-9_]*(?:\[\])?/gi, "")
+    .replace(/["()]/g, "")
+    .replace(/\s+/g, "")
+    .toLowerCase();
+  const whereAt = normalized.indexOf("where");
+  if (whereAt < 0) return normalized;
+  return `${normalized.slice(0, whereAt)}${normalized
+    .slice(whereAt)
+    .replace(/(?:public\.)?(?:message_request|usage_ledger)\./g, "")}`;
+}
+
+function isValidatedIndex(
+  state: MigrationIndexState,
+  marker: string,
+  definition?: string
+): boolean {
+  return (
+    state.exists &&
+    state.valid &&
+    state.marker === marker &&
+    (definition === undefined ||
+      state.definition === undefined ||
+      (state.definition !== null &&
+        normalizeIndexDefinition(state.definition) === normalizeIndexDefinition(definition)))
+  );
 }
 
 async function ensurePreflightColumns(executor: MigrationIndexPreflightExecutor): Promise<void> {
@@ -143,44 +200,56 @@ export async function runSessionReplayIndexPreflight(
     await ensurePreflightColumns(executor);
   }
 
-  for (const spec of specs) {
-    const canonical = await executor.inspectIndex(spec.canonicalName);
-    if (isValidatedIndex(canonical, spec.marker)) {
-      const staleTemp = await executor.inspectIndex(spec.temporaryName);
-      if (staleTemp.exists) {
-        await executor.execute(`DROP INDEX CONCURRENTLY IF EXISTS "${spec.temporaryName}"`);
+  // Concurrent index builds can wait on old snapshots or conflicting DDL.
+  // Bound both lock acquisition and total startup work instead of hanging the
+  // migration advisory lock indefinitely.
+  await executor.execute("SET lock_timeout = '5s'");
+  await executor.execute("SET statement_timeout = '15min'");
+  try {
+    for (const spec of specs) {
+      const canonical = await executor.inspectIndex(spec.canonicalName);
+      if (isValidatedIndex(canonical, spec.marker, spec.definition)) {
+        const staleTemp = await executor.inspectIndex(spec.temporaryName);
+        if (staleTemp.exists) {
+          await executor.execute(`DROP INDEX CONCURRENTLY IF EXISTS "${spec.temporaryName}"`);
+        }
+        continue;
       }
-      continue;
-    }
 
-    let temporary = await executor.inspectIndex(spec.temporaryName);
-    if (!isValidatedIndex(temporary, spec.marker)) {
-      if (temporary.exists) {
-        await executor.execute(`DROP INDEX CONCURRENTLY IF EXISTS "${spec.temporaryName}"`);
+      let temporary = await executor.inspectIndex(spec.temporaryName);
+      if (!isValidatedIndex(temporary, spec.marker, spec.definition)) {
+        if (temporary.exists) {
+          await executor.execute(`DROP INDEX CONCURRENTLY IF EXISTS "${spec.temporaryName}"`);
+        }
+        await executor.execute(
+          `CREATE INDEX CONCURRENTLY "${spec.temporaryName}" ${spec.definition}`
+        );
+        await executor.execute(
+          `COMMENT ON INDEX "public"."${spec.temporaryName}" IS '${spec.marker}'`
+        );
+        temporary = await executor.inspectIndex(spec.temporaryName);
+        if (!isValidatedIndex(temporary, spec.marker, spec.definition)) {
+          throw new Error(`Concurrent preflight produced an invalid index: ${spec.temporaryName}`);
+        }
+      }
+
+      if (canonical.exists) {
+        await executor.execute(
+          `DROP INDEX CONCURRENTLY IF EXISTS "public"."${spec.canonicalName}"`
+        );
       }
       await executor.execute(
-        `CREATE INDEX CONCURRENTLY "${spec.temporaryName}" ${spec.definition}`
+        `ALTER INDEX "public"."${spec.temporaryName}" RENAME TO "${spec.canonicalName}"`
       );
-      await executor.execute(
-        `COMMENT ON INDEX "public"."${spec.temporaryName}" IS '${spec.marker}'`
-      );
-      temporary = await executor.inspectIndex(spec.temporaryName);
-      if (!isValidatedIndex(temporary, spec.marker)) {
-        throw new Error(`Concurrent preflight produced an invalid index: ${spec.temporaryName}`);
+
+      const replaced = await executor.inspectIndex(spec.canonicalName);
+      if (!isValidatedIndex(replaced, spec.marker, spec.definition)) {
+        throw new Error(`Concurrent preflight failed to install index: ${spec.canonicalName}`);
       }
     }
-
-    if (canonical.exists) {
-      await executor.execute(`DROP INDEX CONCURRENTLY IF EXISTS "public"."${spec.canonicalName}"`);
-    }
-    await executor.execute(
-      `ALTER INDEX "public"."${spec.temporaryName}" RENAME TO "${spec.canonicalName}"`
-    );
-
-    const replaced = await executor.inspectIndex(spec.canonicalName);
-    if (!isValidatedIndex(replaced, spec.marker)) {
-      throw new Error(`Concurrent preflight failed to install index: ${spec.canonicalName}`);
-    }
+  } finally {
+    await executor.execute("RESET statement_timeout");
+    await executor.execute("RESET lock_timeout");
   }
 }
 
