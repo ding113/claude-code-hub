@@ -101,6 +101,18 @@ function foldChoice(choice: ChoiceAccumulator, rawChoice: unknown): void {
   retainFirstString(choice.message, "name", delta.name);
   appendString(choice.message, "content", delta.content);
   appendString(choice.message, "reasoning_content", delta.reasoning_content);
+  appendString(choice.message, "refusal", delta.refusal);
+
+  if (isRecord(delta.audio)) {
+    const audio = isRecord(choice.message.audio) ? choice.message.audio : {};
+    retainFirstString(audio, "id", delta.audio.id);
+    appendString(audio, "data", delta.audio.data);
+    appendString(audio, "transcript", delta.audio.transcript);
+    if (typeof delta.audio.expires_at === "number") {
+      audio.expires_at = delta.audio.expires_at;
+    }
+    choice.message.audio = audio;
+  }
 
   if (isRecord(delta.function_call)) {
     choice.functionCall ??= createFunctionAccumulator();
@@ -111,8 +123,17 @@ function foldChoice(choice: ChoiceAccumulator, rawChoice: unknown): void {
   if (typeof rawChoice.finish_reason === "string") {
     choice.finishReason = rawChoice.finish_reason;
   }
-  if (rawChoice.logprobs !== null && rawChoice.logprobs !== undefined) {
-    choice.logprobs = rawChoice.logprobs;
+  if (isRecord(rawChoice.logprobs)) {
+    const logprobs = isRecord(choice.logprobs) ? choice.logprobs : {};
+    for (const [key, value] of Object.entries(rawChoice.logprobs)) {
+      if ((key === "content" || key === "refusal") && Array.isArray(value)) {
+        const previous = logprobs[key];
+        logprobs[key] = [...(Array.isArray(previous) ? previous : []), ...value];
+      } else if (value != null || logprobs[key] === undefined) {
+        logprobs[key] = value;
+      }
+    }
+    choice.logprobs = logprobs;
   }
 }
 

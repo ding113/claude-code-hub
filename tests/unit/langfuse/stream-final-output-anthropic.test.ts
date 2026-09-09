@@ -253,3 +253,146 @@ describe("finalizeAnthropicStreamOutput", () => {
     });
   });
 });
+
+describe("Anthropic native block reconstruction regressions", () => {
+  function completeBlock(block: unknown, deltas: unknown[] = []): ParsedStreamFrames {
+    return frames(
+      frame("message_start", { type: "message_start", message: { id: "native", content: [] } }),
+      contentBlockStart(0, block),
+      ...deltas.map((delta) => contentBlockDelta(0, delta)),
+      contentBlockStop(0),
+      frame("message_stop", { type: "message_stop" })
+    );
+  }
+
+  test.each(["tool_use", "server_tool_use", "mcp_tool_use"])(
+    "reconstructs incremental input for %s",
+    (type) => {
+      const block = { type, id: "tool-1", name: "lookup", input: {} };
+      const parsed = completeBlock(block, [
+        { type: "input_json_delta", partial_json: '{"query":' },
+        { type: "input_json_delta", partial_json: '"cats"}' },
+      ]);
+      expect(expectFinal(finalizeAnthropicStreamOutput(parsed)).value).toMatchObject({
+        content: [{ ...block, input: { query: "cats" } }],
+      });
+      expect(block.input).toEqual({});
+    }
+  );
+
+  test.each(["tool_use", "server_tool_use", "mcp_tool_use"])(
+    "preserves initial input without JSON deltas for %s",
+    (type) => {
+      for (const input of [{}, { query: "already complete" }]) {
+        const block = { type, id: "tool-1", name: "lookup", input };
+        expect(
+          expectFinal(finalizeAnthropicStreamOutput(completeBlock(block))).value
+        ).toMatchObject({
+          content: [block],
+        });
+      }
+    }
+  );
+
+  test.each([undefined, null, [{ type: "page_location", cited_text: "first" }]])(
+    "appends citations to an existing text block with initial citations %j",
+    (citations) => {
+      const first = {
+        type: "web_search_result_location",
+        cited_text: "second",
+        url: "https://example.com",
+      };
+      const second = {
+        type: "web_search_result_location",
+        cited_text: "third",
+        url: "https://example.org",
+      };
+      const block = { type: "text", text: "answer", citations };
+      const result = finalizeAnthropicStreamOutput(
+        completeBlock(block, [
+          { type: "citations_delta", citation: first },
+          { type: "citations_delta", citation: second },
+        ])
+      );
+      expect(expectFinal(result).value).toMatchObject({
+        content: [
+          { type: "text", text: "answer", citations: [...(citations ?? []), first, second] },
+        ],
+      });
+      expect(block.citations).toBe(citations);
+    }
+  );
+
+  test("reconstructs compaction summaries and keeps the latest encrypted metadata", () => {
+    const result = finalizeAnthropicStreamOutput(
+      completeBlock({ type: "compaction", content: null, encrypted_content: null }, [
+        { type: "compaction_delta", content: "Summary ", encrypted_content: "old" },
+        { type: "compaction_delta", content: "complete", encrypted_content: "opaque-final" },
+      ])
+    );
+    expect(expectFinal(result).value).toMatchObject({
+      content: [
+        { type: "compaction", content: "Summary complete", encrypted_content: "opaque-final" },
+      ],
+    });
+  });
+
+  test("preserves a failed compaction's null content and encrypted metadata", () => {
+    const result = finalizeAnthropicStreamOutput(
+      completeBlock({ type: "compaction", content: "partial", encrypted_content: "old" }, [
+        { type: "compaction_delta", content: null, encrypted_content: null },
+      ])
+    );
+    expect(expectFinal(result).value).toMatchObject({
+      content: [{ type: "compaction", content: null, encrypted_content: null }],
+    });
+  });
+
+  test("accepts compaction deltas without the optional encrypted metadata field", () => {
+    const result = finalizeAnthropicStreamOutput(
+      completeBlock({ type: "compaction", content: "" }, [
+        { type: "compaction_delta", content: "summary" },
+      ])
+    );
+    expect(expectFinal(result).value).toMatchObject({
+      content: [{ type: "compaction", content: "summary" }],
+    });
+  });
+
+  test.each([
+    [
+      { type: "thinking", thinking: "" },
+      { type: "citations_delta", citation: {} },
+    ],
+    [
+      { type: "text", text: "" },
+      { type: "citations_delta", citation: "invalid" },
+    ],
+    [
+      { type: "text", text: "" },
+      { type: "compaction_delta", content: "summary" },
+    ],
+    [
+      { type: "compaction", content: "" },
+      { type: "compaction_delta", content: 42 },
+    ],
+    [
+      { type: "compaction", content: "" },
+      { type: "compaction_delta", content: "summary", encrypted_content: 42 },
+    ],
+  ])("keeps invalid native delta data diagnostic-only", (block, delta) => {
+    expect(finalizeAnthropicStreamOutput(completeBlock(block, [delta]))).toMatchObject({
+      kind: "final_output_unavailable",
+      reason: "malformed_frame",
+    });
+  });
+
+  test("keeps reconstructed compaction output within the serialized budget", () => {
+    const result = finalizeAnthropicStreamOutput(
+      completeBlock({ type: "compaction", content: "" }, [
+        { type: "compaction_delta", content: "x".repeat(1024 * 1024) },
+      ])
+    );
+    expect(result).toMatchObject({ kind: "final_output_unavailable", reason: "over_budget" });
+  });
+});

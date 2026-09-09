@@ -309,10 +309,10 @@ describe("traceProxyRequest", () => {
       "x-response-id": "response-456",
     });
     expect(metadata.client_metadata).toEqual({
-      authorization: "Bearer requ******cret",
-      cookie: "requ******cret",
+      authorization: "[REDACTED]",
+      cookie: "[REDACTED]",
       "content-type": "application/json",
-      "x-api-key": "requ******cret",
+      "x-api-key": "[REDACTED]",
       "x-request-id": "request-123",
     });
 
@@ -335,7 +335,7 @@ describe("traceProxyRequest", () => {
     expect(serializedSdkArguments).not.toContain("ws-session-canary");
   });
 
-  test("records mashed client-sent headers in client_metadata", async () => {
+  test("records fully redacted client-sent headers in client_metadata", async () => {
     const { traceProxyRequest } = await import("@/lib/langfuse/trace-proxy-request");
     const authorizationSecret = "Bearer request-authorization-secret";
     const apiKeySecret = "request-api-key-secret";
@@ -370,11 +370,11 @@ describe("traceProxyRequest", () => {
     const clientMetadata = llmCall[1].metadata.client_metadata;
 
     expect(clientMetadata).toEqual({
-      authorization: "Bearer requ******cret",
-      "x-api-key": "requ******cret",
-      cookie: "sess******cret",
+      authorization: "[REDACTED]",
+      "x-api-key": "[REDACTED]",
+      cookie: "[REDACTED]",
       "x-auth-token": "[REDACTED]",
-      "proxy-authorization": "Basi******YXNz",
+      "proxy-authorization": "[REDACTED]",
       "content-type": "application/json",
       "user-agent": "claude-code/1.0",
       "x-request-id": "request-123",
@@ -385,6 +385,93 @@ describe("traceProxyRequest", () => {
     for (const secret of [authorizationSecret, apiKeySecret, cookieSecret, basicSecret]) {
       expect(serializedClientMetadata).not.toContain(secret);
     }
+  });
+
+  test("redacts all original credential header patterns even when a request filter removes them", async () => {
+    const { traceProxyRequest } = await import("@/lib/langfuse/trace-proxy-request");
+    const originalHeaders = new Headers({
+      "x-access-token": "canary-access-token",
+      "x-client-secret": "canary-client-secret",
+      "x-password": "canary-password",
+      "x-custom-authorization": "canary-authorization",
+      "x-custom-api_key": "canary-api-key",
+      "x-custom-cookie": "canary-cookie",
+      "x-cch-future-internal": "canary-internal",
+      "x-request-id": "original-request",
+    });
+    await traceProxyRequest({
+      session: createMockSession({
+        headers: new Headers(),
+        getOriginalHeaders: () => originalHeaders,
+      }),
+      responseHeaders: new Headers(),
+      durationMs: 5,
+      statusCode: 200,
+      isStreaming: false,
+    });
+    const metadata = getObservationCall("llm-call")[1].metadata;
+    expect(metadata.client_metadata).toEqual({
+      "x-access-token": "[REDACTED]",
+      "x-client-secret": "[REDACTED]",
+      "x-password": "[REDACTED]",
+      "x-custom-authorization": "[REDACTED]",
+      "x-custom-api_key": "[REDACTED]",
+      "x-custom-cookie": "[REDACTED]",
+      "x-request-id": "original-request",
+    });
+    expect(JSON.stringify(mockStartObservation.mock.calls)).not.toContain("canary-");
+    expect(originalHeaders.get("x-access-token")).toBe("canary-access-token");
+  });
+
+  test.each([
+    {
+      error: {
+        message: "Incorrect API key",
+        type: "invalid_request_error",
+        code: "invalid_api_key",
+      },
+    },
+    { object: "response", status: "failed", output: [], error: { message: "Upstream failed" } },
+    {
+      object: "response",
+      status: "incomplete",
+      output: [],
+      incomplete_details: { reason: "max_output_tokens" },
+    },
+    { object: "response", status: "completed", output: "invalid-shape" },
+    { object: "response", status: "completed", output: [], error: { message: "Upstream failed" } },
+    { object: "other", status: "completed", output: [] },
+  ])("retains Responses error, incomplete, and non-response objects %j", async (responseBody) => {
+    const { traceProxyRequest } = await import("@/lib/langfuse/trace-proxy-request");
+    await traceProxyRequest({
+      session: createMockSession({ originalFormat: "response" }),
+      responseHeaders: new Headers(),
+      durationMs: 5,
+      statusCode: 401,
+      isStreaming: false,
+      responseText: JSON.stringify(responseBody),
+    });
+    expect(mockStartObservation.mock.calls[0][1].output).toEqual(responseBody);
+    expect(getObservationCall("llm-call")[1].output).toEqual(responseBody);
+  });
+
+  test("preserves bounded large-text diagnostics for Responses", async () => {
+    const { traceProxyRequest } = await import("@/lib/langfuse/trace-proxy-request");
+    const responseText = "x".repeat(1024 * 1024 + 1);
+    await traceProxyRequest({
+      session: createMockSession({ originalFormat: "response" }),
+      responseHeaders: new Headers(),
+      durationMs: 5,
+      statusCode: 502,
+      isStreaming: false,
+      responseText,
+    });
+    expect(getObservationCall("llm-call")[1].output).toEqual({
+      truncated: true,
+      totalChars: responseText.length,
+      head: "x".repeat(128 * 1024),
+      tail: "x".repeat(128 * 1024),
+    });
   });
 
   test("should include provider name and model in tags", async () => {

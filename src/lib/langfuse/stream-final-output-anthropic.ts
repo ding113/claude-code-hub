@@ -56,7 +56,10 @@ export function finalizeAnthropicStreamOutput(parsedFrames: ParsedStreamFrames):
         blocks.set(index, {
           block: { ...contentBlock },
           inputJsonFragments: [],
-          isToolUse: contentBlock.type === "tool_use",
+          isToolUse:
+            contentBlock.type === "tool_use" ||
+            contentBlock.type === "server_tool_use" ||
+            contentBlock.type === "mcp_tool_use",
           stopped: false,
         });
         break;
@@ -82,6 +85,32 @@ export function finalizeAnthropicStreamOutput(parsedFrames: ParsedStreamFrames):
             return createFinalOutputUnavailable("malformed_frame", metadata);
           }
           blockState.block.text = appendText(blockState.block.text, text);
+        } else if (deltaType === "citations_delta") {
+          if (blockState.block.type !== "text" || !isJsonObject(delta.citation)) {
+            return createFinalOutputUnavailable("malformed_frame", metadata);
+          }
+          const citations = blockState.block.citations;
+          blockState.block.citations = [
+            ...(Array.isArray(citations) ? citations : []),
+            delta.citation,
+          ];
+        } else if (deltaType === "compaction_delta") {
+          const content = delta.content;
+          const encryptedContent = delta.encrypted_content;
+          if (
+            blockState.block.type !== "compaction" ||
+            (content !== null && typeof content !== "string") ||
+            (encryptedContent !== undefined &&
+              encryptedContent !== null &&
+              typeof encryptedContent !== "string")
+          ) {
+            return createFinalOutputUnavailable("malformed_frame", metadata);
+          }
+          blockState.block.content =
+            content === null ? null : appendText(blockState.block.content, content);
+          if (encryptedContent !== undefined) {
+            blockState.block.encrypted_content = encryptedContent;
+          }
         } else if (deltaType === "thinking_delta") {
           const thinking = delta.thinking;
           if (blockState.block.type !== "thinking" || typeof thinking !== "string") {
@@ -112,7 +141,7 @@ export function finalizeAnthropicStreamOutput(parsedFrames: ParsedStreamFrames):
         if (index === null || blockState === undefined || blockState.stopped) {
           return createFinalOutputUnavailable("malformed_frame", metadata);
         }
-        if (blockState.isToolUse) {
+        if (blockState.isToolUse && blockState.inputJsonFragments.length > 0) {
           const inputJson = blockState.inputJsonFragments.join("");
           try {
             const parsedInput: unknown = JSON.parse(inputJson);

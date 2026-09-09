@@ -517,3 +517,132 @@ describe("finalizeOpenAIResponsesStream", () => {
     });
   });
 });
+
+describe("Chat native incremental fields regressions", () => {
+  function choiceFrames(values: Record<string, unknown>[]): ParsedStreamFrames {
+    return frames(values.map((value) => ({ data: { choices: [{ index: 0, ...value }] } })));
+  }
+
+  test("concatenates refusal-only deltas and ignores null deltas", () => {
+    const result = finalizeOpenAIChatStream(
+      choiceFrames([
+        { delta: { role: "assistant", refusal: "I cannot " } },
+        { delta: { refusal: null, content: null } },
+        { delta: { refusal: "help." }, finish_reason: "stop" },
+      ])
+    );
+    expect(finalValue(result)).toMatchObject({
+      choices: [
+        { message: { role: "assistant", refusal: "I cannot help." }, finish_reason: "stop" },
+      ],
+    });
+  });
+
+  test("reconstructs audio-only data, transcript, ID, and terminal expiration", () => {
+    const firstAudio = { id: "audio-1", data: "AA", transcript: "Hel", expires_at: 100 };
+    const result = finalizeOpenAIChatStream(
+      choiceFrames([
+        { delta: { role: "assistant", audio: firstAudio } },
+        { delta: { audio: null } },
+        { delta: { audio: { id: null, data: "BB", transcript: "lo", expires_at: null } } },
+        { delta: { audio: { expires_at: 200 } } },
+        { delta: {}, finish_reason: "stop" },
+      ])
+    );
+    expect(finalValue(result)).toMatchObject({
+      choices: [
+        {
+          message: {
+            role: "assistant",
+            audio: { id: "audio-1", data: "AABB", transcript: "Hello", expires_at: 200 },
+          },
+        },
+      ],
+    });
+    expect(firstAudio).toEqual({ id: "audio-1", data: "AA", transcript: "Hel", expires_at: 100 });
+  });
+
+  test.each(["content", "refusal"])("concatenates every %s logprob chunk", (field) => {
+    const first = { [field]: [{ token: "A", logprob: -1 }] };
+    const second = { [field]: [{ token: "B", logprob: -2 }] };
+    const result = finalizeOpenAIChatStream(
+      choiceFrames([
+        { delta: { role: "assistant", [field]: "A" }, logprobs: first },
+        { delta: {}, logprobs: { [field]: null } },
+        { delta: { [field]: "B" }, logprobs: second },
+        { delta: {}, logprobs: null, finish_reason: "stop" },
+      ])
+    );
+    expect(finalValue(result)).toMatchObject({
+      choices: [
+        {
+          message: { [field]: "AB" },
+          logprobs: {
+            [field]: [
+              { token: "A", logprob: -1 },
+              { token: "B", logprob: -2 },
+            ],
+          },
+        },
+      ],
+    });
+    expect(first[field]).toHaveLength(1);
+  });
+
+  test("keeps content and refusal probabilities separate across choices", () => {
+    const result = finalizeOpenAIChatStream(
+      frames([
+        {
+          data: {
+            choices: [
+              {
+                index: 0,
+                delta: { content: "A" },
+                logprobs: { content: [{ token: "A" }], refusal: null },
+              },
+              {
+                index: 1,
+                delta: { refusal: "B" },
+                logprobs: { content: null, refusal: [{ token: "B" }] },
+              },
+            ],
+          },
+        },
+        {
+          data: {
+            choices: [
+              {
+                index: 1,
+                delta: { refusal: "C" },
+                logprobs: { refusal: [{ token: "C" }] },
+                finish_reason: "stop",
+              },
+              {
+                index: 0,
+                delta: { content: "D" },
+                logprobs: { content: [{ token: "D" }] },
+                finish_reason: "stop",
+              },
+            ],
+          },
+        },
+      ])
+    );
+    expect(finalValue(result)).toMatchObject({
+      choices: [
+        { index: 0, logprobs: { content: [{ token: "A" }, { token: "D" }], refusal: null } },
+        { index: 1, logprobs: { content: null, refusal: [{ token: "B" }, { token: "C" }] } },
+      ],
+    });
+  });
+
+  test("keeps reconstructed audio within the serialized budget", () => {
+    expect(
+      finalizeOpenAIChatStream(
+        choiceFrames([
+          { delta: { audio: { data: "x".repeat(1024 * 1024) } }, finish_reason: "stop" },
+        ])
+      )
+    ).toMatchObject({ kind: "final_output_unavailable", reason: "over_budget" });
+  });
+});

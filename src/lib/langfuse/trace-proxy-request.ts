@@ -113,24 +113,6 @@ function redactLangfuseHeaders(headers: Headers): Record<string, string> {
   return redactHeaders(externalHeaders);
 }
 
-function headersToSanitizedRecord(headers: Headers): Record<string, string> {
-  const sanitizedText = sanitizeHeaders(headers);
-  if (!sanitizedText || sanitizedText === "(empty)") {
-    return {};
-  }
-
-  const record: Record<string, string> = {};
-  for (const line of sanitizedText.split(/\r?\n/).filter(Boolean)) {
-    const colonIndex = line.indexOf(":");
-    if (colonIndex === -1) continue;
-    const name = line.slice(0, colonIndex).trim();
-    const value = line.slice(colonIndex + 1).trim();
-    if (!name) continue;
-    record[name] = record[name] ? `${record[name]}\n${value}` : value;
-  }
-  return record;
-}
-
 const SUCCESS_REASONS = new Set([
   "request_success",
   "retry_success",
@@ -245,13 +227,18 @@ function buildResponseCapture(ctx: TraceContext): ResponseCapture {
         ? undefined
         : tryParseJsonSafe(ctx.responseText);
 
+  const response =
+    typeof responseValue === "object" && responseValue !== null && !Array.isArray(responseValue)
+      ? (responseValue as Record<string, unknown>)
+      : undefined;
+
   if (
     ctx.session.originalFormat === "response" &&
-    typeof responseValue === "object" &&
-    responseValue !== null &&
-    !Array.isArray(responseValue)
+    response?.object === "response" &&
+    response.status === "completed" &&
+    response.error == null &&
+    Array.isArray(response.output)
   ) {
-    const response = responseValue as Record<string, unknown>;
     const usage =
       typeof response.usage === "object" &&
       response.usage !== null &&
@@ -292,9 +279,7 @@ function buildResponseCapture(ctx: TraceContext): ResponseCapture {
     };
 
     return {
-      output: Array.isArray(response.output)
-        ? response.output.map((item) => sanitizeResponseOutputItem(item))
-        : undefined,
+      output: response.output.map((item) => sanitizeResponseOutputItem(item)),
       ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
       ...(usageDetails && Object.keys(usageDetails).length > 0 ? { usageDetails } : {}),
     };
@@ -491,7 +476,7 @@ export async function traceProxyRequest(ctx: TraceContext): Promise<void> {
       sseEventCount: ctx.sseEventCount,
       requestHeaders,
       responseHeaders,
-      client_metadata: headersToSanitizedRecord(
+      client_metadata: redactLangfuseHeaders(
         typeof session.getOriginalHeaders === "function"
           ? session.getOriginalHeaders()
           : session.headers
