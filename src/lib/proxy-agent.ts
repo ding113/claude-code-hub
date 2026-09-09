@@ -1,5 +1,11 @@
 import { socksDispatcher } from "fetch-socks";
-import { Agent, type Dispatcher, ProxyAgent, setGlobalDispatcher } from "undici";
+import {
+  Agent,
+  type Dispatcher,
+  ProxyAgent,
+  setGlobalDispatcher,
+  fetch as undiciFetch,
+} from "undici";
 import { getGlobalAgentPool as getPool } from "@/lib/proxy-agent/agent-pool";
 import type { Provider } from "@/types/provider";
 import { getEnvConfig } from "./config/env.schema";
@@ -59,6 +65,18 @@ export interface ProviderProxyConfig {
   name?: string;
   proxyUrl: string | null;
   proxyFallbackToDirect: boolean;
+}
+
+/**
+ * Dispatch fetch through the same undici build that created ProxyAgent / socksDispatcher.
+ * Node 24 global fetch rejects those dispatchers with
+ * `UND_ERR_INVALID_ARG: invalid onRequestStart method` in ~12ms and never opens the proxy socket.
+ */
+export function fetchWithDispatcher(
+  url: string,
+  init?: RequestInit & { dispatcher?: unknown }
+): Promise<Response> {
+  return undiciFetch(url, init as never) as unknown as Promise<Response>;
 }
 
 /**

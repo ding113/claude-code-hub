@@ -32,7 +32,11 @@ import {
   getEndpointFilterStats,
   getPreferredProviderEndpoints,
 } from "@/lib/provider-endpoints/endpoint-selector";
-import { getGlobalAgentPool, getProxyAgentForProvider } from "@/lib/proxy-agent";
+import {
+  fetchWithDispatcher,
+  getGlobalAgentPool,
+  getProxyAgentForProvider,
+} from "@/lib/proxy-agent";
 import {
   isHttp2TransportQuarantined,
   quarantineHttp2Transport,
@@ -3823,7 +3827,7 @@ export class ProxyForwarder {
     }
     const fetchWithDispatch = async (url: string, requestInit: UndiciFetchOptions) => {
       onUpstreamDispatch?.();
-      return await fetch(url, requestInit);
+      return await fetchWithDispatcher(url, requestInit);
     };
 
     // ⭐ 双路超时控制（first-byte / total）
