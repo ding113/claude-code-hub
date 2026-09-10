@@ -4440,7 +4440,7 @@ export interface operations {
                             proxyUrl: string | null;
                             /** @description Whether proxy failures fall back to direct calls. */
                             proxyFallbackToDirect: boolean;
-                            /** @description Custom upstream headers with sensitive values redacted. */
+                            /** @description Custom upstream headers with sensitive values redacted. Values may be static or templates such as {{header.Name}}, {{session.id}}, {{session.client_id}}. */
                             customHeaders: {
                                 [key: string]: string;
                             } | null;
@@ -4764,7 +4764,7 @@ export interface operations {
                     proxy_url?: string | null;
                     /** @description Whether proxy failures fall back to direct calls. */
                     proxy_fallback_to_direct?: boolean;
-                    /** @description Custom upstream headers. */
+                    /** @description Custom upstream headers. Values may be static or templates such as {{header.Name}}, {{session.id}}, {{session.client_id}}. */
                     custom_headers?: {
                         [key: string]: string;
                     } | null;
@@ -4905,7 +4905,7 @@ export interface operations {
                         proxyUrl: string | null;
                         /** @description Whether proxy failures fall back to direct calls. */
                         proxyFallbackToDirect: boolean;
-                        /** @description Custom upstream headers with sensitive values redacted. */
+                        /** @description Custom upstream headers with sensitive values redacted. Values may be static or templates such as {{header.Name}}, {{session.id}}, {{session.client_id}}. */
                         customHeaders: {
                             [key: string]: string;
                         } | null;
@@ -5227,7 +5227,7 @@ export interface operations {
                         proxyUrl: string | null;
                         /** @description Whether proxy failures fall back to direct calls. */
                         proxyFallbackToDirect: boolean;
-                        /** @description Custom upstream headers with sensitive values redacted. */
+                        /** @description Custom upstream headers with sensitive values redacted. Values may be static or templates such as {{header.Name}}, {{session.id}}, {{session.client_id}}. */
                         customHeaders: {
                             [key: string]: string;
                         } | null;
@@ -5726,7 +5726,7 @@ export interface operations {
                     proxy_url?: string | null;
                     /** @description Whether proxy failures fall back to direct calls. */
                     proxy_fallback_to_direct?: boolean;
-                    /** @description Custom upstream headers. */
+                    /** @description Custom upstream headers. Values may be static or templates such as {{header.Name}}, {{session.id}}, {{session.client_id}}. */
                     custom_headers?: {
                         [key: string]: string;
                     } | null;
@@ -5873,7 +5873,7 @@ export interface operations {
                         proxyUrl: string | null;
                         /** @description Whether proxy failures fall back to direct calls. */
                         proxyFallbackToDirect: boolean;
-                        /** @description Custom upstream headers with sensitive values redacted. */
+                        /** @description Custom upstream headers with sensitive values redacted. Values may be static or templates such as {{header.Name}}, {{session.id}}, {{session.client_id}}. */
                         customHeaders: {
                             [key: string]: string;
                         } | null;
@@ -9276,7 +9276,7 @@ export interface operations {
                     preset?: string;
                     /** @description Optional custom JSON payload. */
                     customPayload?: string;
-                    /** @description Optional custom headers. */
+                    /** @description Optional custom headers. Values may be static or templates such as {{header.Name}}, {{session.id}}, {{session.client_id}}. */
                     customHeaders?: {
                         [key: string]: string;
                     };

@@ -1,0 +1,7 @@
+{
+  "title": "Включить адаптер OpenCode Go?",
+  "description": "Этот API URL относится к OpenCode Go (https://opencode.ai). Если включить адаптер, в заголовок x-opencode-session будет записан текущий Session ID — так Go сможет маршрутизировать запросы и кэшировать промпт.",
+  "cancel": "Отмена",
+  "skip": "Не включать",
+  "enable": "Включить и сохранить"
+}

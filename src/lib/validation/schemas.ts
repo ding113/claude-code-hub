@@ -459,7 +459,7 @@ export const KeyFormSchema = z.object({
   cacheTtlPreference: CACHE_TTL_PREFERENCE.optional().default("inherit"),
 });
 
-// 共享：静态自定义请求头的 zod 校验器，复用 normalizeCustomHeadersRecord 中的全部规则。
+// 共享：自定义请求头的 zod 校验器，复用 normalizeCustomHeadersRecord 中的全部规则（含动态模板）。
 // 行为：
 // - 缺失 → 输出中省略字段（保留可选性，不修改既有行为）
 // - 显式 null → null（清空）

@@ -83,7 +83,9 @@ export const ProviderSummarySchema = z
     customHeaders: z
       .record(z.string(), z.string())
       .nullable()
-      .describe("Custom upstream headers with sensitive values redacted."),
+      .describe(
+        "Custom upstream headers with sensitive values redacted. Values may be static or templates such as {{header.Name}}, {{session.id}}, {{session.client_id}}."
+      ),
     firstByteTimeoutStreamingMs: z
       .number()
       .int()
@@ -317,7 +319,12 @@ export const ProviderUnifiedTestSchema = ProviderApiTestSchema.extend({
   successContains: z.string().optional().describe("Expected response content."),
   preset: z.string().optional().describe("Optional preset id."),
   customPayload: z.string().optional().describe("Optional custom JSON payload."),
-  customHeaders: z.record(z.string(), z.string()).optional().describe("Optional custom headers."),
+  customHeaders: z
+    .record(z.string(), z.string())
+    .optional()
+    .describe(
+      "Optional custom headers. Values may be static or templates such as {{header.Name}}, {{session.id}}, {{session.client_id}}."
+    ),
 }).strict();
 
 export const ProviderTestByIdSchema = z
@@ -447,7 +454,9 @@ export const ProviderCreateSchema = z
       .record(z.string(), z.string())
       .nullable()
       .optional()
-      .describe("Custom upstream headers."),
+      .describe(
+        "Custom upstream headers. Values may be static or templates such as {{header.Name}}, {{session.id}}, {{session.client_id}}."
+      ),
     first_byte_timeout_streaming_ms: z
       .number()
       .int()
