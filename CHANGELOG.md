@@ -11,6 +11,7 @@
 - Langfuse 流式请求还原完整最终输出（Claude / OpenAI Chat Completions / Responses / Gemini），避免把原始 SSE 文本当作 generation output
 - Langfuse 将客户端原始请求头写入 generation `client_metadata`（凭据中间打码）
 - 支持 `LANGFUSE_TRACING_ENVIRONMENT` / `LANGFUSE_RELEASE` 传入 LangfuseSpanProcessor
+- 供应商自定义请求头支持动态模板：可用 `{{header.Name}}` 复制入站请求头，`{{session.id}}` 写入 Session ID，`{{session.client_id}}` 写入客户端 Session ID；来源缺失时跳过该头
 
 ### 优化
 

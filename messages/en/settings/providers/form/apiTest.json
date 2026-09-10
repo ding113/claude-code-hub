@@ -15,7 +15,7 @@
   "customConfig": "Custom",
   "customHeaders": {
     "label": "Custom request headers (JSON)",
-    "desc": "Static headers merged into the outbound test request. Will not override authentication.",
+    "desc": "Static values or templates are merged into the outbound test request. Will not override authentication. '{{session.id}}' and '{{session.client_id}}' are skipped because the connectivity test has no live session.",
     "geminiNotSupported": "Custom headers are not supported for the Gemini test path",
     "errors": {
       "invalidJson": "Custom headers must be valid JSON",
@@ -25,7 +25,8 @@
       "protectedName": "Authentication headers cannot be set via custom headers",
       "invalidValue": "Header values must be strings",
       "emptyName": "Header name cannot be empty",
-      "crlf": "Header name and value cannot contain line breaks"
+      "crlf": "Header name and value cannot contain line breaks",
+      "invalidTemplate": "Invalid header template. Supported: '{{header.Name}}', '{{session.id}}', '{{session.client_id}}'"
     }
   },
   "customPayloadDesc": "Enter custom JSON payload to override default request body",

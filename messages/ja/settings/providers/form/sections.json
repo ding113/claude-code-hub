@@ -192,7 +192,7 @@
     },
     "customHeaders": {
       "label": "カスタムリクエストヘッダー（JSON）",
-      "desc": "静的なヘッダーが送信リクエストにマージされます。認証ヘッダーや最終リクエストフィルターを上書きしません。",
+      "desc": "静的な値またはテンプレートが送信リクエストにマージされます。認証ヘッダーや最終リクエストフィルターは上書きしません。'{{header.Name}}' で受信ヘッダーをコピー、'{{session.id}}' で Session ID、'{{session.client_id}}' でクライアント Session ID を設定できます。ソースが無い場合はそのヘッダーをスキップします。",
       "errors": {
         "invalidJson": "カスタムヘッダーは有効な JSON である必要があります",
         "notObject": "カスタムヘッダーは JSON オブジェクトである必要があります",
@@ -201,7 +201,8 @@
         "protectedName": "認証ヘッダーはカスタムヘッダーで設定できません",
         "invalidValue": "ヘッダー値は文字列である必要があります",
         "emptyName": "ヘッダー名は空にできません",
-        "crlf": "ヘッダー名と値に改行を含めることはできません"
+        "crlf": "ヘッダー名と値に改行を含めることはできません",
+        "invalidTemplate": "ヘッダーテンプレートが無効です。対応: '{{header.Name}}'、'{{session.id}}'、'{{session.client_id}}'"
       }
     },
     "codexOverrides": {
