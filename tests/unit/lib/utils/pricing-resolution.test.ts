@@ -104,6 +104,38 @@ describe("resolvePricingForModelRecords", () => {
     expect(resolved?.source).toBe("cloud_model_fallback");
   });
 
+  test("resolves orcarouter provider to orcarouter pricing node", () => {
+    const aliasRecord = makeRecord("gpt-5.5", {
+      mode: "responses",
+      model_family: "gpt",
+      litellm_provider: "orcarouter",
+      pricing: {
+        orcarouter: {
+          input_cost_per_token: 0.0000025,
+          output_cost_per_token: 0.000015,
+          cache_read_input_token_cost: 2.5e-7,
+        },
+      },
+    });
+
+    const resolved = resolvePricingForModelRecords({
+      provider: {
+        id: 3,
+        name: "OrcaRouter",
+        url: "https://api.orcarouter.ai/v1",
+      } as never,
+      primaryModelName: "gpt-5.5",
+      fallbackModelName: null,
+      primaryRecord: aliasRecord,
+      fallbackRecord: null,
+    });
+
+    expect(resolved).not.toBeNull();
+    expect(resolved?.resolvedPricingProviderKey).toBe("orcarouter");
+    expect(resolved?.source).toBe("cloud_exact");
+    expect(resolved?.priceData.input_cost_per_token).toBe(0.0000025);
+  });
+
   test("prefers local manual prices over cloud multi-provider pricing", () => {
     const manualRecord = makeRecord(
       "gpt-5.5",

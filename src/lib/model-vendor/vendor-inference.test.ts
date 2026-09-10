@@ -75,6 +75,8 @@ describe("inferVendorFromModelName", () => {
     { modelId: "z-ai/glm-4.7", expected: "zhipuai" },
     // 托管商前缀跳过 org、按模型段识别
     { modelId: "openrouter/deepseek/deepseek-chat", expected: "deepseek" },
+    { modelId: "orcarouter/deepseek/deepseek-chat", expected: "deepseek" },
+    { modelId: "orcarouter/anthropic/claude-sonnet-5", expected: "anthropic" },
     { modelId: "together/meta-llama/Llama-3-70b", expected: "meta" },
     { modelId: "hf/deepseek-ai/DeepSeek-V3.2", expected: "deepseek" },
     { modelId: "novita/qwen/qwen3-32b", expected: "alibaba" },
@@ -141,6 +143,7 @@ describe("keywordScan", () => {
 describe("isHostPrefix", () => {
   it("recognizes hosting orgs", () => {
     expect(isHostPrefix("openrouter")).toBe(true);
+    expect(isHostPrefix("orcarouter")).toBe(true);
     expect(isHostPrefix("HF")).toBe(true);
     expect(isHostPrefix("anthropic")).toBe(false);
   });

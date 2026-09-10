@@ -28,6 +28,11 @@ describe("Anthropic auth header helpers", () => {
     ).toEqual({
       Authorization: "Bearer sk-test",
     });
+    expect(
+      resolveAnthropicAuthHeaders("sk-test", "https://orcarouter.example.com/v1/messages")
+    ).toEqual({
+      Authorization: "Bearer sk-test",
+    });
   });
 
   it("honors forceBearerOnly for claude-auth style callsites", () => {
