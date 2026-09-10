@@ -12,6 +12,7 @@
 - Langfuse 将客户端原始请求头写入 generation `client_metadata`（凭据中间打码）
 - 支持 `LANGFUSE_TRACING_ENVIRONMENT` / `LANGFUSE_RELEASE` 传入 LangfuseSpanProcessor
 - 供应商自定义请求头支持动态模板：可用 `{{header.Name}}` 复制入站请求头，`{{session.id}}` 写入 Session ID，`{{session.client_id}}` 写入客户端 Session ID；来源缺失时跳过该头
+- 保存供应商时，若 API URL 为 `https://opencode.ai/*` 且尚未配置 `x-opencode-session`，弹出 OpenCode Go 适配确认；开启后写入 `{{session.id}}`
 
 ### 优化
 

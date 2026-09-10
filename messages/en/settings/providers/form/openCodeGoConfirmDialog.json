@@ -1,0 +1,7 @@
+{
+  "title": "Enable OpenCode Go adapter?",
+  "description": "This API URL is OpenCode Go (https://opencode.ai). Enabling it adds the x-opencode-session request header with the current Session ID so Go can route and cache the conversation.",
+  "cancel": "Cancel",
+  "skip": "Don't enable",
+  "enable": "Enable and save"
+}

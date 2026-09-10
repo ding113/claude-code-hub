@@ -1,0 +1,7 @@
+{
+  "title": "OpenCode Go アダプターを有効にしますか？",
+  "description": "この API URL は OpenCode Go（https://opencode.ai）です。有効にすると x-opencode-session リクエストヘッダーに現在の Session ID を書き込み、上流のルーティングとプロンプトキャッシュに利用します。",
+  "cancel": "キャンセル",
+  "skip": "有効にしない",
+  "enable": "有効にして保存"
+}

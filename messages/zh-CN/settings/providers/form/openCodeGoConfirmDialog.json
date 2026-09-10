@@ -1,0 +1,7 @@
+{
+  "title": "开启 OpenCode Go 适配？",
+  "description": "当前 API URL 是 OpenCode Go（https://opencode.ai）。开启后会自动添加请求头 x-opencode-session，写入当前 Session ID，便于上游路由和提示缓存。",
+  "cancel": "取消",
+  "skip": "不开启",
+  "enable": "开启并保存"
+}
