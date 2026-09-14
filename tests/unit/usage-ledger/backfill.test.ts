@@ -34,6 +34,13 @@ describe("backfillUsageLedger", () => {
     expect(typeof backfillUsageLedger).toBe("function");
   });
 
+  it("skips possibly in-flight rows unless they are finalized or older than the grace window", () => {
+    expect(serviceSource).toContain("fn_is_message_request_finalized(");
+    expect(serviceSource).toMatch(
+      /fn_is_message_request_finalized\([\s\S]*?\)\s*OR mr\.created_at < NOW\(\) - INTERVAL '1 hour'/
+    );
+  });
+
   it("uses ON CONFLICT in backfill SQL", () => {
     expect(serviceSource).toContain("ON CONFLICT");
   });

@@ -2,10 +2,11 @@
 
 import { and, avg, count, eq, gte, lt, sql, sum } from "drizzle-orm";
 import { db } from "@/drizzle/db";
-import { usageLedger } from "@/drizzle/schema";
+import { messageRequest, usageLedger } from "@/drizzle/schema";
 import { Decimal, toCostDecimal } from "@/lib/utils/currency";
 import { resolveSystemTimezone } from "@/lib/utils/timezone";
 import { LEDGER_BILLING_CONDITION } from "./_shared/ledger-conditions";
+import { MESSAGE_REQUEST_BILLABLE_ACTIVITY_CONDITION } from "./_shared/message-request-conditions";
 
 /**
  * 今日概览统计数据
@@ -143,16 +144,17 @@ export async function getOverviewMetricsWithComparison(
       ),
 
     // 最近1分钟请求数 (RPM)
+    // usage_ledger 只投影已完成的请求，长流式请求在完成前不可见；实时 RPM 直接统计 message_request。
     db
       .select({
         requestCount: count(),
       })
-      .from(usageLedger)
+      .from(messageRequest)
       .where(
         and(
-          LEDGER_BILLING_CONDITION,
-          userCondition,
-          gte(usageLedger.createdAt, sql`CURRENT_TIMESTAMP - INTERVAL '1 minute'`)
+          MESSAGE_REQUEST_BILLABLE_ACTIVITY_CONDITION,
+          userId ? eq(messageRequest.userId, userId) : undefined,
+          gte(messageRequest.createdAt, sql`CURRENT_TIMESTAMP - INTERVAL '1 minute'`)
         )
       ),
   ]);

@@ -9,6 +9,14 @@ import { logger } from "@/lib/logger";
 import type { StoredCostBreakdown } from "@/types/cost-breakdown";
 import type { CreateMessageRequestData } from "@/types/message";
 import { normalizeRoutingTrace, type RoutingTraceV1 } from "@/types/routing-trace";
+import {
+  flushMessageRequestInserts,
+  hasBufferedMessageRequestInserts,
+  hasFailedMessageRequestInserts,
+  isMessageRequestInsertPending,
+  stopMessageRequestInsertBuffer,
+  takeFailedMessageRequestInsert,
+} from "./message-insert-buffer";
 import { buildMonotonicRoutingTraceAssignments } from "./routing-trace-persistence";
 
 export type MessageRequestUpdatePatch = {
@@ -311,10 +319,14 @@ function loadWriterConfig(): WriterConfig {
 function takeBatch(
   map: Map<number, PendingMessageRequestUpdate>,
   evictableIndex: EvictablePendingIndex,
-  batchSize: number
+  batchSize: number,
+  skip: (id: number) => boolean = () => false
 ): MessageRequestUpdateBatchRecord[] {
   const items: MessageRequestUpdateBatchRecord[] = [];
   for (const [id, pending] of map) {
+    if (skip(id)) {
+      continue;
+    }
     if (pending.durableAcknowledgement && !pending.durableAcknowledgement.settled) {
       pending.durableAcknowledgement.state = "in-flight";
     }
@@ -1029,8 +1041,26 @@ class MessageRequestWriteBuffer {
       do {
         this.flushAgainAfterCurrent = false;
 
+        // Buffered inserts (MESSAGE_REQUEST_INSERT_MODE=async) must commit before any update for
+        // the same ids; rows whose insert is still pending stay queued for a later flush.
+        if (hasBufferedMessageRequestInserts()) {
+          await flushMessageRequestInserts();
+        }
+        if (hasFailedMessageRequestInserts()) {
+          this.dropUpdatesForFailedInserts();
+        }
+
         while (this.pending.size > 0) {
-          const batch = takeBatch(this.pending, this.evictableIndex, this.config.batchSize);
+          const batch = takeBatch(
+            this.pending,
+            this.evictableIndex,
+            this.config.batchSize,
+            isMessageRequestInsertPending
+          );
+          if (batch.length === 0) {
+            // Every remaining update waits for an uncommitted insert; retry on the next timer.
+            break;
+          }
           const requiresUpdatedIds = batch.some(
             (item) => item.durableAcknowledgement && !item.durableAcknowledgement.settled
           );
@@ -1139,6 +1169,21 @@ class MessageRequestWriteBuffer {
     });
 
     await this.flushInFlight;
+  }
+
+  /** Updates for rows whose buffered insert permanently failed can never apply. */
+  private dropUpdatesForFailedInserts(): void {
+    for (const id of Array.from(this.pending.keys())) {
+      if (!takeFailedMessageRequestInsert(id)) continue;
+      const dropped = this.deletePending(id);
+      this.rejectDurableAcknowledgement(
+        dropped?.durableAcknowledgement,
+        new Error(`message_request insert failed for id ${id}`)
+      );
+      logger.warn("[MessageRequestWriteBuffer] Dropped updates for a failed buffered insert", {
+        messageRequestId: id,
+      });
+    }
   }
 
   async stop(): Promise<void> {
@@ -1278,6 +1323,8 @@ export function stopMessageRequestWriteBuffer(): Promise<void> {
   }
   _bufferState = "stopping";
   const buffer = _buffer;
+  // Drain buffered inserts first: queued updates for those rows can only commit afterwards.
+  const insertsStopped = stopMessageRequestInsertBuffer();
 
   let resolveStop!: () => void;
   let rejectStop!: (reason?: unknown) => void;
@@ -1288,6 +1335,9 @@ export function stopMessageRequestWriteBuffer(): Promise<void> {
   _stopPromise = stopPromise;
 
   void (async () => {
+    if (insertsStopped) {
+      await insertsStopped;
+    }
     if (buffer) {
       await buffer.stop();
       if (_buffer === buffer) {

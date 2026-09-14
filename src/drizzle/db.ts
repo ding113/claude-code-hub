@@ -56,6 +56,14 @@ function getPoolBudget(): PoolBudget {
   return splitPoolBudget(env.DB_POOL_MAX ?? defaultTotal);
 }
 
+/** Minimum proxy data-lane connections below which proxy reads queue behind each other. */
+export const RECOMMENDED_MIN_DATA_POOL_CONNECTIONS = 2;
+
+/** Current per-process connection split across the data, control and writer lanes. */
+export function getDbPoolBudget(): Readonly<PoolBudget> {
+  return getPoolBudget();
+}
+
 function resolvePhysicalLane(lane: DbLane, budget: PoolBudget): DbLane {
   if (budget[lane] > 0) return lane;
   if (lane === "writer") return budget.control > 0 ? "control" : "data";

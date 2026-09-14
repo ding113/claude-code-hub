@@ -121,6 +121,19 @@ describe("drizzle/db 连接池配置", () => {
     expect(postgresMock).toHaveBeenCalledTimes(3);
   });
 
+  it("exposes the per-process pool budget without creating pools", async () => {
+    process.env.NODE_ENV = "production";
+    process.env.DB_POOL_MAX = "3";
+
+    const { getDbPoolBudget, RECOMMENDED_MIN_DATA_POOL_CONNECTIONS } = await import(
+      "@/drizzle/db"
+    );
+
+    expect(getDbPoolBudget()).toEqual({ data: 1, control: 1, writer: 1 });
+    expect(getDbPoolBudget().data).toBeLessThan(RECOMMENDED_MIN_DATA_POOL_CONNECTIONS);
+    expect(postgresMock).not.toHaveBeenCalled();
+  });
+
   it("开发和测试环境把默认总预算 10 拆为 data=7、control=2、writer=1", async () => {
     process.env.NODE_ENV = "development";
 

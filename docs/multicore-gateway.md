@@ -99,6 +99,10 @@ Provider group 倍率缓存额外使用版本号阻止“更新通知到达后�
 
 例如默认 2 worker 时，`DB_POOL_MAX=20` 变成 10/10；3 worker 时是 7/7/6。Kubernetes 的多个 Pod 仍各自拥有一份聚合预算，所以数据库总连接上限需要按 Pod 数继续核算。
 
+分摊后每个 worker 的连接还会再拆成 data/control/writer 三条 pool。worker 数较多而 `DB_POOL_MAX` 保持默认时（例如 6 worker × 20 → 每 worker 3 条，即 data 1 / control 1 / writer 1），代理热路径上的数据库读取会在唯一的 data 连接上排队，worker 启动时会打印 `[Multicore] Database pool budget per worker is very small` 告警。建议按每 worker 约 5 条再加 4 设置（6 worker 约 34），并确认 PostgreSQL `max_connections` 覆盖「副本数 × DB_POOL_MAX」加上管理连接余量。launcher 不会自动提高默认值，以免在未调整 `max_connections` 的环境里超出连接上限。
+
+`MESSAGE_REQUEST_INSERT_MAX_PENDING` 与 `MESSAGE_REQUEST_INSERT_ID_CHUNK_SIZE`（`MESSAGE_REQUEST_INSERT_MODE=async` 时生效）按进程生效，不参与分摊：前者达到上限时新请求回落为同步 INSERT，不会丢数据。
+
 显式 worker 数超过内存容量或无法为每个 worker 生成合法分片时，launcher 会 fail fast，而不是悄悄启动一个可能 OOM 或配置校验失败的集群。自动模式则安全回退单进程。每请求正文上限、单响应上限等请求级限制不会分摊。
 
 ### 为什么不用正文 IPC

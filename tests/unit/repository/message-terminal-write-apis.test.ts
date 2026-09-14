@@ -36,6 +36,7 @@ function installSyncBoundaries(insertedRows: readonly Record<string, unknown>[] 
 
   return {
     acknowledgeRoutingTraceOutbox,
+    insertReturning,
     insertValues,
     persistRoutingTraceMonotonically,
     stageRoutingTraceOutbox,
@@ -194,6 +195,81 @@ describe("message terminal write APIs", () => {
         requestSequence: 3,
       })
     );
+  });
+
+  it("returns only generated columns from the insert and fills the rest from inserted values", async () => {
+    vi.resetModules();
+    const createdAt = new Date("2026-07-15T09:00:00.000Z");
+    const { insertReturning } = installSyncBoundaries([
+      { id: 702, createdAt, updatedAt: createdAt, deletedAt: null },
+    ]);
+    const { createMessageRequest } = await import("@/repository/message");
+
+    const result = await createMessageRequest({
+      provider_id: 11,
+      user_id: 22,
+      key: "key-slim",
+      model: "claude-sonnet-4",
+      original_model: "claude-opus-4",
+      session_id: "session-slim",
+      cost_multiplier: 1.25,
+      endpoint: "/v1/messages",
+      messages_count: 4,
+    } satisfies CreateMessageRequestData);
+
+    const selection = insertReturning.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(Object.keys(selection).sort()).toEqual(["createdAt", "deletedAt", "id", "updatedAt"]);
+    expect(result).toMatchObject({
+      id: 702,
+      providerId: 11,
+      userId: 22,
+      key: "key-slim",
+      model: "claude-sonnet-4",
+      originalModel: "claude-opus-4",
+      sessionId: "session-slim",
+      costMultiplier: 1.25,
+      endpoint: "/v1/messages",
+      messagesCount: 4,
+      isReplay: false,
+      requestSequence: 1,
+      specialSettings: null,
+      createdAt,
+    });
+    expect(result.costUsd).toBe("0.000000000000000");
+  });
+
+  it("returns a buffered id without a synchronous insert when the insert buffer accepts the row", async () => {
+    vi.resetModules();
+    const createdAt = new Date("2026-07-15T10:00:00.000Z");
+    const { insertValues } = installSyncBoundaries([]);
+    const enqueueMessageRequestInsert = vi.fn(() => ({ id: 9001, createdAt }));
+    vi.doMock("@/repository/message-insert-buffer", () => ({
+      enqueueMessageRequestInsert,
+      awaitMessageRequestInserted: vi.fn(async () => undefined),
+    }));
+    try {
+      const { createMessageRequest } = await import("@/repository/message");
+
+      const result = await createMessageRequest({
+        provider_id: 11,
+        user_id: 22,
+        key: "key-buffered",
+        model: "claude-sonnet-4",
+      } satisfies CreateMessageRequestData);
+
+      expect(enqueueMessageRequestInsert).toHaveBeenCalledWith(
+        expect.objectContaining({ providerId: 11, userId: 22, key: "key-buffered" })
+      );
+      expect(insertValues).not.toHaveBeenCalled();
+      expect(result).toMatchObject({
+        id: 9001,
+        createdAt,
+        updatedAt: createdAt,
+        key: "key-buffered",
+      });
+    } finally {
+      vi.doUnmock("@/repository/message-insert-buffer");
+    }
   });
 
   it("writes duration through the synchronous database boundary", async () => {

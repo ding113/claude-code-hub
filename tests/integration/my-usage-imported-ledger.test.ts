@@ -148,6 +148,8 @@ async function createMessage(params: {
       inputTokens: params.inputTokens ?? 0,
       outputTokens: params.outputTokens ?? 0,
       clientIp: params.clientIp ?? null,
+      // Completed requests carry a status; the ledger trigger only projects finalized rows.
+      statusCode: 200,
       createdAt: params.createdAt,
       updatedAt: params.createdAt,
     })

@@ -535,6 +535,30 @@ export async function register() {
       if (!settingsSyncEnabled) {
         logger.warn("[Multicore] System settings invalidation unavailable; using TTL fallback");
       }
+
+      // DB_POOL_MAX is split across workers. A worker with a single data-lane connection makes
+      // every proxied database read (auth miss, lease refresh, message insert) wait in one queue.
+      try {
+        const { getDbPoolBudget, RECOMMENDED_MIN_DATA_POOL_CONNECTIONS } = await import(
+          "@/drizzle/db"
+        );
+        const budget = getDbPoolBudget();
+        if (budget.data < RECOMMENDED_MIN_DATA_POOL_CONNECTIONS) {
+          logger.warn("[Multicore] Database pool budget per worker is very small", {
+            workerIndex: process.env.CCH_MULTICORE_WORKER_INDEX ?? null,
+            workerCount: process.env.CCH_MULTICORE_WORKER_COUNT ?? null,
+            dataConnections: budget.data,
+            controlConnections: budget.control,
+            writerConnections: budget.writer,
+            recommendation:
+              "Raise DB_POOL_MAX to about 5 per worker plus 4 (for example 34 for 6 workers) within PostgreSQL max_connections",
+          });
+        }
+      } catch (error) {
+        logger.debug("[Multicore] Unable to inspect database pool budget", {
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
     }
 
     // 生产环境: 执行完整初始化(迁移 + 价格表 + 清理任务 + 通知任务)
@@ -650,6 +674,10 @@ export async function register() {
             );
             const result = await backfillProviderEndpointsFromProviders();
             logger.info("[Instrumentation] Provider endpoints backfill completed", result);
+            const { publishProviderEndpointCacheInvalidation } = await import(
+              "@/lib/cache/provider-endpoint-cache"
+            );
+            await publishProviderEndpointCacheInvalidation();
           } catch (error) {
             logger.warn("[Instrumentation] Failed to backfill provider endpoints", {
               error: error instanceof Error ? error.message : String(error),
@@ -849,6 +877,10 @@ export async function register() {
           );
           const result = await backfillProviderEndpointsFromProviders();
           logger.info("[Instrumentation] Provider endpoints backfill completed", result);
+          const { publishProviderEndpointCacheInvalidation } = await import(
+            "@/lib/cache/provider-endpoint-cache"
+          );
+          await publishProviderEndpointCacheInvalidation();
         } catch (error) {
           logger.warn("[Instrumentation] Failed to backfill provider endpoints", {
             error: error instanceof Error ? error.message : String(error),

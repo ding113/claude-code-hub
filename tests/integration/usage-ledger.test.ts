@@ -7,7 +7,11 @@ import { messageRequest, usageLedger } from "@/drizzle/schema";
 import { backfillUsageLedger } from "@/lib/ledger-backfill";
 import { isLedgerOnlyMode } from "@/lib/ledger-fallback";
 import { findUsageLogs } from "@/repository/message";
-import { sumProviderTotalCost, sumUserTotalCost } from "@/repository/statistics";
+import {
+  sumEntityCostInTimeRanges,
+  sumProviderTotalCost,
+  sumUserTotalCost,
+} from "@/repository/statistics";
 
 if (!process.env.DSN && process.env.DATABASE_URL) {
   process.env.DSN = process.env.DATABASE_URL;
@@ -250,6 +254,7 @@ run("usage ledger integration", () => {
     test("projects prefix Session identity and zero-cost Replay provenance", async () => {
       const requestId = await insertMessageRequestRow({
         key: nextKey("trigger-replay-identity"),
+        statusCode: 200,
         userId: nextUserId(),
         providerId: nextProviderId(),
         sessionId: "physical-session",
@@ -294,6 +299,7 @@ run("usage ledger integration", () => {
       const providerId = nextProviderId();
       const requestId = await insertMessageRequestRow({
         key: nextKey("trigger-provider-chain"),
+        statusCode: 200,
         userId: nextUserId(),
         providerId,
         providerChain: [
@@ -348,6 +354,156 @@ run("usage ledger integration", () => {
     });
   });
 
+  describe("terminal projection", () => {
+    async function ledgerXmin(requestId: number) {
+      const rows = (await db.execute(
+        sql`SELECT xmin::text AS xmin FROM usage_ledger WHERE request_id = ${requestId}`
+      )) as unknown as Array<{ xmin: string }>;
+      return rows[0]?.xmin ?? null;
+    }
+
+    test("does not project an in-flight request until it is finalized", async () => {
+      const requestId = await insertMessageRequestRow({
+        key: nextKey("terminal-in-flight"),
+        userId: nextUserId(),
+        providerId: nextProviderId(),
+        model: "model-in-flight",
+      });
+      expect(await selectLedgerRowByRequestId(requestId)).toBeNull();
+
+      // Non-final updates (usage, cost, duration) still do not create a ledger row.
+      await db
+        .update(messageRequest)
+        .set({ costUsd: "0.500000000000000", durationMs: 120, inputTokens: 9 })
+        .where(eq(messageRequest.id, requestId));
+      expect(await selectLedgerRowByRequestId(requestId)).toBeNull();
+
+      await db
+        .update(messageRequest)
+        .set({ statusCode: 200, outputTokens: 11 })
+        .where(eq(messageRequest.id, requestId));
+
+      const ledgerRow = await selectLedgerRowByRequestId(requestId);
+      expect(ledgerRow).toMatchObject({
+        statusCode: 200,
+        model: "model-in-flight",
+        inputTokens: 9,
+        outputTokens: 11,
+        successRateOutcome: "success",
+      });
+      expect(toNumber(ledgerRow?.costUsd)).toBeCloseTo(0.5, 10);
+    });
+
+    test("projects a request finalized only through its provider chain", async () => {
+      const providerId = nextProviderId();
+      const requestId = await insertMessageRequestRow({
+        key: nextKey("terminal-chain"),
+        userId: nextUserId(),
+        providerId,
+      });
+
+      await db
+        .update(messageRequest)
+        .set({
+          providerChain: [{ id: providerId + 5, name: "final", reason: "retry_failed" }] as never,
+        })
+        .where(eq(messageRequest.id, requestId));
+
+      const ledgerRow = await selectLedgerRowByRequestId(requestId);
+      expect(ledgerRow?.finalProviderId).toBe(providerId + 5);
+    });
+
+    test("skips updates that do not change projected columns", async () => {
+      const requestId = await insertMessageRequestRow({
+        key: nextKey("terminal-no-change"),
+        userId: nextUserId(),
+        providerId: nextProviderId(),
+        statusCode: 200,
+        costUsd: "1.000000000000000",
+      });
+      const before = await ledgerXmin(requestId);
+      expect(before).not.toBeNull();
+
+      // Mirrors a batched CASE update that lists projected columns with unchanged values.
+      await db
+        .update(messageRequest)
+        .set({ statusCode: 200, costUsd: "1.000000000000000", specialSettings: [] as never })
+        .where(eq(messageRequest.id, requestId));
+      expect(await ledgerXmin(requestId)).toBe(before);
+
+      await db
+        .update(messageRequest)
+        .set({ costUsd: "2.000000000000000" })
+        .where(eq(messageRequest.id, requestId));
+      expect(await ledgerXmin(requestId)).not.toBe(before);
+      expect(toNumber((await selectLedgerRowByRequestId(requestId))?.costUsd)).toBeCloseTo(2, 10);
+    });
+
+    test("keeps warmup and non-billing endpoints out of the ledger on both paths", async () => {
+      const warmupInsert = await insertMessageRequestRow({
+        key: nextKey("terminal-warmup-insert"),
+        userId: nextUserId(),
+        providerId: nextProviderId(),
+        blockedBy: "warmup",
+        statusCode: 200,
+      });
+      const countTokensInsert = await insertMessageRequestRow({
+        key: nextKey("terminal-count-tokens-insert"),
+        userId: nextUserId(),
+        providerId: nextProviderId(),
+        endpoint: "/v1/messages/count_tokens",
+        statusCode: 200,
+      });
+      const countTokensLater = await insertMessageRequestRow({
+        key: nextKey("terminal-count-tokens-later"),
+        userId: nextUserId(),
+        providerId: nextProviderId(),
+        endpoint: "/v1/messages/count_tokens",
+      });
+      await db
+        .update(messageRequest)
+        .set({ statusCode: 200 })
+        .where(eq(messageRequest.id, countTokensLater));
+
+      const billedThenWarmup = await insertMessageRequestRow({
+        key: nextKey("terminal-billed-then-warmup"),
+        userId: nextUserId(),
+        providerId: nextProviderId(),
+        statusCode: 200,
+      });
+      await db
+        .update(messageRequest)
+        .set({ blockedBy: "warmup" })
+        .where(eq(messageRequest.id, billedThenWarmup));
+
+      expect(await selectLedgerRowByRequestId(warmupInsert)).toBeNull();
+      expect(await selectLedgerRowByRequestId(countTokensInsert)).toBeNull();
+      expect(await selectLedgerRowByRequestId(countTokensLater)).toBeNull();
+      expect((await selectLedgerRowByRequestId(billedThenWarmup))?.blockedBy).toBe("warmup");
+    });
+
+    test("backfill skips fresh in-flight rows but projects abandoned ones", {
+      timeout: 60_000,
+    }, async () => {
+      const fresh = await insertMessageRequestRow({
+        key: nextKey("terminal-backfill-fresh"),
+        userId: nextUserId(),
+        providerId: nextProviderId(),
+      });
+      const abandoned = await insertMessageRequestRow({
+        key: nextKey("terminal-backfill-abandoned"),
+        userId: nextUserId(),
+        providerId: nextProviderId(),
+        createdAt: new Date(Date.now() - 2 * 60 * 60 * 1000),
+      });
+
+      await backfillUsageLedger();
+
+      expect(await selectLedgerRowByRequestId(fresh)).toBeNull();
+      expect(await selectLedgerRowByRequestId(abandoned)).not.toBeNull();
+    });
+  });
+
   describe("backfill", () => {
     test("backfill copies non-warmup message_request rows when ledger rows are missing", {
       timeout: 60_000,
@@ -356,12 +512,14 @@ run("usage ledger integration", () => {
       const providerId = nextProviderId();
       const keepA = await insertMessageRequestRow({
         key: nextKey("backfill-a"),
+        statusCode: 200,
         userId,
         providerId,
         costUsd: "1.100000000000000",
       });
       const keepB = await insertMessageRequestRow({
         key: nextKey("backfill-b"),
+        statusCode: 200,
         userId,
         providerId,
         costUsd: "2.200000000000000",
@@ -392,6 +550,7 @@ run("usage ledger integration", () => {
     test("backfill is idempotent when running twice", { timeout: 60_000 }, async () => {
       const requestId = await insertMessageRequestRow({
         key: nextKey("backfill-idempotent"),
+        statusCode: 200,
         userId: nextUserId(),
         providerId: nextProviderId(),
         costUsd: "6.600000000000000",
@@ -443,6 +602,7 @@ run("usage ledger integration", () => {
     }, async () => {
       const requestId = await insertMessageRequestRow({
         key: nextKey("backfill-replay-identity"),
+        statusCode: 200,
         userId: nextUserId(),
         providerId: nextProviderId(),
         sessionId: "physical-backfill",
@@ -494,12 +654,14 @@ run("usage ledger integration", () => {
 
       await insertMessageRequestRow({
         key: nextKey("read-match-a"),
+        statusCode: 200,
         userId,
         providerId,
         costUsd: "1.110000000000000",
       });
       await insertMessageRequestRow({
         key: nextKey("read-match-b"),
+        statusCode: 200,
         userId,
         providerId,
         costUsd: "2.220000000000000",
@@ -509,18 +671,73 @@ run("usage ledger integration", () => {
       expect(total).toBeCloseTo(3.33, 10);
     });
 
+    test("sumEntityCostInTimeRanges returns per-range sums from one scan", async () => {
+      const userId = nextUserId();
+      const providerId = nextProviderId();
+      const at = (iso: string) => new Date(iso);
+
+      await insertMessageRequestRow({
+        key: nextKey("ranges-a"),
+        userId,
+        providerId,
+        statusCode: 200,
+        costUsd: "1.000000000000000",
+        createdAt: at("2026-03-01T01:00:00.000Z"),
+      });
+      await insertMessageRequestRow({
+        key: nextKey("ranges-b"),
+        userId,
+        providerId,
+        statusCode: 200,
+        costUsd: "2.000000000000000",
+        createdAt: at("2026-03-01T05:00:00.000Z"),
+      });
+      await insertMessageRequestRow({
+        key: nextKey("ranges-c"),
+        userId,
+        providerId,
+        statusCode: 200,
+        costUsd: "4.000000000000000",
+        createdAt: at("2026-03-03T00:00:00.000Z"),
+      });
+      // In-flight rows are not billed.
+      await insertMessageRequestRow({
+        key: nextKey("ranges-in-flight"),
+        userId,
+        providerId,
+        costUsd: "8.000000000000000",
+        createdAt: at("2026-03-01T02:00:00.000Z"),
+      });
+
+      const ranges = [
+        { startTime: at("2026-03-01T00:00:00.000Z"), endTime: at("2026-03-01T03:00:00.000Z") },
+        { startTime: at("2026-03-01T00:00:00.000Z"), endTime: at("2026-03-02T00:00:00.000Z") },
+        { startTime: at("2026-02-26T00:00:00.000Z"), endTime: at("2026-03-05T00:00:00.000Z") },
+        { startTime: at("2026-04-01T00:00:00.000Z"), endTime: at("2026-04-02T00:00:00.000Z") },
+      ];
+
+      const userSums = await sumEntityCostInTimeRanges("user", userId, ranges);
+      const providerSums = await sumEntityCostInTimeRanges("provider", providerId, ranges);
+
+      expect(userSums.map((value) => Number(value.toFixed(6)))).toEqual([1, 3, 7, 0]);
+      expect(providerSums.map((value) => Number(value.toFixed(6)))).toEqual([1, 3, 7, 0]);
+      expect(await sumEntityCostInTimeRanges("user", userId, [])).toEqual([]);
+    });
+
     test("ledger totals remain stable after deleting message_request rows", async () => {
       const userId = nextUserId();
       const providerId = nextProviderId();
 
       const requestA = await insertMessageRequestRow({
         key: nextKey("read-delete-a"),
+        statusCode: 200,
         userId,
         providerId,
         costUsd: "4.440000000000000",
       });
       const requestB = await insertMessageRequestRow({
         key: nextKey("read-delete-b"),
+        statusCode: 200,
         userId,
         providerId,
         costUsd: "5.550000000000000",

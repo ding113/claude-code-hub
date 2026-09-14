@@ -20,6 +20,7 @@ import { LEDGER_AUDIT_CONDITION, LEDGER_BILLING_CONDITION } from "./_shared/ledg
 import { EXCLUDE_WARMUP_CONDITION } from "./_shared/message-request-conditions";
 import { toMessageRequest } from "./_shared/transformers";
 import { isReservedSessionIdentity } from "./_shared/usage-log-filters";
+import { awaitMessageRequestInserted, enqueueMessageRequestInsert } from "./message-insert-buffer";
 import {
   type DurableMessageRequestUpdateOptions,
   enqueueMessageRequestPostTerminalRoutingTraceDurably,
@@ -329,40 +330,36 @@ export async function createMessageRequest(
     cacheReadInputTokens: data.cache_read_input_tokens,
   };
 
-  const [result] = await db.insert(messageRequest).values(dbData).returning({
-    id: messageRequest.id,
-    providerId: messageRequest.providerId,
-    userId: messageRequest.userId,
-    key: messageRequest.key,
-    model: messageRequest.model,
-    originalModel: messageRequest.originalModel, // 原始模型（重定向前）
-    durationMs: messageRequest.durationMs,
-    costUsd: messageRequest.costUsd,
-    costMultiplier: messageRequest.costMultiplier, // 新增
-    sessionId: messageRequest.sessionId, // 新增
-    sessionIdentity: messageRequest.sessionIdentity,
-    sessionIdentityKind: messageRequest.sessionIdentityKind,
-    affinityScopeTag: messageRequest.affinityScopeTag,
-    affinityFingerprint: messageRequest.affinityFingerprint,
-    affinityFingerprintChain: messageRequest.affinityFingerprintChain,
-    isReplay: messageRequest.isReplay,
-    replaySourceRequestId: messageRequest.replaySourceRequestId,
-    requestSequence: messageRequest.requestSequence, // Request Sequence
-    routingTrace: messageRequest.routingTrace,
-    userAgent: messageRequest.userAgent, // 新增
-    clientIp: messageRequest.clientIp, // 客户端 IP
-    endpoint: messageRequest.endpoint, // 新增：返回端点
-    messagesCount: messageRequest.messagesCount, // 新增
-    cacheTtlApplied: messageRequest.cacheTtlApplied,
-    cacheCreationInputTokens: messageRequest.cacheCreationInputTokens,
-    cacheCreation5mInputTokens: messageRequest.cacheCreation5mInputTokens,
-    cacheCreation1hInputTokens: messageRequest.cacheCreation1hInputTokens,
-    cacheReadInputTokens: messageRequest.cacheReadInputTokens,
-    specialSettings: messageRequest.specialSettings,
-    createdAt: messageRequest.createdAt,
-    updatedAt: messageRequest.updatedAt,
-    deletedAt: messageRequest.deletedAt,
-  });
+  // MESSAGE_REQUEST_INSERT_MODE=async: reserve an id and let the writer batch the insert.
+  // Otherwise (or on back pressure) insert synchronously, RETURNING only database-generated
+  // columns: the rest of the public row is already known from dbData.
+  const buffered = enqueueMessageRequestInsert(dbData);
+  const generated = buffered
+    ? {
+        id: buffered.id,
+        createdAt: buffered.createdAt,
+        updatedAt: buffered.createdAt,
+        deletedAt: null,
+      }
+    : (
+        await db.insert(messageRequest).values(dbData).returning({
+          id: messageRequest.id,
+          createdAt: messageRequest.createdAt,
+          updatedAt: messageRequest.updatedAt,
+          deletedAt: messageRequest.deletedAt,
+        })
+      )[0];
+
+  const result = {
+    ...dbData,
+    // Mirror column defaults applied by the database for omitted values.
+    costUsd: dbData.costUsd ?? "0",
+    isReplay: dbData.isReplay ?? false,
+    requestSequence: dbData.requestSequence ?? 1,
+    routingTrace: dbData.routingTrace ?? null,
+    specialSettings: dbData.specialSettings ?? null,
+    ...generated,
+  };
 
   rememberPublicStatusRequestSeed(result.id, {
     createdAt: result.createdAt!,
@@ -378,6 +375,7 @@ export async function materializeReplayAuditFromSource(
   replayRequestId: number,
   sourceRequestId: number
 ): Promise<boolean> {
+  await awaitMessageRequestInserted(sourceRequestId);
   const rows = await db.execute(sql`
     UPDATE message_request AS replay
     SET
@@ -521,6 +519,7 @@ export async function updateMessageRequestWinnerCost(
   if (!formattedCost) {
     return;
   }
+  await awaitMessageRequestInserted(id);
 
   const MAX_ATTEMPTS = 3;
   let lastError: unknown;
@@ -574,6 +573,7 @@ export async function addMessageRequestHedgeLoserCost(
   if (!formattedDelta) {
     return;
   }
+  await awaitMessageRequestInserted(id);
 
   const loserJson = JSON.stringify([loserEntry]);
   // Partial-match dedup key: jsonb @> matches array elements containing these fields.
@@ -747,6 +747,9 @@ export async function updateMessageRequestDetails(
   }
 
   if (options.onlyIfUnfinalized) {
+    // The fenced UPDATE reports "already finalized" when no row matches; make sure a buffered
+    // insert has committed first so a missing row is not mistaken for a finalized one.
+    await awaitMessageRequestInserted(id);
     const terminalDb =
       getEnvConfig().MESSAGE_REQUEST_WRITE_MODE === "async" ? getMessageWriterDb() : db;
     const updated = await terminalDb

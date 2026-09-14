@@ -9,20 +9,35 @@ import { db } from "@/drizzle/db";
 import { CURRENT_PROVIDER_STATUS_WINDOW_MINUTES } from "@/lib/availability/availability-service";
 import { logger } from "@/lib/logger";
 import { withAdvisoryLock } from "@/lib/migrate";
+import { isHighConcurrencyModeEnabledCached } from "@/lib/system-settings/proxy-runtime";
+import {
+  APPLIED_RETENTION_CUTOFF_META_KEY,
+  startProjectionRetentionScheduler,
+  stopProjectionRetentionScheduler,
+} from "./projection-retention";
 
 const BATCH = 300;
 const BUSY_MS = 10;
+/** Delay after a cycle that drained a partial batch (outbox has recent traffic). */
 const TICK_MS = 200;
+/** Delay after an empty poll: idle instances stop issuing 5 claim transactions per second. */
+const IDLE_TICK_MS = 1_000;
+const IDLE_TICK_MS_HIGH_CONCURRENCY = 2_000;
+/** Maximum consecutive batches in one cycle before yielding to the scheduler. */
+const MAX_BATCHES_PER_CYCLE = 20;
 const BACKFILL_LOCK = "claude-code-hub:availability-projection-backfill";
 /** Match MAX_AVAILABILITY_QUERY_RANGE_DAYS so historical ranges are not silently empty after upgrade. */
 const BACKFILL_RANGE_DAYS = 100;
 const BACKFILL_CHUNK_HOURS = 6;
 
+type CycleOutcome = "empty" | "partial" | "saturated";
+
 type SchedulerState = {
   started?: boolean;
   stopRequested?: boolean;
-  intervalId?: ReturnType<typeof setInterval>;
-  currentPromise?: Promise<void>;
+  timeoutId?: ReturnType<typeof setTimeout>;
+  nextDelayMs?: number;
+  currentPromise?: Promise<CycleOutcome>;
   bootstrapPromise?: Promise<void>;
 };
 
@@ -106,6 +121,16 @@ async function enqueueBackfillChunk(fromIso: string, toIso: string): Promise<num
   return Number(row?.n ?? 0);
 }
 
+async function readAppliedRetentionCutoffMs(): Promise<number> {
+  const rows = await db.execute(sql`
+    SELECT value FROM projection_meta WHERE key = ${APPLIED_RETENTION_CUTOFF_META_KEY} LIMIT 1
+  `);
+  const row = Array.from(rows as Iterable<{ value?: unknown }>)[0];
+  const value = asPayload(row?.value) as { cutoff?: unknown };
+  const cutoffMs = typeof value.cutoff === "string" ? Date.parse(value.cutoff) : Number.NaN;
+  return Number.isFinite(cutoffMs) ? cutoffMs : Number.NEGATIVE_INFINITY;
+}
+
 async function bootstrapBackfill(): Promise<void> {
   const existing = await db.execute(sql`
     SELECT key FROM projection_meta WHERE key = 'backfill_done' LIMIT 1
@@ -131,7 +156,12 @@ async function bootstrapBackfill(): Promise<void> {
       });
 
       const endMs = Date.now();
-      const startMs = endMs - BACKFILL_RANGE_DAYS * 24 * 60 * 60 * 1000;
+      // Never re-enqueue requests older than the applied-request retention cutoff: their dedupe
+      // rows may already be deleted, so projecting them again would double count buckets.
+      const startMs = Math.max(
+        endMs - BACKFILL_RANGE_DAYS * 24 * 60 * 60 * 1000,
+        await readAppliedRetentionCutoffMs()
+      );
       const chunkMs = BACKFILL_CHUNK_HOURS * 60 * 60 * 1000;
       let inserted = 0;
 
@@ -292,24 +322,59 @@ export async function processBatch(): Promise<number> {
       }
     >();
 
+    // Validate payloads and keep the first (lowest outbox id) event per request. Later duplicates
+    // in the same batch are published without counting, matching ON CONFLICT DO NOTHING.
+    type ValidEvent = {
+      row: ClaimedEvent;
+      payload: ClaimedEvent["payload"];
+      requestId: number;
+      providerId: number;
+      occurredAt: string;
+      firstForRequest: boolean;
+    };
+    const validEvents: ValidEvent[] = [];
+    const firstEventByRequest = new Map<number, string>();
     for (const row of claimed) {
       const payload = asPayload(row.payload);
       const requestId = Number(payload.request_id);
       const providerId = Number(payload.provider_id);
-      const outcome = String(payload.outcome || "excluded");
       const occurredAt = payload.occurred_at;
       if (!Number.isFinite(requestId) || !Number.isFinite(providerId) || !occurredAt) {
         invalidIds.push(row.id);
         continue;
       }
+      const firstForRequest = !firstEventByRequest.has(requestId);
+      if (firstForRequest) {
+        firstEventByRequest.set(requestId, row.event_id);
+      }
+      validEvents.push({ row, payload, requestId, providerId, occurredAt, firstForRequest });
+    }
 
+    // One multi-row insert per batch instead of one statement per event.
+    const freshRequestIds = new Set<number>();
+    if (firstEventByRequest.size > 0) {
+      const values = sql.join(
+        Array.from(
+          firstEventByRequest,
+          ([requestId, eventId]) => sql`(${requestId}, ${eventId}::uuid)`
+        ),
+        sql`, `
+      );
       const inserted = await tx.execute(sql`
         INSERT INTO proj_applied_requests (request_id, event_id)
-        VALUES (${requestId}, ${row.event_id}::uuid)
+        VALUES ${values}
         ON CONFLICT (request_id) DO NOTHING
         RETURNING request_id
       `);
-      const isFresh = Array.from(inserted as Iterable<unknown>).length > 0;
+      for (const insertedRow of Array.from(inserted as Iterable<{ request_id?: unknown }>)) {
+        freshRequestIds.add(Number(insertedRow.request_id));
+      }
+    }
+
+    for (const event of validEvents) {
+      const { row, payload, requestId, providerId, occurredAt } = event;
+      const outcome = String(payload.outcome || "excluded");
+      const isFresh = event.firstForRequest && freshRequestIds.has(requestId);
 
       if (isFresh) {
         const durationMs =
@@ -446,27 +511,33 @@ export async function processBatch(): Promise<number> {
   });
 }
 
-async function runCycle(): Promise<void> {
+async function runCycle(): Promise<CycleOutcome> {
   const s = state();
-  if (s.stopRequested) return;
-  if (s.currentPromise) return;
+  if (s.stopRequested) return "empty";
+  if (s.currentPromise) return s.currentPromise;
 
-  let current!: Promise<void>;
-  current = (async () => {
+  let current!: Promise<CycleOutcome>;
+  current = (async (): Promise<CycleOutcome> => {
+    let outcome: CycleOutcome = "empty";
     try {
       let total = 0;
-      for (let i = 0; i < 20; i++) {
+      for (let i = 0; i < MAX_BATCHES_PER_CYCLE; i++) {
         if (s.stopRequested) break;
         const n = await processBatch();
         total += n;
         if (n === 0) break;
-        if (n < BATCH) break;
+        if (n < BATCH) {
+          outcome = "partial";
+          break;
+        }
+        outcome = "saturated";
         await new Promise((r) => setTimeout(r, BUSY_MS));
       }
       if (total > 0) {
         logger.info("[AvailProjection] projected events", { count: total });
       }
     } catch (error) {
+      outcome = "partial";
       logger.warn("[AvailProjection] cycle failed", {
         error: error instanceof Error ? error.message : String(error),
       });
@@ -475,10 +546,35 @@ async function runCycle(): Promise<void> {
         s.currentPromise = undefined;
       }
     }
+    return outcome;
   })();
 
   s.currentPromise = current;
-  await current;
+  return await current;
+}
+
+/**
+ * Next poll delay: drain immediately while the outbox is saturated, poll quickly while traffic
+ * is flowing, and back off when idle (longer in high-concurrency mode, where projection
+ * freshness matters less than database load).
+ */
+export function resolveNextDelayMs(outcome: CycleOutcome, highConcurrency: boolean): number {
+  if (outcome === "saturated") return BUSY_MS;
+  if (outcome === "partial") return TICK_MS;
+  return highConcurrency ? IDLE_TICK_MS_HIGH_CONCURRENCY : IDLE_TICK_MS;
+}
+
+function scheduleNextCycle(delayMs: number): void {
+  const s = state();
+  if (s.stopRequested) return;
+  s.nextDelayMs = delayMs;
+  s.timeoutId = setTimeout(() => {
+    s.timeoutId = undefined;
+    void runCycle().then((outcome) => {
+      scheduleNextCycle(resolveNextDelayMs(outcome, isHighConcurrencyModeEnabledCached()));
+    });
+  }, delayMs);
+  (s.timeoutId as { unref?: () => void } | undefined)?.unref?.();
 }
 
 export function startAvailabilityProjectionWorker(): void {
@@ -496,13 +592,10 @@ export function startAvailabilityProjectionWorker(): void {
         error: error instanceof Error ? error.message : String(error),
       });
     }
-    void runCycle();
   })();
 
-  s.intervalId = setInterval(() => {
-    void runCycle();
-  }, TICK_MS);
-  (s.intervalId as { unref?: () => void } | undefined)?.unref?.();
+  scheduleNextCycle(TICK_MS);
+  startProjectionRetentionScheduler();
 
   logger.info("[AvailProjection] worker started");
 }
@@ -510,10 +603,11 @@ export function startAvailabilityProjectionWorker(): void {
 export async function stopAvailabilityProjectionWorker(): Promise<void> {
   const s = state();
   s.stopRequested = true;
-  if (s.intervalId) {
-    clearInterval(s.intervalId);
-    s.intervalId = undefined;
+  if (s.timeoutId) {
+    clearTimeout(s.timeoutId);
+    s.timeoutId = undefined;
   }
+  await stopProjectionRetentionScheduler();
   await s.bootstrapPromise;
   await s.currentPromise;
   s.started = false;
@@ -527,7 +621,7 @@ export function getAvailabilityProjectionWorkerStatus() {
     started: s.started === true,
     running: Boolean(s.currentPromise),
     bootstrapping: Boolean(s.bootstrapPromise),
-    tickMs: TICK_MS,
+    tickMs: s.nextDelayMs ?? TICK_MS,
   };
 }
 
@@ -535,6 +629,11 @@ export function getAvailabilityProjectionWorkerStatus() {
 export const __test__ = {
   bootstrapBackfill,
   recomputeAvailCurrent,
+  runCycle,
   BACKFILL_RANGE_DAYS,
   BATCH,
+  BUSY_MS,
+  TICK_MS,
+  IDLE_TICK_MS,
+  IDLE_TICK_MS_HIGH_CONCURRENCY,
 };

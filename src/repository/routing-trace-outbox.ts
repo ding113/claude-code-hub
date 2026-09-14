@@ -7,6 +7,7 @@ import { messageRequest } from "@/drizzle/schema";
 import { logger } from "@/lib/logger";
 import { getRedisClient } from "@/lib/redis/client";
 import { normalizeRoutingTrace, type RoutingTraceV1 } from "@/types/routing-trace";
+import { awaitMessageRequestInserted } from "./message-insert-buffer";
 import { buildMonotonicRoutingTraceAssignments } from "./routing-trace-persistence";
 
 const ROUTING_TRACE_OUTBOX_KEY = "cch:routing-trace-outbox:v1";
@@ -363,6 +364,9 @@ export async function persistRoutingTraceMonotonically(
   if (!normalized || !Number.isSafeInteger(requestId) || requestId <= 0) {
     return false;
   }
+  // A buffered insert that has not committed would make this UPDATE match nothing and the replay
+  // would discard the trace as orphaned.
+  await awaitMessageRequestInserted(requestId);
   const assignments = buildMonotonicRoutingTraceAssignments(normalized, {
     routingTrace: sql`${messageRequest.routingTrace}`,
     updatedAt: sql`${messageRequest.updatedAt}`,

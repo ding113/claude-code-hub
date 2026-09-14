@@ -108,6 +108,15 @@ export async function backfillUsageLedger(
           LEFT JOIN usage_ledger ul ON ul.request_id = mr.id
           WHERE mr.id > ${lastId}
             AND mr.blocked_by IS DISTINCT FROM 'warmup'
+            -- The ledger trigger only projects finalized rows. Skip rows that may still be in
+            -- flight on another replica; rows abandoned before finalization (crash, kill) are
+            -- projected once they are older than the in-flight grace window.
+            AND (
+              fn_is_message_request_finalized(
+                mr.blocked_by, mr.status_code, mr.provider_chain, mr.error_message
+              )
+              OR mr.created_at < NOW() - INTERVAL '1 hour'
+            )
             AND (
               mr.endpoint IS NULL
               OR LOWER(REGEXP_REPLACE(mr.endpoint, '/+$', '')) NOT IN (
