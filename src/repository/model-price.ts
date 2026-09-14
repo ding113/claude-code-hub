@@ -3,6 +3,7 @@
 import { desc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import { modelPrices } from "@/drizzle/schema";
+import { scheduleModelPriceCacheInvalidation } from "@/lib/cache/model-price-invalidation";
 import { logger } from "@/lib/logger";
 import { buildModelNameFallbackCandidates } from "@/lib/utils/model-name-matching";
 import type { ModelPrice, ModelPriceData, ModelPriceSource } from "@/types/model-price";
@@ -41,28 +42,7 @@ export interface PaginatedResult<T> {
  */
 export async function findLatestPriceByModel(modelName: string): Promise<ModelPrice | null> {
   try {
-    const selection = {
-      id: modelPrices.id,
-      modelName: modelPrices.modelName,
-      priceData: modelPrices.priceData,
-      source: modelPrices.source,
-      createdAt: modelPrices.createdAt,
-      updatedAt: modelPrices.updatedAt,
-    };
-
-    const [price] = await db
-      .select(selection)
-      .from(modelPrices)
-      .where(eq(modelPrices.modelName, modelName))
-      .orderBy(
-        sql`(${modelPrices.source} = 'manual') DESC`,
-        sql`${modelPrices.createdAt} DESC NULLS LAST`,
-        desc(modelPrices.id)
-      )
-      .limit(1);
-
-    if (price) return toModelPrice(price);
-    return await findLatestPriceByModelFallback(modelName);
+    return await queryLatestPriceByModel(modelName);
   } catch (error) {
     logger.error("[ModelPrice] Failed to query latest price by model", {
       modelName,
@@ -70,6 +50,35 @@ export async function findLatestPriceByModel(modelName: string): Promise<ModelPr
     });
     return null;
   }
+}
+
+/**
+ * Same lookup as findLatestPriceByModel, but database errors are thrown instead of being reported
+ * as "no price". Used by read-through caches so that transient failures are never cached.
+ */
+export async function queryLatestPriceByModel(modelName: string): Promise<ModelPrice | null> {
+  const selection = {
+    id: modelPrices.id,
+    modelName: modelPrices.modelName,
+    priceData: modelPrices.priceData,
+    source: modelPrices.source,
+    createdAt: modelPrices.createdAt,
+    updatedAt: modelPrices.updatedAt,
+  };
+
+  const [price] = await db
+    .select(selection)
+    .from(modelPrices)
+    .where(eq(modelPrices.modelName, modelName))
+    .orderBy(
+      sql`(${modelPrices.source} = 'manual') DESC`,
+      sql`${modelPrices.createdAt} DESC NULLS LAST`,
+      desc(modelPrices.id)
+    )
+    .limit(1);
+
+  if (price) return toModelPrice(price);
+  return await findLatestPriceByModelFallback(modelName);
 }
 
 /** 精确名未命中后的候选名/别名回退查询 */
@@ -320,6 +329,7 @@ export async function createModelPrice(
       updatedAt: modelPrices.updatedAt,
     });
 
+  scheduleModelPriceCacheInvalidation();
   return toModelPrice(price);
 }
 
@@ -333,7 +343,7 @@ export async function upsertModelPrice(
   source: ModelPriceSource = "manual"
 ): Promise<ModelPrice> {
   // 使用事务确保删除和插入的原子性
-  return await db.transaction(async (tx) => {
+  const result = await db.transaction(async (tx) => {
     // 先删除该模型的所有旧记录
     await tx.delete(modelPrices).where(eq(modelPrices.modelName, modelName));
 
@@ -347,6 +357,8 @@ export async function upsertModelPrice(
       .returning();
     return toModelPrice(price);
   });
+  scheduleModelPriceCacheInvalidation();
+  return result;
 }
 
 /**
@@ -354,6 +366,7 @@ export async function upsertModelPrice(
  */
 export async function deleteModelPriceByName(modelName: string): Promise<void> {
   await db.delete(modelPrices).where(eq(modelPrices.modelName, modelName));
+  scheduleModelPriceCacheInvalidation();
 }
 
 /**
@@ -402,6 +415,7 @@ export async function deleteCloudPricesNotIn(keepModelNames: string[]): Promise<
       AND NOT (model_name = ANY(${sql.param(keepModelNames)}))
   `);
   // 驱动可能以 number/string/bigint 报告受影响行数,统一归一化,避免静默回落 0
+  scheduleModelPriceCacheInvalidation();
   const count = Number((result as unknown as { count?: number | bigint | string }).count ?? 0);
   return Number.isFinite(count) ? count : 0;
 }

@@ -1,4 +1,5 @@
-import { matchesAllowedModelRules } from "@/lib/allowed-model-rules";
+import { matchesAllowedModelRules, normalizeAllowedModelRules } from "@/lib/allowed-model-rules";
+import { TTLMap } from "@/lib/cache/ttl-map";
 import { getCircuitState, isCircuitOpen } from "@/lib/circuit-breaker";
 import { getEnvConfig } from "@/lib/config/env.schema";
 import { PROVIDER_GROUP } from "@/lib/constants/provider.constants";
@@ -9,6 +10,7 @@ import { SessionManager } from "@/lib/session-manager";
 import {
   getProxyRuntimeSettings,
   isCacheEffectivenessEnabled,
+  isHighConcurrencyModeEnabledCached,
 } from "@/lib/system-settings/proxy-runtime";
 import {
   parseProviderGroups,
@@ -18,7 +20,7 @@ import {
 import { isProviderActiveNow } from "@/lib/utils/provider-schedule";
 import { resolveSystemTimezone } from "@/lib/utils/timezone";
 import { isVendorTypeCircuitOpen } from "@/lib/vendor-type-circuit-breaker";
-import { findAllProviders, findProviderById } from "@/repository/provider";
+import { findAllProviders } from "@/repository/provider";
 import { getGroupCostMultiplier } from "@/repository/provider-groups";
 import type { ProviderChainItem } from "@/types/message";
 import type { Provider } from "@/types/provider";
@@ -181,6 +183,62 @@ function checkFormatProviderTypeCompatibility(
     default:
       return true; // 未知格式回退为兼容（不会主动过滤）
   }
+}
+
+type ProviderSpendLimitVerdict =
+  | { allowed: true }
+  | { allowed: false; stage: "window" | "total"; reason?: string };
+
+/**
+ * Short-lived per-process verdicts for provider spend limits.
+ *
+ * Every request re-checks every candidate provider's lease and total spend. Under high concurrency
+ * that fan-out dominates Redis round trips and lease refreshes. Verdicts for providers that have
+ * spend limits are reused for a few seconds; the cache key contains every limit input, so an admin
+ * edit or reset takes effect immediately. A provider that just crossed its limit can keep receiving
+ * traffic for at most one TTL (user and key limits are still enforced per request).
+ */
+export const PROVIDER_LIMIT_VERDICT_TTL_MS = 2_000;
+export const PROVIDER_LIMIT_VERDICT_TTL_HIGH_CONCURRENCY_MS = 5_000;
+const providerLimitVerdictCache = new TTLMap<string, ProviderSpendLimitVerdict>({
+  ttlMs: PROVIDER_LIMIT_VERDICT_TTL_MS,
+  maxSize: 2_000,
+});
+const providerLimitVerdictInFlight = new Map<string, Promise<ProviderSpendLimitVerdict>>();
+
+function hasProviderSpendLimits(provider: Provider): boolean {
+  return [
+    provider.limit5hUsd,
+    provider.limitDailyUsd,
+    provider.limitWeeklyUsd,
+    provider.limitMonthlyUsd,
+    provider.limitTotalUsd,
+  ].some((limit) => typeof limit === "number" && limit > 0);
+}
+
+function buildProviderLimitVerdictKey(provider: Provider): string {
+  const totalCostResetAt =
+    provider.totalCostResetAt instanceof Date
+      ? provider.totalCostResetAt.getTime()
+      : (provider.totalCostResetAt ?? "");
+  return [
+    provider.id,
+    provider.limit5hUsd,
+    provider.limit5hResetMode,
+    provider.limitDailyUsd,
+    provider.dailyResetMode,
+    provider.dailyResetTime,
+    provider.limitWeeklyUsd,
+    provider.limitMonthlyUsd,
+    provider.limitTotalUsd,
+    totalCostResetAt,
+  ].join("|");
+}
+
+/** Test helper: clear cached provider spend limit verdicts. */
+export function resetProviderLimitVerdictCacheForTests(): void {
+  providerLimitVerdictCache.clear();
+  providerLimitVerdictInFlight.clear();
 }
 
 export class ProxyProviderResolver {
@@ -729,7 +787,7 @@ export class ProxyProviderResolver {
     session: ProxySession,
     providerId: number
   ): Promise<Provider | null> {
-    const provider = await findProviderById(providerId);
+    const provider = await ProxyProviderResolver.findProviderInSnapshot(session, providerId);
     if (!provider?.isEnabled) return null;
     // 尊重供应商的会话粘性 opt-out：亲和与会话复用同属粘性机制
     if (provider.disableSessionReuse) return null;
@@ -768,26 +826,8 @@ export class ProxyProviderResolver {
     }
 
     // 亲和提名同样不得绕过金额限额（5h/日/周/月 + 总额），与 findReusable 一致
-    const costCheck = await RateLimitService.checkCostLimitsWithLease(provider.id, "provider", {
-      limit_5h_usd: provider.limit5hUsd,
-      limit_5h_reset_mode: provider.limit5hResetMode,
-      limit_daily_usd: provider.limitDailyUsd,
-      daily_reset_mode: provider.dailyResetMode,
-      daily_reset_time: provider.dailyResetTime,
-      limit_weekly_usd: provider.limitWeeklyUsd,
-      limit_monthly_usd: provider.limitMonthlyUsd,
-    });
-    if (!costCheck.allowed) return null;
-
-    const totalCheck = await RateLimitService.checkTotalCostLimit(
-      provider.id,
-      "provider",
-      provider.limitTotalUsd,
-      {
-        resetAt: provider.totalCostResetAt,
-      }
-    );
-    if (!totalCheck.allowed) return null;
+    const spendVerdict = await ProxyProviderResolver.checkProviderSpendLimits(provider);
+    if (!spendVerdict.allowed) return null;
 
     return provider;
   }
@@ -830,6 +870,97 @@ export class ProxyProviderResolver {
   }
 
   /**
+   * Provider spend limit check (5h/daily/weekly/monthly leases plus total spend) with a short
+   * per-process verdict cache for providers that have limits configured.
+   */
+  private static async checkProviderSpendLimits(
+    provider: Provider
+  ): Promise<ProviderSpendLimitVerdict> {
+    if (!hasProviderSpendLimits(provider)) {
+      return ProxyProviderResolver.evaluateProviderSpendLimits(provider);
+    }
+
+    const cacheKey = buildProviderLimitVerdictKey(provider);
+    const cached = providerLimitVerdictCache.get(cacheKey);
+    if (cached) return cached;
+
+    const pending = providerLimitVerdictInFlight.get(cacheKey);
+    if (pending) return pending;
+
+    const evaluation = ProxyProviderResolver.evaluateProviderSpendLimits(provider)
+      .then((verdict) => {
+        providerLimitVerdictCache.set(
+          cacheKey,
+          verdict,
+          isHighConcurrencyModeEnabledCached()
+            ? PROVIDER_LIMIT_VERDICT_TTL_HIGH_CONCURRENCY_MS
+            : PROVIDER_LIMIT_VERDICT_TTL_MS
+        );
+        return verdict;
+      })
+      .finally(() => {
+        if (providerLimitVerdictInFlight.get(cacheKey) === evaluation) {
+          providerLimitVerdictInFlight.delete(cacheKey);
+        }
+      });
+    providerLimitVerdictInFlight.set(cacheKey, evaluation);
+    return evaluation;
+  }
+
+  private static async evaluateProviderSpendLimits(
+    provider: Provider
+  ): Promise<ProviderSpendLimitVerdict> {
+    const costCheck = await RateLimitService.checkCostLimitsWithLease(provider.id, "provider", {
+      limit_5h_usd: provider.limit5hUsd,
+      limit_5h_reset_mode: provider.limit5hResetMode,
+      limit_daily_usd: provider.limitDailyUsd,
+      daily_reset_mode: provider.dailyResetMode,
+      daily_reset_time: provider.dailyResetTime,
+      limit_weekly_usd: provider.limitWeeklyUsd,
+      limit_monthly_usd: provider.limitMonthlyUsd,
+    });
+    if (!costCheck.allowed) {
+      return { allowed: false, stage: "window", reason: costCheck.reason };
+    }
+
+    // 总消费上限（无重置窗口，达到后需要管理员取消限额或手动重置）
+    const totalCheck = await RateLimitService.checkTotalCostLimit(
+      provider.id,
+      "provider",
+      provider.limitTotalUsd,
+      {
+        resetAt: provider.totalCostResetAt,
+      }
+    );
+    if (!totalCheck.allowed) {
+      return { allowed: false, stage: "total", reason: totalCheck.reason };
+    }
+
+    return { allowed: true };
+  }
+
+  /**
+   * Resolve a provider by id from the request-level provider snapshot.
+   *
+   * The snapshot comes from the process provider cache (30s TTL plus pub/sub invalidation on
+   * every admin mutation), which is the same data fresh selection already uses. A provider that
+   * is missing from the snapshot (deleted) is treated as unavailable, matching the previous
+   * by-id lookup that returned null for soft-deleted rows.
+   */
+  private static async findProviderInSnapshot(
+    session: ProxySession,
+    providerId: number
+  ): Promise<Provider | null> {
+    const providers = await session.getProvidersSnapshot();
+    const provider = providers.find((candidate) => candidate.id === providerId);
+    if (!provider) return null;
+    return {
+      ...provider,
+      allowedModels: normalizeAllowedModelRules(provider.allowedModels),
+    };
+  }
+
+  /**
    * 查找可复用的供应商（基于 session）
    */
   private static async findReusable(session: ProxySession): Promise<Provider | null> {
@@ -867,8 +998,8 @@ export class ProxyProviderResolver {
       return null;
     }
 
-    // 验证 provider 可用性
-    const provider = await findProviderById(providerId);
+    // 验证 provider 可用性（使用请求级 provider 快照，避免每次会话复用都按 id 查询 providers 表）
+    const provider = await ProxyProviderResolver.findProviderInSnapshot(session, providerId);
     if (!provider?.isEnabled) {
       logger.debug("ProviderSelector: Session provider unavailable", {
         sessionId: session.sessionId,
@@ -1059,39 +1190,18 @@ export class ProxyProviderResolver {
     // No auth group info (effectiveGroup is null) can reuse any provider
 
     // 会话复用也必须遵守限额（否则会绕过"达到限额即禁用"的语义）
-    const costCheck = await RateLimitService.checkCostLimitsWithLease(provider.id, "provider", {
-      limit_5h_usd: provider.limit5hUsd,
-      limit_5h_reset_mode: provider.limit5hResetMode,
-      limit_daily_usd: provider.limitDailyUsd,
-      daily_reset_mode: provider.dailyResetMode,
-      daily_reset_time: provider.dailyResetTime,
-      limit_weekly_usd: provider.limitWeeklyUsd,
-      limit_monthly_usd: provider.limitMonthlyUsd,
-    });
-
-    if (!costCheck.allowed) {
-      logger.debug("ProviderSelector: Session provider cost limit exceeded, reject reuse", {
-        sessionId: session.sessionId,
-        providerId: provider.id,
-      });
-      return null;
-    }
-
-    const totalCheck = await RateLimitService.checkTotalCostLimit(
-      provider.id,
-      "provider",
-      provider.limitTotalUsd,
-      {
-        resetAt: provider.totalCostResetAt,
-      }
-    );
-
-    if (!totalCheck.allowed) {
-      logger.debug("ProviderSelector: Session provider total cost limit exceeded, reject reuse", {
-        sessionId: session.sessionId,
-        providerId: provider.id,
-        reason: totalCheck.reason,
-      });
+    const spendVerdict = await ProxyProviderResolver.checkProviderSpendLimits(provider);
+    if (!spendVerdict.allowed) {
+      logger.debug(
+        spendVerdict.stage === "total"
+          ? "ProviderSelector: Session provider total cost limit exceeded, reject reuse"
+          : "ProviderSelector: Session provider cost limit exceeded, reject reuse",
+        {
+          sessionId: session.sessionId,
+          providerId: provider.id,
+          reason: spendVerdict.reason,
+        }
+      );
       return null;
     }
 
@@ -1459,39 +1569,18 @@ export class ProxyProviderResolver {
           return null;
         }
 
-        // 1. 检查金额限制
-        const costCheck = await RateLimitService.checkCostLimitsWithLease(p.id, "provider", {
-          limit_5h_usd: p.limit5hUsd,
-          limit_5h_reset_mode: p.limit5hResetMode,
-          limit_daily_usd: p.limitDailyUsd,
-          daily_reset_mode: p.dailyResetMode,
-          daily_reset_time: p.dailyResetTime,
-          limit_weekly_usd: p.limitWeeklyUsd,
-          limit_monthly_usd: p.limitMonthlyUsd,
-        });
-
-        if (!costCheck.allowed) {
-          logger.debug("ProviderSelector: Provider cost limit exceeded", {
-            providerId: p.id,
-          });
-          return null;
-        }
-
-        // 2. 检查总消费上限（无重置窗口，达到后需要管理员取消限额或手动重置）
-        const totalCheck = await RateLimitService.checkTotalCostLimit(
-          p.id,
-          "provider",
-          p.limitTotalUsd,
-          {
-            resetAt: p.totalCostResetAt,
-          }
-        );
-
-        if (!totalCheck.allowed) {
-          logger.debug("ProviderSelector: Provider total cost limit exceeded", {
-            providerId: p.id,
-            reason: totalCheck.reason,
-          });
+        // 1. 检查金额限制（5h/日/周/月租约 + 总消费上限），短 TTL 进程内裁决缓存
+        const spendVerdict = await ProxyProviderResolver.checkProviderSpendLimits(p);
+        if (!spendVerdict.allowed) {
+          logger.debug(
+            spendVerdict.stage === "total"
+              ? "ProviderSelector: Provider total cost limit exceeded"
+              : "ProviderSelector: Provider cost limit exceeded",
+            {
+              providerId: p.id,
+              reason: spendVerdict.reason,
+            }
+          );
           return null;
         }
 

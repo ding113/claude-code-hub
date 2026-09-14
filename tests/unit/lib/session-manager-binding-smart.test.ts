@@ -61,7 +61,7 @@ vi.mock("@/lib/redis/session-binding", () => ({
 // Both are loaded via `await import(...)` inside updateSessionBindingSmart; the
 // static vi.mock still intercepts the dynamic import.
 vi.mock("@/repository/provider", () => ({
-  findProviderById: vi.fn(),
+  findAllProviders: vi.fn(async () => []),
 }));
 
 vi.mock("@/lib/circuit-breaker", () => ({
@@ -70,7 +70,7 @@ vi.mock("@/lib/circuit-breaker", () => ({
 
 import { isCircuitOpen } from "@/lib/circuit-breaker";
 import { SessionManager } from "@/lib/session-manager";
-import { findProviderById } from "@/repository/provider";
+import { findAllProviders } from "@/repository/provider";
 
 const SID = "sess-binding";
 const KEY_ID = 42;
@@ -115,7 +115,7 @@ describe("SessionManager.updateSessionBindingSmart forceUpdate", () => {
   it("forceUpdate=true overrides a healthy higher-priority existing binding", async () => {
     // Existing binding -> provider 1 (healthy, higher priority than the winner)
     legacyProviderId = 1;
-    vi.mocked(findProviderById).mockResolvedValue({ id: 1, name: "main", priority: 5 } as never);
+    vi.mocked(findAllProviders).mockResolvedValue([{ id: 1, name: "main", priority: 5 }] as never);
     vi.mocked(isCircuitOpen).mockResolvedValue(false);
 
     const result = await SessionManager.updateSessionBindingSmart(
@@ -157,7 +157,7 @@ describe("SessionManager.updateSessionBindingSmart forceUpdate", () => {
 
   it("forceUpdate=false keeps the healthy higher-priority binding (documents the gap)", async () => {
     legacyProviderId = 1;
-    vi.mocked(findProviderById).mockResolvedValue({ id: 1, name: "main", priority: 5 } as never);
+    vi.mocked(findAllProviders).mockResolvedValue([{ id: 1, name: "main", priority: 5 }] as never);
     vi.mocked(isCircuitOpen).mockResolvedValue(false);
 
     const result = await SessionManager.updateSessionBindingSmart(
@@ -178,7 +178,7 @@ describe("SessionManager.updateSessionBindingSmart forceUpdate", () => {
 
     await SessionManager.updateSessionBindingSmart(SID, 2, 10, false, false, KEY_ID, true);
 
-    expect(findProviderById).not.toHaveBeenCalled();
+    expect(findAllProviders).not.toHaveBeenCalled();
     expect(isCircuitOpen).not.toHaveBeenCalled();
     // forceUpdate goes straight to the persistence path.
     expect(bindingMocks.mutateLegacySessionBindingSafely).toHaveBeenCalledWith(

@@ -11,15 +11,20 @@
 
 import "server-only";
 
+import { invalidateProviderEndpointCache } from "@/lib/cache/provider-endpoint-cache";
 import { getEnvConfig } from "@/lib/config";
 import { logger } from "@/lib/logger";
-import { publishCacheInvalidation, subscribeCacheInvalidation } from "@/lib/redis/pubsub";
+import {
+  CHANNEL_PROVIDERS_UPDATED,
+  publishCacheInvalidation,
+  subscribeCacheInvalidation,
+} from "@/lib/redis/pubsub";
 import type { Provider } from "@/types/provider";
 
 // 模块级别读取配置，避免热路径函数中频繁调用
 const { ENABLE_PROVIDER_CACHE } = getEnvConfig();
 
-export const CHANNEL_PROVIDERS_UPDATED = "cch:cache:providers:updated";
+export { CHANNEL_PROVIDERS_UPDATED };
 
 const CACHE_TTL_MS = 30_000; // 30 seconds
 
@@ -97,6 +102,9 @@ export function invalidateCache(): void {
  */
 export async function publishProviderCacheInvalidation(): Promise<void> {
   invalidateCache();
+  // Provider mutations can create, sync or remove endpoints. Clear this process's endpoint cache
+  // immediately; other processes clear it when they receive the providers channel message.
+  invalidateProviderEndpointCache();
   await publishCacheInvalidation(CHANNEL_PROVIDERS_UPDATED);
   logger.debug("[ProviderCache] Published cache invalidation");
 }

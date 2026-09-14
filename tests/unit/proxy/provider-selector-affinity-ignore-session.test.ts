@@ -52,7 +52,6 @@ const sessionManagerMocks = vi.hoisted(() => ({
 }));
 
 const providerRepositoryMocks = vi.hoisted(() => ({
-  findProviderById: vi.fn(async () => null as Provider | null),
   findAllProviders: vi.fn(async () => [] as Provider[]),
 }));
 
@@ -148,6 +147,10 @@ const claudeMessage = {
   messages: [{ role: "user", content: "hello" }],
 };
 
+// Providers resolvable by id through the request-level snapshot (in addition to the
+// weighted-random fallback provider 55).
+let extraSnapshotProviders: Provider[] = [];
+
 // Minimal ProxySession stub; loose typing matches sibling selector tests.
 function makeSession(overrides: Record<string, unknown> = {}): any {
   const session: any = {
@@ -172,7 +175,7 @@ function makeSession(overrides: Record<string, unknown> = {}): any {
     }),
     getLastSelectionContext: vi.fn(() => session._ctx ?? null),
     setGroupCostMultiplier: vi.fn(),
-    getProvidersSnapshot: vi.fn(async () => [makeProvider(55)]),
+    getProvidersSnapshot: vi.fn(async () => [makeProvider(55), ...extraSnapshotProviders]),
     recordProviderSessionRef: vi.fn(),
     setSessionIdentityMetadata: vi.fn((metadata: unknown) => {
       session._sessionIdentityMetadata = metadata;
@@ -193,6 +196,7 @@ const affinityHint = {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  extraSnapshotProviders = [];
   envControl.affinityEnabled = true;
   envControl.cacheEffectiveness = false;
   settingsControl.ignoreClientSessionId = true;
@@ -215,7 +219,7 @@ beforeEach(() => {
 describe("affinity candidate cost limits", () => {
   test("candidate over windowed cost limits is rejected and falls back to weighted random", async () => {
     storeMocks.lookup.mockResolvedValue(affinityHint);
-    providerRepositoryMocks.findProviderById.mockResolvedValue(makeProvider(42));
+    extraSnapshotProviders = [makeProvider(42)];
     rateLimitMocks.RateLimitService.checkCostLimitsWithLease.mockImplementation(
       async (providerId: number) => ({ allowed: providerId !== 42 })
     );
@@ -236,7 +240,7 @@ describe("affinity candidate cost limits", () => {
 
   test("candidate over total cost limit is rejected and falls back to weighted random", async () => {
     storeMocks.lookup.mockResolvedValue(affinityHint);
-    providerRepositoryMocks.findProviderById.mockResolvedValue(makeProvider(42));
+    extraSnapshotProviders = [makeProvider(42)];
     rateLimitMocks.RateLimitService.checkTotalCostLimit.mockImplementation(
       async (providerId: number) => ({ allowed: providerId !== 42, current: 0 })
     );
@@ -271,7 +275,7 @@ describe("ignore client session id semantics", () => {
         ...affinityHint,
         hint: { ...affinityHint.hint, matchedFp: "fingerprint-g" },
       });
-    providerRepositoryMocks.findProviderById.mockResolvedValue(makeProvider(42));
+    extraSnapshotProviders = [makeProvider(42)];
 
     const sessions = [
       makeSession({ sessionId: "physical-session-1" }),
@@ -309,7 +313,7 @@ describe("ignore client session id semantics", () => {
         },
       };
     });
-    providerRepositoryMocks.findProviderById.mockResolvedValue(makeProvider(42));
+    extraSnapshotProviders = [makeProvider(42)];
 
     const session = makeSession({
       sessionId: "physical-session",
@@ -344,7 +348,7 @@ describe("ignore client session id semantics", () => {
       ...affinityHint,
       identityFp: "stable-root",
     };
-    providerRepositoryMocks.findProviderById.mockResolvedValue(makeProvider(42));
+    extraSnapshotProviders = [makeProvider(42)];
     const session = makeSession({
       affinity: {
         scopeTag: "scope",
@@ -366,7 +370,6 @@ describe("ignore client session id semantics", () => {
 
   test("ignore on + fingerprintable request never reads the session binding", async () => {
     sessionManagerMocks.SessionManager.getSessionProvider.mockResolvedValue(91);
-    providerRepositoryMocks.findProviderById.mockResolvedValue(makeProvider(91));
 
     const session = makeSession({
       sessionId: "sess_bound",
@@ -385,7 +388,7 @@ describe("ignore client session id semantics", () => {
 
   test("ignore on + non-fingerprintable body still uses legacy session reuse", async () => {
     sessionManagerMocks.SessionManager.getSessionProvider.mockResolvedValue(91);
-    providerRepositoryMocks.findProviderById.mockResolvedValue(makeProvider(91));
+    extraSnapshotProviders = [makeProvider(91)];
 
     const session = makeSession({
       sessionId: "sess_bound",

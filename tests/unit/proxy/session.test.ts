@@ -10,6 +10,16 @@ vi.mock("@/repository/model-price", () => ({
   findLatestPriceByModel: vi.fn(),
 }));
 
+// Billing reads prices through the process cache; route it straight to the repository mock so
+// every test observes its own lookups.
+vi.mock("@/lib/cache/model-price-cache", async () => {
+  const repository = await import("@/repository/model-price");
+  return {
+    findLatestPriceByModelCached: (modelName: string) =>
+      repository.findLatestPriceByModel(modelName),
+  };
+});
+
 vi.mock("@/repository/system-config", () => ({
   getSystemSettings: vi.fn(),
 }));
@@ -378,6 +388,63 @@ describe("ProxySession.getCachedPriceDataByBillingSource", () => {
     expect(result).toBeNull();
     expect(findLatestPriceByModel).toHaveBeenCalledTimes(1);
     expect(findLatestPriceByModel).toHaveBeenCalledWith("same-model");
+  });
+
+  it("should share billing settings across sessions through the process settings cache", async () => {
+    const priceData: ModelPriceData = { input_cost_per_token: 1, output_cost_per_token: 2 };
+
+    vi.mocked(getSystemSettings).mockResolvedValue(makeSystemSettings("redirected"));
+    vi.mocked(findLatestPriceByModel).mockResolvedValue(
+      makePriceRecord("redirected-model", priceData)
+    );
+
+    const first = createSession({
+      originalModel: "original-model",
+      redirectedModel: "redirected-model",
+    });
+    const second = createSession({
+      originalModel: "original-model",
+      redirectedModel: "redirected-model",
+    });
+
+    await first.getCachedPriceDataByBillingSource();
+    await second.getCachedPriceDataByBillingSource();
+
+    expect(getSystemSettings).toHaveBeenCalledTimes(1);
+    const internal = second as unknown as { billingSettingsSource?: unknown };
+    expect(internal.billingSettingsSource).toBe("live");
+  });
+
+  it("should reuse the last cached billing settings when a later refresh fails", async () => {
+    vi.useFakeTimers();
+    try {
+      const priceData: ModelPriceData = { input_cost_per_token: 1, output_cost_per_token: 2 };
+      vi.mocked(getSystemSettings).mockResolvedValueOnce(makeSystemSettings("original"));
+      vi.mocked(findLatestPriceByModel).mockResolvedValue(
+        makePriceRecord("original-model", priceData)
+      );
+
+      const warm = createSession({
+        originalModel: "original-model",
+        redirectedModel: "redirected-model",
+      });
+      await warm.getCachedPriceDataByBillingSource();
+
+      // Expire the 60s process cache so the next session attempts a refresh that fails.
+      vi.advanceTimersByTime(61_000);
+      vi.mocked(getSystemSettings).mockRejectedValueOnce(new Error("DB error"));
+
+      const later = createSession({
+        originalModel: "original-model",
+        redirectedModel: "redirected-model",
+      });
+      await later.getCachedPriceDataByBillingSource();
+
+      const internal = later as unknown as { cachedBillingModelSource?: unknown };
+      expect(internal.cachedBillingModelSource).toBe("original");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("并发调用时应只读取一次配置", async () => {

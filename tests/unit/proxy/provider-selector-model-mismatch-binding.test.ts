@@ -25,7 +25,6 @@ const sessionManagerMocks = vi.hoisted(() => ({
 vi.mock("@/lib/session-manager", () => sessionManagerMocks);
 
 const providerRepositoryMocks = vi.hoisted(() => ({
-  findProviderById: vi.fn(async () => null as Provider | null),
   findAllProviders: vi.fn(async () => [] as Provider[]),
 }));
 
@@ -114,14 +113,15 @@ describe("findReusable - model mismatch clears stale binding", () => {
 
     sessionManagerMocks.SessionManager.getSessionProvider.mockResolvedValueOnce(78);
     const provider = createHaikuOnlyProvider();
-    providerRepositoryMocks.findProviderById.mockResolvedValueOnce({
+    const boundProvider = {
       ...provider,
       disableSessionReuse: true,
-    } as Provider);
+    } as Provider;
 
     const session = {
       sessionId: "sess_disable_reuse",
       shouldReuseProvider: () => true,
+      getProvidersSnapshot: async () => [boundProvider],
       getOriginalModel: () => "claude-haiku-4-5-20251001",
       authState: null,
       getCurrentModel: () => null,
@@ -142,11 +142,11 @@ describe("findReusable - model mismatch clears stale binding", () => {
 
     // Session bound to haiku-only provider
     sessionManagerMocks.SessionManager.getSessionProvider.mockResolvedValueOnce(78);
-    providerRepositoryMocks.findProviderById.mockResolvedValueOnce(createHaikuOnlyProvider());
 
     const session = {
       sessionId: "4c25cf92",
       shouldReuseProvider: () => true,
+      getProvidersSnapshot: async () => [createHaikuOnlyProvider()],
       getOriginalModel: () => "claude-opus-4-6",
       authState: null,
       getCurrentModel: () => null,
@@ -175,11 +175,11 @@ describe("findReusable - model mismatch clears stale binding", () => {
       status: "ok",
       snapshot,
     });
-    providerRepositoryMocks.findProviderById.mockResolvedValueOnce(createHaikuOnlyProvider());
     const setSessionBindingSnapshot = vi.fn();
     const session = {
       sessionId: snapshot.sessionId,
       shouldReuseProvider: () => true,
+      getProvidersSnapshot: async () => [createHaikuOnlyProvider()],
       getOriginalModel: () => "claude-opus-4-6",
       authState: { key: { id: snapshot.keyId } },
       getCurrentModel: () => null,
@@ -202,11 +202,11 @@ describe("findReusable - model mismatch clears stale binding", () => {
     const { ProxyProviderResolver } = await import("@/app/v1/_lib/proxy/provider-selector");
 
     sessionManagerMocks.SessionManager.getSessionProvider.mockResolvedValueOnce(94);
-    providerRepositoryMocks.findProviderById.mockResolvedValueOnce(createOpusProvider());
 
     const session = {
       sessionId: "sess_response_format_mismatch",
       shouldReuseProvider: () => true,
+      getProvidersSnapshot: async () => [createOpusProvider()],
       originalFormat: "response",
       getOriginalModel: () => null,
       authState: null,
@@ -228,7 +228,6 @@ describe("findReusable - model mismatch clears stale binding", () => {
 
     // Session bound to provider that supports all claude models
     sessionManagerMocks.SessionManager.getSessionProvider.mockResolvedValueOnce(94);
-    providerRepositoryMocks.findProviderById.mockResolvedValueOnce(createOpusProvider());
     rateLimitMocks.RateLimitService.checkCostLimitsWithLease.mockResolvedValueOnce({
       allowed: true,
     });
@@ -240,6 +239,7 @@ describe("findReusable - model mismatch clears stale binding", () => {
     const session = {
       sessionId: "sess_ok",
       shouldReuseProvider: () => true,
+      getProvidersSnapshot: async () => [createOpusProvider()],
       getOriginalModel: () => "claude-opus-4-6",
       authState: null,
       getCurrentModel: () => null,
@@ -279,11 +279,11 @@ describe("findReusable - model mismatch clears stale binding", () => {
     const provider = createHaikuOnlyProvider();
     // Restrictive allowlist - only allows specific variant
     provider.allowedModels = ["claude-haiku-4-5-20251001"];
-    providerRepositoryMocks.findProviderById.mockResolvedValueOnce(provider);
 
     const session = {
       sessionId: "sess_variant",
       shouldReuseProvider: () => true,
+      getProvidersSnapshot: async () => [provider],
       getOriginalModel: () => "claude-sonnet-4-5-20250929",
       authState: null,
       getCurrentModel: () => null,
@@ -530,7 +530,6 @@ describe("ProxyProviderResolver.ensure - sticky-session client restriction regre
     const fallback = createFallbackProvider();
 
     sessionManagerMocks.SessionManager.getSessionProvider.mockResolvedValueOnce(78);
-    providerRepositoryMocks.findProviderById.mockResolvedValueOnce(bound);
     providerRepositoryMocks.findAllProviders.mockResolvedValueOnce([bound, fallback]);
 
     const session = createRestrictedSession({
@@ -603,7 +602,6 @@ describe("ProxyProviderResolver.ensure - sticky-session client restriction regre
     const otherRestricted = createOtherRestrictedProvider();
 
     sessionManagerMocks.SessionManager.getSessionProvider.mockResolvedValueOnce(78);
-    providerRepositoryMocks.findProviderById.mockResolvedValueOnce(bound);
     // Snapshot contains only restricted candidates -> pickRandomProvider filters
     // both out via client_restriction, returns null provider.
     providerRepositoryMocks.findAllProviders.mockResolvedValueOnce([bound, otherRestricted]);

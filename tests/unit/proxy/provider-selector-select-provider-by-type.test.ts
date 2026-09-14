@@ -9,7 +9,6 @@ const checkAndTrackProviderSessionMock = vi.hoisted(() => vi.fn());
 vi.mock("@/repository/provider", () => {
   return {
     findAllProviders: findAllProvidersMock,
-    findProviderById: vi.fn(),
   };
 });
 

@@ -546,6 +546,16 @@ function buildTenantContentHashSessionKey(keyId: number, contentHash: string): s
 }
 
 /**
+ * Look up a provider through the process-level provider cache (30s TTL plus pub/sub invalidation).
+ * Binding decisions only need priority and name, so bounded staleness is acceptable here.
+ */
+async function findCachedProviderById(providerId: number) {
+  const { findAllProviders } = await import("@/repository/provider");
+  const providers = await findAllProviders();
+  return providers.find((provider) => provider.id === providerId) ?? null;
+}
+
+/**
  * Session 管理器
  *
  * 核心功能：
@@ -1503,9 +1513,8 @@ export class SessionManager {
         return null;
       }
 
-      // 查询供应商详情获取优先级
-      const { findProviderById } = await import("@/repository/provider");
-      const provider = await findProviderById(providerId);
+      // 查询供应商详情获取优先级（走进程级 provider 缓存，避免按 id 查询 providers 表）
+      const provider = await findCachedProviderById(providerId);
 
       if (!provider) {
         logger.warn("SessionManager: Bound provider not found", { providerId });
@@ -1711,8 +1720,7 @@ export class SessionManager {
         };
       }
 
-      const { findProviderById } = await import("@/repository/provider");
-      const currentProvider = await findProviderById(currentProviderId);
+      const currentProvider = await findCachedProviderById(currentProviderId);
 
       if (!currentProvider) {
         if (!(await persistBinding(false))) {

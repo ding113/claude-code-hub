@@ -11,6 +11,12 @@ export const CHANNEL_PROVIDER_GROUPS_UPDATED = "cch:cache:provider_groups:update
 export const CHANNEL_SYSTEM_SETTINGS_UPDATED = "cch:cache:system_settings:updated";
 // API Key 集合发生变化（典型：创建新 key）时，通知各实例重建 Vacuum Filter，避免误拒绝
 export const CHANNEL_API_KEYS_UPDATED = "cch:cache:api_keys:updated";
+// Provider list changed (admin create/update/delete). Provider and endpoint caches reload.
+export const CHANNEL_PROVIDERS_UPDATED = "cch:cache:providers:updated";
+// Enabled provider endpoints changed (admin create/update/delete/sync). Endpoint caches reload.
+export const CHANNEL_PROVIDER_ENDPOINTS_UPDATED = "cch:cache:provider_endpoints:updated";
+// Model price table changed (manual edit, import, cloud sync). Price lookup caches reload.
+export const CHANNEL_MODEL_PRICES_UPDATED = "cch:cache:model_prices:updated";
 
 /**
  * Redis Pub/Sub 不会补发断线期间的消息。每次首次订阅或重连成功后，统一派发此

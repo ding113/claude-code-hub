@@ -26,7 +26,6 @@ const sessionManagerMocks = vi.hoisted(() => ({
 vi.mock("@/lib/session-manager", () => sessionManagerMocks);
 
 const providerRepositoryMocks = vi.hoisted(() => ({
-  findProviderById: vi.fn(async () => null as Provider | null),
   findAllProviders: vi.fn(async () => [] as Provider[]),
 }));
 
@@ -257,7 +256,6 @@ describe("findReusable - cross-type model routing (#832)", () => {
     });
 
     sessionManagerMocks.SessionManager.getSessionProvider.mockResolvedValueOnce(10);
-    providerRepositoryMocks.findProviderById.mockResolvedValueOnce(provider);
     rateLimitMocks.RateLimitService.checkCostLimitsWithLease.mockResolvedValueOnce({
       allowed: true,
     });
@@ -269,6 +267,7 @@ describe("findReusable - cross-type model routing (#832)", () => {
     const session = {
       sessionId: "cross-type-1",
       shouldReuseProvider: () => true,
+      getProvidersSnapshot: async () => [provider],
       getOriginalModel: () => "claude-opus-4-6",
       authState: null,
       getCurrentModel: () => null,
@@ -286,7 +285,6 @@ describe("findReusable - cross-type model routing (#832)", () => {
     const provider = createProvider({ id: 11, allowedModels: null });
 
     sessionManagerMocks.SessionManager.getSessionProvider.mockResolvedValueOnce(11);
-    providerRepositoryMocks.findProviderById.mockResolvedValueOnce(provider);
     rateLimitMocks.RateLimitService.checkCostLimitsWithLease.mockResolvedValueOnce({
       allowed: true,
     });
@@ -298,6 +296,7 @@ describe("findReusable - cross-type model routing (#832)", () => {
     const session = {
       sessionId: "cross-type-2",
       shouldReuseProvider: () => true,
+      getProvidersSnapshot: async () => [provider],
       getOriginalModel: () => "claude-sonnet-4-5-20250929",
       authState: null,
       getCurrentModel: () => null,
@@ -318,11 +317,11 @@ describe("findReusable - cross-type model routing (#832)", () => {
     });
 
     sessionManagerMocks.SessionManager.getSessionProvider.mockResolvedValueOnce(12);
-    providerRepositoryMocks.findProviderById.mockResolvedValueOnce(provider);
 
     const session = {
       sessionId: "cross-type-3",
       shouldReuseProvider: () => true,
+      getProvidersSnapshot: async () => [provider],
       getOriginalModel: () => "claude-opus-4-6",
       authState: null,
       getCurrentModel: () => null,
@@ -352,11 +351,11 @@ describe("findReusable - cross-type model routing (#832)", () => {
     });
 
     sessionManagerMocks.SessionManager.getSessionProvider.mockResolvedValueOnce(15);
-    providerRepositoryMocks.findProviderById.mockResolvedValueOnce(provider);
 
     const session = {
       sessionId: "cross-type-6",
       shouldReuseProvider: () => true,
+      getProvidersSnapshot: async () => [provider],
       getOriginalModel: () => "claude-opus-4-5-20251001",
       authState: null,
       getCurrentModel: () => null,

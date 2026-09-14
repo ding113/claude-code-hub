@@ -30,6 +30,16 @@ vi.mock("@/repository/model-price", () => ({
   findLatestPriceByModel: vi.fn(),
 }));
 
+// Billing reads prices through the process cache; route it straight to the repository mock so
+// every test observes its own lookups.
+vi.mock("@/lib/cache/model-price-cache", async () => {
+  const repository = await import("@/repository/model-price");
+  return {
+    findLatestPriceByModelCached: (modelName: string) =>
+      repository.findLatestPriceByModel(modelName),
+  };
+});
+
 vi.mock("@/repository/system-config", () => ({
   getSystemSettings: vi.fn(),
 }));

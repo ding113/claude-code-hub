@@ -17,7 +17,6 @@ const sessionManagerMocks = vi.hoisted(() => ({
 vi.mock("@/lib/session-manager", () => sessionManagerMocks);
 
 const providerRepositoryMocks = vi.hoisted(() => ({
-  findProviderById: vi.fn(async () => null as Provider | null),
   findAllProviders: vi.fn(async () => [] as Provider[]),
 }));
 
@@ -32,8 +31,12 @@ const rateLimitMocks = vi.hoisted(() => ({
 
 vi.mock("@/lib/rate-limit", () => rateLimitMocks);
 
-beforeEach(() => {
+beforeEach(async () => {
   vi.resetAllMocks();
+  const { resetProviderLimitVerdictCacheForTests } = await import(
+    "@/app/v1/_lib/proxy/provider-selector"
+  );
+  resetProviderLimitVerdictCacheForTests();
 });
 
 describe("ProxyProviderResolver.filterByLimits - provider total limit", () => {
@@ -108,7 +111,7 @@ describe("ProxyProviderResolver.findReusable - provider total limit", () => {
     const resetAt = new Date("2026-01-04T00:00:00.000Z");
 
     sessionManagerMocks.SessionManager.getSessionProvider.mockResolvedValueOnce(1);
-    providerRepositoryMocks.findProviderById.mockResolvedValueOnce({
+    const boundProvider = {
       id: 1,
       name: "p1",
       isEnabled: true,
@@ -126,7 +129,7 @@ describe("ProxyProviderResolver.findReusable - provider total limit", () => {
       limitTotalUsd: 10,
       totalCostResetAt: resetAt,
       limitConcurrentSessions: 0,
-    } as unknown as Provider);
+    } as unknown as Provider;
 
     rateLimitMocks.RateLimitService.checkTotalCostLimit.mockResolvedValueOnce({
       allowed: false,
@@ -137,6 +140,7 @@ describe("ProxyProviderResolver.findReusable - provider total limit", () => {
     const session = {
       sessionId: "s1",
       shouldReuseProvider: () => true,
+      getProvidersSnapshot: async () => [boundProvider],
       authState: null,
       getCurrentModel: () => null,
       getOriginalModel: () => null,

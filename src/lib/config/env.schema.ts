@@ -79,6 +79,14 @@ export const EnvSchema = z.object({
   // - sync：同步写入（兼容旧行为，但高并发下会增加请求尾部阻塞）
   // - async：异步批量写入（默认，降低 DB 写放大与连接占用）
   MESSAGE_REQUEST_WRITE_MODE: z.enum(["sync", "async"]).default("async"),
+  // message_request 初始 INSERT 写入模式（仅在 MESSAGE_REQUEST_WRITE_MODE=async 时生效）
+  // - sync（默认）：转发前同步 INSERT 一行
+  // - async：应用侧预分配 id，按批 multi-row INSERT（约一个 flush 周期后可见；进程崩溃时未刷盘的行会丢失）
+  MESSAGE_REQUEST_INSERT_MODE: z.enum(["sync", "async"]).default("sync"),
+  // async INSERT 每次从序列预取的 id 数量（每进程）
+  MESSAGE_REQUEST_INSERT_ID_CHUNK_SIZE: z.coerce.number().int().min(8).max(4096).default(128),
+  // async INSERT 待写入行上限（每进程）；达到上限时回落为同步 INSERT（背压，不丢数据）
+  MESSAGE_REQUEST_INSERT_MAX_PENDING: z.coerce.number().int().min(100).max(50000).default(2000),
   // 异步批量写入参数
   MESSAGE_REQUEST_ASYNC_FLUSH_INTERVAL_MS: optionalNumber(
     z
@@ -147,6 +155,10 @@ export const EnvSchema = z.object({
     .max(31_536_000, "AUTH_SESSION_TTL_SECONDS 不能大于 31536000")
     .default(604_800),
   SESSION_TTL: z.coerce.number().default(300),
+  // 可用性投影 outbox 保留期：已发布（published）的 outbox_events 超过该天数后分批删除
+  PROJECTION_OUTBOX_RETENTION_DAYS: z.coerce.number().int().min(1).max(365).default(3),
+  // 可用性投影去重表 proj_applied_requests 保留天数（仅用于迟到重复事件去重）
+  PROJECTION_APPLIED_RETENTION_DAYS: z.coerce.number().int().min(1).max(365).default(7),
   // 会话消息存储控制
   // - false (默认)：存储请求/响应体但对 message 内容脱敏 [REDACTED]
   // - true：原样存储 message 内容（注意隐私和存储空间影响）
@@ -187,6 +199,10 @@ export const EnvSchema = z.object({
   // - true (默认)：启用进程级缓存，30s TTL，提升供应商查询性能
   // - false：禁用缓存，每次请求直接查询数据库
   ENABLE_PROVIDER_CACHE: z.string().default("true").transform(booleanTransform),
+  // 模型价格查询缓存开关
+  // - true (默认)：计费路径的模型价格按模型名缓存 60s，价格写入后立即失效并广播
+  // - false：每次计费直接查询 model_prices 表
+  ENABLE_MODEL_PRICE_CACHE: z.string().default("true").transform(booleanTransform),
   MAX_RETRY_ATTEMPTS_DEFAULT: z.coerce
     .number()
     .min(1, "MAX_RETRY_ATTEMPTS_DEFAULT 不能小于 1")

@@ -47,7 +47,6 @@ const sessionManagerMocks = vi.hoisted(() => ({
 }));
 
 const providerRepositoryMocks = vi.hoisted(() => ({
-  findProviderById: vi.fn(async () => null as Provider | null),
   findAllProviders: vi.fn(async () => [] as Provider[]),
 }));
 
@@ -145,6 +144,10 @@ const claudeMessage = {
 };
 
 // Minimal ProxySession stub; loose typing matches sibling selector tests.
+// Providers resolvable by id through the request-level snapshot (in addition to the
+// weighted-random fallback provider 55).
+let extraSnapshotProviders: Provider[] = [];
+
 function makeSession(overrides: Record<string, unknown> = {}): any {
   // 链条目联动：addProviderToChain 推入、getProviderChain 读出（覆盖粘性选择去重逻辑）
   const chainItems: Array<Record<string, unknown>> = [];
@@ -172,7 +175,7 @@ function makeSession(overrides: Record<string, unknown> = {}): any {
     }),
     getLastSelectionContext: vi.fn(() => session._ctx ?? null),
     setGroupCostMultiplier: vi.fn(),
-    getProvidersSnapshot: vi.fn(async () => [makeProvider(55)]),
+    getProvidersSnapshot: vi.fn(async () => [makeProvider(55), ...extraSnapshotProviders]),
     recordProviderSessionRef: vi.fn(),
     setSessionIdentityMetadata: vi.fn((metadata: unknown) => {
       session._sessionIdentityMetadata = metadata;
@@ -183,6 +186,7 @@ function makeSession(overrides: Record<string, unknown> = {}): any {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  extraSnapshotProviders = [];
   envControl.affinityEnabled = true;
   settingsControl.ignoreClientSessionId = true;
   storeMocks.lookup.mockResolvedValue(null);
@@ -205,7 +209,7 @@ describe("ensure() nomination priority", () => {
   test("ignore-session off: explicit session binding wins while affinity writeback state is initialized", async () => {
     settingsControl.ignoreClientSessionId = false;
     sessionManagerMocks.SessionManager.getSessionProvider.mockResolvedValue(91);
-    providerRepositoryMocks.findProviderById.mockResolvedValue(makeProvider(91));
+    extraSnapshotProviders = [makeProvider(91)];
     storeMocks.lookup.mockResolvedValue({
       generation: "3",
       identityFp: "rootfp",
@@ -245,7 +249,7 @@ describe("ensure() nomination priority", () => {
         tier: "conversation",
       },
     });
-    providerRepositoryMocks.findProviderById.mockResolvedValue(makeProvider(42));
+    extraSnapshotProviders = [makeProvider(42)];
 
     const session = makeSession({ sessionId: "physical-session" });
     const result = await ProxyProviderResolver.ensure(session);
@@ -263,7 +267,8 @@ describe("ensure() nomination priority", () => {
         fingerprints: expect.arrayContaining(["rootfp"]),
       })
     );
-    expect(session.getProvidersSnapshot).not.toHaveBeenCalled();
+    // The nominated provider is resolved from the request snapshot; weighted random selection
+    // must not run (asserted below via the chain containing only affinity_hit).
     expect(session.addProviderToChain).toHaveBeenCalledWith(
       expect.objectContaining({ id: 42 }),
       expect.objectContaining({ reason: "affinity_hit", selectionMethod: "prefix_affinity" })
@@ -305,9 +310,7 @@ describe("ensure() nomination priority", () => {
         tier: "conversation",
       },
     });
-    providerRepositoryMocks.findProviderById.mockResolvedValue(
-      makeProvider(42, { isEnabled: false })
-    );
+    extraSnapshotProviders = [makeProvider(42, { isEnabled: false })];
 
     const session = makeSession();
     const result = await ProxyProviderResolver.ensure(session);
@@ -329,7 +332,7 @@ describe("ensure() nomination priority", () => {
         tier: "conversation",
       },
     });
-    providerRepositoryMocks.findProviderById.mockResolvedValue(makeProvider(42));
+    extraSnapshotProviders = [makeProvider(42)];
     circuitBreakerMocks.isCircuitOpen.mockImplementation(async (id: number) => id === 42);
 
     const session = makeSession();

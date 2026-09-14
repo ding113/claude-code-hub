@@ -1,5 +1,6 @@
 import "server-only";
 
+import { getCachedProviderEndpoints } from "@/lib/cache/provider-endpoint-cache";
 import { getEnvConfig } from "@/lib/config/env.schema";
 import { getAllEndpointHealthStatusAsync } from "@/lib/endpoint-circuit-breaker";
 import {
@@ -46,9 +47,10 @@ export async function getPreferredProviderEndpoints(input: {
   const excludeIds = input.excludeEndpointIds ?? [];
   const excludeSet = excludeIds.length > 0 ? new Set(excludeIds) : null;
 
-  const endpoints = await findEnabledProviderEndpointsByVendorAndType(
-    input.vendorId,
-    input.providerType
+  // Hot path: served from the process endpoint cache. The cached array is shared, so everything
+  // below must stay non-mutating (filter/rank always operate on new arrays).
+  const endpoints = await getCachedProviderEndpoints(input.vendorId, input.providerType, () =>
+    findEnabledProviderEndpointsByVendorAndType(input.vendorId, input.providerType)
   );
   // `findEnabledProviderEndpointsByVendorAndType` 已保证 isEnabled=true 且 deletedAt IS NULL
   const circuitCandidates = excludeSet ? endpoints.filter((e) => !excludeSet.has(e.id)) : endpoints;

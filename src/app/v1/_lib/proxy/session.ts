@@ -1,6 +1,7 @@
 import type { Context } from "hono";
 import { isCountTokensEndpointPath, V1_ENDPOINT_PATHS } from "@/app/v1/_lib/proxy/endpoint-paths";
 import { isRemoteCompactionV2Request } from "@/app/v1/_lib/proxy/remote-compaction";
+import { findLatestPriceByModelCached } from "@/lib/cache/model-price-cache";
 import { logger } from "@/lib/logger";
 import {
   deleteLiveChain,
@@ -19,7 +20,6 @@ import {
   type ResolvedPricing,
   resolvePricingForModelRecords,
 } from "@/lib/utils/pricing-resolution";
-import { findLatestPriceByModel } from "@/repository/model-price";
 import { findAllProviders } from "@/repository/provider";
 import type { CacheTtlResolved } from "@/types/cache";
 import type { Key } from "@/types/key";
@@ -1456,7 +1456,7 @@ export class ProxySession {
    */
   async getCachedPriceData(): Promise<ModelPriceData | null> {
     if (this.cachedPriceData === undefined && this.request.model) {
-      const result = await findLatestPriceByModel(this.request.model);
+      const result = await findLatestPriceByModelCached(this.request.model);
       this.cachedPriceData = result?.priceData ?? null;
     }
     return this.cachedPriceData ?? null;
@@ -1505,7 +1505,7 @@ export class ProxySession {
     const primaryModel = useOriginal ? originalModel : redirectedModel;
     const fallbackModel = useOriginal ? redirectedModel : originalModel;
 
-    const primaryRecord = primaryModel ? await findLatestPriceByModel(primaryModel) : null;
+    const primaryRecord = primaryModel ? await findLatestPriceByModelCached(primaryModel) : null;
     let resolved = resolvePricingForModelRecords({
       provider: providerIdentity,
       primaryModelName: primaryModel,
@@ -1515,7 +1515,7 @@ export class ProxySession {
     });
 
     if (!resolved && fallbackModel && fallbackModel !== primaryModel) {
-      const fallbackRecord = await findLatestPriceByModel(fallbackModel);
+      const fallbackRecord = await findLatestPriceByModelCached(fallbackModel);
       resolved = resolvePricingForModelRecords({
         provider: providerIdentity,
         primaryModelName: primaryModel,
@@ -1559,8 +1559,21 @@ export class ProxySession {
     if (!this.billingSettingsPromise) {
       this.billingSettingsPromise = (async () => {
         try {
-          const { getSystemSettings } = await import("@/repository/system-config");
-          const systemSettings = await getSystemSettings();
+          // Use the process-level settings cache (60s TTL + pub/sub invalidation) so billing
+          // resolution does not issue a system_settings query on every proxied request.
+          const { getCachedSystemSettings } = await import("@/lib/config/system-settings-cache");
+          const systemSettings = await getCachedSystemSettings();
+
+          // id === 0 is the synthetic fallback row returned when the database is unreachable
+          // and no settings were ever cached. Keep the historical conservative defaults.
+          if (systemSettings.id === 0) {
+            logger.error("[ProxySession] Billing settings unavailable, using default fallback");
+            return {
+              billingModelSource: "redirected" as BillingModelSource,
+              codexPriorityBillingSource: "requested" as CodexPriorityBillingSource,
+              source: "default" as const,
+            };
+          }
 
           const billingModelSource =
             systemSettings.billingModelSource === "original" ||

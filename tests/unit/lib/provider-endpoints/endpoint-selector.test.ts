@@ -26,6 +26,10 @@ function makeEndpoint(overrides: Partial<ProviderEndpoint>): ProviderEndpoint {
 describe("provider-endpoints: endpoint-selector", () => {
   test("rankProviderEndpoints 应过滤 disabled/deleted，并按 lastProbeOk/sortOrder/latency/id 排序", async () => {
     vi.resetModules();
+    vi.doMock("@/lib/cache/provider-endpoint-cache", () => ({
+      getCachedProviderEndpoints: (_vendorId: number, _type: string, fetcher: () => unknown) =>
+        fetcher(),
+    }));
     vi.doMock("@/repository", () => ({
       findEnabledProviderEndpointsByVendorAndType: vi.fn(),
       findProviderEndpointsByVendorAndType: vi.fn(),
@@ -94,6 +98,10 @@ describe("provider-endpoints: endpoint-selector", () => {
 
   test("getPreferredProviderEndpoints 应排除禁用/已删除/显式 exclude/熔断 open 的端点，并返回排序结果", async () => {
     vi.resetModules();
+    vi.doMock("@/lib/cache/provider-endpoint-cache", () => ({
+      getCachedProviderEndpoints: (_vendorId: number, _type: string, fetcher: () => unknown) =>
+        fetcher(),
+    }));
 
     // findEnabledProviderEndpointsByVendorAndType 语义：只返回 isEnabled=true 且 deletedAt=null 的端点
     const endpoints: ProviderEndpoint[] = [
@@ -160,6 +168,10 @@ describe("provider-endpoints: endpoint-selector", () => {
 
   test("getPreferredProviderEndpoints 过滤后无候选时返回空数组", async () => {
     vi.resetModules();
+    vi.doMock("@/lib/cache/provider-endpoint-cache", () => ({
+      getCachedProviderEndpoints: (_vendorId: number, _type: string, fetcher: () => unknown) =>
+        fetcher(),
+    }));
 
     const findMock = vi.fn(async () => []);
     const getAllStatusMock = vi.fn(async () => ({}));
@@ -192,6 +204,10 @@ describe("provider-endpoints: endpoint-selector", () => {
 describe("getEndpointFilterStats", () => {
   test("should correctly count total, enabled, circuitOpen, and available endpoints", async () => {
     vi.resetModules();
+    vi.doMock("@/lib/cache/provider-endpoint-cache", () => ({
+      getCachedProviderEndpoints: (_vendorId: number, _type: string, fetcher: () => unknown) =>
+        fetcher(),
+    }));
 
     const endpoints: ProviderEndpoint[] = [
       makeEndpoint({ id: 1, isEnabled: true, lastProbeOk: true }),
@@ -252,6 +268,10 @@ describe("getEndpointFilterStats", () => {
 
   test("should return all zeros when no endpoints exist", async () => {
     vi.resetModules();
+    vi.doMock("@/lib/cache/provider-endpoint-cache", () => ({
+      getCachedProviderEndpoints: (_vendorId: number, _type: string, fetcher: () => unknown) =>
+        fetcher(),
+    }));
 
     const findMock = vi.fn(async () => []);
     const getAllStatusMock = vi.fn(async () => ({}));
@@ -280,6 +300,10 @@ describe("getEndpointFilterStats", () => {
 
   test("should count all enabled endpoints as circuitOpen when all are open", async () => {
     vi.resetModules();
+    vi.doMock("@/lib/cache/provider-endpoint-cache", () => ({
+      getCachedProviderEndpoints: (_vendorId: number, _type: string, fetcher: () => unknown) =>
+        fetcher(),
+    }));
 
     const endpoints: ProviderEndpoint[] = [
       makeEndpoint({ id: 1, isEnabled: true }),
@@ -339,6 +363,10 @@ describe("getEndpointFilterStats", () => {
 describe("ENABLE_ENDPOINT_CIRCUIT_BREAKER disabled", () => {
   test("getPreferredProviderEndpoints skips circuit check when disabled", async () => {
     vi.resetModules();
+    vi.doMock("@/lib/cache/provider-endpoint-cache", () => ({
+      getCachedProviderEndpoints: (_vendorId: number, _type: string, fetcher: () => unknown) =>
+        fetcher(),
+    }));
 
     const endpoints: ProviderEndpoint[] = [
       makeEndpoint({ id: 1, lastProbeOk: true, sortOrder: 0, lastProbeLatencyMs: 100 }),
@@ -378,6 +406,10 @@ describe("ENABLE_ENDPOINT_CIRCUIT_BREAKER disabled", () => {
 
   test("getEndpointFilterStats returns circuitOpen=0 when disabled", async () => {
     vi.resetModules();
+    vi.doMock("@/lib/cache/provider-endpoint-cache", () => ({
+      getCachedProviderEndpoints: (_vendorId: number, _type: string, fetcher: () => unknown) =>
+        fetcher(),
+    }));
 
     const endpoints: ProviderEndpoint[] = [
       makeEndpoint({ id: 1, isEnabled: true, lastProbeOk: true }),
