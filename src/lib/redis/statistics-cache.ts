@@ -7,10 +7,13 @@ import {
 } from "@/repository/statistics";
 import { buildStatisticsCacheKey } from "@/types/dashboard-cache";
 import type { DatabaseKeyStatRow, DatabaseStatRow, TimeRange } from "@/types/statistics";
+import { getOrComputeWithRedisLock } from "./cache-aside";
 import { getRedisClient } from "./client";
+import { resolveDashboardCacheTtlSeconds } from "./dashboard-cache-ttl";
 import { scanPattern } from "./scan-helper";
 
 const CACHE_TTL = 30;
+const CACHE_TTL_HIGH_CONCURRENCY = 60;
 const LOCK_TTL = 5;
 
 type MixedStatisticsResult = {
@@ -19,10 +22,6 @@ type MixedStatisticsResult = {
 };
 
 type StatisticsCacheData = DatabaseStatRow[] | DatabaseKeyStatRow[] | MixedStatisticsResult;
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
 
 async function queryDatabase(
   timeRange: TimeRange,
@@ -44,7 +43,7 @@ async function queryDatabase(
 }
 
 /**
- * Statistics data with Redis caching (30s TTL).
+ * Statistics data with Redis caching (30s TTL, 60s in high-concurrency mode).
  *
  * Strategy:
  * 1. Read from Redis cache first
@@ -69,82 +68,16 @@ export async function getStatisticsWithCache(
     return await queryDatabase(timeRange, mode, timezone, userId);
   }
 
-  const cacheKey = buildStatisticsCacheKey(timeRange, mode, userId, timezone);
-  const lockKey = `${cacheKey}:lock`;
-
-  let locked = false;
-  let data: StatisticsCacheData | undefined;
-
-  try {
-    // 1. Try cache
-    const cached = await redis.get(cacheKey);
-    if (cached) {
-      logger.debug("[StatisticsCache] Cache hit", { timeRange, mode, cacheKey });
-      return JSON.parse(cached) as StatisticsCacheData;
-    }
-
-    // 2. Cache miss - acquire lock (SET NX EX)
-    const lockResult = await redis.set(lockKey, "1", "EX", LOCK_TTL, "NX");
-    locked = lockResult === "OK";
-
-    if (locked) {
-      logger.debug("[StatisticsCache] Acquired lock, computing", { timeRange, mode, lockKey });
-
-      data = await queryDatabase(timeRange, mode, timezone, userId);
-
-      try {
-        await redis.setex(cacheKey, CACHE_TTL, JSON.stringify(data));
-      } catch (writeErr) {
-        logger.warn("[StatisticsCache] Failed to write cache", { cacheKey, error: writeErr });
-      }
-
-      logger.info("[StatisticsCache] Cache updated", {
-        timeRange,
-        mode,
-        userId,
-        cacheKey,
-        ttl: CACHE_TTL,
-      });
-
-      return data;
-    }
-
-    // 3. Lock held by another request - wait and retry (up to 50 x 100ms = 5s)
-    logger.debug("[StatisticsCache] Lock held by another request, retrying", { timeRange, mode });
-
-    for (let i = 0; i < 50; i++) {
-      await sleep(100);
-
-      const retried = await redis.get(cacheKey);
-      if (retried) {
-        logger.debug("[StatisticsCache] Cache hit after retry", {
-          timeRange,
-          mode,
-          retries: i + 1,
-        });
-        return JSON.parse(retried) as StatisticsCacheData;
-      }
-    }
-
-    // Retry timeout - fallback to direct DB
-    logger.warn("[StatisticsCache] Retry timeout, fallback to direct query", { timeRange, mode });
-    return await queryDatabase(timeRange, mode, timezone, userId);
-  } catch (error) {
-    logger.error("[StatisticsCache] Redis error, fallback to direct query", {
-      timeRange,
-      mode,
-      error,
-    });
-    return data ?? (await queryDatabase(timeRange, mode, timezone, userId));
-  } finally {
-    if (locked) {
-      await redis
-        .del(lockKey)
-        .catch((err) =>
-          logger.warn("[StatisticsCache] Failed to release lock", { lockKey, error: err })
-        );
-    }
-  }
+  return getOrComputeWithRedisLock(redis, {
+    name: "StatisticsCache",
+    cacheKey: buildStatisticsCacheKey(timeRange, mode, userId, timezone),
+    ttlSeconds: resolveDashboardCacheTtlSeconds(CACHE_TTL, CACHE_TTL_HIGH_CONCURRENCY),
+    lockTtlSeconds: LOCK_TTL,
+    waitTimeoutMs: 5_000,
+    pollIntervalMs: 100,
+    compute: () => queryDatabase(timeRange, mode, timezone, userId),
+    logContext: { timeRange, mode, userId },
+  });
 }
 
 /**

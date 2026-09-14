@@ -8,6 +8,7 @@ import {
   setSessionDetailsCache,
 } from "@/lib/cache/session-cache";
 import { logger } from "@/lib/logger";
+import { resolveDashboardCacheTtlSeconds } from "@/lib/redis/dashboard-cache-ttl";
 import { extractAfterRequestMessages, isSessionMessages } from "@/lib/session-detail-snapshots";
 import { resolveSessionRequestLocator } from "@/lib/session-request-locator";
 import { normalizeRequestSequence } from "@/lib/utils/request-sequence";
@@ -22,6 +23,20 @@ import {
 import type { SpecialSetting } from "@/types/special-settings";
 import { summarizeTerminateSessionsBatch } from "./active-sessions-utils";
 import type { ActionResult } from "./types";
+
+/**
+ * Active session list aggregates are expensive (per-session usage_ledger sums) and polled every
+ * few seconds by several dashboard components; live concurrency counts are still read per call.
+ */
+const ACTIVE_SESSIONS_CACHE_TTL_SECONDS = 5;
+const ACTIVE_SESSIONS_CACHE_TTL_HIGH_CONCURRENCY_SECONDS = 10;
+
+function resolveActiveSessionsCacheTtlSeconds(): number {
+  return resolveDashboardCacheTtlSeconds(
+    ACTIVE_SESSIONS_CACHE_TTL_SECONDS,
+    ACTIVE_SESSIONS_CACHE_TTL_HIGH_CONCURRENCY_SECONDS
+  );
+}
 
 type ResolvedSessionIdentity = NonNullable<
   Awaited<ReturnType<typeof import("@/repository/message").resolveSessionIdentity>>
@@ -344,7 +359,7 @@ export async function getActiveSessions(): Promise<ActionResult<ActiveSessionInf
     const concurrentCounts = await SessionTracker.getObservedConcurrentCountBatch(allSessionIds);
 
     // 4. 写入缓存
-    setActiveSessionsCache(sessionsData);
+    setActiveSessionsCache(sessionsData, undefined, resolveActiveSessionsCacheTtlSeconds());
 
     // 5. 过滤：管理员可查看所有，普通用户只能查看自己的
     const filteredSessions = isAdmin
@@ -561,7 +576,7 @@ export async function getAllSessions(
     );
 
     // 4. 写入缓存
-    setActiveSessionsCache(sessionsData, cacheKey);
+    setActiveSessionsCache(sessionsData, cacheKey, resolveActiveSessionsCacheTtlSeconds());
 
     // 5. 过滤：管理员可查看所有，普通用户只能查看自己的
     const filteredSessions = isAdmin

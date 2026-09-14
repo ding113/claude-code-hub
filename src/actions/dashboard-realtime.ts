@@ -1,17 +1,18 @@
 "use server";
 
 import { getSession } from "@/lib/auth";
+import { getCachedSystemSettings } from "@/lib/config/system-settings-cache";
 import { logger } from "@/lib/logger";
+import { getOrComputeWithRedisLock } from "@/lib/redis/cache-aside";
+import { getRedisClient } from "@/lib/redis/client";
+import { resolveDashboardCacheTtlSeconds } from "@/lib/redis/dashboard-cache-ttl";
+import { getLeaderboardWithCache } from "@/lib/redis/leaderboard-cache";
 import { findRecentActivityStream } from "@/repository/activity-stream";
-import {
-  findDailyLeaderboard,
-  findDailyModelLeaderboard,
-  findDailyProviderLeaderboard,
-  type LeaderboardEntry,
-  type ModelLeaderboardEntry,
-  type ProviderLeaderboardEntry,
+import type {
+  LeaderboardEntry,
+  ModelLeaderboardEntry,
+  ProviderLeaderboardEntry,
 } from "@/repository/leaderboard";
-import { getSystemSettings } from "@/repository/system-config";
 // 导入已有的接口和方法
 import { getOverviewData, type OverviewData } from "./overview";
 import { getProviderSlots, type ProviderSlotInfo } from "./provider-slots";
@@ -72,6 +73,24 @@ export interface DashboardRealtimeData {
 // Constants for data limits
 const ACTIVITY_STREAM_LIMIT = 20;
 const MODEL_DISTRIBUTION_LIMIT = 10;
+/** The big screen polls every 2s; a few seconds of staleness avoids one query batch per viewer. */
+const ACTIVITY_STREAM_CACHE_TTL_SECONDS = 3;
+const ACTIVITY_STREAM_CACHE_TTL_HIGH_CONCURRENCY_SECONDS = 10;
+
+function getCachedRecentActivityStream(limit: number) {
+  return getOrComputeWithRedisLock(getRedisClient(), {
+    name: "ActivityStreamCache",
+    cacheKey: `dashboard:activity-stream:v1:${limit}`,
+    ttlSeconds: resolveDashboardCacheTtlSeconds(
+      ACTIVITY_STREAM_CACHE_TTL_SECONDS,
+      ACTIVITY_STREAM_CACHE_TTL_HIGH_CONCURRENCY_SECONDS
+    ),
+    lockTtlSeconds: 5,
+    waitTimeoutMs: 1_000,
+    pollIntervalMs: 100,
+    compute: () => findRecentActivityStream(limit),
+  });
+}
 
 /**
  * 获取数据大屏的所有实时数据
@@ -96,7 +115,7 @@ export async function getDashboardRealtimeData(): Promise<ActionResult<Dashboard
       };
     }
 
-    const settings = await getSystemSettings();
+    const settings = await getCachedSystemSettings();
     const isAdmin = session.user.role === "admin";
     const canViewGlobalData = isAdmin || settings.allowGlobalUsageView;
 
@@ -121,11 +140,18 @@ export async function getDashboardRealtimeData(): Promise<ActionResult<Dashboard
       statisticsResult,
     ] = await Promise.allSettled([
       getOverviewData(),
-      findRecentActivityStream(ACTIVITY_STREAM_LIMIT), // 使用新的混合数据源
-      findDailyLeaderboard(),
-      findDailyProviderLeaderboard(),
+      getCachedRecentActivityStream(ACTIVITY_STREAM_LIMIT), // 使用新的混合数据源
+      // 排行榜走共享 Redis 缓存（与排行榜页面一致），避免大屏每 2 秒触发全量聚合
+      getLeaderboardWithCache("daily", settings.currencyDisplay, "user") as Promise<
+        LeaderboardEntry[]
+      >,
+      getLeaderboardWithCache("daily", settings.currencyDisplay, "provider") as Promise<
+        ProviderLeaderboardEntry[]
+      >,
       getProviderSlots(),
-      findDailyModelLeaderboard(),
+      getLeaderboardWithCache("daily", settings.currencyDisplay, "model") as Promise<
+        ModelLeaderboardEntry[]
+      >,
       getUserStatistics("today"),
     ]);
 

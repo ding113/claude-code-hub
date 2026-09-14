@@ -1,7 +1,14 @@
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import { keys, messageRequest, providers, users } from "@/drizzle/schema";
+import { getOrComputeWithRedisLock } from "@/lib/redis/cache-aside";
+import { getRedisClient } from "@/lib/redis/client";
+import { resolveDashboardCacheTtlSeconds } from "@/lib/redis/dashboard-cache-ttl";
 import { maskKey } from "@/lib/utils/validation";
+
+const PROXY_STATUS_REDIS_TTL_SECONDS = 2;
+const PROXY_STATUS_REDIS_TTL_HIGH_CONCURRENCY_SECONDS = 5;
+
 import type { ProxyStatusResponse } from "@/types/proxy-status";
 
 type ActiveRequestRow = {
@@ -87,7 +94,19 @@ export class ProxyStatusTracker {
       return this.inFlight;
     }
 
-    this.inFlight = this.fetchAllUsersStatus()
+    // Shared across processes so each worker does not rerun the status queries on its own.
+    this.inFlight = getOrComputeWithRedisLock(getRedisClient(), {
+      name: "ProxyStatusCache",
+      cacheKey: "proxy-status:v1",
+      ttlSeconds: resolveDashboardCacheTtlSeconds(
+        PROXY_STATUS_REDIS_TTL_SECONDS,
+        PROXY_STATUS_REDIS_TTL_HIGH_CONCURRENCY_SECONDS
+      ),
+      lockTtlSeconds: 5,
+      waitTimeoutMs: 1_000,
+      pollIntervalMs: 50,
+      compute: () => this.fetchAllUsersStatus(),
+    })
       .then((value) => {
         this.cachedStatus = { value, expiresAt: Date.now() + 2_000 };
         return value;
@@ -197,24 +216,39 @@ export class ProxyStatusTracker {
   }
 
   private async loadLastRequests(): Promise<LastRequestRow[]> {
+    // One index seek per live user (idx_message_request_proxy_status_latest) instead of a
+    // DISTINCT ON walk over every finalized request in the table.
     const query = sql<LastRequestRow>`
-      SELECT DISTINCT ON (mr.user_id)
-        mr.user_id AS "userId",
-        mr.id AS "requestId",
-        mr.key AS "keyString",
+      SELECT
+        u.id AS "userId",
+        latest.id AS "requestId",
+        latest.key AS "keyString",
         k.name AS "keyName",
-        mr.provider_id AS "providerId",
-        p.name AS "providerName",
-        mr.model AS "model",
-        mr.updated_at AS "endTime"
-      FROM message_request mr
-      JOIN providers p ON mr.provider_id = p.id AND p.deleted_at IS NULL
-      LEFT JOIN keys k ON k.key = mr.key AND k.deleted_at IS NULL
-      WHERE mr.deleted_at IS NULL
-        AND mr.is_replay = false
-        AND mr.status_code IS NOT NULL
-        AND (mr.blocked_by IS NULL OR mr.blocked_by <> 'warmup')
-      ORDER BY mr.user_id, mr.updated_at DESC NULLS LAST, mr.id DESC
+        latest.provider_id AS "providerId",
+        latest.provider_name AS "providerName",
+        latest.model AS "model",
+        latest.updated_at AS "endTime"
+      FROM users u
+      CROSS JOIN LATERAL (
+        SELECT
+          mr.id,
+          mr.key,
+          mr.provider_id,
+          p.name AS provider_name,
+          mr.model,
+          mr.updated_at
+        FROM message_request mr
+        JOIN providers p ON mr.provider_id = p.id AND p.deleted_at IS NULL
+        WHERE mr.user_id = u.id
+          AND mr.deleted_at IS NULL
+          AND mr.is_replay = false
+          AND mr.status_code IS NOT NULL
+          AND (mr.blocked_by IS NULL OR mr.blocked_by <> 'warmup')
+        ORDER BY mr.updated_at DESC NULLS LAST, mr.id DESC
+        LIMIT 1
+      ) latest
+      LEFT JOIN keys k ON k.key = latest.key AND k.deleted_at IS NULL
+      WHERE u.deleted_at IS NULL
     `;
 
     const result = await db.execute(query);

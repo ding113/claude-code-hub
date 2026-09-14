@@ -67,7 +67,10 @@ describe("ProxyStatusTracker", () => {
 
     const latestSql = sqlText(boundary.execute.mock.calls[0]?.[0]);
     expect(latestSql).toContain("mr.status_code is not null");
-    expect(latestSql).toContain("order by mr.user_id, mr.updated_at desc nulls last, mr.id desc");
+    expect(latestSql).toContain("cross join lateral");
+    expect(latestSql).toContain("where mr.user_id = u.id");
+    expect(latestSql).toContain("order by mr.updated_at desc nulls last, mr.id desc");
+    expect(latestSql).toContain("limit 1");
   });
 
   it("coalesces concurrent calls and caches the response for two seconds", async () => {

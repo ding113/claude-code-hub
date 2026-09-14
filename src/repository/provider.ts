@@ -16,6 +16,9 @@ import { resetEndpointCircuit } from "@/lib/endpoint-circuit-breaker";
 import { logger } from "@/lib/logger";
 import { SENSITIVE_PROVIDER_BATCH_UNDO_KEYS } from "@/lib/provider-batch-patch-error-codes";
 import { normalizeProviderModelRedirectRules } from "@/lib/provider-model-redirects";
+import { getOrComputeWithRedisLock } from "@/lib/redis/cache-aside";
+import { getRedisClient } from "@/lib/redis/client";
+import { resolveDashboardCacheTtlSeconds } from "@/lib/redis/dashboard-cache-ttl";
 import { parseProviderGroups } from "@/lib/utils/provider-group";
 import { resolveSystemTimezone } from "@/lib/utils/timezone";
 import type {
@@ -2325,6 +2328,7 @@ export type ProviderStatisticsRow = {
 
 // 轻量内存缓存：降低后台轮询/重复加载导致的重复扫描
 const PROVIDER_STATISTICS_CACHE_TTL_MS = 10 * 1000; // 10 秒
+const PROVIDER_STATISTICS_CACHE_TTL_HIGH_CONCURRENCY_SECONDS = 30;
 let providerStatisticsCache: {
   timezone: string;
   expiresAt: number;
@@ -2355,7 +2359,7 @@ export async function getProviderStatistics(): Promise<ProviderStatisticsRow[]> 
       return await providerStatisticsInFlight.promise;
     }
 
-    const promise: Promise<ProviderStatisticsRow[]> = (async () => {
+    const queryProviderStatistics = async (): Promise<ProviderStatisticsRow[]> => {
       const query = sql`
          WITH bounds AS (
            SELECT
@@ -2408,6 +2412,25 @@ export async function getProviderStatistics(): Promise<ProviderStatisticsRow[]> 
 
       logger.trace("getProviderStatistics:result", {
         count: data.length,
+      });
+
+      return data;
+    };
+
+    const promise: Promise<ProviderStatisticsRow[]> = (async () => {
+      // Share results across processes: every worker used to miss its own 10s in-process cache.
+      // Cached rows carry last_call_time as an ISO string; consumers accept both forms.
+      const data = await getOrComputeWithRedisLock(getRedisClient(), {
+        name: "ProviderStatisticsCache",
+        cacheKey: `provider-statistics:v1:tz:${timezone}`,
+        ttlSeconds: resolveDashboardCacheTtlSeconds(
+          PROVIDER_STATISTICS_CACHE_TTL_MS / 1000,
+          PROVIDER_STATISTICS_CACHE_TTL_HIGH_CONCURRENCY_SECONDS
+        ),
+        lockTtlSeconds: 5,
+        waitTimeoutMs: 1_000,
+        pollIntervalMs: 100,
+        compute: queryProviderStatistics,
       });
 
       // 注意：返回结果中的 today_cost 为 numeric，使用字符串表示；

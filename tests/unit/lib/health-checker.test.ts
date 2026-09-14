@@ -109,6 +109,29 @@ describe("health/checker", () => {
       );
     });
 
+    it("reuses a recent result and shares one in-flight probe", async () => {
+      process.env.DSN = "postgres://test";
+      mocks.dbExecute.mockResolvedValue([{ "?column?": 1 }]);
+      const { checkDatabase, DATABASE_HEALTH_MEMO_MS } = await import("@/lib/health/checker");
+
+      const [first, second] = await Promise.all([checkDatabase(), checkDatabase()]);
+      const third = await checkDatabase();
+      expect(first.status).toBe("up");
+      expect(second).toBe(first);
+      expect(third).toBe(first);
+      expect(mocks.dbExecute).toHaveBeenCalledTimes(1);
+
+      const nowSpy = vi
+        .spyOn(Date, "now")
+        .mockReturnValue(Date.now() + DATABASE_HEALTH_MEMO_MS + 1);
+      try {
+        await checkDatabase();
+        expect(mocks.dbExecute).toHaveBeenCalledTimes(2);
+      } finally {
+        nowSpy.mockRestore();
+      }
+    });
+
     it("returns down on timeout", async () => {
       process.env.DSN = "postgres://test";
       mocks.dbExecute.mockImplementation(

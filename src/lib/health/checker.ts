@@ -46,7 +46,39 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: str
 
 // -- 数据库检查 --
 
+/**
+ * Probes from load balancers, orchestrators and every worker hit readiness frequently. Reuse a
+ * database result for a short window (and share one in-flight check) so probes never queue behind
+ * proxy traffic for a pool connection.
+ */
+export const DATABASE_HEALTH_MEMO_MS = 2_000;
+let databaseHealthMemo: { value: ComponentHealth; expiresAt: number } | null = null;
+let databaseHealthInFlight: Promise<ComponentHealth> | null = null;
+
 export async function checkDatabase(): Promise<ComponentHealth> {
+  const now = Date.now();
+  if (databaseHealthMemo && databaseHealthMemo.expiresAt > now) {
+    return databaseHealthMemo.value;
+  }
+  if (databaseHealthInFlight) {
+    return databaseHealthInFlight;
+  }
+
+  databaseHealthInFlight = probeDatabase()
+    .then((value) => {
+      // "unchecked" (no DSN) is configuration, not a probe result: do not memoize it.
+      if (value.status !== "unchecked") {
+        databaseHealthMemo = { value, expiresAt: Date.now() + DATABASE_HEALTH_MEMO_MS };
+      }
+      return value;
+    })
+    .finally(() => {
+      databaseHealthInFlight = null;
+    });
+  return databaseHealthInFlight;
+}
+
+async function probeDatabase(): Promise<ComponentHealth> {
   const start = performance.now();
   try {
     const dsn = process.env.DSN?.trim();

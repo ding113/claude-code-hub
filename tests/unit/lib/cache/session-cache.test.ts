@@ -354,4 +354,23 @@ describe("SessionCache（Session 数据缓存层）", () => {
     stopCacheCleanup();
     expect(getCleanupIntervalId()).toBeNull();
   });
+
+  test("setActiveSessionsCache: per-entry TTL override extends the list cache lifetime", async () => {
+    vi.useFakeTimers();
+    try {
+      vi.resetModules();
+      const { getActiveSessionsCache, setActiveSessionsCache, clearAllCaches } =
+        await loadSessionCache();
+      clearAllCaches();
+
+      setActiveSessionsCache([], "ttl_override", 5);
+      vi.advanceTimersByTime(2_001);
+      expect(getActiveSessionsCache("ttl_override")).toEqual([]);
+
+      vi.advanceTimersByTime(3_000);
+      expect(getActiveSessionsCache("ttl_override")).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

@@ -20,8 +20,9 @@ class SessionCache<T> {
     return this.cache.get(key) ?? null;
   }
 
-  set(key: string, data: T): void {
-    this.cache.set(key, data);
+  /** `ttlSeconds` overrides the cache-wide TTL for this entry only. */
+  set(key: string, data: T, ttlSeconds?: number): void {
+    this.cache.set(key, data, ttlSeconds !== undefined ? ttlSeconds * 1000 : undefined);
   }
 
   delete(key: string): void {
@@ -114,9 +115,10 @@ export function getActiveSessionsCache(key: string = "active_sessions") {
 
 export function setActiveSessionsCache(
   data: Parameters<typeof activeSessionsCache.set>[1],
-  key: string = "active_sessions"
+  key: string = "active_sessions",
+  ttlSeconds?: number
 ) {
-  activeSessionsCache.set(key, data);
+  activeSessionsCache.set(key, data, ttlSeconds);
 }
 
 export function getSessionDetailsCache(sessionId: string, userId: number) {
