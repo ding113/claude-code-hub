@@ -23,7 +23,8 @@ export class TTLMap<K, V> {
     return entry.value;
   }
 
-  set(key: K, value: V): void {
+  /** Store a value. `ttlMs` overrides the map-wide TTL for this entry only. */
+  set(key: K, value: V, ttlMs?: number): void {
     // Delete first so re-insert goes to end (LRU order)
     this.store.delete(key);
 
@@ -31,7 +32,8 @@ export class TTLMap<K, V> {
       this.evict();
     }
 
-    this.store.set(key, { value, expiresAt: Date.now() + this.ttlMs });
+    const effectiveTtlMs = ttlMs !== undefined && ttlMs > 0 ? ttlMs : this.ttlMs;
+    this.store.set(key, { value, expiresAt: Date.now() + effectiveTtlMs });
   }
 
   delete(key: K): boolean {

@@ -94,6 +94,7 @@ vi.mock("@/lib/rate-limit", () => ({
     trackUserDailyCost: vi.fn(),
     decrementLeaseBudget: vi.fn(),
     settleLeaseBudgets: vi.fn(),
+    trackTotalCostCache: vi.fn(),
   },
 }));
 
@@ -840,6 +841,75 @@ describe("Lease Budget Decrement after trackCostToRedis", () => {
         }),
       })
     );
+  });
+
+  it("increments cached cumulative spend only for entities with total limits", async () => {
+    const keyResetAt = new Date("2026-01-01T00:00:00.000Z");
+    const userResetAt = new Date("2026-02-01T00:00:00.000Z");
+    const providerResetAt = new Date("2026-03-01T00:00:00.000Z");
+    const session = createSession({
+      originalModel,
+      redirectedModel: originalModel,
+      sessionId: "sess-total-cost",
+      messageId: 5020,
+    });
+    session.setProvider({
+      id: 77,
+      name: "limited-provider",
+      providerType: "claude",
+      costMultiplier: 1.0,
+      dailyResetTime: "00:00",
+      dailyResetMode: "fixed",
+      limitTotalUsd: 100,
+      totalCostResetAt: providerResetAt,
+    } as unknown);
+    const user = {
+      id: 12,
+      name: "limited-user",
+      dailyResetTime: "00:00",
+      dailyResetMode: "fixed",
+      limitTotalUsd: 50,
+      costResetAt: userResetAt,
+    };
+    const key = {
+      id: 34,
+      key: "sk-total-hash",
+      name: "limited-key",
+      dailyResetTime: "00:00",
+      dailyResetMode: "fixed",
+      limitTotalUsd: 10,
+      costResetAt: keyResetAt,
+    };
+    session.setAuthState({ user, key, apiKey: "sk-total-hash", success: true });
+    session.setMessageContext({ id: 5020, createdAt: new Date(), user, key, apiKey: "sk" });
+
+    await ProxyResponseHandler.dispatch(session, createNonStreamResponse(usage));
+    await drainAsyncTasks();
+
+    expect(RateLimitService.trackTotalCostCache).toHaveBeenCalledTimes(1);
+    expect(RateLimitService.trackTotalCostCache).toHaveBeenCalledWith(
+      [
+        { entityType: "key", entityId: 34, keyHash: "sk-total-hash", resetAt: userResetAt },
+        { entityType: "user", entityId: 12, resetAt: userResetAt },
+        { entityType: "provider", entityId: 77, resetAt: providerResetAt },
+      ],
+      0.0105
+    );
+  });
+
+  it("skips the cumulative spend increment when no entity has a total limit", async () => {
+    const session = createSession({
+      originalModel,
+      redirectedModel: originalModel,
+      sessionId: "sess-no-total",
+      messageId: 5021,
+    });
+
+    await ProxyResponseHandler.dispatch(session, createNonStreamResponse(usage));
+    await drainAsyncTasks();
+
+    expect(RateLimitService.trackTotalCostCache).not.toHaveBeenCalled();
+    expect(RateLimitService.settleLeaseBudgets).toHaveBeenCalledTimes(1);
   });
 
   it("should preserve fail-open completion when atomic settlement unexpectedly rejects", async () => {

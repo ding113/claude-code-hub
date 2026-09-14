@@ -6,6 +6,10 @@
  */
 
 import {
+  DEFAULT_LEASE_TTL_SECONDS,
+  HIGH_CONCURRENCY_MIN_LEASE_TTL_SECONDS,
+} from "./quota-lease-constants";
+import {
   type DailyResetMode,
   getTimeRangeForPeriodWithMode,
   getTTLForPeriodWithMode,
@@ -23,6 +27,52 @@ export type LeaseWindowType = (typeof LeaseWindow)[number];
  */
 export const LeaseEntityType = ["key", "user", "provider"] as const;
 export type LeaseEntityTypeType = (typeof LeaseEntityType)[number];
+
+/**
+ * Lease refresh coordination.
+ *
+ * - Refreshes for one entity are single-flight inside a process and across processes (Redis lock).
+ * - A lease key outlives its logical TTL by LEASE_STALE_GRACE_SECONDS so that, while another process
+ *   refreshes, callers can keep using the expired lease. A stale lease never grants new budget: its
+ *   remainingBudget keeps being decremented by settlement, so the over-spend bound stays one slice.
+ */
+export const LEASE_REFRESH_LOCK_TTL_SECONDS = 3;
+export const LEASE_REFRESH_WAIT_MS = 1_000;
+export const LEASE_REFRESH_POLL_MS = 25;
+export const LEASE_STALE_GRACE_SECONDS = 10;
+
+/** High-concurrency mode trades quota freshness for fewer usage_ledger aggregations. */
+export { DEFAULT_LEASE_TTL_SECONDS, HIGH_CONCURRENCY_MIN_LEASE_TTL_SECONDS };
+export const TOTAL_COST_CACHE_TTL_SECONDS = 300;
+export const HIGH_CONCURRENCY_TOTAL_COST_CACHE_TTL_SECONDS = 900;
+
+export function resolveLeaseTtlSeconds(
+  configuredSeconds: number | null | undefined,
+  highConcurrencyMode: boolean
+): number {
+  const configured =
+    typeof configuredSeconds === "number" &&
+    Number.isFinite(configuredSeconds) &&
+    configuredSeconds > 0
+      ? configuredSeconds
+      : DEFAULT_LEASE_TTL_SECONDS;
+  return highConcurrencyMode
+    ? Math.max(configured, HIGH_CONCURRENCY_MIN_LEASE_TTL_SECONDS)
+    : configured;
+}
+
+export function resolveTotalCostCacheTtlSeconds(highConcurrencyMode: boolean): number {
+  return highConcurrencyMode
+    ? HIGH_CONCURRENCY_TOTAL_COST_CACHE_TTL_SECONDS
+    : TOTAL_COST_CACHE_TTL_SECONDS;
+}
+
+export function buildLeaseRefreshLockKey(
+  entityType: LeaseEntityTypeType,
+  entityId: number
+): string {
+  return `lease:refresh_lock:${entityType}:${entityId}`;
+}
 
 /**
  * Budget lease structure

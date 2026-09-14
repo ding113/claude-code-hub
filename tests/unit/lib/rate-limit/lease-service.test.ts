@@ -489,8 +489,13 @@ describe("LeaseService", () => {
       });
 
       expect(result?.ttlSeconds).toBe(30);
-      // Verify setex was called with correct TTL
-      expect(mockRedis.setex).toHaveBeenCalledWith(expect.any(String), 30, expect.any(String));
+      // The key outlives the logical TTL by the stale grace so concurrent refreshes can serve it.
+      const { LEASE_STALE_GRACE_SECONDS } = await import("@/lib/rate-limit/lease");
+      expect(mockRedis.setex).toHaveBeenCalledWith(
+        expect.any(String),
+        30 + LEASE_STALE_GRACE_SECONDS,
+        expect.any(String)
+      );
     });
 
     it("should handle user entity type", async () => {
@@ -787,12 +792,17 @@ describe("LeaseService", () => {
         resetMode: "fixed",
       });
 
+      const { LEASE_STALE_GRACE_SECONDS } = await import("@/lib/rate-limit/lease");
       const expectedKey = buildLeaseKey("key", 123, "daily");
       expect(mockRedis.setex).toHaveBeenCalledWith(
         expectedKey,
-        15, // TTL from system settings
+        15 + LEASE_STALE_GRACE_SECONDS, // TTL from system settings plus stale grace
         expect.any(String)
       );
+      const stored = JSON.parse(mockRedis.setex.mock.calls[0]?.[2] as string) as {
+        ttlSeconds: number;
+      };
+      expect(stored.ttlSeconds).toBe(15);
     });
   });
 

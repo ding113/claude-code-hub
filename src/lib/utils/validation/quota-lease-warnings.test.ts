@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 
 import {
+  getHighConcurrencyEffectiveRefreshInterval,
   shouldWarnQuotaDbRefreshIntervalTooHigh,
   shouldWarnQuotaDbRefreshIntervalTooLow,
   shouldWarnQuotaLeaseCapZero,
@@ -35,5 +36,13 @@ describe("quota-lease-warnings", () => {
     expect(shouldWarnQuotaLeaseCapZero("0.0")).toBe(true);
     expect(shouldWarnQuotaLeaseCapZero("0.01")).toBe(false);
     expect(shouldWarnQuotaLeaseCapZero("abc")).toBe(false);
+  });
+
+  test("getHighConcurrencyEffectiveRefreshInterval", () => {
+    expect(getHighConcurrencyEffectiveRefreshInterval(10, false)).toBeNull();
+    expect(getHighConcurrencyEffectiveRefreshInterval(10, true)).toBe(30);
+    expect(getHighConcurrencyEffectiveRefreshInterval(29, true)).toBe(30);
+    expect(getHighConcurrencyEffectiveRefreshInterval(30, true)).toBeNull();
+    expect(getHighConcurrencyEffectiveRefreshInterval(120, true)).toBeNull();
   });
 });

@@ -1,3 +1,5 @@
+import { HIGH_CONCURRENCY_MIN_LEASE_TTL_SECONDS } from "@/lib/rate-limit/quota-lease-constants";
+
 /**
  * 仅用于 UI 警告：DB 刷新频率过低可能带来较高 DB 负载（不阻止保存）。
  */
@@ -28,4 +30,17 @@ export function shouldWarnQuotaLeaseCapZero(rawValue: string): boolean {
   const parsed = Number.parseFloat(trimmed);
   if (!Number.isFinite(parsed)) return false;
   return parsed === 0;
+}
+
+/**
+ * 仅用于 UI 提示：高并发模式下，配额 DB 刷新间隔实际不低于下限值。
+ * 返回生效的刷新间隔；无需提示时返回 null。
+ */
+export function getHighConcurrencyEffectiveRefreshInterval(
+  value: number,
+  highConcurrencyModeEnabled: boolean
+): number | null {
+  if (!highConcurrencyModeEnabled) return null;
+  if (value >= HIGH_CONCURRENCY_MIN_LEASE_TTL_SECONDS) return null;
+  return HIGH_CONCURRENCY_MIN_LEASE_TTL_SECONDS;
 }

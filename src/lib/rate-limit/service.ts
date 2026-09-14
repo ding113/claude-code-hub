@@ -66,6 +66,7 @@
  */
 
 import type { ChainableCommander } from "ioredis";
+import { getCachedSystemSettingsOnlyCache } from "@/lib/config/system-settings-cache";
 import { logger } from "@/lib/logger";
 import { getRedisClient } from "@/lib/redis";
 import {
@@ -92,7 +93,12 @@ import {
   sumUserTotalCost,
 } from "@/repository/statistics";
 import { clipStartByResetAt, resolveUser5hCostResetAt } from "./cost-reset-utils";
-import type { LeaseWindowType } from "./lease";
+import {
+  LEASE_REFRESH_POLL_MS,
+  LEASE_REFRESH_WAIT_MS,
+  type LeaseWindowType,
+  resolveTotalCostCacheTtlSeconds,
+} from "./lease";
 import {
   type DecrementLeaseBudgetResult,
   LeaseService,
@@ -113,6 +119,7 @@ const SESSION_TTL_SECONDS = (() => {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 300;
 })();
 const SESSION_TTL_MS = SESSION_TTL_SECONDS * 1000;
+const TOTAL_COST_LOCK_TTL_SECONDS = 5;
 
 interface CostLimit {
   amount: number | null;
@@ -471,8 +478,126 @@ export class RateLimitService {
   }
 
   /**
+   * Redis cache key for an entity's cumulative spend since its reset point.
+   * Returns null for key entities without a key hash (enforcement is skipped for them).
+   */
+  static buildTotalCostCacheKey(
+    entityType: "key" | "user" | "provider",
+    entityId: number,
+    options?: { keyHash?: string; resetAt?: Date | null }
+  ): string | null {
+    const resetAtSuffix =
+      options?.resetAt instanceof Date && !Number.isNaN(options.resetAt.getTime())
+        ? `:${options.resetAt.getTime()}`
+        : "";
+    if (entityType === "key") {
+      return options?.keyHash ? `total_cost:key:${options.keyHash}${resetAtSuffix}` : null;
+    }
+    if (entityType === "user") {
+      return `total_cost:user:${entityId}${resetAtSuffix}`;
+    }
+    return `total_cost:provider:${entityId}${resetAtSuffix || ":none"}`;
+  }
+
+  /** In-process single-flight for total cost cache misses. */
+  private static readonly totalCostInFlight = new Map<string, Promise<number>>();
+
+  private static async queryTotalCost(
+    entityType: "key" | "user" | "provider",
+    entityId: number,
+    options?: { keyHash?: string; resetAt?: Date | null }
+  ): Promise<number> {
+    if (entityType === "key") {
+      return sumKeyTotalCost(options?.keyHash ?? "", Infinity, options?.resetAt);
+    }
+    if (entityType === "user") {
+      return sumUserTotalCost(entityId, Infinity, options?.resetAt);
+    }
+    return sumProviderTotalCost(entityId, options?.resetAt ?? null);
+  }
+
+  /**
+   * Read-through cache for cumulative spend. Misses are single-flight inside the process and
+   * coordinated across processes with a short Redis lock, so an expired entry triggers one
+   * unbounded usage_ledger SUM instead of one per concurrent request.
+   */
+  private static async getTotalCostWithCache(
+    cacheKey: string,
+    compute: () => Promise<number>
+  ): Promise<number> {
+    const redis = RateLimitService.redis;
+    if (redis?.status !== "ready" || !redis) {
+      return compute();
+    }
+
+    let cached: string | null;
+    try {
+      cached = await redis.get(cacheKey);
+    } catch (redisError) {
+      logger.warn("[RateLimit] Redis cache read failed, falling back to database:", redisError);
+      return compute();
+    }
+    if (cached !== null) {
+      return Number(cached);
+    }
+
+    const existing = RateLimitService.totalCostInFlight.get(cacheKey);
+    if (existing) return existing;
+
+    const ttlSeconds = resolveTotalCostCacheTtlSeconds(
+      getCachedSystemSettingsOnlyCache()?.enableHighConcurrencyMode === true
+    );
+    const writeCache = (value: number) =>
+      redis.setex(cacheKey, ttlSeconds, value.toString()).catch((err: unknown) => {
+        logger.warn("[RateLimit] Failed to cache total cost:", err);
+      });
+
+    const refresh = (async (): Promise<number> => {
+      const lockKey = `${cacheKey}:lock`;
+      let acquired = false;
+      try {
+        acquired =
+          (await redis.set(lockKey, "1", "EX", TOTAL_COST_LOCK_TTL_SECONDS, "NX")) === "OK";
+      } catch {
+        acquired = false;
+      }
+
+      if (acquired) {
+        try {
+          const value = await compute();
+          await writeCache(value);
+          return value;
+        } finally {
+          await Promise.resolve()
+            .then(() => redis.del(lockKey))
+            .catch(() => undefined);
+        }
+      }
+
+      const deadline = Date.now() + LEASE_REFRESH_WAIT_MS;
+      while (Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, LEASE_REFRESH_POLL_MS));
+        const polled = await redis.get(cacheKey).catch(() => null);
+        if (polled !== null) {
+          return Number(polled);
+        }
+      }
+
+      const value = await compute();
+      void writeCache(value);
+      return value;
+    })().finally(() => {
+      if (RateLimitService.totalCostInFlight.get(cacheKey) === refresh) {
+        RateLimitService.totalCostInFlight.delete(cacheKey);
+      }
+    });
+    RateLimitService.totalCostInFlight.set(cacheKey, refresh);
+    return refresh;
+  }
+
+  /**
    * 检查总消费限额（带 Redis 缓存优化）
-   * 使用 5 分钟 TTL 缓存减少数据库查询频率
+   * 缓存 TTL 默认 5 分钟，高并发模式下 15 分钟；结算时对已存在的缓存做增量，缩小盲区。
    */
   static async checkTotalCostLimit(
     entityId: number,
@@ -485,76 +610,15 @@ export class RateLimitService {
     }
 
     try {
-      let current = 0;
-      const cacheKey = (() => {
-        const resetAtSuffix =
-          options?.resetAt instanceof Date && !Number.isNaN(options.resetAt.getTime())
-            ? `:${options.resetAt.getTime()}`
-            : "";
-        if (entityType === "key") {
-          return `total_cost:key:${options?.keyHash}${resetAtSuffix}`;
-        }
-        if (entityType === "user") {
-          return `total_cost:user:${entityId}${resetAtSuffix}`;
-        }
-        const resetAtMs = resetAtSuffix || ":none";
-        return `total_cost:provider:${entityId}${resetAtMs}`;
-      })();
-      const cacheTtl = 300; // 5 minutes
-
-      // 尝试从 Redis 缓存获取
-      const redis = RateLimitService.redis;
-      if (redis && redis.status === "ready") {
-        try {
-          const cached = await redis.get(cacheKey);
-          if (cached !== null) {
-            current = Number(cached);
-          } else {
-            // 缓存未命中，查询数据库
-            if (entityType === "key") {
-              if (!options?.keyHash) {
-                logger.warn("[RateLimit] Missing key hash for total cost check, skip enforcement");
-                return { allowed: true };
-              }
-              current = await sumKeyTotalCost(options.keyHash, Infinity, options?.resetAt);
-            } else if (entityType === "user") {
-              current = await sumUserTotalCost(entityId, Infinity, options?.resetAt);
-            } else {
-              current = await sumProviderTotalCost(entityId, options?.resetAt ?? null);
-            }
-            // 异步写入缓存，不阻塞请求
-            redis.setex(cacheKey, cacheTtl, current.toString()).catch((err) => {
-              logger.warn("[RateLimit] Failed to cache total cost:", err);
-            });
-          }
-        } catch (redisError) {
-          // Redis 读取失败，降级到数据库查询
-          logger.warn("[RateLimit] Redis cache read failed, falling back to database:", redisError);
-          if (entityType === "key") {
-            if (!options?.keyHash) {
-              return { allowed: true };
-            }
-            current = await sumKeyTotalCost(options.keyHash, Infinity, options?.resetAt);
-          } else if (entityType === "user") {
-            current = await sumUserTotalCost(entityId, Infinity, options?.resetAt);
-          } else {
-            current = await sumProviderTotalCost(entityId, options?.resetAt ?? null);
-          }
-        }
-      } else {
-        // Redis 不可用，直接查询数据库
-        if (entityType === "key") {
-          if (!options?.keyHash) {
-            logger.warn("[RateLimit] Missing key hash for total cost check, skip enforcement");
-            return { allowed: true };
-          }
-          current = await sumKeyTotalCost(options.keyHash, Infinity, options?.resetAt);
-        } else if (entityType === "user") {
-          current = await sumUserTotalCost(entityId, Infinity, options?.resetAt);
-        } else {
-          current = await sumProviderTotalCost(entityId, options?.resetAt ?? null);
-        }
+      const cacheKey = RateLimitService.buildTotalCostCacheKey(entityType, entityId, options);
+      if (!cacheKey) {
+        logger.warn("[RateLimit] Missing key hash for total cost check, skip enforcement");
+        return { allowed: true };
       }
+
+      const current = await RateLimitService.getTotalCostWithCache(cacheKey, () =>
+        RateLimitService.queryTotalCost(entityType, entityId, options)
+      );
 
       if (current >= limitTotalUsd) {
         const typeName = entityType === "key" ? "Key" : entityType === "user" ? "User" : "供应商";
@@ -571,6 +635,56 @@ export class RateLimitService {
       return { allowed: true }; // fail open
     }
   }
+
+  /**
+   * Add a settled request cost to cached cumulative spend entries that already exist.
+   *
+   * Without this, spend accrued after a cache write stays invisible until the entry expires. Missing
+   * entries are left untouched: the next check recomputes them from usage_ledger. The increment
+   * keeps the entry's TTL.
+   */
+  static async trackTotalCostCache(
+    targets: Array<{
+      entityType: "key" | "user" | "provider";
+      entityId: number;
+      keyHash?: string;
+      resetAt?: Date | null;
+    }>,
+    cost: number
+  ): Promise<void> {
+    const redis = RateLimitService.redis;
+    if (redis?.status !== "ready" || !Number.isFinite(cost) || cost <= 0) return;
+
+    const cacheKeys = targets
+      .map((target) =>
+        RateLimitService.buildTotalCostCacheKey(target.entityType, target.entityId, {
+          keyHash: target.keyHash,
+          resetAt: target.resetAt,
+        })
+      )
+      .filter((key): key is string => key !== null);
+    if (cacheKeys.length === 0) return;
+
+    try {
+      await redis.eval(
+        RateLimitService.INCREMENT_EXISTING_TOTAL_COST_LUA,
+        cacheKeys.length,
+        ...cacheKeys,
+        cost.toString()
+      );
+    } catch (error) {
+      logger.warn("[RateLimit] Failed to increment total cost cache", { error });
+    }
+  }
+
+  private static readonly INCREMENT_EXISTING_TOTAL_COST_LUA = `
+    for i = 1, #KEYS do
+      if redis.call("EXISTS", KEYS[i]) == 1 then
+        redis.call("INCRBYFLOAT", KEYS[i], ARGV[1])
+      end
+    end
+    return 1
+  `;
 
   /**
    * 从数据库检查金额限制（降级路径）
@@ -1911,11 +2025,20 @@ export class RateLimitService {
     ];
 
     try {
-      for (const check of windowChecks) {
-        if (!check.limit || check.limit <= 0) continue;
+      const activeChecks = windowChecks.filter(
+        (check): check is (typeof windowChecks)[number] & { limit: number } =>
+          typeof check.limit === "number" && check.limit > 0
+      );
+      if (activeChecks.length === 0) {
+        return { allowed: true };
+      }
 
-        // Get or refresh lease from cache/DB
-        const lease = await LeaseService.getCostLease({
+      // Read or refresh all configured windows together: one MGET and at most one usage_ledger
+      // scan per entity, single-flight across concurrent requests and processes.
+      const leases = await LeaseService.getCostLeases(
+        entityType,
+        entityId,
+        activeChecks.map((check) => ({
           entityType,
           entityId,
           window: check.window,
@@ -1926,7 +2049,11 @@ export class RateLimitService {
             entityType === "user" && check.window === "5h" && check.resetMode === "rolling"
               ? effective5hResetAt
               : limits.cost_reset_at,
-        });
+        }))
+      );
+
+      for (const [index, check] of activeChecks.entries()) {
+        const lease = leases[index];
 
         // Fail-open if lease retrieval failed
         if (!lease) {

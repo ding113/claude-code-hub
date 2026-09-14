@@ -27,6 +27,7 @@ const redisClient = {
   get: vi.fn(async () => null),
   set: vi.fn(async () => "OK"),
   setex: vi.fn(async () => "OK"),
+  del: vi.fn(async () => 1),
   pipeline: vi.fn(() => pipeline),
 };
 

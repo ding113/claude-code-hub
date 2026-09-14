@@ -1211,6 +1211,57 @@ export async function getRateLimitEventStats(
   };
 }
 
+export type CostEntityType = "key" | "user" | "provider";
+
+/**
+ * Cost sums for several time ranges of one entity in a single usage_ledger scan.
+ *
+ * Used by quota lease refresh: an entity with 5h/daily/weekly/monthly limits previously issued one
+ * SUM per window. Each range becomes a FILTER aggregate, and the scan is bounded by the union of
+ * all ranges so the per-entity covering indexes still apply. Results keep the input order.
+ */
+export async function sumEntityCostInTimeRanges(
+  entityType: CostEntityType,
+  entityId: number,
+  ranges: ReadonlyArray<{ startTime: Date; endTime: Date }>
+): Promise<number[]> {
+  if (ranges.length === 0) return [];
+
+  let entityCondition: SQL;
+  if (entityType === "key") {
+    const keyString = await getKeyStringByIdCached(entityId);
+    if (!keyString) return ranges.map(() => 0);
+    entityCondition = eq(usageLedger.key, keyString);
+  } else if (entityType === "user") {
+    entityCondition = eq(usageLedger.userId, entityId);
+  } else {
+    entityCondition = eq(usageLedger.finalProviderId, entityId);
+  }
+
+  const scanStart = new Date(Math.min(...ranges.map((range) => range.startTime.getTime())));
+  const scanEnd = new Date(Math.max(...ranges.map((range) => range.endTime.getTime())));
+
+  const selection: Record<string, SQL<string>> = {};
+  ranges.forEach((range, index) => {
+    selection[`r${index}`] =
+      sql<string>`COALESCE(SUM(${usageLedger.costUsd}) FILTER (WHERE ${usageLedger.createdAt} >= ${range.startTime.toISOString()} AND ${usageLedger.createdAt} < ${range.endTime.toISOString()}), 0)`;
+  });
+
+  const [row] = await db
+    .select(selection)
+    .from(usageLedger)
+    .where(
+      and(
+        entityCondition,
+        gte(usageLedger.createdAt, scanStart),
+        lt(usageLedger.createdAt, scanEnd),
+        LEDGER_BILLING_CONDITION
+      )
+    );
+
+  return ranges.map((_, index) => Number(row?.[`r${index}`] ?? 0));
+}
+
 /**
  * 查询 Provider 在指定时间范围内的消费总和
  * 用于 Provider 层限额检查（Redis 降级）

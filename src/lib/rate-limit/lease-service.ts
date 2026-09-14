@@ -15,6 +15,7 @@ import { getCachedSystemSettings } from "@/lib/config/system-settings-cache";
 import { logger } from "@/lib/logger";
 import { getRedisClient } from "@/lib/redis";
 import {
+  sumEntityCostInTimeRanges,
   sumKeyCostInTimeRange,
   sumProviderCostInTimeRange,
   sumUserCostInTimeRange,
@@ -22,13 +23,19 @@ import {
 import {
   type BudgetLease,
   buildLeaseKey,
+  buildLeaseRefreshLockKey,
   calculateLeaseSlice,
   createBudgetLease,
   deserializeLease,
   getLeaseTimeRange,
   isLeaseExpired,
+  LEASE_REFRESH_LOCK_TTL_SECONDS,
+  LEASE_REFRESH_POLL_MS,
+  LEASE_REFRESH_WAIT_MS,
+  LEASE_STALE_GRACE_SECONDS,
   type LeaseEntityTypeType,
   type LeaseWindowType,
+  resolveLeaseTtlSeconds,
   serializeLease,
 } from "./lease";
 import type { DailyResetMode } from "./time-utils";
@@ -106,6 +113,22 @@ interface LeaseSettlementTarget {
 }
 
 /**
+ * Result of validating a cached lease against the caller's current limits.
+ * - lease: usable as-is
+ * - stale: expired only by TTL (limits unchanged); usable while another process refreshes
+ */
+interface CachedLeaseValidation {
+  lease: BudgetLease | null;
+  stale: BudgetLease | null;
+}
+
+type LeaseBatch = Array<BudgetLease | null>;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
  * Lease Service - manages budget leases for rate limiting
  */
 export class LeaseService {
@@ -115,8 +138,360 @@ export class LeaseService {
 
   private static readonly SETTLEMENT_WINDOWS = ["5h", "daily", "weekly", "monthly"] as const;
 
+  /** In-process single-flight for batched refreshes, keyed by entity and window signature. */
+  private static readonly inFlightRefreshes = new Map<string, Promise<LeaseBatch>>();
+
   private static get redis() {
     return getRedisClient();
+  }
+
+  /**
+   * Apply the lease reuse rules (TTL, fixed 5h reset, limit and cost reset changes) to a cached
+   * Redis value.
+   */
+  private static validateCachedLease(
+    cached: string | null | undefined,
+    params: GetCostLeaseParams
+  ): CachedLeaseValidation {
+    if (!cached) return { lease: null, stale: null };
+    const lease = deserializeLease(cached);
+    if (!lease) return { lease: null, stale: null };
+
+    if (
+      lease.window === "5h" &&
+      lease.resetMode === "fixed" &&
+      typeof lease.windowResetAtMs === "number" &&
+      lease.windowResetAtMs <= Date.now()
+    ) {
+      return { lease: null, stale: null };
+    }
+    if (lease.limitAmount !== params.limitAmount) {
+      return { lease: null, stale: null };
+    }
+    const paramResetAtMs = params.costResetAt instanceof Date ? params.costResetAt.getTime() : null;
+    if ((lease.costResetAtMs ?? null) !== paramResetAtMs) {
+      return { lease: null, stale: null };
+    }
+    if (isLeaseExpired(lease)) {
+      return { lease: null, stale: lease };
+    }
+    return { lease, stale: null };
+  }
+
+  private static buildRefreshSignature(
+    entityType: LeaseEntityTypeType,
+    entityId: number,
+    windows: GetCostLeaseParams[]
+  ): string {
+    const parts = windows.map((params) => {
+      const resetAtMs = params.costResetAt instanceof Date ? params.costResetAt.getTime() : "";
+      return [
+        params.window,
+        params.resetMode ?? "",
+        params.resetTime ?? "",
+        params.limitAmount,
+        resetAtMs,
+      ].join(":");
+    });
+    return `${entityType}:${entityId}|${parts.join("|")}`;
+  }
+
+  /**
+   * Get leases for several windows of one entity with at most one usage_ledger scan.
+   *
+   * 1. Read all window leases with one MGET
+   * 2. Windows whose cached lease is still valid are returned as-is
+   * 3. The remaining windows are refreshed together through a single-flight refresh (in-process
+   *    promise sharing plus a cross-process Redis lock); while another process refreshes, expired
+   *    leases are served instead of issuing duplicate aggregations
+   * 4. Any failure fails open (null) for the affected windows, matching getCostLease
+   */
+  static async getCostLeases(
+    entityType: LeaseEntityTypeType,
+    entityId: number,
+    windows: GetCostLeaseParams[]
+  ): Promise<LeaseBatch> {
+    if (windows.length === 0) return [];
+
+    try {
+      const results: LeaseBatch = windows.map(() => null);
+      const staleLeases: LeaseBatch = windows.map(() => null);
+      const refreshIndexes: number[] = [];
+
+      const redis = LeaseService.redis;
+      if (redis && redis.status === "ready") {
+        const cachedValues = await redis.mget(
+          ...windows.map((params) =>
+            buildLeaseKey(params.entityType, params.entityId, params.window, params.resetMode)
+          )
+        );
+        windows.forEach((params, index) => {
+          const validation = LeaseService.validateCachedLease(cachedValues[index], params);
+          if (validation.lease) {
+            results[index] = validation.lease;
+          } else {
+            staleLeases[index] = validation.stale;
+            refreshIndexes.push(index);
+          }
+        });
+      } else {
+        refreshIndexes.push(...windows.map((_, index) => index));
+      }
+
+      if (refreshIndexes.length === 0) {
+        return results;
+      }
+
+      const refreshed = await LeaseService.refreshCostLeasesSingleFlight(
+        entityType,
+        entityId,
+        refreshIndexes.map((index) => windows[index]),
+        refreshIndexes.map((index) => staleLeases[index])
+      );
+      refreshIndexes.forEach((windowIndex, refreshIndex) => {
+        results[windowIndex] = refreshed[refreshIndex] ?? null;
+      });
+      return results;
+    } catch (error) {
+      logger.error("[LeaseService] getCostLeases failed, fail-open", {
+        entityType,
+        entityId,
+        windows: windows.map((params) => params.window),
+        error,
+      });
+      return windows.map(() => null);
+    }
+  }
+
+  private static async refreshCostLeasesSingleFlight(
+    entityType: LeaseEntityTypeType,
+    entityId: number,
+    windows: GetCostLeaseParams[],
+    staleLeases: LeaseBatch
+  ): Promise<LeaseBatch> {
+    const signature = LeaseService.buildRefreshSignature(entityType, entityId, windows);
+    const allStale = staleLeases.every((lease) => lease !== null);
+
+    const existing = LeaseService.inFlightRefreshes.get(signature);
+    if (existing) {
+      return allStale ? staleLeases : existing;
+    }
+
+    const refresh = LeaseService.refreshCostLeasesWithLock(
+      entityType,
+      entityId,
+      windows,
+      staleLeases
+    ).finally(() => {
+      if (LeaseService.inFlightRefreshes.get(signature) === refresh) {
+        LeaseService.inFlightRefreshes.delete(signature);
+      }
+    });
+    LeaseService.inFlightRefreshes.set(signature, refresh);
+    return refresh;
+  }
+
+  private static async refreshCostLeasesWithLock(
+    entityType: LeaseEntityTypeType,
+    entityId: number,
+    windows: GetCostLeaseParams[],
+    staleLeases: LeaseBatch
+  ): Promise<LeaseBatch> {
+    const redis = LeaseService.redis;
+    if (redis?.status !== "ready" || !redis) {
+      return LeaseService.refreshCostLeasesFromDb(entityType, entityId, windows);
+    }
+
+    const lockKey = buildLeaseRefreshLockKey(entityType, entityId);
+    let acquired = false;
+    try {
+      acquired =
+        (await redis.set(lockKey, "1", "EX", LEASE_REFRESH_LOCK_TTL_SECONDS, "NX")) === "OK";
+    } catch (error) {
+      logger.warn("[LeaseService] Refresh lock unavailable, refreshing directly", {
+        entityType,
+        entityId,
+        error,
+      });
+      return LeaseService.refreshCostLeasesFromDb(entityType, entityId, windows);
+    }
+
+    if (acquired) {
+      try {
+        return await LeaseService.refreshCostLeasesFromDb(entityType, entityId, windows);
+      } finally {
+        await Promise.resolve()
+          .then(() => redis.del(lockKey))
+          .catch((error: unknown) => {
+            logger.warn("[LeaseService] Failed to release refresh lock", { lockKey, error });
+          });
+      }
+    }
+
+    // Another process is refreshing this entity. Expired leases never grant new budget, so serving
+    // them avoids a duplicate aggregation without widening the over-spend bound.
+    if (staleLeases.every((lease) => lease !== null)) {
+      logger.debug("[LeaseService] Refresh lock held elsewhere, serving expired leases", {
+        entityType,
+        entityId,
+      });
+      return staleLeases;
+    }
+
+    const leaseKeys = windows.map((params) =>
+      buildLeaseKey(params.entityType, params.entityId, params.window, params.resetMode)
+    );
+    const deadline = Date.now() + LEASE_REFRESH_WAIT_MS;
+    while (Date.now() < deadline) {
+      await sleep(LEASE_REFRESH_POLL_MS);
+      const cachedValues = await redis.mget(...leaseKeys);
+      const fresh = windows.map(
+        (params, index) => LeaseService.validateCachedLease(cachedValues[index], params).lease
+      );
+      if (fresh.every((lease) => lease !== null)) {
+        return fresh;
+      }
+    }
+
+    logger.debug("[LeaseService] Timed out waiting for concurrent refresh, refreshing directly", {
+      entityType,
+      entityId,
+    });
+    return LeaseService.refreshCostLeasesFromDb(entityType, entityId, windows);
+  }
+
+  /**
+   * Refresh several windows of one entity from the database.
+   *
+   * Fixed 5h windows are read from Redis. All other windows share one usage_ledger scan (a single
+   * window keeps using the dedicated per-window query). Leases are stored with a stale grace so
+   * that concurrent callers can serve them while a later refresh is in progress.
+   */
+  static async refreshCostLeasesFromDb(
+    entityType: LeaseEntityTypeType,
+    entityId: number,
+    windows: GetCostLeaseParams[]
+  ): Promise<LeaseBatch> {
+    if (windows.length === 0) return [];
+
+    try {
+      const settings = await getCachedSystemSettings();
+      const ttlSeconds = resolveLeaseTtlSeconds(
+        settings.quotaDbRefreshIntervalSeconds,
+        settings.enableHighConcurrencyMode === true
+      );
+      const capUsd = settings.quotaLeaseCapUsd ?? undefined;
+      const leasePercentConfig = {
+        quotaLeasePercent5h: settings.quotaLeasePercent5h ?? 0.05,
+        quotaLeasePercentDaily: settings.quotaLeasePercentDaily ?? 0.05,
+        quotaLeasePercentWeekly: settings.quotaLeasePercentWeekly ?? 0.05,
+        quotaLeasePercentMonthly: settings.quotaLeasePercentMonthly ?? 0.05,
+      };
+
+      const usages: number[] = windows.map(() => 0);
+      const windowResets: Array<number | null> = windows.map(() => null);
+      const dbIndexes: number[] = [];
+      const dbRanges: Array<{ startTime: Date; endTime: Date }> = [];
+
+      for (const [index, params] of windows.entries()) {
+        const resetMode = params.resetMode ?? "fixed";
+        if (params.window === "5h" && resetMode === "fixed") {
+          const fixedWindowState = await LeaseService.readFixed5hWindowState(entityType, entityId);
+          usages[index] = fixedWindowState.currentUsage;
+          windowResets[index] = fixedWindowState.windowResetAtMs;
+          continue;
+        }
+
+        const { startTime, endTime } = await getLeaseTimeRange(
+          params.window,
+          params.resetTime ?? "00:00",
+          resetMode
+        );
+        const effectiveStartTime =
+          params.costResetAt instanceof Date && params.costResetAt > startTime
+            ? params.costResetAt
+            : startTime;
+        dbIndexes.push(index);
+        dbRanges.push({ startTime: effectiveStartTime, endTime });
+      }
+
+      if (dbIndexes.length === 1) {
+        usages[dbIndexes[0]] = await LeaseService.queryDbUsage(
+          entityType,
+          entityId,
+          dbRanges[0].startTime,
+          dbRanges[0].endTime
+        );
+      } else if (dbIndexes.length > 1) {
+        const sums = await sumEntityCostInTimeRanges(entityType, entityId, dbRanges);
+        dbIndexes.forEach((windowIndex, rangeIndex) => {
+          usages[windowIndex] = sums[rangeIndex] ?? 0;
+        });
+      }
+
+      const snapshotAtMs = Date.now();
+      const leases = windows.map((params, index) => {
+        const resetMode = params.resetMode ?? "fixed";
+        return createBudgetLease({
+          entityType,
+          entityId,
+          window: params.window,
+          resetMode,
+          resetTime: params.resetTime ?? "00:00",
+          snapshotAtMs,
+          currentUsage: usages[index],
+          limitAmount: params.limitAmount,
+          remainingBudget: calculateLeaseSlice({
+            limitAmount: params.limitAmount,
+            currentUsage: usages[index],
+            percent: LeaseService.getLeasePercent(params.window, leasePercentConfig),
+            capUsd,
+          }),
+          ttlSeconds,
+          costResetAtMs: params.costResetAt instanceof Date ? params.costResetAt.getTime() : null,
+          windowResetAtMs: windowResets[index],
+        });
+      });
+
+      const redis = LeaseService.redis;
+      if (redis && redis.status === "ready") {
+        const storageTtlSeconds = ttlSeconds + LEASE_STALE_GRACE_SECONDS;
+        if (leases.length === 1) {
+          const lease = leases[0];
+          await redis.setex(
+            buildLeaseKey(entityType, entityId, lease.window, lease.resetMode),
+            storageTtlSeconds,
+            serializeLease(lease)
+          );
+        } else {
+          const pipeline = redis.pipeline();
+          for (const lease of leases) {
+            pipeline.setex(
+              buildLeaseKey(entityType, entityId, lease.window, lease.resetMode),
+              storageTtlSeconds,
+              serializeLease(lease)
+            );
+          }
+          await pipeline.exec();
+        }
+        logger.debug("[LeaseService] Leases refreshed from DB", {
+          entityType,
+          entityId,
+          windows: leases.map((lease) => lease.window),
+          ttl: ttlSeconds,
+        });
+      }
+
+      return leases;
+    } catch (error) {
+      logger.error("[LeaseService] refreshCostLeasesFromDb failed", {
+        entityType,
+        entityId,
+        windows: windows.map((params) => params.window),
+        error,
+      });
+      return windows.map(() => null);
+    }
   }
 
   private static getFixed5hCostKey(entityType: LeaseEntityTypeType, entityId: number): string {
@@ -160,7 +535,7 @@ export class LeaseService {
    * 5. On error, fail-open (return null)
    */
   static async getCostLease(params: GetCostLeaseParams): Promise<BudgetLease | null> {
-    const { entityType, entityId, window, limitAmount } = params;
+    const { entityType, entityId, window } = params;
 
     try {
       const redis = LeaseService.redis;
@@ -169,56 +544,17 @@ export class LeaseService {
       // Try Redis cache first
       if (redis && redis.status === "ready") {
         const cached = await redis.get(leaseKey);
-
-        if (cached) {
-          const lease = deserializeLease(cached);
-
-          if (lease && !isLeaseExpired(lease)) {
-            if (
-              lease.window === "5h" &&
-              lease.resetMode === "fixed" &&
-              typeof lease.windowResetAtMs === "number" &&
-              lease.windowResetAtMs <= Date.now()
-            ) {
-              logger.debug("[LeaseService] Fixed 5h window already reset, force refresh", {
-                key: leaseKey,
-                windowResetAtMs: lease.windowResetAtMs,
-              });
-              return await LeaseService.refreshCostLeaseFromDb(params);
-            }
-
-            // Check if limit changed - force refresh if so
-            if (lease.limitAmount !== limitAmount) {
-              logger.debug("[LeaseService] Limit changed, force refresh", {
-                key: leaseKey,
-                cachedLimit: lease.limitAmount,
-                newLimit: limitAmount,
-              });
-              return await LeaseService.refreshCostLeaseFromDb(params);
-            }
-
-            // Check if costResetAt changed - force refresh if so
-            const paramResetAtMs =
-              params.costResetAt instanceof Date ? params.costResetAt.getTime() : null;
-            if ((lease.costResetAtMs ?? null) !== paramResetAtMs) {
-              logger.debug("[LeaseService] costResetAt changed, force refresh", {
-                key: leaseKey,
-                cachedResetAtMs: lease.costResetAtMs ?? null,
-                newResetAtMs: paramResetAtMs,
-              });
-              return await LeaseService.refreshCostLeaseFromDb(params);
-            }
-
-            logger.debug("[LeaseService] Cache hit", {
-              key: leaseKey,
-              remaining: lease.remainingBudget,
-            });
-            return lease;
-          }
+        const validation = LeaseService.validateCachedLease(cached, params);
+        if (validation.lease) {
+          logger.debug("[LeaseService] Cache hit", {
+            key: leaseKey,
+            remaining: validation.lease.remainingBudget,
+          });
+          return validation.lease;
         }
       }
 
-      // Cache miss or expired - refresh from DB
+      // Cache miss, expired, or limits changed - refresh from DB
       return await LeaseService.refreshCostLeaseFromDb(params);
     } catch (error) {
       logger.error("[LeaseService] getCostLease failed, fail-open", {
@@ -232,114 +568,13 @@ export class LeaseService {
   }
 
   /**
-   * Refresh a lease from the database
-   *
-   * 1. Get system settings for lease config
-   * 2. Query DB for current usage in time window
-   * 3. Calculate lease slice (min of percent, remaining, cap)
-   * 4. Store in Redis with TTL
-   * 5. Return the new lease
+   * Refresh a single lease from the database (see refreshCostLeasesFromDb).
    */
   static async refreshCostLeaseFromDb(params: GetCostLeaseParams): Promise<BudgetLease | null> {
-    const {
-      entityType,
-      entityId,
-      window,
-      limitAmount,
-      resetTime = "00:00",
-      resetMode = "fixed",
-    } = params;
-
-    try {
-      // Get system settings
-      const settings = await getCachedSystemSettings();
-      const ttlSeconds = settings.quotaDbRefreshIntervalSeconds ?? 10;
-      const capUsd = settings.quotaLeaseCapUsd ?? undefined;
-
-      // Get percent based on window type
-      const leasePercentConfig = {
-        quotaLeasePercent5h: settings.quotaLeasePercent5h ?? 0.05,
-        quotaLeasePercentDaily: settings.quotaLeasePercentDaily ?? 0.05,
-        quotaLeasePercentWeekly: settings.quotaLeasePercentWeekly ?? 0.05,
-        quotaLeasePercentMonthly: settings.quotaLeasePercentMonthly ?? 0.05,
-      };
-      const percent = LeaseService.getLeasePercent(window, leasePercentConfig);
-
-      let currentUsage = 0;
-      let windowResetAtMs: number | null = null;
-
-      if (window === "5h" && resetMode === "fixed") {
-        const fixedWindowState = await LeaseService.readFixed5hWindowState(entityType, entityId);
-        currentUsage = fixedWindowState.currentUsage;
-        windowResetAtMs = fixedWindowState.windowResetAtMs;
-      } else {
-        // Calculate time range for DB query
-        const { startTime, endTime } = await getLeaseTimeRange(window, resetTime, resetMode);
-
-        // Clip startTime forward if costResetAt is more recent (limits-only reset)
-        const effectiveStartTime =
-          params.costResetAt instanceof Date && params.costResetAt > startTime
-            ? params.costResetAt
-            : startTime;
-
-        // Query DB for current usage
-        currentUsage = await LeaseService.queryDbUsage(
-          entityType,
-          entityId,
-          effectiveStartTime,
-          endTime
-        );
-      }
-
-      // Calculate lease slice
-      const remainingBudget = calculateLeaseSlice({
-        limitAmount,
-        currentUsage,
-        percent,
-        capUsd,
-      });
-
-      // Create lease object
-      const snapshotAtMs = Date.now();
-      const lease = createBudgetLease({
-        entityType,
-        entityId,
-        window,
-        resetMode,
-        resetTime,
-        snapshotAtMs,
-        currentUsage,
-        limitAmount,
-        remainingBudget,
-        ttlSeconds,
-        costResetAtMs: params.costResetAt instanceof Date ? params.costResetAt.getTime() : null,
-        windowResetAtMs,
-      });
-
-      // Store in Redis
-      const redis = LeaseService.redis;
-      if (redis && redis.status === "ready") {
-        const leaseKey = buildLeaseKey(entityType, entityId, window, resetMode);
-        await redis.setex(leaseKey, ttlSeconds, serializeLease(lease));
-
-        logger.debug("[LeaseService] Lease refreshed from DB", {
-          key: leaseKey,
-          currentUsage,
-          remainingBudget,
-          ttl: ttlSeconds,
-        });
-      }
-
-      return lease;
-    } catch (error) {
-      logger.error("[LeaseService] refreshCostLeaseFromDb failed", {
-        entityType,
-        entityId,
-        window,
-        error,
-      });
-      return null;
-    }
+    const [lease] = await LeaseService.refreshCostLeasesFromDb(params.entityType, params.entityId, [
+      params,
+    ]);
+    return lease ?? null;
   }
 
   /**

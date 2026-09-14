@@ -15,6 +15,7 @@ import { recordDiscoveryControlEvent } from "@/lib/observability/discovery-metri
 import { requestCloudPriceTableSync } from "@/lib/price-sync/cloud-price-updater";
 import { ProxyStatusTracker } from "@/lib/proxy-status-tracker";
 import { RateLimitService } from "@/lib/rate-limit";
+import { resolveKeyCostResetAt } from "@/lib/rate-limit/cost-reset-utils";
 import type { SessionBindingSnapshot } from "@/lib/redis/session-binding";
 import { SessionManager } from "@/lib/session-manager";
 import { SessionTracker } from "@/lib/session-tracker";
@@ -7303,6 +7304,31 @@ async function trackCostToRedis(
       requestId: eventId,
       createdAtMs,
     });
+
+    // Keep cached cumulative spend (total limits) current between cache refreshes.
+    const totalCostTargets = [
+      (key.limitTotalUsd ?? 0) > 0
+        ? {
+            entityType: "key" as const,
+            entityId: key.id,
+            keyHash: key.key,
+            resetAt: resolveKeyCostResetAt(key.costResetAt ?? null, user.costResetAt ?? null),
+          }
+        : null,
+      (user.limitTotalUsd ?? 0) > 0
+        ? { entityType: "user" as const, entityId: user.id, resetAt: user.costResetAt }
+        : null,
+      (provider.limitTotalUsd ?? 0) > 0
+        ? {
+            entityType: "provider" as const,
+            entityId: provider.id,
+            resetAt: provider.totalCostResetAt,
+          }
+        : null,
+    ].filter((target) => target !== null);
+    if (totalCostTargets.length > 0) {
+      await RateLimitService.trackTotalCostCache(totalCostTargets, costFloat);
+    }
 
     await RateLimitService.settleLeaseBudgets({
       requestId: eventId,

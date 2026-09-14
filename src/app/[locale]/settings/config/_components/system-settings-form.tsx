@@ -46,6 +46,7 @@ import type { CurrencyCode } from "@/lib/utils";
 import { CURRENCY_CONFIG } from "@/lib/utils";
 import { COMMON_TIMEZONES, getTimezoneLabel } from "@/lib/utils/timezone-shared";
 import {
+  getHighConcurrencyEffectiveRefreshInterval,
   shouldWarnQuotaDbRefreshIntervalTooHigh,
   shouldWarnQuotaDbRefreshIntervalTooLow,
   shouldWarnQuotaLeaseCapZero,
@@ -1535,6 +1536,19 @@ export function SystemSettingsForm({
                   <p className="text-xs text-muted-foreground">
                     {t("quotaLease.dbRefreshIntervalDesc")}
                   </p>
+                  {(() => {
+                    const effectiveInterval = getHighConcurrencyEffectiveRefreshInterval(
+                      quotaDbRefreshIntervalSeconds,
+                      enableHighConcurrencyMode
+                    );
+                    return effectiveInterval === null ? null : (
+                      <p className="text-xs text-muted-foreground">
+                        {t("quotaLease.dbRefreshIntervalHighConcurrencyFloor", {
+                          seconds: effectiveInterval,
+                        })}
+                      </p>
+                    );
+                  })()}
                   {shouldWarnQuotaDbRefreshIntervalTooLow(quotaDbRefreshIntervalSeconds) && (
                     <InlineWarning>
                       {t("quotaLease.warnings.dbRefreshIntervalTooLow", {

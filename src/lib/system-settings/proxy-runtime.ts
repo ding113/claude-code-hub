@@ -97,6 +97,11 @@ export function isCacheEffectivenessEnabled(): boolean {
   return lastKnown?.cacheEffectivenessEnabled ?? envCacheEffectivenessDefault();
 }
 
+/** Synchronous snapshot of the high-concurrency mode flag (false until settings were loaded). */
+export function isHighConcurrencyModeEnabledCached(): boolean {
+  return highConcurrencyModeEnabled;
+}
+
 /** Shrinks long-lived Redis projections while high-concurrency mode is active. */
 export function resolveRedisRetentionTtlSeconds(defaultTtlSeconds: number): number {
   return highConcurrencyModeEnabled ? Math.min(defaultTtlSeconds, 24 * 60 * 60) : defaultTtlSeconds;
