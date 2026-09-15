@@ -8,6 +8,8 @@
 const cluster = require("node:cluster");
 const path = require("node:path");
 const { createClusterSupervisor } = require("./server-lib/cluster-supervisor");
+const { createMemoryCoordinator } = require("./server-lib/memory-coordinator");
+const { readResourceSnapshot } = require("./server-lib/resource-snapshot");
 const {
   createMulticorePlan,
   detectRuntimeResources,
@@ -55,7 +57,11 @@ async function main() {
   }
 
   loadLauncherEnvironment();
-  const resources = detectRuntimeResources();
+  const detected = detectRuntimeResources();
+  const resources = {
+    ...detected,
+    effectiveMemoryBytes: Math.min(detected.effectiveMemoryBytes, readResourceSnapshot().availableRamBytes),
+  };
   const plan = createMulticorePlan({ env: process.env, resources });
   log("info", "multicore_plan_resolved", {
     enabled: plan.enabled,
@@ -86,6 +92,21 @@ async function main() {
     exec: path.join(__dirname, "server.js"),
     execArgv: process.execArgv,
   });
+  process.env.CCH_MEMORY_COORDINATED = "1";
+  const memory = createMemoryCoordinator({ log });
+  const readyWorkers = new Set();
+  cluster.on("fork", (worker) => {
+    memory.attach(worker);
+    worker.on("message", (message) => {
+      if (message?.type !== "cch:gateway-ready") return;
+      readyWorkers.add(worker.id);
+      if (readyWorkers.size === plan.workerCount) memory.resetBaseline();
+    });
+    worker.once("exit", () => readyWorkers.delete(worker.id));
+  });
+  const monitor = setInterval(() => memory.sample(), 1000);
+  monitor.unref();
+  log("info", "memory_plan_resolved", memory.snapshot());
 
   createClusterSupervisor({
     clusterModule: cluster,

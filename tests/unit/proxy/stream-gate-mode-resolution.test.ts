@@ -146,3 +146,21 @@ describe("resolveStreamGateMode", () => {
     expect(resolveStreamGateMode()).toBe("off");
   });
 });
+
+describe("isStreamGatePrecommitActive", () => {
+  test("只在非高并发 enforce 模式启用预提交门控", async () => {
+    const { isStreamGatePrecommitActive } = await loadModules();
+
+    for (const [mode, highConcurrency, expected] of [
+      ["enforce", false, true],
+      ["enforce", true, false],
+      ["shadow", false, false],
+      ["shadow", true, false],
+      ["off", false, false],
+      ["off", true, false],
+    ] as const) {
+      getEnvConfigMock.mockReturnValue({ STREAM_GATE_MODE: mode });
+      expect(isStreamGatePrecommitActive(highConcurrency)).toBe(expected);
+    }
+  });
+});

@@ -1,4 +1,5 @@
 {
+  "LOCAL_CAPACITY_EXCEEDED": "ローカルのリクエスト処理容量が不足しています。しばらくしてから再試行してください。",
   "_comment": "Error messages for Japanese",
 
   "REQUIRED_FIELD": "{field}は必須です",

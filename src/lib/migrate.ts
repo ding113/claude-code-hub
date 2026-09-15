@@ -159,7 +159,8 @@ function createMigrationIndexPreflightExecutor(
         SELECT
           c.oid IS NOT NULL AS exists,
           COALESCE(i.indisvalid, false) AS valid,
-          obj_description(c.oid, 'pg_class') AS marker
+          obj_description(c.oid, 'pg_class') AS marker,
+          CASE WHEN c.oid IS NULL THEN NULL ELSE pg_get_indexdef(c.oid) END AS definition
         FROM (SELECT to_regclass(${qualifiedName}) AS oid) resolved
         LEFT JOIN pg_class c ON c.oid = resolved.oid
         LEFT JOIN pg_index i ON i.indexrelid = c.oid
@@ -168,6 +169,7 @@ function createMigrationIndexPreflightExecutor(
         exists: row?.exists === true,
         valid: row?.valid === true,
         marker: typeof row?.marker === "string" ? row.marker : null,
+        definition: typeof row?.definition === "string" ? row.definition : null,
       };
     },
   };

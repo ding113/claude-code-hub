@@ -5440,6 +5440,7 @@ async function executeProxiedFetch(
   if (proxy) {
     init.dispatcher = proxy.agent;
   }
+
   return fetchWithDispatcher(url, init);
 }
 

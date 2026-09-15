@@ -314,7 +314,7 @@ describe("multicore plan", () => {
         }),
         resources: resources(8, 8192),
       })
-    ).toThrow(/safe memory\/budget capacity/);
+    ).not.toThrow();
 
     expect(() =>
       multicore.createMulticorePlan({
@@ -328,6 +328,14 @@ describe("multicore plan", () => {
     expect(multicore.allocateIntegerBudget(20, 3)).toEqual([7, 7, 6]);
     expect(multicore.allocateIntegerBudget(3, 5)).toEqual([1, 1, 1, 0, 0]);
     expect(() => multicore.allocateIntegerBudget(1, 0)).toThrow(/positive integer/);
+  });
+
+  it("资源充足时自动上限为 32，显式预算仍然限制 worker 数", () => {
+    const plan = multicore.createMulticorePlan({
+      env: productionEnv({ DB_POOL_MAX: "64", DETACHED_STREAM_BUDGET_BYTES: String(256 * MIB) }),
+      resources: resources(128, 128 * 1024),
+    });
+    expect(plan.workerCount).toBe(32);
   });
 
   it("rejects an out-of-range worker index", () => {

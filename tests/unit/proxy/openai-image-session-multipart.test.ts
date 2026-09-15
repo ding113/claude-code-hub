@@ -1,5 +1,23 @@
-import { describe, expect, it } from "vitest";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import path from "node:path";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ProxySession } from "@/app/v1/_lib/proxy/session";
+
+let testDirectory = "";
+
+beforeEach(async () => {
+  const root = path.join(process.cwd(), "tmp");
+  await mkdir(root, { recursive: true });
+  testDirectory = await mkdtemp(path.join(root, "cch-image-"));
+  vi.stubEnv("CCH_MEMORY_SPILL_DIR", testDirectory);
+});
+
+afterEach(async () => {
+  vi.unstubAllEnvs();
+  if (testDirectory) {
+    await rm(testDirectory, { recursive: true, force: true });
+  }
+});
 
 function createContext(request: Request) {
   return {

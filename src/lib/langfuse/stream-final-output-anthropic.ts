@@ -33,11 +33,11 @@ export function finalizeAnthropicStreamOutput(parsedFrames: ParsedStreamFrames):
     switch (eventName) {
       case "message_start": {
         const data = getEventData(frame);
-        const message = data === null ? null : data["message"];
+        const message = data === null ? null : data.message;
         if (messageSkeleton !== undefined || !isJsonObject(message)) {
           return createFinalOutputUnavailable("malformed_frame", metadata);
         }
-        if (hasOwn(message, "content") && !Array.isArray(message["content"])) {
+        if (hasOwn(message, "content") && !Array.isArray(message.content)) {
           return createFinalOutputUnavailable("malformed_frame", metadata);
         }
         messageSkeleton = { ...message };
@@ -46,7 +46,7 @@ export function finalizeAnthropicStreamOutput(parsedFrames: ParsedStreamFrames):
       case "content_block_start": {
         const data = getEventData(frame);
         const index = getIndex(data);
-        const contentBlock = data === null ? null : data["content_block"];
+        const contentBlock = data === null ? null : data.content_block;
         if (index === null || !isJsonObject(contentBlock) || blocks.has(index)) {
           return createFinalOutputUnavailable("malformed_frame", metadata);
         }
@@ -56,7 +56,10 @@ export function finalizeAnthropicStreamOutput(parsedFrames: ParsedStreamFrames):
         blocks.set(index, {
           block: { ...contentBlock },
           inputJsonFragments: [],
-          isToolUse: contentBlock["type"] === "tool_use",
+          isToolUse:
+            contentBlock.type === "tool_use" ||
+            contentBlock.type === "server_tool_use" ||
+            contentBlock.type === "mcp_tool_use",
           stopped: false,
         });
         break;
@@ -64,7 +67,7 @@ export function finalizeAnthropicStreamOutput(parsedFrames: ParsedStreamFrames):
       case "content_block_delta": {
         const data = getEventData(frame);
         const index = getIndex(data);
-        const delta = data === null ? null : data["delta"];
+        const delta = data === null ? null : data.delta;
         const blockState = index === null ? undefined : blocks.get(index);
         if (
           index === null ||
@@ -75,27 +78,53 @@ export function finalizeAnthropicStreamOutput(parsedFrames: ParsedStreamFrames):
           return createFinalOutputUnavailable("malformed_frame", metadata);
         }
 
-        const deltaType = delta["type"];
+        const deltaType = delta.type;
         if (deltaType === "text_delta") {
-          const text = delta["text"];
-          if (blockState.block["type"] !== "text" || typeof text !== "string") {
+          const text = delta.text;
+          if (blockState.block.type !== "text" || typeof text !== "string") {
             return createFinalOutputUnavailable("malformed_frame", metadata);
           }
-          blockState.block["text"] = appendText(blockState.block["text"], text);
+          blockState.block.text = appendText(blockState.block.text, text);
+        } else if (deltaType === "citations_delta") {
+          if (blockState.block.type !== "text" || !isJsonObject(delta.citation)) {
+            return createFinalOutputUnavailable("malformed_frame", metadata);
+          }
+          const citations = blockState.block.citations;
+          blockState.block.citations = [
+            ...(Array.isArray(citations) ? citations : []),
+            delta.citation,
+          ];
+        } else if (deltaType === "compaction_delta") {
+          const content = delta.content;
+          const encryptedContent = delta.encrypted_content;
+          if (
+            blockState.block.type !== "compaction" ||
+            (content !== null && typeof content !== "string") ||
+            (encryptedContent !== undefined &&
+              encryptedContent !== null &&
+              typeof encryptedContent !== "string")
+          ) {
+            return createFinalOutputUnavailable("malformed_frame", metadata);
+          }
+          blockState.block.content =
+            content === null ? null : appendText(blockState.block.content, content);
+          if (encryptedContent !== undefined) {
+            blockState.block.encrypted_content = encryptedContent;
+          }
         } else if (deltaType === "thinking_delta") {
-          const thinking = delta["thinking"];
-          if (blockState.block["type"] !== "thinking" || typeof thinking !== "string") {
+          const thinking = delta.thinking;
+          if (blockState.block.type !== "thinking" || typeof thinking !== "string") {
             return createFinalOutputUnavailable("malformed_frame", metadata);
           }
-          blockState.block["thinking"] = appendText(blockState.block["thinking"], thinking);
+          blockState.block.thinking = appendText(blockState.block.thinking, thinking);
         } else if (deltaType === "signature_delta") {
-          const signature = delta["signature"];
-          if (blockState.block["type"] !== "thinking" || typeof signature !== "string") {
+          const signature = delta.signature;
+          if (blockState.block.type !== "thinking" || typeof signature !== "string") {
             return createFinalOutputUnavailable("malformed_frame", metadata);
           }
-          blockState.block["signature"] = appendText(blockState.block["signature"], signature);
+          blockState.block.signature = appendText(blockState.block.signature, signature);
         } else if (deltaType === "input_json_delta") {
-          const partialJson = delta["partial_json"];
+          const partialJson = delta.partial_json;
           if (!blockState.isToolUse || typeof partialJson !== "string") {
             return createFinalOutputUnavailable("malformed_frame", metadata);
           }
@@ -112,11 +141,11 @@ export function finalizeAnthropicStreamOutput(parsedFrames: ParsedStreamFrames):
         if (index === null || blockState === undefined || blockState.stopped) {
           return createFinalOutputUnavailable("malformed_frame", metadata);
         }
-        if (blockState.isToolUse) {
+        if (blockState.isToolUse && blockState.inputJsonFragments.length > 0) {
           const inputJson = blockState.inputJsonFragments.join("");
           try {
             const parsedInput: unknown = JSON.parse(inputJson);
-            blockState.block["input"] = parsedInput;
+            blockState.block.input = parsedInput;
           } catch (error) {
             if (error instanceof SyntaxError) {
               return createFinalOutputUnavailable("malformed_frame", metadata);
@@ -129,31 +158,31 @@ export function finalizeAnthropicStreamOutput(parsedFrames: ParsedStreamFrames):
       }
       case "message_delta": {
         const data = getEventData(frame);
-        const delta = data === null ? null : data["delta"];
+        const delta = data === null ? null : data.delta;
         if (data === null || messageSkeleton === undefined || !isJsonObject(delta)) {
           return createFinalOutputUnavailable("malformed_frame", metadata);
         }
         if (hasOwn(delta, "stop_reason")) {
-          const stopReason = delta["stop_reason"];
+          const stopReason = delta.stop_reason;
           if (stopReason !== null && typeof stopReason !== "string") {
             return createFinalOutputUnavailable("malformed_frame", metadata);
           }
-          messageSkeleton["stop_reason"] = stopReason;
+          messageSkeleton.stop_reason = stopReason;
         }
         if (hasOwn(delta, "stop_sequence")) {
-          const stopSequence = delta["stop_sequence"];
+          const stopSequence = delta.stop_sequence;
           if (stopSequence !== null && typeof stopSequence !== "string") {
             return createFinalOutputUnavailable("malformed_frame", metadata);
           }
-          messageSkeleton["stop_sequence"] = stopSequence;
+          messageSkeleton.stop_sequence = stopSequence;
         }
         if (hasOwn(data, "usage")) {
-          const usage = data["usage"];
+          const usage = data.usage;
           if (!isJsonObject(usage)) {
             return createFinalOutputUnavailable("malformed_frame", metadata);
           }
-          const previousUsage = messageSkeleton["usage"];
-          messageSkeleton["usage"] = isJsonObject(previousUsage)
+          const previousUsage = messageSkeleton.usage;
+          messageSkeleton.usage = isJsonObject(previousUsage)
             ? { ...previousUsage, ...usage }
             : usage;
         }
@@ -196,10 +225,10 @@ function getEventName(frame: StreamFrame): string | null {
   if (frame.event !== null) {
     return frame.event;
   }
-  if (!isJsonObject(frame.data) || typeof frame.data["type"] !== "string") {
+  if (!isJsonObject(frame.data) || typeof frame.data.type !== "string") {
     return null;
   }
-  return frame.data["type"];
+  return frame.data.type;
 }
 
 function getEventData(frame: StreamFrame): JsonObject | null {
@@ -210,7 +239,7 @@ function getEventData(frame: StreamFrame): JsonObject | null {
 }
 
 function getIndex(data: JsonObject | null): number | null {
-  const index = data?.["index"];
+  const index = data?.index;
   return typeof index === "number" && Number.isInteger(index) && index >= 0 ? index : null;
 }
 

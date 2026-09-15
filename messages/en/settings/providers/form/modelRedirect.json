@@ -29,5 +29,6 @@
   "targetEmpty": "Target model name cannot be empty",
   "targetTooLong": "Target model name is too long (max {max} characters)",
   "targetModel": "Actual Forwarded Model",
-  "targetPlaceholder": "e.g. glm-5.1"
+  "targetPlaceholder": "e.g. glm-5.1",
+  "regexCaptureHint": "Regex rules can reference capture groups in the target: source ^gpt-(.+)$ with target test-$1 forwards gpt-5.5 as test-5.5."
 }

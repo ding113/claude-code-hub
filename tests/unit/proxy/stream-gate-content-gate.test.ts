@@ -59,6 +59,13 @@ async function drainPrefix(chunks: Uint8Array[]): Promise<string> {
 }
 
 describe("runStreamContentGate", () => {
+  it("错误状态位于长消息末尾时仍保留原 64 KiB 状态推断语义", async () => {
+    const frame = `event: error\ndata: ${JSON.stringify({ error: { message: "x".repeat(12000), status_code: 400 } })}\n\n`;
+    const result = await runStreamContentGate(readerFromChunks([frame]), GATE_OPTIONS);
+    expect(result.committed).toBe(false);
+    if (!result.committed)
+      expect(result.error).toMatchObject({ statusCode: 400, gateReason: "gate_error" });
+  });
   it("把共享预算所有权交给已提交前缀，并在失败时自动释放", async () => {
     const reservation = GATE_OPTIONS.prebufferByteCap * 4;
     const budget = new StreamGatePrebufferBudget(() => reservation);

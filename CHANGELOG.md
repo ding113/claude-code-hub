@@ -11,10 +11,17 @@
 - 供应商自定义请求头支持动态模板：可用 `{{header.Name}}` 复制入站请求头，`{{session.id}}` 写入 Session ID，`{{session.client_id}}` 写入客户端 Session ID；来源缺失时跳过该头
 - 保存供应商时，若 API URL 为 `https://opencode.ai/*` 且尚未配置 `x-opencode-session`，弹出 OpenCode Go 适配确认；开启后写入 `{{session.id}}`
 - 供应商选项新增「复写响应模型 ID」：开启后把返回给客户端的 model 字段强制写成用户请求的模型 ID，用于隐藏上游映射
+- 按可用内存分配流门禁预算：128 KiB 起步增长、正文溢写磁盘、本地准入超时 429，避免 40 MiB 固定预占把首内容串行排队 (#1474)
+- Langfuse 流式请求还原完整最终输出（Claude / OpenAI Chat Completions / Responses / Gemini），避免把原始 SSE 文本当作 generation output
+- Langfuse 将客户端原始请求头写入 generation `client_metadata`（凭据中间打码）
+- 支持 `LANGFUSE_TRACING_ENVIRONMENT` / `LANGFUSE_RELEASE` 传入 LangfuseSpanProcessor
 
 ### 优化
 
 - 客户端故障告警不再重复已发送内容：相同错误指纹在冷却期内不入桶、不重推，后续窗口只报新样本
+- Langfuse trace 名称改为 `user:shortModel`，去掉供应商前缀
+- 按 Langfuse JS SDK v5 在 `propagateAttributes` 内创建 observation
+- 大请求/响应体 1 MiB 截断，并在异步发送前快照，避免观测路径拖住完整 body
 
 ### 修复
 
