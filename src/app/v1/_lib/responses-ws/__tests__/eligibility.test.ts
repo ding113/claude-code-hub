@@ -11,6 +11,8 @@ import {
   INTERNAL_SECRET_HEADER,
   RESPONSES_WS_SESSION_HEADER,
   WS_FORWARD_FLAG_HEADER,
+  WS_FORCE_HTTP_HEADER,
+  WS_FORCE_HTTP_PAYLOAD_TOO_LARGE,
 } from "../internal-secret";
 import { clearResponsesWsUnsupportedCache, markResponsesWsUnsupported } from "../unsupported-cache";
 
@@ -152,6 +154,58 @@ describe("evaluateResponsesWsEligibility", () => {
   beforeEach(() => {
     isOpenaiResponsesWebsocketEnabledMock.mockReset();
     clearResponsesWsUnsupportedCache();
+  });
+
+  it.each(["headers", "record"])(
+    "forces HTTP only for a trusted size marker (%s)",
+    async (shape) => {
+      isOpenaiResponsesWebsocketEnabledMock.mockResolvedValue(true);
+      const trusted = trustedInternalHeaders({
+        [WS_FORCE_HTTP_HEADER]: WS_FORCE_HTTP_PAYLOAD_TOO_LARGE,
+      });
+      const headers =
+        shape === "headers"
+          ? trusted
+          : Object.fromEntries(
+              Array.from(trusted.entries()).map(([key, value]) => [key.toUpperCase(), value])
+            );
+      const result = await evaluateResponsesWsEligibility({
+        headers,
+        provider: codexProvider(),
+        endpointId: 12,
+      });
+      expect(result).toEqual({
+        isWebsocketClient: true,
+        eligible: false,
+        downgradeReason: "payload_too_large_for_upstream_ws",
+        endpointId: 12,
+      });
+    }
+  );
+
+  it("rejects a spoofed size marker without the internal secret", async () => {
+    const result = await evaluateResponsesWsEligibility({
+      headers: new Headers({
+        [CLIENT_TRANSPORT_HEADER]: "websocket",
+        [WS_FORWARD_FLAG_HEADER]: "1",
+        [WS_FORCE_HTTP_HEADER]: WS_FORCE_HTTP_PAYLOAD_TOO_LARGE,
+      }),
+      provider: codexProvider(),
+    });
+    expect(result).toEqual({ isWebsocketClient: false, eligible: false });
+  });
+
+  it("ignores an unknown force-HTTP reason and does not cache a trusted size downgrade", async () => {
+    isOpenaiResponsesWebsocketEnabledMock.mockResolvedValue(true);
+    await evaluateResponsesWsEligibility({
+      headers: trustedInternalHeaders({ [WS_FORCE_HTTP_HEADER]: WS_FORCE_HTTP_PAYLOAD_TOO_LARGE }),
+      provider: codexProvider(),
+    });
+    const next = await evaluateResponsesWsEligibility({
+      headers: trustedInternalHeaders({ [WS_FORCE_HTTP_HEADER]: "unknown" }),
+      provider: codexProvider(),
+    });
+    expect(next.eligible).toBe(true);
   });
 
   it("returns not-websocket-client when header is absent", async () => {

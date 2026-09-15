@@ -14,6 +14,8 @@ import {
   INTERNAL_SECRET_HEADER,
   RESPONSES_WS_SESSION_HEADER,
   WS_FORWARD_FLAG_HEADER,
+  WS_FORCE_HTTP_HEADER,
+  WS_FORCE_HTTP_PAYLOAD_TOO_LARGE,
 } from "../internal-secret";
 
 type ServerHandle = {
@@ -416,6 +418,7 @@ describe("tryResponsesWebsocketUpstream", () => {
       "content-type": "application/json",
       "x-cch-client-transport": "websocket",
       [WS_FORWARD_FLAG_HEADER]: "1",
+      [WS_FORCE_HTTP_HEADER]: WS_FORCE_HTTP_PAYLOAD_TOO_LARGE,
       [RESPONSES_WS_SESSION_HEADER]: "client-session-1",
       [INTERNAL_SECRET_HEADER]: "loopback-secret-should-stay-local",
       // Custom header should pass through:
@@ -439,6 +442,7 @@ describe("tryResponsesWebsocketUpstream", () => {
     expect(receivedHeaders[WS_FORWARD_FLAG_HEADER]).toBeUndefined();
     expect(receivedHeaders[RESPONSES_WS_SESSION_HEADER]).toBeUndefined();
     expect(receivedHeaders[INTERNAL_SECRET_HEADER]).toBeUndefined();
+    expect(receivedHeaders[WS_FORCE_HTTP_HEADER]).toBeUndefined();
     // The host the upstream observed must come from the actual TCP target,
     // never the value we passed in the plain Record (which we filter):
     expect(receivedHeaders.host).not.toBe("evil.example.com");

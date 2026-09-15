@@ -161,6 +161,26 @@ describe("ProxyForwarder raw passthrough regression", () => {
     mocks.tryResponsesWebsocketUpstream.mockReset();
   });
 
+  it("strips the internal force-HTTP marker before forwarding to the provider", async () => {
+    const session = createRawPassthroughSession('{"model":"gpt-5.5","input":"hi"}', {
+      "x-cch-responses-ws-force-http": "payload_too_large_for_upstream_ws",
+    });
+    const provider = createProvider();
+    let headers: Headers | undefined;
+    vi.spyOn(ProxyForwarder as any, "fetchWithoutAutoDecode").mockImplementationOnce(
+      async (_url: string, init: RequestInit) => {
+        headers = new Headers(init.headers);
+        return new Response("{}", { headers: { "content-type": "application/json" } });
+      }
+    );
+    const { doForward } = ProxyForwarder as unknown as {
+      doForward: (session: ProxySession, provider: Provider, baseUrl: string) => Promise<Response>;
+    };
+    await doForward(session, provider, provider.url);
+    expect(headers).toBeDefined();
+    expect(headers?.has("x-cch-responses-ws-force-http")).toBe(false);
+  });
+
   it("raw passthrough 应优先保留原始请求体字节，而不是重新 JSON.stringify", async () => {
     const originalBody = '{\n  "model": "gpt-5.5",\n  "input": [1, 2, 3]\n}\n';
     const session = createRawPassthroughSession(originalBody);

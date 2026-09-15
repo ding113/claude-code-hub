@@ -39,6 +39,7 @@
 
   "INTERNAL_ERROR": "系统内部错误，请稍后重试",
   "DATABASE_ERROR": "数据库错误",
+  "RESPONSES_WS_REQUEST_TOO_LARGE": "请求大小为 {actualMiB} MiB，超过 {limitMiB} MiB 上限。请缩小请求内容或开始新会话。",
   "INVALID_NORMALIZED_BODY": "规范化后的请求体无法序列化",
   "NOT_FOUND": "资源不存在",
   "OPERATION_FAILED": "操作失败",
