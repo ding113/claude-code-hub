@@ -19,6 +19,7 @@ import type WebSocketType from "ws";
 import { logger } from "@/lib/logger";
 import type { Provider } from "@/types/provider";
 import { RESERVED_INTERNAL_HEADERS } from "./internal-secret";
+import { getUpstreamPayloadTooLargeMessage } from "./payload-too-large";
 
 declare global {
   // server.js is CommonJS and cannot import this TS module directly. The
@@ -37,6 +38,7 @@ export interface UpstreamWsOutcome {
 export type UpstreamWsFallbackReason =
   | "ws_module_unavailable"
   | "ws_upgrade_rejected"
+  | "ws_payload_too_large"
   | "ws_closed_before_first_event"
   | "ws_error_pre_first_event";
 
@@ -657,6 +659,18 @@ export async function tryResponsesWebsocketUpstream(options: {
 
     const text = typeof data === "string" ? data : data.toString("utf8");
     if (!firstEventSeen) {
+      const payloadTooLargeMessage = getUpstreamPayloadTooLargeMessage(text);
+      if (payloadTooLargeMessage !== null) {
+        finishOpen({
+          ok: false,
+          reason: "ws_payload_too_large",
+          message: payloadTooLargeMessage,
+          cacheableAsUnsupported: false,
+        });
+        socketClosed = true;
+        closeAndForget(1000);
+        return;
+      }
       firstEventSeen = true;
       if (firstEventTimer) {
         clearTimeout(firstEventTimer);
