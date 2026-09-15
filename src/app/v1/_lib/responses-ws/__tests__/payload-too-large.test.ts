@@ -4,7 +4,7 @@ import { getUpstreamPayloadTooLargeMessage } from "../payload-too-large";
 describe("getUpstreamPayloadTooLargeMessage", () => {
   it.each(["status", "status_code"])("recognizes 413 in %s without a size message", (field) => {
     expect(getUpstreamPayloadTooLargeMessage(JSON.stringify({ type: "error", [field]: 413 }))).toBe(
-      "upstream rejected the WebSocket request as too large"
+      ""
     );
   });
 
@@ -56,7 +56,23 @@ describe("getUpstreamPayloadTooLargeMessage", () => {
           error: { [field]: "payload too large" },
         })
       )
-    ).toBe("upstream rejected the WebSocket request as too large");
+    ).toBe("");
+  });
+
+  it.each([400, 422, 507])("recognizes machine size codes for status %i", (status) => {
+    for (const field of ["code", "type"]) {
+      for (const signal of [
+        "request_payload_too_large",
+        "context_length_exceeded",
+        "payload-too-large",
+      ]) {
+        expect(
+          getUpstreamPayloadTooLargeMessage(
+            JSON.stringify({ type: "error", status, error: { [field]: signal } })
+          )
+        ).toBe("");
+      }
+    }
   });
 
   it.each([
@@ -73,6 +89,8 @@ describe("getUpstreamPayloadTooLargeMessage", () => {
     '{"type":"error","status":500,"error":{"message":"payload too large"}}',
     '{"type":"error","status":401,"error":{"message":"payload too large"}}',
     '{"type":"error","status":400,"error":{"message":"invalid model"}}',
+    '{"type":"error","status":400,"error":{"code":"model_not_found"}}',
+    '{"type":"error","status":422,"error":{"type":"rate-limit-exceeded"}}',
     '{"type":"error","status":422,"error":null}',
     '{"type":"error","status":507,"error":"too large"}',
     '{"type":"error","status":400,"error":{"code":413,"type":true,"message":{}}}',

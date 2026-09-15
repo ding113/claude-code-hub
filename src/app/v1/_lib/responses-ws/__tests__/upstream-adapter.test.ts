@@ -363,6 +363,29 @@ describe("tryResponsesWebsocketUpstream", () => {
     }
   );
 
+  it.each([
+    { status: 413 },
+    { status: 400, error: { code: "request_payload_too_large" } },
+    { status: 422, error: { type: "payload-too-large" } },
+    { status: 507, error: { code: "context_length_exceeded" } },
+  ])("falls back for a size error without synthesizing a display message: %j", async (event) => {
+    server = await startMockServer((socket) => {
+      socket.on("message", () => socket.send(JSON.stringify({ type: "error", ...event })));
+    });
+    const result = await tryResponsesWebsocketUpstream({
+      provider: codexProvider(),
+      upstreamUrl: `http://127.0.0.1:${server.port}/v1/responses`,
+      upstreamHeaders: new Headers(),
+      body: { input: "large request" },
+    });
+    expect(result).toEqual({
+      failed: true,
+      reason: "ws_payload_too_large",
+      message: undefined,
+      cacheableAsUnsupported: false,
+    });
+  });
+
   it("forgets a retained socket rejected for size and opens a fresh one for the next request", async () => {
     let connections = 0;
     server = await startMockServer((socket) => {

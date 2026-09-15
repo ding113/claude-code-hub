@@ -15,7 +15,6 @@ const SIZE_SIGNALS = [
   "too many bytes",
   "too large",
 ];
-const DEFAULT_MESSAGE = "upstream rejected the WebSocket request as too large";
 
 function getJsonNumber(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
@@ -25,7 +24,7 @@ function getJsonString(value: unknown): string {
   return typeof value === "string" ? value : "";
 }
 
-/** Recognize request-size errors without treating arbitrary 4xx events as transport failures. */
+/** Return the upstream message (possibly empty) for a size error, or null for an unrelated event. */
 export function getUpstreamPayloadTooLargeMessage(payload: string): string | null {
   let parsed: unknown;
   try {
@@ -45,10 +44,8 @@ export function getUpstreamPayloadTooLargeMessage(payload: string): string | nul
   const code = getJsonString(errorRecord.code);
   const type = getJsonString(errorRecord.type);
   const message = getJsonString(errorRecord.message);
-  if (status === 413) return message || DEFAULT_MESSAGE;
+  if (status === 413) return message;
 
-  const description = `${code} ${type} ${message}`.toLowerCase();
-  return SIZE_SIGNALS.some((signal) => description.includes(signal))
-    ? message || DEFAULT_MESSAGE
-    : null;
+  const description = `${code} ${type} ${message}`.toLowerCase().replace(/[_-]+/g, " ");
+  return SIZE_SIGNALS.some((signal) => description.includes(signal)) ? message : null;
 }

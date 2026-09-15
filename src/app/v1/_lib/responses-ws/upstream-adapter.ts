@@ -664,7 +664,7 @@ export async function tryResponsesWebsocketUpstream(options: {
         finishOpen({
           ok: false,
           reason: "ws_payload_too_large",
-          message: payloadTooLargeMessage,
+          message: payloadTooLargeMessage || undefined,
           cacheableAsUnsupported: false,
         });
         socketClosed = true;
