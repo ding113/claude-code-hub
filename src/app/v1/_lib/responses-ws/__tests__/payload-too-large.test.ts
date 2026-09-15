@@ -75,6 +75,31 @@ describe("getUpstreamPayloadTooLargeMessage", () => {
     }
   });
 
+  it.each([400, 413, 422, 507])("preserves top-level size messages for status %i", (status) => {
+    expect(
+      getUpstreamPayloadTooLargeMessage(
+        JSON.stringify({ type: "error", status, message: "Request body too large: 40 MiB" })
+      )
+    ).toBe("Request body too large: 40 MiB");
+  });
+
+  it.each([400, 422, 507])("recognizes top-level size codes for status %i", (status) => {
+    expect(
+      getUpstreamPayloadTooLargeMessage(
+        JSON.stringify({ type: "error", status, code: "context_length_exceeded" })
+      )
+    ).toBe("");
+  });
+
+  it.each([
+    { code: "context_length_exceeded", error: { message: "Request rejected" } },
+    { message: "Payload too large", error: { message: "Request rejected" } },
+  ])("checks both error shapes and preserves the nested message: %j", (fields) => {
+    expect(
+      getUpstreamPayloadTooLargeMessage(JSON.stringify({ type: "error", status: 400, ...fields }))
+    ).toBe("Request rejected");
+  });
+
   it.each([
     "not json",
     "null",
@@ -91,6 +116,8 @@ describe("getUpstreamPayloadTooLargeMessage", () => {
     '{"type":"error","status":400,"error":{"message":"invalid model"}}',
     '{"type":"error","status":400,"error":{"code":"model_not_found"}}',
     '{"type":"error","status":422,"error":{"type":"rate-limit-exceeded"}}',
+    '{"type":"error","status":400,"code":"model_not_found","message":"Unknown model"}',
+    '{"type":"error","status":422,"code":413,"message":{}}',
     '{"type":"error","status":422,"error":null}',
     '{"type":"error","status":507,"error":"too large"}',
     '{"type":"error","status":400,"error":{"code":413,"type":true,"message":{}}}',

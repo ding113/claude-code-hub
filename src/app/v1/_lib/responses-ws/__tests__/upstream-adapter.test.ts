@@ -365,6 +365,7 @@ describe("tryResponsesWebsocketUpstream", () => {
 
   it.each([
     { status: 413 },
+    { status: 400, code: "context_length_exceeded" },
     { status: 400, error: { code: "request_payload_too_large" } },
     { status: 422, error: { type: "payload-too-large" } },
     { status: 507, error: { code: "context_length_exceeded" } },

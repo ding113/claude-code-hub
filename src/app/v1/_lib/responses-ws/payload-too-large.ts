@@ -41,11 +41,19 @@ export function getUpstreamPayloadTooLargeMessage(payload: string): string | nul
 
   const error = event.error && typeof event.error === "object" ? event.error : {};
   const errorRecord = error as Record<string, unknown>;
-  const code = getJsonString(errorRecord.code);
-  const type = getJsonString(errorRecord.type);
-  const message = getJsonString(errorRecord.message);
+  const message = getJsonString(errorRecord.message) || getJsonString(event.message);
   if (status === 413) return message;
 
-  const description = `${code} ${type} ${message}`.toLowerCase().replace(/[_-]+/g, " ");
+  const description = [
+    event.code,
+    event.message,
+    errorRecord.code,
+    errorRecord.type,
+    errorRecord.message,
+  ]
+    .map(getJsonString)
+    .join(" ")
+    .toLowerCase()
+    .replace(/[_-]+/g, " ");
   return SIZE_SIGNALS.some((signal) => description.includes(signal)) ? message : null;
 }
