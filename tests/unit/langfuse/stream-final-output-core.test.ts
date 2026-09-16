@@ -182,23 +182,16 @@ describe("finalizeStreamOutput", () => {
     });
   });
 
-  test("returns over_budget without partial output or raw body text", () => {
+  test("returns the full reconstructed output regardless of serialized size", () => {
     const rawModelOutput = "model-output-".repeat(100_000);
     const value = { content: rawModelOutput };
 
     const result = finalizeStreamOutput(value, { eventCount: 42, status: 200 });
 
-    expect(result).toMatchObject({
-      kind: "final_output_unavailable",
-      reason: "over_budget",
-      status: 200,
-      eventCount: 42,
-    });
-    if (result.kind !== "final_output_unavailable") {
-      throw new Error("Expected over-budget diagnostic");
+    expect(result).toEqual({ kind: "final", value });
+    if (result.kind !== "final") {
+      throw new Error("Expected a final output");
     }
-    expect(result.serializedBytes).toBeGreaterThan(result.maxSerializedBytes);
-    expect(JSON.stringify(result)).not.toContain(rawModelOutput);
-    expect(JSON.stringify(result)).not.toContain("model-output-");
+    expect((result.value as { content: string }).content).toBe(rawModelOutput);
   });
 });

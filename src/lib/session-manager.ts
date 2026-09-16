@@ -6,6 +6,7 @@ import { extractCodexSessionId } from "@/app/v1/_lib/codex/session-extractor";
 import { sanitizeHeaders, sanitizeUrl } from "@/app/v1/_lib/proxy/errors";
 import { RESERVED_INTERNAL_HEADERS } from "@/app/v1/_lib/responses-ws/internal-secret";
 import { parseClaudeMetadataUserId } from "@/lib/claude-code/metadata-user-id";
+import { compressPayload, decompressPayload } from "@/lib/compression/payload-codec";
 import { getEnvConfig } from "@/lib/config/env.schema";
 import { logger } from "@/lib/logger";
 import {
@@ -353,6 +354,18 @@ function prepareLegacySessionResponseBodySet(
   return { bodies, present };
 }
 
+async function compressLegacySessionBodies(
+  bodies: Record<SessionResponseBodyView, string | null>
+): Promise<Record<SessionResponseBodyView, string | null>> {
+  const entries = await Promise.all(
+    SESSION_RESPONSE_BODY_VIEWS.map(async (view) => {
+      const body = bodies[view];
+      return [view, body === null ? null : await compressPayload(body)] as const;
+    })
+  );
+  return Object.fromEntries(entries) as Record<SessionResponseBodyView, string | null>;
+}
+
 async function readSessionResponseBodyBundleView(
   redis: NonNullable<ReturnType<typeof getRedisClient>>,
   sessionId: string,
@@ -370,10 +383,11 @@ async function readSessionResponseBodyBundleView(
     throw new Error("invalid session response body bundle read result");
   }
 
+  const storedBody = typeof result[2] === "string" ? result[2] : null;
   return {
     exists: Number(result[0]) === 1,
     present: Number(result[1]) === 1,
-    body: typeof result[2] === "string" ? result[2] : null,
+    body: storedBody === null ? null : await decompressPayload(storedBody),
   };
 }
 
@@ -1964,7 +1978,7 @@ export class SessionManager {
         await redis.del(key);
         return;
       }
-      await redis.setex(key, SessionManager.SESSION_TTL, messagesJson);
+      await redis.setex(key, SessionManager.SESSION_TTL, await compressPayload(messagesJson));
       logger.trace("SessionManager: Stored session messages", {
         sessionId,
         requestSequence,
@@ -2271,7 +2285,7 @@ export class SessionManager {
 
         const newKey = `session:${sessionId}:req:${sequence}:messages`;
         const messagesJson = await redis.get(newKey);
-        return messagesJson ? JSON.parse(messagesJson) : null;
+        return messagesJson ? JSON.parse(await decompressPayload(messagesJson)) : null;
       }
 
       // 向后兼容：尝试旧格式
@@ -2280,7 +2294,7 @@ export class SessionManager {
       if (!messagesJson) {
         return null;
       }
-      return JSON.parse(messagesJson);
+      return JSON.parse(await decompressPayload(messagesJson));
     } catch (error) {
       logger.error("SessionManager: Failed to get session messages", { error });
       return null;
@@ -2404,7 +2418,7 @@ export class SessionManager {
       if (sequence) {
         await SessionManager.refreshSessionRequestOwner(redis, sessionId, sequence, keyId);
       }
-      await redis.setex(key, SessionManager.SESSION_TTL, responseString);
+      await redis.setex(key, SessionManager.SESSION_TTL, await compressPayload(responseString));
       logger.trace("SessionManager: Stored session response", {
         sessionId,
         requestSequence,
@@ -2485,6 +2499,8 @@ export class SessionManager {
       );
       if (!getEnvConfig().SESSION_RESPONSE_BODY_DEDUP_ENABLED) {
         const legacy = prepareLegacySessionResponseBodySet(input, SessionManager.STORE_MESSAGES);
+        // 体积上限已按未压缩字节判定，这里只负责落盘前的编码。
+        const legacyStored = await compressLegacySessionBodies(legacy.bodies);
         await SessionManager.refreshSessionRequestOwner(redis, sessionId, sequence, keyId);
         await redis.eval(
           WRITE_LEGACY_SESSION_RESPONSE_BODY_SET_LUA,
@@ -2499,13 +2515,13 @@ export class SessionManager {
           keyId ?? "",
           legacy.present.legacy ? 1 : 0,
           legacy.bodies.legacy === null ? 0 : 1,
-          legacy.bodies.legacy ?? "",
+          legacyStored.legacy ?? "",
           legacy.present.before ? 1 : 0,
           legacy.bodies.before === null ? 0 : 1,
-          legacy.bodies.before ?? "",
+          legacyStored.before ?? "",
           legacy.present.after ? 1 : 0,
           legacy.bodies.after === null ? 0 : 1,
-          legacy.bodies.after ?? ""
+          legacyStored.after ?? ""
         );
         return;
       }
@@ -2521,6 +2537,9 @@ export class SessionManager {
         });
       }
 
+      const bundleStoredBodies = await Promise.all(
+        bundle.bodies.map((body) => compressPayload(body))
+      );
       await SessionManager.refreshSessionRequestOwner(redis, sessionId, sequence, keyId);
       await redis.eval(
         WRITE_SESSION_RESPONSE_BODY_BUNDLE_LUA,
@@ -2541,7 +2560,7 @@ export class SessionManager {
         bundle.refs.legacy,
         bundle.refs.before,
         bundle.refs.after,
-        ...bundle.bodies
+        ...bundleStoredBodies
       );
     } catch (error) {
       logger.error("SessionManager: Failed to store response body bundle", {
@@ -2583,7 +2602,7 @@ export class SessionManager {
         await redis.del(key);
         return;
       }
-      await redis.setex(key, SessionManager.SESSION_TTL, payload);
+      await redis.setex(key, SessionManager.SESSION_TTL, await compressPayload(payload));
       logger.trace("SessionManager: Stored session request body", {
         sessionId,
         requestSequence: sequence,
@@ -2616,7 +2635,7 @@ export class SessionManager {
       const key = `session:${sessionId}:req:${sequence}:requestBody`;
       const value = await redis.get(key);
       if (!value) return null;
-      return JSON.parse(value) as unknown;
+      return JSON.parse(await decompressPayload(value)) as unknown;
     } catch (error) {
       logger.error("SessionManager: Failed to get session request body", { error, sessionId });
       return null;
@@ -2958,7 +2977,7 @@ export class SessionManager {
       // 向后兼容：尝试旧格式
       const legacyKey = `session:${sessionId}:response`;
       const response = await redis.get(legacyKey);
-      return response;
+      return response === null ? null : await decompressPayload(response);
     } catch (error) {
       logger.error("SessionManager: Failed to get session response", { error });
       return null;
@@ -2998,7 +3017,11 @@ export class SessionManager {
             : redactRequestBody(normalizedBody);
           const bodyJson = JSON.stringify(bodyToStore);
           if (canStoreSessionRequestArtifact(bodyJson, `snapshot:${phase}:body`)) {
-            writes.push(redis.setex(bodyKey, SessionManager.SESSION_TTL, bodyJson));
+            writes.push(
+              compressPayload(bodyJson).then((stored) =>
+                redis.setex(bodyKey, SessionManager.SESSION_TTL, stored)
+              )
+            );
           } else {
             writes.push(redis.del(bodyKey));
           }
@@ -3023,7 +3046,11 @@ export class SessionManager {
             : redactMessages(normalizedMessages);
           const messagesJson = JSON.stringify(messagesToStore);
           if (canStoreSessionRequestArtifact(messagesJson, `snapshot:${phase}:messages`)) {
-            writes.push(redis.setex(messagesKey, SessionManager.SESSION_TTL, messagesJson));
+            writes.push(
+              compressPayload(messagesJson).then((stored) =>
+                redis.setex(messagesKey, SessionManager.SESSION_TTL, stored)
+              )
+            );
           } else {
             writes.push(redis.del(messagesKey));
           }
@@ -3100,9 +3127,14 @@ export class SessionManager {
         return null;
       }
 
+      const [bodyText, messagesText] = await Promise.all([
+        bodyValue === null ? Promise.resolve(null) : decompressPayload(bodyValue),
+        messagesValue === null ? Promise.resolve(null) : decompressPayload(messagesValue),
+      ]);
+
       return {
-        body: bodyValue === null ? null : (JSON.parse(bodyValue) as unknown),
-        messages: messagesValue === null ? null : (JSON.parse(messagesValue) as unknown),
+        body: bodyText === null ? null : (JSON.parse(bodyText) as unknown),
+        messages: messagesText === null ? null : (JSON.parse(messagesText) as unknown),
         headers: headersValue === null ? null : parseHeaderRecord(headersValue),
         meta:
           metaValue === null
@@ -3184,7 +3216,11 @@ export class SessionManager {
             bodyToStore !== null &&
             canStoreSessionResponseBody(bodyToStore, `snapshot:${phase}`)
           ) {
-            writes.push(redis.setex(bodyKey, SessionManager.SESSION_TTL, bodyToStore));
+            writes.push(
+              compressPayload(bodyToStore).then((stored) =>
+                redis.setex(bodyKey, SessionManager.SESSION_TTL, stored)
+              )
+            );
           } else if (bodyToStore !== null) {
             bodyExceededLimit = true;
           }

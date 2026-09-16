@@ -448,13 +448,16 @@ export class ProxyError extends Error {
 
   /**
    * 智能截断响应体
-   * - JSON: 完整保存（序列化后）
+   * - JSON: 保留结构，但同样有上限（这段文本会进入 error_message 并被写缓冲长期持有）
    * - 文本: 限制 500 字符
    */
   private static smartTruncate(body: string, parsed?: unknown): string {
     if (parsed) {
-      // JSON 格式：完整保存
-      return JSON.stringify(parsed);
+      const serialized = JSON.stringify(parsed);
+      if (serialized !== undefined && serialized.length > UPSTREAM_ERROR_JSON_MAX_LENGTH) {
+        return `${serialized.substring(0, UPSTREAM_ERROR_JSON_MAX_LENGTH)}...`;
+      }
+      return serialized;
     }
 
     // 纯文本：截断到 500 字符
@@ -1265,6 +1268,9 @@ const SENSITIVE_URL_PARAMS = new Set([
 ]);
 
 const REQUEST_BODY_MAX_LENGTH = 2000;
+
+/** 上游 JSON 错误体上限：保留结构又不让 error_message 无界增长。 */
+const UPSTREAM_ERROR_JSON_MAX_LENGTH = 8 * 1024;
 
 /** 敏感值遮罩：保留前缀长度 */
 const MASK_PREFIX_LENGTH = 4;

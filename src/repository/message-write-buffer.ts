@@ -4,6 +4,12 @@ import type { SQL } from "drizzle-orm";
 import { sql } from "drizzle-orm";
 import { findSafeDatabaseError } from "@/drizzle/admitted-client";
 import { getMessageWriterDb } from "@/drizzle/db";
+import {
+  COMPRESS_MIN_BYTES,
+  compressPayload,
+  decompressPayload,
+  isCompressedPayload,
+} from "@/lib/compression/payload-codec";
 import { getEnvConfig } from "@/lib/config/env.schema";
 import { logger } from "@/lib/logger";
 import type { StoredCostBreakdown } from "@/types/cost-breakdown";
@@ -475,6 +481,72 @@ export function buildBatchUpdateSql(
  * buffer — the winner uses a direct loser-sum-aware replacement and losers use a
  * direct idempotent additive write — so there is no additive field to accumulate.
  */
+/** 这三列是 Postgres text，缓冲期可能有数千条同时在内存里。 */
+const COMPRESSIBLE_ERROR_FIELDS = ["errorMessage", "errorStack", "errorCause"] as const;
+
+/** 解码失败时写入的占位符：绝不能把 base64 信封落进 error 列。 */
+const ERROR_TEXT_UNAVAILABLE = "[cch_error_text_unavailable]";
+
+function hasCompressibleErrorText(patch: MessageRequestUpdatePatch): boolean {
+  return COMPRESSIBLE_ERROR_FIELDS.some((field) => {
+    const value = patch[field];
+    return typeof value === "string" && Buffer.byteLength(value, "utf8") >= COMPRESS_MIN_BYTES;
+  });
+}
+
+/**
+ * 缓冲前把大块错误文本换成压缩句柄。
+ *
+ * 返回缓冲区自有的对象，绝不原地修改调用方传入的 patch；压缩是异步的，
+ * 期间 flush 读到的仍是原文，解码侧对两种形态都安全。
+ */
+function retainErrorTextCompressed(patch: MessageRequestUpdatePatch): MessageRequestUpdatePatch {
+  if (!hasCompressibleErrorText(patch)) return patch;
+
+  const owned: MessageRequestUpdatePatch = { ...patch };
+  for (const field of COMPRESSIBLE_ERROR_FIELDS) {
+    const value = owned[field];
+    if (typeof value !== "string") continue;
+    if (Buffer.byteLength(value, "utf8") < COMPRESS_MIN_BYTES) continue;
+    void compressPayload(value)
+      .then((stored) => {
+        // 压缩期间被新 patch 覆盖时不得回写旧内容。
+        if (owned[field] === value) owned[field] = stored;
+      })
+      .catch(() => undefined);
+  }
+  return owned;
+}
+
+/** 批次里是否存在压缩过的错误文本；没有就完全不走异步解码。 */
+function hasCompressedErrorText(updates: MessageRequestUpdateRecord[]): boolean {
+  return updates.some((update) =>
+    COMPRESSIBLE_ERROR_FIELDS.some((field) => {
+      const value = update.patch[field];
+      return typeof value === "string" && isCompressedPayload(value);
+    })
+  );
+}
+
+/** flush 前解码：只在真的存在信封时复制 patch，避免无谓 churn。 */
+async function decodeBufferedErrorText(
+  updates: MessageRequestUpdateRecord[]
+): Promise<MessageRequestUpdateRecord[]> {
+  return Promise.all(
+    updates.map(async (update) => {
+      let decodedPatch: MessageRequestUpdatePatch | null = null;
+      for (const field of COMPRESSIBLE_ERROR_FIELDS) {
+        const value = update.patch[field];
+        if (typeof value !== "string" || !isCompressedPayload(value)) continue;
+        const text = await decompressPayload(value);
+        if (decodedPatch === null) decodedPatch = { ...update.patch };
+        decodedPatch[field] = isCompressedPayload(text) ? ERROR_TEXT_UNAVAILABLE : text;
+      }
+      return decodedPatch === null ? update : { ...update, patch: decodedPatch };
+    })
+  );
+}
+
 export function mergePatch(
   base: MessageRequestUpdatePatch,
   incoming: MessageRequestUpdatePatch
@@ -873,21 +945,23 @@ class MessageRequestWriteBuffer {
       durableAcknowledgement && !durableAcknowledgement.settled
         ? durableAcknowledgement
         : undefined;
+    const ownedPatch = retainErrorTextCompressed(patch);
     this.pending.set(id, {
-      patch,
+      patch: ownedPatch,
       durableAcknowledgement: activeDurableAcknowledgement,
       requiresTerminalFence,
     });
     if (activeDurableAcknowledgement) {
       this.evictableIndex.remove(id);
     } else {
-      this.evictableIndex.upsert(id, getPatchRetentionPriority(patch));
+      this.evictableIndex.upsert(id, getPatchRetentionPriority(ownedPatch));
     }
   }
 
   private setDeferredOrdinary(id: number, patch: MessageRequestUpdatePatch): void {
-    this.deferredOrdinary.set(id, patch);
-    this.deferredEvictableIndex.upsert(id, getPatchRetentionPriority(patch));
+    const ownedPatch = retainErrorTextCompressed(patch);
+    this.deferredOrdinary.set(id, ownedPatch);
+    this.deferredEvictableIndex.upsert(id, getPatchRetentionPriority(ownedPatch));
   }
 
   private deleteDeferredOrdinary(id: number): MessageRequestUpdatePatch | undefined {
@@ -1072,7 +1146,13 @@ class MessageRequestWriteBuffer {
           const monotonicRoutingTraceIds = batch.flatMap((item) =>
             item.durableAcknowledgement?.writeScope === "post-terminal-metadata" ? [item.id] : []
           );
-          const query = buildBatchUpdateSql(batch, {
+          // SQL 与提交回执都要明文；batch 原引用留给重试，重新入队时保持压缩态。
+          // 无压缩内容时不引入额外 await，保持 flush 原有时序。
+          const decodedBatch = hasCompressedErrorText(batch)
+            ? await decodeBufferedErrorText(batch)
+            : batch;
+          const decodedPatches = new Map(decodedBatch.map((item) => [item.id, item.patch]));
+          const query = buildBatchUpdateSql(decodedBatch, {
             returnUpdatedIds: requiresUpdatedIds,
             fencedUpdateIds,
             monotonicRoutingTraceIds,
@@ -1100,7 +1180,10 @@ class MessageRequestWriteBuffer {
                 continue;
               }
               if (updatedIds.has(item.id)) {
-                this.notifyDurableCommit(acknowledgement, item.patch);
+                this.notifyDurableCommit(
+                  acknowledgement,
+                  decodedPatches.get(item.id) ?? item.patch
+                );
                 if (!acknowledgement.settled) {
                   this.resolveDurableAcknowledgement(acknowledgement);
                 }

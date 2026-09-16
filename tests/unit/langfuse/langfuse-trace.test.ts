@@ -455,7 +455,7 @@ describe("traceProxyRequest", () => {
     expect(getObservationCall("llm-call")[1].output).toEqual(responseBody);
   });
 
-  test("preserves bounded large-text diagnostics for Responses", async () => {
+  test("sends large non-JSON response text in full", async () => {
     const { traceProxyRequest } = await import("@/lib/langfuse/trace-proxy-request");
     const responseText = "x".repeat(1024 * 1024 + 1);
     await traceProxyRequest({
@@ -466,12 +466,7 @@ describe("traceProxyRequest", () => {
       isStreaming: false,
       responseText,
     });
-    expect(getObservationCall("llm-call")[1].output).toEqual({
-      truncated: true,
-      totalChars: responseText.length,
-      head: "x".repeat(128 * 1024),
-      tail: "x".repeat(128 * 1024),
-    });
+    expect(getObservationCall("llm-call")[1].output).toBe(responseText);
   });
   test("should include provider name and model in tags", async () => {
     const { traceProxyRequest } = await import("@/lib/langfuse/trace-proxy-request");

@@ -280,17 +280,20 @@ describe("ProxySessionGuard：warmup 拦截不应计入并发会话", () => {
       "session_assigned",
       "before",
       expect.objectContaining({
-        body: {
-          metadata: {
-            session_id: "sess_seed",
-          },
-          messages: [{ role: "user", content: "hello" }],
-        },
+        // 改写前的快照现在以序列化文本交接，存储侧会解析回对象。
+        body: expect.any(String),
         headers: { "content-type": "application/json" },
         messages: [{ role: "user", content: "hello" }],
       }),
       1
     );
+    const snapshotArg = storeSessionRequestPhaseSnapshotMock.mock.calls[0][2] as {
+      body: string;
+    };
+    expect(JSON.parse(snapshotArg.body)).toEqual({
+      metadata: { session_id: "sess_seed" },
+      messages: [{ role: "user", content: "hello" }],
+    });
   });
 
   test("超限请求跳过 request body/messages，但仍保留轻量 before 快照", async () => {

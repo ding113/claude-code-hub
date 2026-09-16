@@ -3,6 +3,11 @@ import { isCountTokensEndpointPath, V1_ENDPOINT_PATHS } from "@/app/v1/_lib/prox
 import { isRemoteCompactionV2Request } from "@/app/v1/_lib/proxy/remote-compaction";
 import { loadRequestBody, retainRequestMemory } from "@/lib/body-store/request-body-store";
 import { findLatestPriceByModelCached } from "@/lib/cache/model-price-cache";
+import {
+  COMPRESS_MIN_BYTES,
+  compressPayload,
+  decompressPayload,
+} from "@/lib/compression/payload-codec";
 import { logger } from "@/lib/logger";
 import { retainRequestMemoryUntil } from "@/lib/memory/request-lifetime";
 import {
@@ -184,8 +189,38 @@ export class ProxySession {
   // Timestamp when guard pipeline finished and forwarding started (epoch ms).
   forwardStartTime: number | null = null;
 
-  // Actual serialized request body sent to upstream (after all preprocessing).
+  /**
+   * Actual serialized request body sent to upstream (after all preprocessing).
+   *
+   * 这是一个不透明句柄：超过阈值的正文会被异步压缩成信封，未达阈值的保持原文。
+   * 只能通过 getForwardedRequestBody() 读取明文；跨会话复制（hedge/重试）直接搬句柄。
+   */
   forwardedRequestBody: string | null = null;
+  private forwardedRequestBodyPending: Promise<void> | null = null;
+
+  /** 写入后异步压缩，热路径不做 CPU 密集的同步压缩。 */
+  setForwardedRequestBody(text: string | null): void {
+    this.forwardedRequestBody = text;
+    this.forwardedRequestBodyPending = null;
+    if (text === null || Buffer.byteLength(text, "utf8") < COMPRESS_MIN_BYTES) return;
+
+    const pending = compressPayload(text)
+      .then((stored) => {
+        // 压缩期间被新值覆盖时不得回写旧内容。
+        if (this.forwardedRequestBodyPending === pending && this.forwardedRequestBody === text) {
+          this.forwardedRequestBody = stored;
+        }
+      })
+      .catch(() => undefined);
+    this.forwardedRequestBodyPending = pending;
+  }
+
+  async getForwardedRequestBody(): Promise<string | null> {
+    if (this.forwardedRequestBodyPending) await this.forwardedRequestBodyPending;
+    const stored = this.forwardedRequestBody;
+    if (stored === null) return null;
+    return decompressPayload(stored);
+  }
 
   // Session ID（用于会话粘性和并发限流）
   sessionId: string | null;

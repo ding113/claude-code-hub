@@ -1,6 +1,5 @@
 import { isSSEText, parseSSEData } from "@/lib/utils/sse";
 
-export const LANGFUSE_FINAL_OUTPUT_MAX_SERIALIZED_CHARS = 1024 * 1024;
 export const STREAM_ACCUMULATOR_TRUNCATED_MARKER = "\n\n: [cch_truncated]\n\n";
 
 const STREAM_FINAL_OUTPUT_REASONS = [
@@ -8,7 +7,6 @@ const STREAM_FINAL_OUTPUT_REASONS = [
   "malformed_frame",
   "empty_stream",
   "stream_error",
-  "over_budget",
   "unsupported_framing",
   "no_terminal_event",
 ] as const;
@@ -33,8 +31,6 @@ export type StreamFinalOutputDiagnosticMetadata = {
   readonly eventCount?: number;
   readonly status?: number | null;
   readonly framing?: StreamFraming;
-  readonly serializedBytes?: number;
-  readonly maxSerializedBytes?: number;
 };
 
 export type StreamFinalOutputDiagnostic = {
@@ -43,8 +39,6 @@ export type StreamFinalOutputDiagnostic = {
   readonly eventCount: number;
   readonly status?: number | null;
   readonly framing?: StreamFraming;
-  readonly serializedBytes?: number;
-  readonly maxSerializedBytes?: number;
 };
 
 export type StreamFinalOutput =
@@ -67,12 +61,6 @@ export function createFinalOutputUnavailable(
     ...diagnostic,
     ...(metadata.status !== undefined ? { status: metadata.status } : {}),
     ...(metadata.framing !== undefined ? { framing: metadata.framing } : {}),
-    ...(metadata.serializedBytes !== undefined
-      ? { serializedBytes: metadata.serializedBytes }
-      : {}),
-    ...(metadata.maxSerializedBytes !== undefined
-      ? { maxSerializedBytes: metadata.maxSerializedBytes }
-      : {}),
   };
 }
 
@@ -105,27 +93,16 @@ export function finalizeStreamOutput(
   value: unknown,
   metadata: StreamFinalOutputDiagnosticMetadata = {}
 ): StreamFinalOutput {
-  let serializedValue: string;
-
+  // 仍然探测一次序列化：循环引用或 undefined 无法送进 span，必须降级为诊断。
   try {
-    const serialized = JSON.stringify(value);
-    if (serialized === undefined) {
+    if (JSON.stringify(value) === undefined) {
       return createFinalOutputUnavailable("stream_error", metadata);
     }
-    serializedValue = serialized;
   } catch (error) {
     if (error instanceof TypeError) {
       return createFinalOutputUnavailable("stream_error", metadata);
     }
     throw error;
-  }
-
-  if (serializedValue.length > LANGFUSE_FINAL_OUTPUT_MAX_SERIALIZED_CHARS) {
-    return createFinalOutputUnavailable("over_budget", {
-      ...metadata,
-      serializedBytes: serializedValue.length,
-      maxSerializedBytes: LANGFUSE_FINAL_OUTPUT_MAX_SERIALIZED_CHARS,
-    });
   }
 
   return { kind: "final", value };

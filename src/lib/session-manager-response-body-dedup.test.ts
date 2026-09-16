@@ -540,4 +540,42 @@ describe("SessionManager response body deduplication", () => {
     expect(responseBundle(key)?.get("total_bytes")).toBe("8");
     expect(responseBundle(key)?.get("over_budget")).toBe("0");
   });
+
+  it("stores large bodies compressed and reads them back byte-identical", async () => {
+    mockSessionResponseBodyMaxBytes = 5 * 1024 * 1024;
+    const body = `event: content_block_delta\ndata: ${JSON.stringify({
+      delta: { text: "streamed model output worth compressing" },
+    })}\n\n`.repeat(4000);
+    expect(Buffer.byteLength(body, "utf8")).toBeGreaterThan(16 * 1024);
+
+    await SessionManager.storeSessionResponseBodySet("sess_compressed", { legacy: body }, 1);
+
+    // 顶层 import 会在 logger mock 初始化前拉入模块，这里必须动态导入。
+    const { PAYLOAD_ENVELOPE_PREFIX } = await import("@/lib/compression/payload-codec");
+    const stored = bodyFields("session:sess_compressed:req:1:response-bodies:v1");
+    expect(stored).toHaveLength(1);
+    expect(stored[0].startsWith(PAYLOAD_ENVELOPE_PREFIX)).toBe(true);
+    expect(Buffer.byteLength(stored[0], "utf8")).toBeLessThan(Buffer.byteLength(body, "utf8") / 4);
+    await expect(SessionManager.getSessionResponse("sess_compressed", 1)).resolves.toBe(body);
+  });
+
+  it("still reads a plaintext body written by an older build", async () => {
+    await SessionManager.storeSessionResponseBodySet("sess_plain", { legacy: "plain body" }, 1);
+
+    const stored = bodyFields("session:sess_plain:req:1:response-bodies:v1");
+    expect(stored).toEqual(["plain body"]);
+    await expect(SessionManager.getSessionResponse("sess_plain", 1)).resolves.toBe("plain body");
+  });
+
+  it("applies the aggregate size cap to uncompressed bytes", async () => {
+    // 高度可压缩但未压缩体积超限：仍按原有语义跳过，不因压缩而放宽。
+    mockSessionResponseBodyMaxBytes = 1024;
+    const oversized = "a".repeat(4096);
+
+    await SessionManager.storeSessionResponseBodySet("sess_cap", { legacy: oversized }, 1);
+
+    const key = "session:sess_cap:req:1:response-bodies:v1";
+    expect(bodyFields(key)).toEqual([]);
+    expect(responseBundle(key)?.get("over_budget")).toBe("1");
+  });
 });

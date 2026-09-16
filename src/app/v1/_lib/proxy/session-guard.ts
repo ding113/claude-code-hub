@@ -1,4 +1,5 @@
 import { injectClaudeMetadataUserIdWithContext } from "@/lib/claude-code/metadata-user-id";
+import { compressPayload, decompressPayload } from "@/lib/compression/payload-codec";
 import { getCachedSystemSettings } from "@/lib/config";
 import { getEnvConfig } from "@/lib/config/env.schema";
 import { logger } from "@/lib/logger";
@@ -93,17 +94,27 @@ export class ProxySessionGuard {
         session.shouldPersistSessionDebugArtifacts() &&
         session.shouldPersistSessionRequestArtifacts();
       let requestMessageBeforeProxyMutations = session.request.message as Record<string, unknown>;
+      // 一次序列化就冻结了改写前的状态，之后只持有压缩句柄，
+      // 不再为快照保留一整份深拷贝对象。
+      let requestBodyBeforeSnapshot: Promise<string> | null = null;
       if (
         persistSessionRequestArtifacts &&
         session.request.message &&
         typeof session.request.message === "object"
       ) {
         try {
-          requestMessageBeforeProxyMutations = structuredClone(
-            session.request.message as Record<string, unknown>
+          requestBodyBeforeSnapshot = compressPayload(
+            JSON.stringify(session.request.message as Record<string, unknown>)
           );
         } catch {
-          requestMessageBeforeProxyMutations = session.request.message as Record<string, unknown>;
+          requestBodyBeforeSnapshot = null;
+          try {
+            requestMessageBeforeProxyMutations = structuredClone(
+              session.request.message as Record<string, unknown>
+            );
+          } catch {
+            requestMessageBeforeProxyMutations = session.request.message as Record<string, unknown>;
+          }
         }
       }
       const originalMessages = persistSessionRequestArtifacts ? session.getMessages() : undefined;
@@ -238,6 +249,9 @@ export class ProxySessionGuard {
       // 4.2 存储完整请求体与客户端端点（用于 Session 详情调试）
       // 注意：必须在后续任何格式转换/过滤前触发存储，避免记录被“后处理”污染
       if (session.sessionId && session.shouldPersistSessionDebugArtifacts()) {
+        const requestBodyBefore = requestBodyBeforeSnapshot
+          ? await decompressPayload(await requestBodyBeforeSnapshot)
+          : requestMessageBeforeProxyMutations;
         const requestBeforeSnapshot = {
           headers: filterClientRequestSnapshotHeaders(session.headers),
           meta: {
@@ -247,7 +261,7 @@ export class ProxySessionGuard {
           },
           ...(persistSessionRequestArtifacts
             ? {
-                body: requestMessageBeforeProxyMutations,
+                body: requestBodyBefore,
                 ...(originalMessages !== undefined ? { messages: originalMessages } : {}),
               }
             : {}),

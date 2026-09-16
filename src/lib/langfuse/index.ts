@@ -7,6 +7,16 @@ let sdk: NodeSDK | null = null;
 let spanProcessor: LangfuseSpanProcessor | null = null;
 let initialized = false;
 
+type OtlpCompression = "gzip" | "none";
+
+function resolveOtlpCompression(): OtlpCompression {
+  const raw = process.env.LANGFUSE_OTLP_COMPRESSION;
+  if (!raw) return "gzip";
+  if (raw === "gzip" || raw === "none") return raw;
+  logger.warn("[Langfuse] Unknown LANGFUSE_OTLP_COMPRESSION, falling back to gzip", { value: raw });
+  return "gzip";
+}
+
 export function isLangfuseEnabled(): boolean {
   return !!(process.env.LANGFUSE_PUBLIC_KEY && process.env.LANGFUSE_SECRET_KEY);
 }
@@ -28,6 +38,16 @@ export async function initLangfuse(): Promise<void> {
     if (process.env.LANGFUSE_DEBUG === "true") {
       const { configureGlobalLogger, LogLevel } = await import("@langfuse/core");
       configureGlobalLogger({ level: LogLevel.DEBUG });
+    }
+
+    const compression = resolveOtlpCompression();
+    // OTLP 的合并顺序是 user > env > none；LangfuseSpanProcessor 不传 compression，
+    // 因此只要在构造之前写入环境变量即可让导出器整体 gzip，不必手搓 exporter。
+    if (
+      !process.env.OTEL_EXPORTER_OTLP_TRACES_COMPRESSION &&
+      !process.env.OTEL_EXPORTER_OTLP_COMPRESSION
+    ) {
+      process.env.OTEL_EXPORTER_OTLP_TRACES_COMPRESSION = compression;
     }
 
     const sampleRate = Number.parseFloat(process.env.LANGFUSE_SAMPLE_RATE || "1.0");
@@ -66,6 +86,7 @@ export async function initLangfuse(): Promise<void> {
       environment: environment ?? null,
       release: release ?? null,
       debug: process.env.LANGFUSE_DEBUG === "true",
+      compression,
     });
   } catch (error) {
     logger.error("[Langfuse] Failed to initialize", {

@@ -1,17 +1,15 @@
 import type { UsageMetrics } from "@/app/v1/_lib/proxy/response-handler";
 import type { ProxySession } from "@/app/v1/_lib/proxy/session";
+import { decompressPayload } from "@/lib/compression/payload-codec";
 import { finalizeStreamOutputForClient } from "@/lib/langfuse/stream-final-output";
 import {
   createFinalOutputUnavailable,
   type StreamFinalOutput,
 } from "@/lib/langfuse/stream-final-output-core";
+import type { LangfuseTraceBodySource } from "@/lib/langfuse/trace-body-spool";
 import type { TraceContext } from "@/lib/langfuse/trace-proxy-request";
 import { logger } from "@/lib/logger";
 import type { CostBreakdown } from "@/lib/utils/cost-calculation";
-
-const LANGFUSE_RESPONSE_TEXT_MAX_CHARS = 1024 * 1024;
-const LANGFUSE_RESPONSE_TEXT_EDGE_CHARS = 128 * 1024;
-const LANGFUSE_TRUNCATED_MARKER = "\n\n[langfuse_response_truncated]\n\n";
 
 export interface EmitProxyLangfuseTraceData {
   responseHeaders: Headers;
@@ -24,16 +22,8 @@ export interface EmitProxyLangfuseTraceData {
   isStreaming: boolean;
   sseEventCount?: number;
   errorMessage?: string;
-}
-
-function truncateResponseTextForLangfuse(text: string): string {
-  if (text.length <= LANGFUSE_RESPONSE_TEXT_MAX_CHARS) {
-    return text;
-  }
-
-  return `${text.slice(0, LANGFUSE_RESPONSE_TEXT_EDGE_CHARS)}${LANGFUSE_TRUNCATED_MARKER}${text.slice(
-    -LANGFUSE_RESPONSE_TEXT_EDGE_CHARS
-  )}`;
+  /** 流式完整正文来源；所有权转移给本函数，由它负责释放。 */
+  responseBodySpool?: LangfuseTraceBodySource | null;
 }
 
 function buildRequestMessagePreview(message: Record<string, unknown>): Record<string, unknown> {
@@ -63,10 +53,9 @@ function buildLangfuseSessionSnapshot(session: ProxySession): ProxySession {
   const endpoint = session.getEndpoint();
   const requestSequence = session.getRequestSequence();
   const messagesLength = session.getMessagesLength();
+  // 这里拿到的是不透明句柄（通常已是压缩信封），解码推迟到异步阶段。
   const forwardedRequestBody =
-    typeof session.forwardedRequestBody === "string"
-      ? truncateResponseTextForLangfuse(session.forwardedRequestBody)
-      : null;
+    typeof session.forwardedRequestBody === "string" ? session.forwardedRequestBody : null;
   const requestMessage = buildRequestMessagePreview(session.request.message);
   const clientIp = session.clientIp;
   const originalHeaders =
@@ -80,7 +69,7 @@ function buildLangfuseSessionSnapshot(session: ProxySession): ProxySession {
     headers: new Headers(session.headers),
     request: {
       message: requestMessage,
-      log: truncateResponseTextForLangfuse(session.request.log ?? ""),
+      log: session.request.log ?? "",
       note: session.request.note,
       model: session.request.model,
       imageRequestMetadata: null,
@@ -109,16 +98,78 @@ function buildLangfuseSessionSnapshot(session: ProxySession): ProxySession {
   } as unknown as ProxySession;
 }
 
-function enqueueLangfuseTrace(traceContext: TraceContext): void {
-  void import("@/lib/langfuse/trace-proxy-request")
-    .then(({ traceProxyRequest }) => {
-      void traceProxyRequest(traceContext);
-    })
-    .catch((err) => {
-      logger.warn("[Langfuse] Proxy trace failed", {
-        error: err instanceof Error ? err.message : String(err),
-      });
+async function runLangfuseTrace(
+  sessionSnapshot: ProxySession,
+  data: EmitProxyLangfuseTraceData,
+  spool: LangfuseTraceBodySource | null
+): Promise<void> {
+  // 先让出调用栈：materialize / finalize / 发送都不应该占用代理的终态路径。
+  await new Promise<void>((resolve) => setImmediate(resolve));
+
+  try {
+    const {
+      responseHeaders,
+      responseText,
+      durationMs,
+      statusCode,
+      isStreaming,
+      usageMetrics,
+      costUsd,
+      costBreakdown,
+      sseEventCount,
+      errorMessage,
+    } = data;
+
+    const forwardedHandle = sessionSnapshot.forwardedRequestBody;
+    (sessionSnapshot as { forwardedRequestBody: string | null }).forwardedRequestBody =
+      typeof forwardedHandle === "string" ? await decompressPayload(forwardedHandle) : null;
+
+    let streamText = responseText;
+    if (isStreaming && spool) {
+      const fullText = await spool.materialize();
+      if (fullText !== null) streamText = fullText;
+    }
+
+    let finalResponseOutput: StreamFinalOutput | undefined;
+    if (isStreaming && streamText.length > 0) {
+      try {
+        finalResponseOutput = finalizeStreamOutputForClient(
+          streamText,
+          sessionSnapshot.originalFormat,
+          true
+        );
+      } catch (error) {
+        finalResponseOutput = createFinalOutputUnavailable("stream_error");
+        logger.warn("[Langfuse] Stream finalization failed", {
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+
+    const traceContext: TraceContext = {
+      session: sessionSnapshot,
+      responseHeaders,
+      durationMs,
+      statusCode,
+      isStreaming,
+      ...(isStreaming ? {} : { responseText }),
+      ...(finalResponseOutput !== undefined ? { finalResponseOutput } : {}),
+      usageMetrics,
+      costUsd,
+      costBreakdown,
+      sseEventCount,
+      errorMessage,
+    };
+
+    const { traceProxyRequest } = await import("@/lib/langfuse/trace-proxy-request");
+    await traceProxyRequest(traceContext);
+  } catch (err) {
+    logger.warn("[Langfuse] Proxy trace failed", {
+      error: err instanceof Error ? err.message : String(err),
     });
+  } finally {
+    await spool?.dispose();
+  }
 }
 
 /**
@@ -130,63 +181,23 @@ export function emitProxyLangfuseTrace(
   session: ProxySession,
   data: EmitProxyLangfuseTraceData
 ): void {
-  if (!process.env.LANGFUSE_PUBLIC_KEY || !process.env.LANGFUSE_SECRET_KEY) return;
+  const spool = data.responseBodySpool ?? null;
 
-  let responseText: string;
+  if (!process.env.LANGFUSE_PUBLIC_KEY || !process.env.LANGFUSE_SECRET_KEY) {
+    void spool?.dispose();
+    return;
+  }
+
   let sessionSnapshot: ProxySession;
   try {
-    // 必须在异步 import 之前截断，避免动态加载/SDK 发送期间闭包继续强引用完整大响应。
-    responseText = truncateResponseTextForLangfuse(data.responseText);
     sessionSnapshot = buildLangfuseSessionSnapshot(session);
   } catch (err) {
     logger.warn("[Langfuse] Proxy trace snapshot failed", {
       error: err instanceof Error ? err.message : String(err),
     });
+    void spool?.dispose();
     return;
   }
-  const {
-    responseHeaders,
-    responseText: rawResponseText,
-    durationMs,
-    statusCode,
-    isStreaming,
-    usageMetrics,
-    costUsd,
-    costBreakdown,
-    sseEventCount,
-    errorMessage,
-  } = data;
-  let finalResponseOutput: StreamFinalOutput | undefined;
 
-  if (isStreaming && rawResponseText.length > 0) {
-    try {
-      finalResponseOutput = finalizeStreamOutputForClient(
-        rawResponseText,
-        session.originalFormat,
-        true
-      );
-    } catch (error) {
-      finalResponseOutput = createFinalOutputUnavailable("stream_error");
-      logger.warn("[Langfuse] Stream finalization failed", {
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
-  }
-
-  const traceResponseText = isStreaming ? undefined : responseText;
-
-  enqueueLangfuseTrace({
-    session: sessionSnapshot,
-    responseHeaders,
-    durationMs,
-    statusCode,
-    isStreaming,
-    ...(traceResponseText !== undefined ? { responseText: traceResponseText } : {}),
-    ...(finalResponseOutput !== undefined ? { finalResponseOutput } : {}),
-    usageMetrics,
-    costUsd,
-    costBreakdown,
-    sseEventCount,
-    errorMessage,
-  });
+  void runLangfuseTrace(sessionSnapshot, data, spool);
 }

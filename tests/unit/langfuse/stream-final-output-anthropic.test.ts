@@ -387,12 +387,12 @@ describe("Anthropic native block reconstruction regressions", () => {
     });
   });
 
-  test("keeps reconstructed compaction output within the serialized budget", () => {
+  test("keeps the whole reconstructed compaction output, however large", () => {
+    const content = "x".repeat(1024 * 1024);
     const result = finalizeAnthropicStreamOutput(
-      completeBlock({ type: "compaction", content: "" }, [
-        { type: "compaction_delta", content: "x".repeat(1024 * 1024) },
-      ])
+      completeBlock({ type: "compaction", content: "" }, [{ type: "compaction_delta", content }])
     );
-    expect(result).toMatchObject({ kind: "final_output_unavailable", reason: "over_budget" });
+    expect(result).toMatchObject({ kind: "final" });
+    expect(JSON.stringify(result)).toContain(content);
   });
 });

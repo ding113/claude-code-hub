@@ -17,6 +17,7 @@ import {
 import { AsyncTaskManager, shutdownAllAsyncTasks } from "@/lib/async-task-manager";
 import { recordFailure } from "@/lib/circuit-breaker";
 import { emitProxyLangfuseTrace } from "@/lib/langfuse/emit-proxy-trace";
+import { tryCreateLangfuseTraceBodySpool } from "@/lib/langfuse/trace-body-spool";
 import { RateLimitService } from "@/lib/rate-limit";
 import type { SessionBindingSnapshot } from "@/lib/redis/session-binding";
 import { SessionManager } from "@/lib/session-manager";
@@ -85,6 +86,10 @@ vi.mock("@/lib/config/system-settings-cache", () => ({
 
 vi.mock("@/lib/langfuse/emit-proxy-trace", () => ({
   emitProxyLangfuseTrace: vi.fn(),
+}));
+
+vi.mock("@/lib/langfuse/trace-body-spool", () => ({
+  tryCreateLangfuseTraceBodySpool: vi.fn(() => null),
 }));
 
 vi.mock("@/lib/logger", () => ({
@@ -3985,5 +3990,40 @@ describe("ProxyResponseHandler stream client abort finalization", () => {
       expect.objectContaining({ onCommitted: expect.any(Function) })
     );
     expect(recordFailure).toHaveBeenCalledTimes(1);
+  });
+
+  it("hands the Langfuse body spool to the trace and keeps every chunk", async () => {
+    const controller = new AbortController();
+    const session = createSession(controller.signal);
+    const spool = {
+      observe: vi.fn(),
+      materialize: vi.fn().mockResolvedValue(null),
+      dispose: vi.fn().mockResolvedValue(undefined),
+    };
+    vi.mocked(tryCreateLangfuseTraceBodySpool).mockReturnValueOnce(
+      spool as unknown as ReturnType<typeof tryCreateLangfuseTraceBodySpool>
+    );
+    setDeferredStreamingFinalization(session, {
+      providerId: 1,
+      providerName: "avemujica-responses",
+      providerPriority: 1,
+      attemptNumber: 1,
+      totalProvidersAttempted: 1,
+      isFirstAttempt: true,
+      isFailoverSuccess: false,
+      endpointId: 42,
+      endpointUrl: "https://api.test.invalid/v1",
+      upstreamStatusCode: 200,
+    });
+
+    const downstream = await ProxyResponseHandler.dispatch(session, createResponsesSse());
+    await downstream.text();
+    await drainAsyncTasks();
+
+    expect(spool.observe).toHaveBeenCalled();
+    const traceCall = vi.mocked(emitProxyLangfuseTrace).mock.calls.at(-1);
+    expect(traceCall?.[1].responseBodySpool).toBe(spool);
+    // 所有权已转交 emit，处理任务的 finally 不得重复释放。
+    expect(spool.dispose).not.toHaveBeenCalled();
   });
 });

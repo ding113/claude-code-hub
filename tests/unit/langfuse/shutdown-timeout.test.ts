@@ -17,8 +17,29 @@ describe.sequential("shutdownLangfuse", () => {
 
   afterEach(() => {
     vi.unstubAllEnvs();
+    // initLangfuse 直接写 process.env，unstubAllEnvs 清不掉，必须显式删除。
+    delete process.env.OTEL_EXPORTER_OTLP_TRACES_COMPRESSION;
+    delete process.env.OTEL_EXPORTER_OTLP_COMPRESSION;
     vi.useRealTimers();
   });
+
+  function mockOtelStack(): void {
+    vi.doMock("@langfuse/otel", () => ({
+      LangfuseSpanProcessor: class {
+        constructor() {
+          Object.assign(this, { forceFlush: () => Promise.resolve() });
+        }
+      },
+    }));
+    vi.doMock("@opentelemetry/sdk-node", () => ({
+      NodeSDK: class {
+        start() {}
+        shutdown() {
+          return Promise.resolve();
+        }
+      },
+    }));
+  }
 
   it("is a no-op when not initialized", async () => {
     const { shutdownLangfuse } = await import("@/lib/langfuse");
@@ -168,6 +189,45 @@ describe.sequential("shutdownLangfuse", () => {
         release: "0.9.3",
       })
     );
+    await shutdownLangfuse();
+  });
+
+  it("enables OTLP gzip by default", async () => {
+    mockOtelStack();
+    vi.stubEnv("LANGFUSE_PUBLIC_KEY", "pk-test");
+    vi.stubEnv("LANGFUSE_SECRET_KEY", "sk-test");
+
+    const { initLangfuse, shutdownLangfuse } = await import("@/lib/langfuse");
+    await initLangfuse();
+
+    expect(process.env.OTEL_EXPORTER_OTLP_TRACES_COMPRESSION).toBe("gzip");
+    await shutdownLangfuse();
+  });
+
+  it("honors LANGFUSE_OTLP_COMPRESSION=none", async () => {
+    mockOtelStack();
+    vi.stubEnv("LANGFUSE_PUBLIC_KEY", "pk-test");
+    vi.stubEnv("LANGFUSE_SECRET_KEY", "sk-test");
+    vi.stubEnv("LANGFUSE_OTLP_COMPRESSION", "none");
+
+    const { initLangfuse, shutdownLangfuse } = await import("@/lib/langfuse");
+    await initLangfuse();
+
+    expect(process.env.OTEL_EXPORTER_OTLP_TRACES_COMPRESSION).toBe("none");
+    await shutdownLangfuse();
+  });
+
+  it("never overrides an explicitly configured OTEL compression", async () => {
+    mockOtelStack();
+    vi.stubEnv("LANGFUSE_PUBLIC_KEY", "pk-test");
+    vi.stubEnv("LANGFUSE_SECRET_KEY", "sk-test");
+    vi.stubEnv("LANGFUSE_OTLP_COMPRESSION", "gzip");
+    vi.stubEnv("OTEL_EXPORTER_OTLP_TRACES_COMPRESSION", "none");
+
+    const { initLangfuse, shutdownLangfuse } = await import("@/lib/langfuse");
+    await initLangfuse();
+
+    expect(process.env.OTEL_EXPORTER_OTLP_TRACES_COMPRESSION).toBe("none");
     await shutdownLangfuse();
   });
 });

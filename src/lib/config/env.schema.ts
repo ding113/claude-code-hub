@@ -289,6 +289,8 @@ export const EnvSchema = z.object({
   // v5 first-class attributes; consumed by LangfuseSpanProcessor
   LANGFUSE_TRACING_ENVIRONMENT: z.string().optional(),
   LANGFUSE_RELEASE: z.string().optional(),
+  // OTLP HTTP 请求体压缩；仅在未显式设置 OTEL_EXPORTER_OTLP_* 时生效
+  LANGFUSE_OTLP_COMPRESSION: z.enum(["gzip", "none"]).default("gzip"),
 
   // Prometheus scrape at GET /metrics
   METRICS_ENABLED: z.string().default("true").transform(booleanTransform),

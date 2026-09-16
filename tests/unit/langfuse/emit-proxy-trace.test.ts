@@ -203,7 +203,7 @@ describe("emitProxyLangfuseTrace", () => {
     expect(traceContext).not.toHaveProperty("responseText");
   });
 
-  test("keeps the existing bounded text path for non-stream responses", async () => {
+  test("sends non-stream responses in full, with no truncation", async () => {
     const finalizeSpy = vi.spyOn(streamFinalOutput, "finalizeStreamOutputForClient");
     const responseText = "x".repeat(1024 * 1024 + 1);
 
@@ -220,10 +220,170 @@ describe("emitProxyLangfuseTrace", () => {
     await waitForTrace();
 
     const traceContext = mockTraceProxyRequest.mock.calls[0]?.[0];
-    const expectedResponseText = `${"x".repeat(128 * 1024)}\n\n[langfuse_response_truncated]\n\n${"x".repeat(128 * 1024)}`;
     expect(finalizeSpy).not.toHaveBeenCalled();
-    expect(traceContext.responseText).toBe(expectedResponseText);
+    expect(traceContext.responseText).toBe(responseText);
     expect(traceContext).not.toHaveProperty("finalResponseOutput");
+  });
+
+  test("finalizes the spool body rather than the bounded accumulator text", async () => {
+    const boundedText = [chatFrame("head"), "\n\n: [cch_truncated]\n\n"].join("");
+    const fullText = [
+      chatFrame("only present in the spool"),
+      chatFrame("", { finish_reason: "stop" }),
+      "data: [DONE]\n\n",
+    ].join("");
+    const spool = {
+      materialize: vi.fn().mockResolvedValue(fullText),
+      dispose: vi.fn().mockResolvedValue(undefined),
+    };
+
+    emitProxyLangfuseTrace(createMockSession("openai"), {
+      responseHeaders: new Headers(),
+      responseText: boundedText,
+      usageMetrics: null,
+      costUsd: undefined,
+      statusCode: 200,
+      durationMs: 25,
+      isStreaming: true,
+      responseBodySpool: spool,
+    });
+
+    await waitForTrace();
+
+    const traceContext = mockTraceProxyRequest.mock.calls[0]?.[0];
+    expect(spool.materialize).toHaveBeenCalledTimes(1);
+    expect(traceContext.finalResponseOutput).toMatchObject({ kind: "final" });
+    expect(JSON.stringify(traceContext.finalResponseOutput)).toContain("only present in the spool");
+    await vi.waitFor(() => expect(spool.dispose).toHaveBeenCalledTimes(1));
+  });
+
+  test("falls back to the bounded text when the spool cannot materialize", async () => {
+    const boundedText = [chatFrame("bounded"), chatFrame("", { finish_reason: "stop" })].join("");
+    const spool = {
+      materialize: vi.fn().mockResolvedValue(null),
+      dispose: vi.fn().mockResolvedValue(undefined),
+    };
+
+    emitProxyLangfuseTrace(createMockSession("openai"), {
+      responseHeaders: new Headers(),
+      responseText: boundedText,
+      usageMetrics: null,
+      costUsd: undefined,
+      statusCode: 200,
+      durationMs: 25,
+      isStreaming: true,
+      responseBodySpool: spool,
+    });
+
+    await waitForTrace();
+
+    const traceContext = mockTraceProxyRequest.mock.calls[0]?.[0];
+    expect(JSON.stringify(traceContext.finalResponseOutput)).toContain("bounded");
+    await vi.waitFor(() => expect(spool.dispose).toHaveBeenCalledTimes(1));
+  });
+
+  test("disposes the spool when credentials are missing", async () => {
+    delete process.env.LANGFUSE_PUBLIC_KEY;
+    delete process.env.LANGFUSE_SECRET_KEY;
+    const spool = {
+      materialize: vi.fn(),
+      dispose: vi.fn().mockResolvedValue(undefined),
+    };
+
+    emitProxyLangfuseTrace(createMockSession(), {
+      responseHeaders: new Headers(),
+      responseText: "data: {}\n\n",
+      usageMetrics: null,
+      costUsd: undefined,
+      statusCode: 200,
+      durationMs: 25,
+      isStreaming: true,
+      responseBodySpool: spool,
+    });
+
+    expect(spool.materialize).not.toHaveBeenCalled();
+    expect(mockTraceProxyRequest).not.toHaveBeenCalled();
+    await vi.waitFor(() => expect(spool.dispose).toHaveBeenCalledTimes(1));
+  });
+
+  test("disposes the spool when the session snapshot throws", async () => {
+    const spool = {
+      materialize: vi.fn(),
+      dispose: vi.fn().mockResolvedValue(undefined),
+    };
+    const session = {
+      getProviderChain() {
+        throw new Error("snapshot exploded");
+      },
+    } as unknown as ProxySession;
+
+    emitProxyLangfuseTrace(session, {
+      responseHeaders: new Headers(),
+      responseText: "",
+      usageMetrics: null,
+      costUsd: undefined,
+      statusCode: 500,
+      durationMs: 1,
+      isStreaming: true,
+      responseBodySpool: spool,
+    });
+
+    expect(spool.materialize).not.toHaveBeenCalled();
+    await vi.waitFor(() => expect(spool.dispose).toHaveBeenCalledTimes(1));
+  });
+
+  test("disposes the spool even when tracing rejects", async () => {
+    mockTraceProxyRequest.mockRejectedValueOnce(new Error("langfuse unreachable"));
+    const spool = {
+      materialize: vi.fn().mockResolvedValue("data: [DONE]\n\n"),
+      dispose: vi.fn().mockResolvedValue(undefined),
+    };
+
+    emitProxyLangfuseTrace(createMockSession("openai"), {
+      responseHeaders: new Headers(),
+      responseText: "data: [DONE]\n\n",
+      usageMetrics: null,
+      costUsd: undefined,
+      statusCode: 200,
+      durationMs: 25,
+      isStreaming: true,
+      responseBodySpool: spool,
+    });
+
+    await waitForTrace();
+    await vi.waitFor(() => expect(spool.dispose).toHaveBeenCalledTimes(1));
+    expect(mockLoggerWarn).toHaveBeenCalledWith("[Langfuse] Proxy trace failed", {
+      error: "langfuse unreachable",
+    });
+  });
+
+  test("decodes a compressed forwarded request body before tracing", async () => {
+    const { compressPayload } = await import("@/lib/compression/payload-codec");
+    const forwarded = JSON.stringify({
+      model: "gpt-test",
+      messages: Array.from({ length: 4000 }, (_, i) => ({
+        role: "user",
+        content: `turn ${i} with enough text to cross the compression threshold`,
+      })),
+    });
+    const session = createMockSession("openai");
+    (session as { forwardedRequestBody: string | null }).forwardedRequestBody =
+      await compressPayload(forwarded);
+
+    emitProxyLangfuseTrace(session, {
+      responseHeaders: new Headers(),
+      responseText: "{}",
+      usageMetrics: null,
+      costUsd: undefined,
+      statusCode: 200,
+      durationMs: 5,
+      isStreaming: false,
+    });
+
+    await waitForTrace();
+
+    const traceContext = mockTraceProxyRequest.mock.calls[0]?.[0];
+    expect(traceContext.session.forwardedRequestBody).toBe(forwarded);
   });
 
   test("never lets a synchronous session snapshot failure escape", () => {

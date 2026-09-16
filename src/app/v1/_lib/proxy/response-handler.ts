@@ -9,6 +9,7 @@ import { computeCacheScoreFields } from "@/lib/cache-effectiveness/gate";
 import { getEnvConfig } from "@/lib/config/env.schema";
 import { getCachedSystemSettings } from "@/lib/config/system-settings-cache";
 import { emitProxyLangfuseTrace } from "@/lib/langfuse/emit-proxy-trace";
+import { tryCreateLangfuseTraceBodySpool } from "@/lib/langfuse/trace-body-spool";
 import { logger } from "@/lib/logger";
 import { emitProxyMetrics } from "@/lib/metrics";
 import { recordDiscoveryControlEvent } from "@/lib/observability/discovery-metrics";
@@ -3974,6 +3975,13 @@ export class ProxyResponseHandler {
         // 透传场景下，我们在后台 stats 读取到第一块数据时再清除超时（与非透传路径口径一致）。
 
         const streamTextAccumulator = new BoundedStreamTextAccumulator();
+        let langfuseBodySpool = tryCreateLangfuseTraceBodySpool();
+        // 所有权：转交 emit 后置空；未转交的路径必须在 finally 里释放。
+        const disposeLangfuseBodySpool = () => {
+          const spool = langfuseBodySpool;
+          langfuseBodySpool = null;
+          if (spool) void spool.dispose();
+        };
         let lastStreamTextSnapshot: BoundedStreamTextSnapshot | null = null;
         let passthroughFirstByteSeen = false;
         let observePassthroughChunk = (_value: Uint8Array) => {};
@@ -4007,6 +4015,7 @@ export class ProxyResponseHandler {
             const rejection = new Error("client_detached_without_metering");
             passthroughPump.startDrain(reason);
             streamTextAccumulator.discardRetainedBytes();
+            disposeLangfuseBodySpool();
             passthroughPump.cancelSource(rejection);
             return;
           }
@@ -4028,6 +4037,7 @@ export class ProxyResponseHandler {
               budget: getDetachedStreamBudgetSnapshot(),
             });
             abortPassthroughTransport(rejection);
+            disposeLangfuseBodySpool();
             passthroughPump.cancelSource(rejection);
             return;
           }
@@ -4055,6 +4065,8 @@ export class ProxyResponseHandler {
           source: response.body,
           onReadStart: () => observePassthroughReadStart(),
           onChunk: (value) => {
+            // 无条件观察：客户端断开后的 drain 也要进入完整正文。
+            langfuseBodySpool?.observe(value);
             if (value.byteLength > 0) passthroughFirstByteSeen = true;
             const metering = clientAbortMeter?.observe(value);
             passthroughShadowObserver?.observe(value);
@@ -4365,6 +4377,8 @@ export class ProxyResponseHandler {
               usageMetrics: finalizedUsage,
               costUsd: undefined,
             });
+            const langfuseSpoolForTrace = langfuseBodySpool;
+            langfuseBodySpool = null;
             emitProxyLangfuseTrace(session, {
               responseHeaders: response.headers,
               responseText: allContent,
@@ -4374,6 +4388,7 @@ export class ProxyResponseHandler {
               durationMs: duration,
               isStreaming: true,
               errorMessage: finalized.errorMessage ?? undefined,
+              responseBodySpool: langfuseSpoolForTrace,
             });
           } catch (error) {
             const err = error instanceof Error ? error : new Error(String(error));
@@ -4470,6 +4485,7 @@ export class ProxyResponseHandler {
               });
             }
           } finally {
+            disposeLangfuseBodySpool();
             await releaseTransportResources();
             if (!commitSideEffectsScheduled) {
               void (async () => {
@@ -4617,6 +4633,13 @@ export class ProxyResponseHandler {
     let clientAbortDrainTimeoutId: NodeJS.Timeout | null = null;
     let clientAbortDrainStartedAt: number | null = null;
     const streamTextAccumulator = new BoundedStreamTextAccumulator();
+    let langfuseBodySpool = tryCreateLangfuseTraceBodySpool();
+    // 所有权：转交 emit 后置空；未转交的路径必须在 finally 里释放。
+    const disposeLangfuseBodySpool = () => {
+      const spool = langfuseBodySpool;
+      langfuseBodySpool = null;
+      if (spool) void spool.dispose();
+    };
     let lastStreamTextSnapshot: BoundedStreamTextSnapshot | null = null;
     const getCollectedChunkCount = () =>
       lastStreamTextSnapshot?.chunkCount ?? streamTextAccumulator.chunkCount;
@@ -4821,6 +4844,7 @@ export class ProxyResponseHandler {
       if (!clientAbortMeter) {
         clientAbortDrainMode = "rejected";
         streamTextAccumulator.discardRetainedBytes();
+        disposeLangfuseBodySpool();
         streamProtocolObserver = null;
         shadowGateObserver = null;
         if (activeReplaySpool) void activeReplaySpool.abort("raw_client_detached");
@@ -5395,6 +5419,8 @@ export class ProxyResponseHandler {
           usageMetrics: usageForCost,
           costUsd: rawCostUsdStr,
         });
+        const langfuseSpoolForTrace = langfuseBodySpool;
+        langfuseBodySpool = null;
         emitProxyLangfuseTrace(session, {
           responseHeaders: response.headers,
           responseText: allContent,
@@ -5406,6 +5432,7 @@ export class ProxyResponseHandler {
           isStreaming: true,
           sseEventCount: getCollectedChunkCount(),
           errorMessage: streamErrorMessage ?? undefined,
+          responseBodySpool: langfuseSpoolForTrace,
         });
       })();
       // F2 兜底：finalize 在终态决策点之前抛出时，spool 会永挂 owning、租约悬置、
@@ -5454,6 +5481,8 @@ export class ProxyResponseHandler {
     }
 
     const observeChunk = (value: Uint8Array) => {
+      // 无条件观察：客户端断开后的 drain 也要进入完整正文。
+      langfuseBodySpool?.observe(value);
       const chunkSize = value.length;
       if (chunkSize > 0) upstreamFirstByteSeen = true;
       clearIdleTimer();
@@ -5825,6 +5854,7 @@ export class ProxyResponseHandler {
           }
         }
       } finally {
+        disposeLangfuseBodySpool();
         // 确保资源释放
         cleanupTaskAbortBinding();
         cleanupResponseControllerAbortListener();

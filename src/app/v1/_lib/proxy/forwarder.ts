@@ -3458,7 +3458,7 @@ export class ProxyForwarder {
 
         const bodyString = JSON.stringify(bodyToSerialize);
         requestBody = bodyString;
-        session.forwardedRequestBody = retainForwardedBody ? bodyString : null;
+        session.setForwardedRequestBody(retainForwardedBody ? bodyString : null);
       } else {
         // No body: still need streaming detection, auth, URL, headers
         const geminiPathname = session.requestUrl.pathname || "";
@@ -3769,7 +3769,7 @@ export class ProxyForwarder {
         ) {
           // Raw passthrough: preserve original request body bytes as-is
           requestBody = session.request.buffer;
-          session.forwardedRequestBody = retainForwardedBody ? session.request.log : null;
+          session.setForwardedRequestBody(retainForwardedBody ? session.request.log : null);
 
           try {
             isStreaming = (session.request.message as Record<string, unknown>).stream === true;
@@ -3805,7 +3805,7 @@ export class ProxyForwarder {
           const serializedMultipart =
             await serializeOpenAIImageMultipartRequest(imageRequestMetadata);
           requestBody = serializedMultipart.body;
-          session.forwardedRequestBody = retainForwardedBody ? serializedMultipart.summary : null;
+          session.setForwardedRequestBody(retainForwardedBody ? serializedMultipart.summary : null);
           isStreaming = serializedMultipart.isStreaming;
 
           if (serializedMultipart.contentType) {
@@ -3872,7 +3872,7 @@ export class ProxyForwarder {
 
           const bodyString = JSON.stringify(messageToSend);
           requestBody = bodyString;
-          session.forwardedRequestBody = retainForwardedBody ? bodyString : null;
+          session.setForwardedRequestBody(retainForwardedBody ? bodyString : null);
           isStreaming = messageToSend.stream === true;
 
           if (process.env.NODE_ENV === "development") {
@@ -3919,7 +3919,7 @@ export class ProxyForwarder {
     if (session.shouldPersistSessionDebugArtifacts()) {
       const detailSnapshotSession = session as ProxySessionWithDetailSnapshotRuntime;
       detailSnapshotSession.detailSnapshotRequestAfter = {
-        body: session.forwardedRequestBody ?? null,
+        body: await session.getForwardedRequestBody(),
         headers: new Headers(processedHeaders),
         meta: {
           clientUrl: null,

@@ -636,13 +636,12 @@ describe("Chat native incremental fields regressions", () => {
     });
   });
 
-  test("keeps reconstructed audio within the serialized budget", () => {
-    expect(
-      finalizeOpenAIChatStream(
-        choiceFrames([
-          { delta: { audio: { data: "x".repeat(1024 * 1024) } }, finish_reason: "stop" },
-        ])
-      )
-    ).toMatchObject({ kind: "final_output_unavailable", reason: "over_budget" });
+  test("keeps the whole reconstructed audio payload, however large", () => {
+    const data = "x".repeat(1024 * 1024);
+    const result = finalizeOpenAIChatStream(
+      choiceFrames([{ delta: { audio: { data } }, finish_reason: "stop" }])
+    );
+    expect(result).toMatchObject({ kind: "final" });
+    expect(JSON.stringify(result)).toContain(data);
   });
 });
