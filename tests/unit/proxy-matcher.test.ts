@@ -18,13 +18,30 @@ describe("proxy matcher", () => {
       "/v1beta/messages",
       "/v1beta",
       "/v1beta/v1/foo",
+      "/chat/completions",
+      "/chat/completions/models",
+      "/responses",
+      "/responses/compact",
+      "/models",
+      "/messages",
+      "/messages/count_tokens",
     ])("does not match %s", (pathname) => {
       expect(matcher.test(pathname)).toBe(false);
     });
   });
 
   describe("look-alike paths that must NOT be excluded (regression: a bare `v1` prefix would over-match, e.g. `/v10`)", () => {
-    it.each(["/v10/foo", "/v1foo", "/v1beta-extra", "/version"])("matches %s", (pathname) => {
+    it.each([
+      "/v10/foo",
+      "/v1foo",
+      "/v1beta-extra",
+      "/version",
+      "/chat",
+      "/chat/completions-extra",
+      "/messaging",
+      "/models-archive",
+      "/response",
+    ])("matches %s", (pathname) => {
       expect(matcher.test(pathname)).toBe(true);
     });
   });
@@ -62,7 +79,7 @@ describe("proxy matcher", () => {
   // using a different matcher than the one this test file exercises.
   it("inlined matcher in src/proxy.ts stays in sync with src/proxy.matcher.ts", () => {
     const proxyTs = fs.readFileSync(path.join(__dirname, "../../src/proxy.ts"), "utf8");
-    const m = proxyTs.match(/matcher:\s*\[\s*"([^"]+)"\s*\]/);
+    const m = proxyTs.match(/matcher:\s*\[\s*"([^"]+)"\s*,?\s*\]/);
     expect(m, 'could not locate `matcher: ["..."]` literal in src/proxy.ts').not.toBeNull();
     expect(m?.[1]).toBe(proxyMatcherPattern);
   });

@@ -42,6 +42,7 @@ const INTERNAL_TUNNEL_HOST =
   hostname === "0.0.0.0" || hostname === "::" || hostname === "*" ? "127.0.0.1" : hostname;
 
 const WS_PATH = "/v1/responses";
+const WS_PATH_UNPREFIXED = "/responses";
 const CLIENT_TRANSPORT_HEADER = "x-cch-client-transport";
 const WS_FORWARD_FLAG_HEADER = "x-cch-responses-ws-forward";
 const WS_SESSION_HEADER = "x-cch-responses-ws-session";
@@ -1075,7 +1076,11 @@ async function forwardToInternalHttp(
 function isResponsesWsUpgrade(req) {
   if (!req.url) return false;
   const parsed = parse(req.url);
-  return parsed.pathname === WS_PATH;
+  let pathname = parsed.pathname;
+  if (pathname && pathname.length > 1 && pathname.endsWith("/")) {
+    pathname = pathname.slice(0, -1);
+  }
+  return pathname === WS_PATH || pathname === WS_PATH_UNPREFIXED;
 }
 
 function listenServer(server, options) {
@@ -1415,6 +1420,7 @@ module.exports = {
   listenOnPrivateLoopback,
   notifyMulticoreReady,
   registerOrchestratedShutdown,
+  isResponsesWsUpgrade,
   WS_MAX_PAYLOAD_BYTES,
   MAX_PENDING_BYTES,
   MAX_PENDING_OUTBOUND_BYTES,

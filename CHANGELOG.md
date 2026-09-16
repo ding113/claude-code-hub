@@ -15,6 +15,7 @@
 - Langfuse 流式请求还原完整最终输出（Claude / OpenAI Chat Completions / Responses / Gemini），避免把原始 SSE 文本当作 generation output
 - Langfuse 将客户端原始请求头写入 generation `client_metadata`（凭据中间打码）
 - 支持 `LANGFUSE_TRACING_ENVIRONMENT` / `LANGFUSE_RELEASE` 传入 LangfuseSpanProcessor
+- 兼容无 `/v1` 前缀的代理入口：`/chat/completions`、`/responses`、`/models`、`/messages` 映射到对应 `/v1/...` 路径
 
 ### 优化
 

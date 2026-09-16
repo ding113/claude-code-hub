@@ -8,6 +8,7 @@ import {
   handleOpenAICompatibleModels,
 } from "@/app/v1/_lib/models/available-models";
 import { handleProxyRequest } from "@/app/v1/_lib/proxy-handler";
+import { rewriteUnprefixedV1Request } from "@/app/v1/_lib/unprefixed-v1-alias";
 import { withDataDbScope } from "@/drizzle/db";
 import { logger } from "@/lib/logger";
 import { sensitiveWordDetector } from "@/lib/sensitive-word-detector";
@@ -59,7 +60,13 @@ app.all("*", handleProxyRequest);
 
 export { app as v1App };
 
-const routeHandler = withDataDbScope(handle(app));
+const honoHandler = handle(app);
+
+function handleProxyRoute(request: Request): Response | Promise<Response> {
+  return honoHandler(rewriteUnprefixedV1Request(request));
+}
+
+const routeHandler = withDataDbScope(handleProxyRoute);
 
 export {
   routeHandler as GET,

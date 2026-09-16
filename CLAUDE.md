@@ -118,7 +118,7 @@ Key components:
 - **Format Converters** (`converters/`): Bidirectional format translation
 
 ### API Layer
-- **Proxy endpoints**: `/v1/messages`, `/v1/chat/completions`, `/v1/responses`
+- **Proxy endpoints**: `/v1/messages`, `/v1/chat/completions`, `/v1/responses`, `/v1/models` (also accepted without the `/v1` prefix)
 - **Management API**: `/api/v1/*` - RESTful management surface documented by OpenAPI
 - **Legacy Management API**: `/api/actions/{module}/{action}` - Deprecated Server Action adapter, retained behind `ENABLE_LEGACY_ACTIONS_API`
 - **Docs**: `/api/v1/scalar` (Scalar UI), `/api/v1/docs` (Swagger), `/api/v1/openapi.json`
