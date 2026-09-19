@@ -17,20 +17,40 @@ export interface MemoryLease {
   shrinkTo(bytes: number): void;
   release(): void;
 }
+/** 租约标签只用于诊断台账，定位长期不归还的所有者。 */
+export type MemoryLeaseTag =
+  | "body_read"
+  | "body_decode"
+  | "body_materialize"
+  | "gate"
+  | "langfuse_spool";
+export interface MemoryLeaseLedger {
+  count: number;
+  oldestAgeMs: number;
+  byTag: Record<string, { count: number; bytes: number; oldestAgeMs: number }>;
+}
 export interface MemoryGovernor {
   observe(
     stage: "admission" | "body_read" | "body_decode" | "body_materialize" | "gate",
     milliseconds: number,
     bytes?: number
   ): void;
-  acquire(bytes: number, signal?: AbortSignal, waitMs?: number): Promise<MemoryLease>;
-  tryLease(bytes: number): MemoryLease | null;
+  acquire(
+    bytes: number,
+    signal?: AbortSignal,
+    waitMs?: number,
+    tag?: MemoryLeaseTag
+  ): Promise<MemoryLease>;
+  tryLease(bytes: number, tag?: MemoryLeaseTag): MemoryLease | null;
   snapshot(): {
     usedBytes: number;
     limitBytes: number;
     waiting: number;
     peakBytes: number;
     rejected: number;
+    source?: string;
+    stages?: Record<string, { count: number; totalMs: number; maxMs: number; bytes: number }>;
+    leases?: MemoryLeaseLedger;
   };
 }
 export const getMemoryGovernor: () => MemoryGovernor = getGovernor;

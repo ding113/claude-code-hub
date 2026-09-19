@@ -307,4 +307,30 @@ describe("内存租约与本地准入", () => {
     coordinator.sample();
     expect(coordinator.snapshot().targetBytes).toBe((1024 - 256) * MiB);
   });
+  it("租约台账按标签汇总在账量与最长持有时间，归还后移除", async () => {
+    vi.setSystemTime(new Date("2026-01-01T00:00:00Z"));
+    const governor = new MemoryGovernor({ limit: 1000, remote: false, monitor: false });
+    const body = governor.tryLease(300, "body_materialize")!;
+    vi.setSystemTime(new Date("2026-01-01T00:01:00Z"));
+    const gate = await governor.acquire(100, undefined, undefined, "gate");
+    const untagged = governor.tryLease(1)!;
+    body.shrinkTo(200);
+    expect(gate.tryGrow(150)).toBe(true);
+    vi.setSystemTime(new Date("2026-01-01T00:01:30Z"));
+    expect(governor.snapshot().leases).toEqual({
+      count: 3,
+      oldestAgeMs: 90_000,
+      byTag: {
+        body_materialize: { count: 1, bytes: 200, oldestAgeMs: 90_000 },
+        gate: { count: 1, bytes: 150, oldestAgeMs: 30_000 },
+        untagged: { count: 1, bytes: 1, oldestAgeMs: 30_000 },
+      },
+    });
+    body.release();
+    body.release();
+    gate.release();
+    untagged.release();
+    expect(governor.snapshot().leases).toEqual({ count: 0, oldestAgeMs: 0, byTag: {} });
+    expect(governor.snapshot().usedBytes).toBe(0);
+  });
 });

@@ -365,7 +365,7 @@ export function tryCreateLangfuseTraceBodySpool(
 ): LangfuseTraceBodySpool | null {
   if (!process.env.LANGFUSE_PUBLIC_KEY || !process.env.LANGFUSE_SECRET_KEY) return null;
 
-  const lease = getMemoryGovernor().tryLease(STORE_SCRATCH_BYTES);
+  const lease = getMemoryGovernor().tryLease(STORE_SCRATCH_BYTES, "langfuse_spool");
   if (!lease) return null;
 
   try {
