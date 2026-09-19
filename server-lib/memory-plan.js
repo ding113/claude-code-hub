@@ -15,8 +15,10 @@ function createMemoryPlan({ env = process.env, snapshot = readResourceSnapshot()
   const autoBudget = Math.floor(0.6 * Math.max(0, weightedAvailableBytes - reserveBytes));
   const budgetBytes = explicit ? Number(raw) : autoBudget;
   // 总量已按加权余量乘 0.60。热点再受真实物理余量约束，不能重复折扣掉 swap 的贡献。
-  const hotBudgetBytes = Math.min(budgetBytes, Math.floor(Math.max(0, ram - reserveBytes)));
-  return { source: explicit ? "explicit" : "auto", budgetBytes, hotBudgetBytes, reserveBytes, weightedAvailableBytes, ...snapshot };
+  // 运行时只用真实物理余量收紧上限；0.60 折扣已体现在启动基线里，不能随进程自身 RSS 重复折扣。
+  const headroomBytes = Math.floor(Math.max(0, ram - reserveBytes));
+  const hotBudgetBytes = Math.min(budgetBytes, headroomBytes);
+  return { source: explicit ? "explicit" : "auto", budgetBytes, hotBudgetBytes, headroomBytes, reserveBytes, weightedAvailableBytes, ...snapshot };
 }
 
 module.exports = { createMemoryPlan };

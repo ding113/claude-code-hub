@@ -127,6 +127,23 @@ describe("自动规划与显式限制", () => {
       })
     ).toMatchObject({ budgetBytes: 16 * MiB, hotBudgetBytes: 16 * MiB, source: "explicit" });
   });
+  it("headroomBytes 是扣除保留量后的真实物理余量，不含 0.60 折扣和 swap", () => {
+    const auto = createMemoryPlan({
+      env: {},
+      snapshot: { availableRamBytes: 2 * GiB, availableSwapBytes: 8 * GiB },
+    });
+    expect(auto.headroomBytes).toBe(2 * GiB - 256 * MiB);
+    expect(auto.hotBudgetBytes).toBeLessThanOrEqual(auto.headroomBytes);
+    const explicit = createMemoryPlan({
+      env: { CCH_MEMORY_BUDGET_BYTES: String(16 * MiB) },
+      snapshot: { availableRamBytes: 128 * MiB, availableSwapBytes: 0 },
+    });
+    expect(explicit.headroomBytes).toBe(Math.floor(128 * MiB * 0.9));
+    expect(
+      createMemoryPlan({ env: {}, snapshot: { availableRamBytes: 0, availableSwapBytes: 0 } })
+        .headroomBytes
+    ).toBe(0);
+  });
   it("按可用内存加一半 swap 计算，保留基础余量", () => {
     const p = createMemoryPlan({ env: {}, snapshot: fixture() });
     expect(p.weightedAvailableBytes).toBe(11 * GiB);

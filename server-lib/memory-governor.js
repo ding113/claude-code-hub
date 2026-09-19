@@ -76,7 +76,8 @@ class MemoryGovernor {
     }
     const resource = this.readSnapshot();
     const plan = createMemoryPlan({ env: this.env, snapshot: resource });
-    const safe = Math.min(this.ceiling, this.used + plan.hotBudgetBytes);
+    // 进程自身常驻内存增长不应缩小正文额度；只有真实余量低于启动上限时才收紧。
+    const safe = Math.min(this.ceiling, this.used + plan.headroomBytes);
     const pressure = resource.memoryPressure >= 1 || (resource.swapIO || 0) > this.lastSwapIO;
     this.lastSwapIO = resource.swapIO || 0;
     if (pressure || safe < this.limit) {
