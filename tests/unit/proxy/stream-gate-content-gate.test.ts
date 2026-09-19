@@ -11,6 +11,9 @@ import {
   type StreamGateFailureReason,
 } from "@/app/v1/_lib/proxy/stream-gate/stream-content-gate";
 import { StreamGatePrebufferBudget } from "@/app/v1/_lib/proxy/stream-gate/prebuffer-budget";
+import { DiscoveryPrebuffer } from "@/app/v1/_lib/proxy/discovery-prebuffer";
+import { withRequestMemoryLifetime } from "@/lib/memory/request-lifetime";
+import { MemoryGovernor } from "../../../server-lib/memory-governor";
 
 const encoder = new TextEncoder();
 
@@ -93,6 +96,37 @@ describe("runStreamContentGate", () => {
       prebufferBudget: budget,
     });
     expect(failed.committed).toBe(false);
+    expect(budget.snapshot().reservedBytes).toBe(0);
+  });
+
+  it("已提交前缀被丢弃（既未读完也未取消）时，请求作用域结束兜底归还两级额度", async () => {
+    const reservation = GATE_OPTIONS.prebufferByteCap * 4;
+    const governor = new MemoryGovernor({ limit: reservation, remote: false, monitor: false });
+    const budget = new StreamGatePrebufferBudget(() => reservation, governor);
+    const response = await withRequestMemoryLifetime(async () => {
+      const committed = await runStreamContentGate(readerFromChunks([TEXT_DELTA]), {
+        ...GATE_OPTIONS,
+        prebufferBudget: budget,
+      });
+      expect(committed.committed).toBe(true);
+      expect(budget.snapshot().reservedBytes).toBeGreaterThan(0);
+      expect(governor.snapshot().leases.byTag.gate.count).toBe(1);
+      // 模拟下游在构造响应后丢弃了持有租约的前缀流。
+      return new Response("unrelated");
+    });
+    await response.text();
+    expect(budget.snapshot().reservedBytes).toBe(0);
+    expect(governor.snapshot().usedBytes).toBe(0);
+  });
+
+  it("发现预缓冲重复挂载时先归还新租约再报错", async () => {
+    const budget = new StreamGatePrebufferBudget(() => 1024);
+    const prebuffer = new DiscoveryPrebuffer();
+    prebuffer.attachLease(await budget.acquire(256));
+    const second = await budget.acquire(256);
+    expect(() => prebuffer.attachLease(second)).toThrow();
+    expect(budget.snapshot().reservedBytes).toBe(256);
+    prebuffer.clear();
     expect(budget.snapshot().reservedBytes).toBe(0);
   });
 
