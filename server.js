@@ -1179,7 +1179,9 @@ async function main() {
   const memoryIdentity = { pid: process.pid, workerIndex: Number(process.env.CCH_MULTICORE_WORKER_INDEX || 0) };
   log("info", "worker_memory_ready", { ...memoryIdentity, ...memoryGovernor.snapshot() });
   const memoryStatsTimer = setInterval(() => {
-    log("info", "worker_memory_stats", { ...memoryIdentity, ...memoryGovernor.snapshot(), processMemory: process.memoryUsage(), spool: getSpoolBudget() });
+    // Next bundle 首次处理代理请求后才注册；用于定位响应已结束却仍被后台所有者占用的请求内存。
+    const requestMemory = globalThis[Symbol.for("cch.requestMemoryStats")]?.();
+    log("info", "worker_memory_stats", { ...memoryIdentity, ...memoryGovernor.snapshot(), requestMemory, processMemory: process.memoryUsage(), spool: getSpoolBudget() });
   }, 30000);
   memoryStatsTimer.unref();
   if (process.env.CCH_MULTICORE_BACKGROUND_OWNER !== "0") {
