@@ -25,6 +25,7 @@ interface TaskInfo {
   lastActivityAt: number;
   taskType: string;
   staleTimeoutMs: number;
+  touchRequestMemory?: () => void;
 }
 
 interface RegisterTaskOptions {
@@ -157,7 +158,8 @@ class AsyncTaskManagerClass {
       });
     }
 
-    const releaseRequestMemory = retainCurrentRequestMemory();
+    const releaseRequestMemory = retainCurrentRequestMemory(`task:${taskType ?? "unknown"}`);
+    taskInfo.touchRequestMemory = releaseRequestMemory.touch;
     // 任务完成后自动清理；cancel/cleanup 不提前释放仍执行中的消费者。
     promise
       .then(() => {
@@ -221,6 +223,7 @@ class AsyncTaskManagerClass {
     }
 
     taskInfo.lastActivityAt = Date.now();
+    taskInfo.touchRequestMemory?.();
     return true;
   }
 

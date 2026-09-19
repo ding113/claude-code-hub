@@ -9,7 +9,7 @@ import {
   decompressPayload,
 } from "@/lib/compression/payload-codec";
 import { logger } from "@/lib/logger";
-import { retainRequestMemoryUntil } from "@/lib/memory/request-lifetime";
+import { onRequestMemoryForcedEnd, retainRequestMemoryUntil } from "@/lib/memory/request-lifetime";
 import {
   deleteLiveChain,
   type LiveProviderSnapshot,
@@ -197,6 +197,15 @@ export class ProxySession {
    */
   forwardedRequestBody: string | null = null;
   private forwardedRequestBodyPending: Promise<void> | null = null;
+
+  /** 仅在请求内存被强制归还后调用：此时响应早已结束，正文不再属于任何受管额度。 */
+  dropRequestBodyAfterForcedMemoryRelease(): void {
+    this.request.buffer = undefined;
+    this.request.message = {};
+    this.request.log = "";
+    this.forwardedRequestBody = null;
+    this.forwardedRequestBodyPending = null;
+  }
 
   /** 写入后异步压缩，热路径不做 CPU 密集的同步压缩。 */
   setForwardedRequestBody(text: string | null): void {
@@ -463,7 +472,7 @@ export class ProxySession {
     };
     if (bodyResult.lazyLog) setLazyRequestLog(request);
 
-    return new ProxySession({
+    const session = new ProxySession({
       startTime,
       method,
       requestUrl,
@@ -477,6 +486,9 @@ export class ProxySession {
       rawResponsesReasoningEffort,
       rawMessagesReasoningEffort,
     });
+    // 后台所有者卡住且宽限到期时，租约已被强制归还；同步丢弃正文引用，避免被卡住的闭包继续钉住内存。
+    onRequestMemoryForcedEnd(() => session.dropRequestBodyAfterForcedMemoryRelease());
+    return session;
   }
 
   /**
@@ -1001,7 +1013,8 @@ export class ProxySession {
         if (!this.liveObservabilityClosed && (this.liveChainDirty || this.liveRoutingTraceDirty)) {
           this.scheduleLiveObservabilityFlush();
         }
-      })
+      }),
+      "live-observability-flush"
     );
   }
 
@@ -1232,7 +1245,8 @@ export class ProxySession {
         if (!this.sessionId || this.requestSequence == null) return;
         if (!this.shouldTrackSessionObservability()) return;
         await deleteLiveChain(this.sessionId, this.requestSequence);
-      })()
+      })(),
+      "live-observability-close"
     );
     return this.liveObservabilityClosePromise;
   }
