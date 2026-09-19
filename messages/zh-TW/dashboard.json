@@ -251,6 +251,7 @@
         "title": "攔截資訊",
         "type": "攔截類型",
         "sensitiveWord": "敏感詞攔截",
+        "localCapacity": "本地處理容量不足",
         "word": "敏感詞",
         "matchType": "匹配類型",
         "matchTypeContains": "包含比對",

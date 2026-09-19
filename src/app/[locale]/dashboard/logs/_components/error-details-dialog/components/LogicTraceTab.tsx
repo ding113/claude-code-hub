@@ -311,7 +311,11 @@ export function LogicTraceTab({
               {t("blocked.title")}
             </span>
             <Badge variant="outline" className="border-orange-600 text-orange-600">
-              {blockedBy === "sensitive_word" ? t("blocked.sensitiveWord") : blockedBy}
+              {blockedBy === "sensitive_word"
+                ? t("blocked.sensitiveWord")
+                : blockedBy === "local_capacity"
+                  ? t("blocked.localCapacity")
+                  : blockedBy}
             </Badge>
           </div>
           {parsedBlockedReason && (
