@@ -2,6 +2,7 @@ import { ByteStore, STORE_SCRATCH_BYTES } from "@/lib/body-store/byte-store";
 import { getEnvConfig } from "@/lib/config/env.schema";
 import { logger } from "@/lib/logger";
 import { getMemoryGovernor, LocalCapacityError } from "@/lib/memory/governor";
+import { attachRequestMemory } from "@/lib/memory/request-lifetime";
 import { getCachedProxyRuntimeSettings } from "@/lib/system-settings/proxy-runtime";
 import { inferUpstreamErrorStatusCodeFromText } from "@/lib/utils/upstream-error-detection";
 import { BufferedByteChunks } from "../buffered-byte-chunks";
@@ -325,6 +326,8 @@ export async function runStreamContentGate(
             );
         },
       };
+      // 提交后 finally 不再兜底；落盘前缀的文件清理同样交给请求作用域兜底。
+      attachRequestMemory(prebufferLease);
     }
     leaseTransferred = true;
     return {

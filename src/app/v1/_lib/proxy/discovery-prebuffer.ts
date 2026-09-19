@@ -15,7 +15,10 @@ export class DiscoveryPrebuffer extends BufferedByteChunks {
 
   attachLease(lease: StreamGatePrebufferLease | undefined): void {
     if (!lease) return;
-    if (this.lease) throw new Error("Discovery prebuffer already owns a lease");
+    if (this.lease) {
+      lease.release();
+      throw new Error("Discovery prebuffer already owns a lease");
+    }
     this.lease = lease;
   }
 
