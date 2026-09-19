@@ -26,6 +26,7 @@ import {
   ProxyError,
   type RateLimitError,
 } from "./errors";
+import { recordLocalCapacityRejection } from "./local-capacity-log";
 import { ProxyResponses } from "./responses";
 import type { ProxySession } from "./session";
 
@@ -180,9 +181,31 @@ export class ProxyErrorHandler {
         errorMessage: error.message,
         statusCode: 429,
       });
-      await ProxyErrorHandler.logErrorToDatabase(session, error.message, 429, null).catch(
-        () => undefined
-      );
+      if (session.messageContext) {
+        await ProxyErrorHandler.logErrorToDatabase(session, error.message, 429, null).catch(
+          () => undefined
+        );
+      } else {
+        // message_request 行在守卫链末尾才创建；此前的容量拒绝按被拦截请求补一行，仪表盘才可见。
+        const { user, apiKey } = session.authState ?? {};
+        if (user && apiKey) {
+          void recordLocalCapacityRejection({
+            userId: user.id,
+            apiKey,
+            stage: "pipeline",
+            errorMessage: error.message,
+            durationMs: Date.now() - session.startTime,
+            model: session.request.model,
+            sessionId: session.sessionId,
+            endpoint: session.getEndpoint(),
+            userAgent: session.userAgent,
+            clientIp: session.clientIp,
+          });
+        }
+        await ProxyErrorHandler.logErrorToDatabase(session, error.message, 429, null).catch(
+          () => undefined
+        );
+      }
       return await attachSessionIdToErrorResponse(session.sessionId, response);
     }
     // 分离两种消息：
