@@ -959,6 +959,7 @@ describe("proxy hedge transport/lifecycle integration (persistence and control-p
       ).toBe(false);
       client.abort();
       expect(await forwarded).toMatchObject({ statusCode: 499 });
+      if (!occupied) throw new Error("expected the occupied gate lease to be held");
       occupied.release();
       expect(governor.snapshot().usedBytes).toBe(0);
     } finally {

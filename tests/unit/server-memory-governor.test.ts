@@ -147,6 +147,7 @@ describe("内存租约与本地准入", () => {
     worker.emit("exit");
   });
   it("IPC 发送失败或断开时停止取得新授权", async () => {
+    vi.useFakeTimers();
     const child = Object.assign(new EventEmitter(), {
       env: {},
       connected: true,
@@ -160,7 +161,11 @@ describe("内存租约与本地准入", () => {
     child.send.mockImplementation((_message: unknown, callback: (error?: Error) => void) =>
       callback(new Error("send failed"))
     );
-    await governor.requestCredits(100);
+    // 同一 ID 在 1 秒后重试，这次走 IPC 回调报错的路径。
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(child.send).toHaveBeenCalledTimes(2);
+    expect(child.send.mock.calls[1][0]).toMatchObject({ id: child.send.mock.calls[0][0].id });
+    expect(governor.snapshot().limitBytes).toBe(0);
     child.connected = false;
     child.emit("disconnect");
     await expect(governor.acquire(1, undefined, 0)).rejects.toBeInstanceOf(LocalCapacityError);
