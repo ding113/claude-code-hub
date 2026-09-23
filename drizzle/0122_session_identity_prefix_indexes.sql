@@ -1,3 +1,10 @@
--- Session identity prefix indexes are installed by the concurrent index preflight.
--- This migration records the schema revision without running a blocking CREATE INDEX.
-SELECT 1;
+-- runMigrations() builds these indexes with CREATE INDEX CONCURRENTLY before this migration runs,
+-- so IF NOT EXISTS skips them there. Migrations applied outside runMigrations() create them here.
+CREATE INDEX IF NOT EXISTS "idx_message_request_session_identity_prefix" ON "public"."message_request" USING btree ((COALESCE("session_identity", "session_id")) varchar_pattern_ops,"created_at" DESC NULLS LAST,"id" DESC NULLS LAST) WHERE "message_request"."deleted_at" IS NULL AND ("message_request"."blocked_by" IS NULL OR "message_request"."blocked_by" <> 'warmup');--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_message_request_session_id_prefix_cover" ON "public"."message_request" USING btree ("session_id" varchar_pattern_ops,"created_at" DESC NULLS LAST,"id" DESC NULLS LAST) WHERE "message_request"."deleted_at" IS NULL AND ("message_request"."blocked_by" IS NULL OR "message_request"."blocked_by" <> 'warmup');--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_usage_ledger_session_identity_prefix" ON "public"."usage_ledger" USING btree ((COALESCE("session_identity", "session_id")) varchar_pattern_ops,"created_at" DESC NULLS LAST,"id" DESC NULLS LAST) WHERE "usage_ledger"."blocked_by" IS NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_usage_ledger_session_id_prefix" ON "public"."usage_ledger" USING btree ("session_id" varchar_pattern_ops,"created_at" DESC NULLS LAST,"id" DESC NULLS LAST) WHERE "usage_ledger"."blocked_by" IS NULL;--> statement-breakpoint
+COMMENT ON INDEX "public"."idx_message_request_session_identity_prefix" IS 'cch:migration:0121:session-identity-prefix-index:v1';--> statement-breakpoint
+COMMENT ON INDEX "public"."idx_message_request_session_id_prefix_cover" IS 'cch:migration:0121:session-identity-prefix-index:v1';--> statement-breakpoint
+COMMENT ON INDEX "public"."idx_usage_ledger_session_identity_prefix" IS 'cch:migration:0121:session-identity-prefix-index:v1';--> statement-breakpoint
+COMMENT ON INDEX "public"."idx_usage_ledger_session_id_prefix" IS 'cch:migration:0121:session-identity-prefix-index:v1';

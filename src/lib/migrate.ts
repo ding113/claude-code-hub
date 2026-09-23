@@ -5,6 +5,7 @@ import { readMigrationFiles } from "drizzle-orm/migrator";
 import { drizzle } from "drizzle-orm/postgres-js";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import postgres from "postgres";
+import { getEnvConfig } from "@/lib/config/env.schema";
 import { logger } from "@/lib/logger";
 import {
   type MigrationIndexPreflightExecutor,
@@ -224,12 +225,20 @@ export async function runMigrations() {
     await ensureDrizzleMigrationsTableExists(migrationClient);
     await repairDrizzleMigrationsCreatedAt({ client: migrationClient, migrationsFolder });
     const indexExecutor = createMigrationIndexPreflightExecutor(migrationClient);
+    const env = getEnvConfig();
+    const timeouts = {
+      lockTimeoutMs: env.MIGRATION_INDEX_LOCK_TIMEOUT_MS,
+      statementTimeoutMs: env.MIGRATION_INDEX_STATEMENT_TIMEOUT_MS,
+    };
     await runSessionReplayMigrationPlan({
       baseTablesReady: await sessionReplayBaseTablesExist(migrationClient),
       latestMigrationCreatedAt: await getLatestDrizzleMigrationCreatedAt(migrationClient),
       migrate: () => migrate(db, { migrationsFolder }),
       runIndexPreflight: (options) =>
-        runSessionReplayIndexPreflight(indexExecutor, SESSION_REPLAY_INDEX_SPECS, options),
+        runSessionReplayIndexPreflight(indexExecutor, SESSION_REPLAY_INDEX_SPECS, {
+          ...options,
+          timeouts,
+        }),
     });
 
     logger.info("Database migrations completed successfully");

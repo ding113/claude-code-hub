@@ -1,6 +1,7 @@
 export const SESSION_REPLAY_MIGRATION_CREATED_AT = 1785563419224;
 export const SESSION_IDENTITY_INDEX_MIGRATION_CREATED_AT = 1785635169798;
 export const DATABASE_TIMEOUT_INDEX_MIGRATION_CREATED_AT = 1785688550789;
+export const SESSION_IDENTITY_PREFIX_INDEX_MIGRATION_CREATED_AT = 1788950528054;
 export const SESSION_IDENTITY_PREFIX_INDEX_MARKER =
   "cch:migration:0121:session-identity-prefix-index:v1";
 export const SESSION_REPLAY_INDEX_MARKER = "cch:migration:0116:session-replay-index:v1";
@@ -192,20 +193,31 @@ ALTER TABLE "usage_ledger"
   }
 }
 
+export type MigrationIndexTimeouts = {
+  lockTimeoutMs: number;
+  statementTimeoutMs: number;
+};
+
+export const DEFAULT_MIGRATION_INDEX_TIMEOUTS: MigrationIndexTimeouts = {
+  lockTimeoutMs: 5_000,
+  statementTimeoutMs: 15 * 60_000,
+};
+
 export async function runSessionReplayIndexPreflight(
   executor: MigrationIndexPreflightExecutor,
   specs: readonly SessionReplayIndexSpec[] = SESSION_REPLAY_INDEX_SPECS,
-  options: { ensureColumns?: boolean } = {}
+  options: { ensureColumns?: boolean; timeouts?: MigrationIndexTimeouts } = {}
 ): Promise<void> {
   if (options.ensureColumns !== false) {
     await ensurePreflightColumns(executor);
   }
 
+  const timeouts = options.timeouts ?? DEFAULT_MIGRATION_INDEX_TIMEOUTS;
   // Concurrent index builds can wait on old snapshots or conflicting DDL.
   // Bound both lock acquisition and total startup work instead of hanging the
   // migration advisory lock indefinitely.
-  await executor.execute("SET lock_timeout = '5s'");
-  await executor.execute("SET statement_timeout = '15min'");
+  await executor.execute(`SET lock_timeout = '${timeouts.lockTimeoutMs}ms'`);
+  await executor.execute(`SET statement_timeout = '${timeouts.statementTimeoutMs}ms'`);
   try {
     for (const spec of specs) {
       const canonical = await executor.inspectIndex(spec.canonicalName);
@@ -262,13 +274,17 @@ export async function runSessionReplayMigrationPlan(input: {
 }): Promise<void> {
   const { baseTablesReady, latestMigrationCreatedAt, migrate, runIndexPreflight } = input;
 
+  const latestKnown = latestMigrationCreatedAt != null && Number.isFinite(latestMigrationCreatedAt);
+  // 存量库在执行带索引的迁移前先并发建好索引，迁移里的 CREATE INDEX IF NOT EXISTS 随之跳过，
+  // 避免在大表上执行阻塞写入的 CREATE INDEX。
   if (
     baseTablesReady &&
-    (latestMigrationCreatedAt == null ||
-      !Number.isFinite(latestMigrationCreatedAt) ||
-      latestMigrationCreatedAt < DATABASE_TIMEOUT_INDEX_MIGRATION_CREATED_AT)
+    (!latestKnown || latestMigrationCreatedAt < SESSION_IDENTITY_PREFIX_INDEX_MIGRATION_CREATED_AT)
   ) {
-    await runIndexPreflight({ ensureColumns: true });
+    await runIndexPreflight({
+      ensureColumns:
+        !latestKnown || latestMigrationCreatedAt < DATABASE_TIMEOUT_INDEX_MIGRATION_CREATED_AT,
+    });
   }
 
   await migrate();

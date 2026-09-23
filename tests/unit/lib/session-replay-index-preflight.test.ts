@@ -1,8 +1,11 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { describe, expect, test, vi } from "vitest";
 import {
   DATABASE_TIMEOUT_INDEX_MARKER,
   DATABASE_TIMEOUT_INDEX_MIGRATION_CREATED_AT,
   SESSION_IDENTITY_PREFIX_INDEX_MARKER,
+  SESSION_IDENTITY_PREFIX_INDEX_MIGRATION_CREATED_AT,
   SESSION_REPLAY_INDEX_MARKER,
   SESSION_REPLAY_INDEX_SPECS,
   SESSION_REPLAY_MIGRATION_CREATED_AT,
@@ -230,10 +233,27 @@ describe("database index concurrent preflight", () => {
 
     const statements = execute.mock.calls.map(([statement]) => statement);
     expect(statements.some((statement) => statement.includes("ALTER TABLE"))).toBe(false);
-    expect(statements).toContain("SET lock_timeout = '5s'");
-    expect(statements).toContain("SET statement_timeout = '15min'");
+    expect(statements).toContain("SET lock_timeout = '5000ms'");
+    expect(statements).toContain("SET statement_timeout = '900000ms'");
     expect(statements).toContain("RESET statement_timeout");
     expect(statements).toContain("RESET lock_timeout");
+  });
+
+  test("applies configured lock and statement timeouts to concurrent index builds", async () => {
+    const { executor, execute } = createFakeExecutor();
+
+    await runSessionReplayIndexPreflight(executor, [spec], {
+      ensureColumns: false,
+      timeouts: { lockTimeoutMs: 30_000, statementTimeoutMs: 3_600_000 },
+    });
+
+    const statements = execute.mock.calls.map(([statement]) => statement);
+    const createAt = statements.findIndex((statement) =>
+      statement.startsWith("CREATE INDEX CONCURRENTLY")
+    );
+    expect(statements.indexOf("SET lock_timeout = '30000ms'")).toBeLessThan(createAt);
+    expect(statements.indexOf("SET statement_timeout = '3600000ms'")).toBeLessThan(createAt);
+    expect(statements.at(-1)).toBe("RESET lock_timeout");
   });
 
   test("adds pre-0116 Replay columns before building timeout indexes", async () => {
@@ -400,17 +420,75 @@ describe("database index migration orchestration", () => {
     expect(calls).toEqual(["indexes", "migrate", "indexes"]);
   });
 
-  test("runs only postflight after migration 0118 is already recorded", async () => {
+  test("prebuilds prefix indexes without table DDL before upgrading a 0118-0121 database", async () => {
     const calls: string[] = [];
 
     await runSessionReplayMigrationPlan({
       baseTablesReady: true,
       latestMigrationCreatedAt: DATABASE_TIMEOUT_INDEX_MIGRATION_CREATED_AT,
       migrate: async () => calls.push("migrate"),
+      runIndexPreflight: async ({ ensureColumns }) => calls.push(`indexes:${ensureColumns}`),
+    });
+
+    expect(calls).toEqual(["indexes:false", "migrate", "indexes:false"]);
+  });
+
+  test("adds Replay columns in the pre-migration pass only for pre-0118 databases", async () => {
+    const calls: string[] = [];
+
+    await runSessionReplayMigrationPlan({
+      baseTablesReady: true,
+      latestMigrationCreatedAt: DATABASE_TIMEOUT_INDEX_MIGRATION_CREATED_AT - 1,
+      migrate: async () => calls.push("migrate"),
+      runIndexPreflight: async ({ ensureColumns }) => calls.push(`indexes:${ensureColumns}`),
+    });
+
+    expect(calls).toEqual(["indexes:true", "migrate", "indexes:false"]);
+  });
+
+  test("runs only postflight after migration 0122 is already recorded", async () => {
+    const calls: string[] = [];
+
+    await runSessionReplayMigrationPlan({
+      baseTablesReady: true,
+      latestMigrationCreatedAt: SESSION_IDENTITY_PREFIX_INDEX_MIGRATION_CREATED_AT,
+      migrate: async () => calls.push("migrate"),
       runIndexPreflight: async () => calls.push("indexes"),
     });
 
     expect(calls).toEqual(["migrate", "indexes"]);
+  });
+
+  test("migration 0122 creates the prefix indexes with the preflight definitions and marker", () => {
+    const journal = JSON.parse(
+      readFileSync(path.join(process.cwd(), "drizzle/meta/_journal.json"), "utf8")
+    ) as { entries: Array<{ tag: string; when: number }> };
+    const entry = journal.entries.find(
+      (candidate) => candidate.tag === "0122_session_identity_prefix_indexes"
+    );
+    expect(entry?.when).toBe(SESSION_IDENTITY_PREFIX_INDEX_MIGRATION_CREATED_AT);
+
+    const statements = readFileSync(
+      path.join(process.cwd(), "drizzle/0122_session_identity_prefix_indexes.sql"),
+      "utf8"
+    )
+      .split("--> statement-breakpoint")
+      .map((statement) => statement.trim());
+    const prefixSpecs = SESSION_REPLAY_INDEX_SPECS.filter(
+      (candidate) => candidate.marker === SESSION_IDENTITY_PREFIX_INDEX_MARKER
+    );
+    for (const prefixSpec of prefixSpecs) {
+      expect(
+        statements.some((statement) =>
+          statement.endsWith(
+            `CREATE INDEX IF NOT EXISTS "${prefixSpec.canonicalName}" ${prefixSpec.definition};`
+          )
+        )
+      ).toBe(true);
+      expect(statements).toContain(
+        `COMMENT ON INDEX "public"."${prefixSpec.canonicalName}" IS '${prefixSpec.marker}';`
+      );
+    }
   });
 
   test("fails the migration flow when concurrent index postflight fails", async () => {

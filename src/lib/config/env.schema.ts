@@ -123,6 +123,9 @@ export const EnvSchema = z.object({
   // 原因: Boolean("false") === true (任何非空字符串都是 truthy)
   // 正确做法: 使用 transform 显式处理 "false" 和 "0" 字符串
   AUTO_MIGRATE: z.string().default("true").transform(booleanTransform),
+  // 迁移时并发建索引的锁等待与单条语句上限；大表或长事务较多时调高，超时会终止启动
+  MIGRATION_INDEX_LOCK_TIMEOUT_MS: z.coerce.number().int().min(1000).default(5_000),
+  MIGRATION_INDEX_STATEMENT_TIMEOUT_MS: z.coerce.number().int().min(60_000).default(900_000),
   PORT: z.coerce.number().default(23000),
   REDIS_URL: z.string().optional(),
   REDIS_TLS_REJECT_UNAUTHORIZED: z.string().default("true").transform(booleanTransform),
