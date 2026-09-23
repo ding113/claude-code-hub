@@ -283,3 +283,39 @@ describe("Model redirect across provider fallback", () => {
     expect(session.getOriginalModel()).toBe(REQUESTED_MODEL);
   });
 });
+
+describe("Gemini path rewrite after a regex redirect", () => {
+  test("writes captured model text containing $ patterns into the path literally", () => {
+    const provider = createProvider({
+      providerType: "gemini",
+      modelRedirects: [{ matchType: "regex", source: "^(.*)-fast$", target: "$1-pro" }],
+    });
+    const session = createSession("a$&b$1c$`d-fast");
+    session.requestUrl = new URL(
+      "https://example.com/v1beta/models/a$&b$1c$`d-fast:streamGenerateContent?alt=sse"
+    );
+    session.setProvider(provider);
+
+    expect(ModelRedirector.apply(session, provider)).toBe(true);
+    expect(session.request.model).toBe("a$&b$1c$`d-pro");
+    expect(decodeURIComponent(session.requestUrl.pathname)).toBe(
+      "/v1beta/models/a$&b$1c$`d-pro:streamGenerateContent"
+    );
+    expect(session.requestUrl.search).toBe("?alt=sse");
+  });
+
+  test("keeps a path without an action suffix", () => {
+    const provider = createProvider({
+      providerType: "gemini",
+      modelRedirects: [
+        { matchType: "exact", source: "gemini-2.5-flash", target: "gemini-2.5-pro" },
+      ],
+    });
+    const session = createSession("gemini-2.5-flash");
+    session.requestUrl = new URL("https://example.com/v1beta/models/gemini-2.5-flash");
+    session.setProvider(provider);
+
+    expect(ModelRedirector.apply(session, provider)).toBe(true);
+    expect(session.requestUrl.pathname).toBe("/v1beta/models/gemini-2.5-pro");
+  });
+});
