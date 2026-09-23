@@ -146,8 +146,10 @@ function isDisplayableCost(value: unknown): value is string {
 }
 
 function parseAttemptSequence(attemptId: string): number | null {
-  const match = /:(\d+)$/.exec(attemptId);
-  return match ? Number(match[1]) : null;
+  const discoveryMatch = /:(\d+)$/.exec(attemptId);
+  if (discoveryMatch) return Number(discoveryMatch[1]);
+  const hedgeMatch = /^legacy-hedge-(\d+)-(?:\d+|setup)$/.exec(attemptId);
+  return hedgeMatch ? Number(hedgeMatch[1]) : null;
 }
 
 function truncateForDisplay(value: string, maxLength = 8_192): string {
@@ -172,10 +174,14 @@ function getChainErrorMessage(item: ProviderChainItem | null): string | null {
   if (!item) return null;
   const sanitize = (value: string) =>
     truncateForDisplay(sanitizeErrorTextForDetail(redactJsonString(value)));
-  if (item.errorMessage) return sanitize(item.errorMessage);
   if (item.errorDetails?.provider?.upstreamBody) {
-    return sanitize(item.errorDetails.provider.upstreamBody);
+    const upstreamBody = sanitize(item.errorDetails.provider.upstreamBody);
+    const errorMessage = item.errorMessage ? sanitize(item.errorMessage) : null;
+    return errorMessage && !upstreamBody.includes(errorMessage)
+      ? `${errorMessage}\n${upstreamBody}`
+      : upstreamBody;
   }
+  if (item.errorMessage) return sanitize(item.errorMessage);
   if (item.errorDetails?.system?.errorMessage) {
     return sanitize(item.errorDetails.system.errorMessage);
   }
@@ -409,6 +415,54 @@ function buildAttempts(
     attempts.set(attemptId, attempt);
   }
 
+  const matchedChainItems = new Set(
+    [...attempts.values()].map((attempt) => attempt.chainItem).filter((item) => item !== null)
+  );
+  const chainAttempts = providerChain.filter(
+    (item) =>
+      item.attemptNumber != null &&
+      item.reason !== "initial_selection" &&
+      item.reason !== "session_reuse" &&
+      item.reason !== "affinity_hit" &&
+      item.reason !== "hedge_triggered" &&
+      item.reason !== "hedge_launched"
+  );
+  const missingChainAttempts = chainAttempts.filter((item) => !matchedChainItems.has(item));
+  for (const [index, item] of missingChainAttempts.entries()) {
+    const winner =
+      item.reason === "request_success" ||
+      item.reason === "retry_success" ||
+      item.reason === "hedge_winner";
+    const failure =
+      item.errorMessage != null ||
+      item.errorDetails != null ||
+      (item.statusCode != null && item.statusCode >= 400);
+    const outcome = winner ? "winner" : failure ? "failed" : "pending";
+    attempts.set(`chain-${index}`, {
+      id: `chain-${index}`,
+      providerId: item.id,
+      providerName: item.name,
+      sequence: item.attemptNumber ?? null,
+      round: trace.mode === "discovery" ? (trace.summary?.winnerRound ?? 1) : 1,
+      role: "normal",
+      promotedFrom: null,
+      priority: item.priority ?? null,
+      startedAt: item.timestamp == null ? null : Math.max(0, item.timestamp - trace.startedAt),
+      elapsedMs: null,
+      outcome,
+      statusCode: item.statusCode ?? null,
+      cancellationKind: null,
+      reason: item.reason ?? null,
+      fallbackPromoted: false,
+      winnerCommitted: winner,
+      chainItem: item,
+      billingEntry: null,
+      billingStatus: "none",
+      winnerCostUsd: null,
+      history: [],
+    });
+  }
+
   const terminalEvent = trace.events.findLast((event) => event.type === "request_finished");
   const terminalOutcome = normalizeTerminalOutcome(terminalEvent?.outcome);
   if (terminalEvent && terminalOutcome !== "success") {
@@ -607,12 +661,16 @@ export function DiscoveryTraceView({
   const summary = asRecord(trace.summary);
   const config = asRecord(trace.config);
   const runtimeStats = deriveRuntimeStats(trace);
-  const rounds =
-    numberFrom(summary, "rounds", "roundsVisited") ??
-    Math.max(runtimeStats.rounds, ...attempts.map((attempt) => attempt.round));
-  const attemptCount =
-    numberFrom(summary, "attemptsPerRequest", "attempts", "attemptsStarted") ??
-    Math.max(runtimeStats.attemptCount, attempts.length);
+  const rounds = Math.max(
+    numberFrom(summary, "rounds", "roundsVisited") ?? 0,
+    runtimeStats.rounds,
+    ...attempts.map((attempt) => attempt.round)
+  );
+  const attemptCount = Math.max(
+    numberFrom(summary, "attemptsPerRequest", "attempts", "attemptsStarted") ?? 0,
+    runtimeStats.attemptCount,
+    attempts.length
+  );
   const maxActive = numberFrom(summary, "maxActive", "maxActiveAttempts") ?? runtimeStats.maxActive;
   const saturationEvents = trace.events.filter((event) => event.type === "hedge_slot_saturated");
   const terminalEvent = trace.events.findLast((event) => event.type === "request_finished");
