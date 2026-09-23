@@ -269,4 +269,68 @@ describe("内存租约与本地准入", () => {
     for (let i = 0; i < 2000; i++) coordinator.sample();
     expect(coordinator.snapshot().targetBytes).toBe(ceiling);
   });
+  it("进程自身常驻内存增长不缩小额度；真实余量低于启动上限时才收紧", () => {
+    const MiB = 2 ** 20;
+    let ram = 2490 * MiB;
+    const governor = new MemoryGovernor({
+      remote: false,
+      monitor: false,
+      readSnapshot: () => ({ availableRamBytes: ram, availableSwapBytes: 0, memoryPressure: 0 }),
+    });
+    const ceiling = governor.snapshot().limitBytes;
+    expect(ceiling).toBe(Math.floor(0.6 * (2490 - 256) * MiB));
+    // Next 常驻约 470 MiB：零租约时额度不得塌缩（旧逻辑会降到 0.6 * 余量）。
+    ram = 2020 * MiB;
+    governor.sample();
+    expect(governor.snapshot().limitBytes).toBe(ceiling);
+    // 真实余量不足以覆盖启动上限时按余量收紧。
+    ram = 1000 * MiB;
+    governor.sample();
+    expect(governor.snapshot().limitBytes).toBe((1000 - 256) * MiB);
+    ram = 2020 * MiB;
+    for (let i = 0; i < 2000; i++) governor.sample();
+    expect(governor.snapshot().limitBytes).toBe(ceiling);
+  });
+  it("主进程目标同样只按真实余量收紧", () => {
+    const MiB = 2 ** 20;
+    let ram = 4096 * MiB;
+    const coordinator = createMemoryCoordinator({
+      env: {},
+      readSnapshot: () => ({ availableRamBytes: ram, availableSwapBytes: 0, memoryPressure: 0 }),
+    });
+    coordinator.resetBaseline();
+    const ceiling = coordinator.snapshot().targetBytes;
+    ram = 3000 * MiB;
+    coordinator.sample();
+    expect(coordinator.snapshot().targetBytes).toBe(ceiling);
+    ram = 1024 * MiB;
+    coordinator.sample();
+    expect(coordinator.snapshot().targetBytes).toBe((1024 - 256) * MiB);
+  });
+  it("租约台账按标签汇总在账量与最长持有时间，归还后移除", async () => {
+    vi.setSystemTime(new Date("2026-01-01T00:00:00Z"));
+    const governor = new MemoryGovernor({ limit: 1000, remote: false, monitor: false });
+    const body = governor.tryLease(300, "body_materialize")!;
+    vi.setSystemTime(new Date("2026-01-01T00:01:00Z"));
+    const gate = await governor.acquire(100, undefined, undefined, "gate");
+    const untagged = governor.tryLease(1)!;
+    body.shrinkTo(200);
+    expect(gate.tryGrow(150)).toBe(true);
+    vi.setSystemTime(new Date("2026-01-01T00:01:30Z"));
+    expect(governor.snapshot().leases).toEqual({
+      count: 3,
+      oldestAgeMs: 90_000,
+      byTag: {
+        body_materialize: { count: 1, bytes: 200, oldestAgeMs: 90_000 },
+        gate: { count: 1, bytes: 150, oldestAgeMs: 30_000 },
+        untagged: { count: 1, bytes: 1, oldestAgeMs: 30_000 },
+      },
+    });
+    body.release();
+    body.release();
+    gate.release();
+    untagged.release();
+    expect(governor.snapshot().leases).toEqual({ count: 0, oldestAgeMs: 0, byTag: {} });
+    expect(governor.snapshot().usedBytes).toBe(0);
+  });
 });

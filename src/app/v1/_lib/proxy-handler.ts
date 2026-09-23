@@ -16,6 +16,7 @@ import { tryFakeStreamingPath } from "./proxy/fake-streaming/proxy-integration";
 import { detectClientFormat, detectFormatByEndpoint } from "./proxy/format-mapper";
 import { ProxyForwarder } from "./proxy/forwarder";
 import { GuardPipelineBuilder } from "./proxy/guard-pipeline";
+import { recordPreAuthLocalCapacityRejection } from "./proxy/local-capacity-log";
 import { ProxyResponseHandler } from "./proxy/response-handler";
 import { normalizeResponseInput } from "./proxy/response-input-rectifier";
 import { ProxyResponses } from "./proxy/responses";
@@ -26,6 +27,7 @@ export async function handleProxyRequest(c: Context): Promise<Response> {
 }
 
 async function handleOwnedProxyRequest(c: Context): Promise<Response> {
+  const handlerStartedAt = Date.now();
   let session: ProxySession | null = null;
   let cachedSystemSettings: Awaited<ReturnType<typeof getCachedSystemSettings>> | null = null;
   let acquiredConcurrencySessionId: string | null = null;
@@ -199,7 +201,11 @@ async function handleOwnedProxyRequest(c: Context): Promise<Response> {
     if (session) {
       return await ProxyErrorHandler.handle(session, error);
     }
-    if (isLocalCapacityError(error)) return await buildLocalCapacityResponse();
+    if (isLocalCapacityError(error)) {
+      // 正文准入在认证之前：没有 session 可写库，尽力按请求头归属，不阻塞 429 响应。
+      void recordPreAuthLocalCapacityRejection(c, error.message, handlerStartedAt);
+      return await buildLocalCapacityResponse();
+    }
 
     if (error instanceof ProxyError) {
       return ProxyResponses.buildError(error.statusCode, error.getClientSafeMessage());

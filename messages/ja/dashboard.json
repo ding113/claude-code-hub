@@ -251,6 +251,7 @@
         "title": "ブロック情報",
         "type": "ブロックタイプ",
         "sensitiveWord": "機密語句ブロック",
+        "localCapacity": "ローカル処理容量不足",
         "word": "機密語句",
         "matchType": "一致タイプ",
         "matchTypeContains": "部分一致",

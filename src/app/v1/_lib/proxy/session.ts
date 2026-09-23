@@ -3,7 +3,7 @@ import { isCountTokensEndpointPath, V1_ENDPOINT_PATHS } from "@/app/v1/_lib/prox
 import { isRemoteCompactionV2Request } from "@/app/v1/_lib/proxy/remote-compaction";
 import { loadRequestBody, retainRequestMemory } from "@/lib/body-store/request-body-store";
 import { logger } from "@/lib/logger";
-import { retainRequestMemoryUntil } from "@/lib/memory/request-lifetime";
+import { onRequestMemoryForcedEnd, retainRequestMemoryUntil } from "@/lib/memory/request-lifetime";
 import {
   deleteLiveChain,
   type LiveProviderSnapshot,
@@ -172,6 +172,14 @@ export class ProxySession {
 
   // Actual serialized request body sent to upstream (after all preprocessing).
   forwardedRequestBody: string | null = null;
+
+  /** 仅在请求内存被强制归还后调用：此时响应早已结束，正文不再属于任何受管额度。 */
+  dropRequestBodyAfterForcedMemoryRelease(): void {
+    this.request.buffer = undefined;
+    this.request.message = {};
+    this.request.log = "";
+    this.forwardedRequestBody = null;
+  }
 
   // Session ID（用于会话粘性和并发限流）
   sessionId: string | null;
@@ -401,7 +409,7 @@ export class ProxySession {
     };
     if (bodyResult.lazyLog) setLazyRequestLog(request);
 
-    return new ProxySession({
+    const session = new ProxySession({
       startTime,
       method,
       requestUrl,
@@ -412,6 +420,9 @@ export class ProxySession {
       context: c,
       clientAbortSignal,
     });
+    // 后台所有者卡住且宽限到期时，租约已被强制归还；同步丢弃正文引用，避免被卡住的闭包继续钉住内存。
+    onRequestMemoryForcedEnd(() => session.dropRequestBodyAfterForcedMemoryRelease());
+    return session;
   }
 
   /**
@@ -936,7 +947,8 @@ export class ProxySession {
         if (!this.liveObservabilityClosed && (this.liveChainDirty || this.liveRoutingTraceDirty)) {
           this.scheduleLiveObservabilityFlush();
         }
-      })
+      }),
+      "live-observability-flush"
     );
   }
 
@@ -1167,7 +1179,8 @@ export class ProxySession {
         if (!this.sessionId || this.requestSequence == null) return;
         if (!this.shouldTrackSessionObservability()) return;
         await deleteLiveChain(this.sessionId, this.requestSequence);
-      })()
+      })(),
+      "live-observability-close"
     );
     return this.liveObservabilityClosePromise;
   }

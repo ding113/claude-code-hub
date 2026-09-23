@@ -21,6 +21,8 @@ const boundary = vi.hoisted(() => ({
   incrementConcurrentCount: vi.fn<(sessionId: string) => Promise<void>>(),
   incrementObservedConcurrentCount: vi.fn<(identity: string) => Promise<void>>(),
   loadSettings: vi.fn<() => Promise<ProxySettingsFixture>>(),
+  recordLocalCapacityRejection: vi.fn(),
+  recordPreAuthLocalCapacityRejection: vi.fn(),
   runGuards: vi.fn<(session: ProxySession) => Promise<Response | null>>(),
   send: vi.fn<(session: ProxySession) => Promise<Response>>(),
   trackObservedSession: vi.fn<(identity: string) => Promise<void>>(),
@@ -50,6 +52,11 @@ vi.mock("@/app/v1/_lib/proxy/forwarder", () => ({
 vi.mock("@/app/v1/_lib/proxy/errors", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/app/v1/_lib/proxy/errors")>()),
   getErrorOverrideAsync: boundary.getErrorOverride,
+}));
+
+vi.mock("@/app/v1/_lib/proxy/local-capacity-log", () => ({
+  recordLocalCapacityRejection: boundary.recordLocalCapacityRejection,
+  recordPreAuthLocalCapacityRejection: boundary.recordPreAuthLocalCapacityRejection,
 }));
 
 vi.mock("@/lib/langfuse/emit-proxy-trace", () => ({
@@ -111,6 +118,10 @@ describe("handleProxyRequest public error behavior", () => {
     boundary.getErrorOverride.mockReset();
     boundary.endRequest.mockReset();
     boundary.updateMessageRequestDetailsDurably.mockReset();
+    boundary.recordLocalCapacityRejection.mockReset();
+    boundary.recordPreAuthLocalCapacityRejection.mockReset();
+    boundary.recordLocalCapacityRejection.mockResolvedValue(true);
+    boundary.recordPreAuthLocalCapacityRejection.mockResolvedValue(true);
     boundary.loadSettings.mockResolvedValue(settings);
     boundary.getErrorOverride.mockResolvedValue(null);
     boundary.incrementConcurrentCount.mockResolvedValue(undefined);
@@ -228,8 +239,57 @@ describe("handleProxyRequest public error behavior", () => {
     expect(response.headers.get("retry-after")).toBe("1");
     expect((await response.json()).error.code).toBe("local_capacity_exceeded");
     expect(boundary.updateMessageRequestDetailsDurably).toHaveBeenCalledOnce();
+    expect(boundary.recordLocalCapacityRejection).not.toHaveBeenCalled();
     expect(boundary.endRequest).toHaveBeenCalledExactlyOnceWith(9, 17);
     expect(close).toHaveBeenCalledOnce();
+  });
+
+  it("认证后、message_request 行创建前的本地过载按被拦截请求补记一行", async () => {
+    boundary.runGuards.mockImplementation(async (session) => {
+      session.setAuthState({
+        success: true,
+        user: { id: 9 },
+        key: { id: 3 },
+        apiKey: "sk-test",
+      } as Parameters<ProxySession["setAuthState"]>[0]);
+      throw new LocalCapacityError();
+    });
+    const response = await handleProxyRequest(
+      new Context(
+        new Request("http://localhost/v1/messages", {
+          method: "POST",
+          headers: { "user-agent": "codex-test" },
+          body: JSON.stringify({ model: "claude-test", messages: [] }),
+        })
+      )
+    );
+    expect(response.status).toBe(429);
+    expect(boundary.updateMessageRequestDetailsDurably).not.toHaveBeenCalled();
+    expect(boundary.recordLocalCapacityRejection).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({
+        userId: 9,
+        apiKey: "sk-test",
+        stage: "pipeline",
+        model: "claude-test",
+        userAgent: "codex-test",
+        errorMessage: "Local request capacity exhausted; retry later.",
+      })
+    );
+    expect(boundary.recordPreAuthLocalCapacityRejection).not.toHaveBeenCalled();
+  });
+
+  it("未认证的本地过载不写库", async () => {
+    boundary.runGuards.mockRejectedValue(new LocalCapacityError());
+    const response = await handleProxyRequest(
+      new Context(
+        new Request("http://localhost/v1/messages", {
+          method: "POST",
+          body: JSON.stringify({ model: "claude-test", messages: [] }),
+        })
+      )
+    );
+    expect(response.status).toBe(429);
+    expect(boundary.recordLocalCapacityRejection).not.toHaveBeenCalled();
   });
 
   it("请求体读取前最多排队 20 秒，拒绝时不调用上游", async () => {
@@ -257,6 +317,13 @@ describe("handleProxyRequest public error behavior", () => {
       expect(response.headers.get("retry-after")).toBe("1");
       expect(boundary.runGuards).not.toHaveBeenCalled();
       expect(boundary.send).not.toHaveBeenCalled();
+      // 认证前没有 session：交给请求头尽力归属，且不阻塞 429。
+      expect(boundary.recordPreAuthLocalCapacityRejection).toHaveBeenCalledExactlyOnceWith(
+        expect.any(Context),
+        "Local request capacity exhausted; retry later.",
+        expect.any(Number)
+      );
+      expect(boundary.recordLocalCapacityRejection).not.toHaveBeenCalled();
     } finally {
       state[key] = previous;
       vi.useRealTimers();

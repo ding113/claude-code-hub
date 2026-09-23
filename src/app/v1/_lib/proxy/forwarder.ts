@@ -1062,7 +1062,8 @@ async function persistRequestAfterSnapshot(
       session.requestSequence
     ).catch((err) => {
       logger.error("Failed to store request after snapshot:", err);
-    })
+    }),
+    "request-phase-snapshot"
   );
 }
 
@@ -1086,7 +1087,8 @@ async function persistResponseBeforeSnapshot(
       session.authState?.key?.id ?? session.messageContext?.key?.id ?? undefined
     ).catch((err) => {
       logger.error("Failed to store response before snapshot meta:", err);
-    })
+    }),
+    "response-phase-snapshot"
   );
 }
 
@@ -2517,7 +2519,10 @@ export class ProxyForwarder {
           });
 
           // F3a 亲和写回（非流式成功；流式由 finalizeStream 的终态副作用负责）
-          void retainRequestMemoryUntil(recordAffinityWinner(session, currentProvider.id));
+          void retainRequestMemoryUntil(
+            recordAffinityWinner(session, currentProvider.id),
+            "affinity-winner"
+          );
 
           logger.info("ProxyForwarder: Request successful", {
             providerId: currentProvider.id,
@@ -2547,7 +2552,10 @@ export class ProxyForwarder {
               errorCategory === ErrorCategory.RESOURCE_NOT_FOUND) &&
             !isRequestScopedGateFailure(lastError)
           ) {
-            void retainRequestMemoryUntil(tombstoneAffinityOnFailure(session, currentProvider.id));
+            void retainRequestMemoryUntil(
+              tombstoneAffinityOnFailure(session, currentProvider.id),
+              "affinity-tombstone"
+            );
           }
           const errorMessage =
             databaseError?.message ??
@@ -5073,7 +5081,7 @@ export class ProxyForwarder {
           ).getReader()
         : reader;
 
-      const releaseRequestMemory = retainCurrentRequestMemory();
+      const releaseRequestMemory = retainCurrentRequestMemory("hedge-loser-billing");
       void (async () => {
         // 若落败前已读走前缀，补入有界计量器，避免丢失 message_start usage。
         const drain = await drainLoserBillingEvidence({
@@ -5439,7 +5447,7 @@ export class ProxyForwarder {
       // remains gated by `attempt.dispatched` and is reset by the transport callback below, so
       // setup time can trigger a hedge without being eligible for provider-failure attribution.
       armAttemptThreshold(attempt);
-      const releaseRequestMemory = retainCurrentRequestMemory();
+      const releaseRequestMemory = retainCurrentRequestMemory("hedge-attempt");
       void ProxyForwarder.doForward(
         attempt.session,
         providerForRequest,
@@ -5680,7 +5688,10 @@ export class ProxyForwarder {
           errorCategory === ErrorCategory.RESOURCE_NOT_FOUND) &&
         !isRequestScopedGateFailure(error)
       ) {
-        void retainRequestMemoryUntil(tombstoneAffinityOnFailure(session, attempt.provider.id));
+        void retainRequestMemoryUntil(
+          tombstoneAffinityOnFailure(session, attempt.provider.id),
+          "affinity-tombstone"
+        );
       }
       const statusCode = error instanceof ProxyError ? error.statusCode : undefined;
       const databaseError = findSafeDatabaseError(error);
@@ -6679,7 +6690,7 @@ export class ProxyForwarder {
       const controller = attempt.responseController;
       const drainTimeoutMs = getEnvConfig().HEDGE_LOSER_DRAIN_TIMEOUT_MS;
 
-      const releaseRequestMemory = retainCurrentRequestMemory();
+      const releaseRequestMemory = retainCurrentRequestMemory("discovery-loser-billing");
       void (async () => {
         // The validity parser may have consumed one or more chunks before the
         // loser was held. Replay those bytes so usage markers in the prefix
@@ -7512,7 +7523,7 @@ export class ProxyForwarder {
           onLocalAdmissionWait(false);
         }
       };
-      const releaseRequestMemory = retainCurrentRequestMemory();
+      const releaseRequestMemory = retainCurrentRequestMemory("discovery-attempt");
       void ProxyForwarder.doForward(
         attempt.session,
         { ...provider, firstByteTimeoutStreamingMs: 0 },
@@ -8473,7 +8484,8 @@ export class ProxyForwarder {
               lease.ttlSeconds + DISCOVERY_LEASE_HANDOFF_GRACE_SECONDS
             );
             return result.status === "renewed";
-          })()
+          })(),
+          "discovery-lease-renew"
         ),
       onLost: () => {
         if (settled || committed) return;
@@ -8599,7 +8611,8 @@ export class ProxyForwarder {
       orchestrate().catch(async (error) => {
         const normalized = error instanceof Error ? error : new Error(String(error));
         await settleFailure(ProxyForwarder.resolveHedgeTerminalError(normalized, null));
-      })
+      }),
+      "hedge-orchestrate"
     );
 
     try {

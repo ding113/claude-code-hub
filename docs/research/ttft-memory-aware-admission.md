@@ -24,8 +24,11 @@ Discovery 保留原有 1 MiB 前缀边界及完整帧解析语义，解析前按
 H = R + 0.5 * S
 reserve = max(256 MiB, 0.1 * R)
 autoBudget = floor(0.6 * max(0, H - reserve))
-hotBudget = min(autoBudget, floor(max(0, R - reserve)))
+headroom = floor(max(0, R - reserve))
+hotBudget = min(autoBudget, headroom)
 ```
+
+hotBudget 只在启动（多进程为全部 worker 就绪）时计算一次，作为固定上限。运行期每秒的收紧条件是 `limit = min(启动上限, 在用量 + headroom)`：0.6 折扣已体现在启动上限里，不再对剩余内存重复折扣。否则进程自身常驻内存（Next.js 基础堆等非受管分配）增长会在零租约时持续压低正文额度；只有真实物理余量低于启动上限或出现内存压力时才收紧。
 
 Linux 使用 MemAvailable、SwapFree，同时检查可见 cgroup v2/v1 的成员和祖先限制，遵守 memory.high、swap 禁用及 v1 memory+swap 联合限额。无法确认容器 swap 额度时不增加 swap 容量；非 Linux 以可用物理内存保守估计。
 
@@ -39,7 +42,11 @@ cluster primary 只协调字节授权，worker 按 MiB 小批量借用，无正�
 
 cgroup v1 缺少可直接轮询的组内 PSI，不启用宿主机压力回退；仍根据组内 limit/usage、memsw 联合余量及 MemAvailable 动态收缩容量。本地 pressure_level 事件订阅不在当前实现范围。
 
-入站暂存租约在文件操作结束时显式归还；已解析请求通过 AsyncLocalStorage 绑定请求生命周期，在响应 EOF、读错、取消或无正文返回后显式释放。AsyncTaskManager、竞速候选、输家计费与快照等后台消费者分别持有引用，直到实际完成才归还；发出 abort 不等于任务已经退出。FinalizationRegistry 仅兜底被遗弃的响应流和独立调用，不再承担正常请求回收。连续大正文请求即使未触发 GC，也不会积累已完成请求的额度。
+入站暂存租约在文件操作结束时显式归还；已解析请求通过 AsyncLocalStorage 绑定请求生命周期，在响应 EOF、读错、取消或无正文返回后显式释放。AsyncTaskManager、竞速候选、输家计费与快照等后台消费者分别持有带标签的引用，直到实际完成才归还；发出 abort 不等于任务已经退出。后台持有有上限：响应结束后若后台所有者在 `REQUEST_MEMORY_BACKGROUND_GRACE_MS`（默认 150 秒，且不短于输家引流超时 + 30 秒）内既未结束也无进展（流式任务每个 chunk 都会刷新），请求作用域被强制结束——归还全部租约、丢弃会话上的正文引用，并以 warn 日志记录卡住的所有者标签。永不 settle 的 Redis/DB Promise 因此不能永久占用额度。响应仍在传输时不计时。FinalizationRegistry 仅兜底被遗弃的响应流和独立调用，不再承担正常请求回收。连续大正文请求即使未触发 GC，也不会积累已完成请求的额度。
+
+门控租约同时挂到请求作用域作为兜底：显式 release 仍是主路径，但已提交前缀流若被丢弃（既未读完也未取消），作用域结束时仍会归还额度并清理落盘前缀。
+
+诊断：`worker_memory_stats` 的 `leases` 按标签（body_read/body_decode/body_materialize/gate/langfuse_spool）给出在账租约数、字节和最长持有时间；`requestMemory` 给出响应已结束但仍被后台占用的请求数、最长时间、所有者标签分布和累计强制结束次数。
 
 门控额度在最终请求过滤与序列化后、上游计时与发送前申请，仅适用于实际请求流式响应且需要内容门控的端点。非流式与原始透传路径不因识别到供应商协议而占用门控额度；收到无需门控的响应时立即归还。
 

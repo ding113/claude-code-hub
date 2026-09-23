@@ -5,6 +5,7 @@ import {
   type MemoryGovernor,
   type MemoryLease,
 } from "@/lib/memory/governor";
+import { attachRequestMemory } from "@/lib/memory/request-lifetime";
 
 const DEFAULT_STREAM_GATE_GLOBAL_PREBUFFER_BYTE_CAP = 256 * 1024 * 1024;
 
@@ -29,6 +30,15 @@ type PendingAcquire = {
   queued: boolean;
   timer?: ReturnType<typeof setTimeout>;
 };
+
+/**
+ * 显式 release 仍是主路径；请求作用域结束（或宽限到期）是兜底，
+ * 覆盖已提交前缀流被丢弃、既未读完也未取消的情况。release 幂等。
+ */
+function backstop(lease: StreamGatePrebufferLease): StreamGatePrebufferLease {
+  attachRequestMemory(lease);
+  return lease;
+}
 
 /**
  * 流门禁的进程级共享预算。
@@ -56,14 +66,15 @@ export class StreamGatePrebufferBudget {
       shared = await this.governor?.acquire(
         reservedBytes,
         signal,
-        Math.max(0, 20000 - (performance.now() - started))
+        Math.max(0, 20000 - (performance.now() - started)),
+        "gate"
       );
     } catch (error) {
       local.release();
       throw error;
     }
-    if (!shared) return local;
-    return {
+    if (!shared) return backstop(local);
+    return backstop({
       get reservedBytes() {
         return local.reservedBytes;
       },
@@ -97,7 +108,7 @@ export class StreamGatePrebufferBudget {
         local.release();
         shared.release();
       },
-    };
+    });
   }
 
   private acquireLocal(

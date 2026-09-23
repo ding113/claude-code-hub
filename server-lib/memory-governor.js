@@ -32,6 +32,7 @@ class MemoryGovernor {
     this.peak = 0;
     this.rejected = 0;
     this.stages = {};
+    this.leases = new Set();
     this.credits = 0;
     this.nextId = 0;
     this.releasedTotal = 0;
@@ -76,7 +77,8 @@ class MemoryGovernor {
     }
     const resource = this.readSnapshot();
     const plan = createMemoryPlan({ env: this.env, snapshot: resource });
-    const safe = Math.min(this.ceiling, this.used + plan.hotBudgetBytes);
+    // 进程自身常驻内存增长不应缩小正文额度；只有真实余量低于启动上限时才收紧。
+    const safe = Math.min(this.ceiling, this.used + plan.headroomBytes);
     const pressure = resource.memoryPressure >= 1 || (resource.swapIO || 0) > this.lastSwapIO;
     this.lastSwapIO = resource.swapIO || 0;
     if (pressure || safe < this.limit) {
@@ -89,7 +91,20 @@ class MemoryGovernor {
   }
 
   snapshot() {
-    return { usedBytes: this.used, limitBytes: this.remote ? this.credits : this.limit, waiting: this.waiting, peakBytes: this.peak, rejected: this.rejected, source: this.plan.source, stages: this.stages };
+    return { usedBytes: this.used, limitBytes: this.remote ? this.credits : this.limit, waiting: this.waiting, peakBytes: this.peak, rejected: this.rejected, source: this.plan.source, stages: this.stages, leases: this.leaseLedger() };
+  }
+
+  /** 仅供诊断：按标签汇总在账租约，定位长期不归还的所有者。 */
+  leaseLedger() {
+    const now = Date.now();
+    const ledger = { count: this.leases.size, oldestAgeMs: 0, byTag: {} };
+    for (const entry of this.leases) {
+      const ageMs = now - entry.createdAt;
+      const tag = ledger.byTag[entry.tag] || (ledger.byTag[entry.tag] = { count: 0, bytes: 0, oldestAgeMs: 0 });
+      tag.count++; tag.bytes += entry.size(); tag.oldestAgeMs = Math.max(tag.oldestAgeMs, ageMs);
+      ledger.oldestAgeMs = Math.max(ledger.oldestAgeMs, ageMs);
+    }
+    return ledger;
   }
 
   observe(stage, milliseconds, bytes = 0) {
@@ -148,7 +163,7 @@ class MemoryGovernor {
     }
   }
 
-  tryLease(bytes) {
+  tryLease(bytes, tag = "untagged") {
     if (!Number.isSafeInteger(bytes) || bytes < 0) throw new RangeError("Invalid memory lease size");
     const limit = this.remote ? this.credits : this.limit;
     if (bytes > limit - this.used) return null;
@@ -156,6 +171,8 @@ class MemoryGovernor {
     this.peak = Math.max(this.peak, this.used);
     let size = bytes;
     let released = false;
+    const entry = { tag: String(tag), createdAt: Date.now(), size: () => size };
+    this.leases.add(entry);
     const grow = (target, requestCredits) => {
       if (!Number.isSafeInteger(target) || target < 0) throw new RangeError("Invalid memory lease size");
       if (released) return false;
@@ -199,13 +216,14 @@ class MemoryGovernor {
         released = true;
         this.used -= size;
         size = 0;
+        this.leases.delete(entry);
       },
     };
   }
 
-  async acquire(bytes, signal, waitMs = ADMISSION_WAIT_MS) {
+  async acquire(bytes, signal, waitMs = ADMISSION_WAIT_MS, tag = "untagged") {
     if (signal?.aborted) throw signal.reason || new DOMException("Aborted", "AbortError");
-    let lease = this.tryLease(bytes);
+    let lease = this.tryLease(bytes, tag);
     if (lease) return lease;
     if (this.waiting >= 1024) { this.rejected++; throw new LocalCapacityError(); }
     const started = performance.now();
@@ -224,7 +242,7 @@ class MemoryGovernor {
           if (signal?.aborted) onAbort();
         });
         if (performance.now() >= deadline) { this.rejected++; throw new LocalCapacityError(); }
-        lease = this.tryLease(bytes);
+        lease = this.tryLease(bytes, tag);
       }
       return lease;
     } finally { this.waiting--; this.observe("admission", performance.now() - started, bytes); }

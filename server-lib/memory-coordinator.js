@@ -22,7 +22,7 @@ function createMemoryCoordinator({ readSnapshot = readResourceSnapshot, env = pr
     const pressure = resource.memoryPressure >= 1 || (resource.swapIO || 0) > lastSwapIO;
     lastSwapIO = resource.swapIO || 0;
     // 加回仍在账上的在用量只用于计算剩余可授权空间；启动上限始终不变。
-    const safe = Math.min(plan.hotBudgetBytes, granted + current.hotBudgetBytes);
+    const safe = Math.min(plan.hotBudgetBytes, granted + current.headroomBytes);
     if (pressure || safe < target) {
       target = pressure ? Math.min(safe, Math.floor(target * 0.8)) : safe;
       healthy = 0;
