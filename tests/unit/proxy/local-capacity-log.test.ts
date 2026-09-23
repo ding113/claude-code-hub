@@ -180,6 +180,75 @@ describe("本地容量 429 落库", () => {
     expect(boundary.warn).toHaveBeenCalledTimes(4);
   });
 
+  it("认证前：大量伪造 key 不进入节流表，也不会冲掉合法 key 的节流状态", async () => {
+    boundary.validateApiKeyAndGetUser.mockImplementation(async (apiKey: string) =>
+      apiKey === "sk-known" ? { user: { id: 42 }, key: { id: 7 } } : null
+    );
+    expect(
+      await recordPreAuthLocalCapacityRejection(
+        context({ "x-api-key": "sk-known" }),
+        MESSAGE,
+        Date.now()
+      )
+    ).toBe(true);
+
+    for (let i = 0; i < 5000; i++) {
+      vi.advanceTimersByTime(1);
+      await recordPreAuthLocalCapacityRejection(
+        context({ "x-api-key": `sk-forged-${i}` }),
+        MESSAGE,
+        Date.now()
+      );
+    }
+
+    // 仍在同一个 10 秒窗口内：合法 key 继续被节流，不查库也不写库。
+    const lookupsBefore = boundary.validateApiKeyAndGetUser.mock.calls.length;
+    expect(
+      await recordPreAuthLocalCapacityRejection(
+        context({ "x-api-key": "sk-known" }),
+        MESSAGE,
+        Date.now()
+      )
+    ).toBe(false);
+    expect(boundary.validateApiKeyAndGetUser).toHaveBeenCalledTimes(lookupsBefore);
+    expect(boundary.values).toHaveBeenCalledOnce();
+  });
+
+  it("认证前每秒最多查询 20 次 key，下一秒恢复", async () => {
+    boundary.validateApiKeyAndGetUser.mockResolvedValue(null);
+    for (let i = 0; i < 25; i++) {
+      await recordPreAuthLocalCapacityRejection(
+        context({ "x-api-key": `sk-${i}` }),
+        MESSAGE,
+        Date.now()
+      );
+    }
+    expect(boundary.validateApiKeyAndGetUser).toHaveBeenCalledTimes(20);
+
+    vi.advanceTimersByTime(1_000);
+    await recordPreAuthLocalCapacityRejection(
+      context({ "x-api-key": "sk-next" }),
+      MESSAGE,
+      Date.now()
+    );
+    expect(boundary.validateApiKeyAndGetUser).toHaveBeenCalledTimes(21);
+    expect(boundary.validateApiKeyAndGetUser).toHaveBeenLastCalledWith("sk-next");
+  });
+
+  it("节流表满额时只淘汰最早的 key，其余 key 的节流状态保留", async () => {
+    const rejection = (apiKey: string) =>
+      recordLocalCapacityRejection({ userId: 9, apiKey, stage: "pipeline", errorMessage: MESSAGE });
+    for (let i = 0; i < 4096; i++) {
+      expect(await rejection(`sk-${i}`)).toBe(true);
+    }
+    expect(await rejection("sk-new")).toBe(true);
+
+    // sk-0 被淘汰后重新落库；sk-1 仍在窗口内被节流。
+    expect(await rejection("sk-1")).toBe(false);
+    expect(await rejection("sk-0")).toBe(true);
+    expect(boundary.values).toHaveBeenCalledTimes(4098);
+  });
+
   it("认证前归属过程抛错时不影响 429", async () => {
     boundary.validateApiKeyAndGetUser.mockRejectedValue(new Error("redis down"));
     await expect(

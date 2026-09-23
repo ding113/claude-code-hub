@@ -11,9 +11,15 @@ export const LOCAL_CAPACITY_BLOCKED_BY = "local_capacity";
 /** 同一 key 的重试风暴只落一行，其余计入下一行的 suppressed，避免过载时再压数据库。 */
 const THROTTLE_WINDOW_MS = 10_000;
 const MAX_TRACKED_KEYS = 4096;
+/** 认证前归属需要查询 key；进程内每个窗口的查询次数有上限，大量伪造 key 无法借此压数据库。 */
+const PRE_AUTH_LOOKUP_WINDOW_MS = 1_000;
+const PRE_AUTH_LOOKUPS_PER_WINDOW = 20;
 
 type ThrottleEntry = { lastLoggedAt: number; suppressed: number };
+/** 只收录已验证的 key；Map 顺序即 lastLoggedAt 升序，满额时淘汰最早的一项。 */
 const throttle = new Map<string, ThrottleEntry>();
+let preAuthLookupWindowStartedAt = 0;
+let preAuthLookupsInWindow = 0;
 
 export interface LocalCapacityRejection {
   userId: number;
@@ -29,21 +35,34 @@ export interface LocalCapacityRejection {
   clientIp?: string | null;
 }
 
-function takeSuppressedCount(apiKey: string, now: number): number | null {
+/** 窗口内的重复拒绝只累加 suppressed 并返回 true。 */
+function suppressIfThrottled(apiKey: string, now: number): boolean {
   const entry = throttle.get(apiKey);
-  if (entry && now - entry.lastLoggedAt < THROTTLE_WINDOW_MS) {
-    entry.suppressed++;
-    return null;
+  if (!entry || now - entry.lastLoggedAt >= THROTTLE_WINDOW_MS) return false;
+  entry.suppressed++;
+  return true;
+}
+
+function takeSuppressedCount(apiKey: string, now: number): number | null {
+  if (suppressIfThrottled(apiKey, now)) return null;
+  const suppressed = throttle.get(apiKey)?.suppressed ?? 0;
+  throttle.delete(apiKey);
+  for (const [key, value] of throttle) {
+    if (throttle.size < MAX_TRACKED_KEYS && now - value.lastLoggedAt < THROTTLE_WINDOW_MS) break;
+    throttle.delete(key);
   }
-  if (!entry && throttle.size >= MAX_TRACKED_KEYS) {
-    for (const [key, value] of throttle) {
-      if (now - value.lastLoggedAt >= THROTTLE_WINDOW_MS) throttle.delete(key);
-    }
-    if (throttle.size >= MAX_TRACKED_KEYS) throttle.clear();
-  }
-  const suppressed = entry?.suppressed ?? 0;
   throttle.set(apiKey, { lastLoggedAt: now, suppressed: 0 });
   return suppressed;
+}
+
+function takePreAuthLookupSlot(now: number): boolean {
+  if (now - preAuthLookupWindowStartedAt >= PRE_AUTH_LOOKUP_WINDOW_MS) {
+    preAuthLookupWindowStartedAt = now;
+    preAuthLookupsInWindow = 0;
+  }
+  if (preAuthLookupsInWindow >= PRE_AUTH_LOOKUPS_PER_WINDOW) return false;
+  preAuthLookupsInWindow++;
+  return true;
 }
 
 /**
@@ -81,10 +100,13 @@ export async function recordPreAuthLocalCapacityRejection(
       "x-goog-api-key": c.req.header("x-goog-api-key"),
     });
     if (!apiKey) return false;
-    const suppressed = takeSuppressedCount(apiKey, Date.now());
-    if (suppressed === null) return false;
+    const now = Date.now();
+    if (suppressIfThrottled(apiKey, now)) return false;
+    if (!takePreAuthLookupSlot(now)) return false;
     const auth = await validateApiKeyAndGetUser(apiKey);
     if (!auth) return false;
+    const suppressed = takeSuppressedCount(apiKey, Date.now());
+    if (suppressed === null) return false;
     return await insertRejection(
       {
         userId: auth.user.id,
@@ -141,4 +163,6 @@ async function insertRejection(
 
 export function resetLocalCapacityLogThrottleForTests(): void {
   throttle.clear();
+  preAuthLookupWindowStartedAt = 0;
+  preAuthLookupsInWindow = 0;
 }
