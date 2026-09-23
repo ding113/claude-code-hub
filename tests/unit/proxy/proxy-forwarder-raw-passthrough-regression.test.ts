@@ -62,6 +62,10 @@ import { ProxyForwarder } from "@/app/v1/_lib/proxy/forwarder";
 import { rectifyResponseInput } from "@/app/v1/_lib/proxy/response-input-rectifier";
 import { ProxySession } from "@/app/v1/_lib/proxy/session";
 import type { Provider } from "@/types/provider";
+import {
+  clearResponsesWsUnsupportedCache,
+  isResponsesWsUnsupported,
+} from "@/app/v1/_lib/responses-ws/unsupported-cache";
 
 function createProvider(): Provider {
   return {
@@ -154,6 +158,7 @@ function readBodyText(body: BodyInit | undefined): string | null {
 describe("ProxyForwarder raw passthrough regression", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    clearResponsesWsUnsupportedCache();
     mocks.evaluateResponsesWsEligibility.mockResolvedValue({
       isWebsocketClient: false,
       eligible: false,
@@ -337,6 +342,59 @@ describe("ProxyForwarder raw passthrough regression", () => {
     );
     expect(fetchWithoutAutoDecode).not.toHaveBeenCalled();
     expect(await response.text()).toBe(upstreamSse);
+  });
+
+  it("retries a WS size rejection over HTTP without caching the endpoint as unsupported", async () => {
+    const provider = createProvider();
+    const body = JSON.stringify({ model: "gpt-5.5", input: "hello", stream: true });
+    const makeSession = () => {
+      const session = createRawPassthroughSession(body);
+      const endpointPolicy = resolveEndpointPolicy("/v1/responses");
+      Object.assign(session, {
+        requestUrl: new URL("https://proxy.example.com/v1/responses"),
+        endpointPolicy,
+        getEndpointPolicy: vi.fn(() => endpointPolicy),
+      });
+      return session;
+    };
+    const session = makeSession();
+    mocks.evaluateResponsesWsEligibility.mockResolvedValue({
+      isWebsocketClient: true,
+      eligible: true,
+    });
+    mocks.tryResponsesWebsocketUpstream.mockResolvedValueOnce({
+      failed: true,
+      reason: "ws_payload_too_large",
+      message: "Payload too large",
+      cacheableAsUnsupported: false,
+    });
+    const sse = 'data: {"type":"response.completed","response":{"id":"http"}}\n\n';
+    const fetchWithoutAutoDecode = vi
+      .spyOn(ProxyForwarder as any, "fetchWithoutAutoDecode")
+      .mockResolvedValueOnce(
+        new Response(sse, { headers: { "content-type": "text/event-stream" } })
+      );
+    const { doForward } = ProxyForwarder as unknown as {
+      doForward: (session: ProxySession, provider: Provider, baseUrl: string) => Promise<Response>;
+    };
+
+    expect(await (await doForward(session, provider, provider.url)).text()).toBe(sse);
+    expect(fetchWithoutAutoDecode).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchWithoutAutoDecode.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe(provider.url);
+    expect(JSON.parse(readBodyText(init.body ?? undefined)!)).toEqual(JSON.parse(body));
+    expect(isResponsesWsUnsupported(provider.id, null).unsupported).toBe(false);
+    expect(session.providerChain).toEqual([
+      expect.objectContaining({ reason: "responses_ws_fallback", id: provider.id }),
+    ]);
+
+    mocks.tryResponsesWebsocketUpstream.mockResolvedValueOnce({
+      response: new Response(sse, { headers: { "content-type": "text/event-stream" } }),
+      connected: true,
+    });
+    expect(await (await doForward(makeSession(), provider, provider.url)).text()).toBe(sse);
+    expect(mocks.tryResponsesWebsocketUpstream).toHaveBeenCalledTimes(2);
+    expect(fetchWithoutAutoDecode).toHaveBeenCalledTimes(1);
   });
 
   it("remote compaction v2 将单对象 input 规范化后再透传", async () => {
