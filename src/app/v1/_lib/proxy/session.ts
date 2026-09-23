@@ -864,6 +864,8 @@ export class ProxySession {
         | "prefix_affinity";
       circuitState?: "closed" | "open" | "half-open";
       attemptNumber?: number;
+      routingAttemptId?: string; // 对应路由追踪的 attemptId
+      routingRound?: number; // 对应路由追踪的 round
       errorMessage?: string; // 错误信息（失败时记录）
       endpointId?: number | null;
       endpointUrl?: string;
@@ -899,6 +901,8 @@ export class ProxySession {
       circuitState: metadata?.circuitState,
       timestamp: Date.now(),
       attemptNumber: metadata?.attemptNumber,
+      routingAttemptId: metadata?.routingAttemptId,
+      routingRound: metadata?.routingRound,
       errorMessage: metadata?.errorMessage, // 记录错误信息
       // 修复：记录新字段
       statusCode: metadata?.statusCode,
@@ -916,13 +920,16 @@ export class ProxySession {
     };
 
     // 避免重复添加同一个供应商
-    // 检查最后一条记录是否与当前记录完全相同（id + reason + attemptNumber）
+    // 检查最后一条记录是否与当前记录完全相同（id + reason + attemptNumber + routingAttemptId）
     const lastItem = this.providerChain[this.providerChain.length - 1];
     const shouldAdd =
       this.providerChain.length === 0 ||
       lastItem.id !== provider.id ||
       lastItem.reason !== metadata?.reason ||
-      (metadata?.attemptNumber !== undefined && lastItem.attemptNumber !== metadata.attemptNumber);
+      (metadata?.attemptNumber !== undefined &&
+        lastItem.attemptNumber !== metadata.attemptNumber) ||
+      (metadata?.routingAttemptId !== undefined &&
+        lastItem.routingAttemptId !== metadata.routingAttemptId);
 
     if (shouldAdd) {
       this.providerChain.push(item);

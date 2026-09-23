@@ -5136,6 +5136,12 @@ export class ProxyForwarder {
       priority: attempt.provider.priority || 0,
     });
 
+    // 决策链条目携带当前尝试的 attemptId，请求详情据此把同一供应商的多次重试分别对应到各自条目
+    const attemptRoutingRef = (attempt: StreamingHedgeAttempt) => ({
+      routingAttemptId: attempt.attemptId,
+      routingRound: HEDGE_TRACE_ROUND,
+    });
+
     const traceAttemptStarted = (attempt: StreamingHedgeAttempt) => {
       hedgeMetrics.attemptStarted({
         attemptId: attempt.attemptId,
@@ -5200,6 +5206,7 @@ export class ProxyForwarder {
       if (reason === "hedge_loser" && attempt.billAsLoser && !admissionWaiters.has(attempt)) {
         session.addProviderToChain(attempt.provider, {
           ...attempt.endpointAudit,
+          ...attemptRoutingRef(attempt),
           reason: "hedge_loser_billed",
           attemptNumber: attempt.sequence,
           statusCode: attempt.response?.status,
@@ -5218,6 +5225,7 @@ export class ProxyForwarder {
       if (reason === "hedge_loser") {
         session.addProviderToChain(attempt.provider, {
           ...attempt.endpointAudit,
+          ...attemptRoutingRef(attempt),
           reason: "hedge_loser_cancelled",
           attemptNumber: attempt.sequence,
           modelRedirect: getAttemptModelRedirect(attempt),
@@ -5288,6 +5296,7 @@ export class ProxyForwarder {
       }
       session.addProviderToChain(attempt.provider, {
         ...attempt.endpointAudit,
+        ...attemptRoutingRef(attempt),
         reason: "hedge_triggered",
         attemptNumber: attempt.sequence,
         circuitState: getCircuitState(attempt.provider.id),
@@ -5722,6 +5731,7 @@ export class ProxyForwarder {
 
         session.addProviderToChain(attempt.provider, {
           ...attempt.endpointAudit,
+          ...attemptRoutingRef(attempt),
           reason: "client_abort",
           attemptNumber: attempt.sequence,
           errorMessage: "Client aborted request",
@@ -5757,6 +5767,7 @@ export class ProxyForwarder {
 
         session.addProviderToChain(attempt.provider, {
           ...attempt.endpointAudit,
+          ...attemptRoutingRef(attempt),
           reason: "system_error",
           attemptNumber: attempt.sequence,
           errorMessage: safeAdmissionMessage,
@@ -5832,6 +5843,7 @@ export class ProxyForwarder {
               reactiveRectifierResult.requestDetailsBeforeRectify,
               rawCrossProviderFallbackEnabled
             ),
+            ...attemptRoutingRef(attempt),
             modelRedirect: getAttemptModelRedirect(attempt),
           });
 
@@ -5912,6 +5924,7 @@ export class ProxyForwarder {
                   matchedRule,
                   rawCrossProviderFallbackEnabled
                 ),
+                ...attemptRoutingRef(attempt),
                 modelRedirect: getAttemptModelRedirect(attempt),
               }
             : {
@@ -5930,6 +5943,7 @@ export class ProxyForwarder {
                     : errorCategory === ErrorCategory.SYSTEM_ERROR
                       ? "system_error"
                       : "retry_failed",
+                ...attemptRoutingRef(attempt),
                 modelRedirect: getAttemptModelRedirect(attempt),
               }
         );
@@ -6030,6 +6044,7 @@ export class ProxyForwarder {
 
       session.addProviderToChain(attempt.provider, {
         ...attempt.endpointAudit,
+        ...attemptRoutingRef(attempt),
         reason: isActualHedgeWin ? "hedge_winner" : "request_success",
         attemptNumber: attempt.sequence,
         statusCode: attempt.response.status,
@@ -6179,10 +6194,13 @@ export class ProxyForwarder {
         lastError =
           endpointError instanceof Error ? endpointError : new Error(String(endpointError));
         lastErrorCategory = null;
+        const setupAttemptId = `legacy-hedge-${launchedProviderCount + 1}-setup-${provider.id}`;
         const previous = session.getProviderChain().at(-1);
         if (previous?.id !== provider.id || previous.reason !== "endpoint_pool_exhausted") {
           session.addProviderToChain(provider, {
             reason: "system_error",
+            routingAttemptId: setupAttemptId,
+            routingRound: HEDGE_TRACE_ROUND,
             attemptNumber: launchedProviderCount + 1,
             errorMessage: lastError.message,
             errorDetails: {
@@ -6197,7 +6215,7 @@ export class ProxyForwarder {
         }
         session.appendRoutingTraceEvent({
           type: "attempt_finished",
-          attemptId: `legacy-hedge-${launchedProviderCount + 1}-setup-${provider.id}`,
+          attemptId: setupAttemptId,
           attemptKind: "normal",
           round: HEDGE_TRACE_ROUND,
           provider: { id: provider.id, name: provider.name, priority: provider.priority || 0 },
@@ -6279,6 +6297,7 @@ export class ProxyForwarder {
       if (launchedProviderCount > 1) {
         session.addProviderToChain(provider, {
           ...attempt.endpointAudit,
+          ...attemptRoutingRef(attempt),
           reason: "hedge_launched",
           attemptNumber: attempt.sequence,
           circuitState: getCircuitState(provider.id),
@@ -6362,6 +6381,7 @@ export class ProxyForwarder {
           if (!attributed) {
             session.addProviderToChain(attempt.provider, {
               ...attempt.endpointAudit,
+              ...attemptRoutingRef(attempt),
               reason: "client_abort",
               attemptNumber: attempt.sequence,
               errorMessage: "Client aborted request",
@@ -6375,6 +6395,7 @@ export class ProxyForwarder {
       for (const attempt of attributedAttempts) {
         session.addProviderToChain(attempt.provider, {
           ...attempt.endpointAudit,
+          ...attemptRoutingRef(attempt),
           reason: "client_abort_no_first_byte",
           attemptNumber: attempt.sequence,
           errorMessage: "Client aborted before provider first byte threshold",
@@ -7233,6 +7254,8 @@ export class ProxyForwarder {
       if (settled || committed) return;
       const attemptNumber = sequence + 1;
       const sticky = stickyProbeActive && provider.id === initialProvider.id;
+      const setupAttemptId = `${provider.id}:${attemptNumber}`;
+      const setupRound = sticky ? 0 : currentRound;
       const previous = session.getProviderChain().at(-1);
       if (previous?.id !== provider.id || previous.reason !== "endpoint_pool_exhausted") {
         session.addProviderToChain(provider, {
@@ -7246,13 +7269,15 @@ export class ProxyForwarder {
             rawCrossProviderFallbackEnabled
           ),
           reason: "system_error",
+          routingAttemptId: setupAttemptId,
+          routingRound: setupRound,
         });
       }
       session.appendRoutingTraceEvent({
         type: "attempt_finished",
-        attemptId: `${provider.id}:${attemptNumber}`,
+        attemptId: setupAttemptId,
         attemptKind: sticky ? "sticky" : kind,
-        round: sticky ? 0 : currentRound,
+        round: setupRound,
         provider: { id: provider.id, name: provider.name, priority: provider.priority || 0 },
         outcome: "failed",
         reason: "setup_failed",
@@ -7764,6 +7789,8 @@ export class ProxyForwarder {
             coordinator.cancelRequest();
             session.addProviderToChain(provider, {
               ...attempt.endpointAudit,
+              routingAttemptId: attempt.id,
+              routingRound: attempt.traceRound,
               reason: "client_abort",
               attemptNumber: attempt.sequence,
               errorMessage: "Client aborted request",
@@ -7788,6 +7815,8 @@ export class ProxyForwarder {
             const safeAdmissionMessage = admission?.message ?? "Database pool admission exceeded";
             session.addProviderToChain(provider, {
               ...attempt.endpointAudit,
+              routingAttemptId: attempt.id,
+              routingRound: attempt.traceRound,
               reason: "system_error",
               attemptNumber: attempt.sequence,
               errorMessage: safeAdmissionMessage,
@@ -7867,6 +7896,8 @@ export class ProxyForwarder {
                 rectifier.requestDetailsBeforeRectify,
                 rawCrossProviderFallbackEnabled
               ),
+              routingAttemptId: attempt.id,
+              routingRound: attempt.traceRound,
               modelRedirect: getAttemptModelRedirect(attempt),
             });
             try {
@@ -7991,6 +8022,8 @@ export class ProxyForwarder {
                   : lastErrorCategory === ErrorCategory.SYSTEM_ERROR
                     ? "system_error"
                     : "retry_failed",
+            routingAttemptId: attempt.id,
+            routingRound: attempt.traceRound,
             modelRedirect: getAttemptModelRedirect(attempt),
           });
           // 注意：discovery 路径不经过 stream content gate（validity 判定在

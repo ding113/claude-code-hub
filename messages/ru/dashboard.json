@@ -457,6 +457,7 @@
         "viewDetails": "Открыть детали Discovery",
         "stickyPhase": "Проверка Sticky",
         "round": "Раунд {round}",
+        "roundUnknown": "Раунд не записан",
         "attempts": "Попыток: {count}",
         "noAttempts": "Попытки провайдеров не записаны",
         "providerFallback": "Провайдер {id}",

@@ -457,6 +457,7 @@
         "viewDetails": "View Discovery details",
         "stickyPhase": "Sticky probe",
         "round": "Round {round}",
+        "roundUnknown": "Round not recorded",
         "attempts": "{count} attempts",
         "noAttempts": "No provider attempts were recorded",
         "providerFallback": "Provider {id}",
