@@ -457,6 +457,7 @@
         "viewDetails": "查看 Discovery 詳情",
         "stickyPhase": "Sticky 探測",
         "round": "第 {round} 輪",
+        "roundUnknown": "輪次未記錄",
         "attempts": "{count} 次嘗試",
         "noAttempts": "沒有記錄到供應商嘗試",
         "providerFallback": "供應商 {id}",

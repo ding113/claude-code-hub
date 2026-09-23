@@ -61,7 +61,8 @@ type AttemptView = {
   providerId: number | null;
   providerName: string | null;
   sequence: number | null;
-  round: number;
+  // null：只从决策链重建且没有记录轮次
+  round: number | null;
   role: "sticky" | "normal" | "fallback";
   promotedFrom: "sticky" | "normal" | null;
   priority: number | null;
@@ -190,12 +191,19 @@ function getChainErrorMessage(item: ProviderChainItem | null): string | null {
 }
 
 function buildProviderChainLookup(providerChain: ProviderChainItem[]): {
+  byRoutingAttemptId: Map<string, ProviderChainItem>;
   byAttempt: Map<string, ProviderChainItem>;
   uniqueByProvider: Map<number, ProviderChainItem>;
 } {
+  // 带 routingAttemptId 的条目只按 attemptId 精确对应；推断匹配只使用未记录 attemptId 的条目
+  const byRoutingAttemptId = new Map<string, ProviderChainItem>();
   const byAttempt = new Map<string, ProviderChainItem>();
   const byProvider = new Map<number, ProviderChainItem[]>();
   for (const item of providerChain) {
+    if (item.routingAttemptId) {
+      byRoutingAttemptId.set(item.routingAttemptId, item);
+      continue;
+    }
     const items = byProvider.get(item.id) ?? [];
     items.push(item);
     byProvider.set(item.id, items);
@@ -208,7 +216,7 @@ function buildProviderChainLookup(providerChain: ProviderChainItem[]): {
   for (const [providerId, items] of byProvider) {
     if (items.length === 1) uniqueByProvider.set(providerId, items[0]);
   }
-  return { byAttempt, uniqueByProvider };
+  return { byRoutingAttemptId, byAttempt, uniqueByProvider };
 }
 
 function findChainItem(
@@ -216,6 +224,8 @@ function findChainItem(
   providerId: number | null,
   lookup: ReturnType<typeof buildProviderChainLookup>
 ): ProviderChainItem | null {
+  const routed = lookup.byRoutingAttemptId.get(attemptId);
+  if (routed) return routed;
   if (providerId == null) return null;
   const sequence = parseAttemptSequence(attemptId);
   if (sequence != null) {
@@ -379,7 +389,8 @@ function buildAttempts(
     attempt.providerName ??= provider.name;
     attempt.sequence ??= parseAttemptSequence(attempt.id);
     attempt.chainItem ??= findChainItem(attempt.id, attempt.providerId, lookup);
-    attempt.round = Math.max(attempt.round, round);
+    const traceRound = Math.max(attempt.round ?? round, round);
+    attempt.round = traceRound;
     attempt.priority ??= provider.priority;
     attempt.statusCode ??= asNumber(event.statusCode);
     attempt.cancellationKind ??= asString(event.cancellationKind);
@@ -391,10 +402,7 @@ function buildAttempts(
     attempt.role =
       attempt.role === "fallback"
         ? "fallback"
-        : normalizeRole(
-            event.attemptKind ?? event.role ?? event.kind ?? attempt.role,
-            attempt.round
-          );
+        : normalizeRole(event.attemptKind ?? event.role ?? event.kind ?? attempt.role, traceRound);
     applyEventOutcome(attempt, type, event, roleBeforeEvent);
     if (
       type === "attempt_started" ||
@@ -418,6 +426,10 @@ function buildAttempts(
   const matchedChainItems = new Set(
     [...attempts.values()].map((attempt) => attempt.chainItem).filter((item) => item !== null)
   );
+  // 同一尝试的其余条目（例如启动记录）已有对应的尝试卡片，不再重建
+  for (const item of providerChain) {
+    if (item.routingAttemptId && attempts.has(item.routingAttemptId)) matchedChainItems.add(item);
+  }
   const chainAttempts = providerChain.filter(
     (item) =>
       item.attemptNumber != null &&
@@ -443,7 +455,8 @@ function buildAttempts(
       providerId: item.id,
       providerName: item.name,
       sequence: item.attemptNumber ?? null,
-      round: trace.mode === "discovery" ? (trace.summary?.winnerRound ?? 1) : 1,
+      // 决策链条目没有记录轮次时，Discovery 的轮次无法确定，单独归入“轮次未记录”
+      round: item.routingRound ?? (trace.mode === "discovery" ? null : 1),
       role: "normal",
       promotedFrom: null,
       priority: item.priority ?? null,
@@ -476,8 +489,11 @@ function buildAttempts(
     }
   }
 
+  // 轮次未记录的重建尝试排在所有已知轮次之后
   const sortedAttempts = [...attempts.values()].sort((a, b) => {
-    if (a.round !== b.round) return a.round - b.round;
+    const aRound = a.round ?? Number.MAX_SAFE_INTEGER;
+    const bRound = b.round ?? Number.MAX_SAFE_INTEGER;
+    if (aRound !== bRound) return aRound - bRound;
     return (a.startedAt ?? Number.MAX_SAFE_INTEGER) - (b.startedAt ?? Number.MAX_SAFE_INTEGER);
   });
 
@@ -651,7 +667,7 @@ export function DiscoveryTraceView({
 }) {
   const t = useTranslations("dashboard.logs.details.routingTrace");
   const attempts = buildAttempts(trace, providerChain, hedgeLosers, costUsd);
-  const grouped = new Map<number, AttemptView[]>();
+  const grouped = new Map<number | null, AttemptView[]>();
   for (const attempt of attempts) {
     const group = grouped.get(attempt.round) ?? [];
     group.push(attempt);
@@ -664,7 +680,7 @@ export function DiscoveryTraceView({
   const rounds = Math.max(
     numberFrom(summary, "rounds", "roundsVisited") ?? 0,
     runtimeStats.rounds,
-    ...attempts.map((attempt) => attempt.round)
+    ...attempts.flatMap((attempt) => (attempt.round == null ? [] : [attempt.round]))
   );
   const attemptCount = Math.max(
     numberFrom(summary, "attemptsPerRequest", "attempts", "attemptsStarted") ?? 0,
@@ -840,7 +856,11 @@ export function DiscoveryTraceView({
       ) : (
         <div className="space-y-6">
           {[...grouped.entries()].map(([round, roundAttempts]) => (
-            <section key={round} className="space-y-3" data-testid={`discovery-round-${round}`}>
+            <section
+              key={round ?? "unknown"}
+              className="space-y-3"
+              data-testid={`discovery-round-${round ?? "unknown"}`}
+            >
               <div className="flex items-center justify-between gap-3 border-b pb-2">
                 <div className="flex items-center gap-2 min-w-0">
                   {round === 0 ? (
@@ -849,7 +869,11 @@ export function DiscoveryTraceView({
                     <GitBranch className="h-4 w-4 shrink-0 text-blue-600" />
                   )}
                   <h5 className="text-sm font-medium truncate">
-                    {round === 0 ? t("stickyPhase") : t("round", { round })}
+                    {round === null
+                      ? t("roundUnknown")
+                      : round === 0
+                        ? t("stickyPhase")
+                        : t("round", { round })}
                   </h5>
                 </div>
                 <Badge variant="secondary" className="shrink-0 text-[10px]">

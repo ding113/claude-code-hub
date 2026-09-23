@@ -2957,7 +2957,101 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
           }),
         ])
       );
+      expect(
+        session
+          .getProviderChain()
+          .filter((item) => item.id === provider1.id && item.routingAttemptId)
+          .map((item) => [item.reason, item.routingAttemptId, item.routingRound])
+      ).toEqual([
+        ["hedge_triggered", "legacy-hedge-1-1", 1],
+        ["retry_failed", "legacy-hedge-1-1", 1],
+        ["hedge_winner", "legacy-hedge-1-2", 1],
+      ]);
     } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("keeps the terminal failure of a rectified hedge retry in the decision chain", async () => {
+    vi.useFakeTimers();
+
+    try {
+      const provider1 = createProvider({ id: 1, name: "p1", firstByteTimeoutStreamingMs: 100 });
+      const session = createSession();
+      session.setProvider(provider1);
+      session.request.message = {
+        model: "claude-test",
+        stream: true,
+        max_tokens: 1000,
+        thinking: { type: "enabled", budget_tokens: 500 },
+        messages: [{ role: "user", content: "hi" }],
+      };
+
+      mocks.pickRandomProviderWithExclusion.mockResolvedValue(null);
+      mocks.categorizeErrorAsync
+        .mockResolvedValueOnce(ProxyErrorCategory.NON_RETRYABLE_CLIENT_ERROR)
+        .mockResolvedValueOnce(ProxyErrorCategory.PROVIDER_ERROR);
+
+      const doForward = vi.spyOn(
+        ProxyForwarder as unknown as {
+          doForward: (...args: unknown[]) => Promise<Response>;
+        },
+        "doForward"
+      );
+      const controllerFirst = new AbortController();
+      const controllerRetry = new AbortController();
+      doForward.mockImplementationOnce(async (attemptSession) => {
+        const runtime = attemptSession as ProxySession & AttemptRuntime;
+        runtime.responseController = controllerFirst;
+        runtime.clearResponseTimeout = vi.fn();
+        return createDelayedFailure({
+          delayMs: 20,
+          error: new UpstreamProxyError(
+            "thinking.enabled.budget_tokens: Input should be greater than or equal to 1024",
+            400,
+            {
+              body: '{"error":"budget_too_low"}',
+              providerId: provider1.id,
+              providerName: provider1.name,
+            }
+          ),
+          controller: controllerFirst,
+        });
+      });
+      doForward.mockImplementationOnce(async (attemptSession) => {
+        const runtime = attemptSession as ProxySession & AttemptRuntime;
+        runtime.responseController = controllerRetry;
+        runtime.clearResponseTimeout = vi.fn();
+        return createDelayedFailure({
+          delayMs: 20,
+          error: new UpstreamProxyError("Provider returned 502", 502, {
+            body: '{"error":"retry upstream failed"}',
+            providerId: provider1.id,
+            providerName: provider1.name,
+          }),
+          controller: controllerRetry,
+        });
+      });
+
+      const errorPromise = ProxyForwarder.send(session).catch(
+        (rejection) => rejection as UpstreamProxyError
+      );
+      await vi.runAllTimersAsync();
+      expect(await errorPromise).toBeInstanceOf(UpstreamProxyError);
+      expect(doForward).toHaveBeenCalledTimes(2);
+
+      const attemptEntries = session
+        .getProviderChain()
+        .filter((item) => item.id === provider1.id && item.reason === "retry_failed");
+      expect(attemptEntries.map((item) => [item.routingAttemptId, item.statusCode])).toEqual([
+        ["legacy-hedge-1-1", 400],
+        ["legacy-hedge-1-2", 502],
+      ]);
+      expect(attemptEntries[1].errorDetails?.provider?.upstreamBody).toBe(
+        '{"error":"retry upstream failed"}'
+      );
+    } finally {
+      mocks.pickRandomProviderWithExclusion.mockReset();
       vi.useRealTimers();
     }
   });
@@ -6561,6 +6655,17 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
         }),
       ])
     );
+    const finished = session
+      .getRoutingTrace()
+      ?.events.find(
+        (event) => event.type === "attempt_finished" && event.provider?.id === provider.id
+      );
+    const failedEntry = session
+      .getProviderChain()
+      .find((item) => item.id === provider.id && item.reason === "retry_failed");
+    expect(finished?.attemptId).toBeDefined();
+    expect(failedEntry?.routingAttemptId).toBe(finished?.attemptId);
+    expect(failedEntry?.routingRound).toBe(finished?.round);
   });
 
   test("removes streaming hedge client abort listener after winner response is returned", async () => {

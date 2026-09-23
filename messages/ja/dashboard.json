@@ -457,6 +457,7 @@
         "viewDetails": "Discovery の詳細を表示",
         "stickyPhase": "Sticky プローブ",
         "round": "ラウンド {round}",
+        "roundUnknown": "ラウンド未記録",
         "attempts": "{count} 回の試行",
         "noAttempts": "プロバイダー試行の記録がありません",
         "providerFallback": "プロバイダー {id}",
