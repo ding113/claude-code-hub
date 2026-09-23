@@ -148,7 +148,7 @@ function isDisplayableCost(value: unknown): value is string {
 function parseAttemptSequence(attemptId: string): number | null {
   const discoveryMatch = /:(\d+)$/.exec(attemptId);
   if (discoveryMatch) return Number(discoveryMatch[1]);
-  const hedgeMatch = /^legacy-hedge-(\d+)-(?:\d+|setup)$/.exec(attemptId);
+  const hedgeMatch = /^legacy-hedge-(\d+)-(?:\d+|setup(?:-\d+)?)$/.exec(attemptId);
   return hedgeMatch ? Number(hedgeMatch[1]) : null;
 }
 

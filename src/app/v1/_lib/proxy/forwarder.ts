@@ -5888,49 +5888,51 @@ export class ProxyForwarder {
       });
       ProxyForwarder.markProviderFailed(session, failedProviderIds, attempt.provider.id);
 
-      session.addProviderToChain(
-        attempt.provider,
-        errorCategory === ErrorCategory.NON_RETRYABLE_CLIENT_ERROR
-          ? {
-              ...buildClientErrorChainEntry(
-                attempt.provider,
-                attempt.endpointAudit,
-                attempt.sequence,
-                error,
-                errorMessage,
-                buildRequestDetails(session),
-                matchedRule,
-                rawCrossProviderFallbackEnabled
-              ),
-              modelRedirect: getAttemptModelRedirect(attempt),
-            }
-          : {
-              ...buildRetryFailedChainEntry(
-                attempt.provider,
-                attempt.endpointAudit,
-                attempt.sequence,
-                error,
-                errorMessage,
-                buildRequestDetails(session),
-                rawCrossProviderFallbackEnabled
-              ),
-              reason:
-                errorCategory === ErrorCategory.RESOURCE_NOT_FOUND
-                  ? "resource_not_found"
-                  : errorCategory === ErrorCategory.SYSTEM_ERROR
-                    ? "system_error"
-                    : "retry_failed",
-              modelRedirect: getAttemptModelRedirect(attempt),
-            }
-      );
-
-      if (
-        errorCategory === ErrorCategory.PROVIDER_ERROR &&
-        statusCode !== 404 &&
-        !isRequestScopedGateFailure(error)
-      ) {
-        attempt.healthOutcome = "provider_failure";
-        await recordFailure(attempt.provider.id, error);
+      try {
+        if (
+          errorCategory === ErrorCategory.PROVIDER_ERROR &&
+          statusCode !== 404 &&
+          !isRequestScopedGateFailure(error)
+        ) {
+          attempt.healthOutcome = "provider_failure";
+          await recordFailure(attempt.provider.id, error);
+        }
+      } finally {
+        session.addProviderToChain(
+          attempt.provider,
+          errorCategory === ErrorCategory.NON_RETRYABLE_CLIENT_ERROR
+            ? {
+                ...buildClientErrorChainEntry(
+                  attempt.provider,
+                  attempt.endpointAudit,
+                  attempt.sequence,
+                  error,
+                  errorMessage,
+                  buildRequestDetails(session),
+                  matchedRule,
+                  rawCrossProviderFallbackEnabled
+                ),
+                modelRedirect: getAttemptModelRedirect(attempt),
+              }
+            : {
+                ...buildRetryFailedChainEntry(
+                  attempt.provider,
+                  attempt.endpointAudit,
+                  attempt.sequence,
+                  error,
+                  errorMessage,
+                  buildRequestDetails(session),
+                  rawCrossProviderFallbackEnabled
+                ),
+                reason:
+                  errorCategory === ErrorCategory.RESOURCE_NOT_FOUND
+                    ? "resource_not_found"
+                    : errorCategory === ErrorCategory.SYSTEM_ERROR
+                      ? "system_error"
+                      : "retry_failed",
+                modelRedirect: getAttemptModelRedirect(attempt),
+              }
+        );
       }
 
       if (errorCategory === ErrorCategory.NON_RETRYABLE_CLIENT_ERROR) {
@@ -6195,7 +6197,7 @@ export class ProxyForwarder {
         }
         session.appendRoutingTraceEvent({
           type: "attempt_finished",
-          attemptId: `legacy-hedge-${launchedProviderCount + 1}-setup`,
+          attemptId: `legacy-hedge-${launchedProviderCount + 1}-setup-${provider.id}`,
           attemptKind: "normal",
           round: HEDGE_TRACE_ROUND,
           provider: { id: provider.id, name: provider.name, priority: provider.priority || 0 },

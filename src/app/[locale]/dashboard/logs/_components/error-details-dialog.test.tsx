@@ -2544,62 +2544,65 @@ describe("error-details-dialog routing trace", () => {
     unmount();
   });
 
-  test("matches a legacy Hedge attempt to its upstream error in the decision chain", () => {
-    const trace: RoutingTraceV1 = {
-      ...discoveryTrace,
-      mode: "legacy_hedge",
-      discoveryEnabled: false,
-      eligible: false,
-      bypassReason: "disabled",
-      events: [
-        {
-          type: "attempt_finished",
-          at: 1_100,
-          elapsedMs: 100,
-          round: 1,
-          attemptId: "legacy-hedge-1-1",
-          provider: { id: 1, name: "failed-provider" },
-          outcome: "failed",
-          statusCode: 502,
-        },
-      ],
-    };
-    const { container, unmount } = renderClientWithIntl(
-      <ErrorDetailsDialog
-        externalOpen
-        initialTab="logic-trace"
-        statusCode={502}
-        errorMessage={null}
-        sessionId="legacy-error-trace"
-        providerChain={[
-          { id: 1, name: "failed-provider", reason: "initial_selection" },
+  test.each(["legacy-hedge-1-1", "legacy-hedge-1-setup-1"])(
+    "matches legacy Hedge attempt %s to its decision-chain error",
+    (attemptId) => {
+      const trace: RoutingTraceV1 = {
+        ...discoveryTrace,
+        mode: "legacy_hedge",
+        discoveryEnabled: false,
+        eligible: false,
+        bypassReason: "disabled",
+        events: [
           {
-            id: 1,
-            name: "failed-provider",
-            reason: "retry_failed",
-            attemptNumber: 1,
+            type: "attempt_finished",
+            at: 1_100,
+            elapsedMs: 100,
+            round: 1,
+            attemptId,
+            provider: { id: 1, name: "failed-provider" },
+            outcome: "failed",
             statusCode: 502,
-            errorDetails: {
-              provider: {
-                id: 1,
-                name: "failed-provider",
-                statusCode: 502,
-                statusText: "Bad Gateway",
-                upstreamBody: '{"error":"gateway failure"}',
+          },
+        ],
+      };
+      const { container, unmount } = renderClientWithIntl(
+        <ErrorDetailsDialog
+          externalOpen
+          initialTab="logic-trace"
+          statusCode={502}
+          errorMessage={null}
+          sessionId="legacy-error-trace"
+          providerChain={[
+            { id: 1, name: "failed-provider", reason: "initial_selection" },
+            {
+              id: 1,
+              name: "failed-provider",
+              reason: "retry_failed",
+              attemptNumber: 1,
+              statusCode: 502,
+              errorDetails: {
+                provider: {
+                  id: 1,
+                  name: "failed-provider",
+                  statusCode: 502,
+                  statusText: "Bad Gateway",
+                  upstreamBody: '{"error":"gateway failure"}',
+                },
               },
             },
-          },
-        ]}
-        routingTrace={trace}
-      />
-    );
+          ]}
+          routingTrace={trace}
+        />
+      );
 
-    const attempts = container.querySelectorAll("[data-testid='discovery-attempt']");
-    expect(attempts).toHaveLength(1);
-    click(attempts[0].querySelector("[data-testid='discovery-attempt-toggle']") ?? null);
-    expect(attempts[0].textContent).toContain("gateway failure");
-    unmount();
-  });
+      const attempts = container.querySelectorAll("[data-testid='discovery-attempt']");
+      expect(attempts).toHaveLength(1);
+      click(attempts[0].querySelector("[data-testid='discovery-attempt-toggle']") ?? null);
+      expect(attempts[0].textContent).toContain("gateway failure");
+      unmount();
+    }
+  );
 
   test("falls back to the old chain for an unsupported trace version", () => {
     const html = renderWithIntl(
