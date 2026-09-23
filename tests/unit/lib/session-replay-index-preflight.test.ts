@@ -481,11 +481,16 @@ describe("database index migration orchestration", () => {
     expect(statements[0]).toContain("DO $$");
     expect(statements[0]).toContain("RAISE EXCEPTION");
     expect(statements[0]).toContain(
-      "pg_relation_size('public.message_request') > 64 * 1024 * 1024"
+      "pg_relation_size(format('public.%I', spec.table_name)::regclass) > 64 * 1024 * 1024"
     );
-    expect(statements[0]).toContain("pg_relation_size('public.usage_ledger') > 64 * 1024 * 1024");
     for (const prefixSpec of prefixSpecs) {
-      expect(statements[0]).toContain(`'${prefixSpec.canonicalName}'`);
+      // 守卫只检查缺失索引所在的表，错误详情里的并发建索引语句与 preflight 定义一致。
+      const tableName = prefixSpec.canonicalName.startsWith("idx_message_request_")
+        ? "message_request"
+        : "usage_ledger";
+      expect(statements[0]).toContain(
+        `'${tableName}', '${prefixSpec.canonicalName}', '${prefixSpec.definition.replaceAll("'", "''")}'`
+      );
       expect(
         statements.some((statement) =>
           statement.endsWith(
