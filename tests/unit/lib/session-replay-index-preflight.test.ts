@@ -477,7 +477,15 @@ describe("database index migration orchestration", () => {
     const prefixSpecs = SESSION_REPLAY_INDEX_SPECS.filter(
       (candidate) => candidate.marker === SESSION_IDENTITY_PREFIX_INDEX_MARKER
     );
+    // 第一条语句在大表上拒绝阻塞式建索引，必须先于所有 CREATE INDEX 执行。
+    expect(statements[0]).toContain("DO $$");
+    expect(statements[0]).toContain("RAISE EXCEPTION");
+    expect(statements[0]).toContain(
+      "pg_relation_size('public.message_request') > 64 * 1024 * 1024"
+    );
+    expect(statements[0]).toContain("pg_relation_size('public.usage_ledger') > 64 * 1024 * 1024");
     for (const prefixSpec of prefixSpecs) {
+      expect(statements[0]).toContain(`'${prefixSpec.canonicalName}'`);
       expect(
         statements.some((statement) =>
           statement.endsWith(
