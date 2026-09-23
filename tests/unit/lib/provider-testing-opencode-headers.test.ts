@@ -30,6 +30,21 @@ describe("buildProviderTestHeaders", () => {
     expect(headers["X-OpenCode-Session"]).toBe("ses_custom");
   });
 
+  it("skips unresolved {{session.id}} templates then still injects a hashed session", () => {
+    const headers = buildProviderTestHeaders(
+      createConfig({
+        customHeaders: {
+          "x-tenant": "acme",
+          "x-opencode-session": "{{session.id}}",
+        },
+      })
+    );
+
+    expect(headers["x-tenant"]).toBe("acme");
+    expect(headers["x-opencode-session"]).toMatch(/^[0-9a-f-]{36}$/);
+    expect(headers["x-opencode-session"]).not.toBe("{{session.id}}");
+  });
+
   it("leaves non-opencode providers untouched", () => {
     const headers = buildProviderTestHeaders(
       createConfig({ providerUrl: "https://api.openai.com/v1" })

@@ -5,6 +5,7 @@
  */
 
 import { applyOpencodeSessionHeader } from "@/app/v1/_lib/headers";
+import { mergeResolvedCustomHeaders } from "@/lib/custom-headers";
 import {
   createProxyAgentForProvider,
   fetchWithDispatcher,
@@ -59,10 +60,13 @@ export function buildProviderTestHeaders(
   config: ProviderTestConfig,
   overrides?: Parameters<typeof getTestHeaders>[3]
 ): Record<string, string> {
-  const headers = {
-    ...getTestHeaders(config.providerType, config.apiKey, config.providerUrl, overrides),
-    ...(config.customHeaders || {}),
-  };
+  const headers = getTestHeaders(config.providerType, config.apiKey, config.providerUrl, overrides);
+  if (config.customHeaders) {
+    const lookup = new Headers(headers);
+    mergeResolvedCustomHeaders(headers, config.customHeaders, {
+      getHeader: (name) => lookup.get(name),
+    });
+  }
   applyOpencodeSessionHeader(headers, config.providerUrl);
   return headers;
 }

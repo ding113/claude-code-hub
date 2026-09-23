@@ -373,3 +373,43 @@ describe("Provider schemas - API 密钥长度限制", () => {
     expect(UpdateProviderSchema.safeParse({ key: "" }).success).toBe(false);
   });
 });
+
+describe("Provider schemas - custom_headers templates", () => {
+  const baseCreate = {
+    name: "测试供应商",
+    url: "https://api.example.com",
+    key: "sk-test",
+    provider_type: "claude" as const,
+  };
+
+  test("CreateProviderSchema 接受动态模板值", () => {
+    const parsed = CreateProviderSchema.parse({
+      ...baseCreate,
+      custom_headers: {
+        "x-session-id": "{{session.id}}",
+        "x-ua": "{{header.user-agent}}",
+      },
+    });
+    expect(parsed.custom_headers).toEqual({
+      "x-session-id": "{{session.id}}",
+      "x-ua": "{{header.user-agent}}",
+    });
+  });
+
+  test("CreateProviderSchema 拒绝未知模板", () => {
+    const result = CreateProviderSchema.safeParse({
+      ...baseCreate,
+      custom_headers: { "x-foo": "{{foo}}" },
+    });
+    expect(result.success).toBe(false);
+  });
+
+  test("UpdateProviderSchema 接受动态模板值", () => {
+    const parsed = UpdateProviderSchema.parse({
+      custom_headers: { "x-client-session": "{{session.client_id}}" },
+    });
+    expect(parsed.custom_headers).toEqual({
+      "x-client-session": "{{session.client_id}}",
+    });
+  });
+});

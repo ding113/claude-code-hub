@@ -15,7 +15,7 @@
   "customConfig": "自訂",
   "customHeaders": {
     "label": "自訂請求標頭（JSON）",
-    "desc": "靜態請求標頭會合併到本次測試請求；不會覆蓋鑑權標頭。",
+    "desc": "靜態值或動態模板會合併到本次測試請求；不會覆蓋鑑權標頭。連通性測試沒有真實會話，'{{session.id}}' 和 '{{session.client_id}}' 會被跳過。",
     "geminiNotSupported": "Gemini 測試通道暫不支援自訂請求標頭",
     "errors": {
       "invalidJson": "自訂請求標頭必須為合法 JSON",
@@ -25,7 +25,8 @@
       "protectedName": "鑑權請求標頭不能透過自訂請求標頭設定",
       "invalidValue": "請求標頭值必須為字串",
       "emptyName": "請求標頭名稱不能為空",
-      "crlf": "請求標頭名稱和值不能包含換行符"
+      "crlf": "請求標頭名稱和值不能包含換行符",
+      "invalidTemplate": "動態模板語法無效。支援 '{{header.Name}}'、'{{session.id}}'、'{{session.client_id}}'"
     }
   },
   "customPayloadDesc": "輸入自訂 JSON payload，將覆蓋預設請求主體",

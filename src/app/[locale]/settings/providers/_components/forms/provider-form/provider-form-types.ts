@@ -78,7 +78,7 @@ export interface RoutingState {
   // Scheduled active time window (HH:mm format, null = always active)
   activeTimeStart: string | null;
   activeTimeEnd: string | null;
-  // Static custom request headers as JSON text (parsed on submit, null/empty cleared on save)
+  // Custom request headers as JSON text: static values or {{header.*}} / {{session.*}} templates
   customHeadersText: string;
 }
 

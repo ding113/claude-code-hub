@@ -22,7 +22,7 @@ import { applyCodexProviderOverridesWithAudit } from "@/lib/codex/provider-overr
 import { getCachedSystemSettings, isHttp2Enabled } from "@/lib/config";
 import { getEnvConfig } from "@/lib/config/env.schema";
 import { PROVIDER_DEFAULTS, PROVIDER_LIMITS } from "@/lib/constants/provider.constants";
-import { PROTECTED_AUTH_HEADER_NAMES } from "@/lib/custom-headers";
+import { mergeResolvedCustomHeaders } from "@/lib/custom-headers";
 import { recordEndpointFailure, recordEndpointSuccess } from "@/lib/endpoint-circuit-breaker";
 import { applyGeminiGoogleSearchOverrideWithAudit } from "@/lib/gemini/provider-overrides";
 import { isLangfuseEnabled } from "@/lib/langfuse";
@@ -267,21 +267,29 @@ const PROVIDER_CUSTOM_HEADER_RESERVED_NAMES: ReadonlySet<string> = new Set(
   ["host", ...OUTBOUND_TRANSPORT_HEADER_BLACKLIST].map((n) => n.toLowerCase())
 );
 
-// 把 provider 上配置的静态自定义请求头合并到 overrides 中。
+// 把 provider 上配置的自定义请求头（静态值或 {{header.*}} / {{session.*}} 模板）合并到 overrides 中。
 // 入参 overrides 直接被原地修改。鉴权头（authorization / x-api-key / x-goog-api-key）会在调用方
 // 之后再写入，从而保证鉴权始终覆盖自定义头；这里额外做一次防御性的剥离，避免历史脏数据通过 DB 旁路注入。
 function applyProviderCustomHeaders(
   overrides: Record<string, string>,
-  customHeaders: Record<string, string> | null | undefined
+  customHeaders: Record<string, string> | null | undefined,
+  session: ProxySession
 ): void {
   if (!customHeaders) return;
-  for (const [name, value] of Object.entries(customHeaders)) {
-    if (typeof value !== "string") continue;
-    const lower = name.toLowerCase();
-    if (PROTECTED_AUTH_HEADER_NAMES.has(lower)) continue;
-    if (PROVIDER_CUSTOM_HEADER_RESERVED_NAMES.has(lower)) continue;
-    overrides[name] = value;
-  }
+  mergeResolvedCustomHeaders(
+    overrides,
+    customHeaders,
+    {
+      getHeader: (name) => session.headers.get(name),
+      sessionId: session.sessionId ?? session.upstreamSessionSeed,
+      clientSessionId: SessionManager.extractClientSessionId(
+        session.request.message,
+        session.headers,
+        session.userAgent
+      ),
+    },
+    PROVIDER_CUSTOM_HEADER_RESERVED_NAMES
+  );
 }
 
 const RETRY_LIMITS = PROVIDER_LIMITS.MAX_RETRY_ATTEMPTS;
@@ -9114,8 +9122,8 @@ export class ProxyForwarder {
       "accept-encoding": "identity", // 禁用压缩：避免 undici ZlibError（代理应透传原始数据）
     };
 
-    // 静态自定义请求头：在默认覆盖之后、鉴权头之前合并；剥离任何受保护的鉴权名（防御历史脏数据）
-    applyProviderCustomHeaders(overrides, provider.customHeaders);
+    // 自定义请求头：在默认覆盖之后、鉴权头之前合并；剥离任何受保护的鉴权名（防御历史脏数据）
+    applyProviderCustomHeaders(overrides, provider.customHeaders, session);
 
     if (provider.providerType === "claude-auth" || provider.providerType === "claude") {
       Object.assign(
@@ -9208,8 +9216,8 @@ export class ProxyForwarder {
       "user-agent": session.headers.get("user-agent") ?? session.userAgent ?? "claude-code-hub",
     };
 
-    // 静态自定义请求头：在默认覆盖之后、鉴权头之前合并；剥离任何受保护的鉴权名
-    applyProviderCustomHeaders(overrides, provider.customHeaders);
+    // 自定义请求头：在默认覆盖之后、鉴权头之前合并；剥离任何受保护的鉴权名
+    applyProviderCustomHeaders(overrides, provider.customHeaders, session);
 
     if (isApiKey) {
       overrides[GEMINI_PROTOCOL.HEADERS.API_KEY] = accessToken;
