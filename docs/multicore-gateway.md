@@ -25,8 +25,10 @@
 自动数量为以下容量的最小值：
 
 ```text
-min(32, floor(effective_vCPU / 2), memory_capacity, shared_budget_capacity)
+min(32, floor(effective_vCPU / 2), memory_capacity, shared_budget_capacity, floor(DB_POOL_MAX / 4))
 ```
+
+最后一项保证自动模式下每个 worker 至少有 4 个数据库连接（data 2、control 1、writer 1），避免三条连接 lane 退化为共用一个单连接池。默认 `DB_POOL_MAX=20` 时自动模式最多 5 个 worker；需要更多 worker 时按比例调高 `DB_POOL_MAX`。显式 `CCH_MULTICORE_WORKERS` 只要求每个 worker 至少 1 个连接。
 
 每个进程预留两个 vCPU 的原因是主 JavaScript 线程之外仍有 GC、异步 zlib/libuv、TLS 和原生代码工作，避免“4 vCPU 启 4 个主线程”把尾延迟和内存推到不可控区间。需要覆盖默认值时可显式设置 worker 数。
 

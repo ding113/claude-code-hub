@@ -332,10 +332,35 @@ describe("multicore plan", () => {
 
   it("资源充足时自动上限为 32，显式预算仍然限制 worker 数", () => {
     const plan = multicore.createMulticorePlan({
-      env: productionEnv({ DB_POOL_MAX: "64", DETACHED_STREAM_BUDGET_BYTES: String(256 * MIB) }),
+      env: productionEnv({ DB_POOL_MAX: "128", DETACHED_STREAM_BUDGET_BYTES: String(256 * MIB) }),
       resources: resources(128, 128 * 1024),
     });
     expect(plan.workerCount).toBe(32);
+  });
+
+  it("自动模式按每个 worker 至少 4 个数据库连接限制 worker 数", () => {
+    const plan = multicore.createMulticorePlan({
+      env: productionEnv(),
+      resources: resources(64, 64 * 1024),
+    });
+    expect(plan).toMatchObject({ enabled: true, workerCount: 5 });
+    expect(plan.budgetAllocations?.DB_POOL_MAX).toEqual([4, 4, 4, 4, 4]);
+
+    const tightPool = multicore.createMulticorePlan({
+      env: productionEnv({ DB_POOL_MAX: "7" }),
+      resources: resources(8, 8192),
+    });
+    expect(tightPool).toMatchObject({
+      enabled: false,
+      workerCount: 1,
+      reason: "insufficient_shared_budget",
+    });
+
+    const explicit = multicore.createMulticorePlan({
+      env: productionEnv({ DB_POOL_MAX: "7", CCH_MULTICORE_WORKERS: "3" }),
+      resources: resources(8, 8192),
+    });
+    expect(explicit.budgetAllocations?.DB_POOL_MAX).toEqual([3, 2, 2]);
   });
 
   it("rejects an out-of-range worker index", () => {

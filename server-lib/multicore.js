@@ -9,6 +9,8 @@ const DEFAULT_AUTO_MAX_WORKERS = 32;
 const MAX_EXPLICIT_WORKERS = 32;
 const DEFAULT_MEMORY_PER_WORKER_MB = 1024;
 const DEFAULT_PRIMARY_MEMORY_RESERVE_MB = 256;
+// 自动模式下每个 worker 至少保留 4 个数据库连接：data 2 + control 1 + writer 1，三条 lane 各有独立连接池。
+const AUTO_MIN_DB_POOL_PER_WORKER = 4;
 
 const CGROUP_FILES = Object.freeze({
   cpuMaxV2: "/sys/fs/cgroup/cpu.max",
@@ -461,7 +463,8 @@ function createMulticorePlan(options = {}) {
     workerCount = Math.min(
       Math.floor(resources.effectiveCpu / 2),
       DEFAULT_AUTO_MAX_WORKERS,
-      safeCapacity
+      safeCapacity,
+      Math.floor(resolvedBudgets.totals.DB_POOL_MAX / AUTO_MIN_DB_POOL_PER_WORKER)
     );
     reason = "auto_resource_eligible";
     if (workerCount < 2) {
