@@ -223,9 +223,12 @@ export function LogicTraceTab({
   // Calculate step offset for session reuse flow
   const sessionReuseStepOffset = isSessionReuseFlow ? 1 : 0;
 
+  const hasHedgeAttemptEvidence =
+    normalizedRoutingTrace?.events.some((event) => event.attemptId != null) ||
+    providerChain?.some((item) => item.attemptNumber != null);
   if (
     normalizedRoutingTrace?.mode === "discovery" ||
-    normalizedRoutingTrace?.mode === "legacy_hedge"
+    (normalizedRoutingTrace?.mode === "legacy_hedge" && hasHedgeAttemptEvidence)
   ) {
     return (
       <div className="space-y-5">
