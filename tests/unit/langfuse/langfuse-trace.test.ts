@@ -860,6 +860,25 @@ describe("traceProxyRequest", () => {
     expect(mockSetTraceIO).not.toHaveBeenCalled();
   });
 
+  test("should not mark a streaming response missing when its final output was reconstructed", async () => {
+    const { traceProxyRequest } = await import("@/lib/langfuse/trace-proxy-request");
+
+    await traceProxyRequest({
+      session: createMockSession(),
+      responseHeaders: new Headers(),
+      durationMs: 500,
+      statusCode: 200,
+      isStreaming: true,
+      sseEventCount: 6,
+      finalResponseOutput: { kind: "final", value: { id: "msg_1", content: [] } },
+      errorMessage: "client disconnected after completion",
+    });
+
+    const rootCall = mockStartObservation.mock.calls[0];
+    expect(rootCall[1].output).toEqual({ id: "msg_1", content: [] });
+    expect(rootCall[1].metadata.responseMissing).toBe(false);
+  });
+
   test("should mark missing non-stream output when request input exists", async () => {
     const { traceProxyRequest } = await import("@/lib/langfuse/trace-proxy-request");
 

@@ -167,6 +167,8 @@ function hasRequestInput(ctx: TraceContext): boolean {
 
 function isResponseMissing(ctx: TraceContext): boolean {
   if (ctx.responseText) return false;
+  // 流式请求不再携带 responseText，已还原出最终输出即视为有响应
+  if (ctx.finalResponseOutput?.kind === "final") return false;
   if (ctx.errorMessage) return true;
   if (!hasRequestInput(ctx)) return false;
   if (ctx.isStreaming) return ctx.sseEventCount === 0;
