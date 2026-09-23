@@ -1047,7 +1047,13 @@ describe("traceProxyRequest", () => {
     expect(rootCall[1].output).toEqual(expectedOutput);
     expect(llmCall?.[1]).toMatchObject({
       output: expectedOutput,
-      usageDetails: responseBody.usage,
+      usageDetails: {
+        input: 75,
+        input_cached_tokens: 25,
+        output: 40,
+        output_reasoning_tokens: 10,
+        total: 150,
+      },
       metadata: { response: { id: "resp_123", status: "completed", model: "gpt-5.6" } },
     });
     expect(mockSetTraceIO).not.toHaveBeenCalled();
@@ -1088,7 +1094,7 @@ describe("traceProxyRequest", () => {
 
     expect(llmCall?.[1]).toMatchObject({
       output: [{ type: "function_call", call_id: "call_123" }],
-      usageDetails: { input_tokens: 1, output_tokens: 2, total_tokens: 3 },
+      usageDetails: { input: 1, output: 2, total: 3 },
       metadata: { response: { id: "resp_stream", status: "completed", model: "gpt-5.6" } },
     });
   });
