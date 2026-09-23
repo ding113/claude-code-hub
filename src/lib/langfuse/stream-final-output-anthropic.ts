@@ -141,8 +141,9 @@ export function finalizeAnthropicStreamOutput(parsedFrames: ParsedStreamFrames):
         if (index === null || blockState === undefined || blockState.stopped) {
           return createFinalOutputUnavailable("malformed_frame", metadata);
         }
-        if (blockState.isToolUse && blockState.inputJsonFragments.length > 0) {
-          const inputJson = blockState.inputJsonFragments.join("");
+        // 无参数工具只发送 partial_json: ""，此时保留 content_block_start 里的 input
+        const inputJson = blockState.inputJsonFragments.join("");
+        if (blockState.isToolUse && inputJson.length > 0) {
           try {
             const parsedInput: unknown = JSON.parse(inputJson);
             blockState.block.input = parsedInput;
@@ -221,14 +222,12 @@ export function finalizeAnthropicStreamOutput(parsedFrames: ParsedStreamFrames):
   return finalizeStreamOutput(message, metadata);
 }
 
+// 优先使用 data.type：没有 event: 行的 SSE 帧会被解析成默认事件名 "message"
 function getEventName(frame: StreamFrame): string | null {
-  if (frame.event !== null) {
-    return frame.event;
+  if (isJsonObject(frame.data) && typeof frame.data.type === "string") {
+    return frame.data.type;
   }
-  if (!isJsonObject(frame.data) || typeof frame.data.type !== "string") {
-    return null;
-  }
-  return frame.data.type;
+  return frame.event;
 }
 
 function getEventData(frame: StreamFrame): JsonObject | null {

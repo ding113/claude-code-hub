@@ -4,6 +4,7 @@ import type {
   StreamFrame,
   StreamFinalOutput,
 } from "@/lib/langfuse/stream-final-output-core";
+import { finalizeStreamOutputForClient } from "@/lib/langfuse/stream-final-output";
 import { finalizeAnthropicStreamOutput } from "@/lib/langfuse/stream-final-output-anthropic";
 
 function frame(event: string, data: unknown): StreamFrame {
@@ -141,6 +142,48 @@ describe("finalizeAnthropicStreamOutput", () => {
         { type: "text", text: "second" },
         { type: "text", text: "third" },
       ],
+    });
+  });
+
+  test("keeps the start input of a parameterless tool that streams an empty partial_json", () => {
+    const result = expectFinal(
+      finalizeAnthropicStreamOutput(
+        frames(
+          frame("message_start", {
+            type: "message_start",
+            message: { id: "msg_no_args", type: "message", content: [] },
+          }),
+          contentBlockStart(0, { type: "tool_use", id: "tool_now", name: "get_time", input: {} }),
+          contentBlockDelta(0, { type: "input_json_delta", partial_json: "" }),
+          contentBlockStop(0),
+          frame("message_stop", { type: "message_stop" })
+        )
+      )
+    );
+
+    expect(result.value).toMatchObject({
+      content: [{ type: "tool_use", id: "tool_now", name: "get_time", input: {} }],
+    });
+  });
+
+  test("reconstructs SSE streams whose frames carry only data: lines", () => {
+    const streamText = [
+      { type: "message_start", message: { id: "msg_data_only", type: "message", content: [] } },
+      { type: "content_block_start", index: 0, content_block: { type: "text", text: "" } },
+      { type: "content_block_delta", index: 0, delta: { type: "text_delta", text: "Hi" } },
+      { type: "content_block_stop", index: 0 },
+      { type: "message_delta", delta: { stop_reason: "end_turn" }, usage: { output_tokens: 1 } },
+      { type: "message_stop" },
+    ]
+      .map((event) => `data: ${JSON.stringify(event)}\n\n`)
+      .join("");
+
+    const result = finalizeStreamOutputForClient(streamText, "claude", true);
+    if (result === undefined) throw new Error("Expected a finalizer result");
+    expect(expectFinal(result).value).toMatchObject({
+      id: "msg_data_only",
+      content: [{ type: "text", text: "Hi" }],
+      stop_reason: "end_turn",
     });
   });
 
