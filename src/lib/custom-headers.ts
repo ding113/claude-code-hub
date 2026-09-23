@@ -75,6 +75,7 @@ function parseCustomHeaderExpr(raw: string): CustomHeaderExpr | null {
     if (SENSITIVE_TEMPLATE_SOURCE_HEADER_NAMES.has(name.toLowerCase())) return null;
     return { kind: "header", name };
   }
+  return null;
 }
 
 function matchCustomHeaderTemplates(value: string): RegExpMatchArray[] {
