@@ -28,9 +28,7 @@ import { getDistinctProviderGroupsAction } from "@/lib/api-client/v1/actions/req
 import {
   type CustomHeadersValidationErrorCode,
   parseCustomHeadersJsonText,
-  stringifyCustomHeadersForTextarea,
 } from "@/lib/custom-headers";
-import { applyOpenCodeGoSessionHeader, shouldPromptOpenCodeGoAdapter } from "@/lib/opencode-go";
 import { PROVIDER_BATCH_PATCH_ERROR_CODES } from "@/lib/provider-batch-patch-error-codes";
 import { isValidUrl } from "@/lib/utils/validation";
 import type { ProviderDisplay, ProviderEndpoint, ProviderType } from "@/types/provider";
@@ -93,7 +91,6 @@ function ProviderFormContent({
     limit5hResetMode?: "fixed" | "rolling";
   };
   const [isPending, startTransition] = useTransition();
-  const [showOpenCodeGoConfirm, setShowOpenCodeGoConfirm] = useState(false);
   const isEdit = mode === "edit";
 
   const queryClient = useQueryClient();
@@ -287,25 +284,14 @@ function ProviderFormContent({
     return null;
   };
 
+  // Check if failureThreshold needs confirmation
   const needsFailureThresholdConfirm = () => {
     const threshold = state.circuitBreaker.failureThreshold;
     return threshold === 0 || (threshold !== undefined && threshold > 20);
   };
 
-  const getEffectiveProviderUrl = () =>
-    (endpointPoolHideLegacyUrlInput
-      ? (endpointPoolPreferredUrl ?? state.basic.url)
-      : state.basic.url
-    ).trim();
-
-  const needsOpenCodeGoPrompt = () => {
-    const customHeadersResult = parseCustomHeadersJsonText(state.routing.customHeadersText);
-    const customHeaders = customHeadersResult.ok ? customHeadersResult.value : null;
-    return shouldPromptOpenCodeGoAdapter(getEffectiveProviderUrl(), customHeaders);
-  };
-
   // Actual form submission
-  const performSubmit = (enableOpenCodeGo = false) => {
+  const performSubmit = () => {
     startTransition(async () => {
       try {
         // Convert duration from minutes to milliseconds
@@ -335,19 +321,14 @@ function ProviderFormContent({
         const parsedCustomHeadersResult = parseCustomHeadersJsonText(
           state.routing.customHeadersText
         );
-        let parsedCustomHeaders = parsedCustomHeadersResult.ok
+        const parsedCustomHeaders = parsedCustomHeadersResult.ok
           ? (parsedCustomHeadersResult.value ?? null)
           : null;
-        if (enableOpenCodeGo) {
-          parsedCustomHeaders = applyOpenCodeGoSessionHeader(parsedCustomHeaders);
-          dispatch({
-            type: "SET_CUSTOM_HEADERS_TEXT",
-            payload: stringifyCustomHeadersForTextarea(parsedCustomHeaders),
-          });
-        }
 
         // Base form data without key (for type safety)
-        const effectiveProviderUrl = getEffectiveProviderUrl();
+        const effectiveProviderUrl = endpointPoolHideLegacyUrlInput
+          ? (endpointPoolPreferredUrl ?? state.basic.url).trim()
+          : state.basic.url.trim();
 
         const baseFormData = {
           name: state.basic.name.trim(),
@@ -481,13 +462,9 @@ function ProviderFormContent({
       return;
     }
 
+    // Check if failureThreshold needs confirmation
     if (needsFailureThresholdConfirm()) {
       dispatch({ type: "SET_SHOW_FAILURE_THRESHOLD_CONFIRM", payload: true });
-      return;
-    }
-
-    if (needsOpenCodeGoPrompt()) {
-      setShowOpenCodeGoConfirm(true);
       return;
     }
 
@@ -809,46 +786,10 @@ function ProviderFormContent({
             <AlertDialogAction
               onClick={() => {
                 dispatch({ type: "SET_SHOW_FAILURE_THRESHOLD_CONFIRM", payload: false });
-                if (needsOpenCodeGoPrompt()) {
-                  setShowOpenCodeGoConfirm(true);
-                  return;
-                }
                 performSubmit();
               }}
             >
               {t("failureThresholdConfirmDialog.confirm")}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      <AlertDialog open={showOpenCodeGoConfirm} onOpenChange={setShowOpenCodeGoConfirm}>
-        <AlertDialogContent>
-          <AlertHeader>
-            <AlertTitle>{t("openCodeGoConfirmDialog.title")}</AlertTitle>
-            <AlertDialogDescription>
-              {t("openCodeGoConfirmDialog.description")}
-            </AlertDialogDescription>
-          </AlertHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>{t("openCodeGoConfirmDialog.cancel")}</AlertDialogCancel>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => {
-                setShowOpenCodeGoConfirm(false);
-                performSubmit(false);
-              }}
-            >
-              {t("openCodeGoConfirmDialog.skip")}
-            </Button>
-            <AlertDialogAction
-              onClick={() => {
-                setShowOpenCodeGoConfirm(false);
-                performSubmit(true);
-              }}
-            >
-              {t("openCodeGoConfirmDialog.enable")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

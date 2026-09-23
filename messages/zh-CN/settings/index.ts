@@ -37,7 +37,6 @@ import providersFormCommon from "./providers/form/common.json";
 import providersFormDeleteDialog from "./providers/form/deleteDialog.json";
 import providersFormErrors from "./providers/form/errors.json";
 import providersFormFailureThresholdConfirmDialog from "./providers/form/failureThresholdConfirmDialog.json";
-import providersFormOpenCodeGoConfirmDialog from "./providers/form/openCodeGoConfirmDialog.json";
 import providersFormKey from "./providers/form/key.json";
 import providersFormMaxRetryAttempts from "./providers/form/maxRetryAttempts.json";
 import providersFormMatchTester from "./providers/form/matchTester.json";
@@ -65,7 +64,6 @@ const providersForm = {
   deleteDialog: providersFormDeleteDialog,
   errors: providersFormErrors,
   failureThresholdConfirmDialog: providersFormFailureThresholdConfirmDialog,
-  openCodeGoConfirmDialog: providersFormOpenCodeGoConfirmDialog,
   key: providersFormKey,
   matchTester: providersFormMatchTester,
   maxRetryAttempts: providersFormMaxRetryAttempts,
