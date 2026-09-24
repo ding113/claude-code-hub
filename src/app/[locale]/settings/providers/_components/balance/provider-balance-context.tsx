@@ -6,7 +6,7 @@ import {
   useCallback,
   useContext,
   useEffect,
-  useMemo,
+  useState,
   useSyncExternalStore,
 } from "react";
 import { getProviderBalances } from "@/lib/api-client/v1/actions/provider-balance";
@@ -36,18 +36,25 @@ export function ProviderBalanceProvider({
   store,
   autoRefreshMs = PROVIDER_BALANCE_AUTO_REFRESH_MS,
 }: ProviderBalanceProviderProps) {
-  const activeStore = useMemo(
-    () => store ?? new ProviderBalanceStore({ fetchBalances: getProviderBalances }),
-    [store]
-  );
+  // 自建的 store 在同一个 effect 内创建和释放：StrictMode 的
+  // setup - cleanup - setup 会重跑该 effect，复用同一个实例会拿到已经释放的 store。
+  const [ownedStore, setOwnedStore] = useState<ProviderBalanceStore | null>(null);
+  const activeStore = store ?? ownedStore;
 
   useEffect(() => {
     if (store) return;
-    return () => activeStore.dispose();
-  }, [activeStore, store]);
+
+    const created = new ProviderBalanceStore({ fetchBalances: getProviderBalances });
+    setOwnedStore(created);
+
+    return () => {
+      created.dispose();
+      setOwnedStore((current) => (current === created ? null : current));
+    };
+  }, [store]);
 
   useEffect(() => {
-    if (autoRefreshMs <= 0) return;
+    if (!activeStore || autoRefreshMs <= 0) return;
 
     const timer = setInterval(() => {
       if (typeof document !== "undefined" && document.visibilityState !== "visible") return;

@@ -22,6 +22,14 @@ function balanceMap(ids: number[]): ProviderBalanceMap {
   return Object.fromEntries(ids.map((id) => [id, snapshot(id, id)])) as ProviderBalanceMap;
 }
 
+function deferred<T = void>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((r) => {
+    resolve = r;
+  });
+  return { promise, resolve };
+}
+
 /**
  * 用真实定时器并把合并窗口设为 0：同步登记的供应商仍然会落到同一个宏任务里合并，
  * 与浏览器中的行为一致。
@@ -229,5 +237,74 @@ describe("ProviderBalanceStore 手动与自动更新", () => {
 
     expect(store.getEntry(9).status).toBe("ready");
     expect(store.getEntry(9).snapshot?.balance).toBe(9);
+  });
+
+  it("手动刷新先完成时，后完成的旧批次不会覆盖新快照", async () => {
+    const staleBatch = deferred<void>();
+    const { store } = createStore({
+      fetchBalances: async (ids, options) => {
+        if (!options.refresh) await staleBatch.promise;
+        const balance = options.refresh ? 999 : 1;
+        return Object.fromEntries(
+          ids.map((id) => [id, snapshot(id, balance)])
+        ) as ProviderBalanceMap;
+      },
+    });
+
+    store.request(1);
+    await vi.waitFor(() => expect(store.getEntry(1).status).toBe("loading"));
+
+    await store.refresh(1);
+    expect(store.getEntry(1).snapshot?.balance).toBe(999);
+
+    staleBatch.resolve();
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    expect(store.getEntry(1).snapshot?.balance).toBe(999);
+    expect(store.getEntry(1).status).toBe("ready");
+  });
+
+  it("自动更新中一批失败不会中断后续批次", async () => {
+    const { store } = createStore({
+      batchSize: 1,
+      fetchBalances: async (ids) => {
+        if (ids[0] === 1) throw new Error("network down");
+        return balanceMap(ids);
+      },
+    });
+
+    for (const id of [1, 2]) store.request(id);
+    await vi.waitFor(() => expect(store.getEntry(2).snapshot?.balance).toBe(2));
+
+    // 第 1 个供应商仍然失败，但第 2 个供应商必须照常刷新
+    await expect(store.revalidateTracked()).resolves.toBeUndefined();
+    expect(store.getEntry(2).snapshot?.balance).toBe(2);
+  });
+
+  it("刷新全部时一批失败仍处理其余批次并把失败交给调用方", async () => {
+    let failFirst = false;
+    const { store, fetchBalances } = createStore({
+      batchSize: 1,
+      fetchBalances: async (ids) => {
+        if (failFirst && ids[0] === 1) throw new Error("network down");
+        return balanceMap(ids);
+      },
+    });
+
+    for (const id of [1, 2]) store.request(id);
+    await vi.waitFor(() => expect(store.getEntry(2).status).toBe("ready"));
+
+    failFirst = true;
+    fetchBalances.mockClear();
+
+    // 第 1 批失败后第 2 批仍然要发出，失败原因最后抛给调用方
+    await expect(store.refreshAll()).rejects.toThrow("network down");
+
+    expect(fetchBalances.mock.calls).toEqual([
+      [[1], { refresh: true }],
+      [[2], { refresh: true }],
+    ]);
+    expect(store.getEntry(2).snapshot?.balance).toBe(2);
+    expect(store.isRefreshingAll()).toBe(false);
   });
 });

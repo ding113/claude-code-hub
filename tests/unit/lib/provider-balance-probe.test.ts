@@ -11,7 +11,7 @@ vi.mock("@/lib/logger", () => ({
   logger: { warn: vi.fn(), error: vi.fn(), info: vi.fn(), debug: vi.fn() },
 }));
 
-const { buildOpenAiUsageRange, probeProviderBalance } = await import(
+const { buildOpenAiUsageRange, probeProviderBalance, resolveSourceBaseUrl } = await import(
   "@/lib/provider-balance/probe"
 );
 const { PROVIDER_BALANCE_MAX_RESPONSE_BYTES } = await import("@/lib/provider-balance/endpoints");
@@ -207,7 +207,7 @@ describe("probeProviderBalance 请求构造", () => {
     expect((init.headers as Record<string, string>).Accept).toBe("application/json");
   });
 
-  it("基地址末尾的斜杠不会产生重复路径分隔符", async () => {
+  it("子路径挂载的中转网关保留自己的路径前缀", async () => {
     fetchWithDispatcher.mockResolvedValueOnce(
       jsonResponse({ data: { total_available: 0, total_used: 0, total_granted: 0 } })
     );
@@ -215,5 +215,54 @@ describe("probeProviderBalance 请求构造", () => {
     await probeProviderBalance(provider({ url: "https://relay.example.com/api/" }));
 
     expect(requestedUrls()[0]).toBe("https://relay.example.com/api/api/usage/token/");
+  });
+
+  it("基地址以 /v1 结尾时不产生重复版本段", async () => {
+    fetchWithDispatcher
+      .mockResolvedValueOnce(new Response("not found", { status: 404 }))
+      .mockResolvedValueOnce(jsonResponse({ hard_limit_usd: 120 }))
+      .mockResolvedValueOnce(jsonResponse({ total_usage: 4500 }));
+
+    await probeProviderBalance(provider({ url: "https://relay.example.com/v1" }));
+
+    expect(requestedUrls()[1]).toBe("https://relay.example.com/v1/dashboard/billing/subscription");
+    expect(requestedUrls()[2]).toContain("/v1/dashboard/billing/usage?start_date=");
+  });
+
+  it("官方钱包端点忽略基地址里的 /v1 与子路径", async () => {
+    fetchWithDispatcher.mockResolvedValueOnce(
+      jsonResponse({ balance_infos: [{ currency: "CNY", total_balance: "5.00" }] })
+    );
+
+    const snapshot = await probeProviderBalance(
+      provider({ url: "https://api.deepseek.com/v1", key: "sk-deepseek" })
+    );
+
+    expect(snapshot.source).toBe("deepseek-balance");
+    expect(snapshot.balance).toBe(5);
+    expect(requestedUrls()[0]).toBe("https://api.deepseek.com/user/balance");
+  });
+});
+
+describe("resolveSourceBaseUrl", () => {
+  it("网关兼容端点只去掉末尾的 API 版本后缀", () => {
+    const gateway = "https://relay.example.com";
+    expect(resolveSourceBaseUrl(gateway, "new-api-token-usage")).toBe(gateway);
+    expect(resolveSourceBaseUrl(`${gateway}/v1`, "openai-billing")).toBe(gateway);
+    expect(resolveSourceBaseUrl(`${gateway}/v1beta`, "openai-billing")).toBe(gateway);
+    expect(resolveSourceBaseUrl(`${gateway}/api`, "new-api-token-usage")).toBe(`${gateway}/api`);
+    expect(resolveSourceBaseUrl(`${gateway}/sub/v1`, "openai-billing")).toBe(`${gateway}/sub`);
+  });
+
+  it("站点根路径下的钱包端点一律取 origin", () => {
+    expect(resolveSourceBaseUrl("https://api.deepseek.com/v1", "deepseek-balance")).toBe(
+      "https://api.deepseek.com"
+    );
+    expect(resolveSourceBaseUrl("https://api.moonshot.cn/v1", "kimi-balance")).toBe(
+      "https://api.moonshot.cn"
+    );
+    expect(resolveSourceBaseUrl("https://chatgpt.com/backend-api/codex", "chatgpt-credits")).toBe(
+      "https://chatgpt.com"
+    );
   });
 });

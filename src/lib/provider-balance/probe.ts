@@ -100,10 +100,12 @@ async function fetchBalanceJson(
   }
 
   if (response.status === 404 || response.status === 405) {
+    await cancelResponseBody(response);
     throw new EndpointUnavailableError(String(response.status));
   }
 
   if (!response.ok) {
+    await cancelResponseBody(response);
     throw new EndpointFailedError(classifyHttpStatus(response.status));
   }
 
@@ -114,6 +116,16 @@ async function fetchBalanceJson(
     // HTML 登录页或网关错误页会走到这里，说明该路径没有实现余额协议
     throw new EndpointUnavailableError("non-json");
   }
+}
+
+/**
+ * 丢弃不再读取的响应体。
+ *
+ * fetchWithDispatcher 直接调用 undici，不会自动消费响应体；非 2xx 分支若直接抛出，
+ * 连接会一直被占用到超时为止。
+ */
+async function cancelResponseBody(response: Response): Promise<void> {
+  await response.body?.cancel().catch(() => undefined);
 }
 
 /**
@@ -156,6 +168,31 @@ async function readTextWithLimit(response: Response, maxBytes: number): Promise<
   return new TextDecoder().decode(merged);
 }
 
+/** 网关兼容端点前需要从基地址去掉的 API 版本后缀 */
+const TRAILING_API_VERSION_PATTERN = /\/(v1|v1beta|v1alpha)$/i;
+
+/** 余额端点在站点根路径下的来源，基地址的子路径与它们无关 */
+const ORIGIN_SCOPED_SOURCES: readonly ProviderBalanceSource[] = [
+  PROVIDER_BALANCE_SOURCES.DeepSeekBalance,
+  PROVIDER_BALANCE_SOURCES.KimiBalance,
+  PROVIDER_BALANCE_SOURCES.ChatGptCredits,
+];
+
+/**
+ * 解析一个余额来源实际使用的基地址。
+ *
+ * 官方钱包端点挂在站点根路径下，供应商若被配置成 `https://api.deepseek.com/v1`
+ * 就不能再拼上 `/v1`，否则会请求到 `/v1/user/balance`。
+ * 网关兼容端点保留子路径挂载，只去掉末尾的 API 版本后缀：
+ * 端点自身已经写明 `/v1`（OpenAI 计费）或没有版本段（New API 的 `/api/...`）。
+ */
+export function resolveSourceBaseUrl(baseUrl: string, source: ProviderBalanceSource): string {
+  if (ORIGIN_SCOPED_SOURCES.includes(source)) {
+    return new URL(baseUrl).origin;
+  }
+  return baseUrl.replace(TRAILING_API_VERSION_PATTERN, "");
+}
+
 function buildUrl(baseUrl: string, endpoint: string): string {
   return `${baseUrl}${endpoint}`;
 }
@@ -172,10 +209,12 @@ async function runSource(
   source: ProviderBalanceSource,
   kimiCurrency: CurrencyCode
 ): Promise<ProviderBalancePatch> {
+  const sourceBaseUrl = resolveSourceBaseUrl(baseUrl, source);
+
   if (source === PROVIDER_BALANCE_SOURCES.NewApiTokenUsage) {
     const result = await fetchBalanceJson(
       provider,
-      buildUrl(baseUrl, PROVIDER_BALANCE_ENDPOINTS.newApiTokenUsage)
+      buildUrl(sourceBaseUrl, PROVIDER_BALANCE_ENDPOINTS.newApiTokenUsage)
     );
     return parseNewApiTokenUsage(result.json);
   }
@@ -183,13 +222,13 @@ async function runSource(
   if (source === PROVIDER_BALANCE_SOURCES.OpenAiBilling) {
     const subscription = await fetchBalanceJson(
       provider,
-      buildUrl(baseUrl, PROVIDER_BALANCE_ENDPOINTS.openAiBillingSubscription)
+      buildUrl(sourceBaseUrl, PROVIDER_BALANCE_ENDPOINTS.openAiBillingSubscription)
     );
     const direct = parseOpenAiBilling(subscription.json, {});
     if (direct.balance !== undefined) return direct;
 
     const range = buildOpenAiUsageRange(new Date());
-    const usageUrl = `${buildUrl(baseUrl, PROVIDER_BALANCE_ENDPOINTS.openAiBillingUsage)}?start_date=${range.start}&end_date=${range.end}`;
+    const usageUrl = `${buildUrl(sourceBaseUrl, PROVIDER_BALANCE_ENDPOINTS.openAiBillingUsage)}?start_date=${range.start}&end_date=${range.end}`;
     const usage = await fetchBalanceJson(provider, usageUrl);
     return parseOpenAiBilling(subscription.json, usage.json);
   }
@@ -197,23 +236,22 @@ async function runSource(
   if (source === PROVIDER_BALANCE_SOURCES.DeepSeekBalance) {
     const result = await fetchBalanceJson(
       provider,
-      buildUrl(baseUrl, PROVIDER_BALANCE_ENDPOINTS.deepSeekBalance)
+      buildUrl(sourceBaseUrl, PROVIDER_BALANCE_ENDPOINTS.deepSeekBalance)
     );
     return parseDeepSeekBalance(result.json);
   }
 
   if (source === PROVIDER_BALANCE_SOURCES.ChatGptCredits) {
-    // 该端点挂在站点根路径下，与供应商配置的 /backend-api/codex 基地址无关
     const result = await fetchBalanceJson(
       provider,
-      `${new URL(baseUrl).origin}${PROVIDER_BALANCE_ENDPOINTS.chatGptWhamUsage}`
+      buildUrl(sourceBaseUrl, PROVIDER_BALANCE_ENDPOINTS.chatGptWhamUsage)
     );
     return parseChatGptWhamUsage(result.json);
   }
 
   const result = await fetchBalanceJson(
     provider,
-    buildUrl(baseUrl, PROVIDER_BALANCE_ENDPOINTS.kimiBalance)
+    buildUrl(sourceBaseUrl, PROVIDER_BALANCE_ENDPOINTS.kimiBalance)
   );
   return parseKimiBalance(result.json, kimiCurrency);
 }
