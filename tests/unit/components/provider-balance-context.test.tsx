@@ -84,7 +84,7 @@ describe("ProviderBalanceProvider 在 StrictMode 下", () => {
 
     // StrictMode 的 setup - cleanup - setup 之后必须仍然发出请求
     await act(async () => {
-      await vi.waitFor(() => expect(readProbe(container)).toBe("ready:42"));
+      await vi.waitFor(() => expect(fetchBalances).toHaveBeenCalled());
     });
     expect(readProbe(container)).toBe("ready:42");
   });
@@ -100,8 +100,9 @@ describe("ProviderBalanceProvider 在 StrictMode 下", () => {
     );
 
     await act(async () => {
-      await vi.waitFor(() => expect(readProbe(container)).toBe("ready:42"));
+      await vi.waitFor(() => expect(fetchBalances).toHaveBeenCalled());
     });
+    expect(readProbe(container)).toBe("ready:42");
 
     act(() => {
       root.unmount();
@@ -138,8 +139,9 @@ describe("ProviderBalanceProvider 在 StrictMode 下", () => {
     );
 
     await act(async () => {
-      await vi.waitFor(() => expect(readProbe(container)).toBe("ready:42"));
+      await vi.waitFor(() => expect(fetchBalances).toHaveBeenCalled());
     });
+    expect(readProbe(container)).toBe("ready:42");
 
     const before = fetchBalances.mock.calls.length;
     await act(async () => {
@@ -160,11 +162,13 @@ describe("ProviderBalanceProvider 释放顺序", () => {
       </ProviderBalanceProvider>
     );
 
+    // StrictMode 初次挂载已经跑过一次 cleanup，只统计卸载新增的那次调用
+    disposeSpy.mockClear();
     act(() => {
       root.unmount();
     });
 
-    expect(disposeSpy).toHaveBeenCalled();
+    expect(disposeSpy).toHaveBeenCalledTimes(1);
     disposeSpy.mockRestore();
   });
 

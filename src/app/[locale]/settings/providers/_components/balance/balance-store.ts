@@ -107,6 +107,14 @@ export class ProviderBalanceStore {
     return Array.from(this.tracked);
   }
 
+  /**
+   * 正在被强制刷新的供应商。
+   *
+   * 定时重读要跳过它们：重读读到的是服务端旧快照，却会因为拿到更新的代号
+   * 而把正在进行的强制刷新结果顶掉。
+   */
+  private readonly forceRefreshing = new Set<number>();
+
   /** 登记一个供应商，等待下一批请求把它带上 */
   request(providerId: number): void {
     if (this.disposed || this.tracked.has(providerId)) return;
@@ -120,7 +128,7 @@ export class ProviderBalanceStore {
     if (this.disposed) return;
     this.tracked.add(providerId);
     this.queue = this.queue.filter((id) => id !== providerId);
-    await this.load([providerId], true);
+    await this.loadForced([providerId]);
   }
 
   /** 强制刷新所有已登记的供应商 */
@@ -135,7 +143,7 @@ export class ProviderBalanceStore {
     try {
       for (let index = 0; index < ids.length; index += this.batchSize) {
         try {
-          await this.load(ids.slice(index, index + this.batchSize), true);
+          await this.loadForced(ids.slice(index, index + this.batchSize));
         } catch (error) {
           // 一批失败不影响其余批次，失败原因留到最后交给调用方提示
           firstError ??= error;
@@ -152,13 +160,26 @@ export class ProviderBalanceStore {
   /** 按服务端缓存策略重新读取已登记的供应商，用于定时自动更新 */
   async revalidateTracked(): Promise<void> {
     if (this.disposed) return;
-    const ids = this.getTrackedIds().filter((id) => !this.queue.includes(id));
+    const ids = this.getTrackedIds().filter(
+      (id) => !this.queue.includes(id) && !this.forceRefreshing.has(id)
+    );
     for (let index = 0; index < ids.length; index += this.batchSize) {
       try {
         await this.load(ids.slice(index, index + this.batchSize), false);
       } catch {
         // 定时刷新没有调用方接手失败；保留上一次快照，继续处理后续批次
       }
+    }
+  }
+
+  /** 强制刷新一批，期间标记这些供应商，避免被定时重读顶掉 */
+  private async loadForced(providerIds: number[]): Promise<void> {
+    for (const providerId of providerIds) this.forceRefreshing.add(providerId);
+
+    try {
+      await this.load(providerIds, true);
+    } finally {
+      for (const providerId of providerIds) this.forceRefreshing.delete(providerId);
     }
   }
 

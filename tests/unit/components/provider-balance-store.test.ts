@@ -307,4 +307,46 @@ describe("ProviderBalanceStore 手动与自动更新", () => {
     expect(store.getEntry(2).snapshot?.balance).toBe(2);
     expect(store.isRefreshingAll()).toBe(false);
   });
+
+  it("自动更新跳过正在强制刷新的供应商", async () => {
+    const forced = deferred<void>();
+    const { store, fetchBalances } = createStore({
+      batchSize: 1,
+      fetchBalances: async (ids, options) => {
+        if (options.refresh) {
+          await forced.promise;
+          return Object.fromEntries(ids.map((id) => [id, snapshot(id, 999)])) as ProviderBalanceMap;
+        }
+        return balanceMap(ids);
+      },
+    });
+
+    store.request(1);
+    await vi.waitFor(() => expect(store.getEntry(1).status).toBe("ready"));
+    fetchBalances.mockClear();
+
+    const refreshing = store.refresh(1);
+    // 强制刷新还在进行时，定时重读不能介入：它读到的是服务端旧快照
+    await store.revalidateTracked();
+    expect(fetchBalances.mock.calls).toEqual([[[1], { refresh: true }]]);
+
+    forced.resolve();
+    await refreshing;
+
+    expect(store.getEntry(1).snapshot?.balance).toBe(999);
+    expect(store.getEntry(1).status).toBe("ready");
+  });
+
+  it("强制刷新结束后自动更新恢复覆盖该供应商", async () => {
+    const { store, fetchBalances } = createStore({ batchSize: 1 });
+
+    store.request(1);
+    await vi.waitFor(() => expect(store.getEntry(1).status).toBe("ready"));
+    await store.refresh(1);
+
+    fetchBalances.mockClear();
+    await store.revalidateTracked();
+
+    expect(fetchBalances.mock.calls).toEqual([[[1], { refresh: false }]]);
+  });
 });
