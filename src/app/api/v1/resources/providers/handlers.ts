@@ -25,6 +25,7 @@ import { ProviderCacheEffectivenessListQuerySchema } from "@/lib/api/v1/schemas/
 import {
   HIDDEN_PROVIDER_TYPES,
   ProviderApiTestSchema,
+  ProviderBalanceBatchBodySchema,
   ProviderBatchPatchApplySchema,
   ProviderBatchPatchPreviewSchema,
   ProviderBatchUpdateSchema,
@@ -314,6 +315,44 @@ export async function getProviderLimitBatch(c: Context): Promise<Response> {
   return jsonResponse({
     items: Array.from(result.data.entries()).map(([id, usage]) => ({ id, usage })),
   });
+}
+
+export async function getProviderBalancesBatch(c: Context): Promise<Response> {
+  const body = await parseJson(c, ProviderBalanceBatchBodySchema);
+  if (body instanceof Response) return body;
+  const visibleProviders = await loadVisibleProviders(c);
+  if (visibleProviders instanceof Response) return visibleProviders;
+  const visibleIds = new Set(visibleProviders.map((provider) => provider.id));
+  const providerIds = body.providerIds.filter((id) => visibleIds.has(id));
+  if (providerIds.length === 0) return jsonResponse({ items: [] });
+
+  const balanceActions = await import("@/actions/provider-balance");
+  const result = await callAction(
+    c,
+    balanceActions.getProviderBalances,
+    [providerIds, { refresh: body.refresh }] as never[],
+    c.get("auth")
+  );
+  if (!result.ok) return actionError(c, result);
+  return jsonResponse({ items: Object.values(result.data) }, { headers: withNoStoreHeaders() });
+}
+
+export async function refreshProviderBalance(c: Context): Promise<Response> {
+  const id = parseProviderIdWithSuffix(c, "balance:refresh");
+  if (id instanceof Response) return id;
+  const existing = await findVisibleProvider(c, id);
+  if (existing instanceof Response) return existing;
+  if (!existing) return providerNotFound(c);
+
+  const balanceActions = await import("@/actions/provider-balance");
+  const result = await callAction(
+    c,
+    balanceActions.refreshProviderBalance,
+    [id] as never[],
+    c.get("auth")
+  );
+  if (!result.ok) return actionError(c, result);
+  return jsonResponse(result.data, { headers: withNoStoreHeaders() });
 }
 
 export async function listProviderGroups(c: Context): Promise<Response> {

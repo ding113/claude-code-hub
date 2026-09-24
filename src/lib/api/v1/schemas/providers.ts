@@ -4,6 +4,7 @@ import {
   CODEX_IMAGE_GENERATION_PREFERENCE_VALUES,
   PROVIDER_KEY_MAX_LENGTH,
 } from "@/lib/constants/provider.constants";
+import { PROVIDER_BALANCE_BATCH_LIMIT } from "@/types/provider-balance";
 import { ProviderTypeSchema } from "./_common";
 
 export const HIDDEN_PROVIDER_TYPES = new Set(HIDDEN_PROVIDER_TYPE_VALUES);
@@ -198,6 +199,51 @@ export const ProviderIdsBodySchema = z
     providerIds: z.array(z.number().int().positive()).min(1).max(500).describe("Provider ids."),
   })
   .strict();
+
+export const ProviderBalanceBatchBodySchema = z
+  .object({
+    providerIds: z
+      .array(z.number().int().positive())
+      .min(1)
+      .max(PROVIDER_BALANCE_BATCH_LIMIT)
+      .describe("Provider ids to query upstream balance for."),
+    refresh: z
+      .boolean()
+      .default(false)
+      .describe("Skip the cached snapshot and query upstream again."),
+  })
+  .strict();
+
+export const ProviderBalanceSnapshotSchema = z
+  .object({
+    providerId: z.number().int().positive().describe("Provider id."),
+    status: z
+      .enum(["ok", "unsupported", "error"])
+      .describe("Whether the upstream reported a usable balance."),
+    source: z
+      .enum([
+        "new-api-token-usage",
+        "openai-billing",
+        "deepseek-balance",
+        "kimi-balance",
+        "chatgpt-credits",
+      ])
+      .nullable()
+      .describe("Upstream protocol that produced the snapshot."),
+    balance: z.number().nullable().describe("Remaining balance in the reported currency."),
+    currency: z.string().describe("Currency the balance is denominated in."),
+    totalGranted: z.number().nullable().describe("Total granted amount."),
+    totalUsed: z.number().nullable().describe("Total consumed amount."),
+    unlimited: z.boolean().describe("Upstream reports an unlimited quota."),
+    expiresAt: z.string().nullable().describe("Key expiry time in ISO-8601."),
+    checkedAt: z.string().describe("Snapshot time in ISO-8601."),
+    errorCode: z.string().nullable().describe("Failure reason code."),
+  })
+  .describe("Upstream balance snapshot for one provider.");
+
+export const ProviderBalanceListResponseSchema = z.object({
+  items: z.array(ProviderBalanceSnapshotSchema).describe("Provider balance snapshots."),
+});
 
 const ProviderBatchUpdateFieldsSchema = z
   .object({
