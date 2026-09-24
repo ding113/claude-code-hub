@@ -196,6 +196,19 @@ const CONTENT_DELTA_FRAME = sseFrame("content_block_delta", {
   delta: { type: "text_delta", text: "Hello" },
 });
 const MESSAGE_STOP_FRAME = sseFrame("message_stop", { type: "message_stop" });
+// 请求级拒绝：合法结束但不带任何内容块（#1491）
+const REFUSAL_FRAMES = [
+  MESSAGE_START_FRAME,
+  sseFrame("message_delta", {
+    type: "message_delta",
+    delta: {
+      stop_reason: "refusal",
+      stop_details: { type: "refusal", category: "reasoning_extraction" },
+    },
+    usage: { output_tokens: 0 },
+  }),
+  MESSAGE_STOP_FRAME,
+];
 
 // failover 后获胜供应商的正常内容流
 const WINNER_FRAMES = [MESSAGE_START_FRAME, CONTENT_DELTA_FRAME, MESSAGE_STOP_FRAME];
@@ -840,6 +853,54 @@ describe("F1 stream content gate x ProxyForwarder paths", () => {
         .find((item) => item.id === provider1.id && item.reason === "retry_failed");
       expect(emptyStreamEntry?.statusCode).toBe(502);
       expect(emptyStreamEntry?.errorMessage).toContain("empty_stream");
+      // 门控 502 是 CCH 本地合成的，错误体保留上游真实状态
+      expect(emptyStreamEntry?.errorMessage).toContain('"upstream_status_code":200');
+    });
+
+    test("无内容块的 refusal 流原样透传：不重试、不切商、不计入熔断（#1491）", async () => {
+      const provider1 = createProvider({ id: 1, name: "refusal-p1" });
+      const session = createSession();
+      session.setProvider(provider1);
+
+      const doForward = spyOnDoForward();
+      doForward.mockImplementation(async () => createSseResponse(REFUSAL_FRAMES));
+
+      const response = await ProxyForwarder.send(session);
+      const text = await response.text();
+
+      expect(response.status).toBe(200);
+      expect(text).toBe(REFUSAL_FRAMES.join(""));
+      expect(doForward).toHaveBeenCalledTimes(1);
+      expect(mocks.pickRandomProviderWithExclusion).not.toHaveBeenCalled();
+      expect(mocks.recordFailure).not.toHaveBeenCalled();
+      expect(mocks.tombstoneAffinityOnFailure).not.toHaveBeenCalled();
+      expect(session.provider?.id).toBe(provider1.id);
+    });
+
+    test("Legacy Hedge 在 enforce 下把 refusal 流判为赢家且不计入熔断（#1491）", async () => {
+      const provider1 = createProvider({
+        id: 1,
+        name: "refusal-hedge",
+        firstByteTimeoutStreamingMs: 100,
+      });
+      const session = createSession();
+      session.setProvider(provider1);
+
+      const doForward = spyOnDoForward();
+      doForward.mockImplementation(async (attemptSession) => {
+        attachAttemptRuntime(attemptSession, {
+          clearResponseTimeout: vi.fn(),
+          releaseAgent: vi.fn(),
+        });
+        return createSseResponse(REFUSAL_FRAMES);
+      });
+
+      const response = await ProxyForwarder.send(session);
+
+      expect(await response.text()).toBe(REFUSAL_FRAMES.join(""));
+      expect(doForward).toHaveBeenCalledTimes(1);
+      expect(mocks.pickRandomProviderWithExclusion).not.toHaveBeenCalled();
+      expect(mocks.recordFailure).not.toHaveBeenCalled();
     });
 
     test('Responses 空文本响应（output_text.done text=""）直接透传，不 failover', async () => {

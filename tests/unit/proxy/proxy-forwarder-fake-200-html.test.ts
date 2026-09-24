@@ -784,6 +784,40 @@ describe("ProxyForwarder - fake 200 HTML body", () => {
     expect(mocks.recordSuccess).toHaveBeenCalledWith(2);
     expect(mocks.recordSuccess).not.toHaveBeenCalledWith(1);
   });
+
+  test("无内容块的请求级 refusal 是合法结果：不重试、不切商、不计入熔断（#1491）", async () => {
+    const provider1 = createProvider({ id: 1, name: "p1", key: "k1", maxRetryAttempts: 2 });
+
+    const session = createSession();
+    session.setProvider(provider1);
+
+    const doForward = vi.spyOn(
+      ProxyForwarder as unknown as { doForward: (...args: unknown[]) => Promise<Response> },
+      "doForward"
+    );
+    const refusalJson = JSON.stringify({
+      type: "message",
+      content: [],
+      stop_reason: "refusal",
+      stop_details: { type: "refusal", category: "reasoning_extraction" },
+      usage: { input_tokens: 10, output_tokens: 0 },
+    });
+    doForward.mockResolvedValueOnce(
+      new Response(refusalJson, {
+        status: 200,
+        // 不提供 content-length：走 forwarder 的 JSON 内容结构检查分支
+        headers: { "content-type": "application/json; charset=utf-8" },
+      })
+    );
+
+    const response = await ProxyForwarder.send(session);
+
+    expect(response.status).toBe(200);
+    expect(JSON.parse(await response.text())).toMatchObject({ stop_reason: "refusal" });
+    expect(doForward).toHaveBeenCalledTimes(1);
+    expect(mocks.pickRandomProviderWithExclusion).not.toHaveBeenCalled();
+    expect(mocks.recordFailure).not.toHaveBeenCalled();
+  });
 });
 
 describe("ProxyError.getClientSafeMessage - FAKE_200 sanitization", () => {

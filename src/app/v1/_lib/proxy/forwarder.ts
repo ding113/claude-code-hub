@@ -2096,6 +2096,7 @@ export class ProxyForwarder {
                     family: gateFamily,
                     providerId: currentProvider.id,
                     providerName: currentProvider.name,
+                    upstreamStatusCode: response.status,
                     ...resolveStreamGateCaps(),
                     // 首字节到达即清除首字节计时器，保持「首字节超时」的原始语义——
                     // 思考型模型可在首个内容帧前长时间输出中性帧，不应触发该计时器
@@ -2394,8 +2395,9 @@ export class ProxyForwarder {
               try {
                 const responseJson = JSON.parse(responseText) as Record<string, unknown>;
 
-                // 检测 Claude 格式的空响应
-                if (responseJson.type === "message") {
+                // 检测 Claude 格式的空响应。stop_reason=refusal 是请求级拒绝结果，
+                // 可以合法地不带任何内容块，不能按空响应重试/切换/计入熔断。
+                if (responseJson.type === "message" && responseJson.stop_reason !== "refusal") {
                   const content = responseJson.content as unknown[];
                   if (!content || content.length === 0) {
                     throw new EmptyResponseError(
@@ -3132,6 +3134,15 @@ export class ProxyForwarder {
               providerName: currentProvider.name,
               statusCode: statusCode,
               statusCodeInferred: proxyError.upstreamError?.statusCodeInferred ?? false,
+              // 门控错误的 statusCode 是 CCH 本地合成的；单独标出上游真实状态与熔断计入口径
+              ...(proxyError instanceof StreamPrecommitError
+                ? {
+                    errorSource: "stream_gate_local",
+                    upstreamStatusCode: proxyError.upstreamStatusCode,
+                    gateReason: proxyError.gateReason,
+                    circuitBreakerAccountable: !isRequestScopedGateFailure(proxyError),
+                  }
+                : {}),
               error: errorMessage,
               attemptNumber: attemptCount,
               totalProvidersAttempted,
@@ -5560,6 +5571,7 @@ export class ProxyForwarder {
                   family: hedgeGateFamily,
                   providerId: attempt.provider.id,
                   providerName: attempt.provider.name,
+                  upstreamStatusCode: response.status,
                   ...resolveStreamGateCaps(),
                   // 首字节时刻先挂在 attempt 上，由 commitWinner 决定是否记为 session TTFB
                   onFirstByte: () => {

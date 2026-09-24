@@ -27,6 +27,10 @@ const samples = [
     "]".repeat(1000) +
     ',"choices":[{"delta":{"content":"ok"}}]}',
   '{"type":"content_block_delta","delta":{"text":"你好\\nworld"}}',
+  '{"type":"message_delta","delta":{"stop_reason":"refusal","stop_details":{"type":"refusal"}}}',
+  '{"type":"message_delta","delta":{"stop_reason":"end_turn"}}',
+  '{"type":"message_delta","delta":{"stop_reason":["refusal"]}}',
+  '{"type":"message_delta","delta":{"stop_reason":"refusal"},"error":{"message":"boom"}}',
   '{"type":"response.output_text.delta","delta":"ok","error":{"message":"failed"}}',
   '{"type":"response.output_text.delta","delta":"ok","delta":""}',
   '{"type":"response.completed","response":{"status":"completed","output":[{"type":"compaction"},{"encrypted_content":"opaque"}]}}',

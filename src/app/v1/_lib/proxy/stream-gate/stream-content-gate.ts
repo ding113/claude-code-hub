@@ -18,7 +18,9 @@ import { SseFrameBufferLimitError, SseFrameParser } from "./sse-frames";
  * - content 帧到达 -> 提交：返回已缓冲的前缀字节 + 原 reader，调用方拼接透传
  * - error / malformed 帧 -> precommit 失败：调用方抛错走现有供应商切换循环
  * - terminal 先于 content -> 空流失败；但 openai-responses 的干净完成（status=completed）
- *   视为成功响应直接提交，空回复是合法结果（见 isCleanResponsesCompletion）
+ *   视为成功响应直接提交，空回复是合法结果（见 isCleanResponsesCompletion）；
+ *   anthropic 的 message_delta(stop_reason=refusal) 由分类器判为 content，请求级拒绝
+ *   在 message_stop 之前即提交透传
  * - 流提前结束（无终止帧的 EOF）-> 空流失败
  * - neutral 帧入缓冲；超过 event/byte 上限 -> prebuffer_overflow 失败
  *   （请求回显帧不计入字节上限，见 isRequestEchoFrame）
@@ -39,12 +41,17 @@ export type StreamGateFailureReason =
  * 门控 precommit 错误。流内 error 是 HTTP 200 body 合成的错误：明确的 4xx 状态应保留，
  * 让既有错误规则决定是否重试；无法确认是客户端错误时仍按 502 走供应商故障路径。
  * 熔断计入与否再由 isRequestScopedGateFailure() 区分。
+ *
+ * statusCode 是 CCH 本地合成的状态；上游真实 HTTP 状态单独保存在 upstreamStatusCode
+ * 并写入错误体，避免日志里的 `returned 502` 被误读为上游真的返回了 502。
  */
 export class StreamPrecommitError extends ProxyError {
   readonly gateReason: StreamGateFailureReason;
   readonly gateFamily: ProtocolFamily;
   /** 干净终止帧先于任何内容到达（区别于上游断流 / 空 body 的 EOF） */
   readonly terminalBeforeContent: boolean;
+  /** 上游响应的真实 HTTP 状态（门控只作用于已成功建立的流式响应）；未知时为 null */
+  readonly upstreamStatusCode: number | null;
 
   constructor(
     reason: StreamGateFailureReason,
@@ -58,6 +65,7 @@ export class StreamPrecommitError extends ProxyError {
       bufferedBytes?: number;
       echoExcludedBytes?: number;
       terminalBeforeContent?: boolean;
+      upstreamStatusCode?: number;
     }
   ) {
     const message = `Stream content gate rejected upstream before first valid content (${reason})`;
@@ -83,6 +91,7 @@ export class StreamPrecommitError extends ProxyError {
     this.gateReason = reason;
     this.gateFamily = detail.family;
     this.terminalBeforeContent = detail.terminalBeforeContent === true;
+    this.upstreamStatusCode = detail.upstreamStatusCode ?? null;
   }
 }
 
@@ -100,8 +109,9 @@ export class StreamPrecommitError extends ProxyError {
  * EOF 分支，那是真实的供应商侧异常，必须继续计入熔断。
  *
  * 其余家族的 `empty_stream` 保持计入：anthropic / openai-chat / gemini 在正常空回复下
- * 仍会发出内容帧（如 `text_delta` 的空串所在的 content_block 系列），只吐终止帧属于畸形
- * 流，是真实的供应商侧异常。
+ * 仍会发出内容帧（如 `text_delta` 的空串所在的 content_block 系列；anthropic 请求级
+ * 拒绝的 `message_delta.delta.stop_reason=refusal` 由分类器判为 content 直接提交），
+ * 没有任何内容或明确拒绝就只吐终止帧属于畸形流，是真实的供应商侧异常。
  *
  * 其余 reason 一律计入：`gate_error` / `decode_error` 是真实上游错误帧或损坏载荷，
  * `idle_timeout` 是真实上游静默，`prebuffer_overflow` 是异常中性帧洪泛。
@@ -124,6 +134,7 @@ function buildGateErrorBody(
     bufferedBytes?: number;
     echoExcludedBytes?: number;
     terminalBeforeContent?: boolean;
+    upstreamStatusCode?: number;
   }
 ): string {
   if (reason === "gate_error" && detail.frameData) {
@@ -135,6 +146,9 @@ function buildGateErrorBody(
       type: "stream_gate_precommit",
       reason,
       family: detail.family,
+      ...(detail.upstreamStatusCode !== undefined
+        ? { upstream_status_code: detail.upstreamStatusCode }
+        : {}),
       frames_seen: detail.framesSeen,
       buffered_bytes: detail.bufferedBytes,
       ...(detail.echoExcludedBytes ? { echo_excluded_bytes: detail.echoExcludedBytes } : {}),
@@ -197,6 +211,8 @@ export interface StreamGateOptions extends StreamGateCaps {
   family: ProtocolFamily;
   providerId: number;
   providerName: string;
+  /** 上游响应真实 HTTP 状态，仅用于区分门控本地错误与上游错误的可观测性 */
+  upstreamStatusCode?: number;
   /** 首个非空上游 chunk 到达时回调一次（调用方用于清除首字节计时器，恢复其原始语义） */
   onFirstByte?: () => void;
   /** 门控等待期的读间隔静默上限（毫秒；<=0 或未设不启用），对齐提交后 response-handler 的静默超时 */
@@ -294,6 +310,7 @@ export async function runStreamContentGate(
         bufferedBytes,
         echoExcludedBytes,
         terminalBeforeContent,
+        upstreamStatusCode: options.upstreamStatusCode,
       }),
     };
   };
