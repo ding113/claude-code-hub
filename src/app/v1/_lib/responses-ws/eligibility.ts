@@ -15,7 +15,12 @@
 
 import { isOpenaiResponsesWebsocketEnabled } from "@/lib/config/system-settings-cache";
 import type { Provider } from "@/types/provider";
-import { RESPONSES_WS_SESSION_HEADER, verifyInternalRequest } from "./internal-secret";
+import {
+  RESPONSES_WS_SESSION_HEADER,
+  verifyInternalRequest,
+  WS_FORCE_HTTP_HEADER,
+  WS_FORCE_HTTP_PAYLOAD_TOO_LARGE,
+} from "./internal-secret";
 import { isResponsesWsUnsupported } from "./unsupported-cache";
 
 export const CLIENT_TRANSPORT_HEADER = "x-cch-client-transport";
@@ -23,6 +28,7 @@ export const CLIENT_TRANSPORT_HEADER = "x-cch-client-transport";
 export type ResponsesWsDowngradeReason =
   | "setting_disabled"
   | "provider_not_codex"
+  | "payload_too_large_for_upstream_ws"
   | "endpoint_ws_unsupported_cached"
   | "ws_not_yet_implemented";
 
@@ -31,6 +37,14 @@ export interface ResponsesWsEligibility {
   eligible: boolean;
   downgradeReason?: ResponsesWsDowngradeReason;
   endpointId?: number | null;
+}
+
+function readHeader(headers: Headers | Record<string, string>, name: string): string | null {
+  if (headers instanceof Headers) return headers.get(name);
+  for (const [key, value] of Object.entries(headers)) {
+    if (key.toLowerCase() === name) return value;
+  }
+  return null;
 }
 
 /**
@@ -46,35 +60,13 @@ export interface ResponsesWsEligibility {
  * so external requests cannot pass this check.
  */
 export function isWebsocketClientRequest(headers: Headers | Record<string, string>): boolean {
-  let value: string | null | undefined;
-  if (headers instanceof Headers) {
-    value = headers.get(CLIENT_TRANSPORT_HEADER);
-  } else {
-    // Plain record: header keys may be in any case (e.g. `X-Cch-Client-Transport`).
-    // Normalize to lowercase before comparing to avoid silent misses.
-    for (const [k, v] of Object.entries(headers)) {
-      if (k.toLowerCase() === CLIENT_TRANSPORT_HEADER) {
-        value = v;
-        break;
-      }
-    }
-  }
+  const value = readHeader(headers, CLIENT_TRANSPORT_HEADER);
   if (typeof value !== "string" || value.toLowerCase() !== "websocket") return false;
   return verifyInternalRequest(headers);
 }
 
 export function getResponsesWsSessionId(headers: Headers | Record<string, string>): string | null {
-  let value: string | null | undefined;
-  if (headers instanceof Headers) {
-    value = headers.get(RESPONSES_WS_SESSION_HEADER);
-  } else {
-    for (const [k, v] of Object.entries(headers)) {
-      if (k.toLowerCase() === RESPONSES_WS_SESSION_HEADER) {
-        value = v;
-        break;
-      }
-    }
-  }
+  const value = readHeader(headers, RESPONSES_WS_SESSION_HEADER);
 
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
@@ -90,6 +82,15 @@ export async function evaluateResponsesWsEligibility(options: {
   const websocketClient = isWebsocketClientRequest(options.headers);
   if (!websocketClient) {
     return { isWebsocketClient: false, eligible: false };
+  }
+
+  if (readHeader(options.headers, WS_FORCE_HTTP_HEADER) === WS_FORCE_HTTP_PAYLOAD_TOO_LARGE) {
+    return {
+      isWebsocketClient: true,
+      eligible: false,
+      downgradeReason: "payload_too_large_for_upstream_ws",
+      endpointId: options.endpointId ?? null,
+    };
   }
 
   if (options.provider.providerType !== "codex") {
