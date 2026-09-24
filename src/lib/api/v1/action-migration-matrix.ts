@@ -70,6 +70,17 @@ export const ACTION_MIGRATION_MATRIX = [
     exportPolicy: "all-action-exports",
   },
   {
+    module: "provider-balance",
+    sourceFile: "provider-balance.ts",
+    resource: "providers",
+    endpointFamilies: [
+      "/api/v1/providers/balances:batch",
+      "/api/v1/providers/{id}/balance:refresh",
+    ],
+    access: "admin",
+    exportPolicy: "all-action-exports",
+  },
+  {
     module: "provider-cache-effectiveness",
     sourceFile: "provider-cache-effectiveness.ts",
     resource: "providers",

@@ -1,0 +1,39 @@
+{
+  "title": "Upstream balance",
+  "label": "Balance",
+  "loading": "Loading...",
+  "unknownShort": "N/A",
+  "unlimited": "The upstream reports an unlimited quota for this key.",
+  "unlimitedShort": "Unlimited",
+  "unsupported": "This upstream does not expose a balance endpoint.",
+  "errorShort": "Failed",
+  "source": "Source: {source}",
+  "granted": "Granted: {amount}",
+  "used": "Used: {amount}",
+  "expiresAt": "Expires at {time}",
+  "expiredAt": "Expired at {time}",
+  "checkedAt": "Checked at {time}",
+  "refreshHint": "Click to query the upstream again.",
+  "refreshAria": "Refresh upstream balance",
+  "refreshAll": "Refresh balances",
+  "refreshingAll": "Refreshing...",
+  "refreshFailed": "Could not refresh the balance",
+  "toolbarHint": "Balances come from each provider's own key and refresh automatically every 10 minutes.",
+  "sources": {
+    "new-api-token-usage": "New API token quota",
+    "openai-billing": "OpenAI-compatible billing",
+    "deepseek-balance": "DeepSeek wallet",
+    "kimi-balance": "Moonshot wallet",
+    "chatgpt-credits": "ChatGPT account credits"
+  },
+  "errors": {
+    "unauthorized": "The upstream rejected this key.",
+    "forbidden": "This key is not allowed to read the balance.",
+    "rate_limited": "The upstream rate-limited the balance query.",
+    "upstream_error": "The upstream returned an error.",
+    "invalid_response": "The upstream returned an unreadable response.",
+    "timeout": "The balance query timed out.",
+    "network": "The balance query could not reach the upstream.",
+    "invalid_url": "The provider address is not a valid URL."
+  }
+}
