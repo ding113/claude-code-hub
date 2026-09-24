@@ -158,6 +158,7 @@ vi.mock("@/app/v1/_lib/proxy/errors", async (importOriginal) => {
 import { ErrorCategory as ProxyErrorCategory } from "@/app/v1/_lib/proxy/errors";
 import { ProxyForwarder } from "@/app/v1/_lib/proxy/forwarder";
 import { ProxySession } from "@/app/v1/_lib/proxy/session";
+import { logger } from "@/lib/logger";
 import type { Provider } from "@/types/provider";
 
 type AttemptRuntime = {
@@ -165,6 +166,14 @@ type AttemptRuntime = {
   responseController?: AbortController;
   releaseAgent?: () => void;
 };
+
+/** 串行路径「Provider error occurred」日志的结构化上下文（按调用顺序） */
+function providerErrorLogs(): Record<string, unknown>[] {
+  return vi
+    .mocked(logger.warn)
+    .mock.calls.filter(([message]) => message === "ProxyForwarder: Provider error occurred")
+    .map(([, context]) => context as Record<string, unknown>);
+}
 
 function sseFrame(eventName: string | null, data: Record<string, unknown>): string {
   const dataLine = `data: ${JSON.stringify(data)}\n\n`;
@@ -855,6 +864,52 @@ describe("F1 stream content gate x ProxyForwarder paths", () => {
       expect(emptyStreamEntry?.errorMessage).toContain("empty_stream");
       // 门控 502 是 CCH 本地合成的，错误体保留上游真实状态
       expect(emptyStreamEntry?.errorMessage).toContain('"upstream_status_code":200');
+      expect(providerErrorLogs()).toEqual([
+        expect.objectContaining({
+          providerId: provider1.id,
+          statusCode: 502,
+          errorSource: "stream_gate_local",
+          upstreamStatusCode: 200,
+          gateReason: "empty_stream",
+          willRetry: false,
+          circuitBreakerAccounted: true,
+        }),
+      ]);
+    });
+
+    test.each([
+      {
+        name: "同供应商重试未耗尽的 attempt",
+        maxRetryAttempts: 2,
+        probe: false,
+        accounted: [false, true],
+      },
+      { name: "探测请求", maxRetryAttempts: 1, probe: true, accounted: [false] },
+    ])("门控失败日志的 circuitBreakerAccounted 与实际记账一致：$name", async (testCase) => {
+      const provider1 = createProvider({
+        id: 1,
+        name: "gate-p1",
+        maxRetryAttempts: testCase.maxRetryAttempts,
+      });
+      const provider2 = createProvider({ id: 2, name: "gate-p2" });
+      const session = createSession();
+      session.setProvider(provider1);
+      vi.spyOn(session, "isProbeRequest").mockReturnValue(testCase.probe);
+
+      mocks.pickRandomProviderWithExclusion.mockResolvedValueOnce(provider2);
+      const doForward = spyOnDoForward();
+      for (let i = 0; i < testCase.maxRetryAttempts; i++) {
+        doForward.mockImplementationOnce(async () => createSseResponse([MESSAGE_STOP_FRAME]));
+      }
+      doForward.mockImplementationOnce(async () => createSseResponse(WINNER_FRAMES));
+
+      const response = await ProxyForwarder.send(session);
+      expect(await response.text()).toBe(WINNER_FRAMES.join(""));
+
+      const logs = providerErrorLogs();
+      expect(logs.map((log) => log.circuitBreakerAccounted)).toEqual(testCase.accounted);
+      const accountedCount = testCase.accounted.filter(Boolean).length;
+      expect(mocks.recordFailure).toHaveBeenCalledTimes(accountedCount);
     });
 
     test("无内容块的 refusal 流原样透传：不重试、不切商、不计入熔断（#1491）", async () => {
