@@ -18,9 +18,11 @@
   "refreshAll": "重新整理餘額",
   "refreshingAll": "重新整理中...",
   "refreshFailed": "餘額重新整理失敗",
-  "toolbarHint": "餘額由各供應商自己的密鑰查詢取得，每 10 分鐘自動更新一次。",
+  "toolbarHint": "餘額由各供應商自己的密鑰或設定的 New API 系統存取權杖查詢取得，每 10 分鐘自動更新一次。",
   "sources": {
     "new-api-token-usage": "New API 令牌額度",
+    "new-api-account": "New API 帳戶餘額",
+    "sub2api-usage": "Sub2API 用量",
     "openai-billing": "OpenAI 相容計費",
     "deepseek-balance": "DeepSeek 錢包",
     "kimi-balance": "Moonshot 錢包",
@@ -28,6 +30,7 @@
   },
   "errors": {
     "unauthorized": "上游拒絕了該密鑰。",
+    "access_token_rejected": "上游拒絕了系統存取權杖，請檢查權杖與使用者 ID。",
     "forbidden": "該密鑰沒有讀取餘額的權限。",
     "rate_limited": "上游對餘額查詢做了限流。",
     "upstream_error": "上游回傳了錯誤。",

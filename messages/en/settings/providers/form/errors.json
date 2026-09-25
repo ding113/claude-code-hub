@@ -7,5 +7,6 @@
   "invalidUrl": "Please enter a valid API address",
   "urlRequired": "Please enter an API address",
   "invalidWebsiteUrl": "Please enter a valid provider website URL",
-  "updateFailed": "Failed to update provider"
+  "updateFailed": "Failed to update provider",
+  "invalidNewApiUserId": "The user ID must be a positive whole number"
 }

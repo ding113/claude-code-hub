@@ -18,9 +18,11 @@
   "refreshAll": "残高を更新",
   "refreshingAll": "更新中...",
   "refreshFailed": "残高を更新できませんでした",
-  "toolbarHint": "残高は各プロバイダー自身のキーで照会され、10 分ごとに自動更新されます。",
+  "toolbarHint": "残高は各プロバイダー自身のキー、または設定済みの New API システムアクセストークンで照会され、10 分ごとに自動更新されます。",
   "sources": {
     "new-api-token-usage": "New API トークン残量",
+    "new-api-account": "New API アカウント残高",
+    "sub2api-usage": "Sub2API 利用状況",
     "openai-billing": "OpenAI 互換の課金情報",
     "deepseek-balance": "DeepSeek ウォレット",
     "kimi-balance": "Moonshot ウォレット",
@@ -28,6 +30,7 @@
   },
   "errors": {
     "unauthorized": "アップストリームがこのキーを拒否しました。",
+    "access_token_rejected": "アップストリームがシステムアクセストークンを拒否しました。トークンとユーザー ID を確認してください。",
     "forbidden": "このキーには残高を読み取る権限がありません。",
     "rate_limited": "アップストリームが残高照会をレート制限しました。",
     "upstream_error": "アップストリームがエラーを返しました。",

@@ -161,6 +161,18 @@ export async function updateProvider(c: Context): Promise<Response> {
       detail: "Redacted placeholders cannot be used for the key field when updating providers.",
     });
   }
+  if (
+    typeof body.data.new_api_access_token === "string" &&
+    hasLegacyRedactedWritePlaceholders(body.data.new_api_access_token)
+  ) {
+    return createProblemResponse({
+      status: 422,
+      instance: new URL(c.req.url).pathname,
+      errorCode: "provider.redacted_placeholder_rejected",
+      detail:
+        "Redacted placeholders cannot be used for the new_api_access_token field when updating providers.",
+    });
+  }
   if (hasUnresolvedRedactedHeaderEcho(body.data.custom_headers, existing.customHeaders)) {
     return createProblemResponse({
       status: 422,
@@ -667,6 +679,8 @@ function sanitizeProvider(
     name: provider.name,
     url: redactUrlCredentials(provider.url) ?? provider.url,
     maskedKey: provider.maskedKey,
+    maskedNewApiAccessToken: provider.maskedNewApiAccessToken,
+    newApiUserId: provider.newApiUserId,
     isEnabled: provider.isEnabled,
     weight: provider.weight,
     priority: provider.priority,

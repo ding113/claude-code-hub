@@ -25,6 +25,12 @@ export const PROVIDER_RULE_LIMITS = {
 // 供应商 API 密钥最大长度（字符数），取宽松上限即可
 export const PROVIDER_KEY_MAX_LENGTH = 1024 * 1024;
 
+// New API 系统访问令牌最大长度（字符数）；New API 生成的令牌为 32 位字符串
+export const NEW_API_ACCESS_TOKEN_MAX_LENGTH = 512;
+
+// New API 用户 ID 上限，与 PostgreSQL integer 一致
+export const NEW_API_USER_ID_MAX = 2_147_483_647;
+
 export const PROVIDER_DEFAULTS = {
   IS_ENABLED: true,
   WEIGHT: 1,

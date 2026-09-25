@@ -1,0 +1,16 @@
+{
+  "title": "余额查询",
+  "desc": "可选。为 New API 站点配置系统访问令牌后，余额展示账户余额，不再展示密钥额度。",
+  "accessToken": {
+    "label": "系统访问令牌",
+    "placeholder": "在 New API 个人设置中生成",
+    "leaveEmptyDesc": "留空则不更改令牌",
+    "current": "当前令牌：{token}",
+    "clear": "清除已配置的令牌"
+  },
+  "userId": {
+    "label": "用户 ID",
+    "placeholder": "例如 1",
+    "desc": "旧版本 New API 要求同时提供用户 ID，可在个人设置页面查看。"
+  }
+}

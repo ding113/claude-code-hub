@@ -28,17 +28,27 @@ const balanceStore = new RedisKVStore<ProviderBalanceSnapshot>({
 });
 
 /**
- * 缓存键带上配置指纹：密钥、地址或代理改变后旧快照立即失效，
- * 不会把换过密钥的供应商的旧余额继续展示出来。
+ * 缓存键带上配置指纹：密钥、地址、代理或 New API 系统访问令牌与用户 ID 改变后旧快照立即失效，
+ * 不会把换过凭证的供应商的旧余额继续展示出来。
  */
 export function buildBalanceCacheKey(provider: {
   id: number;
   url: string;
   key: string;
   proxyUrl: string | null;
+  newApiAccessToken: string | null;
+  newApiUserId: number | null;
 }): string {
   const fingerprint = createHash("sha256")
-    .update(`${provider.url}\u0000${provider.key}\u0000${provider.proxyUrl ?? ""}`)
+    .update(
+      [
+        provider.url,
+        provider.key,
+        provider.proxyUrl ?? "",
+        provider.newApiAccessToken ?? "",
+        provider.newApiUserId === null ? "" : String(provider.newApiUserId),
+      ].join("\u0000")
+    )
     .digest("hex")
     .slice(0, 16);
   return `${provider.id}:${fingerprint}`;

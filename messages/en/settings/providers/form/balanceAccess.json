@@ -1,0 +1,16 @@
+{
+  "title": "Balance query",
+  "desc": "Optional. With a New API system access token, the balance shows the account balance instead of the key quota.",
+  "accessToken": {
+    "label": "System access token",
+    "placeholder": "Generate one in New API personal settings",
+    "leaveEmptyDesc": "Leave empty to keep the current token",
+    "current": "Current token: {token}",
+    "clear": "Remove the configured token"
+  },
+  "userId": {
+    "label": "User ID",
+    "placeholder": "e.g. 1",
+    "desc": "Older New API releases also require the user ID, shown on the personal settings page."
+  }
+}

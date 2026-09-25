@@ -1,6 +1,7 @@
 // 供应商余额查询类型定义
 //
-// 余额来自上游服务商的只读端点，使用供应商自身配置的密钥查询。
+// 余额来自上游服务商的只读端点，默认使用供应商自身配置的密钥查询；
+// 配置了 New API 系统访问令牌的供应商改用该令牌查询账户余额。
 // 每个来源对应一种上游协议，详见 src/lib/provider-balance/endpoints.ts。
 
 import type { CurrencyCode } from "@/lib/utils/currency";
@@ -8,6 +9,8 @@ import type { CurrencyCode } from "@/lib/utils/currency";
 /** 余额查询来源，对应一种上游只读协议 */
 export const PROVIDER_BALANCE_SOURCES = {
   NewApiTokenUsage: "new-api-token-usage",
+  NewApiAccount: "new-api-account",
+  Sub2ApiUsage: "sub2api-usage",
   OpenAiBilling: "openai-billing",
   DeepSeekBalance: "deepseek-balance",
   KimiBalance: "kimi-balance",
@@ -33,6 +36,8 @@ export type ProviderBalanceStatus =
 /** 余额查询失败原因，客户端据此翻译展示文案 */
 export const PROVIDER_BALANCE_ERROR_CODES = {
   Unauthorized: "unauthorized",
+  /** New API 拒绝了系统访问令牌或用户 ID */
+  AccessTokenRejected: "access_token_rejected",
   Forbidden: "forbidden",
   RateLimited: "rate_limited",
   UpstreamError: "upstream_error",

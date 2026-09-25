@@ -30,12 +30,23 @@ function provider(overrides: Partial<Parameters<typeof probeProviderBalance>[0]>
     key: "sk-test",
     proxyUrl: null,
     proxyFallbackToDirect: false,
+    newApiAccessToken: null,
+    newApiUserId: null,
     ...overrides,
   };
 }
 
 function requestedUrls(): string[] {
   return fetchWithDispatcher.mock.calls.map((call) => call[0] as string);
+}
+
+function requestHeaders(index: number): Record<string, string> {
+  const init = fetchWithDispatcher.mock.calls[index]?.[1] as RequestInit;
+  return init.headers as Record<string, string>;
+}
+
+function notFound(): Response {
+  return new Response("404 page not found", { status: 404 });
 }
 
 beforeEach(() => {
@@ -69,7 +80,8 @@ describe("probeProviderBalance 来源选择", () => {
 
   it("端点返回 404 时回落到下一个来源", async () => {
     fetchWithDispatcher
-      .mockResolvedValueOnce(new Response("not found", { status: 404 }))
+      .mockResolvedValueOnce(notFound())
+      .mockResolvedValueOnce(notFound())
       .mockResolvedValueOnce(jsonResponse({ hard_limit_usd: 120 }))
       .mockResolvedValueOnce(jsonResponse({ total_usage: 4500 }));
 
@@ -78,26 +90,29 @@ describe("probeProviderBalance 来源选择", () => {
     expect(snapshot.source).toBe("openai-billing");
     expect(snapshot.balance).toBe(75);
     expect(snapshot.totalGranted).toBe(120);
-    expect(requestedUrls()[1]).toBe("https://relay.example.com/v1/dashboard/billing/subscription");
-    expect(requestedUrls()[2]).toContain("/v1/dashboard/billing/usage?start_date=");
+    expect(requestedUrls().slice(0, 3)).toEqual([
+      "https://relay.example.com/api/usage/token/",
+      "https://relay.example.com/v1/usage",
+      "https://relay.example.com/v1/dashboard/billing/subscription",
+    ]);
+    expect(requestedUrls()[3]).toContain("/v1/dashboard/billing/usage?start_date=");
   });
 
   it("返回非 JSON 内容时视为该来源不可用", async () => {
-    fetchWithDispatcher
-      .mockResolvedValueOnce(new Response("<html>login</html>", { status: 200 }))
-      .mockResolvedValueOnce(new Response("<html>login</html>", { status: 200 }));
+    fetchWithDispatcher.mockImplementation(
+      async () => new Response("<html>login</html>", { status: 200 })
+    );
 
     const snapshot = await probeProviderBalance(provider());
 
     expect(snapshot.status).toBe("unsupported");
     expect(snapshot.errorCode).toBeNull();
+    expect(fetchWithDispatcher).toHaveBeenCalledTimes(3);
   });
 
   it("响应体超过上限时视为该来源不可用", async () => {
     const oversized = "x".repeat(PROVIDER_BALANCE_MAX_RESPONSE_BYTES + 1024);
-    fetchWithDispatcher
-      .mockResolvedValueOnce(new Response(oversized, { status: 200 }))
-      .mockResolvedValueOnce(new Response(oversized, { status: 200 }));
+    fetchWithDispatcher.mockImplementation(async () => new Response(oversized, { status: 200 }));
 
     const snapshot = await probeProviderBalance(provider());
 
@@ -107,6 +122,7 @@ describe("probeProviderBalance 来源选择", () => {
   it("所有来源都只返回空数据时判定为不支持", async () => {
     fetchWithDispatcher
       .mockResolvedValueOnce(jsonResponse({ data: { object: "billing" } }))
+      .mockResolvedValueOnce(jsonResponse({ object: "usage" }))
       .mockResolvedValueOnce(jsonResponse({ object: "billing_subscription" }))
       .mockResolvedValueOnce(jsonResponse({}));
 
@@ -140,9 +156,7 @@ describe("probeProviderBalance 来源选择", () => {
 
 describe("probeProviderBalance 失败分类", () => {
   it("401 归类为密钥被拒绝", async () => {
-    fetchWithDispatcher
-      .mockResolvedValueOnce(new Response("nope", { status: 401 }))
-      .mockResolvedValueOnce(new Response("nope", { status: 401 }));
+    fetchWithDispatcher.mockImplementation(async () => new Response("nope", { status: 401 }));
 
     const snapshot = await probeProviderBalance(provider());
 
@@ -151,9 +165,7 @@ describe("probeProviderBalance 失败分类", () => {
   });
 
   it("429 归类为被限流", async () => {
-    fetchWithDispatcher
-      .mockResolvedValueOnce(new Response("slow down", { status: 429 }))
-      .mockResolvedValueOnce(new Response("slow down", { status: 429 }));
+    fetchWithDispatcher.mockImplementation(async () => new Response("slow down", { status: 429 }));
 
     const snapshot = await probeProviderBalance(provider());
     expect(snapshot.errorCode).toBe("rate_limited");
@@ -178,6 +190,7 @@ describe("probeProviderBalance 失败分类", () => {
   it("先出现的失败原因优先保留", async () => {
     fetchWithDispatcher
       .mockResolvedValueOnce(new Response("nope", { status: 403 }))
+      .mockResolvedValueOnce(new Response("boom", { status: 500 }))
       .mockResolvedValueOnce(new Response("boom", { status: 500 }));
 
     const snapshot = await probeProviderBalance(provider());
@@ -219,14 +232,16 @@ describe("probeProviderBalance 请求构造", () => {
 
   it("基地址以 /v1 结尾时不产生重复版本段", async () => {
     fetchWithDispatcher
-      .mockResolvedValueOnce(new Response("not found", { status: 404 }))
+      .mockResolvedValueOnce(notFound())
+      .mockResolvedValueOnce(notFound())
       .mockResolvedValueOnce(jsonResponse({ hard_limit_usd: 120 }))
       .mockResolvedValueOnce(jsonResponse({ total_usage: 4500 }));
 
     await probeProviderBalance(provider({ url: "https://relay.example.com/v1" }));
 
-    expect(requestedUrls()[1]).toBe("https://relay.example.com/v1/dashboard/billing/subscription");
-    expect(requestedUrls()[2]).toContain("/v1/dashboard/billing/usage?start_date=");
+    expect(requestedUrls()[1]).toBe("https://relay.example.com/v1/usage");
+    expect(requestedUrls()[2]).toBe("https://relay.example.com/v1/dashboard/billing/subscription");
+    expect(requestedUrls()[3]).toContain("/v1/dashboard/billing/usage?start_date=");
   });
 
   it("官方钱包端点忽略基地址里的 /v1 与子路径", async () => {

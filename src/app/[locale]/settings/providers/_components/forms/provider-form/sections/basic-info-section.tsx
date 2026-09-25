@@ -1,12 +1,14 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { ExternalLink, Eye, EyeOff, Globe, Key, Link2, User } from "lucide-react";
+import { ExternalLink, Eye, EyeOff, Globe, Key, Link2, User, Wallet } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ProviderEndpointsSection } from "@/app/[locale]/settings/providers/_components/provider-endpoints-table";
+import { Checkbox } from "@/components/ui/checkbox";
 import { InlineWarning } from "@/components/ui/inline-warning";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -42,6 +44,9 @@ export function BasicInfoSection({ autoUrlPending, endpointPool }: BasicInfoSect
   const isBatch = mode === "batch";
   const nameInputRef = useRef<HTMLInputElement>(null);
   const [showKey, setShowKey] = useState(false);
+  const [showAccessToken, setShowAccessToken] = useState(false);
+  // 只有编辑已配置令牌的供应商时才展示掩码与清除选项
+  const configuredAccessToken = isEdit ? (provider?.maskedNewApiAccessToken ?? null) : null;
 
   const apiKeyWarnings = useMemo(() => detectApiKeyWarnings(state.basic.key), [state.basic.key]);
 
@@ -303,6 +308,87 @@ export function BasicInfoSection({ autoUrlPending, endpointPool }: BasicInfoSect
                 ))}
               </div>
             )}
+          </SmartInputWrapper>
+        </div>
+      </SectionCard>
+
+      {/* Balance query (New API system access token) */}
+      <SectionCard
+        title={t("balanceAccess.title")}
+        description={t("balanceAccess.desc")}
+        icon={Wallet}
+      >
+        <div className="space-y-4">
+          <SmartInputWrapper
+            label={t("balanceAccess.accessToken.label")}
+            description={
+              configuredAccessToken
+                ? t("balanceAccess.accessToken.current", { token: configuredAccessToken })
+                : undefined
+            }
+          >
+            <div className="relative">
+              <Input
+                id={isEdit ? "edit-new-api-access-token" : "new-api-access-token"}
+                type={showAccessToken ? "text" : "password"}
+                value={state.basic.newApiAccessToken}
+                onChange={(e) =>
+                  dispatch({ type: "SET_NEW_API_ACCESS_TOKEN", payload: e.target.value })
+                }
+                placeholder={
+                  configuredAccessToken
+                    ? t("balanceAccess.accessToken.leaveEmptyDesc")
+                    : t("balanceAccess.accessToken.placeholder")
+                }
+                disabled={state.ui.isPending || state.basic.clearNewApiAccessToken}
+                className="pr-10 font-mono text-sm"
+                autoComplete="new-password"
+              />
+              <button
+                type="button"
+                onClick={() => setShowAccessToken(!showAccessToken)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+              >
+                {showAccessToken ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
+
+            {configuredAccessToken && (
+              <div className="mt-2 flex items-center gap-2">
+                <Checkbox
+                  id={isEdit ? "edit-clear-new-api-access-token" : "clear-new-api-access-token"}
+                  checked={state.basic.clearNewApiAccessToken}
+                  onCheckedChange={(checked) =>
+                    dispatch({ type: "SET_CLEAR_NEW_API_ACCESS_TOKEN", payload: checked === true })
+                  }
+                  disabled={state.ui.isPending}
+                />
+                <Label
+                  htmlFor={
+                    isEdit ? "edit-clear-new-api-access-token" : "clear-new-api-access-token"
+                  }
+                  className="text-sm font-normal text-muted-foreground"
+                >
+                  {t("balanceAccess.accessToken.clear")}
+                </Label>
+              </div>
+            )}
+          </SmartInputWrapper>
+
+          <SmartInputWrapper
+            label={t("balanceAccess.userId.label")}
+            description={t("balanceAccess.userId.desc")}
+          >
+            <Input
+              id={isEdit ? "edit-new-api-user-id" : "new-api-user-id"}
+              inputMode="numeric"
+              value={state.basic.newApiUserId}
+              onChange={(e) => dispatch({ type: "SET_NEW_API_USER_ID", payload: e.target.value })}
+              placeholder={t("balanceAccess.userId.placeholder")}
+              disabled={state.ui.isPending}
+              className="font-mono text-sm"
+              autoComplete="off"
+            />
           </SmartInputWrapper>
         </div>
       </SectionCard>

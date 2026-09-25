@@ -55,6 +55,16 @@ export function normalizeTimestamp(value: unknown): number | undefined {
   return parsed < 1e12 ? parsed * 1000 : parsed;
 }
 
+/** 读取时间字段：数字按秒或毫秒时间戳处理，字符串按 ISO 8601 解析，统一成毫秒 */
+export function readDateTime(value: unknown): number | undefined {
+  if (typeof value === "string" && value.trim() && !Number.isFinite(Number(value))) {
+    const parsed = Date.parse(value);
+    // Go 的零值时间 0001-01-01T00:00:00Z 会解析成负数，同样视为未设置
+    return Number.isNaN(parsed) || parsed <= 0 ? undefined : parsed;
+  }
+  return normalizeTimestamp(value);
+}
+
 /** New API 额度单位转换成 USD，负值按 0 处理 */
 export function quotaToUsd(value: number | undefined): number | undefined {
   if (value === undefined) return undefined;
@@ -90,6 +100,97 @@ export function parseNewApiTokenUsage(json: unknown): ProviderBalancePatch {
     ...(unlimited || quotaToUsd(totalGranted) === undefined
       ? {}
       : { totalGranted: quotaToUsd(totalGranted) }),
+    ...(expiresAt === undefined ? {} : { expiresAt }),
+  };
+}
+
+/**
+ * 判定 New API 家族管理端点返回的是失败信封。
+ *
+ * 2026-07 之前的 New API 在令牌无效、缺少或不匹配 New-Api-User 时返回 HTTP 200 和
+ * `{ success: false }`，只看状态码会把认证失败误判为成功。
+ */
+export function isNewApiFailureEnvelope(json: unknown): boolean {
+  return isRecord(json) && json.success === false;
+}
+
+/**
+ * 解析 New API / One API 家族的 /api/user/self 响应。
+ *
+ * data.quota 是账户剩余额度，data.used_quota 是账户累计已用额度，
+ * 两者相加是账户累计获得的额度，单位都是 quota。
+ */
+export function parseNewApiUserSelf(json: unknown): ProviderBalancePatch {
+  const data = isRecord(json) && isRecord(json.data) ? json.data : {};
+  const balance = quotaToUsd(readNumber(data.quota));
+  if (balance === undefined) return {};
+
+  const totalUsed = quotaToUsd(readNumber(data.used_quota));
+
+  return {
+    balance,
+    currency: "USD",
+    ...(totalUsed === undefined ? {} : { totalUsed, totalGranted: balance + totalUsed }),
+  };
+}
+
+/**
+ * 解析 Sub2API 的 /v1/usage 响应。
+ *
+ * Sub2API 各版本的响应都带布尔型 isValid（CC Switch 用量脚本的约定），据此识别 Sub2API；
+ * 其他网关在同一路径上返回的内容不满足该特征，按「该来源不可用」处理。
+ *
+ * - mode 为 quota_limited：密钥配置了总额度或速率限制，quota 给出密钥总额度的剩余、上限与已用；
+ *   只配置了速率限制时没有 quota，只展示密钥的累计用量
+ * - 带 balance 字段：钱包模式，balance 是账户钱包余额
+ * - 其余情况是订阅模式：remaining 是订阅各周期限额中最小的剩余额度，-1 表示订阅没有配置限额
+ *
+ * 2026-03 之前的版本没有 mode 字段，钱包与订阅两种结构与 unrestricted 相同。
+ * 金额单位固定为 USD，累计用量取按倍率结算后的 actual_cost。
+ */
+export function parseSub2ApiUsage(json: unknown): ProviderBalancePatch {
+  if (!isRecord(json) || typeof json.isValid !== "boolean") return {};
+
+  const usage = isRecord(json.usage) ? json.usage : {};
+  const usageTotal = isRecord(usage.total) ? usage.total : {};
+  const keyUsedUsd = readNumber(usageTotal.actual_cost);
+
+  if (json.mode === "quota_limited") {
+    const hasQuota = isRecord(json.quota);
+    const quota = isRecord(json.quota) ? json.quota : {};
+    const remaining = readNumber(quota.remaining);
+    const limit = readNumber(quota.limit);
+    const used = hasQuota ? readNumber(quota.used) : keyUsedUsd;
+    const expiresAt = readDateTime(json.expires_at);
+
+    return {
+      currency: "USD",
+      ...(remaining === undefined ? {} : { balance: Math.max(0, remaining) }),
+      ...(limit === undefined ? {} : { totalGranted: limit }),
+      ...(used === undefined ? {} : { totalUsed: used }),
+      ...(expiresAt === undefined ? {} : { expiresAt }),
+    };
+  }
+
+  if ("balance" in json) {
+    const balance = readNumber(json.balance);
+    return {
+      currency: "USD",
+      ...(balance === undefined ? {} : { balance }),
+      ...(keyUsedUsd === undefined ? {} : { totalUsed: keyUsedUsd }),
+    };
+  }
+
+  const remaining = readNumber(json.remaining);
+  const unlimited = remaining !== undefined && remaining < 0;
+  const subscription = isRecord(json.subscription) ? json.subscription : {};
+  const expiresAt = readDateTime(subscription.expires_at);
+
+  return {
+    currency: "USD",
+    ...(unlimited ? { unlimited: true } : {}),
+    ...(remaining === undefined || unlimited ? {} : { balance: remaining }),
+    ...(keyUsedUsd === undefined ? {} : { totalUsed: keyUsedUsd }),
     ...(expiresAt === undefined ? {} : { expiresAt }),
   };
 }

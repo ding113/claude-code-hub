@@ -14,17 +14,21 @@ import {
   type ProviderBalanceSource,
 } from "@/types/provider-balance";
 import {
+  NEW_API_USER_ID_HEADERS,
   PROVIDER_BALANCE_ENDPOINTS,
   PROVIDER_BALANCE_MAX_RESPONSE_BYTES,
   PROVIDER_BALANCE_REQUEST_TIMEOUT_MS,
 } from "./endpoints";
 import {
   hasBalanceData,
+  isNewApiFailureEnvelope,
   parseChatGptWhamUsage,
   parseDeepSeekBalance,
   parseKimiBalance,
   parseNewApiTokenUsage,
+  parseNewApiUserSelf,
   parseOpenAiBilling,
+  parseSub2ApiUsage,
 } from "./parsers";
 import { normalizeBalanceBaseUrl, planProviderBalanceSources } from "./planner";
 
@@ -35,6 +39,45 @@ export interface ProviderBalanceProbeInput {
   key: string;
   proxyUrl: string | null;
   proxyFallbackToDirect: boolean;
+  /** New API 系统访问令牌，配置后改为查询账户余额 */
+  newApiAccessToken: string | null;
+  /** New API 用户 ID，旧版本 New API 要求与系统访问令牌一起提供 */
+  newApiUserId: number | null;
+}
+
+/** 一次余额请求使用的凭证 */
+interface BalanceRequestAuth {
+  /** 供应商密钥或 New API 系统访问令牌 */
+  credential: "provider-key" | "new-api-access-token";
+  headers: Record<string, string>;
+}
+
+function buildProviderKeyAuth(provider: ProviderBalanceProbeInput): BalanceRequestAuth {
+  return {
+    credential: "provider-key",
+    headers: { Authorization: `Bearer ${provider.key}` },
+  };
+}
+
+/** 系统访问令牌走 Bearer；配置了用户 ID 时按各分支的头名一并发送 */
+export function buildNewApiAccessTokenAuth(provider: {
+  newApiAccessToken: string;
+  newApiUserId: number | null;
+}): BalanceRequestAuth {
+  const userIdHeaders =
+    provider.newApiUserId === null
+      ? {}
+      : Object.fromEntries(
+          NEW_API_USER_ID_HEADERS.map((name) => [name, String(provider.newApiUserId)])
+        );
+
+  return {
+    credential: "new-api-access-token",
+    headers: {
+      Authorization: `Bearer ${provider.newApiAccessToken.trim()}`,
+      ...userIdHeaders,
+    },
+  };
 }
 
 /** 单个端点的请求结果 */
@@ -55,7 +98,10 @@ class EndpointFailedError extends Error {
   }
 }
 
-function classifyHttpStatus(status: number): ProviderBalanceErrorCode {
+function classifyHttpStatus(status: number, auth: BalanceRequestAuth): ProviderBalanceErrorCode {
+  if (auth.credential === "new-api-access-token" && (status === 401 || status === 403)) {
+    return PROVIDER_BALANCE_ERROR_CODES.AccessTokenRejected;
+  }
   if (status === 401) return PROVIDER_BALANCE_ERROR_CODES.Unauthorized;
   if (status === 403) return PROVIDER_BALANCE_ERROR_CODES.Forbidden;
   if (status === 429) return PROVIDER_BALANCE_ERROR_CODES.RateLimited;
@@ -73,7 +119,8 @@ function classifyFetchError(error: unknown): ProviderBalanceErrorCode {
 /** 通过供应商自身的代理配置发起一次只读 GET */
 async function fetchBalanceJson(
   provider: ProviderBalanceProbeInput,
-  url: string
+  url: string,
+  auth: BalanceRequestAuth
 ): Promise<EndpointResult> {
   const proxy = createProxyAgentForProvider(
     {
@@ -90,7 +137,7 @@ async function fetchBalanceJson(
       method: "GET",
       headers: {
         Accept: "application/json",
-        Authorization: `Bearer ${provider.key}`,
+        ...auth.headers,
       },
       signal: AbortSignal.timeout(PROVIDER_BALANCE_REQUEST_TIMEOUT_MS),
       ...(proxy ? { dispatcher: proxy.agent } : {}),
@@ -106,7 +153,7 @@ async function fetchBalanceJson(
 
   if (!response.ok) {
     await cancelResponseBody(response);
-    throw new EndpointFailedError(classifyHttpStatus(response.status));
+    throw new EndpointFailedError(classifyHttpStatus(response.status, auth));
   }
 
   const text = await readTextWithLimit(response, PROVIDER_BALANCE_MAX_RESPONSE_BYTES);
@@ -211,32 +258,65 @@ async function runSource(
 ): Promise<ProviderBalancePatch> {
   const sourceBaseUrl = resolveSourceBaseUrl(baseUrl, source);
 
+  if (source === PROVIDER_BALANCE_SOURCES.NewApiAccount) {
+    // 规划阶段只在配置了令牌时选择该来源
+    if (!provider.newApiAccessToken) {
+      throw new Error("new-api-account source requires a New API access token");
+    }
+    const result = await fetchBalanceJson(
+      provider,
+      buildUrl(sourceBaseUrl, PROVIDER_BALANCE_ENDPOINTS.newApiUserSelf),
+      buildNewApiAccessTokenAuth({
+        newApiAccessToken: provider.newApiAccessToken,
+        newApiUserId: provider.newApiUserId,
+      })
+    );
+    if (isNewApiFailureEnvelope(result.json)) {
+      throw new EndpointFailedError(PROVIDER_BALANCE_ERROR_CODES.AccessTokenRejected);
+    }
+    return parseNewApiUserSelf(result.json);
+  }
+
+  const keyAuth = buildProviderKeyAuth(provider);
+
   if (source === PROVIDER_BALANCE_SOURCES.NewApiTokenUsage) {
     const result = await fetchBalanceJson(
       provider,
-      buildUrl(sourceBaseUrl, PROVIDER_BALANCE_ENDPOINTS.newApiTokenUsage)
+      buildUrl(sourceBaseUrl, PROVIDER_BALANCE_ENDPOINTS.newApiTokenUsage),
+      keyAuth
     );
     return parseNewApiTokenUsage(result.json);
+  }
+
+  if (source === PROVIDER_BALANCE_SOURCES.Sub2ApiUsage) {
+    const result = await fetchBalanceJson(
+      provider,
+      buildUrl(sourceBaseUrl, PROVIDER_BALANCE_ENDPOINTS.sub2ApiUsage),
+      keyAuth
+    );
+    return parseSub2ApiUsage(result.json);
   }
 
   if (source === PROVIDER_BALANCE_SOURCES.OpenAiBilling) {
     const subscription = await fetchBalanceJson(
       provider,
-      buildUrl(sourceBaseUrl, PROVIDER_BALANCE_ENDPOINTS.openAiBillingSubscription)
+      buildUrl(sourceBaseUrl, PROVIDER_BALANCE_ENDPOINTS.openAiBillingSubscription),
+      keyAuth
     );
     const direct = parseOpenAiBilling(subscription.json, {});
     if (direct.balance !== undefined) return direct;
 
     const range = buildOpenAiUsageRange(new Date());
     const usageUrl = `${buildUrl(sourceBaseUrl, PROVIDER_BALANCE_ENDPOINTS.openAiBillingUsage)}?start_date=${range.start}&end_date=${range.end}`;
-    const usage = await fetchBalanceJson(provider, usageUrl);
+    const usage = await fetchBalanceJson(provider, usageUrl, keyAuth);
     return parseOpenAiBilling(subscription.json, usage.json);
   }
 
   if (source === PROVIDER_BALANCE_SOURCES.DeepSeekBalance) {
     const result = await fetchBalanceJson(
       provider,
-      buildUrl(sourceBaseUrl, PROVIDER_BALANCE_ENDPOINTS.deepSeekBalance)
+      buildUrl(sourceBaseUrl, PROVIDER_BALANCE_ENDPOINTS.deepSeekBalance),
+      keyAuth
     );
     return parseDeepSeekBalance(result.json);
   }
@@ -244,14 +324,16 @@ async function runSource(
   if (source === PROVIDER_BALANCE_SOURCES.ChatGptCredits) {
     const result = await fetchBalanceJson(
       provider,
-      buildUrl(sourceBaseUrl, PROVIDER_BALANCE_ENDPOINTS.chatGptWhamUsage)
+      buildUrl(sourceBaseUrl, PROVIDER_BALANCE_ENDPOINTS.chatGptWhamUsage),
+      keyAuth
     );
     return parseChatGptWhamUsage(result.json);
   }
 
   const result = await fetchBalanceJson(
     provider,
-    buildUrl(sourceBaseUrl, PROVIDER_BALANCE_ENDPOINTS.kimiBalance)
+    buildUrl(sourceBaseUrl, PROVIDER_BALANCE_ENDPOINTS.kimiBalance),
+    keyAuth
   );
   return parseKimiBalance(result.json, kimiCurrency);
 }
@@ -317,6 +399,7 @@ export async function probeProviderBalance(
   const plan = planProviderBalanceSources({
     providerUrl: provider.url,
     providerKey: provider.key,
+    newApiAccessToken: provider.newApiAccessToken,
   });
   if (plan.sources.length === 0) {
     return buildFailureSnapshot(provider.id, PROVIDER_BALANCE_STATUSES.Unsupported, null);

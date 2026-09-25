@@ -39,14 +39,17 @@ describe("isStructuredCredential", () => {
   });
 });
 
-describe("planProviderBalanceSources", () => {
-  it("未知中转网关按通用兼容端点顺序探测", () => {
-    const plan = planProviderBalanceSources({
-      providerUrl: "https://relay.example.com",
-      providerKey: KEY,
-    });
+function plan(providerUrl: string, providerKey = KEY, newApiAccessToken: string | null = null) {
+  return planProviderBalanceSources({ providerUrl, providerKey, newApiAccessToken });
+}
 
-    expect(plan.sources).toEqual(["new-api-token-usage", "openai-billing"]);
+describe("planProviderBalanceSources", () => {
+  it("未知中转网关按通用兼容端点顺序探测，Sub2API 排在 New API 之后", () => {
+    expect(plan("https://relay.example.com").sources).toEqual([
+      "new-api-token-usage",
+      "sub2api-usage",
+      "openai-billing",
+    ]);
   });
 
   it("官方直连端点没有余额查询", () => {
@@ -55,30 +58,22 @@ describe("planProviderBalanceSources", () => {
       "https://api.openai.com/v1",
       "https://generativelanguage.googleapis.com",
     ]) {
-      expect(planProviderBalanceSources({ providerUrl: url, providerKey: KEY }).sources).toEqual(
-        []
-      );
+      expect(plan(url).sources).toEqual([]);
     }
   });
 
   it("DeepSeek 先查官方钱包再回落兼容端点", () => {
-    const plan = planProviderBalanceSources({
-      providerUrl: "https://api.deepseek.com",
-      providerKey: KEY,
-    });
-
-    expect(plan.sources).toEqual(["deepseek-balance", "new-api-token-usage", "openai-billing"]);
+    expect(plan("https://api.deepseek.com").sources).toEqual([
+      "deepseek-balance",
+      "new-api-token-usage",
+      "sub2api-usage",
+      "openai-billing",
+    ]);
   });
 
   it("Moonshot 按域名决定结算币种", () => {
-    const cn = planProviderBalanceSources({
-      providerUrl: "https://api.moonshot.cn/v1",
-      providerKey: KEY,
-    });
-    const global = planProviderBalanceSources({
-      providerUrl: "https://api.moonshot.ai/v1",
-      providerKey: KEY,
-    });
+    const cn = plan("https://api.moonshot.cn/v1");
+    const global = plan("https://api.moonshot.ai/v1");
 
     expect(cn.sources[0]).toBe("kimi-balance");
     expect(cn.kimiCurrency).toBe("CNY");
@@ -86,27 +81,35 @@ describe("planProviderBalanceSources", () => {
   });
 
   it("ChatGPT 账号只查后端用量端点", () => {
-    const plan = planProviderBalanceSources({
-      providerUrl: "https://chatgpt.com/backend-api/codex",
-      providerKey: KEY,
-    });
-
-    expect(plan.sources).toEqual(["chatgpt-credits"]);
+    expect(plan("https://chatgpt.com/backend-api/codex").sources).toEqual(["chatgpt-credits"]);
   });
 
   it("非法地址、空密钥与结构化凭证都不探测", () => {
-    expect(planProviderBalanceSources({ providerUrl: "nope", providerKey: KEY }).sources).toEqual(
-      []
-    );
+    expect(plan("nope").sources).toEqual([]);
+    expect(plan("https://relay.example.com", "  ").sources).toEqual([]);
+    expect(plan("https://relay.example.com", '{"client_email":"x"}').sources).toEqual([]);
+  });
+
+  it("配置了系统访问令牌时只查询 New API 账户余额", () => {
+    expect(plan("https://relay.example.com/v1", KEY, "access-token").sources).toEqual([
+      "new-api-account",
+    ]);
+  });
+
+  it("配置了系统访问令牌时不再检查供应商密钥的形态", () => {
     expect(
-      planProviderBalanceSources({ providerUrl: "https://relay.example.com", providerKey: "  " })
-        .sources
-    ).toEqual([]);
-    expect(
-      planProviderBalanceSources({
-        providerUrl: "https://relay.example.com",
-        providerKey: '{"client_email":"x"}',
-      }).sources
-    ).toEqual([]);
+      plan("https://relay.example.com", '{"client_email":"x"}', "access-token").sources
+    ).toEqual(["new-api-account"]);
+    expect(plan("https://relay.example.com", "", "access-token").sources).toEqual([
+      "new-api-account",
+    ]);
+  });
+
+  it("空白令牌等同于未配置", () => {
+    expect(plan("https://relay.example.com", KEY, "   ").sources[0]).toBe("new-api-token-usage");
+  });
+
+  it("地址非法时即使配置了令牌也不探测", () => {
+    expect(plan("nope", KEY, "access-token").sources).toEqual([]);
   });
 });

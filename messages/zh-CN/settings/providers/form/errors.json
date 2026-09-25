@@ -7,5 +7,6 @@
   "keyRequired": "请输入 API 密钥",
   "addFailed": "添加服务商失败",
   "updateFailed": "更新服务商失败",
-  "deleteFailed": "删除服务商失败"
+  "deleteFailed": "删除服务商失败",
+  "invalidNewApiUserId": "用户 ID 必须是正整数"
 }

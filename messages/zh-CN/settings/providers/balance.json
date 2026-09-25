@@ -18,9 +18,11 @@
   "refreshAll": "刷新余额",
   "refreshingAll": "刷新中...",
   "refreshFailed": "余额刷新失败",
-  "toolbarHint": "余额由各供应商自己的密钥查询得到，每 10 分钟自动更新一次。",
+  "toolbarHint": "余额由各供应商自己的密钥或配置的 New API 系统访问令牌查询得到，每 10 分钟自动更新一次。",
   "sources": {
     "new-api-token-usage": "New API 令牌额度",
+    "new-api-account": "New API 账户余额",
+    "sub2api-usage": "Sub2API 用量",
     "openai-billing": "OpenAI 兼容计费",
     "deepseek-balance": "DeepSeek 钱包",
     "kimi-balance": "Moonshot 钱包",
@@ -28,6 +30,7 @@
   },
   "errors": {
     "unauthorized": "上游拒绝了该密钥。",
+    "access_token_rejected": "上游拒绝了系统访问令牌，请检查令牌与用户 ID。",
     "forbidden": "该密钥没有读取余额的权限。",
     "rate_limited": "上游对余额查询做了限流。",
     "upstream_error": "上游返回了错误。",

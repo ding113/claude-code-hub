@@ -1,0 +1,16 @@
+{
+  "title": "餘額查詢",
+  "desc": "選填。為 New API 站點設定系統存取權杖後，餘額顯示帳戶餘額，不再顯示金鑰額度。",
+  "accessToken": {
+    "label": "系統存取權杖",
+    "placeholder": "在 New API 個人設定中產生",
+    "leaveEmptyDesc": "留空則不變更權杖",
+    "current": "目前權杖：{token}",
+    "clear": "清除已設定的權杖"
+  },
+  "userId": {
+    "label": "使用者 ID",
+    "placeholder": "例如 1",
+    "desc": "舊版 New API 要求同時提供使用者 ID，可在個人設定頁面查看。"
+  }
+}
