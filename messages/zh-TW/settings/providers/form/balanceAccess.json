@@ -6,7 +6,9 @@
     "placeholder": "在 New API 個人設定中產生",
     "leaveEmptyDesc": "留空則不變更權杖",
     "current": "目前權杖：{token}",
-    "clear": "清除已設定的權杖"
+    "clear": "清除已設定的權杖",
+    "show": "顯示權杖",
+    "hide": "隱藏權杖"
   },
   "userId": {
     "label": "使用者 ID",

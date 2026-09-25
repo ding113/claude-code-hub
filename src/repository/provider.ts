@@ -1144,6 +1144,9 @@ export interface BatchProviderUpdates {
   // MCP
   mcpPassthroughType?: string;
   mcpPassthroughUrl?: string | null;
+  // 余额查询凭证（单个编辑撤销时恢复）
+  newApiAccessToken?: string | null;
+  newApiUserId?: number | null;
 }
 
 type ProviderBatchUpdatedRow = {
@@ -1389,6 +1392,12 @@ export async function updateProvidersBatch(
   }
   if (updates.mcpPassthroughUrl !== undefined) {
     setClauses.mcpPassthroughUrl = updates.mcpPassthroughUrl;
+  }
+  if (updates.newApiAccessToken !== undefined) {
+    setClauses.newApiAccessToken = updates.newApiAccessToken;
+  }
+  if (updates.newApiUserId !== undefined) {
+    setClauses.newApiUserId = updates.newApiUserId;
   }
 
   if (Object.keys(setClauses).length === 1) {

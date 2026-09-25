@@ -6,7 +6,9 @@
     "placeholder": "Generate one in New API personal settings",
     "leaveEmptyDesc": "Leave empty to keep the current token",
     "current": "Current token: {token}",
-    "clear": "Remove the configured token"
+    "clear": "Remove the configured token",
+    "show": "Show token",
+    "hide": "Hide token"
   },
   "userId": {
     "label": "User ID",

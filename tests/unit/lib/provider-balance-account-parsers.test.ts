@@ -82,15 +82,27 @@ describe("parseSub2ApiUsage", () => {
   });
 
   it("密钥额度超用时余额按 0 展示", () => {
+    // Sub2API 对额度耗尽与过期的密钥仍返回 isValid:true，只有停用的密钥为 false
     const patch = parseSub2ApiUsage({
       mode: "quota_limited",
-      isValid: false,
+      isValid: true,
       status: "quota_exhausted",
       quota: { limit: 5, used: 5.2, remaining: -0.2, unit: "USD" },
     });
 
     expect(patch.balance).toBe(0);
     expect(patch.totalGranted).toBe(5);
+  });
+
+  it("停用的密钥 isValid 为 false，仍如实展示额度", () => {
+    const patch = parseSub2ApiUsage({
+      mode: "quota_limited",
+      isValid: false,
+      status: "disabled",
+      quota: { limit: 5, used: 1, remaining: 4, unit: "USD" },
+    });
+
+    expect(patch).toEqual({ balance: 4, currency: "USD", totalGranted: 5, totalUsed: 1 });
   });
 
   it("密钥只配置了速率限制时展示密钥累计用量", () => {

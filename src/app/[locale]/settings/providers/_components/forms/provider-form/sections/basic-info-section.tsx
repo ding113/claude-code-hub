@@ -330,6 +330,7 @@ export function BasicInfoSection({ autoUrlPending, endpointPool }: BasicInfoSect
             <div className="relative">
               <Input
                 id={isEdit ? "edit-new-api-access-token" : "new-api-access-token"}
+                aria-label={t("balanceAccess.accessToken.label")}
                 type={showAccessToken ? "text" : "password"}
                 value={state.basic.newApiAccessToken}
                 onChange={(e) =>
@@ -347,6 +348,12 @@ export function BasicInfoSection({ autoUrlPending, endpointPool }: BasicInfoSect
               <button
                 type="button"
                 onClick={() => setShowAccessToken(!showAccessToken)}
+                aria-label={
+                  showAccessToken
+                    ? t("balanceAccess.accessToken.hide")
+                    : t("balanceAccess.accessToken.show")
+                }
+                aria-pressed={showAccessToken}
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
               >
                 {showAccessToken ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
@@ -381,6 +388,7 @@ export function BasicInfoSection({ autoUrlPending, endpointPool }: BasicInfoSect
           >
             <Input
               id={isEdit ? "edit-new-api-user-id" : "new-api-user-id"}
+              aria-label={t("balanceAccess.userId.label")}
               inputMode="numeric"
               value={state.basic.newApiUserId}
               onChange={(e) => dispatch({ type: "SET_NEW_API_USER_ID", payload: e.target.value })}

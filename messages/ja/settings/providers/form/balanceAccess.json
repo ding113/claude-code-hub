@@ -6,7 +6,9 @@
     "placeholder": "New API の個人設定で生成",
     "leaveEmptyDesc": "空欄のままならトークンを変更しません",
     "current": "現在のトークン：{token}",
-    "clear": "設定済みのトークンを削除"
+    "clear": "設定済みのトークンを削除",
+    "show": "トークンを表示",
+    "hide": "トークンを隠す"
   },
   "userId": {
     "label": "ユーザー ID",

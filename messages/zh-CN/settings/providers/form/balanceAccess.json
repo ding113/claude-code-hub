@@ -6,7 +6,9 @@
     "placeholder": "在 New API 个人设置中生成",
     "leaveEmptyDesc": "留空则不更改令牌",
     "current": "当前令牌：{token}",
-    "clear": "清除已配置的令牌"
+    "clear": "清除已配置的令牌",
+    "show": "显示令牌",
+    "hide": "隐藏令牌"
   },
   "userId": {
     "label": "用户 ID",
