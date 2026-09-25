@@ -55,6 +55,8 @@ const TEXT_DELTA =
 const ERROR_FRAME =
   'event: error\ndata: {"type":"error","error":{"type":"overloaded_error","message":"overloaded"}}\n\n';
 const MESSAGE_STOP = 'event: message_stop\ndata: {"type":"message_stop"}\n\n';
+const REFUSAL_DELTA =
+  'event: message_delta\ndata: {"type":"message_delta","delta":{"stop_reason":"refusal","stop_details":{"type":"refusal","category":"reasoning_extraction"}},"usage":{"output_tokens":0}}\n\n';
 
 async function drainPrefix(chunks: Uint8Array[]): Promise<string> {
   const merged = concatChunks(chunks);
@@ -219,6 +221,49 @@ describe("runStreamContentGate", () => {
     if (result.committed) return;
     expect((result.error as StreamPrecommitError).gateReason).toBe("empty_stream");
     expect((result.error as StreamPrecommitError).terminalBeforeContent).toBe(true);
+  });
+
+  it("无内容块的 Anthropic refusal 流原样提交，不伪造 empty_stream（#1491）", async () => {
+    const reader = readerFromChunks([MESSAGE_START, REFUSAL_DELTA, MESSAGE_STOP]);
+    const result = await runStreamContentGate(reader, GATE_OPTIONS);
+    expect(result.committed).toBe(true);
+    if (!result.committed) return;
+    expect(await drainPrefix(result.prefixChunks)).toBe(MESSAGE_START + REFUSAL_DELTA);
+    const rest = await reader.read();
+    expect(new TextDecoder().decode(rest.value)).toBe(MESSAGE_STOP);
+  });
+
+  it("三帧 refusal 位于同一 chunk 或无结尾空行时同样提交", async () => {
+    const single = await runStreamContentGate(
+      readerFromChunks([MESSAGE_START + REFUSAL_DELTA + MESSAGE_STOP]),
+      GATE_OPTIONS
+    );
+    expect(single.committed).toBe(true);
+
+    const trailing = await runStreamContentGate(
+      readerFromChunks([MESSAGE_START, REFUSAL_DELTA.trimEnd()]),
+      GATE_OPTIONS
+    );
+    expect(trailing.committed).toBe(true);
+    if (trailing.committed) expect(trailing.readerDone).toBe(true);
+  });
+
+  it("非 refusal 的 message_delta 之后直接终止仍是 empty_stream", async () => {
+    const endTurn =
+      'event: message_delta\ndata: {"type":"message_delta","delta":{"stop_reason":"end_turn"}}\n\n';
+    const result = await runStreamContentGate(
+      readerFromChunks([MESSAGE_START, endTurn, MESSAGE_STOP]),
+      { ...GATE_OPTIONS, upstreamStatusCode: 200 }
+    );
+    expect(result.committed).toBe(false);
+    if (result.committed) return;
+    const gateError = result.error as StreamPrecommitError;
+    expect(gateError.gateReason).toBe("empty_stream");
+    expect(isRequestScopedGateFailure(gateError)).toBe(false);
+    // 本地合成 502 与上游真实 200 分开记录
+    expect(gateError.statusCode).toBe(502);
+    expect(gateError.upstreamStatusCode).toBe(200);
+    expect(JSON.parse(gateError.upstreamError?.body ?? "{}").error.upstream_status_code).toBe(200);
   });
 
   it("treats EOF without any content as empty stream", async () => {
