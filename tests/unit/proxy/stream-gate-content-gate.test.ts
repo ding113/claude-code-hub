@@ -295,39 +295,133 @@ describe("runStreamContentGate", () => {
     expect(result.readerDone).toBe(true);
   });
 
-  it("fails with prebuffer_overflow when event cap exceeded", async () => {
+  it("releases the stream (instead of failing) when the event cap is exceeded before content", async () => {
+    // 帧数上限只决定何时放行：已缓冲前缀随提交交出，剩余帧仍留在 reader 上
     const pings = Array.from({ length: 20 }, () => PING);
     const reader = readerFromChunks(pings);
     const result = await runStreamContentGate(reader, {
       ...GATE_OPTIONS,
       prebufferEventCap: 10,
     });
-    expect(result.committed).toBe(false);
-    if (result.committed) return;
-    expect((result.error as StreamPrecommitError).gateReason).toBe("prebuffer_overflow");
+    expect(result.committed).toBe(true);
+    if (!result.committed) return;
+    expect(result.releasedBeforeContent).toBe(true);
+    expect(result.readerDone).toBe(false);
+    expect(result.framesSeen).toBe(11);
+    expect(await drainPrefix(result.prefixChunks)).toBe(PING.repeat(11));
+
+    // 放行后流原样继续：剩余 9 帧从同一 reader 读出，一个字节都不丢
+    let rest = "";
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      rest += new TextDecoder().decode(value);
+    }
+    expect(rest).toBe(PING.repeat(9));
   });
 
-  it("fails with prebuffer_overflow when a single chunk carries more frames than the event cap", async () => {
-    // event 上限是逐帧硬上限：单 chunk 内塞满小中性帧同样触发
+  it("releases with the whole chunk when a single chunk carries more frames than the event cap", async () => {
+    // 放行点落在 chunk 中间时，整块（含放行帧之后的帧）都进入前缀，不截断
     const manyFramesOneChunk = Array.from({ length: 20 }, () => PING).join("");
     const reader = readerFromChunks([manyFramesOneChunk]);
     const result = await runStreamContentGate(reader, {
       ...GATE_OPTIONS,
       prebufferEventCap: 10,
     });
+    expect(result.committed).toBe(true);
+    if (!result.committed) return;
+    expect(result.releasedBeforeContent).toBe(true);
+    expect(await drainPrefix(result.prefixChunks)).toBe(manyFramesOneChunk);
+  });
+
+  it("does not kill a long-thinking anthropic stream that emits 65 tiny neutral frames (production regression)", async () => {
+    // 生产事故形态：frames_seen=65、buffered_bytes≈8KB、cap=64/10MB。
+    // 旧行为返回 prebuffer_overflow(502) 并计入熔断，切换到同一上游后仍然失败 -> 503。
+    const emptyThinking =
+      'event: content_block_delta\ndata: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":""}}\n\n';
+    const neutralPrefix = [MESSAGE_START, ...Array.from({ length: 64 }, () => emptyThinking)];
+    const reader = readerFromChunks([...neutralPrefix, TEXT_DELTA, MESSAGE_STOP]);
+    const result = await runStreamContentGate(reader, {
+      ...GATE_OPTIONS,
+      prebufferEventCap: 64,
+      prebufferByteCap: 10 * 1024 * 1024,
+      captureCommitMarker: true,
+    });
+
+    expect(result.committed).toBe(true);
+    if (!result.committed) return;
+    expect(result.releasedBeforeContent).toBe(true);
+    expect(result.framesSeen).toBe(65);
+    expect(result.commitMarker?.releasedBeforeContent).toBe(true);
+    expect(result.commitMarker?.bufferedBytes).toBeLessThan(10 * 1024);
+
+    // 真正的内容帧在放行后照常送达客户端
+    let rest = "";
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      rest += new TextDecoder().decode(value);
+    }
+    expect(rest).toBe(TEXT_DELTA + MESSAGE_STOP);
+  });
+
+  it("still fails closed when the neutral prefix exceeds the byte cap at the event cap", async () => {
+    // 帧数与字节同时超限：字节上限是内存保护，必须优先于放行
+    const bigNeutral = `event: ping\ndata: {"type":"ping","pad":"${"x".repeat(560)}"}\n\n`;
+    const reader = readerFromChunks([bigNeutral.repeat(3)]);
+    const result = await runStreamContentGate(reader, {
+      ...GATE_OPTIONS,
+      prebufferEventCap: 2,
+      prebufferByteCap: 1024,
+    });
     expect(result.committed).toBe(false);
     if (result.committed) return;
     expect((result.error as StreamPrecommitError).gateReason).toBe("prebuffer_overflow");
   });
 
+  it("classifies an EOF with only neutral frames past the event cap as empty_stream, not overflow", async () => {
+    // 最后一帧无结尾空行，只能在 EOF 冲刷时见到；流已结束，放行无意义，按空流归类
+    const unterminatedPing = 'event: ping\ndata: {"type":"ping"}';
+    const reader = readerFromChunks([PING, PING, PING, unterminatedPing]);
+    const result = await runStreamContentGate(reader, {
+      ...GATE_OPTIONS,
+      prebufferEventCap: 3,
+    });
+    expect(result.committed).toBe(false);
+    if (result.committed) return;
+    expect((result.error as StreamPrecommitError).gateReason).toBe("empty_stream");
+  });
+
+  it("hands the prebuffer lease to the caller on release, same as a content commit", async () => {
+    const reservation = GATE_OPTIONS.prebufferByteCap * 4;
+    const budget = new StreamGatePrebufferBudget(() => reservation);
+    const released = await runStreamContentGate(
+      readerFromChunks(Array.from({ length: 5 }, () => PING)),
+      {
+        ...GATE_OPTIONS,
+        prebufferEventCap: 3,
+        prebufferBudget: budget,
+      }
+    );
+    expect(released.committed).toBe(true);
+    if (!released.committed) return;
+    expect(released.releasedBeforeContent).toBe(true);
+    expect(released.prebufferLease?.reservedBytes).toBeGreaterThan(0);
+    expect(budget.snapshot().reservedBytes).toBe(released.prebufferLease?.reservedBytes);
+    released.prebufferLease?.release();
+    expect(budget.snapshot().reservedBytes).toBe(0);
+  });
+
   it("commits when content arrives right at the event cap boundary", async () => {
-    // 第 cap 帧仍允许缓冲（framesSeen > cap 才溢出）；下一帧即 content 应正常提交
+    // 第 cap 帧仍允许缓冲（framesSeen > cap 才放行）；下一帧即 content 应按常规提交
     const reader = readerFromChunks([PING + PING + PING + TEXT_DELTA]);
     const result = await runStreamContentGate(reader, {
       ...GATE_OPTIONS,
       prebufferEventCap: 3,
     });
     expect(result.committed).toBe(true);
+    if (!result.committed) return;
+    expect(result.releasedBeforeContent).toBe(false);
   });
 
   it("fails with prebuffer_overflow when byte cap exceeded", async () => {
@@ -668,6 +762,7 @@ describe("commit marker and first-byte callback", () => {
       chunkIndex: 3,
       eventName: "content_block_delta",
       echoExcludedBytes: 0,
+      releasedBeforeContent: false,
     });
     expect(result.commitMarker?.bufferedBytes).toBeGreaterThan(0);
   });

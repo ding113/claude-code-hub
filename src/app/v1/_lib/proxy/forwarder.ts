@@ -2185,6 +2185,7 @@ export class ProxyForwarder {
                   framesSeen: gate.framesSeen,
                   prefixChunks: gate.prefixChunks.length,
                   readerDone: gate.readerDone,
+                  releasedBeforeContent: gate.releasedBeforeContent,
                   ...(gateChainAudit
                     ? {
                         commitEventName: gateChainAudit.eventName,
