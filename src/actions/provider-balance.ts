@@ -58,6 +58,8 @@ export async function getProviderBalances(
         url: provider.url,
         key: provider.key,
         proxyUrl: provider.proxyUrl,
+        newApiAccessToken: provider.newApiAccessToken,
+        newApiUserId: provider.newApiUserId,
       });
 
       if (options?.refresh !== true) {
@@ -71,6 +73,8 @@ export async function getProviderBalances(
         key: provider.key,
         proxyUrl: provider.proxyUrl,
         proxyFallbackToDirect: provider.proxyFallbackToDirect,
+        newApiAccessToken: provider.newApiAccessToken,
+        newApiUserId: provider.newApiUserId,
       });
       await writeCachedBalance(cacheKey, snapshot);
       return snapshot;

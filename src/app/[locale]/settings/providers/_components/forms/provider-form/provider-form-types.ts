@@ -45,6 +45,12 @@ export interface BasicInfoState {
   url: string;
   key: string;
   websiteUrl: string;
+  // 新填写的 New API 系统访问令牌；编辑时留空表示保持不变
+  newApiAccessToken: string;
+  // 编辑时清除已配置的系统访问令牌
+  clearNewApiAccessToken: boolean;
+  // New API 用户 ID 的输入文本，空字符串表示不配置
+  newApiUserId: string;
 }
 
 export interface RoutingState {
@@ -143,6 +149,9 @@ export type ProviderFormAction =
   | { type: "SET_URL"; payload: string }
   | { type: "SET_KEY"; payload: string }
   | { type: "SET_WEBSITE_URL"; payload: string }
+  | { type: "SET_NEW_API_ACCESS_TOKEN"; payload: string }
+  | { type: "SET_CLEAR_NEW_API_ACCESS_TOKEN"; payload: boolean }
+  | { type: "SET_NEW_API_USER_ID"; payload: string }
   // Routing actions
   | { type: "SET_PROVIDER_TYPE"; payload: ProviderType }
   | { type: "SET_GROUP_TAG"; payload: string[] }

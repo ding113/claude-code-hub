@@ -1,14 +1,19 @@
 // 余额探测顺序规划
 //
-// 先按已知服务商域名选择官方钱包端点，再回落到中转网关的通用兼容端点。
+// 配置了 New API 系统访问令牌的供应商只查询账户余额；
+// 其余供应商先按已知服务商域名选择官方钱包端点，再回落到中转网关的通用兼容端点。
 // 官方 Anthropic / OpenAI / Google 端点不提供余额查询，直接判定为不支持。
 
 import type { CurrencyCode } from "@/lib/utils/currency";
 import { PROVIDER_BALANCE_SOURCES, type ProviderBalanceSource } from "@/types/provider-balance";
 
-/** 通用兼容端点，按成功率排序：中转网关多为 New API 家族 */
+/**
+ * 通用兼容端点，按成功率排序：中转网关多为 New API 家族，其次是 Sub2API。
+ * 各网关不认识的端点返回 404 或非 JSON，Sub2API 的响应另有结构特征校验，顺序探测不会误判。
+ */
 const GATEWAY_FALLBACK_SOURCES: readonly ProviderBalanceSource[] = [
   PROVIDER_BALANCE_SOURCES.NewApiTokenUsage,
+  PROVIDER_BALANCE_SOURCES.Sub2ApiUsage,
   PROVIDER_BALANCE_SOURCES.OpenAiBilling,
 ];
 
@@ -63,17 +68,25 @@ export function isStructuredCredential(providerKey: string): boolean {
 /**
  * 规划一个供应商的余额探测顺序。
  *
+ * 管理员配置了 New API 系统访问令牌时，只查询该令牌所属账户的余额，
+ * 不再回落到密钥额度：令牌是明确的配置，查询失败应当如实报告。
+ *
  * Gemini 官方协议使用 x-goog-api-key 认证且没有余额端点，
  * 但 gemini 类型也常指向中转网关，因此仍然尝试通用兼容端点。
  */
 export function planProviderBalanceSources(input: {
   providerUrl: string;
   providerKey: string;
+  newApiAccessToken: string | null;
 }): ProviderBalancePlan {
   const hostname = readHostname(input.providerUrl);
   const kimiCurrency: CurrencyCode = hostname
     ? (MOONSHOT_CURRENCY_BY_HOSTNAME[hostname] ?? "CNY")
     : "CNY";
+
+  if (hostname && input.newApiAccessToken?.trim()) {
+    return { sources: [PROVIDER_BALANCE_SOURCES.NewApiAccount], kimiCurrency };
+  }
 
   if (!hostname || !input.providerKey.trim() || isStructuredCredential(input.providerKey)) {
     return { sources: [], kimiCurrency };

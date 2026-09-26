@@ -188,6 +188,9 @@ export const providers = pgTable('providers', {
   description: text('description'),
   url: varchar('url').notNull(),
   key: varchar('key').notNull(),
+  // New API 系统访问令牌与用户 ID（可选）：配置后余额查询读取该账户余额，不再读取密钥额度
+  newApiAccessToken: varchar('new_api_access_token'),
+  newApiUserId: integer('new_api_user_id'),
   providerVendorId: integer('provider_vendor_id')
     .notNull()
     .references(() => providerVendors.id, {

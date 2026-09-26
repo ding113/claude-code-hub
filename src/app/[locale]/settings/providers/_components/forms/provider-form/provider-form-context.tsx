@@ -147,7 +147,15 @@ export function createInitialState(
     const analysis = analyzeBatchProviderSettings(batchProviders);
 
     return {
-      basic: { name: "", url: "", key: "", websiteUrl: "" },
+      basic: {
+        name: "",
+        url: "",
+        key: "",
+        websiteUrl: "",
+        newApiAccessToken: "",
+        clearNewApiAccessToken: false,
+        newApiUserId: "",
+      },
       routing: {
         providerType: "claude", // 批量编辑不支持修改 providerType
         groupTag:
@@ -345,7 +353,15 @@ export function createInitialState(
   // Batch mode fallback: all fields start at neutral defaults (no provider source)
   if (isBatch) {
     return {
-      basic: { name: "", url: "", key: "", websiteUrl: "" },
+      basic: {
+        name: "",
+        url: "",
+        key: "",
+        websiteUrl: "",
+        newApiAccessToken: "",
+        clearNewApiAccessToken: false,
+        newApiUserId: "",
+      },
       routing: {
         providerType: "claude",
         groupTag: [],
@@ -423,6 +439,13 @@ export function createInitialState(
       url: cloneSafeUrlValue(sourceProvider?.url ?? preset?.url, isClone),
       key: "",
       websiteUrl: cloneSafeUrlValue(sourceProvider?.websiteUrl ?? preset?.websiteUrl, isClone),
+      // 令牌只以掩码形式下发，编辑与复制都需要重新填写
+      newApiAccessToken: "",
+      clearNewApiAccessToken: false,
+      newApiUserId:
+        sourceProvider?.newApiUserId === null || sourceProvider?.newApiUserId === undefined
+          ? ""
+          : String(sourceProvider.newApiUserId),
     },
     routing: {
       providerType: sourceProvider?.providerType ?? preset?.providerType ?? "claude",
@@ -526,6 +549,24 @@ export function providerFormReducer(
       return { ...state, basic: { ...state.basic, key: action.payload } };
     case "SET_WEBSITE_URL":
       return { ...state, basic: { ...state.basic, websiteUrl: action.payload } };
+    case "SET_NEW_API_ACCESS_TOKEN":
+      // 填写新令牌即表示替换，不再清除
+      return {
+        ...state,
+        basic: { ...state.basic, newApiAccessToken: action.payload, clearNewApiAccessToken: false },
+      };
+    case "SET_CLEAR_NEW_API_ACCESS_TOKEN":
+      // 选择清除时丢弃尚未保存的新令牌
+      return {
+        ...state,
+        basic: {
+          ...state.basic,
+          clearNewApiAccessToken: action.payload,
+          newApiAccessToken: action.payload ? "" : state.basic.newApiAccessToken,
+        },
+      };
+    case "SET_NEW_API_USER_ID":
+      return { ...state, basic: { ...state.basic, newApiUserId: action.payload } };
 
     // Routing
     case "SET_PROVIDER_TYPE":

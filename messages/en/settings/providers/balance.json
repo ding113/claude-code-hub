@@ -18,9 +18,11 @@
   "refreshAll": "Refresh balances",
   "refreshingAll": "Refreshing...",
   "refreshFailed": "Could not refresh the balance",
-  "toolbarHint": "Balances come from each provider's own key and refresh automatically every 10 minutes.",
+  "toolbarHint": "Balances come from each provider's own key or its configured New API system access token, and refresh automatically every 10 minutes.",
   "sources": {
     "new-api-token-usage": "New API token quota",
+    "new-api-account": "New API account balance",
+    "sub2api-usage": "Sub2API usage",
     "openai-billing": "OpenAI-compatible billing",
     "deepseek-balance": "DeepSeek wallet",
     "kimi-balance": "Moonshot wallet",
@@ -28,6 +30,7 @@
   },
   "errors": {
     "unauthorized": "The upstream rejected this key.",
+    "access_token_rejected": "The upstream rejected the system access token. Check the token and the user ID.",
     "forbidden": "This key is not allowed to read the balance.",
     "rate_limited": "The upstream rate-limited the balance query.",
     "upstream_error": "The upstream returned an error.",
