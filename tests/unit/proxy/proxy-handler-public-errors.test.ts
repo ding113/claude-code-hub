@@ -1,7 +1,8 @@
 import { Context } from "hono";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { ProxySession } from "@/app/v1/_lib/proxy/session";
+import type { MessageContext, ProxySession } from "@/app/v1/_lib/proxy/session";
 import type { FakeStreamingWhitelistEntry } from "@/types/system-config";
+import { LocalCapacityError, MemoryGovernor } from "../../../server-lib/memory-governor";
 
 type ProxySettingsFixture = {
   readonly enableHighConcurrencyMode: boolean;
@@ -15,10 +16,13 @@ const boundary = vi.hoisted(() => ({
   decrementConcurrentCount: vi.fn<(sessionId: string) => Promise<void>>(),
   decrementObservedConcurrentCount: vi.fn<(identity: string) => Promise<void>>(),
   emitProxyLangfuseTrace: vi.fn(),
+  endRequest: vi.fn(),
   getErrorOverride: vi.fn<(error: Error) => Promise<null>>(),
   incrementConcurrentCount: vi.fn<(sessionId: string) => Promise<void>>(),
   incrementObservedConcurrentCount: vi.fn<(identity: string) => Promise<void>>(),
   loadSettings: vi.fn<() => Promise<ProxySettingsFixture>>(),
+  recordLocalCapacityRejection: vi.fn(),
+  recordPreAuthLocalCapacityRejection: vi.fn(),
   runGuards: vi.fn<(session: ProxySession) => Promise<Response | null>>(),
   send: vi.fn<(session: ProxySession) => Promise<Response>>(),
   trackObservedSession: vi.fn<(identity: string) => Promise<void>>(),
@@ -50,6 +54,11 @@ vi.mock("@/app/v1/_lib/proxy/errors", async (importOriginal) => ({
   getErrorOverrideAsync: boundary.getErrorOverride,
 }));
 
+vi.mock("@/app/v1/_lib/proxy/local-capacity-log", () => ({
+  recordLocalCapacityRejection: boundary.recordLocalCapacityRejection,
+  recordPreAuthLocalCapacityRejection: boundary.recordPreAuthLocalCapacityRejection,
+}));
+
 vi.mock("@/lib/langfuse/emit-proxy-trace", () => ({
   emitProxyLangfuseTrace: boundary.emitProxyLangfuseTrace,
 }));
@@ -71,7 +80,7 @@ vi.mock("@/lib/session-tracker", () => ({
 
 vi.mock("@/lib/proxy-status-tracker", () => ({
   ProxyStatusTracker: {
-    getInstance: () => ({ endRequest: vi.fn(), startRequest: vi.fn() }),
+    getInstance: () => ({ endRequest: boundary.endRequest, startRequest: vi.fn() }),
   },
 }));
 
@@ -107,6 +116,12 @@ describe("handleProxyRequest public error behavior", () => {
     boundary.trackObservedSession.mockReset();
     boundary.loadSettings.mockReset();
     boundary.getErrorOverride.mockReset();
+    boundary.endRequest.mockReset();
+    boundary.updateMessageRequestDetailsDurably.mockReset();
+    boundary.recordLocalCapacityRejection.mockReset();
+    boundary.recordPreAuthLocalCapacityRejection.mockReset();
+    boundary.recordLocalCapacityRejection.mockResolvedValue(true);
+    boundary.recordPreAuthLocalCapacityRejection.mockResolvedValue(true);
     boundary.loadSettings.mockResolvedValue(settings);
     boundary.getErrorOverride.mockResolvedValue(null);
     boundary.incrementConcurrentCount.mockResolvedValue(undefined);
@@ -163,14 +178,15 @@ describe("handleProxyRequest public error behavior", () => {
   });
 
   it("hides an unknown failure that occurs before session creation", async () => {
-    const request = new (class extends Request {
-      override clone(): Request {
-        throw new Error("request clone failed");
-      }
-    })("http://localhost/v1/messages", {
+    const request = new Request("http://localhost/v1/messages", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ model: "claude-test", messages: [] }),
+    });
+    Object.defineProperty(request, "body", {
+      get() {
+        throw new Error("request body read failed");
+      },
     });
 
     const response = await handleProxyRequest(new Context(request));
@@ -185,5 +201,132 @@ describe("handleProxyRequest public error behavior", () => {
     });
     expect(boundary.runGuards).not.toHaveBeenCalled();
     expect(boundary.decrementConcurrentCount).not.toHaveBeenCalled();
+  });
+
+  it("本地过载保留 429 与 Retry-After，不能变成供应商错误", async () => {
+    boundary.send.mockRejectedValue(new LocalCapacityError());
+    const request = new Request("http://localhost/v1/messages", {
+      method: "POST",
+      body: JSON.stringify({ model: "claude-test", messages: [] }),
+    });
+    const response = await handleProxyRequest(new Context(request));
+    expect(response.status).toBe(429);
+    expect(response.headers.get("retry-after")).toBe("1");
+    expect((await response.json()).error.code).toBe("local_capacity_exceeded");
+  });
+
+  it.each([false, true])("本地过载持久化失败=%s 时都结束追踪及实时观测", async (fails) => {
+    const close = vi.fn().mockResolvedValue(undefined);
+    boundary.runGuards.mockImplementation(async (session) => {
+      session.setMessageContext({ id: 17, user: { id: 9 } } as MessageContext);
+      vi.spyOn(session, "closeLiveObservability").mockImplementation(close);
+      return null;
+    });
+    if (fails)
+      boundary.updateMessageRequestDetailsDurably.mockRejectedValueOnce(
+        new Error("database unavailable")
+      );
+    boundary.send.mockRejectedValue(new LocalCapacityError());
+    const response = await handleProxyRequest(
+      new Context(
+        new Request("http://localhost/v1/messages", {
+          method: "POST",
+          body: JSON.stringify({ model: "claude-test", messages: [] }),
+        })
+      )
+    );
+    expect(response.status).toBe(429);
+    expect(response.headers.get("retry-after")).toBe("1");
+    expect((await response.json()).error.code).toBe("local_capacity_exceeded");
+    expect(boundary.updateMessageRequestDetailsDurably).toHaveBeenCalledOnce();
+    expect(boundary.recordLocalCapacityRejection).not.toHaveBeenCalled();
+    expect(boundary.endRequest).toHaveBeenCalledExactlyOnceWith(9, 17);
+    expect(close).toHaveBeenCalledOnce();
+  });
+
+  it("认证后、message_request 行创建前的本地过载按被拦截请求补记一行", async () => {
+    boundary.runGuards.mockImplementation(async (session) => {
+      session.setAuthState({
+        success: true,
+        user: { id: 9 },
+        key: { id: 3 },
+        apiKey: "sk-test",
+      } as Parameters<ProxySession["setAuthState"]>[0]);
+      throw new LocalCapacityError();
+    });
+    const response = await handleProxyRequest(
+      new Context(
+        new Request("http://localhost/v1/messages", {
+          method: "POST",
+          headers: { "user-agent": "codex-test" },
+          body: JSON.stringify({ model: "claude-test", messages: [] }),
+        })
+      )
+    );
+    expect(response.status).toBe(429);
+    expect(boundary.updateMessageRequestDetailsDurably).not.toHaveBeenCalled();
+    expect(boundary.recordLocalCapacityRejection).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({
+        userId: 9,
+        apiKey: "sk-test",
+        stage: "pipeline",
+        model: "claude-test",
+        userAgent: "codex-test",
+        errorMessage: "Local request capacity exhausted; retry later.",
+      })
+    );
+    expect(boundary.recordPreAuthLocalCapacityRejection).not.toHaveBeenCalled();
+  });
+
+  it("未认证的本地过载不写库", async () => {
+    boundary.runGuards.mockRejectedValue(new LocalCapacityError());
+    const response = await handleProxyRequest(
+      new Context(
+        new Request("http://localhost/v1/messages", {
+          method: "POST",
+          body: JSON.stringify({ model: "claude-test", messages: [] }),
+        })
+      )
+    );
+    expect(response.status).toBe(429);
+    expect(boundary.recordLocalCapacityRejection).not.toHaveBeenCalled();
+  });
+
+  it("请求体读取前最多排队 20 秒，拒绝时不调用上游", async () => {
+    vi.useFakeTimers();
+    const key = Symbol.for("cch.memoryGovernor");
+    const state = globalThis as unknown as Record<symbol, unknown>;
+    const previous = state[key];
+    state[key] = new MemoryGovernor({ limit: 0, remote: false, monitor: false });
+    try {
+      const request = new Request("http://localhost/v1/messages", {
+        method: "POST",
+        body: JSON.stringify({ model: "claude-test", messages: [] }),
+      });
+      let completed = false;
+      const pending = handleProxyRequest(new Context(request)).then((response) => {
+        completed = true;
+        return response;
+      });
+      await vi.advanceTimersByTimeAsync(19999);
+      expect(completed).toBe(false);
+      expect(request.bodyUsed).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+      const response = await pending;
+      expect(response.status).toBe(429);
+      expect(response.headers.get("retry-after")).toBe("1");
+      expect(boundary.runGuards).not.toHaveBeenCalled();
+      expect(boundary.send).not.toHaveBeenCalled();
+      // 认证前没有 session：交给请求头尽力归属，且不阻塞 429。
+      expect(boundary.recordPreAuthLocalCapacityRejection).toHaveBeenCalledExactlyOnceWith(
+        expect.any(Context),
+        "Local request capacity exhausted; retry later.",
+        expect.any(Number)
+      );
+      expect(boundary.recordLocalCapacityRejection).not.toHaveBeenCalled();
+    } finally {
+      state[key] = previous;
+      vi.useRealTimers();
+    }
   });
 });

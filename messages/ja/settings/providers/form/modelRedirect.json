@@ -28,6 +28,7 @@
   "targetTooLong": "ターゲットモデル名が長すぎます（最大 {max} 文字）",
   "targetModel": "実際に転送されるモデル",
   "targetPlaceholder": "例：glm-5.1",
+  "regexCaptureHint": "正規表現ルールはターゲットでキャプチャグループを参照できます。ソースに ^gpt-(.+)$、ターゲットに test-$1 を指定すると、gpt-5.5 は test-5.5 として転送されます。",
   "regexInvalid": "正規表現が無効です",
   "regexUnsafe": "正規表現に ReDoS のリスクがあります"
 }

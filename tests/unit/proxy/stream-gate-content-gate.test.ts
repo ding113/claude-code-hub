@@ -11,6 +11,9 @@ import {
   type StreamGateFailureReason,
 } from "@/app/v1/_lib/proxy/stream-gate/stream-content-gate";
 import { StreamGatePrebufferBudget } from "@/app/v1/_lib/proxy/stream-gate/prebuffer-budget";
+import { DiscoveryPrebuffer } from "@/app/v1/_lib/proxy/discovery-prebuffer";
+import { withRequestMemoryLifetime } from "@/lib/memory/request-lifetime";
+import { MemoryGovernor } from "../../../server-lib/memory-governor";
 
 const encoder = new TextEncoder();
 
@@ -52,6 +55,8 @@ const TEXT_DELTA =
 const ERROR_FRAME =
   'event: error\ndata: {"type":"error","error":{"type":"overloaded_error","message":"overloaded"}}\n\n';
 const MESSAGE_STOP = 'event: message_stop\ndata: {"type":"message_stop"}\n\n';
+const REFUSAL_DELTA =
+  'event: message_delta\ndata: {"type":"message_delta","delta":{"stop_reason":"refusal","stop_details":{"type":"refusal","category":"reasoning_extraction"}},"usage":{"output_tokens":0}}\n\n';
 
 async function drainPrefix(chunks: Uint8Array[]): Promise<string> {
   const merged = concatChunks(chunks);
@@ -59,6 +64,13 @@ async function drainPrefix(chunks: Uint8Array[]): Promise<string> {
 }
 
 describe("runStreamContentGate", () => {
+  it("错误状态位于长消息末尾时仍保留原 64 KiB 状态推断语义", async () => {
+    const frame = `event: error\ndata: ${JSON.stringify({ error: { message: "x".repeat(12000), status_code: 400 } })}\n\n`;
+    const result = await runStreamContentGate(readerFromChunks([frame]), GATE_OPTIONS);
+    expect(result.committed).toBe(false);
+    if (!result.committed)
+      expect(result.error).toMatchObject({ statusCode: 400, gateReason: "gate_error" });
+  });
   it("把共享预算所有权交给已提交前缀，并在失败时自动释放", async () => {
     const reservation = GATE_OPTIONS.prebufferByteCap * 4;
     const budget = new StreamGatePrebufferBudget(() => reservation);
@@ -86,6 +98,37 @@ describe("runStreamContentGate", () => {
       prebufferBudget: budget,
     });
     expect(failed.committed).toBe(false);
+    expect(budget.snapshot().reservedBytes).toBe(0);
+  });
+
+  it("已提交前缀被丢弃（既未读完也未取消）时，请求作用域结束兜底归还两级额度", async () => {
+    const reservation = GATE_OPTIONS.prebufferByteCap * 4;
+    const governor = new MemoryGovernor({ limit: reservation, remote: false, monitor: false });
+    const budget = new StreamGatePrebufferBudget(() => reservation, governor);
+    const response = await withRequestMemoryLifetime(async () => {
+      const committed = await runStreamContentGate(readerFromChunks([TEXT_DELTA]), {
+        ...GATE_OPTIONS,
+        prebufferBudget: budget,
+      });
+      expect(committed.committed).toBe(true);
+      expect(budget.snapshot().reservedBytes).toBeGreaterThan(0);
+      expect(governor.snapshot().leases.byTag.gate.count).toBe(1);
+      // 模拟下游在构造响应后丢弃了持有租约的前缀流。
+      return new Response("unrelated");
+    });
+    await response.text();
+    expect(budget.snapshot().reservedBytes).toBe(0);
+    expect(governor.snapshot().usedBytes).toBe(0);
+  });
+
+  it("发现预缓冲重复挂载时先归还新租约再报错", async () => {
+    const budget = new StreamGatePrebufferBudget(() => 1024);
+    const prebuffer = new DiscoveryPrebuffer();
+    prebuffer.attachLease(await budget.acquire(256));
+    const second = await budget.acquire(256);
+    expect(() => prebuffer.attachLease(second)).toThrow();
+    expect(budget.snapshot().reservedBytes).toBe(256);
+    prebuffer.clear();
     expect(budget.snapshot().reservedBytes).toBe(0);
   });
 
@@ -178,6 +221,49 @@ describe("runStreamContentGate", () => {
     if (result.committed) return;
     expect((result.error as StreamPrecommitError).gateReason).toBe("empty_stream");
     expect((result.error as StreamPrecommitError).terminalBeforeContent).toBe(true);
+  });
+
+  it("无内容块的 Anthropic refusal 流原样提交，不伪造 empty_stream（#1491）", async () => {
+    const reader = readerFromChunks([MESSAGE_START, REFUSAL_DELTA, MESSAGE_STOP]);
+    const result = await runStreamContentGate(reader, GATE_OPTIONS);
+    expect(result.committed).toBe(true);
+    if (!result.committed) return;
+    expect(await drainPrefix(result.prefixChunks)).toBe(MESSAGE_START + REFUSAL_DELTA);
+    const rest = await reader.read();
+    expect(new TextDecoder().decode(rest.value)).toBe(MESSAGE_STOP);
+  });
+
+  it("三帧 refusal 位于同一 chunk 或无结尾空行时同样提交", async () => {
+    const single = await runStreamContentGate(
+      readerFromChunks([MESSAGE_START + REFUSAL_DELTA + MESSAGE_STOP]),
+      GATE_OPTIONS
+    );
+    expect(single.committed).toBe(true);
+
+    const trailing = await runStreamContentGate(
+      readerFromChunks([MESSAGE_START, REFUSAL_DELTA.trimEnd()]),
+      GATE_OPTIONS
+    );
+    expect(trailing.committed).toBe(true);
+    if (trailing.committed) expect(trailing.readerDone).toBe(true);
+  });
+
+  it("非 refusal 的 message_delta 之后直接终止仍是 empty_stream", async () => {
+    const endTurn =
+      'event: message_delta\ndata: {"type":"message_delta","delta":{"stop_reason":"end_turn"}}\n\n';
+    const result = await runStreamContentGate(
+      readerFromChunks([MESSAGE_START, endTurn, MESSAGE_STOP]),
+      { ...GATE_OPTIONS, upstreamStatusCode: 200 }
+    );
+    expect(result.committed).toBe(false);
+    if (result.committed) return;
+    const gateError = result.error as StreamPrecommitError;
+    expect(gateError.gateReason).toBe("empty_stream");
+    expect(isRequestScopedGateFailure(gateError)).toBe(false);
+    // 本地合成 502 与上游真实 200 分开记录
+    expect(gateError.statusCode).toBe(502);
+    expect(gateError.upstreamStatusCode).toBe(200);
+    expect(JSON.parse(gateError.upstreamError?.body ?? "{}").error.upstream_status_code).toBe(200);
   });
 
   it("treats EOF without any content as empty stream", async () => {

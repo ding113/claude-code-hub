@@ -324,6 +324,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/providers/balances:batch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Batch get provider upstream balances
+         * @description Queries the upstream balance for multiple visible providers using each provider's own key. Serves cached snapshots unless refresh is set.
+         */
+        post: operations["postProvidersBalancesBatch"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/providers/{id}/balance:refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Refresh provider upstream balance
+         * @description Queries the upstream balance for one provider, bypassing the cached snapshot.
+         */
+        post: operations["postProvidersByIdBalanceRefresh"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/providers/groups": {
         parameters: {
             query?: never;
@@ -4367,6 +4407,10 @@ export interface operations {
                             url: string;
                             /** @description Masked provider API key. */
                             maskedKey: string;
+                            /** @description Masked New API system access token used for account balance queries, or null when not configured. */
+                            maskedNewApiAccessToken: string | null;
+                            /** @description New API user id sent with the system access token. */
+                            newApiUserId: number | null;
                             /** @description Whether the provider is enabled. */
                             isEnabled: boolean;
                             /** @description Provider routing weight. */
@@ -4440,7 +4484,7 @@ export interface operations {
                             proxyUrl: string | null;
                             /** @description Whether proxy failures fall back to direct calls. */
                             proxyFallbackToDirect: boolean;
-                            /** @description Custom upstream headers with sensitive values redacted. */
+                            /** @description Custom upstream headers with sensitive values redacted. Values may be static or templates such as {{header.Name}}, {{session.id}}, {{session.client_id}}. */
                             customHeaders: {
                                 [key: string]: string;
                             } | null;
@@ -4682,6 +4726,10 @@ export interface operations {
                     url: string;
                     /** @description Provider API key. Write-only. */
                     key: string;
+                    /** @description New API system access token. When set, balance queries read the account balance instead of the key quota. Empty string or null clears it. Write-only. */
+                    new_api_access_token?: string | null;
+                    /** @description New API user id sent with the system access token. Required by New API releases before 2026-07. */
+                    new_api_user_id?: number | null;
                     /** @description Whether the provider is enabled. */
                     is_enabled?: boolean;
                     /** @description Provider routing weight. */
@@ -4764,7 +4812,7 @@ export interface operations {
                     proxy_url?: string | null;
                     /** @description Whether proxy failures fall back to direct calls. */
                     proxy_fallback_to_direct?: boolean;
-                    /** @description Custom upstream headers. */
+                    /** @description Custom upstream headers. Values may be static or templates such as {{header.Name}}, {{session.id}}, {{session.client_id}}. */
                     custom_headers?: {
                         [key: string]: string;
                     } | null;
@@ -4832,6 +4880,10 @@ export interface operations {
                         url: string;
                         /** @description Masked provider API key. */
                         maskedKey: string;
+                        /** @description Masked New API system access token used for account balance queries, or null when not configured. */
+                        maskedNewApiAccessToken: string | null;
+                        /** @description New API user id sent with the system access token. */
+                        newApiUserId: number | null;
                         /** @description Whether the provider is enabled. */
                         isEnabled: boolean;
                         /** @description Provider routing weight. */
@@ -4905,7 +4957,7 @@ export interface operations {
                         proxyUrl: string | null;
                         /** @description Whether proxy failures fall back to direct calls. */
                         proxyFallbackToDirect: boolean;
-                        /** @description Custom upstream headers with sensitive values redacted. */
+                        /** @description Custom upstream headers with sensitive values redacted. Values may be static or templates such as {{header.Name}}, {{session.id}}, {{session.client_id}}. */
                         customHeaders: {
                             [key: string]: string;
                         } | null;
@@ -5154,6 +5206,10 @@ export interface operations {
                         url: string;
                         /** @description Masked provider API key. */
                         maskedKey: string;
+                        /** @description Masked New API system access token used for account balance queries, or null when not configured. */
+                        maskedNewApiAccessToken: string | null;
+                        /** @description New API user id sent with the system access token. */
+                        newApiUserId: number | null;
                         /** @description Whether the provider is enabled. */
                         isEnabled: boolean;
                         /** @description Provider routing weight. */
@@ -5227,7 +5283,7 @@ export interface operations {
                         proxyUrl: string | null;
                         /** @description Whether proxy failures fall back to direct calls. */
                         proxyFallbackToDirect: boolean;
-                        /** @description Custom upstream headers with sensitive values redacted. */
+                        /** @description Custom upstream headers with sensitive values redacted. Values may be static or templates such as {{header.Name}}, {{session.id}}, {{session.client_id}}. */
                         customHeaders: {
                             [key: string]: string;
                         } | null;
@@ -5645,6 +5701,10 @@ export interface operations {
                      * @description Provider upstream base URL.
                      */
                     url?: string;
+                    /** @description New API system access token. When set, balance queries read the account balance instead of the key quota. Empty string or null clears it. Write-only. */
+                    new_api_access_token?: string | null;
+                    /** @description New API user id sent with the system access token. Required by New API releases before 2026-07. */
+                    new_api_user_id?: number | null;
                     /** @description Whether the provider is enabled. */
                     is_enabled?: boolean;
                     /** @description Provider routing weight. */
@@ -5726,7 +5786,7 @@ export interface operations {
                     proxy_url?: string | null;
                     /** @description Whether proxy failures fall back to direct calls. */
                     proxy_fallback_to_direct?: boolean;
-                    /** @description Custom upstream headers. */
+                    /** @description Custom upstream headers. Values may be static or templates such as {{header.Name}}, {{session.id}}, {{session.client_id}}. */
                     custom_headers?: {
                         [key: string]: string;
                     } | null;
@@ -5800,6 +5860,10 @@ export interface operations {
                         url: string;
                         /** @description Masked provider API key. */
                         maskedKey: string;
+                        /** @description Masked New API system access token used for account balance queries, or null when not configured. */
+                        maskedNewApiAccessToken: string | null;
+                        /** @description New API user id sent with the system access token. */
+                        newApiUserId: number | null;
                         /** @description Whether the provider is enabled. */
                         isEnabled: boolean;
                         /** @description Provider routing weight. */
@@ -5873,7 +5937,7 @@ export interface operations {
                         proxyUrl: string | null;
                         /** @description Whether proxy failures fall back to direct calls. */
                         proxyFallbackToDirect: boolean;
-                        /** @description Custom upstream headers with sensitive values redacted. */
+                        /** @description Custom upstream headers with sensitive values redacted. Values may be static or templates such as {{header.Name}}, {{session.id}}, {{session.client_id}}. */
                         customHeaders: {
                             [key: string]: string;
                         } | null;
@@ -7388,6 +7452,424 @@ export interface operations {
                     "application/json": {
                         /** @description Provider response items. */
                         items: unknown[];
+                    };
+                };
+            };
+            /** @description Invalid request. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        /** @description Stable problem type URI or URN. */
+                        type: string;
+                        /** @description Short problem title. */
+                        title: string;
+                        /** @description HTTP status code. */
+                        status: number;
+                        /** @description Human-readable error detail. */
+                        detail: string;
+                        /** @description Request path that produced the problem. */
+                        instance: string;
+                        /** @description Application error code for frontend i18n. */
+                        errorCode: string;
+                        /** @description Optional i18n parameters. */
+                        errorParams?: {
+                            [key: string]: unknown;
+                        };
+                        /** @description Optional request trace identifier. */
+                        traceId?: string;
+                        /** @description Validation failure details. */
+                        invalidParams?: {
+                            /** @description Path to the invalid input field. */
+                            path: (string | number)[];
+                            /** @description Machine-readable validation error code. */
+                            code: string;
+                            /** @description Validation error message. */
+                            message: string;
+                        }[];
+                    };
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        /** @description Stable problem type URI or URN. */
+                        type: string;
+                        /** @description Short problem title. */
+                        title: string;
+                        /** @description HTTP status code. */
+                        status: number;
+                        /** @description Human-readable error detail. */
+                        detail: string;
+                        /** @description Request path that produced the problem. */
+                        instance: string;
+                        /** @description Application error code for frontend i18n. */
+                        errorCode: string;
+                        /** @description Optional i18n parameters. */
+                        errorParams?: {
+                            [key: string]: unknown;
+                        };
+                        /** @description Optional request trace identifier. */
+                        traceId?: string;
+                        /** @description Validation failure details. */
+                        invalidParams?: {
+                            /** @description Path to the invalid input field. */
+                            path: (string | number)[];
+                            /** @description Machine-readable validation error code. */
+                            code: string;
+                            /** @description Validation error message. */
+                            message: string;
+                        }[];
+                    };
+                };
+            };
+            /** @description Admin access required. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        /** @description Stable problem type URI or URN. */
+                        type: string;
+                        /** @description Short problem title. */
+                        title: string;
+                        /** @description HTTP status code. */
+                        status: number;
+                        /** @description Human-readable error detail. */
+                        detail: string;
+                        /** @description Request path that produced the problem. */
+                        instance: string;
+                        /** @description Application error code for frontend i18n. */
+                        errorCode: string;
+                        /** @description Optional i18n parameters. */
+                        errorParams?: {
+                            [key: string]: unknown;
+                        };
+                        /** @description Optional request trace identifier. */
+                        traceId?: string;
+                        /** @description Validation failure details. */
+                        invalidParams?: {
+                            /** @description Path to the invalid input field. */
+                            path: (string | number)[];
+                            /** @description Machine-readable validation error code. */
+                            code: string;
+                            /** @description Validation error message. */
+                            message: string;
+                        }[];
+                    };
+                };
+            };
+            /** @description Provider not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        /** @description Stable problem type URI or URN. */
+                        type: string;
+                        /** @description Short problem title. */
+                        title: string;
+                        /** @description HTTP status code. */
+                        status: number;
+                        /** @description Human-readable error detail. */
+                        detail: string;
+                        /** @description Request path that produced the problem. */
+                        instance: string;
+                        /** @description Application error code for frontend i18n. */
+                        errorCode: string;
+                        /** @description Optional i18n parameters. */
+                        errorParams?: {
+                            [key: string]: unknown;
+                        };
+                        /** @description Optional request trace identifier. */
+                        traceId?: string;
+                        /** @description Validation failure details. */
+                        invalidParams?: {
+                            /** @description Path to the invalid input field. */
+                            path: (string | number)[];
+                            /** @description Machine-readable validation error code. */
+                            code: string;
+                            /** @description Validation error message. */
+                            message: string;
+                        }[];
+                    };
+                };
+            };
+        };
+    };
+    postProvidersBalancesBatch: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Required only when authenticating with the auth-token cookie on mutation requests. */
+                "X-CCH-CSRF"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description Provider ids to query upstream balance for. */
+                    providerIds: number[];
+                    /**
+                     * @description Skip the cached snapshot and query upstream again.
+                     * @default false
+                     */
+                    refresh?: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description Provider balance snapshots. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @description Provider balance snapshots. */
+                        items: {
+                            /** @description Provider id. */
+                            providerId: number;
+                            /**
+                             * @description Whether the upstream reported a usable balance.
+                             * @enum {string}
+                             */
+                            status: "ok" | "unsupported" | "error";
+                            /**
+                             * @description Upstream protocol that produced the snapshot.
+                             * @enum {string|null}
+                             */
+                            source: "new-api-token-usage" | "new-api-account" | "sub2api-usage" | "openai-billing" | "deepseek-balance" | "kimi-balance" | "chatgpt-credits" | null;
+                            /** @description Remaining balance in the reported currency. */
+                            balance: number | null;
+                            /** @description Currency the balance is denominated in. */
+                            currency: string;
+                            /** @description Total granted amount. */
+                            totalGranted: number | null;
+                            /** @description Total consumed amount. */
+                            totalUsed: number | null;
+                            /** @description Upstream reports an unlimited quota. */
+                            unlimited: boolean;
+                            /** @description Key expiry time in ISO-8601. */
+                            expiresAt: string | null;
+                            /** @description Snapshot time in ISO-8601. */
+                            checkedAt: string;
+                            /** @description Failure reason code. */
+                            errorCode: string | null;
+                        }[];
+                    };
+                };
+            };
+            /** @description Invalid request. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        /** @description Stable problem type URI or URN. */
+                        type: string;
+                        /** @description Short problem title. */
+                        title: string;
+                        /** @description HTTP status code. */
+                        status: number;
+                        /** @description Human-readable error detail. */
+                        detail: string;
+                        /** @description Request path that produced the problem. */
+                        instance: string;
+                        /** @description Application error code for frontend i18n. */
+                        errorCode: string;
+                        /** @description Optional i18n parameters. */
+                        errorParams?: {
+                            [key: string]: unknown;
+                        };
+                        /** @description Optional request trace identifier. */
+                        traceId?: string;
+                        /** @description Validation failure details. */
+                        invalidParams?: {
+                            /** @description Path to the invalid input field. */
+                            path: (string | number)[];
+                            /** @description Machine-readable validation error code. */
+                            code: string;
+                            /** @description Validation error message. */
+                            message: string;
+                        }[];
+                    };
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        /** @description Stable problem type URI or URN. */
+                        type: string;
+                        /** @description Short problem title. */
+                        title: string;
+                        /** @description HTTP status code. */
+                        status: number;
+                        /** @description Human-readable error detail. */
+                        detail: string;
+                        /** @description Request path that produced the problem. */
+                        instance: string;
+                        /** @description Application error code for frontend i18n. */
+                        errorCode: string;
+                        /** @description Optional i18n parameters. */
+                        errorParams?: {
+                            [key: string]: unknown;
+                        };
+                        /** @description Optional request trace identifier. */
+                        traceId?: string;
+                        /** @description Validation failure details. */
+                        invalidParams?: {
+                            /** @description Path to the invalid input field. */
+                            path: (string | number)[];
+                            /** @description Machine-readable validation error code. */
+                            code: string;
+                            /** @description Validation error message. */
+                            message: string;
+                        }[];
+                    };
+                };
+            };
+            /** @description Admin access required. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        /** @description Stable problem type URI or URN. */
+                        type: string;
+                        /** @description Short problem title. */
+                        title: string;
+                        /** @description HTTP status code. */
+                        status: number;
+                        /** @description Human-readable error detail. */
+                        detail: string;
+                        /** @description Request path that produced the problem. */
+                        instance: string;
+                        /** @description Application error code for frontend i18n. */
+                        errorCode: string;
+                        /** @description Optional i18n parameters. */
+                        errorParams?: {
+                            [key: string]: unknown;
+                        };
+                        /** @description Optional request trace identifier. */
+                        traceId?: string;
+                        /** @description Validation failure details. */
+                        invalidParams?: {
+                            /** @description Path to the invalid input field. */
+                            path: (string | number)[];
+                            /** @description Machine-readable validation error code. */
+                            code: string;
+                            /** @description Validation error message. */
+                            message: string;
+                        }[];
+                    };
+                };
+            };
+            /** @description Provider not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        /** @description Stable problem type URI or URN. */
+                        type: string;
+                        /** @description Short problem title. */
+                        title: string;
+                        /** @description HTTP status code. */
+                        status: number;
+                        /** @description Human-readable error detail. */
+                        detail: string;
+                        /** @description Request path that produced the problem. */
+                        instance: string;
+                        /** @description Application error code for frontend i18n. */
+                        errorCode: string;
+                        /** @description Optional i18n parameters. */
+                        errorParams?: {
+                            [key: string]: unknown;
+                        };
+                        /** @description Optional request trace identifier. */
+                        traceId?: string;
+                        /** @description Validation failure details. */
+                        invalidParams?: {
+                            /** @description Path to the invalid input field. */
+                            path: (string | number)[];
+                            /** @description Machine-readable validation error code. */
+                            code: string;
+                            /** @description Validation error message. */
+                            message: string;
+                        }[];
+                    };
+                };
+            };
+        };
+    };
+    postProvidersByIdBalanceRefresh: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Required only when authenticating with the auth-token cookie on mutation requests. */
+                "X-CCH-CSRF"?: string;
+            };
+            path: {
+                /** @description Provider id. */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Provider balance snapshot. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @description Provider id. */
+                        providerId: number;
+                        /**
+                         * @description Whether the upstream reported a usable balance.
+                         * @enum {string}
+                         */
+                        status: "ok" | "unsupported" | "error";
+                        /**
+                         * @description Upstream protocol that produced the snapshot.
+                         * @enum {string|null}
+                         */
+                        source: "new-api-token-usage" | "new-api-account" | "sub2api-usage" | "openai-billing" | "deepseek-balance" | "kimi-balance" | "chatgpt-credits" | null;
+                        /** @description Remaining balance in the reported currency. */
+                        balance: number | null;
+                        /** @description Currency the balance is denominated in. */
+                        currency: string;
+                        /** @description Total granted amount. */
+                        totalGranted: number | null;
+                        /** @description Total consumed amount. */
+                        totalUsed: number | null;
+                        /** @description Upstream reports an unlimited quota. */
+                        unlimited: boolean;
+                        /** @description Key expiry time in ISO-8601. */
+                        expiresAt: string | null;
+                        /** @description Snapshot time in ISO-8601. */
+                        checkedAt: string;
+                        /** @description Failure reason code. */
+                        errorCode: string | null;
                     };
                 };
             };
@@ -9276,7 +9758,7 @@ export interface operations {
                     preset?: string;
                     /** @description Optional custom JSON payload. */
                     customPayload?: string;
-                    /** @description Optional custom headers. */
+                    /** @description Optional custom headers. Values may be static or templates such as {{header.Name}}, {{session.id}}, {{session.client_id}}. */
                     customHeaders?: {
                         [key: string]: string;
                     };
@@ -12256,7 +12738,7 @@ export interface operations {
                         /** @description Public status aggregation interval in minutes. */
                         publicStatusAggregationIntervalMinutes: number;
                         /**
-                         * @description Stream content gate mode for ordinary requests: buffer until the first valid content frame and fail over on error or empty streams (enforce), observe divergence only (shadow), or disable (off). Replay owners always retain the pre-content safety gate.
+                         * @description Stream content gate mode for ordinary requests: buffer until the first valid content frame and fail over on error or empty streams (enforce), observe divergence only (shadow), or disable (off). Shadow and off deliver the first upstream byte immediately, including for replay owners; high-concurrency mode is treated as off.
                          * @enum {string}
                          */
                         streamGateMode: "off" | "shadow" | "enforce";
@@ -12546,7 +13028,7 @@ export interface operations {
                     /** @description Public status aggregation interval in minutes. */
                     publicStatusAggregationIntervalMinutes?: number;
                     /**
-                     * @description Stream content gate mode for ordinary requests: buffer until the first valid content frame and fail over on error or empty streams (enforce), observe divergence only (shadow), or disable (off). Replay owners always retain the pre-content safety gate.
+                     * @description Stream content gate mode for ordinary requests: buffer until the first valid content frame and fail over on error or empty streams (enforce), observe divergence only (shadow), or disable (off). Shadow and off deliver the first upstream byte immediately, including for replay owners; high-concurrency mode is treated as off.
                      * @enum {string}
                      */
                     streamGateMode?: "off" | "shadow" | "enforce";
@@ -12711,7 +13193,7 @@ export interface operations {
                         /** @description Public status aggregation interval in minutes. */
                         publicStatusAggregationIntervalMinutes: number;
                         /**
-                         * @description Stream content gate mode for ordinary requests: buffer until the first valid content frame and fail over on error or empty streams (enforce), observe divergence only (shadow), or disable (off). Replay owners always retain the pre-content safety gate.
+                         * @description Stream content gate mode for ordinary requests: buffer until the first valid content frame and fail over on error or empty streams (enforce), observe divergence only (shadow), or disable (off). Shadow and off deliver the first upstream byte immediately, including for replay owners; high-concurrency mode is treated as off.
                          * @enum {string}
                          */
                         streamGateMode: "off" | "shadow" | "enforce";

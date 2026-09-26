@@ -2342,6 +2342,34 @@ describe("error-details-dialog routing trace", () => {
     expect(html).not.toContain("Discovery rounds");
   });
 
+  test("shows provider selection when a legacy Hedge trace has no attempt evidence", () => {
+    const html = renderWithIntl(
+      <ErrorDetailsDialog
+        externalOpen
+        initialTab="logic-trace"
+        statusCode={200}
+        errorMessage={null}
+        providerChain={[{ id: 1, name: "selected-provider", reason: "initial_selection" }]}
+        routingTrace={{
+          version: 1,
+          mode: "legacy_hedge",
+          startedAt: 1_000,
+          updatedAt: 2_000,
+          discoveryEnabled: false,
+          eligible: false,
+          bypassReason: "disabled",
+          events: [{ type: "request_started", at: 1_000, elapsedMs: 0 }],
+        }}
+        sessionId="legacy-selection-only"
+      />
+    );
+
+    expect(html).toContain("Legacy Hedge");
+    expect(html).toContain("selected-provider");
+    expect(html).not.toContain("No provider attempts recorded");
+    expect(html).not.toContain('data-testid="discovery-attempt"');
+  });
+
   test("surfaces legacy hedge slot saturation and its configured cap", () => {
     const legacyHedgeTrace: RoutingTraceV1 = {
       version: 1,
@@ -2456,6 +2484,258 @@ describe("error-details-dialog routing trace", () => {
 
     expect(discoveryView?.textContent).toContain("1 rounds · 3 attempts · max 2 active");
     expect(discoveryView?.textContent).not.toContain("0 attempts · max 0 active");
+  });
+
+  test("shows a recorded upstream error when a legacy Hedge trace has no attempt events", () => {
+    const trace: RoutingTraceV1 = {
+      ...discoveryTrace,
+      mode: "legacy_hedge",
+      discoveryEnabled: false,
+      eligible: false,
+      bypassReason: "disabled",
+      events: [
+        { type: "request_started", at: 1_000, elapsedMs: 0 },
+        { type: "request_finished", at: 1_100, elapsedMs: 100, outcome: "failed", statusCode: 502 },
+      ],
+      summary: {
+        ...discoveryTrace.summary!,
+        outcome: "failed",
+        statusCode: 502,
+        attemptsPerRequest: 0,
+      },
+    };
+    const { container, unmount } = renderClientWithIntl(
+      <ErrorDetailsDialog
+        externalOpen
+        initialTab="logic-trace"
+        statusCode={502}
+        errorMessage={null}
+        sessionId="legacy-empty-trace"
+        providerChain={[
+          { id: 1, name: "selected", reason: "initial_selection" },
+          {
+            id: 1,
+            name: "selected",
+            reason: "retry_failed",
+            attemptNumber: 1,
+            statusCode: 502,
+            errorMessage: "upstream failed",
+            errorDetails: {
+              provider: {
+                id: 1,
+                name: "selected",
+                statusCode: 502,
+                statusText: "Bad Gateway",
+                upstreamBody: '{"error":"upstream unavailable"}',
+              },
+            },
+          },
+        ]}
+        routingTrace={trace}
+      />
+    );
+
+    const attempt = container.querySelector("[data-testid='discovery-attempt']");
+    expect(attempt?.textContent).toContain("selected");
+    expect(attempt?.textContent).toContain("HTTP 502");
+    expect(container.textContent).not.toContain("No provider attempts recorded");
+    click(attempt?.querySelector("[data-testid='discovery-attempt-toggle']") ?? null);
+    expect(attempt?.textContent).toContain("upstream unavailable");
+    unmount();
+  });
+
+  test.each(["legacy-hedge-1-1", "legacy-hedge-1-setup-1"])(
+    "matches legacy Hedge attempt %s to its decision-chain error",
+    (attemptId) => {
+      const trace: RoutingTraceV1 = {
+        ...discoveryTrace,
+        mode: "legacy_hedge",
+        discoveryEnabled: false,
+        eligible: false,
+        bypassReason: "disabled",
+        events: [
+          {
+            type: "attempt_finished",
+            at: 1_100,
+            elapsedMs: 100,
+            round: 1,
+            attemptId,
+            provider: { id: 1, name: "failed-provider" },
+            outcome: "failed",
+            statusCode: 502,
+          },
+        ],
+      };
+      const { container, unmount } = renderClientWithIntl(
+        <ErrorDetailsDialog
+          externalOpen
+          initialTab="logic-trace"
+          statusCode={502}
+          errorMessage={null}
+          sessionId="legacy-error-trace"
+          providerChain={[
+            { id: 1, name: "failed-provider", reason: "initial_selection" },
+            {
+              id: 1,
+              name: "failed-provider",
+              reason: "retry_failed",
+              attemptNumber: 1,
+              statusCode: 502,
+              errorDetails: {
+                provider: {
+                  id: 1,
+                  name: "failed-provider",
+                  statusCode: 502,
+                  statusText: "Bad Gateway",
+                  upstreamBody: '{"error":"gateway failure"}',
+                },
+              },
+            },
+          ]}
+          routingTrace={trace}
+        />
+      );
+
+      const attempts = container.querySelectorAll("[data-testid='discovery-attempt']");
+      expect(attempts).toHaveLength(1);
+      click(attempts[0].querySelector("[data-testid='discovery-attempt-toggle']") ?? null);
+      expect(attempts[0].textContent).toContain("gateway failure");
+      unmount();
+    }
+  );
+
+  test("matches each rectified legacy Hedge retry to its own decision-chain error", () => {
+    const trace: RoutingTraceV1 = {
+      ...discoveryTrace,
+      mode: "legacy_hedge",
+      discoveryEnabled: false,
+      eligible: false,
+      bypassReason: "disabled",
+      events: [
+        {
+          type: "attempt_finished",
+          at: 1_100,
+          elapsedMs: 100,
+          round: 1,
+          attemptId: "legacy-hedge-2-1",
+          provider: { id: 7, name: "retried-provider" },
+          outcome: "failed",
+          statusCode: 400,
+          reason: "reactive_rectifier_retry",
+        },
+        {
+          type: "attempt_finished",
+          at: 1_300,
+          elapsedMs: 300,
+          round: 1,
+          attemptId: "legacy-hedge-2-2",
+          provider: { id: 7, name: "retried-provider" },
+          outcome: "failed",
+          statusCode: 502,
+        },
+      ],
+    };
+    const upstreamError = (statusCode: number, upstreamBody: string) => ({
+      provider: {
+        id: 7,
+        name: "retried-provider",
+        statusCode,
+        statusText: "error",
+        upstreamBody,
+      },
+    });
+    const { container, unmount } = renderClientWithIntl(
+      <ErrorDetailsDialog
+        externalOpen
+        initialTab="logic-trace"
+        statusCode={502}
+        errorMessage={null}
+        sessionId="legacy-rectified-retry"
+        providerChain={[
+          { id: 1, name: "initial-provider", reason: "initial_selection" },
+          {
+            id: 7,
+            name: "retried-provider",
+            reason: "retry_failed",
+            attemptNumber: 1,
+            routingAttemptId: "legacy-hedge-2-1",
+            routingRound: 1,
+            statusCode: 400,
+            errorDetails: upstreamError(400, '{"error":"budget too low"}'),
+          },
+          {
+            id: 7,
+            name: "retried-provider",
+            reason: "retry_failed",
+            attemptNumber: 2,
+            routingAttemptId: "legacy-hedge-2-2",
+            routingRound: 1,
+            statusCode: 502,
+            errorDetails: upstreamError(502, '{"error":"retry gateway failure"}'),
+          },
+        ]}
+        routingTrace={trace}
+      />
+    );
+
+    const attempts = [...container.querySelectorAll("[data-testid='discovery-attempt']")];
+    expect(attempts).toHaveLength(2);
+    for (const attempt of attempts) {
+      click(attempt.querySelector("[data-testid='discovery-attempt-toggle']") ?? null);
+    }
+    expect(attempts[0].textContent).toContain("budget too low");
+    expect(attempts[0].textContent).not.toContain("retry gateway failure");
+    expect(attempts[1].textContent).toContain("retry gateway failure");
+    unmount();
+  });
+
+  test("keeps reconstructed Discovery attempts out of the winner round when their round is unknown", () => {
+    const trace: RoutingTraceV1 = {
+      ...discoveryTrace,
+      events: [
+        { type: "request_started", at: 1_000, elapsedMs: 0 },
+        { type: "request_finished", at: 1_500, elapsedMs: 500, outcome: "failed", statusCode: 502 },
+      ],
+      summary: { ...discoveryTrace.summary!, outcome: "failed", statusCode: 502, winnerRound: 2 },
+    };
+    const { container, unmount } = renderClientWithIntl(
+      <ErrorDetailsDialog
+        externalOpen
+        initialTab="logic-trace"
+        statusCode={502}
+        errorMessage={null}
+        sessionId="discovery-truncated-trace"
+        providerChain={[
+          {
+            id: 21,
+            name: "round-one-provider",
+            reason: "retry_failed",
+            attemptNumber: 1,
+            routingAttemptId: "21:1",
+            routingRound: 1,
+            statusCode: 502,
+            errorMessage: "round one failure",
+          },
+          {
+            id: 22,
+            name: "legacy-record-provider",
+            reason: "retry_failed",
+            attemptNumber: 2,
+            statusCode: 502,
+            errorMessage: "round not recorded failure",
+          },
+        ]}
+        routingTrace={trace}
+      />
+    );
+
+    const roundOne = container.querySelector("[data-testid='discovery-round-1']");
+    const unknownRound = container.querySelector("[data-testid='discovery-round-unknown']");
+    expect(roundOne?.textContent).toContain("round-one-provider");
+    expect(unknownRound?.textContent).toContain("Round not recorded");
+    expect(unknownRound?.textContent).toContain("legacy-record-provider");
+    expect(container.querySelector("[data-testid='discovery-round-2']")).toBeNull();
+    unmount();
   });
 
   test("falls back to the old chain for an unsupported trace version", () => {

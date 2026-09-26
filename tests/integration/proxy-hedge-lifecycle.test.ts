@@ -7,7 +7,12 @@ import { DiscoveryValidityParser } from "@/app/v1/_lib/proxy/discovery-validity"
 import { ProxyForwarder } from "@/app/v1/_lib/proxy/forwarder";
 import { ProxyResponseHandler } from "@/app/v1/_lib/proxy/response-handler";
 import { type MessageContext, ProxySession } from "@/app/v1/_lib/proxy/session";
-import { SseFrameParser } from "@/app/v1/_lib/proxy/stream-gate/sse-frames";
+import { ProbedSseFrames } from "@/app/v1/_lib/proxy/stream-gate/probed-sse-frames";
+import {
+  getStreamGatePrebufferBudget,
+  StreamGatePrebufferBudget,
+} from "@/app/v1/_lib/proxy/stream-gate/prebuffer-budget";
+import { MemoryGovernor } from "../../server-lib/memory-governor";
 import { DbPoolAdmissionError } from "@/drizzle/admitted-client";
 import { getGlobalAgentPool, resetGlobalAgentPool } from "@/lib/proxy-agent";
 import type { SessionBindingSnapshot } from "@/lib/redis/session-binding";
@@ -19,7 +24,18 @@ const state = vi.hoisted(() => {
   return {
     addLoserCost: vi.fn(),
     billHedgeLosers: false,
+    bodyGovernor: null as MemoryGovernor | null,
     discoveryEnabled: false,
+    stickyProviderId: null as number | null,
+    clearBinding: vi.fn(async () => ({
+      status: "ok",
+      snapshot: {
+        sessionId: "integration-discovery",
+        keyId: 22,
+        providerId: null,
+        generation: "g2",
+      },
+    })),
     acquireDiscoveryLease: vi.fn(async () => ({
       status: "acquired",
       ownerToken: "integration-lease",
@@ -67,6 +83,22 @@ const state = vi.hoisted(() => {
     updateMessageRequestCostWithBreakdown: vi.fn(async () => {}),
     updateMessageRequestDetailsIfUnfinalized: vi.fn(async () => {}),
     updateWinnerCost: vi.fn(async () => {}),
+  };
+});
+
+vi.mock("@/lib/memory/governor", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/memory/governor")>();
+  return {
+    ...actual,
+    // Keep the real governor while isolating fixture admission from host RAM.
+    getMemoryGovernor: () => {
+      state.bodyGovernor ??= new MemoryGovernor({
+        limit: 64 * 1024 ** 2,
+        remote: false,
+        monitor: false,
+      });
+      return state.bodyGovernor;
+    },
   };
 });
 
@@ -132,8 +164,11 @@ vi.mock("@/lib/session-manager", async (importOriginal) => {
         status: "ok" as const,
         source: "existing" as const,
         legacyFallbackAllowed: false as const,
-        snapshot: { sessionId, keyId, providerId: null, generation: "g1" },
+        snapshot: { sessionId, keyId, providerId: state.stickyProviderId, generation: "g1" },
       };
+    }
+    static override async clearVersionedSessionProvider() {
+      return state.clearBinding() as never;
     }
     static override async acquireSessionDiscoveryLease() {
       return state.acquireDiscoveryLease();
@@ -386,7 +421,7 @@ type Upstream = {
   readonly write: (body: string) => Promise<void>;
 };
 
-async function startUpstream(): Promise<Upstream> {
+async function startUpstream(contentType = "text/event-stream"): Promise<Upstream> {
   const sockets = new Set<Socket>();
   const responseGate = Promise.withResolvers<ServerResponse>();
   const terminationGate = Promise.withResolvers<void>();
@@ -395,7 +430,7 @@ async function startUpstream(): Promise<Upstream> {
   const server = createServer((request, response) => {
     requests += 1;
     request.resume();
-    response.writeHead(200, { "content-type": "text/event-stream" });
+    response.writeHead(200, { "content-type": contentType });
     response.flushHeaders();
     response.once("close", () => {
       if (!response.writableEnded) aborts += 1;
@@ -561,9 +596,9 @@ function watchNeutralResponsesPrefixConsumption() {
     observed += typeof chunk === "string" ? chunk : decoder.decode(chunk, { stream: true });
     if (observed.includes('"sequence_number":3')) consumed.resolve();
   };
-  const originalGateVisit = SseFrameParser.prototype.visit;
+  const originalGateVisit = ProbedSseFrames.prototype.visit;
   const gateSpy = vi
-    .spyOn(SseFrameParser.prototype, "visit")
+    .spyOn(ProbedSseFrames.prototype, "visit")
     .mockImplementation(function (chunk, visitor) {
       observe(chunk);
       return originalGateVisit.call(this, chunk, visitor);
@@ -612,6 +647,7 @@ beforeEach(async () => {
   vi.clearAllMocks();
   state.billHedgeLosers = false;
   state.discoveryEnabled = false;
+  state.stickyProviderId = null;
   state.http2Error = null;
   state.loserBilled = Promise.withResolvers<void>();
   state.providers.length = 0;
@@ -717,10 +753,16 @@ describe("proxy hedge transport/lifecycle integration (persistence and control-p
     const client = new AbortController();
     const now = vi.spyOn(Date, "now");
     const neutralPrefixConsumption = watchNeutralResponsesPrefixConsumption();
+    const governor = new MemoryGovernor({ limit: 8 * 1024 ** 2, remote: false, monitor: false });
+    const budget = new StreamGatePrebufferBudget(() => 8 * 1024 ** 2, governor);
+    const admission = vi
+      .spyOn(getStreamGatePrebufferBudget(), "acquire")
+      .mockImplementation((...args) => budget.acquire(...args));
     try {
       // Given: Discovery has two Codex attempts and only the alternative emits the real fixture.
       now.mockReturnValue(10_000);
       state.discoveryEnabled = true;
+      state.streamGateMode = "enforce";
       const initialProvider = createProvider(1, loser.baseUrl, 0);
       initialProvider.providerType = "codex";
       const winningProvider = createProvider(2, winner.baseUrl, 0);
@@ -730,7 +772,17 @@ describe("proxy hedge transport/lifecycle integration (persistence and control-p
       const session = await createSession(initialProvider, "/v1/responses", client.signal);
       session.sessionId = "integration-discovery-ttft";
       const agents = watchAgentReleases(2);
-      const stream = responsesStreamFixture("resp_discovery", "msg_discovery");
+      const fixture = responsesStreamFixture("resp_discovery", "msg_discovery");
+      const stream = {
+        ...fixture,
+        neutralPrefix: [
+          responsesFrame("response.created", {
+            type: "response.created",
+            response: { status: "in_progress", instructions: "x".repeat(300000) },
+          }),
+          ...fixture.neutralPrefix,
+        ],
+      };
 
       const forwarded = ProxyForwarder.send(session);
       await Promise.all([loser.response, winner.response]);
@@ -738,6 +790,7 @@ describe("proxy hedge transport/lifecycle integration (persistence and control-p
       await winner.write(stream.neutralPrefix.join(""));
       await neutralPrefixConsumption.consumed;
       expect(session.ttftMs).toBeNull();
+      expect(governor.snapshot().usedBytes).toBeGreaterThan(300000 * 8);
 
       // When: sequence 5 makes the alternative ready and Discovery commits it.
       now.mockReturnValue(10_125);
@@ -745,6 +798,7 @@ describe("proxy hedge transport/lifecycle integration (persistence and control-p
       const forwardedResponse = await forwarded;
 
       // Then: TTFT is fixed at winner commit, before ResponseHandler reads the stream.
+      expect(governor.snapshot().usedBytes).toBeGreaterThanOrEqual(300000);
       expect(session.firstByteMs).toBe(50);
       expect(session.ttftMs).toBe(125);
       const firstByteMsAtCommit = session.firstByteMs;
@@ -764,11 +818,223 @@ describe("proxy hedge transport/lifecycle integration (persistence and control-p
       expect(loser.abortCount()).toBe(1);
       expect(winner.abortCount()).toBe(0);
       expect(agents.pool.getPoolStats().activeRequests).toBe(0);
+      expect(governor.snapshot().usedBytes).toBe(0);
     } finally {
       client.abort(new Error("fixture cleanup"));
       neutralPrefixConsumption.restore();
+      admission.mockRestore();
       now.mockRestore();
       await Promise.all([loser.close(), winner.close()]);
+    }
+  });
+
+  it.each([
+    { sticky: false, waitMs: 650, cancel: false },
+    { sticky: true, waitMs: 650, cancel: false },
+    { sticky: true, waitMs: 6500, cancel: true },
+  ])(
+    "does not spend Discovery SLA in local admission (sticky=$sticky, wait=$waitMs ms, cancel=$cancel)",
+    async ({ sticky, waitMs, cancel }) => {
+      const [first, second] = await Promise.all([startUpstream(), startUpstream()]);
+      const client = new AbortController();
+      const governor = new MemoryGovernor({ limit: 1024 ** 2, remote: false, monitor: false });
+      const budget = new StreamGatePrebufferBudget(() => 1024 ** 2, governor);
+      const occupied = await budget.acquire(1024 ** 2);
+      const admission = vi
+        .spyOn(getStreamGatePrebufferBudget(), "acquire")
+        .mockImplementation((...args) => budget.acquire(...args));
+      let forwarded: Promise<Response | Error> | undefined;
+      try {
+        state.discoveryEnabled = true;
+        state.streamGateMode = "enforce";
+        state.stickyProviderId = sticky ? 1 : null;
+        const initial = createProvider(1, first.baseUrl, 0);
+        initial.providerType = "codex";
+        const alternative = createProvider(2, second.baseUrl, 0);
+        alternative.providerType = "codex";
+        alternative.priority = initial.priority;
+        state.providers.push(alternative);
+        const session = await createSession(initial, "/v1/responses", client.signal);
+        session.sessionId = "discovery-local-admission-sla";
+        vi.spyOn(session, "shouldReuseProvider").mockReturnValue(sticky);
+        let settled = false;
+        forwarded = ProxyForwarder.send(session)
+          .catch((error) => error)
+          .finally(() => {
+            settled = true;
+          });
+        await new Promise((resolve) => setTimeout(resolve, waitMs));
+        expect(settled).toBe(false);
+        expect(first.requestCount() + second.requestCount()).toBe(0);
+        expect(
+          session
+            .getRoutingTrace()
+            ?.events.some(
+              (event) => event.type === "fallback_promoted" || event.type === "sticky_timeout"
+            )
+        ).toBe(false);
+        expect(state.clearBinding).not.toHaveBeenCalled();
+
+        if (cancel) {
+          // The configured lease initially lives for one second plus five seconds
+          // of handoff grace; this wait crosses that original expiry.
+          expect(state.renewDiscoveryLease.mock.calls.length).toBeGreaterThanOrEqual(2);
+          client.abort();
+          expect(await forwarded).toMatchObject({ statusCode: 499 });
+          const renewalCount = state.renewDiscoveryLease.mock.calls.length;
+          occupied.release();
+          await new Promise((resolve) => setTimeout(resolve, 150));
+          expect(state.renewDiscoveryLease).toHaveBeenCalledTimes(renewalCount);
+          expect(first.requestCount() + second.requestCount()).toBe(0);
+          expect(budget.snapshot().waiting).toBe(0);
+          expect(governor.snapshot().usedBytes).toBe(0);
+          expect(state.clearBinding).not.toHaveBeenCalled();
+          return;
+        }
+        occupied.release();
+        await first.response;
+        const stream = responsesStreamFixture("resp_admitted", "msg_admitted");
+        await first.send(stream.firstContent + stream.completed);
+        const response = await forwarded;
+        expect(response).toBeInstanceOf(Response);
+        await (response as Response).body?.cancel();
+        expect(
+          session.getRoutingTrace()?.events.find((event) => event.type === "winner_committed")
+            ?.attemptKind
+        ).toBe(sticky ? "sticky" : "normal");
+        expect(state.recordFailure).not.toHaveBeenCalled();
+      } finally {
+        client.abort();
+        occupied.release();
+        await forwarded;
+        admission.mockRestore();
+        await Promise.all([first.close(), second.close()]);
+      }
+    }
+  );
+
+  it("pauses Sticky and race deadlines during compatibility response admission", async () => {
+    const upstream = await startUpstream("application/json");
+    const client = new AbortController();
+    const governor = new MemoryGovernor({ limit: 1024 ** 2, remote: false, monitor: false });
+    const budget = new StreamGatePrebufferBudget(() => 1024 ** 2, governor);
+    const entered = Promise.withResolvers<void>();
+    let occupied: Awaited<ReturnType<typeof budget.acquire>> | undefined;
+    let acquireCount = 0;
+    const admission = vi
+      .spyOn(getStreamGatePrebufferBudget(), "acquire")
+      .mockImplementation(async (...args) => {
+        if (++acquireCount === 2) {
+          occupied = await budget.acquire(1024 ** 2);
+          entered.resolve();
+        }
+        return budget.acquire(...args);
+      });
+    let forwarded: Promise<Response | Error> | undefined;
+    try {
+      state.discoveryEnabled = true;
+      state.streamGateMode = "enforce";
+      state.stickyProviderId = 1;
+      const initial = createProvider(1, upstream.baseUrl, 0);
+      const session = await createSession(initial, "/v1/messages", client.signal);
+      session.sessionId = "discovery-compatibility-admission";
+      vi.spyOn(session, "shouldReuseProvider").mockReturnValue(true);
+      let settled = false;
+      forwarded = ProxyForwarder.send(session)
+        .catch((error) => error)
+        .finally(() => {
+          settled = true;
+        });
+      await entered.promise;
+      await new Promise((resolve) => setTimeout(resolve, 650));
+      expect(settled).toBe(false);
+      expect(upstream.requestCount()).toBe(1);
+      expect(state.clearBinding).not.toHaveBeenCalled();
+      expect(
+        session
+          .getRoutingTrace()
+          ?.events.some(
+            (event) => event.type === "fallback_promoted" || event.type === "sticky_timeout"
+          )
+      ).toBe(false);
+      client.abort();
+      expect(await forwarded).toMatchObject({ statusCode: 499 });
+      if (!occupied) throw new Error("expected the occupied gate lease to be held");
+      occupied.release();
+      expect(governor.snapshot().usedBytes).toBe(0);
+    } finally {
+      client.abort();
+      occupied?.release();
+      await forwarded;
+      admission.mockRestore();
+      await upstream.close();
+    }
+  });
+
+  it("still expires Discovery when admitted upstreams do not produce content", async () => {
+    const [first, second] = await Promise.all([startUpstream(), startUpstream()]);
+    const client = new AbortController();
+    try {
+      state.discoveryEnabled = true;
+      const initial = createProvider(1, first.baseUrl, 0);
+      const alternative = createProvider(2, second.baseUrl, 0);
+      alternative.priority = initial.priority;
+      state.providers.push(alternative);
+      const session = await createSession(initial, "/v1/messages", client.signal);
+      session.sessionId = "discovery-upstream-sla";
+      const rejected = expect(ProxyForwarder.send(session)).rejects.toMatchObject({
+        statusCode: 503,
+      });
+      await Promise.all([first.response, second.response]);
+      await rejected;
+      expect(first.requestCount() + second.requestCount()).toBe(2);
+      expect(
+        session.getRoutingTrace()?.events.some((event) => event.type === "fallback_promoted")
+      ).toBe(true);
+    } finally {
+      client.abort();
+      await Promise.all([first.close(), second.close()]);
+    }
+  });
+
+  it("Discovery 解析容量不足返回本地 429，取消所有候选且不惩罚供应商", async () => {
+    const [first, second] = await Promise.all([startUpstream(), startUpstream()]);
+    const client = new AbortController();
+    const governor = new MemoryGovernor({ limit: 256 * 1024, remote: false, monitor: false });
+    const budget = new StreamGatePrebufferBudget(() => 256 * 1024, governor);
+    const admission = vi
+      .spyOn(getStreamGatePrebufferBudget(), "acquire")
+      .mockImplementation((...args) => budget.acquire(...args));
+    try {
+      state.discoveryEnabled = true;
+      state.streamGateMode = "enforce";
+      const initial = createProvider(1, first.baseUrl, 0);
+      initial.providerType = "codex";
+      const alternative = createProvider(2, second.baseUrl, 0);
+      alternative.providerType = "codex";
+      alternative.priority = initial.priority;
+      state.providers.push(alternative);
+      const session = await createSession(initial, "/v1/responses", client.signal);
+      session.sessionId = "discovery-local-capacity";
+      const rejected = expect(ProxyForwarder.send(session)).rejects.toMatchObject({
+        statusCode: 429,
+      });
+      await Promise.all([first.response, second.response]);
+      await first.write(
+        responsesFrame("response.created", {
+          type: "response.created",
+          response: { status: "in_progress", instructions: "x".repeat(40000) },
+        })
+      );
+      await rejected;
+      await Promise.all([first.terminated, second.terminated]);
+      expect(governor.snapshot().usedBytes).toBe(0);
+      expect(budget.snapshot().reservedBytes).toBe(0);
+      expect(state.recordFailure).not.toHaveBeenCalled();
+    } finally {
+      client.abort();
+      admission.mockRestore();
+      await Promise.all([first.close(), second.close()]);
     }
   });
 
@@ -1018,12 +1284,15 @@ describe("proxy hedge transport/lifecycle integration (persistence and control-p
 
       const forwarded = ProxyForwarder.send(session);
       await Promise.all([loser.response, winner.response]);
+      await winner.write(
+        'event: message_start\ndata: {"type":"message_start","message":{"id":"msg_winner"}}\n\n'
+      );
+
+      const downstream = await ProxyResponseHandler.dispatch(session, await forwarded);
       await winner.send(
         'event: content_block_delta\ndata: {"type":"content_block_delta","delta":{"type":"text_delta","text":"winner"}}\n\n' +
           'event: message_stop\ndata: {"type":"message_stop"}\n\n'
       );
-
-      const downstream = await ProxyResponseHandler.dispatch(session, await forwarded);
       await expect(downstream.text()).resolves.toContain("winner");
       await settleTasks();
       await loser.terminated;

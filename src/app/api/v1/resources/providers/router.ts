@@ -10,6 +10,9 @@ import {
 import {
   ProviderApiTestSchema,
   ProviderArrayResponseSchema,
+  ProviderBalanceBatchBodySchema,
+  ProviderBalanceListResponseSchema,
+  ProviderBalanceSnapshotSchema,
   ProviderBatchPatchApplySchema,
   ProviderBatchPatchPreviewSchema,
   ProviderBatchUpdateSchema,
@@ -41,6 +44,7 @@ import {
   deleteProvider,
   fetchProviderUpstreamModels,
   getProvider,
+  getProviderBalancesBatch,
   getProviderLimit,
   getProviderLimitBatch,
   getProviderModelSuggestions,
@@ -51,6 +55,7 @@ import {
   listProviders,
   previewBatchPatch,
   reclusterProviderVendors,
+  refreshProviderBalance,
   resetProviderCircuit,
   resetProviderCircuitsBatch,
   resetProviderUsage,
@@ -434,6 +439,56 @@ providersRouter.openapi(
     },
   }),
   getProviderLimitBatch as never
+);
+
+providersRouter.openapi(
+  createRoute({
+    method: "post",
+    path: "/providers/balances:batch",
+    middleware: requireAuth("admin"),
+    tags: ["Providers"],
+    summary: "Batch get provider upstream balances",
+    description:
+      "Queries the upstream balance for multiple visible providers using each provider's own key. Serves cached snapshots unless refresh is set.",
+    "x-required-access": "admin",
+    security,
+    request: {
+      body: {
+        required: true,
+        content: { "application/json": { schema: ProviderBalanceBatchBodySchema } },
+      },
+    },
+    responses: {
+      200: {
+        description: "Provider balance snapshots.",
+        content: { "application/json": { schema: ProviderBalanceListResponseSchema } },
+      },
+      ...problemResponses,
+    },
+  }),
+  getProviderBalancesBatch as never
+);
+
+providersRouter.openapi(
+  createRoute({
+    method: "post",
+    path: "/providers/{id}/balance:refresh",
+    middleware: requireAuth("admin"),
+    tags: ["Providers"],
+    summary: "Refresh provider upstream balance",
+    description: "Queries the upstream balance for one provider, bypassing the cached snapshot.",
+    "x-required-access": "admin",
+    security,
+    request: { params: ProviderIdParamSchema },
+    responses: {
+      200: {
+        description: "Provider balance snapshot.",
+        content: { "application/json": { schema: ProviderBalanceSnapshotSchema } },
+      },
+      ...problemResponses,
+    },
+  }),
+  refreshProviderBalance as never
 );
 
 providersRouter.openapi(

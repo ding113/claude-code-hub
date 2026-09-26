@@ -855,6 +855,20 @@
       "when": 1788182990280,
       "tag": "0121_legacy_hedge_abort_health",
       "breakpoints": true
+    },
+    {
+      "idx": 122,
+      "version": "7",
+      "when": 1788950528054,
+      "tag": "0122_session_identity_prefix_indexes",
+      "breakpoints": true
+    },
+    {
+      "idx": 123,
+      "version": "7",
+      "when": 1790352239389,
+      "tag": "0123_provider_new_api_access_token",
+      "breakpoints": true
     }
   ]
 }

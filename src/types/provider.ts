@@ -320,6 +320,10 @@ export interface Provider {
   name: string;
   url: string;
   key: string;
+  // New API 系统访问令牌（可选）：配置后余额查询读取该账户余额，不再读取密钥额度
+  newApiAccessToken: string | null;
+  // New API 用户 ID（可选）：旧版本 New API 要求与系统访问令牌一起提供
+  newApiUserId: number | null;
   // 供应商聚合实体（按官网域名归一）
   providerVendorId: number | null;
   // 是否启用
@@ -447,6 +451,9 @@ export interface ProviderDisplay {
   name: string;
   url: string;
   maskedKey: string;
+  // 掩码后的 New API 系统访问令牌，未配置时为 null
+  maskedNewApiAccessToken: string | null;
+  newApiUserId: number | null;
   isEnabled: boolean;
   weight: number;
   // 优先级和分组配置
@@ -566,6 +573,8 @@ export interface CreateProviderData {
   name: string;
   url: string;
   key: string;
+  new_api_access_token?: string | null;
+  new_api_user_id?: number | null;
   // 是否启用（默认 true）- 数据库字段名
   is_enabled?: boolean;
   // 权重（默认 1）
@@ -651,6 +660,8 @@ export interface UpdateProviderData {
   name?: string;
   url?: string;
   key?: string;
+  new_api_access_token?: string | null;
+  new_api_user_id?: number | null;
   // 是否启用 - 数据库字段名
   is_enabled?: boolean;
   // 权重（0-100）

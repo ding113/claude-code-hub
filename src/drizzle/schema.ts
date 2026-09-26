@@ -188,6 +188,9 @@ export const providers = pgTable('providers', {
   description: text('description'),
   url: varchar('url').notNull(),
   key: varchar('key').notNull(),
+  // New API 系统访问令牌与用户 ID（可选）：配置后余额查询读取该账户余额，不再读取密钥额度
+  newApiAccessToken: varchar('new_api_access_token'),
+  newApiUserId: integer('new_api_user_id'),
   providerVendorId: integer('provider_vendor_id')
     .notNull()
     .references(() => providerVendors.id, {
@@ -688,6 +691,21 @@ export const messageRequest = pgTable('message_request', {
       table.id.desc()
     )
     .where(sql`${table.deletedAt} IS NULL`),
+  // Supports complete historical prefix matching without scanning the table.
+  messageRequestSessionIdentityPrefixIdx: index('idx_message_request_session_identity_prefix')
+    .on(
+      sql`COALESCE(${table.sessionIdentity}, ${table.sessionId}) varchar_pattern_ops`,
+      table.createdAt.desc(),
+      table.id.desc()
+    )
+    .where(
+      sql`${table.deletedAt} IS NULL AND (${table.blockedBy} IS NULL OR ${table.blockedBy} <> 'warmup')`
+    ),
+  messageRequestSessionIdPrefixCoverIdx: index('idx_message_request_session_id_prefix_cover')
+    .on(sql`${table.sessionId} varchar_pattern_ops`, table.createdAt.desc(), table.id.desc())
+    .where(
+      sql`${table.deletedAt} IS NULL AND (${table.blockedBy} IS NULL OR ${table.blockedBy} <> 'warmup')`
+    ),
   // Endpoint 过滤查询索引（仅针对未删除数据）
   messageRequestEndpointIdx: index('idx_message_request_endpoint').on(table.endpoint).where(sql`${table.deletedAt} IS NULL`),
   // blocked_by 过滤查询索引（用于排除 warmup/sensitive 等拦截请求）
@@ -1265,6 +1283,16 @@ export const usageLedger = pgTable('usage_ledger', {
     .where(sql`${table.blockedBy} IS NULL AND ${table.isReplay} = false`),
   usageLedgerSessionIdentityIdx: index('idx_usage_ledger_session_identity')
     .on(sql`COALESCE(${table.sessionIdentity}, ${table.sessionId})`),
+  usageLedgerSessionIdentityPrefixIdx: index('idx_usage_ledger_session_identity_prefix')
+    .on(
+      sql`COALESCE(${table.sessionIdentity}, ${table.sessionId}) varchar_pattern_ops`,
+      table.createdAt.desc(),
+      table.id.desc()
+    )
+    .where(sql`${table.blockedBy} IS NULL`),
+  usageLedgerSessionIdPrefixIdx: index('idx_usage_ledger_session_id_prefix')
+    .on(sql`${table.sessionId} varchar_pattern_ops`, table.createdAt.desc(), table.id.desc())
+    .where(sql`${table.blockedBy} IS NULL`),
   usageLedgerModelIdx: index('idx_usage_ledger_model')
     .on(table.model)
     .where(sql`${table.model} IS NOT NULL`),

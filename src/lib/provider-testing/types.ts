@@ -102,7 +102,7 @@ export interface ProviderTestConfig {
   preset?: string;
   /** Custom JSON payload (overrides preset and default body) */
   customPayload?: string;
-  /** Custom headers to merge with default headers */
+  /** Custom headers to merge with default headers (static values or {{header.*}} / {{session.*}} templates) */
   customHeaders?: Record<string, string>;
 }
 

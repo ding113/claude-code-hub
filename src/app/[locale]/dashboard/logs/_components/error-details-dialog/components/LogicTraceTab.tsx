@@ -223,9 +223,12 @@ export function LogicTraceTab({
   // Calculate step offset for session reuse flow
   const sessionReuseStepOffset = isSessionReuseFlow ? 1 : 0;
 
+  const hasHedgeAttemptEvidence =
+    normalizedRoutingTrace?.events.some((event) => event.attemptId != null) ||
+    providerChain?.some((item) => item.attemptNumber != null);
   if (
     normalizedRoutingTrace?.mode === "discovery" ||
-    normalizedRoutingTrace?.mode === "legacy_hedge"
+    (normalizedRoutingTrace?.mode === "legacy_hedge" && hasHedgeAttemptEvidence)
   ) {
     return (
       <div className="space-y-5">
@@ -311,7 +314,11 @@ export function LogicTraceTab({
               {t("blocked.title")}
             </span>
             <Badge variant="outline" className="border-orange-600 text-orange-600">
-              {blockedBy === "sensitive_word" ? t("blocked.sensitiveWord") : blockedBy}
+              {blockedBy === "sensitive_word"
+                ? t("blocked.sensitiveWord")
+                : blockedBy === "local_capacity"
+                  ? t("blocked.localCapacity")
+                  : blockedBy}
             </Badge>
           </div>
           {parsedBlockedReason && (

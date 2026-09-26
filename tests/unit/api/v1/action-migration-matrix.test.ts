@@ -96,6 +96,7 @@ describe("v1 action migration matrix", () => {
       "keys",
       "key-quota",
       "providers",
+      "provider-balance",
       "provider-cache-effectiveness",
       "provider-endpoints",
       "provider-groups",

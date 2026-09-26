@@ -192,7 +192,7 @@
     },
     "customHeaders": {
       "label": "Custom request headers (JSON)",
-      "desc": "Static headers merged into outbound requests. Cannot override authentication or final request filters.",
+      "desc": "Static values or templates are merged into outbound requests. Cannot override authentication or final request filters. Use '{{header.Name}}' to copy an inbound header, '{{session.id}}' for the Session ID, and '{{session.client_id}}' for the client Session ID. Missing sources skip that header.",
       "errors": {
         "invalidJson": "Custom headers must be valid JSON",
         "notObject": "Custom headers must be a JSON object",
@@ -201,7 +201,8 @@
         "protectedName": "Authentication headers cannot be set via custom headers",
         "invalidValue": "Header values must be strings",
         "emptyName": "Header name cannot be empty",
-        "crlf": "Header name and value cannot contain line breaks"
+        "crlf": "Header name and value cannot contain line breaks",
+        "invalidTemplate": "Invalid header template. Supported: '{{header.Name}}', '{{session.id}}', '{{session.client_id}}'"
       }
     },
     "codexOverrides": {

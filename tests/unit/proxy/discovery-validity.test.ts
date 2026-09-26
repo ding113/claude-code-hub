@@ -19,6 +19,24 @@ describe("discovery validity", () => {
     ).toBe(true);
   });
 
+  it("treats an Anthropic request-level refusal as a complete candidate (#1491)", () => {
+    const parser = new DiscoveryValidityParser("anthropic");
+    expect(parser.push('data: {"type":"message_start","message":{"content":[]}}\n\n').ready).toBe(
+      false
+    );
+    expect(
+      parser.push(
+        'event: message_delta\ndata: {"type":"message_delta","delta":{"stop_reason":"refusal"}}\n\n'
+      )
+    ).toMatchObject({ ready: true, error: false });
+    expect(
+      classifyDiscoveryChunk(
+        'event: message_delta\ndata: {"type":"message_delta","delta":{"stop_reason":"end_turn"}}\n\n',
+        "anthropic"
+      ).ready
+    ).toBe(false);
+  });
+
   it("accepts OpenAI Chat delta and rejects DONE", () => {
     expect(
       classifyDiscoveryChunk('data: {"choices":[{"delta":{"content":"hi"}}]}\n\n', "openai-chat")

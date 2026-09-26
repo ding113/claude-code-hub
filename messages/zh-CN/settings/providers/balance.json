@@ -1,0 +1,42 @@
+{
+  "title": "上游余额",
+  "label": "余额",
+  "loading": "查询中...",
+  "unknownShort": "无数据",
+  "unlimited": "上游声明该密钥的额度不限量。",
+  "unlimitedShort": "不限量",
+  "unsupported": "该上游没有提供余额查询端点。",
+  "errorShort": "查询失败",
+  "source": "来源：{source}",
+  "granted": "已授予：{amount}",
+  "used": "已使用：{amount}",
+  "expiresAt": "过期时间：{time}",
+  "expiredAt": "已于 {time} 过期",
+  "checkedAt": "查询时间：{time}",
+  "refreshHint": "点击立即重新向上游查询。",
+  "refreshAria": "刷新上游余额",
+  "refreshAll": "刷新余额",
+  "refreshingAll": "刷新中...",
+  "refreshFailed": "余额刷新失败",
+  "toolbarHint": "余额由各供应商自己的密钥或配置的 New API 系统访问令牌查询得到，每 10 分钟自动更新一次。",
+  "sources": {
+    "new-api-token-usage": "New API 令牌额度",
+    "new-api-account": "New API 账户余额",
+    "sub2api-usage": "Sub2API 用量",
+    "openai-billing": "OpenAI 兼容计费",
+    "deepseek-balance": "DeepSeek 钱包",
+    "kimi-balance": "Moonshot 钱包",
+    "chatgpt-credits": "ChatGPT 账号额度"
+  },
+  "errors": {
+    "unauthorized": "上游拒绝了该密钥。",
+    "access_token_rejected": "上游拒绝了系统访问令牌，请检查令牌与用户 ID。",
+    "forbidden": "该密钥没有读取余额的权限。",
+    "rate_limited": "上游对余额查询做了限流。",
+    "upstream_error": "上游返回了错误。",
+    "invalid_response": "上游返回了无法解析的内容。",
+    "timeout": "余额查询超时。",
+    "network": "无法连接到上游查询余额。",
+    "invalid_url": "供应商地址不是合法的 URL。"
+  }
+}

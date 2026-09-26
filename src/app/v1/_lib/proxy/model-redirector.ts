@@ -3,6 +3,7 @@ import {
   findMatchingProviderModelRedirectRule,
   getProviderModelRedirectTarget,
   hasProviderModelRedirectRules,
+  resolveProviderModelRedirectTarget,
 } from "@/lib/provider-model-redirects";
 import type { Provider } from "@/types/provider";
 import { isOpenAIImageMultipartRequest, setOpenAIImageMultipartModel } from "./openai-image-compat";
@@ -67,7 +68,7 @@ export class ModelRedirector {
       return false;
     }
 
-    const redirectedModel = matchedRule.target;
+    const redirectedModel = resolveProviderModelRedirectTarget(originalModel, matchedRule);
 
     // 执行重定向
     logger.info("[ModelRedirector] Model redirected", {
@@ -90,9 +91,11 @@ export class ModelRedirector {
       const originalPath = session.requestUrl.pathname;
       // 替换 URL 中的模型名称
       // 匹配模式：/models/{model}:action 或 /models/{model}
+      // 用替换函数：正则重定向的目标可能带有客户端模型名里的 $ 字符，必须按字面量写入
       const newPath = originalPath.replace(
         /\/models\/([^/:]+)(:[^/]+)?$/,
-        `/models/${redirectedModel}$2`
+        (_match, _model: string, action: string | undefined) =>
+          `/models/${redirectedModel}${action ?? ""}`
       );
 
       if (newPath !== originalPath) {

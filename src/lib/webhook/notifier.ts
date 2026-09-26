@@ -1,7 +1,11 @@
 import { createHmac } from "node:crypto";
 import type { Dispatcher } from "undici";
 import { logger } from "@/lib/logger";
-import { createProxyAgentForProvider, type ProxyConfig } from "@/lib/proxy-agent";
+import {
+  createProxyAgentForProvider,
+  fetchWithDispatcher,
+  type ProxyConfig,
+} from "@/lib/proxy-agent";
 import { createRenderer, type Renderer } from "./renderers";
 import type {
   ProviderType,
@@ -177,7 +181,7 @@ export class WebhookNotifier {
     url: string,
     init: RequestInit & { dispatcher?: Dispatcher }
   ): Promise<WebhookResult> {
-    const response = await fetch(url, init);
+    const response = await fetchWithDispatcher(url, init);
 
     if (!response.ok) {
       const errorBody = await response.text().catch(() => "");

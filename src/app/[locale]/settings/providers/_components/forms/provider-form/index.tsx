@@ -34,6 +34,7 @@ import { isValidUrl } from "@/lib/utils/validation";
 import type { ProviderDisplay, ProviderEndpoint, ProviderType } from "@/types/provider";
 import { invalidateProviderQueries } from "../../invalidate-provider-queries";
 import { FormTabNav, NAV_ORDER, PARENT_MAP, TAB_ORDER } from "./components/form-tab-nav";
+import { buildNewApiAccessTokenEditPayload, parseNewApiUserIdInput } from "./new-api-access";
 import { ProviderFormProvider, useProviderForm } from "./provider-form-context";
 import type { NavTargetId, SubTabId, TabId } from "./provider-form-types";
 import { BasicInfoSection } from "./sections/basic-info-section";
@@ -71,6 +72,7 @@ const CUSTOM_HEADERS_ERROR_KEYS: Record<CustomHeadersValidationErrorCode, string
   invalid_value: "sections.routing.customHeaders.errors.invalidValue",
   empty_name: "sections.routing.customHeaders.errors.emptyName",
   crlf: "sections.routing.customHeaders.errors.crlf",
+  invalid_template: "sections.routing.customHeaders.errors.invalidTemplate",
 };
 
 // Internal form component that uses context
@@ -272,6 +274,10 @@ function ProviderFormContent({
       return t("errors.keyRequired");
     }
 
+    if (mode !== "batch" && parseNewApiUserIdInput(state.basic.newApiUserId) === undefined) {
+      return t("errors.invalidNewApiUserId");
+    }
+
     // Custom headers JSON: parse-on-submit; invalid input maps to a localized message
     if (mode !== "batch") {
       const customHeadersResult = parseCustomHeadersJsonText(state.routing.customHeadersText);
@@ -329,10 +335,15 @@ function ProviderFormContent({
           ? (endpointPoolPreferredUrl ?? state.basic.url).trim()
           : state.basic.url.trim();
 
+        // validateForm 已拒绝非法的用户 ID，这里只会得到数字或 null
+        const newApiUserId = parseNewApiUserIdInput(state.basic.newApiUserId) ?? null;
+        const trimmedNewApiAccessToken = state.basic.newApiAccessToken.trim();
+
         const baseFormData = {
           name: state.basic.name.trim(),
           url: effectiveProviderUrl,
           website_url: state.basic.websiteUrl?.trim() || null,
+          new_api_user_id: newApiUserId,
           provider_type: state.routing.providerType,
           preserve_client_ip: state.routing.preserveClientIp,
           disable_session_reuse: state.routing.disableSessionReuse,
@@ -390,7 +401,14 @@ function ProviderFormContent({
 
         if (isEdit && provider) {
           // For edit: only include key if user provided a new one
-          const editFormData = trimmedKey ? { ...baseFormData, key: trimmedKey } : baseFormData;
+          const editFormData = {
+            ...baseFormData,
+            ...(trimmedKey ? { key: trimmedKey } : {}),
+            ...buildNewApiAccessTokenEditPayload(
+              trimmedNewApiAccessToken,
+              state.basic.clearNewApiAccessToken
+            ),
+          };
           const res = await editProvider(provider.id, editFormData);
           if (!res.ok) {
             toast.error(res.error || t("errors.updateFailed"));
@@ -427,7 +445,11 @@ function ProviderFormContent({
           void doInvalidate();
         } else {
           // For create: key is required
-          const createFormData = { ...baseFormData, key: trimmedKey };
+          const createFormData = {
+            ...baseFormData,
+            key: trimmedKey,
+            new_api_access_token: trimmedNewApiAccessToken || null,
+          };
           const res = await addProvider(createFormData);
           if (!res.ok) {
             toast.error(res.error || t("errors.addFailed"));

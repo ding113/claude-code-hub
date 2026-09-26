@@ -5,10 +5,12 @@ const os = require("node:os");
 
 const MIB = 1024 * 1024;
 const WORKER_READY_MESSAGE_TYPE = "cch:gateway-ready";
-const DEFAULT_AUTO_MAX_WORKERS = 4;
+const DEFAULT_AUTO_MAX_WORKERS = 32;
 const MAX_EXPLICIT_WORKERS = 32;
 const DEFAULT_MEMORY_PER_WORKER_MB = 1024;
 const DEFAULT_PRIMARY_MEMORY_RESERVE_MB = 256;
+// 自动模式下每个 worker 至少保留 4 个数据库连接：data 2 + control 1 + writer 1，三条 lane 各有独立连接池。
+const AUTO_MIN_DB_POOL_PER_WORKER = 4;
 
 const CGROUP_FILES = Object.freeze({
   cpuMaxV2: "/sys/fs/cgroup/cpu.max",
@@ -276,7 +278,7 @@ function resolveAggregateBudgets(env) {
     {
       name: "STREAM_GATE_GLOBAL_PREBUFFER_BYTE_CAP",
       defaultValue: 256 * MIB,
-      minPerWorker: streamGatePerRequestBytes * 4,
+      minPerWorker: 128 * 1024,
       max: 2 * 1024 * MIB,
     },
     {
@@ -461,7 +463,8 @@ function createMulticorePlan(options = {}) {
     workerCount = Math.min(
       Math.floor(resources.effectiveCpu / 2),
       DEFAULT_AUTO_MAX_WORKERS,
-      safeCapacity
+      safeCapacity,
+      Math.floor(resolvedBudgets.totals.DB_POOL_MAX / AUTO_MIN_DB_POOL_PER_WORKER)
     );
     reason = "auto_resource_eligible";
     if (workerCount < 2) {
@@ -488,6 +491,7 @@ function createMulticorePlan(options = {}) {
     budgetCapacity,
     aggregateBudgets: resolvedBudgets.totals,
     budgetAllocations,
+    explicitStreamGateBudget: env.STREAM_GATE_GLOBAL_PREBUFFER_BYTE_CAP != null,
   };
 }
 
@@ -508,6 +512,7 @@ function buildWorkerEnvironment(plan, workerIndex) {
   };
 
   for (const [name, allocations] of Object.entries(plan.budgetAllocations)) {
+    if (name === "STREAM_GATE_GLOBAL_PREBUFFER_BYTE_CAP" && plan.explicitStreamGateBudget === false) continue;
     workerEnv[name] = String(allocations[workerIndex]);
   }
   return workerEnv;

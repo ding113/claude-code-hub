@@ -4,7 +4,13 @@
  * 统一执行模板探测，并在协议不匹配时自动切换到同套件里的下一个模板。
  */
 
-import { createProxyAgentForProvider, type ProviderProxyConfig } from "@/lib/proxy-agent";
+import { applyOpencodeSessionHeader } from "@/app/v1/_lib/headers";
+import { mergeResolvedCustomHeaders } from "@/lib/custom-headers";
+import {
+  createProxyAgentForProvider,
+  fetchWithDispatcher,
+  type ProviderProxyConfig,
+} from "@/lib/proxy-agent";
 import { parseResponse } from "./parsers";
 import {
   getExecutionPresetCandidates,
@@ -48,6 +54,23 @@ interface VersionlessFallbackState {
 const RETRYABLE_HTTP_STATUS_CODES = [400, 404, 405, 415, 422] as const;
 const INVALID_OPENAI_URL_MARKER = /Invalid URL \(POST \/v1\/.+\)/i;
 
+// provider 自定义头在这里才合并进来，opencode 的会话头必须在合并之后按不区分大小写补齐，
+// 否则 `X-OpenCode-Session` 之类的写法会与注入值并存。
+export function buildProviderTestHeaders(
+  config: ProviderTestConfig,
+  overrides?: Parameters<typeof getTestHeaders>[3]
+): Record<string, string> {
+  const headers = getTestHeaders(config.providerType, config.apiKey, config.providerUrl, overrides);
+  if (config.customHeaders) {
+    const lookup = new Headers(headers);
+    mergeResolvedCustomHeaders(headers, config.customHeaders, {
+      getHeader: (name) => lookup.get(name),
+    });
+  }
+  applyOpencodeSessionHeader(headers, config.providerUrl);
+  return headers;
+}
+
 function buildAttemptPlans(config: ProviderTestConfig): AttemptPlan[] {
   const customPayload = config.customPayload?.trim();
   if (customPayload) {
@@ -56,12 +79,9 @@ function buildAttemptPlans(config: ProviderTestConfig): AttemptPlan[] {
       return [
         {
           body: parsed,
-          headers: {
-            ...getTestHeaders(config.providerType, config.apiKey, config.providerUrl, {
-              geminiBearerAuth: config.geminiBearerAuth,
-            }),
-            ...(config.customHeaders || {}),
-          },
+          headers: buildProviderTestHeaders(config, {
+            geminiBearerAuth: config.geminiBearerAuth,
+          }),
           model: config.model,
           successContains: config.successContains ?? DEFAULT_SUCCESS_CONTAINS[config.providerType],
           url: getTestUrl(config.providerUrl, config.providerType, config.model),
@@ -91,12 +111,9 @@ function buildAttemptPlans(config: ProviderTestConfig): AttemptPlan[] {
     return [
       {
         body: getTestBody(config.providerType, config.model),
-        headers: {
-          ...getTestHeaders(config.providerType, config.apiKey, config.providerUrl, {
-            geminiBearerAuth: config.geminiBearerAuth,
-          }),
-          ...(config.customHeaders || {}),
-        },
+        headers: buildProviderTestHeaders(config, {
+          geminiBearerAuth: config.geminiBearerAuth,
+        }),
         model: config.model,
         successContains: config.successContains ?? DEFAULT_SUCCESS_CONTAINS[config.providerType],
         url: getTestUrl(config.providerUrl, config.providerType, config.model),
@@ -109,14 +126,11 @@ function buildAttemptPlans(config: ProviderTestConfig): AttemptPlan[] {
     return {
       preset,
       body: getPresetPayload(preset.id, effectiveModel),
-      headers: {
-        ...getTestHeaders(config.providerType, config.apiKey, config.providerUrl, {
-          userAgent: preset.userAgent,
-          extraHeaders: preset.extraHeaders,
-          geminiBearerAuth: config.geminiBearerAuth,
-        }),
-        ...(config.customHeaders || {}),
-      },
+      headers: buildProviderTestHeaders(config, {
+        userAgent: preset.userAgent,
+        extraHeaders: preset.extraHeaders,
+        geminiBearerAuth: config.geminiBearerAuth,
+      }),
       model: effectiveModel,
       successContains:
         config.successContains ??
@@ -239,7 +253,7 @@ async function runSingleAttempt(
       while (true) {
         attemptStartTime = Date.now();
         firstByteMs = undefined;
-        const response = await fetch(requestUrl, fetchOptions);
+        const response = await fetchWithDispatcher(requestUrl, fetchOptions);
         firstByteMs = Date.now() - attemptStartTime;
 
         const responseBody = await response.text();

@@ -1,4 +1,5 @@
 import { matchesPattern } from "@/lib/model-pattern-matcher";
+import { resolveProviderPatternRegex } from "@/lib/provider-pattern-regex";
 import type { ProviderModelRedirectMatchType, ProviderModelRedirectRule } from "@/types/provider";
 
 const PROVIDER_MODEL_REDIRECT_MATCH_TYPES = new Set<ProviderModelRedirectMatchType>([
@@ -114,9 +115,38 @@ export function findMatchingProviderModelRedirectRule(
   return null;
 }
 
+// regex 规则的 target 支持引用捕获组（`$1` / `$&` / `$<name>`），语义仍然是「整串替换成 target」，
+// 而不是 sed 式的局部替换：`contains`/未加锚点的正则命中子串时，旧配置依赖的仍是整串改写。
+// 实现上借 String.replace 做原生的 `$` 展开，再用哨兵切掉未参与匹配的前后缀，避免自己实现一套展开规则。
+const TARGET_EXPANSION_SENTINEL = "\u0000";
+
+export function resolveProviderModelRedirectTarget(
+  model: string,
+  rule: ProviderModelRedirectRule
+): string {
+  if (rule.matchType !== "regex" || !rule.target.includes("$")) {
+    return rule.target;
+  }
+
+  const compiled = resolveProviderPatternRegex(rule.source);
+  if (!compiled?.regex.test(model)) {
+    return rule.target;
+  }
+
+  const expanded = model.replace(
+    compiled.regex,
+    `${TARGET_EXPANSION_SENTINEL}${rule.target}${TARGET_EXPANSION_SENTINEL}`
+  );
+  return expanded.slice(
+    expanded.indexOf(TARGET_EXPANSION_SENTINEL) + 1,
+    expanded.lastIndexOf(TARGET_EXPANSION_SENTINEL)
+  );
+}
+
 export function getProviderModelRedirectTarget(
   model: string,
   rules: ProviderModelRedirectRule[] | null | undefined
 ): string {
-  return findMatchingProviderModelRedirectRule(model, rules)?.target ?? model;
+  const rule = findMatchingProviderModelRedirectRule(model, rules);
+  return rule ? resolveProviderModelRedirectTarget(model, rule) : model;
 }
